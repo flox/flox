@@ -19,6 +19,24 @@ impl FloxPackageProvider {
 }
 #[async_trait]
 impl PackageProvider for FloxPackageProvider {
+    async fn init(&self, package_name: &str, builder: FloxBuilder) -> Result<InitResult> {
+    
+        let mut process = Command::new("flox")
+            .arg("init")
+            .arg("--package-name")
+            .arg(package_name)
+            .arg("--builder")
+            .arg(format!("{}", builder))
+            .output();
+        
+        // {
+        //     Ok(_) => Ok(CreateResult::new("Package created")),
+        //     Err(err) => Err(anyhow!("Error thrown trying to create a message: {}", err)),
+        // }
+        let output = process.await?;
+
+        Ok(InitResult::new(std::str::from_utf8(&output.stdout)?))
+    }
     async fn create(&self, package_name: &str) -> Result<CreateResult> {
     
         let mut process = Command::new("flox")

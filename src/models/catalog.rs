@@ -1,7 +1,13 @@
 use serde::{Serialize, Deserialize};
 use getset::{Getters, CopyGetters};
-pub trait Catalog {
+use async_trait::async_trait;
+use anyhow::Result;
 
+use super::{Package, PublishResult};
+
+#[async_trait]
+pub trait Catalog {
+    async fn publish(package: &Package) -> Result<PublishResult>;
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -9,8 +15,11 @@ pub struct FloxCatalog {
     
 }
 
+#[async_trait]
 impl Catalog for FloxCatalog {
-
+    async fn publish(package: &Package) -> Result<PublishResult> {
+        return Ok(PublishResult::new())
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -35,11 +44,11 @@ pub enum Stability {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum TargetSystem {
     #[serde(rename = "x86_64-linux")]
-    x86_64_linux,
+    X86_64Linux,
     #[serde(rename = "x86_64-darwin")]
-    x86_64_darwin,
+    X86_64Darwin,
     #[serde(rename = "aarch64-darwin")]
-    aarch64_darwin,
+    Aarch64Darwin,
     Other(String),
     Unknown
 }
