@@ -3,7 +3,8 @@
 //! 
 //! 
 //! 
-use std::path::Path;
+use std::{path::Path, collections::HashMap};
+use log::{info, warn, error};
 
 use crate::models::*;
 use async_trait::async_trait;
@@ -11,7 +12,7 @@ use anyhow::{anyhow, Result, Ok};
 use tokio::process::Command;
 
 use super::git::{DefaultGitProvider, GitProvider, GitCommandProvider};
-
+use crate::environment::*;
 struct NixCommands {
     
 }
@@ -55,43 +56,54 @@ impl FloxNativePackageProvider {
 #[async_trait]
 impl PackageProvider for FloxNativePackageProvider {
     async fn init(&self, package_name: &str, builder: FloxBuilder) -> Result<InitResult> {
-    
+        info!("init {}, {}", package_name, builder);
+                    
+
         if !Path::new("flox.nix").exists() {
             // Init with _init if we haven't already.
-            Command::new("nix")
+            info!("No flox.nix exists, running flox#templates._init");
+
+
+            let output = Command::new(get_nix_cmd())
+                .envs(&build_flox_env())
                 .arg("flake")
                 .arg("init")
                 .arg("--template")            
                 .arg("flox#templates._init")
             .output().await?;
+
+            let nix_response = std::str::from_utf8(&output.stdout)?;
+            let nix_err_response = std::str::from_utf8(&output.stderr)?;
+
+            info!("out: {} err:{}", nix_response, nix_err_response);
         }
         
         // create a git repo at this spot
         if !Path::new(".git").exists() {
+            info!("No git repository locally, creating one");
             self.git_provider.init_repo().await?;
         }
+        let output = Command::new(get_nix_cmd())
+                .envs(&build_flox_env())
+                .arg("flake")
+                .arg("init")
+                .arg("--template")            
+                .arg(format!("flox#templates.{}", builder))
+            .output().await?;
 
-        let mut process = Command::new("nix")
-            .arg("flake")
-            .arg("init")
-            .arg("")            
-            .arg(format!("flox#templates.{}", builder))
-            .output();
-        
-        // {
-        //     Ok(_) => Ok(CreateResult::new("Package created")),
-        //     Err(err) => Err(anyhow!("Error thrown trying to create a message: {}", err)),
-        // }
-        let output = process.await?;
+            let nix_response = std::str::from_utf8(&output.stdout)?;
+            let nix_err_response = std::str::from_utf8(&output.stderr)?;
 
+            info!("flake init out: {} err:{}", nix_response, nix_err_response);
         // after init we create some structure
         std::fs::create_dir_all(format!("pkgs/{}", package_name))?;
         // move the default.nix into the pkgs directory
         self.git_provider.mv(Path::new("pkgs/default.nix"), 
             Path::new(&format!("pkgs/{}/default.nix", package_name))).await?;
 
-        Ok(InitResult::new(std::str::from_utf8(&output.stdout)?))
+        Ok(InitResult::new("Done"))
     }
+
     async fn create(&self, package_name: &str) -> Result<CreateResult> {
     
         let mut process = Command::new("flox")
@@ -117,6 +129,29 @@ impl PackageProvider for FloxNativePackageProvider {
     }
 
     async fn shell(&self) -> Result<()> {
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use anyhow::Result;
+
+    use crate::models::{FloxBuilder, PackageProvider};
+
+    use super::FloxNativePackageProvider;
+
+    #[tokio::test]
+    async fn test_init_cmd() -> Result<()> {
+        std::env::set_var("RUST_LOG", "info");
+
+        pretty_env_logger::init();
+
+        info!("Logging");
+        let pkg_prov = FloxNativePackageProvider::with_command_git();
+        
+        pkg_prov.init("test_pkg", FloxBuilder::RustPackage).await?;
+
         Ok(())
     }
 }
