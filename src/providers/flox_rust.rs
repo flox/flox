@@ -10,7 +10,7 @@ use async_trait::async_trait;
 use anyhow::{anyhow, Result, Ok};
 use tokio::process::Command;
 
-use super::git::{DefaultGitProvider, GitProvider};
+use super::git::{DefaultGitProvider, GitProvider, GitCommandProvider};
 
 struct NixCommands {
     
@@ -39,7 +39,15 @@ impl NixCommands {
 }
 
 struct FloxNativePackageProvider {
+    git_provider: Box<dyn GitProvider + Send + Sync>
+}
 
+impl FloxNativePackageProvider {
+    fn with_command_git() -> Self {
+        return FloxNativePackageProvider {
+            git_provider: Box::new(GitCommandProvider)
+        }
+    }
 }
 
 ///
@@ -60,7 +68,7 @@ impl PackageProvider for FloxNativePackageProvider {
         
         // create a git repo at this spot
         if !Path::new(".git").exists() {
-            DefaultGitProvider::init_repo().await?;
+            self.git_provider.init_repo().await?;
         }
 
         let mut process = Command::new("nix")
@@ -79,7 +87,7 @@ impl PackageProvider for FloxNativePackageProvider {
         // after init we create some structure
         std::fs::create_dir_all(format!("pkgs/{}", package_name))?;
         // move the default.nix into the pkgs directory
-        DefaultGitProvider::mv(Path::new("pkgs/default.nix"), 
+        self.git_provider.mv(Path::new("pkgs/default.nix"), 
             Path::new(&format!("pkgs/{}/default.nix", package_name))).await?;
 
         Ok(InitResult::new(std::str::from_utf8(&output.stdout)?))

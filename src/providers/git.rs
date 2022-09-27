@@ -13,17 +13,18 @@ pub struct Repository {
 // flox
 #[async_trait]
 pub trait GitProvider {
-    async fn init_repo() -> Result<()>;
-    async fn add_remote() -> Result<()>;
+    async fn init_repo(&self) -> Result<()>;
+    async fn add_remote(&self) -> Result<()>;
     /// Move a file from one path to another using git.
-    async fn mv(from: &Path, to: &Path) -> Result<()>;
+    async fn mv(&self, from: &Path, to: &Path) -> Result<()>;
 }
 
+#[derive(Copy, Clone)]
 pub struct GitCommandProvider;
 
 #[async_trait]
 impl GitProvider for GitCommandProvider {
-    async fn init_repo() -> Result<()> {
+    async fn init_repo(&self) -> Result<()> {
         let process = Command::new("git")
             .arg("init")                   
             .output();
@@ -34,11 +35,11 @@ impl GitProvider for GitCommandProvider {
         Ok(())
     }
 
-    async fn add_remote() -> Result<()> {
+    async fn add_remote(&self) -> Result<()> {
         Ok(())
     }
     
-    async fn mv(from: &Path, to: &Path) -> Result<()> {
+    async fn mv(&self,from: &Path, to: &Path) -> Result<()> {
         let process = Command::new("git")
         .arg("mv")                   
         .arg(format!("{}", from.as_os_str().to_string_lossy()))

@@ -20,7 +20,7 @@ pub struct Flox <Storage, Package>{
 }
 
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Package {
     name: String,
     description: String
@@ -49,7 +49,7 @@ impl CreateResult {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SearchResult {
     packages: Vec<Package>
 }
@@ -58,18 +58,22 @@ impl SearchResult {
         SearchResult { packages:packages }
     }
 }
+
+#[derive(Copy,Clone)]
 pub struct InstallResult {}
 impl InstallResult {
     fn new() -> Self {
         InstallResult {  }
     }
 }
+#[derive(Copy,Clone)]
 pub struct PublishResult {}
 impl PublishResult {
     fn new() -> Self {
         PublishResult {  }
     }
 }
+#[derive(Clone, Default)]
 pub struct InitResult {
     pub message: String
 }
