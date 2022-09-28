@@ -71,7 +71,7 @@ impl PackageProvider for FloxNativePackageProvider {
             self.git_provider.init_repo().await?;
         }
 
-        let mut process = Command::new("nix")
+        let process = Command::new("nix")
             .arg("flake")
             .arg("init")
             .arg("")            
