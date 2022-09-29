@@ -10,9 +10,10 @@ pub trait Catalog {
     async fn publish(package: &Package) -> Result<PublishResult>;
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+pub trait PublishProvider {}
+
 pub struct FloxCatalog {
-    
+    publish_provider: Box<dyn PublishProvider>
 }
 
 #[async_trait]
