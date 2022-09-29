@@ -8,16 +8,16 @@ use log::{info, warn, error};
 
 use crate::models::*;
 use async_trait::async_trait;
-use anyhow::{anyhow, Result, Ok};
+use anyhow::{anyhow, Result};
 use tokio::process::Command;
 
 use super::git::{DefaultGitProvider, GitProvider, GitCommandProvider};
 use crate::environment::*;
-struct NixCommands {
+struct NixRunner {
     
 }
 
-impl NixCommands {
+impl NixRunner {
     async fn get_templates() -> Result<String> {
         let process = Command::new("nix")
         .arg("eval")
@@ -36,6 +36,24 @@ impl NixCommands {
         let output = process.await?;
 
         Ok(std::str::from_utf8(&output.stdout)?.to_string())
+    }
+
+    async fn run(cmd: &str, args: &Vec<&str>) -> Result<String> {
+        let output = Command::new(get_nix_cmd())
+                .envs(&build_flox_env())
+                .arg(cmd)
+                .args(args)
+                .output().await?;
+
+        let nix_response = std::str::from_utf8(&output.stdout)?;
+        let nix_err_response = std::str::from_utf8(&output.stderr)?;
+
+        if !output.stderr.is_empty() {
+            error!("Error in nix response, {}", nix_err_response);
+            Err(anyhow!("Error in nix response"))
+        } else {
+            Ok(nix_response.to_string())
+        }
     }
 }
 
@@ -63,19 +81,12 @@ impl PackageProvider for FloxNativePackageProvider {
             // Init with _init if we haven't already.
             info!("No flox.nix exists, running flox#templates._init");
 
+            let run = NixRunner::run("flake", &vec!["init","--template","flox#templates._init"]).await ;
 
-            let output = Command::new(get_nix_cmd())
-                .envs(&build_flox_env())
-                .arg("flake")
-                .arg("init")
-                .arg("--template")            
-                .arg("flox#templates._init")
-            .output().await?;
-
-            let nix_response = std::str::from_utf8(&output.stdout)?;
-            let nix_err_response = std::str::from_utf8(&output.stderr)?;
-
-            info!("out: {} err:{}", nix_response, nix_err_response);
+            match run {
+                Ok(response) => info!("Ran flox initialization template. {}", response),
+                Err(e) => error!("EXXXX: Error initializing flox: {}",e)
+            };
         }
         
         // create a git repo at this spot
@@ -83,18 +94,15 @@ impl PackageProvider for FloxNativePackageProvider {
             info!("No git repository locally, creating one");
             self.git_provider.init_repo().await?;
         }
-        let output = Command::new(get_nix_cmd())
-                .envs(&build_flox_env())
-                .arg("flake")
-                .arg("init")
-                .arg("--template")            
-                .arg(format!("flox#templates.{}", builder))
-            .output().await?;
-
-            let nix_response = std::str::from_utf8(&output.stdout)?;
-            let nix_err_response = std::str::from_utf8(&output.stderr)?;
-
-            info!("flake init out: {} err:{}", nix_response, nix_err_response);
+         
+        match NixRunner::run("flake",&vec!["init","--template",&format!("flox#templates.{}", builder)]).await {            
+                Ok(response) => info!("Ran flox builder template. {}", response),
+                Err(e) => {
+                    error!("EXXXX: Error initializing flox: {}",e);
+                    // fatal, 
+                    return Err(e);
+                }
+        };        
         // after init we create some structure
         std::fs::create_dir_all(format!("pkgs/{}", package_name))?;
         // move the default.nix into the pkgs directory
@@ -111,11 +119,7 @@ impl PackageProvider for FloxNativePackageProvider {
             .arg(package_name)
             .output();
         
-        // {
-        //     Ok(_) => Ok(CreateResult::new("Package created")),
-        //     Err(err) => Err(anyhow!("Error thrown trying to create a message: {}", err)),
-        // }
-        let output = process.await?;
+         let output = process.await?;
 
         Ok(CreateResult::new(std::str::from_utf8(&output.stdout)?))
     }
