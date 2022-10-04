@@ -13,11 +13,11 @@ use tokio::process::Command;
 
 use super::git::{DefaultGitProvider, GitProvider, GitCommandProvider};
 use crate::environment::*;
-struct NixRunner {
+struct FloxRunner {
     
 }
 
-impl NixRunner {
+impl FloxRunner {
     async fn get_templates() -> Result<String> {
         let process = Command::new("nix")
         .arg("eval")
@@ -38,9 +38,25 @@ impl NixRunner {
         Ok(std::str::from_utf8(&output.stdout)?.to_string())
     }
 
-    async fn run(cmd: &str, args: &Vec<&str>) -> Result<String> {
+    async fn run_in_nix(cmd: &str, args: &Vec<&str>) -> Result<String> {
         let output = Command::new(get_nix_cmd())
-                .envs(&build_flox_env())
+                .envs(&build_flox_env()?)
+                .arg(cmd)
+                .args(args)
+                .output().await?;
+
+        let nix_response = std::str::from_utf8(&output.stdout)?;
+        let nix_err_response = std::str::from_utf8(&output.stderr)?;
+
+        if !output.stderr.is_empty() {
+            error!("Error in nix response, {}", nix_err_response);
+            Err(anyhow!("Error in nix response"))
+        } else {
+            Ok(nix_response.to_string())
+        }
+    }
+    async fn run_in_flox(cmd: &str, args: &Vec<&str>) -> Result<String> {
+        let output = Command::new("flox")
                 .arg(cmd)
                 .args(args)
                 .output().await?;
@@ -81,11 +97,11 @@ impl PackageProvider for FloxNativePackageProvider {
             // Init with _init if we haven't already.
             info!("No flox.nix exists, running flox#templates._init");
 
-            let run = NixRunner::run("flake", &vec!["init","--template","flox#templates._init"]).await ;
+            let run = FloxRunner::run_in_nix("flake", &vec!["init","--template","flox#templates._init"]).await ;
 
             match run {
                 Ok(response) => info!("Ran flox initialization template. {}", response),
-                Err(e) => error!("EXXXX: Error initializing flox: {}",e)
+                Err(e) => error!("FXXXX: Error initializing flox: {}",e)
             };
         }
         
@@ -95,10 +111,11 @@ impl PackageProvider for FloxNativePackageProvider {
             self.git_provider.init_repo().await?;
         }
          
-        match NixRunner::run("flake",&vec!["init","--template",&format!("flox#templates.{}", builder)]).await {            
+        match FloxRunner::run_in_nix("flake",
+            &vec!["init","--template", &format!("flox#templates.{}", builder)]).await {            
                 Ok(response) => info!("Ran flox builder template. {}", response),
                 Err(e) => {
-                    error!("EXXXX: Error initializing flox: {}",e);
+                    error!("FXXXX: Error initializing flox: {}",e);
                     // fatal, 
                     return Err(e);
                 }
@@ -111,17 +128,12 @@ impl PackageProvider for FloxNativePackageProvider {
 
         Ok(InitResult::new("Done"))
     }
-
-    async fn create(&self, package_name: &str) -> Result<CreateResult> {
     
-        let mut process = Command::new("flox")
-            .arg("create")
-            .arg(package_name)
-            .output();
-        
-         let output = process.await?;
+    async fn environments(&self) -> Result<Vec<Environment>> {
+    
+        let mut output = FloxRunner::run_in_flox("environments", &vec![]).await?;
 
-        Ok(CreateResult::new(std::str::from_utf8(&output.stdout)?))
+        Ok(vec![])
     }
 
     async fn install(&self) -> Result<InstallResult> {

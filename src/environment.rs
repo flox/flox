@@ -2,12 +2,12 @@
 //! reduce the number of magic strings 
 
 use std::collections::HashMap;
-
+use anyhow::Result;
 /// Environment variable key for the GitHub Api Key
 pub static GITHUB_TOKEN : &str = "GITHUB_TOKEN";
 
-pub fn build_flox_env() -> HashMap<String,String> {
-    let home = env!("HOME");
+pub fn build_flox_env() -> Result<HashMap<String,String>> {
+    let home = std::env::var("HOME")?;
 
     let mut env_map : HashMap<String, String> = HashMap::new();
             
@@ -17,7 +17,7 @@ pub fn build_flox_env() -> HashMap<String,String> {
     env_map.insert("NIX_USER_CONF_FILES".to_string(), format!("{}/.config/flox/nix.conf", home));
     env_map.insert("GIT_CONFIG_SYSTEM".to_string(), format!("{}/.config/flox/gitconfig", home));
 
-    return env_map;
+    return Ok(env_map);
 }
 
 pub fn get_nix_cmd() -> String {

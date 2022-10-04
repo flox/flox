@@ -6,7 +6,8 @@ use anyhow::{Result, anyhow};
 async fn test_github() -> Result<()> {
 
     dotenv::dotenv().ok();
-    let token = std::env::var(crate::environment::GITHUB_TOKEN).expect("GITHUB_TOKEN env variable is required. Add it to the .env file.");
+    let token = std::env::var(crate::environment::GITHUB_TOKEN)
+        .expect("GITHUB_TOKEN env variable is required. Add it to the .env file.");
 
     let octocrab = Octocrab::builder().personal_token(token.to_string()).build()?;
     

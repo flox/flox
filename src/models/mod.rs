@@ -1,5 +1,5 @@
 
-use std::fmt::Display;
+use std::{fmt::Display, path::Path};
 
 use async_trait::async_trait;
 use anyhow::{anyhow,Result};
@@ -26,8 +26,23 @@ pub struct Package {
     description: String
 }
 
-pub struct Environment {}
-pub struct Generation {}
+#[derive(Debug, Clone)]
+pub struct Environment {
+    name: String,
+    path: String,
+    system: TargetSystem,
+    generations: Vec<Generation> 
+}
+
+#[derive(Debug, Clone)]
+pub struct Generation {
+    number: i64,
+    path: String
+}
+
+pub struct History {
+
+}
 
 
 impl <Storage, Provider> Flox<Storage, Provider> {
@@ -141,14 +156,14 @@ impl Display for FloxBuilder {
 #[async_trait]
 pub trait PackageProvider {
     async fn init(&self, package_name: &str, builder: FloxBuilder) -> Result<InitResult>;
-    async fn create(&self, package_name: &str) -> Result<CreateResult>;
+    async fn environments(&self) -> Result<Vec<Environment>>;
     async fn search(&self, query: &str) -> Result<SearchResult>;
     async fn install(&self, ) -> Result<InstallResult>;
     async fn shell(&self) -> Result<()>;
 }
 
-pub trait RuntimeProvider {
-    fn activate() -> Result<()>;
-    fn environments() -> Result<()>;
-}
+// pub trait RuntimeProvider {
+//     fn activate() -> Result<()>;
+//     fn environments() -> Result<()>;
+// }
 
