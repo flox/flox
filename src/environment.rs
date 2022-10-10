@@ -6,14 +6,9 @@ use anyhow::Result;
 /// Environment variable key for the GitHub Api Key
 pub static GITHUB_TOKEN : &str = "GITHUB_TOKEN";
 
-<<<<<<< Updated upstream
 pub fn build_flox_env() -> Result<HashMap<String,String>> {
-    let home = std::env::var("HOME")?;
-=======
-/// Setup the flox environment so nix can be called with the proper command
-pub fn build_flox_env() -> HashMap<String,String> {
+
     let home = env!("HOME");
->>>>>>> Stashed changes
 
     let mut env_map : HashMap<String, String> = HashMap::new();
             

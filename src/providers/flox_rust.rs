@@ -117,7 +117,6 @@ impl PackageProvider for FloxNativePackageProvider {
             info!("No git repository locally, creating one");
             self.git_provider.init_repo().await?;
         }
-<<<<<<< Updated upstream
          
         match FloxRunner::run_in_nix("flake",
             &vec!["init","--template", &format!("flox#templates.{}", builder)]).await {            
@@ -128,10 +127,9 @@ impl PackageProvider for FloxNativePackageProvider {
                     return Err(e);
                 }
         };        
-=======
         // TODO move this to a nix runner
         let output = Command::new(get_nix_cmd())
-                .envs(&build_flox_env())
+                .envs(&build_flox_env()?)
                 .arg("flake")
                 .arg("init")
                 .arg("--template")            
@@ -142,7 +140,7 @@ impl PackageProvider for FloxNativePackageProvider {
             let nix_err_response = std::str::from_utf8(&output.stderr)?;
 
             info!("flake init out: {} err:{}", nix_response, nix_err_response);
->>>>>>> Stashed changes
+
         // after init we create some structure
         std::fs::create_dir_all(format!("pkgs/{}", package_name))?;
         // move the default.nix into the pkgs directory
