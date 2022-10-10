@@ -89,6 +89,13 @@ impl FloxNativePackageProvider {
 /// 
 #[async_trait]
 impl PackageProvider for FloxNativePackageProvider {
+    /// Initialize a flox project
+    /// This directly uses nix instead of Flox because the flox shell script currently uses a 
+    /// input system, so this is a faithful adoption of the command using the nix command directly.
+    /// Because this is meant to be a sdk method, the builder is passed in, but the implementor can use
+    /// Other(String) to call any template.
+    /// 
+    /// This will also create a git repository if it doesn't exist.
     async fn init(&self, package_name: &str, builder: FloxBuilder) -> Result<InitResult> {
         info!("init {}, {}", package_name, builder);
                     
@@ -110,6 +117,7 @@ impl PackageProvider for FloxNativePackageProvider {
             info!("No git repository locally, creating one");
             self.git_provider.init_repo().await?;
         }
+<<<<<<< Updated upstream
          
         match FloxRunner::run_in_nix("flake",
             &vec!["init","--template", &format!("flox#templates.{}", builder)]).await {            
@@ -120,6 +128,21 @@ impl PackageProvider for FloxNativePackageProvider {
                     return Err(e);
                 }
         };        
+=======
+        // TODO move this to a nix runner
+        let output = Command::new(get_nix_cmd())
+                .envs(&build_flox_env())
+                .arg("flake")
+                .arg("init")
+                .arg("--template")            
+                .arg(format!("flox#templates.{}", builder))
+            .output().await?;
+
+            let nix_response = std::str::from_utf8(&output.stdout)?;
+            let nix_err_response = std::str::from_utf8(&output.stderr)?;
+
+            info!("flake init out: {} err:{}", nix_response, nix_err_response);
+>>>>>>> Stashed changes
         // after init we create some structure
         std::fs::create_dir_all(format!("pkgs/{}", package_name))?;
         // move the default.nix into the pkgs directory
@@ -163,7 +186,6 @@ mod test {
 
         pretty_env_logger::init();
 
-        info!("Logging");
         let pkg_prov = FloxNativePackageProvider::with_command_git();
         
         pkg_prov.init("test_pkg", FloxBuilder::RustPackage).await?;
