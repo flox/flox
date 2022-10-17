@@ -1,5 +1,11 @@
 use clap::Parser;
 
+use utils::*;
+
+mod config;
+mod build;
+mod utils;
+
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
 pub(crate) struct FloxArgs {
@@ -8,10 +14,10 @@ pub(crate) struct FloxArgs {
 }
 
 #[derive(clap::Subcommand, Debug)]
-pub (crate) enum CreateAction {
-    Install {
+pub (crate) enum BuildAction {
+    PathSelector {
         #[clap(value_parser)]
-        package_name: String
+        path: String
     }
 }
 
