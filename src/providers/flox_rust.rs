@@ -11,7 +11,7 @@ use async_trait::async_trait;
 use anyhow::{anyhow, Result};
 use tokio::process::Command;
 
-use super::git::{DefaultGitProvider, GitProvider, GitCommandProvider};
+use super::{git::{DefaultGitProvider, GitProvider, GitCommandProvider}, traits::Initializer};
 use crate::environment::*;
 struct FloxRunner {
     
@@ -88,7 +88,7 @@ impl FloxNativePackageProvider {
 ///
 /// 
 #[async_trait]
-impl PackageProvider for FloxNativePackageProvider {
+impl Initializer for FloxNativePackageProvider {
     /// Initialize a flox project
     /// This directly uses nix instead of Flox because the flox shell script currently uses a 
     /// input system, so this is a faithful adoption of the command using the nix command directly.
@@ -150,44 +150,44 @@ impl PackageProvider for FloxNativePackageProvider {
         Ok(InitResult::new("Done"))
     }
     
-    async fn environments(&self) -> Result<Vec<Environment>> {
+    // async fn environments(&self) -> Result<Vec<Environment>> {
     
-        let mut output = FloxRunner::run_in_flox("environments", &vec![]).await?;
+    //     let mut output = FloxRunner::run_in_flox("environments", &vec![]).await?;
 
-        Ok(vec![])
-    }
+    //     Ok(vec![])
+    // }
 
-    async fn install(&self) -> Result<InstallResult> {
-        Ok(InstallResult{})
-    }
+    // async fn install(&self) -> Result<InstallResult> {
+    //     Ok(InstallResult{})
+    // }
 
-    async fn search(&self, query: &str) -> Result<SearchResult> {
-        Ok(SearchResult::new(Vec::new()))
-    }
+    // async fn search(&self, query: &str) -> Result<SearchResult> {
+    //     Ok(SearchResult::new(Vec::new()))
+    // }
 
-    async fn shell(&self) -> Result<()> {
-        Ok(())
-    }
+    // async fn shell(&self) -> Result<()> {
+    //     Ok(())
+    // }
 }
 
 #[cfg(test)]
 mod test {
-    use anyhow::Result;
+    // use anyhow::Result;
 
-    use crate::models::{FloxBuilder, PackageProvider};
+    // use crate::models::{FloxBuilder, PackageProvider};
 
-    use super::FloxNativePackageProvider;
+    // use super::FloxNativePackageProvider;
 
-    #[tokio::test]
-    async fn test_init_cmd() -> Result<()> {
-        std::env::set_var("RUST_LOG", "info");
+    // #[tokio::test]
+    // async fn test_init_cmd() -> Result<()> {
+    //     std::env::set_var("RUST_LOG", "info");
 
-        pretty_env_logger::init();
+    //     pretty_env_logger::init();
 
-        let pkg_prov = FloxNativePackageProvider::with_command_git();
+    //     let pkg_prov = FloxNativePackageProvider::with_command_git();
         
-        pkg_prov.init("test_pkg", FloxBuilder::RustPackage).await?;
+    //     pkg_prov.init("test_pkg", FloxBuilder::RustPackage).await?;
 
-        Ok(())
-    }
+    //     Ok(())
+    // }
 }

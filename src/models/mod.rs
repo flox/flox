@@ -150,17 +150,6 @@ impl Display for FloxBuilder {
     }
 }
 
-/// A provider for package actions. 
-/// 
-/// 
-#[async_trait]
-pub trait PackageProvider {
-    async fn init(&self, package_name: &str, builder: FloxBuilder) -> Result<InitResult>;
-    async fn environments(&self) -> Result<Vec<Environment>>;
-    async fn search(&self, query: &str) -> Result<SearchResult>;
-    async fn install(&self, ) -> Result<InstallResult>;
-    async fn shell(&self) -> Result<()>;
-}
 
 // pub trait RuntimeProvider {
 //     fn activate() -> Result<()>;

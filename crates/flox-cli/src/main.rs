@@ -10,7 +10,7 @@ mod utils;
 #[clap(author, version, about, long_about = None)]
 pub(crate) struct FloxArgs {
     #[clap(subcommand)]
-    create: CreateAction
+    create: BuildAction
 }
 
 #[derive(clap::Subcommand, Debug)]
@@ -31,7 +31,9 @@ async fn main() {
 #[cfg(test)]
 mod tests {
     use clap::Parser;
-    use super::app::*;
+    use crate::FloxArgs;
+
+    use super::*;
 
     #[tokio::test]
     async fn test_create() {
