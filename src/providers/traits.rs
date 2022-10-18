@@ -7,6 +7,32 @@ pub trait Initializer {
     async fn init(&self, package_name: &str, builder: FloxBuilder) -> Result<InitResult>;
 }
 
+
+#[async_trait]
+pub trait Publisher {
+
+}
+
+#[async_trait]
+pub trait Builder {
+
+}
+
+#[async_trait]
+pub trait Installer {
+
+}
+
+#[async_trait]
+pub trait Sharer {
+
+}
+
+
+trait Flywheel : Initializer + Publisher + Installer + Sharer + Builder {
+
+}
+
 // A provider for package actions. 
 // #[async_trait]
 // pub trait PackageProvider {
