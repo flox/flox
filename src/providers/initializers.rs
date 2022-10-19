@@ -14,18 +14,19 @@ use tokio::process::Command;
 use super::{git::{DefaultGitProvider, GitProvider, GitCommandProvider}};
 use crate::environment::*;
 
+async fn get_provider() -> Result<Box<dyn Initializer>> {
+    let init_provider = crate::config::CONFIG.read()
+        .await.get("INIT_PROVIDER")?;
+    match init_provider {
+        "flox" => Ok(Box::new(FloxInitializer)),
+        "rust" => Ok(Box::new(RustNativeInitializer::with_command_git())),
+        _ => Ok(Box::new(FloxInitializer))
+    }
+}
 
 #[async_trait]
 pub trait Initializer {
-    async fn get_provider() -> Result<Box<dyn Initializer>> where Self: Sized {
-        let init_provider = crate::config::CONFIG.read()
-            .await.get("INIT_PROVIDER")?;
-        match init_provider {
-            "flox" => Ok(Box::new(FloxInitializer)),
-            "rust" => Ok(Box::new(RustNativeInitializer::with_command_git())),
-            _ => Ok(Box::new(FloxInitializer))
-        }
-    }
+    fn name(&self) -> String;
     async fn init(&self, package_name: &str, builder: &FloxBuilder) -> Result<InitResult>;  
     fn cleanup() -> Result<()> where Self: Sized {
 
@@ -52,7 +53,9 @@ impl RustNativeInitializer {
 
 #[async_trait]
 impl Initializer for FloxInitializer {
-   
+    fn name(&self) -> String {
+        return String::from("FloxInitializer");
+    }
     async fn init(&self, package_name: &str, builder: &FloxBuilder) -> Result<InitResult> {
         let output = CommandRunner::run_in_flox("init", 
             &vec!["--template",&format!("{}", builder), "--name", package_name]).await?;
@@ -64,6 +67,9 @@ impl Initializer for FloxInitializer {
 /// 
 #[async_trait]
 impl Initializer for RustNativeInitializer {
+    fn name(&self) -> String {
+        return String::from("RustNativeInitializer");
+    }
     /// Initialize a flox project
     /// This directly uses nix instead of Flox because the flox shell script currently uses a 
     /// input system, so this is a faithful adoption of the command using the nix command directly.
@@ -129,9 +135,11 @@ impl Initializer for RustNativeInitializer {
 
 #[cfg(test)]
 mod test {
-    use std::path::Path;
+    use std::{path::Path, env};
 
     use anyhow::Result;
+
+    use crate::config::CONFIG;
 
     use super::{FloxInitializer, Initializer, RustNativeInitializer};
 
@@ -159,6 +167,28 @@ mod test {
         // ensure cleanup 
         assert_eq!(Path::new("./flake.nix").exists(), false);
         assert_eq!(Path::new("./pkgs").exists(), false);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_default_init_di() -> Result<()> {
+       let mut provider = super::get_provider().await?;
+
+       // default
+       assert_eq!(provider.name(), "FloxInitializer");
+
+       Ok(())
+    }
+    #[tokio::test]
+    async fn test_rust_init_di() -> Result<()> {
+        env::set_var("INIT_PROVIDER", "rust");
+       
+        // config is lazy, so we'll set the env and then try to grab the provider
+        
+        let provider = super::get_provider().await?;
+ 
+        assert_eq!(provider.name(), "RustNativeInitializer");
 
         Ok(())
     }

@@ -7,9 +7,16 @@ use lazy_static::lazy_static;
 
 lazy_static! {
     pub static ref CONFIG : RwLock<Config> = {
-        let src = config::File::with_name("flox.toml");
-        RwLock::new(Config::builder().add_source(src)
-        .add_source(config::Environment::with_prefix("FLOX"))
-        .build().unwrap())
+        let config = if !std::path::Path::new("./flox.toml").exists() {
+            Config::builder()
+            .add_source(config::Environment::with_prefix("FLOX"))
+        } else {
+            let src = config::File::with_name("flox.toml");
+            Config::builder()
+                .add_source(config::Environment::with_prefix("FLOX"))
+                .add_source(src)
+        };
+    
+        RwLock::new(config.build().unwrap())
     };
 }
