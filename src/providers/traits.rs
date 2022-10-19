@@ -1,8 +1,8 @@
-use std::path::Path;
+
 
 use async_trait::async_trait;
 use anyhow::Result;
-use crate::models::{FloxBuilder, InitResult, SearchResult, InstallResult};
+use crate::models::{SearchResult, InstallResult};
 
 use super::initializers::Initializer;
 

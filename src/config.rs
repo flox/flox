@@ -1,6 +1,6 @@
 
-use config::{Config, FileSourceFile, Map, Value};
-use serde::Deserialize;
+use config::{Config, Map, Value};
+
 use tokio::sync::RwLock;
 use anyhow::{Result};
 use lazy_static::lazy_static;

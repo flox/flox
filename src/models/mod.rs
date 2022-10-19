@@ -1,8 +1,8 @@
 
-use std::{fmt::Display, path::Path};
+use std::{fmt::Display};
 
-use async_trait::async_trait;
-use anyhow::{anyhow,Result};
+
+use anyhow::{Result};
 use tokio::sync::RwLock;
 
 pub mod catalog;
@@ -46,10 +46,10 @@ pub struct History {
 
 
 impl <Storage, Provider> Flox<Storage, Provider> {
-    fn subscribe(name: &str) -> Result<()> {
+    fn subscribe(_name: &str) -> Result<()> {
         return Ok(())
     }
-    fn unsubscribe(name: &str) -> Result<()> {
+    fn unsubscribe(_name: &str) -> Result<()> {
         return Ok(())
     }
 }

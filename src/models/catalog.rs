@@ -1,5 +1,5 @@
 use serde::{Serialize, Deserialize};
-use getset::{Getters, CopyGetters};
+use getset::{Getters};
 use async_trait::async_trait;
 use anyhow::Result;
 
@@ -18,7 +18,7 @@ pub struct FloxCatalog {
 
 #[async_trait]
 impl Catalog for FloxCatalog {
-    async fn publish(package: &Package) -> Result<PublishResult> {
+    async fn publish(_package: &Package) -> Result<PublishResult> {
         return Ok(PublishResult::new())
     }
 }

@@ -43,8 +43,8 @@ pub struct LibGit2Provider;
 impl GitProvider for LibGit2Provider {
     async fn doctor(&self) -> bool { todo!() }
     async fn init_repo(&self) -> Result<()>  { todo!() }
-    async fn add_remote(&self,origin_name: &str, url: &str) -> Result<()> { todo!() }
-    async fn mv(&self, from: &Path, to: &Path) -> Result<()> { todo!() }
+    async fn add_remote(&self,_origin_name: &str, _url: &str) -> Result<()> { todo!() }
+    async fn mv(&self, _from: &Path, _to: &Path) -> Result<()> { todo!() }
 }
 
 /// A simple Git Provider that uses the git 
@@ -66,7 +66,7 @@ impl GitProvider for GitCommandProvider {
             .output();
         
         
-        let output = process.await?;
+        let _output = process.await?;
 
         Ok(())
     }
@@ -80,7 +80,7 @@ impl GitProvider for GitCommandProvider {
             .output();
         
         
-        let output = process.await?;
+        let _output = process.await?;
         Ok(())
     }
     
@@ -92,7 +92,7 @@ impl GitProvider for GitCommandProvider {
         .output();
     
     
-        let output = process.await?;
+        let _output = process.await?;
 
         Ok(())
     }

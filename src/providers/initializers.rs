@@ -3,20 +3,20 @@
 //! 
 //! 
 //! 
-use std::{path::Path, collections::HashMap, process::Stdio};
-use log::{info, warn, error};
+use std::{path::Path};
+use log::{info, error};
 
 use crate::{models::*, utils::runner::CommandRunner};
 use async_trait::async_trait;
-use anyhow::{anyhow, Result};
+use anyhow::{Result};
 use tokio::process::Command;
 
-use super::{git::{DefaultGitProvider, GitProvider, GitCommandProvider}};
+use super::{git::{GitProvider, GitCommandProvider}};
 use crate::environment::*;
 
 async fn get_provider() -> Result<Box<dyn Initializer>> {
     let init_provider: String= crate::config::CONFIG.read()
-        .await.get("init_provider").unwrap_or_else(|r|String::from("flox"));
+        .await.get("init_provider").unwrap_or_else(|_r|String::from("flox"));
 
         Ok(match init_provider.as_str() {
             "flox" => Box::new(FloxInitializer),
@@ -146,9 +146,9 @@ mod test {
     use std::{path::Path, env};
 
     use anyhow::Result;
-    use config::{Map, Value};
+    
 
-    use crate::config::CONFIG;
+    
 
     use super::{FloxInitializer, Initializer, RustNativeInitializer};
 
@@ -182,7 +182,7 @@ mod test {
 
     #[tokio::test]
     async fn test_default_init_di() -> Result<()> {
-       let mut provider = super::get_provider().await?;
+       let provider = super::get_provider().await?;
 
        // default
        assert_eq!(provider.name(), "FloxInitializer");
