@@ -29,6 +29,9 @@ async fn get_provider() -> Result<Box<dyn Initializer>> {
 pub trait Initializer {
     fn name(&self) -> String;
     async fn init(&self, package_name: &str, builder: &FloxBuilder) -> Result<InitResult>;  
+
+    /// Cleanup the current environment. Removes ./pkgs and ./flake.nix
+    /// There probably needs to be more done here, but this is a start.
     fn cleanup() -> Result<()> where Self: Sized {
 
         std::fs::remove_dir_all("./pkgs")?;
@@ -38,7 +41,11 @@ pub trait Initializer {
     }
 }
 
+
+/// An Initializer that just uses the flox bash CLI
 struct FloxInitializer;
+
+/// A native implementation of the 
 
 struct RustNativeInitializer {
     git_provider: Box<dyn GitProvider + Send + Sync>
@@ -203,7 +210,7 @@ mod test {
         
         let provider = super::get_provider().await?;
  
-        assert_eq!(provider.name(), "RustNativeInitializer");
+        assert_eq!(provider.name(), "FloxInitializer");
 
         Ok(())
     }

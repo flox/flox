@@ -19,6 +19,10 @@ The rust SDK will then be used to genrate an api via https://github.com/fzyzcjy/
 2. Install rust nightly `rustup default nightly`
 3. Hack away
 
+## Providers
+
+Providers allow for dependency injection of different parts.
+
 ## References 
 
 Github interaction is provided by octocrab : https://github.com/XAMPPRocky/octocrab

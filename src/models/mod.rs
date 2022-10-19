@@ -129,6 +129,7 @@ pub enum FloxBuilder {
     Custom(String)
 }
 
+
 impl Display for FloxBuilder {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let flox_name = match self {
