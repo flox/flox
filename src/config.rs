@@ -20,3 +20,11 @@ lazy_static! {
         RwLock::new(config.build().unwrap())
     };
 }
+
+async fn dump_config() -> Result<()> {
+    let config = CONFIG.write().await.clone();
+
+    println!("{:?}", config.try_deserialize::<Map<String,Value>>()?);
+
+    Ok(())
+}

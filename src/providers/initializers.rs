@@ -15,13 +15,14 @@ use super::{git::{DefaultGitProvider, GitProvider, GitCommandProvider}};
 use crate::environment::*;
 
 async fn get_provider() -> Result<Box<dyn Initializer>> {
-    let init_provider = crate::config::CONFIG.read()
-        .await.get("INIT_PROVIDER")?;
-    match init_provider {
-        "flox" => Ok(Box::new(FloxInitializer)),
-        "rust" => Ok(Box::new(RustNativeInitializer::with_command_git())),
-        _ => Ok(Box::new(FloxInitializer))
-    }
+    let init_provider: String= crate::config::CONFIG.read()
+        .await.get("init_provider").unwrap_or_else(|r|String::from("flox"));
+
+        Ok(match init_provider.as_str() {
+            "flox" => Box::new(FloxInitializer),
+            "rust" => Box::new(RustNativeInitializer::with_command_git()),
+            _ => Box::new(FloxInitializer)
+    })
 }
 
 #[async_trait]
@@ -138,6 +139,7 @@ mod test {
     use std::{path::Path, env};
 
     use anyhow::Result;
+    use config::{Map, Value};
 
     use crate::config::CONFIG;
 
@@ -182,8 +184,21 @@ mod test {
     }
     #[tokio::test]
     async fn test_rust_init_di() -> Result<()> {
-        env::set_var("INIT_PROVIDER", "rust");
-       
+        env::set_var("FLOX_INIT_PROVIDER", "rust");
+    
+        // config is lazy, so we'll set the env and then try to grab the provider
+        
+        let provider = super::get_provider().await?;
+ 
+        assert_eq!(provider.name(), "RustNativeInitializer");
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_rust_init_flox() -> Result<()> {
+        env::set_var("FLOX_INIT_PROVIDER", "flox");
+    
         // config is lazy, so we'll set the env and then try to grab the provider
         
         let provider = super::get_provider().await?;
