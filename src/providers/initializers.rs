@@ -31,7 +31,7 @@ impl RustNativeInitializer {
 
 #[async_trait]
 impl Initializer for FloxInitializer {
-    async fn init(&self, package_name: &str, builder: FloxBuilder) -> Result<InitResult> {
+    async fn init(&self, package_name: &str, builder: &FloxBuilder) -> Result<InitResult> {
         let output = CommandRunner::run_in_flox("init", 
             &vec!["--template",&format!("{}", builder), "--name", package_name]).await?;
 
@@ -49,7 +49,7 @@ impl Initializer for RustNativeInitializer {
     /// Other(String) to call any template.
     /// 
     /// This will also create a git repository if it doesn't exist.
-    async fn init(&self, package_name: &str, builder: FloxBuilder) -> Result<InitResult> {
+    async fn init(&self, package_name: &str, builder: &FloxBuilder) -> Result<InitResult> {
         info!("init {}, {}", package_name, builder);
                     
 
@@ -107,6 +107,8 @@ impl Initializer for RustNativeInitializer {
 
 #[cfg(test)]
 mod test {
+    use std::path::Path;
+
     use anyhow::Result;
 
     use super::{FloxInitializer, Initializer, RustNativeInitializer};
@@ -117,12 +119,24 @@ mod test {
 
         pretty_env_logger::init();
 
+        let builder = crate::models::FloxBuilder::RustPackage;
+
         let flox_init = FloxInitializer;
 
         // initialize a rust native initializer (which uses nix via a Command) using the command git 
         let flox_native_init = RustNativeInitializer::with_command_git();
 
-        flox_init.init("test_pkg", crate::models::FloxBuilder::RustPackage).await?;
+        flox_native_init.init("test_pkg", &builder).await?;
+        
+        RustNativeInitializer::cleanup()?;
+
+        flox_init.init("test_pkg", &builder).await?;
+
+        FloxInitializer::cleanup()?;
+
+        // ensure cleanup 
+        assert_eq!(Path::new("./flake.nix").exists(), false);
+        assert_eq!(Path::new("./pkgs").exists(), false);
 
         Ok(())
     }
