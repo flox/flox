@@ -4,17 +4,7 @@ use async_trait::async_trait;
 use anyhow::Result;
 use crate::models::{FloxBuilder, InitResult, SearchResult, InstallResult};
 
-#[async_trait]
-pub trait Initializer {
-    async fn init(&self, package_name: &str, builder: &FloxBuilder) -> Result<InitResult>;  
-    fn cleanup() -> Result<()> {
-        
-        std::fs::remove_dir_all("./pkgs")?;
-        std::fs::remove_file("./flake.nix")?;
-
-        Ok(())
-    }
-}
+use super::initializers::Initializer;
 
 
 #[async_trait]

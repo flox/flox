@@ -11,9 +11,30 @@ use async_trait::async_trait;
 use anyhow::{anyhow, Result};
 use tokio::process::Command;
 
-use super::{git::{DefaultGitProvider, GitProvider, GitCommandProvider}, traits::Initializer};
+use super::{git::{DefaultGitProvider, GitProvider, GitCommandProvider}};
 use crate::environment::*;
 
+
+#[async_trait]
+pub trait Initializer {
+    async fn get_provider() -> Result<Box<dyn Initializer>> where Self: Sized {
+        let init_provider = crate::config::CONFIG.read()
+            .await.get("INIT_PROVIDER")?;
+        match init_provider {
+            "flox" => Ok(Box::new(FloxInitializer)),
+            "rust" => Ok(Box::new(RustNativeInitializer::with_command_git())),
+            _ => Ok(Box::new(FloxInitializer))
+        }
+    }
+    async fn init(&self, package_name: &str, builder: &FloxBuilder) -> Result<InitResult>;  
+    fn cleanup() -> Result<()> where Self: Sized {
+
+        std::fs::remove_dir_all("./pkgs")?;
+        std::fs::remove_file("./flake.nix")?;
+
+        Ok(())
+    }
+}
 
 struct FloxInitializer;
 
@@ -31,6 +52,7 @@ impl RustNativeInitializer {
 
 #[async_trait]
 impl Initializer for FloxInitializer {
+   
     async fn init(&self, package_name: &str, builder: &FloxBuilder) -> Result<InitResult> {
         let output = CommandRunner::run_in_flox("init", 
             &vec!["--template",&format!("{}", builder), "--name", package_name]).await?;

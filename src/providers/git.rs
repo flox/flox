@@ -13,8 +13,17 @@ pub struct Repository {
 // flox
 #[async_trait]
 pub trait GitProvider {
+    /// Example of how to do a DI approach to git providers
+    async fn get_provider() -> Result<Box<dyn GitProvider>> where Self: Sized {
+        let git_provider = crate::config::CONFIG.read()
+            .await.get("GIT_PROVIDER")?;
+        match git_provider {
+            _ => Ok(Box::new(GitCommandProvider))
+        }
+    }
+    async fn doctor(&self) -> bool ;
     async fn init_repo(&self) -> Result<()>;
-    async fn add_remote(&self) -> Result<()>;
+    async fn add_remote(&self,origin_name: &str, url: &str) -> Result<()>;
     /// Move a file from one path to another using git.
     async fn mv(&self, from: &Path, to: &Path) -> Result<()>;
 }
@@ -22,8 +31,19 @@ pub trait GitProvider {
 #[derive(Copy, Clone)]
 pub struct GitCommandProvider;
 
+/// A simple Git Provider that uses the git 
+/// command. This would require that git is installed.
 #[async_trait]
-impl GitProvider for GitCommandProvider {
+impl GitProvider for GitCommandProvider { 
+    async fn doctor(&self) -> bool {
+        // look for git command in the path
+        if !Command::new("git").arg("--help").output().await.is_ok() {
+            error!("Could not find git in the path.");
+            return false;
+        }
+
+        true
+    }
     async fn init_repo(&self) -> Result<()> {
         let process = Command::new("git")
             .arg("init")                   
@@ -35,7 +55,16 @@ impl GitProvider for GitCommandProvider {
         Ok(())
     }
 
-    async fn add_remote(&self) -> Result<()> {
+    async fn add_remote(&self, origin_name: &str, url: &str) -> Result<()> {
+        let process = Command::new("git")
+            .arg("remote")
+            .arg("add")
+            .arg(origin_name)
+            .arg(url)         
+            .output();
+        
+        
+        let output = process.await?;
         Ok(())
     }
     
