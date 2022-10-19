@@ -33,7 +33,7 @@ pub trait Developer {
     async fn shell(&self) -> Result<()>;
 }
 
-
+/// A Quick example of building the "flywheel" with the traits that we built
 #[async_trait]
 trait Flywheel : Initializer + Publisher + Installer + Sharer + Builder + Developer {
     

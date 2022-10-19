@@ -1,4 +1,8 @@
 
+//# An attempt at defining a domain model for flox
+//# Mostly ignore this for now, but feel free to put data models in here
+//# that we should share between applications.
+
 use std::{fmt::Display};
 
 
@@ -11,7 +15,7 @@ use catalog::*;
 
 ///
 /// Flox base instance
-/// 
+/// Ignore for now
 pub struct Flox <Storage, Package>{
     storage: RwLock<Storage>,
     package_provider: RwLock<Package>,
@@ -44,7 +48,7 @@ pub struct History {
 
 }
 
-
+// Probably going to use Flywheel instead of this approach, but I'l leave it here for now.
 impl <Storage, Provider> Flox<Storage, Provider> {
     fn subscribe(_name: &str) -> Result<()> {
         return Ok(())
@@ -129,7 +133,25 @@ pub enum FloxBuilder {
     Custom(String)
 }
 
-
+impl From<String> for FloxBuilder {
+    fn from(builder: String) -> Self {
+        match builder.as_str() {
+            "buildBazelPackage" | "bazel" => FloxBuilder::Bazel,
+            "buildGoModule" | "go" => FloxBuilder::GoModule,
+            "buildPerlPackage" | "perl" => FloxBuilder::PerlPackage,
+            "buildPythonPackage" | "python" => FloxBuilder::PythonPackage,
+            "buildRustPackage" | "rust" => FloxBuilder::RustPackage,
+            "floxEnv" | "env" => FloxBuilder::FloxEnv,
+            "mkRelease" | "release" => FloxBuilder::Mix,
+            "mkDerivation" | "drv" | "derivation" => FloxBuilder::Derivation,
+            "mkDerivation-java" | "drv.java" => FloxBuilder::DerivationJava,
+            "mkDerivation-ruby" | "drv.ruby" => FloxBuilder::DerivationRuby,
+            "mkYarnPackage" | "yarn" => FloxBuilder::YarnPackage,
+            "python-withPackages" | "python-with-packages" => FloxBuilder::PythonWithPackages,
+            _ => FloxBuilder::Custom(builder)
+        }
+    }
+}
 impl Display for FloxBuilder {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let flox_name = match self {

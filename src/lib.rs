@@ -9,3 +9,7 @@ pub mod utils;
 mod models;
 
 pub mod environment;
+
+pub mod prelude {
+    pub use super::models::*;
+}

@@ -14,7 +14,7 @@ use tokio::process::Command;
 use super::{git::{GitProvider, GitCommandProvider}};
 use crate::environment::*;
 
-async fn get_provider() -> Result<Box<dyn Initializer>> {
+pub async fn get_provider() -> Result<Box<dyn Initializer>> {
     let init_provider: String= crate::config::CONFIG.read()
         .await.get("init_provider").unwrap_or_else(|_r|String::from("flox"));
 
