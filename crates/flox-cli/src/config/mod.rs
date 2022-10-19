@@ -1,7 +1,7 @@
-struct FloxConfiguration {
-    defaultFlake: String
-}
+// struct FloxConfiguration {
+//     defaultFlake: String
+// }
 
-impl FloxConfiguration {
+// impl FloxConfiguration {
     
-}
+// }
