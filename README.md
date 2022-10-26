@@ -13,11 +13,11 @@ The application will be async so parallelization of certain tasks (e.g. searchin
 
 The rust SDK will then be used to genrate an api via https://github.com/fzyzcjy/flutter_rust_bridge and a UI will be built in flutter / dart. 
 
-## Development (with flox 👍)
+## Development (with flox)
 
 1. `flox develop`
 
-## Development (without flox 👎)
+## Development (without flox)
 
 1. Download rustup - `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`
 2. Install rust nightly `rustup default nightly`
