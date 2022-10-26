@@ -1,7 +1,7 @@
-use serde::{Serialize, Deserialize};
-use getset::{Getters};
-use async_trait::async_trait;
 use anyhow::Result;
+use async_trait::async_trait;
+use getset::Getters;
+use serde::{Deserialize, Serialize};
 
 use super::{Package, PublishResult};
 
@@ -13,13 +13,13 @@ pub trait Catalog {
 pub trait PublishProvider {}
 
 pub struct FloxCatalog {
-    publish_provider: Box<dyn PublishProvider>
+    publish_provider: Box<dyn PublishProvider>,
 }
 
 #[async_trait]
 impl Catalog for FloxCatalog {
     async fn publish(_package: &Package) -> Result<PublishResult> {
-        return Ok(PublishResult::new())
+        return Ok(PublishResult::new());
     }
 }
 
@@ -28,7 +28,7 @@ pub enum SourceType {
     Repository(String),
     File(String),
     Directory(String),
-    Unknown
+    Unknown,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -38,9 +38,8 @@ pub enum Stability {
     Unstable,
     Staging,
     Other(String), // will need custom deserializer for this
-    Unknown
+    Unknown,
 }
-
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum TargetSystem {
@@ -51,7 +50,7 @@ pub enum TargetSystem {
     #[serde(rename = "aarch64-darwin")]
     Aarch64Darwin,
     Other(String),
-    Unknown
+    Unknown,
 }
 
 impl Default for SourceType {
@@ -80,37 +79,34 @@ pub struct CatalogManifest {
     pub cache: Vec<CatalogCache>,
     pub build: CatalogBuild,
     pub eval: CatalogEval,
-    pub source: CatalogSource
-
+    pub source: CatalogSource,
 }
 
-impl CatalogManifest {
-    
-}
-#[derive(Debug, Clone, Serialize, Deserialize,Getters)]
+impl CatalogManifest {}
+#[derive(Debug, Clone, Serialize, Deserialize, Getters)]
 #[getset(get = "pub")]
 #[serde(rename_all = "camelCase")]
-pub struct CatalogElement{
+pub struct CatalogElement {
     store_paths: Vec<String>,
     attr_path: Vec<String>,
-    active: bool
+    active: bool,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, Getters)]
 #[serde(rename_all = "camelCase")]
 #[getset(get = "pub")]
-pub struct CatalogCache{
+pub struct CatalogCache {
     cache_url: String,
     state: String, // move to enum?
-    narinfo: Vec<NarInfo>
+    narinfo: Vec<NarInfo>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CatalogBuild{
+pub struct CatalogBuild {
     // TODO
 }
 #[derive(Debug, Clone, Serialize, Deserialize, Getters)]
 #[serde(rename_all = "camelCase")]
 #[getset(get = "pub")]
-pub struct CatalogEval{
+pub struct CatalogEval {
     attr_path: Vec<String>,
     drv_path: String,
     meta: CatalogMetadata,
@@ -119,14 +115,14 @@ pub struct CatalogEval{
     pname: String,
     stability: Stability,
     system: TargetSystem,
-    version: String
+    version: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Getters)]
 #[serde(rename_all = "camelCase")]
 #[getset(get = "pub")]
 pub struct NixOutput {
-    out: String // could be vec of strings? May have to flatten
+    out: String, // could be vec of strings? May have to flatten
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Getters)]
@@ -140,23 +136,22 @@ pub struct CatalogMetadata {
     outputs_to_install: Vec<String>,
     position: String,
     unfree: bool,
-    unsupported: bool
+    unsupported: bool,
 }
-
 
 #[derive(Debug, Clone, Serialize, Deserialize, Getters)]
 #[getset(get = "pub")]
-pub struct CatalogSource{
+pub struct CatalogSource {
     locked: SourceEntry,
-    original: SourceEntry
+    original: SourceEntry,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Getters)]
 #[getset(get = "pub")]
 #[serde(rename_all = "camelCase")]
-pub struct SourceEntry{
+pub struct SourceEntry {
     #[serde(default)]
-    last_modified: u64,    
+    last_modified: u64,
     #[serde(default)]
     nar_hash: String,
     #[serde(default)]
@@ -165,12 +160,11 @@ pub struct SourceEntry{
     repo: String,
     #[serde(default)]
     rev: String,
-    #[serde(rename="ref", default)]
+    #[serde(rename = "ref", default)]
     reference: String,
-    #[serde(rename="type",default)]
-    lock_type: String
+    #[serde(rename = "type", default)]
+    lock_type: String,
 }
-
 
 #[derive(Debug, Clone, Serialize, Deserialize, Getters)]
 #[getset(get = "pub")]
@@ -185,35 +179,44 @@ pub struct NarInfo {
     deriver: String,
     download_size: u64,
     nar_hash: String,
-    references: Vec<String>
+    references: Vec<String>,
 }
 
 #[cfg(test)]
 mod test {
-    use anyhow::Result;
     use super::*;
+    use anyhow::Result;
     use std::fs;
 
     #[tokio::test]
     async fn test_catalog_model() -> Result<()> {
         let json_file = &fs::read_to_string("tests/catalog_example.json")?;
-       
-        let manifest: CatalogManifest = 
-            serde_json::from_str(json_file)?;
+
+        let manifest: CatalogManifest = serde_json::from_str(json_file)?;
 
         // Test all of the roots and see if we
         // get what we expect.
 
-        assert_eq!(manifest.element.attr_path, vec!["x86_64-linux",
-        "stable",
-        "flox"]);
+        assert_eq!(
+            manifest.element.attr_path,
+            vec!["x86_64-linux", "stable", "flox"]
+        );
 
-        assert_eq!(manifest.cache.first().unwrap().cache_url, "https://flox-store-public.s3.us-east-1.amazonaws.com?trusted=1");
-        assert_eq!(manifest.source.locked.nar_hash, "sha256-edcFhtk4qxHc3r13yTpBRFTRShbZyMDigT9OgeJuCDw=");
-        assert_eq!(manifest.eval.meta.position, "/nix/store/40nz8qcma443z2lvp64ryah09i96qyhs-source/default.nix:67");
+        assert_eq!(
+            manifest.cache.first().unwrap().cache_url,
+            "https://flox-store-public.s3.us-east-1.amazonaws.com?trusted=1"
+        );
+        assert_eq!(
+            manifest.source.locked.nar_hash,
+            "sha256-edcFhtk4qxHc3r13yTpBRFTRShbZyMDigT9OgeJuCDw="
+        );
+        assert_eq!(
+            manifest.eval.meta.position,
+            "/nix/store/40nz8qcma443z2lvp64ryah09i96qyhs-source/default.nix:67"
+        );
         let json = serde_json::to_string(&manifest)?;
-       
-        // check some serialization 
+
+        // check some serialization
         assert!(json.contains("\"name\":\"flox-0.0.2-r212\""));
 
         Ok(())

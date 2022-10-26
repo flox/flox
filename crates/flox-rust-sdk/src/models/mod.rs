@@ -1,12 +1,10 @@
-
 //# An attempt at defining a domain model for flox
 //# Mostly ignore this for now, but feel free to put data models in here
 //# that we should share between applications.
 
-use std::{fmt::Display};
+use std::fmt::Display;
 
-
-use anyhow::{Result};
+use anyhow::Result;
 use tokio::sync::RwLock;
 
 pub mod catalog;
@@ -16,18 +14,17 @@ use catalog::*;
 ///
 /// Flox base instance
 /// Ignore for now
-pub struct Flox <Storage, Package>{
+pub struct Flox<Storage, Package> {
     storage: RwLock<Storage>,
     package_provider: RwLock<Package>,
     channels: Vec<FloxChannel>,
-    catalog: RwLock<FloxCatalog>
+    catalog: RwLock<FloxCatalog>,
 }
-
 
 #[derive(Debug, Clone)]
 pub struct Package {
     name: String,
-    description: String
+    description: String,
 }
 
 #[derive(Debug, Clone)]
@@ -35,82 +32,79 @@ pub struct Environment {
     name: String,
     path: String,
     system: TargetSystem,
-    generations: Vec<Generation> 
+    generations: Vec<Generation>,
 }
 
 #[derive(Debug, Clone)]
 pub struct Generation {
     number: i64,
-    path: String
+    path: String,
 }
 
-pub struct History {
-
-}
+pub struct History {}
 
 // Probably going to use Flywheel instead of this approach, but I'l leave it here for now.
-impl <Storage, Provider> Flox<Storage, Provider> {
+impl<Storage, Provider> Flox<Storage, Provider> {
     fn subscribe(_name: &str) -> Result<()> {
-        return Ok(())
+        Ok(())
     }
     fn unsubscribe(_name: &str) -> Result<()> {
-        return Ok(())
+        Ok(())
     }
 }
 
 pub struct CreateResult {
-     message: String
+    message: String,
 }
 
 impl CreateResult {
     pub fn new(message: &str) -> Self {
-         CreateResult { message:message.to_string() }
+        CreateResult {
+            message: message.to_string(),
+        }
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct SearchResult {
-    packages: Vec<Package>
+    packages: Vec<Package>,
 }
 impl SearchResult {
     pub fn new(packages: Vec<Package>) -> Self {
-        SearchResult { packages:packages }
+        SearchResult { packages }
     }
 }
 
-#[derive(Copy,Clone)]
+#[derive(Copy, Clone)]
 pub struct InstallResult {}
 impl InstallResult {
     fn new() -> Self {
-        InstallResult {  }
+        InstallResult {}
     }
 }
-#[derive(Copy,Clone)]
+#[derive(Copy, Clone)]
 pub struct PublishResult {}
 impl PublishResult {
     fn new() -> Self {
-        PublishResult {  }
+        PublishResult {}
     }
 }
 #[derive(Clone, Default)]
 pub struct InitResult {
-    pub message: String
+    pub message: String,
 }
 impl InitResult {
     pub fn new(message: &str) -> Self {
-        InitResult { message: message.to_string() }
+        InitResult {
+            message: message.to_string(),
+        }
     }
 }
 pub struct FloxConfig {}
 
-pub struct FloxChannel {
+pub struct FloxChannel {}
 
-}
-
-pub(crate) trait CacheProvider {
-
-}
-
+pub(crate) trait CacheProvider {}
 
 pub(crate) trait StorageProvider {
     fn destroy(package: Package) -> Result<PublishResult>;
@@ -130,7 +124,7 @@ pub enum FloxBuilder {
     DerivationRuby,
     YarnPackage,
     PythonWithPackages,
-    Custom(String)
+    Custom(String),
 }
 
 impl From<String> for FloxBuilder {
@@ -148,7 +142,7 @@ impl From<String> for FloxBuilder {
             "mkDerivation-ruby" | "drv.ruby" => FloxBuilder::DerivationRuby,
             "mkYarnPackage" | "yarn" => FloxBuilder::YarnPackage,
             "python-withPackages" | "python-with-packages" => FloxBuilder::PythonWithPackages,
-            _ => FloxBuilder::Custom(builder)
+            _ => FloxBuilder::Custom(builder),
         }
     }
 }
@@ -169,13 +163,11 @@ impl Display for FloxBuilder {
             FloxBuilder::PythonWithPackages => "python-withPackages",
             FloxBuilder::Custom(s) => s,
         };
-        return write!(f, "{}", flox_name)
+        write!(f, "{}", flox_name)
     }
 }
-
 
 // pub trait RuntimeProvider {
 //     fn activate() -> Result<()>;
 //     fn environments() -> Result<()>;
 // }
-

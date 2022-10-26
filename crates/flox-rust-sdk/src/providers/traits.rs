@@ -1,21 +1,14 @@
-
-
-use async_trait::async_trait;
+use crate::models::{InstallResult, SearchResult};
 use anyhow::Result;
-use crate::models::{SearchResult, InstallResult};
+use async_trait::async_trait;
 
 use super::initializers::Initializer;
 
+#[async_trait]
+pub trait Publisher {}
 
 #[async_trait]
-pub trait Publisher {
-
-}
-
-#[async_trait]
-pub trait Builder {
-
-}
+pub trait Builder {}
 
 #[async_trait]
 pub trait Installer {
@@ -24,9 +17,7 @@ pub trait Installer {
 }
 
 #[async_trait]
-pub trait Sharer {
-
-}
+pub trait Sharer {}
 
 #[async_trait]
 pub trait Developer {
@@ -35,11 +26,9 @@ pub trait Developer {
 
 /// A Quick example of building the "flywheel" with the traits that we built
 #[async_trait]
-trait Flywheel : Initializer + Publisher + Installer + Sharer + Builder + Developer {
-    
-}
+trait Flywheel: Initializer + Publisher + Installer + Sharer + Builder + Developer {}
 
-// A provider for package actions. 
+// A provider for package actions.
 // #[async_trait]
 // pub trait PackageProvider {
 //     async fn init(&self, package_name: &str, builder: FloxBuilder) -> Result<InitResult>;
