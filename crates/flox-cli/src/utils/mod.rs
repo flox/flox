@@ -8,6 +8,6 @@ struct Flake {}
 
 impl Flake {
     fn determine_default_flake(path_str: String) {
-        let path = Path::new(&path_str);
+        let _path = Path::new(&path_str);
     }
 }

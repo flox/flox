@@ -1,37 +1,42 @@
-use clap::{Parser, };
-use anyhow::{Result};
-use flox_rust_sdk::{providers::initializers, prelude::FloxBuilder};
-use utils::*;
+use anyhow::Result;
+use clap::Parser;
+use flox_rust_sdk::providers::initializers;
 
-mod config;
 mod build;
+mod config;
 mod utils;
 
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
 pub(crate) struct FloxArgs {
     #[clap(subcommand, help = "Initialize a flox project")]
-    init: InitializeAction
+    init: InitializeAction,
 }
 
 #[derive(clap::Subcommand, Debug)]
-pub (crate) enum InitializeAction {
+pub(crate) enum InitializeAction {
     Init {
         #[clap(value_parser, help = "The package name you are trying to initialize")]
         package_name: String,
         #[clap(value_parser, help = "The builder you would like to use.")]
-        builder: String
-    }
+        builder: String,
+    },
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
     let args = FloxArgs::parse();
-    println!("{:?}",args);
+    println!("{:?}", args);
 
     match args.init {
-        InitializeAction::Init { package_name, builder } => {
-            initializers::get_provider().await?.init(&package_name, &builder.into()).await?;
+        InitializeAction::Init {
+            package_name,
+            builder,
+        } => {
+            initializers::get_provider()
+                .await?
+                .init(&package_name, &builder.into())
+                .await?;
         }
     }
 
