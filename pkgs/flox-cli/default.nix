@@ -35,6 +35,6 @@ in
       pkg-config # for openssl
     ];
 
-
-
+    # For the use with rust-analyzer
+    RUST_SRC_PATH = "${rustPlatform.rustLibSrc}";
   }
