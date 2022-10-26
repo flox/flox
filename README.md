@@ -13,9 +13,13 @@ The application will be async so parallelization of certain tasks (e.g. searchin
 
 The rust SDK will then be used to genrate an api via https://github.com/fzyzcjy/flutter_rust_bridge and a UI will be built in flutter / dart. 
 
-## Development
+## Development (with flox 👍)
 
-1. Download rustup - `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh` (Note: add flox/nix way of doing this)
+1. `flox develop`
+
+## Development (without flox 👎)
+
+1. Download rustup - `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`
 2. Install rust nightly `rustup default nightly`
 3. Hack away
 
@@ -32,4 +36,3 @@ Sam proposed that is to at some point integrate cxx binding support so nix can b
     - https://github.com/nix-community/go-nix  
     - https://github.com/Profpatsch/libnix-haskell#readme  
     - https://www.haskellforall.com/2022/09/nix-serve-ng-faster-more-reliable-drop.html 
-
