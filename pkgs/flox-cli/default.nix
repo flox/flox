@@ -6,29 +6,35 @@
   openssl,
   pkg-config,
   darwin,
-}:
-rustPlatform.buildRustPackage rec {
-  pname = "flox-cli";
-  version = "0.0.0";
-  src = self;
+}: let
+  cargoToml = lib.importTOML (self + "/crates/flox-cli/Cargo.toml");
+in
+  rustPlatform.buildRustPackage
+  {
+    pname = cargoToml.package.name;
+    version = cargoToml.package.version;
+    src = self;
 
-  cargoLock = {
-    lockFile = self + "/Cargo.lock";
-  };
+    cargoLock = {
+      lockFile = self + "/Cargo.lock";
+    };
 
-  buildAndTestSubdir = "crates/flox-cli";
+    buildAndTestSubdir = "crates/flox-cli";
 
-  doCheck = false;
+    doCheck = false;
 
-  buildInputs =
-    [
-      openssl.dev
-    ]
-    ++ lib.optional hostPlatform.isDarwin [
-      darwin.apple_sdk.frameworks.Security
+    buildInputs =
+      [
+        openssl.dev
+      ]
+      ++ lib.optional hostPlatform.isDarwin [
+        darwin.apple_sdk.frameworks.Security
+      ];
+
+    nativeBuildInputs = [
+      pkg-config # for openssl
     ];
 
-  nativeBuildInputs = [
-    pkg-config # for openssl
-  ];
-}
+
+
+  }
