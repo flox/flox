@@ -1,9 +1,10 @@
 
 
 
+#[cfg(test)]
 mod test {
+    use anyhow::Result;
 
-    use anyhow::{Result, anyhow};
     #[tokio::test]
     async fn test_github() -> Result<()> {
         use octocrab::Octocrab;
