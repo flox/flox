@@ -8,6 +8,8 @@
   darwin,
   flox,
   nix,
+  cacert,
+  glibcLocales,
 }: let
   cargoToml = lib.importTOML (self + "/crates/flox-cli/Cargo.toml");
 in
@@ -25,9 +27,6 @@ in
 
     doCheck = false;
 
-    NIX_BIN = "${nix}/bin/nix";
-    FLOX_SH = "${flox}/libexec/flox/flox";
-
     buildInputs =
       [
         openssl.dev
@@ -39,4 +38,15 @@ in
     nativeBuildInputs = [
       pkg-config # for openssl
     ];
+
+    NIX_BIN = "${nix}/bin/nix";
+    FLOX_SH = "${flox}/libexec/flox/flox";
+    NIXPKGS_CACERT_BUNDLE_CRT = " ${cacert}/etc/ssl/certs/ca-bundle.crt";
+  }
+  // lib.optionalAttrs hostPlatform.isLinux {
+    LOCALE_ARCHIVE = "${glibcLocales}/lib/locale/locale-archive";
+  }
+  // lib.optionalAttrs hostPlatform.isDarwin {
+    NIX_COREFOUNDATION_RPATH = "${darwin.CF}/Library/Frameworks";
+    PATH_LOCALE = "${darwin.locale}/share/locale";
   }
