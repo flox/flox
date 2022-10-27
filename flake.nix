@@ -5,7 +5,10 @@
 
   # Declaration of external resources
   # =================================
-
+  inputs.shellHooks = {
+    url = "github:cachix/pre-commit-hooks.nix";
+    inputs.nixpkgs.follows = "floxpkgs/nixpkgs/nixpkgs";
+  };
   # =================================
 
   outputs = args @ {floxpkgs, ...}: floxpkgs.project args (_: {});

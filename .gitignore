@@ -1,9 +1,3 @@
 /target
-
-
-# Added by cargo
-#
-# already existing elements were commented out
-
-#/target
 .env
+.pre-commit-config.yaml
