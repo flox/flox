@@ -4,5 +4,6 @@ inputs.shellHooks.lib.run {
   hooks = {
     alejandra.enable = true;
     rustfmt.enable = true;
+    clippy.enable = true;
   };
 }
