@@ -2,7 +2,7 @@ use anyhow::{anyhow, Result};
 use std::process::Stdio;
 use tokio::process::Command;
 
-use crate::environment::{build_flox_env, get_nix_cmd};
+use crate::environment::{build_flox_env, FLOX_SH, NIX_BIN};
 
 pub(crate) struct CommandRunner {}
 
@@ -29,7 +29,7 @@ impl CommandRunner {
     }
 
     pub async fn run_in_nix(cmd: &str, args: &Vec<&str>) -> Result<String> {
-        let output = Command::new(get_nix_cmd())
+        let output = Command::new(NIX_BIN)
             .envs(&build_flox_env()?)
             .arg(cmd)
             .args(args)
@@ -56,7 +56,7 @@ impl CommandRunner {
     }
 
     pub async fn run_in_flox(cmd: &str, args: &Vec<&str>) -> Result<String> {
-        match Command::new("flox")
+        match Command::new(FLOX_SH)
             .arg(cmd)
             .args(args)
             .stdout(Stdio::null())

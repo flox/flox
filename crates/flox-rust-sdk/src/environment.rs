@@ -3,6 +3,9 @@
 
 use anyhow::Result;
 use std::collections::HashMap;
+pub static NIX_BIN: &str = env!("NIX_BIN");
+pub static FLOX_SH: &str = env!("FLOX_SH");
+
 /// Environment variable key for the GitHub Api Key
 pub static GITHUB_TOKEN: &str = "GITHUB_TOKEN";
 
@@ -30,9 +33,4 @@ pub fn build_flox_env() -> Result<HashMap<String, String>> {
     );
 
     Ok(env_map)
-}
-
-pub fn get_nix_cmd() -> String {
-    // figure out how to get this from the flox environment
-    "/nix/store/31zkw5bn1k0w4bllxf6bh7yssmkfflvq-flox-0.0.5-r23/libexec/flox/nix".to_string()
 }

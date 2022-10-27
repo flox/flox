@@ -136,7 +136,7 @@ impl Initializer for RustNativeInitializer {
             }
         };
         // TODO move this to a nix runner
-        let output = Command::new(get_nix_cmd())
+        let output = Command::new(NIX_BIN)
             .envs(&build_flox_env()?)
             .arg("flake")
             .arg("init")

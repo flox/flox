@@ -20,8 +20,9 @@ The rust SDK will then be used to genrate an api via https://github.com/fzyzcjy/
 ## Development (without flox)
 
 1. Download rustup - `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`
-2. Install rust nightly `rustup default nightly`
-3. Hack away
+1. Install rust nightly `rustup default nightly`
+1. Set NIX_BIN and FLOX_SH environment variables
+1. Hack away
 
 ## Providers
 

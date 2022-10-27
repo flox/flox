@@ -6,6 +6,8 @@
   openssl,
   pkg-config,
   darwin,
+  flox,
+  nix,
 }: let
   cargoToml = lib.importTOML (self + "/crates/flox-cli/Cargo.toml");
 in
@@ -22,6 +24,9 @@ in
     buildAndTestSubdir = "crates/flox-cli";
 
     doCheck = false;
+
+    NIX_BIN = "${nix}/bin/nix";
+    FLOX_SH = "${flox}/libexec/flox/flox";
 
     buildInputs =
       [
