@@ -15,7 +15,7 @@ The rust SDK will then be used to genrate an api via https://github.com/fzyzcjy/
 
 ## Development (with flox)
 
-1. `flox develop -A rust-env` → sets up an environemnt with rust, rustfmt, clippy, rust-analyzer and pre-commit-hooks
+1. `flox develop -A rust-env` → sets up an environment with rust, rustfmt, clippy, rust-analyzer and pre-commit-hooks
 
 ## Development (without flox)
 
