@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use crate::{
+    actions::package::Package,
     environment::build_flox_env,
     models::catalog::Stability,
     nix::{
@@ -49,6 +50,10 @@ pub struct Flox<'flox> {
 }
 
 impl Flox<'_> {
+    pub fn package(&self, installable: Installable) -> Package {
+        Package::new(self, installable)
+    }
+
     pub fn nix(&self) -> Result<Box<dyn NixAPI>> {
         self.custom_nix.configure(self)
     }

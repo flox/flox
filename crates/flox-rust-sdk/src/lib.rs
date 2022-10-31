@@ -16,5 +16,7 @@ pub mod prelude {
     pub use super::models::*;
     pub use crate::flox::Flox;
 }
+
+pub mod actions;
 pub mod flox;
 pub mod nix;
