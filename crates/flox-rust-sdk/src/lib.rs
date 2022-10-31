@@ -13,8 +13,9 @@ mod models;
 pub mod environment;
 
 pub mod prelude {
-    pub use super::models::*;
     pub use crate::flox::Flox;
+    pub use crate::models::catalog::Stability;
+    pub use crate::nix::installable::Installable;
 }
 
 pub mod actions;
