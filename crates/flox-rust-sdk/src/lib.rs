@@ -15,3 +15,4 @@ pub mod environment;
 pub mod prelude {
     pub use super::models::*;
 }
+pub mod nix;
