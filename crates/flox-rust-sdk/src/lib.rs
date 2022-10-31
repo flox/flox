@@ -20,4 +20,4 @@ pub mod prelude {
 
 pub mod actions;
 pub mod flox;
-pub mod nix;
+pub use runix as nix;

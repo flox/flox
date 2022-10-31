@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use crate::{
     actions::package::Package,
-    environment::build_flox_env,
+    environment::{self, build_flox_env},
     models::catalog::Stability,
     nix::{
         command_line::NixCommandLine, EvaluationArgs, FlakeArgs, NixAPI, NixCommonArgs, NixConfig,
@@ -68,6 +68,7 @@ struct FloxNix;
 impl ConfigureNix for FloxNix {
     fn configure<'nix, 'a: 'nix>(&'a self, flox: &Flox) -> Result<Box<dyn NixAPI>> {
         Ok(Box::new(NixCommandLine::new(
+            Some(environment::NIX_BIN.to_string()),
             build_flox_env()?,
             NixCommonArgs::default(),
             FlakeArgs::default(),

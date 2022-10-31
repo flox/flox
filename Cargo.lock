@@ -503,6 +503,7 @@ dependencies = [
  "octocrab",
  "pretty_env_logger",
  "rnix",
+ "runix",
  "serde",
  "serde_json",
  "tokio",
@@ -1499,6 +1500,17 @@ dependencies = [
  "memoffset",
  "rustc-hash",
  "text-size",
+]
+
+[[package]]
+name = "runix"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "derive_builder",
+ "derive_more",
+ "tokio",
 ]
 
 [[package]]

@@ -107,7 +107,6 @@ pub trait NixCommand {
 // impl NixCommand {}
 
 pub mod command {
-    use config::builder;
     use derive_builder::Builder;
 
     use super::{EvaluationArgs, FlakeArgs, InstallablesArgs, NixCommand};
@@ -141,18 +140,13 @@ pub mod command {
 }
 
 pub mod command_line {
-    use std::{collections::HashMap, ffi, io, process::Stdio};
+    use std::{collections::HashMap, process::Stdio};
 
-    use anyhow::Result;
+    use anyhow::{anyhow, Result};
     use async_trait::async_trait;
-    use clap::builder::OsStr;
     use derive_builder::Builder;
     use derive_more::Constructor;
     use tokio::process::Command;
-
-    /// TODO: move to this module?
-    /// Configurable via [NixCommandLine]?
-    use crate::{environment::NIX_BIN, prelude::Flox};
 
     use super::{
         EvaluationArgs, FlakeArgs, InstallablesArgs, NixAPI, NixArgs, NixCommand, NixCommonArgs,
@@ -162,6 +156,8 @@ pub mod command_line {
     /// Nix Implementation based on the Nix Command Line
     #[derive(Constructor, Builder, Default)]
     pub struct NixCommandLine {
+        nix_bin: Option<String>,
+
         /// Environment
         environment: HashMap<String, String>,
         common_args: NixCommonArgs,
@@ -172,7 +168,7 @@ pub mod command_line {
 
     impl NixCommandLine {
         pub async fn run_in_nix(&self, args: &Vec<&str>) -> Result<String> {
-            let output = Command::new(NIX_BIN)
+            let output = Command::new(self.nix_bin.as_deref().unwrap_or_else(|| "nix"))
                 .envs(&self.environment)
                 .args(args)
                 .output()
@@ -203,7 +199,7 @@ pub mod command_line {
         /// Construct and run a nix command
         /// Merge with default argumens as applicable
         async fn run(&self, args: NixArgs) -> Result<()> {
-            let mut command = Command::new(NIX_BIN);
+            let mut command = Command::new(self.nix_bin.as_deref().unwrap_or_else(|| "nix"));
             command
                 .envs(&self.environment)
                 .args(dbg!(self.config.args()))
@@ -221,7 +217,7 @@ pub mod command_line {
 
             let mut child = command.spawn()?;
 
-            let output = child.wait().await?;
+            let _ = child.wait().await?;
 
             // let nix_response = std::str::from_utf8(&output.stdout)?;
             // let nix_err_response = std::str::from_utf8(&output.stderr)?;
