@@ -114,14 +114,14 @@ pub mod command {
 
     #[derive(Builder, Default, Clone)]
     #[builder(default)]
-    pub struct BuildArgs {
+    pub struct Build {
         flake: FlakeArgs,
         eval: EvaluationArgs,
         #[builder(setter(into))]
         installables: InstallablesArgs,
     }
 
-    impl NixCommand for BuildArgs {
+    impl NixCommand for Build {
         fn subcommand(&self) -> Vec<String> {
             vec!["build".to_owned()]
         }
@@ -155,8 +155,8 @@ pub mod command_line {
     use crate::{environment::NIX_BIN, prelude::Flox};
 
     use super::{
-        command::BuildArgsBuilder, EvaluationArgs, FlakeArgs, InstallablesArgs, NixAPI, NixArgs,
-        NixArgsBuilder, NixCommand, NixCommonArgs, NixConfig,
+        EvaluationArgs, FlakeArgs, InstallablesArgs, NixAPI, NixArgs, NixCommand, NixCommonArgs,
+        NixConfig,
     };
 
     /// Nix Implementation based on the Nix Command Line

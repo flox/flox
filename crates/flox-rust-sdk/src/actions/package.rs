@@ -1,9 +1,7 @@
 use anyhow::Result;
 use derive_more::Constructor;
 
-use crate::{
-    flox::Flox, nix::command::BuildArgsBuilder, nix::NixArgsBuilder, prelude::Installable,
-};
+use crate::{flox::Flox, nix::command::BuildBuilder, nix::NixArgsBuilder, prelude::Installable};
 
 #[derive(Constructor)]
 pub struct Package<'flox> {
@@ -17,12 +15,12 @@ impl Package<'_> {
     pub async fn build(&self) -> Result<()> {
         let nix = self.flox.nix()?;
 
-        let build_args = BuildArgsBuilder::default()
+        let command_args = BuildBuilder::default()
             .installables([self.installable.clone()])
             .build()?;
 
         let nix_args = NixArgsBuilder::default()
-            .command(Box::new(build_args))
+            .command(Box::new(command_args))
             .build()?;
 
         nix.run(nix_args).await?;
