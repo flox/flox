@@ -17,7 +17,7 @@ use installable::Installable;
 ///
 /// Future extensions of this trait may include running with text/json/rnix deserialization
 #[async_trait]
-pub trait NixAPI {
+pub trait NixApi {
     /// passthru nix
     async fn run(&self, args: NixArgs) -> Result<()>;
 }
@@ -149,7 +149,7 @@ pub mod command_line {
     use tokio::process::Command;
 
     use super::{
-        EvaluationArgs, FlakeArgs, InstallablesArgs, NixAPI, NixArgs, NixCommand, NixCommonArgs,
+        EvaluationArgs, FlakeArgs, InstallablesArgs, NixApi, NixArgs, NixCommand, NixCommonArgs,
         NixConfig,
     };
 
@@ -195,7 +195,7 @@ pub mod command_line {
     }
 
     #[async_trait]
-    impl NixAPI for NixCommandLine {
+    impl NixApi for NixCommandLine {
         /// Construct and run a nix command
         /// Merge with default argumens as applicable
         async fn run(&self, args: NixArgs) -> Result<()> {

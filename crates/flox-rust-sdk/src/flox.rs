@@ -5,7 +5,7 @@ use crate::{
     environment::{self, build_flox_env},
     models::catalog::Stability,
     nix::{
-        command_line::NixCommandLine, EvaluationArgs, FlakeArgs, NixAPI, NixCommonArgs, NixConfig,
+        command_line::NixCommandLine, EvaluationArgs, FlakeArgs, NixApi, NixCommonArgs, NixConfig,
     },
     prelude::Installable,
 };
