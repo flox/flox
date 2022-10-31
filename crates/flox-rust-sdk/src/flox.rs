@@ -22,7 +22,7 @@ use derive_builder::Builder;
 ///
 /// [Flox] will provide a preconfigured instance of the Nix API.
 /// By default this nix API uses the nix CLI.
-/// Preconfiguration includes environemnt variables and flox specific arguments.
+/// Preconfiguration includes environment variables and flox specific arguments.
 #[derive(Builder)]
 pub struct Flox<'flox> {
     /// The directory pointing to the users flox configuration
