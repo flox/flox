@@ -14,5 +14,7 @@ pub mod environment;
 
 pub mod prelude {
     pub use super::models::*;
+    pub use crate::flox::Flox;
 }
+pub mod flox;
 pub mod nix;
