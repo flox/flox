@@ -1,15 +1,20 @@
 use anyhow::Result;
 use derive_more::Constructor;
 
-use crate::{flox::Flox, nix::command::BuildBuilder, nix::NixArgsBuilder, prelude::Installable};
+use crate::{
+    flox::{Flox, NixApiExt},
+    nix::command::BuildBuilder,
+    nix::NixArgsBuilder,
+    prelude::Installable,
+};
 
 #[derive(Constructor)]
-pub struct Package<'flox> {
-    flox: &'flox Flox<'flox>,
+pub struct Package<'flox, Nix: NixApiExt> {
+    flox: &'flox Flox<Nix>,
     installable: Installable,
 }
 
-impl Package<'_> {
+impl<Nix: NixApiExt> Package<'_, Nix> {
     /// flox build
     /// runs `nix build <installable>`
     pub async fn build(&self) -> Result<()> {

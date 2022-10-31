@@ -154,7 +154,7 @@ pub mod command_line {
     };
 
     /// Nix Implementation based on the Nix Command Line
-    #[derive(Constructor, Builder, Default)]
+    #[derive(Constructor, Builder, Default, Clone)]
     pub struct NixCommandLine {
         nix_bin: Option<String>,
 

@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{marker::PhantomData, path::PathBuf};
 
 use crate::{
     actions::package::Package,
@@ -24,7 +24,7 @@ use derive_builder::Builder;
 /// By default this nix API uses the nix CLI.
 /// Preconfiguration includes environment variables and flox specific arguments.
 #[derive(Builder)]
-pub struct Flox<'flox> {
+pub struct Flox<Nix: NixApiExt> {
     /// The directory pointing to the users flox configuration
     ///
     /// TODO: set a default in the lib or CLI?
@@ -45,35 +45,39 @@ pub struct Flox<'flox> {
     #[builder(default)]
     extra_nix_args: Vec<String>,
 
-    #[builder(default = "&FloxNix")]
-    custom_nix: &'flox dyn ConfigureNix,
+    #[builder(setter(skip))]
+    #[builder(default)]
+    nix_marker: PhantomData<Nix>,
 }
 
-impl Flox<'_> {
-    pub fn package(&self, installable: Installable) -> Package {
+pub type DefaultFlox = Flox<NixCommandLine>;
+pub type DefaultFloxBuilder = FloxBuilder<NixCommandLine>;
+
+impl<Nix: NixApiExt> Flox<Nix> {
+    pub fn package(&self, installable: Installable) -> Package<Nix> {
         Package::new(self, installable)
     }
 
-    pub fn nix(&self) -> Result<Box<dyn NixAPI>> {
-        self.custom_nix.configure(self)
+    pub fn nix(&self) -> Result<Nix> {
+        Nix::instance(self)
     }
 }
 
-pub trait ConfigureNix {
-    fn configure<'nix, 'a: 'nix>(&'a self, flox: &Flox) -> Result<Box<dyn NixAPI>>;
+pub trait NixApiExt: NixApi {
+    fn instance(flox: &Flox<Self>) -> Result<Self>
+    where
+        Self: Sized;
 }
 
-struct FloxNix;
-
-impl ConfigureNix for FloxNix {
-    fn configure<'nix, 'a: 'nix>(&'a self, flox: &Flox) -> Result<Box<dyn NixAPI>> {
-        Ok(Box::new(NixCommandLine::new(
+impl NixApiExt for NixCommandLine {
+    fn instance(flox: &Flox<Self>) -> Result<Self> {
+        Ok(NixCommandLine::new(
             Some(environment::NIX_BIN.to_string()),
             build_flox_env()?,
             NixCommonArgs::default(),
             FlakeArgs::default(),
             EvaluationArgs::default(),
             NixConfig::default(),
-        )))
+        ))
     }
 }
