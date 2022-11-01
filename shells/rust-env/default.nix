@@ -22,8 +22,6 @@ mkShell ({
       rustfmt
       clippy
       rust-analyzer
-      cargo
-      rustc
       rust.packages.stable.rustPlatform.rustLibSrc
     ];
     shellHook = ''
