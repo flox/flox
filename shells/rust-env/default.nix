@@ -1,21 +1,31 @@
 {
   mkShell,
   self',
+  lib,
   rustfmt,
   clippy,
   rust-analyzer,
+  darwin,
   flox,
+  glibcLocales,
+  hostPlatform,
   nix,
   rustPlatform,
+  cargo,
+  rustc,
+  rust,
 }:
-mkShell {
-  inputsFrom = [self'.packages.flox-cli];
-  packages = [rustfmt clippy rust-analyzer];
-  shellHook = ''
-    ${self'.checks.pre-commit-check.shellHook}
-    export NIX_BIN="${nix}/bin/nix"
-    export FLOX_SH="${flox}/libexec/flox/flox"
-    # For use with rust-analyzer
-    export RUST_SRC_PATH="${rustPlatform.rustLibSrc}"
-  '';
-}
+mkShell ({
+    inputsFrom = [self'.packages.flox-cli];
+    RUST_SRC_PATH = "${rust.packages.stable.rustPlatform.rustLibSrc}";
+    packages = [
+      rustfmt
+      clippy
+      rust-analyzer
+      rust.packages.stable.rustPlatform.rustLibSrc
+    ];
+    shellHook = ''
+      ${self'.checks.pre-commit-check.shellHook}
+    '';
+  }
+  // self'.packages.flox-cli.envs)

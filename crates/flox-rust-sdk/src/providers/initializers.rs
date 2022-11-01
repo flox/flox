@@ -22,9 +22,8 @@ pub async fn get_provider() -> Result<Box<dyn Initializer>> {
         .unwrap_or_else(|_r| String::from("flox"));
 
     Ok(match init_provider.as_str() {
-        "flox" => Box::new(FloxInitializer),
         "rust" => Box::new(RustNativeInitializer::with_command_git()),
-        _ => Box::new(FloxInitializer),
+        _ => Box::new(RustNativeInitializer::with_command_git()),
     })
 }
 
@@ -46,9 +45,6 @@ pub trait Initializer {
     }
 }
 
-/// An Initializer that just uses the flox bash CLI
-struct FloxInitializer;
-
 /// A native implementation of the
 
 struct RustNativeInitializer {
@@ -60,27 +56,6 @@ impl RustNativeInitializer {
         RustNativeInitializer {
             git_provider: Box::new(GitCommandProvider),
         }
-    }
-}
-
-#[async_trait]
-impl Initializer for FloxInitializer {
-    fn name(&self) -> String {
-        String::from("FloxInitializer")
-    }
-    async fn init(&self, package_name: &str, builder: &FloxBuilder) -> Result<InitResult> {
-        let output = CommandRunner::run_in_flox(
-            "init",
-            &vec![
-                "--template",
-                &format!("{}", builder),
-                "--name",
-                package_name,
-            ],
-        )
-        .await?;
-
-        Ok(InitResult { message: output })
     }
 }
 
@@ -170,7 +145,7 @@ mod test {
 
     use anyhow::Result;
 
-    use super::{FloxInitializer, Initializer, RustNativeInitializer};
+    use super::{Initializer, RustNativeInitializer};
 
     #[tokio::test]
     async fn test_init_cmd() -> Result<()> {
@@ -180,18 +155,12 @@ mod test {
 
         let builder = crate::models::FloxBuilder::RustPackage;
 
-        let flox_init = FloxInitializer;
-
         // initialize a rust native initializer (which uses nix via a Command) using the command git
         let flox_native_init = RustNativeInitializer::with_command_git();
 
         flox_native_init.init("test_pkg", &builder).await?;
 
         RustNativeInitializer::cleanup()?;
-
-        flox_init.init("test_pkg", &builder).await?;
-
-        FloxInitializer::cleanup()?;
 
         // ensure cleanup
         assert_eq!(Path::new("./flake.nix").exists(), false);
@@ -205,7 +174,7 @@ mod test {
         let provider = super::get_provider().await?;
 
         // default
-        assert_eq!(provider.name(), "FloxInitializer");
+        assert_eq!(provider.name(), "RustNativeInitializer");
 
         Ok(())
     }
@@ -218,19 +187,6 @@ mod test {
         let provider = super::get_provider().await?;
 
         assert_eq!(provider.name(), "RustNativeInitializer");
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_rust_init_flox() -> Result<()> {
-        env::set_var("FLOX_INIT_PROVIDER", "flox");
-
-        // config is lazy, so we'll set the env and then try to grab the provider
-
-        let provider = super::get_provider().await?;
-
-        assert_eq!(provider.name(), "FloxInitializer");
 
         Ok(())
     }

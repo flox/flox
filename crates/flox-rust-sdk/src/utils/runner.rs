@@ -1,5 +1,4 @@
 use anyhow::{anyhow, Result};
-use std::process::Stdio;
 use tokio::process::Command;
 
 use crate::environment::{build_flox_env, FLOX_SH, NIX_BIN};
@@ -52,19 +51,6 @@ impl CommandRunner {
             ))
         } else {
             Ok(nix_response.to_string())
-        }
-    }
-
-    pub async fn run_in_flox(cmd: &str, args: &Vec<&str>) -> Result<String> {
-        match Command::new(FLOX_SH)
-            .arg(cmd)
-            .args(args)
-            .stdout(Stdio::null())
-            .output()
-            .await
-        {
-            Ok(output) => Ok(std::str::from_utf8(&output.stdout)?.to_string()),
-            Err(e) => Err(anyhow!("Error in nix response, {}", e)),
         }
     }
 }
