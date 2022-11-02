@@ -155,14 +155,39 @@ mod commands {
     }
 }
 
-#[derive(clap::Subcommand, Debug)]
-pub(crate) enum InitializeAction {
-    Init {
-        #[clap(value_parser, help = "The package name you are trying to initialize")]
-        package_name: String,
-        #[clap(value_parser, help = "The builder you would like to use.")]
-        builder: String,
-    },
+use crate::commands::FloxArgs;
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    env_logger::init();
+    let args = FloxArgs::try_parse();
+
+    match args {
+        Ok(root_args) => root_args.handle().await?,
+
+        Err(e) => match e.kind() {
+            clap::error::ErrorKind::DisplayHelp | clap::error::ErrorKind::DisplayVersion => {
+                error!("\n{}", e.render());
+                info!("The previous flox CLI is also implicitly supported, run\n\n\tflox support --help\n\n to see which commands are not yet reimplemented");
+                exit(0);
+            }
+            clap::error::ErrorKind::InvalidSubcommand | clap::error::ErrorKind::UnknownArgument => {
+                warn!("{}", e.render());
+                info!("Running as legacy flox command...");
+                let sys_args = env::args().collect::<Vec<_>>();
+                exit(
+                    run_in_flox(&sys_args[1..])
+                        .await?
+                        .code()
+                        .unwrap_or_default(),
+                );
+            }
+            _ => {
+                error!("\n{}", e.render())
+            }
+        },
+    }
+    Ok(())
 }
 
 pub async fn run_in_flox(args: &[impl AsRef<std::ffi::OsStr> + Debug]) -> Result<ExitStatus> {
