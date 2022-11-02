@@ -185,9 +185,6 @@ mod tests {
     #[tokio::test]
     async fn test_flox_help() {
         // TODO check the output
-        assert_eq!(
-            run_in_flox(&["--help".to_string()]).await.code().unwrap(),
-            0,
-        )
+        assert_eq!(run_in_flox(&["--help"]).await.unwrap().code().unwrap(), 0,)
     }
 }
