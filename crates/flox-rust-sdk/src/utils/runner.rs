@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Result};
 use tokio::process::Command;
 
-use crate::environment::{build_flox_env, FLOX_SH, NIX_BIN};
+use crate::environment::{build_flox_env, NIX_BIN};
 
 pub(crate) struct CommandRunner {}
 

@@ -10,7 +10,7 @@ use tokio::process::Command;
 mod build;
 mod config;
 mod utils;
-
+pub static FLOX_SH: &str = env!("FLOX_SH");
 mod commands {
     use anyhow::Result;
     use clap::{Parser, Subcommand};
@@ -165,40 +165,17 @@ pub(crate) enum InitializeAction {
     },
 }
 
-pub async fn run_in_flox(args: &[String]) -> ExitStatus {
-    Command::new(FLOX_SH)
+pub async fn run_in_flox(args: &[impl AsRef<std::ffi::OsStr> + Debug]) -> Result<ExitStatus> {
+    debug!("Running in flox with arguments: {:?}", args);
+    let status = Command::new(FLOX_SH)
         .args(args)
         .envs(&build_flox_env().unwrap())
         .spawn()
         .expect("failed to spawn flox")
         .wait()
-        .await
-        .unwrap()
-}
+        .await?;
 
-#[tokio::main]
-async fn main() -> Result<()> {
-    // TODO pick out the commands we want to implement in Rust
-    let raw_args: Vec<String> = env::args().collect();
-
-    exit(run_in_flox(&raw_args[1..]).await.code().unwrap());
-
-    let args = FloxArgs::parse();
-    println!("{:?}", args);
-
-    match args.init {
-        InitializeAction::Init {
-            package_name,
-            builder,
-        } => {
-            initializers::get_provider()
-                .await?
-                .init(&package_name, &builder.into())
-                .await?;
-        }
-    }
-
-    Ok(())
+    Ok(status)
 }
 
 #[cfg(test)]
