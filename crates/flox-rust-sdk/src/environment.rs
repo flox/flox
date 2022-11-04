@@ -5,7 +5,6 @@ use anyhow::Result;
 use std::collections::HashMap;
 use std::env;
 pub static NIX_BIN: &str = env!("NIX_BIN");
-pub static FLOX_SH: &str = env!("FLOX_SH");
 
 /// Environment variable key for the GitHub Api Key
 pub static GITHUB_TOKEN: &str = "GITHUB_TOKEN";

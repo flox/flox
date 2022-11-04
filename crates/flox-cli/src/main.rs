@@ -1,66 +1,137 @@
-use anyhow::{anyhow, Result};
-use clap::Parser;
-use flox_rust_sdk::environment::{build_flox_env, FLOX_SH};
-use flox_rust_sdk::providers::initializers;
+use anyhow::Result;
+use flox_rust_sdk::environment::build_flox_env;
+use log::{debug, info};
 use std::env;
+use std::fmt::Debug;
 use std::process::{exit, ExitStatus};
+use std::str::FromStr;
 use tokio::process::Command;
 
 mod build;
 mod config;
 mod utils;
+pub static FLOX_SH: &str = env!("FLOX_SH");
 
-#[derive(Parser, Debug)]
-#[clap(author, version, about, long_about = None)]
-pub(crate) struct FloxArgs {
-    #[clap(subcommand, help = "Initialize a flox project")]
-    init: InitializeAction,
+mod commands {
+    use anyhow::Result;
+    use bpaf::Bpaf;
+    use flox_rust_sdk::prelude::FloxBuilder;
+
+
+    use self::package::PackageArgs;
+
+    #[derive(Bpaf)]
+    #[bpaf(options)]
+    pub struct FloxArgs {
+        verbose: bool,
+
+        debug: bool,
+
+        #[bpaf(external(commands))]
+        command: Commands,
+
+        #[bpaf(positional)]
+        nix_args: Vec<String>,
+    }
+
+    impl FloxArgs {
+        pub async fn handle(&self) -> Result<()> {
+            match self.command {
+                // Commands::Support(ref f) => f.run(self).await?,
+                // Commands::Build(ref f) => f.run(&self).await?,
+                Commands::Package(ref package) => package.handle(self).await?,
+            }
+            Ok(())
+        }
+
+        fn flox(&self) -> FloxBuilder {
+            FloxBuilder::default()
+        }
+    }
+
+    /// Transparent separation of different categories of commands
+    #[derive(Bpaf)]
+    pub enum Commands {
+        Package(#[bpaf(external(package::package_args))] PackageArgs),
+    }
+
+    mod package {
+        use anyhow::Result;
+        use bpaf::Bpaf;
+
+        use self::build::BuildArgs;
+
+        use super::FloxArgs;
+
+        #[derive(Bpaf)]
+        pub struct PackageArgs {
+            #[bpaf(external(package_commands))]
+            pub command: PackageCommands,
+        }
+
+        impl PackageArgs {
+            pub async fn handle(&self, root_args: &FloxArgs) -> Result<()> {
+                let flox = root_args.flox().build()?;
+
+                match &self.command {
+                    PackageCommands::Build(BuildArgs { installable }) => {
+                        flox.package(installable.clone().into()).build().await?
+                    }
+                }
+
+                Ok(())
+            }
+        }
+
+        #[derive(Bpaf)]
+        pub enum PackageCommands {
+            #[bpaf(command)]
+            Build(#[bpaf(external(build::build_args))] build::BuildArgs),
+        }
+
+        mod build {
+            use bpaf::Bpaf;
+            #[derive(Bpaf)]
+            pub struct BuildArgs {
+                #[bpaf(positional("INSTALLABLE"))]
+                pub installable: String,
+            }
+        }
+    }
 }
 
-#[derive(clap::Subcommand, Debug)]
-pub(crate) enum InitializeAction {
-    Init {
-        #[clap(value_parser, help = "The package name you are trying to initialize")]
-        package_name: String,
-        #[clap(value_parser, help = "The builder you would like to use.")]
-        builder: String,
-    },
+#[tokio::main]
+async fn main() -> Result<()> {
+    env_logger::init();
+
+    if let Ok(value) = env::var("FLOX_PREVIEW") {
+        if let Ok(true) = bool::from_str(&value) {
+            run_rust_flox().await?;
+            exit(0);
+        }
+    }
+    info!("`FLOX_PREVIEW` not set to \"true\", falling back to legacy flox");
+    run_in_flox(&env::args_os().collect::<Vec<_>>()[1..]).await?;
+    Ok(())
 }
 
-pub async fn run_in_flox(args: &[String]) -> ExitStatus {
-    Command::new(FLOX_SH)
+async fn run_rust_flox() -> Result<()> {
+    let args = commands::flox_args().run();
+    args.handle().await?;
+    Ok(())
+}
+
+pub async fn run_in_flox(args: &[impl AsRef<std::ffi::OsStr> + Debug]) -> Result<ExitStatus> {
+    debug!("Running in flox with arguments: {:?}", args);
+    let status = Command::new(FLOX_SH)
         .args(args)
         .envs(&build_flox_env().unwrap())
         .spawn()
         .expect("failed to spawn flox")
         .wait()
-        .await
-        .unwrap()
-}
+        .await?;
 
-#[tokio::main]
-async fn main() -> Result<()> {
-    // TODO pick out the commands we want to implement in Rust
-    let raw_args: Vec<String> = env::args().collect();
-
-    exit(run_in_flox(&raw_args[1..]).await.code().unwrap());
-
-    let args = FloxArgs::parse();
-    println!("{:?}", args);
-
-    match args.init {
-        InitializeAction::Init {
-            package_name,
-            builder,
-        } => {
-            initializers::get_provider()
-                .await?
-                .init(&package_name, &builder.into())
-                .await?;
-        }
-    }
-
-    Ok(())
+    Ok(status)
 }
 
 #[cfg(test)]
@@ -70,9 +141,6 @@ mod tests {
     #[tokio::test]
     async fn test_flox_help() {
         // TODO check the output
-        assert_eq!(
-            run_in_flox(&["--help".to_string()]).await.code().unwrap(),
-            0,
-        )
+        assert_eq!(run_in_flox(&["--help"]).await.unwrap().code().unwrap(), 0,)
     }
 }
