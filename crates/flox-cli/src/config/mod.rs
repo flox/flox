@@ -40,6 +40,7 @@ pub struct GithubConfig {}
 /// controls wheter flox-preview is enabled or not
 #[derive(Debug, Deserialize, Default)]
 pub struct CliEnable {
+    #[serde(default)]
     enable: bool,
 }
 
