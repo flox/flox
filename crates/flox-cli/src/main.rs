@@ -1,8 +1,8 @@
 use anyhow::Result;
-use clap::Parser;
+use bpaf::OptionParser;
+// use clap::{Parser, Args};
 use flox_rust_sdk::environment::build_flox_env;
 use log::{debug, error, info, warn};
-use std::env;
 use std::fmt::Debug;
 use std::process::{exit, ExitStatus};
 use tokio::process::Command;
@@ -11,37 +11,36 @@ mod build;
 mod config;
 mod utils;
 pub static FLOX_SH: &str = env!("FLOX_SH");
+
 mod commands {
     use anyhow::Result;
-    use clap::{Parser, Subcommand};
+    use bpaf::Bpaf;
     use flox_rust_sdk::prelude::FloxBuilder;
 
-    use forward::{Forward, ForwardTo};
+    // use forward::{Forward, ForwardTo};
 
     use self::package::PackageArgs;
 
-    #[derive(Parser)]
-    #[clap(author, version, about, long_about = None)]
+    #[derive(Bpaf)]
+    #[bpaf(options)]
     pub struct FloxArgs {
-        #[clap(long)]
         verbose: bool,
 
-        #[clap(long)]
         debug: bool,
 
-        #[clap(subcommand)]
-        command: FloxCommands,
+        #[bpaf(external(commands))]
+        command: Commands,
 
-        #[clap(last = true)]
+        #[bpaf(positional)]
         nix_args: Vec<String>,
     }
 
     impl FloxArgs {
         pub async fn handle(&self) -> Result<()> {
             match self.command {
-                FloxCommands::Support(ref f) => f.run(self).await?,
-                FloxCommands::Build(ref f) => f.run(&self).await?,
-                FloxCommands::Package(ref package) => package.handle(self).await?,
+                // Commands::Support(ref f) => f.run(self).await?,
+                // Commands::Build(ref f) => f.run(&self).await?,
+                Commands::Package(ref package) => package.handle(self).await?,
             }
             Ok(())
         }
@@ -51,41 +50,23 @@ mod commands {
         }
     }
 
-    #[derive(Subcommand)]
-    pub enum FloxCommands {
-        /// allow explicitly forwarding to legacy flox
-        Support(Forward<LegacyFlox>),
-        Build(Forward<LegacyFloxBuild>),
-        Package(PackageArgs),
-    }
-
-    impl ForwardTo for FloxCommands {
-        /// any unknown commands to flox that are not subcommands knwo to flox
-        const COMMAND: &'static [&'static str] = &[""];
-    }
-
-    pub struct LegacyFlox;
-    impl ForwardTo for LegacyFlox {
-        /// any unknown commands to flox that are not subcommands knwo to flox
-        const COMMAND: &'static [&'static str] = &[""];
-    }
-
-    pub struct LegacyFloxBuild;
-    impl ForwardTo for LegacyFloxBuild {
-        const COMMAND: &'static [&'static str] = &["build"];
+    /// Transparent separation of different categories of commands
+    #[derive(Bpaf)]
+    pub enum Commands {
+        Package(#[bpaf(external(package::package_args))] PackageArgs),
     }
 
     mod package {
         use anyhow::Result;
-        use clap::{Parser, Subcommand};
+        use bpaf::Bpaf;
 
         use self::build::BuildArgs;
 
         use super::FloxArgs;
 
-        #[derive(Parser)]
+        #[derive(Bpaf)]
         pub struct PackageArgs {
-            #[clap(subcommand)]
+            #[bpaf(external(package_commands))]
             pub command: PackageCommands,
         }
 
@@ -95,7 +76,7 @@ mod commands {
 
                 match &self.command {
                     PackageCommands::Build(BuildArgs { installable }) => {
-                        flox.package(installable.clone()).build().await?
+                        flox.package(installable.clone().into()).build().await?
                     }
                 }
 
@@ -103,90 +84,28 @@ mod commands {
             }
         }
 
-        #[derive(Subcommand)]
+        #[derive(Bpaf)]
         pub enum PackageCommands {
-            Build(build::BuildArgs),
+            #[bpaf(command)]
+            Build(#[bpaf(external(build::build_args))] build::BuildArgs),
         }
 
         mod build {
-            use clap::Args;
-            use flox_rust_sdk::prelude::Installable;
-            #[derive(Args)]
+            use bpaf::Bpaf;
+            #[derive(Bpaf)]
             pub struct BuildArgs {
-                pub installable: Installable,
-            }
-        }
-    }
-
-    mod forward {
-        use std::marker::PhantomData;
-
-        use anyhow::Result;
-        use clap::Args;
-
-        use crate::run_in_flox;
-
-        use super::FloxArgs;
-
-        pub trait ForwardTo {
-            const COMMAND: &'static [&'static str] = &["--help"];
-        }
-
-        #[derive(Args)]
-        pub struct Forward<F: ForwardTo> {
-            #[clap(raw = true)]
-            args: Vec<String>,
-            #[clap(skip)]
-            _command_marker: PhantomData<F>,
-        }
-        impl<F: ForwardTo> Forward<F> {
-            pub async fn run(&self, root: &FloxArgs) -> Result<()> {
-                let mut command = Vec::new();
-                if root.verbose {
-                    command.append(&mut vec!["-v"]);
-                }
-                command.append(&mut F::COMMAND.to_vec());
-                command.extend(self.args.iter().map(|s| &**s));
-                command.extend(root.nix_args.iter().map(|s| &**s));
-                run_in_flox(&command).await?;
-                Ok(())
+                #[bpaf(positional("INSTALLABLE"))]
+                pub installable: String,
             }
         }
     }
 }
 
-use crate::commands::FloxArgs;
-
 #[tokio::main]
 async fn main() -> Result<()> {
     env_logger::init();
-    let args = FloxArgs::try_parse();
-
-    match args {
-        Ok(root_args) => root_args.handle().await?,
-
-        Err(e) => match e.kind() {
-            clap::error::ErrorKind::DisplayHelp | clap::error::ErrorKind::DisplayVersion => {
-                error!("\n{}", e.render());
-                info!("The previous flox CLI is also implicitly supported, run\n\n\tflox support --help\n\n to see which commands are not yet reimplemented");
-                exit(0);
-            }
-            clap::error::ErrorKind::InvalidSubcommand | clap::error::ErrorKind::UnknownArgument => {
-                warn!("{}", e.render());
-                info!("Running as legacy flox command...");
-                let sys_args = env::args().collect::<Vec<_>>();
-                exit(
-                    run_in_flox(&sys_args[1..])
-                        .await?
-                        .code()
-                        .unwrap_or_default(),
-                );
-            }
-            _ => {
-                error!("\n{}", e.render())
-            }
-        },
-    }
+    let args = commands::flox_args().run();
+    args.handle().await?;
     Ok(())
 }
 

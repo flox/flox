@@ -123,6 +123,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "bpaf"
+version = "0.7.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a1eefd44fa3be02b360bb22b44abaf204fb381baf5d2f24e270f58bb42dc3e73"
+dependencies = [
+ "bpaf_derive",
+]
+
+[[package]]
+name = "bpaf_derive"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f6ec104786b13bcaaa3548a689bd7527e02de0c92ea1035e64f5be501f741790"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "bumpalo"
 version = "3.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -488,7 +508,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
- "clap",
+ "bpaf",
  "dotenv",
  "env_logger 0.9.1",
  "flox-rust-sdk",
