@@ -104,14 +104,13 @@ mod commands {
 async fn main() -> Result<()> {
     env_logger::init();
 
-    if let Ok(value) = env::var("FLOX_PREVIEW") {
-        if let Ok(true) = bool::from_str(&value) {
-            run_rust_flox().await?;
-            exit(0);
-        }
+    if config::CliConfig::enabled()? {
+        run_rust_flox().await?;
+    } else {
+        info!("`FLOX_PREVIEW` unset or not \"true\", falling back to legacy flox");
+        run_in_flox(&env::args_os().collect::<Vec<_>>()[1..]).await?;
     }
-    info!("`FLOX_PREVIEW` not set to \"true\", falling back to legacy flox");
-    run_in_flox(&env::args_os().collect::<Vec<_>>()[1..]).await?;
+
     Ok(())
 }
 
