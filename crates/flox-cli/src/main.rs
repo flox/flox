@@ -17,7 +17,6 @@ mod commands {
     use bpaf::Bpaf;
     use flox_rust_sdk::prelude::FloxBuilder;
 
-
     use self::package::PackageArgs;
 
     #[derive(Bpaf)]
