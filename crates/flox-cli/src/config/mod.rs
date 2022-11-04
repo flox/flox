@@ -46,14 +46,15 @@ pub struct CliEnable {
 
 impl CliConfig {
     /// Creates a raw [Config] object
-    pub fn config() -> Result<Config> {
-        let config_dir = env::var("FLOX_PREVIEW_CONFIG_DIR")
-            .map(Into::<PathBuf>::into)
-            .or_else::<Error, _>(|e| {
+    fn config() -> Result<Config> {
+        let config_dir = match env::var("FLOX_PREVIEW_CONFIG_DIR") {
+            Ok(v) => v.into(),
+            Err(_) => {
                 info!("`FLOX_PREVIEW_CONFIG_DIR` not set");
                 let config_dir = dirs::config_dir().unwrap();
-                Ok(config_dir.join("flox-preview"))
-            })?;
+                config_dir.join("flox-preview")
+            }
+        };
 
         let builder = Config::builder()
             .add_source(
