@@ -20,3 +20,4 @@ log= "0.4.17"
 env_logger = "0.9.1"
 bpaf = { version = "0.7.2", features = ["derive"] }
 config = "0.13.1"
+dirs = "4.0.0"
