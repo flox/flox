@@ -509,6 +509,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "bpaf",
+ "config",
  "dotenv",
  "env_logger 0.9.1",
  "flox-rust-sdk",
