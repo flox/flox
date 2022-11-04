@@ -104,6 +104,19 @@ mod commands {
 #[tokio::main]
 async fn main() -> Result<()> {
     env_logger::init();
+
+    if let Ok(value) = env::var("FLOX_PREVIEW") {
+        if let Ok(true) = bool::from_str(&value) {
+            run_rust_flox().await?;
+            exit(0);
+        }
+    }
+    info!("`FLOX_PREVIEW` unset or not \"true\", falling back to legacy flox");
+    run_in_flox(&env::args_os().collect::<Vec<_>>()[1..]).await?;
+    Ok(())
+}
+
+async fn run_rust_flox() -> Result<()> {
     let args = commands::flox_args().run();
     args.handle().await?;
     Ok(())
