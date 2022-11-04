@@ -7,10 +7,19 @@ use serde::Deserialize;
 
 #[derive(Debug, Deserialize, Default)]
 pub struct CliConfig {
+    /// Whether the flox preview is enabled
+    ///
+    /// if `false` causes fallback to the bash implementation of flox
     #[serde(flatten)]
     enable: CliEnable,
+
+    /// flox configuration options
     flox: FloxConfig,
+
+    /// nix configuration options
     nix: NixConfig,
+
+    /// github configuration options
     github: GithubConfig,
 }
 
