@@ -1,10 +1,10 @@
 use anyhow::Result;
-use bpaf::OptionParser;
-// use clap::{Parser, Args};
 use flox_rust_sdk::environment::build_flox_env;
-use log::{debug, error, info, warn};
+use log::{debug, info};
+use std::env;
 use std::fmt::Debug;
 use std::process::{exit, ExitStatus};
+use std::str::FromStr;
 use tokio::process::Command;
 
 mod build;
