@@ -78,11 +78,3 @@ impl CliConfig {
         Ok(enabled.enable)
     }
 }
-
-// struct FloxConfiguration {
-//     defaultFlake: String
-// }
-
-// impl FloxConfiguration {
-
-// }
