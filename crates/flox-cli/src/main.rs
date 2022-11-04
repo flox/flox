@@ -110,7 +110,7 @@ async fn main() -> Result<()> {
             exit(0);
         }
     }
-    info!("`FLOX_PREVIEW` unset or not \"true\", falling back to legacy flox");
+    info!("`FLOX_PREVIEW` not set to \"true\", falling back to legacy flox");
     run_in_flox(&env::args_os().collect::<Vec<_>>()[1..]).await?;
     Ok(())
 }
