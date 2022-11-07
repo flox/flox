@@ -103,7 +103,7 @@ mod commands {
 async fn main() -> Result<()> {
     env_logger::init();
 
-    if config::CliConfig::enabled()? {
+    if crate::config::Config::preview_enabled()? {
         run_rust_flox().await?;
     } else {
         info!("`FLOX_PREVIEW` unset or not \"true\", falling back to legacy flox");
