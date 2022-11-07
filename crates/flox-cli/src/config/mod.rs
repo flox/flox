@@ -11,16 +11,16 @@ pub struct Config {
     ///
     /// if `false` causes fallback to the bash implementation of flox
     #[serde(flatten)]
-    enable: EnablePreview,
+    pub enable: EnablePreview,
 
     /// flox configuration options
-    flox: FloxConfig,
+    pub flox: FloxConfig,
 
     /// nix configuration options
-    nix: NixConfig,
+    pub nix: NixConfig,
 
     /// github configuration options
-    github: GithubConfig,
+    pub github: GithubConfig,
 }
 
 // TODO: move to flox_sdk?
