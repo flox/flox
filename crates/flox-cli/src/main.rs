@@ -37,7 +37,7 @@ mod commands {
         /// Initialize the command line by creating an initial FloxBuilder
         pub async fn handle(&self, config: crate::config::Config) -> Result<()> {
             let flox = FloxBuilder::default()
-                .collect_metrics(config.flox.allow_telemetry)
+                .collect_metrics(config.flox.allow_telemetry.unwrap_or_default())
                 .cache_dir(config.flox.cache_dir)
                 .data_dir(config.flox.data_dir)
                 .config_dir(config.flox.config_dir)

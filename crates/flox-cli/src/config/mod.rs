@@ -27,7 +27,7 @@ pub struct Config {
 /// Describes the Configuration for the flox library
 #[derive(Debug, Deserialize, Default)]
 pub struct FloxConfig {
-    pub allow_telemetry: bool,
+    pub allow_telemetry: Option<bool>,
     pub cache_dir: PathBuf,
     pub data_dir: PathBuf,
     pub config_dir: PathBuf,
