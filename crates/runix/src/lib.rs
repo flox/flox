@@ -179,7 +179,7 @@ pub mod command_line {
 
     impl NixCommandLine {
         pub async fn run_in_nix(&self, args: &Vec<&str>) -> Result<String> {
-            let output = Command::new(self.nix_bin.as_deref().unwrap_or_else(|| "nix"))
+            let output = Command::new(self.nix_bin.as_deref().unwrap_or("nix"))
                 .envs(&self.environment)
                 .args(args)
                 .output()
@@ -210,7 +210,7 @@ pub mod command_line {
         /// Construct and run a nix command
         /// Merge with default argumens as applicable
         async fn run(&self, args: NixArgs) -> Result<()> {
-            let mut command = Command::new(self.nix_bin.as_deref().unwrap_or_else(|| "nix"));
+            let mut command = Command::new(self.nix_bin.as_deref().unwrap_or("nix"));
             command
                 .envs(&self.environment)
                 .args(self.config.args())

@@ -3,14 +3,11 @@ use std::{marker::PhantomData, path::PathBuf};
 use crate::{
     actions::package::Package,
     environment::{self, build_flox_env},
-    models::catalog::Stability,
-    nix::{
-        command_line::NixCommandLine, EvaluationArgs, FlakeArgs, NixApi, NixCommonArgs, NixConfig,
-    },
+    nix::{command_line::NixCommandLine, EvaluationArgs, FlakeArgs, NixApi, NixCommonArgs},
     prelude::Installable,
 };
 use anyhow::Result;
-use config::builder;
+
 use derive_builder::Builder;
 use runix::NixConfigBuilder;
 
@@ -69,7 +66,7 @@ pub trait NixApiExt: NixApi {
 }
 
 impl NixApiExt for NixCommandLine {
-    fn instance(flox: &Flox<Self>) -> Result<Self> {
+    fn instance(_flox: &Flox<Self>) -> Result<Self> {
         let nix_config = NixConfigBuilder::default()
             .accept_flake_config(true.into())
             // .netrc_file() TODO

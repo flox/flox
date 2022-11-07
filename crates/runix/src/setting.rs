@@ -2,8 +2,6 @@ use std::fmt::Display;
 
 use derive_more::From;
 
-use crate::command_line::ToArgs;
-
 /// Setting Container akin to https://cs.github.com/NixOS/nix/blob/499e99d099ec513478a2d3120b2af3a16d9ae49d/src/libutil/config.cc#L199
 #[derive(From, Clone)]
 pub struct Setting<T>(T);

@@ -3,8 +3,8 @@ use flox_rust_sdk::environment::build_flox_env;
 use log::{debug, info};
 use std::env;
 use std::fmt::Debug;
-use std::process::{exit, ExitStatus};
-use std::str::FromStr;
+use std::process::ExitStatus;
+
 use tokio::process::Command;
 
 mod build;
@@ -69,8 +69,6 @@ mod commands {
         use flox_rust_sdk::prelude::Flox;
 
         use self::build::BuildArgs;
-
-        use super::FloxArgs;
 
         #[derive(Bpaf)]
         pub struct PackageArgs {

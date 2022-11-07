@@ -1,6 +1,6 @@
 use std::{env, path::PathBuf};
 
-use anyhow::{Context, Error, Result};
+use anyhow::{Context, Result};
 use config::{Config as HierarchicalConfig, Environment};
 use log::info;
 use serde::Deserialize;
