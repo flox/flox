@@ -47,7 +47,7 @@ mod commands {
             match self.command {
                 // Commands::Support(ref f) => f.run(self).await?,
                 // Commands::Build(ref f) => f.run(&self).await?,
-                Commands::Package(ref package) => package.handle(self).await?,
+                Commands::Package(ref package) => package.handle(flox).await?,
             }
             Ok(())
         }
@@ -66,6 +66,7 @@ mod commands {
     mod package {
         use anyhow::Result;
         use bpaf::Bpaf;
+        use flox_rust_sdk::prelude::Flox;
 
         use self::build::BuildArgs;
 
@@ -78,9 +79,7 @@ mod commands {
         }
 
         impl PackageArgs {
-            pub async fn handle(&self, root_args: &FloxArgs) -> Result<()> {
-                let flox = root_args.flox().build()?;
-
+            pub async fn handle(&self, flox: Flox) -> Result<()> {
                 match &self.command {
                     PackageCommands::Build(BuildArgs { installable }) => {
                         flox.package(installable.clone().into()).build().await?
@@ -124,7 +123,7 @@ async fn main() -> Result<()> {
 
 async fn run_rust_flox() -> Result<()> {
     let args = commands::flox_args().run();
-    args.handle().await?;
+    args.handle(config::Config::parse()?).await?;
     Ok(())
 }
 
