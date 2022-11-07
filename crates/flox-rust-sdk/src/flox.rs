@@ -29,6 +29,8 @@ pub struct Flox<Nix: NixApiExt> {
     ///
     /// TODO: set a default in the lib or CLI?
     config_dir: PathBuf,
+    cache_dir: PathBuf,
+    data_dir: PathBuf,
 
     /// Whether to collect metrics of any kind
     /// (yet to be made use of)
