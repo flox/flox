@@ -6,7 +6,11 @@ use derive_builder::Builder;
 use derive_more::From;
 
 pub mod installable;
+pub mod setting;
+
+pub use command_line as default;
 use installable::Installable;
+use setting::Setting;
 
 /// Abstract nix interface
 ///
@@ -28,12 +32,6 @@ trait MergeArgs {
     fn merge(&mut self, other: &Self) -> Result<()>;
 }
 
-/// These arguments correspond to nix config settings as defined in `nix.conf` or overridden on the commandline
-/// and refer to the options defined in
-/// - All implementations of Setting<_> ([approximation](https://cs.github.com/?scopeName=All+repos&scope=&q=repo%3Anixos%2Fnix+%2FSetting%3C%5Cw%2B%3E%2F))
-#[derive(Builder, Clone, Default)]
-pub struct NixConfig {}
-
 /// Nix arguments
 /// should be a proper struct + de/serialization to and from [&str]
 #[derive(Builder)]
@@ -51,6 +49,18 @@ pub struct NixArgs {
     /// These may contain flake/evaluation args if applicable
     // #[builder(setter(skip))]
     command: Box<dyn NixCommand + Send + Sync>,
+}
+
+/// These arguments correspond to nix config settings as defined in `nix.conf` or overridden on the commandline
+/// and refer to the options defined in
+/// - All implementations of Setting<_> ([approximation](https://cs.github.com/?scopeName=All+repos&scope=&q=repo%3Anixos%2Fnix+%2FSetting%3C%5Cw%2B%3E%2F))
+#[derive(Builder, Clone, Default)]
+#[builder(setter(strip_option))]
+pub struct NixConfig {
+    accept_flake_config: Option<Setting<bool>>,
+    warn_dirty: Option<Setting<bool>>,
+    extra_experimental_features: Option<Setting<Vec<String>>>,
+    extra_substituters: Option<Setting<Vec<String>>>,
 }
 
 /// These arguments do not depend on the nix subcommand issued
@@ -247,7 +257,25 @@ pub mod command_line {
 
     impl ToArgs for NixConfig {
         fn args(&self) -> Vec<String> {
-            vec![]
+            let mut args = vec![];
+
+            if let Some(ref s) = self.accept_flake_config {
+                args.append(&mut s.to_args("--accept-flake-config"));
+            }
+
+            if let Some(ref s) = self.warn_dirty {
+                args.append(&mut s.to_args("--warn-dirty"));
+            }
+
+            if let Some(ref s) = self.extra_experimental_features {
+                args.append(&mut s.to_args("--extra-experimental-features"));
+            }
+
+            if let Some(ref s) = self.extra_substituters {
+                args.append(&mut s.to_args("--extra-substituters"));
+            }
+
+            args
         }
     }
     impl ToArgs for NixArgs {
@@ -296,5 +324,3 @@ pub mod command_line {
         }
     }
 }
-
-pub use command_line as default;
