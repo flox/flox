@@ -156,6 +156,7 @@ pub mod command_line {
     use async_trait::async_trait;
     use derive_builder::Builder;
     use derive_more::Constructor;
+    use log::debug;
     use tokio::process::Command;
 
     use super::{
@@ -212,18 +213,19 @@ pub mod command_line {
             let mut command = Command::new(self.nix_bin.as_deref().unwrap_or_else(|| "nix"));
             command
                 .envs(&self.environment)
-                .args(dbg!(self.config.args()))
-                .args(dbg!(self.common_args.args()))
-                .args(dbg!(args.args()))
+                .args(self.config.args())
+                .args(self.common_args.args())
+                .args(args.args())
                 .stdout(Stdio::inherit())
                 .stderr(Stdio::inherit());
 
-            command
+            let args = command
                 .as_std()
                 .get_args()
                 .map(|arg| arg.to_string_lossy().to_string())
-                .collect::<Vec<String>>()
-                .join(" ");
+                .collect::<Vec<_>>();
+
+            debug!("Invoking nix CLI: env={:?}; {:#?}", self.environment, args);
 
             let mut child = command.spawn()?;
 
