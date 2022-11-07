@@ -12,6 +12,7 @@ use crate::{
 use anyhow::Result;
 use config::builder;
 use derive_builder::Builder;
+use runix::NixConfigBuilder;
 
 /// The main API struct for our flox implementation
 ///
@@ -69,13 +70,28 @@ pub trait NixApiExt: NixApi {
 
 impl NixApiExt for NixCommandLine {
     fn instance(flox: &Flox<Self>) -> Result<Self> {
+        let nix_config = NixConfigBuilder::default()
+            .accept_flake_config(true.into())
+            // .netrc_file() TODO
+            .warn_dirty(false.into())
+            .extra_experimental_features(
+                ["nix-command", "flakes"].map(String::from).to_vec().into(),
+            )
+            .extra_substituters(
+                ["https://cache.floxdev.com?trusted=1"]
+                    .map(String::from)
+                    .to_vec()
+                    .into(),
+            )
+            .build()?;
+
         Ok(NixCommandLine::new(
             Some(environment::NIX_BIN.to_string()),
             build_flox_env()?,
             NixCommonArgs::default(),
             FlakeArgs::default(),
             EvaluationArgs::default(),
-            NixConfig::default(),
+            nix_config,
         ))
     }
 }
