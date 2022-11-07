@@ -1,6 +1,6 @@
 use std::{env, path::PathBuf};
 
-use anyhow::{Error, Result};
+use anyhow::{Context, Error, Result};
 use config::{Config as HierarchicalConfig, Environment};
 use log::info;
 use serde::Deserialize;
@@ -75,7 +75,9 @@ impl Config {
     /// Creates a [CliConfig] from the environment and config file
     pub fn parse() -> Result<Config> {
         let final_config = Self::raw_config()?;
-        let cli_confg = final_config.try_deserialize()?;
+        let cli_confg = final_config
+            .try_deserialize()
+            .context("Could not parse config")?;
         Ok(cli_confg)
     }
 
