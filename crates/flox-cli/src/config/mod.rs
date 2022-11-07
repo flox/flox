@@ -26,7 +26,12 @@ pub struct Config {
 // TODO: move to flox_sdk?
 /// Describes the Configuration for the flox library
 #[derive(Debug, Deserialize, Default)]
-pub struct FloxConfig {}
+pub struct FloxConfig {
+    pub allow_telemetry: bool,
+    pub cache_dir: PathBuf,
+    pub data_dir: PathBuf,
+    pub config_dir: PathBuf,
+}
 
 // TODO: move to runix?
 /// Describes the nix config under flox
@@ -47,6 +52,8 @@ pub struct EnablePreview {
 impl Config {
     /// Creates a raw [Config] object
     fn raw_config() -> Result<HierarchicalConfig> {
+        let cache_dir = dirs::cache_dir().unwrap().join("flox-preview");
+        let data_dir = dirs::data_dir().unwrap().join("flox-preview");
         let config_dir = match env::var("FLOX_PREVIEW_CONFIG_DIR") {
             Ok(v) => v.into(),
             Err(_) => {
@@ -57,6 +64,9 @@ impl Config {
         };
 
         let builder = HierarchicalConfig::builder()
+            .set_default("flox.cache_dir", cache_dir.to_str().unwrap())?
+            .set_default("flox.data_dir", data_dir.to_str().unwrap())?
+            .set_default("flox.config_dir", config_dir.to_str().unwrap())?
             .add_source(
                 config::File::with_name(config_dir.join("flox").to_str().unwrap()).required(false),
             )
