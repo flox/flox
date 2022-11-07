@@ -7,19 +7,16 @@ use serde::Deserialize;
 
 #[derive(Debug, Deserialize, Default)]
 pub struct Config {
-    /// Whether the flox preview is enabled
-    ///
-    /// if `false` causes fallback to the bash implementation of flox
-    #[serde(flatten)]
-    pub enable: EnablePreview,
-
     /// flox configuration options
+    #[serde(default)]
     pub flox: FloxConfig,
 
     /// nix configuration options
+    #[serde(default)]
     pub nix: NixConfig,
 
     /// github configuration options
+    #[serde(default)]
     pub github: GithubConfig,
 }
 
