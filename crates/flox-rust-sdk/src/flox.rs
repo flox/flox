@@ -37,10 +37,6 @@ pub struct Flox<Nix: NixApiExt> {
     #[builder(default)]
     collect_metrics: bool,
 
-    /// The stability context for this instance
-    #[builder(default = "Stability::Stable")]
-    stability: Stability,
-
     /// Additional `nix` arguments
     ///
     /// TODO: Implementation detail, should go along with the nix Configurator
