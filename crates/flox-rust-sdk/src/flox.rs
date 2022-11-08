@@ -3,15 +3,17 @@ use std::{marker::PhantomData, path::PathBuf};
 use crate::{
     actions::package::Package,
     environment::{self, build_flox_env},
-    nix::{command_line::NixCommandLine, EvaluationArgs, FlakeArgs, NixApi, NixCommonArgs},
     prelude::{Installable, Stability},
 };
 use anyhow::Result;
 
 use derive_builder::Builder;
 use runix::{
-    setting::{AcceptFlakeConfig, ExperimentalFeatures, Substituters, WarnDirty},
-    NixConfigBuilder,
+    arguments::{
+        common::NixCommonArgs, config::NixConfigBuilder, eval::EvaluationArgs, flake::FlakeArgs,
+    },
+    command_line::NixCommandLine,
+    NixApi,
 };
 
 /// The main API struct for our flox implementation

@@ -1,11 +1,15 @@
 use anyhow::Result;
 use derive_more::Constructor;
-use runix::{setting::OverrideInputs, FlakeArgs, FlakeArgsBuilder};
+use runix::{
+    arguments::{
+        flake::{FlakeArgs, FlakeArgsBuilder, OverrideInputs},
+        NixArgsBuilder,
+    },
+    command::BuildBuilder,
+};
 
 use crate::{
     flox::{Flox, NixApiExt},
-    nix::command::BuildBuilder,
-    nix::NixArgsBuilder,
     prelude::{Installable, Stability},
 };
 
