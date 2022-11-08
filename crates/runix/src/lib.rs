@@ -9,8 +9,8 @@ pub mod installable;
 pub mod setting;
 
 pub use command_line as default;
-use installable::Installable;
-use setting::Setting;
+use installable::{FlakeRef, Installable};
+use setting::{AcceptFlakeConfig, ExperimentalFeatures, OverrideInputs, Substituters, WarnDirty};
 
 /// Abstract nix interface
 ///
@@ -55,12 +55,12 @@ pub struct NixArgs {
 /// and refer to the options defined in
 /// - All implementations of Setting<_> ([approximation](https://cs.github.com/?scopeName=All+repos&scope=&q=repo%3Anixos%2Fnix+%2FSetting%3C%5Cw%2B%3E%2F))
 #[derive(Builder, Clone, Default)]
-#[builder(setter(strip_option))]
+#[builder(setter(strip_option, into))]
 pub struct NixConfig {
-    accept_flake_config: Option<Setting<bool>>,
-    warn_dirty: Option<Setting<bool>>,
-    extra_experimental_features: Option<Setting<Vec<String>>>,
-    extra_substituters: Option<Setting<Vec<String>>>,
+    accept_flake_config: Option<AcceptFlakeConfig>,
+    warn_dirty: Option<WarnDirty>,
+    extra_experimental_features: Option<ExperimentalFeatures>,
+    extra_substituters: Option<Substituters>,
 }
 
 /// These arguments do not depend on the nix subcommand issued
@@ -74,7 +74,9 @@ pub struct NixCommonArgs {}
 /// Corresponding to the arguments defined in
 /// [libcmd/installables.cc](https://github.com/NixOS/nix/blob/84cc7ad77c6faf1cda8f8a10f7c12a939b61fe35/src/libcmd/installables.cc#L26-L126)
 #[derive(Builder, Clone, Default)]
-pub struct FlakeArgs {}
+pub struct FlakeArgs {
+    override_inputs: Option<Vec<OverrideInputs>>,
+}
 
 /// Evaluation related arguments
 /// Corresponding to the arguments defined in
@@ -259,27 +261,19 @@ pub mod command_line {
 
     impl ToArgs for NixConfig {
         fn args(&self) -> Vec<String> {
-            let mut args = vec![];
-
-            if let Some(ref s) = self.accept_flake_config {
-                args.append(&mut s.to_args("--accept-flake-config"));
-            }
-
-            if let Some(ref s) = self.warn_dirty {
-                args.append(&mut s.to_args("--warn-dirty"));
-            }
-
-            if let Some(ref s) = self.extra_experimental_features {
-                args.append(&mut s.to_args("--extra-experimental-features"));
-            }
-
-            if let Some(ref s) = self.extra_substituters {
-                args.append(&mut s.to_args("--extra-substituters"));
-            }
-
-            args
+            vec![
+                self.accept_flake_config.args(),
+                self.warn_dirty.args(),
+                self.extra_experimental_features.args(),
+                self.extra_substituters.args(),
+                // self.extra_substituters.as_ref().map(ToArgs::args),
+            ]
+            .into_iter()
+            .flatten()
+            .collect()
         }
     }
+
     impl ToArgs for NixArgs {
         fn args(&self) -> Vec<String> {
             let mut acc = vec![];
@@ -298,7 +292,15 @@ pub mod command_line {
 
     impl ToArgs for FlakeArgs {
         fn args(&self) -> Vec<String> {
-            vec![]
+            let mut args = vec![];
+
+            args.extend(
+                self.override_inputs
+                    .as_ref()
+                    .map(|overrides| overrides.into_iter().flat_map(ToArgs::args).collect()),
+            );
+
+            args
         }
     }
 
