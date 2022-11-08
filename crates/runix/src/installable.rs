@@ -1,6 +1,6 @@
 #[derive(Debug, Clone)]
 pub struct Installable {
-    flakeref: String,
+    flakeref: FlakeRef,
     attr_path: String,
 }
 
@@ -27,3 +27,5 @@ impl From<String> for Installable {
         }
     }
 }
+
+pub type FlakeRef = String;
