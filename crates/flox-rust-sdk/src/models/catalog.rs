@@ -2,7 +2,7 @@ use std::str::FromStr;
 
 use anyhow::Result;
 use async_trait::async_trait;
-use derive_more::{Display, FromStr};
+use derive_more::{Display};
 use getset::Getters;
 use serde::{Deserialize, Serialize};
 
@@ -34,7 +34,7 @@ pub enum SourceType {
     Unknown,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Display, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Display, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub enum Stability {
     #[display(fmt = "stable")]
