@@ -4,7 +4,7 @@ use crate::{
     actions::package::Package,
     environment::{self, build_flox_env},
     nix::{command_line::NixCommandLine, EvaluationArgs, FlakeArgs, NixApi, NixCommonArgs},
-    prelude::Installable,
+    prelude::{Installable, Stability},
 };
 use anyhow::Result;
 
@@ -53,8 +53,8 @@ pub type DefaultFlox = Flox<NixCommandLine>;
 pub type DefaultFloxBuilder = FloxBuilder<NixCommandLine>;
 
 impl<Nix: NixApiExt> Flox<Nix> {
-    pub fn package(&self, installable: Installable) -> Package<Nix> {
-        Package::new(self, installable)
+    pub fn package(&self, installable: Installable, stability: Stability) -> Package<Nix> {
+        Package::new(self, installable, stability)
     }
 
     pub fn nix(&self) -> Result<Nix> {

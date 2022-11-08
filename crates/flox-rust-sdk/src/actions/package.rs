@@ -5,13 +5,14 @@ use crate::{
     flox::{Flox, NixApiExt},
     nix::command::BuildBuilder,
     nix::NixArgsBuilder,
-    prelude::Installable,
+    prelude::{Installable, Stability},
 };
 
 #[derive(Constructor)]
 pub struct Package<'flox, Nix: NixApiExt> {
     flox: &'flox Flox<Nix>,
     installable: Installable,
+    stability: Stability,
 }
 
 impl<Nix: NixApiExt> Package<'_, Nix> {

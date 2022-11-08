@@ -72,7 +72,7 @@ mod commands {
 
         #[derive(Bpaf)]
         pub struct PackageArgs {
-            stability: Stability,
+            stability: Option<Stability>,
 
             #[bpaf(external(package_commands))]
             command: PackageCommands,
@@ -82,9 +82,12 @@ mod commands {
             pub async fn handle(&self, flox: Flox) -> Result<()> {
                 match &self.command {
                     PackageCommands::Build(BuildArgs { installable }) => {
-                        flox.package(installable.clone().into(), self.stability.clone())
-                            .build()
-                            .await?
+                        flox.package(
+                            installable.clone().into(),
+                            self.stability.clone().unwrap_or_default(),
+                        )
+                        .build()
+                        .await?
                     }
                 }
 
