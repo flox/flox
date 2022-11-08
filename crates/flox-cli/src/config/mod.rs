@@ -27,6 +27,12 @@ pub struct Config {
 /// Describes the Configuration for the flox library
 #[derive(Debug, Deserialize, Default)]
 pub struct FloxConfig {
+    /// Control telemetry for the rust CLI
+    ///
+    /// An [Option] since tri-state:
+    /// - Some(true): User said yes
+    /// - Some(false): User said no
+    /// - None: Didn't ask the user yet - required to decide whether to ask or not
     pub allow_telemetry: Option<bool>,
     pub cache_dir: PathBuf,
     pub data_dir: PathBuf,
