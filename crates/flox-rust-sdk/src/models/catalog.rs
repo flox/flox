@@ -1,5 +1,8 @@
+use std::str::FromStr;
+
 use anyhow::Result;
 use async_trait::async_trait;
+use derive_more::{Display, FromStr};
 use getset::Getters;
 use serde::{Deserialize, Serialize};
 
@@ -31,14 +34,32 @@ pub enum SourceType {
     Unknown,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Display, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub enum Stability {
+    #[display(fmt = "stable")]
     Stable,
+    #[display(fmt = "unstable")]
     Unstable,
+    #[display(fmt = "staging")]
     Staging,
+    #[display(fmt = "{}", "_0")]
     Other(String), // will need custom deserializer for this
+    #[display(fmt = "stable")]
     Unknown,
+}
+
+// TODO: fix serde stuff for Stability...
+impl FromStr for Stability {
+    type Err = anyhow::Error;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "stable" => Ok(Stability::Stable),
+            "unstable" => Ok(Self::Unstable),
+            "staging" => Ok(Stability::Staging),
+            _ => Ok(Stability::Other(s.to_string())),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

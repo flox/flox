@@ -66,21 +66,25 @@ mod commands {
     mod package {
         use anyhow::Result;
         use bpaf::Bpaf;
-        use flox_rust_sdk::prelude::Flox;
+        use flox_rust_sdk::prelude::{Flox, Stability};
 
         use self::build::BuildArgs;
 
         #[derive(Bpaf)]
         pub struct PackageArgs {
+            stability: Stability,
+
             #[bpaf(external(package_commands))]
-            pub command: PackageCommands,
+            command: PackageCommands,
         }
 
         impl PackageArgs {
             pub async fn handle(&self, flox: Flox) -> Result<()> {
                 match &self.command {
                     PackageCommands::Build(BuildArgs { installable }) => {
-                        flox.package(installable.clone().into()).build().await?
+                        flox.package(installable.clone().into(), self.stability.clone())
+                            .build()
+                            .await?
                     }
                 }
 
