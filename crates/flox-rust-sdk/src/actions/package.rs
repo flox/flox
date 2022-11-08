@@ -1,5 +1,6 @@
 use anyhow::Result;
 use derive_more::Constructor;
+use runix::{setting::OverrideInputs, FlakeArgs, FlakeArgsBuilder};
 
 use crate::{
     flox::{Flox, NixApiExt},
@@ -15,6 +16,20 @@ pub struct Package<'flox, Nix: NixApiExt> {
     stability: Stability,
 }
 
+impl<Nix> Package<'_, Nix>
+where
+    Nix: NixApiExt,
+{
+    fn flake_args(&self) -> Result<FlakeArgs> {
+        Ok(FlakeArgsBuilder::default()
+            .override_inputs([OverrideInputs::new(
+                "floxpkgs/nixpkgs/nixpkgs".into(),
+                format!("flake:nixpkgs-{}", self.stability),
+            )])
+            .build()?)
+    }
+}
+
 impl<Nix: NixApiExt> Package<'_, Nix> {
     /// flox build
     /// runs `nix build <installable>`
@@ -22,6 +37,7 @@ impl<Nix: NixApiExt> Package<'_, Nix> {
         let nix = self.flox.nix()?;
 
         let command_args = BuildBuilder::default()
+            .flake(self.flake_args()?)
             .installables([self.installable.clone()])
             .build()?;
 

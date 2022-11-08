@@ -74,6 +74,7 @@ pub struct NixCommonArgs {}
 /// Corresponding to the arguments defined in
 /// [libcmd/installables.cc](https://github.com/NixOS/nix/blob/84cc7ad77c6faf1cda8f8a10f7c12a939b61fe35/src/libcmd/installables.cc#L26-L126)
 #[derive(Builder, Clone, Default)]
+#[builder(setter(strip_option, into))]
 pub struct FlakeArgs {
     override_inputs: Option<Vec<OverrideInputs>>,
 }
