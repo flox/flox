@@ -292,15 +292,14 @@ pub mod command_line {
 
     impl ToArgs for FlakeArgs {
         fn args(&self) -> Vec<String> {
-            let mut args = vec![];
+            let flags = self.override_inputs.as_ref().map(|overrides| {
+                overrides
+                    .into_iter()
+                    .flat_map(ToArgs::args)
+                    .collect::<Vec<String>>()
+            });
 
-            args.extend(
-                self.override_inputs
-                    .as_ref()
-                    .map(|overrides| overrides.into_iter().flat_map(ToArgs::args).collect()),
-            );
-
-            args
+            dbg!(flags.unwrap_or_default())
         }
     }
 
@@ -319,9 +318,9 @@ pub mod command_line {
     impl ToArgs for dyn NixCommand + Send + Sync {
         fn args(&self) -> Vec<String> {
             let mut acc = Vec::new();
+            acc.append(&mut self.subcommand());
             acc.append(&mut self.flake_args().map_or(Vec::new(), |a| a.args()));
             acc.append(&mut self.eval_args().map_or(Vec::new(), |a| a.args()));
-            acc.append(&mut self.subcommand());
             acc.append(&mut self.installables().map_or(Vec::new(), |a| a.args()));
             acc
             //  ++; self.eval_args() ++ self.installables()
