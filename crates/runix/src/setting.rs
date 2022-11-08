@@ -1,6 +1,6 @@
 use std::{fmt::Display, ops::Deref};
 
-use derive_more::{Deref, From};
+use derive_more::{Constructor, Deref, From};
 
 use crate::{command_line::ToArgs, installable::FlakeRef};
 
@@ -37,8 +37,10 @@ impl<D: Deref<Target = Vec<String>> + Flag> TypedFlag for D {
 impl<W: TypedFlag> ToArgs for W {
     fn args(&self) -> Vec<String> {
         match Self::FLAG_TYPE {
-            FlagTypes::Bool => todo!(),
-            FlagTypes::List(f) => f(self).to_owned(),
+            FlagTypes::Bool => vec![Self::FLAG.to_string()],
+            FlagTypes::List(f) => {
+                vec![Self::FLAG.to_string(), f(self).join(" ")]
+            }
         }
     }
 }
@@ -75,16 +77,25 @@ impl Flag for Substituters {
 }
 
 /// Tuple like override inputs flag
-#[derive(Clone)]
-pub struct OverrideInputs(FlakeRef, FlakeRef);
+#[derive(Clone, Constructor)]
+pub struct OverrideInputs {
+    from: FlakeRef,
+    to: FlakeRef,
+}
+
 impl Flag for OverrideInputs {
-    const FLAG: &'static str = "--override-inputs";
+    const FLAG: &'static str = "--override-input";
 }
 impl ToArgs for OverrideInputs {
     fn args(&self) -> Vec<String> {
-        vec![Self::FLAG.to_string(), self.0.clone(), self.1.clone()]
+        dbg!(vec![
+            Self::FLAG.to_string(),
+            self.from.clone(),
+            self.to.clone()
+        ])
     }
 }
+
 impl<T: ToArgs> ToArgs for Option<T> {
     fn args(&self) -> Vec<String> {
         self.iter().map(|t| t.args()).flatten().collect()
