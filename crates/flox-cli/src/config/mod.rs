@@ -5,6 +5,9 @@ use config::{Config as HierarchicalConfig, Environment};
 use log::info;
 use serde::Deserialize;
 
+/// Name of flox managed directories (config, data, cache)
+const FLOX_DIR_NAME: &'_ str = "flox-preview";
+
 #[derive(Debug, Deserialize, Default)]
 pub struct Config {
     /// flox configuration options
@@ -49,14 +52,14 @@ pub struct EnablePreview {
 impl Config {
     /// Creates a raw [Config] object
     fn raw_config() -> Result<HierarchicalConfig> {
-        let cache_dir = dirs::cache_dir().unwrap().join("flox-preview");
-        let data_dir = dirs::data_dir().unwrap().join("flox-preview");
+        let cache_dir = dirs::cache_dir().unwrap().join(FLOX_DIR_NAME);
+        let data_dir = dirs::data_dir().unwrap().join(FLOX_DIR_NAME);
         let config_dir = match env::var("FLOX_PREVIEW_CONFIG_DIR") {
             Ok(v) => v.into(),
             Err(_) => {
                 info!("`FLOX_PREVIEW_CONFIG_DIR` not set");
                 let config_dir = dirs::config_dir().unwrap();
-                config_dir.join("flox-preview")
+                config_dir.join(FLOX_DIR_NAME)
             }
         };
 
