@@ -19,7 +19,7 @@ impl ToArgs for FlakeArgs {
     fn args(&self) -> Vec<String> {
         let flags = self.override_inputs.as_ref().map(|overrides| {
             overrides
-                .into_iter()
+                .iter()
                 .flat_map(ToArgs::args)
                 .collect::<Vec<String>>()
         });

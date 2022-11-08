@@ -9,8 +9,7 @@ use tokio::process::Command;
 
 use crate::{
     arguments::{
-        common::NixCommonArgs, config::NixConfig, eval::EvaluationArgs, flake::FlakeArgs,
-        InstallablesArgs, NixArgs,
+        common::NixCommonArgs, config::NixConfig, eval::EvaluationArgs, flake::FlakeArgs, NixArgs,
     },
     command::NixCommand,
     NixApi,
@@ -160,6 +159,6 @@ impl<W: TypedFlag> ToArgs for W {
 
 impl<T: ToArgs> ToArgs for Option<T> {
     fn args(&self) -> Vec<String> {
-        self.iter().map(|t| t.args()).flatten().collect()
+        self.iter().flat_map(|t| t.args()).collect()
     }
 }

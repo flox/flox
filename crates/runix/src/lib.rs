@@ -3,9 +3,9 @@
 use anyhow::Result;
 use arguments::NixArgs;
 use async_trait::async_trait;
-use command::NixCommand;
-use derive_builder::Builder;
-use derive_more::From;
+
+
+
 
 pub mod arguments;
 pub mod command;
@@ -14,7 +14,7 @@ pub mod installable;
 pub mod setting;
 
 pub use command_line as default;
-use installable::{FlakeRef, Installable};
+
 
 /// Abstract nix interface
 ///
