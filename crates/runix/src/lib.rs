@@ -315,7 +315,7 @@ pub mod command_line {
     }
 
     impl ToArgs for dyn NixCommand + Send + Sync {
-        fn args<'a>(&self) -> Vec<String> {
+        fn args(&self) -> Vec<String> {
             let mut acc = Vec::new();
             acc.append(&mut self.flake_args().map_or(Vec::new(), |a| a.args()));
             acc.append(&mut self.eval_args().map_or(Vec::new(), |a| a.args()));
