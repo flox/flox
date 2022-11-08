@@ -4,9 +4,6 @@ use anyhow::Result;
 use arguments::NixArgs;
 use async_trait::async_trait;
 
-
-
-
 pub mod arguments;
 pub mod command;
 pub mod command_line;
@@ -14,7 +11,6 @@ pub mod installable;
 pub mod setting;
 
 pub use command_line as default;
-
 
 /// Abstract nix interface
 ///

@@ -2,7 +2,7 @@ use derive_builder::Builder;
 use derive_more::Constructor;
 
 use crate::{
-    command_line::{Flag, ToArgs},
+    command_line::{Flag, FlagType, ToArgs},
     installable::FlakeRef,
 };
 
@@ -35,10 +35,11 @@ pub struct OverrideInputs {
     to: FlakeRef,
 }
 
-impl Flag for OverrideInputs {
+impl Flag<Self> for OverrideInputs {
     const FLAG: &'static str = "--override-input";
+    const FLAG_TYPE: &'static FlagType<Self> = &FlagType::Args(Self::args);
 }
-impl ToArgs for OverrideInputs {
+impl OverrideInputs {
     fn args(&self) -> Vec<String> {
         dbg!(vec![
             Self::FLAG.to_string(),
