@@ -3,8 +3,8 @@ use flox_rust_sdk::environment::build_flox_env;
 use log::{debug, info};
 use std::env;
 use std::fmt::Debug;
-use std::process::{exit, ExitStatus};
-use std::str::FromStr;
+use std::process::ExitStatus;
+
 use tokio::process::Command;
 
 mod build;
@@ -34,11 +34,20 @@ mod commands {
     }
 
     impl FloxArgs {
-        pub async fn handle(&self) -> Result<()> {
+        /// Initialize the command line by creating an initial FloxBuilder
+        pub async fn handle(&self, config: crate::config::Config) -> Result<()> {
+            let flox = FloxBuilder::default()
+                .collect_metrics(config.flox.allow_telemetry.unwrap_or_default())
+                .cache_dir(config.flox.cache_dir)
+                .data_dir(config.flox.data_dir)
+                .config_dir(config.flox.config_dir)
+                .extra_nix_args(self.nix_args.clone()) // TODO: consume Self?
+                .build()?;
+
             match self.command {
                 // Commands::Support(ref f) => f.run(self).await?,
                 // Commands::Build(ref f) => f.run(&self).await?,
-                Commands::Package(ref package) => package.handle(self).await?,
+                Commands::Package(ref package) => package.handle(flox).await?,
             }
             Ok(())
         }
@@ -57,24 +66,28 @@ mod commands {
     mod package {
         use anyhow::Result;
         use bpaf::Bpaf;
+        use flox_rust_sdk::prelude::{Flox, Stability};
 
         use self::build::BuildArgs;
 
-        use super::FloxArgs;
-
         #[derive(Bpaf)]
         pub struct PackageArgs {
+            stability: Option<Stability>,
+
             #[bpaf(external(package_commands))]
-            pub command: PackageCommands,
+            command: PackageCommands,
         }
 
         impl PackageArgs {
-            pub async fn handle(&self, root_args: &FloxArgs) -> Result<()> {
-                let flox = root_args.flox().build()?;
-
+            pub async fn handle(&self, flox: Flox) -> Result<()> {
                 match &self.command {
                     PackageCommands::Build(BuildArgs { installable }) => {
-                        flox.package(installable.clone().into()).build().await?
+                        flox.package(
+                            installable.clone().into(),
+                            self.stability.clone().unwrap_or_default(),
+                        )
+                        .build()
+                        .await?
                     }
                 }
 
@@ -115,7 +128,7 @@ async fn main() -> Result<()> {
 
 async fn run_rust_flox() -> Result<()> {
     let args = commands::flox_args().run();
-    args.handle().await?;
+    args.handle(config::Config::parse()?).await?;
     Ok(())
 }
 

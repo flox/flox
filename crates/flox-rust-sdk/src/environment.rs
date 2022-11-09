@@ -38,19 +38,19 @@ pub fn build_flox_env() -> Result<HashMap<String, String>> {
         }
     };
 
-    if let Err(_) = env::var("NIX_SSL_CERT_FILE") {
+    if env::var("NIX_SSL_CERT_FILE").is_err() {
         env_map.insert("NIX_SSL_CERT_FILE".to_string(), ssl_cert_file);
     }
 
     #[cfg(target_os = "macos")]
     {
-        if let Err(_) = env::var("NIX_COREFOUNDATION_RPATH") {
+        if env::var("NIX_COREFOUNDATION_RPATH").is_err() {
             env_map.insert(
                 "NIX_COREFOUNDATION_RPATH".to_string(),
                 env!("NIX_COREFOUNDATION_RPATH").to_string(),
             );
         }
-        if let Err(_) = env::var("PATH_LOCALE") {
+        if env::var("PATH_LOCALE").is_err() {
             env_map.insert("PATH_LOCALE".to_string(), env!("PATH_LOCALE").to_string());
         }
     }
@@ -65,8 +65,9 @@ pub fn build_flox_env() -> Result<HashMap<String, String>> {
         }
     }
 
+    env_map.insert("NIX_REMOTE".to_string(), "daemon".to_string());
+
     // For now these variables are managed in bash
-    // env_map.insert("NIX_REMOTE".to_string(), "daemon".to_string());
     // let home = env!("HOME");
     // env_map.insert(
     //     "NIX_USER_CONF_FILES".to_string(),

@@ -3,15 +3,18 @@ use std::{marker::PhantomData, path::PathBuf};
 use crate::{
     actions::package::Package,
     environment::{self, build_flox_env},
-    models::catalog::Stability,
-    nix::{
-        command_line::NixCommandLine, EvaluationArgs, FlakeArgs, NixApi, NixCommonArgs, NixConfig,
-    },
-    prelude::Installable,
+    prelude::{Installable, Stability},
 };
 use anyhow::Result;
-use config::builder;
+
 use derive_builder::Builder;
+use runix::{
+    arguments::{
+        common::NixCommonArgs, config::NixConfigBuilder, eval::EvaluationArgs, flake::FlakeArgs,
+    },
+    command_line::NixCommandLine,
+    NixApi,
+};
 
 /// The main API struct for our flox implementation
 ///
@@ -29,15 +32,13 @@ pub struct Flox<Nix: NixApiExt> {
     ///
     /// TODO: set a default in the lib or CLI?
     config_dir: PathBuf,
+    cache_dir: PathBuf,
+    data_dir: PathBuf,
 
     /// Whether to collect metrics of any kind
     /// (yet to be made use of)
     #[builder(default)]
     collect_metrics: bool,
-
-    /// The stability context for this instance
-    #[builder(default = "Stability::Stable")]
-    stability: Stability,
 
     /// Additional `nix` arguments
     ///
@@ -54,8 +55,8 @@ pub type DefaultFlox = Flox<NixCommandLine>;
 pub type DefaultFloxBuilder = FloxBuilder<NixCommandLine>;
 
 impl<Nix: NixApiExt> Flox<Nix> {
-    pub fn package(&self, installable: Installable) -> Package<Nix> {
-        Package::new(self, installable)
+    pub fn package(&self, installable: Installable, stability: Stability) -> Package<Nix> {
+        Package::new(self, installable, stability)
     }
 
     pub fn nix(&self) -> Result<Nix> {
@@ -70,14 +71,26 @@ pub trait NixApiExt: NixApi {
 }
 
 impl NixApiExt for NixCommandLine {
-    fn instance(flox: &Flox<Self>) -> Result<Self> {
+    fn instance(_flox: &Flox<Self>) -> Result<Self> {
+        let nix_config = NixConfigBuilder::default()
+            .accept_flake_config(())
+            // .netrc_file() TODO
+            .warn_dirty(())
+            .extra_experimental_features(["nix-command", "flakes"].map(String::from).to_vec())
+            .extra_substituters(
+                ["https://cache.floxdev.com?trusted=1"]
+                    .map(String::from)
+                    .to_vec(),
+            )
+            .build()?;
+
         Ok(NixCommandLine::new(
             Some(environment::NIX_BIN.to_string()),
             build_flox_env()?,
             NixCommonArgs::default(),
             FlakeArgs::default(),
             EvaluationArgs::default(),
-            NixConfig::default(),
+            nix_config,
         ))
     }
 }

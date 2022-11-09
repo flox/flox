@@ -1,32 +1,43 @@
 use std::{env, path::PathBuf};
 
-use anyhow::{Error, Result};
+use anyhow::{Context, Result};
 use config::{Config as HierarchicalConfig, Environment};
 use log::info;
 use serde::Deserialize;
 
+/// Name of flox managed directories (config, data, cache)
+const FLOX_DIR_NAME: &'_ str = "flox-preview";
+
 #[derive(Debug, Deserialize, Default)]
 pub struct Config {
-    /// Whether the flox preview is enabled
-    ///
-    /// if `false` causes fallback to the bash implementation of flox
-    #[serde(flatten)]
-    enable: EnablePreview,
-
     /// flox configuration options
-    flox: FloxConfig,
+    #[serde(default)]
+    pub flox: FloxConfig,
 
     /// nix configuration options
-    nix: NixConfig,
+    #[serde(default)]
+    pub nix: NixConfig,
 
     /// github configuration options
-    github: GithubConfig,
+    #[serde(default)]
+    pub github: GithubConfig,
 }
 
 // TODO: move to flox_sdk?
 /// Describes the Configuration for the flox library
 #[derive(Debug, Deserialize, Default)]
-pub struct FloxConfig {}
+pub struct FloxConfig {
+    /// Control telemetry for the rust CLI
+    ///
+    /// An [Option] since tri-state:
+    /// - Some(true): User said yes
+    /// - Some(false): User said no
+    /// - None: Didn't ask the user yet - required to decide whether to ask or not
+    pub allow_telemetry: Option<bool>,
+    pub cache_dir: PathBuf,
+    pub data_dir: PathBuf,
+    pub config_dir: PathBuf,
+}
 
 // TODO: move to runix?
 /// Describes the nix config under flox
@@ -47,16 +58,21 @@ pub struct EnablePreview {
 impl Config {
     /// Creates a raw [Config] object
     fn raw_config() -> Result<HierarchicalConfig> {
+        let cache_dir = dirs::cache_dir().unwrap().join(FLOX_DIR_NAME);
+        let data_dir = dirs::data_dir().unwrap().join(FLOX_DIR_NAME);
         let config_dir = match env::var("FLOX_PREVIEW_CONFIG_DIR") {
             Ok(v) => v.into(),
             Err(_) => {
                 info!("`FLOX_PREVIEW_CONFIG_DIR` not set");
                 let config_dir = dirs::config_dir().unwrap();
-                config_dir.join("flox-preview")
+                config_dir.join(FLOX_DIR_NAME)
             }
         };
 
         let builder = HierarchicalConfig::builder()
+            .set_default("flox.cache_dir", cache_dir.to_str().unwrap())?
+            .set_default("flox.data_dir", data_dir.to_str().unwrap())?
+            .set_default("flox.config_dir", config_dir.to_str().unwrap())?
             .add_source(
                 config::File::with_name(config_dir.join("flox").to_str().unwrap()).required(false),
             )
@@ -68,7 +84,9 @@ impl Config {
     /// Creates a [CliConfig] from the environment and config file
     pub fn parse() -> Result<Config> {
         let final_config = Self::raw_config()?;
-        let cli_confg = final_config.try_deserialize()?;
+        let cli_confg = final_config
+            .try_deserialize()
+            .context("Could not parse config")?;
         Ok(cli_confg)
     }
 

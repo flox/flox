@@ -1584,6 +1584,7 @@ dependencies = [
  "async-trait",
  "derive_builder",
  "derive_more",
+ "log",
  "tokio",
 ]
 
