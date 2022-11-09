@@ -132,9 +132,34 @@ pub trait Flag<T: Flag<T>> {
 
 ///
 pub enum FlagType<T> {
+    /// A boolean flag/toggle
+    ///
+    /// Flags of this kind just print their name as is regardless of the content
     Bool,
+    /// A list flag
+    ///
+    /// list flags consist of a flag and a space delimited list of elements
+    /// which is passed as a single arguement.
+    ///
+    /// ```
+    /// --flag "a b c"
+    /// ```
     List(fn(&T) -> Vec<String>),
+    /// A flag with variably many arguments
+    ///
+    /// The implementer of this flag provides the arguements to be passed as is
+    ///
+    /// ```
+    /// --flag a b
+    /// ```
     Args(fn(&T) -> Vec<String>),
+    /// A custom flag
+    ///
+    /// The implementer of this flag provides the representation of arguements
+    ///
+    /// ```
+    /// a b c
+    /// ```
     Custom(fn(&T) -> Vec<String>),
 }
 
