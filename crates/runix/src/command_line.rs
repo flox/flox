@@ -163,6 +163,18 @@ pub enum FlagType<T> {
     Custom(fn(&T) -> Vec<String>),
 }
 
+impl<T: Deref<Target = Vec<String>>> FlagType<T> {
+    pub const fn list() -> FlagType<T> {
+        FlagType::List(|s| s.deref().to_owned())
+    }
+}
+
+impl<T: Deref<Target = impl ToString>> FlagType<T> {
+    pub const fn infer() -> FlagType<T> {
+        todo!()
+    }
+}
+
 impl<T: Flag<T>> ToArgs for T {
     fn args(&self) -> Vec<String> {
         match Self::FLAG_TYPE {
