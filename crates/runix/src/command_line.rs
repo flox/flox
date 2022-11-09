@@ -124,35 +124,70 @@ impl ToArgs for dyn NixCommand + Send + Sync {
 ///
 /// Usage:
 /// 1. Create a struct for a flag and implement [Flag] for it
-/// 2. Implement [TypedFlag] for the setting or manualy implement [ToArgs]
-pub trait Flag {
+/// 2. Define `FLAG_TYPE` as either `FlagType::Bool` if no extra arguments are involved, or as `FlagType::Args` to point at an internal argument list or extra logic on `Self`
+pub trait Flag<T: Flag<T>> {
     const FLAG: &'static str;
+    const FLAG_TYPE: FlagType<T>;
 }
 
 ///
-pub enum FlagTypes<T> {
+pub enum FlagType<T> {
+    /// A boolean flag/toggle
+    ///
+    /// Flags of this kind just print their name as is regardless of the content
     Bool,
+    /// A list flag
+    ///
+    /// list flags consist of a flag and a space delimited list of elements
+    /// which is passed as a single arguement.
+    ///
+    /// ```
+    /// --flag "a b c"
+    /// ```
     List(fn(&T) -> Vec<String>),
+    /// A flag with variably many arguments
+    ///
+    /// The implementer of this flag provides the arguements to be passed as is
+    ///
+    /// ```
+    /// --flag a b
+    /// ```
+    Args(fn(&T) -> Vec<String>),
+    /// A custom flag
+    ///
+    /// The implementer of this flag provides the representation of arguements
+    ///
+    /// ```
+    /// a b c
+    /// ```
+    Custom(fn(&T) -> Vec<String>),
 }
 
-pub trait TypedFlag: Flag
-where
-    Self: Sized,
-{
-    const FLAG_TYPE: FlagTypes<Self>;
+impl<T: Deref<Target = Vec<String>>> FlagType<T> {
+    pub const fn list() -> FlagType<T> {
+        FlagType::List(|s| s.deref().to_owned())
+    }
 }
 
-impl<D: Deref<Target = Vec<String>> + Flag> TypedFlag for D {
-    const FLAG_TYPE: FlagTypes<Self> = FlagTypes::List(|s| s.deref().to_owned());
+impl<T: Deref<Target = impl ToString>> FlagType<T> {
+    pub const fn infer() -> FlagType<T> {
+        todo!()
+    }
 }
 
-impl<W: TypedFlag> ToArgs for W {
+impl<T: Flag<T>> ToArgs for T {
     fn args(&self) -> Vec<String> {
         match Self::FLAG_TYPE {
-            FlagTypes::Bool => vec![Self::FLAG.to_string()],
-            FlagTypes::List(f) => {
+            FlagType::Bool => vec![Self::FLAG.to_string()],
+            FlagType::List(f) => {
                 vec![Self::FLAG.to_string(), f(self).join(" ")]
             }
+            FlagType::Args(f) => {
+                let mut flags = vec![Self::FLAG.to_string()];
+                flags.append(&mut f(self));
+                flags
+            }
+            FlagType::Custom(f) => f(self),
         }
     }
 }

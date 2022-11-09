@@ -2,7 +2,7 @@ use std::str::FromStr;
 
 use anyhow::Result;
 use async_trait::async_trait;
-use derive_more::{Display};
+use derive_more::Display;
 use getset::Getters;
 use serde::{Deserialize, Serialize};
 

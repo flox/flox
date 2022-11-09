@@ -1,7 +1,7 @@
 use derive_builder::Builder;
 use derive_more::{Deref, From};
 
-use crate::command_line::{Flag, FlagTypes, ToArgs, TypedFlag};
+use crate::command_line::{Flag, FlagType, ToArgs};
 
 /// These arguments correspond to nix config settings as defined in `nix.conf` or overridden on the commandline
 /// and refer to the options defined in
@@ -33,33 +33,31 @@ impl ToArgs for NixConfig {
 /// flag for warn dirty
 #[derive(Clone, From)]
 pub struct WarnDirty;
-impl Flag for WarnDirty {
+impl Flag<Self> for WarnDirty {
     const FLAG: &'static str = "--warn-dirty";
-}
-impl TypedFlag for WarnDirty {
-    const FLAG_TYPE: FlagTypes<Self> = FlagTypes::Bool;
+    const FLAG_TYPE: FlagType<Self> = FlagType::Bool;
 }
 
 /// Flag for accept-flake-config
 #[derive(Clone, From)]
 pub struct AcceptFlakeConfig;
-impl Flag for AcceptFlakeConfig {
+impl Flag<Self> for AcceptFlakeConfig {
     const FLAG: &'static str = "--accept-flake-config";
-}
-impl TypedFlag for AcceptFlakeConfig {
-    const FLAG_TYPE: FlagTypes<Self> = FlagTypes::Bool;
+    const FLAG_TYPE: FlagType<Self> = FlagType::Bool;
 }
 
 /// Flag for extra experimental features
-#[derive(Clone, Deref, From)]
+#[derive(Clone, From, Deref)]
 pub struct ExperimentalFeatures(Vec<String>);
-impl Flag for ExperimentalFeatures {
+impl Flag<Self> for ExperimentalFeatures {
     const FLAG: &'static str = "--extra-experimental-features";
+    const FLAG_TYPE: FlagType<Self> = FlagType::list();
 }
 
 /// Flag for extra substituters
-#[derive(Clone, Deref, From)]
+#[derive(Clone, From, Deref)]
 pub struct Substituters(Vec<String>);
-impl Flag for Substituters {
+impl Flag<Self> for Substituters {
     const FLAG: &'static str = "--extra-substituters";
+    const FLAG_TYPE: FlagType<Self> = FlagType::list();
 }
