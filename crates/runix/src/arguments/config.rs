@@ -35,7 +35,7 @@ impl ToArgs for NixConfig {
 pub struct WarnDirty;
 impl Flag<Self> for WarnDirty {
     const FLAG: &'static str = "--warn-dirty";
-    const FLAG_TYPE: &'static FlagType<Self> = &FlagType::Bool;
+    const FLAG_TYPE: FlagType<Self> = FlagType::Bool;
 }
 
 /// Flag for accept-flake-config
@@ -43,21 +43,21 @@ impl Flag<Self> for WarnDirty {
 pub struct AcceptFlakeConfig;
 impl Flag<Self> for AcceptFlakeConfig {
     const FLAG: &'static str = "--accept-flake-config";
-    const FLAG_TYPE: &'static FlagType<Self> = &FlagType::Bool;
+    const FLAG_TYPE: FlagType<Self> = FlagType::Bool;
 }
 
 /// Flag for extra experimental features
-#[derive(Clone, From)]
+#[derive(Clone, From, Deref)]
 pub struct ExperimentalFeatures(Vec<String>);
 impl Flag<Self> for ExperimentalFeatures {
     const FLAG: &'static str = "--extra-experimental-features";
-    const FLAG_TYPE: &'static FlagType<Self> = &FlagType::Args(|s| s.0.to_vec());
+    const FLAG_TYPE: FlagType<Self> = FlagType::list();
 }
 
 /// Flag for extra substituters
-#[derive(Clone, From)]
+#[derive(Clone, From, Deref)]
 pub struct Substituters(Vec<String>);
 impl Flag<Self> for Substituters {
     const FLAG: &'static str = "--extra-substituters";
-    const FLAG_TYPE: &'static FlagType<Self> = &FlagType::Args(|s| s.0.to_vec());
+    const FLAG_TYPE: FlagType<Self> = FlagType::list();
 }

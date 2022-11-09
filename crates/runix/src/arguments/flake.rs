@@ -37,8 +37,9 @@ pub struct OverrideInputs {
 
 impl Flag<Self> for OverrideInputs {
     const FLAG: &'static str = "--override-input";
-    const FLAG_TYPE: &'static FlagType<Self> = &FlagType::Args(Self::args);
+    const FLAG_TYPE: FlagType<Self> = FlagType::List(Self::args);
 }
+
 impl OverrideInputs {
     fn args(&self) -> Vec<String> {
         dbg!(vec![

@@ -125,9 +125,9 @@ impl ToArgs for dyn NixCommand + Send + Sync {
 /// Usage:
 /// 1. Create a struct for a flag and implement [Flag] for it
 /// 2. Define `FLAG_TYPE` as either `FlagType::Bool` if no extra arguments are involved, or as `FlagType::Args` to point at an internal argument list or extra logic on `Self`
-pub trait Flag<T: Flag<T> + 'static> {
+pub trait Flag<T: Flag<T>> {
     const FLAG: &'static str;
-    const FLAG_TYPE: &'static FlagType<T>;
+    const FLAG_TYPE: FlagType<T>;
 }
 
 ///
@@ -136,7 +136,7 @@ pub enum FlagType<T> {
     Args(fn(&T) -> Vec<String>),
 }
 
-impl<T: Flag<T> + 'static> ToArgs for T {
+impl<T: Flag<T>> ToArgs for T {
     fn args(&self) -> Vec<String> {
         match Self::FLAG_TYPE {
             FlagType::Bool => vec![Self::FLAG.to_string()],
