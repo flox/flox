@@ -133,16 +133,24 @@ pub trait Flag<T: Flag<T>> {
 ///
 pub enum FlagType<T> {
     Bool,
+    List(fn(&T) -> Vec<String>),
     Args(fn(&T) -> Vec<String>),
+    Custom(fn(&T) -> Vec<String>),
 }
 
 impl<T: Flag<T>> ToArgs for T {
     fn args(&self) -> Vec<String> {
         match Self::FLAG_TYPE {
             FlagType::Bool => vec![Self::FLAG.to_string()],
-            FlagType::Args(f) => {
+            FlagType::List(f) => {
                 vec![Self::FLAG.to_string(), f(self).join(" ")]
             }
+            FlagType::Args(f) => {
+                let mut flags = vec![Self::FLAG.to_string()];
+                flags.append(&mut f(self));
+                flags
+            }
+            FlagType::Custom(f) => f(self),
         }
     }
 }
