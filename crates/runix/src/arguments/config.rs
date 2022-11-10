@@ -1,4 +1,3 @@
-use derive_builder::Builder;
 use derive_more::{Deref, From};
 
 use crate::command_line::{Flag, FlagType, ToArgs};
@@ -6,13 +5,12 @@ use crate::command_line::{Flag, FlagType, ToArgs};
 /// These arguments correspond to nix config settings as defined in `nix.conf` or overridden on the commandline
 /// and refer to the options defined in
 /// - All implementations of Setting<_> ([approximation](https://cs.github.com/?scopeName=All+repos&scope=&q=repo%3Anixos%2Fnix+%2FSetting%3C%5Cw%2B%3E%2F))
-#[derive(Builder, Clone, Default)]
-#[builder(setter(strip_option, into))]
+#[derive(Clone, Default)]
 pub struct NixConfig {
-    accept_flake_config: Option<AcceptFlakeConfig>,
-    warn_dirty: Option<WarnDirty>,
-    extra_experimental_features: Option<ExperimentalFeatures>,
-    extra_substituters: Option<Substituters>,
+    pub accept_flake_config: Option<AcceptFlakeConfig>,
+    pub warn_dirty: Option<WarnDirty>,
+    pub extra_experimental_features: Option<ExperimentalFeatures>,
+    pub extra_substituters: Option<Substituters>,
 }
 
 impl ToArgs for NixConfig {

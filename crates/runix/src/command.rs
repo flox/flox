@@ -1,6 +1,7 @@
-use derive_builder::Builder;
-
-use crate::arguments::{eval::EvaluationArgs, flake::FlakeArgs, InstallablesArgs};
+use crate::{
+    arguments::{eval::EvaluationArgs, flake::FlakeArgs, InstallablesArgs},
+    command_line::ToArgs,
+};
 
 pub trait NixCommand {
     fn subcommand(&self) -> Vec<String>;
@@ -15,13 +16,23 @@ pub trait NixCommand {
     }
 }
 
-#[derive(Builder, Default, Clone)]
-#[builder(default)]
+impl ToArgs for dyn NixCommand + Send + Sync {
+    fn args(&self) -> Vec<String> {
+        let mut acc = Vec::new();
+        acc.append(&mut self.subcommand());
+        acc.append(&mut self.flake_args().map_or(Vec::new(), |a| a.args()));
+        acc.append(&mut self.eval_args().map_or(Vec::new(), |a| a.args()));
+        acc.append(&mut self.installables().map_or(Vec::new(), |a| a.args()));
+        acc
+        //  ++; self.eval_args() ++ self.installables()
+    }
+}
+
+#[derive(Default, Clone)]
 pub struct Build {
-    flake: FlakeArgs,
-    eval: EvaluationArgs,
-    #[builder(setter(into))]
-    installables: InstallablesArgs,
+    pub flake: FlakeArgs,
+    pub eval: EvaluationArgs,
+    pub installables: InstallablesArgs,
 }
 
 impl NixCommand for Build {

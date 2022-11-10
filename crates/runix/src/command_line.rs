@@ -2,8 +2,6 @@ use std::{collections::HashMap, ops::Deref, process::Stdio};
 
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
-use derive_builder::Builder;
-use derive_more::Constructor;
 use log::debug;
 use tokio::process::Command;
 
@@ -15,23 +13,28 @@ use crate::{
     NixApi,
 };
 
-/// Nix Implementation based on the Nix Command Line
-#[derive(Constructor, Builder, Default, Clone)]
-pub struct NixCommandLine {
-    nix_bin: Option<String>,
+#[derive(Clone, Default)]
+pub struct NixCommandLineDefaults {
+    pub environment: HashMap<String, String>,
+    pub common_args: NixCommonArgs,
+    pub flake_args: FlakeArgs,
+    pub eval_args: EvaluationArgs,
+    pub config: NixConfig,
+}
 
-    /// Environment
-    environment: HashMap<String, String>,
-    common_args: NixCommonArgs,
-    flake_args: FlakeArgs,
-    eval_args: EvaluationArgs,
-    config: NixConfig,
+/// Nix Implementation based on the Nix Command Line
+#[derive(Clone, Default)]
+pub struct NixCommandLine {
+    pub nix_bin: Option<String>,
+
+    /// Default environment
+    pub defaults: NixCommandLineDefaults,
 }
 
 impl NixCommandLine {
     pub async fn run_in_nix(&self, args: &Vec<&str>) -> Result<String> {
         let output = Command::new(self.nix_bin.as_deref().unwrap_or("nix"))
-            .envs(&self.environment)
+            .envs(&self.defaults.environment)
             .args(args)
             .output()
             .await?;
@@ -63,9 +66,9 @@ impl NixApi for NixCommandLine {
     async fn run(&self, args: NixArgs) -> Result<()> {
         let mut command = Command::new(self.nix_bin.as_deref().unwrap_or("nix"));
         command
-            .envs(&self.environment)
-            .args(self.config.args())
-            .args(self.common_args.args())
+            .envs(&self.defaults.environment)
+            .args(self.defaults.config.args())
+            .args(self.defaults.common_args.args())
             .args(args.args())
             .stdout(Stdio::inherit())
             .stderr(Stdio::inherit());
@@ -76,7 +79,10 @@ impl NixApi for NixCommandLine {
             .map(|arg| arg.to_string_lossy().to_string())
             .collect::<Vec<_>>();
 
-        debug!("Invoking nix CLI: env={:?}; {:#?}", self.environment, args);
+        debug!(
+            "Invoking nix CLI: env={:?}; {:#?}",
+            self.defaults.environment, args
+        );
 
         let mut child = command.spawn()?;
 
@@ -106,18 +112,6 @@ impl NixApi for NixCommandLine {
 
 pub trait ToArgs {
     fn args(&self) -> Vec<String>;
-}
-
-impl ToArgs for dyn NixCommand + Send + Sync {
-    fn args(&self) -> Vec<String> {
-        let mut acc = Vec::new();
-        acc.append(&mut self.subcommand());
-        acc.append(&mut self.flake_args().map_or(Vec::new(), |a| a.args()));
-        acc.append(&mut self.eval_args().map_or(Vec::new(), |a| a.args()));
-        acc.append(&mut self.installables().map_or(Vec::new(), |a| a.args()));
-        acc
-        //  ++; self.eval_args() ++ self.installables()
-    }
 }
 
 /// Setting Flag Container akin to https://cs.github.com/NixOS/nix/blob/499e99d099ec513478a2d3120b2af3a16d9ae49d/src/libutil/config.cc#L199

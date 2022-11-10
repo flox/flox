@@ -2,10 +2,10 @@ use anyhow::Result;
 use derive_more::Constructor;
 use runix::{
     arguments::{
-        flake::{FlakeArgs, FlakeArgsBuilder, OverrideInputs},
-        NixArgsBuilder,
+        flake::{FlakeArgs, InputOverride},
+        NixArgs,
     },
-    command::BuildBuilder,
+    command::Build,
 };
 
 use crate::{
@@ -25,12 +25,12 @@ where
     Nix: NixApiExt,
 {
     fn flake_args(&self) -> Result<FlakeArgs> {
-        Ok(FlakeArgsBuilder::default()
-            .override_inputs([OverrideInputs::new(
-                "floxpkgs/nixpkgs/nixpkgs".into(),
-                format!("flake:nixpkgs-{}", self.stability),
-            )])
-            .build()?)
+        Ok(FlakeArgs {
+            override_inputs: vec![InputOverride {
+                from: "floxpkgs/nixpkgs/nixpkgs".into(),
+                to: format!("flake:nixpkgs-{}", self.stability),
+            }],
+        })
     }
 }
 
@@ -40,14 +40,17 @@ impl<Nix: NixApiExt> Package<'_, Nix> {
     pub async fn build(&self) -> Result<()> {
         let nix = self.flox.nix()?;
 
-        let command_args = BuildBuilder::default()
-            .flake(self.flake_args()?)
-            .installables([self.installable.clone()])
-            .build()?;
+        let command_args = Build {
+            flake: (self.flake_args()?),
+            installables: [self.installable.clone()].into(),
+            ..Default::default()
+        };
 
-        let nix_args = NixArgsBuilder::default()
-            .command(Box::new(command_args))
-            .build()?;
+        let nix_args = NixArgs {
+            config: Default::default(),
+            common: Default::default(),
+            command: (Box::new(command_args)),
+        };
 
         nix.run(nix_args).await?;
         Ok(())

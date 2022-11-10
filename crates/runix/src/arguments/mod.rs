@@ -1,4 +1,3 @@
-use derive_builder::Builder;
 use derive_more::From;
 
 use crate::{command::NixCommand, command_line::ToArgs, installable::Installable};
@@ -12,21 +11,16 @@ pub mod flake;
 
 /// Nix arguments
 /// should be a proper struct + de/serialization to and from [&str]
-#[derive(Builder)]
-#[builder(pattern = "owned")]
 pub struct NixArgs {
     /// Common arguments to the nix command
-    #[builder(default)]
-    common: NixCommonArgs,
+    pub common: NixCommonArgs,
 
     /// Nix configuration (overrides nix.conf)
-    #[builder(default)]
-    config: NixConfig,
+    pub config: NixConfig,
 
     /// Arguments to the nix subcommand
     /// These may contain flake/evaluation args if applicable
-    // #[builder(setter(skip))]
-    command: Box<dyn NixCommand + Send + Sync>,
+    pub command: Box<dyn NixCommand + Send + Sync>,
 }
 
 impl ToArgs for NixArgs {

@@ -8,7 +8,6 @@ pub mod arguments;
 pub mod command;
 pub mod command_line;
 pub mod installable;
-pub mod setting;
 
 pub use command_line as default;
 

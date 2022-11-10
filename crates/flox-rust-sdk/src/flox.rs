@@ -9,10 +9,8 @@ use anyhow::Result;
 
 use derive_builder::Builder;
 use runix::{
-    arguments::{
-        common::NixCommonArgs, config::NixConfigBuilder, eval::EvaluationArgs, flake::FlakeArgs,
-    },
-    command_line::NixCommandLine,
+    arguments::{common::NixCommonArgs, config::NixConfig, eval::EvaluationArgs, flake::FlakeArgs},
+    command_line::{NixCommandLine, NixCommandLineDefaults},
     NixApi,
 };
 
@@ -72,25 +70,26 @@ pub trait NixApiExt: NixApi {
 
 impl NixApiExt for NixCommandLine {
     fn instance(_flox: &Flox<Self>) -> Result<Self> {
-        let nix_config = NixConfigBuilder::default()
-            .accept_flake_config(())
-            // .netrc_file() TODO
-            .warn_dirty(())
-            .extra_experimental_features(["nix-command", "flakes"].map(String::from).to_vec())
-            .extra_substituters(
+        let nix_config = NixConfig {
+            extra_experimental_features: Some(
+                ["nix-command", "flakes"].map(String::from).to_vec().into(),
+            ),
+            extra_substituters: Some(
                 ["https://cache.floxdev.com?trusted=1"]
                     .map(String::from)
-                    .to_vec(),
-            )
-            .build()?;
+                    .to_vec()
+                    .into(),
+            ),
+            ..Default::default()
+        };
 
-        Ok(NixCommandLine::new(
-            Some(environment::NIX_BIN.to_string()),
-            build_flox_env()?,
-            NixCommonArgs::default(),
-            FlakeArgs::default(),
-            EvaluationArgs::default(),
-            nix_config,
-        ))
+        Ok(NixCommandLine {
+            nix_bin: Some(environment::NIX_BIN.to_string()),
+            defaults: NixCommandLineDefaults {
+                environment: build_flox_env()?,
+                config: nix_config,
+                ..Default::default()
+            },
+        })
     }
 }
