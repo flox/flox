@@ -1,30 +1,31 @@
-use anyhow::Result;
 use derive_more::Constructor;
-use runix::{
-    arguments::{
-        flake::{FlakeArgs, InputOverride},
-        NixArgs,
-    },
-    command::Build,
-};
+
+use runix::{BuildArgs, FlakeArgs, InputOverride, Installable, NixApi};
+use thiserror::Error;
 
 use crate::{
-    flox::{Flox, NixApiExt},
-    prelude::{Installable, Stability},
+    flox::{Flox, FloxNixApi},
+    prelude::Stability,
 };
 
 #[derive(Constructor)]
-pub struct Package<'flox, Nix: NixApiExt> {
-    flox: &'flox Flox<Nix>,
+pub struct Package<'flox> {
+    flox: &'flox Flox,
     installable: Installable,
     stability: Stability,
 }
 
-impl<Nix> Package<'_, Nix>
-where
-    Nix: NixApiExt,
-{
-    fn flake_args(&self) -> Result<FlakeArgs> {
+#[derive(Error, Debug)]
+pub enum NixBuildError<Nix: NixApi> {
+    #[error("Error getting Nix instance")]
+    NixInstance(()),
+    #[error("Error getting flake args")]
+    FlakeArgs(()),
+    #[error("Error running nix: {0}")]
+    NixRun(<Nix as NixApi>::BuildError),
+}
+impl Package<'_> {
+    fn flake_args(&self) -> Result<FlakeArgs, ()> {
         Ok(FlakeArgs {
             override_inputs: vec![InputOverride {
                 from: "floxpkgs/nixpkgs/nixpkgs".into(),
@@ -32,27 +33,21 @@ where
             }],
         })
     }
-}
 
-impl<Nix: NixApiExt> Package<'_, Nix> {
     /// flox build
     /// runs `nix build <installable>`
-    pub async fn build(&self) -> Result<()> {
-        let nix = self.flox.nix()?;
+    pub async fn build<Nix: FloxNixApi + NixApi>(&self) -> Result<(), NixBuildError<Nix>> {
+        let nix = self.flox.nix::<Nix>();
 
-        let command_args = Build {
-            flake: (self.flake_args()?),
+        let command_args = BuildArgs {
+            flake_args: self.flake_args().map_err(NixBuildError::FlakeArgs)?,
             installables: [self.installable.clone()].into(),
             ..Default::default()
         };
 
-        let nix_args = NixArgs {
-            config: Default::default(),
-            common: Default::default(),
-            command: (Box::new(command_args)),
-        };
-
-        nix.run(nix_args).await?;
+        nix.build(command_args)
+            .await
+            .map_err(NixBuildError::NixRun)?;
         Ok(())
     }
 }

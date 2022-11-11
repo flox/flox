@@ -15,7 +15,7 @@ pub static FLOX_SH: &str = env!("FLOX_SH");
 mod commands {
     use anyhow::Result;
     use bpaf::Bpaf;
-    use flox_rust_sdk::prelude::FloxBuilder;
+    use flox_rust_sdk::flox::Flox;
 
     use self::package::PackageArgs;
 
@@ -36,13 +36,12 @@ mod commands {
     impl FloxArgs {
         /// Initialize the command line by creating an initial FloxBuilder
         pub async fn handle(&self, config: crate::config::Config) -> Result<()> {
-            let flox = FloxBuilder::default()
-                .collect_metrics(config.flox.allow_telemetry.unwrap_or_default())
-                .cache_dir(config.flox.cache_dir)
-                .data_dir(config.flox.data_dir)
-                .config_dir(config.flox.config_dir)
-                .extra_nix_args(self.nix_args.clone()) // TODO: consume Self?
-                .build()?;
+            let flox = Flox {
+                collect_metrics: config.flox.allow_telemetry.unwrap_or_default(),
+                cache_dir: config.flox.cache_dir,
+                data_dir: config.flox.data_dir,
+                config_dir: config.flox.config_dir,
+            };
 
             match self.command {
                 // Commands::Support(ref f) => f.run(self).await?,
@@ -50,10 +49,6 @@ mod commands {
                 Commands::Package(ref package) => package.handle(flox).await?,
             }
             Ok(())
-        }
-
-        fn flox(&self) -> FloxBuilder {
-            FloxBuilder::default()
         }
     }
 
@@ -66,7 +61,7 @@ mod commands {
     mod package {
         use anyhow::Result;
         use bpaf::Bpaf;
-        use flox_rust_sdk::prelude::{Flox, Stability};
+        use flox_rust_sdk::{flox::Flox, nix::NixCommandLine, prelude::Stability};
 
         use self::build::BuildArgs;
 
@@ -86,7 +81,7 @@ mod commands {
                             installable.clone().into(),
                             self.stability.clone().unwrap_or_default(),
                         )
-                        .build()
+                        .build::<NixCommandLine>()
                         .await?
                     }
                 }
@@ -136,7 +131,7 @@ pub async fn run_in_flox(args: &[impl AsRef<std::ffi::OsStr> + Debug]) -> Result
     debug!("Running in flox with arguments: {:?}", args);
     let status = Command::new(FLOX_SH)
         .args(args)
-        .envs(&build_flox_env().unwrap())
+        .envs(&build_flox_env())
         .spawn()
         .expect("failed to spawn flox")
         .wait()

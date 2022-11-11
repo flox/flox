@@ -1,7 +1,6 @@
 //! Modiule for all defined environment variables to
 //! reduce the number of magic strings
 
-use anyhow::Result;
 use std::collections::HashMap;
 use std::env;
 pub static NIX_BIN: &str = env!("NIX_BIN");
@@ -9,7 +8,7 @@ pub static NIX_BIN: &str = env!("NIX_BIN");
 /// Environment variable key for the GitHub Api Key
 pub static GITHUB_TOKEN: &str = "GITHUB_TOKEN";
 
-pub fn build_flox_env() -> Result<HashMap<String, String>> {
+pub fn build_flox_env() -> HashMap<String, String> {
     let mut env_map: HashMap<String, String> = HashMap::new();
 
     /*
@@ -78,5 +77,5 @@ pub fn build_flox_env() -> Result<HashMap<String, String>> {
     //     format!("{}/.config/flox/gitconfig", home),
     // );
 
-    Ok(env_map)
+    env_map
 }
