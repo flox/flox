@@ -16,7 +16,7 @@ pub struct Package<'flox> {
 }
 
 #[derive(Error, Debug)]
-pub enum NixBuildError<Nix: NixApi> {
+pub enum PackageBuildError<Nix: NixApi> {
     #[error("Error getting Nix instance")]
     NixInstance(()),
     #[error("Error getting flake args")]
@@ -36,18 +36,18 @@ impl Package<'_> {
 
     /// flox build
     /// runs `nix build <installable>`
-    pub async fn build<Nix: FloxNixApi + NixApi>(&self) -> Result<(), NixBuildError<Nix>> {
+    pub async fn build<Nix: FloxNixApi + NixApi>(&self) -> Result<(), PackageBuildError<Nix>> {
         let nix = self.flox.nix::<Nix>();
 
         let command_args = BuildArgs {
-            flake_args: self.flake_args().map_err(NixBuildError::FlakeArgs)?,
+            flake_args: self.flake_args().map_err(PackageBuildError::FlakeArgs)?,
             installables: [self.installable.clone()].into(),
             ..Default::default()
         };
 
         nix.build(command_args)
             .await
-            .map_err(NixBuildError::NixRun)?;
+            .map_err(PackageBuildError::NixRun)?;
         Ok(())
     }
 }
