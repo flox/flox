@@ -31,9 +31,7 @@ pub enum CleanupInitializerError {
     RemoveFlake(std::io::Error),
 }
 impl Initializer<'_> {
-    pub async fn init<Nix: FloxNixApi + NixApi, Git: GitProvider>(
-        &self,
-    ) -> Result<(), InitError<Nix, Git>> {
+    pub async fn init<Nix: FloxNixApi, Git: GitProvider>(&self) -> Result<(), InitError<Nix, Git>> {
         let nix = self.flox.nix::<Nix>();
 
         if !Path::new("flox.nix").exists() {
@@ -68,9 +66,7 @@ impl Initializer<'_> {
         Ok(())
     }
 
-    pub async fn cleanup<Nix: FloxNixApi + NixApi, Git: GitProvider>(
-        &self,
-    ) -> Result<(), CleanupInitializerError> {
+    pub async fn cleanup<Git: GitProvider>(&self) -> Result<(), CleanupInitializerError> {
         std::fs::remove_dir_all("./pkgs").map_err(CleanupInitializerError::RemovePkgs)?;
         std::fs::remove_file("./flake.nix").map_err(CleanupInitializerError::RemoveFlake)?;
 

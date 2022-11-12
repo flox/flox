@@ -36,7 +36,7 @@ impl Package<'_> {
 
     /// flox build
     /// runs `nix build <installable>`
-    pub async fn build<Nix: FloxNixApi + NixApi>(&self) -> Result<(), PackageBuildError<Nix>> {
+    pub async fn build<Nix: FloxNixApi>(&self) -> Result<(), PackageBuildError<Nix>> {
         let nix = self.flox.nix::<Nix>();
 
         let command_args = BuildArgs {

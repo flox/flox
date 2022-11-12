@@ -7,7 +7,7 @@ use crate::{
     providers::git::GitProvider,
 };
 
-use runix::{DefaultArgs, Installable, NixCommandLine, NixCommonArgs, NixConfigArgs};
+use runix::{DefaultArgs, Installable, NixApi, NixCommandLine, NixCommonArgs, NixConfigArgs};
 
 /// The main API struct for our flox implementation
 ///
@@ -33,7 +33,7 @@ pub struct Flox {
     pub collect_metrics: bool,
 }
 
-pub trait FloxNixApi {
+pub trait FloxNixApi: NixApi {
     fn new(nix_bin: String, defaults: DefaultArgs) -> Self;
 }
 
