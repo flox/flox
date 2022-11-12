@@ -64,13 +64,31 @@ impl GitProvider for LibGit2Provider {
     }
 }
 
+#[derive(Error, Debug)]
+pub enum CommandInitError {
+    #[error("Error in CLI initializing git repo: {0}")]
+    Command(#[from] std::io::Error),
+}
+
+#[derive(Error, Debug)]
+pub enum CommandAddRemoteError {
+    #[error("Error in CLI adding remote repo: {0}")]
+    Command(#[from] std::io::Error),
+}
+
+#[derive(Error, Debug)]
+pub enum CommandMvError {
+    #[error("Error in CLI moving file: {0}")]
+    Command(#[from] std::io::Error),
+}
+
 /// A simple Git Provider that uses the git
 /// command. This would require that git is installed.
 #[async_trait]
 impl GitProvider for GitCommandProvider {
-    type InitError = std::io::Error;
-    type AddRemoteError = std::io::Error;
-    type MvError = std::io::Error;
+    type InitError = CommandInitError;
+    type AddRemoteError = CommandAddRemoteError;
+    type MvError = CommandMvError;
 
     fn new() -> GitCommandProvider {
         GitCommandProvider
@@ -85,7 +103,7 @@ impl GitProvider for GitCommandProvider {
 
         true
     }
-    async fn init_repo(&self) -> Result<(), std::io::Error> {
+    async fn init_repo(&self) -> Result<(), Self::InitError> {
         let process = Command::new("git").arg("init").output();
 
         let _output = process.await?;
@@ -93,7 +111,7 @@ impl GitProvider for GitCommandProvider {
         Ok(())
     }
 
-    async fn add_remote(&self, origin_name: &str, url: &str) -> Result<(), std::io::Error> {
+    async fn add_remote(&self, origin_name: &str, url: &str) -> Result<(), Self::AddRemoteError> {
         let process = Command::new("git")
             .arg("remote")
             .arg("add")
@@ -102,10 +120,11 @@ impl GitProvider for GitCommandProvider {
             .output();
 
         let _output = process.await?;
+
         Ok(())
     }
 
-    async fn mv(&self, from: &Path, to: &Path) -> Result<(), std::io::Error> {
+    async fn mv(&self, from: &Path, to: &Path) -> Result<(), Self::MvError> {
         let process = Command::new("git")
             .arg("mv")
             .arg(format!("{}", from.as_os_str().to_string_lossy()))
