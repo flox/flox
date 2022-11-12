@@ -118,6 +118,10 @@ impl std::fmt::Display for Installable {
     }
 }
 
+fn installable_args<I: IntoIterator<Item = Installable>>(i: I) -> Vec<String> {
+    i.into_iter().map(|x| x.to_string()).collect()
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct BuildArgs {
     pub common_args: NixCommonArgs,
@@ -132,9 +136,7 @@ impl IntoArgs for BuildArgs {
         args.append(&mut self.common_args.into_args());
         args.append(&mut self.flake_args.into_args());
         args.append(&mut self.eval_args.into_args());
-        for ins in self.installables {
-            args.push(ins.to_string());
-        }
+        args.append(&mut installable_args(self.installables));
         args
     }
 }
@@ -153,9 +155,7 @@ impl IntoArgs for EvalArgs {
         args.append(&mut self.common_args.into_args());
         args.append(&mut self.flake_args.into_args());
         args.append(&mut self.eval_args.into_args());
-        if let Some(installable) = self.installable {
-            args.push(installable.to_string());
-        }
+        args.append(&mut installable_args(self.installable));
         args
     }
 }
