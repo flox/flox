@@ -8,8 +8,10 @@
   darwin,
   flox,
   nix,
+  pandoc,
   cacert,
   glibcLocales,
+  installShellFiles,
 }: let
   cargoToml = lib.importTOML (self + "/crates/flox-cli/Cargo.toml");
 
@@ -40,6 +42,11 @@ in
 
       doCheck = false;
 
+      postInstall = ''
+        pandoc --standalone -t man ${self.inputs.floxpkgs.inputs.flox}/flox.1.md -o flox.1
+        installManPage flox.1
+      '';
+
       buildInputs =
         [
           openssl.dev
@@ -50,6 +57,8 @@ in
 
       nativeBuildInputs = [
         pkg-config # for openssl
+        pandoc
+        installShellFiles
       ];
 
       passthru.envs = envs;
