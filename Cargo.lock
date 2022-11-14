@@ -523,8 +523,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "flox-cli"
-version = "0.1.0"
+name = "flox"
+version = "0.0.7"
 dependencies = [
  "anyhow",
  "async-trait",

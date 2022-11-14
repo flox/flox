@@ -1,4 +1,5 @@
 {
+  system,
   self,
   lib,
   rustPlatform,
@@ -6,19 +7,19 @@
   openssl,
   pkg-config,
   darwin,
-  flox,
+  flox-bash ? self.inputs.floxpkgs-internal.packages.${system}.flox-bash,
   nix,
   pandoc,
   cacert,
   glibcLocales,
   installShellFiles,
 }: let
-  cargoToml = lib.importTOML (self + "/crates/flox-cli/Cargo.toml");
+  cargoToml = lib.importTOML (self + "/crates/flox/Cargo.toml");
 
   envs =
     {
       NIX_BIN = "${nix}/bin/nix";
-      FLOX_SH = "${flox}/libexec/flox/flox";
+      FLOX_SH = "${flox-bash}/libexec/flox/flox";
       NIXPKGS_CACERT_BUNDLE_CRT = "${cacert}/etc/ssl/certs/ca-bundle.crt";
     }
     // lib.optionalAttrs hostPlatform.isDarwin {
@@ -31,14 +32,14 @@
 in
   rustPlatform.buildRustPackage ({
       pname = cargoToml.package.name;
-      version = cargoToml.package.version;
+      version = "${cargoToml.package.version}-r${toString self.revCount or "dirty"}";
       src = self;
 
       cargoLock = {
         lockFile = self + "/Cargo.lock";
       };
 
-      buildAndTestSubdir = "crates/flox-cli";
+      buildAndTestSubdir = "crates/flox";
 
       doCheck = false;
 

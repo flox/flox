@@ -1,2 +1,2 @@
 [workspace]
-members = ["crates/flox-cli", "crates/flox-rust-sdk", "crates/runix"]
+members = ["crates/*"]

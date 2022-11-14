@@ -6,7 +6,6 @@
   clippy,
   rust-analyzer,
   darwin,
-  flox,
   glibcLocales,
   hostPlatform,
   nix,
@@ -16,7 +15,7 @@
   rust,
 }:
 mkShell ({
-    inputsFrom = [self'.packages.flox-cli];
+    inputsFrom = [self'.packages.flox];
     RUST_SRC_PATH = "${rust.packages.stable.rustPlatform.rustLibSrc}";
     packages = [
       rustfmt
@@ -28,4 +27,4 @@ mkShell ({
       ${self'.checks.pre-commit-check.shellHook}
     '';
   }
-  // self'.packages.flox-cli.envs)
+  // self'.packages.flox.envs)
