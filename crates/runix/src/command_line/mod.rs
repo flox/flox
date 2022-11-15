@@ -77,17 +77,17 @@ impl NixCommandLine {
     }
 }
 
-pub trait IntoArgs {
-    fn into_args(&self) -> Vec<String>;
+pub trait ToArgs {
+    fn to_args(&self) -> Vec<String>;
 }
 
-impl<T: IntoArgs> IntoArgs for Option<T> {
-    fn into_args(&self) -> Vec<String> {
-        self.iter().flat_map(|t| t.into_args()).collect()
+impl<T: ToArgs> ToArgs for Option<T> {
+    fn to_args(&self) -> Vec<String> {
+        self.iter().flat_map(|t| t.to_args()).collect()
     }
 }
 
-pub trait NixCliCommand<Own: IntoArgs = ()>: fmt::Debug + Sized {
+pub trait NixCliCommand<Own: ToArgs = ()>: fmt::Debug + Sized {
     const SUBCOMMAND: &'static [&'static str];
 
     const FLAKE_ARGS: fn(Self) -> Option<FlakeArgs> = |_| None;
@@ -109,16 +109,16 @@ pub trait NixCliCommand<Own: IntoArgs = ()>: fmt::Debug + Sized {
 
     fn args(&self) -> Vec<String> {
         let mut acc = Vec::new();
-        acc.append(&mut self.flake_args().map_or(Vec::new(), |a| a.into_args()));
-        acc.append(&mut self.eval_args().map_or(Vec::new(), |a| a.into_args()));
-        acc.append(&mut self.installables().map_or(Vec::new(), |a| a.into_args()));
-        acc.append(&mut self.own().map_or(Vec::new(), |a| a.into_args()));
+        acc.append(&mut self.flake_args().map_or(Vec::new(), |a| a.to_args()));
+        acc.append(&mut self.eval_args().map_or(Vec::new(), |a| a.to_args()));
+        acc.append(&mut self.installables().map_or(Vec::new(), |a| a.to_args()));
+        acc.append(&mut self.own().map_or(Vec::new(), |a| a.to_args()));
         acc
     }
 }
 
-impl IntoArgs for () {
-    fn into_args(&self) -> Vec<String> {
+impl ToArgs for () {
+    fn to_args(&self) -> Vec<String> {
         Default::default()
     }
 }
@@ -146,9 +146,9 @@ where
         nix_args: &NixArgs,
     ) -> Result<(), NixCommandLineRunError> {
         let args = [
-            backend.defaults.config_args.into_args(),
-            backend.defaults.common_args.into_args(),
-            nix_args.into_args(),
+            backend.defaults.config_args.to_args(),
+            backend.defaults.common_args.to_args(),
+            nix_args.to_args(),
             Self::SUBCOMMAND.iter().map(ToString::to_string).collect(),
             self.args(),
         ]

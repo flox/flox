@@ -4,7 +4,7 @@ use crate::{
     arguments::{eval::EvaluationArgs, flake::FlakeArgs, DevelopArgs, InstallablesArgs},
     command_line::{
         flag::{Flag, FlagType},
-        IntoArgs, NixCliCommand,
+        NixCliCommand, ToArgs,
     },
     installable::Installable,
 };

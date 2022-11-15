@@ -3,7 +3,7 @@ use derive_more::Constructor;
 use crate::{
     command_line::{
         flag::{Flag, FlagType},
-        IntoArgs,
+        ToArgs,
     },
     installable::FlakeRef,
 };
@@ -16,12 +16,12 @@ pub struct FlakeArgs {
     pub override_inputs: Option<Vec<OverrideInputs>>,
 }
 
-impl IntoArgs for FlakeArgs {
-    fn into_args(&self) -> Vec<String> {
+impl ToArgs for FlakeArgs {
+    fn to_args(&self) -> Vec<String> {
         let flags = self.override_inputs.as_ref().map(|overrides| {
             overrides
                 .iter()
-                .flat_map(IntoArgs::into_args)
+                .flat_map(ToArgs::to_args)
                 .collect::<Vec<String>>()
         });
 
