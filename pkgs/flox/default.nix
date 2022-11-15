@@ -1,5 +1,7 @@
 {
   system,
+  # self is a flake if this package is built localy, but if it's called as a proto, it's just the
+  # source
   self,
   lib,
   rustPlatform,
@@ -44,8 +46,9 @@ in
       doCheck = false;
 
       postInstall = ''
-        pandoc --standalone -t man ${self.inputs.floxpkgs.inputs.flox}/flox.1.md -o flox.1
-        installManPage flox.1
+        # TODO move .md file to this repo
+        # pandoc --standalone -t man ${self}/flox.1.md -o flox.1
+        installManPage ${flox-bash}/share/man/man1/flox.1.gz
       '';
 
       buildInputs =
