@@ -39,25 +39,33 @@ pub struct Flox {
 }
 
 pub trait FloxNixApi: NixBackend {
-    fn new(nix_bin: String, defaults: DefaultArgs) -> Self;
+    fn new(flox: &Flox, defaults: DefaultArgs) -> Self;
 }
 
 impl FloxNixApi for NixCommandLine {
-    fn new(nix_bin: String, defaults: DefaultArgs) -> NixCommandLine {
+    fn new(flox: &Flox, defaults: DefaultArgs) -> NixCommandLine {
         NixCommandLine {
-            nix_bin: Some(nix_bin),
+            nix_bin: Some(environment::NIX_BIN.to_string()),
             defaults,
         }
     }
 }
 
 impl Flox {
+    /// Provide the package scope to interact with raw packages, (build, develop, etc)
     pub fn package(&self, installable: Installable, stability: Stability) -> Package {
         Package::new(self, installable, stability)
     }
 
+    /// Produce a new Nix Backend
+    ///
+    /// This method performs backend independen configuration of nix
+    /// and passes itself and the default config to the constructor of the Nix Backend
+    ///
+    /// The constructor will perform backend specifc configuration measures
+    /// and return a fresh initialized backend.
     pub fn nix<Nix: FloxNixApi>(&self) -> Nix {
-        let nix_config_args = NixConfigArgs {
+        let config_args = NixConfigArgs {
             extra_experimental_features: Some(
                 ["nix-command", "flakes"].map(String::from).to_vec().into(),
             ),
@@ -76,13 +84,15 @@ impl Flox {
 
         let defaults = DefaultArgs {
             environment: build_flox_env(),
+            config_args,
             common_args,
             ..Default::default()
         };
 
-        Nix::new(environment::NIX_BIN.to_string(), defaults)
+        Nix::new(self, defaults)
     }
 
+    /// Initialize and provide a git abstraction
     pub fn git_provider<Git: GitProvider>(&self) -> Git {
         Git::new()
     }
