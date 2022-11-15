@@ -75,9 +75,13 @@ pub struct Develop {
     pub develop_args: DevelopArgs,
 }
 
-impl NixCliCommand for Develop {
+impl NixCliCommand<DevelopArgs> for Develop {
     const SUBCOMMAND: &'static [&'static str] = &["develop"];
     const FLAKE_ARGS: fn(Self) -> Option<FlakeArgs> = |s| Some(s.flake);
     const EVAL_ARGS: fn(Self) -> Option<EvaluationArgs> = |s| Some(s.eval);
     const INSTALLABLES: fn(Self) -> Option<InstallablesArgs> = |s| Some(s.installables);
+
+    fn own(&self) -> Option<DevelopArgs> {
+        Some(self.develop_args.clone())
+    }
 }
