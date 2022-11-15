@@ -137,8 +137,9 @@ where
     ) -> Result<(), NixCommandLineRunError> {
         let args = [
             backend.defaults.config_args.into_args(),
-            Self::SUBCOMMAND.iter().map(ToString::to_string).collect(),
             backend.defaults.common_args.into_args(),
+            nix_args.into_args(),
+            Self::SUBCOMMAND.iter().map(ToString::to_string).collect(),
             self.args(),
         ]
         .into_iter()
@@ -146,7 +147,6 @@ where
 
         backend.run(args).await?;
         Ok(())
-        // backend.run_in_nix(args)
     }
 }
 
