@@ -8,6 +8,7 @@ use runix::{
 };
 
 use crate::{
+    actions::environment::Environment,
     actions::package::Package,
     environment::{self, build_flox_env},
     prelude::Stability,
@@ -55,6 +56,10 @@ impl Flox {
     /// Provide the package scope to interact with raw packages, (build, develop, etc)
     pub fn package(&self, installable: Installable, stability: Stability) -> Package {
         Package::new(self, installable, stability)
+    }
+
+    pub fn environment(&self, dir: PathBuf) -> Environment {
+        Environment::new(self, dir)
     }
 
     /// Produce a new Nix Backend

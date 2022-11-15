@@ -17,6 +17,7 @@ mod commands {
     use bpaf::Bpaf;
     use flox_rust_sdk::flox::Flox;
 
+    use self::environment::EnvironmentArgs;
     use self::package::PackageArgs;
 
     #[derive(Bpaf)]
@@ -47,6 +48,7 @@ mod commands {
                 // Commands::Support(ref f) => f.run(self).await?,
                 // Commands::Build(ref f) => f.run(&self).await?,
                 Commands::Package(ref package) => package.handle(flox).await?,
+                Commands::Environment(ref environment) => environment.handle(flox).await?,
             }
             Ok(())
         }
@@ -56,6 +58,7 @@ mod commands {
     #[derive(Bpaf)]
     pub enum Commands {
         Package(#[bpaf(external(package::package_args))] PackageArgs),
+        Environment(#[bpaf(external(environment::environment_args))] EnvironmentArgs),
     }
 
     mod package {
@@ -102,6 +105,85 @@ mod commands {
             pub struct BuildArgs {
                 #[bpaf(positional("INSTALLABLE"))]
                 pub installable: String,
+            }
+        }
+    }
+
+    mod environment {
+        use anyhow::Result;
+        use bpaf::Bpaf;
+        use flox_rust_sdk::flox::Flox;
+        use flox_rust_sdk::nix::command_line::NixCommandLine;
+        use std:: path::PathBuf;
+
+        use self::install::InstallArgs;
+        use self::remove::RemoveArgs;
+
+        #[derive(Bpaf)]
+        pub struct EnvironmentArgs {
+            /// path to environment. Note: this will be changed to an environment name
+            #[bpaf(short('e'))]
+            pub environment: PathBuf,
+            #[bpaf(external(environment_commands))]
+            command: EnvironmentCommands,
+        }
+
+        impl EnvironmentArgs {
+            pub async fn handle(&self, flox: Flox) -> Result<()> {
+                match &self.command {
+                    EnvironmentCommands::List => {
+                        flox.environment(self.environment.clone())
+                            .list::<NixCommandLine>()
+                            .await?
+                    }
+                    EnvironmentCommands::Edit => {
+                        flox.environment(self.environment.clone())
+                            .edit::<NixCommandLine>()
+                            .await?
+                    }
+                    EnvironmentCommands::Install(InstallArgs { package }) => {
+                        flox.environment(self.environment.clone())
+                            .install::<NixCommandLine>(package)
+                            .await?
+                    }
+                    EnvironmentCommands::Remove(RemoveArgs { package }) => {
+                        flox.environment(self.environment.clone())
+                            .remove::<NixCommandLine>(package)
+                            .await?
+                    }
+                }
+
+                Ok(())
+            }
+        }
+
+        #[derive(Bpaf, Clone)]
+        pub enum EnvironmentCommands {
+            #[bpaf(command)]
+            List,
+            #[bpaf(command)]
+            Edit,
+            #[bpaf(command)]
+            Install(#[bpaf(external(install::install_args))] install::InstallArgs),
+            #[bpaf(command)]
+            Remove(#[bpaf(external(remove::remove_args))] remove::RemoveArgs),
+        }
+
+        mod install {
+            use bpaf::Bpaf;
+            #[derive(Bpaf, Clone)]
+            pub struct InstallArgs {
+                #[bpaf(positional("PACKAGE"))]
+                pub package: String,
+            }
+        }
+
+        mod remove {
+            use bpaf::Bpaf;
+            #[derive(Bpaf, Clone)]
+            pub struct RemoveArgs {
+                #[bpaf(positional("PACKAGE"))]
+                pub package: String,
             }
         }
     }
