@@ -1,13 +1,18 @@
 use std::path::PathBuf;
 
+use runix::{
+    arguments::{common::NixCommonArgs, config::NixConfigArgs},
+    command_line::{DefaultArgs, NixCommandLine},
+    installable::Installable,
+    NixBackend,
+};
+
 use crate::{
     actions::package::Package,
     environment::{self, build_flox_env},
     prelude::Stability,
     providers::git::GitProvider,
 };
-
-use runix::{DefaultArgs, Installable, NixApi, NixCommandLine, NixCommonArgs, NixConfigArgs};
 
 /// The main API struct for our flox implementation
 ///
@@ -33,7 +38,7 @@ pub struct Flox {
     pub collect_metrics: bool,
 }
 
-pub trait FloxNixApi: NixApi {
+pub trait FloxNixApi: NixBackend {
     fn new(nix_bin: String, defaults: DefaultArgs) -> Self;
 }
 
@@ -53,19 +58,19 @@ impl Flox {
 
     pub fn nix<Nix: FloxNixApi>(&self) -> Nix {
         let nix_config_args = NixConfigArgs {
-            extra_experimental_features: ["nix-command", "flakes"]
-                .map(String::from)
-                .to_vec()
-                .into(),
-            extra_substituters: ["https://cache.floxdev.com?trusted=1"]
-                .map(String::from)
-                .to_vec()
-                .into(),
+            extra_experimental_features: Some(
+                ["nix-command", "flakes"].map(String::from).to_vec().into(),
+            ),
+            extra_substituters: Some(
+                ["https://cache.floxdev.com?trusted=1"]
+                    .map(String::from)
+                    .to_vec()
+                    .into(),
+            ),
             ..Default::default()
         };
 
         let common_args = NixCommonArgs {
-            nix_config_args,
             ..Default::default()
         };
 

@@ -1,5 +1,5 @@
 use log::{error, info};
-use runix::{FlakeInitArgs, NixApi};
+use runix::{arguments::NixArgs, command::FlakeInit, NixBackend, Run};
 use std::path::Path;
 
 use crate::flox::{Flox, FloxNixApi};
@@ -14,13 +14,16 @@ pub struct Initializer<'flox> {
 }
 
 #[derive(Error, Debug)]
-pub enum InitError<Nix: NixApi, Git: GitProvider> {
+pub enum InitError<Nix: NixBackend, Git: GitProvider>
+where
+    FlakeInit: Run<Nix>,
+{
     #[error("Error initializing git repo: {0}")]
     InitRepo(Git::InitError),
     #[error("Error initializing base template with Nix")]
-    NixInitBase(Nix::FlakeInitError),
+    NixInitBase(<FlakeInit as Run<Nix>>::Error),
     #[error("Error initializing template with Nix")]
-    NixInit(Nix::FlakeInitError),
+    NixInit(<FlakeInit as Run<Nix>>::Error),
 }
 
 #[derive(Error, Debug)]
@@ -31,17 +34,21 @@ pub enum CleanupInitializerError {
     RemoveFlake(std::io::Error),
 }
 impl Initializer<'_> {
-    pub async fn init<Nix: FloxNixApi, Git: GitProvider>(&self) -> Result<(), InitError<Nix, Git>> {
+    pub async fn init<Nix: FloxNixApi, Git: GitProvider>(&self) -> Result<(), InitError<Nix, Git>>
+    where
+        FlakeInit: Run<Nix>,
+    {
         let nix = self.flox.nix::<Nix>();
 
         if !Path::new("flox.nix").exists() {
             // Init with _init if we haven't already.
             info!("No flox.nix exists, running flox#templates._init");
 
-            nix.flake_init(FlakeInitArgs {
+            FlakeInit {
                 template: Some("flox#templates._init".to_string().into()),
                 ..Default::default()
-            })
+            }
+            .run(&nix, &NixArgs::default())
             .await
             .map_err(InitError::NixInitBase)?;
         }
@@ -56,10 +63,11 @@ impl Initializer<'_> {
                 .map_err(InitError::InitRepo)?;
         }
 
-        nix.flake_init(FlakeInitArgs {
+        FlakeInit {
             template: Some(format!("flox#templates.{}", self.template_name).into()),
             ..Default::default()
-        })
+        }
+        .run(&nix, &NixArgs::default())
         .await
         .map_err(InitError::NixInit)?;
 

@@ -1,6 +1,14 @@
 use derive_more::Constructor;
 
-use runix::{BuildArgs, FlakeArgs, InputOverride, Installable, NixApi};
+use runix::{
+    arguments::{
+        flake::{FlakeArgs, OverrideInputs},
+        NixArgs,
+    },
+    command::Build,
+    installable::Installable,
+    NixBackend, Run,
+};
 use thiserror::Error;
 
 use crate::{
@@ -16,38 +24,50 @@ pub struct Package<'flox> {
 }
 
 #[derive(Error, Debug)]
-pub enum PackageBuildError<Nix: NixApi> {
+pub enum PackageBuildError<Nix: NixBackend>
+where
+    Build: Run<Nix>,
+{
     #[error("Error getting Nix instance")]
     NixInstance(()),
     #[error("Error getting flake args")]
     FlakeArgs(()),
     #[error("Error running nix: {0}")]
-    NixRun(<Nix as NixApi>::BuildError),
+    NixRun(<Build as Run<Nix>>::Error),
 }
+
 impl Package<'_> {
     fn flake_args(&self) -> Result<FlakeArgs, ()> {
         Ok(FlakeArgs {
-            override_inputs: vec![InputOverride {
-                from: "floxpkgs/nixpkgs/nixpkgs".into(),
-                to: format!("flake:nixpkgs-{}", self.stability),
-            }],
+            override_inputs: Some(vec![OverrideInputs::new(
+                "floxpkgs/nixpkgs/nixpkgs".into(),
+                format!("flake:nixpkgs-{}", self.stability),
+            )
+            .into()]),
         })
     }
 
     /// flox build
     /// runs `nix build <installable>`
-    pub async fn build<Nix: FloxNixApi>(&self) -> Result<(), PackageBuildError<Nix>> {
+    pub async fn build<Nix: FloxNixApi>(&self) -> Result<(), PackageBuildError<Nix>>
+    where
+        Build: Run<Nix>,
+    {
         let nix = self.flox.nix::<Nix>();
 
-        let command_args = BuildArgs {
-            flake_args: self.flake_args().map_err(PackageBuildError::FlakeArgs)?,
+        let nix_args = NixArgs::default();
+
+        let command = Build {
+            flake: self.flake_args().map_err(PackageBuildError::FlakeArgs)?,
             installables: [self.installable.clone()].into(),
             ..Default::default()
         };
 
-        nix.build(command_args)
+        command
+            .run(&nix, &nix_args)
             .await
             .map_err(PackageBuildError::NixRun)?;
+
         Ok(())
     }
 }
