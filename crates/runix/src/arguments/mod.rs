@@ -45,3 +45,16 @@ impl IntoArgs for InstallablesArgs {
         self.0.iter().map(|i| i.to_nix()).collect()
     }
 }
+
+/// Nix arguments
+/// should be a proper struct + de/serialization to and from [&str]
+#[derive(Debug, Default, Clone)]
+pub struct DevelopArgs {}
+
+impl IntoArgs for DevelopArgs {
+    fn into_args(&self) -> Vec<String> {
+        let mut acc = vec![];
+
+        acc
+    }
+}

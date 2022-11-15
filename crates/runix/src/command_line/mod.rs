@@ -87,8 +87,12 @@ impl<T: IntoArgs> IntoArgs for Option<T> {
     }
 }
 
-pub trait NixCliCommand: fmt::Debug {
+pub trait NixCliCommand: fmt::Debug + Sized {
     const SUBCOMMAND: &'static [&'static str];
+
+    const FLAKE_ARGS: fn(Self) -> Option<FlakeArgs> = |_| None;
+    const EVAL_ARGS: fn(Self) -> Option<EvaluationArgs> = |_| None;
+    const INSTALLABLES: fn(Self) -> Option<InstallablesArgs> = |_| None;
 
     fn flake_args(&self) -> Option<FlakeArgs> {
         None

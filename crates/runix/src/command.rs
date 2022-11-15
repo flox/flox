@@ -1,7 +1,7 @@
 use derive_more::{Deref, From};
 
 use crate::{
-    arguments::{eval::EvaluationArgs, flake::FlakeArgs, InstallablesArgs},
+    arguments::{eval::EvaluationArgs, flake::FlakeArgs, DevelopArgs, InstallablesArgs},
     command_line::{
         flag::{Flag, FlagType},
         IntoArgs, NixCliCommand,
@@ -68,4 +68,20 @@ impl NixCliCommand for FlakeInit {
     fn own(&self) -> Option<Vec<String>> {
         self.template.as_ref().map(IntoArgs::into_args)
     }
+}
+
+/// `nix develop` Command
+#[derive(Debug, Default, Clone)]
+pub struct Develop {
+    pub flake: FlakeArgs,
+    pub eval: EvaluationArgs,
+    pub installables: InstallablesArgs,
+    pub develop_args: DevelopArgs,
+}
+
+impl NixCliCommand for Develop {
+    const SUBCOMMAND: &'static [&'static str] = &["develop"];
+    const FLAKE_ARGS: fn(Self) -> Option<FlakeArgs> = |s| Some(s.flake);
+    const EVAL_ARGS: fn(Self) -> Option<EvaluationArgs> = |s| Some(s.eval);
+    const INSTALLABLES: fn(Self) -> Option<InstallablesArgs> = |s| Some(s.installables);
 }
