@@ -61,7 +61,7 @@ mod commands {
     mod package {
         use anyhow::Result;
         use bpaf::Bpaf;
-        use flox_rust_sdk::{flox::Flox, prelude::Stability, nix::command_line::NixCommandLine};
+        use flox_rust_sdk::{flox::Flox, nix::command_line::NixCommandLine, prelude::Stability};
 
         use self::build::BuildArgs;
 
