@@ -4,7 +4,7 @@ use derive_more::{Deref, From};
 
 use crate::command_line::{
     flag::{Flag, FlagType},
-    ToArgs,
+    IntoArgs,
 };
 
 /// These arguments correspond to nix config settings as defined in `nix.conf` or overridden on the commandline
@@ -19,14 +19,14 @@ pub struct NixConfigArgs {
     pub extra_substituters: Option<Substituters>,
 }
 
-impl ToArgs for NixConfigArgs {
-    fn args(&self) -> Vec<String> {
+impl IntoArgs for NixConfigArgs {
+    fn into_args(&self) -> Vec<String> {
         vec![
-            self.accept_flake_config.args(),
-            self.warn_dirty.args(),
-            self.extra_experimental_features.args(),
-            self.extra_substituters.args(),
-            self.flake_registry.args(),
+            self.accept_flake_config.into_args(),
+            self.warn_dirty.into_args(),
+            self.extra_experimental_features.into_args(),
+            self.extra_substituters.into_args(),
+            self.flake_registry.into_args(),
             // self.extra_substituters.as_ref().map(ToArgs::args),
         ]
         .into_iter()

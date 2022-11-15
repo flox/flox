@@ -1,6 +1,6 @@
 use derive_more::From;
 
-use crate::{command_line::ToArgs, installable::Installable};
+use crate::{command_line::IntoArgs, installable::Installable};
 
 use self::{common::NixCommonArgs, config::NixConfigArgs};
 
@@ -20,11 +20,11 @@ pub struct NixArgs {
     config: NixConfigArgs,
 }
 
-impl ToArgs for NixArgs {
-    fn args(&self) -> Vec<String> {
+impl IntoArgs for NixArgs {
+    fn into_args(&self) -> Vec<String> {
         let mut acc = vec![];
-        acc.append(&mut self.config.args());
-        acc.append(&mut self.common.args());
+        acc.append(&mut self.config.into_args());
+        acc.append(&mut self.common.into_args());
         acc
     }
 }
@@ -40,8 +40,8 @@ pub struct InstallableArg(Installable);
 #[from(forward)]
 pub struct InstallablesArgs(Vec<Installable>);
 
-impl ToArgs for InstallablesArgs {
-    fn args(&self) -> Vec<String> {
+impl IntoArgs for InstallablesArgs {
+    fn into_args(&self) -> Vec<String> {
         self.0.iter().map(|i| i.to_nix()).collect()
     }
 }

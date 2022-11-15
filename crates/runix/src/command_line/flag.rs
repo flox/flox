@@ -1,6 +1,6 @@
 use std::ops::Deref;
 
-use super::ToArgs;
+use super::IntoArgs;
 
 /// Setting Flag Container akin to https://cs.github.com/NixOS/nix/blob/499e99d099ec513478a2d3120b2af3a16d9ae49d/src/libutil/config.cc#L199
 ///
@@ -65,11 +65,11 @@ impl<T: Deref<Target = impl ToString>> FlagType<T> {
     }
 }
 
-impl<T> ToArgs for T
+impl<T> IntoArgs for T
 where
     T: Flag,
 {
-    fn args(&self) -> Vec<String> {
+    fn into_args(&self) -> Vec<String> {
         match Self::FLAG_TYPE {
             FlagType::Bool => vec![Self::FLAG.to_string()],
             FlagType::List(f) => {

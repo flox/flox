@@ -6,6 +6,7 @@ use runix::{
         NixArgs,
     },
     command::Build,
+    command_line::NixCommandLine,
     installable::Installable,
     NixBackend, Run,
 };

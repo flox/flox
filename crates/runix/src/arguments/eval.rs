@@ -1,4 +1,4 @@
-use crate::command_line::ToArgs;
+use crate::command_line::IntoArgs;
 
 /// Evaluation related arguments
 /// Corresponding to the arguments defined in
@@ -6,8 +6,8 @@ use crate::command_line::ToArgs;
 #[derive(Clone, Default, Debug)]
 pub struct EvaluationArgs {}
 
-impl ToArgs for EvaluationArgs {
-    fn args(&self) -> Vec<String> {
+impl IntoArgs for EvaluationArgs {
+    fn into_args(&self) -> Vec<String> {
         vec![]
     }
 }

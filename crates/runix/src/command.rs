@@ -4,7 +4,7 @@ use crate::{
     arguments::{eval::EvaluationArgs, flake::FlakeArgs, InstallablesArgs},
     command_line::{
         flag::{Flag, FlagType},
-        NixCliCommand, ToArgs,
+        IntoArgs, NixCliCommand,
     },
     installable::Installable,
 };
@@ -66,6 +66,6 @@ impl NixCliCommand for FlakeInit {
     }
 
     fn own(&self) -> Option<Vec<String>> {
-        self.template.as_ref().map(ToArgs::args)
+        self.template.as_ref().map(IntoArgs::into_args)
     }
 }
