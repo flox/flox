@@ -87,7 +87,7 @@ impl<T: IntoArgs> IntoArgs for Option<T> {
     }
 }
 
-pub trait NixCliCommand: fmt::Debug + Sized {
+pub trait NixCliCommand<Own: IntoArgs = ()>: fmt::Debug + Sized {
     const SUBCOMMAND: &'static [&'static str];
 
     const FLAKE_ARGS: fn(Self) -> Option<FlakeArgs> = |_| None;
@@ -103,7 +103,7 @@ pub trait NixCliCommand: fmt::Debug + Sized {
     fn installables(&self) -> Option<InstallablesArgs> {
         None
     }
-    fn own(&self) -> Option<Vec<String>> {
+    fn own(&self) -> Option<Own> {
         None
     }
 
@@ -112,8 +112,14 @@ pub trait NixCliCommand: fmt::Debug + Sized {
         acc.append(&mut self.flake_args().map_or(Vec::new(), |a| a.into_args()));
         acc.append(&mut self.eval_args().map_or(Vec::new(), |a| a.into_args()));
         acc.append(&mut self.installables().map_or(Vec::new(), |a| a.into_args()));
-        acc.append(&mut self.own().unwrap_or_default());
+        acc.append(&mut self.own().map_or(Vec::new(), |a| a.into_args()));
         acc
+    }
+}
+
+impl IntoArgs for () {
+    fn into_args(&self) -> Vec<String> {
+        Default::default()
     }
 }
 

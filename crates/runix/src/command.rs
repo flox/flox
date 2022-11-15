@@ -31,10 +31,6 @@ impl NixCliCommand for Build {
     fn installables(&self) -> Option<InstallablesArgs> {
         Some(self.installables.clone())
     }
-
-    fn own(&self) -> Option<Vec<String>> {
-        None
-    }
 }
 
 /// `nix flake init` Command
@@ -55,7 +51,7 @@ impl Flag for TemplateFlag {
     const FLAG_TYPE: FlagType<Self> = FlagType::arg();
 }
 
-impl NixCliCommand for FlakeInit {
+impl NixCliCommand<TemplateFlag> for FlakeInit {
     const SUBCOMMAND: &'static [&'static str] = &["flake", "init"];
 
     fn flake_args(&self) -> Option<FlakeArgs> {
@@ -65,8 +61,8 @@ impl NixCliCommand for FlakeInit {
         Some(self.eval.clone())
     }
 
-    fn own(&self) -> Option<Vec<String>> {
-        self.template.as_ref().map(IntoArgs::into_args)
+    fn own(&self) -> Option<TemplateFlag> {
+        self.template.clone()
     }
 }
 
