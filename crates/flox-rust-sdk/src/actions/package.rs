@@ -8,7 +8,7 @@ use runix::{
     command::Build,
     command_line::NixCommandLine,
     installable::Installable,
-    NixBackend, Run,
+    NixBackend, Run, RunTyped,
 };
 use thiserror::Error;
 
@@ -52,7 +52,7 @@ impl Package<'_> {
     /// runs `nix build <installable>`
     pub async fn build<Nix: FloxNixApi>(&self) -> Result<(), PackageBuildError<Nix>>
     where
-        Build: Run<Nix>,
+        Build: RunTyped<Nix>,
     {
         let nix = self.flox.nix::<Nix>();
 
@@ -65,7 +65,7 @@ impl Package<'_> {
         };
 
         command
-            .run(&nix, &nix_args)
+            .run_typed(&nix, &nix_args)
             .await
             .map_err(PackageBuildError::NixRun)?;
 
