@@ -4,12 +4,10 @@ use crate::{
     arguments::{eval::EvaluationArgs, flake::FlakeArgs, DevelopArgs, InstallablesArgs},
     command_line::{
         flag::{Flag, FlagType},
-        Group, NixCliCommand, TypedCommand,
+        Group, JsonCommand, NixCliCommand, TypedCommand,
     },
     installable::Installable,
 };
-
-pub trait NixJsonCommand: NixCliCommand {}
 
 #[derive(Debug, Default, Clone)]
 pub struct Build {
@@ -26,7 +24,7 @@ impl NixCliCommand for Build {
     const FLAKE_ARGS: Group<Self, FlakeArgs> = Some(|d| d.flake.clone());
     const EVAL_ARGS: Group<Self, EvaluationArgs> = Some(|d| d.eval.clone());
 }
-
+impl JsonCommand for Build {}
 impl TypedCommand for Build {
     type Output = ();
 }

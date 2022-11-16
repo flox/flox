@@ -112,6 +112,48 @@ pub trait NixCliCommand: fmt::Debug + Sized {
     }
 }
 
+/// Marker Trait for commands that can return JSON
+///
+/// Used to automatically implement [RunJson] for the implementer
+/// by adding `--json` to the nix backend invocation
+///
+/// Commands that may output json data but doing so other than with `--json`
+/// should implment [RunJson] directly instead of this marker.
+pub trait JsonCommand {}
+
+/// Marker Trait for commands that can be deserialized into
+/// [TypedCommand::Output]
+///
+/// Used to automatically implement [RunTyped] for implementers
+/// that implement [RunJson] by trying to deserialize
+/// the json output to its associated type
+///
+/// Commands that may be deserialized from other data than JSON
+/// should implment [RunTyped] directly instead of this marker
+/// eg for [Develop]:
+///
+/// ```
+/// use async_trait::async_trait;
+/// use runix::arguments::NixArgs
+/// use runix::command::Develop
+/// use runix::{RunTyped, NixBackend}
+///
+/// struct NixCommandLine;
+/// impl NixBackend for NixCommandLine {}
+///
+/// #[async_trait]
+/// impl RunTyped<NixCommandLine> for Develop {
+///     type Output = ();
+///     async fn run_typed(
+///         &self,
+///         backend: &NixCommandLine,
+///         nix_args: &NixArgs,
+///     ) -> Result<Self::Output, Self::Error> {
+///         todo!()
+///     }
+/// }
+/// ```
+
 pub trait TypedCommand {
     type Output;
 }
@@ -160,7 +202,7 @@ where
 #[async_trait]
 impl<C> RunJson<NixCommandLine> for C
 where
-    C: Run<NixCommandLine> + Send + Sync,
+    C: Run<NixCommandLine> + JsonCommand + Send + Sync,
 {
     async fn json(
         &self,
