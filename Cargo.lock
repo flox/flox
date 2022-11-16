@@ -1584,6 +1584,8 @@ dependencies = [
  "async-trait",
  "derive_more",
  "log",
+ "serde",
+ "serde_json",
  "thiserror",
  "tokio",
 ]
