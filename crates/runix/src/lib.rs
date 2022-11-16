@@ -11,6 +11,7 @@ pub mod command_line;
 pub mod installable;
 
 pub use command_line as default;
+use serde_json::Value;
 
 pub trait NixBackend {}
 
@@ -22,7 +23,7 @@ pub trait Run<B: NixBackend> {
 
 #[async_trait]
 pub trait RunJson<B: NixBackend>: Run<B> {
-    async fn json(&self, backend: &B, nix_args: &NixArgs) -> Result<(), Self::Error>;
+    async fn json(&self, backend: &B, nix_args: &NixArgs) -> Result<Value, Self::Error>;
 }
 
 #[async_trait]
