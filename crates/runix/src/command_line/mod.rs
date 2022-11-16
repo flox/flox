@@ -7,6 +7,8 @@ use std::{
 use async_trait::async_trait;
 use derive_more::Constructor;
 use log::debug;
+use serde::Deserialize;
+use serde_json::Value;
 use thiserror::Error;
 use tokio::process::Command;
 
@@ -15,7 +17,8 @@ use crate::{
         common::NixCommonArgs, config::NixConfigArgs, eval::EvaluationArgs, flake::FlakeArgs,
         InstallablesArgs, NixArgs,
     },
-    NixBackend, Run, RunTyped,
+    command::Develop,
+    NixBackend, Run, RunJson, RunTyped,
 };
 
 pub mod flag;
@@ -134,8 +137,6 @@ where
 {
     type Error = NixCommandLineRunError;
 
-    // type Backend = NixCommandLine;
-
     async fn run(
         &self,
         backend: &NixCommandLine,
@@ -157,9 +158,27 @@ where
 }
 
 #[async_trait]
+impl<C> RunJson<NixCommandLine> for C
+where
+    C: Run<NixCommandLine> + Send + Sync,
+{
+    async fn json(
+        &self,
+        backend: &NixCommandLine,
+        nix_args: &NixArgs,
+    ) -> Result<Value, Self::Error> {
+        if let Ok(v) = self.run(backend, nix_args).await {
+            return Ok(serde_json::from_str(unimplemented!()).unwrap());
+        }
+        todo!()
+    }
+}
+
+#[async_trait]
 impl<C> RunTyped<NixCommandLine> for C
 where
-    C: NixCliCommand + TypedCommand + Send + Sync,
+    C: RunJson<NixCommandLine> + TypedCommand + Send + Sync,
+    <C as TypedCommand>::Output: for<'de> Deserialize<'de>,
 {
     type Output = C::Output;
     async fn run_typed(
@@ -167,6 +186,10 @@ where
         backend: &NixCommandLine,
         nix_args: &NixArgs,
     ) -> Result<Self::Output, Self::Error> {
+        if let Ok(v) = self.json(backend, nix_args).await {
+            return Ok(serde_json::from_value(v).unwrap());
+        }
+
         todo!()
     }
 }
