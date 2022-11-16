@@ -4,7 +4,7 @@ use crate::{
     arguments::{eval::EvaluationArgs, flake::FlakeArgs, DevelopArgs, InstallablesArgs},
     command_line::{
         flag::{Flag, FlagType},
-        NixCliCommand, ToArgs,
+        Group, NixCliCommand, ToArgs,
     },
     installable::Installable,
 };
@@ -21,16 +21,10 @@ pub struct Build {
 impl NixCliCommand for Build {
     const SUBCOMMAND: &'static [&'static str] = &["build"];
 
-    fn flake_args(&self) -> Option<FlakeArgs> {
-        Some(self.flake.clone())
-    }
-    fn eval_args(&self) -> Option<EvaluationArgs> {
-        Some(self.eval.clone())
-    }
+    const INSTALLABLES: Group<Self, InstallablesArgs> = Some(|d| d.installables.clone());
+    const FLAKE_ARGS: Group<Self, FlakeArgs> = Some(|d| d.flake.clone());
+    const EVAL_ARGS: Group<Self, EvaluationArgs> = Some(|d| d.eval.clone());
 
-    fn installables(&self) -> Option<InstallablesArgs> {
-        Some(self.installables.clone())
-    }
 }
 
 /// `nix flake init` Command
@@ -51,19 +45,12 @@ impl Flag for TemplateFlag {
     const FLAG_TYPE: FlagType<Self> = FlagType::arg();
 }
 
-impl NixCliCommand<TemplateFlag> for FlakeInit {
+impl NixCliCommand<Option<TemplateFlag>> for FlakeInit {
     const SUBCOMMAND: &'static [&'static str] = &["flake", "init"];
-
-    fn flake_args(&self) -> Option<FlakeArgs> {
-        Some(self.flake.clone())
-    }
-    fn eval_args(&self) -> Option<EvaluationArgs> {
-        Some(self.eval.clone())
-    }
-
-    fn own(&self) -> Option<TemplateFlag> {
-        self.template.clone()
-    }
+    const INSTALLABLES: Group<Self, InstallablesArgs> = Some(|d| d.installables.clone());
+    const FLAKE_ARGS: Group<Self, FlakeArgs> = Some(|d| d.flake.clone());
+    const EVAL_ARGS: Group<Self, EvaluationArgs> = Some(|d| d.eval.clone());
+    const OWN_ARGS: Group<Self, Option<TemplateFlag>> = Some(|d| d.template.clone());
 }
 
 /// `nix develop` Command
@@ -77,11 +64,8 @@ pub struct Develop {
 
 impl NixCliCommand<DevelopArgs> for Develop {
     const SUBCOMMAND: &'static [&'static str] = &["develop"];
-    const FLAKE_ARGS: fn(Self) -> Option<FlakeArgs> = |s| Some(s.flake);
-    const EVAL_ARGS: fn(Self) -> Option<EvaluationArgs> = |s| Some(s.eval);
-    const INSTALLABLES: fn(Self) -> Option<InstallablesArgs> = |s| Some(s.installables);
-
-    fn own(&self) -> Option<DevelopArgs> {
-        Some(self.develop_args.clone())
-    }
+    const INSTALLABLES: Group<Self, InstallablesArgs> = Some(|d| d.installables.clone());
+    const FLAKE_ARGS: Group<Self, FlakeArgs> = Some(|d| d.flake.clone());
+    const EVAL_ARGS: Group<Self, EvaluationArgs> = Some(|d| d.eval.clone());
+    const OWN_ARGS: Group<Self, DevelopArgs> = Some(|d| d.develop_args.clone());
 }

@@ -87,32 +87,22 @@ impl<T: ToArgs> ToArgs for Option<T> {
     }
 }
 
+pub type Group<T, U> = Option<fn(&T) -> U>;
+
 pub trait NixCliCommand<Own: ToArgs = ()>: fmt::Debug + Sized {
     const SUBCOMMAND: &'static [&'static str];
 
-    const FLAKE_ARGS: fn(Self) -> Option<FlakeArgs> = |_| None;
-    const EVAL_ARGS: fn(Self) -> Option<EvaluationArgs> = |_| None;
-    const INSTALLABLES: fn(Self) -> Option<InstallablesArgs> = |_| None;
-
-    fn flake_args(&self) -> Option<FlakeArgs> {
-        None
-    }
-    fn eval_args(&self) -> Option<EvaluationArgs> {
-        None
-    }
-    fn installables(&self) -> Option<InstallablesArgs> {
-        None
-    }
-    fn own(&self) -> Option<Own> {
-        None
-    }
+    const INSTALLABLES: Group<Self, InstallablesArgs> = None;
+    const FLAKE_ARGS: Group<Self, FlakeArgs> = None;
+    const EVAL_ARGS: Group<Self, EvaluationArgs> = None;
+    const OWN_ARGS: Group<Self, Own> = None;
 
     fn args(&self) -> Vec<String> {
         let mut acc = Vec::new();
-        acc.append(&mut self.flake_args().map_or(Vec::new(), |a| a.to_args()));
-        acc.append(&mut self.eval_args().map_or(Vec::new(), |a| a.to_args()));
-        acc.append(&mut self.installables().map_or(Vec::new(), |a| a.to_args()));
-        acc.append(&mut self.own().map_or(Vec::new(), |a| a.to_args()));
+        acc.append(&mut Self::FLAKE_ARGS.map_or(Vec::new(), |f| f(self).to_args()));
+        acc.append(&mut Self::EVAL_ARGS.map_or(Vec::new(), |f| f(self).to_args()));
+        acc.append(&mut Self::INSTALLABLES.map_or(Vec::new(), |f| f(self).to_args()));
+        acc.append(&mut Self::OWN_ARGS.map_or(Vec::new(), |f| f(self).to_args()));
         acc
     }
 }
