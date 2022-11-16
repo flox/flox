@@ -19,6 +19,7 @@ pub struct Build {
 }
 
 impl NixCliCommand for Build {
+    type Own = ();
     const SUBCOMMAND: &'static [&'static str] = &["build"];
 
     const INSTALLABLES: Group<Self, InstallablesArgs> = Some(|d| d.installables.clone());
@@ -48,7 +49,9 @@ impl Flag for TemplateFlag {
     const FLAG_TYPE: FlagType<Self> = FlagType::arg();
 }
 
-impl NixCliCommand<Option<TemplateFlag>> for FlakeInit {
+impl NixCliCommand for FlakeInit {
+    type Own = Option<TemplateFlag>;
+
     const SUBCOMMAND: &'static [&'static str] = &["flake", "init"];
     const INSTALLABLES: Group<Self, InstallablesArgs> = Some(|d| d.installables.clone());
     const FLAKE_ARGS: Group<Self, FlakeArgs> = Some(|d| d.flake.clone());
@@ -65,7 +68,8 @@ pub struct Develop {
     pub develop_args: DevelopArgs,
 }
 
-impl NixCliCommand<DevelopArgs> for Develop {
+impl NixCliCommand for Develop {
+    type Own = DevelopArgs;
     const SUBCOMMAND: &'static [&'static str] = &["develop"];
     const INSTALLABLES: Group<Self, InstallablesArgs> = Some(|d| d.installables.clone());
     const FLAKE_ARGS: Group<Self, FlakeArgs> = Some(|d| d.flake.clone());

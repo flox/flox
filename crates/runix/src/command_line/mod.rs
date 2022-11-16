@@ -89,13 +89,15 @@ impl<T: ToArgs> ToArgs for Option<T> {
 
 pub type Group<T, U> = Option<fn(&T) -> U>;
 
-pub trait NixCliCommand<Own: ToArgs = ()>: fmt::Debug + Sized {
+pub trait NixCliCommand: fmt::Debug + Sized {
+    type Own: ToArgs;
+
     const SUBCOMMAND: &'static [&'static str];
 
     const INSTALLABLES: Group<Self, InstallablesArgs> = None;
     const FLAKE_ARGS: Group<Self, FlakeArgs> = None;
     const EVAL_ARGS: Group<Self, EvaluationArgs> = None;
-    const OWN_ARGS: Group<Self, Own> = None;
+    const OWN_ARGS: Group<Self, Self::Own> = None;
 
     fn args(&self) -> Vec<String> {
         let mut acc = Vec::new();
