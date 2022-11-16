@@ -53,11 +53,11 @@ where
 impl Package<'_> {
     fn flake_args(&self) -> Result<FlakeArgs, ()> {
         Ok(FlakeArgs {
-            override_inputs: Some(vec![OverrideInputs::new(
+            override_inputs: vec![(
                 "floxpkgs/nixpkgs/nixpkgs".into(),
                 format!("flake:nixpkgs-{}", self.stability),
             )
-            .into()]),
+                .into()],
         })
     }
 

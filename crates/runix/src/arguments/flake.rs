@@ -1,4 +1,4 @@
-use derive_more::Constructor;
+use derive_more::{Constructor, From};
 
 use crate::{
     command_line::{
@@ -13,24 +13,23 @@ use crate::{
 /// [libcmd/installables.cc](https://github.com/NixOS/nix/blob/84cc7ad77c6faf1cda8f8a10f7c12a939b61fe35/src/libcmd/installables.cc#L26-L126)
 #[derive(Clone, Default, Debug)]
 pub struct FlakeArgs {
-    pub override_inputs: Option<Vec<OverrideInputs>>,
+    pub override_inputs: Vec<OverrideInputs>,
 }
 
 impl ToArgs for FlakeArgs {
     fn to_args(&self) -> Vec<String> {
-        let flags = self.override_inputs.as_ref().map(|overrides| {
-            overrides
-                .iter()
-                .flat_map(ToArgs::to_args)
-                .collect::<Vec<String>>()
-        });
+        let flags = self
+            .override_inputs
+            .iter()
+            .flat_map(ToArgs::to_args)
+            .collect::<Vec<String>>();
 
-        dbg!(flags.unwrap_or_default())
+        dbg!(flags)
     }
 }
 
 /// Tuple like override inputs flag
-#[derive(Clone, Debug, Constructor)]
+#[derive(Clone, Debug, From, Constructor)]
 pub struct OverrideInputs {
     from: FlakeRef,
     to: FlakeRef,

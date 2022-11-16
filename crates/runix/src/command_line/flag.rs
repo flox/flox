@@ -17,7 +17,7 @@ pub enum FlagType<T> {
     /// A boolean flag/toggle
     ///
     /// Flags of this kind just print their name as is regardless of the content
-    Bool,
+    Bool(fn(&T) -> bool),
     /// A list flag
     ///
     /// list flags consist of a flag and a space delimited list of elements
@@ -53,6 +53,12 @@ pub enum FlagType<T> {
     Custom(fn(&T) -> Vec<String>),
 }
 
+impl<T: Deref<Target = bool>> FlagType<T> {
+    pub const fn bool() -> FlagType<T> {
+        FlagType::Bool(|s| *s.deref())
+    }
+}
+
 impl<T: Deref<Target = Vec<String>>> FlagType<T> {
     pub const fn list() -> FlagType<T> {
         FlagType::List(|s| s.deref().to_owned())
@@ -71,15 +77,29 @@ where
 {
     fn to_args(&self) -> Vec<String> {
         match Self::FLAG_TYPE {
-            FlagType::Bool => vec![Self::FLAG.to_string()],
+            FlagType::Bool(f) => match f(self) {
+                true => vec![Self::FLAG.to_string()],
+                false => Default::default(),
+            },
+            // Todo: should --listarg "" be allowed?
             FlagType::List(f) => {
-                vec![Self::FLAG.to_string(), f(self).join(" ")]
+                let list = f(self);
+                match list.is_empty() {
+                    true => Default::default(),
+                    false => vec![Self::FLAG.to_string(), f(self).join(" ")],
+                }
             }
             FlagType::Arg(f) => vec![Self::FLAG.to_string(), f(self)],
             FlagType::Args(f) => {
-                let mut flags = vec![Self::FLAG.to_string()];
-                flags.append(&mut f(self));
-                flags
+                let mut list = f(self);
+                match list.is_empty() {
+                    true => Default::default(),
+                    false => {
+                        let mut flags = vec![Self::FLAG.to_string()];
+                        flags.append(&mut list);
+                        flags
+                    }
+                }
             }
             FlagType::Custom(f) => f(self),
         }

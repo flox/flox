@@ -66,15 +66,16 @@ impl Flox {
     /// and return a fresh initialized backend.
     pub fn nix<Nix: FloxNixApi>(&self) -> Nix {
         let config_args = NixConfigArgs {
-            extra_experimental_features: Some(
-                ["nix-command", "flakes"].map(String::from).to_vec().into(),
-            ),
-            extra_substituters: Some(
-                ["https://cache.floxdev.com?trusted=1"]
-                    .map(String::from)
-                    .to_vec()
-                    .into(),
-            ),
+            extra_experimental_features: ["nix-command", "flakes"]
+                .map(String::from)
+                .to_vec()
+                .into(),
+
+            extra_substituters: ["https://cache.floxdev.com?trusted=1"]
+                .map(String::from)
+                .to_vec()
+                .into(),
+
             ..Default::default()
         };
 
