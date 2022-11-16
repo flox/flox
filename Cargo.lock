@@ -124,18 +124,18 @@ dependencies = [
 
 [[package]]
 name = "bpaf"
-version = "0.7.2"
+version = "0.7.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a1eefd44fa3be02b360bb22b44abaf204fb381baf5d2f24e270f58bb42dc3e73"
+checksum = "35a6710089f503b5c252055951b677bbabcdc1d11fc5af39b19c766dd8d6ffdd"
 dependencies = [
  "bpaf_derive",
 ]
 
 [[package]]
 name = "bpaf_derive"
-version = "0.3.1"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f6ec104786b13bcaaa3548a689bd7527e02de0c92ea1035e64f5be501f741790"
+checksum = "c4b72f43346862f1414ebfdf724756fae6f42d729e4eba94d34235ad5d5649ed"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -563,6 +563,7 @@ dependencies = [
  "runix",
  "serde",
  "serde_json",
+ "thiserror",
  "tokio",
 ]
 
@@ -1580,11 +1581,12 @@ dependencies = [
 name = "runix"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "async-trait",
- "derive_builder",
  "derive_more",
  "log",
+ "serde",
+ "serde_json",
+ "thiserror",
  "tokio",
 ]
 

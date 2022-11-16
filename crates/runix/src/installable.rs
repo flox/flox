@@ -28,4 +28,10 @@ impl From<String> for Installable {
     }
 }
 
+impl ToString for Installable {
+    fn to_string(&self) -> String {
+        self.to_nix()
+    }
+}
+
 pub type FlakeRef = String;

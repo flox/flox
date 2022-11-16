@@ -1,55 +1,111 @@
-use anyhow::Result;
 use derive_more::Constructor;
+
 use runix::{
     arguments::{
-        flake::{FlakeArgs, FlakeArgsBuilder, OverrideInputs},
-        NixArgsBuilder,
+        flake::{FlakeArgs, OverrideInputs},
+        DevelopArgs, NixArgs,
     },
-    command::BuildBuilder,
+    command::{Build, Develop},
+    command_line::NixCommandLine,
+    installable::Installable,
+    NixBackend, Run, RunTyped,
 };
+use thiserror::Error;
 
 use crate::{
-    flox::{Flox, NixApiExt},
-    prelude::{Installable, Stability},
+    flox::{Flox, FloxNixApi},
+    prelude::Stability,
 };
 
 #[derive(Constructor)]
-pub struct Package<'flox, Nix: NixApiExt> {
-    flox: &'flox Flox<Nix>,
+pub struct Package<'flox> {
+    flox: &'flox Flox,
     installable: Installable,
     stability: Stability,
 }
 
-impl<Nix> Package<'_, Nix>
+#[derive(Error, Debug)]
+pub enum PackageBuildError<Nix: NixBackend>
 where
-    Nix: NixApiExt,
+    Build: Run<Nix>,
 {
-    fn flake_args(&self) -> Result<FlakeArgs> {
-        Ok(FlakeArgsBuilder::default()
-            .override_inputs([OverrideInputs::new(
-                "floxpkgs/nixpkgs/nixpkgs".into(),
-                format!("flake:nixpkgs-{}", self.stability),
-            )])
-            .build()?)
-    }
+    #[error("Error getting Nix instance")]
+    NixInstance(()),
+    #[error("Error getting flake args")]
+    FlakeArgs(()),
+    #[error("Error running nix: {0}")]
+    NixRun(<Build as Run<Nix>>::Error),
 }
 
-impl<Nix: NixApiExt> Package<'_, Nix> {
+#[derive(Error, Debug)]
+pub enum PackageDevelopError<Nix: NixBackend>
+where
+    Develop: Run<Nix>,
+{
+    #[error("Error getting Nix instance")]
+    NixInstance(()),
+    #[error("Error getting flake args")]
+    FlakeArgs(()),
+    #[error("Error running nix: {0}")]
+    NixRun(<Develop as Run<Nix>>::Error),
+}
+
+impl Package<'_> {
+    fn flake_args(&self) -> Result<FlakeArgs, ()> {
+        Ok(FlakeArgs {
+            override_inputs: vec![(
+                "floxpkgs/nixpkgs/nixpkgs".into(),
+                format!("flake:nixpkgs-{}", self.stability),
+            )
+                .into()],
+        })
+    }
+
     /// flox build
     /// runs `nix build <installable>`
-    pub async fn build(&self) -> Result<()> {
-        let nix = self.flox.nix()?;
+    pub async fn build<Nix: FloxNixApi>(&self) -> Result<(), PackageBuildError<Nix>>
+    where
+        Build: RunTyped<Nix>,
+    {
+        let nix = self.flox.nix::<Nix>();
 
-        let command_args = BuildBuilder::default()
-            .flake(self.flake_args()?)
-            .installables([self.installable.clone()])
-            .build()?;
+        let nix_args = NixArgs::default();
 
-        let nix_args = NixArgsBuilder::default()
-            .command(Box::new(command_args))
-            .build()?;
+        let command = Build {
+            flake: self.flake_args().map_err(PackageBuildError::FlakeArgs)?,
+            installables: [self.installable.clone()].into(),
+            ..Default::default()
+        };
 
-        nix.run(nix_args).await?;
+        command
+            .run_typed(&nix, &nix_args)
+            .await
+            .map_err(PackageBuildError::NixRun)?;
+
+        Ok(())
+    }
+
+    /// flox develop
+    /// runs `nix develop <installable>`
+    pub async fn develop<Nix: FloxNixApi>(&self) -> Result<(), PackageDevelopError<Nix>>
+    where
+        Develop: Run<Nix>,
+    {
+        let nix = self.flox.nix::<Nix>();
+
+        let nix_args = NixArgs::default();
+
+        let command = Develop {
+            flake: self.flake_args().map_err(PackageDevelopError::FlakeArgs)?,
+            installables: [self.installable.clone()].into(),
+            ..Default::default()
+        };
+
+        command
+            .run(&nix, &nix_args)
+            .await
+            .map_err(PackageDevelopError::NixRun)?;
+
         Ok(())
     }
 }

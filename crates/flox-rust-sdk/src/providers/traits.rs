@@ -2,7 +2,8 @@ use crate::models::{InstallResult, SearchResult};
 use anyhow::Result;
 use async_trait::async_trait;
 
-use super::initializers::Initializer;
+#[async_trait]
+pub trait Initializer {}
 
 #[async_trait]
 pub trait Publisher {}

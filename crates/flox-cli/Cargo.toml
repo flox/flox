@@ -18,6 +18,6 @@ dotenv = "0.15.0"
 async-trait = "0.1.52"
 log= "0.4.17"
 env_logger = "0.9.1"
-bpaf = { version = "0.7.2", features = ["derive"] }
+bpaf = { version = "0.7.1", features = ["derive"] }
 config = "0.13.1"
 dirs = "4.0.0"

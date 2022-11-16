@@ -81,7 +81,7 @@ impl Config {
         Ok(final_config)
     }
 
-    /// Creates a [CliConfig] from the environment and config file
+    /// Creates a [Config] from the environment and config file
     pub fn parse() -> Result<Config> {
         let final_config = Self::raw_config()?;
         let cli_confg = final_config

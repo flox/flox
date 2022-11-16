@@ -23,3 +23,5 @@ lazy_static = "1.4.0"
 derive_more = "0.99.17"
 derive_builder = "0.11.2"
 runix = {path = "../runix"}
+thiserror = "1.0"
+

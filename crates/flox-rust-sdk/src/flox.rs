@@ -1,19 +1,17 @@
-use std::{marker::PhantomData, path::PathBuf};
+use std::path::PathBuf;
+
+use runix::{
+    arguments::{common::NixCommonArgs, config::NixConfigArgs},
+    command_line::{DefaultArgs, NixCommandLine},
+    installable::Installable,
+    NixBackend,
+};
 
 use crate::{
     actions::package::Package,
     environment::{self, build_flox_env},
-    prelude::{Installable, Stability},
-};
-use anyhow::Result;
-
-use derive_builder::Builder;
-use runix::{
-    arguments::{
-        common::NixCommonArgs, config::NixConfigBuilder, eval::EvaluationArgs, flake::FlakeArgs,
-    },
-    command_line::NixCommandLine,
-    NixApi,
+    prelude::Stability,
+    providers::git::GitProvider,
 };
 
 /// The main API struct for our flox implementation
@@ -26,71 +24,77 @@ use runix::{
 /// [Flox] will provide a preconfigured instance of the Nix API.
 /// By default this nix API uses the nix CLI.
 /// Preconfiguration includes environment variables and flox specific arguments.
-#[derive(Builder)]
-pub struct Flox<Nix: NixApiExt> {
+#[derive(Debug)]
+pub struct Flox {
     /// The directory pointing to the users flox configuration
     ///
     /// TODO: set a default in the lib or CLI?
-    config_dir: PathBuf,
-    cache_dir: PathBuf,
-    data_dir: PathBuf,
+    pub config_dir: PathBuf,
+    pub cache_dir: PathBuf,
+    pub data_dir: PathBuf,
 
     /// Whether to collect metrics of any kind
     /// (yet to be made use of)
-    #[builder(default)]
-    collect_metrics: bool,
-
-    /// Additional `nix` arguments
-    ///
-    /// TODO: Implementation detail, should go along with the nix Configurator
-    #[builder(default)]
-    extra_nix_args: Vec<String>,
-
-    #[builder(setter(skip))]
-    #[builder(default)]
-    nix_marker: PhantomData<Nix>,
+    pub collect_metrics: bool,
 }
 
-pub type DefaultFlox = Flox<NixCommandLine>;
-pub type DefaultFloxBuilder = FloxBuilder<NixCommandLine>;
+pub trait FloxNixApi: NixBackend {
+    fn new(flox: &Flox, defaults: DefaultArgs) -> Self;
+}
 
-impl<Nix: NixApiExt> Flox<Nix> {
-    pub fn package(&self, installable: Installable, stability: Stability) -> Package<Nix> {
+impl FloxNixApi for NixCommandLine {
+    fn new(flox: &Flox, defaults: DefaultArgs) -> NixCommandLine {
+        NixCommandLine {
+            nix_bin: Some(environment::NIX_BIN.to_string()),
+            defaults,
+        }
+    }
+}
+
+impl Flox {
+    /// Provide the package scope to interact with raw packages, (build, develop, etc)
+    pub fn package(&self, installable: Installable, stability: Stability) -> Package {
         Package::new(self, installable, stability)
     }
 
-    pub fn nix(&self) -> Result<Nix> {
-        Nix::instance(self)
+    /// Produce a new Nix Backend
+    ///
+    /// This method performs backend independen configuration of nix
+    /// and passes itself and the default config to the constructor of the Nix Backend
+    ///
+    /// The constructor will perform backend specifc configuration measures
+    /// and return a fresh initialized backend.
+    pub fn nix<Nix: FloxNixApi>(&self) -> Nix {
+        let config_args = NixConfigArgs {
+            extra_experimental_features: ["nix-command", "flakes"]
+                .map(String::from)
+                .to_vec()
+                .into(),
+
+            extra_substituters: ["https://cache.floxdev.com?trusted=1"]
+                .map(String::from)
+                .to_vec()
+                .into(),
+
+            ..Default::default()
+        };
+
+        let common_args = NixCommonArgs {
+            ..Default::default()
+        };
+
+        let defaults = DefaultArgs {
+            environment: build_flox_env(),
+            config_args,
+            common_args,
+            ..Default::default()
+        };
+
+        Nix::new(self, defaults)
     }
-}
 
-pub trait NixApiExt: NixApi {
-    fn instance(flox: &Flox<Self>) -> Result<Self>
-    where
-        Self: Sized;
-}
-
-impl NixApiExt for NixCommandLine {
-    fn instance(_flox: &Flox<Self>) -> Result<Self> {
-        let nix_config = NixConfigBuilder::default()
-            .accept_flake_config(())
-            // .netrc_file() TODO
-            .warn_dirty(())
-            .extra_experimental_features(["nix-command", "flakes"].map(String::from).to_vec())
-            .extra_substituters(
-                ["https://cache.floxdev.com?trusted=1"]
-                    .map(String::from)
-                    .to_vec(),
-            )
-            .build()?;
-
-        Ok(NixCommandLine::new(
-            Some(environment::NIX_BIN.to_string()),
-            build_flox_env()?,
-            NixCommonArgs::default(),
-            FlakeArgs::default(),
-            EvaluationArgs::default(),
-            nix_config,
-        ))
+    /// Initialize and provide a git abstraction
+    pub fn git_provider<Git: GitProvider>(&self) -> Git {
+        Git::new()
     }
 }
