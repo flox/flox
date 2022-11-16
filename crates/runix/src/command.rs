@@ -4,7 +4,7 @@ use crate::{
     arguments::{eval::EvaluationArgs, flake::FlakeArgs, DevelopArgs, InstallablesArgs},
     command_line::{
         flag::{Flag, FlagType},
-        Group, NixCliCommand, ToArgs,
+        Group, NixCliCommand, TypedCommand,
     },
     installable::Installable,
 };
@@ -24,7 +24,10 @@ impl NixCliCommand for Build {
     const INSTALLABLES: Group<Self, InstallablesArgs> = Some(|d| d.installables.clone());
     const FLAKE_ARGS: Group<Self, FlakeArgs> = Some(|d| d.flake.clone());
     const EVAL_ARGS: Group<Self, EvaluationArgs> = Some(|d| d.eval.clone());
+}
 
+impl TypedCommand for Build {
+    type Output = ();
 }
 
 /// `nix flake init` Command

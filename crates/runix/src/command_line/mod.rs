@@ -1,7 +1,7 @@
 use core::fmt;
 use std::{
-    collections::HashMap, error::Error, ffi::OsStr, io, marker::PhantomData, ops::Deref,
-    process::Stdio,
+    borrow::Cow, collections::HashMap, error::Error, ffi::OsStr, io, marker::PhantomData,
+    ops::Deref, process::Stdio,
 };
 
 use async_trait::async_trait;
@@ -15,7 +15,7 @@ use crate::{
         common::NixCommonArgs, config::NixConfigArgs, eval::EvaluationArgs, flake::FlakeArgs,
         InstallablesArgs, NixArgs,
     },
-    NixBackend, Run,
+    NixBackend, Run, RunTyped,
 };
 
 pub mod flag;
@@ -107,6 +107,10 @@ pub trait NixCliCommand<Own: ToArgs = ()>: fmt::Debug + Sized {
     }
 }
 
+pub trait TypedCommand {
+    type Output;
+}
+
 impl ToArgs for () {
     fn to_args(&self) -> Vec<String> {
         Default::default()
@@ -147,6 +151,21 @@ where
 
         backend.run(args).await?;
         Ok(())
+    }
+}
+
+#[async_trait]
+impl<C> RunTyped<NixCommandLine> for C
+where
+    C: NixCliCommand + TypedCommand + Send + Sync,
+{
+    type Output = C::Output;
+    async fn run_typed(
+        &self,
+        backend: &NixCommandLine,
+        nix_args: &NixArgs,
+    ) -> Result<Self::Output, Self::Error> {
+        todo!()
     }
 }
 
