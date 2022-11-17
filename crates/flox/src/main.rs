@@ -114,7 +114,7 @@ mod commands {
         use bpaf::Bpaf;
         use flox_rust_sdk::flox::Flox;
         use flox_rust_sdk::nix::command_line::NixCommandLine;
-        use std:: path::PathBuf;
+        use std::path::PathBuf;
 
         use self::install::InstallArgs;
         use self::remove::RemoveArgs;
