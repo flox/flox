@@ -524,7 +524,7 @@ dependencies = [
 
 [[package]]
 name = "flox"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -566,6 +566,10 @@ dependencies = [
  "thiserror",
  "tokio",
 ]
+
+[[package]]
+name = "floxd"
+version = "0.1.0"
 
 [[package]]
 name = "fnv"
