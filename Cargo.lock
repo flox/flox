@@ -524,7 +524,7 @@ dependencies = [
 
 [[package]]
 name = "flox"
-version = "0.0.8"
+version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -545,7 +545,7 @@ dependencies = [
 
 [[package]]
 name = "flox-rust-sdk"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1583,7 +1583,7 @@ dependencies = [
 
 [[package]]
 name = "runix"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "async-trait",
  "derive_more",
