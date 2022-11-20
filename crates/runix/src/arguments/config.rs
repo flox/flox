@@ -17,6 +17,7 @@ pub struct NixConfigArgs {
     pub flake_registry: FlakeRegistry,
     pub extra_experimental_features: ExperimentalFeatures,
     pub extra_substituters: Substituters,
+    pub show_trace: ShowTrace,
 }
 
 impl ToArgs for NixConfigArgs {
@@ -27,6 +28,7 @@ impl ToArgs for NixConfigArgs {
             self.extra_experimental_features.to_args(),
             self.extra_substituters.to_args(),
             self.flake_registry.to_args(),
+            self.show_trace.to_args(),
             // self.extra_substituters.as_ref().map(ToArgs::args),
         ]
         .into_iter()
@@ -48,6 +50,14 @@ impl Flag for WarnDirty {
 pub struct AcceptFlakeConfig(bool);
 impl Flag for AcceptFlakeConfig {
     const FLAG: &'static str = "--accept-flake-config";
+    const FLAG_TYPE: FlagType<Self> = FlagType::bool();
+}
+
+/// Flag for show-trace
+#[derive(Clone, From, Debug, Deref, Default)]
+pub struct ShowTrace(bool);
+impl Flag for ShowTrace {
+    const FLAG: &'static str = "--show-trace";
     const FLAG_TYPE: FlagType<Self> = FlagType::bool();
 }
 

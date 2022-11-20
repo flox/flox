@@ -14,10 +14,10 @@ pub mod flake;
 #[derive(Debug, Default)]
 pub struct NixArgs {
     /// Common arguments to the nix command
-    common: NixCommonArgs,
+    pub common: NixCommonArgs,
 
     /// Nix configuration (overrides nix.conf)
-    config: NixConfigArgs,
+    pub config: NixConfigArgs,
 }
 
 impl ToArgs for NixArgs {
