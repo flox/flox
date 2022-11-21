@@ -59,6 +59,8 @@
 
       NIX_BASH_COMPLETION_SCRIPT = ../../crates/flox/src/static/nix_bash_completion.sh;
       NIX_ZSH_COMPLETION_SCRIPT = ../../crates/flox/src/static/nix_zsh_completion.sh;
+
+      FLOX_RESOLVER_SRC = ../../resolver;
     }
     // lib.optionalAttrs hostPlatform.isDarwin {
       NIX_COREFOUNDATION_RPATH = "${darwin.CF}/Library/Frameworks";

@@ -63,7 +63,7 @@ pub struct DevelopArgs {}
 
 impl ToArgs for DevelopArgs {
     fn to_args(&self) -> Vec<String> {
-        let mut acc = vec![];
+        let acc = vec![];
 
         acc
     }

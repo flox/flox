@@ -300,6 +300,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "console"
+version = "0.15.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c050367d967ced717c04b65d8c619d863ef9292ce0c5760028655a2fb298718c"
+dependencies = [
+ "encode_unicode",
+ "lazy_static",
+ "libc",
+ "terminal_size",
+ "unicode-width",
+ "winapi",
+]
+
+[[package]]
 name = "convert_case"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -326,6 +340,12 @@ name = "countme"
 version = "2.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "328b822bdcba4d4e402be8d9adb6eebf269f969f8eadef977a553ff3c4fbcb58"
+
+[[package]]
+name = "countme"
+version = "3.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7704b5fdd17b18ae31c4c1da5a2e0305a2bf17b5249300a9ee9ed7b72114c636"
 
 [[package]]
 name = "cpufeatures"
@@ -470,6 +490,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "dialoguer"
+version = "0.10.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a92e7e37ecef6857fdc0c0c5d42fd5b0938e46590c2183cc92dd310a6d078eb1"
+dependencies = [
+ "console",
+ "tempfile",
+ "zeroize",
+]
+
+[[package]]
 name = "digest"
 version = "0.10.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -516,6 +547,12 @@ name = "dotenv"
 version = "0.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "77c90badedccf4105eca100756a0b1289e191f6fcbdadd3cee1d2f614f97da8f"
+
+[[package]]
+name = "encode_unicode"
+version = "0.3.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a357d28ed41a50f9c765dbfe56cbc04a64e53e5fc58ba79fbc34c10ef3df831f"
 
 [[package]]
 name = "encoding_rs"
@@ -591,6 +628,7 @@ dependencies = [
  "async-trait",
  "bpaf",
  "config",
+ "dialoguer",
  "dirs",
  "dotenv",
  "env_logger 0.9.1",
@@ -599,7 +637,7 @@ dependencies = [
  "git2",
  "log",
  "octocrab",
- "rnix",
+ "rnix 0.10.2",
  "serde",
  "serde_json",
  "tempfile",
@@ -624,7 +662,8 @@ dependencies = [
  "nix-editor",
  "octocrab",
  "pretty_env_logger",
- "rnix",
+ "regex",
+ "rnix 0.11.0",
  "runix",
  "serde",
  "serde_json",
@@ -1265,7 +1304,7 @@ dependencies = [
  "clap 3.2.23",
  "failure",
  "owo-colors",
- "rnix",
+ "rnix 0.10.2",
 ]
 
 [[package]]
@@ -1702,8 +1741,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8024a523e8836f1a5d051203dc00d833357fee94e351b51348dfaeca5364daa9"
 dependencies = [
  "cbitset",
- "rowan",
+ "rowan 0.12.6",
  "smol_str",
+]
+
+[[package]]
+name = "rnix"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bb35cedbeb70e0ccabef2a31bcff0aebd114f19566086300b8f42c725fc2cb5f"
+dependencies = [
+ "rowan 0.15.10",
 ]
 
 [[package]]
@@ -1723,8 +1771,21 @@ version = "0.12.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a1b36e449f3702f3b0c821411db1cbdf30fb451726a9456dce5dabcd44420043"
 dependencies = [
- "countme",
+ "countme 2.0.4",
  "hashbrown 0.9.1",
+ "memoffset",
+ "rustc-hash",
+ "text-size",
+]
+
+[[package]]
+name = "rowan"
+version = "0.15.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5811547e7ba31e903fe48c8ceab10d40d70a101f3d15523c847cce91aa71f332"
+dependencies = [
+ "countme 3.0.1",
+ "hashbrown 0.12.3",
  "memoffset",
  "rustc-hash",
  "text-size",
@@ -2073,6 +2134,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bab24d30b911b2376f3a13cc2cd443142f0c81dda04c118693e35b3835757755"
 dependencies = [
  "winapi-util",
+]
+
+[[package]]
+name = "terminal_size"
+version = "0.1.17"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "633c1a546cee861a1a6d0dc69ebeca693bf4296661ba7852b9d21d159e0506df"
+dependencies = [
+ "libc",
+ "winapi",
 ]
 
 [[package]]
