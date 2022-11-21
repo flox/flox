@@ -1,0 +1,23 @@
+From 19ced08ed5aa9a40f63b0317f0f7c710768e85a2 Mon Sep 17 00:00:00 2001
+From: Yannik Sander <yannik@floxdev.com>
+Date: Mon, 22 Aug 2022 14:28:09 +0200
+Subject: [PATCH] Search any attribute recursively if `recurseForDerivation` is
+ set
+
+---
+ src/nix/search.cc | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/nix/search.cc b/src/nix/search.cc
+index bdd45cbed95..1d260b13150 100644
+--- a/src/nix/search.cc
++++ b/src/nix/search.cc
+@@ -178,7 +178,7 @@ struct CmdSearch : InstallableCommand, MixJSON
+                 else if (initialRecurse)
+                     recurse();
+ 
+-                else if (attrPathS[0] == "legacyPackages" && attrPath.size() > 2) {
++                else if (attrPath.size() >= 2) {
+                     auto attr = cursor.maybeGetAttr(state->sRecurseForDerivations);
+                     if (attr && attr->getBool())
+                         recurse();

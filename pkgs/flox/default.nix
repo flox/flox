@@ -10,13 +10,20 @@
   pkg-config,
   darwin,
   flox-bash ? self.inputs.floxpkgs-internal.packages.${system}.flox-bash,
-  nix,
+  nixStable,
   pandoc,
   cacert,
   glibcLocales,
   installShellFiles,
 }: let
   cargoToml = lib.importTOML (self + "/crates/flox/Cargo.toml");
+  nix = nixStable.overrideAttrs (oldAttrs: {
+    patches = (oldAttrs.patches or []) ++ [
+      ./nix-patches/CmdProfileBuild.patch
+      ./nix-patches/CmdSearchAttributes.patch
+      ./nix-patches/update-profile-list-warning.patch
+    ];
+  });
 
   envs =
     {
