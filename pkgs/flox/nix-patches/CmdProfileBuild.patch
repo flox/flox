@@ -1,0 +1,154 @@
+commit 62085f7a171ad405884fb8c05cec673d7314c4fa
+Author: Michael Brantley <limeytexan@users.noreply.github.com>
+Date:   Sun Apr 17 15:30:24 2022 +0100
+
+    Working implementation of `nix profile build`
+
+diff --git a/src/nix/profile-build.md b/src/nix/profile-build.md
+new file mode 100644
+index 000000000..d9bf5ee31
+--- /dev/null
++++ b/src/nix/profile-build.md
+@@ -0,0 +1,16 @@
++R""(
++
++# Examples
++
++* Build a profile generation from a manifest:
++
++  ```console
++  # nix profile build path/to/manifest.json
++  ```
++
++# Description
++
++This command builds a profile *generation* from
++a `manifest.json` file copied from another profile.
++
++)""
+diff --git a/src/nix/profile.cc b/src/nix/profile.cc
+index a8ff9c78a..e14aca97e 100644
+--- a/src/nix/profile.cc
++++ b/src/nix/profile.cc
+@@ -90,9 +90,10 @@ struct ProfileManifest
+ 
+     ProfileManifest() { }
+ 
+-    ProfileManifest(EvalState & state, const Path & profile)
++    ProfileManifest(EvalState & state, const Path & manifestPath)
+     {
+-        auto manifestPath = profile + "/manifest.json";
++        auto profilePath = dirOf(manifestPath);
++        const Path profile = profilePath.data();
+ 
+         if (pathExists(manifestPath)) {
+             auto json = nlohmann::json::parse(readFile(manifestPath));
+@@ -235,6 +236,55 @@ struct ProfileManifest
+     }
+ };
+ 
++struct CmdProfileBuild : SourceExprCommand
++{
++    Path manifestPath;
++    Path outLink = "result";
++
++    CmdProfileBuild()
++    {
++        expectArgs({
++            .label = "path/to/manifest.json",
++            .handler = {&manifestPath},
++            .completer = completePath
++        });
++
++        addFlag({
++            .longName = "out-link",
++            .shortName = 'o',
++            .description = "Use *path* as prefix for the symlinks to the build results. It defaults to `result`.",
++            .labels = {"path"},
++            .handler = {&outLink},
++            .completer = completePath
++        });
++
++        addFlag({
++            .longName = "no-link",
++            .description = "Do not create symlinks to the build results.",
++            .handler = {&outLink, Path("")},
++        });
++    }
++
++    std::string description() override
++    {
++        return "build profile generation from manifest";
++    }
++
++    std::string doc() override
++    {
++        return
++          #include "profile-build.md"
++          ;
++    }
++
++    void run(ref<Store> store) override
++    {
++        ProfileManifest manifest(*getEvalState(), manifestPath);
++        auto storePath = manifest.build(store);
++        std::cout << store->printStorePath(storePath) << std::endl;
++    }
++};
++
+ struct CmdProfileInstall : InstallablesCommand, MixDefaultProfile
+ {
+     std::string description() override
+@@ -251,7 +301,7 @@ struct CmdProfileInstall : InstallablesCommand, MixDefaultProfile
+ 
+     void run(ref<Store> store) override
+     {
+-        ProfileManifest manifest(*getEvalState(), *profile);
++        ProfileManifest manifest(*getEvalState(), *profile + "/manifest.json");
+ 
+         auto builtPaths = Installable::build(getEvalStore(), store, Realise::Outputs, installables, bmNormal);
+ 
+@@ -344,7 +394,7 @@ struct CmdProfileRemove : virtual EvalCommand, MixDefaultProfile, MixProfileElem
+ 
+     void run(ref<Store> store) override
+     {
+-        ProfileManifest oldManifest(*getEvalState(), *profile);
++        ProfileManifest oldManifest(*getEvalState(), *profile + "/manifest.json");
+ 
+         auto matchers = getMatchers(store);
+ 
+@@ -396,7 +446,7 @@ struct CmdProfileUpgrade : virtual SourceExprCommand, MixDefaultProfile, MixProf
+ 
+     void run(ref<Store> store) override
+     {
+-        ProfileManifest manifest(*getEvalState(), *profile);
++        ProfileManifest manifest(*getEvalState(), *profile + "/manifest.json");
+ 
+         auto matchers = getMatchers(store);
+ 
+@@ -484,7 +534,7 @@ struct CmdProfileList : virtual EvalCommand, virtual StoreCommand, MixDefaultPro
+ 
+     void run(ref<Store> store) override
+     {
+-        ProfileManifest manifest(*getEvalState(), *profile);
++        ProfileManifest manifest(*getEvalState(), *profile + "/manifest.json");
+ 
+         for (size_t i = 0; i < manifest.elements.size(); ++i) {
+             auto & element(manifest.elements[i]);
+@@ -555,7 +605,7 @@ struct CmdProfileHistory : virtual StoreCommand, EvalCommand, MixDefaultProfile
+         bool first = true;
+ 
+         for (auto & gen : gens) {
+-            ProfileManifest manifest(*getEvalState(), gen.path);
++            ProfileManifest manifest(*getEvalState(), gen.path + "/manifest.json");
+ 
+             if (!first) std::cout << "\n";
+             first = false;
+@@ -650,6 +700,7 @@ struct CmdProfile : NixMultiCommand
+ {
+     CmdProfile()
+         : MultiCommand({
++              {"build", []() { return make_ref<CmdProfileBuild>(); }},
+               {"install", []() { return make_ref<CmdProfileInstall>(); }},
+               {"remove", []() { return make_ref<CmdProfileRemove>(); }},
+               {"upgrade", []() { return make_ref<CmdProfileUpgrade>(); }},
