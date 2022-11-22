@@ -47,7 +47,9 @@ mod commands {
             match self.command {
                 // Commands::Support(ref f) => f.run(self).await?,
                 // Commands::Build(ref f) => f.run(&self).await?,
-                Commands::Package(ref package) => package.handle(flox).await?,
+                Commands::Package(ref package) => {
+                    package.handle(flox, self.verbose, self.debug).await?
+                }
                 Commands::Environment(ref environment) => environment.handle(flox).await?,
             }
             Ok(())
@@ -57,14 +59,24 @@ mod commands {
     /// Transparent separation of different categories of commands
     #[derive(Bpaf)]
     pub enum Commands {
-        Package(#[bpaf(external(package::package_args))] PackageArgs),
-        Environment(#[bpaf(external(environment::environment_args))] EnvironmentArgs),
+        Package(
+            #[bpaf(external(package::package_args))]
+            #[bpaf(group_help("Development Commands"))]
+            PackageArgs,
+        ),
+        Environment(
+            #[bpaf(external(environment::environment_args))]
+            #[bpaf(group_help("Environment Commands"))]
+            EnvironmentArgs,
+        ),
     }
 
     mod package {
         use anyhow::Result;
         use bpaf::Bpaf;
         use flox_rust_sdk::{flox::Flox, nix::command_line::NixCommandLine, prelude::Stability};
+
+        use crate::run_in_flox;
 
         use self::build::BuildArgs;
 
@@ -77,7 +89,36 @@ mod commands {
         }
 
         impl PackageArgs {
-            pub async fn handle(&self, flox: Flox) -> Result<()> {
+            async fn forward(
+                &self,
+                command: impl ToString,
+                mut passthru: Vec<String>,
+                verbose: bool,
+                debug: bool,
+            ) -> Result<()> {
+                let mut args = vec![];
+
+                if verbose {
+                    args.push("--verbose".to_string())
+                }
+
+                if debug {
+                    args.push("--debug".to_string())
+                }
+
+                args.push(command.to_string());
+                if let Some(ref stability) = self.stability {
+                    args.append(&mut vec!["--stability".to_string(), stability.to_string()]);
+                }
+
+                args.append(&mut passthru);
+                let status = run_in_flox(&args).await?;
+
+                // Todo: add exit code error
+                Ok(())
+            }
+
+            pub async fn handle(&self, flox: Flox, verbose: bool, debug: bool) -> Result<()> {
                 match &self.command {
                     PackageCommands::Build(BuildArgs { installable }) => {
                         flox.package(
@@ -87,21 +128,51 @@ mod commands {
                         .build::<NixCommandLine>()
                         .await?
                     }
+                    PackageCommands::Develop { passthru } => {
+                        self.forward("develop", passthru.clone(), verbose, debug)
+                            .await?
+                    }
+                    PackageCommands::Publish { passthru } => {
+                        self.forward("publish", passthru.clone(), verbose, debug)
+                            .await?
+                    }
+                    PackageCommands::Run { passthru } => {
+                        self.forward("run", passthru.clone(), verbose, debug)
+                            .await?
+                    }
+                    PackageCommands::Shell { passthru } => {
+                        self.forward("shell", passthru.clone(), verbose, debug)
+                            .await?
+                    }
                 }
 
                 Ok(())
             }
         }
 
-        #[derive(Bpaf)]
+        #[derive(Bpaf, Clone)]
         pub enum PackageCommands {
+            /// build package from current project
             #[bpaf(command)]
             Build(#[bpaf(external(build::build_args))] build::BuildArgs),
+
+            /// launch development shell for current project
+            #[bpaf(command)]
+            Develop { passthru: Vec<String> },
+            /// build and publish project to flox channel
+            #[bpaf(command)]
+            Publish { passthru: Vec<String> },
+            /// run app from current project
+            #[bpaf(command)]
+            Run { passthru: Vec<String> },
+            /// run a shell in which the current project is available
+            #[bpaf(command)]
+            Shell { passthru: Vec<String> },
         }
 
         mod build {
             use bpaf::Bpaf;
-            #[derive(Bpaf)]
+            #[derive(Bpaf, Clone)]
             pub struct BuildArgs {
                 #[bpaf(positional("INSTALLABLE"))]
                 pub installable: String,
@@ -159,12 +230,16 @@ mod commands {
 
         #[derive(Bpaf, Clone)]
         pub enum EnvironmentCommands {
+            /// list packages installed in an environment
             #[bpaf(command)]
             List,
+            /// edit declarative environment configuration
             #[bpaf(command)]
             Edit,
+            /// install a package into an environment
             #[bpaf(command)]
             Install(#[bpaf(external(install::install_args))] install::InstallArgs),
+            /// remove packages from an environment
             #[bpaf(command)]
             Remove(#[bpaf(external(remove::remove_args))] remove::RemoveArgs),
         }
