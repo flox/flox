@@ -90,6 +90,12 @@ impl<T: ToArgs> ToArgs for Option<T> {
     }
 }
 
+impl<T: ToArgs> ToArgs for Vec<T> {
+    fn to_args(&self) -> Vec<String> {
+        self.iter().flat_map(|t| t.to_args()).collect()
+    }
+}
+
 pub type Group<T, U> = Option<fn(&T) -> U>;
 
 pub trait NixCliCommand: fmt::Debug + Sized {
