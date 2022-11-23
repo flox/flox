@@ -58,6 +58,7 @@ impl Package<'_> {
                 format!("flake:nixpkgs-{}", self.stability),
             )
                 .into()],
+            ..Default::default()
         })
     }
 

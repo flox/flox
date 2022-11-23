@@ -1,6 +1,9 @@
-use crate::command_line::flag::{Flag, FlagType};
-use crate::command_line::ToArgs;
 use derive_more::{Deref, From};
+
+use crate::{
+    command_line::ToArgs,
+    default::flag::{Flag, FlagType},
+};
 
 /// Evaluation related arguments
 /// Corresponding to the arguments defined in
@@ -12,7 +15,7 @@ pub struct EvaluationArgs {
 
 impl ToArgs for EvaluationArgs {
     fn to_args(&self) -> Vec<String> {
-        vec![self.impure.to_args()].into_iter().flatten().collect()
+        self.impure.to_args()
     }
 }
 

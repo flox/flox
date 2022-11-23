@@ -1,7 +1,10 @@
 use derive_more::{Deref, From};
 
 use crate::{
-    arguments::{eval::EvaluationArgs, flake::FlakeArgs, DevelopArgs, InstallablesArgs},
+    arguments::{
+        eval::EvaluationArgs, flake::FlakeArgs, source::SourceArgs, DevelopArgs, EvalArgs,
+        InstallableArg, InstallablesArgs,
+    },
     command_line::{
         flag::{Flag, FlagType},
         Group, JsonCommand, NixCliCommand, TypedCommand,
@@ -13,6 +16,7 @@ use crate::{
 pub struct Build {
     pub flake: FlakeArgs,
     pub eval: EvaluationArgs,
+    pub source: SourceArgs,
     pub installables: InstallablesArgs,
 }
 
@@ -23,6 +27,7 @@ impl NixCliCommand for Build {
     const INSTALLABLES: Group<Self, InstallablesArgs> = Some(|d| d.installables.clone());
     const FLAKE_ARGS: Group<Self, FlakeArgs> = Some(|d| d.flake.clone());
     const EVAL_ARGS: Group<Self, EvaluationArgs> = Some(|d| d.eval.clone());
+    const SOURCE_ARGS: Group<Self, SourceArgs> = Some(|d| d.source.clone());
 }
 impl JsonCommand for Build {}
 impl TypedCommand for Build {
@@ -62,6 +67,7 @@ impl NixCliCommand for FlakeInit {
 pub struct Develop {
     pub flake: FlakeArgs,
     pub eval: EvaluationArgs,
+    pub source: SourceArgs,
     pub installables: InstallablesArgs,
     pub develop_args: DevelopArgs,
 }
@@ -72,5 +78,25 @@ impl NixCliCommand for Develop {
     const INSTALLABLES: Group<Self, InstallablesArgs> = Some(|d| d.installables.clone());
     const FLAKE_ARGS: Group<Self, FlakeArgs> = Some(|d| d.flake.clone());
     const EVAL_ARGS: Group<Self, EvaluationArgs> = Some(|d| d.eval.clone());
+    const SOURCE_ARGS: Group<Self, SourceArgs> = Some(|d| d.source.clone());
     const OWN_ARGS: Group<Self, DevelopArgs> = Some(|d| d.develop_args.clone());
 }
+
+/// `nix eval` Command
+#[derive(Debug, Default, Clone)]
+pub struct Eval {
+    pub flake: FlakeArgs,
+    pub eval: EvaluationArgs,
+    pub installable: InstallableArg,
+    pub eval_args: EvalArgs,
+}
+
+impl NixCliCommand for Eval {
+    type Own = EvalArgs;
+    const SUBCOMMAND: &'static [&'static str] = &["eval"];
+    const INSTALLABLE: Group<Self, InstallableArg> = Some(|d| d.installable.clone());
+    const FLAKE_ARGS: Group<Self, FlakeArgs> = Some(|d| d.flake.clone());
+    const EVAL_ARGS: Group<Self, EvaluationArgs> = Some(|d| d.eval.clone());
+    const OWN_ARGS: Group<Self, EvalArgs> = Some(|d| d.eval_args.clone());
+}
+impl JsonCommand for Eval {}

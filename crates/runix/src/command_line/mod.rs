@@ -15,7 +15,7 @@ use tokio::process::Command;
 use crate::{
     arguments::{
         common::NixCommonArgs, config::NixConfigArgs, eval::EvaluationArgs, flake::FlakeArgs,
-        InstallablesArgs, NixArgs,
+        source::SourceArgs, InstallableArg, InstallablesArgs, NixArgs,
     },
     command::Develop,
     NixBackend, Run, RunJson, RunTyped,
@@ -104,15 +104,19 @@ pub trait NixCliCommand: fmt::Debug + Sized {
     const SUBCOMMAND: &'static [&'static str];
 
     const INSTALLABLES: Group<Self, InstallablesArgs> = None;
+    const INSTALLABLE: Group<Self, InstallableArg> = None;
     const FLAKE_ARGS: Group<Self, FlakeArgs> = None;
     const EVAL_ARGS: Group<Self, EvaluationArgs> = None;
+    const SOURCE_ARGS: Group<Self, SourceArgs> = None;
     const OWN_ARGS: Group<Self, Self::Own> = None;
 
     fn args(&self) -> Vec<String> {
         let mut acc = Vec::new();
         acc.append(&mut Self::FLAKE_ARGS.map_or(Vec::new(), |f| f(self).to_args()));
         acc.append(&mut Self::EVAL_ARGS.map_or(Vec::new(), |f| f(self).to_args()));
+        acc.append(&mut Self::SOURCE_ARGS.map_or(Vec::new(), |f| f(self).to_args()));
         acc.append(&mut Self::INSTALLABLES.map_or(Vec::new(), |f| f(self).to_args()));
+        acc.append(&mut Self::INSTALLABLE.map_or(Vec::new(), |f| f(self).to_args()));
         acc.append(&mut Self::OWN_ARGS.map_or(Vec::new(), |f| f(self).to_args()));
         acc
     }

@@ -1,4 +1,4 @@
-use derive_more::{Constructor, From};
+use derive_more::{Constructor, Deref, From};
 
 use crate::{
     command_line::{
@@ -14,25 +14,26 @@ use crate::{
 #[derive(Clone, Default, Debug)]
 pub struct FlakeArgs {
     pub override_inputs: Vec<OverrideInputs>,
+    pub no_write_lock_file: NoWriteLockFile,
 }
 
 impl ToArgs for FlakeArgs {
     fn to_args(&self) -> Vec<String> {
-        let flags = self
-            .override_inputs
-            .iter()
-            .flat_map(ToArgs::to_args)
-            .collect::<Vec<String>>();
-
-        dbg!(flags)
+        vec![
+            self.no_write_lock_file.to_args(),
+            self.override_inputs.to_args(),
+        ]
+        .into_iter()
+        .flatten()
+        .collect()
     }
 }
 
 /// Tuple like override inputs flag
 #[derive(Clone, Debug, From, Constructor)]
 pub struct OverrideInputs {
-    from: FlakeRef,
-    to: FlakeRef,
+    pub from: FlakeRef,
+    pub to: FlakeRef,
 }
 impl Flag for OverrideInputs {
     const FLAG: &'static str = "--override-input";
@@ -42,4 +43,12 @@ impl OverrideInputs {
     fn args(&self) -> Vec<String> {
         dbg!(vec![self.from.clone(), self.to.clone()])
     }
+}
+
+/// Flag for no-write-lock-file
+#[derive(Clone, From, Debug, Deref, Default)]
+pub struct NoWriteLockFile(bool);
+impl Flag for NoWriteLockFile {
+    const FLAG: &'static str = "--no-write-lock-file";
+    const FLAG_TYPE: FlagType<Self> = FlagType::bool();
 }
