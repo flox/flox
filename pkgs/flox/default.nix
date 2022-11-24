@@ -18,17 +18,22 @@
 }: let
   cargoToml = lib.importTOML (self + "/crates/flox/Cargo.toml");
   nix = nixStable.overrideAttrs (oldAttrs: {
-    patches = (oldAttrs.patches or []) ++ [
-      ./nix-patches/CmdProfileBuild.patch
-      ./nix-patches/CmdSearchAttributes.patch
-      ./nix-patches/update-profile-list-warning.patch
-    ];
+    patches =
+      (oldAttrs.patches or [])
+      ++ [
+        ./nix-patches/CmdProfileBuild.patch
+        ./nix-patches/CmdSearchAttributes.patch
+        ./nix-patches/update-profile-list-warning.patch
+      ];
   });
 
   envs =
     {
       NIX_BIN = "${nix}/bin/nix";
       FLOX_SH = "${flox-bash}/libexec/flox/flox";
+      FLOX_VERSION = "${envs.FLOX_RS_VERSION}-${envs.FLOX_SH_VERSION}";
+      FLOX_SH_VERSION = flox-bash.version;
+      FLOX_RS_VERSION = "${cargoToml.package.version}-r${toString self.revCount or "dirty"}";
       NIXPKGS_CACERT_BUNDLE_CRT = "${cacert}/etc/ssl/certs/ca-bundle.crt";
     }
     // lib.optionalAttrs hostPlatform.isDarwin {
@@ -41,7 +46,7 @@
 in
   rustPlatform.buildRustPackage ({
       pname = cargoToml.package.name;
-      version = "${cargoToml.package.version}-r${toString self.revCount or "dirty"}";
+      version = envs.FLOX_VERSION;
       src = self;
 
       cargoLock = {

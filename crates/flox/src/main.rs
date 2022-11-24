@@ -11,6 +11,7 @@ mod build;
 mod config;
 mod utils;
 pub static FLOX_SH: &str = env!("FLOX_SH");
+static FLOX_VERSION: &str = env!("FLOX_VERSION");
 
 mod commands {
     use std::{os::unix::process, str::FromStr};
@@ -21,11 +22,13 @@ mod commands {
     use flox_rust_sdk::prelude::{Channel, ChannelRegistry};
     use tempfile::TempDir;
 
+    use crate::FLOX_VERSION;
+
     use self::environment::EnvironmentArgs;
     use self::package::PackageArgs;
 
     #[derive(Bpaf)]
-    #[bpaf(options)]
+    #[bpaf(options, version(FLOX_VERSION))]
     pub struct FloxArgs {
         verbose: bool,
 
