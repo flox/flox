@@ -1,0 +1,124 @@
+{
+  "flakes": [
+    {
+      "from": {
+        "id": "examples",
+        "type": "indirect"
+      },
+      "to": {
+        "owner": "flox-examples",
+        "repo": "floxpkgs",
+        "type": "github"
+      }
+    },
+    {
+      "from": {
+        "id": "flox",
+        "type": "indirect"
+      },
+      "to": {
+        "owner": "flox",
+        "ref": "master",
+        "repo": "floxpkgs",
+        "type": "github"
+      }
+    },
+    {
+      "from": {
+        "id": "local",
+        "type": "indirect"
+      },
+      "to": {
+        "path": "/var/folders/fb/f1xb57354q79t_jpw5_h79cw0000gq/T/tmp.eq7xa1aY4U/hello-python",
+        "type": "path"
+      }
+    },
+    {
+      "from": {
+        "id": "nixpkgs",
+        "type": "indirect"
+      },
+      "to": {
+        "owner": "flox",
+        "ref": "stable",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
+    {
+      "from": {
+        "id": "nixpkgs-flox",
+        "type": "indirect"
+      },
+      "to": {
+        "owner": "flox",
+        "ref": "master",
+        "repo": "nixpkgs-flox",
+        "type": "github"
+      }
+    },
+    {
+      "from": {
+        "id": "ysndr",
+        "type": "indirect"
+      },
+      "to": {
+        "owner": "ysndr",
+        "ref": "master",
+        "repo": "floxpkgs",
+        "type": "github"
+      }
+    },
+    {
+      "from": {
+        "id": "nixpkgs-stable",
+        "type": "indirect"
+      },
+      "to": {
+        "owner": "flox",
+        "ref": "stable",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
+    {
+      "from": {
+        "id": "nixpkgs-staging",
+        "type": "indirect"
+      },
+      "to": {
+        "owner": "flox",
+        "ref": "staging",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
+    {
+      "from": {
+        "id": "nixpkgs-unstable",
+        "type": "indirect"
+      },
+      "to": {
+        "owner": "flox",
+        "ref": "unstable",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
+    {
+      "exact": true,
+      "from": {
+        "id": "nixpkgs",
+        "type": "indirect"
+      },
+      "to": {
+        "lastModified": 1666570118,
+        "narHash": "sha256-MTXmIYowHM1wyIYyqPdBLia5SjGnxETv0YkIbDsbkx4=",
+        "path": "/nix/store/083m43hjhry94cvfmqdv7kjpvsl3zzvi-source",
+        "rev": "1e684b371cf05300bc2b432f958f285855bac8fb",
+        "type": "path"
+      }
+    }
+  ],
+  "version": 2
+}

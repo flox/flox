@@ -23,5 +23,6 @@ lazy_static = "1.4.0"
 derive_more = "0.99.17"
 derive_builder = "0.11.2"
 runix = {path = "../runix"}
+url = "2.3" # 2.3.1 has conflicting dependencies with octocrab
+serde_with = "2.0.1"
 thiserror = "1.0"
-

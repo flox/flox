@@ -21,3 +21,4 @@ env_logger = "0.9.1"
 bpaf = { version = "0.7.1", features = ["derive"] }
 config = "0.13.1"
 dirs = "4.0.0"
+tempfile = "3.3.0"

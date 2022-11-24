@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{fs::File, path::PathBuf};
 
 use runix::{
     arguments::{common::NixCommonArgs, config::NixConfigArgs},
@@ -11,9 +11,12 @@ use crate::{
     actions::environment::Environment,
     actions::package::Package,
     environment::{self, build_flox_env},
+    models::channels::ChannelRegistry,
     prelude::Stability,
     providers::git::GitProvider,
 };
+
+use runix::arguments::{eval::EvaluationArgs, flake::FlakeArgs};
 
 /// The main API struct for our flox implementation
 ///
@@ -33,6 +36,9 @@ pub struct Flox {
     pub config_dir: PathBuf,
     pub cache_dir: PathBuf,
     pub data_dir: PathBuf,
+    pub temp_dir: PathBuf,
+
+    pub channels: ChannelRegistry,
 
     /// Whether to collect metrics of any kind
     /// (yet to be made use of)
@@ -44,7 +50,12 @@ pub trait FloxNixApi: NixBackend {
 }
 
 impl FloxNixApi for NixCommandLine {
-    fn new(flox: &Flox, defaults: DefaultArgs) -> NixCommandLine {
+    fn new(flox: &Flox, mut defaults: DefaultArgs) -> NixCommandLine {
+        let registry_file = flox.temp_dir.join("registry.json");
+        serde_json::to_writer(File::create(&registry_file).unwrap(), &flox.channels).unwrap();
+
+        defaults.config_args.flake_registry = registry_file.into();
+
         NixCommandLine {
             nix_bin: Some(environment::NIX_BIN.to_string()),
             defaults,

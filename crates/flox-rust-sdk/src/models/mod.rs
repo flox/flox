@@ -8,6 +8,9 @@ use anyhow::Result;
 use tokio::sync::RwLock;
 
 pub mod catalog;
+pub mod channels;
+pub mod flake_ref;
+pub mod registry;
 
 use catalog::*;
 
