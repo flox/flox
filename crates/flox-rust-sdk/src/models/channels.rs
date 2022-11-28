@@ -43,3 +43,13 @@ impl ChannelRegistry {
         self.registry.set(name, channel.flake_ref)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn github_url() {
+        Channel::from_str("github:flox/floxpkgs").expect("parses");
+    }
+}

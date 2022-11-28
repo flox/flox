@@ -322,18 +322,19 @@ impl GitService {
     }
 
     fn from_url(url: &Url) -> Result<Self, FlakeRefError> {
+        dbg!(&url);
         let mut service = match url
             .path()
             .splitn(3, "/")
             // .cloned()
             .collect::<Vec<_>>()[..]
         {
-            ["", owner, repo] => GitService {
+            ["", owner, repo] | [owner, repo] => GitService {
                 owner: owner.to_string(),
                 repo: repo.to_string(),
                 ..Default::default()
             },
-            ["", owner, repo, commit_ref] => GitService {
+            ["", owner, repo, commit_ref] | [owner, repo, commit_ref] => GitService {
                 owner: owner.to_string(),
                 repo: repo.to_string(),
                 commit_ref: Some(commit_ref.to_string()),
