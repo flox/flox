@@ -76,6 +76,7 @@ mod commands {
                 config_dir: config.flox.config_dir,
                 channels: channels,
                 temp_dir: temp_dir.path().to_path_buf(),
+                system: env!("NIX_TARGET_SYSTEM").to_string(),
             };
 
             match self.command {

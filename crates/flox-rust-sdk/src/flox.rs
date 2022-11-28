@@ -43,6 +43,8 @@ pub struct Flox {
     /// Whether to collect metrics of any kind
     /// (yet to be made use of)
     pub collect_metrics: bool,
+
+    pub system: String,
 }
 
 pub trait FloxNixApi: NixBackend {

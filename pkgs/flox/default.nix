@@ -6,6 +6,7 @@
   lib,
   rustPlatform,
   hostPlatform,
+  targetPlatform,
   openssl,
   pkg-config,
   darwin,
@@ -35,6 +36,7 @@
       FLOX_SH_VERSION = flox-bash.version;
       FLOX_RS_VERSION = "${cargoToml.package.version}-r${toString self.revCount or "dirty"}";
       NIXPKGS_CACERT_BUNDLE_CRT = "${cacert}/etc/ssl/certs/ca-bundle.crt";
+      NIX_TARGET_SYSTEM = targetPlatform.system;
     }
     // lib.optionalAttrs hostPlatform.isDarwin {
       NIX_COREFOUNDATION_RPATH = "${darwin.CF}/Library/Frameworks";
