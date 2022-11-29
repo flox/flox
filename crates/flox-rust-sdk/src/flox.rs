@@ -48,19 +48,14 @@ pub struct Flox {
 }
 
 pub trait FloxNixApi: NixBackend {
-    fn new(flox: &Flox, defaults: DefaultArgs) -> Self;
+    fn new(flox: &Flox, default_nix_args: DefaultArgs) -> Self;
 }
 
 impl FloxNixApi for NixCommandLine {
-    fn new(flox: &Flox, mut defaults: DefaultArgs) -> NixCommandLine {
-        let registry_file = flox.temp_dir.join("registry.json");
-        serde_json::to_writer(File::create(&registry_file).unwrap(), &flox.channels).unwrap();
-
-        defaults.config_args.flake_registry = registry_file.into();
-
+    fn new(_: &Flox, default_nix_args: DefaultArgs) -> NixCommandLine {
         NixCommandLine {
             nix_bin: Some(environment::NIX_BIN.to_string()),
-            defaults,
+            defaults: default_nix_args,
         }
     }
 }
@@ -83,6 +78,10 @@ impl Flox {
     /// The constructor will perform backend specifc configuration measures
     /// and return a fresh initialized backend.
     pub fn nix<Nix: FloxNixApi>(&self) -> Nix {
+        // Set the registry file as default argument
+        let registry_file = self.temp_dir.join("registry.json");
+        serde_json::to_writer(File::create(&registry_file).unwrap(), &self.channels).unwrap();
+
         let config_args = NixConfigArgs {
             extra_experimental_features: ["nix-command", "flakes"]
                 .map(String::from)
@@ -94,6 +93,8 @@ impl Flox {
                 .to_vec()
                 .into(),
 
+            flake_registry: Some(registry_file.into()),
+
             ..Default::default()
         };
 
@@ -101,14 +102,14 @@ impl Flox {
             ..Default::default()
         };
 
-        let defaults = DefaultArgs {
+        let default_nix_args = DefaultArgs {
             environment: build_flox_env(),
             config_args,
             common_args,
             ..Default::default()
         };
 
-        Nix::new(self, defaults)
+        Nix::new(self, default_nix_args)
     }
 
     /// Initialize and provide a git abstraction

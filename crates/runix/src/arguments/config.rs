@@ -14,7 +14,7 @@ use crate::command_line::{
 pub struct NixConfigArgs {
     pub accept_flake_config: AcceptFlakeConfig,
     pub warn_dirty: WarnDirty,
-    pub flake_registry: FlakeRegistry,
+    pub flake_registry: Option<FlakeRegistry>,
     pub extra_experimental_features: ExperimentalFeatures,
     pub extra_substituters: Substituters,
     pub show_trace: ShowTrace,
