@@ -256,7 +256,7 @@ async fn main() -> Result<()> {
     if crate::config::Config::preview_enabled()? {
         run_rust_flox().await?;
     } else {
-        info!("`FLOX_PREVIEW` unset or not \"true\", falling back to legacy flox");
+        info!("`FLOX_PREVIEW_ENABLE` unset or not \"true\", falling back to legacy flox");
         run_in_flox(&env::args_os().collect::<Vec<_>>()[1..]).await?;
     }
 
