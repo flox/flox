@@ -16,7 +16,26 @@
   cacert,
   glibcLocales,
   installShellFiles,
+  runCommand,
+  fd,
 }: let
+  manpages =
+    runCommand "flox-manpages" {
+      src = "${self}/crates/flox/doc";
+      buildInputs = [pandoc fd];
+    } ''
+
+      mkdir $out
+      pushd $src
+
+      fd "flox.*.md" ./ -x \
+        pandoc -t man \
+          -L ${./pandoc-filters/include-files.lua} \
+          --standalone \
+          -o "$out/{/.}.1" \
+          {}
+    '';
+
   cargoToml = lib.importTOML (self + "/crates/flox/Cargo.toml");
   nix = nixStable.overrideAttrs (oldAttrs: {
     patches =
@@ -55,14 +74,15 @@ in
         lockFile = self + "/Cargo.lock";
       };
 
+      outputs = ["out" "man"];
+      outputsToInstall = ["out" "man"];
+
       buildAndTestSubdir = "crates/flox";
 
       doCheck = false;
 
       postInstall = ''
-        # TODO move .md file to this repo
-        # pandoc --standalone -t man ${self}/flox.1.md -o flox.1
-        installManPage ${flox-bash}/share/man/man1/flox.1.gz
+        installManPage ${manpages}/*
       '';
 
       buildInputs =
@@ -80,5 +100,6 @@ in
       ];
 
       passthru.envs = envs;
+      passthru.manpages = manpages;
     }
     // envs)
