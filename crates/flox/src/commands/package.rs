@@ -2,7 +2,7 @@ use anyhow::Result;
 use bpaf::Bpaf;
 use flox_rust_sdk::{flox::Flox, nix::command_line::NixCommandLine, prelude::Stability};
 
-use crate::flox_forward;
+use crate::{config::Config, flox_forward};
 
 #[derive(Bpaf)]
 pub struct PackageArgs {
@@ -18,11 +18,25 @@ pub struct PackageArgs {
 impl PackageArgs {
     pub async fn handle(&self, flox: Flox) -> Result<()> {
         match &self.command {
-            PackageCommands::Build { .. }
-            | PackageCommands::Develop { .. }
-            | PackageCommands::Publish { .. }
-            | PackageCommands::Run { .. }
-            | PackageCommands::Shell { .. } => flox_forward().await?,
+            _ if !Config::preview_enabled()? => flox_forward().await?,
+            PackageCommands::Build {} => {
+                flox.package(
+                    self.installable.clone().into(),
+                    self.stability.clone().unwrap_or_default(),
+                )
+                .build::<NixCommandLine>()
+                .await?
+            }
+
+            PackageCommands::Develop {} => {
+                flox.package(
+                    self.installable.clone().into(),
+                    self.stability.clone().unwrap_or_default(),
+                )
+                .develop::<NixCommandLine>()
+                .await?
+            }
+            _ => todo!(),
         }
 
         Ok(())

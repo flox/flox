@@ -18,23 +18,14 @@ static FLOX_VERSION: &str = env!("FLOX_VERSION");
 async fn main() -> Result<()> {
     env_logger::init();
 
-    if crate::config::Config::preview_enabled()? {
-        run_rust_flox().await?;
-    } else {
-        info!("`FLOX_PREVIEW_ENABLE` unset or not \"true\", falling back to legacy flox");
-        run_in_flox(&env::args_os().collect::<Vec<_>>()[1..]).await?;
-    }
-
-    Ok(())
-}
-
-async fn run_rust_flox() -> Result<()> {
     let args = commands::flox_args().run();
     args.handle(config::Config::parse()?).await?;
+
     Ok(())
 }
 
 pub async fn flox_forward() -> Result<()> {
+    info!("`FLOX_PREVIEW_ENABLE` unset or not \"true\", falling back to legacy flox");
     run_in_flox(&env::args_os().collect::<Vec<_>>()[1..]).await?;
     Ok(())
 }

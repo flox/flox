@@ -4,6 +4,7 @@ use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::nix::command_line::NixCommandLine;
 use std::path::PathBuf;
 
+use crate::config::Config;
 use crate::flox_forward;
 
 #[derive(Bpaf)]
@@ -19,21 +20,14 @@ pub struct EnvironmentArgs {
 impl EnvironmentArgs {
     pub async fn handle(&self, flox: Flox) -> Result<()> {
         match &self.command {
-            EnvironmentCommands::Activate(_)
-            | EnvironmentCommands::Cat
-            | EnvironmentCommands::Destroy
-            | EnvironmentCommands::Edit
-            | EnvironmentCommands::Generations
-            | EnvironmentCommands::Git(_)
-            | EnvironmentCommands::History
-            | EnvironmentCommands::Install { .. }
-            | EnvironmentCommands::List
-            | EnvironmentCommands::Push { .. }
-            | EnvironmentCommands::Pull { .. }
-            | EnvironmentCommands::Remove { .. }
-            | EnvironmentCommands::Rollback
-            | EnvironmentCommands::SwitchGeneration { .. }
-            | EnvironmentCommands::Upgrade { .. } => flox_forward().await?,
+            _ if !Config::preview_enabled()? => flox_forward().await?,
+            EnvironmentCommands::Install { package } => {
+                flox.environment(self.environment.clone())
+                    .install::<NixCommandLine>(&package[0])
+                    .await?
+            }
+
+            _ => todo!(),
         }
 
         Ok(())

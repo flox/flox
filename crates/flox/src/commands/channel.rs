@@ -2,7 +2,7 @@ use anyhow::Result;
 use bpaf::Bpaf;
 use flox_rust_sdk::{flox::Flox, nix::command_line::NixCommandLine, prelude::Stability};
 
-use crate::flox_forward;
+use crate::{config::Config, flox_forward};
 
 #[derive(Bpaf)]
 pub struct ChannelArgs {
@@ -13,10 +13,8 @@ pub struct ChannelArgs {
 impl ChannelArgs {
     pub async fn handle(&self, flox: Flox) -> Result<()> {
         match &self.command {
-            ChannelCommands::Subscribe { .. }
-            | ChannelCommands::Unsubscribe { .. }
-            | ChannelCommands::Search { .. }
-            | ChannelCommands::Channels { .. } => flox_forward().await?,
+            _ if !Config::preview_enabled()? => flox_forward().await?,
+            _ => todo!(),
         }
 
         Ok(())

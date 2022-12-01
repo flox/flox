@@ -2,7 +2,7 @@ use anyhow::Result;
 use bpaf::Bpaf;
 use flox_rust_sdk::{flox::Flox, nix::command_line::NixCommandLine, prelude::Stability};
 
-use crate::flox_forward;
+use crate::{config::Config, flox_forward};
 
 #[derive(Bpaf)]
 pub struct GeneralArgs {
@@ -13,11 +13,8 @@ pub struct GeneralArgs {
 impl GeneralArgs {
     pub async fn handle(&self, flox: Flox) -> Result<()> {
         match &self.command {
-            GeneralCommands::Init { .. }
-            | GeneralCommands::Gh { .. }
-            | GeneralCommands::Nix { .. }
-            | GeneralCommands::Config { .. }
-            | GeneralCommands::Envs => flox_forward().await?,
+            _ if !Config::preview_enabled()? => flox_forward().await?,
+            _ => todo!(),
         }
 
         Ok(())
