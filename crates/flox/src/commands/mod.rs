@@ -45,6 +45,10 @@ impl FloxArgs {
         let mut channels = ChannelRegistry::default();
         channels.register_channel("flox", Channel::from_str("github:flox/floxpkgs")?);
         channels.register_channel("nixpkgs", Channel::from_str("github:flox/nixpkgs/stable")?);
+        channels.register_channel(
+            "nixpkgs-flox",
+            Channel::from_str("github:flox/nixpkgs-flox/master")?,
+        );
 
         // generate these dynamically based on <?>
         channels.register_channel(
