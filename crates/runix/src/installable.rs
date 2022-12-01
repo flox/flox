@@ -1,4 +1,6 @@
-#[derive(Debug, Clone)]
+use derive_more::Constructor;
+
+#[derive(Debug, Clone, Constructor)]
 pub struct Installable {
     pub flakeref: FlakeRef,
     pub attr_path: String,

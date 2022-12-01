@@ -2,6 +2,7 @@ use anyhow::Result;
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::nix::command_line::NixCommandLine;
+use flox_rust_sdk::prelude::flox_package::FloxPackage;
 use std::path::PathBuf;
 
 use crate::config::Config;
@@ -21,9 +22,9 @@ impl EnvironmentArgs {
     pub async fn handle(&self, flox: Flox) -> Result<()> {
         match &self.command {
             _ if !Config::preview_enabled()? => flox_forward().await?,
-            EnvironmentCommands::Install { package } => {
-                flox.environment(self.environment.clone())
-                    .install::<NixCommandLine>(&package[0])
+            EnvironmentCommands::Install { packages } => {
+                flox.environment(self.environment.clone())?
+                    .install::<NixCommandLine>(packages)
                     .await?
             }
 
@@ -71,8 +72,8 @@ pub enum EnvironmentCommands {
     /// install a package into an environment
     #[bpaf(command)]
     Install {
-        #[bpaf(positional("PACKAGE"), some("At least one package"))]
-        package: Vec<String>,
+        #[bpaf(positional("PACKAGES"), some("At least one package"))]
+        packages: Vec<FloxPackage>,
     },
 
     /// list packages installed in an environment
@@ -90,8 +91,8 @@ pub enum EnvironmentCommands {
     /// remove packages from an environment
     #[bpaf(command)]
     Remove {
-        #[bpaf(positional("PACKAGE"), some("At least one package"))]
-        package: Vec<String>,
+        #[bpaf(positional("PACKAGES"), some("At least one package"))]
+        packages: Vec<FloxPackage>,
     },
 
     /// rollback to the previous generation of an environment
@@ -108,7 +109,7 @@ pub enum EnvironmentCommands {
     /// upgrade packages using their most recent flake
     #[bpaf(command)]
     Upgrade {
-        #[bpaf(positional("PACKAGE"), some("At least one package"))]
-        package: Vec<String>,
+        #[bpaf(positional("PACKAGES"), some("At least one package"))]
+        packages: Vec<FloxPackage>,
     },
 }

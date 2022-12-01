@@ -9,7 +9,7 @@ use runix::{
 
 use crate::{
     actions::environment::Environment,
-    actions::package::Package,
+    actions::{environment::EnvironmentError, package::Package},
     environment::{self, build_flox_env},
     models::channels::ChannelRegistry,
     prelude::Stability,
@@ -66,7 +66,7 @@ impl Flox {
         Package::new(self, installable, stability)
     }
 
-    pub fn environment(&self, dir: PathBuf) -> Environment {
+    pub fn environment(&self, dir: PathBuf) -> Result<Environment, EnvironmentError> {
         Environment::new(self, dir)
     }
 

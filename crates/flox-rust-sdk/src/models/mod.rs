@@ -10,6 +10,7 @@ use tokio::sync::RwLock;
 pub mod catalog;
 pub mod channels;
 pub mod flake_ref;
+pub mod flox_package;
 pub mod registry;
 
 use catalog::*;
