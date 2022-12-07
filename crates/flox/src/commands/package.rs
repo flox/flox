@@ -55,6 +55,10 @@ impl PackageCommands {
 
 #[derive(Bpaf, Clone)]
 pub enum PackageCommands {
+    /// initialize flox expressions for current project
+    #[bpaf(command)]
+    Init {},
+
     /// build package from current project
     #[bpaf(command)]
     Build {

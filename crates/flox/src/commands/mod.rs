@@ -22,14 +22,18 @@ use self::package::{PackageArgs, PackageCommands};
 #[derive(Bpaf)]
 #[bpaf(options, version(FLOX_VERSION))]
 pub struct FloxArgs {
+    /// Verbose mode.
+    ///
+    /// Invoke multiple times for increasing detail.
     verbose: bool,
 
+    /// Debug mode.
+    ///
+    /// Invoke multiple times for increasing detail.
     debug: bool,
 
     #[bpaf(external(commands))]
     command: Commands,
-    // #[bpaf(positional)]
-    // nix_args: Vec<String>,
 }
 
 impl FloxArgs {

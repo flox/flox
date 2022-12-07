@@ -4,10 +4,7 @@ use anyhow::Result;
 use bpaf::Bpaf;
 use flox_rust_sdk::{
     flox::Flox,
-    nix::{
-        arguments::NixArgs,
-        Run,
-    },
+    nix::{arguments::NixArgs, Run},
     prelude::Stability,
 };
 use log::debug;
@@ -30,24 +27,33 @@ impl GeneralCommands {
 
 #[derive(Bpaf, Clone)]
 pub enum GeneralCommands {
-    /// initialize flox expressions for current project
-    #[bpaf(command)]
-    Init {},
-
     ///access to the gh CLI
-    #[bpaf(command)]
+    #[bpaf(command, hide)]
     Gh(Vec<String>),
 
     #[bpaf(command)]
-    Nix(#[bpaf(positional, complete_shell(complete_nix_shell()))] Vec<String>),
+    Nix(#[bpaf(positional("NIX ARGUMENTS"), complete_shell(complete_nix_shell()))] Vec<String>),
 
     /// configure user parameters
     #[bpaf(command)]
-    Config,
+    Config(#[bpaf(external(config_args))] ConfigArgs),
 
     /// list all available environments
     #[bpaf(command, long("environments"))]
     Envs,
+}
+
+#[derive(Bpaf, Clone)]
+pub enum ConfigArgs {
+    /// list the current values of all configurable paramers
+    #[bpaf(short, long)]
+    List,
+    /// prompt the user to confirm or update configurable parameters.
+    #[bpaf(short, long)]
+    Remove,
+    /// reset all configurable parameters to their default values without further confirmation.
+    #[bpaf(short, long)]
+    Confirm,
 }
 
 fn complete_nix_shell() -> bpaf::ShellComp {
