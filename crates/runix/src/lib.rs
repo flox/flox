@@ -23,12 +23,17 @@ pub trait Run<B: NixBackend> {
 
 #[async_trait]
 pub trait RunJson<B: NixBackend>: Run<B> {
-    async fn json(&self, backend: &B, nix_args: &NixArgs) -> Result<Value, Self::Error>;
+    type JsonError: 'static + Error + Send + Sync;
+    async fn run_json(&self, backend: &B, nix_args: &NixArgs) -> Result<Value, Self::JsonError>;
 }
 
 #[async_trait]
 pub trait RunTyped<B: NixBackend>: Run<B> {
     type Output;
-    async fn run_typed(&self, backend: &B, nix_args: &NixArgs)
-        -> Result<Self::Output, Self::Error>;
+    type TypedError: 'static + Error + Send + Sync;
+    async fn run_typed(
+        &self,
+        backend: &B,
+        nix_args: &NixArgs,
+    ) -> Result<Self::Output, Self::TypedError>;
 }

@@ -79,7 +79,7 @@ impl Package<'_> {
         };
 
         command
-            .run_typed(&nix, &nix_args)
+            .run(&nix, &nix_args)
             .await
             .map_err(PackageBuildError::NixRun)?;
 

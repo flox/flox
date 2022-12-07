@@ -11,12 +11,13 @@ use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::prelude::{Channel, ChannelRegistry};
 use tempfile::TempDir;
 
+use crate::utils::init_channels;
 use crate::FLOX_VERSION;
 
-use self::channel::ChannelArgs;
-use self::environment::EnvironmentArgs;
-use self::general::GeneralArgs;
-use self::package::PackageArgs;
+use self::channel::{ChannelArgs, ChannelCommands};
+use self::environment::{EnvironmentArgs, EnvironmentCommands};
+use self::general::{GeneralArgs, GeneralCommands};
+use self::package::{PackageArgs, PackageCommands};
 
 #[derive(Bpaf)]
 #[bpaf(options, version(FLOX_VERSION))]
@@ -27,9 +28,8 @@ pub struct FloxArgs {
 
     #[bpaf(external(commands))]
     command: Commands,
-
-    #[bpaf(positional)]
-    nix_args: Vec<String>,
+    // #[bpaf(positional)]
+    // nix_args: Vec<String>,
 }
 
 impl FloxArgs {
@@ -42,34 +42,14 @@ impl FloxArgs {
         // `temp_dir` will automatically be removed from disk when the function returns
         let temp_dir = TempDir::new_in(process_dir)?;
 
-        let mut channels = ChannelRegistry::default();
-        channels.register_channel("flox", Channel::from_str("github:flox/floxpkgs")?);
-        channels.register_channel("nixpkgs", Channel::from_str("github:flox/nixpkgs/stable")?);
-        channels.register_channel(
-            "nixpkgs-flox",
-            Channel::from_str("github:flox/nixpkgs-flox/master")?,
-        );
-
-        // generate these dynamically based on <?>
-        channels.register_channel(
-            "nixpkgs-stable",
-            Channel::from_str("github:flox/nixpkgs/stable")?,
-        );
-        channels.register_channel(
-            "nixpkgs-staging",
-            Channel::from_str("github:flox/nixpkgs/staging")?,
-        );
-        channels.register_channel(
-            "nixpkgs-unstable",
-            Channel::from_str("github:flox/nixpkgs/unstable")?,
-        );
+        let channels = init_channels()?;
 
         let flox = Flox {
             collect_metrics: config.flox.allow_telemetry.unwrap_or_default(),
             cache_dir: config.flox.cache_dir,
             data_dir: config.flox.data_dir,
             config_dir: config.flox.config_dir,
-            channels: channels,
+            channels,
             temp_dir: temp_dir.path().to_path_buf(),
             system: env!("NIX_TARGET_SYSTEM").to_string(),
         };
@@ -88,23 +68,23 @@ impl FloxArgs {
 #[derive(Bpaf)]
 pub enum Commands {
     Package(
-        #[bpaf(external(package::package_args))]
+        #[bpaf(external(package::package_commands))]
         #[bpaf(group_help("Development Commands"))]
-        PackageArgs,
+        PackageCommands,
     ),
     Environment(
-        #[bpaf(external(environment::environment_args))]
+        #[bpaf(external(environment::environment_commands))]
         #[bpaf(group_help("Environment Commands"))]
-        EnvironmentArgs,
+        EnvironmentCommands,
     ),
     Channel(
-        #[bpaf(external(channel::channel_args))]
+        #[bpaf(external(channel::channel_commands))]
         #[bpaf(group_help("Channel Commands"))]
-        ChannelArgs,
+        ChannelCommands,
     ),
     General(
-        #[bpaf(external(general::general_args))]
+        #[bpaf(external(general::general_commands))]
         #[bpaf(group_help("General Commands"))]
-        GeneralArgs,
+        GeneralCommands,
     ),
 }

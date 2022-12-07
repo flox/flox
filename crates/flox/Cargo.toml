@@ -18,7 +18,8 @@ dotenv = "0.15.0"
 async-trait = "0.1.52"
 log= "0.4.17"
 env_logger = "0.9.1"
-bpaf = { version = "0.7.1", features = ["derive"] }
+bpaf = { version = "0.7.6", features = ["derive", "autocomplete"] }
 config = "0.13.1"
 dirs = "4.0.0"
 tempfile = "3.3.0"
+futures = "0.3.25"

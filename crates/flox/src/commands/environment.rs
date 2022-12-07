@@ -8,22 +8,23 @@ use std::path::PathBuf;
 use crate::config::Config;
 use crate::flox_forward;
 
-#[derive(Bpaf)]
+#[derive(Bpaf, Clone)]
 pub struct EnvironmentArgs {
     /// path to environment. TODO: this will be changed to an environment name or an
     /// installable at some point, once we settle on how users specify environments
     #[bpaf(short('e'))]
     pub environment: PathBuf,
-    #[bpaf(external(environment_commands))]
-    command: EnvironmentCommands,
 }
 
-impl EnvironmentArgs {
+impl EnvironmentCommands {
     pub async fn handle(&self, flox: Flox) -> Result<()> {
-        match &self.command {
+        match self {
             _ if !Config::preview_enabled()? => flox_forward().await?,
-            EnvironmentCommands::Install { packages } => {
-                flox.environment(self.environment.clone())?
+            EnvironmentCommands::Install {
+                packages,
+                environment: EnvironmentArgs { environment },
+            } => {
+                flox.environment(environment.clone())?
                     .install::<NixCommandLine>(packages)
                     .await?
             }
@@ -72,6 +73,9 @@ pub enum EnvironmentCommands {
     /// install a package into an environment
     #[bpaf(command)]
     Install {
+        #[bpaf(external(environment_args), group_help("Environment Options"))]
+        environment: EnvironmentArgs,
+
         #[bpaf(positional("PACKAGES"), some("At least one package"))]
         packages: Vec<FloxPackage>,
     },

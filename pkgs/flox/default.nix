@@ -56,6 +56,9 @@
       FLOX_RS_VERSION = "${cargoToml.package.version}-r${toString self.revCount or "dirty"}";
       NIXPKGS_CACERT_BUNDLE_CRT = "${cacert}/etc/ssl/certs/ca-bundle.crt";
       NIX_TARGET_SYSTEM = targetPlatform.system;
+
+      NIX_BASH_COMPLETION_SCRIPT = ../../crates/flox/src/static/nix_bash_completion.sh;
+      NIX_ZSH_COMPLETION_SCRIPT = ../../crates/flox/src/static/nix_zsh_completion.sh;
     }
     // lib.optionalAttrs hostPlatform.isDarwin {
       NIX_COREFOUNDATION_RPATH = "${darwin.CF}/Library/Frameworks";
@@ -83,6 +86,10 @@ in
 
       postInstall = ''
         installManPage ${manpages}/*
+        installShellCompletion --cmd flox \
+          --bash <($out/bin/flox --bpaf-complete-style-bash) \
+          --fish <($out/bin/flox --bpaf-complete-style-fish) \
+          --zsh <($out/bin/flox --bpaf-complete-style-zsh)
       '';
 
       buildInputs =

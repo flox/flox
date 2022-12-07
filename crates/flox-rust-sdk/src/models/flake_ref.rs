@@ -322,7 +322,6 @@ impl GitService {
     }
 
     fn from_url(url: &Url) -> Result<Self, FlakeRefError> {
-        dbg!(&url);
         let mut service = match url
             .path()
             .splitn(3, "/")

@@ -1,12 +1,15 @@
 use core::fmt;
 use std::{
-    borrow::Cow, collections::HashMap, error::Error, ffi::OsStr, io, marker::PhantomData,
-    ops::Deref, process::Stdio,
+    collections::HashMap,
+    ffi::OsStr,
+    io,
+    process::{Output, Stdio},
 };
 
 use async_trait::async_trait;
-use derive_more::Constructor;
+
 use log::debug;
+use once_cell::sync::OnceCell;
 use serde::Deserialize;
 use serde_json::Value;
 use thiserror::Error;
@@ -17,7 +20,6 @@ use crate::{
         common::NixCommonArgs, config::NixConfigArgs, eval::EvaluationArgs, flake::FlakeArgs,
         source::SourceArgs, InstallableArg, InstallablesArgs, NixArgs,
     },
-    command::Develop,
     NixBackend, Run, RunJson, RunTyped,
 };
 
@@ -43,17 +45,17 @@ pub struct NixCommandLine {
 pub enum NixCommandLineError {
     #[error("Nix printed {0} bytes to stderr")]
     Printed(u32),
-    #[error("Failed to spawn nix")]
-    Spawn(std::io::Error),
-    #[error("Failed to wait for Nix")]
-    Wait(std::io::Error),
+    #[error("Error running Nix: {0}")]
+    Run(std::io::Error),
+    #[error("Bad exit: {0:?}")]
+    Exit(std::process::Output),
 }
 
 impl NixCommandLine {
     async fn run<S: AsRef<OsStr>>(
         &self,
         args: impl IntoIterator<Item = S>,
-    ) -> Result<(), NixCommandLineError> {
+    ) -> Result<std::process::Output, NixCommandLineError> {
         let mut command = Command::new(self.nix_bin.as_deref().unwrap_or("nix"));
         command
             .envs(&self.defaults.environment)
@@ -72,11 +74,36 @@ impl NixCommandLine {
             self.defaults.environment, args
         );
 
-        let mut child = command.spawn().map_err(NixCommandLineError::Spawn)?;
+        let output = command.output().await.map_err(NixCommandLineError::Run)?;
 
-        let _ = child.wait().await.map_err(NixCommandLineError::Wait)?;
+        if !output.status.success() {
+            return Err(NixCommandLineError::Exit(output));
+        }
 
-        Ok(())
+        Ok(output)
+    }
+
+    // Small wrapping helper function to make Run implementations simpler
+    async fn run_command<A, B: NixCliCommand<Own = A>>(
+        &self,
+        command: &B,
+        nix_args: &NixArgs,
+        json: bool,
+    ) -> Result<std::process::Output, NixCommandLineRunError> {
+        let args = vec![
+            self.defaults.config_args.to_args(),
+            self.defaults.common_args.to_args(),
+            nix_args.to_args(),
+            B::SUBCOMMAND.iter().map(ToString::to_string).collect(),
+            if json {
+                vec!["--json".to_string()]
+            } else {
+                vec![]
+            },
+            command.args(),
+        ];
+
+        Ok(self.run(args.into_iter().flatten()).await?)
     }
 }
 
@@ -194,35 +221,41 @@ where
         backend: &NixCommandLine,
         nix_args: &NixArgs,
     ) -> Result<(), NixCommandLineRunError> {
-        let args = [
-            backend.defaults.config_args.to_args(),
-            backend.defaults.common_args.to_args(),
-            nix_args.to_args(),
-            Self::SUBCOMMAND.iter().map(ToString::to_string).collect(),
-            self.args(),
-        ]
-        .into_iter()
-        .flatten();
-
-        backend.run(args).await?;
+        backend.run_command(self, nix_args, false).await?;
         Ok(())
     }
+}
+
+#[derive(Error, Debug)]
+pub enum NixCommandLineRunJsonError<E> {
+    #[error("Error decoding json: {0}")]
+    Json(#[from] serde_json::Error),
+    #[error(transparent)]
+    Run(E),
 }
 
 #[async_trait]
 impl<C> RunJson<NixCommandLine> for C
 where
-    C: Run<NixCommandLine> + JsonCommand + Send + Sync,
+    C: NixCliCommand + JsonCommand + Send + Sync,
 {
-    async fn json(
+    type JsonError = NixCommandLineRunJsonError<Self::Error>;
+
+    async fn run_json(
         &self,
         backend: &NixCommandLine,
         nix_args: &NixArgs,
-    ) -> Result<Value, Self::Error> {
-        if let Ok(v) = self.run(backend, nix_args).await {
-            return Ok(serde_json::from_str(unimplemented!()).unwrap());
-        }
-        todo!()
+    ) -> Result<Value, Self::JsonError> {
+        let output = backend
+            .run_command(self, nix_args, true)
+            .await
+            .map_err(NixCommandLineRunJsonError::Run)?;
+
+        let out_str = String::from_utf8_lossy(&output.stdout);
+
+        debug!("JSON command output: {:?}", out_str);
+
+        Ok(serde_json::from_str(&out_str)?)
     }
 }
 
@@ -233,16 +266,18 @@ where
     <C as TypedCommand>::Output: for<'de> Deserialize<'de>,
 {
     type Output = C::Output;
+
+    type TypedError = <Self as RunJson<NixCommandLine>>::JsonError;
+
     async fn run_typed(
         &self,
         backend: &NixCommandLine,
         nix_args: &NixArgs,
-    ) -> Result<Self::Output, Self::Error> {
-        if let Ok(v) = self.json(backend, nix_args).await {
-            return Ok(serde_json::from_value(v).unwrap());
+    ) -> Result<Self::Output, Self::TypedError> {
+        match self.run_json(backend, nix_args).await {
+            Ok(v) => Ok(serde_json::from_value(v).unwrap()),
+            Err(e) => Err(e),
         }
-
-        todo!()
     }
 }
 

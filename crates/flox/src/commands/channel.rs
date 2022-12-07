@@ -4,15 +4,12 @@ use flox_rust_sdk::{flox::Flox, nix::command_line::NixCommandLine, prelude::Stab
 
 use crate::{config::Config, flox_forward};
 
-#[derive(Bpaf)]
-pub struct ChannelArgs {
-    #[bpaf(external(channel_commands))]
-    command: ChannelCommands,
-}
+#[derive(Bpaf, Clone)]
+pub struct ChannelArgs {}
 
-impl ChannelArgs {
+impl ChannelCommands {
     pub async fn handle(&self, flox: Flox) -> Result<()> {
-        match &self.command {
+        match self {
             _ if !Config::preview_enabled()? => flox_forward().await?,
             _ => todo!(),
         }
@@ -22,30 +19,30 @@ impl ChannelArgs {
 }
 
 #[derive(Bpaf, Clone)]
-#[bpaf(adjacent)]
 pub enum ChannelCommands {
     /// subscribe to channel URL
     #[bpaf(command)]
     Subscribe {
-        #[bpaf(positional)]
+        #[bpaf(positional("name"))]
         name: Option<ChannelRef>,
-        #[bpaf(positional)]
+        #[bpaf(positional("url"))]
         url: Option<Url>,
     },
 
     /// unsubscribe from channel
     #[bpaf(command)]
     Unsubscribe {
-        #[bpaf(positional)]
+        #[bpaf(positional("channel"))]
         channel: ChannelRef,
     },
 
     /// search packages in subscribed channels
     #[bpaf(command)]
     Search {
-        #[bpaf(short, long)]
+        #[bpaf(short, long, argument("channel"))]
         channel: ChannelRef,
-        #[bpaf(positional)]
+
+        #[bpaf(positional("search term"))]
         search_term: Option<String>,
     },
 
