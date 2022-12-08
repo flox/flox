@@ -9,7 +9,7 @@ use crate::{config::Config, flox_forward};
 pub struct PackageArgs {
     stability: Option<Stability>,
 
-    #[bpaf(positional)]
+    #[bpaf(short('A'), argument("INSTALLABLE"))]
     installable: Option<String>,
 }
 
