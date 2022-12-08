@@ -62,8 +62,13 @@ impl FloxNixApi for NixCommandLine {
 
 impl Flox {
     /// Provide the package scope to interact with raw packages, (build, develop, etc)
-    pub fn package(&self, installable: Installable, stability: Stability) -> Package {
-        Package::new(self, installable, stability)
+    pub fn package(
+        &self,
+        installable: Installable,
+        stability: Stability,
+        nix_arguments: Vec<String>,
+    ) -> Package {
+        Package::new(self, installable, stability, nix_arguments)
     }
 
     pub fn environment(&self, dir: PathBuf) -> Result<Environment, EnvironmentError> {
@@ -77,7 +82,7 @@ impl Flox {
     ///
     /// The constructor will perform backend specifc configuration measures
     /// and return a fresh initialized backend.
-    pub fn nix<Nix: FloxNixApi>(&self) -> Nix {
+    pub fn nix<Nix: FloxNixApi>(&self, extra_args: Vec<String>) -> Nix {
         // Set the registry file as default argument
         let registry_file = self.temp_dir.join("registry.json");
         serde_json::to_writer(File::create(&registry_file).unwrap(), &self.channels).unwrap();
@@ -106,6 +111,7 @@ impl Flox {
             environment: build_flox_env(),
             config_args,
             common_args,
+            extra_args,
             ..Default::default()
         };
 

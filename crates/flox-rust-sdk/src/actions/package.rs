@@ -22,6 +22,7 @@ pub struct Package<'flox> {
     flox: &'flox Flox,
     installable: Installable,
     stability: Stability,
+    nix_arguments: Vec<String>,
 }
 
 #[derive(Error, Debug)]
@@ -68,7 +69,7 @@ impl Package<'_> {
     where
         Build: RunTyped<Nix>,
     {
-        let nix = self.flox.nix::<Nix>();
+        let nix = self.flox.nix::<Nix>(self.nix_arguments.clone());
 
         let nix_args = NixArgs::default();
 
@@ -92,7 +93,7 @@ impl Package<'_> {
     where
         Develop: Run<Nix>,
     {
-        let nix = self.flox.nix::<Nix>();
+        let nix = self.flox.nix::<Nix>(self.nix_arguments.clone());
 
         let nix_args = NixArgs::default();
 
