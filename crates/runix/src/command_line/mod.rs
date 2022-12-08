@@ -69,9 +69,35 @@ impl NixCommandLine {
             .collect::<Vec<_>>();
 
         debug!(
-            "Invoking nix CLI: env={:?}; {:#?}",
-            self.defaults.environment, args
+            "Invoking nix CLI:\nenv = {env:?}\nargs = {args:#?}",
+            env = self.defaults.environment,
+            args = args,
         );
+
+        if log::log_enabled!(target: "posix", log::Level::Debug) {
+            eprintln!(
+                "+ \x1b[1m{env_string} {executable} {command_string}\x1b[0m",
+                env_string = command
+                    .as_std()
+                    .get_envs()
+                    .map(|(k, v)| {
+                        format!(
+                            "{}={:?}",
+                            k.to_string_lossy(),
+                            v.map_or("".into(), OsStr::to_string_lossy)
+                        )
+                    })
+                    .collect::<Vec<_>>()
+                    .join(" "),
+                executable = shell_escape::escape(command.as_std().get_program().to_string_lossy()),
+                command_string = command
+                    .as_std()
+                    .get_args()
+                    .map(|arg| shell_escape::escape(arg.to_string_lossy()))
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            )
+        }
 
         let output = command.output().await.map_err(NixCommandLineError::Run)?;
 

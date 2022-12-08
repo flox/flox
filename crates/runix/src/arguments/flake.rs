@@ -41,7 +41,7 @@ impl Flag for OverrideInputs {
 }
 impl OverrideInputs {
     fn args(&self) -> Vec<String> {
-        dbg!(vec![self.from.clone(), self.to.clone()])
+        vec![self.from.clone(), self.to.clone()]
     }
 }
 
