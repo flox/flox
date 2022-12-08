@@ -63,6 +63,38 @@ impl PackageCommands {
                 .develop::<NixCommandLine>()
                 .await?
             }
+            PackageCommands::Run {
+                package:
+                    PackageArgs {
+                        stability,
+                        installable,
+                        nix_arguments,
+                    },
+            } => {
+                flox.package(
+                    installable.clone().unwrap().into(),
+                    stability.clone().unwrap_or_default(),
+                    nix_arguments.clone(),
+                )
+                .run::<NixCommandLine>()
+                .await?
+            }
+            PackageCommands::Shell {
+                package:
+                    PackageArgs {
+                        stability,
+                        installable,
+                        nix_arguments,
+                    },
+            } => {
+                flox.package(
+                    installable.clone().unwrap().into(),
+                    stability.clone().unwrap_or_default(),
+                    nix_arguments.clone(),
+                )
+                .shell::<NixCommandLine>()
+                .await?
+            }
             _ => todo!(),
         }
 
