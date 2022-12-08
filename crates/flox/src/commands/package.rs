@@ -11,6 +11,19 @@ pub struct PackageArgs {
 
     #[bpaf(short('A'), argument("INSTALLABLE"))]
     installable: Option<String>,
+
+    #[bpaf(external(nix_args))]
+    nix_arguments: Vec<String>,
+}
+
+fn nix_args() -> impl Parser<Vec<String>> {
+    extra_args("NIX ARGUMENTS")
+}
+
+fn extra_args(var: &'static str) -> impl Parser<Vec<String>> {
+    bpaf::any(var)
+        .guard(|m| m != "--help", "Not A Nix Arg")
+        .many()
 }
 
 impl PackageCommands {
@@ -22,6 +35,7 @@ impl PackageCommands {
                     PackageArgs {
                         stability,
                         installable,
+                        nix_arguments,
                     },
             } => {
                 flox.package(
@@ -37,6 +51,7 @@ impl PackageCommands {
                     PackageArgs {
                         stability,
                         installable,
+                        nix_arguments,
                     },
             } => {
                 flox.package(
