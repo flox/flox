@@ -126,8 +126,8 @@ impl NixCommandLine {
             } else {
                 vec![]
             },
-            self.defaults.extra_args.clone(),
             command.args(),
+            self.defaults.extra_args.clone(),
         ];
 
         Ok(self.run(args.into_iter().flatten()).await?)

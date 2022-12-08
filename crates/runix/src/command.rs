@@ -100,3 +100,49 @@ impl NixCliCommand for Eval {
     const OWN_ARGS: Group<Self, EvalArgs> = Some(|d| d.eval_args.clone());
 }
 impl JsonCommand for Eval {}
+
+/// `nix run` Command
+#[derive(Debug, Default, Clone)]
+pub struct RunStruct {
+    pub flake: FlakeArgs,
+    pub eval: EvaluationArgs,
+    pub source: SourceArgs,
+    pub installables: InstallablesArgs,
+}
+
+impl NixCliCommand for RunStruct {
+    type Own = ();
+    const SUBCOMMAND: &'static [&'static str] = &["run"];
+
+    const INSTALLABLES: Group<Self, InstallablesArgs> = Some(|d| d.installables.clone());
+    const FLAKE_ARGS: Group<Self, FlakeArgs> = Some(|d| d.flake.clone());
+    const EVAL_ARGS: Group<Self, EvaluationArgs> = Some(|d| d.eval.clone());
+    const SOURCE_ARGS: Group<Self, SourceArgs> = Some(|d| d.source.clone());
+}
+impl JsonCommand for RunStruct {}
+impl TypedCommand for RunStruct {
+    type Output = ();
+}
+
+/// `nix shell` Command
+#[derive(Debug, Default, Clone)]
+pub struct Shell {
+    pub flake: FlakeArgs,
+    pub eval: EvaluationArgs,
+    pub source: SourceArgs,
+    pub installables: InstallablesArgs,
+}
+
+impl NixCliCommand for Shell {
+    type Own = ();
+    const SUBCOMMAND: &'static [&'static str] = &["shell"];
+
+    const INSTALLABLES: Group<Self, InstallablesArgs> = Some(|d| d.installables.clone());
+    const FLAKE_ARGS: Group<Self, FlakeArgs> = Some(|d| d.flake.clone());
+    const EVAL_ARGS: Group<Self, EvaluationArgs> = Some(|d| d.eval.clone());
+    const SOURCE_ARGS: Group<Self, SourceArgs> = Some(|d| d.source.clone());
+}
+impl JsonCommand for Shell {}
+impl TypedCommand for Shell {
+    type Output = ();
+}
