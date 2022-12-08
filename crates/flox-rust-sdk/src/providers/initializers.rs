@@ -38,7 +38,7 @@ impl Initializer<'_> {
     where
         FlakeInit: Run<Nix>,
     {
-        let nix = self.flox.nix::<Nix>();
+        let nix = self.flox.nix(Vec::new());
 
         if !Path::new("flox.nix").exists() {
             // Init with _init if we haven't already.

@@ -31,6 +31,7 @@ pub struct DefaultArgs {
     pub config_args: NixConfigArgs,
     pub flake_args: FlakeArgs,
     pub eval_args: EvaluationArgs,
+    pub extra_args: Vec<String>,
 }
 
 /// Nix Implementation based on the Nix Command Line
@@ -125,6 +126,7 @@ impl NixCommandLine {
             } else {
                 vec![]
             },
+            self.defaults.extra_args.clone(),
             command.args(),
         ];
 

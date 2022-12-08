@@ -267,7 +267,7 @@ impl<'flox> Environment<'flox> {
     {
         let temp_flake_dir = self.write_temp_environment(new_flox_nix).await?;
 
-        let nix = self.flox.nix();
+        let nix = self.flox.nix(Vec::new());
 
         let nix_args = NixArgs::default();
 

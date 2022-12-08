@@ -41,6 +41,7 @@ impl PackageCommands {
                 flox.package(
                     installable.clone().unwrap().into(),
                     stability.clone().unwrap_or_default(),
+                    nix_arguments.clone(),
                 )
                 .build::<NixCommandLine>()
                 .await?
@@ -57,6 +58,7 @@ impl PackageCommands {
                 flox.package(
                     installable.clone().unwrap().into(),
                     stability.clone().unwrap_or_default(),
+                    nix_arguments.clone(),
                 )
                 .develop::<NixCommandLine>()
                 .await?
