@@ -69,7 +69,7 @@ impl NixCommandLine {
             .collect::<Vec<_>>();
 
         debug!(
-            "Invoking nix CLI:\nenv = {env:?}\nargs = {args:#?}\ncopyable: {env_string} {command_string:?}",
+            "Invoking nix CLI:\nenv = {env:?}\nargs = {args:#?}\ncopyable: {env_string} {executable} {command_string}",
             env=self.defaults.environment,
             args=args,
             env_string=command
@@ -84,7 +84,10 @@ impl NixCommandLine {
                 })
                 .collect::<Vec<_>>()
                 .join(" "),
-            command_string=command.as_std()
+            executable=shell_escape::escape(command.as_std().get_program().to_string_lossy()),
+            command_string=command.as_std().get_args().map(
+                |arg| shell_escape::escape(arg.to_string_lossy())
+            ).collect::<Vec<_>>().join(" ")
         );
 
         let output = command.output().await.map_err(NixCommandLineError::Run)?;
