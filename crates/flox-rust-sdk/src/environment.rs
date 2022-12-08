@@ -64,8 +64,6 @@ pub fn build_flox_env() -> HashMap<String, String> {
         }
     }
 
-    env_map.insert("NIX_REMOTE".to_string(), "daemon".to_string());
-
     // For now these variables are managed in bash
     // let home = env!("HOME");
     // env_map.insert(
