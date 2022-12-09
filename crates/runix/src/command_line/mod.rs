@@ -113,7 +113,7 @@ impl CommandMode for Collect {
     type Output = Output;
     async fn run(command: &mut Command) -> Result<Self::Output, NixCommandLineError> {
         let command = command
-            .stdout(Stdio::inherit())
+            .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .stdin(Stdio::inherit());
 
