@@ -3,7 +3,7 @@ use std::{
     collections::HashMap,
     ffi::OsStr,
     io,
-    process::{Output, Stdio},
+    process::{ExitStatus, Output, Stdio},
 };
 
 use async_trait::async_trait;
@@ -12,7 +12,11 @@ use log::debug;
 use serde::Deserialize;
 use serde_json::Value;
 use thiserror::Error;
-use tokio::process::Command;
+use tokio::{
+    io::{AsyncBufReadExt, BufReader},
+    process::Command,
+};
+use tokio_stream::{wrappers::LinesStream, StreamExt};
 
 use crate::{
     arguments::{
@@ -51,35 +55,26 @@ pub enum NixCommandLineError {
     Exit(std::process::Output),
 }
 
-impl NixCommandLine {
-    async fn run<S: AsRef<OsStr>>(
-        &self,
-        args: impl IntoIterator<Item = S>,
-    ) -> Result<std::process::Output, NixCommandLineError> {
-        let mut command = Command::new(self.nix_bin.as_deref().unwrap_or("nix"));
-        command
-            .envs(&self.defaults.environment)
-            .args(args)
-            .stdout(Stdio::inherit())
-            .stderr(Stdio::inherit());
+trait CommandExt {
+    fn log(&self) {}
+}
 
-        let args = command
-            .as_std()
-            .get_args()
-            .map(|arg| arg.to_string_lossy().to_string())
-            .collect::<Vec<_>>();
-
+impl CommandExt for std::process::Command {
+    fn log(&self) {
         debug!(
-            "Invoking nix CLI:\nenv = {env:?}\nargs = {args:#?}",
-            env = self.defaults.environment,
-            args = args,
+            "Invoking {executable}:\nenv = {env:?}\nargs = {args:#?}",
+            executable = shell_escape::escape(self.get_program().to_string_lossy()),
+            env = self.get_envs().into_iter().collect::<HashMap<_, _>>(),
+            args = self
+                .get_args()
+                .map(|arg| arg.to_string_lossy().to_string())
+                .collect::<Vec<_>>(),
         );
 
         if log::log_enabled!(target: "posix", log::Level::Debug) {
             eprintln!(
                 "+ \x1b[1m{env_string} {executable} {command_string}\x1b[0m",
-                env_string = command
-                    .as_std()
+                env_string = self
                     .get_envs()
                     .map(|(k, v)| {
                         format!(
@@ -90,32 +85,97 @@ impl NixCommandLine {
                     })
                     .collect::<Vec<_>>()
                     .join(" "),
-                executable = shell_escape::escape(command.as_std().get_program().to_string_lossy()),
-                command_string = command
-                    .as_std()
+                executable = shell_escape::escape(self.get_program().to_string_lossy()),
+                command_string = self
                     .get_args()
                     .map(|arg| shell_escape::escape(arg.to_string_lossy()))
                     .collect::<Vec<_>>()
                     .join(" ")
             )
         }
+    }
+}
 
-        let output = command.output().await.map_err(NixCommandLineError::Run)?;
+#[async_trait]
+trait CommandMode {
+    type Output;
+    async fn run(command: &mut Command) -> Result<Self::Output, NixCommandLineError>;
+}
 
-        if !output.status.success() {
-            return Err(NixCommandLineError::Exit(output));
-        }
+/// Implementation of a command execution that collects stdout of a process
+/// and logs the stderr of the executed subprocess to the logging framework
+/// of the host process.
+///
+/// Silent, non user facing operation
+struct Collect;
+#[async_trait]
+impl CommandMode for Collect {
+    type Output = Output;
+    async fn run(command: &mut Command) -> Result<Self::Output, NixCommandLineError> {
+        let command = command
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::piped())
+            .stdin(Stdio::inherit());
+
+        command.as_std().log();
+
+        let mut child = command.spawn().map_err(NixCommandLineError::Run)?;
+
+        let child_stderr_stream = LinesStream::new(
+            BufReader::new(
+                child
+                    .stderr
+                    .take()
+                    .expect("Process should be connected to piped stderr"),
+            )
+            .lines(),
+        );
+
+        let stderr = child_stderr_stream.fold(String::new(), |buf, l| {
+            let l = l.expect("Stderr is expected to emit lines");
+            debug!("{}", &l);
+            buf + &l + "\n"
+        });
+
+        let (stderr, output) = tokio::join!(stderr, child.wait_with_output());
+
+        let mut output = output.map_err(NixCommandLineError::Run)?;
+        output.stderr = stderr.into_bytes();
 
         Ok(output)
     }
+}
 
+/// Implementation of a command execution that connects the subprocess' stdio
+/// to the parent process stdio.
+///
+/// User facing operation
+struct Passthru;
+#[async_trait]
+impl CommandMode for Passthru {
+    type Output = ExitStatus;
+    async fn run(command: &mut Command) -> Result<ExitStatus, NixCommandLineError> {
+        let command = command
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
+            .stdin(Stdio::inherit());
+
+        command.as_std().log();
+
+        let status = command.status().await.map_err(NixCommandLineError::Run)?;
+
+        Ok(status)
+    }
+}
+
+impl NixCommandLine {
     // Small wrapping helper function to make Run implementations simpler
-    async fn run_command<A, B: NixCliCommand<Own = A>>(
+    async fn run_command<M: CommandMode, A, B: NixCliCommand<Own = A>>(
         &self,
         command: &B,
         nix_args: &NixArgs,
         json: bool,
-    ) -> Result<std::process::Output, NixCommandLineRunError> {
+    ) -> Result<M::Output, NixCommandLineRunError> {
         let args = vec![
             self.defaults.config_args.to_args(),
             self.defaults.common_args.to_args(),
@@ -130,7 +190,12 @@ impl NixCommandLine {
             self.defaults.extra_args.clone(),
         ];
 
-        Ok(self.run(args.into_iter().flatten()).await?)
+        let mut command = Command::new(self.nix_bin.as_deref().unwrap_or("nix"));
+        command
+            .envs(&self.defaults.environment)
+            .args(args.into_iter().flatten());
+
+        Ok(M::run(&mut command).await?)
     }
 }
 
@@ -248,7 +313,9 @@ where
         backend: &NixCommandLine,
         nix_args: &NixArgs,
     ) -> Result<(), NixCommandLineRunError> {
-        backend.run_command(self, nix_args, false).await?;
+        backend
+            .run_command::<Passthru, _, _>(self, nix_args, false)
+            .await?;
         Ok(())
     }
 }
@@ -274,7 +341,7 @@ where
         nix_args: &NixArgs,
     ) -> Result<Value, Self::JsonError> {
         let output = backend
-            .run_command(self, nix_args, true)
+            .run_command::<Collect, _, _>(self, nix_args, true)
             .await
             .map_err(NixCommandLineRunJsonError::Run)?;
 

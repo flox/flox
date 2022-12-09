@@ -9,6 +9,7 @@ edition = "2021"
 async-trait = "0.1.52"
 derive_more = "0.99.17"
 tokio = { version = "1.21", features = ["full"] }
+tokio-stream = { version = "0.1.11", features = ["tokio-util", "io-util"] }
 log = "0.4.17"
 thiserror = "1.0"
 serde = "1.0"
