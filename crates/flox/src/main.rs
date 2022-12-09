@@ -22,6 +22,10 @@ use flox_rust_sdk::flox::FLOX_SH;
 async fn main() -> Result<()> {
     env_logger::init();
 
+    let _ = ctrlc::set_handler(move || {
+        dialoguer::console::Term::stderr().show_cursor();
+    });
+
     let args = commands::flox_args().run();
     args.handle(config::Config::parse()?).await?;
 

@@ -2,7 +2,7 @@ mod flake;
 
 use std::{path::Path, str::FromStr};
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 pub use flake::*;
 use flox_rust_sdk::{
     flox::Flox,
@@ -102,7 +102,7 @@ pub async fn resolve_installable(
             .max_length(5)
             .items(&choices)
             .interact()
-            .unwrap();
+            .with_context(|| "Failed to prompt for package choice")?;
 
         matches.remove(sel_i).installable
     } else if matches.len() == 1 {
