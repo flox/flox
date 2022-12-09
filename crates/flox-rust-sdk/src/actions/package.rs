@@ -5,8 +5,7 @@ use runix::{
         flake::{FlakeArgs, OverrideInputs},
         DevelopArgs, NixArgs,
     },
-    command::{Build, Develop, RunStruct, Shell},
-    command_line::NixCommandLine,
+    command::{Build, Develop, Run as RunCommand, Shell},
     installable::Installable,
     NixBackend, Run, RunTyped,
 };
@@ -25,15 +24,22 @@ pub struct Package<'flox> {
     nix_arguments: Vec<String>,
 }
 
+/// Errors shared among package/development commands
+#[derive(Error, Debug)]
+pub enum PackageError {
+    #[error("Error getting Nix instance")]
+    NixInstance(()),
+    #[error("Error getting flake args")]
+    FlakeArgs(()),
+}
+
 #[derive(Error, Debug)]
 pub enum PackageBuildError<Nix: NixBackend>
 where
     Build: Run<Nix>,
 {
-    #[error("Error getting Nix instance")]
-    NixInstance(()),
-    #[error("Error getting flake args")]
-    FlakeArgs(()),
+    #[error(transparent)]
+    Common(#[from] PackageError),
     #[error("Error running nix: {0}")]
     NixRun(<Build as Run<Nix>>::Error),
 }
@@ -43,10 +49,8 @@ pub enum PackageDevelopError<Nix: NixBackend>
 where
     Develop: Run<Nix>,
 {
-    #[error("Error getting Nix instance")]
-    NixInstance(()),
-    #[error("Error getting flake args")]
-    FlakeArgs(()),
+    #[error(transparent)]
+    Common(#[from] PackageError),
     #[error("Error running nix: {0}")]
     NixRun(<Develop as Run<Nix>>::Error),
 }
@@ -54,14 +58,12 @@ where
 #[derive(Error, Debug)]
 pub enum PackageRunError<Nix: NixBackend>
 where
-    RunStruct: Run<Nix>,
+    RunCommand: Run<Nix>,
 {
-    #[error("Error getting Nix instance")]
-    NixInstance(()),
-    #[error("Error getting flake args")]
-    FlakeArgs(()),
+    #[error(transparent)]
+    Common(#[from] PackageError),
     #[error("Error running nix: {0}")]
-    NixRun(<RunStruct as Run<Nix>>::Error),
+    NixRun(<RunCommand as Run<Nix>>::Error),
 }
 
 #[derive(Error, Debug)]
@@ -69,10 +71,8 @@ pub enum PackageShellError<Nix: NixBackend>
 where
     Shell: Run<Nix>,
 {
-    #[error("Error getting Nix instance")]
-    NixInstance(()),
-    #[error("Error getting flake args")]
-    FlakeArgs(()),
+    #[error(transparent)]
+    Common(#[from] PackageError),
     #[error("Error running nix: {0}")]
     NixRun(<Shell as Run<Nix>>::Error),
 }
@@ -100,7 +100,7 @@ impl Package<'_> {
         let nix_args = NixArgs::default();
 
         let command = Build {
-            flake: self.flake_args().map_err(PackageBuildError::FlakeArgs)?,
+            flake: self.flake_args().map_err(PackageError::FlakeArgs)?,
             installables: [self.installable.clone()].into(),
             ..Default::default()
         };
@@ -124,8 +124,8 @@ impl Package<'_> {
         let nix_args = NixArgs::default();
 
         let command = Develop {
-            flake: self.flake_args().map_err(PackageDevelopError::FlakeArgs)?,
-            installables: [self.installable.clone()].into(),
+            flake: self.flake_args().map_err(PackageError::FlakeArgs)?,
+            installable: self.installable.clone().into(),
             ..Default::default()
         };
 
@@ -141,15 +141,15 @@ impl Package<'_> {
     /// runs `nix run <installable>`
     pub async fn run<Nix: FloxNixApi>(&self) -> Result<(), PackageRunError<Nix>>
     where
-        RunStruct: Run<Nix>,
+        RunCommand: Run<Nix>,
     {
         let nix = self.flox.nix::<Nix>(self.nix_arguments.clone());
 
         let nix_args = NixArgs::default();
 
-        let command = RunStruct {
-            flake: self.flake_args().map_err(PackageRunError::FlakeArgs)?,
-            installables: [self.installable.clone()].into(),
+        let command = RunCommand {
+            flake: self.flake_args().map_err(PackageError::FlakeArgs)?,
+            installable: self.installable.clone().into(),
             ..Default::default()
         };
 
@@ -172,7 +172,7 @@ impl Package<'_> {
         let nix_args = NixArgs::default();
 
         let command = Shell {
-            flake: self.flake_args().map_err(PackageShellError::FlakeArgs)?,
+            flake: self.flake_args().map_err(PackageError::FlakeArgs)?,
             installables: [self.installable.clone()].into(),
             ..Default::default()
         };
