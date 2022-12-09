@@ -56,7 +56,7 @@ pub fn build_flox_env() -> HashMap<String, String> {
 
     #[cfg(target_os = "linux")]
     {
-        if let Err(_) = env::var("LOCALE_ARCHIVE") {
+        if env::var("LOCALE_ARCHIVE").is_err() {
             env_map.insert(
                 "LOCALE_ARCHIVE".to_string(),
                 env!("LOCALE_ARCHIVE").to_string(),

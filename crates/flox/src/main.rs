@@ -1,3 +1,6 @@
+#[macro_use]
+extern crate anyhow;
+
 use anyhow::Result;
 use flox_rust_sdk::environment::build_flox_env;
 use log::{debug, info};

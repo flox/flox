@@ -1,19 +1,49 @@
 use anyhow::Result;
 use bpaf::{Bpaf, Parser};
-use flox_rust_sdk::{flox::Flox, nix::command_line::NixCommandLine, prelude::Stability};
+use flox_rust_sdk::{
+    flox::{Flox, FloxInstallable, ParseFloxInstallableError},
+    nix::command_line::NixCommandLine,
+    prelude::Stability,
+};
 
-use crate::{config::Config, flox_forward};
+use crate::{config::Config, flox_forward, utils::resolve_installable};
+
+fn bpaf_parse_flox_installable(
+    installable: String,
+) -> Result<FloxInstallable, ParseFloxInstallableError> {
+    Ok(installable.parse()?)
+}
 
 #[derive(Bpaf, Clone)]
 
 pub struct PackageArgs {
     stability: Option<Stability>,
 
-    #[bpaf(short('A'), argument("INSTALLABLE"))]
-    installable: Option<String>,
+    #[bpaf(
+        short('A'),
+        argument::<String>("INSTALLABLE"),
+        parse(bpaf_parse_flox_installable),
+        optional
+    )]
+    arg_installable: Option<FloxInstallable>,
+    #[bpaf(positional::<String>("INSTALLABLE"), parse(bpaf_parse_flox_installable), optional)]
+    pos_installable: Option<FloxInstallable>,
 
     #[bpaf(external(nix_args))]
     nix_arguments: Vec<String>,
+}
+
+impl PackageArgs {
+    fn installable(&self) -> FloxInstallable {
+        self.arg_installable
+            .as_ref()
+            .or(self.pos_installable.as_ref())
+            .unwrap_or(&FloxInstallable {
+                source: None,
+                attr_path: vec![],
+            })
+            .clone()
+    }
 }
 
 fn nix_args() -> impl Parser<Vec<String>> {
@@ -32,14 +62,22 @@ impl PackageCommands {
             _ if !Config::preview_enabled()? => flox_forward().await?,
             PackageCommands::Build {
                 package:
-                    PackageArgs {
+                    package @ PackageArgs {
                         stability,
-                        installable,
                         nix_arguments,
+                        ..
                     },
             } => {
+                let installable = resolve_installable(
+                    &flox,
+                    package.installable(),
+                    &["."],
+                    &[("packages", true)],
+                )
+                .await?;
+
                 flox.package(
-                    installable.clone().unwrap().into(),
+                    installable.into(),
                     stability.clone().unwrap_or_default(),
                     nix_arguments.clone(),
                 )
@@ -49,14 +87,22 @@ impl PackageCommands {
 
             PackageCommands::Develop {
                 package:
-                    PackageArgs {
+                    package @ PackageArgs {
                         stability,
-                        installable,
                         nix_arguments,
+                        ..
                     },
             } => {
+                let installable = resolve_installable(
+                    &flox,
+                    package.installable(),
+                    &["."],
+                    &[("packages", true), ("devShells", true)],
+                )
+                .await?;
+
                 flox.package(
-                    installable.clone().unwrap().into(),
+                    installable.into(),
                     stability.clone().unwrap_or_default(),
                     nix_arguments.clone(),
                 )
@@ -65,14 +111,22 @@ impl PackageCommands {
             }
             PackageCommands::Run {
                 package:
-                    PackageArgs {
+                    package @ PackageArgs {
                         stability,
-                        installable,
                         nix_arguments,
+                        ..
                     },
             } => {
+                let installable = resolve_installable(
+                    &flox,
+                    package.installable(),
+                    &["."],
+                    &[("packages", true), ("apps", true)],
+                )
+                .await?;
+
                 flox.package(
-                    installable.clone().unwrap().into(),
+                    installable.into(),
                     stability.clone().unwrap_or_default(),
                     nix_arguments.clone(),
                 )
@@ -81,14 +135,22 @@ impl PackageCommands {
             }
             PackageCommands::Shell {
                 package:
-                    PackageArgs {
+                    package @ PackageArgs {
                         stability,
-                        installable,
                         nix_arguments,
+                        ..
                     },
             } => {
+                let installable = resolve_installable(
+                    &flox,
+                    package.installable(),
+                    &["."],
+                    &[("packages", true)],
+                )
+                .await?;
+
                 flox.package(
-                    installable.clone().unwrap().into(),
+                    installable.into(),
                     stability.clone().unwrap_or_default(),
                     nix_arguments.clone(),
                 )
