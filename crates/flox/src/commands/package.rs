@@ -1,35 +1,24 @@
 use anyhow::Result;
 use bpaf::{Bpaf, Parser};
 use flox_rust_sdk::{
-    flox::{Flox, FloxInstallable, ParseFloxInstallableError},
+    flox::{Flox, FloxInstallable},
     nix::command_line::NixCommandLine,
     prelude::Stability,
 };
 
 use crate::{config::Config, flox_forward, utils::resolve_installable};
 
-fn bpaf_parse_flox_installable(
-    installable: String,
-) -> Result<FloxInstallable, ParseFloxInstallableError> {
-    Ok(installable.parse()?)
-}
-
 #[derive(Bpaf, Clone)]
 
 pub struct PackageArgs {
     stability: Option<Stability>,
 
-    #[bpaf(
-        short('A'),
-        argument::<String>("INSTALLABLE"),
-        parse(bpaf_parse_flox_installable),
-        optional
-    )]
+    #[bpaf(short('A'), argument("INSTALLABLE"), hide)]
     arg_installable: Option<FloxInstallable>,
-    #[bpaf(positional::<String>("INSTALLABLE"), parse(bpaf_parse_flox_installable), optional)]
+    #[bpaf(external, optional)]
     pos_installable: Option<FloxInstallable>,
 
-    #[bpaf(external(nix_args))]
+    #[bpaf(external)]
     nix_arguments: Vec<String>,
 }
 
@@ -46,13 +35,20 @@ impl PackageArgs {
     }
 }
 
-fn nix_args() -> impl Parser<Vec<String>> {
+fn pos_installable() -> impl Parser<FloxInstallable> {
+    bpaf::any("INSTALLABLE").anywhere()
+}
+
+fn nix_arguments() -> impl Parser<Vec<String>> {
     extra_args("NIX ARGUMENTS")
 }
 
 fn extra_args(var: &'static str) -> impl Parser<Vec<String>> {
     bpaf::any(var)
-        .guard(|m| m != "--help", "Not A Nix Arg")
+        .guard(
+            |m: &String| !["--help", "-h"].contains(&m.as_str()),
+            "Not A Nix Arg",
+        )
         .many()
 }
 
