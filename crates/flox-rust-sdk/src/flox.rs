@@ -109,7 +109,7 @@ pub struct ResolvedInstallableMatch {
     pub prefix: String,
     pub system: Option<String>,
     pub key: Vec<String>,
-    pub installable: Installable,
+    pub flakeref: String,
 }
 
 impl ResolvedInstallableMatch {
@@ -119,26 +119,30 @@ impl ResolvedInstallableMatch {
         system: Option<String>,
         key: Vec<String>,
     ) -> ResolvedInstallableMatch {
+        ResolvedInstallableMatch {
+            prefix,
+            system,
+            key,
+            flakeref,
+        }
+    }
+
+    pub fn installable(self) -> Installable {
         // Build the multi-part key into a Nix-safe single string
-        let nix_str_key = key
-            .iter()
+        let nix_str_key = self
+            .key
+            .into_iter()
             .map(|s| format!("{:?}", s))
             .collect::<Vec<_>>()
             .join(".");
 
-        // Return our match as a single valid `Installable`
-        ResolvedInstallableMatch {
-            installable: Installable {
-                flakeref,
-                // Join the prefix and key into a safe attrpath, adding the associated system if present
-                attr_path: match system {
-                    Some(ref s) => format!("{:?}.{:?}.{}", &prefix, s, nix_str_key),
-                    None => format!("{:?}.{}", &prefix, nix_str_key),
-                },
+        Installable {
+            flakeref: self.flakeref,
+            // Join the prefix and key into a safe attrpath, adding the associated system if present
+            attr_path: match self.system {
+                Some(ref s) => format!("{:?}.{:?}.{}", &self.prefix, s, nix_str_key),
+                None => format!("{:?}.{}", &self.prefix, nix_str_key),
             },
-            prefix,
-            system,
-            key,
         }
     }
 }

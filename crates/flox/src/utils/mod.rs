@@ -85,7 +85,7 @@ pub async fn resolve_installable(
 
         // Populate the flakerefs and prefixes sets
         for m in &matches {
-            flakerefs.insert(m.installable.flakeref.to_string());
+            flakerefs.insert(m.flakeref.to_string());
             prefixes.insert(m.prefix.to_string());
         }
 
@@ -105,12 +105,12 @@ pub async fn resolve_installable(
                     match (flakerefs.len() > 1, prefixes.len() > 1) {
                         (false, false) => nix_safe_key,
                         (true, false) => {
-                            format!("{}#{}", m.installable.flakeref, nix_safe_key)
+                            format!("{}#{}", m.flakeref, nix_safe_key)
                         }
                         (true, true) => {
                             format!(
                                 "{}#{}.{}",
-                                m.installable.flakeref,
+                                m.flakeref,
                                 nix_str_safe(&m.prefix),
                                 nix_safe_key
                             )
@@ -156,7 +156,7 @@ pub async fn resolve_installable(
             .interact()
             .with_context(|| format!("Failed to prompt for {} choice", derivation_type))?;
 
-        let installable = matches.remove(sel_i).installable;
+        let installable = matches.remove(sel_i).installable();
 
         warn!(
             "HINT: avoid selecting a {} next time with:",
@@ -166,7 +166,7 @@ pub async fn resolve_installable(
 
         installable
     } else if matches.len() == 1 {
-        matches.remove(0).installable
+        matches.remove(0).installable()
     } else {
         return Err(anyhow!("No matching installables found"));
     })
