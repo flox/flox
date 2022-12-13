@@ -1,6 +1,6 @@
 {
   mkShell,
-  self',
+  self,
   lib,
   rustfmt,
   clippy,
@@ -15,7 +15,7 @@
   rust,
 }:
 mkShell ({
-    inputsFrom = [self'.packages.flox];
+    inputsFrom = [self.packages.flox];
     RUST_SRC_PATH = "${rust.packages.stable.rustPlatform.rustLibSrc}";
     packages = [
       rustfmt
@@ -24,7 +24,7 @@ mkShell ({
       rust.packages.stable.rustPlatform.rustLibSrc
     ];
     shellHook = ''
-      ${self'.checks.pre-commit-check.shellHook}
+      ${self.checks.pre-commit-check.shellHook}
     '';
   }
-  // self'.packages.flox.envs)
+  // self.packages.flox.envs)
