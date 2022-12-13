@@ -1,5 +1,7 @@
 #[macro_use]
 extern crate anyhow;
+#[macro_use]
+extern crate lazy_static;
 
 use self::config::{Feature, Impl};
 use anyhow::Result;
@@ -22,9 +24,13 @@ use flox_rust_sdk::flox::FLOX_SH;
 async fn main() -> Result<()> {
     env_logger::init();
 
-    let _ = ctrlc::set_handler(move || {
-        dialoguer::console::Term::stderr().show_cursor();
-    });
+    if dialoguer::console::user_attended_stderr() {
+        ctrlc::set_handler(move || {
+            dialoguer::console::Term::stderr()
+                .show_cursor()
+                .expect("Failed to re-show hidden cursor before exit");
+        })?;
+    }
 
     let args = commands::flox_args().run();
     args.handle(config::Config::parse()?).await?;

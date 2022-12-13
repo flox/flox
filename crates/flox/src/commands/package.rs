@@ -70,6 +70,8 @@ impl PackageCommands {
                     package.installable(),
                     &["."],
                     &[("packages", true)],
+                    "build",
+                    "package",
                 )
                 .await?;
 
@@ -95,6 +97,8 @@ impl PackageCommands {
                     package.installable(),
                     &["."],
                     &[("packages", true), ("devShells", true)],
+                    "develop",
+                    "shell",
                 )
                 .await?;
 
@@ -119,6 +123,8 @@ impl PackageCommands {
                     package.installable(),
                     &["."],
                     &[("packages", true), ("apps", true)],
+                    "run",
+                    "app",
                 )
                 .await?;
 
@@ -143,6 +149,8 @@ impl PackageCommands {
                     package.installable(),
                     &["."],
                     &[("packages", true)],
+                    "shell",
+                    "package",
                 )
                 .await?;
 

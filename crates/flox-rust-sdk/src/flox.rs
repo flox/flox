@@ -78,6 +78,7 @@ impl FloxNixApi for NixCommandLine {
         }
     }
 }
+
 /// Typed matching installable outputted by our Nix evaluation
 #[derive(Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord)]
 struct InstallableEvalQueryEntry {
@@ -121,7 +122,7 @@ impl ResolvedInstallableMatch {
         // Build the multi-part key into a Nix-safe single string
         let nix_str_key = key
             .iter()
-            .map(|k| format!("{:?}", k))
+            .map(|s| format!("{:?}", s))
             .collect::<Vec<_>>()
             .join(".");
 
