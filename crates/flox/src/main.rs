@@ -1,6 +1,7 @@
 #[macro_use]
 extern crate anyhow;
 
+use self::config::{Feature, Impl};
 use anyhow::Result;
 use flox_rust_sdk::environment::build_flox_env;
 use log::{debug, info};
@@ -27,8 +28,20 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
+pub fn should_flox_forward(f: Feature) -> Result<bool> {
+    if f.implementation()? == Impl::Bash {
+        let env_name = format!(
+            "FLOX_PREVIEW_FEATURES_{}",
+            serde_variant::to_variant_name(&f).unwrap().to_uppercase()
+        );
+        info!("`{env_name}` unset or not \"true\", falling back to legacy flox");
+        Ok(false)
+    } else {
+        Ok(true)
+    }
+}
+
 pub async fn flox_forward() -> Result<()> {
-    info!("`FLOX_PREVIEW_ENABLE` unset or not \"true\", falling back to legacy flox");
     run_in_flox(&env::args_os().collect::<Vec<_>>()[1..]).await?;
     Ok(())
 }

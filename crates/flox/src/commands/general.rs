@@ -1,16 +1,17 @@
-use std::future::Future;
-
 use anyhow::Result;
 use bpaf::Bpaf;
 use flox_rust_sdk::{
     flox::Flox,
-    nix::{arguments::NixArgs, Run},
-    prelude::Stability,
+    nix::{
+        command_line::{Group, NixCliCommand, NixCommandLine, ToArgs},
+        Run,
+    },
 };
-use log::debug;
-use tempfile::{tempfile, TempDir};
 
-use crate::{commands::channel, config::Config, flox_forward, utils::init_channels};
+use crate::{
+    config::{Feature, Impl},
+    flox_forward, should_flox_forward,
+};
 
 #[derive(Bpaf, Clone)]
 pub struct GeneralArgs {}
@@ -18,7 +19,14 @@ pub struct GeneralArgs {}
 impl GeneralCommands {
     pub async fn handle(&self, flox: Flox) -> Result<()> {
         match self {
-            _ if !Config::preview_enabled()? => flox_forward().await?,
+            _ if should_flox_forward(Feature::All)? => flox_forward().await?,
+
+            GeneralCommands::Nix(args) if Feature::All.implementation()? == Impl::Rust => {
+                let nix: NixCommandLine = flox.nix(Default::default());
+                RawCommand(args.to_owned())
+                    .run(&nix, &Default::default())
+                    .await?;
+            }
             _ => todo!(),
         }
         Ok(())
@@ -80,5 +88,15 @@ fn complete_nix_shell() -> bpaf::ShellComp {
     }
 }
 
-pub type ChannelRef = String;
-pub type Url = String;
+#[derive(Debug, Clone)]
+pub struct RawCommand(pub Vec<String>);
+impl ToArgs for RawCommand {
+    fn to_args(&self) -> Vec<String> {
+        self.0.to_owned()
+    }
+}
+impl NixCliCommand for RawCommand {
+    type Own = Self;
+    const SUBCOMMAND: &'static [&'static str] = &[];
+    const OWN_ARGS: Group<Self, Self::Own> = Some(|s| s.to_owned());
+}

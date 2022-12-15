@@ -6,7 +6,7 @@ use flox_rust_sdk::{
     prelude::Stability,
 };
 
-use crate::{config::Config, flox_forward, utils::resolve_installable};
+use crate::{config::Feature, flox_forward, should_flox_forward, utils::resolve_installable};
 
 #[derive(Bpaf, Clone)]
 
@@ -55,7 +55,8 @@ fn extra_args(var: &'static str) -> impl Parser<Vec<String>> {
 impl PackageCommands {
     pub async fn handle(&self, flox: Flox) -> Result<()> {
         match self {
-            _ if !Config::preview_enabled()? => flox_forward().await?,
+            _ if should_flox_forward(Feature::Nix)? => flox_forward().await?,
+
             PackageCommands::Build {
                 package:
                     package @ PackageArgs {

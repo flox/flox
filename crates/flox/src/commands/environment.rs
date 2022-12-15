@@ -5,8 +5,8 @@ use flox_rust_sdk::nix::command_line::NixCommandLine;
 use flox_rust_sdk::prelude::flox_package::FloxPackage;
 use std::path::PathBuf;
 
-use crate::config::Config;
-use crate::flox_forward;
+use crate::config::Feature;
+use crate::{flox_forward, should_flox_forward};
 
 #[derive(Bpaf, Clone)]
 pub struct EnvironmentArgs {
@@ -21,7 +21,8 @@ pub struct EnvironmentArgs {
 impl EnvironmentCommands {
     pub async fn handle(&self, flox: Flox) -> Result<()> {
         match self {
-            _ if !Config::preview_enabled()? => flox_forward().await?,
+            _ if should_flox_forward(Feature::Env)? => flox_forward().await?,
+
             EnvironmentCommands::Install {
                 packages,
                 environment: EnvironmentArgs { environment },

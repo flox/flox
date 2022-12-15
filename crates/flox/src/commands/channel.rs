@@ -1,16 +1,17 @@
 use anyhow::Result;
 use bpaf::Bpaf;
-use flox_rust_sdk::{flox::Flox, nix::command_line::NixCommandLine, prelude::Stability};
+use flox_rust_sdk::flox::Flox;
 
-use crate::{config::Config, flox_forward};
+use crate::{config::Feature, flox_forward, should_flox_forward};
 
 #[derive(Bpaf, Clone)]
 pub struct ChannelArgs {}
 
 impl ChannelCommands {
-    pub async fn handle(&self, flox: Flox) -> Result<()> {
+    pub async fn handle(&self, _flox: Flox) -> Result<()> {
         match self {
-            _ if !Config::preview_enabled()? => flox_forward().await?,
+            _ if should_flox_forward(Feature::Env)? => flox_forward().await?,
+
             _ => todo!(),
         }
 
