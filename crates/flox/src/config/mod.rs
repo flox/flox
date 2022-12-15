@@ -119,8 +119,6 @@ impl Config {
 
             let final_config = builder.build()?;
 
-            dbg!(&final_config);
-
             let final_config = HierarchicalConfig::builder()
                 .add_source(final_config)
                 .build()?;
