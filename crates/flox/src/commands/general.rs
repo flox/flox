@@ -19,14 +19,13 @@ pub struct GeneralArgs {}
 impl GeneralCommands {
     pub async fn handle(&self, flox: Flox) -> Result<()> {
         match self {
-            _ if should_flox_forward(Feature::All)? => flox_forward().await?,
-
-            GeneralCommands::Nix(args) if Feature::All.implementation()? == Impl::Rust => {
+            GeneralCommands::Nix(args) if Feature::Nix.implementation()? == Impl::Rust => {
                 let nix: NixCommandLine = flox.nix(Default::default());
                 RawCommand(args.to_owned())
                     .run(&nix, &Default::default())
                     .await?;
             }
+            _ if should_flox_forward(Feature::All)? => flox_forward().await?,
             _ => todo!(),
         }
         Ok(())

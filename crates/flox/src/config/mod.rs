@@ -119,10 +119,6 @@ impl Config {
 
             let final_config = builder.build()?;
 
-            let final_config = HierarchicalConfig::builder()
-                .add_source(final_config)
-                .build()?;
-
             Ok(final_config)
         })
     }

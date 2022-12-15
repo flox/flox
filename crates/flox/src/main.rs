@@ -32,12 +32,12 @@ pub fn should_flox_forward(f: Feature) -> Result<bool> {
     if f.implementation()? == Impl::Bash {
         let env_name = format!(
             "FLOX_PREVIEW_FEATURES_{}",
-            serde_variant::to_variant_name(&f).unwrap().to_uppercase()
+            serde_variant::to_variant_name(&f)?.to_uppercase()
         );
-        info!("`{env_name}` unset or not \"true\", falling back to legacy flox");
-        Ok(false)
-    } else {
+        info!("`{env_name}` unset or not \"rust\", falling back to legacy flox");
         Ok(true)
+    } else {
+        Ok(false)
     }
 }
 
