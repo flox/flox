@@ -4,6 +4,7 @@ use std::{
     path::PathBuf,
 };
 
+use once_cell::sync::Lazy;
 use runix::{
     arguments::{
         common::NixCommonArgs,
@@ -30,9 +31,7 @@ use crate::{
 
 pub use crate::models::flox_installable::*;
 
-lazy_static! {
-    static ref INPUT_CHARS: Vec<char> = ('a'..='t').into_iter().collect();
-}
+static INPUT_CHARS: Lazy<Vec<char>> = Lazy::new(|| ('a'..='t').into_iter().collect());
 
 pub const FLOX_SH: &str = env!("FLOX_SH");
 pub const FLOX_VERSION: &str = env!("FLOX_VERSION");
@@ -78,6 +77,7 @@ impl FloxNixApi for NixCommandLine {
         }
     }
 }
+
 /// Typed matching installable outputted by our Nix evaluation
 #[derive(Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord)]
 struct InstallableEvalQueryEntry {
@@ -108,7 +108,7 @@ pub struct ResolvedInstallableMatch {
     pub prefix: String,
     pub system: Option<String>,
     pub key: Vec<String>,
-    pub installable: Installable,
+    pub flakeref: String,
 }
 
 impl ResolvedInstallableMatch {
@@ -118,26 +118,30 @@ impl ResolvedInstallableMatch {
         system: Option<String>,
         key: Vec<String>,
     ) -> ResolvedInstallableMatch {
-        // Build the multi-part key into a Nix-safe single string
-        let nix_str_key = key
-            .iter()
-            .map(|k| format!("{:?}", k))
-            .collect::<Vec<_>>()
-            .join(".");
-
-        // Return our match as a single valid `Installable`
         ResolvedInstallableMatch {
-            installable: Installable {
-                flakeref,
-                // Join the prefix and key into a safe attrpath, adding the associated system if present
-                attr_path: match system {
-                    Some(ref s) => format!("{:?}.{:?}.{}", &prefix, s, nix_str_key),
-                    None => format!("{:?}.{}", &prefix, nix_str_key),
-                },
-            },
             prefix,
             system,
             key,
+            flakeref,
+        }
+    }
+
+    pub fn installable(self) -> Installable {
+        // Build the multi-part key into a Nix-safe single string
+        let nix_str_key = self
+            .key
+            .into_iter()
+            .map(|s| format!("{:?}", s))
+            .collect::<Vec<_>>()
+            .join(".");
+
+        Installable {
+            flakeref: self.flakeref,
+            // Join the prefix and key into a safe attrpath, adding the associated system if present
+            attr_path: match self.system {
+                Some(ref s) => format!("{:?}.{:?}.{}", &self.prefix, s, nix_str_key),
+                None => format!("{:?}.{}", &self.prefix, nix_str_key),
+            },
         }
     }
 }

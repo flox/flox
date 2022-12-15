@@ -1,8 +1,6 @@
 extern crate pretty_env_logger;
 #[macro_use]
 extern crate log;
-#[macro_use]
-extern crate lazy_static;
 
 pub mod providers;
 pub mod utils;

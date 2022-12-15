@@ -22,6 +22,16 @@ use flox_rust_sdk::flox::FLOX_SH;
 async fn main() -> Result<()> {
     env_logger::init();
 
+    // Ensure cursor doesn't remain hidden if a prompt gets cancelled
+    // Upstream issue is https://github.com/mitsuhiko/dialoguer/issues/77 - though considered intentional behavior
+    if dialoguer::console::user_attended_stderr() {
+        ctrlc::set_handler(move || {
+            dialoguer::console::Term::stderr()
+                .show_cursor()
+                .expect("Failed to re-show hidden cursor before exit");
+        })?;
+    }
+
     let args = commands::flox_args().run();
     args.handle(config::Config::parse()?).await?;
 

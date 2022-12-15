@@ -367,6 +367,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "ctrlc"
+version = "3.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1d91974fbbe88ec1df0c24a4f00f99583667a7e2e6272b2b92d294d81e462173"
+dependencies = [
+ "nix",
+ "winapi",
+]
+
+[[package]]
 name = "cxx"
 version = "1.0.80"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -634,6 +644,7 @@ dependencies = [
  "async-trait",
  "bpaf",
  "config",
+ "ctrlc",
  "dialoguer",
  "dirs",
  "dotenv",
@@ -645,6 +656,7 @@ dependencies = [
  "log",
  "octocrab",
  "once_cell",
+ "regex",
  "rnix 0.10.2",
  "serde",
  "serde_json",
@@ -666,10 +678,10 @@ dependencies = [
  "dotenv",
  "fs_extra",
  "getset",
- "lazy_static",
  "log",
  "nix-editor",
  "octocrab",
+ "once_cell",
  "pretty_env_logger",
  "regex",
  "rnix 0.11.0",
@@ -1311,6 +1323,18 @@ dependencies = [
  "security-framework",
  "security-framework-sys",
  "tempfile",
+]
+
+[[package]]
+name = "nix"
+version = "0.25.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f346ff70e7dbfd675fe90590b92d59ef2de15a8779ae305ebcbfd3f0caf59be4"
+dependencies = [
+ "autocfg",
+ "bitflags",
+ "cfg-if",
+ "libc",
 ]
 
 [[package]]
