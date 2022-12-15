@@ -9,6 +9,7 @@ use flox_rust_sdk::{
     prelude::{Channel, ChannelRegistry},
 };
 use log::{info, warn};
+use once_cell::sync::Lazy;
 
 use std::collections::HashSet;
 
@@ -20,9 +21,7 @@ use std::borrow::Cow;
 
 use regex::Regex;
 
-lazy_static! {
-    static ref NIX_IDENTIFIER_SAFE: Regex = Regex::new(r#"^[a-zA-Z0-9_-]+$"#).unwrap();
-}
+static NIX_IDENTIFIER_SAFE: Lazy<Regex> = Lazy::new(|| Regex::new(r#"^[a-zA-Z0-9_-]+$"#).unwrap());
 
 struct Flake {}
 

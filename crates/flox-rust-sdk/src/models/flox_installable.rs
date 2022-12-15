@@ -1,12 +1,12 @@
+use once_cell::sync::Lazy;
 use thiserror::Error;
 
 use regex::Regex;
 
-lazy_static! {
-    // Matches against strings which are likely to be flakerefs
-    // Such as: `github:NixOS/nixpkgs`, `.`, `../somedir`, etc
-    static ref PROBABLY_FLAKEREF_RE: Regex = Regex::new(r#"^(?:\.?\.?/|\.$|[a-z+]+:)"#).unwrap();
-}
+// Matches against strings which are likely to be flakerefs
+// Such as: `github:NixOS/nixpkgs`, `.`, `../somedir`, etc
+static PROBABLY_FLAKEREF_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r#"^(?:\.?\.?/|\.$|[a-z+]+:)"#).unwrap());
 
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct FloxInstallable {

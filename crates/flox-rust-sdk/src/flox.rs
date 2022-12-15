@@ -4,6 +4,7 @@ use std::{
     path::PathBuf,
 };
 
+use once_cell::sync::Lazy;
 use runix::{
     arguments::{
         common::NixCommonArgs,
@@ -30,9 +31,7 @@ use crate::{
 
 pub use crate::models::flox_installable::*;
 
-lazy_static! {
-    static ref INPUT_CHARS: Vec<char> = ('a'..='t').into_iter().collect();
-}
+static INPUT_CHARS: Lazy<Vec<char>> = Lazy::new(|| ('a'..='t').into_iter().collect());
 
 pub const FLOX_SH: &str = env!("FLOX_SH");
 pub const FLOX_VERSION: &str = env!("FLOX_VERSION");
