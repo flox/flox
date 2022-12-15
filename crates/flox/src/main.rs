@@ -14,8 +14,8 @@ mod build;
 mod commands;
 mod config;
 mod utils;
-pub static FLOX_SH: &str = env!("FLOX_SH");
-static FLOX_VERSION: &str = env!("FLOX_VERSION");
+
+use flox_rust_sdk::flox::FLOX_SH;
 
 #[tokio::main]
 async fn main() -> Result<()> {

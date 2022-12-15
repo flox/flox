@@ -12,7 +12,7 @@ use flox_rust_sdk::prelude::{Channel, ChannelRegistry};
 use tempfile::TempDir;
 
 use crate::utils::init_channels;
-use crate::FLOX_VERSION;
+use flox_rust_sdk::flox::{FLOX_SH, FLOX_VERSION};
 
 use self::channel::{ChannelArgs, ChannelCommands};
 use self::environment::{EnvironmentArgs, EnvironmentCommands};

@@ -34,6 +34,9 @@ lazy_static! {
     static ref INPUT_CHARS: Vec<char> = ('a'..='t').into_iter().collect();
 }
 
+pub const FLOX_SH: &str = env!("FLOX_SH");
+pub const FLOX_VERSION: &str = env!("FLOX_VERSION");
+
 /// The main API struct for our flox implementation
 ///
 /// A [Flox] instance serves as the context for nix invocations

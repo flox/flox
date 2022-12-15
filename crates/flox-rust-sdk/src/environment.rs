@@ -1,6 +1,7 @@
 //! Modiule for all defined environment variables to
 //! reduce the number of magic strings
 
+use crate::flox;
 use std::collections::HashMap;
 use std::env;
 pub static NIX_BIN: &str = env!("NIX_BIN");
@@ -63,6 +64,11 @@ pub fn build_flox_env() -> HashMap<String, String> {
             );
         }
     }
+
+    env_map.insert(
+        "FLOX_VERSION".to_string(),
+        crate::flox::FLOX_VERSION.to_string(),
+    );
 
     // For now these variables are managed in bash
     // let home = env!("HOME");

@@ -44,6 +44,7 @@
         ./nix-patches/CmdProfileBuild.patch
         ./nix-patches/CmdSearchAttributes.patch
         ./nix-patches/update-profile-list-warning.patch
+        ./nix-patches/curl_flox_version.patch
       ];
   });
 
