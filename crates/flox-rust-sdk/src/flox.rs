@@ -313,37 +313,42 @@ impl Flox {
     /// The constructor will perform backend specifc configuration measures
     /// and return a fresh initialized backend.
     pub fn nix<Nix: FloxNixApi>(&self, extra_args: Vec<String>) -> Nix {
-        // Set the registry file as default argument
-        let registry_file = self.temp_dir.join("registry.json");
-        serde_json::to_writer(File::create(&registry_file).unwrap(), &self.channels).unwrap();
-
         let environment = {
-            let config = NixConfigArgs {
-                accept_flake_config: true.into(),
-                warn_dirty: false.into(),
-                extra_experimental_features: ["nix-command", "flakes"]
-                    .map(String::from)
-                    .to_vec()
-                    .into(),
-                extra_substituters: ["https://cache.floxdev.com?trusted=1"]
-                    .map(String::from)
-                    .to_vec()
-                    .into(),
-                extra_access_tokens: self.access_tokens.clone().into(),
-                flake_registry: Some(registry_file.into()),
-                netrc_file: Some(self.netrc_file.clone().into()),
-                ..Default::default()
-            };
+            // Write registry file if it does not exist
+            let registry_file = self.temp_dir.join("registry.json");
+            if !registry_file.exists() {
+                serde_json::to_writer(File::create(&registry_file).unwrap(), &self.channels)
+                    .unwrap();
+            }
 
+            // Write Config file if it does not exist
             let config_file = self.temp_dir.join("nix.conf");
-            File::options()
-                .mode(0o600)
-                .create_new(true)
-                .write(true)
-                .open(&config_file)
-                .unwrap()
-                .write_all(config.to_config_string().as_bytes())
-                .unwrap();
+            if !config_file.exists() {
+                let config = NixConfigArgs {
+                    accept_flake_config: true.into(),
+                    warn_dirty: false.into(),
+                    extra_experimental_features: ["nix-command", "flakes"]
+                        .map(String::from)
+                        .to_vec()
+                        .into(),
+                    extra_substituters: ["https://cache.floxdev.com?trusted=1"]
+                        .map(String::from)
+                        .to_vec()
+                        .into(),
+                    extra_access_tokens: self.access_tokens.clone().into(),
+                    flake_registry: Some(registry_file.into()),
+                    netrc_file: Some(self.netrc_file.clone().into()),
+                    ..Default::default()
+                };
+                File::options()
+                    .mode(0o600)
+                    .create_new(true)
+                    .write(true)
+                    .open(&config_file)
+                    .unwrap()
+                    .write_all(config.to_config_string().as_bytes())
+                    .unwrap();
+            }
 
             let mut env = default_nix_subprocess_env();
             let _ = env.insert(
