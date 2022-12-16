@@ -11,7 +11,7 @@ use runix::{
     arguments::{
         common::NixCommonArgs,
         config::NixConfigArgs,
-        flake::{FlakeArgs, OverrideInputs},
+        flake::{self, FlakeArgs, OverrideInputs},
         EvalArgs, NixArgs,
     },
     command::Eval,
@@ -85,8 +85,10 @@ impl FloxNixApi for NixCommandLine {
 
 /// Typed matching installable outputted by our Nix evaluation
 #[derive(Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[serde(rename_all = "camelCase")]
 struct InstallableEvalQueryEntry {
     system: Option<String>,
+    explicit_system: bool,
     prefix: String,
     key: Vec<String>,
     input: String,
@@ -112,6 +114,7 @@ type InstallableEvalQueryOut = BTreeSet<InstallableEvalQueryEntry>;
 pub struct ResolvedInstallableMatch {
     pub prefix: String,
     pub system: Option<String>,
+    pub explicit_system: bool,
     pub key: Vec<String>,
     pub flakeref: String,
 }
@@ -121,11 +124,13 @@ impl ResolvedInstallableMatch {
         flakeref: String,
         prefix: String,
         system: Option<String>,
+        explicit_system: bool,
         key: Vec<String>,
     ) -> ResolvedInstallableMatch {
         ResolvedInstallableMatch {
             prefix,
             system,
+            explicit_system,
             key,
             flakeref,
         }
@@ -169,91 +174,149 @@ impl Flox {
     /// Invoke Nix to convert a FloxInstallable into a list of matches
     pub async fn resolve_matches<Nix: FloxNixApi>(
         &self,
-        flox_installable: FloxInstallable,
+        flox_installables: &[FloxInstallable],
         default_flakerefs: &[&str],
         default_attr_prefixes: &[(&str, bool)],
+        must_exist: bool,
     ) -> Result<Vec<ResolvedInstallableMatch>, ResolveFloxInstallableError<Nix>>
     where
         Eval: RunJson<Nix>,
     {
-        assert!(default_flakerefs.len() <= INPUT_CHARS.len());
-
         // Optimize for installable resolutions that do not require an eval
         // Match against exactly 1 flakeref and 1 prefix
-        if let ([d_flakeref], [(d_prefix, d_systemized)], [key]) = (
-            default_flakerefs,
-            default_attr_prefixes,
-            flox_installable.attr_path.as_slice(),
-        ) {
-            return Ok(vec![ResolvedInstallableMatch::new(
-                flox_installable
-                    .source
-                    .unwrap_or_else(|| d_flakeref.to_string()),
-                d_prefix.to_string(),
-                d_systemized.then(|| self.system.to_string()),
-                vec![key.to_string()],
-            )]);
+        let mut optimized = vec![];
+        for flox_installable in flox_installables {
+            if let (false, [d_flakeref], [(d_prefix, d_systemized)], [key]) = (
+                must_exist,
+                default_flakerefs,
+                default_attr_prefixes,
+                flox_installable.attr_path.as_slice(),
+            ) {
+                optimized.push(ResolvedInstallableMatch::new(
+                    flox_installable
+                        .source
+                        .as_ref()
+                        .map(String::from)
+                        .unwrap_or_else(|| d_flakeref.to_string()),
+                    d_prefix.to_string(),
+                    d_systemized.then(|| self.system.to_string()),
+                    false,
+                    vec![key.to_string()],
+                ));
+            } else {
+                break;
+            }
+        }
+        if optimized.len() == flox_installables.len() {
+            return Ok(optimized);
         }
 
-        // Create a map between input name and the input flakeref
-        // such as `"a" => "github:NixOS/nixpkgs"`
-        let mut flakeref_inputs: HashMap<String, String> = HashMap::new();
+        let numbered_flox_installables: Vec<(usize, FloxInstallable)> = flox_installables
+            .iter()
+            .enumerate()
+            .map(|(i, f)| (i, f.clone()))
+            .collect();
 
-        // Add either the provided source flakeref or the default flakerefs to the inputs map
-        if let Some(source) = flox_installable.source {
-            flakeref_inputs.insert("a".to_string(), source);
-        } else {
-            for (flakeref, input) in default_flakerefs.iter().zip(INPUT_CHARS.iter()) {
-                flakeref_inputs.insert(input.to_string(), flakeref.to_string());
+        let mut flakeref_inputs: HashMap<char, String> = HashMap::new();
+        let mut inputs_assoc: HashMap<Option<usize>, Vec<char>> = HashMap::new();
+
+        let has_sourceless = numbered_flox_installables
+            .iter()
+            .any(|(_, f)| f.source.is_none());
+
+        let mut occupied = 0;
+
+        if has_sourceless {
+            for flakeref in default_flakerefs {
+                flakeref_inputs.insert(*INPUT_CHARS.get(occupied).unwrap(), flakeref.to_string());
+                inputs_assoc
+                    .entry(None)
+                    .or_insert_with(Vec::new)
+                    .push(*INPUT_CHARS.get(occupied).unwrap());
+                occupied += 1;
+            }
+        }
+
+        for (installable_id, flox_installable) in &numbered_flox_installables {
+            if let Some(ref source) = flox_installable.source {
+                let assoc = inputs_assoc
+                    .entry(Some(*installable_id))
+                    .or_insert_with(Vec::new);
+
+                if let Some((c, _)) = flakeref_inputs.iter().find(|(_, s)| *s == source) {
+                    let c = *c;
+                    flakeref_inputs.insert(c, source.to_string());
+                    assoc.push(c);
+                } else {
+                    flakeref_inputs.insert(*INPUT_CHARS.get(occupied).unwrap(), source.to_string());
+                    assoc.push(*INPUT_CHARS.get(occupied).unwrap());
+                    occupied += 1;
+                }
             }
         }
 
         // Strip the systemization off of the default attr prefixes (only used in optimization)
-        let mut attr_prefixes: Vec<&str> = default_attr_prefixes
+        let default_attr_prefixes: Vec<&str> = default_attr_prefixes
             .iter()
             .map(|(prefix, _)| *prefix)
             .collect();
 
-        // Split the key out of the provided attr path, using the first component as a prefix if more than 1 is present
-        let key = match flox_installable.attr_path.split_first() {
-            Some((prefix, key)) if key.len() > 0 => {
-                attr_prefixes.push(prefix);
-                Some(key.to_vec())
-            }
-            Some((prefix, _)) => Some(vec![prefix.clone()]),
-            None => None,
-        };
+        let installable_resolve_strs: Vec<String> = numbered_flox_installables
+            .into_iter()
+            .map(|(installable_id, flox_installable)| {
+                // Split the key out of the provided attr path, using the first component as a prefix if more than 1 is present
+                let (attr_prefix, key) = match flox_installable.attr_path.split_first() {
+                    Some((prefix, key)) if key.len() > 0 => {
+                        (Some(prefix.as_str()), Some(key.to_vec()))
+                    }
+                    Some((prefix, _)) => (None, Some(vec![prefix.clone()])),
+                    None => (None, None),
+                };
 
-        // Construct the `apply` argument for the nix eval call to find what installables match
-        let eval_apply = format!(
-            // Template the Nix expression and our arguments in
-            r#"(x: x {{
-                system = "{system}";
-                prefixes = [{prefixes}];
-                inputs = [{inputs}];
-                key = {key};
-            }})"#,
-            system = self.system,
-            prefixes = attr_prefixes
-                .into_iter()
-                .map(|p| format!("{:?}", p))
-                .collect::<Vec<_>>()
-                .join(" "),
-            inputs = flakeref_inputs
-                .keys()
-                .map(|k| format!("{:?}", k))
-                .collect::<Vec<_>>()
-                .join(" "),
-            key = key
-                .map(|x| format!(
-                    "[{}]",
-                    x.iter()
+                format!(
+                    // Template the Nix expression and our arguments in
+                    r#"(x {{
+                        system = "{system}";
+                        defaultPrefixes = [{default_prefixes}];
+                        prefix = {prefix};
+                        inputs = [{inputs}];
+                        key = {key};
+                    }})"#,
+                    system = self.system,
+                    prefix = attr_prefix
+                        .map(|p| format!("{:?}", p))
+                        .unwrap_or_else(|| "null".to_string()),
+                    default_prefixes = default_attr_prefixes
+                        .iter()
                         .map(|p| format!("{:?}", p))
                         .collect::<Vec<_>>()
-                        .join(" ")
-                ))
-                .unwrap_or_else(|| "null".to_string()),
-        );
+                        .join(" "),
+                    inputs = inputs_assoc
+                        .get(&None)
+                        .iter()
+                        .chain(inputs_assoc.get(&Some(installable_id)).iter())
+                        .map(|x| x
+                            .iter()
+                            .map(|x| format!("{:?}", x.to_string()))
+                            .collect::<Vec<String>>())
+                        .flatten()
+                        .collect::<Vec<String>>()
+                        .join(" "),
+                    key = key
+                        .map(|x| format!(
+                            "[{}]",
+                            x.iter()
+                                .map(|p| format!("{:?}", p))
+                                .collect::<Vec<_>>()
+                                .join(" ")
+                        ))
+                        .unwrap_or_else(|| "null".to_string()),
+                )
+            })
+            .collect();
+
+        // Construct the `apply` argument for the nix eval call to find what installables match
+        let eval_apply = format!(r#"(x: ({}))"#, installable_resolve_strs.join(" ++ "));
 
         // The super resolver we're currently using to evaluate multiple whole flakerefs at once
         let resolve_installable: Installable =
@@ -294,11 +357,12 @@ impl Flox {
             .map(|e| {
                 ResolvedInstallableMatch::new(
                     flakeref_inputs
-                        .get(&e.input)
+                        .get(&e.input.chars().next().unwrap())
                         .expect("Match came from input that was not specified")
                         .to_string(),
                     e.prefix,
                     e.system,
+                    e.explicit_system,
                     e.key,
                 )
             })

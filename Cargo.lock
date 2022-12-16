@@ -646,6 +646,7 @@ dependencies = [
  "config",
  "crossterm",
  "ctrlc",
+ "derive_more",
  "dirs",
  "dotenv",
  "env_logger 0.9.3",
