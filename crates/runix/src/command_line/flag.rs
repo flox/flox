@@ -1,4 +1,4 @@
-use std::ops::Deref;
+use std::{ffi::OsStr, ops::Deref};
 
 use super::ToArgs;
 
@@ -65,9 +65,29 @@ impl<T: Deref<Target = Vec<String>>> FlagType<T> {
     }
 }
 
+impl<T: Deref<Target = impl IntoIterator<Item = (impl AsRef<str>, impl AsRef<str>)> + Clone>>
+    FlagType<T>
+{
+    pub const fn map() -> FlagType<T> {
+        FlagType::List(|s| {
+            s.deref()
+                .clone()
+                .into_iter()
+                .map(|(k, v)| format!("{}={}", k.as_ref(), v.as_ref()))
+                .collect::<Vec<_>>()
+        })
+    }
+}
+
 impl<T: Deref<Target = impl ToString>> FlagType<T> {
     pub const fn arg() -> FlagType<T> {
         FlagType::Arg(|s| s.deref().to_string())
+    }
+}
+
+impl<T: Deref<Target = impl AsRef<OsStr>>> FlagType<T> {
+    pub const fn os_str_arg() -> FlagType<T> {
+        FlagType::Arg(|s| s.deref().as_ref().to_string_lossy().to_string())
     }
 }
 

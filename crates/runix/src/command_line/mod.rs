@@ -117,8 +117,6 @@ impl CommandMode for Collect {
             .stderr(Stdio::piped())
             .stdin(Stdio::inherit());
 
-        command.as_std().log();
-
         let mut child = command.spawn().map_err(NixCommandLineError::Run)?;
 
         let child_stderr_stream = LinesStream::new(
@@ -160,8 +158,6 @@ impl CommandMode for Passthru {
             .stderr(Stdio::inherit())
             .stdin(Stdio::inherit());
 
-        command.as_std().log();
-
         let status = command.status().await.map_err(NixCommandLineError::Run)?;
 
         Ok(status)
@@ -194,6 +190,8 @@ impl NixCommandLine {
         command
             .envs(&self.defaults.environment)
             .args(args.into_iter().flatten());
+
+        command.as_std().log();
 
         Ok(M::run(&mut command).await?)
     }

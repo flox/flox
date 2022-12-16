@@ -1,9 +1,6 @@
-mod flake;
-
 use std::{path::Path, str::FromStr};
 
-use anyhow::{Context, Result};
-pub use flake::*;
+use anyhow::{Context, Ok, Result};
 use flox_rust_sdk::{
     flox::Flox,
     prelude::{Channel, ChannelRegistry},
@@ -13,10 +10,10 @@ use once_cell::sync::Lazy;
 
 use std::collections::HashSet;
 
-pub use flake::*;
 use flox_rust_sdk::flox::FloxInstallable;
 use flox_rust_sdk::prelude::Installable;
 
+pub mod init;
 use std::borrow::Cow;
 
 use regex::Regex;

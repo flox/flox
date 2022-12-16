@@ -44,6 +44,7 @@
         ./nix-patches/CmdProfileBuild.patch
         ./nix-patches/CmdSearchAttributes.patch
         ./nix-patches/update-profile-list-warning.patch
+        ./nix-patches/multiple-github-tokens.patch
         ./nix-patches/curl_flox_version.patch
       ];
   });
@@ -62,6 +63,10 @@
       NIX_ZSH_COMPLETION_SCRIPT = ../../crates/flox/src/static/nix_zsh_completion.sh;
 
       FLOX_RESOLVER_SRC = ../../resolver;
+
+      # Static "floxbeta" token for closed beta.
+      # XXX Remove after closed beta.
+      BETA_ACCESS_TOKEN = "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";
     }
     // lib.optionalAttrs hostPlatform.isDarwin {
       NIX_COREFOUNDATION_RPATH = "${darwin.CF}/Library/Frameworks";

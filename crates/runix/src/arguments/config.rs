@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{collections::HashMap, fmt::format, path::PathBuf};
 
 use derive_more::{Deref, From};
 
@@ -17,11 +17,13 @@ pub struct NixConfigArgs {
     pub flake_registry: Option<FlakeRegistry>,
     pub extra_experimental_features: ExperimentalFeatures,
     pub extra_substituters: Substituters,
+    pub extra_access_tokens: AccessTokens,
     pub show_trace: ShowTrace,
+    pub netrc_file: Option<NetRCFile>,
 }
 
-impl ToArgs for NixConfigArgs {
-    fn to_args(&self) -> Vec<String> {
+impl NixConfigArgs {
+    fn flags(&self) -> Vec<Vec<String>> {
         vec![
             self.accept_flake_config.to_args(),
             self.warn_dirty.to_args(),
@@ -29,11 +31,34 @@ impl ToArgs for NixConfigArgs {
             self.extra_substituters.to_args(),
             self.flake_registry.to_args(),
             self.show_trace.to_args(),
-            // self.extra_substituters.as_ref().map(ToArgs::args),
+            self.netrc_file.to_args(),
+            self.extra_access_tokens.to_args(),
         ]
-        .into_iter()
-        .flatten()
-        .collect()
+    }
+
+    fn config_items(&self) -> Vec<(String, String)> {
+        self.flags()
+            .into_iter()
+            .filter_map(|f| match &f[..] {
+                [] => None,
+                [b] => Some((b[2..].to_string(), true.to_string())),
+                [l, ls @ ..] => Some((l[2..].to_string(), ls.join(" "))),
+            })
+            .collect()
+    }
+
+    pub fn to_config_string(&self) -> String {
+        self.config_items()
+            .into_iter()
+            .map(|(k, v)| format!("{k} = {v}"))
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+}
+
+impl ToArgs for NixConfigArgs {
+    fn to_args(&self) -> Vec<String> {
+        self.flags().into_iter().flatten().collect()
     }
 }
 
@@ -82,5 +107,21 @@ impl Flag for Substituters {
 pub struct FlakeRegistry(PathBuf);
 impl Flag for FlakeRegistry {
     const FLAG: &'static str = "--flake-registry";
-    const FLAG_TYPE: FlagType<Self> = FlagType::Args(|s| vec![s.0.to_string_lossy().to_string()]);
+    const FLAG_TYPE: FlagType<Self> = FlagType::os_str_arg();
+}
+
+/// Flag for extra substituters
+#[derive(Clone, From, Deref, Debug, Default)]
+pub struct NetRCFile(PathBuf);
+impl Flag for NetRCFile {
+    const FLAG: &'static str = "--netrc-file";
+    const FLAG_TYPE: FlagType<Self> = FlagType::os_str_arg();
+}
+
+/// Flag for extra access tokens
+#[derive(Clone, From, Deref, Debug, Default)]
+pub struct AccessTokens(HashMap<String, String>);
+impl Flag for AccessTokens {
+    const FLAG: &'static str = "--extra-access-tokens";
+    const FLAG_TYPE: FlagType<Self> = FlagType::map();
 }

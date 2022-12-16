@@ -9,8 +9,10 @@ use flox_rust_sdk::{
 };
 
 use crate::{
-    config::{Feature, Impl},
+    commands::channel,
+    config::{Config, Feature, Impl},
     flox_forward, should_flox_forward,
+    utils::init::init_channels,
 };
 
 #[derive(Bpaf, Clone)]

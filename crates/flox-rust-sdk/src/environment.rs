@@ -9,21 +9,20 @@ pub static NIX_BIN: &str = env!("NIX_BIN");
 /// Environment variable key for the GitHub Api Key
 pub static GITHUB_TOKEN: &str = "GITHUB_TOKEN";
 
-pub fn build_flox_env() -> HashMap<String, String> {
+/// Explicitly set environment for nix calls
+///
+/// Nixpkgs itself is broken in that the packages it creates depends
+/// upon a variety of environment variables at runtime.  On NixOS
+/// these are convenient to set on a system-wide basis but that
+/// essentially masks the problem, and it's not uncommon to see Nix
+/// packages trip over the absence of environment variables when
+/// invoked on other Linux distributions.
+///
+/// For flox specifically, set Nix-provided defaults for certain
+/// environment variables that we know to be required on the various
+/// operating systems.
+pub fn default_nix_subprocess_env() -> HashMap<String, String> {
     let mut env_map: HashMap<String, String> = HashMap::new();
-
-    /*
-     * Nixpkgs itself is broken in that the packages it creates depends
-     * upon a variety of environment variables at runtime.  On NixOS
-     * these are convenient to set on a system-wide basis but that
-     * essentially masks the problem, and it's not uncommon to see Nix
-     * packages trip over the absence of environment variables when
-     * invoked on other Linux distributions.
-     *
-     * For flox specifically, set Nix-provided defaults for certain
-     * environment variables that we know to be required on the various
-     * operating systems.
-     */
 
     // respect SSL_CERT_FILE, but if it isn't set, use buildtime NIXPKGS_CACERT_BUNDLE_CRT
     let ssl_cert_file = match env::var("SSL_CERT_FILE") {

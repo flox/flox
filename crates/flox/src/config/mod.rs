@@ -2,8 +2,9 @@ use std::{collections::HashMap, env, path::PathBuf};
 
 use anyhow::{Context, Result};
 use config::{Config as HierarchicalConfig, Environment, Value};
+use flox_rust_sdk::prelude::Stability;
 use itertools::{Either, Itertools};
-use log::debug;
+use log::{debug, info};
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
 
@@ -42,12 +43,16 @@ pub struct FloxConfig {
     pub cache_dir: PathBuf,
     pub data_dir: PathBuf,
     pub config_dir: PathBuf,
+    #[serde(default)]
+    pub stability: Stability,
 }
 
 // TODO: move to runix?
 /// Describes the nix config under flox
 #[derive(Clone, Debug, Deserialize, Default)]
-pub struct NixConfig {}
+pub struct NixConfig {
+    pub access_tokens: HashMap<String, String>,
+}
 
 /// Describes the github config under flox
 #[derive(Clone, Debug, Deserialize, Default)]

@@ -1,6 +1,8 @@
 use std::{
     collections::{BTreeSet, HashMap},
     fs::File,
+    io::Write,
+    os::unix::prelude::OpenOptionsExt,
     path::PathBuf,
 };
 
@@ -23,7 +25,7 @@ use thiserror::Error;
 use crate::{
     actions::environment::Environment,
     actions::{environment::EnvironmentError, package::Package},
-    environment::{self, build_flox_env},
+    environment::{self, default_nix_subprocess_env},
     models::channels::ChannelRegistry,
     prelude::Stability,
     providers::git::GitProvider,
@@ -55,6 +57,9 @@ pub struct Flox {
     pub cache_dir: PathBuf,
     pub data_dir: PathBuf,
     pub temp_dir: PathBuf,
+
+    pub access_tokens: HashMap<String, String>,
+    pub netrc_file: PathBuf,
 
     pub channels: ChannelRegistry,
 
@@ -312,20 +317,40 @@ impl Flox {
         let registry_file = self.temp_dir.join("registry.json");
         serde_json::to_writer(File::create(&registry_file).unwrap(), &self.channels).unwrap();
 
-        let config_args = NixConfigArgs {
-            extra_experimental_features: ["nix-command", "flakes"]
-                .map(String::from)
-                .to_vec()
-                .into(),
+        let environment = {
+            let config = NixConfigArgs {
+                accept_flake_config: true.into(),
+                warn_dirty: false.into(),
+                extra_experimental_features: ["nix-command", "flakes"]
+                    .map(String::from)
+                    .to_vec()
+                    .into(),
+                extra_substituters: ["https://cache.floxdev.com?trusted=1"]
+                    .map(String::from)
+                    .to_vec()
+                    .into(),
+                extra_access_tokens: self.access_tokens.clone().into(),
+                flake_registry: Some(registry_file.into()),
+                netrc_file: Some(self.netrc_file.clone().into()),
+                ..Default::default()
+            };
 
-            extra_substituters: ["https://cache.floxdev.com?trusted=1"]
-                .map(String::from)
-                .to_vec()
-                .into(),
+            let config_file = self.temp_dir.join("nix.conf");
+            File::options()
+                .mode(0o600)
+                .create_new(true)
+                .write(true)
+                .open(&config_file)
+                .unwrap()
+                .write_all(config.to_config_string().as_bytes())
+                .unwrap();
 
-            flake_registry: Some(registry_file.into()),
-
-            ..Default::default()
+            let mut env = default_nix_subprocess_env();
+            let _ = env.insert(
+                "NIX_USER_CONF_FILES".to_string(),
+                config_file.to_string_lossy().to_string(),
+            );
+            env
         };
 
         let common_args = NixCommonArgs {
@@ -333,8 +358,7 @@ impl Flox {
         };
 
         let default_nix_args = DefaultArgs {
-            environment: build_flox_env(),
-            config_args,
+            environment,
             common_args,
             extra_args,
             ..Default::default()

@@ -3,8 +3,8 @@ extern crate anyhow;
 
 use self::config::{Feature, Impl};
 use anyhow::Result;
-use flox_rust_sdk::environment::build_flox_env;
-use log::{debug, info};
+use flox_rust_sdk::environment::default_nix_subprocess_env;
+use log::{debug, info, warn};
 use std::env;
 use std::fmt::Debug;
 use std::process::ExitStatus;
@@ -22,17 +22,10 @@ use flox_rust_sdk::flox::FLOX_SH;
 async fn main() -> Result<()> {
     env_logger::init();
 
-    // Ensure cursor doesn't remain hidden if a prompt gets cancelled
-    // Upstream issue is https://github.com/mitsuhiko/dialoguer/issues/77 - though considered intentional behavior
-    if dialoguer::console::user_attended_stderr() {
-        ctrlc::set_handler(move || {
-            dialoguer::console::Term::stderr()
-                .show_cursor()
-                .expect("Failed to re-show hidden cursor before exit");
-        })?;
-    }
+    set_user()?;
 
     let args = commands::flox_args().run();
+
     args.handle(config::Config::parse()?).await?;
 
     Ok(())
@@ -60,13 +53,43 @@ pub async fn run_in_flox(args: &[impl AsRef<std::ffi::OsStr> + Debug]) -> Result
     debug!("Running in flox with arguments: {:?}", args);
     let status = Command::new(FLOX_SH)
         .args(args)
-        .envs(&build_flox_env())
+        .envs(&default_nix_subprocess_env())
         .spawn()
         .expect("failed to spawn flox")
         .wait()
         .await?;
 
     Ok(status)
+}
+
+/// Resets the `$USER`/`HOME` variables to match `euid`
+///
+/// Files written by `sudo flox ...` / `su`,
+/// may write into your user's home (instead of /root).
+/// Resetting `$USER`/`$HOME` will solve that.
+fn set_user() -> Result<()> {
+    {
+        if let Some(effective_user) = nix::unistd::User::from_uid(nix::unistd::geteuid())? {
+            if env::var("USER")? != effective_user.name {
+                env::set_var("USER", effective_user.name);
+                env::set_var("HOME", effective_user.dir);
+            }
+        } else {
+            // Corporate LDAP environments rely on finding nss_ldap in
+            // ld.so.cache *or* by configuring nscd to perform the LDAP
+            // lookups instead. The Nix version of glibc has been modified
+            // to disable ld.so.cache, so if nscd isn't configured to do
+            // this then ldap access to the passwd map will not work.
+            // Bottom line - don't abort if we cannot find a passwd
+            // entry for the euid, but do warn because it's very
+            // likely to cause problems at some point.
+            warn!(
+                "cannot determine effective uid - continuing as user '{}'",
+                env::var("USER")?
+            );
+        };
+        Ok(())
+    }
 }
 
 #[cfg(test)]

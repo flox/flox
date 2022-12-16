@@ -1,3 +1,5 @@
+use std::env;
+
 use anyhow::Result;
 use bpaf::{Bpaf, Parser};
 use flox_rust_sdk::{
@@ -6,7 +8,11 @@ use flox_rust_sdk::{
     prelude::Stability,
 };
 
-use crate::{config::Feature, flox_forward, should_flox_forward, utils::resolve_installable};
+use crate::{
+    config::{Config, Feature},
+    flox_forward, should_flox_forward,
+    utils::resolve_installable,
+};
 
 #[derive(Bpaf, Clone)]
 
@@ -33,6 +39,19 @@ impl PackageArgs {
             })
             .clone()
     }
+
+    /// Resolve stability from flag or config (which reads environment variables).
+    /// If the stability is set by a flag, modify STABILITY env variable to match
+    /// the set stability.
+    /// Flox invocations in a child process will inherit hence inherit the stability.
+    fn stability(&self, config: &Config) -> Stability {
+        if let Some(ref stability) = self.stability {
+            env::set_var("FLOX_PREVIEW_STABILITY", stability.to_string());
+            stability.clone()
+        } else {
+            config.flox.stability.clone()
+        }
+    }
 }
 
 fn pos_installable() -> impl Parser<FloxInstallable> {
@@ -53,17 +72,12 @@ fn extra_args(var: &'static str) -> impl Parser<Vec<String>> {
 }
 
 impl PackageCommands {
-    pub async fn handle(&self, flox: Flox) -> Result<()> {
+    pub async fn handle(&self, config: Config, flox: Flox) -> Result<()> {
         match self {
             _ if should_flox_forward(Feature::Nix)? => flox_forward().await?,
 
             PackageCommands::Build {
-                package:
-                    package @ PackageArgs {
-                        stability,
-                        nix_arguments,
-                        ..
-                    },
+                package: package @ PackageArgs { nix_arguments, .. },
             } => {
                 let installable = resolve_installable(
                     &flox,
@@ -77,7 +91,7 @@ impl PackageCommands {
 
                 flox.package(
                     installable.into(),
-                    stability.clone().unwrap_or_default(),
+                    package.stability(&config),
                     nix_arguments.clone(),
                 )
                 .build::<NixCommandLine>()
@@ -85,12 +99,7 @@ impl PackageCommands {
             }
 
             PackageCommands::Develop {
-                package:
-                    package @ PackageArgs {
-                        stability,
-                        nix_arguments,
-                        ..
-                    },
+                package: package @ PackageArgs { nix_arguments, .. },
             } => {
                 let installable = resolve_installable(
                     &flox,
@@ -104,19 +113,14 @@ impl PackageCommands {
 
                 flox.package(
                     installable.into(),
-                    stability.clone().unwrap_or_default(),
+                    package.stability(&config),
                     nix_arguments.clone(),
                 )
                 .develop::<NixCommandLine>()
                 .await?
             }
             PackageCommands::Run {
-                package:
-                    package @ PackageArgs {
-                        stability,
-                        nix_arguments,
-                        ..
-                    },
+                package: package @ PackageArgs { nix_arguments, .. },
             } => {
                 let installable = resolve_installable(
                     &flox,
@@ -130,19 +134,14 @@ impl PackageCommands {
 
                 flox.package(
                     installable.into(),
-                    stability.clone().unwrap_or_default(),
+                    package.stability(&config),
                     nix_arguments.clone(),
                 )
                 .run::<NixCommandLine>()
                 .await?
             }
             PackageCommands::Shell {
-                package:
-                    package @ PackageArgs {
-                        stability,
-                        nix_arguments,
-                        ..
-                    },
+                package: package @ PackageArgs { nix_arguments, .. },
             } => {
                 let installable = resolve_installable(
                     &flox,
@@ -156,7 +155,7 @@ impl PackageCommands {
 
                 flox.package(
                     installable.into(),
-                    stability.clone().unwrap_or_default(),
+                    package.stability(&config),
                     nix_arguments.clone(),
                 )
                 .shell::<NixCommandLine>()
