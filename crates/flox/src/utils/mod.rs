@@ -1,11 +1,15 @@
 use std::{path::Path, str::FromStr};
 
 use anyhow::{Context, Ok, Result};
+use crossterm::tty::IsTty;
 use flox_rust_sdk::{
     flox::Flox,
     prelude::{Channel, ChannelRegistry},
 };
-use log::{info, warn};
+use indoc::indoc;
+use inquire::ui::{Attributes, RenderConfig, StyleSheet, Styled};
+use itertools::Itertools;
+use log::warn;
 use once_cell::sync::Lazy;
 
 use std::collections::HashSet;
@@ -13,10 +17,14 @@ use std::collections::HashSet;
 use flox_rust_sdk::flox::FloxInstallable;
 use flox_rust_sdk::prelude::Installable;
 
+pub mod colors;
+pub mod dialog;
 pub mod init;
 use std::borrow::Cow;
 
 use regex::Regex;
+
+use crate::utils::dialog::InquireExt;
 
 static NIX_IDENTIFIER_SAFE: Lazy<Regex> = Lazy::new(|| Regex::new(r#"^[a-zA-Z0-9_-]+$"#).unwrap());
 
@@ -86,7 +94,7 @@ pub async fn resolve_installable(
         }
 
         // Complile a list of choices for the user to choose from
-        let mut choices: Vec<String> = matches
+        let choices: Vec<String> = matches
             .iter()
             .map(
                 // Format the results according to how verbose we have to be for disambiguation, only showing the flakeref or prefix when multiple are used
@@ -119,46 +127,49 @@ pub async fn resolve_installable(
             )
             .collect();
 
-        if !dialoguer::console::user_attended_stderr() {
-            warn!(
-                "No terminal found, you must address a specific {}. For example with:",
-                derivation_type
-            );
-            warn!(
-                "$ flox {} {}",
-                subcommand,
-                choices.get(0).expect("Expected at least one choice")
-            );
-
-            info!("The available packages are:");
-            for choice in choices {
-                info!("- {}", choice);
-            }
-
+        if !std::io::stderr().is_tty() {
             return Err(anyhow!(
-                "No terminal to prompt for {} choice",
-                derivation_type
+                indoc! {"
+                You must address a specific {derivation_type}. For example with:
+
+                    $ flox {subcommand} {first_choice},
+
+                The available packages are:
+                {choices_list}
+            "},
+                derivation_type = derivation_type,
+                subcommand = subcommand,
+                first_choice = choices.get(0).expect("Expected at least one choice"),
+                choices_list = choices
+                    .iter()
+                    .map(|choice| format!("  - {choice}"))
+                    .join("\n")
+            ))
+            .context(format!(
+                "No terminal to prompt for {derivation_type} choice"
             ));
         }
 
-        warn!("Select a {} for flox {}", derivation_type, subcommand);
-
         // Prompt for the user to select match
-        let sel_i = dialoguer::Select::with_theme(&dialoguer::theme::ColorfulTheme::default())
-            .with_prompt("Select a package")
-            .default(0)
-            .max_length(5)
-            .items(&choices)
-            .interact()
-            .with_context(|| format!("Failed to prompt for {} choice", derivation_type))?;
+        let sel = inquire::Select::new(
+            &format!("Select a {} for flox {}", derivation_type, subcommand),
+            choices,
+        )
+        .with_flox_theme()
+        .raw_prompt()
+        .with_context(|| format!("Failed to prompt for {} choice", derivation_type))?;
 
-        let installable = matches.remove(sel_i).installable();
+        let installable = matches.remove(sel.index).installable();
 
         warn!(
             "HINT: avoid selecting a {} next time with:",
             derivation_type
         );
-        warn!("$ flox {} {}", subcommand, choices.remove(sel_i));
+        warn!(
+            "$ flox {} {}",
+            subcommand,
+            shell_escape::escape(sel.value.into())
+        );
 
         installable
     } else if matches.len() == 1 {

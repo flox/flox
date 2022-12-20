@@ -4,22 +4,37 @@ mod general;
 mod package;
 
 use std::{env, fs};
-use std::{os::unix::process, str::FromStr};
 
 use anyhow::Result;
-use bpaf::{command, construct, Bpaf, Parser};
+use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::prelude::{Channel, ChannelRegistry};
-use log::warn;
 use tempfile::TempDir;
 
-use crate::utils::{init::init_access_tokens, init::init_channels, init::init_git_conf};
-use flox_rust_sdk::flox::{FLOX_SH, FLOX_VERSION};
+use crate::utils::init::{init_access_tokens, init_channels, init_git_conf, init_logger};
+use flox_rust_sdk::flox::FLOX_VERSION;
 
-use self::channel::{ChannelArgs, ChannelCommands};
-use self::environment::{EnvironmentArgs, EnvironmentCommands};
-use self::general::{GeneralArgs, GeneralCommands};
-use self::package::{PackageArgs, PackageCommands};
+use self::channel::ChannelCommands;
+use self::environment::EnvironmentCommands;
+use self::general::GeneralCommands;
+use self::package::PackageCommands;
+
+fn vec_len<T>(x: Vec<T>) -> usize {
+    Vec::len(&x)
+}
+
+#[derive(Bpaf, Clone, Debug)]
+pub enum Verbosity {
+    Verbose(
+        /// Verbose mode.
+        ///
+        /// Invoke multiple times for increasing detail.
+        #[bpaf(short('v'), long("verbose"), switch, many, map(vec_len))]
+        usize,
+    ),
+
+    #[bpaf(short, long)]
+    Quiet,
+}
 
 #[derive(Bpaf)]
 #[bpaf(options, version(FLOX_VERSION))]
@@ -27,12 +42,12 @@ pub struct FloxArgs {
     /// Verbose mode.
     ///
     /// Invoke multiple times for increasing detail.
-    verbose: bool,
+    #[bpaf(external, fallback(Verbosity::Verbose(0)))]
+    verbosity: Verbosity,
 
     /// Debug mode.
-    ///
-    /// Invoke multiple times for increasing detail.
-    debug: bool,
+    #[bpaf(short, long)]
+    pub debug: bool,
 
     #[bpaf(external(commands))]
     command: Commands,
@@ -41,6 +56,8 @@ pub struct FloxArgs {
 impl FloxArgs {
     /// Initialize the command line by creating an initial FloxBuilder
     pub async fn handle(self, config: crate::config::Config) -> Result<()> {
+        init_logger(self.verbosity, self.debug);
+
         // prepare a temp dir for the run:
         let process_dir = config.flox.cache_dir.join("process");
         tokio::fs::create_dir_all(&process_dir).await?;
@@ -76,15 +93,7 @@ impl FloxArgs {
             let _ = temp_dir.into_path();
         }
 
-        // Ensure cursor doesn't remain hidden if a prompt gets cancelled
-        // Upstream issue is https://github.com/mitsuhiko/dialoguer/issues/77 - though considered intentional behavior
         ctrlc::set_handler(move || {
-            if dialoguer::console::user_attended_stderr() {
-                dialoguer::console::Term::stderr()
-                    .show_cursor()
-                    .expect("Failed to re-show hidden cursor before exit");
-            }
-
             // in case of SIG* the drop handler of temp_dir will not be called
             // if we are not in debugging mode, drop the tempdir manually
             if !self.debug {

@@ -3,11 +3,12 @@ extern crate anyhow;
 
 use self::config::{Feature, Impl};
 use anyhow::Result;
+use commands::FloxArgs;
 use flox_rust_sdk::environment::default_nix_subprocess_env;
-use log::{debug, info, warn};
+use log::{debug, error, info, warn};
 use std::env;
 use std::fmt::Debug;
-use std::process::ExitStatus;
+use std::process::{ExitCode, ExitStatus};
 
 use tokio::process::Command;
 
@@ -18,17 +19,28 @@ mod utils;
 
 use flox_rust_sdk::flox::FLOX_SH;
 
-#[tokio::main]
-async fn main() -> Result<()> {
-    env_logger::init();
-
+async fn run(args: FloxArgs) -> Result<()> {
     set_user()?;
-
-    let args = commands::flox_args().run();
-
     args.handle(config::Config::parse()?).await?;
-
     Ok(())
+}
+
+#[tokio::main]
+async fn main() -> ExitCode {
+    let args = commands::flox_args().run();
+    let debug = args.debug;
+
+    match run(args).await {
+        Ok(()) => ExitCode::from(0),
+        Err(e) => {
+            if debug {
+                error!("{:#?}", e);
+            } else {
+                error!("{}", e);
+            }
+            ExitCode::from(1)
+        }
+    }
 }
 
 pub fn should_flox_forward(f: Feature) -> Result<bool> {

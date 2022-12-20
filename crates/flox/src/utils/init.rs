@@ -1,5 +1,8 @@
 use anyhow::Ok;
 use anyhow::Result;
+use crossterm::style::Attribute;
+use crossterm::style::ContentStyle;
+use crossterm::style::Stylize;
 use log::debug;
 use serde::Deserialize;
 use std::collections::HashMap;
@@ -7,6 +10,7 @@ use std::env;
 use std::fs::File;
 use std::io::BufRead;
 use std::io::BufReader;
+use std::io::Write;
 use std::iter;
 use std::path::Path;
 use std::str::FromStr;
@@ -15,8 +19,72 @@ use tokio::io::AsyncWriteExt;
 use flox_rust_sdk::prelude::Channel;
 use flox_rust_sdk::prelude::ChannelRegistry;
 
+use crate::commands::Verbosity;
+use crate::utils::colors;
+
 const ENV_GIT_CONFIG_SYSTEM: &'static str = "GIT_CONFIG_SYSTEM";
 const ENV_FLOX_ORIGINAL_GIT_CONFIG_SYSTEM: &'static str = "FLOX_ORIGINAL_GIT_CONFIG_SYSTEM";
+
+pub fn init_logger(verbosity: Verbosity, debug: bool) {
+    let log_filter = match (verbosity, debug) {
+        (Verbosity::Quiet, false) => "off,flox=error",
+        (Verbosity::Quiet, true) => "off,flox=error,posix=debug",
+        (Verbosity::Verbose(0), false) => "off,flox=info",
+        (Verbosity::Verbose(0), true) => "off,flox=debug",
+        (Verbosity::Verbose(1), false) => "off,flox=info,flox-rust-sdk=info,runix=info",
+        (Verbosity::Verbose(1), true) => "off,flox=debug,flox-rust-sdk=debug,runix=debug",
+        (Verbosity::Verbose(2), _) => "debug",
+        (Verbosity::Verbose(_), _) => "trace",
+    };
+
+    let mut builder =
+        env_logger::Builder::from_env(env_logger::Env::default().default_filter_or(log_filter));
+
+    builder.format(move |f, record| {
+        let mut style = ContentStyle::new();
+        match record.level() {
+            log::Level::Trace => {
+                style.foreground_color = Some(colors::LIGHT_PEACH.to_crossterm());
+                style.attributes.set(Attribute::Bold);
+            }
+            log::Level::Error | log::Level::Warn => {
+                style.attributes.set(Attribute::Bold);
+            }
+            _ => {}
+        }
+
+        let args = style.apply(record.args());
+
+        if debug {
+            writeln!(
+                f,
+                "[{level}] [{target}] {args}",
+                level = match record.level() {
+                    log::Level::Trace => "TRACE".cyan(),
+                    log::Level::Debug => "DEBUG".blue(),
+                    log::Level::Info => "INFO".green(),
+                    log::Level::Warn => "WARN".yellow(),
+                    log::Level::Error => "ERROR".red(),
+                },
+                target = record.target().bold(),
+            )
+        } else {
+            writeln!(
+                f,
+                "{level}{args}",
+                level = match record.level() {
+                    log::Level::Error => "ERROR: "
+                        .with(colors::LIGHT_PEACH.to_crossterm())
+                        .bold()
+                        .to_string(),
+                    _ => "".to_string(),
+                },
+            )
+        }
+    });
+
+    builder.init();
+}
 
 pub fn init_channels() -> Result<ChannelRegistry> {
     let mut channels = ChannelRegistry::default();
