@@ -331,10 +331,16 @@ impl Flox {
                         .map(String::from)
                         .to_vec()
                         .into(),
-                    extra_substituters: ["https://cache.floxdev.com?trusted=1"]
+                    extra_substituters: ["https://cache.floxdev.com"]
                         .map(String::from)
                         .to_vec()
                         .into(),
+                    extra_trusted_public_keys: [
+                        "flox-store-public-0:8c/B+kjIaQ+BloCmNkRUKwaVPFWkriSAd0JJvuDu4F0=",
+                    ]
+                    .map(String::from)
+                    .to_vec()
+                    .into(),
                     extra_access_tokens: self.access_tokens.clone().into(),
                     flake_registry: Some(registry_file.into()),
                     netrc_file: Some(self.netrc_file.clone().into()),

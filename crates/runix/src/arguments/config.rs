@@ -17,6 +17,7 @@ pub struct NixConfigArgs {
     pub flake_registry: Option<FlakeRegistry>,
     pub extra_experimental_features: ExperimentalFeatures,
     pub extra_substituters: Substituters,
+    pub extra_trusted_public_keys: TrustedPublicKeys,
     pub extra_access_tokens: AccessTokens,
     pub show_trace: ShowTrace,
     pub netrc_file: Option<NetRCFile>,
@@ -29,6 +30,7 @@ impl NixConfigArgs {
             self.warn_dirty.to_args(),
             self.extra_experimental_features.to_args(),
             self.extra_substituters.to_args(),
+            self.extra_trusted_public_keys.to_args(),
             self.flake_registry.to_args(),
             self.show_trace.to_args(),
             self.netrc_file.to_args(),
@@ -124,4 +126,12 @@ pub struct AccessTokens(HashMap<String, String>);
 impl Flag for AccessTokens {
     const FLAG: &'static str = "--extra-access-tokens";
     const FLAG_TYPE: FlagType<Self> = FlagType::map();
+}
+
+/// Flag for extra trusted public keys
+#[derive(Clone, From, Deref, Debug, Default)]
+pub struct TrustedPublicKeys(Vec<String>);
+impl Flag for TrustedPublicKeys {
+    const FLAG: &'static str = "--extra-trusted-public-keys";
+    const FLAG_TYPE: FlagType<Self> = FlagType::list();
 }
