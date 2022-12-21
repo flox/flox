@@ -1,16 +1,17 @@
 use std::{path::Path, str::FromStr};
 
-use anyhow::{Context, Ok, Result};
+use anyhow::{Context, Result};
+use async_trait::async_trait;
 use crossterm::tty::IsTty;
 use flox_rust_sdk::{
-    flox::Flox,
+    flox::{Flox, ResolvedInstallableMatch},
     prelude::{Channel, ChannelRegistry},
 };
 use indoc::indoc;
-use inquire::ui::{Attributes, RenderConfig, StyleSheet, Styled};
 use itertools::Itertools;
-use log::warn;
+use log::{debug, warn};
 use once_cell::sync::Lazy;
+use tempfile::TempDir;
 
 use std::collections::HashSet;
 
@@ -24,6 +25,7 @@ use std::borrow::Cow;
 
 use regex::Regex;
 
+use crate::config::Config;
 use crate::utils::dialog::InquireExt;
 
 static NIX_IDENTIFIER_SAFE: Lazy<Regex> = Lazy::new(|| Regex::new(r#"^[a-zA-Z0-9_-]+$"#).unwrap());
@@ -70,19 +72,215 @@ fn nix_str_safe<'a>(s: &'a str) -> Cow<'a, str> {
     }
 }
 
-pub async fn resolve_installable(
+#[async_trait]
+pub trait InstallableDef: FromStr + Default + Clone {
+    const DEFAULT_PREFIXES: &'static [(&'static str, bool)];
+    const DEFAULT_FLAKEREFS: &'static [&'static str];
+    const INSTALLABLE: fn(&Self) -> String;
+    const SUBCOMMAND: &'static str;
+    const DERIVATION_TYPE: &'static str;
+
+    async fn resolve_matches(&self, flox: &Flox) -> Result<Vec<ResolvedInstallableMatch>> {
+        Ok(flox
+            .resolve_matches(
+                &[Self::INSTALLABLE(self).parse()?],
+                Self::DEFAULT_FLAKEREFS,
+                Self::DEFAULT_PREFIXES,
+                false,
+            )
+            .await?)
+    }
+
+    async fn resolve_installable(&self, flox: &Flox) -> Result<Installable> {
+        Ok(resolve_installable_from_matches(
+            Self::SUBCOMMAND,
+            Self::DERIVATION_TYPE,
+            self.resolve_matches(flox).await?,
+        )
+        .await?)
+    }
+
+    fn complete_inst(&self) -> Vec<(String, Option<String>)> {
+        let inst = Self::INSTALLABLE(self);
+
+        let config = Config::parse()
+            .map_err(|e| debug!("Failed to load config: {e}"))
+            .unwrap_or_default();
+
+        let channels = init_channels()
+            .map_err(|e| debug!("Failed to initialize channels: {e}"))
+            .unwrap_or_default();
+
+        let process_dir = config.flox.cache_dir.join("process");
+        match std::fs::create_dir_all(&process_dir) {
+            Ok(_) => {}
+            Err(e) => {
+                debug!("Failed to create process dir: {e}");
+                return vec![];
+            }
+        };
+
+        let temp_dir = match TempDir::new_in(process_dir) {
+            Ok(x) => x,
+            Err(e) => {
+                debug!("Failed to create temp_dir: {e}");
+                return vec![];
+            }
+        };
+
+        let access_tokens = init::init_access_tokens(&config.nix.access_tokens)
+            .map_err(|e| debug!("Failed to initialize access tokens: {e}"))
+            .unwrap_or_default();
+
+        let netrc_file = dirs::home_dir()
+            .expect("User must have a home directory")
+            .join(".netrc");
+
+        let flox = Flox {
+            collect_metrics: false,
+            cache_dir: config.flox.cache_dir,
+            data_dir: config.flox.data_dir,
+            config_dir: config.flox.config_dir,
+            channels,
+            temp_dir: temp_dir.path().to_path_buf(),
+            system: env!("NIX_TARGET_SYSTEM").to_string(),
+            netrc_file,
+            access_tokens,
+        };
+
+        let default_prefixes = Self::DEFAULT_PREFIXES;
+        let default_flakerefs = Self::DEFAULT_FLAKEREFS;
+
+        let inst = inst.clone();
+        let handle = tokio::runtime::Handle::current();
+        let comp = std::thread::spawn(move || {
+            handle
+                .block_on(complete_installable(
+                    &flox,
+                    &inst,
+                    default_flakerefs,
+                    default_prefixes,
+                ))
+                .map_err(|e| debug!("Failed to complete installable: {e}"))
+                .unwrap_or_default()
+        })
+        .join()
+        .unwrap();
+
+        comp.into_iter().map(|a| (a, None)).collect()
+    }
+}
+
+pub async fn complete_installable(
     flox: &Flox,
-    flox_installable: FloxInstallable,
+    installable_str: &String,
     default_flakerefs: &[&str],
     default_attr_prefixes: &[(&str, bool)],
-    subcommand: &str,
-    derivation_type: &str,
-) -> Result<Installable> {
-    let mut matches = flox
-        .resolve_matches(flox_installable, default_flakerefs, default_attr_prefixes)
+) -> Result<Vec<String>> {
+    let mut flox_installables: Vec<FloxInstallable> = vec![];
+
+    if installable_str != "." {
+        let trimmed = installable_str.trim_end_matches(|c| c == '.' || c == '#');
+
+        if let Ok(flox_installable) = trimmed.parse() {
+            flox_installables.push(flox_installable);
+        }
+
+        match trimmed.rsplit_once(|c| c == '.' || c == '#') {
+            Some((s, _)) if s != trimmed => flox_installables.push(s.parse()?),
+            None => flox_installables.push("".parse()?),
+            Some(_) => {}
+        };
+    } else {
+        flox_installables.push(FloxInstallable {
+            source: Some(".".to_string()),
+            attr_path: vec![],
+        });
+    };
+
+    let matches = flox
+        .resolve_matches(
+            flox_installables.as_slice(),
+            default_flakerefs,
+            default_attr_prefixes,
+            true,
+        )
         .await?;
 
-    Ok(if matches.len() > 1 {
+    let mut flakerefs: HashSet<String> = HashSet::new();
+    let mut prefixes: HashSet<String> = HashSet::new();
+
+    for m in &matches {
+        flakerefs.insert(m.flakeref.to_string());
+        prefixes.insert(m.prefix.to_string());
+    }
+
+    let mut completions: Vec<String> = matches
+        .iter()
+        .map(|m| {
+            let nix_safe_key = m
+                .key
+                .iter()
+                .map(|s| nix_str_safe(s.as_str()))
+                .collect::<Vec<_>>()
+                .join(".");
+
+            let mut t = vec![format!(
+                "{}#{}.{}",
+                m.flakeref,
+                nix_str_safe(&m.prefix),
+                nix_safe_key
+            )];
+
+            if let (true, Some(system)) = (m.explicit_system, &m.system) {
+                t.push(format!(
+                    "{}#{}.{}.{}",
+                    m.flakeref,
+                    nix_str_safe(&m.prefix),
+                    nix_str_safe(&system),
+                    nix_safe_key
+                ));
+
+                if flakerefs.len() <= 1 {
+                    t.push(format!(
+                        "{}.{}.{}",
+                        nix_str_safe(&m.prefix),
+                        nix_str_safe(&system),
+                        nix_safe_key
+                    ));
+                }
+            }
+
+            if flakerefs.len() <= 1 && prefixes.len() <= 1 {
+                t.push(nix_safe_key.clone());
+            }
+
+            if prefixes.len() <= 1 {
+                t.push(format!("{}#{}", m.flakeref, nix_safe_key));
+            }
+
+            if flakerefs.len() <= 1 {
+                t.push(format!("{}.{}", nix_str_safe(&m.prefix), nix_safe_key));
+            }
+
+            t
+        })
+        .flatten()
+        .filter(|c| c.starts_with(installable_str))
+        .collect();
+
+    completions.sort();
+    completions.dedup();
+
+    Ok(completions)
+}
+
+pub async fn resolve_installable_from_matches(
+    subcommand: &str,
+    derivation_type: &str,
+    mut matches: Vec<ResolvedInstallableMatch>,
+) -> Result<Installable> {
+    if matches.len() > 1 {
         // Create set of used prefixes and flakerefs to determine how many are in use
         let mut flakerefs: HashSet<String> = HashSet::new();
         let mut prefixes: HashSet<String> = HashSet::new();
@@ -120,7 +318,7 @@ pub async fn resolve_installable(
                             )
                         }
                         (false, true) => {
-                            format!("{}.{}", m.prefix, nix_safe_key)
+                            format!("{}.{}", nix_str_safe(&m.prefix), nix_safe_key)
                         }
                     }
                 },
@@ -171,10 +369,10 @@ pub async fn resolve_installable(
             shell_escape::escape(sel.value.into())
         );
 
-        installable
+        Ok(installable)
     } else if matches.len() == 1 {
-        matches.remove(0).installable()
+        Ok(matches.remove(0).installable())
     } else {
-        return Err(anyhow!("No matching installables found"));
-    })
+        bail!("No matching installables found");
+    }
 }

@@ -1,45 +1,100 @@
-use std::env;
+use std::{any::TypeId, collections::HashMap, env, str::FromStr, sync::Mutex};
 
 use anyhow::Result;
 use bpaf::{Bpaf, Parser};
-use flox_rust_sdk::{
-    flox::{Flox, FloxInstallable},
-    nix::command_line::NixCommandLine,
-    prelude::Stability,
-};
+use derive_more::{FromStr, Into};
+use flox_rust_sdk::{flox::Flox, nix::command_line::NixCommandLine, prelude::Stability};
+use once_cell::sync::Lazy;
 
 use crate::{
     config::{Config, Feature},
     flox_forward, should_flox_forward,
-    utils::resolve_installable,
+    utils::InstallableDef,
 };
 
-#[derive(Bpaf, Clone)]
+#[derive(FromStr, Default, Debug, Clone, Into)]
+pub struct BuildInstallable(String);
+impl InstallableDef for BuildInstallable {
+    const DEFAULT_PREFIXES: &'static [(&'static str, bool)] =
+        &[("packages", true), ("legacyPackages", true)];
+    const DEFAULT_FLAKEREFS: &'static [&'static str] = &["."];
+    const INSTALLABLE: fn(&Self) -> String = |s| s.0.to_owned();
+    const SUBCOMMAND: &'static str = "build";
+    const DERIVATION_TYPE: &'static str = "package";
+}
 
+#[derive(FromStr, Default, Debug, Clone, Into)]
+pub struct DevelopInstallable(String);
+impl InstallableDef for DevelopInstallable {
+    const DEFAULT_PREFIXES: &'static [(&'static str, bool)] = &[
+        ("packages", true),
+        ("devShells", true),
+        ("legacyPackages", true),
+    ];
+    const DEFAULT_FLAKEREFS: &'static [&'static str] = &["."];
+    const INSTALLABLE: fn(&Self) -> String = |s| s.0.to_owned();
+    const SUBCOMMAND: &'static str = "develop";
+    const DERIVATION_TYPE: &'static str = "shell";
+}
+
+#[derive(FromStr, Default, Debug, Clone, Into)]
+pub struct PublishInstallable(String);
+impl InstallableDef for PublishInstallable {
+    const DEFAULT_PREFIXES: &'static [(&'static str, bool)] =
+        &[("packages", true), ("legacyPackages", true)];
+    const DEFAULT_FLAKEREFS: &'static [&'static str] = &["."];
+    const INSTALLABLE: fn(&Self) -> String = |s| s.0.to_owned();
+    const SUBCOMMAND: &'static str = "publish";
+    const DERIVATION_TYPE: &'static str = "package";
+}
+
+#[derive(FromStr, Default, Debug, Clone, Into)]
+pub struct RunInstallable(String);
+impl InstallableDef for RunInstallable {
+    const DEFAULT_PREFIXES: &'static [(&'static str, bool)] =
+        &[("packages", true), ("apps", true), ("legacyPackages", true)];
+    const DEFAULT_FLAKEREFS: &'static [&'static str] = &["."];
+    const INSTALLABLE: fn(&Self) -> String = |s| s.0.to_owned();
+    const SUBCOMMAND: &'static str = "build";
+    const DERIVATION_TYPE: &'static str = "package";
+}
+
+#[derive(FromStr, Default, Debug, Clone, Into)]
+pub struct ShellInstallable(String);
+impl InstallableDef for ShellInstallable {
+    const DEFAULT_PREFIXES: &'static [(&'static str, bool)] =
+        &[("packages", true), ("legacyPackages", true)];
+    const DEFAULT_FLAKEREFS: &'static [&'static str] = &["."];
+    const INSTALLABLE: fn(&Self) -> String = |s| s.0.to_owned();
+    const SUBCOMMAND: &'static str = "shell";
+    const DERIVATION_TYPE: &'static str = "package";
+}
+
+static COMPLETED_INSTALLABLES: Lazy<
+    Mutex<HashMap<(TypeId, String), Vec<(String, Option<String>)>>>,
+> = Lazy::new(|| Mutex::new(HashMap::new()));
+
+fn complete_installable<T: InstallableDef + 'static>(
+    inst_arg: &T,
+) -> Vec<(String, Option<String>)> {
+    COMPLETED_INSTALLABLES
+        .lock()
+        .unwrap()
+        .entry((TypeId::of::<T>(), T::INSTALLABLE(inst_arg)))
+        .or_insert_with(|| inst_arg.complete_inst())
+        .to_vec()
+}
+
+#[derive(Bpaf, Clone, Debug)]
 pub struct PackageArgs {
+    #[bpaf(long, argument("STABILITY"), optional)]
     stability: Option<Stability>,
-
-    #[bpaf(short('A'), argument("INSTALLABLE"), hide)]
-    arg_installable: Option<FloxInstallable>,
-    #[bpaf(external, optional)]
-    pos_installable: Option<FloxInstallable>,
 
     #[bpaf(external)]
     nix_arguments: Vec<String>,
 }
 
 impl PackageArgs {
-    fn installable(&self) -> FloxInstallable {
-        self.arg_installable
-            .as_ref()
-            .or(self.pos_installable.as_ref())
-            .unwrap_or(&FloxInstallable {
-                source: None,
-                attr_path: vec![],
-            })
-            .clone()
-    }
-
     /// Resolve stability from flag or config (which reads environment variables).
     /// If the stability is set by a flag, modify STABILITY env variable to match
     /// the set stability.
@@ -54,8 +109,15 @@ impl PackageArgs {
     }
 }
 
-fn pos_installable() -> impl Parser<FloxInstallable> {
-    bpaf::any("INSTALLABLE").anywhere()
+fn installable_arg<T>() -> impl Parser<T>
+where
+    T: InstallableDef + 'static,
+    <T as FromStr>::Err: std::fmt::Display,
+{
+    bpaf::positional("INSTALLABLE")
+        .complete(complete_installable)
+        .fallback(T::default())
+        .adjacent()
 }
 
 fn nix_arguments() -> impl Parser<Vec<String>> {
@@ -78,19 +140,11 @@ impl PackageCommands {
 
             PackageCommands::Build {
                 package: package @ PackageArgs { nix_arguments, .. },
+                installable_arg,
+                ..
             } => {
-                let installable = resolve_installable(
-                    &flox,
-                    package.installable(),
-                    &["."],
-                    &[("packages", true)],
-                    "build",
-                    "package",
-                )
-                .await?;
-
                 flox.package(
-                    installable.into(),
+                    installable_arg.resolve_installable(&flox).await?,
                     package.stability(&config),
                     nix_arguments.clone(),
                 )
@@ -100,19 +154,12 @@ impl PackageCommands {
 
             PackageCommands::Develop {
                 package: package @ PackageArgs { nix_arguments, .. },
-            } => {
-                let installable = resolve_installable(
-                    &flox,
-                    package.installable(),
-                    &["."],
-                    &[("packages", true), ("devShells", true)],
-                    "develop",
-                    "shell",
-                )
-                .await?;
 
+                installable_arg,
+                ..
+            } => {
                 flox.package(
-                    installable.into(),
+                    installable_arg.resolve_installable(&flox).await?,
                     package.stability(&config),
                     nix_arguments.clone(),
                 )
@@ -121,19 +168,11 @@ impl PackageCommands {
             }
             PackageCommands::Run {
                 package: package @ PackageArgs { nix_arguments, .. },
+                installable_arg,
+                ..
             } => {
-                let installable = resolve_installable(
-                    &flox,
-                    package.installable(),
-                    &["."],
-                    &[("packages", true), ("apps", true)],
-                    "run",
-                    "app",
-                )
-                .await?;
-
                 flox.package(
-                    installable.into(),
+                    installable_arg.resolve_installable(&flox).await?,
                     package.stability(&config),
                     nix_arguments.clone(),
                 )
@@ -142,19 +181,11 @@ impl PackageCommands {
             }
             PackageCommands::Shell {
                 package: package @ PackageArgs { nix_arguments, .. },
+                installable_arg,
+                ..
             } => {
-                let installable = resolve_installable(
-                    &flox,
-                    package.installable(),
-                    &["."],
-                    &[("packages", true)],
-                    "shell",
-                    "package",
-                )
-                .await?;
-
                 flox.package(
-                    installable.into(),
+                    installable_arg.resolve_installable(&flox).await?,
                     package.stability(&config),
                     nix_arguments.clone(),
                 )
@@ -168,7 +199,7 @@ impl PackageCommands {
     }
 }
 
-#[derive(Bpaf, Clone)]
+#[derive(Bpaf, Clone, Debug)]
 pub enum PackageCommands {
     /// initialize flox expressions for current project
     #[bpaf(command)]
@@ -177,6 +208,11 @@ pub enum PackageCommands {
     /// build package from current project
     #[bpaf(command)]
     Build {
+        #[bpaf(short('A'), hide)]
+        _attr_flag: bool,
+        #[bpaf(external)]
+        installable_arg: BuildInstallable,
+
         #[bpaf(external(package_args), group_help("Development Options"))]
         package: PackageArgs,
     },
@@ -184,12 +220,22 @@ pub enum PackageCommands {
     /// launch development shell for current project
     #[bpaf(command)]
     Develop {
+        #[bpaf(short('A'), hide)]
+        _attr_flag: bool,
+        #[bpaf(external)]
+        installable_arg: DevelopInstallable,
+
         #[bpaf(external(package_args), group_help("Development Options"))]
         package: PackageArgs,
     },
     /// build and publish project to flox channel
     #[bpaf(command)]
     Publish {
+        #[bpaf(short('A'), hide)]
+        _attr_flag: bool,
+        #[bpaf(external)]
+        installable_arg: PublishInstallable,
+
         /// The --upstream-url determines the upstream repository containing
         #[bpaf(argument("REPO"))]
         channel_repo: String,
@@ -200,12 +246,22 @@ pub enum PackageCommands {
     /// run app from current project
     #[bpaf(command)]
     Run {
+        #[bpaf(short('A'), hide)]
+        _attr_flag: bool,
+        #[bpaf(external)]
+        installable_arg: RunInstallable,
+
         #[bpaf(external(package_args), group_help("Development Options"))]
         package: PackageArgs,
     },
     /// run a shell in which the current project is available
     #[bpaf(command)]
     Shell {
+        #[bpaf(short('A'), hide)]
+        _attr_flag: bool,
+        #[bpaf(external)]
+        installable_arg: ShellInstallable,
+
         #[bpaf(external(package_args), group_help("Development Options"))]
         package: PackageArgs,
     },
