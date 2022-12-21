@@ -77,7 +77,7 @@
         then {keys = map (x: [x]) (builtins.attrNames prefix);}
         # If provided key matches on systemized prefix, just the key
         else if hasAttrByPath key prefix
-        then {keys = [];}
+        then {keys = [key];}
         # If provided key matches on prefix without system, use the first component of the key as a system
         else if systemIfPresent input prefixName != null && hasAttrByPath key input.${prefixName}
         then {
