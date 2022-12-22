@@ -1,4 +1,4 @@
-use std::{path::Path, str::FromStr};
+use std::{collections::HashMap, path::Path, str::FromStr};
 
 use anyhow::{Context, Result};
 use async_trait::async_trait;
@@ -9,7 +9,7 @@ use flox_rust_sdk::{
 };
 use indoc::indoc;
 use itertools::Itertools;
-use log::{debug, warn};
+use log::{debug, error, warn};
 use once_cell::sync::Lazy;
 use tempfile::TempDir;
 
@@ -209,12 +209,21 @@ pub async fn complete_installable(
         )
         .await?;
 
-    let mut flakerefs: HashSet<String> = HashSet::new();
-    let mut prefixes: HashSet<String> = HashSet::new();
+    let mut prefixes_with: HashMap<String, HashSet<String>> = HashMap::new();
+    let mut flakerefs_with: HashMap<String, HashSet<String>> = HashMap::new();
 
     for m in &matches {
-        flakerefs.insert(m.flakeref.to_string());
-        prefixes.insert(m.prefix.to_string());
+        let k1 = m.key.get(0).expect("match is missing key");
+
+        flakerefs_with
+            .entry(k1.clone())
+            .or_insert_with(|| HashSet::new())
+            .insert(m.flakeref.clone());
+
+        prefixes_with
+            .entry(k1.clone())
+            .or_insert_with(|| HashSet::new())
+            .insert(m.prefix.clone());
     }
 
     let mut completions: Vec<String> = matches
@@ -234,6 +243,10 @@ pub async fn complete_installable(
                 nix_safe_key
             )];
 
+            let k1 = m.key.get(0).expect("match is missing key");
+            let flakerefs = flakerefs_with.get(k1).map(HashSet::len).unwrap_or(0);
+            let prefixes = flakerefs_with.get(k1).map(HashSet::len).unwrap_or(0);
+
             if let (true, Some(system)) = (m.explicit_system, &m.system) {
                 t.push(format!(
                     "{}#{}.{}.{}",
@@ -243,7 +256,7 @@ pub async fn complete_installable(
                     nix_safe_key
                 ));
 
-                if flakerefs.len() <= 1 {
+                if flakerefs <= 1 {
                     t.push(format!(
                         "{}.{}.{}",
                         nix_str_safe(&m.prefix),
@@ -253,15 +266,15 @@ pub async fn complete_installable(
                 }
             }
 
-            if flakerefs.len() <= 1 && prefixes.len() <= 1 {
+            if flakerefs <= 1 && prefixes <= 1 {
                 t.push(nix_safe_key.clone());
             }
 
-            if prefixes.len() <= 1 {
+            if prefixes <= 1 {
                 t.push(format!("{}#{}", m.flakeref, nix_safe_key));
             }
 
-            if flakerefs.len() <= 1 {
+            if flakerefs <= 1 {
                 t.push(format!("{}.{}", nix_str_safe(&m.prefix), nix_safe_key));
             }
 
@@ -284,18 +297,25 @@ pub async fn resolve_installable_from_matches(
     mut matches: Vec<ResolvedInstallableMatch>,
 ) -> Result<Installable> {
     if matches.len() > 1 {
-        // Create set of used prefixes and flakerefs to determine how many are in use
-        let mut flakerefs: HashSet<String> = HashSet::new();
-        let mut prefixes: HashSet<String> = HashSet::new();
+        let mut prefixes_with: HashMap<String, HashSet<String>> = HashMap::new();
+        let mut flakerefs_with: HashMap<String, HashSet<String>> = HashMap::new();
 
-        // Populate the flakerefs and prefixes sets
         for m in &matches {
-            flakerefs.insert(m.flakeref.to_string());
-            prefixes.insert(m.prefix.to_string());
+            let k1 = m.key.get(0).expect("match is missing key");
+
+            flakerefs_with
+                .entry(k1.clone())
+                .or_insert_with(|| HashSet::new())
+                .insert(m.flakeref.clone());
+
+            prefixes_with
+                .entry(k1.clone())
+                .or_insert_with(|| HashSet::new())
+                .insert(m.prefix.clone());
         }
 
-        // Complile a list of choices for the user to choose from
-        let choices: Vec<String> = matches
+        // Complile a list of choices for the user to choose from, and shorter choices for suggestions
+        let mut choices: Vec<(String, String)> = matches
             .iter()
             .map(
                 // Format the results according to how verbose we have to be for disambiguation, only showing the flakeref or prefix when multiple are used
@@ -307,23 +327,37 @@ pub async fn resolve_installable_from_matches(
                         .collect::<Vec<_>>()
                         .join(".");
 
-                    match (flakerefs.len() > 1, prefixes.len() > 1) {
-                        (false, false) => nix_safe_key,
-                        (true, false) => {
-                            format!("{}#{}", m.flakeref, nix_safe_key)
-                        }
-                        (true, true) => {
-                            format!(
-                                "{}#{}.{}",
-                                m.flakeref,
-                                nix_str_safe(&m.prefix),
-                                nix_safe_key
-                            )
-                        }
-                        (false, true) => {
-                            format!("{}.{}", nix_str_safe(&m.prefix), nix_safe_key)
-                        }
-                    }
+                    let k1 = m.key.get(0).expect("match is missing key");
+
+                    let flakerefs = flakerefs_with.get(k1).map(HashSet::len).unwrap_or(0);
+                    let prefixes = flakerefs_with.get(k1).map(HashSet::len).unwrap_or(0);
+
+                    let prefixes_total = prefixes_with.values().fold(0, |a, p| a + p.len());
+
+                    let flakeref_str: Cow<str> = if flakerefs > 1 {
+                        format!("{}#", m.flakeref).into()
+                    } else {
+                        "".into()
+                    };
+
+                    let prefix_strs: (Cow<str>, Cow<str>) = if prefixes_total > 1 {
+                        let long: Cow<str> = format!("{}.", nix_str_safe(&m.prefix)).into();
+
+                        let short = if prefixes > 1 {
+                            long.clone()
+                        } else {
+                            "".into()
+                        };
+
+                        (long, short)
+                    } else {
+                        ("".into(), "".into())
+                    };
+
+                    (
+                        format!("{}{}{}", flakeref_str, prefix_strs.0, nix_safe_key),
+                        format!("{}{}{}", flakeref_str, prefix_strs.1, nix_safe_key),
+                    )
                 },
             )
             .collect();
@@ -334,32 +368,31 @@ pub async fn resolve_installable_from_matches(
         };
 
         if !std::io::stderr().is_tty() {
-            return Err(anyhow!(
+            error!(
                 indoc! {"
-                You must address a specific {derivation_type}. For example with:
+                    You must address a specific {derivation_type}. For example with:
 
-                    $ flox {full_subcommand} {first_choice},
+                      $ flox {full_subcommand} {first_choice},
 
-                The available packages are:
-                {choices_list}
-            "},
+                    The available packages are:
+                    {choices_list}
+                "},
                 derivation_type = derivation_type,
                 full_subcommand = full_subcommand,
-                first_choice = choices.get(0).expect("Expected at least one choice"),
+                first_choice = choices.get(0).expect("Expected at least one choice").1,
                 choices_list = choices
                     .iter()
-                    .map(|choice| format!("  - {choice}"))
+                    .map(|(choice, _)| format!("  - {choice}"))
                     .join("\n")
-            ))
-            .context(format!(
-                "No terminal to prompt for {derivation_type} choice"
-            ));
+            );
+
+            bail!("No terminal to prompt for {derivation_type} choice");
         }
 
         // Prompt for the user to select match
         let sel = inquire::Select::new(
             &format!("Select a {} for flox {}", derivation_type, subcommand),
-            choices,
+            choices.iter().map(|(long, _)| long).collect(),
         )
         .with_flox_theme()
         .raw_prompt()
@@ -368,12 +401,10 @@ pub async fn resolve_installable_from_matches(
         let installable = matches.remove(sel.index).installable();
 
         warn!(
-            "HINT: avoid selecting a {} next time with:",
-            derivation_type
-        );
-        warn!(
-            "$ flox {full_subcommand} {choice}",
-            choice = shell_escape::escape(sel.value.into())
+            "HINT: avoid selecting a {} next time with:\n  $ flox {} {}",
+            derivation_type,
+            full_subcommand,
+            shell_escape::escape(choices.remove(sel.index).1.into())
         );
 
         Ok(installable)
