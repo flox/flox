@@ -189,6 +189,7 @@ pub fn init_access_tokens(
         "github.com/flox/nixpkgs-catalog",
         "github.com/flox/catalog-ingest",
         "github.com/flox/flox-extras",
+        "github.com/flox/bundlers",
     ]
     .into_iter()
     .map(String::from)

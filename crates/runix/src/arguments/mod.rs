@@ -69,6 +69,25 @@ impl ToArgs for DevelopArgs {
     }
 }
 
+#[derive(Clone, From, Deref, Debug)]
+#[from(forward)]
+pub struct Bundler(Installable);
+impl Flag for Bundler {
+    const FLAG: &'static str = "--bundler";
+    const FLAG_TYPE: FlagType<Self> = FlagType::arg();
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct BundleArgs {
+    pub bundler: Option<Bundler>,
+}
+
+impl ToArgs for BundleArgs {
+    fn to_args(&self) -> Vec<String> {
+        self.bundler.to_args()
+    }
+}
+
 #[derive(Clone, From, Deref, Debug, Default)]
 #[from(forward)]
 pub struct Apply(String);

@@ -2,8 +2,8 @@ use derive_more::{Deref, From};
 
 use crate::{
     arguments::{
-        eval::EvaluationArgs, flake::FlakeArgs, source::SourceArgs, DevelopArgs, EvalArgs,
-        InstallableArg, InstallablesArgs,
+        eval::EvaluationArgs, flake::FlakeArgs, source::SourceArgs, BundleArgs, DevelopArgs,
+        EvalArgs, InstallableArg, InstallablesArgs,
     },
     command_line::{
         flag::{Flag, FlagType},
@@ -144,5 +144,30 @@ impl NixCliCommand for Shell {
 }
 impl JsonCommand for Shell {}
 impl TypedCommand for Shell {
+    type Output = ();
+}
+
+/// `nix bundle` Command
+#[derive(Debug, Default, Clone)]
+pub struct Bundle {
+    pub flake: FlakeArgs,
+    pub eval: EvaluationArgs,
+    pub source: SourceArgs,
+    pub installable: InstallableArg,
+    pub bundle_args: BundleArgs,
+}
+
+impl NixCliCommand for Bundle {
+    type Own = BundleArgs;
+    const SUBCOMMAND: &'static [&'static str] = &["bundle"];
+
+    const INSTALLABLE: Group<Self, InstallableArg> = Some(|d| d.installable.clone());
+    const FLAKE_ARGS: Group<Self, FlakeArgs> = Some(|d| d.flake.clone());
+    const EVAL_ARGS: Group<Self, EvaluationArgs> = Some(|d| d.eval.clone());
+    const SOURCE_ARGS: Group<Self, SourceArgs> = Some(|d| d.source.clone());
+    const OWN_ARGS: Group<Self, BundleArgs> = Some(|d| d.bundle_args.clone());
+}
+impl JsonCommand for Bundle {}
+impl TypedCommand for Bundle {
     type Output = ();
 }

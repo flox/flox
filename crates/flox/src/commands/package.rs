@@ -70,6 +70,28 @@ impl InstallableDef for ShellInstallable {
     const DERIVATION_TYPE: &'static str = "package";
 }
 
+#[derive(FromStr, Default, Debug, Clone, Into)]
+pub struct BundleInstallable(String);
+impl InstallableDef for BundleInstallable {
+    const DEFAULT_PREFIXES: &'static [(&'static str, bool)] =
+        &[("packages", true), ("legacyPackages", true)];
+    const DEFAULT_FLAKEREFS: &'static [&'static str] = &["."];
+    const INSTALLABLE: fn(&Self) -> String = |s| s.0.to_owned();
+    const SUBCOMMAND: &'static str = "bundle";
+    const DERIVATION_TYPE: &'static str = "package";
+}
+
+#[derive(FromStr, Default, Debug, Clone, Into)]
+pub struct BundlerInstallable(String);
+impl InstallableDef for BundlerInstallable {
+    const DEFAULT_PREFIXES: &'static [(&'static str, bool)] = &[("bundlers", true)];
+    const DEFAULT_FLAKEREFS: &'static [&'static str] = &["github:flox/bundlers/master"];
+    const INSTALLABLE: fn(&Self) -> String = |s| s.0.to_owned();
+    const SUBCOMMAND: &'static str = "bundle";
+    const DERIVATION_TYPE: &'static str = "bundler";
+    const ARG_FLAG: Option<&'static str> = Some("--bundler");
+}
+
 static COMPLETED_INSTALLABLES: Lazy<
     Mutex<HashMap<(TypeId, String), Vec<(String, Option<String>)>>>,
 > = Lazy::new(|| Mutex::new(HashMap::new()));
@@ -116,7 +138,7 @@ where
 {
     bpaf::positional("INSTALLABLE")
         .complete(complete_installable)
-        .fallback(T::default())
+        .fallback(Default::default())
         .adjacent()
 }
 
@@ -192,6 +214,21 @@ impl PackageCommands {
                 .shell::<NixCommandLine>()
                 .await?
             }
+
+            PackageCommands::Bundle {
+                package: package @ PackageArgs { nix_arguments, .. },
+                installable_arg,
+                bundler,
+                ..
+            } => {
+                flox.package(
+                    installable_arg.resolve_installable(&flox).await?,
+                    package.stability(&config),
+                    nix_arguments.clone(),
+                )
+                .bundle::<NixCommandLine>(bundler.resolve_installable(&flox).await?)
+                .await?
+            }
             _ => todo!(),
         }
 
@@ -261,6 +298,25 @@ pub enum PackageCommands {
         _attr_flag: bool,
         #[bpaf(external)]
         installable_arg: ShellInstallable,
+
+        #[bpaf(external(package_args), group_help("Development Options"))]
+        package: PackageArgs,
+    },
+    /// run a bundler for current project
+    #[bpaf(command)]
+    Bundle {
+        #[bpaf(
+            short,
+            long,
+            complete(complete_installable),
+            fallback(Default::default())
+        )]
+        bundler: BundlerInstallable,
+
+        #[bpaf(short('A'), hide)]
+        _attr_flag: bool,
+        #[bpaf(external)]
+        installable_arg: BundleInstallable,
 
         #[bpaf(external(package_args), group_help("Development Options"))]
         package: PackageArgs,

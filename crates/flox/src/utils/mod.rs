@@ -79,6 +79,7 @@ pub trait InstallableDef: FromStr + Default + Clone {
     const INSTALLABLE: fn(&Self) -> String;
     const SUBCOMMAND: &'static str;
     const DERIVATION_TYPE: &'static str;
+    const ARG_FLAG: Option<&'static str> = None;
 
     async fn resolve_matches(&self, flox: &Flox) -> Result<Vec<ResolvedInstallableMatch>> {
         Ok(flox
@@ -95,6 +96,7 @@ pub trait InstallableDef: FromStr + Default + Clone {
         Ok(resolve_installable_from_matches(
             Self::SUBCOMMAND,
             Self::DERIVATION_TYPE,
+            Self::ARG_FLAG,
             self.resolve_matches(flox).await?,
         )
         .await?)
@@ -278,6 +280,7 @@ pub async fn complete_installable(
 pub async fn resolve_installable_from_matches(
     subcommand: &str,
     derivation_type: &str,
+    arg_flag: Option<&str>,
     mut matches: Vec<ResolvedInstallableMatch>,
 ) -> Result<Installable> {
     if matches.len() > 1 {
@@ -325,18 +328,23 @@ pub async fn resolve_installable_from_matches(
             )
             .collect();
 
+        let full_subcommand: Cow<str> = match arg_flag {
+            Some(f) => format!("{subcommand} {f}").into(),
+            None => subcommand.into(),
+        };
+
         if !std::io::stderr().is_tty() {
             return Err(anyhow!(
                 indoc! {"
                 You must address a specific {derivation_type}. For example with:
 
-                    $ flox {subcommand} {first_choice},
+                    $ flox {full_subcommand} {first_choice},
 
                 The available packages are:
                 {choices_list}
             "},
                 derivation_type = derivation_type,
-                subcommand = subcommand,
+                full_subcommand = full_subcommand,
                 first_choice = choices.get(0).expect("Expected at least one choice"),
                 choices_list = choices
                     .iter()
@@ -364,9 +372,8 @@ pub async fn resolve_installable_from_matches(
             derivation_type
         );
         warn!(
-            "$ flox {} {}",
-            subcommand,
-            shell_escape::escape(sel.value.into())
+            "$ flox {full_subcommand} {choice}",
+            choice = shell_escape::escape(sel.value.into())
         );
 
         Ok(installable)
