@@ -1,13 +1,14 @@
-use anyhow::Ok;
 use anyhow::Result;
 use crossterm::style::Attribute;
 use crossterm::style::ContentStyle;
 use crossterm::style::Stylize;
+use env_logger::fmt::Formatter;
 use log::debug;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::env;
 use std::fs::File;
+use std::io;
 use std::io::BufRead;
 use std::io::BufReader;
 use std::io::Write;
@@ -55,9 +56,32 @@ pub fn init_logger(verbosity: Verbosity, debug: bool) {
 
         let args = style.apply(record.args());
 
+        struct IndentWrapper<'a> {
+            buf: &'a mut Formatter,
+        }
+
+        impl Write for IndentWrapper<'_> {
+            fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+                let mut first = true;
+                for chunk in buf.split(|&x| x == b'\n') {
+                    if !first {
+                        write!(self.buf, "\n{:width$}", "", width = 4)?;
+                    }
+                    self.buf.write_all(chunk)?;
+                    first = false;
+                }
+
+                Ok(buf.len())
+            }
+
+            fn flush(&mut self) -> io::Result<()> {
+                self.buf.flush()
+            }
+        }
+
         if debug {
-            writeln!(
-                f,
+            write!(
+                IndentWrapper { buf: f },
                 "[{level}] [{target}] {args}",
                 level = match record.level() {
                     log::Level::Trace => "TRACE".cyan(),
@@ -67,10 +91,11 @@ pub fn init_logger(verbosity: Verbosity, debug: bool) {
                     log::Level::Error => "ERROR".red(),
                 },
                 target = record.target().bold(),
-            )
+            )?;
+            write!(f, "\n")
         } else {
-            writeln!(
-                f,
+            write!(
+                IndentWrapper { buf: f },
                 "{level}{args}",
                 level = match record.level() {
                     log::Level::Error => "ERROR: "
@@ -79,7 +104,8 @@ pub fn init_logger(verbosity: Verbosity, debug: bool) {
                         .to_string(),
                     _ => "".to_string(),
                 },
-            )
+            )?;
+            write!(f, "\n")
         }
     });
 
