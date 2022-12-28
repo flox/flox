@@ -66,7 +66,7 @@
 
       # Static "floxbeta" token for closed beta.
       # XXX Remove after closed beta.
-      BETA_ACCESS_TOKEN = "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";
+      BETA_ACCESS_TOKEN = "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";
     }
     // lib.optionalAttrs hostPlatform.isDarwin {
       NIX_COREFOUNDATION_RPATH = "${darwin.CF}/Library/Frameworks";
