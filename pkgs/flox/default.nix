@@ -20,6 +20,8 @@
   installShellFiles,
   runCommand,
   fd,
+  gnused,
+  bats,
 }: let
   manpages =
     runCommand "flox-manpages" {
@@ -55,6 +57,8 @@
     {
       NIX_BIN = "${nix}/bin/nix";
       FLOX_SH = "${flox-bash}/libexec/flox/flox";
+      FLOX_SH_PATH = "${flox-bash}";
+      FLOX_SH_FLAKE = flox-bash.src; # For bats tests
       FLOX_VERSION = "${envs.FLOX_RS_VERSION}-${envs.FLOX_SH_VERSION}";
       FLOX_SH_VERSION = flox-bash.version;
       FLOX_RS_VERSION = "${cargoToml.package.version}-r${toString self.revCount or "dirty"}";
@@ -114,9 +118,12 @@ in
         pkg-config # for openssl
         pandoc
         installShellFiles
+        gnused
+        (bats.withLibraries (p: [p.bats-support p.bats-assert]))
       ];
 
       passthru.envs = envs;
       passthru.manpages = manpages;
+      passthru.rustPlatform = rustPlatform;
     }
     // envs)

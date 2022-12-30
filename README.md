@@ -24,6 +24,18 @@ The rust SDK will then be used to genrate an api via https://github.com/fzyzcjy/
 1. Set NIX_BIN and FLOX_SH environment variables
 1. Hack away
 
+## Testing (with flox)
+
+0. (temporary) get the latests integration tests
+   ```
+   flox develop .\#rust-env --override-input floxpkgs-internal/flox github:flox/flox-bash-private`
+   ```
+1. run cargo tests
+   - `cargo test` will run all pure integration tests
+   - `cargo test -F "extra-tests"` enables integration and other long running tests
+   - `hivemind` watches the rust source code and continuously runs `cargo test -F "extra-tests"` on changes
+     can be configured through [./Procfile]
+
 ## Providers
 
 Providers allow for dependency injection of different parts.

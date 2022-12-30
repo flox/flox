@@ -13,11 +13,17 @@
   cargo,
   rustc,
   rust,
+  hivemind,
+  cargo-watch,
 }:
 mkShell ({
-    inputsFrom = [self.packages.flox];
-    RUST_SRC_PATH = "${rust.packages.stable.rustPlatform.rustLibSrc}";
+    inputsFrom = [
+      self.packages.flox
+    ];
+    RUST_SRC_PATH = "${self.packages.flox.passthru.rustPlatform.rustLibSrc}";
     packages = [
+      hivemind
+      cargo-watch
       rustfmt
       clippy
       rust-analyzer
