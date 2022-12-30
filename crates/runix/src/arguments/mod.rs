@@ -106,6 +106,9 @@ pub struct EvalArgs {
 
 impl ToArgs for EvalArgs {
     fn to_args(&self) -> Vec<String> {
-        vec![self.apply.to_args()].into_iter().flatten().collect()
+        vec![self.installable.to_args(), self.apply.to_args()]
+            .into_iter()
+            .flatten()
+            .collect()
     }
 }
