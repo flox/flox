@@ -94,7 +94,7 @@
       "inputs": {
         "capacitor": [
           "flox-floxpkgs-internal",
-          "flox-bash",
+          "flox",
           "flox-floxpkgs",
           "capacitor"
         ]
@@ -118,7 +118,7 @@
       "inputs": {
         "capacitor": [
           "flox-floxpkgs-internal",
-          "flox-bash-private",
+          "flox-internal",
           "flox-floxpkgs",
           "capacitor"
         ]
@@ -500,44 +500,6 @@
         "url": "ssh://git@github.com/flox/flox-bash"
       }
     },
-    "flox-bash": {
-      "inputs": {
-        "flox-floxpkgs": "flox-floxpkgs_3"
-      },
-      "locked": {
-        "lastModified": 1672424039,
-        "narHash": "sha256-MH7ndAaeUWPDUn5Cq09dFke8iIfbB3+XeHodbkc4AcA=",
-        "ref": "main",
-        "rev": "572aa4688eb57a8eb93f6a13ac5804bceb40ed80",
-        "revCount": 113,
-        "type": "git",
-        "url": "ssh://git@github.com/flox/flox-bash"
-      },
-      "original": {
-        "ref": "main",
-        "type": "git",
-        "url": "ssh://git@github.com/flox/flox-bash"
-      }
-    },
-    "flox-bash-private": {
-      "inputs": {
-        "flox-floxpkgs": "flox-floxpkgs_4"
-      },
-      "locked": {
-        "lastModified": 1672424039,
-        "narHash": "sha256-MH7ndAaeUWPDUn5Cq09dFke8iIfbB3+XeHodbkc4AcA=",
-        "ref": "main",
-        "rev": "572aa4688eb57a8eb93f6a13ac5804bceb40ed80",
-        "revCount": 113,
-        "type": "git",
-        "url": "ssh://git@github.com/flox/flox-bash-private"
-      },
-      "original": {
-        "ref": "main",
-        "type": "git",
-        "url": "ssh://git@github.com/flox/flox-bash-private"
-      }
-    },
     "flox-floxpkgs": {
       "inputs": {
         "builtfilter": "builtfilter",
@@ -567,8 +529,8 @@
         "builtfilter": "builtfilter_3",
         "capacitor": "capacitor_3",
         "catalog": "catalog_3",
-        "flox-bash": "flox-bash",
-        "flox-bash-private": "flox-bash-private",
+        "flox": "flox_3",
+        "flox-internal": "flox-internal",
         "flox-rust-sdk": "flox-rust-sdk",
         "floxdocs_tng": "floxdocs_tng",
         "floxdocs_tngv3": "floxdocs_tngv3",
@@ -589,16 +551,15 @@
         "update-catalog": "update-catalog"
       },
       "locked": {
-        "lastModified": 1672426638,
-        "narHash": "sha256-eSU2Dko2XsvTIueyllPcqe6E65dIQ6Oe8oAN864uWtg=",
-        "ref": "flox-cli",
-        "rev": "ecf452bc57b257ff44a0532ea6b2478cca64f50a",
-        "revCount": 1029,
+        "lastModified": 1672424196,
+        "narHash": "sha256-cqutYkyI8+vgZOdYfVMduhRANsaR4EPKDhgSfd2yq/k=",
+        "ref": "refs/heads/master",
+        "rev": "7703b3ceb8b66ca640ed9cd74efc34cd80b9a985",
+        "revCount": 1023,
         "type": "git",
         "url": "ssh://git@github.com/flox/floxpkgs-internal"
       },
       "original": {
-        "ref": "flox-cli",
         "type": "git",
         "url": "ssh://git@github.com/flox/floxpkgs-internal"
       }
@@ -631,7 +592,7 @@
         "builtfilter": "builtfilter_4",
         "capacitor": "capacitor_4",
         "catalog": "catalog_4",
-        "flox": "flox_3",
+        "flox": "flox_4",
         "nixpkgs": "nixpkgs_9",
         "tracelinks": "tracelinks_3"
       },
@@ -654,7 +615,7 @@
         "builtfilter": "builtfilter_5",
         "capacitor": "capacitor_5",
         "catalog": "catalog_5",
-        "flox": "flox_4",
+        "flox": "flox_5",
         "nixpkgs": "nixpkgs_12",
         "tracelinks": "tracelinks_4"
       },
@@ -673,6 +634,25 @@
       }
     },
     "flox-internal": {
+      "inputs": {
+        "flox-floxpkgs": "flox-floxpkgs_4"
+      },
+      "locked": {
+        "lastModified": 1672424039,
+        "narHash": "sha256-MH7ndAaeUWPDUn5Cq09dFke8iIfbB3+XeHodbkc4AcA=",
+        "ref": "main",
+        "rev": "572aa4688eb57a8eb93f6a13ac5804bceb40ed80",
+        "revCount": 113,
+        "type": "git",
+        "url": "ssh://git@github.com/flox/flox-bash-private"
+      },
+      "original": {
+        "ref": "main",
+        "type": "git",
+        "url": "ssh://git@github.com/flox/flox-bash-private"
+      }
+    },
+    "flox-internal_2": {
       "inputs": {
         "floxpkgs": "floxpkgs"
       },
@@ -733,32 +713,28 @@
     },
     "flox_3": {
       "inputs": {
-        "floxpkgs": [
-          "flox-floxpkgs-internal",
-          "flox-bash",
-          "flox-floxpkgs"
-        ]
+        "flox-floxpkgs": "flox-floxpkgs_3"
       },
       "locked": {
-        "lastModified": 1670439320,
-        "narHash": "sha256-fYoEKHnWDS6TJJMUI1ft4VLE+ZL1FZtadOwxAGZEdZE=",
+        "lastModified": 1672424039,
+        "narHash": "sha256-MH7ndAaeUWPDUn5Cq09dFke8iIfbB3+XeHodbkc4AcA=",
         "ref": "main",
-        "rev": "8773bf45bae559705c996c6a88cbe86849a926b9",
-        "revCount": 92,
+        "rev": "572aa4688eb57a8eb93f6a13ac5804bceb40ed80",
+        "revCount": 113,
         "type": "git",
-        "url": "ssh://git@github.com/flox/flox"
+        "url": "ssh://git@github.com/flox/flox-bash"
       },
       "original": {
         "ref": "main",
         "type": "git",
-        "url": "ssh://git@github.com/flox/flox"
+        "url": "ssh://git@github.com/flox/flox-bash"
       }
     },
     "flox_4": {
       "inputs": {
         "floxpkgs": [
           "flox-floxpkgs-internal",
-          "flox-bash-private",
+          "flox",
           "flox-floxpkgs"
         ]
       },
@@ -778,6 +754,29 @@
       }
     },
     "flox_5": {
+      "inputs": {
+        "floxpkgs": [
+          "flox-floxpkgs-internal",
+          "flox-internal",
+          "flox-floxpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1670439320,
+        "narHash": "sha256-fYoEKHnWDS6TJJMUI1ft4VLE+ZL1FZtadOwxAGZEdZE=",
+        "ref": "main",
+        "rev": "8773bf45bae559705c996c6a88cbe86849a926b9",
+        "revCount": 92,
+        "type": "git",
+        "url": "ssh://git@github.com/flox/flox"
+      },
+      "original": {
+        "ref": "main",
+        "type": "git",
+        "url": "ssh://git@github.com/flox/flox"
+      }
+    },
+    "flox_6": {
       "inputs": {
         "floxpkgs": [
           "flox-floxpkgs-internal",
@@ -801,7 +800,7 @@
         "url": "ssh://git@github.com/flox/flox"
       }
     },
-    "flox_6": {
+    "flox_7": {
       "inputs": {
         "floxpkgs": [
           "flox-floxpkgs-internal",
@@ -846,7 +845,7 @@
           "flox-floxpkgs-internal",
           "capacitor"
         ],
-        "flox-internal": "flox-internal",
+        "flox-internal": "flox-internal_2",
         "floxdocs": [
           "flox-floxpkgs-internal",
           "floxdocs_tngv3"
@@ -877,7 +876,7 @@
         "builtfilter": "builtfilter_6",
         "capacitor": "capacitor_6",
         "catalog": "catalog_6",
-        "flox": "flox_5",
+        "flox": "flox_6",
         "nixpkgs": "nixpkgs_15",
         "tracelinks": "tracelinks_5"
       },
@@ -903,7 +902,7 @@
           "capacitor"
         ],
         "catalog": "catalog_7",
-        "flox": "flox_6",
+        "flox": "flox_7",
         "nixpkgs": "nixpkgs_18",
         "tracelinks": "tracelinks_6"
       },
@@ -1424,7 +1423,7 @@
       "inputs": {
         "floxpkgs": [
           "flox-floxpkgs-internal",
-          "flox-bash-private",
+          "flox-internal",
           "flox-floxpkgs"
         ],
         "nixpkgs": "nixpkgs_13",
@@ -1766,7 +1765,7 @@
       "inputs": {
         "floxpkgs": [
           "flox-floxpkgs-internal",
-          "flox-bash",
+          "flox",
           "flox-floxpkgs"
         ],
         "nixpkgs": "nixpkgs_10",
@@ -2417,7 +2416,7 @@
       "inputs": {
         "floxpkgs": [
           "flox-floxpkgs-internal",
-          "flox-bash",
+          "flox",
           "flox-floxpkgs"
         ]
       },
@@ -2440,7 +2439,7 @@
       "inputs": {
         "floxpkgs": [
           "flox-floxpkgs-internal",
-          "flox-bash-private",
+          "flox-internal",
           "flox-floxpkgs"
         ]
       },
