@@ -1147,22 +1147,6 @@
         "type": "github"
       }
     },
-    "nixpkgs-stable_8": {
-      "locked": {
-        "lastModified": 1671271954,
-        "narHash": "sha256-cSvu+bnvN08sOlTBWbBrKaBHQZq8mvk8bgpt0ZJ2Snc=",
-        "owner": "NixOS",
-        "repo": "nixpkgs",
-        "rev": "d513b448cc2a6da2c8803e3c197c9fc7e67b19e3",
-        "type": "github"
-      },
-      "original": {
-        "owner": "NixOS",
-        "ref": "nixos-22.05",
-        "repo": "nixpkgs",
-        "type": "github"
-      }
-    },
     "nixpkgs-staging": {
       "locked": {
         "lastModified": 1670929434,
@@ -2339,6 +2323,11 @@
       "inputs": {
         "flox-floxpkgs": "flox-floxpkgs",
         "flox-floxpkgs-internal": "flox-floxpkgs-internal",
+        "nixpkgs": [
+          "flox-floxpkgs",
+          "nixpkgs",
+          "nixpkgs"
+        ],
         "shellHooks": "shellHooks"
       }
     },
@@ -2348,11 +2337,11 @@
         "flake-utils": "flake-utils_2",
         "gitignore": "gitignore",
         "nixpkgs": [
-          "flox-floxpkgs",
-          "nixpkgs",
           "nixpkgs"
         ],
-        "nixpkgs-stable": "nixpkgs-stable_8"
+        "nixpkgs-stable": [
+          "nixpkgs"
+        ]
       },
       "locked": {
         "lastModified": 1672050129,
