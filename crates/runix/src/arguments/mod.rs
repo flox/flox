@@ -100,7 +100,8 @@ impl Flag for Apply {
 /// https://github.com/NixOS/nix/blob/a6239eb5700ebb85b47bb5f12366404448361f8d/src/nix/eval.cc#LL21-40
 #[derive(Debug, Default, Clone)]
 pub struct EvalArgs {
-    pub apply: Apply,
+    pub apply: Option<Apply>,
+    pub installable: Option<InstallableArg>,
 }
 
 impl ToArgs for EvalArgs {

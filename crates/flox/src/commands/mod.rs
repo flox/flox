@@ -10,6 +10,7 @@ use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 use tempfile::TempDir;
 
+use crate::flox_forward;
 use crate::utils::init::{init_access_tokens, init_channels, init_git_conf, init_logger};
 use flox_rust_sdk::flox::FLOX_VERSION;
 
@@ -20,6 +21,10 @@ use self::package::PackageCommands;
 
 fn vec_len<T>(x: Vec<T>) -> usize {
     Vec::len(&x)
+}
+
+fn vec_not_empty<T>(x: Vec<T>) -> bool {
+    !x.is_empty()
 }
 
 #[derive(Bpaf, Clone, Debug)]
@@ -46,7 +51,7 @@ pub struct FloxArgs {
     verbosity: Verbosity,
 
     /// Debug mode.
-    #[bpaf(short, long)]
+    #[bpaf(short, long, switch, many, map(vec_not_empty))]
     pub debug: bool,
 
     #[bpaf(external(commands))]
@@ -106,6 +111,7 @@ impl FloxArgs {
             Commands::Environment(ref environment) => environment.handle(flox).await?,
             Commands::Channel(ref channel) => channel.handle(flox).await?,
             Commands::General(ref general) => general.handle(flox).await?,
+            Commands::Prefix => flox_forward().await?,
         }
 
         Ok(())
@@ -113,7 +119,7 @@ impl FloxArgs {
 }
 
 /// Transparent separation of different categories of commands
-#[derive(Bpaf)]
+#[derive(Bpaf, Clone)]
 pub enum Commands {
     Package(
         #[bpaf(external(package::package_commands))]
@@ -135,4 +141,7 @@ pub enum Commands {
         #[bpaf(group_help("General Commands"))]
         GeneralCommands,
     ),
+    /// For development only
+    #[bpaf(hide)]
+    Prefix,
 }

@@ -41,7 +41,7 @@ pub enum ChannelCommands {
     #[bpaf(command)]
     Search {
         #[bpaf(short, long, argument("channel"))]
-        channel: ChannelRef,
+        channel: Option<ChannelRef>,
 
         #[bpaf(positional("search term"))]
         search_term: Option<String>,

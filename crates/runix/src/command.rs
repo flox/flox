@@ -87,14 +87,12 @@ impl NixCliCommand for Develop {
 pub struct Eval {
     pub flake: FlakeArgs,
     pub eval: EvaluationArgs,
-    pub installable: InstallableArg,
     pub eval_args: EvalArgs,
 }
 
 impl NixCliCommand for Eval {
     type Own = EvalArgs;
     const SUBCOMMAND: &'static [&'static str] = &["eval"];
-    const INSTALLABLE: Group<Self, InstallableArg> = Some(|d| d.installable.clone());
     const FLAKE_ARGS: Group<Self, FlakeArgs> = Some(|d| d.flake.clone());
     const EVAL_ARGS: Group<Self, EvaluationArgs> = Some(|d| d.eval.clone());
     const OWN_ARGS: Group<Self, EvalArgs> = Some(|d| d.eval_args.clone());

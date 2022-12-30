@@ -41,7 +41,7 @@ pub enum GeneralCommands {
     Gh(Vec<String>),
 
     #[bpaf(command)]
-    Nix(#[bpaf(positional("NIX ARGUMENTS"), complete_shell(complete_nix_shell()))] Vec<String>),
+    Nix(#[bpaf(any("NIX ARGUMENTS"), complete_shell(complete_nix_shell()))] Vec<String>),
 
     /// configure user parameters
     #[bpaf(command)]

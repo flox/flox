@@ -125,5 +125,6 @@ in
       passthru.envs = envs;
       passthru.manpages = manpages;
       passthru.rustPlatform = rustPlatform;
+      passthru.flox-bash = flox-bash;
     }
     // envs)

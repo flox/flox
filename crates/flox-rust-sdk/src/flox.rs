@@ -335,9 +335,9 @@ impl Flox {
                     .collect(),
             },
             // Use the super resolver as the installable (which we use as this only takes one)
-            installable: resolve_installable.into(),
             eval_args: EvalArgs {
-                apply: eval_apply.into(),
+                installable: Some(resolve_installable.into()),
+                apply: Some(eval_apply.into()),
             },
             ..Default::default()
         };

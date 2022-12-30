@@ -88,11 +88,7 @@ where
 impl Package<'_> {
     fn flake_args(&self) -> Result<FlakeArgs, ()> {
         Ok(FlakeArgs {
-            override_inputs: vec![(
-                "floxpkgs/nixpkgs/nixpkgs".into(),
-                format!("flake:nixpkgs-{}", self.stability),
-            )
-                .into()],
+            override_inputs: vec![self.stability.as_override()],
             ..Default::default()
         })
     }

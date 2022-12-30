@@ -7,7 +7,7 @@ use commands::FloxArgs;
 use flox_rust_sdk::environment::default_nix_subprocess_env;
 use log::{debug, error, info, warn};
 use std::env;
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 use std::process::{ExitCode, ExitStatus};
 
 use tokio::process::Command;
@@ -33,6 +33,10 @@ async fn main() -> ExitCode {
     match run(args).await {
         Ok(()) => ExitCode::from(0),
         Err(e) => {
+            // Do not print any error if caused by wrapped flox (sh)
+            if e.is::<FloxShellErrorCode>() {
+                return e.downcast_ref::<FloxShellErrorCode>().unwrap().0;
+            }
             if debug {
                 error!("{:#?}", e);
             } else {
@@ -49,15 +53,29 @@ pub fn should_flox_forward(f: Feature) -> Result<bool> {
             "FLOX_PREVIEW_FEATURES_{}",
             serde_variant::to_variant_name(&f)?.to_uppercase()
         );
-        info!("`{env_name}` unset or not \"rust\", falling back to legacy flox");
+        debug!("`{env_name}` unset or not \"rust\", falling back to legacy flox");
         Ok(true)
     } else {
         Ok(false)
     }
 }
 
+#[derive(Debug)]
+struct FloxShellErrorCode(ExitCode);
+impl Display for FloxShellErrorCode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        <Self as Debug>::fmt(&self, f)
+    }
+}
+impl std::error::Error for FloxShellErrorCode {}
+
 pub async fn flox_forward() -> Result<()> {
-    run_in_flox(&env::args_os().collect::<Vec<_>>()[1..]).await?;
+    let result = run_in_flox(&env::args_os().collect::<Vec<_>>()[1..]).await?;
+    if !result.success() {
+        Err(FloxShellErrorCode(ExitCode::from(
+            result.code().expect("Process terminated by signal") as u8,
+        )))?;
+    }
     Ok(())
 }
 

@@ -3,7 +3,16 @@ use std::{any::TypeId, collections::HashMap, env, str::FromStr, sync::Mutex};
 use anyhow::Result;
 use bpaf::{Bpaf, Parser};
 use derive_more::{FromStr, Into};
-use flox_rust_sdk::{flox::Flox, nix::command_line::NixCommandLine, prelude::Stability};
+use flox_rust_sdk::{
+    flox::Flox,
+    nix::{
+        arguments::{flake::FlakeArgs, NixArgs},
+        command::Eval,
+        command_line::NixCommandLine,
+        Run, RunJson,
+    },
+    prelude::Stability,
+};
 use once_cell::sync::Lazy;
 
 use crate::{
@@ -214,7 +223,21 @@ impl PackageCommands {
                 .shell::<NixCommandLine>()
                 .await?
             }
+            PackageCommands::Eval {
+                package: package @ PackageArgs { nix_arguments, .. },
+                ..
+            } => {
+                let nix = flox.nix::<NixCommandLine>(nix_arguments.clone());
+                let command = Eval {
+                    flake: FlakeArgs {
+                        override_inputs: [package.stability(&config).as_override()].into(),
+                        ..FlakeArgs::default()
+                    },
+                    ..Eval::default()
+                };
 
+                command.run(&nix, &NixArgs::default()).await?
+            }
             PackageCommands::Bundle {
                 package: package @ PackageArgs { nix_arguments, .. },
                 installable_arg,
@@ -273,9 +296,27 @@ pub enum PackageCommands {
         #[bpaf(external)]
         installable_arg: PublishInstallable,
 
-        /// The --upstream-url determines the upstream repository containing
+        /// The --channel-repo determines the upstream repository containing
         #[bpaf(argument("REPO"))]
         channel_repo: String,
+
+        #[bpaf(argument("REPO"))]
+        build_repo: String,
+
+        #[bpaf(argument("URL"))]
+        upload_to: String,
+
+        #[bpaf(argument("URL"))]
+        download_from: String,
+
+        #[bpaf(argument("DIR"))]
+        render_path: String,
+
+        #[bpaf(argument("FILE"))]
+        key_file: String,
+
+        #[bpaf(argument("FILE"))]
+        publish_system: String,
 
         #[bpaf(external(package_args), group_help("Development Options"))]
         package: PackageArgs,
@@ -302,6 +343,14 @@ pub enum PackageCommands {
         #[bpaf(external(package_args), group_help("Development Options"))]
         package: PackageArgs,
     },
+
+    /// evaluate a Nix expression
+    #[bpaf(command)]
+    Eval {
+        #[bpaf(external(package_args), group_help("Development Options"))]
+        package: PackageArgs,
+    },
+
     /// run a bundler for current project
     #[bpaf(command)]
     Bundle {

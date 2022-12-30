@@ -37,3 +37,8 @@ xdg = "2.4"
 nix = "0.26"
 indoc = "1.0"
 derive_more = "0.99.17"
+
+[features]
+extra-tests = ["bats-tests", "impure-unit-tests"]
+impure-unit-tests = []
+bats-tests = []

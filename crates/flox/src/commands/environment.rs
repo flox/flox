@@ -1,5 +1,5 @@
 use anyhow::Result;
-use bpaf::Bpaf;
+use bpaf::{construct, Bpaf, Parser, ShellComp};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::nix::command_line::NixCommandLine;
 use flox_rust_sdk::prelude::flox_package::FloxPackage;
@@ -39,6 +39,34 @@ impl EnvironmentCommands {
     }
 }
 
+fn activate_run_args() -> impl Parser<Option<(String, Vec<String>)>> {
+    let command = bpaf::positional("COMMAND").strict();
+    let args = bpaf::any("ARGUMENTS").many();
+
+    bpaf::construct!(command, args).optional()
+}
+
+#[derive(Clone)]
+pub enum ImportFile {
+    Stdin,
+    Path(PathBuf),
+}
+
+impl ImportFile {
+    fn parse() -> impl Parser<ImportFile> {
+        let stdin = bpaf::any::<char>("STDIN (-)")
+            .help("Use `-` to read from STDIN")
+            .complete(|_| vec![("-", Some("Read from STDIN"))])
+            .guard(|t| *t == '-', "Use `-` to read from STDIN")
+            .map(|_| ImportFile::Stdin);
+        let path = bpaf::positional("PATH")
+            .help("Path to export file")
+            .complete_shell(ShellComp::File { mask: None })
+            .map(ImportFile::Path);
+        construct!([stdin, path])
+    }
+}
+
 #[derive(Bpaf, Clone)]
 pub enum EnvironmentCommands {
     /// activate environment:
@@ -51,11 +79,11 @@ pub enum EnvironmentCommands {
         #[bpaf(external(environment_args), group_help("Environment Options"))]
         environment: EnvironmentArgs,
 
-        #[bpaf(positional)]
-        arguments: Vec<String>,
+        #[bpaf(external(activate_run_args))]
+        arguments: Option<(String, Vec<String>)>,
     },
 
-    /// remove all data pertaining to an environment
+    /// remove all data pertaining to an environment`
     #[bpaf(command)]
     Destroy {
         #[bpaf(short, long)]
@@ -95,7 +123,7 @@ pub enum EnvironmentCommands {
         #[bpaf(external(environment_args), group_help("Environment Options"))]
         environment: EnvironmentArgs,
 
-        #[bpaf(positional("Git Arguments"))]
+        #[bpaf(any("Git Arguments"))]
         git_arguments: Vec<String>,
     },
 
@@ -114,6 +142,9 @@ pub enum EnvironmentCommands {
     Import {
         #[bpaf(external(environment_args), group_help("Environment Options"))]
         environment: EnvironmentArgs,
+
+        #[bpaf(external(ImportFile::parse), fallback(ImportFile::Stdin))]
+        file: ImportFile,
     },
 
     /// install a package into an environment
@@ -156,7 +187,7 @@ pub enum EnvironmentCommands {
     },
 
     /// remove packages from an environment
-    #[bpaf(command)]
+    #[bpaf(command, long("rm"))]
     Remove {
         #[bpaf(external(environment_args), group_help("Environment Options"))]
         environment: EnvironmentArgs,
@@ -169,6 +200,12 @@ pub enum EnvironmentCommands {
     Rollback {
         #[bpaf(external(environment_args), group_help("Environment Options"))]
         environment: EnvironmentArgs,
+
+        /// Generation to roll back to.
+        ///
+        /// If omitted, defaults to the previous generation.
+        #[bpaf(argument("GENERATION"))]
+        to: Option<u32>,
     },
 
     /// switch to a specific generation of an environment
@@ -187,7 +224,7 @@ pub enum EnvironmentCommands {
         #[bpaf(external(environment_args), group_help("Environment Options"))]
         environment: EnvironmentArgs,
 
-        #[bpaf(positional("PACKAGES"), some("At least one package"))]
+        #[bpaf(positional("PACKAGES"))]
         packages: Vec<FloxPackage>,
     },
 

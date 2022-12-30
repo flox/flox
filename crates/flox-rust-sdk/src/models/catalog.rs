@@ -4,6 +4,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 use derive_more::Display;
 use getset::Getters;
+use runix::arguments::flake::OverrideInputs;
 use serde::{Deserialize, Serialize};
 
 use super::{Package, PublishResult};
@@ -59,6 +60,16 @@ impl FromStr for Stability {
             "staging" => Ok(Stability::Staging),
             _ => Ok(Stability::Other(s.to_string())),
         }
+    }
+}
+
+impl Stability {
+    pub fn as_override(&self) -> OverrideInputs {
+        (
+            "floxpkgs/nixpkgs/nixpkgs".into(),
+            format!("flake:nixpkgs-{}", self),
+        )
+            .into()
     }
 }
 
