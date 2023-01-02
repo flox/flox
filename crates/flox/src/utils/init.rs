@@ -1,9 +1,13 @@
+use anyhow::Context;
 use anyhow::Result;
 use crossterm::style::Attribute;
 use crossterm::style::ContentStyle;
 use crossterm::style::Stylize;
+use crossterm::tty::IsTty;
 use env_logger::fmt::Formatter;
+use indoc::indoc;
 use log::debug;
+use log::info;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::env;
@@ -15,6 +19,7 @@ use std::io::Write;
 use std::iter;
 use std::path::Path;
 use std::str::FromStr;
+use tokio::io::AsyncReadExt;
 use tokio::io::AsyncWriteExt;
 
 use flox_rust_sdk::prelude::Channel;
@@ -23,8 +28,106 @@ use flox_rust_sdk::prelude::ChannelRegistry;
 use crate::commands::Verbosity;
 use crate::utils::colors;
 
+use super::dialog::InquireExt;
+use super::metrics::METRICS_UUID_FILE_NAME;
+
 const ENV_GIT_CONFIG_SYSTEM: &'static str = "GIT_CONFIG_SYSTEM";
 const ENV_FLOX_ORIGINAL_GIT_CONFIG_SYSTEM: &'static str = "FLOX_ORIGINAL_GIT_CONFIG_SYSTEM";
+
+async fn write_metrics_uuid(uuid_path: &Path, consent: bool) -> Result<()> {
+    let mut file = tokio::fs::File::create(&uuid_path).await?;
+    if consent {
+        let uuid = uuid::Uuid::new_v4();
+        file.write_all(uuid.to_string().as_bytes()).await?;
+    }
+    Ok(())
+}
+
+pub async fn init_telemetry_consent(data_dir: &Path) -> Result<()> {
+    tokio::fs::create_dir_all(data_dir).await?;
+
+    if !std::io::stderr().is_tty() {
+        // Can't prompt user now, do it another time
+        return Ok(());
+    }
+
+    let uuid_path = data_dir.join(METRICS_UUID_FILE_NAME);
+
+    match tokio::fs::File::open(&uuid_path).await {
+        Ok(_) => return Ok(()),
+        Err(err) => match err.kind() {
+            std::io::ErrorKind::NotFound => {}
+            _ => return Err(err.into()),
+        },
+    }
+
+    let bash_config_home = dirs::config_dir().context("Unable to find config dir")?;
+    let bash_user_meta_path = bash_config_home.join("flox").join("floxUserMeta.json");
+
+    if let Ok(mut file) = tokio::fs::File::open(&bash_user_meta_path).await {
+        let mut bash_user_meta_json = String::new();
+        file.read_to_string(&mut bash_user_meta_json).await?;
+
+        let json: serde_json::Value = serde_json::from_str(&bash_user_meta_json)?;
+
+        if let Some(x) = json["floxMetricsConsent"].as_u64() {
+            write_metrics_uuid(&uuid_path, x == 1).await?;
+            return Ok(());
+        }
+    }
+
+    let consent = inquire::Confirm::new("Do you consent to the collection of basic usage metrics?")
+        .with_help_message(indoc! {"
+            flox collects basic usage metrics in order to improve the user experience,
+            including a record of the subcommand invoked along with a unique token.
+            It does not collect any personal information."})
+        .with_flox_theme()
+        .prompt()?;
+
+    if consent {
+        write_metrics_uuid(&uuid_path, true).await?;
+        info!("\nThank you for helping to improve flox!\n");
+    } else {
+        let _consent_refusal =
+            inquire::Confirm::new("Can we log your refusal?")
+                .with_help_message("Doing this helps us keep track of our user count, it would just be a single anonymous request")
+                .with_flox_theme()
+                .prompt()?;
+
+        // TODO log if Refuse
+
+        write_metrics_uuid(&uuid_path, false).await?;
+        info!("\nUnderstood. If you change your mind you can change your election\nat any time with the following command: flox reset-metrics\n");
+    }
+
+    Ok(())
+}
+
+pub async fn init_uuid(data_dir: &Path) -> Result<uuid::Uuid> {
+    tokio::fs::create_dir_all(data_dir).await?;
+
+    let uuid_file_path = data_dir.join("uuid");
+
+    match tokio::fs::File::open(&uuid_file_path).await {
+        Ok(mut uuid_file) => {
+            debug!("Reading uuid from file");
+            let mut uuid_str = String::new();
+            uuid_file.read_to_string(&mut uuid_str).await?;
+            Ok(uuid::Uuid::try_parse(&uuid_str)?)
+        }
+        Err(err) => match err.kind() {
+            std::io::ErrorKind::NotFound => {
+                debug!("Creating new uuid");
+                let uuid = uuid::Uuid::new_v4();
+                let mut file = tokio::fs::File::create(&uuid_file_path).await?;
+                file.write_all(uuid.to_string().as_bytes()).await?;
+
+                Ok(uuid)
+            }
+            _ => Err(err.into()),
+        },
+    }
+}
 
 pub fn init_logger(verbosity: Verbosity, debug: bool) {
     let log_filter = match (verbosity, debug) {

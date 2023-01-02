@@ -9,10 +9,12 @@ use flox_rust_sdk::{
 };
 
 use crate::{
-    commands::channel,
-    config::{Config, Feature, Impl},
+    config::{Feature, Impl},
     flox_forward, should_flox_forward,
-    utils::init::init_channels,
+    utils::{
+        init::init_telemetry_consent,
+        metrics::{metric, METRICS_EVENTS_FILE_NAME, METRICS_UUID_FILE_NAME},
+    },
 };
 
 #[derive(Bpaf, Clone)]
@@ -22,12 +24,21 @@ impl GeneralCommands {
     pub async fn handle(&self, flox: Flox) -> Result<()> {
         match self {
             GeneralCommands::Nix(args) if Feature::Nix.implementation()? == Impl::Rust => {
+                metric("nix");
+
                 let nix: NixCommandLine = flox.nix(Default::default());
                 RawCommand(args.to_owned())
                     .run(&nix, &Default::default())
                     .await?;
             }
-            _ if should_flox_forward(Feature::All)? => flox_forward().await?,
+
+            GeneralCommands::ResetMetrics => {
+                tokio::fs::remove_file(flox.cache_dir.join(METRICS_EVENTS_FILE_NAME)).await?;
+                tokio::fs::remove_file(flox.data_dir.join(METRICS_UUID_FILE_NAME)).await?;
+                init_telemetry_consent(&flox.data_dir).await?;
+            }
+
+            _ if should_flox_forward(Feature::All)? => flox_forward(&flox).await?,
             _ => todo!(),
         }
         Ok(())
@@ -36,7 +47,7 @@ impl GeneralCommands {
 
 #[derive(Bpaf, Clone)]
 pub enum GeneralCommands {
-    ///access to the gh CLI
+    /// access to the gh CLI
     #[bpaf(command, hide)]
     Gh(Vec<String>),
 
@@ -50,6 +61,10 @@ pub enum GeneralCommands {
     /// list all available environments
     #[bpaf(command, long("environments"))]
     Envs,
+
+    /// reset the metrics queue (if any), reset metrics ID, and re-prompt for consent
+    #[bpaf(command("reset-metrics"))]
+    ResetMetrics,
 }
 
 #[derive(Bpaf, Clone)]

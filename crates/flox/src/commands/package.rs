@@ -18,7 +18,7 @@ use once_cell::sync::Lazy;
 use crate::{
     config::{Config, Feature},
     flox_forward, should_flox_forward,
-    utils::InstallableDef,
+    utils::{metrics::metric, InstallableDef},
 };
 
 #[derive(FromStr, Default, Debug, Clone, Into)]
@@ -167,13 +167,15 @@ fn extra_args(var: &'static str) -> impl Parser<Vec<String>> {
 impl PackageCommands {
     pub async fn handle(&self, config: Config, flox: Flox) -> Result<()> {
         match self {
-            _ if should_flox_forward(Feature::Nix)? => flox_forward().await?,
+            _ if should_flox_forward(Feature::Nix)? => flox_forward(&flox).await?,
 
             PackageCommands::Build {
                 package: package @ PackageArgs { nix_arguments, .. },
                 installable_arg,
                 ..
             } => {
+                metric("build");
+
                 flox.package(
                     installable_arg.resolve_installable(&flox).await?,
                     package.stability(&config),
@@ -185,10 +187,11 @@ impl PackageCommands {
 
             PackageCommands::Develop {
                 package: package @ PackageArgs { nix_arguments, .. },
-
                 installable_arg,
                 ..
             } => {
+                metric("develop");
+
                 flox.package(
                     installable_arg.resolve_installable(&flox).await?,
                     package.stability(&config),
@@ -202,6 +205,8 @@ impl PackageCommands {
                 installable_arg,
                 ..
             } => {
+                metric("run");
+
                 flox.package(
                     installable_arg.resolve_installable(&flox).await?,
                     package.stability(&config),
@@ -215,6 +220,8 @@ impl PackageCommands {
                 installable_arg,
                 ..
             } => {
+                metric("shell");
+
                 flox.package(
                     installable_arg.resolve_installable(&flox).await?,
                     package.stability(&config),

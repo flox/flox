@@ -6,6 +6,7 @@ use flox_rust_sdk::prelude::flox_package::FloxPackage;
 use std::path::PathBuf;
 
 use crate::config::Feature;
+use crate::utils::metrics::metric;
 use crate::{flox_forward, should_flox_forward};
 
 #[derive(Bpaf, Clone)]
@@ -21,12 +22,14 @@ pub struct EnvironmentArgs {
 impl EnvironmentCommands {
     pub async fn handle(&self, flox: Flox) -> Result<()> {
         match self {
-            _ if should_flox_forward(Feature::Env)? => flox_forward().await?,
+            _ if should_flox_forward(Feature::Env)? => flox_forward(&flox).await?,
 
             EnvironmentCommands::Install {
                 packages,
                 environment: EnvironmentArgs { environment },
             } => {
+                metric("install");
+
                 flox.environment(environment.clone().unwrap())?
                     .install::<NixCommandLine>(packages)
                     .await?

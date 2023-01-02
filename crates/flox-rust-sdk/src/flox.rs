@@ -11,7 +11,7 @@ use runix::{
     arguments::{
         common::NixCommonArgs,
         config::NixConfigArgs,
-        flake::{self, FlakeArgs, OverrideInputs},
+        flake::{FlakeArgs, OverrideInputs},
         EvalArgs, NixArgs,
     },
     command::Eval,
@@ -63,11 +63,9 @@ pub struct Flox {
 
     pub channels: ChannelRegistry,
 
-    /// Whether to collect metrics of any kind
-    /// (yet to be made use of)
-    pub collect_metrics: bool,
-
     pub system: String,
+
+    pub uuid: uuid::Uuid,
 }
 
 pub trait FloxNixApi: NixBackend {

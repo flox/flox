@@ -1,10 +1,10 @@
-use std::{collections::HashMap, env, path::PathBuf};
+use std::{collections::HashMap, env, io::Write, path::PathBuf};
 
 use anyhow::{Context, Result};
-use config::{Config as HierarchicalConfig, Environment, Value};
+use config::{Config as HierarchicalConfig, Environment};
 use flox_rust_sdk::prelude::Stability;
 use itertools::{Either, Itertools};
-use log::{debug, info};
+use log::debug;
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
 
@@ -33,13 +33,8 @@ pub struct Config {
 /// Describes the Configuration for the flox library
 #[derive(Clone, Debug, Deserialize, Default)]
 pub struct FloxConfig {
-    /// Control telemetry for the rust CLI
-    ///
-    /// An [Option] since tri-state:
-    /// - Some(true): User said yes
-    /// - Some(false): User said no
-    /// - None: Didn't ask the user yet - required to decide whether to ask or not
-    pub allow_telemetry: Option<bool>,
+    #[serde(default)]
+    pub disable_telemetry: bool,
     pub cache_dir: PathBuf,
     pub data_dir: PathBuf,
     pub config_dir: PathBuf,

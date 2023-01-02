@@ -8,9 +8,9 @@ use crate::{config::Feature, flox_forward, should_flox_forward};
 pub struct ChannelArgs {}
 
 impl ChannelCommands {
-    pub async fn handle(&self, _flox: Flox) -> Result<()> {
+    pub async fn handle(&self, flox: Flox) -> Result<()> {
         match self {
-            _ if should_flox_forward(Feature::Env)? => flox_forward().await?,
+            _ if should_flox_forward(Feature::Env)? => flox_forward(&flox).await?,
 
             _ => todo!(),
         }

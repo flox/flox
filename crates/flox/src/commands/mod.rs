@@ -11,7 +11,9 @@ use flox_rust_sdk::flox::Flox;
 use tempfile::TempDir;
 
 use crate::flox_forward;
-use crate::utils::init::{init_access_tokens, init_channels, init_git_conf, init_logger};
+use crate::utils::init::{
+    init_access_tokens, init_channels, init_git_conf, init_telemetry_consent, init_uuid,
+};
 use flox_rust_sdk::flox::FLOX_VERSION;
 
 use self::channel::ChannelCommands;
@@ -48,7 +50,7 @@ pub struct FloxArgs {
     ///
     /// Invoke multiple times for increasing detail.
     #[bpaf(external, fallback(Verbosity::Verbose(0)))]
-    verbosity: Verbosity,
+    pub verbosity: Verbosity,
 
     /// Debug mode.
     #[bpaf(short, long, switch, many, map(vec_not_empty))]
@@ -61,8 +63,6 @@ pub struct FloxArgs {
 impl FloxArgs {
     /// Initialize the command line by creating an initial FloxBuilder
     pub async fn handle(self, config: crate::config::Config) -> Result<()> {
-        init_logger(self.verbosity, self.debug);
-
         // prepare a temp dir for the run:
         let process_dir = config.flox.cache_dir.join("process");
         tokio::fs::create_dir_all(&process_dir).await?;
@@ -73,6 +73,12 @@ impl FloxArgs {
 
         init_git_conf(temp_dir.path()).await?;
 
+        // disabling telemetry will work regardless
+        // but we don't want to give users who disabled it the prompt
+        if !config.flox.disable_telemetry {
+            init_telemetry_consent(&config.flox.data_dir).await?;
+        }
+
         let channels = init_channels()?;
 
         let access_tokens = init_access_tokens(&config.nix.access_tokens)?;
@@ -82,7 +88,6 @@ impl FloxArgs {
             .join(".netrc");
 
         let flox = Flox {
-            collect_metrics: config.flox.allow_telemetry.unwrap_or_default(),
             cache_dir: config.flox.cache_dir.clone(),
             data_dir: config.flox.data_dir.clone(),
             config_dir: config.flox.config_dir.clone(),
@@ -91,6 +96,7 @@ impl FloxArgs {
             netrc_file,
             temp_dir: temp_dir_path.clone(),
             system: env!("NIX_TARGET_SYSTEM").to_string(),
+            uuid: init_uuid(&config.flox.data_dir).await?,
         };
 
         // in debug mode keep the tempdir to reproduce nix commands
@@ -111,7 +117,7 @@ impl FloxArgs {
             Commands::Environment(ref environment) => environment.handle(flox).await?,
             Commands::Channel(ref channel) => channel.handle(flox).await?,
             Commands::General(ref general) => general.handle(flox).await?,
-            Commands::Prefix => flox_forward().await?,
+            Commands::Prefix => flox_forward(&flox).await?,
         }
 
         Ok(())

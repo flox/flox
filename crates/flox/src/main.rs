@@ -2,13 +2,18 @@
 extern crate anyhow;
 
 use self::config::{Feature, Impl};
-use anyhow::Result;
+use anyhow::{Context, Result};
 use commands::FloxArgs;
 use flox_rust_sdk::environment::default_nix_subprocess_env;
 use log::{debug, error, info, warn};
+use serde_json::json;
 use std::env;
 use std::fmt::{Debug, Display};
+use std::path::Path;
 use std::process::{ExitCode, ExitStatus};
+use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
+use utils::init::init_logger;
+use utils::metrics::METRICS_UUID_FILE_NAME;
 
 use tokio::process::Command;
 
@@ -17,9 +22,10 @@ mod commands;
 mod config;
 mod utils;
 
-use flox_rust_sdk::flox::FLOX_SH;
+use flox_rust_sdk::flox::{Flox, FLOX_SH};
 
 async fn run(args: FloxArgs) -> Result<()> {
+    init_logger(args.verbosity.clone(), args.debug);
     set_user()?;
     args.handle(config::Config::parse()?).await?;
     Ok(())
@@ -69,8 +75,8 @@ impl Display for FloxShellErrorCode {
 }
 impl std::error::Error for FloxShellErrorCode {}
 
-pub async fn flox_forward() -> Result<()> {
-    let result = run_in_flox(&env::args_os().collect::<Vec<_>>()[1..]).await?;
+pub async fn flox_forward(flox: &Flox) -> Result<()> {
+    let result = run_in_flox(flox, &env::args_os().collect::<Vec<_>>()[1..]).await?;
     if !result.success() {
         Err(FloxShellErrorCode(ExitCode::from(
             result.code().expect("Process terminated by signal") as u8,
@@ -79,8 +85,67 @@ pub async fn flox_forward() -> Result<()> {
     Ok(())
 }
 
-pub async fn run_in_flox(args: &[impl AsRef<std::ffi::OsStr> + Debug]) -> Result<ExitStatus> {
+async fn sync_bash_metrics_consent(data_dir: &Path) -> Result<()> {
+    let uuid_path = data_dir.join(METRICS_UUID_FILE_NAME);
+
+    let metrics_enabled = match tokio::fs::File::open(&uuid_path).await {
+        Ok(mut f) => {
+            let mut uuid_str = String::new();
+            f.read_to_string(&mut uuid_str).await?;
+            !uuid_str.trim().is_empty()
+        }
+        Err(err) => match err.kind() {
+            std::io::ErrorKind::NotFound => {
+                // Consent hasn't been determined yet, so there is nothing to sync
+                return Ok(());
+            }
+            _ => return Err(err.into()),
+        },
+    };
+
+    let bash_config_home = dirs::config_dir().context("Unable to find config dir")?;
+    let bash_user_meta_path = bash_config_home.join("flox").join("floxUserMeta.json");
+
+    let mut bash_user_meta_file = tokio::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(&bash_user_meta_path)
+        .await
+        .context("Unable to open bash flox meta")?;
+
+    let mut json: serde_json::Value = {
+        let mut bash_user_meta_json = String::new();
+        bash_user_meta_file
+            .read_to_string(&mut bash_user_meta_json)
+            .await
+            .context("Unable to read bash flox meta")?;
+
+        serde_json::from_str(&bash_user_meta_json).context("Unable to parse bash flox meta")?
+    };
+
+    json["floxMetricsConsent"] = json!(if metrics_enabled { 1 } else { 0 });
+
+    let bash_user_meta_json = serde_json::to_string_pretty(&json)
+        .context("Failed to serialize modified bash flox meta")?;
+
+    bash_user_meta_file.set_len(0).await?;
+    bash_user_meta_file.rewind().await?;
+    bash_user_meta_file
+        .write_all(bash_user_meta_json.as_bytes())
+        .await
+        .context("Unable to write modified bash flox meta")?;
+
+    Ok(())
+}
+
+pub async fn run_in_flox(
+    flox: &Flox,
+    args: &[impl AsRef<std::ffi::OsStr> + Debug],
+) -> Result<ExitStatus> {
     debug!("Running in flox with arguments: {:?}", args);
+
+    sync_bash_metrics_consent(&flox.data_dir).await?;
+
     let status = Command::new(FLOX_SH)
         .args(args)
         .envs(&default_nix_subprocess_env())

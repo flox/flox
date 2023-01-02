@@ -661,6 +661,7 @@ dependencies = [
  "octocrab",
  "once_cell",
  "regex",
+ "reqwest",
  "rnix 0.10.2",
  "serde",
  "serde_json",
@@ -668,8 +669,11 @@ dependencies = [
  "serde_yaml",
  "shell-escape",
  "supports-color",
+ "sys-info",
  "tempfile",
+ "time 0.3.16",
  "tokio",
+ "uuid",
  "xdg",
 ]
 
@@ -701,6 +705,7 @@ dependencies = [
  "thiserror",
  "tokio",
  "url",
+ "uuid",
 ]
 
 [[package]]
@@ -2283,6 +2288,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "sys-info"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0b3a0d0aba8bf96a0e1ddfdc352fc53b3df7f39318c71854910c3c4b024ae52c"
+dependencies = [
+ "cc",
+ "libc",
+]
+
+[[package]]
 name = "tempfile"
 version = "3.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2581,6 +2596,16 @@ dependencies = [
  "form_urlencoded",
  "idna",
  "percent-encoding",
+ "serde",
+]
+
+[[package]]
+name = "uuid"
+version = "1.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "422ee0de9031b5b948b97a8fc04e3aa35230001a722ddd27943e0be31564ce4c"
+dependencies = [
+ "getrandom",
  "serde",
 ]
 

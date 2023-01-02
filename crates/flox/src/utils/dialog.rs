@@ -17,7 +17,13 @@ where
     }
 }
 
-fn flox_theme() -> RenderConfig {
+impl InquireExt for inquire::Confirm<'_> {
+    fn with_flox_theme(self) -> Self {
+        self.with_render_config(flox_theme())
+    }
+}
+
+pub fn flox_theme() -> RenderConfig {
     let mut render_config = RenderConfig::default_colored();
     render_config.answered_prompt_prefix =
         Styled::new(">").with_fg(colors::LIGHT_PEACH.to_inquire());

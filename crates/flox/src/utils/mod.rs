@@ -11,6 +11,7 @@ use indoc::indoc;
 use itertools::Itertools;
 use log::{debug, error, warn};
 use once_cell::sync::Lazy;
+use std::borrow::Cow;
 use tempfile::TempDir;
 
 use std::collections::HashSet;
@@ -21,7 +22,7 @@ use flox_rust_sdk::prelude::Installable;
 pub mod colors;
 pub mod dialog;
 pub mod init;
-use std::borrow::Cow;
+pub mod metrics;
 
 use regex::Regex;
 
@@ -139,7 +140,6 @@ pub trait InstallableDef: FromStr + Default + Clone {
             .join(".netrc");
 
         let flox = Flox {
-            collect_metrics: false,
             cache_dir: config.flox.cache_dir,
             data_dir: config.flox.data_dir,
             config_dir: config.flox.config_dir,
@@ -148,6 +148,7 @@ pub trait InstallableDef: FromStr + Default + Clone {
             system: env!("NIX_TARGET_SYSTEM").to_string(),
             netrc_file,
             access_tokens,
+            uuid: uuid::Uuid::nil(),
         };
 
         let default_prefixes = Self::DEFAULT_PREFIXES;

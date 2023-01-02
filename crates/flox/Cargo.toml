@@ -37,6 +37,10 @@ xdg = "2.4"
 nix = "0.26"
 indoc = "1.0"
 derive_more = "0.99.17"
+time = { version = "0.3", features = ["serde"] }
+uuid = { version = "1.2", features = ["serde", "v4"] }
+reqwest = "0.11"
+sys-info = "0.9"
 
 [features]
 extra-tests = ["bats-tests", "impure-unit-tests"]
