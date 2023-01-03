@@ -134,9 +134,11 @@ pub fn init_logger(verbosity: Verbosity, debug: bool) {
         (Verbosity::Quiet, false) => "off,flox=error",
         (Verbosity::Quiet, true) => "off,flox=error,posix=debug",
         (Verbosity::Verbose(0), false) => "off,flox=info",
-        (Verbosity::Verbose(0), true) => "off,flox=debug",
+        (Verbosity::Verbose(0), true) => "off,flox=debug,posix=debug",
         (Verbosity::Verbose(1), false) => "off,flox=info,flox-rust-sdk=info,runix=info",
-        (Verbosity::Verbose(1), true) => "off,flox=debug,flox-rust-sdk=debug,runix=debug",
+        (Verbosity::Verbose(1), true) => {
+            "off,flox=debug,flox-rust-sdk=debug,runix=debug,posix=debug"
+        }
         (Verbosity::Verbose(2), _) => "debug",
         (Verbosity::Verbose(_), _) => "trace",
     };
