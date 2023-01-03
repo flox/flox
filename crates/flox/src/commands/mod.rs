@@ -104,13 +104,14 @@ impl FloxArgs {
             let _ = temp_dir.into_path();
         }
 
-        ctrlc::set_handler(move || {
+        tokio::spawn(async move {
+            tokio::signal::ctrl_c().await.unwrap();
             // in case of SIG* the drop handler of temp_dir will not be called
             // if we are not in debugging mode, drop the tempdir manually
             if !self.debug {
                 let _ = fs::remove_dir_all(&temp_dir_path);
             }
-        })?;
+        });
 
         match self.command {
             Commands::Package(ref package) => package.handle(config, flox).await?,

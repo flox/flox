@@ -378,16 +378,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ctrlc"
-version = "3.2.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1d91974fbbe88ec1df0c24a4f00f99583667a7e2e6272b2b92d294d81e462173"
-dependencies = [
- "nix 0.25.1",
- "winapi",
-]
-
-[[package]]
 name = "cxx"
 version = "1.0.80"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -645,7 +635,6 @@ dependencies = [
  "bpaf",
  "config",
  "crossterm",
- "ctrlc",
  "derive_more",
  "dirs",
  "dotenv",
@@ -657,7 +646,7 @@ dependencies = [
  "inquire",
  "itertools",
  "log",
- "nix 0.26.1",
+ "nix",
  "octocrab",
  "once_cell",
  "regex",
@@ -1382,18 +1371,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1f71d09d5c87634207f894c6b31b6a2b2c64ea3bdcf71bd5599fdbbe1600c00f"
 dependencies = [
  "unicode-segmentation",
-]
-
-[[package]]
-name = "nix"
-version = "0.25.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f346ff70e7dbfd675fe90590b92d59ef2de15a8779ae305ebcbfd3f0caf59be4"
-dependencies = [
- "autocfg",
- "bitflags",
- "cfg-if",
- "libc",
 ]
 
 [[package]]

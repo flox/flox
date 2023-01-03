@@ -9,6 +9,7 @@ use log::{debug, error, info, warn};
 use serde_json::json;
 use std::env;
 use std::fmt::{Debug, Display};
+use std::os::unix::process::ExitStatusExt;
 use std::path::Path;
 use std::process::{ExitCode, ExitStatus};
 use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
@@ -79,7 +80,12 @@ pub async fn flox_forward(flox: &Flox) -> Result<()> {
     let result = run_in_flox(flox, &env::args_os().collect::<Vec<_>>()[1..]).await?;
     if !result.success() {
         Err(FloxShellErrorCode(ExitCode::from(
-            result.code().expect("Process terminated by signal") as u8,
+            result.code().unwrap_or(
+                // Unix only
+                result
+                    .signal()
+                    .expect("Process terminated by unknown means"),
+            ) as u8,
         )))?;
     }
     Ok(())
