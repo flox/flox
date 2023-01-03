@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt::format, path::PathBuf};
+use std::{collections::HashMap, path::PathBuf};
 
 use derive_more::{Deref, From};
 

@@ -1,7 +1,6 @@
 //! Modiule for all defined environment variables to
 //! reduce the number of magic strings
 
-use crate::flox;
 use std::collections::HashMap;
 use std::env;
 pub static NIX_BIN: &str = env!("NIX_BIN");

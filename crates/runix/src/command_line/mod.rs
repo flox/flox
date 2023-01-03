@@ -384,7 +384,7 @@ where
 
     // type Backend = NixCommandLine;
 
-    async fn run(&self, backend: &u32, nix_args: &NixArgs) -> Result<(), io::Error> {
+    async fn run(&self, _backend: &u32, _nix_args: &NixArgs) -> Result<(), io::Error> {
         panic!("42")
         // backend.run_in_nix(args)
     }

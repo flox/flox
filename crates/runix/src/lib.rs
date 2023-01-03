@@ -1,3 +1,5 @@
+#![deny(warnings)]
+
 use std::error::Error;
 
 /// Rust abstraction over the nix command line

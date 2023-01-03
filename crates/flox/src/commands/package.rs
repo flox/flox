@@ -9,7 +9,7 @@ use flox_rust_sdk::{
         arguments::{flake::FlakeArgs, NixArgs},
         command::Eval,
         command_line::NixCommandLine,
-        Run, RunJson,
+        Run,
     },
     prelude::Stability,
 };
@@ -101,6 +101,7 @@ impl InstallableDef for BundlerInstallable {
     const ARG_FLAG: Option<&'static str> = Some("--bundler");
 }
 
+#[allow(clippy::type_complexity)]
 static COMPLETED_INSTALLABLES: Lazy<
     Mutex<HashMap<(TypeId, String), Vec<(String, Option<String>)>>>,
 > = Lazy::new(|| Mutex::new(HashMap::new()));

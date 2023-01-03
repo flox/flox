@@ -1,21 +1,13 @@
-use std::str::FromStr;
-
 use derive_more::FromStr;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use url::Url;
 
-use super::{
-    flake_ref::{FlakeRefError, ToFlakeRef},
-    registry::{Registry, RegistryError},
-};
+use super::{flake_ref::ToFlakeRef, registry::Registry};
 
 #[derive(Error, Debug)]
 pub enum ChannelError {
     #[error("Couldn't Parse channel Url: {0}")]
     ParseUrl(#[from] url::ParseError),
-    #[error("Couldn't Parse channel flakeRef: {0}")]
-    ParseFlakeRef(FlakeRefError),
 }
 
 #[derive(Debug, FromStr)]
@@ -47,6 +39,7 @@ impl ChannelRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::str::FromStr;
 
     #[test]
     fn github_url() {

@@ -1,11 +1,10 @@
-#[macro_use]
-extern crate anyhow;
+#![deny(warnings)]
 
 use self::config::{Feature, Impl};
 use anyhow::{Context, Result};
 use commands::FloxArgs;
 use flox_rust_sdk::environment::default_nix_subprocess_env;
-use log::{debug, error, info, warn};
+use log::{debug, error, warn};
 use serde_json::json;
 use std::env;
 use std::fmt::{Debug, Display};
@@ -71,7 +70,7 @@ pub fn should_flox_forward(f: Feature) -> Result<bool> {
 struct FloxShellErrorCode(ExitCode);
 impl Display for FloxShellErrorCode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        <Self as Debug>::fmt(&self, f)
+        <Self as Debug>::fmt(self, f)
     }
 }
 impl std::error::Error for FloxShellErrorCode {}
@@ -80,12 +79,11 @@ pub async fn flox_forward(flox: &Flox) -> Result<()> {
     let result = run_in_flox(flox, &env::args_os().collect::<Vec<_>>()[1..]).await?;
     if !result.success() {
         Err(FloxShellErrorCode(ExitCode::from(
-            result.code().unwrap_or(
-                // Unix only
+            result.code().unwrap_or_else(|| {
                 result
                     .signal()
-                    .expect("Process terminated by unknown means"),
-            ) as u8,
+                    .expect("Process terminated by unknown means")
+            }) as u8,
         )))?;
     }
     Ok(())
@@ -190,16 +188,5 @@ fn set_user() -> Result<()> {
             );
         };
         Ok(())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn test_flox_help() {
-        // TODO check the output
-        assert_eq!(run_in_flox(&["--help"]).await.unwrap().code().unwrap(), 0,)
     }
 }

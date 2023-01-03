@@ -1,11 +1,12 @@
+use anyhow::Result;
+use std::process::ExitCode;
 use std::{
     fs::{self, create_dir_all},
-    os::{self, unix},
+    os::unix,
     path::Path,
-    process::{self, ExitCode},
+    process::{self},
 };
 
-use anyhow::Result;
 use derive_more::{Deref, DerefMut};
 use tempfile::TempDir;
 
@@ -84,13 +85,11 @@ fn create_test_root() -> TempDir {
     let tests_path = test_fake_root.path().join("tests");
     create_dir_all(&tests_path).expect("Failed creating tests directory");
 
-    for entry in fs::read_dir(Path::new(env!("FLOX_SH_FLAKE")).join("tests")).unwrap() {
-        match entry {
-            Ok(entry) => {
-                unix::fs::symlink(entry.path(), tests_path.join(entry.file_name())).unwrap()
-            }
-            Err(_) => {}
-        }
+    for entry in fs::read_dir(Path::new(env!("FLOX_SH_FLAKE")).join("tests"))
+        .unwrap()
+        .flatten()
+    {
+        unix::fs::symlink(entry.path(), tests_path.join(entry.file_name())).unwrap()
     }
     test_fake_root
 }

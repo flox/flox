@@ -10,7 +10,7 @@ use thiserror::Error;
 
 use crate::{
     flox::{Flox, FloxNixApi},
-    prelude::Stability,
+    models::stability::Stability,
 };
 
 #[derive(Constructor)]

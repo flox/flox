@@ -6,6 +6,7 @@ use std::{
     path::PathBuf,
 };
 
+use log::debug;
 use once_cell::sync::Lazy;
 use runix::{
     arguments::{
@@ -26,8 +27,7 @@ use crate::{
     actions::environment::Environment,
     actions::{environment::EnvironmentError, package::Package},
     environment::{self, default_nix_subprocess_env},
-    models::channels::ChannelRegistry,
-    prelude::Stability,
+    models::{channels::ChannelRegistry, stability::Stability},
     providers::git::GitProvider,
 };
 
@@ -264,7 +264,7 @@ impl Flox {
             .map(|(installable_id, flox_installable)| {
                 // Split the key out of the provided attr path, using the first component as a prefix if more than 1 is present
                 let (attr_prefix, key) = match flox_installable.attr_path.split_first() {
-                    Some((prefix, key)) if key.len() > 0 => {
+                    Some((prefix, key)) if !key.is_empty() => {
                         (Some(prefix.as_str()), Some(key.to_vec()))
                     }
                     Some((prefix, _)) => (None, Some(vec![prefix.clone()])),
@@ -293,11 +293,10 @@ impl Flox {
                         .get(&None)
                         .iter()
                         .chain(inputs_assoc.get(&Some(installable_id)).iter())
-                        .map(|x| x
+                        .flat_map(|x| x
                             .iter()
                             .map(|x| format!("{:?}", x.to_string()))
                             .collect::<Vec<String>>())
-                        .flatten()
                         .collect::<Vec<String>>()
                         .join(" "),
                     key = key
@@ -426,6 +425,7 @@ impl Flox {
             env
         };
 
+        #[allow(clippy::needless_update)]
         let common_args = NixCommonArgs {
             ..Default::default()
         };

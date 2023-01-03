@@ -1,0 +1,49 @@
+use std::str::FromStr;
+
+use derive_more::Display;
+use runix::arguments::flake::OverrideInputs;
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Serialize, Deserialize, Display, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum Stability {
+    #[display(fmt = "stable")]
+    Stable,
+    #[display(fmt = "unstable")]
+    Unstable,
+    #[display(fmt = "staging")]
+    Staging,
+    #[display(fmt = "{}", "_0")]
+    Other(String), // will need custom deserializer for this
+    #[display(fmt = "stable")]
+    Unknown,
+}
+
+impl Stability {
+    pub fn as_override(&self) -> OverrideInputs {
+        (
+            "floxpkgs/nixpkgs/nixpkgs".into(),
+            format!("flake:nixpkgs-{}", self),
+        )
+            .into()
+    }
+}
+
+impl Default for Stability {
+    fn default() -> Self {
+        Stability::Unknown
+    }
+}
+
+// TODO: fix serde stuff for Stability...
+impl FromStr for Stability {
+    type Err = anyhow::Error;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "stable" => Ok(Stability::Stable),
+            "unstable" => Ok(Self::Unstable),
+            "staging" => Ok(Stability::Staging),
+            _ => Ok(Stability::Other(s.to_string())),
+        }
+    }
+}

@@ -1,4 +1,5 @@
 use fs_extra;
+use log::{info, warn};
 use nix_editor;
 use runix::NixBackend;
 use runix::{
@@ -199,7 +200,7 @@ impl<'flox> Environment<'flox> {
 
     pub async fn remove<Nix: FloxNixApi>(
         &self,
-        package: FloxPackage,
+        _package: FloxPackage,
     ) -> Result<(), EnvironmentRemoveError<Nix>>
     where
         Build: Run<Nix>,

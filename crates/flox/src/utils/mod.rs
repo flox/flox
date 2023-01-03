@@ -1,6 +1,6 @@
-use std::{collections::HashMap, path::Path, str::FromStr};
+use std::{collections::HashMap, str::FromStr};
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use async_trait::async_trait;
 use crossterm::tty::IsTty;
 use flox_rust_sdk::{
@@ -31,14 +31,6 @@ use crate::utils::dialog::InquireExt;
 
 static NIX_IDENTIFIER_SAFE: Lazy<Regex> = Lazy::new(|| Regex::new(r#"^[a-zA-Z0-9_-]+$"#).unwrap());
 
-struct Flake {}
-
-impl Flake {
-    fn determine_default_flake(path_str: String) {
-        let _path = Path::new(&path_str);
-    }
-}
-
 pub fn init_channels() -> Result<ChannelRegistry> {
     let mut channels = ChannelRegistry::default();
     channels.register_channel("flox", Channel::from_str("github:flox/floxpkgs")?);
@@ -65,7 +57,7 @@ pub fn init_channels() -> Result<ChannelRegistry> {
     Ok(channels)
 }
 
-fn nix_str_safe<'a>(s: &'a str) -> Cow<'a, str> {
+fn nix_str_safe(s: &str) -> Cow<str> {
     if NIX_IDENTIFIER_SAFE.is_match(s) {
         s.into()
     } else {
@@ -154,7 +146,7 @@ pub trait InstallableDef: FromStr + Default + Clone {
         let default_prefixes = Self::DEFAULT_PREFIXES;
         let default_flakerefs = Self::DEFAULT_FLAKEREFS;
 
-        let inst = inst.clone();
+        let inst = inst;
         let handle = tokio::runtime::Handle::current();
         let comp = std::thread::spawn(move || {
             handle
@@ -218,18 +210,18 @@ pub async fn complete_installable(
 
         flakerefs_with
             .entry(k1.clone())
-            .or_insert_with(|| HashSet::new())
+            .or_insert_with(HashSet::new)
             .insert(m.flakeref.clone());
 
         prefixes_with
             .entry(k1.clone())
-            .or_insert_with(|| HashSet::new())
+            .or_insert_with(HashSet::new)
             .insert(m.prefix.clone());
     }
 
     let mut completions: Vec<String> = matches
         .iter()
-        .map(|m| {
+        .flat_map(|m| {
             let nix_safe_key = m
                 .key
                 .iter()
@@ -253,7 +245,7 @@ pub async fn complete_installable(
                     "{}#{}.{}.{}",
                     m.flakeref,
                     nix_str_safe(&m.prefix),
-                    nix_str_safe(&system),
+                    nix_str_safe(system),
                     nix_safe_key
                 ));
 
@@ -261,7 +253,7 @@ pub async fn complete_installable(
                     t.push(format!(
                         "{}.{}.{}",
                         nix_str_safe(&m.prefix),
-                        nix_str_safe(&system),
+                        nix_str_safe(system),
                         nix_safe_key
                     ));
                 }
@@ -281,7 +273,6 @@ pub async fn complete_installable(
 
             t
         })
-        .flatten()
         .filter(|c| c.starts_with(installable_str))
         .collect();
 
@@ -297,80 +288,85 @@ pub async fn resolve_installable_from_matches(
     arg_flag: Option<&str>,
     mut matches: Vec<ResolvedInstallableMatch>,
 ) -> Result<Installable> {
-    if matches.len() > 1 {
-        let mut prefixes_with: HashMap<String, HashSet<String>> = HashMap::new();
-        let mut flakerefs_with: HashMap<String, HashSet<String>> = HashMap::new();
-
-        for m in &matches {
-            let k1 = m.key.get(0).expect("match is missing key");
-
-            flakerefs_with
-                .entry(k1.clone())
-                .or_insert_with(|| HashSet::new())
-                .insert(m.flakeref.clone());
-
-            prefixes_with
-                .entry(k1.clone())
-                .or_insert_with(|| HashSet::new())
-                .insert(m.prefix.clone());
+    match matches.len() {
+        0 => {
+            bail!("No matching installables found");
         }
+        1 => Ok(matches.remove(0).installable()),
+        _ => {
+            let mut prefixes_with: HashMap<String, HashSet<String>> = HashMap::new();
+            let mut flakerefs_with: HashMap<String, HashSet<String>> = HashMap::new();
 
-        // Complile a list of choices for the user to choose from, and shorter choices for suggestions
-        let mut choices: Vec<(String, String)> = matches
-            .iter()
-            .map(
-                // Format the results according to how verbose we have to be for disambiguation, only showing the flakeref or prefix when multiple are used
-                |m| {
-                    let nix_safe_key = m
-                        .key
-                        .iter()
-                        .map(|s| nix_str_safe(s.as_str()))
-                        .collect::<Vec<_>>()
-                        .join(".");
+            for m in &matches {
+                let k1 = m.key.get(0).expect("match is missing key");
 
-                    let k1 = m.key.get(0).expect("match is missing key");
+                flakerefs_with
+                    .entry(k1.clone())
+                    .or_insert_with(HashSet::new)
+                    .insert(m.flakeref.clone());
 
-                    let flakerefs = flakerefs_with.get(k1).map(HashSet::len).unwrap_or(0);
-                    let prefixes = flakerefs_with.get(k1).map(HashSet::len).unwrap_or(0);
+                prefixes_with
+                    .entry(k1.clone())
+                    .or_insert_with(HashSet::new)
+                    .insert(m.prefix.clone());
+            }
 
-                    let prefixes_total = prefixes_with.values().fold(0, |a, p| a + p.len());
+            // Complile a list of choices for the user to choose from, and shorter choices for suggestions
+            let mut choices: Vec<(String, String)> = matches
+                .iter()
+                .map(
+                    // Format the results according to how verbose we have to be for disambiguation, only showing the flakeref or prefix when multiple are used
+                    |m| {
+                        let nix_safe_key = m
+                            .key
+                            .iter()
+                            .map(|s| nix_str_safe(s.as_str()))
+                            .collect::<Vec<_>>()
+                            .join(".");
 
-                    let flakeref_str: Cow<str> = if flakerefs > 1 {
-                        format!("{}#", m.flakeref).into()
-                    } else {
-                        "".into()
-                    };
+                        let k1 = m.key.get(0).expect("match is missing key");
 
-                    let prefix_strs: (Cow<str>, Cow<str>) = if prefixes_total > 1 {
-                        let long: Cow<str> = format!("{}.", nix_str_safe(&m.prefix)).into();
+                        let flakerefs = flakerefs_with.get(k1).map(HashSet::len).unwrap_or(0);
+                        let prefixes = flakerefs_with.get(k1).map(HashSet::len).unwrap_or(0);
 
-                        let short = if prefixes > 1 {
-                            long.clone()
+                        let prefixes_total = prefixes_with.values().fold(0, |a, p| a + p.len());
+
+                        let flakeref_str: Cow<str> = if flakerefs > 1 {
+                            format!("{}#", m.flakeref).into()
                         } else {
                             "".into()
                         };
 
-                        (long, short)
-                    } else {
-                        ("".into(), "".into())
-                    };
+                        let prefix_strs: (Cow<str>, Cow<str>) = if prefixes_total > 1 {
+                            let long: Cow<str> = format!("{}.", nix_str_safe(&m.prefix)).into();
 
-                    (
-                        format!("{}{}{}", flakeref_str, prefix_strs.0, nix_safe_key),
-                        format!("{}{}{}", flakeref_str, prefix_strs.1, nix_safe_key),
-                    )
-                },
-            )
-            .collect();
+                            let short = if prefixes > 1 {
+                                long.clone()
+                            } else {
+                                "".into()
+                            };
 
-        let full_subcommand: Cow<str> = match arg_flag {
-            Some(f) => format!("{subcommand} {f}").into(),
-            None => subcommand.into(),
-        };
+                            (long, short)
+                        } else {
+                            ("".into(), "".into())
+                        };
 
-        if !std::io::stderr().is_tty() {
-            error!(
-                indoc! {"
+                        (
+                            format!("{}{}{}", flakeref_str, prefix_strs.0, nix_safe_key),
+                            format!("{}{}{}", flakeref_str, prefix_strs.1, nix_safe_key),
+                        )
+                    },
+                )
+                .collect();
+
+            let full_subcommand: Cow<str> = match arg_flag {
+                Some(f) => format!("{subcommand} {f}").into(),
+                None => subcommand.into(),
+            };
+
+            if !std::io::stderr().is_tty() {
+                error!(
+                    indoc! {"
                     You must address a specific {derivation_type}. For example with:
 
                       $ flox {full_subcommand} {first_choice},
@@ -378,40 +374,37 @@ pub async fn resolve_installable_from_matches(
                     The available packages are:
                     {choices_list}
                 "},
-                derivation_type = derivation_type,
-                full_subcommand = full_subcommand,
-                first_choice = choices.get(0).expect("Expected at least one choice").1,
-                choices_list = choices
-                    .iter()
-                    .map(|(choice, _)| format!("  - {choice}"))
-                    .join("\n")
+                    derivation_type = derivation_type,
+                    full_subcommand = full_subcommand,
+                    first_choice = choices.get(0).expect("Expected at least one choice").1,
+                    choices_list = choices
+                        .iter()
+                        .map(|(choice, _)| format!("  - {choice}"))
+                        .join("\n")
+                );
+
+                bail!("No terminal to prompt for {derivation_type} choice");
+            }
+
+            // Prompt for the user to select match
+            let sel = inquire::Select::new(
+                &format!("Select a {} for flox {}", derivation_type, subcommand),
+                choices.iter().map(|(long, _)| long).collect(),
+            )
+            .with_flox_theme()
+            .raw_prompt()
+            .with_context(|| format!("Failed to prompt for {} choice", derivation_type))?;
+
+            let installable = matches.remove(sel.index).installable();
+
+            warn!(
+                "HINT: avoid selecting a {} next time with:\n  $ flox {} {}",
+                derivation_type,
+                full_subcommand,
+                shell_escape::escape(choices.remove(sel.index).1.into())
             );
 
-            bail!("No terminal to prompt for {derivation_type} choice");
+            Ok(installable)
         }
-
-        // Prompt for the user to select match
-        let sel = inquire::Select::new(
-            &format!("Select a {} for flox {}", derivation_type, subcommand),
-            choices.iter().map(|(long, _)| long).collect(),
-        )
-        .with_flox_theme()
-        .raw_prompt()
-        .with_context(|| format!("Failed to prompt for {} choice", derivation_type))?;
-
-        let installable = matches.remove(sel.index).installable();
-
-        warn!(
-            "HINT: avoid selecting a {} next time with:\n  $ flox {} {}",
-            derivation_type,
-            full_subcommand,
-            shell_escape::escape(choices.remove(sel.index).1.into())
-        );
-
-        Ok(installable)
-    } else if matches.len() == 1 {
-        Ok(matches.remove(0).installable())
-    } else {
-        bail!("No matching installables found");
     }
 }

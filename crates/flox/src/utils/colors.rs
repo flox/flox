@@ -115,6 +115,7 @@ impl FloxColor {
     }
 }
 
+#[allow(unused)]
 pub const DARK_BLUE: FloxColor = FloxColor {
     ansi256: 17,
     rgb: (32, 20, 123),
@@ -126,6 +127,7 @@ pub const LIGHT_BLUE: FloxColor = FloxColor {
     basic: BasicColor::Blue,
 };
 
+#[allow(unused)]
 pub const DARK_PEACH: FloxColor = FloxColor {
     ansi256: 216,
     rgb: (225, 185, 144),

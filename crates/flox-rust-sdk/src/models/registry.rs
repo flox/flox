@@ -1,17 +1,13 @@
-use std::{collections::BTreeSet, default, num::ParseIntError, path::PathBuf};
+use std::collections::BTreeSet;
 
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
 use thiserror::Error;
-use url::{form_urlencoded::Serializer, Url, UrlQuery};
 
 use super::flake_ref::{FlakeRefError, IndirectFlake, ToFlakeRef};
 
 #[derive(Error, Debug)]
 pub enum RegistryError {
-    #[error("Failed Importing Registry: {0}")]
-    Import(serde_json::Error),
-
     #[error(transparent)]
     FlakeRef(#[from] FlakeRefError),
 }
@@ -34,13 +30,14 @@ impl Registry {
             from: FromFlakeRef::Indirect(IndirectFlake {
                 id: name.to_string(),
             }),
-            to: to,
+            to,
             exact: None,
         });
     }
 
+    #[allow(unused)]
     /// Todo: more functions such as remove, get, etc
-    pub fn remove(&mut self, name: impl ToString) {}
+    pub fn remove(&mut self, _name: impl ToString) {}
 }
 
 /// TODO: use https://github.com/dtolnay/serde-repr?

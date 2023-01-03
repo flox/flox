@@ -1,3 +1,4 @@
+use log::debug;
 use once_cell::sync::Lazy;
 use thiserror::Error;
 
@@ -51,7 +52,7 @@ impl std::str::FromStr for FloxInstallable {
             });
         }
 
-        if attr_path_str == "" {
+        if attr_path_str.is_empty() {
             return Ok(FloxInstallable {
                 source: maybe_source.map(String::from),
                 attr_path: vec![],

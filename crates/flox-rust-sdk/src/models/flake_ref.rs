@@ -1,11 +1,10 @@
-use std::{borrow::Cow, default, num::ParseIntError, path::PathBuf, str::FromStr};
+use std::{borrow::Cow, num::ParseIntError, path::PathBuf, str::FromStr};
 
+use log::info;
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
 use thiserror::Error;
 use url::{form_urlencoded::Serializer, Url, UrlQuery};
-
-use super::registry::RegistryError;
 
 #[derive(Debug, Error)]
 pub enum UrlError {
@@ -128,20 +127,20 @@ impl ToFlakeRef {
                 url
             }
             ToFlakeRef::Git {
-                url,
-                shallow,
-                submodules,
-                all_refs,
-                commit_ref,
-                rev_count,
-                pinned,
+                url: _,
+                shallow: _,
+                submodules: _,
+                all_refs: _,
+                commit_ref: _,
+                rev_count: _,
+                pinned: _,
             } => todo!(),
             ToFlakeRef::Tarball {
-                url,
-                unpack,
-                nar_hash,
+                url: _,
+                unpack: _,
+                nar_hash: _,
             } => todo!(),
-            ToFlakeRef::Indirect(IndirectFlake { id }) => {
+            ToFlakeRef::Indirect(IndirectFlake { id: _ }) => {
                 Url::parse("flake:{id}").expect("Failed to create indirect reference")
             }
         };
@@ -151,19 +150,16 @@ impl ToFlakeRef {
         let flake_ref = match url.scheme() {
             // https://cs.github.com/NixOS/nix/blob/f225f4307662fe9a57543d0c86c28aa9fddaf0d2/src/libfetchers/path.cc#L11
             //
-            "path" | "file" => {
-                let path = ToFlakeRef::Path {
-                    path: url.to_file_path().map_err(UrlError::ExtractPath)?,
-                    rev_count: url
-                        .query_pairs()
-                        .find(|(name, _)| name == "revCount")
-                        .map(|(c, _)| c.parse().map_err(FlakeRefError::ParseRevCount))
-                        .transpose()?,
-                    pinned: Pinned::from_query(url)?,
-                };
-                path
-            }
-            "github" => ToFlakeRef::GitHub(GitService::from_url(&url)?),
+            "path" | "file" => ToFlakeRef::Path {
+                path: url.to_file_path().map_err(UrlError::ExtractPath)?,
+                rev_count: url
+                    .query_pairs()
+                    .find(|(name, _)| name == "revCount")
+                    .map(|(c, _)| c.parse().map_err(FlakeRefError::ParseRevCount))
+                    .transpose()?,
+                pinned: Pinned::from_query(url)?,
+            },
+            "github" => ToFlakeRef::GitHub(GitService::from_url(url)?),
             "flake" => ToFlakeRef::Indirect(IndirectFlake {
                 id: url.path().to_string(),
             }),
@@ -312,8 +308,8 @@ impl GitService {
         let path = format!("{}/{}", self.owner, self.repo);
         url.set_path(&path);
         let mut query = url.query_pairs_mut();
-        if let Some(ref commitRef) = self.commit_ref {
-            query.append_pair("ref", commitRef);
+        if let Some(ref commit_ref) = self.commit_ref {
+            query.append_pair("ref", commit_ref);
         }
         for pin in &self.pinned {
             pin.add_to_query(&mut query);
@@ -324,7 +320,7 @@ impl GitService {
     fn from_url(url: &Url) -> Result<Self, FlakeRefError> {
         let mut service = match url
             .path()
-            .splitn(3, "/")
+            .splitn(3, '/')
             // .cloned()
             .collect::<Vec<_>>()[..]
         {

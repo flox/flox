@@ -1,4 +1,4 @@
-use std::{collections::HashMap, env, io::Write, path::PathBuf};
+use std::{collections::HashMap, env, path::PathBuf};
 
 use anyhow::{Context, Result};
 use config::{Config as HierarchicalConfig, Environment};
@@ -76,8 +76,14 @@ impl Feature {
 
         Ok(match self {
             Feature::All => *map.get(self).unwrap_or(&Impl::Bash),
-            Feature::Env => *map.get(self).or(map.get(&Self::All)).unwrap_or(&Impl::Bash),
-            Feature::Nix => *map.get(self).or(map.get(&Self::All)).unwrap_or(&Impl::Rust),
+            Feature::Env => *map
+                .get(self)
+                .or_else(|| map.get(&Self::All))
+                .unwrap_or(&Impl::Bash),
+            Feature::Nix => *map
+                .get(self)
+                .or_else(|| map.get(&Self::All))
+                .unwrap_or(&Impl::Rust),
         })
     }
 }

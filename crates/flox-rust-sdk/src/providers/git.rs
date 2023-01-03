@@ -1,10 +1,12 @@
 use std::path::Path;
 
+use log::error;
 use thiserror::Error;
 
 use async_trait::async_trait;
 use tokio::process::Command;
 
+#[allow(unused)]
 pub struct Repository {
     name: String,
     path: String,

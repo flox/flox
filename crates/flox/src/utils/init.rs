@@ -31,8 +31,8 @@ use crate::utils::colors;
 use super::dialog::InquireExt;
 use super::metrics::METRICS_UUID_FILE_NAME;
 
-const ENV_GIT_CONFIG_SYSTEM: &'static str = "GIT_CONFIG_SYSTEM";
-const ENV_FLOX_ORIGINAL_GIT_CONFIG_SYSTEM: &'static str = "FLOX_ORIGINAL_GIT_CONFIG_SYSTEM";
+const ENV_GIT_CONFIG_SYSTEM: &str = "GIT_CONFIG_SYSTEM";
+const ENV_FLOX_ORIGINAL_GIT_CONFIG_SYSTEM: &str = "FLOX_ORIGINAL_GIT_CONFIG_SYSTEM";
 
 async fn write_metrics_uuid(uuid_path: &Path, consent: bool) -> Result<()> {
     let mut file = tokio::fs::File::create(&uuid_path).await?;
@@ -197,7 +197,7 @@ pub fn init_logger(verbosity: Verbosity, debug: bool) {
                 },
                 target = record.target().bold(),
             )?;
-            write!(f, "\n")
+            writeln!(f)
         } else {
             write!(
                 IndentWrapper { buf: f },
@@ -210,7 +210,7 @@ pub fn init_logger(verbosity: Verbosity, debug: bool) {
                     _ => "".to_string(),
                 },
             )?;
-            write!(f, "\n")
+            writeln!(f)
         }
     });
 
@@ -266,7 +266,7 @@ pub fn init_access_tokens(
         let mut tokens = HashMap::new();
         for line in BufReader::new(File::open(nix_tokens_file)?).lines() {
             let line = line.unwrap();
-            let (k, v) = if let Some(l) = line.split_once("=") {
+            let (k, v) = if let Some(l) = line.split_once('=') {
                 l
             } else {
                 continue;
@@ -275,7 +275,7 @@ pub fn init_access_tokens(
             match (k.trim(), v.trim()) {
                 ("access-tokens", tt) | ("extra-access-tokens", tt) => {
                     tokens.extend(tt.split_ascii_whitespace().into_iter().map(|t| {
-                        let (tk, tv) = t.split_once("=").unwrap();
+                        let (tk, tv) = t.split_once('=').unwrap();
                         (tk.to_string(), tv.to_string())
                     }));
                 }
@@ -322,7 +322,7 @@ pub async fn init_git_conf(temp_dir: &Path) -> Result<()> {
     // `GIT_CONFIG_SYSTEM` as outside flox or by parent flox instance.
     // Ignored if absent, empty or pointing to a non-existent file.
     let current_system_conf = match env::var(ENV_GIT_CONFIG_SYSTEM) {
-        Result::Ok(c) if c != "" && Path::new(&c).exists() => Some(c),
+        Result::Ok(c) if !c.is_empty() && Path::new(&c).exists() => Some(c),
         _ => None,
     };
 
@@ -356,7 +356,7 @@ pub async fn init_git_conf(temp_dir: &Path) -> Result<()> {
         original_include = system_conf
             .as_ref()
             .map(|c| format!("path = {c}"))
-            .unwrap_or("; no original system git config".to_string())
+            .unwrap_or_else(|| "; no original system git config".to_string())
     );
 
     // create a file in the process directory containing the git config

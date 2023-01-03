@@ -1,6 +1,4 @@
-extern crate pretty_env_logger;
-#[macro_use]
-extern crate log;
+#![deny(warnings)]
 
 pub mod providers;
 pub mod utils;
@@ -11,7 +9,7 @@ pub mod environment;
 
 pub mod prelude {
     pub use crate::models::channels::{Channel, ChannelRegistry};
-    pub use crate::models::{catalog::Stability, flox_package};
+    pub use crate::models::{flox_package, stability::Stability};
     pub use crate::nix::installable::Installable;
 }
 
