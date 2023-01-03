@@ -1,6 +1,7 @@
 use std::{collections::HashMap, path::PathBuf};
 
 use derive_more::{Deref, From};
+use runix_derive::ToArgs;
 
 use crate::command_line::{
     flag::{Flag, FlagType},
@@ -10,7 +11,7 @@ use crate::command_line::{
 /// These arguments correspond to nix config settings as defined in `nix.conf` or overridden on the commandline
 /// and refer to the options defined in
 /// - All implementations of Setting<_> ([approximation](https://cs.github.com/?scopeName=All+repos&scope=&q=repo%3Anixos%2Fnix+%2FSetting%3C%5Cw%2B%3E%2F))
-#[derive(Clone, Default, Debug)]
+#[derive(Clone, Default, Debug, ToArgs)]
 pub struct NixConfigArgs {
     pub accept_flake_config: AcceptFlakeConfig,
     pub warn_dirty: WarnDirty,
@@ -55,12 +56,6 @@ impl NixConfigArgs {
             .map(|(k, v)| format!("{k} = {v}"))
             .collect::<Vec<_>>()
             .join("\n")
-    }
-}
-
-impl ToArgs for NixConfigArgs {
-    fn to_args(&self) -> Vec<String> {
-        self.flags().into_iter().flatten().collect()
     }
 }
 

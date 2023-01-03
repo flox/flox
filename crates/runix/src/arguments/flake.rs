@@ -1,4 +1,5 @@
 use derive_more::{Constructor, Deref, From};
+use runix_derive::ToArgs;
 
 use crate::{
     command_line::{
@@ -11,22 +12,10 @@ use crate::{
 /// Flake related arguments
 /// Corresponding to the arguments defined in
 /// [libcmd/installables.cc](https://github.com/NixOS/nix/blob/84cc7ad77c6faf1cda8f8a10f7c12a939b61fe35/src/libcmd/installables.cc#L26-L126)
-#[derive(Clone, Default, Debug)]
+#[derive(Clone, Default, Debug, ToArgs)]
 pub struct FlakeArgs {
     pub override_inputs: Vec<OverrideInputs>,
     pub no_write_lock_file: NoWriteLockFile,
-}
-
-impl ToArgs for FlakeArgs {
-    fn to_args(&self) -> Vec<String> {
-        vec![
-            self.no_write_lock_file.to_args(),
-            self.override_inputs.to_args(),
-        ]
-        .into_iter()
-        .flatten()
-        .collect()
-    }
 }
 
 /// Tuple like override inputs flag

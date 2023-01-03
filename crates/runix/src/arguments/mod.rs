@@ -1,4 +1,5 @@
 use derive_more::{Deref, From};
+use runix_derive::ToArgs;
 
 use crate::{
     command_line::ToArgs,
@@ -16,22 +17,13 @@ pub mod source;
 
 /// Nix arguments
 /// should be a proper struct + de/serialization to and from [&str]
-#[derive(Debug, Default)]
+#[derive(Debug, Default, ToArgs)]
 pub struct NixArgs {
     /// Common arguments to the nix command
     pub common: NixCommonArgs,
 
     /// Nix configuration (overrides nix.conf)
     pub config: NixConfigArgs,
-}
-
-impl ToArgs for NixArgs {
-    fn to_args(&self) -> Vec<String> {
-        let mut acc = vec![];
-        acc.append(&mut self.config.to_args());
-        acc.append(&mut self.common.to_args());
-        acc
-    }
 }
 
 /// Installable argument for commands taking a single Installable
@@ -58,16 +50,8 @@ impl ToArgs for InstallablesArgs {
 
 /// Nix arguments
 /// should be a proper struct + de/serialization to and from [&str]
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, ToArgs)]
 pub struct DevelopArgs {}
-
-impl ToArgs for DevelopArgs {
-    fn to_args(&self) -> Vec<String> {
-        let acc = vec![];
-
-        acc
-    }
-}
 
 #[derive(Clone, From, Deref, Debug)]
 #[from(forward)]
@@ -77,15 +61,9 @@ impl Flag for Bundler {
     const FLAG_TYPE: FlagType<Self> = FlagType::arg();
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, ToArgs)]
 pub struct BundleArgs {
     pub bundler: Option<Bundler>,
-}
-
-impl ToArgs for BundleArgs {
-    fn to_args(&self) -> Vec<String> {
-        self.bundler.to_args()
-    }
 }
 
 #[derive(Clone, From, Deref, Debug, Default)]
@@ -98,17 +76,8 @@ impl Flag for Apply {
 
 /// Options to `nix eval`
 /// https://github.com/NixOS/nix/blob/a6239eb5700ebb85b47bb5f12366404448361f8d/src/nix/eval.cc#LL21-40
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, ToArgs)]
 pub struct EvalArgs {
     pub apply: Option<Apply>,
     pub installable: Option<InstallableArg>,
-}
-
-impl ToArgs for EvalArgs {
-    fn to_args(&self) -> Vec<String> {
-        vec![self.installable.to_args(), self.apply.to_args()]
-            .into_iter()
-            .flatten()
-            .collect()
-    }
 }

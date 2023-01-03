@@ -1890,12 +1890,22 @@ dependencies = [
  "async-trait",
  "derive_more",
  "log",
+ "runix-derive",
  "serde",
  "serde_json",
  "shell-escape",
  "thiserror",
  "tokio",
  "tokio-stream",
+]
+
+[[package]]
+name = "runix-derive"
+version = "0.0.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]
