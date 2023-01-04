@@ -10,7 +10,6 @@ use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 use tempfile::TempDir;
 
-use crate::flox_forward;
 use crate::utils::init::{
     init_access_tokens, init_channels, init_git_conf, init_telemetry_consent, init_uuid,
 };
@@ -118,7 +117,7 @@ impl FloxArgs {
             Commands::Environment(ref environment) => environment.handle(flox).await?,
             Commands::Channel(ref channel) => channel.handle(flox).await?,
             Commands::General(ref general) => general.handle(flox).await?,
-            Commands::Prefix => flox_forward(&flox).await?,
+            Commands::Prefix => println!(env!("out")),
         }
 
         Ok(())
