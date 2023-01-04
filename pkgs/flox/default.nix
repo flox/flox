@@ -92,6 +92,9 @@ in
 
       cargoLock = {
         lockFile = self + "/Cargo.lock";
+        outputHashes = {
+          "inquire-0.5.2" = "sha256-B+MUxrSYYqiBYS+BA5gkRfm91Yd+ZMN/ukkFyUQLptU=";
+        };
       };
 
       outputs = ["out" "man"];

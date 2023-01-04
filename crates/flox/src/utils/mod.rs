@@ -364,7 +364,7 @@ pub async fn resolve_installable_from_matches(
                 None => subcommand.into(),
             };
 
-            if !std::io::stderr().is_tty() {
+            if !std::io::stderr().is_tty() || !std::io::stdin().is_tty() {
                 error!(
                     indoc! {"
                     You must address a specific {derivation_type}. For example with:

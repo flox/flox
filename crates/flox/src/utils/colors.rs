@@ -84,33 +84,41 @@ pub struct FloxColor {
 }
 
 impl FloxColor {
-    pub fn to_crossterm(&self) -> crossterm::style::Color {
+    pub fn to_crossterm(&self) -> Option<crossterm::style::Color> {
         match supports_color::on(supports_color::Stream::Stderr) {
             Some(supports_color::ColorLevel { has_16m: true, .. }) => {
-                crossterm::style::Color::Rgb {
+                Some(crossterm::style::Color::Rgb {
                     r: self.rgb.0,
                     g: self.rgb.1,
                     b: self.rgb.2,
-                }
+                })
             }
             Some(supports_color::ColorLevel { has_256: true, .. }) => {
-                crossterm::style::Color::AnsiValue(self.ansi256)
+                Some(crossterm::style::Color::AnsiValue(self.ansi256))
             }
-            _ => self.basic.to_crossterm(),
+            Some(supports_color::ColorLevel {
+                has_basic: true, ..
+            }) => Some(self.basic.to_crossterm()),
+            _ => None,
         }
     }
 
-    pub fn to_inquire(&self) -> inquire::ui::Color {
+    pub fn to_inquire(&self) -> Option<inquire::ui::Color> {
         match supports_color::on(supports_color::Stream::Stderr) {
-            Some(supports_color::ColorLevel { has_16m: true, .. }) => inquire::ui::Color::Rgb {
-                r: self.rgb.0,
-                g: self.rgb.1,
-                b: self.rgb.2,
-            },
-            Some(supports_color::ColorLevel { has_256: true, .. }) => {
-                inquire::ui::Color::AnsiValue(self.ansi256)
+            Some(supports_color::ColorLevel { has_16m: true, .. }) => {
+                Some(inquire::ui::Color::Rgb {
+                    r: self.rgb.0,
+                    g: self.rgb.1,
+                    b: self.rgb.2,
+                })
             }
-            _ => self.basic.to_inquire(),
+            Some(supports_color::ColorLevel { has_256: true, .. }) => {
+                Some(inquire::ui::Color::AnsiValue(self.ansi256))
+            }
+            Some(supports_color::ColorLevel {
+                has_basic: true, ..
+            }) => Some(self.basic.to_inquire()),
+            _ => None,
         }
     }
 }

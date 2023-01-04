@@ -46,7 +46,7 @@ async fn write_metrics_uuid(uuid_path: &Path, consent: bool) -> Result<()> {
 pub async fn init_telemetry_consent(data_dir: &Path) -> Result<()> {
     tokio::fs::create_dir_all(data_dir).await?;
 
-    if !std::io::stderr().is_tty() {
+    if !std::io::stderr().is_tty() || !std::io::stdin().is_tty() {
         // Can't prompt user now, do it another time
         return Ok(());
     }
@@ -147,19 +147,23 @@ pub fn init_logger(verbosity: Verbosity, debug: bool) {
         env_logger::Builder::from_env(env_logger::Env::default().default_filter_or(log_filter));
 
     builder.format(move |f, record| {
-        let mut style = ContentStyle::new();
-        match record.level() {
-            log::Level::Trace => {
-                style.foreground_color = Some(colors::LIGHT_PEACH.to_crossterm());
-                style.attributes.set(Attribute::Bold);
+        let line = if let Some(light_peach) = colors::LIGHT_PEACH.to_crossterm() {
+            let mut line_style = ContentStyle::new();
+            match record.level() {
+                log::Level::Trace => {
+                    line_style.foreground_color = Some(light_peach);
+                    line_style.attributes.set(Attribute::Bold);
+                }
+                log::Level::Error | log::Level::Warn => {
+                    line_style.attributes.set(Attribute::Bold);
+                }
+                _ => {}
             }
-            log::Level::Error | log::Level::Warn => {
-                style.attributes.set(Attribute::Bold);
-            }
-            _ => {}
-        }
 
-        let args = style.apply(record.args());
+            line_style.apply(record.args()).to_string()
+        } else {
+            record.args().to_string()
+        };
 
         struct IndentWrapper<'a> {
             buf: &'a mut Formatter,
@@ -185,28 +189,45 @@ pub fn init_logger(verbosity: Verbosity, debug: bool) {
         }
 
         if debug {
+            let bare_level_name = match record.level() {
+                log::Level::Trace => "TRACE",
+                log::Level::Debug => "DEBUG",
+                log::Level::Info => "INFO",
+                log::Level::Warn => "WARN",
+                log::Level::Error => "ERROR",
+            };
+
+            // TODO add flox colors for all levels and for target
+            let (level_name, target_name) = match supports_color::on(supports_color::Stream::Stderr)
+            {
+                Some(supports_color::ColorLevel {
+                    has_basic: true, ..
+                }) => (
+                    (match record.level() {
+                        log::Level::Trace => bare_level_name.cyan(),
+                        log::Level::Debug => bare_level_name.blue(),
+                        log::Level::Info => bare_level_name.green(),
+                        log::Level::Warn => bare_level_name.yellow(),
+                        log::Level::Error => bare_level_name.red(),
+                    })
+                    .to_string(),
+                    record.target().bold().to_string(),
+                ),
+                _ => (bare_level_name.to_string(), record.target().to_string()),
+            };
+
             write!(
                 IndentWrapper { buf: f },
-                "[{level}] [{target}] {args}",
-                level = match record.level() {
-                    log::Level::Trace => "TRACE".cyan(),
-                    log::Level::Debug => "DEBUG".blue(),
-                    log::Level::Info => "INFO".green(),
-                    log::Level::Warn => "WARN".yellow(),
-                    log::Level::Error => "ERROR".red(),
-                },
-                target = record.target().bold(),
+                "[{level_name}] [{target_name}] {line}",
             )?;
             writeln!(f)
         } else {
             write!(
                 IndentWrapper { buf: f },
-                "{level}{args}",
-                level = match record.level() {
-                    log::Level::Error => "ERROR: "
-                        .with(colors::LIGHT_PEACH.to_crossterm())
-                        .bold()
-                        .to_string(),
+                "{level_prefix}{line}",
+                level_prefix = match (record.level(), colors::LIGHT_PEACH.to_crossterm()) {
+                    (log::Level::Error, Some(light_peach)) =>
+                        "ERROR: ".with(light_peach).bold().to_string(),
                     _ => "".to_string(),
                 },
             )?;

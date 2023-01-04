@@ -1099,8 +1099,7 @@ checksum = "adab1eaa3408fb7f0c777a73e7465fd5656136fc93b670eb6df3c88c2c1344e3"
 [[package]]
 name = "inquire"
 version = "0.5.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e6055ce38cac9b10ac819ed4a509d92ccbc60808152c19ff9121c98198964272"
+source = "git+https://github.com/flox/inquire.git#48a6887f112d31819b9ba764e6c70c45793f7a09"
 dependencies = [
  "bitflags",
  "crossterm",
