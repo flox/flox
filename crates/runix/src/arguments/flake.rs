@@ -14,21 +14,21 @@ use crate::{
 /// [libcmd/installables.cc](https://github.com/NixOS/nix/blob/84cc7ad77c6faf1cda8f8a10f7c12a939b61fe35/src/libcmd/installables.cc#L26-L126)
 #[derive(Clone, Default, Debug, ToArgs)]
 pub struct FlakeArgs {
-    pub override_inputs: Vec<OverrideInputs>,
+    pub override_inputs: Vec<OverrideInput>,
     pub no_write_lock_file: NoWriteLockFile,
 }
 
 /// Tuple like override inputs flag
 #[derive(Clone, Debug, From, Constructor)]
-pub struct OverrideInputs {
+pub struct OverrideInput {
     pub from: FlakeRef,
     pub to: FlakeRef,
 }
-impl Flag for OverrideInputs {
+impl Flag for OverrideInput {
     const FLAG: &'static str = "--override-input";
     const FLAG_TYPE: FlagType<Self> = FlagType::Args(Self::args);
 }
-impl OverrideInputs {
+impl OverrideInput {
     fn args(&self) -> Vec<String> {
         vec![self.from.clone(), self.to.clone()]
     }

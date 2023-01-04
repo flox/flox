@@ -1,7 +1,7 @@
 use std::str::FromStr;
 
 use derive_more::Display;
-use runix::arguments::flake::OverrideInputs;
+use runix::arguments::flake::OverrideInput;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Display, PartialEq, Eq)]
@@ -20,7 +20,7 @@ pub enum Stability {
 }
 
 impl Stability {
-    pub fn as_override(&self) -> OverrideInputs {
+    pub fn as_override(&self) -> OverrideInput {
         (
             "floxpkgs/nixpkgs/nixpkgs".into(),
             format!("flake:nixpkgs-{}", self),

@@ -27,7 +27,7 @@ impl GeneralCommands {
                 metric("nix");
 
                 let nix: NixCommandLine = flox.nix(Default::default());
-                RawCommand(args.to_owned())
+                RawCommand::new(args.to_owned())
                     .run(&nix, &Default::default())
                     .await?;
             }
@@ -104,13 +104,30 @@ fn complete_nix_shell() -> bpaf::ShellComp {
     }
 }
 
+/// A raw nix command.
+///
+/// Will run `nix <default args> <self.args>...`
+///
+/// Doesn't permit the appplication of any default arguments set by flox,
+/// except nix configuration args and common nix command args.
+///
+/// See: [`nix --help`](https://nixos.org/manual/nix/unstable/command-ref/new-cli/nix.html)
 #[derive(Debug, Clone)]
-pub struct RawCommand(pub Vec<String>);
-impl ToArgs for RawCommand {
-    fn to_args(&self) -> Vec<String> {
-        self.0.to_owned()
+pub struct RawCommand {
+    args: Vec<String>,
+}
+
+impl RawCommand {
+    fn new(args: Vec<String>) -> Self {
+        RawCommand { args }
     }
 }
+impl ToArgs for RawCommand {
+    fn to_args(&self) -> Vec<String> {
+        self.args.to_owned()
+    }
+}
+
 impl NixCliCommand for RawCommand {
     type Own = Self;
     const SUBCOMMAND: &'static [&'static str] = &[];

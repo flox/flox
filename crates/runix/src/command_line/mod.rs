@@ -173,10 +173,19 @@ impl NixCommandLine {
         json: bool,
     ) -> Result<M::Output, NixCommandLineRunError> {
         let args = vec![
+            // apply default args always applicable
             self.defaults.config_args.to_args(),
             self.defaults.common_args.to_args(),
             nix_args.to_args(),
             B::SUBCOMMAND.iter().map(ToString::to_string).collect(),
+            // apply command specific defaults if applicable
+            // as defined by the command impl
+            B::EVAL_ARGS
+                .map(|_| self.defaults.eval_args.to_args())
+                .unwrap_or_default(),
+            B::FLAKE_ARGS
+                .map(|_| self.defaults.flake_args.to_args())
+                .unwrap_or_default(),
             if json {
                 vec!["--json".to_string()]
             } else {

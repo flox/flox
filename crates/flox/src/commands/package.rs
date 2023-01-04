@@ -8,7 +8,7 @@ use flox_rust_sdk::{
     nix::{
         arguments::{flake::FlakeArgs, NixArgs},
         command::Eval,
-        command_line::NixCommandLine,
+        command_line::{Group, NixCliCommand, NixCommandLine, ToArgs},
         Run,
     },
     prelude::Stability,
@@ -122,6 +122,7 @@ pub struct PackageArgs {
     #[bpaf(long, argument("STABILITY"), optional)]
     stability: Option<Stability>,
 
+    /// parsed using [nix_arguments]
     #[bpaf(external)]
     nix_arguments: Vec<String>,
 }
@@ -260,6 +261,37 @@ impl PackageCommands {
                 .bundle::<NixCommandLine>(bundler.resolve_installable(&flox).await?)
                 .await?
             }
+            PackageCommands::Flake {
+                subcommand,
+                package,
+            } => {
+                // currently Flox::package requires _a package_.
+                // since flake commands can't provide this flox.
+                // we need to create a custom nix instance.
+                // TODO: decide whether `flox flake` should be a "development command"
+                //       It is currently implemented as such because it is influenced by `--stability`.
+                //       Yet, it could be implemented as a different group altogether (more cleanly?).
+                let nix: NixCommandLine = flox.nix(Default::default());
+
+                // Flake commands should take `--stability`
+                // Can't be a default on the `nix` instance, because that will apply it as a flag
+                // on `nix flake` rather than `nix flake <subcommand>`.
+                // Even though documented as "Common flake-related options",
+                // flake args such as `--override-inputs` can not be applied to `nix flake`.
+                // Inform [FlakeCommand] about the issued subcommand
+                // and inject the flake args through its `ToArgs` implementation.
+                FlakeCommand {
+                    subcommand: subcommand.to_owned(),
+                    default_flake_args: FlakeArgs {
+                        override_inputs: [package.stability(&config).as_override()].into(),
+                        ..Default::default()
+                    },
+                    args: package.nix_arguments.to_owned(),
+                }
+                .run(&nix, &Default::default())
+                .await?;
+            }
+
             _ => todo!(),
         }
 
@@ -378,4 +410,36 @@ pub enum PackageCommands {
         #[bpaf(external(package_args), group_help("Development Options"))]
         package: PackageArgs,
     },
+
+    /// run `nix flake` commands
+    #[bpaf(command)]
+    Flake {
+        #[bpaf(positional("NIX FLAKE COMMAND"))]
+        subcommand: String,
+
+        #[bpaf(external(package_args), group_help("Development Options"))]
+        package: PackageArgs,
+    },
+}
+
+#[derive(Debug, Clone)]
+pub struct FlakeCommand {
+    subcommand: String,
+    default_flake_args: FlakeArgs,
+    args: Vec<String>,
+}
+impl ToArgs for FlakeCommand {
+    fn to_args(&self) -> Vec<String> {
+        let mut args = vec![self.subcommand.clone()];
+        args.append(&mut self.default_flake_args.to_args());
+        args.append(&mut self.args.clone());
+        args
+    }
+}
+
+impl NixCliCommand for FlakeCommand {
+    type Own = Self;
+    const SUBCOMMAND: &'static [&'static str] = &["flake"];
+    const OWN_ARGS: Group<Self, Self::Own> = Some(|s| s.to_owned());
+    const FLAKE_ARGS: Group<Self, FlakeArgs> = Some(|_| Default::default());
 }

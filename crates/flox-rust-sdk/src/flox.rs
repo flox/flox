@@ -12,7 +12,7 @@ use runix::{
     arguments::{
         common::NixCommonArgs,
         config::NixConfigArgs,
-        flake::{FlakeArgs, OverrideInputs},
+        flake::{FlakeArgs, OverrideInput},
         EvalArgs, NixArgs,
     },
     command::Eval,
@@ -325,7 +325,7 @@ impl Flox {
                 // Use the flakeref map from earlier as input overrides so all the inputs point to the correct flakerefs
                 override_inputs: flakeref_inputs
                     .iter()
-                    .map(|(c, flakeref)| OverrideInputs {
+                    .map(|(c, flakeref)| OverrideInput {
                         from: c.to_string(),
                         to: flakeref.to_string(),
                     })
