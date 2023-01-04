@@ -75,7 +75,7 @@ impl FloxArgs {
         // disabling telemetry will work regardless
         // but we don't want to give users who disabled it the prompt
         if !config.flox.disable_telemetry {
-            init_telemetry_consent(&config.flox.data_dir).await?;
+            init_telemetry_consent(&config.flox.data_dir, &config.flox.cache_dir).await?;
         }
 
         let channels = init_channels()?;

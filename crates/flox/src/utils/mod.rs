@@ -22,6 +22,7 @@ use flox_rust_sdk::prelude::Installable;
 pub mod colors;
 pub mod dialog;
 pub mod init;
+pub mod logger;
 pub mod metrics;
 
 use regex::Regex;

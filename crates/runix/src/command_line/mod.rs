@@ -72,7 +72,8 @@ impl CommandExt for std::process::Command {
         );
 
         if log::log_enabled!(target: "posix", log::Level::Debug) {
-            eprintln!(
+            debug!(
+                target: "posix",
                 "+ \x1b[1m{env_string} {executable} {command_string}\x1b[0m",
                 env_string = self
                     .get_envs()
@@ -91,7 +92,7 @@ impl CommandExt for std::process::Command {
                     .map(|arg| shell_escape::escape(arg.to_string_lossy()))
                     .collect::<Vec<_>>()
                     .join(" ")
-            )
+            );
         }
     }
 }

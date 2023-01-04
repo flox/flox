@@ -18,7 +18,6 @@ octocrab = "0.17.0"
 dotenv = "0.15.0"
 async-trait = "0.1.52"
 log= "0.4.17"
-env_logger = "0.9.1"
 bpaf = { version = "0.7.6", features = ["derive", "autocomplete"] }
 config = "0.13.1"
 dirs = "4.0.0"
@@ -40,6 +39,10 @@ time = { version = "0.3", features = ["serde"] }
 uuid = { version = "1.2", features = ["serde", "v4"] }
 reqwest = "0.11"
 sys-info = "0.9"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-log = { version = "0.1", features = ["env_logger"] }
+fslock = "0.2.1"
 
 [features]
 extra-tests = ["bats-tests", "impure-unit-tests"]

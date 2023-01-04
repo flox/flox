@@ -1,13 +1,11 @@
 use anyhow::Context;
 use anyhow::Result;
-use crossterm::style::Attribute;
-use crossterm::style::ContentStyle;
-use crossterm::style::Stylize;
 use crossterm::tty::IsTty;
-use env_logger::fmt::Formatter;
+use fslock::LockFile;
 use indoc::indoc;
 use log::debug;
 use log::info;
+use log::trace;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::env;
@@ -15,21 +13,23 @@ use std::fs::File;
 use std::io;
 use std::io::BufRead;
 use std::io::BufReader;
-use std::io::Write;
 use std::iter;
 use std::path::Path;
 use std::str::FromStr;
 use tokio::io::AsyncReadExt;
 use tokio::io::AsyncWriteExt;
+use tracing_subscriber::prelude::*;
+use tracing_subscriber::Layer;
 
 use flox_rust_sdk::prelude::Channel;
 use flox_rust_sdk::prelude::ChannelRegistry;
 
 use crate::commands::Verbosity;
-use crate::utils::colors;
+use crate::utils::logger;
+use crate::utils::metrics::METRICS_LOCK_FILE_NAME;
 
 use super::dialog::InquireExt;
-use super::metrics::METRICS_UUID_FILE_NAME;
+use super::metrics::{PosthogLayer, METRICS_UUID_FILE_NAME};
 
 const ENV_GIT_CONFIG_SYSTEM: &str = "GIT_CONFIG_SYSTEM";
 const ENV_FLOX_ORIGINAL_GIT_CONFIG_SYSTEM: &str = "FLOX_ORIGINAL_GIT_CONFIG_SYSTEM";
@@ -43,13 +43,16 @@ async fn write_metrics_uuid(uuid_path: &Path, consent: bool) -> Result<()> {
     Ok(())
 }
 
-pub async fn init_telemetry_consent(data_dir: &Path) -> Result<()> {
+pub async fn init_telemetry_consent(data_dir: &Path, cache_dir: &Path) -> Result<()> {
     tokio::fs::create_dir_all(data_dir).await?;
 
     if !std::io::stderr().is_tty() || !std::io::stdin().is_tty() {
         // Can't prompt user now, do it another time
         return Ok(());
     }
+
+    let mut metrics_lock = LockFile::open(&cache_dir.join(METRICS_LOCK_FILE_NAME))?;
+    tokio::task::spawn_blocking(move || metrics_lock.lock()).await??;
 
     let uuid_path = data_dir.join(METRICS_UUID_FILE_NAME);
 
@@ -61,20 +64,27 @@ pub async fn init_telemetry_consent(data_dir: &Path) -> Result<()> {
         },
     }
 
+    debug!("Metrics consent not recorded");
+
     let bash_config_home = dirs::config_dir().context("Unable to find config dir")?;
     let bash_user_meta_path = bash_config_home.join("flox").join("floxUserMeta.json");
 
     if let Ok(mut file) = tokio::fs::File::open(&bash_user_meta_path).await {
+        trace!("Attempting to extract metrics consent value from bash flox");
+
         let mut bash_user_meta_json = String::new();
         file.read_to_string(&mut bash_user_meta_json).await?;
 
         let json: serde_json::Value = serde_json::from_str(&bash_user_meta_json)?;
 
         if let Some(x) = json["floxMetricsConsent"].as_u64() {
+            debug!("Using metrics consent value from bash flox");
             write_metrics_uuid(&uuid_path, x == 1).await?;
             return Ok(());
         }
     }
+
+    trace!("Prompting user for metrics consent");
 
     let consent = inquire::Confirm::new("Do you consent to the collection of basic usage metrics?")
         .with_help_message(indoc! {"
@@ -143,99 +153,19 @@ pub fn init_logger(verbosity: Verbosity, debug: bool) {
         (Verbosity::Verbose(_), _) => "trace",
     };
 
-    let mut builder =
-        env_logger::Builder::from_env(env_logger::Env::default().default_filter_or(log_filter));
+    let env_filter = tracing_subscriber::filter::EnvFilter::try_from_default_env()
+        .or_else(|_| tracing_subscriber::filter::EnvFilter::try_new(log_filter))
+        .unwrap();
 
-    builder.format(move |f, record| {
-        let line = if let Some(light_peach) = colors::LIGHT_PEACH.to_crossterm() {
-            let mut line_style = ContentStyle::new();
-            match record.level() {
-                log::Level::Trace => {
-                    line_style.foreground_color = Some(light_peach);
-                    line_style.attributes.set(Attribute::Bold);
-                }
-                log::Level::Error | log::Level::Warn => {
-                    line_style.attributes.set(Attribute::Bold);
-                }
-                _ => {}
-            }
+    let fmt_layer = tracing_subscriber::fmt::layer()
+        .with_writer(io::stderr)
+        .event_format(logger::LogFormatter { debug })
+        .with_filter(env_filter);
 
-            line_style.apply(record.args()).to_string()
-        } else {
-            record.args().to_string()
-        };
-
-        struct IndentWrapper<'a> {
-            buf: &'a mut Formatter,
-        }
-
-        impl Write for IndentWrapper<'_> {
-            fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-                let mut first = true;
-                for chunk in buf.split(|&x| x == b'\n') {
-                    if !first {
-                        write!(self.buf, "\n{:width$}", "", width = 4)?;
-                    }
-                    self.buf.write_all(chunk)?;
-                    first = false;
-                }
-
-                Ok(buf.len())
-            }
-
-            fn flush(&mut self) -> io::Result<()> {
-                self.buf.flush()
-            }
-        }
-
-        if debug {
-            let bare_level_name = match record.level() {
-                log::Level::Trace => "TRACE",
-                log::Level::Debug => "DEBUG",
-                log::Level::Info => "INFO",
-                log::Level::Warn => "WARN",
-                log::Level::Error => "ERROR",
-            };
-
-            // TODO add flox colors for all levels and for target
-            let (level_name, target_name) = match supports_color::on(supports_color::Stream::Stderr)
-            {
-                Some(supports_color::ColorLevel {
-                    has_basic: true, ..
-                }) => (
-                    (match record.level() {
-                        log::Level::Trace => bare_level_name.cyan(),
-                        log::Level::Debug => bare_level_name.blue(),
-                        log::Level::Info => bare_level_name.green(),
-                        log::Level::Warn => bare_level_name.yellow(),
-                        log::Level::Error => bare_level_name.red(),
-                    })
-                    .to_string(),
-                    record.target().bold().to_string(),
-                ),
-                _ => (bare_level_name.to_string(), record.target().to_string()),
-            };
-
-            write!(
-                IndentWrapper { buf: f },
-                "[{level_name}] [{target_name}] {line}",
-            )?;
-            writeln!(f)
-        } else {
-            write!(
-                IndentWrapper { buf: f },
-                "{level_prefix}{line}",
-                level_prefix = match (record.level(), colors::LIGHT_PEACH.to_crossterm()) {
-                    (log::Level::Error, Some(light_peach)) =>
-                        "ERROR: ".with(light_peach).bold().to_string(),
-                    _ => "".to_string(),
-                },
-            )?;
-            writeln!(f)
-        }
-    });
-
-    builder.init();
+    tracing_subscriber::registry()
+        .with(PosthogLayer::new())
+        .with(fmt_layer)
+        .init();
 }
 
 pub fn init_channels() -> Result<ChannelRegistry> {

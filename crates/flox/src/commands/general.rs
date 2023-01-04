@@ -7,13 +7,14 @@ use flox_rust_sdk::{
         Run,
     },
 };
+use fslock::LockFile;
 
 use crate::{
     config::{Feature, Impl},
-    flox_forward, should_flox_forward,
+    flox_forward, should_flox_forward, subcommand_metric,
     utils::{
         init::init_telemetry_consent,
-        metrics::{metric, METRICS_EVENTS_FILE_NAME, METRICS_UUID_FILE_NAME},
+        metrics::{METRICS_EVENTS_FILE_NAME, METRICS_LOCK_FILE_NAME, METRICS_UUID_FILE_NAME},
     },
 };
 
@@ -24,7 +25,7 @@ impl GeneralCommands {
     pub async fn handle(&self, flox: Flox) -> Result<()> {
         match self {
             GeneralCommands::Nix(args) if Feature::Nix.implementation()? == Impl::Rust => {
-                metric("nix");
+                subcommand_metric!("nix");
 
                 let nix: NixCommandLine = flox.nix(Default::default());
                 RawCommand::new(args.to_owned())
@@ -33,9 +34,29 @@ impl GeneralCommands {
             }
 
             GeneralCommands::ResetMetrics => {
-                tokio::fs::remove_file(flox.cache_dir.join(METRICS_EVENTS_FILE_NAME)).await?;
-                tokio::fs::remove_file(flox.data_dir.join(METRICS_UUID_FILE_NAME)).await?;
-                init_telemetry_consent(&flox.data_dir).await?;
+                let mut metrics_lock =
+                    LockFile::open(&flox.cache_dir.join(METRICS_LOCK_FILE_NAME))?;
+                tokio::task::spawn_blocking(move || metrics_lock.lock()).await??;
+
+                if let Err(err) =
+                    tokio::fs::remove_file(flox.cache_dir.join(METRICS_EVENTS_FILE_NAME)).await
+                {
+                    match err.kind() {
+                        std::io::ErrorKind::NotFound => {}
+                        _ => Err(err)?,
+                    }
+                }
+
+                if let Err(err) =
+                    tokio::fs::remove_file(flox.data_dir.join(METRICS_UUID_FILE_NAME)).await
+                {
+                    match err.kind() {
+                        std::io::ErrorKind::NotFound => {}
+                        _ => Err(err)?,
+                    }
+                }
+
+                init_telemetry_consent(&flox.data_dir, &flox.cache_dir).await?;
             }
 
             _ if should_flox_forward(Feature::All)? => flox_forward(&flox).await?,

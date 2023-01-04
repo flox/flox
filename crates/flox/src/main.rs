@@ -4,6 +4,7 @@ use self::config::{Feature, Impl};
 use anyhow::{Context, Result};
 use commands::FloxArgs;
 use flox_rust_sdk::environment::default_nix_subprocess_env;
+use fslock::LockFile;
 use log::{debug, error, warn};
 use serde_json::json;
 use std::env;
@@ -13,7 +14,7 @@ use std::path::Path;
 use std::process::{ExitCode, ExitStatus};
 use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
 use utils::init::init_logger;
-use utils::metrics::METRICS_UUID_FILE_NAME;
+use utils::metrics::{METRICS_LOCK_FILE_NAME, METRICS_UUID_FILE_NAME};
 
 use tokio::process::Command;
 
@@ -89,7 +90,10 @@ pub async fn flox_forward(flox: &Flox) -> Result<()> {
     Ok(())
 }
 
-async fn sync_bash_metrics_consent(data_dir: &Path) -> Result<()> {
+async fn sync_bash_metrics_consent(data_dir: &Path, cache_dir: &Path) -> Result<()> {
+    let mut metrics_lock = LockFile::open(&cache_dir.join(METRICS_LOCK_FILE_NAME))?;
+    tokio::task::spawn_blocking(move || metrics_lock.lock()).await??;
+
     let uuid_path = data_dir.join(METRICS_UUID_FILE_NAME);
 
     let metrics_enabled = match tokio::fs::File::open(&uuid_path).await {
@@ -148,7 +152,7 @@ pub async fn run_in_flox(
 ) -> Result<ExitStatus> {
     debug!("Running in flox with arguments: {:?}", args);
 
-    sync_bash_metrics_consent(&flox.data_dir).await?;
+    sync_bash_metrics_consent(&flox.data_dir, &flox.cache_dir).await?;
 
     let status = Command::new(FLOX_SH)
         .args(args)

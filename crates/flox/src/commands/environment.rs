@@ -6,8 +6,7 @@ use flox_rust_sdk::prelude::flox_package::FloxPackage;
 use std::path::PathBuf;
 
 use crate::config::Feature;
-use crate::utils::metrics::metric;
-use crate::{flox_forward, should_flox_forward};
+use crate::{flox_forward, should_flox_forward, subcommand_metric};
 
 #[derive(Bpaf, Clone)]
 pub struct EnvironmentArgs {
@@ -29,7 +28,7 @@ impl EnvironmentCommands {
                 packages,
                 environment: EnvironmentArgs { environment },
             } => {
-                metric("install");
+                subcommand_metric!("install");
 
                 flox.environment(environment.clone().unwrap())?
                     .install::<NixCommandLine>(packages)

@@ -17,8 +17,8 @@ use once_cell::sync::Lazy;
 
 use crate::{
     config::{Config, Feature},
-    flox_forward, should_flox_forward,
-    utils::{metrics::metric, InstallableDef},
+    flox_forward, should_flox_forward, subcommand_metric,
+    utils::InstallableDef,
 };
 
 #[derive(FromStr, Default, Debug, Clone, Into)]
@@ -176,7 +176,7 @@ impl PackageCommands {
                 installable_arg,
                 ..
             } => {
-                metric("build");
+                subcommand_metric!("build");
 
                 flox.package(
                     installable_arg.resolve_installable(&flox).await?,
@@ -192,7 +192,7 @@ impl PackageCommands {
                 installable_arg,
                 ..
             } => {
-                metric("develop");
+                subcommand_metric!("develop");
 
                 flox.package(
                     installable_arg.resolve_installable(&flox).await?,
@@ -207,7 +207,7 @@ impl PackageCommands {
                 installable_arg,
                 ..
             } => {
-                metric("run");
+                subcommand_metric!("run");
 
                 flox.package(
                     installable_arg.resolve_installable(&flox).await?,
@@ -222,7 +222,7 @@ impl PackageCommands {
                 installable_arg,
                 ..
             } => {
-                metric("shell");
+                subcommand_metric!("shell");
 
                 flox.package(
                     installable_arg.resolve_installable(&flox).await?,
@@ -236,6 +236,8 @@ impl PackageCommands {
                 package: package @ PackageArgs { nix_arguments, .. },
                 ..
             } => {
+                subcommand_metric!("eval");
+
                 let nix = flox.nix::<NixCommandLine>(nix_arguments.clone());
                 let command = Eval {
                     flake: FlakeArgs {
@@ -253,6 +255,8 @@ impl PackageCommands {
                 bundler,
                 ..
             } => {
+                subcommand_metric!("bundle");
+
                 flox.package(
                     installable_arg.resolve_installable(&flox).await?,
                     package.stability(&config),
