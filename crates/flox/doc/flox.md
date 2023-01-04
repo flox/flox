@@ -33,6 +33,45 @@ See *floxtutorial(7)* to get started.
 More in-depth information is available by way of the [flox User's Manual](https://alpha.floxsdlc.com/docs/).
 -->
 
+## Command Line Completions
+
+Flox ships with command line completions for `bash`, `zsh` and `fish`.
+To enable completions in your shell Add the follwoing to your shell's
+startup script:
+
+**When using the flox installers**
+
+- `bash`, `zsh`
+```
+export XDG_DATA_DIRS="/usr/local/share:$XDG_DATA_DIRS"
+```
+
+- `fish`
+```
+set -px XDG_DATA_DIRS "/usr/local/share"
+```
+
+**When installing flox through Nix**
+
+- `bash`, `zsh`
+```
+# for single user user installs
+export XDG_DATA_DIRS="$HOME/.nix-profile/share:$XDG_DATA_DIRS"
+
+# for global installs
+export XDG_DATA_DIRS="/nix/var/nix/profiles/default:$XDG_DATA_DIRS"
+
+```
+
+- `fish`
+```
+# for single user user installs
+set -px XDG_DATA_DIRS "$HOME/.nix-profile/share"
+
+# for global installs
+set -px XDG_DATA_DIRS "/nix/var/nix/profiles/default"
+```
+
 # OPTIONS
 
 ```{.include}
