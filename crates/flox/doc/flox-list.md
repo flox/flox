@@ -1,5 +1,5 @@
 ---
-title: FLOX-BUILD
+title: FLOX-LIST
 section: 1
 header: "flox User Manuals"
 ...
@@ -7,11 +7,11 @@ header: "flox User Manuals"
 
 # NAME
 
-flox-build - build package from current project
+flox-list - list packages installed in an environment
 
 # SYNOPSIS
 
-flox [ `<general-options>` ] list [ `<options>` ] [ `<generation>` ]
+flox [ `<general-options>` ] list [ (\--out-path | \--json) ] [ `<generation>` ]
 
 # DESCRIPTION
 
@@ -27,6 +27,13 @@ of a specific generation.
 ```
 
 ## List Options
+
+[ \--out-path ]
+:   Include store paths of packages in the environment
+
+
+[ \--json ]
+:   Print as machine readable JSON
 
 [ `<generation>` ]
 :   Generation to list, defaults to the latest if absent.

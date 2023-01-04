@@ -11,7 +11,8 @@ use crate::{flox_forward, should_flox_forward};
 
 #[derive(Bpaf, Clone)]
 pub struct EnvironmentArgs {
-    /// path to environment.
+    /// Path to environment.
+    ///
     ///
     /// TODO: this will be changed to an environment name or an
     /// installable at some point, once we settle on how users specify environments
@@ -165,6 +166,11 @@ pub enum EnvironmentCommands {
     List {
         #[bpaf(external(environment_args), group_help("Environment Options"))]
         environment: EnvironmentArgs,
+
+        #[bpaf(external(list_output), optional)]
+        json: Option<ListOutput>,
+
+        /// The generation to list, if not speciefied defaults to the current one
         #[bpaf(positional("GENERATION"))]
         generation: Option<u32>,
     },
@@ -237,4 +243,14 @@ pub enum EnvironmentCommands {
         #[bpaf(external(environment_args), group_help("Environment Options"))]
         environment: EnvironmentArgs,
     },
+}
+
+#[derive(Bpaf, Clone)]
+pub enum ListOutput {
+    /// Include store paths of packages in the environment
+    #[bpaf(long("out-path"))]
+    OutPath,
+    /// Print as machine readable json
+    #[bpaf(long)]
+    Json,
 }
