@@ -7,18 +7,20 @@ use std::{env, fs};
 
 use anyhow::Result;
 use bpaf::Bpaf;
-use flox_rust_sdk::flox::Flox;
+use flox_rust_sdk::flox::{Flox, FLOX_VERSION};
 use tempfile::TempDir;
-
-use crate::utils::init::{
-    init_access_tokens, init_channels, init_git_conf, init_telemetry_consent, init_uuid,
-};
-use flox_rust_sdk::flox::FLOX_VERSION;
 
 use self::channel::ChannelCommands;
 use self::environment::EnvironmentCommands;
 use self::general::GeneralCommands;
 use self::package::PackageCommands;
+use crate::utils::init::{
+    init_access_tokens,
+    init_channels,
+    init_git_conf,
+    init_telemetry_consent,
+    init_uuid,
+};
 
 fn vec_len<T>(x: Vec<T>) -> usize {
     Vec::len(&x)

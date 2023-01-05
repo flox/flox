@@ -1,12 +1,13 @@
-use log::{error, info};
-use runix::{arguments::NixArgs, command::FlakeInit, NixBackend, Run};
 use std::path::Path;
 
-use crate::flox::{Flox, FloxNixApi};
-
+use log::{error, info};
+use runix::arguments::NixArgs;
+use runix::command::FlakeInit;
+use runix::{NixBackend, Run};
 use thiserror::Error;
 
 use super::git::GitProvider;
+use crate::flox::{Flox, FloxNixApi};
 
 pub struct Initializer<'flox> {
     flox: &'flox Flox,

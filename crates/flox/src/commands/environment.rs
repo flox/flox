@@ -1,9 +1,10 @@
+use std::path::PathBuf;
+
 use anyhow::Result;
 use bpaf::{construct, Bpaf, Parser, ShellComp};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::nix::command_line::NixCommandLine;
 use flox_rust_sdk::prelude::flox_package::FloxPackage;
-use std::path::PathBuf;
 
 use crate::config::Feature;
 use crate::{flox_forward, should_flox_forward, subcommand_metric};
@@ -33,7 +34,7 @@ impl EnvironmentCommands {
                 flox.environment(environment.clone().unwrap())?
                     .install::<NixCommandLine>(packages)
                     .await?
-            }
+            },
 
             _ => todo!(),
         }

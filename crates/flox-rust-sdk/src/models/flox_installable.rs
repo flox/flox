@@ -1,8 +1,7 @@
 use log::debug;
 use once_cell::sync::Lazy;
-use thiserror::Error;
-
 use regex::Regex;
+use thiserror::Error;
 
 // Matches against strings which are likely to be flakerefs
 // Such as: `github:NixOS/nixpkgs`, `.`, `../somedir`, etc
@@ -98,7 +97,7 @@ impl std::str::FromStr for FloxInstallable {
                         });
                     }
                     attr_path
-                }
+                },
                 // With an attrpath like `x`
                 rnix::ast::Expr::Ident(ident) => vec![ident
                     .ident_token()

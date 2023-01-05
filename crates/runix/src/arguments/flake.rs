@@ -1,13 +1,9 @@
 use derive_more::{Constructor, Deref, From};
 use runix_derive::ToArgs;
 
-use crate::{
-    command_line::{
-        flag::{Flag, FlagType},
-        ToArgs,
-    },
-    installable::FlakeRef,
-};
+use crate::command_line::flag::{Flag, FlagType};
+use crate::command_line::ToArgs;
+use crate::installable::FlakeRef;
 
 /// Flake related arguments
 /// Corresponding to the arguments defined in

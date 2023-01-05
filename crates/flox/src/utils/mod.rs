@@ -1,23 +1,17 @@
-use std::{collections::HashMap, str::FromStr};
+use std::borrow::Cow;
+use std::collections::{HashMap, HashSet};
+use std::str::FromStr;
 
 use anyhow::{bail, Context, Result};
 use async_trait::async_trait;
 use crossterm::tty::IsTty;
-use flox_rust_sdk::{
-    flox::{Flox, ResolvedInstallableMatch},
-    prelude::{Channel, ChannelRegistry},
-};
+use flox_rust_sdk::flox::{Flox, FloxInstallable, ResolvedInstallableMatch};
+use flox_rust_sdk::prelude::{Channel, ChannelRegistry, Installable};
 use indoc::indoc;
 use itertools::Itertools;
 use log::{debug, error, warn};
 use once_cell::sync::Lazy;
-use std::borrow::Cow;
 use tempfile::TempDir;
-
-use std::collections::HashSet;
-
-use flox_rust_sdk::flox::FloxInstallable;
-use flox_rust_sdk::prelude::Installable;
 
 pub mod colors;
 pub mod dialog;
@@ -109,11 +103,11 @@ pub trait InstallableDef: FromStr + Default + Clone {
 
         let process_dir = config.flox.cache_dir.join("process");
         match std::fs::create_dir_all(&process_dir) {
-            Ok(_) => {}
+            Ok(_) => {},
             Err(e) => {
                 debug!("Failed to create process dir: {e}");
                 return vec![];
-            }
+            },
         };
 
         let temp_dir = match TempDir::new_in(process_dir) {
@@ -121,7 +115,7 @@ pub trait InstallableDef: FromStr + Default + Clone {
             Err(e) => {
                 debug!("Failed to create temp_dir: {e}");
                 return vec![];
-            }
+            },
         };
 
         let access_tokens = init::init_access_tokens(&config.nix.access_tokens)
@@ -185,7 +179,7 @@ pub async fn complete_installable(
         match trimmed.rsplit_once(|c| c == '.' || c == '#') {
             Some((s, _)) if s != trimmed => flox_installables.push(s.parse()?),
             None => flox_installables.push("".parse()?),
-            Some(_) => {}
+            Some(_) => {},
         };
     } else {
         flox_installables.push(FloxInstallable {
@@ -292,7 +286,7 @@ pub async fn resolve_installable_from_matches(
     match matches.len() {
         0 => {
             bail!("No matching installables found");
-        }
+        },
         1 => Ok(matches.remove(0).installable()),
         _ => {
             let mut prefixes_with: HashMap<String, HashSet<String>> = HashMap::new();
@@ -406,6 +400,6 @@ pub async fn resolve_installable_from_matches(
             );
 
             Ok(installable)
-        }
+        },
     }
 }

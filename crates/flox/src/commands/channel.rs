@@ -2,7 +2,8 @@ use anyhow::Result;
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 
-use crate::{config::Feature, flox_forward, should_flox_forward};
+use crate::config::Feature;
+use crate::{flox_forward, should_flox_forward};
 
 #[derive(Bpaf, Clone)]
 pub struct ChannelArgs {}

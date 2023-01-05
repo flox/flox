@@ -1,9 +1,8 @@
 use std::path::Path;
 
+use async_trait::async_trait;
 use log::error;
 use thiserror::Error;
-
-use async_trait::async_trait;
 use tokio::process::Command;
 
 #[allow(unused)]
@@ -44,8 +43,8 @@ pub enum EmptyError {}
 #[async_trait]
 // STUB
 impl GitProvider for LibGit2Provider {
-    type InitError = EmptyError;
     type AddRemoteError = EmptyError;
+    type InitError = EmptyError;
     type MvError = EmptyError;
 
     fn new() -> LibGit2Provider {
@@ -55,12 +54,15 @@ impl GitProvider for LibGit2Provider {
     async fn doctor(&self) -> bool {
         todo!()
     }
+
     async fn init_repo(&self) -> Result<(), EmptyError> {
         todo!()
     }
+
     async fn add_remote(&self, _origin_name: &str, _url: &str) -> Result<(), EmptyError> {
         todo!()
     }
+
     async fn mv(&self, _from: &Path, _to: &Path) -> Result<(), EmptyError> {
         todo!()
     }
@@ -88,8 +90,8 @@ pub enum CommandMvError {
 /// command. This would require that git is installed.
 #[async_trait]
 impl GitProvider for GitCommandProvider {
-    type InitError = CommandInitError;
     type AddRemoteError = CommandAddRemoteError;
+    type InitError = CommandInitError;
     type MvError = CommandMvError;
 
     fn new() -> GitCommandProvider {
@@ -105,6 +107,7 @@ impl GitProvider for GitCommandProvider {
 
         true
     }
+
     async fn init_repo(&self) -> Result<(), Self::InitError> {
         let process = Command::new("git").arg("init").output();
 

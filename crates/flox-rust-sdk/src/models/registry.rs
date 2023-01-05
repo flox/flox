@@ -78,8 +78,9 @@ enum FromFlakeRef {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::fs::File;
+
+    use super::*;
     #[test]
     fn parses_nix_registry() {
         serde_json::from_reader::<_, Registry>(File::open("./test/registry.test.json").unwrap())

@@ -33,7 +33,7 @@ pub fn default_nix_subprocess_env() -> HashMap<String, String> {
                 nixpkgs_cacert_bundle_crt.to_string(),
             );
             nixpkgs_cacert_bundle_crt.to_string()
-        }
+        },
     };
 
     if env::var("NIX_SSL_CERT_FILE").is_err() {

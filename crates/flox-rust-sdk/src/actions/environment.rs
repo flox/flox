@@ -1,24 +1,18 @@
-use fs_extra;
-use log::{info, warn};
-use nix_editor;
-use runix::NixBackend;
-use runix::{
-    arguments::{eval::EvaluationArgs, NixArgs},
-    command::Build,
-    installable::Installable,
-    Run,
-};
-use std::fs;
-use std::io;
 use std::path::PathBuf;
-use tempfile;
-use thiserror::Error;
+use std::{fs, io};
 
-use crate::{
-    flox::{Flox, FloxNixApi},
-    prelude::flox_package::FloxPackage,
-    utils::errors::IoError,
-};
+use log::{info, warn};
+use runix::arguments::eval::EvaluationArgs;
+use runix::arguments::NixArgs;
+use runix::command::Build;
+use runix::installable::Installable;
+use runix::{NixBackend, Run};
+use thiserror::Error;
+use {fs_extra, nix_editor, tempfile};
+
+use crate::flox::{Flox, FloxNixApi};
+use crate::prelude::flox_package::FloxPackage;
+use crate::utils::errors::IoError;
 
 static FLOX_NIX: &str = "flox.nix";
 static CATALOG_JSON: &str = "catalog.json";
@@ -141,7 +135,7 @@ impl<'flox> Environment<'flox> {
                     flox_nix: env_path.join(FLOX_NIX),
                     catalog_json: env_path.join(CATALOG_JSON),
                 })
-            }
+            },
             _ => Err(EnvironmentError::TooShortDirectory { dir }),
         }
     }

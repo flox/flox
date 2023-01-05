@@ -1,4 +1,5 @@
-use std::{ffi::OsStr, ops::Deref};
+use std::ffi::OsStr;
+use std::ops::Deref;
 
 use super::ToArgs;
 
@@ -108,7 +109,7 @@ where
                     true => Default::default(),
                     false => vec![Self::FLAG.to_string(), f(self).join(" ")],
                 }
-            }
+            },
             FlagType::Arg(f) => vec![Self::FLAG.to_string(), f(self)],
             FlagType::Args(f) => {
                 let mut list = f(self);
@@ -118,9 +119,9 @@ where
                         let mut flags = vec![Self::FLAG.to_string()];
                         flags.append(&mut list);
                         flags
-                    }
+                    },
                 }
-            }
+            },
             FlagType::Custom(f) => f(self),
         }
     }

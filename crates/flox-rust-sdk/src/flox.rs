@@ -1,37 +1,29 @@
-use std::{
-    collections::{BTreeSet, HashMap},
-    fs::File,
-    io::Write,
-    os::unix::prelude::OpenOptionsExt,
-    path::PathBuf,
-};
+use std::collections::{BTreeSet, HashMap};
+use std::fs::File;
+use std::io::Write;
+use std::os::unix::prelude::OpenOptionsExt;
+use std::path::PathBuf;
 
 use log::debug;
 use once_cell::sync::Lazy;
-use runix::{
-    arguments::{
-        common::NixCommonArgs,
-        config::NixConfigArgs,
-        flake::{FlakeArgs, OverrideInput},
-        EvalArgs, NixArgs,
-    },
-    command::Eval,
-    command_line::{DefaultArgs, NixCommandLine},
-    installable::Installable,
-    NixBackend, RunJson,
-};
+use runix::arguments::common::NixCommonArgs;
+use runix::arguments::config::NixConfigArgs;
+use runix::arguments::flake::{FlakeArgs, OverrideInput};
+use runix::arguments::{EvalArgs, NixArgs};
+use runix::command::Eval;
+use runix::command_line::{DefaultArgs, NixCommandLine};
+use runix::installable::Installable;
+use runix::{NixBackend, RunJson};
 use serde::Deserialize;
 use thiserror::Error;
 
-use crate::{
-    actions::environment::Environment,
-    actions::{environment::EnvironmentError, package::Package},
-    environment::{self, default_nix_subprocess_env},
-    models::{channels::ChannelRegistry, stability::Stability},
-    providers::git::GitProvider,
-};
-
+use crate::actions::environment::{Environment, EnvironmentError};
+use crate::actions::package::Package;
+use crate::environment::{self, default_nix_subprocess_env};
+use crate::models::channels::ChannelRegistry;
 pub use crate::models::flox_installable::*;
+use crate::models::stability::Stability;
+use crate::providers::git::GitProvider;
 
 static INPUT_CHARS: Lazy<Vec<char>> = Lazy::new(|| ('a'..='t').into_iter().collect());
 
@@ -266,7 +258,7 @@ impl Flox {
                 let (attr_prefix, key) = match flox_installable.attr_path.split_first() {
                     Some((prefix, key)) if !key.is_empty() => {
                         (Some(prefix.as_str()), Some(key.to_vec()))
-                    }
+                    },
                     Some((prefix, _)) => (None, Some(vec![prefix.clone()])),
                     None => (None, None),
                 };

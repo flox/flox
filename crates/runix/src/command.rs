@@ -1,16 +1,12 @@
 use derive_more::{Deref, From};
 
-use crate::{
-    arguments::{
-        eval::EvaluationArgs, flake::FlakeArgs, source::SourceArgs, BundleArgs, DevelopArgs,
-        EvalArgs, InstallableArg, InstallablesArgs,
-    },
-    command_line::{
-        flag::{Flag, FlagType},
-        Group, JsonCommand, NixCliCommand, TypedCommand,
-    },
-    installable::Installable,
-};
+use crate::arguments::eval::EvaluationArgs;
+use crate::arguments::flake::FlakeArgs;
+use crate::arguments::source::SourceArgs;
+use crate::arguments::{BundleArgs, DevelopArgs, EvalArgs, InstallableArg, InstallablesArgs};
+use crate::command_line::flag::{Flag, FlagType};
+use crate::command_line::{Group, JsonCommand, NixCliCommand, TypedCommand};
+use crate::installable::Installable;
 
 #[derive(Debug, Default, Clone)]
 pub struct Build {
@@ -22,12 +18,12 @@ pub struct Build {
 
 impl NixCliCommand for Build {
     type Own = ();
-    const SUBCOMMAND: &'static [&'static str] = &["build"];
 
-    const INSTALLABLES: Group<Self, InstallablesArgs> = Some(|d| d.installables.clone());
-    const FLAKE_ARGS: Group<Self, FlakeArgs> = Some(|d| d.flake.clone());
     const EVAL_ARGS: Group<Self, EvaluationArgs> = Some(|d| d.eval.clone());
+    const FLAKE_ARGS: Group<Self, FlakeArgs> = Some(|d| d.flake.clone());
+    const INSTALLABLES: Group<Self, InstallablesArgs> = Some(|d| d.installables.clone());
     const SOURCE_ARGS: Group<Self, SourceArgs> = Some(|d| d.source.clone());
+    const SUBCOMMAND: &'static [&'static str] = &["build"];
 }
 impl JsonCommand for Build {}
 impl TypedCommand for Build {
@@ -55,11 +51,11 @@ impl Flag for TemplateFlag {
 impl NixCliCommand for FlakeInit {
     type Own = Option<TemplateFlag>;
 
-    const SUBCOMMAND: &'static [&'static str] = &["flake", "init"];
-    const INSTALLABLES: Group<Self, InstallablesArgs> = Some(|d| d.installables.clone());
-    const FLAKE_ARGS: Group<Self, FlakeArgs> = Some(|d| d.flake.clone());
     const EVAL_ARGS: Group<Self, EvaluationArgs> = Some(|d| d.eval.clone());
+    const FLAKE_ARGS: Group<Self, FlakeArgs> = Some(|d| d.flake.clone());
+    const INSTALLABLES: Group<Self, InstallablesArgs> = Some(|d| d.installables.clone());
     const OWN_ARGS: Group<Self, Option<TemplateFlag>> = Some(|d| d.template.clone());
+    const SUBCOMMAND: &'static [&'static str] = &["flake", "init"];
 }
 
 /// `nix develop` Command
@@ -74,12 +70,13 @@ pub struct Develop {
 
 impl NixCliCommand for Develop {
     type Own = DevelopArgs;
-    const SUBCOMMAND: &'static [&'static str] = &["develop"];
-    const INSTALLABLE: Group<Self, InstallableArg> = Some(|d| d.installable.clone());
-    const FLAKE_ARGS: Group<Self, FlakeArgs> = Some(|d| d.flake.clone());
+
     const EVAL_ARGS: Group<Self, EvaluationArgs> = Some(|d| d.eval.clone());
-    const SOURCE_ARGS: Group<Self, SourceArgs> = Some(|d| d.source.clone());
+    const FLAKE_ARGS: Group<Self, FlakeArgs> = Some(|d| d.flake.clone());
+    const INSTALLABLE: Group<Self, InstallableArg> = Some(|d| d.installable.clone());
     const OWN_ARGS: Group<Self, DevelopArgs> = Some(|d| d.develop_args.clone());
+    const SOURCE_ARGS: Group<Self, SourceArgs> = Some(|d| d.source.clone());
+    const SUBCOMMAND: &'static [&'static str] = &["develop"];
 }
 
 /// `nix eval` Command
@@ -92,10 +89,11 @@ pub struct Eval {
 
 impl NixCliCommand for Eval {
     type Own = EvalArgs;
-    const SUBCOMMAND: &'static [&'static str] = &["eval"];
-    const FLAKE_ARGS: Group<Self, FlakeArgs> = Some(|d| d.flake.clone());
+
     const EVAL_ARGS: Group<Self, EvaluationArgs> = Some(|d| d.eval.clone());
+    const FLAKE_ARGS: Group<Self, FlakeArgs> = Some(|d| d.flake.clone());
     const OWN_ARGS: Group<Self, EvalArgs> = Some(|d| d.eval_args.clone());
+    const SUBCOMMAND: &'static [&'static str] = &["eval"];
 }
 impl JsonCommand for Eval {}
 
@@ -110,12 +108,12 @@ pub struct Run {
 
 impl NixCliCommand for Run {
     type Own = ();
-    const SUBCOMMAND: &'static [&'static str] = &["run"];
 
-    const INSTALLABLE: Group<Self, InstallableArg> = Some(|d| d.installable.clone());
-    const FLAKE_ARGS: Group<Self, FlakeArgs> = Some(|d| d.flake.clone());
     const EVAL_ARGS: Group<Self, EvaluationArgs> = Some(|d| d.eval.clone());
+    const FLAKE_ARGS: Group<Self, FlakeArgs> = Some(|d| d.flake.clone());
+    const INSTALLABLE: Group<Self, InstallableArg> = Some(|d| d.installable.clone());
     const SOURCE_ARGS: Group<Self, SourceArgs> = Some(|d| d.source.clone());
+    const SUBCOMMAND: &'static [&'static str] = &["run"];
 }
 impl JsonCommand for Run {}
 impl TypedCommand for Run {
@@ -133,12 +131,12 @@ pub struct Shell {
 
 impl NixCliCommand for Shell {
     type Own = ();
-    const SUBCOMMAND: &'static [&'static str] = &["shell"];
 
-    const INSTALLABLES: Group<Self, InstallablesArgs> = Some(|d| d.installables.clone());
-    const FLAKE_ARGS: Group<Self, FlakeArgs> = Some(|d| d.flake.clone());
     const EVAL_ARGS: Group<Self, EvaluationArgs> = Some(|d| d.eval.clone());
+    const FLAKE_ARGS: Group<Self, FlakeArgs> = Some(|d| d.flake.clone());
+    const INSTALLABLES: Group<Self, InstallablesArgs> = Some(|d| d.installables.clone());
     const SOURCE_ARGS: Group<Self, SourceArgs> = Some(|d| d.source.clone());
+    const SUBCOMMAND: &'static [&'static str] = &["shell"];
 }
 impl JsonCommand for Shell {}
 impl TypedCommand for Shell {
@@ -157,13 +155,13 @@ pub struct Bundle {
 
 impl NixCliCommand for Bundle {
     type Own = BundleArgs;
-    const SUBCOMMAND: &'static [&'static str] = &["bundle"];
 
-    const INSTALLABLE: Group<Self, InstallableArg> = Some(|d| d.installable.clone());
-    const FLAKE_ARGS: Group<Self, FlakeArgs> = Some(|d| d.flake.clone());
     const EVAL_ARGS: Group<Self, EvaluationArgs> = Some(|d| d.eval.clone());
-    const SOURCE_ARGS: Group<Self, SourceArgs> = Some(|d| d.source.clone());
+    const FLAKE_ARGS: Group<Self, FlakeArgs> = Some(|d| d.flake.clone());
+    const INSTALLABLE: Group<Self, InstallableArg> = Some(|d| d.installable.clone());
     const OWN_ARGS: Group<Self, BundleArgs> = Some(|d| d.bundle_args.clone());
+    const SOURCE_ARGS: Group<Self, SourceArgs> = Some(|d| d.source.clone());
+    const SUBCOMMAND: &'static [&'static str] = &["bundle"];
 }
 impl JsonCommand for Bundle {}
 impl TypedCommand for Bundle {

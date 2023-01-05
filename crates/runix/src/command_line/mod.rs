@@ -1,30 +1,26 @@
 use core::fmt;
-use std::{
-    collections::HashMap,
-    ffi::OsStr,
-    io,
-    process::{ExitStatus, Output, Stdio},
-};
+use std::collections::HashMap;
+use std::ffi::OsStr;
+use std::io;
+use std::process::{ExitStatus, Output, Stdio};
 
 use async_trait::async_trait;
-
 use log::debug;
 use serde::Deserialize;
 use serde_json::Value;
 use thiserror::Error;
-use tokio::{
-    io::{AsyncBufReadExt, BufReader},
-    process::Command,
-};
-use tokio_stream::{wrappers::LinesStream, StreamExt};
+use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::process::Command;
+use tokio_stream::wrappers::LinesStream;
+use tokio_stream::StreamExt;
 
-use crate::{
-    arguments::{
-        common::NixCommonArgs, config::NixConfigArgs, eval::EvaluationArgs, flake::FlakeArgs,
-        source::SourceArgs, InstallableArg, InstallablesArgs, NixArgs,
-    },
-    NixBackend, Run, RunJson, RunTyped,
-};
+use crate::arguments::common::NixCommonArgs;
+use crate::arguments::config::NixConfigArgs;
+use crate::arguments::eval::EvaluationArgs;
+use crate::arguments::flake::FlakeArgs;
+use crate::arguments::source::SourceArgs;
+use crate::arguments::{InstallableArg, InstallablesArgs, NixArgs};
+use crate::{NixBackend, Run, RunJson, RunTyped};
 
 pub mod flag;
 
@@ -112,6 +108,7 @@ struct Collect;
 #[async_trait]
 impl CommandMode for Collect {
     type Output = Output;
+
     async fn run(command: &mut Command) -> Result<Self::Output, NixCommandLineError> {
         let command = command
             .stdout(Stdio::piped())
@@ -153,6 +150,7 @@ struct Passthru;
 #[async_trait]
 impl CommandMode for Passthru {
     type Output = ExitStatus;
+
     async fn run(command: &mut Command) -> Result<ExitStatus, NixCommandLineError> {
         let command = command
             .stdout(Stdio::inherit())
@@ -368,7 +366,6 @@ where
     <C as TypedCommand>::Output: for<'de> Deserialize<'de>,
 {
     type Output = C::Output;
-
     type TypedError = <Self as RunJson<NixCommandLine>>::JsonError;
 
     async fn run_typed(

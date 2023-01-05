@@ -1,10 +1,14 @@
-use std::{borrow::Cow, num::ParseIntError, path::PathBuf, str::FromStr};
+use std::borrow::Cow;
+use std::num::ParseIntError;
+use std::path::PathBuf;
+use std::str::FromStr;
 
 use log::info;
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
 use thiserror::Error;
-use url::{form_urlencoded::Serializer, Url, UrlQuery};
+use url::form_urlencoded::Serializer;
+use url::{Url, UrlQuery};
 
 #[derive(Debug, Error)]
 pub enum UrlError {
@@ -97,7 +101,7 @@ impl ToFlakeRef {
                     .expect("Failed initializing `{service}:` url");
                 e.add_to_url(&mut url);
                 url
-            }
+            },
             ToFlakeRef::Path {
                 path,
                 rev_count,
@@ -125,7 +129,7 @@ impl ToFlakeRef {
 
                 debug_assert_eq!(url.scheme(), "path");
                 url
-            }
+            },
             ToFlakeRef::Git {
                 url: _,
                 shallow: _,
@@ -142,14 +146,14 @@ impl ToFlakeRef {
             } => todo!(),
             ToFlakeRef::Indirect(IndirectFlake { id: _ }) => {
                 Url::parse("flake:{id}").expect("Failed to create indirect reference")
-            }
+            },
         };
         Ok(url)
     }
+
     pub fn from_url(url: &FlakeUrl) -> Result<ToFlakeRef, FlakeRefError> {
         let flake_ref = match url.scheme() {
             // https://cs.github.com/NixOS/nix/blob/f225f4307662fe9a57543d0c86c28aa9fddaf0d2/src/libfetchers/path.cc#L11
-            //
             "path" | "file" => ToFlakeRef::Path {
                 path: url.to_file_path().map_err(UrlError::ExtractPath)?,
                 rev_count: url
@@ -220,13 +224,13 @@ impl Pinned {
                 last_modified: _,
             } => {
                 query.append_pair("narHash", &nar_hash.clone());
-            }
+            },
             Pinned::Rev {
                 commit_rev,
                 last_modified: _,
             } => {
                 query.append_pair("rev", &commit_rev.clone());
-            }
+            },
             Pinned::NarAndRev {
                 nar_hash,
                 last_modified: _,
@@ -234,7 +238,7 @@ impl Pinned {
             } => {
                 query.append_pair("narHash", &nar_hash.clone());
                 query.append_pair("rev", &commit_rev.clone());
-            }
+            },
         };
 
         match self {
@@ -242,7 +246,7 @@ impl Pinned {
             | Pinned::Nar { last_modified, .. }
             | Pinned::Rev { last_modified, .. } => {
                 query.append_pair("lastModified", &last_modified.to_string())
-            }
+            },
         };
     }
 
@@ -407,18 +411,15 @@ mod tests {
         )
         .expect("should parse pin");
 
-        assert_eq!(
-            flakeref,
-            ToFlakeRef::Path {
-                path: "/nix/store/083m43hjhry94cvfmqdv7kjpvsl3zzvi-source".into(),
-                rev_count: None,
-                pinned: Some(Pinned::NarAndRev {
-                    nar_hash: "sha256-MTXmIYowHM1wyIYyqPdBLia5SjGnxETv0YkIbDsbkx4=".into(),
-                    last_modified: 1666570118,
-                    commit_rev: "1e684b371cf05300bc2b432f958f285855bac8fb".into()
-                })
-            }
-        )
+        assert_eq!(flakeref, ToFlakeRef::Path {
+            path: "/nix/store/083m43hjhry94cvfmqdv7kjpvsl3zzvi-source".into(),
+            rev_count: None,
+            pinned: Some(Pinned::NarAndRev {
+                nar_hash: "sha256-MTXmIYowHM1wyIYyqPdBLia5SjGnxETv0YkIbDsbkx4=".into(),
+                last_modified: 1666570118,
+                commit_rev: "1e684b371cf05300bc2b432f958f285855bac8fb".into()
+            })
+        })
     }
 
     /// Ensure that a path flake ref serializes without inforation loss

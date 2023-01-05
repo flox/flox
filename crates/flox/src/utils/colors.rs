@@ -92,10 +92,10 @@ impl FloxColor {
                     g: self.rgb.1,
                     b: self.rgb.2,
                 })
-            }
+            },
             Some(supports_color::ColorLevel { has_256: true, .. }) => {
                 Some(crossterm::style::Color::AnsiValue(self.ansi256))
-            }
+            },
             Some(supports_color::ColorLevel {
                 has_basic: true, ..
             }) => Some(self.basic.to_crossterm()),
@@ -111,10 +111,10 @@ impl FloxColor {
                     g: self.rgb.1,
                     b: self.rgb.2,
                 })
-            }
+            },
             Some(supports_color::ColorLevel { has_256: true, .. }) => {
                 Some(inquire::ui::Color::AnsiValue(self.ansi256))
-            }
+            },
             Some(supports_color::ColorLevel {
                 has_basic: true, ..
             }) => Some(self.basic.to_inquire()),

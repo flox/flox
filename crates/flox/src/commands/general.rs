@@ -1,22 +1,18 @@
 use anyhow::Result;
 use bpaf::Bpaf;
-use flox_rust_sdk::{
-    flox::Flox,
-    nix::{
-        command_line::{Group, NixCliCommand, NixCommandLine, ToArgs},
-        Run,
-    },
-};
+use flox_rust_sdk::flox::Flox;
+use flox_rust_sdk::nix::command_line::{Group, NixCliCommand, NixCommandLine, ToArgs};
+use flox_rust_sdk::nix::Run;
 use fslock::LockFile;
 
-use crate::{
-    config::{Feature, Impl},
-    flox_forward, should_flox_forward, subcommand_metric,
-    utils::{
-        init::init_telemetry_consent,
-        metrics::{METRICS_EVENTS_FILE_NAME, METRICS_LOCK_FILE_NAME, METRICS_UUID_FILE_NAME},
-    },
+use crate::config::{Feature, Impl};
+use crate::utils::init::init_telemetry_consent;
+use crate::utils::metrics::{
+    METRICS_EVENTS_FILE_NAME,
+    METRICS_LOCK_FILE_NAME,
+    METRICS_UUID_FILE_NAME,
 };
+use crate::{flox_forward, should_flox_forward, subcommand_metric};
 
 #[derive(Bpaf, Clone)]
 pub struct GeneralArgs {}
@@ -31,7 +27,7 @@ impl GeneralCommands {
                 RawCommand::new(args.to_owned())
                     .run(&nix, &Default::default())
                     .await?;
-            }
+            },
 
             GeneralCommands::ResetMetrics => {
                 let mut metrics_lock =
@@ -42,7 +38,7 @@ impl GeneralCommands {
                     tokio::fs::remove_file(flox.cache_dir.join(METRICS_EVENTS_FILE_NAME)).await
                 {
                     match err.kind() {
-                        std::io::ErrorKind::NotFound => {}
+                        std::io::ErrorKind::NotFound => {},
                         _ => Err(err)?,
                     }
                 }
@@ -51,13 +47,13 @@ impl GeneralCommands {
                     tokio::fs::remove_file(flox.data_dir.join(METRICS_UUID_FILE_NAME)).await
                 {
                     match err.kind() {
-                        std::io::ErrorKind::NotFound => {}
+                        std::io::ErrorKind::NotFound => {},
                         _ => Err(err)?,
                     }
                 }
 
                 init_telemetry_consent(&flox.data_dir, &flox.cache_dir).await?;
-            }
+            },
 
             _ if should_flox_forward(Feature::All)? => flox_forward(&flox).await?,
             _ => todo!(),
@@ -151,6 +147,7 @@ impl ToArgs for RawCommand {
 
 impl NixCliCommand for RawCommand {
     type Own = Self;
-    const SUBCOMMAND: &'static [&'static str] = &[];
+
     const OWN_ARGS: Group<Self, Self::Own> = Some(|s| s.to_owned());
+    const SUBCOMMAND: &'static [&'static str] = &[];
 }

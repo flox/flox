@@ -1,35 +1,26 @@
-use anyhow::Context;
-use anyhow::Result;
-use crossterm::tty::IsTty;
-use fslock::LockFile;
-use indoc::indoc;
-use log::debug;
-use log::info;
-use log::trace;
-use serde::Deserialize;
 use std::collections::HashMap;
-use std::env;
 use std::fs::File;
-use std::io;
-use std::io::BufRead;
-use std::io::BufReader;
-use std::iter;
+use std::io::{BufRead, BufReader};
 use std::path::Path;
 use std::str::FromStr;
-use tokio::io::AsyncReadExt;
-use tokio::io::AsyncWriteExt;
+use std::{env, io, iter};
+
+use anyhow::{Context, Result};
+use crossterm::tty::IsTty;
+use flox_rust_sdk::prelude::{Channel, ChannelRegistry};
+use fslock::LockFile;
+use indoc::indoc;
+use log::{debug, info, trace};
+use serde::Deserialize;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::Layer;
 
-use flox_rust_sdk::prelude::Channel;
-use flox_rust_sdk::prelude::ChannelRegistry;
-
+use super::dialog::InquireExt;
+use super::metrics::{PosthogLayer, METRICS_UUID_FILE_NAME};
 use crate::commands::Verbosity;
 use crate::utils::logger;
 use crate::utils::metrics::METRICS_LOCK_FILE_NAME;
-
-use super::dialog::InquireExt;
-use super::metrics::{PosthogLayer, METRICS_UUID_FILE_NAME};
 
 const ENV_GIT_CONFIG_SYSTEM: &str = "GIT_CONFIG_SYSTEM";
 const ENV_FLOX_ORIGINAL_GIT_CONFIG_SYSTEM: &str = "FLOX_ORIGINAL_GIT_CONFIG_SYSTEM";
@@ -59,7 +50,7 @@ pub async fn init_telemetry_consent(data_dir: &Path, cache_dir: &Path) -> Result
     match tokio::fs::File::open(&uuid_path).await {
         Ok(_) => return Ok(()),
         Err(err) => match err.kind() {
-            std::io::ErrorKind::NotFound => {}
+            std::io::ErrorKind::NotFound => {},
             _ => return Err(err.into()),
         },
     }
@@ -124,7 +115,7 @@ pub async fn init_uuid(data_dir: &Path) -> Result<uuid::Uuid> {
             let mut uuid_str = String::new();
             uuid_file.read_to_string(&mut uuid_str).await?;
             Ok(uuid::Uuid::try_parse(&uuid_str)?)
-        }
+        },
         Err(err) => match err.kind() {
             std::io::ErrorKind::NotFound => {
                 debug!("Creating new uuid");
@@ -133,7 +124,7 @@ pub async fn init_uuid(data_dir: &Path) -> Result<uuid::Uuid> {
                 file.write_all(uuid.to_string().as_bytes()).await?;
 
                 Ok(uuid)
-            }
+            },
             _ => Err(err.into()),
         },
     }
@@ -148,7 +139,7 @@ pub fn init_logger(verbosity: Verbosity, debug: bool) {
         (Verbosity::Verbose(1), false) => "off,flox=info,flox-rust-sdk=info,runix=info",
         (Verbosity::Verbose(1), true) => {
             "off,flox=debug,flox-rust-sdk=debug,runix=debug,posix=debug"
-        }
+        },
         (Verbosity::Verbose(2), _) => "debug",
         (Verbosity::Verbose(_), _) => "trace",
     };
@@ -229,8 +220,8 @@ pub fn init_access_tokens(
                         let (tk, tv) = t.split_once('=').unwrap();
                         (tk.to_string(), tv.to_string())
                     }));
-                }
-                _ => {}
+                },
+                _ => {},
             }
         }
         tokens

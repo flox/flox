@@ -1,104 +1,103 @@
-use std::{any::TypeId, collections::HashMap, env, str::FromStr, sync::Mutex};
+use std::any::TypeId;
+use std::collections::HashMap;
+use std::env;
+use std::str::FromStr;
+use std::sync::Mutex;
 
 use anyhow::Result;
 use bpaf::{Bpaf, Parser};
 use derive_more::{FromStr, Into};
-use flox_rust_sdk::{
-    flox::Flox,
-    nix::{
-        arguments::{flake::FlakeArgs, NixArgs},
-        command::Eval,
-        command_line::{Group, NixCliCommand, NixCommandLine, ToArgs},
-        Run,
-    },
-    prelude::Stability,
-};
+use flox_rust_sdk::flox::Flox;
+use flox_rust_sdk::nix::arguments::flake::FlakeArgs;
+use flox_rust_sdk::nix::arguments::NixArgs;
+use flox_rust_sdk::nix::command::Eval;
+use flox_rust_sdk::nix::command_line::{Group, NixCliCommand, NixCommandLine, ToArgs};
+use flox_rust_sdk::nix::Run;
+use flox_rust_sdk::prelude::Stability;
 use once_cell::sync::Lazy;
 
-use crate::{
-    config::{Config, Feature},
-    flox_forward, should_flox_forward, subcommand_metric,
-    utils::InstallableDef,
-};
+use crate::config::{Config, Feature};
+use crate::utils::InstallableDef;
+use crate::{flox_forward, should_flox_forward, subcommand_metric};
 
 #[derive(FromStr, Default, Debug, Clone, Into)]
 pub struct BuildInstallable(String);
 impl InstallableDef for BuildInstallable {
+    const DEFAULT_FLAKEREFS: &'static [&'static str] = &["."];
     const DEFAULT_PREFIXES: &'static [(&'static str, bool)] =
         &[("packages", true), ("legacyPackages", true)];
-    const DEFAULT_FLAKEREFS: &'static [&'static str] = &["."];
+    const DERIVATION_TYPE: &'static str = "package";
     const INSTALLABLE: fn(&Self) -> String = |s| s.0.to_owned();
     const SUBCOMMAND: &'static str = "build";
-    const DERIVATION_TYPE: &'static str = "package";
 }
 
 #[derive(FromStr, Default, Debug, Clone, Into)]
 pub struct DevelopInstallable(String);
 impl InstallableDef for DevelopInstallable {
+    const DEFAULT_FLAKEREFS: &'static [&'static str] = &["."];
     const DEFAULT_PREFIXES: &'static [(&'static str, bool)] = &[
         ("packages", true),
         ("devShells", true),
         ("legacyPackages", true),
     ];
-    const DEFAULT_FLAKEREFS: &'static [&'static str] = &["."];
+    const DERIVATION_TYPE: &'static str = "shell";
     const INSTALLABLE: fn(&Self) -> String = |s| s.0.to_owned();
     const SUBCOMMAND: &'static str = "develop";
-    const DERIVATION_TYPE: &'static str = "shell";
 }
 
 #[derive(FromStr, Default, Debug, Clone, Into)]
 pub struct PublishInstallable(String);
 impl InstallableDef for PublishInstallable {
+    const DEFAULT_FLAKEREFS: &'static [&'static str] = &["."];
     const DEFAULT_PREFIXES: &'static [(&'static str, bool)] =
         &[("packages", true), ("legacyPackages", true)];
-    const DEFAULT_FLAKEREFS: &'static [&'static str] = &["."];
+    const DERIVATION_TYPE: &'static str = "package";
     const INSTALLABLE: fn(&Self) -> String = |s| s.0.to_owned();
     const SUBCOMMAND: &'static str = "publish";
-    const DERIVATION_TYPE: &'static str = "package";
 }
 
 #[derive(FromStr, Default, Debug, Clone, Into)]
 pub struct RunInstallable(String);
 impl InstallableDef for RunInstallable {
+    const DEFAULT_FLAKEREFS: &'static [&'static str] = &["."];
     const DEFAULT_PREFIXES: &'static [(&'static str, bool)] =
         &[("packages", true), ("apps", true), ("legacyPackages", true)];
-    const DEFAULT_FLAKEREFS: &'static [&'static str] = &["."];
+    const DERIVATION_TYPE: &'static str = "package";
     const INSTALLABLE: fn(&Self) -> String = |s| s.0.to_owned();
     const SUBCOMMAND: &'static str = "build";
-    const DERIVATION_TYPE: &'static str = "package";
 }
 
 #[derive(FromStr, Default, Debug, Clone, Into)]
 pub struct ShellInstallable(String);
 impl InstallableDef for ShellInstallable {
+    const DEFAULT_FLAKEREFS: &'static [&'static str] = &["."];
     const DEFAULT_PREFIXES: &'static [(&'static str, bool)] =
         &[("packages", true), ("legacyPackages", true)];
-    const DEFAULT_FLAKEREFS: &'static [&'static str] = &["."];
+    const DERIVATION_TYPE: &'static str = "package";
     const INSTALLABLE: fn(&Self) -> String = |s| s.0.to_owned();
     const SUBCOMMAND: &'static str = "shell";
-    const DERIVATION_TYPE: &'static str = "package";
 }
 
 #[derive(FromStr, Default, Debug, Clone, Into)]
 pub struct BundleInstallable(String);
 impl InstallableDef for BundleInstallable {
+    const DEFAULT_FLAKEREFS: &'static [&'static str] = &["."];
     const DEFAULT_PREFIXES: &'static [(&'static str, bool)] =
         &[("packages", true), ("legacyPackages", true)];
-    const DEFAULT_FLAKEREFS: &'static [&'static str] = &["."];
+    const DERIVATION_TYPE: &'static str = "package";
     const INSTALLABLE: fn(&Self) -> String = |s| s.0.to_owned();
     const SUBCOMMAND: &'static str = "bundle";
-    const DERIVATION_TYPE: &'static str = "package";
 }
 
 #[derive(FromStr, Default, Debug, Clone, Into)]
 pub struct BundlerInstallable(String);
 impl InstallableDef for BundlerInstallable {
-    const DEFAULT_PREFIXES: &'static [(&'static str, bool)] = &[("bundlers", true)];
+    const ARG_FLAG: Option<&'static str> = Some("--bundler");
     const DEFAULT_FLAKEREFS: &'static [&'static str] = &["github:flox/bundlers/master"];
+    const DEFAULT_PREFIXES: &'static [(&'static str, bool)] = &[("bundlers", true)];
+    const DERIVATION_TYPE: &'static str = "bundler";
     const INSTALLABLE: fn(&Self) -> String = |s| s.0.to_owned();
     const SUBCOMMAND: &'static str = "bundle";
-    const DERIVATION_TYPE: &'static str = "bundler";
-    const ARG_FLAG: Option<&'static str> = Some("--bundler");
 }
 
 #[allow(clippy::type_complexity)]
@@ -185,7 +184,7 @@ impl PackageCommands {
                 )
                 .build::<NixCommandLine>()
                 .await?
-            }
+            },
 
             PackageCommands::Develop {
                 package: package @ PackageArgs { nix_arguments, .. },
@@ -201,7 +200,7 @@ impl PackageCommands {
                 )
                 .develop::<NixCommandLine>()
                 .await?
-            }
+            },
             PackageCommands::Run {
                 package: package @ PackageArgs { nix_arguments, .. },
                 installable_arg,
@@ -216,7 +215,7 @@ impl PackageCommands {
                 )
                 .run::<NixCommandLine>()
                 .await?
-            }
+            },
             PackageCommands::Shell {
                 package: package @ PackageArgs { nix_arguments, .. },
                 installable_arg,
@@ -231,7 +230,7 @@ impl PackageCommands {
                 )
                 .shell::<NixCommandLine>()
                 .await?
-            }
+            },
             PackageCommands::Eval {
                 package: package @ PackageArgs { nix_arguments, .. },
                 ..
@@ -248,7 +247,7 @@ impl PackageCommands {
                 };
 
                 command.run(&nix, &NixArgs::default()).await?
-            }
+            },
             PackageCommands::Bundle {
                 package: package @ PackageArgs { nix_arguments, .. },
                 installable_arg,
@@ -264,7 +263,7 @@ impl PackageCommands {
                 )
                 .bundle::<NixCommandLine>(bundler.resolve_installable(&flox).await?)
                 .await?
-            }
+            },
             PackageCommands::Flake {
                 subcommand,
                 package,
@@ -294,7 +293,7 @@ impl PackageCommands {
                 }
                 .run(&nix, &Default::default())
                 .await?;
-            }
+            },
 
             _ => todo!(),
         }
@@ -443,7 +442,8 @@ impl ToArgs for FlakeCommand {
 
 impl NixCliCommand for FlakeCommand {
     type Own = Self;
-    const SUBCOMMAND: &'static [&'static str] = &["flake"];
-    const OWN_ARGS: Group<Self, Self::Own> = Some(|s| s.to_owned());
+
     const FLAKE_ARGS: Group<Self, FlakeArgs> = Some(|_| Default::default());
+    const OWN_ARGS: Group<Self, Self::Own> = Some(|s| s.to_owned());
+    const SUBCOMMAND: &'static [&'static str] = &["flake"];
 }

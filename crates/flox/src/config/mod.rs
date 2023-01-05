@@ -1,4 +1,6 @@
-use std::{collections::HashMap, env, path::PathBuf};
+use std::collections::HashMap;
+use std::env;
+use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use config::{Config as HierarchicalConfig, Environment};
@@ -101,7 +103,7 @@ impl Config {
                     debug!("`FLOX_PREVIEW_CONFIG_DIR` not set");
                     let config_dir = dirs::config_dir().unwrap();
                     config_dir.join(FLOX_DIR_NAME)
-                }
+                },
             };
 
             let builder = HierarchicalConfig::builder()

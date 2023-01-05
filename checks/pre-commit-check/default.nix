@@ -12,6 +12,8 @@
       rev = "d7c86c8244af0cb5be1ab2b3882d0af74a191352";
     };
   });
+
+  rustfmt = nixpkgs.rustfmt.override {asNightly = true;};
 in
   (inputs.shellHooks.lib.run {
     src = ../..;
@@ -24,4 +26,4 @@ in
     settings.clippy.denyWarnings = true;
     tools = {inherit commitizen;};
   })
-  // {passthru.commitizen = commitizen;}
+  // {passthru = {inherit commitizen rustfmt;};}

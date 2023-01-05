@@ -1,12 +1,11 @@
-use std::{collections::HashMap, path::PathBuf};
+use std::collections::HashMap;
+use std::path::PathBuf;
 
 use derive_more::{Deref, From};
 use runix_derive::ToArgs;
 
-use crate::command_line::{
-    flag::{Flag, FlagType},
-    ToArgs,
-};
+use crate::command_line::flag::{Flag, FlagType};
+use crate::command_line::ToArgs;
 
 /// These arguments correspond to nix config settings as defined in `nix.conf` or overridden on the commandline
 /// and refer to the options defined in

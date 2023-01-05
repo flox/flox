@@ -38,6 +38,7 @@ impl Default for Stability {
 // TODO: fix serde stuff for Stability...
 impl FromStr for Stability {
     type Err = anyhow::Error;
+
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "stable" => Ok(Stability::Stable),

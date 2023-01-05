@@ -1,7 +1,6 @@
-use crossterm::style::Attribute;
-use crossterm::style::ContentStyle;
-use crossterm::style::Stylize;
 use std::fmt::{self, Write};
+
+use crossterm::style::{Attribute, ContentStyle, Stylize};
 
 use crate::utils::colors;
 
@@ -23,8 +22,11 @@ impl<'a> tracing::field::Visit for LoggerVisitor<'a> {
     }
 
     fn record_f64(&mut self, _field: &tracing::field::Field, _value: f64) {}
+
     fn record_i64(&mut self, _field: &tracing::field::Field, _value: i64) {}
+
     fn record_u64(&mut self, _field: &tracing::field::Field, _value: u64) {}
+
     fn record_bool(&mut self, _field: &tracing::field::Field, _value: bool) {}
 
     fn record_error(
@@ -101,11 +103,11 @@ where
                 tracing::Level::TRACE => {
                     line_style.foreground_color = Some(light_peach);
                     line_style.attributes.set(Attribute::Bold);
-                }
+                },
                 tracing::Level::ERROR | tracing::Level::WARN => {
                     line_style.attributes.set(Attribute::Bold);
-                }
-                _ => {}
+                },
+                _ => {},
             }
 
             line_style.apply(message).to_string()

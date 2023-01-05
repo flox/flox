@@ -1,17 +1,13 @@
 use derive_more::Constructor;
-
-use runix::{
-    arguments::{flake::FlakeArgs, BundleArgs, NixArgs},
-    command::{Build, Bundle, Develop, Run as RunCommand, Shell},
-    installable::Installable,
-    NixBackend, Run, RunTyped,
-};
+use runix::arguments::flake::FlakeArgs;
+use runix::arguments::{BundleArgs, NixArgs};
+use runix::command::{Build, Bundle, Develop, Run as RunCommand, Shell};
+use runix::installable::Installable;
+use runix::{NixBackend, Run, RunTyped};
 use thiserror::Error;
 
-use crate::{
-    flox::{Flox, FloxNixApi},
-    models::stability::Stability,
-};
+use crate::flox::{Flox, FloxNixApi};
+use crate::models::stability::Stability;
 
 #[derive(Constructor)]
 pub struct Package<'flox> {

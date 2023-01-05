@@ -1,20 +1,21 @@
-use self::config::{Feature, Impl};
+use std::env;
+use std::fmt::{Debug, Display};
+use std::os::unix::process::ExitStatusExt;
+use std::path::Path;
+use std::process::{ExitCode, ExitStatus};
+
 use anyhow::{Context, Result};
 use commands::FloxArgs;
 use flox_rust_sdk::environment::default_nix_subprocess_env;
 use fslock::LockFile;
 use log::{debug, error, warn};
 use serde_json::json;
-use std::env;
-use std::fmt::{Debug, Display};
-use std::os::unix::process::ExitStatusExt;
-use std::path::Path;
-use std::process::{ExitCode, ExitStatus};
 use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
+use tokio::process::Command;
 use utils::init::init_logger;
 use utils::metrics::{METRICS_LOCK_FILE_NAME, METRICS_UUID_FILE_NAME};
 
-use tokio::process::Command;
+use self::config::{Feature, Impl};
 
 mod build;
 mod commands;
@@ -48,7 +49,7 @@ async fn main() -> ExitCode {
                 error!("{}", e);
             }
             ExitCode::from(1)
-        }
+        },
     }
 }
 
@@ -99,12 +100,12 @@ async fn sync_bash_metrics_consent(data_dir: &Path, cache_dir: &Path) -> Result<
             let mut uuid_str = String::new();
             f.read_to_string(&mut uuid_str).await?;
             !uuid_str.trim().is_empty()
-        }
+        },
         Err(err) => match err.kind() {
             std::io::ErrorKind::NotFound => {
                 // Consent hasn't been determined yet, so there is nothing to sync
                 return Ok(());
-            }
+            },
             _ => return Err(err.into()),
         },
     };

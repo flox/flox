@@ -1,12 +1,12 @@
-use anyhow::Result;
-use std::process::ExitCode;
-use std::{
-    fs::{self, create_dir_all},
-    os::unix,
-    path::Path,
-    process::{self},
+use std::fs::{self, create_dir_all};
+use std::os::unix;
+use std::path::Path;
+use std::process::{
+    ExitCode,
+    {self},
 };
 
+use anyhow::Result;
 use derive_more::{Deref, DerefMut};
 use tempfile::TempDir;
 

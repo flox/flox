@@ -1,10 +1,8 @@
 use derive_more::{Deref, From};
 use runix_derive::ToArgs;
 
-use crate::{
-    command_line::ToArgs,
-    default::flag::{Flag, FlagType},
-};
+use crate::command_line::ToArgs;
+use crate::default::flag::{Flag, FlagType};
 
 /// Evaluation related arguments
 /// Corresponding to the arguments defined in

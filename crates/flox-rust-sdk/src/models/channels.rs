@@ -2,7 +2,8 @@ use derive_more::FromStr;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use super::{flake_ref::ToFlakeRef, registry::Registry};
+use super::flake_ref::ToFlakeRef;
+use super::registry::Registry;
 
 #[derive(Error, Debug)]
 pub enum ChannelError {
@@ -38,8 +39,9 @@ impl ChannelRegistry {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::str::FromStr;
+
+    use super::*;
 
     #[test]
     fn github_url() {

@@ -1,14 +1,14 @@
+use std::sync::mpsc;
+
 use anyhow::Result;
 use fslock::LockFile;
 use log::{debug, error};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use std::sync::mpsc;
-use time::{format_description::well_known::Iso8601, Duration, OffsetDateTime};
-use tokio::{
-    fs::OpenOptions,
-    io::{AsyncReadExt, AsyncWriteExt},
-};
+use time::format_description::well_known::Iso8601;
+use time::{Duration, OffsetDateTime};
+use tokio::fs::OpenOptions;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use uuid::Uuid;
 
 use crate::config::Config;
@@ -37,6 +37,7 @@ impl<'a> tracing::field::Visit for PosthogVisitor<'a> {
             *self.0 = Some(value.to_string());
         }
     }
+
     fn record_debug(&mut self, _field: &tracing::field::Field, _value: &dyn std::fmt::Debug) {}
 }
 
@@ -236,12 +237,12 @@ pub async fn add_metric(subcommand: Option<String>) -> Result<()> {
             }
 
             Uuid::try_parse(uuid_str_trimmed)?
-        }
+        },
         Err(err) => match err.kind() {
             std::io::ErrorKind::NotFound => {
                 // Metrics have not been consented to yet
                 return Ok(());
-            }
+            },
             _ => Err(err)?,
         },
     };
