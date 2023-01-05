@@ -6,4 +6,5 @@ inputs.shellHooks.lib.run {
     rustfmt.enable = true;
     clippy.enable = true;
   };
+  settings.clippy.denyWarnings = true;
 }

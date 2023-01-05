@@ -1,5 +1,3 @@
-#![deny(warnings)]
-
 use self::config::{Feature, Impl};
 use anyhow::{Context, Result};
 use commands::FloxArgs;

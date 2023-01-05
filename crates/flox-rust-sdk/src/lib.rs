@@ -1,5 +1,3 @@
-#![deny(warnings)]
-
 pub mod providers;
 pub mod utils;
 
