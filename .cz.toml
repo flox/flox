@@ -1,0 +1,11 @@
+[tool]
+[tool.commitizen]
+name = "cz_conventional_commits"
+version = "0.1.0"
+tag_format = "v$version"
+version_files = ["./crates/flox/Cargo.toml:version"]
+changelog_incremental = true
+major_version_zero = true
+pre_bump_hooks = [
+  "cargo update --offline -p flox ",
+]

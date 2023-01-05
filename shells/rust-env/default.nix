@@ -15,6 +15,7 @@
   rust,
   hivemind,
   cargo-watch,
+  # commitizen,
 }:
 mkShell ({
     inputsFrom = [
@@ -23,6 +24,8 @@ mkShell ({
     ];
     RUST_SRC_PATH = "${self.packages.flox.passthru.rustPlatform.rustLibSrc}";
     packages = [
+      # temporar until https://github.com/commitizen-tools/commitizen/pull/644 is merged
+      self.checks.pre-commit-check.passthru.commitizen
       hivemind
       cargo-watch
       rustfmt
