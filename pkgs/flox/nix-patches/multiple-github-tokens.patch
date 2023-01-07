@@ -1,5 +1,5 @@
 diff --git a/src/libfetchers/github.cc b/src/libfetchers/github.cc
-index a491d82a6..a8943b0ee 100644
+index 2115ce2f5..0785e0906 100644
 --- a/src/libfetchers/github.cc
 +++ b/src/libfetchers/github.cc
 @@ -157,18 +157,37 @@ struct GitArchiveInputScheme : InputScheme
@@ -52,16 +52,16 @@ index a491d82a6..a8943b0ee 100644
  
          auto json = nlohmann::json::parse(
              readFile(
-@@ -272,7 +291,7 @@ struct GitHubInputScheme : GitArchiveInputScheme
-             host, getStrAttr(input.attrs, "owner"), getStrAttr(input.attrs, "repo"),
-             input.getRev()->to_string(Base16, false));
- 
+@@ -263,7 +282,7 @@ struct GitHubInputScheme : GitArchiveInputScheme
+     DownloadUrl getDownloadUrl(const Input & input) const override
+     {
+         auto host = maybeGetStrAttr(input.attrs, "host").value_or("github.com");
 -        Headers headers = makeHeadersWithAuthTokens(host);
 +        Headers headers = makeHeadersWithAuthTokens(host, input);
-         return DownloadUrl { url, headers };
-     }
- 
-@@ -316,7 +335,7 @@ struct GitLabInputScheme : GitArchiveInputScheme
+         // If we have no auth headers then we default to the public archive
+         // urls so we do not run into rate limits.
+         const auto urlFmt =
+@@ -319,7 +338,7 @@ struct GitLabInputScheme : GitArchiveInputScheme
          auto url = fmt("https://%s/api/v4/projects/%s%%2F%s/repository/commits?ref_name=%s",
              host, getStrAttr(input.attrs, "owner"), getStrAttr(input.attrs, "repo"), *input.getRef());
  
@@ -70,7 +70,7 @@ index a491d82a6..a8943b0ee 100644
  
          auto json = nlohmann::json::parse(
              readFile(
-@@ -339,7 +358,7 @@ struct GitLabInputScheme : GitArchiveInputScheme
+@@ -342,7 +361,7 @@ struct GitLabInputScheme : GitArchiveInputScheme
              host, getStrAttr(input.attrs, "owner"), getStrAttr(input.attrs, "repo"),
              input.getRev()->to_string(Base16, false));
  
@@ -79,7 +79,7 @@ index a491d82a6..a8943b0ee 100644
          return DownloadUrl { url, headers };
      }
  
-@@ -379,7 +398,7 @@ struct SourceHutInputScheme : GitArchiveInputScheme
+@@ -382,7 +401,7 @@ struct SourceHutInputScheme : GitArchiveInputScheme
          auto base_url = fmt("https://%s/%s/%s",
              host, getStrAttr(input.attrs, "owner"), getStrAttr(input.attrs, "repo"));
  
@@ -88,7 +88,7 @@ index a491d82a6..a8943b0ee 100644
  
          std::string refUri;
          if (ref == "HEAD") {
-@@ -426,7 +445,7 @@ struct SourceHutInputScheme : GitArchiveInputScheme
+@@ -429,7 +448,7 @@ struct SourceHutInputScheme : GitArchiveInputScheme
              host, getStrAttr(input.attrs, "owner"), getStrAttr(input.attrs, "repo"),
              input.getRev()->to_string(Base16, false));
  
