@@ -4,6 +4,7 @@ use std::io::Write;
 use std::os::unix::prelude::OpenOptionsExt;
 use std::path::PathBuf;
 
+use derive_more::Constructor;
 use log::debug;
 use once_cell::sync::Lazy;
 use runix::arguments::common::NixCommonArgs;
@@ -18,6 +19,7 @@ use serde::Deserialize;
 use thiserror::Error;
 
 use crate::actions::environment::{Environment, EnvironmentError};
+use crate::actions::initializer::Initializer;
 use crate::actions::package::Package;
 use crate::environment::{self, default_nix_subprocess_env};
 use crate::models::channels::ChannelRegistry;
@@ -82,6 +84,7 @@ struct InstallableEvalQueryEntry {
     prefix: String,
     key: Vec<String>,
     input: String,
+    description: Option<String>,
 }
 
 #[derive(Error, Debug)]
@@ -100,32 +103,17 @@ where
 /// Typed output of our Nix evaluation to find matching installables
 type InstallableEvalQueryOut = BTreeSet<InstallableEvalQueryEntry>;
 
-#[derive(Debug)]
+#[derive(Debug, Constructor)]
 pub struct ResolvedInstallableMatch {
+    pub flakeref: String,
     pub prefix: String,
     pub system: Option<String>,
     pub explicit_system: bool,
     pub key: Vec<String>,
-    pub flakeref: String,
+    pub description: Option<String>,
 }
 
 impl ResolvedInstallableMatch {
-    fn new(
-        flakeref: String,
-        prefix: String,
-        system: Option<String>,
-        explicit_system: bool,
-        key: Vec<String>,
-    ) -> ResolvedInstallableMatch {
-        ResolvedInstallableMatch {
-            prefix,
-            system,
-            explicit_system,
-            key,
-            flakeref,
-        }
-    }
-
     pub fn installable(self) -> Installable {
         // Build the multi-part key into a Nix-safe single string
         let nix_str_key = self
@@ -159,6 +147,16 @@ impl Flox {
         Package::new(self, installable, stability, nix_arguments)
     }
 
+    /// Provide an initializer for initializing project directories
+    pub fn initializer(
+        &self,
+        template: Installable,
+        name: String,
+        nix_arguments: Vec<String>,
+    ) -> Initializer {
+        Initializer::new(self, template, name, nix_arguments)
+    }
+
     pub fn environment(&self, dir: PathBuf) -> Result<Environment, EnvironmentError> {
         Environment::new(self, dir)
     }
@@ -170,6 +168,7 @@ impl Flox {
         default_flakerefs: &[&str],
         default_attr_prefixes: &[(&str, bool)],
         must_exist: bool,
+        description_key: Option<&[&str]>,
     ) -> Result<Vec<ResolvedInstallableMatch>, ResolveFloxInstallableError<Nix>>
     where
         Eval: RunJson<Nix>,
@@ -194,6 +193,7 @@ impl Flox {
                     d_systemized.then(|| self.system.to_string()),
                     false,
                     vec![key.to_string()],
+                    None,
                 ));
             } else {
                 break;
@@ -273,6 +273,7 @@ impl Flox {
                         prefix = {prefix};
                         inputs = [{inputs}];
                         key = {key};
+                        descriptionKey = {description_key};
                     }})"#,
                     system = self.system,
                     prefix = attr_prefix
@@ -294,6 +295,15 @@ impl Flox {
                         .collect::<Vec<String>>()
                         .join(" "),
                     key = key
+                        .map(|x| format!(
+                            "[{}]",
+                            x.iter()
+                                .map(|p| format!("{:?}", p))
+                                .collect::<Vec<_>>()
+                                .join(" ")
+                        ))
+                        .unwrap_or_else(|| "null".to_string()),
+                    description_key = description_key
                         .map(|x| format!(
                             "[{}]",
                             x.iter()
@@ -355,6 +365,7 @@ impl Flox {
                     e.system,
                     e.explicit_system,
                     e.key,
+                    e.description,
                 )
             })
             .collect())

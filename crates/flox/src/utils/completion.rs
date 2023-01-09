@@ -109,6 +109,7 @@ impl FloxCompletionExt for Flox {
                 default_flakerefs,
                 default_attr_prefixes,
                 true,
+                None,
             )
             .await?;
 

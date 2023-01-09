@@ -23,6 +23,12 @@ impl InquireExt for inquire::Confirm<'_> {
     }
 }
 
+impl InquireExt for inquire::Text<'_> {
+    fn with_flox_theme(self) -> Self {
+        self.with_render_config(flox_theme())
+    }
+}
+
 pub fn flox_theme() -> RenderConfig {
     let mut render_config = RenderConfig::default_colored();
 

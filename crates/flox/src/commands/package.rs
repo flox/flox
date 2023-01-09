@@ -1,7 +1,7 @@
 use std::env;
 use std::fmt::Debug;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use bpaf::{construct, Bpaf, Parser};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::nix::arguments::flake::FlakeArgs;
@@ -10,9 +10,11 @@ use flox_rust_sdk::nix::command::Eval as EvalComm;
 use flox_rust_sdk::nix::command_line::{Group, NixCliCommand, NixCommandLine, ToArgs};
 use flox_rust_sdk::nix::Run as RunC;
 use flox_rust_sdk::prelude::Stability;
+use flox_rust_sdk::providers::git::GitCommandProvider;
 
 use crate::config::features::Feature;
 use crate::config::Config;
+use crate::utils::dialog::InquireExt;
 use crate::{flox_forward, subcommand_metric};
 
 pub(crate) mod interface {
@@ -28,8 +30,16 @@ pub(crate) mod interface {
         PublishInstallable,
         RunInstallable,
         ShellInstallable,
+        TemplateInstallable,
     };
     use crate::utils::{InstallableArgument, Parsed};
+
+    #[derive(Debug, Clone, Bpaf)]
+    pub struct Init {
+        #[bpaf(external(InstallableArgument::positional))]
+        pub(crate) template: Option<InstallableArgument<Parsed, TemplateInstallable>>,
+    }
+    parseable!(Init, init);
 
     #[derive(Debug, Clone, Bpaf)]
     pub struct Build {
@@ -164,7 +174,7 @@ pub(crate) mod interface {
     pub enum PackageCommands {
         /// initialize flox expressions for current project
         #[bpaf(command)]
-        Init {},
+        Init(#[bpaf(external(WithPassthru::parse))] WithPassthru<Init>),
         /// build package from current project
         #[bpaf(command)]
         Build(#[bpaf(external(WithPassthru::parse))] WithPassthru<Build>),
@@ -207,13 +217,35 @@ impl interface::PackageCommands {
                 flox_forward(&flox).await?
             },
 
+            interface::PackageCommands::Init(command) => {
+                subcommand_metric!("init");
+
+                let name = inquire::Text::new("Enter a package name")
+                    .with_flox_theme()
+                    .prompt()
+                    .context("Failed to prompt for name")?;
+
+                let template = command
+                    .inner
+                    .template
+                    .unwrap_or_default()
+                    .resolve_installable(
+                        &flox,
+                        Some(|m| m.key.get(0).map(|x| x == "_init") != Some(true)),
+                    )
+                    .await?;
+
+                flox.initializer(template, name, command.nix_args)
+                    .init::<NixCommandLine, GitCommandProvider>()
+                    .await?
+            },
             interface::PackageCommands::Build(command) => {
                 subcommand_metric!("build");
                 let installable_arg = command
                     .inner
                     .installable_arg
                     .unwrap_or_default()
-                    .resolve_installable(&flox)
+                    .resolve_installable(&flox, None)
                     .await?;
 
                 flox.package(
@@ -231,7 +263,7 @@ impl interface::PackageCommands {
                     .inner
                     .installable_arg
                     .unwrap_or_default()
-                    .resolve_installable(&flox)
+                    .resolve_installable(&flox, None)
                     .await?;
 
                 flox.package(
@@ -249,7 +281,7 @@ impl interface::PackageCommands {
                     .inner
                     .installable_arg
                     .unwrap_or_default()
-                    .resolve_installable(&flox)
+                    .resolve_installable(&flox, None)
                     .await?;
 
                 flox.package(
@@ -267,7 +299,7 @@ impl interface::PackageCommands {
                     .inner
                     .installable_arg
                     .unwrap_or_default()
-                    .resolve_installable(&flox)
+                    .resolve_installable(&flox, None)
                     .await?;
 
                 flox.package(
@@ -300,14 +332,14 @@ impl interface::PackageCommands {
                     .inner
                     .installable_arg
                     .unwrap_or_default()
-                    .resolve_installable(&flox)
+                    .resolve_installable(&flox, None)
                     .await?;
 
                 let bundler = command
                     .inner
                     .bundler_arg
                     .unwrap_or_default()
-                    .resolve_installable(&flox)
+                    .resolve_installable(&flox, None)
                     .await?;
 
                 flox.package(

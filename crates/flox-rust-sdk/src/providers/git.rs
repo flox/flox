@@ -30,11 +30,11 @@ pub trait GitProvider {
     async fn mv(&self, from: &Path, to: &Path) -> Result<(), Self::MvError>;
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct GitCommandProvider;
 
 // TODO A provider for LibGit2
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct LibGit2Provider;
 
 #[derive(Error, Debug)]

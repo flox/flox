@@ -41,7 +41,19 @@
       key,
       # Internally used to re-execute ourselves setting the key as the prefix when key=[x] and prefix=null
       keyAsPrefix ? false,
+      # Used to optionally grab a description from each match
+      # List of keys to be used with `attrByPath`
+      descriptionKey ? null,
     }: let
+      # Copied from nixpkgs
+      attrByPath = attrPath: default: set: let
+        attr = builtins.head attrPath;
+      in
+        if attrPath == []
+        then set
+        else if set ? ${attr}
+        then attrByPath (builtins.tail attrPath) default set.${attr}
+        else default;
       # Copied from nixpkgs
       hasAttrByPath = attrPath: e: let
         attr = builtins.head attrPath;
@@ -103,7 +115,7 @@
         x = keysForInputAndPrefix reflected.${inputName} prefixName;
       in
         map
-        (key: {
+        (key: rec {
           inherit key;
           explicitSystem = x ? system;
           system =
@@ -112,6 +124,19 @@
             else systemIfPresent reflected.${inputName} prefixName;
           prefix = prefixName;
           input = inputName;
+          description =
+            if descriptionKey != null
+            then let
+              prefixed =
+                if system == null
+                then reflected.${inputName}.${prefix}
+                else reflected.${inputName}.${prefix}.${system};
+              item = attrByPath key null prefixed;
+            in
+              if item != null
+              then attrByPath descriptionKey null item
+              else builtins.trace "Found key but is missing" null
+            else null;
         })
         x.keys;
 

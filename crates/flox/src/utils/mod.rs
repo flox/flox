@@ -107,6 +107,10 @@ impl InstallableKind {
         )
     }
 
+    pub const fn template() -> Self {
+        Self::new("template", &[("templates", false)], &["flox"])
+    }
+
     pub const fn shell() -> Self {
         Self::new("shell", &[("devShells", true)], &["."])
     }
@@ -222,14 +226,24 @@ impl<Matching: InstallableDef + 'static> InstallableArgument<Parsed, Matching> {
                 &drv.flake_refs,
                 &drv.prefix,
                 false,
+                Matching::DESCRIPTION_KEY,
             )
             .await?)
     }
 
     /// called at runtime to extract single installable from CLI input
-    pub async fn resolve_installable(&self, flox: &Flox) -> Result<Installable> {
+    pub async fn resolve_installable(
+        &self,
+        flox: &Flox,
+        filter: Option<fn(&ResolvedInstallableMatch) -> bool>,
+    ) -> Result<Installable> {
         let drv = InstallableKind::any(Matching::DERIVATION_TYPES).unwrap();
-        let matches = self.resolve_matches(flox).await?;
+        let returned_matches = self.resolve_matches(flox).await?;
+
+        let matches = match filter {
+            None => returned_matches,
+            Some(f) => returned_matches.into_iter().filter(f).collect(),
+        };
 
         resolve_installable_from_matches(
             Matching::SUBCOMMAND,
@@ -283,6 +297,7 @@ pub trait InstallableDef: Default + Clone {
     const DERIVATION_TYPES: &'static [InstallableKind];
     const SUBCOMMAND: &'static str;
     const ARG_FLAG: Option<&'static str> = None;
+    const DESCRIPTION_KEY: Option<&'static [&'static str]>;
 }
 
 /// Resolve a single installation candidate from a list of matches
@@ -303,11 +318,14 @@ pub async fn resolve_installable_from_matches(
         },
         1 => Ok(matches.remove(0).installable()),
         _ => {
+            let mut prefixes_total: HashSet<String> = HashSet::new();
             let mut prefixes_with: HashMap<String, HashSet<String>> = HashMap::new();
             let mut flakerefs_with: HashMap<String, HashSet<String>> = HashMap::new();
 
             for m in &matches {
                 let k1 = m.key.get(0).expect("match is missing key");
+
+                prefixes_total.insert(m.prefix.clone());
 
                 flakerefs_with
                     .entry(k1.clone())
@@ -338,15 +356,13 @@ pub async fn resolve_installable_from_matches(
                         let flakerefs = flakerefs_with.get(k1).map(HashSet::len).unwrap_or(0);
                         let prefixes = flakerefs_with.get(k1).map(HashSet::len).unwrap_or(0);
 
-                        let prefixes_total = prefixes_with.values().fold(0, |a, p| a + p.len());
-
                         let flakeref_str: Cow<str> = if flakerefs > 1 {
                             format!("{}#", m.flakeref).into()
                         } else {
                             "".into()
                         };
 
-                        let prefix_strs: (Cow<str>, Cow<str>) = if prefixes_total > 1 {
+                        let prefix_strs: (Cow<str>, Cow<str>) = if prefixes_total.len() > 1 {
                             let long: Cow<str> = format!("{}.", nix_str_safe(&m.prefix)).into();
 
                             let short = if prefixes > 1 {
@@ -360,8 +376,16 @@ pub async fn resolve_installable_from_matches(
                             ("".into(), "".into())
                         };
 
+                        let description_part: Cow<str> = match &m.description {
+                            Some(d) => format!(": {d}").into(),
+                            None => "".into(),
+                        };
+
                         (
-                            format!("{}{}{}", flakeref_str, prefix_strs.0, nix_safe_key),
+                            format!(
+                                "{}{}{}{}",
+                                flakeref_str, prefix_strs.0, nix_safe_key, description_part
+                            ),
                             format!("{}{}{}", flakeref_str, prefix_strs.1, nix_safe_key),
                         )
                     },
