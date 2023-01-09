@@ -51,6 +51,14 @@ pub enum NixCommandLineError {
     Exit(std::process::Output),
 }
 
+#[derive(Error, Debug)]
+pub enum NixCommandLineCollectError {
+    #[error(transparent)]
+    CommandLine(#[from] NixCommandLineError),
+    #[error("Nix failed with: [exit code {0}]\n{1}")]
+    NixError(i32, String),
+}
+
 trait CommandExt {
     fn log(&self) {}
 }
@@ -96,7 +104,8 @@ impl CommandExt for std::process::Command {
 #[async_trait]
 trait CommandMode {
     type Output;
-    async fn run(command: &mut Command) -> Result<Self::Output, NixCommandLineError>;
+    type Error;
+    async fn run(command: &mut Command) -> Result<Self::Output, Self::Error>;
 }
 
 /// Implementation of a command execution that collects stdout of a process
@@ -107,9 +116,10 @@ trait CommandMode {
 struct Collect;
 #[async_trait]
 impl CommandMode for Collect {
+    type Error = NixCommandLineCollectError;
     type Output = Output;
 
-    async fn run(command: &mut Command) -> Result<Self::Output, NixCommandLineError> {
+    async fn run(command: &mut Command) -> Result<Self::Output, NixCommandLineCollectError> {
         let command = command
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -138,6 +148,13 @@ impl CommandMode for Collect {
         let mut output = output.map_err(NixCommandLineError::Run)?;
         output.stderr = stderr.into_bytes();
 
+        if !output.status.success() {
+            return Err(NixCommandLineCollectError::NixError(
+                output.status.code().unwrap_or(-1),
+                String::from_utf8_lossy(&output.stderr).to_string(),
+            ));
+        }
+
         Ok(output)
     }
 }
@@ -149,9 +166,10 @@ impl CommandMode for Collect {
 struct Passthru;
 #[async_trait]
 impl CommandMode for Passthru {
+    type Error = NixCommandLineError;
     type Output = ExitStatus;
 
-    async fn run(command: &mut Command) -> Result<ExitStatus, NixCommandLineError> {
+    async fn run(command: &mut Command) -> Result<ExitStatus, Self::Error> {
         let command = command
             .stdout(Stdio::inherit())
             .stderr(Stdio::inherit())
@@ -170,7 +188,7 @@ impl NixCommandLine {
         command: &B,
         nix_args: &NixArgs,
         json: bool,
-    ) -> Result<M::Output, NixCommandLineRunError> {
+    ) -> Result<M::Output, M::Error> {
         let args = vec![
             // apply default args always applicable
             self.defaults.config_args.to_args(),
@@ -201,7 +219,7 @@ impl NixCommandLine {
 
         command.as_std().log();
 
-        Ok(M::run(&mut command).await?)
+        M::run(&mut command).await
     }
 }
 
@@ -327,13 +345,11 @@ where
 }
 
 #[derive(Error, Debug)]
-pub enum NixCommandLineRunJsonError<E> {
+pub enum NixCommandLineRunJsonError {
     #[error("Error decoding json: {0}")]
     Json(#[from] serde_json::Error),
-    #[error("Nix failed with: [exit code {0}]\n{1}")]
-    NixError(i32, String),
     #[error(transparent)]
-    Run(E),
+    Run(NixCommandLineCollectError),
 }
 
 #[async_trait]
@@ -341,7 +357,7 @@ impl<C> RunJson<NixCommandLine> for C
 where
     C: NixCliCommand + JsonCommand + Send + Sync,
 {
-    type JsonError = NixCommandLineRunJsonError<Self::Error>;
+    type JsonError = NixCommandLineRunJsonError;
 
     async fn run_json(
         &self,
@@ -352,13 +368,6 @@ where
             .run_command::<Collect, _, _>(self, nix_args, true)
             .await
             .map_err(NixCommandLineRunJsonError::Run)?;
-
-        if !output.status.success() {
-            return Err(NixCommandLineRunJsonError::NixError(
-                output.status.code().unwrap_or(-1),
-                String::from_utf8_lossy(&output.stderr).to_string(),
-            ));
-        }
 
         let out_str = String::from_utf8_lossy(&output.stdout);
         debug!("JSON command output: {:?}", out_str);
