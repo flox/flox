@@ -319,12 +319,12 @@ fn copy_file_without_permissions(from: &PathBuf, to: &PathBuf) -> Result<(), Env
         .write(true)
         .truncate(true)
         .create(true)
-        .open(&to)
+        .open(to)
         .map_err(|io_err| IoError::Open {
             file: to.to_path_buf(),
             err: io_err,
         })?;
-    let mut from_file = fs::File::open(&from).map_err(|io_err| IoError::Open {
+    let mut from_file = fs::File::open(from).map_err(|io_err| IoError::Open {
         file: from.to_path_buf(),
         err: io_err,
     })?;

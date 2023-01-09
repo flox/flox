@@ -13,7 +13,7 @@ use tempfile::TempDir;
 use self::channel::ChannelCommands;
 use self::environment::EnvironmentCommands;
 use self::general::GeneralCommands;
-use self::package::PackageCommands;
+use self::package::interface;
 use crate::utils::init::{
     init_access_tokens,
     init_channels,
@@ -115,7 +115,7 @@ impl FloxArgs {
         });
 
         match self.command {
-            Commands::Package(ref package) => package.handle(config, flox).await?,
+            Commands::Package(package) => package.handle(config, flox).await?,
             Commands::Environment(ref environment) => environment.handle(flox).await?,
             Commands::Channel(ref channel) => channel.handle(flox).await?,
             Commands::General(ref general) => general.handle(flox).await?,
@@ -130,9 +130,9 @@ impl FloxArgs {
 #[derive(Bpaf, Clone)]
 pub enum Commands {
     Package(
-        #[bpaf(external(package::package_commands))]
+        #[bpaf(external(package::interface::package_commands))]
         #[bpaf(group_help("Development Commands"))]
-        PackageCommands,
+        interface::PackageCommands,
     ),
     Environment(
         #[bpaf(external(environment::environment_commands))]

@@ -148,6 +148,8 @@ impl ResolvedInstallableMatch {
 
 impl Flox {
     /// Provide the package scope to interact with raw packages, (build, develop, etc)
+    ///
+    ///  TODO: consume [Option<FloxInstallable>]
     pub fn package(
         &self,
         installable: Installable,

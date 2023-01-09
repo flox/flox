@@ -15,9 +15,9 @@ struct LoggerVisitor<'a>(&'a mut LogFields);
 impl<'a> tracing::field::Visit for LoggerVisitor<'a> {
     fn record_str(&mut self, field: &tracing::field::Field, value: &str) {
         if field.name() == "message" {
-            (*self.0).message = Some(value.to_string());
+            self.0.message = Some(value.to_string());
         } else if field.name() == "log.target" {
-            (*self.0).target = Some(value.to_string());
+            self.0.target = Some(value.to_string());
         }
     }
 
@@ -35,13 +35,13 @@ impl<'a> tracing::field::Visit for LoggerVisitor<'a> {
         value: &(dyn std::error::Error + 'static),
     ) {
         if field.name() == "message" {
-            (*self.0).message = Some(value.to_string());
+            (self.0).message = Some(value.to_string());
         }
     }
 
     fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
         if field.name() == "message" {
-            (*self.0).message = Some(format!("{:?}", value));
+            (self.0).message = Some(format!("{:?}", value));
         }
     }
 }

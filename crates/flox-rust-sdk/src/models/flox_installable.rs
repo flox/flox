@@ -8,7 +8,7 @@ use thiserror::Error;
 static PROBABLY_FLAKEREF_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r#"^(?:\.?\.?/|\.$|[a-z+]+:)"#).unwrap());
 
-#[derive(PartialEq, Eq, Clone, Debug)]
+#[derive(PartialEq, Eq, Clone, Debug, Default)]
 pub struct FloxInstallable {
     pub source: Option<String>,
     pub attr_path: Vec<String>,

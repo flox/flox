@@ -88,6 +88,19 @@ impl Feature {
                 .unwrap_or(&Impl::Rust),
         })
     }
+
+    pub fn is_forwarded(&self) -> Result<bool> {
+        if self.implementation()? == Impl::Bash {
+            let env_name = format!(
+                "FLOX_PREVIEW_FEATURES_{}",
+                serde_variant::to_variant_name(self)?.to_uppercase()
+            );
+            debug!("`{env_name}` unset or not \"rust\", falling back to legacy flox");
+            Ok(true)
+        } else {
+            Ok(false)
+        }
+    }
 }
 
 impl Config {

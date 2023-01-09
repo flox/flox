@@ -89,6 +89,7 @@ pub async fn flox_forward(flox: &Flox) -> Result<()> {
     Ok(())
 }
 
+#[allow(clippy::bool_to_int_with_if)]
 async fn sync_bash_metrics_consent(data_dir: &Path, cache_dir: &Path) -> Result<()> {
     let mut metrics_lock = LockFile::open(&cache_dir.join(METRICS_LOCK_FILE_NAME))?;
     tokio::task::spawn_blocking(move || metrics_lock.lock()).await??;

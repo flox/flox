@@ -1,9 +1,12 @@
+use std::any::TypeId;
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
+use std::marker::PhantomData;
 use std::str::FromStr;
+use std::sync::Mutex;
 
 use anyhow::{bail, Context, Result};
-use async_trait::async_trait;
+use bpaf::Parser;
 use crossterm::tty::IsTty;
 use flox_rust_sdk::flox::{Flox, FloxInstallable, ResolvedInstallableMatch};
 use flox_rust_sdk::prelude::{Channel, ChannelRegistry, Installable};
@@ -11,17 +14,18 @@ use indoc::indoc;
 use itertools::Itertools;
 use log::{debug, error, warn};
 use once_cell::sync::Lazy;
-use tempfile::TempDir;
 
 pub mod colors;
+mod completion;
 pub mod dialog;
 pub mod init;
+pub mod installables;
 pub mod logger;
 pub mod metrics;
 
 use regex::Regex;
 
-use crate::config::Config;
+use self::completion::FloxCompletionExt;
 use crate::utils::dialog::InquireExt;
 
 static NIX_IDENTIFIER_SAFE: Lazy<Regex> = Lazy::new(|| Regex::new(r#"^[a-zA-Z0-9_-]+$"#).unwrap());
@@ -60,223 +64,233 @@ fn nix_str_safe(s: &str) -> Cow<str> {
     }
 }
 
-#[async_trait]
-pub trait InstallableDef: FromStr + Default + Clone {
-    const DEFAULT_PREFIXES: &'static [(&'static str, bool)];
-    const DEFAULT_FLAKEREFS: &'static [&'static str];
-    const INSTALLABLE: fn(&Self) -> String;
-    const SUBCOMMAND: &'static str;
-    const DERIVATION_TYPE: &'static str;
-    const ARG_FLAG: Option<&'static str> = None;
+/// Low level Installable type
+///
+/// Describes a specific flake output abstraction by its name,
+/// _default_ `prefix` and _default_ `flake_ref`.
+///
+/// Default **does not** refer to the nix commands defaults but
+/// the default for this kind of Installable
+///
+/// Eg. "App" is an installable type that has the default prefix
+/// `apps`.
+/// It is targeted by the `run` command which also accepts other
+/// runnables, i.e. packages (found in `packages` or `legacyPacakges`)
+///
+/// [InstallableKind] allows to compose multiple of these *ables
+/// into [InstallableArgument]s
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct InstallableKind {
+    name: Cow<'static, str>,
+    prefix: Cow<'static, [(&'static str, bool)]>,
+    flake_refs: Cow<'static, [&'static str]>,
+}
 
+impl InstallableKind {
+    pub const fn new(
+        name: &'static str,
+        prefix: &'static [(&'static str, bool)],
+        flake_refs: &'static [&'static str],
+    ) -> Self {
+        Self {
+            name: Cow::Borrowed(name),
+            prefix: Cow::Borrowed(prefix),
+            flake_refs: Cow::Borrowed(flake_refs),
+        }
+    }
+
+    pub const fn package() -> Self {
+        Self::new(
+            "package",
+            &[("packages", true), ("legacyPackages", true)],
+            &["."],
+        )
+    }
+
+    pub const fn shell() -> Self {
+        Self::new("shell", &[("devShells", true)], &["."])
+    }
+
+    pub const fn app() -> Self {
+        Self::new("app", &[("apps", true)], &["."])
+    }
+
+    pub const fn bundler() -> Self {
+        Self::new("bundler", &[("bundlers", true)], &[
+            "github:flox/bundlers/master",
+        ])
+    }
+
+    pub fn or(self, other: Self) -> Self {
+        let name = self.name + other.name;
+
+        // TODO: Needs sorted? If so, go though set?
+        // this impl retains order.
+        let mut prefix: Vec<(&str, bool)> = self.prefix.to_vec();
+        prefix.extend(other.prefix.iter());
+        prefix.dedup();
+
+        let mut flake_refs: Vec<&str> = self.flake_refs.to_vec();
+        flake_refs.extend(other.flake_refs.iter());
+        flake_refs.dedup();
+
+        Self {
+            name,
+            prefix: Cow::Owned(prefix.into_iter().collect::<Vec<_>>()),
+            flake_refs: Cow::Owned(flake_refs.into_iter().collect::<Vec<_>>()),
+        }
+    }
+
+    pub fn any<'a>(drv_types: impl IntoIterator<Item = &'a Self>) -> Option<Self> {
+        drv_types.into_iter().dedup().cloned().reduce(Self::or)
+    }
+}
+
+pub type Unparsed = String;
+pub type Parsed = FloxInstallable;
+
+///
+#[derive(Clone, Debug, Default)]
+pub struct InstallableArgument<InstallableState, Matching: InstallableDef> {
+    installable: InstallableState,
+    _matching: PhantomData<Matching>,
+}
+
+impl<Matching: InstallableDef + 'static> InstallableArgument<Unparsed, Matching> {
+    pub fn unparsed(unparsed: String) -> Self {
+        Self {
+            installable: unparsed,
+            _matching: Default::default(),
+        }
+    }
+
+    /// Try to convert an [Unparsed] [InstallableArgument] to a [Parsed] one
+    /// by parsing its inner value as [FloxInstallable]
+    pub fn parse(self) -> Result<InstallableArgument<Parsed, Matching>> {
+        Ok(InstallableArgument {
+            installable: self.installable.parse()?,
+            _matching: self._matching,
+        })
+    }
+
+    /// Completion fucntion for bpaf completion engine
+    fn complete_installable(&self) -> Vec<(String, Option<String>)> {
+        #[allow(clippy::type_complexity)]
+        static COMPLETED_INSTALLABLES: Lazy<
+            Mutex<HashMap<(TypeId, String), Vec<(String, Option<String>)>>>,
+        > = Lazy::new(|| Mutex::new(HashMap::new()));
+
+        COMPLETED_INSTALLABLES
+            .lock()
+            .unwrap()
+            .entry((TypeId::of::<Self>(), self.installable.clone()))
+            .or_insert_with(|| {
+                let drv = InstallableKind::any(Matching::DERIVATION_TYPES).unwrap();
+
+                let installable = self.installable.clone();
+                let default_prefixes = drv.prefix;
+                let default_flakerefs = drv.flake_refs;
+
+                let flox = Flox::completion_instance().expect("Could not initialize flox instance");
+
+                let handle = tokio::runtime::Handle::current();
+                let comp = std::thread::spawn(move || {
+                    handle
+                        .block_on(flox.complete_installable(
+                            &installable,
+                            &default_flakerefs,
+                            &default_prefixes,
+                        ))
+                        .map_err(|e| debug!("Failed to complete installable: {e}"))
+                        .unwrap_or_default()
+                })
+                .join()
+                .unwrap();
+
+                comp.into_iter().map(|a| (a, None)).collect()
+            })
+            .to_vec()
+    }
+}
+impl<Matching: InstallableDef + 'static> InstallableArgument<Parsed, Matching> {
     async fn resolve_matches(&self, flox: &Flox) -> Result<Vec<ResolvedInstallableMatch>> {
+        let drv = InstallableKind::any(Matching::DERIVATION_TYPES).unwrap();
+
         Ok(flox
             .resolve_matches(
-                &[Self::INSTALLABLE(self).parse()?],
-                Self::DEFAULT_FLAKEREFS,
-                Self::DEFAULT_PREFIXES,
+                &[self.installable.clone()],
+                &drv.flake_refs,
+                &drv.prefix,
                 false,
             )
             .await?)
     }
 
-    async fn resolve_installable(&self, flox: &Flox) -> Result<Installable> {
-        Ok(resolve_installable_from_matches(
-            Self::SUBCOMMAND,
-            Self::DERIVATION_TYPE,
-            Self::ARG_FLAG,
-            self.resolve_matches(flox).await?,
+    /// called at runtime to extract single installable from CLI input
+    pub async fn resolve_installable(&self, flox: &Flox) -> Result<Installable> {
+        let drv = InstallableKind::any(Matching::DERIVATION_TYPES).unwrap();
+        let matches = self.resolve_matches(flox).await?;
+
+        resolve_installable_from_matches(
+            Matching::SUBCOMMAND,
+            &drv.name,
+            Matching::ARG_FLAG,
+            matches,
         )
-        .await?)
+        .await
     }
 
-    fn complete_inst(&self) -> Vec<(String, Option<String>)> {
-        let inst = Self::INSTALLABLE(self);
+    pub fn positional() -> impl Parser<Option<Self>> {
+        let parser = bpaf::positional::<Unparsed>("INSTALLABLE");
+        Self::parse_with(parser)
+    }
 
-        let config = Config::parse()
-            .map_err(|e| debug!("Failed to load config: {e}"))
-            .unwrap_or_default();
+    pub fn parse_with(parser: impl Parser<Unparsed>) -> impl Parser<Option<Self>> {
+        let unparsed = parser
+            .map(InstallableArgument::<Unparsed, Matching>::unparsed)
+            .complete(|u| u.complete_installable());
 
-        let channels = init_channels()
-            .map_err(|e| debug!("Failed to initialize channels: {e}"))
-            .unwrap_or_default();
+        unparsed
+            .map(|u| u.parse())
+            .guard(Result::is_ok, "Is not ok")
+            .map(Result::unwrap)
+            .optional()
+            .catch()
+    }
+}
+impl<Matching: InstallableDef> FromStr for InstallableArgument<Unparsed, Matching> {
+    type Err = <Unparsed as FromStr>::Err;
 
-        let process_dir = config.flox.cache_dir.join("process");
-        match std::fs::create_dir_all(&process_dir) {
-            Ok(_) => {},
-            Err(e) => {
-                debug!("Failed to create process dir: {e}");
-                return vec![];
-            },
-        };
-
-        let temp_dir = match TempDir::new_in(process_dir) {
-            Ok(x) => x,
-            Err(e) => {
-                debug!("Failed to create temp_dir: {e}");
-                return vec![];
-            },
-        };
-
-        let access_tokens = init::init_access_tokens(&config.nix.access_tokens)
-            .map_err(|e| debug!("Failed to initialize access tokens: {e}"))
-            .unwrap_or_default();
-
-        let netrc_file = dirs::home_dir()
-            .expect("User must have a home directory")
-            .join(".netrc");
-
-        let flox = Flox {
-            cache_dir: config.flox.cache_dir,
-            data_dir: config.flox.data_dir,
-            config_dir: config.flox.config_dir,
-            channels,
-            temp_dir: temp_dir.path().to_path_buf(),
-            system: env!("NIX_TARGET_SYSTEM").to_string(),
-            netrc_file,
-            access_tokens,
-            uuid: uuid::Uuid::nil(),
-        };
-
-        let default_prefixes = Self::DEFAULT_PREFIXES;
-        let default_flakerefs = Self::DEFAULT_FLAKEREFS;
-
-        let inst = inst;
-        let handle = tokio::runtime::Handle::current();
-        let comp = std::thread::spawn(move || {
-            handle
-                .block_on(complete_installable(
-                    &flox,
-                    &inst,
-                    default_flakerefs,
-                    default_prefixes,
-                ))
-                .map_err(|e| debug!("Failed to complete installable: {e}"))
-                .unwrap_or_default()
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(Self {
+            installable: Unparsed::from_str(s)?,
+            _matching: Default::default(),
         })
-        .join()
-        .unwrap();
+    }
+}
+impl<Matching: InstallableDef> FromStr for InstallableArgument<Parsed, Matching> {
+    type Err = <Parsed as FromStr>::Err;
 
-        comp.into_iter().map(|a| (a, None)).collect()
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(Self {
+            installable: Parsed::from_str(s)?,
+            _matching: Default::default(),
+        })
     }
 }
 
-pub async fn complete_installable(
-    flox: &Flox,
-    installable_str: &String,
-    default_flakerefs: &[&str],
-    default_attr_prefixes: &[(&str, bool)],
-) -> Result<Vec<String>> {
-    let mut flox_installables: Vec<FloxInstallable> = vec![];
-
-    if installable_str != "." {
-        let trimmed = installable_str.trim_end_matches(|c| c == '.' || c == '#');
-
-        if let Ok(flox_installable) = trimmed.parse() {
-            flox_installables.push(flox_installable);
-        }
-
-        match trimmed.rsplit_once(|c| c == '.' || c == '#') {
-            Some((s, _)) if s != trimmed => flox_installables.push(s.parse()?),
-            None => flox_installables.push("".parse()?),
-            Some(_) => {},
-        };
-    } else {
-        flox_installables.push(FloxInstallable {
-            source: Some(".".to_string()),
-            attr_path: vec![],
-        });
-    };
-
-    let matches = flox
-        .resolve_matches(
-            flox_installables.as_slice(),
-            default_flakerefs,
-            default_attr_prefixes,
-            true,
-        )
-        .await?;
-
-    let mut prefixes_with: HashMap<String, HashSet<String>> = HashMap::new();
-    let mut flakerefs_with: HashMap<String, HashSet<String>> = HashMap::new();
-
-    for m in &matches {
-        let k1 = m.key.get(0).expect("match is missing key");
-
-        flakerefs_with
-            .entry(k1.clone())
-            .or_insert_with(HashSet::new)
-            .insert(m.flakeref.clone());
-
-        prefixes_with
-            .entry(k1.clone())
-            .or_insert_with(HashSet::new)
-            .insert(m.prefix.clone());
-    }
-
-    let mut completions: Vec<String> = matches
-        .iter()
-        .flat_map(|m| {
-            let nix_safe_key = m
-                .key
-                .iter()
-                .map(|s| nix_str_safe(s.as_str()))
-                .collect::<Vec<_>>()
-                .join(".");
-
-            let mut t = vec![format!(
-                "{}#{}.{}",
-                m.flakeref,
-                nix_str_safe(&m.prefix),
-                nix_safe_key
-            )];
-
-            let k1 = m.key.get(0).expect("match is missing key");
-            let flakerefs = flakerefs_with.get(k1).map(HashSet::len).unwrap_or(0);
-            let prefixes = flakerefs_with.get(k1).map(HashSet::len).unwrap_or(0);
-
-            if let (true, Some(system)) = (m.explicit_system, &m.system) {
-                t.push(format!(
-                    "{}#{}.{}.{}",
-                    m.flakeref,
-                    nix_str_safe(&m.prefix),
-                    nix_str_safe(system),
-                    nix_safe_key
-                ));
-
-                if flakerefs <= 1 {
-                    t.push(format!(
-                        "{}.{}.{}",
-                        nix_str_safe(&m.prefix),
-                        nix_str_safe(system),
-                        nix_safe_key
-                    ));
-                }
-            }
-
-            if flakerefs <= 1 && prefixes <= 1 {
-                t.push(nix_safe_key.clone());
-            }
-
-            if prefixes <= 1 {
-                t.push(format!("{}#{}", m.flakeref, nix_safe_key));
-            }
-
-            if flakerefs <= 1 {
-                t.push(format!("{}.{}", nix_str_safe(&m.prefix), nix_safe_key));
-            }
-
-            t
-        })
-        .filter(|c| c.starts_with(installable_str))
-        .collect();
-
-    completions.sort();
-    completions.dedup();
-
-    Ok(completions)
+pub trait InstallableDef: Default + Clone {
+    const DERIVATION_TYPES: &'static [InstallableKind];
+    const SUBCOMMAND: &'static str;
+    const ARG_FLAG: Option<&'static str> = None;
 }
 
+/// Resolve a single installation candidate from a list of matches
+///
+/// - return an error if no matches were found
+/// - return a nix installable if a single match was found
+/// - start an interactive dialog if multiple matches were found
+///   and a controlling tty was detected
 pub async fn resolve_installable_from_matches(
     subcommand: &str,
     derivation_type: &str,
