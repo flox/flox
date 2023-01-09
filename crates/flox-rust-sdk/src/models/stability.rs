@@ -1,3 +1,4 @@
+use std::convert::Infallible;
 use std::str::FromStr;
 
 use derive_more::Display;
@@ -37,7 +38,7 @@ impl Default for Stability {
 
 // TODO: fix serde stuff for Stability...
 impl FromStr for Stability {
-    type Err = anyhow::Error;
+    type Err = Infallible;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
