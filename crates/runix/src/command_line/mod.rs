@@ -330,6 +330,8 @@ where
 pub enum NixCommandLineRunJsonError<E> {
     #[error("Error decoding json: {0}")]
     Json(#[from] serde_json::Error),
+    #[error("Nix failed with: [exit code {0}]\n{1}")]
+    NixError(i32, String),
     #[error(transparent)]
     Run(E),
 }
@@ -351,8 +353,14 @@ where
             .await
             .map_err(NixCommandLineRunJsonError::Run)?;
 
-        let out_str = String::from_utf8_lossy(&output.stdout);
+        if !output.status.success() {
+            return Err(NixCommandLineRunJsonError::NixError(
+                output.status.code().unwrap_or(-1),
+                String::from_utf8_lossy(&output.stderr).to_string(),
+            ));
+        }
 
+        let out_str = String::from_utf8_lossy(&output.stdout);
         debug!("JSON command output: {:?}", out_str);
 
         Ok(serde_json::from_str(&out_str)?)
