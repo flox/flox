@@ -9,6 +9,7 @@ use itertools::{Either, Itertools};
 use log::debug;
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
+use xdg::BaseDirectories;
 
 /// Name of flox managed directories (config, data, cache)
 const FLOX_DIR_NAME: &'_ str = "flox-preview";
@@ -108,23 +109,25 @@ impl Config {
     fn raw_config<'a>() -> Result<&'a HierarchicalConfig> {
         static INSTANCE: OnceCell<HierarchicalConfig> = OnceCell::new();
         INSTANCE.get_or_try_init(|| {
-            let cache_dir = dirs::cache_dir().unwrap().join(FLOX_DIR_NAME);
-            let data_dir = dirs::data_dir().unwrap().join(FLOX_DIR_NAME);
+            let flox_dirs = BaseDirectories::with_prefix(FLOX_DIR_NAME)?;
+
+            let cache_dir = flox_dirs.get_cache_home();
+            let data_dir = flox_dirs.get_data_home();
             let config_dir = match env::var("FLOX_PREVIEW_CONFIG_DIR") {
                 Ok(v) => v.into(),
                 Err(_) => {
                     debug!("`FLOX_PREVIEW_CONFIG_DIR` not set");
-                    let config_dir = dirs::config_dir().unwrap();
-                    config_dir.join(FLOX_DIR_NAME)
+                    flox_dirs.get_config_home()
                 },
             };
 
             let builder = HierarchicalConfig::builder()
                 .set_default("cache_dir", cache_dir.to_str().unwrap())?
                 .set_default("data_dir", data_dir.to_str().unwrap())?
+                // config dir is added to the config for completenes, the config file cannot chenge the config dir
                 .set_default("config_dir", config_dir.to_str().unwrap())?
                 .add_source(
-                    config::File::with_name(config_dir.join("flox").to_str().unwrap())
+                    config::File::with_name("flox")
                         .required(false),
                 );
 

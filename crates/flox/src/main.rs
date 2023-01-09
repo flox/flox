@@ -111,8 +111,11 @@ async fn sync_bash_metrics_consent(data_dir: &Path, cache_dir: &Path) -> Result<
         },
     };
 
-    let bash_config_home = dirs::config_dir().context("Unable to find config dir")?;
-    let bash_user_meta_path = bash_config_home.join("flox").join("floxUserMeta.json");
+    let bash_config_home =
+        xdg::BaseDirectories::with_prefix("flox").context("Unable to find config dir")?;
+    let bash_user_meta_path = bash_config_home
+        .find_config_file("floxUserMeta.json")
+        .context("Unable to find flox config file: `floxUserMeta.json`")?;
 
     let mut bash_user_meta_file = tokio::fs::OpenOptions::new()
         .read(true)
