@@ -2,7 +2,7 @@ use std::collections::{BTreeSet, HashMap};
 use std::fs::File;
 use std::io::Write;
 use std::os::unix::prelude::OpenOptionsExt;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use derive_more::Constructor;
 use log::debug;
@@ -25,7 +25,6 @@ use crate::environment::{self, default_nix_subprocess_env};
 use crate::models::channels::ChannelRegistry;
 pub use crate::models::flox_installable::*;
 use crate::models::stability::Stability;
-use crate::providers::git::GitProvider;
 
 static INPUT_CHARS: Lazy<Vec<char>> = Lazy::new(|| ('a'..='t').into_iter().collect());
 
@@ -148,13 +147,12 @@ impl Flox {
     }
 
     /// Provide an initializer for initializing project directories
-    pub fn initializer(
-        &self,
-        template: Installable,
-        name: String,
+    pub fn initializer<'flox, 'a>(
+        &'flox self,
         nix_arguments: Vec<String>,
-    ) -> Initializer {
-        Initializer::new(self, template, name, nix_arguments)
+        dir: &'a Path,
+    ) -> Initializer<'flox, 'a> {
+        Initializer::new(self, dir, nix_arguments)
     }
 
     pub fn environment(&self, dir: PathBuf) -> Result<Environment, EnvironmentError> {
@@ -437,10 +435,5 @@ impl Flox {
         };
 
         Nix::new(self, default_nix_args)
-    }
-
-    /// Initialize and provide a git abstraction
-    pub fn git_provider<Git: GitProvider>(&self) -> Git {
-        Git::new()
     }
 }

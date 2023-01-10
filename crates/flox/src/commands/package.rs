@@ -1,7 +1,7 @@
 use std::env;
 use std::fmt::Debug;
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use bpaf::{construct, Bpaf, Parser};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::nix::arguments::flake::FlakeArgs;
@@ -10,7 +10,8 @@ use flox_rust_sdk::nix::command::Eval as EvalComm;
 use flox_rust_sdk::nix::command_line::{Group, NixCliCommand, NixCommandLine, ToArgs};
 use flox_rust_sdk::nix::Run as RunC;
 use flox_rust_sdk::prelude::Stability;
-use flox_rust_sdk::providers::git::GitCommandProvider;
+use flox_rust_sdk::providers::git::{GitCommandProvider, GitDiscoverError, GitProvider};
+use log::info;
 
 use crate::config::features::Feature;
 use crate::config::Config;
@@ -36,9 +37,21 @@ pub(crate) mod interface {
 
     #[derive(Debug, Clone, Bpaf)]
     pub struct Init {
-        #[bpaf(external(InstallableArgument::positional))]
+        // [sic]
+        // template does NOT support package args
+        // - e.g. `stability`
+        #[bpaf(external(template_arg))]
         pub(crate) template: Option<InstallableArgument<Parsed, TemplateInstallable>>,
+        #[bpaf(long("name"), short('n'), argument("name"))]
+        pub(crate) name: Option<String>,
+        #[bpaf(short('i'), long("init-repo"), switch)]
+        pub(crate) init_repo: bool,
     }
+    pub(crate) fn template_arg(
+    ) -> impl Parser<Option<InstallableArgument<Parsed, TemplateInstallable>>> {
+        InstallableArgument::parse_with(bpaf::long("template").short('t').argument("template"))
+    }
+
     parseable!(Init, init);
 
     #[derive(Debug, Clone, Bpaf)]
@@ -220,21 +233,67 @@ impl interface::PackageCommands {
             interface::PackageCommands::Init(command) => {
                 subcommand_metric!("init");
 
-                let name = inquire::Text::new("Enter a package name")
-                    .with_flox_theme()
-                    .prompt()
-                    .context("Failed to prompt for name")?;
+                let cwd = std::env::current_dir()?;
 
-                let template = command
-                    .inner
-                    .template
-                    .unwrap_or_default()
-                    .resolve_installable(&flox)
+                let git = match GitCommandProvider::discover(&cwd).await {
+                    Ok(g) => {
+                        info!(
+                            "Found git repo{}",
+                            g.workdir()
+                                .map(|p| format!(": {}", p.display()))
+                                .unwrap_or_else(|| "".to_owned())
+                        );
+                        Some(g)
+                    },
+                    Err(err) => match err.not_found() {
+                        true => {
+                            info!("No git repository found");
+
+                            if command.inner.init_repo
+                                || inquire::Confirm::new("Would you like to initialize Git?")
+                                    .with_flox_theme()
+                                    .prompt()?
+                            {
+                                Some(GitCommandProvider::init(&cwd).await?)
+                            } else {
+                                None
+                            }
+                        },
+                        false => bail!("Error trying to find Git repo: {}", err),
+                    },
+                };
+
+                let init = flox.initializer(command.nix_args, &cwd);
+                init.ensure_flox_project::<NixCommandLine, GitCommandProvider>(&git)
                     .await?;
 
-                flox.initializer(template, name, command.nix_args)
-                    .init::<NixCommandLine, GitCommandProvider>()
-                    .await?
+                let name = match command.inner.name {
+                    Some(n) => n,
+                    None => {
+                        inquire::Text::new("Enter a name to create a new package (enter to skip)")
+                            .with_flox_theme()
+                            .prompt()
+                            .context("Failed to prompt for name")?
+                    },
+                };
+
+                let trimmed_name = name.trim();
+
+                if !trimmed_name.is_empty() {
+                    let template = command
+                        .inner
+                        .template
+                        .unwrap_or_default()
+                        .resolve_installable(&flox)
+                        .await?;
+
+                    init.init_flox_package::<NixCommandLine, GitCommandProvider>(
+                        &git,
+                        template,
+                        trimmed_name,
+                    )
+                    .await?;
+                }
             },
             interface::PackageCommands::Build(command) => {
                 subcommand_metric!("build");

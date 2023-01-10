@@ -597,6 +597,7 @@ dependencies = [
  "derive_more",
  "dotenv",
  "fs_extra",
+ "git2",
  "log",
  "nix-editor",
  "octocrab",

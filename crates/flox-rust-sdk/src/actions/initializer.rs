@@ -1,8 +1,8 @@
 use std::borrow::Cow;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use derive_more::Constructor;
-use log::{error, info};
+use log::{debug, error, info};
 use once_cell::sync::Lazy;
 use regex::Regex;
 use runix::arguments::NixArgs;
@@ -18,32 +18,66 @@ use crate::providers::git::GitProvider;
 static PNAME_DECLARATION: Lazy<Regex> = Lazy::new(|| Regex::new(r#"pname = ".*""#).unwrap());
 
 #[derive(Constructor)]
-pub struct Initializer<'flox> {
+pub struct Initializer<'flox, 'a> {
     flox: &'flox Flox,
-    template: Installable,
-    name: String,
+    dir: &'a Path,
     nix_arguments: Vec<String>,
 }
 
 #[derive(Error, Debug)]
-pub enum InitError<Nix: NixBackend, Git: GitProvider>
+pub enum InitFloxPackageError<Nix: NixBackend, Git: GitProvider>
 where
     FlakeInit: Run<Nix>,
 {
-    #[error("Error initializing git repo: {0}")]
-    InitRepo(Git::InitError),
-    #[error("Error initializing base template with Nix")]
-    NixInitBase(<FlakeInit as Run<Nix>>::Error),
     #[error("Error initializing template with Nix")]
     NixInit(<FlakeInit as Run<Nix>>::Error),
     #[error("Error moving template file to named location")]
-    MvNamed(Git::MvError),
+    MvNamed(std::io::Error),
+    #[error("Error moving template file to named location using Git")]
+    MvNamedGit(Git::MvError),
     #[error("Error reading template file contents")]
     ReadTemplateFile(std::io::Error),
     #[error("Error truncating template file")]
     TruncateTemplateFile(std::io::Error),
     #[error("Error writing to template file")]
     WriteTemplateFile(std::io::Error),
+    #[error("Error making named directory")]
+    MkNamedDir(std::io::Error),
+    #[error("Error opening new renamed file for writing")]
+    OpenNamed(std::io::Error),
+    #[error("Error removing old unnamed file")]
+    RemoveUnnamedFile(std::io::Error),
+    #[error("Error removing old unnamed file using Git")]
+    RemoveUnnamedFileGit(Git::RmError),
+    #[error("Error staging new renamed file in Git")]
+    GitAdd(Git::AddError),
+}
+
+#[derive(Error, Debug)]
+pub enum EnsureFloxProjectError<Nix: NixBackend, Git: GitProvider>
+where
+    FlakeInit: Run<Nix>,
+{
+    #[error("Error initializing base template with Nix")]
+    NixInitBase(<FlakeInit as Run<Nix>>::Error),
+    #[error("Error reading template file contents")]
+    ReadTemplateFile(std::io::Error),
+    #[error("Error truncating template file")]
+    TruncateTemplateFile(std::io::Error),
+    #[error("Error writing to template file")]
+    WriteTemplateFile(std::io::Error),
+    #[error("Error new template file in Git")]
+    GitAdd(Git::AddError),
+}
+
+#[derive(Error, Debug)]
+pub enum InitGitRepoError<Git: GitProvider> {
+    #[error("Error getting current directory: {0}")]
+    CurrentDirError(std::io::Error),
+    #[error("Error attempting to discover git repo: {0}")]
+    OpenRepo(Git::DiscoverError),
+    #[error("Error initializing git repo: {0}")]
+    InitRepo(Git::InitError),
 }
 
 #[derive(Error, Debug)]
@@ -53,8 +87,11 @@ pub enum CleanupInitializerError {
     #[error("Error removing flake.nix")]
     RemoveFlake(std::io::Error),
 }
-impl Initializer<'_> {
-    pub async fn init<Nix: FloxNixApi, Git: GitProvider>(&self) -> Result<(), InitError<Nix, Git>>
+impl Initializer<'_, '_> {
+    pub async fn ensure_flox_project<Nix: FloxNixApi, Git: GitProvider>(
+        &self,
+        git: &Option<Git>,
+    ) -> Result<(), EnsureFloxProjectError<Nix, Git>>
     where
         FlakeInit: Run<Nix>,
     {
@@ -70,65 +107,96 @@ impl Initializer<'_> {
             }
             .run(&nix, &NixArgs::default())
             .await
-            .map_err(InitError::NixInitBase)?;
+            .map_err(EnsureFloxProjectError::NixInitBase)?;
+
+            if let Some(git) = git {
+                git.add(&[Path::new("flake.nix")])
+                    .await
+                    .map_err(EnsureFloxProjectError::GitAdd)?;
+            }
         }
 
-        // create a git repo at this spot
-        if !Path::new(".git").exists() {
-            info!("No git repository locally, creating one");
-            self.flox
-                .git_provider::<Git>()
-                .init_repo()
-                .await
-                .map_err(InitError::InitRepo)?;
-        }
+        Ok(())
+    }
+
+    pub async fn init_flox_package<Nix: FloxNixApi, Git: GitProvider>(
+        &self,
+        git: &Option<Git>,
+        template: Installable,
+        name: &str,
+    ) -> Result<(), InitFloxPackageError<Nix, Git>>
+    where
+        FlakeInit: Run<Nix>,
+    {
+        let nix = self.flox.nix(self.nix_arguments.clone());
 
         FlakeInit {
-            template: Some(self.template.to_string().into()),
+            template: Some(template.to_string().into()),
             ..Default::default()
         }
         .run(&nix, &NixArgs::default())
         .await
-        .map_err(InitError::NixInit)?;
+        .map_err(InitFloxPackageError::NixInit)?;
+
+        let old_package_path = self.dir.join("pkgs/default.nix");
 
         // TODO do we want to care about some errors?
-        if let Ok(mut file) = tokio::fs::OpenOptions::new()
-            .write(true)
-            .read(true)
-            .create(false)
-            .open("pkgs/default.nix")
-            .await
-        {
-            let package_path = ["pkgs", &self.name, "default.nix"]
-                .iter()
-                .collect::<PathBuf>();
-            self.flox
-                .git_provider::<Git>()
-                .mv(Path::new("pkgs/default.nix"), &package_path)
-                .await
-                .map_err(InitError::MvNamed)?;
-
-            info!(
-                "renamed: pkgs/default.nix -> pkgs/{}/default.nix",
-                self.name
-            );
-
+        if let Ok(mut file) = tokio::fs::File::open(&old_package_path).await {
             let mut package_contents = String::new();
             file.read_to_string(&mut package_contents)
                 .await
-                .map_err(InitError::ReadTemplateFile)?;
+                .map_err(InitFloxPackageError::ReadTemplateFile)?;
+
+            // Drop handler should clear our file handle in case we want to delete it
+            drop(file);
 
             let new_contents =
-                PNAME_DECLARATION.replace(&package_contents, format!(r#"pname = "{}""#, self.name));
+                PNAME_DECLARATION.replace(&package_contents, format!(r#"pname = "{name}""#));
+
+            let new_package_dir = self.dir.join("pkgs").join(name);
+            debug!("creating dir: {}", new_package_dir.display());
+            tokio::fs::create_dir_all(&new_package_dir)
+                .await
+                .map_err(InitFloxPackageError::MkNamedDir)?;
+
+            let new_package_path = new_package_dir.join("default.nix");
 
             if let Cow::Owned(s) = new_contents {
-                file.set_len(0)
+                if let Some(git) = git {
+                    git.rm(&[&old_package_path], false, true, false)
+                        .await
+                        .map_err(InitFloxPackageError::RemoveUnnamedFileGit)?;
+                } else {
+                    tokio::fs::remove_file(&old_package_path)
+                        .await
+                        .map_err(InitFloxPackageError::RemoveUnnamedFile)?;
+                }
+
+                let mut file = tokio::fs::File::create(&new_package_path)
                     .await
-                    .map_err(InitError::TruncateTemplateFile)?;
+                    .map_err(InitFloxPackageError::OpenNamed)?;
+
                 file.write_all(s.as_bytes())
                     .await
-                    .map_err(InitError::WriteTemplateFile)?;
+                    .map_err(InitFloxPackageError::WriteTemplateFile)?;
+
+                if let Some(git) = git {
+                    git.add(&[&new_package_path])
+                        .await
+                        .map_err(InitFloxPackageError::GitAdd)?;
+                }
+            } else if let Some(git) = git {
+                git.mv(&old_package_path, &new_package_path)
+                    .await
+                    .map_err(InitFloxPackageError::MvNamedGit)?;
+            } else {
+                tokio::fs::rename(&old_package_path, &new_package_path)
+                    .await
+                    .map_err(InitFloxPackageError::MkNamedDir)?;
             }
+
+            // this might technically be a lie, but it's close enough :)
+            info!("renamed: pkgs/default.nix -> pkgs/{name}/default.nix");
         }
 
         Ok(())
