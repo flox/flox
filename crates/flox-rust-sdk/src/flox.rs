@@ -168,7 +168,7 @@ impl Flox {
         default_flakerefs: &[&str],
         default_attr_prefixes: &[(&str, bool)],
         must_exist: bool,
-        description_key: Option<&[&str]>,
+        processor: Option<&str>,
     ) -> Result<Vec<ResolvedInstallableMatch>, ResolveFloxInstallableError<Nix>>
     where
         Eval: RunJson<Nix>,
@@ -273,7 +273,7 @@ impl Flox {
                         prefix = {prefix};
                         inputs = [{inputs}];
                         key = {key};
-                        descriptionKey = {description_key};
+                        processor = {processor};
                     }})"#,
                     system = self.system,
                     prefix = attr_prefix
@@ -303,14 +303,8 @@ impl Flox {
                                 .join(" ")
                         ))
                         .unwrap_or_else(|| "null".to_string()),
-                    description_key = description_key
-                        .map(|x| format!(
-                            "[{}]",
-                            x.iter()
-                                .map(|p| format!("{:?}", p))
-                                .collect::<Vec<_>>()
-                                .join(" ")
-                        ))
+                    processor = processor
+                        .map(|x| format!("(prefix: key: item: {})", x))
                         .unwrap_or_else(|| "null".to_string()),
                 )
             })

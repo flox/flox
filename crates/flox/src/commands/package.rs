@@ -229,10 +229,7 @@ impl interface::PackageCommands {
                     .inner
                     .template
                     .unwrap_or_default()
-                    .resolve_installable(
-                        &flox,
-                        Some(|m| m.key.get(0).map(|x| x == "_init") != Some(true)),
-                    )
+                    .resolve_installable(&flox)
                     .await?;
 
                 flox.initializer(template, name, command.nix_args)
@@ -245,7 +242,7 @@ impl interface::PackageCommands {
                     .inner
                     .installable_arg
                     .unwrap_or_default()
-                    .resolve_installable(&flox, None)
+                    .resolve_installable(&flox)
                     .await?;
 
                 flox.package(
@@ -263,7 +260,7 @@ impl interface::PackageCommands {
                     .inner
                     .installable_arg
                     .unwrap_or_default()
-                    .resolve_installable(&flox, None)
+                    .resolve_installable(&flox)
                     .await?;
 
                 flox.package(
@@ -281,7 +278,7 @@ impl interface::PackageCommands {
                     .inner
                     .installable_arg
                     .unwrap_or_default()
-                    .resolve_installable(&flox, None)
+                    .resolve_installable(&flox)
                     .await?;
 
                 flox.package(
@@ -299,7 +296,7 @@ impl interface::PackageCommands {
                     .inner
                     .installable_arg
                     .unwrap_or_default()
-                    .resolve_installable(&flox, None)
+                    .resolve_installable(&flox)
                     .await?;
 
                 flox.package(
@@ -332,14 +329,14 @@ impl interface::PackageCommands {
                     .inner
                     .installable_arg
                     .unwrap_or_default()
-                    .resolve_installable(&flox, None)
+                    .resolve_installable(&flox)
                     .await?;
 
                 let bundler = command
                     .inner
                     .bundler_arg
                     .unwrap_or_default()
-                    .resolve_installable(&flox, None)
+                    .resolve_installable(&flox)
                     .await?;
 
                 flox.package(

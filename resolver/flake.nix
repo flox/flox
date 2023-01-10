@@ -41,9 +41,8 @@
       key,
       # Internally used to re-execute ourselves setting the key as the prefix when key=[x] and prefix=null
       keyAsPrefix ? false,
-      # Used to optionally grab a description from each match
-      # List of keys to be used with `attrByPath`
-      descriptionKey ? null,
+      # Optional unction used to filter out fields and find descriptions
+      processor ? null,
     }: let
       # Copied from nixpkgs
       attrByPath = attrPath: default: set: let
@@ -114,31 +113,38 @@
       handlePrefix = inputName: prefixName: let
         x = keysForInputAndPrefix reflected.${inputName} prefixName;
       in
-        map
-        (key: rec {
-          inherit key;
-          explicitSystem = x ? system;
-          system =
-            if x ? system
-            then x.system
-            else systemIfPresent reflected.${inputName} prefixName;
-          prefix = prefixName;
-          input = inputName;
-          description =
-            if descriptionKey != null
-            then let
-              prefixed =
-                if system == null
-                then reflected.${inputName}.${prefix}
-                else reflected.${inputName}.${prefix}.${system};
-              item = attrByPath key null prefixed;
-            in
-              if item != null
-              then attrByPath descriptionKey null item
-              else builtins.trace "Found key but is missing" null
-            else null;
-        })
-        x.keys;
+        builtins.filter (x: x != null) (
+          map
+          (key: let
+            system =
+              if x ? system
+              then x.system
+              else systemIfPresent reflected.${inputName} prefixName;
+
+            prefix = selectPrefix reflected.${inputName} prefixName;
+
+            processed =
+              if processor != null
+              then let
+                item = attrByPath key null prefix;
+                out = builtins.tryEval (processor prefix key item);
+              in
+                if item != null && out.success != false
+                then out.value
+                else builtins.trace "Found key but is somehow missing" null
+              else null;
+          in
+            if processor == null || processed != null
+            then {
+              inherit key system;
+              explicitSystem = x ? system;
+              prefix = prefixName;
+              input = inputName;
+              description = processed.description or null;
+            }
+            else null)
+          x.keys
+        );
 
       # Loop over the prefixes of each input, handling them
       handleInput = let

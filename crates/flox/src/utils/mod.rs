@@ -226,24 +226,15 @@ impl<Matching: InstallableDef + 'static> InstallableArgument<Parsed, Matching> {
                 &drv.flake_refs,
                 &drv.prefix,
                 false,
-                Matching::DESCRIPTION_KEY,
+                Matching::PROCESSOR,
             )
             .await?)
     }
 
     /// called at runtime to extract single installable from CLI input
-    pub async fn resolve_installable(
-        &self,
-        flox: &Flox,
-        filter: Option<fn(&ResolvedInstallableMatch) -> bool>,
-    ) -> Result<Installable> {
+    pub async fn resolve_installable(&self, flox: &Flox) -> Result<Installable> {
         let drv = InstallableKind::any(Matching::DERIVATION_TYPES).unwrap();
-        let returned_matches = self.resolve_matches(flox).await?;
-
-        let matches = match filter {
-            None => returned_matches,
-            Some(f) => returned_matches.into_iter().filter(f).collect(),
-        };
+        let matches = self.resolve_matches(flox).await?;
 
         resolve_installable_from_matches(
             Matching::SUBCOMMAND,
@@ -297,7 +288,7 @@ pub trait InstallableDef: Default + Clone {
     const DERIVATION_TYPES: &'static [InstallableKind];
     const SUBCOMMAND: &'static str;
     const ARG_FLAG: Option<&'static str> = None;
-    const DESCRIPTION_KEY: Option<&'static [&'static str]>;
+    const PROCESSOR: Option<&'static str>;
 }
 
 /// Resolve a single installation candidate from a list of matches
