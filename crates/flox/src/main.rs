@@ -5,6 +5,7 @@ use std::path::Path;
 use std::process::{ExitCode, ExitStatus};
 
 use anyhow::{Context, Result};
+use bpaf::Parser;
 use commands::FloxArgs;
 use flox_rust_sdk::environment::default_nix_subprocess_env;
 use fslock::LockFile;
@@ -23,7 +24,7 @@ mod utils;
 use flox_rust_sdk::flox::{Flox, FLOX_SH};
 
 async fn run(args: FloxArgs) -> Result<()> {
-    init_logger(args.verbosity.clone(), args.debug);
+    init_logger(Some(args.verbosity.clone()), Some(args.debug));
     set_user()?;
     args.handle(config::Config::parse()?).await?;
     Ok(())
@@ -31,6 +32,20 @@ async fn run(args: FloxArgs) -> Result<()> {
 
 #[tokio::main]
 async fn main() -> ExitCode {
+    init_logger(None, None);
+    let (verbosity, debug) = {
+        let verbosity_parser = commands::verbosity();
+        let debug_parser = bpaf::long("debug").short('d').switch();
+        let other_parser = bpaf::any::<String>("ANY").many();
+
+        bpaf::construct!(verbosity_parser, debug_parser, other_parser)
+            .map(|(v, d, _)| (v, d))
+            .to_options()
+            .try_run()
+            .unwrap_or_default()
+    };
+    init_logger(Some(verbosity), Some(debug));
+
     let args = commands::flox_args().run();
     let debug = args.debug;
 

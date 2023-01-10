@@ -3,20 +3,21 @@ use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
 use std::str::FromStr;
-use std::{env, io, iter};
+use std::{env, iter};
 
 use anyhow::{Context, Result};
 use crossterm::tty::IsTty;
 use flox_rust_sdk::prelude::{Channel, ChannelRegistry};
 use fslock::LockFile;
 use indoc::indoc;
-use log::{debug, info, trace};
+use log::{debug, error, info, trace};
+use once_cell::sync::OnceCell;
 use serde::Deserialize;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tracing_subscriber::prelude::*;
-use tracing_subscriber::Layer;
 
 use super::dialog::InquireExt;
+use super::logger::LogFormatter;
 use super::metrics::{PosthogLayer, METRICS_UUID_FILE_NAME};
 use crate::commands::Verbosity;
 use crate::utils::logger;
@@ -24,6 +25,33 @@ use crate::utils::metrics::METRICS_LOCK_FILE_NAME;
 
 const ENV_GIT_CONFIG_SYSTEM: &str = "GIT_CONFIG_SYSTEM";
 const ENV_FLOX_ORIGINAL_GIT_CONFIG_SYSTEM: &str = "FLOX_ORIGINAL_GIT_CONFIG_SYSTEM";
+
+// If we use just `std::io::stderr()` I don't think we can make a valid type signature for LOGGER_HANDLE
+struct JustStderr;
+impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for JustStderr {
+    type Writer = std::io::Stderr;
+
+    fn make_writer(&'a self) -> Self::Writer {
+        std::io::stderr()
+    }
+}
+
+#[allow(clippy::type_complexity)]
+static LOGGER_HANDLE: OnceCell<
+    tracing_subscriber::reload::Handle<
+        tracing_subscriber::filter::Filtered<
+            tracing_subscriber::fmt::Layer<
+                tracing_subscriber::layer::Layered<PosthogLayer, tracing_subscriber::Registry>,
+                tracing_subscriber::fmt::format::DefaultFields,
+                LogFormatter,
+                JustStderr,
+            >,
+            tracing_subscriber::EnvFilter,
+            tracing_subscriber::layer::Layered<PosthogLayer, tracing_subscriber::Registry>,
+        >,
+        tracing_subscriber::layer::Layered<PosthogLayer, tracing_subscriber::Registry>,
+    >,
+> = OnceCell::new();
 
 async fn write_metrics_uuid(uuid_path: &Path, consent: bool) -> Result<()> {
     let mut file = tokio::fs::File::create(&uuid_path).await?;
@@ -132,7 +160,10 @@ pub async fn init_uuid(data_dir: &Path) -> Result<uuid::Uuid> {
     }
 }
 
-pub fn init_logger(verbosity: Verbosity, debug: bool) {
+pub fn init_logger(verbosity: Option<Verbosity>, debug: Option<bool>) {
+    let verbosity = verbosity.unwrap_or_default();
+    let debug = debug.unwrap_or(false);
+
     let log_filter = match (verbosity, debug) {
         (Verbosity::Quiet, false) => "off,flox=error",
         (Verbosity::Quiet, true) => "off,flox=error,posix=debug",
@@ -146,19 +177,41 @@ pub fn init_logger(verbosity: Verbosity, debug: bool) {
         (Verbosity::Verbose(_), _) => "trace",
     };
 
-    let env_filter = tracing_subscriber::filter::EnvFilter::try_from_default_env()
-        .or_else(|_| tracing_subscriber::filter::EnvFilter::try_new(log_filter))
-        .unwrap();
+    let handle = LOGGER_HANDLE.get_or_init(|| {
+        debug!("Initializing logger (how are you seeing this?)");
 
-    let fmt_layer = tracing_subscriber::fmt::layer()
-        .with_writer(io::stderr)
-        .event_format(logger::LogFormatter { debug })
-        .with_filter(env_filter);
+        let (fmt_reloadable, fmt_reload_handle) = tracing_subscriber::reload::Layer::new(
+            tracing_subscriber::fmt::layer()
+                .with_writer(JustStderr)
+                .event_format(logger::LogFormatter { debug })
+                .with_filter(
+                    tracing_subscriber::filter::EnvFilter::try_from_default_env()
+                        .or_else(|_| tracing_subscriber::filter::EnvFilter::try_new(log_filter))
+                        .unwrap(),
+                ),
+        );
 
-    tracing_subscriber::registry()
-        .with(PosthogLayer::new())
-        .with(fmt_layer)
-        .init();
+        tracing_subscriber::registry()
+            .with(PosthogLayer::new())
+            .with(fmt_reloadable)
+            .init();
+
+        fmt_reload_handle
+    });
+
+    debug!("Updating logger");
+
+    if let Err(err) = handle.modify(|layer| {
+        *layer.filter_mut() = tracing_subscriber::filter::EnvFilter::try_from_default_env()
+            .or_else(|_| tracing_subscriber::filter::EnvFilter::try_new(log_filter))
+            .unwrap();
+
+        *layer.inner_mut() = tracing_subscriber::fmt::layer()
+            .with_writer(JustStderr)
+            .event_format(logger::LogFormatter { debug });
+    }) {
+        error!("Updating logger failed: {}", err);
+    }
 }
 
 pub fn init_channels() -> Result<ChannelRegistry> {

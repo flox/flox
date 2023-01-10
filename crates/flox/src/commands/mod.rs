@@ -44,13 +44,19 @@ pub enum Verbosity {
     Quiet,
 }
 
+impl Default for Verbosity {
+    fn default() -> Self {
+        Verbosity::Verbose(0)
+    }
+}
+
 #[derive(Bpaf)]
 #[bpaf(options, version(FLOX_VERSION))]
 pub struct FloxArgs {
     /// Verbose mode.
     ///
     /// Invoke multiple times for increasing detail.
-    #[bpaf(external, fallback(Verbosity::Verbose(0)))]
+    #[bpaf(external, fallback(Default::default()))]
     pub verbosity: Verbosity,
 
     /// Debug mode.
