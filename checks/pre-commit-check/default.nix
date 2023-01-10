@@ -9,7 +9,7 @@
     src = builtins.fetchGit {
       url = "https://github.com/skoef/commitizen/";
       ref = "add-hooks-for-bump-command";
-      rev = "d7c86c8244af0cb5be1ab2b3882d0af74a191352";
+      rev = "103def9d6c290afe1b0daca359581cefadce11ce";
     };
   });
 
