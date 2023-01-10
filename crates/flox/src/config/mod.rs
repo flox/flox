@@ -8,7 +8,7 @@ use flox_rust_sdk::prelude::Stability;
 use itertools::{Either, Itertools};
 use log::debug;
 use once_cell::sync::OnceCell;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use xdg::BaseDirectories;
 
 /// Name of flox managed directories (config, data, cache)
@@ -29,7 +29,7 @@ pub struct Config {
     pub github: GithubConfig,
 
     #[serde(default)]
-    pub features: HashMap<Feature, Impl>,
+    pub features: HashMap<features::Feature, features::Impl>,
 }
 
 // TODO: move to flox_sdk?
@@ -55,54 +55,7 @@ pub struct NixConfig {
 /// Describes the github config under flox
 #[derive(Clone, Debug, Deserialize, Default)]
 pub struct GithubConfig {}
-
-#[derive(Clone, Debug, PartialEq, Eq, Copy, Deserialize, Serialize)]
-#[serde(rename_all = "lowercase")]
-pub enum Impl {
-    Rust,
-    Bash,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize, Hash)]
-pub enum Feature {
-    #[serde(rename = "all")]
-    All,
-    #[serde(rename = "env")]
-    Env,
-    #[serde(rename = "nix")]
-    Nix,
-}
-
-impl Feature {
-    pub fn implementation(&self) -> Result<Impl> {
-        let map = Config::parse()?.features;
-
-        Ok(match self {
-            Feature::All => *map.get(self).unwrap_or(&Impl::Bash),
-            Feature::Env => *map
-                .get(self)
-                .or_else(|| map.get(&Self::All))
-                .unwrap_or(&Impl::Bash),
-            Feature::Nix => *map
-                .get(self)
-                .or_else(|| map.get(&Self::All))
-                .unwrap_or(&Impl::Rust),
-        })
-    }
-
-    pub fn is_forwarded(&self) -> Result<bool> {
-        if self.implementation()? == Impl::Bash {
-            let env_name = format!(
-                "FLOX_PREVIEW_FEATURES_{}",
-                serde_variant::to_variant_name(self)?.to_uppercase()
-            );
-            debug!("`{env_name}` unset or not \"rust\", falling back to legacy flox");
-            Ok(true)
-        } else {
-            Ok(false)
-        }
-    }
-}
+pub mod features;
 
 impl Config {
     /// Creates a raw [Config] object and caches it for the lifetime of the program

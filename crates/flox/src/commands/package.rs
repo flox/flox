@@ -11,8 +11,9 @@ use flox_rust_sdk::nix::command_line::{Group, NixCliCommand, NixCommandLine, ToA
 use flox_rust_sdk::nix::Run as RunC;
 use flox_rust_sdk::prelude::Stability;
 
-use crate::config::{Config, Feature};
-use crate::{flox_forward, should_flox_forward, subcommand_metric};
+use crate::config::features::Feature;
+use crate::config::Config;
+use crate::{flox_forward, subcommand_metric};
 
 pub(crate) mod interface {
     use bpaf::{Bpaf, Parser};
@@ -194,7 +195,17 @@ pub(crate) mod interface {
 impl interface::PackageCommands {
     pub async fn handle(self, config: Config, flox: Flox) -> Result<()> {
         match self {
-            _ if should_flox_forward(Feature::Nix)? => flox_forward(&flox).await?,
+            _ if Feature::Nix.is_forwarded()? => flox_forward(&flox).await?,
+
+            // Unification implemntation of Develop is not yet implmented in rust
+            interface::PackageCommands::Develop(_) if Feature::Develop.is_forwarded()? => {
+                flox_forward(&flox).await?
+            },
+
+            // `flox publish` is not yet implmented in rust
+            interface::PackageCommands::Publish(_) if Feature::Publish.is_forwarded()? => {
+                flox_forward(&flox).await?
+            },
 
             interface::PackageCommands::Build(command) => {
                 subcommand_metric!("build");

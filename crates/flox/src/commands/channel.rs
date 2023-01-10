@@ -2,8 +2,8 @@ use anyhow::Result;
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 
-use crate::config::Feature;
-use crate::{flox_forward, should_flox_forward};
+use crate::config::features::Feature;
+use crate::flox_forward;
 
 #[derive(Bpaf, Clone)]
 pub struct ChannelArgs {}
@@ -11,7 +11,7 @@ pub struct ChannelArgs {}
 impl ChannelCommands {
     pub async fn handle(&self, flox: Flox) -> Result<()> {
         match self {
-            _ if should_flox_forward(Feature::Env)? => flox_forward(&flox).await?,
+            _ if Feature::Env.is_forwarded()? => flox_forward(&flox).await?,
 
             _ => todo!(),
         }

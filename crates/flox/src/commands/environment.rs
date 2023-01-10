@@ -6,8 +6,8 @@ use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::nix::command_line::NixCommandLine;
 use flox_rust_sdk::prelude::flox_package::FloxPackage;
 
-use crate::config::Feature;
-use crate::{flox_forward, should_flox_forward, subcommand_metric};
+use crate::config::features::Feature;
+use crate::{flox_forward, subcommand_metric};
 
 #[derive(Bpaf, Clone)]
 pub struct EnvironmentArgs {
@@ -23,7 +23,7 @@ pub struct EnvironmentArgs {
 impl EnvironmentCommands {
     pub async fn handle(&self, flox: Flox) -> Result<()> {
         match self {
-            _ if should_flox_forward(Feature::Env)? => flox_forward(&flox).await?,
+            _ if Feature::Env.is_forwarded()? => flox_forward(&flox).await?,
 
             EnvironmentCommands::Install {
                 packages,

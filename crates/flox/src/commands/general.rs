@@ -5,14 +5,14 @@ use flox_rust_sdk::nix::command_line::{Group, NixCliCommand, NixCommandLine, ToA
 use flox_rust_sdk::nix::Run;
 use fslock::LockFile;
 
-use crate::config::{Feature, Impl};
+use crate::config::features::Feature;
 use crate::utils::init::init_telemetry_consent;
 use crate::utils::metrics::{
     METRICS_EVENTS_FILE_NAME,
     METRICS_LOCK_FILE_NAME,
     METRICS_UUID_FILE_NAME,
 };
-use crate::{flox_forward, should_flox_forward, subcommand_metric};
+use crate::{flox_forward, subcommand_metric};
 
 #[derive(Bpaf, Clone)]
 pub struct GeneralArgs {}
@@ -20,7 +20,10 @@ pub struct GeneralArgs {}
 impl GeneralCommands {
     pub async fn handle(&self, flox: Flox) -> Result<()> {
         match self {
-            GeneralCommands::Nix(args) if Feature::Nix.implementation()? == Impl::Rust => {
+            _ if Feature::All.is_forwarded()? => flox_forward(&flox).await?,
+            GeneralCommands::Nix(_) if Feature::Nix.is_forwarded()? => flox_forward(&flox).await?,
+
+            GeneralCommands::Nix(args) => {
                 subcommand_metric!("nix");
 
                 let nix: NixCommandLine = flox.nix(Default::default());
@@ -55,7 +58,6 @@ impl GeneralCommands {
                 init_telemetry_consent(&flox.data_dir, &flox.cache_dir).await?;
             },
 
-            _ if should_flox_forward(Feature::All)? => flox_forward(&flox).await?,
             _ => todo!(),
         }
         Ok(())

@@ -15,8 +15,6 @@ use tokio::process::Command;
 use utils::init::init_logger;
 use utils::metrics::{METRICS_LOCK_FILE_NAME, METRICS_UUID_FILE_NAME};
 
-use self::config::{Feature, Impl};
-
 mod build;
 mod commands;
 mod config;
@@ -50,19 +48,6 @@ async fn main() -> ExitCode {
             }
             ExitCode::from(1)
         },
-    }
-}
-
-pub fn should_flox_forward(f: Feature) -> Result<bool> {
-    if f.implementation()? == Impl::Bash {
-        let env_name = format!(
-            "FLOX_PREVIEW_FEATURES_{}",
-            serde_variant::to_variant_name(&f)?.to_uppercase()
-        );
-        debug!("`{env_name}` unset or not \"rust\", falling back to legacy flox");
-        Ok(true)
-    } else {
-        Ok(false)
     }
 }
 
