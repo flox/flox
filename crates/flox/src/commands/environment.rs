@@ -18,6 +18,9 @@ pub struct EnvironmentArgs {
     /// installable at some point, once we settle on how users specify environments
     #[bpaf(short, long, argument("ENV"))]
     pub environment: Option<PathBuf>,
+
+    #[bpaf(short, long, argument("SYSTEM"))]
+    pub system: Option<String>,
 }
 
 impl EnvironmentCommands {
@@ -27,7 +30,7 @@ impl EnvironmentCommands {
 
             EnvironmentCommands::Install {
                 packages,
-                environment: EnvironmentArgs { environment },
+                environment: EnvironmentArgs { environment, .. },
             } => {
                 subcommand_metric!("install");
 
@@ -85,6 +88,13 @@ pub enum EnvironmentCommands {
 
         #[bpaf(external(activate_run_args))]
         arguments: Option<(String, Vec<String>)>,
+    },
+
+    /// create an envirnment
+    #[bpaf(command)]
+    Create {
+        #[bpaf(external(environment_args), group_help("Environment Options"))]
+        environment: EnvironmentArgs,
     },
 
     /// remove all data pertaining to an environment`
@@ -175,7 +185,7 @@ pub enum EnvironmentCommands {
         generation: Option<u32>,
     },
 
-    /// pull environment metadata from remote registry
+    /// send environment metadata from remote registry
     #[bpaf(command)]
     Push {
         #[bpaf(long, short)]
@@ -185,14 +195,20 @@ pub enum EnvironmentCommands {
         environment: EnvironmentArgs,
     },
 
-    /// send environment metadata to remote registry
+    /// pull environment metadata to remote registry
     #[bpaf(command)]
     Pull {
+        #[bpaf(external(environment_args), group_help("Environment Options"))]
+        environment: EnvironmentArgs,
+
+        /// forceably overwrite either the local copy of the environment
         #[bpaf(long, short)]
         force: bool,
 
-        #[bpaf(external(environment_args), group_help("Environment Options"))]
-        environment: EnvironmentArgs,
+        /// do not actually render or create links to environments in the store.
+        /// (Flox internal use only.)
+        #[bpaf(long("no-render"))]
+        no_render: bool,
     },
 
     /// remove packages from an environment
