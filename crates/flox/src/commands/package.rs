@@ -1,8 +1,10 @@
 use std::env;
 use std::fmt::Debug;
+use std::path::PathBuf;
 
 use anyhow::{bail, Context, Result};
 use bpaf::{construct, Bpaf, Parser};
+use flox_rust_sdk::actions::project::{self, Closed, Open, Project};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::nix::arguments::flake::FlakeArgs;
 use flox_rust_sdk::nix::arguments::NixArgs;
@@ -10,7 +12,8 @@ use flox_rust_sdk::nix::command::Eval as EvalComm;
 use flox_rust_sdk::nix::command_line::{Group, NixCliCommand, NixCommandLine, ToArgs};
 use flox_rust_sdk::nix::Run as RunC;
 use flox_rust_sdk::prelude::Stability;
-use flox_rust_sdk::providers::git::{GitCommandProvider, GitDiscoverError, GitProvider};
+use flox_rust_sdk::providers::git::GitCommandProvider;
+use futures::TryFutureExt;
 use log::info;
 
 use crate::config::features::Feature;
@@ -44,8 +47,8 @@ pub(crate) mod interface {
         pub(crate) template: Option<InstallableArgument<Parsed, TemplateInstallable>>,
         #[bpaf(long("name"), short('n'), argument("name"))]
         pub(crate) name: Option<String>,
-        #[bpaf(short('i'), long("init-repo"), switch)]
-        pub(crate) init_repo: bool,
+        #[bpaf(short('i'), long("init-git"), switch)]
+        pub(crate) init_git: bool,
     }
     pub(crate) fn template_arg(
     ) -> impl Parser<Option<InstallableArgument<Parsed, TemplateInstallable>>> {
@@ -235,37 +238,8 @@ impl interface::PackageCommands {
 
                 let cwd = std::env::current_dir()?;
 
-                let git = match GitCommandProvider::discover(&cwd).await {
-                    Ok(g) => {
-                        info!(
-                            "Found git repo{}",
-                            g.workdir()
-                                .map(|p| format!(": {}", p.display()))
-                                .unwrap_or_else(|| "".to_owned())
-                        );
-                        Some(g)
-                    },
-                    Err(err) => match err.not_found() {
-                        true => {
-                            info!("No git repository found");
-
-                            if command.inner.init_repo
-                                || inquire::Confirm::new("Would you like to initialize Git?")
-                                    .with_flox_theme()
-                                    .prompt()?
-                            {
-                                Some(GitCommandProvider::init(&cwd).await?)
-                            } else {
-                                None
-                            }
-                        },
-                        false => bail!("Error trying to find Git repo: {}", err),
-                    },
-                };
-
-                let init = flox.initializer(command.nix_args, &cwd);
-                init.ensure_flox_project::<NixCommandLine, GitCommandProvider>(&git)
-                    .await?;
+                let git_repo = ensure_project_repo(&flox, cwd, &command).await?;
+                let project = ensure_project(git_repo, &command).await?;
 
                 let name = match command.inner.name {
                     Some(n) => n,
@@ -277,9 +251,9 @@ impl interface::PackageCommands {
                     },
                 };
 
-                let trimmed_name = name.trim();
+                let name = name.trim();
 
-                if !trimmed_name.is_empty() {
+                if !name.is_empty() {
                     let template = command
                         .inner
                         .template
@@ -287,12 +261,9 @@ impl interface::PackageCommands {
                         .resolve_installable(&flox)
                         .await?;
 
-                    init.init_flox_package::<NixCommandLine, GitCommandProvider>(
-                        &git,
-                        template,
-                        trimmed_name,
-                    )
-                    .await?;
+                    project
+                        .init_flox_package::<NixCommandLine>(command.nix_args, template, name)
+                        .await?;
                 }
             },
             interface::PackageCommands::Build(command) => {
@@ -462,6 +433,62 @@ impl interface::PackageCommands {
 
         Ok(())
     }
+}
+
+async fn ensure_project_repo<'flox>(
+    flox: &'flox Flox,
+    cwd: PathBuf,
+    command: &WithPassthru<interface::Init>,
+) -> Result<project::Project<'flox, Closed<GitCommandProvider>>, anyhow::Error> {
+    let git_repo = flox
+        .project(cwd)
+        .guard::<GitCommandProvider>()
+        .await?
+        .open()
+        .inspect_ok(|p| {
+            info!(
+                "Found git repo{}",
+                p.workdir()
+                    .map(|p| format!(": {}", p.display()))
+                    .unwrap_or_else(|| "".to_owned())
+            );
+        })
+        .or_else(|g| async move {
+            if command.inner.init_git
+                || inquire::Confirm::new("Would you like to initialize Git?")
+                    .with_flox_theme()
+                    .prompt()?
+            {
+                let p = g.init_git().await?;
+
+                info!(
+                    "Created git repo{}",
+                    p.workdir()
+                        .map(|p| format!(": {}", p.display()))
+                        .unwrap_or_else(|| "".to_owned())
+                );
+
+                Ok(p)
+            } else {
+                bail!("a Git repository is required");
+            }
+        })
+        .await?;
+    Ok(git_repo)
+}
+
+/// Create
+async fn ensure_project<'flox>(
+    git_repo: Project<'flox, Closed<GitCommandProvider>>,
+    command: &WithPassthru<interface::Init>,
+) -> Result<Project<'flox, Open<GitCommandProvider>>> {
+    let project = git_repo
+        .guard()
+        .await?
+        .open()
+        .or_else(|g| g.init_project::<NixCommandLine>(command.nix_args.clone()))
+        .await?;
+    Ok(project)
 }
 
 #[derive(Bpaf, Clone, Debug)]
