@@ -1,51 +1,85 @@
-# Flox Rust SDK / CLI Prototype
+<p>
+    <a href="https://floxdev.com" target="_blank"><img src="img/flox_blue_small.png" alt="flox logo" /></a>
+</p>
 
-This is a prototype abstraction layer that can be used by the Flox UI and an attempt to create a faithful future replacement of the flox bash script in a 
-language that can be easier supported, extended, and collaborated on than a collection of bash scripts.
+## Quick Tour of flox
 
-## Design Choices
+flox is a multi-platform and reproducible environment manager
+for curating portable collections of tools
+for use across distributions and in any context.
+This means you can:
 
-This code is in its very early stages and should only be thought of as a draft prototype. 
 
-In order to provide a way to extend flox in the future with minimal breaking changes to the API consumers I have seperated the different functions that use external dependnecies into different Provider traits. These traits will provide a common "floxesque" interface but allow us to change out implementation details trivially.
+<br>
+<img alt="flox flywheel" align="right" width="350" src="img/310703783_812187779826049_7314390197914243071_n.png">
 
-The application will be async so parallelization of certain tasks (e.g. searching) will be possible in future versions.
+1. Install and run software anywhere
+2. Share collections of software that others can use
+3. Build software the same way in any environment
+4. Publish software for re-use
 
-The rust SDK will then be used to genrate an api via https://github.com/fzyzcjy/flutter_rust_bridge and a UI will be built in flutter / dart. 
+<br>
+<br>
+<br>
 
-## Development (with flox)
+Lets look at the entire flox lifecycle.
 
-1. `flox develop -A rust-env` → sets up an environment with rust, rustfmt, clippy, rust-analyzer and pre-commit-hooks
+## Install and run packages
 
-## Development (without flox)
+Install almost any open source package on any Linux or MacOS machine.
+flox is compatible with all linux distributions.
+You can use it to install packages on your development machine, your EC2 instances,
+or anything else without being locked in to a distro-dependent package manager.
 
-1. Download rustup - `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`
-1. Install rust nightly `rustup default nightly`
-1. Set NIX_BIN and FLOX_SH environment variables
-1. Hack away
+<img src="./img/flywheel-install.gif" />
+<br>
 
-## Testing (with flox)
+## Share package collections
 
-0. (temporary) get the latests integration tests
-   ```
-   flox develop .\#rust-env --override-input floxpkgs-internal/flox github:flox/flox-bash-private`
-   ```
-1. run cargo tests
-   - `cargo test` will run all pure integration tests
-   - `cargo test -F "extra-tests"` enables integration and other long running tests
-   - `hivemind` watches the rust source code and continuously runs `cargo test -F "extra-tests"` on changes
-     can be configured through [./Procfile]
+Synchronize tools across your machines.
+With flox you can curate a collection of packages once and then use them on your servers,
+laptop, and/or desktop with no additional set-up or maintenance.
+flox keeps everything synchronized and allows global rollbacks.
+Keep everyone on the same page and up-to-date
+without shipping clunky containers or AMIs around your team.
+You can make global changes to your team's tools,
+view change logs,
+and perform global upgrades and rollbacks.
 
-## Providers
+<img src="./img/flywheel-pull.gif" />
+<br>
 
-Providers allow for dependency injection of different parts.
+## Build your own packages
 
-## References 
+Packages built with flox run the same everywhere.
+No containers or fancy CI pipeline required.
 
-Github interaction is provided by octocrab : https://github.com/XAMPPRocky/octocrab
-CLI argument parsing is provided by Clap using the Derive feature
-Sam proposed that is to at some point integrate cxx binding support so nix can be used via FFI and not the command prompt. He provided me with some examples in go and haskell
-    - https://cxx.rs/ 
-    - https://github.com/nix-community/go-nix  
-    - https://github.com/Profpatsch/libnix-haskell#readme  
-    - https://www.haskellforall.com/2022/09/nix-serve-ng-faster-more-reliable-drop.html 
+Use different versions of development tools side-by-side with no extra set-up.
+No need to worry about conflicting versions of transitive dependencies
+or jump through hoops with brew, yum, and apt-get
+when you switch between projects and versions.
+
+Store your environments in the cloud.
+flox can globally synchronize your runtime
+and project-specific development environments everywhere you work,
+so feel at home on every server, laptop, and desktop
+you use without a lengthy set-up.
+
+<img src="./img/flywheel-build.gif" />
+<br>
+
+## Publish your packages
+
+flox makes it easy to publish and distribute your own packages
+for others to use
+just as they would use any other open source package.
+
+<img src="./img/flywheel-publish.gif" />
+<br>
+
+## Where to go from here
+
+Not sure if you get it yet? Already having ideas for how you can use it?
+Either way, carry on and
+[install flox](https://beta.floxdev.com/docs/getting-started/install-flox/)
+to get started!

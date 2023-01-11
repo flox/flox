@@ -1,0 +1,170 @@
+# Rust CLI and Library
+
+## Contents of the Repo
+
+Currently this repo houses five rust crates:
+
+- `flox`: the flox binary and reimplementation of the `bash` based flox.
+- `flox-rust-sdk`: A library layer implementing flox' capabilities independent
+  of the frontend.
+- `floxd`: a potential flox daemon
+- `runix`: A typesafe abstraction of the Nix CLI - to be released separately.
+- `runix-derive`: A proc macro assisting some runix type implementations.
+
+
+## Development
+
+```
+$ flox develop rust-env
+```
+
+Sets up an environment with dependencies, rust toolchain, variable
+and pre-commit-hooks.
+
+In the enviroment, use [`cargo`](https://doc.rust-lang.org/cargo/)
+to build the rust based cli.
+
+- build and run flox
+   ```
+   $ cargo run -- <args>
+   ```
+- build a debug build of flox
+   ```
+   $ cargo build
+   # builds to ./target/debug/flox
+   ```
+- build an optimized release build of flox
+   ```
+   $ cargo build --release
+   # builds to ./target/release/flox
+   ```
+
+**Note:**
+
+cargo based builds should only be used locally.
+Flox must be buildable using `flox` or `nix`.
+
+- format rust code:
+  ```
+  $ cargo fmt
+  $ cargo fmt --check # just check
+  ```
+  The project is formatted using rustfmt and applies custom rules through
+  `.rustfmt.toml`.
+  A pre-commit hook is set up to check rust file formatting.
+- format nix code
+  ```
+  $ alejandra .
+  $ alejandra . --check # just check
+  ```
+  A pre-commit hook is set up to check nix file formatting.
+- lint rust
+  ```
+  $ cargo clippy --all
+  ```
+- lint all files (including for formatting):
+  ```
+  $ pre-commit run -a
+  ```
+
+## Git
+
+### Commits
+
+This project follows (tries to),
+[conventional commits](https://www.conventionalcommits.org/en/v1.0.0/).
+
+We employ [commitizen](https://commitizen-tools.github.io/commitizen/)
+to help enforcing those rules.
+
+**Commit messges that explain the content of the commit are appreciated**
+
+-----
+
+For starters: commit messages shold have to follow the pattern:
+
+```
+<type>[optional scope]: <description>
+
+[optional body]
+
+[optional footer(s)]
+```
+
+The commit contains the following structural elements,
+to communicate intent to the consumers of your library:
+
+1. **fix**: a commit of the type `fix` patches a bug in your codebase
+   (this correlates with PATCH in Semantic Versioning).
+2. **feat**: a commit of the type feat introduces a new feature to the codebase
+   (this correlates with MINOR in Semantic Versioning).
+3. **BREAKING CHANGE**: a commit that has a footer BREAKING CHANGE:,
+   or appends a ! after the type/scope, introduces a breaking API change
+   (correlating with MAJOR in Semantic Versioning).
+   A BREAKING CHANGE can be part of commits of any type.
+4. types other than fix: and feat: are allowed,
+   for example @commitlint/config-conventional (based on the Angular convention)
+   recommends `build`, `chore`, `ci`, `docs`, `style`, `refactor`, `perf`,
+   `test`, and others.
+5. footers other than BREAKING CHANGE: <description> may be provided
+   and follow a convention similar to git trailer format.
+
+Additional types are not mandated by the Conventional Commits specification,
+and have no implicit effect in Semantic Versioning
+(unless they include a BREAKING CHANGE).
+
+A scope may be provided to a commit’s type,
+to provide additional contextual information
+and is contained within parenthesis, e.g., feat(parser): add ability to parse
+arrays.
+
+-----
+
+A pre-commit hook will ensure only corrextly formatted commit messages are
+committed.
+
+You can also run
+
+```
+$ cz c
+```
+
+or
+
+```
+$ cz commit
+```
+
+to make conforming commits interactively.
+
+### Merges
+
+This repo follows a variant of [git-flow](https://www.atlassian.com/git/tutorials/comparing-workflows/gitflow-workflow).
+
+Features are branched off the `develop` branch and committed back to it,
+upon completion, using GitHub PRs.
+Features should be **squashed and merged** into `develop`,
+or if they represent multiple bigger changes,
+squashed into multiple distinct change sets.
+
+### Releases
+
+**TODO**
+
+
+
+## Testing
+
+0. (temporary) get the latests integration tests
+   ```
+   flox develop .\#rust-env \
+     --override-input flox-floxpkgs-internal/flox github:flox/flox-bash-private
+   ```
+1. run cargo tests
+   - `cargo test` will run all pure rust tests tests
+   - `cargo test -F "extra-tests"` enables
+     unit tests that can't run in the nix sandbox (`-F impure-unit-tests`)
+     and integration tests that are shared with the bash implementation
+     of flox and ensure compatibility.
+   - `hivemind` watches the rust source code and continuously runs `cargo test -F "extra-tests"` on changes
+     can be configured through [./Procfile]
