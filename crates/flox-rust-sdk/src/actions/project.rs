@@ -74,6 +74,13 @@ impl<'flox> Project<'flox, Closed<PathBuf>> {
 }
 
 impl<'flox, Git: GitProvider> ProjectGuard<'flox, Closed<Git>, Closed<PathBuf>> {
+    pub fn workdir(&self) -> Option<&Path> {
+        match self {
+            Guard::Initialized(i) => i.workdir().map(Path::new),
+            Guard::Uninitialized(u) => Some(&u.state.inner),
+        }
+    }
+
     pub async fn init_git(self) -> Result<Project<'flox, Closed<Git>>, ProjectInitGitError<Git>> {
         match self {
             Guard::Initialized(i) => Ok(i),

@@ -41,7 +41,7 @@
       key,
       # Internally used to re-execute ourselves setting the key as the prefix when key=[x] and prefix=null
       keyAsPrefix ? false,
-      # Optional unction used to filter out fields and find descriptions
+      # Optional function used to filter out fields and find descriptions
       processor ? null,
     }: let
       # Copied from nixpkgs

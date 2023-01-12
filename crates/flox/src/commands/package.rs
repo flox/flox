@@ -244,7 +244,7 @@ impl interface::PackageCommands {
                 let name = match command.inner.name {
                     Some(n) => n,
                     None => {
-                        inquire::Text::new("Enter a name to create a new package (enter to skip)")
+                        inquire::Text::new("Enter a name to create a new package (leave empty to only initialize a project)")
                             .with_flox_theme()
                             .prompt()
                             .context("Failed to prompt for name")?
@@ -454,8 +454,10 @@ async fn ensure_project_repo<'flox>(
             );
         })
         .or_else(|g| async move {
+            let in_text = g.workdir().map(|x| format!("in {}", x.display())).unwrap_or_else(|| "here".to_owned());
             if command.inner.init_git
-                || inquire::Confirm::new("Would you like to initialize Git?")
+                || inquire::Confirm::new(&format!("The current directory is not in a Git repository, would you like to create one {}?", in_text))
+                    .with_default(false)
                     .with_flox_theme()
                     .prompt()?
             {
@@ -470,7 +472,7 @@ async fn ensure_project_repo<'flox>(
 
                 Ok(p)
             } else {
-                bail!("a Git repository is required");
+                bail!("You must be inside of a Git repository to initialize a project");
             }
         })
         .await?;
