@@ -23,7 +23,12 @@ pub trait GitProvider: Send + Sized {
     type MvError: std::error::Error;
     type RmError: std::error::Error;
     type AddError: std::error::Error;
-    type DiscoverError: std::error::Error + GitDiscoverError;
+    type DiscoverError: std::error::Error
+        + GitDiscoverError
+        + Send
+        + Sync
+        + std::fmt::Debug
+        + 'static;
 
     async fn discover<P: AsRef<Path>>(path: P) -> Result<Self, Self::DiscoverError>;
     async fn init<P: AsRef<Path>>(path: P) -> Result<Self, Self::InitError>;

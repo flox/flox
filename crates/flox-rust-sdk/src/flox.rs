@@ -21,8 +21,10 @@ use crate::actions::package::Package;
 use crate::actions::project::{self, Project};
 use crate::environment::{self, default_nix_subprocess_env};
 use crate::models::channels::ChannelRegistry;
+pub use crate::models::environment_ref::*;
 pub use crate::models::flox_installable::*;
 use crate::models::stability::Stability;
+use crate::providers::git::GitProvider;
 
 static INPUT_CHARS: Lazy<Vec<char>> = Lazy::new(|| ('a'..='t').into_iter().collect());
 
@@ -149,6 +151,13 @@ impl Flox {
 
     pub fn project<X>(&self, x: X) -> Project<project::Closed<X>> {
         Project::closed(self, x)
+    }
+
+    pub async fn environment_ref<Git: GitProvider>(
+        &self,
+        name: &str,
+    ) -> Result<EnvironmentRef, EnvironmentRefError<Git::DiscoverError>> {
+        EnvironmentRef::new::<Git>(self, name).await
     }
 
     pub fn environment(&self, dir: PathBuf) -> Result<Environment, EnvironmentError> {

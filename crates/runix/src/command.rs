@@ -84,6 +84,7 @@ impl NixCliCommand for Develop {
 pub struct Eval {
     pub flake: FlakeArgs,
     pub eval: EvaluationArgs,
+    pub source: SourceArgs,
     pub eval_args: EvalArgs,
 }
 
@@ -93,6 +94,7 @@ impl NixCliCommand for Eval {
     const EVAL_ARGS: Group<Self, EvaluationArgs> = Some(|d| d.eval.clone());
     const FLAKE_ARGS: Group<Self, FlakeArgs> = Some(|d| d.flake.clone());
     const OWN_ARGS: Group<Self, EvalArgs> = Some(|d| d.eval_args.clone());
+    const SOURCE_ARGS: Group<Self, SourceArgs> = Some(|d| d.source.clone());
     const SUBCOMMAND: &'static [&'static str] = &["eval"];
 }
 impl JsonCommand for Eval {}

@@ -17,13 +17,18 @@ use futures::TryFutureExt;
 use inquire::error::InquireResult;
 use log::info;
 
+use crate::commands::package::interface::ResolveInstallable;
 use crate::config::features::Feature;
 use crate::config::Config;
 use crate::utils::dialog::{Confirm, Dialog, Text};
 use crate::{flox_forward, subcommand_metric};
 
 pub(crate) mod interface {
+    use async_trait::async_trait;
     use bpaf::{Bpaf, Parser};
+    use flox_rust_sdk::flox::{EnvironmentRef, Flox};
+    use flox_rust_sdk::prelude::Installable;
+    use flox_rust_sdk::providers::git::GitProvider;
 
     use super::parseable_macro::parseable;
     use super::{package_args, PackageArgs, Parseable, WithPassthru};
@@ -37,7 +42,68 @@ pub(crate) mod interface {
         ShellInstallable,
         TemplateInstallable,
     };
-    use crate::utils::{InstallableArgument, Parsed};
+    use crate::utils::{InstallableArgument, InstallableDef, Parsed};
+
+    /// TODO:
+    /// I would like a `-e` flag with no following argument to default to `PosOrEnv::Env("")`,
+    /// and no arguments to default to `PosOrEnv::Pos(InstallableArgument<Parsed, T>::default())`
+    #[derive(Clone, Debug)]
+    pub enum PosOrEnv<T: InstallableDef> {
+        Pos(InstallableArgument<Parsed, T>),
+        Env(String),
+    }
+    impl<T: 'static + InstallableDef> PosOrEnv<T> {
+        fn parser() -> impl Parser<Option<PosOrEnv<T>>> {
+            let p = InstallableArgument::positional();
+            let e = bpaf::long("environment")
+                .short('e')
+                .argument("environment")
+                .optional();
+
+            let pp = p.map(|x| x.map(PosOrEnv::Pos));
+            let ee = e.map(|x| x.map(PosOrEnv::Env));
+
+            bpaf::construct!([pp, ee])
+        }
+    }
+
+    #[async_trait(?Send)]
+    pub trait ResolveInstallable<Git: GitProvider> {
+        async fn installable(&self, flox: &Flox) -> anyhow::Result<Installable>;
+    }
+
+    #[async_trait(?Send)]
+    impl<T: InstallableDef + 'static, Git: GitProvider> ResolveInstallable<Git> for PosOrEnv<T> {
+        async fn installable(&self, flox: &Flox) -> anyhow::Result<Installable> {
+            Ok(match self {
+                PosOrEnv::Pos(i) => i.resolve_installable(flox).await?,
+                PosOrEnv::Env(n) => {
+                    EnvironmentRef::new::<Git>(flox, n)
+                        .await?
+                        .get_latest_installable(flox)
+                        .await?
+                },
+            })
+        }
+    }
+
+    #[async_trait(?Send)]
+    impl<T: InstallableDef + 'static, Git: GitProvider> ResolveInstallable<Git>
+        for Option<PosOrEnv<T>>
+    {
+        async fn installable(&self, flox: &Flox) -> anyhow::Result<Installable> {
+            Ok(match self {
+                Some(x) => ResolveInstallable::<Git>::installable(x, flox).await?,
+                None => {
+                    ResolveInstallable::<Git>::installable(
+                        &PosOrEnv::Pos(InstallableArgument::<Parsed, T>::default()),
+                        flox,
+                    )
+                    .await?
+                },
+            })
+        }
+    }
 
     #[derive(Debug, Clone, Bpaf)]
     pub struct Init {
@@ -160,9 +226,9 @@ pub(crate) mod interface {
         #[bpaf(external)]
         pub(crate) bundler_arg: Option<InstallableArgument<Parsed, BundlerInstallable>>,
 
-        /// Package to bundle
-        #[bpaf(external(InstallableArgument::positional))]
-        pub(crate) installable_arg: Option<InstallableArgument<Parsed, BundleInstallable>>,
+        /// Package or environment to bundle
+        #[bpaf(external(PosOrEnv::parser))]
+        pub(crate) installable_arg: Option<PosOrEnv<BundleInstallable>>,
 
         #[bpaf(short('A'), hide)]
         pub _attr_flag: bool,
@@ -389,12 +455,11 @@ impl interface::PackageCommands {
             interface::PackageCommands::Bundle(command) => {
                 subcommand_metric!("bundle");
 
-                let installable_arg = command
-                    .inner
-                    .installable_arg
-                    .unwrap_or_default()
-                    .resolve_installable(&flox)
-                    .await?;
+                let installable_arg = ResolveInstallable::<GitCommandProvider>::installable(
+                    &command.inner.installable_arg,
+                    &flox,
+                )
+                .await?;
 
                 let bundler = command
                     .inner
