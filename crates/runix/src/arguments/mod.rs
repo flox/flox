@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use derive_more::{Deref, From};
 use runix_derive::ToArgs;
 
@@ -15,13 +17,27 @@ pub mod source;
 
 /// Nix arguments
 /// should be a proper struct + de/serialization to and from [&str]
-#[derive(Debug, Default, ToArgs)]
+#[derive(Debug, Default)]
 pub struct NixArgs {
+    /// Configure the cwd for nix actions.
+    ///
+    /// Relevant for instance for init and relative installables
+    pub cwd: Option<PathBuf>,
+
     /// Common arguments to the nix command
     pub common: NixCommonArgs,
 
     /// Nix configuration (overrides nix.conf)
     pub config: NixConfigArgs,
+}
+
+impl ToArgs for NixArgs {
+    fn to_args(&self) -> Vec<String> {
+        [self.config.to_args(), self.common.to_args()]
+            .into_iter()
+            .flatten()
+            .collect()
+    }
 }
 
 /// Installable argument for commands taking a single Installable

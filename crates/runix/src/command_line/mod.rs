@@ -217,6 +217,10 @@ impl NixCommandLine {
             .envs(&self.defaults.environment)
             .args(args.into_iter().flatten());
 
+        if let Some(ref cwd) = nix_args.cwd {
+            command.current_dir(cwd);
+        }
+
         command.as_std().log();
 
         M::run(&mut command).await

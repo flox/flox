@@ -195,17 +195,20 @@ impl<Git: GitProvider> Project<'_, Open<Git>> {
 
         let nix = self.flox.nix(nix_extra_args);
 
+        let root = repo
+            .workdir()
+            .ok_or(InitFloxPackageError::WorkdirNotFound)?;
+
         FlakeInit {
             template: Some(template.to_string().into()),
             ..Default::default()
         }
-        .run(&nix, &NixArgs::default())
+        .run(&nix, &NixArgs {
+            cwd: root.to_path_buf().into(),
+            ..NixArgs::default()
+        })
         .await
         .map_err(InitFloxPackageError::NixInit)?;
-
-        let root = repo
-            .workdir()
-            .ok_or(InitFloxPackageError::WorkdirNotFound)?;
 
         let old_package_path = root.join("pkgs/default.nix");
 
