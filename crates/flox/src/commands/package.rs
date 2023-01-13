@@ -53,17 +53,14 @@ pub(crate) mod interface {
         Env(String),
     }
     impl<T: 'static + InstallableDef> PosOrEnv<T> {
-        fn parser() -> impl Parser<Option<PosOrEnv<T>>> {
-            let p = InstallableArgument::positional();
-            let e = bpaf::long("environment")
+        fn parser() -> impl Parser<PosOrEnv<T>> {
+            let installable = InstallableArgument::positional().map(PosOrEnv::Pos);
+            let environment = bpaf::long("environment")
                 .short('e')
                 .argument("environment")
-                .optional();
+                .map(PosOrEnv::Env);
 
-            let pp = p.map(|x| x.map(PosOrEnv::Pos));
-            let ee = e.map(|x| x.map(PosOrEnv::Env));
-
-            bpaf::construct!([pp, ee])
+            bpaf::construct!([installable, environment])
         }
     }
 
@@ -120,6 +117,7 @@ pub(crate) mod interface {
     pub(crate) fn template_arg(
     ) -> impl Parser<Option<InstallableArgument<Parsed, TemplateInstallable>>> {
         InstallableArgument::parse_with(bpaf::long("template").short('t').argument("template"))
+            .optional()
     }
 
     parseable!(Init, init);
@@ -132,7 +130,7 @@ pub(crate) mod interface {
         #[bpaf(short('A'), hide)]
         pub(crate) _attr_flag: bool,
 
-        #[bpaf(external(InstallableArgument::positional))]
+        #[bpaf(external(InstallableArgument::positional), optional, catch)]
         pub(crate) installable_arg: Option<InstallableArgument<Parsed, BuildInstallable>>,
     }
     parseable!(Build, build);
@@ -147,7 +145,7 @@ pub(crate) mod interface {
         pub _attr_flag: bool,
 
         /// Shell or package to develop on
-        #[bpaf(external(InstallableArgument::positional))]
+        #[bpaf(external(InstallableArgument::positional), optional, catch)]
         pub(crate) installable_arg: Option<InstallableArgument<Parsed, DevelopInstallable>>,
     }
     parseable!(Develop, develop);
@@ -198,7 +196,7 @@ pub(crate) mod interface {
         pub publish_system: String,
 
         /// Package to publish
-        #[bpaf(external(InstallableArgument::positional))]
+        #[bpaf(external(InstallableArgument::positional), optional, catch)]
         pub(crate) _installable_arg: Option<InstallableArgument<Parsed, PublishInstallable>>,
     }
     parseable!(Publish, publish);
@@ -212,7 +210,7 @@ pub(crate) mod interface {
         pub _attr_flag: bool,
 
         /// Package to provide in a shell
-        #[bpaf(external(InstallableArgument::positional))]
+        #[bpaf(external(InstallableArgument::positional), optional, catch)]
         pub(crate) installable_arg: Option<InstallableArgument<Parsed, ShellInstallable>>,
     }
     parseable!(Shell, shell);
@@ -227,7 +225,7 @@ pub(crate) mod interface {
         pub(crate) bundler_arg: Option<InstallableArgument<Parsed, BundlerInstallable>>,
 
         /// Package or environment to bundle
-        #[bpaf(external(PosOrEnv::parser))]
+        #[bpaf(external(PosOrEnv::parser), optional, catch)]
         pub(crate) installable_arg: Option<PosOrEnv<BundleInstallable>>,
 
         #[bpaf(short('A'), hide)]
@@ -237,6 +235,7 @@ pub(crate) mod interface {
     pub(crate) fn bundler_arg(
     ) -> impl Parser<Option<InstallableArgument<Parsed, BundlerInstallable>>> {
         InstallableArgument::parse_with(bpaf::long("bundler").short('b').argument("bundler"))
+            .optional()
     }
 
     #[derive(Bpaf, Clone, Debug)]
@@ -246,7 +245,7 @@ pub(crate) mod interface {
 
         #[bpaf(short('A'), hide)]
         pub(crate) _attr_flag: bool,
-        #[bpaf(external(InstallableArgument::positional))]
+        #[bpaf(external(InstallableArgument::positional), optional, catch)]
         pub(crate) installable_arg: Option<InstallableArgument<Parsed, RunInstallable>>,
     }
     parseable!(Run, run);

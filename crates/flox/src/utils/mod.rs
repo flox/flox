@@ -247,12 +247,12 @@ impl<Matching: InstallableDef + 'static> InstallableArgument<Parsed, Matching> {
         .await
     }
 
-    pub fn positional() -> impl Parser<Option<Self>> {
+    pub fn positional() -> impl Parser<Self> {
         let parser = bpaf::positional::<Unparsed>("INSTALLABLE");
         Self::parse_with(parser)
     }
 
-    pub fn parse_with(parser: impl Parser<Unparsed>) -> impl Parser<Option<Self>> {
+    pub fn parse_with(parser: impl Parser<Unparsed>) -> impl Parser<Self> {
         let unparsed = parser
             .map(InstallableArgument::<Unparsed, Matching>::unparsed)
             .complete(|u| u.complete_installable());
@@ -261,8 +261,6 @@ impl<Matching: InstallableDef + 'static> InstallableArgument<Parsed, Matching> {
             .map(|u| u.parse())
             .guard(Result::is_ok, "Is not ok")
             .map(Result::unwrap)
-            .optional()
-            .catch()
     }
 }
 impl<Matching: InstallableDef> FromStr for InstallableArgument<Unparsed, Matching> {
