@@ -26,6 +26,7 @@ use flox_rust_sdk::flox::{Flox, FLOX_SH};
 async fn run(args: FloxArgs) -> Result<()> {
     init_logger(Some(args.verbosity.clone()), Some(args.debug));
     set_user()?;
+    set_parent_process_id();
     args.handle(config::Config::parse()?).await?;
     Ok(())
 }
@@ -196,4 +197,14 @@ fn set_user() -> Result<()> {
         };
         Ok(())
     }
+}
+
+/// Stores the PID of the executing shell as shells do not set $SHELL
+/// when they are launched.
+///
+/// $FLOX_PARENT_PID is used when launching sub-shells to ensure users
+/// keep running their chosen shell.
+fn set_parent_process_id() {
+    let ppid = nix::unistd::getppid();
+    env::set_var("FLOX_PARENT_PID", ppid.to_string());
 }
