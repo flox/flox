@@ -12,7 +12,7 @@ use serde::Deserialize;
 use xdg::BaseDirectories;
 
 /// Name of flox managed directories (config, data, cache)
-const FLOX_DIR_NAME: &'_ str = "flox-preview";
+const FLOX_DIR_NAME: &'_ str = "flox";
 
 #[derive(Clone, Debug, Deserialize, Default)]
 pub struct Config {
