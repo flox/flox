@@ -112,15 +112,14 @@ async fn sync_bash_metrics_consent(data_dir: &Path, cache_dir: &Path) -> Result<
         },
     };
 
-    let bash_config_home =
+    let bash_flox_dirs =
         xdg::BaseDirectories::with_prefix("flox").context("Unable to find config dir")?;
-    let bash_user_meta_path = bash_config_home
-        .find_config_file("floxUserMeta.json")
-        .context("Unable to find flox config file: `floxUserMeta.json`")?;
+    let bash_user_meta_path = bash_flox_dirs.get_config_home().join("floxUserMeta.json");
 
     let mut bash_user_meta_file = tokio::fs::OpenOptions::new()
         .read(true)
         .write(true)
+        .create(true)
         .open(&bash_user_meta_path)
         .await
         .context("Unable to open bash flox meta")?;
@@ -132,7 +131,11 @@ async fn sync_bash_metrics_consent(data_dir: &Path, cache_dir: &Path) -> Result<
             .await
             .context("Unable to read bash flox meta")?;
 
-        serde_json::from_str(&bash_user_meta_json).context("Unable to parse bash flox meta")?
+        if bash_user_meta_json.is_empty() {
+            json!({})
+        } else {
+            serde_json::from_str(&bash_user_meta_json).context("Unable to parse bash flox meta")?
+        }
     };
 
     json["floxMetricsConsent"] = json!(if metrics_enabled { 1 } else { 0 });

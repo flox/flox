@@ -85,10 +85,9 @@ pub async fn init_telemetry_consent(data_dir: &Path, cache_dir: &Path) -> Result
 
     debug!("Metrics consent not recorded");
 
-    let bash_user_meta_path = xdg::BaseDirectories::with_prefix("flox")
-        .context("Unable to find config dir")?
-        .find_config_file("floxUserMeta.json")
-        .context("Unable to find floxUserMeta.json")?;
+    let bash_flox_dirs =
+        xdg::BaseDirectories::with_prefix("flox").context("Unable to find config dir")?;
+    let bash_user_meta_path = bash_flox_dirs.get_config_home().join("floxUserMeta.json");
 
     if let Ok(mut file) = tokio::fs::File::open(&bash_user_meta_path).await {
         trace!("Attempting to extract metrics consent value from bash flox");
