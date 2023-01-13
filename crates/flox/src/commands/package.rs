@@ -52,15 +52,16 @@ pub(crate) mod interface {
         Pos(InstallableArgument<Parsed, T>),
         Env(String),
     }
-    impl<T: 'static + InstallableDef> PosOrEnv<T> {
-        fn parser() -> impl Parser<PosOrEnv<T>> {
+    impl<T: 'static + InstallableDef> Parseable for PosOrEnv<T> {
+        fn parse() -> bpaf::parsers::ParseBox<Self> {
             let installable = InstallableArgument::positional().map(PosOrEnv::Pos);
             let environment = bpaf::long("environment")
                 .short('e')
                 .argument("environment")
                 .map(PosOrEnv::Env);
 
-            bpaf::construct!([installable, environment])
+            let parser = bpaf::construct!([installable, environment]);
+            bpaf::construct!(parser) // turn into a box
         }
     }
 
@@ -225,7 +226,7 @@ pub(crate) mod interface {
         pub(crate) bundler_arg: Option<InstallableArgument<Parsed, BundlerInstallable>>,
 
         /// Package or environment to bundle
-        #[bpaf(external(PosOrEnv::parser), optional, catch)]
+        #[bpaf(external(PosOrEnv::parse), optional, catch)]
         pub(crate) installable_arg: Option<PosOrEnv<BundleInstallable>>,
 
         #[bpaf(short('A'), hide)]
