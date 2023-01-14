@@ -23,7 +23,7 @@ pub enum Stability {
 impl Stability {
     pub fn as_override(&self) -> OverrideInput {
         (
-            "floxpkgs/nixpkgs/nixpkgs".into(),
+            "flox-floxpkgs/nixpkgs/nixpkgs".into(),
             format!("flake:nixpkgs-{}", self),
         )
             .into()
