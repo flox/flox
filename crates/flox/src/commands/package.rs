@@ -237,6 +237,7 @@ impl interface::PackageCommands {
                 subcommand_metric!("init");
 
                 let cwd = std::env::current_dir()?;
+                let basename = cwd.file_name().and_then(|x|x.to_str()).unwrap_or("NAME").to_owned();
 
                 let git_repo = ensure_project_repo(&flox, cwd, &command).await?;
                 let project = ensure_project(git_repo, &command).await?;
@@ -244,8 +245,9 @@ impl interface::PackageCommands {
                 let name = match command.inner.name {
                     Some(n) => n,
                     None => {
-                        inquire::Text::new("Enter a name to create a new package (leave empty to only initialize a project)")
+                        inquire::Text::new("Enter package name")
                             .with_flox_theme()
+                            .with_default(&basename)
                             .prompt()
                             .context("Failed to prompt for name")?
                     },
