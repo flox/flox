@@ -126,8 +126,8 @@ impl ResolvedInstallableMatch {
             flakeref: self.flakeref,
             // Join the prefix and key into a safe attrpath, adding the associated system if present
             attr_path: match self.system {
-                Some(ref s) => format!("{:?}.{:?}.{}", &self.prefix, s, nix_str_key),
-                None => format!("{:?}.{}", &self.prefix, nix_str_key),
+                Some(ref s) => format!(".{:?}.{:?}.{}", &self.prefix, s, nix_str_key),
+                None => format!(".{:?}.{}", &self.prefix, nix_str_key),
             },
         }
     }
