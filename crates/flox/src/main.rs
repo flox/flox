@@ -149,7 +149,10 @@ async fn sync_bash_metrics_consent(data_dir: &Path, cache_dir: &Path) -> Result<
 
     let bash_flox_dirs =
         xdg::BaseDirectories::with_prefix("flox").context("Unable to find config dir")?;
-    let bash_user_meta_path = bash_flox_dirs.get_config_home().join("floxUserMeta.json");
+    let bash_config_home = bash_flox_dirs.get_config_home();
+    let bash_user_meta_path = bash_config_home.join("floxUserMeta.json");
+
+    tokio::fs::create_dir_all(bash_config_home).await?;
 
     let mut bash_user_meta_file = tokio::fs::OpenOptions::new()
         .read(true)
@@ -174,9 +177,11 @@ async fn sync_bash_metrics_consent(data_dir: &Path, cache_dir: &Path) -> Result<
     };
 
     json["floxMetricsConsent"] = json!(if metrics_enabled { 1 } else { 0 });
+    json["version"] = json!(1);
 
-    let bash_user_meta_json = serde_json::to_string_pretty(&json)
+    let mut bash_user_meta_json = serde_json::to_string_pretty(&json)
         .context("Failed to serialize modified bash flox meta")?;
+    bash_user_meta_json.push('\n');
 
     bash_user_meta_file.set_len(0).await?;
     bash_user_meta_file.rewind().await?;
