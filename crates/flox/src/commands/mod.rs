@@ -60,7 +60,7 @@ pub struct FloxArgs {
     pub verbosity: Verbosity,
 
     /// Debug mode.
-    #[bpaf(short, long, switch, many, map(vec_not_empty))]
+    #[bpaf(long, switch, many, map(vec_not_empty))]
     pub debug: bool,
 
     #[bpaf(external(commands))]

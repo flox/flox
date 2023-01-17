@@ -12,7 +12,7 @@ and must be specified _before_ the `<command>` argument.
 -v, \--verbose
 :   Verbose mode. Invoke multiple times for increasing detail.
 
--d, \--debug
+\--debug
 :   Debug mode. Invoke multiple times for increasing detail.
 
 -V, \--version

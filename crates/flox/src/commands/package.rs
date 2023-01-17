@@ -237,20 +237,22 @@ impl interface::PackageCommands {
                 subcommand_metric!("init");
 
                 let cwd = std::env::current_dir()?;
-                let basename = cwd.file_name().and_then(|x|x.to_str()).unwrap_or("NAME").to_owned();
+                let basename = cwd
+                    .file_name()
+                    .and_then(|x| x.to_str())
+                    .unwrap_or("NAME")
+                    .to_owned();
 
                 let git_repo = ensure_project_repo(&flox, cwd, &command).await?;
                 let project = ensure_project(git_repo, &command).await?;
 
                 let name = match command.inner.name {
                     Some(n) => n,
-                    None => {
-                        inquire::Text::new("Enter package name")
-                            .with_flox_theme()
-                            .with_default(&basename)
-                            .prompt()
-                            .context("Failed to prompt for name")?
-                    },
+                    None => inquire::Text::new("Enter package name")
+                        .with_flox_theme()
+                        .with_default(&basename)
+                        .prompt()
+                        .context("Failed to prompt for name")?,
                 };
 
                 let name = name.trim();

@@ -38,7 +38,7 @@ async fn main() -> ExitCode {
     init_logger(None, None);
     let (verbosity, debug) = {
         let verbosity_parser = commands::verbosity();
-        let debug_parser = bpaf::long("debug").short('d').switch();
+        let debug_parser = bpaf::long("debug").switch();
         let other_parser = bpaf::any::<String>("ANY").many();
 
         bpaf::construct!(verbosity_parser, debug_parser, other_parser)

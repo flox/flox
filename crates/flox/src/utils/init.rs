@@ -36,22 +36,21 @@ impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for JustStderr {
     }
 }
 
+type LayerType = tracing_subscriber::layer::Layered<PosthogLayer, tracing_subscriber::Registry>;
+type ReloadHandle<T> = tracing_subscriber::reload::Handle<T, LayerType>;
+
 #[allow(clippy::type_complexity)]
-static LOGGER_HANDLE: OnceCell<
-    tracing_subscriber::reload::Handle<
-        tracing_subscriber::filter::Filtered<
-            tracing_subscriber::fmt::Layer<
-                tracing_subscriber::layer::Layered<PosthogLayer, tracing_subscriber::Registry>,
-                tracing_subscriber::fmt::format::DefaultFields,
-                LogFormatter,
-                JustStderr,
-            >,
-            tracing_subscriber::EnvFilter,
-            tracing_subscriber::layer::Layered<PosthogLayer, tracing_subscriber::Registry>,
+static LOGGER_HANDLE: OnceCell<(
+    ReloadHandle<tracing_subscriber::EnvFilter>,
+    ReloadHandle<
+        tracing_subscriber::fmt::Layer<
+            LayerType,
+            tracing_subscriber::fmt::format::DefaultFields,
+            LogFormatter,
+            JustStderr,
         >,
-        tracing_subscriber::layer::Layered<PosthogLayer, tracing_subscriber::Registry>,
     >,
-> = OnceCell::new();
+)> = OnceCell::new();
 
 async fn write_metrics_uuid(uuid_path: &Path, consent: bool) -> Result<()> {
     let mut file = tokio::fs::File::create(&uuid_path).await?;
@@ -163,53 +162,66 @@ pub fn init_logger(verbosity: Option<Verbosity>, debug: Option<bool>) {
     let verbosity = verbosity.unwrap_or_default();
     let debug = debug.unwrap_or(false);
 
-    let log_filter = match (verbosity, debug) {
-        (Verbosity::Quiet, false) => "off,flox=error",
-        (Verbosity::Quiet, true) => "off,flox=error,posix=debug",
-        (Verbosity::Verbose(0), false) => "off,flox=info",
-        (Verbosity::Verbose(0), true) => "off,flox=debug,posix=debug",
-        (Verbosity::Verbose(1), false) => "off,flox=info,flox-rust-sdk=info,runix=info",
-        (Verbosity::Verbose(1), true) => {
+    let log_filter = match (debug, verbosity) {
+        // Show only errors
+        (false, Verbosity::Quiet) => "off,flox=error",
+        // Show our own info logs
+        (false, Verbosity::Verbose(0)) => "off,flox=info",
+        // Also show POSIX debug
+        (false, Verbosity::Verbose(1)) => "off,flox=info,posix=debug",
+        // Also show info from our libraries
+        (false, Verbosity::Verbose(2)) => {
+            "off,flox=debug,flox-rust-sdk=info,runix=info,posix=debug"
+        },
+        // Also show debug from our libraries
+        (true, Verbosity::Quiet) | (false, Verbosity::Verbose(3)) => {
             "off,flox=debug,flox-rust-sdk=debug,runix=debug,posix=debug"
         },
-        (Verbosity::Verbose(2), _) => "debug",
-        (Verbosity::Verbose(_), _) => "trace",
+        // Also show debug from everything
+        (true, Verbosity::Verbose(0)) | (false, Verbosity::Verbose(4)) => "debug",
+        // Also show trace from everything
+        (true, Verbosity::Verbose(_)) | (false, Verbosity::Verbose(_)) => "trace",
     };
 
-    let handle = LOGGER_HANDLE.get_or_init(|| {
+    let (filter_handle, fmt_handle) = LOGGER_HANDLE.get_or_init(|| {
         debug!("Initializing logger (how are you seeing this?)");
 
-        let (fmt_reloadable, fmt_reload_handle) = tracing_subscriber::reload::Layer::new(
-            tracing_subscriber::fmt::layer()
-                .with_writer(JustStderr)
-                .event_format(logger::LogFormatter { debug })
-                .with_filter(
-                    tracing_subscriber::filter::EnvFilter::try_from_default_env()
-                        .or_else(|_| tracing_subscriber::filter::EnvFilter::try_new(log_filter))
-                        .unwrap(),
-                ),
-        );
+        let filter = tracing_subscriber::filter::EnvFilter::try_from_default_env()
+            .or_else(|_| tracing_subscriber::filter::EnvFilter::try_new(log_filter))
+            .unwrap();
+        let (filter_reloadable, filter_reload_handle) =
+            tracing_subscriber::reload::Layer::new(filter);
+
+        let fmt = tracing_subscriber::fmt::layer()
+            .with_writer(JustStderr)
+            .event_format(logger::LogFormatter { debug });
+
+        let (fmt_reloadable, fmt_reload_handle) = tracing_subscriber::reload::Layer::new(fmt);
+
+        let fmt_filtered = fmt_reloadable.with_filter(filter_reloadable);
 
         tracing_subscriber::registry()
             .with(PosthogLayer::new())
-            .with(fmt_reloadable)
+            .with(fmt_filtered)
             .init();
 
-        fmt_reload_handle
+        (filter_reload_handle, fmt_reload_handle)
     });
 
-    debug!("Updating logger");
-
-    if let Err(err) = handle.modify(|layer| {
-        *layer.filter_mut() = tracing_subscriber::filter::EnvFilter::try_from_default_env()
+    if let Err(err) = filter_handle.modify(|layer| {
+        *layer = tracing_subscriber::filter::EnvFilter::try_from_default_env()
             .or_else(|_| tracing_subscriber::filter::EnvFilter::try_new(log_filter))
             .unwrap();
+    }) {
+        error!("Updating logger filter failed: {}", err);
+    }
 
-        *layer.inner_mut() = tracing_subscriber::fmt::layer()
+    if let Err(err) = fmt_handle.modify(|layer| {
+        *layer = tracing_subscriber::fmt::layer()
             .with_writer(JustStderr)
             .event_format(logger::LogFormatter { debug });
     }) {
-        error!("Updating logger failed: {}", err);
+        error!("Updating logger filter failed: {}", err);
     }
 }
 
