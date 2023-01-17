@@ -1,4 +1,5 @@
 use std::env;
+use std::ffi::OsString;
 use std::fmt::{Debug, Display};
 use std::os::unix::process::ExitStatusExt;
 use std::path::Path;
@@ -9,7 +10,8 @@ use bpaf::Parser;
 use commands::FloxArgs;
 use flox_rust_sdk::environment::default_nix_subprocess_env;
 use fslock::LockFile;
-use log::{debug, error, warn};
+use itertools::Itertools;
+use log::{debug, error, info, warn};
 use serde_json::json;
 use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
 use tokio::process::Command;
@@ -47,7 +49,40 @@ async fn main() -> ExitCode {
     };
     init_logger(Some(verbosity), Some(debug));
 
-    let args = commands::flox_args().run();
+    let args = commands::flox_args().try_run().map_err(|err| match err {
+        bpaf::ParseFailure::Stdout(_) => err,
+        bpaf::ParseFailure::Stderr(message) => {
+            let mut help_args = env::args_os()
+                .skip(1)
+                .take_while(|arg| arg != "")
+                .collect_vec();
+            help_args.push(OsString::from("--help".to_string()));
+            let failure = commands::flox_args()
+                .run_inner(help_args[..].into())
+                .err()
+                .unwrap();
+            match failure {
+                bpaf::ParseFailure::Stdout(ref e) | bpaf::ParseFailure::Stderr(ref e) => {
+                    bpaf::ParseFailure::Stderr(format!("{message}\n\n{e}"))
+                },
+            }
+        },
+    });
+
+    if let Some(parse_err) = args.as_ref().err() {
+        match parse_err {
+            bpaf::ParseFailure::Stdout(m) => {
+                info!("{m}");
+                return ExitCode::from(0);
+            },
+            bpaf::ParseFailure::Stderr(m) => {
+                error!("{m}");
+                return ExitCode::from(1);
+            },
+        }
+    }
+    let args = args.unwrap();
+
     let debug = args.debug;
 
     match run(args).await {
