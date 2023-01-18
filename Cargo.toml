@@ -2,3 +2,6 @@
 members = ["crates/*"]
 
 default-members = ["crates/flox"]
+
+[patch.crates-io]
+bpaf = { git = "https://github.com/ysndr/bpaf", branch = "error/more-suggestions" }
