@@ -6,7 +6,7 @@ mod package;
 use std::{env, fs};
 
 use anyhow::Result;
-use bpaf::Bpaf;
+use bpaf::{Bpaf, Parser};
 use flox_rust_sdk::flox::{Flox, FLOX_VERSION};
 use tempfile::TempDir;
 
@@ -125,7 +125,6 @@ impl FloxArgs {
             Commands::Environment(ref environment) => environment.handle(flox).await?,
             Commands::Channel(ref channel) => channel.handle(flox).await?,
             Commands::General(ref general) => general.handle(flox).await?,
-            Commands::Prefix => println!(env!("out")),
         }
 
         Ok(())
@@ -155,7 +154,23 @@ pub enum Commands {
         #[bpaf(group_help("General Commands"))]
         GeneralCommands,
     ),
-    /// For development only
-    #[bpaf(hide)]
-    Prefix,
+}
+
+/// Special command to check for the presence of the `--prefix` flag.
+///
+/// With `--prefix` the application will print the prefix of the program
+/// and quit early.
+#[derive(Bpaf, Default)]
+pub struct Prefix {
+    #[bpaf(long)]
+    prefix: bool,
+    #[bpaf(any, many)]
+    _catchall: Vec<String>,
+}
+
+impl Prefix {
+    /// Parses to [Self] and extract the `--prefix` flag
+    pub fn check() -> bool {
+        prefix().to_options().try_run().unwrap_or_default().prefix
+    }
 }

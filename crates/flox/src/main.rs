@@ -7,7 +7,7 @@ use std::process::{ExitCode, ExitStatus};
 
 use anyhow::{Context, Result};
 use bpaf::Parser;
-use commands::FloxArgs;
+use commands::{FloxArgs, Prefix};
 use flox_rust_sdk::environment::default_nix_subprocess_env;
 use fslock::LockFile;
 use itertools::Itertools;
@@ -35,6 +35,12 @@ async fn run(args: FloxArgs) -> Result<()> {
 
 #[tokio::main]
 async fn main() -> ExitCode {
+    // Quit early if `--prefix` is present
+    if Prefix::check() {
+        println!(env!("out"));
+        return ExitCode::from(0);
+    }
+
     init_logger(None, None);
     let (verbosity, debug) = {
         let verbosity_parser = commands::verbosity();
