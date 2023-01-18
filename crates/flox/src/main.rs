@@ -166,7 +166,9 @@ async fn sync_bash_metrics_consent(data_dir: &Path, cache_dir: &Path) -> Result<
         .create(true)
         .open(&bash_user_meta_path)
         .await
-        .context("Unable to open bash flox meta")?;
+        .context(format!(
+            "Unable to open (rw) legacy config file at {bash_user_meta_path:?}"
+        ))?;
 
     let mut json: serde_json::Value = {
         let mut bash_user_meta_json = String::new();
