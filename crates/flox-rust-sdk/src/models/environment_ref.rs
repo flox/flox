@@ -50,28 +50,33 @@ pub enum FindProjectError {
 /// Works similarly to `tokio::fs::canonicalize`,
 /// except it will tolerate a path being missing by instead checking the parent (and so on).
 ///
-/// It will keep a record of all components it had to remove before finding the file in `removed`
-#[async_recursion]
-async fn rough_canonicalize(path: &Path, removed: &mut Vec<OsString>) -> std::io::Result<PathBuf> {
-    match tokio::fs::canonicalize(path).await {
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-            let mut parts = path.iter().collect::<Vec<_>>();
-            match parts.len() {
-                0 => Err(err),
-                len => {
-                    let last = parts.remove(len - 1);
-                    removed.push(last.to_owned());
+/// Instead of returning the canon version of the given path,
+/// it returns the closest valid parent to it, and a list of remaining components.
+async fn rough_canonicalize(path: &Path) -> std::io::Result<(PathBuf, Vec<OsString>)> {
+    let mut last_err = match tokio::fs::canonicalize(path).await {
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => err,
+        Err(err) => return Err(err),
+        Ok(p) => return Ok((p, vec![])),
+    };
 
-                    let shortened = parts.into_iter().collect::<PathBuf>();
+    let mut parts = path.iter().collect::<Vec<_>>();
+    let mut removed = Vec::new();
 
-                    trace!("Re-trying canonicalize on parent: {shortened:?} {removed:?}",);
-                    rough_canonicalize(&shortened, removed).await
-                },
-            }
-        },
-        Err(err) => Err(err),
-        Ok(p) => Ok(p.join(removed.iter().collect::<PathBuf>())),
+    while !parts.is_empty() {
+        let last = parts.remove(parts.len() - 1);
+        removed.push(last.to_owned());
+
+        match tokio::fs::canonicalize(path).await {
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                last_err = err;
+                continue;
+            },
+            Err(err) => return Err(err),
+            Ok(p) => return Ok((p, removed)),
+        }
     }
+
+    Err(last_err)
 }
 
 impl<'flox, Git: GitProvider> Project<'flox, Git> {
@@ -86,14 +91,12 @@ impl<'flox, Git: GitProvider> Project<'flox, Git> {
 
         trace!("Finding project dir for: {environment_path:?}");
 
-        let mut removed = Vec::new();
-
-        match rough_canonicalize(&environment_path, &mut removed).await {
+        match rough_canonicalize(&environment_path).await {
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
                 Err(FindProjectError::Missing)
             },
             Err(err) => Err(FindProjectError::TryExists(err)),
-            Ok(real_path) => {
+            Ok((real_path, removed)) => {
                 if removed.is_empty() {
                     Ok(real_path)
                 } else {
@@ -179,8 +182,9 @@ impl<'flox, Git: GitProvider> Project<'flox, Git> {
         };
 
         // The above `subdir` and `name` logic can give us an empty name
-        // which results in a faulty attrpath.
-        // Make this a hard error.
+        // which results in a faulty attrpath when reconstructing.
+        // Make this a hard error for now.
+        // TODO: integrate with a prompt/resolution to ask which name to use?
         if name == Path::new("") {
             return Err(FindProjectError::NoName);
         }
@@ -201,11 +205,12 @@ impl<'flox, Git: GitProvider> Project<'flox, Git> {
             ),
             attr_path: format!(
                 ".floxEnvs.{system}.{name}",
-                // Split the name apart and build it together separated with `.` to make a full attrpath
+                // Split the name apart and build it together separated with `.` to make a full attrpath,
+                // using escaping just in case.
                 name = self
                     .name
                     .iter()
-                    .map(|x| x.to_string_lossy())
+                    .map(|x| format!("{x:?}"))
                     .collect::<Vec<_>>()
                     .join(".")
             ),
@@ -222,8 +227,8 @@ pub struct Named<Git: GitProvider> {
 
 #[derive(Error, Debug)]
 pub enum NamedGetCurrentGenError<Git: GitProvider> {
-    #[error("Error printing metadata: {0}")]
-    Show(Git::ShowError),
+    #[error("Error printing named environment metadata for branch {0}: {1}")]
+    Show(String, Git::ShowError),
     #[error("Metadata file is not valid unicode")]
     MetadataEncoding,
     #[error("Error parsing current generation from metadata: {0}")]
@@ -326,7 +331,9 @@ impl<Git: GitProvider> Named<Git> {
             .git
             .show(&format!("{system}.{name}:metadata.json", name = self.name))
             .await
-            .map_err(NamedGetCurrentGenError::Show)?;
+            .map_err(|e| {
+                NamedGetCurrentGenError::Show(format!("{system}.{name}", name = self.name), e)
+            })?;
 
         let out_str = out_os_str
             .to_str()
