@@ -130,6 +130,10 @@ pub enum NamedGetCurrentGenError<Git: GitProvider> {
     MetadataEncoding,
     #[error("Error parsing current generation from metadata: {0}")]
     Parse(#[from] serde_json::Error),
+    #[error("`currentGen` attribute is missing")]
+    NoCurrentGen,
+    #[error("`currentGen` attribute is wrong type")]
+    BadCurrentGen,
 }
 
 #[derive(Error, Debug)]
@@ -230,7 +234,14 @@ impl<Git: GitProvider> Named<Git> {
             .to_str()
             .ok_or(NamedGetCurrentGenError::MetadataEncoding)?;
 
-        Ok(serde_json::from_str(out_str)?)
+        let out: serde_json::Value = serde_json::from_str(out_str)?;
+
+        Ok(out
+            .get("currentGen")
+            .ok_or(NamedGetCurrentGenError::NoCurrentGen)?
+            .as_str()
+            .ok_or(NamedGetCurrentGenError::BadCurrentGen)?
+            .to_owned())
     }
 }
 
