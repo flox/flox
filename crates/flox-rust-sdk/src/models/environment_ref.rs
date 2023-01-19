@@ -110,7 +110,7 @@ impl<'flox, Git: GitProvider> Project<'flox, Git> {
                 "git+file://{project_dir}",
                 project_dir = self.project.path().display()
             ),
-            attr_path: format!("floxEnvs.{system}.{name}", name = self.name.display()),
+            attr_path: format!(".floxEnvs.{system}.{name}", name = self.name.display()),
         }
     }
 }
