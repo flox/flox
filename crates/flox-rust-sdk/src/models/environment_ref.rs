@@ -1,6 +1,7 @@
 use std::io::{self, ErrorKind};
-use std::path::{PathBuf, StripPrefixError};
+use std::path::PathBuf;
 
+use async_recursion::async_recursion;
 use log::debug;
 use runix::installable::Installable;
 use thiserror::Error;
@@ -33,27 +34,39 @@ pub enum FindProjectError {
     OpenError,
     #[error("Found Git repo, but it is not a project")]
     NotProject,
-    // TODO be more informative about (or handle) symlinks or fs boundaries or something?
-    #[error(
-        "Environment is a part of Git repo, but the workdir is not a prefix of environment: {0}"
-    )]
-    StripPrefix(StripPrefixError),
     #[error("Environment is in a Git repo, but it is bare")]
     BareRepo,
+    #[error("Does not end in a name")]
+    NoName,
 }
 
 impl<'flox, Git: GitProvider> Project<'flox, Git> {
+    #[async_recursion]
+    pub async fn find_dir(environment_path: PathBuf) -> Result<PathBuf, FindProjectError> {
+        match environment_path.canonicalize() {
+            Err(err) => match err.kind() {
+                io::ErrorKind::NotFound
+                    if environment_path.parent().map(|p| !p.ends_with("pkgs")) == Some(true) =>
+                {
+                    let file_name = environment_path
+                        .file_name()
+                        .ok_or(FindProjectError::NoName)?;
+                    let parent = environment_path.parent().ok_or(FindProjectError::Missing)?;
+
+                    Self::find_dir(parent.join("pkgs").join(file_name)).await
+                },
+                io::ErrorKind::NotFound => Err(FindProjectError::Missing),
+                _ => Err(FindProjectError::TryExists(err)),
+            },
+            Ok(x) => Ok(x),
+        }
+    }
+
     pub async fn find(
         flox: &'flox Flox,
         environment_path_str: &str,
     ) -> Result<Project<'flox, Git>, FindProjectError> {
-        let environment_path = match PathBuf::from(environment_path_str).canonicalize() {
-            Err(err) => match err.kind() {
-                io::ErrorKind::NotFound => return Err(FindProjectError::Missing),
-                _ => return Err(FindProjectError::TryExists(err)),
-            },
-            Ok(x) => x,
-        };
+        let environment_path = Self::find_dir(PathBuf::from(environment_path_str)).await?;
 
         let git_repo = flox
             .project(environment_path.clone())
@@ -73,15 +86,21 @@ impl<'flox, Git: GitProvider> Project<'flox, Git> {
             .map_err(|_| FindProjectError::NotProject)?;
 
         let workdir = project.workdir().ok_or(FindProjectError::BareRepo)?;
-        let name = environment_path
-            .strip_prefix(workdir)
-            .map_err(FindProjectError::StripPrefix)?
-            .to_owned();
+
+        let name = match environment_path.strip_prefix(workdir) {
+            Ok(s) => s,
+            Err(_) => &environment_path,
+        };
+
+        let name = match name.strip_prefix("pkgs") {
+            Ok(s) => s,
+            Err(_) => name,
+        };
 
         Ok(Project {
             flox,
             project,
-            name,
+            name: name.to_owned(),
         })
     }
 
@@ -237,9 +256,13 @@ impl<Git: GitProvider> EnvironmentRef<'_, Git> {
         flox: &'flox Flox,
         environment_name: &str,
     ) -> Result<EnvironmentRef<'flox, Git>, EnvironmentRefError<Git>> {
+        debug!("Finding environment for {}", environment_name);
+
         match Project::find(flox, environment_name).await {
             Ok(p) => Ok(EnvironmentRef::Project(p)),
             Err(FindProjectError::Missing | FindProjectError::NotInGitRepo) => {
+                debug!("Couldn't find project environment, searching for named environment");
+
                 Ok(EnvironmentRef::Named(
                     Named::find(flox, environment_name)
                         .await
@@ -254,15 +277,11 @@ impl<Git: GitProvider> EnvironmentRef<'_, Git> {
         &self,
         flox: &Flox,
     ) -> Result<Installable, NamedGetCurrentGenError<Git>> {
-        debug!("Resolving env to installable: {:?}", self);
-
-        let system = &flox.system;
-
         match self {
-            EnvironmentRef::Project(project_ref) => Ok(project_ref.get_installable(system)),
+            EnvironmentRef::Project(project_ref) => Ok(project_ref.get_installable(&flox.system)),
             EnvironmentRef::Named(named_ref) => {
-                let gen = named_ref.get_current_gen(system).await?;
-                Ok(named_ref.get_installable(flox, system, &gen))
+                let gen = named_ref.get_current_gen(&flox.system).await?;
+                Ok(named_ref.get_installable(flox, &flox.system, &gen))
             },
         }
     }
