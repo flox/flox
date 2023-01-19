@@ -1,8 +1,10 @@
+use std::borrow::Cow;
+use std::ffi::{OsStr, OsString};
 use std::io::{self, ErrorKind};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use async_recursion::async_recursion;
-use log::debug;
+use log::{debug, trace};
 use runix::installable::Installable;
 use thiserror::Error;
 
@@ -13,17 +15,20 @@ use crate::providers::git::GitProvider;
 static DEFAULT_NAME: &str = "default";
 static DEFAULT_OWNER: &str = "local";
 
+static DEFAULT_PROJECT_ENV_DIR: &str = "pkgs";
+
 #[derive(Debug)]
 pub struct Project<'flox, Git: GitProvider> {
     pub flox: &'flox Flox,
     pub project: project::Project<'flox, project::Open<Git>>,
     pub name: PathBuf,
+    pub subdir: OsString,
 }
 
 #[derive(Error, Debug)]
 pub enum FindProjectError {
     #[error("Error checking whether environment is a path: {0}")]
-    TryExists(io::Error),
+    TryExists(#[from] io::Error),
     #[error("Path for environment not found")]
     Missing,
     #[error("Error trying to discover Git repo")]
@@ -40,34 +45,87 @@ pub enum FindProjectError {
     NoName,
 }
 
+/// Roughly canonicalize a path
+///
+/// Works similarly to `tokio::fs::canonicalize`,
+/// except it will tolerate a path being missing by instead checking the parent (and so on).
+///
+/// It will keep a record of all components it had to remove before finding the file in `removed`
+#[async_recursion]
+async fn rough_canonicalize(path: &Path, removed: &mut Vec<OsString>) -> std::io::Result<PathBuf> {
+    match tokio::fs::canonicalize(path).await {
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            let mut parts = path.iter().collect::<Vec<_>>();
+            match parts.len() {
+                0 => Err(err),
+                len => {
+                    let last = parts.remove(len - 1);
+                    removed.push(last.to_owned());
+
+                    let shortened = parts.into_iter().collect::<PathBuf>();
+
+                    trace!("Re-trying canonicalize on parent: {shortened:?} {removed:?}",);
+                    rough_canonicalize(&shortened, removed).await
+                },
+            }
+        },
+        Err(err) => Err(err),
+        Ok(p) => Ok(p.join(removed.iter().collect::<PathBuf>())),
+    }
+}
+
 impl<'flox, Git: GitProvider> Project<'flox, Git> {
     #[async_recursion]
-    pub async fn find_dir(environment_path: PathBuf) -> Result<PathBuf, FindProjectError> {
-        match environment_path.canonicalize() {
-            Err(err) => match err.kind() {
-                io::ErrorKind::NotFound
-                    if environment_path.parent().map(|p| !p.ends_with("pkgs")) == Some(true) =>
-                {
-                    let file_name = environment_path
-                        .file_name()
-                        .ok_or(FindProjectError::NoName)?;
-                    let parent = environment_path.parent().ok_or(FindProjectError::Missing)?;
+    pub async fn find_dir(environment_path: &Path) -> Result<PathBuf, FindProjectError> {
+        // We get better results out of canonicalization if this is an absolute path
+        let environment_path: Cow<Path> = if environment_path.is_relative() {
+            std::env::current_dir()?.join(environment_path).into()
+        } else {
+            environment_path.into()
+        };
 
-                    Self::find_dir(parent.join("pkgs").join(file_name)).await
-                },
-                io::ErrorKind::NotFound => Err(FindProjectError::Missing),
-                _ => Err(FindProjectError::TryExists(err)),
+        trace!("Finding project dir for: {environment_path:?}");
+
+        let mut removed = Vec::new();
+
+        match rough_canonicalize(&environment_path, &mut removed).await {
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                Err(FindProjectError::Missing)
             },
-            Ok(x) => Ok(x),
+            Err(err) => Err(FindProjectError::TryExists(err)),
+            Ok(real_path) => {
+                if removed.is_empty() {
+                    Ok(real_path)
+                } else {
+                    trace!("Components removed for canonicalization: {removed:?}");
+
+                    let removed_path: PathBuf = removed.into_iter().collect();
+
+                    if !removed_path.starts_with(DEFAULT_PROJECT_ENV_DIR)
+                        && !real_path.ends_with(DEFAULT_PROJECT_ENV_DIR)
+                    {
+                        trace!("no {DEFAULT_PROJECT_ENV_DIR} inbetween real and removed, adding and retrying");
+                        Ok(Self::find_dir(
+                            &real_path.join(DEFAULT_PROJECT_ENV_DIR).join(removed_path),
+                        )
+                        .await?)
+                    } else {
+                        Err(FindProjectError::Missing)
+                    }
+                }
+            },
         }
     }
 
     pub async fn find(
         flox: &'flox Flox,
-        environment_path_str: &str,
+        environment_path_raw: &Path,
     ) -> Result<Project<'flox, Git>, FindProjectError> {
-        let environment_path = Self::find_dir(PathBuf::from(environment_path_str)).await?;
+        let environment_path = Self::find_dir(environment_path_raw).await?;
+        trace!("Found environment path: {environment_path:?}");
 
+        // Find the `Project` to use, erroring all the way if it is not in the perfect state.
+        // TODO: further changes and integrations to make more flexible possible?
         let git_repo = flox
             .project(environment_path.clone())
             .guard::<Git>()
@@ -85,22 +143,53 @@ impl<'flox, Git: GitProvider> Project<'flox, Git> {
             .await
             .map_err(|_| FindProjectError::NotProject)?;
 
+        // Project logic uses your current active work tree, so no bares.
         let workdir = project.workdir().ok_or(FindProjectError::BareRepo)?;
 
-        let name = match environment_path.strip_prefix(workdir) {
+        // The whole path except for the working directory it may start with.
+        // i.e. `/home/me/my-repo/xyz/a/b/c` becomes `xyz/a/b/c`
+        let sub_path = match environment_path.strip_prefix(workdir) {
             Ok(s) => s,
             Err(_) => &environment_path,
         };
 
-        let name = match name.strip_prefix("pkgs") {
-            Ok(s) => s,
-            Err(_) => name,
+        trace!("Determined environment sub-path to be: {sub_path:?}",);
+
+        // The first component of the sub-path made above,
+        // and if none is supplied then the default.
+        // This makes the assumption that environments will never be more than 1 level deep,
+        // which may not always be true in the future.
+        let subdir = sub_path
+            .iter()
+            .next()
+            .unwrap_or_else(|| OsStr::new(DEFAULT_PROJECT_ENV_DIR))
+            .to_owned();
+
+        // The name is everything except for the subdir defined above,
+        // so strip that from the sub-path to get the name.
+        // If for some reason it does not exist (i.e. we added the default),
+        // then just ignore the error.
+        //
+        // This can be any length, so as to support nesting,
+        // since an env in `pkgs/stuff/a/flox.nix` results in `floxEnvs.[system].stuff.a`,
+        // and we construct the above installable later.
+        let name = match sub_path.strip_prefix(&subdir) {
+            Ok(x) => x.to_owned(),
+            Err(_) => sub_path.to_owned(),
         };
+
+        // The above `subdir` and `name` logic can give us an empty name
+        // which results in a faulty attrpath.
+        // Make this a hard error.
+        if name == Path::new("") {
+            return Err(FindProjectError::NoName);
+        }
 
         Ok(Project {
             flox,
             project,
-            name: name.to_owned(),
+            subdir,
+            name,
         })
     }
 
@@ -108,9 +197,18 @@ impl<'flox, Git: GitProvider> Project<'flox, Git> {
         Installable {
             flakeref: format!(
                 "git+file://{project_dir}",
-                project_dir = self.project.path().display()
+                project_dir = self.project.path().display(),
             ),
-            attr_path: format!(".floxEnvs.{system}.{name}", name = self.name.display()),
+            attr_path: format!(
+                ".floxEnvs.{system}.{name}",
+                // Split the name apart and build it together separated with `.` to make a full attrpath
+                name = self
+                    .name
+                    .iter()
+                    .map(|x| x.to_string_lossy())
+                    .collect::<Vec<_>>()
+                    .join(".")
+            ),
         }
     }
 }
@@ -269,9 +367,15 @@ impl<Git: GitProvider> EnvironmentRef<'_, Git> {
     ) -> Result<EnvironmentRef<'flox, Git>, EnvironmentRefError<Git>> {
         debug!("Finding environment for {}", environment_name);
 
-        match Project::find(flox, environment_name).await {
-            Ok(p) => Ok(EnvironmentRef::Project(p)),
-            Err(FindProjectError::Missing | FindProjectError::NotInGitRepo) => {
+        let environment_path_raw = PathBuf::from(environment_name);
+        match (
+            Project::find(flox, &environment_path_raw).await,
+            environment_path_raw.components().next(),
+        ) {
+            (
+                Err(FindProjectError::Missing | FindProjectError::NotInGitRepo),
+                Some(std::path::Component::Normal(_)),
+            ) => {
                 debug!("Couldn't find project environment, searching for named environment");
 
                 Ok(EnvironmentRef::Named(
@@ -280,7 +384,8 @@ impl<Git: GitProvider> EnvironmentRef<'_, Git> {
                         .map_err(EnvironmentRefError::Named)?,
                 ))
             },
-            Err(err) => Err(EnvironmentRefError::Project(err)),
+            (Ok(p), _) => Ok(EnvironmentRef::Project(p)),
+            (Err(err), _) => Err(EnvironmentRefError::Project(err)),
         }
     }
 
