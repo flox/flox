@@ -156,8 +156,8 @@ impl Flox {
     pub async fn environment_ref<Git: GitProvider>(
         &self,
         name: &str,
-    ) -> Result<EnvironmentRef, EnvironmentRefError<Git::DiscoverError>> {
-        EnvironmentRef::new::<Git>(self, name).await
+    ) -> Result<EnvironmentRef<Git>, EnvironmentRefError<Git>> {
+        EnvironmentRef::find(self, name).await
     }
 
     pub fn environment(&self, dir: PathBuf) -> Result<Environment, EnvironmentError> {

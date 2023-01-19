@@ -37,8 +37,9 @@ impl<I, U> Guard<I, U> {
 
 type ProjectGuard<'flox, I, U> = Guard<Project<'flox, I>, Project<'flox, U>>;
 
+#[derive(Constructor, Debug)]
 pub struct Open<Git: GitProvider> {
-    repo: Git,
+    pub repo: Git,
 }
 
 #[derive(Constructor, Debug)]
@@ -76,8 +77,15 @@ impl<'flox> Project<'flox, Closed<PathBuf>> {
 impl<'flox, Git: GitProvider> ProjectGuard<'flox, Closed<Git>, Closed<PathBuf>> {
     pub fn workdir(&self) -> Option<&Path> {
         match self {
-            Guard::Initialized(i) => i.workdir().map(Path::new),
+            Guard::Initialized(i) => i.workdir(),
             Guard::Uninitialized(u) => Some(&u.state.inner),
+        }
+    }
+
+    pub fn path(&self) -> &Path {
+        match self {
+            Guard::Initialized(i) => i.path(),
+            Guard::Uninitialized(u) => &u.state.inner,
         }
     }
 
@@ -103,6 +111,10 @@ impl<'flox, Git: GitProvider> Project<'flox, Closed<Git>> {
         self.state.inner.workdir()
     }
 
+    pub fn path(&self) -> &Path {
+        self.state.inner.path()
+    }
+
     /// Guards opening a project
     ///
     /// - Resolves as initilaized if a `flake.nix` is present
@@ -117,7 +129,7 @@ impl<'flox, Git: GitProvider> Project<'flox, Closed<Git>> {
         if root.join("flake.nix").exists() {
             Ok(Guard::Initialized(Project {
                 flox: self.flox,
-                state: Open { repo },
+                state: Open::new(repo),
             }))
         } else {
             Ok(Guard::Uninitialized(Project {
@@ -167,7 +179,7 @@ impl<'flox, Git: GitProvider> ProjectGuard<'flox, Open<Git>, Closed<Git>> {
 
         Ok(Project {
             flox: uninit.flox,
-            state: Open { repo },
+            state: Open::new(repo),
         })
     }
 }
@@ -182,6 +194,14 @@ impl<'flox, T> Project<'flox, Closed<T>> {
 }
 
 impl<Git: GitProvider> Project<'_, Open<Git>> {
+    pub fn workdir(&self) -> Option<&Path> {
+        self.state.repo.workdir()
+    }
+
+    pub fn path(&self) -> &Path {
+        self.state.repo.path()
+    }
+
     pub async fn init_flox_package<Nix: FloxNixApi>(
         &self,
         nix_extra_args: Vec<String>,

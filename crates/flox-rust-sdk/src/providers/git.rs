@@ -1,4 +1,5 @@
 use std::ffi::OsString;
+use std::fmt;
 use std::os::unix::ffi::OsStringExt;
 use std::path::{Path, PathBuf};
 
@@ -17,12 +18,13 @@ pub trait GitDiscoverError {
 // simple git provider for the tasks we need to provide in
 // flox
 #[async_trait(?Send)]
-pub trait GitProvider: Send + Sized {
+pub trait GitProvider: Send + Sized + std::fmt::Debug {
     type InitError: std::error::Error;
     type AddRemoteError: std::error::Error;
     type MvError: std::error::Error;
     type RmError: std::error::Error;
     type AddError: std::error::Error;
+    type ShowError: std::error::Error + Send + Sync + 'static;
     type DiscoverError: std::error::Error
         + GitDiscoverError
         + Send
@@ -43,8 +45,10 @@ pub trait GitProvider: Send + Sized {
         cached: bool,
     ) -> Result<(), Self::RmError>;
     async fn add(&self, paths: &[&Path]) -> Result<(), Self::AddError>;
+    async fn show(&self, object: &str) -> Result<OsString, Self::ShowError>;
 
     fn workdir(&self) -> Option<&Path>;
+    fn path(&self) -> &Path;
 }
 
 #[derive(Error, Debug)]
@@ -57,6 +61,14 @@ pub enum LibGit2NewError {
 
 pub struct LibGit2Provider {
     repository: git2::Repository,
+}
+
+impl fmt::Debug for LibGit2Provider {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("LibGit2Provider")
+            .field("workdir", &self.workdir())
+            .finish()
+    }
 }
 
 impl GitDiscoverError for git2::Error {
@@ -74,6 +86,7 @@ impl GitProvider for LibGit2Provider {
     type InitError = git2::Error;
     type MvError = EmptyError;
     type RmError = EmptyError;
+    type ShowError = EmptyError;
 
     async fn init<P: AsRef<Path>>(path: P) -> Result<LibGit2Provider, Self::InitError> {
         Ok(LibGit2Provider {
@@ -83,6 +96,10 @@ impl GitProvider for LibGit2Provider {
 
     fn workdir(&self) -> Option<&Path> {
         self.repository.workdir()
+    }
+
+    fn path(&self) -> &Path {
+        self.repository.path()
     }
 
     async fn add_remote(&self, _origin_name: &str, _url: &str) -> Result<(), Self::AddRemoteError> {
@@ -107,6 +124,10 @@ impl GitProvider for LibGit2Provider {
         todo!()
     }
 
+    async fn show(&self, _object: &str) -> Result<OsString, Self::ShowError> {
+        todo!()
+    }
+
     async fn discover<P: AsRef<Path>>(path: P) -> Result<Self, Self::DiscoverError> {
         Ok(LibGit2Provider {
             repository: git2::Repository::discover(path)?,
@@ -125,6 +146,7 @@ pub enum GitCommandError {
 #[derive(Clone, Debug)]
 pub struct GitCommandProvider {
     workdir: Option<PathBuf>,
+    path: PathBuf,
 }
 
 impl GitCommandProvider {
@@ -181,6 +203,7 @@ impl GitProvider for GitCommandProvider {
     type InitError = GitCommandError;
     type MvError = GitCommandError;
     type RmError = GitCommandError;
+    type ShowError = GitCommandError;
 
     async fn init<P: AsRef<Path>>(path: P) -> Result<GitCommandProvider, Self::InitError> {
         let _out = GitCommandProvider::run_command(
@@ -190,6 +213,7 @@ impl GitProvider for GitCommandProvider {
 
         Ok(GitCommandProvider {
             workdir: Some(path.as_ref().into()),
+            path: path.as_ref().into(),
         })
     }
 
@@ -252,6 +276,10 @@ impl GitProvider for GitCommandProvider {
         self.workdir.as_ref().map(|x| x.as_ref())
     }
 
+    fn path(&self) -> &Path {
+        self.path.as_ref()
+    }
+
     async fn add(&self, paths: &[&Path]) -> Result<(), Self::MvError> {
         let mut command = GitCommandProvider::new_command(&self.workdir);
         command.arg("add");
@@ -262,6 +290,14 @@ impl GitProvider for GitCommandProvider {
         let _out = GitCommandProvider::run_command(&mut command).await?;
 
         Ok(())
+    }
+
+    async fn show(&self, object: &str) -> Result<OsString, Self::ShowError> {
+        let mut command = GitCommandProvider::new_command(&self.workdir);
+        command.arg("show");
+        command.arg(object);
+
+        Ok(GitCommandProvider::run_command(&mut command).await?)
     }
 
     async fn discover<P: AsRef<Path>>(path: P) -> Result<Self, Self::DiscoverError> {
@@ -277,8 +313,11 @@ impl GitProvider for GitCommandProvider {
             None => return Err(GitCommandDiscoverError::GitDirEncoding),
         };
 
+        let workdir = PathBuf::from(out_str.trim());
+
         Ok(GitCommandProvider {
-            workdir: Some(PathBuf::from(out_str.trim())),
+            workdir: Some(workdir.clone()),
+            path: workdir,
         })
     }
 }

@@ -71,12 +71,14 @@ pub(crate) mod interface {
     }
 
     #[async_trait(?Send)]
-    impl<T: InstallableDef + 'static, Git: GitProvider> ResolveInstallable<Git> for PosOrEnv<T> {
+    impl<T: InstallableDef + 'static, Git: GitProvider + 'static> ResolveInstallable<Git>
+        for PosOrEnv<T>
+    {
         async fn installable(&self, flox: &Flox) -> anyhow::Result<Installable> {
             Ok(match self {
                 PosOrEnv::Pos(i) => i.resolve_installable(flox).await?,
                 PosOrEnv::Env(n) => {
-                    EnvironmentRef::new::<Git>(flox, n)
+                    EnvironmentRef::<Git>::find(flox, n)
                         .await?
                         .get_latest_installable(flox)
                         .await?
@@ -86,7 +88,7 @@ pub(crate) mod interface {
     }
 
     #[async_trait(?Send)]
-    impl<T: InstallableDef + 'static, Git: GitProvider> ResolveInstallable<Git>
+    impl<T: InstallableDef + 'static, Git: GitProvider + 'static> ResolveInstallable<Git>
         for Option<PosOrEnv<T>>
     {
         async fn installable(&self, flox: &Flox) -> anyhow::Result<Installable> {

@@ -1,153 +1,168 @@
 use std::io::{self, ErrorKind};
 use std::path::{PathBuf, StripPrefixError};
 
-use log::{debug, trace};
-use runix::arguments::eval::EvaluationArgs;
-use runix::arguments::source::SourceArgs;
-use runix::arguments::NixArgs;
-use runix::command::Eval;
+use log::debug;
 use runix::installable::Installable;
-use runix::RunJson;
 use thiserror::Error;
 
-use crate::flox::{Flox, FloxNixApi};
+use crate::actions::project;
+use crate::flox::Flox;
 use crate::providers::git::GitProvider;
 
 static DEFAULT_NAME: &str = "default";
 static DEFAULT_OWNER: &str = "local";
 
 #[derive(Debug)]
-pub struct ProjectEnvironmentRef {
-    pub flake_dir: String,
-    pub name: String,
+pub struct Project<'flox, Git: GitProvider> {
+    pub flox: &'flox Flox,
+    pub project: project::Project<'flox, project::Open<Git>>,
+    pub name: PathBuf,
 }
 
 #[derive(Error, Debug)]
-pub enum ProjectEnvironmentRefError<DiscoverError> {
-    #[error("environment specified exists, but it is not in a git repo: {0}")]
-    NotInGitRepo(DiscoverError),
-    #[error("environment is in a git repo, but it is bare")]
-    BareRepo,
+pub enum FindProjectError {
+    #[error("Error checking whether environment is a path: {0}")]
+    TryExists(io::Error),
+    #[error("Path for environment not found")]
+    Missing,
+    #[error("Error trying to discover Git repo")]
+    DiscoverError,
+    #[error("Environment specified exists, but it is not in a Git repo")]
+    NotInGitRepo,
+    #[error("Error checking for project")]
+    OpenError,
+    #[error("Found Git repo, but it is not a project")]
+    NotProject,
     // TODO be more informative about (or handle) symlinks or fs boundaries or something?
-    #[error("environment is a part of git repo, but git repo is not a prefix of environment: {0}")]
+    #[error(
+        "Environment is a part of Git repo, but the workdir is not a prefix of environment: {0}"
+    )]
     StripPrefix(StripPrefixError),
-    #[error("failed to check if git repo contains a flake.nix: {0}")]
-    TryExistsFlake(io::Error),
-    #[error("environment is in git repo, but git repo does not contain a flake.nix")]
-    NotFlake,
-    #[error("environment is in flake repo, but not inside of pkgs/")]
-    NotPkgs,
-    #[error("Project path is not valid unicode")]
-    ProjectPathEncoding,
+    #[error("Environment is in a Git repo, but it is bare")]
+    BareRepo,
 }
 
-impl ProjectEnvironmentRef {
-    pub async fn new<Git: GitProvider>(
-        environment_path: &PathBuf,
-    ) -> Result<Self, ProjectEnvironmentRefError<Git::DiscoverError>> {
-        trace!("Finding git repository for given path: {environment_path:?}");
+impl<'flox, Git: GitProvider> Project<'flox, Git> {
+    pub async fn find(
+        flox: &'flox Flox,
+        environment_path_str: &str,
+    ) -> Result<Project<'flox, Git>, FindProjectError> {
+        let environment_path = match PathBuf::from(environment_path_str).canonicalize() {
+            Err(err) => match err.kind() {
+                io::ErrorKind::NotFound => return Err(FindProjectError::Missing),
+                _ => return Err(FindProjectError::TryExists(err)),
+            },
+            Ok(x) => x,
+        };
 
-        let git = Git::discover(environment_path)
+        let git_repo = flox
+            .project(environment_path.clone())
+            .guard::<Git>()
             .await
-            .map_err(ProjectEnvironmentRefError::NotInGitRepo)?;
+            .map_err(|_| FindProjectError::DiscoverError)?
+            .open()
+            .await
+            .map_err(|_| FindProjectError::NotInGitRepo)?;
 
-        let repo_workdir = git.workdir().ok_or(ProjectEnvironmentRefError::BareRepo)?;
+        let project = git_repo
+            .guard()
+            .await
+            .map_err(|_| FindProjectError::OpenError)?
+            .open()
+            .await
+            .map_err(|_| FindProjectError::NotProject)?;
 
-        trace!("Repo workdir for {environment_path:?} is {repo_workdir:?}");
+        let workdir = project.workdir().ok_or(FindProjectError::BareRepo)?;
+        let name = environment_path
+            .strip_prefix(workdir)
+            .map_err(FindProjectError::StripPrefix)?
+            .to_owned();
 
-        let is_flake = repo_workdir
-            .join("flake.nix")
-            .try_exists()
-            .map_err(ProjectEnvironmentRefError::TryExistsFlake)?;
-
-        if !is_flake {
-            return Err(ProjectEnvironmentRefError::NotFlake);
-        }
-
-        let subdir = environment_path
-            .strip_prefix(repo_workdir)
-            .map_err(ProjectEnvironmentRefError::StripPrefix)?;
-
-        let name = subdir
-            .strip_prefix("pkgs")
-            .map_err(|_| ProjectEnvironmentRefError::NotPkgs)?;
-
-        Ok(ProjectEnvironmentRef {
-            flake_dir: repo_workdir
-                .to_str()
-                .ok_or(ProjectEnvironmentRefError::ProjectPathEncoding)?
-                .to_owned(),
-            name: name
-                .to_str()
-                .ok_or(ProjectEnvironmentRefError::ProjectPathEncoding)?
-                .to_owned(),
+        Ok(Project {
+            flox,
+            project,
+            name,
         })
     }
 
     fn get_installable(&self, system: &str) -> Installable {
         Installable {
-            flakeref: format!("git+file://{flake_dir}", flake_dir = self.flake_dir),
-            attr_path: format!("floxEnvs.{system}.{name}", name = self.name),
+            flakeref: format!(
+                "git+file://{project_dir}",
+                project_dir = self.project.path().display()
+            ),
+            attr_path: format!("floxEnvs.{system}.{name}", name = self.name.display()),
         }
     }
 }
 
 #[derive(Debug)]
-pub struct NamedEnvironmentRef {
+pub struct Named<Git: GitProvider> {
     pub owner: String,
     pub name: String,
+    pub git: Git,
 }
 
 #[derive(Error, Debug)]
-pub enum NamedEnvironmentGetCurrentGenError<Nix: FloxNixApi>
-where
-    Eval: RunJson<Nix>,
-{
-    #[error("Error evaluating to read metadata: {0}")]
-    Eval(<Eval as RunJson<Nix>>::JsonError),
-    #[error("Error parsing current gen from metadata: {0}")]
+pub enum NamedGetCurrentGenError<Git: GitProvider> {
+    #[error("Error printing metadata: {0}")]
+    Show(Git::ShowError),
+    #[error("Metadata file is not valid unicode")]
+    MetadataEncoding,
+    #[error("Error parsing current generation from metadata: {0}")]
     Parse(#[from] serde_json::Error),
 }
 
 #[derive(Error, Debug)]
-pub enum NamedEnvironmentRefError {
-    #[error("Symlink for default owner is invalid")]
+pub enum FindDefaultOwnerError {
+    #[error("Symlink is invalid")]
     DefaultOwnerSymlinkTarget,
-    #[error("Error checking symlink for default owner")]
+    #[error("Error checking symlink")]
     ReadLink(io::Error),
-    #[error("Default owner symlink is not valid unicode")]
+    #[error("Symlink is not valid unicode")]
     DefaultOwnerSymlinkEncoding,
 }
 
-impl NamedEnvironmentRef {
-    pub async fn new(flox: &Flox, environment: &str) -> Result<Self, NamedEnvironmentRefError> {
-        // TODO: fallback prompt stuff
+#[derive(Error, Debug)]
+pub enum FindNamedError<Git: GitProvider> {
+    #[error("Error finding default environment owner: {0}")]
+    DefaultOwnerSymlinkTarget(#[from] FindDefaultOwnerError),
+    #[error("Owner directory is missing")]
+    GitDiscoverError(Git::DiscoverError),
+}
+
+impl<Git: GitProvider> Named<Git> {
+    pub async fn find(flox: &Flox, environment: &str) -> Result<Self, FindNamedError<Git>> {
         let (owner, name) = match environment.rsplit_once('/') {
             None => {
-                let default_owner = NamedEnvironmentRef::default_owner(flox).await?;
+                let default_owner = Self::find_default_owner(flox).await?;
 
-                return Ok(NamedEnvironmentRef {
-                    owner: default_owner,
-                    name: if environment.is_empty() {
+                (
+                    default_owner,
+                    if environment.is_empty() {
                         DEFAULT_NAME.to_string()
                     } else {
                         environment.to_string()
                     },
-                });
+                )
             },
-            Some((owner, "")) => (owner.into(), DEFAULT_NAME.to_string()),
-            Some((owner, name)) => (owner.into(), name.to_string()),
+            Some((owner, "")) => (owner.to_string(), DEFAULT_NAME.to_string()),
+            Some((owner, name)) => (owner.to_string(), name.to_string()),
         };
 
-        Ok(NamedEnvironmentRef { owner, name })
+        let git = Git::discover(Self::meta_dir(flox).join(&owner))
+            .await
+            .map_err(FindNamedError::GitDiscoverError)?;
+
+        Ok(Named { owner, name, git })
     }
 
     fn meta_dir(flox: &Flox) -> PathBuf {
         flox.cache_dir.join("meta")
     }
 
-    async fn default_owner(flox: &Flox) -> Result<String, NamedEnvironmentRefError> {
-        let link_path = NamedEnvironmentRef::meta_dir(flox).join(DEFAULT_OWNER);
+    async fn find_default_owner(flox: &Flox) -> Result<String, FindDefaultOwnerError> {
+        let link_path = Self::meta_dir(flox).join(DEFAULT_OWNER);
         debug!(
             "Checking `local` symlink (`{}`) for true name of default user",
             link_path.display()
@@ -156,14 +171,15 @@ impl NamedEnvironmentRef {
         match tokio::fs::read_link(link_path).await {
             Ok(p) => Ok(p
                 .file_name()
-                .ok_or(NamedEnvironmentRefError::DefaultOwnerSymlinkTarget)?
+                .ok_or(FindDefaultOwnerError::DefaultOwnerSymlinkTarget)?
                 .to_str()
-                .ok_or(NamedEnvironmentRefError::DefaultOwnerSymlinkEncoding)?
+                .ok_or(FindDefaultOwnerError::DefaultOwnerSymlinkEncoding)?
                 .to_owned()),
             Err(err) => match err.kind() {
                 // `InvalidInput` occurs if the path is not a symlink
+                // return DEFAULT_OWNER if it is a directory or doesn't already exist
                 ErrorKind::NotFound | ErrorKind::InvalidInput => Ok(DEFAULT_OWNER.to_owned()),
-                _ => Err(NamedEnvironmentRefError::ReadLink(err)),
+                _ => Err(FindDefaultOwnerError::ReadLink(err)),
             },
         }
     }
@@ -174,101 +190,70 @@ impl NamedEnvironmentRef {
                 "git+file://{meta_dir}/{owner}?ref={system}.{name}&dir={gen}",
                 name = self.name,
                 owner = self.owner,
-                meta_dir = NamedEnvironmentRef::meta_dir(flox).display(),
+                meta_dir = Self::meta_dir(flox).display(),
             ),
-            attr_path: format!("floxEnvs.{system}.{name}", name = self.name),
+            // The git branch varies but the name always remains `default`,
+            // which comes from the template
+            // https://github.com/flox/flox-bash-private/tree/main/lib/templateFloxEnv/pkgs/default
+            // and does not get renamed.
+            attr_path: format!(".floxEnvs.{system}.default"),
         }
     }
 
-    async fn get_current_gen<Nix: FloxNixApi>(
-        &self,
-        flox: &Flox,
-        system: &str,
-    ) -> Result<String, NamedEnvironmentGetCurrentGenError<Nix>>
-    where
-        Eval: RunJson<Nix>,
-    {
-        let expr = format!(
-            r#"(builtins.fromJSON
-                (builtins.readFile
-                    "${{builtins.fetchGit {{ url = "file://{meta_dir}/{owner}?ref={system}.{name}"; ref = "{system}.{name}"; }}}}/metadata.json"
-                )
-            ).currentGen"#,
-            name = self.name,
-            owner = self.owner,
-            meta_dir = NamedEnvironmentRef::meta_dir(flox).display(),
-        );
-        let command = Eval {
-            source: SourceArgs {
-                expr: Some(expr.into()),
-            },
-            eval: EvaluationArgs {
-                impure: true.into(),
-            },
-            ..Default::default()
-        };
-
-        let json_out = command
-            .run_json(&flox.nix::<Nix>(vec![]), &NixArgs::default())
+    async fn get_current_gen(&self, system: &str) -> Result<String, NamedGetCurrentGenError<Git>> {
+        let out_os_str = self
+            .git
+            .show(&format!("{system}.{name}:metadata.json", name = self.name))
             .await
-            .map_err(NamedEnvironmentGetCurrentGenError::Eval)?;
+            .map_err(NamedGetCurrentGenError::Show)?;
 
-        Ok(serde_json::from_value::<String>(json_out)?)
+        let out_str = out_os_str
+            .to_str()
+            .ok_or(NamedGetCurrentGenError::MetadataEncoding)?;
+
+        Ok(serde_json::from_str(out_str)?)
     }
 }
 
 #[derive(Debug)]
-pub enum EnvironmentRef {
-    Named(NamedEnvironmentRef),
-    Project(ProjectEnvironmentRef),
+pub enum EnvironmentRef<'flox, Git: GitProvider> {
+    Named(Named<Git>),
+    Project(Project<'flox, Git>),
 }
 
 #[derive(Error, Debug)]
-pub enum EnvironmentRefError<DiscoverError> {
+pub enum EnvironmentRefError<Git: GitProvider> {
     #[error(transparent)]
-    Project(ProjectEnvironmentRefError<DiscoverError>),
+    Project(FindProjectError),
     #[error(transparent)]
-    Named(NamedEnvironmentRefError),
-    #[error("error checking whether environment is a path: {0}")]
-    TryExists(io::Error),
+    Named(FindNamedError<Git>),
 }
 
 #[allow(unused)]
-impl EnvironmentRef {
-    pub async fn new<Git: GitProvider>(
-        flox: &Flox,
+impl<Git: GitProvider> EnvironmentRef<'_, Git> {
+    /// Try to find a project environment matching the inputted name,
+    /// if the dir is missing or is not a Git repo, then try as a named environment
+    pub async fn find<'flox>(
+        flox: &'flox Flox,
         environment_name: &str,
-    ) -> Result<Self, EnvironmentRefError<Git::DiscoverError>> {
-        let path = match PathBuf::from(environment_name).canonicalize() {
-            Err(err) => match err.kind() {
-                io::ErrorKind::NotFound => None,
-                _ => return Err(EnvironmentRefError::TryExists(err)),
+    ) -> Result<EnvironmentRef<'flox, Git>, EnvironmentRefError<Git>> {
+        match Project::find(flox, environment_name).await {
+            Ok(p) => Ok(EnvironmentRef::Project(p)),
+            Err(FindProjectError::Missing | FindProjectError::NotInGitRepo) => {
+                Ok(EnvironmentRef::Named(
+                    Named::find(flox, environment_name)
+                        .await
+                        .map_err(EnvironmentRefError::Named)?,
+                ))
             },
-            Ok(x) => Some(x),
-        };
-
-        if let Some(path) = path {
-            Ok(EnvironmentRef::Project(
-                ProjectEnvironmentRef::new::<Git>(&path)
-                    .await
-                    .map_err(EnvironmentRefError::Project)?,
-            ))
-        } else {
-            Ok(EnvironmentRef::Named(
-                NamedEnvironmentRef::new(flox, environment_name)
-                    .await
-                    .map_err(EnvironmentRefError::Named)?,
-            ))
+            Err(err) => Err(EnvironmentRefError::Project(err)),
         }
     }
 
-    pub async fn get_latest_installable<Nix: FloxNixApi>(
+    pub async fn get_latest_installable(
         &self,
         flox: &Flox,
-    ) -> Result<Installable, NamedEnvironmentGetCurrentGenError<Nix>>
-    where
-        Eval: RunJson<Nix>,
-    {
+    ) -> Result<Installable, NamedGetCurrentGenError<Git>> {
         debug!("Resolving env to installable: {:?}", self);
 
         let system = &flox.system;
@@ -276,7 +261,7 @@ impl EnvironmentRef {
         match self {
             EnvironmentRef::Project(project_ref) => Ok(project_ref.get_installable(system)),
             EnvironmentRef::Named(named_ref) => {
-                let gen = named_ref.get_current_gen(flox, system).await?;
+                let gen = named_ref.get_current_gen(system).await?;
                 Ok(named_ref.get_installable(flox, system, &gen))
             },
         }
