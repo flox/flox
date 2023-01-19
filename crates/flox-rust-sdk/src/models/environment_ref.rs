@@ -375,24 +375,29 @@ impl<Git: GitProvider> EnvironmentRef<'_, Git> {
         debug!("Finding environment for {}", environment_name);
 
         let environment_path_raw = PathBuf::from(environment_name);
-        match (
-            Project::find(flox, &environment_path_raw).await,
-            environment_path_raw.components().next(),
-        ) {
-            (
-                Err(FindProjectError::Missing | FindProjectError::NotInGitRepo),
-                Some(std::path::Component::Normal(_)),
-            ) => {
-                debug!("Couldn't find project environment, searching for named environment");
 
-                Ok(EnvironmentRef::Named(
-                    Named::find(flox, environment_name)
-                        .await
-                        .map_err(EnvironmentRefError::Named)?,
-                ))
+        // Attempt to find project first and fallback on some errors
+        match Project::find(flox, &environment_path_raw).await {
+            // Check what the first component of path is when handling error
+            Err(err) => match (environment_path_raw.components().next(), &err) {
+                // If is a normal component (i.e. `a` not `..` or `/`)
+                // and the error is due to not being in Git repo or the path missing,
+                // then try it as a named environment instead
+                (
+                    Some(std::path::Component::Normal(_)),
+                    FindProjectError::Missing | FindProjectError::NotInGitRepo,
+                ) => {
+                    debug!("Couldn't find project environment, searching for named environment");
+
+                    Ok(EnvironmentRef::Named(
+                        Named::find(flox, environment_name)
+                            .await
+                            .map_err(EnvironmentRefError::Named)?,
+                    ))
+                },
+                _ => Err(EnvironmentRefError::Project(err)),
             },
-            (Ok(p), _) => Ok(EnvironmentRef::Project(p)),
-            (Err(err), _) => Err(EnvironmentRefError::Project(err)),
+            Ok(p) => Ok(EnvironmentRef::Project(p)),
         }
     }
 
