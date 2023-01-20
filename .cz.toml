@@ -6,6 +6,8 @@ tag_format = "v$version"
 version_files = ["./crates/flox/Cargo.toml:version"]
 changelog_incremental = true
 major_version_zero = true
+annotated_tag = true
+bump_message = "bump: $current_version → $new_version"
 pre_bump_hooks = [
-  "cargo update --offline -p flox ",
+  "cargo update -p flox", # allow network to access dependency patches
 ]
