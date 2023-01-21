@@ -1,9 +1,9 @@
 use std::any::TypeId;
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
+use std::io::Stderr;
 use std::marker::PhantomData;
 use std::str::FromStr;
-use std::sync::Mutex;
 
 use anyhow::{bail, Context, Result};
 use bpaf::Parser;
@@ -24,11 +24,13 @@ pub mod logger;
 pub mod metrics;
 
 use regex::Regex;
+use tokio::sync::Mutex;
 
 use self::completion::FloxCompletionExt;
-use crate::utils::dialog::InquireExt;
+use crate::utils::dialog::{Dialog, Select};
 
 static NIX_IDENTIFIER_SAFE: Lazy<Regex> = Lazy::new(|| Regex::new(r#"^[a-zA-Z0-9_-]+$"#).unwrap());
+pub static TERMINAL_STDERR: Lazy<Mutex<Stderr>> = Lazy::new(|| Mutex::new(std::io::stderr()));
 
 pub fn init_channels() -> Result<ChannelRegistry> {
     let mut channels = ChannelRegistry::default();
@@ -181,8 +183,8 @@ impl<Matching: InstallableDef + 'static> InstallableArgument<Unparsed, Matching>
     fn complete_installable(&self) -> Vec<(String, Option<String>)> {
         #[allow(clippy::type_complexity)]
         static COMPLETED_INSTALLABLES: Lazy<
-            Mutex<HashMap<(TypeId, String), Vec<(String, Option<String>)>>>,
-        > = Lazy::new(|| Mutex::new(HashMap::new()));
+            std::sync::Mutex<HashMap<(TypeId, String), Vec<(String, Option<String>)>>>,
+        > = Lazy::new(|| std::sync::Mutex::new(HashMap::new()));
 
         COMPLETED_INSTALLABLES
             .lock()
@@ -411,21 +413,27 @@ pub async fn resolve_installable_from_matches(
             }
 
             // Prompt for the user to select match
-            let sel = inquire::Select::new(
-                &format!("Select a {} for flox {}", derivation_type, subcommand),
-                choices.iter().map(|(long, _)| long).collect(),
-            )
-            .with_flox_theme()
-            .raw_prompt()
-            .with_context(|| format!("Failed to prompt for {} choice", derivation_type))?;
+            let dialog = Dialog {
+                message: &format!("Select a {} for flox {}", derivation_type, subcommand),
+                help_message: None,
+                typed: Select {
+                    options: choices.iter().cloned().map(|(long, _)| long).collect(),
+                },
+            };
 
-            let installable = matches.remove(sel.index).installable();
+            let sel = dialog
+                .raw_prompt()
+                .await
+                .with_context(|| format!("Failed to prompt for {} choice", derivation_type))?
+                .0;
+
+            let installable = matches.remove(sel).installable();
 
             warn!(
                 "HINT: avoid selecting a {} next time with:\n  $ flox {} {}",
                 derivation_type,
                 full_subcommand,
-                shell_escape::escape(choices.remove(sel.index).1.into())
+                shell_escape::escape(choices.remove(sel).1.into())
             );
 
             Ok(installable)

@@ -1,7 +1,4 @@
 use std::collections::{BTreeSet, HashMap};
-use std::fs::File;
-use std::io::Write;
-use std::os::unix::prelude::OpenOptionsExt;
 use std::path::PathBuf;
 
 use derive_more::Constructor;
@@ -366,12 +363,18 @@ impl Flox {
     /// The constructor will perform backend specifc configuration measures
     /// and return a fresh initialized backend.
     pub fn nix<Nix: FloxNixApi>(&self, extra_args: Vec<String>) -> Nix {
+        use std::io::Write;
+        use std::os::unix::prelude::OpenOptionsExt;
+
         let environment = {
             // Write registry file if it does not exist
             let registry_file = self.temp_dir.join("registry.json");
             if !registry_file.exists() {
-                serde_json::to_writer(File::create(&registry_file).unwrap(), &self.channels)
-                    .unwrap();
+                serde_json::to_writer(
+                    std::fs::File::create(&registry_file).unwrap(),
+                    &self.channels,
+                )
+                .unwrap();
             }
 
             // Write Config file if it does not exist
@@ -399,7 +402,7 @@ impl Flox {
                     netrc_file: Some(self.netrc_file.clone().into()),
                     ..Default::default()
                 };
-                File::options()
+                std::fs::File::options()
                     .mode(0o600)
                     .create_new(true)
                     .write(true)

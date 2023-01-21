@@ -7,7 +7,7 @@ use indoc::indoc;
 use log::{debug, info, trace};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-use crate::utils::dialog::InquireExt;
+use crate::utils::dialog::{Confirm, Dialog};
 use crate::utils::metrics::{METRICS_LOCK_FILE_NAME, METRICS_UUID_FILE_NAME};
 
 async fn write_metrics_uuid(uuid_path: &Path, consent: bool) -> Result<()> {
@@ -63,23 +63,32 @@ pub async fn init_telemetry_consent(data_dir: &Path, cache_dir: &Path) -> Result
 
     trace!("Prompting user for metrics consent");
 
-    let consent = inquire::Confirm::new("Do you consent to the collection of basic usage metrics?")
-        .with_help_message(indoc! {"
+    let dialog = Dialog {
+        message: "Do you consent to the collection of basic usage metrics?",
+        help_message: Some(indoc! {"
             flox collects basic usage metrics in order to improve the user experience,
             including a record of the subcommand invoked along with a unique token.
-            It does not collect any personal information."})
-        .with_flox_theme()
-        .prompt()?;
+            It does not collect any personal information."}),
+        typed: Confirm {
+            default: Some(false),
+        },
+    };
+
+    let consent = dialog.prompt().await?;
 
     if consent {
         write_metrics_uuid(&uuid_path, true).await?;
         info!("\nThank you for helping to improve flox!\n");
     } else {
-        let _consent_refusal =
-            inquire::Confirm::new("Can we log your refusal?")
-                .with_help_message("Doing this helps us keep track of our user count, it would just be a single anonymous request")
-                .with_flox_theme()
-                .prompt()?;
+        let dialog = Dialog {
+            message: "Can we log your refusal?",
+            help_message: Some("Doing this helps us keep track of our user count, it would just be a single anonymous request"),
+            typed: Confirm {
+                default: Some(true),
+            },
+        };
+
+        let _consent_refusal = dialog.prompt().await?;
 
         // TODO log if Refuse
 

@@ -265,8 +265,12 @@ impl<Git: GitProvider> Project<'_, Open<Git>> {
 
     /// Delete flox files from repo
     pub async fn delete(self) -> Result<(), CleanupInitializerError> {
-        std::fs::remove_dir_all("./pkgs").map_err(CleanupInitializerError::RemovePkgs)?;
-        std::fs::remove_file("./flake.nix").map_err(CleanupInitializerError::RemoveFlake)?;
+        tokio::fs::remove_dir_all("./pkgs")
+            .await
+            .map_err(CleanupInitializerError::RemovePkgs)?;
+        tokio::fs::remove_file("./flake.nix")
+            .await
+            .map_err(CleanupInitializerError::RemoveFlake)?;
 
         Ok(())
     }

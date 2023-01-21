@@ -5,14 +5,29 @@ use tracing_subscriber::prelude::*;
 use crate::commands::Verbosity;
 use crate::utils::logger::{self, LogFormatter};
 use crate::utils::metrics::PosthogLayer;
+use crate::utils::TERMINAL_STDERR;
 
-// If we use just `std::io::stderr()` I don't think we can make a valid type signature for LOGGER_HANDLE
-struct JustStderr;
-impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for JustStderr {
-    type Writer = std::io::Stderr;
+struct LockingTerminalStderr;
+impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for LockingTerminalStderr {
+    type Writer = LockingTerminalStderr;
 
     fn make_writer(&'a self) -> Self::Writer {
-        std::io::stderr()
+        LockingTerminalStderr
+    }
+}
+
+impl std::io::Write for LockingTerminalStderr {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        let buf_vec = buf.to_vec();
+        tokio::task::spawn_blocking(move || {
+            TERMINAL_STDERR.blocking_lock().write(buf_vec.as_slice())
+        });
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        tokio::task::spawn_blocking(move || TERMINAL_STDERR.blocking_lock().flush());
+        Ok(())
     }
 }
 
@@ -27,7 +42,7 @@ static LOGGER_HANDLE: OnceCell<(
             LayerType,
             tracing_subscriber::fmt::format::DefaultFields,
             LogFormatter,
-            JustStderr,
+            LockingTerminalStderr,
         >,
     >,
 )> = OnceCell::new();
@@ -67,7 +82,7 @@ pub fn init_logger(verbosity: Option<Verbosity>, debug: Option<bool>) {
             tracing_subscriber::reload::Layer::new(filter);
 
         let fmt = tracing_subscriber::fmt::layer()
-            .with_writer(JustStderr)
+            .with_writer(LockingTerminalStderr)
             .event_format(logger::LogFormatter { debug });
 
         let (fmt_reloadable, fmt_reload_handle) = tracing_subscriber::reload::Layer::new(fmt);
@@ -92,7 +107,7 @@ pub fn init_logger(verbosity: Option<Verbosity>, debug: Option<bool>) {
 
     if let Err(err) = fmt_handle.modify(|layer| {
         *layer = tracing_subscriber::fmt::layer()
-            .with_writer(JustStderr)
+            .with_writer(LockingTerminalStderr)
             .event_format(logger::LogFormatter { debug });
     }) {
         error!("Updating logger filter failed: {}", err);

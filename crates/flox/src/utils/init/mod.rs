@@ -1,6 +1,4 @@
 use std::collections::HashMap;
-use std::fs::File;
-use std::io::{BufRead, BufReader};
 use std::path::Path;
 use std::str::FromStr;
 use std::{env, iter};
@@ -49,6 +47,8 @@ pub fn init_channels() -> Result<ChannelRegistry> {
 pub fn init_access_tokens(
     config_tokens: &HashMap<String, String>,
 ) -> Result<HashMap<String, String>> {
+    use std::io::{BufRead, BufReader};
+
     #[derive(Deserialize)]
     struct GhHost {
         oauth_token: String,
@@ -56,7 +56,7 @@ pub fn init_access_tokens(
 
     let gh_config_file = xdg::BaseDirectories::with_prefix("gh")?.get_config_file("hosts.yml");
     let gh_tokens: HashMap<String, String> = if gh_config_file.exists() {
-        serde_yaml::from_reader::<_, HashMap<String, GhHost>>(File::open(gh_config_file)?)?
+        serde_yaml::from_reader::<_, HashMap<String, GhHost>>(std::fs::File::open(gh_config_file)?)?
             .into_iter()
             .map(|(k, v)| (k, v.oauth_token))
             .collect()
@@ -67,7 +67,7 @@ pub fn init_access_tokens(
     let nix_tokens_file = xdg::BaseDirectories::with_prefix("nix")?.get_config_file("nix.conf");
     let nix_tokens: HashMap<String, String> = if nix_tokens_file.exists() {
         let mut tokens = HashMap::new();
-        for line in BufReader::new(File::open(nix_tokens_file)?).lines() {
+        for line in BufReader::new(std::fs::File::open(nix_tokens_file)?).lines() {
             let line = line.unwrap();
             let (k, v) = if let Some(l) = line.split_once('=') {
                 l
@@ -146,7 +146,8 @@ pub async fn init_git_conf(temp_dir: &Path) -> Result<()> {
         (_, Some(c)) => Some(c),
 
         // If no backed up config extists, use the default global config file
-        _ if Path::new("/etc/gitconfig").exists() => Some("/etc/gitconfig"),
+        // _ if Path::new("/etc/gitconfig").exists() => Some("/etc/gitconfig"),
+        _ if tokio::fs::metadata("/etc/gitconfig").await.is_ok() => Some("/etc/gitconfig"),
 
         // if neither exists, no other system config is applied
         _ => None,

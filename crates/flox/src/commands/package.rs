@@ -1,6 +1,6 @@
 use std::env;
 use std::fmt::Debug;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
 use bpaf::{construct, Bpaf, Parser};
@@ -14,11 +14,12 @@ use flox_rust_sdk::nix::Run as RunC;
 use flox_rust_sdk::prelude::Stability;
 use flox_rust_sdk::providers::git::GitCommandProvider;
 use futures::TryFutureExt;
+use inquire::error::InquireResult;
 use log::info;
 
 use crate::config::features::Feature;
 use crate::config::Config;
-use crate::utils::dialog::InquireExt;
+use crate::utils::dialog::{Confirm, Dialog, Text};
 use crate::{flox_forward, subcommand_metric};
 
 pub(crate) mod interface {
@@ -248,11 +249,17 @@ impl interface::PackageCommands {
 
                 let name = match command.inner.name {
                     Some(n) => n,
-                    None => inquire::Text::new("Enter package name")
-                        .with_flox_theme()
-                        .with_default(&basename)
-                        .prompt()
-                        .context("Failed to prompt for name")?,
+                    None => {
+                        let dialog = Dialog {
+                            message: "Enter package name",
+                            help_message: None,
+                            typed: Text {
+                                default: Some(&basename),
+                            },
+                        };
+
+                        dialog.prompt().await.context("Failed to prompt for name")?
+                    },
                 };
 
                 let name = name.trim();
@@ -458,13 +465,21 @@ async fn ensure_project_repo<'flox>(
             );
         })
         .or_else(|g| async move {
-            let in_text = g.workdir().map(|x| format!("in {}", x.display())).unwrap_or_else(|| "here".to_owned());
-            if command.inner.init_git
-                || inquire::Confirm::new(&format!("The current directory is not in a Git repository, would you like to create one {}?", in_text))
-                    .with_default(false)
-                    .with_flox_theme()
-                    .prompt()?
-            {
+            async fn prompt(workdir: Option<&Path>) -> InquireResult<bool> {
+                let in_text = workdir.map(|x| format!("in {}", x.display())).unwrap_or_else(|| "here".to_owned());
+
+                let dialog = Dialog {
+                    message: &format!("The current directory is not in a Git repository, would you like to create one {}?", in_text),
+                    help_message: None,
+                    typed: Confirm {
+                        default: Some(false)
+                    }
+                };
+
+                dialog.prompt().await
+            }
+
+            if command.inner.init_git || prompt(g.workdir()).await? {
                 let p = g.init_git().await?;
 
                 info!(

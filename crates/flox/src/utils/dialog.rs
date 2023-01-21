@@ -2,30 +2,121 @@ use std::fmt::Display;
 
 use inquire::ui::{Attributes, RenderConfig, StyleSheet, Styled};
 
-use super::colors;
+use super::{colors, TERMINAL_STDERR};
 
-pub trait InquireExt {
-    fn with_flox_theme(self) -> Self;
+pub struct Text<'a> {
+    pub default: Option<&'a str>,
+}
+pub struct Confirm {
+    pub default: Option<bool>,
+}
+pub struct Select<T> {
+    pub options: Vec<T>,
 }
 
-impl<T> InquireExt for inquire::Select<'_, T>
-where
-    T: Display,
-{
-    fn with_flox_theme(self) -> Self {
-        self.with_render_config(flox_theme())
+pub struct Dialog<'a, Type> {
+    pub message: &'a str,
+    pub help_message: Option<&'a str>,
+    pub typed: Type,
+}
+
+impl<'a> Dialog<'a, Text<'a>> {
+    pub async fn prompt(self) -> inquire::error::InquireResult<String> {
+        let message = self.message.to_owned();
+        let help_message = self.help_message.map(ToOwned::to_owned);
+        let default = self.typed.default.map(ToOwned::to_owned);
+
+        tokio::task::spawn_blocking(move || {
+            let _stderr_lock = TERMINAL_STDERR.blocking_lock();
+
+            let mut dialog = inquire::Text::new(&message).with_render_config(flox_theme());
+
+            if let Some(ref help_message) = help_message {
+                dialog = dialog.with_help_message(help_message);
+            }
+
+            if let Some(ref default) = default {
+                dialog = dialog.with_default(default);
+            }
+
+            dialog.prompt()
+        })
+        .await
+        .expect("Failed to join blocking dialog")
     }
 }
 
-impl InquireExt for inquire::Confirm<'_> {
-    fn with_flox_theme(self) -> Self {
-        self.with_render_config(flox_theme())
+impl<'a> Dialog<'a, Confirm> {
+    pub async fn prompt(self) -> inquire::error::InquireResult<bool> {
+        let message = self.message.to_owned();
+        let help_message = self.help_message.map(ToOwned::to_owned);
+        let default = self.typed.default;
+
+        tokio::task::spawn_blocking(move || {
+            let _stderr_lock = TERMINAL_STDERR.blocking_lock();
+
+            let mut dialog = inquire::Confirm::new(&message).with_render_config(flox_theme());
+
+            if let Some(default) = default {
+                dialog = dialog.with_default(default);
+            }
+
+            if let Some(ref help_message) = help_message {
+                dialog = dialog.with_help_message(help_message);
+            }
+
+            dialog.prompt()
+        })
+        .await
+        .expect("Failed to join blocking dialog")
     }
 }
 
-impl InquireExt for inquire::Text<'_> {
-    fn with_flox_theme(self) -> Self {
-        self.with_render_config(flox_theme())
+impl<'a, T: Display + Send + 'static> Dialog<'a, Select<T>> {
+    #[allow(dead_code)]
+    pub async fn prompt(self) -> inquire::error::InquireResult<T> {
+        let message = self.message.to_owned();
+        let help_message = self.help_message.map(ToOwned::to_owned);
+        let options = self.typed.options;
+
+        tokio::task::spawn_blocking(move || {
+            let _stderr_lock = TERMINAL_STDERR.blocking_lock();
+
+            let mut dialog =
+                inquire::Select::new(&message, options).with_render_config(flox_theme());
+
+            if let Some(ref help_message) = help_message {
+                dialog = dialog.with_help_message(help_message);
+            }
+
+            dialog.prompt()
+        })
+        .await
+        .expect("Failed to join blocking dialog")
+    }
+
+    pub async fn raw_prompt(self) -> inquire::error::InquireResult<(usize, T)> {
+        let message = self.message.to_owned();
+        let help_message = self.help_message.map(ToOwned::to_owned);
+        let options = self.typed.options;
+
+        tokio::task::spawn_blocking(move || {
+            let _stderr_lock = TERMINAL_STDERR.blocking_lock();
+
+            let mut dialog =
+                inquire::Select::new(&message, options).with_render_config(flox_theme());
+
+            if let Some(ref help_message) = help_message {
+                dialog = dialog.with_help_message(help_message);
+            }
+
+            match dialog.raw_prompt() {
+                Ok(x) => Ok((x.index, x.value)),
+                Err(err) => Err(err),
+            }
+        })
+        .await
+        .expect("Failed to join blocking dialog")
     }
 }
 
