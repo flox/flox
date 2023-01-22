@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::fmt::{self, Write};
 
 use crossterm::style::{Attribute, ContentStyle, Stylize};
@@ -97,25 +98,45 @@ where
             None => return Ok(()),
         };
 
+        let is_posix = fields.target.iter().any(|x| x == "posix");
+        let is_flox = fields
+            .target
+            .iter()
+            .any(|x| x == "flox" || x.starts_with("flox::"));
+
+        let message: Cow<str> = if is_posix {
+            format!("+ {}", message).into()
+        } else {
+            message.into()
+        };
+
         let line = if let Some(light_peach) = colors::LIGHT_PEACH.to_crossterm() {
             let mut line_style = ContentStyle::new();
-            match *level {
-                tracing::Level::TRACE => {
+            match (*level, is_flox, is_posix) {
+                // Debug and trace from flox should be bold peach
+                (tracing::Level::TRACE | tracing::Level::DEBUG, true, _) => {
                     line_style.foreground_color = Some(light_peach);
                     line_style.attributes.set(Attribute::Bold);
                 },
-                tracing::Level::ERROR | tracing::Level::WARN => {
+                // POSIX outputs should be bold
+                (_, _, true) => {
+                    line_style.attributes.set(Attribute::Bold);
+                },
+                // Other Error and Warn outputs should be bold
+                (tracing::Level::ERROR | tracing::Level::WARN, _, _) => {
                     line_style.attributes.set(Attribute::Bold);
                 },
                 _ => {},
             }
 
-            line_style.apply(message).to_string()
+            line_style.apply(message).to_string().into()
         } else {
             message
         };
 
-        if self.debug {
+        // If to use the more verbose debug printer, this should always be used with `--debug`,
+        // and otherwise should appear when printing something non-flox, non-posix, and high verbosity
+        if self.debug || (*level <= tracing::Level::DEBUG && !is_flox && !is_posix) {
             let target_prefix = if let Some(target) = fields.target {
                 // TODO add flox colors for all levels and for target
                 let target_name = match supports_color::on(supports_color::Stream::Stderr) {

@@ -96,7 +96,7 @@ where
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-struct MetricEntry {
+pub struct MetricEntry {
     subcommand: Option<String>,
     timestamp: OffsetDateTime,
     flox_version: String,

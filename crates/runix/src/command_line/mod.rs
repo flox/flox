@@ -5,7 +5,7 @@ use std::io;
 use std::process::{ExitStatus, Output, Stdio};
 
 use async_trait::async_trait;
-use log::debug;
+use log::{debug, log};
 use serde::Deserialize;
 use serde_json::Value;
 use thiserror::Error;
@@ -59,12 +59,12 @@ pub enum NixCommandLineCollectError {
     NixError(i32, String),
 }
 
-trait CommandExt {
-    fn log(&self) {}
+pub trait CommandExt {
+    fn log(&self, _level: log::Level) {}
 }
 
 impl CommandExt for std::process::Command {
-    fn log(&self) {
+    fn log(&self, level: log::Level) {
         debug!(
             "Invoking {executable}:\nenv = {env:?}\nargs = {args:#?}",
             executable = shell_escape::escape(self.get_program().to_string_lossy()),
@@ -75,10 +75,14 @@ impl CommandExt for std::process::Command {
                 .collect::<Vec<_>>(),
         );
 
-        if log::log_enabled!(target: "posix", log::Level::Debug) {
-            debug!(
+        if log::log_enabled!(target: "posix", level) {
+            log!(
                 target: "posix",
-                "+ \x1b[1m{env_string} {executable} {command_string}\x1b[0m",
+
+                level,
+
+                "{env_string} {executable} {command_string}",
+
                 env_string = self
                     .get_envs()
                     .map(|(k, v)| {
@@ -120,6 +124,8 @@ impl CommandMode for Collect {
     type Output = Output;
 
     async fn run(command: &mut Command) -> Result<Self::Output, NixCommandLineCollectError> {
+        command.as_std().log(log::Level::Debug);
+
         let command = command
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -170,6 +176,8 @@ impl CommandMode for Passthru {
     type Output = ExitStatus;
 
     async fn run(command: &mut Command) -> Result<ExitStatus, Self::Error> {
+        command.as_std().log(log::Level::Info);
+
         let command = command
             .stdout(Stdio::inherit())
             .stderr(Stdio::inherit())
@@ -220,8 +228,6 @@ impl NixCommandLine {
         if let Some(ref cwd) = nix_args.cwd {
             command.current_dir(cwd);
         }
-
-        command.as_std().log();
 
         M::run(&mut command).await
     }

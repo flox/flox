@@ -56,9 +56,9 @@ pub fn init_logger(verbosity: Option<Verbosity>, debug: Option<bool>) {
         (false, Verbosity::Quiet) => "off,flox=error",
         // Show our own info logs
         (false, Verbosity::Verbose(0)) => "off,flox=info",
-        // Also show POSIX debug
-        (false, Verbosity::Verbose(1)) => "off,flox=info,posix=debug",
-        // Also show info from our libraries
+        // Also show POSIX info
+        (false, Verbosity::Verbose(1)) => "off,flox=info,posix=info",
+        // Also show info from our libraries and POSIX debug
         (false, Verbosity::Verbose(2)) => {
             "off,flox=debug,flox-rust-sdk=info,runix=info,posix=debug"
         },

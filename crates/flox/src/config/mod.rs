@@ -69,8 +69,9 @@ impl Config {
             let config_dir = match env::var("FLOX_PREVIEW_CONFIG_DIR") {
                 Ok(v) => v.into(),
                 Err(_) => {
-                    debug!("`FLOX_PREVIEW_CONFIG_DIR` not set");
-                    flox_dirs.get_config_home()
+                    let config_dir = flox_dirs.get_config_home();
+                    debug!("`FLOX_PREVIEW_CONFIG_DIR` not set, using {config_dir:?}");
+                    config_dir
                 },
             };
 
