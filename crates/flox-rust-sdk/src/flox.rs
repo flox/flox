@@ -297,6 +297,8 @@ impl Flox {
                         .map(|x| format!("(prefix: key: item: {})", x))
                         .unwrap_or_else(|| "null".to_string()),
                 )
+                .replace("                    ", " ")
+                .replace('\n', "")
             })
             .collect();
 
