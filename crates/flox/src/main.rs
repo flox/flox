@@ -78,7 +78,7 @@ async fn main() -> ExitCode {
     if let Some(parse_err) = args.as_ref().err() {
         match parse_err {
             bpaf::ParseFailure::Stdout(m) => {
-                info!("{m}");
+                print!("{m}");
                 return ExitCode::from(0);
             },
             bpaf::ParseFailure::Stderr(m) => {
