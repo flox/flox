@@ -87,6 +87,22 @@ pub(crate) mod interface {
     parseable!(Develop, develop);
 
     #[derive(Bpaf, Clone, Debug)]
+    /// print shell code that can be sourced by bash to reproduce the development environment
+    pub struct PrintDevEnv {
+        #[bpaf(external(package_args), group_help("Development Options"))]
+        pub package: PackageArgs,
+
+        #[bpaf(short('A'), hide)]
+        pub _attr_flag: bool,
+
+        /// Shell or package to develop on
+        #[bpaf(external(InstallableArgument::positional))]
+        pub(crate) _installable_arg: Option<InstallableArgument<Parsed, DevelopInstallable>>,
+    }
+    parseable!(PrintDevEnv, print_dev_env);
+
+
+    #[derive(Bpaf, Clone, Debug)]
     pub struct Publish {
         #[bpaf(external(package_args), group_help("Development Options"))]
         pub package: PackageArgs,
@@ -198,6 +214,9 @@ pub(crate) mod interface {
         /// launch development shell for current project
         #[bpaf(command)]
         Develop(#[bpaf(external(WithPassthru::parse))] WithPassthru<Develop>),
+        /// print shell code that can be sourced by bash to reproduce the development environment
+        #[bpaf(command("print-dev-env"))]
+        PrintDevEnv(#[bpaf(external(WithPassthru::parse))] WithPassthru<PrintDevEnv>),
         /// build and publish project to flox channel
         #[bpaf(command)]
         Publish(#[bpaf(external(WithPassthru::parse))] WithPassthru<Publish>),
@@ -226,6 +245,11 @@ impl interface::PackageCommands {
 
             // Unification implemntation of Develop is not yet implmented in rust
             interface::PackageCommands::Develop(_) if Feature::Develop.is_forwarded()? => {
+                flox_forward(&flox).await?
+            },
+
+            // Unification implemntation of print-dev-env is not yet implmented in rust
+            interface::PackageCommands::PrintDevEnv(_) if Feature::Develop.is_forwarded()? => {
                 flox_forward(&flox).await?
             },
 
