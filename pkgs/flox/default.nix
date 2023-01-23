@@ -10,9 +10,7 @@
   openssl,
   pkg-config,
   darwin,
-  flox-bash ?
-    self.inputs.flox-floxpkgs-internal.packages.${system}.flox-bash-private
-    or self.inputs.flox-floxpkgs-internal.packages.${system}.flox-internal,
+  flox-bash ? self.inputs.flox-bash.packages.${system}.flox,
   nixStable,
   pandoc,
   cacert,
