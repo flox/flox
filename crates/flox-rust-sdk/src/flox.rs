@@ -21,7 +21,7 @@ use crate::actions::package::Package;
 use crate::actions::project::{self, Project};
 use crate::environment::{self, default_nix_subprocess_env};
 use crate::models::channels::ChannelRegistry;
-pub use crate::models::environment_ref::*;
+pub use crate::models::environment_ref::{self, *};
 pub use crate::models::flox_installable::*;
 use crate::models::stability::Stability;
 use crate::providers::git::GitProvider;
@@ -94,8 +94,6 @@ pub enum ResolveFloxInstallableError<Nix: FloxNixApi>
 where
     Eval: RunJson<Nix>,
 {
-    #[error("No matches were found for the provided installable")]
-    NoMatches,
     #[error("Error checking for installable matches: {0}")]
     Eval(<Eval as RunJson<Nix>>::JsonError),
     #[error("Error parsing installable eval output: {0}")]
@@ -153,10 +151,13 @@ impl Flox {
         Project::closed(self, x)
     }
 
-    pub async fn environment_ref<Git: GitProvider>(
+    pub async fn environment_ref<Git: GitProvider, Nix: FloxNixApi>(
         &self,
         name: &str,
-    ) -> Result<EnvironmentRef<Git>, EnvironmentRefError<Git>> {
+    ) -> Result<Vec<EnvironmentRef<Git>>, EnvironmentRefError<Git, Nix>>
+    where
+        Eval: RunJson<Nix>,
+    {
         EnvironmentRef::find(self, name).await
     }
 

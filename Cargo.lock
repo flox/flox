@@ -578,6 +578,7 @@ dependencies = [
  "nix",
  "octocrab",
  "once_cell",
+ "pathdiff",
  "regex",
  "reqwest",
  "rnix 0.10.2",

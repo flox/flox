@@ -42,11 +42,13 @@ pub(crate) mod interface {
         ShellInstallable,
         TemplateInstallable,
     };
-    use crate::utils::{InstallableArgument, InstallableDef, Parsed};
+    use crate::utils::{
+        resolve_installable_from_environment_refs,
+        InstallableArgument,
+        InstallableDef,
+        Parsed,
+    };
 
-    /// TODO:
-    /// I would like a `-e` flag with no following argument to default to `PosOrEnv::Env("")`,
-    /// and no arguments to default to `PosOrEnv::Pos(InstallableArgument<Parsed, T>::default())`
     #[derive(Clone, Debug)]
     pub enum PosOrEnv<T: InstallableDef> {
         Pos(InstallableArgument<Parsed, T>),
@@ -78,10 +80,12 @@ pub(crate) mod interface {
             Ok(match self {
                 PosOrEnv::Pos(i) => i.resolve_installable(flox).await?,
                 PosOrEnv::Env(n) => {
-                    EnvironmentRef::<Git>::find(flox, n)
-                        .await?
-                        .get_latest_installable(flox)
-                        .await?
+                    resolve_installable_from_environment_refs(
+                        flox,
+                        "todo",
+                        EnvironmentRef::<Git>::find(flox, n).await?,
+                    )
+                    .await?
                 },
             })
         }
@@ -163,7 +167,7 @@ pub(crate) mod interface {
         pub _attr_flag: bool,
 
         /// Shell or package to develop on
-        #[bpaf(external(InstallableArgument::positional))]
+        #[bpaf(external(InstallableArgument::positional), optional, catch)]
         pub(crate) _installable_arg: Option<InstallableArgument<Parsed, DevelopInstallable>>,
     }
     parseable!(PrintDevEnv, print_dev_env);

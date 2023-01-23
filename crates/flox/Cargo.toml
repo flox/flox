@@ -43,6 +43,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tracing-log = { version = "0.1", features = ["env_logger"] }
 fslock = "0.2.1"
+pathdiff = "0.2"
 indexmap = {version =  "1.9", features = ["serde"] }
 
 [features]

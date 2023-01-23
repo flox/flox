@@ -3,13 +3,15 @@ use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::io::Stderr;
 use std::marker::PhantomData;
+use std::path::Path;
 use std::str::FromStr;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use bpaf::Parser;
 use crossterm::tty::IsTty;
-use flox_rust_sdk::flox::{Flox, FloxInstallable, ResolvedInstallableMatch};
+use flox_rust_sdk::flox::{EnvironmentRef, Flox, FloxInstallable, ResolvedInstallableMatch};
 use flox_rust_sdk::prelude::{Channel, ChannelRegistry, Installable};
+use flox_rust_sdk::providers::git::GitProvider;
 use indoc::indoc;
 use itertools::Itertools;
 use log::{debug, error, warn};
@@ -395,7 +397,7 @@ pub async fn resolve_installable_from_matches(
 
                       $ flox {full_subcommand} {first_choice},
 
-                    The available packages are:
+                    The available {derivation_type}s are:
                     {choices_list}
                 "},
                     derivation_type = derivation_type,
@@ -432,6 +434,120 @@ pub async fn resolve_installable_from_matches(
                 derivation_type,
                 full_subcommand,
                 shell_escape::escape(choices.remove(sel).1.into())
+            );
+
+            Ok(installable)
+        },
+    }
+}
+
+/// Resolve a single installation candidate from a list of matches
+///
+/// - return an error if no matches were found
+/// - return a nix installable if a single match was found
+/// - start an interactive dialog if multiple matches were found
+///   and a controlling tty was detected
+pub async fn resolve_installable_from_environment_refs<'flox, Git: GitProvider + 'static>(
+    flox: &'flox Flox,
+    subcommand: &str,
+    mut environment_refs: Vec<EnvironmentRef<'flox, Git>>,
+) -> Result<Installable> {
+    match environment_refs.len() {
+        0 => {
+            bail!("No matching environments found");
+        },
+        1 => Ok(environment_refs
+            .remove(0)
+            .get_latest_installable(flox)
+            .await?),
+        _ => {
+            let mut sources: HashSet<Option<&Path>> = HashSet::new();
+
+            for m in &environment_refs {
+                if let EnvironmentRef::Project(p) = m {
+                    sources.insert(Some(&p.workdir));
+                } else {
+                    sources.insert(None);
+                }
+            }
+
+            let current_dir = std::env::current_dir()?;
+
+            // Complile a list of choices for the user to choose from, and shorter choices for suggestions
+            let mut choices: Vec<(String, &String)> = environment_refs
+                .iter()
+                .map(
+                    // Format the results according to how verbose we have to be for disambiguation, only showing the flakeref or prefix when multiple are used
+                    |m| {
+                        let prefix: Cow<str> = match m {
+                            EnvironmentRef::Named(_) if sources.len() > 1 => "Named - ".into(),
+                            EnvironmentRef::Project(n) if sources.len() > 1 => {
+                                let rel = pathdiff::diff_paths(&n.workdir, &current_dir)
+                                    .ok_or_else(|| anyhow!("Project path should be absolute"))?;
+
+                                if rel == Path::new("") {
+                                    ". - ".into()
+                                } else {
+                                    format!("{} - ", rel.display()).into()
+                                }
+                            },
+                            _ => "".into(),
+                        };
+
+                        let name = match m {
+                            EnvironmentRef::Named(n) => &n.name,
+                            EnvironmentRef::Project(p) => &p.name,
+                        };
+
+                        Ok((format!("{prefix}{name}"), name))
+                    },
+                )
+                .collect::<Result<Vec<_>>>()?;
+
+            if !std::io::stderr().is_tty() || !std::io::stdin().is_tty() {
+                error!(
+                    indoc! {"
+                    You must address a specific environment. For example with:
+
+                      $ flox {subcommand} {first_choice},
+
+                    The available environments are:
+                    {choices_list}
+                "},
+                    subcommand = subcommand,
+                    first_choice = choices.get(0).expect("Expected at least one choice").1,
+                    choices_list = choices
+                        .iter()
+                        .map(|(long, _)| format!("  - {long}"))
+                        .join("\n")
+                );
+
+                bail!("No terminal to prompt for environment choice");
+            }
+
+            // Prompt for the user to select match
+            let dialog = Dialog {
+                message: &format!("Select an environment for flox {}", subcommand),
+                help_message: None,
+                typed: Select {
+                    options: choices.iter().cloned().map(|(long, _)| long).collect(),
+                },
+            };
+
+            let (sel, _) = dialog
+                .raw_prompt()
+                .await
+                .context("Failed to prompt for environment choice")?;
+
+            let escaped = shell_escape::escape(choices.remove(sel).1.into()).into_owned();
+
+            let installable = environment_refs
+                .remove(sel)
+                .get_latest_installable(flox)
+                .await?;
+
+            warn!(
+                "HINT: avoid selecting an environment next time with:\n  $ flox {subcommand} -e {escaped}",
             );
 
             Ok(installable)
