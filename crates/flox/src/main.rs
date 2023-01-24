@@ -228,7 +228,8 @@ pub async fn run_in_flox(
 fn set_user() -> Result<()> {
     {
         if let Some(effective_user) = nix::unistd::User::from_uid(nix::unistd::geteuid())? {
-            if env::var("USER")? != effective_user.name {
+            // TODO: warn if variable is empty?
+            if env::var("USER").unwrap_or_default() != effective_user.name {
                 env::set_var("USER", effective_user.name);
                 env::set_var("HOME", effective_user.dir);
             }
@@ -243,7 +244,7 @@ fn set_user() -> Result<()> {
             // likely to cause problems at some point.
             warn!(
                 "cannot determine effective uid - continuing as user '{}'",
-                env::var("USER")?
+                env::var("USER").context("Could not read '$USER' variable")?
             );
         };
         Ok(())
