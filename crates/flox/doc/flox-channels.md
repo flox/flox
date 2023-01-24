@@ -11,7 +11,7 @@ flox-channels - list all subscribed channels.
 
 # SYNOPSIS
 
-flox [ `<general-options>` ] channels
+flox [ `<general-options>` ] channels [ --json ]
 
 # DESCRIPTION
 
@@ -22,3 +22,8 @@ List channel subscriptions.
 ```{.include}
 ./include/general-options.md
 ```
+
+## Channels Options
+
+[ --json ]
+:   Encode the output as json

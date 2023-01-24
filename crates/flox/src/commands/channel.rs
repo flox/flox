@@ -50,7 +50,11 @@ pub enum ChannelCommands {
 
     /// list all subscribed channels
     #[bpaf(command)]
-    Channels {},
+    Channels {
+        /// print channels as JSON
+        #[bpaf(long)]
+        json: bool
+    },
 }
 
 pub type ChannelRef = String;
