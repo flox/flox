@@ -110,7 +110,9 @@ in
 
       buildAndTestSubdir = "crates/flox";
 
-      doCheck = false;
+      doCheck = true;
+      cargoTestFlags = ["--workspace"];
+
 
       postInstall = ''
         installManPage ${manpages}/*
@@ -118,6 +120,15 @@ in
           --bash <($out/bin/flox --bpaf-complete-style-bash) \
           --fish <($out/bin/flox --bpaf-complete-style-fish) \
           --zsh <($out/bin/flox --bpaf-complete-style-zsh)
+      '';
+
+
+      doInstallCheck = true;
+      postInstallCheck = ''
+        # Quick unit test to ensure that we are not using any "naked"
+        # commands within our scripts. Doesn't hit all codepaths but
+        # catches most of them.
+        env -i USER=`id -un` HOME=$PWD $out/bin/flox list > /dev/null
       '';
 
       buildInputs =
