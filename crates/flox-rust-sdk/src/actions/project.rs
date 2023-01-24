@@ -27,7 +27,7 @@ pub enum Guard<I, U> {
 }
 
 impl<I, U> Guard<I, U> {
-    pub async fn open(self) -> Result<I, Self> {
+    pub fn open(self) -> Result<I, Self> {
         match self {
             Guard::Initialized(i) => Ok(i),
             Guard::Uninitialized(_) => Err(self),
@@ -38,8 +38,8 @@ impl<I, U> Guard<I, U> {
 type ProjectGuard<'flox, I, U> = Guard<Project<'flox, I>, Project<'flox, U>>;
 
 #[derive(Constructor, Debug)]
-pub struct Open<Git: GitProvider> {
-    pub repo: Git,
+pub struct Open<T> {
+    pub inner: T,
 }
 
 #[derive(Constructor, Debug)]
@@ -61,13 +61,11 @@ impl<'flox> Project<'flox, Closed<PathBuf>> {
         match Git::discover(&self.state.inner).await {
             Ok(repo) => Ok(Guard::Initialized(Project {
                 flox: self.flox,
-                state: Closed { inner: repo },
+                state: Closed::new(repo),
             })),
             Err(err) if err.not_found() => Ok(Guard::Uninitialized(Project {
                 flox: self.flox,
-                state: Closed {
-                    inner: self.state.inner,
-                },
+                state: Closed::new(self.state.inner),
             })),
             Err(err) => Err(ProjectDiscoverGitError::DiscoverRepoError(err)),
         }
@@ -99,7 +97,7 @@ impl<'flox, Git: GitProvider> ProjectGuard<'flox, Closed<Git>, Closed<PathBuf>> 
 
                 Ok(Project {
                     flox: u.flox,
-                    state: Closed { inner: repo },
+                    state: Closed::new(repo),
                 })
             },
         }
@@ -134,7 +132,7 @@ impl<'flox, Git: GitProvider> Project<'flox, Closed<Git>> {
         } else {
             Ok(Guard::Uninitialized(Project {
                 flox: self.flox,
-                state: Closed { inner: repo },
+                state: Closed::new(repo),
             }))
         }
     }
@@ -188,18 +186,18 @@ impl<'flox, T> Project<'flox, Closed<T>> {
     pub fn closed(flox: &'flox Flox, inner: T) -> Self {
         Project {
             flox,
-            state: Closed { inner },
+            state: Closed::new(inner),
         }
     }
 }
 
 impl<Git: GitProvider> Project<'_, Open<Git>> {
     pub fn workdir(&self) -> Option<&Path> {
-        self.state.repo.workdir()
+        self.state.inner.workdir()
     }
 
     pub fn path(&self) -> &Path {
-        self.state.repo.path()
+        self.state.inner.path()
     }
 
     pub async fn init_flox_package<Nix: FloxNixApi>(
@@ -211,7 +209,7 @@ impl<Git: GitProvider> Project<'_, Open<Git>> {
     where
         FlakeInit: Run<Nix>,
     {
-        let repo = &self.state.repo;
+        let repo = &self.state.inner;
 
         let nix = self.flox.nix(nix_extra_args);
 

@@ -13,7 +13,6 @@ use flox_rust_sdk::nix::command_line::{Group, NixCliCommand, NixCommandLine, ToA
 use flox_rust_sdk::nix::Run as RunC;
 use flox_rust_sdk::prelude::Stability;
 use flox_rust_sdk::providers::git::GitCommandProvider;
-use futures::TryFutureExt;
 use inquire::error::InquireResult;
 use log::info;
 
@@ -545,22 +544,26 @@ async fn ensure_project_repo<'flox>(
     cwd: PathBuf,
     command: &WithPassthru<interface::Init>,
 ) -> Result<project::Project<'flox, Closed<GitCommandProvider>>, anyhow::Error> {
-    let git_repo = flox
+    match flox
         .project(cwd)
         .guard::<GitCommandProvider>()
         .await?
         .open()
-        .inspect_ok(|p| {
+    {
+        Ok(p) => {
             info!(
                 "Found git repo{}",
                 p.workdir()
                     .map(|p| format!(": {}", p.display()))
                     .unwrap_or_else(|| "".to_owned())
             );
-        })
-        .or_else(|g| async move {
+            Ok(p)
+        },
+        Err(g) => {
             async fn prompt(workdir: Option<&Path>) -> InquireResult<bool> {
-                let in_text = workdir.map(|x| format!("in {}", x.display())).unwrap_or_else(|| "here".to_owned());
+                let in_text = workdir
+                    .map(|x| format!("in {}", x.display()))
+                    .unwrap_or_else(|| "here".to_owned());
 
                 let dialog = Dialog {
                     message: &format!("The current directory is not in a Git repository, would you like to create one {}?", in_text),
@@ -587,9 +590,8 @@ async fn ensure_project_repo<'flox>(
             } else {
                 bail!("You must be inside of a Git repository to initialize a project");
             }
-        })
-        .await?;
-    Ok(git_repo)
+        },
+    }
 }
 
 /// Create
@@ -597,13 +599,12 @@ async fn ensure_project<'flox>(
     git_repo: Project<'flox, Closed<GitCommandProvider>>,
     command: &WithPassthru<interface::Init>,
 ) -> Result<Project<'flox, Open<GitCommandProvider>>> {
-    let project = git_repo
-        .guard()
-        .await?
-        .open()
-        .or_else(|g| g.init_project::<NixCommandLine>(command.nix_args.clone()))
-        .await?;
-    Ok(project)
+    match git_repo.guard().await?.open() {
+        Ok(x) => Ok(x),
+        Err(g) => Ok(g
+            .init_project::<NixCommandLine>(command.nix_args.clone())
+            .await?),
+    }
 }
 
 #[derive(Bpaf, Clone, Debug)]

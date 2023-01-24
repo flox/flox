@@ -1,7 +1,7 @@
 use std::io::{self, ErrorKind};
 use std::path::PathBuf;
 
-use log::debug;
+use log::{debug, log};
 use runix::command::Eval;
 use runix::installable::Installable;
 use runix::RunJson;
@@ -65,7 +65,6 @@ impl<'flox> Project<'flox> {
             .await
             .map_err(|_| FindProjectError::DiscoverError)?
             .open()
-            .await
             .map_err(|_| FindProjectError::NotInGitRepo)?;
 
         let project = git_repo
@@ -73,7 +72,6 @@ impl<'flox> Project<'flox> {
             .await
             .map_err(|_| FindProjectError::OpenError)?
             .open()
-            .await
             .map_err(|_| FindProjectError::NotProject)?;
 
         // TODO: it is easy to use `.path()` instead, but we do not know any default branch.
@@ -254,6 +252,8 @@ where
     Project(FindProjectError<Nix>),
     #[error(transparent)]
     Named(FindNamedError<Git>),
+    #[error("Environment name format is invalid")]
+    Invalid,
 }
 
 #[allow(unused)]
@@ -271,16 +271,63 @@ impl<Git: GitProvider> EnvironmentRef<'_, Git> {
 
         let mut environment_refs = Vec::new();
 
-        match Project::find::<Nix, Git>(flox, environment_name).await {
-            Err(_) => { /*todo */ },
-            Ok(ps) => {
-                for p in ps {
-                    environment_refs.push(EnvironmentRef::Project(p));
-                }
-            },
+        let mut not_proj = false;
+        let mut not_named = false;
+
+        // Lets hope nobody manages to put one of these in their project environment names
+        if environment_name.contains('/') {
+            not_proj = true;
         }
+
+        // I think starting with `.` is totally possible, but we're going to hope nobody will do it,
+        // so we can use it as a marker to force project resolution.
+        // Yes this completely goes against @tomberek's Nix patch to make this skip resolving
+        // since it resolves anyway, but whatever lol.
+        if environment_name.starts_with("floxEnvs.") || environment_name.starts_with('.') {
+            not_named = true;
+        }
+
+        // houston we have a problem
+        if not_proj && not_named {
+            return Err(EnvironmentRefError::Invalid);
+        }
+
+        if !not_proj {
+            match Project::find::<Nix, Git>(flox, environment_name).await {
+                Err(FindProjectError::NotInGitRepo | FindProjectError::NotProject) => {
+                    debug!("Not in a project Git repo, forcing named resolution");
+                    not_proj = true;
+                },
+                Err(err) => return Err(EnvironmentRefError::Project(err)),
+                Ok(ps) => {
+                    for p in ps {
+                        environment_refs.push(EnvironmentRef::Project(p));
+                    }
+
+                    not_proj = false;
+                },
+            };
+        }
+
         match Named::find(flox, environment_name).await {
-            Err(_) => { /*todo */ },
+            // This might be a bit picky, but a lot less should go wrong with named environments,
+            // so we can assume that errors are likely to be user errors,
+            // which are likely to be usage errors.
+            // i.e. missing, which are probably fine to ignore 🤷
+            Err(err) if not_proj => return Err(EnvironmentRefError::Named(err)),
+            Err(err) => {
+                log!(
+                    // This is unlikely to be something a user cares about,
+                    // unless they are getting "not found" errors.
+                    if environment_refs.is_empty() {
+                        log::Level::Warn
+                    } else {
+                        log::Level::Debug
+                    },
+                    "Error finding named environment, ignoring since we are in a project: {:?}",
+                    err
+                )
+            },
             Ok(n) => {
                 environment_refs.push(EnvironmentRef::Named(n));
             },
