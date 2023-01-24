@@ -1,7 +1,7 @@
 pub mod providers;
 pub mod utils;
 
-mod models;
+pub mod models;
 
 pub mod environment;
 

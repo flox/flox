@@ -18,11 +18,11 @@ use thiserror::Error;
 
 use crate::actions::environment::{Environment, EnvironmentError};
 use crate::actions::package::Package;
-use crate::actions::project::{self, Project};
 use crate::environment::{self, default_nix_subprocess_env};
 use crate::models::channels::ChannelRegistry;
 pub use crate::models::environment_ref::{self, *};
 pub use crate::models::flox_installable::*;
+use crate::models::project::{self, Project};
 use crate::models::stability::Stability;
 use crate::providers::git::GitProvider;
 

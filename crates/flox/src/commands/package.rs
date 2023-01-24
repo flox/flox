@@ -4,8 +4,8 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
 use bpaf::{construct, Bpaf, Parser};
-use flox_rust_sdk::actions::project::{self, Closed, Open, Project};
 use flox_rust_sdk::flox::Flox;
+use flox_rust_sdk::models::project::{self, Closed, Open, Project};
 use flox_rust_sdk::nix::arguments::flake::FlakeArgs;
 use flox_rust_sdk::nix::arguments::NixArgs;
 use flox_rust_sdk::nix::command::Eval as EvalComm;
