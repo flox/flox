@@ -22,6 +22,7 @@
   fd,
   gnused,
   bats,
+  gitMinimal,
 }: let
   manpages =
     runCommand "flox-manpages" {
@@ -57,6 +58,7 @@
   envs =
     {
       NIX_BIN = "${nix}/bin/nix";
+      GIT_BIN = "${gitMinimal}/bin/git";
       FLOX_SH = "${flox-bash}/libexec/flox/flox";
       FLOX_SH_PATH = "${flox-bash}";
       FLOX_SH_FLAKE = flox-bash.src; # For bats tests

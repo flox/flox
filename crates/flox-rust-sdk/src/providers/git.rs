@@ -124,7 +124,7 @@ pub struct GitCommandProvider {
 
 impl GitCommandProvider {
     fn new_command<P: AsRef<Path>>(w: &Option<P>) -> Command {
-        let mut c = Command::new("git");
+        let mut c = Command::new(env!("GIT_BIN"));
 
         if let Some(workdir) = w.as_ref() {
             c.arg("-C");
