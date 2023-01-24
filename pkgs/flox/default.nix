@@ -113,7 +113,6 @@ in
       doCheck = true;
       cargoTestFlags = ["--workspace"];
 
-
       postInstall = ''
         installManPage ${manpages}/*
         installShellCompletion --cmd flox \
@@ -122,13 +121,12 @@ in
           --zsh <($out/bin/flox --bpaf-complete-style-zsh)
       '';
 
-
       doInstallCheck = true;
       postInstallCheck = ''
         # Quick unit test to ensure that we are not using any "naked"
         # commands within our scripts. Doesn't hit all codepaths but
         # catches most of them.
-        env -i USER=`id -un` HOME=$PWD $out/bin/flox list > /dev/null
+        env -i USER=`id -un` HOME=$PWD $out/bin/flox envs > /dev/null
       '';
 
       buildInputs =
