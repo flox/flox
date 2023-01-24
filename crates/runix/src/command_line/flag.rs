@@ -24,7 +24,7 @@ pub enum FlagType<T> {
     /// list flags consist of a flag and a space delimited list of elements
     /// which is passed as a single arguement.
     ///
-    /// ```
+    /// ```ignore
     /// --flag "a b c"
     /// ```
     List(fn(&T) -> Vec<String>),
@@ -32,7 +32,7 @@ pub enum FlagType<T> {
     ///
     /// single arg flags consist of a flag and corresponding value
     ///
-    /// ```
+    /// ```ignore
     /// --flag "a b c"
     /// ```
     Arg(fn(&T) -> String),
@@ -40,7 +40,7 @@ pub enum FlagType<T> {
     ///
     /// The implementer of this flag provides the arguements to be passed as is
     ///
-    /// ```
+    /// ```ignore
     /// --flag a b
     /// ```
     Args(fn(&T) -> Vec<String>),
@@ -48,7 +48,7 @@ pub enum FlagType<T> {
     ///
     /// The implementer of this flag provides the representation of arguements
     ///
-    /// ```
+    /// ```ignore
     /// a b c
     /// ```
     Custom(fn(&T) -> Vec<String>),

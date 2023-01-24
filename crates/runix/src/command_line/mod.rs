@@ -297,16 +297,31 @@ pub trait JsonCommand {}
 ///
 /// ```
 /// use async_trait::async_trait;
-/// use runix::arguments::NixArgs
-/// use runix::command::Develop
-/// use runix::{RunTyped, NixBackend}
+/// use runix::arguments::NixArgs;
+/// use runix::command::Develop;
+/// use runix::{NixBackend, Run, RunTyped};
 ///
 /// struct NixCommandLine;
 /// impl NixBackend for NixCommandLine {}
 ///
 /// #[async_trait]
+/// impl Run<NixCommandLine> for Develop {
+///     type Error = std::io::Error;
+///
+///     async fn run(
+///         &self,
+///         backend: &NixCommandLine,
+///         nix_args: &NixArgs,
+///     ) -> Result<(), Self::Error> {
+///         todo!()
+///     }
+/// }
+///
+/// #[async_trait]
 /// impl RunTyped<NixCommandLine> for Develop {
 ///     type Output = ();
+///     type TypedError = std::io::Error;
+///
 ///     async fn run_typed(
 ///         &self,
 ///         backend: &NixCommandLine,
@@ -316,7 +331,6 @@ pub trait JsonCommand {}
 ///     }
 /// }
 /// ```
-
 pub trait TypedCommand {
     type Output;
 }
