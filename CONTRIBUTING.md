@@ -15,10 +15,20 @@ Currently this repo houses five rust crates:
 ## Development
 
 ```
-$ flox develop rust-env
+$ flox develop .#rust-env
 ```
 
-Sets up an environment with dependencies, rust toolchain, variable
+> **Note**
+>
+> If you have access to internal repositories, instead run
+>
+> ```
+> $ flox develop .#rust-env --override-input flox-bash github:flox/flox-bash-private
+> ```
+>
+> to work with the prerelease version of flox.
+
+This sets up an environment with dependencies, rust toolchain, variable
 and pre-commit-hooks.
 
 In the enviroment, use [`cargo`](https://doc.rust-lang.org/cargo/)
