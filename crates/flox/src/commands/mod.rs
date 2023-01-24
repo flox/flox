@@ -107,7 +107,7 @@ impl FloxArgs {
         };
 
         // in debug mode keep the tempdir to reproduce nix commands
-        if self.debug {
+        if self.debug || matches!(self.verbosity, Verbosity::Verbose(1..)) {
             let _ = temp_dir.into_path();
         }
 
@@ -115,7 +115,7 @@ impl FloxArgs {
             tokio::signal::ctrl_c().await.unwrap();
             // in case of SIG* the drop handler of temp_dir will not be called
             // if we are not in debugging mode, drop the tempdir manually
-            if !self.debug {
+            if !self.debug || !matches!(self.verbosity, Verbosity::Verbose(1..)) {
                 let _ = fs::remove_dir_all(&temp_dir_path);
             }
         });
