@@ -11,7 +11,7 @@ use commands::{FloxArgs, Prefix};
 use flox_rust_sdk::environment::default_nix_subprocess_env;
 use fslock::LockFile;
 use itertools::Itertools;
-use log::{debug, error, info, warn};
+use log::{debug, error, warn};
 use serde_json::json;
 use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
 use tokio::process::Command;

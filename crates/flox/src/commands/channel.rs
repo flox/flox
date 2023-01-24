@@ -53,7 +53,7 @@ pub enum ChannelCommands {
     Channels {
         /// print channels as JSON
         #[bpaf(long)]
-        json: bool
+        json: bool,
     },
 }
 

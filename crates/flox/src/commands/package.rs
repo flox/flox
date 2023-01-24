@@ -101,7 +101,6 @@ pub(crate) mod interface {
     }
     parseable!(PrintDevEnv, print_dev_env);
 
-
     #[derive(Bpaf, Clone, Debug)]
     pub struct Publish {
         #[bpaf(external(package_args), group_help("Development Options"))]
