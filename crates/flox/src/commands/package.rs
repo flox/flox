@@ -81,7 +81,7 @@ pub(crate) mod interface {
                 PosOrEnv::Env(n) => {
                     resolve_installable_from_environment_refs(
                         flox,
-                        "todo",
+                        T::SUBCOMMAND,
                         EnvironmentRef::<Git>::find(flox, n).await?,
                     )
                     .await?
