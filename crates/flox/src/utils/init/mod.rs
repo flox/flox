@@ -5,9 +5,9 @@ use std::{env, iter};
 
 use anyhow::Result;
 use flox_rust_sdk::prelude::{Channel, ChannelRegistry};
-use log::debug;
+use log::{debug, info};
 use serde::Deserialize;
-use tokio::io::AsyncWriteExt;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 mod logger;
 mod metrics;
@@ -113,7 +113,7 @@ pub fn init_access_tokens(
     Ok(tokens)
 }
 
-pub async fn init_git_conf(temp_dir: &Path) -> Result<()> {
+pub async fn init_git_conf(temp_dir: &Path, config_dir: &Path) -> Result<()> {
     // Get the backed up `GIT_CONFIG_SYSTEM` set by a parent invocation of `flox`
     // May be empty if `GIT_CONFIG_SYSTEM` not set outside of flox.
     // If not empty is expected to point to an existing file.
@@ -159,23 +159,52 @@ pub async fn init_git_conf(temp_dir: &Path) -> Result<()> {
         betaToken = env!("BETA_ACCESS_TOKEN"),
         original_include = system_conf
             .as_ref()
-            .map(|c| format!("path = {c}"))
-            .unwrap_or_else(|| "; no original system git config".to_string())
+            .map(|c| format!(
+                indoc::indoc!(
+                    "
+
+[include]
+	path = {}
+
+"
+                ),
+                c
+            ))
+            .unwrap_or_default()
     );
 
-    // create a file in the process directory containing the git config
-    let temp_system_conf_path = temp_dir.join("gitconfig");
-    tokio::fs::OpenOptions::new()
-        .write(true)
-        .mode(0o600)
-        .create_new(true)
-        .open(&temp_system_conf_path)
-        .await?
-        .write_all(git_config.as_bytes())
-        .await?;
+    // write or update gitconfig if needed
+    let flox_system_conf_path = config_dir.join("gitconfig");
+
+    if !flox_system_conf_path.exists() || {
+        let mut contents = String::new(); // todo: allocate once with some room
+
+        tokio::fs::OpenOptions::new()
+            .read(true)
+            .open(&flox_system_conf_path)
+            .await?
+            .read_to_string(&mut contents)
+            .await?;
+
+        contents != git_config
+    } {
+        // create a file in the process directory containing the git config
+        let temp_system_conf_path = temp_dir.join("gitconfig");
+        tokio::fs::OpenOptions::new()
+            .write(true)
+            .mode(0o600)
+            .create_new(true)
+            .open(&temp_system_conf_path)
+            .await?
+            .write_all(git_config.as_bytes())
+            .await?;
+
+        info!("Updating git config {:#?}", &flox_system_conf_path);
+        tokio::fs::rename(temp_system_conf_path, &flox_system_conf_path).await?;
+    }
 
     // Set system config variable
-    env::set_var(ENV_GIT_CONFIG_SYSTEM, temp_system_conf_path);
+    env::set_var(ENV_GIT_CONFIG_SYSTEM, flox_system_conf_path);
     // Set the `FLOX_ORIGINAL_GIT_CONFIG_SYSTEM` variable.
     // This will be empty, if no system wide configuration is applied.
     // In an inner invocation the existence of this variable means that `GIT_CONFIG_SYSTEM` was

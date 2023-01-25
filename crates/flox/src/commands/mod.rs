@@ -78,7 +78,7 @@ impl FloxArgs {
         let temp_dir = TempDir::new_in(process_dir)?;
         let temp_dir_path = temp_dir.path().to_owned();
 
-        init_git_conf(temp_dir.path()).await?;
+        init_git_conf(temp_dir.path(), &config.flox.config_dir).await?;
 
         // disabling telemetry will work regardless
         // but we don't want to give users who disabled it the prompt
