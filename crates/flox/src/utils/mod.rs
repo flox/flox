@@ -1,4 +1,3 @@
-use std::any::TypeId;
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::io::Stderr;
@@ -183,41 +182,29 @@ impl<Matching: InstallableDef + 'static> InstallableArgument<Unparsed, Matching>
 
     /// Completion fucntion for bpaf completion engine
     fn complete_installable(&self) -> Vec<(String, Option<String>)> {
-        #[allow(clippy::type_complexity)]
-        static COMPLETED_INSTALLABLES: Lazy<
-            std::sync::Mutex<HashMap<(TypeId, String), Vec<(String, Option<String>)>>>,
-        > = Lazy::new(|| std::sync::Mutex::new(HashMap::new()));
+        let drv = InstallableKind::any(Matching::DERIVATION_TYPES).unwrap();
 
-        COMPLETED_INSTALLABLES
-            .lock()
-            .unwrap()
-            .entry((TypeId::of::<Self>(), self.installable.clone()))
-            .or_insert_with(|| {
-                let drv = InstallableKind::any(Matching::DERIVATION_TYPES).unwrap();
+        let installable = self.installable.clone();
+        let default_prefixes = drv.prefix;
+        let default_flakerefs = drv.flake_refs;
 
-                let installable = self.installable.clone();
-                let default_prefixes = drv.prefix;
-                let default_flakerefs = drv.flake_refs;
+        let flox = Flox::completion_instance().expect("Could not initialize flox instance");
 
-                let flox = Flox::completion_instance().expect("Could not initialize flox instance");
+        let handle = tokio::runtime::Handle::current();
+        let comp = std::thread::spawn(move || {
+            handle
+                .block_on(flox.complete_installable(
+                    &installable,
+                    &default_flakerefs,
+                    &default_prefixes,
+                ))
+                .map_err(|e| debug!("Failed to complete installable: {e}"))
+                .unwrap_or_default()
+        })
+        .join()
+        .unwrap();
 
-                let handle = tokio::runtime::Handle::current();
-                let comp = std::thread::spawn(move || {
-                    handle
-                        .block_on(flox.complete_installable(
-                            &installable,
-                            &default_flakerefs,
-                            &default_prefixes,
-                        ))
-                        .map_err(|e| debug!("Failed to complete installable: {e}"))
-                        .unwrap_or_default()
-                })
-                .join()
-                .unwrap();
-
-                comp.into_iter().map(|a| (a, None)).collect()
-            })
-            .to_vec()
+        comp.into_iter().map(|a| (a, None)).collect()
     }
 }
 impl<Matching: InstallableDef + 'static> InstallableArgument<Parsed, Matching> {
