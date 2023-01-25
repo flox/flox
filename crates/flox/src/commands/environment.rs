@@ -11,17 +11,11 @@ use crate::{flox_forward, subcommand_metric};
 
 #[derive(Bpaf, Clone)]
 pub struct EnvironmentArgs {
-    /// Path to environment.
-    ///
-    ///
-    /// TODO: this will be changed to an environment name or an
-    /// installable at some point, once we settle on how users specify environments
-    #[bpaf(short, long, argument("ENV"))]
-    pub environment: Option<PathBuf>,
-
     #[bpaf(short, long, argument("SYSTEM"))]
     pub system: Option<String>,
 }
+
+pub type EnvironmentRef = PathBuf;
 
 impl EnvironmentCommands {
     pub async fn handle(&self, flox: Flox) -> Result<()> {
@@ -30,7 +24,8 @@ impl EnvironmentCommands {
 
             EnvironmentCommands::Install {
                 packages,
-                environment: EnvironmentArgs { environment, .. },
+                environment_args: EnvironmentArgs { .. },
+                environment,
             } => {
                 subcommand_metric!("install");
 
@@ -84,7 +79,10 @@ pub enum EnvironmentCommands {
     #[bpaf(command)]
     Activate {
         #[bpaf(external(environment_args), group_help("Environment Options"))]
-        environment: EnvironmentArgs,
+        environment_args: EnvironmentArgs,
+
+        #[bpaf(long, short, argument("ENV"))]
+        environment: Vec<EnvironmentRef>,
 
         #[bpaf(external(activate_run_args))]
         arguments: Option<(String, Vec<String>)>,
@@ -94,7 +92,10 @@ pub enum EnvironmentCommands {
     #[bpaf(command)]
     Create {
         #[bpaf(external(environment_args), group_help("Environment Options"))]
-        environment: EnvironmentArgs,
+        environment_args: EnvironmentArgs,
+
+        #[bpaf(long, short, argument("ENV"))]
+        environment: Option<EnvironmentRef>,
     },
 
     /// remove all data pertaining to an environment`
@@ -107,35 +108,50 @@ pub enum EnvironmentCommands {
         origin: bool,
 
         #[bpaf(external(environment_args), group_help("Environment Options"))]
-        environment: EnvironmentArgs,
+        environment_args: EnvironmentArgs,
+
+        #[bpaf(long, short, argument("ENV"))]
+        environment: Option<EnvironmentRef>,
     },
 
     /// edit declarative environment configuration
     #[bpaf(command)]
     Edit {
         #[bpaf(external(environment_args), group_help("Environment Options"))]
-        environment: EnvironmentArgs,
+        environment_args: EnvironmentArgs,
+
+        #[bpaf(long, short, argument("ENV"))]
+        environment: Option<EnvironmentRef>,
     },
 
     /// export declarative environment manifest to STDOUT
     #[bpaf(command)]
     Export {
         #[bpaf(external(environment_args), group_help("Environment Options"))]
-        environment: EnvironmentArgs,
+        environment_args: EnvironmentArgs,
+
+        #[bpaf(long, short, argument("ENV"))]
+        environment: Option<EnvironmentRef>,
     },
 
     /// list environment generations with contents
     #[bpaf(command)]
     Generations {
         #[bpaf(external(environment_args), group_help("Environment Options"))]
-        environment: EnvironmentArgs,
+        environment_args: EnvironmentArgs,
+
+        #[bpaf(long, short, argument("ENV"))]
+        environment: Option<EnvironmentRef>,
     },
 
     /// access to the git CLI for floxmeta repository
     #[bpaf(command)]
     Git {
         #[bpaf(external(environment_args), group_help("Environment Options"))]
-        environment: EnvironmentArgs,
+        environment_args: EnvironmentArgs,
+
+        #[bpaf(long, short, argument("ENV"))]
+        environment: Option<EnvironmentRef>,
 
         #[bpaf(any("Git Arguments"))]
         git_arguments: Vec<String>,
@@ -148,14 +164,20 @@ pub enum EnvironmentCommands {
         oneline: bool,
 
         #[bpaf(external(environment_args), group_help("Environment Options"))]
-        environment: EnvironmentArgs,
+        environment_args: EnvironmentArgs,
+
+        #[bpaf(long, short, argument("ENV"))]
+        environment: Option<EnvironmentRef>,
     },
 
     /// import declarative environment manifest from STDIN as new generation
     #[bpaf(command)]
     Import {
         #[bpaf(external(environment_args), group_help("Environment Options"))]
-        environment: EnvironmentArgs,
+        environment_args: EnvironmentArgs,
+
+        #[bpaf(long, short, argument("ENV"))]
+        environment: Option<EnvironmentRef>,
 
         #[bpaf(external(ImportFile::parse), fallback(ImportFile::Stdin))]
         file: ImportFile,
@@ -165,7 +187,10 @@ pub enum EnvironmentCommands {
     #[bpaf(command)]
     Install {
         #[bpaf(external(environment_args), group_help("Environment Options"))]
-        environment: EnvironmentArgs,
+        environment_args: EnvironmentArgs,
+
+        #[bpaf(long, short, argument("ENV"))]
+        environment: Option<EnvironmentRef>,
 
         #[bpaf(positional("PACKAGES"), some("At least one package"))]
         packages: Vec<FloxPackage>,
@@ -175,7 +200,10 @@ pub enum EnvironmentCommands {
     #[bpaf(command)]
     List {
         #[bpaf(external(environment_args), group_help("Environment Options"))]
-        environment: EnvironmentArgs,
+        environment_args: EnvironmentArgs,
+
+        #[bpaf(long, short, argument("ENV"))]
+        environment: Option<EnvironmentRef>,
 
         #[bpaf(external(list_output), optional)]
         json: Option<ListOutput>,
@@ -192,14 +220,20 @@ pub enum EnvironmentCommands {
         force: bool,
 
         #[bpaf(external(environment_args), group_help("Environment Options"))]
-        environment: EnvironmentArgs,
+        environment_args: EnvironmentArgs,
+
+        #[bpaf(long, short, argument("ENV"))]
+        environment: Option<EnvironmentRef>,
     },
 
     /// pull environment metadata to remote registry
     #[bpaf(command)]
     Pull {
         #[bpaf(external(environment_args), group_help("Environment Options"))]
-        environment: EnvironmentArgs,
+        environment_args: EnvironmentArgs,
+
+        #[bpaf(long, short, argument("ENV"))]
+        environment: Option<EnvironmentRef>,
 
         /// forceably overwrite either the local copy of the environment
         #[bpaf(long, short)]
@@ -215,7 +249,11 @@ pub enum EnvironmentCommands {
     #[bpaf(command, long("rm"))]
     Remove {
         #[bpaf(external(environment_args), group_help("Environment Options"))]
-        environment: EnvironmentArgs,
+        environment_args: EnvironmentArgs,
+
+        #[bpaf(long, short, argument("ENV"))]
+        environment: Option<EnvironmentRef>,
+
         #[bpaf(positional("PACKAGES"), some("At least one package"))]
         packages: Vec<FloxPackage>,
     },
@@ -224,7 +262,10 @@ pub enum EnvironmentCommands {
     #[bpaf(command)]
     Rollback {
         #[bpaf(external(environment_args), group_help("Environment Options"))]
-        environment: EnvironmentArgs,
+        environment_args: EnvironmentArgs,
+
+        #[bpaf(long, short, argument("ENV"))]
+        environment: Option<EnvironmentRef>,
 
         /// Generation to roll back to.
         ///
@@ -237,7 +278,10 @@ pub enum EnvironmentCommands {
     #[bpaf(command("switch-generation"))]
     SwitchGeneration {
         #[bpaf(external(environment_args), group_help("Environment Options"))]
-        environment: EnvironmentArgs,
+        environment_args: EnvironmentArgs,
+
+        #[bpaf(long, short, argument("ENV"))]
+        environment: Option<EnvironmentRef>,
 
         #[bpaf(positional("GENERATION"))]
         generation: u32,
@@ -247,7 +291,10 @@ pub enum EnvironmentCommands {
     #[bpaf(command)]
     Upgrade {
         #[bpaf(external(environment_args), group_help("Environment Options"))]
-        environment: EnvironmentArgs,
+        environment_args: EnvironmentArgs,
+
+        #[bpaf(long, short, argument("ENV"))]
+        environment: Option<EnvironmentRef>,
 
         #[bpaf(positional("PACKAGES"))]
         packages: Vec<FloxPackage>,
@@ -257,7 +304,10 @@ pub enum EnvironmentCommands {
     #[bpaf(command("wipe-history"))]
     WipeHistory {
         #[bpaf(external(environment_args), group_help("Environment Options"))]
-        environment: EnvironmentArgs,
+        environment_args: EnvironmentArgs,
+
+        #[bpaf(long, short, argument("ENV"))]
+        environment: Option<EnvironmentRef>,
     },
 }
 
