@@ -21,6 +21,7 @@ pub struct NixConfigArgs {
     pub extra_access_tokens: AccessTokens,
     pub show_trace: ShowTrace,
     pub netrc_file: Option<NetRCFile>,
+    pub connect_timeout: ConnectTimeout,
 }
 
 impl NixConfigArgs {
@@ -72,6 +73,14 @@ pub struct AcceptFlakeConfig(bool);
 impl Flag for AcceptFlakeConfig {
     const FLAG: &'static str = "--accept-flake-config";
     const FLAG_TYPE: FlagType<Self> = FlagType::bool();
+}
+
+/// Flag for accept-flake-config
+#[derive(Clone, From, Debug, Deref, Default)]
+pub struct ConnectTimeout(u32);
+impl Flag for ConnectTimeout {
+    const FLAG: &'static str = "--connect-timeout";
+    const FLAG_TYPE: FlagType<Self> = FlagType::number_arg();
 }
 
 /// Flag for show-trace

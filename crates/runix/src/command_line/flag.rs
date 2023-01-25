@@ -92,6 +92,12 @@ impl<T: Deref<Target = impl AsRef<OsStr>>> FlagType<T> {
     }
 }
 
+impl<T: Deref<Target = u32>> FlagType<T> {
+    pub const fn number_arg() -> FlagType<T> {
+        FlagType::Arg(|s| s.deref().to_string())
+    }
+}
+
 impl<T> ToArgs for T
 where
     T: Flag,
