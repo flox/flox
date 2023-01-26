@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::path::PathBuf;
 
 use derive_more::{Deref, From};
@@ -13,29 +12,30 @@ use crate::command_line::ToArgs;
 #[derive(Clone, Default, Debug, ToArgs)]
 pub struct NixConfigArgs {
     pub accept_flake_config: AcceptFlakeConfig,
-    pub warn_dirty: WarnDirty,
-    pub flake_registry: Option<FlakeRegistry>,
+    pub connect_timeout: ConnectTimeout,
+    pub extra_access_tokens: AccessTokens,
     pub extra_experimental_features: ExperimentalFeatures,
     pub extra_substituters: Substituters,
     pub extra_trusted_public_keys: TrustedPublicKeys,
-    pub extra_access_tokens: AccessTokens,
-    pub show_trace: ShowTrace,
+    pub flake_registry: Option<FlakeRegistry>,
     pub netrc_file: Option<NetRCFile>,
-    pub connect_timeout: ConnectTimeout,
+    pub show_trace: ShowTrace,
+    pub warn_dirty: WarnDirty,
 }
 
 impl NixConfigArgs {
     fn flags(&self) -> Vec<Vec<String>> {
         vec![
             self.accept_flake_config.to_args(),
-            self.warn_dirty.to_args(),
+            self.connect_timeout.to_args(),
+            self.extra_access_tokens.to_args(),
             self.extra_experimental_features.to_args(),
             self.extra_substituters.to_args(),
             self.extra_trusted_public_keys.to_args(),
             self.flake_registry.to_args(),
-            self.show_trace.to_args(),
             self.netrc_file.to_args(),
-            self.extra_access_tokens.to_args(),
+            self.show_trace.to_args(),
+            self.warn_dirty.to_args(),
         ]
     }
 
@@ -125,7 +125,7 @@ impl Flag for NetRCFile {
 
 /// Flag for extra access tokens
 #[derive(Clone, From, Deref, Debug, Default)]
-pub struct AccessTokens(HashMap<String, String>);
+pub struct AccessTokens(Vec<(String, String)>);
 impl Flag for AccessTokens {
     const FLAG: &'static str = "--extra-access-tokens";
     const FLAG_TYPE: FlagType<Self> = FlagType::map();
