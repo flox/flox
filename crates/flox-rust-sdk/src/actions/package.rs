@@ -3,7 +3,7 @@ use runix::arguments::flake::FlakeArgs;
 use runix::arguments::{BundleArgs, NixArgs};
 use runix::command::{Build, Bundle, Develop, Run as RunCommand, Shell};
 use runix::installable::Installable;
-use runix::{NixBackend, Run, RunTyped};
+use runix::{NixBackend, Run};
 use thiserror::Error;
 
 use crate::flox::{Flox, FloxNixApi};
@@ -93,7 +93,7 @@ impl Package<'_> {
     /// runs `nix build <installable>`
     pub async fn build<Nix: FloxNixApi>(&self) -> Result<(), PackageBuildError<Nix>>
     where
-        Build: RunTyped<Nix>,
+        Build: Run<Nix>,
     {
         let nix = self.flox.nix::<Nix>(self.nix_arguments.clone());
 
