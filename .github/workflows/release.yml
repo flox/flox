@@ -19,7 +19,7 @@ jobs:
       # checkout develop branch
       - uses: actions/checkout@v3
         with:
-          ref: "develop"
+          ref: "main"
           fetch-depth: 0
           token: ${{ secrets.NIX_GIT_TOKEN }}
 
@@ -42,11 +42,6 @@ jobs:
 
           echo "TAG=$(git describe --abbrev=0 --tags)" >> $GITHUB_OUTPUT
 
-      - name: Merge into `main`
+      - name: "Push `${{ steps.tag.outputs.TAG }} (tag), main (branch)"
         run: |
-          git switch main
-          git merge --ff-only "${{ steps.tag.outputs.TAG }}"
-
-      - name: "Push `${{ steps.tag.outputs.TAG }} (tag), main (branch), develop (branch)"
-        run: |
-          git push --atomic origin ${{ steps.tag.outputs.TAG }} main develop
+          git push --atomic origin ${{ steps.tag.outputs.TAG }} main
