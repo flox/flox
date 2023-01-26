@@ -117,10 +117,12 @@ pub fn init_access_tokens(
 }
 
 pub async fn init_git_conf(temp_dir: &Path, config_dir: &Path) -> Result<()> {
+    let flox_system_conf_path = config_dir.join("gitconfig");
+
     // Get the backed up `GIT_CONFIG_SYSTEM` set by a parent invocation of `flox`
     // May be empty if `GIT_CONFIG_SYSTEM` not set outside of flox.
     // If not empty is expected to point to an existing file.
-    let backed_system_conf = match env::var(ENV_FLOX_ORIGINAL_GIT_CONFIG_SYSTEM) {
+    let backed_up_system_conf = match env::var(ENV_FLOX_ORIGINAL_GIT_CONFIG_SYSTEM) {
         Result::Ok(c) => Some(c),
         _ => None,
     };
@@ -135,11 +137,12 @@ pub async fn init_git_conf(temp_dir: &Path, config_dir: &Path) -> Result<()> {
     // Recall or load the system config if it exists
     let system_conf = match (
         current_system_conf.as_deref(),
-        backed_system_conf.as_deref(),
+        backed_up_system_conf.as_deref(),
     ) {
         // Use `GIT_CONFIG_SYSTEM` if `FLOX_ORIGINAL_GIT_CONFIG_SYSTEM` is not set.
+        // Ignore if `GIT_CONFIG_SYSTEM` is set to flox/gitconfgi to avoid circular imports.
         // Corresponds to first/"outermost" invocation of flox.
-        (Some(c), None) => Some(c),
+        (Some(c), None) if Path::new(c) != flox_system_conf_path => Some(c),
 
         // No prior backed up system gitconfig
         (_, Some("")) => None,
@@ -177,8 +180,6 @@ pub async fn init_git_conf(temp_dir: &Path, config_dir: &Path) -> Result<()> {
     );
 
     // write or update gitconfig if needed
-    let flox_system_conf_path = config_dir.join("gitconfig");
-
     if !flox_system_conf_path.exists() || {
         let mut contents = String::new(); // todo: allocate once with some room
 
