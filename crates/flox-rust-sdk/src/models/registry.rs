@@ -12,7 +12,7 @@ pub enum RegistryError {
     FlakeRef(#[from] FlakeRefError),
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, Default)]
+#[derive(Debug, Clone, Deserialize, Serialize, Default, PartialEq, Eq)]
 pub struct Registry {
     version: Version,
     /// Uses BTree implmentation to guarantee stable outputs
@@ -41,7 +41,7 @@ impl Registry {
 }
 
 /// TODO: use https://github.com/dtolnay/serde-repr?
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 struct Version(u8);
 impl Default for Version {
     fn default() -> Self {

@@ -70,6 +70,10 @@ pub struct FloxArgs {
 impl FloxArgs {
     /// Initialize the command line by creating an initial FloxBuilder
     pub async fn handle(self, config: crate::config::Config) -> Result<()> {
+        // ensure xdg dirs exist
+        tokio::fs::create_dir_all(&config.flox.config_dir).await?;
+        tokio::fs::create_dir_all(&config.flox.data_dir).await?;
+
         // prepare a temp dir for the run:
         let process_dir = config.flox.cache_dir.join("process");
         tokio::fs::create_dir_all(&process_dir).await?;

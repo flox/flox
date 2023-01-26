@@ -1,10 +1,11 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
 use std::str::FromStr;
 use std::{env, iter};
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use flox_rust_sdk::prelude::{Channel, ChannelRegistry};
+use indexmap::IndexMap;
 use log::{debug, info};
 use serde::Deserialize;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -20,7 +21,7 @@ const ENV_FLOX_ORIGINAL_GIT_CONFIG_SYSTEM: &str = "FLOX_ORIGINAL_GIT_CONFIG_SYST
 
 pub fn init_channels() -> Result<ChannelRegistry> {
     let mut channels = ChannelRegistry::default();
-    channels.register_channel("flox", Channel::from_str("github:flox/floxpkgs")?);
+    channels.register_channel("flox", Channel::from_str("github:flox/floxpkgs/master")?);
     channels.register_channel("nixpkgs", Channel::from_str("github:flox/nixpkgs/stable")?);
     channels.register_channel(
         "nixpkgs-flox",
@@ -46,7 +47,7 @@ pub fn init_channels() -> Result<ChannelRegistry> {
 
 pub fn init_access_tokens(
     config_tokens: &HashMap<String, String>,
-) -> Result<HashMap<String, String>> {
+) -> Result<Vec<(String, String)>> {
     use std::io::{BufRead, BufReader};
 
     #[derive(Deserialize)]
@@ -55,8 +56,9 @@ pub fn init_access_tokens(
     }
 
     let gh_config_file = xdg::BaseDirectories::with_prefix("gh")?.get_config_file("hosts.yml");
-    let gh_tokens: HashMap<String, String> = if gh_config_file.exists() {
-        serde_yaml::from_reader::<_, HashMap<String, GhHost>>(std::fs::File::open(gh_config_file)?)?
+    let gh_tokens: BTreeMap<String, String> = if gh_config_file.exists() {
+        serde_yaml::from_reader::<_, IndexMap<String, GhHost>>(std::fs::File::open(gh_config_file)?)
+            .context("Could not read `gh` config file")?
             .into_iter()
             .map(|(k, v)| (k, v.oauth_token))
             .collect()
@@ -65,8 +67,8 @@ pub fn init_access_tokens(
     };
 
     let nix_tokens_file = xdg::BaseDirectories::with_prefix("nix")?.get_config_file("nix.conf");
-    let nix_tokens: HashMap<String, String> = if nix_tokens_file.exists() {
-        let mut tokens = HashMap::new();
+    let nix_tokens: Vec<(String, String)> = if nix_tokens_file.exists() {
+        let mut tokens = Vec::new();
         for line in BufReader::new(std::fs::File::open(nix_tokens_file)?).lines() {
             let line = line.unwrap();
             let (k, v) = if let Some(l) = line.split_once('=') {
@@ -103,12 +105,13 @@ pub fn init_access_tokens(
     .map(String::from)
     .zip(iter::repeat(env!("BETA_ACCESS_TOKEN").to_string()));
 
-    let mut tokens = HashMap::new();
+    let mut tokens = Vec::new();
 
-    tokens.extend(gh_tokens.into_iter());
-    tokens.extend(nix_tokens.into_iter());
-    tokens.extend(config_tokens.clone().into_iter());
     tokens.extend(beta_access);
+    tokens.extend(nix_tokens.into_iter());
+    tokens.extend(gh_tokens.into_iter());
+    tokens.extend(config_tokens.clone().into_iter());
+    tokens.dedup();
 
     Ok(tokens)
 }

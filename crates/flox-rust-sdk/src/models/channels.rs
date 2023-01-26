@@ -25,7 +25,7 @@ impl From<ToFlakeRef> for Channel {
 }
 
 /// Todo: ensure some channels cannot be overriden
-#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ChannelRegistry {
     #[serde(flatten)]
     registry: Registry,

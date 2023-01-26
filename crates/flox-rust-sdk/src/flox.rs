@@ -1,8 +1,9 @@
 use std::collections::{BTreeSet, HashMap};
+use std::io::Read;
 use std::path::PathBuf;
 
 use derive_more::Constructor;
-use log::debug;
+use log::{debug, info};
 use once_cell::sync::Lazy;
 use runix::arguments::common::NixCommonArgs;
 use runix::arguments::config::NixConfigArgs;
@@ -48,7 +49,10 @@ pub struct Flox {
     pub data_dir: PathBuf,
     pub temp_dir: PathBuf,
 
-    pub access_tokens: HashMap<String, String>,
+    /// access tokens injected in nix.conf
+    ///
+    /// Use [Vec] to preserve orginal ordering
+    pub access_tokens: Vec<(String, String)>,
     pub netrc_file: PathBuf,
 
     pub channels: ChannelRegistry,
@@ -369,55 +373,90 @@ impl Flox {
         use std::os::unix::prelude::OpenOptionsExt;
 
         let environment = {
-            // Write registry file if it does not exist
-            let registry_file = self.temp_dir.join("registry.json");
-            if !registry_file.exists() {
-                serde_json::to_writer(
-                    std::fs::File::create(&registry_file).unwrap(),
-                    &self.channels,
-                )
-                .unwrap();
-            }
+            // Write registry file if it does not exist or has changed
+            let global_registry_file = self.config_dir.join("floxFlakeRegistry.json");
+            let registry_content = serde_json::to_string_pretty(&self.channels).unwrap();
+            if !global_registry_file.exists() || {
+                let contents: ChannelRegistry =
+                    serde_json::from_reader(std::fs::File::open(&global_registry_file).unwrap())
+                        .expect("Invalid registry file");
 
-            // Write Config file if it does not exist
-            let config_file = self.temp_dir.join("nix.conf");
-            if !config_file.exists() {
-                let config = NixConfigArgs {
-                    accept_flake_config: true.into(),
-                    warn_dirty: false.into(),
-                    extra_experimental_features: ["nix-command", "flakes"]
-                        .map(String::from)
-                        .to_vec()
-                        .into(),
-                    extra_substituters: ["https://cache.floxdev.com"]
-                        .map(String::from)
-                        .to_vec()
-                        .into(),
-                    extra_trusted_public_keys: [
-                        "flox-store-public-0:8c/B+kjIaQ+BloCmNkRUKwaVPFWkriSAd0JJvuDu4F0=",
-                    ]
-                    .map(String::from)
-                    .to_vec()
-                    .into(),
-                    extra_access_tokens: self.access_tokens.clone().into(),
-                    flake_registry: Some(registry_file.into()),
-                    netrc_file: Some(self.netrc_file.clone().into()),
-                    ..Default::default()
-                };
+                contents != self.channels
+            } {
+                let temp_registry_file = self.temp_dir.join("registry.json");
+
                 std::fs::File::options()
                     .mode(0o600)
                     .create_new(true)
                     .write(true)
-                    .open(&config_file)
+                    .open(&temp_registry_file)
                     .unwrap()
-                    .write_all(config.to_config_string().as_bytes())
+                    .write_all(registry_content.as_bytes())
                     .unwrap();
+
+                debug!("Updating flake registry: {global_registry_file:?}");
+                std::fs::rename(temp_registry_file, &global_registry_file).unwrap();
+            }
+
+            let config = NixConfigArgs {
+                accept_flake_config: true.into(),
+                warn_dirty: false.into(),
+                extra_experimental_features: ["nix-command", "flakes"]
+                    .map(String::from)
+                    .to_vec()
+                    .into(),
+                extra_substituters: ["https://cache.floxdev.com"]
+                    .map(String::from)
+                    .to_vec()
+                    .into(),
+                extra_trusted_public_keys: [
+                    "flox-store-public-0:8c/B+kjIaQ+BloCmNkRUKwaVPFWkriSAd0JJvuDu4F0=",
+                ]
+                .map(String::from)
+                .to_vec()
+                .into(),
+                extra_access_tokens: self.access_tokens.clone().into(),
+                flake_registry: Some(global_registry_file.into()),
+                netrc_file: Some(self.netrc_file.clone().into()),
+                connect_timeout: 5.into(),
+                ..Default::default()
+            };
+
+            let nix_config = format!(
+                "# Automatically generated - do not edit.\n{}\n",
+                config.to_config_string()
+            );
+
+            // Write nix.conf file if it does not exist or has changed
+            let global_config_file_path = self.config_dir.join("nix.conf");
+            if !global_config_file_path.exists() || {
+                let mut contents = String::new();
+                std::fs::File::open(&global_config_file_path)
+                    .unwrap()
+                    .read_to_string(&mut contents)
+                    .unwrap();
+
+                contents != nix_config
+            } {
+                let temp_config_file_path = self.temp_dir.join("nix.conf");
+
+                std::fs::File::options()
+                    .mode(0o600)
+                    .create_new(true)
+                    .write(true)
+                    .open(&temp_config_file_path)
+                    .unwrap()
+                    .write_all(nix_config.as_bytes())
+                    .unwrap();
+
+                info!("Updating nix.conf: {global_config_file_path:?}");
+                std::fs::rename(temp_config_file_path, &global_config_file_path).unwrap()
             }
 
             let mut env = default_nix_subprocess_env();
             let _ = env.insert(
                 "NIX_USER_CONF_FILES".to_string(),
-                config_file.to_string_lossy().to_string(),
+                global_config_file_path.to_string_lossy().to_string(),
             );
             env
         };
