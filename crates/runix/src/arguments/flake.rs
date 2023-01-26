@@ -35,5 +35,7 @@ impl OverrideInput {
 pub struct NoWriteLockFile(bool);
 impl Flag for NoWriteLockFile {
     const FLAG: &'static str = "--no-write-lock-file";
+    /// Not a config/switch.
+    /// There is no `--write-lock-file` equivalent
     const FLAG_TYPE: FlagType<Self> = FlagType::bool();
 }

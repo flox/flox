@@ -24,30 +24,22 @@ pub struct NixConfigArgs {
 }
 
 impl NixConfigArgs {
-    fn flags(&self) -> Vec<Vec<String>> {
-        vec![
-            self.accept_flake_config.to_args(),
-            self.connect_timeout.to_args(),
-            self.extra_access_tokens.to_args(),
-            self.extra_experimental_features.to_args(),
-            self.extra_substituters.to_args(),
-            self.extra_trusted_public_keys.to_args(),
-            self.flake_registry.to_args(),
-            self.netrc_file.to_args(),
-            self.show_trace.to_args(),
-            self.warn_dirty.to_args(),
-        ]
-    }
-
     fn config_items(&self) -> Vec<(String, String)> {
-        self.flags()
-            .into_iter()
-            .filter_map(|f| match &f[..] {
-                [] => None,
-                [b] => Some((b[2..].to_string(), true.to_string())),
-                [l, ls @ ..] => Some((l[2..].to_string(), ls.join(" "))),
-            })
-            .collect()
+        [
+            self.accept_flake_config.to_config(),
+            self.connect_timeout.to_config(),
+            self.extra_access_tokens.to_config(),
+            self.extra_experimental_features.to_config(),
+            self.extra_substituters.to_config(),
+            self.extra_trusted_public_keys.to_config(),
+            self.flake_registry.as_ref().and_then(ToConfig::to_config),
+            self.netrc_file.as_ref().and_then(ToConfig::to_config),
+            self.show_trace.to_config(),
+            self.warn_dirty.to_config(),
+        ]
+        .into_iter()
+        .flatten()
+        .collect()
     }
 
     pub fn to_config_string(&self) -> String {
@@ -59,12 +51,36 @@ impl NixConfigArgs {
     }
 }
 
+trait ToConfig {
+    fn to_config(&self) -> Option<(String, String)>;
+}
+
+impl<T> ToConfig for T
+where
+    T: Flag,
+{
+    fn to_config(&self) -> Option<(String, String)> {
+        let name = &T::FLAG[2..];
+        match T::FLAG_TYPE {
+            FlagType::Switch(default, f) => {
+                let value = f(self);
+                (value != default).then_some((name.to_owned(), value.to_string()))
+            },
+            FlagType::Indicator(f) => f(self).then_some((name.to_owned(), true.to_string())),
+            _ => {
+                let args = self.to_args()[1..].join(" ");
+                Some((name.to_owned(), args))
+            },
+        }
+    }
+}
+
 /// flag for warn dirty
 #[derive(Clone, From, Debug, Deref, Default)]
 pub struct WarnDirty(bool);
 impl Flag for WarnDirty {
     const FLAG: &'static str = "--warn-dirty";
-    const FLAG_TYPE: FlagType<Self> = FlagType::bool();
+    const FLAG_TYPE: FlagType<Self> = FlagType::switch(true);
 }
 
 /// Flag for accept-flake-config
@@ -72,7 +88,7 @@ impl Flag for WarnDirty {
 pub struct AcceptFlakeConfig(bool);
 impl Flag for AcceptFlakeConfig {
     const FLAG: &'static str = "--accept-flake-config";
-    const FLAG_TYPE: FlagType<Self> = FlagType::bool();
+    const FLAG_TYPE: FlagType<Self> = FlagType::switch(false);
 }
 
 /// Flag for accept-flake-config
@@ -88,6 +104,7 @@ impl Flag for ConnectTimeout {
 pub struct ShowTrace(bool);
 impl Flag for ShowTrace {
     const FLAG: &'static str = "--show-trace";
+    /// technically a switch (`--no-show-trace` seems to be allowed)
     const FLAG_TYPE: FlagType<Self> = FlagType::bool();
 }
 

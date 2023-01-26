@@ -15,10 +15,19 @@ pub trait Flag: Sized {
 
 ///
 pub enum FlagType<T> {
-    /// A boolean flag/toggle
+    /// An explicit two state switch
+    ///
+    /// If their value is the default value this flag is not printed
+    ///
+    /// If `true` (default == false) prints the name of the flag
+    /// If `false` (default == true) prefix it with `no-`
+    ///
+    /// Mainly used by nix-config values
+    Switch(bool, fn(&T) -> bool),
+    /// A boolean flag
     ///
     /// Flags of this kind just print their name as is regardless of the content
-    Bool(fn(&T) -> bool),
+    Indicator(fn(&T) -> bool),
     /// A list flag
     ///
     /// list flags consist of a flag and a space delimited list of elements
@@ -56,7 +65,11 @@ pub enum FlagType<T> {
 
 impl<T: Deref<Target = bool>> FlagType<T> {
     pub const fn bool() -> FlagType<T> {
-        FlagType::Bool(|s| *s.deref())
+        FlagType::Indicator(|s| *s.deref())
+    }
+
+    pub const fn switch(default: bool) -> FlagType<T> {
+        FlagType::Switch(default, |s| *s.deref())
     }
 }
 
@@ -104,9 +117,14 @@ where
 {
     fn to_args(&self) -> Vec<String> {
         match Self::FLAG_TYPE {
-            FlagType::Bool(f) => match f(self) {
+            FlagType::Indicator(f) => match f(self) {
                 true => vec![Self::FLAG.to_string()],
                 false => Default::default(),
+            },
+            FlagType::Switch(default, f) => match (f(self), default) {
+                (true, false) => vec![Self::FLAG.to_string()],
+                (false, true) => vec![format!("--no-{}", &Self::FLAG[2..])],
+                _ => Default::default(),
             },
             // Todo: should --listarg "" be allowed?
             FlagType::List(f) => {
