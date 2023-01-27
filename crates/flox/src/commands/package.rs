@@ -6,11 +6,12 @@ use anyhow::{bail, Context, Result};
 use bpaf::{construct, Bpaf, Parser};
 use flox_rust_sdk::flox::{EnvironmentRef, Flox};
 use flox_rust_sdk::models::project::{self, Closed, Open, Project};
+use flox_rust_sdk::nix::arguments::eval::EvaluationArgs;
 use flox_rust_sdk::nix::arguments::flake::FlakeArgs;
 use flox_rust_sdk::nix::arguments::NixArgs;
-use flox_rust_sdk::nix::command::Eval as EvalComm;
+use flox_rust_sdk::nix::command::{Build, BuildOut, Eval as EvalComm};
 use flox_rust_sdk::nix::command_line::{Group, NixCliCommand, NixCommandLine, ToArgs};
-use flox_rust_sdk::nix::Run as RunC;
+use flox_rust_sdk::nix::{Run as RunC, RunTyped};
 use flox_rust_sdk::prelude::{Installable, Stability};
 use flox_rust_sdk::providers::git::{GitCommandProvider, GitProvider};
 use inquire::error::InquireResult;
@@ -254,6 +255,20 @@ pub(crate) mod interface {
     }
 
     #[derive(Bpaf, Clone, Debug)]
+    pub struct Containerize {
+        #[bpaf(external(package_args), group_help("Development Options"))]
+        pub package: PackageArgs,
+
+        /// Environment to containerize
+        #[bpaf(long("environment"), short('e'))]
+        pub(crate) environment_name: Option<String>,
+
+        #[bpaf(short('A'), hide)]
+        pub _attr_flag: bool,
+    }
+    parseable!(Containerize, containerize);
+
+    #[derive(Bpaf, Clone, Debug)]
     pub struct Run {
         #[bpaf(external(package_args), group_help("Development Options"))]
         pub(crate) package: PackageArgs,
@@ -311,6 +326,9 @@ pub(crate) mod interface {
         /// run a bundler for current project
         #[bpaf(command)]
         Bundle(#[bpaf(external(WithPassthru::parse))] WithPassthru<Bundle>),
+        /// containerize a project
+        #[bpaf(command)]
+        Containerize(#[bpaf(external(WithPassthru::parse))] WithPassthru<Containerize>),
         /// run `nix flake` commands
         #[bpaf(command)]
         Flake(#[bpaf(external(WithPassthru::parse))] WithPassthru<Flake>),
@@ -395,7 +413,7 @@ impl interface::PackageCommands {
                     command.nix_args,
                 )
                 .build::<NixCommandLine>()
-                .await?
+                .await?;
             },
             interface::PackageCommands::Develop(command) => {
                 subcommand_metric!("develop");
@@ -489,6 +507,50 @@ impl interface::PackageCommands {
                 )
                 .bundle::<NixCommandLine>(bundler)
                 .await?
+            },
+            interface::PackageCommands::Containerize(command) => {
+                subcommand_metric!("containerize");
+
+                let installable = env_ref_to_installable::<GitCommandProvider>(
+                    &flox,
+                    "containerize",
+                    &command.inner.environment_name.unwrap_or_default(),
+                )
+                .await?;
+
+                let nix = flox.nix::<NixCommandLine>(command.nix_args);
+
+                let nix_args = NixArgs::default();
+
+                let command = Build {
+                    installables: [Installable {
+                        flakeref: installable.flakeref,
+                        attr_path: installable.attr_path + ".passthru.streamLayeredImage",
+                    }]
+                    .into(),
+                    eval: EvaluationArgs {
+                        impure: true.into(),
+                    },
+                    ..Default::default()
+                };
+
+                let mut out: BuildOut = command.run_typed(&nix, &nix_args).await?;
+
+                let script = out
+                    .pop()
+                    .context("Container script not built")?
+                    .outputs
+                    .remove("out")
+                    .context("Container script output not found")?;
+
+                debug!("Got container script: {:?}", script);
+
+                tokio::process::Command::new(script)
+                    .spawn()
+                    .context("Failed to start container script")?
+                    .wait()
+                    .await
+                    .context("Container script failed to run")?;
             },
             interface::PackageCommands::Flake(command) => {
                 /// A custom nix command that passes its arguments to `nix flake`

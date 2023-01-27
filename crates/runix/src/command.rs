@@ -1,4 +1,7 @@
+use std::collections::HashMap;
+
 use derive_more::{Deref, From};
+use serde::Deserialize;
 
 use crate::arguments::eval::EvaluationArgs;
 use crate::arguments::flake::FlakeArgs;
@@ -26,8 +29,15 @@ impl NixCliCommand for Build {
     const SUBCOMMAND: &'static [&'static str] = &["build"];
 }
 impl JsonCommand for Build {}
+#[derive(Deserialize, Clone, Debug)]
+pub struct BuildOutEntry {
+    #[serde(rename = "drvPath")]
+    pub drv_path: String,
+    pub outputs: HashMap<String, String>,
+}
+pub type BuildOut = Vec<BuildOutEntry>;
 impl TypedCommand for Build {
-    type Output = ();
+    type Output = BuildOut;
 }
 
 /// `nix flake init` Command
