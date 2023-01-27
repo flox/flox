@@ -1,7 +1,7 @@
 use std::io::{self, ErrorKind};
 use std::path::PathBuf;
 
-use log::{debug, log};
+use log::debug;
 use runix::command::Eval;
 use runix::installable::Installable;
 use runix::RunJson;
@@ -31,21 +31,21 @@ where
     CurrentDir(io::Error),
     #[error("Error trying to discover Git repo")]
     DiscoverError,
-    #[error("Environment specified exists, but it is not in a Git repo")]
+    #[error("Not in a Git repository")]
     NotInGitRepo,
     #[error("Error checking for project")]
     OpenError,
-    #[error("Found Git repo, but it is not a project")]
+    #[error("Git repository found is not a flox project")]
     NotProject,
-    #[error("Environment is in a Git repo, but it is bare")]
+    #[error("Git repository found is bare")]
     BareRepo,
-    #[error("Environment is missing a name")]
+    #[error("Missing a name")]
     NoName,
-    #[error("Failed to parse as flox installable")]
+    #[error("Failed to parse as flox installable: {0}")]
     Parse(#[from] ParseFloxInstallableError),
     #[error("Workdir is not valid unicode")]
     WorkdirEncoding,
-    #[error("Error attempting to resolve to installables")]
+    #[error("Error attempting to resolve to installables: {0}")]
     ResolveFailure(ResolveFloxInstallableError<Nix>),
 }
 
@@ -114,8 +114,8 @@ pub struct Named<Git: GitProvider> {
 
 #[derive(Error, Debug)]
 pub enum NamedGetCurrentGenError<Git: GitProvider> {
-    #[error("Error printing named environment metadata for branch {0}: {1}")]
-    Show(String, Git::ShowError),
+    #[error("Error printing metadata {0}")]
+    Show(Git::ShowError),
     #[error("Metadata file is not valid unicode")]
     MetadataEncoding,
     #[error("Error parsing current generation from metadata: {0}")]
@@ -138,9 +138,15 @@ pub enum FindDefaultOwnerError {
 
 #[derive(Error, Debug)]
 pub enum FindNamedError<Git: GitProvider> {
-    #[error("Error finding default environment owner: {0}")]
+    #[error("Error finding default owner: {0}")]
     DefaultOwnerSymlinkTarget(#[from] FindDefaultOwnerError),
-    #[error("Owner directory is missing")]
+    #[error("Error checking directory")]
+    CheckEnvironmentError(std::io::Error),
+    #[error("Not found")]
+    NotFound,
+    #[error("Cached Git directory is missing")]
+    OwnerPath(std::io::Error),
+    #[error("Error checking cached Git repository")]
     GitDiscoverError(Git::DiscoverError),
 }
 
@@ -163,9 +169,20 @@ impl<Git: GitProvider> Named<Git> {
             Some((owner, name)) => (owner.to_string(), name.to_string()),
         };
 
-        let git = Git::discover(Self::meta_dir(flox).join(&owner))
-            .await
-            .map_err(FindNamedError::GitDiscoverError)?;
+        match tokio::fs::metadata(flox.data_dir.join("environments").join(&owner).join(&name)).await
+        {
+            Err(err) if err.kind() == ErrorKind::NotFound => return Err(FindNamedError::NotFound),
+            Err(err) => return Err(FindNamedError::CheckEnvironmentError(err)),
+            Ok(_) => {},
+        };
+
+        let git = Git::discover(
+            tokio::fs::canonicalize(Self::meta_dir(flox).join(&owner))
+                .await
+                .map_err(FindNamedError::OwnerPath)?,
+        )
+        .await
+        .map_err(FindNamedError::GitDiscoverError)?;
 
         Ok(Named { owner, name, git })
     }
@@ -218,9 +235,7 @@ impl<Git: GitProvider> Named<Git> {
             .git
             .show(&format!("{system}.{name}:metadata.json", name = self.name))
             .await
-            .map_err(|e| {
-                NamedGetCurrentGenError::Show(format!("{system}.{name}", name = self.name), e)
-            })?;
+            .map_err(|e| NamedGetCurrentGenError::Show(e))?;
 
         let out_str = out_os_str
             .to_str()
@@ -248,22 +263,23 @@ pub enum EnvironmentRefError<Git: GitProvider, Nix: FloxNixApi>
 where
     Eval: RunJson<Nix>,
 {
-    #[error(transparent)]
+    #[error("Error finding project environment: {0}")]
     Project(FindProjectError<Nix>),
-    #[error(transparent)]
+    #[error("Error finding named environment: {0}")]
     Named(FindNamedError<Git>),
-    #[error("Environment name format is invalid")]
+    #[error("Name format is invalid")]
     Invalid,
 }
 
 #[allow(unused)]
 impl<Git: GitProvider> EnvironmentRef<'_, Git> {
-    /// Try to find a project environment matching the inputted name,
-    /// if the dir is missing or is not a Git repo, then try as a named environment
     pub async fn find<'flox, Nix: FloxNixApi>(
         flox: &'flox Flox,
         environment_name: &str,
-    ) -> Result<Vec<EnvironmentRef<'flox, Git>>, EnvironmentRefError<Git, Nix>>
+    ) -> Result<
+        (Vec<EnvironmentRef<'flox, Git>>, Option<FindNamedError<Git>>),
+        EnvironmentRefError<Git, Nix>,
+    >
     where
         Eval: RunJson<Nix>,
     {
@@ -309,31 +325,20 @@ impl<Git: GitProvider> EnvironmentRef<'_, Git> {
             };
         }
 
-        match Named::find(flox, environment_name).await {
+        let named_in_proj_err = match Named::find(flox, environment_name).await {
             // This might be a bit picky, but a lot less should go wrong with named environments,
             // so we can assume that errors are likely to be user errors,
             // which are likely to be usage errors.
             // i.e. missing, which are probably fine to ignore 🤷
             Err(err) if not_proj => return Err(EnvironmentRefError::Named(err)),
-            Err(err) => {
-                log!(
-                    // This is unlikely to be something a user cares about,
-                    // unless they are getting "not found" errors.
-                    if environment_refs.is_empty() {
-                        log::Level::Warn
-                    } else {
-                        log::Level::Debug
-                    },
-                    "Error finding named environment, ignoring since we are in a project: {:?}",
-                    err
-                )
-            },
+            Err(err) => Some(err),
             Ok(n) => {
                 environment_refs.push(EnvironmentRef::Named(n));
+                None
             },
-        }
+        };
 
-        Ok(environment_refs)
+        Ok((environment_refs, named_in_proj_err))
     }
 
     pub async fn get_latest_installable<'flox>(

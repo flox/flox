@@ -154,7 +154,10 @@ impl Flox {
     pub async fn environment_ref<Git: GitProvider, Nix: FloxNixApi>(
         &self,
         name: &str,
-    ) -> Result<Vec<EnvironmentRef<Git>>, EnvironmentRefError<Git, Nix>>
+    ) -> Result<
+        (Vec<EnvironmentRef<Git>>, Option<FindNamedError<Git>>),
+        EnvironmentRefError<Git, Nix>,
+    >
     where
         Eval: RunJson<Nix>,
     {

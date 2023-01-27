@@ -5,7 +5,7 @@ use std::os::unix::process::ExitStatusExt;
 use std::path::Path;
 use std::process::{ExitCode, ExitStatus};
 
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use bpaf::Parser;
 use commands::{FloxArgs, Prefix};
 use flox_rust_sdk::environment::default_nix_subprocess_env;
@@ -89,8 +89,6 @@ async fn main() -> ExitCode {
     }
     let args = args.unwrap();
 
-    let debug = args.debug;
-
     match run(args).await {
         Ok(()) => ExitCode::from(0),
         Err(e) => {
@@ -98,11 +96,9 @@ async fn main() -> ExitCode {
             if e.is::<FloxShellErrorCode>() {
                 return e.downcast_ref::<FloxShellErrorCode>().unwrap().0;
             }
-            if debug {
-                error!("{:#?}", e);
-            } else {
-                error!("{}", e);
-            }
+
+            error!("{:?}", anyhow!(e));
+
             ExitCode::from(1)
         },
     }

@@ -4,33 +4,54 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
 use bpaf::{construct, Bpaf, Parser};
-use flox_rust_sdk::flox::Flox;
+use flox_rust_sdk::flox::{EnvironmentRef, Flox};
 use flox_rust_sdk::models::project::{self, Closed, Open, Project};
 use flox_rust_sdk::nix::arguments::flake::FlakeArgs;
 use flox_rust_sdk::nix::arguments::NixArgs;
 use flox_rust_sdk::nix::command::Eval as EvalComm;
 use flox_rust_sdk::nix::command_line::{Group, NixCliCommand, NixCommandLine, ToArgs};
 use flox_rust_sdk::nix::Run as RunC;
-use flox_rust_sdk::prelude::Stability;
-use flox_rust_sdk::providers::git::GitCommandProvider;
+use flox_rust_sdk::prelude::{Installable, Stability};
+use flox_rust_sdk::providers::git::{GitCommandProvider, GitProvider};
 use inquire::error::InquireResult;
-use log::info;
+use log::{debug, info, warn};
 
 use crate::commands::package::interface::ResolveInstallable;
 use crate::config::features::Feature;
 use crate::config::Config;
 use crate::utils::dialog::{Confirm, Dialog, Text};
+use crate::utils::resolve_installable_from_environment_refs;
 use crate::{flox_forward, subcommand_metric};
+
+async fn env_ref_to_installable<Git: GitProvider + 'static>(
+    flox: &Flox,
+    subcommand: &str,
+    environment_name: &str,
+) -> anyhow::Result<Installable> {
+    let (env_refs, named_in_proj_err) = EnvironmentRef::<Git>::find(flox, environment_name).await?;
+    if let Some(err) = named_in_proj_err {
+        if env_refs.is_empty() {
+            warn!(
+                "Error finding named environment (while in a project): {}",
+                err
+            );
+        }
+
+        debug!("Named environment error: {:?}", err);
+    }
+
+    resolve_installable_from_environment_refs(flox, subcommand, env_refs).await
+}
 
 pub(crate) mod interface {
     use async_trait::async_trait;
     use bpaf::{Bpaf, Parser};
-    use flox_rust_sdk::flox::{EnvironmentRef, Flox};
+    use flox_rust_sdk::flox::Flox;
     use flox_rust_sdk::prelude::Installable;
     use flox_rust_sdk::providers::git::GitProvider;
 
     use super::parseable_macro::parseable;
-    use super::{package_args, PackageArgs, Parseable, WithPassthru};
+    use super::{env_ref_to_installable, package_args, PackageArgs, Parseable, WithPassthru};
     use crate::utils::installables::{
         BuildInstallable,
         BundleInstallable,
@@ -41,12 +62,7 @@ pub(crate) mod interface {
         ShellInstallable,
         TemplateInstallable,
     };
-    use crate::utils::{
-        resolve_installable_from_environment_refs,
-        InstallableArgument,
-        InstallableDef,
-        Parsed,
-    };
+    use crate::utils::{InstallableArgument, InstallableDef, Parsed};
 
     #[derive(Clone, Debug)]
     pub enum PosOrEnv<T: InstallableDef> {
@@ -78,14 +94,7 @@ pub(crate) mod interface {
         async fn installable(&self, flox: &Flox) -> anyhow::Result<Installable> {
             Ok(match self {
                 PosOrEnv::Pos(i) => i.resolve_installable(flox).await?,
-                PosOrEnv::Env(n) => {
-                    resolve_installable_from_environment_refs(
-                        flox,
-                        T::SUBCOMMAND,
-                        EnvironmentRef::<Git>::find(flox, n).await?,
-                    )
-                    .await?
-                },
+                PosOrEnv::Env(n) => env_ref_to_installable::<Git>(flox, T::SUBCOMMAND, n).await?,
             })
         }
     }
