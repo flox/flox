@@ -71,10 +71,6 @@
 
       FLOX_RESOLVER_SRC = ../../resolver;
 
-      # Static "floxbeta" token for closed beta.
-      # XXX Remove after closed beta.
-      BETA_ACCESS_TOKEN = "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";
-
       METRICS_EVENTS_URL = "https://events.floxdev.com/capture";
       METRICS_EVENTS_API_KEY = "phc_z4dOADAPvpU9VNzCjDD3pIJuSuGTyagKdFWfjak838Y";
     }

@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
 use std::str::FromStr;
-use std::{env, iter};
+use std::env;
 
 use anyhow::{Context, Result};
 use flox_rust_sdk::prelude::{Channel, ChannelRegistry};
@@ -93,21 +93,8 @@ pub fn init_access_tokens(
         Default::default()
     };
 
-    let beta_access = [
-        "github.com/flox/capacitor",
-        "github.com/flox/nixpkgs-flox",
-        "github.com/flox/nixpkgs-catalog",
-        "github.com/flox/catalog-ingest",
-        "github.com/flox/flox-extras",
-        "github.com/flox/bundlers",
-    ]
-    .into_iter()
-    .map(String::from)
-    .zip(iter::repeat(env!("BETA_ACCESS_TOKEN").to_string()));
-
     let mut tokens = Vec::new();
 
-    tokens.extend(beta_access);
     tokens.extend(nix_tokens.into_iter());
     tokens.extend(gh_tokens.into_iter());
     tokens.extend(config_tokens.clone().into_iter());
@@ -162,7 +149,6 @@ pub async fn init_git_conf(temp_dir: &Path, config_dir: &Path) -> Result<()> {
     // the flox specific git config
     let git_config = format!(
         include_str!("./gitConfig.in"),
-        betaToken = env!("BETA_ACCESS_TOKEN"),
         original_include = system_conf
             .as_ref()
             .map(|c| format!(
