@@ -67,9 +67,9 @@ where
                 (value != default).then_some((name.to_owned(), value.to_string()))
             },
             FlagType::Indicator(f) => f(self).then_some((name.to_owned(), true.to_string())),
-            _ => {
-                let args = self.to_args()[1..].join(" ");
-                Some((name.to_owned(), args))
+            _ => match self.to_args()[..] {
+                [] | [_] => None,
+                ref args => Some((name.to_owned(), args[1..].join(" "))),
             },
         }
     }
