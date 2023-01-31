@@ -70,6 +70,32 @@ impl ImportFile {
 }
 
 #[derive(Bpaf, Clone)]
+pub enum PullFloxmainOrEnv {
+    /// pull the `floxmain` branch to sync configuration
+    #[bpaf(long, short)]
+    Main,
+    Env {
+        #[bpaf(long("environment"), short('e'), argument("ENV"))]
+        env: Option<EnvironmentRef>,
+        /// do not actually render or create links to environments in the store.
+        /// (Flox internal use only.)
+        #[bpaf(long("no-render"))]
+        no_render: bool,
+    },
+}
+
+#[derive(Bpaf, Clone)]
+pub enum PushFloxmainOrEnv {
+    /// push the `floxmain` branch to sync configuration
+    #[bpaf(long, short)]
+    Main,
+    Env {
+        #[bpaf(long("environment"), short('e'), argument("ENV"))]
+        env: Option<EnvironmentRef>,
+    },
+}
+
+#[derive(Bpaf, Clone)]
 pub enum EnvironmentCommands {
     /// activate environment:
     ///
@@ -216,14 +242,15 @@ pub enum EnvironmentCommands {
     /// send environment metadata from remote registry
     #[bpaf(command)]
     Push {
-        #[bpaf(long, short)]
-        force: bool,
-
         #[bpaf(external(environment_args), group_help("Environment Options"))]
         environment_args: EnvironmentArgs,
 
-        #[bpaf(long, short, argument("ENV"))]
-        environment: Option<EnvironmentRef>,
+        #[bpaf(external(push_floxmain_or_env), optional)]
+        target: Option<PushFloxmainOrEnv>,
+
+        /// forceably overwrite the remote copy of the environment
+        #[bpaf(long, short)]
+        force: bool,
     },
 
     /// pull environment metadata to remote registry
@@ -232,17 +259,12 @@ pub enum EnvironmentCommands {
         #[bpaf(external(environment_args), group_help("Environment Options"))]
         environment_args: EnvironmentArgs,
 
-        #[bpaf(long, short, argument("ENV"))]
-        environment: Option<EnvironmentRef>,
+        #[bpaf(external(pull_floxmain_or_env), optional)]
+        target: Option<PullFloxmainOrEnv>,
 
-        /// forceably overwrite either the local copy of the environment
+        /// forceably overwrite the local copy of the environment
         #[bpaf(long, short)]
         force: bool,
-
-        /// do not actually render or create links to environments in the store.
-        /// (Flox internal use only.)
-        #[bpaf(long("no-render"))]
-        no_render: bool,
     },
 
     /// remove packages from an environment
