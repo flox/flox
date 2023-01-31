@@ -26,13 +26,14 @@ pub struct Registry {
 
 impl Registry {
     pub fn set(&mut self, name: impl ToString, to: ToFlakeRef) {
-        self.flakes.insert(RegistryEntry {
+        let entry = RegistryEntry {
             from: FromFlakeRef::Indirect(IndirectFlake {
                 id: name.to_string(),
             }),
             to,
             exact: None,
-        });
+        };
+        self.flakes.replace(entry);
     }
 
     #[allow(unused)]

@@ -1,11 +1,16 @@
+use std::env;
+use std::str::FromStr;
+
 use anyhow::Result;
-use bpaf::Bpaf;
+use bpaf::{Bpaf, Parser};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::nix::command_line::{Group, NixCliCommand, NixCommandLine, ToArgs};
 use flox_rust_sdk::nix::Run;
+use flox_rust_sdk::prelude::{Channel, Stability};
 use fslock::LockFile;
 
 use crate::config::features::Feature;
+use crate::config::Config;
 use crate::utils::init::init_telemetry_consent;
 use crate::utils::metrics::{
     METRICS_EVENTS_FILE_NAME,
@@ -18,16 +23,32 @@ use crate::{flox_forward, subcommand_metric};
 pub struct GeneralArgs {}
 
 impl GeneralCommands {
-    pub async fn handle(&self, flox: Flox) -> Result<()> {
+    pub async fn handle(&self, mut config: Config, mut flox: Flox) -> Result<()> {
         match self {
-            _ if Feature::All.is_forwarded()? => flox_forward(&flox).await?,
             GeneralCommands::Nix(_) if Feature::Nix.is_forwarded()? => flox_forward(&flox).await?,
 
-            GeneralCommands::Nix(args) => {
+            // To be moved to packages - figure out completions again
+            GeneralCommands::Nix(wrapped) => {
                 subcommand_metric!("nix");
 
+                // mutable state hurray :/
+                config.flox.stability = {
+                    if let Some(ref stability) = wrapped.stability {
+                        env::set_var("FLOX_STABILITY", stability.to_string());
+                        stability.clone()
+                    } else {
+                        config.flox.stability
+                    }
+                };
+
+                flox.channels.register_channel(
+                    "nixpkgs",
+                    Channel::from_str(&format!("github:flox/nixpkgs/{}", config.flox.stability))?,
+                );
+
                 let nix: NixCommandLine = flox.nix(Default::default());
-                RawCommand::new(args.to_owned())
+
+                RawCommand::new(wrapped.nix.to_owned())
                     .run(&nix, &Default::default())
                     .await?;
             },
@@ -57,21 +78,19 @@ impl GeneralCommands {
 
                 init_telemetry_consent(&flox.data_dir, &flox.cache_dir).await?;
             },
-
+            _ if Feature::All.is_forwarded()? => flox_forward(&flox).await?,
             _ => todo!(),
         }
         Ok(())
     }
 }
 
+/// General Commands
 #[derive(Bpaf, Clone)]
 pub enum GeneralCommands {
     /// access to the gh CLI
     #[bpaf(command, hide)]
     Gh(Vec<String>),
-
-    #[bpaf(command)]
-    Nix(#[bpaf(any("NIX ARGUMENTS"), complete_shell(complete_nix_shell()))] Vec<String>),
 
     /// configure user parameters
     #[bpaf(command)]
@@ -84,6 +103,9 @@ pub enum GeneralCommands {
     /// reset the metrics queue (if any), reset metrics ID, and re-prompt for consent
     #[bpaf(command("reset-metrics"))]
     ResetMetrics,
+
+    /// access to the nix CLI
+    Nix(#[bpaf(external(parse_nix_passthru))] WrappedNix),
 }
 
 #[derive(Bpaf, Clone)]
@@ -99,7 +121,39 @@ pub enum ConfigArgs {
     Confirm,
 }
 
-fn complete_nix_shell() -> bpaf::ShellComp {
+#[derive(Clone, Debug)]
+pub struct WrappedNix {
+    stability: Option<Stability>,
+    nix: Vec<String>,
+}
+fn parse_nix_passthru() -> impl Parser<WrappedNix> {
+    fn nix_sub_command<const OFFSET: u8>() -> impl Parser<Vec<String>> {
+        bpaf::command(
+            "nix",
+            bpaf::any("NIX ARGUMENTS")
+                .guard(|item| item != "--stability", "Stability not expected")
+                .complete_shell(complete_nix_shell(OFFSET))
+                .many()
+                .to_options(),
+        )
+        .help("access to the nix CLI")
+    }
+    let with_stability = {
+        let stability = bpaf::long("stability").argument("STABILITY").map(Some);
+        let nix = nix_sub_command::<2>();
+        bpaf::construct!(WrappedNix { stability, nix }).adjacent()
+    };
+
+    let without_stability = {
+        let stability = bpaf::pure(Default::default());
+        let nix = nix_sub_command::<0>().hide();
+        bpaf::construct!(WrappedNix { nix, stability }).hide()
+    };
+
+    bpaf::construct!([without_stability, with_stability]).hide_usage()
+}
+
+fn complete_nix_shell(offset: u8) -> bpaf::ShellComp {
     // Box::leak will effectively turn the String
     // (that is produced by `replace`) insto a `&'static str`,
     // at the cost of giving up memeory management over that string.
@@ -110,10 +164,18 @@ fn complete_nix_shell() -> bpaf::ShellComp {
     // since the completion runs in its own process.
     // Any memory it leaks will be cleared by the system allocator.
     bpaf::ShellComp::Raw {
-        zsh: Box::leak(format!("source {}", env!("NIX_ZSH_COMPLETION_SCRIPT")).into_boxed_str()),
+        zsh: Box::leak(
+            format!(
+                "OFFSET={}; echo 'was' > /dev/stderr; source {}",
+                offset,
+                env!("NIX_ZSH_COMPLETION_SCRIPT")
+            )
+            .into_boxed_str(),
+        ),
         bash: Box::leak(
             format!(
-                "source {}; _nix_bash_completion",
+                "OFFSET={}; source {}; _nix_bash_completion",
+                offset,
                 env!("NIX_BASH_COMPLETION_SCRIPT")
             )
             .into_boxed_str(),

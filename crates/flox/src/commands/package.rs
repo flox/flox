@@ -1,4 +1,3 @@
-use std::env;
 use std::fmt::Debug;
 use std::path::{Path, PathBuf};
 
@@ -52,7 +51,7 @@ pub(crate) mod interface {
     use flox_rust_sdk::providers::git::GitProvider;
 
     use super::parseable_macro::parseable;
-    use super::{env_ref_to_installable, package_args, PackageArgs, Parseable, WithPassthru};
+    use super::{env_ref_to_installable, Parseable, WithPassthru};
     use crate::utils::installables::{
         BuildInstallable,
         BundleInstallable,
@@ -119,6 +118,9 @@ pub(crate) mod interface {
     }
 
     #[derive(Debug, Clone, Bpaf)]
+    pub struct Nix {}
+
+    #[derive(Debug, Clone, Bpaf)]
     pub struct Init {
         // [sic]
         // template does NOT support package args
@@ -140,9 +142,6 @@ pub(crate) mod interface {
 
     #[derive(Debug, Clone, Bpaf)]
     pub struct Build {
-        #[bpaf(external(package_args), group_help("Development Options"))]
-        pub(crate) package: PackageArgs,
-
         #[bpaf(short('A'), hide)]
         pub(crate) _attr_flag: bool,
 
@@ -154,9 +153,6 @@ pub(crate) mod interface {
     #[derive(Bpaf, Clone, Debug)]
     /// launch development shell for current project
     pub struct Develop {
-        #[bpaf(external(package_args), group_help("Development Options"))]
-        pub package: PackageArgs,
-
         #[bpaf(short('A'), hide)]
         pub _attr_flag: bool,
 
@@ -169,9 +165,6 @@ pub(crate) mod interface {
     #[derive(Bpaf, Clone, Debug)]
     /// print shell code that can be sourced by bash to reproduce the development environment
     pub struct PrintDevEnv {
-        #[bpaf(external(package_args), group_help("Development Options"))]
-        pub package: PackageArgs,
-
         #[bpaf(short('A'), hide)]
         pub _attr_flag: bool,
 
@@ -183,9 +176,6 @@ pub(crate) mod interface {
 
     #[derive(Bpaf, Clone, Debug)]
     pub struct Publish {
-        #[bpaf(external(package_args), group_help("Development Options"))]
-        pub package: PackageArgs,
-
         #[bpaf(short('A'), hide)]
         pub _attr_flag: bool,
 
@@ -219,9 +209,6 @@ pub(crate) mod interface {
 
     #[derive(Bpaf, Clone, Debug)]
     pub struct Shell {
-        #[bpaf(external(package_args), group_help("Development Options"))]
-        pub package: PackageArgs,
-
         #[bpaf(short('A'), hide)]
         pub _attr_flag: bool,
 
@@ -233,9 +220,6 @@ pub(crate) mod interface {
 
     #[derive(Bpaf, Clone, Debug)]
     pub struct Bundle {
-        #[bpaf(external(package_args), group_help("Development Options"))]
-        pub package: PackageArgs,
-
         /// Bundler to use
         #[bpaf(external)]
         pub(crate) bundler_arg: Option<InstallableArgument<Parsed, BundlerInstallable>>,
@@ -256,9 +240,6 @@ pub(crate) mod interface {
 
     #[derive(Bpaf, Clone, Debug)]
     pub struct Containerize {
-        #[bpaf(external(package_args), group_help("Development Options"))]
-        pub package: PackageArgs,
-
         /// Environment to containerize
         #[bpaf(long("environment"), short('e'))]
         pub(crate) environment_name: Option<String>,
@@ -270,9 +251,6 @@ pub(crate) mod interface {
 
     #[derive(Bpaf, Clone, Debug)]
     pub struct Run {
-        #[bpaf(external(package_args), group_help("Development Options"))]
-        pub(crate) package: PackageArgs,
-
         #[bpaf(short('A'), hide)]
         pub(crate) _attr_flag: bool,
         #[bpaf(external(InstallableArgument::positional), optional, catch)]
@@ -281,17 +259,11 @@ pub(crate) mod interface {
     parseable!(Run, run);
 
     #[derive(Bpaf, Clone, Debug)]
-    pub struct Eval {
-        #[bpaf(external(package_args), group_help("Development Options"))]
-        pub(crate) package: PackageArgs,
-    }
+    pub struct Eval {}
     parseable!(Eval, eval);
 
     #[derive(Bpaf, Clone, Debug)]
     pub struct Flake {
-        #[bpaf(external(package_args), group_help("Development Options"))]
-        pub package: PackageArgs,
-
         #[bpaf(positional("NIX FLAKE COMMAND"))]
         pub subcommand: String,
     }
@@ -407,13 +379,9 @@ impl interface::PackageCommands {
                     .resolve_installable(&flox)
                     .await?;
 
-                flox.package(
-                    installable_arg,
-                    command.inner.package.stability(&config),
-                    command.nix_args,
-                )
-                .build::<NixCommandLine>()
-                .await?;
+                flox.package(installable_arg, config.flox.stability, command.nix_args)
+                    .build::<NixCommandLine>()
+                    .await?;
             },
             interface::PackageCommands::Develop(command) => {
                 subcommand_metric!("develop");
@@ -425,13 +393,9 @@ impl interface::PackageCommands {
                     .resolve_installable(&flox)
                     .await?;
 
-                flox.package(
-                    installable_arg,
-                    command.inner.package.stability(&config),
-                    command.nix_args,
-                )
-                .develop::<NixCommandLine>()
-                .await?
+                flox.package(installable_arg, config.flox.stability, command.nix_args)
+                    .develop::<NixCommandLine>()
+                    .await?
             },
             interface::PackageCommands::Run(command) => {
                 subcommand_metric!("run");
@@ -443,13 +407,9 @@ impl interface::PackageCommands {
                     .resolve_installable(&flox)
                     .await?;
 
-                flox.package(
-                    installable_arg,
-                    command.inner.package.stability(&config),
-                    command.nix_args,
-                )
-                .run::<NixCommandLine>()
-                .await?
+                flox.package(installable_arg, config.flox.stability, command.nix_args)
+                    .run::<NixCommandLine>()
+                    .await?
             },
             interface::PackageCommands::Shell(command) => {
                 subcommand_metric!("shell");
@@ -461,13 +421,9 @@ impl interface::PackageCommands {
                     .resolve_installable(&flox)
                     .await?;
 
-                flox.package(
-                    installable_arg,
-                    command.inner.package.stability(&config),
-                    command.nix_args,
-                )
-                .shell::<NixCommandLine>()
-                .await?
+                flox.package(installable_arg, config.flox.stability, command.nix_args)
+                    .shell::<NixCommandLine>()
+                    .await?
             },
             interface::PackageCommands::Eval(command) => {
                 subcommand_metric!("eval");
@@ -475,8 +431,7 @@ impl interface::PackageCommands {
                 let nix = flox.nix::<NixCommandLine>(command.nix_args);
                 let command = EvalComm {
                     flake: FlakeArgs {
-                        override_inputs: [command.inner.package.stability(&config).as_override()]
-                            .into(),
+                        override_inputs: [config.flox.stability.as_override()].into(),
                         ..FlakeArgs::default()
                     },
                     ..Default::default()
@@ -500,13 +455,9 @@ impl interface::PackageCommands {
                     .resolve_installable(&flox)
                     .await?;
 
-                flox.package(
-                    installable_arg,
-                    command.inner.package.stability(&config),
-                    command.nix_args,
-                )
-                .bundle::<NixCommandLine>(bundler)
-                .await?
+                flox.package(installable_arg, config.flox.stability, command.nix_args)
+                    .bundle::<NixCommandLine>(bundler)
+                    .await?
             },
             interface::PackageCommands::Containerize(command) => {
                 subcommand_metric!("containerize");
@@ -594,8 +545,7 @@ impl interface::PackageCommands {
                 FlakeCommand {
                     subcommand: command.inner.subcommand.to_owned(),
                     default_flake_args: FlakeArgs {
-                        override_inputs: [command.inner.package.stability(&config).as_override()]
-                            .into(),
+                        override_inputs: [config.flox.stability.as_override()].into(),
                         ..Default::default()
                     },
                     args: command.nix_args,
@@ -681,23 +631,23 @@ async fn ensure_project<'flox>(
 #[derive(Bpaf, Clone, Debug)]
 pub struct PackageArgs {
     #[bpaf(long, argument("STABILITY"))]
-    stability: Option<Stability>,
+    pub stability: Option<Stability>,
 }
 
-impl PackageArgs {
-    /// Resolve stability from flag or config (which reads environment variables).
-    /// If the stability is set by a flag, modify STABILITY env variable to match
-    /// the set stability.
-    /// Flox invocations in a child process will inherit hence inherit the stability.
-    fn stability(&self, config: &Config) -> Stability {
-        if let Some(ref stability) = self.stability {
-            env::set_var("FLOX_PREVIEW_STABILITY", stability.to_string());
-            stability.clone()
-        } else {
-            config.flox.stability.clone()
-        }
-    }
-}
+// impl PackageArgs {
+//     /// Resolve stability from flag or config (which reads environment variables).
+//     /// If the stability is set by a flag, modify STABILITY env variable to match
+//     /// the set stability.
+//     /// Flox invocations in a child process will inherit hence inherit the stability.
+//     pub(crate) fn stability(&self, config: &Config) -> Stability {
+//         if let Some(ref stability) = self.stability {
+//             env::set_var("FLOX_PREVIEW_STABILITY", stability.to_string());
+//             stability.clone()
+//         } else {
+//             config.flox.stability.clone()
+//         }
+//     }
+// }
 
 #[derive(Debug, Clone)]
 pub struct WithPassthru<T> {

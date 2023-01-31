@@ -3,7 +3,7 @@ _nix_bash_completion() {
     local cword cur
     _get_comp_words_by_ref -n ':=&' words cword cur
     unset words[0]
-    cword=$((cword - 1))
+    cword=$((cword - 1 - $OFFSET))
     local have_type
     while IFS= read -r line; do
         local completion=${line%%$'\t'*}

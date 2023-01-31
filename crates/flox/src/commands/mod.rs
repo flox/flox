@@ -3,11 +3,13 @@ mod environment;
 mod general;
 mod package;
 
+use std::str::FromStr;
 use std::{env, fs};
 
 use anyhow::Result;
 use bpaf::{Bpaf, Parser};
 use flox_rust_sdk::flox::{Flox, FLOX_VERSION};
+use flox_rust_sdk::prelude::Channel;
 use tempfile::TempDir;
 
 use self::channel::ChannelCommands;
@@ -69,7 +71,7 @@ pub struct FloxArgs {
 
 impl FloxArgs {
     /// Initialize the command line by creating an initial FloxBuilder
-    pub async fn handle(self, config: crate::config::Config) -> Result<()> {
+    pub async fn handle(self, mut config: crate::config::Config) -> Result<()> {
         // ensure xdg dirs exist
         tokio::fs::create_dir_all(&config.flox.config_dir).await?;
         tokio::fs::create_dir_all(&config.flox.data_dir).await?;
@@ -125,10 +127,33 @@ impl FloxArgs {
         });
 
         match self.command {
-            Commands::Package(package) => package.handle(config, flox).await?,
+            Commands::Package { options, command } => {
+                // Resolve stability from flag or config (which reads environment variables).
+                // If the stability is set by a flag, modify STABILITY env variable to match
+                // the set stability.
+                // Flox invocations in a child process will inherit hence inherit the stability.
+
+                // mutability, meh
+                config.flox.stability = {
+                    if let Some(ref stability) = options.stability {
+                        env::set_var("FLOX_STABILITY", stability.to_string());
+                        stability.clone()
+                    } else {
+                        config.flox.stability
+                    }
+                };
+
+                let mut flox = flox;
+                // more mutable state hurray :/
+                flox.channels.register_channel(
+                    "nixpkgs",
+                    Channel::from_str(&format!("github:flox/nixpkgs/{}", config.flox.stability))?,
+                );
+                command.handle(config, flox).await?
+            },
             Commands::Environment(ref environment) => environment.handle(flox).await?,
             Commands::Channel(ref channel) => channel.handle(flox).await?,
-            Commands::General(ref general) => general.handle(flox).await?,
+            Commands::General(ref general) => general.handle(config, flox).await?,
         }
 
         Ok(())
@@ -138,11 +163,15 @@ impl FloxArgs {
 /// Transparent separation of different categories of commands
 #[derive(Bpaf, Clone)]
 pub enum Commands {
-    Package(
+    Package {
+        #[bpaf(external(package::package_args), group_help("Development Options"))]
+        options: package::PackageArgs,
+
         #[bpaf(external(package::interface::package_commands))]
         #[bpaf(group_help("Development Commands"))]
-        interface::PackageCommands,
-    ),
+        command: interface::PackageCommands,
+    },
+
     Environment(
         #[bpaf(external(environment::environment_commands))]
         #[bpaf(group_help("Environment Commands"))]
