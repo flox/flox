@@ -14,7 +14,7 @@ use flox_rust_sdk::nix::{Run as RunC, RunTyped};
 use flox_rust_sdk::prelude::{Installable, Stability};
 use flox_rust_sdk::providers::git::{GitCommandProvider, GitProvider};
 use inquire::error::InquireResult;
-use log::{debug, info, warn};
+use log::{debug, info};
 
 use crate::commands::package::interface::ResolveInstallable;
 use crate::config::features::Feature;
@@ -28,17 +28,7 @@ async fn env_ref_to_installable<Git: GitProvider + 'static>(
     subcommand: &str,
     environment_name: &str,
 ) -> anyhow::Result<Installable> {
-    let (env_refs, named_in_proj_err) = EnvironmentRef::<Git>::find(flox, environment_name).await?;
-    if let Some(err) = named_in_proj_err {
-        if env_refs.is_empty() {
-            warn!(
-                "Error finding named environment (while in a project): {}",
-                err
-            );
-        }
-
-        debug!("Named environment error: {:?}", err);
-    }
+    let env_refs = EnvironmentRef::<Git>::find(flox, environment_name).await?;
 
     resolve_installable_from_environment_refs(flox, subcommand, env_refs).await
 }
@@ -241,7 +231,7 @@ pub(crate) mod interface {
     #[derive(Bpaf, Clone, Debug)]
     pub struct Containerize {
         /// Environment to containerize
-        #[bpaf(long("environment"), short('e'))]
+        #[bpaf(long("environment"), short('e'), argument("ENV"))]
         pub(crate) environment_name: Option<String>,
 
         #[bpaf(short('A'), hide)]

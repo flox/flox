@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, HashMap};
+use std::env;
 use std::path::Path;
 use std::str::FromStr;
-use std::env;
 
 use anyhow::{Context, Result};
 use flox_rust_sdk::prelude::{Channel, ChannelRegistry};

@@ -50,6 +50,7 @@ where
 }
 
 impl<'flox> Project<'flox> {
+    /// Returns a list of project matches for a user specified environment
     pub async fn find<Nix: FloxNixApi, Git: GitProvider>(
         flox: &'flox Flox,
         environment_name: &str,
@@ -151,7 +152,8 @@ pub enum FindNamedError<Git: GitProvider> {
 }
 
 impl<Git: GitProvider> Named<Git> {
-    pub async fn find(flox: &Flox, environment: &str) -> Result<Self, FindNamedError<Git>> {
+    /// Check if user specified environment matches a named environment
+    pub async fn find(flox: &Flox, environment: &str) -> Result<Option<Self>, FindNamedError<Git>> {
         let (owner, name) = match environment.rsplit_once('/') {
             None => {
                 let default_owner = Self::find_default_owner(flox).await?;
@@ -169,9 +171,9 @@ impl<Git: GitProvider> Named<Git> {
             Some((owner, name)) => (owner.to_string(), name.to_string()),
         };
 
-        match tokio::fs::metadata(flox.data_dir.join("environments").join(&owner).join(&name)).await
-        {
-            Err(err) if err.kind() == ErrorKind::NotFound => return Err(FindNamedError::NotFound),
+        match tokio::fs::metadata(Self::environment_dir(flox, &owner, &name)).await {
+            // no matches for this environment exist
+            Err(err) if err.kind() == ErrorKind::NotFound => return Ok(None),
             Err(err) => return Err(FindNamedError::CheckEnvironmentError(err)),
             Ok(_) => {},
         };
@@ -182,17 +184,30 @@ impl<Git: GitProvider> Named<Git> {
                 .map_err(FindNamedError::OwnerPath)?,
         )
         .await
+        // if we found an environment in data_dir but there's no git repo in meta_dir, something's
+        // wrong
         .map_err(FindNamedError::GitDiscoverError)?;
 
-        Ok(Named { owner, name, git })
+        Ok(Some(Named { owner, name, git }))
     }
 
     fn meta_dir(flox: &Flox) -> PathBuf {
         flox.cache_dir.join("meta")
     }
 
+    /// Return path to an owner in data dir, e.g. ~/.local/share/flox/environments/owner
+    fn owner_dir(flox: &Flox, owner: &str) -> PathBuf {
+        flox.data_dir.join("environments").join(owner)
+    }
+
+    /// Return path to environment in data dir,
+    /// e.g. ~/.local/share/flox/environments/owner/system.name
+    fn environment_dir(flox: &Flox, owner: &str, name: &str) -> PathBuf {
+        Self::owner_dir(flox, owner).join(format!("{}.{}", flox.system, name))
+    }
+
     async fn find_default_owner(flox: &Flox) -> Result<String, FindDefaultOwnerError> {
-        let link_path = Self::meta_dir(flox).join(DEFAULT_OWNER);
+        let link_path = Self::owner_dir(flox, DEFAULT_OWNER);
         debug!(
             "Checking `local` symlink (`{}`) for true name of default user",
             link_path.display()
@@ -273,13 +288,12 @@ where
 
 #[allow(unused)]
 impl<Git: GitProvider> EnvironmentRef<'_, Git> {
+    /// Returns a list of all matches for a user specified environment, including both named and
+    /// project environment matches
     pub async fn find<'flox, Nix: FloxNixApi>(
         flox: &'flox Flox,
         environment_name: &str,
-    ) -> Result<
-        (Vec<EnvironmentRef<'flox, Git>>, Option<FindNamedError<Git>>),
-        EnvironmentRefError<Git, Nix>,
-    >
+    ) -> Result<(Vec<EnvironmentRef<'flox, Git>>), EnvironmentRefError<Git, Nix>>
     where
         Eval: RunJson<Nix>,
     {
@@ -287,21 +301,15 @@ impl<Git: GitProvider> EnvironmentRef<'_, Git> {
 
         let mut environment_refs = Vec::new();
 
-        let mut not_proj = false;
-        let mut not_named = false;
+        // Assume packages do not have '/' in their name
+        // This is a weak assumption that is "mostly" true
+        let not_proj = environment_name.contains('/');
 
-        // Lets hope nobody manages to put one of these in their project environment names
-        if environment_name.contains('/') {
-            not_proj = true;
-        }
-
-        // I think starting with `.` is totally possible, but we're going to hope nobody will do it,
-        // so we can use it as a marker to force project resolution.
-        // Yes this completely goes against @tomberek's Nix patch to make this skip resolving
-        // since it resolves anyway, but whatever lol.
-        if environment_name.starts_with("floxEnvs.") || environment_name.starts_with('.') {
-            not_named = true;
-        }
+        let not_named =
+            // Skip named resolution if name starts with floxEnvs. or .floxEnvs.
+            environment_name.starts_with("floxEnvs.") || environment_name.starts_with(".floxEnvs.")
+            // Don't allow # in named environments as they look like flakerefs
+            || environment_name.contains('#');
 
         // houston we have a problem
         if not_proj && not_named {
@@ -310,35 +318,29 @@ impl<Git: GitProvider> EnvironmentRef<'_, Git> {
 
         if !not_proj {
             match Project::find::<Nix, Git>(flox, environment_name).await {
-                Err(FindProjectError::NotInGitRepo | FindProjectError::NotProject) => {
-                    debug!("Not in a project Git repo, forcing named resolution");
-                    not_proj = true;
+                Err(e @ (FindProjectError::NotInGitRepo | FindProjectError::NotProject)) => {
+                    debug!("{}", e);
                 },
                 Err(err) => return Err(EnvironmentRefError::Project(err)),
                 Ok(ps) => {
                     for p in ps {
                         environment_refs.push(EnvironmentRef::Project(p));
                     }
-
-                    not_proj = false;
                 },
             };
         }
 
-        let named_in_proj_err = match Named::find(flox, environment_name).await {
-            // This might be a bit picky, but a lot less should go wrong with named environments,
-            // so we can assume that errors are likely to be user errors,
-            // which are likely to be usage errors.
-            // i.e. missing, which are probably fine to ignore 🤷
-            Err(err) if not_proj => return Err(EnvironmentRefError::Named(err)),
-            Err(err) => Some(err),
-            Ok(n) => {
-                environment_refs.push(EnvironmentRef::Named(n));
-                None
-            },
-        };
+        if !not_named {
+            match Named::find(flox, environment_name).await {
+                Err(err) => return Err(EnvironmentRefError::Named(err)),
+                Ok(None) => {},
+                Ok(Some(n)) => {
+                    environment_refs.push(EnvironmentRef::Named(n));
+                },
+            };
+        }
 
-        Ok((environment_refs, named_in_proj_err))
+        Ok(environment_refs)
     }
 
     pub async fn get_latest_installable<'flox>(
