@@ -31,11 +31,13 @@ pub enum ChannelCommands {
         url: Option<Url>,
     },
 
-    /// unsubscribe from channel
+    /// unsubscribe from a channel
     #[bpaf(command)]
     Unsubscribe {
-        #[bpaf(positional("channel"))]
-        channel: ChannelRef,
+        /// channel name to unsubscribe.
+        /// If ommited, flow will prompt for the name interactively
+        #[bpaf(positional("channel"), optional)]
+        channel: Option<ChannelRef>,
     },
 
     /// search packages in subscribed channels
