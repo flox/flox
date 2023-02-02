@@ -241,8 +241,7 @@ impl<Git: GitProvider> Named<Git> {
             // which comes from the template
             // https://github.com/flox/flox-bash-private/tree/main/lib/templateFloxEnv/pkgs/default
             // and does not get renamed.
-            // Use debug representation of name to escape it
-            attr_path: format!(".floxEnvs.{system}.{:?}", self.name),
+            attr_path: format!(".floxEnvs.{system}.default"),
         }
     }
 
