@@ -288,7 +288,7 @@ pub(crate) mod interface {
         /// run a bundler for current project
         #[bpaf(command)]
         Bundle(#[bpaf(external(WithPassthru::parse))] WithPassthru<Bundle>),
-        /// containerize a project
+        /// containerize an environment
         #[bpaf(command)]
         Containerize(#[bpaf(external(WithPassthru::parse))] WithPassthru<Containerize>),
         /// run `nix flake` commands
