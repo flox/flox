@@ -653,7 +653,7 @@ pub struct PackageArgs {
 //     /// Flox invocations in a child process will inherit hence inherit the stability.
 //     pub(crate) fn stability(&self, config: &Config) -> Stability {
 //         if let Some(ref stability) = self.stability {
-//             env::set_var("FLOX_PREVIEW_STABILITY", stability.to_string());
+//             env::set_var("FLOX_STABILITY", stability.to_string());
 //             stability.clone()
 //         } else {
 //             config.flox.stability.clone()

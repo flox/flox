@@ -66,11 +66,12 @@ impl Config {
 
             let cache_dir = flox_dirs.get_cache_home();
             let data_dir = flox_dirs.get_data_home();
-            let config_dir = match env::var("FLOX_PREVIEW_CONFIG_DIR") {
+            let config_dir = match env::var("FLOX_CONFIG_HOME") {
                 Ok(v) => v.into(),
                 Err(_) => {
                     let config_dir = flox_dirs.get_config_home();
-                    debug!("`FLOX_PREVIEW_CONFIG_DIR` not set, using {config_dir:?}");
+                    debug!("`FLOX_CONFIG_HOME` not set, using {config_dir:?}");
+                    env::set_var("FLOX_CONFIG_HOME", &config_dir);
                     config_dir
                 },
             };
@@ -86,7 +87,7 @@ impl Config {
                 );
 
             let mut flox_envs = env::vars()
-                .filter_map(|(k, v)| k.strip_prefix("FLOX_PREVIEW_").map(|k| (k.to_owned(), v)))
+                .filter_map(|(k, v)| k.strip_prefix("FLOX_").map(|k| (k.to_owned(), v)))
                 .collect::<Vec<_>>();
 
             let builder = builder
