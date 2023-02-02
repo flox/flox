@@ -1,7 +1,6 @@
 use std::path::Path;
 
 use anyhow::{Context, Result};
-use crossterm::tty::IsTty;
 use fslock::LockFile;
 use indoc::formatdoc;
 use log::{debug, info, trace};
@@ -23,7 +22,7 @@ async fn write_metrics_uuid(uuid_path: &Path, consent: bool) -> Result<()> {
 pub async fn init_telemetry_consent(data_dir: &Path, cache_dir: &Path) -> Result<()> {
     tokio::fs::create_dir_all(data_dir).await?;
 
-    if !std::io::stderr().is_tty() || !std::io::stdin().is_tty() {
+    if !Dialog::can_prompt() {
         // Can't prompt user now, do it another time
         return Ok(());
     }

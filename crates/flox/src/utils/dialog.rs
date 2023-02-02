@@ -1,5 +1,6 @@
 use std::fmt::Display;
 
+use crossterm::tty::IsTty;
 use inquire::ui::{Attributes, RenderConfig, StyleSheet, Styled};
 
 use super::{colors, TERMINAL_STDERR};
@@ -117,6 +118,13 @@ impl<'a, T: Display + Send + 'static> Dialog<'a, Select<T>> {
         })
         .await
         .expect("Failed to join blocking dialog")
+    }
+}
+
+impl Dialog<'_, ()> {
+    /// True if stderr and stdin are ttys
+    pub fn can_prompt() -> bool {
+        std::io::stderr().is_tty() && std::io::stdin().is_tty()
     }
 }
 

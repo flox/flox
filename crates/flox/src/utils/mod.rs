@@ -7,7 +7,6 @@ use std::str::FromStr;
 
 use anyhow::{anyhow, bail, Context, Result};
 use bpaf::Parser;
-use crossterm::tty::IsTty;
 use flox_rust_sdk::flox::{EnvironmentRef, Flox, FloxInstallable, ResolvedInstallableMatch};
 use flox_rust_sdk::prelude::{Channel, ChannelRegistry, Installable};
 use flox_rust_sdk::providers::git::GitProvider;
@@ -377,7 +376,7 @@ pub async fn resolve_installable_from_matches(
                 None => subcommand.into(),
             };
 
-            if !std::io::stderr().is_tty() || !std::io::stdin().is_tty() {
+            if !Dialog::can_prompt() {
                 error!(
                     indoc! {"
                     You must address a specific {derivation_type}. For example with:
@@ -491,7 +490,7 @@ pub async fn resolve_installable_from_environment_refs<'flox, Git: GitProvider +
                 )
                 .collect::<Result<Vec<_>>>()?;
 
-            if !std::io::stderr().is_tty() || !std::io::stdin().is_tty() {
+            if !Dialog::can_prompt() {
                 error!(
                     indoc! {"
                     You must address a specific environment. For example with:
