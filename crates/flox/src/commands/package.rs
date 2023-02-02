@@ -1,8 +1,10 @@
+use std::env;
 use std::fmt::Debug;
 use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
 use bpaf::{construct, Bpaf, Parser};
+use crossterm::tty::IsTty;
 use flox_rust_sdk::flox::{EnvironmentRef, Flox};
 use flox_rust_sdk::models::project::{self, Closed, Open, Project};
 use flox_rust_sdk::nix::arguments::eval::EvaluationArgs;
@@ -13,7 +15,9 @@ use flox_rust_sdk::nix::command_line::{Group, NixCliCommand, NixCommandLine, ToA
 use flox_rust_sdk::nix::{Run as RunC, RunTyped};
 use flox_rust_sdk::prelude::{Installable, Stability};
 use flox_rust_sdk::providers::git::{GitCommandProvider, GitProvider};
+use indoc::indoc;
 use inquire::error::InquireResult;
+use itertools::Itertools;
 use log::{debug, info};
 
 use crate::commands::package::interface::ResolveInstallable;
@@ -459,9 +463,25 @@ impl interface::PackageCommands {
                 )
                 .await?;
 
+                if std::io::stdout().is_tty() {
+                    bail!(
+                        indoc! {"
+                        'flox containerize' pipes a container image to stdout, but stdout is
+                        attached to the terminal. Instead, run this command as:
+
+                            $ {command} | docker load
+                    "},
+                        command = env::args()
+                            .map(|arg| shell_escape::escape(arg.into()))
+                            .join(" ")
+                    );
+                }
+
                 let nix = flox.nix::<NixCommandLine>(command.nix_args);
 
                 let nix_args = NixArgs::default();
+
+                info!("Building container...");
 
                 let command = Build {
                     installables: [Installable {
@@ -476,6 +496,8 @@ impl interface::PackageCommands {
                 };
 
                 let mut out: BuildOut = command.run_typed(&nix, &nix_args).await?;
+
+                info!("Done.");
 
                 let script = out
                     .pop()
