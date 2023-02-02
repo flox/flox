@@ -175,25 +175,25 @@ pub(crate) mod interface {
 
         /// The --channel-repo determines the upstream repository containing
         #[bpaf(argument("REPO"))]
-        pub channel_repo: String,
+        pub channel_repo: Option<String>,
 
         #[bpaf(argument("REPO"))]
-        pub build_repo: String,
+        pub build_repo: Option<String>,
 
         #[bpaf(argument("URL"))]
-        pub upload_to: String,
+        pub upload_to: Option<String>,
 
         #[bpaf(argument("URL"))]
-        pub download_from: String,
+        pub download_from: Option<String>,
 
         #[bpaf(argument("DIR"))]
-        pub render_path: String,
+        pub render_path: Option<String>,
 
         #[bpaf(argument("FILE"))]
-        pub key_file: String,
+        pub key_file: Option<String>,
 
         #[bpaf(argument("FILE"))]
-        pub publish_system: String,
+        pub publish_system: Option<String>,
 
         /// Package to publish
         #[bpaf(external(InstallableArgument::positional), optional, catch)]
