@@ -14,9 +14,8 @@ flox [ `<general-options>` ] publish [ `<options>` ]
 
 # DESCRIPTION
 
-Build the requested package (or "installable").
-If not provided `flox` will prompt for you to
-select from the list of known packages.
+Perform a build, (optionally) copy binaries to a cache,
+and add package metadata to a flox channel.
 
 # OPTIONS
 

@@ -1,5 +1,5 @@
 ---
-title: FLOX-BUILD
+title: FLOX-DESTROY
 section: 1
 header: "flox User Manuals"
 ...
@@ -7,7 +7,7 @@ header: "flox User Manuals"
 
 # NAME
 
-flox-build - build package from current project
+flox-destroy - destroy an environment
 
 # SYNOPSIS
 

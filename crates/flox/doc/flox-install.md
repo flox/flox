@@ -7,7 +7,7 @@ header: "flox User Manuals"
 
 # NAME
 
-flox-build - Install package(s) to environment.
+flox-install - Install package(s) to environment.
 
 # SYNOPSIS
 

@@ -1,5 +1,5 @@
 ---
-title: FLOX-BUILD
+title: FLOX-RUN
 section: 1
 header: "flox User Manuals"
 ...
@@ -7,7 +7,7 @@ header: "flox User Manuals"
 
 # NAME
 
-flox-build - run app from current project
+flox-run - run app from current project
 
 # SYNOPSIS
 

@@ -153,8 +153,8 @@ runtime environments, developer environments, and administration.
 
 
 **publish**
-:   Perform a build, (optionally) copy to cache substituter,
-    and render package metadata for inclusion in the flox catalog.
+:   Perform a build, (optionally) copy binaries to a cache,
+    and add package metadata to a flox channel.
 
 **run**
 :   Run flake application from the requested package (or "installable").
