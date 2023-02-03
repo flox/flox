@@ -115,7 +115,7 @@ runtime environments, developer environments, and administration.
 :   Import declarative environment manifest as new generation.
 
 **export**
-:   Display declarative environment manifest.
+:   Export environment as a tar.
 
 **edit**
 :   Edit declarative environment manifest.

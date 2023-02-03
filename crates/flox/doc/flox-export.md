@@ -7,7 +7,7 @@ header: "flox User Manuals"
 
 # NAME
 
-flox-export -
+flox-export - export environment as a tar
 
 # SYNOPSIS
 
@@ -15,7 +15,7 @@ flox [ `<general-options>` ] export [ `<options>` ]
 
 # DESCRIPTION
 
-Display declarative environment manifest.
+Export environment as a tar. The resulting tar can be piped to `flox import`.
 
 # OPTIONS
 
