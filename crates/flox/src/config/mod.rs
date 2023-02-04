@@ -72,8 +72,9 @@ impl Config {
                     v.into()
                 },
                 Err(_) => {
-                    let config_dir = flox_dirs.get_config_home().canonicalize()?;
+                    let config_dir = flox_dirs.get_config_home();
                     fs::create_dir_all(&config_dir)?;
+                    let config_dir = config_dir.canonicalize()?;
                     debug!("`FLOX_CONFIG_HOME` not set, using {config_dir:?}");
                     env::set_var("FLOX_CONFIG_HOME", &config_dir);
                     config_dir
