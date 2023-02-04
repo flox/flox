@@ -117,6 +117,9 @@ runtime environments, developer environments, and administration.
 **export**
 :   Export environment as a tar.
 
+**containerize**
+:   Export environment as a container image.
+
 **edit**
 :   Edit declarative environment manifest.
 
