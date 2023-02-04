@@ -1,0 +1,11 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Report a bug or an issue
+    url: https://github.com/flox/flox/issues/new/
+    about: Report a bug or an issue in flox
+  - name: Ask a question or request a feature
+    url: https://discourse.floxdev.com/
+    about: Ask questions, request features and discuss with other flox community members
+  - name: Learn how to contribute
+    url: https://github.com/flox/flox/blob/main/CONTRIBUTING.md
+    about: Learn how to contribute to flox
