@@ -383,11 +383,11 @@
         "tracelinks": "tracelinks_2"
       },
       "locked": {
-        "lastModified": 1675514345,
-        "narHash": "sha256-odTjm8RYnN7+Bnq9gx2EYbZkc0D2TC+hJZMm8dvFBPE=",
+        "lastModified": 1675526828,
+        "narHash": "sha256-kXfTi8LEHgfuTYYGXQX0KwWySFhuA146kaaLS6rCTDY=",
         "owner": "flox",
         "repo": "floxpkgs",
-        "rev": "472a08b6cc2e8800586d89bdf54c0556cc5f4e05",
+        "rev": "978c4c32bb3b15d28a66b74469b5d9f8708c607c",
         "type": "github"
       },
       "original": {
@@ -408,11 +408,11 @@
         "shellHooks": "shellHooks_2"
       },
       "locked": {
-        "lastModified": 1675443629,
-        "narHash": "sha256-fDFPFKb9fYEMjqxKMlFHxhnNm27jDC2TsfcrkZjd0n4=",
+        "lastModified": 1675525395,
+        "narHash": "sha256-qTEZIslIq6LG3qPBTV9uLTORFWFmwB9PrDFQgBty+ek=",
         "ref": "main",
-        "rev": "19d1a62b0dec0608b060ce4293fc69b6593970f5",
-        "revCount": 349,
+        "rev": "2770f59526f0c2583bfe56724505770f849d49a1",
+        "revCount": 351,
         "type": "git",
         "url": "ssh://git@github.com/flox/flox"
       },
