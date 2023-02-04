@@ -1,6 +1,6 @@
 use std::collections::HashMap;
-use std::env;
 use std::path::PathBuf;
+use std::{env, fs};
 
 use anyhow::{Context, Result};
 use config::{Config as HierarchicalConfig, Environment};
@@ -67,9 +67,13 @@ impl Config {
             let cache_dir = flox_dirs.get_cache_home();
             let data_dir = flox_dirs.get_data_home();
             let config_dir = match env::var("FLOX_CONFIG_HOME") {
-                Ok(v) => v.into(),
+                Ok(v) => {
+                    fs::create_dir_all(&v)?;
+                    v.into()
+                },
                 Err(_) => {
-                    let config_dir = flox_dirs.get_config_home();
+                    let config_dir = flox_dirs.get_config_home().canonicalize()?;
+                    fs::create_dir_all(&config_dir)?;
                     debug!("`FLOX_CONFIG_HOME` not set, using {config_dir:?}");
                     env::set_var("FLOX_CONFIG_HOME", &config_dir);
                     config_dir
