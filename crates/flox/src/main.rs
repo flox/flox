@@ -7,7 +7,7 @@ use std::process::{ExitCode, ExitStatus};
 
 use anyhow::{anyhow, Context, Result};
 use bpaf::Parser;
-use commands::{FloxArgs, Prefix};
+use commands::{BashPassthru, FloxArgs, Prefix};
 use flox_rust_sdk::environment::default_nix_subprocess_env;
 use fslock::LockFile;
 use itertools::Itertools;
@@ -35,13 +35,25 @@ async fn run(args: FloxArgs) -> Result<()> {
 
 #[tokio::main]
 async fn main() -> ExitCode {
+    init_logger(None, None);
+
+    // redirect to flox early if `--bash-passthru` is present
+    if let Some(args) = BashPassthru::check() {
+        return run_in_flox(None, &args)
+            .await
+            .unwrap_or_else(|run_error| {
+                error!("Error: {:?}", run_error);
+                1u8
+            })
+            .into();
+    }
+
     // Quit early if `--prefix` is present
     if Prefix::check() {
         println!(env!("out"));
         return ExitCode::from(0);
     }
 
-    init_logger(None, None);
     let (verbosity, debug) = {
         let verbosity_parser = commands::verbosity();
         let debug_parser = bpaf::long("debug").switch();
@@ -114,16 +126,11 @@ impl Display for FloxShellErrorCode {
 impl std::error::Error for FloxShellErrorCode {}
 
 pub async fn flox_forward(flox: &Flox) -> Result<()> {
-    let result = run_in_flox(flox, &env::args_os().collect::<Vec<_>>()[1..]).await?;
-    if !result.success() {
-        Err(FloxShellErrorCode(ExitCode::from(
-            result.code().unwrap_or_else(|| {
-                result
-                    .signal()
-                    .expect("Process terminated by unknown means")
-            }) as u8,
-        )))?;
+    let result = run_in_flox(Some(flox), &env::args_os().collect::<Vec<_>>()[1..]).await?;
+    if !ExitStatus::from_raw(result as i32).success() {
+        Err(FloxShellErrorCode(ExitCode::from(result)))?
     }
+
     Ok(())
 }
 
@@ -198,12 +205,14 @@ async fn sync_bash_metrics_consent(data_dir: &Path, cache_dir: &Path) -> Result<
 }
 
 pub async fn run_in_flox(
-    flox: &Flox,
+    flox: Option<&Flox>,
     args: &[impl AsRef<std::ffi::OsStr> + Debug],
-) -> Result<ExitStatus> {
+) -> Result<u8> {
     debug!("Running in flox with arguments: {:?}", args);
 
-    sync_bash_metrics_consent(&flox.data_dir, &flox.cache_dir).await?;
+    if let Some(flox) = flox {
+        sync_bash_metrics_consent(&flox.data_dir, &flox.cache_dir).await?;
+    }
 
     let status = Command::new(FLOX_SH)
         .args(args)
@@ -211,9 +220,16 @@ pub async fn run_in_flox(
         .spawn()
         .expect("failed to spawn flox")
         .wait()
-        .await?;
+        .await
+        .context("fatal: failed executing {FLOX_SH}")?;
 
-    Ok(status)
+    let code = status.code().unwrap_or_else(|| {
+        status
+            .signal()
+            .expect("Process terminated by unknown means")
+    }) as u8;
+
+    Ok(code)
 }
 
 /// Resets the `$USER`/`HOME` variables to match `euid`

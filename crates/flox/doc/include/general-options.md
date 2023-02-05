@@ -20,4 +20,8 @@ and must be specified _before_ the `<command>` argument.
 
 \--prefix
 :   Print `flox` installation prefix / Nix store path.
-    (Flox internal use only.)
+    (flox internal use only.)
+
+\--bash-passthru
+:   Force execution in `flox-bash`
+    (flox internal use only.)

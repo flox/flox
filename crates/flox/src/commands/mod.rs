@@ -209,3 +209,30 @@ impl Prefix {
         prefix().to_options().try_run().unwrap_or_default().prefix
     }
 }
+
+/// Special command to check for the presence of the `--bash-passthru`
+///
+/// With `--bash-passthru`,
+/// all arguments to `flox` are passed to `flox-bash`
+#[derive(Bpaf, Default, Debug)]
+pub struct BashPassthru {
+    #[bpaf(long("bash-passthru"))]
+    do_passthru: bool,
+
+    #[bpaf(any, many)]
+    flox_args: Vec<String>,
+}
+
+impl BashPassthru {
+    /// Parses to [Self] and extract the `--bash-passthru` flag
+    /// returning a list of the remaining arguments if given.
+    pub fn check() -> Option<Vec<String>> {
+        let passtrhu = bash_passthru().to_options().try_run().unwrap_or_default();
+
+        if passtrhu.do_passthru {
+            return Some(passtrhu.flox_args);
+        }
+
+        None
+    }
+}
