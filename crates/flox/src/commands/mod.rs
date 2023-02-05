@@ -88,8 +88,10 @@ impl FloxArgs {
 
         // disabling telemetry will work regardless
         // but we don't want to give users who disabled it the prompt
-        if !config.flox.disable_telemetry {
+        if !config.flox.disable_metrics {
             init_telemetry_consent(&config.flox.data_dir, &config.flox.cache_dir).await?;
+        } else {
+            env::set_var("FLOX_DISABLE_METRICS", "true");
         }
 
         let channels = init_channels()?;

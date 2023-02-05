@@ -213,7 +213,7 @@ async fn push_metrics(metrics: Vec<MetricEntry>, uuid: Uuid) -> Result<()> {
 pub async fn add_metric(subcommand: Option<String>) -> Result<()> {
     let config = Config::parse()?;
 
-    if config.flox.disable_telemetry {
+    if config.flox.disable_metrics {
         return Ok(());
     }
 

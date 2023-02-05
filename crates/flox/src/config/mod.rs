@@ -37,7 +37,7 @@ pub struct Config {
 #[derive(Clone, Debug, Deserialize, Default)]
 pub struct FloxConfig {
     #[serde(default)]
-    pub disable_telemetry: bool,
+    pub disable_metrics: bool,
     pub cache_dir: PathBuf,
     pub data_dir: PathBuf,
     pub config_dir: PathBuf,
