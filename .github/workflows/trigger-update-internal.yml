@@ -1,0 +1,25 @@
+name: "Trigger Update of floxpkgs/index"
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  update_inputs:
+    name: "Issue Update Request"
+    env:
+      INDEX: ${{ github.repository_owner }}/floxpkgs-internal
+
+    runs-on: ubuntu-latest
+    steps:
+    - name: Send Trigger to ${{ env.INDEX }}
+      # TODO: find out which token to use?
+      run: |
+        curl \
+          -X POST \
+          -H "Accept: application/vnd.github.v3+json" \
+          -H "Authorization: Bearer ${{ secrets.NIX_GIT_TOKEN }}" \
+          https://api.github.com/repos/${{ env.INDEX }}/actions/workflows/update-index.yml/dispatches \
+          -d '{ "ref" : "master" }'
