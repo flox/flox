@@ -68,14 +68,20 @@ impl Config {
             let data_dir = flox_dirs.get_data_home();
             let config_dir = match env::var("FLOX_CONFIG_HOME") {
                 Ok(v) => {
-                    fs::create_dir_all(&v)?;
+                    debug!("`$FLOX_CONFIG_HOME` set: {v}");
+                    fs::create_dir_all(&v)
+                        .context(format!("Could not create config directory: {v:?}"))?;
                     v.into()
                 },
                 Err(_) => {
                     let config_dir = flox_dirs.get_config_home();
-                    fs::create_dir_all(&config_dir)?;
-                    let config_dir = config_dir.canonicalize()?;
+                    debug!("`$FLOX_CONFIG_HOME` not set, using {config_dir:?}");
+                    fs::create_dir_all(&config_dir)
+                        .context(format!("Could not create config directory: {config_dir:?}"))?;
                     debug!("`FLOX_CONFIG_HOME` not set, using {config_dir:?}");
+                    let config_dir = config_dir
+                        .canonicalize()
+                        .context("Could not canonicalize  conifig directory '{config_dir:?}'")?;
                     env::set_var("FLOX_CONFIG_HOME", &config_dir);
                     config_dir
                 },
