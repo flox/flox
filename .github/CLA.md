@@ -1,7 +1,7 @@
 # FLOXDEV, INC. CONTRIBUTION LICENSE AGREEMENT
 
-This Contribution License Agreement (the “**CLA**”) is between the individual set forth in the signature
-block (“**You**”) and FloxDev, Inc., (“[**flox**]”), effective as of the date of Your signature and sets forth
+This Contribution License Agreement (the “**CLA**”) is between the individual performing the Contribution
+(“**You**”) and FloxDev, Inc., (“[**flox**]”), effective as of the date of Your Contribution and sets forth
 the terms pursuant to which You provides Contributions to flox.
 
 You accept and agree to the following terms and conditions for Your present and future Contributions
@@ -59,11 +59,11 @@ make Your representations in this CLA inaccurate in any respect.
 hereof, and supersedes any and all prior or contemporaneous representations, understandings, and agreements,
 between the parties regarding same. If any part of this CLA is found to be unenforceable, the remaining
 portions of this CLA will remain in full force and effect. No modification of or amendment to this CLA, nor
-any waiver of any rights under this CLA, will be effective unless in writing signed by the party to be charged,
+any waiver of any rights under this CLA, will be effective unless agreed to by the party to be charged,
 and the waiver of any breach or default will not constitute a waiver of any other right under this CLA or any
 subsequent breach or default. Nothing in this CLA creates and the parties do not intend to create, any
 partnership or joint venture between themselves. Either party may freely assign this CLA. This CLA is
 binding upon and will inure to the benefit of a party’s successors and permitted assigns. This CLA will be
 governed by the laws of the State of New York. Exclusive jurisdiction of any and all disputes hereunder will
 be in the state and federal courts in New York, New York. This CLA may be executed in counterparts with
-the same effect as if all signatories had signed the same document.
+the same effect as if all parties had agreed to the same document.
