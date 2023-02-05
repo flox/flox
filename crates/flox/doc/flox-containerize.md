@@ -15,7 +15,8 @@ flox [ `<general-options>` ] containerize [ `<options>` ]
 
 # DESCRIPTION
 
-Export flox environment as a container image
+Export flox environment as a container image. The image is dumped to stdout and
+should be piped to `docker load`.
 
 # OPTIONS
 
