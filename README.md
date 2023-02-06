@@ -2,84 +2,129 @@
     <a href="https://floxdev.com" target="_blank"><img src="img/flox_blue_small.png" alt="flox logo" /></a>
 </p>
 
-## Quick Tour of flox
+![license](https://badgen.net/badge/license/GPLv2/green)
+![PRs](https://badgen.net/badge/PRs/welcome/green)
+![release](https://badgen.net/badge/release/v0.1.0/purple)
 
-flox is a multi-platform and reproducible environment manager
-for curating portable collections of tools
-for use across distributions and in any context.
-This means you can:
+## flox
 
+The [flox](https://floxdev.com) CLI is a multi-platform environment manager
+built on [Nix](https://github.com/nixOS/nix).
 
-<br>
-<img alt="flox flywheel" align="right" width="350" src="img/310703783_812187779826049_7314390197914243071_n.png">
+<img style="float:right" alt="flox flywheel" align="right" width="280" src="img/310703783_812187779826049_7314390197914243071_n.png">
+
+With flox you can:
 
 1. Install and run software anywhere
 2. Share collections of software that others can use
 3. Build software the same way in any environment
 4. Publish software for re-use
 
-<br>
-<br>
-<br>
 
-Lets look at the entire flox lifecycle.
 
-## Install and run packages
+## Installation
 
-Install almost any open source package on any Linux or MacOS machine.
-flox is compatible with all linux distributions.
-You can use it to install packages on your development machine, your EC2 instances,
-or anything else without being locked in to a distro-dependent package manager.
+You can download the flox CLI via one of our native installers for Mac, Linux, or Windows WSL [here](https://floxdev.com/docs).
 
-<img src="./img/flywheel-install.gif" />
-<br>
+## Usage
 
-## Share package collections
+See the [docs](https://floxdev.com/docs) for more detail on usage.
 
-Synchronize tools across your machines.
-With flox you can curate a collection of packages once and then use them on your servers,
-laptop, and/or desktop with no additional set-up or maintenance.
-flox keeps everything synchronized and allows global rollbacks.
-Keep everyone on the same page and up-to-date
-without shipping clunky containers or AMIs around your team.
-You can make global changes to your team's tools,
-view change logs,
-and perform global upgrades and rollbacks.
+#### Search through available packages:
 
-<img src="./img/flywheel-pull.gif" />
-<br>
+``` { .console .no-copy }
+$ flox search ripgrep
+ripgrep - A utility that combines the usability of The Silver Searcher with the raw speed of grep
+  stable.nixpkgs-flox.ripgrep@12.1.1
+  stable.nixpkgs-flox.ripgrep@13.0.0
+  staging.nixpkgs-flox.ripgrep@13.0.0
+  unstable.nixpkgs-flox.ripgrep@13.0.0
+```
 
-## Build your own packages
+#### Install a package:
 
-Packages built with flox run the same everywhere.
-No containers or fancy CI pipeline required.
+``` { .console .no-copy }
+$ flox install ripgrep
+created generation 1
+```
 
-Use different versions of development tools side-by-side with no extra set-up.
-No need to worry about conflicting versions of transitive dependencies
-or jump through hoops with brew, yum, and apt-get
-when you switch between projects and versions.
+#### Create a new environment:
 
-Store your environments in the cloud.
-flox can globally synchronize your runtime
-and project-specific development environments everywhere you work,
-so feel at home on every server, laptop, and desktop
-you use without a lengthy set-up.
+``` { .console .no-copy }
+$ flox create
+created environment default (aarch64-linux)
+```
 
-<img src="./img/flywheel-build.gif" />
-<br>
+#### Activate an environment¶
+``` { .console .no-copy }
+$ flox install cowsay
+created generation 2
+$ flox activate
+flox [default] $ cowsay '¡Hola!'
+ ________
+< !Hola! >
+ --------
+        \   ^__^
+         \  (oo)\_______
+            (__)\       )\/\
+                ||----w |
+                ||     ||
+$ exit
+```
 
-## Publish your packages
+#### Use another's environment:
 
-flox makes it easy to publish and distribute your own packages
-for others to use
-just as they would use any other open source package.
+``` { .console .no-copy }
+$ flox pull -e flox-examples/demo
+Total 0 (delta 0), reused 0 (delta 0), pack-reused 0
+To /home/USER/.cache/flox/meta/flox-examples
+ * [new branch]      aarch64-linux.demo -> aarch64-linux.demo
+$ flox activate -e flox-examples/demo
+flox [demo] $ fortune | cowsay
+ _____________________________________
+/ Spock: We suffered 23 casualties in \
+\ that attack, Captain.               /
+ -------------------------------------
+        \   ^__^
+         \  (oo)\_______
+            (__)\       )\/\
+                ||----w |
+                ||     ||
+$ exit
+```
 
-<img src="./img/flywheel-publish.gif" />
-<br>
 
-## Where to go from here
+## `nixpkgs-flox`
 
-Not sure if you get it yet? Already having ideas for how you can use it?
-Either way, carry on and
-[install flox](https://beta.floxdev.com/docs/getting-started/install-flox/)
-to get started!
+The flox CLI gets its packages from the
+[nixpkgs-flox](https://github.com/flox/nixpkgs-flox) channel, which is created
+using Nixpkgs.
+Using packages from a flox channel adds a few features as compared to using
+Nixpkgs directly: semantic versioning, stabilities, and guaranteed cache hits.
+See the [docs](https://floxdev.com/docs/basics) for more.
+
+## Contributing
+
+We welcome contributions to this project. Please read the [Contributor guide](./CONTRIBUTING.md) first.
+
+#### Building from source
+
+The flox CLI is written in Rust. Building flox requires a running Nix daemon.
+
+The simplest way to build flox is via flox!
+- Download `flox` and run `flox build` in the project directory.
+
+If you're a Nix user, you can run the following:
+`nix build .#flox --extra-experimental-features "nix-command flakes"`.
+
+See the [contributor guide](./CONTRIBUTING.md) for more information.
+
+## License
+
+The flox CLI is licensed under the GPLv2. See [LICENSE](./LICENSE).
+
+## Community
+
+Find us on [Twitter](https://twitter.com/floxdevelopment) and [Discourse](https://discourse.floxdev.com).
+
+For updates to the flox CLI, follow this repo on [GitHub](https://github.com/flox/flox)!
