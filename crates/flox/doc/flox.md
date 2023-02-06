@@ -218,6 +218,19 @@ flox install unstable.nixpkgs-flox.hello@2.10
     Defaults to `$XDG_DATA_HOME/flox/environments` or `$HOME/.local/share/flox/environments`
     if `$XDG_DATA_HOME` is not defined.
 
+`$FLOX_AUTOUPDATE`
+:   By default flox will check for new environment generations
+    in the background as they are activated
+    and then prompt to upgrade with the next activation.
+    This can be configured as follows:
+
+    Setting `FLOX_AUTOUPDATE=0` disables feature.
+    \
+    Setting `FLOX_AUTOUPDATE=1` (or if not defined) enables feature.
+    \
+    Setting `FLOX_AUTOUPDATE=2` configures flox to automatically
+    pull updates without prompting.
+
 `$FLOX_PROMPT`, `$FLOX_PROMPT_COLOR_{1,2}`, `$FLOX_PROMPT_DISABLE`
 :   The **FLOX_PROMPT** variable defaults to a bold blue "flox"
     and can be used to specify an alternate flox indicator string
