@@ -4,9 +4,9 @@
 
 ![license](https://badgen.net/badge/license/GPLv2/green)
 ![PRs](https://badgen.net/badge/PRs/welcome/green)
-![release](https://badgen.net/badge/release/v0.1.0/purple)
+![beta](https://badgen.net/badge/beta/v0.1.0/58569c)
 
-## flox
+## flox (beta)
 
 The [flox](https://floxdev.com) CLI is a multi-platform environment manager
 built on [Nix](https://github.com/nixOS/nix).
