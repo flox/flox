@@ -33,7 +33,7 @@ or with a command and arguments to be invoked directly.
 
 [ -- `<command>` [ `<argument>` ] ]
 :   Command to run in the environment.
-    Spawns the command in an ephmenral environemnt
+    Spawns the command in an ephmenral environment
     that does not leak into the calling process.
 
 

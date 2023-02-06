@@ -47,7 +47,7 @@ links to environments in the store. (Flox internal use only.)
     Cannot be used in conjunction with the `-e|--environment` flag.
 
 [ \--force ]
-:   forceably overwrite the uppstream copy of the environment
+:   forceably overwrite the upstream copy of the environment
 
 [ \--no-render ]
 :   do not render or create links to environments in the store

@@ -44,7 +44,7 @@ upstream or local copy of the environment based on having invoked
 
 
 [ \--force ]
-:   forceably overwrite the uppstream copy of the environment
+:   forceably overwrite the upstream copy of the environment
 
 # SEE ALSO
 

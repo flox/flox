@@ -30,4 +30,4 @@ your current shell rather than in a subshell (as with flox develop).
 ```
 
 `<package>`
-:   the package or project flox environemnt to prit the environment script for
+:   the package or project flox environment to prit the environment script for

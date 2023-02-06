@@ -36,7 +36,7 @@ More in-depth information is available by way of the [flox User's Manual](https:
 ## Command Line Completions
 
 Flox ships with command line completions for `bash`, `zsh` and `fish`.
-To enable completions in your shell Add the follwoing to your shell's
+To enable completions in your shell Add the following to your shell's
 startup script:
 
 **When using the flox installers**
