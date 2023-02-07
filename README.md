@@ -69,7 +69,7 @@ flox [default] $ cowsay '¡Hola!'
             (__)\       )\/\
                 ||----w |
                 ||     ||
-$ exit
+flox [default] $ exit
 ```
 
 #### Use another's environment:
@@ -80,7 +80,7 @@ Total 0 (delta 0), reused 0 (delta 0), pack-reused 0
 To /home/USER/.cache/flox/meta/flox-examples
  * [new branch]      aarch64-linux.demo -> aarch64-linux.demo
 $ flox activate -e flox-examples/demo
-flox [demo] $ fortune | cowsay
+flox [flox-examples/demo default] $ fortune | cowsay
  _____________________________________
 / Spock: We suffered 23 casualties in \
 \ that attack, Captain.               /
@@ -90,7 +90,7 @@ flox [demo] $ fortune | cowsay
             (__)\       )\/\
                 ||----w |
                 ||     ||
-$ exit
+flox [flox-examples/demo default] $ exit
 ```
 
 
