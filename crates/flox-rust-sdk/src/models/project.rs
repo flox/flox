@@ -13,8 +13,10 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 use crate::flox::{Flox, FloxNixApi};
 use crate::providers::git::{GitDiscoverError, GitProvider};
+use crate::utils::{find_and_replace, FindAndReplaceError};
 
 static PNAME_DECLARATION: Lazy<Regex> = Lazy::new(|| Regex::new(r#"pname = ".*""#).unwrap());
+static PACKAGE_NAME_PLACEHOLDER: &str = "__PACKAGE_NAME__";
 
 trait Initialize<I> {
     type InitError;
@@ -230,54 +232,74 @@ impl<Git: GitProvider> Project<'_, Open<Git>> {
 
         let old_package_path = root.join("pkgs/default.nix");
 
-        let mut file = match tokio::fs::File::open(&old_package_path).await {
-            Ok(f) => f,
+        match tokio::fs::File::open(&old_package_path).await {
+            // legacy path. Drop after we merge template changes to floxpkgs
+            Ok(mut file) => {
+                let mut package_contents = String::new();
+                file.read_to_string(&mut package_contents)
+                    .await
+                    .map_err(InitFloxPackageError::ReadTemplateFile)?;
+
+                // Drop handler should clear our file handle in case we want to delete it
+                drop(file);
+
+                let new_contents =
+                    PNAME_DECLARATION.replace(&package_contents, format!(r#"pname = "{name}""#));
+
+                let new_package_dir = root.join("pkgs").join(name);
+                debug!("creating dir: {}", new_package_dir.display());
+                tokio::fs::create_dir_all(&new_package_dir)
+                    .await
+                    .map_err(InitFloxPackageError::MkNamedDir)?;
+
+                let new_package_path = new_package_dir.join("default.nix");
+
+                repo.rm(&[&old_package_path], false, true, false)
+                    .await
+                    .map_err(InitFloxPackageError::RemoveUnnamedFile)?;
+
+                let mut file = tokio::fs::File::create(&new_package_path)
+                    .await
+                    .map_err(InitFloxPackageError::OpenNamed)?;
+
+                file.write_all(new_contents.as_bytes())
+                    .await
+                    .map_err(InitFloxPackageError::WriteTemplateFile)?;
+
+                repo.add(&[&new_package_path])
+                    .await
+                    .map_err(InitFloxPackageError::GitAdd)?;
+
+                // this might technically be a lie, but it's close enough :)
+                info!("renamed: pkgs/default.nix -> pkgs/{name}/default.nix");
+            },
             Err(err) => match err.kind() {
                 std::io::ErrorKind::NotFound => {
-                    return Ok(());
+                    let old_proto_pkg_path = root.join("pkgs").join(PACKAGE_NAME_PLACEHOLDER);
+                    let new_proto_pkg_path = root.join("pkgs").join(name);
+
+                    repo.mv(&old_proto_pkg_path, &new_proto_pkg_path)
+                        .await
+                        .map_err(InitFloxPackageError::GitMv)?;
+                    info!(
+                        "moved: {} -> {}",
+                        old_proto_pkg_path.to_string_lossy(),
+                        new_proto_pkg_path.to_string_lossy()
+                    );
+
+                    // our minimal "templating" - Replace any occurrences of
+                    // PACKAGE_NAME_PLACEHOLDER with name
+                    find_and_replace(&new_proto_pkg_path, PACKAGE_NAME_PLACEHOLDER, name)
+                        .await
+                        .map_err(InitFloxPackageError::<Nix, Git>::ReplacePackageName)?;
+
+                    repo.add(&[&new_proto_pkg_path])
+                        .await
+                        .map_err(InitFloxPackageError::GitAdd)?;
                 },
                 _ => return Err(InitFloxPackageError::OpenTemplateFile(err)),
             },
         };
-
-        let mut package_contents = String::new();
-        file.read_to_string(&mut package_contents)
-            .await
-            .map_err(InitFloxPackageError::ReadTemplateFile)?;
-
-        // Drop handler should clear our file handle in case we want to delete it
-        drop(file);
-
-        let new_contents =
-            PNAME_DECLARATION.replace(&package_contents, format!(r#"pname = "{name}""#));
-
-        let new_package_dir = root.join("pkgs").join(name);
-        debug!("creating dir: {}", new_package_dir.display());
-        tokio::fs::create_dir_all(&new_package_dir)
-            .await
-            .map_err(InitFloxPackageError::MkNamedDir)?;
-
-        let new_package_path = new_package_dir.join("default.nix");
-
-        repo.rm(&[&old_package_path], false, true, false)
-            .await
-            .map_err(InitFloxPackageError::RemoveUnnamedFile)?;
-
-        let mut file = tokio::fs::File::create(&new_package_path)
-            .await
-            .map_err(InitFloxPackageError::OpenNamed)?;
-
-        file.write_all(new_contents.as_bytes())
-            .await
-            .map_err(InitFloxPackageError::WriteTemplateFile)?;
-
-        repo.add(&[&new_package_path])
-            .await
-            .map_err(InitFloxPackageError::GitAdd)?;
-
-        // this might technically be a lie, but it's close enough :)
-        info!("renamed: pkgs/default.nix -> pkgs/{name}/default.nix");
-
         Ok(())
     }
 
@@ -359,6 +381,10 @@ where
     RemoveUnnamedFile(Git::RmError),
     #[error("Error staging new renamed file in Git")]
     GitAdd(Git::AddError),
+    #[error("Error moving file in Git")]
+    GitMv(Git::MvError),
+    #[error("Error replacing {}: {0}", PACKAGE_NAME_PLACEHOLDER)]
+    ReplacePackageName(FindAndReplaceError),
 }
 
 #[derive(Error, Debug)]
