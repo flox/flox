@@ -273,7 +273,7 @@ flox install unstable.nixpkgs-flox.hello@2.10
 
 `$FLOX_DISABLE_METRICS`
 :   Variable for disabling the collection/sending of metrics data.
-    If not empty, prevents flox from submitting basic metrics information
+    If set to "true", prevents flox from submitting basic metrics information
     including the subcommand issued along with a unique token.
 
 `$EDITOR`, `$VISUAL`
