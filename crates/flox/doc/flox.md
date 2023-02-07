@@ -286,12 +286,37 @@ flox install unstable.nixpkgs-flox.hello@2.10
 
     See also: https://nixos.org/manual/nix/stable/installation/env-variables.html#nix_ssl_cert_file
 
-<!--
+
 # EXAMPLES
 
 # SEE ALSO
 
-`flox-framework`(7)
-
-`flox-tutorial`(7)
--->
+[`flox-activate`(1)](./flox-activate.md),
+[`flox-build`(1)](./flox-build.md),
+[`flox-channels`(1)](./flox-channels.md),
+[`flox-config`(1)](./flox-config.md),
+[`flox-containerize`(1)](./flox-containerize.md),
+[`flox-create`(1)](./flox-create.md),
+[`flox-destroy`(1)](./flox-destroy.md),
+[`flox-develop`(1)](./flox-develop.md),
+[`flox-edit`(1)](./flox-edit.md),
+[`flox-environments`(1)](./flox-environments.md),
+[`flox-export`(1)](./flox-export.md),
+[`flox-generations`(1)](./flox-generations.md),
+[`flox-gh`(1)](./flox-gh.md),
+[`flox-git`(1)](./flox-git.md),
+[`flox-history`(1)](./flox-history.md),
+[`flox-import`(1)](./flox-import.md),
+[`flox-init`(1)](./flox-init.md),
+[`flox-install`(1)](./flox-install.md),
+[`flox-list`(1)](./flox-list.md),
+[`flox-print-dev-env`(1)](./flox-print-dev-env.md),
+[`flox-publish`(1)](./flox-publish.md),
+[`flox-pull`(1)](./flox-pull.md),
+[`flox-push`(1)](./flox-push.md),
+[`flox-remove`(1)](./flox-remove.md),
+[`flox-run`(1)](./flox-run.md),
+[`flox-search`(1)](./flox-search.md),
+[`flox-subscribe`(1)](./flox-subscribe.md),
+[`flox-unsubscribe`(1)](./flox-unsubscribe.md),
+[`flox-upgrade`(1)](./flox-upgrade.md)
