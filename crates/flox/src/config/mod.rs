@@ -9,6 +9,7 @@ use itertools::{Either, Itertools};
 use log::debug;
 use once_cell::sync::OnceCell;
 use serde::Deserialize;
+use serde_with::{serde_as, DisplayFromStr};
 use xdg::BaseDirectories;
 
 /// Name of flox managed directories (config, data, cache)
@@ -34,9 +35,11 @@ pub struct Config {
 
 // TODO: move to flox_sdk?
 /// Describes the Configuration for the flox library
+#[serde_as]
 #[derive(Clone, Debug, Deserialize, Default)]
 pub struct FloxConfig {
     #[serde(default)]
+    #[serde_as(as = "DisplayFromStr")]
     pub disable_metrics: bool,
     pub cache_dir: PathBuf,
     pub data_dir: PathBuf,

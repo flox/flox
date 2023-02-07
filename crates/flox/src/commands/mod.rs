@@ -10,6 +10,7 @@ use anyhow::Result;
 use bpaf::{Bpaf, Parser};
 use flox_rust_sdk::flox::{Flox, FLOX_VERSION};
 use flox_rust_sdk::prelude::Channel;
+use log::debug;
 use tempfile::TempDir;
 
 use self::channel::ChannelCommands;
@@ -90,7 +91,9 @@ impl FloxArgs {
         // but we don't want to give users who disabled it the prompt
         if !config.flox.disable_metrics {
             init_telemetry_consent(&config.flox.data_dir, &config.flox.cache_dir).await?;
+            env::remove_var("FLOX_DISABLE_METRICS");
         } else {
+            debug!("Metrics collection disabled");
             env::set_var("FLOX_DISABLE_METRICS", "true");
         }
 

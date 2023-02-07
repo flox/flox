@@ -585,6 +585,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_variant",
+ "serde_with",
  "serde_yaml",
  "shell-escape",
  "supports-color",

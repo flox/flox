@@ -12,6 +12,7 @@ tokio = { version = "1", features = ["full"] }
 rnix = "0.10.2"
 serde = "1.0"
 serde_json = "1.0"
+serde_with = "2.0.1"
 serde_yaml = "0.9"
 git2 = "0.15.0"
 octocrab = "0.17.0"
