@@ -97,6 +97,8 @@ pub enum GeneralCommands {
     Config(#[bpaf(external(config_args))] ConfigArgs),
 
     /// list all available environments
+    /// Aliases:
+    ///   environments, envs
     #[bpaf(command, long("environments"))]
     Envs,
 
