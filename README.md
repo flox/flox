@@ -94,7 +94,7 @@ to your problem, we would love to review your pull request!
 We welcome contributions to this project. Please read the [Contributor
 guide](./CONTRIBUTING.md) first.
 
-## ⚠️ License
+## 🪪 License
 
 The flox CLI is licensed under the GPLv2. See [LICENSE](./LICENSE).
 
