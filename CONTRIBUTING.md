@@ -1,16 +1,13 @@
-# Rust CLI and Library
+# Flox CLI and Library
 
 ## Contents of the Repo
 
-Currently this repo houses five rust crates:
+Currently this repo houses three rust crates:
 
 - `flox`: the flox binary and reimplementation of the `bash` based flox.
 - `flox-rust-sdk`: A library layer implementing flox' capabilities independent
   of the frontend.
 - `floxd`: a potential flox daemon
-- `runix`: A typesafe abstraction of the Nix CLI - to be released separately.
-- `runix-derive`: A proc macro assisting some runix type implementations.
-
 
 ## Development
 
@@ -78,6 +75,11 @@ Flox must be buildable using `flox` or `nix`.
   ```
 
 ## Git
+
+### CLA
+
+- [ ] All commits in a Pull Request are [signed](https://docs.github.com/en/authentication/managing-commit-signature-verification/signing-commits) and Verified by Github or via GPG.
+- [ ] As an outside contibutor you need to accept the flox [Contributor License Agreement](.github/CLA.md) by adding your Git/Github details in a row at the end of the [`CONTRIBUTORS.csv`](.github/CONTRIBUTORS.csv) file by way of the same pull request or one done previously.
 
 ### Commits
 
