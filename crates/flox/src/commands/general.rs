@@ -90,7 +90,7 @@ impl GeneralCommands {
 pub enum GeneralCommands {
     /// access to the gh CLI
     #[bpaf(command, hide)]
-    Gh(Vec<String>),
+    Gh(#[bpaf(any("gh Arguments"))] Vec<String>),
 
     /// configure user parameters
     #[bpaf(command)]
