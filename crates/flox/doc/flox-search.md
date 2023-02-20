@@ -11,7 +11,7 @@ flox-search - search packages in subscribed channels.
 
 # SYNOPSIS
 
-flox [ `<general-options>` ] search `<name>` [ (-c|\--channel) `<channel>` ] [ \--refresh ]
+flox [ `<general-options>` ] search `<name>` [ (-c|\--channel) `<channel>` ]... [ \--refresh ]
 
 # DESCRIPTION
 
@@ -30,12 +30,18 @@ you can invoke with `--refresh` to update the list before searching.
 ./include/general-options.md
 ```
 
+## Search Options
+
 [ `<name>` ]
 :   package name to search for
 
-[ (-c|\--channel) `<channel>` ]
-:   Specify the channel(s) to be searched.
+[ (-c|\--channel) `<channel>` ]...
+:   Specify the channel to be searched.
     If unspecified searches all subscribed channels.
+    Can be given multiple times to search in more channels.
 
 [ \--refresh ]
 :   Update the list before searching.
+
+[ \--json ]
+:   output the search results in json format
