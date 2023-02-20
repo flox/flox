@@ -166,6 +166,9 @@ pub enum EnvironmentCommands {
         #[bpaf(external(environment_args), group_help("Environment Options"))]
         environment_args: EnvironmentArgs,
 
+        #[bpaf(long)]
+        json: bool,
+
         #[bpaf(long, short, argument("ENV"))]
         environment: Option<EnvironmentRef>,
     },

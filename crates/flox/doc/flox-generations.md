@@ -23,3 +23,8 @@ List generations of selected environment.
 ./include/general-options.md
 ./include/environment-options.md
 ```
+
+## Generations Options
+
+[ \--json ]
+:   format output as JSON
