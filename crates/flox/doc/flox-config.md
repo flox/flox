@@ -27,11 +27,20 @@ Configure and/or display user-specific parameters.
 
 ## Config Options
 
-[ (--list|-l) ]
+[ (\--list|-l) ]
 :   List the current values of all configurable parameters.
 
-[ (--confirm|-c) ]
+[ (\--confirm|-c) ]
 :   Prompt the user to confirm or update configurable parameters.
 
-[ (--reset|-r) ]
+[ (\--reset|-r) ]
 ：  Reset all configurable parameters to their default values without further confirmation.
+
+[ \--set `<key>` `<value>` ]
+：  Set `<key> = <value>` for string values
+
+[ \--setNumber `<key>` `<value>`  ]
+：  Set `<key> = <value>` for number values
+
+[ \--delete `<key>` ]
+：  Reset the value for `<key>` to its default

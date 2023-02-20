@@ -113,7 +113,7 @@ pub enum GeneralCommands {
 #[derive(Bpaf, Clone)]
 pub enum ConfigArgs {
     /// list the current values of all configurable paramers
-    #[bpaf(short, long)]
+    #[bpaf(short, long, default)]
     List,
     /// prompt the user to confirm or update configurable parameters.
     #[bpaf(short, long)]
@@ -121,6 +121,53 @@ pub enum ConfigArgs {
     /// reset all configurable parameters to their default values without further confirmation.
     #[bpaf(short, long)]
     Confirm,
+
+    Set(#[bpaf(external(config_set))] ConfigSet),
+    SetNumber(#[bpaf(external(config_set_number))] ConfigSetNumber),
+    Delete(#[bpaf(external(config_delete))] ConfigDelete),
+}
+
+/// Arguments for `flox config --set`
+#[derive(Debug, Clone, Bpaf)]
+#[bpaf(adjacent)]
+#[allow(unused)]
+pub struct ConfigSet {
+    /// set <key> to <value>
+    set: (),
+    /// Configuration key
+    #[bpaf(positional("key"))]
+    key: String,
+    /// configuration Value
+    #[bpaf(positional("value"))]
+    value: String,
+}
+
+/// Arguments for `flox config --setNumber`
+#[derive(Debug, Clone, Bpaf)]
+#[bpaf(adjacent)]
+#[allow(unused)]
+pub struct ConfigSetNumber {
+    /// Set <key> to <number>
+    #[bpaf(long("setNumber"))]
+    set_number: (),
+    /// Configuration key
+    #[bpaf(positional("key"))]
+    key: String,
+    /// Configuration Value (i32)
+    #[bpaf(positional("number"))]
+    value: i32,
+}
+
+/// Arguments for `flox config --delete`
+#[derive(Debug, Clone, Bpaf)]
+#[bpaf(adjacent)]
+#[allow(unused)]
+pub struct ConfigDelete {
+    /// delete <key> from config
+    delete: (),
+    /// Configuration key
+    #[bpaf(long("delete"), argument("key"))]
+    key: String,
 }
 
 #[derive(Clone, Debug)]
