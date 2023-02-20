@@ -97,7 +97,7 @@ impl FloxArgs {
             env::set_var("FLOX_DISABLE_METRICS", "true");
         }
 
-        let channels = init_channels()?;
+        let channels = init_channels(&config.flox.config_dir)?;
 
         let access_tokens = init_access_tokens(&config.nix.access_tokens)?;
 

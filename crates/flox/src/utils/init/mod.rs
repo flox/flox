@@ -4,7 +4,6 @@ use std::path::Path;
 use std::str::FromStr;
 
 use anyhow::{Context, Result};
-use flox_rust_sdk::prelude::{Channel, ChannelRegistry};
 use indexmap::IndexMap;
 use log::{debug, info};
 use serde::Deserialize;
@@ -19,31 +18,9 @@ pub use metrics::*;
 const ENV_GIT_CONFIG_SYSTEM: &str = "GIT_CONFIG_SYSTEM";
 const ENV_FLOX_ORIGINAL_GIT_CONFIG_SYSTEM: &str = "FLOX_ORIGINAL_GIT_CONFIG_SYSTEM";
 
-pub fn init_channels() -> Result<ChannelRegistry> {
-    let mut channels = ChannelRegistry::default();
-    channels.register_channel("flox", Channel::from_str("github:flox/floxpkgs/master")?);
-    channels.register_channel("nixpkgs", Channel::from_str("github:flox/nixpkgs/stable")?);
-    channels.register_channel(
-        "nixpkgs-flox",
-        Channel::from_str("github:flox/nixpkgs-flox/master")?,
-    );
+mod channels;
 
-    // generate these dynamically based on <?>
-    channels.register_channel(
-        "nixpkgs-stable",
-        Channel::from_str("github:flox/nixpkgs/stable")?,
-    );
-    channels.register_channel(
-        "nixpkgs-staging",
-        Channel::from_str("github:flox/nixpkgs/staging")?,
-    );
-    channels.register_channel(
-        "nixpkgs-unstable",
-        Channel::from_str("github:flox/nixpkgs/unstable")?,
-    );
-
-    Ok(channels)
-}
+pub use channels::init_channels;
 
 pub fn init_access_tokens(
     config_tokens: &HashMap<String, String>,
