@@ -135,16 +135,16 @@ dependencies = [
 
 [[package]]
 name = "bpaf"
-version = "0.7.7"
-source = "git+https://github.com/ysndr/bpaf?branch=error/more-suggestions#02eefc7c6ccdb051a7eb65cf357533beeef0a95c"
+version = "0.7.9"
+source = "git+https://github.com/ysndr/bpaf?branch=error/more-suggestions#a82cdc69f9a56963b1e0c481593bef03c3c2b25f"
 dependencies = [
  "bpaf_derive",
 ]
 
 [[package]]
 name = "bpaf_derive"
-version = "0.3.3"
-source = "git+https://github.com/ysndr/bpaf?branch=error/more-suggestions#02eefc7c6ccdb051a7eb65cf357533beeef0a95c"
+version = "0.3.4"
+source = "git+https://github.com/ysndr/bpaf?branch=error/more-suggestions#a82cdc69f9a56963b1e0c481593bef03c3c2b25f"
 dependencies = [
  "proc-macro2",
  "quote",

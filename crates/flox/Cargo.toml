@@ -19,7 +19,7 @@ octocrab = "0.17.0"
 dotenv = "0.15.0"
 async-trait = "0.1.52"
 log = "0.4.17"
-bpaf = { version = "0.7.6", features = ["derive", "autocomplete"] }
+bpaf = { version = "0.7.9", features = ["derive", "autocomplete"] }
 config = "0.13.1"
 dirs = "4.0.0"
 tempfile = "3.3.0"

@@ -89,11 +89,12 @@ in
 
       cargoLock = {
         lockFile = self + "/Cargo.lock";
+        # TODO: adopt `allowBuiltinFetchGit = true;` here?
         outputHashes = {
           # fixes: show failing command element more often
           # * https://github.com/pacak/bpaf/pull/155
           # * https://github.com/pacak/bpaf/issues/154
-          "bpaf-0.7.7" = "sha256-TT6N2dpilRNVlBVNRyxPfrZ/szEH6lbmMk3KrKnU8ns=";
+          "bpaf-0.7.9" = "sha256-K275X1fmcVyi0siHgLDZLDv/wOO8AGv7H8BeN6OxrZg=";
           # fixes: output on stderr instead of stdout (https://github.com/mikaelmello/inquire/pull/89)
           "inquire-0.5.2" = "sha256-B+MUxrSYYqiBYS+BA5gkRfm91Yd+ZMN/ukkFyUQLptU=";
 
