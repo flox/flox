@@ -1,0 +1,32 @@
+name: Sync to Production
+
+# Controls when the workflow will run
+on:
+  workflow_dispatch:
+    inputs:
+      "production-url":
+        description: The production repo to update
+        required: true
+        default: flox/flox
+
+jobs:
+  sync:
+    name: Synchronize changes to Production
+
+    # The type of runner that the job will run on
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Fetch remaining tags and commits on branch ${{ github.ref_name }}
+        run: |
+          git fetch --prune --unshallow --tags origin ${{ github.ref }}
+
+      - name: Add production remote
+        run: |
+          git remote add production https://${{ secrets.NIX_GIT_TOKEN }}@github.com/${{ inputs.production-url }}
+
+      - name: Push to production remote
+        run: |
+          git push --force --tags --atomic production ${{ github.ref }}
