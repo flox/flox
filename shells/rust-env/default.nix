@@ -29,7 +29,7 @@ mkShell ({
       self.checks.pre-commit-check.passthru.commitizen
       self.checks.pre-commit-check.passthru.rustfmt
       hivemind
-      cargo-watch
+      # cargo-watch
       clippy
       rust-analyzer
       rust.packages.stable.rustPlatform.rustLibSrc

@@ -25,6 +25,9 @@ in
       commitizen.enable = true;
     };
     settings.clippy.denyWarnings = true;
-    tools = {inherit commitizen;};
+    tools = {
+      inherit commitizen;
+      inherit (nixpkgs) cargo clippy rustfmt alejandra;
+    };
   })
   // {passthru = {inherit commitizen rustfmt;};}
