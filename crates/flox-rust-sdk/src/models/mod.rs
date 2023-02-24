@@ -2,9 +2,8 @@
 
 pub mod channels;
 pub mod environment_ref;
-pub mod flake_ref;
 pub mod flox_installable;
 pub mod flox_package;
 pub mod project;
-pub mod registry;
+pub use runix::{flake_ref, registry};
 pub mod stability;

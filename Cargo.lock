@@ -1832,7 +1832,8 @@ dependencies = [
 
 [[package]]
 name = "runix"
-version = "0.0.0"
+version = "0.1.1"
+source = "git+https://github.com/flox/runix#86cc3e5c7b9b0b674f9f5348fc22ed801a726e8e"
 dependencies = [
  "async-trait",
  "derive_more",
@@ -1840,15 +1841,19 @@ dependencies = [
  "runix-derive",
  "serde",
  "serde_json",
+ "serde_with",
  "shell-escape",
  "thiserror",
  "tokio",
  "tokio-stream",
+ "url",
 ]
 
 [[package]]
 name = "runix-derive"
-version = "0.0.0"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c075e9f29a7d57ca9271d5c4901a2034b5868120506cfb00a4d169abc63a4ba7"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2024,9 +2029,9 @@ dependencies = [
 
 [[package]]
 name = "serde_with"
-version = "2.1.0"
+version = "2.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "25bf4a5a814902cd1014dbccfa4d4560fb8432c779471e96e035602519f82eef"
+checksum = "30d904179146de381af4c93d3af6ca4984b3152db687dacb9c3c35e86f39809c"
 dependencies = [
  "base64",
  "chrono",
@@ -2040,9 +2045,9 @@ dependencies = [
 
 [[package]]
 name = "serde_with_macros"
-version = "2.1.0"
+version = "2.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e3452b4c0f6c1e357f73fdb87cd1efabaa12acf328c7a528e252893baeb3f4aa"
+checksum = "a1966009f3c05f095697c537312f5415d1e3ed31ce0a56942bac4c771c5c335e"
 dependencies = [
  "darling",
  "proc-macro2",

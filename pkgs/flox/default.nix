@@ -96,6 +96,8 @@ in
           "bpaf-0.7.7" = "sha256-TT6N2dpilRNVlBVNRyxPfrZ/szEH6lbmMk3KrKnU8ns=";
           # fixes: output on stderr instead of stdout (https://github.com/mikaelmello/inquire/pull/89)
           "inquire-0.5.2" = "sha256-B+MUxrSYYqiBYS+BA5gkRfm91Yd+ZMN/ukkFyUQLptU=";
+
+          "runix-0.1.1" = "sha256-jnv7U0dIhebcdd7PEfnLOEqyzJND+COXRQ+za0mpERY=";
         };
       };
 
