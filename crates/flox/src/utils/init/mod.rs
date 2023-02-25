@@ -1,7 +1,6 @@
 use std::collections::{BTreeMap, HashMap};
 use std::env;
 use std::path::Path;
-use std::str::FromStr;
 
 use anyhow::{Context, Result};
 use indexmap::IndexMap;

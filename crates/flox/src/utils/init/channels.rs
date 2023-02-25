@@ -54,7 +54,7 @@ pub fn init_channels(config_dir: &Path) -> Result<ChannelRegistry> {
         "nixpkgs",
         // overridden if stability is known.
         // globalizing stability is outstanding.
-        Channel::from_str(&format!("github:flox/nixpkgs/stable"))?,
+        Channel::from_str("github:flox/nixpkgs/stable")?,
     );
     channels.register_channel(
         "nixpkgs-stable",
