@@ -1,7 +1,6 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
-use derive_more::Constructor;
-use log::{debug, error, info};
+use log::{debug, info};
 use once_cell::sync::Lazy;
 use regex::Regex;
 use runix::arguments::NixArgs;
@@ -11,140 +10,23 @@ use runix::{NixBackend, Run};
 use thiserror::Error;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-use crate::flox::{Flox, FloxNixApi};
-use crate::providers::git::{GitDiscoverError, GitProvider};
+use super::{Closed, Open, Root, RootGuard};
+use crate::flox::FloxNixApi;
+use crate::providers::git::GitProvider;
+use crate::utils::guard::Guard;
 use crate::utils::{find_and_replace, FindAndReplaceError};
 
 static PNAME_DECLARATION: Lazy<Regex> = Lazy::new(|| Regex::new(r#"pname = ".*""#).unwrap());
 static PACKAGE_NAME_PLACEHOLDER: &str = "__PACKAGE_NAME__";
 
-trait Initialize<I> {
-    type InitError;
-    fn init(self) -> Result<I, Self::InitError>;
-}
-
-pub enum Guard<I, U> {
-    Initialized(I),
-    Uninitialized(U),
-}
-
-impl<I, U> Guard<I, U> {
-    pub fn open(self) -> Result<I, Self> {
-        match self {
-            Guard::Initialized(i) => Ok(i),
-            Guard::Uninitialized(_) => Err(self),
-        }
-    }
-}
-
-type ProjectGuard<'flox, I, U> = Guard<Project<'flox, I>, Project<'flox, U>>;
-
-#[derive(Constructor, Debug)]
-pub struct Open<T> {
-    pub inner: T,
-}
-
-#[derive(Constructor, Debug)]
-pub struct Closed<T> {
-    pub inner: T,
-}
-
-#[derive(Constructor, Debug)]
-pub struct Project<'flox, State> {
-    pub flox: &'flox Flox,
-    pub state: State,
-}
-
-impl<'flox> Project<'flox, Closed<PathBuf>> {
-    pub async fn guard<Git: GitProvider>(
-        self,
-    ) -> Result<ProjectGuard<'flox, Closed<Git>, Closed<PathBuf>>, ProjectDiscoverGitError<Git>>
-    {
-        match Git::discover(&self.state.inner).await {
-            Ok(repo) => Ok(Guard::Initialized(Project {
-                flox: self.flox,
-                state: Closed::new(repo),
-            })),
-            Err(err) if err.not_found() => Ok(Guard::Uninitialized(Project {
-                flox: self.flox,
-                state: Closed::new(self.state.inner),
-            })),
-            Err(err) => Err(ProjectDiscoverGitError::DiscoverRepoError(err)),
-        }
-    }
-}
-
-impl<'flox, Git: GitProvider> ProjectGuard<'flox, Closed<Git>, Closed<PathBuf>> {
-    pub fn workdir(&self) -> Option<&Path> {
-        match self {
-            Guard::Initialized(i) => i.workdir(),
-            Guard::Uninitialized(u) => Some(&u.state.inner),
-        }
-    }
-
-    pub fn path(&self) -> &Path {
-        match self {
-            Guard::Initialized(i) => i.path(),
-            Guard::Uninitialized(u) => &u.state.inner,
-        }
-    }
-
-    pub async fn init_git(self) -> Result<Project<'flox, Closed<Git>>, ProjectInitGitError<Git>> {
-        match self {
-            Guard::Initialized(i) => Ok(i),
-            Guard::Uninitialized(u) => {
-                let repo = Git::init(&u.state.inner)
-                    .await
-                    .map_err(ProjectInitGitError::InitRepoError)?;
-
-                Ok(Project {
-                    flox: u.flox,
-                    state: Closed::new(repo),
-                })
-            },
-        }
-    }
-}
-
-impl<'flox, Git: GitProvider> Project<'flox, Closed<Git>> {
-    pub fn workdir(&self) -> Option<&Path> {
-        self.state.inner.workdir()
-    }
-
-    pub fn path(&self) -> &Path {
-        self.state.inner.path()
-    }
-
-    /// Guards opening a project
-    ///
-    /// - Resolves as initilaized if a `flake.nix` is present
-    /// - Resolves as unitialized if not
-    pub async fn guard(
-        self,
-    ) -> Result<ProjectGuard<'flox, Open<Git>, Closed<Git>>, OpenProjectError> {
-        let repo = self.state.inner;
-
-        let root = repo.workdir().ok_or(OpenProjectError::WorkdirNotFound)?;
-
-        if root.join("flake.nix").exists() {
-            Ok(Guard::Initialized(Project {
-                flox: self.flox,
-                state: Open::new(repo),
-            }))
-        } else {
-            Ok(Guard::Uninitialized(Project {
-                flox: self.flox,
-                state: Closed::new(repo),
-            }))
-        }
-    }
-}
-
-impl<'flox, Git: GitProvider> ProjectGuard<'flox, Open<Git>, Closed<Git>> {
+/// Implementation to upgrade into an open Project
+impl<'flox, Git: GitProvider> RootGuard<'flox, Open<Git>, Closed<Git>> {
+    /// Initialize a new project in the workdir of a git root or return
+    /// an existing project if it exists.
     pub async fn init_project<Nix: FloxNixApi>(
         self,
         nix_extra_args: Vec<String>,
-    ) -> Result<Project<'flox, Open<Git>>, InitProjectError<Nix, Git>>
+    ) -> Result<Root<'flox, Open<Git>>, InitProjectError<Nix, Git>>
     where
         FlakeInit: Run<Nix>,
     {
@@ -177,31 +59,30 @@ impl<'flox, Git: GitProvider> ProjectGuard<'flox, Open<Git>, Closed<Git>> {
             .await
             .map_err(InitProjectError::GitAdd)?;
 
-        Ok(Project {
+        Ok(Root {
             flox: uninit.flox,
             state: Open::new(repo),
         })
     }
 }
 
-impl<'flox, T> Project<'flox, Closed<T>> {
-    pub fn closed(flox: &'flox Flox, inner: T) -> Self {
-        Project {
-            flox,
-            state: Closed::new(inner),
-        }
-    }
-}
-
-impl<Git: GitProvider> Project<'_, Open<Git>> {
+/// Implementations for an opened project
+impl<Git: GitProvider> Root<'_, Open<Git>> {
+    /// Get the root directory of the project flake
+    ///
+    /// currently the git root but may be a subdir with a flake.nix
     pub fn workdir(&self) -> Option<&Path> {
         self.state.inner.workdir()
     }
 
+    /// Path to the `.git` directory
     pub fn path(&self) -> &Path {
         self.state.inner.path()
     }
 
+    /// Add a new flox style package from a template.
+    /// Uses `nix flake init` to retrieve files
+    /// and postprocesses the generic templates.
     pub async fn init_flox_package<Nix: FloxNixApi>(
         &self,
         nix_extra_args: Vec<String>,
@@ -304,7 +185,7 @@ impl<Git: GitProvider> Project<'_, Open<Git>> {
     }
 
     /// Delete flox files from repo
-    pub async fn delete(self) -> Result<(), CleanupInitializerError> {
+    pub async fn cleanup_flox(self) -> Result<(), CleanupInitializerError> {
         tokio::fs::remove_dir_all("./pkgs")
             .await
             .map_err(CleanupInitializerError::RemovePkgs)?;
@@ -314,24 +195,6 @@ impl<Git: GitProvider> Project<'_, Open<Git>> {
 
         Ok(())
     }
-}
-
-#[derive(Error, Debug)]
-pub enum ProjectDiscoverGitError<Git: GitProvider> {
-    #[error("Error attempting to discover repository: {0}")]
-    DiscoverRepoError(Git::DiscoverError),
-}
-
-#[derive(Error, Debug)]
-pub enum ProjectInitGitError<Git: GitProvider> {
-    #[error("Error initializing repository: {0}")]
-    InitRepoError(Git::InitError),
-}
-
-#[derive(Error, Debug)]
-pub enum OpenProjectError {
-    #[error("Could not determine repository root")]
-    WorkdirNotFound,
 }
 
 #[derive(Error, Debug)]

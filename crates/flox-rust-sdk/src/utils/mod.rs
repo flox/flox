@@ -1,4 +1,5 @@
 pub mod errors;
+pub mod guard;
 
 use std::path::Path;
 

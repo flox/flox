@@ -22,7 +22,7 @@ use crate::environment::{self, default_nix_subprocess_env};
 use crate::models::channels::ChannelRegistry;
 pub use crate::models::environment_ref::{self, *};
 pub use crate::models::flox_installable::*;
-use crate::models::project::{self, Project};
+use crate::models::root::{self, Root};
 use crate::models::stability::Stability;
 use crate::providers::git::GitProvider;
 
@@ -147,8 +147,8 @@ impl Flox {
         Package::new(self, installable, stability, nix_arguments)
     }
 
-    pub fn project<X>(&self, x: X) -> Project<project::Closed<X>> {
-        Project::closed(self, x)
+    pub fn project<X>(&self, x: X) -> Root<root::Closed<X>> {
+        Root::closed(self, x)
     }
 
     pub async fn environment_ref<Git: GitProvider, Nix: FloxNixApi>(

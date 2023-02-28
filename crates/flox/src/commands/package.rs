@@ -6,7 +6,7 @@ use anyhow::{bail, Context, Result};
 use bpaf::{construct, Bpaf, Parser};
 use crossterm::tty::IsTty;
 use flox_rust_sdk::flox::{EnvironmentRef, Flox};
-use flox_rust_sdk::models::project::{self, Closed, Open, Project};
+use flox_rust_sdk::models::root::{self, Closed, Open, Root};
 use flox_rust_sdk::nix::arguments::eval::EvaluationArgs;
 use flox_rust_sdk::nix::arguments::flake::FlakeArgs;
 use flox_rust_sdk::nix::arguments::NixArgs;
@@ -576,7 +576,7 @@ async fn ensure_project_repo<'flox>(
     flox: &'flox Flox,
     cwd: PathBuf,
     command: &WithPassthru<interface::Init>,
-) -> Result<project::Project<'flox, Closed<GitCommandProvider>>, anyhow::Error> {
+) -> Result<root::Root<'flox, Closed<GitCommandProvider>>, anyhow::Error> {
     match flox
         .project(cwd)
         .guard::<GitCommandProvider>()
@@ -593,13 +593,9 @@ async fn ensure_project_repo<'flox>(
             Ok(p)
         },
         Err(g) => {
-            async fn prompt(workdir: Option<&Path>) -> InquireResult<bool> {
-                let in_text = workdir
-                    .map(|x| format!("in {}", x.display()))
-                    .unwrap_or_else(|| "here".to_owned());
-
+            async fn prompt(path: &Path) -> InquireResult<bool> {
                 let dialog = Dialog {
-                    message: &format!("The current directory is not in a Git repository, would you like to create one {}?", in_text),
+                    message: &format!("The current directory is not in a Git repository, would you like to create one in {path:?}?"),
                     help_message: None,
                     typed: Confirm {
                         default: Some(false)
@@ -609,7 +605,7 @@ async fn ensure_project_repo<'flox>(
                 dialog.prompt().await
             }
 
-            if command.inner.init_git || prompt(g.workdir()).await? {
+            if command.inner.init_git || prompt(g.path()).await? {
                 let p = g.init_git().await?;
 
                 info!(
@@ -629,9 +625,9 @@ async fn ensure_project_repo<'flox>(
 
 /// Create
 async fn ensure_project<'flox>(
-    git_repo: Project<'flox, Closed<GitCommandProvider>>,
+    git_repo: Root<'flox, Closed<GitCommandProvider>>,
     command: &WithPassthru<interface::Init>,
-) -> Result<Project<'flox, Open<GitCommandProvider>>> {
+) -> Result<Root<'flox, Open<GitCommandProvider>>> {
     match git_repo.guard().await?.open() {
         Ok(x) => Ok(x),
         Err(g) => Ok(g
