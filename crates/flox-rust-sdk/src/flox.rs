@@ -266,7 +266,7 @@ impl Flox {
                         system = "{system}";
                         defaultPrefixes = [{default_prefixes}];
                         inputs = [{inputs}];
-                        key = {key};
+                        key = [{key}];
                         processor = {processor};
                     }})"#,
                     system = self.system,
