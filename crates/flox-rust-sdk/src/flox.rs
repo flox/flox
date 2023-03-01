@@ -260,29 +260,16 @@ impl Flox {
         let installable_resolve_strs: Vec<String> = numbered_flox_installables
             .into_iter()
             .map(|(installable_id, flox_installable)| {
-                // Split the key out of the provided attr path, using the first component as a prefix if more than 1 is present
-                let (attr_prefix, key) = match flox_installable.attr_path.split_first() {
-                    Some((prefix, key)) if !key.is_empty() => {
-                        (Some(prefix.as_str()), Some(key.to_vec()))
-                    },
-                    Some((prefix, _)) => (None, Some(vec![prefix.clone()])),
-                    None => (None, None),
-                };
-
                 format!(
                     // Template the Nix expression and our arguments in
                     r#"(x {{
                         system = "{system}";
                         defaultPrefixes = [{default_prefixes}];
-                        prefix = {prefix};
                         inputs = [{inputs}];
                         key = {key};
                         processor = {processor};
                     }})"#,
                     system = self.system,
-                    prefix = attr_prefix
-                        .map(|p| format!("{:?}", p))
-                        .unwrap_or_else(|| "null".to_string()),
                     default_prefixes = default_attr_prefixes
                         .iter()
                         .map(|p| format!("{:?}", p))
@@ -298,15 +285,12 @@ impl Flox {
                             .collect::<Vec<String>>())
                         .collect::<Vec<String>>()
                         .join(" "),
-                    key = key
-                        .map(|x| format!(
-                            "[{}]",
-                            x.iter()
-                                .map(|p| format!("{:?}", p))
-                                .collect::<Vec<_>>()
-                                .join(" ")
-                        ))
-                        .unwrap_or_else(|| "null".to_string()),
+                    key = flox_installable
+                        .attr_path
+                        .iter()
+                        .map(|p| format!("{:?}", p))
+                        .collect::<Vec<_>>()
+                        .join(" "),
                     processor = processor
                         .map(|x| format!("(prefix: key: item: {})", x))
                         .unwrap_or_else(|| "null".to_string()),

@@ -31,16 +31,11 @@
       inputs,
       # List of default prefixnames we scan
       defaultPrefixes,
-      # The specified prefix to scan under
-      # Might be null
-      prefix,
       # The current system to resolve for
       system,
-      # A list of strings comprising an attrpath to be applied after the prefix (and system if present) to reach the potential installable
-      # Might be null
+      # A list of strings comprising an attrpath to be applied to reach the potential installable
+      # This may be missing a system, a prefix, or both
       key,
-      # Internally used to re-execute ourselves setting the key as the prefix when key=[x] and prefix=null
-      keyAsPrefix ? false,
       # Optional function used to filter out fields and find descriptions
       processor ? null,
     }: let
@@ -63,14 +58,23 @@
         then hasAttrByPath (builtins.tail attrPath) e.${attr}
         else false;
 
-      # List of prefixes that we are looking for that are present on the input
-      prefixesForInput = input:
-        builtins.filter
-        (prefixName: builtins.elem prefixName (builtins.attrNames input))
-        (
-          if prefix != null
-          then [prefix]
-          else defaultPrefixes
+      # Generate a list of prefix and key pairs for the given key
+      prefixKeyPairs =
+        (map
+          (defaultPrefix: {
+            prefix = defaultPrefix;
+            inherit key;
+          })
+          defaultPrefixes)
+        ++ (
+          if builtins.length key >= 2
+          then [
+            {
+              prefix = builtins.head key;
+              key = builtins.tail key;
+            }
+          ]
+          else []
         );
 
       # Get the prefix from an input by name, accounting for systemization if present
@@ -80,25 +84,25 @@
         else input.${prefixName};
 
       # Create a list of all matching keys (remember keys are a list of strings too).
-      keysForInputAndPrefix = input: prefixName: let
-        prefix = selectPrefix input prefixName;
+      keysForInputAndPrefix = input: pair: let
+        prefix = selectPrefix input pair.prefix;
       in
         # If no key, all available keys
-        if key == null
+        if builtins.length pair.key == 0
         then {keys = map (x: [x]) (builtins.attrNames prefix);}
         # If provided key matches on systemized prefix, just the key
-        else if hasAttrByPath key prefix
-        then {keys = [key];}
+        else if hasAttrByPath pair.key prefix
+        then {keys = [pair.key];}
         # If provided key matches on prefix without system, use the first component of the key as a system
-        else if systemIfPresent input prefixName != null && hasAttrByPath key input.${prefixName}
+        else if systemIfPresent input pair.prefix != null && hasAttrByPath pair.key input.${pair.prefix}
         then {
           keys =
-            if builtins.length key >= 2
+            if builtins.length pair.key >= 2
             # If key is long enough to include a tail, then the tail can be the key
-            then [(builtins.tail key)]
+            then [(builtins.tail pair.key)]
             # If key only includes the system, then all available keys under than system
-            else map (x: [x]) (builtins.attrNames input.${prefixName}.${builtins.head key});
-          system = builtins.head key;
+            else map (x: [x]) (builtins.attrNames input.${pair.prefix}.${builtins.head pair.key});
+          system = builtins.head pair.key;
         }
         # Else no key matches
         else {keys = [];};
@@ -110,8 +114,8 @@
         else null;
 
       # Loop over the keys of each prefix, handling them
-      handlePrefix = inputName: prefixName: let
-        x = keysForInputAndPrefix reflected.${inputName} prefixName;
+      handlePrefix = inputName: pair: let
+        x = keysForInputAndPrefix reflected.${inputName} pair;
       in
         builtins.filter (x: x != null) (
           map
@@ -119,9 +123,9 @@
             system =
               if x ? system
               then x.system
-              else systemIfPresent reflected.${inputName} prefixName;
+              else systemIfPresent reflected.${inputName} pair.prefix;
 
-            prefix = selectPrefix reflected.${inputName} prefixName;
+            prefix = selectPrefix reflected.${inputName} pair.prefix;
 
             processed =
               if processor != null
@@ -138,7 +142,7 @@
             then {
               inherit key system;
               explicitSystem = x ? system;
-              prefix = prefixName;
+              prefix = pair.prefix;
               input = inputName;
               description = processed.description or null;
             }
@@ -152,7 +156,11 @@
         inputName: (
           map
           (handlePrefix inputName)
-          (prefixesForInput reflected.${inputName})
+          (
+            builtins.filter
+            (p: builtins.elem p.prefix (builtins.attrNames reflected.${inputName}))
+            prefixKeyPairs
+          )
         );
 
       # Loop over the inputs, handling each one
@@ -162,17 +170,6 @@
         inputs;
     in
       # Flatten our lists twice (for prefix and input) to get a flat list of matches
-      (builtins.concatLists (builtins.concatLists handled))
-      ++ (
-        if keyAsPrefix == false && prefix == null && key != null && builtins.length key == 1
-        then
-          resolve {
-            inherit inputs defaultPrefixes system;
-            prefix = builtins.elemAt key 0;
-            key = null;
-            keyAsPrefix = true;
-          }
-        else []
-      );
+      (builtins.concatLists (builtins.concatLists handled));
   };
 }
