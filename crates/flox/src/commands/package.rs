@@ -6,7 +6,8 @@ use anyhow::{bail, Context, Result};
 use bpaf::{construct, Bpaf, Parser};
 use crossterm::tty::IsTty;
 use flox_rust_sdk::flox::{EnvironmentRef, Flox};
-use flox_rust_sdk::models::root::{self, Closed, Open, Root};
+use flox_rust_sdk::models::root::project::Project;
+use flox_rust_sdk::models::root::{self, Closed, Root};
 use flox_rust_sdk::nix::arguments::eval::EvaluationArgs;
 use flox_rust_sdk::nix::arguments::flake::FlakeArgs;
 use flox_rust_sdk::nix::arguments::NixArgs;
@@ -627,7 +628,7 @@ async fn ensure_project_repo<'flox>(
 async fn ensure_project<'flox>(
     git_repo: Root<'flox, Closed<GitCommandProvider>>,
     command: &WithPassthru<interface::Init>,
-) -> Result<Root<'flox, Open<GitCommandProvider>>> {
+) -> Result<Root<'flox, Project<GitCommandProvider>>> {
     match git_repo.guard().await?.open() {
         Ok(x) => Ok(x),
         Err(g) => Ok(g

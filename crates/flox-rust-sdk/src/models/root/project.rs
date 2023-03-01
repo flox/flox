@@ -1,5 +1,6 @@
 use std::path::Path;
 
+use derive_more::Constructor;
 use log::{debug, info};
 use once_cell::sync::Lazy;
 use regex::Regex;
@@ -10,7 +11,7 @@ use runix::{NixBackend, Run};
 use thiserror::Error;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-use super::{Closed, Open, Root, RootGuard};
+use super::{Closed, Root, RootGuard};
 use crate::flox::FloxNixApi;
 use crate::providers::git::GitProvider;
 use crate::utils::guard::Guard;
@@ -19,14 +20,42 @@ use crate::utils::{find_and_replace, FindAndReplaceError};
 static PNAME_DECLARATION: Lazy<Regex> = Lazy::new(|| Regex::new(r#"pname = ".*""#).unwrap());
 static PACKAGE_NAME_PLACEHOLDER: &str = "__PACKAGE_NAME__";
 
+#[derive(Constructor, Debug)]
+pub struct Project<T> {
+    pub inner: T,
+}
+
+impl<'flox, Git: GitProvider> Root<'flox, Closed<Git>> {
+    /// Guards opening a project
+    ///
+    /// - Resolves as initialized if a `flake.nix` is present
+    /// - Resolves as uninitialized if not
+    pub async fn guard(
+        self,
+    ) -> Result<RootGuard<'flox, Project<Git>, Closed<Git>>, OpenProjectError> {
+        let repo = &self.state.inner;
+
+        let root = repo.workdir().ok_or(OpenProjectError::WorkdirNotFound)?;
+
+        if root.join("flake.nix").exists() {
+            Ok(Guard::Initialized(Root {
+                flox: self.flox,
+                state: Project::new(self.state.inner),
+            }))
+        } else {
+            Ok(Guard::Uninitialized(self))
+        }
+    }
+}
+
 /// Implementation to upgrade into an open Project
-impl<'flox, Git: GitProvider> RootGuard<'flox, Open<Git>, Closed<Git>> {
+impl<'flox, Git: GitProvider> RootGuard<'flox, Project<Git>, Closed<Git>> {
     /// Initialize a new project in the workdir of a git root or return
     /// an existing project if it exists.
     pub async fn init_project<Nix: FloxNixApi>(
         self,
         nix_extra_args: Vec<String>,
-    ) -> Result<Root<'flox, Open<Git>>, InitProjectError<Nix, Git>>
+    ) -> Result<Root<'flox, Project<Git>>, InitProjectError<Nix, Git>>
     where
         FlakeInit: Run<Nix>,
     {
@@ -61,13 +90,13 @@ impl<'flox, Git: GitProvider> RootGuard<'flox, Open<Git>, Closed<Git>> {
 
         Ok(Root {
             flox: uninit.flox,
-            state: Open::new(repo),
+            state: Project::new(repo),
         })
     }
 }
 
 /// Implementations for an opened project
-impl<Git: GitProvider> Root<'_, Open<Git>> {
+impl<Git: GitProvider> Root<'_, Project<Git>> {
     /// Get the root directory of the project flake
     ///
     /// currently the git root but may be a subdir with a flake.nix
@@ -195,6 +224,13 @@ impl<Git: GitProvider> Root<'_, Open<Git>> {
 
         Ok(())
     }
+}
+
+/// Errors occuring while trying to upgrade to an [`Open<Git>`] [Root]
+#[derive(Error, Debug)]
+pub enum OpenProjectError {
+    #[error("Could not determine repository root")]
+    WorkdirNotFound,
 }
 
 #[derive(Error, Debug)]

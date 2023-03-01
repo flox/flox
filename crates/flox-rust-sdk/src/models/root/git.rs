@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 
 use thiserror::Error;
 
-use super::{Closed, Open, Root, RootGuard};
+use super::{Closed, Root, RootGuard};
 use crate::providers::git::GitProvider;
 use crate::utils::guard::Guard;
 
@@ -46,25 +46,6 @@ impl<'flox, Git: GitProvider> Root<'flox, Closed<Git>> {
     pub fn path(&self) -> &Path {
         self.state.inner.path()
     }
-
-    /// Guards opening a project
-    ///
-    /// - Resolves as initialized if a `flake.nix` is present
-    /// - Resolves as uninitialized if not
-    pub async fn guard(self) -> Result<RootGuard<'flox, Open<Git>, Closed<Git>>, OpenProjectError> {
-        let repo = &self.state.inner;
-
-        let root = repo.workdir().ok_or(OpenProjectError::WorkdirNotFound)?;
-
-        if root.join("flake.nix").exists() {
-            Ok(Guard::Initialized(Root {
-                flox: self.flox,
-                state: Open::new(self.state.inner),
-            }))
-        } else {
-            Ok(Guard::Uninitialized(self))
-        }
-    }
 }
 
 /// Errors possible during initialization of the git repo
@@ -72,11 +53,4 @@ impl<'flox, Git: GitProvider> Root<'flox, Closed<Git>> {
 pub enum ProjectInitGitError<Git: GitProvider> {
     #[error("Error initializing repository: {0}")]
     InitRepoError(Git::InitError),
-}
-
-/// Errors occuring while trying to upgrade to an [`Open<Git>`] [Root]
-#[derive(Error, Debug)]
-pub enum OpenProjectError {
-    #[error("Could not determine repository root")]
-    WorkdirNotFound,
 }

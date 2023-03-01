@@ -5,6 +5,7 @@ use std::future::Future;
 /// A value that can be either initialized or not.
 /// Uninitialized values need to be mapped into an initialized value
 /// before being accesible
+#[derive(Debug)]
 pub enum Guard<I, U> {
     Initialized(I),
     Uninitialized(U),

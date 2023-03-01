@@ -5,6 +5,7 @@ use bpaf::{construct, Bpaf, Parser, ShellComp};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::nix::command_line::NixCommandLine;
 use flox_rust_sdk::prelude::flox_package::FloxPackage;
+use flox_rust_sdk::providers::git::GitCommandProvider;
 
 use crate::config::features::Feature;
 use crate::{flox_forward, subcommand_metric};
@@ -20,13 +21,44 @@ pub type EnvironmentRef = PathBuf;
 impl EnvironmentCommands {
     pub async fn handle(&self, flox: Flox) -> Result<()> {
         match self {
-            _ if Feature::Env.is_forwarded()? => flox_forward(&flox).await?,
+            EnvironmentCommands::List {
+                environment_args: _,
+                environment,
+                json: _,
+                generation: _,
+            } if !Feature::Env.is_forwarded()? => {
+                let name = environment
+                    .as_ref()
+                    .map(|path| path.as_os_str().to_string_lossy())
+                    .unwrap_or_else(|| "default".into());
+
+                // todo rename project!
+                // this is now just a root
+
+                // assume local for now. next, parse environment
+                // assume local exists
+                let floxmeta = flox
+                    .project(flox.cache_dir.join("meta").join("local"))
+                    .guard::<GitCommandProvider>()
+                    .await?
+                    .open()
+                    .unwrap()
+                    .guard_floxmeta()
+                    .await?
+                    .open()
+                    .unwrap();
+                let environment = floxmeta.environment(&name).await?;
+                let metadata = environment.metadata().await?;
+                let generation = environment.generation(&metadata.current_gen).await?;
+
+                println!("{}", serde_json::to_string_pretty(&generation).unwrap())
+            },
 
             EnvironmentCommands::Install {
                 packages,
                 environment_args: EnvironmentArgs { .. },
                 environment,
-            } => {
+            } if !Feature::Env.is_forwarded()? => {
                 subcommand_metric!("install");
 
                 flox.environment(environment.clone().unwrap())?
@@ -34,7 +66,7 @@ impl EnvironmentCommands {
                     .await?
             },
 
-            _ => todo!(),
+            _ => flox_forward(&flox).await?,
         }
 
         Ok(())

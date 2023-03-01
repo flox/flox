@@ -3,16 +3,13 @@ use derive_more::Constructor;
 use crate::flox::Flox;
 use crate::utils::guard::Guard;
 
+pub mod environment;
+pub mod floxmeta;
 mod git;
-mod project;
+pub mod project;
 mod reference;
 
 pub type RootGuard<'flox, I, U> = Guard<Root<'flox, I>, Root<'flox, U>>;
-
-#[derive(Constructor, Debug)]
-pub struct Open<T> {
-    pub inner: T,
-}
 
 /// Marker for a non finalized [Root]
 ///
@@ -23,6 +20,8 @@ pub struct Closed<T> {
 }
 
 /// An abstract root representation.
+///
+/// Wraps a state and a [`Flox`] instance. Generally, Root would not be needed
 ///
 /// # Root?
 ///
