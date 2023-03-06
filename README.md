@@ -43,6 +43,9 @@
 your environments**. flox builds on top of a powerfull ideas of [Nix][nix] as
 well as making them accessible to everybody.
 
+Install packages from [the biggest open source repository
+(nixpkgs)][post-nixpkgs] that contains **more that 80.000 packages**.
+
 With `flox` you can:<br/>
 &rarr; [Create composable environments][basics]<br/>
 &rarr; [Share your environments with others][share-envs]<br/>
@@ -62,18 +65,19 @@ With `flox` you can:<br/>
 - .. more (point to the website)
 -->
 
-
 ## ⚡️ Quick start
 
-``` console
-$ flox search hello           # <- to search for package
-$ flox install -e demo hello  # <- to install packages into an environment
-$ flox activate -e demo       # <- to enter an environment shell
+``` text
+$ flox search hello           # <- Search for a package 🚀.
 
-flox [demo default] $ hello   # <- have fun!
+$ flox install -e demo hello  # <- Install packages into an environment 🔨.
+
+$ flox activate -e demo       # <- Enter the environment shell 🎆.
+
+flox [demo default] $ hello   # <- Have fun 🎉.
 Hello world!
-flox [demo default] $ exit    # <- exit environment
-$
+
+flox [demo default] $ exit    # <- Exit environment 💃.
 ```
 
 ## 📫 Have a question? Want to chat? Ran into a problem?
@@ -110,3 +114,4 @@ The flox CLI is licensed under the GPLv2. See [LICENSE](./LICENSE).
 [matrix]: https://matrix.to/#/#flox:matrix.org
 [discord]: https://discord.gg/mxUgrRGP
 [new-issue]: https://github.com/flox/flox-private/issues/new/choose
+[post-nixpkgs]: https://floxdev.com/blog/nixpkgs
