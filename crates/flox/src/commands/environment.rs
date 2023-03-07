@@ -274,7 +274,7 @@ pub enum EnvironmentCommands {
         generation: Option<u32>,
     },
 
-    /// send environment metadata from remote registry
+    /// send environment metadata to remote registry
     #[bpaf(command)]
     Push {
         #[bpaf(external(environment_args), group_help("Environment Options"))]
@@ -288,7 +288,7 @@ pub enum EnvironmentCommands {
         force: bool,
     },
 
-    /// pull environment metadata to remote registry
+    /// pull environment metadata from remote registry
     #[bpaf(command)]
     Pull {
         #[bpaf(external(environment_args), group_help("Environment Options"))]
