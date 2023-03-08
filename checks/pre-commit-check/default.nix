@@ -3,14 +3,10 @@
   nixpkgs,
   lib,
 }: let
-  # temporary, until https://github.com/commitizen-tools/commitizen/pull/644 is merged
+  # temporary, until commitizen 2.41.1 is avalable in nixpkgss
   commitizen = nixpkgs.commitizen.overridePythonAttrs (old: {
     doCheck = false;
-    src = builtins.fetchGit {
-      url = "https://github.com/skoef/commitizen/";
-      ref = "add-hooks-for-bump-command";
-      rev = "26b38beb8d507e4a4ee3c062639a96230c33dd92";
-    };
+    src = inputs.commitizen-src;
     meta = (old.meta or {}) // {mainProgram = "cz";};
   });
 
