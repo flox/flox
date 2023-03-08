@@ -96,12 +96,6 @@ pub enum GeneralCommands {
     #[bpaf(command)]
     Config(#[bpaf(external(config_args))] ConfigArgs),
 
-    /// list all available environments
-    /// Aliases:
-    ///   environments, envs
-    #[bpaf(command, long("environments"))]
-    Envs,
-
     /// reset the metrics queue (if any), reset metrics ID, and re-prompt for consent
     #[bpaf(command("reset-metrics"))]
     ResetMetrics,

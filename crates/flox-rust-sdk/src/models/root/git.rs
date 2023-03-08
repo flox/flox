@@ -19,11 +19,12 @@ impl<'flox, Git: GitProvider> RootGuard<'flox, Closed<Git>, Closed<PathBuf>> {
     }
 
     /// Retrieve the initialized repo or try to create one
+    // todo add `bare` option
     pub async fn init_git(self) -> Result<Root<'flox, Closed<Git>>, ProjectInitGitError<Git>> {
         match self {
             Guard::Initialized(i) => Ok(i),
             Guard::Uninitialized(u) => {
-                let repo = Git::init(&u.state.inner)
+                let repo = Git::init(&u.state.inner, false)
                     .await
                     .map_err(ProjectInitGitError::InitRepoError)?;
 

@@ -3,9 +3,11 @@ use std::path::PathBuf;
 use anyhow::Result;
 use bpaf::{construct, Bpaf, Parser, ShellComp};
 use flox_rust_sdk::flox::Flox;
+use flox_rust_sdk::models::root::floxmeta::Floxmeta;
 use flox_rust_sdk::nix::command_line::NixCommandLine;
 use flox_rust_sdk::prelude::flox_package::FloxPackage;
-use flox_rust_sdk::providers::git::GitCommandProvider;
+use flox_rust_sdk::providers::git::{GitCommandProvider, GitProvider};
+use serde_json::json;
 
 use crate::config::features::Feature;
 use crate::{flox_forward, subcommand_metric};
@@ -42,16 +44,35 @@ impl EnvironmentCommands {
                     .guard::<GitCommandProvider>()
                     .await?
                     .open()
-                    .unwrap()
+                    .expect("Expected repository exist")
                     .guard_floxmeta()
-                    .await?
-                    .open()
-                    .unwrap();
+                    .await?;
+
                 let environment = floxmeta.environment(&name).await?;
                 let metadata = environment.metadata().await?;
                 let generation = environment.generation(&metadata.current_gen).await?;
 
                 println!("{}", serde_json::to_string_pretty(&generation).unwrap())
+            },
+
+            EnvironmentCommands::Envs if !Feature::Env.is_forwarded()? => {
+                let floxmetas = Floxmeta::<GitCommandProvider>::list_floxmetas(&flox).await?;
+
+                let mut values = Vec::new();
+
+                for meta in floxmetas {
+                    let envs = meta.environments().await?;
+                    let mut dir = meta.git.workdir();
+                    let dir = dir.get_or_insert_with(|| meta.git.path());
+
+                    values.push(json!({
+                        "type": "floxmeta",
+                        "path": dir,
+                        "envs": envs,
+                    }));
+                }
+
+                println!("{}", serde_json::to_string_pretty(&values)?);
             },
 
             EnvironmentCommands::Install {
@@ -129,6 +150,12 @@ pub enum PushFloxmainOrEnv {
 
 #[derive(Bpaf, Clone)]
 pub enum EnvironmentCommands {
+    /// list all available environments
+    /// Aliases:
+    ///   environments, envs
+    #[bpaf(command, long("environments"))]
+    Envs,
+
     /// activate environment:
     ///
     /// * in current shell: . <(flox activate)

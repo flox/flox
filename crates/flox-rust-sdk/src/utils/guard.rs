@@ -26,6 +26,16 @@ impl<I, U> Guard<I, U> {
     /// ensure an initalized value using a fallible async initializer
     ///
     /// akin to [Option<T>::ok_or_else]
+    pub fn ensure<E, F: FnOnce(U) -> Result<I, E>>(self, f: F) -> Result<I, E> {
+        match self {
+            Guard::Initialized(i) => Ok(i),
+            Guard::Uninitialized(u) => Ok(f(u)?),
+        }
+    }
+
+    /// same as [`Guard::ensure`], but async
+    ///
+    /// akin to [Option<T>::ok_or_else]
     pub async fn ensure_async<Fut: Future<Output = Result<I, E>>, E, F: FnOnce(U) -> Fut>(
         self,
         f: F,

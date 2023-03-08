@@ -41,7 +41,7 @@ pub const FLOX_VERSION: &str = env!("FLOX_VERSION");
 /// [Flox] will provide a preconfigured instance of the Nix API.
 /// By default this nix API uses the nix CLI.
 /// Preconfiguration includes environment variables and flox specific arguments.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Flox {
     /// The directory pointing to the users flox configuration
     ///

@@ -1,17 +1,28 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
 
+use log::debug;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use super::floxmeta::Floxmeta;
-use super::Root;
-use crate::providers::git::GitProvider;
+use crate::providers::git::{BranchInfo, GitProvider};
 
+#[derive(Serialize, Debug)]
 pub struct Environment<'flox, G> {
     name: String,
     system: String,
-    floxmeta: &'flox Floxmeta<G>,
+    remote: Option<EnvBranch>,
+    local: Option<EnvBranch>,
+    #[serde(skip)]
+    floxmeta: &'flox Floxmeta<'flox, G>,
+}
+
+#[derive(Serialize, Debug)]
+#[allow(unused)]
+pub struct EnvBranch {
+    description: String,
+    hash: String,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -68,34 +79,122 @@ pub struct Generation {
 }
 
 /// Implementations for an opened floxmeta
-impl<Git: GitProvider> Root<'_, Floxmeta<Git>> {
-    /// Add a new flox style package from a template.
-    /// Uses `nix flake init` to retrieve files
-    /// and postprocesses the generic templates.
+impl<Git: GitProvider> Floxmeta<'_, Git> {
     pub async fn environment(
         &self,
         name: &str,
-    ) -> Result<Root<'_, Environment<Git>>, GetEnvironmentError>
-where {
-        Ok(Root {
-            flox: self.flox,
-            state: Environment {
-                name: name.to_string(),
-                system: self.flox.system.clone(),
-                floxmeta: &self.state,
-            },
-        })
+    ) -> Result<Environment<Git>, GetEnvironmentError<Git>> {
+        self.environments()
+            .await?
+            .into_iter()
+            .find(|env| env.name == name && env.system == self.flox.system)
+            .ok_or(GetEnvironmentError::NotFound)
+    }
+
+    /// Detect all environments from a floxmeta repo
+    pub async fn environments(&self) -> Result<Vec<Environment<Git>>, GetEnvironmentsError<Git>> {
+        self.git
+            .fetch()
+            .await
+            .map_err(GetEnvironmentsError::FetchBranches)?;
+
+        // get output of `git branch -av`
+        let list_branches_output = self
+            .git
+            .list_branches()
+            .await
+            .map_err(GetEnvironmentsError::ListBranches)?;
+
+        // parse and sort git output
+        let environments = list_branches_output
+            .into_iter()
+            .filter_map(|branch| {
+                // discard unknown remote
+                match branch.remote.as_deref() {
+                    Some("origin") | None => Some(branch),
+                    Some(remote) => {
+                        debug!(
+                            "Unknown remote '{remote}' for branch '{name}', \
+                             not listing environment",
+                            remote = remote,
+                            name = branch.name
+                        );
+                        None
+                    },
+                }
+            })
+            .filter_map(|branch| {
+                // discard unknown branch names
+                let (system, name) = branch.name.split_once('.').or_else(|| {
+                    debug!(
+                        "Branch '{name}' does not look like \
+                            an environment branch ('<system>.<name>'), \
+                            not listing environment",
+                        name = branch.name
+                    );
+                    None
+                })?;
+
+                let branch = BranchInfo {
+                    name: name.to_string(),
+                    remote: branch.remote,
+                    rev: branch.rev,
+                    description: branch.description,
+                };
+                Some((system.to_string(), branch))
+            })
+            .map(|(system, branch)| {
+                // wrap into an environment branch struct
+                let env_branch = EnvBranch {
+                    description: branch.description,
+                    hash: branch.rev,
+                };
+
+                let (local, remote) = if branch.remote.is_some() {
+                    (None, Some(env_branch))
+                } else {
+                    (Some(env_branch), None)
+                };
+
+                Environment {
+                    name: branch.name,
+                    system,
+                    local,
+                    remote,
+                    floxmeta: self,
+                }
+            })
+            .fold(
+                HashMap::new(),
+                |mut merged: HashMap<_, Environment<_>>, mut env| {
+                    // implace either remote or local in a refererence we already stored
+                    // assumes only at most one of each is present
+                    if let Some(stored) = merged.get_mut(&(env.name.clone(), env.system.clone())) {
+                        stored.local = env.local.take().or_else(|| stored.local.take());
+                        stored.remote = env.remote.take().or_else(|| stored.remote.take());
+                    }
+                    // if its the first reference for the <system, <name> combination
+                    // store it to be possibly merged
+                    else {
+                        merged.insert((env.name.clone(), env.system.clone()), env);
+                    }
+                    merged
+                },
+            )
+            .into_values()
+            .collect();
+        Ok(environments)
     }
 }
 
 /// Implementations for an environment
-impl<Git: GitProvider> Root<'_, Environment<'_, Git>> {
+impl<Git: GitProvider> Environment<'_, Git> {
     pub async fn metadata(&self) -> Result<Metadata, MetadataError<Git>> {
-        let git = &self.state.floxmeta.git;
+        let git = &self.floxmeta.git;
         let metadata_str = git
             .show(&format!(
                 "{}.{}:{}",
-                self.state.system, self.state.name, "metadata.json"
+                self.system, self.name, "metadata.json"
             ))
             .await
             .map_err(MetadataError::RetrieveMetadata)?;
@@ -107,7 +206,7 @@ impl<Git: GitProvider> Root<'_, Environment<'_, Git>> {
     }
 
     pub async fn generation(&self, generation: &str) -> Result<Generation, GenerationError<Git>> {
-        let git = &self.state.floxmeta.git;
+        let git = &self.floxmeta.git;
         let mut metadata = self.metadata().await?;
         let generation_metadata = metadata
             .generations
@@ -116,7 +215,7 @@ impl<Git: GitProvider> Root<'_, Environment<'_, Git>> {
         let manifest_content = git
             .show(&format!(
                 "{}.{}:{}/{}",
-                self.state.system, self.state.name, generation, "manifest.json"
+                self.system, self.name, generation, "manifest.json"
             ))
             .await
             .map_err(ManifestError::RetrieveManifest)?;
@@ -133,7 +232,21 @@ impl<Git: GitProvider> Root<'_, Environment<'_, Git>> {
 }
 
 #[derive(Error, Debug)]
-pub enum GetEnvironmentError {}
+pub enum GetEnvironmentError<Git: GitProvider> {
+    #[error("Environment not found")]
+    NotFound,
+    #[error(transparent)]
+    GetEnvironment(#[from] GetEnvironmentsError<Git>),
+}
+
+#[derive(Error, Debug)]
+pub enum GetEnvironmentsError<Git: GitProvider> {
+    #[error("Failed listing environemnt branches: {0}")]
+    ListBranches(Git::ListBranchesError),
+
+    #[error("Failed fetching environemnt branches: {0}")]
+    FetchBranches(Git::FetchError),
+}
 
 #[derive(Error, Debug)]
 pub enum MetadataError<Git: GitProvider> {

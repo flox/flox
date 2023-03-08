@@ -15,6 +15,13 @@ pub trait GitDiscoverError {
     fn not_found(&self) -> bool;
 }
 
+pub struct BranchInfo {
+    pub name: String,
+    pub remote: Option<String>,
+    pub rev: String,
+    pub description: String,
+}
+
 // simple git provider for the tasks we need to provide in
 // flox
 #[async_trait(?Send)]
@@ -24,6 +31,7 @@ pub trait GitProvider: Send + Sized + std::fmt::Debug {
     type MvError: std::error::Error;
     type RmError: std::error::Error;
     type AddError: std::error::Error;
+    type ListBranchesError: std::error::Error;
     type ShowError: std::error::Error + Send + Sync + 'static;
     type DiscoverError: std::error::Error
         + GitDiscoverError
@@ -31,10 +39,10 @@ pub trait GitProvider: Send + Sized + std::fmt::Debug {
         + Sync
         + std::fmt::Debug
         + 'static;
+    type FetchError: std::error::Error;
 
     async fn discover<P: AsRef<Path>>(path: P) -> Result<Self, Self::DiscoverError>;
-    async fn init<P: AsRef<Path>>(path: P) -> Result<Self, Self::InitError>;
-
+    async fn init<P: AsRef<Path>>(path: P, bare: bool) -> Result<Self, Self::InitError>;
     async fn add_remote(&self, origin_name: &str, url: &str) -> Result<(), Self::AddRemoteError>;
     async fn mv(&self, from: &Path, to: &Path) -> Result<(), Self::MvError>;
     async fn rm(
@@ -46,6 +54,9 @@ pub trait GitProvider: Send + Sized + std::fmt::Debug {
     ) -> Result<(), Self::RmError>;
     async fn add(&self, paths: &[&Path]) -> Result<(), Self::AddError>;
     async fn show(&self, object: &str) -> Result<OsString, Self::ShowError>;
+    async fn list_branches(&self) -> Result<Vec<BranchInfo>, Self::ListBranchesError>;
+
+    async fn fetch(&self) -> Result<(), Self::FetchError>;
 
     fn workdir(&self) -> Option<&Path>;
     fn path(&self) -> &Path;
@@ -83,14 +94,20 @@ impl GitProvider for LibGit2Provider {
     type AddError = EmptyError;
     type AddRemoteError = EmptyError;
     type DiscoverError = git2::Error;
+    type FetchError = EmptyError;
     type InitError = git2::Error;
+    type ListBranchesError = EmptyError;
     type MvError = EmptyError;
     type RmError = EmptyError;
     type ShowError = EmptyError;
 
-    async fn init<P: AsRef<Path>>(path: P) -> Result<LibGit2Provider, Self::InitError> {
+    async fn init<P: AsRef<Path>>(path: P, bare: bool) -> Result<LibGit2Provider, Self::InitError> {
         Ok(LibGit2Provider {
-            repository: git2::Repository::init(path)?,
+            repository: if bare {
+                git2::Repository::init_bare(path)?
+            } else {
+                git2::Repository::init(path)?
+            },
         })
     }
 
@@ -125,6 +142,14 @@ impl GitProvider for LibGit2Provider {
     }
 
     async fn show(&self, _object: &str) -> Result<OsString, Self::ShowError> {
+        todo!()
+    }
+
+    async fn list_branches(&self) -> Result<Vec<BranchInfo>, Self::ListBranchesError> {
+        todo!()
+    }
+
+    async fn fetch(&self) -> Result<(), Self::FetchError> {
         todo!()
     }
 
@@ -200,16 +225,24 @@ impl GitProvider for GitCommandProvider {
     type AddError = GitCommandError;
     type AddRemoteError = GitCommandError;
     type DiscoverError = GitCommandDiscoverError;
+    type FetchError = GitCommandError;
     type InitError = GitCommandError;
+    type ListBranchesError = GitCommandError;
     type MvError = GitCommandError;
     type RmError = GitCommandError;
     type ShowError = GitCommandError;
 
-    async fn init<P: AsRef<Path>>(path: P) -> Result<GitCommandProvider, Self::InitError> {
-        let _out = GitCommandProvider::run_command(
-            GitCommandProvider::new_command(&Some(&path)).arg("init"),
-        )
-        .await?;
+    async fn init<P: AsRef<Path>>(
+        path: P,
+        bare: bool,
+    ) -> Result<GitCommandProvider, Self::InitError> {
+        let mut command = GitCommandProvider::new_command(&Some(&path));
+        command.arg("init");
+        if bare {
+            command.arg("--bare");
+        }
+
+        let _out = GitCommandProvider::run_command(&mut command).await?;
 
         Ok(GitCommandProvider {
             workdir: Some(path.as_ref().into()),
@@ -298,6 +331,65 @@ impl GitProvider for GitCommandProvider {
         command.arg(object);
 
         Ok(GitCommandProvider::run_command(&mut command).await?)
+    }
+
+    async fn list_branches(&self) -> Result<Vec<BranchInfo>, Self::ListBranchesError> {
+        let mut command = GitCommandProvider::new_command(&self.workdir);
+        command.arg("branch");
+        command.args(["--all", "--verbose"]);
+
+        let info = GitCommandProvider::run_command(&mut command)
+            .await?
+            .to_string_lossy()
+            .lines()
+            .map(|line| {
+                // split all lines into three parts (undoing git's default format)
+                // using the `--format` option failed on me to produce any useful output at all
+                // If using the git cli that would probably be the better way
+                // of providing parseable data.
+                //
+                // the git putput is formatted as
+                // [*] <name> <whitespace> <rev hash> <whitespace> <subject>
+                //  L present iff branch is currently checked out
+
+                // the active branch is denoted by a leadinf '*', which cannot be disabled?
+                let (full_name, rest) =
+                    line.trim_start_matches('*').trim().split_once(' ').unwrap();
+                // hash part
+                let (hash, rest) = rest.trim().split_once(' ').unwrap();
+                // description
+                let description = rest.trim_start();
+                (full_name, hash, description)
+            })
+            .map(|(full_name, hash, description)| {
+                // discard unknown remotes
+                let (remote, name) = match full_name
+                    .strip_prefix("remotes/")
+                    .and_then(|remote| remote.split_once('/'))
+                {
+                    Some((remote, name)) => (Some(remote), name),
+                    None => (None, full_name),
+                };
+                BranchInfo {
+                    name: name.to_string(),
+                    remote: remote.map(String::from),
+                    rev: hash.to_string(),
+                    description: description.to_string(),
+                }
+            })
+            .collect();
+
+        Ok(info)
+    }
+
+    async fn fetch(&self) -> Result<(), Self::FetchError> {
+        GitCommandProvider::run_command(
+            GitCommandProvider::new_command(&self.workdir.as_deref().or(Some(&self.path)))
+                .arg("fetch")
+                .arg("--all"),
+        )
+        .await?;
+        Ok(())
     }
 
     async fn discover<P: AsRef<Path>>(path: P) -> Result<Self, Self::DiscoverError> {
