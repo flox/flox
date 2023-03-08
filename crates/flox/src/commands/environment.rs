@@ -146,7 +146,7 @@ pub enum EnvironmentCommands {
         arguments: Option<(String, Vec<String>)>,
     },
 
-    /// create an envirnment
+    /// create an environment
     #[bpaf(command)]
     Create {
         #[bpaf(external(environment_args), group_help("Environment Options"))]
@@ -156,7 +156,7 @@ pub enum EnvironmentCommands {
         environment: Option<EnvironmentRef>,
     },
 
-    /// remove all data pertaining to an environment`
+    /// remove all data pertaining to an environment
     #[bpaf(command)]
     Destroy {
         #[bpaf(short, long)]
