@@ -1,8 +1,18 @@
-name: Create Pre-Release
+name: Create Release
 
 # Controls when the workflow will run
 on:
-  workflow_dispatch
+  workflow_dispatch:
+    inputs:
+      increment:
+        type: choice
+        description: |
+          Which SemVer component shall this release increment?
+          Leave on 'AUTO' to have commitizen pick the increment based on commits.
+        options:
+        - AUTO
+        - MINOR
+        - PATCH
 
 jobs:
   # This workflow will do three things:
@@ -12,6 +22,8 @@ jobs:
 
 
   increment-patch:
+    if: ${{ startsWith( github.ref_name, 'release/' ) }}
+
     # The type of runner that the job will run on
     runs-on: ubuntu-latest
 
@@ -19,7 +31,6 @@ jobs:
       # checkout develop branch
       - uses: actions/checkout@v3
         with:
-          ref: "main"
           fetch-depth: 0
           token: ${{ secrets.NIX_GIT_TOKEN }}
 
@@ -34,14 +45,21 @@ jobs:
         with:
           extra_nix_config: extra-access-tokens = github.com=${{ secrets.NIX_GIT_TOKEN }}
 
-      - name: Tag new releases
+      - name: Squash commit and tag new release
         id: tag
+        env:
+          INCREMENT: ${{ inputs.increment }}
         run: |
-          nix develop .#ci \
-            -c cz bump --yes
+          # run the release script
+          git pull origin main:main
+          bash .github/scripts/release.sh
 
-          echo "TAG=$(git describe --abbrev=0 --tags)" >> $GITHUB_OUTPUT
+      - name: "Update release branch"
+        run: |
+          # update the PR branch
+          # this way github will accept the push to main as a closing commit for the PR
+          git push --force origin HEAD
 
       - name: "Push `${{ steps.tag.outputs.TAG }} (tag), main (branch)"
         run: |
-          git push --atomic origin ${{ steps.tag.outputs.TAG }} main
+          git push --atomic origin ${{ steps.tag.outputs.TAG }} HEAD:main
