@@ -9,7 +9,7 @@ use anyhow::{anyhow, bail, Context, Result};
 use bpaf::Parser;
 use flox_rust_sdk::flox::{EnvironmentRef, Flox, FloxInstallable, ResolvedInstallableMatch};
 use flox_rust_sdk::prelude::{Channel, ChannelRegistry, Installable};
-use flox_rust_sdk::providers::git::GitProvider;
+use flox_rust_sdk::providers::git::{GitCommandProvider, GitProvider};
 use indoc::indoc;
 use itertools::Itertools;
 use log::{debug, error, warn};
@@ -179,8 +179,11 @@ impl<Matching: InstallableDef + 'static> InstallableArgument<Unparsed, Matching>
         })
     }
 
-    /// Completion fucntion for bpaf completion engine
+    /// Completion function for bpaf completion engine
     fn complete_installable(&self) -> Vec<(String, Option<String>)> {
+        // avoid stray logs of lower severity from polluting the completions
+        log::set_max_level(log::LevelFilter::Error);
+
         let drv = InstallableKind::any(Matching::DERIVATION_TYPES).unwrap();
 
         let installable = self.installable.clone();
@@ -210,15 +213,16 @@ impl<Matching: InstallableDef + 'static> InstallableArgument<Parsed, Matching> {
     async fn resolve_matches(&self, flox: &Flox) -> Result<Vec<ResolvedInstallableMatch>> {
         let drv = InstallableKind::any(Matching::DERIVATION_TYPES).unwrap();
 
-        Ok(flox
-            .resolve_matches(
+        let matches = flox
+            .resolve_matches::<_, GitCommandProvider>(
                 &[self.installable.clone()],
                 &drv.flake_refs,
                 &drv.prefix,
                 false,
                 Matching::PROCESSOR,
             )
-            .await?)
+            .await?;
+        Ok(matches)
     }
 
     /// called at runtime to extract single installable from CLI input

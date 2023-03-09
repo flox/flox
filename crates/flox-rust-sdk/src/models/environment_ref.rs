@@ -82,7 +82,7 @@ impl<'flox> Project<'flox> {
         let workdir_str = workdir.to_str().ok_or(FindProjectError::WorkdirEncoding)?;
 
         let matches = flox
-            .resolve_matches(
+            .resolve_matches::<Nix, Git>(
                 &[environment_name.parse()?],
                 &[&format!("git+file://{}", workdir_str)],
                 &[("floxEnvs", true)],

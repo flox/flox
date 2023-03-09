@@ -1,9 +1,10 @@
 use std::collections::{BTreeSet, HashMap};
 use std::io::Read;
 use std::path::PathBuf;
+use std::str::FromStr;
 
 use derive_more::Constructor;
-use log::{debug, info};
+use log::{debug, info, warn};
 use once_cell::sync::Lazy;
 use runix::arguments::common::NixCommonArgs;
 use runix::arguments::config::NixConfigArgs;
@@ -21,6 +22,7 @@ use crate::actions::package::Package;
 use crate::environment::{self, default_nix_subprocess_env};
 use crate::models::channels::ChannelRegistry;
 pub use crate::models::environment_ref::{self, *};
+use crate::models::flake_ref::ToFlakeRef;
 pub use crate::models::flox_installable::*;
 use crate::models::root::{self, Root};
 use crate::models::stability::Stability;
@@ -166,7 +168,7 @@ impl Flox {
     }
 
     /// Invoke Nix to convert a FloxInstallable into a list of matches
-    pub async fn resolve_matches<Nix: FloxNixApi>(
+    pub async fn resolve_matches<Nix: FloxNixApi, Git: GitProvider>(
         &self,
         flox_installables: &[FloxInstallable],
         default_flakerefs: &[&str],
@@ -177,13 +179,48 @@ impl Flox {
     where
         Eval: RunJson<Nix>,
     {
+        // ignore default flake_refs that point to paths which are not flakes.
+        let default_flakerefs = default_flakerefs
+            .iter()
+            .copied()
+            .filter(|flake_ref| {
+                let parsed_flake_ref = ToFlakeRef::from_str(flake_ref);
+                // if we can't parse the flake_ref we warn but keep it
+                // this is until we can be sure enought that our flake_ref parser is robust
+                if let Err(e) = parsed_flake_ref {
+                    warn!(
+                        "
+Could not parse flake_ref {flake_ref}
+{e:?}
+"
+                    );
+                    return true;
+                };
+                let parsed_flake_ref = parsed_flake_ref.unwrap();
+
+                futures::executor::block_on(async {
+                    match parsed_flake_ref {
+                        //
+                        ToFlakeRef::Path { path, .. } => self
+                            .project(path)
+                            .guard::<Git>()
+                            .await
+                            .ok()
+                            .and_then(|guard| guard.open().ok())
+                            .is_some(),
+                        _ => true,
+                    }
+                })
+            })
+            .collect::<Vec<_>>();
+
         // Optimize for installable resolutions that do not require an eval
         // Match against exactly 1 flakeref and 1 prefix
         let mut optimized = vec![];
         for flox_installable in flox_installables {
             if let (false, [d_flakeref], [(d_prefix, d_systemized)], [key]) = (
                 must_exist,
-                default_flakerefs,
+                &default_flakerefs[..],
                 default_attr_prefixes,
                 flox_installable.attr_path.as_slice(),
             ) {

@@ -3,6 +3,7 @@ use std::collections::{HashMap, HashSet};
 use anyhow::{bail, Result};
 use async_trait::async_trait;
 use flox_rust_sdk::flox::{Flox, FloxInstallable};
+use flox_rust_sdk::providers::git::GitCommandProvider;
 use log::debug;
 use tempfile::TempDir;
 
@@ -104,7 +105,7 @@ impl FloxCompletionExt for Flox {
         };
 
         let matches = self
-            .resolve_matches(
+            .resolve_matches::<_, GitCommandProvider>(
                 flox_installables.as_slice(),
                 default_flakerefs,
                 default_attr_prefixes,
