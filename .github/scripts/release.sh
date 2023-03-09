@@ -27,7 +27,7 @@ if [[ "$INCREMENT" = "PATCH" ]]; then
     increment_flag="--increment=PATCH"
 fi
 if [[ "$INCREMENT" = "AUTO" ]]; then
-    # dont set the flag
+    increment_flag=
 fi
 
 # enter nix shell before resetting to make sure any nix changes on release/ are used
