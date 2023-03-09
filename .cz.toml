@@ -10,4 +10,5 @@ annotated_tag = true
 bump_message = "bump: $current_version → $new_version"
 pre_bump_hooks = [
   "cargo update -p flox", # allow network to access dependency patches
+  "nix flake update",
 ]
