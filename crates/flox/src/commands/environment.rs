@@ -40,7 +40,7 @@ impl EnvironmentCommands {
                 // assume local for now. next, parse environment
                 // assume local exists
                 let floxmeta = flox
-                    .project(flox.cache_dir.join("meta").join("local"))
+                    .resource(flox.cache_dir.join("meta").join("local"))
                     .guard::<GitCommandProvider>()
                     .await?
                     .open()
@@ -50,20 +50,26 @@ impl EnvironmentCommands {
 
                 let environment = floxmeta.environment(&name).await?;
                 let metadata = environment.metadata().await?;
-                let generation = environment.generation(&metadata.current_gen).await?;
+                let generation = environment
+                    .generation(
+                        &metadata
+                            .current_gen
+                            .unwrap_or("No generation found".to_string()),
+                    )
+                    .await?;
 
                 println!("{}", serde_json::to_string_pretty(&generation).unwrap())
             },
 
             EnvironmentCommands::Envs if !Feature::Env.is_forwarded()? => {
-                let floxmetas = Floxmeta::<GitCommandProvider>::list_floxmetas(&flox).await?;
+                let floxmetas = Floxmeta::<GitCommandProvider, _>::list_floxmetas(&flox).await?;
 
                 let mut values = Vec::new();
 
                 for meta in floxmetas {
                     let envs = meta.environments().await?;
-                    let mut dir = meta.git.workdir();
-                    let dir = dir.get_or_insert_with(|| meta.git.path());
+                    let mut dir = meta.git().workdir();
+                    let dir = dir.get_or_insert_with(|| meta.git().path());
 
                     values.push(json!({
                         "type": "floxmeta",

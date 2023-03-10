@@ -8,6 +8,7 @@ pub mod floxmeta;
 mod git;
 pub mod project;
 mod reference;
+pub mod transaction;
 
 pub type RootGuard<'flox, I, U> = Guard<Root<'flox, I>, Root<'flox, U>>;
 

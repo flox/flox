@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
 
@@ -5,30 +6,33 @@ use log::debug;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use super::floxmeta::Floxmeta;
+use super::floxmeta::{Floxmeta, TransactionCommitError, TransactionEnterError};
+use super::transaction::{GitAccess, GitSandBox, ReadOnly};
 use crate::providers::git::{BranchInfo, GitProvider};
 
+pub const METADATA_JSON: &'_ str = "metadata.json";
+
 #[derive(Serialize, Debug)]
-pub struct Environment<'flox, G> {
+pub struct Environment<'flox, Git: GitProvider, A: GitAccess<Git>> {
     name: String,
     system: String,
     remote: Option<EnvBranch>,
     local: Option<EnvBranch>,
     #[serde(skip)]
-    floxmeta: &'flox Floxmeta<'flox, G>,
+    floxmeta: Floxmeta<'flox, Git, A>,
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, Clone)]
 #[allow(unused)]
 pub struct EnvBranch {
     description: String,
     hash: String,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct Metadata {
-    pub current_gen: String,
+    pub current_gen: Option<String>,
     generations: BTreeMap<String, GenerationMetadata>,
     #[serde(default)]
     version: u32,
@@ -79,11 +83,11 @@ pub struct Generation {
 }
 
 /// Implementations for an opened floxmeta
-impl<Git: GitProvider> Floxmeta<'_, Git> {
+impl<Git: GitProvider, A: GitAccess<Git>> Floxmeta<'_, Git, A> {
     pub async fn environment(
         &self,
         name: &str,
-    ) -> Result<Environment<Git>, GetEnvironmentError<Git>> {
+    ) -> Result<Environment<Git, ReadOnly<Git>>, GetEnvironmentError<Git>> {
         self.environments()
             .await?
             .into_iter()
@@ -92,15 +96,19 @@ impl<Git: GitProvider> Floxmeta<'_, Git> {
     }
 
     /// Detect all environments from a floxmeta repo
-    pub async fn environments(&self) -> Result<Vec<Environment<Git>>, GetEnvironmentsError<Git>> {
-        self.git
+    pub async fn environments(
+        &self,
+    ) -> Result<Vec<Environment<Git, ReadOnly<Git>>>, GetEnvironmentsError<Git>> {
+        self.access
+            .git()
             .fetch()
             .await
             .map_err(GetEnvironmentsError::FetchBranches)?;
 
         // get output of `git branch -av`
         let list_branches_output = self
-            .git
+            .access
+            .git()
             .list_branches()
             .await
             .map_err(GetEnvironmentsError::ListBranches)?;
@@ -161,12 +169,17 @@ impl<Git: GitProvider> Floxmeta<'_, Git> {
                     system,
                     local,
                     remote,
-                    floxmeta: self,
+                    floxmeta: Floxmeta {
+                        owner: self.owner.clone(),
+                        flox: self.flox,
+                        access: self.access.read_only(),
+                        _git: std::marker::PhantomData,
+                    },
                 }
             })
             .fold(
                 HashMap::new(),
-                |mut merged: HashMap<_, Environment<_>>, mut env| {
+                |mut merged: HashMap<_, Environment<_, _>>, mut env| {
                     // implace either remote or local in a refererence we already stored
                     // assumes only at most one of each is present
                     if let Some(stored) = merged.get_mut(&(env.name.clone(), env.system.clone())) {
@@ -188,14 +201,31 @@ impl<Git: GitProvider> Floxmeta<'_, Git> {
 }
 
 /// Implementations for an environment
-impl<Git: GitProvider> Environment<'_, Git> {
+impl<Git: GitProvider, A: GitAccess<Git>> Environment<'_, Git, A> {
+    pub fn name(&self) -> Cow<str> {
+        Cow::from(&self.name)
+    }
+
+    pub fn system(&self) -> Cow<str> {
+        Cow::from(&self.system)
+    }
+
+    pub fn remote(&self) -> Cow<Option<EnvBranch>> {
+        Cow::Borrowed(&self.remote)
+    }
+
+    pub fn local(&self) -> Cow<Option<EnvBranch>> {
+        Cow::Borrowed(&self.local)
+    }
+
+    pub fn owner(&self) -> &str {
+        self.floxmeta.owner()
+    }
+
     pub async fn metadata(&self) -> Result<Metadata, MetadataError<Git>> {
-        let git = &self.floxmeta.git;
+        let git = &self.floxmeta.access.git();
         let metadata_str = git
-            .show(&format!(
-                "{}.{}:{}",
-                self.system, self.name, "metadata.json"
-            ))
+            .show(&format!("{}.{}:{}", self.system, self.name, METADATA_JSON))
             .await
             .map_err(MetadataError::RetrieveMetadata)?;
 
@@ -206,7 +236,7 @@ impl<Git: GitProvider> Environment<'_, Git> {
     }
 
     pub async fn generation(&self, generation: &str) -> Result<Generation, GenerationError<Git>> {
-        let git = &self.floxmeta.git;
+        let git = &self.floxmeta.access.git();
         let mut metadata = self.metadata().await?;
         let generation_metadata = metadata
             .generations
@@ -227,6 +257,43 @@ impl<Git: GitProvider> Environment<'_, Git> {
             name: generation.to_owned(),
             metadata: generation_metadata,
             elements: manifest.elements,
+        })
+    }
+}
+
+/// Implementations for R/O only instances
+///
+/// Mainly transformation into modifiable sandboxed instances
+impl<'flox, Git: GitProvider> Environment<'flox, Git, ReadOnly<Git>> {
+    /// Enter into editable mode by creating a git sandbox for the floxmeta
+    pub async fn enter_transaction(
+        self,
+    ) -> Result<Environment<'flox, Git, GitSandBox<Git>>, TransactionEnterError<Git>> {
+        let floxmeta = self.floxmeta.enter_transaction().await?;
+        Ok(Environment {
+            name: self.name,
+            system: self.system,
+            remote: self.remote,
+            local: self.local,
+            floxmeta,
+        })
+    }
+}
+
+/// Implementations for sandboxed only Environments
+impl<'flox, Git: GitProvider> Environment<'flox, Git, GitSandBox<Git>> {
+    /// Commit changes to environment by closing the underlying transaction
+    pub async fn commit_transaction(
+        self,
+        message: &'flox str,
+    ) -> Result<Environment<'_, Git, ReadOnly<Git>>, TransactionCommitError<Git>> {
+        let floxmeta = self.floxmeta.commit_transaction(message).await?;
+        Ok(Environment {
+            name: self.name,
+            system: self.system,
+            remote: self.remote,
+            local: self.local,
+            floxmeta,
         })
     }
 }

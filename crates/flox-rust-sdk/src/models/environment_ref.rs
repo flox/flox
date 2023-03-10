@@ -61,7 +61,7 @@ impl<'flox> Project<'flox> {
         // Find the `Project` to use, erroring all the way if it is not in the perfect state.
         // TODO: further changes and integrations to make more flexible possible?
         let git_repo = flox
-            .project(std::env::current_dir().map_err(FindProjectError::CurrentDir)?)
+            .resource(std::env::current_dir().map_err(FindProjectError::CurrentDir)?)
             .guard::<Git>()
             .await
             .map_err(|_| FindProjectError::DiscoverError)?

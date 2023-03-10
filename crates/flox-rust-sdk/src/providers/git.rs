@@ -1,4 +1,4 @@
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::fmt;
 use std::os::unix::ffi::OsStringExt;
 use std::path::{Path, PathBuf};
@@ -27,11 +27,17 @@ pub struct BranchInfo {
 #[async_trait(?Send)]
 pub trait GitProvider: Send + Sized + std::fmt::Debug {
     type InitError: std::error::Error;
+    type CloneError: std::error::Error;
+    type CommitError: std::error::Error;
+    type PushError: std::error::Error;
+
+    type CheckoutError: std::error::Error;
+    type ListBranchesError: std::error::Error;
+
     type AddRemoteError: std::error::Error;
     type MvError: std::error::Error;
     type RmError: std::error::Error;
     type AddError: std::error::Error;
-    type ListBranchesError: std::error::Error;
     type ShowError: std::error::Error + Send + Sync + 'static;
     type DiscoverError: std::error::Error
         + GitDiscoverError
@@ -40,9 +46,19 @@ pub trait GitProvider: Send + Sized + std::fmt::Debug {
         + std::fmt::Debug
         + 'static;
     type FetchError: std::error::Error;
+    type SetOriginError: std::error::Error;
 
     async fn discover<P: AsRef<Path>>(path: P) -> Result<Self, Self::DiscoverError>;
     async fn init<P: AsRef<Path>>(path: P, bare: bool) -> Result<Self, Self::InitError>;
+    async fn clone<O: AsRef<OsStr>, P: AsRef<Path>>(
+        origin: O,
+        path: P,
+        bare: bool,
+    ) -> Result<Self, Self::CloneError>;
+
+    async fn checkout(&self, name: &str, orphan: bool) -> Result<(), Self::CheckoutError>;
+    async fn list_branches(&self) -> Result<Vec<BranchInfo>, Self::ListBranchesError>;
+
     async fn add_remote(&self, origin_name: &str, url: &str) -> Result<(), Self::AddRemoteError>;
     async fn mv(&self, from: &Path, to: &Path) -> Result<(), Self::MvError>;
     async fn rm(
@@ -53,10 +69,14 @@ pub trait GitProvider: Send + Sized + std::fmt::Debug {
         cached: bool,
     ) -> Result<(), Self::RmError>;
     async fn add(&self, paths: &[&Path]) -> Result<(), Self::AddError>;
+    async fn commit(&self, message: &str) -> Result<(), Self::CommitError>;
+
     async fn show(&self, object: &str) -> Result<OsString, Self::ShowError>;
-    async fn list_branches(&self) -> Result<Vec<BranchInfo>, Self::ListBranchesError>;
 
     async fn fetch(&self) -> Result<(), Self::FetchError>;
+    async fn push(&self, remote: &str) -> Result<(), Self::PushError>;
+    async fn set_origin(&self, branch: &str, origin_name: &str)
+        -> Result<(), Self::SetOriginError>;
 
     fn workdir(&self) -> Option<&Path>;
     fn path(&self) -> &Path;
@@ -93,13 +113,24 @@ impl GitDiscoverError for git2::Error {
 impl GitProvider for LibGit2Provider {
     type AddError = EmptyError;
     type AddRemoteError = EmptyError;
+    type CheckoutError = EmptyError;
+    type CloneError = EmptyError;
+    type CommitError = EmptyError;
     type DiscoverError = git2::Error;
     type FetchError = EmptyError;
     type InitError = git2::Error;
     type ListBranchesError = EmptyError;
     type MvError = EmptyError;
+    type PushError = EmptyError;
     type RmError = EmptyError;
+    type SetOriginError = EmptyError;
     type ShowError = EmptyError;
+
+    async fn discover<P: AsRef<Path>>(path: P) -> Result<Self, Self::DiscoverError> {
+        Ok(LibGit2Provider {
+            repository: git2::Repository::discover(path)?,
+        })
+    }
 
     async fn init<P: AsRef<Path>>(path: P, bare: bool) -> Result<LibGit2Provider, Self::InitError> {
         Ok(LibGit2Provider {
@@ -111,12 +142,20 @@ impl GitProvider for LibGit2Provider {
         })
     }
 
-    fn workdir(&self) -> Option<&Path> {
-        self.repository.workdir()
+    async fn clone<O: AsRef<OsStr>, P: AsRef<Path>>(
+        _origin: O,
+        _path: P,
+        _bare: bool,
+    ) -> Result<Self, Self::CloneError> {
+        todo!()
     }
 
-    fn path(&self) -> &Path {
-        self.repository.path()
+    async fn checkout(&self, _name: &str, _orphan: bool) -> Result<(), Self::CheckoutError> {
+        todo!()
+    }
+
+    async fn list_branches(&self) -> Result<Vec<BranchInfo>, Self::ListBranchesError> {
+        todo!()
     }
 
     async fn add_remote(&self, _origin_name: &str, _url: &str) -> Result<(), Self::AddRemoteError> {
@@ -141,11 +180,11 @@ impl GitProvider for LibGit2Provider {
         todo!()
     }
 
-    async fn show(&self, _object: &str) -> Result<OsString, Self::ShowError> {
+    async fn commit(&self, _message: &str) -> Result<(), Self::CommitError> {
         todo!()
     }
 
-    async fn list_branches(&self) -> Result<Vec<BranchInfo>, Self::ListBranchesError> {
+    async fn show(&self, _object: &str) -> Result<OsString, Self::ShowError> {
         todo!()
     }
 
@@ -153,10 +192,24 @@ impl GitProvider for LibGit2Provider {
         todo!()
     }
 
-    async fn discover<P: AsRef<Path>>(path: P) -> Result<Self, Self::DiscoverError> {
-        Ok(LibGit2Provider {
-            repository: git2::Repository::discover(path)?,
-        })
+    async fn push(&self, _remote: &str) -> Result<(), Self::PushError> {
+        todo!()
+    }
+
+    async fn set_origin(
+        &self,
+        _branch: &str,
+        _origin_name: &str,
+    ) -> Result<(), Self::SetOriginError> {
+        todo!()
+    }
+
+    fn workdir(&self) -> Option<&Path> {
+        self.repository.workdir()
+    }
+
+    fn path(&self) -> &Path {
+        self.repository.path()
     }
 }
 
@@ -206,6 +259,8 @@ pub enum GitCommandDiscoverError {
     Command(#[from] GitCommandError),
     #[error("Git directory is not valid unicode")]
     GitDirEncoding,
+    #[error("Git returned an uexpected output: {0}")]
+    UnexpectedOutput(String),
 }
 
 impl GitDiscoverError for GitCommandDiscoverError {
@@ -224,13 +279,61 @@ impl GitDiscoverError for GitCommandDiscoverError {
 impl GitProvider for GitCommandProvider {
     type AddError = GitCommandError;
     type AddRemoteError = GitCommandError;
+    type CheckoutError = GitCommandError;
+    type CloneError = GitCommandError;
+    type CommitError = GitCommandError;
     type DiscoverError = GitCommandDiscoverError;
     type FetchError = GitCommandError;
     type InitError = GitCommandError;
     type ListBranchesError = GitCommandError;
     type MvError = GitCommandError;
+    type PushError = GitCommandError;
     type RmError = GitCommandError;
+    type SetOriginError = GitCommandError;
     type ShowError = GitCommandError;
+
+    async fn discover<P: AsRef<Path>>(path: P) -> Result<Self, Self::DiscoverError> {
+        let out = GitCommandProvider::run_command(
+            GitCommandProvider::new_command(&Some(&path))
+                .arg("rev-parse")
+                .arg("--is-bare-repository"),
+        )
+        .await?;
+
+        let out_str = out
+            .to_str()
+            .ok_or(GitCommandDiscoverError::GitDirEncoding)?;
+
+        let bare = out_str
+            .trim()
+            .parse::<bool>()
+            .map_err(|_| GitCommandDiscoverError::UnexpectedOutput(out_str.to_string()))?;
+
+        if bare {
+            return Ok(GitCommandProvider {
+                workdir: None,
+                path: path.as_ref().to_path_buf(),
+            });
+        }
+
+        let out = GitCommandProvider::run_command(
+            GitCommandProvider::new_command(&Some(&path))
+                .arg("rev-parse")
+                .arg("--show-toplevel"),
+        )
+        .await?;
+
+        let out_str = out
+            .to_str()
+            .ok_or(GitCommandDiscoverError::GitDirEncoding)?;
+
+        let workdir = PathBuf::from(out_str.trim());
+
+        Ok(GitCommandProvider {
+            workdir: Some(workdir.clone()),
+            path: workdir,
+        })
+    }
 
     async fn init<P: AsRef<Path>>(
         path: P,
@@ -250,6 +353,40 @@ impl GitProvider for GitCommandProvider {
         })
     }
 
+    async fn clone<O: AsRef<OsStr>, P: AsRef<Path>>(
+        origin: O,
+        path: P,
+        bare: bool,
+    ) -> Result<Self, Self::CloneError> {
+        let mut command = GitCommandProvider::new_command(&Some(&path));
+        command.arg("clone");
+        if bare {
+            command.arg("--bare");
+        }
+
+        command.arg(origin.as_ref());
+        command.arg("./");
+
+        let _out = GitCommandProvider::run_command(&mut command).await?;
+        Ok(GitCommandProvider {
+            workdir: (!bare).then(|| path.as_ref().to_path_buf()),
+            path: path.as_ref().into(),
+        })
+    }
+
+    async fn checkout(&self, name: &str, orphan: bool) -> Result<(), Self::CheckoutError> {
+        let mut command = GitCommandProvider::new_command(&self.workdir());
+        command.arg("checkout");
+        if orphan {
+            command.arg("--orphan");
+        }
+
+        command.arg(name);
+
+        let _out = GitCommandProvider::run_command(&mut command).await?;
+        Ok(())
+    }
+
     async fn add_remote(&self, origin_name: &str, url: &str) -> Result<(), Self::AddRemoteError> {
         let _out = GitCommandProvider::run_command(
             GitCommandProvider::new_command(&self.workdir)
@@ -257,6 +394,23 @@ impl GitProvider for GitCommandProvider {
                 .arg("add")
                 .arg(origin_name)
                 .arg(url),
+        )
+        .await?;
+
+        Ok(())
+    }
+
+    async fn set_origin(
+        &self,
+        branch: &str,
+        origin_name: &str,
+    ) -> Result<(), Self::SetOriginError> {
+        let _out = GitCommandProvider::run_command(
+            GitCommandProvider::new_command(&self.workdir)
+                .arg("branch")
+                .arg(branch)
+                .arg("--set-upstream")
+                .arg(format!("{origin_name}/{branch}")),
         )
         .await?;
 
@@ -305,14 +459,6 @@ impl GitProvider for GitCommandProvider {
         Ok(())
     }
 
-    fn workdir(&self) -> Option<&Path> {
-        self.workdir.as_ref().map(|x| x.as_ref())
-    }
-
-    fn path(&self) -> &Path {
-        self.path.as_ref()
-    }
-
     async fn add(&self, paths: &[&Path]) -> Result<(), Self::MvError> {
         let mut command = GitCommandProvider::new_command(&self.workdir);
         command.arg("add");
@@ -325,8 +471,17 @@ impl GitProvider for GitCommandProvider {
         Ok(())
     }
 
+    async fn commit(&self, message: &str) -> Result<(), Self::CommitError> {
+        let mut command = GitCommandProvider::new_command(&self.workdir());
+        command.arg("commit");
+        command.args(["-m", message]);
+
+        let _out = GitCommandProvider::run_command(&mut command).await?;
+        Ok(())
+    }
+
     async fn show(&self, object: &str) -> Result<OsString, Self::ShowError> {
-        let mut command = GitCommandProvider::new_command(&self.workdir);
+        let mut command = GitCommandProvider::new_command(&Some(&self.path));
         command.arg("show");
         command.arg(object);
 
@@ -334,7 +489,7 @@ impl GitProvider for GitCommandProvider {
     }
 
     async fn list_branches(&self) -> Result<Vec<BranchInfo>, Self::ListBranchesError> {
-        let mut command = GitCommandProvider::new_command(&self.workdir);
+        let mut command = GitCommandProvider::new_command(&Some(&self.path));
         command.arg("branch");
         command.args(["--all", "--verbose"]);
 
@@ -392,24 +547,21 @@ impl GitProvider for GitCommandProvider {
         Ok(())
     }
 
-    async fn discover<P: AsRef<Path>>(path: P) -> Result<Self, Self::DiscoverError> {
-        let out = GitCommandProvider::run_command(
-            GitCommandProvider::new_command(&Some(path))
-                .arg("rev-parse")
-                .arg("--show-toplevel"),
-        )
-        .await?;
+    async fn push(&self, remote: &str) -> Result<(), Self::PushError> {
+        let mut command = GitCommandProvider::new_command(&self.workdir());
+        command.arg("push");
+        command.arg(remote);
+        command.arg("HEAD");
 
-        let out_str = match out.to_str() {
-            Some(s) => s,
-            None => return Err(GitCommandDiscoverError::GitDirEncoding),
-        };
+        let _out = GitCommandProvider::run_command(&mut command).await?;
+        Ok(())
+    }
 
-        let workdir = PathBuf::from(out_str.trim());
+    fn workdir(&self) -> Option<&Path> {
+        self.workdir.as_ref().map(|x| x.as_ref())
+    }
 
-        Ok(GitCommandProvider {
-            workdir: Some(workdir.clone()),
-            path: workdir,
-        })
+    fn path(&self) -> &Path {
+        self.path.as_ref()
     }
 }

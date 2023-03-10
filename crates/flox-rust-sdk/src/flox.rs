@@ -149,7 +149,7 @@ impl Flox {
         Package::new(self, installable, stability, nix_arguments)
     }
 
-    pub fn project<X>(&self, x: X) -> Root<root::Closed<X>> {
+    pub fn resource<X>(&self, x: X) -> Root<root::Closed<X>> {
         Root::closed(self, x)
     }
 
@@ -202,7 +202,7 @@ Could not parse flake_ref {flake_ref}
                     match parsed_flake_ref {
                         //
                         ToFlakeRef::Path { path, .. } => self
-                            .project(path)
+                            .resource(path)
                             .guard::<Git>()
                             .await
                             .ok()

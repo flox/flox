@@ -579,7 +579,7 @@ async fn ensure_project_repo<'flox>(
     command: &WithPassthru<interface::Init>,
 ) -> Result<root::Root<'flox, Closed<GitCommandProvider>>, anyhow::Error> {
     match flox
-        .project(cwd)
+        .resource(cwd)
         .guard::<GitCommandProvider>()
         .await?
         .open()
