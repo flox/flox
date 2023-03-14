@@ -14,7 +14,7 @@ pub enum Stability {
     Unstable,
     #[display(fmt = "staging")]
     Staging,
-    #[display(fmt = "{}", "_0")]
+    #[display(fmt = "{_0}")]
     Other(String), // will need custom deserializer for this
     #[display(fmt = "stable")]
     Unknown,
@@ -24,7 +24,7 @@ impl Stability {
     pub fn as_override(&self) -> OverrideInput {
         (
             "flox-floxpkgs/nixpkgs/nixpkgs".into(),
-            format!("flake:nixpkgs-{}", self),
+            format!("flake:nixpkgs-{self}"),
         )
             .into()
     }

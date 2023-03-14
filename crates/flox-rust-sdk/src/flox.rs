@@ -121,7 +121,7 @@ impl ResolvedInstallableMatch {
         let nix_str_key = self
             .key
             .into_iter()
-            .map(|s| format!("{:?}", s))
+            .map(|s| format!("{s:?}"))
             .collect::<Vec<_>>()
             .join(".");
 
@@ -309,7 +309,7 @@ Could not parse flake_ref {flake_ref}
                     system = self.system,
                     default_prefixes = default_attr_prefixes
                         .iter()
-                        .map(|p| format!("{:?}", p))
+                        .map(|p| format!("{p:?}"))
                         .collect::<Vec<_>>()
                         .join(" "),
                     inputs = inputs_assoc
@@ -325,11 +325,11 @@ Could not parse flake_ref {flake_ref}
                     key = flox_installable
                         .attr_path
                         .iter()
-                        .map(|p| format!("{:?}", p))
+                        .map(|p| format!("{p:?}"))
                         .collect::<Vec<_>>()
                         .join(" "),
                     processor = processor
-                        .map(|x| format!("(prefix: key: item: {})", x))
+                        .map(|x| format!("(prefix: key: item: {x})"))
                         .unwrap_or_else(|| "null".to_string()),
                 )
                 .replace("                    ", " ")

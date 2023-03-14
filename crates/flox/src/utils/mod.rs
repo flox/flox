@@ -62,7 +62,7 @@ fn nix_str_safe(s: &str) -> Cow<str> {
     if NIX_IDENTIFIER_SAFE.is_match(s) {
         s.into()
     } else {
-        format!("{:?}", s).into()
+        format!("{s:?}").into()
     }
 }
 
@@ -404,7 +404,7 @@ pub async fn resolve_installable_from_matches(
 
             // Prompt for the user to select match
             let dialog = Dialog {
-                message: &format!("Select a {} for flox {}", derivation_type, subcommand),
+                message: &format!("Select a {derivation_type} for flox {subcommand}"),
                 help_message: None,
                 typed: Select {
                     options: choices.iter().cloned().map(|(long, _)| long).collect(),
@@ -414,7 +414,7 @@ pub async fn resolve_installable_from_matches(
             let sel = dialog
                 .raw_prompt()
                 .await
-                .with_context(|| format!("Failed to prompt for {} choice", derivation_type))?
+                .with_context(|| format!("Failed to prompt for {derivation_type} choice"))?
                 .0;
 
             let installable = matches.remove(sel).installable();
@@ -517,7 +517,7 @@ pub async fn resolve_installable_from_environment_refs<'flox, Git: GitProvider +
 
             // Prompt for the user to select match
             let dialog = Dialog {
-                message: &format!("Select an environment for flox {}", subcommand),
+                message: &format!("Select an environment for flox {subcommand}"),
                 help_message: None,
                 typed: Select {
                     options: choices.iter().cloned().map(|(long, _)| long).collect(),

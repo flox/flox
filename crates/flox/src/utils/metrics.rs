@@ -136,7 +136,7 @@ async fn push_metrics(metrics: Vec<MetricEntry>, uuid: Uuid) -> Result<()> {
                     "distinct_id": uuid,
                     "$device_id": uuid,
 
-                    "$current_url": entry.subcommand.as_ref().map(|x| format!("flox://{}", x)),
+                    "$current_url": entry.subcommand.as_ref().map(|x| format!("flox://{x}")),
                     "$pathname": entry.subcommand,
                     "subcommand": entry.subcommand,
 

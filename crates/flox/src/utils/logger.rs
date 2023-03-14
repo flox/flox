@@ -42,7 +42,7 @@ impl<'a> tracing::field::Visit for LoggerVisitor<'a> {
 
     fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
         if field.name() == "message" {
-            (self.0).message = Some(format!("{:?}", value));
+            (self.0).message = Some(format!("{value:?}"));
         }
     }
 }
@@ -105,7 +105,7 @@ where
             .any(|x| x == "flox" || x.starts_with("flox::"));
 
         let message: Cow<str> = if is_posix {
-            format!("+ {}", message).into()
+            format!("+ {message}").into()
         } else {
             message.into()
         };

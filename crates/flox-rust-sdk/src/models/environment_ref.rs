@@ -84,7 +84,7 @@ impl<'flox> Project<'flox> {
         let matches = flox
             .resolve_matches::<Nix, Git>(
                 &[environment_name.parse()?],
-                &[&format!("git+file://{}", workdir_str)],
+                &[&format!("git+file://{workdir_str}")],
                 &[("floxEnvs", true)],
                 true,
                 None,

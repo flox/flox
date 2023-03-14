@@ -45,7 +45,7 @@ impl Serialize for Cache {
 }
 
 impl Cache {
-    pub fn add(&mut self, cache_meta: CacheMeta) -> () {
+    pub fn add(&mut self, cache_meta: CacheMeta) {
         self.0.insert(cache_meta.cache_url.clone(), cache_meta);
     }
 }

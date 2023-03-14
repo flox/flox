@@ -1,10 +1,7 @@
 use std::fs::{self, create_dir_all};
 use std::os::unix;
 use std::path::Path;
-use std::process::{
-    ExitCode,
-    {self},
-};
+use std::process::{self, ExitCode};
 
 use anyhow::Result;
 use derive_more::{Deref, DerefMut};
@@ -16,7 +13,6 @@ use tempfile::TempDir;
 ///
 /// External bats tests (imported from flox-bash)
 #[test]
-#[cfg(feature = "bats-tests")]
 fn bats_integration_environment() -> Result<ExitCode> {
     let mut test_command = bats_test("integration");
 
@@ -31,7 +27,6 @@ fn bats_integration_environment() -> Result<ExitCode> {
 ///
 /// External bats development tests (imported from flox-bash)
 #[test]
-#[cfg(feature = "bats-tests")]
 fn bats_integration_development() -> Result<ExitCode> {
     let mut test_command = bats_test("package");
     Ok(ExitCode::from(

@@ -169,7 +169,7 @@ impl<'flox> Environment<'flox> {
              package|
              -> Result<(String, i32), EnvironmentError> {
                 // reference to packages.<package>
-                let query = format!("packages.{}", package);
+                let query = format!("packages.{package}");
 
                 let new_content = nix_editor::write::write(&flox_nix_contents, &query, "{}")
                     .map_err(EnvironmentError::ModifyFloxNix)?;

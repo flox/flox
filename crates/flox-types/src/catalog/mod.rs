@@ -65,7 +65,7 @@ mod tests {
         let json_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("tests")
             .join("curl-handcrafted.json");
-        let raw_contents = fs::read_to_string(&json_path).unwrap();
+        let raw_contents = fs::read_to_string(json_path).unwrap();
         let stability_catalog: StabilityCatalog = serde_json::from_str(&raw_contents).unwrap();
         let serialized = serde_json::to_string(&stability_catalog).unwrap();
         let raw_value: Value = serde_json::from_str(&raw_contents).unwrap();
@@ -77,7 +77,7 @@ mod tests {
         let json_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("tests")
             .join("flox-handcrafted.json");
-        let raw_contents = fs::read_to_string(&json_path).unwrap();
+        let raw_contents = fs::read_to_string(json_path).unwrap();
         let catalog_entry: CatalogEntry = serde_json::from_str(&raw_contents).unwrap();
         let serialized = serde_json::to_string_pretty(&catalog_entry).unwrap();
         let raw_value: Value = serde_json::from_str(&raw_contents).unwrap();
