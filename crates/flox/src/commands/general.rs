@@ -1,13 +1,18 @@
-use std::env;
+use std::path::Path;
 use std::str::FromStr;
+use std::{env, io};
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use bpaf::{Bpaf, Parser};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::nix::command_line::{Group, NixCliCommand, NixCommandLine, ToArgs};
 use flox_rust_sdk::nix::Run;
 use flox_rust_sdk::prelude::{Channel, Stability};
 use fslock::LockFile;
+use log::warn;
+use serde::Serialize;
+use tokio::fs;
+use toml_edit::Key;
 
 use crate::config::features::Feature;
 use crate::config::Config;
@@ -78,6 +83,9 @@ impl GeneralCommands {
 
                 init_telemetry_consent(&flox.data_dir, &flox.cache_dir).await?;
             },
+
+            GeneralCommands::Config(config_args) => config_args.handle(config, flox).await?,
+
             _ if Feature::All.is_forwarded()? => flox_forward(&flox).await?,
             _ => todo!(),
         }
@@ -109,16 +117,94 @@ pub enum ConfigArgs {
     /// list the current values of all configurable paramers
     #[bpaf(short, long, default)]
     List,
-    /// prompt the user to confirm or update configurable parameters.
-    #[bpaf(short, long)]
-    Remove,
     /// reset all configurable parameters to their default values without further confirmation.
     #[bpaf(short, long)]
-    Confirm,
-
+    Reset,
     Set(#[bpaf(external(config_set))] ConfigSet),
     SetNumber(#[bpaf(external(config_set_number))] ConfigSetNumber),
+    SetBool(#[bpaf(external(config_set_bool))] ConfigSetBool),
     Delete(#[bpaf(external(config_delete))] ConfigDelete),
+}
+
+impl ConfigArgs {
+    /// handle config flags like commands
+    async fn handle(&self, config: Config, flox: Flox) -> Result<()> {
+        /// wrapper around [Config::write_to]
+        async fn update_config<V: Serialize>(
+            config_dir: &Path,
+            temp_dir: &Path,
+            key: impl AsRef<str>,
+            value: Option<V>,
+        ) -> Result<()> {
+            let key_path = Key::parse(key.as_ref()).context("Could not parse key")?;
+
+            let config_file_path = config_dir.join("flox.toml");
+            let config_file_contents = match fs::read_to_string(&config_file_path).await {
+                Ok(s) => Ok(Some(s)),
+                Err(e) if e.kind() == io::ErrorKind::NotFound => {
+                    warn!("No existing user config file found");
+                    Ok(None)
+                },
+                Err(e) => Err(e).context("Could read current config file.\nPlease verify the format or reset using `flox config --reset`"),
+            }?;
+            let config_file_contents = Config::write_to(config_file_contents, &key_path, value)
+                .context("Could not write config value")?;
+
+            write_config(temp_dir, config_dir, config_file_contents).await?;
+            Ok(())
+        }
+
+        async fn write_config(
+            temp_dir: &Path,
+            config_dir: &Path,
+            content: impl AsRef<[u8]>,
+        ) -> Result<()> {
+            let tempfile = tempfile::Builder::new().tempfile_in(temp_dir)?;
+            fs::write(&tempfile, content)
+                .await
+                .context("Could not write config file")?;
+            tempfile.persist(config_dir.join("flox.toml"))?;
+            Ok(())
+        }
+
+        match self {
+            ConfigArgs::List => println!("{}", config.get(&[])?),
+            ConfigArgs::Reset => write_config(&flox.temp_dir, &flox.config_dir, "").await?,
+            ConfigArgs::Set(ConfigSet { key, value, .. }) => {
+                update_config(&flox.config_dir, &flox.temp_dir, key, Some(value)).await?
+            },
+            ConfigArgs::SetNumber(ConfigSetNumber { key, value, .. }) => {
+                update_config(
+                    &flox.config_dir,
+                    &flox.temp_dir,
+                    key,
+                    Some(
+                        value
+                            .parse::<i32>()
+                            .context(format!("could not parse '{value}' as number"))?,
+                    ),
+                )
+                .await?
+            },
+            ConfigArgs::SetBool(ConfigSetBool { key, value, .. }) => {
+                update_config(
+                    &flox.config_dir,
+                    &flox.temp_dir,
+                    key,
+                    Some(
+                        value
+                            .parse::<i32>()
+                            .context(format!("could not parse '{value}' as number"))?,
+                    ),
+                )
+                .await?
+            },
+            ConfigArgs::Delete(ConfigDelete { key, .. }) => {
+                update_config::<()>(&flox.config_dir, &flox.temp_dir, key, None).await?
+            },
+        }
+        Ok(())
+    }
 }
 
 /// Arguments for `flox config --set`
@@ -142,23 +228,50 @@ pub struct ConfigSet {
 #[allow(unused)]
 pub struct ConfigSetNumber {
     /// Set <key> to <number>
-    #[bpaf(long("setNumber"))]
+    #[bpaf(long("set-number"))]
     set_number: (),
     /// Configuration key
     #[bpaf(positional("key"))]
     key: String,
     /// Configuration Value (i32)
+    // we have to parse to int ourselves after reading the argument,
+    // as the bpaf error for parse failures here is not descriptive enough
+    // (<https://github.com/pacak/bpaf/issues/172>)
     #[bpaf(positional("number"))]
-    value: i32,
+    value: String,
 }
+
+/// Arguments for `flox config --setNumber`
+#[derive(Debug, Clone, Bpaf)]
+#[bpaf(adjacent)]
+#[allow(unused)]
+pub struct ConfigSetBool {
+    /// Set <key> to <bool>
+    #[bpaf(long("set-bool"))]
+    set_bool: (),
+    /// Configuration key
+    #[bpaf(positional("key"))]
+    key: String,
+    /// Configuration Value (bool)
+    #[bpaf(positional("bool"))]
+    // #[bpaf(external(parse_bool))]
+    // we have to parse to int ourselves after reading the argument,
+    // as the bpaf error for parse failures here is not descriptive enough
+    // (<https://github.com/pacak/bpaf/issues/172>)
+    value: String,
+}
+
+/// bug in bpaf (<https://github.com/pacak/bpaf/issues/171>)
+// fn parse_bool() -> impl Parser<String> {
+//     bpaf::positional::<String>("bool")
+// }
 
 /// Arguments for `flox config --delete`
 #[derive(Debug, Clone, Bpaf)]
 #[bpaf(adjacent)]
 #[allow(unused)]
+/// delete <key> from config
 pub struct ConfigDelete {
-    /// delete <key> from config
-    delete: (),
     /// Configuration key
     #[bpaf(long("delete"), argument("key"))]
     key: String,
