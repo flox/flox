@@ -167,7 +167,7 @@ impl<Git: GitProvider> Floxmeta<'_, Git> {
             .fold(
                 HashMap::new(),
                 |mut merged: HashMap<_, Environment<_>>, mut env| {
-                    // inplace either remote or local in a reference we already stored
+                    // emplace either remote or local in a reference we already stored
                     // assumes only at most one of each is present
                     if let Some(stored) = merged.get_mut(&(env.name.clone(), env.system.clone())) {
                         stored.local = env.local.take().or_else(|| stored.local.take());
