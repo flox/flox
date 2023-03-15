@@ -93,7 +93,7 @@ impl Config {
             let builder = HierarchicalConfig::builder()
                 .set_default("cache_dir", cache_dir.to_str().unwrap())?
                 .set_default("data_dir", data_dir.to_str().unwrap())?
-                // config dir is added to the config for completes, the config file cannot chenge the config dir
+                // config dir is added to the config for completeness, the config file cannot chenge the config dir
                 .set_default("config_dir", config_dir.to_str().unwrap())?
                 .add_source(
                     config::File::with_name("flox")
