@@ -4,6 +4,7 @@ use tempfile::TempDir;
 
 use crate::providers::git::GitProvider;
 
+#[derive(Debug)]
 pub struct ReadOnly<Git: GitProvider> {
     git: Rc<Git>,
 }
@@ -22,6 +23,7 @@ impl<Git: GitProvider> ReadOnly<Git> {
     }
 }
 
+#[derive(Debug)]
 pub struct GitSandBox<Git: GitProvider> {
     sandboxed: Git,
     original: Rc<Git>,

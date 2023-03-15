@@ -10,10 +10,12 @@ use thiserror::Error;
 use tokio::fs::OpenOptions;
 use tokio::io::AsyncWriteExt;
 
-use super::environment::{Metadata, METADATA_JSON};
-use super::reference::ProjectDiscoverGitError;
-use super::transaction::{GitAccess, GitSandBox, ReadOnly};
-use super::{Closed, Root};
+mod environment;
+use environment::{Metadata, METADATA_JSON};
+
+use super::root::reference::ProjectDiscoverGitError;
+use super::root::transaction::{GitAccess, GitSandBox, ReadOnly};
+use super::root::{Closed, Root};
 use crate::flox::Flox;
 use crate::providers::git::GitProvider;
 

@@ -6,8 +6,8 @@ use log::debug;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use super::floxmeta::{Floxmeta, TransactionCommitError, TransactionEnterError};
-use super::transaction::{GitAccess, GitSandBox, ReadOnly};
+use super::{Floxmeta, TransactionCommitError, TransactionEnterError};
+use crate::models::root::transaction::{GitAccess, GitSandBox, ReadOnly};
 use crate::providers::git::{BranchInfo, GitProvider};
 
 pub const METADATA_JSON: &'_ str = "metadata.json";

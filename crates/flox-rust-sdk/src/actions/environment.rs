@@ -1,5 +1,5 @@
+use std::fs;
 use std::path::PathBuf;
-use std::{fs, io};
 
 use log::{info, warn};
 use runix::arguments::eval::EvaluationArgs;
@@ -12,6 +12,7 @@ use {fs_extra, nix_editor, tempfile};
 
 use crate::flox::{Flox, FloxNixApi};
 use crate::prelude::flox_package::FloxPackage;
+use crate::utils::copy_file_without_permissions;
 use crate::utils::errors::IoError;
 
 static FLOX_NIX: &str = "flox.nix";
@@ -179,7 +180,7 @@ impl<'flox> Environment<'flox> {
 
         if n_new > 0 {
             let built_environment = self.build(&edited).await?;
-            self.write_environment(&edited, &built_environment)?;
+            self.write_environment(&edited, &built_environment).await?;
         }
 
         match n_new {
@@ -289,7 +290,7 @@ impl<'flox> Environment<'flox> {
         })
     }
 
-    fn write_environment(
+    async fn write_environment(
         &self,
         new_flox_nix: &str,
         built_environment: &BuiltEnvironment,
@@ -298,7 +299,7 @@ impl<'flox> Environment<'flox> {
         // packages (e.g. nixpkgs-flox.hello) must be pinned to a specific version which is added to
         // the catalog
         let result_catalog_json = built_environment.result.join(CATALOG_JSON);
-        copy_file_without_permissions(&result_catalog_json, &self.catalog_json)?;
+        copy_file_without_permissions(&result_catalog_json, &self.catalog_json).await?;
         fs::write(&self.flox_nix, new_flox_nix).map_err(|err| IoError::Write {
             file: self.flox_nix.clone(),
             err,
@@ -306,31 +307,4 @@ impl<'flox> Environment<'flox> {
 
         Ok(())
     }
-}
-
-///////////////////
-// Helper functions
-///////////////////
-
-/// Using fs::copy copies permissions from the Nix store, which we don't want, so open (or
-/// create) the files and copy with io::copy
-fn copy_file_without_permissions(from: &PathBuf, to: &PathBuf) -> Result<(), EnvironmentError> {
-    let mut to_file = fs::File::options()
-        .write(true)
-        .truncate(true)
-        .create(true)
-        .open(to)
-        .map_err(|io_err| IoError::Open {
-            file: to.to_path_buf(),
-            err: io_err,
-        })?;
-    let mut from_file = fs::File::open(from).map_err(|io_err| IoError::Open {
-        file: from.to_path_buf(),
-        err: io_err,
-    })?;
-    io::copy(&mut from_file, &mut to_file).map_err(|io_err| IoError::Copy {
-        file: from.to_path_buf(),
-        err: io_err,
-    })?;
-    Ok(())
 }

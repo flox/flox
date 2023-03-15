@@ -7,7 +7,10 @@ use ::log::debug;
 use thiserror::Error;
 use tokio::fs::OpenOptions;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::{fs, io};
 use walkdir;
+
+use self::errors::IoError;
 
 #[derive(Error, Debug)]
 pub enum FindAndReplaceError {
@@ -64,5 +67,37 @@ pub async fn find_and_replace(
         }
     }
 
+    Ok(())
+}
+
+/// Using fs::copy copies permissions from the Nix store, which we don't want, so open (or
+/// create) the files and copy with io::copy
+pub async fn copy_file_without_permissions(
+    from: impl AsRef<Path>,
+    to: impl AsRef<Path>,
+) -> Result<(), IoError> {
+    let mut to_file = fs::OpenOptions::new()
+        .write(true)
+        .truncate(true)
+        .create(true)
+        .open(&to)
+        .await
+        .map_err(|io_err| IoError::Open {
+            file: to.as_ref().to_path_buf(),
+            err: io_err,
+        })?;
+    let mut from_file = fs::File::open(&from)
+        .await
+        .map_err(|io_err| IoError::Open {
+            file: from.as_ref().to_path_buf(),
+            err: io_err,
+        })?;
+
+    io::copy(&mut from_file, &mut to_file)
+        .await
+        .map_err(|io_err| IoError::Copy {
+            file: from.as_ref().to_path_buf(),
+            err: io_err,
+        })?;
     Ok(())
 }

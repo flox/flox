@@ -3,11 +3,8 @@ use derive_more::Constructor;
 use crate::flox::Flox;
 use crate::utils::guard::Guard;
 
-pub mod environment;
-pub mod floxmeta;
-mod git;
-pub mod project;
-mod reference;
+pub mod git;
+pub mod reference;
 pub mod transaction;
 
 pub type RootGuard<'flox, I, U> = Guard<Root<'flox, I>, Root<'flox, U>>;
