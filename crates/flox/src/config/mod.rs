@@ -306,7 +306,6 @@ fn mk_environment(envs: &mut Vec<(String, String)>, prefix: &str) -> Environment
 mod tests {
 
     use indoc::indoc;
-    use tempfile::{tempfile, TempDir};
 
     use super::*;
 

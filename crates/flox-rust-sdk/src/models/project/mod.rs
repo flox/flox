@@ -41,7 +41,7 @@ pub struct Project<'flox, Git: GitProvider, Access: GitAccess<Git>> {
     /// or is a subflake.
     /// One such places are named env's generations:
     ///
-    /// ```
+    /// ```ignore
     /// /
     /// L .git/
     /// L 1/
@@ -120,7 +120,7 @@ impl<'flox, Git: GitProvider> Guard<Project<'flox, Git, ReadOnly<Git>>, Root<'fl
         .await
         .map_err(InitProjectError::NixInitBase)?;
 
-        repo.add(&[&root.join("flake.nix")])
+        repo.add(&[Path::new("flake.nix")])
             .await
             .map_err(InitProjectError::GitAdd)?;
 
@@ -556,6 +556,8 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::env;
+
     use super::*;
     use crate::prelude::ChannelRegistry;
     use crate::providers::git::GitCommandProvider;
@@ -622,8 +624,12 @@ mod tests {
             .expect_err("Should error without flake.nix");
     }
 
+    #[cfg(feature = "impure-unit-tests")]
     #[tokio::test]
     async fn create_project() {
+        let temp_home = tempfile::tempdir().unwrap();
+        env::set_var("HOME", temp_home.path());
+
         let (flox, tempdir_handle) = flox_instance();
 
         let project_dir = tempfile::tempdir_in(tempdir_handle.path()).unwrap();
