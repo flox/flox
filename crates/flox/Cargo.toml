@@ -49,6 +49,9 @@ fslock = "0.2.1"
 pathdiff = "0.2"
 indexmap = {version =  "1.9", features = ["serde"] }
 
+[dev-dependencies]
+temp-env = "0.3.2"
+
 
 [features]
 extra-tests = ["bats-tests", "impure-unit-tests"]

@@ -306,6 +306,7 @@ fn mk_environment(envs: &mut Vec<(String, String)>, prefix: &str) -> Environment
 mod tests {
 
     use indoc::indoc;
+    use tempfile::{tempfile, TempDir};
 
     use super::*;
 
@@ -335,11 +336,24 @@ mod tests {
 
     #[test]
     fn test_set_by_env() {
-        env::set_var("FLOX_GIT_BASE_URL", "hello");
-        let config = Config::parse().unwrap();
-        assert_eq!(
-            config.get(&Key::parse("git_base_url").unwrap()).unwrap(),
-            "\"hello\"".to_string()
+        let tempdir = tempfile::tempdir().unwrap();
+        temp_env::with_vars(
+            [
+                (
+                    "HOME",
+                    Some(tempdir.path().as_os_str().to_string_lossy().as_ref()),
+                ),
+                ("FLOX_GIT_BASE_URL", Some("hello")),
+            ],
+            || {
+                env::set_var("FLOX_GIT_BASE_URL", "hello");
+                let config = Config::parse().unwrap();
+                assert_eq!(
+                    config.get(&Key::parse("git_base_url").unwrap()).unwrap(),
+                    "\"hello\"".to_string()
+                );
+                env::remove_var("FLOX_CONFIG_HOME");
+            },
         );
     }
 
