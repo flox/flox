@@ -431,25 +431,23 @@ pub async fn resolve_installable_from_matches(
     }
 }
 
-/// Resolve a single installation candidate from a list of matches
+/// Resolve a single environment from a list of matches
 ///
 /// - return an error if no matches were found
-/// - return a nix installable if a single match was found
+/// - return the match if there is only one
 /// - start an interactive dialog if multiple matches were found
 ///   and a controlling tty was detected
-pub async fn resolve_installable_from_environment_refs<'flox, Git: GitProvider + 'static>(
+pub async fn resolve_environment_ref<'flox, Git: GitProvider + 'static>(
     flox: &'flox Flox,
     subcommand: &str,
-    mut environment_refs: Vec<EnvironmentRef<'flox, Git>>,
-) -> Result<Installable> {
+    environment_name: Option<&str>,
+) -> Result<EnvironmentRef<'flox>> {
+    let mut environment_refs = EnvironmentRef::find::<_, Git>(flox, environment_name).await?;
     match environment_refs.len() {
         0 => {
             bail!("No matching environments found");
         },
-        1 => Ok(environment_refs
-            .remove(0)
-            .get_latest_installable(flox)
-            .await?),
+        1 => Ok(environment_refs.remove(0)),
         _ => {
             let mut sources: HashSet<Option<&Path>> = HashSet::new();
 
@@ -531,16 +529,13 @@ pub async fn resolve_installable_from_environment_refs<'flox, Git: GitProvider +
 
             let escaped = shell_escape::escape(choices.remove(sel).1.into()).into_owned();
 
-            let installable = environment_refs
-                .remove(sel)
-                .get_latest_installable(flox)
-                .await?;
+            let environment_ref = environment_refs.remove(sel);
 
             warn!(
                 "HINT: avoid selecting an environment next time with:\n  $ flox {subcommand} -e {escaped}",
             );
 
-            Ok(installable)
+            Ok(environment_ref)
         },
     }
 }

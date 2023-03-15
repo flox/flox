@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{bail, Context, Result};
 use bpaf::{construct, Bpaf, Parser};
 use crossterm::tty::IsTty;
-use flox_rust_sdk::flox::{EnvironmentRef, Flox};
+use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::project::Project;
 use flox_rust_sdk::models::root::transaction::ReadOnly;
 use flox_rust_sdk::models::root::{self, Closed, Root};
@@ -26,7 +26,7 @@ use crate::commands::package::interface::ResolveInstallable;
 use crate::config::features::Feature;
 use crate::config::Config;
 use crate::utils::dialog::{Confirm, Dialog, Text};
-use crate::utils::resolve_installable_from_environment_refs;
+use crate::utils::resolve_environment_ref;
 use crate::{flox_forward, subcommand_metric};
 
 async fn env_ref_to_installable<Git: GitProvider + 'static>(
@@ -34,9 +34,8 @@ async fn env_ref_to_installable<Git: GitProvider + 'static>(
     subcommand: &str,
     environment_name: &str,
 ) -> anyhow::Result<Installable> {
-    let env_refs = EnvironmentRef::<Git>::find(flox, environment_name).await?;
-
-    resolve_installable_from_environment_refs(flox, subcommand, env_refs).await
+    let env_ref = resolve_environment_ref::<Git>(flox, subcommand, Some(environment_name)).await?;
+    Ok(env_ref.get_latest_installable::<Git>(flox).await?)
 }
 
 pub(crate) mod interface {

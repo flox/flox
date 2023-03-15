@@ -1,8 +1,9 @@
 use std::path::PathBuf;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use bpaf::{construct, Bpaf, Parser, ShellComp};
 use flox_rust_sdk::flox::Flox;
+use flox_rust_sdk::models::environment_ref;
 use flox_rust_sdk::models::floxmeta::Floxmeta;
 use flox_rust_sdk::nix::command_line::NixCommandLine;
 use flox_rust_sdk::prelude::flox_package::FloxPackage;
@@ -10,6 +11,7 @@ use flox_rust_sdk::providers::git::{GitCommandProvider, GitProvider};
 use serde_json::json;
 
 use crate::config::features::Feature;
+use crate::utils::resolve_environment_ref;
 use crate::{flox_forward, subcommand_metric};
 
 #[derive(Bpaf, Clone)]
@@ -29,34 +31,16 @@ impl EnvironmentCommands {
                 json: _,
                 generation: _,
             } if !Feature::Env.is_forwarded()? => {
-                let name = environment
-                    .as_ref()
-                    .map(|path| path.as_os_str().to_string_lossy())
-                    .unwrap_or_else(|| "default".into());
+                let environment_name = environment.as_ref().map(|e| e.to_str().unwrap());
+                let environment_ref: environment_ref::EnvironmentRef =
+                    resolve_environment_ref::<GitCommandProvider>(&flox, "list", environment_name)
+                        .await?;
+                let environment = environment_ref
+                    .to_named::<GitCommandProvider>(&flox)
+                    .await
+                    .context("Environment not found")?;
 
-                // todo rename project!
-                // this is now just a root
-
-                // assume local for now. next, parse environment
-                // assume local exists
-                let floxmeta = flox
-                    .resource(flox.cache_dir.join("meta").join("local"))
-                    .guard::<GitCommandProvider>()
-                    .await?
-                    .open()
-                    .expect("Expected repository exist")
-                    .guard_floxmeta()
-                    .await?;
-
-                let environment = floxmeta.environment(&name).await?;
-                let metadata = environment.metadata().await?;
-                let generation = environment
-                    .generation(
-                        &metadata
-                            .current_gen
-                            .unwrap_or("No generation found".to_string()),
-                    )
-                    .await?;
+                let generation = environment.generation(Default::default()).await?;
 
                 println!("{}", serde_json::to_string_pretty(&generation).unwrap())
             },

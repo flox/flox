@@ -3,10 +3,11 @@ use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
 
 use log::debug;
+use runix::installable::Installable;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use super::{Floxmeta, TransactionCommitError, TransactionEnterError};
+use super::{Floxmeta, GetFloxmetaError, TransactionCommitError, TransactionEnterError};
 use crate::models::root::transaction::{GitAccess, GitSandBox, ReadOnly};
 use crate::providers::git::{BranchInfo, GitProvider};
 
@@ -83,11 +84,11 @@ pub struct Generation {
 }
 
 /// Implementations for an opened floxmeta
-impl<Git: GitProvider, A: GitAccess<Git>> Floxmeta<'_, Git, A> {
+impl<'flox, Git: GitProvider, A: GitAccess<Git>> Floxmeta<'flox, Git, A> {
     pub async fn environment(
         &self,
         name: &str,
-    ) -> Result<Environment<Git, ReadOnly<Git>>, GetEnvironmentError<Git>> {
+    ) -> Result<Environment<'flox, Git, ReadOnly<Git>>, GetEnvironmentError<Git>> {
         self.environments()
             .await?
             .into_iter()
@@ -98,7 +99,7 @@ impl<Git: GitProvider, A: GitAccess<Git>> Floxmeta<'_, Git, A> {
     /// Detect all environments from a floxmeta repo
     pub async fn environments(
         &self,
-    ) -> Result<Vec<Environment<Git, ReadOnly<Git>>>, GetEnvironmentsError<Git>> {
+    ) -> Result<Vec<Environment<'flox, Git, ReadOnly<Git>>>, GetEnvironmentsError<Git>> {
         self.access
             .git()
             .fetch()
@@ -201,7 +202,7 @@ impl<Git: GitProvider, A: GitAccess<Git>> Floxmeta<'_, Git, A> {
 }
 
 /// Implementations for an environment
-impl<Git: GitProvider, A: GitAccess<Git>> Environment<'_, Git, A> {
+impl<'flox, Git: GitProvider> Environment<'flox, Git, ReadOnly<Git>> {
     pub fn name(&self) -> Cow<str> {
         Cow::from(&self.name)
     }
@@ -235,9 +236,17 @@ impl<Git: GitProvider, A: GitAccess<Git>> Environment<'_, Git, A> {
         Ok(metadata)
     }
 
-    pub async fn generation(&self, generation: &str) -> Result<Generation, GenerationError<Git>> {
+    pub async fn generation(
+        &self,
+        generation: Option<&str>,
+    ) -> Result<Generation, GenerationError<Git>> {
         let git = &self.floxmeta.access.git();
         let mut metadata = self.metadata().await?;
+
+        let generation = generation
+            .or(metadata.current_gen.as_deref())
+            .ok_or(GenerationError::Empty)?;
+
         let generation_metadata = metadata
             .generations
             .remove(generation)
@@ -258,6 +267,23 @@ impl<Git: GitProvider, A: GitAccess<Git>> Environment<'_, Git, A> {
             metadata: generation_metadata,
             elements: manifest.elements,
         })
+    }
+
+    pub async fn installable(
+        &self,
+        generation: Option<&str>,
+    ) -> Result<Installable, GenerationError<Git>> {
+        let git = &self.floxmeta.access.git();
+        let metadata = self.metadata().await?;
+
+        let generation = generation
+            .or(metadata.current_gen.as_deref())
+            .ok_or(GenerationError::Empty)?;
+
+        Ok(Installable::new(
+            format!("git+path:{}?dir={generation}", git.path().to_string_lossy()),
+            ".floxEnvs.default".to_string(),
+        ))
     }
 }
 
@@ -304,6 +330,8 @@ pub enum GetEnvironmentError<Git: GitProvider> {
     NotFound,
     #[error(transparent)]
     GetEnvironment(#[from] GetEnvironmentsError<Git>),
+    #[error(transparent)]
+    GetFloxmeta(#[from] GetFloxmetaError<Git>),
 }
 
 #[derive(Error, Debug)]
@@ -326,12 +354,22 @@ pub enum MetadataError<Git: GitProvider> {
 }
 
 #[derive(Error, Debug)]
+pub enum CurrentGenerationError<Git: GitProvider> {
+    #[error("Failed parsing 'metadata.json': {0}")]
+    Generation(#[from] GenerationError<Git>),
+}
+
+#[derive(Error, Debug)]
 pub enum GenerationError<Git: GitProvider> {
+    #[error("Empty Environment")]
+    Empty,
+
     #[error("Generation not found")]
     NotFound,
 
     #[error(transparent)]
     Metadata(#[from] MetadataError<Git>),
+
     #[error(transparent)]
     Manifest(#[from] ManifestError<Git>),
 }

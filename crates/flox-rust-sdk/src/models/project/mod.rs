@@ -281,7 +281,7 @@ impl<'flox, Git: GitProvider, Access: GitAccess<Git>> Project<'flox, Git, Access
     /// Get a particular environment by name
     /// (attr path once nested packages are implemented)
     pub async fn environment<Nix: FloxNixApi>(
-        &'flox self,
+        &self,
         name: &str,
     ) -> Result<Environment<'flox, Git, ReadOnly<Git>>, ()>
     where

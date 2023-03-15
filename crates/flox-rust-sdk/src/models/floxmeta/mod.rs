@@ -10,7 +10,7 @@ use thiserror::Error;
 use tokio::fs::OpenOptions;
 use tokio::io::AsyncWriteExt;
 
-mod environment;
+pub mod environment;
 use environment::{Metadata, METADATA_JSON};
 
 use super::root::reference::ProjectDiscoverGitError;
