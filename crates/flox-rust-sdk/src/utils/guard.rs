@@ -4,7 +4,7 @@ use std::future::Future;
 ///
 /// A value that can be either initialized or not.
 /// Uninitialized values need to be mapped into an initialized value
-/// before being accesible
+/// before being accessible
 #[derive(Debug)]
 pub enum Guard<I, U> {
     Initialized(I),
@@ -23,7 +23,7 @@ impl<I, U> Guard<I, U> {
         }
     }
 
-    /// ensure an initalized value using a fallible async initializer
+    /// ensure an initialized value using a fallible async initializer
     ///
     /// akin to [Option<T>::ok_or_else]
     pub fn ensure<E, F: FnOnce(U) -> Result<I, E>>(self, f: F) -> Result<I, E> {

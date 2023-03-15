@@ -226,7 +226,7 @@ impl<Git: GitProvider> Root<'_, Project<Git>> {
     }
 }
 
-/// Errors occuring while trying to upgrade to an [`Open<Git>`] [Root]
+/// Errors occurring while trying to upgrade to an [`Open<Git>`] [Root]
 #[derive(Error, Debug)]
 pub enum OpenProjectError {
     #[error("Could not determine repository root")]

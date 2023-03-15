@@ -53,7 +53,7 @@ pub struct Flox {
 
     /// access tokens injected in nix.conf
     ///
-    /// Use [Vec] to preserve orginal ordering
+    /// Use [Vec] to preserve original ordering
     pub access_tokens: Vec<(String, String)>,
     pub netrc_file: PathBuf,
 
@@ -360,7 +360,7 @@ impl Flox {
     /// This method performs backend independen configuration of nix
     /// and passes itself and the default config to the constructor of the Nix Backend
     ///
-    /// The constructor will perform backend specifc configuration measures
+    /// The constructor will perform backend specific configuration measures
     /// and return a fresh initialized backend.
     pub fn nix<Nix: FloxNixApi>(&self, extra_args: Vec<String>) -> Nix {
         use std::io::Write;

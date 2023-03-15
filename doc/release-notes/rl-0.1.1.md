@@ -6,7 +6,7 @@ Specifically, this release includes:
 - added support for `flox generations --json`
 - improved package name resolution in the output of `flox list`
 - fixed `flox search --json`
-- ported multiple functions from bash MVP to rust rewite
+- ported multiple functions from bash MVP to rust rewrite
 - updated channel subscriptions to span multiple machines
 - the parsing of gh subcommand args has been fixed
 - updated flox/flox/README

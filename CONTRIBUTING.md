@@ -28,7 +28,7 @@ $ flox develop .#rust-env
 This sets up an environment with dependencies, rust toolchain, variable
 and pre-commit-hooks.
 
-In the enviroment, use [`cargo`](https://doc.rust-lang.org/cargo/)
+In the environment, use [`cargo`](https://doc.rust-lang.org/cargo/)
 to build the rust based cli.
 
 - build and run flox
@@ -79,7 +79,7 @@ Flox must be buildable using `flox` or `nix`.
 ### CLA
 
 - [ ] All commits in a Pull Request are [signed](https://docs.github.com/en/authentication/managing-commit-signature-verification/signing-commits) and Verified by Github or via GPG.
-- [ ] As an outside contibutor you need to accept the flox [Contributor License Agreement](.github/CLA.md) by adding your Git/Github details in a row at the end of the [`CONTRIBUTORS.csv`](.github/CONTRIBUTORS.csv) file by way of the same pull request or one done previously.
+- [ ] As an outside contributor you need to accept the flox [Contributor License Agreement](.github/CLA.md) by adding your Git/Github details in a row at the end of the [`CONTRIBUTORS.csv`](.github/CONTRIBUTORS.csv) file by way of the same pull request or one done previously.
 
 ### Commits
 
@@ -89,7 +89,7 @@ This project follows (tries to),
 We employ [commitizen](https://commitizen-tools.github.io/commitizen/)
 to help enforcing those rules.
 
-**Commit messges that explain the content of the commit are appreciated**
+**Commit messages that explain the content of the commit are appreciated**
 
 -----
 
