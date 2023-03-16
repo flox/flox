@@ -77,7 +77,7 @@ fn nix_str_safe(s: &str) -> Cow<str> {
 /// Eg. "App" is an installable type that has the default prefix
 /// `apps`.
 /// It is targeted by the `run` command which also accepts other
-/// runnables, i.e. packages (found in `packages` or `legacyPacakges`)
+/// runnables, i.e. packages (found in `packages` or `legacyPackages`)
 ///
 /// [InstallableKind] allows to compose multiple of these *ables
 /// into [InstallableArgument]s
@@ -321,7 +321,7 @@ pub async fn resolve_installable_from_matches(
                     .insert(m.prefix.clone());
             }
 
-            // Complile a list of choices for the user to choose from, and shorter choices for suggestions
+            // Compile a list of choices for the user to choose from, and shorter choices for suggestions
             let mut choices: Vec<(String, String)> = matches
                 .iter()
                 .map(
@@ -461,7 +461,7 @@ pub async fn resolve_environment_ref<'flox, Git: GitProvider + 'static>(
 
             let current_dir = std::env::current_dir()?;
 
-            // Complile a list of choices for the user to choose from, and shorter choices for suggestions
+            // Compile a list of choices for the user to choose from, and shorter choices for suggestions
             let mut choices: Vec<(String, &String)> = environment_refs
                 .iter()
                 .map(

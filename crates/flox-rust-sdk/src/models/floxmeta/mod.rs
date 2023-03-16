@@ -123,7 +123,7 @@ impl<'flox, Git: GitProvider> Floxmeta<'flox, Git, ReadOnly<Git>> {
 
     /// gets a floxmeta reference for a specific owner
     ///
-    /// Looks up a directory in $CAHCE_DIR/meta
+    /// Looks up a directory in $CACHE_DIR/meta
     ///
     /// # Errors
     ///
@@ -270,7 +270,7 @@ impl<'flox, Git: GitProvider> Floxmeta<'flox, Git, GitSandBox<Git>> {
     }
 }
 
-/// Errors occuring while trying to upgrade to an [`Open<Git>`] [Root]
+/// Errors occurring while trying to upgrade to an [`Open<Git>`] [Root]
 #[derive(Error, Debug)]
 pub enum OpenFloxmetaError {
     #[error("Could not determine repository root")]

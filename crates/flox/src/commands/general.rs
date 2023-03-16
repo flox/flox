@@ -312,7 +312,7 @@ fn parse_nix_passthru() -> impl Parser<WrappedNix> {
 fn complete_nix_shell(offset: u8) -> bpaf::ShellComp {
     // Box::leak will effectively turn the String
     // (that is produced by `replace`) insto a `&'static str`,
-    // at the cost of giving up memeory management over that string.
+    // at the cost of giving up memory management over that string.
     //
     // Note:
     // We could use a `OnceCell` to ensure this leak happens only once.
@@ -345,7 +345,7 @@ fn complete_nix_shell(offset: u8) -> bpaf::ShellComp {
 ///
 /// Will run `nix <default args> <self.args>...`
 ///
-/// Doesn't permit the appplication of any default arguments set by flox,
+/// Doesn't permit the application of any default arguments set by flox,
 /// except nix configuration args and common nix command args.
 ///
 /// See: [`nix --help`](https://nixos.org/manual/nix/unstable/command-ref/new-cli/nix.html)

@@ -35,7 +35,7 @@ pub enum ChannelCommands {
     #[bpaf(command)]
     Unsubscribe {
         /// channel name to unsubscribe.
-        /// If ommited, flow will prompt for the name interactively
+        /// If omitted, flow will prompt for the name interactively
         #[bpaf(positional("channel"), optional)]
         channel: Option<ChannelRef>,
     },

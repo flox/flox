@@ -71,7 +71,7 @@ fn default_true() -> bool {
 pub struct Narinfo {
     pub path: DerivationPath,
     // TODO remove this default once https://github.com/NixOS/nix/pull/7924 has
-    // made it's way into our verison of Nix
+    // made it's way into our version of Nix
     #[serde(default = "default_true")]
     pub valid: bool,
     // TODO add other fields

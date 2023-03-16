@@ -286,7 +286,7 @@ pub enum EnvironmentCommands {
         #[bpaf(external(list_output), optional)]
         json: Option<ListOutput>,
 
-        /// The generation to list, if not speciefied defaults to the current one
+        /// The generation to list, if not specified defaults to the current one
         #[bpaf(positional("GENERATION"))]
         generation: Option<u32>,
     },

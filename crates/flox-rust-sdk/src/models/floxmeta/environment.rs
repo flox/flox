@@ -181,7 +181,7 @@ impl<'flox, Git: GitProvider, A: GitAccess<Git>> Floxmeta<'flox, Git, A> {
             .fold(
                 HashMap::new(),
                 |mut merged: HashMap<_, Environment<_, _>>, mut env| {
-                    // implace either remote or local in a refererence we already stored
+                    // emplace either remote or local in a reference we already stored
                     // assumes only at most one of each is present
                     if let Some(stored) = merged.get_mut(&(env.name.clone(), env.system.clone())) {
                         stored.local = env.local.take().or_else(|| stored.local.take());
@@ -336,10 +336,10 @@ pub enum GetEnvironmentError<Git: GitProvider> {
 
 #[derive(Error, Debug)]
 pub enum GetEnvironmentsError<Git: GitProvider> {
-    #[error("Failed listing environemnt branches: {0}")]
+    #[error("Failed listing environment branches: {0}")]
     ListBranches(Git::ListBranchesError),
 
-    #[error("Failed fetching environemnt branches: {0}")]
+    #[error("Failed fetching environment branches: {0}")]
     FetchBranches(Git::FetchError),
 }
 

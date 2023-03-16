@@ -1,6 +1,6 @@
 {
   system,
-  # self is a flake if this package is built localy, but if it's called as a proto, it's just the
+  # self is a flake if this package is built locally, but if it's called as a proto, it's just the
   # source
   self,
   lib,

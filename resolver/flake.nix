@@ -2,7 +2,7 @@
   description = "Super Resolver";
 
   inputs = {
-    # Empty inputs to be overriden
+    # Empty inputs to be overridden
     a.follows = "/";
     b.follows = "/";
     c.follows = "/";

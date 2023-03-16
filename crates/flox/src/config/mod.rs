@@ -132,7 +132,7 @@ impl Config {
                 .set_default("git_base_url", "https://github.com/")?
                 .set_default("cache_dir", cache_dir.to_str().unwrap())?
                 .set_default("data_dir", data_dir.to_str().unwrap())?
-                // config dir is added to the config for completenes, the config file cannot chenge the config dir
+                // config dir is added to the config for completeness, the config file cannot chenge the config dir
                 .set_default("config_dir", config_dir.to_str().unwrap())?;
 
             // read from (flox-bash) installation

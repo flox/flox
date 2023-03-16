@@ -3,7 +3,7 @@
   nixpkgs,
   lib,
 }: let
-  # temporary, until commitizen 2.41.1 is avalable in nixpkgss
+  # temporary, until commitizen 2.41.1 is available in nixpkgss
   commitizen = nixpkgs.commitizen.overridePythonAttrs (old: {
     doCheck = false;
     src = inputs.commitizen-src;
