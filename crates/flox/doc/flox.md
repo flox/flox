@@ -23,7 +23,7 @@ The `flox` CLI is used:
    which can be used in a variety of contexts
    on any Linux distribution, in or out of a container.
 1. To launch flox *development environments*
-   as maintained using a `flox.toml` file
+   as maintained using a `flox.nix` file
    stored within a project directory.
 1. As a wrapper for Nix functionality
    which drives the process of building packages with flox.
@@ -152,7 +152,7 @@ runtime environments, developer environments, and administration.
 
 **develop**
 :   Launch subshell configured for development environment using the
-    `flox.toml` or Nix expression file as found in the current directory.
+    `flox.nix` or Nix expression file as found in the current directory.
 
 
 **publish**

@@ -16,7 +16,7 @@ flox [ `<general-options>` ] develop [ `<options>` ]
 # DESCRIPTION
 
 Launch sub-shell configured for development environment using the
-`flox.toml` or Nix expression file as found in the current directory.
+`flox.nix` or Nix expression file as found in the current directory.
 
 # OPTIONS
 
