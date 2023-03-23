@@ -335,35 +335,43 @@ impl interface::PackageCommands {
                 let git_repo = ensure_project_repo(&flox, cwd, &command).await?;
                 let project = ensure_project(git_repo, &command).await?;
 
+                // Check if template exists before asking for project's name
+                let template = command
+                    .inner
+                    .template
+                    .unwrap_or_default()
+                    .resolve_installable(&flox)
+                    .await?;
+
                 let name = match command.inner.name {
                     Some(n) => n,
                     None => {
-                        let dialog = Dialog {
-                            message: "Enter package name",
-                            help_message: None,
-                            typed: Text {
-                                default: Some(&basename),
-                            },
-                        };
+                        // TODO: find a better way to not hardcode this
+                        if template.to_string().ends_with("\"project\"") {
+                            "default".to_string()
+                        } else {
+                            let dialog = Dialog {
+                                message: "Enter package name",
+                                help_message: None,
+                                typed: Text {
+                                    default: Some(&basename),
+                                },
+                            };
 
-                        dialog.prompt().await.context("Failed to prompt for name")?
+                            dialog.prompt().await.context("Failed to prompt for name")?
+                        }
                     },
                 };
 
                 let name = name.trim();
 
                 if !name.is_empty() {
-                    let template = command
-                        .inner
-                        .template
-                        .unwrap_or_default()
-                        .resolve_installable(&flox)
-                        .await?;
-
                     project
                         .init_flox_package::<NixCommandLine>(command.nix_args, template, name)
                         .await?;
                 }
+
+                info!("Run 'flox activate' to enter the environment.")
             },
             interface::PackageCommands::Build(command) => {
                 subcommand_metric!("build");

@@ -239,26 +239,29 @@ impl<'flox, Git: GitProvider, Access: GitAccess<Git>> Project<'flox, Git, Access
             Err(err) => match err.kind() {
                 std::io::ErrorKind::NotFound => {
                     let old_proto_pkg_path = root.join("pkgs").join(PACKAGE_NAME_PLACEHOLDER);
-                    let new_proto_pkg_path = root.join("pkgs").join(name);
 
-                    repo.mv(&old_proto_pkg_path, &new_proto_pkg_path)
-                        .await
-                        .map_err(InitFloxPackageError::GitMv)?;
-                    info!(
-                        "moved: {} -> {}",
-                        old_proto_pkg_path.to_string_lossy(),
-                        new_proto_pkg_path.to_string_lossy()
-                    );
+                    if old_proto_pkg_path.exists() {
+                        let new_proto_pkg_path = root.join("pkgs").join(name);
 
-                    // our minimal "templating" - Replace any occurrences of
-                    // PACKAGE_NAME_PLACEHOLDER with name
-                    find_and_replace(&new_proto_pkg_path, PACKAGE_NAME_PLACEHOLDER, name)
-                        .await
-                        .map_err(InitFloxPackageError::<Nix, Git>::ReplacePackageName)?;
+                        repo.mv(&old_proto_pkg_path, &new_proto_pkg_path)
+                            .await
+                            .map_err(InitFloxPackageError::GitMv)?;
+                        info!(
+                            "moved: {} -> {}",
+                            old_proto_pkg_path.to_string_lossy(),
+                            new_proto_pkg_path.to_string_lossy()
+                        );
 
-                    repo.add(&[&new_proto_pkg_path])
-                        .await
-                        .map_err(InitFloxPackageError::GitAdd)?;
+                        // our minimal "templating" - Replace any occurrences of
+                        // PACKAGE_NAME_PLACEHOLDER with name
+                        find_and_replace(&new_proto_pkg_path, PACKAGE_NAME_PLACEHOLDER, name)
+                            .await
+                            .map_err(InitFloxPackageError::<Nix, Git>::ReplacePackageName)?;
+
+                        repo.add(&[&new_proto_pkg_path])
+                            .await
+                            .map_err(InitFloxPackageError::GitAdd)?;
+                    }
                 },
                 _ => return Err(InitFloxPackageError::OpenTemplateFile(err)),
             },
