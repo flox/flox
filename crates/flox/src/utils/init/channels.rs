@@ -21,8 +21,12 @@ pub fn init_channels(config_dir: &Path) -> Result<ChannelRegistry> {
     let flox_user_meta_path = config_dir.join("floxUserMeta.json");
 
     let user_channels = if flox_user_meta_path.exists() {
-        let parsed_user_meta: UserMeta = serde_json::from_reader(File::open(flox_user_meta_path)?)?;
-        parsed_user_meta.channels
+        let parsed_user_meta: UserMeta =
+            serde_json::from_reader(File::open(&flox_user_meta_path)?)?;
+        parsed_user_meta.channels.unwrap_or_else(|| {
+            warn!("Did not find 'channels' in {flox_user_meta_path:?}, consider running 'flox subscribe'");
+            HashMap::default()
+        })
     } else {
         warn!("Did not find {flox_user_meta_path:?}, continuing without user channels");
         HashMap::default()
@@ -76,5 +80,5 @@ pub fn init_channels(config_dir: &Path) -> Result<ChannelRegistry> {
 struct UserMeta {
     /// User provided channels
     /// TODO: transition to runix flakeRefs
-    channels: HashMap<String, String>,
+    channels: Option<HashMap<String, String>>,
 }
