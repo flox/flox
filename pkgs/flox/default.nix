@@ -11,7 +11,6 @@
   pkg-config,
   darwin,
   flox-bash ? self.inputs.flox-bash.packages.${system}.flox,
-  nixStable,
   pandoc,
   cacert,
   glibcLocales,
@@ -40,22 +39,10 @@
     '';
 
   cargoToml = lib.importTOML (self + "/crates/flox/Cargo.toml");
-  nix = nixStable.overrideAttrs (oldAttrs: {
-    patches =
-      (oldAttrs.patches or [])
-      ++ [
-        ./nix-patches/CmdProfileBuild.patch
-        ./nix-patches/CmdSearchAttributes.patch
-        ./nix-patches/update-profile-list-warning.patch
-        ./nix-patches/multiple-github-tokens.2.13.2.patch
-        ./nix-patches/curl_flox_version.patch
-        ./nix-patches/no-default-prefixes-hash.patch
-      ];
-  });
 
   envs =
     {
-      NIX_BIN = "${nix}/bin/nix";
+      NIX_BIN = "${flox-bash.nixPatched}/bin/nix";
       GIT_BIN = "${gitMinimal}/bin/git";
       FLOX_SH = "${flox-bash}/libexec/flox/flox";
       FLOX_SH_PATH = "${flox-bash}";
