@@ -110,7 +110,7 @@ impl InstallableKind {
     }
 
     pub const fn template() -> Self {
-        Self::new("template", &[("templates", false)], &["flox"])
+        Self::new("template", &[("templates", false)], &["flake:flox"])
     }
 
     pub const fn shell() -> Self {
