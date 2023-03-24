@@ -4,6 +4,7 @@ use crate::utils::InstallableDef;
 #[derive(Default, Debug, Clone)]
 pub struct TemplateInstallable;
 impl InstallableDef for TemplateInstallable {
+    const ARG_FLAG: Option<&'static str> = Some("--template");
     const DERIVATION_TYPES: &'static [InstallableKind] = &[InstallableKind::template()];
     const PROCESSOR: Option<&'static str> = Some(
         r#"if builtins.length key < 1 || builtins.elemAt key 0 != "_init" then { description = item.description; } else null"#,

@@ -347,7 +347,7 @@ impl interface::PackageCommands {
                     Some(n) => n,
                     None => {
                         // TODO: find a better way to not hardcode this
-                        if template.to_string().ends_with("\"project\"") {
+                        if template.to_string() == "flake:flox#.\"templates\".\"project\"" {
                             "default".to_string()
                         } else {
                             let dialog = Dialog {
