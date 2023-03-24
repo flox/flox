@@ -262,6 +262,12 @@ impl<'flox, Git: GitProvider, Access: GitAccess<Git>> Project<'flox, Git, Access
                             .await
                             .map_err(InitFloxPackageError::GitAdd)?;
                     }
+                    // TODO: find a better way to not hardcode this
+                    if template.to_string().ends_with("\"project\"") {
+                        repo.add(&[&root.join("flox.nix")])
+                            .await
+                            .map_err(InitFloxPackageError::GitAdd)?;
+                    }
                 },
                 _ => return Err(InitFloxPackageError::OpenTemplateFile(err)),
             },
