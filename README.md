@@ -40,7 +40,7 @@
 </p>
 
 [flox][website] is a command line tool that helps you **manage
-your environments**. flox builds on top of a powerful ideas of [Nix][nix] as
+your environments**. flox builds on top of the powerful ideas of [Nix][nix] as
 well as making them accessible to everybody.
 
 Install packages from [the biggest open source repository
