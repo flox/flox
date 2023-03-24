@@ -132,7 +132,7 @@ arrays.
 
 -----
 
-A pre-commit hook will ensure only corrextly formatted commit messages are
+A pre-commit hook will ensure only correctly formatted commit messages are
 committed.
 
 You can also run
