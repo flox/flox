@@ -113,5 +113,5 @@ The flox CLI is licensed under the GPLv2. See [LICENSE](./LICENSE).
 [twitter]: https://twitter.com/floxdevelopment
 [matrix]: https://matrix.to/#/#flox:matrix.org
 [discord]: https://discord.gg/mxUgrRGP
-[new-issue]: https://github.com/flox/flox-private/issues/new/choose
+[new-issue]: https://github.com/flox/flox/issues/new/choose
 [post-nixpkgs]: https://floxdev.com/blog/nixpkgs
