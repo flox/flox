@@ -5,7 +5,7 @@
 Currently this repo houses three rust crates:
 
 - `flox`: the flox binary and reimplementation of the `bash` based flox.
-- `flox-rust-sdk`: A library layer implementing flox' capabilities independent
+- `flox-rust-sdk`: A library layer implementing flox's capabilities independent
   of the frontend.
 - `floxd`: a potential flox daemon
 
@@ -132,7 +132,7 @@ arrays.
 
 -----
 
-A pre-commit hook will ensure only corrextly formatted commit messages are
+A pre-commit hook will ensure only correctly formatted commit messages are
 committed.
 
 You can also run

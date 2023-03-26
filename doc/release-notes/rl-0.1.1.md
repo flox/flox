@@ -8,6 +8,6 @@ Specifically, this release includes:
 - fixed `flox search --json`
 - ported multiple functions from bash MVP to rust rewrite
 - updated channel subscriptions to span multiple machines
-- the parsing of gh subcommand args has been fixed
+- the parsing of `gh` subcommand args has been fixed
 - updated flox/flox/README
 - minor updates to help and man pages and numerous bug fixes
