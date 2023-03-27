@@ -39,7 +39,7 @@ pub struct Project<'flox, Git: GitProvider, Access: GitAccess<Git>> {
     ///
     /// Represent setups where the project is not in the git root,
     /// or is a subflake.
-    /// One such places are named env's generations:
+    /// One such place is named env's generations:
     ///
     /// ```ignore
     /// /
@@ -147,11 +147,21 @@ impl<'flox, Git: GitProvider, Access: GitAccess<Git>> Project<'flox, Git, Access
         }
     }
 
-    /// Get the root directory of the project flake
+    /// Get the git root for a flake
     ///
-    /// currently the git root but may be a subdir with a flake.nix
+    /// The flake itself may be in a subdir as returned by flake_root()
     pub fn workdir(&self) -> Option<&Path> {
         self.git.git().workdir()
+    }
+
+    /// Get the root directory of the project flake
+    ///
+    /// If the project is a subflake, returns the subflake directory
+    pub fn flake_root(&self) -> Option<PathBuf> {
+        self.git
+            .git()
+            .workdir()
+            .map(|git_workdir| git_workdir.join(&self.subdir))
     }
 
     /// flakeref for the project

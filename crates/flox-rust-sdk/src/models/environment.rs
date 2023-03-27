@@ -8,6 +8,8 @@ use super::project;
 use super::root::transaction::ReadOnly;
 use crate::providers::git::GitProvider;
 
+pub static CATALOG_JSON: &str = "catalog.json";
+
 pub enum CommonEnvironment<'flox, Git: GitProvider> {
     Named(floxmeta::environment::Environment<'flox, Git, ReadOnly<Git>>),
     Project(project::environment::Environment<'flox, Git, ReadOnly<Git>>),

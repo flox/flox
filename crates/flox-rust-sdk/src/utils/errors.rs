@@ -15,4 +15,6 @@ pub enum IoError {
     Write { file: PathBuf, err: io::Error },
     #[error("Path {dir} does not exist or is invalid: {err}")]
     Canonicalize { dir: PathBuf, err: io::Error },
+    #[error("Couldn't create directory {dir}: {err}")]
+    CreateDir { dir: PathBuf, err: io::Error },
 }

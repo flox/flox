@@ -6,6 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+flox-types = { path = "../flox-types" }
 tokio = { version = "1", features = ["full"] }
 rnix = "0.11"
 serde = "1.0"

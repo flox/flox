@@ -7,7 +7,7 @@ use serde_with::skip_serializing_none;
 use crate::catalog::*;
 
 #[skip_serializing_none]
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[serde(deny_unknown_fields)]
 /// Proof that a package has been successfully evaluated.
@@ -26,12 +26,12 @@ pub struct Eval {
     // not all packages have pname; a random example from Nixpkgs is _3llo
     pub pname: Option<String>,
     pub stability: Option<String>,
-    pub system: String,
+    pub system: System,
     pub version: PackageVersion,
 }
 
 #[skip_serializing_none]
-#[derive(Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Meta {
     pub description: Option<String>,

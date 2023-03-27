@@ -3,11 +3,13 @@ use std::path::PathBuf;
 use anyhow::{Context, Result};
 use bpaf::{construct, Bpaf, Parser, ShellComp};
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::models::environment_ref;
 use flox_rust_sdk::models::floxmeta::Floxmeta;
+use flox_rust_sdk::models::root::transaction::ReadOnly;
+use flox_rust_sdk::models::{environment_ref, project};
 use flox_rust_sdk::nix::command_line::NixCommandLine;
 use flox_rust_sdk::prelude::flox_package::FloxPackage;
 use flox_rust_sdk::providers::git::{GitCommandProvider, GitProvider};
+use flox_types::constants::LATEST_VERSION;
 use serde_json::json;
 
 use crate::config::features::Feature;
@@ -35,14 +37,44 @@ impl EnvironmentCommands {
                 let environment_ref: environment_ref::EnvironmentRef =
                     resolve_environment_ref::<GitCommandProvider>(&flox, "list", environment_name)
                         .await?;
-                let environment = environment_ref
-                    .to_named::<GitCommandProvider>(&flox)
-                    .await
-                    .context("Environment not found")?;
 
-                let generation = environment.generation(Default::default()).await?;
+                match environment_ref {
+                    environment_ref::EnvironmentRef::Named(_) => {
+                        let environment = environment_ref
+                            .to_named::<GitCommandProvider>(&flox)
+                            .await
+                            .context("Environment not found")?;
 
-                println!("{}", serde_json::to_string_pretty(&generation).unwrap())
+                        let generation = environment.generation(Default::default()).await?;
+
+                        println!("{}", serde_json::to_string_pretty(&generation).unwrap())
+                    },
+                    environment_ref::EnvironmentRef::Project(_) => {
+                        let environment: project::environment::Environment<
+                            GitCommandProvider,
+                            ReadOnly<GitCommandProvider>,
+                        > = environment_ref
+                            .to_project(&flox)
+                            .await
+                            .context("Environment not found")?;
+
+                        let catalog = environment.catalog(&flox).await?;
+                        let installed_store_paths =
+                            environment.installed_store_paths(&flox).await?;
+
+                        println!("Packages in {environment}:");
+                        for (publish_element, _) in catalog.entries.iter() {
+                            if publish_element.version != LATEST_VERSION {
+                                println!("{publish_element} {}", publish_element.version)
+                            } else {
+                                println!("{publish_element}")
+                            }
+                        }
+                        for store_path in installed_store_paths.iter() {
+                            println!("{}", store_path.to_string_lossy())
+                        }
+                    },
+                }
             },
 
             EnvironmentCommands::Envs if !Feature::Env.is_forwarded()? => {

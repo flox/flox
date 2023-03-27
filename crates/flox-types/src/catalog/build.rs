@@ -6,10 +6,10 @@ use serde::{Deserialize, Serialize};
 /// successful build.
 /// After a successful build, the contents of an output path are known, whereas
 /// after an eval, only the output path is known.
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Build(Vec<BuildMeta>);
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 #[serde(rename_all = "camelCase")]
 pub struct BuildMeta {

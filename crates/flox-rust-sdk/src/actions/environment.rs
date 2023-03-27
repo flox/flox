@@ -11,12 +11,12 @@ use thiserror::Error;
 use {fs_extra, nix_editor, tempfile};
 
 use crate::flox::{Flox, FloxNixApi};
+use crate::models::environment::CATALOG_JSON;
 use crate::prelude::flox_package::FloxPackage;
 use crate::utils::copy_file_without_permissions;
 use crate::utils::errors::IoError;
 
 static FLOX_NIX: &str = "flox.nix";
-static CATALOG_JSON: &str = "catalog.json";
 
 pub struct Environment<'flox> {
     flox: &'flox Flox,

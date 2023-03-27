@@ -15,7 +15,7 @@ pub type SubstituterUrl = Url;
 /// Unlike other sections of the catalog, a `Cache` object does not represent
 /// invariants; it may in fact store the information that a package has _not_
 /// been cached.
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub struct Cache(pub HashMap<SubstituterUrl, CacheMeta>);
 
 impl<'de> Deserialize<'de> for Cache {
@@ -53,13 +53,14 @@ impl Cache {
 /// Represents all cache entries of all outputs found in one substituter
 #[serde_as]
 #[skip_serializing_none]
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-#[serde(deny_unknown_fields)]
 pub struct CacheMeta {
     #[serde_as(as = "DisplayFromStr")]
     pub cache_url: SubstituterUrl,
     pub narinfo: Vec<Narinfo>,
+    #[serde(flatten)]
+    pub _other: BTreeMap<String, Value>,
 }
 
 fn default_true() -> bool {
