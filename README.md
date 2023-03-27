@@ -1,11 +1,19 @@
 <h1 align="center">
   <a href="https://floxdev.com" target="_blank">
-    <img src="img/flox_blue_small.png" alt="flox logo" />
+    <picture>
+      <source media="(prefers-color-scheme: dark)"  srcset="img/flox_orange_small.png" />
+      <source media="(prefers-color-scheme: light)" srcset="img/flox_blue_small.png" />
+      <img src="img/flox_blue_small.png" alt="flox logo" />
+    </picture>
   </a>
 </h1>
 
 <h2 align="center">
-  <img style="height:1em;" src="img/harness_the_power_of_nix.svg" alt="Harness the Power of Nix" />
+  <picture>
+    <source media="(prefers-color-scheme: dark)"  srcset="img/harness_the_power_of_nix_dark.svg" />
+    <source media="(prefers-color-scheme: light)" srcset="img/harness_the_power_of_nix_light.svg" />
+    <img height="24" src="img/harness_the_power_of_nix_light.svg" alt="Harness the Power of Nix" />
+  </picture>
 </h2>
 
 <!-- TODO: here comes the graphic
