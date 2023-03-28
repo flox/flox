@@ -8,6 +8,9 @@
   hostPlatform,
   targetPlatform,
   openssl,
+  libssh2,
+  libgit2,
+  zlib,
   pkg-config,
   darwin,
   flox-bash ? self.inputs.flox-bash.packages.${system}.flox,
@@ -60,6 +63,8 @@
 
       METRICS_EVENTS_URL = "https://events.floxdev.com/capture";
       METRICS_EVENTS_API_KEY = "phc_z4dOADAPvpU9VNzCjDD3pIJuSuGTyagKdFWfjak838Y";
+
+      LIBSSH2_SYS_USE_PKG_CONFIG = "1";
     }
     // lib.optionalAttrs hostPlatform.isDarwin {
       NIX_COREFOUNDATION_RPATH = "${darwin.CF}/Library/Frameworks";
@@ -76,15 +81,7 @@ in
 
       cargoLock = {
         lockFile = self + "/Cargo.lock";
-        # TODO: adopt `allowBuiltinFetchGit = true;` here?
-        outputHashes = {
-          # fixes: show failing command element more often
-          # * https://github.com/pacak/bpaf/pull/155
-          # * https://github.com/pacak/bpaf/issues/154
-          "bpaf-0.7.9" = "sha256-K275X1fmcVyi0siHgLDZLDv/wOO8AGv7H8BeN6OxrZg=";
-
-          "runix-0.1.1" = "sha256-jnv7U0dIhebcdd7PEfnLOEqyzJND+COXRQ+za0mpERY=";
-        };
+        allowBuiltinFetchGit = true;
       };
 
       outputs = ["out" "man"];
@@ -114,6 +111,9 @@ in
       buildInputs =
         [
           openssl.dev
+          zlib
+          libssh2
+          libgit2
         ]
         ++ lib.optional hostPlatform.isDarwin [
           darwin.apple_sdk.frameworks.Security
