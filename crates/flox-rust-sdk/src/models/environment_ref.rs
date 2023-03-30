@@ -2,7 +2,7 @@ use std::io::{self, ErrorKind};
 use std::path::{Path, PathBuf};
 
 use log::debug;
-use runix::command::Eval;
+use runix::command::{Eval, FlakeMetadata};
 use runix::installable::Installable;
 use runix::RunJson;
 use thiserror::Error;
@@ -61,6 +61,7 @@ impl<'flox> Project<'flox> {
     ) -> Result<Vec<Project<'flox>>, FindProjectError<Nix>>
     where
         Eval: RunJson<Nix>,
+        FlakeMetadata: RunJson<Nix>,
     {
         // Find the `Project` to use, erroring all the way if it is not in the perfect state.
         // TODO: further changes and integrations to make more flexible possible?
@@ -309,6 +310,7 @@ impl EnvironmentRef<'_> {
     ) -> Result<(Vec<EnvironmentRef<'flox>>), EnvironmentRefError<Git, Nix>>
     where
         Eval: RunJson<Nix>,
+        FlakeMetadata: RunJson<Nix>,
     {
         let (not_proj, not_named) = match environment_name {
             Some(name) => {

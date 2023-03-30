@@ -2,7 +2,7 @@ use derive_more::FromStr;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use super::flake_ref::ToFlakeRef;
+use super::flake_ref::FlakeRef;
 use super::registry::Registry;
 
 #[derive(Error, Debug)]
@@ -13,13 +13,13 @@ pub enum ChannelError {
 
 #[derive(Debug, FromStr)]
 pub struct Channel {
-    flake_ref: ToFlakeRef,
+    flake_ref: FlakeRef,
 }
 
 impl Channel {}
 
-impl From<ToFlakeRef> for Channel {
-    fn from(flake_ref: ToFlakeRef) -> Self {
+impl From<FlakeRef> for Channel {
+    fn from(flake_ref: FlakeRef) -> Self {
         Channel { flake_ref }
     }
 }

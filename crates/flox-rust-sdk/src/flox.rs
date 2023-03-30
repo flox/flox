@@ -10,7 +10,7 @@ use runix::arguments::common::NixCommonArgs;
 use runix::arguments::config::NixConfigArgs;
 use runix::arguments::flake::{FlakeArgs, OverrideInput};
 use runix::arguments::{EvalArgs, NixArgs};
-use runix::command::Eval;
+use runix::command::{Eval, FlakeMetadata};
 use runix::command_line::{DefaultArgs, NixCommandLine};
 use runix::installable::Installable;
 use runix::{NixBackend, RunJson};
@@ -22,7 +22,7 @@ use crate::actions::package::Package;
 use crate::environment::{self, default_nix_subprocess_env};
 use crate::models::channels::ChannelRegistry;
 pub use crate::models::environment_ref::{self, *};
-use crate::models::flake_ref::ToFlakeRef;
+use crate::models::flake_ref::FlakeRef;
 pub use crate::models::flox_installable::*;
 use crate::models::root::{self, Root};
 use crate::models::stability::Stability;
@@ -159,6 +159,7 @@ impl Flox {
     ) -> Result<Vec<EnvironmentRef>, EnvironmentRefError<Git, Nix>>
     where
         Eval: RunJson<Nix>,
+        FlakeMetadata: RunJson<Nix>,
     {
         EnvironmentRef::find(self, Some(name)).await
     }
@@ -178,13 +179,21 @@ impl Flox {
     ) -> Result<Vec<ResolvedInstallableMatch>, ResolveFloxInstallableError<Nix>>
     where
         Eval: RunJson<Nix>,
+        FlakeMetadata: RunJson<Nix>,
     {
-        // ignore default flake_refs that point to paths which are not flakes.
+        // Ignore default flake_refs are not flakes.
+        // Default flake_refs can not be changed by the user.
+        // If nix produces errors due to a flake not found,
+        // this can produce misleading error messages.
+        //
+        // Additionally, `./` is used as a default flakeref for multiple installables.
+        // To prevent copying large locations that are not a flake,
+        // we try to ensure a flake can be reached using `nix flake metadata`
         let default_flakerefs = default_flakerefs
             .iter()
             .copied()
             .filter(|flake_ref| {
-                let parsed_flake_ref = ToFlakeRef::from_str(flake_ref);
+                let parsed_flake_ref = FlakeRef::from_str(flake_ref);
                 // if we can't parse the flake_ref we warn but keep it
                 // this is until we can be sure enought that our flake_ref parser is robust
                 if let Err(e) = parsed_flake_ref {
@@ -199,17 +208,15 @@ Could not parse flake_ref {flake_ref}
                 let parsed_flake_ref = parsed_flake_ref.unwrap();
 
                 futures::executor::block_on(async {
-                    match parsed_flake_ref {
-                        //
-                        ToFlakeRef::Path { path, .. } => self
-                            .resource(path)
-                            .guard::<Git>()
-                            .await
-                            .ok()
-                            .and_then(|guard| guard.open().ok())
-                            .is_some(),
-                        _ => true,
-                    }
+                    let command = FlakeMetadata {
+                        flake_ref: Some(parsed_flake_ref.into()),
+                        ..Default::default()
+                    };
+
+                    command
+                        .run_json(&self.nix::<Nix>(vec![]), &NixArgs::default())
+                        .await
+                        .is_ok()
                 })
             })
             .collect::<Vec<_>>();
