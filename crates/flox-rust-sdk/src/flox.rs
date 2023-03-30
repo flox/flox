@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use std::str::FromStr;
 
 use derive_more::Constructor;
+use flox_types::stability::Stability;
 use log::{debug, info, warn};
 use once_cell::sync::Lazy;
 use runix::arguments::common::NixCommonArgs;
@@ -25,7 +26,6 @@ pub use crate::models::environment_ref::{self, *};
 use crate::models::flake_ref::FlakeRef;
 pub use crate::models::flox_installable::*;
 use crate::models::root::{self, Root};
-use crate::models::stability::Stability;
 use crate::providers::git::GitProvider;
 
 static INPUT_CHARS: Lazy<Vec<char>> = Lazy::new(|| ('a'..='t').into_iter().collect());

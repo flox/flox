@@ -5,7 +5,7 @@ use derive_more::Display;
 use runix::arguments::flake::OverrideInput;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize, Display, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Display, PartialEq, Eq, Ord, PartialOrd)]
 #[serde(rename_all = "camelCase")]
 pub enum Stability {
     #[display(fmt = "stable")]
@@ -16,8 +16,6 @@ pub enum Stability {
     Staging,
     #[display(fmt = "{_0}")]
     Other(String), // will need custom deserializer for this
-    #[display(fmt = "stable")]
-    Unknown,
 }
 
 impl Stability {
@@ -32,7 +30,7 @@ impl Stability {
 
 impl Default for Stability {
     fn default() -> Self {
-        Stability::Unknown
+        Stability::Stable
     }
 }
 

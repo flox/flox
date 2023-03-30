@@ -9,4 +9,3 @@ pub mod root;
 pub use runix::{flake_ref, registry};
 pub mod floxmeta;
 pub mod project;
-pub mod stability;

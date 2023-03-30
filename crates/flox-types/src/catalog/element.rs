@@ -1,10 +1,9 @@
-use std::fmt::Display;
-
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
 
 use crate::catalog::*;
-use crate::constants::*;
+use crate::constants::DEFAULT_CHANNEL;
+use crate::stability::Stability;
 
 #[skip_serializing_none]
 #[derive(Clone, Serialize, Deserialize)]
@@ -49,17 +48,18 @@ pub struct PublishElement {
     pub version: PackageVersion,
 }
 
-impl Display for PublishElement {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl PublishElement {
+    /// TODO drop once we have an actual FloxTuple type
+    pub fn to_flox_tuple(&self) -> String {
         let mut result = Vec::new();
-        if self.stability != DEFAULT_STABILITY {
-            result.push(self.stability.clone())
+        if self.stability != Stability::default() {
+            result.push(self.stability.to_string())
         }
         if self.original_url != DEFAULT_CHANNEL {
             result.push(self.original_url.clone())
         }
         result.extend(self.namespace.clone());
-        write!(f, "{}", result.join("."))
+        result.join(".")
     }
 }
 
@@ -67,9 +67,9 @@ impl Display for PublishElement {
 mod tests {
     use super::*;
 
+    /// Default stability and channel are not printed
     #[test]
-    fn display_publish_element() {
-        // Default stability and channel are not printed
+    fn to_flox_tuple_publish_element() {
         let publish_element = PublishElement {
             namespace: vec![
                 "python3".to_string(),
@@ -77,13 +77,16 @@ mod tests {
                 "requests".to_string(),
             ],
             original_url: "nixpkgs-flox".to_string(),
-            stability: "stable".to_string(),
+            stability: Stability::default(),
             system: "dummy".to_string(),
             version: "dummy".to_string(),
         };
-        assert_eq!(format!("{publish_element}"), "python3.pkgs.requests");
+        assert_eq!(publish_element.to_flox_tuple(), "python3.pkgs.requests");
+    }
 
-        // Non-default stability and channel are printed
+    /// Non-default stability and channel are printed
+    #[test]
+    fn to_flox_tuple_publish_element_no_default() {
         let publish_element = PublishElement {
             namespace: vec![
                 "python3".to_string(),
@@ -91,13 +94,53 @@ mod tests {
                 "requests".to_string(),
             ],
             original_url: "nixpkgs-acme".to_string(),
-            stability: "staging".to_string(),
+            stability: Stability::Staging,
             system: "dummy".to_string(),
             version: "dummy".to_string(),
         };
         assert_eq!(
-            format!("{publish_element}"),
+            publish_element.to_flox_tuple(),
             "staging.nixpkgs-acme.python3.pkgs.requests"
+        );
+    }
+
+    /// Non-default stability is printed even when default channel is not
+    #[test]
+    fn to_flox_tuple_publish_element_default_channel() {
+        let publish_element = PublishElement {
+            namespace: vec![
+                "python3".to_string(),
+                "pkgs".to_string(),
+                "requests".to_string(),
+            ],
+            original_url: "nixpkgs-flox".to_string(),
+            stability: Stability::Staging,
+            system: "dummy".to_string(),
+            version: "dummy".to_string(),
+        };
+        assert_eq!(
+            publish_element.to_flox_tuple(),
+            "staging.python3.pkgs.requests"
+        );
+    }
+
+    /// Non-default channel is printed even when default stability is not
+    #[test]
+    fn to_flox_tuple_publish_element_default_stability() {
+        let publish_element = PublishElement {
+            namespace: vec![
+                "python3".to_string(),
+                "pkgs".to_string(),
+                "requests".to_string(),
+            ],
+            original_url: "nixpkgs-acme".to_string(),
+            stability: Stability::default(),
+            system: "dummy".to_string(),
+            version: "dummy".to_string(),
+        };
+        assert_eq!(
+            publish_element.to_flox_tuple(),
+            "nixpkgs-acme.python3.pkgs.requests"
         );
     }
 }

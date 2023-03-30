@@ -703,7 +703,9 @@ name = "flox-types"
 version = "0.0.1"
 dependencies = [
  "anyhow",
+ "derive_more",
  "pretty_assertions",
+ "runix",
  "serde",
  "serde_json",
  "serde_with",

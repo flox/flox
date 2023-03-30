@@ -65,9 +65,13 @@ impl EnvironmentCommands {
                         println!("Packages in {environment}:");
                         for (publish_element, _) in catalog.entries.iter() {
                             if publish_element.version != LATEST_VERSION {
-                                println!("{publish_element} {}", publish_element.version)
+                                println!(
+                                    "{} {}",
+                                    publish_element.to_flox_tuple(),
+                                    publish_element.version
+                                )
                             } else {
-                                println!("{publish_element}")
+                                println!("{}", publish_element.to_flox_tuple())
                             }
                         }
                         for store_path in installed_store_paths.iter() {

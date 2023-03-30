@@ -4,7 +4,7 @@ use std::{env, fs};
 
 use anyhow::{Context, Result};
 use config::{Config as HierarchicalConfig, Environment};
-use flox_rust_sdk::prelude::Stability;
+use flox_types::stability::Stability;
 use itertools::{Either, Itertools};
 use log::{debug, trace};
 use once_cell::sync::OnceCell;

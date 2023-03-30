@@ -6,6 +6,7 @@ use serde_json::{self, Value};
 use serde_with::skip_serializing_none;
 use thiserror::Error;
 
+use crate::stability::Stability;
 use crate::version::Version;
 
 mod build;
@@ -13,13 +14,11 @@ pub use build::Build;
 pub mod cache;
 pub use cache::Cache;
 mod element;
-pub use element::Element;
+pub use element::{Element, PublishElement};
 mod eval;
 pub use eval::Eval;
 mod source;
 pub use source::Source;
-
-use self::element::PublishElement;
 
 pub type DerivationPath = PathBuf;
 pub type StorePath = PathBuf;
@@ -30,7 +29,6 @@ pub type AttrPath = Vec<String>;
 /// TODO https://docs.rs/nonempty/latest/nonempty/
 pub type Namespace = AttrPath;
 pub type PackageVersion = String;
-pub type Stability = String;
 pub type System = String;
 /// TODO use runix FlakeRef
 pub type FlakeRef = String;
