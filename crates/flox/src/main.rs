@@ -214,14 +214,19 @@ pub async fn run_in_flox(
         sync_bash_metrics_consent(&flox.data_dir, &flox.cache_dir).await?;
     }
 
-    let status = Command::new(FLOX_SH)
+    let flox_bin = std::env::var("FLOX_BASH_PREFIX")
+        .map_or(Path::new(FLOX_SH).to_path_buf(), |prefix| {
+            Path::new(&prefix).join("bin").join("flox")
+        });
+
+    let status = Command::new(&flox_bin)
         .args(args)
         .envs(&default_nix_subprocess_env())
         .spawn()
         .expect("failed to spawn flox")
         .wait()
         .await
-        .context("fatal: failed executing {FLOX_SH}")?;
+        .context("fatal: failed executing {flox_bin}")?;
 
     let code = status.code().unwrap_or_else(|| {
         status
