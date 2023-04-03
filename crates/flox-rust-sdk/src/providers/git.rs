@@ -217,8 +217,8 @@ impl GitProvider for LibGit2Provider {
 pub enum GitCommandError {
     #[error("Failed to run git: {0}")]
     Command(#[from] std::io::Error),
-    #[error("Git failed with: [exit code {0}]\n{1}")]
-    BadExit(i32, String),
+    #[error("Git failed with: [exit code {0}]\n  stdout: {1}\n  stderr: {2}")]
+    BadExit(i32, String, String),
 }
 
 #[derive(Clone, Debug)]
@@ -243,9 +243,13 @@ impl GitCommandProvider {
         let out = command.output().await?;
 
         if !out.status.success() {
+            let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+            let stderr = String::from_utf8_lossy(&out.stderr).to_string();
+
             return Err(GitCommandError::BadExit(
                 out.status.code().unwrap_or(-1),
-                String::from_utf8_lossy(&out.stderr).to_string(),
+                stdout,
+                stderr,
             ));
         }
 

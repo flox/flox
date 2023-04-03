@@ -11,6 +11,7 @@ use tokio::fs::OpenOptions;
 use tokio::io::AsyncWriteExt;
 
 pub mod environment;
+pub mod user_meta;
 use environment::{Metadata, METADATA_JSON};
 
 use super::root::reference::ProjectDiscoverGitError;
@@ -175,6 +176,11 @@ impl<'flox, Git: GitProvider> Floxmeta<'flox, Git, ReadOnly<Git>> {
 /// Constructors and implementations for retrieving floxmeta handles
 /// and creating a writable transaction
 impl<'flox, Git: GitProvider, Access: GitAccess<Git>> Floxmeta<'flox, Git, Access> {
+    pub async fn fetch(&self) -> Result<(), FetchError<Git>> {
+        self.git().fetch().await.map_err(FetchError)?;
+        Ok(())
+    }
+
     pub fn owner(&self) -> &str {
         &self.owner
     }
@@ -355,15 +361,19 @@ pub enum TransactionCommitError<Git: GitProvider> {
     GitPush(Git::PushError),
 }
 
+#[derive(Error, Debug)]
+#[error("Failed updating floxmeta: {0}")]
+pub struct FetchError<Git: GitProvider>(Git::FetchError);
+
 #[cfg(test)]
 #[cfg(feature = "impure-unit-tests")]
-mod floxmeta_tests {
+pub(super) mod floxmeta_tests {
     use tempfile::TempDir;
 
     use super::*;
     use crate::providers::git::GitCommandProvider;
 
-    fn flox_instance() -> (Flox, TempDir) {
+    pub(super) fn flox_instance() -> (Flox, TempDir) {
         let tempdir_handle = tempfile::tempdir_in(std::env::temp_dir()).unwrap();
 
         let cache_dir = tempdir_handle.path().join("caches");
