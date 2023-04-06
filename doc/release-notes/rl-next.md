@@ -1,1 +1,7 @@
-## Release 0.x.x (2023-00-00)
+## Release 0.x.y (2023-04-00)
+
+[summary]
+[list]
+
+We especially want to thank all our github.com/flox/flox contributors!
+
