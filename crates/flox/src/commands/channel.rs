@@ -1,12 +1,20 @@
-use anyhow::Result;
+use anyhow::{bail, Context, Result};
 use bpaf::Bpaf;
 use derive_more::Display;
-use flox_rust_sdk::flox::Flox;
+use flox_rust_sdk::flox::{Flox, DEFAULT_OWNER};
+use flox_rust_sdk::nix::command::FlakeMetadata;
+use flox_rust_sdk::nix::command_line::NixCommandLine;
+use flox_rust_sdk::nix::flake_ref::git_service::{GitServiceAttributes, GitServiceRef};
+use flox_rust_sdk::nix::flake_ref::FlakeRef;
+use flox_rust_sdk::nix::RunJson;
+use flox_rust_sdk::providers::git::GitCommandProvider;
 use itertools::Itertools;
+use regex::Regex;
 use serde_json::json;
 
 use crate::config::features::Feature;
 use crate::flox_forward;
+use crate::utils::dialog::{Dialog, Select, Text};
 use crate::utils::init::{DEFAULT_CHANNELS, HIDDEN_CHANNELS};
 
 #[derive(Bpaf, Clone)]
@@ -73,6 +81,150 @@ impl ChannelCommands {
                     }
                 }
             },
+
+            ChannelCommands::Subscribe(args) => {
+                // query name interactively if not provided
+                let name = match args {
+                    None => {
+                        Dialog {
+                            help_message: None,
+                            message: "Enter channel name to be added:",
+                            typed: Text { default: None },
+                        }
+                        .prompt()
+                        .await?
+                    },
+                    Some(SubscribeArgs::Name { name })
+                    | Some(SubscribeArgs::NameUrl { name, .. }) => name.to_string(),
+                };
+
+                // return if name invalid
+                if [HIDDEN_CHANNELS.keys(), DEFAULT_CHANNELS.keys()]
+                    .into_iter()
+                    .flatten()
+                    .contains(&name.as_str())
+                {
+                    bail!("'{name}' is a reserved channel name");
+                }
+
+                // return if name is invalid
+                if !Regex::new("^[a-zA-Z][a-zA-Z0-9_-]*$")
+                    .unwrap()
+                    .is_match(&name)
+                {
+                    bail!("invalid channel name '{name}', valid regexp: ^[a-zA-Z][a-zA-Z0-9_-]*$");
+                }
+
+                // query url interactively if not provided
+                let url = match args {
+                    None | Some(SubscribeArgs::Name { .. }) => {
+                        let default = FlakeRef::Github(GitServiceRef::new(
+                            name.to_string(),
+                            "floxpkgs".to_string(),
+                            GitServiceAttributes {
+                                reference: Some("master".to_string()),
+                                ..Default::default()
+                            },
+                        ));
+
+                        Dialog {
+                            help_message: None,
+                            message: &format!("Enter URL for '{name}' channel:"),
+                            typed: Text {
+                                default: Some(&default.to_string()),
+                            },
+                        }
+                        .prompt()
+                        .await?
+                    },
+                    Some(SubscribeArgs::NameUrl { url, .. }) => url.to_string(),
+                };
+
+                // attempt parsing url as flakeref (validation)
+                let url = url
+                    .parse::<FlakeRef>()
+                    .with_context(|| format!("'{url}' is not a valid url"))?;
+
+                // read user channels
+                let floxmeta = flox
+                    .floxmeta::<GitCommandProvider>(DEFAULT_OWNER)
+                    .await
+                    .context("Could not get default floxmeta")?;
+
+                let mut user_meta = floxmeta
+                    .user_meta()
+                    .await
+                    .context("Could not read user metadata")?;
+                let user_meta_channels = user_meta.channels.get_or_insert(Default::default());
+
+                // ensure channel does not yet exist
+                if user_meta_channels.contains_key(&name) {
+                    bail!("A channel subscription '{name}' already exists");
+                }
+
+                // validate the existence of the flake behind `url`
+                // candidate for a flakeref extension?
+                let nix = flox.nix::<NixCommandLine>(Default::default());
+                let command = FlakeMetadata {
+                    flake_ref: Some(url.clone().into()),
+                    ..Default::default()
+                };
+                let _ = command
+                    .run_json(&nix, &Default::default())
+                    .await
+                    .map_err(|_| anyhow::anyhow!("Could not verify channel URL: '{url}'"))?;
+
+                user_meta_channels.insert(name.to_string(), url.to_string());
+
+                // tansactionally update user meta file
+                floxmeta
+                    .set_user_meta(&user_meta, &format!("Subscribed to {url} as '{name}'"))
+                    .await?;
+            },
+
+            ChannelCommands::Unsubscribe { channel } => {
+                let floxmeta = flox
+                    .floxmeta::<GitCommandProvider>(DEFAULT_OWNER)
+                    .await
+                    .context("Could not get default floxmeta")?;
+
+                let mut user_meta = floxmeta
+                    .user_meta()
+                    .await
+                    .context("Could not read user metadata")?;
+                let user_meta_channels = user_meta.channels.get_or_insert(Default::default());
+
+                let channel = match channel {
+                    Some(channel) => channel.to_owned(),
+                    None => {
+                        let dialog = Dialog {
+                            help_message: None,
+                            message: "Enter channel name to be added:",
+                            typed: Select {
+                                options: user_meta_channels.keys().cloned().collect_vec(),
+                            },
+                        };
+
+                        dialog.prompt().await?
+                    },
+                };
+
+                if HIDDEN_CHANNELS
+                    .keys()
+                    .chain(DEFAULT_CHANNELS.keys())
+                    .contains(&channel.as_str())
+                {
+                    bail!("'{channel}' is a reserved channel name and can't be unsubscribed from");
+                }
+
+                if user_meta_channels.remove(&channel).is_none() {
+                    bail!("No subscription found for '{channel}'");
+                }
+
+                floxmeta
+                    .set_user_meta(&user_meta, &format!("Unsubscribed from '{channel}'"))
+                    .await?;
+            },
             _ => todo!(),
         }
 
@@ -84,12 +236,7 @@ impl ChannelCommands {
 pub enum ChannelCommands {
     /// subscribe to channel URL
     #[bpaf(command)]
-    Subscribe {
-        #[bpaf(positional("name"))]
-        name: Option<ChannelRef>,
-        #[bpaf(positional("url"))]
-        url: Option<Url>,
-    },
+    Subscribe(#[bpaf(external(subscribe_args), optional)] Option<SubscribeArgs>),
 
     /// unsubscribe from a channel
     #[bpaf(command)]
@@ -120,6 +267,23 @@ pub enum ChannelCommands {
         /// print channels as JSON
         #[bpaf(long)]
         json: bool,
+    },
+}
+
+#[derive(Bpaf, Clone)]
+pub enum SubscribeArgs {
+    NameUrl {
+        /// Name of the subscribed channel
+        #[bpaf(positional("name"))]
+        name: ChannelRef,
+        /// Url of the channel.
+        #[bpaf(positional("url"))]
+        url: Url,
+    },
+    Name {
+        /// Name of the subscribed channel
+        #[bpaf(positional("name"))]
+        name: ChannelRef,
     },
 }
 

@@ -2,13 +2,14 @@ use std::collections::BTreeMap;
 use std::fs::File;
 use std::path::Path;
 
+use anyhow::anyhow;
 use flox_types::version::Version;
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
 use thiserror::Error;
 
-use super::{FetchError, Floxmeta};
-use crate::models::root::transaction::{GitAccess, GitSandBox};
+use super::{FetchError, Floxmeta, TransactionCommitError, TransactionEnterError};
+use crate::models::root::transaction::{GitAccess, GitSandBox, ReadOnly};
 use crate::providers::git::GitProvider;
 
 pub(super) const FLOX_MAIN_BRANCH: &str = "floxmain";
@@ -43,6 +44,35 @@ impl<'flox, Git: GitProvider, A: GitAccess<Git>> Floxmeta<'flox, Git, A> {
     }
 }
 
+impl<'flox, Git: GitProvider> Floxmeta<'flox, Git, ReadOnly<Git>> {
+    pub async fn set_user_meta(
+        &self,
+        user_meta: &UserMeta,
+        message: &str,
+    ) -> Result<(), TransactionError<Git, SetUserMetaError<Git>>> {
+        let floxmeta_sandbox = self
+            .clone()
+            .enter_transaction()
+            .await
+            .map_err(TransactionError::Enter)?;
+
+        floxmeta_sandbox
+            .git()
+            .checkout(FLOX_MAIN_BRANCH, false)
+            .await
+            .map_err(|e| TransactionError::Setup(anyhow!(e.to_string())))?;
+
+        floxmeta_sandbox.set_user_meta(user_meta).await?;
+
+        floxmeta_sandbox
+            .commit_transaction(message)
+            .await
+            .map_err(TransactionError::Commit)?;
+
+        Ok(())
+    }
+}
+
 impl<'flox, Git: GitProvider> Floxmeta<'flox, Git, GitSandBox<Git>> {
     /// write `floxUserMeta.json` file to floxmeta repo
     ///
@@ -61,6 +91,18 @@ impl<'flox, Git: GitProvider> Floxmeta<'flox, Git, GitSandBox<Git>> {
 
         Ok(())
     }
+}
+
+#[derive(Error, Debug)]
+pub enum TransactionError<Git: GitProvider, Inner> {
+    #[error(transparent)]
+    Enter(TransactionEnterError<Git>),
+    #[error(transparent)]
+    Inner(#[from] Inner),
+    #[error(transparent)]
+    Setup(anyhow::Error),
+    #[error(transparent)]
+    Commit(TransactionCommitError<Git>),
 }
 
 #[derive(Error, Debug)]

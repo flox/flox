@@ -68,6 +68,17 @@ impl<'flox, Git: GitProvider> Root<'flox, Closed<Git>> {
 
 impl<'flox> Root<'flox, Closed<String>> {}
 
+impl<'flox, Git: GitProvider> Clone for Floxmeta<'flox, Git, ReadOnly<Git>> {
+    fn clone(&self) -> Self {
+        Self {
+            flox: self.flox,
+            owner: self.owner.clone(),
+            access: self.access.read_only(),
+            _git: self._git,
+        }
+    }
+}
+
 /// Constructors and implementations for retrieving floxmeta handles
 /// and creating a writable transaction
 impl<'flox, Git: GitProvider> Floxmeta<'flox, Git, ReadOnly<Git>> {

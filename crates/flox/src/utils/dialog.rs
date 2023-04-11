@@ -37,7 +37,7 @@ impl<'a> Dialog<'a, Text<'a>> {
             }
 
             if let Some(ref default) = default {
-                dialog = dialog.with_default(default);
+                dialog = dialog.with_initial_value(default);
             }
 
             dialog.prompt()

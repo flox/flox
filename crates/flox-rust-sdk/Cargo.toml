@@ -18,6 +18,7 @@ runix = "0.1.1"
 url = "2.3"                                    # 2.3.1 has conflicting dependencies with octocrab
 serde_with = "2.0.1"
 thiserror = "1.0"
+anyhow = "1.0"
 nix-editor = "0.3.0"
 tempfile = "3.4.0"
 fs_extra = "1.2.0"
