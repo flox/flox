@@ -25,6 +25,8 @@ use crate::models::channels::ChannelRegistry;
 pub use crate::models::environment_ref::{self, *};
 use crate::models::flake_ref::FlakeRef;
 pub use crate::models::flox_installable::*;
+use crate::models::floxmeta::{Floxmeta, GetFloxmetaError};
+use crate::models::root::transaction::ReadOnly;
 use crate::models::root::{self, Root};
 use crate::providers::git::GitProvider;
 
@@ -166,6 +168,13 @@ impl Flox {
 
     pub fn environment(&self, dir: PathBuf) -> Result<Environment, EnvironmentError> {
         Environment::new(self, dir)
+    }
+
+    pub async fn floxmeta<Git: GitProvider>(
+        &self,
+        owner: &str,
+    ) -> Result<Floxmeta<Git, ReadOnly<Git>>, GetFloxmetaError<Git>> {
+        Floxmeta::get_floxmeta(self, owner).await
     }
 
     /// Invoke Nix to convert a FloxInstallable into a list of matches

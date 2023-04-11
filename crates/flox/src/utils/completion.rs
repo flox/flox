@@ -7,8 +7,8 @@ use flox_rust_sdk::providers::git::GitCommandProvider;
 use log::debug;
 use tempfile::TempDir;
 
-use super::init::init_access_tokens;
-use super::{init_channels, nix_str_safe};
+use super::init::{init_access_tokens, init_channels};
+use super::nix_str_safe;
 use crate::config::Config;
 
 #[async_trait]
@@ -37,7 +37,8 @@ impl FloxCompletionExt for Flox {
             .map_err(|e| debug!("Failed to load config: {e}"))
             .unwrap();
 
-        let channels = init_channels()
+        // todo: does not use user channels yet
+        let channels = init_channels(Default::default())
             .map_err(|e| debug!("Failed to initialize channels: {e}"))
             .unwrap();
 

@@ -11,8 +11,8 @@ use super::{FetchError, Floxmeta};
 use crate::models::root::transaction::{GitAccess, GitSandBox};
 use crate::providers::git::GitProvider;
 
-const FLOX_MAIN_BRANCH: &str = "floxmain";
-const FLOX_USER_META_FILE: &str = "floxUserMeta.json";
+pub(super) const FLOX_MAIN_BRANCH: &str = "floxmain";
+pub(super) const FLOX_USER_META_FILE: &str = "floxUserMeta.json";
 
 #[serde_as]
 #[derive(Deserialize, Serialize)]
@@ -20,12 +20,12 @@ pub struct UserMeta {
     /// User provided channels
     /// TODO: transition to runix flakeRefs
     #[serde_as(as = "Option<BTreeMap<_, DisplayFromStr>>")]
-    channels: Option<BTreeMap<String, String>>,
+    pub channels: Option<BTreeMap<String, String>>,
     #[serde(rename = "floxClientUUID")]
-    client_uuid: uuid::Uuid,
+    pub client_uuid: uuid::Uuid,
     #[serde(rename = "floxMetricsConsent")]
-    metrics_consent: u8,
-    version: Version<1>,
+    pub metrics_consent: u8,
+    pub version: Version<1>,
 }
 
 impl<'flox, Git: GitProvider, A: GitAccess<Git>> Floxmeta<'flox, Git, A> {
@@ -33,7 +33,6 @@ impl<'flox, Git: GitProvider, A: GitAccess<Git>> Floxmeta<'flox, Git, A> {
     ///
     /// note: fetches updates from upstream (todo: is this a ui decision?)
     pub async fn user_meta(&self) -> Result<UserMeta, GetUserMetaError<Git>> {
-        self.fetch().await?;
         let user_meta_str = self
             .git()
             .show(&format!("{FLOX_MAIN_BRANCH}:{FLOX_USER_META_FILE}"))
@@ -47,13 +46,9 @@ impl<'flox, Git: GitProvider, A: GitAccess<Git>> Floxmeta<'flox, Git, A> {
 impl<'flox, Git: GitProvider> Floxmeta<'flox, Git, GitSandBox<Git>> {
     /// write `floxUserMeta.json` file to floxmeta repo
     ///
-    /// This is in a sandbox, where checkouts and adding files is allowd
+    /// This is in a sandbox, where checkouts and adding files is allowed.
+    /// It is assumed the correct branch is checked out before this function is called.
     pub async fn set_user_meta(&self, user_meta: &UserMeta) -> Result<(), SetUserMetaError<Git>> {
-        self.git()
-            .checkout(FLOX_MAIN_BRANCH, false)
-            .await
-            .map_err(SetUserMetaError::Checkout)?;
-
         let mut file = File::create(self.git().workdir().unwrap().join(FLOX_USER_META_FILE))
             .map_err(SetUserMetaError::OpenUserMetaFile)?;
 
@@ -129,6 +124,7 @@ mod tests {
             .enter_transaction()
             .await
             .expect("Should enter transaction");
+        floxmeta.git().checkout("floxmain", false).await.unwrap();
         floxmeta
             .set_user_meta(&UserMeta {
                 channels: Some([].into()),

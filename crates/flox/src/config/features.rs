@@ -16,6 +16,8 @@ pub enum Feature {
     Develop,
     #[serde(rename = "publish")]
     Publish,
+    #[serde(rename = "channels")]
+    Channels,
 }
 
 impl Feature {
@@ -32,7 +34,7 @@ impl Feature {
                 .get(self)
                 .or_else(|| map.get(&Self::All))
                 .unwrap_or(&Impl::Rust),
-            Feature::Develop | Feature::Publish => *map
+            Feature::Develop | Feature::Publish | Feature::Channels => *map
                 .get(self)
                 .or_else(|| map.get(&Self::All))
                 .unwrap_or(&Impl::Bash),

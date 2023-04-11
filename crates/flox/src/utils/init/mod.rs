@@ -19,7 +19,7 @@ const ENV_FLOX_ORIGINAL_GIT_CONFIG_SYSTEM: &str = "FLOX_ORIGINAL_GIT_CONFIG_SYST
 
 mod channels;
 
-pub use channels::init_channels;
+pub use channels::{init_channels, DEFAULT_CHANNELS, HIDDEN_CHANNELS};
 
 pub fn init_access_tokens(
     config_tokens: &HashMap<String, String>,

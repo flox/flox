@@ -4,7 +4,7 @@ use std::os::unix::ffi::OsStringExt;
 use std::path::{Path, PathBuf};
 
 use async_trait::async_trait;
-use log::error;
+use log::{debug, error};
 use thiserror::Error;
 use tokio::process::Command;
 
@@ -33,6 +33,7 @@ pub trait GitProvider: Send + Sized + std::fmt::Debug {
 
     type CheckoutError: std::error::Error;
     type ListBranchesError: std::error::Error;
+    type RenameError: std::error::Error;
 
     type AddRemoteError: std::error::Error;
     type MvError: std::error::Error;
@@ -58,6 +59,7 @@ pub trait GitProvider: Send + Sized + std::fmt::Debug {
 
     async fn checkout(&self, name: &str, orphan: bool) -> Result<(), Self::CheckoutError>;
     async fn list_branches(&self) -> Result<Vec<BranchInfo>, Self::ListBranchesError>;
+    async fn rename_branch(&self, new_name: &str) -> Result<(), Self::RenameError>;
 
     async fn add_remote(&self, origin_name: &str, url: &str) -> Result<(), Self::AddRemoteError>;
     async fn mv(&self, from: &Path, to: &Path) -> Result<(), Self::MvError>;
@@ -122,6 +124,7 @@ impl GitProvider for LibGit2Provider {
     type ListBranchesError = EmptyError;
     type MvError = EmptyError;
     type PushError = EmptyError;
+    type RenameError = EmptyError;
     type RmError = EmptyError;
     type SetOriginError = EmptyError;
     type ShowError = EmptyError;
@@ -155,6 +158,10 @@ impl GitProvider for LibGit2Provider {
     }
 
     async fn list_branches(&self) -> Result<Vec<BranchInfo>, Self::ListBranchesError> {
+        todo!()
+    }
+
+    async fn rename_branch(&self, _new_name: &str) -> Result<(), Self::RenameError> {
         todo!()
     }
 
@@ -240,6 +247,7 @@ impl GitCommandProvider {
     }
 
     async fn run_command(command: &mut Command) -> Result<OsString, GitCommandError> {
+        debug!(target: "posix", "{:?}", command.as_std());
         let out = command.output().await?;
 
         if !out.status.success() {
@@ -292,6 +300,7 @@ impl GitProvider for GitCommandProvider {
     type ListBranchesError = GitCommandError;
     type MvError = GitCommandError;
     type PushError = GitCommandError;
+    type RenameError = GitCommandError;
     type RmError = GitCommandError;
     type SetOriginError = GitCommandError;
     type ShowError = GitCommandError;
@@ -401,6 +410,17 @@ impl GitProvider for GitCommandProvider {
         )
         .await?;
 
+        Ok(())
+    }
+
+    async fn rename_branch(&self, new_name: &str) -> Result<(), Self::RenameError> {
+        let _out = GitCommandProvider::run_command(
+            GitCommandProvider::new_command(&self.workdir)
+                .arg("branch")
+                .arg("-m")
+                .arg(new_name),
+        )
+        .await?;
         Ok(())
     }
 

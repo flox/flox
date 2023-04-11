@@ -1871,7 +1871,7 @@ dependencies = [
 [[package]]
 name = "runix"
 version = "0.1.1"
-source = "git+https://github.com/flox/runix#98b06bc30d9794634df8b06bf537fed2abebe20c"
+source = "git+https://github.com/flox/runix#66f181cf1bc45981c3eced5e655bb74c60ae0dbc"
 dependencies = [
  "async-trait",
  "chrono",

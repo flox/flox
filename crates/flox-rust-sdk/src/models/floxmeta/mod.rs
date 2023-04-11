@@ -1,23 +1,26 @@
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 
+use flox_types::version::Version;
 use futures::{StreamExt, TryStreamExt};
 use log::warn;
 use runix::command::FlakeInit;
 use runix::{NixBackend, Run};
 use tempfile::TempDir;
 use thiserror::Error;
-use tokio::fs::OpenOptions;
+use tokio::fs::{self, OpenOptions};
 use tokio::io::AsyncWriteExt;
 
 pub mod environment;
 pub mod user_meta;
 use environment::{Metadata, METADATA_JSON};
 
+use self::user_meta::{SetUserMetaError, FLOX_USER_META_FILE};
 use super::root::reference::ProjectDiscoverGitError;
 use super::root::transaction::{GitAccess, GitSandBox, ReadOnly};
 use super::root::{Closed, Root};
 use crate::flox::Flox;
+use crate::models::floxmeta::user_meta::UserMeta;
 use crate::providers::git::GitProvider;
 
 pub const FLOXMETA_DIR_NAME: &str = "meta";
@@ -63,9 +66,85 @@ impl<'flox, Git: GitProvider> Root<'flox, Closed<Git>> {
     }
 }
 
+impl<'flox> Root<'flox, Closed<String>> {}
+
 /// Constructors and implementations for retrieving floxmeta handles
 /// and creating a writable transaction
 impl<'flox, Git: GitProvider> Floxmeta<'flox, Git, ReadOnly<Git>> {
+    /// Creates a new floxmeta for the specified owner
+    ///
+    /// ## Return value
+    ///
+    /// returns [Floxmeta] instance for the newly created floxmeta dir
+    ///
+    /// returns [CreateFloxmetaError]
+    ///
+    /// * if a floxmeta for the specified owner already exists.
+    /// * if creating initializing a floxmeta in a tempdir fails at any step
+    /// * if the temporary floxmeta cannot be moved to its final location
+    pub async fn create_floxmeta(
+        flox: &'flox Flox,
+        owner: &str,
+    ) -> Result<Floxmeta<'flox, Git, ReadOnly<Git>>, CreateFloxmetaError<Git>> {
+        let floxmeta_dir = flox.cache_dir.join(FLOXMETA_DIR_NAME);
+        let user_floxmeta_dir = flox.cache_dir.join(FLOXMETA_DIR_NAME).join(owner);
+        let user_floxmeta_prepare_dir = flox.temp_dir.join(FLOXMETA_DIR_NAME).join(owner);
+
+        // simple check if floxmeta already exists
+        if user_floxmeta_dir.exists() {
+            return Err(CreateFloxmetaError::Exists(owner.to_string()));
+        }
+
+        fs::create_dir_all(&user_floxmeta_prepare_dir)
+            .await
+            .map_err(CreateFloxmetaError::CreateInitialDir)?;
+
+        // We are creating the floxmeta in a tempdir.
+        // After finishing the initialization is complete and successful
+        // the floxmeta is moved to its final place
+        // TODO use --initial-branch instead of renaming to floxmeta
+        let git = Git::init(&user_floxmeta_prepare_dir, true)
+            .await
+            .map_err(CreateFloxmetaError::Init)?;
+
+        let floxmeta_prepare = Floxmeta {
+            owner: owner.to_string(),
+            flox,
+            access: ReadOnly::new(git),
+            _git: PhantomData::default(),
+        };
+
+        let user_meta = UserMeta {
+            channels: Default::default(),
+            client_uuid: uuid::Uuid::new_v4(),
+            metrics_consent: 0,
+            version: Version::<1>,
+        };
+
+        let floxmeta = floxmeta_prepare.enter_transaction().await?;
+        floxmeta
+            .access
+            .git()
+            .rename_branch("floxmain")
+            .await
+            .map_err(CreateFloxmetaError::Rename)?;
+        floxmeta.set_user_meta(&user_meta).await?;
+        let _ = floxmeta
+            .commit_transaction(&format!("init: create {FLOX_USER_META_FILE}"))
+            .await?;
+
+        fs::create_dir_all(floxmeta_dir)
+            .await
+            .map_err(CreateFloxmetaError::CreateFloxmetaHome)?;
+        fs::rename(user_floxmeta_prepare_dir, user_floxmeta_dir)
+            .await
+            .map_err(CreateFloxmetaError::MoveFloxmeta)?;
+
+        let floxmeta = Self::get_floxmeta(flox, owner).await?;
+
+        Ok(floxmeta)
+    }
+
     /// lists all floxmeta repositories currently cloned to the floxmeta cache
     ///
     /// # Errors
@@ -283,6 +362,31 @@ pub enum OpenFloxmetaError {
     WorkdirNotFound,
 }
 
+/// Errors occurring while trying to create a floxmeta
+#[derive(Error, Debug)]
+pub enum CreateFloxmetaError<Git: GitProvider> {
+    #[error("A floxmeta '{0}' already exists")]
+    Exists(String),
+    #[error("Could not create floxmeta initial directory: {0}")]
+    CreateInitialDir(std::io::Error),
+    #[error("Could not create floxmeta home directory: {0}")]
+    CreateFloxmetaHome(std::io::Error),
+    #[error("Could not move floxmeta repository to floxmeta home: {0}")]
+    MoveFloxmeta(std::io::Error),
+    #[error("Could not initialize git repo: {0}")]
+    Init(Git::InitError),
+    #[error("Could not make repo writable: {0}")]
+    Transacton(#[from] TransactionEnterError<Git>),
+    #[error("Could not rename 'floxmain' branch: {0}")]
+    Rename(Git::RenameError),
+    #[error("Could not write back user metadata: {0}")]
+    UserMeta(#[from] SetUserMetaError<Git>),
+    #[error("Could not write back initialized floxmeta")]
+    Commit(#[from] TransactionCommitError<Git>),
+    #[error("Could not read created floxmeta: {0}")]
+    GetCreated(#[from] GetFloxmetaError<Git>),
+}
+
 #[derive(Error, Debug)]
 pub enum InitFloxmetaError<Nix: NixBackend, Git: GitProvider>
 where
@@ -357,7 +461,9 @@ pub enum TransactionEnterError<Git: GitProvider> {
 }
 #[derive(Error, Debug)]
 pub enum TransactionCommitError<Git: GitProvider> {
+    #[error("Failed committing changes: {0}")]
     GitCommit(Git::CommitError),
+    #[error("Failed synchronizing changes: {0}")]
     GitPush(Git::PushError),
 }
 
@@ -483,5 +589,23 @@ pub(super) mod floxmeta_tests {
         ));
 
         let _ = floxmeta.abort_transaction().await;
+    }
+
+    #[tokio::test]
+    async fn test_create_floxmeta() {
+        let (flox, _tempdir_handle) = flox_instance();
+
+        Floxmeta::<GitCommandProvider, ReadOnly<_>>::get_floxmeta(&flox, "someone")
+            .await
+            .expect_err("Should fail finding floxmeta");
+        let floxmeta =
+            Floxmeta::<GitCommandProvider, ReadOnly<_>>::create_floxmeta(&flox, "someone")
+                .await
+                .expect("should create a floxmeta");
+        floxmeta.user_meta().await.expect("should find user_meta");
+
+        Floxmeta::<GitCommandProvider, ReadOnly<_>>::create_floxmeta(&flox, "someone")
+            .await
+            .expect_err("should fail if floxmeta exists");
     }
 }

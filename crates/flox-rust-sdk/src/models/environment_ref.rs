@@ -16,7 +16,7 @@ use crate::flox::{Flox, FloxNixApi, ResolveFloxInstallableError};
 use crate::providers::git::GitProvider;
 
 static DEFAULT_NAME: &str = "default";
-static DEFAULT_OWNER: &str = "local";
+pub static DEFAULT_OWNER: &str = "local";
 
 #[derive(Debug)]
 pub struct Project<'flox> {

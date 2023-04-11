@@ -6,10 +6,12 @@ mod package;
 use std::str::FromStr;
 use std::{env, fs};
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use bpaf::{Bpaf, Parser};
-use flox_rust_sdk::flox::{Flox, FLOX_VERSION};
+use flox_rust_sdk::flox::{Flox, DEFAULT_OWNER, FLOX_VERSION};
+use flox_rust_sdk::models::floxmeta::{Floxmeta, GetFloxmetaError};
 use flox_rust_sdk::prelude::Channel;
+use flox_rust_sdk::providers::git::GitCommandProvider;
 use log::debug;
 use tempfile::TempDir;
 
@@ -97,24 +99,49 @@ impl FloxArgs {
             env::set_var("FLOX_DISABLE_METRICS", "true");
         }
 
-        let channels = init_channels(&config.flox.config_dir)?;
-
         let access_tokens = init_access_tokens(&config.nix.access_tokens)?;
 
         let netrc_file = dirs::home_dir()
             .expect("User must have a home directory")
             .join(".netrc");
 
-        let flox = Flox {
+        let boostrap_flox = Flox {
             cache_dir: config.flox.cache_dir.clone(),
             data_dir: config.flox.data_dir.clone(),
             config_dir: config.flox.config_dir.clone(),
-            channels,
+            channels: Default::default(),
             access_tokens,
             netrc_file,
             temp_dir: temp_dir_path.clone(),
             system: env!("NIX_TARGET_SYSTEM").to_string(),
             uuid: init_uuid(&config.flox.data_dir).await?,
+        };
+
+        let floxmeta = match boostrap_flox
+            .floxmeta::<GitCommandProvider>(DEFAULT_OWNER)
+            .await
+        {
+            Ok(floxmeta) => floxmeta,
+            Err(GetFloxmetaError::NotFound(_)) => {
+                Floxmeta::create_floxmeta(&boostrap_flox, DEFAULT_OWNER)
+                    .await
+                    .context("Could not create 'floxmeta'")?
+            },
+            Err(e) => Err(e).context("Could not read 'floxmeta'")?,
+        };
+
+        //  Floxmeta::create_floxmeta creates an intial user_meta
+        let user_meta = floxmeta
+            .user_meta()
+            .await
+            .context("Could not get user metadata")?;
+
+        let user_channels = user_meta.channels.unwrap_or_default();
+        let channels = init_channels(user_channels)?;
+
+        let flox = Flox {
+            channels,
+            ..boostrap_flox
         };
 
         // in debug mode keep the tempdir to reproduce nix commands

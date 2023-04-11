@@ -1,37 +1,43 @@
-use std::collections::HashMap;
-use std::fs::File;
-use std::path::Path;
+use std::collections::BTreeMap;
 use std::str::FromStr;
 
 use anyhow::{Context, Result};
 use flox_rust_sdk::prelude::{Channel, ChannelRegistry};
 use indoc::formatdoc;
-use log::warn;
-use serde::Deserialize;
+use once_cell::sync::Lazy;
+
+/// Default channels that are aways vendored with flox and can't be overridden
+pub static DEFAULT_CHANNELS: Lazy<BTreeMap<&'static str, &'static str>> = Lazy::new(|| {
+    [
+        ("flox", "github:flox/floxpkgs/master"),
+        ("nixpkgs-flox", "github:flox/nixpkgs-flox/master"),
+    ]
+    .into()
+});
+
+/// Hidden channels that are used for stability setup
+pub static HIDDEN_CHANNELS: Lazy<BTreeMap<&'static str, &'static str>> = Lazy::new(|| {
+    [
+        (
+            "nixpkgs",
+            // overridden if stability is known.
+            // globalizing stability is outstanding.
+            "github:flox/nixpkgs/stable",
+        ),
+        ("nixpkgs-stable", "github:flox/nixpkgs/stable"),
+        ("nixpkgs-unstable", "github:flox/nixpkgs/unstable"),
+        ("nixpkgs-staging", "github:flox/nixpkgs/staging"),
+    ]
+    .into()
+});
 
 /// Setup the **in-memory** channels registry.
 ///
 /// The registry is later written to a file to be passed to nix.
 ///
-/// Channels that have been subscribed to are read from the floxUserMeta.json file.
-pub fn init_channels(config_dir: &Path) -> Result<ChannelRegistry> {
-    // TODO: figure out how/where we handle FloxUserMeta during and after the rewrite
-    // For now we "only" need the channels.
-    // Editing of this file is left to the bash implementation.
-    let flox_user_meta_path = config_dir.join("floxUserMeta.json");
-
-    let user_channels = if flox_user_meta_path.exists() {
-        let parsed_user_meta: UserMeta =
-            serde_json::from_reader(File::open(&flox_user_meta_path)?)?;
-        parsed_user_meta.channels.unwrap_or_else(|| {
-            warn!("Did not find 'channels' in {flox_user_meta_path:?}, consider running 'flox subscribe'");
-            HashMap::default()
-        })
-    } else {
-        warn!("Did not find {flox_user_meta_path:?}, continuing without user channels");
-        HashMap::default()
-    };
-
+/// Channels that have been subscribed to are passed as argument.
+/// They are typically read from the floxUserMeta.json configuration in the user's floxmeta.
+pub fn init_channels(user_channels: BTreeMap<String, String>) -> Result<ChannelRegistry> {
     let mut channels = ChannelRegistry::default();
 
     // user synched channels
@@ -47,38 +53,14 @@ pub fn init_channels(config_dir: &Path) -> Result<ChannelRegistry> {
     }
 
     // default channels
-    channels.register_channel("flox", Channel::from_str("github:flox/floxpkgs/master")?);
-    channels.register_channel(
-        "nixpkgs-flox",
-        Channel::from_str("github:flox/nixpkgs-flox/master")?,
-    );
+    for (name, flakeref) in DEFAULT_CHANNELS.iter() {
+        channels.register_channel(name, Channel::from_str(flakeref)?)
+    }
 
-    // always add these:
-    channels.register_channel(
-        "nixpkgs",
-        // overridden if stability is known.
-        // globalizing stability is outstanding.
-        Channel::from_str("github:flox/nixpkgs/stable")?,
-    );
-    channels.register_channel(
-        "nixpkgs-stable",
-        Channel::from_str("github:flox/nixpkgs/stable")?,
-    );
-    channels.register_channel(
-        "nixpkgs-staging",
-        Channel::from_str("github:flox/nixpkgs/staging")?,
-    );
-    channels.register_channel(
-        "nixpkgs-unstable",
-        Channel::from_str("github:flox/nixpkgs/unstable")?,
-    );
+    // hidden channels
+    for (name, flakeref) in HIDDEN_CHANNELS.iter() {
+        channels.register_channel(name, Channel::from_str(flakeref)?)
+    }
 
     Ok(channels)
-}
-
-#[derive(Deserialize)]
-struct UserMeta {
-    /// User provided channels
-    /// TODO: transition to runix flakeRefs
-    channels: Option<HashMap<String, String>>,
 }

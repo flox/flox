@@ -1,4 +1,5 @@
 use derive_more::FromStr;
+use runix::registry::RegistryEntry;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -34,6 +35,10 @@ pub struct ChannelRegistry {
 impl ChannelRegistry {
     pub fn register_channel(&mut self, name: impl ToString, channel: Channel) {
         self.registry.set(name, channel.flake_ref)
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &RegistryEntry> {
+        self.registry.entries()
     }
 }
 

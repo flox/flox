@@ -8,7 +8,7 @@ use std::str::FromStr;
 use anyhow::{anyhow, bail, Context, Result};
 use bpaf::Parser;
 use flox_rust_sdk::flox::{EnvironmentRef, Flox, FloxInstallable, ResolvedInstallableMatch};
-use flox_rust_sdk::prelude::{Channel, ChannelRegistry, Installable};
+use flox_rust_sdk::prelude::Installable;
 use flox_rust_sdk::providers::git::{GitCommandProvider, GitProvider};
 use indoc::indoc;
 use itertools::Itertools;
@@ -31,32 +31,6 @@ use crate::utils::dialog::{Dialog, Select};
 
 static NIX_IDENTIFIER_SAFE: Lazy<Regex> = Lazy::new(|| Regex::new(r#"^[a-zA-Z0-9_-]+$"#).unwrap());
 pub static TERMINAL_STDERR: Lazy<Mutex<Stderr>> = Lazy::new(|| Mutex::new(std::io::stderr()));
-
-pub fn init_channels() -> Result<ChannelRegistry> {
-    let mut channels = ChannelRegistry::default();
-    channels.register_channel("flox", Channel::from_str("github:flox/floxpkgs")?);
-    channels.register_channel("nixpkgs", Channel::from_str("github:flox/nixpkgs/stable")?);
-    channels.register_channel(
-        "nixpkgs-flox",
-        Channel::from_str("github:flox/nixpkgs-flox/master")?,
-    );
-
-    // generate these dynamically based on <?>
-    channels.register_channel(
-        "nixpkgs-stable",
-        Channel::from_str("github:flox/nixpkgs/stable")?,
-    );
-    channels.register_channel(
-        "nixpkgs-staging",
-        Channel::from_str("github:flox/nixpkgs/staging")?,
-    );
-    channels.register_channel(
-        "nixpkgs-unstable",
-        Channel::from_str("github:flox/nixpkgs/unstable")?,
-    );
-
-    Ok(channels)
-}
 
 fn nix_str_safe(s: &str) -> Cow<str> {
     if NIX_IDENTIFIER_SAFE.is_match(s) {
