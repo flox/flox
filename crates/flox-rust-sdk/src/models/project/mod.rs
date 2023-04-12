@@ -7,6 +7,8 @@ use once_cell::sync::Lazy;
 use regex::Regex;
 use runix::arguments::{EvalArgs, NixArgs};
 use runix::command::{Eval, FlakeInit};
+use runix::flake_ref::git::{GitAttributes, GitRef};
+use runix::flake_ref::FlakeRef;
 use runix::installable::Installable;
 use runix::{NixBackend, Run, RunJson};
 use tempfile::TempDir;
@@ -158,16 +160,39 @@ impl<'flox, Git: GitProvider, Access: GitAccess<Git>> Project<'flox, Git, Access
     ///
     /// If the project is a subflake, returns the subflake directory
     pub fn flake_root(&self) -> Option<PathBuf> {
-        self.git
-            .git()
-            .workdir()
-            .map(|git_workdir| git_workdir.join(&self.subdir))
+        match self.flakeref() {
+            FlakeRef::GitPath(GitRef { url, attributes }) => Some(
+                url.to_file_path()
+                    .unwrap()
+                    .join(attributes.dir.unwrap_or_default()),
+            ),
+            _ => todo!("handling of non-local projects not implemented"),
+        }
+    }
+
+    /// Get a the directory for links of rendered enviroments
+    ///
+    /// ## Panics
+    ///
+    /// Panics if flake is not a local repository
+    /// todo: handling of other flake refs
+    pub(crate) fn environment_out_link_dir(&self) -> PathBuf {
+        self.flake_root().unwrap().join(".flox").join("envs")
     }
 
     /// flakeref for the project
-    // todo: use typed FlakeRefs
-    pub fn flakeref(&self) -> String {
-        self.workdir().unwrap().to_string_lossy().to_string()
+    // todo: base project on FlakeRefs
+    pub fn flakeref(&self) -> FlakeRef {
+        FlakeRef::GitPath(GitRef::new(
+            url::Url::from_directory_path(self.workdir().unwrap())
+                .unwrap() // we know the path
+                .try_into()
+                .unwrap(), // we know its protocol is "file",
+            GitAttributes {
+                dir: Some(self.subdir.clone()),
+                ..Default::default()
+            },
+        ))
     }
 
     /// Add a new flox style package from a template.
@@ -317,7 +342,9 @@ impl<'flox, Git: GitProvider, Access: GitAccess<Git>> Project<'flox, Git, Access
         let eval = Eval {
             eval_args: EvalArgs {
                 apply: Some(nix_apply_expr.into()),
-                installable: Some(Installable::new(self.flakeref(), "floxEnvs".to_string()).into()),
+                installable: Some(
+                    Installable::new(self.flakeref().to_string(), "floxEnvs".to_string()).into(),
+                ),
             },
             ..Eval::default()
         };
@@ -350,7 +377,9 @@ impl<'flox, Git: GitProvider, Access: GitAccess<Git>> Project<'flox, Git, Access
         let eval = Eval {
             eval_args: EvalArgs {
                 apply: Some(nix_apply_expr.into()),
-                installable: Some(Installable::new(self.flakeref(), "floxEnvs".to_string()).into()),
+                installable: Some(
+                    Installable::new(self.flakeref().to_string(), "floxEnvs".to_string()).into(),
+                ),
             },
             ..Eval::default()
         };

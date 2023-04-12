@@ -281,7 +281,13 @@ impl<'flox, Git: GitProvider> Environment<'flox, Git, ReadOnly<Git>> {
             .ok_or(GenerationError::Empty)?;
 
         Ok(Installable::new(
-            format!("git+path:{}?dir={generation}", git.path().to_string_lossy()),
+            // todo: replace with flakeref
+            format!(
+                "git+path://{root}?ref={system}.{name}&dir={generation}",
+                root = git.path().to_string_lossy(),
+                system = self.system(),
+                name = self.name()
+            ),
             ".floxEnvs.default".to_string(),
         ))
     }

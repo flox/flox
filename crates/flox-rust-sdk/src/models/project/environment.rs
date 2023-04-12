@@ -1,17 +1,18 @@
 use std::borrow::Cow;
 use std::fmt::Display;
+use std::path::PathBuf;
 
 use flox_types::catalog::{EnvCatalog, StorePath};
 use runix::arguments::eval::EvaluationArgs;
-use runix::arguments::EvalArgs;
-use runix::command::Eval;
+use runix::arguments::{BuildArgs, EvalArgs};
+use runix::command::{Build, Eval};
 use runix::command_line::{NixCommandLine, NixCommandLineRunJsonError};
 use runix::installable::Installable;
-use runix::RunJson;
+use runix::{NixBackend, Run, RunJson, RunTyped};
 use thiserror::Error;
 
 use super::{Index, Project, TransactionCommitError, TransactionEnterError};
-use crate::flox::Flox;
+use crate::flox::{Flox, FloxNixApi};
 use crate::models::root::transaction::{GitAccess, GitSandBox, ReadOnly};
 use crate::providers::git::GitProvider;
 use crate::utils::errors::IoError;
@@ -53,7 +54,7 @@ impl<Git: GitProvider, A: GitAccess<Git>> Environment<'_, Git, A> {
     // todo: share with named env
     pub fn installable(&self) -> Installable {
         Installable {
-            flakeref: self.project.flakeref(),
+            flakeref: self.project.flakeref().to_string(),
             attr_path: format!(".floxEnvs.{}.{}", self.system, self.name),
         }
     }
@@ -111,7 +112,60 @@ impl<Git: GitProvider, A: GitAccess<Git>> Environment<'_, Git, A> {
 
         serde_json::from_value(catalog_value).map_err(ProjectEnvironmentError::ParseCatalog)
     }
+
+    pub fn systematized_name(&self) -> String {
+        format!("{0}.{1}", self.system, self.name)
+    }
+
+    /// Where to link a built environment to
+    ///
+    /// When used as a lookup signals whether the environment has *at some point* been built before
+    /// and is "activatable". Note that the environment may have been modified since it was last built.
+    ///
+    /// Mind that an existing out link does not necessarily imply that the environment
+    /// can in fact be built.
+    pub fn out_link(&self) -> PathBuf {
+        self.project
+            .environment_out_link_dir()
+            .join(self.systematized_name())
+    }
+
+    /// Try building the environment and optionally linking it to the associated out_link
+    ///
+    /// [try_build]'s only external effect is having nix build
+    /// and create a gcroot/out_link for an environment derivation.
+    pub async fn try_build<Nix>(&self) -> Result<(), BuildError<Nix>>
+    where
+        Nix: FloxNixApi,
+        Build: RunTyped<Nix>,
+    {
+        let nix: Nix = self.project.flox.nix([].to_vec());
+
+        let build = Build {
+            installables: [self.installable()].into(),
+            eval: runix::arguments::eval::EvaluationArgs {
+                impure: true.into(),
+            },
+            build: BuildArgs {
+                out_link: Some(self.out_link().into()),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        build
+            .run(&nix, &Default::default())
+            .await
+            .map_err(BuildError)?;
+        Ok(())
+    }
 }
+
+#[derive(Debug, Error)]
+#[error(transparent)]
+pub struct BuildError<Nix: NixBackend>(pub(crate) <Build as Run<Nix>>::Error)
+where
+    Build: Run<Nix>;
 
 /// Implementations for R/O only instances
 ///
@@ -154,5 +208,105 @@ impl<Git: GitProvider, A: GitAccess<Git>> Display for Environment<'_, Git, A> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // this assumes self.project.flakeref is the current working directory
         write!(f, "environment .#{}", self.name)
+    }
+}
+
+#[cfg(test)]
+#[cfg(feature = "impure-unit-tests")]
+mod tests {
+    use std::env;
+
+    use tempfile::TempDir;
+
+    use super::*;
+    use crate::flox::Flox;
+    use crate::prelude::ChannelRegistry;
+    use crate::providers::git::GitCommandProvider;
+
+    fn flox_instance() -> (Flox, TempDir) {
+        let tempdir_handle = tempfile::tempdir_in(std::env::temp_dir()).unwrap();
+
+        let cache_dir = tempdir_handle.path().join("caches");
+        let temp_dir = tempdir_handle.path().join("temp");
+        let config_dir = tempdir_handle.path().join("config");
+
+        std::fs::create_dir_all(&cache_dir).unwrap();
+        std::fs::create_dir_all(&temp_dir).unwrap();
+        std::fs::create_dir_all(&config_dir).unwrap();
+
+        let mut channels = ChannelRegistry::default();
+        channels.register_channel("flox", "github:flox/floxpkgs/master".parse().unwrap());
+
+        let flox = Flox {
+            system: "aarch64-darwin".to_string(),
+            cache_dir,
+            temp_dir,
+            config_dir,
+            channels,
+            ..Default::default()
+        };
+
+        (flox, tempdir_handle)
+    }
+
+    #[tokio::test]
+    async fn build_environment() {
+        use tokio::io::AsyncWriteExt;
+
+        let temp_home = tempfile::tempdir().unwrap();
+        env::set_var("HOME", temp_home.path());
+
+        let (flox, tempdir_handle) = flox_instance();
+
+        let project_dir = tempfile::tempdir_in(tempdir_handle.path()).unwrap();
+        let _project_git = GitCommandProvider::init(project_dir.path(), false)
+            .await
+            .expect("should create git repo");
+
+        let project = flox
+            .resource(project_dir.path().to_path_buf())
+            .guard::<GitCommandProvider>()
+            .await
+            .expect("Finding dir should succeed")
+            .open()
+            .expect("should find git repo")
+            .guard()
+            .await
+            .expect("Openeing project dir should succeed")
+            .init_project(Vec::new())
+            .await
+            .expect("Should init a new project");
+
+        let (project, mut index) = project
+            .enter_transaction()
+            .await
+            .expect("Should be able to make sandbox");
+
+        project.create_default_env(&mut index).await;
+        let mut flox_nix = tokio::fs::OpenOptions::new()
+            .write(true)
+            .truncate(true)
+            .open(project.flake_root().unwrap().join("flox.nix"))
+            .await
+            .unwrap();
+        flox_nix
+            .write_all("{ packages.flox.flox = {}; }\n".as_bytes())
+            .await
+            .unwrap();
+
+        let project = project
+            .commit_transaction(index, "unused")
+            .await
+            .expect("Should commit transaction");
+
+        let project = project
+            .environment("default")
+            .await
+            .expect("should find new environment");
+
+        project.try_build().await.expect("should build");
+
+        assert!(project.out_link().exists());
+        assert!(project.out_link().join("bin").join("flox").exists());
     }
 }
