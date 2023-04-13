@@ -45,3 +45,6 @@ you can invoke with `--refresh` to update the list before searching.
 
 [ \--json ]
 :   output the search results in json format
+
+[ -v | \--verbose ]
+:   output extended information

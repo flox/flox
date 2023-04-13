@@ -257,6 +257,10 @@ pub enum ChannelCommands {
         #[bpaf(long)]
         json: bool,
 
+        /// print extended search results
+        #[bpaf(long, short)]
+        verbose: bool,
+
         #[bpaf(positional("search term"))]
         search_term: Option<String>,
     },
