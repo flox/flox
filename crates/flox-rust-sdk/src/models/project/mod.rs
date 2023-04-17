@@ -328,7 +328,7 @@ impl<'flox, Git: GitProvider, Access: GitAccess<Git>> Project<'flox, Git, Access
     pub async fn environment<Nix: FloxNixApi>(
         &self,
         name: &str,
-    ) -> Result<Environment<'flox, Git, ReadOnly<Git>>, ()>
+    ) -> Result<Environment<'flox, Git, ReadOnly<Git>>, GetEnvironmentError<Nix>>
     where
         Eval: RunJson<Nix>,
     {
@@ -349,15 +349,22 @@ impl<'flox, Git: GitProvider, Access: GitAccess<Git>> Project<'flox, Git, Access
             ..Eval::default()
         };
 
-        let env = eval.run_json(&nix, &Default::default()).await.unwrap();
-        let env = serde_json::from_value::<bool>(env).unwrap();
+        let has_env = eval
+            .run_json(&nix, &Default::default())
+            .await
+            .map_err(GetEnvironmentError::GetEnvExists)?;
+        let has_env: bool =
+            serde_json::from_value(has_env).map_err(GetEnvironmentError::DecodeEval)?;
 
-        env.then(|| Environment {
+        if !has_env {
+            return Err(GetEnvironmentError::NotFound);
+        }
+
+        Ok(Environment {
             name: name.to_string(),
             system: self.flox.system.clone(),
             project: Project::new(self.flox, self.git.read_only(), self.subdir.clone()),
         })
-        .ok_or(())
     }
 
     /// List environments in this project
@@ -593,6 +600,19 @@ pub enum CleanupInitializerError {
     RemovePkgs(std::io::Error),
     #[error("Error removing flake.nix")]
     RemoveFlake(std::io::Error),
+}
+
+#[derive(Error, Debug)]
+pub enum GetEnvironmentError<Nix: NixBackend>
+where
+    Eval: RunJson<Nix>,
+{
+    #[error("Could evaluate whether flake has environment: {0}")]
+    GetEnvExists(<Eval as RunJson<Nix>>::JsonError),
+    #[error("Could not decode eval response: {0}")]
+    DecodeEval(serde_json::Error),
+    #[error("Environment not found")]
+    NotFound,
 }
 
 #[derive(Error, Debug)]

@@ -4,13 +4,14 @@ use std::path::{Path, PathBuf};
 use log::debug;
 use runix::command::{Eval, FlakeMetadata};
 use runix::installable::Installable;
-use runix::RunJson;
+use runix::{NixBackend, RunJson};
 use thiserror::Error;
 
 use super::environment::CommonEnvironment;
 use super::flox_installable::{FloxInstallable, ParseFloxInstallableError};
 use super::floxmeta::{self, Floxmeta, GetFloxmetaError};
-use super::project;
+use super::project::{self, OpenProjectError};
+use super::root::reference::ProjectDiscoverGitError;
 use super::root::transaction::{GitAccess, ReadOnly};
 use crate::flox::{Flox, FloxNixApi, ResolveFloxInstallableError};
 use crate::providers::git::GitProvider;
@@ -380,70 +381,62 @@ impl EnvironmentRef<'_> {
         }
     }
 
-    /// explicitly resolve as named env
-    pub async fn to_named<'flox, Git: GitProvider>(
-        &self,
-        flox: &'flox Flox,
-    ) -> Option<floxmeta::environment::Environment<'flox, Git, ReadOnly<Git>>> {
-        match self {
-            EnvironmentRef::Project(_) => None,
-            EnvironmentRef::Named(Named {
-                ref owner,
-                ref name,
-            }) => Floxmeta::get_floxmeta(flox, owner)
-                .await
-                .ok()?
-                .environment(name)
-                .await
-                .ok(),
-        }
-    }
-
-    /// explicitly resolve as project env
-    ///
-    /// TODO: assumes path installables right now.
-    ///       We got to fix that eventually to support remote envs?!
-    pub async fn to_project<'flox, Git: GitProvider + 'flox>(
+    pub async fn to_env<'flox, Git: GitProvider + 'flox, Nix: FloxNixApi>(
         &'flox self,
         flox: &'flox Flox,
-    ) -> Option<project::environment::Environment<'flox, Git, ReadOnly<Git>>> {
-        match self {
+    ) -> Result<CommonEnvironment<Git>, CastError<Git, Nix>>
+    where
+        Eval: RunJson<Nix>,
+    {
+        let env = match self {
+            EnvironmentRef::Named(Named { owner, name }) => {
+                let floxmeta = Floxmeta::get_floxmeta(flox, owner).await?;
+                let environment = floxmeta.environment(name).await?;
+                CommonEnvironment::Named(environment)
+            },
             EnvironmentRef::Project(Project {
                 flox,
                 installable,
                 workdir,
                 name,
             }) => {
-                let project = flox
+                let git = flox
                     .resource(Path::new(&installable.flakeref).to_path_buf())
                     .guard::<Git>()
-                    .await
-                    .ok()?
+                    .await?
                     .open()
-                    .ok()?
+                    .map_err(|_| CastError::NotFound(installable.to_string()))?;
+
+                let project = git
                     .guard()
-                    .await
-                    .ok()?
+                    .await?
                     .open()
-                    .ok()?;
+                    .map_err(|_| CastError::NotFound(installable.to_string()))?;
 
-                project.environment(name).await.ok()
-            },
-            EnvironmentRef::Named(_) => None,
-        }
-    }
+                let environment = project.environment(name).await?;
 
-    async fn to_env<'flox, Git: GitProvider + 'flox>(
-        &'flox self,
-        flox: &'flox Flox,
-    ) -> CommonEnvironment<Git> {
-        match self {
-            EnvironmentRef::Named(_) => {
-                CommonEnvironment::Named(self.to_named(flox).await.unwrap())
+                CommonEnvironment::Project(environment)
             },
-            EnvironmentRef::Project(_) => {
-                CommonEnvironment::Project(self.to_project::<Git>(flox).await.unwrap())
-            },
-        }
+        };
+        Ok(env)
     }
+}
+
+#[derive(Debug, Error)]
+pub enum CastError<Git: GitProvider, Nix: NixBackend>
+where
+    Eval: RunJson<Nix>,
+{
+    #[error(transparent)]
+    GetFloxmeta(#[from] GetFloxmetaError<Git>),
+    #[error(transparent)]
+    GetFloxmetaEnvironment(#[from] floxmeta::environment::GetEnvironmentError<Git>),
+    #[error(transparent)]
+    DiscoveGit(#[from] ProjectDiscoverGitError<Git>),
+    #[error("Environment not found: {0}")]
+    NotFound(String),
+    #[error(transparent)]
+    OpenProject(#[from] OpenProjectError),
+    #[error(transparent)]
+    GetProjectEnvironment(#[from] project::GetEnvironmentError<Nix>),
 }

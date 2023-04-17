@@ -42,16 +42,18 @@ impl<'flox, Git: GitProvider> CommonEnvironment<'flox, Git> {
         todo!()
     }
 
-    pub fn to_named(self) -> Option<floxmeta::environment::Environment<'flox, Git, ReadOnly<Git>>> {
+    pub async fn upgrade(&self, _packages: &[FloxPackage]) {
+        todo!()
+    }
+
+    pub fn named(self) -> Option<floxmeta::environment::Environment<'flox, Git, ReadOnly<Git>>> {
         match self {
             CommonEnvironment::Named(n) => Some(n),
             CommonEnvironment::Project(_) => None,
         }
     }
 
-    pub fn to_project(
-        self,
-    ) -> Option<project::environment::Environment<'flox, Git, ReadOnly<Git>>> {
+    pub fn project(self) -> Option<project::environment::Environment<'flox, Git, ReadOnly<Git>>> {
         match self {
             CommonEnvironment::Named(_) => None,
             CommonEnvironment::Project(p) => Some(p),
