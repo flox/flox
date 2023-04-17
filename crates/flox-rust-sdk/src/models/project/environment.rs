@@ -4,6 +4,7 @@ use std::path::PathBuf;
 
 use flox_types::catalog::{EnvCatalog, StorePath};
 use runix::arguments::eval::EvaluationArgs;
+use runix::arguments::flake::FlakeArgs;
 use runix::arguments::{BuildArgs, EvalArgs};
 use runix::command::{Build, Eval};
 use runix::command_line::{NixCommandLine, NixCommandLineRunJsonError};
@@ -166,6 +167,66 @@ impl<Git: GitProvider, A: GitAccess<Git>> Environment<'_, Git, A> {
             .map_err(EnvironmentBuildError::Build)?;
         Ok(())
     }
+
+    /// Get the file path to the `flox.nix` producing the environment
+    ///
+    /// First, resolves the store path of the file using
+    ///
+    /// ```ignore
+    /// $ nix eval <installable>.meta.position
+    /// ```
+    ///
+    /// Then strips off the `/nix/store/<pkg-root>` part
+    /// and appends the suffix to the project root
+    pub async fn flox_nix<Nix>(&self) -> Result<PathBuf, GetFloxNixError<Nix>>
+    where
+        Nix: FloxNixApi,
+        Eval: RunJson<Nix>,
+    {
+        // todo: error handling for remote flakes
+        // for now we assume all project envs exist locally
+        let flake_root = self.project.flake_root().unwrap();
+
+        let nix = self.project.flox.nix(Default::default());
+
+        let mut installable = self.installable().unwrap();
+        // attributes are known safe values
+        installable
+            .attr_path
+            .push_attr("meta")
+            .unwrap()
+            .push_attr("position")
+            .unwrap();
+
+        let command = Eval {
+            flake: FlakeArgs {
+                no_write_lock_file: true.into(),
+                ..Default::default()
+            },
+            eval_args: EvalArgs {
+                installable: Some(installable.into()),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let output = command
+            .run_json(&nix, &Default::default())
+            .await
+            .map_err(GetFloxNixError::Eval)?;
+
+        let store_path: PathBuf =
+            serde_json::from_value(output).map_err(GetFloxNixError::Output)?;
+
+        // skip first four components
+        // /                (1)
+        // nix/             (2)
+        // store/           (3)
+        // <store-root>/    (4)
+        let store_path: PathBuf = store_path.components().skip(4).collect();
+
+        Ok(flake_root.join(store_path))
+    }
 }
 
 #[derive(Debug, Error)]
@@ -216,6 +277,16 @@ impl<Git: GitProvider, A: GitAccess<Git>> Display for Environment<'_, Git, A> {
         // this assumes self.project.flakeref is the current working directory
         write!(f, "environment .#{}", self.name)
     }
+}
+
+#[derive(Debug, Error)]
+pub enum GetFloxNixError<Nix>
+where
+    Eval: RunJson<Nix>,
+    Nix: FloxNixApi,
+{
+    Eval(<Eval as RunJson<Nix>>::JsonError),
+    Output(serde_json::Error),
 }
 
 #[cfg(test)]
