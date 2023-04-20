@@ -25,7 +25,7 @@ pub struct UserMeta {
     #[serde(rename = "floxClientUUID")]
     pub client_uuid: uuid::Uuid,
     #[serde(rename = "floxMetricsConsent")]
-    pub metrics_consent: u8,
+    pub metrics_consent: Option<u8>,
     pub version: Version<1>,
 }
 
