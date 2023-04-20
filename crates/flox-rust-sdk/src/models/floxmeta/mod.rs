@@ -128,7 +128,7 @@ impl<'flox, Git: GitProvider> Floxmeta<'flox, Git, ReadOnly<Git>> {
         let user_meta = UserMeta {
             channels: Default::default(),
             client_uuid: uuid::Uuid::new_v4(),
-            metrics_consent: 0,
+            metrics_consent: None,
             version: Version::<1>,
         };
 
