@@ -1,4 +1,4 @@
-name: "Trigger Update of floxpkgs/index"
+name: "Trigger Update of floxpkgs-intenal"
 
 on:
   push:

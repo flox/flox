@@ -1,9 +1,9 @@
-name: "Trigger Update of floxpkgs/index"
+name: "Trigger Update of floxpkgs"
 
 on:
   push:
-    branches:
-      - main
+    tags:
+      - latest
   workflow_dispatch:
 
 jobs:
