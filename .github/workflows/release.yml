@@ -58,8 +58,15 @@ jobs:
         run: |
           # update the PR branch
           # this way github will accept the push to main as a closing commit for the PR
+          #
+          # this does not seem to have worked the last times, TODO: find out why
+          #
           git push --force origin HEAD
 
       - name: "Push `${{ steps.tag.outputs.TAG }} (tag), main (branch)"
         run: |
-          git push --atomic origin ${{ steps.tag.outputs.TAG }} HEAD:main
+          # remove current latest pointer tag if it exists
+          [[ git show-ref refs/tags/latest --quiet ]] && git push origin :refs/tags/latest
+
+          # push release and latest tag and update main branch
+          git push --atomic origin ${{ steps.tag.outputs.TAG }} latest HEAD:main

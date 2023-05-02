@@ -36,4 +36,8 @@ git reset --soft main
 nix develop .#ci \
     -c cz bump --yes "$increment_flag"
 
+# store release tag
 echo "TAG=$(git describe --abbrev=0 --tags)" >> "$GITHUB_OUTPUT"
+
+# update "latest" release tag
+git tag -f "latest"
