@@ -1,6 +1,6 @@
 pub mod errors;
 pub mod guard;
-
+pub mod rnix;
 use std::path::Path;
 
 use ::log::debug;
