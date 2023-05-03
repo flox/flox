@@ -10,6 +10,7 @@ use runix::installable::{AttrPath, Attribute, Installable, ParseInstallableError
 use runix::store_path::StorePath;
 use thiserror::Error;
 
+use super::environment::InstalledPackage;
 use crate::prelude::ChannelRegistry;
 
 #[derive(Debug, PartialEq, Eq, Clone, From)]
@@ -49,6 +50,39 @@ impl FloxPackage {
             channels,
             default_channel,
         )?))
+    }
+
+    pub fn flox_nix_attribute(&self) -> Option<(Vec<String>, Option<String>)> {
+        match self {
+            FloxPackage::Id(_) => None,
+            FloxPackage::StorePath(path) => Some(([path.to_string()].to_vec(), None)),
+            FloxPackage::Installable(installable) => {
+                Some(([installable.to_string()].to_vec(), None))
+            },
+            FloxPackage::Triple(FloxTriple {
+                stability,
+                channel,
+                name,
+                version,
+            }) => {
+                let attrpath = [stability.to_string(), channel.to_string()]
+                    .into_iter()
+                    .chain(name.iter().map(|i| i.as_ref().to_owned()))
+                    .collect();
+
+                Some((attrpath, version.to_owned()))
+            },
+        }
+    }
+}
+
+impl From<InstalledPackage> for FloxPackage {
+    fn from(value: InstalledPackage) -> Self {
+        match value {
+            InstalledPackage::Catalog(triple, _) => Self::Triple(triple),
+            InstalledPackage::Installable(installable, _) => Self::Installable(installable),
+            InstalledPackage::StorePath(path) => Self::StorePath(path),
+        }
     }
 }
 
