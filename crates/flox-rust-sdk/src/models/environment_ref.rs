@@ -1,3 +1,4 @@
+use std::fmt::Display;
 use std::io::{self, ErrorKind};
 use std::path::{Path, PathBuf};
 
@@ -312,6 +313,22 @@ impl<'flox> Named {
 pub enum EnvironmentRef<'flox> {
     Named(Named),
     Project(Project<'flox>),
+}
+
+impl Display for EnvironmentRef<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            EnvironmentRef::Named(Named { owner, name }) => {
+                if owner != DEFAULT_OWNER {
+                    write!(f, "{owner}/")?
+                }
+                write!(f, "{owner}/{name}")
+            },
+            EnvironmentRef::Project(Project { workdir, name, .. }) => {
+                write!(f, "{name} {workdir:?}")
+            },
+        }
+    }
 }
 
 #[derive(Error, Debug)]
