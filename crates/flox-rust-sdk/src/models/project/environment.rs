@@ -4,6 +4,8 @@ use std::path::{Path, PathBuf};
 
 use flox_types::catalog::{EnvCatalog, StorePath};
 use futures::TryFutureExt;
+use rnix::ast::{AttrSet, Expr};
+use rowan::ast::AstNode;
 use runix::arguments::eval::EvaluationArgs;
 use runix::arguments::flake::FlakeArgs;
 use runix::arguments::{BuildArgs, EvalArgs};
@@ -13,15 +15,18 @@ use runix::installable::{FlakeAttribute, ParseInstallableError};
 use runix::{NixBackend, Run, RunJson, RunTyped};
 use thiserror::Error;
 use tokio::fs::File;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::AsyncWriteExt;
 
 use super::{Index, Project, TransactionCommitError, TransactionEnterError};
 use crate::actions::environment::{EnvironmentBuildError, EnvironmentError};
 use crate::flox::{Flox, FloxNixApi};
 use crate::models::root::transaction::{GitAccess, GitSandBox, ReadOnly};
+use crate::prelude::flox_package::FloxPackage;
 use crate::providers::git::GitProvider;
 use crate::utils::errors::IoError;
+use crate::utils::rnix::{AttrSetExt, StrExt};
 
+#[derive(Debug)]
 pub struct Environment<'flox, Git: GitProvider, Access: GitAccess<Git>> {
     /// aka. Nix attrpath, undr the assumption that they are not nested!
     pub(super) name: String,
@@ -271,6 +276,62 @@ impl<'flox, Git: GitProvider> Environment<'flox, Git, GitSandBox<Git>> {
             system: self.system,
             project,
         })
+    }
+
+    pub async fn install(
+        &self,
+        packages: impl IntoIterator<Item = &FloxPackage>,
+    ) -> Result<(), ()> {
+        let packages = packages
+            .into_iter()
+            .map(|package| package.flox_nix_attribute().unwrap());
+
+        let flox_nix_path = self.flox_nix().await.unwrap();
+        let flox_nix_content: String = read_flox_nix(&flox_nix_path).await.unwrap();
+
+        let mut root = rnix::Root::parse(&flox_nix_content)
+            .ok()
+            .unwrap()
+            .expr()
+            .unwrap();
+
+        if let Expr::Lambda(lambda) = root {
+            root = lambda.body().unwrap();
+        }
+
+        let config_attrset = find_attrs(root.clone()).unwrap();
+        let mut edited = config_attrset.clone();
+
+        for (path, version) in packages {
+            let mut value = rnix::ast::AttrSet::new();
+            if let Some(version) = version {
+                value = value.insert_unchecked(
+                    ["version"],
+                    rnix::ast::Str::new(&version).syntax().to_owned(),
+                );
+            }
+            edited = edited.insert_unchecked(path, value.syntax().to_owned());
+        }
+
+        let green_tree = config_attrset
+            .syntax()
+            .replace_with(edited.syntax().green().into_owned());
+        let new_content = nixpkgs_fmt::reformat_string(&green_tree.to_string());
+        write_flox_nix(&flox_nix_path, &new_content).await.unwrap();
+
+        Ok(())
+    }
+}
+
+fn find_attrs(mut expr: Expr) -> Result<AttrSet, ()> {
+    loop {
+        match expr {
+            Expr::LetIn(let_in) => expr = let_in.body().unwrap(),
+            Expr::With(with) => expr = with.body().unwrap(),
+
+            Expr::AttrSet(attrset) => return Ok(attrset),
+            _ => return Err(()),
+        }
     }
 }
 
