@@ -425,23 +425,23 @@ impl EnvironmentRef<'_> {
     }
 
     pub async fn to_env<'flox, Git: GitProvider + 'flox, Nix: FloxNixApi>(
-        &'flox self,
+        &self,
         flox: &'flox Flox,
-    ) -> Result<CommonEnvironment<Git>, CastError<Git, Nix>>
+    ) -> Result<CommonEnvironment<'flox, Git>, CastError<Git, Nix>>
     where
         Eval: RunJson<Nix>,
     {
-        let env = match self {
+        let env = match &self {
             EnvironmentRef::Named(Named { owner, name }) => {
                 let floxmeta = Floxmeta::get_floxmeta(flox, owner).await?;
                 let environment = floxmeta.environment(name).await?;
                 CommonEnvironment::Named(environment)
             },
             EnvironmentRef::Project(Project {
-                flox,
                 flake_attribute,
                 workdir,
                 name,
+                ..
             }) => {
                 let path = match &flake_attribute.flakeref {
                     runix::flake_ref::FlakeRef::Path(PathRef { path, .. }) => path.clone(),
