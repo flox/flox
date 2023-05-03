@@ -1,8 +1,9 @@
 use std::borrow::Cow;
 use std::fmt::Display;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use flox_types::catalog::{EnvCatalog, StorePath};
+use futures::TryFutureExt;
 use runix::arguments::eval::EvaluationArgs;
 use runix::arguments::flake::FlakeArgs;
 use runix::arguments::{BuildArgs, EvalArgs};
@@ -11,9 +12,11 @@ use runix::command_line::{NixCommandLine, NixCommandLineRunJsonError};
 use runix::installable::{FlakeAttribute, ParseInstallableError};
 use runix::{NixBackend, Run, RunJson, RunTyped};
 use thiserror::Error;
+use tokio::fs::File;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 use super::{Index, Project, TransactionCommitError, TransactionEnterError};
-use crate::actions::environment::EnvironmentBuildError;
+use crate::actions::environment::{EnvironmentBuildError, EnvironmentError};
 use crate::flox::{Flox, FloxNixApi};
 use crate::models::root::transaction::{GitAccess, GitSandBox, ReadOnly};
 use crate::providers::git::GitProvider;
@@ -276,6 +279,32 @@ impl<Git: GitProvider, A: GitAccess<Git>> Display for Environment<'_, Git, A> {
         // this assumes self.project.flakeref is the current working directory
         write!(f, "environment .#{}", self.name)
     }
+}
+
+async fn read_flox_nix(flox_nix_path: impl AsRef<Path>) -> Result<String, EnvironmentError> {
+    let flox_nix_content = tokio::fs::read_to_string(&flox_nix_path)
+        .await
+        .map_err(|err| IoError::Open {
+            file: flox_nix_path.as_ref().to_path_buf(),
+            err,
+        })?;
+
+    Ok(flox_nix_content)
+}
+
+async fn write_flox_nix(
+    flox_nix_path: impl AsRef<Path>,
+    content: impl AsRef<[u8]>,
+) -> Result<(), EnvironmentError> {
+    File::open(&flox_nix_path)
+        .and_then(|mut file| async move { file.write_all(content.as_ref()).await })
+        .await
+        .map_err(|err| IoError::Open {
+            file: flox_nix_path.as_ref().to_path_buf(),
+            err,
+        })?;
+
+    Ok(())
 }
 
 #[derive(Debug, Error)]
