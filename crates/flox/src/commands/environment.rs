@@ -4,7 +4,6 @@ use anyhow::{Context, Result};
 use bpaf::{construct, Bpaf, Parser, ShellComp};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::CommonEnvironment;
-use flox_rust_sdk::models::environment_ref;
 use flox_rust_sdk::models::floxmeta::Floxmeta;
 use flox_rust_sdk::nix::command_line::NixCommandLine;
 use flox_rust_sdk::prelude::flox_package::FloxPackage;
@@ -23,7 +22,7 @@ pub struct EnvironmentArgs {
     pub system: Option<String>,
 }
 
-pub type EnvironmentRef = PathBuf;
+pub type EnvironmentRef = String;
 
 impl EnvironmentCommands {
     pub async fn handle(&self, flox: Flox) -> Result<()> {
@@ -34,15 +33,8 @@ impl EnvironmentCommands {
                 json: _,
                 generation: _,
             } if !Feature::Env.is_forwarded()? => {
-                let environment_name = environment.as_ref().map(|e| e.to_str().unwrap());
-                let environment_ref: environment_ref::EnvironmentRef =
-                    resolve_environment_ref::<GitCommandProvider>(&flox, "list", environment_name)
-                        .await?;
-
-                let environment = environment_ref
-                    .to_env::<GitCommandProvider, NixCommandLine>(&flox)
-                    .await
-                    .context("Environment not found")?;
+                let environment =
+                    resolve_environment(&flox, environment.as_deref(), "install").await?;
 
                 match environment {
                     CommonEnvironment::Named(env) => {
@@ -102,11 +94,26 @@ impl EnvironmentCommands {
                 let packages: Vec<_> = packages
                     .iter()
                     .map(|package| FloxPackage::parse(package, &flox.channels, DEFAULT_CHANNEL))
-                    .try_collect()?;
+                    .collect::<Result<Vec<_>, _>>()?
+                    .into_iter()
+                    .dedup()
+                    .collect();
 
-                flox.environment(environment.clone().unwrap())?
-                    .install::<NixCommandLine>(&packages)
-                    .await?
+                let environment =
+                    resolve_environment(&flox, environment.as_deref(), "install").await?;
+
+                // todo use set?
+                let installed = environment
+                    .packages()
+                    .into_iter()
+                    .map(From::from)
+                    .collect::<Vec<FloxPackage>>();
+
+                if let Some(installed) = packages.iter().find(|pkg| installed.contains(pkg)) {
+                    anyhow::bail!("{installed} is already installed");
+                }
+
+                environment.install(&packages).await;
             },
 
             _ => flox_forward(&flox).await?,
@@ -114,6 +121,20 @@ impl EnvironmentCommands {
 
         Ok(())
     }
+}
+
+async fn resolve_environment<'flox>(
+    flox: &'flox Flox,
+    environment_name: Option<&str>,
+    subcommand: &str,
+) -> Result<CommonEnvironment<'flox, GitCommandProvider>, anyhow::Error> {
+    let environment_ref =
+        resolve_environment_ref::<GitCommandProvider>(flox, subcommand, environment_name).await?;
+    let environment = environment_ref
+        .to_env::<GitCommandProvider, NixCommandLine>(flox)
+        .await
+        .context("Could not use environment")?;
+    Ok(environment)
 }
 
 fn activate_run_args() -> impl Parser<Option<(String, Vec<String>)>> {
