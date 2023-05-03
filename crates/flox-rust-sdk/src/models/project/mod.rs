@@ -27,10 +27,10 @@ pub mod environment;
 
 static PACKAGE_NAME_PLACEHOLDER: &str = "__PACKAGE_NAME__";
 
-#[derive(Debug)]
 /// A representation of a project, i.e. a git repo with a flake.nix
 ///
 /// We assume the flake.nix follows the capacitor output schema
+#[derive(Debug)]
 pub struct Project<'flox, Git: GitProvider, Access: GitAccess<Git>> {
     flox: &'flox Flox,
     git: Access,
