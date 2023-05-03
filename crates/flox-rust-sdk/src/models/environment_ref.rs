@@ -24,7 +24,7 @@ use crate::providers::git::GitProvider;
 static DEFAULT_NAME: &str = "default";
 pub static DEFAULT_OWNER: &str = "local";
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Project<'flox> {
     pub flox: &'flox Flox,
     pub flake_attribute: FlakeAttribute,
@@ -122,7 +122,7 @@ impl<'flox> Project<'flox> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Named {
     pub owner: String,
     pub name: String,
@@ -309,7 +309,7 @@ impl<'flox> Named {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum EnvironmentRef<'flox> {
     Named(Named),
     Project(Project<'flox>),
