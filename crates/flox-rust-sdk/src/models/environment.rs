@@ -1,11 +1,13 @@
 use std::borrow::Cow;
 
+use flox_types::catalog::CatalogEntry;
 use runix::installable::{FlakeAttribute, ParseInstallableError};
+use runix::store_path::StorePath;
+use super::flox_package::{FloxPackage, FloxTriple};
 use serde_json::Value;
 use thiserror::Error;
-
-use super::flox_package::FloxPackage;
 use super::floxmeta::environment::GenerationError;
+use super::flox_package::FloxPackage;
 use super::root::transaction::ReadOnly;
 use super::{floxmeta, project};
 use crate::providers::git::GitProvider;
@@ -19,6 +21,12 @@ pub const DEFAULT_MAX_AGE_DAYS: u32 = 90;
 pub enum CommonEnvironment<'flox, Git: GitProvider> {
     Named(floxmeta::environment::Environment<'flox, Git, ReadOnly<Git>>),
     Project(project::environment::Environment<'flox, Git, ReadOnly<Git>>),
+}
+
+pub enum InstalledPackage {
+    Catalog(FloxTriple, CatalogEntry),
+    Installable(Installable, CatalogEntry),
+    StorePath(StorePath),
 }
 
 impl<'flox, Git: GitProvider> CommonEnvironment<'flox, Git> {
@@ -43,7 +51,7 @@ impl<'flox, Git: GitProvider> CommonEnvironment<'flox, Git> {
         }
     }
 
-    pub fn packages(&self) -> Value {
+    pub fn packages(&self) -> Vec<InstalledPackage> {
         todo!()
     }
 
