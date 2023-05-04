@@ -51,8 +51,23 @@ impl<'flox, Git: GitProvider> CommonEnvironment<'flox, Git> {
         todo!()
     }
 
-    pub async fn install(&self, _packages: &[FloxPackage]) {
-        todo!()
+    pub async fn install(
+        self,
+        packages: &[FloxPackage],
+    ) -> Result<CommonEnvironment<'flox, Git>, ()> {
+        match self {
+            CommonEnvironment::Named(_) => todo!(),
+            CommonEnvironment::Project(p) => {
+                let (sandbox, mut index) = p.enter_transaction().await.map_err(|_| ())?;
+                sandbox.install(packages).await?;
+                index.insert(sandbox.flox_nix().await.unwrap(), project::FileAction::Add);
+                sandbox
+                    .commit_transaction(index, "installed packages")
+                    .await
+                    .map_err(|_| ())
+                    .map(CommonEnvironment::Project)
+            },
+        }
     }
 
     pub async fn uninstall(&self, _packages: &[FloxPackage]) {
