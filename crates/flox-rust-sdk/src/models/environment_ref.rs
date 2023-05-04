@@ -21,7 +21,7 @@ use super::root::transaction::{GitAccess, ReadOnly};
 use crate::flox::{Flox, FloxNixApi, ResolveFloxInstallableError};
 use crate::providers::git::GitProvider;
 
-static DEFAULT_NAME: &str = "default";
+pub static DEFAULT_NAME: &str = "default";
 pub static DEFAULT_OWNER: &str = "local";
 
 #[derive(Debug, Clone)]
