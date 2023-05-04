@@ -136,7 +136,10 @@ impl EnvironmentCommands {
                     anyhow::bail!("{installed} is already installed");
                 }
 
-                environment.install(&packages).await;
+                environment
+                    .install(&packages)
+                    .await
+                    .map_err(|_| anyhow::anyhow!("could not install packages"))?;
             },
 
             EnvironmentCommands::WipeHistory {
