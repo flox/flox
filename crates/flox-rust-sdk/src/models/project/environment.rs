@@ -176,7 +176,7 @@ impl<Git: GitProvider, A: GitAccess<Git>> Environment<'_, Git, A> {
         Ok(())
     }
 
-    /// Get the file path to the `flox.nix` producing the environment
+    /// Get the relative file path to the `flox.nix` producing the environment
     ///
     /// First, resolves the store path of the file using
     ///
@@ -185,16 +185,11 @@ impl<Git: GitProvider, A: GitAccess<Git>> Environment<'_, Git, A> {
     /// ```
     ///
     /// Then strips off the `/nix/store/<pkg-root>` part
-    /// and appends the suffix to the project root
     pub async fn flox_nix<Nix>(&self) -> Result<PathBuf, GetFloxNixError<Nix>>
     where
         Nix: FloxNixApi,
         Eval: RunJson<Nix>,
     {
-        // todo: error handling for remote flakes
-        // for now we assume all project envs exist locally
-        let flake_root = self.project.flake_root().unwrap();
-
         let nix = self.project.flox.nix(Default::default());
 
         let mut installable = self.installable().unwrap();
@@ -233,7 +228,7 @@ impl<Git: GitProvider, A: GitAccess<Git>> Environment<'_, Git, A> {
         // <store-root>/    (4)
         let store_path: PathBuf = store_path.components().skip(4).collect();
 
-        Ok(flake_root.join(store_path))
+        Ok(store_path)
     }
 }
 
@@ -287,7 +282,12 @@ impl<'flox, Git: GitProvider> Environment<'flox, Git, GitSandBox<Git>> {
             .into_iter()
             .map(|package| package.flox_nix_attribute().unwrap());
 
-        let flox_nix_path = self.flox_nix().await.unwrap();
+        // assume flake exists locally
+        let flox_nix_path = self
+            .project
+            .flake_root()
+            .unwrap()
+            .join(self.flox_nix().await.unwrap());
         let flox_nix_content: String = read_flox_nix(&flox_nix_path).await.unwrap();
 
         let mut root = rnix::Root::parse(&flox_nix_content)
