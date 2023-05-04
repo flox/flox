@@ -3,13 +3,6 @@
   nixpkgs,
   lib,
 }: let
-  # temporary, until commitizen 2.41.1 is available in nixpkgss
-  commitizen = nixpkgs.commitizen.overridePythonAttrs (old: {
-    doCheck = false;
-    src = inputs.commitizen-src;
-    meta = (old.meta or {}) // {mainProgram = "cz";};
-  });
-
   rustfmt = nixpkgs.rustfmt.override {asNightly = true;};
 in
   (inputs.shellHooks.lib.run {
@@ -22,8 +15,7 @@ in
     };
     settings.clippy.denyWarnings = true;
     tools = {
-      inherit commitizen;
-      inherit (nixpkgs) cargo clippy rustfmt alejandra;
+      inherit (nixpkgs) cargo commitizen clippy rustfmt alejandra;
     };
   })
-  // {passthru = {inherit commitizen rustfmt;};}
+  // {passthru = {inherit rustfmt;};}

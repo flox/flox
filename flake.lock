@@ -81,22 +81,6 @@
         "type": "github"
       }
     },
-    "commitizen-src": {
-      "flake": false,
-      "locked": {
-        "lastModified": 1681897569,
-        "narHash": "sha256-1DWNVp5+R1lpNELCmX2GEnfg9s73y7tufuBjzTHqmd0=",
-        "owner": "commitizen-tools",
-        "repo": "commitizen",
-        "rev": "a829488727a5518d436439cb807e946c214ae396",
-        "type": "github"
-      },
-      "original": {
-        "owner": "commitizen-tools",
-        "repo": "commitizen",
-        "type": "github"
-      }
-    },
     "flake-compat": {
       "flake": false,
       "locked": {
@@ -461,7 +445,6 @@
     },
     "root": {
       "inputs": {
-        "commitizen-src": "commitizen-src",
         "flox-bash": "flox-bash",
         "flox-floxpkgs": "flox-floxpkgs",
         "shellHooks": "shellHooks"

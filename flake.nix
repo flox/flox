@@ -12,10 +12,6 @@
   # Declaration of external resources
   # =================================
   inputs.shellHooks.url = "github:cachix/pre-commit-hooks.nix";
-  inputs.commitizen-src = {
-    url = "github:commitizen-tools/commitizen";
-    flake = false;
-  };
   # =================================
 
   outputs = args @ {flox-floxpkgs, ...}: flox-floxpkgs.project args (_: {});
