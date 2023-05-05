@@ -33,8 +33,21 @@ or with a command and arguments to be invoked directly.
 
 [ -- `<command>` [ `<argument>` ] ]
 :   Command to run in the environment.
-    Spawns the command in an ephmenral environment
+    Spawns the command in a subshell
     that does not leak into the calling process.
+    
+    
+# ENVIRONMENT VARIABLES
+
+`$FLOX_ENV`
+:   Absolute path to the _install prefix_ of the environment being activated.
+
+    Set by `flox activate` before executing `shell.hook`.
+
+    This variable may be used to set other environment variables such as
+    `MANPATH`, `PKG_CONFIG_PATH`, `PYTHONPATH`, etc so that relevant tooling
+    will search these directories to locate files and resources from
+    the environment.
 
 
 # EXAMPLES:
