@@ -9,7 +9,8 @@ use flox_rust_sdk::models::floxmeta::Floxmeta;
 use flox_rust_sdk::nix::command_line::NixCommandLine;
 use flox_rust_sdk::prelude::flox_package::FloxPackage;
 use flox_rust_sdk::providers::git::{GitCommandProvider, GitProvider};
-use flox_types::constants::LATEST_VERSION;
+use flox_types::constants::{DEFAULT_CHANNEL, LATEST_VERSION};
+use itertools::Itertools;
 use serde_json::json;
 
 use crate::config::features::Feature;
@@ -98,8 +99,13 @@ impl EnvironmentCommands {
             } if !Feature::Env.is_forwarded()? => {
                 subcommand_metric!("install");
 
+                let packages: Vec<_> = packages
+                    .iter()
+                    .map(|package| FloxPackage::parse(package, &flox.channels, DEFAULT_CHANNEL))
+                    .try_collect()?;
+
                 flox.environment(environment.clone().unwrap())?
-                    .install::<NixCommandLine>(packages)
+                    .install::<NixCommandLine>(&packages)
                     .await?
             },
 
@@ -297,7 +303,7 @@ pub enum EnvironmentCommands {
         environment: Option<EnvironmentRef>,
 
         #[bpaf(positional("PACKAGES"), some("At least one package"))]
-        packages: Vec<FloxPackage>,
+        packages: Vec<String>,
     },
 
     /// list packages installed in an environment
@@ -355,7 +361,7 @@ pub enum EnvironmentCommands {
         environment: Option<EnvironmentRef>,
 
         #[bpaf(positional("PACKAGES"), some("At least one package"))]
-        packages: Vec<FloxPackage>,
+        packages: Vec<String>,
     },
 
     /// rollback to the previous generation of an environment
@@ -397,7 +403,7 @@ pub enum EnvironmentCommands {
         environment: Option<EnvironmentRef>,
 
         #[bpaf(positional("PACKAGES"))]
-        packages: Vec<FloxPackage>,
+        packages: Vec<String>,
     },
 
     /// delete non-current versions of an environment

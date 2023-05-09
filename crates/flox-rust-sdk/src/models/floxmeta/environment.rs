@@ -1,11 +1,14 @@
 use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use log::debug;
+use runix::flake_ref::git::{GitAttributes, GitRef};
+use runix::flake_ref::FlakeRef;
 use runix::installable::Installable;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use url::Url;
 
 use super::{Floxmeta, GetFloxmetaError, TransactionCommitError, TransactionEnterError};
 use crate::models::root::transaction::{GitAccess, GitSandBox, ReadOnly};
@@ -280,16 +283,21 @@ impl<'flox, Git: GitProvider> Environment<'flox, Git, ReadOnly<Git>> {
             .or(metadata.current_gen.as_deref())
             .ok_or(GenerationError::Empty)?;
 
-        Ok(Installable::new(
-            // todo: replace with flakeref
-            format!(
-                "git+path://{root}?ref={system}.{name}&dir={generation}",
-                root = git.path().to_string_lossy(),
-                system = self.system(),
-                name = self.name()
-            ),
-            ".floxEnvs.default".to_string(),
-        ))
+        let flakeref = FlakeRef::GitPath(GitRef {
+            // we can unwrap here since we construct and know the path
+            url: Url::from_file_path(git.path()).unwrap().try_into().unwrap(),
+            attributes: GitAttributes {
+                reference: format!("{system}.{name}", system = self.system(), name = self.name)
+                    .into(),
+                dir: Path::new(generation).to_path_buf().into(),
+                ..Default::default()
+            },
+        });
+
+        Ok(Installable {
+            flakeref,
+            attr_path: ["", "floxEnvs", "default"].try_into().unwrap(),
+        })
     }
 }
 

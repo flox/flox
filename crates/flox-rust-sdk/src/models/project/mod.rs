@@ -8,6 +8,7 @@ use regex::Regex;
 use runix::arguments::{EvalArgs, NixArgs};
 use runix::command::{Eval, FlakeInit};
 use runix::flake_ref::git::{GitAttributes, GitRef};
+use runix::flake_ref::indirect::IndirectRef;
 use runix::flake_ref::FlakeRef;
 use runix::installable::Installable;
 use runix::{NixBackend, Run, RunJson};
@@ -112,7 +113,13 @@ impl<'flox, Git: GitProvider> Guard<Project<'flox, Git, ReadOnly<Git>>, Root<'fl
         let nix = uninit.flox.nix(nix_extra_args);
 
         FlakeInit {
-            template: Some("flox#templates._init".to_string().into()),
+            template: Some(
+                Installable {
+                    flakeref: IndirectRef::new("flox".to_string(), Default::default()).into(),
+                    attr_path: ["", "templates", "_init"].try_into().unwrap(),
+                }
+                .into(),
+            ),
             ..Default::default()
         }
         .run(&nix, &NixArgs {
@@ -218,7 +225,7 @@ impl<'flox, Git: GitProvider, Access: GitAccess<Git>> Project<'flox, Git, Access
             .ok_or(InitFloxPackageError::WorkdirNotFound)?;
 
         FlakeInit {
-            template: Some(template.to_string().into()),
+            template: Some(template.clone().into()),
             ..Default::default()
         }
         .run(&nix, &NixArgs {
@@ -343,7 +350,11 @@ impl<'flox, Git: GitProvider, Access: GitAccess<Git>> Project<'flox, Git, Access
             eval_args: EvalArgs {
                 apply: Some(nix_apply_expr.into()),
                 installable: Some(
-                    Installable::new(self.flakeref().to_string(), "floxEnvs".to_string()).into(),
+                    Installable {
+                        flakeref: self.flakeref(),
+                        attr_path: ["floxEnvs".to_string()].try_into().unwrap(),
+                    }
+                    .into(),
                 ),
             },
             ..Eval::default()
@@ -385,7 +396,11 @@ impl<'flox, Git: GitProvider, Access: GitAccess<Git>> Project<'flox, Git, Access
             eval_args: EvalArgs {
                 apply: Some(nix_apply_expr.into()),
                 installable: Some(
-                    Installable::new(self.flakeref().to_string(), "floxEnvs".to_string()).into(),
+                    Installable {
+                        flakeref: self.flakeref(),
+                        attr_path: ["floxEnvs".to_string()].try_into().unwrap(),
+                    }
+                    .into(),
                 ),
             },
             ..Eval::default()
@@ -620,6 +635,7 @@ pub enum GetEnvironmentsError<Nix: NixBackend>
 where
     Eval: RunJson<Nix>,
 {
+    #[error("Could not read environments: {0}")]
     ListEnvironments(<Eval as RunJson<Nix>>::JsonError),
 }
 

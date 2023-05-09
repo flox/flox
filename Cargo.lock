@@ -681,6 +681,7 @@ dependencies = [
  "fs_extra",
  "futures",
  "git2",
+ "indoc",
  "log",
  "nix-editor",
  "once_cell",
@@ -1871,13 +1872,14 @@ dependencies = [
 [[package]]
 name = "runix"
 version = "0.1.1"
-source = "git+https://github.com/flox/runix#b59b0acb3749aefbda17cde0326f4f7e155681e8"
+source = "git+https://github.com/flox/runix#c78b086a4de62fe3c1f4ff2fa73f38afb2c4c4c5"
 dependencies = [
  "async-trait",
  "chrono",
  "derive_more",
  "log",
  "once_cell",
+ "percent-encoding",
  "regex",
  "runix-derive",
  "serde",

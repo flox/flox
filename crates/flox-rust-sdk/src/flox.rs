@@ -1,10 +1,11 @@
 use std::collections::{BTreeSet, HashMap};
 use std::io::Read;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use derive_more::Constructor;
 use flox_types::stability::Stability;
+use indoc::indoc;
 use log::{debug, info, warn};
 use once_cell::sync::Lazy;
 use runix::arguments::common::NixCommonArgs;
@@ -13,7 +14,8 @@ use runix::arguments::flake::{FlakeArgs, OverrideInput};
 use runix::arguments::{EvalArgs, NixArgs};
 use runix::command::{Eval, FlakeMetadata};
 use runix::command_line::{DefaultArgs, NixCommandLine};
-use runix::installable::Installable;
+use runix::flake_ref::path::PathRef;
+use runix::installable::{AttrPath, Installable};
 use runix::{NixBackend, RunJson};
 use serde::Deserialize;
 use thiserror::Error;
@@ -119,21 +121,26 @@ pub struct ResolvedInstallableMatch {
 
 impl ResolvedInstallableMatch {
     pub fn installable(self) -> Installable {
-        // Build the multi-part key into a Nix-safe single string
-        let nix_str_key = self
-            .key
-            .into_iter()
-            .map(|s| format!("{s:?}"))
-            .collect::<Vec<_>>()
-            .join(".");
+        // Join the prefix and key into a safe attrpath, adding the associated system if present
+        let attr_path = {
+            let mut builder = AttrPath::default();
+            // enforce exact attr path (<flakeref>#.<attrpath>)
+            builder.push_attr("").unwrap();
+            builder.push_attr(&self.prefix).unwrap();
+            if let Some(ref system) = self.system {
+                builder.push_attr(system).unwrap();
+            }
+
+            // Build the multi-part key into a Nix-safe single string
+            for key in self.key {
+                builder.push_attr(&key).unwrap();
+            }
+            builder
+        };
 
         Installable {
-            flakeref: self.flakeref,
-            // Join the prefix and key into a safe attrpath, adding the associated system if present
-            attr_path: match self.system {
-                Some(ref s) => format!(".{:?}.{:?}.{}", &self.prefix, s, nix_str_key),
-                None => format!(".{:?}.{}", &self.prefix, nix_str_key),
-            },
+            flakeref: self.flakeref.parse().unwrap(),
+            attr_path,
         }
     }
 }
@@ -201,16 +208,18 @@ impl Flox {
         let default_flakerefs = default_flakerefs
             .iter()
             .copied()
-            .filter(|flake_ref| {
-                let parsed_flake_ref = FlakeRef::from_str(flake_ref);
+            .filter(|flakeref| {
+                let parsed_flake_ref = FlakeRef::from_str(flakeref);
                 // if we can't parse the flake_ref we warn but keep it
                 // this is until we can be sure enought that our flake_ref parser is robust
                 if let Err(e) = parsed_flake_ref {
                     warn!(
-                        "
-Could not parse flake_ref {flake_ref}
-{e:?}
-"
+                        indoc! {"
+                        Could not parse flake_ref {flakeref}
+                        {e:?}
+                   "},
+                        flakeref = flakeref,
+                        e = e
                     );
                     return true;
                 };
@@ -357,8 +366,13 @@ Could not parse flake_ref {flake_ref}
         let eval_apply = format!(r#"(x: ({}))"#, installable_resolve_strs.join(" ++ "));
 
         // The super resolver we're currently using to evaluate multiple whole flakerefs at once
-        let resolve_installable: Installable =
-            format!("path://{}#resolve", env!("FLOX_RESOLVER_SRC")).into();
+        let resolve_installable = Installable {
+            flakeref: FlakeRef::Path(PathRef {
+                path: Path::new(env!("FLOX_RESOLVER_SRC")).to_path_buf(),
+                attributes: Default::default(),
+            }),
+            attr_path: ["", "resolve"].try_into().unwrap(),
+        };
 
         let command = Eval {
             flake: FlakeArgs {
@@ -366,9 +380,25 @@ Could not parse flake_ref {flake_ref}
                 // Use the flakeref map from earlier as input overrides so all the inputs point to the correct flakerefs
                 override_inputs: flakeref_inputs
                     .iter()
-                    .map(|(c, flakeref)| OverrideInput {
-                        from: c.to_string(),
-                        to: flakeref.to_string(),
+                    .filter_map(|(c, flakeref)| {
+                        let parsed_flakeref = flakeref.parse();
+                        match parsed_flakeref {
+                            Ok(to) => Some(OverrideInput {
+                                from: c.to_string(),
+                                to,
+                            }),
+                            Err(e) => {
+                                warn!(
+                                    indoc! {"
+                                    Could not parse flake_ref {flakeref}
+                                    {e:?}
+                                "},
+                                    flakeref = flakeref,
+                                    e = e
+                                );
+                                None
+                            },
+                        }
                     })
                     .collect(),
             },
@@ -521,5 +551,26 @@ Could not parse flake_ref {flake_ref}
         };
 
         Nix::new(self, default_nix_args)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_resolved_installable_match_to_installable() {
+        let resolved = ResolvedInstallableMatch::new(
+            "github:flox/flox".to_string(),
+            "packages".to_string(),
+            Some("aarch64-darwin".to_string()),
+            false,
+            vec!["flox".to_string()],
+            None,
+        );
+        assert_eq!(
+            Installable::from_str("github:flox/flox#.packages.aarch64-darwin.flox").unwrap(),
+            resolved.installable(),
+        );
     }
 }

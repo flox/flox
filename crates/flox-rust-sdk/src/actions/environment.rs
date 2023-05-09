@@ -5,7 +5,8 @@ use log::{info, warn};
 use runix::arguments::eval::EvaluationArgs;
 use runix::arguments::NixArgs;
 use runix::command::Build;
-use runix::installable::Installable;
+use runix::flake_ref::path::PathRef;
+use runix::installable::{AttrPath, Installable, ParseInstallableError};
 use runix::{NixBackend, Run};
 use thiserror::Error;
 use {fs_extra, nix_editor, tempfile};
@@ -25,7 +26,7 @@ pub struct Environment<'flox> {
     /// The directory within a flake containing this environment, e.g. pkgs/my-package. This is a
     /// relative, not absolute path
     subdir: PathBuf,
-    attr_path: String,
+    attr_path: String, // todo use AttrPath
     flox_nix: PathBuf,
     catalog_json: PathBuf,
 }
@@ -104,6 +105,8 @@ pub enum EnvironmentBuildError<Nix: NixBackend>
 where
     Build: Run<Nix>,
 {
+    #[error("Could not create installable: {0}")]
+    ParseInstallable(#[from] ParseInstallableError),
     #[error(transparent)]
     Io(#[from] IoError),
     #[error(transparent)]
@@ -267,10 +270,13 @@ impl<'flox> Environment<'flox> {
 
         let nix_args = NixArgs::default();
 
-        let temp_installable = Installable::new(
-            temp_flake_dir.to_string_lossy().to_string(),
-            self.attr_path.clone(),
-        );
+        let temp_installable = Installable {
+            flakeref: runix::flake_ref::FlakeRef::Path(PathRef::new(
+                temp_flake_dir,
+                Default::default(),
+            )),
+            attr_path: self.attr_path.parse::<AttrPath>().unwrap(),
+        };
         let command = Build {
             installables: [temp_installable].into(),
             eval: EvaluationArgs {

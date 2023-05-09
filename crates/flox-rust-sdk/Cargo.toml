@@ -29,6 +29,8 @@ uuid = { version = "1.2", features = ["serde", "v4"] }
 git2 = "0.16.1"
 # async-recursion = "1.0"
 walkdir = "2"
+indoc = "2.0.1"
+
 
 [dev-dependencies]
 anyhow = "1.0.65"

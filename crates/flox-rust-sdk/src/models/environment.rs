@@ -1,11 +1,13 @@
 use std::borrow::Cow;
 
+use runix::installable::{Installable, ParseInstallableError};
 use serde_json::Value;
+use thiserror::Error;
 
 use super::flox_package::FloxPackage;
-use super::floxmeta::{self};
-use super::project;
+use super::floxmeta::environment::GenerationError;
 use super::root::transaction::ReadOnly;
+use super::{floxmeta, project};
 use crate::providers::git::GitProvider;
 
 pub static CATALOG_JSON: &str = "catalog.json";
@@ -16,10 +18,17 @@ pub enum CommonEnvironment<'flox, Git: GitProvider> {
 }
 
 impl<'flox, Git: GitProvider> CommonEnvironment<'flox, Git> {
-    pub async fn installable(&self) -> runix::installable::Installable {
+    /// get an installbale for the environment
+    /// todo installable should be constructed earlier
+    pub async fn installable(
+        &self,
+    ) -> Result<Installable, EnvironmentError<GenerationError<Git>, ParseInstallableError>> {
         match self {
-            CommonEnvironment::Named(n) => n.installable(Default::default()).await.unwrap(),
-            CommonEnvironment::Project(p) => p.installable(),
+            CommonEnvironment::Named(n) => n
+                .installable(Default::default())
+                .await
+                .map_err(EnvironmentError::Named),
+            CommonEnvironment::Project(p) => p.installable().map_err(EnvironmentError::Project),
         }
     }
 
@@ -59,4 +68,12 @@ impl<'flox, Git: GitProvider> CommonEnvironment<'flox, Git> {
             CommonEnvironment::Project(p) => Some(p),
         }
     }
+}
+
+#[derive(Debug, Error)]
+pub enum EnvironmentError<N, P> {
+    #[error(transparent)]
+    Named(N),
+    #[error(transparent)]
+    Project(P),
 }

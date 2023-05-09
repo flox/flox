@@ -12,7 +12,7 @@ pub enum ChannelError {
     ParseUrl(#[from] url::ParseError),
 }
 
-#[derive(Debug, FromStr)]
+#[derive(Debug, FromStr, PartialEq, Eq, Clone)]
 pub struct Channel {
     flake_ref: FlakeRef,
 }
@@ -39,6 +39,14 @@ impl ChannelRegistry {
 
     pub fn iter(&self) -> impl Iterator<Item = &RegistryEntry> {
         self.registry.entries()
+    }
+
+    pub fn iter_names(&self) -> impl Iterator<Item = &String> {
+        self.iter().map(|entry| &entry.from.id)
+    }
+
+    pub fn get_entry(&self, name: impl AsRef<str>) -> Option<&RegistryEntry> {
+        self.iter().find(|entry| entry.from.id == name.as_ref())
     }
 }
 

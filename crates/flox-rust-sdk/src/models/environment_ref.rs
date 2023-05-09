@@ -3,9 +3,13 @@ use std::path::{Path, PathBuf};
 
 use log::debug;
 use runix::command::{Eval, FlakeMetadata};
+use runix::flake_ref::git::{GitAttributes, GitRef};
+use runix::flake_ref::path::PathRef;
+use runix::flake_ref::FlakeRef;
 use runix::installable::Installable;
 use runix::{NixBackend, RunJson};
 use thiserror::Error;
+use url::Url;
 
 use super::environment::CommonEnvironment;
 use super::flox_installable::{FloxInstallable, ParseFloxInstallableError};
@@ -233,18 +237,28 @@ impl<'flox> Named {
     }
 
     fn get_installable(&self, flox: &Flox, system: &str, gen: &str) -> Installable {
+        let flakeref = FlakeRef::GitPath(GitRef {
+            // we can unwrap here since we construct and know the path
+            url: Url::from_file_path(Self::meta_dir(flox).join(&self.owner))
+                .unwrap()
+                .try_into()
+                .unwrap(),
+            attributes: GitAttributes {
+                reference: format!("{system}.{name}", name = self.name).into(),
+                dir: Path::new(gen).to_path_buf().into(),
+                ..Default::default()
+            },
+        });
+
         Installable {
-            flakeref: format!(
-                "git+file://{meta_dir}/{owner}?ref={system}.{name}&dir={gen}",
-                name = self.name,
-                owner = self.owner,
-                meta_dir = Self::meta_dir(flox).display(),
-            ),
+            flakeref,
             // The git branch varies but the name always remains `default`,
             // which comes from the template
             // https://github.com/flox/flox-bash-private/tree/main/lib/templateFloxEnv/pkgs/default
             // and does not get renamed.
-            attr_path: format!(".floxEnvs.{system}.default"),
+            //
+            // enforce exact attr path (<flakeref>#.floxEnvs.<system>.default)
+            attr_path: ["", "floxEnvs", system, "default"].try_into().unwrap(),
         }
     }
 
@@ -400,8 +414,16 @@ impl EnvironmentRef<'_> {
                 workdir,
                 name,
             }) => {
+                let path = match &installable.flakeref {
+                    runix::flake_ref::FlakeRef::Path(PathRef { path, .. }) => path.clone(),
+                    runix::flake_ref::FlakeRef::GitPath(GitRef { url, .. }) => {
+                        url.to_file_path().unwrap()
+                    },
+                    _ => Err(CastError::InvalidFlakeRef)?,
+                };
+
                 let git = flox
-                    .resource(Path::new(&installable.flakeref).to_path_buf())
+                    .resource(path)
                     .guard::<Git>()
                     .await?
                     .open()
@@ -435,6 +457,8 @@ where
     DiscoveGit(#[from] ProjectDiscoverGitError<Git>),
     #[error("Environment not found: {0}")]
     NotFound(String),
+    #[error("Only local git repositories ('git+file://') are supported at the moment")]
+    InvalidFlakeRef,
     #[error(transparent)]
     OpenProject(#[from] OpenProjectError),
     #[error(transparent)]

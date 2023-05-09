@@ -7,11 +7,12 @@ use runix::arguments::eval::EvaluationArgs;
 use runix::arguments::{BuildArgs, EvalArgs};
 use runix::command::{Build, Eval};
 use runix::command_line::{NixCommandLine, NixCommandLineRunJsonError};
-use runix::installable::Installable;
+use runix::installable::{Installable, ParseInstallableError};
 use runix::{NixBackend, Run, RunJson, RunTyped};
 use thiserror::Error;
 
 use super::{Index, Project, TransactionCommitError, TransactionEnterError};
+use crate::actions::environment::EnvironmentBuildError;
 use crate::flox::{Flox, FloxNixApi};
 use crate::models::root::transaction::{GitAccess, GitSandBox, ReadOnly};
 use crate::providers::git::GitProvider;
@@ -26,6 +27,8 @@ pub struct Environment<'flox, Git: GitProvider, Access: GitAccess<Git>> {
 
 #[derive(Error, Debug)]
 pub enum ProjectEnvironmentError {
+    #[error(transparent)]
+    ParseInstallable(#[from] ParseInstallableError),
     #[error(transparent)]
     Io(#[from] IoError),
     #[error("Failed to eval environment catalog: {0}")]
@@ -52,11 +55,11 @@ impl<Git: GitProvider, A: GitAccess<Git>> Environment<'_, Git, A> {
 
     /// get an installable for this environment
     // todo: share with named env
-    pub fn installable(&self) -> Installable {
-        Installable {
-            flakeref: self.project.flakeref().to_string(),
-            attr_path: format!(".floxEnvs.{}.{}", self.system, self.name),
-        }
+    pub fn installable(&self) -> Result<Installable, ParseInstallableError> {
+        Ok(Installable {
+            flakeref: self.project.flakeref(),
+            attr_path: ["", "floxEnvs", &self.system, &self.name].try_into()?,
+        })
     }
 
     pub async fn installed_store_paths(
@@ -65,8 +68,8 @@ impl<Git: GitProvider, A: GitAccess<Git>> Environment<'_, Git, A> {
     ) -> Result<Vec<StorePath>, ProjectEnvironmentError> {
         let nix = flox.nix::<NixCommandLine>(Default::default());
 
-        let mut installable = self.installable();
-        installable.attr_path.push_str(".installedStorePaths");
+        let mut installable = self.installable()?;
+        installable.attr_path.push_attr("installedStorePaths")?;
 
         let eval = Eval {
             eval: EvaluationArgs {
@@ -91,8 +94,8 @@ impl<Git: GitProvider, A: GitAccess<Git>> Environment<'_, Git, A> {
     pub async fn catalog(&self, flox: &Flox) -> Result<EnvCatalog, ProjectEnvironmentError> {
         let nix = flox.nix::<NixCommandLine>(Default::default());
 
-        let mut installable = self.installable();
-        installable.attr_path.push_str(".catalog");
+        let mut installable = self.installable()?;
+        installable.attr_path.push_attr("catalog")?;
 
         let eval = Eval {
             eval: EvaluationArgs {
@@ -134,7 +137,7 @@ impl<Git: GitProvider, A: GitAccess<Git>> Environment<'_, Git, A> {
     ///
     /// [try_build]'s only external effect is having nix build
     /// and create a gcroot/out_link for an environment derivation.
-    pub async fn try_build<Nix>(&self) -> Result<(), BuildError<Nix>>
+    pub async fn try_build<Nix>(&self) -> Result<(), EnvironmentBuildError<Nix>>
     where
         Nix: FloxNixApi,
         Build: RunTyped<Nix>,
@@ -142,7 +145,7 @@ impl<Git: GitProvider, A: GitAccess<Git>> Environment<'_, Git, A> {
         let nix: Nix = self.project.flox.nix([].to_vec());
 
         let build = Build {
-            installables: [self.installable()].into(),
+            installables: [self.installable()?].into(),
             eval: runix::arguments::eval::EvaluationArgs {
                 impure: true.into(),
             },
@@ -156,7 +159,7 @@ impl<Git: GitProvider, A: GitAccess<Git>> Environment<'_, Git, A> {
         build
             .run(&nix, &Default::default())
             .await
-            .map_err(BuildError)?;
+            .map_err(EnvironmentBuildError::Build)?;
         Ok(())
     }
 }

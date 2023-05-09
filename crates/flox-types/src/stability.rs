@@ -22,7 +22,7 @@ impl Stability {
     pub fn as_override(&self) -> OverrideInput {
         (
             "flox-floxpkgs/nixpkgs/nixpkgs".into(),
-            format!("flake:nixpkgs-{self}"),
+            format!("flake:nixpkgs-{self}").parse().unwrap(),
         )
             .into()
     }

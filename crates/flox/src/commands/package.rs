@@ -466,12 +466,16 @@ impl interface::PackageCommands {
             interface::PackageCommands::Containerize(command) => {
                 subcommand_metric!("containerize");
 
-                let installable = env_ref_to_installable::<GitCommandProvider>(
+                let mut installable = env_ref_to_installable::<GitCommandProvider>(
                     &flox,
                     "containerize",
                     &command.inner.environment_name.unwrap_or_default(),
                 )
                 .await?;
+
+                installable
+                    .attr_path
+                    .extend(["passthru", "streamLayeredImage"].map(|attr| attr.parse().unwrap()));
 
                 if std::io::stdout().is_tty() {
                     bail!(
@@ -494,11 +498,7 @@ impl interface::PackageCommands {
                 info!("Building container...");
 
                 let command = Build {
-                    installables: [Installable {
-                        flakeref: installable.flakeref,
-                        attr_path: installable.attr_path + ".passthru.streamLayeredImage",
-                    }]
-                    .into(),
+                    installables: [installable].into(),
                     eval: EvaluationArgs {
                         impure: true.into(),
                     },
