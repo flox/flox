@@ -2,9 +2,7 @@ use std::collections::BTreeMap;
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 
-use log::{debug, info};
-use once_cell::sync::Lazy;
-use regex::Regex;
+use log::info;
 use runix::arguments::{EvalArgs, NixArgs};
 use runix::command::{Eval, FlakeInit};
 use runix::flake_ref::git::{GitAttributes, GitRef};
@@ -14,7 +12,6 @@ use runix::installable::Installable;
 use runix::{NixBackend, Run, RunJson};
 use tempfile::TempDir;
 use thiserror::Error;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use walkdir::WalkDir;
 
 use self::environment::Environment;
@@ -28,7 +25,6 @@ use crate::utils::{copy_file_without_permissions, find_and_replace, FindAndRepla
 
 pub mod environment;
 
-static PNAME_DECLARATION: Lazy<Regex> = Lazy::new(|| Regex::new(r#"pname = ".*""#).unwrap());
 static PACKAGE_NAME_PLACEHOLDER: &str = "__PACKAGE_NAME__";
 
 #[derive(Debug)]
@@ -235,86 +231,38 @@ impl<'flox, Git: GitProvider, Access: GitAccess<Git>> Project<'flox, Git, Access
         .await
         .map_err(InitFloxPackageError::NixInit)?;
 
-        let old_package_path = root.join("pkgs/default.nix");
+        let old_proto_pkg_path = root.join("pkgs").join(PACKAGE_NAME_PLACEHOLDER);
 
-        match tokio::fs::File::open(&old_package_path).await {
-            // legacy path. Drop after we merge template changes to floxpkgs
-            Ok(mut file) => {
-                let mut package_contents = String::new();
-                file.read_to_string(&mut package_contents)
-                    .await
-                    .map_err(InitFloxPackageError::ReadTemplateFile)?;
-
-                // Drop handler should clear our file handle in case we want to delete it
-                drop(file);
-
-                let new_contents =
-                    PNAME_DECLARATION.replace(&package_contents, format!(r#"pname = "{name}""#));
-
-                let new_package_dir = root.join("pkgs").join(name);
-                debug!("creating dir: {}", new_package_dir.display());
-                tokio::fs::create_dir_all(&new_package_dir)
-                    .await
-                    .map_err(InitFloxPackageError::MkNamedDir)?;
-
-                let new_package_path = new_package_dir.join("default.nix");
-
-                repo.rm(&[&old_package_path], false, true, false)
-                    .await
-                    .map_err(InitFloxPackageError::RemoveUnnamedFile)?;
-
-                let mut file = tokio::fs::File::create(&new_package_path)
-                    .await
-                    .map_err(InitFloxPackageError::OpenNamed)?;
-
-                file.write_all(new_contents.as_bytes())
-                    .await
-                    .map_err(InitFloxPackageError::WriteTemplateFile)?;
-
-                repo.add(&[&new_package_path])
+        if !old_proto_pkg_path.exists() {
+            // TODO: really find a better way to not hardcode this
+            if template.to_string() == "flake:flox#.\"templates\".\"project\"" {
+                repo.add(&[&root.join("flox.nix")])
                     .await
                     .map_err(InitFloxPackageError::GitAdd)?;
+            }
+        } else {
+            let new_proto_pkg_path = root.join("pkgs").join(name);
 
-                // this might technically be a lie, but it's close enough :)
-                info!("renamed: pkgs/default.nix -> pkgs/{name}/default.nix");
-            },
-            Err(err) if err.kind() == std::io::ErrorKind::NotFound => 'move_to_pkgs: {
-                let old_proto_pkg_path = root.join("pkgs").join(PACKAGE_NAME_PLACEHOLDER);
+            repo.mv(&old_proto_pkg_path, &new_proto_pkg_path)
+                .await
+                .map_err(InitFloxPackageError::GitMv)?;
+            info!(
+                "moved: {} -> {}",
+                old_proto_pkg_path.to_string_lossy(),
+                new_proto_pkg_path.to_string_lossy()
+            );
 
-                if !old_proto_pkg_path.exists() {
-                    // TODO: really find a better way to not hardcode this
-                    if template.to_string() == "flake:flox#.\"templates\".\"project\"" {
-                        repo.add(&[&root.join("flox.nix")])
-                            .await
-                            .map_err(InitFloxPackageError::GitAdd)?;
-                    }
+            // our minimal "templating" - Replace any occurrences of
+            // PACKAGE_NAME_PLACEHOLDER with name
+            find_and_replace(&new_proto_pkg_path, PACKAGE_NAME_PLACEHOLDER, name)
+                .await
+                .map_err(InitFloxPackageError::<Nix, Git>::ReplacePackageName)?;
 
-                    break 'move_to_pkgs;
-                }
+            repo.add(&[&new_proto_pkg_path])
+                .await
+                .map_err(InitFloxPackageError::GitAdd)?;
+        }
 
-                let new_proto_pkg_path = root.join("pkgs").join(name);
-
-                repo.mv(&old_proto_pkg_path, &new_proto_pkg_path)
-                    .await
-                    .map_err(InitFloxPackageError::GitMv)?;
-                info!(
-                    "moved: {} -> {}",
-                    old_proto_pkg_path.to_string_lossy(),
-                    new_proto_pkg_path.to_string_lossy()
-                );
-
-                // our minimal "templating" - Replace any occurrences of
-                // PACKAGE_NAME_PLACEHOLDER with name
-                find_and_replace(&new_proto_pkg_path, PACKAGE_NAME_PLACEHOLDER, name)
-                    .await
-                    .map_err(InitFloxPackageError::<Nix, Git>::ReplacePackageName)?;
-
-                repo.add(&[&new_proto_pkg_path])
-                    .await
-                    .map_err(InitFloxPackageError::GitAdd)?;
-            },
-            Err(err) => return Err(InitFloxPackageError::OpenTemplateFile(err)),
-        };
         Ok(())
     }
 
