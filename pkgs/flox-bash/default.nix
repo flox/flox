@@ -1,8 +1,6 @@
 {
   self,
   stdenv,
-  inputs,
-  getRev ? inputs.flox-floxpkgs.lib.getRev,
   ansifilter,
   bashInteractive,
   coreutils,
@@ -85,7 +83,7 @@
 in
   stdenv.mkDerivation rec {
     pname = "flox";
-    version = "0.0.10-${getRev src}";
+    version = "0.0.10-${self.lib.getRev src}";
     src = "${self}/flox-bash";
     nativeBuildInputs =
       [bats entr makeWrapper pandoc shellcheck shfmt which]
