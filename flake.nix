@@ -11,47 +11,45 @@
   # =================================
 
   outputs = args @ {
-    self,
     capacitor,
     nixpkgs-flox,
     ...
-  }: let
-    inherit (capacitor) lib;
-
-    defaultPlugins = [
-      (capacitor.plugins.allLocalResources {})
-      (import ./capacitor-plugins/catalog.nix {inherit self lib;} {})
-      (import ./capacitor-plugins/floxEnvs.nix {inherit self lib;} {
-        sourceType = "packages";
-        dir = "pkgs";
-      })
-      (import ./capacitor-plugins/rootFloxEnvs.nix {inherit self lib;} {})
-    ];
-
-    project = args: config:
-      capacitor ({nixpkgs = nixpkgs-flox;} // args) (
-        context:
-          lib.recursiveUpdate {
-            config.plugins = capacitor.defaultPlugins ++ defaultPlugins;
-          }
-          (config context)
-      );
-  in
-    project args (_: {
+  }:
+    capacitor args ({
+      self,
+      lib,
+      ...
+    }: let
+      defaultPlugins = [
+        (capacitor.plugins.allLocalResources {})
+        (import ./capacitor-plugins/catalog.nix {inherit self lib;} {})
+        (import ./capacitor-plugins/floxEnvs.nix {inherit self lib;} {
+          sourceType = "packages";
+          dir = "pkgs";
+        })
+        (import ./capacitor-plugins/rootFloxEnvs.nix {inherit self lib;} {})
+      ];
+    in {
       config = {
-        extraPlugins = [
-          (capacitor.plugins.allLocalResources {})
-          (import ./capacitor-plugins/catalog.nix {inherit self lib;} {})
-          (capacitor.plugins.plugins {dir = ./capacitor-plugins;})
-          (capacitor.plugins.templates {})
-        ];
+        extraPlugins =
+          defaultPlugins
+          ++ [
+            (capacitor.plugins.plugins {dir = ./capacitor-plugins;})
+            (capacitor.plugins.templates {})
+          ];
       };
 
-      # reexport of capacitor
       passthru.capacitor = capacitor;
-      # define default plugins
-      passthru.defaultPlugins = defaultPlugins;
-      # simple capacitor interface
-      passthru.project = project;
+
+      passtrhu.defaultPlugins = defaultPlugins;
+
+      passthru.project = args: config:
+        capacitor ({nixpkgs = nixpkgs-flox;} // args) (
+          context:
+            lib.recursiveUpdate {
+              config.plugins = capacitor.defaultPlugins ++ defaultPlugins;
+            }
+            (config context)
+        );
     });
 }
