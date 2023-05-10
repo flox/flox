@@ -38,6 +38,3 @@ nix develop .#ci \
 
 # store release tag
 echo "TAG=$(git describe --abbrev=0 --tags)" >> "$GITHUB_OUTPUT"
-
-# update "latest" release tag
-git tag -f "latest"
