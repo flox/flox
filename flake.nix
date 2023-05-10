@@ -3,11 +3,6 @@
 
   inputs.flox-floxpkgs.url = "github:flox/floxpkgs";
   inputs.flox-floxpkgs.inputs.flox.follows = "/";
-  inputs.flox-floxpkgs.inputs.flox-bash.follows = "flox-bash";
-
-  inputs.flox-bash.url = "github:flox/flox-bash";
-  inputs.flox-bash.inputs.flox.follows = "/";
-  inputs.flox-bash.inputs.flox-floxpkgs.follows = "flox-floxpkgs";
 
   # Declaration of external resources
   # =================================

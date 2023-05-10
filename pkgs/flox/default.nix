@@ -13,7 +13,7 @@
   zlib,
   pkg-config,
   darwin,
-  flox-bash ? self.inputs.flox-bash.packages.${system}.flox,
+  flox-bash,
   pandoc,
   cacert,
   glibcLocales,

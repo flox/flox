@@ -1,0 +1,4 @@
+#!/bin/sh
+# A non-interactive editor which will add a comment to flox.nix.
+# Used for testing and nothing else.
+echo "# test comment" >> "$*"

@@ -1,0 +1,32 @@
+set attr [lindex $argv 0]
+set flox $env(FLOX_CLI)
+if {$attr eq ""} {
+    spawn $flox -v develop
+} else {
+    spawn $flox -v develop $attr
+}
+set timeout 30
+expect {
+    -re "(fetching|downloading)" {
+        # fetching needs a higher timeout
+        set timeout 90
+        expect {
+            "developing package" {}
+            timeout { exit 1 }
+        }
+        set timeout 30
+    }
+    "developing package" {}
+    timeout { exit 1 }
+}
+expect {
+    -re "\$" {}
+    timeout { exit 1 }
+}
+send "which rg\n"
+expect {
+    -re "/nix/store/.*-ripgrep-13.0.0/bin/rg" {}
+    timeout { exit 1 }
+}
+send "exit\r"
+expect eof

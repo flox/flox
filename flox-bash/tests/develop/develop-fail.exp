@@ -1,0 +1,11 @@
+set attr [lindex $argv 0]
+set flox $env(FLOX_CLI)
+if {$attr eq ""} {
+    spawn $flox -v develop
+} else {
+    spawn $flox -v develop $attr
+}
+expect {
+    "ERROR: could not determine toplevel directory" {}
+    timeout { exit 1 }
+}
