@@ -2,8 +2,8 @@
   description = "Floxpkgs/Project Template";
 
   inputs.capacitor.url = "github:flox/capacitor?ref=v0";
-  inputs.nixpkgs-flox.url = "github:flox/nixpkgs-flox";
-  inputs.nixpkgs-flox.inputs.flox.follows = "/";
+  inputs.nixpkgs.url = "github:flox/nixpkgs-flox";
+  inputs.nixpkgs.inputs.flox.follows = "/";
 
   # Declaration of external resources
   # =================================
@@ -12,7 +12,7 @@
 
   outputs = args @ {
     capacitor,
-    nixpkgs-flox,
+    nixpkgs,
     ...
   }:
     capacitor args ({
@@ -44,7 +44,7 @@
       passtrhu.defaultPlugins = defaultPlugins;
 
       passthru.project = args: config:
-        capacitor ({nixpkgs = nixpkgs-flox;} // args) (
+        capacitor ({inherit nixpkgs;} // args) (
           context:
             lib.recursiveUpdate {
               config.plugins = capacitor.defaultPlugins ++ defaultPlugins;
