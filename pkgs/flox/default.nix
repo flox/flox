@@ -50,9 +50,7 @@
       FLOX_SH = "${flox-bash}/libexec/flox/flox";
       FLOX_SH_PATH = "${flox-bash}";
       FLOX_SH_FLAKE = flox-bash.src; # For bats tests
-      FLOX_VERSION = "${envs.FLOX_RS_VERSION}-${envs.FLOX_SH_VERSION}";
-      FLOX_SH_VERSION = flox-bash.version;
-      FLOX_RS_VERSION = "${cargoToml.package.version}-r${toString self.revCount or "dirty"}";
+      FLOX_VERSION = "${cargoToml.package.version}-r${self.lib.getRev self}";
       NIXPKGS_CACERT_BUNDLE_CRT = "${cacert}/etc/ssl/certs/ca-bundle.crt";
       NIX_TARGET_SYSTEM = targetPlatform.system;
 
