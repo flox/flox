@@ -214,7 +214,7 @@ clean:
 	-rm -rf lib/commands/shells
 
 result: $(SRC)
-	nix --extra-experimental-features 'nix-command flakes' build '.#flox' -L
+	nix --extra-experimental-features 'nix-command flakes' build '.#flox-bash' -L
 
 .PHONY: test watch-test
 watch-test: FORCE
