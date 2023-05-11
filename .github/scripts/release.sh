@@ -1,5 +1,7 @@
 #!/usr/bin/env sh
 
+set -euxo pipefail
+
 fork_point="$(git merge-base --fork-point main)"
 main_head="$(git show-ref -s --heads main)"
 
