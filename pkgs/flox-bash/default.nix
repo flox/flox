@@ -33,7 +33,6 @@
   substituteAll,
   util-linuxMinimal,
   which,
-  writeText,
 }: let
   # The getent package can be found in pkgs.unixtools.
   inherit (pkgs.unixtools) getent;
@@ -80,10 +79,13 @@
     else throw "unsupported system variant";
 
   bats = pkgs.bats.withLibraries (p: [p.bats-support p.bats-assert]);
+
+  # read commitizen config file as the single source of version
+  czToml = lib.importTOML (self + "/.cz.toml");
 in
   stdenv.mkDerivation rec {
     pname = "flox";
-    version = "0.0.10-${self.lib.getRev src}";
+    version = "${czToml.tool.commitizen.version}-${self.lib.getRev self}";
     src = "${self}/flox-bash";
     nativeBuildInputs =
       [bats entr makeWrapper pandoc shellcheck shfmt which]
