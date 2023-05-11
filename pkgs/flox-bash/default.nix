@@ -84,7 +84,7 @@
   czToml = lib.importTOML (self + "/.cz.toml");
 in
   stdenv.mkDerivation rec {
-    pname = "flox";
+    pname = "flox-bash";
     version = "${czToml.tool.commitizen.version}-${self.lib.getRev self}";
     src = "${self}/flox-bash";
     nativeBuildInputs =
