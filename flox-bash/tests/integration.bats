@@ -909,6 +909,48 @@ function assertAndRemoveFiles {
   popd
 }
 
+@test "flox publish {
+  for key in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY; do
+    if [ ! -v "$key" ]; then
+      echo "This test depends on $key but it is not set"
+      return 1
+    fi
+  done
+
+  # setup up temporary local channel
+  CHANNEL="$FLOX_TEST_HOME/channel"
+  run mkdir "$CHANNEL"
+  assert_success
+  run git -C "$CHANNEL" init
+  assert_success
+  run cp lib/templateFloxEnv/flake.nix "$CHANNEL"
+  assert_success
+  run git -C "$CHANNEL" add flake.nix
+  assert_success
+  run $FLOX_CLI flake update "$CHANNEL"
+  assert_success
+
+  run $FLOX_CLI --debug publish "github:flox/flox-private#flox-bash" \
+    --build-repo "git@github.com:flox/flox-private" \
+    --channel-repo "$CHANNEL" \
+    --upload-to 's3://flox-store-public?write-nar-listing=1&ls-compression=br'\
+    --download-from https://cache.floxdev.com
+    # TODO add --key-file or make content addressed
+  assert_success
+  assert_output --partial "flox publish completed"
+
+  CHANNEL_NAME=publish-test
+
+  run $FLOX_CLI subscribe "$CHANNEL_NAME" "$CHANNEL"
+  assert_success
+
+  run $FLOX_CLI search -c "$CHANNEL_NAME" flox
+  assert_success
+  assert_output "$CHANNEL_NAME.flox-bash"
+
+  run $FLOX_CLI unsubscribe "$CHANNEL_NAME"
+}
+
 @test "tear down install test state" {
   run sh -c "XDG_CONFIG_HOME=$REAL_XDG_CONFIG_HOME GH_CONFIG_DIR=$REAL_GH_CONFIG_DIR $FLOX_CLI destroy -e $TEST_ENVIRONMENT --origin -f"
   assert_output --partial "WARNING: you are about to delete the following"
