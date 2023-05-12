@@ -58,6 +58,11 @@ jobs:
           # push release and latest tag and update main branch
           git push --atomic origin \
             ${{ steps.tag.outputs.TAG }} \
-            refs/tags/${{ steps.tag.outputs.TAG }}:main
+            +${{ steps.tag.outputs.TAG }}~0:refs/heads/main
+          # push "latest" branch
+          git push --force origin +${{ steps.tag.outputs.TAG }}~0:refs/heads/latest
+          
+          # update the PR branch so github will close the PR
+          # todo: close pr as a separate step through API?
+          git push --force origin HEAD
 
-          git push --force origin refs/tags/${{ steps.tag.outputs.TAG }}:latest
