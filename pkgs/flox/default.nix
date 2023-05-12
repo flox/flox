@@ -3,6 +3,7 @@
   # self is a flake if this package is built locally, but if it's called as a proto, it's just the
   # source
   self,
+  inputs,
   lib,
   rustPlatform,
   hostPlatform,
@@ -50,7 +51,7 @@
       FLOX_SH = "${flox-bash}/libexec/flox/flox";
       FLOX_SH_PATH = "${flox-bash}";
       FLOX_SH_FLAKE = flox-bash.src; # For bats tests
-      FLOX_VERSION = "${cargoToml.package.version}-r${self.lib.getRev self}";
+      FLOX_VERSION = "${cargoToml.package.version}-${inputs.flox-floxpkgs.lib.getRev self}";
       NIXPKGS_CACERT_BUNDLE_CRT = "${cacert}/etc/ssl/certs/ca-bundle.crt";
       NIX_TARGET_SYSTEM = targetPlatform.system;
 
