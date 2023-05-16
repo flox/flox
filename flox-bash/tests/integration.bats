@@ -795,17 +795,20 @@ load test_support.bash
 }
 
 @test "flox activate on multiple environments" {
+  run "$FLOX_CLI" create -e "${TEST_ENVIRONMENT}-1"
+  assert_success
+  run "$FLOX_CLI" install -e "${TEST_ENVIRONMENT}-1" "$FLOX_PACKAGE"
+  assert_success
   run "$FLOX_CLI" create -e "${TEST_ENVIRONMENT}-2"
   assert_success
   run "$FLOX_CLI" install -e "${TEST_ENVIRONMENT}-2" "$FLOX_PACKAGE"
   assert_success
-  (
-    run "$FLOX_CLI" activate -e "$TEST_ENVIRONMENT" -e "${TEST_ENVIRONMENT}-2" \
-        -- bash -c 'echo "FLOX_ENV: $FLOX_ENV"'
-    assert_success
-    # FLOX_ENV should be set to the first argument
-    assert_output --regexp "FLOX_ENV: .*$TEST_ENVIRONMENT"
-  )
+  run "$FLOX_CLI" activate                                   \
+      -e "${TEST_ENVIRONMENT}-1" -e "${TEST_ENVIRONMENT}-2"  \
+      -- bash -c 'echo "FLOX_ENV: $FLOX_ENV"'
+  assert_success
+  # FLOX_ENV should be set to the first argument
+  assert_output --regexp "^FLOX_ENV: .*${TEST_ENVIRONMENT}-1\$"
 }
 
 @test "flox develop setup" {
@@ -970,7 +973,11 @@ function assertAndRemoveFiles {
   assert_output --partial "WARNING: you are about to delete the following"
   assert_output --partial "Deleted branch"
   assert_output --partial "removed"
-  run $FLOX_CLI destroy -e "${TEST_ENVIRONMENT}-2" --origin -f
+  run sh -c "XDG_CONFIG_HOME=$REAL_XDG_CONFIG_HOME GH_CONFIG_DIR=$REAL_GH_CONFIG_DIR $FLOX_CLI destroy -e ${TEST_ENVIRONMENT}-1 --origin -f"
+  assert_output --partial "WARNING: you are about to delete the following"
+  assert_output --partial "Deleted branch"
+  assert_output --partial "removed"
+  run sh -c "XDG_CONFIG_HOME=$REAL_XDG_CONFIG_HOME GH_CONFIG_DIR=$REAL_GH_CONFIG_DIR $FLOX_CLI destroy -e ${TEST_ENVIRONMENT}-2 --origin -f"
   assert_output --partial "WARNING: you are about to delete the following"
   assert_output --partial "Deleted branch"
   assert_output --partial "removed"
