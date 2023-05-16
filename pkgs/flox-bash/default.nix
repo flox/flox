@@ -89,7 +89,7 @@ in
     version = "${czToml.tool.commitizen.version}-${inputs.flox-floxpkgs.lib.getRev self}";
     src = "${self}/flox-bash";
     nativeBuildInputs =
-      [bats entr makeWrapper pandoc shellcheck shfmt which]
+      [bats entr makeWrapper pandoc shellcheck shfmt which git]
       # nix-provided expect not working on Darwin (#441)
       ++ lib.optionals hostPlatform.isLinux [expect];
     buildInputs = [
@@ -156,8 +156,10 @@ in
 
       # Rewrite /usr/bin/env bash to the full path of bashInteractive.
       # Use --host to resolve using the runtime path.
-      patchShebangs --host "$out/libexec/flox/flox"               \
-                           "$out/libexec/flox/darwin-path-fixer"
+      patchShebangs --host "$out/libexec/flox/flox"
+      if [ -e "$out/libexec/flox/darwin-path-fixer" ]; then
+        patchShebangs --host "$out/libexec/flox/darwin-path-fixer"
+      fi
     '';
 
     doInstallCheck = ! stdenv.isDarwin;

@@ -100,8 +100,9 @@ in
           --fish <($out/bin/flox --bpaf-complete-style-fish) \
           --zsh <($out/bin/flox --bpaf-complete-style-zsh)
 
-        wrapProgram "$out/bin/flox"                                          \
-                    --prefix PATH : "${flox-bash}/bin:${flox-bash}/libexec"
+        wrapProgram "$out/bin/flox"                                       \
+                    --prefix PATH :                                       \
+                      "${flox-bash}/bin:${flox-bash}/libexec:${git}/bin"
       '';
 
       doInstallCheck = true;
