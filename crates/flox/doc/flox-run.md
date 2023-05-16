@@ -18,7 +18,7 @@ flox [ `<general-options>` ] run [ `<run-options>` ] [ -- [ `<command args>` ...
 Run flake application from the requested package (or "installable").
 If not provided `flox` will prompt for you to select from the list of known packages.
 `flox run` uses `nix run` under the hood to execute the so-called installable. Which makes it possible to run 
-packages from any Nix flake that exposes the `app` attribute in its outputs.
+packages from any Nix flake that exposes the `apps` attribute in its outputs.
 
 # EXAMPLES
 
