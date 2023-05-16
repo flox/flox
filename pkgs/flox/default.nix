@@ -23,7 +23,9 @@
   fd,
   gnused,
   bats,
-  gitMinimal,
+  git,
+  gh,
+  makeWrapper
 }: let
   manpages =
     runCommand "flox-manpages" {
@@ -47,7 +49,7 @@
   envs =
     {
       NIX_BIN = "${flox-bash.nixPatched}/bin/nix";
-      GIT_BIN = "${gitMinimal}/bin/git";
+      GIT_BIN = "${git}/bin/git";
       FLOX_SH = "${flox-bash}/libexec/flox/flox";
       FLOX_SH_PATH = "${flox-bash}";
       FLOX_SH_FLAKE = flox-bash.src; # For bats tests
@@ -97,6 +99,9 @@ in
           --bash <($out/bin/flox --bpaf-complete-style-bash) \
           --fish <($out/bin/flox --bpaf-complete-style-fish) \
           --zsh <($out/bin/flox --bpaf-complete-style-zsh)
+
+        wrapProgram "$out/bin/flox"                                          \
+                    --prefix PATH : "${flox-bash}/bin:${flox-bash}/libexec"
       '';
 
       doInstallCheck = true;
@@ -104,8 +109,13 @@ in
         # Quick unit test to ensure that we are not using any "naked"
         # commands within our scripts. Doesn't hit all codepaths but
         # catches most of them.
-        git init;
-        env -i USER=`id -un` HOME=$PWD $out/bin/flox --debug envs > /dev/null
+
+        set -eu;
+        set -o pipefail;
+
+        env -i USER=`id -un` "HOME=$PWD" "$out/bin/flox" --help > /dev/null||  \
+          env -i USER=`id -un` "HOME=$PWD" "$out/bin/flox" --debug --verbose   \
+                                                           --help
       '';
 
       buildInputs =
@@ -125,6 +135,7 @@ in
         installShellFiles
         gnused
         (bats.withLibraries (p: [p.bats-support p.bats-assert]))
+        makeWrapper
       ];
 
       passthru.envs = envs;

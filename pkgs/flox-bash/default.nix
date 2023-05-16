@@ -89,7 +89,7 @@ in
     version = "${czToml.tool.commitizen.version}-${inputs.flox-floxpkgs.lib.getRev self}";
     src = "${self}/flox-bash";
     nativeBuildInputs =
-      [bats entr makeWrapper pandoc shellcheck shfmt which]
+      [bats entr makeWrapper pandoc shellcheck shfmt which git]
       # nix-provided expect not working on Darwin (#441)
       ++ lib.optionals hostPlatform.isLinux [expect];
     buildInputs = [
@@ -121,6 +121,7 @@ in
       [
         "PREFIX=$(out)"
         "VERSION=${version}"
+        # FIXME: these may not be cross compatible. Ensure these are host deps.
         "FLOXPATH=$(out)/libexec/flox:${lib.makeBinPath buildInputs}"
         "NIXPKGS_CACERT_BUNDLE_CRT=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
         "FLOX_ACTIVATE_BASH=${floxActivateBash}"
@@ -147,7 +148,7 @@ in
       # TODO: replace "--argv0 '$0'" with "--inherit-argv0" once Nix
       #       version advances to the version that supports it.
       #
-      mkdir -p $out/libexec
+      mkdir -p "$out/libexec"
       makeWrapper ${nixPatched}/bin/nix "$out/libexec/flox/nix" --argv0 '$0' \
         --prefix PATH : "${lib.makeBinPath [git]}"
       makeWrapper ${gh}/bin/gh "$out/libexec/flox/gh" --argv0 '$0' \
@@ -161,14 +162,16 @@ in
 
     doInstallCheck = ! stdenv.isDarwin;
     postInstallCheck = ''
-      # Expects to be run from a `git' directory.
-      # FIXME: We need to figure out why `flox' is expecting a `.git' directory.
-      git init;
-
       # Quick unit test to ensure that we are not using any "naked"
       # commands within our scripts. Doesn't hit all codepaths but
       # catches most of them.
-      env -i USER=`id -un` "HOME=$PWD" "$out/bin/flox" help > /dev/null
+
+      set -eu;
+      set -o pipefail;
+
+      env -i USER=`id -un` "HOME=$PWD" "$out/bin/flox" --help > /dev/null||  \
+        env -i USER=`id -un` "HOME=$PWD" "$out/bin/flox" --debug --verbose   \
+                                                         --help
     '';
 
     passthru.nixPatched = nixPatched;
