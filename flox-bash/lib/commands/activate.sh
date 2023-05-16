@@ -291,7 +291,7 @@ function floxActivate() {
 	# interspersed between `shell.hook' bodies.
 	# Because the "target" environment may not be the last to activate, we
 	# explicitly set `FLOX_ENV' here so that once activated the variable will
-	# point to the environment indicated on the command line.
+	# point to the first environment indicated on the command line.
 	eval "$(decodeEnvironment "$_target_environment")"
 	echo "export FLOX_ENV='$environmentBaseDir'" >> "$rcScript"
 
