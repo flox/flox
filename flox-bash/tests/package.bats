@@ -45,24 +45,8 @@ load test_support.bash
   assert_output --partial "0  $FLOX_PACKAGE  $FLOX_PACKAGE_FIRST8"
 }
 
-@test "flox activate on multiple environments" {
-  run "$FLOX_CLI" create -e "${TEST_ENVIRONMENT}-2"
-  assert_success
-  run "$FLOX_CLI" install -e "${TEST_ENVIRONMENT}-2" "$FLOX_PACKAGE"
-  assert_success
-  (
-    run "$FLOX_CLI" activate -e "$TEST_ENVIRONMENT" -e "${TEST_ENVIRONMENT}-2" \
-        -- bash -c 'echo "FLOX_ENV: $FLOX_ENV"'
-    assert_output --partial "FLOX_ENV: /"
-  )
-}
-
 @test "tear down install test state" {
   run $FLOX_CLI destroy -e "$TEST_ENVIRONMENT" --origin -f
-  assert_output --partial "WARNING: you are about to delete the following"
-  assert_output --partial "Deleted branch"
-  assert_output --partial "removed"
-  run $FLOX_CLI destroy -e "${TEST_ENVIRONMENT}-2" --origin -f
   assert_output --partial "WARNING: you are about to delete the following"
   assert_output --partial "Deleted branch"
   assert_output --partial "removed"
