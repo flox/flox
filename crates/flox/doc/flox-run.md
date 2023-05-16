@@ -35,7 +35,7 @@ $ flox run
 [↑ to move, enter to select, type to filter]
 ```
 
-If `flox run` is called with an agrument, it will try to run that one instead.
+If `flox run` is called with an argument, it will try to run that one instead.
 
 ```
 $ flox run cowsay -- 'Moo!'
