@@ -89,7 +89,7 @@ in
     version = "${czToml.tool.commitizen.version}-${inputs.flox-floxpkgs.lib.getRev self}";
     src = "${self}/flox-bash";
     nativeBuildInputs =
-      [bats entr makeWrapper pandoc shellcheck shfmt which git]
+      [bats entr makeWrapper pandoc shellcheck shfmt which]
       # nix-provided expect not working on Darwin (#441)
       ++ lib.optionals hostPlatform.isLinux [expect];
     buildInputs = [
