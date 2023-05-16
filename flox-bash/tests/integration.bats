@@ -12,22 +12,22 @@ load test_support.bash
 
 @test "flox package sanity check" {
   # directories
-  [ -d $FLOX_PACKAGE/bin ]
-  [ -d $FLOX_PACKAGE/libexec ]
-  [ -d $FLOX_PACKAGE/libexec/flox ]
-  [ -d $FLOX_PACKAGE/etc ]
-  [ -d $FLOX_PACKAGE/etc/flox.zdotdir ]
-  [ -d $FLOX_PACKAGE/lib ]
-  [ -d $FLOX_PACKAGE/share ]
-  [ -d $FLOX_PACKAGE/share/man ]
-  [ -d $FLOX_PACKAGE/share/man/man1 ]
-  [ -d $FLOX_PACKAGE/share/bash-completion ]
-  [ -d $FLOX_PACKAGE/share/bash-completion/completions ]
+  [ -d "$FLOX_PACKAGE/bin" ]
+  [ -d "$FLOX_PACKAGE/libexec" ]
+  [ -d "$FLOX_PACKAGE/libexec/flox" ]
+  [ -d "$FLOX_PACKAGE/etc" ]
+  [ -d "$FLOX_PACKAGE/etc/flox.zdotdir" ]
+  [ -d "$FLOX_PACKAGE/lib" ]
+  [ -d "$FLOX_PACKAGE/share" ]
+  [ -d "$FLOX_PACKAGE/share/man" ]
+  [ -d "$FLOX_PACKAGE/share/man/man1" ]
+  [ -d "$FLOX_PACKAGE/share/bash-completion" ]
+  [ -d "$FLOX_PACKAGE/share/bash-completion/completions" ]
   # executables
-  [ -x $FLOX_CLI ]
-  [ -x $FLOX_PACKAGE/libexec/flox/gh ]
-  [ -x $FLOX_PACKAGE/libexec/flox/nix ]
-  [ -x $FLOX_PACKAGE/libexec/flox/flox ]
+  [ -x "$FLOX_CLI" ]
+  [ -x "$FLOX_PACKAGE/libexec/flox/gh" ]
+  [ -x "$FLOX_PACKAGE/libexec/flox/nix" ]
+  [ -x "$FLOX_PACKAGE/libexec/flox/flox" ]
   # Could go on ...
 }
 
@@ -37,9 +37,9 @@ load test_support.bash
 }
 
 @test "flox --prefix" {
-  run $FLOX_CLI --prefix
+  run "$FLOX_CLI" --prefix
   assert_success
-  assert_output $FLOX_PACKAGE
+  assert_output "$FLOX_PACKAGE"
 }
 
 @test "flox generate config files in $FLOX_CONFIG_HOME" {
@@ -51,7 +51,7 @@ load test_support.bash
   #
   # This test will work until channels will be implemented in rust.
   # At which point the messaging may change as well.
-  run $FLOX_CLI channels
+  run "$FLOX_CLI" channels
   assert_success
   assert_output --partial "Updating $FLOX_CONFIG_HOME/nix.conf"
   assert_output --partial "Updating $FLOX_CONFIG_HOME/gitconfig"
@@ -792,6 +792,32 @@ load test_support.bash
   assert_output --regexp "0  nixpkgs#hello +hello-"$VERSION_REGEX
   assert_output --partial "1  $FLOX_PACKAGE  $FLOX_PACKAGE_FIRST8"
   ! assert_output --partial "stable.nixpkgs-flox.hello"
+}
+
+@test "flox activate on multiple environments" {
+  run "$FLOX_CLI" create -e "${TEST_ENVIRONMENT}-1"
+  assert_success
+  run "$FLOX_CLI" install -e "${TEST_ENVIRONMENT}-1" "$FLOX_PACKAGE"
+  assert_success
+  run "$FLOX_CLI" create -e "${TEST_ENVIRONMENT}-2"
+  assert_success
+  run "$FLOX_CLI" install -e "${TEST_ENVIRONMENT}-2" "$FLOX_PACKAGE"
+  assert_success
+  run "$FLOX_CLI" activate                                   \
+      -e "${TEST_ENVIRONMENT}-1" -e "${TEST_ENVIRONMENT}-2"  \
+      -- bash -c 'echo "FLOX_ENV: $FLOX_ENV"'
+  assert_success
+  # FLOX_ENV should be set to the first argument
+  assert_output --regexp "^FLOX_ENV: .*${TEST_ENVIRONMENT}-1\$"
+  # Cleanup
+  run sh -c "XDG_CONFIG_HOME=$REAL_XDG_CONFIG_HOME GH_CONFIG_DIR=$REAL_GH_CONFIG_DIR $FLOX_CLI destroy -e ${TEST_ENVIRONMENT}-1 --origin -f"
+  assert_output --partial "WARNING: you are about to delete the following"
+  assert_output --partial "Deleted branch"
+  assert_output --partial "removed"
+  run sh -c "XDG_CONFIG_HOME=$REAL_XDG_CONFIG_HOME GH_CONFIG_DIR=$REAL_GH_CONFIG_DIR $FLOX_CLI destroy -e ${TEST_ENVIRONMENT}-2 --origin -f"
+  assert_output --partial "WARNING: you are about to delete the following"
+  assert_output --partial "Deleted branch"
+  assert_output --partial "removed"
 }
 
 @test "flox develop setup" {

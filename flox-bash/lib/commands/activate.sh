@@ -12,13 +12,14 @@ function bashRC() {
 	$_grep -v '^#' "$_lib/commands/shells/activate.bash" | $_grep -v '^$'
 	# Add computed environment variables.
 	for i in PATH XDG_DATA_DIRS FLOX_ACTIVE_ENVIRONMENTS                    \
-			FLOX_PROMPT_ENVIRONMENTS FLOX_PROMPT_COLOR_{1,2} FLOX_ENV; do
-		printf 'export %s="%s"\n' $i "${!i}"
+			FLOX_PROMPT_ENVIRONMENTS FLOX_PROMPT_COLOR_{1,2}; do
+		printf 'export %s="%s"\n' "$i" "${!i}"
 	done
 	# Add environment-specific activation commands.
 	for i in "$@"; do
 		# set $branchName,$floxNixDir,$environment{Name,Alias,Owner,System,BaseDir,BinDir,ParentDir,MetaDir}
 		eval "$(decodeEnvironment "$i")"
+		echo "export FLOX_ENV='$environmentBaseDir'"
 		if [ -f "$environmentBaseDir/activate" ]; then
 			$invoke_cat "$environmentBaseDir/activate"
 		elif [ -f "$environmentBaseDir/manifest.toml" ]; then
@@ -73,7 +74,9 @@ _usage["activate"]="activate environment:
 
 function floxActivate() {
 	trace "$@"
-	local -a environments=($1); shift
+	local -a environments
+	read -ra environments <<< "$1"; shift
+	local _target_environment="${environments[0]}"
 	local system="$1"; shift
 	local -a invocation=("$@")
 	local -A _flox_active_environments_hash
@@ -221,8 +224,6 @@ function floxActivate() {
 	FLOX_ACTIVE_ENVIRONMENTS="$(joinString ':' "${flox_active_environments_prepend[@]}" "$FLOX_ACTIVE_ENVIRONMENTS")"
 	FLOX_PROMPT_ENVIRONMENTS="$(joinString ' ' "${flox_prompt_environments_prepend[@]}" "$FLOX_PROMPT_ENVIRONMENTS")"
 	export PATH XDG_DATA_DIRS FLOX_ACTIVE_ENVIRONMENTS FLOX_PROMPT_ENVIRONMENTS
-	FLOX_ENV="$environmentBaseDir"
-	export FLOX_ENV
 
 	# Darwin has a "path_helper" which indiscriminately reorders the path to
 	# put the Apple-preferred items first in the PATH, which completely breaks
@@ -285,6 +286,14 @@ function floxActivate() {
 		error "unknown shell: $rcShell" < /dev/null
 		;;
 	esac
+
+	# Earlier parts of the activation script set individual `FLOX_ENV' vars
+	# interspersed between `shell.hook' bodies.
+	# Because the "target" environment may not be the last to activate, we
+	# explicitly set `FLOX_ENV' here so that once activated the variable will
+	# point to the first environment indicated on the command line.
+	eval "$(decodeEnvironment "$_target_environment")"
+	echo "export FLOX_ENV='$environmentBaseDir'" >> "$rcScript"
 
 	# Set the init script to self-destruct upon activation (unless debugging).
 	# Very James Bond.

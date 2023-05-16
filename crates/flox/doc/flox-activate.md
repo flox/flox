@@ -44,6 +44,10 @@ or with a command and arguments to be invoked directly.
 
     Set by `flox activate` before executing `shell.hook`.
 
+    If multiple environments are indicated, each `shell.hook` will run with
+    its associated `FLOX_ENV` set properly, and the activated environment
+    will have `FLOX_ENV` set to the first environment indicated on the CLI.
+
     This variable may be used to set other environment variables such as
     `MANPATH`, `PKG_CONFIG_PATH`, `PYTHONPATH`, etc so that relevant tooling
     will search these directories to locate files and resources from
