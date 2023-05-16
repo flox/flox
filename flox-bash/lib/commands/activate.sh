@@ -292,8 +292,8 @@ function floxActivate() {
 	# Because the "target" environment may not be the last to activate, we
 	# explicitly set `FLOX_ENV' here so that once activated the variable will
 	# point to the environment indicated on the command line.
-	eval "$(decodeEnvironment "$environment")"
-	echo "export FLOX_ENV='$FLOX_ENV'" >> "$rcScript"
+	eval "$(decodeEnvironment "$_target_environment")"
+	echo "export FLOX_ENV='$environmentBaseDir'" >> "$rcScript"
 
 	# Set the init script to self-destruct upon activation (unless debugging).
 	# Very James Bond.
