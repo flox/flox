@@ -802,7 +802,8 @@ load test_support.bash
   (
     run "$FLOX_CLI" activate -e "$TEST_ENVIRONMENT" -e "${TEST_ENVIRONMENT}-2" \
         -- bash -c 'echo "FLOX_ENV: $FLOX_ENV"'
-    assert_output --partial "FLOX_ENV: /"
+    # FLOX_ENV should be set to the first argument
+    assert_output --regexp "^FLOX_ENV: .*$TEST_ENVIRONMENT\$"
   )
 }
 
