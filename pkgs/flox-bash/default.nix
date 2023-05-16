@@ -161,6 +161,10 @@ in
 
     doInstallCheck = ! stdenv.isDarwin;
     postInstallCheck = ''
+      # Expects to be run from a `git' directory.
+      # FIXME: We need to figure out why `flox' is expecting a `.git' directory.
+      git init;
+
       # Quick unit test to ensure that we are not using any "naked"
       # commands within our scripts. Doesn't hit all codepaths but
       # catches most of them.
