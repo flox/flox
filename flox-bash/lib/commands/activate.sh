@@ -19,7 +19,7 @@ function bashRC() {
 	for i in "$@"; do
 		# set $branchName,$floxNixDir,$environment{Name,Alias,Owner,System,BaseDir,BinDir,ParentDir,MetaDir}
 		eval "$(decodeEnvironment "$i")"
-	    echo "export FLOX_ENV='$environmentBaseDir'"
+		echo "export FLOX_ENV='$environmentBaseDir'"
 		if [ -f "$environmentBaseDir/activate" ]; then
 			$invoke_cat "$environmentBaseDir/activate"
 		elif [ -f "$environmentBaseDir/manifest.toml" ]; then
