@@ -148,25 +148,23 @@ in
       #       version advances to the version that supports it.
       #
       mkdir -p $out/libexec
-      makeWrapper ${nixPatched}/bin/nix $out/libexec/flox/nix --argv0 '$0' \
+      makeWrapper ${nixPatched}/bin/nix "$out/libexec/flox/nix" --argv0 '$0' \
         --prefix PATH : "${lib.makeBinPath [git]}"
-      makeWrapper ${gh}/bin/gh $out/libexec/flox/gh --argv0 '$0' \
+      makeWrapper ${gh}/bin/gh "$out/libexec/flox/gh" --argv0 '$0' \
         --prefix PATH : "${lib.makeBinPath [git]}"
 
       # Rewrite /usr/bin/env bash to the full path of bashInteractive.
       # Use --host to resolve using the runtime path.
-      patchShebangs --host $out/libexec/flox/flox $out/libexec/flox/darwin-path-fixer
+      patchShebangs --host "$out/libexec/flox/flox"               \
+                           "$out/libexec/flox/darwin-path-fixer"
     '';
 
-    # XXX: environment setup for the postInstallCheck on Linux is failing
-    #      following the merge of flox + flox-bash repositories. Temporarily
-    #      disable to keep builds flowing while we investigate.
-    doInstallCheck = false; # ! stdenv.isDarwin;
+    doInstallCheck = ! stdenv.isDarwin;
     postInstallCheck = ''
       # Quick unit test to ensure that we are not using any "naked"
       # commands within our scripts. Doesn't hit all codepaths but
       # catches most of them.
-      env -i USER=`id -un` HOME=$PWD $out/bin/flox help > /dev/null
+      env -i USER=`id -un` "HOME=$PWD" "$out/bin/flox" help > /dev/null
     '';
 
     passthru.nixPatched = nixPatched;
