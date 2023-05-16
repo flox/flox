@@ -347,20 +347,22 @@ impl interface::PackageCommands {
                 let name = match command.inner.name {
                     Some(n) => n,
                     None => {
+                        // Comment this out since we're using mkShell instead of
+                        // root-level flox.nix
                         // TODO: find a better way to not hardcode this
-                        if template.to_string() == "flake:flox#.\"templates\".\"project\"" {
-                            "default".to_string()
-                        } else {
-                            let dialog = Dialog {
-                                message: "Enter package name",
-                                help_message: None,
-                                typed: Text {
-                                    default: Some(&basename),
-                                },
-                            };
+                        // if template.to_string() == "flake:flox#.templates.project" {
+                        //     "default".to_string()
+                        // } else {
+                        let dialog = Dialog {
+                            message: "Enter package name",
+                            help_message: None,
+                            typed: Text {
+                                default: Some(&basename),
+                            },
+                        };
 
-                            dialog.prompt().await.context("Failed to prompt for name")?
-                        }
+                        dialog.prompt().await.context("Failed to prompt for name")?
+                        // }
                     },
                 };
 
@@ -372,7 +374,7 @@ impl interface::PackageCommands {
                         .await?;
                 }
 
-                info!("Run 'flox activate' to enter the environment.")
+                info!("Run 'flox develop' to enter the project environment.")
             },
             interface::PackageCommands::Build(command) => {
                 subcommand_metric!("build");
