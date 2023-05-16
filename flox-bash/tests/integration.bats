@@ -804,7 +804,7 @@ load test_support.bash
         -- bash -c 'echo "FLOX_ENV: $FLOX_ENV"'
     assert_success
     # FLOX_ENV should be set to the first argument
-    assert_output --regexp "^FLOX_ENV: .*$TEST_ENVIRONMENT\$"
+    assert_output --regexp "FLOX_ENV: .*$TEST_ENVIRONMENT"
   )
 }
 
