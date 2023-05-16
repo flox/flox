@@ -155,9 +155,10 @@ in
 
       # Rewrite /usr/bin/env bash to the full path of bashInteractive.
       # Use --host to resolve using the runtime path.
-      # XXX: run it in a subshell because it otherwise fails with:
+      # Run patchShebangs for files individually to avoid this error:
       #   /nix/store/pw17yc3mwmsci4jygwalj8ppg0drz31v-stdenv-linux/setup: line 136: pop_var_context: head of shell_variables not a function context
-      ( patchShebangs --host $out/libexec/flox/flox $out/libexec/flox/darwin-path-fixer )
+      patchShebangs --host $out/libexec/flox/flox
+      patchShebangs --host $out/libexec/flox/darwin-path-fixer
     '';
 
     doInstallCheck = ! stdenv.isDarwin;
