@@ -13,7 +13,7 @@ function bashRC() {
 	# Add computed environment variables.
 	for i in PATH XDG_DATA_DIRS FLOX_ACTIVE_ENVIRONMENTS                    \
 			FLOX_PROMPT_ENVIRONMENTS FLOX_PROMPT_COLOR_{1,2}; do
-		printf 'export %s="%s"\n' $i "${!i}"
+		printf 'export %s="%s"\n' "$i" "${!i}"
 	done
 	# Add environment-specific activation commands.
 	for i in "$@"; do
@@ -74,8 +74,9 @@ _usage["activate"]="activate environment:
 
 function floxActivate() {
 	trace "$@"
-	local _target_environment="$1";
-	local -a environments=("$1"); shift
+	local -a environments
+	read -ra environments <<< "$1"; shift
+	local _target_environment="${environments[0]}"
 	local system="$1"; shift
 	local -a invocation=("$@")
 	local -A _flox_active_environments_hash
