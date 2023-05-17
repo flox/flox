@@ -38,7 +38,7 @@ $ flox run
 ```
 
 If `flox run` is called with an argument, it will try to run that app instead, without asking for user input.
-Note, in this example it's assumed there's an `flake.nix` in the current directory.
+Note, in this example it's assumed there's a `flake.nix` in the current directory.
 
 ```
 $ flox run flox -- -- --version
