@@ -158,10 +158,7 @@ in
       patchShebangs --host $out/libexec/flox/flox $out/libexec/flox/darwin-path-fixer
     '';
 
-    # XXX: environment setup for the postInstallCheck on Linux is failing
-    #      following the merge of flox + flox-bash repositories. Temporarily
-    #      disable to keep builds flowing while we investigate.
-    doInstallCheck = false; # ! stdenv.isDarwin;
+    doInstallCheck = ! stdenv.isDarwin;
     postInstallCheck = ''
       # Quick unit test to ensure that we are not using any "naked"
       # commands within our scripts. Doesn't hit all codepaths but
