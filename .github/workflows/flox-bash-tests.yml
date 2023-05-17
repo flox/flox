@@ -31,6 +31,20 @@ jobs:
     - name: Install flox
       uses: flox/install-flox-action@v1.0.0
 
+    - name: Git and SSH Setup
+      run: |
+        set -eu;
+        set -o pipefail;
+        mkdir -p /home/runner/.ssh;
+        ssh-keyscan github.com >> /home/runner/.ssh/known_hosts;
+        ssh-keygen -f /home/runner/.ssh/id_rsa -t rsa -N ''  \
+                   -C gha@floxdev.com;
+        chmod 600 /home/runner/.ssh/id_rsa;
+        ssh-agent -a "$SSH_AUTH_SOCK" > /dev/null;
+        ssh-add /home/runner/.ssh/id_rsa;
+        git config --global user.email "gha@floxdev.com";
+        git config --global user.name "Flox GitHubActions";
+
     - uses: actions/checkout@v3
 
     - name: Show Env
@@ -40,6 +54,7 @@ jobs:
         echo "# ============================================================================ #" >&2;
         { printf '    bash   version: '; bash --version|head -n1;      } >&2;
         { printf '    nix    version: '; nix  --version;               } >&2;
+        { printf '    flox   version: '; flox --version|cut -d' ' -f2; } >&2;
         echo "# ---------------------------------------------------------------------------- #" >&2;
 
 # ---------------------------------------------------------------------------- #
