@@ -1,0 +1,60 @@
+# ============================================================================ #
+#
+#
+#
+# ---------------------------------------------------------------------------- #
+#
+name: "Flox Bash Tests"
+
+on:
+  push:
+    branches:
+      -  main
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+
+# ---------------------------------------------------------------------------- #
+
+jobs:
+  flox-bash-tests:
+    runs-on: ubuntu-latest
+    env:
+      SYSTEM: x86_64-linux
+      SSH_AUTH_SOCK: /tmp/ssh_agent.sock
+
+    steps:
+    - name: Install flox
+      uses: flox/install-flox-action@v1.0.0
+
+      - uses: actions/checkout@v3
+
+      - name: Show Env
+        run: |
+          set -eu;
+          set -o pipefail;
+          echo "# ============================================================================ #" >&2;
+          { printf '    bash   version: '; bash --version|head -n1;      } >&2;
+          { printf '    nix    version: '; nix  --version;               } >&2;
+          echo "# ---------------------------------------------------------------------------- #" >&2;
+
+# ---------------------------------------------------------------------------- #
+
+      - name: Build and Test
+        run: |
+          set -eu;
+          set -o pipefail;
+          pushd ./flox-bash >/dev/null;
+          flox develop '..#flox-bash' -- bash -c 'make && make test';
+          popd >/dev/null;
+
+
+# ---------------------------------------------------------------------------- #
+#
+#
+#
+# ============================================================================ #
