@@ -158,7 +158,7 @@ in
       patchShebangs --host $out/libexec/flox/flox $out/libexec/flox/darwin-path-fixer
     '';
 
-    doInstallCheck = ! stdenv.isDarwin;
+    doInstallCheck = true;
     postInstallCheck = ''
       # Quick unit test to ensure that we are not using any "naked"
       # commands within our scripts. Doesn't hit all codepaths but
