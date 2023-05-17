@@ -46,13 +46,16 @@ jobs:
 
     - name: Build and Test
       run: |
+        #set -eu;
+        #set -o pipefail;
+        # FIXME: we should be able to use strict mode for `flox print-dev-env;'
+        pushd ./flox-bash;
+        . <( flox print-dev-env '..#flox-bash'; );
         set -eu;
         set -o pipefail;
-        pushd ./flox-bash >/dev/null;
-        . <( flox print-dev-env '..#flox-bash'; );
         make;
         make test;
-        popd >/dev/null;
+        popd;
 
 
 # ---------------------------------------------------------------------------- #
