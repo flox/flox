@@ -46,7 +46,7 @@
 
   envs =
     {
-      NIX_BIN = "${flox-bash.nixPatched}/bin/nix";
+      NIX_BIN = "${flox-bash.nixPatched}/libexec/flox/nix";
       GIT_BIN = "${gitMinimal}/bin/git";
       FLOX_SH = "${flox-bash}/libexec/flox/flox";
       FLOX_SH_PATH = "${flox-bash}";
@@ -104,7 +104,6 @@ in
         # Quick unit test to ensure that we are not using any "naked"
         # commands within our scripts. Doesn't hit all codepaths but
         # catches most of them.
-        git init;
         env -i USER=`id -un` HOME=$PWD $out/bin/flox --debug envs > /dev/null
       '';
 
