@@ -46,7 +46,7 @@
 
   envs =
     {
-      NIX_BIN = "${flox-bash.nixPatched}/libexec/flox/nix";
+      NIX_BIN = "${flox-bash}/libexec/flox/nix";
       GIT_BIN = "${gitMinimal}/bin/git";
       FLOX_SH = "${flox-bash}/libexec/flox/flox";
       FLOX_SH_PATH = "${flox-bash}";
@@ -105,6 +105,7 @@ in
         # commands within our scripts. Doesn't hit all codepaths but
         # catches most of them.
         env -i USER=`id -un` HOME=$PWD $out/bin/flox --debug envs > /dev/null
+        env -i USER=`id -un` HOME=$PWD $out/bin/flox nix help > /dev/null
       '';
 
       buildInputs =
