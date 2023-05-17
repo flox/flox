@@ -49,7 +49,9 @@ jobs:
         set -eu;
         set -o pipefail;
         pushd ./flox-bash >/dev/null;
-        flox develop '..#flox-bash' -- bash -c 'make && make test';
+        . <( flox print-dev-env '..#flox-bash'; );
+        make;
+        make test;
         popd >/dev/null;
 
 
