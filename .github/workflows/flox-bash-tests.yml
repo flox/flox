@@ -31,26 +31,26 @@ jobs:
     - name: Install flox
       uses: flox/install-flox-action@v1.0.0
 
-      - uses: actions/checkout@v3
+    - uses: actions/checkout@v3
 
-      - name: Show Env
-        run: |
-          set -eu;
-          set -o pipefail;
-          echo "# ============================================================================ #" >&2;
-          { printf '    bash   version: '; bash --version|head -n1;      } >&2;
-          { printf '    nix    version: '; nix  --version;               } >&2;
-          echo "# ---------------------------------------------------------------------------- #" >&2;
+    - name: Show Env
+      run: |
+        set -eu;
+        set -o pipefail;
+        echo "# ============================================================================ #" >&2;
+        { printf '    bash   version: '; bash --version|head -n1;      } >&2;
+        { printf '    nix    version: '; nix  --version;               } >&2;
+        echo "# ---------------------------------------------------------------------------- #" >&2;
 
 # ---------------------------------------------------------------------------- #
 
-      - name: Build and Test
-        run: |
-          set -eu;
-          set -o pipefail;
-          pushd ./flox-bash >/dev/null;
-          flox develop '..#flox-bash' -- bash -c 'make && make test';
-          popd >/dev/null;
+    - name: Build and Test
+      run: |
+        set -eu;
+        set -o pipefail;
+        pushd ./flox-bash >/dev/null;
+        flox develop '..#flox-bash' -- bash -c 'make && make test';
+        popd >/dev/null;
 
 
 # ---------------------------------------------------------------------------- #
