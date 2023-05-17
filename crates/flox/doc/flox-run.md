@@ -26,6 +26,7 @@ that exposes the `apps` attribute in its outputs.
 ## Running applications in the current working directory
 
 If `flox run` is called without any arguments, it will ask the user which application they want to use.
+Note, in this example it's assumed there's an `flake.nix` in the current directory.
 
 ```console
 $ flox run
@@ -37,9 +38,10 @@ $ flox run
 ```
 
 If `flox run` is called with an argument, it will try to run that app instead, without asking for user input.
+Note, in this example it's assumed there's an `flake.nix` in the current directory.
 
 ```
-$ flox run cowsay -- 'Moo!'
+$ flox run flox -- -- --version
 ```
 
 ## Running applications from nixpkgs
