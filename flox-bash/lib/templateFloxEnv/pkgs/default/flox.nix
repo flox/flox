@@ -10,9 +10,9 @@
   # Sets common environment variables such as `PKG_CONFIG_PATH' and `MANPATH'.
   packages."github:flox/etc-profiles".profile-common-paths = {};
   # Sets `PYTHONPATH' if `python3' is detected.
-  packages."github:flox/etc-profiles".profile-common-paths = {};
+  packages."github:flox/etc-profiles".profile-python3 = {};
   # Sets `NODE_PATH' if `node' is detected.
-  packages."github:flox/etc-profiles".profile-common-paths = {};
+  packages."github:flox/etc-profiles".profile-node = {};
 
 
   # Aliases available when environment is active
