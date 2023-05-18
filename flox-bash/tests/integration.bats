@@ -624,7 +624,7 @@ load test_support.bash
 
 # Again we need github connectivity for this.
 @test "flox push" {
-  run sh -c "XDG_CONFIG_HOME=$REAL_XDG_CONFIG_HOME GH_CONFIG_DIR=$REAL_GH_CONFIG_DIR $FLOX_CLI --debug push -e $TEST_ENVIRONMENT"
+  run sh -c "XDG_CONFIG_HOME=$REAL_XDG_CONFIG_HOME GH_CONFIG_DIR=$REAL_GH_CONFIG_DIR $FLOX_CLI --debug push -e $TEST_ENVIRONMENT -f"
   assert_success
   assert_output --partial "To "
   assert_output --regexp "\* \[new branch\] +origin/.*.$TEST_ENVIRONMENT -> .*.$TEST_ENVIRONMENT"
@@ -640,7 +640,7 @@ load test_support.bash
 
 # ... and this.
 @test "flox pull" {
-  run sh -c "XDG_CONFIG_HOME=$REAL_XDG_CONFIG_HOME GH_CONFIG_DIR=$REAL_GH_CONFIG_DIR $FLOX_CLI pull -e $TEST_ENVIRONMENT"
+  run sh -c "XDG_CONFIG_HOME=$REAL_XDG_CONFIG_HOME GH_CONFIG_DIR=$REAL_GH_CONFIG_DIR $FLOX_CLI pull -e $TEST_ENVIRONMENT -f"
   assert_success
   assert_output --partial "To "
   assert_output --regexp "\* \[new branch\] +.*\.$TEST_ENVIRONMENT -> .*\.$TEST_ENVIRONMENT"
@@ -815,6 +815,22 @@ load test_support.bash
   assert_output --partial "Deleted branch"
   assert_output --partial "removed"
   run sh -c "XDG_CONFIG_HOME=$REAL_XDG_CONFIG_HOME GH_CONFIG_DIR=$REAL_GH_CONFIG_DIR $FLOX_CLI destroy -e ${TEST_ENVIRONMENT}-2 --origin -f"
+  assert_output --partial "WARNING: you are about to delete the following"
+  assert_output --partial "Deleted branch"
+  assert_output --partial "removed"
+}
+
+@test "basic usage can resolve pkg-config" {
+  run "$FLOX_CLI" create -e "${TEST_ENVIRONMENT}-1"
+  assert_success
+  run "$FLOX_CLI" install -e "${TEST_ENVIRONMENT}-1" python3 pkg-config libkrb5
+  assert_success
+  run "$FLOX_CLI" activate -e "${TEST_ENVIRONMENT}-1" -- pkg-config --list-all
+  assert_success
+  assert_output --partial python3
+  # TODO: install all outputs by default so this works
+  # assert_output --regexp '^krb5 +'
+  run sh -c "XDG_CONFIG_HOME=$REAL_XDG_CONFIG_HOME GH_CONFIG_DIR=$REAL_GH_CONFIG_DIR $FLOX_CLI destroy -e ${TEST_ENVIRONMENT}-1 --origin -f"
   assert_output --partial "WARNING: you are about to delete the following"
   assert_output --partial "Deleted branch"
   assert_output --partial "removed"
