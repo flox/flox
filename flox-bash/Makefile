@@ -85,7 +85,7 @@ LIB = \
 	lib/templateFloxEnv/flake.lock \
 	lib/templateFloxEnv/flake.nix \
 	lib/templateFloxEnv/pkgs/default/default.nix \
-	lib/templateFloxEnv/pkgs/default/flox.nix
+	lib/templateFloxEnv/pkgs/default/flox.nix \
 	lib/templateFloxEnvNoProfiles/pkgs/default/default.nix \
 	lib/templateFloxEnvNoProfiles/pkgs/default/flox.nix
 LIBEXEC = \
