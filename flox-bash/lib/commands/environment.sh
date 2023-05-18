@@ -176,11 +176,12 @@ function floxList() {
 		local newCatalogJSON="$workDir/$nextGen/pkgs/default/catalog.json"
 		local upgradeDiffs="$workDir/upgradeDiffs"
 
-		# Create an ephemeral copy of the current generation to upgrade.
+		# Create an temporary copy of the current generation to upgrade.
 		# -T so we don't copy the parent directory
-		$_cp -rT $workDir/$currentGen $workDir/$nextGen
+		$_cp -rT "$workDir/$currentGen" "$workDir/$nextGen"
 		# Always refresh the flake.{nix,lock} files with each new generation.
-		$_cp -f --no-preserve=mode $_lib/templateFloxEnv/flake.{nix,lock} -t $workDir/$nextGen
+		$_cp -f --no-preserve=mode "$_lib/templateFloxEnv/flake."{nix,lock}  \
+			-t "$workDir/$nextGen"
 		# Remove the catalog.nix file (if found).
 		$_rm -f $newCatalogJSON
 		# Otherwise Nix eval won't be able to find any of the files.
@@ -232,27 +233,45 @@ function floxCreate() {
 	local -a invocation=("$@")
 	# set $branchName,$floxNixDir,$environment{Name,Alias,Owner,System,BaseDir,BinDir,ParentDir,MetaDir}
 	eval $(decodeEnvironment "$environment")
+	local envTemplate="$_lib/templateFloxEnv";
+	for i in "$@"; do
+		if [ "$i" = "--no-profiles" || "$i" = '-P' ]; then
+			envTemplate="$_lib/templateFloxEnvNoProfiles"
+		else
+			usage | error "unknown argument: '$i'"
+		fi
+	done
 
 	# Create shared clone for creating new environment.
 	local workDir
-	workDir=$(mkTempDir)
+	workDir="$(mkTempDir)"
 	beginTransaction "$environment" "$workDir" 1
 
 	# Glean current and next generations from clone.
 	local -i currentGenVersion=2
 	local nextGen
-	nextGen=$($_readlink $workDir/next)
+	nextGen="$($_readlink "$workDir/next")"
 
 	# To see if it already exists simply assert that the workdir doesn't
 	# already have an "origin" reference for the branch.
-	if $invoke_git -C $workDir show-ref --quiet refs/remotes/origin/"$branchName" >/dev/null; then
-		error "environment $environmentAlias ($system) already exists" < /dev/null
+	if $invoke_git -C "$workDir" show-ref --quiet            \
+		 "refs/remotes/origin/$branchName" >/dev/null; then
+		error "environment $environmentAlias ($system) already exists"  \
+		  < /dev/null
 	fi
 
 	# Construct and render the new manifest.json in the metadata workDir.
-	$_cp --no-preserve=mode -rT $_lib/templateFloxEnv $workDir/$nextGen
+	$_cp --no-preserve=mode -rT "$envTemplate" "$workDir/$nextGen"
+	# If the template doesn't contain `flake.{nix,lock}' pull them from the
+	# default template.
+	if ! [ -r "$workDir/$nextGen/flake.nix"  -a       \
+		   -r "$workDir/$nextGen/flake.lock" ]; then
+	  $_cp --no-preserve=mode "$_lib/templateFloxEnv/flake."{nix,lock}  \
+		   -t "$workDir/$nextGen"
+	fi
+	$_cp --no-preserve=mode -rT "$envTemplate" "$workDir/$nextGen"
 	# otherwise Nix build won't be able to find any of the files
-	$_git -C $workDir add $nextGen
+	$_git -C "$workDir" add "$nextGen"
 
 	local envPackage
 	if ! envPackage=$($invoke_nix build --impure --no-link --print-out-paths "$workDir/$nextGen#.floxEnvs.$system.default"); then
@@ -260,15 +279,16 @@ function floxCreate() {
 	fi
 
 	# catalog.json should be empty, but keep these lines for the sake of consistent boilerplate
-	$_jq . --sort-keys $envPackage/catalog.json > $workDir/$nextGen/pkgs/default/catalog.json
-	$_jq . --sort-keys $envPackage/manifest.json > $workDir/$nextGen/manifest.json
-	$_git -C $workDir add $nextGen/pkgs/default/catalog.json
-	$_git -C $workDir add $nextGen/manifest.json
+	$_jq . --sort-keys "$envPackage/catalog.json"  \
+	  > "$workDir/$nextGen/pkgs/default/catalog.json"
+	$_jq . --sort-keys "$envPackage/manifest.json"  \
+	  > "$workDir/$nextGen/manifest.json"
+	$_git -C "$workDir" add "$nextGen/"{manifest.json,pkgs/default/catalog.json}
 
 	# Commit the transaction.
-	commitTransaction create $environment $workDir $envPackage \
-		"$USER created environment" \
-		$currentGenVersion \
+	commitTransaction create "$environment" "$workDir" "$envPackage"  \
+		"$USER created environment"                                   \
+		"$currentGenVersion"                                          \
 		"$me create" > /dev/null
 
 	warn "created environment $environmentAlias ($system)"
@@ -461,14 +481,16 @@ EOF
 			$_cp --no-preserve=mode -rT $_lib/templateFloxEnv $workDir/$nextGen
 		fi
 		# otherwise Nix build won't be able to find any of the files
-		$_git -C $workDir add $nextGen
+		$_git -C "$workDir" add "$nextGen"
 
 		# Modify the declarative environment to add the new installables.
 		for versionedPkgArg in ${versionedPkgArgs[@]}; do
 			# That's it; invoke the editor to add the package.
-			nixEditor $environment $workDir/$nextGen/pkgs/default/flox.nix install "$versionedPkgArg"
+			nixEditor "$environment"                               \
+				"$workDir/$nextGen/pkgs/default/flox.nix" install  \
+				"$versionedPkgArg"
 		done
-		$_git -C $workDir add $nextGen/pkgs/default/flox.nix
+		$_git -C "$workDir" add "$nextGen/pkgs/default/flox.nix"
 
 		local envPackage
 		if ! envPackage=$($invoke_nix build --impure --no-link --print-out-paths "$workDir/$nextGen#.floxEnvs.$system.default"); then
@@ -619,7 +641,7 @@ EOF
 		$_git -C $workDir add $nextGen/manifest.toml
 		;;
 	2)
-		# Create an ephemeral copy of the current generation to delete from.
+		# Create an temporary copy of the current generation to delete from.
 		# -T so we don't copy the parent directory
 		$_cp -rT $workDir/$currentGen $workDir/$nextGen
 		# Always refresh the flake.{nix,lock} files with each new generation.

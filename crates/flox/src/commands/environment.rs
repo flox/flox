@@ -203,6 +203,11 @@ pub enum EnvironmentCommands {
 
         #[bpaf(long, short, argument("ENV"))]
         environment: Option<EnvironmentRef>,
+
+        // Indicates that `templateFloxEnvNoProfiles` should be used as template
+        // for environment instead of `templateFloxEnv`.
+        #[bpaf(long("no-profiles"), short('P'))]
+        no_profiles: bool,
     },
 
     /// remove all data pertaining to an environment
