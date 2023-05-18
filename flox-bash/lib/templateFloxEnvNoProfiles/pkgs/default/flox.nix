@@ -6,13 +6,13 @@
 
   # Activation Extensions
   # Provides an extensible `<env>/etc/profile` script.
-  packages."github:flox/etc-profiles".profile-base = {};
+  #packages."github:flox/etc-profiles".profile-base = {};
   # Sets common environment variables such as `PKG_CONFIG_PATH' and `MANPATH'.
-  packages."github:flox/etc-profiles".profile-common-paths = {};
+  #packages."github:flox/etc-profiles".profile-common-paths = {};
   # Sets `PYTHONPATH' if `python3' is detected.
-  packages."github:flox/etc-profiles".profile-common-paths = {};
+  #packages."github:flox/etc-profiles".profile-common-paths = {};
   # Sets `NODE_PATH' if `node' is detected.
-  packages."github:flox/etc-profiles".profile-common-paths = {};
+  #packages."github:flox/etc-profiles".profile-common-paths = {};
 
 
   # Aliases available when environment is active
@@ -26,8 +26,9 @@
   #   Due to conflicts with Nix language you have to escape it with ''
   #   (two single quotes)
   #   Example: ` ''${ENV_VARIABLE} `
-  shell.hook = ''
-    # Source `<env>/etc/profile` if it exists.
-    [ -r "$FLOX_ENV/etc/profile" ] && . "$FLOX_ENV/etc/profile";
-  '';
+  #shell.hook = ''
+  #  # Source `<env>/etc/profile` if it exists.
+  #  [ -r "$FLOX_ENV/etc/profile" ] && . "$FLOX_ENV/etc/profile";
+  #  echo 'Flox Environment'|figlet;
+  #'';
 }
