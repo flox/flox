@@ -206,6 +206,7 @@ pub enum EnvironmentCommands {
 
         // Indicates that `templateFloxEnvNoProfiles` should be used as template
         // for environment instead of `templateFloxEnv`.
+        /// Disable installation of `/etc/profile` scripts
         #[bpaf(long("no-profiles"), short('P'))]
         no_profiles: bool,
     },

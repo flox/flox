@@ -235,7 +235,7 @@ function floxCreate() {
 	eval $(decodeEnvironment "$environment")
 	local envTemplate="$_lib/templateFloxEnv";
 	for i in "$@"; do
-		if [ "$i" = "--no-profiles" || "$i" = '-P' ]; then
+		if [ "$i" = "--no-profiles" ] || [ "$i" = '-P' ]; then
 			envTemplate="$_lib/templateFloxEnvNoProfiles"
 		else
 			usage | error "unknown argument: '$i'"
@@ -264,8 +264,8 @@ function floxCreate() {
 	$_cp --no-preserve=mode -rT "$envTemplate" "$workDir/$nextGen"
 	# If the template doesn't contain `flake.{nix,lock}' pull them from the
 	# default template.
-	if ! [ -r "$workDir/$nextGen/flake.nix"  -a       \
-		   -r "$workDir/$nextGen/flake.lock" ]; then
+	if ! [ -r "$workDir/$nextGen/flake.nix" -a        \
+	       -r "$workDir/$nextGen/flake.lock" ]; then
 	  $_cp --no-preserve=mode "$_lib/templateFloxEnv/flake."{nix,lock}  \
 		   -t "$workDir/$nextGen"
 	fi
