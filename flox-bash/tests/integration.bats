@@ -810,11 +810,11 @@ load test_support.bash
   # FLOX_ENV should be set to the first argument
   assert_output --regexp "^FLOX_ENV: .*${TEST_ENVIRONMENT}-1\$"
   # Cleanup
-  run sh -c "XDG_CONFIG_HOME=$REAL_XDG_CONFIG_HOME GH_CONFIG_DIR=$REAL_GH_CONFIG_DIR $FLOX_CLI destroy -e ${TEST_ENVIRONMENT}-1 --origin -f"
+  run sh -c "XDG_CONFIG_HOME=$REAL_XDG_CONFIG_HOME GH_CONFIG_DIR=$REAL_GH_CONFIG_DIR $FLOX_CLI destroy -e ${TEST_ENVIRONMENT}-1 -f"
   assert_output --partial "WARNING: you are about to delete the following"
   assert_output --partial "Deleted branch"
   assert_output --partial "removed"
-  run sh -c "XDG_CONFIG_HOME=$REAL_XDG_CONFIG_HOME GH_CONFIG_DIR=$REAL_GH_CONFIG_DIR $FLOX_CLI destroy -e ${TEST_ENVIRONMENT}-2 --origin -f"
+  run sh -c "XDG_CONFIG_HOME=$REAL_XDG_CONFIG_HOME GH_CONFIG_DIR=$REAL_GH_CONFIG_DIR $FLOX_CLI destroy -e ${TEST_ENVIRONMENT}-2 -f"
   assert_output --partial "WARNING: you are about to delete the following"
   assert_output --partial "Deleted branch"
   assert_output --partial "removed"
@@ -830,7 +830,31 @@ load test_support.bash
   assert_output --partial python3
   # TODO: install all outputs by default so this works
   # assert_output --regexp '^krb5 +'
-  run sh -c "XDG_CONFIG_HOME=$REAL_XDG_CONFIG_HOME GH_CONFIG_DIR=$REAL_GH_CONFIG_DIR $FLOX_CLI destroy -e ${TEST_ENVIRONMENT}-1 --origin -f"
+  run sh -c "XDG_CONFIG_HOME=$REAL_XDG_CONFIG_HOME GH_CONFIG_DIR=$REAL_GH_CONFIG_DIR $FLOX_CLI destroy -e ${TEST_ENVIRONMENT}-1 -f"
+  assert_output --partial "WARNING: you are about to delete the following"
+  assert_output --partial "Deleted branch"
+  assert_output --partial "removed"
+}
+
+@test "flox create -P" {
+  run "$FLOX_CLI" create -P -e "${TEST_ENVIRONMENT}-1"
+  assert_success
+  run "$FLOX_CLI" list -e "${TEST_ENVIRONMENT}-1"
+  refute_output --partial 'github:flox/etc-profiles';
+  # TODO: install all outputs by default so this works
+  # assert_output --regexp '^krb5 +'
+  run sh -c "XDG_CONFIG_HOME=$REAL_XDG_CONFIG_HOME GH_CONFIG_DIR=$REAL_GH_CONFIG_DIR $FLOX_CLI destroy -e ${TEST_ENVIRONMENT}-1 -f"
+  assert_output --partial "WARNING: you are about to delete the following"
+  assert_output --partial "Deleted branch"
+  assert_output --partial "removed"
+}
+
+@test "flox create --no-profiles" {
+  run "$FLOX_CLI" create --no-profiles -e "${TEST_ENVIRONMENT}-1"
+  assert_success
+  run "$FLOX_CLI" list -e "${TEST_ENVIRONMENT}-1"
+  refute_output --partial 'github:flox/etc-profiles';
+  run sh -c "XDG_CONFIG_HOME=$REAL_XDG_CONFIG_HOME GH_CONFIG_DIR=$REAL_GH_CONFIG_DIR $FLOX_CLI destroy -e ${TEST_ENVIRONMENT}-1 -f"
   assert_output --partial "WARNING: you are about to delete the following"
   assert_output --partial "Deleted branch"
   assert_output --partial "removed"
