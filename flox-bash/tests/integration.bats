@@ -935,7 +935,7 @@ function assertAndRemoveFiles {
   popd
 }
 
-@test "flox publish {
+@test "flox publish" {
   for key in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY; do
     if [ ! -v "$key" ]; then
       echo "This test depends on $key but it is not set"
