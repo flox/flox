@@ -86,6 +86,8 @@ LIB = \
 	lib/templateFloxEnv/flake.nix \
 	lib/templateFloxEnv/pkgs/default/default.nix \
 	lib/templateFloxEnv/pkgs/default/flox.nix
+	lib/templateFloxEnvNoProfiles/pkgs/default/default.nix \
+	lib/templateFloxEnvNoProfiles/pkgs/default/flox.nix
 LIBEXEC = \
 	libexec/flox/flox \
 	libexec/flox/darwin-path-fixer.awk
