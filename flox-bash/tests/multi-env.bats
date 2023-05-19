@@ -32,6 +32,7 @@ load test_support.bash;
 # ---------------------------------------------------------------------------- #
 
 @test "flox activate on multiple environments" {
+  #shellcheck disable=SC2016
   run "$FLOX_CLI" activate                                 \
       -e "${TEST_ENVIRONMENT}1" -e "${TEST_ENVIRONMENT}2"  \
       -- bash -c 'echo "FLOX_ENV: $FLOX_ENV"';
