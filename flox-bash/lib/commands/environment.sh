@@ -176,7 +176,7 @@ function floxList() {
 		local newCatalogJSON="$workDir/$nextGen/pkgs/default/catalog.json"
 		local upgradeDiffs="$workDir/upgradeDiffs"
 
-		# Create an temporary copy of the current generation to upgrade.
+		# Create a temporary copy of the current generation to upgrade.
 		# -T so we don't copy the parent directory
 		$_cp -rT "$workDir/$currentGen" "$workDir/$nextGen"
 		# Always refresh the flake.{nix,lock} files with each new generation.
