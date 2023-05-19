@@ -27,9 +27,9 @@ load test_support.bash;
 
 @test "etc-profiles can locate python3 pkg-config resources" {
   # `pkg-config' should be able to locate `python3' files.
-  run "$FLOX_CLI" activate -e "${TEST_ENVIRONMENT}1" -- pkg-config --list-all
-  assert_success
-  assert_output --partial python3
+  run "$FLOX_CLI" activate -e "${TEST_ENVIRONMENT}1" -- pkg-config --list-all;
+  assert_success;
+  assert_output --partial python3;
 
   # TODO: install all outputs by default so this works
   # assert_output --regexp '^krb5 +'
