@@ -31,12 +31,17 @@ pub struct GeneralArgs {}
 impl GeneralCommands {
     pub async fn handle(&self, mut config: Config, mut flox: Flox) -> Result<()> {
         match self {
+            GeneralCommands::Gh(_) => subcommand_metric!("gh"),
+            GeneralCommands::Config(_) => subcommand_metric!("config"),
+            GeneralCommands::ResetMetrics => subcommand_metric!("reset-metrics"),
+            GeneralCommands::Nix(_) => subcommand_metric!("nix"),
+        }
+
+        match self {
             GeneralCommands::Nix(_) if Feature::Nix.is_forwarded()? => flox_forward(&flox).await?,
 
             // To be moved to packages - figure out completions again
             GeneralCommands::Nix(wrapped) => {
-                subcommand_metric!("nix");
-
                 // mutable state hurray :/
                 config.flox.stability = {
                     if let Some(ref stability) = wrapped.stability {

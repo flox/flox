@@ -3,7 +3,7 @@ use std::path::Path;
 use anyhow::{Context, Result};
 use fslock::LockFile;
 use indoc::formatdoc;
-use log::{debug, info, trace};
+use log::{debug, info};
 use time::OffsetDateTime;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
@@ -40,28 +40,7 @@ pub async fn init_telemetry_consent(data_dir: &Path, cache_dir: &Path) -> Result
         },
     }
 
-    debug!("Metrics UUID not found, determining consent");
-
-    let bash_flox_dirs =
-        xdg::BaseDirectories::with_prefix("flox").context("Unable to find config dir")?;
-    let bash_user_meta_path = bash_flox_dirs.get_config_home().join("floxUserMeta.json");
-
-    if let Ok(mut file) = tokio::fs::File::open(&bash_user_meta_path).await {
-        trace!("Attempting to extract metrics consent value from bash flox");
-
-        let mut bash_user_meta_json = String::new();
-        file.read_to_string(&mut bash_user_meta_json).await?;
-
-        let json: serde_json::Value = serde_json::from_str(&bash_user_meta_json)?;
-
-        if let Some(x) = json["floxMetricsConsent"].as_u64() {
-            debug!("Using metrics consent value from bash flox");
-            write_metrics_uuid(&uuid_path, x == 1).await?;
-            return Ok(());
-        }
-    }
-
-    debug!("Metrics consent not determined, prompting for consent");
+    debug!("Metrics UUID not found, prompting for consent");
 
     // Generate a real metric to use as an example so they can see the field contents are non-threatening
     let now = OffsetDateTime::now_utc();
