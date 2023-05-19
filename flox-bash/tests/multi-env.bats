@@ -13,6 +13,20 @@ bats_require_minimum_version 1.5.0;
 
 load test_support.bash;
 
+kill_envs() {
+  "$FLOX_CLI" destroy -e "${TEST_ENVIRONMENT}1" --origin -f||:;
+  "$FLOX_CLI" destroy -e "${TEST_ENVIRONMENT}2" --origin -f||:;
+}
+
+setup_file() {
+  common_setup;
+  kill_envs;
+}
+
+teardown_file() {
+  kill_envs;
+}
+
 
 # ---------------------------------------------------------------------------- #
 
@@ -39,16 +53,6 @@ load test_support.bash;
   assert_success;
   # FLOX_ENV should be set to the first argument
   assert_output --regexp "^FLOX_ENV: .*${TEST_ENVIRONMENT}1\$";
-}
-
-
-# ---------------------------------------------------------------------------- #
-
-@test "teardown ${TEST_ENVIRONMENT}{1,2}" {
-  run "$FLOX_CLI" destroy -e "${TEST_ENVIRONMENT}1" -f;
-  assert_success;
-  run "$FLOX_CLI" destroy -e "${TEST_ENVIRONMENT}2" -f;
-  assert_success;
 }
 
 

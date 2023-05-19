@@ -2,8 +2,11 @@ bats_load_library bats-support
 bats_load_library bats-assert
 bats_require_minimum_version 1.5.0
 
-# setup_file() function run once for a given bats test file.
-setup_file() {
+# Common setup routines are defined in a separate function so this process may
+# be extended.
+# To do so a test file may redefine `setup_file' and call `common_setup' before
+# writing their extensions.
+common_setup() {
   set -x
 
   if [ -z "$FLOX_CLI" ]; then
@@ -18,8 +21,8 @@ setup_file() {
   fi
   export FLOX_DISABLE_METRICS="true"
   # Remove any vestiges of previous test runs.
-  $FLOX_CLI destroy -e $TEST_ENVIRONMENT --origin -f || :
   export TEST_ENVIRONMENT=_testing_
+  $FLOX_CLI destroy -e "$TEST_ENVIRONMENT" --origin -f || :
   export NIX_SYSTEM=$($FLOX_CLI nix --extra-experimental-features nix-command show-config | awk '/system = / {print $NF}')
   # Simulate pure bootstrapping environment. It is challenging to get
   # the nix, gh, and flox tools to all use the same set of defaults.
@@ -36,6 +39,7 @@ setup_file() {
   export FLOX_ENVIRONMENTS=$FLOX_DATA_HOME/environments
   export FLOX_CONFIG_HOME=$XDG_CONFIG_HOME/flox
 
+  unset FLOX_ENV
   unset FLOX_PROMPT_ENVIRONMENTS
   unset FLOX_ACTIVE_ENVIRONMENTS
 
@@ -65,4 +69,12 @@ setup_file() {
   export VERSION_REGEX='[0-9]+\.[0-9.]+'
 
   set +x
+}
+
+
+# setup_file() function run once for a given bats test file.
+# This function may be redefined by individual test files, but running
+# `common_setup' is the recommended minimum.
+setup_file() {
+  common_setup
 }
