@@ -332,33 +332,6 @@ function temporaryAssert009LinkLayout() {
 }
 # /XXX
 
-#
-# gitCheckout($repoDir,$branch)
-#
-function gitCheckout() {
-	trace "$@"
-	local repoDir="$1"; shift
-	local branch="$1"; shift
-	[ -d "$repoDir" ] || gitInitFloxmeta "$repoDir"
-
-	# Confirm or checkout the desired branch.
-	local currentBranch=
-	if [ -d "$repoDir" ]; then
-		currentBranch=$($_git -C "$repoDir" branch --show-current)
-	fi
-	[ "$currentBranch" = "$branch" ] || {
-		if $_git -C "$repoDir" show-ref --quiet refs/heads/"$branch"; then
-			$_git -C "$repoDir" checkout --quiet "$branch"
-		else
-			$_git -C "$repoDir" checkout --quiet --orphan "$branch"
-			$_git -C "$repoDir" ls-files | $_xargs --no-run-if-empty $_git -C "$repoDir" rm --quiet -f
-			# A commit is needed in order to make the branch visible.
-			$_git -C "$repoDir" commit --quiet --allow-empty \
-				-m "$USER created profile"
-		fi
-	}
-}
-
 # githubHelperGit()
 #
 # Invokes git in provided directory with github helper configured.
@@ -374,10 +347,6 @@ function metaGit() {
 	local environment="$1"; shift
 	# set $branchName,$floxNixDir,$environment{Name,Alias,Owner,System,BaseDir,BinDir,ParentDir,MetaDir}
 	eval $(decodeEnvironment "$environment")
-
-	# First verify that the clone is not out of date and check
-	# out requested branch.
-	gitCheckout "$environmentMetaDir" "$branchName"
 
 	githubHelperGit -C "$environmentMetaDir" "$@"
 }
@@ -425,9 +394,6 @@ function syncEnvironment() {
 	local snippet
 	snippet=$(environmentRegistry "$workDir" "$environment" syncGenerations)
 	eval "$snippet" || true
-
-	# FIXME REFACTOR based on detecting actual change.
-	[ -z "$_cline" ] || metaGit "$environment" add "metadata.json"
 }
 
 function commitMessage() {
