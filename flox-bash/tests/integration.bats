@@ -229,7 +229,7 @@ load test_support.bash
 @test "flox list after install should contain hello" {
   run $FLOX_CLI list -e $TEST_ENVIRONMENT
   assert_success
-  assert_output --partial "Curr Gen  2"
+  assert_output --regexp "Curr Gen +2"
   assert_output --regexp "4  stable.nixpkgs-flox.hello +"$VERSION_REGEX
 }
 
@@ -242,7 +242,7 @@ load test_support.bash
 @test "flox list after install should contain cowsay and hello" {
   run $FLOX_CLI list -e $TEST_ENVIRONMENT
   assert_success
-  assert_output --partial "Curr Gen  3"
+  assert_output --regexp "Curr Gen +3"
   assert_output --regexp "4  stable.nixpkgs-flox.cowsay +"$VERSION_REGEX
   assert_output --regexp "5  stable.nixpkgs-flox.dasel +"$VERSION_REGEX
   assert_output --regexp "6  stable.nixpkgs-flox.hello +"$VERSION_REGEX
@@ -264,7 +264,7 @@ load test_support.bash
 @test "verify flox edit removed hello from manifest.json" {
   run $FLOX_CLI list -e $TEST_ENVIRONMENT
   assert_success
-  assert_output --partial "Curr Gen  4"
+  assert_output --regexp "Curr Gen +4"
   assert_output --regexp "4  stable.nixpkgs-flox.cowsay +"$VERSION_REGEX
   assert_output --regexp "5  stable.nixpkgs-flox.dasel +"$VERSION_REGEX
   ! assert_output --partial "stable.nixpkgs-flox.hello"
@@ -290,7 +290,7 @@ load test_support.bash
 @test "verify flox edit added hello to manifest.json" {
   run $FLOX_CLI list -e $TEST_ENVIRONMENT
   assert_success
-  assert_output --partial "Curr Gen  5"
+  assert_output --regexp "Curr Gen +5"
   assert_output --regexp "4  stable.nixpkgs-flox.cowsay +"$VERSION_REGEX
   assert_output --regexp "5  stable.nixpkgs-flox.dasel +"$VERSION_REGEX
   assert_output --regexp "6  stable.nixpkgs-flox.hello +"$VERSION_REGEX
@@ -333,7 +333,7 @@ load test_support.bash
 @test "flox list after remove should not contain hello" {
   run $FLOX_CLI list -e $TEST_ENVIRONMENT
   assert_success
-  assert_output --partial "Curr Gen  6"
+  assert_output --regexp "Curr Gen +6"
   assert_output --regexp "4  stable.nixpkgs-flox.cowsay +"$VERSION_REGEX
   assert_output --regexp "5  stable.nixpkgs-flox.dasel +"$VERSION_REGEX
   assert_output --regexp "6  stable.nixpkgs-flox.jq +"$VERSION_REGEX
@@ -343,7 +343,7 @@ load test_support.bash
 @test "flox list of generation 3 should contain hello" {
   run $FLOX_CLI list -e $TEST_ENVIRONMENT 3
   assert_success
-  assert_output --partial "Curr Gen  3"
+  assert_output --regexp "Curr Gen +3"
   assert_output --regexp "4  stable.nixpkgs-flox.cowsay +"$VERSION_REGEX
   assert_output --regexp "5  stable.nixpkgs-flox.dasel +"$VERSION_REGEX
   assert_output --regexp "6  stable.nixpkgs-flox.hello +"$VERSION_REGEX
@@ -517,7 +517,7 @@ load test_support.bash
 @test "flox list after rollback should reflect generation 2" {
   run $FLOX_CLI list -e $TEST_ENVIRONMENT
   assert_success
-  assert_output --partial "Curr Gen  5"
+  assert_output --regexp "Curr Gen +5"
   assert_output --regexp "4  stable.nixpkgs-flox.cowsay +"$VERSION_REGEX
   assert_output --regexp "5  stable.nixpkgs-flox.dasel +"$VERSION_REGEX
   assert_output --regexp "6  stable.nixpkgs-flox.hello +"$VERSION_REGEX
@@ -533,7 +533,7 @@ load test_support.bash
 @test "flox list after rollback --to 4 should reflect generation 4" {
   run $FLOX_CLI list -e $TEST_ENVIRONMENT
   assert_success
-  assert_output --partial "Curr Gen  4"
+  assert_output --regexp "Curr Gen +4"
   assert_output --regexp "4  stable.nixpkgs-flox.cowsay +"$VERSION_REGEX
   assert_output --regexp "5  stable.nixpkgs-flox.dasel +"$VERSION_REGEX
   assert_output --regexp "6  stable.nixpkgs-flox.jq +"$VERSION_REGEX
@@ -549,7 +549,7 @@ load test_support.bash
 @test "flox list after switch-generation 2 should reflect generation 2" {
   run $FLOX_CLI list -e $TEST_ENVIRONMENT
   assert_success
-  assert_output --partial "Curr Gen  2"
+  assert_output --regexp "Curr Gen +2"
   assert_output --regexp "4  stable.nixpkgs-flox.hello +"$VERSION_REGEX
   ! assert_output --partial "stable.nixpkgs-flox.cowsay"
   ! assert_output --partial "stable.nixpkgs-flox.dasel"
@@ -649,7 +649,7 @@ load test_support.bash
 @test "flox list after flox pull should be exactly as before" {
   run $FLOX_CLI list -e $TEST_ENVIRONMENT
   assert_success
-  assert_output --partial "Curr Gen  2"
+  assert_output --regexp "Curr Gen +2"
   assert_output --regexp "4  stable.nixpkgs-flox.hello +"$VERSION_REGEX
   ! assert_output --partial "stable.nixpkgs-flox.cowsay"
   ! assert_output --partial "stable.nixpkgs-flox.dasel"
@@ -684,7 +684,7 @@ load test_support.bash
 @test "flox list after installing by store path should contain package" {
   run $FLOX_CLI list -e $TEST_ENVIRONMENT
   assert_success
-  assert_output --partial "Curr Gen  7"
+  assert_output --regexp "Curr Gen +7"
   assert_output --regexp "4  stable.nixpkgs-flox.hello +"$VERSION_REGEX
   assert_output --regexp "5  $FLOX_PACKAGE +$FLOX_PACKAGE_FIRST8"
 }
@@ -704,7 +704,7 @@ load test_support.bash
 @test "flox list after installing by nixpkgs flake should contain package" {
   run $FLOX_CLI list -e $TEST_ENVIRONMENT
   assert_success
-  assert_output --partial "Curr Gen  9"
+  assert_output --regexp "Curr Gen +9"
   assert_output --regexp "4  nixpkgs#hello +hello-"$VERSION_REGEX
   assert_output --regexp "5  $FLOX_PACKAGE +$FLOX_PACKAGE_FIRST8"
   ! assert_output --partial "stable.nixpkgs-flox.hello"
@@ -731,7 +731,7 @@ load test_support.bash
 @test "flox list after remove by nixpkgs flake 1 should not contain package" {
   run $FLOX_CLI list -e $TEST_ENVIRONMENT
   assert_success
-  assert_output --partial "Curr Gen  10"
+  assert_output --regexp "Curr Gen +10"
   assert_output --regexp "4  $FLOX_PACKAGE +$FLOX_PACKAGE_FIRST8"
   ! assert_output --partial "nixpkgs#hello"
   ! assert_output --partial "stable.nixpkgs-flox.hello"
@@ -767,7 +767,7 @@ load test_support.bash
 @test "flox list after remove by nixpkgs flake 2 should not contain package" {
   run $FLOX_CLI list -e $TEST_ENVIRONMENT
   assert_success
-  assert_output --partial "Curr Gen  11"
+  assert_output --regexp "Curr Gen +11"
   assert_output --regexp "4  $FLOX_PACKAGE +$FLOX_PACKAGE_FIRST8"
   ! assert_output --partial "nixpkgs#hello"
   ! assert_output --partial "stable.nixpkgs-flox.hello"
@@ -788,7 +788,7 @@ load test_support.bash
 @test "flox list to verify contents of generation 9 at generation 12" {
   run $FLOX_CLI list -e $TEST_ENVIRONMENT
   assert_success
-  assert_output --partial "Curr Gen  12"
+  assert_output --regexp "Curr Gen +12"
   assert_output --regexp "4  nixpkgs#hello +hello-"$VERSION_REGEX
   assert_output --regexp "5  $FLOX_PACKAGE +$FLOX_PACKAGE_FIRST8"
   ! assert_output --partial "stable.nixpkgs-flox.hello"
