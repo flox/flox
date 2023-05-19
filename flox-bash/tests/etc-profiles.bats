@@ -2,7 +2,10 @@
 # -*- mode: bats; -*-
 # ============================================================================ #
 #
+# Test basic usage of `etc/profile' script usage with `flox create' and
+# `flox activate'.
 #
+# Notably ensure that things like `pkg-config' "just work" out of the box.
 #
 # ---------------------------------------------------------------------------- #
 

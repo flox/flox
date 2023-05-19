@@ -2,7 +2,8 @@
 # -*- mode: bats; -*-
 # ============================================================================ #
 #
-#
+# Test the `FLOX_ENV' variable set by `flox activate' is set appropriately when
+# multiple environments are indicated on the CLI.
 #
 # ---------------------------------------------------------------------------- #
 
