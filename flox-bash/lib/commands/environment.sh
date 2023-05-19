@@ -641,7 +641,7 @@ EOF
 		$_git -C $workDir add $nextGen/manifest.toml
 		;;
 	2)
-		# Create an temporary copy of the current generation to delete from.
+		# Create a temporary copy of the current generation to delete from.
 		# -T so we don't copy the parent directory
 		$_cp -rT $workDir/$currentGen $workDir/$nextGen
 		# Always refresh the flake.{nix,lock} files with each new generation.
