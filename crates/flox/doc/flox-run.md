@@ -17,16 +17,14 @@ flox [ `<general-options>` ] run [ `<run-options>` ] [ -- [ `<command args>` ...
 
 Run flake application from the requested package (or "installable").
 If not provided `flox` will prompt for you to select from the list of known packages.
-`flox run` uses `nix run` under the hood to execute the so-called installable.
-Which makes it possible to run packages from any Nix flake
-that exposes the `apps` attribute in its outputs.
+`flox run` uses `nix run` under the hood to execute the so-called installables.
 
 # EXAMPLES
 
 ## Running applications in the current working directory
 
-If `flox run` is called without any arguments, it will ask the user which application they want to use.
-Note, in this example it's assumed there's an `flake.nix` in the current directory.
+If `flox run` is called without any arguments, it will ask the user which installable they want to run.
+Note, in this example, it's assumed there's an `flake.nix` in the current directory.
 
 ```console
 $ flox run
@@ -37,8 +35,9 @@ $ flox run
 [↑ to move, enter to select, type to filter]
 ```
 
-If `flox run` is called with an argument, it will try to run that app instead, without asking for user input.
-Note, in this example it's assumed there's a `flake.nix` in the current directory.
+If `flox run` is called with an argument, it will try to run that installable instead, without asking for user 
+input.
+Note, in this example, it's assumed there's a `flake.nix` in the current directory.
 
 ```
 $ flox run flox -- -- --version
@@ -46,13 +45,15 @@ $ flox run flox -- -- --version
 
 ## Running applications from nixpkgs
 
-It is possible to use `flox run`, to run applications from nixpkgs as follows.
+It is possible to use `flox run`, to run packages from nixpkgs as follows.
 
 ```console
 $ flox run 'nixpkgs#cowsay' -- 'Moo'
 ```
 
-Note, if flags have to be passed to the called application, it is done as follows.
+## Passing flags
+
+Flags can be passed to the called installable as follows.
 
 ```console
 $ flox run 'nixpkgs#cowsay' -- -- --help
@@ -69,3 +70,7 @@ $ flox run 'nixpkgs#cowsay' -- -- --help
 ./include/general-options.md
 ./include/development-options.md
 ```
+
+# SEE ALSO
+
+[nix(1)](https://nixos.org/manual/nix/stable/command-ref/new-cli/nix.html#installables)
