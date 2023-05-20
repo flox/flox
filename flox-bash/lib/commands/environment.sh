@@ -1332,8 +1332,6 @@ function floxDestroy() {
 		warn "$i"
 	done
 	if [ $force -gt 0 ] || boolPrompt "Are you sure?" "no"; then
-		# Start by changing to the (default) floxmain branch to ensure
-		# we're not attempting to delete the current branch.
 		if [ -n "$localBranch" ]; then
 			# Ensure following commands always succeed so that subsequent
 			# invocations can reach the --origin remote removal below.
