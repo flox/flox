@@ -29,30 +29,6 @@ function bootstrap() {
 		# Interactive mode
 		interactive=1
 
-		# Collect the user's express consent to submit telemetry data.
-		if [ -z "$FLOX_DISABLE_METRICS" ]; then
-			if ! floxMetricsConsent=$(floxUserMetaRegistry get floxMetricsConsent); then
-				info ""
-				info "flox collects basic usage metrics in order to improve the user experience,"
-				info "including a record of the subcommand invoked along with a unique token."
-				info "It does not collect any personal information."
-				info ""
-				if boolPrompt "Do you consent to the collection of basic usage metrics?" "yes"; then
-					floxUserMetaRegistry setNumber floxMetricsConsent 1
-					info ""
-					info "Thank you for helping to improving flox!"
-					info ""
-				else
-					floxUserMetaRegistry setNumber floxMetricsConsent 0
-					info ""
-					info "Understood. If you change your mind you can change your election"
-					info "at any time with the following command: flox config --reset"
-					info ""
-				fi
-				floxMetricsConsent=$(floxUserMetaRegistry get floxMetricsConsent)
-			fi
-		fi
-
 		# Note whether user has seen various educational/informational messages.
 		educatePublish=$(floxUserMetaRegistry get educatePublish) || \
 			floxUserMetaRegistry setNumber educatePublish 0
@@ -62,10 +38,7 @@ function bootstrap() {
 		#
 		# Non-interactive mode. Use all defaults if not found in registry.
 		#
-		if [ -z "$FLOX_DISABLE_METRICS" ]; then
-			floxMetricsConsent=$(floxUserMetaRegistry get floxMetricsConsent) || \
-				floxMetricsConsent=0
-		fi
+
 		# Only educate in interactive mode; setting educatePublish=1
 		# means user has been educated.
 		educatePublish=1

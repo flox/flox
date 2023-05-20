@@ -821,8 +821,6 @@ load test_support.bash
 }
 
 @test "flox develop setup" {
-  # since develop tests use expect, flox thinks it's being used interactively and asks about metrics
-  $FLOX_CLI config --setNumber floxMetricsConsent 0
   # Note the use of --dereference to copy flake.{nix,lock} as files.
   run sh -c "tar -cf - --dereference --mode u+w -C $TESTS_DIR/develop ./develop | tar -C $FLOX_TEST_HOME -xf -"
   assert_success
