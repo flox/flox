@@ -1335,11 +1335,9 @@ function floxDestroy() {
 		# Start by changing to the (default) floxmain branch to ensure
 		# we're not attempting to delete the current branch.
 		if [ -n "$localBranch" ]; then
-			if $invoke_git -C "$environmentMetaDir" checkout --quiet "$defaultBranch" 2>/dev/null; then
-				# Ensure following commands always succeed so that subsequent
-				# invocations can reach the --origin remote removal below.
-				$invoke_git -C "$environmentMetaDir" branch -D "$branchName" || true
-			fi
+			# Ensure following commands always succeed so that subsequent
+			# invocations can reach the --origin remote removal below.
+			$invoke_git -C "$environmentMetaDir" branch -D "$branchName" || true
 		fi
 		if [ -n "$origin" ]; then
 			$invoke_git -C "$environmentMetaDir" branch -rd origin/"$branchName" || true
