@@ -17,6 +17,7 @@ use xdg::BaseDirectories;
 /// Name of flox managed directories (config, data, cache)
 const FLOX_DIR_NAME: &'_ str = "flox";
 const FLOX_SH_PATH: &'_ str = env!("FLOX_SH_PATH");
+pub const FLOX_CONFIG_FILE: &'_ str = "flox.toml";
 
 #[derive(Clone, Debug, Deserialize, Default, Serialize)]
 pub struct Config {
@@ -137,26 +138,30 @@ impl Config {
 
             // read from (flox-bash) installation
             builder = builder.add_source(
-                config::File::from(PathBuf::from("/etc").join("flox.toml"))
+                config::File::from(PathBuf::from("/etc").join(FLOX_CONFIG_FILE))
                     .format(config::FileFormat::Toml)
                     .required(false),
             );
 
             // read from (flox-bash) installation
             builder = builder.add_source(
-                config::File::from(PathBuf::from(FLOX_SH_PATH).join("etc").join("flox.toml"))
-                    .format(config::FileFormat::Toml),
+                config::File::from(
+                    PathBuf::from(FLOX_SH_PATH)
+                        .join("etc")
+                        .join(FLOX_CONFIG_FILE),
+                )
+                .format(config::FileFormat::Toml),
             );
 
             // look for files in XDG_CONFIG_DIRS locations
-            for file in flox_dirs.find_config_files("flox.toml") {
+            for file in flox_dirs.find_config_files(FLOX_CONFIG_FILE) {
                 builder =
                     builder.add_source(config::File::from(file).format(config::FileFormat::Toml));
             }
 
             // Add explicit FLOX_CONFIG_HOME file last
             builder = builder.add_source(
-                config::File::from(config_dir.join("flox.toml"))
+                config::File::from(config_dir.join(FLOX_CONFIG_FILE))
                     .format(config::FileFormat::Toml)
                     .required(false),
             );
