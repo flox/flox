@@ -25,7 +25,7 @@ use crate::utils::init::{
     init_access_tokens,
     init_channels,
     init_git_conf,
-    init_telemetry_consent,
+    init_telemetry,
     init_uuid,
     telemetry_denial_need_migration,
 };
@@ -115,7 +115,7 @@ impl FloxArgs {
         }
 
         if !config.flox.disable_metrics {
-            init_telemetry_consent(&config.flox.data_dir, &config.flox.cache_dir).await?;
+            init_telemetry(&config.flox.data_dir, &config.flox.cache_dir).await?;
         } else {
             debug!("Metrics collection disabled");
             env::set_var("FLOX_DISABLE_METRICS", "true");

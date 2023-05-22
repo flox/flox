@@ -40,7 +40,7 @@ pub async fn telemetry_denial_need_migration(data_dir: &Path, cache_dir: &Path) 
 ///
 /// If a metrics-uuid file is present, assume telemetry is already set up.
 /// Any migration concerning user opt-out should be handled before using [telemetry_denial_need_migration].
-pub async fn init_telemetry_consent(data_dir: &Path, cache_dir: &Path) -> Result<()> {
+pub async fn init_telemetry(data_dir: &Path, cache_dir: &Path) -> Result<()> {
     tokio::fs::create_dir_all(data_dir).await?;
 
     let mut metrics_lock = LockFile::open(&cache_dir.join(METRICS_LOCK_FILE_NAME))?;
