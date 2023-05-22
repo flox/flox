@@ -2,6 +2,7 @@ use std::sync::mpsc;
 
 use anyhow::{Context, Result};
 use fslock::LockFile;
+use futures::TryFutureExt;
 use indoc::indoc;
 use log::{debug, error};
 use serde::{Deserialize, Serialize};
@@ -226,8 +227,9 @@ pub async fn add_metric(subcommand: Option<String>) -> Result<()> {
 
     let uuid_path = data_dir.join(METRICS_UUID_FILE_NAME);
 
-    let uuid = match tokio::fs::File::open(&uuid_path).await {
-        Ok(mut f) => {
+    let uuid = tokio::fs::File::open(&uuid_path)
+        .or_else(|e| async { Err(e).context("Could not read metrics UUID file") })
+        .and_then(|mut f| async move {
             let mut uuid_str = String::new();
             f.read_to_string(&mut uuid_str).await?;
             let uuid_str_trimmed = uuid_str.trim();
@@ -235,11 +237,9 @@ pub async fn add_metric(subcommand: Option<String>) -> Result<()> {
                 indoc! {"
                 Could not parse the metrics UUID of this installation in {uuid_path}
             "}
-            })?
-        },
-
-        Err(err) => Err(err)?,
-    };
+            })
+        })
+        .await?;
 
     let buffer_file_path = cache_dir.join(METRICS_EVENTS_FILE_NAME);
     let mut events_buffer_file = OpenOptions::new()
