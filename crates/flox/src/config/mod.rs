@@ -1,12 +1,12 @@
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::{env, fs};
 
 use anyhow::{Context, Result};
 use config::{Config as HierarchicalConfig, Environment};
 use flox_types::stability::Stability;
 use itertools::{Either, Itertools};
-use log::{debug, trace};
+use log::{debug, trace, warn};
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
 use tempfile::PersistError;
@@ -94,6 +94,10 @@ pub enum ReadWriteError {
     TomlDe(#[from] toml_edit::de::Error),
     #[error(transparent)]
     Io(#[from] std::io::Error),
+    #[error("Could not read config file: {0}")]
+    ReadConfig(std::io::Error),
+    #[error("Could not write config file: {0}")]
+    WriteConfig(std::io::Error),
     #[error(transparent)]
     Persist(#[from] PersistError),
 }
@@ -119,7 +123,6 @@ impl Config {
                     debug!("`$FLOX_CONFIG_HOME` not set, using {config_dir:?}");
                     fs::create_dir_all(&config_dir)
                         .context(format!("Could not create config directory: {config_dir:?}"))?;
-                    debug!("`FLOX_CONFIG_HOME` not set, using {config_dir:?}");
                     let config_dir = config_dir
                         .canonicalize()
                         .context("Could not canonicalize  conifig directory '{config_dir:?}'")?;
@@ -288,6 +291,34 @@ impl Config {
         }
 
         Ok(document.to_string())
+    }
+
+    pub fn write_to_in<V: Serialize>(
+        config_file_path: impl AsRef<Path>,
+        temp_dir: impl AsRef<Path>,
+        query: &[Key],
+        value: Option<V>,
+    ) -> Result<(), ReadWriteError> {
+        let config_file_contents = match fs::read_to_string(&config_file_path) {
+            Ok(s) => Ok(Some(s)),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                warn!(
+                    "No existing user config file found in {:?}",
+                    config_file_path.as_ref()
+                );
+                Ok(None)
+            },
+            Err(e) => Err(e),
+        }
+        .map_err(ReadWriteError::ReadConfig)?;
+
+        let config_file_contents = Self::write_to(config_file_contents, query, value)?;
+
+        let tempfile = tempfile::Builder::new().tempfile_in(temp_dir)?;
+        fs::write(&tempfile, config_file_contents).map_err(ReadWriteError::WriteConfig)?;
+        tempfile.persist(config_file_path)?;
+
+        Ok(())
     }
 }
 
