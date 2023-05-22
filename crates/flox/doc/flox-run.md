@@ -11,20 +11,21 @@ flox-run - run app from current project
 
 # SYNOPSIS
 
-flox [ `<general-options>` ] run [ `<run-options>` ] [ -- [ `<command args>` ... ] ]
+flox [ `<general-options>` ] run [ `<run-options>` ] [ `<installable>` ] [ -- [ `<command args>` ... ] ]
 
 # DESCRIPTION
 
-Run flake application (or "installable").
-If not provided `flox` will prompt for you to select from the list of known packages.
-`flox run` uses `nix run` under the hood to execute the so-called installables.
+Run a flake application from the requested installable.
+See the [nix(1)] manual's section on installables for more information.
+
+[nix(1)]: https://nixos.org/manual/nix/stable/command-ref/new-cli/nix.html#installables
 
 # EXAMPLES
 
 ## Running applications in the current working directory
 
 If `flox run` is called without any arguments, it will ask the user which installable they want to run.
-Note, in this example, it's assumed there's an `flake.nix` in the current directory.
+Note, in this example, it's assumed there's a `flake.nix` in the current directory.
 
 ```console
 $ flox run
@@ -35,8 +36,7 @@ $ flox run
 [↑ to move, enter to select, type to filter]
 ```
 
-If `flox run` is called with an argument, it will try to run that installable instead, without asking for user 
-input.
+If `flox run` is called with an argument, it will try to run that installable instead, without asking for user input.
 Note, in this example, it's assumed there's a `flake.nix` in the current directory.
 
 ```
@@ -73,4 +73,7 @@ $ flox run 'nixpkgs#cowsay' -- -- --help
 
 # SEE ALSO
 
-[nix(1)](https://nixos.org/manual/nix/stable/command-ref/new-cli/nix.html#installables)
+[nix(1)]
+
+[nix(1)]: https://nixos.org/manual/nix/stable/command-ref/new-cli/nix.html
+
