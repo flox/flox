@@ -142,12 +142,15 @@ function gitInitFloxmeta() {
 	# Set initial branch with `-c init.defaultBranch=` instead of
 	# `--initial-branch=` to stay compatible with old version of
 	# git, which will ignore unrecognized `-c` options.
-	$invoke_git -c init.defaultBranch="${defaultBranch}" init --quiet "$repoDir"
+	$invoke_git -c init.defaultBranch="${defaultBranch}" init --bare --quiet "$repoDir"
 	$invoke_git -C "$repoDir" config pull.rebase true
 	$invoke_git -C "$repoDir" config receive.denyCurrentBranch updateInstead
 	# A commit is needed in order to make the branch visible.
-	$invoke_git -C "$repoDir" commit --quiet --allow-empty \
+	local tmpDir="$(mkTempDir)"
+	$invoke_git clone --quiet --shared "$repoDir" "$tmpDir"
+	$invoke_git -C "$tmpDir" commit --quiet --allow-empty \
 		-m "$USER created repository"
+	$invoke_git -C "$tmpDir" push --quiet --set-upstream origin $defaultBranch
 }
 
 # XXX TEMPORARY function to convert old-style "1.json" -> "1/manifest.json"

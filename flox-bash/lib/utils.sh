@@ -627,20 +627,14 @@ function initFloxUserMetaJSON() {
 	local origin
 	origin=$(getSetOrigin "$defaultEnv")
 
-	# We normally use an ephemeral clone in floxUserMetaRegistry() to
-	# modify floxUserMeta.json but for bootstrapping it's OK to use the
-	# existing clone in situ as it's designed to have floxmain checked
-	# out at all times anyway.
-	local workDir="$userFloxMetaCloneDir"
+	# Create ephemeral clone.
+	local workDir
+	workDir=$(mkTempDir)
+	$_git clone --quiet --shared "$userFloxMetaCloneDir" $workDir
 
 	# Start by checking out the floxmain branch, which is guaranteed to
 	# exist because it's found in github:flox/floxmeta-template.
-	$invoke_git -C "$workDir" checkout --quiet "$defaultBranch"
-
-	# Check for uncommitted file in the way.
-	if [ -f "$workDir"/floxUserMeta.json ]; then
-		$_mv --verbose "$workDir"/floxUserMeta.json{,.$now}
-	fi
+	$_git -C "$workDir" checkout --quiet "$defaultBranch"
 
 	# Capture STDIN to the new file.
 	$_cat > "$workDir"/floxUserMeta.json
@@ -652,6 +646,9 @@ function initFloxUserMetaJSON() {
 	# Add and commit.
 	$invoke_git -C "$workDir" add floxUserMeta.json
 	$invoke_git -C "$workDir" commit -m "$message" --quiet
+
+	# Push changes back to bare repository.
+	$_git -C $workDir push --quiet --set-upstream origin $defaultBranch
 }
 
 #
@@ -680,17 +677,12 @@ function floxUserMetaRegistry() {
 				( $floxUserMetaTemplate * $old )
 			' $OLDfloxUserMeta |
 				initFloxUserMetaJSON "init: floxUserMeta.json (migrated from <=0.0.9)"
+			$_rm -f $OLDfloxUserMeta
 		else
 			$_jq -n -r -S "$floxUserMetaTemplate" |
 				initFloxUserMetaJSON "init: floxUserMeta.json"
 		fi
 		$_git -C "$userFloxMetaCloneDir" show "$defaultBranch:floxUserMeta.json" >$floxUserMeta
-	fi
-
-	# XXX TEMPORARY: write back contents to $OLDfloxUserMeta while we work
-	# to update the rust CLI to read this information from git.
-	if [ ! -f $OLDfloxUserMeta ]; then
-		$_cp -f $floxUserMeta $OLDfloxUserMeta
 	fi
 
 	case "$verb" in
@@ -712,9 +704,6 @@ function floxUserMetaRegistry() {
 		$_git -C $workDir push --quiet --set-upstream origin $defaultBranch
 		# Refresh temporary $floxUserMeta (used for this invocation only).
 		$_git -C "$userFloxMetaCloneDir" show "$defaultBranch:floxUserMeta.json" >$floxUserMeta
-		# XXX TEMPORARY: write back contents to $OLDfloxUserMeta while we work
-		# to update the rust CLI to read this information from git.
-		$_cp -f $floxUserMeta $OLDfloxUserMeta
 		;;
 	*)
 		error "floxUserMetaRegistry(): unsupported operation '$verb'" </dev/null
