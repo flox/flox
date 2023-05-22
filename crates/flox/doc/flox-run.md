@@ -24,8 +24,9 @@ See the [nix(1)] manual's section on installables for more information.
 
 ## Running applications in the current working directory
 
-If `flox run` is called without any arguments, it will ask the user which installable they want to run.
-Note, in this example, it's assumed there's a `flake.nix` in the current directory.
+If `flox run` is called without any arguments, and a controlling tty is available,
+it will offer the user a selection of installable from the current flake.
+Note, in this example, it's assumed there's a `flake.nix` in the current directory path.
 
 ```console
 $ flox run
