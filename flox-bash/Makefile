@@ -107,7 +107,7 @@ SRC = $(SRC_BASH) $(SRC_BATS) $(SRC_JQ)
 SHFMT = shfmt --language-dialect bash
 # SC1090 (warning): ShellCheck can't follow non-constant source. Use a directive to specify location.
 # SC1091 (info): Not following: ./init.sh was not specified as input (see shellcheck -x).
-# SC2034 (warning): floxFooBar appears unused. Verify use (or export if used externally).
+# SC2034 (warning): floxMetricsConsent appears unused. Verify use (or export if used externally).
 # SC2086 (info): Double quote to prevent globbing and word splitting.
 # SC2154 (warning): _nix is referenced but not assigned.
 # SC2166 (warning): Prefer [ p ] && [ q ] as [ p -a q ] is not well defined.
