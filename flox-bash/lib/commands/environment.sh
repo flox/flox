@@ -1333,6 +1333,14 @@ function floxDestroy() {
 	done
 	if [ $force -gt 0 ] || boolPrompt "Are you sure?" "no"; then
 		if [ -n "$localBranch" ]; then
+
+			# TODO: remove once we move exclusively to the use of bare clones.
+			# Start by changing to the (default) floxmain branch to ensure
+			# we're not attempting to delete the current branch.
+			[ "$($_git -C "$environmentMetaDir" rev-parse --is-bare-repository)" == "true" ] || \
+				$invoke_git -C "$environmentMetaDir" checkout --quiet "$defaultBranch" 2>/dev/null || true
+			# /TODO
+
 			# Ensure following commands always succeed so that subsequent
 			# invocations can reach the --origin remote removal below.
 			$invoke_git -C "$environmentMetaDir" branch -D "$branchName" || true
