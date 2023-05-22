@@ -63,7 +63,7 @@ $ flox run 'nixpkgs#cowsay' -- -- --help
 
 ## RUN OPTIONS
 
-[ -- [ `<command args>` ... ] ]
+[ -- [ `<nix command args>` ] -- [ `<command args>` ... ] ]
 :   Arguments passed to the application
 
 ```{.include}
