@@ -55,6 +55,8 @@ fn bats_test(test: &str) -> Command {
     // we provide a store path provided by our devShell.
     test_command.env("FLOX_PACKAGE", env!("FLOX_SH_PATH"));
     test_command.env("FLOX_IMPLEMENTATION", "rust");
+    // Disable metrics for all test invocations.
+    test_command.env("FLOX_DISABLE_METRICS", "true");
     // Some externally called programs in the test may produce a warning
     // if LC_ALL is unset.
     // Since this is not the variable under test,
