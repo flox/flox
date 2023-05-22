@@ -1,7 +1,8 @@
 use std::sync::mpsc;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use fslock::LockFile;
+use indoc::indoc;
 use log::{debug, error};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -225,26 +226,19 @@ pub async fn add_metric(subcommand: Option<String>) -> Result<()> {
 
     let uuid_path = data_dir.join(METRICS_UUID_FILE_NAME);
 
-    let uuid = match tokio::fs::File::open(uuid_path).await {
+    let uuid = match tokio::fs::File::open(&uuid_path).await {
         Ok(mut f) => {
             let mut uuid_str = String::new();
             f.read_to_string(&mut uuid_str).await?;
             let uuid_str_trimmed = uuid_str.trim();
-
-            if uuid_str_trimmed.is_empty() {
-                // Metrics have been rejected
-                return Ok(());
-            }
-
-            Uuid::try_parse(uuid_str_trimmed)?
+            Uuid::try_parse(uuid_str_trimmed).with_context(|| {
+                indoc! {"
+                Could not parse the metrics UUID of this installation in {uuid_path}
+            "}
+            })?
         },
-        Err(err) => match err.kind() {
-            std::io::ErrorKind::NotFound => {
-                // Metrics have not been consented to yet
-                return Ok(());
-            },
-            _ => Err(err)?,
-        },
+
+        Err(err) => Err(err)?,
     };
 
     let buffer_file_path = cache_dir.join(METRICS_EVENTS_FILE_NAME);

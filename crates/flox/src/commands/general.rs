@@ -15,7 +15,6 @@ use tokio::fs;
 use toml_edit::Key;
 
 use crate::config::features::Feature;
-use crate::utils::init::init_telemetry_consent;
 use crate::config::{Config, ReadWriteError, FLOX_CONFIG_FILE};
 use crate::utils::metrics::{
     METRICS_EVENTS_FILE_NAME,
@@ -85,8 +84,6 @@ impl GeneralCommands {
                         _ => Err(err)?,
                     }
                 }
-
-                init_telemetry_consent(&flox.data_dir, &flox.cache_dir).await?;
             },
 
             GeneralCommands::Config(config_args) => config_args.handle(config, flox).await?,
