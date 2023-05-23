@@ -130,3 +130,78 @@ pub async fn init_uuid(data_dir: &Path) -> Result<uuid::Uuid> {
         },
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use tempfile::TempDir;
+
+    use super::*;
+
+    /// An empty metrics-uuid file needs migration
+    #[allow(clippy::bool_assert_comparison)]
+    #[tokio::test]
+    async fn test_telemetry_denial_need_migration_empty_uuid() {
+        let tempdir = TempDir::new().unwrap();
+        let data_dir = tempdir.path().join("data");
+
+        std::fs::create_dir_all(&data_dir).unwrap();
+        std::fs::File::create(data_dir.join(METRICS_UUID_FILE_NAME)).unwrap();
+
+        let need_migration =
+            telemetry_opt_out_needs_migration(data_dir, tempdir.path().join("cache"))
+                .await
+                .unwrap();
+
+        assert_eq!(need_migration, true);
+    }
+
+    /// An empty data dir (without metrics-uuid file) does not need migration
+    #[allow(clippy::bool_assert_comparison)]
+    #[tokio::test]
+    async fn test_telemetry_denial_need_migration_empty_data() {
+        let tempdir = TempDir::new().unwrap();
+        let need_migration = telemetry_opt_out_needs_migration(
+            tempdir.path().join("data"),
+            tempdir.path().join("cache"),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(need_migration, false);
+    }
+
+    /// A non-empty metrics-uuid file does not need migration
+    #[allow(clippy::bool_assert_comparison)]
+    #[tokio::test]
+    async fn test_telemetry_denial_need_migration_filled_uuid() {
+        let tempdir = TempDir::new().unwrap();
+        let data_dir = tempdir.path().join("data");
+
+        std::fs::create_dir_all(&data_dir).unwrap();
+        std::fs::write(
+            data_dir.join(METRICS_UUID_FILE_NAME),
+            uuid::Uuid::new_v4().to_string(),
+        )
+        .unwrap();
+
+        let need_migration =
+            telemetry_opt_out_needs_migration(data_dir, tempdir.path().join("cache"))
+                .await
+                .unwrap();
+
+        assert_eq!(need_migration, false);
+    }
+
+    #[tokio::test]
+    async fn test_init_telemetry() {
+        let tempdir = TempDir::new().unwrap();
+        let uuid_file_path = tempdir.path().join("data").join(METRICS_UUID_FILE_NAME);
+        init_telemetry(tempdir.path().join("data"), tempdir.path().join("cache"))
+            .await
+            .unwrap();
+        assert!(uuid_file_path.exists());
+
+        let uuid_str = std::fs::read_to_string(uuid_file_path).unwrap();
+        assert!(uuid::Uuid::try_parse(&uuid_str).is_ok())
+    }
+}
