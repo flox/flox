@@ -87,15 +87,16 @@ pub async fn init_telemetry(data_dir: impl AsRef<Path>, cache_dir: impl AsRef<Pa
         flox includes a record of the subcommand invoked along with a unique token.
         It does not collect any personal information.
 
-        An example of one of these metrics looks like this:
+        Example metric for this invocation:
 
         {example}
 
-        The collection of metrics can be disabled by setting
+        The collection of metrics can be disabled in the following ways:
 
-            FLOX_DISABLE_METRICS=true
+        environment: FLOX_DISABLE_METRICS=true
+          user-wide: flox config --set-bool disable_metrics true
+        system-wide: update /etc/flox.toml as described in flox(1)
 
-        or any of the other methods described in flox(1).
         "};
     info!("{notice}");
 
