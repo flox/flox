@@ -15,7 +15,8 @@ use crate::utils::metrics::{MetricEntry, METRICS_LOCK_FILE_NAME, METRICS_UUID_FI
 /// We are moving this responsibility to the user configuration file.
 /// This detects whether a migration is necessary.
 pub async fn telemetry_denial_need_migration(data_dir: &Path, cache_dir: &Path) -> Result<bool> {
-    tokio::fs::create_dir_all(data_dir).await?;
+    tokio::fs::create_dir_all(&data_dir).await?;
+    tokio::fs::create_dir_all(&cache_dir).await?;
 
     let mut metrics_lock = LockFile::open(&cache_dir.join(METRICS_LOCK_FILE_NAME))?;
     tokio::task::spawn_blocking(move || metrics_lock.lock()).await??;
@@ -41,7 +42,8 @@ pub async fn telemetry_denial_need_migration(data_dir: &Path, cache_dir: &Path) 
 /// If a metrics-uuid file is present, assume telemetry is already set up.
 /// Any migration concerning user opt-out should be handled before using [telemetry_denial_need_migration].
 pub async fn init_telemetry(data_dir: &Path, cache_dir: &Path) -> Result<()> {
-    tokio::fs::create_dir_all(data_dir).await?;
+    tokio::fs::create_dir_all(&data_dir).await?;
+    tokio::fs::create_dir_all(&cache_dir).await?;
 
     let mut metrics_lock = LockFile::open(&cache_dir.join(METRICS_LOCK_FILE_NAME))?;
     tokio::task::spawn_blocking(move || metrics_lock.lock()).await??;
