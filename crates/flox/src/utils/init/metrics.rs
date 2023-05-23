@@ -9,19 +9,25 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 use crate::utils::metrics::{MetricEntry, METRICS_LOCK_FILE_NAME, METRICS_UUID_FILE_NAME};
 
-/// Check whether the current uuid file is empty
+/// Determine whether the user has previously opted-out of metrics
+/// through the legacy consent dialog.
+///
+/// Check whether the current uuid file is empty.
 ///
 /// An empty metrics uuid file used to signal telemtry opt-out.
 /// We are moving this responsibility to the user configuration file.
 /// This detects whether a migration is necessary.
-pub async fn telemetry_denial_need_migration(data_dir: &Path, cache_dir: &Path) -> Result<bool> {
+pub async fn telemetry_opt_out_needs_migration(
+    data_dir: impl AsRef<Path>,
+    cache_dir: impl AsRef<Path>,
+) -> Result<bool> {
     tokio::fs::create_dir_all(&data_dir).await?;
     tokio::fs::create_dir_all(&cache_dir).await?;
 
-    let mut metrics_lock = LockFile::open(&cache_dir.join(METRICS_LOCK_FILE_NAME))?;
+    let mut metrics_lock = LockFile::open(&cache_dir.as_ref().join(METRICS_LOCK_FILE_NAME))?;
     tokio::task::spawn_blocking(move || metrics_lock.lock()).await??;
 
-    let uuid_path = data_dir.join(METRICS_UUID_FILE_NAME);
+    let uuid_path = data_dir.as_ref().join(METRICS_UUID_FILE_NAME);
 
     match tokio::fs::File::open(&uuid_path).await {
         Ok(mut file) => {
@@ -41,13 +47,13 @@ pub async fn telemetry_denial_need_migration(data_dir: &Path, cache_dir: &Path) 
 ///
 /// If a metrics-uuid file is present, assume telemetry is already set up.
 /// Any migration concerning user opt-out should be handled before using [telemetry_denial_need_migration].
-pub async fn init_telemetry(data_dir: &Path, cache_dir: &Path) -> Result<()> {
+pub async fn init_telemetry(data_dir: impl AsRef<Path>, cache_dir: impl AsRef<Path>) -> Result<()> {
     tokio::fs::create_dir_all(&data_dir).await?;
     tokio::fs::create_dir_all(&cache_dir).await?;
 
-    let mut metrics_lock = LockFile::open(&cache_dir.join(METRICS_LOCK_FILE_NAME))?;
+    let mut metrics_lock = LockFile::open(&cache_dir.as_ref().join(METRICS_LOCK_FILE_NAME))?;
     tokio::task::spawn_blocking(move || metrics_lock.lock()).await??;
-    let uuid_path = data_dir.join(METRICS_UUID_FILE_NAME);
+    let uuid_path = data_dir.as_ref().join(METRICS_UUID_FILE_NAME);
 
     // we already have a uuid, so lets use that
     if uuid_path.exists() {

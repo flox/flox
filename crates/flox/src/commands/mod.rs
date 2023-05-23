@@ -27,7 +27,7 @@ use crate::utils::init::{
     init_git_conf,
     init_telemetry,
     init_uuid,
-    telemetry_denial_need_migration,
+    telemetry_opt_out_needs_migration,
 };
 use crate::utils::metrics::METRICS_UUID_FILE_NAME;
 
@@ -97,7 +97,7 @@ impl FloxArgs {
         // metrics could be turned off by writing an empty UUID file
         // this branch migrates empty files to a config value in the user's flox.toml
         // and deletes the now defunct empty file
-        if telemetry_denial_need_migration(&config.flox.data_dir, &config.flox.cache_dir).await? {
+        if telemetry_opt_out_needs_migration(&config.flox.data_dir, &config.flox.cache_dir).await? {
             info!("Migrating previous telemetry opt out to user config");
             // update current run time config
             config.flox.disable_metrics = true;
