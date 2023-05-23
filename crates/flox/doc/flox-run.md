@@ -11,7 +11,7 @@ flox-run - run app from current project
 
 # SYNOPSIS
 
-flox [ `<general-options>` ] run [ `<run-options>` ] [ `<installable>` ] [ -- [ `<command args>` ... ] ]
+flox [ `<general-options>` ] run [ `<run-options>` ] [ `<installable>` ] [ -- [ `<nix command args>` ] -- [ `<command args>` ... ] ]
 
 # DESCRIPTION
 
