@@ -106,7 +106,7 @@ impl FloxArgs {
             Config::write_to_in(
                 config.flox.config_dir.join(FLOX_CONFIG_FILE),
                 &temp_dir,
-                &[Key::new("flox"), Key::new("disable_metrics")],
+                &[Key::new("disable_metrics")],
                 Some(true),
             )?;
 
