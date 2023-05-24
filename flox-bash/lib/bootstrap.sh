@@ -34,15 +34,9 @@ function bootstrap() {
 			floxUserMetaRegistry setNumber educatePublish 0
 
 	else
-
-		#
-		# Non-interactive mode. Use all defaults if not found in registry.
-		#
-
 		# Only educate in interactive mode; setting educatePublish=1
 		# means user has been educated.
 		educatePublish=1
-
 	fi
 }
 
