@@ -12,7 +12,7 @@
 declare -i educatePublishCalled=0
 function doEducatePublish() {
 	educatePublishCalled=1
-	[ $educatePublish -eq 0 ] || return 0
+	[ "$educatePublish" -eq 0 ] || return 0
 	$_cat <<EOF 1>&2
 
 As this seems to be your first time publishing a package here's a
@@ -55,10 +55,10 @@ function initProjectRegistry() {
 	floxProjectMetaDir=".flox"
 	if [ -n "$gitCloneToplevel" ]; then
 		local gitCloneFloxDir="$gitCloneToplevel/$floxProjectMetaDir"
-		[ -d $gitCloneFloxDir ] || $invoke_mkdir -p "$gitCloneFloxDir"
+		[ -d "$gitCloneFloxDir" ] || $invoke_mkdir -p "$gitCloneFloxDir"
 		gitCloneRegistry="$gitCloneFloxDir/metadata.json"
-		if [ $interactive -eq 1 ]; then
-			[ -f $gitCloneRegistry ] || info "creating $gitCloneRegistry"
+		if [ "$interactive" -eq 1 ]; then
+			[ -f "$gitCloneRegistry" ] || info "creating $gitCloneRegistry"
 			if ! $_grep -q "^/$floxProjectMetaDir$" "$gitCloneToplevel/.gitignore" && \
 				$invoke_gum confirm "add /$floxProjectMetaDir to toplevel .gitignore file?"; then
 				echo "/$floxProjectMetaDir" >> "$gitCloneToplevel/.gitignore"
@@ -220,7 +220,7 @@ function floxPublish() {
 		upstreamFullName="$($_git rev-parse --abbrev-ref --symbolic-full-name "@{u}")"
 		upstreamRemote="${upstreamFullName//\/*/}"
 		upstreamBranch="${upstreamFullName//${upstreamRemote}\//}"
-		cloneRemote="$($_git remote get-url ${upstreamRemote:-origin})"
+		cloneRemote="$($_git remote get-url "${upstreamRemote:-origin}")"
 		cloneBranch="$($_git rev-parse --abbrev-ref --symbolic-full-name @)"
 		cloneRev="$($_git rev-parse @)"
 	fi
@@ -405,12 +405,12 @@ function floxPublish() {
 	[ -z "$downloadFrom" ] || entirePublishCommand=$(printf "%s --download-from %s" "$entirePublishCommand" "$downloadFrom")
 
 	# Only hint and save responses in interactive mode.
-	if [ $interactive -eq 1 ]; then
+	if [ "$interactive" -eq 1 ]; then
 		# Input parsing over, print informational hint in the event that we
 		# had to ask any questions.
 		if [ $educatePublishCalled -eq 1 ]; then
 			warn "HINT: avoid having to answer these questions next time with:"
-			echo '{{ Color "'$LIGHTPEACH256'" "'$DARKBLUE256'" "$ '$entirePublishCommand'" }}' | \
+			echo '{{ Color "'"$LIGHTPEACH256"'" "'"$DARKBLUE256"'" "$ '"$entirePublishCommand"'" }}' | \
 				$_gum format -t template 1>&2
 		fi
 
@@ -424,7 +424,7 @@ function floxPublish() {
 			registry "$gitCloneRegistry" 1 set downloadFrom "$downloadFrom"
 		fi
 	else
-		echo '{{ Color "'$LIGHTPEACH256'" "'$DARKBLUE256'" "'$entirePublishCommand'" }}' | \
+		echo '{{ Color "'"$LIGHTPEACH256"'" "'"$DARKBLUE256"'" "'"$entirePublishCommand"'" }}' | \
 			$_gum format -t template 1>&2
 	fi
 
@@ -448,7 +448,7 @@ function floxPublish() {
 
 	# TODO Make content addressable (remove "false" below).
 	local ca_out
-	if false ca_out="$($invoke_nix "${_nixArgs[@]}" store make-content-addressed $outpaths --json | $_jq '.rewrites[]')"; then
+	if false ca_out="$($invoke_nix "${_nixArgs[@]}" store make-content-addressed "$outpaths" --json | $_jq '.rewrites[]')"; then
 		# Replace package outpaths with CA versions.
 		warn "Replacing with content-addressable package: $ca_out"
 		outpaths=$ca_out
@@ -460,7 +460,7 @@ function floxPublish() {
 	fi
 	if [ -n "$keyFile" ]; then
 		if [ -f "$keyFile" ]; then
-			$invoke_nix "${_nixArgs[@]}" store sign -r --key-file "$keyFile" $outpaths
+			$invoke_nix "${_nixArgs[@]}" store sign -r --key-file "$keyFile" "$outpaths"
 		else
 			error "could not read $keyFile: $!" < /dev/null
 		fi
@@ -476,15 +476,15 @@ function floxPublish() {
 	tmpstderr=$(mkTempFile)
 	evalAndBuild=$($invoke_nix "${_nixArgs[@]}" eval --json \
 		--override-input target "$canonicalFlakeRef" \
-		--override-input target/flox-floxpkgs/nixpkgs/nixpkgs flake:nixpkgs-$FLOX_STABILITY \
-		"$analyzer#.analysis.eval.packages.$publishSystem.$packageAttrPath" 2>$tmpstderr) || {
+		--override-input target/flox-floxpkgs/nixpkgs/nixpkgs flake:nixpkgs-"$FLOX_STABILITY" \
+		"$analyzer#.analysis.eval.packages.$publishSystem.$packageAttrPath" 2>"$tmpstderr") || {
 		$_grep --no-filename -v \
 		  -e "^evaluating 'catalog\." \
 		  -e "not writing modified lock file of flake" \
 		  -e " Added input " \
 		  -e " follows " \
 		  -e "\([0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]\)" \
-		  $tmpstderr 1>&2 || true
+		  "$tmpstderr" 1>&2 || true
 		error "eval of $analyzer#analysis.eval.packages.$publishSystem.$packageAttrPath failed - see above" < /dev/null
 	}
 
@@ -514,7 +514,7 @@ function floxPublish() {
 	# Copy to binary cache (optional).
 	if [ -n "$uploadTo" ]; then
 		local builtfilter="flake:flox#builtfilter"
-		$invoke_nix "${_nixArgs[@]}" copy --to "$uploadTo" $outpaths
+		$invoke_nix "${_nixArgs[@]}" copy --to "$uploadTo" "$outpaths"
 		# Enhance eval data with remote binary substituter.
 		evalAndBuildAndSource=$(echo "$evalAndBuildAndSource" | \
 			$invoke_nix "${_nixArgs[@]}" run "$builtfilter" -- --substituter "$downloadFrom")
@@ -546,7 +546,7 @@ function floxPublish() {
 		$_mkdir -p "$($_dirname "$epAttrPath")"
 		echo "$elementPath" | $_jq -r '.analysis' > "$( echo "$elementPath" | $_jq -r '.attrPath' )"
 		warn "flox publish completed"
-		$_git -C "$gitClone" add $renderPath
+		$_git -C "$gitClone" add "$renderPath"
 		if [ ! -d "$channelRepository" ]; then
 			# TODO: improve contents of git log message
 			epAttrPath="${epAttrPath//$gitClone\/$renderPath\//}"

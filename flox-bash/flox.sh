@@ -85,7 +85,7 @@ while [ $# -ne 0 ]; do
 		;;
 	-h | --help)
 		# Perform initialization to pull in usage().
-		. $_lib/init.sh
+		. "$_lib"/init.sh
 		usage
 		exit 0
 		;;
@@ -97,7 +97,7 @@ done
 declare invocation_string="$0 $*"
 
 # Perform initialization with benefit of flox CLI args set above.
-. $_lib/init.sh
+. "$_lib"/init.sh
 
 # Improve upon the invocation string now we have pprint().
 invocation_string=$(pprint "$me" "$@")
@@ -198,7 +198,7 @@ activate | history | create | install | list | remove | rollback | \
 		esac
 	fi
 
-	[ $verbose -eq 0 ] || [ "$subcommand" = "activate" ] || echo Using environment: $environment >&2
+	[ $verbose -eq 0 ] || [ "$subcommand" = "activate" ] || echo Using environment: "$environment" >&2
 
 	case "$subcommand" in
 
@@ -236,7 +236,7 @@ activate | history | create | install | list | remove | rollback | \
 			# "rollback --to" command (which makes no sense IMO).
 			args=("--to" "${args[@]}")
 		fi
-		floxRollback "$environment" "$FLOX_SYSTEM" $subcommand "${args[@]}";;
+		floxRollback "$environment" "$FLOX_SYSTEM" "$subcommand" "${args[@]}";;
 	upgrade)
 		floxUpgrade "$environment" "$FLOX_SYSTEM" "${args[@]}";;
 
@@ -290,7 +290,7 @@ envs | environments)
 	;;
 
 gh)
-	verboseExec $_gh "$@"
+	verboseExec "$_gh" "$@"
 	;;
 
 init)
@@ -306,7 +306,7 @@ nix)
 	if [ -n "$FLOX_ORIGINAL_NIX_GET_COMPLETIONS" ]; then
 		export NIX_GET_COMPLETIONS="$(( FLOX_ORIGINAL_NIX_GET_COMPLETIONS - 1 ))"
 	fi
-	verboseExec $_nix "$@"
+	verboseExec "$_nix" "$@"
 	;;
 
 config)
@@ -331,11 +331,11 @@ help)
 	# calls "nroff" (in the groff package) which is similarly broken.
 	# So, for this one instance just add coreutils & less to the PATH.
 	export PATH="@@FLOXPATH@@"
-	verboseExec $_man -l "$_share/man/man1/flox.1.gz"
+	verboseExec "$_man" -l "$_share/man/man1/flox.1.gz"
 	;;
 
 *)
-	verboseExec $_nix "$subcommand" "$@"
+	verboseExec "$_nix" "$subcommand" "$@"
 	;;
 
 esac

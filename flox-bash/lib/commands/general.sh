@@ -70,7 +70,7 @@ function floxSubscribe() {
 	if [ -z "$flakeUrl" ]; then
 		local prompt="Enter URL for '$flakeName' channel: "
 		local value
-		value=$(git_base_urlToFlakeURL ${git_base_url} ${flakeName}/floxpkgs master)
+		value=$(git_base_urlToFlakeURL "${git_base_url}" "${flakeName}"/floxpkgs master)
 		read -e -p "$prompt" -i "$value" flakeUrl
 	fi
 	validateFlakeURL "$flakeUrl" || \
@@ -103,7 +103,7 @@ function floxUnsubscribe() {
 		if [ ! ${validChannels["$flakeName"]+_} ]; then
 			error "invalid channel '$flakeName'" < /dev/null
 		fi
-		if [ ${validChannels["$flakeName"]} == "flox" ]; then
+		if [ "${validChannels["$flakeName"]}" == "flox" ]; then
 			error "cannot unsubscribe from flox channel '$flakeName'" < /dev/null
 		fi
 	else
@@ -280,8 +280,8 @@ function floxEnvironments() {
 	[ $# -eq 0 ] || usage | error "the 'flox environments' command takes no arguments"
 	# For each environmentMetaDir, list environment
 	for i in $FLOX_META/*; do
-		if [ -d $i ]; then
-			[ -L $i ] || listEnvironments $system $i
+		if [ -d "$i" ]; then
+			[ -L "$i" ] || listEnvironments "$system" "$i"
 		fi
 	done
 }

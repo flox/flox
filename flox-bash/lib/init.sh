@@ -12,13 +12,13 @@ shopt -s extglob
 shopt -s nullglob
 
 # Pull in utility functions early.
-. $_lib/utils.sh
+. "$_lib"/utils.sh
 
 # Import library functions.
-. $_lib/metadata.sh
+. "$_lib"/metadata.sh
 
 # Import command functions.
-. $_lib/commands.sh
+. "$_lib"/commands.sh
 
 #
 # Parse flox configuration files in TOML format. Order of processing:
@@ -52,7 +52,7 @@ read_flox_conf()
 				# values.
 				$_cat "$f" | \
 				$_dasel -r toml -w json | \
-				$_jq -r --arg var $i 'if has($var) then "FLOX_CONF_\($var)=\(.[$var] | tojson)" else empty end'
+				$_jq -r --arg var "$i" 'if has($var) then "FLOX_CONF_\($var)=\(.[$var] | tojson)" else empty end'
 			done
 		fi
 	done
@@ -146,18 +146,18 @@ declare floxFlakeRegistry="$FLOX_CONFIG_HOME/floxFlakeRegistry.json"
 # Manage user-specific nix.conf for use with flox only.
 # XXX May need further consideration for Enterprise.
 declare nixConf="$FLOX_CONFIG_HOME/nix.conf"
-tmpNixConf=$($_mktemp --tmpdir=$FLOX_CONFIG_HOME)
+tmpNixConf=$($_mktemp --tmpdir="$FLOX_CONFIG_HOME")
 # We want the file in alphabetical order to ease comparing it.
 # The consideration of access tokens is somewhat out of order.
 # The remaining elements are appended below.
-$_cat > $tmpNixConf <<EOF
+$_cat > "$tmpNixConf" <<EOF
 # Automatically generated - do not edit.
 accept-flake-config = true
 connect-timeout = 5
 EOF
 
 # Ensure file is secure before appending access token(s).
-$_chmod 600 $tmpNixConf
+$_chmod 600 "$tmpNixConf"
 
 # Look for github tokens from multiple sources:
 #   1. the user's own .config/nix/nix.conf, else
@@ -196,7 +196,7 @@ if [ -f "$XDG_CONFIG_HOME/gh/hosts.yml" ]; then
 	done
 fi
 if [ -f "$FLOX_CONFIG_HOME/tokens" ]; then
-	if [ "$($_stat -c %a $FLOX_CONFIG_HOME/tokens)" != "600" ]; then
+	if [ "$($_stat -c %a "$FLOX_CONFIG_HOME"/tokens)" != "600" ]; then
 		warn "fixing mode of $FLOX_CONFIG_HOME/tokens"
 		$_chmod 600 "$FLOX_CONFIG_HOME/tokens"
 	fi
@@ -210,11 +210,11 @@ if [ -f "$FLOX_CONFIG_HOME/tokens" ]; then
 fi
 # Append all available tokens to nix.conf.
 if [ ${#accessTokens[@]} -gt 0 ]; then
-	echo "extra-access-tokens = ${accessTokens[@]}" >> $tmpNixConf
+	echo "extra-access-tokens = ${accessTokens[@]}" >> "$tmpNixConf"
 fi
 
 # Add the remaining config values in alphabetical order
-$_cat >> $tmpNixConf <<EOF
+$_cat >> "$tmpNixConf" <<EOF
 extra-experimental-features = nix-command flakes
 extra-substituters = https://cache.floxdev.com
 extra-trusted-public-keys = flox-store-public-0:8c/B+kjIaQ+BloCmNkRUKwaVPFWkriSAd0JJvuDu4F0=
@@ -223,11 +223,11 @@ netrc-file = $HOME/.netrc
 warn-dirty = false
 EOF
 
-if $_cmp --quiet $tmpNixConf $nixConf; then
-	$_rm $tmpNixConf
+if $_cmp --quiet "$tmpNixConf" "$nixConf"; then
+	$_rm "$tmpNixConf"
 else
 	warn "Updating $nixConf"
-	$_mv -f $tmpNixConf $nixConf
+	$_mv -f "$tmpNixConf" "$nixConf"
 fi
 export NIX_USER_CONF_FILES="$nixConf"
 export SSL_CERT_FILE="${SSL_CERT_FILE:-@@NIXPKGS_CACERT_BUNDLE_CRT@@}"
@@ -238,9 +238,9 @@ export NIX_SSL_CERT_FILE="${NIX_SSL_CERT_FILE:-$SSL_CERT_FILE}"
 # passthru mechanism for passing options to git invocations. (?)
 gitConfig="$FLOX_CONFIG_HOME/gitconfig"
 
-tmpGitConfig=$($_mktemp --tmpdir=$FLOX_CONFIG_HOME)
-$_chmod 600 $tmpGitConfig
-$_cat > $tmpGitConfig <<EOF
+tmpGitConfig=$($_mktemp --tmpdir="$FLOX_CONFIG_HOME")
+$_chmod 600 "$tmpGitConfig"
+$_cat > "$tmpGitConfig" <<EOF
 # Automatically generated - do not edit.
 [user]
 	name = Flox User
@@ -293,7 +293,7 @@ if [ -e "$GIT_CONFIG_SYSTEM" -a "$GIT_CONFIG_SYSTEM" != "$gitConfig" ]; then
 	# Save first/original observed variable to disambiguate our use
 	# of GIT_CONFIG_SYSTEM in subshells.
 	export FLOX_ORIGINAL_GIT_CONFIG_SYSTEM="$GIT_CONFIG_SYSTEM"
-	$_cat >> $tmpGitConfig <<EOF
+	$_cat >> "$tmpGitConfig" <<EOF
 [include]
 	path = $GIT_CONFIG_SYSTEM
 
@@ -301,11 +301,11 @@ EOF
 fi
 
 # Compare generated gitconfig to cached version.
-if $_cmp --quiet $tmpGitConfig $gitConfig; then
-	$_rm $tmpGitConfig
+if $_cmp --quiet "$tmpGitConfig" "$gitConfig"; then
+	$_rm "$tmpGitConfig"
 else
 	warn "Updating $gitConfig"
-	$_mv -f $tmpGitConfig $gitConfig
+	$_mv -f "$tmpGitConfig" "$gitConfig"
 fi
 
 # Override system gitconfig.
@@ -346,7 +346,7 @@ if [ -z "$FLOX_CONF_git_base_url" ]; then
 fi
 
 # Bootstrap user-specific configuration.
-. $_lib/bootstrap.sh
+. "$_lib"/bootstrap.sh
 
 # Populate user-specific flake registry.
 declare -A validChannels=()

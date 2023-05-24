@@ -112,14 +112,14 @@ function parseNixArgs() {
 # order that commands appear in the usage() statement.
 
 ## General commands
-. $_lib/commands/general.sh
+. "$_lib"/commands/general.sh
 
 ## Environment commands
-. $_lib/commands/activate.sh
-. $_lib/commands/environment.sh
+. "$_lib"/commands/activate.sh
+. "$_lib"/commands/environment.sh
 
 ## Development commands
-. $_lib/commands/development.sh
-. $_lib/commands/publish.sh
+. "$_lib"/commands/development.sh
+. "$_lib"/commands/publish.sh
 
 # vim:ts=4:noet:syntax=bash

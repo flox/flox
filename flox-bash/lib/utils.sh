@@ -112,7 +112,7 @@ function trace() {
 	# Redirect the output of set -x to /dev/null
 	exec 9>/dev/null
 	local BASH_XTRACEFD=9
-	[ $debug -gt 0 ] || return 0
+	[ "$debug" -gt 0 ] || return 0
 	echo -e "trace:${filecolor}${BASH_SOURCE[2]}:${BASH_LINENO[1]}${colorReset} ${funccolor}${FUNCNAME[1]}${colorReset}( ${argscolor}"$(pprint "$@")"${colorReset} )" 1>&2
 }
 
@@ -124,18 +124,18 @@ function hash_commands() {
 	local PATH=@@FLOXPATH@@:$PATH
 	for i in $@; do
 		_i=${i//-/_} # Pesky utilities containing dashes require rewrite.
-		hash $i # Dies with useful/precise error on failure when not found.
-		declare -g _$_i=$(type -P $i)
+		hash "$i" # Dies with useful/precise error on failure when not found.
+		declare -g _"$_i"=$(type -P "$i")
 
 		# Define $invoke_<name> variables for those invocations we'd
 		# like to wrap with the invoke() subroutine.
-		declare -g invoke_$_i="invoke $(type -P $i)"
+		declare -g invoke_"$_i"="invoke $(type -P "$i")"
 
 		# Some commands require certain environment variables to work properly.
 		# Make note of them here for displaying verbose output in invoke().
 		case $i in
 		nix | nix-store)
-			exported_variables[$(type -P $i)]="NIX_REMOTE NIX_SSL_CERT_FILE NIX_USER_CONF_FILES GIT_CONFIG_SYSTEM" ;;
+			exported_variables[$(type -P "$i")]="NIX_REMOTE NIX_SSL_CERT_FILE NIX_USER_CONF_FILES GIT_CONFIG_SYSTEM" ;;
 		*) ;;
 		esac
 	done
@@ -159,8 +159,8 @@ function first_in_PATH() {
 	set -h # explicitly enable hashing
 	local PATH=@@FLOXPATH@@:$PATH
 	for i in $@; do
-		if hash $i 2>/dev/null; then
-			echo $(type -P $i)
+		if hash "$i" 2>/dev/null; then
+			echo $(type -P "$i")
 			return
 		fi
 	done
@@ -171,8 +171,8 @@ editorCommand=${EDITOR:-${VISUAL:-${bestAvailableEditor:-vi}}}
 
 # Short name for this script, derived from $0.
 me="${0##*/}"
-mespaces=$(echo $me | $_tr '[a-z]' ' ')
-medashes=$(echo $me | $_tr '[a-z]' '-')
+mespaces=$(echo "$me" | $_tr '[a-z]' ' ')
+medashes=$(echo "$me" | $_tr '[a-z]' '-')
 
 # info() prints to STDERR
 function info() {
@@ -189,7 +189,7 @@ function warn() {
 # verboseExec() uses pprint() to safely print exec() calls to STDERR
 function verboseExec() {
 	trace "$@"
-	[ $verbose -eq 0 ] || warn $(pprint "+" "$@")
+	[ "$verbose" -eq 0 ] || warn $(pprint "+" "$@")
 	exec "$@"
 }
 
@@ -215,7 +215,7 @@ declare -a tmpFiles=()
 declare -a tmpDirs=()
 function cleanup() {
 	# Keep temp files if debugging.
-	if [ $debug -eq 0 ]; then
+	if [ "$debug" -eq 0 ]; then
 		if [ ${#tmpFiles[@]} -gt 0 ]; then
 			$invoke_rm -f "${tmpFiles[@]}"
 		fi
@@ -236,14 +236,14 @@ function mkTempFile() {
 	local tmpFile
 	tmpFile=$($_mktemp)
 	tmpFiles+=($tmpFile)
-	echo $tmpFile
+	echo "$tmpFile"
 }
 
 function mkTempDir() {
 	local tmpDir
 	tmpDir=$($_mktemp -d)
 	tmpDirs+=($tmpDir)
-	echo $tmpDir
+	echo "$tmpDir"
 }
 
 declare -A _usage
@@ -322,7 +322,7 @@ function invoke() {
 	local BASH_XTRACEFD=9
 	trace "$@"
 	local vars=()
-	if [ $verbose -ge $minverbosity ]; then
+	if [ "$verbose" -ge $minverbosity ]; then
 		for i in ${exported_variables[$1]}; do
 			vars+=($(eval "echo $i=\${$i}"))
 		done
@@ -412,7 +412,7 @@ function renderManifestTOML() {
 	local manifest_toml="$1"; shift
 
 	# Derive a list of Nix installables.
-	local -a installables=($($_cat $manifest_toml | manifestTOML installables))
+	local -a installables=($($_cat "$manifest_toml" | manifestTOML installables))
 
 	# Convert this list of installables to a list of floxpkgArgs.
 	local -a floxpkgArgs
@@ -424,15 +424,15 @@ function renderManifestTOML() {
 		# Now we use this list of floxpkgArgs to create a temporary profile.
 		local tmpdir
 		tmpdir=$(mkTempDir)
-		$invoke_nix profile install --impure --profile $tmpdir/profile "${floxpkgArgs[@]}"
+		$invoke_nix profile install --impure --profile "$tmpdir"/profile "${floxpkgArgs[@]}"
 
 		# If we've gotten this far we have a profile. Follow the links to
 		# identify the package, then (carefully) discard the tmpdir.
-		environmentPackage=$(cd $tmpdir && readlink $(readlink profile))
-		$_rm -f $tmpdir/profile $tmpdir/profile-1-link
-		$_rmdir $tmpdir
+		environmentPackage=$(cd "$tmpdir" && readlink $(readlink profile))
+		$_rm -f "$tmpdir"/profile "$tmpdir"/profile-1-link
+		$_rmdir "$tmpdir"
 		if [ -n "$environmentPackage" ]; then
-			echo $environmentPackage
+			echo "$environmentPackage"
 		else
 			error "failed to render new environment" </dev/null
 		fi
@@ -450,7 +450,7 @@ function boolPrompt() {
 	local prompt="$1"; shift
 	local default="$1"; shift
 	local defaultLower
-	defaultLower=$(echo $default | $_tr A-Z a-z)
+	defaultLower=$(echo "$default" | $_tr A-Z a-z)
 	local defaultrc
 	case "$defaultLower" in
 	n|no) defaultrc=1 ;;
@@ -459,15 +459,15 @@ function boolPrompt() {
 		error "boolPrompt() called with invalid default" < /dev/null
 		;;
 	esac
-	[ $interactive -eq 1 ] || return $defaultrc
+	[ "$interactive" -eq 1 ] || return $defaultrc
 	local defaultCaps
-	defaultCaps=$(echo $default | tr a-z A-Z)
+	defaultCaps=$(echo "$default" | tr a-z A-Z)
 	local defaultPrompt
 	defaultPrompt=$(echo "y/n" | tr "$defaultLower" "$defaultCaps")
 	local value
 	read -e -p "$prompt ($defaultPrompt) " value
 	local valueLower
-	valueLower=$(echo $value | tr A-Z a-z)
+	valueLower=$(echo "$value" | tr A-Z a-z)
 	case "$valueLower" in
 	n|no) return 1 ;;
 	y|yes) return 0 ;;
@@ -488,7 +488,7 @@ function promptInput() {
 	local prompt="$1"; shift
 	local value="$1"; shift
 	# If not interactive then go with the default.(?)
-	[ $interactive -eq 1 ] || {
+	[ "$interactive" -eq 1 ] || {
 		echo "$value"
 		return 0
 	}
@@ -595,12 +595,12 @@ function registry() {
 		delete | delArray | delArrayNumber | delArrayString)
 			local _tmpfile
 			_tmpfile=$(mkTempFile)
-			minverbosity=2 $invoke_jq "${jqargs[@]}" > $_tmpfile
+			minverbosity=2 $invoke_jq "${jqargs[@]}" > "$_tmpfile"
 			if [ -s "$_tmpfile" ]; then
-				$_cmp -s $_tmpfile $registry || $_mv $_tmpfile $registry
-				$_rm -f $_tmpfile
+				$_cmp -s "$_tmpfile" "$registry" || $_mv "$_tmpfile" "$registry"
+				$_rm -f "$_tmpfile"
 				local dn
-				dn=$($_dirname $registry)
+				dn=$($_dirname "$registry")
 			else
 				error "something went wrong" < /dev/null
 			fi
@@ -639,7 +639,7 @@ function initFloxUserMetaJSON() {
 
 	# Check for uncommitted file in the way.
 	if [ -f "$workDir"/floxUserMeta.json ]; then
-		$_mv --verbose "$workDir"/floxUserMeta.json{,.$now}
+		$_mv --verbose "$workDir"/floxUserMeta.json{,."$now"}
 	fi
 
 	# Capture STDIN to the new file.
@@ -668,9 +668,9 @@ function floxUserMetaRegistry() {
 	# $floxUserMeta file in bootstrap(). If that file is empty then we
 	# know to initialize the file in git and follow that by refreshing
 	# the temporary $floxUserMeta file in the local filesystem.
-	if [ ! -s $floxUserMeta ]; then
+	if [ ! -s "$floxUserMeta" ]; then
 		local floxUserMetaTemplate='{"channels":{}, "version":1}'
-		if [ -f $OLDfloxUserMeta ]; then
+		if [ -f "$OLDfloxUserMeta" ]; then
 			# XXX TEMPORARY: migrate data from ~/.config/floxUserMeta.json.
 			# XXX Delete after 20230331.
 			$_jq -r -S --argjson floxUserMetaTemplate "$floxUserMetaTemplate" '
@@ -678,43 +678,43 @@ function floxUserMetaRegistry() {
 				del(.channels."nixpkgs") |
 				del(.channels."nixpkgs-flox") as $old |
 				( $floxUserMetaTemplate * $old )
-			' $OLDfloxUserMeta |
+			' "$OLDfloxUserMeta" |
 				initFloxUserMetaJSON "init: floxUserMeta.json (migrated from <=0.0.9)"
 		else
 			$_jq -n -r -S "$floxUserMetaTemplate" |
 				initFloxUserMetaJSON "init: floxUserMeta.json"
 		fi
-		$_git -C "$userFloxMetaCloneDir" show "$defaultBranch:floxUserMeta.json" >$floxUserMeta
+		$_git -C "$userFloxMetaCloneDir" show "$defaultBranch:floxUserMeta.json" >"$floxUserMeta"
 	fi
 
 	# XXX TEMPORARY: write back contents to $OLDfloxUserMeta while we work
 	# to update the rust CLI to read this information from git.
-	if [ ! -f $OLDfloxUserMeta ]; then
-		$_cp -f $floxUserMeta $OLDfloxUserMeta
+	if [ ! -f "$OLDfloxUserMeta" ]; then
+		$_cp -f "$floxUserMeta" "$OLDfloxUserMeta"
 	fi
 
 	case "$verb" in
 	get|dump)
 		# Perform the registry query.
-		registry $floxUserMeta 1 "$verb" $@
+		registry "$floxUserMeta" 1 "$verb" $@
 		;;
 	set|setNumber|delete)
 		# Create ephemeral clone.
 		local workDir
 		workDir=$(mkTempDir)
-		$_git clone --quiet --shared "$userFloxMetaCloneDir" $workDir
+		$_git clone --quiet --shared "$userFloxMetaCloneDir" "$workDir"
 		# Check out the floxmain branch in the ephemeral clone.
-		$_git -C "$workDir" checkout --quiet $defaultBranch
+		$_git -C "$workDir" checkout --quiet "$defaultBranch"
 		# Modify the registry file
 		registry "$workDir/floxUserMeta.json" 1 "$verb" $@
-		$_git -C $workDir add "floxUserMeta.json"
-		$_git -C $workDir commit -m "$invocation_string" --quiet
-		$_git -C $workDir push --quiet --set-upstream origin $defaultBranch
+		$_git -C "$workDir" add "floxUserMeta.json"
+		$_git -C "$workDir" commit -m "$invocation_string" --quiet
+		$_git -C "$workDir" push --quiet --set-upstream origin "$defaultBranch"
 		# Refresh temporary $floxUserMeta (used for this invocation only).
-		$_git -C "$userFloxMetaCloneDir" show "$defaultBranch:floxUserMeta.json" >$floxUserMeta
+		$_git -C "$userFloxMetaCloneDir" show "$defaultBranch:floxUserMeta.json" >"$floxUserMeta"
 		# XXX TEMPORARY: write back contents to $OLDfloxUserMeta while we work
 		# to update the rust CLI to read this information from git.
-		$_cp -f $floxUserMeta $OLDfloxUserMeta
+		$_cp -f "$floxUserMeta" "$OLDfloxUserMeta"
 		;;
 	*)
 		error "floxUserMetaRegistry(): unsupported operation '$verb'" </dev/null
@@ -770,14 +770,14 @@ function environmentRegistry() {
 		delete | delArray | delArrayNumber | delArrayString)
 			local _tmpfile
 			_tmpfile=$(mkTempFile)
-			$invoke_jq "${jqargs[@]}" > $_tmpfile
+			$invoke_jq "${jqargs[@]}" > "$_tmpfile"
 			if [ -s "$_tmpfile" ]; then
-				$_cmp -s $_tmpfile $registry || $_mv $_tmpfile $registry
-				$_rm -f $_tmpfile
+				$_cmp -s "$_tmpfile" "$registry" || $_mv "$_tmpfile" "$registry"
+				$_rm -f "$_tmpfile"
 				local dn
-				dn=$($_dirname $registry)
+				dn=$($_dirname "$registry")
 				[ ! -e "$dn/.git" ] || \
-					$_git -C $dn add $($_basename $registry)
+					$_git -C "$dn" add $($_basename "$registry")
 			else
 				error "something went wrong" < /dev/null
 			fi
@@ -1082,11 +1082,11 @@ function nixEditor() {
 	local -a nixEditorArgs
 	# FIXME: the use of read() below exits nonzero because of EOF.
 	IFS=$'\n' read -r -d '' -a nixEditorArgs < \
-		<(manifest $environment/manifest.json floxpkgToNixEditorArgs "$versionedFloxpkgArg") || :
+		<(manifest "$environment"/manifest.json floxpkgToNixEditorArgs "$versionedFloxpkgArg") || :
 	# That's it; invoke the editor to add the package.
 	case "$action" in
 	install)
-		$invoke_nix_editor -i $workDir/$nextGen/pkgs/default/flox.nix "${nixEditorArgs[@]}"
+		$invoke_nix_editor -i "$workDir"/"$nextGen"/pkgs/default/flox.nix "${nixEditorArgs[@]}"
 		;;
 	delete)
 		# TODO: if a user tries to remove a package with the version specified,
@@ -1096,7 +1096,7 @@ function nixEditor() {
 		#       We may need to enforce there's only one instance of a package
 		#       on the module side
 		# ignore args after the first one, since the rest are used for installation
-		$invoke_nix_editor -id $workDir/$nextGen/pkgs/default/flox.nix "${nixEditorArgs[0]}"
+		$invoke_nix_editor -id "$workDir"/"$nextGen"/pkgs/default/flox.nix "${nixEditorArgs[0]}"
 		;;
 	esac
 }
@@ -1122,7 +1122,7 @@ function parseURL() {
 		;;
 	https://*|http://*) # e.g. "https://github.com/"
 		urlTransport="${url//:*/}"
-		urlHostname="$(echo $url | $_cut -d/ -f3)"
+		urlHostname="$(echo "$url" | $_cut -d/ -f3)"
 		urlUsername=""
 		;;
 	*)
@@ -1179,14 +1179,14 @@ function validateTOML() {
 	local path="$1"; shift
 	# XXX do more here to highlight what the problem is.
 	tmpstderr=$(mkTempFile)
-	if $_cat $path | $_dasel -r toml -w toml >/dev/null 2>$tmpstderr; then
+	if $_cat "$path" | $_dasel -r toml -w toml >/dev/null 2>"$tmpstderr"; then
 		: confirmed valid TOML
-		$_rm -f $tmpstderr
+		$_rm -f "$tmpstderr"
 		return 0
 	else
 		warn "'$path' contains invalid TOML syntax - see below:"
-		$_cat $tmpstderr 1>&2
-		$_rm -f $tmpstderr
+		$_cat "$tmpstderr" 1>&2
+		$_rm -f "$tmpstderr"
 		echo "" 1>&2
 		return 1
 	fi
@@ -1232,7 +1232,7 @@ function updateFloxFlakeRegistry() {
 	trace "$@"
 	# Render Nix flake registry using flox and user-provided entries.
 	# Note: avoids problems to let nix create the temporary file.
-	tmpFloxFlakeRegistry=$($_mktemp --dry-run --tmpdir=$FLOX_CONFIG_HOME)
+	tmpFloxFlakeRegistry=$($_mktemp --dry-run --tmpdir="$FLOX_CONFIG_HOME")
 	. <(getChannelsJSON | $_jq -r '
 	  to_entries | sort_by(.key) | map(
 	    "minverbosity=2 $invoke_nix registry add --registry $tmpFloxFlakeRegistry \"\(.key)\" \"\(.value.url)\" && validChannels[\(.key)]=\"\(.value.type)\""
@@ -1244,16 +1244,16 @@ function updateFloxFlakeRegistry() {
 	# in the event that the user overrides the "nixpkgs" entry in their user registry.
 	# We add this at the flake level, but we don't include them in getChannelsJSON
 	# above because these aren't "channels" containing flox catalogs.
-	minverbosity=2 $invoke_nix registry add --registry $tmpFloxFlakeRegistry nixpkgs github:flox/nixpkgs/$FLOX_STABILITY
-	minverbosity=2 $invoke_nix registry add --registry $tmpFloxFlakeRegistry nixpkgs-stable github:flox/nixpkgs/stable
-	minverbosity=2 $invoke_nix registry add --registry $tmpFloxFlakeRegistry nixpkgs-staging github:flox/nixpkgs/staging
-	minverbosity=2 $invoke_nix registry add --registry $tmpFloxFlakeRegistry nixpkgs-unstable github:flox/nixpkgs/unstable
+	minverbosity=2 $invoke_nix registry add --registry "$tmpFloxFlakeRegistry" nixpkgs github:flox/nixpkgs/"$FLOX_STABILITY"
+	minverbosity=2 $invoke_nix registry add --registry "$tmpFloxFlakeRegistry" nixpkgs-stable github:flox/nixpkgs/stable
+	minverbosity=2 $invoke_nix registry add --registry "$tmpFloxFlakeRegistry" nixpkgs-staging github:flox/nixpkgs/staging
+	minverbosity=2 $invoke_nix registry add --registry "$tmpFloxFlakeRegistry" nixpkgs-unstable github:flox/nixpkgs/unstable
 
 	# order of keys is not relevant for json data
-	if [ -f $floxFlakeRegistry ] && $_cmp --quiet <($_jq -S < $tmpFloxFlakeRegistry) <($_jq -S < $floxFlakeRegistry); then
-		$_rm $tmpFloxFlakeRegistry
+	if [ -f "$floxFlakeRegistry" ] && $_cmp --quiet <($_jq -S < "$tmpFloxFlakeRegistry") <($_jq -S < "$floxFlakeRegistry"); then
+		$_rm "$tmpFloxFlakeRegistry"
 	else
-		$_mv -f $tmpFloxFlakeRegistry $floxFlakeRegistry
+		$_mv -f "$tmpFloxFlakeRegistry" "$floxFlakeRegistry"
 	fi
 }
 
@@ -1294,7 +1294,7 @@ function searchChannels() {
 	# doesn't change often, unlike other channels that are quicker to update
 	# and for which people expect to see updates reflected instantly.
 	for channel in ${channels[@]}; do
-		[ $channel != "nixpkgs-flox" ] || continue
+		[ "$channel" != "nixpkgs-flox" ] || continue
 		$invoke_nix flake metadata "flake:${channel}" --refresh ${_nixArgs[@]}  > /dev/null
 	done
 
@@ -1304,31 +1304,31 @@ function searchChannels() {
 	_script=$(mkTempFile)
 	local _tmpdir
 	_tmpdir=$(mkTempDir)
-	local -a _channelDirs=($(for i in ${channels[@]}; do echo $_tmpdir/$i; done))
-	local -a _resultDirs=($(for i in ${channels[@]}; do echo $_tmpdir/$i/{stable,staging,unstable}; done))
-	local -a _stdoutFiles=($(for i in ${channels[@]}; do echo $_tmpdir/$i/{stable,staging,unstable}/stdout; done))
-	local -a _stderrFiles=($(for i in ${channels[@]}; do echo $_tmpdir/$i/{stable,staging,unstable}/stderr; done))
+	local -a _channelDirs=($(for i in ${channels[@]}; do echo "$_tmpdir"/"$i"; done))
+	local -a _resultDirs=($(for i in ${channels[@]}; do echo "$_tmpdir"/"$i"/{stable,staging,unstable}; done))
+	local -a _stdoutFiles=($(for i in ${channels[@]}; do echo "$_tmpdir"/"$i"/{stable,staging,unstable}/stdout; done))
+	local -a _stderrFiles=($(for i in ${channels[@]}; do echo "$_tmpdir"/"$i"/{stable,staging,unstable}/stderr; done))
 	local _nixInvocationVariables=()
 	for i in ${exported_variables[$_nix]}; do
 		_nixInvocationVariables+=("$i=${!i}")
 	done
 	for channel in ${channels[*]}; do
 		for stability in stable staging unstable; do
-			$_mkdir -p $_tmpdir/$channel/$stability
+			$_mkdir -p "$_tmpdir"/"$channel"/$stability
 			local -a cmd=(
 				$_nix search --log-format bar --json --no-write-lock-file $refreshArg
 				"'flake:${channel}#.catalog.${FLOX_SYSTEM}.$stability'" "'$packageregexp'"
 			)
-			echo "${cmd[@]} >$_tmpdir/$channel/$stability/stdout 2>$_tmpdir/$channel/$stability/stderr &" >> $_script
-			[ $verbose -lt $minverbosity ] || warn "+ ${_nixInvocationVariables[@]} ${cmd[@]}"
+			echo "${cmd[@]} >$_tmpdir/$channel/$stability/stdout 2>$_tmpdir/$channel/$stability/stderr &" >> "$_script"
+			[ "$verbose" -lt $minverbosity ] || warn "+ ${_nixInvocationVariables[@]} ${cmd[@]}"
 		done
 	done
-	echo "wait" >> $_script
-	if [ $interactive -eq 1 ]; then
+	echo "wait" >> "$_script"
+	if [ "$interactive" -eq 1 ]; then
 		# gum BUG: writes the spinner to stdout (dumb) - redirect that to stderr
-		$_gum spin --title="Searching channels: ${channels[*]}" 1>&2 -- $_bash $_script
+		$_gum spin --title="Searching channels: ${channels[*]}" 1>&2 -- "$_bash" "$_script"
 	else
-		$_bash $_script
+		$_bash "$_script"
 	fi
 
 	# The results directory is composed of files of the form:
@@ -1344,10 +1344,10 @@ function searchChannels() {
 	  ${_stderrFiles[@]} 1>&2 || true
 	$invoke_jq -r -f "$_lib/merge-search-results.jq" ${_stdoutFiles[@]} | \
 		$_jq -r -s add
-	if [ $debug -eq 0 ]; then
+	if [ "$debug" -eq 0 ]; then
 		$_rm -f ${_stdoutFiles[@]}
 		$_rm -f ${_stderrFiles[@]}
-		$_rmdir ${_resultDirs[@]} ${_channelDirs[@]} $_tmpdir
+		$_rmdir ${_resultDirs[@]} ${_channelDirs[@]} "$_tmpdir"
 	fi
 }
 
@@ -1370,7 +1370,7 @@ function selectAttrPath() {
 	local flakeRef="$1"; shift
 	local subcommand="$1"; shift
 	local attrTypes="$@"; shift
-	local -a attrPaths=($(lookupAttrPaths $flakeRef $attrTypes))
+	local -a attrPaths=($(lookupAttrPaths "$flakeRef" "$attrTypes"))
 	local attrPath
 	if [ ${#attrPaths[@]} -eq 0 ]; then
 		error "cannot find attribute path - have you run 'flox init'?" < /dev/null
@@ -1378,7 +1378,7 @@ function selectAttrPath() {
 		echo "${attrPaths[0]}"
 	else
 		warn "Select package for flox $subcommand"
-		attrPath=$($_gum choose ${attrPaths[*]})
+		attrPath=$($_gum choose "${attrPaths[*]}")
 
 		local hintCommandArgs
 		case "$subcommand" in
@@ -1388,7 +1388,7 @@ function selectAttrPath() {
 
 		warn ""
 		warn "HINT: avoid selecting a package next time with:"
-		echo '{{ Color "'$LIGHTPEACH256'" "'$DARKBLUE256'" "$ flox '$hintCommandArgs'" }}' \
+		echo '{{ Color "'$LIGHTPEACH256'" "'$DARKBLUE256'" "$ flox '"$hintCommandArgs"'" }}' \
 		    | $_gum format -t template 1>&2
 		echo "$attrPath"
 	fi
@@ -1429,7 +1429,7 @@ function ensureGHRepoExists() {
 function submitMetric() {
 	trace "$@"
 	local subcommand="$1"; shift
-	[ $floxMetricsConsent -eq 1 ] || exit 0;
+	[ "$floxMetricsConsent" -eq 1 ] || exit 0;
 	[ -z "$FLOX_DISABLE_METRICS" ] || exit 0;
 
 	# Blow away the file if it is faulty json.
@@ -1547,7 +1547,7 @@ function darwinPromptPatchFile() {
 	if $invoke_gum confirm --default="true" "Reapply flox patches to '$brokenFile'?"; then
 		# Intentionally relying on Mac versions of sudo and patch.
 		( set -x && \
-			/usr/bin/sudo /usr/bin/patch -V none -p0 -d / --verbose < $patchFile ) || \
+			/usr/bin/sudo /usr/bin/patch -V none -p0 -d / --verbose < "$patchFile" ) || \
 			warn "problems applying '$patchFile' - please reinstall flox"
 	else
 		warn "OK, note you may encounter problems with zsh session history."
@@ -1555,12 +1555,12 @@ function darwinPromptPatchFile() {
 }
 function darwinRepairFiles() {
 	trace "$@"
-	[ $interactive -eq 1 ] || return 0
+	[ "$interactive" -eq 1 ] || return 0
 	# Only attempt to repair if /etc/zshrc* was patched at install time.
 	if [ -f /etc/zshrc -a -f /etc/zshrc.backup-before-flox ] &&
 		! $_grep -q 'HISTFILE=${HISTFILE:-${ZDOTDIR:-$HOME}/.zsh_history}' /etc/zshrc; then
 		if $_cmp --quiet /etc/zshrc /etc/zshrc.backup-before-flox; then
-			darwinPromptPatchFile /etc/zshrc $_share/flox/files/darwin-zshrc.patch
+			darwinPromptPatchFile /etc/zshrc "$_share"/flox/files/darwin-zshrc.patch
 		else
 			warn "broken 'HISTFILE' variable assignment in /etc/zshrc - please reinstall flox"
 		fi
@@ -1569,7 +1569,7 @@ function darwinRepairFiles() {
 	if [ -f /etc/zshrc_Apple_Terminal -a -f /etc/zshrc_Apple_Terminal.backup-before-flox ] &&
 		! $_grep -q 'SHELL_SESSION_DIR="${SHELL_SESSION_DIR:-${ZDOTDIR:-$HOME}/.zsh_sessions}"' /etc/zshrc_Apple_Terminal; then
 		if $_cmp --quiet /etc/zshrc_Apple_Terminal /etc/zshrc_Apple_Terminal.backup-before-flox; then
-			darwinPromptPatchFile /etc/zshrc_Apple_Terminal $_share/flox/files/darwin-zshrc_Apple_Terminal.patch
+			darwinPromptPatchFile /etc/zshrc_Apple_Terminal "$_share"/flox/files/darwin-zshrc_Apple_Terminal.patch
 		else
 			warn "broken 'SHELL_SESSION_DIR' variable assignment in /etc/zshrc - please reinstall flox"
 		fi
@@ -1605,7 +1605,7 @@ function identifyParentShell() {
 			 -r "/proc/$FLOX_PARENT_PID/exe" ]; then
 			# Linux - use information from /proc.
 			parentShell="$($_readlink "/proc/$FLOX_PARENT_PID/exe")"
-		elif local psOutput="$(ps -c -o command= -p $FLOX_PARENT_PID 2>/dev/null)"; then
+		elif local psOutput="$(ps -c -o command= -p "$FLOX_PARENT_PID" 2>/dev/null)"; then
 			# Darwin/other - use `ps` to guess the shell.
 			# Note that this value often comes back with a leading "-" character
 			# that is not part of the executable's path.

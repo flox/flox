@@ -205,7 +205,7 @@ function temporaryAssert007Schema {
 	# Commit, reading commit message from STDIN.
 	$invoke_git -C "$repoDir" commit \
 		--quiet -m "$USER converted to 0.0.7 floxmeta schema"
-	$invoke_git -C $repoDir push --quiet
+	$invoke_git -C "$repoDir" push --quiet
 
 	warn "Conversion complete. Please re-run command."
 	exit 0
@@ -221,9 +221,9 @@ function temporaryAssert008Schema {
 	# set $branchName,$floxNixDir,$environment{Name,Alias,Owner,System,BaseDir,BinDir,ParentDir,MetaDir}
 	eval $(decodeEnvironment "$environment")
 	local currentGen
-	currentGen=$($_readlink $workDir/current || :)
+	currentGen=$($_readlink "$workDir"/current || :)
 	local nextGen
-	nextGen=$($_readlink $workDir/next)
+	nextGen=$($_readlink "$workDir"/next)
 	local currentGenDir="$repoDir/$currentGen"
 	local nextGenDir="$repoDir/$nextGen"
 
@@ -237,29 +237,29 @@ function temporaryAssert008Schema {
 
 	# Copy the template flox environment into the next generation.
 	# Files in the Nix store are read-only.
-	$_cp --no-preserve=mode -rT $_lib/templateFloxEnv $nextGenDir
+	$_cp --no-preserve=mode -rT "$_lib"/templateFloxEnv "$nextGenDir"
 	# otherwise Nix build won't be able to find any of the files
-	$_git -C $workDir add $nextGen
+	$_git -C "$workDir" add "$nextGen"
 
 	# Use nix-editor to transfer packages from the current manifest.json file.
 	local tmpScript
 	tmpScript=$(mkTempFile)
-	manifest $currentGenDir/manifest.json convert007to008 $_nix_editor $nextGenDir/pkgs/default/flox.nix > $tmpScript
+	manifest "$currentGenDir"/manifest.json convert007to008 "$_nix_editor" "$nextGenDir"/pkgs/default/flox.nix > "$tmpScript"
 
 	# Similarly use nix-editor to transfer aliases and env vars from manifest.toml.
 	# jq outputs something like 'value'. Arguments to nix-editor have to be double quoted, so wrap with
 	# '"', resulting in '"''value''"'
-	$invoke_dasel -w json -f $currentGenDir/manifest.toml | \
-		$invoke_jq -r --arg dq "'\"'" --arg nixEditor $_nix_editor --arg file $nextGenDir/pkgs/default/flox.nix \
-			'(.aliases//{}) | to_entries | map(($dq+(.value|@sh)+$dq) as $quotedValue | "\($nixEditor) -i \($file) shell.aliases.\(.key) -v \($quotedValue)")[]' >> $tmpScript
-	$invoke_dasel -w json -f $currentGenDir/manifest.toml | \
-		$invoke_jq -r --arg dq "'\"'" --arg nixEditor $_nix_editor --arg file $nextGenDir/pkgs/default/flox.nix \
-			'(.environment//{}) | to_entries | map(($dq+(.value|@sh)+$dq) as $quotedValue | "\($nixEditor) -i \($file) environmentVariables.\(.key) -v \($quotedValue)")[]' >> $tmpScript
+	$invoke_dasel -w json -f "$currentGenDir"/manifest.toml | \
+		$invoke_jq -r --arg dq "'\"'" --arg nixEditor "$_nix_editor" --arg file "$nextGenDir"/pkgs/default/flox.nix \
+			'(.aliases//{}) | to_entries | map(($dq+(.value|@sh)+$dq) as $quotedValue | "\($nixEditor) -i \($file) shell.aliases.\(.key) -v \($quotedValue)")[]' >> "$tmpScript"
+	$invoke_dasel -w json -f "$currentGenDir"/manifest.toml | \
+		$invoke_jq -r --arg dq "'\"'" --arg nixEditor "$_nix_editor" --arg file "$nextGenDir"/pkgs/default/flox.nix \
+			'(.environment//{}) | to_entries | map(($dq+(.value|@sh)+$dq) as $quotedValue | "\($nixEditor) -i \($file) environmentVariables.\(.key) -v \($quotedValue)")[]' >> "$tmpScript"
 
-	if [ $verbose -gt 0 ]; then
-		( set -x && source $tmpScript )
+	if [ "$verbose" -gt 0 ]; then
+		( set -x && source "$tmpScript" )
 	else
-		source $tmpScript
+		source "$tmpScript"
 	fi
 
 	# Hooks are different. Nix editor doesn't know how to poke those in-between '' blocks.
@@ -267,25 +267,25 @@ function temporaryAssert008Schema {
 	hookScript=$(mkTempFile)
 	local tmpFloxNix
 	tmpFloxNix=$(mkTempFile)
-	$invoke_dasel -w json -f $currentGenDir/manifest.toml | \
-		$invoke_jq -r '(.hooks//{}) | to_entries | map(.value | gsub("\n"; "; "))[]' > $hookScript
-	$invoke_awk "{print} /hook = / {system(\"cat $hookScript\")}" $nextGenDir/pkgs/default/flox.nix > $tmpFloxNix
-	$_mv -f $tmpFloxNix $nextGenDir/pkgs/default/flox.nix
+	$invoke_dasel -w json -f "$currentGenDir"/manifest.toml | \
+		$invoke_jq -r '(.hooks//{}) | to_entries | map(.value | gsub("\n"; "; "))[]' > "$hookScript"
+	$invoke_awk "{print} /hook = / {system(\"cat $hookScript\")}" "$nextGenDir"/pkgs/default/flox.nix > "$tmpFloxNix"
+	$_mv -f "$tmpFloxNix" "$nextGenDir"/pkgs/default/flox.nix
 
-	$_git -C $repoDir add $nextGen/pkgs/default/flox.nix
+	$_git -C "$repoDir" add "$nextGen"/pkgs/default/flox.nix
 
 	local envPackage
 	if ! envPackage=$($invoke_nix build --impure --no-link --print-out-paths "$nextGenDir#.floxEnvs.$environmentSystem.default"); then
 		error "failed to install packages: ${pkgArgs[@]}" < /dev/null
 	fi
 
-	$_jq . --sort-keys $envPackage/catalog.json > $nextGenDir/pkgs/default/catalog.json
-	$_jq . --sort-keys $envPackage/manifest.json > $nextGenDir/manifest.json
-	$_git -C $repoDir add $nextGen/pkgs/default/catalog.json
-	$_git -C $repoDir add $nextGen/manifest.json
+	$_jq . --sort-keys "$envPackage"/catalog.json > "$nextGenDir"/pkgs/default/catalog.json
+	$_jq . --sort-keys "$envPackage"/manifest.json > "$nextGenDir"/manifest.json
+	$_git -C "$repoDir" add "$nextGen"/pkgs/default/catalog.json
+	$_git -C "$repoDir" add "$nextGen"/manifest.json
 
 	local resultCommitTransaction
-	result=$(commitTransaction temporaryAssert008Schema $environment $repoDir $envPackage \
+	result=$(commitTransaction temporaryAssert008Schema "$environment" "$repoDir" "$envPackage" \
 		"$USER converted to 0.0.8 floxmeta schema" 2 \
 		"$me automatic conversion")
 
@@ -315,7 +315,7 @@ function temporaryAssert009LinkLayout() {
 				: ;;
 			$environmentBasename-*-link|/nix/store/*)
 				# Old link - rename and leave forwarding link in its place.
-				local y="${environmentSystem}.$($_basename $i)"
+				local y="${environmentSystem}.$($_basename "$i")"
 				if [ -L "${environmentParentDir}/$y" ]; then
 					$_rm "$i"
 				else
@@ -351,7 +351,7 @@ function gitCheckout() {
 			$_git -C "$repoDir" checkout --quiet "$branch"
 		else
 			$_git -C "$repoDir" checkout --quiet --orphan "$branch"
-			$_git -C "$repoDir" ls-files | $_xargs --no-run-if-empty $_git -C "$repoDir" rm --quiet -f
+			$_git -C "$repoDir" ls-files | $_xargs --no-run-if-empty "$_git" -C "$repoDir" rm --quiet -f
 			# A commit is needed in order to make the branch visible.
 			$_git -C "$repoDir" commit --quiet --allow-empty \
 				-m "$USER created profile"
@@ -408,7 +408,7 @@ function syncEnvironment() {
 	# set $branchName,$floxNixDir,$environment{Name,Alias,Owner,System,BaseDir,BinDir,ParentDir,MetaDir}
 	eval $(decodeEnvironment "$environment")
 	local environmentRealDir
-	environmentRealDir=$($_readlink -f $environmentParentDir)
+	environmentRealDir=$($_readlink -f "$environmentParentDir")
 
 	# Create shared clone for performing work.
 	local workDir
@@ -465,16 +465,16 @@ function commitMessage() {
 	# as 1 and 2 if both are defined, or 1 if there is only one generation.
 	local myEndGen=
 	if [ -n "$startGenPath" ]; then
-		$invoke_ln -s "$startGenPath" $tmpDir/${environmentName}-1-link
+		$invoke_ln -s "$startGenPath" "$tmpDir"/"${environmentName}"-1-link
 		myEndGen=2
 	else
 		myEndGen=1
 	fi
-	$invoke_ln -s "$endGenPath" $tmpDir/${environmentName}-${myEndGen}-link
-	$invoke_ln -s ${environmentName}-${myEndGen}-link $tmpDir/${environmentName}
+	$invoke_ln -s "$endGenPath" "$tmpDir"/"${environmentName}"-${myEndGen}-link
+	$invoke_ln -s "${environmentName}"-${myEndGen}-link "$tmpDir"/"${environmentName}"
 
 	local _cline
-	$_nix profile history --profile $tmpDir/${environmentName} | $_ansifilter --text | \
+	$_nix profile history --profile "$tmpDir"/"${environmentName}" | $_ansifilter --text | \
 		$_awk '\
 			BEGIN {p=0} \
 			/^  flake:/ {if (p==1) {print $0}} \
@@ -486,15 +486,15 @@ function commitMessage() {
 			local detail
 			detail=$(echo "$_cline" | $_cut -d: -f3-)
 			local floxpkg
-			floxpkg=$(manifest $environment/manifest.json flakerefToFloxpkg "$flakeref")
+			floxpkg=$(manifest "$environment"/manifest.json flakerefToFloxpkg "$flakeref")
 			echo "  ${floxpkg}:${detail}"
-		done > $tmpDir/commitMessageBody
+		done > "$tmpDir"/commitMessageBody
 
 	if [[ "$logMessage" =~ " upgraded "$ ]]; then
 		# When doing an upgrade of everything we don't know what we're
 		# upgrading until after its finished. Take this opportunity to
 		# replace that message.
-		logMessage="${logMessage}$($_cut -d: -f1 $tmpDir/commitMessageBody | $_xargs)"
+		logMessage="${logMessage}$($_cut -d: -f1 "$tmpDir"/commitMessageBody | $_xargs)"
 	fi
 
 	# Actually print log message out to STDOUT.
@@ -503,25 +503,25 @@ $logMessage
 
 ${invocation[@]}
 EOF
-	$_cat $tmpDir/commitMessageBody
+	$_cat "$tmpDir"/commitMessageBody
 
 	# Clean up.
 	$_rm -f \
-		$tmpDir/"${environmentName}-1-link" \
-		$tmpDir/"${environmentName}-2-link" \
-		$tmpDir/"${environmentName}" \
-		$tmpDir/commitMessageBody
-	$_rmdir $tmpDir
+		"$tmpDir"/"${environmentName}-1-link" \
+		"$tmpDir"/"${environmentName}-2-link" \
+		"$tmpDir"/"${environmentName}" \
+		"$tmpDir"/commitMessageBody
+	$_rmdir "$tmpDir"
 }
 
 function checkGhAuth {
 	trace "$@"
 	local hostname="$1"; shift
 	# Repeat login attempts until we're successfully logged in.
-	while ! $_gh auth status -h $hostname >/dev/null 2>&1; do
+	while ! $_gh auth status -h "$hostname" >/dev/null 2>&1; do
 		initialGreeting
 		warn "Invoking 'gh auth login -h $hostname'"
-		$_gh auth login -h $hostname
+		$_gh auth login -h "$hostname"
 		info ""
 	done
 }
@@ -556,8 +556,8 @@ function promptMetaOrigin() {
 	github.com)
 		echo "Great, let's start by getting you logged into $server." 1>&2
 		# For github.com only, use the `gh` CLI to make things easy.
-		checkGhAuth $server
-		if organization=$(getUsernameFromGhAuth $server); then
+		checkGhAuth "$server"
+		if organization=$(getUsernameFromGhAuth "$server"); then
 			echo "Success! You are logged into $server as $organization." 1>&2
 		else
 			echo "Hmmm ... could not log you into $server. No problem, we can find another way." 1>&2
@@ -630,7 +630,7 @@ function getSetOrigin() {
 		if [ "$environmentOwner" == "flox" -o "$environmentOwner" == "flox-examples" ]; then
 			# We got this.
 			origin="https://github.com/$environmentOwner/floxmeta"
-		elif [ $interactive -eq 1 ]; then
+		elif [ "$interactive" -eq 1 ]; then
 			local defaultOrigin
 			if [ "$environmentOwner" == "local" ]; then
 				defaultOrigin=$(promptMetaOrigin)
@@ -664,31 +664,31 @@ function getSetOrigin() {
 		# A few final cleanup steps.
 		if [ "$environmentOwner" == "local" ]; then
 			local newEnvironmentOwner
-			newEnvironmentOwner=$($_dirname $origin); newEnvironmentOwner=${newEnvironmentOwner/*[:\/]/} # XXX hack
+			newEnvironmentOwner=$($_dirname "$origin"); newEnvironmentOwner=${newEnvironmentOwner/*[:\/]/} # XXX hack
 
 			# rename .cache/flox/meta/{local -> owner} &&
 			#   replace with symlink from local -> owner
 			# use .cache/flox/meta/owner as environmentMetaDir going forward (only for this function though!)
 			if [ -d "$FLOX_META/$newEnvironmentOwner" ]; then
 				warn "moving profile metadata directory $FLOX_META/$newEnvironmentOwner out of the way"
-				$invoke_mv --verbose $FLOX_META/$newEnvironmentOwner{,.$$}
+				$invoke_mv --verbose "$FLOX_META"/"$newEnvironmentOwner"{,.$$}
 			fi
 			if [ -d "$FLOX_META/local" ]; then
 				$invoke_mv "$FLOX_META/local" "$FLOX_META/$newEnvironmentOwner"
 			fi
-			$invoke_ln -s -f $newEnvironmentOwner "$FLOX_META/local"
+			$invoke_ln -s -f "$newEnvironmentOwner" "$FLOX_META/local"
 			environmentMetaDir="$FLOX_META/$newEnvironmentOwner"
 
 			# rename .local/share/flox/environments/{local -> owner}
 			#   replace with symlink from local -> owner
 			if [ -d "$FLOX_ENVIRONMENTS/$newEnvironmentOwner" ]; then
 				warn "moving environment directory $FLOX_ENVIRONMENTS/$newEnvironmentOwner out of the way"
-				$invoke_mv --verbose $FLOX_ENVIRONMENTS/$newEnvironmentOwner{,.$$}
+				$invoke_mv --verbose "$FLOX_ENVIRONMENTS"/"$newEnvironmentOwner"{,.$$}
 			fi
 			if [ -d "$FLOX_ENVIRONMENTS/local" ]; then
 				$invoke_mv "$FLOX_ENVIRONMENTS/local" "$FLOX_ENVIRONMENTS/$newEnvironmentOwner"
 			fi
-			$invoke_ln -s -f $newEnvironmentOwner "$FLOX_ENVIRONMENTS/local"
+			$invoke_ln -s -f "$newEnvironmentOwner" "$FLOX_ENVIRONMENTS/local"
 
 			# perform single commit rewriting all URL references to refer to new home of floxmeta repo
 			rewriteURLs "$FLOX_ENVIRONMENTS/local" "$origin"
@@ -725,7 +725,7 @@ function beginTransaction() {
 		gitInitFloxmeta "$environmentMetaDir"
 
 		# Create an ephemeral clone in $workDir.
-		$invoke_git clone --quiet --shared "$environmentMetaDir" $workDir
+		$invoke_git clone --quiet --shared "$environmentMetaDir" "$workDir"
 
 		# Use registry function to initialize metadata.json.
 		registry "$workDir/metadata.json" 1 set currentGen 1
@@ -744,9 +744,9 @@ function beginTransaction() {
 			$_cp "$floxNixDir/flox.nix" "$workDir/current/pkgs/default/flox.nix"
 			[ ! -f "$floxNixDir/catalog.json" ] ||
 				$_cp "$floxNixDir/catalog.json" "$workDir/current/pkgs/default/catalog.json"
-			$_cp --no-preserve=mode $_lib/templateFloxEnv/pkgs/default/default.nix "$workDir/current/pkgs/default/default.nix"
+			$_cp --no-preserve=mode "$_lib"/templateFloxEnv/pkgs/default/default.nix "$workDir/current/pkgs/default/default.nix"
 		else
-			$_cp --no-preserve=mode -rT $_lib/templateFloxEnv "$workDir/current/."
+			$_cp --no-preserve=mode -rT "$_lib"/templateFloxEnv "$workDir/current/."
 		fi
 
 		# Link next generation.
@@ -772,7 +772,7 @@ function beginTransaction() {
 	fi
 
 	# Create an ephemeral clone.
-	$invoke_git clone --quiet --shared "$environmentMetaDir" $workDir
+	$invoke_git clone --quiet --shared "$environmentMetaDir" "$workDir"
 
 	# Check out the relevant branch. Can be complicated in the event
 	# that this is the first pull of a brand-new branch.
@@ -782,7 +782,7 @@ function beginTransaction() {
 		$invoke_git -C "$workDir" checkout --quiet --track origin/"$branchName"
 	elif [ $createBranch -eq 1 ]; then
 		$invoke_git -C "$workDir" checkout --quiet --orphan "$branchName"
-		$invoke_git -C "$workDir" ls-files | $_xargs --no-run-if-empty $_git -C "$workDir" rm --quiet -f
+		$invoke_git -C "$workDir" ls-files | $_xargs --no-run-if-empty "$_git" -C "$workDir" rm --quiet -f
 		# A commit is needed in order to make the branch visible.
 		$invoke_git -C "$workDir" commit --quiet --allow-empty \
 			-m "$USER created environment $environmentName ($environmentSystem)"
@@ -814,8 +814,8 @@ function beginTransaction() {
 	# to record this in the floxmeta repo.)
 	local -i nextGen
 	nextGen=$(registry "$workDir/metadata.json" 1 nextGen)
-	$invoke_mkdir -p $workDir/$nextGen
-	$invoke_ln -s $nextGen $workDir/next
+	$invoke_mkdir -p "$workDir"/$nextGen
+	$invoke_ln -s $nextGen "$workDir"/next
 
 	# XXX Temporary covering transition from 0.0.7 -> 0.0.8
 	temporaryAssert008Schema "$environment" "$workDir"
@@ -837,7 +837,7 @@ function cmpV1Environments() {
 	# have a manifest.json file to inspect. First test that both
 	# environments have manifest.json files to be compared.
 	if [ -f "$env1/manifest.json" -a -f "$env2/manifest.json" ]; then
-		$invoke_jq -n -f $_lib/diff-manifests.jq \
+		$invoke_jq -n -f "$_lib"/diff-manifests.jq \
 			--slurpfile m1 "$env1/manifest.json" \
 			--slurpfile m2 "$env2/manifest.json" || return 1
 	else
@@ -902,7 +902,7 @@ function commitTransaction() {
 			result="project-environment-modified"
 		fi
 
-		$invoke_nix_store --add-root "$environmentBaseDir" -r $environmentPackage >/dev/null
+		$invoke_nix_store --add-root "$environmentBaseDir" -r "$environmentPackage" >/dev/null
 		$invoke_cp "$workDir/next/pkgs/default/flox.nix" "$floxNixDir/flox.nix"
 		$invoke_cp "$workDir/next/pkgs/default/catalog.json" "$floxNixDir/catalog.json"
 
@@ -912,9 +912,9 @@ function commitTransaction() {
 
 	# Glean current and next generations from clone.
 	local -i currentGen
-	currentGen=$($_readlink $workDir/current || echo 0)
+	currentGen=$($_readlink "$workDir"/current || echo 0)
 	local -i nextGen
-	nextGen=$($_readlink $workDir/next)
+	nextGen=$($_readlink "$workDir"/next)
 
 	# XXX temporary: as we change to version 0.0.9 the layout of environment
 	# links changes to embed the system type. Take this opportunity to rename
@@ -930,12 +930,12 @@ function commitTransaction() {
 	fi
 
 	# Check to see if there has been a change.
-	if [ -n "$oldEnvPackage" ] && cmpEnvironments $nextGenVersion "$environmentPackage" "$oldEnvPackage"; then
+	if [ -n "$oldEnvPackage" ] && cmpEnvironments "$nextGenVersion" "$environmentPackage" "$oldEnvPackage"; then
 		# The rendered environments are the same, which means this is a no-op
 		# except in the case where someone has done `flox edit` and changed
 		# the flox.nix file.
 		if [ "$action" != "edit" ] || $_cmp --quiet "$workDir/$currentGen/pkgs/default/flox.nix" "$workDir/$nextGen/pkgs/default/flox.nix"; then
-			if [ $verbose -ge 1 ]; then
+			if [ "$verbose" -ge 1 ]; then
 				warn "No environment changes detected .. exiting"
 			fi
 			echo -n "named-environment-no-changes"
@@ -948,14 +948,14 @@ function commitTransaction() {
 
 	# Figure out if we're creating or switching to an existing generation.
 	local createdOrSwitchedTo="created"
-	if $invoke_jq -e --arg gen $nextGen '.generations | has($gen)' $workDir/metadata.json >/dev/null; then
+	if $invoke_jq -e --arg gen $nextGen '.generations | has($gen)' "$workDir"/metadata.json >/dev/null; then
 		result="named-environment-switch-to-generation"
 		createdOrSwitchedTo="switched to"
 	else
 		result="named-environment-created-generation"
 		# Update environment metadata with new end generation information.
 		registry "$workDir/metadata.json" 1 set generations \
-			${nextGen} path $environmentPackage
+			${nextGen} path "$environmentPackage"
 		registry "$workDir/metadata.json" 1 addArray generations \
 			${nextGen} logMessage "$logMessage"
 		registry "$workDir/metadata.json" 1 setNumber generations \
@@ -963,7 +963,7 @@ function commitTransaction() {
 		registry "$workDir/metadata.json" 1 setNumber generations \
 			${nextGen} lastActive "$now"
 		registry "$workDir/metadata.json" 1 setNumber generations \
-			${nextGen} version $nextGenVersion
+			${nextGen} version "$nextGenVersion"
 	fi
 
 	# Also update lastActive time for current generation, if known.
@@ -972,20 +972,20 @@ function commitTransaction() {
 			$currentGen lastActive "$now"
 
 	# Mark the metadata.json file to be included with the commit.
-	$invoke_git -C $workDir add "metadata.json"
+	$invoke_git -C "$workDir" add "metadata.json"
 
 	# Now that metadata is recorded, actually put the change
 	# into effect. Must be done before calling commitMessage().
 	if [ "$createdOrSwitchedTo" = "created" ]; then
 		$invoke_nix_store --add-root "${environment}-${nextGen}-link" \
-			-r $environmentPackage >/dev/null
+			-r "$environmentPackage" >/dev/null
 	fi
-	$invoke_rm -f $environment
-	$invoke_ln -s "${environmentName}-${nextGen}-link" $environment
+	$invoke_rm -f "$environment"
+	$invoke_ln -s "${environmentName}-${nextGen}-link" "$environment"
 
 	# Detect version and act accordingly.
 	local -i currentGenVersion
-	if ! currentGenVersion=$(registry $workDir/metadata.json 1 get generations "$currentGen" version); then
+	if ! currentGenVersion=$(registry "$workDir"/metadata.json 1 get generations "$currentGen" version); then
 		currentGenVersion=1
 	fi
 	# Unification TODO: use catalog.json instead of relying on manifest.json
@@ -994,12 +994,12 @@ function commitTransaction() {
 		"$environment" "$oldEnvPackage" "$environmentPackage" \
 		"$logMessage" "${invocation[@]}")
 
-	$invoke_git -C $workDir commit -m "$message" --quiet
-	$invoke_git -C $workDir push --quiet --set-upstream origin $branchName
+	$invoke_git -C "$workDir" commit -m "$message" --quiet
+	$invoke_git -C "$workDir" push --quiet --set-upstream origin "$branchName"
 
 	# Tom's feature: teach a man to fish with (-v|--verbose)
-	if [ $verbose -ge 1 -a $currentGenVersion -eq 2 -a $nextGenVersion -eq 2 ]; then
-		$invoke_git -C $workDir diff HEAD:{$currentGen,$nextGen}/pkgs/default/flox.nix
+	if [ "$verbose" -ge 1 -a $currentGenVersion -eq 2 -a "$nextGenVersion" -eq 2 ]; then
+		$invoke_git -C "$workDir" diff HEAD:{$currentGen,$nextGen}/pkgs/default/flox.nix
 		warn "$createdOrSwitchedTo generation $nextGen"
 	fi
 
@@ -1014,14 +1014,14 @@ function listEnvironments() {
 	local system="$1"; shift
 	local environmentMetaDir="$1"; shift
 	local environmentOwner
-	environmentOwner=$($_basename $environmentMetaDir)
+	environmentOwner=$($_basename "$environmentMetaDir")
 
 	# Quick sanity check .. is this a git repo?
 	$_git -C "$environmentMetaDir" rev-parse 2> /dev/null || \
 		error "not a git clone? Please remove: $environmentMetaDir" < /dev/null
 
 	# Start by updating all remotes in the clone dir.
-	githubHelperGit -C $environmentMetaDir fetch --quiet --all
+	githubHelperGit -C "$environmentMetaDir" fetch --quiet --all
 
 	# Derive all known branches. Recall branches will be of the form:
 	#   remotes/origin/x86_64-linux.default
@@ -1030,7 +1030,7 @@ function listEnvironments() {
 	local -A _local
 	local -A _origin
 	local -a _cline
-	. <($invoke_git -C $environmentMetaDir branch -av | $_sed 's/^\*//' | while read -a _cline
+	. <($invoke_git -C "$environmentMetaDir" branch -av | $_sed 's/^\*//' | while read -a _cline
 		do
 			_remote=$($_dirname "${_cline[0]}")
 			_branch=$($_basename "${_cline[0]}")
@@ -1073,18 +1073,18 @@ function listEnvironments() {
 		if [ -n "$__local" ]; then
 			local __metadata
 			__metadata=$(mkTempFile)
-			if $invoke_git -C $environmentMetaDir show $__local:metadata.json > $__metadata 2>/dev/null; then
+			if $invoke_git -C "$environmentMetaDir" show "$__local":metadata.json > "$__metadata" 2>/dev/null; then
 				__commit="$__local"
-				__generation=$($invoke_jq -r .currentGen $__metadata)
+				__generation=$($invoke_jq -r .currentGen "$__metadata")
 			fi
 		fi
 		if [ -n "$__origin" -a "$__origin" != "$__local" ]; then
 			local __metadata
 			__metadata=$(mkTempFile)
-			if $invoke_git -C $environmentMetaDir show $__origin:metadata.json > $__metadata 2>/dev/null; then
+			if $invoke_git -C "$environmentMetaDir" show "$__origin":metadata.json > "$__metadata" 2>/dev/null; then
 				__commit="$__commit (remote $__origin)"
 				__printCommit=1
-				__generation=$($invoke_jq -r .currentGen $__metadata)
+				__generation=$($invoke_jq -r .currentGen "$__metadata")
 			fi
 		fi
 		$_cat <<EOF
@@ -1094,7 +1094,7 @@ $environmentOwner/$__name
     Path      $FLOX_ENVIRONMENTS/$environmentOwner/$__name
     Curr Gen  $__generation
 EOF
-		if [ $verbose -eq 0 ]; then
+		if [ "$verbose" -eq 0 ]; then
 			[ $__printCommit -eq 0 ] || echo "    Commit    $__commit"
 		else
 			$_cat <<EOF
@@ -1145,14 +1145,14 @@ function updateAvailable() {
 		if $_git -C "$environmentMetaDir" show-ref --quiet refs/heads/"$branchName" 2>/dev/null; then
 			local tmpfile
 			tmpfile=$(mkTempFile)
-			if $invoke_git -C "$environmentMetaDir" show "${branchName}:metadata.json" >$tmpfile 2>/dev/null; then
+			if $invoke_git -C "$environmentMetaDir" show "${branchName}:metadata.json" >"$tmpfile" 2>/dev/null; then
 				local -i currentGen
-				if currentGen=$(registry $tmpfile 1 get currentGen); then
+				if currentGen=$(registry "$tmpfile" 1 get currentGen); then
 					# If that worked then calculate generation number upstream.
 					if $_git -C "$environmentMetaDir" show-ref --quiet refs/remotes/origin/"$branchName" 2>/dev/null; then
-						if $invoke_git -C "$environmentMetaDir" show "origin/${branchName}:metadata.json" >$tmpfile 2>/dev/null; then
+						if $invoke_git -C "$environmentMetaDir" show "origin/${branchName}:metadata.json" >"$tmpfile" 2>/dev/null; then
 							local -i currentOriginGen
-							if currentOriginGen=$(registry $tmpfile 1 get currentGen); then
+							if currentOriginGen=$(registry "$tmpfile" 1 get currentGen); then
 								if [ $currentGen -lt $currentOriginGen ]; then
 									echo $currentOriginGen
 									return 0
@@ -1193,7 +1193,7 @@ function trailingAsyncFetch() {
 		fi
 	done
 	# Make every effort to stay hidden in the background unless debugging.
-	if [ $debug -gt 0 ]; then
+	if [ "$debug" -gt 0 ]; then
 		( _trailingAsyncFetch "${!trailingAsyncFetchMetaDirs[@]}" </dev/null & )
 	else
 		( _trailingAsyncFetch "${!trailingAsyncFetchMetaDirs[@]}" </dev/null & ) >/dev/null 2>&1

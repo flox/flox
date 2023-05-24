@@ -21,7 +21,7 @@ declare floxUserMeta
 floxUserMeta=$(mkTempFile)
 function bootstrap() {
 	$_git -C "$userFloxMetaCloneDir" \
-		show "$defaultBranch:floxUserMeta.json" >$floxUserMeta 2>/dev/null || _initial_bootstrap=1
+		show "$defaultBranch:floxUserMeta.json" >"$floxUserMeta" 2>/dev/null || _initial_bootstrap=1
 	floxUserMetaRegistry get floxClientUUID >/dev/null || \
 		floxUserMetaRegistry set floxClientUUID $($_uuid)
 	floxClientUUID=$(floxUserMetaRegistry get floxClientUUID)

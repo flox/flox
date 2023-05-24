@@ -14,7 +14,7 @@ function floxListProject() {
 	eval $(decodeEnvironment "$environment")
 
 	# Increase verbosity when invoking list command.
-	if [ $verbose -eq 1 ]; then
+	if [ "$verbose" -eq 1 ]; then
 		let ++verbose
 	fi
 
@@ -25,8 +25,8 @@ function floxListProject() {
 	# because we may have selected to display a different generation number
 	# by way of a commandline argument. Should revisit based on needs of
 	# SaaS/environment manager project.
-	if [ $displayJSON -gt 0 ]; then
-		manifest $manifestJSON listEnvironment --json | $_jq -r \
+	if [ "$displayJSON" -gt 0 ]; then
+		manifest "$manifestJSON" listEnvironment --json | $_jq -r \
 			--arg c "$environmentParentDir/$environmentName" \
 			--arg a "$environmentAlias" \
 			--arg s "$environmentSystem" \
@@ -41,11 +41,11 @@ $environmentParentDir/$environmentName
 
 Packages
 EOF
-		if [ $displayOutPath -gt 0 ]; then
-			manifest $manifestJSON listEnvironment --out-path |
+		if [ "$displayOutPath" -gt 0 ]; then
+			manifest "$manifestJSON" listEnvironment --out-path |
 				$_column -t | $_sed 's/^/    /'
 		else
-			manifest $manifestJSON listEnvironment |
+			manifest "$manifestJSON" listEnvironment |
 				$_column -t | $_sed 's/^/    /'
 		fi
 	fi
@@ -118,7 +118,7 @@ function floxList() {
 	local currentGeneration
 	if [ -z "$listGeneration" ]; then
 		# Identify currentGeneration of environment.
-		currentGeneration=$(metaGitShow $environment metadata.json | $_jq -r .currentGen)
+		currentGeneration=$(metaGitShow "$environment" metadata.json | $_jq -r .currentGen)
 		[ -n "$currentGeneration" ] || \
 			error "environment $environmentAlias does not exist" < /dev/null
 		# List contents of current generation.
@@ -129,8 +129,8 @@ function floxList() {
 	# corrupt or not found.
 	local manifestJSON
 	manifestJSON=$(mkTempFile)
-	metaGitShow $environment $listGeneration/manifest.json > $manifestJSON
-	if [ ! -s $manifestJSON ]; then
+	metaGitShow "$environment" "$listGeneration"/manifest.json > "$manifestJSON"
+	if [ ! -s "$manifestJSON" ]; then
 		if [ "$listGeneration" == "$currentGeneration" ]; then
 			# If current generation does not exist then environment is corrupt.
 			error "environment manifest not found for generation $listGeneration - run 'flox destroy -e $environmentAlias' to clean up" </dev/null
@@ -140,15 +140,15 @@ function floxList() {
 	fi
 
 	# Increase verbosity when invoking list command.
-	if [ $verbose -eq 1 ]; then
+	if [ "$verbose" -eq 1 ]; then
 		let ++verbose
 	fi
 
 	# Before going any further, warn if environment is of current system
 	# type and has not been locally rendered.
 	if [ "$FLOX_SYSTEM" == "$NIX_CONFIG_system" ]; then
-		if [ -d $environment ]; then
-			[ -f $environment/manifest.json ] || \
+		if [ -d "$environment" ]; then
+			[ -f "$environment"/manifest.json ] || \
 				error "$environment/manifest.json not found - run 'flox destroy -e $environmentAlias' to clean up" </dev/null
 		else
 			warn "environment '$environmentAlias' not present - run 'flox pull -e $environmentAlias' before activating"
@@ -168,9 +168,9 @@ function floxList() {
 
 		# Glean current and next generations from clone.
 		local currentGen
-		currentGen=$($_readlink $workDir/current)
+		currentGen=$($_readlink "$workDir"/current)
 		local nextGen
-		nextGen=$($_readlink $workDir/next)
+		nextGen=$($_readlink "$workDir"/next)
 
 		local oldCatalogJSON="$workDir/$currentGen/pkgs/default/catalog.json"
 		local newCatalogJSON="$workDir/$nextGen/pkgs/default/catalog.json"
@@ -178,25 +178,25 @@ function floxList() {
 
 		# Create an ephemeral copy of the current generation to upgrade.
 		# -T so we don't copy the parent directory
-		$_cp -rT $workDir/$currentGen $workDir/$nextGen
+		$_cp -rT "$workDir"/"$currentGen" "$workDir"/"$nextGen"
 		# Always refresh the flake.{nix,lock} files with each new generation.
-		$_cp -f --no-preserve=mode $_lib/templateFloxEnv/flake.{nix,lock} -t $workDir/$nextGen
+		$_cp -f --no-preserve=mode "$_lib"/templateFloxEnv/flake.{nix,lock} -t "$workDir"/"$nextGen"
 		# Remove the catalog.nix file (if found).
-		$_rm -f $newCatalogJSON
+		$_rm -f "$newCatalogJSON"
 		# Otherwise Nix eval won't be able to find any of the files.
-		$_git -C $workDir add $nextGen
+		$_git -C "$workDir" add "$nextGen"
 
-		if $invoke_nix eval "$workDir/$nextGen#floxEnvs.$environmentSystem.default.catalog" --impure --json > $newCatalogJSON; then
-			$invoke_jq -n -f $_lib/diff-catalogs.jq \
-				--slurpfile c1 $oldCatalogJSON --slurpfile c2 $newCatalogJSON > $upgradeDiffs
+		if $invoke_nix eval "$workDir/$nextGen#floxEnvs.$environmentSystem.default.catalog" --impure --json > "$newCatalogJSON"; then
+			$invoke_jq -n -f "$_lib"/diff-catalogs.jq \
+				--slurpfile c1 "$oldCatalogJSON" --slurpfile c2 "$newCatalogJSON" > "$upgradeDiffs"
 		else
 			# TODO: once environments have been upgraded and the above eval can
 			# reasonably be expected to succeed then call this out as an error,
 			# but in the meantime just report an empty set of available upgrades.
-			echo '{"add":[],"remove":[],"upgrade":[]}' > $upgradeDiffs
+			echo '{"add":[],"remove":[],"upgrade":[]}' > "$upgradeDiffs"
 		fi
-		manifest $manifestJSON listEnvironment --json | $_jq -r \
-			--slurpfile d $upgradeDiffs \
+		manifest "$manifestJSON" listEnvironment --json | $_jq -r \
+			--slurpfile d "$upgradeDiffs" \
 			--arg n "$environmentOwner/$environmentName" \
 			--arg a "$environmentAlias" \
 			--arg s "$environmentSystem" \
@@ -214,10 +214,10 @@ $environmentOwner/$environmentName
 Packages
 EOF
 		if [ $displayOutPath -gt 0 ]; then
-			manifest $manifestJSON listEnvironment --out-path |
+			manifest "$manifestJSON" listEnvironment --out-path |
 				$_column -t | $_sed 's/^/    /'
 		else
-			manifest $manifestJSON listEnvironment |
+			manifest "$manifestJSON" listEnvironment |
 				$_column -t | $_sed 's/^/    /'
 		fi
 	fi
@@ -241,18 +241,18 @@ function floxCreate() {
 	# Glean current and next generations from clone.
 	local -i currentGenVersion=2
 	local nextGen
-	nextGen=$($_readlink $workDir/next)
+	nextGen=$($_readlink "$workDir"/next)
 
 	# To see if it already exists simply assert that the workdir doesn't
 	# already have an "origin" reference for the branch.
-	if $invoke_git -C $workDir show-ref --quiet refs/remotes/origin/"$branchName" >/dev/null; then
+	if $invoke_git -C "$workDir" show-ref --quiet refs/remotes/origin/"$branchName" >/dev/null; then
 		error "environment $environmentAlias ($system) already exists" < /dev/null
 	fi
 
 	# Construct and render the new manifest.json in the metadata workDir.
-	$_cp --no-preserve=mode -rT $_lib/templateFloxEnv $workDir/$nextGen
+	$_cp --no-preserve=mode -rT "$_lib"/templateFloxEnv "$workDir"/"$nextGen"
 	# otherwise Nix build won't be able to find any of the files
-	$_git -C $workDir add $nextGen
+	$_git -C "$workDir" add "$nextGen"
 
 	local envPackage
 	if ! envPackage=$($invoke_nix build --impure --no-link --print-out-paths "$workDir/$nextGen#.floxEnvs.$system.default"); then
@@ -260,13 +260,13 @@ function floxCreate() {
 	fi
 
 	# catalog.json should be empty, but keep these lines for the sake of consistent boilerplate
-	$_jq . --sort-keys $envPackage/catalog.json > $workDir/$nextGen/pkgs/default/catalog.json
-	$_jq . --sort-keys $envPackage/manifest.json > $workDir/$nextGen/manifest.json
-	$_git -C $workDir add $nextGen/pkgs/default/catalog.json
-	$_git -C $workDir add $nextGen/manifest.json
+	$_jq . --sort-keys "$envPackage"/catalog.json > "$workDir"/"$nextGen"/pkgs/default/catalog.json
+	$_jq . --sort-keys "$envPackage"/manifest.json > "$workDir"/"$nextGen"/manifest.json
+	$_git -C "$workDir" add "$nextGen"/pkgs/default/catalog.json
+	$_git -C "$workDir" add "$nextGen"/manifest.json
 
 	# Commit the transaction.
-	commitTransaction create $environment $workDir $envPackage \
+	commitTransaction create "$environment" "$workDir" "$envPackage" \
 		"$USER created environment" \
 		$currentGenVersion \
 		"$me create" > /dev/null
@@ -331,9 +331,9 @@ function floxInstall() {
 
 	# Glean current and next generations from clone.
 	local currentGen
-	currentGen=$($_readlink $workDir/current || :)
+	currentGen=$($_readlink "$workDir"/current || :)
 	local nextGen
-	nextGen=$($_readlink $workDir/next)
+	nextGen=$($_readlink "$workDir"/next)
 
 	# Step through installables deriving floxpkg equivalents.
 	local -a pkgArgs=()
@@ -352,7 +352,7 @@ function floxInstall() {
 		case "$pkgArg" in
 		flake:*)
 			# Look up floxpkg name from flox flake prefix.
-			pkgNames+=("$(manifest $environment/manifest.json flakerefToFloxpkg "$pkgArg")") ||
+			pkgNames+=("$(manifest "$environment"/manifest.json flakerefToFloxpkg "$pkgArg")") ||
 				error "failed to look up floxpkg reference for flake \"$pkgArg\"" </dev/null
 			;;
 		*)
@@ -365,7 +365,7 @@ function floxInstall() {
 	if [ -z "$currentGen" ]; then
 		# if we're creating a new environment, make it version 2
 		currentGenVersion=2
-	elif ! currentGenVersion=$(registry $workDir/metadata.json 1 get generations "$currentGen" version); then
+	elif ! currentGenVersion=$(registry "$workDir"/metadata.json 1 get generations "$currentGen" version); then
 		currentGenVersion=1
 	fi
 
@@ -383,12 +383,12 @@ function floxInstall() {
 			local _stderr
 			_stderr=$(mkTempFile)
 			for pkgArg in ${pkgArgs[@]}; do
-				if ! $invoke_nix build --no-link --impure "$pkgArg" >$_stderr 2>&1; then
+				if ! $invoke_nix build --no-link --impure "$pkgArg" >"$_stderr" 2>&1; then
 					failedPkgArgs+=("$pkgArg")
 					local pkgName
 					case "$pkgArg" in
 					flake:*\#)
-						pkgName=("$(manifest $environment/manifest.json flakerefToFloxpkg "$pkgArg")")
+						pkgName=("$(manifest "$environment"/manifest.json flakerefToFloxpkg "$pkgArg")")
 						;;
 					*)
 						pkgName="$pkgArg"
@@ -400,85 +400,85 @@ function floxInstall() {
 						warn "\t\$ flox install $pkgName.fromSource\n"
 						warn "failed to find a binary download for '$pkgName'" < /dev/null
 					else
-						$_cat $_stderr 1>&2
+						$_cat "$_stderr" 1>&2
 					fi
 				fi
 			done
-			$_rm -f $_stderr
+			$_rm -f "$_stderr"
 			error "failed to install packages: ${failedPkgArgs[@]}" < /dev/null
 		fi
 
 		# Construct and render the new manifest.json in the metadata workDir.
 		if [ -n "$currentGen" ]; then
 			$_cat \
-				$environmentWorkDir/x/manifest.json \
-				$workDir/$currentGen/manifest.json \
-				| $_jq -s -f $_lib/merge-manifests.jq \
-				> $workDir/$nextGen/manifest.json
+				"$environmentWorkDir"/x/manifest.json \
+				"$workDir"/"$currentGen"/manifest.json \
+				| $_jq -s -f "$_lib"/merge-manifests.jq \
+				> "$workDir"/"$nextGen"/manifest.json
 		else
 			# Expand the compact JSON rendered by default.
-			$_jq . $environmentWorkDir/x/manifest.json > $workDir/$nextGen/manifest.json
+			$_jq . "$environmentWorkDir"/x/manifest.json > "$workDir"/"$nextGen"/manifest.json
 		fi
-		$_git -C $workDir add $nextGen/manifest.json
+		$_git -C "$workDir" add "$nextGen"/manifest.json
 
 		# Take this opportunity to compare the current and next generations before building.
 		local envPackage
-		if $_cmp --quiet $workDir/$currentGen/manifest.json $workDir/$nextGen/manifest.json; then
-			envPackage=$($_jq -r '.generations[.currentGen].path' $workDir/metadata.json)
+		if $_cmp --quiet "$workDir"/"$currentGen"/manifest.json "$workDir"/"$nextGen"/manifest.json; then
+			envPackage=$($_jq -r '.generations[.currentGen].path' "$workDir"/metadata.json)
 		else
 			# Invoke 'nix profile build' to turn the manifest into a package.
 			# Derive the environment package from the newly-rendered link.
-			envPackage=$($invoke_nix profile build $workDir/$nextGen/manifest.json)
+			envPackage=$($invoke_nix profile build "$workDir"/"$nextGen"/manifest.json)
 		fi
 
 		# Generate declarative manifest.
 		# First add the top half with packages section removed.
 		if [ -n "$currentGen" ]; then
 			# Include everything up to the snipline.
-			$_awk "{if (/$snipline/) {exit} else {print}}" "$workDir/$currentGen/manifest.toml" > $workDir/$nextGen/manifest.toml
+			$_awk "{if (/$snipline/) {exit} else {print}}" "$workDir/$currentGen/manifest.toml" > "$workDir"/"$nextGen"/manifest.toml
 		else
 			# Bootstrap with prototype manifest.
-			$_cat > $workDir/$nextGen/manifest.toml <<EOF
+			$_cat > "$workDir"/"$nextGen"/manifest.toml <<EOF
 $protoManifestToml
 EOF
 		fi
 		# Append empty line if it doesn't already end with one.
-		$_tail -1 $workDir/$nextGen/manifest.toml | $_grep --quiet '^$' || ( echo >> $workDir/$nextGen/manifest.toml )
+		$_tail -1 "$workDir"/"$nextGen"/manifest.toml | $_grep --quiet '^$' || ( echo >> "$workDir"/"$nextGen"/manifest.toml )
 		# Then append the updated packages list derived from manifest.json.
-		echo "# $snipline" >> $workDir/$nextGen/manifest.toml
-		manifest "$workDir/$nextGen/manifest.json" listEnvironmentTOML >> $workDir/$nextGen/manifest.toml
-		$_git -C $workDir add $nextGen/manifest.toml
+		echo "# $snipline" >> "$workDir"/"$nextGen"/manifest.toml
+		manifest "$workDir/$nextGen/manifest.json" listEnvironmentTOML >> "$workDir"/"$nextGen"/manifest.toml
+		$_git -C "$workDir" add "$nextGen"/manifest.toml
 		;;
 	2)
 		# Construct and render the new manifest.json in the metadata workDir.
 		if [ -n "$currentGen" ]; then
 			# -T so we don't copy the parent directory
-			$_cp -rT $workDir/$currentGen $workDir/$nextGen
+			$_cp -rT "$workDir"/"$currentGen" "$workDir"/"$nextGen"
 			# Always refresh the flake.{nix,lock} files with each new generation.
-			$_cp -f --no-preserve=mode $_lib/templateFloxEnv/flake.{nix,lock} -t $workDir/$nextGen
+			$_cp -f --no-preserve=mode "$_lib"/templateFloxEnv/flake.{nix,lock} -t "$workDir"/"$nextGen"
 		else
 			# files in the Nix store are read-only
-			$_cp --no-preserve=mode -rT $_lib/templateFloxEnv $workDir/$nextGen
+			$_cp --no-preserve=mode -rT "$_lib"/templateFloxEnv "$workDir"/"$nextGen"
 		fi
 		# otherwise Nix build won't be able to find any of the files
-		$_git -C $workDir add $nextGen
+		$_git -C "$workDir" add "$nextGen"
 
 		# Modify the declarative environment to add the new installables.
 		for versionedPkgArg in ${versionedPkgArgs[@]}; do
 			# That's it; invoke the editor to add the package.
-			nixEditor $environment $workDir/$nextGen/pkgs/default/flox.nix install "$versionedPkgArg"
+			nixEditor "$environment" "$workDir"/"$nextGen"/pkgs/default/flox.nix install "$versionedPkgArg"
 		done
-		$_git -C $workDir add $nextGen/pkgs/default/flox.nix
+		$_git -C "$workDir" add "$nextGen"/pkgs/default/flox.nix
 
 		local envPackage
 		if ! envPackage=$($invoke_nix build --impure --no-link --print-out-paths "$workDir/$nextGen#.floxEnvs.$system.default"); then
 			error "failed to install packages: ${pkgArgs[@]}" < /dev/null
 		fi
 
-		$_jq . --sort-keys $envPackage/catalog.json > $workDir/$nextGen/pkgs/default/catalog.json
-		$_jq . --sort-keys $envPackage/manifest.json > $workDir/$nextGen/manifest.json
-		$_git -C $workDir add $nextGen/pkgs/default/catalog.json
-		$_git -C $workDir add $nextGen/manifest.json
+		$_jq . --sort-keys "$envPackage"/catalog.json > "$workDir"/"$nextGen"/pkgs/default/catalog.json
+		$_jq . --sort-keys "$envPackage"/manifest.json > "$workDir"/"$nextGen"/manifest.json
+		$_git -C "$workDir" add "$nextGen"/pkgs/default/catalog.json
+		$_git -C "$workDir" add "$nextGen"/manifest.json
 		;;
 	*)
 		error "unknown version: $currentGenVersion" < /dev/null
@@ -486,7 +486,7 @@ EOF
 	esac
 
 	# That went well. Go ahead and commit the transaction.
-	local result=$(commitTransaction install $environment $workDir $envPackage \
+	local result=$(commitTransaction install "$environment" "$workDir" "$envPackage" \
 		"$USER installed ${pkgNames[*]}" \
 		$currentGenVersion \
 		"$me install ${invocation[*]}")
@@ -542,20 +542,20 @@ function floxRemove() {
 
 	# Glean current and next generations from clone.
 	local currentGen
-	currentGen=$($_readlink $workDir/current || :)
+	currentGen=$($_readlink "$workDir"/current || :)
 	local nextGen
-	nextGen=$($_readlink $workDir/next)
+	nextGen=$($_readlink "$workDir"/next)
 
 	# Create an ephemeral copy of the current generation to delete from.
 	local environmentWorkDir
 	environmentWorkDir=$(mkTempDir)
 	local envPackage
-	envPackage=$($_jq -r '.generations[.currentGen].path' $workDir/metadata.json)
-	$_ln -s $envPackage $environmentWorkDir/x-$currentGen-link
-	$_ln -s x-$currentGen-link $environmentWorkDir/x
+	envPackage=$($_jq -r '.generations[.currentGen].path' "$workDir"/metadata.json)
+	$_ln -s "$envPackage" "$environmentWorkDir"/x-"$currentGen"-link
+	$_ln -s x-"$currentGen"-link "$environmentWorkDir"/x
 
 	local -i currentGenVersion
-	if ! currentGenVersion=$(registry $workDir/metadata.json 1 get generations "$currentGen" version); then
+	if ! currentGenVersion=$(registry "$workDir"/metadata.json 1 get generations "$currentGen" version); then
 		currentGenVersion=1
 	fi
 
@@ -572,12 +572,12 @@ function floxRemove() {
 		pkgArgs+=("$pkgArg")
 		position=
 		if [[ "$pkgArg" == *#* ]]; then
-			position=$(manifest $environmentWorkDir/x/manifest.json flakerefToPosition "$pkgArg") ||
+			position=$(manifest "$environmentWorkDir"/x/manifest.json flakerefToPosition "$pkgArg") ||
 				error "Package '$pkg' not found in '$environmentAlias' environment." </dev/null
 		elif [[ "$pkgArg" =~ ^[0-9]+$ ]]; then
 			position="$pkgArg"
 		else
-			position=$(manifest $environmentWorkDir/x/manifest.json storepathToPosition "$pkgArg") ||
+			position=$(manifest "$environmentWorkDir"/x/manifest.json storepathToPosition "$pkgArg") ||
 				error "Package '$pkg' not found in '$environmentAlias' environment." </dev/null
 		fi
 		pkgPositionArgs+=($position)
@@ -585,64 +585,64 @@ function floxRemove() {
 	# Look up floxpkg name(s) from position.
 	local -a pkgNames=()
 	for position in ${pkgPositionArgs[@]}; do
-		pkgNames+=("$(manifest $environmentWorkDir/x/manifest.json positionToFloxpkg "$position")") ||
+		pkgNames+=("$(manifest "$environmentWorkDir"/x/manifest.json positionToFloxpkg "$position")") ||
 			error "failed to look up package name for position \"$position\" in environment $environment" </dev/null
 	done
 
 	case $currentGenVersion in
 	1)
 		# Render a new environment with 'nix profile remove'.
-		$invoke_nix profile remove --profile $environmentWorkDir/x "${pkgPositionArgs[@]}"
-		envPackage=$($_realpath $environmentWorkDir/x/.)
+		$invoke_nix profile remove --profile "$environmentWorkDir"/x "${pkgPositionArgs[@]}"
+		envPackage=$($_realpath "$environmentWorkDir"/x/.)
 
 		# That went well, update metadata accordingly.
 		# Expand the compact JSON rendered by default.
-		$_jq . $environmentWorkDir/x/manifest.json > $workDir/$nextGen/manifest.json
-		$_git -C $workDir add $nextGen/manifest.json
+		$_jq . "$environmentWorkDir"/x/manifest.json > "$workDir"/"$nextGen"/manifest.json
+		$_git -C "$workDir" add "$nextGen"/manifest.json
 
 		# Generate declarative manifest.
 		# First add the top half with packages section removed.
 		if [ -n "$currentGen" ]; then
 			# Include everything up to the snipline.
-			$_awk "{if (/$snipline/) {exit} else {print}}" "$workDir/$currentGen/manifest.toml" > $workDir/$nextGen/manifest.toml
+			$_awk "{if (/$snipline/) {exit} else {print}}" "$workDir/$currentGen/manifest.toml" > "$workDir"/"$nextGen"/manifest.toml
 		else
 			# Bootstrap with prototype manifest.
-			$_cat > $workDir/$nextGen/manifest.toml <<EOF
+			$_cat > "$workDir"/"$nextGen"/manifest.toml <<EOF
 $protoManifestToml
 EOF
 		fi
 		# Append empty line if it doesn't already end with one.
-		$_tail -1 $workDir/$nextGen/manifest.toml | $_grep --quiet '^$' || ( echo >> $workDir/$nextGen/manifest.toml )
+		$_tail -1 "$workDir"/"$nextGen"/manifest.toml | $_grep --quiet '^$' || ( echo >> "$workDir"/"$nextGen"/manifest.toml )
 		# Then append the updated packages list derived from manifest.json.
-		echo "# $snipline" >> $workDir/$nextGen/manifest.toml
-		manifest "$workDir/$nextGen/manifest.json" listEnvironmentTOML >> $workDir/$nextGen/manifest.toml
-		$_git -C $workDir add $nextGen/manifest.toml
+		echo "# $snipline" >> "$workDir"/"$nextGen"/manifest.toml
+		manifest "$workDir/$nextGen/manifest.json" listEnvironmentTOML >> "$workDir"/"$nextGen"/manifest.toml
+		$_git -C "$workDir" add "$nextGen"/manifest.toml
 		;;
 	2)
 		# Create an ephemeral copy of the current generation to delete from.
 		# -T so we don't copy the parent directory
-		$_cp -rT $workDir/$currentGen $workDir/$nextGen
+		$_cp -rT "$workDir"/"$currentGen" "$workDir"/"$nextGen"
 		# Always refresh the flake.{nix,lock} files with each new generation.
-		$_cp -f --no-preserve=mode $_lib/templateFloxEnv/flake.{nix,lock} -t $workDir/$nextGen
+		$_cp -f --no-preserve=mode "$_lib"/templateFloxEnv/flake.{nix,lock} -t "$workDir"/"$nextGen"
 		# otherwise Nix build won't be able to find any of the files
-		$_git -C $workDir add $nextGen
+		$_git -C "$workDir" add "$nextGen"
 
 		# Step through floxtuples removing packages.
 		for pkgName in ${pkgNames[@]}; do
 			# That's it; invoke the editor to remove the package.
-			nixEditor $environment $workDir/$nextGen/pkgs/default/flox.nix delete "$pkgName"
+			nixEditor "$environment" "$workDir"/"$nextGen"/pkgs/default/flox.nix delete "$pkgName"
 		done
-		$_git -C $workDir add $nextGen/pkgs/default/flox.nix
+		$_git -C "$workDir" add "$nextGen"/pkgs/default/flox.nix
 
 		local envPackage
 		if ! envPackage=$($invoke_nix build --impure --no-link --print-out-paths "$workDir/$nextGen#.floxEnvs.$system.default"); then
 			error "failed to remove ${pkgNames[@]}" </dev/null
 		fi
 
-		$_jq . --sort-keys $envPackage/catalog.json > $workDir/$nextGen/pkgs/default/catalog.json
-		$_jq . --sort-keys $envPackage/manifest.json > $workDir/$nextGen/manifest.json
-		$_git -C $workDir add $nextGen/pkgs/default/catalog.json
-		$_git -C $workDir add $nextGen/manifest.json
+		$_jq . --sort-keys "$envPackage"/catalog.json > "$workDir"/"$nextGen"/pkgs/default/catalog.json
+		$_jq . --sort-keys "$envPackage"/manifest.json > "$workDir"/"$nextGen"/manifest.json
+		$_git -C "$workDir" add "$nextGen"/pkgs/default/catalog.json
+		$_git -C "$workDir" add "$nextGen"/manifest.json
 		;;
 	*)
 		error "unknown version: $currentGenVersion" </dev/null
@@ -650,7 +650,7 @@ EOF
 	esac
 
 	# That went well. Go ahead and commit the transaction.
-	local result=$(commitTransaction remove $environment $workDir $envPackage \
+	local result=$(commitTransaction remove "$environment" "$workDir" "$envPackage" \
 		"$USER removed ${pkgNames[*]}" \
 		$currentGenVersion \
 		"$me remove ${invocation[*]}")
@@ -705,17 +705,17 @@ function floxUpgrade() {
 
 	# Glean current and next generations from clone.
 	local currentGen
-	currentGen=$($_readlink $workDir/current)
+	currentGen=$($_readlink "$workDir"/current)
 	local nextGen
-	nextGen=$($_readlink $workDir/next)
+	nextGen=$($_readlink "$workDir"/next)
 
 	# Create an ephemeral copy of the current generation to upgrade.
 	local environmentWorkDir
 	environmentWorkDir=$(mkTempDir)
 	local envPackage
-	envPackage=$($_jq -r '.generations[.currentGen].path' $workDir/metadata.json)
-	$_ln -s $envPackage $environmentWorkDir/x-$currentGen-link
-	$_ln -s x-$currentGen-link $environmentWorkDir/x
+	envPackage=$($_jq -r '.generations[.currentGen].path' "$workDir"/metadata.json)
+	$_ln -s "$envPackage" "$environmentWorkDir"/x-"$currentGen"-link
+	$_ln -s x-"$currentGen"-link "$environmentWorkDir"/x
 
 	# The remove and upgrade commands operate on flake references and
 	# require the package to be present in the manifest. Take this
@@ -726,12 +726,12 @@ function floxUpgrade() {
 		pkgArg=$(floxpkgArg "$pkg")
 		position=
 		if [[ "$pkgArg" == *#* ]]; then
-			position="$(manifest $environmentWorkDir/x/manifest.json flakerefToPosition "$pkgArg")" ||
+			position="$(manifest "$environmentWorkDir"/x/manifest.json flakerefToPosition "$pkgArg")" ||
 				error "package \"$pkg\" not found in environment $environment" </dev/null
 		elif [[ "$pkgArg" =~ ^[0-9]+$ ]]; then
 			position="$pkgArg"
 		else
-			position="$(manifest $environmentWorkDir/x/manifest.json storepathToPosition "$pkgArg")" ||
+			position="$(manifest "$environmentWorkDir"/x/manifest.json storepathToPosition "$pkgArg")" ||
 				error "package \"$pkg\" not found in environment $environment" </dev/null
 		fi
 		pkgArgs+=($position)
@@ -739,18 +739,18 @@ function floxUpgrade() {
 	# Look up floxpkg name(s) from position.
 	local -a pkgNames=()
 	for position in ${pkgArgs[@]}; do
-		pkgNames+=("$(manifest $environmentWorkDir/x/manifest.json positionToFloxpkg "$position")") ||
+		pkgNames+=("$(manifest "$environmentWorkDir"/x/manifest.json positionToFloxpkg "$position")") ||
 			error "failed to look up package name for position \"$position\" in environment $environment" </dev/null
 	done
 	# Look up catalog deletion paths from position.
 	local -a pkgCatalogPaths=()
 	for position in ${pkgArgs[@]}; do
-		pkgCatalogPaths+=("$(manifest $environmentWorkDir/x/manifest.json positionToCatalogPath "$position")") ||
+		pkgCatalogPaths+=("$(manifest "$environmentWorkDir"/x/manifest.json positionToCatalogPath "$position")") ||
 			error "failed to look up package catalog path for position \"$position\" in environment $environment" </dev/null
 	done
 
 	local -i currentGenVersion
-	if ! currentGenVersion=$(registry $workDir/metadata.json 1 get generations "$currentGen" version); then
+	if ! currentGenVersion=$(registry "$workDir"/metadata.json 1 get generations "$currentGen" version); then
 		currentGenVersion=1
 	fi
 	case $currentGenVersion in
@@ -758,43 +758,43 @@ function floxUpgrade() {
 
 		# Render a new environment with 'nix profile upgrade'.
 		if [ ${#pkgArgs[@]} -gt 0 ]; then
-			$invoke_nix profile upgrade --impure --profile $environmentWorkDir/x "${pkgArgs[@]}"
+			$invoke_nix profile upgrade --impure --profile "$environmentWorkDir"/x "${pkgArgs[@]}"
 		else
-			$invoke_nix profile upgrade --impure --profile $environmentWorkDir/x '.*'
+			$invoke_nix profile upgrade --impure --profile "$environmentWorkDir"/x '.*'
 		fi
-		envPackage=$($_realpath $environmentWorkDir/x/.)
+		envPackage=$($_realpath "$environmentWorkDir"/x/.)
 
 		# That went well, update metadata accordingly.
 		# Expand the compact JSON rendered by default.
-		$_jq . $environmentWorkDir/x/manifest.json > $workDir/$nextGen/manifest.json
-		$_git -C $workDir add $nextGen/manifest.json
+		$_jq . "$environmentWorkDir"/x/manifest.json > "$workDir"/"$nextGen"/manifest.json
+		$_git -C "$workDir" add "$nextGen"/manifest.json
 
 		# Generate declarative manifest.
 		# First add the top half with packages section removed.
 		if [ -n "$currentGen" ]; then
 			# Include everything up to the snipline.
-			$_awk "{if (/$snipline/) {exit} else {print}}" "$workDir/$currentGen/manifest.toml" > $workDir/$nextGen/manifest.toml
+			$_awk "{if (/$snipline/) {exit} else {print}}" "$workDir/$currentGen/manifest.toml" > "$workDir"/"$nextGen"/manifest.toml
 		else
 			# Bootstrap with prototype manifest.
-			$_cat > $workDir/$nextGen/manifest.toml <<EOF
+			$_cat > "$workDir"/"$nextGen"/manifest.toml <<EOF
 $protoManifestToml
 EOF
 		fi
 		# Append empty line if it doesn't already end with one.
-		$_tail -1 $workDir/$nextGen/manifest.toml | $_grep --quiet '^$' || ( echo >> $workDir/$nextGen/manifest.toml )
+		$_tail -1 "$workDir"/"$nextGen"/manifest.toml | $_grep --quiet '^$' || ( echo >> "$workDir"/"$nextGen"/manifest.toml )
 		# Then append the updated packages list derived from manifest.json.
-		echo "# $snipline" >> $workDir/$nextGen/manifest.toml
-		manifest "$workDir/$nextGen/manifest.json" listEnvironmentTOML >> $workDir/$nextGen/manifest.toml
-		$_git -C $workDir add $nextGen/manifest.toml
+		echo "# $snipline" >> "$workDir"/"$nextGen"/manifest.toml
+		manifest "$workDir/$nextGen/manifest.json" listEnvironmentTOML >> "$workDir"/"$nextGen"/manifest.toml
+		$_git -C "$workDir" add "$nextGen"/manifest.toml
 		;;
 	2)
 		# Create an ephemeral copy of the current generation to upgrade.
 		# -T so we don't copy the parent directory
-		$_cp -rT $workDir/$currentGen $workDir/$nextGen
+		$_cp -rT "$workDir"/"$currentGen" "$workDir"/"$nextGen"
 		# Always refresh the flake.{nix,lock} files with each new generation.
-		$_cp -f --no-preserve=mode $_lib/templateFloxEnv/flake.{nix,lock} -t $workDir/$nextGen
+		$_cp -f --no-preserve=mode "$_lib"/templateFloxEnv/flake.{nix,lock} -t "$workDir"/"$nextGen"
 		# otherwise Nix build won't be able to find any of the files
-		$_git -C $workDir add $nextGen
+		$_git -C "$workDir" add "$nextGen"
 
 		# To upgrade a package, we remove its entry from the ephemeral
 		# catalog.json file. This essentially makes it unlocked, and Nix
@@ -803,14 +803,14 @@ EOF
 
 		if [ ${#upgradeArgs[@]} == 0 ]; then
 			# If upgrading all, simply remove all locks.
-			$_rm $workDir/$nextGen/pkgs/default/catalog.json
+			$_rm "$workDir"/"$nextGen"/pkgs/default/catalog.json
 		else
 			# Delete all pkgCatalogPath references from catalog.json.
 			local concatPkgCatalogPaths
 			concatPkgCatalogPaths=$(IFS=","; echo "${pkgCatalogPaths[*]}")
 			$invoke_jq "del($concatPkgCatalogPaths)" \
-				$workDir/$currentGen/pkgs/default/catalog.json \
-				> $workDir/$nextGen/pkgs/default/catalog.json
+				"$workDir"/"$currentGen"/pkgs/default/catalog.json \
+				> "$workDir"/"$nextGen"/pkgs/default/catalog.json
 		fi
 
 		local envPackage
@@ -819,10 +819,10 @@ EOF
 			error "failed to upgrade packages" < /dev/null
 		fi
 
-		$_jq . --sort-keys $envPackage/catalog.json > $workDir/$nextGen/pkgs/default/catalog.json
-		$_jq . --sort-keys $envPackage/manifest.json > $workDir/$nextGen/manifest.json
-		$_git -C $workDir add $nextGen/pkgs/default/catalog.json
-		$_git -C $workDir add $nextGen/manifest.json
+		$_jq . --sort-keys "$envPackage"/catalog.json > "$workDir"/"$nextGen"/pkgs/default/catalog.json
+		$_jq . --sort-keys "$envPackage"/manifest.json > "$workDir"/"$nextGen"/manifest.json
+		$_git -C "$workDir" add "$nextGen"/pkgs/default/catalog.json
+		$_git -C "$workDir" add "$nextGen"/manifest.json
 		;;
 	*)
 		error "unknown version: $currentGenVersion" </dev/null
@@ -830,7 +830,7 @@ EOF
 	esac
 
 	# That went well. Go ahead and commit the transaction.
-	local result=$(commitTransaction upgrade $environment $workDir $envPackage \
+	local result=$(commitTransaction upgrade "$environment" "$workDir" "$envPackage" \
 		"$USER upgraded ${pkgNames[*]}" \
 		$currentGenVersion \
 		"$me upgrade ${invocation[*]}")
@@ -862,43 +862,43 @@ function floxEdit() {
 
 	# Glean current and next generations from clone.
 	local currentGen
-	currentGen=$($_readlink $workDir/current || :)
+	currentGen=$($_readlink "$workDir"/current || :)
 	local nextGen
-	nextGen=$($_readlink $workDir/next)
+	nextGen=$($_readlink "$workDir"/next)
 
 	local -i currentGenVersion
 	if [ -z "$currentGen" ]; then
 		# if we're creating a new environment, make it version 2
 		currentGenVersion=2
-	elif ! currentGenVersion=$(registry $workDir/metadata.json 1 get generations "$currentGen" version); then
+	elif ! currentGenVersion=$(registry "$workDir"/metadata.json 1 get generations "$currentGen" version); then
 		currentGenVersion=1
 	fi
 	case $currentGenVersion in
 	1)
 		# Copy manifest.toml from currentGen, or create prototype.
 		if [ -n "$currentGen" ]; then
-			$_cp $workDir/$currentGen/manifest.toml $workDir/$nextGen/manifest.toml
+			$_cp "$workDir"/"$currentGen"/manifest.toml "$workDir"/"$nextGen"/manifest.toml
 		else
-			$_cat > $workDir/$nextGen/manifest.toml <<EOF
+			$_cat > "$workDir"/"$nextGen"/manifest.toml <<EOF
 $protoManifestToml
 
 EOF
 			# XXX temporary: if 0.0.6 format manifest.json exists then append current package manifest.
 			if [ -f "$workDir/manifest.json" ]; then
-				manifest $workDir/manifest.json listEnvironmentTOML >> $workDir/$nextGen/manifest.toml
+				manifest "$workDir"/manifest.json listEnvironmentTOML >> "$workDir"/"$nextGen"/manifest.toml
 			fi # /XXX
 		fi
 
 		# Edit nextGen manifest.toml file.
 		while true; do
-			$editorCommand $workDir/$nextGen/manifest.toml
+			$editorCommand "$workDir"/"$nextGen"/manifest.toml
 
 			# Verify valid TOML syntax
-			[ -s $workDir/$nextGen/manifest.toml ] || (
-				$_rm -f $workDir/$nextGen/manifest.toml
+			[ -s "$workDir"/"$nextGen"/manifest.toml ] || (
+				$_rm -f "$workDir"/"$nextGen"/manifest.toml
 				error "editor returned empty manifest .. aborting" < /dev/null
 			)
-			if validateTOML $workDir/$nextGen/manifest.toml; then
+			if validateTOML "$workDir"/"$nextGen"/manifest.toml; then
 				: confirmed valid TOML
 				break
 			else
@@ -906,7 +906,7 @@ EOF
 					if boolPrompt "Try again?" "yes"; then
 						: will try again
 					else
-						$_rm -f $workDir/$nextGen/manifest.toml
+						$_rm -f "$workDir"/"$nextGen"/manifest.toml
 						error "editor returned invalid TOML .. aborting" < /dev/null
 					fi
 				else
@@ -921,34 +921,34 @@ EOF
 			warn "No environment changes detected .. exiting"
 			exit 0
 		fi
-		$_git -C $workDir add $nextGen/manifest.toml
+		$_git -C "$workDir" add "$nextGen"/manifest.toml
 
 		# Now render the environment package from the manifest.toml. This pulls
 		# from the latest catalog by design and will upgrade everything.
 		local envPackage
-		envPackage=$(renderManifestTOML $workDir/$nextGen/manifest.toml)
+		envPackage=$(renderManifestTOML "$workDir"/"$nextGen"/manifest.toml)
 		[ -n "$envPackage" ] || error "failed to render new environment" </dev/null
 		;;
 	2)
 		# Copy manifest.toml from currentGen, or create prototype.
 		if [ -n "$currentGen" ]; then
 			# -T so we don't copy the parent directory
-			$_cp -rT $workDir/$currentGen $workDir/$nextGen
+			$_cp -rT "$workDir"/"$currentGen" "$workDir"/"$nextGen"
 			# Always refresh the flake.{nix,lock} files with each new generation.
-			$_cp -f --no-preserve=mode $_lib/templateFloxEnv/flake.{nix,lock} -t $workDir/$nextGen
+			$_cp -f --no-preserve=mode "$_lib"/templateFloxEnv/flake.{nix,lock} -t "$workDir"/"$nextGen"
 		else
 			# files in the Nix store are read-only
-			$_cp --no-preserve=mode -rT $_lib/templateFloxEnv $workDir/$nextGen
+			$_cp --no-preserve=mode -rT "$_lib"/templateFloxEnv "$workDir"/"$nextGen"
 		fi
 		# otherwise Nix build won't be able to find any of the files
-		$_git -C $workDir add $nextGen
+		$_git -C "$workDir" add "$nextGen"
 
 		# Edit nextGen manifest.toml file.
 		while true; do
-			$editorCommand $workDir/$nextGen/pkgs/default/flox.nix
+			$editorCommand "$workDir"/"$nextGen"/pkgs/default/flox.nix
 
-			[ -s $workDir/$nextGen/pkgs/default/flox.nix ] || (
-				$_rm -rf $workDir/$nextGen
+			[ -s "$workDir"/"$nextGen"/pkgs/default/flox.nix ] || (
+				$_rm -rf "$workDir"/"$nextGen"
 				error "editor returned empty configuration .. aborting" < /dev/null
 			)
 
@@ -961,7 +961,7 @@ EOF
 					if boolPrompt "Invalid configuration. Try again?" "yes"; then
 						: will try again
 					else
-						$_rm -rf $workDir/$nextGen
+						$_rm -rf "$workDir"/"$nextGen"
 						error "editor returned invalid configuration .. aborting" < /dev/null
 					fi
 				else
@@ -969,10 +969,10 @@ EOF
 				fi
 			fi
 		done
-		$_git -C $workDir add $nextGen/pkgs/default/flox.nix
+		$_git -C "$workDir" add "$nextGen"/pkgs/default/flox.nix
 		# copy the potentially updated catalog
-		$_jq . --sort-keys $envPackage/catalog.json > $workDir/$nextGen/pkgs/default/catalog.json
-		$_git -C $workDir add $workDir/$nextGen/pkgs/default/catalog.json
+		$_jq . --sort-keys "$envPackage"/catalog.json > "$workDir"/"$nextGen"/pkgs/default/catalog.json
+		$_git -C "$workDir" add "$workDir"/"$nextGen"/pkgs/default/catalog.json
 		;;
 	*)
 		error "unknown version: $currentGenVersion" </dev/null
@@ -981,11 +981,11 @@ EOF
 
 	# Copy the manifest.json (lock file) from the freshly-rendered
 	# package into the floxmeta repo.
-	$_jq . --sort-keys $envPackage/manifest.json > $workDir/$nextGen/manifest.json
-	$_git -C $workDir add $nextGen/manifest.json
+	$_jq . --sort-keys "$envPackage"/manifest.json > "$workDir"/"$nextGen"/manifest.json
+	$_git -C "$workDir" add "$nextGen"/manifest.json
 
 	# That went well. Go ahead and commit the transaction.
-	local result=$(commitTransaction edit $environment $workDir $envPackage \
+	local result=$(commitTransaction edit "$environment" "$workDir" "$envPackage" \
 		"$USER edited declarative profile (generation $nextGen)" \
 		$currentGenVersion \
 		"$me edit ${invocation[*]}")
@@ -1017,29 +1017,29 @@ function floxImport() {
 
 	# Glean next generation from clone.
 	local nextGen
-	nextGen=$($_readlink $workDir/next)
+	nextGen=$($_readlink "$workDir"/next)
 
 	# New tarball coming in on STDIN. Extract to tmpDir.
 	local tmpDir
 	tmpDir=$(mkTempDir)
-	$_tar -C $tmpDir -xf - || \
+	$_tar -C "$tmpDir" -xf - || \
 		usage | error "tar extraction failed - try using same flox version for import and export"
 
 	# Inspect extracted data.
-	[ -f $tmpDir/metadata.json ] || \
+	[ -f "$tmpDir"/metadata.json ] || \
 		usage | error "metadata.json not found - was tar created with flox export?"
 	local currentGen
-	currentGen=$(registry $tmpDir/metadata.json 1 get currentGen) || \
+	currentGen=$(registry "$tmpDir"/metadata.json 1 get currentGen) || \
 		usage | error "metadata.json does not contain currentGen"
 
 	# Move latest generation from extracted data and insert as nextGen.
-	$invoke_rmdir $workDir/$nextGen
-	$invoke_mv $tmpDir/$currentGen $workDir/$nextGen
-	$invoke_git -C $workDir add $nextGen
+	$invoke_rmdir "$workDir"/"$nextGen"
+	$invoke_mv "$tmpDir"/"$currentGen" "$workDir"/"$nextGen"
+	$invoke_git -C "$workDir" add "$nextGen"
 
 	# Detect version and act accordingly.
 	local -i currentGenVersion
-	if ! currentGenVersion=$(registry $tmpDir/metadata.json 1 get generations "$currentGen" version); then
+	if ! currentGenVersion=$(registry "$tmpDir"/metadata.json 1 get generations "$currentGen" version); then
 		currentGenVersion=1
 	fi
 
@@ -1048,7 +1048,7 @@ function floxImport() {
 	1)
 		# Now render the environment package from the manifest.toml. This pulls
 		# from the latest catalog by design and will upgrade everything.
-		envPackage=$(renderManifestTOML $workDir/$nextGen/manifest.toml)
+		envPackage=$(renderManifestTOML "$workDir"/"$nextGen"/manifest.toml)
 		[ -n "$envPackage" ] || error "failed to render new environment" </dev/null
 		;;
 	2)
@@ -1062,11 +1062,11 @@ function floxImport() {
 	# Copy the manifest.json (lock file) from the freshly-rendered
 	# package into the floxmeta repo, using jq to expand it out of
 	# the concise format generated by Nix.
-	$_jq . $envPackage/manifest.json > $workDir/$nextGen/manifest.json
-	$_git -C $workDir add $nextGen/manifest.json
+	$_jq . "$envPackage"/manifest.json > "$workDir"/"$nextGen"/manifest.json
+	$_git -C "$workDir" add "$nextGen"/manifest.json
 
 	# That went well. Go ahead and commit the transaction.
-	local result=$(commitTransaction import $environment $workDir $envPackage \
+	local result=$(commitTransaction import "$environment" "$workDir" "$envPackage" \
 		"$USER imported generation $nextGen" \
 		$currentGenVersion \
 		"$me import ${invocation[*]}")
@@ -1093,7 +1093,7 @@ function floxExport() {
 	eval $(decodeEnvironment "$environment")
 	# This is the easy one; just export all the generations. It's up to the
 	# import function to weed out and renumber the current generation.
-	metaGit $environment archive --format=tar "$branchName"
+	metaGit "$environment" archive --format=tar "$branchName"
 }
 
 _environment_commands+=("history")
@@ -1132,9 +1132,9 @@ function floxHistory() {
 		esac
 	done
 	if [ $displayJSON -gt 0 ]; then
-		$invoke_git -C $environmentMetaDir log $branchName --pretty="$logFormat" | $_jq -s .
+		$invoke_git -C "$environmentMetaDir" log "$branchName" --pretty="$logFormat" | $_jq -s .
 	else
-		$invoke_git -C $environmentMetaDir log $branchName --pretty="$logFormat"
+		$invoke_git -C "$environmentMetaDir" log "$branchName" --pretty="$logFormat"
 	fi
 }
 
@@ -1168,11 +1168,11 @@ function floxGenerations() {
 	# rather than the symlinks on disk so that we can have a history of all
 	# generations long after they've been deleted for the purposes of GC.
 	tmpfile=$(mkTempFile)
-	metaGitShow $environment metadata.json > $tmpfile
+	metaGitShow "$environment" metadata.json > "$tmpfile"
 	if [ $displayJSON -gt 0 ]; then
-		registry $tmpfile 1 listGenerations --json
+		registry "$tmpfile" 1 listGenerations --json
 	else
-		registry $tmpfile 1 listGenerations
+		registry "$tmpfile" 1 listGenerations
 	fi
 }
 
@@ -1192,7 +1192,7 @@ function floxRollback() {
 
 	# Glean current and next generations from clone.
 	local currentGen
-	currentGen=$($_readlink $workDir/current)
+	currentGen=$($_readlink "$workDir"/current)
 
 	# Look for target generation from command arguments.
 	local -i targetGeneration=0
@@ -1216,16 +1216,16 @@ function floxRollback() {
 	}
 
 	# Look up target generation in metadata, verify generation exists.
-	$invoke_jq -e --arg gen $targetGeneration '.generations | has($gen)' $workDir/metadata.json >/dev/null || \
+	$invoke_jq -e --arg gen $targetGeneration '.generations | has($gen)' "$workDir"/metadata.json >/dev/null || \
 		error "could not find environment data for generation '$targetGeneration'" < /dev/null
 
 	# Set the target generation in metadata.json by changing the "next" symlink
 	# in the workDir. A bit hacky but a workaround to the limitations of bash.
-	$_rm -f $workDir/next
-	ln -s $targetGeneration $workDir/next
+	$_rm -f "$workDir"/next
+	ln -s $targetGeneration "$workDir"/next
 
 	# ... and commit.
-	local result=$(commitTransaction $subcommand $environment $workDir UNUSED \
+	local result=$(commitTransaction "$subcommand" "$environment" "$workDir" UNUSED \
 		"$USER switched to generation $targetGeneration" \
 		1 \
 		"$me $subcommand ${invocation[*]}")
@@ -1391,7 +1391,7 @@ function floxPushPull() {
 			shift
 			;;
 		--no-render)
-			[ $action = "pull" ] ||
+			[ "$action" = "pull" ] ||
 				error "'$1' argument only valid with 'flox pull'" </dev/null
 			noRender=1
 			logFormat='format:{"time":%ct, "msg":"%s"}'
@@ -1412,7 +1412,7 @@ function floxPushPull() {
 		esac
 	done
 
-	[ $action = "push" -o $action = "pull" ] ||
+	[ "$action" = "push" -o "$action" = "pull" ] ||
 		error "pushpullMetadata(): first arg must be (push|pull)" < /dev/null
 
 	# First verify that the clone has an origin defined.
@@ -1427,11 +1427,11 @@ function floxPushPull() {
 	# Create an ephemeral clone with which to perform the synchronization.
 	local tmpDir
 	tmpDir=$(mkTempDir)
-	$invoke_git clone --quiet --shared "$environmentMetaDir" $tmpDir
+	$invoke_git clone --quiet --shared "$environmentMetaDir" "$tmpDir"
 
 	# Add the upstream remote to the ephemeral clone.
-	$invoke_git -C $tmpDir remote add upstream $origin
-	githubHelperGit -C $tmpDir fetch --quiet --all
+	$invoke_git -C "$tmpDir" remote add upstream "$origin"
+	githubHelperGit -C "$tmpDir" fetch --quiet --all
 
 	# Check out the relevant branch. Can be complicated in the event
 	# that this is the first pull of a brand-new branch.
@@ -1451,7 +1451,7 @@ function floxPushPull() {
 
 	# Then push or pull.
 	if [ "$action" = "push" ]; then
-		githubHelperGit -C $tmpDir push $forceArg upstream origin/"$branchName":refs/heads/"$branchName" ||
+		githubHelperGit -C "$tmpDir" push $forceArg upstream origin/"$branchName":refs/heads/"$branchName" ||
 			error "repeat command with '--force' to overwrite" < /dev/null
 		# Push succeeded, ensure that $environmentMetaDir has remote ref for this branch.
 		githubHelperGit -C "$environmentMetaDir" fetch --quiet origin
@@ -1460,15 +1460,15 @@ function floxPushPull() {
 		# a hard reset if invoked with --force.
 		if $invoke_git -C "$tmpDir" show-ref --quiet refs/remotes/upstream/"$branchName"; then
 			if [ -z "$forceArg" ]; then
-				$invoke_git -C $tmpDir rebase --quiet upstream/"$branchName" ||
+				$invoke_git -C "$tmpDir" rebase --quiet upstream/"$branchName" ||
 					error "repeat command with '--force' to overwrite" < /dev/null
 			else
-				$invoke_git -C $tmpDir reset --quiet --hard upstream/"$branchName"
+				$invoke_git -C "$tmpDir" reset --quiet --hard upstream/"$branchName"
 			fi
 			# Set receive.denyCurrentBranch=updateInstead before pushing
 			# to update both the bare repository and the checked out branch.
 			$invoke_git -C "$environmentMetaDir" config receive.denyCurrentBranch updateInstead
-			$invoke_git -C $tmpDir push $forceArg origin
+			$invoke_git -C "$tmpDir" push $forceArg origin
 			if [ $floxmain -eq 1 ]; then
 				: # nothing to do
 			elif [ $noRender -gt 0 ]; then
@@ -1497,7 +1497,7 @@ function floxGit() {
 	local -a invocation=("$@")
 	# set $branchName,$floxNixDir,$environment{Name,Alias,Owner,System,BaseDir,BinDir,ParentDir,MetaDir}
 	eval $(decodeEnvironment "$environment")
-	githubHelperGit -C $environmentMetaDir ${args[@]}
+	githubHelperGit -C "$environmentMetaDir" ${args[@]}
 }
 
 # vim:ts=4:noet:syntax=bash

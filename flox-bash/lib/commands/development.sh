@@ -119,7 +119,7 @@ function floxBuild() {
 	if [ -n "$FLOX_ORIGINAL_NIX_GET_COMPLETIONS" ]; then
 		export NIX_GET_COMPLETIONS="$(( FLOX_ORIGINAL_NIX_GET_COMPLETIONS + 1 ))"
 	fi
-	$invoke_nix "${_nixArgs[@]}" build --impure "${buildArgs[@]}" "${installables[@]}" --override-input flox-floxpkgs/nixpkgs/nixpkgs flake:nixpkgs-$FLOX_STABILITY
+	$invoke_nix "${_nixArgs[@]}" build --impure "${buildArgs[@]}" "${installables[@]}" --override-input flox-floxpkgs/nixpkgs/nixpkgs flake:nixpkgs-"$FLOX_STABILITY"
 }
 
 # flox eval
@@ -168,7 +168,7 @@ function floxEval() {
 	if [ -n "$FLOX_ORIGINAL_NIX_GET_COMPLETIONS" ]; then
 		export NIX_GET_COMPLETIONS="$(( FLOX_ORIGINAL_NIX_GET_COMPLETIONS + 1 ))"
 	fi
-	$invoke_nix "${_nixArgs[@]}" eval --impure "${evalArgs[@]}" "${installables[@]}" --override-input flox-floxpkgs/nixpkgs/nixpkgs flake:nixpkgs-$FLOX_STABILITY
+	$invoke_nix "${_nixArgs[@]}" eval --impure "${evalArgs[@]}" "${installables[@]}" --override-input flox-floxpkgs/nixpkgs/nixpkgs flake:nixpkgs-"$FLOX_STABILITY"
 }
 
 #
@@ -182,7 +182,7 @@ function flakeTopLevel() {
 	trace "$@"
 	local flakeRef=$1; shift
 	local url
-	if url=$($invoke_nix "${_nixArgs[@]}" flake metadata "$flakeRef" --json "$@" --override-input flox-floxpkgs/nixpkgs/nixpkgs flake:nixpkgs-$FLOX_STABILITY 2>/dev/null </dev/null | $_jq -r .resolvedUrl); then
+	if url=$($invoke_nix "${_nixArgs[@]}" flake metadata "$flakeRef" --json "$@" --override-input flox-floxpkgs/nixpkgs/nixpkgs flake:nixpkgs-"$FLOX_STABILITY" 2>/dev/null </dev/null | $_jq -r .resolvedUrl); then
 		# strip git+file://
 		url="${url/git+file:\/\//}"
 		# strip path:
@@ -217,13 +217,13 @@ function flakeMetaDir {
 	trace "$@"
 	local topLevel=$1; shift
 	local metaDir="$topLevel/.flox"
-	[ -d $metaDir ] || $invoke_mkdir -p "$metaDir"
+	[ -d "$metaDir" ] || $invoke_mkdir -p "$metaDir"
 
 	local gitCloneToplevel
-	if false && gitCloneToplevel="$($_git -C $topLevel rev-parse --show-toplevel 2>/dev/null)"; then
+	if false && gitCloneToplevel="$($_git -C "$topLevel" rev-parse --show-toplevel 2>/dev/null)"; then
 		local metaSubDir=${metaDir/$gitCloneToplevel\///}
 		# TODO: re-enable following more extensive testing
-		if [ $interactive -eq 1 ]; then
+		if [ "$interactive" -eq 1 ]; then
 			if ! $_grep -q "^$metaSubDir$" "$gitCloneToplevel/.gitignore" && \
 				$invoke_gum confirm "add $metaSubDir to toplevel .gitignore file?"; then
 				echo "$metaSubDir" >> "$gitCloneToplevel/.gitignore"
@@ -232,7 +232,7 @@ function flakeMetaDir {
 			fi
 		fi
 	fi
-	echo $metaDir
+	echo "$metaDir"
 }
 
 # flox develop, aka flox print-dev-env when run non-interactively
@@ -349,13 +349,13 @@ function floxDevelop() {
 	if [ -n "$FLOX_ORIGINAL_NIX_GET_COMPLETIONS" ]; then
 		# Dispatch nix to perform the work of looking up matches for $installable.
 		export NIX_GET_COMPLETIONS="$(( FLOX_ORIGINAL_NIX_GET_COMPLETIONS + 1 ))"
-		verboseExec $_nix "${_nixArgs[@]}" develop "$installable" "${developArgs[@]}" \
-			--override-input flox-floxpkgs/nixpkgs/nixpkgs flake:nixpkgs-$FLOX_STABILITY \
+		verboseExec "$_nix" "${_nixArgs[@]}" develop "$installable" "${developArgs[@]}" \
+			--override-input flox-floxpkgs/nixpkgs/nixpkgs flake:nixpkgs-"$FLOX_STABILITY" \
 			"${remainingArgs[@]}"
 	else
 
 		local nixDevelopInvocation
-		if [ $interactive -eq 1 ]; then
+		if [ "$interactive" -eq 1 ]; then
 			nixDevelopInvocation="$_nix ${_nixArgs[*]} develop $installable ${developArgs[*]} \
 						--override-input flox-floxpkgs/nixpkgs/nixpkgs flake:nixpkgs-$FLOX_STABILITY \
 						${remainingArgs[*]}"
@@ -393,16 +393,16 @@ function floxDevelop() {
 			# That's all there is to it - just hand over control to flox activate
 			# to take it from here.
 			# flox develop
-			if [ $interactive -eq 1 ]; then
-				floxActivate "$floxEnvFlakeURL" "$FLOX_SYSTEM" -- $nixDevelopInvocation
+			if [ "$interactive" -eq 1 ]; then
+				floxActivate "$floxEnvFlakeURL" "$FLOX_SYSTEM" -- "$nixDevelopInvocation"
 			# print-dev-env
 			else
 				floxActivate "$floxEnvFlakeURL" "$FLOX_SYSTEM"
-				verboseExec $nixDevelopInvocation
+				verboseExec "$nixDevelopInvocation"
 			fi
 		else
 			# Otherwise we just proceed with 'nix (develop|print-dev-env)'.
-			verboseExec $nixDevelopInvocation
+			verboseExec "$nixDevelopInvocation"
 		fi
 	fi
 }
@@ -471,7 +471,7 @@ function floxRun() {
 	if [ -n "$FLOX_ORIGINAL_NIX_GET_COMPLETIONS" ]; then
 		export NIX_GET_COMPLETIONS="$(( FLOX_ORIGINAL_NIX_GET_COMPLETIONS + 1 ))"
 	fi
-	$invoke_nix "${_nixArgs[@]}" run --impure "${runArgs[@]}" "${installables[@]}" --override-input flox-floxpkgs/nixpkgs/nixpkgs flake:nixpkgs-$FLOX_STABILITY "${remainingArgs[@]}"
+	$invoke_nix "${_nixArgs[@]}" run --impure "${runArgs[@]}" "${installables[@]}" --override-input flox-floxpkgs/nixpkgs/nixpkgs flake:nixpkgs-"$FLOX_STABILITY" "${remainingArgs[@]}"
 }
 
 # flox shell
@@ -532,7 +532,7 @@ function floxShell() {
 	if [ -n "$FLOX_ORIGINAL_NIX_GET_COMPLETIONS" ]; then
 		export NIX_GET_COMPLETIONS="$(( FLOX_ORIGINAL_NIX_GET_COMPLETIONS + 1 ))"
 	fi
-	$invoke_nix "${_nixArgs[@]}" shell --impure "${shellArgs[@]}" "${installables[@]}" --override-input flox-floxpkgs/nixpkgs/nixpkgs flake:nixpkgs-$FLOX_STABILITY "${remainingArgs[@]}"
+	$invoke_nix "${_nixArgs[@]}" shell --impure "${shellArgs[@]}" "${installables[@]}" --override-input flox-floxpkgs/nixpkgs/nixpkgs flake:nixpkgs-"$FLOX_STABILITY" "${remainingArgs[@]}"
 }
 
 #
@@ -561,9 +561,9 @@ function selectDefaultEnvironment() {
 	[ -n "$topLevel" ] || topLevel="."
 	# This could fail noisily, so quietly try a lookup before calling
 	# selectAttrPath() which needs to prompt to stderr.
-	local -a attrPaths=($(lookupAttrPaths $topLevel floxEnvs 2>/dev/null))
+	local -a attrPaths=($(lookupAttrPaths "$topLevel" floxEnvs 2>/dev/null))
 	if [ ${#attrPaths[@]} -gt 0 ]; then
-		local attrPath="$(selectAttrPath $topLevel $subcommand floxEnvs)"
+		local attrPath="$(selectAttrPath "$topLevel" "$subcommand" floxEnvs)"
 		if [ -n "$attrPath" ]; then
 			echo "$topLevel#$attrPath"
 		else
