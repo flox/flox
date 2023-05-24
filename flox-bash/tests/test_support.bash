@@ -22,7 +22,6 @@ common_setup() {
   export FLOX_DISABLE_METRICS="true"
   export TEST_ENVIRONMENT=_testing_
   # Remove any vestiges of previous test runs.
-  export TEST_ENVIRONMENT=_testing_
   $FLOX_CLI destroy -e "$TEST_ENVIRONMENT" --origin -f || :
 
   export NIX_SYSTEM=$($FLOX_CLI nix --extra-experimental-features nix-command show-config | awk '/system = / {print $NF}')
