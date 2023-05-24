@@ -130,7 +130,6 @@ pub async fn flox_forward(flox: &Flox) -> Result<()> {
     Ok(())
 }
 
-#[allow(clippy::bool_to_int_with_if)]
 
 pub async fn run_in_flox(
     _flox: Option<&Flox>,

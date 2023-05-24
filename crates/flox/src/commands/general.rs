@@ -143,8 +143,8 @@ impl ConfigArgs {
             let config_file_path = config_dir.join(FLOX_CONFIG_FILE);
 
             match Config::write_to_in(config_file_path, temp_dir, &query, value) {
-                err @ Err(ReadWriteError::ReadConfig(_)) => err.context("Could read current config file.\nPlease verify the format or reset using `flox config --reset`")?,
-                err@ Err(_) => err?,
+                err @ Err(ReadWriteError::ReadConfig(_)) => err.context("Could not read current config file.\nPlease verify the format or reset using `flox config --reset`")?,
+                err @ Err(_) => err?,
                 Ok(()) => ()
             }
             Ok(())
