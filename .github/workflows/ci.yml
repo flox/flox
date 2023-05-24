@@ -32,4 +32,4 @@ jobs:
         github-access-token: ${{ secrets.NIX_GIT_TOKEN }}
 
     - name: Build
-      run: flox build ${{ matrix.package }}
+      run: flox build ${{ matrix.package }} -L
