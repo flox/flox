@@ -17,9 +17,9 @@ setup_file() {
     export FLOX_PACKAGE_FIRST8=$(echo $FLOX_PACKAGE | dd bs=c skip=11 count=8 2>/dev/null)
   fi
   export FLOX_DISABLE_METRICS="true"
+  export TEST_ENVIRONMENT=_testing_
   # Remove any vestiges of previous test runs.
   $FLOX_CLI destroy -e $TEST_ENVIRONMENT --origin -f || :
-  export TEST_ENVIRONMENT=_testing_
   export NIX_SYSTEM=$($FLOX_CLI nix --extra-experimental-features nix-command show-config | awk '/system = / {print $NF}')
   # Simulate pure bootstrapping environment. It is challenging to get
   # the nix, gh, and flox tools to all use the same set of defaults.
