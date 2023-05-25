@@ -130,7 +130,6 @@ pub async fn flox_forward(flox: &Flox) -> Result<()> {
     Ok(())
 }
 
-
 pub async fn run_in_flox(
     _flox: Option<&Flox>,
     args: &[impl AsRef<std::ffi::OsStr> + Debug],
