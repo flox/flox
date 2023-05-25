@@ -10,6 +10,8 @@ use flox_rust_sdk::nix::Run;
 use flox_rust_sdk::prelude::Channel;
 use flox_types::stability::Stability;
 use fslock::LockFile;
+use indoc::indoc;
+use log::info;
 use serde::Serialize;
 use tokio::fs;
 use toml_edit::Key;
@@ -84,6 +86,20 @@ impl GeneralCommands {
                         _ => Err(err)?,
                     }
                 }
+
+                let notice = indoc! {"
+                    Sucessfully reset telemetry ID for this machine!
+
+                    A new ID will be assigned next time you use flox.
+
+                    The collection of metrics can be disabled in the following ways:
+
+                    environment: FLOX_DISABLE_METRICS=true
+                    user-wide: flox config --set-bool disable_metrics true
+                    system-wide: update /etc/flox.toml as described in flox(1)
+                "};
+
+                info!("{notice}");
             },
 
             GeneralCommands::Config(config_args) => config_args.handle(config, flox).await?,
