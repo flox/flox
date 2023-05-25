@@ -62,6 +62,9 @@ pub async fn init_telemetry(data_dir: impl AsRef<Path>, cache_dir: impl AsRef<Pa
 
     debug!("Metrics UUID not found, creating new user");
 
+    // Create new user uuid
+    let telemetry_uuid = uuid::Uuid::new_v4();
+
     // Generate a real metric to use as an example so they can see the field contents are non-threatening
     let now = OffsetDateTime::now_utc();
     let example_metric_entry = MetricEntry::new(Some("[subcommand]".to_string()), now);
@@ -73,7 +76,7 @@ pub async fn init_telemetry(data_dir: impl AsRef<Path>, cache_dir: impl AsRef<Pa
 
     // This isn't actually in the struct (gets added later),
     // so we put a placeholder in there to be more fair.
-    example_json["uuid"] = "[uuid generated]".into();
+    example_json["uuid"] = telemetry_uuid.to_string().into();
     // The default encoding is disturbing
     example_json["timestamp"] = now.to_string().into();
 
@@ -101,8 +104,8 @@ pub async fn init_telemetry(data_dir: impl AsRef<Path>, cache_dir: impl AsRef<Pa
     info!("{notice}");
 
     let mut file = tokio::fs::File::create(&uuid_path).await?;
-    let uuid = uuid::Uuid::new_v4();
-    file.write_all(uuid.to_string().as_bytes()).await?;
+    file.write_all(telemetry_uuid.to_string().as_bytes())
+        .await?;
     Ok(())
 }
 
