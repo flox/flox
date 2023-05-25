@@ -199,8 +199,8 @@ impl ConfigArgs {
                     key,
                     Some(
                         value
-                            .parse::<i32>()
-                            .context(format!("could not parse '{value}' as number"))?,
+                            .parse::<bool>()
+                            .context(format!("could not parse '{value}' as bool"))?,
                     ),
                 )
                 .await?
