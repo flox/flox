@@ -8,7 +8,8 @@
 : "${_grep:=grep}"
 : "${_sort:=sort}"
 : "${_gum:=gum}"
-if [ -z "${_floco_uri:-}" ]; then
+# TODO: Don't use `nix run' to call `semver'
+if [[ -z "${_floco_uri:-}" ]]; then
   _floco_uri=github:aakropotkin/floco
   _floco_uri="$_floco_uri/e1231f054258f7d62652109725881767765b1efb"
 fi
