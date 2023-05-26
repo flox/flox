@@ -9,15 +9,15 @@
 : "${_sort:=sort}"
 : "${_gum:=gum}"
 : "${_semver:=semver}"
+: "${_xargs:=xargs}"
 
 _general_commands+=("channels")
 _usage["channels"]="list channel subscriptions"
 _usage_options["channels"]="[--json]"
 function floxChannels() {
 	trace "$@"
-	local -a channelsArgs=()
 	local -i displayJSON=0
-	while test $# -gt 0; do
+	while [[ "$#" -gt 0 ]]; do
 		# 'flox list' args.
 		case "$1" in
 		--json) # takes zero args
@@ -32,15 +32,17 @@ function floxChannels() {
 			;;
 		esac
 	done
-	if [ $displayJSON -gt 0 ]; then
+	if [[ "$displayJSON" -gt 0 ]]; then
 		getChannelsJSON
 	else
-		local -a rows=($(getChannelsJSON | $_jq -r '
+		local -a rows;
+		read -ra rows < <( getChannelsJSON | $_jq -r '
 		  to_entries | sort_by(.key) | map(
 			"|\(.key)|\(.value.type)|\(.value.url)|"
-		  )[]
-		'))
-		$invoke_gum format --type="markdown" -- "|Channel|Type|URL|" "|---|---|---|" "${rows[@]}"
+		  )[]'
+		)
+		${invoke_gum?} format --type="markdown"                              \
+		               -- "|Channel|Type|URL|" "|---|---|---|" "${rows[@]}"
 	fi
 }
 
@@ -51,7 +53,7 @@ function floxSubscribe() {
 	trace "$@"
 	local flakeName
 	local flakeUrl
-	while test $# -gt 0; do
+	while [[ "$#" -gt 0 ]]; do
 		case "$1" in
 		-*)
 			usage | error "unknown option '$1'"
@@ -69,22 +71,27 @@ function floxSubscribe() {
 			;;
 		esac
 	done
-	if [ -z "$flakeName" ]; then
-		read -e -p "Enter channel name to be added: " flakeName
+	if [[ -z "$flakeName" ]]; then
+		read -er -p "Enter channel name to be added: " flakeName
 	fi
-	if [ ${validChannels["$flakeName"]+_} ]; then
+	if [[ ${validChannels["$flakeName"]+_} ]]; then
 		error "subscription already exists for channel '$flakeName'" < /dev/null
 	fi
-	[[ "$flakeName" =~ ^[a-zA-Z][a-zA-Z0-9_-]*$ ]] ||
+	if ! [[ "$flakeName" =~ ^[a-zA-Z][a-zA-Z0-9_-]*$ ]]; then
 		error "invalid channel name '$flakeName', valid regexp: ^[a-zA-Z][a-zA-Z0-9_-]*$" < /dev/null
-	if [ -z "$flakeUrl" ]; then
+	fi
+	if [[ -z "$flakeUrl" ]]; then
 		local prompt="Enter URL for '$flakeName' channel: "
 		local value
-		value=$(git_base_urlToFlakeURL ${git_base_url} ${flakeName}/floxpkgs master)
-		read -e -p "$prompt" -i "$value" flakeUrl
+		value="$(
+			git_base_urlToFlakeURL "${git_base_url?}" "$flakeName/floxpkgs"  \
+			                       master
+		)"
+		read -er -p "$prompt" -i "$value" flakeUrl
 	fi
-	validateFlakeURL "$flakeUrl" || \
+	if ! validateFlakeURL "$flakeUrl"; then
 		error "could not verify channel URL: \"$flakeUrl\"" < /dev/null
+	fi
 	floxUserMetaRegistry set channels "$flakeName" "$flakeUrl"
 	warn "subscribed channel '$flakeName'"
 }
@@ -95,13 +102,13 @@ _usage_options["unsubscribe"]="[<name>]"
 function floxUnsubscribe() {
 	trace "$@"
 	local flakeName
-	while test $# -gt 0; do
+	while [[ "$#" -gt 0 ]]; do
 		case "$1" in
 		-*)
 			usage | error "unknown option '$1'"
 			;;
 		*)
-			if [ -n "$flakeName" ]; then
+			if [[ -n "$flakeName" ]]; then
 				usage | error "extra argument '$1'"
 			else
 				flakeName="$1"; shift
@@ -109,24 +116,27 @@ function floxUnsubscribe() {
 			;;
 		esac
 	done
-	if [ -n "$flakeName" ]; then
-		if [ ! ${validChannels["$flakeName"]+_} ]; then
+	if [[ -n "$flakeName" ]]; then
+		if ! [[ ${validChannels["$flakeName"]+_} ]]; then
 			error "invalid channel '$flakeName'" < /dev/null
 		fi
-		if [ ${validChannels["$flakeName"]} == "flox" ]; then
+		if [[ "${validChannels["$flakeName"]}" == "flox" ]]; then
 			error "cannot unsubscribe from flox channel '$flakeName'" < /dev/null
 		fi
 	else
 		local -A userChannels
 		for i in "${!validChannels[@]}"; do
-			if [ "${validChannels["$i"]}" == "user" ]; then
+			if [[ ${validChannels["$i"]} = "user" ]]; then
 				userChannels["$i"]=1
 			fi
 		done
-		local -a sortedUserChannels=($(echo "${!userChannels[@]}" | $_xargs -n 1 | $_sort | $_xargs))
-		if [ ${#sortedUserChannels[@]} -gt 0 ]; then
+		local -a sortedUserChannels;
+		read -ra sortedUserChannels < <(
+			echo "${!userChannels[@]}" | $_xargs -n 1 | $_sort | $_xargs
+		)
+		if [[ "${#sortedUserChannels[@]}" -gt 0 ]]; then
 			warn "Select channel to unsubscribe: "
-			flakeName=$($_gum choose "${sortedUserChannels[@]}")
+			flakeName="$($_gum choose "${sortedUserChannels[@]}")"
 		else
 			error "no channel to unsubscribe" < /dev/null
 		fi
@@ -216,8 +226,8 @@ function floxSearch() {
 
 	runSearch() {
 	  if [[ "$jsonOutput" -gt 0 ]] || [[ -n "${semver:-}" ]]; then
-	  	searchChannels "$packageregexp" "${channels[@]}" $refreshArg | \
-	  		$_jq -r -f "$_lib/searchJSON.jq"
+		  searchChannels "$packageregexp" "${channels[@]}" $refreshArg | \
+			  $_jq -r -f "${_lib?}/searchJSON.jq"
 	  else
 	  	# Use grep to highlight text matches, but also include all the lines
 	  	# around the matches by using the `-C` context flag with a big number.
@@ -301,14 +311,14 @@ function floxConfig() {
 	local -i configRegistryMode=0
 	local configRegistryCmd
 	local -a configRegistryArgs
-	while [ $# -ne 0 ]; do
+	while [[ "$#" -gt 0 ]]; do
 		case "$1" in
 		--list|-l)
 			configListMode=1; shift
 			;;
 		--set|-s)
 			configRegistryMode=1; shift
-			configRegistryCmd=set
+			configRegistryCmd='set'
 			configRegistryArgs+=("$1"); shift
 			configRegistryArgs+=("$1"); shift
 			;;
@@ -328,25 +338,27 @@ function floxConfig() {
 			;;
 		--confirm|-c)
 			getPromptSetConfirm=1; shift
+			export getPromptSetConfirm
 			;;
 		*)
 			usage | error "extra argument '$1'"
 			;;
 		esac
 	done
-	if [ $configListMode -eq 0 ]; then
-		if [ $configResetMode -eq 1 ]; then
+	if [[ "$configListMode" -eq 0 ]]; then
+		if [[ "$configResetMode" -eq 1 ]]; then
 			# Forcibly wipe out contents of floxUserMeta.json and start over.
-			$_jq -n -r -S '{channels:{},version:1}' |
-				initFloxUserMetaJSON "$userFloxMetaCloneDir" "reset: floxUserMeta.json"
+			$_jq -n -r -S '{channels:{},version:1}' | \
+				initFloxUserMetaJSON                                     \
+				  "${userFloxMetaCloneDir?}" "reset: floxUserMeta.json"
 			bootstrap
-		elif [ $configRegistryMode -eq 1 ]; then
-			floxUserMetaRegistry $configRegistryCmd ${configRegistryArgs[@]}
+		elif [[ "$configRegistryMode" -eq 1 ]]; then
+			floxUserMetaRegistry $configRegistryCmd "${configRegistryArgs[@]}"
 		fi
 	fi
 	# Finish by listing values.
-	floxUserMetaRegistry dump |
-		$_jq -r 'del(.version) | to_entries | map("\(.key) = \"\(.value)\"") | .[]'
+	floxUserMetaRegistry dump | $_jq -r '
+	  del(.version) | to_entries | map("\(.key) = \"\(.value)\"") | .[]'
 }
 
 _general_commands+=("gh")
@@ -357,11 +369,13 @@ _usage["(envs|environments)"]="list all available environments"
 function floxEnvironments() {
 	trace "$@"
 	local system="$1"; shift
-	[ $# -eq 0 ] || usage | error "the 'flox environments' command takes no arguments"
+	if [[ "$#" -ne 0 ]]; then
+		usage | error "the 'flox environments' command takes no arguments"
+	fi
 	# For each environmentMetaDir, list environment
-	for i in $FLOX_META/*; do
-		if [ -d $i ]; then
-			[ -L $i ] || listEnvironments $system $i
+	for i in "$FLOX_META/"*; do
+		if [[ -d "$i" ]] && { ! [[ -L "$i" ]]; }; then
+			listEnvironments "$system" "$i"
 		fi
 	done
 }
