@@ -1,5 +1,19 @@
 ## General commands
 
+# Set utility fallbacks
+: "${_jq:=jq}"
+: "${_nix:=nix}"
+: "${_sed:=sed}"
+: "${_column:=column}"
+: "${_grep:=grep}"
+: "${_sort:=sort}"
+: "${_gum:=gum}"
+if [ -z "${_floco_uri:-}" ]; then
+  _floco_uri=github:aakropotkin/floco
+  _floco_uri="$_floco_uri/e1231f054258f7d62652109725881767765b1efb"
+fi
+: "${_semver:=$_nix run '$_floco_uri#semver' --}"
+
 _general_commands+=("channels")
 _usage["channels"]="list channel subscriptions"
 _usage_options["channels"]="[--json]"
@@ -138,7 +152,9 @@ function floxSearch() {
 	declare showDetail="false"
 	declare refreshArg
 	declare -a channels=()
-	while test $# -gt 0; do
+	semver=
+	semverRange='*'
+	while test "$#" -gt 0; do
 		case "$1" in
 		-c | --channel)
 			shift
@@ -165,17 +181,25 @@ function floxSearch() {
 			showDetail="true"
 			shift
 			;;
+		*@*)  # Semver
+			semver=:
+			semverRange="${1##*@}"
+			_pkg="${1%@*}"
+			shift
+			set -- "$_pkg" "$@"
+			unset _pkg
+		    ;;
 		*)
-			if [ "$subcommand" = "packages" ]; then
+			if [ "${subcommand:-}" = "packages" ]; then
 				# Expecting a channel name (and optionally a jobset).
 				packageregexp="^$1\."
-			elif [ -z "$packageregexp" ]; then
+			elif [ -z "${packageregexp:-}" ]; then
 				# Expecting a package name (or part of a package name)
 				packageregexp="$1"
 				# In the event that someone has passed a space or "|"-separated
 				# search term (thank you Eelco :-\), turn that into an equivalent
 				# regexp.
-				if [[ "$packageregexp" =~ [:space:] ]]; then
+				if [[ "${packageregexp:-}" =~ [:space:] ]]; then
 					packageregexp="(${packageregexp// /|})"
 				fi
 			else
@@ -185,27 +209,85 @@ function floxSearch() {
 			;;
 		esac
 	done
-	[ -n "$packageregexp" ] ||
+	[ -n "${packageregexp:-}" ] ||
 		usage | error "missing channel argument"
-	[ -z "$@" ] ||
-		usage | error "extra arguments \"$@\""
-	if [ -z "$GREP_COLOR" ]; then
-		export GREP_COLOR='1;32'
-	fi
-	if [ $jsonOutput -gt 0 ]; then
-		searchChannels "$packageregexp" ${channels[@]} $refreshArg | \
-			$_jq -r -f "$_lib/searchJSON.jq"
+	[ -z "$*" ] ||
+		usage | error "extra arguments \"$*\""
+	: "${GREP_COLOR=1;32}"
+	export GREP_COLOR
+
+	runSearch() {
+	  if [ $jsonOutput -gt 0 ] || [ -n "${semver:-}" ]; then
+	  	searchChannels "$packageregexp" "${channels[@]}" $refreshArg | \
+	  		$_jq -r -f "$_lib/searchJSON.jq"
+	  else
+	  	# Use grep to highlight text matches, but also include all the lines
+	  	# around the matches by using the `-C` context flag with a big number.
+	  	# It's also unfortunate that the Linux version of `column` which
+	  	# supports the `--keep-empty-lines` option is not available on Darwin,
+	  	# so we instead embed a line with "---" between groupings and then use
+	  	# `sed` below to replace it with a blank line.
+	  	searchChannels "$packageregexp" "${channels[@]}" $refreshArg | \
+	  		$_jq -r -f --argjson showDetail "$showDetail" "$_lib/search.jq" | \
+	  		$_column -t -s "|" | $_sed 's/^---$//' | \
+	  		$_grep -C 1000000 --ignore-case --color -E "$packageregexp"
+	  fi
+	}
+
+	if [ -z "${semver:-}" ]; then
+		runSearch
 	else
-		# Use grep to highlight text matches, but also include all the lines
-		# around the matches by using the `-C` context flag with a big number.
-		# It's also unfortunate that the Linux version of `column` which
-		# supports the `--keep-empty-lines` option is not available on Darwin,
-		# so we instead embed a line with "---" between groupings and then use
-		# `sed` below to replace it with a blank line.
-		searchChannels "$packageregexp" ${channels[@]} $refreshArg | \
-			$_jq -r -f --argjson showDetail $showDetail "$_lib/search.jq" | \
-			$_column -t -s "|" | $_sed 's/^---$//' | \
-			$_grep -C 1000000 --ignore-case --color -E "$packageregexp"
+		local matchesJSON keepVersionsJSON keepsJSON;
+		matchesJSON="$(mkTempFile)"
+		keepVersionsJSON="$(mkTempFile)"
+		keepsJSON="$(mkTempFile)"
+		runSearch > "$matchesJSON"
+		#shellcheck disable=SC2046
+		$_semver --loose --range "$semverRange"                          \
+				$($_jq -r 'map( .version )[]' "$matchesJSON"|$_sort -u)  \
+			|$_jq -Rsc 'split( "\n" )|map( select( . != "" ) )'          \
+			> "$keepVersionsJSON"
+		#shellcheck disable=SC2016
+		$_jq --slurpfile keeps "$keepVersionsJSON" '
+		  map( select( 0 <= ( $keeps|bsearch( .version  ) ) ) )
+		' "$matchesJSON" > "$keepsJSON"
+		if [ "$jsonOutput" -le 0 ]; then
+			#shellcheck disable=SC2016
+			$_jq -r -f --argjson showDetail "$showDetail" '
+# Then create arrays of result lines indexed under floxref.
+reduce .[] as $x (
+  {};
+  "  " as $indent |
+  "\($x.floxref)" as $f |
+  (
+    if $x.description == null or $x.description == ""
+    then "\($x.alias)"
+    else "\($x.alias) - \($x.description)"
+    end
+  ) as $header |
+  "\($x.stability).\($x.floxref)@\($x.version)" as $line |
+  # The first time seeing a floxref construct an array containing a
+  # header as the previous value, otherwise use the previous array.
+  ( if .[$f] then .[$f] else [$header] end ) as $prev |
+  ( if $showDetail then ($prev + [($indent + $line)]) else $prev end ) as $result |
+  . * { "\($f)": $result }
+) |
+
+# Sort by key.
+to_entries | sort_by(.key) |
+# Join floxref arrays by newline.
+map(.value | join("\n")) |
+# Our desire is to separate groupings of output with a newline but
+# unfortunately the Linux version of `column` which supports the
+# `--keep-empty-lines` option is not available on Darwin, so we
+# instead place a line with "---" between groupings and then use
+# `sed` to remove that on the flox.sh end.
+( if $showDetail then "\n---\n" else "\n" end ) as $joinString |
+join($joinString)' "$keepsJSON"                    \
+	  		|$_column -t -s "|"|$_sed 's/^---$//'
+		else
+			echo "$(< "$keepsJSON")"
+		fi
 	fi
 }
 
