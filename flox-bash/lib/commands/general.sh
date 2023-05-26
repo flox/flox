@@ -216,7 +216,7 @@ function floxSearch() {
 	if [[ "$#" -gt 0 ]]; then
 		usage | error "extra arguments \"$*\""
 	fi
-	: "${GREP_COLOR=1;32}"
+	: "${GREP_COLOR:=1;32}"
 	export GREP_COLOR
 
 	runSearch() {
