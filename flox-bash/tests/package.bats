@@ -46,7 +46,7 @@ load test_support.bash
 }
 
 @test "tear down install test state" {
-  run $FLOX_CLI destroy -e "$TEST_ENVIRONMENT" --origin -f
+  run $FLOX_CLI destroy -e "$TEST_ENVIRONMENT" --origin -f||:
   assert_output --partial "WARNING: you are about to delete the following"
   assert_output --partial "Deleted branch"
   assert_output --partial "removed"

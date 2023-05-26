@@ -74,6 +74,7 @@ LIB = \
 	lib/registry.jq \
 	lib/search.jq \
 	lib/searchJSON.jq \
+	lib/catalog-search.jq \
 	lib/utils.sh \
 	lib/catalog-ingest/flake.nix \
 	lib/catalog-ingest/lib/analysis.nix \

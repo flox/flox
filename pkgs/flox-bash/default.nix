@@ -34,6 +34,7 @@
   substituteAll,
   util-linuxMinimal,
   which,
+  semver,
 }: let
   # The getent package can be found in pkgs.unixtools.
   inherit (pkgs.unixtools) getent;
@@ -116,6 +117,7 @@ in
       nixPatched
       nix-editor
       util-linuxMinimal
+      semver
     ];
     makeFlags =
       [
