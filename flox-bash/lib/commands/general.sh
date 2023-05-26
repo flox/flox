@@ -154,7 +154,7 @@ function floxSearch() {
 	declare -a channels=()
 	semver=
 	semverRange='*'
-	while test "$#" -gt 0; do
+	while [[ "$#" -gt 0 ]]; do
 		case "$1" in
 		-c | --channel)
 			shift
@@ -209,17 +209,17 @@ function floxSearch() {
 			;;
 		esac
 	done
-	if [ -z "${packageregexp:-}" ]; then
+	if [[ -z "${packageregexp:-}" ]]; then
 		usage | error "missing channel argument"
 	fi
-	if [ "$#" -gt 0 ]; then
+	if [[ "$#" -gt 0 ]]; then
 		usage | error "extra arguments \"$*\""
 	fi
 	: "${GREP_COLOR=1;32}"
 	export GREP_COLOR
 
 	runSearch() {
-	  if [ "$jsonOutput" -gt 0 ] || [ -n "${semver:-}" ]; then
+	  if [[ "$jsonOutput" -gt 0 ]] || [[ -n "${semver:-}" ]]; then
 	  	searchChannels "$packageregexp" "${channels[@]}" $refreshArg | \
 	  		$_jq -r -f "$_lib/searchJSON.jq"
 	  else
@@ -236,28 +236,28 @@ function floxSearch() {
 	  fi
 	}
 
-	if [ -z "${semver:-}" ]; then
+	if [[ -z "${semver:-}" ]]; then
 		# You're done!
 		runSearch
-	elif [ "$semverRange" = "*" ]; then
+	elif [[ "$semverRange" = '*' ]]; then
 		# '*' matches all versions, so there's no reason to perform filtering
 		showDetail='true'
 		runSearch
 	else
 		# Semver Search requires additional processing.
-		local matchesJSON versionsJSON keepVersionsJSON keepsJSON;
+		local matchesJSON versionsList keepVersionsJSON keepsJSON;
 		matchesJSON="$(mkTempFile)"
-		versionsJSON="$(mkTempFile)"
+		versionsList="$(mkTempFile)"
 		keepVersionsJSON="$(mkTempFile)"
 		keepsJSON="$(mkTempFile)"
 		# Run regular JSON search and stash the results.
 		runSearch > "$matchesJSON"
 		# Extract the version numbers
-		$_jq -r 'map( .version )[]' "$matchesJSON"|$_sort -u > "$versionsJSON"
+		$_jq -r 'map( .version )[]' "$matchesJSON"|$_sort -u > "$versionsList"
 
 		# Get a list of satisfactory versions, and stash them to a file.
 		#shellcheck disable=SC2046
-		$_semver --coerce --loose --range "$semverRange" $(< "$versionsJSON")  \
+		$_semver --coerce --loose --range "$semverRange" $(< "$versionsList")  \
 			|$_jq -Rsc 'split( "\n" )|map( select( . != "" ) )'                \
 			> "$keepVersionsJSON"
 
@@ -271,7 +271,7 @@ function floxSearch() {
 		# Post-process results to match `flox search -v'
 		# TODO: Move snippet to a separate file.
 		# TODO: Refactor `search.jq' and `searchJSON.jq' for D.R.Y.
-		if [ "$jsonOutput" -le 0 ]; then
+		if [[ "$jsonOutput" -le 0 ]]; then
 			#shellcheck disable=SC2016
 			$_jq -r '
 map( . += { floxref: ( .channel + "." + .attrPath ) } )|reduce .[] as $x ( {};
@@ -283,9 +283,9 @@ map( . += { floxref: ( .channel + "." + .attrPath ) } )|reduce .[] as $x ( {};
   # The first time seeing a floxref construct an array containing a
   # header as the previous value, otherwise use the previous array.
   ( if .[$f] then .[$f] else [$header] end ) as $prev|
-  ( $prev + [($indent + $line)] ) as $result|. * { "\($f)": $result }
+  ( $prev + [( $indent + $line )] ) as $result|. * { "\($f)": $result }
 # Sort by key and join floxref arrays by newline.
-)|to_entries|sort_by( .key )|map( .value|join( "\n" ) )|join("\n---\n")
+)|to_entries|sort_by( .key )|map( .value|join( "\n" ) )|join( "\n---\n" )
 			  ' "$keepsJSON"|$_column -t -s "|"|$_sed 's/^---$//'
 		else
 			echo "$(< "$keepsJSON")"
