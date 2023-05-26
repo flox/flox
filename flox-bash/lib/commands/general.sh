@@ -190,10 +190,10 @@ function floxSearch() {
 			unset _pkg
 		    ;;
 		*)
-			if [ "${subcommand:-}" = "packages" ]; then
+			if [[ "${subcommand:-}" = "packages" ]]; then
 				# Expecting a channel name (and optionally a jobset).
 				packageregexp="^$1\."
-			elif [ -z "${packageregexp:-}" ]; then
+			elif [[ -z "${packageregexp:-}" ]]; then
 				# Expecting a package name (or part of a package name)
 				packageregexp="$1"
 				# In the event that someone has passed a space or "|"-separated
