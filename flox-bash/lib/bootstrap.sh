@@ -25,12 +25,12 @@ function bootstrap() {
 	floxUserMetaRegistry get floxClientUUID >/dev/null || \
 		floxUserMetaRegistry set floxClientUUID $($_uuid)
 	floxClientUUID=$(floxUserMetaRegistry get floxClientUUID)
-	if [ -t 1 ] && [ -z "$PS1" ]; then
+	if [ -t 1 ] && [ -z "${PS1:-}" ]; then
 		# Interactive mode
 		interactive=1
 
 		# Collect the user's express consent to submit telemetry data.
-		if [ -z "$FLOX_DISABLE_METRICS" ]; then
+		if [ -z "${FLOX_DISABLE_METRICS:-}" ]; then
 			if ! floxMetricsConsent=$(floxUserMetaRegistry get floxMetricsConsent); then
 				info ""
 				info "flox collects basic usage metrics in order to improve the user experience,"
@@ -62,7 +62,7 @@ function bootstrap() {
 		#
 		# Non-interactive mode. Use all defaults if not found in registry.
 		#
-		if [ -z "$FLOX_DISABLE_METRICS" ]; then
+		if [ -z "${FLOX_DISABLE_METRICS:-}" ]; then
 			floxMetricsConsent=$(floxUserMetaRegistry get floxMetricsConsent) || \
 				floxMetricsConsent=0
 		fi
