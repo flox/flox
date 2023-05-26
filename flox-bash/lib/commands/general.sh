@@ -225,9 +225,9 @@ function floxSearch() {
 	export GREP_COLOR
 
 	runSearch() {
-	  if [[ "$jsonOutput" -gt 0 ]] || [[ -n "${semver:-}" ]]; then
+	  if [[ "$jsonOutput" -gt 0 ]]; then
 		  searchChannels "$packageregexp" "${channels[@]}" $refreshArg | \
-			  $_jq -r -f "${_lib?}/searchJSON.jq"
+			  $_jq -L "${_lib?}" -rf "${_lib?}/searchJSON.jq"
 	  else
 	  	# Use grep to highlight text matches, but also include all the lines
 	  	# around the matches by using the `-C` context flag with a big number.
@@ -235,9 +235,10 @@ function floxSearch() {
 	  	# supports the `--keep-empty-lines` option is not available on Darwin,
 	  	# so we instead embed a line with "---" between groupings and then use
 	  	# `sed` below to replace it with a blank line.
-	  	searchChannels "$packageregexp" "${channels[@]}" $refreshArg | \
-	  		$_jq -r -f --argjson showDetail "$showDetail" "$_lib/search.jq" | \
-	  		$_column -t -s "|" | $_sed 's/^---$//' | \
+	  	searchChannels "$packageregexp" "${channels[@]}" $refreshArg |   \
+	  		$_jq -L "${_lib?}" -r --argjson showDetail "$showDetail"     \
+			     -f "$_lib/search.jq" |                                  \
+	  		$_column -t -s "|" | $_sed 's/^---$//' |                     \
 	  		$_grep -C 1000000 --ignore-case --color -E "$packageregexp"
 	  fi
 	}
@@ -256,8 +257,12 @@ function floxSearch() {
 		versionsList="$(mkTempFile)"
 		keepVersionsJSON="$(mkTempFile)"
 		keepsJSON="$(mkTempFile)"
-		# Run regular JSON search and stash the results.
-		runSearch > "$matchesJSON"
+		# Run search and stash results for post-processing.
+		# This is like `searchJSON.jq' but includes a `floxref' field.
+		searchChannels "$packageregexp" "${channels[@]}" $refreshArg | \
+		  $_jq -L "${_lib?}" -r 'include "catalog-search";
+		    to_entries|map( nixCatalogPkgToSearchEntry )' > "$matchesJSON";
+
 		# Extract the version numbers
 		$_jq -r 'map( .version )[]' "$matchesJSON"|$_sort -u > "$versionsList"
 
@@ -269,32 +274,20 @@ function floxSearch() {
 
 		# Filter original results to those with satisfactory versions.
 		#shellcheck disable=SC2016
-		$_jq --slurpfile keeps "$keepVersionsJSON" '
+		$_jq -c --slurpfile keeps "$keepVersionsJSON" '
 		  map( .version as $v|select( $keeps[]|any(
 		    ( . == $v ) or ( . == ( $v + ".0" ) ) or ( . == ( $v + ".0.0" ) )
 		  ) ) )' "$matchesJSON" > "$keepsJSON"
 
 		# Post-process results to match `flox search -v'
-		# TODO: Move snippet to a separate file.
-		# TODO: Refactor `search.jq' and `searchJSON.jq' for D.R.Y.
 		if [[ "$jsonOutput" -le 0 ]]; then
 			#shellcheck disable=SC2016
-			$_jq -r '
-map( . += { floxref: ( .channel + "." + .attrPath ) } )|reduce .[] as $x ( {};
-  "  " as $indent|"\($x.floxref)" as $f|
-  ( if $x.description == null or $x.description == ""
-    then "\($x.alias)" else "\($x.alias) - \($x.description)" end
-  ) as $header|
-  "\($x.stability).\($x.floxref)@\($x.version)" as $line|
-  # The first time seeing a floxref construct an array containing a
-  # header as the previous value, otherwise use the previous array.
-  ( if .[$f] then .[$f] else [$header] end ) as $prev|
-  ( $prev + [( $indent + $line )] ) as $result|. * { "\($f)": $result }
-# Sort by key and join floxref arrays by newline.
-)|to_entries|sort_by( .key )|map( .value|join( "\n" ) )|join( "\n---\n" )
-			  ' "$keepsJSON"|$_column -t -s "|"|$_sed 's/^---$//'
+			$_jq -L "${_lib?}" -r 'include "catalog-search";
+			  searchEntriesToPretty( true )
+			' "$keepsJSON"|$_column -t -s "|"|$_sed 's/^---$//'             \
+	  		  |$_grep -C 1000000 --ignore-case --color -E "$packageregexp"
 		else
-			echo "$(< "$keepsJSON")"
+			$_jq . "$keepsJSON"
 		fi
 	fi
 }
