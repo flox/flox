@@ -12,7 +12,7 @@ if [ -z "${_floco_uri:-}" ]; then
   _floco_uri=github:aakropotkin/floco
   _floco_uri="$_floco_uri/e1231f054258f7d62652109725881767765b1efb"
 fi
-: "${_semver:=$_nix run '$_floco_uri#semver' --}"
+: "${_semver:=$_nix run $_floco_uri#semver --}"
 
 _general_commands+=("channels")
 _usage["channels"]="list channel subscriptions"
@@ -209,15 +209,17 @@ function floxSearch() {
 			;;
 		esac
 	done
-	[ -n "${packageregexp:-}" ] ||
+	if [ -z "${packageregexp:-}" ]; then
 		usage | error "missing channel argument"
-	[ -z "$*" ] ||
+	fi
+	if [ "$#" -gt 0 ]; then
 		usage | error "extra arguments \"$*\""
+	fi
 	: "${GREP_COLOR=1;32}"
 	export GREP_COLOR
 
 	runSearch() {
-	  if [ $jsonOutput -gt 0 ] || [ -n "${semver:-}" ]; then
+	  if [ "$jsonOutput" -gt 0 ] || [ -n "${semver:-}" ]; then
 	  	searchChannels "$packageregexp" "${channels[@]}" $refreshArg | \
 	  		$_jq -r -f "$_lib/searchJSON.jq"
 	  else
@@ -235,56 +237,56 @@ function floxSearch() {
 	}
 
 	if [ -z "${semver:-}" ]; then
+		# You're done!
+		runSearch
+	elif [ "$semverRange" = "*" ]; then
+		# '*' matches all versions, so there's no reason to perform filtering
+		showDetail='true'
 		runSearch
 	else
-		local matchesJSON keepVersionsJSON keepsJSON;
+		# Semver Search requires additional processing.
+		local matchesJSON versionsJSON keepVersionsJSON keepsJSON;
 		matchesJSON="$(mkTempFile)"
+		versionsJSON="$(mkTempFile)"
 		keepVersionsJSON="$(mkTempFile)"
 		keepsJSON="$(mkTempFile)"
+		# Run regular JSON search and stash the results.
 		runSearch > "$matchesJSON"
+		# Extract the version numbers
+		$_jq -r 'map( .version )[]' "$matchesJSON"|$_sort -u > "$versionsJSON"
+
+		# Get a list of satisfactory versions, and stash them to a file.
 		#shellcheck disable=SC2046
-		$_semver --loose --range "$semverRange"                          \
-				$($_jq -r 'map( .version )[]' "$matchesJSON"|$_sort -u)  \
-			|$_jq -Rsc 'split( "\n" )|map( select( . != "" ) )'          \
+		$_semver --coerce --loose --range "$semverRange" $(< "$versionsJSON")  \
+			|$_jq -Rsc 'split( "\n" )|map( select( . != "" ) )'                \
 			> "$keepVersionsJSON"
+
+		# Filter original results to those with satisfactory versions.
 		#shellcheck disable=SC2016
 		$_jq --slurpfile keeps "$keepVersionsJSON" '
-		  map( select( 0 <= ( $keeps|bsearch( .version  ) ) ) )
-		' "$matchesJSON" > "$keepsJSON"
+		  map( .version as $v|select( $keeps[]|any(
+		    ( . == $v ) or ( . == ( $v + ".0" ) ) or ( . == ( $v + ".0.0" ) )
+		  ) ) )' "$matchesJSON" > "$keepsJSON"
+
+		# Post-process results to match `flox search -v'
+		# TODO: Move snippet to a separate file.
+		# TODO: Refactor `search.jq' and `searchJSON.jq' for D.R.Y.
 		if [ "$jsonOutput" -le 0 ]; then
 			#shellcheck disable=SC2016
-			$_jq -r -f --argjson showDetail "$showDetail" '
-# Then create arrays of result lines indexed under floxref.
-reduce .[] as $x (
-  {};
-  "  " as $indent |
-  "\($x.floxref)" as $f |
-  (
-    if $x.description == null or $x.description == ""
-    then "\($x.alias)"
-    else "\($x.alias) - \($x.description)"
-    end
-  ) as $header |
-  "\($x.stability).\($x.floxref)@\($x.version)" as $line |
+			$_jq -r '
+map( . += { floxref: ( .channel + "." + .attrPath ) } )|reduce .[] as $x ( {};
+  "  " as $indent|"\($x.floxref)" as $f|
+  ( if $x.description == null or $x.description == ""
+    then "\($x.alias)" else "\($x.alias) - \($x.description)" end
+  ) as $header|
+  "\($x.stability).\($x.floxref)@\($x.version)" as $line|
   # The first time seeing a floxref construct an array containing a
   # header as the previous value, otherwise use the previous array.
-  ( if .[$f] then .[$f] else [$header] end ) as $prev |
-  ( if $showDetail then ($prev + [($indent + $line)]) else $prev end ) as $result |
-  . * { "\($f)": $result }
-) |
-
-# Sort by key.
-to_entries | sort_by(.key) |
-# Join floxref arrays by newline.
-map(.value | join("\n")) |
-# Our desire is to separate groupings of output with a newline but
-# unfortunately the Linux version of `column` which supports the
-# `--keep-empty-lines` option is not available on Darwin, so we
-# instead place a line with "---" between groupings and then use
-# `sed` to remove that on the flox.sh end.
-( if $showDetail then "\n---\n" else "\n" end ) as $joinString |
-join($joinString)' "$keepsJSON"                    \
-	  		|$_column -t -s "|"|$_sed 's/^---$//'
+  ( if .[$f] then .[$f] else [$header] end ) as $prev|
+  ( $prev + [($indent + $line)] ) as $result|. * { "\($f)": $result }
+# Sort by key and join floxref arrays by newline.
+)|to_entries|sort_by( .key )|map( .value|join( "\n" ) )|join("\n---\n")
+			  ' "$keepsJSON"|$_column -t -s "|"|$_sed 's/^---$//'
 		else
 			echo "$(< "$keepsJSON")"
 		fi
