@@ -8,12 +8,7 @@
 : "${_grep:=grep}"
 : "${_sort:=sort}"
 : "${_gum:=gum}"
-# TODO: Don't use `nix run' to call `semver'
-if [[ -z "${_floco_uri:-}" ]]; then
-  _floco_uri=github:aakropotkin/floco
-  _floco_uri="$_floco_uri/e1231f054258f7d62652109725881767765b1efb"
-fi
-: "${_semver:=$_nix run $_floco_uri#semver --}"
+: "${_semver:=semver}"
 
 _general_commands+=("channels")
 _usage["channels"]="list channel subscriptions"
