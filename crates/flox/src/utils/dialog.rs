@@ -1,3 +1,4 @@
+use std::env;
 use std::fmt::Display;
 
 use crossterm::tty::IsTty;
@@ -124,7 +125,14 @@ impl<'a, T: Display + Send + 'static> Dialog<'a, Select<T>> {
 impl Dialog<'_, ()> {
     /// True if stderr and stdin are ttys
     pub fn can_prompt() -> bool {
-        std::io::stderr().is_tty() && std::io::stdin().is_tty()
+        // able to prompt user
+        let open_stderr = std::io::stderr().is_tty();
+        // able to receive input
+        let open_stdin = std::io::stdin().is_tty();
+        // "probably" an interactive shell session
+        let shell_prompt_present = env::var("PS1").is_ok();
+
+        open_stderr && open_stdin && shell_prompt_present
     }
 }
 
