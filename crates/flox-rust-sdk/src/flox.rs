@@ -445,7 +445,7 @@ impl Flox {
     ///
     /// The constructor will perform backend specific configuration measures
     /// and return a fresh initialized backend.
-    pub fn nix<Nix: FloxNixApi>(&self, extra_args: Vec<String>) -> Nix {
+    pub fn nix<Nix: FloxNixApi>(&self, mut caller_extra_args: Vec<String>) -> Nix {
         use std::io::Write;
         use std::os::unix::prelude::OpenOptionsExt;
 
@@ -542,6 +542,9 @@ impl Flox {
         let common_args = NixCommonArgs {
             ..Default::default()
         };
+
+        let mut extra_args = vec!["--quiet".to_string(), "--quiet".to_string()];
+        extra_args.append(&mut caller_extra_args);
 
         let default_nix_args = DefaultArgs {
             environment,
