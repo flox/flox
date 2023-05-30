@@ -142,12 +142,15 @@ function gitInitFloxmeta() {
 	# Set initial branch with `-c init.defaultBranch=` instead of
 	# `--initial-branch=` to stay compatible with old version of
 	# git, which will ignore unrecognized `-c` options.
-	$invoke_git -c init.defaultBranch="${defaultBranch}" init --quiet "$repoDir"
+	$invoke_git -c init.defaultBranch="${defaultBranch}" init --bare --quiet "$repoDir"
 	$invoke_git -C "$repoDir" config pull.rebase true
 	$invoke_git -C "$repoDir" config receive.denyCurrentBranch updateInstead
 	# A commit is needed in order to make the branch visible.
-	$invoke_git -C "$repoDir" commit --quiet --allow-empty \
+	local tmpDir="$(mkTempDir)"
+	$invoke_git clone --quiet --shared "$repoDir" "$tmpDir"
+	$invoke_git -C "$tmpDir" commit --quiet --allow-empty \
 		-m "$USER created repository"
+	$invoke_git -C "$tmpDir" push --quiet origin $defaultBranch
 }
 
 # XXX TEMPORARY function to convert old-style "1.json" -> "1/manifest.json"
@@ -332,33 +335,6 @@ function temporaryAssert009LinkLayout() {
 }
 # /XXX
 
-#
-# gitCheckout($repoDir,$branch)
-#
-function gitCheckout() {
-	trace "$@"
-	local repoDir="$1"; shift
-	local branch="$1"; shift
-	[ -d "$repoDir" ] || gitInitFloxmeta "$repoDir"
-
-	# Confirm or checkout the desired branch.
-	local currentBranch=
-	if [ -d "$repoDir" ]; then
-		currentBranch=$($_git -C "$repoDir" branch --show-current)
-	fi
-	[ "$currentBranch" = "$branch" ] || {
-		if $_git -C "$repoDir" show-ref --quiet refs/heads/"$branch"; then
-			$_git -C "$repoDir" checkout --quiet "$branch"
-		else
-			$_git -C "$repoDir" checkout --quiet --orphan "$branch"
-			$_git -C "$repoDir" ls-files | $_xargs --no-run-if-empty $_git -C "$repoDir" rm --quiet -f
-			# A commit is needed in order to make the branch visible.
-			$_git -C "$repoDir" commit --quiet --allow-empty \
-				-m "$USER created profile"
-		fi
-	}
-}
-
 # githubHelperGit()
 #
 # Invokes git in provided directory with github helper configured.
@@ -374,10 +350,6 @@ function metaGit() {
 	local environment="$1"; shift
 	# set $branchName,$floxNixDir,$environment{Name,Alias,Owner,System,BaseDir,BinDir,ParentDir,MetaDir}
 	eval $(decodeEnvironment "$environment")
-
-	# First verify that the clone is not out of date and check
-	# out requested branch.
-	gitCheckout "$environmentMetaDir" "$branchName"
 
 	githubHelperGit -C "$environmentMetaDir" "$@"
 }
@@ -425,9 +397,6 @@ function syncEnvironment() {
 	local snippet
 	snippet=$(environmentRegistry "$workDir" "$environment" syncGenerations)
 	eval "$snippet" || true
-
-	# FIXME REFACTOR based on detecting actual change.
-	[ -z "$_cline" ] || metaGit "$environment" add "metadata.json"
 }
 
 function commitMessage() {

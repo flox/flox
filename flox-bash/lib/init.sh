@@ -135,10 +135,6 @@ fi
 # Path for floxmeta clone for current user (for access to floxmain).
 declare userFloxMetaCloneDir="$FLOX_META/$defaultEnvironmentOwner"
 
-# Define place to store user-specific metadata separate
-# from profile metadata.
-declare OLDfloxUserMeta="$FLOX_CONFIG_HOME/floxUserMeta.json"
-
 # Define location for user-specific flox flake registry.
 declare floxFlakeRegistry="$FLOX_CONFIG_HOME/floxFlakeRegistry.json"
 
