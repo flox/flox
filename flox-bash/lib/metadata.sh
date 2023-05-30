@@ -150,7 +150,7 @@ function gitInitFloxmeta() {
 	$invoke_git clone --quiet --shared "$repoDir" "$tmpDir"
 	$invoke_git -C "$tmpDir" commit --quiet --allow-empty \
 		-m "$USER created repository"
-	$invoke_git -C "$tmpDir" push --quiet --set-upstream origin $defaultBranch
+	$invoke_git -C "$tmpDir" push --quiet origin $defaultBranch
 }
 
 # XXX TEMPORARY function to convert old-style "1.json" -> "1/manifest.json"
