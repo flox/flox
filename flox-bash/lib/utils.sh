@@ -667,21 +667,8 @@ function floxUserMetaRegistry() {
 	# the temporary $floxUserMeta file in the local filesystem.
 	if [ ! -s $floxUserMeta ]; then
 		local floxUserMetaTemplate='{"channels":{}, "version":1}'
-		if [ -f $OLDfloxUserMeta ]; then
-			# XXX TEMPORARY: migrate data from ~/.config/floxUserMeta.json.
-			# XXX Delete after 20230331.
-			$_jq -r -S --argjson floxUserMetaTemplate "$floxUserMetaTemplate" '
-				del(.channels."flox") |
-				del(.channels."nixpkgs") |
-				del(.channels."nixpkgs-flox") as $old |
-				( $floxUserMetaTemplate * $old )
-			' $OLDfloxUserMeta |
-				initFloxUserMetaJSON "init: floxUserMeta.json (migrated from <=0.0.9)"
-			$_rm -f $OLDfloxUserMeta
-		else
-			$_jq -n -r -S "$floxUserMetaTemplate" |
-				initFloxUserMetaJSON "init: floxUserMeta.json"
-		fi
+		$_jq -n -r -S "$floxUserMetaTemplate" |
+			initFloxUserMetaJSON "init: floxUserMeta.json"
 		$_git -C "$userFloxMetaCloneDir" show "$defaultBranch:floxUserMeta.json" >$floxUserMeta
 	fi
 
