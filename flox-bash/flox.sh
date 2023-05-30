@@ -12,7 +12,6 @@ declare -i verbose=0
 declare -i debug=0
 
 # Declare global variables
-declare -i floxMetricsConsent=0
 declare -i educatePublish=0
 declare -i interactive=0
 
@@ -137,9 +136,6 @@ declare -a environments=()
 
 # Build log message as we go.
 logMessage=
-
-# Add metric for this invocation in the background.
-submitMetric "$subcommand" &
 
 case "$subcommand" in
 

@@ -28,6 +28,28 @@ pub type EnvironmentRef = PathBuf;
 impl EnvironmentCommands {
     pub async fn handle(&self, flox: Flox) -> Result<()> {
         match self {
+            EnvironmentCommands::List { .. } => subcommand_metric!("list"),
+            EnvironmentCommands::Envs => subcommand_metric!("envs"),
+            EnvironmentCommands::Activate { .. } => subcommand_metric!("activate"),
+            EnvironmentCommands::Create { .. } => subcommand_metric!("create"),
+            EnvironmentCommands::Destroy { .. } => subcommand_metric!("destroy"),
+            EnvironmentCommands::Edit { .. } => subcommand_metric!("edit"),
+            EnvironmentCommands::Export { .. } => subcommand_metric!("export"),
+            EnvironmentCommands::Generations { .. } => subcommand_metric!("generations"),
+            EnvironmentCommands::Git { .. } => subcommand_metric!("git"),
+            EnvironmentCommands::History { .. } => subcommand_metric!("history"),
+            EnvironmentCommands::Import { .. } => subcommand_metric!("import"),
+            EnvironmentCommands::Install { .. } => subcommand_metric!("install"),
+            EnvironmentCommands::Push { .. } => subcommand_metric!("push"),
+            EnvironmentCommands::Pull { .. } => subcommand_metric!("pull"),
+            EnvironmentCommands::Remove { .. } => subcommand_metric!("remove"),
+            EnvironmentCommands::Rollback { .. } => subcommand_metric!("rollback"),
+            EnvironmentCommands::SwitchGeneration { .. } => subcommand_metric!("switch"),
+            EnvironmentCommands::Upgrade { .. } => subcommand_metric!("upgrade"),
+            EnvironmentCommands::WipeHistory { .. } => subcommand_metric!("wipe-history"),
+        }
+
+        match self {
             EnvironmentCommands::List {
                 environment_args: _,
                 environment,
@@ -97,8 +119,6 @@ impl EnvironmentCommands {
                 environment_args: EnvironmentArgs { .. },
                 environment,
             } if !Feature::Env.is_forwarded()? => {
-                subcommand_metric!("install");
-
                 let packages: Vec<_> = packages
                     .iter()
                     .map(|package| FloxPackage::parse(package, &flox.channels, DEFAULT_CHANNEL))

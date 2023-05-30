@@ -12,20 +12,24 @@ use flox_rust_sdk::flox::{Flox, DEFAULT_OWNER, FLOX_VERSION};
 use flox_rust_sdk::models::floxmeta::{Floxmeta, GetFloxmetaError};
 use flox_rust_sdk::prelude::Channel;
 use flox_rust_sdk::providers::git::GitCommandProvider;
-use log::debug;
+use log::{debug, info};
 use tempfile::TempDir;
+use toml_edit::Key;
 
 use self::channel::ChannelCommands;
 use self::environment::EnvironmentCommands;
 use self::general::GeneralCommands;
 use self::package::interface;
+use crate::config::{Config, FLOX_CONFIG_FILE};
 use crate::utils::init::{
     init_access_tokens,
     init_channels,
     init_git_conf,
-    init_telemetry_consent,
+    init_telemetry,
     init_uuid,
+    telemetry_opt_out_needs_migration,
 };
+use crate::utils::metrics::METRICS_UUID_FILE_NAME;
 
 fn vec_len<T>(x: Vec<T>) -> usize {
     Vec::len(&x)
@@ -89,11 +93,29 @@ impl FloxArgs {
 
         init_git_conf(temp_dir.path(), &config.flox.config_dir).await?;
 
-        // disabling telemetry will work regardless
-        // but we don't want to give users who disabled it the prompt
+        // migrate metrics denial
+        // metrics could be turned off by writing an empty UUID file
+        // this branch migrates empty files to a config value in the user's flox.toml
+        // and deletes the now defunct empty file
+        if telemetry_opt_out_needs_migration(&config.flox.data_dir, &config.flox.cache_dir).await? {
+            info!("Migrating previous telemetry opt out to user config");
+            // update current run time config
+            config.flox.disable_metrics = true;
+
+            // update persistent config file
+            Config::write_to_in(
+                config.flox.config_dir.join(FLOX_CONFIG_FILE),
+                &temp_dir,
+                &[Key::new("disable_metrics")],
+                Some(true),
+            )?;
+
+            // remove marker uuid file
+            tokio::fs::remove_file(&config.flox.data_dir.join(METRICS_UUID_FILE_NAME)).await?;
+        }
+
         if !config.flox.disable_metrics {
-            init_telemetry_consent(&config.flox.data_dir, &config.flox.cache_dir).await?;
-            env::remove_var("FLOX_DISABLE_METRICS");
+            init_telemetry(&config.flox.data_dir, &config.flox.cache_dir).await?;
         } else {
             debug!("Metrics collection disabled");
             env::set_var("FLOX_DISABLE_METRICS", "true");

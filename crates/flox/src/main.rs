@@ -9,14 +9,10 @@ use anyhow::{anyhow, Context, Result};
 use bpaf::Parser;
 use commands::{BashPassthru, FloxArgs, Prefix};
 use flox_rust_sdk::environment::default_nix_subprocess_env;
-use fslock::LockFile;
 use itertools::Itertools;
 use log::{debug, error, warn};
-use serde_json::json;
-use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
 use tokio::process::Command;
 use utils::init::init_logger;
-use utils::metrics::{METRICS_LOCK_FILE_NAME, METRICS_UUID_FILE_NAME};
 
 mod build;
 mod commands;
@@ -134,85 +130,11 @@ pub async fn flox_forward(flox: &Flox) -> Result<()> {
     Ok(())
 }
 
-#[allow(clippy::bool_to_int_with_if)]
-async fn sync_bash_metrics_consent(data_dir: &Path, cache_dir: &Path) -> Result<()> {
-    let mut metrics_lock = LockFile::open(&cache_dir.join(METRICS_LOCK_FILE_NAME))?;
-    tokio::task::spawn_blocking(move || metrics_lock.lock()).await??;
-
-    let uuid_path = data_dir.join(METRICS_UUID_FILE_NAME);
-
-    let metrics_enabled = match tokio::fs::File::open(&uuid_path).await {
-        Ok(mut f) => {
-            let mut uuid_str = String::new();
-            f.read_to_string(&mut uuid_str).await?;
-            !uuid_str.trim().is_empty()
-        },
-        Err(err) => match err.kind() {
-            std::io::ErrorKind::NotFound => {
-                // Consent hasn't been determined yet, so there is nothing to sync
-                return Ok(());
-            },
-            _ => return Err(err.into()),
-        },
-    };
-
-    let bash_flox_dirs =
-        xdg::BaseDirectories::with_prefix("flox").context("Unable to find config dir")?;
-    let bash_config_home = bash_flox_dirs.get_config_home();
-    let bash_user_meta_path = bash_config_home.join("floxUserMeta.json");
-
-    tokio::fs::create_dir_all(bash_config_home).await?;
-
-    let mut bash_user_meta_file = tokio::fs::OpenOptions::new()
-        .read(true)
-        .write(true)
-        .create(true)
-        .open(&bash_user_meta_path)
-        .await
-        .context(format!(
-            "Unable to open (rw) legacy config file at {bash_user_meta_path:?}"
-        ))?;
-
-    let mut json: serde_json::Value = {
-        let mut bash_user_meta_json = String::new();
-        bash_user_meta_file
-            .read_to_string(&mut bash_user_meta_json)
-            .await
-            .context("Unable to read bash flox meta")?;
-
-        if bash_user_meta_json.is_empty() {
-            json!({})
-        } else {
-            serde_json::from_str(&bash_user_meta_json).context("Unable to parse bash flox meta")?
-        }
-    };
-
-    json["floxMetricsConsent"] = json!(if metrics_enabled { 1 } else { 0 });
-    json["version"] = json!(1);
-
-    let mut bash_user_meta_json = serde_json::to_string_pretty(&json)
-        .context("Failed to serialize modified bash flox meta")?;
-    bash_user_meta_json.push('\n');
-
-    bash_user_meta_file.set_len(0).await?;
-    bash_user_meta_file.rewind().await?;
-    bash_user_meta_file
-        .write_all(bash_user_meta_json.as_bytes())
-        .await
-        .context("Unable to write modified bash flox meta")?;
-
-    Ok(())
-}
-
 pub async fn run_in_flox(
-    flox: Option<&Flox>,
+    _flox: Option<&Flox>,
     args: &[impl AsRef<std::ffi::OsStr> + Debug],
 ) -> Result<u8> {
     debug!("Running in flox with arguments: {:?}", args);
-
-    if let Some(flox) = flox {
-        sync_bash_metrics_consent(&flox.data_dir, &flox.cache_dir).await?;
-    }
 
     let flox_bin = std::env::var("FLOX_BASH_PREFIX")
         .map_or(Path::new(FLOX_SH).to_path_buf(), |prefix| {

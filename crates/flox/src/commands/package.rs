@@ -306,6 +306,20 @@ pub(crate) mod interface {
 impl interface::PackageCommands {
     pub async fn handle(self, config: Config, flox: Flox) -> Result<()> {
         match self {
+            interface::PackageCommands::Develop(_) => subcommand_metric!("develop"),
+            interface::PackageCommands::Init(_) => subcommand_metric!("init"),
+            interface::PackageCommands::Build(_) => subcommand_metric!("build"),
+            interface::PackageCommands::PrintDevEnv(_) => subcommand_metric!("print-dev-env"),
+            interface::PackageCommands::Publish(_) => subcommand_metric!("publish"),
+            interface::PackageCommands::Run(_) => subcommand_metric!("run"),
+            interface::PackageCommands::Shell(_) => subcommand_metric!("shell"),
+            interface::PackageCommands::Eval(_) => subcommand_metric!("eval"),
+            interface::PackageCommands::Bundle(_) => subcommand_metric!("bundle"),
+            interface::PackageCommands::Containerize(_) => subcommand_metric!("containerize"),
+            interface::PackageCommands::Flake(_) => subcommand_metric!("flake"),
+        }
+
+        match self {
             _ if Feature::Nix.is_forwarded()? => flox_forward(&flox).await?,
 
             // Unification implementation of Develop is not yet implemented in rust
@@ -324,8 +338,6 @@ impl interface::PackageCommands {
             },
 
             interface::PackageCommands::Init(command) => {
-                subcommand_metric!("init");
-
                 let cwd = std::env::current_dir()?;
                 let basename = cwd
                     .file_name()
@@ -377,7 +389,6 @@ impl interface::PackageCommands {
                 info!("Run 'flox develop' to enter the project environment.")
             },
             interface::PackageCommands::Build(command) => {
-                subcommand_metric!("build");
                 let installable_arg = command
                     .inner
                     .installable_arg
@@ -390,8 +401,6 @@ impl interface::PackageCommands {
                     .await?;
             },
             interface::PackageCommands::Develop(command) => {
-                subcommand_metric!("develop");
-
                 let installable_arg = command
                     .inner
                     .installable_arg
@@ -404,8 +413,6 @@ impl interface::PackageCommands {
                     .await?
             },
             interface::PackageCommands::Run(command) => {
-                subcommand_metric!("run");
-
                 let installable_arg = command
                     .inner
                     .installable_arg
@@ -418,8 +425,6 @@ impl interface::PackageCommands {
                     .await?
             },
             interface::PackageCommands::Shell(command) => {
-                subcommand_metric!("shell");
-
                 let installable_arg = command
                     .inner
                     .installable_arg
@@ -432,8 +437,6 @@ impl interface::PackageCommands {
                     .await?
             },
             interface::PackageCommands::Eval(command) => {
-                subcommand_metric!("eval");
-
                 let nix = flox.nix::<NixCommandLine>(command.nix_args);
                 let command = EvalComm {
                     flake: FlakeArgs {
@@ -446,8 +449,6 @@ impl interface::PackageCommands {
                 command.run(&nix, &NixArgs::default()).await?
             },
             interface::PackageCommands::Bundle(command) => {
-                subcommand_metric!("bundle");
-
                 let installable_arg = ResolveInstallable::<GitCommandProvider>::installable(
                     &command.inner.installable_arg,
                     &flox,
@@ -466,8 +467,6 @@ impl interface::PackageCommands {
                     .await?
             },
             interface::PackageCommands::Containerize(command) => {
-                subcommand_metric!("containerize");
-
                 let mut installable = env_ref_to_installable::<GitCommandProvider>(
                     &flox,
                     "containerize",

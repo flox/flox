@@ -111,7 +111,6 @@ export PWD=$($_pwd)
 export FLOX_STABILITY="${FLOX_STABILITY:-stable}"
 export FLOX_CACHE_HOME="${FLOX_CACHE_HOME:-${XDG_CACHE_HOME:-$HOME/.cache}/flox}"
 export FLOX_META="${FLOX_META:-$FLOX_CACHE_HOME/meta}"
-export FLOX_METRICS="${FLOX_METRICS:-$FLOX_CACHE_HOME/metrics-events.json}"
 export FLOX_DATA_HOME="${FLOX_DATA_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/flox}"
 export FLOX_ENVIRONMENTS="${FLOX_ENVIRONMENTS:-$FLOX_DATA_HOME/environments}"
 export XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"

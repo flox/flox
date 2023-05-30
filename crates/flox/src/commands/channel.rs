@@ -13,9 +13,9 @@ use regex::Regex;
 use serde_json::json;
 
 use crate::config::features::Feature;
-use crate::flox_forward;
 use crate::utils::dialog::{Dialog, Select, Text};
 use crate::utils::init::{DEFAULT_CHANNELS, HIDDEN_CHANNELS};
+use crate::{flox_forward, subcommand_metric};
 
 #[derive(Bpaf, Clone)]
 pub struct ChannelArgs {}
@@ -30,6 +30,13 @@ enum ChannelType {
 
 impl ChannelCommands {
     pub async fn handle(&self, flox: Flox) -> Result<()> {
+        match self {
+            ChannelCommands::Subscribe(_) => subcommand_metric!("subscribe"),
+            ChannelCommands::Unsubscribe { .. } => subcommand_metric!("unsubscribe"),
+            ChannelCommands::Search { .. } => subcommand_metric!("search"),
+            ChannelCommands::Channels { .. } => subcommand_metric!("channels"),
+        }
+
         match self {
             _ if Feature::Channels.is_forwarded()? => flox_forward(&flox).await?,
             ChannelCommands::Channels { json } => {

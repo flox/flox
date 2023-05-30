@@ -3,65 +3,67 @@ use std::path::Path;
 use anyhow::{Context, Result};
 use fslock::LockFile;
 use indoc::formatdoc;
-use log::{debug, info, trace};
+use log::{debug, info};
 use time::OffsetDateTime;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-use crate::utils::dialog::{Confirm, Dialog};
 use crate::utils::metrics::{MetricEntry, METRICS_LOCK_FILE_NAME, METRICS_UUID_FILE_NAME};
 
-async fn write_metrics_uuid(uuid_path: &Path, consent: bool) -> Result<()> {
-    let mut file = tokio::fs::File::create(&uuid_path).await?;
-    if consent {
-        let uuid = uuid::Uuid::new_v4();
-        file.write_all(uuid.to_string().as_bytes()).await?;
+/// Determine whether the user has previously opted-out of metrics
+/// through the legacy consent dialog.
+///
+/// Check whether the current uuid file is empty.
+///
+/// An empty metrics uuid file used to signal telemtry opt-out.
+/// We are moving this responsibility to the user configuration file.
+/// This detects whether a migration is necessary.
+pub async fn telemetry_opt_out_needs_migration(
+    data_dir: impl AsRef<Path>,
+    cache_dir: impl AsRef<Path>,
+) -> Result<bool> {
+    tokio::fs::create_dir_all(&data_dir).await?;
+    tokio::fs::create_dir_all(&cache_dir).await?;
+
+    let mut metrics_lock = LockFile::open(&cache_dir.as_ref().join(METRICS_LOCK_FILE_NAME))?;
+    tokio::task::spawn_blocking(move || metrics_lock.lock()).await??;
+
+    let uuid_path = data_dir.as_ref().join(METRICS_UUID_FILE_NAME);
+
+    match tokio::fs::File::open(&uuid_path).await {
+        Ok(mut file) => {
+            let mut content = String::new();
+            file.read_to_string(&mut content).await?;
+            if content.trim().is_empty() {
+                return Ok(true);
+            }
+            Ok(false)
+        },
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(err) => Err(err.into()),
     }
-    Ok(())
 }
 
-pub async fn init_telemetry_consent(data_dir: &Path, cache_dir: &Path) -> Result<()> {
-    tokio::fs::create_dir_all(data_dir).await?;
+/// Initializes the telemetry for the current installation by creating a new metrics uuid
+///
+/// If a metrics-uuid file is present, assume telemetry is already set up.
+/// Any migration concerning user opt-out should be handled before using [telemetry_denial_need_migration].
+pub async fn init_telemetry(data_dir: impl AsRef<Path>, cache_dir: impl AsRef<Path>) -> Result<()> {
+    tokio::fs::create_dir_all(&data_dir).await?;
+    tokio::fs::create_dir_all(&cache_dir).await?;
 
-    if !Dialog::can_prompt() {
-        // Can't prompt user now, do it another time
+    let mut metrics_lock = LockFile::open(&cache_dir.as_ref().join(METRICS_LOCK_FILE_NAME))?;
+    tokio::task::spawn_blocking(move || metrics_lock.lock()).await??;
+    let uuid_path = data_dir.as_ref().join(METRICS_UUID_FILE_NAME);
+
+    // we already have a uuid, so lets use that
+    if uuid_path.exists() {
         return Ok(());
     }
 
-    let mut metrics_lock = LockFile::open(&cache_dir.join(METRICS_LOCK_FILE_NAME))?;
-    tokio::task::spawn_blocking(move || metrics_lock.lock()).await??;
+    debug!("Metrics UUID not found, creating new user");
 
-    let uuid_path = data_dir.join(METRICS_UUID_FILE_NAME);
-
-    match tokio::fs::File::open(&uuid_path).await {
-        Ok(_) => return Ok(()),
-        Err(err) => match err.kind() {
-            std::io::ErrorKind::NotFound => {},
-            _ => return Err(err.into()),
-        },
-    }
-
-    debug!("Metrics UUID not found, determining consent");
-
-    let bash_flox_dirs =
-        xdg::BaseDirectories::with_prefix("flox").context("Unable to find config dir")?;
-    let bash_user_meta_path = bash_flox_dirs.get_config_home().join("floxUserMeta.json");
-
-    if let Ok(mut file) = tokio::fs::File::open(&bash_user_meta_path).await {
-        trace!("Attempting to extract metrics consent value from bash flox");
-
-        let mut bash_user_meta_json = String::new();
-        file.read_to_string(&mut bash_user_meta_json).await?;
-
-        let json: serde_json::Value = serde_json::from_str(&bash_user_meta_json)?;
-
-        if let Some(x) = json["floxMetricsConsent"].as_u64() {
-            debug!("Using metrics consent value from bash flox");
-            write_metrics_uuid(&uuid_path, x == 1).await?;
-            return Ok(());
-        }
-    }
-
-    debug!("Metrics consent not determined, prompting for consent");
+    // Create new user uuid
+    let telemetry_uuid = uuid::Uuid::new_v4();
 
     // Generate a real metric to use as an example so they can see the field contents are non-threatening
     let now = OffsetDateTime::now_utc();
@@ -73,9 +75,8 @@ pub async fn init_telemetry_consent(data_dir: &Path, cache_dir: &Path) -> Result
         .context("Failed to JSON-ify example metric entry")?;
 
     // This isn't actually in the struct (gets added later),
-    // and doesn't actually exist unless they say "yes",
     // so we put a placeholder in there to be more fair.
-    example_json["uuid"] = "[uuid generated upon consent]".into();
+    example_json["uuid"] = telemetry_uuid.to_string().into();
     // The default encoding is disturbing
     example_json["timestamp"] = now.to_string().into();
 
@@ -83,43 +84,29 @@ pub async fn init_telemetry_consent(data_dir: &Path, cache_dir: &Path) -> Result
     let example = serde_json::to_string_pretty(&example_json)
         .context("Failed to stringify example metric entry")?;
 
-    let help = formatdoc! {"
-        flox collects basic usage metrics in order to improve the user experience,
-        including a record of the subcommand invoked along with a unique token.
+    let notice = formatdoc! {"
+        flox collects basic usage metrics in order to improve the user experience.
+
+        flox includes a record of the subcommand invoked along with a unique token.
         It does not collect any personal information.
 
-        An example of one of these metrics looks like this: {example}"};
+        Example metric for this invocation:
 
-    let dialog = Dialog {
-        message: "Do you consent to the collection of basic usage metrics?",
-        help_message: Some(&help),
-        typed: Confirm {
-            default: Some(false),
-        },
-    };
+        {example}
 
-    let consent = dialog.prompt().await?;
+        The collection of metrics can be disabled in the following ways:
 
-    if consent {
-        write_metrics_uuid(&uuid_path, true).await?;
-        info!("\nThank you for helping to improve flox!\n");
-    } else {
-        let dialog = Dialog {
-            message: "Can we log your refusal?",
-            help_message: Some("Doing this helps us keep track of our user count, it would just be a single anonymous request"),
-            typed: Confirm {
-                default: Some(true),
-            },
-        };
+          environment: FLOX_DISABLE_METRICS=true
+            user-wide: flox config --set-bool disable_metrics true
+          system-wide: update /etc/flox.toml as described in flox(1)
 
-        let _consent_refusal = dialog.prompt().await?;
+        "};
+    info!("{notice}");
 
-        // TODO log if Refuse
-
-        write_metrics_uuid(&uuid_path, false).await?;
-        info!("\nUnderstood. If you change your mind you can change your election\nat any time with the following command: flox reset-metrics\n");
-    }
-
+    let mut file = tokio::fs::File::create(&uuid_path).await?;
+    file.write_all(telemetry_uuid.to_string().as_bytes())
+        .await?;
+    file.flush().await?;
     Ok(())
 }
 
@@ -146,5 +133,81 @@ pub async fn init_uuid(data_dir: &Path) -> Result<uuid::Uuid> {
             },
             _ => Err(err.into()),
         },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use tempfile::TempDir;
+
+    use super::*;
+
+    /// An empty metrics-uuid file needs migration
+    #[allow(clippy::bool_assert_comparison)]
+    #[tokio::test]
+    async fn test_telemetry_denial_need_migration_empty_uuid() {
+        let tempdir = TempDir::new().unwrap();
+        let data_dir = tempdir.path().join("data");
+
+        std::fs::create_dir_all(&data_dir).unwrap();
+        std::fs::File::create(data_dir.join(METRICS_UUID_FILE_NAME)).unwrap();
+
+        let need_migration =
+            telemetry_opt_out_needs_migration(data_dir, tempdir.path().join("cache"))
+                .await
+                .unwrap();
+
+        assert_eq!(need_migration, true);
+    }
+
+    /// An empty data dir (without metrics-uuid file) does not need migration
+    #[allow(clippy::bool_assert_comparison)]
+    #[tokio::test]
+    async fn test_telemetry_denial_need_migration_empty_data() {
+        let tempdir = TempDir::new().unwrap();
+        let need_migration = telemetry_opt_out_needs_migration(
+            tempdir.path().join("data"),
+            tempdir.path().join("cache"),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(need_migration, false);
+    }
+
+    /// A non-empty metrics-uuid file does not need migration
+    #[allow(clippy::bool_assert_comparison)]
+    #[tokio::test]
+    async fn test_telemetry_denial_need_migration_filled_uuid() {
+        let tempdir = TempDir::new().unwrap();
+        let data_dir = tempdir.path().join("data");
+
+        std::fs::create_dir_all(&data_dir).unwrap();
+        std::fs::write(
+            data_dir.join(METRICS_UUID_FILE_NAME),
+            uuid::Uuid::new_v4().to_string(),
+        )
+        .unwrap();
+
+        let need_migration =
+            telemetry_opt_out_needs_migration(data_dir, tempdir.path().join("cache"))
+                .await
+                .unwrap();
+
+        assert_eq!(need_migration, false);
+    }
+
+    #[tokio::test]
+    async fn test_init_telemetry() {
+        let tempdir = TempDir::new().unwrap();
+        let uuid_file_path = tempdir.path().join("data").join(METRICS_UUID_FILE_NAME);
+        init_telemetry(tempdir.path().join("data"), tempdir.path().join("cache"))
+            .await
+            .unwrap();
+        assert!(uuid_file_path.exists());
+
+        let uuid_str = std::fs::read_to_string(uuid_file_path).unwrap();
+        eprintln!("uuid: {uuid_str}");
+        uuid::Uuid::try_parse(&uuid_str).expect("parses uuid");
     }
 }

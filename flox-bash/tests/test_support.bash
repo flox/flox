@@ -22,7 +22,6 @@ common_setup() {
     )"
     export FLOX_PACKAGE_FIRST8
   fi
-  export FLOX_DISABLE_METRICS='true'
   export TEST_ENVIRONMENT=_testing_
   # Remove any vestiges of previous test runs.
   $FLOX_CLI destroy -e "$TEST_ENVIRONMENT" --origin -f || :
