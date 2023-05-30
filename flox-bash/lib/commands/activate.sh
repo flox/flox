@@ -68,7 +68,7 @@ function bashRC() {
 
 _environment_commands+=("activate")
 _usage["activate"]="activate environment:
-        in current shell: . <(flox activate)
+        in current shell: eval "$(flox activate)"
         in subshell: flox activate
         for command: flox activate -- <command> <args>"
 
@@ -313,7 +313,7 @@ function floxActivate() {
 	# both of the following:
 	#
 	# - invoke 'flox activate -e foo'
-	# - have '. <(flox activate)' in .zshrc
+	# - have 'eval "$(flox activate)"' in .zshrc
 	#
 	# Our only real defense against this sort of "double activation"
 	# is to put guards around our configuration, just as C include

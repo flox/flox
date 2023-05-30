@@ -35,8 +35,8 @@ or with a command and arguments to be invoked directly.
 :   Command to run in the environment.
     Spawns the command in a subshell
     that does not leak into the calling process.
-    
-    
+
+
 # ENVIRONMENT VARIABLES
 
 `$FLOX_ENV`
@@ -60,7 +60,7 @@ or with a command and arguments to be invoked directly.
     (add to the relevant "rc" file, e.g. `~/.bashrc` or `~/.zprofile`)
 
     ```
-    . <(flox activate)
+    eval "$(flox activate)"
     ```
 
 -   activate "foo" and "default" flox environments in a new subshell

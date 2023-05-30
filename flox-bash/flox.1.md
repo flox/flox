@@ -160,7 +160,7 @@ The following options are supported by the commands below.
     - activate "default" flox environment only within the current shell
     (add to the relevant "rc" file, e.g. `~/.bashrc` or `~/.zprofile`)
     ```
-    . <(flox activate)
+    eval "$(flox activate)"
     ```
 
     - activate "foo" and "default" flox environments in a new subshell

@@ -23,7 +23,7 @@ environment commands:
     flox <command> [(-e|--environment) <env>] [<args>]
     ----
     flox activate - activate environment:
-        in current shell: . <(flox activate)
+        in current shell: eval "$(flox activate)"
         in subshell: flox activate
         for command: flox activate -- <command> <args>
     flox list [--out-path] [--json]
@@ -67,4 +67,3 @@ development commands:
                  [--render-path <dir>] [--key-file <file>] \
                  [(-A|--attr) <package>] [--publish-system <system>]
          - build and publish project to flox channel
-
