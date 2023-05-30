@@ -648,7 +648,7 @@ function initFloxUserMetaJSON() {
 	$invoke_git -C "$workDir" commit -m "$message" --quiet
 
 	# Push changes back to bare repository.
-	$_git -C $workDir push --quiet --set-upstream origin $defaultBranch
+	$_git -C $workDir push --quiet origin $defaultBranch
 }
 
 #
