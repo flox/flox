@@ -106,6 +106,7 @@ pub async fn init_telemetry(data_dir: impl AsRef<Path>, cache_dir: impl AsRef<Pa
     let mut file = tokio::fs::File::create(&uuid_path).await?;
     file.write_all(telemetry_uuid.to_string().as_bytes())
         .await?;
+    file.flush().await?;
     Ok(())
 }
 
@@ -206,6 +207,7 @@ mod tests {
         assert!(uuid_file_path.exists());
 
         let uuid_str = std::fs::read_to_string(uuid_file_path).unwrap();
-        assert!(uuid::Uuid::try_parse(&uuid_str).is_ok())
+        eprintln!("uuid: {uuid_str}");
+        uuid::Uuid::try_parse(&uuid_str).expect("parses uuid");
     }
 }
