@@ -1292,7 +1292,7 @@ function searchChannels() {
 		for stability in stable staging unstable; do
 			$_mkdir -p $_tmpdir/$channel/$stability
 			local -a cmd=(
-				$_nix search --log-format bar --json --no-write-lock-file $refreshArg       \
+				$_nix search --log-format bar --json --no-write-lock-file $refreshArg
 				"'flake:${channel}#.catalog.${FLOX_SYSTEM}.$stability'" "'$packageregexp'"
 			)
 			echo "${cmd[@]} >$_tmpdir/$channel/$stability/stdout 2>$_tmpdir/$channel/$stability/stderr &" >> $_script
