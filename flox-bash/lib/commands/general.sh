@@ -227,7 +227,9 @@ function floxSearch() {
 	runSearch() {
 	  if [[ "$jsonOutput" -gt 0 ]]; then
 		  searchChannels "$packageregexp" "${channels[@]}" $refreshArg | \
-			  $_jq -L "${_lib?}" -rf "${_lib?}/searchJSON.jq"
+			$_jq -L "${_lib?}" -r 'include "catalog-search";
+			  to_entries|map( select( .key|endswith( ".latest" )|not )|.value )
+			';
 	  else
 	  	# Use grep to highlight text matches, but also include all the lines
 	  	# around the matches by using the `-C` context flag with a big number.
@@ -236,8 +238,10 @@ function floxSearch() {
 	  	# so we instead embed a line with "---" between groupings and then use
 	  	# `sed` below to replace it with a blank line.
 	  	searchChannels "$packageregexp" "${channels[@]}" $refreshArg |   \
-	  		$_jq -L "${_lib?}" -r --argjson showDetail "$showDetail"     \
-			     -f "${_lib?}/search.jq" |                               \
+	  		$_jq -L "${_lib?}" -r --argjson showDetail "$showDetail" '
+			  include "catalog-search";
+              to_entries|map( catalogPkgToSearchEntry )|
+              searchEntriesToPretty( $showDetail )'
 	  		$_column -t -s "|" | $_sed 's/^---$//' |                     \
 	  		$_grep -C 1000000 --ignore-case --color -E "$packageregexp"
 	  fi
@@ -258,7 +262,6 @@ function floxSearch() {
 		keepVersionsJSON="$(mkTempFile)"
 		keepsJSON="$(mkTempFile)"
 		# Run search and stash results for post-processing.
-		# This is like `searchJSON.jq' but includes a `floxref' field.
 		searchChannels "$packageregexp" "${channels[@]}" $refreshArg | \
 		  $_jq -L "${_lib?}" -r 'include "catalog-search";
 		    to_entries|map( catalogPkgToSearchEntry )' > "$matchesJSON";

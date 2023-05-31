@@ -68,12 +68,9 @@ LIB = \
 	lib/manifest.jq \
 	lib/manifestTOML.jq \
 	lib/merge-manifests.jq \
-	lib/merge-search-results.jq \
 	lib/metadata.sh \
 	lib/environmentRegistry.jq \
 	lib/registry.jq \
-	lib/search.jq \
-	lib/searchJSON.jq \
 	lib/catalog-search.jq \
 	lib/utils.sh \
 	lib/catalog-ingest/flake.nix \
