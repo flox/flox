@@ -4,26 +4,46 @@
 #
 # ---------------------------------------------------------------------------- #
 
+# Processes results from `nix search <URL>#catalog.<SYSTEM>.<STABILITY> --json;'
+# injecting the "channel" ( flake alias ) into the key, and adding info scraped
+# from the `attrPath' as fields.
+#
+# NOTE: The format of these results differs from `nix search --json;'
+# Ex:
+# "catalog.x86_64-linux.stable.vimPlugins.vim-svelte.2022-02-1": {}
+#   ->
+# "catalog.x86_64-linux.stable.nixpkgs-flox.vimPlugins.vim-svelte.2022-02-1": {}
+def nixPkgToCatalogPkg( $channel ):
+  ( .key|split( "." ) ) as $key|
+  $key[0] as $catalog|
+  $key[1] as $system|
+  $key[2] as $stability|
+  ( $key[3:]|join( "." ) ) as $attrPathVersion|
+  .key    = $catalog + "." + $system + "." + $channel + "." + $attrPathVersion|
+  .value += {
+    catalog:         $catalog
+  , system:          $system
+  , stability:       $stability
+  , channel:         $channel
+  , attrPathVersion: $attrPathVersion
+  , attrPath:        $key[3:-1]|join( "." )
+  };
+
+
+# ---------------------------------------------------------------------------- #
+
 # Convert the JSON representation of a catalog package emitted by `nix search'
 # into an entry used by `flox search'.
-def nixCatalogPkgToSearchEntry:
+def catalogPkgToSearchEntry:
   # Discard anything for which version = "latest".
-  select( .key|endswith( ".latest" )|not )|
-  # Start by parsing and enhancing data into fields
-  ( .key|split( "." ) ) as $key|
-  .value.version as $_version|
-  .value.catalog   = $key[0]|
-  .value.system    = $key[1]|
-  .value.stability = $key[2]|
-  .value.channel   = $key[3]|
-  .value.attrPath  = ($key[4:]|join( "." )|rtrimstr( ".\($key[-1])" ) )|
-  .value.floxref   = "\(.value.channel).\(.value.attrPath)"|
-  .value.alias     = (
-    ( if .value.stability == "stable" then (
-        if .value.channel == "nixpkgs-flox" then [] else [.value.channel] end
-      ) else [.value.stability,.value.channel]
-      end ) + $key[4:]|join( "." )|rtrimstr( ".\($key[-1])" )
-  )|.value;
+  select( .key|endswith( ".latest" )|not )|.value|.+= {
+    floxref: ( .channel + "." + .attrPath )
+  , alias: (
+      ( if .stability == "stable"       then "" else .stability + "." end ) +
+      ( if .channel   == "nixpkgs-flox" then "" else .channel   + "." end ) +
+      .attrPath
+    )
+  };
 
 
 # ---------------------------------------------------------------------------- #
@@ -34,7 +54,7 @@ def searchEntriesToPrettyBlocks( $showDetail ):
   reduce .[] as $x (
     {};
     # Results are grouped under short headers which might have a description.
-    ( $x.alias + (
+    ( $x.channel + "." + $x.attrPath + (
         if ( $x.description == null ) or ( $x.description == "" )
           then ""
           else " - " + $x.description

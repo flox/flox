@@ -4,6 +4,6 @@
 #       column --keep-empty-lines -t -s "|"
 include "catalog-search";
 # Convert `nix search' results into extended `flox search' entries.
-to_entries|map( nixCatalogPkgToSearchEntry )|
+to_entries|map( catalogPkgToSearchEntry )|
 # Then create arrays of result lines indexed under floxref.
 searchEntriesToPretty( $showDetail )

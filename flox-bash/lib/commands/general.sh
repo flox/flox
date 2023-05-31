@@ -237,7 +237,7 @@ function floxSearch() {
 	  	# `sed` below to replace it with a blank line.
 	  	searchChannels "$packageregexp" "${channels[@]}" $refreshArg |   \
 	  		$_jq -L "${_lib?}" -r --argjson showDetail "$showDetail"     \
-			     -f "$_lib/search.jq" |                                  \
+			     -f "${_lib?}/search.jq" |                               \
 	  		$_column -t -s "|" | $_sed 's/^---$//' |                     \
 	  		$_grep -C 1000000 --ignore-case --color -E "$packageregexp"
 	  fi
@@ -261,7 +261,7 @@ function floxSearch() {
 		# This is like `searchJSON.jq' but includes a `floxref' field.
 		searchChannels "$packageregexp" "${channels[@]}" $refreshArg | \
 		  $_jq -L "${_lib?}" -r 'include "catalog-search";
-		    to_entries|map( nixCatalogPkgToSearchEntry )' > "$matchesJSON";
+		    to_entries|map( catalogPkgToSearchEntry )' > "$matchesJSON";
 
 		# Extract the version numbers
 		$_jq -r 'map( .version )[]' "$matchesJSON"|$_sort -u > "$versionsList"
