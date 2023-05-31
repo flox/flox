@@ -87,7 +87,7 @@ jobs:
           set -o pipefail;
           flox create -e foo;
           flox install -e foo cowsay;
-          . <( flox activate -e foo; );
+          eval "$( flox activate -e foo; )";
           cowsay "No Signature" >&2;
 
       - name: Create Env (Global Signing)
@@ -97,7 +97,7 @@ jobs:
           git config --global commit.gpgsign true;
           flox create -e bar;
           flox install -e bar cowsay;
-          . <( flox activate -e bar; );
+          eval "$( flox activate -e bar; )";
           cowsay "Signature set in Global Config" >&2;
           git config --global --unset commit.gpgsign;
 
@@ -108,7 +108,7 @@ jobs:
           git config commit.gpgsign true;
           flox create -e quux;
           flox install -e quux cowsay;
-          . <( flox activate -e quux; );
+          eval "$( flox activate -e quux; )";
           cowsay "Signature set in User Config" >&2;
           git config --unset commit.gpgsign;
 

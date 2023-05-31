@@ -200,7 +200,7 @@ pub enum EnvironmentCommands {
 
     /// activate environment:
     ///
-    /// * in current shell: . <(flox activate)
+    /// * in current shell: eval "$(flox activate)"
     /// * in subshell: flox activate
     /// * for command: flox activate -- <command> <args>
     #[bpaf(command)]
