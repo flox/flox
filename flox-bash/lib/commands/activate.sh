@@ -68,7 +68,7 @@ function bashRC() {
 
 _environment_commands+=("activate")
 _usage["activate"]="activate environment:
-        in current shell: eval \"$(flox activate)\"
+        in current shell: eval \"\$(flox activate)\"
         in subshell: flox activate
         for command: flox activate -- <command> <args>"
 
