@@ -37,12 +37,7 @@ def nixPkgToCatalogPkg( $channel ):
 def catalogPkgToSearchEntry:
   # Discard anything for which version = "latest".
   select( .key|endswith( ".latest" )|not )|.value|.+= {
-    floxref: ( .channel + "." + .attrPath )
-  , alias: (
-      ( if .stability == "stable"       then "" else .stability + "." end ) +
-      ( if .channel   == "nixpkgs-flox" then "" else .channel   + "." end ) +
-      .attrPath
-    )
+    floxref: ( .stability + "." + .channel + "." + .attrPath )
   };
 
 
@@ -54,25 +49,25 @@ def searchEntriesToPrettyBlocks( $showDetail ):
   reduce .[] as $x (
     {};
     # Results are grouped under short headers which might have a description.
-    ( $x.channel + "." + $x.attrPath + (
-        if ( $x.description == null ) or ( $x.description == "" )
-          then ""
-          else " - " + $x.description
-        end
-      )
+    ( if ( $x.description == null ) or ( $x.description == "" )
+        then $x.pname
+        else $x.pname + " - " + $x.description
+      end
     ) as $header|
-    # When `showDetails' is active, be show multiple lines under each header
-    # as `<stability>.<channel>.<attrPath>@<version>'.
-    ( $x.stability + "." + $x.floxref + "@" + $x.version ) as $line|
     # The first time seeing a floxref construct an array containing a
     # header as the previous value, otherwise use the previous array.
-    ( if .[$x.floxref] then .[$x.floxref] else [$header] end ) as $prev|
-    # Only include `$line' when `$showDetail' is enabled.
-    ( if $showDetail then ( $prev + [( "  " + $line )] ) else $prev end
-    ) as $result|
+    ( if .[$header] then .[$header] else [$header] end ) as $prev|
     # Merge result with existing collection.
     # This potentially "updates" existing elements.
-    . * { "\($x.floxref)": $result }
+    . * {
+      # Only include `$line' when `$showDetail' is enabled.
+      "\($header)":
+        # When `showDetails' is active, be show multiple lines under each header
+        # as `<stability>.<channel>.<attrPath>@<version>'.
+        ( if ( $showDetail|not ) then $prev else
+            ( $prev + [( "  " + $x.floxref + "@" + $x.version )] )
+          end )
+    }
   );
 
 
