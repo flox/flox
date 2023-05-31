@@ -1320,9 +1320,9 @@ function searchChannels() {
 	  ${_stderrFiles[@]} 1>&2 || true
 	#shellcheck disable=SC2016
 	$invoke_jq -r -L "${_lib?}" 'include "catalog-search";
-	  ( input_filename|split( "/" )[-3] ) as $channel|
-	  with_entries( nixPkgToCatalogPkg( $channel ) )
-    ' "${_stdoutFiles[@]}"|$_jq -r -s add
+	    ( input_filename|split( "/" )[-3] ) as $channel|
+	    with_entries( nixPkgToCatalogPkg( $channel ) )
+	  ' "${_stdoutFiles[@]}"|$_jq -r -s add
 	if [ $debug -eq 0 ]; then
 		$_rm -f ${_stdoutFiles[@]}
 		$_rm -f ${_stderrFiles[@]}
