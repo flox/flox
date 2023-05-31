@@ -37,7 +37,7 @@ def nixPkgToCatalogPkg( $channel ):
 def catalogPkgToSearchEntry:
   # Discard anything for which version = "latest".
   select( .key|endswith( ".latest" )|not )|.value|.+= {
-    floxref: ( .stability + "." + .channel + "." + .attrPath )
+    floxref: ( .channel + "." + .attrPath )
   };
 
 
@@ -48,20 +48,26 @@ def catalogPkgToSearchEntry:
 def searchEntriesToPrettyBlocks( $showDetail ):
   reduce .[] as $x (
     {};
+    ( if $showDetail then $x.pname else (
+        ( if $x.stability == "stable" then "" else $x.stability + "." end ) +
+        ( if $x.channel == "nixpkgs-flox" then "" else $x.channel + "." end ) +
+        $x.attrPath
+      ) end
+    ) as $alias|
     # Results are grouped under short headers which might have a description.
-    ( if ( $x.description == null ) or ( $x.description == "" )
-        then $x.pname
-        else $x.pname + " - " + $x.description
+    ( if ( $x.description == null ) or ( $x.description == "" ) then $alias else
+        $alias + ( if $showDetail then " - " else "|" end ) + $x.description
       end
     ) as $header|
+    ( if $showDetail then $header else $x.floxref end ) as $key|
     # The first time seeing a floxref construct an array containing a
     # header as the previous value, otherwise use the previous array.
-    ( if .[$header] then .[$header] else [$header] end ) as $prev|
+    ( if .[$key] then .[$key] else [$header] end ) as $prev|
     # Merge result with existing collection.
     # This potentially "updates" existing elements.
     . * {
       # Only include `$line' when `$showDetail' is enabled.
-      "\($header)":
+      "\($key)":
         # When `showDetails' is active, be show multiple lines under each header
         # as `<stability>.<channel>.<attrPath>@<version>'.
         ( if ( $showDetail|not ) then $prev else

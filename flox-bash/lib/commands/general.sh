@@ -224,6 +224,12 @@ function floxSearch() {
 	: "${GREP_COLOR:=1;32}"
 	export GREP_COLOR
 
+	if [[ "$showDetaul" = true ]]; then
+		_m_col="cat -"
+	else
+		_m_col="$_column -s '|' -t -l 2"
+	fi
+
 	runSearch() {
 	  if [[ "$jsonOutput" -gt 0 ]]; then
 		  searchChannels "$packageregexp" "${channels[@]}" $refreshArg | \
@@ -237,12 +243,13 @@ function floxSearch() {
 	  	# supports the `--keep-empty-lines` option is not available on Darwin,
 	  	# so we instead embed a line with "---" between groupings and then use
 	  	# `sed` below to replace it with a blank line.
+		#shellcheck disable=SC2016
 	  	searchChannels "$packageregexp" "${channels[@]}" $refreshArg |   \
 	  		$_jq -L "${_lib?}" -r --argjson showDetail "$showDetail" '
 			  include "catalog-search";
               to_entries|map( catalogPkgToSearchEntry )|
-              searchEntriesToPretty( $showDetail )'
-	  		$_column -t -s "|" | $_sed 's/^---$//' |                     \
+              searchEntriesToPretty( $showDetail )
+			'|$_m_col|$_sed 's/^---[[:space:]]*$//'|     \
 	  		$_grep -C 1000000 --ignore-case --color -E "$packageregexp"
 	  fi
 	}
@@ -287,7 +294,7 @@ function floxSearch() {
 			#shellcheck disable=SC2016
 			$_jq -L "${_lib?}" -r 'include "catalog-search";
 			  searchEntriesToPretty( true )
-			' "$keepsJSON"|$_column -t -s "|"|$_sed 's/^---$//'             \
+			' "$keepsJSON"|$_m_col|$_sed 's/^---[[:space:]]*$//'            \
 	  		  |$_grep -C 1000000 --ignore-case --color -E "$packageregexp"
 		else
 			$_jq . "$keepsJSON"
