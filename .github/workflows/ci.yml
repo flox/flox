@@ -54,7 +54,7 @@ jobs:
 
     - name: Setup Caches
       if: ${{ needs.check-user.outputs.isFloxUser == 'true' }}
-      uses: cachix/cachix-action@main
+      uses: cachix/cachix-action@v12
       with:
         authToken: ${{ secrets.AWS_ACCESS_KEY_ID }}
         signingKey: ${{ secrets.FLOX_STORE_PUBLIC_NIX_SECRET_KEY }}
