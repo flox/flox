@@ -59,7 +59,6 @@ jobs:
         authToken: ${{ secrets.AWS_ACCESS_KEY_ID }}
         signingKey: ${{ secrets.FLOX_STORE_PUBLIC_NIX_SECRET_KEY }}
         cachixArgs: --hostname s3://flox-store-public
-        skipAddingSubstituter: true
         name: floxdev
 
     - name: Build
