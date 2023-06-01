@@ -10,7 +10,7 @@ general commands:
          - subscribe to channel URL
     flox unsubscribe [<name>]
          - unsubscribe from channel
-    flox search [(-c|--channel) <channel>] [(-v|--verbose)] [--json] <args>
+    flox search [(-c,--channel) <channel>]... [(-l|--long)|--json] [--refresh] [<regex>[@<semver-range>]]
          - search packages in subscribed channels
     flox config [--list] [--reset [--confirm]] \
                 [--set <arg> <value>] [--setNumber <arg> <value>] \
