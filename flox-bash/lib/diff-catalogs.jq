@@ -26,16 +26,19 @@ $c2[0] as $b |
 #               ...
 # }
 def isPackage:
-  if ((type == "object") | not) then (
-    # Uh oh ... something gone wrong, not a dict.
-    "ERROR: encountered object of type \(type)" | halt_error(1)
+  if (type != "object") then (
+    false
   )
   elif (has("type") and .["type"] == "catalogRender") then (
     true
   )
   # XXX TEMPORARY transition code while we wait for catalogs
   # to be rewritten in latest format with "type" field.
-  elif (has("element") and has("eval")) then (
+  # Require publish_element which will be present for packages from catalogs but
+  # not flakes. Admittedly that's a bit hacky and at some point perhaps we
+  # should support upgrades for flake packages, but for now only support them
+  # for packages from catalogs.
+  elif (has("element") and has("eval") and has("publish_element")) then (
     true
   )
   else (
@@ -44,12 +47,16 @@ def isPackage:
 
 def packagePNames(keys):
   # Recurse, adding to keys as we go.
-  to_entries | map(
-    (keys + [.key]) as $newkeys |
-    if (.value | isPackage) then keys else (
-      .value | packagePNames($newkeys)[]
-    ) end
-  );
+  if (type == "object") then (
+    to_entries | map(
+      (keys + [.key]) as $newkeys |
+      if (.value | isPackage) then keys else (
+          .value | packagePNames($newkeys)[]
+      ) end
+    )
+  ) else (
+    empty
+  ) end;
 
 def packagePaths(catalog):
   catalog | to_entries | map(
