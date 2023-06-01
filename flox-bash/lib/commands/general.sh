@@ -181,7 +181,14 @@ function floxSearch() {
 			shift
 			;;
 		# TODO: Deprecate `-v,--verbose'
-		-l|--long|-v|--verbose)
+		-v|--verbose)
+			_msg="the flag 'flox search -v,--verbose' is deprecated."
+			_msg="$_msg Please use 'flox search -l,--long' instead."
+			warn "WARNING: $_msg"
+			showDetail="true"
+			shift
+			;;
+		-l|--long)
 			showDetail="true"
 			shift
 			;;
