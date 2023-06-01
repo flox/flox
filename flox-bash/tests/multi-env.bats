@@ -16,18 +16,18 @@ load test_support.bash;
 
 # ---------------------------------------------------------------------------- #
 
-kill_envs() {
+destroy_envs() {
   "$FLOX_CLI" destroy -e "${TEST_ENVIRONMENT}1" --origin -f||:;
   "$FLOX_CLI" destroy -e "${TEST_ENVIRONMENT}2" --origin -f||:;
 }
 
 setup_file() {
   common_setup;
-  kill_envs;
+  destroy_envs;
 }
 
 teardown_file() {
-  kill_envs;
+  destroy_envs;
 }
 
 
