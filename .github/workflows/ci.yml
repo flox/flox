@@ -10,6 +10,7 @@ on:
 jobs:
 
   check-user:
+    runs-on: ubuntu-latest
     name: Check User is a Flox Member
     outputs:
       isFloxUser: ${{ steps.check-user.outputs.isFloxUser }}
