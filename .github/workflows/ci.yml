@@ -9,9 +9,28 @@ on:
 
 jobs:
 
+  check-user:
+    name: Check User is a Flox Member
+    outputs:
+      isFloxUser: ${{ steps.check-user.outputs.isFloxUser }}
+    steps:
+    - id: check-user
+      env:
+        GITHUB_TOKEN ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        if gh api -H 'Accept: application/vnd.github+json'  \
+                  -H 'X-GitHub-Api-Version: 2022-11-28'     \
+                  /orgs/flox/members/${{ github.actor }};
+        then
+          echo 'isFloxUser=true' >> "$GITHUB_OUTPUT";
+        else
+          echo 'isFloxUser=false' >> "$GITHUB_OUTPUT";
+        fi
+
   build:
     name: Build ${{ matrix.package }}
     runs-on: ubuntu-latest
+    needs: check-user
 
     strategy:
       matrix:
@@ -21,6 +40,7 @@ jobs:
           - package: nix-editor
 
     steps:
+
     - name: Checkout
       uses: actions/checkout@v3
       with:
@@ -30,6 +50,16 @@ jobs:
       uses: flox/install-flox-action@main
       with:
         github-access-token: ${{ secrets.NIX_GIT_TOKEN }}
+
+    - name: Setup Caches
+      if: ${{ needs.check-user.outputs.isFloxUser == 'true' }}
+      uses: cachix/cachix-action
+      with:
+        authToken: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        signingKey: ${{ secrets.FLOX_STORE_PUBLIC_NIX_SECRET_KEY }}
+        cachixArgs: --hostname s3://flox-store-public
+        skipAddingSubstituter: true
+        name: floxdev
 
     - name: Build
       run: flox build ${{ matrix.package }} -L
