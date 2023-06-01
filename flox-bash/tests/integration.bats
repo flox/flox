@@ -4,9 +4,6 @@
 # - unit tests only to be run from within package build
 # - unit and integration tests to be run from command line
 #
-bats_load_library bats-support
-bats_load_library bats-assert
-bats_require_minimum_version 1.5.0
 
 load test_support.bash
 
