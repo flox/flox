@@ -60,6 +60,7 @@ jobs:
         signingKey: ${{ secrets.FLOX_STORE_PUBLIC_NIX_SECRET_KEY }}
         cachixArgs: --hostname s3://flox-store-public
         name: floxdev
+        installCommand: nix profile install nixpkgs#cachix
 
     - name: Build
       run: flox build ${{ matrix.package }} -L
