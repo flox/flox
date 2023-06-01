@@ -4,26 +4,41 @@
 #
 # ---------------------------------------------------------------------------- #
 
+# Processes results from `nix search <URL>#catalog.<SYSTEM>.<STABILITY> --json;'
+# injecting the "channel" ( flake alias ) into the key, and adding info scraped
+# from the `attrPath' as fields.
+#
+# NOTE: The format of these results differs from `nix search --json;'
+# Ex:
+# "catalog.x86_64-linux.stable.vimPlugins.vim-svelte.2022-02-1": {}
+#   ->
+# "catalog.x86_64-linux.stable.nixpkgs-flox.vimPlugins.vim-svelte.2022-02-1": {}
+def nixPkgToCatalogPkg( $channel ):
+  ( .key|split( "." ) ) as $key|
+  $key[0] as $catalog|
+  $key[1] as $system|
+  $key[2] as $stability|
+  ( $key[3:]|join( "." ) ) as $attrPathVersion|
+  .key    = $catalog + "." + $system + "." + $channel + "." + $attrPathVersion|
+  .value += {
+    catalog:         $catalog
+  , system:          $system
+  , stability:       $stability
+  , channel:         $channel
+  , attrPathVersion: $attrPathVersion
+  , attrPath:        $key[3:-1]|join( "." )
+  };
+
+
+# ---------------------------------------------------------------------------- #
+
 # Convert the JSON representation of a catalog package emitted by `nix search'
 # into an entry used by `flox search'.
-def nixCatalogPkgToSearchEntry:
+def catalogPkgToSearchEntry:
   # Discard anything for which version = "latest".
-  select( .key|endswith( ".latest" )|not )|
-  # Start by parsing and enhancing data into fields
-  ( .key|split( "." ) ) as $key|
-  .value.version as $_version|
-  .value.catalog   = $key[0]|
-  .value.system    = $key[1]|
-  .value.stability = $key[2]|
-  .value.channel   = $key[3]|
-  .value.attrPath  = ($key[4:]|join( "." )|rtrimstr( ".\($key[-1])" ) )|
-  .value.floxref   = "\(.value.channel).\(.value.attrPath)"|
-  .value.alias     = (
-    ( if .value.stability == "stable" then (
-        if .value.channel == "nixpkgs-flox" then [] else [.value.channel] end
-      ) else [.value.stability,.value.channel]
-      end ) + $key[4:]|join( "." )|rtrimstr( ".\($key[-1])" )
-  )|.value;
+  select( .key|endswith( ".latest" )|not )|.value|.+= {
+    floxref: ( .channel + "." + .attrPath )
+  };
 
 
 # ---------------------------------------------------------------------------- #
@@ -33,26 +48,32 @@ def nixCatalogPkgToSearchEntry:
 def searchEntriesToPrettyBlocks( $showDetail ):
   reduce .[] as $x (
     {};
+    ( if $showDetail then $x.pname else (
+        ( if $x.stability == "stable" then "" else $x.stability + "." end ) +
+        ( if $x.channel == "nixpkgs-flox" then "" else $x.channel + "." end ) +
+        $x.attrPath
+      ) end
+    ) as $alias|
     # Results are grouped under short headers which might have a description.
-    ( $x.alias + (
-        if ( $x.description == null ) or ( $x.description == "" )
-          then ""
-          else " - " + $x.description
-        end
-      )
+    ( if ( $x.description == null ) or ( $x.description == "" ) then $alias else
+        $alias + ( if $showDetail then " - " else "|" end ) + $x.description
+      end
     ) as $header|
-    # When `showDetails' is active, be show multiple lines under each header
-    # as `<stability>.<channel>.<attrPath>@<version>'.
-    ( $x.stability + "." + $x.floxref + "@" + $x.version ) as $line|
+    ( if $showDetail then $header else $x.floxref end ) as $key|
     # The first time seeing a floxref construct an array containing a
     # header as the previous value, otherwise use the previous array.
-    ( if .[$x.floxref] then .[$x.floxref] else [$header] end ) as $prev|
-    # Only include `$line' when `$showDetail' is enabled.
-    ( if $showDetail then ( $prev + [( "  " + $line )] ) else $prev end
-    ) as $result|
+    ( if .[$key] then .[$key] else [$header] end ) as $prev|
     # Merge result with existing collection.
     # This potentially "updates" existing elements.
-    . * { "\($x.floxref)": $result }
+    . * {
+      # Only include `$line' when `$showDetail' is enabled.
+      "\($key)":
+        # When `showDetails' is active, be show multiple lines under each header
+        # as `<stability>.<channel>.<attrPath>@<version>'.
+        ( if ( $showDetail|not ) then $prev else
+            ( $prev + [( "  " + $x.floxref + "@" + $x.version )] )
+          end )
+    }
   );
 
 

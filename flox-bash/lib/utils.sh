@@ -149,7 +149,7 @@ hash_commands \
 	ansifilter awk basename bash cat chmod cmp column cp curl cut dasel date dirname \
 	getent gh git grep gum id jq ln man mkdir mktemp mv nix nix-editor nix-store \
 	pwd readlink realpath rm rmdir sed sh sleep sort stat tail tar tee \
-	touch tr uname uuid xargs zgrep
+	touch tr uname uuid xargs zgrep semver
 
 # Return full path of first command available in PATH.
 #
@@ -1318,8 +1318,11 @@ function searchChannels() {
 	  -e " follows " \
 	  -e "\([0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]\)" \
 	  ${_stderrFiles[@]} 1>&2 || true
-	$invoke_jq -r -f "$_lib/merge-search-results.jq" ${_stdoutFiles[@]} | \
-		$_jq -r -s add
+	#shellcheck disable=SC2016
+	$invoke_jq -r -L "${_lib?}" 'include "catalog-search";
+	    ( input_filename|split( "/" )[-3] ) as $channel|
+	    with_entries( nixPkgToCatalogPkg( $channel ) )
+	  ' "${_stdoutFiles[@]}"|$_jq -r -s add
 	if [ $debug -eq 0 ]; then
 		$_rm -f ${_stdoutFiles[@]}
 		$_rm -f ${_stderrFiles[@]}
