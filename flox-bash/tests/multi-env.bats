@@ -13,8 +13,8 @@ load test_support.bash;
 # ---------------------------------------------------------------------------- #
 
 destroy_envs() {
-  "$FLOX_CLI" destroy -e "${TEST_ENVIRONMENT}1" --origin -f||:;
-  "$FLOX_CLI" destroy -e "${TEST_ENVIRONMENT}2" --origin -f||:;
+  "$FLOX_CLI" destroy -e "${TEST_ENVIRONMENT}_multi_1" --origin -f||:;
+  "$FLOX_CLI" destroy -e "${TEST_ENVIRONMENT}_multi_1" --origin -f||:;
 }
 
 setup_file() {
@@ -29,15 +29,15 @@ teardown_file() {
 
 # ---------------------------------------------------------------------------- #
 
-@test "init flox ${TEST_ENVIRONMENT}{1,2}" {
-  run "$FLOX_CLI" create -e "${TEST_ENVIRONMENT}1";
+@test "init flox ${TEST_ENVIRONMENT}_multi_{1,2}" {
+  run "$FLOX_CLI" create -e "${TEST_ENVIRONMENT}_multi_1";
   assert_success;
-  run "$FLOX_CLI" install -e "${TEST_ENVIRONMENT}1" "$FLOX_PACKAGE";
+  run "$FLOX_CLI" install -e "${TEST_ENVIRONMENT}_multi_1" "$FLOX_PACKAGE";
   assert_success;
 
-  run "$FLOX_CLI" create -e "${TEST_ENVIRONMENT}2";
+  run "$FLOX_CLI" create -e "${TEST_ENVIRONMENT}_multi_2";
   assert_success;
-  run "$FLOX_CLI" install -e "${TEST_ENVIRONMENT}2" "$FLOX_PACKAGE";
+  run "$FLOX_CLI" install -e "${TEST_ENVIRONMENT}_multi_2" "$FLOX_PACKAGE";
   assert_success;
 }
 
@@ -46,12 +46,12 @@ teardown_file() {
 
 @test "flox activate on multiple environments" {
   #shellcheck disable=SC2016
-  run "$FLOX_CLI" activate                                 \
-      -e "${TEST_ENVIRONMENT}1" -e "${TEST_ENVIRONMENT}2"  \
+  run "$FLOX_CLI" activate                                               \
+      -e "${TEST_ENVIRONMENT}_multi_1" -e "${TEST_ENVIRONMENT}_multi_2"  \
       -- bash -c 'echo "FLOX_ENV: $FLOX_ENV"';
   assert_success;
   # FLOX_ENV should be set to the first argument
-  assert_output --regexp "^FLOX_ENV: .*${TEST_ENVIRONMENT}1\$";
+  assert_output --regexp "^FLOX_ENV: .*${TEST_ENVIRONMENT}_multi_1\$";
 }
 
 
