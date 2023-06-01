@@ -60,7 +60,7 @@ jobs:
           # so pusing to latest is just forwarding the branch
           git push --atomic origin \
             ${{ steps.tag.outputs.TAG }} \
-            +${{ steps.tag.outputs.TAG }}~0:refs/heads/main
+            +${{ steps.tag.outputs.TAG }}~0:refs/heads/main \
             +${{ steps.tag.outputs.TAG }}~0:refs/heads/latest 
           
           # update the PR branch so github will close the PR
