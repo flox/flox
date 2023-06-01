@@ -150,7 +150,8 @@ function floxUnsubscribe() {
 
 _general_commands+=("search")
 _usage["search"]="search packages in subscribed channels"
-_usage_options["search"]="[(-c|--channel) <channel>] [(-v|--verbose)] [--json] <args>"
+_usage_options["search"]="[(-c,--channel) <channel>]... [(-l|--long)|--json] "
+_usage_options["search"]+="[--refresh] [<regex>[@<semver-range>]]"
 function floxSearch() {
 	trace "$@"
 	packageregexp=
@@ -167,14 +168,10 @@ function floxSearch() {
 			channels+=("$1")
 			shift
 			;;
-		--show-libs)
-			# Not yet supported; will implement when catalog has hasBin|hasMan.
-			shift
-			;;
-		--all)
-			packageregexp="."
-			shift
-			;;
+		# TODO: Will implement when catalog has `has{Bin,Man}'.
+		#show-libs)
+		#	shift
+		#	;;
 		--refresh)
 			refreshArg="--refresh"
 			shift
@@ -183,7 +180,8 @@ function floxSearch() {
 			jsonOutput=1
 			shift
 			;;
-		-v|--verbose)
+		# TODO: Deprecate `-v,--verbose'
+		-l|--long|-v|--verbose)
 			showDetail="true"
 			shift
 			;;
@@ -215,15 +213,15 @@ function floxSearch() {
 			;;
 		esac
 	done
-	if [[ -z "${packageregexp:-}" ]]; then
-		usage | error "missing channel argument"
-	fi
+
+	: "${packageregexp:=.}"
 	if [[ "$#" -gt 0 ]]; then
 		usage | error "extra arguments \"$*\""
 	fi
 	: "${GREP_COLOR:=1;32}"
 	export GREP_COLOR
 
+	# TODO: handle lines which contain `|' in their descriptions
 	if [[ "$showDetail" = true ]]; then
 		_m_col="cat -"
 	else

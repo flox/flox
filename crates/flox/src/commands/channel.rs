@@ -265,10 +265,19 @@ pub enum ChannelCommands {
         json: bool,
 
         /// print extended search results
-        #[bpaf(long, short)]
-        verbose: bool,
+        #[bpaf(short, long, long("verbose"), short('v'))]
+        long: bool,
 
-        #[bpaf(positional("search term"))]
+        /// force update of catalogs from remote sources before searching
+        #[bpaf(long)]
+        refresh: bool,
+
+        /// query string of the form `<REGEX>[@<SEMVER-RANGE>]` used to filter
+        /// match against package names/descriptions, and semantic version.
+        /// Regex pattern is `PCRE` style, and semver ranges use the
+        /// `node-semver` syntax.
+        /// Exs: `(hello|coreutils)`, `node@>=16`, `coreutils@9.1`
+        #[bpaf(positional("search-term"))]
         search_term: Option<String>,
     },
 
