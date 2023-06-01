@@ -179,7 +179,7 @@ pub async fn init_git_conf(temp_dir: &Path, config_dir: &Path) -> Result<()> {
             .write_all(git_config.as_bytes())
             .await?;
 
-        info!("Updating git config {:#?}", &flox_system_conf_path);
+        info!("Updating {:#?}", &flox_system_conf_path);
         tokio::fs::rename(temp_system_conf_path, &flox_system_conf_path).await?;
     }
 
