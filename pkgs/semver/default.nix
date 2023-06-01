@@ -1,1 +1,4 @@
-{inputs}: inputs.floco.packages.semver
+{inputs}:
+inputs.floco.packages.semver.overrideAttrs (_: {
+  allowSubstitutes = true;
+})
