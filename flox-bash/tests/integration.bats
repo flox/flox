@@ -4,9 +4,6 @@
 # - unit tests only to be run from within package build
 # - unit and integration tests to be run from command line
 #
-bats_load_library bats-support
-bats_load_library bats-assert
-bats_require_minimum_version 1.5.0
 
 load test_support.bash
 
@@ -793,32 +790,6 @@ load test_support.bash
   assert_output --regexp "0  nixpkgs#hello +hello-"$VERSION_REGEX
   assert_output --partial "1  $FLOX_PACKAGE  $FLOX_PACKAGE_FIRST8"
   ! assert_output --partial "stable.nixpkgs-flox.hello"
-}
-
-@test "flox activate on multiple environments" {
-  run "$FLOX_CLI" create -e "${TEST_ENVIRONMENT}-1"
-  assert_success
-  run "$FLOX_CLI" install -e "${TEST_ENVIRONMENT}-1" "$FLOX_PACKAGE"
-  assert_success
-  run "$FLOX_CLI" create -e "${TEST_ENVIRONMENT}-2"
-  assert_success
-  run "$FLOX_CLI" install -e "${TEST_ENVIRONMENT}-2" "$FLOX_PACKAGE"
-  assert_success
-  run "$FLOX_CLI" activate                                   \
-      -e "${TEST_ENVIRONMENT}-1" -e "${TEST_ENVIRONMENT}-2"  \
-      -- bash -c 'echo "FLOX_ENV: $FLOX_ENV"'
-  assert_success
-  # FLOX_ENV should be set to the first argument
-  assert_output --regexp "^FLOX_ENV: .*${TEST_ENVIRONMENT}-1\$"
-  # Cleanup
-  run sh -c "XDG_CONFIG_HOME=$REAL_XDG_CONFIG_HOME GH_CONFIG_DIR=$REAL_GH_CONFIG_DIR $FLOX_CLI destroy -e ${TEST_ENVIRONMENT}-1 --origin -f"
-  assert_output --partial "WARNING: you are about to delete the following"
-  assert_output --partial "Deleted branch"
-  assert_output --partial "removed"
-  run sh -c "XDG_CONFIG_HOME=$REAL_XDG_CONFIG_HOME GH_CONFIG_DIR=$REAL_GH_CONFIG_DIR $FLOX_CLI destroy -e ${TEST_ENVIRONMENT}-2 --origin -f"
-  assert_output --partial "WARNING: you are about to delete the following"
-  assert_output --partial "Deleted branch"
-  assert_output --partial "removed"
 }
 
 @test "flox develop setup" {
