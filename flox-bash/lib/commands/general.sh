@@ -224,7 +224,7 @@ function floxSearch() {
 	: "${GREP_COLOR:=1;32}"
 	export GREP_COLOR
 
-	if [[ "$showDetaul" = true ]]; then
+	if [[ "$showDetail" = true ]]; then
 		_m_col="cat -"
 	else
 		_m_col="$_column -s '|' -t -l 2"
