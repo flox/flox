@@ -227,7 +227,7 @@ function floxSearch() {
 	if [[ "$showDetail" = true ]]; then
 		_m_col="cat -"
 	else
-		_m_col="$_column -s '|' -t -l 2"
+		_m_col="$_column -s '|' -t"
 	fi
 
 	runSearch() {
