@@ -221,7 +221,7 @@ EOF
 if $_cmp --quiet $tmpNixConf $nixConf; then
 	$_rm $tmpNixConf
 else
-	warn "Updating $nixConf"
+	warn "Updating \"$nixConf\""
 	$_mv -f $tmpNixConf $nixConf
 fi
 export NIX_USER_CONF_FILES="$nixConf"

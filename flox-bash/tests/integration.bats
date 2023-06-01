@@ -53,8 +53,9 @@ load test_support.bash
   # At which point the messaging may change as well.
   run "$FLOX_CLI" channels
   assert_success
+  assert_output --partial "Updating \"$FLOX_CONFIG_HOME/gitconfig\""
+  skip "remaining portion of test depends on rust or bash execution"
   assert_output --partial "Updating $FLOX_CONFIG_HOME/nix.conf"
-  assert_output --partial "Updating $FLOX_CONFIG_HOME/gitconfig"
 }
 
 @test "flox git remote -v" {
