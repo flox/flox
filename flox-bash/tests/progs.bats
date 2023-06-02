@@ -36,12 +36,16 @@ util() {
     . "$_lib/progs.sh";
   fi
   . "$_lib/utils.sh";
+
+  # Run the given command and stash the exit code
   eval "$@";
   _ec="$?";
 
   # restore old options
   eval "$_old_opts";
   PATH="$_OLD_PATH";
+
+  # Don't forget to use the exit code from our command.
   return "$_ec";
 }
 
