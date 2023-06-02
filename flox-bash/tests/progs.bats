@@ -27,6 +27,9 @@ util() {
   _old_opts="$( shopt -p; )";
   shopt -s extglob;
   shopt -s nullglob;
+  _OLD_PATH="$PATH";
+  PATH='/bin:/sbin:/usr/bin:/usr/local/bin'
+  PATH="$PATH:/run/wrappers/bin:/run/current-system/sw/bin"
 
   # Run utils setup
   if [[ -r "$_lib/progs.sh" ]]; then
@@ -37,6 +40,7 @@ util() {
 
   # restore old options
   eval "$_old_opts";
+  PATH="$_OLD_PATH"
 }
 
 cmds=(
