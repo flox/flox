@@ -191,13 +191,13 @@ medashes=$(echo $me | $_tr '[a-z]' '-')
 # info() prints to STDERR
 function info() {
 	trace "$@"
-	[ ${#@} -eq 0 ] || echo "$@" 1>&2
+	[[ "$#" -eq 0 ]] || echo "$@" 1>&2
 }
 
 # warn() prints to STDERR in bold color
 function warn() {
 	trace "$@"
-	[ "${#@}" -eq 0 ] || echo -e "${colorBold}${@}${colorReset}" 1>&2
+	[ "$#" -eq 0 ] || echo -e "${colorBold}${@}${colorReset}" 1>&2
 }
 
 # verboseExec() uses pprint() to safely print exec() calls to STDERR
