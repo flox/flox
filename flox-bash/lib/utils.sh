@@ -112,7 +112,7 @@ function trace() {
 	# Redirect the output of set -x to /dev/null
 	exec 9>/dev/null
 	local BASH_XTRACEFD=9
-	[ $debug -gt 0 ] || return 0
+	[ "$debug" = 0 ] || return 0
 	echo -e "trace:${filecolor}${BASH_SOURCE[2]}:${BASH_LINENO[1]}${colorReset} ${funccolor}${FUNCNAME[1]}${colorReset}( ${argscolor}"$(pprint "$@")"${colorReset} )" 1>&2
 }
 
@@ -197,13 +197,13 @@ function info() {
 # warn() prints to STDERR in bold color
 function warn() {
 	trace "$@"
-	[ ${#@} -eq 0 ] || echo -e "${colorBold}${@}${colorReset}" 1>&2
+	[ "${#@}" -eq 0 ] || echo -e "${colorBold}${@}${colorReset}" 1>&2
 }
 
 # verboseExec() uses pprint() to safely print exec() calls to STDERR
 function verboseExec() {
 	trace "$@"
-	[ $verbose -eq 0 ] || warn $(pprint "+" "$@")
+	[ "$verbose" -eq 0 ] || warn $(pprint "+" "$@")
 	exec "$@"
 }
 
@@ -212,7 +212,7 @@ function verboseExec() {
 function error() {
 	trace "$@"
 	info "" # Add space before printing error.
-	[ ${#@} -eq 0 ] || warn "ERROR: $@"
+	[ "${#@}" -eq 0 ] || warn "ERROR: $@"
 	info "" # Add space before appending output.
 	# Relay any STDIN out to STDERR.
 	$_cat 1>&2
@@ -229,8 +229,8 @@ declare -a tmpFiles=()
 declare -a tmpDirs=()
 function cleanup() {
 	# Keep temp files if debugging.
-	if [ $debug -eq 0 ]; then
-		if [ ${#tmpFiles[@]} -gt 0 ]; then
+	if [ "$debug" = 0 ]; then
+		if [ "${#tmpFiles[@]}" -gt 0 ]; then
 			$invoke_rm -f "${tmpFiles[@]}"
 		fi
 		if [ ${#tmpDirs[@]} -gt 0 ]; then

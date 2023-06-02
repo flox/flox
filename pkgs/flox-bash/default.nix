@@ -102,7 +102,7 @@
       nix = ["nix" "nix-store"];
       gnused = ["sed"];
       diffutils = ["cmp"];
-      getent = ["get-ent"];
+      getent = ["getent"];
       libossp_uuid = ["uuid"];
       gnutar = ["tar"];
       man = ["man"];
