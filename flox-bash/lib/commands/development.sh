@@ -119,7 +119,7 @@ function floxBuild() {
 	if [ -n "$FLOX_ORIGINAL_NIX_GET_COMPLETIONS" ]; then
 		export NIX_GET_COMPLETIONS="$(( FLOX_ORIGINAL_NIX_GET_COMPLETIONS + 1 ))"
 	fi
-	$invoke_nix "${_nixArgs[@]}" build --impure "${buildArgs[@]}" "${installables[@]}" --override-input flox-floxpkgs/nixpkgs/nixpkgs flake:nixpkgs-$FLOX_STABILITY
+	$invoke_nix "${_nixArgs[@]}" build "${buildArgs[@]}" "${installables[@]}" --override-input flox-floxpkgs/nixpkgs/nixpkgs flake:nixpkgs-$FLOX_STABILITY
 }
 
 # flox eval
@@ -378,7 +378,7 @@ function floxDevelop() {
 			floxNixDir="$($_dirname "$floxNixDir")"
 			# Try to build the floxEnv if there is one.
 			# The following build could fail; let it.
-			floxBuild "${_nixArgs[@]}" --out-link "$floxEnvGCRoot" "$floxEnvFlakeURL" "${developArgs[@]}" || \
+			floxBuild "${_nixArgs[@]}" --impure --out-link "$floxEnvGCRoot" "$floxEnvFlakeURL" "${developArgs[@]}" || \
 				error "failed to build floxEnv from $floxNixDir/flox.nix" < /dev/null
 
 			# The build was successful so copy the newly rendered catalog and
