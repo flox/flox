@@ -22,9 +22,11 @@ concurrency:
 
 jobs:
   flox-bash-tests:
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     env:
-      SYSTEM: x86_64-linux
       SSH_AUTH_SOCK: /tmp/ssh_agent.sock
 
     steps:
