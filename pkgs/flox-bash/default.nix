@@ -88,69 +88,121 @@
 
   progDecls = out: let
     drvProgs = {
-      ansifilter        = ["ansifilter"];
-      gawk              = ["awk"];
-      bashInteractive   = ["bash" "sh"];
-      curl              = ["curl"];
-      dasel             = ["dasel"];
-      gh                = ["gh"];
-      git               = ["git"];
-      gnugrep           = ["grep"];
-      gum               = ["gum"];
-      jq                = ["jq"];
-      nix-editor        = ["nix-editor"];
-      nix               = ["nix" "nix-store"];
-      gnused            = ["sed"];
-      diffutils         = ["cmp"];
-      getent            = ["get-ent"];
-      libossp_uuid      = ["uuid"];
-      gnutar            = ["tar"];
-      man               = ["man"];
-      findutils         = ["xargs"];
-      gzip              = ["zgrep"];
-      semver            = ["semver"];
+      ansifilter = ["ansifilter"];
+      gawk = ["awk"];
+      bashInteractive = ["bash" "sh"];
+      curl = ["curl"];
+      dasel = ["dasel"];
+      gh = ["gh"];
+      git = ["git"];
+      gnugrep = ["grep"];
+      gum = ["gum"];
+      jq = ["jq"];
+      nix-editor = ["nix-editor"];
+      nix = ["nix" "nix-store"];
+      gnused = ["sed"];
+      diffutils = ["cmp"];
+      getent = ["get-ent"];
+      libossp_uuid = ["uuid"];
+      gnutar = ["tar"];
+      man = ["man"];
+      findutils = ["xargs"];
+      gzip = ["zgrep"];
+      semver = ["semver"];
       util-linuxMinimal = ["column"];
-      coreutils         = [
-        "date" "dirname" "stat" "tail" "tee" "touch" "tr" "uname" "pwd"
-        "readlink" "realpath" "rm" "rmdir" "sleep" "sort" "id" "ln" "mkdir"
-        "mktemp" "mv" "basename" "cat" "chmod" "cp" "cut"
+      coreutils = [
+        "date"
+        "dirname"
+        "stat"
+        "tail"
+        "tee"
+        "touch"
+        "tr"
+        "uname"
+        "pwd"
+        "readlink"
+        "realpath"
+        "rm"
+        "rmdir"
+        "sleep"
+        "sort"
+        "id"
+        "ln"
+        "mkdir"
+        "mktemp"
+        "mv"
+        "basename"
+        "cat"
+        "chmod"
+        "cp"
+        "cut"
       ];
     };
     drvs = {
       inherit
-        ansifilter gawk bashInteractive curl dasel git gnugrep gum jq
-        nix-editor gnused diffutils getent libossp_uuid gnutar man findutils
-        gzip semver coreutils util-linuxMinimal
-      ;
+        ansifilter
+        gawk
+        bashInteractive
+        curl
+        dasel
+        git
+        gnugrep
+        gum
+        jq
+        nix-editor
+        gnused
+        diffutils
+        getent
+        libossp_uuid
+        gnutar
+        man
+        findutils
+        gzip
+        semver
+        coreutils
+        util-linuxMinimal
+        ;
       # Wrapped progs
       gh = out + "/libexec/flox";
       nix = out + "/libexec/flox";
     };
     nixVars = builtins.concatStringsSep " " [
-      "NIX_REMOTE" "NIX_SSL_CERT_FILE" "NIX_USER_CONF_FILES" "GIT_CONFIG_SYSTEM"
+      "NIX_REMOTE"
+      "NIX_SSL_CERT_FILE"
+      "NIX_USER_CONF_FILES"
+      "GIT_CONFIG_SYSTEM"
     ];
     genProg = drvOrPath: name: let
-      binPath = if builtins.isString drvOrPath then drvOrPath else
-                drvOrPath.outPath + "/bin";
+      binPath =
+        if builtins.isString drvOrPath
+        then drvOrPath
+        else drvOrPath.outPath + "/bin";
       vname = builtins.replaceStrings ["-"] ["_"] name;
-      vars  = if ! ( builtins.elem name ["nix" "nix-store"] ) then "" else ''
-        exported_variables["${binPath}/${name}"]='${nixVars}';
-      '';
-    in ''
-      export _${vname}='${binPath}/${name}';
-      export invoke_${vname}='invoke ${binPath}/${name}';
-    '' + vars;
+      vars =
+        if ! (builtins.elem name ["nix" "nix-store"])
+        then ""
+        else ''
+          exported_variables["${binPath}/${name}"]='${nixVars}';
+        '';
+    in
+      ''
+        export _${vname}='${binPath}/${name}';
+        export invoke_${vname}='invoke ${binPath}/${name}';
+      ''
+      + vars;
     proc = acc: drvName: let
-      drv   = builtins.getAttr drvName drvs;
+      drv = builtins.getAttr drvName drvs;
       progs = builtins.getAttr drvName drvProgs;
-      decls = map ( genProg drv ) progs;
-    in acc ++ decls;
+      decls = map (genProg drv) progs;
+    in
+      acc ++ decls;
     init = ''
       declare -Ax exported_variables;
       export _PROGS_INJECTED=:;
     '';
-    allDecls = builtins.foldl' proc [init] ( builtins.attrNames drvProgs );
-  in builtins.concatStringsSep "\n" allDecls;
+    allDecls = builtins.foldl' proc [init] (builtins.attrNames drvProgs);
+  in
+    builtins.concatStringsSep "\n" allDecls;
 in
   stdenv.mkDerivation rec {
     pname = "flox-bash";
@@ -160,7 +212,7 @@ in
       [bats entr makeWrapper pandoc shellcheck shfmt which]
       # nix-provided expect not working on Darwin (#441)
       ++ lib.optionals hostPlatform.isLinux [expect];
-    buildInputs = [
+    propagatedBuildInputs = [
       ansifilter
       bashInteractive
       coreutils
@@ -188,9 +240,11 @@ in
     ];
     makeFlags =
       [
-        "PREFIX=$(out)"
+        "PREFIX=${builtins.placeholder "out"}"
         "VERSION=${version}"
-        "FLOXPATH=$(out)/libexec/flox:${lib.makeBinPath buildInputs}"
+        "FLOXPATH=${builtins.placeholder "out"}/libexec/flox:${
+          lib.makeBinPath propagatedBuildInputs
+        }"
         "NIXPKGS_CACERT_BUNDLE_CRT=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
         "FLOX_ACTIVATE_BASH=${floxActivateBash}"
       ]
@@ -202,7 +256,7 @@ in
         "PATH_LOCALE=${pkgs.darwin.locale}/share/locale"
       ];
 
-    progs_sh = progDecls ( builtins.placeholder "out" );
+    progs_sh = progDecls (builtins.placeholder "out");
 
     postInstall = ''
       # Some programs cannot function without git, ssh, and other

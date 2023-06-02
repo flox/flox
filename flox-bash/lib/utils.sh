@@ -131,7 +131,8 @@ function hash_commands() {
 		return 0;
 	fi
 	set -h # explicitly enable hashing
-	local PATH="@@FLOXPATH@@:$PATH"
+	_OLD_PATH="$PATH"
+	PATH="@@FLOXPATH@@:$PATH"
 	for i in "$@"; do
 		_i=${i//-/_} # Pesky utilities containing dashes require rewrite.
 		hash $i # Dies with useful/precise error on failure when not found.
@@ -149,6 +150,7 @@ function hash_commands() {
 		*) ;;
 		esac
 	done
+	PATH="$_OLD_PATH"
 }
 
 # Before doing anything take inventory of all commands required by the script.
@@ -167,13 +169,15 @@ hash_commands \
 function first_in_PATH() {
 	trace "$@"
 	set -h # explicitly enable hashing
-	local PATH=@@FLOXPATH@@:$PATH
+	_OLD_PATH="$PATH"
+	PATH="@@FLOXPATH@@:$PATH"
 	for i in $@; do
 		if hash $i 2>/dev/null; then
 			echo $(type -P $i)
 			return
 		fi
 	done
+	PATH="$_OLD_PATH"
 }
 
 bestAvailableEditor=$(first_in_PATH vim vi nano emacs ed)

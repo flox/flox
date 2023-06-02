@@ -47,19 +47,19 @@
 
   envs =
     {
-      NIX_BIN = "${flox-bash}/libexec/flox/nix";
-      GIT_BIN = "${gitMinimal}/bin/git";
-      FLOX_SH = "${flox-bash}/libexec/flox/flox";
-      FLOX_SH_PATH = "${flox-bash}";
+      NIX_BIN = flox-bash.outPath + "/libexec/flox/nix";
+      GIT_BIN = gitMinimal.outPath + "/bin/git";
+      FLOX_SH = flox-bash.outPath + "/libexec/flox/flox";
+      FLOX_SH_PATH = flox-bash.outPath;
       FLOX_SH_FLAKE = flox-bash.src; # For bats tests
       FLOX_VERSION = "${cargoToml.package.version}-${inputs.flox-floxpkgs.lib.getRev self}";
-      NIXPKGS_CACERT_BUNDLE_CRT = "${cacert}/etc/ssl/certs/ca-bundle.crt";
+      NIXPKGS_CACERT_BUNDLE_CRT = cacert.outPath + "/etc/ssl/certs/ca-bundle.crt";
       NIX_TARGET_SYSTEM = targetPlatform.system;
 
       NIX_BASH_COMPLETION_SCRIPT = ../../crates/flox/src/static/nix_bash_completion.sh;
       NIX_ZSH_COMPLETION_SCRIPT = ../../crates/flox/src/static/nix_zsh_completion.sh;
 
-      FLOX_RESOLVER_SRC = ../../resolver;
+      FLOX_RESOLVER_SRC = builtins.path {path = ../../resolver;};
 
       METRICS_EVENTS_URL = "https://events.floxdev.com/capture";
       METRICS_EVENTS_API_KEY = "phc_z4dOADAPvpU9VNzCjDD3pIJuSuGTyagKdFWfjak838Y";
@@ -67,11 +67,11 @@
       LIBSSH2_SYS_USE_PKG_CONFIG = "1";
     }
     // lib.optionalAttrs hostPlatform.isDarwin {
-      NIX_COREFOUNDATION_RPATH = "${darwin.CF}/Library/Frameworks";
-      PATH_LOCALE = "${darwin.locale}/share/locale";
+      NIX_COREFOUNDATION_RPATH = darwin.CF.outPath + "/Library/Frameworks";
+      PATH_LOCALE = darwin.locale.outPath + "/share/locale";
     }
     // lib.optionalAttrs hostPlatform.isLinux {
-      LOCALE_ARCHIVE = "${glibcLocales}/lib/locale/locale-archive";
+      LOCALE_ARCHIVE = glibcLocales.outPath + "/lib/locale/locale-archive";
     };
 in
   rustPlatform.buildRustPackage ({
@@ -127,6 +127,8 @@ in
         gnused
         (bats.withLibraries (p: [p.bats-support p.bats-assert]))
       ];
+
+      propagatedBuildInputs = [flox-bash gitMinimal];
 
       passthru.envs = envs;
       passthru.manpages = manpages;
