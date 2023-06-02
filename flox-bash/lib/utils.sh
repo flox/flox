@@ -117,12 +117,22 @@ function trace() {
 }
 
 # Track exported environment variables for use in verbose output.
+# XXX: This routine is effectively skipped when running `flox' from the
+# nix store, which will instead hard code these values at build time in the
+# generated file `flox-bash/lib/progs.sh'.
+# That generated file sets the variable `_PROGS_INJECTED' which causes this
+# routien to bail early.
+# Any changes to this function should likely be reflected in
+# `pkgs/flox-bash/default.nix'.
 declare -A exported_variables
 function hash_commands() {
 	trace "$@"
+	if [[ -n "${_PROGS_INJECTED:-}" ]]; then
+		return 0;
+	fi
 	set -h # explicitly enable hashing
-	local PATH=@@FLOXPATH@@:$PATH
-	for i in $@; do
+	local PATH="@@FLOXPATH@@:$PATH"
+	for i in "$@"; do
 		_i=${i//-/_} # Pesky utilities containing dashes require rewrite.
 		hash $i # Dies with useful/precise error on failure when not found.
 		declare -g _$_i=$(type -P $i)

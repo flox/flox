@@ -11,14 +11,22 @@ shopt -s extglob
 # Allow globs to return the empty list.
 shopt -s nullglob
 
+# Pull in absolute paths to runtime programs if a file has been provided.
+# This is generate by `default.nix' but isn't strictly required to run if the
+# user's runtime environment provides all necessary dependencies.
+if [[ -r "$_lib/progs.sh" ]]; then
+	  . "$_lib/progs.sh"
+fi
+
 # Pull in utility functions early.
-. $_lib/utils.sh
+. "$_lib/utils.sh"
+
 
 # Import library functions.
-. $_lib/metadata.sh
+. "$_lib/metadata.sh"
 
 # Import command functions.
-. $_lib/commands.sh
+. "$_lib/commands.sh"
 
 #
 # Parse flox configuration files in TOML format. Order of processing:
