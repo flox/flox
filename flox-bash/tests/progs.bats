@@ -11,9 +11,22 @@ load test_support.bash;
 
 # ---------------------------------------------------------------------------- #
 
+destroy_envs() {
+  "$FLOX_CLI" destroy -e "$TEST_ENVIRONMENT" --origin -f||:;
+}
+
 setup_file() {
   common_setup;
+  TEST_ENVIRONMENT='_testing_progs';
+  destroy_envs;
 }
+
+teardown_file() {
+  destroy_envs;
+}
+
+
+# ---------------------------------------------------------------------------- #
 
 # Run a command in the context of `flox-bash' after it has processed `utils.sh'.
 # This file handles resolution of runtime dependencies, so we only care about
@@ -72,6 +85,18 @@ cmds=(
     run util echo "\$invoke_$p";
     assert_output --regexp "^invoke /nix/store/.*/$p\$";
   done
+}
+
+
+# ---------------------------------------------------------------------------- #
+
+@test "ensure activated shell doesn't inherit '_${cmds[1]}'" {
+  run "$FLOX_CLI" create -e "$TEST_ENVIRONMENT";
+  assert_success;
+  run "$FLOX_CLI" install -e "$TEST_ENVIRONMENT" hello bash;
+  assert_success;
+  run "$FLOX_CLI" activate -- bash -c "echo \"\${_${cmds[1]}:-NOPE}\";";
+  assert_output --partial NOPE;
 }
 
 
