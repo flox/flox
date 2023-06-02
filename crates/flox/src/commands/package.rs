@@ -616,6 +616,16 @@ async fn ensure_project_repo<'flox>(
                 dialog.prompt().await
             }
 
+            if !command.inner.init_git && !Dialog::can_prompt() {
+                let msg = indoc! {"
+                    The current directory is not in a Git repository.
+                    Unable to prompt for confirmation to create a git repository.
+
+                    Explcitly allow by running with '-i' or '--git-init
+                "};
+                bail!("{msg}");
+            }
+
             if command.inner.init_git || prompt(g.path()).await? {
                 let p = g.init_git().await?;
 
