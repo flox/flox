@@ -59,6 +59,8 @@ jobs:
         nix profile install '.#nix-editor' 'nixpkgs#libossp_uuid';
         if [[ "${{ matrix.os }}" = 'ubuntu-latest' ]]; then
           nix profile install 'nixpkgs#expect';
+        elif [[ "${{ matrix.os }}" = 'ubuntu-latest' ]]; then
+          nix profile install 'nixpkgs#coreutils';
         fi
         pushd ./flox-bash;
         flox build '..#flox-bash';
