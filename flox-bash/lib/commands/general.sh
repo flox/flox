@@ -28,8 +28,8 @@ function floxChannels() {
 		mapfile -t rows < <(getChannelsJSON | $_jq -r '
 		  to_entries | sort_by(.key) | map(
 			"|\(.key)|\(.value.type)|\(.value.url)|"
-		  )[]
-		')
+		  )[]'
+		)
 		${invoke_gum?} format --type="markdown"                              \
 		               -- "|Channel|Type|URL|" "|---|---|---|" "${rows[@]}"
 	fi
