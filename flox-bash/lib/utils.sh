@@ -112,36 +112,17 @@ function trace() {
 	# Redirect the output of set -x to /dev/null
 	exec 9>/dev/null
 	local BASH_XTRACEFD=9
-	[[ "${debug:-0}" -gt 0 ]] || return 0
+	[ ${debug:-0} -gt 0 ] || return 0
 	echo -e "trace:${filecolor}${BASH_SOURCE[2]}:${BASH_LINENO[1]}${colorReset} ${funccolor}${FUNCNAME[1]}${colorReset}( ${argscolor}"$(pprint "$@")"${colorReset} )" 1>&2
 }
 
 # Track exported environment variables for use in verbose output.
-# XXX: This routine is effectively skipped when running `flox' from the
-# nix store, which will instead hard code these values at build time in the
-# generated file `flox-bash/lib/progs.sh'.
-# That generated file sets the variable `_FLOX_PROGS_INJECTED' which causes this
-# routine to bail early.
-# Any changes to this function should likely be reflected in
-# `pkgs/flox-bash/default.nix'.
-#
-# NOTE: we use `declare -g <VAR>=<VAL>;' rather than export.
-# This is important to prevent commands such as `flox activate' from inheriting
-# these variables.
-# We can't use something like `env -i "$SHELL";' for `flox activate' either
-# because this would prevent this usage from behaving "as expected":
-#   FOO=1 flox activate -- bash -c 'echo "$FOO";';
-# So use `declare -g' ( without `-x' )!
 declare -A exported_variables
 function hash_commands() {
 	trace "$@"
-	if [[ -n "${_FLOX_PROGS_INJECTED:-}" ]]; then
-		return 0;
-	fi
 	set -h # explicitly enable hashing
-	_OLD_PATH="$PATH"
-	PATH="@@FLOXPATH@@:$PATH"
-	for i in "$@"; do
+	local PATH=@@FLOXPATH@@:$PATH
+	for i in $@; do
 		_i=${i//-/_} # Pesky utilities containing dashes require rewrite.
 		hash $i # Dies with useful/precise error on failure when not found.
 		declare -g _$_i=$(type -P $i)
@@ -158,7 +139,6 @@ function hash_commands() {
 		*) ;;
 		esac
 	done
-	PATH="$_OLD_PATH"
 }
 
 # Before doing anything take inventory of all commands required by the script.
@@ -177,15 +157,13 @@ hash_commands \
 function first_in_PATH() {
 	trace "$@"
 	set -h # explicitly enable hashing
-	_OLD_PATH="$PATH"
-	PATH="@@FLOXPATH@@:$PATH"
+	local PATH=@@FLOXPATH@@:$PATH
 	for i in $@; do
 		if hash $i 2>/dev/null; then
 			echo $(type -P $i)
 			return
 		fi
 	done
-	PATH="$_OLD_PATH"
 }
 
 bestAvailableEditor=$(first_in_PATH vim vi nano emacs ed)
@@ -199,19 +177,19 @@ medashes=$(echo $me | $_tr '[a-z]' '-')
 # info() prints to STDERR
 function info() {
 	trace "$@"
-	[[ "$#" -eq 0 ]] || echo "$@" 1>&2
+	[ ${#@} -eq 0 ] || echo "$@" 1>&2
 }
 
 # warn() prints to STDERR in bold color
 function warn() {
 	trace "$@"
-	[ "$#" -eq 0 ] || echo -e "${colorBold}${@}${colorReset}" 1>&2
+	[ ${#@} -eq 0 ] || echo -e "${colorBold}${@}${colorReset}" 1>&2
 }
 
 # verboseExec() uses pprint() to safely print exec() calls to STDERR
 function verboseExec() {
 	trace "$@"
-	[[ "${verbose:-0}" -eq 0 ]] || warn $(pprint "+" "$@")
+	[ $verbose -eq 0 ] || warn $(pprint "+" "$@")
 	exec "$@"
 }
 
@@ -220,7 +198,7 @@ function verboseExec() {
 function error() {
 	trace "$@"
 	info "" # Add space before printing error.
-	[[ "$#" -eq 0 ]] || warn "ERROR: $@"
+	[ ${#@} -eq 0 ] || warn "ERROR: $@"
 	info "" # Add space before appending output.
 	# Relay any STDIN out to STDERR.
 	$_cat 1>&2
@@ -237,13 +215,13 @@ declare -a tmpFiles=()
 declare -a tmpDirs=()
 function cleanup() {
 	# Keep temp files if debugging.
-	if [[ "${debug:-0}" -eq 0 ]]; then
-		if [[ "${#tmpFiles[@]}" -gt 0 ]]; then
+	if [ ${debug:-0} -eq 0 ]; then
+		if [ ${#tmpFiles[@]} -gt 0 ]; then
 			$invoke_rm -f "${tmpFiles[@]}"
 		fi
-		if [[ "${#tmpDirs[@]}" -gt 0 ]]; then
+		if [ ${#tmpDirs[@]} -gt 0 ]; then
 			for i in "${tmpDirs[@]}"; do
-				if [[ "$i" =~ ^/tmp || "$i" =~ ^${TMPDIR} ]]; then
+				if [[ $i =~ ^/tmp || $i =~ ^${TMPDIR} ]]; then
 					$invoke_rm -rf "$i"
 				else
 					warn "cowardly refusing to recursively remove '$i'"
@@ -344,7 +322,7 @@ function invoke() {
 	local BASH_XTRACEFD=9
 	trace "$@"
 	local vars=()
-	if [[ "${verbose:-0}" -ge "$minverbosity" ]]; then
+	if [ $verbose -ge $minverbosity ]; then
 		for i in ${exported_variables[$1]}; do
 			vars+=($(eval "echo $i=\${$i}"))
 		done
@@ -1318,7 +1296,7 @@ function searchChannels() {
 				"'flake:${channel}#.catalog.${FLOX_SYSTEM}.$stability'" "'$packageregexp'"
 			)
 			echo "${cmd[@]} >$_tmpdir/$channel/$stability/stdout 2>$_tmpdir/$channel/$stability/stderr &" >> $_script
-			[[ "${verbose:-0}" -lt "$minverbosity" ]] || warn "+ ${_nixInvocationVariables[@]} ${cmd[@]}"
+			[ $verbose -lt $minverbosity ] || warn "+ ${_nixInvocationVariables[@]} ${cmd[@]}"
 		done
 	done
 	echo "wait" >> $_script
@@ -1345,7 +1323,7 @@ function searchChannels() {
 	    ( input_filename|split( "/" )[-3] ) as $channel|
 	    with_entries( nixPkgToCatalogPkg( $channel ) )
 	  ' "${_stdoutFiles[@]}"|$_jq -r -s add
-	if [[ "${debug:-0}" -eq 0 ]]; then
+	if [ $debug -eq 0 ]; then
 		$_rm -f ${_stdoutFiles[@]}
 		$_rm -f ${_stderrFiles[@]}
 		$_rmdir ${_resultDirs[@]} ${_channelDirs[@]} $_tmpdir

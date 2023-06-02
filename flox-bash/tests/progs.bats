@@ -48,10 +48,6 @@ util() {
   PATH="$PATH:/run/wrappers/bin:/run/current-system/sw/bin"
 
   # Run utils setup
-  if [[ -r "$_lib/progs.sh" ]]; then
-    #shellcheck disable=SC1091
-    . "$_lib/progs.sh";
-  fi
   #shellcheck source-path=SCRIPTDIR
   #shellcheck source=../lib/utils.sh
   . "$_lib/utils.sh";
