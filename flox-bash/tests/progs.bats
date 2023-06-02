@@ -36,12 +36,15 @@ util() {
 
   # Run utils setup
   if [[ -r "$_lib/progs.sh" ]]; then
+    #shellcheck disable=SC1091
     . "$_lib/progs.sh";
   fi
+  #shellcheck source-path=SCRIPTDIR
+  #shellcheck source=../lib/utils.sh
   . "$_lib/utils.sh";
 
   # Run the given command and stash the exit code
-  eval "$@";
+  eval "$*";
   _ec="$?";
 
   # restore old options
