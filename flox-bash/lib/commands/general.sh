@@ -25,7 +25,7 @@ function floxChannels() {
 		getChannelsJSON
 	else
 		local -a rows;
-		mapfile -t rows < <(getChannelsJSON | $_jq -r '
+		mapfile -t rows < <( getChannelsJSON | $_jq -r '
 		  to_entries | sort_by(.key) | map(
 			"|\(.key)|\(.value.type)|\(.value.url)|"
 		  )[]'
