@@ -1,5 +1,6 @@
 {
   self,
+  flox-src,
   inputs,
   stdenv,
   ansifilter,
@@ -83,12 +84,12 @@
   bats = pkgs.bats.withLibraries (p: [p.bats-support p.bats-assert]);
 
   # read commitizen config file as the single source of version
-  czToml = lib.importTOML (self + "/.cz.toml");
+  czToml = lib.importTOML (flox-src + "/.cz.toml");
 in
   stdenv.mkDerivation rec {
     pname = "flox-bash";
     version = "${czToml.tool.commitizen.version}-${inputs.flox-floxpkgs.lib.getRev self}";
-    src = "${self}/flox-bash";
+    src = flox-src + "/flox-bash";
     nativeBuildInputs =
       [bats entr makeWrapper pandoc shellcheck shfmt which]
       # nix-provided expect not working on Darwin (#441)

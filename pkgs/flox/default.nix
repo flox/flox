@@ -3,6 +3,7 @@
   # self is a flake if this package is built locally, but if it's called as a proto, it's just the
   # source
   self,
+  flox-src,
   inputs,
   lib,
   rustPlatform,
@@ -27,7 +28,7 @@
 }: let
   manpages =
     runCommand "flox-manpages" {
-      src = "${self}/crates/flox/doc";
+      src = flox-src + "/crates/flox/doc";
       buildInputs = [pandoc fd];
     } ''
 
@@ -42,7 +43,7 @@
           {}
     '';
 
-  cargoToml = lib.importTOML (self + "/crates/flox/Cargo.toml");
+  cargoToml = lib.importTOML (flox-src + "/crates/flox/Cargo.toml");
 
   envs =
     {
@@ -76,10 +77,10 @@ in
   rustPlatform.buildRustPackage ({
       pname = cargoToml.package.name;
       version = envs.FLOX_VERSION;
-      src = self;
+      src = flox-src;
 
       cargoLock = {
-        lockFile = self + "/Cargo.lock";
+        lockFile = flox-src + "/Cargo.lock";
         allowBuiltinFetchGit = true;
       };
 
