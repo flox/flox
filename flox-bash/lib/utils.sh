@@ -112,7 +112,7 @@ function trace() {
 	# Redirect the output of set -x to /dev/null
 	exec 9>/dev/null
 	local BASH_XTRACEFD=9
-	[ "$debug" = 0 ] || return 0
+	[[ "${debug:-0}" -gt 0 ]] || return 0
 	echo -e "trace:${filecolor}${BASH_SOURCE[2]}:${BASH_LINENO[1]}${colorReset} ${funccolor}${FUNCNAME[1]}${colorReset}( ${argscolor}"$(pprint "$@")"${colorReset} )" 1>&2
 }
 
@@ -203,7 +203,7 @@ function warn() {
 # verboseExec() uses pprint() to safely print exec() calls to STDERR
 function verboseExec() {
 	trace "$@"
-	[ "$verbose" -eq 0 ] || warn $(pprint "+" "$@")
+	[[ "${verbose:-0}" -eq 0 ]] || warn $(pprint "+" "$@")
 	exec "$@"
 }
 
@@ -212,7 +212,7 @@ function verboseExec() {
 function error() {
 	trace "$@"
 	info "" # Add space before printing error.
-	[ "${#@}" -eq 0 ] || warn "ERROR: $@"
+	[[ "$#" -eq 0 ]] || warn "ERROR: $@"
 	info "" # Add space before appending output.
 	# Relay any STDIN out to STDERR.
 	$_cat 1>&2
@@ -229,13 +229,13 @@ declare -a tmpFiles=()
 declare -a tmpDirs=()
 function cleanup() {
 	# Keep temp files if debugging.
-	if [ "$debug" = 0 ]; then
-		if [ "${#tmpFiles[@]}" -gt 0 ]; then
+	if [[ "${debug:-0}" -eq 0 ]]; then
+		if [[ "${#tmpFiles[@]}" -gt 0 ]]; then
 			$invoke_rm -f "${tmpFiles[@]}"
 		fi
-		if [ ${#tmpDirs[@]} -gt 0 ]; then
+		if [[ "${#tmpDirs[@]}" -gt 0 ]]; then
 			for i in "${tmpDirs[@]}"; do
-				if [[ $i =~ ^/tmp || $i =~ ^${TMPDIR} ]]; then
+				if [[ "$i" =~ ^/tmp || "$i" =~ ^${TMPDIR} ]]; then
 					$invoke_rm -rf "$i"
 				else
 					warn "cowardly refusing to recursively remove '$i'"
@@ -336,7 +336,7 @@ function invoke() {
 	local BASH_XTRACEFD=9
 	trace "$@"
 	local vars=()
-	if [ $verbose -ge $minverbosity ]; then
+	if [[ "${verbose:-0}" -ge "$minverbosity" ]]; then
 		for i in ${exported_variables[$1]}; do
 			vars+=($(eval "echo $i=\${$i}"))
 		done
@@ -1310,7 +1310,7 @@ function searchChannels() {
 				"'flake:${channel}#.catalog.${FLOX_SYSTEM}.$stability'" "'$packageregexp'"
 			)
 			echo "${cmd[@]} >$_tmpdir/$channel/$stability/stdout 2>$_tmpdir/$channel/$stability/stderr &" >> $_script
-			[ $verbose -lt $minverbosity ] || warn "+ ${_nixInvocationVariables[@]} ${cmd[@]}"
+			[[ "${verbose:-0}" -lt "$minverbosity" ]] || warn "+ ${_nixInvocationVariables[@]} ${cmd[@]}"
 		done
 	done
 	echo "wait" >> $_script
@@ -1337,7 +1337,7 @@ function searchChannels() {
 	    ( input_filename|split( "/" )[-3] ) as $channel|
 	    with_entries( nixPkgToCatalogPkg( $channel ) )
 	  ' "${_stdoutFiles[@]}"|$_jq -r -s add
-	if [ $debug -eq 0 ]; then
+	if [ "${debug:-0}" = 0 ]; then
 		$_rm -f ${_stdoutFiles[@]}
 		$_rm -f ${_stderrFiles[@]}
 		$_rmdir ${_resultDirs[@]} ${_channelDirs[@]} $_tmpdir
