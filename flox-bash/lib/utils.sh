@@ -1337,7 +1337,7 @@ function searchChannels() {
 	    ( input_filename|split( "/" )[-3] ) as $channel|
 	    with_entries( nixPkgToCatalogPkg( $channel ) )
 	  ' "${_stdoutFiles[@]}"|$_jq -r -s add
-	if [ "${debug:-0}" = 0 ]; then
+	if [[ "${debug:-0}" -eq 0 ]]; then
 		$_rm -f ${_stdoutFiles[@]}
 		$_rm -f ${_stderrFiles[@]}
 		$_rmdir ${_resultDirs[@]} ${_channelDirs[@]} $_tmpdir
