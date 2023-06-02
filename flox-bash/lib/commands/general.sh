@@ -1,16 +1,5 @@
 ## General commands
 
-# Set utility fallbacks
-: "${_jq:=jq}"
-: "${_nix:=nix}"
-: "${_sed:=sed}"
-: "${_column:=column}"
-: "${_grep:=grep}"
-: "${_sort:=sort}"
-: "${_gum:=gum}"
-: "${_semver:=semver}"
-: "${_xargs:=xargs}"
-
 _general_commands+=("channels")
 _usage["channels"]="list channel subscriptions"
 _usage_options["channels"]="[--json]"
@@ -36,7 +25,7 @@ function floxChannels() {
 		getChannelsJSON
 	else
 		local -a rows;
-		read -ra rows < <( getChannelsJSON | $_jq -r '
+		mapfile -t rows < <( getChannelsJSON | $_jq -r '
 		  to_entries | sort_by(.key) | map(
 			"|\(.key)|\(.value.type)|\(.value.url)|"
 		  )[]'
