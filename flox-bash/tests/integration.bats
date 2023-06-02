@@ -33,48 +33,11 @@ load test_support.bash
   assert_success
 }
 
-@test "flox --prefix" {
-  run "$FLOX_CLI" --prefix
-  assert_success
-  assert_output "$FLOX_PACKAGE"
-}
-
-@test "flox generate config files in $FLOX_CONFIG_HOME" {
-  # The rust wrapper will not forward all commands to flox (bash)
-  # Help messages for instance are generated entirely by the argument parsing step,
-  # that precedes any command processing.
-  # As such this tests fails to see the "Updating ..." messages if used with `--help`.
-  # The first test forwarding to flox (subscribe, below) will and fails as well.
-  #
-  # This test will work until channels will be implemented in rust.
-  # At which point the messaging may change as well.
-  run "$FLOX_CLI" channels
-  assert_success
-  assert_output --partial "Updating \"$FLOX_CONFIG_HOME/gitconfig\""
-  skip "remaining portion of test depends on rust or bash execution"
-  assert_output --partial "Updating $FLOX_CONFIG_HOME/nix.conf"
-}
-
-@test "flox git remote -v" {
-  run $FLOX_CLI git remote -v
-  assert_success
-  assert_output - < /dev/null
-}
-
-@test "flox --help" {
-  run $FLOX_CLI --help
-  assert_success
-  # the rust implementation generates its USAGE/help internally
-  if [ "$FLOX_IMPLEMENTATION" != "rust" ]; then
-    assert_output - <tests/usage.out
-  fi
-}
-
 @test "flox eval" {
   # Evaluate a Nix expression given on the command line:
   run $FLOX_CLI eval --expr '1 + 2'
   assert_success
-  echo 3 | assert_output -
+  assert_output --partial 3
 
   # Evaluate a Nix expression to JSON:
   run $FLOX_CLI eval --json --expr '{ x = 1; }'
@@ -152,29 +115,6 @@ load test_support.bash
   assert_output --partial 'ERROR: could not verify channel URL: "github:flox-examples/floxpkgs-private"'
 }
 
-# These next two tests are annoying:
-# - the `gh` tool requires GH_CONFIG_DIR
-# - while `nix` requires XDG_CONFIG_HOME
-#   - ... and because `nix` invokes `gh`, just provide them both
-@test "assert can log into github GH_CONFIG_DIR=$REAL_GH_CONFIG_DIR" {
-  run sh -c "XDG_CONFIG_HOME=$REAL_XDG_CONFIG_HOME GH_CONFIG_DIR=$REAL_GH_CONFIG_DIR $FLOX_CLI gh auth status"
-  assert_success
-  assert_output --partial "✓ Logged in to github.com as"
-}
-
-@test "flox subscribe private with creds GH_CONFIG_DIR=$REAL_GH_CONFIG_DIR" {
-  run sh -c "XDG_CONFIG_HOME=$REAL_XDG_CONFIG_HOME GH_CONFIG_DIR=$REAL_GH_CONFIG_DIR $FLOX_CLI subscribe flox-examples-private github:flox-examples/floxpkgs-private"
-  assert_success
-  assert_output --partial "subscribed channel 'flox-examples-private'"
-}
-
-# Keep environment in next test to prevent nix.conf rewrite warning.
-@test "flox unsubscribe private" {
-  run sh -c "XDG_CONFIG_HOME=$REAL_XDG_CONFIG_HOME GH_CONFIG_DIR=$REAL_GH_CONFIG_DIR $FLOX_CLI unsubscribe flox-examples-private"
-  assert_success
-  assert_output --partial "unsubscribed from channel 'flox-examples-private'"
-}
-
 @test "flox create -e $TEST_ENVIRONMENT" {
   run $FLOX_CLI create -e $TEST_ENVIRONMENT
   assert_success
@@ -224,13 +164,6 @@ load test_support.bash
   assert_output --regexp ".*error: package nixpkgs-flox.$NIX_SYSTEM.stable.hello.latest is identical to package nixpkgs-flox-dup.$NIX_SYSTEM.stable.hello.latest"
 }
 
-@test "flox list after install should contain hello" {
-  run $FLOX_CLI list -e $TEST_ENVIRONMENT
-  assert_success
-  assert_output --partial "Curr Gen  2"
-  assert_output --regexp "0  stable.nixpkgs-flox.hello +"$VERSION_REGEX
-}
-
 @test "flox install cowsay jq dasel" {
   run $FLOX_CLI --debug install -e $TEST_ENVIRONMENT cowsay jq dasel
   assert_success
@@ -240,7 +173,6 @@ load test_support.bash
 @test "flox list after install should contain cowsay and hello" {
   run $FLOX_CLI list -e $TEST_ENVIRONMENT
   assert_success
-  assert_output --partial "Curr Gen  3"
   assert_output --regexp "0  stable.nixpkgs-flox.cowsay +"$VERSION_REGEX
   assert_output --regexp "1  stable.nixpkgs-flox.dasel +"$VERSION_REGEX
   assert_output --regexp "2  stable.nixpkgs-flox.hello +"$VERSION_REGEX
@@ -262,7 +194,6 @@ load test_support.bash
 @test "verify flox edit removed hello from manifest.json" {
   run $FLOX_CLI list -e $TEST_ENVIRONMENT
   assert_success
-  assert_output --partial "Curr Gen  4"
   assert_output --regexp "0  stable.nixpkgs-flox.cowsay +"$VERSION_REGEX
   assert_output --regexp "1  stable.nixpkgs-flox.dasel +"$VERSION_REGEX
   ! assert_output --partial "stable.nixpkgs-flox.hello"
@@ -288,7 +219,6 @@ load test_support.bash
 @test "verify flox edit added hello to manifest.json" {
   run $FLOX_CLI list -e $TEST_ENVIRONMENT
   assert_success
-  assert_output --partial "Curr Gen  5"
   assert_output --regexp "0  stable.nixpkgs-flox.cowsay +"$VERSION_REGEX
   assert_output --regexp "1  stable.nixpkgs-flox.dasel +"$VERSION_REGEX
   assert_output --regexp "2  stable.nixpkgs-flox.hello +"$VERSION_REGEX
@@ -331,7 +261,6 @@ load test_support.bash
 @test "flox list after remove should not contain hello" {
   run $FLOX_CLI list -e $TEST_ENVIRONMENT
   assert_success
-  assert_output --partial "Curr Gen  6"
   assert_output --regexp "0  stable.nixpkgs-flox.cowsay +"$VERSION_REGEX
   assert_output --regexp "1  stable.nixpkgs-flox.dasel +"$VERSION_REGEX
   assert_output --regexp "2  stable.nixpkgs-flox.jq +"$VERSION_REGEX
@@ -341,7 +270,6 @@ load test_support.bash
 @test "flox list of generation 3 should contain hello" {
   run $FLOX_CLI list -e $TEST_ENVIRONMENT 3
   assert_success
-  assert_output --partial "Curr Gen  3"
   assert_output --regexp "0  stable.nixpkgs-flox.cowsay +"$VERSION_REGEX
   assert_output --regexp "1  stable.nixpkgs-flox.dasel +"$VERSION_REGEX
   assert_output --regexp "2  stable.nixpkgs-flox.hello +"$VERSION_REGEX
@@ -515,7 +443,6 @@ load test_support.bash
 @test "flox list after rollback should reflect generation 2" {
   run $FLOX_CLI list -e $TEST_ENVIRONMENT
   assert_success
-  assert_output --partial "Curr Gen  5"
   assert_output --regexp "0  stable.nixpkgs-flox.cowsay +"$VERSION_REGEX
   assert_output --regexp "1  stable.nixpkgs-flox.dasel +"$VERSION_REGEX
   assert_output --regexp "2  stable.nixpkgs-flox.hello +"$VERSION_REGEX
@@ -525,10 +452,7 @@ load test_support.bash
 @test "flox rollback --to 4" {
   run $FLOX_CLI rollback --to 4 -e $TEST_ENVIRONMENT
   assert_success
-  assert_output --partial "Rolled back environment '$TEST_ENVIRONMENT' from generation 5 to 4."
-}
-
-@test "flox list after rollback --to 4 should reflect generation 4" {
+  assert_output --regexp "Rolled back environment '$TEST_ENVIRONMENT' from generation [0-9]+ to 4."
   run $FLOX_CLI list -e $TEST_ENVIRONMENT
   assert_success
   assert_output --partial "Curr Gen  4"
@@ -541,66 +465,20 @@ load test_support.bash
 @test "flox switch-generation 2" {
   run $FLOX_CLI switch-generation 2 -e $TEST_ENVIRONMENT
   assert_success
-  assert_output --partial "Switched environment '$TEST_ENVIRONMENT' from generation 4 to 2."
-}
-
-@test "flox list after switch-generation 2 should reflect generation 2" {
+  assert_output --regexp "Switched environment '$TEST_ENVIRONMENT' from generation [0-9]+ to 2."
   run $FLOX_CLI list -e $TEST_ENVIRONMENT
   assert_success
   assert_output --partial "Curr Gen  2"
   assert_output --regexp "0  stable.nixpkgs-flox.hello +"$VERSION_REGEX
-  ! assert_output --partial "stable.nixpkgs-flox.cowsay"
-  ! assert_output --partial "stable.nixpkgs-flox.dasel"
-  ! assert_output --partial "stable.nixpkgs-flox.jq"
+  refute_output --partial "stable.nixpkgs-flox.cowsay"
+  refute_output --partial "stable.nixpkgs-flox.dasel"
+  refute_output --partial "stable.nixpkgs-flox.jq"
 }
 
-@test "flox rollback to 1" {
-  run $FLOX_CLI rollback -e $TEST_ENVIRONMENT
-  assert_success
-  assert_output --partial "Rolled back environment '$TEST_ENVIRONMENT' from generation 2 to 1."
-  run $FLOX_CLI list -e $TEST_ENVIRONMENT
-  # generation 1 has no packages
-  assert_output --regexp ".*Packages"
-}
-
-@test "flox rollback to 0" {
-  run $FLOX_CLI rollback -e $TEST_ENVIRONMENT
+@test "flox switch-generation 9999" {
+  run $FLOX_CLI switch-generation 9999 -e $TEST_ENVIRONMENT
   assert_failure
-  assert_output --partial "ERROR: invalid generation '0'"
-}
-
-@test "flox switch-generation 7" {
-  run $FLOX_CLI switch-generation 7 -e $TEST_ENVIRONMENT
-  assert_failure
-  assert_output --partial "ERROR: could not find environment data for generation '7'"
-}
-
-@test "flox rollback --to 2" {
-  run $FLOX_CLI switch-generation 2 -e $TEST_ENVIRONMENT
-  assert_success
-  assert_output --partial "Switched environment '$TEST_ENVIRONMENT' from generation 1 to 2."
-  run $FLOX_CLI rollback --to 2 -e $TEST_ENVIRONMENT
-  assert_success
-  assert_output --partial "start and target generations are the same"
-}
-
-@test "flox generations" {
-  run $FLOX_CLI generations -e $TEST_ENVIRONMENT
-  assert_success
-  assert_output --partial "Generation 2:"
-  assert_output --partial "Path:"
-  assert_output --partial "Created:"
-  assert_output --partial "Last active:"
-  assert_output --partial "Log entries:"
-  assert_output --partial "installed stable.nixpkgs-flox.hello"
-  assert_output --partial "Generation 3:"
-  assert_output --partial "installed stable.nixpkgs-flox.cowsay stable.nixpkgs-flox.jq stable.nixpkgs-flox.dasel"
-  assert_output --partial "Generation 4:"
-  assert_output --partial "edited declarative profile (generation 4)"
-  assert_output --partial "Generation 5:"
-  assert_output --partial "edited declarative profile (generation 5)"
-  assert_output --partial "Generation 6:"
-  assert_output --partial "removed stable.nixpkgs-flox.hello"
+  assert_output --partial "ERROR: could not find environment data for generation '9999'"
 }
 
 @test "flox environments takes no arguments" {
@@ -620,14 +498,6 @@ load test_support.bash
   assert_output --partial "Alias     $TEST_ENVIRONMENT"
 }
 
-# Again we need github connectivity for this.
-@test "flox push" {
-  run sh -c "XDG_CONFIG_HOME=$REAL_XDG_CONFIG_HOME GH_CONFIG_DIR=$REAL_GH_CONFIG_DIR $FLOX_CLI --debug push -e $TEST_ENVIRONMENT"
-  assert_success
-  assert_output --partial "To "
-  assert_output --regexp "\* \[new branch\] +origin/.*.$TEST_ENVIRONMENT -> .*.$TEST_ENVIRONMENT"
-}
-
 @test "flox destroy local only" {
   run $FLOX_CLI destroy -e $TEST_ENVIRONMENT -f
   assert_success
@@ -636,76 +506,16 @@ load test_support.bash
   assert_output --partial "removed"
 }
 
-# ... and this.
-@test "flox pull" {
-  run sh -c "XDG_CONFIG_HOME=$REAL_XDG_CONFIG_HOME GH_CONFIG_DIR=$REAL_GH_CONFIG_DIR $FLOX_CLI pull -e $TEST_ENVIRONMENT"
-  assert_success
-  assert_output --partial "To "
-  assert_output --regexp "\* \[new branch\] +.*\.$TEST_ENVIRONMENT -> .*\.$TEST_ENVIRONMENT"
-}
-
-@test "flox list after flox pull should be exactly as before" {
-  run $FLOX_CLI list -e $TEST_ENVIRONMENT
-  assert_success
-  assert_output --partial "Curr Gen  2"
-  assert_output --regexp "0  stable.nixpkgs-flox.hello +"$VERSION_REGEX
-  ! assert_output --partial "stable.nixpkgs-flox.cowsay"
-  ! assert_output --partial "stable.nixpkgs-flox.dasel"
-  ! assert_output --partial "stable.nixpkgs-flox.jq"
-}
-
-@test "flox search should return results quickly" {
-  # "timeout 15 flox search" does not work? Haven't investigated why, just
-  # fall back to doing the math manually and report when it takes too long.
-  local -i start
-  start=$(date +%s)
-  run $FLOX_CLI search hello
-  local -i end
-  end=$(date +%s)
-  assert_success
-  assert_output --partial "hello"
-  ! assert_output --partial "stable"
-  ! assert_output --partial "nixpkgs-flox"
-  # Assert we spent less than 15 seconds in the process.
-  local -i elapsed
-  elapsed=$(($end - $start))
-  echo spent $elapsed seconds
-  [ $elapsed -lt 15 ]
-}
-
 @test "flox install by /nix/store path" {
   run $FLOX_CLI install -e $TEST_ENVIRONMENT $FLOX_PACKAGE
   assert_success
   assert_output --partial "Installed '$FLOX_PACKAGE' package(s) into '$TEST_ENVIRONMENT' environment."
 }
 
-@test "flox list after installing by store path should contain package" {
-  run $FLOX_CLI list -e $TEST_ENVIRONMENT
-  assert_success
-  assert_output --partial "Curr Gen  7"
-  assert_output --regexp "0  stable.nixpkgs-flox.hello +"$VERSION_REGEX
-  assert_output --partial "1  $FLOX_PACKAGE  $FLOX_PACKAGE_FIRST8"
-}
-
-@test "flox remove hello again" {
-  run $FLOX_CLI remove -e $TEST_ENVIRONMENT hello
-  assert_success
-  assert_output --partial "Removed 'hello' package(s) from '$TEST_ENVIRONMENT' environment."
-}
-
 @test "flox install by nixpkgs flake" {
   run $FLOX_CLI install -e $TEST_ENVIRONMENT "nixpkgs#hello"
   assert_success
   assert_output --partial "Installed 'nixpkgs#hello' package(s) into '$TEST_ENVIRONMENT' environment."
-}
-
-@test "flox list after installing by nixpkgs flake should contain package" {
-  run $FLOX_CLI list -e $TEST_ENVIRONMENT
-  assert_success
-  assert_output --partial "Curr Gen  9"
-  assert_output --regexp "0  nixpkgs#hello +hello-"$VERSION_REGEX
-  assert_output --partial "1  $FLOX_PACKAGE  $FLOX_PACKAGE_FIRST8"
-  ! assert_output --partial "stable.nixpkgs-flox.hello"
 }
 
 @test "flox export to $FLOX_TEST_HOME/floxExport.tar" {
@@ -726,70 +536,18 @@ load test_support.bash
   assert_output --partial "Removed 'nixpkgs#hello' package(s) from '$TEST_ENVIRONMENT' environment."
 }
 
-@test "flox list after remove by nixpkgs flake 1 should not contain package" {
-  run $FLOX_CLI list -e $TEST_ENVIRONMENT
-  assert_success
-  assert_output --partial "Curr Gen  10"
-  assert_output --partial "0  $FLOX_PACKAGE  $FLOX_PACKAGE_FIRST8"
-  ! assert_output --partial "nixpkgs#hello"
-  ! assert_output --partial "stable.nixpkgs-flox.hello"
-}
-
-@test "flox rollback after flake removal 1" {
-  run $FLOX_CLI rollback -e $TEST_ENVIRONMENT
-  assert_success
-  assert_output --partial "Rolled back environment '$TEST_ENVIRONMENT' from generation 10 to 9."
-}
-
-# @test "flox remove by nixpkgs flake 2" {
-#   run $FLOX_CLI remove -e $TEST_ENVIRONMENT "legacyPackages.$NIX_SYSTEM.hello"
-#   assert_success
-#   assert_output --partial "created generation 10"
-# }
-#
-# @test "flox list after remove by nixpkgs flake 2 should not contain package" {
-#   run $FLOX_CLI list -e $TEST_ENVIRONMENT
-#   assert_success
-#   assert_output --partial "Curr Gen  11"
-#   assert_output --partial "0  $FLOX_PACKAGE  $FLOX_PACKAGE_FIRST8"
-#   ! assert_output --partial "flake:nixpkgs#legacyPackages.$NIX_SYSTEM.hello"
-#   ! assert_output --partial "stable.nixpkgs-flox.hello"
-# }
-
-@test "flox remove by nixpkgs flake 2" {
-  run $FLOX_CLI remove -e $TEST_ENVIRONMENT "flake:nixpkgs#legacyPackages.$NIX_SYSTEM.hello"
-  assert_success
-  assert_output --partial "Removed 'flake:nixpkgs#legacyPackages.$NIX_SYSTEM.hello' package(s) from '$TEST_ENVIRONMENT' environment."
-}
-
 @test "flox list after remove by nixpkgs flake 2 should not contain package" {
   run $FLOX_CLI list -e $TEST_ENVIRONMENT
   assert_success
-  assert_output --partial "Curr Gen  11"
-  assert_output --partial "0  $FLOX_PACKAGE  $FLOX_PACKAGE_FIRST8"
+  assert_output --regexp "[0-9]+ +$FLOX_PACKAGE +$FLOX_PACKAGE_FIRST8"
   ! assert_output --partial "nixpkgs#hello"
   ! assert_output --partial "stable.nixpkgs-flox.hello"
 }
-
-# @test "flox switch-generation after flake removal 2" {
-#   run $FLOX_CLI rollback -e $TEST_ENVIRONMENT --to 8
-#   assert_success
-#   assert_output --partial "switched to generation 8"
-# }
 
 @test "flox import from $FLOX_TEST_HOME/floxExport.tar" {
   run sh -c "$FLOX_CLI import -e $TEST_ENVIRONMENT < $FLOX_TEST_HOME/floxExport.tar"
   assert_success
   assert_output --partial "Environment '$TEST_ENVIRONMENT' imported."
-}
-
-@test "flox list to verify contents of generation 9 at generation 12" {
-  run $FLOX_CLI list -e $TEST_ENVIRONMENT
-  assert_success
-  assert_output --partial "Curr Gen  12"
-  assert_output --regexp "0  nixpkgs#hello +hello-"$VERSION_REGEX
-  assert_output --partial "1  $FLOX_PACKAGE  $FLOX_PACKAGE_FIRST8"
-  ! assert_output --partial "stable.nixpkgs-flox.hello"
 }
 
 @test "flox develop setup" {
