@@ -621,7 +621,8 @@ async fn ensure_project_repo<'flox>(
                     The current directory is not in a Git repository.
                     Unable to prompt for confirmation to create a git repository.
 
-                    Explcitly allow by running with '-i' or '--git-init
+                    Explcitly allow flox to create a git repository in the current directory
+                    by running with '-i' or '--git-init'.
                 "};
                 bail!("{msg}");
             }
