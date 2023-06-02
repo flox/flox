@@ -121,7 +121,7 @@ function trace() {
 # nix store, which will instead hard code these values at build time in the
 # generated file `flox-bash/lib/progs.sh'.
 # That generated file sets the variable `_PROGS_INJECTED' which causes this
-# routien to bail early.
+# routine to bail early.
 # Any changes to this function should likely be reflected in
 # `pkgs/flox-bash/default.nix'.
 declare -A exported_variables
