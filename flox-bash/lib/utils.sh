@@ -124,6 +124,14 @@ function trace() {
 # routine to bail early.
 # Any changes to this function should likely be reflected in
 # `pkgs/flox-bash/default.nix'.
+#
+# NOTE: we use `declare -g <VAR>=<VAL>;' rather than export.
+# This is important to prevent commands such as `flox activate' from inheriting
+# these variables.
+# We can't use something like `env -i "$SHELL";' for `flox activate' either
+# because this would prevent this usage from behaving "as expected":
+#   FOO=1 flox activate -- bash -c 'echo "$FOO";';
+# So use `declare -g' ( without `-x' )!
 declare -A exported_variables
 function hash_commands() {
 	trace "$@"

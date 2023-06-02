@@ -186,8 +186,8 @@
         '';
     in
       ''
-        _${vname}='${binPath}/${name}';
-        invoke_${vname}='invoke ${binPath}/${name}';
+        declare -g _${vname}='${binPath}/${name}';
+        declare -g invoke_${vname}='invoke ${binPath}/${name}';
       ''
       + vars;
     proc = acc: drvName: let
@@ -197,8 +197,8 @@
     in
       acc ++ decls;
     init = ''
-      declare -Ax exported_variables;
-      _PROGS_INJECTED=:;
+      declare -A exported_variables;
+      declare -g _PROGS_INJECTED=:;
     '';
     allDecls = builtins.foldl' proc [init] (builtins.attrNames drvProgs);
   in
