@@ -56,7 +56,10 @@ jobs:
           pkgsFor = builtins.getAttr system nixpkgs.legacyPackages;
         in pkgsFor.bats.withLibraries ( p: [p.bats-support p.bats-assert] )
         ';
-        nix profile install '.#nix-editor';
+        nix profile install '.#nix-editor' 'nixpkgs#libossp_uuid';
+        if [[ "${{ matrix.os }}" = 'ubuntu-latest' ]]; then
+          nix profile install 'nixpkgs#expect';
+        fi
         pushd ./flox-bash;
         flox build '..#flox-bash';
         FLOX_PACKAGE="$PWD/result" bats tests;

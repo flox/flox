@@ -3,9 +3,19 @@
 # flox CLI tests run in two contexts:
 # - unit tests only to be run from within package build
 # - unit and integration tests to be run from command line
-#
+
 
 load test_support.bash
+
+setup_file() {
+  common_setup;
+  if command -v expect >/dev/null 2>&1; then
+    export _HAVE_EXPECT=:;
+  else
+    export _HAVE_EXPECT=;
+  fi
+}
+
 
 @test "flox package sanity check" {
   # directories
@@ -569,6 +579,9 @@ function assertAndRemoveFiles {
 }
 
 @test "flox develop no installable" {
+  if [[ -z "$_HAVE_EXPECT" ]]; then
+    skip "test requires unavailable program: 'expect'";
+  fi
   pushd "$FLOX_TEST_HOME/develop"
     run expect "$TESTS_DIR/develop/develop.exp" ""
     assert_success
@@ -577,6 +590,9 @@ function assertAndRemoveFiles {
 }
 
 @test "flox develop from flake root" {
+  if [[ -z "$_HAVE_EXPECT" ]]; then
+    skip "test requires unavailable program: 'expect'";
+  fi
   pushd "$FLOX_TEST_HOME/develop"
     for attr in "" my-pkg .#my-pkg .#packages.$NIX_SYSTEM.my-pkg "$FLOX_TEST_HOME/develop#my-pkg"; do
       run expect "$TESTS_DIR/develop/develop.exp" "$attr"
@@ -587,6 +603,9 @@ function assertAndRemoveFiles {
 }
 
 @test "flox develop from flake subdirectory" {
+  if [[ -z "$_HAVE_EXPECT" ]]; then
+    skip "test requires unavailable program: 'expect'";
+  fi
   pushd "$FLOX_TEST_HOME/develop/pkgs"
     for attr in .#my-pkg "$FLOX_TEST_HOME/develop#my-pkg"; do
       run expect "$TESTS_DIR/develop/develop.exp" "$attr"
@@ -597,6 +616,9 @@ function assertAndRemoveFiles {
 }
 
 @test "flox develop from different directory" {
+  if [[ -z "$_HAVE_EXPECT" ]]; then
+    skip "test requires unavailable program: 'expect'";
+  fi
   pushd "$FLOX_TEST_HOME"
     run expect "$TESTS_DIR/develop/develop.exp" ./develop#my-pkg
     assert_success
@@ -604,6 +626,9 @@ function assertAndRemoveFiles {
 }
 
 @test "flox develop after git init" {
+  if [[ -z "$_HAVE_EXPECT" ]]; then
+    skip "test requires unavailable program: 'expect'";
+  fi
   pushd "$FLOX_TEST_HOME/develop"
     git init
     git add .
@@ -616,11 +641,17 @@ function assertAndRemoveFiles {
 }
 
 @test "flox develop fails with remote flake" {
+  if [[ -z "$_HAVE_EXPECT" ]]; then
+    skip "test requires unavailable program: 'expect'";
+  fi
   run expect "$TESTS_DIR/develop/develop-fail.exp" "git+ssh://git@github.com/flox/flox-bash-private?dir=tests/develop#my-pkg"
   assert_success
 }
 
 @test "flox develop toplevel with package" {
+  if [[ -z "$_HAVE_EXPECT" ]]; then
+    skip "test requires unavailable program: 'expect'";
+  fi
   # Note the use of --dereference to copy flake.{nix,lock} as files.
   run sh -c "tar -cf - --dereference --mode u+w -C $TESTS_DIR/develop ./toplevel-flox-nix-with-pkg | tar -C $FLOX_TEST_HOME -xf -"
   assert_success
@@ -634,6 +665,9 @@ function assertAndRemoveFiles {
 }
 
 @test "flox develop toplevel" {
+  if [[ -z "$_HAVE_EXPECT" ]]; then
+    skip "test requires unavailable program: 'expect'";
+  fi
   # Note the use of --dereference to copy flake.{nix,lock} as files.
   run sh -c "tar -cf - --dereference --mode u+w -C $TESTS_DIR/develop ./toplevel-flox-nix | tar -C $FLOX_TEST_HOME -xf -"
   assert_success
@@ -651,6 +685,9 @@ function assertAndRemoveFiles {
 }
 
 @test "flox develop devShell" {
+  if [[ -z "$_HAVE_EXPECT" ]]; then
+    skip "test requires unavailable program: 'expect'";
+  fi
   # Note the use of --dereference to copy flake.lock as file.
   run sh -c "tar -cf - --dereference --mode u+w -C $TESTS_DIR/develop ./devShell | tar -C $FLOX_TEST_HOME -xf -"
   assert_success
