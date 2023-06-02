@@ -37,10 +37,12 @@ util() {
   fi
   . "$_lib/utils.sh";
   eval "$@";
+  _ec="$?";
 
   # restore old options
   eval "$_old_opts";
-  PATH="$_OLD_PATH"
+  PATH="$_OLD_PATH";
+  return "$_ec";
 }
 
 cmds=(
