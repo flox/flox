@@ -128,8 +128,6 @@ in
         (bats.withLibraries (p: [p.bats-support p.bats-assert]))
       ];
 
-      propagatedBuildInputs = [flox-bash gitMinimal];
-
       passthru.envs = envs;
       passthru.manpages = manpages;
       passthru.rustPlatform = rustPlatform;

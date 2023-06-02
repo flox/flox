@@ -198,7 +198,7 @@
       acc ++ decls;
     init = ''
       declare -A exported_variables;
-      declare -g _PROGS_INJECTED=:;
+      declare -g _FLOX_PROGS_INJECTED=:;
     '';
     allDecls = builtins.foldl' proc [init] (builtins.attrNames drvProgs);
   in
@@ -212,7 +212,7 @@ in
       [bats entr makeWrapper pandoc shellcheck shfmt which]
       # nix-provided expect not working on Darwin (#441)
       ++ lib.optionals hostPlatform.isLinux [expect];
-    propagatedBuildInputs = [
+    buildInputs = [
       ansifilter
       bashInteractive
       coreutils
@@ -243,7 +243,7 @@ in
         "PREFIX=${builtins.placeholder "out"}"
         "VERSION=${version}"
         "FLOXPATH=${builtins.placeholder "out"}/libexec/flox:${
-          lib.makeBinPath propagatedBuildInputs
+          lib.makeBinPath buildInputs
         }"
         "NIXPKGS_CACERT_BUNDLE_CRT=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
         "FLOX_ACTIVATE_BASH=${floxActivateBash}"
