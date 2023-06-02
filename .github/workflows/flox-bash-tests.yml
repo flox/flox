@@ -48,15 +48,17 @@ jobs:
 
     - name: Build and Test
       run: |
-        #set -eu;
-        #set -o pipefail;
-        # FIXME: we should be able to use strict mode for `flox print-dev-env;'
-        pushd ./flox-bash;
-        . <( flox print-dev-env '..#flox-bash'; );
         set -eu;
         set -o pipefail;
-        make;
-        make test;
+        nix profile install --impure --expr 'let
+          nixpkgs = builtins.getFlake "nixpkgs";
+          system  = builtins.currentSystem;
+          pkgsFor = builtins.getAttr system nixpkgs.legacyPackages;
+        in pkgsFor.bats.withLibraries ( p: [p.bats-support p.bats-assert] )
+        ';
+        pushd ./flox-bash;
+        flox build '..#flox-bash';
+        FLOX_PACKAGE="$PWD/result" bats tests;
         popd;
 
 
