@@ -15,6 +15,9 @@ setup_file() {
   common_setup;
 }
 
+# Run a command in the context of `flox-bash' after it has processed `utils.sh'.
+# This file handles resolution of runtime dependencies, so we only care about
+# testing past that point of initialization.
 util() {
   # Perform a minimal form of `flox-bash/lib/init.sh' required to support
   # using internal `flox-bash/lib/utils.sh' routines.
