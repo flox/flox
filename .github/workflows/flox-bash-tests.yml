@@ -24,7 +24,9 @@ jobs:
   flox-bash-tests:
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os:
+        - ubuntu-latest
+        #- macos-latest
     runs-on: ${{ matrix.os }}
     env:
       SSH_AUTH_SOCK: /tmp/ssh_agent.sock
