@@ -9,6 +9,10 @@ load test_support.bash
 
 setup_file() {
   common_setup;
+  # The nixpkgs version of expect does not work on Darwin, so on
+  # that system we rely on the user to install expect separately.
+  # First discover whether expect is available in the PATH before
+  # commencing tests. 
   if command -v expect >/dev/null 2>&1; then
     export _HAVE_EXPECT=:;
   else
