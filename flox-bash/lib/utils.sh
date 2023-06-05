@@ -112,7 +112,7 @@ function trace() {
 	# Redirect the output of set -x to /dev/null
 	exec 9>/dev/null
 	local BASH_XTRACEFD=9
-	[ $debug -gt 0 ] || return 0
+	[ ${debug:-0} -gt 0 ] || return 0
 	echo -e "trace:${filecolor}${BASH_SOURCE[2]}:${BASH_LINENO[1]}${colorReset} ${funccolor}${FUNCNAME[1]}${colorReset}( ${argscolor}"$(pprint "$@")"${colorReset} )" 1>&2
 }
 
@@ -215,7 +215,7 @@ declare -a tmpFiles=()
 declare -a tmpDirs=()
 function cleanup() {
 	# Keep temp files if debugging.
-	if [ $debug -eq 0 ]; then
+	if [ ${debug:-0} -eq 0 ]; then
 		if [ ${#tmpFiles[@]} -gt 0 ]; then
 			$invoke_rm -f "${tmpFiles[@]}"
 		fi

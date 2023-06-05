@@ -7,8 +7,6 @@ bats_require_minimum_version 1.5.0
 # To do so a test file may redefine `setup_file' and call `common_setup' before
 # writing their extensions.
 common_setup() {
-  set -x
-
   if [[ -z "${FLOX_CLI:-}" ]]; then
     if [[ -L ./result ]]; then
       FLOX_PACKAGE="$(readlink ./result)"
@@ -74,8 +72,6 @@ common_setup() {
   # - do NOT include $VERSION_REGEX within quotes (eats backslashes)
   # - do NOT add '$' at the end to anchor the match at EOL (doesn't work)
   export VERSION_REGEX='[0-9]+\.[0-9.]+'
-
-  set +x
 }
 
 
