@@ -52,6 +52,13 @@ jobs:
       run: |
         set -eu;
         set -o pipefail;
+        # Rather than using `flox develop .#flox-bash;' we explicitly install
+        # the minimal collection of executables required to run the test suite.
+        # The rationale is that the dev-shell contains `buildInputs' that may
+        # cause executables to be resolved during tests that may not actually
+        # resolve at runtime.
+        # This issue did occur with `semver' and `column' in the past, so this
+        # approach aims to catch this category of issue.
         nix profile install --impure --expr 'let
           nixpkgs = builtins.getFlake "nixpkgs";
           system  = builtins.currentSystem;
@@ -62,7 +69,14 @@ jobs:
         if [[ "${{ matrix.os }}" = 'ubuntu-latest' ]]; then
           nix profile install 'nixpkgs#expect';
         elif [[ "${{ matrix.os }}" = 'macos-latest' ]]; then
-          nix profile install 'nixpkgs#coreutils';
+          # TODO: discover additional required packages and then enable
+          # `macos-latest' in the system matrix at the top of this file.
+          #
+          # NOTE: the `expect' package for Darwin is broken, so we don't
+          # attempt to install it.
+          # The test suite will skip tests which require `expect' when it is
+          # not available in `PATH', so we'll still get some results.
+          nix profile install 'nixpkgs#coreutils' 'nixpkgs#gnumake';
         fi
         pushd ./flox-bash;
         flox build '..#flox-bash';
