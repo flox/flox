@@ -22,12 +22,7 @@ concurrency:
 
 jobs:
   flox-bash-tests:
-    strategy:
-      matrix:
-        os:
-        - ubuntu-latest
-        #- macos-latest
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
     env:
       SSH_AUTH_SOCK: /tmp/ssh_agent.sock
 
@@ -65,10 +60,11 @@ jobs:
           pkgsFor = builtins.getAttr system nixpkgs.legacyPackages;
         in pkgsFor.bats.withLibraries ( p: [p.bats-support p.bats-assert] )
         ';
+        _OS='ubuntu-latest';
         nix profile install '.#nix-editor' 'nixpkgs#libossp_uuid';
-        if [[ "${{ matrix.os }}" = 'ubuntu-latest' ]]; then
+        if [[ "$_OS" = 'ubuntu-latest' ]]; then
           nix profile install 'nixpkgs#expect';
-        elif [[ "${{ matrix.os }}" = 'macos-latest' ]]; then
+        elif [[ "$_OS" = 'macos-latest' ]]; then
           # TODO: discover additional required packages and then enable
           # `macos-latest' in the system matrix at the top of this file.
           #
