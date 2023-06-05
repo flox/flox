@@ -91,7 +91,7 @@ cmds=(
   assert_success;
   run "$FLOX_CLI" install -e "$TEST_ENVIRONMENT" hello bash;
   assert_success;
-  run "$FLOX_CLI" activate -- bash -c "echo \"\${_${cmds[1]}:-NOPE}\";";
+  run "$FLOX_CLI" activate -e "$TEST_ENVIRONMENT" -- bash -c "echo \"\${_${cmds[1]}:-NOPE}\";";
   assert_output --partial NOPE;
 }
 
