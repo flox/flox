@@ -51,7 +51,7 @@ teardown_file() {
       -- bash -c 'echo "FLOX_ENV: $FLOX_ENV"';
   assert_success;
   # FLOX_ENV should be set to the first argument
-  assert_output --partial --regexp "^FLOX_ENV: .*${TEST_ENVIRONMENT}_multi_1\$";
+  assert_output --partial "FLOX_ENV: ${FLOX_ENVIRONMENTS}/local/${NIX_SYSTEM}.${TEST_ENVIRONMENT}_multi_1";
 }
 
 
