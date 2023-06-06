@@ -51,4 +51,4 @@ jobs:
         github-access-token: ${{ secrets.NIX_GIT_TOKEN }}
 
     - name: Test
-      run: flox run -L .#flox-tests 
+      run: flox run .#flox-tests -L
