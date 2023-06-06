@@ -71,6 +71,10 @@ in
         --print-output-on-failure \
         --verbose-run \
         --timing \
+            ${tests-src}/tests/integration.bats \
+            ${tests-src}/tests/multi-env.bats \
+            ${tests-src}/tests/package.bats \
+            ${tests-src}/tests/progs.bats \
             ${tests-src}/tests/semver-search.bats \
                 "$@"
   ''

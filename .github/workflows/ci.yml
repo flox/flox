@@ -33,3 +33,22 @@ jobs:
 
     - name: Build
       run: flox build ${{ matrix.package }} -L
+
+  tests:
+    name: Run flox tests
+    runs-on: ubuntu-latest
+    # TODO: add a dependency on build part once we have some caching
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+      with:
+        fetch-depth: 0
+
+    - name: Install flox
+      uses: flox/install-flox-action@main
+      with:
+        github-access-token: ${{ secrets.NIX_GIT_TOKEN }}
+
+    - name: Test
+      run: flox run -L .#flox-tests 
