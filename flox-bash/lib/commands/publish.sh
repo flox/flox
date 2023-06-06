@@ -466,18 +466,18 @@ function floxPublish() {
 		error "eval of $analyzer#analysis.eval.packages.$publishSystem.$packageAttrPath failed - see above" < /dev/null
 	}
 	local evalOutputs
-	evalOutputs="$($_jq -r '.eval.outputs | map(values)[]' <<< "$evalAndBuild")"
+	evalOutputs=$($_jq -r '.eval.outputs | map(values)[]' <<< "$evalAndBuild")
 	# Filter eval outputs to return only the ones that exist.
 	local outpaths
-	outpaths="$(for i in "$evalOutputs"; do [ -e "$i" ] && echo $i; done)"
+	outpaths="$(for i in $evalOutputs; do [ -e "$i" ] && echo $i; done)"
 
 	# TODO Make content addressable (remove "false" below).
 	local ca_out
-	if false ca_out="$($invoke_nix "${_nixArgs[@]}" store make-content-addressed $outpaths --json | $_jq '.rewrites[]')"; then
-		# Replace package outpaths with CA versions.
-		warn "Replacing with content-addressable package: $ca_out"
-		outpaths="$ca_out"
-	fi
+#	if false ca_out="$($invoke_nix "${_nixArgs[@]}" store make-content-addressed $outpaths --json | $_jq '.rewrites[]')"; then
+#		# Replace package outpaths with CA versions.
+#		warn "Replacing with content-addressable package: $ca_out"
+#		outpaths="$ca_out"
+#	fi
 
 	# Sign the package outpaths (optional). Sign by default?
 	if [ -z "$keyFile" -a -f "$FLOX_CONFIG_HOME/secret-key" ]; then
@@ -485,7 +485,7 @@ function floxPublish() {
 	fi
 	if [ -n "$keyFile" ]; then
 		if [ -f "$keyFile" ]; then
-			$invoke_nix "${_nixArgs[@]}" store sign -r --key-file "$keyFile" "$outpaths"
+			$invoke_nix "${_nixArgs[@]}" store sign -r --key-file "$keyFile" $outpaths
 		else
 			error "could not read $keyFile: $!" < /dev/null
 		fi
