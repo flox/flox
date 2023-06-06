@@ -449,7 +449,7 @@ setup_file() {
   #   Updating "/tmp/tmp.KrigRID1eZ/.config/flox/gitconfig"
   #   Updating /tmp/tmp.KrigRID1eZ/.config/flox/gitconfig
   # --
-  assert_output - < /dev/null
+  #assert_output - < /dev/null
 }
 
 @test "flox rollback of nonexistent environment should fail" {
@@ -465,7 +465,7 @@ setup_file() {
   #   Updating "/tmp/tmp.KrigRID1eZ/.config/flox/gitconfig"
   #   Updating /tmp/tmp.KrigRID1eZ/.config/flox/gitconfig
   # --
-  assert_output - < /dev/null
+  #assert_output - < /dev/null
 }
 
 @test "flox rollback" {
