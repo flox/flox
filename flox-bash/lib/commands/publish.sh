@@ -242,16 +242,15 @@ function floxPublish() {
 			fi
 		fi
 		while true; do
+			if checkGitRepoExists "$buildRepository"; then
+				[ -z "$buildRepository" ] || break
+			fi
+			warn "repository '$buildRepository' does not exist"
+			warn "please enter a valid URL from which to 'flox build' a package"
 			buildRepository=$(promptInput \
 				"Enter git URL (required)" \
 				"build repository:" \
 				"$buildRepository")
-			if checkGitRepoExists "$buildRepository"; then
-				[ -z "$buildRepository" ] || break
-			else
-				warn "repository '$buildRepository' does not exist"
-			fi
-			warn "please enter a valid URL from which to 'flox build' a package"
 		done
 	fi
 	warn "build repository: $buildRepository"
@@ -269,16 +268,12 @@ function floxPublish() {
 		upstreamRev=$(githubHelperGit ls-remote "$buildRepository" HEAD)
 		# Keep only first 40 characters to remove the extra spaces and "HEAD" label.
 		upstreamRev=${upstreamRev:0:40}
-		canonicalFlakeRef="${buildRepository}?rev=${upstreamRev}"
 		# If we did derive the buildRepository from a local git clone, confirm
 		# that it is not out of sync with upstream.
 		if [ "$buildRepository" = "$cloneRemote" ]; then
 			if ! $_git diff --exit-code --quiet; then
-				warn "Warning: uncommitted changes not present in upstream rev ${upstreamRev:0:7}"
-				if ! $invoke_gum confirm "proceed to publish revision ${upstreamRev:0:7}?"; then
-					warn "aborting ..."
-					exit 1
-				fi
+				warn "Warning: uncommitted changes detected"
+				error "commit all changes before publishing" < /dev/null
 			fi
 			if ! $_git diff --cached --exit-code --quiet; then
 				warn "Warning: staged commits not present in upstream rev ${upstreamRev:0:7}"
@@ -289,12 +284,17 @@ function floxPublish() {
 			fi
 			if [ "$cloneRev" != "$upstreamRev" ]; then
 				warn "Warning: local clone (${cloneRev:0:7}) out of sync with upstream (${upstreamRev:0:7})"
-				if ! $invoke_gum confirm "proceed to publish revision ${upstreamRev:0:7}?"; then
+				if $invoke_gum confirm "push revision ${cloneRev:0:7} upstream and publish?"; then
+					warn "+ $_git push"
+					$_git push
+					upstreamRev="$cloneRev"
+				else
 					warn "aborting ..."
 					exit 1
 				fi
 			fi
 		fi
+		canonicalFlakeRef="${buildRepository}?rev=${upstreamRev}"
 		;;
 	esac
 
@@ -321,7 +321,7 @@ function floxPublish() {
 
 	# The packageAttrPath as constructed by Hydra will be of the form
 	# <flakeRef>#hydraJobsStable.<pname>.<system>. Take this opportunity
-	# to extract the pname.
+	# to extract the pname. XXX Still needed?
 	case "$packageAttrPath" in
 	hydraJobsStable.*.$publishSystem)
 		FLOX_STABILITY=stable
@@ -355,14 +355,14 @@ function floxPublish() {
 			esac
 		fi
 		while true; do
-			channelRepository=$(promptInput \
-				"Enter git URL (required)" \
-				"channel repository:" \
-				"$channelRepository")
 			if ensureGHRepoExists "$channelRepository" private "https://github.com/flox/floxpkgs-template.git"; then
 				[ -z "$channelRepository" ] || break
 			fi
 			warn "please enter a valid URL with which to 'flox subscribe'"
+			channelRepository=$(promptInput \
+				"Enter git URL (required)" \
+				"channel repository:" \
+				"$channelRepository")
 		done
 	fi
 	warn "channel repository: $channelRepository"
@@ -374,11 +374,12 @@ function floxPublish() {
 		doEducatePublish
 		# Load previous answer (if applicable).
 		uploadTo=$(registry "$gitCloneRegistry" 1 get uploadTo || :)
-		# XXX TODO: find a way to remember previous binary cache locations
-		uploadTo=$(promptInput \
-			"Enter binary cache URL (leave blank to skip upload)" \
-			"binary cache for upload:" \
-			"$uploadTo")
+		if [ -z "$uploadTo" ]; then
+			uploadTo=$(promptInput \
+				"Enter binary cache URL (leave blank to skip upload)" \
+				"binary cache for upload:" \
+				"$uploadTo")
+		fi
 	fi
 	[ -z "$uploadTo" ] || warn "upload to: $uploadTo"
 	if [ -z "$downloadFrom" ]; then
@@ -387,12 +388,11 @@ function floxPublish() {
 		if [ -z "$downloadFrom" ]; then
 			# Note - the following line is not a mistake; if $downloadFrom is not
 			# defined then we should use $uploadTo as the default suggested value.
-			downloadFrom=$uploadTo
+			downloadFrom=$(promptInput \
+				"Enter binary cache URL (optional)" \
+				"binary cache for download:" \
+				"$uploadTo")
 		fi
-		downloadFrom=$(promptInput \
-			"Enter binary cache URL (optional)" \
-			"binary cache for download:" \
-			"$downloadFrom")
 	fi
 	[ -z "$downloadFrom" ] || warn "download from: $downloadFrom"
 
@@ -409,7 +409,6 @@ function floxPublish() {
 		# Input parsing over, print informational hint in the event that we
 		# had to ask any questions.
 		if [ $educatePublishCalled -eq 1 ]; then
-			warn "HINT: avoid having to answer these questions next time with:"
 			echo '{{ Color "'$LIGHTPEACH256'" "'$DARKBLUE256'" "$ '$entirePublishCommand'" }}' | \
 				$_gum format -t template 1>&2
 		fi
@@ -442,29 +441,8 @@ function floxPublish() {
 
 	# Then build package.
 	warn "Building $packageAttrPath ..."
-	local outpaths
-	outpaths=$(floxBuild "${_nixArgs[@]}" --no-link --print-out-paths "$canonicalFlakeURL" "${buildArgs[@]}")
-	[ -n "$outpaths" ] || error "could not build $canonicalFlakeURL" < /dev/null
-
-	# TODO Make content addressable (remove "false" below).
-	local ca_out
-	if false ca_out="$($invoke_nix "${_nixArgs[@]}" store make-content-addressed $outpaths --json | $_jq '.rewrites[]')"; then
-		# Replace package outpaths with CA versions.
-		warn "Replacing with content-addressable package: $ca_out"
-		outpaths=$ca_out
-	fi
-
-	# Sign the package outpaths (optional). Sign by default?
-	if [ -z "$keyFile" -a -f "$FLOX_CONFIG_HOME/secret-key" ]; then
-		keyFile="$FLOX_CONFIG_HOME/secret-key"
-	fi
-	if [ -n "$keyFile" ]; then
-		if [ -f "$keyFile" ]; then
-			$invoke_nix "${_nixArgs[@]}" store sign -r --key-file "$keyFile" $outpaths
-		else
-			error "could not read $keyFile: $!" < /dev/null
-		fi
-	fi
+	floxBuild "${_nixArgs[@]}" --no-link "$canonicalFlakeURL" "${buildArgs[@]}" || \
+		error "could not build $canonicalFlakeURL" < /dev/null
 
 	### Next section cribbed from: github:flox/catalog-ingest#analyze
 
@@ -487,6 +465,31 @@ function floxPublish() {
 		  $tmpstderr 1>&2 || true
 		error "eval of $analyzer#analysis.eval.packages.$publishSystem.$packageAttrPath failed - see above" < /dev/null
 	}
+	local evalOutputs
+	evalOutputs="$($_jq -r '.eval.outputs | map(values)[]' <<< "$evalAndBuild")"
+	# Filter eval outputs to return only the ones that exist.
+	local outpaths
+	outpaths="$(for i in "$evalOutputs"; do [ -e "$i" ] && echo $i; done)"
+
+	# TODO Make content addressable (remove "false" below).
+	local ca_out
+	if false ca_out="$($invoke_nix "${_nixArgs[@]}" store make-content-addressed $outpaths --json | $_jq '.rewrites[]')"; then
+		# Replace package outpaths with CA versions.
+		warn "Replacing with content-addressable package: $ca_out"
+		outpaths="$ca_out"
+	fi
+
+	# Sign the package outpaths (optional). Sign by default?
+	if [ -z "$keyFile" -a -f "$FLOX_CONFIG_HOME/secret-key" ]; then
+		keyFile="$FLOX_CONFIG_HOME/secret-key"
+	fi
+	if [ -n "$keyFile" ]; then
+		if [ -f "$keyFile" ]; then
+			$invoke_nix "${_nixArgs[@]}" store sign -r --key-file "$keyFile" "$outpaths"
+		else
+			error "could not read $keyFile: $!" < /dev/null
+		fi
+	fi
 
 	# Gather buildRepository package outpath metadata.
 	local buildMetadata
