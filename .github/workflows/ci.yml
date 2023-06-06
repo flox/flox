@@ -34,8 +34,8 @@ jobs:
     - name: Build
       run: flox build ${{ matrix.package }} -L
 
-  tests:
-    name: Run flox tests
+  test-flox:
+    name: Test flox
     runs-on: ubuntu-latest
     # TODO: add a dependency on build part once we have some caching
 
