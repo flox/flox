@@ -49,10 +49,10 @@ jobs:
       with:
         fetch-depth: 0
 
-      - name: GPG Signature Setup
-        run: |
-          git config --global gpg.format ssh;
-          git config --global user.signingkey /home/runner/.ssh/id_rsa.pub;
+    - name: GPG Signature Setup
+      run: |
+        git config --global gpg.format ssh;
+        git config --global user.signingkey /home/runner/.ssh/id_rsa.pub;
 
     - name: Install flox
       uses: flox/install-flox-action@main
