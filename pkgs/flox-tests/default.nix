@@ -15,6 +15,7 @@
   gnutar,
   jq,
   nix-editor,
+  openssh,
   parallel,
   unixtools,
   which,
@@ -41,6 +42,7 @@
     gnutar
     jq
     nix-editor
+    openssh
     parallel
     unixtools.util-linux
     which
@@ -73,11 +75,5 @@ in
         --print-output-on-failure \
         --verbose-run \
         --timing \
-            ${tests-src}/tests/integration.bats \
-            ${tests-src}/tests/multi-env.bats \
-            ${tests-src}/tests/package.bats \
-            ${tests-src}/tests/progs.bats \
-            ${tests-src}/tests/gpgsign.bats \
-            ${tests-src}/tests/semver-search.bats \
-                "$@"
+            ${tests-src}/tests "$@"
   ''
