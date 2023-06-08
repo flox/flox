@@ -39,4 +39,4 @@ jobs:
       run: flox nix build .#${{ matrix.package }} -L --print-out-paths
 
     - name: Cache
-      run: flox nix copy --to "$FLOX_SUBSTITUTER" .#${{ matrix.package }}
+      run: flox nix copy --to "$FLOX_SUBSTITUTER" '.#${{ matrix.package }}^*'
