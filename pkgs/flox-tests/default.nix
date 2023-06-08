@@ -131,6 +131,7 @@ in
         git config --global gpg.format ssh
         if [[ -f "$TESTS_DIR/id_ed25519.pub" ]];
         then
+          chmod 0600 $TESTS_DIR/id_ed25519
           git config --global user.signingkey $TESTS_DIR/id_ed25519.pub
         fi
 
@@ -142,7 +143,7 @@ in
               --print-output-on-failure             \
               --verbose-run                         \
               --timing                              \
-                  $TESTS_DIR "$@"                 \
+                  $TESTS_DIR "$@"                   \
           ';
         else
           exec -a "$0" bats                         \
