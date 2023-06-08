@@ -18,7 +18,7 @@
   parallel,
   unixtools,
   which,
-  writeScriptBin,
+  writeShellScriptBin,
 }: let
   batsWith = bats.withLibraries (p: [
     p.bats-assert
@@ -46,9 +46,7 @@
     which
   ];
 in
-  writeScriptBin "flox-tests" ''
-        #!${bash}/bin/bash
-
+  writeShellScriptBin "flox-tests" ''
         if command -v flox &> /dev/null
         then
           export TMP_FLOX_CLI=$(command -v flox)
@@ -91,7 +89,7 @@ in
 
         WATCH=0
 
-        while getopts ":F:WhT::" flag;
+        while getopts ":F:T:Wh" flag;
         do
           case "$flag" in
             F)
@@ -111,10 +109,7 @@ in
         done
 
         # remove options from positional parameters
-        if [ "$0" != "--" ];
-        then
-          shift $(expr $OPTIND - 2)
-        fi
+        shift $(expr $OPTIND - 1)
 
         # Default flag values
         if [ -z "$FLOX_CLI" ];
@@ -131,18 +126,6 @@ in
         #echo "FLOX_CLI: $FLOX_CLI"
         #echo "TESTS_DIR: $TESTS_DIR"
         #echo "BATS ARGS: $@"
-
-        # produce nice error when bats args are not passed after --
-        if [[ ! -z "$@" ]];
-        then
-          if [ "$1" == "--" ];
-          then
-            shift
-          else
-            >&2 echo "ERROR: provide BATS ARGUMENTS after \`--\`!"
-            exit 1
-          fi
-        fi
 
         # isolate git config
         git config --global gpg.format ssh
