@@ -84,7 +84,7 @@ teardown_file() {
   # This is not compatible with 16.14
   refute_output --partial 'netlify_test_.nodejs@16.13.2';
   # These are all `>= 16.14' so they should appear.
-  assert_output --partial 'netlify_test_.nodejs@16.14.0'
+  assert_output --partial 'netlify_test_.nodejs@16.14.2'
   assert_output --partial 'netlify_test_.nodejs@16.15.0'
   assert_output --partial 'netlify_test_.nodejs@16.16.0'
 }
@@ -104,7 +104,7 @@ teardown_file() {
   refute_output --partial 'netlify_test_.nodejs@18.14.1';
   refute_output --partial 'netlify_test_.nodejs@18.14.2';
   # These are all `>= 16.14' so they should appear.
-  assert_output --partial 'netlify_test_.nodejs@16.14.0'
+  assert_output --partial 'netlify_test_.nodejs@16.14.2'
   assert_output --partial 'netlify_test_.nodejs@16.15.0'
   assert_output --partial 'netlify_test_.nodejs@16.16.0'
   # Make sure 18.16.0 appears

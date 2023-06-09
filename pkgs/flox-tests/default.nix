@@ -47,6 +47,7 @@
   ];
 in
   writeShellScriptBin "flox-tests" ''
+
         if command -v flox &> /dev/null
         then
           export TMP_FLOX_CLI=$(command -v flox)
@@ -54,7 +55,6 @@ in
 
         export TEMP_FLOX=$(mktemp -d)
         export PATH="${lib.makeBinPath paths}"
-        export FLOX_PACKAGE="flox"
         export FLOX_DISABLE_METRICS=true
         export GIT_CONFIG_SYSTEM="$TEMP_FLOX/gitconfig-system"
         export GIT_CONFIG_GLOBAL="$TEMP_FLOX/gitconfig-global"
