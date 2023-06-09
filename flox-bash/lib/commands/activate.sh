@@ -359,7 +359,7 @@ function floxActivate() {
 				# profile script and then executing an interactive shell.
 				*dash)
 					exec "$rcShell" -c                                      \
-						   "source '$_etc/flox.bashrc'; exec $rcShell -i";
+					       "source '$_etc/flox.bashrc'; exec $rcShell -i";
 					;;
 			esac
 			;;
