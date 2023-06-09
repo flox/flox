@@ -86,23 +86,36 @@ function floxActivate() {
 
 	local -a cmdArgs=()
 	local -i inCmdArgs=0
-	for arg in "${invocation[@]}"; do
-		case "$arg" in
+
+	while [[ "$#" -gt 0 ]]; do
+		case "$1" in
+		# User has explicitly requested a system which differs from the
+		# running system.
+		# This is largely useful for `aarch64-darwin' systems which have the
+		# ability to execute `x86_64-darwin' binaries.
+		-s|--system)
+			shift;
+			if [[ "$#" -lt 1 ]]; then
+				error "option \`--system <SYSTEM>' requires an argument"
+			fi
+			system="$1"
+			;;
 		--)
-			if [ "$inCmdArgs" -eq 1 ]; then
-				cmdArgs+=("$arg")
+			if [[ "$inCmdArgs" -eq 1 ]]; then
+				cmdArgs+=("$1")
 			else
 				inCmdArgs=1
 			fi
 			;;
 		*)
-			if [ "$inCmdArgs" -eq 1 ]; then
-				cmdArgs+=("$arg")
+			if [[ "$inCmdArgs" -eq 1 ]]; then
+				cmdArgs+=("$1")
 			else
-				usage | error "unexpected argument \"$arg\" passed to \"$subcommand\""
+				usage | error "unexpected argument \"$1\" passed to \"$subcommand\""
 			fi
 			;;
 		esac
+		shift;
 	done
 
 	# The $FLOX_ACTIVE_ENVIRONMENTS variable is colon-separated (like $PATH)
