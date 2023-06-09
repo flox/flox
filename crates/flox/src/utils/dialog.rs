@@ -8,6 +8,8 @@ use super::{colors, TERMINAL_STDERR};
 pub struct Text<'a> {
     pub default: Option<&'a str>,
 }
+
+#[allow(unused)]
 pub struct Confirm {
     pub default: Option<bool>,
 }
@@ -48,6 +50,7 @@ impl<'a> Dialog<'a, Text<'a>> {
 }
 
 impl<'a> Dialog<'a, Confirm> {
+    #[allow(unused)]
     pub async fn prompt(self) -> inquire::error::InquireResult<bool> {
         let message = self.message.to_owned();
         let help_message = self.help_message.map(ToOwned::to_owned);
