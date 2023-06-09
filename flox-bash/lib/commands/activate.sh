@@ -265,7 +265,7 @@ function floxActivate() {
 	local rcScript
 	rcScript="$(mktemp)" # cleans up after itself, do not use mkTempFile()
 	case "$rcShell" in
-	*bash)
+	*bash|*dash)
 		bashRC "${_environments_to_activate[@]}" >> "$rcScript"
 		;;
 	*zsh)
@@ -349,10 +349,19 @@ function floxActivate() {
 	if [ "$interactive" -eq 1 ]; then
 		# Interactive case - launch subshell.
 		case "$rcShell" in
-		*bash)
+		*bash|*dash)
 			export FLOX_BASH_INIT_SCRIPT="$rcScript"
 			[ "$verbose" -eq 0 ] || pprint "+$colorBold" exec "$rcShell" "--rcfile" "$_etc/flox.bashrc" "$colorReset" 1>&2
-			exec "$rcShell" "--rcfile" "$_etc/flox.bashrc"
+			case "$rcShell" in
+				*bash) exec "$rcShell" "--rcfile" "$_etc/flox.bashrc"; ;;
+				# `dash' lacks an equivalent for `--rcfile' so we have to do
+				# things "the good ol' fashioned way" - manually sourcing the
+				# profile script and then executing an interactive shell.
+				*dash)
+					exec "$rcShell" -c                                      \
+					       "source '$_etc/flox.bashrc'; exec $rcShell -i";
+					;;
+			esac
 			;;
 		*zsh)
 			export FLOX_ZSH_INIT_SCRIPT="$rcScript"
@@ -377,7 +386,7 @@ function floxActivate() {
 		local _flox_activate_verbose=/dev/null
 		[ "$verbose" -eq 0 ] || _flox_activate_verbose=/dev/stderr
 		case "$rcShell" in
-		*bash|*zsh)
+		*bash|*zsh|*dash)
 			$_cat "$rcScript" | $_tee "$_flox_activate_verbose"
 			;;
 		*)

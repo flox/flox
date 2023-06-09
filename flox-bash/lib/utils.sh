@@ -1470,12 +1470,12 @@ function darwinRepairFiles() {
 #
 function identifyParentShell() {
 	trace "$@"
-	local parentShell="$SHELL" # default
-	local shellCmd="${SHELL/*\//}" # aka basename
+	local parentShell="${SHELL:-}" # default
+	local shellCmd="${parentShell/*\//}" # aka basename
 	local parentShellCmd="$shellCmd" # default
 
 	# Only attempt a guess if we know our parent PID.
-	if [ -n "$FLOX_PARENT_PID" ]; then
+	if [ -n "${FLOX_PARENT_PID:-}" ]; then
 		# First attempt to identify details of parent shell process.
 		if [ -L "/proc/$FLOX_PARENT_PID/exe" -a \
 			 -r "/proc/$FLOX_PARENT_PID/exe" ]; then
@@ -1494,14 +1494,14 @@ function identifyParentShell() {
 		# Compare $SHELL and $parentShell to see if the command names match.
 		if [ "$shellCmd" == "$parentShellCmd" ]; then
 			# Respect $SHELL over $parentShell (which is usually its realpath).
-			echo "$SHELL"
+			echo "${SHELL:-$shellCmd}"
 		else
 			# Return parent shell.
 			echo "$parentShell"
 		fi
 	else
 		# We don't know our parent PID so don't even guess.
-		echo "$SHELL"
+		echo "${SHELL:-$shellCmd}"
 	fi
 }
 

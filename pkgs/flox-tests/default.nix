@@ -2,6 +2,8 @@
   self,
   lib,
   bash,
+  zsh,
+  dash,
   bats,
   coreutils,
   entr,
@@ -28,6 +30,8 @@
 
   paths = [
     bash
+    zsh
+    dash
     batsWith
     coreutils
     entr

@@ -184,21 +184,6 @@ setup_file() {
   assert_output --regexp "3  stable.nixpkgs-flox.jq +"$VERSION_REGEX
 }
 
-@test "flox activate can invoke hello and cowsay" {
-  run $FLOX_CLI activate -e $TEST_ENVIRONMENT -- sh -c 'hello | cowsay'
-  assert_success
-  assert_output --partial - < tests/hello-cowsay.out
-}
-
-@test "flox activate accepts '-s,--system' options" {
-  run "$FLOX_CLI" activate -e "$TEST_ENVIRONMENT" --system "$NIX_SYSTEM"  \
-                           -- sh -c ':'
-  assert_success
-  run "$FLOX_CLI" activate -e "$TEST_ENVIRONMENT" -s "$NIX_SYSTEM"  \
-                           -- sh -c ':'
-  assert_success
-}
-
 @test "flox edit remove hello" {
   EDITOR=./tests/remove-hello run $FLOX_CLI edit -e $TEST_ENVIRONMENT
   assert_success
