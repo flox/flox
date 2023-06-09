@@ -47,4 +47,4 @@ jobs:
       run: |
         flox nix copy --to "$FLOX_SUBSTITUTER" '.#${{ matrix.package }}^*'
         flox nix run github:tomberek/nix-ci buildtime_uncached .#${{ matrix.package }} https://cache.nixos.org https://cache.floxdev.com "$FLOX_SUBSTITUTER"
-        flox nix run github:tomberek/nix-ci buildtime_uncached .#${{ matrix.package }} https://cache.nixos.org https://cache.floxdev.com "$FLOX_SUBSTITUTER" | xargs -I {} sh -c "flox nix copy --to \"$FLOX_SUBSTITUTER\" {} || :"
+        flox nix run github:tomberek/nix-ci buildtime_uncached .#${{ matrix.package }} https://cache.nixos.org https://cache.floxdev.com "$FLOX_SUBSTITUTER" | xargs -I {} sh -c "flox -v nix copy --to \"$FLOX_SUBSTITUTER\" {} || :"
