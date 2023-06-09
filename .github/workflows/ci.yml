@@ -26,8 +26,10 @@ jobs:
       with:
         fetch-depth: 0
 
+    # FIXME: Change to `uses: flox/install-flox-action@main' when that action
+    #        is fixed.
     - name: Install flox
-      uses: flox/install-flox-action@main
+      uses: flox/install-flox-action@87d4bf1c9567497fe28cb55b411b16c375273219
       with:
         github-access-token: ${{ secrets.NIX_GIT_TOKEN }}
         substituter: s3://flox-store
