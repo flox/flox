@@ -9,7 +9,6 @@
   curl,
   dasel,
   diffutils,
-  entr,
   expect,
   findutils,
   gawk,
@@ -81,8 +80,6 @@
     then floxActivateBashDarwin
     else throw "unsupported system variant";
 
-  bats = pkgs.bats.withLibraries (p: [p.bats-support p.bats-assert]);
-
   # read commitizen config file as the single source of version
   czToml = lib.importTOML (flox-src + "/.cz.toml");
 in
@@ -91,7 +88,7 @@ in
     version = "${czToml.tool.commitizen.version}-${inputs.flox-floxpkgs.lib.getRev self}";
     src = flox-src + "/flox-bash";
     nativeBuildInputs =
-      [bats entr makeWrapper pandoc shellcheck shfmt which]
+      [makeWrapper pandoc shellcheck shfmt which]
       # nix-provided expect not working on Darwin (#441)
       ++ lib.optionals hostPlatform.isLinux [expect];
     buildInputs = [
