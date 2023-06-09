@@ -40,3 +40,8 @@ jobs:
 
     - name: Cache
       run: flox nix copy --to "$FLOX_SUBSTITUTER" '.#${{ matrix.package }}^*'
+
+    - name: Test 
+      if: ${{ matrix.package == 'flox' }}
+      run: |
+        flox run flox-tests -- -- --flox $(realpath ./result/bin/flox)

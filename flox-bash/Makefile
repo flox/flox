@@ -213,17 +213,3 @@ clean:
 
 result: $(SRC)
 	nix --extra-experimental-features 'nix-command flakes' build '.#flox-bash' -L
-
-.PHONY: test watch-test
-watch-test: FORCE
-	for i in $(SRC); do echo "$$i"; done|entr -s '    \
-	  echo Building ...;                              \
-	  rm -f ./result;                                 \
-	  $(MAKE) result;                                 \
-	  FLOX_PACKAGE="$${FLOX_PACKAGE:-$(PREFIX)}"      \
-	    bats $(if $(MATCH),-f ".*$(MATCH).*") tests;  \
-	';
-
-test: result
-	FLOX_PACKAGE="$${FLOX_PACKAGE:-$(PREFIX)}"       \
-	  bats $(if $(MATCH),-f ".*$(MATCH).*") tests;

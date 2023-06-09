@@ -23,7 +23,6 @@
   runCommand,
   fd,
   gnused,
-  bats,
   gitMinimal,
 }: let
   manpages =
@@ -51,7 +50,6 @@
       GIT_BIN = "${gitMinimal}/bin/git";
       FLOX_SH = "${flox-bash}/libexec/flox/flox";
       FLOX_SH_PATH = "${flox-bash}";
-      FLOX_SH_FLAKE = flox-bash.src; # For bats tests
       FLOX_VERSION = "${cargoToml.package.version}-${inputs.flox-floxpkgs.lib.getRev self}";
       NIXPKGS_CACERT_BUNDLE_CRT = "${cacert}/etc/ssl/certs/ca-bundle.crt";
       NIX_TARGET_SYSTEM = targetPlatform.system;
@@ -125,7 +123,6 @@ in
         pandoc
         installShellFiles
         gnused
-        (bats.withLibraries (p: [p.bats-support p.bats-assert]))
       ];
 
       passthru.envs = envs;
