@@ -213,7 +213,7 @@ impl Flox {
                 // if we can't parse the flake_ref we warn but keep it
                 // this is until we can be sure enought that our flake_ref parser is robust
                 if let Err(e) = parsed_flake_ref {
-                    warn!(
+                    debug!(
                         indoc! {"
                         Could not parse default flake_ref {flakeref}
                         {e}
