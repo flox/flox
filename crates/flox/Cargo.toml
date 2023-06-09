@@ -52,6 +52,5 @@ temp-env = "0.3.2"
 
 
 [features]
-extra-tests = ["bats-tests", "impure-unit-tests"]
+extra-tests = ["impure-unit-tests"]
 impure-unit-tests = []
-bats-tests = []

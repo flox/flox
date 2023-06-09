@@ -167,16 +167,36 @@ squashed into multiple distinct change sets.
 
 ## Testing
 
-0. (temporary) get the latests integration tests
-   ```
-   flox develop .\#rust-env \
-     --override-input flox-floxpkgs-internal/flox github:flox/flox-bash-private
-   ```
-1. run cargo tests
-   - `cargo test` will run all pure rust tests tests
-   - `cargo test -F "extra-tests"` enables
-     unit tests that can't run in the nix sandbox (`-F impure-unit-tests`)
-     and integration tests that are shared with the bash implementation
-     of flox and ensure compatibility.
-   - `hivemind` watches the rust source code and continuously runs `cargo test -F "extra-tests"` on changes
-     can be configured through [./Procfile]
+### Unit tests
+
+Unit test are ran with `cargo`:
+
+```console
+$ flox develop flox --command "cargo test"
+```
+
+### Integration tests
+
+Integration tests are written with `bats` and `expect`.
+They are located in the `./tests` folder.
+To run them:
+
+```console
+$ cargo build
+$ flox run .#flox-tests --flox ./target/debug/flox
+```
+By default `flox` CLI is going to be picked from the environment.
+
+When working on the test you would probably want to run them continuously on
+every change. In that case run the following:
+
+```console
+$ flox run .#flox-tests --flox ./target/debug/flox --watch
+```
+
+Also note that you can pass `bats` arguments, like `--filter`, to not run all
+the tests.
+
+```console
+$ flox run .#flox-tests --flox ./target/debug/flox --watch -- --filter "flox search"
+```
