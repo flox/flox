@@ -12,5 +12,11 @@
     # inputs.nixpkgs.follows = "/flox-floxpkgs/nixpkgs";
   };
 
-  outputs = args @ {flox-floxpkgs, ...}: flox-floxpkgs.project args (_: {});
+  outputs = inputs:
+    inputs.flox-floxpkgs.project inputs (_: {
+      #  config.plugins = [
+      #   (_: { greetings.en = "hello"; })
+      #   (_: [{ greetings.de = "hallo"; } { greetings.zh = "你好"; }])
+      # ];
+    });
 }
