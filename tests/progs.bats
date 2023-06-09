@@ -19,6 +19,21 @@ setup_file() {
   common_setup;
   export TEST_ENVIRONMENT='_testing_progs';
   destroy_envs;
+
+  # Perform a minimal form of `flox-bash/lib/init.sh' required to support
+  # using internal `flox-bash/lib/utils.sh' routines.
+  _prefix="$( $FLOX_CLI --bash-passthru --prefix; )";
+  _lib="$_prefix/lib";
+  _libexec="$_prefix/libexec";
+  _etc="$_prefix/etc";
+
+  # Used to reset `PATH' to conventional UNIX system default.
+  # This ensures that the `PATH' used by the test environment does not pollute
+  # our results.
+  _progs_PATH='/bin:/sbin:/usr/bin:/usr/local/bin';
+  _progs_PATH="$_progs_PATH:/run/wrappers/bin:/run/current-system/sw/bin";
+
+  export _prefix _lib _libexec _etc _progs_PATH;
 }
 
 teardown_file() {
@@ -32,20 +47,12 @@ teardown_file() {
 # This file handles resolution of runtime dependencies, so we only care about
 # testing past that point of initialization.
 util() {
-  # Perform a minimal form of `flox-bash/lib/init.sh' required to support
-  # using internal `flox-bash/lib/utils.sh' routines.
-  _prefix="$( $FLOX_CLI --bash-passthru --prefix; )";
-  _lib="$_prefix/lib";
-  _libexec="$_prefix/libexec";
-  _etc="$_prefix/etc";
-
   # push current options
   _old_opts="$( shopt -p; )";
   shopt -s extglob;
   shopt -s nullglob;
   _OLD_PATH="$PATH";
-  PATH='/bin:/sbin:/usr/bin:/usr/local/bin'
-  PATH="$PATH:/run/wrappers/bin:/run/current-system/sw/bin"
+  export PATH="$_progs_PATH";
 
   # Run utils setup
   #shellcheck source-path=SCRIPTDIR
