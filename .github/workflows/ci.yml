@@ -30,11 +30,18 @@ jobs:
       uses: flox/install-flox-action@main
       with:
         github-access-token: ${{ secrets.NIX_GIT_TOKEN }}
+        substituter: s3://flox-store
+        substituter-key: ${{ secrets.FLOX_STORE_PUBLIC_NIX_SECRET_KEY }}
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
     - name: Build
-      run: flox build ${{ matrix.package }}
+      run: flox nix build .#${{ matrix.package }} -L --print-out-paths
 
     - name: Test 
       if: ${{ matrix.package == 'flox' }}
       run: |
         flox run flox-tests -- -- --flox $(realpath ./result/bin/flox)
+
+    - name: Cache
+      run: flox nix copy --to "$FLOX_SUBSTITUTER" '.#${{ matrix.package }}^*'
