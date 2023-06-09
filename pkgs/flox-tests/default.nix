@@ -128,12 +128,9 @@ in
         #echo "BATS ARGS: $@"
 
         # isolate git config
+        ssh-keygen -t ed25519 -q -N "" -f $TEMP_FLOX/id_ed25519
         git config --global gpg.format ssh
-        if [[ -f "$TESTS_DIR/id_ed25519.pub" ]];
-        then
-          chmod 0600 $TESTS_DIR/id_ed25519
-          git config --global user.signingkey $TESTS_DIR/id_ed25519.pub
-        fi
+        git config --global user.signingkey $TEMP_FLOX/id_ed25519.pub
 
         # run basts either via entr or just a single run
         if [[ $WATCH -eq 1 ]];
