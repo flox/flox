@@ -30,7 +30,7 @@ common_setup() {
   # Remove any vestiges of previous test runs.
   $FLOX_CLI destroy -e "$TEST_ENVIRONMENT" --origin -f || :
 
-  export NIX_SYSTEM="$($FLOX_CLI nix eval --impure --expr builtins.currentSystem)"
+  export NIX_SYSTEM="$($FLOX_CLI nix eval --impure --expr builtins.currentSystem --raw)"
 
   # Simulate pure bootstrapping environment. It is challenging to get
   # the nix, gh, and flox tools to all use the same set of defaults.
