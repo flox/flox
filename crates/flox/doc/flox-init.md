@@ -26,10 +26,6 @@ flox will query them using interactive dialogs.
 In non interactive shells the command will fail without a `<name>` and default
 to a generic builder for `<template>`.
 
-If no `PROJECT_ROOT` was detected, ie. the current dir is not in a floxified
-repository, flox will initialize a flox repo in the root of the repository
-or create a git repository in `CWD` if not currently inside a git repo.
-
 # OPTIONS
 
 ```{.include}
