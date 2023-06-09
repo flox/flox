@@ -1,6 +1,6 @@
 use std::env;
 use std::fmt::Debug;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use anyhow::{bail, Context, Result};
 use bpaf::{construct, Bpaf, Parser};
@@ -19,14 +19,13 @@ use flox_rust_sdk::prelude::Installable;
 use flox_rust_sdk::providers::git::{GitCommandProvider, GitProvider};
 use flox_types::stability::Stability;
 use indoc::indoc;
-use inquire::error::InquireResult;
 use itertools::Itertools;
 use log::{debug, info};
 
 use crate::commands::package::interface::ResolveInstallable;
 use crate::config::features::Feature;
 use crate::config::Config;
-use crate::utils::dialog::{Confirm, Dialog, Text};
+use crate::utils::dialog::{Dialog, Text};
 use crate::utils::resolve_environment_ref;
 use crate::{flox_forward, subcommand_metric};
 
@@ -125,8 +124,6 @@ pub(crate) mod interface {
         pub(crate) template: Option<InstallableArgument<Parsed, TemplateInstallable>>,
         #[bpaf(long("name"), short('n'), argument("name"))]
         pub(crate) name: Option<String>,
-        #[bpaf(short('i'), long("init-git"), switch)]
-        pub(crate) init_git: bool,
     }
     pub(crate) fn template_arg(
     ) -> impl Parser<Option<InstallableArgument<Parsed, TemplateInstallable>>> {
@@ -345,7 +342,7 @@ impl interface::PackageCommands {
                     .unwrap_or("NAME")
                     .to_owned();
 
-                let git_repo = ensure_project_repo(&flox, cwd, &command).await?;
+                let git_repo = ensure_project_repo(&flox, cwd).await?;
                 let project = ensure_project(git_repo, &command).await?;
 
                 // Check if template exists before asking for project's name
@@ -583,11 +580,10 @@ impl interface::PackageCommands {
     }
 }
 
-async fn ensure_project_repo<'flox>(
-    flox: &'flox Flox,
+async fn ensure_project_repo(
+    flox: &Flox,
     cwd: PathBuf,
-    command: &WithPassthru<interface::Init>,
-) -> Result<root::Root<'flox, Closed<GitCommandProvider>>, anyhow::Error> {
+) -> Result<root::Root<Closed<GitCommandProvider>>, anyhow::Error> {
     match flox
         .resource(cwd)
         .guard::<GitCommandProvider>()
@@ -603,45 +599,12 @@ async fn ensure_project_repo<'flox>(
             );
             Ok(p)
         },
-        Err(g) => {
-            async fn prompt(path: &Path) -> InquireResult<bool> {
-                let dialog = Dialog {
-                    message: &format!("The current directory is not in a Git repository, would you like to create one in {path:?}?"),
-                    help_message: None,
-                    typed: Confirm {
-                        default: Some(false)
-                    }
-                };
+        Err(_) => bail!(indoc! {"
+            You must be inside of a Git repository to initialize a project
 
-                dialog.prompt().await
-            }
-
-            if !command.inner.init_git && !Dialog::can_prompt() {
-                let msg = indoc! {"
-                    The current directory is not in a Git repository.
-                    Unable to prompt for confirmation to create a git repository.
-
-                    Explicitly allow flox to create a git repository in the current directory
-                    by running with '-i' or '--git-init'.
-                "};
-                bail!("{msg}");
-            }
-
-            if command.inner.init_git || prompt(g.path()).await? {
-                let p = g.init_git().await?;
-
-                info!(
-                    "Created git repo{}",
-                    p.workdir()
-                        .map(|p| format!(": {}", p.display()))
-                        .unwrap_or_else(|| "".to_owned())
-                );
-
-                Ok(p)
-            } else {
-                bail!("You must be inside of a Git repository to initialize a project");
-            }
-        },
+            To provide the best possible experience, projects must be under version control.
+            Please initialize a project in an existing repo or create one using 'git init'.
+        "}),
     }
 }
 
