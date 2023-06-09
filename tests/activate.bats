@@ -114,6 +114,18 @@ teardown_file() {
 
 
 # ---------------------------------------------------------------------------- #
+
+@test "'flox activate' accepts '-s,--system' options" {
+  run "$FLOX_CLI" activate -e "$TEST_ENVIRONMENT" --system "$NIX_SYSTEM"  \
+                           -- sh -c ':'
+  assert_success
+  run "$FLOX_CLI" activate -e "$TEST_ENVIRONMENT" -s "$NIX_SYSTEM"  \
+                           -- sh -c ':'
+  assert_success
+}
+
+
+# ---------------------------------------------------------------------------- #
 #
 #
 #
