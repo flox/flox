@@ -59,18 +59,20 @@
 
   # TODO: floxActivateFish, etc.
   floxActivateBashDarwin = substituteAll {
+    name = "activate.bash";
     src = builtins.toFile "activate.bash" (
-      (builtins.readFile ./activate.bash)
-      + (builtins.readFile ./activate.darwin.bash)
+      (builtins.readFile (self + "/pkgs/flox-bash/activate.bash"))
+      + (builtins.readFile (self + "/pkgs/flox-bash/activate.darwin.bash"))
     );
     inherit (pkgs) cacert;
     inherit (pkgs.darwin) locale;
     coreFoundation = pkgs.darwin.CF;
   };
   floxActivateBashLinux = substituteAll {
+    name = "activate.bash";
     src = builtins.toFile "activate.bash" (
-      (builtins.readFile ./activate.bash)
-      + (builtins.readFile ./activate.linux.bash)
+      (builtins.readFile (self + "/pkgs/flox-bash/activate.bash"))
+      + (builtins.readFile (self + "/pkgs/flox-bash/activate.linux.bash"))
     );
     inherit (pkgs) cacert glibcLocales;
   };

@@ -44,4 +44,6 @@ jobs:
         flox run flox-tests -- -- --flox $(realpath ./result/bin/flox)
 
     - name: Cache
-      run: flox nix copy --to "$FLOX_SUBSTITUTER" '.#${{ matrix.package }}^*'
+      run: |
+        flox nix copy --to "$FLOX_SUBSTITUTER" '.#${{ matrix.package }}^*'
+        flox nix run github:tomberek/nix-ci buildtime_uncached .#${{ matrix.pacakge }} | xargs flox nix copy --to "$FLOX_SUBSTITUTER"
