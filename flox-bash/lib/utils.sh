@@ -1381,7 +1381,8 @@ function selectAttrPath() {
 
 function checkGitRepoExists() {
 	trace "$@"
-	local origin="$1"
+	# Remove any rev/ref tags before attempting to verify repo exists.
+	local origin="${1/\?*/}"
 	githubHelperGit ls-remote "$origin" >/dev/null 2>&1
 }
 

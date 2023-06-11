@@ -223,6 +223,8 @@ function floxPublish() {
 		cloneRemote="$($_git remote get-url ${upstreamRemote:-origin})"
 		cloneBranch="$($_git rev-parse --abbrev-ref --symbolic-full-name @)"
 		cloneRev="$($_git rev-parse @)"
+		# Create the project registry before proceeding.
+		initProjectRegistry
 	fi
 
 	# The --build-repo argument specifies the repository of the flake used
@@ -235,8 +237,6 @@ function floxPublish() {
 			# Derive the default flakeRef from the current git clone.
 			if [ "$packageFlakeRef" = "." ]; then
 				buildRepository="$cloneRemote"
-				# Create the project registry before proceeding.
-				initProjectRegistry
 			else
 				buildRepository="$packageFlakeRef"
 			fi
@@ -263,14 +263,24 @@ function floxPublish() {
 		canonicalFlakeRef="${buildRepository}"
 		;;
 	*)
+		local buildRepositoryBase headref
+		if [[ "$buildRepository" =~ '?'*ref= ]]; then
+		    buildRepositoryBase="${buildRepository/\?*/}"
+			headref="${buildRepository/*\?ref=/}"
+			headref="${headref/&*/}"
+		else
+		    buildRepositoryBase="$buildRepository"
+			headref="HEAD"
+		fi
+
 		# Figure out the HEAD version to derive canonical flake URL.
 		local upstreamRev
-		upstreamRev=$(githubHelperGit ls-remote "$buildRepository" HEAD)
+		upstreamRev=$(githubHelperGit ls-remote "$buildRepositoryBase" "$headref")
 		# Keep only first 40 characters to remove the extra spaces and "HEAD" label.
 		upstreamRev=${upstreamRev:0:40}
 		# If we did derive the buildRepository from a local git clone, confirm
 		# that it is not out of sync with upstream.
-		if [ "$buildRepository" = "$cloneRemote" ]; then
+		if [ "$buildRepositoryBase" = "$cloneRemote" ]; then
 			if ! $_git diff --exit-code --quiet; then
 				warn "Warning: uncommitted changes detected"
 				error "commit all changes before publishing" < /dev/null
@@ -294,7 +304,7 @@ function floxPublish() {
 				fi
 			fi
 		fi
-		canonicalFlakeRef="${buildRepository}?rev=${upstreamRev}"
+		canonicalFlakeRef="${buildRepositoryBase}?rev=${upstreamRev}"
 		;;
 	esac
 
@@ -398,18 +408,18 @@ function floxPublish() {
 
 	# Construct string encapsulating entire command invocation.
 	local entirePublishCommand
-	entirePublishCommand=$(printf \
+	entirePublishCommand="$(printf \
 		"flox publish -A %s --build-repo %s --channel-repo %s" \
-		"$packageAttrPath" "$buildRepository" "$channelRepository")
-	[ -z "$uploadTo" ] || entirePublishCommand=$(printf "%s --upload-to %s" "$entirePublishCommand" "$uploadTo")
-	[ -z "$downloadFrom" ] || entirePublishCommand=$(printf "%s --download-from %s" "$entirePublishCommand" "$downloadFrom")
+		"$packageAttrPath" "$buildRepository" "$channelRepository")"
+	[ -z "$uploadTo" ] || entirePublishCommand="$(printf "%s --upload-to %s" "$entirePublishCommand" "$uploadTo")"
+	[ -z "$downloadFrom" ] || entirePublishCommand="$(printf "%s --download-from %s" "$entirePublishCommand" "$downloadFrom")"
 
 	# Only hint and save responses in interactive mode.
 	if [ $interactive -eq 1 ]; then
 		# Input parsing over, print informational hint in the event that we
 		# had to ask any questions.
 		if [ $educatePublishCalled -eq 1 ]; then
-			echo '{{ Color "'$LIGHTPEACH256'" "'$DARKBLUE256'" "$ '$entirePublishCommand'" }}' | \
+			echo '{{ Color "'$LIGHTPEACH256'" "'$DARKBLUE256'" "$ '"$entirePublishCommand"'" }}' | \
 				$_gum format -t template 1>&2
 		fi
 
@@ -423,7 +433,7 @@ function floxPublish() {
 			registry "$gitCloneRegistry" 1 set downloadFrom "$downloadFrom"
 		fi
 	else
-		echo '{{ Color "'$LIGHTPEACH256'" "'$DARKBLUE256'" "'$entirePublishCommand'" }}' | \
+		echo '{{ Color "'$LIGHTPEACH256'" "'$DARKBLUE256'" "'"$entirePublishCommand"'" }}' | \
 			$_gum format -t template 1>&2
 	fi
 
@@ -564,8 +574,8 @@ function floxPublish() {
 				while true; do
 					[ "$pushAttempt" -lt 3 ] ||
 						error "could not push to $channelRepository after $pushAttempt attempts" </dev/null
-					$_git -C "$gitClone" pull --rebase
-					if $_git -C "$gitClone" push; then
+					githubHelperGit -C "$gitClone" pull --rebase
+					if githubHelperGit -C "$gitClone" push; then
 						# Job done.
 						break
 					else
