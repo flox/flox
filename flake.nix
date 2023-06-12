@@ -12,5 +12,6 @@
     # inputs.nixpkgs.follows = "/flox-floxpkgs/nixpkgs";
   };
 
-  outputs = args @ {flox-floxpkgs, ...}: flox-floxpkgs.project args (_: {});
+  outputs = inputs:
+    inputs.flox-floxpkgs.project inputs (_: {});
 }

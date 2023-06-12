@@ -315,6 +315,7 @@ flox install unstable.nixpkgs-flox.hello@2.10
 [`flox-pull`(1)](./flox-pull.md),
 [`flox-push`(1)](./flox-push.md),
 [`flox-remove`(1)](./flox-remove.md),
+[`flox-remove`(1)](./flox-rollback.md),
 [`flox-run`(1)](./flox-run.md),
 [`flox-search`(1)](./flox-search.md),
 [`flox-subscribe`(1)](./flox-subscribe.md),
