@@ -13,10 +13,5 @@
   };
 
   outputs = inputs:
-    inputs.flox-floxpkgs.project inputs (_: {
-      #  config.plugins = [
-      #   (_: { greetings.en = "hello"; })
-      #   (_: [{ greetings.de = "hallo"; } { greetings.zh = "你好"; }])
-      # ];
-    });
+    inputs.flox-floxpkgs.project inputs (_: {});
 }
