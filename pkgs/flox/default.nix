@@ -24,6 +24,8 @@
   fd,
   gnused,
   gitMinimal,
+  gnutar,
+  zstd,
 }: let
   manpages =
     runCommand "flox-manpages" {
@@ -71,23 +73,91 @@
     // lib.optionalAttrs hostPlatform.isLinux {
       LOCALE_ARCHIVE = "${glibcLocales}/lib/locale/locale-archive";
     };
-in
-  rustPlatform.buildRustPackage ({
-      pname = cargoToml.package.name;
-      version = envs.FLOX_VERSION;
+
+  pname = cargoToml.package.name;
+  version = envs.FLOX_VERSION;
+  cargoLock = {
+    lockFile = builtins.path {
+      name = "Cargo.lock";
+      path = flox-src + "/Cargo.lock";
+    };
+    allowBuiltinFetchGit = true;
+  };
+  buildType = "release";
+
+  buildInputs =
+    [
+      openssl.dev
+      zlib
+      libssh2
+      libgit2
+    ]
+    ++ lib.optional hostPlatform.isDarwin [
+      darwin.apple_sdk.frameworks.Security
+    ];
+
+  nativeBuildInputs = [
+    pkg-config # for openssl
+    pandoc
+    installShellFiles
+    gnused
+  ];
+
+  # Build dummy programs in order to populate a "./target" cache
+  pre-build = rustPlatform.buildRustPackage {
+    # Save cache directory
+    postBuild = ''
+      export SOURCE_DATE_EPOCH=1
+      ${gnutar}/bin/tar --sort=name \
+        --mtime="@''${SOURCE_DATE_EPOCH}" \
+        --owner=0 \
+        --group=0 \
+        --numeric-owner \
+        --pax-option=exthdr.name=%d/PaxHeaders/%f,delete=atime,delete=ctime \
+        -c ./target | ${zstd}/bin/zstd "-T''${NIX_BUILD_CORES:-0}" -o $target
+    '';
+    outputs = ["out" "target"];
+    inherit buildInputs nativeBuildInputs cargoLock buildType;
+    name = pname + "-deps";
+    cargoBuildFlags = ["--workspace"];
+    preBuild = ''
+      for i in crates/*/src; do
+      cat <<'EOF' > "$i"/main.rs
+      pub fn main() {}
+      EOF
+      done
+    '';
+    src = builtins.path {
+      name = pname + "-src";
+      path = flox-src;
+      filter = path: type:
+        (type == "directory")
+        || (builtins.elem (builtins.baseNameOf path) ["Cargo.toml" "Cargo.lock"]);
+    };
+    doCheck = false;
+    doInstallCheck = false;
+  };
+
+  drv = rustPlatform.buildRustPackage ({
+      inherit buildInputs nativeBuildInputs cargoLock buildType;
+      inherit pname version;
       src = flox-src;
 
-      cargoLock = {
-        lockFile = flox-src + "/Cargo.lock";
-        allowBuiltinFetchGit = true;
-      };
+      # Extract cache directory
+      preBuild = ''
+        mkdir ./target
+        ${zstd}/bin/zstd -d "${pre-build.target}" --stdout | \
+          ${gnutar}/bin/tar -x -C ./. --strip-components=1
+        # TODO: use a better date?
+        find "./target" -exec touch -cfhd "$(date --date=tomorrow)" -- {} +
+      '';
 
       outputs = ["out" "man"];
       outputsToInstall = ["out" "man"];
 
       buildAndTestSubdir = "crates/flox";
-
       doCheck = true;
+
       cargoTestFlags = ["--workspace"];
 
       postInstall = ''
@@ -107,27 +177,12 @@ in
         env -i USER=`id -un` HOME=$PWD $out/bin/flox nix help > /dev/null
       '';
 
-      buildInputs =
-        [
-          openssl.dev
-          zlib
-          libssh2
-          libgit2
-        ]
-        ++ lib.optional hostPlatform.isDarwin [
-          darwin.apple_sdk.frameworks.Security
-        ];
-
-      nativeBuildInputs = [
-        pkg-config # for openssl
-        pandoc
-        installShellFiles
-        gnused
-      ];
-
       passthru.envs = envs;
       passthru.manpages = manpages;
       passthru.rustPlatform = rustPlatform;
       passthru.flox-bash = flox-bash;
+      passthru.pre-build = pre-build;
     }
-    // envs)
+    // envs);
+in
+  drv

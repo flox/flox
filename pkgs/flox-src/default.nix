@@ -10,5 +10,6 @@ builtins.path {
       (self.outPath + "/checks")
       (self.outPath + "/tests")
       (self.outPath + "/shells")
+      (self.outPath + "/.github")
     ];
 }
