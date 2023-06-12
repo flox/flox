@@ -108,6 +108,43 @@ function parseNixArgs() {
 	done
 }
 
+# This function parses out common flake options used by the flox
+# builders as used by several of the environment builder and
+# development subcommands.
+declare -a _floxFlakeArgs
+function parseFloxFlakeArgs() {
+	_floxFlakeArgs=()
+	_cmdArgs=()
+	while test $# -gt 0; do
+		case "$1" in
+		# Options taking two args.
+		--arg|--argstr|--override-flake|--override-input)
+			_floxFlakeArgs+=("$1"); shift
+			_floxFlakeArgs+=("$1"); shift
+			_floxFlakeArgs+=("$1"); shift
+			;;
+		# Options taking one arg.
+		--priority|--eval-store|--include|-I|--inputs-from|--update-input|--expr|--file|-f)
+			_floxFlakeArgs+=("$1"); shift
+			_floxFlakeArgs+=("$1"); shift
+			;;
+		# Options taking zero args.
+		--debugger|--impure|--commit-lock-file|--no-registries|--no-update-lock-file|--no-write-lock-file|--recreate-lock-file|--derivation)
+			_floxFlakeArgs+=("$1"); shift
+			;;
+		# Consume remaining args
+		--command|-c|--)
+			_cmdArgs+=("$@")
+			break
+			;;
+		# All else are command args.
+		*)
+			_cmdArgs+=("$1"); shift
+			;;
+		esac
+	done
+}
+
 # Import command functions. N.B. the order of imports determines the
 # order that commands appear in the usage() statement.
 

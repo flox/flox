@@ -6,6 +6,7 @@ _usage["init"]="initialize flox expressions for current project"
 function floxInit() {
 	trace "$@"
 	parseNixArgs "$@" && set -- "${_cmdArgs[@]}"
+	parseFloxFlakeArgs "$@" && set -- "${_cmdArgs[@]}"
 
 	local template
 	local pname
@@ -73,6 +74,7 @@ _usage["build"]="build package from current project"
 function floxBuild() {
 	trace "$@"
 	parseNixArgs "$@" && set -- "${_cmdArgs[@]}"
+	parseFloxFlakeArgs "$@" && set -- "${_cmdArgs[@]}"
 
 	local -a buildArgs=()
 	local -a installables=()
@@ -128,6 +130,7 @@ _usage["eval"]="evaluate a Nix expression"
 function floxEval() {
 	trace "$@"
 	parseNixArgs "$@" && set -- "${_cmdArgs[@]}"
+	parseFloxFlakeArgs "$@" && set -- "${_cmdArgs[@]}"
 
 	local -a evalArgs=()
 	local -a installables=()
@@ -243,6 +246,7 @@ _usage["print-dev-env"]="print shell code that can be sourced by bash to reprodu
 function floxDevelop() {
 	trace "$@"
 	parseNixArgs "$@" && set -- "${_cmdArgs[@]}"
+	parseFloxFlakeArgs "$@" && set -- "${_cmdArgs[@]}"
 
 	local -a developArgs=()
 	local -a installables=()
@@ -413,6 +417,7 @@ _usage["run"]="run app from current project"
 function floxRun() {
 	trace "$@"
 	parseNixArgs "$@" && set -- "${_cmdArgs[@]}"
+	parseFloxFlakeArgs "$@" && set -- "${_cmdArgs[@]}"
 
 	local -a runArgs=()
 	local -a installables=()
@@ -480,6 +485,7 @@ _usage["shell"]="run a shell in which the current project is available"
 function floxShell() {
 	trace "$@"
 	parseNixArgs "$@" && set -- "${_cmdArgs[@]}"
+	parseFloxFlakeArgs "$@" && set -- "${_cmdArgs[@]}"
 
 	local -a shellArgs=()
 	local -a installables=()
