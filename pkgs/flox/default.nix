@@ -132,7 +132,7 @@ in
 
       # build dependencies
       nativeBuildInputs =
-        cargoDepsArtifacts.buildInputs
+        cargoDepsArtifacts.nativeBuildInputs
         ++ [
           installShellFiles
           gnused
