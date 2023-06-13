@@ -21,7 +21,7 @@ Any change to a managed environment is tracked as a new generation.
 By default, `flox activate` will activate the latest generation.
 
 `flox rollback` allows to reset the activated environment to an earlier generation.
-Without arguments resets the _default_ environment to the _previous_ generation.
+When called without arguments, flox will reset the _default_ environment to the _previous_ generation.
 A specific generation number can be provided using the `--to GENERATION` option.
 
 
