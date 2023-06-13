@@ -119,7 +119,7 @@
 in
   craneLib.buildPackage ({
       pname = cargoToml.package.name;
-      version = envs.FLOX_VERSION;
+      version = cargoToml.package.version;
       src = flox-src;
 
       cargoArtifacts = cargoDepsArtifacts;
