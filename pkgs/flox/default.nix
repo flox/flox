@@ -1,5 +1,5 @@
 {
-  system,
+  nixpkgs,
   # self is a flake if this package is built locally, but if it's called as a proto, it's just the
   # source
   self,
@@ -25,6 +25,56 @@
   gnused,
   gitMinimal,
 }: let
+  # crane (<https://crane.dev/>) library for building rust packages
+  craneLib = inputs.crane.mkLib nixpkgs;
+
+  # build time environment variables
+  envs =
+    {
+      # 3rd party CLIs
+      # we want to use our own binaries by absolute path
+      # rather than relying on or modifying the user's `PATH` variable
+      NIX_BIN = "${flox-bash}/libexec/flox/nix";
+      GIT_BIN = "${gitMinimal}/bin/git";
+
+      # path to bash impl of flox to dispatch unimplemented commands to
+      FLOX_SH = "${flox-bash}/libexec/flox/flox";
+      FLOX_SH_PATH = "${flox-bash}";
+
+      # Modified nix completion scripts
+      # used to pass through nix completion ability for `flox nix *`
+      NIX_BASH_COMPLETION_SCRIPT = ../../crates/flox/src/static/nix_bash_completion.sh;
+      NIX_ZSH_COMPLETION_SCRIPT = ../../crates/flox/src/static/nix_zsh_completion.sh;
+
+      # bundling of an internally used nix script
+      FLOX_RESOLVER_SRC = ../../resolver;
+
+      # Metrics subsystem configuration
+      METRICS_EVENTS_URL = "https://events.floxdev.com/capture";
+      METRICS_EVENTS_API_KEY = "phc_z4dOADAPvpU9VNzCjDD3pIJuSuGTyagKdFWfjak838Y";
+
+      # the libssh crate wants to use its own libssh prebuilts
+      # or build libssh from source.
+      # This env variable will entcourage it to link to the nix provided version
+      LIBSSH2_SYS_USE_PKG_CONFIG = "1";
+
+      # used internally to ensure CA certificates are available
+      NIXPKGS_CACERT_BUNDLE_CRT = "${cacert}/etc/ssl/certs/ca-bundle.crt";
+
+      # The current version of flox being built
+      FLOX_VERSION = "${cargoToml.package.version}-${inputs.flox-floxpkgs.lib.getRev self}";
+      # Reexport of the platform flox is being built for
+      NIX_TARGET_SYSTEM = targetPlatform.system;
+    }
+    // lib.optionalAttrs hostPlatform.isDarwin {
+      NIX_COREFOUNDATION_RPATH = "${darwin.CF}/Library/Frameworks";
+      PATH_LOCALE = "${darwin.locale}/share/locale";
+    }
+    // lib.optionalAttrs hostPlatform.isLinux {
+      LOCALE_ARCHIVE = "${glibcLocales}/lib/locale/locale-archive";
+    };
+
+  # compiled manpages
   manpages =
     runCommand "flox-manpages" {
       src = flox-src + "/crates/flox/doc";
@@ -44,52 +94,54 @@
 
   cargoToml = lib.importTOML (flox-src + "/crates/flox/Cargo.toml");
 
-  envs =
-    {
-      NIX_BIN = "${flox-bash}/libexec/flox/nix";
-      GIT_BIN = "${gitMinimal}/bin/git";
-      FLOX_SH = "${flox-bash}/libexec/flox/flox";
-      FLOX_SH_PATH = "${flox-bash}";
-      FLOX_VERSION = "${cargoToml.package.version}-${inputs.flox-floxpkgs.lib.getRev self}";
-      NIXPKGS_CACERT_BUNDLE_CRT = "${cacert}/etc/ssl/certs/ca-bundle.crt";
-      NIX_TARGET_SYSTEM = targetPlatform.system;
+  # incremental build of thrid party crates
+  cargoDepsArtifacts = craneLib.buildDepsOnly {
+    pname = cargoToml.package.name;
+    version = envs.FLOX_VERSION;
+    src = flox-src;
 
-      NIX_BASH_COMPLETION_SCRIPT = ../../crates/flox/src/static/nix_bash_completion.sh;
-      NIX_ZSH_COMPLETION_SCRIPT = ../../crates/flox/src/static/nix_zsh_completion.sh;
+    # runtime dependencies of the dependent crates
+    buildInputs =
+      [
+        openssl.dev # octokit -> hyper -> ssl
+        zlib # git2
+        libssh2 # git2
+        libgit2 # git2
+      ]
+      ++ lib.optional hostPlatform.isDarwin [
+        darwin.apple_sdk.frameworks.Security # git2 (and others)
+      ];
 
-      FLOX_RESOLVER_SRC = ../../resolver;
-
-      METRICS_EVENTS_URL = "https://events.floxdev.com/capture";
-      METRICS_EVENTS_API_KEY = "phc_z4dOADAPvpU9VNzCjDD3pIJuSuGTyagKdFWfjak838Y";
-
-      LIBSSH2_SYS_USE_PKG_CONFIG = "1";
-    }
-    // lib.optionalAttrs hostPlatform.isDarwin {
-      NIX_COREFOUNDATION_RPATH = "${darwin.CF}/Library/Frameworks";
-      PATH_LOCALE = "${darwin.locale}/share/locale";
-    }
-    // lib.optionalAttrs hostPlatform.isLinux {
-      LOCALE_ARCHIVE = "${glibcLocales}/lib/locale/locale-archive";
-    };
+    nativeBuildInputs = [
+      pkg-config # for openssl
+    ];
+  };
 in
-  rustPlatform.buildRustPackage ({
+  craneLib.buildPackage ({
       pname = cargoToml.package.name;
       version = envs.FLOX_VERSION;
       src = flox-src;
 
-      cargoLock = {
-        lockFile = flox-src + "/Cargo.lock";
-        allowBuiltinFetchGit = true;
-      };
+      cargoArtifacts = cargoDepsArtifacts;
 
       outputs = ["out" "man"];
       outputsToInstall = ["out" "man"];
 
-      buildAndTestSubdir = "crates/flox";
+      # runtime dependencies
+      buildInputs = cargoDepsArtifacts.buildInputs ++ [];
 
-      doCheck = true;
-      cargoTestFlags = ["--workspace"];
+      # build dependencies
+      nativeBuildInputs =
+        cargoDepsArtifacts.buildInputs
+        ++ [
+          installShellFiles
+          gnused
+        ];
 
+      # test all our crates (include the libraries)
+      cargoTestExtraArgs = "--workspace";
+
+      # bundle manpages and completion scripts
       postInstall = ''
         installManPage ${manpages}/*
         installShellCompletion --cmd flox \
@@ -107,27 +159,10 @@ in
         env -i USER=`id -un` HOME=$PWD $out/bin/flox nix help > /dev/null
       '';
 
-      buildInputs =
-        [
-          openssl.dev
-          zlib
-          libssh2
-          libgit2
-        ]
-        ++ lib.optional hostPlatform.isDarwin [
-          darwin.apple_sdk.frameworks.Security
-        ];
-
-      nativeBuildInputs = [
-        pkg-config # for openssl
-        pandoc
-        installShellFiles
-        gnused
-      ];
-
       passthru.envs = envs;
       passthru.manpages = manpages;
       passthru.rustPlatform = rustPlatform;
       passthru.flox-bash = flox-bash;
+      passthru.cargoDeps = cargoDepsArtifacts;
     }
     // envs)

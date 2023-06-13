@@ -3,6 +3,7 @@
 
   inputs.flox-floxpkgs.url = "github:flox/floxpkgs";
   inputs.shellHooks.url = "github:cachix/pre-commit-hooks.nix";
+  inputs.crane = "github:ipetkov/crane";
   inputs.floco = {
     type = "github";
     owner = "aakropotkin";
