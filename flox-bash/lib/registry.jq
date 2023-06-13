@@ -129,6 +129,7 @@ def listGenerations(args):
   (args | length) as $argc |
   if $argc == 0 then
     $registry | .generations | to_entries |
+      sort_by(.key|tonumber) |
       map(listGeneration) | flatten | .[]
   elif args[0] == "--json" then
     $registry | .generations
