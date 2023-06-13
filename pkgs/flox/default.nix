@@ -97,7 +97,7 @@
   # incremental build of thrid party crates
   cargoDepsArtifacts = craneLib.buildDepsOnly {
     pname = cargoToml.package.name;
-    version = envs.FLOX_VERSION;
+    version = cargoToml.package.version;
     src = flox-src;
 
     # runtime dependencies of the dependent crates
@@ -119,7 +119,7 @@
 in
   craneLib.buildPackage ({
       pname = cargoToml.package.name;
-      version = cargoToml.package.version;
+      version = envs.FLOX_VERSION;
       src = flox-src;
 
       cargoArtifacts = cargoDepsArtifacts;
