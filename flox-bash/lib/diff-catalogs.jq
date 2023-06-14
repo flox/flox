@@ -15,6 +15,25 @@ $c2[0] as $b |
 # - at least 3 deep (to account for channel and system), and
 # - containing the package attributes build, element, eval and version
 
+# Example flake element:
+# {
+#   "nixpkgs": {          # channel
+#     "x86_64-linux": {   # system
+#       "xorg": {         # pname (part 1 of n)
+#         "xeyes": {      # pname (part 2 of n, can be more)
+#           "build": [ ... ],
+#           "element": [ ... ],
+#           "eval": [ ... ],
+#           "version": 1
+#         }
+#       }
+#     }
+#   }
+# }
+#
+def isPackage:
+  (has("type") and .["type"] == "catalogRender") or (has("element") and has("eval") and has("version"));
+
 # Example catalog element:
 # {
 #   "nixpkgs-flox": {     # channel
@@ -39,25 +58,6 @@ $c2[0] as $b |
 # }
 def isCatalogPackage:
   isPackage and has("publish_element");
-
-# Example flake element:
-# {
-#   "nixpkgs": {          # channel
-#     "x86_64-linux": {   # system
-#       "xorg": {         # pname (part 1 of n)
-#         "xeyes": {      # pname (part 2 of n, can be more)
-#           "build": [ ... ],
-#           "element": [ ... ],
-#           "eval": [ ... ],
-#           "version": 1
-#         }
-#       }
-#     }
-#   }
-# }
-#
-def isPackage:
-  (has("type") and .["type"] == "catalogRender") or (has("element") and has("eval") and has("version"));
 
 def packagePNames(keys):
   # Recurse, adding to keys as we go.
