@@ -70,8 +70,8 @@ def packagePNames(keys):
   to_entries | map(
     (keys + [.key]) as $newkeys |
     if ((.value | type) != "object") then (
-      # Uh oh ... something gone wrong, not a dict.
-      "ERROR: encountered object of type \(type)" | halt_error(1)
+      # We got to a leaf before finding a package, so there was never a valid catalog entry.
+      "Internal error: invalid catalog data, encountered object of type \(type)" | halt_error(1)
     )
     elif (.value | isCatalogPackage) then
       # Don't return the final catalogVersion key (usually "latest").
