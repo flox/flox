@@ -62,7 +62,7 @@ def isCatalogPackage:
 #   }
 # }
 #
-def isFlakePackage:
+def isPackage:
   (has("type") and .["type"] == "catalogRender") or (has("element") and has("eval") and has("version"));
 
 def packagePNames(keys):
