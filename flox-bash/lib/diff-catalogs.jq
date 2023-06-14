@@ -38,13 +38,7 @@ $c2[0] as $b |
 #   }
 # }
 def isCatalogPackage:
-  (
-    has("build") and has("element") and has("eval") and has("version") and
-    has("cache") and has("publish_element") and has("source")
-  ) or (
-    # TODO: remove, "type" is deprecated?
-    has("type") and .["type"] == "catalogRender"
-  );
+  isPackage and has("publish_element");
 
 # Example flake element:
 # {
