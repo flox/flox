@@ -9,7 +9,7 @@
   # packages.flox.etc-profiles = {
   #   # All language packs are installed by default, but you can also
   #   # select individual packs by uncommenting the line below.
-  #   # Invoke `flox search -c flox etc-profiles -l` to see
+  #   # Invoke `flox search -l -c flox etc-profiles` to see
   #   # a list of all supported language pack outputs.
   #   # Please note that all/most language packs depend on including
   #   # the "base" and "common_paths" output.
