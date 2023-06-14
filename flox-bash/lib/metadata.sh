@@ -490,7 +490,13 @@ function checkGhAuth {
 	while ! $_gh auth status -h $hostname >/dev/null 2>&1; do
 		initialGreeting
 		warn "Invoking 'gh auth login -h $hostname'"
-		$_gh auth login -h $hostname
+
+		# gh auth login will automatically add credential helpers to the users
+		# global git config.
+		# Since flox will set the git credential helper manually where its needed
+		# and we want to avoid writing user files, trick gh to modify a temporary,
+		# discarded file instead
+		GIT_CONFIG_GLOBAL="$(mkTempFile)" $_gh auth login -h $hostname
 		info ""
 	done
 }

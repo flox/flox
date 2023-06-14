@@ -1389,7 +1389,12 @@ function ensureGHRepoExists() {
 	if ! checkGitRepoExists "$origin"; then
 		if [[ "${origin,,}" =~ github ]]; then
 			( $_gh auth status >/dev/null 2>&1 ) ||
-				$_gh auth login
+				# gh auth login will automatically add credential helpers to the users
+				# global git config.
+				# Since flox will set the git credential helper manually where its needed
+				# and we want to avoid writing user files, trick gh to modify a temporary,
+				# discarded file instead
+				GIT_CONFIG_GLOBAL="$(mkTempFile)" $_gh auth login
 			( $_gh repo view "$origin" >/dev/null 2>&1 ) || (
 				set -x
 				$_gh repo create \
