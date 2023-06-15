@@ -180,8 +180,11 @@ impl Display for FloxPackage {
 
 #[cfg(test)]
 mod tests {
+    use std::env::current_dir;
+
     use flox_types::constants::DEFAULT_CHANNEL;
     use once_cell::sync::Lazy;
+    use runix::flake_ref::git::GitRef;
     use runix::flake_ref::path::PathRef;
 
     use super::*;
@@ -265,10 +268,20 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "In the nix sandbox the current directory is not a flake nor a repo due to file filters)"]
     fn parse_flakeref() {
         let expected = FloxPackage::Installable(Installable {
-            flakeref: runix::flake_ref::FlakeRef::Path(PathRef {
-                path: Path::new(".").to_path_buf(),
+            // during tests and build the current dir is set to the manifest dir
+            flakeref: runix::flake_ref::FlakeRef::GitPath(GitRef {
+                url: url::Url::from_file_path(
+                    Path::new(env!("CARGO_MANIFEST_DIR"))
+                        .ancestors()
+                        .nth(2)
+                        .unwrap(),
+                )
+                .unwrap()
+                .try_into()
+                .unwrap(),
                 attributes: Default::default(),
             }),
             attr_path: ["packages", "aarch64-darwin", "flox"].try_into().unwrap(),

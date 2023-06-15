@@ -86,23 +86,36 @@ function floxActivate() {
 
 	local -a cmdArgs=()
 	local -i inCmdArgs=0
-	for arg in "${invocation[@]}"; do
-		case "$arg" in
+
+	while [[ "$#" -gt 0 ]]; do
+		case "$1" in
+		# User has explicitly requested a system which differs from the
+		# running system.
+		# This is largely useful for `aarch64-darwin' systems which have the
+		# ability to execute `x86_64-darwin' binaries.
+		-s|--system)
+			shift;
+			if [[ "$#" -lt 1 ]]; then
+				error "option \`--system <SYSTEM>' requires an argument"
+			fi
+			system="$1"
+			;;
 		--)
-			if [ "$inCmdArgs" -eq 1 ]; then
-				cmdArgs+=("$arg")
+			if [[ "$inCmdArgs" -eq 1 ]]; then
+				cmdArgs+=("$1")
 			else
 				inCmdArgs=1
 			fi
 			;;
 		*)
-			if [ "$inCmdArgs" -eq 1 ]; then
-				cmdArgs+=("$arg")
+			if [[ "$inCmdArgs" -eq 1 ]]; then
+				cmdArgs+=("$1")
 			else
-				usage | error "unexpected argument \"$arg\" passed to \"$subcommand\""
+				usage | error "unexpected argument \"$1\" passed to \"$subcommand\""
 			fi
 			;;
 		esac
+		shift;
 	done
 
 	# The $FLOX_ACTIVE_ENVIRONMENTS variable is colon-separated (like $PATH)
@@ -252,7 +265,7 @@ function floxActivate() {
 	local rcScript
 	rcScript="$(mktemp)" # cleans up after itself, do not use mkTempFile()
 	case "$rcShell" in
-	*bash)
+	*bash|*dash)
 		bashRC "${_environments_to_activate[@]}" >> "$rcScript"
 		;;
 	*zsh)
@@ -336,10 +349,19 @@ function floxActivate() {
 	if [ "$interactive" -eq 1 ]; then
 		# Interactive case - launch subshell.
 		case "$rcShell" in
-		*bash)
+		*bash|*dash)
 			export FLOX_BASH_INIT_SCRIPT="$rcScript"
 			[ "$verbose" -eq 0 ] || pprint "+$colorBold" exec "$rcShell" "--rcfile" "$_etc/flox.bashrc" "$colorReset" 1>&2
-			exec "$rcShell" "--rcfile" "$_etc/flox.bashrc"
+			case "$rcShell" in
+				*bash) exec "$rcShell" "--rcfile" "$_etc/flox.bashrc"; ;;
+				# `dash' lacks an equivalent for `--rcfile' so we have to do
+				# things "the good ol' fashioned way" - manually sourcing the
+				# profile script and then executing an interactive shell.
+				*dash)
+					exec "$rcShell" -c                                      \
+					       "source '$_etc/flox.bashrc'; exec $rcShell -i";
+					;;
+			esac
 			;;
 		*zsh)
 			export FLOX_ZSH_INIT_SCRIPT="$rcScript"
@@ -364,7 +386,7 @@ function floxActivate() {
 		local _flox_activate_verbose=/dev/null
 		[ "$verbose" -eq 0 ] || _flox_activate_verbose=/dev/stderr
 		case "$rcShell" in
-		*bash|*zsh)
+		*bash|*zsh|*dash)
 			$_cat "$rcScript" | $_tee "$_flox_activate_verbose"
 			;;
 		*)

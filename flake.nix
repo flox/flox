@@ -3,6 +3,7 @@
 
   inputs.flox-floxpkgs.url = "github:flox/floxpkgs";
   inputs.shellHooks.url = "github:cachix/pre-commit-hooks.nix";
+  inputs.crane.url = "github:ipetkov/crane";
   inputs.floco = {
     type = "github";
     owner = "aakropotkin";
@@ -12,5 +13,6 @@
     # inputs.nixpkgs.follows = "/flox-floxpkgs/nixpkgs";
   };
 
-  outputs = args @ {flox-floxpkgs, ...}: flox-floxpkgs.project args (_: {});
+  outputs = inputs:
+    inputs.flox-floxpkgs.project inputs (_: {});
 }

@@ -1389,7 +1389,12 @@ function ensureGHRepoExists() {
 	if ! checkGitRepoExists "$origin"; then
 		if [[ "${origin,,}" =~ github ]]; then
 			( $_gh auth status >/dev/null 2>&1 ) ||
-				$_gh auth login
+				# gh auth login will automatically add credential helpers to the users
+				# global git config.
+				# Since flox will set the git credential helper manually where its needed
+				# and we want to avoid writing user files, trick gh to modify a temporary,
+				# discarded file instead
+				GIT_CONFIG_GLOBAL="$(mkTempFile)" $_gh auth login
 			( $_gh repo view "$origin" >/dev/null 2>&1 ) || (
 				set -x
 				$_gh repo create \
@@ -1470,12 +1475,12 @@ function darwinRepairFiles() {
 #
 function identifyParentShell() {
 	trace "$@"
-	local parentShell="$SHELL" # default
-	local shellCmd="${SHELL/*\//}" # aka basename
+	local parentShell="${SHELL:-}" # default
+	local shellCmd="${parentShell/*\//}" # aka basename
 	local parentShellCmd="$shellCmd" # default
 
 	# Only attempt a guess if we know our parent PID.
-	if [ -n "$FLOX_PARENT_PID" ]; then
+	if [ -n "${FLOX_PARENT_PID:-}" ]; then
 		# First attempt to identify details of parent shell process.
 		if [ -L "/proc/$FLOX_PARENT_PID/exe" -a \
 			 -r "/proc/$FLOX_PARENT_PID/exe" ]; then
@@ -1494,14 +1499,14 @@ function identifyParentShell() {
 		# Compare $SHELL and $parentShell to see if the command names match.
 		if [ "$shellCmd" == "$parentShellCmd" ]; then
 			# Respect $SHELL over $parentShell (which is usually its realpath).
-			echo "$SHELL"
+			echo "${SHELL:-$shellCmd}"
 		else
 			# Return parent shell.
 			echo "$parentShell"
 		fi
 	else
 		# We don't know our parent PID so don't even guess.
-		echo "$SHELL"
+		echo "${SHELL:-$shellCmd}"
 	fi
 }
 
