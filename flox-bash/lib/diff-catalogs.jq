@@ -70,7 +70,7 @@ def packagePNames(keys):
     elif (.value | isCatalogPackage) then
       # Don't return the final catalogVersion key (usually "latest").
       keys
-    elif (.value | isFlakePackage) then
+    elif (.value | isPackage) then
       # Return all keys including the last one.
       $newkeys
     else (
