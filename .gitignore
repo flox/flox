@@ -2,3 +2,4 @@
 /result*
 .env
 .pre-commit-config.yaml
+/.flox
