@@ -1357,9 +1357,8 @@ function selectAttrPath() {
 		echo "${attrPaths[0]}"
 	else
 		# don't attempt to prompt if not interactive
-		if [ ! -t 0 ] || [ ! -t 2 ]; then
+		[ $interactive -eq 1 ] || \
 			error "Can't select package for 'flox $subcommand' in non-interactive mode." </dev/null
-		fi
 
 		warn "Select package for 'flox $subcommand'"
 

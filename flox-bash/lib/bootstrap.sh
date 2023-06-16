@@ -25,7 +25,7 @@ function bootstrap() {
 	floxUserMetaRegistry get floxClientUUID >/dev/null || \
 		floxUserMetaRegistry set floxClientUUID $($_uuid)
 	floxClientUUID=$(floxUserMetaRegistry get floxClientUUID)
-	if [ -t 1 ]; then
+	if [ -t 0 -a -t 2 ]; then
 		# Interactive mode
 		interactive=1
 
