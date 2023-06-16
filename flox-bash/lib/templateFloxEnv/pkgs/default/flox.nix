@@ -14,7 +14,7 @@
   #   # a list of all supported language pack outputs.
   #   # Please note that all/most language packs depend on including
   #   # the "base" and "common_paths" output.
-  #   # meta.outputsToInstall = [ "base" "common_paths" "python3" ];
+  #   meta.outputsToInstall = [ "base" "common_paths" "python3" ];
   # };
 
   # Aliases available when environment is active
