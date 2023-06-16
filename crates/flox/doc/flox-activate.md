@@ -53,6 +53,38 @@ or with a command and arguments to be invoked directly.
     will search these directories to locate files and resources from
     the environment.
 
+    **N.B.** the default shell hook for newly-created environments will
+    source the `$FLOX_ENV/etc/profile` file at activation if it exists.
+    This behavior can be viewed/modified with `flox edit`.
+
+## Language packs _(**experimental**)_
+
+Language packs help you develop with flox the way **you** work, making it
+possible to install and use compilers, interpreters, libraries and modules
+in much the way you would on any other operating system.
+
+Language packs are activated by way of `$FLOX_ENV/etc/profile` as described
+above, and the `flox.etc-profiles` package provides a version of this script
+along with "language packs" providing environment variables and hooks that
+support developing in a variety of languages.
+
+Install a bundle of all language packs with the command:
+
+```
+flox install flox.etc-profiles
+```
+
+To restrict the installation to individual language packs, invoke `flox edit`
+and update the installation stanza as follows:
+
+```
+packages.flox.etc-profiles = {
+  meta.outputsToInstall = [ "base" "common_paths" "python3" ];
+};
+```
+
+Please note that the `base` and `common_paths` language packs are required
+when installing individual language packs.
 
 # EXAMPLES:
 
