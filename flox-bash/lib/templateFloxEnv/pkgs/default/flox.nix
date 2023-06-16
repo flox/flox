@@ -6,6 +6,7 @@
 
   # Activation Extensions
   # Provides an extensible `<env>/etc/profile` script.
+  # see 'man flox-activate' for more information on Language Packs.
   # packages.flox.etc-profiles = {
   #   # All language packs are installed by default, but you can also
   #   # select individual packs by uncommenting the line below.
