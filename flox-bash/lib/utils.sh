@@ -1361,8 +1361,10 @@ function selectAttrPath() {
 			error "Can't select package for 'flox $subcommand' in non-interactive mode." </dev/null
 		fi
 
-		warn "Select package for flox $subcommand"
-		attrPath=$($_gum choose ${attrPaths[*]})
+		warn "Select package for 'flox $subcommand'"
+
+		# don't continue if prompting failed (e.g. interrupted)
+		attrPath=$($_gum choose ${attrPaths[*]}) ||	error "Selection failed" </dev/null
 
 		local hintCommandArgs
 		case "$subcommand" in
