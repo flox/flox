@@ -12,65 +12,82 @@ $c2[0] as $b |
 # Identify package paths in catalog by recursing through structure and
 # popping the traversed path whenever encountering an attibute:
 #
-# - at least 4 deep (to account for channel, system, and stability), and
-# - containing the attribute: "type": "catalogRender"
+# - at least 3 deep (to account for channel and system), and
+# - containing the package attributes build, element, eval and version
+
+# Example flake element:
+# {
+#   "nixpkgs": {          # channel
+#     "x86_64-linux": {   # system
+#       "xorg": {         # pname (part 1 of n)
+#         "xeyes": {      # pname (part 2 of n, can be more)
+#           "build": [ ... ],
+#           "element": [ ... ],
+#           "eval": [ ... ],
+#           "version": 1
+#         }
+#       }
+#     }
+#   }
+# }
 #
-# Example structure:
+def isPackage:
+  (has("type") and .["type"] == "catalogRender") or (has("element") and has("eval") and has("version"));
+
+# Example catalog element:
 # {
 #   "nixpkgs-flox": {     # channel
 #     "aarch64-darwin": { # system
 #       "stable": {       # stability
 #         "xorg": {       # pname (part 1 of n)
-#           "xeyes": {    # pname (part 2 of n), can be more
+#           "xeyes": {    # pname (part 2 of n, can be more)
 #             "latest": { # catalogVersion
-#               ...
+#               "build": [ ... ],
+#               "cache": [ ... ],
+#               "element": { ... },
+#               "eval": { ... },
+#               "publish_element": { ... },
+#               "source": { ... },
+#               "version": 1
+#             }
+#           }
+#         }
+#       }
+#     }
+#   }
 # }
-def isPackage:
-  if (type != "object") then (
-    false
-  )
-  elif (has("type") and .["type"] == "catalogRender") then (
-    true
-  )
-  # XXX TEMPORARY transition code while we wait for catalogs
-  # to be rewritten in latest format with "type" field.
-  # Require publish_element which will be present for packages from catalogs but
-  # not flakes. Admittedly that's a bit hacky and at some point perhaps we
-  # should support upgrades for flake packages, but for now only support them
-  # for packages from catalogs.
-  elif (has("element") and has("eval") and has("publish_element")) then (
-    true
-  )
-  else (
-    false
-  ) end;
+def isCatalogPackage:
+  isPackage and has("publish_element");
 
 def packagePNames(keys):
   # Recurse, adding to keys as we go.
-  if (type == "object") then (
-    to_entries | map(
-      (keys + [.key]) as $newkeys |
-      if (.value | isPackage) then keys else (
-          .value | packagePNames($newkeys)[]
-      ) end
+  to_entries | map(
+    (keys + [.key]) as $newkeys |
+    if ((.value | type) != "object") then (
+      # We got to a leaf before finding a package, so there was never a valid catalog entry.
+      "Internal error: invalid catalog data, encountered object of type \(type)" | halt_error(1)
     )
-  ) else (
-    empty
-  ) end;
+    elif (.value | isCatalogPackage) then
+      # Don't return the final catalogVersion key (usually "latest").
+      keys
+    elif (.value | isPackage) then
+      # Return all keys including the last one.
+      $newkeys
+    else (
+      .value | packagePNames($newkeys)[]
+    ) end
+  );
 
 def packagePaths(catalog):
   catalog | to_entries | map(
     .key as $channel |
     .value | to_entries | map(
       .key as $system |
-      .value | to_entries | map(
-        .key as $stability |
-        .value | packagePNames([]) | map(
-          [ $channel, $system, $stability ] + . | flatten
-        )
+      .value | packagePNames([]) | map(
+        [ $channel, $system ] + . | flatten
       )
     )
-  ) | flatten(3);
+  ) | flatten(2);
 
 # Identify package paths in each catalog.
 packagePaths($a) as $a_paths |
