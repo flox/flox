@@ -193,7 +193,7 @@ function floxActivate() {
 	local rcShell
 	if [ "${#cmdArgs[@]}" -gt 0 ]; then
 		rcShell="$_bash" # i.e. language of this script
-	elif [ "$interactive" -eq 1 ]; then
+	elif [ -t 1 ]; then
 		rcShell="$SHELL" # i.e. the shell we will be invoking
 	else
 		# Non-interactive. In this case it's really important to emit commands
@@ -251,7 +251,7 @@ function floxActivate() {
 	# https://discourse.floxdev.com/t/losing-part-of-my-shell-environment-when-using-flox-develop/556/2
 	if [[ -x /usr/libexec/path_helper ]] && [[ "$PATH" =~ ^/usr/local/bin: ]]
 	then
-		if [[ "${#cmdArgs[@]}" -eq 0 ]] && [[ "$interactive" -eq 0 ]]; then
+		if [[ "${#cmdArgs[@]}" -eq 0 ]] && ! [[ -t 1 ]]; then
 			case "$rcShell" in
 			*bash|*zsh)
 				PATH="$(echo "$PATH" | $_awk -v shellDialect=bash -f "$_libexec/flox/darwin-path-fixer.awk")"
@@ -346,7 +346,7 @@ function floxActivate() {
 	[ "$($_uname -s)" != "Darwin" ] || darwinRepairFiles
 
 	# Activate.
-	if [ "$interactive" -eq 1 ]; then
+	if [ -t 1 ]; then
 		# Interactive case - launch subshell.
 		case "$rcShell" in
 		*bash|*dash)
