@@ -423,7 +423,7 @@ function floxPublish() {
 	# Construct string encapsulating entire command invocation.
 	local entirePublishCommand
 	entirePublishCommand="flox publish -A '$packageAttrPath'"
-    entirePublishCommand+=" --build-repo '$buildRepository'"
+	entirePublishCommand+=" --build-repo '$buildRepository'"
 	entirePublishCommand+=" --channel-repo '$channelRepository'"
 
 	if [[ -n "$uploadTo" ]]; then
