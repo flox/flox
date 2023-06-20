@@ -15,18 +15,8 @@ Currently this repo houses three rust crates:
 $ flox develop .#rust-env
 ```
 
-> **Note**
->
-> If you have access to internal repositories, instead run
->
-> ```
-> $ flox develop .#rust-env --override-input flox-bash github:flox/flox-bash-private
-> ```
->
-> to work with the prerelease version of flox.
-
 This sets up an environment with dependencies, rust toolchain, variable
-and pre-commit-hooks.
+and `pre-commit-hooks`.
 
 In the environment, use [`cargo`](https://doc.rust-lang.org/cargo/)
 to build the rust based cli.
@@ -172,7 +162,7 @@ squashed into multiple distinct change sets.
 Unit test are ran with `cargo`:
 
 ```console
-$ flox develop flox --command "cargo test"
+$ flox develop flox --command 'cargo test';
 ```
 
 ### Integration tests
@@ -182,7 +172,7 @@ They are located in the `./tests` folder.
 To run them:
 
 ```console
-$ cargo build
+$ flox develop flox --command 'cargo build';
 $ flox run .#flox-tests --flox ./target/debug/flox
 ```
 By default `flox` CLI is going to be picked from the environment.

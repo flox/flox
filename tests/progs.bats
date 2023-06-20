@@ -37,6 +37,7 @@ setup_file() {
 }
 
 teardown_file() {
+  common_teardown;
   destroy_envs;
 }
 

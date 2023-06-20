@@ -23,6 +23,7 @@ setup_file() {
 }
 
 teardown_file() {
+  common_teardown;
   destroy_envs;
 }
 
@@ -32,12 +33,12 @@ teardown_file() {
 @test "init flox ${TEST_ENVIRONMENT}_multi_{1,2}" {
   run "$FLOX_CLI" create -e "${TEST_ENVIRONMENT}_multi_1";
   assert_success;
-  run "$FLOX_CLI" install -e "${TEST_ENVIRONMENT}_multi_1" "$FLOX_PACKAGE";
+  run "$FLOX_CLI" install -e "${TEST_ENVIRONMENT}_multi_1" "$HELLO_PACKAGE";
   assert_success;
 
   run "$FLOX_CLI" create -e "${TEST_ENVIRONMENT}_multi_2";
   assert_success;
-  run "$FLOX_CLI" install -e "${TEST_ENVIRONMENT}_multi_2" "$FLOX_PACKAGE";
+  run "$FLOX_CLI" install -e "${TEST_ENVIRONMENT}_multi_2" "$HELLO_PACKAGE";
   assert_success;
 }
 

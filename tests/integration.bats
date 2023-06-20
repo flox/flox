@@ -522,9 +522,9 @@ setup_file() {
 }
 
 @test "flox install by /nix/store path" {
-  run $FLOX_CLI install -e $TEST_ENVIRONMENT $FLOX_PACKAGE
+  run $FLOX_CLI install -e $TEST_ENVIRONMENT "$HELLO_PACKAGE"
   assert_success
-  assert_output --partial "Installed '$FLOX_PACKAGE' package(s) into '$TEST_ENVIRONMENT' environment."
+  assert_output --partial "Installed '$HELLO_PACKAGE' package(s) into '$TEST_ENVIRONMENT' environment."
 }
 
 @test "flox install by nixpkgs flake" {
@@ -554,7 +554,7 @@ setup_file() {
 @test "flox list after remove by nixpkgs flake 2 should not contain package" {
   run $FLOX_CLI list -e $TEST_ENVIRONMENT
   assert_success
-  assert_output --regexp "[0-9]+ +$FLOX_PACKAGE +$FLOX_PACKAGE_FIRST8"
+  assert_output --regexp "[0-9]+ +$HELLO_PACKAGE +$HELLO_PACKAGE_FIRST8"
   ! assert_output --partial "nixpkgs#hello"
   ! assert_output --partial "stable.nixpkgs-flox.hello"
 }

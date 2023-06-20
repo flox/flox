@@ -2,10 +2,6 @@
 
 load test_support.bash
 
-setup_file() {
-  common_setup;
-}
-
 @test "create environment with git global gpgsign set" {
   TEST_CASE_ENVIRONMENT=$(echo $RANDOM | md5sum | head -c 20; echo)
 

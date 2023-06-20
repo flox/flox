@@ -17,20 +17,26 @@ common_setup() {
     return 1 
   fi
 
-  export FLOX_PACKAGE="$(dirname $(dirname $FLOX_CLI))"
-  if [[ $FLOX_PACKAGE != /nix/store/* ]]; then
-    echo "ERROR: FLOX_PACKAGE (a path to the nix package in /nix/store) needs to be a /nix/store entry, but it is:\n\n  $FLOX_PACKAGE."
-    return 1 
-  fi
-
-  export FLOX_PACKAGE_FIRST8="$(echo $FLOX_PACKAGE | dd bs=c skip=11 count=8 2>/dev/null)"
+  FLOX_PACKAGE="$( readlink -f "$FLOX_CLI")"
+  export FLOX_PACKAGE="${FLOX_PACKAGE%/*/*}"
 
   export TEST_ENVIRONMENT=_testing_
 
   # Remove any vestiges of previous test runs.
   $FLOX_CLI destroy -e "$TEST_ENVIRONMENT" --origin -f || :
 
-  export NIX_SYSTEM="$($FLOX_CLI nix eval --impure --expr builtins.currentSystem --raw)"
+  NIX_SYSTEM="$(
+    $FLOX_CLI nix eval --impure --expr builtins.currentSystem --raw
+  )"
+  export NIX_SYSTEM
+
+  HELLO_LINK="$(mktemp)"
+  HELLO_PACKAGE="$(
+    $FLOX_CLI build hello --print-out-paths --out-link "$HELLO_LINK"
+  )"
+  HELLO_FIRST8="${HELLO_PACKAGE#"${NIX_STORE:-/nix/store}/"}"
+  HELLO_FIRST8="${HELLO_FIRST8:0:8}"
+  export HELLO_LINK HELLO_PACKAGE HELLO_FIRST8
 
   # Simulate pure bootstrapping environment. It is challenging to get
   # the nix, gh, and flox tools to all use the same set of defaults.
@@ -80,10 +86,20 @@ common_setup() {
   export VERSION_REGEX='[0-9]+\.[0-9.]+'
 }
 
+# Shared teardown process.
+common_teardown() {
+  rm -f "$HELLO_LINK"
+}
+
+
 
 # setup_file() function run once for a given bats test file.
 # This function may be redefined by individual test files, but running
 # `common_setup' is the recommended minimum.
 setup_file() {
   common_setup
+}
+
+teardown_file() {
+  common_teardown
 }
