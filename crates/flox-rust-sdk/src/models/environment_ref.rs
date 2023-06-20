@@ -209,7 +209,7 @@ impl<'flox> Named {
     }
 
     /// Return path to an owner in data dir, e.g. ~/.local/share/flox/environments/owner
-    fn owner_dir(flox: &Flox, owner: &str) -> PathBuf {
+    pub fn owner_dir(flox: &Flox, owner: &str) -> PathBuf {
         flox.data_dir.join("environments").join(owner)
     }
 

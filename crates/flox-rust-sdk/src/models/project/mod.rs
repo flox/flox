@@ -590,17 +590,18 @@ where
 }
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
     use std::env;
 
     use super::*;
     use crate::prelude::ChannelRegistry;
     use crate::providers::git::GitCommandProvider;
 
-    fn flox_instance() -> (Flox, TempDir) {
+    pub fn flox_instance() -> (Flox, TempDir) {
         let tempdir_handle = tempfile::tempdir_in(std::env::temp_dir()).unwrap();
 
         let cache_dir = tempdir_handle.path().join("caches");
+        let data_dir = tempdir_handle.path().join(".local/share/flox");
         let temp_dir = tempdir_handle.path().join("temp");
         let config_dir = tempdir_handle.path().join("config");
 
@@ -614,6 +615,7 @@ mod tests {
         let flox = Flox {
             system: "aarch64-darwin".to_string(),
             cache_dir,
+            data_dir,
             temp_dir,
             config_dir,
             channels,

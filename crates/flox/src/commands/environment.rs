@@ -1,16 +1,19 @@
 use std::path::PathBuf;
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use bpaf::{construct, Bpaf, Parser, ShellComp};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::CommonEnvironment;
 use flox_rust_sdk::models::environment_ref;
 use flox_rust_sdk::models::floxmeta::Floxmeta;
+use flox_rust_sdk::nix::command::StoreGc;
 use flox_rust_sdk::nix::command_line::NixCommandLine;
+use flox_rust_sdk::nix::Run;
 use flox_rust_sdk::prelude::flox_package::FloxPackage;
 use flox_rust_sdk::providers::git::{GitCommandProvider, GitProvider};
 use flox_types::constants::{DEFAULT_CHANNEL, LATEST_VERSION};
 use itertools::Itertools;
+use log::info;
 use serde_json::json;
 
 use crate::config::features::Feature;
@@ -127,6 +130,43 @@ impl EnvironmentCommands {
                 flox.environment(environment.clone().unwrap())?
                     .install::<NixCommandLine>(&packages)
                     .await?
+            },
+
+            EnvironmentCommands::WipeHistory {
+                // TODO use environment_args.system?
+                environment_args: _,
+                environment,
+            } => {
+                let environment_name = environment.as_ref().map(|e| e.to_str().unwrap());
+                let environment_ref: environment_ref::EnvironmentRef =
+                    resolve_environment_ref::<GitCommandProvider>(
+                        &flox,
+                        "wipe-history",
+                        environment_name,
+                    )
+                    .await?;
+
+                let environment = environment_ref
+                    .to_env::<GitCommandProvider, NixCommandLine>(&flox)
+                    .await
+                    .context("Environment not found")?;
+
+                match environment {
+                    CommonEnvironment::Named(env) => {
+                        env.delete_symlinks().await?;
+
+                        let nix = flox.nix::<NixCommandLine>(Default::default());
+                        let store_gc = StoreGc {
+                            ..StoreGc::default()
+                        };
+
+                        info!("Running garbage collection. This may take a while...");
+                        store_gc.run(&nix, &Default::default()).await?;
+                    },
+                    CommonEnvironment::Project(_) => {
+                        bail!("can't wipe-history for project environment; project environments only keep the most recent build.");
+                    },
+                }
             },
 
             _ => flox_forward(&flox).await?,
@@ -430,7 +470,7 @@ pub enum EnvironmentCommands {
         packages: Vec<String>,
     },
 
-    /// delete non-current versions of an environment
+    /// delete builds of non-current versions of an environment
     #[bpaf(command("wipe-history"))]
     WipeHistory {
         #[bpaf(external(environment_args), group_help("Environment Options"))]

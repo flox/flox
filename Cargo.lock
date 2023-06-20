@@ -675,6 +675,7 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "async-trait",
+ "chrono",
  "derive_more",
  "dotenv",
  "flox-types",
@@ -682,6 +683,7 @@ dependencies = [
  "futures",
  "git2",
  "indoc",
+ "itertools",
  "log",
  "nix-editor",
  "once_cell",

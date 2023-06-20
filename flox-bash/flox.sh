@@ -142,7 +142,7 @@ case "$subcommand" in
 
 # Flox commands which take an (-e|--environment) environment argument.
 activate | history | create | install | list | remove | rollback | \
-	switch-generation | upgrade | wipe-history | \
+	switch-generation | upgrade | \
 	import | export | edit | generations | git | push | pull | destroy)
 
 	# Look for the --environment and --system argument(s).
@@ -236,9 +236,6 @@ activate | history | create | install | list | remove | rollback | \
 		floxRollback "$environment" "$FLOX_SYSTEM" $subcommand "${args[@]}";;
 	upgrade)
 		floxUpgrade "$environment" "$FLOX_SYSTEM" "${args[@]}";;
-
-	wipe-history)
-		error not implemented < /dev/null;;
 	*)
 		usage | error "Unknown command: $subcommand"
 		;;

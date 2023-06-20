@@ -1,7 +1,10 @@
 use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap};
+use std::fs;
 use std::path::{Path, PathBuf};
 
+use chrono::{TimeZone, Utc};
+use itertools::Itertools;
 use log::debug;
 use runix::flake_ref::git::{GitAttributes, GitRef};
 use runix::flake_ref::FlakeRef;
@@ -11,6 +14,8 @@ use thiserror::Error;
 use url::Url;
 
 use super::{Floxmeta, GetFloxmetaError, TransactionCommitError, TransactionEnterError};
+use crate::models::environment::{DEFAULT_KEEP_GENERATIONS, DEFAULT_MAX_AGE_DAYS};
+use crate::models::environment_ref::Named;
 use crate::models::root::transaction::{GitAccess, GitSandBox, ReadOnly};
 use crate::providers::git::{BranchInfo, GitProvider};
 
@@ -36,13 +41,15 @@ pub struct EnvBranch {
 #[derive(Serialize, Deserialize, Debug, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct Metadata {
+    /// None means the environment has been created but does not yet have any
+    /// generations
     pub current_gen: Option<String>,
     generations: BTreeMap<String, GenerationMetadata>,
     #[serde(default)]
     version: u32,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Clone, Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct GenerationMetadata {
     created: u64,
@@ -214,6 +221,10 @@ impl<'flox, Git: GitProvider> Environment<'flox, Git, ReadOnly<Git>> {
         Cow::from(&self.system)
     }
 
+    pub fn systematized_name(&self) -> String {
+        format!("{0}.{1}", self.system, self.name)
+    }
+
     pub fn remote(&self) -> Cow<Option<EnvBranch>> {
         Cow::Borrowed(&self.remote)
     }
@@ -224,6 +235,11 @@ impl<'flox, Git: GitProvider> Environment<'flox, Git, ReadOnly<Git>> {
 
     pub fn owner(&self) -> &str {
         self.floxmeta.owner()
+    }
+
+    fn symlink_path(&self, generation: &str) -> PathBuf {
+        let owner_dir = Named::owner_dir(self.floxmeta.flox, self.owner());
+        owner_dir.join(format!("{}-{generation}-link", self.systematized_name()))
     }
 
     pub async fn metadata(&self) -> Result<Metadata, MetadataError<Git>> {
@@ -298,6 +314,47 @@ impl<'flox, Git: GitProvider> Environment<'flox, Git, ReadOnly<Git>> {
             flakeref,
             attr_path: ["", "floxEnvs", "default"].try_into().unwrap(),
         })
+    }
+
+    pub async fn delete_symlinks(&self) -> Result<(), DeleteSymlinksError<Git>> {
+        for symlink in self.symlinks_to_delete(self.metadata().await?) {
+            fs::remove_file(symlink?).unwrap();
+        }
+        Ok(())
+    }
+
+    /// Returns iterator of symlinks for old generations, keeping at least
+    /// DEFAULT_KEEP_GENERATIONS
+    fn symlinks_to_delete(
+        &self,
+        metadata: Metadata,
+    ) -> impl Iterator<Item = Result<PathBuf, DeleteSymlinksError<Git>>> + '_ {
+        let now = Utc::now();
+        metadata
+            .generations
+            .into_iter()
+            .sorted_by(|(_, metadata_1), (_, metadata_2)| {
+                metadata_2.last_active.cmp(&metadata_1.last_active)
+            })
+            // don't gc DEFAULT_KEEP_GENERATIONS most recent generations
+            .skip(DEFAULT_KEEP_GENERATIONS)
+            .filter_map(move |(generation, metadata)| {
+                let last_active = Utc
+                    .timestamp_opt(metadata.last_active.try_into().unwrap(), 0)
+                    .unwrap();
+                let days_since_active = now.signed_duration_since(last_active).num_days();
+                if days_since_active < 0 {
+                    return Some(Err(DeleteSymlinksError::<Git>::TimestampInFuture(
+                        generation,
+                    )));
+                }
+                // current_gen must have been active more recently than any other
+                // generation, so it will be skipped above
+                if days_since_active > DEFAULT_MAX_AGE_DAYS.into() {
+                    return Some(Ok(self.symlink_path(&generation.to_string())));
+                }
+                None
+            })
     }
 }
 
@@ -396,4 +453,179 @@ pub enum ManifestError<Git: GitProvider> {
 
     #[error("Failed parsing 'manifest.json': {0}")]
     ParseManifest(serde_json::Error),
+}
+
+#[derive(Error, Debug)]
+pub enum DeleteSymlinksError<Git: GitProvider> {
+    #[error(transparent)]
+    Metadata(#[from] MetadataError<Git>),
+    #[error("Found generation with last active timestamp in the future: {0}")]
+    TimestampInFuture(String),
+}
+
+#[cfg(test)]
+mod tests {
+
+    use std::marker::PhantomData;
+
+    use chrono::Days;
+
+    use super::*;
+    use crate::flox::Flox;
+    use crate::models::project::tests::flox_instance;
+    use crate::providers::git::tests::mock_provider;
+    use crate::providers::git::GitCommandProvider;
+
+    fn mock_environment<'flox>(
+        flox: &'flox Flox,
+    ) -> Environment<'flox, GitCommandProvider, ReadOnly<GitCommandProvider>> {
+        let owner = "owner";
+        let name = "name";
+        let system = "system";
+
+        let floxmeta = Floxmeta::<GitCommandProvider, ReadOnly<_>> {
+            access: ReadOnly::new(mock_provider()),
+            flox,
+            owner: owner.to_string(),
+            _git: PhantomData::default(),
+        };
+
+        Environment {
+            floxmeta,
+            local: None,
+            name: name.to_string(),
+            remote: None,
+            system: system.to_string(),
+        }
+    }
+
+    #[tokio::test]
+    async fn symlinks_to_delete() {
+        let (flox, _tempdir_handle) = flox_instance();
+        let environment = mock_environment(&flox);
+
+        let too_old = Utc::now()
+            .checked_sub_days(Days::new((DEFAULT_MAX_AGE_DAYS + 1).into()))
+            .unwrap()
+            .timestamp() as u64;
+
+        fn new_generation_metadata(last_active: u64) -> GenerationMetadata {
+            GenerationMetadata {
+                created: 0,
+                last_active,
+                log_message: vec![],
+                path: PathBuf::from("/does-not-exist"),
+                version: 1,
+            }
+        }
+
+        // When there are DEFAULT_KEEP_GENERATIONS generations older than
+        // DEFAULT_MAX_AGE_DAYS, no generations are deleted.
+        let mut generations = BTreeMap::new();
+        let num_generations = DEFAULT_KEEP_GENERATIONS;
+        for generation in 1..num_generations + 1 {
+            generations.insert(
+                generation.to_string(),
+                new_generation_metadata(too_old - (num_generations - generation) as u64),
+            );
+        }
+
+        let metadata = Metadata {
+            current_gen: Some(num_generations.to_string()),
+            generations,
+            version: 1,
+        };
+
+        let mut symlinks = environment.symlinks_to_delete(metadata);
+        assert!(symlinks.next().is_none());
+
+        // When there are DEFAULT_KEEP_GENERATIONS+1 generations older than
+        // DEFAULT_MAX_AGE_DAYS, the oldest generation is deleted.
+        let mut generations = BTreeMap::new();
+        let num_generations = DEFAULT_KEEP_GENERATIONS + 1;
+        for generation in 1..num_generations + 1 {
+            generations.insert(
+                generation.to_string(),
+                new_generation_metadata(too_old - (num_generations - generation) as u64),
+            );
+        }
+
+        let metadata = Metadata {
+            current_gen: Some(num_generations.to_string()),
+            generations,
+            version: 1,
+        };
+
+        let mut symlinks = environment.symlinks_to_delete(metadata);
+        assert_eq!(
+            symlinks.next().unwrap().unwrap(),
+            flox.data_dir.join("environments/owner/system.name-1-link")
+        );
+        assert!(symlinks.next().is_none());
+
+        // When there are DEFAULT_KEEP_GENERATIONS+2 but all generations are as
+        // recent as DEFAULT_MAX_AGE_DAYS, no generations are deleted.
+        let max_age_days_ago = Utc::now()
+            .checked_sub_days(Days::new(DEFAULT_MAX_AGE_DAYS.into()))
+            .unwrap()
+            .timestamp();
+
+        let mut generations = BTreeMap::new();
+        let num_generations = DEFAULT_KEEP_GENERATIONS + 2;
+        for generation in 1..num_generations + 1 {
+            generations.insert(
+                generation.to_string(),
+                new_generation_metadata(max_age_days_ago as u64 + generation as u64),
+            );
+        }
+
+        let metadata = Metadata {
+            current_gen: Some(num_generations.to_string()),
+            generations,
+            version: 1,
+        };
+
+        let mut symlinks = environment.symlinks_to_delete(metadata);
+        assert!(symlinks.next().is_none());
+
+        // When there are DEFAULT_KEEP_GENERATIONS+2 and every other generation
+        // is older than DEFAULT_MAX_AGE_DAYS, the two oldest generations are deleted.
+        let max_age_days_ago = Utc::now()
+            .checked_sub_days(Days::new(DEFAULT_MAX_AGE_DAYS.into()))
+            .unwrap()
+            .timestamp();
+
+        let mut generations = BTreeMap::new();
+        let num_generations = DEFAULT_KEEP_GENERATIONS + 2;
+        for generation in 1..num_generations + 1 {
+            generations.insert(
+                generation.to_string(),
+                new_generation_metadata(
+                    // make even generations too old
+                    if generation % 2 == 1 {
+                        max_age_days_ago as u64 + generation as u64
+                    } else {
+                        too_old - (num_generations - generation) as u64
+                    },
+                ),
+            );
+        }
+
+        let metadata = Metadata {
+            current_gen: Some(num_generations.to_string()),
+            generations,
+            version: 1,
+        };
+
+        let mut symlinks = environment.symlinks_to_delete(metadata);
+        assert_eq!(
+            symlinks.next().unwrap().unwrap(),
+            flox.data_dir.join("environments/owner/system.name-4-link")
+        );
+        assert_eq!(
+            symlinks.next().unwrap().unwrap(),
+            flox.data_dir.join("environments/owner/system.name-2-link")
+        );
+        assert!(symlinks.next().is_none());
+    }
 }

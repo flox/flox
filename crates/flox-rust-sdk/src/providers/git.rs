@@ -589,3 +589,17 @@ impl GitProvider for GitCommandProvider {
         self.path.as_ref()
     }
 }
+
+#[cfg(test)]
+pub mod tests {
+
+    use super::*;
+
+    /// A provider with path set to /does-not-exist for use in tests
+    pub fn mock_provider() -> GitCommandProvider {
+        GitCommandProvider {
+            workdir: None,
+            path: PathBuf::from("/does-not-exist"),
+        }
+    }
+}

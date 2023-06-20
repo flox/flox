@@ -1280,9 +1280,6 @@ function floxRollback() {
 _environment_commands+=("switch-generation")
 _usage["switch-generation"]="switch to a specific generation of an environment"
 
-_environment_commands+=("wipe-history")
-_usage["wipe-history"]="delete non-current versions of an environment"
-
 _environment_commands+=("destroy")
 _usage["destroy"]="remove all data pertaining to an environment"
 _usage_options["destroy"]="[--force] [--origin]"
