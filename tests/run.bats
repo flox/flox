@@ -13,21 +13,14 @@ load test_support.bash;
 
 # ---------------------------------------------------------------------------- #
 
-# We use `tar' instead of `cp' to instantiate that sandbox because Darwin
-# systems are shipped with the FreeBSD implementation of system utilities -
-# unlike the vastly superior GNU `coreutils' implementations, their `cp' lacks
-# the ability to dereference symlinks and stuff.
-setup_file() {
-  FLOX_TEST_HOME_STYLE='file' common_file_setup;
-  require_expect;
-  # Note the use of --dereference to copy flake.{nix,lock} as files.
-  tar -cf - --dereference --mode u+w -C "$TESTS_DIR/run" "./hello"  \
-    |tar -C "$FLOX_TEST_HOME" -xf -;
-  # We can't really parallelize these because we depend on past test actions.
-  export BATS_NO_PARALLELIZE_WITHIN_FILE=true;
-}
+# Suppress the creation of file/suite homedirs.
+setup_file() { common_file_setup test; }
 
 setup() {
+  # Note the use of `-L' to copy flake.{nix,lock} as files.
+  home_setup test;
+  cp -LTpr -- "$TESTS_DIR/run/hello" "$FLOX_TEST_HOME/hello";
+  chmod -R u+w "$FLOX_TEST_HOME/hello";
   cd "$FLOX_TEST_HOME/hello"||return;
 }
 

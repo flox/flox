@@ -197,8 +197,8 @@ through to the inner command:
 
 ```console
 $ flox develop flox --command 'cargo build';
-$ flox shell '.#flox-tests' --command                                   \
-    sh -c 'flox-tests --flox ./target/debug/flox -- ./tests/run.bats';
+$ flox shell '.#flox-tests' --command                                        \
+    sh -c 'flox-tests --flox ./target/debug/flox -- -j 4 ./tests/run.bats';
 ```
 
 

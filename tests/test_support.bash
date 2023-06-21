@@ -82,8 +82,11 @@ xdg_tmp_setup() {
   xdg_vars_setup;
   if [[ "${__FT_RAN_XDG_TMP_SETUP:-}" = "$XDG_CACHE_HOME" ]]; then return 0; fi
   mkdir -p "$XDG_CACHE_HOME";
+  # We symlink the cache for `nix' so that the fetcher cache and eval cache are
+  # shared across the entire suite and between runs.
+  # We DO NOT want to use a similar approach for `flox' caches.
   if ! [[ -e "$XDG_CACHE_HOME/nix" ]]; then
-    cp -Tpr -- "$REAL_XDG_CACHE_HOME/nix" "$XDG_CACHE_HOME/nix";
+    ln -s -- "$REAL_XDG_CACHE_HOME/nix" "$XDG_CACHE_HOME/nix";
   fi
   export __FT_RAN_XDG_TMP_SETUP="$XDG_CACHE_HOME";
 }
@@ -115,8 +118,6 @@ home_setup() {
     test)  export FLOX_TEST_HOME="${BATS_TEST_TMPDIR?}/home";                 ;;
     *)     echo "home_setup: Invalid homedir category '${1?}'" >&2; return 1; ;;
   esac
-  : "${FLOX_TEST_HOME_STYLE=${1:-suite}}";
-  export FLOX_TEST_HOME_STYLE;
   flox_vars_setup;
   export GH_CONFIG_DIR="$XDG_CONFIG_HOME/gh";
   if [[ "${__FT_RAN_HOME_SETUP:-}" = "$FLOX_TEST_HOME" ]]; then return 0; fi
@@ -127,20 +128,22 @@ home_setup() {
 
 # ---------------------------------------------------------------------------- #
 
+# common_file_setup [HOME_STYLE ::= (suite|file|test)]
+# ----------------------------------------------------
 # Run once for a given `bats' test file.
 # This function may be redefined by individual test files, but running
-# `common_setup' is the recommended minimum.
+# `common_file_setup' is the recommended minimum.
+#shellcheck disable=SC2120
 common_file_setup() {
   # Generate a `TEST_ENVIRONMENT' name.
   setup_file_envname;
   # Remove any vestiges of previous test runs.
   destroyEnvForce "$TEST_ENVIRONMENT";
   # Setup a homedir associated with this file.
-  if [[ "${FLOX_TEST_HOME_STYLE:-suite}" != test ]]; then
-    home_setup "${FLOX_TEST_HOME_STYLE:-suite}";
-  fi
+  if [[ "${1:-suite}" != test ]]; then home_setup "${1:-suite}"; fi
 }
 
+#shellcheck disable=SC2119
 setup_file() { common_file_setup; }
 
 
@@ -152,6 +155,7 @@ common_file_teardown() {
     destroyEnvForce "$TEST_ENVIRONMENT";
     rm -rf "$BATS_FILE_TMPDIR";
   fi
+  unset FLOX_TEST_HOME;
 }
 
 teardown_file() { common_file_teardown; }

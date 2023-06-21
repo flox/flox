@@ -145,6 +145,10 @@ nix_system_setup() {
 # Set variables related to locating test resources and misc. bats settings.
 misc_vars_setup() {
   if [[ -n "${__FT_RAN_MISC_VARS_SETUP:-}" ]]; then return 0; fi
+
+  # Set homedir so `parallels' and other tools work, without pollution.
+  export HOME="$BATS_RUN_TMPDIR/homeless-shelter";
+
   # Assume that versions:
   # a) start with numbers
   # b) contain at least one dot
@@ -185,12 +189,37 @@ ssh_key_setup() {
   export FLOX_TEST_SSH_KEY;
   if ! [[ -r "$FLOX_TEST_SSH_KEY" ]]; then
     mkdir -p "${FLOX_TEST_SSH_KEY%/*}";
-    ssh-keygen -t ed25519 -q -N '' -f "$FLOX_TEST_SSH_KEY";
+    ssh-keygen -t ed25519 -q -N '' -f "$FLOX_TEST_SSH_KEY"  \
+               -C 'floxuser@example.invalid';
+    chmod 600 "$FLOX_TEST_SSH_KEY";
   fi
   export SSH_AUTH_SOCK="$BATS_SUITE_TMPDIR/ssh/ssh_agent.sock";
   if ! [[ -d "${SSH_AUTH_SOCK%/*}" ]]; then mkdir -p "${SSH_AUTH_SOCK%/*}"; fi
+  if ! [[ -e "$SSH_AUTH_SOCK" ]]; then
+    eval "$( ssh-agent -s; )";
+    ln -sf "$SSH_AUTH_SOCK" "$BATS_SUITE_TMPDIR/ssh/ssh_agent.sock";
+    export SSH_AUTH_SOCK="$BATS_SUITE_TMPDIR/ssh/ssh_agent.sock";
+    ssh-add "$FLOX_TEST_SSH_KEY";
+  fi
   unset SSH_ASKPASS;
   export __FT_RAN_SSH_KEY_SETUP=:;
+}
+
+
+# ---------------------------------------------------------------------------- #
+
+# Create a GPG key to test commit signing.
+# The user and email align with `git' and `ssh' identity.
+gpg_key_setup() {
+  if [[ -n "${__FT_RAN_GPG_KEY_SETUP:-}" ]]; then return 0; fi
+  misc_vars_setup;
+  mkdir -p "$BATS_RUN_TMPDIR/homeless-shelter/.gnupg";
+  gpg --full-gen-key --batch <( printf '%s\n'                                \
+    'Key-Type: 1' 'Key-Length: 4096' 'Subkey-Type: 1' 'Subkey-Length: 4096'  \
+    'Expire-Date: 0' 'Name-Real: Flox User'                                  \
+    'Name-Email: floxuser@example.invalid' '%no-protection';
+  );
+  export __FT_RAN_GPG_KEY_SETUP=:;
 }
 
 
@@ -203,8 +232,8 @@ gitconfig_setup() {
   mkdir -p "$BATS_SUITE_TMPDIR/git";
   export GIT_CONFIG_SYSTEM="$BATS_SUITE_TMPDIR/git/gitconfig.system";
   # Handle config shared across whole test suite.
-  git config --system user.name  'Flox Integration';
-  git config --system user.email 'integration@localhost';
+  git config --system user.name  'Flox User';
+  git config --system user.email 'floxuser@example.invalid';
   git config --system gpg.format ssh;
   # Create a temporary `ssh' key for use by `git'.
   ssh_key_setup;
@@ -225,7 +254,6 @@ destroyEnvForce() {
   flox_location_setup;
   { $FLOX_CLI destroy -e "${1?}" --origin -f||:; } >/dev/null 2>&1;
 }
-declare -x destroyEnvForce;
 
 
 # Force destroy all test environments.
@@ -259,6 +287,7 @@ common_suite_setup() {
   flox_cli_vars_setup;
   # Generate configs and auth.
   ssh_key_setup;
+  gpg_key_setup;
   gitconfig_setup;
   # Cleanup pollution from past runs.
   destroyAllTestEnvs;
@@ -278,6 +307,7 @@ common_suite_teardown() {
     destroyAllTestEnvs;
     rm -rf "$BATS_SUITE_TMPDIR";
   fi
+  eval "$( ssh-agent -k; )";
 }
 
 # Recognized by `bats'.
