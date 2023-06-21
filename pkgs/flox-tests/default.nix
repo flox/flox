@@ -108,8 +108,7 @@ in
         git config --global user.signingkey "$TEMP_FLOX/id_ed25519.pub";
 
         # run basts either via entr or just a single run
-        if [[ "''${WATCH:-0}" -eq 1 ]];
-        then
+        if [[ -n "''${WATCH:-}" ]]; then
           find "$TESTS_DIR" "$FLOX_CLI"|entr -s '   \
             bats                                    \
               --print-output-on-failure             \
