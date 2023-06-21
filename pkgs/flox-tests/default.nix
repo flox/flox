@@ -54,10 +54,12 @@ in
 
         if command -v flox &> /dev/null
         then
-          export TMP_FLOX_CLI=$(command -v flox)
+          TMP_FLOX_CLI="$(command -v flox)"
+          export TMP_FLOX_CLI
         fi
 
-        export TEMP_FLOX=$(mktemp -d)
+        TEMP_FLOX="$(mktemp -d)"
+        export TEMP_FLOX
         export PATH="${lib.makeBinPath paths}"
         export FLOX_DISABLE_METRICS=true
         export GIT_CONFIG_SYSTEM="$TEMP_FLOX/gitconfig-system"
@@ -79,78 +81,48 @@ in
     EOF
         }
 
-        # Transform long options to short ones
-        for arg in "$@"; do
-          shift
-          case "$arg" in
-            '--flox')   set -- "$@" '-F';;
-            '--tests')  set -- "$@" '-T';;
-            '--watch')  set -- "$@" '-W';;
-            '--help')   set -- "$@" '-h';;
-            *)          set -- "$@" "$arg" ;;
+        WATCH=
+        while [[ "$#" -gt 0 ]]; do
+          case "$1" in
+            -[fF]|--flox)         export FLOX_CLI="''${2?}"; shift; ;;
+            -[tT]|--tests)        export TESTS_DIR="''${2?}"; shift; ;;
+            -[wW]|--watch)        WATCH=: ;;
+            -h|--help|-u|--usage) usage exit 0 ;;
+            --)                   shift; break; ;;
+            *)  echo "ERROR: Unrecognized arg '$*'" >&2; usage; exit 1; ;;
           esac
+          shift;
         done
-
-        WATCH=0
-
-        while getopts ":F:T:Wh" flag;
-        do
-          case "$flag" in
-            F)
-              export FLOX_CLI=$OPTARG
-              ;;
-            T)
-              export TESTS_DIR=$OPTARG
-              ;;
-            W)
-              WATCH=1
-              ;;
-            h)
-              usage
-              exit 0
-              ;;
-          esac
-        done
-
-        # remove options from positional parameters
-        shift $(expr $OPTIND - 1)
 
         # Default flag values
-        if [ -z "$FLOX_CLI" ];
-        then
-          export FLOX_CLI=$TMP_FLOX_CLI
-        fi
-        if [ -z "$TESTS_DIR" ];
-        then
-          export TESTS_DIR=$PWD/tests
-        fi
-
-        # DEBUG
-        #echo "WATCH: $WATCH"
-        #echo "FLOX_CLI: $FLOX_CLI"
-        #echo "TESTS_DIR: $TESTS_DIR"
-        #echo "BATS ARGS: $@"
+        : "''${FLOX_CLI:=$TMP_FLOX_CLI}";
+        : "''${TESTS_DIR:=$PWD/tests}";
+        export TESTS_DIR FLOX_CLI;
 
         # isolate git config
-        ssh-keygen -t ed25519 -q -N "" -f $TEMP_FLOX/id_ed25519
-        git config --global gpg.format ssh
-        git config --global user.signingkey $TEMP_FLOX/id_ed25519.pub
+        ssh-keygen -t ed25519 -q -N "" -f "$TEMP_FLOX/id_ed25519";
+        # FIXME: Why on earth is the test suite modifying my GPG perms?!
+        #        This took me so long to debug...
+        #        I'm leaving it for now but this is high on the TODO list.
+        git config --global gpg.format ssh;
+        git config --global user.signingkey "$TEMP_FLOX/id_ed25519.pub";
 
         # run basts either via entr or just a single run
-        if [[ $WATCH -eq 1 ]];
+        if [[ "''${WATCH:-0}" -eq 1 ]];
         then
-          find $TESTS_DIR $FLOX_CLI | entr -s '     \
+          find "$TESTS_DIR" "$FLOX_CLI"|entr -s '   \
             bats                                    \
               --print-output-on-failure             \
               --verbose-run                         \
               --timing                              \
-                  $TESTS_DIR "$@"                   \
+              "''${@:-$TESTS_DIR}"                  \
           ';
         else
           exec -a "$0" bats                         \
               --print-output-on-failure             \
               --verbose-run                         \
               --timing                              \
-                  $TESTS_DIR "$@"
+              "''${@:-$TESTS_DIR}"                  \
+          ;
         fi
   ''

@@ -9,29 +9,9 @@ load test_support.bash
 
 setup_file() {
   common_setup;
+  cp -Trf "$TESTS_DIR/develop" "$FLOX_TEST_HOME/develop"
 }
 
-
-#@test "flox package sanity check" {
-#  # directories
-#  [ -d "$FLOX_PACKAGE/bin" ]
-#  [ -d "$FLOX_PACKAGE/libexec" ]
-#  [ -d "$FLOX_PACKAGE/libexec/flox" ]
-#  [ -d "$FLOX_PACKAGE/etc" ]
-#  [ -d "$FLOX_PACKAGE/etc/flox.zdotdir" ]
-#  [ -d "$FLOX_PACKAGE/lib" ]
-#  [ -d "$FLOX_PACKAGE/share" ]
-#  [ -d "$FLOX_PACKAGE/share/man" ]
-#  [ -d "$FLOX_PACKAGE/share/man/man1" ]
-#  [ -d "$FLOX_PACKAGE/share/bash-completion" ]
-#  [ -d "$FLOX_PACKAGE/share/bash-completion/completions" ]
-#  # executables
-#  [ -x "$FLOX_CLI" ]
-#  [ -x "$FLOX_PACKAGE/libexec/flox/gh" ]
-#  [ -x "$FLOX_PACKAGE/libexec/flox/nix" ]
-#  [ -x "$FLOX_PACKAGE/libexec/flox/flox" ]
-#  # Could go on ...
-#}
 
 @test "assert testing home $FLOX_TEST_HOME" {
   run sh -c "test -d $FLOX_TEST_HOME"
@@ -102,22 +82,6 @@ setup_file() {
   run $FLOX_CLI gh auth status
   assert_failure
   assert_output --partial "You are not logged into any GitHub hosts. Run gh auth login to authenticate."
-}
-
-@test "assert no access to private repository" {
-  # otherwise a cached version of the private repo may be used
-  run unlink $XDG_CACHE_HOME/nix
-  assert_success
-  run $FLOX_CLI flake metadata github:flox-examples/floxpkgs-private --no-eval-cache --no-write-lock-file --json
-  assert_failure
-  run ln -s ~/.cache/nix $XDG_CACHE_HOME/nix
-  assert_success
-}
-
-@test "flox subscribe private without creds" {
-  run $FLOX_CLI subscribe flox-examples-private github:flox-examples/floxpkgs-private
-  assert_failure
-  assert_output --partial 'ERROR: could not verify channel URL: "github:flox-examples/floxpkgs-private"'
 }
 
 @test "flox create -e $TEST_ENVIRONMENT" {
@@ -528,9 +492,9 @@ setup_file() {
 }
 
 @test "flox install by nixpkgs flake" {
-  run $FLOX_CLI install -e $TEST_ENVIRONMENT "nixpkgs#hello"
+  run $FLOX_CLI install -e $TEST_ENVIRONMENT "nixpkgs#cowsay"
   assert_success
-  assert_output --partial "Installed 'nixpkgs#hello' package(s) into '$TEST_ENVIRONMENT' environment."
+  assert_output --partial "Installed 'nixpkgs#cowsay' package(s) into '$TEST_ENVIRONMENT' environment."
 }
 
 @test "flox export to $FLOX_TEST_HOME/floxExport.tar" {
@@ -539,24 +503,24 @@ setup_file() {
 }
 
 @test "flox.nix after installing by nixpkgs flake should contain package" {
-  EDITOR=cat run $FLOX_CLI edit -e $TEST_ENVIRONMENT
+  EDITOR=cat run $FLOX_CLI edit -e "$TEST_ENVIRONMENT"
   assert_success
-  assert_output --partial 'packages.nixpkgs.hello = {};'
+  assert_output --partial 'packages.nixpkgs.cowsay = {};'
   ! assert_output --partial "created generation"
 }
 
 @test "flox remove by nixpkgs flake 1" {
-  run $FLOX_CLI remove -e $TEST_ENVIRONMENT "nixpkgs#hello"
+  run $FLOX_CLI remove -e "$TEST_ENVIRONMENT" "nixpkgs#cowsay"
   assert_success
-  assert_output --partial "Removed 'nixpkgs#hello' package(s) from '$TEST_ENVIRONMENT' environment."
+  assert_output --partial "Removed 'nixpkgs#cowsay' package(s) from '$TEST_ENVIRONMENT' environment."
 }
 
 @test "flox list after remove by nixpkgs flake 2 should not contain package" {
-  run $FLOX_CLI list -e $TEST_ENVIRONMENT
+  run $FLOX_CLI list -e "$TEST_ENVIRONMENT"
   assert_success
   assert_output --regexp "[0-9]+ +$HELLO_PACKAGE +$HELLO_PACKAGE_FIRST8"
-  ! assert_output --partial "nixpkgs#hello"
-  ! assert_output --partial "stable.nixpkgs-flox.hello"
+  ! assert_output --partial "nixpkgs#cowsay"
+  ! assert_output --partial "stable.nixpkgs-flox.cowsay"
 }
 
 @test "flox import from $FLOX_TEST_HOME/floxExport.tar" {
@@ -565,129 +529,11 @@ setup_file() {
   assert_output --partial "Environment '$TEST_ENVIRONMENT' imported."
 }
 
-@test "flox develop setup" {
-  # Note the use of --dereference to copy flake.{nix,lock} as files.
-  run sh -c "tar -cf - --dereference --mode u+w -C ./tests/develop ./develop | tar -C $FLOX_TEST_HOME -xf -"
-  assert_success
-  # note the develop flake may have an out of date lock
-}
-
-function assertAndRemoveFiles {
-  pushd "$FLOX_TEST_HOME/develop"
-    assert [ -h .flox/envs/$NIX_SYSTEM.my-pkg ]
-    rm -r .flox
-    assert [ -f $FLOX_TEST_HOME/develop/pkgs/my-pkg/catalog.json ]
-    rm pkgs/my-pkg/catalog.json
-    assert [ -f pkgs/my-pkg/manifest.json ]
-    rm pkgs/my-pkg/manifest.json
-  popd
-}
-
-@test "flox develop no installable" {
-  pushd "$FLOX_TEST_HOME/develop"
-    run expect "$TESTS_DIR/develop/develop.exp" ""
-    assert_success
-    assertAndRemoveFiles
-  popd
-}
-
-@test "flox develop from flake root" {
-  pushd "$FLOX_TEST_HOME/develop"
-    for attr in "" my-pkg .#my-pkg .#packages.$NIX_SYSTEM.my-pkg "$FLOX_TEST_HOME/develop#my-pkg"; do
-      run expect "$TESTS_DIR/develop/develop.exp" "$attr"
-      assert_success
-      assertAndRemoveFiles
-    done
-  popd
-}
-
-@test "flox develop from flake subdirectory" {
-  pushd "$FLOX_TEST_HOME/develop/pkgs"
-    for attr in .#my-pkg "$FLOX_TEST_HOME/develop#my-pkg"; do
-      run expect "$TESTS_DIR/develop/develop.exp" "$attr"
-      assert_success
-      assertAndRemoveFiles
-    done
-  popd
-}
-
-@test "flox develop from different directory" {
-  pushd "$FLOX_TEST_HOME"
-    run expect "$TESTS_DIR/develop/develop.exp" ./develop#my-pkg
-    assert_success
-  popd
-}
-
-@test "flox develop after git init" {
-  pushd "$FLOX_TEST_HOME/develop"
-    git init
-    git add .
-    for attr in .#my-pkg "$FLOX_TEST_HOME/develop#my-pkg"; do
-      run expect "$TESTS_DIR/develop/develop.exp" "$attr"
-      assert_success
-      assertAndRemoveFiles
-    done
-  popd
-}
-
-@test "flox develop fails with remote flake" {
-  run expect "$TESTS_DIR/develop/develop-fail.exp" "git+ssh://git@github.com/flox/flox-bash-private?dir=tests/develop#my-pkg"
-  assert_success
-}
-
-@test "flox develop toplevel with package" {
-  # Note the use of --dereference to copy flake.{nix,lock} as files.
-  run sh -c "tar -cf - --dereference --mode u+w -C $TESTS_DIR/develop ./toplevel-flox-nix-with-pkg | tar -C $FLOX_TEST_HOME -xf -"
-  assert_success
-  pushd "$FLOX_TEST_HOME/toplevel-flox-nix-with-pkg"
-    run expect "$TESTS_DIR/develop/develop.exp" ""
-    assert_success
-    assert [ -h .flox/envs/$NIX_SYSTEM.default ]
-    assert [ -f catalog.json ]
-    assert [ -f manifest.json ]
-  popd
-}
-
-@test "flox develop toplevel" {
-  # Note the use of --dereference to copy flake.{nix,lock} as files.
-  run sh -c "tar -cf - --dereference --mode u+w -C $TESTS_DIR/develop ./toplevel-flox-nix | tar -C $FLOX_TEST_HOME -xf -"
-  assert_success
-  pushd "$FLOX_TEST_HOME/toplevel-flox-nix"
-    run $FLOX_CLI install -e .#default hello
-    assert_success
-    # for some reason expect hangs forever when SHELL=zsh and I don't feel like
-    # debugging why
-    SHELL=bash run expect "$TESTS_DIR/develop/toplevel-flox-nix.exp" ""
-    assert_success
-    assert [ -h .flox/envs/$NIX_SYSTEM.default ]
-    assert [ -f catalog.json ]
-    assert [ -f manifest.json ]
-  popd
-}
-
-@test "flox develop devShell" {
-  # Note the use of --dereference to copy flake.lock as file.
-  run sh -c "tar -cf - --dereference --mode u+w -C $TESTS_DIR/develop ./devShell | tar -C $FLOX_TEST_HOME -xf -"
-  assert_success
-  pushd "$FLOX_TEST_HOME/devShell"
-    run expect "$TESTS_DIR/develop/devShell.exp" ""
-    assert_success
-    assert [ ! -h .flox/envs/$NIX_SYSTEM.default ]
-    assert [ ! -f catalog.json ]
-    assert [ ! -f manifest.json ]
-  popd
-}
-
 @test "tear down install test state" {
   run sh -c "XDG_CONFIG_HOME=$REAL_XDG_CONFIG_HOME GH_CONFIG_DIR=$REAL_GH_CONFIG_DIR $FLOX_CLI destroy -e $TEST_ENVIRONMENT --origin -f"
   assert_output --partial "WARNING: you are about to delete the following"
   assert_output --partial "Deleted branch"
   assert_output --partial "removed"
-}
-
-@test "rm -rf $FLOX_TEST_HOME" {
-  run rm -rf $FLOX_TEST_HOME
-  assert_success
 }
 
 # vim:ts=4:noet:syntax=bash

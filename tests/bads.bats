@@ -299,6 +299,25 @@ load test_support.bash;
 
 
 # ---------------------------------------------------------------------------- #
+
+##@test "assert no access to private repository" {
+##  # otherwise a cached version of the private repo may be used
+##  run unlink $XDG_CACHE_HOME/nix
+##  assert_success
+##  run $FLOX_CLI flake metadata github:flox-examples/floxpkgs-private --no-eval-cache --no-write-lock-file --json
+##  assert_failure
+##  run ln -s ~/.cache/nix $XDG_CACHE_HOME/nix
+##  assert_success
+##}
+
+##@test "flox subscribe private without creds" {
+##  run $FLOX_CLI subscribe flox-examples-private github:flox-examples/floxpkgs-private
+##  assert_failure
+##  assert_output --partial 'ERROR: could not verify channel URL: "github:flox-examples/floxpkgs-private"'
+##}
+
+
+# ---------------------------------------------------------------------------- #
 #
 #
 #

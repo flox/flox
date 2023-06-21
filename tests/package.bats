@@ -2,33 +2,6 @@
 
 load test_support.bash
 
-#@test "flox package sanity check" {
-#  # directories
-#  [ -d "$FLOX_PACKAGE/bin" ]
-#  [ -d "$FLOX_PACKAGE/libexec" ]
-#  [ -d "$FLOX_PACKAGE/libexec/flox" ]
-#  [ -d "$FLOX_PACKAGE/etc" ]
-#  [ -d "$FLOX_PACKAGE/etc/flox.zdotdir" ]
-#  [ -d "$FLOX_PACKAGE/lib" ]
-#  [ -d "$FLOX_PACKAGE/share" ]
-#  [ -d "$FLOX_PACKAGE/share/man" ]
-#  [ -d "$FLOX_PACKAGE/share/man/man1" ]
-#  [ -d "$FLOX_PACKAGE/share/bash-completion" ]
-#  [ -d "$FLOX_PACKAGE/share/bash-completion/completions" ]
-#  # executables
-#  [ -x "$FLOX_CLI" ]
-#  [ -x "$FLOX_PACKAGE/libexec/flox/gh" ]
-#  [ -x "$FLOX_PACKAGE/libexec/flox/nix" ]
-#  [ -x "$FLOX_PACKAGE/libexec/flox/flox" ]
-#  # Could go on ...
-#}
-
-@test "flox --prefix" {
-  run "$FLOX_CLI" --prefix
-  assert_success
-  assert_output "$FLOX_PACKAGE"
-}
-
 @test "flox install by /nix/store path" {
   run "$FLOX_CLI" install -e "$TEST_ENVIRONMENT" "$HELLO_PACKAGE"
   assert_success

@@ -30,8 +30,8 @@ setup_file() {
 }
 
 teardown_file() {
-  common_teardown;
   "$FLOX_CLI" unsubscribe netlify_test_;
+  common_teardown;
 }
 
 
