@@ -36,7 +36,7 @@ common_setup() {
     return 1 
   fi
 
-  # Force absolut paths for both FLOX_CLI and FLOX_PACKAGE
+  # Force absolute paths for both FLOX_CLI and FLOX_PACKAGE
   FLOX_CLI="$(readlink -f "$FLOX_CLI")"
 
   : "${FLOX_PACKAGE:=${FLOX_CLI%/*/*}}"
