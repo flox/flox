@@ -101,9 +101,9 @@ in
 
         # isolate git config
         ssh-keygen -t ed25519 -q -N "" -f "$TEMP_FLOX/id_ed25519";
-        # FIXME: Why on earth is the test suite modifying my GPG perms?!
-        #        This took me so long to debug...
-        #        I'm leaving it for now but this is high on the TODO list.
+        export GIT_CONFIG_GLOBAL="$TEMP_FLOX/gitconfig";
+        git config --global user.name "Flox Integration;
+        git config --global user.email "integration@localhost;
         git config --global gpg.format ssh;
         git config --global user.signingkey "$TEMP_FLOX/id_ed25519.pub";
 
