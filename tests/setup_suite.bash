@@ -205,7 +205,9 @@ ssh_key_setup() {
   fi
   export SSH_AUTH_SOCK="$BATS_SUITE_TMPDIR/ssh/ssh_agent.sock";
   if ! [[ -d "${SSH_AUTH_SOCK%/*}" ]]; then mkdir -p "${SSH_AUTH_SOCK%/*}"; fi
+  # If our socket isn't open ( it probably ain't ) we open one.
   if ! [[ -e "$SSH_AUTH_SOCK" ]]; then
+    # You can't find work in this town without a good agent. Lets get one.
     eval "$( ssh-agent -s; )";
     ln -sf "$SSH_AUTH_SOCK" "$BATS_SUITE_TMPDIR/ssh/ssh_agent.sock";
     export SSH_AUTH_SOCK="$BATS_SUITE_TMPDIR/ssh/ssh_agent.sock";
@@ -319,7 +321,13 @@ common_suite_teardown() {
     destroyAllTestEnvs;
     rm -rf "$BATS_SUITE_TMPDIR";
   fi
+  # Our agent was useful, but it's time for them to retire.
   eval "$( ssh-agent -k; )";
+  # This directory is always deleted because it contains generated secrets.
+  # I can't imagine what anyone would ever do with them, but I'm not interested
+  # in learning about some esoteric new exploit in an
+  # incident response situation because I left them laying around.
+  rm -rf "$BATS_RUN_TMPDIR/homeless-shelter";
 }
 
 # Recognized by `bats'.
