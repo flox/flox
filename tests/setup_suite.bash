@@ -166,6 +166,10 @@ misc_vars_setup() {
   # All envs with this prefix are destroyed on startup and exit of this suite.
   export FLOX_TEST_ENVNAME_PREFIX='_testing_';
 
+  # Suppress warnings by `flox create' about environments named with
+  # '_testing_*' prefixes.
+  export _FLOX_TEST_SUITE_MODE=:;
+
   export __FT_RAN_MISC_VARS_SETUP=:;
 }
 
@@ -257,7 +261,6 @@ destroyEnvForce() {
 
 
 # Force destroy all test environments.
-# TODO: reserve this prefix from the `flox' CLI.
 destroyAllTestEnvs() {
   flox_location_setup;
   misc_vars_setup;
