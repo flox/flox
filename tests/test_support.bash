@@ -59,9 +59,9 @@ hello_pkg_setup() {
   $FLOX_CLI nix build 'nixpkgs#hello' --out-link "$HELLO_LINK";
   HELLO_PACKAGE="$( readlink -f "$HELLO_LINK"; )";
   # Get first 8 characters of store path hash.
-  HELLO_FIRST8="${HELLO_PACKAGE#"${NIX_STORE:-/nix/store}/"}";
-  HELLO_FIRST8="${HELLO_FIRST8:0:8}";
-  export HELLO_PACKAGE HELLO_FIRST8;
+  HELLO_PACKAGE_FIRST8="${HELLO_PACKAGE#"${NIX_STORE:-/nix/store}/"}";
+  HELLO_PACKAGE_FIRST8="${HELLO_PACKAGE_FIRST8:0:8}";
+  export HELLO_PACKAGE HELLO_PACKAGE_FIRST8;
   export __FT_RAN_HELLO_PKG_SETUP=:;
 }
 
@@ -136,7 +136,9 @@ common_file_setup() {
   # Remove any vestiges of previous test runs.
   destroyEnvForce "$TEST_ENVIRONMENT";
   # Setup a homedir associated with this file.
-  home_setup "${FLOX_TEST_HOME_STYLE:-suite}";
+  if [[ "${FLOX_TEST_HOME_STYLE:-suite}" != test ]]; then
+    home_setup "${FLOX_TEST_HOME_STYLE:-suite}";
+  fi
 }
 
 setup_file() { common_file_setup; }

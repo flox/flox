@@ -18,7 +18,7 @@ load test_support.bash
 
 setup_file() {
   common_file_setup;
-  requite_expect;
+  require_expect;
   hello_pkg_setup;
   # We can't really parallelize these because we depend on past test states.
   export BATS_NO_PARALLELIZE_WITHIN_FILE=true;

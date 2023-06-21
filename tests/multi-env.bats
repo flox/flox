@@ -20,6 +20,7 @@ destroy_envs() {
 
 setup_file() {
   common_file_setup;
+  hello_pkg_setup;
   destroyEnvForce "${TEST_ENVIRONMENT}1";
   destroyEnvForce "${TEST_ENVIRONMENT}2";
   $FLOX_CLI create  -e "${TEST_ENVIRONMENT}1";
