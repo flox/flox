@@ -2,6 +2,12 @@
 
 load test_support.bash
 
+setup_file() {
+  common_setup;
+  # We can't really parallelize these because we depend on past test actions.
+  export BATS_NO_PARALLELIZE_WITHIN_FILE=true;
+}
+
 @test "flox install by /nix/store path" {
   run "$FLOX_CLI" install -e "$TEST_ENVIRONMENT" "$HELLO_PACKAGE"
   assert_success

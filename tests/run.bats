@@ -8,6 +8,8 @@
 
 load test_support.bash;
 
+# bats file_tags=run
+
 
 # ---------------------------------------------------------------------------- #
 
@@ -20,6 +22,11 @@ setup_file() {
   # Note the use of --dereference to copy flake.{nix,lock} as files.
   tar -cf - --dereference --mode u+w -C "$TESTS_DIR/run" "./hello"  \
     |tar -C "$FLOX_TEST_HOME" -xf -;
+  # We can't really parallelize these because we depend on past test actions.
+  export BATS_NO_PARALLELIZE_WITHIN_FILE=true;
+}
+
+setup() {
   cd "$FLOX_TEST_HOME/hello"||return;
 }
 
@@ -35,6 +42,7 @@ setup_file() {
 
 # ---------------------------------------------------------------------------- #
 
+# XXX: If you try to run in parallel this crash failing to create `floxmeta'
 @test "flox run package from project env" {
   run $FLOX_CLI run hello;
   assert_success;

@@ -9,6 +9,7 @@
 
 load test_support.bash;
 
+# bats file_tags=activate
 
 # ---------------------------------------------------------------------------- #
 
@@ -20,26 +21,15 @@ destroy_envs() {
 setup_file() {
   common_setup;
   destroy_envs;
+  $FLOX_CLI create  -e "${TEST_ENVIRONMENT}_multi_1";
+  $FLOX_CLI install -e "${TEST_ENVIRONMENT}_multi_1" "$HELLO_PACKAGE";
+  $FLOX_CLI create  -e "${TEST_ENVIRONMENT}_multi_2";
+  $FLOX_CLI install -e "${TEST_ENVIRONMENT}_multi_2" "$HELLO_PACKAGE";
 }
 
 teardown_file() {
   common_teardown;
   destroy_envs;
-}
-
-
-# ---------------------------------------------------------------------------- #
-
-@test "init flox ${TEST_ENVIRONMENT}_multi_{1,2}" {
-  run "$FLOX_CLI" create -e "${TEST_ENVIRONMENT}_multi_1";
-  assert_success;
-  run "$FLOX_CLI" install -e "${TEST_ENVIRONMENT}_multi_1" "$HELLO_PACKAGE";
-  assert_success;
-
-  run "$FLOX_CLI" create -e "${TEST_ENVIRONMENT}_multi_2";
-  assert_success;
-  run "$FLOX_CLI" install -e "${TEST_ENVIRONMENT}_multi_2" "$HELLO_PACKAGE";
-  assert_success;
 }
 
 

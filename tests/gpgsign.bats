@@ -1,6 +1,17 @@
 #!/usr/bin/env bats
 
+# FIXME: if you run this outside of the `flox-test' wrapper you'll clobber your
+# real `~/.gitconfig' files.
+
 load test_support.bash
+
+setup_file() {
+  common_setup;
+  # We can't really parallelize these because we depend on past test actions.
+  export BATS_NO_PARALLELIZE_WITHIN_FILE=true;
+}
+
+# bats file_tags=git, gpg, security
 
 @test "create environment with git global gpgsign set" {
   TEST_CASE_ENVIRONMENT=$(echo $RANDOM | md5sum | head -c 20; echo)

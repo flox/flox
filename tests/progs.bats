@@ -8,6 +8,8 @@
 
 load test_support.bash;
 
+# bats file_tags=progs, dependencies, init
+
 
 # ---------------------------------------------------------------------------- #
 

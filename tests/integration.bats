@@ -9,7 +9,8 @@ load test_support.bash
 
 setup_file() {
   common_setup;
-  cp -Trf "$TESTS_DIR/develop" "$FLOX_TEST_HOME/develop"
+  # We can't really parallelize these because we depend on past test states.
+  export BATS_NO_PARALLELIZE_WITHIN_FILE=true;
 }
 
 
