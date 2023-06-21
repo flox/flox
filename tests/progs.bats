@@ -8,6 +8,8 @@
 
 load test_support.bash;
 
+# bats file_tags=progs, dependencies, init
+
 
 # ---------------------------------------------------------------------------- #
 
@@ -37,6 +39,7 @@ setup_file() {
 }
 
 teardown_file() {
+  common_teardown;
   destroy_envs;
 }
 

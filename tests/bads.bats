@@ -126,7 +126,7 @@ load test_support.bash;
 ##   assert_success
 ##   assert_output --partial "Curr Gen  7"
 ##   assert_output --regexp "0  stable.nixpkgs-flox.hello +"$VERSION_REGEX
-##   assert_output --partial "1  $FLOX_PACKAGE  $FLOX_PACKAGE_FIRST8"
+##   assert_output --partial "1  $HELLO_PACKAGE  $HELLO_PACKAGE_FIRST8"
 ## }
 
 
@@ -146,7 +146,7 @@ load test_support.bash;
 ##   assert_success
 ##   assert_output --partial "Curr Gen  9"
 ##   assert_output --regexp "0  nixpkgs#hello +hello-"$VERSION_REGEX
-##   assert_output --partial "1  $FLOX_PACKAGE  $FLOX_PACKAGE_FIRST8"
+##   assert_output --partial "1  $HELLO_PACKAGE  $HELLO_PACKAGE_FIRST8"
 ##   ! assert_output --partial "stable.nixpkgs-flox.hello"
 ## }
 
@@ -157,7 +157,7 @@ load test_support.bash;
 ##   run $FLOX_CLI list -e $TEST_ENVIRONMENT
 ##   assert_success
 ##   assert_output --partial "Curr Gen  10"
-##   assert_output --partial "0  $FLOX_PACKAGE  $FLOX_PACKAGE_FIRST8"
+##   assert_output --partial "0  $HELLO_PACKAGE  $HELLO_PACKAGE_FIRST8"
 ##   ! assert_output --partial "nixpkgs#hello"
 ##   ! assert_output --partial "stable.nixpkgs-flox.hello"
 ## }
@@ -185,7 +185,7 @@ load test_support.bash;
 ##   assert_success
 ##   assert_output --partial "Curr Gen  12"
 ##   assert_output --regexp "0  nixpkgs#hello +hello-"$VERSION_REGEX
-##   assert_output --partial "1  $FLOX_PACKAGE  $FLOX_PACKAGE_FIRST8"
+##   assert_output --partial "1  $HELLO_PACKAGE  $HELLO_PACKAGE_FIRST8"
 ##   ! assert_output --partial "stable.nixpkgs-flox.hello"
 ## }
 
@@ -295,6 +295,25 @@ load test_support.bash;
 ##  assert_output "$CHANNEL_NAME.flox-bash"
 ##
 ##  run $FLOX_CLI unsubscribe "$CHANNEL_NAME"
+##}
+
+
+# ---------------------------------------------------------------------------- #
+
+##@test "assert no access to private repository" {
+##  # otherwise a cached version of the private repo may be used
+##  run unlink $XDG_CACHE_HOME/nix
+##  assert_success
+##  run $FLOX_CLI flake metadata github:flox-examples/floxpkgs-private --no-eval-cache --no-write-lock-file --json
+##  assert_failure
+##  run ln -s ~/.cache/nix $XDG_CACHE_HOME/nix
+##  assert_success
+##}
+
+##@test "flox subscribe private without creds" {
+##  run $FLOX_CLI subscribe flox-examples-private github:flox-examples/floxpkgs-private
+##  assert_failure
+##  assert_output --partial 'ERROR: could not verify channel URL: "github:flox-examples/floxpkgs-private"'
 ##}
 
 
