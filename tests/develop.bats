@@ -18,6 +18,8 @@
 
 load test_support.bash;
 
+# bats file_tags=develop, project-env, expect
+
 
 # ---------------------------------------------------------------------------- #
 
@@ -135,6 +137,7 @@ runExpect() {
 
 # ---------------------------------------------------------------------------- #
 
+# bats test_tags=git:local
 @test "'flox develop' after 'git init' with relative URI" {
   loadHarness develop;
   run git init;
@@ -145,6 +148,7 @@ runExpect() {
   assertPkgFiles;
 }
 
+# bats test_tags=git:local
 @test "'flox develop' after 'git init' with absolute URI" {
   loadHarness develop;
   run git init;
@@ -158,6 +162,7 @@ runExpect() {
 
 # ---------------------------------------------------------------------------- #
 
+# bats test_tags=git:remote
 @test "'flox develop' fails with remote flake" {
   run expect "$TESTS_DIR/develop/develop-fail.exp"                           \
              "git+ssh://git@github.com/flox/flox?dir=tests/develop#my-pkg";
@@ -194,6 +199,7 @@ runExpect() {
 
 # ---------------------------------------------------------------------------- #
 
+# bats test_tags devShell
 @test "'flox develop' with 'devShell'" {
   loadHarness devShell;
   run expect "$TESTS_DIR/develop/devShell.exp" '';
