@@ -86,8 +86,8 @@ in
           case "$1" in
             -[fF]|--flox)         export FLOX_CLI="''${2?}"; shift; ;;
             -[tT]|--tests)        export TESTS_DIR="''${2?}"; shift; ;;
-            -[wW]|--watch)        WATCH=: ;;
-            -h|--help|-u|--usage) usage exit 0 ;;
+            -[wW]|--watch)        WATCH=:; ;;
+            -h|--help|-u|--usage) usage; exit 0; ;;
             --)                   shift; break; ;;
             *)  echo "ERROR: Unrecognized arg '$*'" >&2; usage; exit 1; ;;
           esac
