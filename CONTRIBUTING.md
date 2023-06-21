@@ -15,18 +15,8 @@ Currently this repo houses three rust crates:
 $ flox develop .#rust-env
 ```
 
-> **Note**
->
-> If you have access to internal repositories, instead run
->
-> ```
-> $ flox develop .#rust-env --override-input flox-bash github:flox/flox-bash-private
-> ```
->
-> to work with the prerelease version of flox.
-
 This sets up an environment with dependencies, rust toolchain, variable
-and pre-commit-hooks.
+and `pre-commit-hooks`.
 
 In the environment, use [`cargo`](https://doc.rust-lang.org/cargo/)
 to build the rust based cli.
@@ -169,34 +159,50 @@ squashed into multiple distinct change sets.
 
 ### Unit tests
 
-Unit test are ran with `cargo`:
+Unit test are ran with `cargo`.
+These cover code authored in Rust, but does not explicitly cover code authored
+in `<flox>/flox-bash/`.
 
 ```console
-$ flox develop flox --command "cargo test"
+$ flox develop flox --command 'cargo test';
 ```
 
 ### Integration tests
 
 Integration tests are written with `bats` and `expect`.
-They are located in the `./tests` folder.
+They are located in the `<flox>/tests` folder.
 To run them:
 
 ```console
-$ cargo build
-$ flox run .#flox-tests --flox ./target/debug/flox
+$ flox develop flox --command 'cargo build';
+$ flox shell '.#flox-tests' --command flox-tests --flox ./target/debug/flox;
 ```
 By default `flox` CLI is going to be picked from the environment.
+
 
 When working on the test you would probably want to run them continuously on
 every change. In that case run the following:
 
 ```console
-$ flox run .#flox-tests --flox ./target/debug/flox --watch
+$ flox develop flox --command 'cargo build';
+$ flox shell '.#flox-tests' --command               \
+    flox-tests --flox ./target/debug/flox --watch;
 ```
 
-Also note that you can pass `bats` arguments, like `--filter`, to not run all
-the tests.
+
+You can pass arbitrary flags through to `bats` using a `--` separator - however
+bugs in the `flox` CLI parser require you to use `sh -c` to wrap the command.
+Failing to wrap will cause `flox` to "consume" the `--` rather than pass it
+through to the inner command:
 
 ```console
-$ flox run .#flox-tests --flox ./target/debug/flox --watch -- --filter "flox search"
+$ flox develop flox --command 'cargo build';
+$ flox shell '.#flox-tests' --command                                   \
+    sh -c 'flox-tests --flox ./target/debug/flox -- ./tests/run.bats';
 ```
+
+
+**Important** the option `--tests` must point to the `<flox>/tests/` directory
+root which is used to locate various resources within test environments.
+If you wish to explicitly name test files to be run, or subdirs of tests, use
+`flox-tests ... -- ./tests/foo.bats ./tests/subdir` as show in earlier examples.

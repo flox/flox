@@ -21,6 +21,8 @@
 
 load test_support.bash;
 
+# bats file_tags=search
+
 
 # ---------------------------------------------------------------------------- #
 
@@ -31,6 +33,7 @@ setup_file() {
 
 teardown_file() {
   "$FLOX_CLI" unsubscribe netlify_test_;
+  common_teardown;
 }
 
 
@@ -42,6 +45,10 @@ teardown_file() {
   assert_success;
 }
 
+
+# ---------------------------------------------------------------------------- #
+
+# bats file_tags=search, semver
 
 # ---------------------------------------------------------------------------- #
 
