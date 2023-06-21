@@ -25,17 +25,15 @@ load test_support.bash;
 
 setup() {
   unset HARNESS;
-  cd "$FLOX_TEST_HOME"||return;
+  cd "${FLOX_TEST_HOME?}"||return;
 }
 
 
 teardown() {
-  cd "$FLOX_TEST_HOME"||return;
-  if [[ -n "${HARNESS:-}" ]] && [[ -d "$FLOX_TEST_HOME/$HARNESS" ]]; then
-    rm -rf "$FLOX_TEST_HOME/$HARNESS";
+  cd "${FLOX_TEST_HOME?}"||return;
+  if [[ -n "${HARNESS:-}" ]] && [[ -d "${FLOX_TEST_HOME?}/$HARNESS" ]]; then
+    rm -rf "${FLOX_TEST_HOME:?}/$HARNESS";
   fi
-  find "$FLOX_TEST_HOME" -name catalog.json -o -name manifest.json -delete;
-  find "$FLOX_TEST_HOME" -type d -name '.flox' -exec rm -r \; ;
 }
 
 
@@ -49,7 +47,7 @@ teardown() {
 # unlike the vastly superior GNU `coreutils' implementations, their `cp' lacks
 # the ability to dereference symlinks and stuff.
 loadHarness() {
-  rm -rf "$FLOX_TEST_HOME/$1";
+  rm -rf "${FLOX_TEST_HOME:?}/$1";
   # Note the use of --dereference to copy flake.{nix,lock} as files.
   tar -cf - --dereference --mode u+w -C "$TESTS_DIR/develop" "./$1"  \
     |tar -C "$FLOX_TEST_HOME" -xf -;
@@ -62,10 +60,15 @@ loadHarness() {
 assertPkgFiles() {
   local _harness _target;
   _harness="${HARNESS:-develop}";
-  _target="${1:-my-pkg}";
+  _target="${1:-default}";
   assert test -h "$FLOX_TEST_HOME/$_harness/.flox/envs/$NIX_SYSTEM.$_target";
-  assert test -f "$FLOX_TEST_HOME/$_harness/pkgs/$_target/catalog.json";
-  assert test -f "$FLOX_TEST_HOME/$_harness/pkgs/$_target/manifest.json";
+  if [[ "$_target" = default ]]; then
+    assert test -f "$FLOX_TEST_HOME/$_harness/catalog.json";
+    assert test -f "$FLOX_TEST_HOME/$_harness/manifest.json";
+  else
+    assert test -f "$FLOX_TEST_HOME/$_harness/pkgs/$_target/catalog.json";
+    assert test -f "$FLOX_TEST_HOME/$_harness/pkgs/$_target/manifest.json";
+  fi
 }
 
 
@@ -80,28 +83,28 @@ runExpect() {
 @test "'flox develop' from flake root with no installable" {
   loadHarness develop;
   runExpect '';
-  assertPkgFiles;
+  assertPkgFiles my-pkg;
 }
 
 
 @test "'flox develop' from flake root with '.#my-pkg'" {
   loadHarness develop;
   runExpect '.#my-pkg';
-  assertPkgFiles;
+  assertPkgFiles my-pkg;
 }
 
 
 @test "'flox develop' from flake root with '.#packages.$NIX_SYSTEM.my-pkg'" {
   loadHarness develop;
   runExpect ".#packages.$NIX_SYSTEM.my-pkg";
-  assertPkgFiles;
+  assertPkgFiles my-pkg;
 }
 
 
 @test "'flox develop' from flake root with '$FLOX_TEST_HOME/develop#my-pkg'" {
   loadHarness develop;
   runExpect "$FLOX_TEST_HOME/develop#my-pkg";
-  assertPkgFiles;
+  assertPkgFiles my-pkg;
 }
 
 
@@ -112,7 +115,7 @@ runExpect() {
   run cd "$FLOX_TEST_HOME/develop/pkgs";
   assert_success;
   runExpect '.#my-pkg';
-  assertPkgFiles;
+  assertPkgFiles my-pkg;
 }
 
 
@@ -121,7 +124,7 @@ runExpect() {
   run cd "$FLOX_TEST_HOME/develop/pkgs";
   assert_success;
   runExpect "$FLOX_TEST_HOME/develop#my-pkg";
-  assertPkgFiles;
+  assertPkgFiles my-pkg;
 }
 
 
@@ -145,7 +148,7 @@ runExpect() {
   run git add .;
   assert_success;
   runExpect ".#my-pkg";
-  assertPkgFiles;
+  assertPkgFiles my-pkg;
 }
 
 # bats test_tags=git:local
@@ -156,7 +159,7 @@ runExpect() {
   run git add .;
   assert_success;
   runExpect "$FLOX_TEST_HOME/develop#my-pkg";
-  assertPkgFiles;
+  assertPkgFiles my-pkg;
 }
 
 
@@ -175,9 +178,7 @@ runExpect() {
 @test "'flox develop' toplevel with package's default target" {
   loadHarness toplevel-flox-nix-with-pkg;
   runExpect '';
-  assert test -h "$FLOX_TEST_HOME/$HARNESS/.flox/envs/$NIX_SYSTEM.default";
-  assert test -f "$FLOX_TEST_HOME/$HARNESS/catalog.json";
-  assert test -f "$FLOX_TEST_HOME/$HARNESS/manifest.json";
+  assertPkgFiles default;
 }
 
 
@@ -191,9 +192,7 @@ runExpect() {
   # debugging why
   SHELL=bash run expect "$TESTS_DIR/develop/toplevel-flox-nix.exp" '';
   assert_success;
-  assert test -h "$FLOX_TEST_HOME/$HARNESS/.flox/envs/$NIX_SYSTEM.default";
-  assert test -f "$FLOX_TEST_HOME/$HARNESS/catalog.json";
-  assert test -f "$FLOX_TEST_HOME/$HARNESS/manifest.json";
+  assertPkgFiles default;
 }
 
 
