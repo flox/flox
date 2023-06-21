@@ -18,7 +18,8 @@ load test_support.bash;
 # unlike the vastly superior GNU `coreutils' implementations, their `cp' lacks
 # the ability to dereference symlinks and stuff.
 setup_file() {
-  common_setup;
+  FLOX_TEST_HOME_STYLE='file' common_file_setup;
+  require_expect;
   # Note the use of --dereference to copy flake.{nix,lock} as files.
   tar -cf - --dereference --mode u+w -C "$TESTS_DIR/run" "./hello"  \
     |tar -C "$FLOX_TEST_HOME" -xf -;

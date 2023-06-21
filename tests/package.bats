@@ -3,7 +3,8 @@
 load test_support.bash
 
 setup_file() {
-  common_setup;
+  common_file_setup;
+  hello_pkg_setup;
   # We can't really parallelize these because we depend on past test actions.
   export BATS_NO_PARALLELIZE_WITHIN_FILE=true;
 }

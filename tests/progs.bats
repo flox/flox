@@ -13,14 +13,8 @@ load test_support.bash;
 
 # ---------------------------------------------------------------------------- #
 
-destroy_envs() {
-  "$FLOX_CLI" destroy -e "$TEST_ENVIRONMENT" --origin -f||:;
-}
-
 setup_file() {
-  common_setup;
-  export TEST_ENVIRONMENT='_testing_progs';
-  destroy_envs;
+  common_file_setup;
 
   # Perform a minimal form of `flox-bash/lib/init.sh' required to support
   # using internal `flox-bash/lib/utils.sh' routines.
@@ -36,11 +30,6 @@ setup_file() {
   _progs_PATH="$_progs_PATH:/run/wrappers/bin:/run/current-system/sw/bin";
 
   export _prefix _lib _libexec _etc _progs_PATH;
-}
-
-teardown_file() {
-  common_teardown;
-  destroy_envs;
 }
 
 
