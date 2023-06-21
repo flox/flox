@@ -11,6 +11,7 @@ bats_load_library bats-support;
 bats_load_library bats-assert;
 bats_require_minimum_version '1.5.0';
 
+
 # ---------------------------------------------------------------------------- #
 
 # Throw errors for undefined variables.
@@ -24,7 +25,7 @@ repo_root_setup() {
     if [[ -d "$PWD/.git" ]] && [[ -d "$PWD/tests" ]]; then
       REPO_ROOT="$PWD";
     else
-      REPO_ROOT="$( git rev-parse --show-toplevel )";
+      REPO_ROOT="$( git rev-parse --show-toplevel; )";
     fi
   fi
   export REPO_ROOT;
@@ -56,7 +57,8 @@ tests_dir_setup() {
 # This allows us to copy some of their existing configs and caches into
 # our test harnesses.
 # This function does not perform any copies, it only sets variables.
-# This helper is careful not to accidentally set these variables to tmpdirs.
+#
+# NOTE: we unset these variables past this point to avoid pollution.
 xdg_reals_setup() {
   if [[ -n "${__FT_RAN_XDG_REALS_SETUP:-}" ]]; then return 0; fi
   # Set fallbacks and export.
@@ -98,6 +100,9 @@ git_reals_setup() {
 
 # ---------------------------------------------------------------------------- #
 
+# Backup environment variables pointing to "real" system and users paths.
+# We sometimes refer to these in order to copy resources from the system into
+# our isolated sandboxes.
 reals_setup() {
   repo_root_setup;
   tests_dir_setup;
@@ -108,6 +113,7 @@ reals_setup() {
 
 # ---------------------------------------------------------------------------- #
 
+# Locate the `flox' executable to be tested against.
 flox_location_setup() {
   if [[ -n "${__FT_RAN_FLOX_LOCATION_SETUP:-}" ]]; then return 0; fi
   repo_root_setup;
@@ -214,6 +220,9 @@ ssh_key_setup() {
 
 # Create a GPG key to test commit signing.
 # The user and email align with `git' and `ssh' identity.
+#
+# XXX: `gnupg' references `HOME' to lookup keys, which should be set to
+#      `$BATS_RUN_TMPDIR/homeless-shelter' by `misc_vars_setup'.
 gpg_key_setup() {
   if [[ -n "${__FT_RAN_GPG_KEY_SETUP:-}" ]]; then return 0; fi
   misc_vars_setup;
