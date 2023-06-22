@@ -591,8 +591,6 @@ where
 
 #[cfg(test)]
 pub mod tests {
-    use std::env;
-
     use super::*;
     use crate::prelude::ChannelRegistry;
     use crate::providers::git::GitCommandProvider;

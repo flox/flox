@@ -180,12 +180,9 @@ impl Display for FloxPackage {
 
 #[cfg(test)]
 mod tests {
-    use std::env::current_dir;
-
     use flox_types::constants::DEFAULT_CHANNEL;
     use once_cell::sync::Lazy;
     use runix::flake_ref::git::GitRef;
-    use runix::flake_ref::path::PathRef;
 
     use super::*;
     use crate::flox::FLOX_SH;
