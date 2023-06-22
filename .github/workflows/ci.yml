@@ -38,12 +38,8 @@ jobs:
     - name: Build
       run: flox nix build .#${{ matrix.package }} -L --print-out-paths
 
-    - name: Cache Runtime
-      run: flox nix copy --to "$FLOX_SUBSTITUTER" '.#${{ matrix.package }}^*'
-
-    - name: Cache build deps
-      if: matrix.package == 'flox'
-      run: flox nix copy --to "$FLOX_SUBSTITUTER" '.#flox.cargoDeps'
+    - name: Cache the store
+      run: flox nix copy --all --to "$FLOX_SUBSTITUTER" -vv
 
     - name: Test
       if: ${{ matrix.package == 'flox' }}
