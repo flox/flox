@@ -311,7 +311,7 @@ common_suite_setup() {
 }
 
 # Recognized by `bats'.
-setup_suite() { set -x; common_suite_setup; set +x; }
+setup_suite() { common_suite_setup; }
 
 
 # ---------------------------------------------------------------------------- #
@@ -326,6 +326,7 @@ common_suite_teardown() {
   fi
   # Our agent was useful, but it's time for them to retire.
   eval "$( ssh-agent -k; )";
+  cd "$BAT_RUN_TMPDIR"||return;
   # This directory is always deleted because it contains generated secrets.
   # I can't imagine what anyone would ever do with them, but I'm not interested
   # in learning about some esoteric new exploit in an
@@ -334,7 +335,7 @@ common_suite_teardown() {
 }
 
 # Recognized by `bats'.
-teardown_suite() { set -x; common_suite_teardown; set +x; }
+teardown_suite() { common_suite_teardown; }
 
 
 # ---------------------------------------------------------------------------- #

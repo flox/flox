@@ -121,6 +121,7 @@ in
           '--verbose-run'
           '--timing'
           #'-j' '4'
+          '--trace'
           "''${@:-}"
         );
         {
