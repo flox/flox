@@ -26,7 +26,12 @@ function bootstrap() {
 		floxUserMetaRegistry set floxClientUUID $($_uuid)
 	floxClientUUID=$(floxUserMetaRegistry get floxClientUUID)
 	if [ -t 1 ]; then
-		# Interactive mode
+		# Spawn mode indicates that flox activate should launch subshell instead
+		# of emitting statements (to stdout) to be sourced by current shell.
+		spawnMode=1
+	fi
+	if [ -t 0 -a -t 2 ]; then
+		# Interactive mode indicates the ability to prompt users for input.
 		interactive=1
 
 		# Note whether user has seen various educational/informational messages.

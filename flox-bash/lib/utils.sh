@@ -1356,8 +1356,14 @@ function selectAttrPath() {
 	elif [ ${#attrPaths[@]} -eq 1 ]; then
 		echo "${attrPaths[0]}"
 	else
-		warn "Select package for flox $subcommand"
-		attrPath=$($_gum choose ${attrPaths[*]})
+		# don't attempt to prompt if not interactive
+		[ $interactive -eq 1 ] || \
+			error "Can't select package for 'flox $subcommand' in non-interactive mode." </dev/null
+
+		warn "Select package for 'flox $subcommand'"
+
+		# don't continue if prompting failed (e.g. interrupted)
+		attrPath=$($_gum choose ${attrPaths[*]}) ||	error "Selection failed" </dev/null
 
 		local hintCommandArgs
 		case "$subcommand" in
