@@ -38,13 +38,15 @@ repo_root_setup() {
 tests_dir_setup() {
   if [[ -n "${__FT_RAN_TESTS_DIR_SETUP:-}" ]]; then return 0; fi
   repo_root_setup;
-  case "$BATS_TEST_DIRNAME" in
-    */tests) TESTS_DIR="$( readlink -f "$BATS_TEST_DIRNAME"; )"; ;;
-    *)       TESTS_DIR="$REPO_ROOT/tests";                       ;;
-  esac
-  if ! [[ -d "$TESTS_DIR" ]]; then
-    echo "tests_dir_setup: \`TESTS_DIR' must be a directory" >&2;
-    return 1;
+  if [[ -z "${TEST_DIR:-}" ]]; then
+    case "$BATS_TEST_DIRNAME" in
+      */tests) TESTS_DIR="$( readlink -f "$BATS_TEST_DIRNAME"; )"; ;;
+      *)       TESTS_DIR="$REPO_ROOT/tests";                       ;;
+    esac
+    if ! [[ -d "$TESTS_DIR" ]]; then
+      echo "tests_dir_setup: \`TESTS_DIR' must be a directory" >&2;
+      return 1;
+    fi
   fi
   export TESTS_DIR;
   export __FT_RAN_TESTS_DIR_SETUP=:;
@@ -100,19 +102,6 @@ git_reals_setup() {
 
 # ---------------------------------------------------------------------------- #
 
-# Backup environment variables pointing to "real" system and users paths.
-# We sometimes refer to these in order to copy resources from the system into
-# our isolated sandboxes.
-reals_setup() {
-  repo_root_setup;
-  tests_dir_setup;
-  xdg_reals_setup;
-  git_reals_setup;
-}
-
-
-# ---------------------------------------------------------------------------- #
-
 # Locate the `flox' executable to be tested against.
 flox_location_setup() {
   if [[ -n "${__FT_RAN_FLOX_LOCATION_SETUP:-}" ]]; then return 0; fi
@@ -131,6 +120,20 @@ flox_location_setup() {
   FLOX_CLI="$( readlink -f "$FLOX_CLI"; )";
   export FLOX_CLI;
   export __FT_RAN_FLOX_LOCATION_SETUP=:;
+}
+
+
+# ---------------------------------------------------------------------------- #
+
+# Backup environment variables pointing to "real" system and users paths.
+# We sometimes refer to these in order to copy resources from the system into
+# our isolated sandboxes.
+reals_setup() {
+  repo_root_setup;
+  tests_dir_setup;
+  xdg_reals_setup;
+  git_reals_setup;
+  flox_location_setup;
 }
 
 
