@@ -14,6 +14,7 @@ declare -i debug=0
 # Declare global variables
 declare -i educatePublish=0
 declare -i interactive=0
+declare -i spawnMode=0
 
 # set -x if debugging, can never remember which way this goes so do both.
 # Note need to do this here in addition to "-d" flag to be able to debug

@@ -193,10 +193,11 @@ function floxActivate() {
 	local rcShell
 	if [ "${#cmdArgs[@]}" -gt 0 ]; then
 		rcShell="$_bash" # i.e. language of this script
-	elif [ "$interactive" -eq 1 ]; then
+	elif [ "$spawnMode" -eq 1 ]; then
+		# "Spawn" mode. Configure environment using bash then exec $rcShell.
 		rcShell="$SHELL" # i.e. the shell we will be invoking
 	else
-		# Non-interactive. In this case it's really important to emit commands
+		# "Source" mode. In this case it's really important to emit commands
 		# using the correct syntax, so start by doing everything possible to
 		# accurately identify the currently-running (parent) shell.
 		rcShell="$(identifyParentShell)";
@@ -251,7 +252,7 @@ function floxActivate() {
 	# https://discourse.floxdev.com/t/losing-part-of-my-shell-environment-when-using-flox-develop/556/2
 	if [[ -x /usr/libexec/path_helper ]] && [[ "$PATH" =~ ^/usr/local/bin: ]]
 	then
-		if [[ "${#cmdArgs[@]}" -eq 0 ]] && [[ "$interactive" -eq 0 ]]; then
+		if [[ "${#cmdArgs[@]}" -eq 0 ]] && [[ "$spawnMode" -eq 0 ]]; then
 			case "$rcShell" in
 			*bash|*zsh)
 				PATH="$(echo "$PATH" | $_awk -v shellDialect=bash -f "$_libexec/flox/darwin-path-fixer.awk")"
@@ -346,8 +347,8 @@ function floxActivate() {
 	[ "$($_uname -s)" != "Darwin" ] || darwinRepairFiles
 
 	# Activate.
-	if [ "$interactive" -eq 1 ]; then
-		# Interactive case - launch subshell.
+	if [ "$spawnMode" -eq 1 ]; then
+		# Spawn mode - launch subshell.
 		case "$rcShell" in
 		*bash|*dash)
 			export FLOX_BASH_INIT_SCRIPT="$rcScript"
@@ -382,7 +383,7 @@ function floxActivate() {
 			;;
 		esac
 	else
-		# Non-interactive case - print out commands to be sourced.
+		# Source mode - print out commands to be sourced.
 		local _flox_activate_verbose=/dev/null
 		[ "$verbose" -eq 0 ] || _flox_activate_verbose=/dev/stderr
 		case "$rcShell" in
