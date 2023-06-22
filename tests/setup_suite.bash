@@ -311,7 +311,7 @@ common_suite_setup() {
 }
 
 # Recognized by `bats'.
-setup_suite() { common_suite_setup; }
+setup_suite() { set -x; common_suite_setup; set +x; }
 
 
 # ---------------------------------------------------------------------------- #
@@ -334,7 +334,7 @@ common_suite_teardown() {
 }
 
 # Recognized by `bats'.
-teardown_suite() { common_suite_teardown; }
+teardown_suite() { set -x; common_suite_teardown; set +x; }
 
 
 # ---------------------------------------------------------------------------- #
