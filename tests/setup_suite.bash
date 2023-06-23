@@ -307,13 +307,7 @@ xdg_tmp_setup() {
   # We DO NOT want to use a similar approach for `flox' caches.
   if ! [[ -e "$XDG_CACHE_HOME/nix" ]]; then
     if [[ -e "$REAL_XDG_CACHE_HOME/nix" ]]; then
-      if [[ -w "$REAL_XDG_CACHE_HOME/nix" ]]; then
-        ln -sf -- "$REAL_XDG_CACHE_HOME/nix" "$XDG_CACHE_HOME/nix";
-      elif [[ -e "$BATS_SUITE_TMPDIR/home/.cache/nix" ]]; then
-        cp -Tr -- "$BATS_SUITE_TMPDIR/hom/.cache/nix" "$XDG_CACHE_HOME/nix";
-      else
-        cp -Tr -- "$REAL_XDG_CACHE_HOME/nix" "$XDG_CACHE_HOME/nix";
-      fi
+        ln -s -- "$REAL_XDG_CACHE_HOME/nix" "$XDG_CACHE_HOME/nix";
     else
       mkdir -p "$XDG_CACHE_HOME/nix";
     fi
