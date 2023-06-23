@@ -24,18 +24,30 @@ expect {
     timeout { exit 1 }
 }
 expect {
-    -re "\$" {}
+    -re "\$" {
+        send "{ command -v rg||which rg||type -P rg; } 2>&1\n"
+        expect {
+            -re "/nix/store/.*-ripgrep-13.0.0/bin/rg" {}
+            timeout { exit 1 }
+        }
+    }
     timeout { exit 1 }
 }
-send "which rg\n"
 expect {
-    -re "/nix/store/.*-ripgrep-13.0.0/bin/rg" {}
+    -re "\$" {
+        send "{ command -v curl||which curl||type -P curl; } 2>&1\n"
+        expect {
+            -re ".*/(develop|toplevel-flox-nix-with-pkg)/.flox/envs/.*(my-pkg|default)/bin/curl" {}
+            timeout { exit 1 }
+        }
+    }
     timeout { exit 1 }
 }
-send "which curl\n"
 expect {
-    -re ".*/(develop|toplevel-flox-nix-with-pkg)/.flox/envs/.*(my-pkg|default)/bin/curl" {}
-    timeout { exit 1 }
+    -re "\$" {
+        send "exit\r"
+        expect eof
+    }
+    timeout { exit 0 }
 }
-send "exit\r"
-expect eof
+exit 0

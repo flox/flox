@@ -441,6 +441,7 @@ common_suite_teardown() {
     rm -rf "$BATS_SUITE_TMPDIR";
   fi
   # Our agent was useful, but it's time for them to retire.
+  # We force true in case we are tearing down when an agent never launched.
   eval "$( ssh-agent -k||echo ':'; )";
   cd "$BAT_RUN_TMPDIR"||return;
   # This directory is always deleted because it contains generated secrets.
