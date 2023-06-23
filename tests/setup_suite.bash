@@ -302,12 +302,14 @@ xdg_tmp_setup() {
   xdg_vars_setup;
   if [[ "${__FT_RAN_XDG_TMP_SETUP:-}" = "$XDG_CACHE_HOME" ]]; then return 0; fi
   mkdir -p "$XDG_CACHE_HOME";
+  chmod u+w "$XDG_CACHE_HOME";
   # We symlink the cache for `nix' so that the fetcher cache and eval cache are
   # shared across the entire suite and between runs.
   # We DO NOT want to use a similar approach for `flox' caches.
   if ! [[ -e "$XDG_CACHE_HOME/nix" ]]; then
     if [[ -e "$REAL_XDG_CACHE_HOME/nix" ]]; then
-        ln -s -- "$REAL_XDG_CACHE_HOME/nix" "$XDG_CACHE_HOME/nix";
+      chmod u+w "$READ_XDG_CACHE_HOME/nix";
+      ln -s -- "$REAL_XDG_CACHE_HOME/nix" "$XDG_CACHE_HOME/nix";
     else
       mkdir -p "$XDG_CACHE_HOME/nix";
     fi
@@ -315,7 +317,6 @@ xdg_tmp_setup() {
   chmod u+w "$XDG_CACHE_HOME";
   mkdir -p "$XDG_CONFIG_HOME/gh";
 
-  chmod u+w "$XDG_CACHE_HOME/nix";
   mkdir -p "$XDG_CACHE_HOME/nix/eval-cache-v4";
   chmod u+w "$XDG_CACHE_HOME/nix/eval-cache-v4";
   export __FT_RAN_XDG_TMP_SETUP="$XDG_CACHE_HOME";
