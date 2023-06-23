@@ -306,8 +306,13 @@ xdg_tmp_setup() {
   # shared across the entire suite and between runs.
   # We DO NOT want to use a similar approach for `flox' caches.
   if ! [[ -e "$XDG_CACHE_HOME/nix" ]]; then
-    ln -s -- "$REAL_XDG_CACHE_HOME/nix" "$XDG_CACHE_HOME/nix";
+    if [[ -e "$REAL_XDG_CACHE_HOME/nix" ]]; then
+      ln -sf -- "$REAL_XDG_CACHE_HOME/nix" "$XDG_CACHE_HOME/nix";
+    else
+      mkdir -p "$XDG_CACHE_HOME/nix";
+    fi
   fi
+  mkdir -p "$XDG_CONFIG_HOME/gh";
   export __FT_RAN_XDG_TMP_SETUP="$XDG_CACHE_HOME";
 }
 
