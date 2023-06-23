@@ -309,7 +309,7 @@ xdg_tmp_setup() {
   # We DO NOT want to use a similar approach for `flox' caches.
   if ! [[ -e "$XDG_CACHE_HOME/nix" ]]; then
     if [[ -e "$REAL_XDG_CACHE_HOME/nix" ]]; then
-      chmod u+w "$READ_XDG_CACHE_HOME/nix";
+      chmod u+w "$REAL_XDG_CACHE_HOME/nix";
       ln -s -- "$REAL_XDG_CACHE_HOME/nix" "$XDG_CACHE_HOME/nix";
     else
       mkdir -p "$XDG_CACHE_HOME/nix";
