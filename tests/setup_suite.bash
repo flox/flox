@@ -312,8 +312,12 @@ xdg_tmp_setup() {
       mkdir -p "$XDG_CACHE_HOME/nix";
     fi
   fi
-  mkdir -p "$XDG_CACHE_HOME/nix/fetcher-cache-v1.sqlite";
+  chmod u+w "$XDG_CACHE_HOME";
   mkdir -p "$XDG_CONFIG_HOME/gh";
+
+  chmod u+w "$XDG_CACHE_HOME/nix";
+  mkdir -p "$XDG_CACHE_HOME/nix/eval-cache-v4";
+  chmod u+w "$XDG_CACHE_HOME/nix/eval-cache-v4";
   export __FT_RAN_XDG_TMP_SETUP="$XDG_CACHE_HOME";
 }
 
