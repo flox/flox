@@ -155,9 +155,6 @@ nix_system_setup() {
 misc_vars_setup() {
   if [[ -n "${__FT_RAN_MISC_VARS_SETUP:-}" ]]; then return 0; fi
 
-  # Set homedir so `parallels' and other tools work, without pollution.
-  export HOME="$BATS_RUN_TMPDIR/homeless-shelter";
-
   # Assume that versions:
   # a) start with numbers
   # b) contain at least one dot
@@ -223,22 +220,23 @@ ssh_key_setup() {
 
 # ---------------------------------------------------------------------------- #
 
-# Create a GPG key to test commit signing.
-# The user and email align with `git' and `ssh' identity.
-#
-# XXX: `gnupg' references `HOME' to lookup keys, which should be set to
-#      `$BATS_RUN_TMPDIR/homeless-shelter' by `misc_vars_setup'.
-gpg_key_setup() {
-  if [[ -n "${__FT_RAN_GPG_KEY_SETUP:-}" ]]; then return 0; fi
-  misc_vars_setup;
-  mkdir -p "$BATS_RUN_TMPDIR/homeless-shelter/.gnupg";
-  gpg --full-gen-key --batch <( printf '%s\n'                                \
-    'Key-Type: 1' 'Key-Length: 4096' 'Subkey-Type: 1' 'Subkey-Length: 4096'  \
-    'Expire-Date: 0' 'Name-Real: Flox User'                                  \
-    'Name-Email: floxuser@example.invalid' '%no-protection';
-  );
-  export __FT_RAN_GPG_KEY_SETUP=:;
-}
+## FIXME: `HOME' setting blows up CI/CD
+## # Create a GPG key to test commit signing.
+## # The user and email align with `git' and `ssh' identity.
+## #
+## # XXX: `gnupg' references `HOME' to lookup keys, which should be set to
+## #      `$BATS_RUN_TMPDIR/homeless-shelter' by `misc_vars_setup'.
+## gpg_key_setup() {
+##   if [[ -n "${__FT_RAN_GPG_KEY_SETUP:-}" ]]; then return 0; fi
+##   misc_vars_setup;
+##   mkdir -p "$BATS_RUN_TMPDIR/homeless-shelter/.gnupg";
+##   gpg --full-gen-key --batch <( printf '%s\n'                                \
+##     'Key-Type: 1' 'Key-Length: 4096' 'Subkey-Type: 1' 'Subkey-Length: 4096'  \
+##     'Expire-Date: 0' 'Name-Real: Flox User'                                  \
+##     'Name-Email: floxuser@example.invalid' '%no-protection';
+##   );
+##   export __FT_RAN_GPG_KEY_SETUP=:;
+## }
 
 
 # ---------------------------------------------------------------------------- #
@@ -304,7 +302,8 @@ common_suite_setup() {
   flox_cli_vars_setup;
   # Generate configs and auth.
   ssh_key_setup;
-  gpg_key_setup;
+  ## FIXME
+  ##gpg_key_setup;
   gitconfig_setup;
   # Cleanup pollution from past runs.
   destroyAllTestEnvs;
