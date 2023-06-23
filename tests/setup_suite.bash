@@ -71,7 +71,9 @@ xdg_reals_setup() {
   export REAL_XDG_CONFIG_HOME="$XDG_CONFIG_HOME";
   export REAL_XDG_CACHE_HOME="$XDG_CACHE_HOME";
   # Prevent later routines from referencing real dirs.
-  unset HOME XDG_CONFIG_HOME XDG_CACHE_HOME;
+  unset XDG_CONFIG_HOME XDG_CACHE_HOME;
+  ## FIXME:
+  ## unset HOME;
   export __FT_RAN_XDG_REALS_SETUP=:;
 }
 
