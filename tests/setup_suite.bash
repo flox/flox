@@ -62,14 +62,16 @@ tests_dir_setup() {
 xdg_reals_setup() {
   if [[ -n "${__FT_RAN_XDG_REALS_SETUP:-}" ]]; then return 0; fi
   # Set fallbacks and export.
-  : "${HOME:-$BATS_RUN_TMPDIR/homeless-shelter}";
-  : "${XDG_CONFIG_HOME:-$HOME/.config}";
-  : "${XDG_CACHE_HOME:-$HOME/.cache}";
+  : "${HOME:=${BATS_RUN_TMPDIR:?}/homeless-shelter}";
+  : "${XDG_CONFIG_HOME:=${HOME:?}/.config}";
+  : "${XDG_CACHE_HOME:=$HOME/.cache}";
+  : "${XDG_DATA_HOME:=$HOME/.local/share}";
   export REAL_HOME="$HOME";
-  export REAL_XDG_CONFIG_HOME="$XDG_CONFIG_HOME";
-  export REAL_XDG_CACHE_HOME="$XDG_CACHE_HOME";
+  export REAL_XDG_CONFIG_HOME="${XDG_CONFIG_HOME:?}";
+  export REAL_XDG_CACHE_HOME="${XDG_CACHE_HOME:?}";
+  export REAL_XDG_DATA_HOME="${XDG_DATA_HOME:?}";
   # Prevent later routines from referencing real dirs.
-  unset HOME XDG_CONFIG_HOME XDG_CACHE_HOME;
+  unset HOME XDG_CONFIG_HOME XDG_CACHE_HOME XDG_DATA_HOME;
   export __FT_RAN_XDG_REALS_SETUP=:;
 }
 
@@ -80,18 +82,18 @@ git_reals_setup() {
   if [[ -n "${__FT_RAN_GIT_REALS_SETUP:-}" ]]; then return 0; fi
   xdg_reals_setup;
   # Set fallbacks and export.
-  : "${GH_CONFIG_DIR:=$REAL_XDG_CONFIG_HOME/gh}";
+  : "${GH_CONFIG_DIR:=${REAL_XDG_CONFIG_HOME:?}/gh}";
   : "${GIT_CONFIG_SYSTEM:=/etc/gitconfig}";
   if [[ -z "${GIT_CONFIG_GLOBAL:-}" ]]; then
     if [[ -r "$REAL_XDG_CONFIG_HOME/git/gitconfig" ]]; then
       GIT_CONFIG_GLOBAL="$REAL_XDG_CONFIG_HOME/git/gitconfig";
     else
-      GIT_CONFIG_GLOBAL="$REAL_HOME/.gitconfig";
+      GIT_CONFIG_GLOBAL="${REAL_HOME:?}/.gitconfig";
     fi
   fi
-  export REAL_GH_CONFIG_DIR="$GH_CONFIG_DIR";
-  export REAL_GIT_CONFIG_SYSTEM="$GIT_CONFIG_SYSTEM";
-  export REAL_GIT_CONFIG_GLOBAL="$GIT_CONFIG_GLOBAL";
+  export REAL_GH_CONFIG_DIR="${GH_CONFIG_DIR:?}";
+  export REAL_GIT_CONFIG_SYSTEM="${GIT_CONFIG_SYSTEM:?}";
+  export REAL_GIT_CONFIG_GLOBAL="${GIT_CONFIG_GLOBAL:?}";
   # Prevent later routines from referencing real configs.
   unset GH_CONFIG_DIR GIT_CONFIG_SYSTEM GIT_CONFIG_GLOBAL;
   export __FT_RAN_GIT_REALS_SETUP=:;
@@ -106,7 +108,7 @@ flox_location_setup() {
   repo_root_setup;
   # Force absolute paths for both FLOX_CLI and FLOX_PACKAGE
   if [[ -z "${FLOX_CLI:-}" ]]; then
-    if [[ -x "$REPO_ROOT/target/debug/flox" ]]; then
+    if [[ -x "${REPO_ROOT:?}/target/debug/flox" ]]; then
       FLOX_CLI="$REPO_ROOT/target/debug/flox";
     elif [[ -x "$REPO_ROOT/target/release/flox" ]]; then
       FLOX_CLI="$REPO_ROOT/target/release/flox";
@@ -125,6 +127,8 @@ flox_location_setup() {
 
 # ---------------------------------------------------------------------------- #
 
+print_var() { eval echo "  $1: \$$1"; }
+
 # Backup environment variables pointing to "real" system and users paths.
 # We sometimes refer to these in order to copy resources from the system into
 # our isolated sandboxes.
@@ -134,6 +138,18 @@ reals_setup() {
   xdg_reals_setup;
   git_reals_setup;
   flox_location_setup;
+  {
+    print_var REAL_HOME;
+    print_var REPO_ROOT;
+    print_var TESTS_DIR;
+    print_var REAL_XDG_CACHE_HOME;
+    print_var REAL_XDG_CONFIG_HOME;
+    print_var REAL_XDG_DATA_HOME;
+    print_var REAL_GH_CONFIG_DIR;
+    print_var REAL_GIT_CONFIG_SYSTEM;
+    print_var REAL_GIT_CONFIG_GLOBAL;
+    print_var FLOX_CLI;
+  } >&3;
 }
 
 
@@ -291,9 +307,9 @@ destroyAllTestEnvs() {
 # Set `XDG_*_HOME' variables to temporary paths.
 # This helper should be run after setting `FLOX_TEST_HOME'.
 xdg_vars_setup() {
-  export XDG_CACHE_HOME="${FLOX_TEST_HOME?}/.cache";
-  export XDG_DATA_HOME="${FLOX_TEST_HOME?}/.local/shore";
-  export XDG_CONFIG_HOME="${FLOX_TEST_HOME?}/.config";
+  export XDG_CONFIG_HOME="${FLOX_TEST_HOME:?}/.config";
+  export XDG_CACHE_HOME="$FLOX_TEST_HOME/.cache";
+  export XDG_DATA_HOME="$FLOX_TEST_HOME/.local/shore";
 }
 
 
@@ -301,14 +317,16 @@ xdg_vars_setup() {
 xdg_tmp_setup() {
   xdg_reals_setup;
   xdg_vars_setup;
-  if [[ "${__FT_RAN_XDG_TMP_SETUP:-}" = "$XDG_CACHE_HOME" ]]; then return 0; fi
+  if [[ "${__FT_RAN_XDG_TMP_SETUP:-}" = "${XDG_CACHE_HOME:?}" ]]; then
+    return 0;
+  fi
   mkdir -p "$XDG_CACHE_HOME";
   chmod u+w "$XDG_CACHE_HOME";
   # We symlink the cache for `nix' so that the fetcher cache and eval cache are
   # shared across the entire suite and between runs.
   # We DO NOT want to use a similar approach for `flox' caches.
   if ! [[ -e "$XDG_CACHE_HOME/nix" ]]; then
-    if [[ -e "$REAL_XDG_CACHE_HOME/nix" ]]; then
+    if [[ -e "${REAL_XDG_CACHE_HOME:?}/nix" ]]; then
       chmod u+w "$REAL_XDG_CACHE_HOME/nix";
       ln -s -- "$REAL_XDG_CACHE_HOME/nix" "$XDG_CACHE_HOME/nix";
     else
@@ -316,7 +334,7 @@ xdg_tmp_setup() {
     fi
   fi
   chmod u+w "$XDG_CACHE_HOME";
-  mkdir -p "$XDG_CONFIG_HOME/gh";
+  mkdir -p "${XDG_CONFIG_HOME:?}/gh";
 
   mkdir -p "$XDG_CACHE_HOME/nix/eval-cache-v4";
   chmod u+w "$XDG_CACHE_HOME/nix/eval-cache-v4";
@@ -386,6 +404,26 @@ common_suite_setup() {
   gitconfig_setup;
   # Cleanup pollution from past runs.
   destroyAllTestEnvs;
+  {
+    print_var FLOX_TEST_HOME;
+    print_var HOME;
+    print_var XDG_CONFIG_HOME;
+    print_var XDG_CACHE_HOME;
+    print_var XDG_DATA_HOME;
+    print_var FLOX_CACHE_HOME;
+    print_var FLOX_CONFIG_HOME;
+    print_var FLOX_META;
+    print_var FLOX_ENVIRONMENTS;
+    print_var FLOX_CACHE_HOME;
+    print_var NIX_SYSTEM;
+    print_var XDG_CACHE_HOME;
+    print_var XDG_CONFIG_HOME;
+    print_var FLOX_TEST_SSH_KEY;
+    print_var SSH_AUTH_SOCK;
+    print_var GH_CONFIG_DIR;
+    print_var GIT_CONFIG_SYSTEM;
+    print_var GIT_CONFIG_GLOBAL;
+  } >&3;
 }
 
 # Recognized by `bats'.
