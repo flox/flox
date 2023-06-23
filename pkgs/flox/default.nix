@@ -98,7 +98,7 @@
   cargoDepsArtifacts = craneLib.buildDepsOnly {
     pname = cargoToml.package.name;
     version = cargoToml.package.version;
-    src = flox-src;
+    src = craneLib.cleanCargoSource (craneLib.path flox-src);
 
     # runtime dependencies of the dependent crates
     buildInputs =

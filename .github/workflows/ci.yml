@@ -38,10 +38,10 @@ jobs:
     - name: Build
       run: flox nix build .#${{ matrix.package }} -L --print-out-paths
 
-    - name: Cache
-      run: flox nix copy --to "$FLOX_SUBSTITUTER" '.#${{ matrix.package }}^*'
+    - name: Cache the store
+      run: flox nix copy --all --to "$FLOX_SUBSTITUTER" -vv
 
-    - name: Test 
+    - name: Test
       if: ${{ matrix.package == 'flox' }}
       run: |
         flox run flox-tests -- -- --flox $(realpath ./result/bin/flox)
