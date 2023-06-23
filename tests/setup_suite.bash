@@ -299,6 +299,7 @@ xdg_vars_setup() {
 
 # Copy user's real caches into temporary cache to speed up eval and fetching.
 xdg_tmp_setup() {
+  xdg_reals_setup;
   xdg_vars_setup;
   if [[ "${__FT_RAN_XDG_TMP_SETUP:-}" = "$XDG_CACHE_HOME" ]]; then return 0; fi
   mkdir -p "$XDG_CACHE_HOME";
