@@ -14,18 +14,16 @@ bats_require_minimum_version '1.5.0';
 
 # ---------------------------------------------------------------------------- #
 
-# Throw errors for undefined variables.
-set -u;
-
-# ---------------------------------------------------------------------------- #
-
 # Locate repository root.
 repo_root_setup() {
   if [[ -z "${REPO_ROOT:-}" ]]; then
     if [[ -d "$PWD/.git" ]] && [[ -d "$PWD/tests" ]]; then
       REPO_ROOT="$PWD";
     else
-      REPO_ROOT="$( git rev-parse --show-toplevel; )";
+      REPO_ROOT="$( git rev-parse --show-toplevel||:; )";
+    fi
+    if [[ -z "$REPO_ROOT" ]] && [[ -d "$PWD/tests" ]]; then
+      REPO_ROOT="$PWD";
     fi
   fi
   export REPO_ROOT;
@@ -39,7 +37,7 @@ tests_dir_setup() {
   if [[ -n "${__FT_RAN_TESTS_DIR_SETUP:-}" ]]; then return 0; fi
   repo_root_setup;
   if [[ -z "${TEST_DIR:-}" ]]; then
-    case "$BATS_TEST_DIRNAME" in
+    case "${BATS_TEST_DIRNAME:-}" in
       */tests) TESTS_DIR="$( readlink -f "$BATS_TEST_DIRNAME"; )"; ;;
       *)       TESTS_DIR="$REPO_ROOT/tests";                       ;;
     esac
@@ -71,9 +69,7 @@ xdg_reals_setup() {
   export REAL_XDG_CONFIG_HOME="$XDG_CONFIG_HOME";
   export REAL_XDG_CACHE_HOME="$XDG_CACHE_HOME";
   # Prevent later routines from referencing real dirs.
-  unset XDG_CONFIG_HOME XDG_CACHE_HOME;
-  ## FIXME:
-  ## unset HOME;
+  unset HOME XDG_CONFIG_HOME XDG_CACHE_HOME;
   export __FT_RAN_XDG_REALS_SETUP=:;
 }
 
@@ -114,6 +110,8 @@ flox_location_setup() {
       FLOX_CLI="$REPO_ROOT/target/debug/flox";
     elif [[ -x "$REPO_ROOT/target/release/flox" ]]; then
       FLOX_CLI="$REPO_ROOT/target/release/flox";
+    elif [[ -x "$REPO_ROOT/result/bin/flox" ]]; then
+      FLOX_CLI="$REPO_ROOT/bin/flox";
     elif command -v flox &> /dev/null; then
       echo "WARNING: using flox executable from PATH" >&2;
       FLOX_CLI="$( command -v flox; )";
@@ -222,23 +220,24 @@ ssh_key_setup() {
 
 # ---------------------------------------------------------------------------- #
 
-## FIXME: `HOME' setting blows up CI/CD
-## # Create a GPG key to test commit signing.
-## # The user and email align with `git' and `ssh' identity.
-## #
-## # XXX: `gnupg' references `HOME' to lookup keys, which should be set to
-## #      `$BATS_RUN_TMPDIR/homeless-shelter' by `misc_vars_setup'.
-## gpg_key_setup() {
-##   if [[ -n "${__FT_RAN_GPG_KEY_SETUP:-}" ]]; then return 0; fi
-##   misc_vars_setup;
-##   mkdir -p "$BATS_RUN_TMPDIR/homeless-shelter/.gnupg";
-##   gpg --full-gen-key --batch <( printf '%s\n'                                \
-##     'Key-Type: 1' 'Key-Length: 4096' 'Subkey-Type: 1' 'Subkey-Length: 4096'  \
-##     'Expire-Date: 0' 'Name-Real: Flox User'                                  \
-##     'Name-Email: floxuser@example.invalid' '%no-protection';
-##   );
-##   export __FT_RAN_GPG_KEY_SETUP=:;
-## }
+# Create a GPG key to test commit signing.
+# The user and email align with `git' and `ssh' identity.
+#
+# XXX: `gnupg' references `HOME' to lookup keys, which should be set to
+#      `$BATS_RUN_TMPDIR/homeless-shelter' by `misc_vars_setup'.
+#
+# TODO: Secret key signing for `git' blows up.
+gpg_key_setup() {
+  if [[ -n "${__FT_RAN_GPG_KEY_SETUP:-}" ]]; then return 0; fi
+  misc_vars_setup;
+  mkdir -p "$BATS_RUN_TMPDIR/homeless-shelter/.gnupg";
+  gpg --full-gen-key --batch <( printf '%s\n'                                \
+    'Key-Type: 1' 'Key-Length: 4096' 'Subkey-Type: 1' 'Subkey-Length: 4096'  \
+    'Expire-Date: 0' 'Name-Real: Flox User'                                  \
+    'Name-Email: floxuser@example.invalid' '%no-protection';
+  );
+  export __FT_RAN_GPG_KEY_SETUP=:;
+}
 
 
 # ---------------------------------------------------------------------------- #
@@ -271,6 +270,7 @@ gitconfig_setup() {
 destroyEnvForce() {
   flox_location_setup;
   { $FLOX_CLI destroy -e "${1?}" --origin -f||:; } >/dev/null 2>&1;
+  return 0;
 }
 
 
@@ -281,7 +281,69 @@ destroyAllTestEnvs() {
   {
     $FLOX_CLI envs 2>/dev/null                                                 \
       |grep '^[^/[:space:]]\+/'"$FLOX_TEST_ENVNAME_PREFIX"'[[:alnum:]_-]*$'||:;
-  }|while read -r e; do destroyEnvForce "$e"; done
+  }|while read -r e; do destroyEnvForce "$e"||:; done
+  return 0;
+}
+
+
+# ---------------------------------------------------------------------------- #
+
+# Set `XDG_*_HOME' variables to temporary paths.
+# This helper should be run after setting `FLOX_TEST_HOME'.
+xdg_vars_setup() {
+  export XDG_CACHE_HOME="${FLOX_TEST_HOME?}/.cache";
+  export XDG_DATA_HOME="${FLOX_TEST_HOME?}/.local/shore";
+  export XDG_CONFIG_HOME="${FLOX_TEST_HOME?}/.config";
+}
+
+
+# Copy user's real caches into temporary cache to speed up eval and fetching.
+xdg_tmp_setup() {
+  xdg_vars_setup;
+  if [[ "${__FT_RAN_XDG_TMP_SETUP:-}" = "$XDG_CACHE_HOME" ]]; then return 0; fi
+  mkdir -p "$XDG_CACHE_HOME";
+  # We symlink the cache for `nix' so that the fetcher cache and eval cache are
+  # shared across the entire suite and between runs.
+  # We DO NOT want to use a similar approach for `flox' caches.
+  if ! [[ -e "$XDG_CACHE_HOME/nix" ]]; then
+    ln -s -- "$REAL_XDG_CACHE_HOME/nix" "$XDG_CACHE_HOME/nix";
+  fi
+  export __FT_RAN_XDG_TMP_SETUP="$XDG_CACHE_HOME";
+}
+
+
+# ---------------------------------------------------------------------------- #
+
+# This helper should be run after setting `FLOX_TEST_HOME'.
+flox_vars_setup() {
+  xdg_vars_setup;
+  export FLOX_CACHE_HOME="$XDG_CACHE_HOME/flox";
+  export FLOX_CONFIG_HOME="$XDG_CONFIG_HOME/flox";
+  export FLOX_DATA_HOME="$XDG_DATA_HOME/flox";
+  export FLOX_META="$FLOX_CACHE_HOME/meta";
+  export FLOX_ENVIRONMENTS="$FLOX_DATA_HOME/environments";
+  export HOME="${FLOX_TEST_HOME:-$HOME}";
+}
+
+# ---------------------------------------------------------------------------- #
+
+# home_setup [suite|file|test]
+# ----------------------------
+# Set `FLOX_TEST_HOME' to a temporary directory and setup essential files.
+# Homedirs can be created "globally" for the entire test suite ( default ), or
+# for individual files or single tests by passing an optional argument.
+home_setup() {
+  case "${1:-suite}" in
+    suite) export FLOX_TEST_HOME="${BATS_SUITE_TMPDIR?}/home";                ;;
+    file)  export FLOX_TEST_HOME="${BATS_FILE_TMPDIR?}/home";                 ;;
+    test)  export FLOX_TEST_HOME="${BATS_TEST_TMPDIR?}/home";                 ;;
+    *)     echo "home_setup: Invalid homedir category '${1?}'" >&2; return 1; ;;
+  esac
+  flox_vars_setup;
+  export GH_CONFIG_DIR="$XDG_CONFIG_HOME/gh";
+  if [[ "${__FT_RAN_HOME_SETUP:-}" = "$FLOX_TEST_HOME" ]]; then return 0; fi
+  xdg_tmp_setup;
+  export __FT_RAN_HOME_SETUP="$FLOX_TEST_HOME";
 }
 
 
@@ -298,14 +360,17 @@ destroyAllTestEnvs() {
 common_suite_setup() {
   # Backup real env vars.
   reals_setup;
+  # Setup a phony home directory shared by the test suite.
+  # Individual files and tests may create their own private homedirs, but this
+  # default one is required before we try to invoke any `flox' CLI commands.
+  home_setup suite;
   # Set common env vars.
   nix_system_setup;
   misc_vars_setup;
   flox_cli_vars_setup;
   # Generate configs and auth.
   ssh_key_setup;
-  ## FIXME
-  ##gpg_key_setup;
+  gpg_key_setup;
   gitconfig_setup;
   # Cleanup pollution from past runs.
   destroyAllTestEnvs;

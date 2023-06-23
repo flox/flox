@@ -99,9 +99,11 @@ in
             FLOX_CLI="$PWD/target/debug/flox";
           elif [[ -x "$PWD/target/release/flox" ]]; then
             FLOX_CLI="$PWD/target/release/flox";
+          elif [[ -x "$PWD/result/bin/flox" ]]; then
+            FLOX_CLI="$( readlink -f $PWD/result; )/bin/flox";
           elif command -v flox &> /dev/null; then
             echo "''${0##*/} WARNING: using flox executable from PATH" >&2;
-            FLOX_CLI="$(command -v flox)";
+            FLOX_CLI="$( command -v flox; )";
           fi
           export FLOX_CLI;
         fi
@@ -120,8 +122,7 @@ in
           '--print-output-on-failure'
           '--verbose-run'
           '--timing'
-          #'-j' '4'
-          '--trace'
+          '-j' '4'
           "''${@:-}"
         );
         {

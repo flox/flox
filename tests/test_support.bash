@@ -68,66 +68,6 @@ hello_pkg_setup() {
 
 # ---------------------------------------------------------------------------- #
 
-# Set `XDG_*_HOME' variables to temporary paths.
-# This helper should be run after setting `FLOX_TEST_HOME'.
-xdg_vars_setup() {
-  export XDG_CACHE_HOME="${FLOX_TEST_HOME?}/.cache";
-  export XDG_DATA_HOME="${FLOX_TEST_HOME?}/.local/shore";
-  export XDG_CONFIG_HOME="${FLOX_TEST_HOME?}/.config";
-}
-
-
-# Copy user's real caches into temporary cache to speed up eval and fetching.
-xdg_tmp_setup() {
-  xdg_vars_setup;
-  if [[ "${__FT_RAN_XDG_TMP_SETUP:-}" = "$XDG_CACHE_HOME" ]]; then return 0; fi
-  mkdir -p "$XDG_CACHE_HOME";
-  # We symlink the cache for `nix' so that the fetcher cache and eval cache are
-  # shared across the entire suite and between runs.
-  # We DO NOT want to use a similar approach for `flox' caches.
-  if ! [[ -e "$XDG_CACHE_HOME/nix" ]]; then
-    ln -s -- "$REAL_XDG_CACHE_HOME/nix" "$XDG_CACHE_HOME/nix";
-  fi
-  export __FT_RAN_XDG_TMP_SETUP="$XDG_CACHE_HOME";
-}
-
-
-# ---------------------------------------------------------------------------- #
-
-# This helper should be run after setting `FLOX_TEST_HOME'.
-flox_vars_setup() {
-  xdg_vars_setup;
-  export FLOX_CACHE_HOME="$XDG_CACHE_HOME/flox";
-  export FLOX_CONFIG_HOME="$XDG_CONFIG_HOME/flox";
-  export FLOX_DATA_HOME="$XDG_DATA_HOME/flox";
-  export FLOX_META="$FLOX_CACHE_HOME/meta";
-  export FLOX_ENVIRONMENTS="$FLOX_DATA_HOME/environments";
-}
-
-# ---------------------------------------------------------------------------- #
-
-# home_setup [suite|file|test]
-# ----------------------------
-# Set `FLOX_TEST_HOME' to a temporary directory and setup essential files.
-# Homedirs can be created "globally" for the entire test suite ( default ), or
-# for individual files or single tests by passing an optional argument.
-home_setup() {
-  case "${1:-suite}" in
-    suite) export FLOX_TEST_HOME="${BATS_SUITE_TMPDIR?}/home";                ;;
-    file)  export FLOX_TEST_HOME="${BATS_FILE_TMPDIR?}/home";                 ;;
-    test)  export FLOX_TEST_HOME="${BATS_TEST_TMPDIR?}/home";                 ;;
-    *)     echo "home_setup: Invalid homedir category '${1?}'" >&2; return 1; ;;
-  esac
-  flox_vars_setup;
-  export GH_CONFIG_DIR="$XDG_CONFIG_HOME/gh";
-  if [[ "${__FT_RAN_HOME_SETUP:-}" = "$FLOX_TEST_HOME" ]]; then return 0; fi
-  xdg_tmp_setup;
-  export __FT_RAN_HOME_SETUP="$FLOX_TEST_HOME";
-}
-
-
-# ---------------------------------------------------------------------------- #
-
 # common_file_setup [HOME_STYLE ::= (suite|file|test)]
 # ----------------------------------------------------
 # Run once for a given `bats' test file.

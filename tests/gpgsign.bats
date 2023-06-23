@@ -15,14 +15,21 @@ load test_support.bash;
 # ---------------------------------------------------------------------------- #
 
 setup_file() { common_file_setup test; }
-setup()      { home_setup test; cd "$FLOX_TEST_HOME"||return; }
-teardown()   { cd "$BATS_RUN_TMPDIR"||return; }
+
+setup() {
+  home_setup test;
+  cp -Tpr -- "$BATS_RUN_TMPDIR/homeless-shelter/.gnupg"  \
+             "$FLOX_TEST_HOME/.gnupg";
+  cd "$FLOX_TEST_HOME"||return;
+}
+
+teardown() { cd "$BATS_RUN_TMPDIR"||return; }
 
 # ---------------------------------------------------------------------------- #
 
 @test "create environment with git global gpgsign set" {
 
-  skip "Test is currently broken";
+  skip "TODO: GPG secret key signing setup";
 
   run git config --global commit.gpgsign true;
   assert_success;
@@ -46,7 +53,7 @@ teardown()   { cd "$BATS_RUN_TMPDIR"||return; }
 
 @test "create environment with git user gpgsign set" {
 
-  skip "Test is currently broken";
+  skip "TODO: GPG secret key signing setup";
 
   run git init;
   assert_success;
