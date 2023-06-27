@@ -209,12 +209,16 @@ impl<'flox> Named {
     }
 
     /// Return path to an owner in data dir, e.g. ~/.local/share/flox/environments/owner
-    pub fn owner_dir(flox: &Flox, owner: &str) -> PathBuf {
+    fn associated_owner_dir(flox: &Flox, owner: &str) -> PathBuf {
         flox.data_dir.join("environments").join(owner)
     }
 
+    pub fn owner_dir(&self, flox: &Flox) -> PathBuf {
+        Self::associated_owner_dir(flox, &self.owner)
+    }
+
     async fn find_default_owner(flox: &Flox) -> Result<String, FindDefaultOwnerError> {
-        let link_path = Self::owner_dir(flox, DEFAULT_OWNER);
+        let link_path = Self::associated_owner_dir(flox, DEFAULT_OWNER);
         debug!(
             "Checking `local` symlink (`{}`) for true name of default user",
             link_path.display()

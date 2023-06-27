@@ -237,8 +237,15 @@ impl<'flox, Git: GitProvider> Environment<'flox, Git, ReadOnly<Git>> {
         self.floxmeta.owner()
     }
 
+    fn as_env_ref(&self) -> Named {
+        Named {
+            name: self.name().to_string(),
+            owner: self.owner().to_string(),
+        }
+    }
+
     fn symlink_path(&self, generation: &str) -> PathBuf {
-        let owner_dir = Named::owner_dir(self.floxmeta.flox, self.owner());
+        let owner_dir = self.as_env_ref().owner_dir(self.floxmeta.flox);
         owner_dir.join(format!("{}-{generation}-link", self.systematized_name()))
     }
 
