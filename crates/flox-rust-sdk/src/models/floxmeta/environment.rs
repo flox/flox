@@ -479,7 +479,7 @@ mod tests {
 
     use super::*;
     use crate::flox::Flox;
-    use crate::models::project::tests::flox_instance;
+    use crate::flox::tests::flox_instance;
     use crate::providers::git::tests::mock_provider;
     use crate::providers::git::GitCommandProvider;
 

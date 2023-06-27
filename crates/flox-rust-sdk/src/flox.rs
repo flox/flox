@@ -558,8 +558,38 @@ impl Flox {
 }
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
+    use tempfile::TempDir;
+
     use super::*;
+
+    pub fn flox_instance() -> (Flox, TempDir) {
+        let tempdir_handle = tempfile::tempdir_in(std::env::temp_dir()).unwrap();
+
+        let cache_dir = tempdir_handle.path().join("caches");
+        let data_dir = tempdir_handle.path().join(".local/share/flox");
+        let temp_dir = tempdir_handle.path().join("temp");
+        let config_dir = tempdir_handle.path().join("config");
+
+        std::fs::create_dir_all(&cache_dir).unwrap();
+        std::fs::create_dir_all(&temp_dir).unwrap();
+        std::fs::create_dir_all(&config_dir).unwrap();
+
+        let mut channels = ChannelRegistry::default();
+        channels.register_channel("flox", "github:flox/floxpkgs/master".parse().unwrap());
+
+        let flox = Flox {
+            system: "aarch64-darwin".to_string(),
+            cache_dir,
+            data_dir,
+            temp_dir,
+            config_dir,
+            channels,
+            ..Default::default()
+        };
+
+        (flox, tempdir_handle)
+    }
 
     #[test]
     fn test_resolved_installable_match_to_installable() {
