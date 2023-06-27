@@ -12,9 +12,9 @@ use crate::providers::git::GitProvider;
 
 pub static CATALOG_JSON: &str = "catalog.json";
 // don't forget to update the man page
-pub static DEFAULT_KEEP_GENERATIONS: usize = 10;
+pub const DEFAULT_KEEP_GENERATIONS: usize = 10;
 // don't forget to update the man page
-pub static DEFAULT_MAX_AGE_DAYS: u32 = 90;
+pub const DEFAULT_MAX_AGE_DAYS: u32 = 90;
 
 pub enum CommonEnvironment<'flox, Git: GitProvider> {
     Named(floxmeta::environment::Environment<'flox, Git, ReadOnly<Git>>),
