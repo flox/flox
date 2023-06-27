@@ -478,8 +478,8 @@ mod tests {
     use chrono::Days;
 
     use super::*;
-    use crate::flox::Flox;
     use crate::flox::tests::flox_instance;
+    use crate::flox::Flox;
     use crate::providers::git::tests::mock_provider;
     use crate::providers::git::GitCommandProvider;
 
