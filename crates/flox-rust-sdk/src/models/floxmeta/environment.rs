@@ -511,34 +511,36 @@ mod tests {
         }
     }
 
+    fn mock_generation_metadata(last_active: u64) -> GenerationMetadata {
+        GenerationMetadata {
+            created: 0,
+            last_active,
+            log_message: vec![],
+            path: PathBuf::from("/does-not-exist"),
+            version: 1,
+        }
+    }
+
+    fn too_old() -> u64 {
+        Utc::now()
+            .checked_sub_days(Days::new((DEFAULT_MAX_AGE_DAYS + 1).into()))
+            .unwrap()
+            .timestamp() as u64
+    }
+
+    /// When there are DEFAULT_KEEP_GENERATIONS generations older than
+    /// DEFAULT_MAX_AGE_DAYS, no generations are deleted.
     #[tokio::test]
-    async fn symlinks_to_delete() {
+    async fn symlinks_to_delete_keeps_generations() {
         let (flox, _tempdir_handle) = flox_instance();
         let environment = mock_environment(&flox);
 
-        let too_old = Utc::now()
-            .checked_sub_days(Days::new((DEFAULT_MAX_AGE_DAYS + 1).into()))
-            .unwrap()
-            .timestamp() as u64;
-
-        fn new_generation_metadata(last_active: u64) -> GenerationMetadata {
-            GenerationMetadata {
-                created: 0,
-                last_active,
-                log_message: vec![],
-                path: PathBuf::from("/does-not-exist"),
-                version: 1,
-            }
-        }
-
-        // When there are DEFAULT_KEEP_GENERATIONS generations older than
-        // DEFAULT_MAX_AGE_DAYS, no generations are deleted.
         let mut generations = BTreeMap::new();
         let num_generations = DEFAULT_KEEP_GENERATIONS;
         for generation in 1..num_generations + 1 {
             generations.insert(
                 generation.to_string(),
-                new_generation_metadata(too_old - (num_generations - generation) as u64),
+                mock_generation_metadata(too_old() - (num_generations - generation) as u64),
             );
         }
 
@@ -550,15 +552,21 @@ mod tests {
 
         let mut symlinks = environment.symlinks_to_delete(metadata);
         assert!(symlinks.next().is_none());
+    }
 
-        // When there are DEFAULT_KEEP_GENERATIONS+1 generations older than
-        // DEFAULT_MAX_AGE_DAYS, the oldest generation is deleted.
+    /// When there are DEFAULT_KEEP_GENERATIONS+1 generations older than
+    /// DEFAULT_MAX_AGE_DAYS, the oldest generation is deleted.
+    #[tokio::test]
+    async fn symlinks_to_delete_too_many_generations() {
+        let (flox, _tempdir_handle) = flox_instance();
+        let environment = mock_environment(&flox);
+
         let mut generations = BTreeMap::new();
         let num_generations = DEFAULT_KEEP_GENERATIONS + 1;
         for generation in 1..num_generations + 1 {
             generations.insert(
                 generation.to_string(),
-                new_generation_metadata(too_old - (num_generations - generation) as u64),
+                mock_generation_metadata(too_old() - (num_generations - generation) as u64),
             );
         }
 
@@ -574,9 +582,15 @@ mod tests {
             flox.data_dir.join("environments/owner/system.name-1-link")
         );
         assert!(symlinks.next().is_none());
+    }
 
-        // When there are DEFAULT_KEEP_GENERATIONS+2 but all generations are as
-        // recent as DEFAULT_MAX_AGE_DAYS, no generations are deleted.
+    /// When there are DEFAULT_KEEP_GENERATIONS+2 but all generations are as
+    /// recent as DEFAULT_MAX_AGE_DAYS, no generations are deleted.
+    #[tokio::test]
+    async fn symlinks_to_delete_keeps_recent() {
+        let (flox, _tempdir_handle) = flox_instance();
+        let environment = mock_environment(&flox);
+
         let max_age_days_ago = Utc::now()
             .checked_sub_days(Days::new(DEFAULT_MAX_AGE_DAYS.into()))
             .unwrap()
@@ -587,7 +601,7 @@ mod tests {
         for generation in 1..num_generations + 1 {
             generations.insert(
                 generation.to_string(),
-                new_generation_metadata(max_age_days_ago as u64 + generation as u64),
+                mock_generation_metadata(max_age_days_ago as u64 + generation as u64),
             );
         }
 
@@ -599,9 +613,15 @@ mod tests {
 
         let mut symlinks = environment.symlinks_to_delete(metadata);
         assert!(symlinks.next().is_none());
+    }
 
-        // When there are DEFAULT_KEEP_GENERATIONS+2 and every other generation
-        // is older than DEFAULT_MAX_AGE_DAYS, the two oldest generations are deleted.
+    /// When there are DEFAULT_KEEP_GENERATIONS+2 and every other generation
+    /// is older than DEFAULT_MAX_AGE_DAYS, the two oldest generations are deleted.
+    #[tokio::test]
+    async fn symlinks_to_delete_deletes_oldest() {
+        let (flox, _tempdir_handle) = flox_instance();
+        let environment = mock_environment(&flox);
+
         let max_age_days_ago = Utc::now()
             .checked_sub_days(Days::new(DEFAULT_MAX_AGE_DAYS.into()))
             .unwrap()
@@ -612,12 +632,12 @@ mod tests {
         for generation in 1..num_generations + 1 {
             generations.insert(
                 generation.to_string(),
-                new_generation_metadata(
+                mock_generation_metadata(
                     // make even generations too old
                     if generation % 2 == 1 {
                         max_age_days_ago as u64 + generation as u64
                     } else {
-                        too_old - (num_generations - generation) as u64
+                        too_old() - (num_generations - generation) as u64
                     },
                 ),
             );
