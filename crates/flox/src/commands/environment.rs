@@ -154,7 +154,11 @@ impl EnvironmentCommands {
                 match environment {
                     CommonEnvironment::Named(env) => {
                         if env.delete_symlinks().await? {
-                            let nix = flox.nix::<NixCommandLine>(Default::default());
+                            let nix = flox.nix::<NixCommandLine>(vec![
+                                "--verbose".to_string(),
+                                "--verbose".to_string(),
+                                "--verbose".to_string(),
+                            ]);
                             let store_gc_command = StoreGc {
                                 ..StoreGc::default()
                             };
