@@ -69,7 +69,7 @@ pub fn init_access_tokens(
 
             match (k.trim(), v.trim()) {
                 ("access-tokens", tt) | ("extra-access-tokens", tt) => {
-                    tokens.extend(tt.split_ascii_whitespace().into_iter().map(|t| {
+                    tokens.extend(tt.split_ascii_whitespace().map(|t| {
                         let (tk, tv) = t.split_once('=').unwrap();
                         (tk.to_string(), tv.to_string())
                     }));

@@ -32,7 +32,7 @@ use crate::models::root::transaction::ReadOnly;
 use crate::models::root::{self, Root};
 use crate::providers::git::GitProvider;
 
-static INPUT_CHARS: Lazy<Vec<char>> = Lazy::new(|| ('a'..='t').into_iter().collect());
+static INPUT_CHARS: Lazy<Vec<char>> = Lazy::new(|| ('a'..='t').collect());
 
 pub const FLOX_SH: &str = env!("FLOX_SH");
 pub const FLOX_VERSION: &str = env!("FLOX_VERSION");
