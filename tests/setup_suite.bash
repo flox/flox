@@ -320,6 +320,9 @@ xdg_tmp_setup() {
   if [[ "${__FT_RAN_XDG_TMP_SETUP:-}" = "${XDG_CACHE_HOME:?}" ]]; then
     return 0;
   fi
+
+  # Cache Dirs
+
   mkdir -p "$XDG_CACHE_HOME";
   chmod u+w "$XDG_CACHE_HOME";
   # We symlink the cache for `nix' so that the fetcher cache and eval cache are
@@ -333,11 +336,38 @@ xdg_tmp_setup() {
       mkdir -p "$XDG_CACHE_HOME/nix";
     fi
   fi
-  chmod u+w "$XDG_CACHE_HOME";
-  mkdir -p "${XDG_CONFIG_HOME:?}/gh";
 
   mkdir -p "$XDG_CACHE_HOME/nix/eval-cache-v4";
   chmod u+w "$XDG_CACHE_HOME/nix/eval-cache-v4";
+
+
+  # Config Dirs
+
+  mkdir -p "${XDG_CONFIG_HOME:?}";
+  chmod u+w "$XDG_CONFIG_HOME";
+  mkdir -p "${XDG_CONFIG_HOME:?}/gh";
+
+  if [[ -e "${REAL_XDG_CONFIG_HOME:?}/nix" ]]; then
+    rm -rf "$XDG_CONFIG_HOME/nix";
+    cp -Tr -- "$REAL_XDG_CONFIG_HOME/nix" "$XDG_CONFIG_HOME/nix";
+    chmod -R u+w "$XDG_CONFIG_HOME/nix";
+  fi
+  if [[ -e "$REAL_XDG_CONFIG_HOME/flox" ]]; then
+    rm -rf "$XDG_CONFIG_HOME/flox";
+    cp -Tr -- "$REAL_XDG_CONFIG_HOME/flox" "$XDG_CONFIG_HOME/flox";
+    chmod -R u+w "$XDG_CONFIG_HOME/flox";
+  fi
+
+
+  # Data Dirs
+
+  mkdir -p "${XDG_DATA_HOME:?}";
+  chmod u+w "$XDG_DATA_HOME";
+  mkdir -p "$XDG_DATA_HOME/flox";
+  chmod u+w "$XDG_DATA_HOME/flox";
+  mkdir -p "$XDG_DATA_HOME/flox/environments";
+  chmod u+w "$XDG_DATA_HOME/flox/environments";
+
   export __FT_RAN_XDG_TMP_SETUP="$XDG_CACHE_HOME";
 }
 
