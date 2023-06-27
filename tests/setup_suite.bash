@@ -309,7 +309,7 @@ destroyAllTestEnvs() {
 xdg_vars_setup() {
   export XDG_CONFIG_HOME="${FLOX_TEST_HOME:?}/.config";
   export XDG_CACHE_HOME="$FLOX_TEST_HOME/.cache";
-  export XDG_DATA_HOME="$FLOX_TEST_HOME/.local/shore";
+  export XDG_DATA_HOME="$FLOX_TEST_HOME/.local/share";
 }
 
 
@@ -399,10 +399,12 @@ home_setup() {
     test)  export FLOX_TEST_HOME="${BATS_TEST_TMPDIR?}/home";                 ;;
     *)     echo "home_setup: Invalid homedir category '${1?}'" >&2; return 1; ;;
   esac
-  flox_vars_setup;
   export GH_CONFIG_DIR="$XDG_CONFIG_HOME/gh";
-  if [[ "${__FT_RAN_HOME_SETUP:-}" = "$FLOX_TEST_HOME" ]]; then return 0; fi
+  #if [[ "${__FT_RAN_HOME_SETUP:-}" = "$FLOX_TEST_HOME" ]]; then return 0; fi
+  # Force recreation on `home' on every invocation.
+  unset __FT_RAN_HOME_SETUP;
   xdg_tmp_setup;
+  flox_vars_setup;
   export __FT_RAN_HOME_SETUP="$FLOX_TEST_HOME";
 }
 
