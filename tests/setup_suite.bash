@@ -146,6 +146,7 @@ print_var() { eval echo "  $1: \$$1"; }
 reals_setup() {
   repo_root_setup;
   tests_dir_setup;
+  nix_store_dir_setup;
   xdg_reals_setup;
   git_reals_setup;
   flox_location_setup;
@@ -154,6 +155,7 @@ reals_setup() {
     print_var REAL_HOME;
     print_var REPO_ROOT;
     print_var TESTS_DIR;
+    print_var NIX_STORE;
     print_var REAL_XDG_CACHE_HOME;
     print_var REAL_XDG_CONFIG_HOME;
     print_var REAL_XDG_DATA_HOME;
@@ -174,6 +176,19 @@ nix_system_setup() {
     $FLOX_CLI nix eval --impure --expr builtins.currentSystem --raw;
   )}";
   export NIX_SYSTEM;
+}
+
+
+# ---------------------------------------------------------------------------- #
+
+# Lookup the path to the Nix store.
+# This is mostly important for testing "single user installs"
+nix_store_dir_setup() {
+  flox_location_setup;
+  : "${NIX_STORE:=$(
+    $FLOX_CLI nix eval --impure --expr builtins.storeDir --raw;
+  )}";
+  export NIX_STORE;
 }
 
 
