@@ -174,7 +174,7 @@ impl<'flox, Git: GitProvider> Floxmeta<'flox, Git, ReadOnly<Git>> {
                 .map_err(|e| ListFloxmetaError::CreateMetaDir(metadir.clone(), e))?
         }
 
-        let floxmeta_dirs = futures::stream::iter(
+        futures::stream::iter(
             metadir
                 .read_dir()
                 .map_err(|e| ListFloxmetaError::OpenMetaDir(metadir.clone(), e))?,
@@ -207,9 +207,7 @@ impl<'flox, Git: GitProvider> Floxmeta<'flox, Git, ReadOnly<Git>> {
             Ok(floxmeta)
         })
         .try_collect()
-        .await;
-
-        floxmeta_dirs
+        .await
     }
 
     /// gets a floxmeta reference for a specific owner

@@ -5,10 +5,13 @@ use derive_more::Display;
 use runix::arguments::flake::OverrideInput;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize, Display, PartialEq, Eq, Ord, PartialOrd)]
+#[derive(
+    Debug, Clone, Serialize, Deserialize, Display, PartialEq, Eq, Ord, PartialOrd, Default,
+)]
 #[serde(rename_all = "camelCase")]
 pub enum Stability {
     #[display(fmt = "stable")]
+    #[default]
     Stable,
     #[display(fmt = "unstable")]
     Unstable,
@@ -25,12 +28,6 @@ impl Stability {
             format!("flake:nixpkgs-{self}").parse().unwrap(),
         )
             .into()
-    }
-}
-
-impl Default for Stability {
-    fn default() -> Self {
-        Stability::Stable
     }
 }
 

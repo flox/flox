@@ -1,8 +1,10 @@
 set attr [lindex $argv 0]
 set flox $env(FLOX_CLI)
 if {$attr eq ""} {
+    set cmd "$flox -v develop"
     spawn $flox -v develop
 } else {
+    set cmd "$flox -v develop $attr"
     spawn $flox -v develop $attr
 }
 set timeout 60
@@ -12,28 +14,43 @@ expect {
         set timeout 90
         expect {
             "activating floxEnv" {}
-            timeout { exit 1 }
+            timeout {
+              puts stderr "Reached timeout running '$cmd'"
+              exit 1
+            }
         }
         set timeout 30
     }
     "activating floxEnv" {}
-    timeout { exit 1 }
+    timeout {
+      puts stderr "Reached timeout running '$cmd'"
+      exit 1
+    }
 }
 expect {
     -re "\$" {
         send "{ command -v hello||which hello||type -P hello; } 2>&1\n"
         expect {
             -re ".*/toplevel-flox-nix/.flox/envs/.*default/bin/hello" {}
-            timeout { exit 1 }
+            timeout {
+              puts stderr "Reached timeout locating 'hello'"
+              exit 1
+            }
         }
     }
-    timeout { exit 1 }
+    timeout {
+      puts stderr "Reached timeout running '$cmd'"
+      exit 1
+    }
 }
 expect {
     -re "\$" {
         send "exit\r"
         expect eof
     }
-    timeout { exit 0 }
+    timeout {
+      puts stderr "Reached timeout locating 'hello'"
+      exit 0
+    }
 }
 exit 0
