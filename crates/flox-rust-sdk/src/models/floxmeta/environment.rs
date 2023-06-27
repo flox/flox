@@ -358,7 +358,7 @@ impl<'flox, Git: GitProvider> Environment<'flox, Git, ReadOnly<Git>> {
                 // current_gen must have been active more recently than any other
                 // generation, so it will be skipped above
                 if days_since_active > DEFAULT_MAX_AGE_DAYS.into() {
-                    return Some(Ok(self.symlink_path(&generation.to_string())));
+                    return Some(Ok(self.symlink_path(&generation)));
                 }
                 None
             })
