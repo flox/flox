@@ -32,12 +32,6 @@ EDIT_ENVIRONMENT=_edit_testing_
   assert_output --partial 'environmentVariables.test = "file"'
 
   # test reading from stdin
-  contentsStdin=$(cat <<'EOF'
-{
-  environmentVariables.test = "stdin";
-}
-EOF
-)
   run sh -c "echo '{ environmentVariables.test = \"stdin\"; }'
               |$FLOX_CLI edit -e '$EDIT_ENVIRONMENT' --file -;";
   assert_success
