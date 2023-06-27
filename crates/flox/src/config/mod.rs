@@ -396,9 +396,12 @@ mod tests {
     fn test_writing_value() {
         let config_content =
             Config::write_to(None, &Key::parse("git_base_url").unwrap(), Some("hello")).unwrap();
-        assert_eq!(config_content, indoc! {"
+        assert_eq!(
+            config_content,
+            indoc! {"
             git_base_url = \"hello\"
-            "})
+            "}
+        )
     }
     #[test]
     fn test_appending_value() {
@@ -412,10 +415,13 @@ mod tests {
             Some("stable"),
         )
         .unwrap();
-        assert_eq!(config_content, indoc! {"
+        assert_eq!(
+            config_content,
+            indoc! {"
         git_base_url = \"hello\"
         stability = \"stable\"
-        "});
+        "}
+        );
     }
 
     #[test]
@@ -431,11 +437,14 @@ mod tests {
             Some("stable"),
         )
         .unwrap();
-        assert_eq!(config_content, indoc! {"
+        assert_eq!(
+            config_content,
+            indoc! {"
         # my git base url is friendly, see:
         git_base_url = \"hello\"
         stability = \"stable\"
-        "});
+        "}
+        );
     }
 
     #[test]
@@ -446,21 +455,27 @@ mod tests {
             Some("ghp_my_access_token"),
         )
         .unwrap();
-        assert_eq!(config_content, indoc! {"
+        assert_eq!(
+            config_content,
+            indoc! {"
         [nix]
 
         [nix.access_tokens]
         \"github.com\" = \"ghp_my_access_token\"
-        "});
+        "}
+        );
     }
 
     #[test]
     fn test_writing_bool() {
         let config_content =
             Config::write_to(None, &Key::parse("disable_metrics").unwrap(), Some(true)).unwrap();
-        assert_eq!(config_content, indoc! {"
+        assert_eq!(
+            config_content,
+            indoc! {"
         disable_metrics = true
-        "});
+        "}
+        );
     }
 
     #[test]
@@ -549,10 +564,13 @@ mod tests {
             None::<()>,
         )
         .unwrap();
-        assert_eq!(config_content, indoc! {"
+        assert_eq!(
+            config_content,
+            indoc! {"
         [nix]
 
         [nix.access_tokens]
-        "});
+        "}
+        );
     }
 }

@@ -118,10 +118,13 @@ impl<'flox, Git: GitProvider> Guard<Project<'flox, Git, ReadOnly<Git>>, Root<'fl
             ),
             ..Default::default()
         }
-        .run(&nix, &NixArgs {
-            cwd: Some(root.to_path_buf()),
-            ..Default::default()
-        })
+        .run(
+            &nix,
+            &NixArgs {
+                cwd: Some(root.to_path_buf()),
+                ..Default::default()
+            },
+        )
         .await
         .map_err(InitProjectError::NixInitBase)?;
 
@@ -224,10 +227,13 @@ impl<'flox, Git: GitProvider, Access: GitAccess<Git>> Project<'flox, Git, Access
             template: Some(template.clone().into()),
             ..Default::default()
         }
-        .run(&nix, &NixArgs {
-            cwd: root.to_path_buf().into(),
-            ..NixArgs::default()
-        })
+        .run(
+            &nix,
+            &NixArgs {
+                cwd: root.to_path_buf().into(),
+                ..NixArgs::default()
+            },
+        )
         .await
         .map_err(InitFloxPackageError::NixInit)?;
 

@@ -323,11 +323,16 @@ impl<'flox, Git: GitProvider> Environment<'flox, Git, ReadOnly<Git>> {
         })
     }
 
-    pub async fn delete_symlinks(&self) -> Result<(), DeleteSymlinksError<Git>> {
-        for symlink in self.symlinks_to_delete(self.metadata().await?) {
-            fs::remove_file(symlink?).unwrap();
+    pub async fn delete_symlinks(&self) -> Result<bool, DeleteSymlinksError<Git>> {
+        let mut symlinks_to_delete = self.symlinks_to_delete(self.metadata().await?).peekable();
+        if symlinks_to_delete.peek().is_some() {
+            for symlink in self.symlinks_to_delete(self.metadata().await?) {
+                fs::remove_file(symlink?).unwrap();
+            }
+            Ok(true)
+        } else {
+            Ok(false)
         }
-        Ok(())
     }
 
     /// Returns iterator of symlinks for old generations, keeping at least

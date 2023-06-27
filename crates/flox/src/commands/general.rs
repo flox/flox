@@ -19,9 +19,7 @@ use toml_edit::Key;
 use crate::config::features::Feature;
 use crate::config::{Config, ReadWriteError, FLOX_CONFIG_FILE};
 use crate::utils::metrics::{
-    METRICS_EVENTS_FILE_NAME,
-    METRICS_LOCK_FILE_NAME,
-    METRICS_UUID_FILE_NAME,
+    METRICS_EVENTS_FILE_NAME, METRICS_LOCK_FILE_NAME, METRICS_UUID_FILE_NAME,
 };
 use crate::{flox_forward, subcommand_metric};
 

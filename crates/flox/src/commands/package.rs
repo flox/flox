@@ -48,14 +48,8 @@ pub(crate) mod interface {
     use super::parseable_macro::parseable;
     use super::{env_ref_to_installable, Parseable, WithPassthru};
     use crate::utils::installables::{
-        BuildInstallable,
-        BundleInstallable,
-        BundlerInstallable,
-        DevelopInstallable,
-        PublishInstallable,
-        RunInstallable,
-        ShellInstallable,
-        TemplateInstallable,
+        BuildInstallable, BundleInstallable, BundlerInstallable, DevelopInstallable,
+        PublishInstallable, RunInstallable, ShellInstallable, TemplateInstallable,
     };
     use crate::utils::{InstallableArgument, InstallableDef, Parsed};
 

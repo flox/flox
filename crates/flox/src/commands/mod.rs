@@ -22,11 +22,7 @@ use self::general::GeneralCommands;
 use self::package::interface;
 use crate::config::{Config, FLOX_CONFIG_FILE};
 use crate::utils::init::{
-    init_access_tokens,
-    init_channels,
-    init_git_conf,
-    init_telemetry,
-    init_uuid,
+    init_access_tokens, init_channels, init_git_conf, init_telemetry, init_uuid,
     telemetry_opt_out_needs_migration,
 };
 use crate::utils::metrics::METRICS_UUID_FILE_NAME;

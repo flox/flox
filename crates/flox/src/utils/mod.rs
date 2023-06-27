@@ -96,9 +96,11 @@ impl InstallableKind {
     }
 
     pub const fn bundler() -> Self {
-        Self::new("bundler", &[("bundlers", true)], &[
-            "github:flox/bundlers/master",
-        ])
+        Self::new(
+            "bundler",
+            &[("bundlers", true)],
+            &["github:flox/bundlers/master"],
+        )
     }
 
     pub fn or(self, other: Self) -> Self {
