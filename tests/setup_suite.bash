@@ -62,16 +62,27 @@ tests_dir_setup() {
 xdg_reals_setup() {
   if [[ -n "${__FT_RAN_XDG_REALS_SETUP:-}" ]]; then return 0; fi
   # Set fallbacks and export.
-  : "${HOME:=${BATS_RUN_TMPDIR:?}/homeless-shelter}";
+  : "${USER:=$( id -un 2>/dev/null; )}";
+  if [[ -z "${HOME:-}" ]]; then
+		: HOME="$( getent passwd "$USER" 2>/dev/null|cut -d: -f6; )";
+    if [[ -z "${HOME:-}" ]]; then
+      if [[ -d "/home/$USER" ]]; then
+        HOME="/home/$USER"
+      else
+        HOME="${BATS_RUN_TMPDIR:?}/homeless-shelter";
+      fi
+    fi
+  fi
   : "${XDG_CONFIG_HOME:=${HOME:?}/.config}";
   : "${XDG_CACHE_HOME:=$HOME/.cache}";
   : "${XDG_DATA_HOME:=$HOME/.local/share}";
+  export REAL_USER="$USER";
   export REAL_HOME="$HOME";
   export REAL_XDG_CONFIG_HOME="${XDG_CONFIG_HOME:?}";
   export REAL_XDG_CACHE_HOME="${XDG_CACHE_HOME:?}";
   export REAL_XDG_DATA_HOME="${XDG_DATA_HOME:?}";
   # Prevent later routines from referencing real dirs.
-  unset HOME XDG_CONFIG_HOME XDG_CACHE_HOME XDG_DATA_HOME;
+  unset USER HOME XDG_CONFIG_HOME XDG_CACHE_HOME XDG_DATA_HOME;
   export __FT_RAN_XDG_REALS_SETUP=:;
 }
 
@@ -139,6 +150,7 @@ reals_setup() {
   git_reals_setup;
   flox_location_setup;
   {
+    print_var REAL_USER;
     print_var REAL_HOME;
     print_var REPO_ROOT;
     print_var TESTS_DIR;
@@ -382,6 +394,7 @@ flox_vars_setup() {
   export FLOX_DATA_HOME="$XDG_DATA_HOME/flox";
   export FLOX_META="$FLOX_CACHE_HOME/meta";
   export FLOX_ENVIRONMENTS="$FLOX_DATA_HOME/environments";
+  export USER="flox-test";
   export HOME="${FLOX_TEST_HOME:-$HOME}";
 }
 
@@ -399,12 +412,12 @@ home_setup() {
     test)  export FLOX_TEST_HOME="${BATS_TEST_TMPDIR?}/home";                 ;;
     *)     echo "home_setup: Invalid homedir category '${1?}'" >&2; return 1; ;;
   esac
-  export GH_CONFIG_DIR="$XDG_CONFIG_HOME/gh";
   #if [[ "${__FT_RAN_HOME_SETUP:-}" = "$FLOX_TEST_HOME" ]]; then return 0; fi
   # Force recreation on `home' on every invocation.
   unset __FT_RAN_HOME_SETUP;
   xdg_tmp_setup;
   flox_vars_setup;
+  export GH_CONFIG_DIR="$XDG_CONFIG_HOME/gh";
   export __FT_RAN_HOME_SETUP="$FLOX_TEST_HOME";
 }
 
