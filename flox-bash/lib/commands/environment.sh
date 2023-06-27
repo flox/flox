@@ -856,7 +856,7 @@ function floxEdit() {
 	local -a invocation=("$@")
 
 	local inputFile
-	while test $# -gt 0; do
+	while [[ "$#" -gt 0 ]]; do
 		# 'flox edit' args.
 		case "$1" in
 		-f | --file) # takes one arg
@@ -964,7 +964,7 @@ EOF
 				# cat will read from stdin if $inputFile is -
 				$_cat "$inputFile" > "$workDir/$nextGen/pkgs/default/flox.nix"
 			else
-				$editorCommand $workDir/$nextGen/pkgs/default/flox.nix
+				$editorCommand "$workDir/$nextGen/pkgs/default/flox.nix"
 			fi
 
 			[ -s $workDir/$nextGen/pkgs/default/flox.nix ] || (
