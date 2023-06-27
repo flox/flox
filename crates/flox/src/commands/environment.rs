@@ -156,12 +156,12 @@ impl EnvironmentCommands {
                         env.delete_symlinks().await?;
 
                         let nix = flox.nix::<NixCommandLine>(Default::default());
-                        let store_gc = StoreGc {
+                        let store_gc_command = StoreGc {
                             ..StoreGc::default()
                         };
 
                         info!("Running garbage collection. This may take a while...");
-                        store_gc.run(&nix, &Default::default()).await?;
+                        store_gc_command.run(&nix, &Default::default()).await?;
                     },
                     CommonEnvironment::Project(_) => {
                         bail!("can't wipe-history for project environment; project environments only keep the most recent build.");
