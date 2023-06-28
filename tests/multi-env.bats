@@ -14,22 +14,26 @@ load test_support.bash;
 # ---------------------------------------------------------------------------- #
 
 destroy_envs() {
-  "$FLOX_CLI" destroy -e "${TEST_ENVIRONMENT}_multi_1" --origin -f||:;
-  "$FLOX_CLI" destroy -e "${TEST_ENVIRONMENT}_multi_1" --origin -f||:;
+  destroyEnvForce "${TEST_ENVIRONMENT}1";
+  destroyEnvForce "${TEST_ENVIRONMENT}2";
 }
 
 setup_file() {
-  common_setup;
-  destroy_envs;
-  $FLOX_CLI create  -e "${TEST_ENVIRONMENT}_multi_1";
-  $FLOX_CLI install -e "${TEST_ENVIRONMENT}_multi_1" "$HELLO_PACKAGE";
-  $FLOX_CLI create  -e "${TEST_ENVIRONMENT}_multi_2";
-  $FLOX_CLI install -e "${TEST_ENVIRONMENT}_multi_2" "$HELLO_PACKAGE";
+  common_file_setup;
+  hello_pkg_setup;
+  destroyEnvForce "${TEST_ENVIRONMENT}1";
+  destroyEnvForce "${TEST_ENVIRONMENT}2";
+  $FLOX_CLI create  -e "${TEST_ENVIRONMENT}1";
+  $FLOX_CLI install -e "${TEST_ENVIRONMENT}1" "$HELLO_PACKAGE";
+  $FLOX_CLI create  -e "${TEST_ENVIRONMENT}2";
+  $FLOX_CLI install -e "${TEST_ENVIRONMENT}2" "$HELLO_PACKAGE";
 }
 
 teardown_file() {
-  common_teardown;
-  destroy_envs;
+  if [[ -z "${FLOX_TEST_KEEP_TMP:-}" ]]; then
+    destroyEnvForce "${TEST_ENVIRONMENT}1";
+    destroyEnvForce "${TEST_ENVIRONMENT}2";
+  fi
 }
 
 

@@ -36,12 +36,11 @@ jobs:
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
     - name: Build
-      run: flox nix build .#${{ matrix.package }} -L --print-out-paths
+      run: flox build '${{ matrix.package }}' -L --print-out-paths
 
     - name: Cache the store
       run: flox nix copy --all --to "$FLOX_SUBSTITUTER" -vv
 
     - name: Test
       if: ${{ matrix.package == 'flox' }}
-      run: |
-        flox run flox-tests -- -- --flox $(realpath ./result/bin/flox)
+      run: flox run flox-tests

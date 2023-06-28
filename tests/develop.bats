@@ -26,7 +26,7 @@ load test_support.bash;
 # ---------------------------------------------------------------------------- #
 
 setup_file() {
-  common_setup;
+  common_file_setup;
   # We can't really parallelize these because we reuse the same test dirs.
   # e.g. `FLOX_TEST_HOME/develop' is used multiple times.
   export BATS_NO_PARALLELIZE_WITHIN_FILE=true;

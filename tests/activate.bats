@@ -17,14 +17,8 @@ load test_support.bash;
 
 # ---------------------------------------------------------------------------- #
 
-destroy_envs() {
-  "$FLOX_CLI" destroy -e "$TEST_ENVIRONMENT" --origin -f||:;
-}
-
 setup_file() {
-  common_setup;
-  export TEST_ENVIRONMENT='_testing_activate'
-  destroy_envs;
+  common_file_setup;
   "$FLOX_CLI" create -e "$TEST_ENVIRONMENT";
   "$FLOX_CLI" install -e "$TEST_ENVIRONMENT" hello cowsay;
 
@@ -37,11 +31,6 @@ setup_file() {
   _eval_cmd="eval \"\$( $FLOX_CLI activate -e '$TEST_ENVIRONMENT'; )\"";
   _eval_cmd="$_eval_cmd; hello|cowsay;";
   export _eval_cmd;
-}
-
-teardown_file() {
-  common_teardown;
-  destroy_envs;
 }
 
 # ---------------------------------------------------------------------------- #

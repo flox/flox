@@ -27,13 +27,8 @@ load test_support.bash;
 # ---------------------------------------------------------------------------- #
 
 setup_file() {
-  common_setup;
+  common_file_setup file;
   "$FLOX_CLI" subscribe netlify_test_ github:flox-examples/nixpkgs-netlify/main;
-}
-
-teardown_file() {
-  "$FLOX_CLI" unsubscribe netlify_test_;
-  common_teardown;
 }
 
 

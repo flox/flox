@@ -1,18 +1,31 @@
-#!/usr/bin/env bats
+#! /usr/bin/env bats
+# -*- mode: bats; -*-
+# ============================================================================ #
 #
 # flox CLI tests run in two contexts:
 # - unit tests only to be run from within package build
 # - unit and integration tests to be run from command line
-
+#
+#
+# ---------------------------------------------------------------------------- #
 
 load test_support.bash
 
+# bats file_tags=integration
+#
+
+# ---------------------------------------------------------------------------- #
+
 setup_file() {
-  common_setup;
+  common_file_setup;
+  require_expect;
+  hello_pkg_setup;
   # We can't really parallelize these because we depend on past test states.
   export BATS_NO_PARALLELIZE_WITHIN_FILE=true;
 }
 
+
+# ---------------------------------------------------------------------------- #
 
 @test "assert testing home $FLOX_TEST_HOME" {
   run sh -c "test -d $FLOX_TEST_HOME"
@@ -537,4 +550,10 @@ setup_file() {
   assert_output --partial "removed"
 }
 
+
+# ---------------------------------------------------------------------------- #
+#
+#
+#
+# ============================================================================ #
 # vim:ts=4:noet:syntax=bash

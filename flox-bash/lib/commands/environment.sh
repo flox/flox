@@ -232,6 +232,17 @@ function floxCreate() {
 	local -a invocation=("$@")
 	# set $branchName,$floxNixDir,$environment{Name,Alias,Owner,System,BaseDir,BinDir,ParentDir,MetaDir}
 	eval $(decodeEnvironment "$environment")
+	if [[ -z "${_FLOX_TEST_SUITE_MODE:-}" ]]; then
+		case "$environmentAlias" in
+			_testing_*)
+				warn "Environments named with the prefix \`_testing_*' are \
+reserved for use by the \`flox' test suite. It is not an error to create an \
+environment with this name, but doing so may cause this environment to be \
+deleted if you build \`flox' from source and/or run the test suite.";
+			;;
+			*) :; ;;
+		esac
+	fi
 
 	# Create shared clone for creating new environment.
 	local workDir
