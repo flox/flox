@@ -1,0 +1,3 @@
+{
+  environmentVariables.test = "file";
+}
