@@ -488,9 +488,9 @@ mod tests {
     use crate::providers::git::tests::mock_provider;
     use crate::providers::git::GitCommandProvider;
 
-    fn mock_environment<'flox>(
-        flox: &'flox Flox,
-    ) -> Environment<'flox, GitCommandProvider, ReadOnly<GitCommandProvider>> {
+    fn mock_environment(
+        flox: &Flox,
+    ) -> Environment<'_, GitCommandProvider, ReadOnly<GitCommandProvider>> {
         let owner = "owner";
         let name = "name";
         let system = "system";
