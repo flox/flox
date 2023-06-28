@@ -8,8 +8,6 @@
 # these can be redefined in a particular test file at any point after loading
 # and before writing test definitions.
 #
-# To customize how
-#
 # ---------------------------------------------------------------------------- #
 #
 # NOTE: This file is processed after `setup_suite.bash'.

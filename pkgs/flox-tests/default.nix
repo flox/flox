@@ -122,6 +122,7 @@ in
           '--print-output-on-failure'
           '--verbose-run'
           '--timing'
+          '-j' '4'
           "''${@:-}"
         );
         {
