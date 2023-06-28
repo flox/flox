@@ -38,9 +38,26 @@ setup_test_basename() {
 # ---------------------------------------------------------------------------- #
 
 # Generate an env name base on the test file's name, setting `TEST_ENVIRONMENT'.
+#
+# Ex: `test/foo.bats'  ->  `_testing_foo'
 setup_file_envname() {
   setup_test_basename;
   : "${TEST_ENVIRONMENT:=${FLOX_TEST_ENVNAME_PREFIX}${BATS_TEST_BASENAME}}";
+  export TEST_ENVIRONMENT;
+}
+
+
+# ---------------------------------------------------------------------------- #
+
+# Generate an env name base on the test file's name and the current test number,
+# setting `TEST_ENVIRONMENT'.
+#
+# Ex: `test/foo.bats:@test#4'  ->  `_testing_foo_4'
+setup_test_envname() {
+  setup_test_basename;
+  setup_file_envname;
+  TEST_ENVIRONMENT="$FLOX_TEST_ENVNAME_PREFIX$BATS_TEST_BASENAME";
+  TEST_ENVIRONMENT="$TEST_ENVIRONMENT$BATS_TEST_NUMBER";
   export TEST_ENVIRONMENT;
 }
 
