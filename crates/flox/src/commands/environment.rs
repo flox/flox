@@ -154,6 +154,10 @@ impl EnvironmentCommands {
                 match environment {
                     CommonEnvironment::Named(env) => {
                         if env.delete_symlinks().await? {
+                            // The flox nix instance is created with `--quiet --quiet`
+                            // because nix logs are passed to stderr unfiltered.
+                            // nix store gc logs are more useful,
+                            // thus we use 3 `--verbose` to have them appear.
                             let nix = flox.nix::<NixCommandLine>(vec![
                                 "--verbose".to_string(),
                                 "--verbose".to_string(),
