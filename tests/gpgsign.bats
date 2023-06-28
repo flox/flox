@@ -18,8 +18,9 @@ setup_file() { common_file_setup test; }
 
 setup() {
   home_setup test;
-  cp -Tpr -- "$BATS_RUN_TMPDIR/homeless-shelter/.gnupg"  \
-             "$FLOX_TEST_HOME/.gnupg";
+  # TODO: fix gpg setup and re-enable.
+  #cp -Tpr -- "$BATS_RUN_TMPDIR/homeless-shelter/.gnupg"  \
+  #           "$FLOX_TEST_HOME/.gnupg";
   cd "$FLOX_TEST_HOME"||return;
 }
 
