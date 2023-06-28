@@ -117,19 +117,19 @@ git_reals_setup() {
 flox_location_setup() {
   if [[ -n "${__FT_RAN_FLOX_LOCATION_SETUP:-}" ]]; then return 0; fi
   repo_root_setup;
-  # Force absolute paths for both FLOX_CLI and FLOX_PACKAGE
   if [[ -z "${FLOX_CLI:-}" ]]; then
     if [[ -x "${REPO_ROOT:?}/target/debug/flox" ]]; then
       FLOX_CLI="$REPO_ROOT/target/debug/flox";
     elif [[ -x "$REPO_ROOT/target/release/flox" ]]; then
       FLOX_CLI="$REPO_ROOT/target/release/flox";
     elif [[ -x "$REPO_ROOT/result/bin/flox" ]]; then
-      FLOX_CLI="$REPO_ROOT/bin/flox";
+      FLOX_CLI="$REPO_ROOT/result/bin/flox";
     elif command -v flox &> /dev/null; then
       echo "WARNING: using flox executable from PATH" >&2;
       FLOX_CLI="$( command -v flox; )";
     fi
   fi
+  # Force absolute paths for both FLOX_CLI and FLOX_PACKAGE
   FLOX_CLI="$( readlink -f "$FLOX_CLI"; )";
   export FLOX_CLI;
   export __FT_RAN_FLOX_LOCATION_SETUP=:;
