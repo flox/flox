@@ -641,7 +641,7 @@ pub mod tests {
     #[tokio::test]
     async fn create_project() {
         let temp_home = tempfile::tempdir().unwrap();
-        env::set_var("HOME", temp_home.path());
+        std::env::set_var("HOME", temp_home.path());
 
         let (flox, tempdir_handle) = flox_instance();
 
