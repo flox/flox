@@ -249,6 +249,10 @@ pub enum EnvironmentCommands {
 
         #[bpaf(long, short, argument("ENV"))]
         environment: Option<EnvironmentRef>,
+
+        /// Replace environment declaration with that in FILE
+        #[bpaf(long, short, argument("FILE"))]
+        file: Option<PathBuf>,
     },
 
     /// export declarative environment manifest to STDOUT

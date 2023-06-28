@@ -855,6 +855,21 @@ function floxEdit() {
 	local system="$1"; shift
 	local -a invocation=("$@")
 
+	local inputFile
+	while [[ "$#" -gt 0 ]]; do
+		# 'flox edit' args.
+		case "$1" in
+		-f | --file) # takes one arg
+			shift
+			inputFile="$1"; shift
+			;;
+		# Any other options are unrecognised.
+		*)
+			usage | error "unknown option '$1'"
+			;;
+		esac
+	done
+
 	# Create shared clone for importing new generation.
 	local workDir
 	workDir=$(mkTempDir)
@@ -945,7 +960,12 @@ EOF
 
 		# Edit nextGen manifest.toml file.
 		while true; do
-			$editorCommand $workDir/$nextGen/pkgs/default/flox.nix
+			if [ -n "$inputFile" ]; then
+				# cat will read from stdin if $inputFile is -
+				$_cat "$inputFile" > "$workDir/$nextGen/pkgs/default/flox.nix"
+			else
+				$editorCommand "$workDir/$nextGen/pkgs/default/flox.nix"
+			fi
 
 			[ -s $workDir/$nextGen/pkgs/default/flox.nix ] || (
 				$_rm -rf $workDir/$nextGen
