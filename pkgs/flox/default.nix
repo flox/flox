@@ -115,6 +115,8 @@
     nativeBuildInputs = [
       pkg-config # for openssl
     ];
+
+    inherit (envs) LIBSSH2_SYS_USE_PKG_CONFIG;
   };
 in
   craneLib.buildPackage ({
