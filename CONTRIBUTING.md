@@ -175,7 +175,7 @@ To run them:
 
 ```console
 $ flox develop flox --command 'cargo build';
-$ flox shell '.#flox-tests' --command flox-tests --flox ./target/debug/flox;
+$ flox run '.#flox-tests' -- --flox ./target/debug/flox;
 ```
 By default `flox` CLI is going to be picked from the environment.
 
@@ -185,8 +185,7 @@ every change. In that case run the following:
 
 ```console
 $ flox develop flox --command 'cargo build';
-$ flox shell '.#flox-tests' --command               \
-    flox-tests --flox ./target/debug/flox --watch;
+$ flox run '.#flox-tests' -- --flox ./target/debug/flox --watch;
 ```
 
 
@@ -197,8 +196,8 @@ through to the inner command:
 
 ```console
 $ flox develop flox --command 'cargo build';
-$ flox shell '.#flox-tests' --command                                        \
-    sh -c 'flox-tests --flox ./target/debug/flox -- -j 4 ./tests/run.bats';
+$ flox run '.#flox-tests' --                            \
+  --flox ./target/debug/flox -- -j 4 ./tests/run.bats;
 ```
 
 
