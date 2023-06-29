@@ -208,15 +208,23 @@ impl<'flox> Named {
         flox.cache_dir.join("meta")
     }
 
-    /// Return path to an owner in data dir, e.g. ~/.local/share/flox/environments/owner
-    fn associated_owner_dir(flox: &Flox, owner: &str) -> PathBuf {
+    /// Return path to the environment data dir for an owner,
+    /// e.g. ~/.local/share/flox/environments/owner
+    pub fn associated_owner_dir(flox: &Flox, owner: &str) -> PathBuf {
         flox.data_dir.join("environments").join(owner)
     }
 
-    pub fn owner_dir(&self, flox: &Flox) -> PathBuf {
-        Self::associated_owner_dir(flox, &self.owner)
-    }
-
+    /// Try to infer the name for the default owner.
+    ///
+    /// Installations of pacakges without an explicit owner are done for a pseudo owner
+    /// called 'local'.
+    /// Once a user is authenticated, and we know their username,
+    /// the `local/*` environments are migrated
+    /// and 'local' is linked to the the _actual_ `<user>` directory.
+    ///
+    /// This method tries to read the `local` link to infer the current owner name.
+    ///
+    /// Note: Username tracking is likely to change.
     async fn find_default_owner(flox: &Flox) -> Result<String, FindDefaultOwnerError> {
         let link_path = Self::associated_owner_dir(flox, DEFAULT_OWNER);
         debug!(
@@ -240,6 +248,7 @@ impl<'flox> Named {
         }
     }
 
+    /// Convert an environment reference to an installable
     fn get_installable(&self, flox: &Flox, system: &str, gen: &str) -> Installable {
         let flakeref = FlakeRef::GitPath(GitRef {
             // we can unwrap here since we construct and know the path
@@ -268,7 +277,6 @@ impl<'flox> Named {
 
     async fn get_current_gen<Git: GitProvider>(
         &self,
-
         flox: &'flox Flox,
     ) -> Result<String, NamedGetCurrentGenError<Git>> {
         let floxmeta = Floxmeta::<Git, ReadOnly<Git>>::get_floxmeta(flox, &self.owner)

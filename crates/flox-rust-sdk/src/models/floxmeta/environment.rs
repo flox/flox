@@ -38,24 +38,42 @@ pub struct EnvBranch {
     hash: String,
 }
 
+/// flox environment metadata for managed environments
+///
+/// Managed environments support rolling back to previous generations.
+/// Generations are defined immutable copy-on-write folders.
+/// Rollbacks and asssociated [GenerationMetadata] is tracked per environemnt
+/// in a metadata file at the root of the environment branch.
 #[derive(Serialize, Deserialize, Debug, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct Metadata {
     /// None means the environment has been created but does not yet have any
     /// generations
     pub current_gen: Option<String>,
+    /// Metadata for all generations of the environment.
+    /// Entries in this map must match up 1-to-1 with the generation folders
+    /// in the environment branch.
     generations: BTreeMap<String, GenerationMetadata>,
+    /// Schema version of the metadata file, not yet utilized
     #[serde(default)]
     version: u32,
 }
 
+/// Metadata for a single generation of an environment
 #[derive(Clone, Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct GenerationMetadata {
+    /// unix timestamp of the creation time if this generation
     created: u64,
+    /// unix timestamp of the last activation.
+    /// taken into account during garbage collection
     last_active: u64,
+    /// log message(s) describing the change from the previous generation
     log_message: Vec<String>,
+    /// store path of the built generation
     path: PathBuf,
+    /// Schema version of the metadata file, not yet utilized
+    /// TODO: equivalent to metadata.json#version?
     #[serde(default)]
     version: u32,
 }
@@ -213,16 +231,18 @@ impl<'flox, Git: GitProvider, A: GitAccess<Git>> Floxmeta<'flox, Git, A> {
 
 /// Implementations for an environment
 impl<'flox, Git: GitProvider> Environment<'flox, Git, ReadOnly<Git>> {
+    /// The name of the environment
     pub fn name(&self) -> Cow<str> {
         Cow::from(&self.name)
     }
 
+    /// The platform this environment can be activated on
     pub fn system(&self) -> Cow<str> {
         Cow::from(&self.system)
     }
 
-    pub fn systematized_name(&self) -> String {
-        format!("{0}.{1}", self.system, self.name)
+    pub fn owner(&self) -> Cow<str> {
+        Cow::from(&self.floxmeta.owner)
     }
 
     pub fn remote(&self) -> Cow<Option<EnvBranch>> {
@@ -233,20 +253,20 @@ impl<'flox, Git: GitProvider> Environment<'flox, Git, ReadOnly<Git>> {
         Cow::Borrowed(&self.local)
     }
 
-    pub fn owner(&self) -> &str {
-        self.floxmeta.owner()
-    }
-
-    fn as_env_ref(&self) -> Named {
+    pub fn as_env_ref(&self) -> Named {
         Named {
-            name: self.name().to_string(),
-            owner: self.owner().to_string(),
+            name: self.name.to_string(),
+            owner: self.floxmeta.owner.to_string(),
         }
     }
 
     fn symlink_path(&self, generation: &str) -> PathBuf {
-        let owner_dir = self.as_env_ref().owner_dir(self.floxmeta.flox);
-        owner_dir.join(format!("{}-{generation}-link", self.systematized_name()))
+        let owner_dir = Named::associated_owner_dir(self.floxmeta.flox, &self.floxmeta.owner);
+        owner_dir.join(format!(
+            "{system}.{name}-{generation}-link",
+            system = self.system,
+            name = self.name
+        ))
     }
 
     pub async fn metadata(&self) -> Result<Metadata, MetadataError<Git>> {
