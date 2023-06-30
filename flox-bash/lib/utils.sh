@@ -113,7 +113,7 @@ function trace() {
 	exec 9>/dev/null
 	local BASH_XTRACEFD=9
 	[ ${debug:-0} -gt 0 ] || return 0
-	echo -e "trace:${filecolor}${BASH_SOURCE[2]}:${BASH_LINENO[1]}${colorReset} ${funccolor}${FUNCNAME[1]}${colorReset}( ${argscolor}"$(pprint "$@")"${colorReset} )" 1>&2
+	echo -e "trace:${filecolor}${BASH_SOURCE[2]}:${BASH_LINENO[1]}${colorReset} ${funccolor}${FUNCNAME[1]}${colorReset}( ${argscolor}$(pprint "$@")${colorReset} )" 1>&2
 }
 
 # Track exported environment variables for use in verbose output.
