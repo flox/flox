@@ -341,17 +341,14 @@ setup_file() {
   aarch64-darwin)
     RG_PATH="/nix/store/ix73alhygpflvq50fimdgwl1x2f8yv7y-ripgrep-13.0.0/bin/rg"
     CURL_PATH="/nix/store/8nv1g4ymxi2f96pbl1jy9h625v2risd8-curl-7.86.0-bin/bin/curl"
-    CURL_PATH_2="/nix/store/8nv1g4ymxi2f96pbl1jy9h625v2risd8-curl-7.86.0-bin/bin/curl"
     ;;
   aarch64-linux)
     RG_PATH="/nix/store/zcq437znz7080wc7gbhijdm5x66qk5lj-ripgrep-13.0.0/bin/rg"
     CURL_PATH="/nix/store/0b3a9wbhss293wd8qv6q6gfh2wgk34c6-curl-7.86.0-bin/bin/curl"
-    CURL_PATH_2="/nix/store/0b3a9wbhss293wd8qv6q6gfh2wgk34c6-curl-7.86.0-bin/bin/curl"
     ;;
   x86_64-linux)
     RG_PATH="/nix/store/cv1ska2lnafi6l650d4943bm0r3qvixy-ripgrep-13.0.0/bin/rg"
-    CURL_PATH="/nix/store/b7xwyhb5zy4x26jvk9vl84ihb7gcijrn-curl-7.86.0/bin/curl"
-    CURL_PATH_2="/nix/store/m2h1p50yvcq5j9b3hkrwqnmrr9pbkzpz-curl-7.86.0-bin/bin/curl"
+    CURL_PATH="/nix/store/m2h1p50yvcq5j9b3hkrwqnmrr9pbkzpz-curl-7.86.0-bin/bin/curl"
     ;;
   *)
     echo "unsupported system for upgrade test"
@@ -366,31 +363,28 @@ setup_file() {
   # Note the use of --dereference to copy flake.{nix,lock} as files.
   run sh -c "tar -cf - --dereference --mode u+w -C $TESTS_DIR/upgrade/$NIX_SYSTEM . | $FLOX_CLI import -e _upgrade_testing_"
   assert_success
-  run $FLOX_CLI activate -e _upgrade_testing_ -- sh -c 'readlink $(which rg)'
+  run $FLOX_CLI activate -e _upgrade_testing_ -- sh -xc 'realpath $(which rg)'
   assert_output --partial "$RG_PATH"
-  run $FLOX_CLI activate -e _upgrade_testing_ -- sh -c 'readlink $(which curl)'
+  run $FLOX_CLI activate -e _upgrade_testing_ -- sh -xc 'realpath $(which curl)'
   assert_output --partial "$CURL_PATH"
 
   # upgrade ripgrep but not curl
   run $FLOX_CLI upgrade -e _upgrade_testing_ ripgrep
   assert_success
   assert_output --partial "Environment '_upgrade_testing_' upgraded."
-  run $FLOX_CLI activate -e _upgrade_testing_ -- sh -c 'readlink $(which rg)'
+  run $FLOX_CLI activate -e _upgrade_testing_ -- sh -xc 'realpath $(which rg)'
   ! assert_output --partial "$RG_PATH"
-  run $FLOX_CLI activate -e _upgrade_testing_ -- sh -c 'readlink $(which curl)'
-  # Even though it hasn't been upgraded, the path to curl can still change due
-  # to how it's wrapped by buildenv
-  assert_output --partial "$CURL_PATH_2"
+  run $FLOX_CLI activate -e _upgrade_testing_ -- sh -xc 'realpath $(which curl)'
+  assert_output --partial "$CURL_PATH"
 
   # upgrade everything
-  run $FLOX_CLI upgrade -e _upgrade_testing_
+  run $FLOX_CLI --debug upgrade -e _upgrade_testing_
   assert_success
   assert_output --partial "Environment '_upgrade_testing_' upgraded."
-  run $FLOX_CLI activate -e _upgrade_testing_ -- sh -c 'readlink $(which rg)'
+  run $FLOX_CLI activate -e _upgrade_testing_ -- sh -xc 'realpath $(which rg)'
   ! assert_output --partial "$RG_PATH"
-  run $FLOX_CLI activate -e _upgrade_testing_ -- sh -c 'readlink $(which curl)'
+  run $FLOX_CLI activate -e _upgrade_testing_ -- sh -xc 'realpath $(which curl)'
   ! assert_output --partial "$CURL_PATH"
-  ! assert_output --partial "$CURL_PATH_2"
 
   # teardown
   run $FLOX_CLI unsubscribe nixpkgs-flox-upgrade-test
