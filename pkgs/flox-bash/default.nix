@@ -51,8 +51,7 @@
         ./nix-patches/update-profile-list-warning.patch
         ./nix-patches/multiple-github-tokens.2.13.2.patch
         ./nix-patches/curl_flox_version.patch
-        ./nix-patches/no-default-prefixes-hash.patch
-        ./nix-patches/subflake-outPaths.patch
+        ./nix-patches/no-default-prefixes-hash.2.15.1.patch
       ];
   });
 
