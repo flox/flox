@@ -161,6 +161,10 @@ activate | history | create | install | list | remove | rollback | \
 			export FLOX_SYSTEM="$1"
 			shift
 			;;
+		--)
+			args+=("$@")
+			break
+			;;
 		*)
 			args+=("$1")
 			shift
