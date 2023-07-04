@@ -61,8 +61,6 @@ function floxList() {
 	parseFloxFlakeArgs "$@" && set -- "${_cmdArgs[@]}"
 	# set $branchName,$floxNixDir,$environment{Name,Alias,Owner,System,BaseDir,BinDir,ParentDir,MetaDir}
 	eval $(decodeEnvironment "$environment")
-	parseNixArgs "$@" && set -- "${_cmdArgs[@]}"
-	parseFloxFlakeArgs "$@" && set -- "${_cmdArgs[@]}"
 	local -a invocation=("$@")
 
 	local -a listArgs=()
