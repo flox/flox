@@ -470,12 +470,14 @@ function floxPublish() {
 	declare -a outpaths
 	mapfile -t outpaths < <(
 		floxBuild "${_nixArgs[@]}" --no-link --print-out-paths  \
-		          "$canonicalFlakeURL" "${buildArgs[@]}"
+		          "$canonicalFlakeURL^"'*' "${buildArgs[@]}"
     )
 	if [[ "${#outpaths[@]}" -le 0 ]]; then
 		error "could not build $canonicalFlakeURL" < /dev/null
 	fi
 
+	# TODO Make content addressable (uncomment "XXX" lines below).
+	if false; then # XXX
 	declare -a ca_out
 	mapfile -t ca_out < <(
 		$invoke_nix "${_nixArgs[@]}" store make-content-addressed             \
@@ -486,6 +488,7 @@ function floxPublish() {
 		warn "Replacing with content-addressable package: $ca_out"
 		outpaths=( "${ca_out[@]}" )
 	fi
+	fi # /XXX
 
 	# Sign the package outpaths (optional). Sign by default?
 	if [[ -z "${keyFile:-}" ]] && [[ -f "$FLOX_CONFIG_HOME/secret-key" ]]; then
