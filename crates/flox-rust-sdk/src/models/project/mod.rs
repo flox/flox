@@ -590,38 +590,10 @@ where
 }
 
 #[cfg(test)]
-mod tests {
-    use std::env;
-
+pub mod tests {
     use super::*;
-    use crate::prelude::ChannelRegistry;
+    use crate::flox::tests::flox_instance;
     use crate::providers::git::GitCommandProvider;
-
-    fn flox_instance() -> (Flox, TempDir) {
-        let tempdir_handle = tempfile::tempdir_in(std::env::temp_dir()).unwrap();
-
-        let cache_dir = tempdir_handle.path().join("caches");
-        let temp_dir = tempdir_handle.path().join("temp");
-        let config_dir = tempdir_handle.path().join("config");
-
-        std::fs::create_dir_all(&cache_dir).unwrap();
-        std::fs::create_dir_all(&temp_dir).unwrap();
-        std::fs::create_dir_all(&config_dir).unwrap();
-
-        let mut channels = ChannelRegistry::default();
-        channels.register_channel("flox", "github:flox/floxpkgs/master".parse().unwrap());
-
-        let flox = Flox {
-            system: "aarch64-darwin".to_string(),
-            cache_dir,
-            temp_dir,
-            config_dir,
-            channels,
-            ..Default::default()
-        };
-
-        (flox, tempdir_handle)
-    }
 
     #[tokio::test]
     async fn fail_without_git() {
@@ -663,7 +635,7 @@ mod tests {
     #[tokio::test]
     async fn create_project() {
         let temp_home = tempfile::tempdir().unwrap();
-        env::set_var("HOME", temp_home.path());
+        std::env::set_var("HOME", temp_home.path());
 
         let (flox, tempdir_handle) = flox_instance();
 

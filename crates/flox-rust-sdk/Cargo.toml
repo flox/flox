@@ -30,6 +30,8 @@ git2 = "0.16.1"
 # async-recursion = "1.0"
 walkdir = "2"
 indoc = "2.0.1"
+itertools = "0.10.5"
+chrono = "0.4.24"
 
 
 [dev-dependencies]
