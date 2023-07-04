@@ -341,7 +341,7 @@ function floxPublish() {
 
 	# The packageAttrPath as constructed by Hydra will be of the form
 	# <flakeRef>#hydraJobsStable.<pname>.<system>. Take this opportunity
-	# to extract the pname.
+	# to extract the pname. XXX Still needed?
 	case "$packageAttrPath" in
 	hydraJobsStable.*.$publishSystem)
 		FLOX_STABILITY=stable
@@ -375,14 +375,14 @@ function floxPublish() {
 			esac
 		fi
 		while true; do
-			channelRepository=$(promptInput \
-				"Enter git URL (required)" \
-				"channel repository:" \
-				"$channelRepository")
 			if ensureGHRepoExists "$channelRepository" private "https://github.com/flox/floxpkgs-template.git"; then
 				[ -z "$channelRepository" ] || break
 			fi
 			warn "please enter a valid URL with which to 'flox subscribe'"
+			channelRepository=$(promptInput \
+				"Enter git URL (required)" \
+				"channel repository:" \
+				"$channelRepository")
 		done
 	fi
 	warn "channel repository: $channelRepository"
@@ -409,16 +409,13 @@ function floxPublish() {
 	if [[ -z "${downloadFrom+1}" ]]; then
 		# Load previous answer (if applicable).
 		downloadFrom="$(registry "$gitCloneRegistry" 1 get downloadFrom || :)"
-		if [[ -z "$downloadFrom" ]] && [[ -n "$uploadTo" ]]; then
+		if [[ -z "$downloadFrom" ]] && [[ "${interactive:-0}" -eq 1 ]]; then
 			# Note - the following line is not a mistake; if $downloadFrom is not
 			# defined then we should use $uploadTo as the default suggested value.
-			downloadFrom="$uploadTo"
-		fi
-		if [[ -z "$downloadFrom" ]] && [[ "${interactive:-0}" -eq 1 ]]; then
 			downloadFrom="$(promptInput              \
 				"Enter binary cache URL (optional)"  \
 				"binary cache for download:"         \
-				"$downloadFrom")"
+				"$uploadTo")"
 		fi
 	fi
 	# Set empty fallback
@@ -427,25 +424,18 @@ function floxPublish() {
 
 	# Construct string encapsulating entire command invocation.
 	local entirePublishCommand
-	entirePublishCommand="flox publish -A '$packageAttrPath'"
-	entirePublishCommand+=" --build-repo '$buildRepository'"
-	entirePublishCommand+=" --channel-repo '$channelRepository'"
-
-	if [[ -n "$uploadTo" ]]; then
-		entirePublishCommand+=" --upload-to '$uploadTo'"
-	fi
-
-	if [[ -n "$downloadFrom" ]]; then
-		entirePublishCommand+=" --download-from '$downloadFrom'"
-	fi
+	entirePublishCommand="$(printf \
+		"flox publish -A %s --build-repo %s --channel-repo %s" \
+		"$packageAttrPath" "$buildRepository" "$channelRepository")"
+	[ -z "$uploadTo" ] || entirePublishCommand="$(printf "%s --upload-to %s" "$entirePublishCommand" "$uploadTo")"
+	[ -z "$downloadFrom" ] || entirePublishCommand="$(printf "%s --download-from %s" "$entirePublishCommand" "$downloadFrom")"
 
 	# Only hint and save responses in interactive mode.
 	if [[ "${interactive:-0}" -eq 1 ]]; then
 		# Input parsing over, print informational hint in the event that we
 		# had to ask any questions.
 		if [[ "${educatePublishCalled:-0}" -eq 1 ]]; then
-			warn "HINT: avoid having to answer these questions next time with:"
-			echo '{{ Color "'$LIGHTPEACH256'" "'$DARKBLUE256'" "$ '$entirePublishCommand'" }}' | \
+			echo '{{ Color "'$LIGHTPEACH256'" "'$DARKBLUE256'" "$ '"$entirePublishCommand"'" }}' | \
 				$_gum format -t template 1>&2
 		fi
 
@@ -459,7 +449,7 @@ function floxPublish() {
 			registry "$gitCloneRegistry" 1 set downloadFrom "$downloadFrom"
 		fi
 	else
-		echo '{{ Color "'$LIGHTPEACH256'" "'$DARKBLUE256'" "'$entirePublishCommand'" }}' | \
+		echo '{{ Color "'$LIGHTPEACH256'" "'$DARKBLUE256'" "'"$entirePublishCommand"'" }}' | \
 			$_gum format -t template 1>&2
 	fi
 
@@ -605,8 +595,8 @@ function floxPublish() {
 				while true; do
 					[ "$pushAttempt" -lt 3 ] ||
 						error "could not push to $channelRepository after $pushAttempt attempts" </dev/null
-					$_git -C "$gitClone" pull --rebase
-					if $_git -C "$gitClone" push; then
+					githubHelperGit -C "$gitClone" pull --rebase
+					if githubHelperGit -C "$gitClone" push; then
 						# Job done.
 						break
 					else
