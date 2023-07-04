@@ -223,6 +223,8 @@ function floxPublish() {
 		cloneRemote="$($_git remote get-url ${upstreamRemote:-origin})"
 		cloneBranch="$($_git rev-parse --abbrev-ref --symbolic-full-name @)"
 		cloneRev="$($_git rev-parse @)"
+		# Create the project registry before proceeding.
+		initProjectRegistry
 	fi
 
 	# The --build-repo argument specifies the repository of the flake used
@@ -235,8 +237,6 @@ function floxPublish() {
 			# Derive the default flakeRef from the current git clone.
 			if [ "$packageFlakeRef" = "." ]; then
 				buildRepository="$cloneRemote"
-				# Create the project registry before proceeding.
-				initProjectRegistry
 			else
 				buildRepository="$packageFlakeRef"
 			fi
