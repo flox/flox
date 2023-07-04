@@ -53,11 +53,11 @@ function floxInit() {
 	# Extract flox _init template if it hasn't already.
 	[ -f flox.nix ] || {
 		# Start by extracting "_init" template to floxify project.
-		$invoke_nix flake init --template "flox#templates._init" "$@"
+		$invoke_nix flake init --template "flox#templates._init" "${_floxFlakeArgs[@]}" "$@"
 	}
 
 	# Extract requested template.
-	$invoke_nix "${_nixArgs[@]}" flake init --template "flox#templates.$template" "$@"
+	$invoke_nix "${_nixArgs[@]}" flake init --template "flox#templates.$template" "${_floxFlakeArgs[@]}" "$@"
 	if [ -f pkgs/default.nix ]; then
 		$invoke_mkdir -p "pkgs/$pname"
 		$invoke_git mv pkgs/default.nix "pkgs/$pname/default.nix"
@@ -76,7 +76,7 @@ function floxBuild() {
 	parseNixArgs "$@" && set -- "${_cmdArgs[@]}"
 	parseFloxFlakeArgs "$@" && set -- "${_cmdArgs[@]}"
 
-	local -a buildArgs=()
+	local -a buildArgs=( "${_floxFlakeArgs[@]}" )
 	local -a installables=()
 	while test $# -gt 0; do
 		case "$1" in
@@ -132,7 +132,7 @@ function floxEval() {
 	parseNixArgs "$@" && set -- "${_cmdArgs[@]}"
 	parseFloxFlakeArgs "$@" && set -- "${_cmdArgs[@]}"
 
-	local -a evalArgs=()
+	local -a evalArgs=( "${_floxFlakeArgs[@]}" )
 	local -a installables=()
 	while test $# -gt 0; do
 		case "$1" in
@@ -248,7 +248,7 @@ function floxDevelop() {
 	parseNixArgs "$@" && set -- "${_cmdArgs[@]}"
 	parseFloxFlakeArgs "$@" && set -- "${_cmdArgs[@]}"
 
-	local -a developArgs=()
+	local -a developArgs=( "${_floxFlakeArgs[@]}" )
 	local -a installables=()
 	local -a remainingArgs=()
 	while test $# -gt 0; do
@@ -419,7 +419,7 @@ function floxRun() {
 	parseNixArgs "$@" && set -- "${_cmdArgs[@]}"
 	parseFloxFlakeArgs "$@" && set -- "${_cmdArgs[@]}"
 
-	local -a runArgs=()
+	local -a runArgs=( "${_floxFlakeArgs[@]}" )
 	local -a installables=()
 	local -a remainingArgs=()
 	while test $# -gt 0; do
@@ -487,7 +487,7 @@ function floxShell() {
 	parseNixArgs "$@" && set -- "${_cmdArgs[@]}"
 	parseFloxFlakeArgs "$@" && set -- "${_cmdArgs[@]}"
 
-	local -a shellArgs=()
+	local -a shellArgs=( "${_floxFlakeArgs[@]}" )
 	local -a installables=()
 	local -a remainingArgs=()
 	while test $# -gt 0; do
