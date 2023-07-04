@@ -89,13 +89,13 @@ function floxBuild() {
 		# All remaining options are `nix build` args.
 
 		# Options taking two args.
-		-o|--profile|--override-flake|--override-input)
+		-o|--profile)
 			buildArgs+=("$1"); shift
 			buildArgs+=("$1"); shift
 			buildArgs+=("$1"); shift
 			;;
 		# Options taking one arg.
-		--out-link|--eval-store|--include|-I|--inputs-from|--update-input|--expr|--file|-f)
+		--out-link)
 			buildArgs+=("$1"); shift
 			buildArgs+=("$1"); shift
 			;;
@@ -262,13 +262,13 @@ function floxDevelop() {
 		# All remaining options are `nix build` args.
 
 		# Options taking two args.
-		--redirect|--arg|--argstr|--override-flake|--override-input)
+		--redirect)
 			developArgs+=("$1"); shift
 			developArgs+=("$1"); shift
 			developArgs+=("$1"); shift
 			;;
 		# Options taking one arg.
-		--keep|-k|--phase|--profile|--unset|-u|--eval-store|--include|-I|--inputs-from|--update-input|--expr|--file|-f)
+		--keep|-k|--phase|--profile|--unset|-u)
 			developArgs+=("$1"); shift
 			developArgs+=("$1"); shift
 			;;
@@ -432,17 +432,6 @@ function floxRun() {
 
 		# All remaining options are `nix run` args.
 
-		# Options taking two args.
-		--arg|--argstr|--override-flake|--override-input)
-			runArgs+=("$1"); shift
-			runArgs+=("$1"); shift
-			runArgs+=("$1"); shift
-			;;
-		# Options taking one arg.
-		--eval-store|--include|-I|--inputs-from|--update-input|--expr|--file|-f)
-			runArgs+=("$1"); shift
-			runArgs+=("$1"); shift
-			;;
 		# Options that consume remaining arguments
 		--)
 			remainingArgs+=("$@")
@@ -500,14 +489,8 @@ function floxShell() {
 
 		# All remaining options are `nix run` args.
 
-		# Options taking two args.
-		--arg|--argstr|--override-flake|--override-input)
-			shellArgs+=("$1"); shift
-			shellArgs+=("$1"); shift
-			shellArgs+=("$1"); shift
-			;;
 		# Options taking one arg.
-		--keep|-k|--unset|-u|--eval-store|--include|-I|--inputs-from|--update-input|--expr|--file|-f)
+		--keep|-k|--unset|-u)
 			shellArgs+=("$1"); shift
 			shellArgs+=("$1"); shift
 			;;
