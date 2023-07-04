@@ -79,10 +79,11 @@ _usage_options["publish"]="[--build-repo <URL>] [--channel-repo <URL>] \\
 function floxPublish() {
 	trace "$@"
 	parseNixArgs "$@" && set -- "${_cmdArgs[@]}"
+	parseFloxFlakeArgs "$@" && set -- "${_cmdArgs[@]}"
 
 	# Publish takes the same args as build, plus a few more.
 	# Split out the publish args from the build args.
-	local -a buildArgs=()
+	local -a buildArgs=( "${_floxFlakeArgs[@]}" )
 	local -a installables
 	local packageAttrPath
 	local packageFlakeRef
@@ -149,13 +150,8 @@ function floxPublish() {
 		# All remaining options are `nix build` args.
 
 		# Options taking two args.
-		--out-link|-o|--profile|--override-flake|--override-input)
+		--out-link|-o|--profile)
 			buildArgs+=("$1"); shift
-			buildArgs+=("$1"); shift
-			buildArgs+=("$1"); shift
-			;;
-		# Options taking one arg.
-		--eval-store|--include|-I|--inputs-from|--update-input|--expr|--file|-f)
 			buildArgs+=("$1"); shift
 			buildArgs+=("$1"); shift
 			;;
@@ -223,6 +219,8 @@ function floxPublish() {
 		cloneRemote="$($_git remote get-url ${upstreamRemote:-origin})"
 		cloneBranch="$($_git rev-parse --abbrev-ref --symbolic-full-name @)"
 		cloneRev="$($_git rev-parse @)"
+		# Create the project registry before proceeding.
+		initProjectRegistry
 	fi
 
 	# The --build-repo argument specifies the repository of the flake used
@@ -235,23 +233,20 @@ function floxPublish() {
 			# Derive the default flakeRef from the current git clone.
 			if [ "$packageFlakeRef" = "." ]; then
 				buildRepository="$cloneRemote"
-				# Create the project registry before proceeding.
-				initProjectRegistry
 			else
 				buildRepository="$packageFlakeRef"
 			fi
 		fi
 		while true; do
+			if checkGitRepoExists "$buildRepository"; then
+				[ -z "$buildRepository" ] || break
+			fi
+			warn "repository '$buildRepository' does not exist"
+			warn "please enter a valid URL from which to 'flox build' a package"
 			buildRepository=$(promptInput \
 				"Enter git URL (required)" \
 				"build repository:" \
 				"$buildRepository")
-			if checkGitRepoExists "$buildRepository"; then
-				[ -z "$buildRepository" ] || break
-			else
-				warn "repository '$buildRepository' does not exist"
-			fi
-			warn "please enter a valid URL from which to 'flox build' a package"
 		done
 	fi
 	warn "build repository: $buildRepository"
@@ -264,37 +259,58 @@ function floxPublish() {
 		canonicalFlakeRef="${buildRepository}"
 		;;
 	*)
+		local buildRepositoryBase headref
+		if [[ "$buildRepository" =~ '?'*ref= ]]; then
+		    buildRepositoryBase="${buildRepository/\?*/}"
+			headref="${buildRepository/*\?ref=/}"
+			headref="${headref/&*/}"
+		else
+		    buildRepositoryBase="$buildRepository"
+			headref="HEAD"
+		fi
+
 		# Figure out the HEAD version to derive canonical flake URL.
 		local upstreamRev
-		upstreamRev=$(githubHelperGit ls-remote "$buildRepository" HEAD)
+		upstreamRev=$(githubHelperGit ls-remote "$buildRepositoryBase" "$headref")
 		# Keep only first 40 characters to remove the extra spaces and "HEAD" label.
 		upstreamRev=${upstreamRev:0:40}
-		canonicalFlakeRef="${buildRepository}?rev=${upstreamRev}"
 		# If we did derive the buildRepository from a local git clone, confirm
 		# that it is not out of sync with upstream.
-		if [ "$buildRepository" = "$cloneRemote" ]; then
+		if [ "$buildRepositoryBase" = "$cloneRemote" ]; then
 			if ! $_git diff --exit-code --quiet; then
-				warn "Warning: uncommitted changes not present in upstream rev ${upstreamRev:0:7}"
-				if ! $invoke_gum confirm "proceed to publish revision ${upstreamRev:0:7}?"; then
-					warn "aborting ..."
-					exit 1
-				fi
+				warn "Warning: uncommitted changes detected"
+				error "commit all changes before publishing" < /dev/null
 			fi
 			if ! $_git diff --cached --exit-code --quiet; then
 				warn "Warning: staged commits not present in upstream rev ${upstreamRev:0:7}"
-				if ! $invoke_gum confirm "proceed to publish revision ${upstreamRev:0:7}?"; then
+				if [[ "${interactive:-0}" -eq 1 ]]; then
+					if ! $invoke_gum confirm "proceed to publish revision ${upstreamRev:0:7}?"; then
+						warn "aborting ..."
+						exit 1
+					fi
+				else
 					warn "aborting ..."
 					exit 1
 				fi
 			fi
 			if [ "$cloneRev" != "$upstreamRev" ]; then
 				warn "Warning: local clone (${cloneRev:0:7}) out of sync with upstream (${upstreamRev:0:7})"
-				if ! $invoke_gum confirm "proceed to publish revision ${upstreamRev:0:7}?"; then
+				if [[ "${interactive:-0}" -eq 1 ]]; then
+					if $invoke_gum confirm "push revision ${cloneRev:0:7} upstream and publish?"; then
+						warn "+ $_git push"
+						$_git push
+						upstreamRev="$cloneRev"
+					else
+						warn "aborting ..."
+						exit 1
+					fi
+				else
 					warn "aborting ..."
 					exit 1
 				fi
 			fi
 		fi
+		canonicalFlakeRef="${buildRepositoryBase}?rev=${upstreamRev}"
 		;;
 	esac
 
@@ -321,7 +337,7 @@ function floxPublish() {
 
 	# The packageAttrPath as constructed by Hydra will be of the form
 	# <flakeRef>#hydraJobsStable.<pname>.<system>. Take this opportunity
-	# to extract the pname.
+	# to extract the pname. XXX Still needed?
 	case "$packageAttrPath" in
 	hydraJobsStable.*.$publishSystem)
 		FLOX_STABILITY=stable
@@ -355,14 +371,14 @@ function floxPublish() {
 			esac
 		fi
 		while true; do
-			channelRepository=$(promptInput \
-				"Enter git URL (required)" \
-				"channel repository:" \
-				"$channelRepository")
 			if ensureGHRepoExists "$channelRepository" private "https://github.com/flox/floxpkgs-template.git"; then
 				[ -z "$channelRepository" ] || break
 			fi
 			warn "please enter a valid URL with which to 'flox subscribe'"
+			channelRepository=$(promptInput \
+				"Enter git URL (required)" \
+				"channel repository:" \
+				"$channelRepository")
 		done
 	fi
 	warn "channel repository: $channelRepository"
@@ -370,53 +386,58 @@ function floxPublish() {
 	# Prompt for location(s) TO and FROM which we can (optionally) copy the
 	# built package store path(s). By default these will refer to the same
 	# URL, but can be overridden with --download-from.
-	if [ -z "$uploadTo" ]; then
+	if [[ -z "${uploadTo}" ]]; then
 		doEducatePublish
 		# Load previous answer (if applicable).
-		uploadTo=$(registry "$gitCloneRegistry" 1 get uploadTo || :)
-		# XXX TODO: find a way to remember previous binary cache locations
-		uploadTo=$(promptInput \
-			"Enter binary cache URL (leave blank to skip upload)" \
-			"binary cache for upload:" \
-			"$uploadTo")
+		uploadTo="$(registry "$gitCloneRegistry" 1 get uploadTo || :)"
+		if [[ -z "$uploadTo" ]] && [[ "${interactive:-0}" -eq 1 ]]; then
+			# XXX TODO: find a way to remember previous binary cache locations
+			uploadTo="$(promptInput                                    \
+				"Enter binary cache URL (leave blank to skip upload)"  \
+				"binary cache for upload:"                             \
+				"$uploadTo")"
+		fi
 	fi
-	[ -z "$uploadTo" ] || warn "upload to: $uploadTo"
-	if [ -z "$downloadFrom" ]; then
+	# Set empty fallback
+	: "${uploadTo:=}"
+	[[ -z "${uploadTo:-}" ]] || warn "upload to: $uploadTo"
+
+	if [[ -z "${downloadFrom}" ]]; then
 		# Load previous answer (if applicable).
-		downloadFrom=$(registry "$gitCloneRegistry" 1 get downloadFrom || :)
-		if [ -z "$downloadFrom" ]; then
+		downloadFrom="$(registry "$gitCloneRegistry" 1 get downloadFrom || :)"
+		if [[ -z "$downloadFrom" ]] && [[ "${interactive:-0}" -eq 1 ]]; then
 			# Note - the following line is not a mistake; if $downloadFrom is not
 			# defined then we should use $uploadTo as the default suggested value.
-			downloadFrom=$uploadTo
+			downloadFrom="$(promptInput              \
+				"Enter binary cache URL (optional)"  \
+				"binary cache for download:"         \
+				"$uploadTo")"
 		fi
-		downloadFrom=$(promptInput \
-			"Enter binary cache URL (optional)" \
-			"binary cache for download:" \
-			"$downloadFrom")
 	fi
-	[ -z "$downloadFrom" ] || warn "download from: $downloadFrom"
+	# Set empty fallback
+	: "${downloadFrom:=}"
+	[[ -z "$downloadFrom" ]] || warn "download from: $downloadFrom"
 
 	# Construct string encapsulating entire command invocation.
 	local entirePublishCommand
-	entirePublishCommand=$(printf \
+	entirePublishCommand="$(printf \
 		"flox publish -A %s --build-repo %s --channel-repo %s" \
-		"$packageAttrPath" "$buildRepository" "$channelRepository")
-	[ -z "$uploadTo" ] || entirePublishCommand=$(printf "%s --upload-to %s" "$entirePublishCommand" "$uploadTo")
-	[ -z "$downloadFrom" ] || entirePublishCommand=$(printf "%s --download-from %s" "$entirePublishCommand" "$downloadFrom")
+		"$packageAttrPath" "$buildRepository" "$channelRepository")"
+	[ -z "$uploadTo" ] || entirePublishCommand="$(printf "%s --upload-to %s" "$entirePublishCommand" "$uploadTo")"
+	[ -z "$downloadFrom" ] || entirePublishCommand="$(printf "%s --download-from %s" "$entirePublishCommand" "$downloadFrom")"
 
 	# Only hint and save responses in interactive mode.
-	if [ $interactive -eq 1 ]; then
+	if [[ "${interactive:-0}" -eq 1 ]]; then
 		# Input parsing over, print informational hint in the event that we
 		# had to ask any questions.
-		if [ $educatePublishCalled -eq 1 ]; then
-			warn "HINT: avoid having to answer these questions next time with:"
-			echo '{{ Color "'$LIGHTPEACH256'" "'$DARKBLUE256'" "$ '$entirePublishCommand'" }}' | \
+		if [[ "${educatePublishCalled:-0}" -eq 1 ]]; then
+			echo '{{ Color "'$LIGHTPEACH256'" "'$DARKBLUE256'" "$ '"$entirePublishCommand"'" }}' | \
 				$_gum format -t template 1>&2
 		fi
 
 		# Save answers to the project registry so they can serve as
 		# defaults for next time.
-		if [ -n "$gitCloneRegistry" ]; then
+		if [[ -n "${gitCloneRegistry:-}" ]]; then
 			registry "$gitCloneRegistry" 1 set buildRepository "$buildRepository"
 			registry "$gitCloneRegistry" 1 set packageAttrPath "$packageAttrPath"
 			registry "$gitCloneRegistry" 1 set channelRepository "$channelRepository"
@@ -424,43 +445,55 @@ function floxPublish() {
 			registry "$gitCloneRegistry" 1 set downloadFrom "$downloadFrom"
 		fi
 	else
-		echo '{{ Color "'$LIGHTPEACH256'" "'$DARKBLUE256'" "'$entirePublishCommand'" }}' | \
+		echo '{{ Color "'$LIGHTPEACH256'" "'$DARKBLUE256'" "'"$entirePublishCommand"'" }}' | \
 			$_gum format -t template 1>&2
 	fi
 
 	# Start by making sure we can clone the channel repository to
 	# which we want to publish.
-	if [ "$channelRepository" = "-" ]; then
+	if [[ "$channelRepository" = "-" ]]; then
 		gitClone="-"
-	elif [ -d "$channelRepository" ]; then
+	elif [[ -d "$channelRepository" ]]; then
 		gitClone="$channelRepository"
 	else
-		gitClone=$tmpdir
+		gitClone="$tmpdir"
 		warn "Cloning $channelRepository ..."
 		$invoke_gh repo clone "$channelRepository" "$gitClone"
 	fi
 
 	# Then build package.
 	warn "Building $packageAttrPath ..."
-	local outpaths
-	outpaths=$(floxBuild "${_nixArgs[@]}" --no-link --print-out-paths "$canonicalFlakeURL" "${buildArgs[@]}")
-	[ -n "$outpaths" ] || error "could not build $canonicalFlakeURL" < /dev/null
+	declare -a outpaths
+	mapfile -t outpaths < <(
+		floxBuild "${_nixArgs[@]}" --no-link --print-out-paths  \
+		          "$canonicalFlakeURL^"'*' "${buildArgs[@]}"
+    ) || error "could not build $canonicalFlakeURL" < /dev/null
+	if [[ "${#outpaths[@]}" -le 0 ]]; then
+		error "no outputs created from build of $canonicalFlakeURL" < /dev/null
+	fi
 
-	# TODO Make content addressable (remove "false" below).
-	local ca_out
-	if false ca_out="$($invoke_nix "${_nixArgs[@]}" store make-content-addressed $outpaths --json | $_jq '.rewrites[]')"; then
+	# TODO Make content addressable (uncomment "XXX" lines below).
+	if false; then # XXX
+	declare -a ca_out
+	mapfile -t ca_out < <(
+		$invoke_nix "${_nixArgs[@]}" store make-content-addressed             \
+		            "${outpaths[@]}" --json|$_jq '.rewrites[]'||echo 'ERROR'
+	)
+	if [[ "${#ca_out[@]}" -gt 0 ]] && [[ "${#ca_out[0]}" != 'ERROR' ]]; then
 		# Replace package outpaths with CA versions.
 		warn "Replacing with content-addressable package: $ca_out"
-		outpaths=$ca_out
+		outpaths=( "${ca_out[@]}" )
 	fi
+	fi # /XXX
 
 	# Sign the package outpaths (optional). Sign by default?
-	if [ -z "$keyFile" -a -f "$FLOX_CONFIG_HOME/secret-key" ]; then
+	if [[ -z "${keyFile:-}" ]] && [[ -f "$FLOX_CONFIG_HOME/secret-key" ]]; then
 		keyFile="$FLOX_CONFIG_HOME/secret-key"
 	fi
-	if [ -n "$keyFile" ]; then
-		if [ -f "$keyFile" ]; then
-			$invoke_nix "${_nixArgs[@]}" store sign -r --key-file "$keyFile" $outpaths
+	if [[ -n "${keyFile:-}" ]]; then
+		if [[ -f "$keyFile" ]]; then
+			$invoke_nix "${_nixArgs[@]}" store sign -r --key-file "$keyFile"  \
+				        "${outpaths[@]}"
 		else
 			error "could not read $keyFile: $!" < /dev/null
 		fi
@@ -473,7 +506,7 @@ function floxPublish() {
 	local analyzer="path:$_lib/catalog-ingest"
 	# Nix eval command is noisy so filter out the expected output.
 	local tmpstderr
-	tmpstderr=$(mkTempFile)
+	tmpstderr="$(mkTempFile)"
 	evalAndBuild=$($invoke_nix "${_nixArgs[@]}" eval --json \
 		--override-input target "$canonicalFlakeRef" \
 		--override-input target/flox-floxpkgs/nixpkgs/nixpkgs flake:nixpkgs-$FLOX_STABILITY \
@@ -512,9 +545,9 @@ function floxPublish() {
 	')
 
 	# Copy to binary cache (optional).
-	if [ -n "$uploadTo" ]; then
+	if [[ -n "$uploadTo" ]]; then
 		local builtfilter="flake:flox#builtfilter"
-		$invoke_nix "${_nixArgs[@]}" copy --to "$uploadTo" $outpaths
+		$invoke_nix "${_nixArgs[@]}" copy --to "$uploadTo" "${outpaths[@]}"
 		# Enhance eval data with remote binary substituter.
 		evalAndBuildAndSource=$(echo "$evalAndBuildAndSource" | \
 			$invoke_nix "${_nixArgs[@]}" run "$builtfilter" -- --substituter "$downloadFrom")
@@ -561,8 +594,8 @@ function floxPublish() {
 				while true; do
 					[ "$pushAttempt" -lt 3 ] ||
 						error "could not push to $channelRepository after $pushAttempt attempts" </dev/null
-					$_git -C "$gitClone" pull --rebase
-					if $_git -C "$gitClone" push; then
+					githubHelperGit -C "$gitClone" pull --rebase
+					if githubHelperGit -C "$gitClone" push; then
 						# Job done.
 						break
 					else
