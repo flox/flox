@@ -858,10 +858,13 @@ function floxEdit() {
 	local environment="$1"; shift
 	local system="$1"; shift
 	parseNixArgs "$@" && set -- "${_cmdArgs[@]}"
-	parseFloxFlakeArgs "$@" && set -- "${_cmdArgs[@]}"
-	local -a invocation=("$@")
 
 	local inputFile
+
+	# Our -f|--file arg collides with the same argument as used
+	# by nix (build|eval|develop), so parse this out of $@ before
+	# calling parseFloxFlakeArgs.
+	local -a otherArgs=()
 	while [[ "$#" -gt 0 ]]; do
 		# 'flox edit' args.
 		case "$1" in
@@ -869,6 +872,17 @@ function floxEdit() {
 			shift
 			inputFile="$1"; shift
 			;;
+		*)
+			otherArgs+=("$1"); shift
+			;;
+		esac
+	done
+
+	parseFloxFlakeArgs "${otherArgs[@]}" && set -- "${_cmdArgs[@]}"
+	local -a invocation=("$@")
+
+	while [[ "$#" -gt 0 ]]; do
+		case "$1" in
 		# Any other options are unrecognised.
 		*)
 			usage | error "unknown option '$1'"
