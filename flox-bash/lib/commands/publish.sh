@@ -242,16 +242,15 @@ function floxPublish() {
 			fi
 		fi
 		while true; do
+			if checkGitRepoExists "$buildRepository"; then
+				[ -z "$buildRepository" ] || break
+			fi
+			warn "repository '$buildRepository' does not exist"
+			warn "please enter a valid URL from which to 'flox build' a package"
 			buildRepository=$(promptInput \
 				"Enter git URL (required)" \
 				"build repository:" \
 				"$buildRepository")
-			if checkGitRepoExists "$buildRepository"; then
-				[ -z "$buildRepository" ] || break
-			else
-				warn "repository '$buildRepository' does not exist"
-			fi
-			warn "please enter a valid URL from which to 'flox build' a package"
 		done
 	fi
 	warn "build repository: $buildRepository"
