@@ -263,26 +263,27 @@ function floxPublish() {
 		canonicalFlakeRef="${buildRepository}"
 		;;
 	*)
+		local buildRepositoryBase headref
+		if [[ "$buildRepository" =~ '?'*ref= ]]; then
+		    buildRepositoryBase="${buildRepository/\?*/}"
+			headref="${buildRepository/*\?ref=/}"
+			headref="${headref/&*/}"
+		else
+		    buildRepositoryBase="$buildRepository"
+			headref="HEAD"
+		fi
+
 		# Figure out the HEAD version to derive canonical flake URL.
 		local upstreamRev
-		upstreamRev=$(githubHelperGit ls-remote "$buildRepository" HEAD)
+		upstreamRev=$(githubHelperGit ls-remote "$buildRepositoryBase" "$headref")
 		# Keep only first 40 characters to remove the extra spaces and "HEAD" label.
 		upstreamRev=${upstreamRev:0:40}
-		canonicalFlakeRef="${buildRepository}?rev=${upstreamRev}"
 		# If we did derive the buildRepository from a local git clone, confirm
 		# that it is not out of sync with upstream.
-		if [ "$buildRepository" = "$cloneRemote" ]; then
+		if [ "$buildRepositoryBase" = "$cloneRemote" ]; then
 			if ! $_git diff --exit-code --quiet; then
-				warn "Warning: uncommitted changes not present in upstream rev ${upstreamRev:0:7}"
-				if [[ "${interactive:-0}" -eq 1 ]]; then
-					if ! $invoke_gum confirm "proceed to publish revision ${upstreamRev:0:7}?"; then
-						warn "aborting ..."
-						exit 1
-					fi
-				else
-					warn "aborting ..."
-					exit 1
-				fi
+				warn "Warning: uncommitted changes detected"
+				error "commit all changes before publishing" < /dev/null
 			fi
 			if ! $_git diff --cached --exit-code --quiet; then
 				warn "Warning: staged commits not present in upstream rev ${upstreamRev:0:7}"
@@ -299,7 +300,11 @@ function floxPublish() {
 			if [ "$cloneRev" != "$upstreamRev" ]; then
 				warn "Warning: local clone (${cloneRev:0:7}) out of sync with upstream (${upstreamRev:0:7})"
 				if [[ "${interactive:-0}" -eq 1 ]]; then
-					if ! $invoke_gum confirm "proceed to publish revision ${upstreamRev:0:7}?"; then
+					if $invoke_gum confirm "push revision ${cloneRev:0:7} upstream and publish?"; then
+						warn "+ $_git push"
+						$_git push
+						upstreamRev="$cloneRev"
+					else
 						warn "aborting ..."
 						exit 1
 					fi
@@ -309,6 +314,7 @@ function floxPublish() {
 				fi
 			fi
 		fi
+		canonicalFlakeRef="${buildRepositoryBase}?rev=${upstreamRev}"
 		;;
 	esac
 
