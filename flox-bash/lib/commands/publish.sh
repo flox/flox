@@ -386,7 +386,7 @@ function floxPublish() {
 	# Prompt for location(s) TO and FROM which we can (optionally) copy the
 	# built package store path(s). By default these will refer to the same
 	# URL, but can be overridden with --download-from.
-	if [[ -z "${uploadTo+1}" ]]; then
+	if [[ -z "${uploadTo}" ]]; then
 		doEducatePublish
 		# Load previous answer (if applicable).
 		uploadTo="$(registry "$gitCloneRegistry" 1 get uploadTo || :)"
@@ -402,7 +402,7 @@ function floxPublish() {
 	: "${uploadTo:=}"
 	[[ -z "${uploadTo:-}" ]] || warn "upload to: $uploadTo"
 
-	if [[ -z "${downloadFrom+1}" ]]; then
+	if [[ -z "${downloadFrom}" ]]; then
 		# Load previous answer (if applicable).
 		downloadFrom="$(registry "$gitCloneRegistry" 1 get downloadFrom || :)"
 		if [[ -z "$downloadFrom" ]] && [[ "${interactive:-0}" -eq 1 ]]; then
