@@ -79,10 +79,11 @@ _usage_options["publish"]="[--build-repo <URL>] [--channel-repo <URL>] \\
 function floxPublish() {
 	trace "$@"
 	parseNixArgs "$@" && set -- "${_cmdArgs[@]}"
+	parseFloxFlakeArgs "$@" && set -- "${_cmdArgs[@]}"
 
 	# Publish takes the same args as build, plus a few more.
 	# Split out the publish args from the build args.
-	local -a buildArgs=()
+	local -a buildArgs=( "${_floxFlakeArgs[@]}" )
 	local -a installables
 	local packageAttrPath
 	local packageFlakeRef
@@ -149,13 +150,8 @@ function floxPublish() {
 		# All remaining options are `nix build` args.
 
 		# Options taking two args.
-		--out-link|-o|--profile|--override-flake|--override-input)
+		--out-link|-o|--profile)
 			buildArgs+=("$1"); shift
-			buildArgs+=("$1"); shift
-			buildArgs+=("$1"); shift
-			;;
-		# Options taking one arg.
-		--eval-store|--include|-I|--inputs-from|--update-input|--expr|--file|-f)
 			buildArgs+=("$1"); shift
 			buildArgs+=("$1"); shift
 			;;
