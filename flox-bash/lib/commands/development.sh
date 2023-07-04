@@ -6,6 +6,7 @@ _usage["init"]="initialize flox expressions for current project"
 function floxInit() {
 	trace "$@"
 	parseNixArgs "$@" && set -- "${_cmdArgs[@]}"
+	parseFloxFlakeArgs "$@" && set -- "${_cmdArgs[@]}"
 
 	local template
 	local pname
@@ -52,11 +53,11 @@ function floxInit() {
 	# Extract flox _init template if it hasn't already.
 	[ -f flox.nix ] || {
 		# Start by extracting "_init" template to floxify project.
-		$invoke_nix flake init --template "flox#templates._init" "$@"
+		$invoke_nix flake init --template "flox#templates._init" "${_floxFlakeArgs[@]}" "$@"
 	}
 
 	# Extract requested template.
-	$invoke_nix "${_nixArgs[@]}" flake init --template "flox#templates.$template" "$@"
+	$invoke_nix "${_nixArgs[@]}" flake init --template "flox#templates.$template" "${_floxFlakeArgs[@]}" "$@"
 	if [ -f pkgs/default.nix ]; then
 		$invoke_mkdir -p "pkgs/$pname"
 		$invoke_git mv pkgs/default.nix "pkgs/$pname/default.nix"
@@ -73,8 +74,9 @@ _usage["build"]="build package from current project"
 function floxBuild() {
 	trace "$@"
 	parseNixArgs "$@" && set -- "${_cmdArgs[@]}"
+	parseFloxFlakeArgs "$@" && set -- "${_cmdArgs[@]}"
 
-	local -a buildArgs=()
+	local -a buildArgs=( "${_floxFlakeArgs[@]}" )
 	local -a installables=()
 	while test $# -gt 0; do
 		case "$1" in
@@ -87,13 +89,13 @@ function floxBuild() {
 		# All remaining options are `nix build` args.
 
 		# Options taking two args.
-		-o|--profile|--override-flake|--override-input)
+		-o|--profile)
 			buildArgs+=("$1"); shift
 			buildArgs+=("$1"); shift
 			buildArgs+=("$1"); shift
 			;;
 		# Options taking one arg.
-		--out-link|--eval-store|--include|-I|--inputs-from|--update-input|--expr|--file|-f)
+		--out-link)
 			buildArgs+=("$1"); shift
 			buildArgs+=("$1"); shift
 			;;
@@ -128,8 +130,9 @@ _usage["eval"]="evaluate a Nix expression"
 function floxEval() {
 	trace "$@"
 	parseNixArgs "$@" && set -- "${_cmdArgs[@]}"
+	parseFloxFlakeArgs "$@" && set -- "${_cmdArgs[@]}"
 
-	local -a evalArgs=()
+	local -a evalArgs=( "${_floxFlakeArgs[@]}" )
 	local -a installables=()
 	while test $# -gt 0; do
 		case "$1" in
@@ -243,8 +246,9 @@ _usage["print-dev-env"]="print shell code that can be sourced by bash to reprodu
 function floxDevelop() {
 	trace "$@"
 	parseNixArgs "$@" && set -- "${_cmdArgs[@]}"
+	parseFloxFlakeArgs "$@" && set -- "${_cmdArgs[@]}"
 
-	local -a developArgs=()
+	local -a developArgs=( "${_floxFlakeArgs[@]}" )
 	local -a installables=()
 	local -a remainingArgs=()
 	while test $# -gt 0; do
@@ -258,13 +262,13 @@ function floxDevelop() {
 		# All remaining options are `nix build` args.
 
 		# Options taking two args.
-		--redirect|--arg|--argstr|--override-flake|--override-input)
+		--redirect)
 			developArgs+=("$1"); shift
 			developArgs+=("$1"); shift
 			developArgs+=("$1"); shift
 			;;
 		# Options taking one arg.
-		--keep|-k|--phase|--profile|--unset|-u|--eval-store|--include|-I|--inputs-from|--update-input|--expr|--file|-f)
+		--keep|-k|--phase|--profile|--unset|-u)
 			developArgs+=("$1"); shift
 			developArgs+=("$1"); shift
 			;;
@@ -413,8 +417,9 @@ _usage["run"]="run app from current project"
 function floxRun() {
 	trace "$@"
 	parseNixArgs "$@" && set -- "${_cmdArgs[@]}"
+	parseFloxFlakeArgs "$@" && set -- "${_cmdArgs[@]}"
 
-	local -a runArgs=()
+	local -a runArgs=( "${_floxFlakeArgs[@]}" )
 	local -a installables=()
 	local -a remainingArgs=()
 	while test $# -gt 0; do
@@ -427,17 +432,6 @@ function floxRun() {
 
 		# All remaining options are `nix run` args.
 
-		# Options taking two args.
-		--arg|--argstr|--override-flake|--override-input)
-			runArgs+=("$1"); shift
-			runArgs+=("$1"); shift
-			runArgs+=("$1"); shift
-			;;
-		# Options taking one arg.
-		--eval-store|--include|-I|--inputs-from|--update-input|--expr|--file|-f)
-			runArgs+=("$1"); shift
-			runArgs+=("$1"); shift
-			;;
 		# Options that consume remaining arguments
 		--)
 			remainingArgs+=("$@")
@@ -480,8 +474,9 @@ _usage["shell"]="run a shell in which the current project is available"
 function floxShell() {
 	trace "$@"
 	parseNixArgs "$@" && set -- "${_cmdArgs[@]}"
+	parseFloxFlakeArgs "$@" && set -- "${_cmdArgs[@]}"
 
-	local -a shellArgs=()
+	local -a shellArgs=( "${_floxFlakeArgs[@]}" )
 	local -a installables=()
 	local -a remainingArgs=()
 	while test $# -gt 0; do
@@ -494,14 +489,8 @@ function floxShell() {
 
 		# All remaining options are `nix run` args.
 
-		# Options taking two args.
-		--arg|--argstr|--override-flake|--override-input)
-			shellArgs+=("$1"); shift
-			shellArgs+=("$1"); shift
-			shellArgs+=("$1"); shift
-			;;
 		# Options taking one arg.
-		--keep|-k|--unset|-u|--eval-store|--include|-I|--inputs-from|--update-input|--expr|--file|-f)
+		--keep|-k|--unset|-u)
 			shellArgs+=("$1"); shift
 			shellArgs+=("$1"); shift
 			;;
