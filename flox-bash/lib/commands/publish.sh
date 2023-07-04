@@ -471,9 +471,9 @@ function floxPublish() {
 	mapfile -t outpaths < <(
 		floxBuild "${_nixArgs[@]}" --no-link --print-out-paths  \
 		          "$canonicalFlakeURL^"'*' "${buildArgs[@]}"
-    )
+    ) || error "could not build $canonicalFlakeURL" < /dev/null
 	if [[ "${#outpaths[@]}" -le 0 ]]; then
-		error "could not build $canonicalFlakeURL" < /dev/null
+		error "no outputs created from build of $canonicalFlakeURL" < /dev/null
 	fi
 
 	# TODO Make content addressable (uncomment "XXX" lines below).
