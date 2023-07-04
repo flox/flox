@@ -8,6 +8,8 @@ function floxListProject() {
 	trace "$@"
 	local environment="$1"; shift
 	local system="$1"; shift
+	parseNixArgs "$@" && set -- "${_cmdArgs[@]}"
+	parseFloxFlakeArgs "$@" && set -- "${_cmdArgs[@]}"
 	local displayOutPath="$1"; shift
 	local displayJSON="$1"; shift
 	# set $branchName,$floxNixDir,$environment{Name,Alias,Owner,System,BaseDir,BinDir,ParentDir,MetaDir}
@@ -55,9 +57,10 @@ function floxList() {
 	trace "$@"
 	local environment="$1"; shift
 	local system="$1"; shift
+	parseNixArgs "$@" && set -- "${_cmdArgs[@]}"
+	parseFloxFlakeArgs "$@" && set -- "${_cmdArgs[@]}"
 	# set $branchName,$floxNixDir,$environment{Name,Alias,Owner,System,BaseDir,BinDir,ParentDir,MetaDir}
 	eval $(decodeEnvironment "$environment")
-	parseNixArgs "$@" && set -- "${_cmdArgs[@]}"
 	local -a invocation=("$@")
 
 	local -a listArgs=()
@@ -186,7 +189,7 @@ function floxList() {
 		# Otherwise Nix eval won't be able to find any of the files.
 		$_git -C $workDir add $nextGen
 
-		if $invoke_nix eval "$workDir/$nextGen#floxEnvs.$environmentSystem.default.catalog" --impure --json > $newCatalogJSON; then
+		if $invoke_nix "${_nixArgs[@]}" eval "$workDir/$nextGen#floxEnvs.$environmentSystem.default.catalog" --impure --json "${_floxFlakeArgs[@]}" > $newCatalogJSON; then
 			$invoke_jq -n -f $_lib/diff-catalogs.jq \
 				--slurpfile c1 $oldCatalogJSON --slurpfile c2 $newCatalogJSON > $upgradeDiffs
 		else
@@ -229,6 +232,8 @@ function floxCreate() {
 	trace "$@"
 	local environment="$1"; shift
 	local system="$1"; shift
+	parseNixArgs "$@" && set -- "${_cmdArgs[@]}"
+	parseFloxFlakeArgs "$@" && set -- "${_cmdArgs[@]}"
 	local -a invocation=("$@")
 	# set $branchName,$floxNixDir,$environment{Name,Alias,Owner,System,BaseDir,BinDir,ParentDir,MetaDir}
 	eval $(decodeEnvironment "$environment")
@@ -266,7 +271,7 @@ deleted if you build \`flox' from source and/or run the test suite.";
 	$_git -C $workDir add $nextGen
 
 	local envPackage
-	if ! envPackage=$($invoke_nix build --impure --no-link --print-out-paths "$workDir/$nextGen#.floxEnvs.$system.default"); then
+	if ! envPackage=$($invoke_nix "${_nixArgs[@]}" build --impure --no-link --print-out-paths "$workDir/$nextGen#.floxEnvs.$system.default" "${_floxFlakeArgs[@]}"); then
 		error "failed to create environment: ${invocation[*]}" < /dev/null
 	fi
 
@@ -292,9 +297,9 @@ function floxInstall() {
 	local environment="$1"; shift
 	local system="$1"; shift
 	parseNixArgs "$@" && set -- "${_cmdArgs[@]}"
+	parseFloxFlakeArgs "$@" && set -- "${_cmdArgs[@]}"
 	local -a invocation=("$@")
 
-	local -a installArgs=()
 	local -a installables=()
 	while test $# -gt 0; do
 		# 'flox install' args.
@@ -303,24 +308,6 @@ function floxInstall() {
 			# legacy nix-build option; convert to flakeref
 			shift
 			installables+=(".#$1"); shift
-			;;
-
-		# All remaining options are 'nix profile install' args.
-
-		# Options taking two args.
-		--arg|--argstr|--override-flake|--override-input)
-			installArgs+=("$1"); shift
-			installArgs+=("$1"); shift
-			installArgs+=("$1"); shift
-			;;
-		# Options taking one arg.
-		--priority|--eval-store|--include|-I|--inputs-from|--update-input|--expr|--file|-f)
-			installArgs+=("$1"); shift
-			installArgs+=("$1"); shift
-			;;
-		# Options taking zero args.
-		--debugger|--impure|--commit-lock-file|--no-registries|--no-update-lock-file|--no-write-lock-file|--recreate-lock-file|--derivation)
-			installArgs+=("$1"); shift
 			;;
 		# Any other options are unrecognised.
 		-*)
@@ -387,14 +374,14 @@ function floxInstall() {
 		# do that is to just install them to an ephemeral profile.
 		local environmentWorkDir
 		environmentWorkDir=$(mkTempDir)
-		if ! $invoke_nix profile install --profile "$environmentWorkDir/x" --impure "${pkgArgs[@]}"; then
+		if ! $invoke_nix "${_nixArgs[@]}" profile install --profile "$environmentWorkDir/x" --impure "${pkgArgs[@]}" "${_floxFlakeArgs[@]}"; then
 			# If that failed then repeat the build of each pkgArg individually
 			# to report which one(s) failed.
 			local -a failedPkgArgs=()
 			local _stderr
 			_stderr=$(mkTempFile)
 			for pkgArg in ${pkgArgs[@]}; do
-				if ! $invoke_nix build --no-link --impure "$pkgArg" >$_stderr 2>&1; then
+				if ! $invoke_nix "${_nixArgs[@]}" build --no-link --impure "$pkgArg" "${_floxFlakeArgs[@]}" >$_stderr 2>&1; then
 					failedPkgArgs+=("$pkgArg")
 					local pkgName
 					case "$pkgArg" in
@@ -439,7 +426,7 @@ function floxInstall() {
 		else
 			# Invoke 'nix profile build' to turn the manifest into a package.
 			# Derive the environment package from the newly-rendered link.
-			envPackage=$($invoke_nix profile build $workDir/$nextGen/manifest.json)
+			envPackage=$($invoke_nix "${_nixArgs[@]}" profile build $workDir/$nextGen/manifest.json "${_floxFlakeArgs[@]}")
 		fi
 
 		# Generate declarative manifest.
@@ -482,7 +469,7 @@ EOF
 		$_git -C $workDir add $nextGen/pkgs/default/flox.nix
 
 		local envPackage
-		if ! envPackage=$($invoke_nix build --impure --no-link --print-out-paths -L "$workDir/$nextGen#.floxEnvs.$system.default"); then
+		if ! envPackage=$($invoke_nix "${_nixArgs[@]}" build --impure --no-link --print-out-paths -L "$workDir/$nextGen#.floxEnvs.$system.default" "${_floxFlakeArgs[@]}"); then
 			error "failed to install packages: ${pkgArgs[@]}" < /dev/null
 		fi
 
@@ -522,6 +509,8 @@ function floxRemove() {
 	trace "$@"
 	local environment="$1"; shift
 	local system="$1"; shift
+	parseNixArgs "$@" && set -- "${_cmdArgs[@]}"
+	parseFloxFlakeArgs "$@" && set -- "${_cmdArgs[@]}"
 	local -a invocation=("$@")
 
 	local -a removeArgs=()
@@ -603,7 +592,7 @@ function floxRemove() {
 	case $currentGenVersion in
 	1)
 		# Render a new environment with 'nix profile remove'.
-		$invoke_nix profile remove --profile $environmentWorkDir/x "${pkgPositionArgs[@]}"
+		$invoke_nix "${_nixArgs[@]}" profile remove --profile $environmentWorkDir/x "${pkgPositionArgs[@]}" "${_floxFlakeArgs[@]}"
 		envPackage=$($_realpath $environmentWorkDir/x/.)
 
 		# That went well, update metadata accordingly.
@@ -646,7 +635,7 @@ EOF
 		$_git -C $workDir add $nextGen/pkgs/default/flox.nix
 
 		local envPackage
-		if ! envPackage=$($invoke_nix build --impure --no-link --print-out-paths "$workDir/$nextGen#.floxEnvs.$system.default"); then
+		if ! envPackage=$($invoke_nix "${_nixArgs[@]}" build --impure --no-link --print-out-paths "$workDir/$nextGen#.floxEnvs.$system.default" "${_floxFlakeArgs[@]}"); then
 			error "failed to remove ${pkgNames[@]}" </dev/null
 		fi
 
@@ -685,6 +674,8 @@ function floxUpgrade() {
 	trace "$@"
 	local environment="$1"; shift
 	local system="$1"; shift
+	parseNixArgs "$@" && set -- "${_cmdArgs[@]}"
+	parseFloxFlakeArgs "$@" && set -- "${_cmdArgs[@]}"
 	local -a invocation=("$@")
 
 	local -a upgradeArgs=()
@@ -769,9 +760,9 @@ function floxUpgrade() {
 
 		# Render a new environment with 'nix profile upgrade'.
 		if [ ${#pkgArgs[@]} -gt 0 ]; then
-			$invoke_nix profile upgrade --impure --profile $environmentWorkDir/x "${pkgArgs[@]}"
+			$invoke_nix "${_nixArgs[@]}" profile upgrade --impure --profile $environmentWorkDir/x "${pkgArgs[@]}" "${_floxFlakeArgs[@]}"
 		else
-			$invoke_nix profile upgrade --impure --profile $environmentWorkDir/x '.*'
+			$invoke_nix "${_nixArgs[@]}" profile upgrade --impure --profile $environmentWorkDir/x '.*' "${_floxFlakeArgs[@]}"
 		fi
 		envPackage=$($_realpath $environmentWorkDir/x/.)
 
@@ -825,7 +816,7 @@ EOF
 		fi
 
 		local envPackage
-		if ! envPackage=$($invoke_nix build --impure --no-link --print-out-paths "$workDir/$nextGen#.floxEnvs.$system.default"); then
+		if ! envPackage=$($invoke_nix "${_nixArgs[@]}" build --impure --no-link --print-out-paths "$workDir/$nextGen#.floxEnvs.$system.default" "${_floxFlakeArgs[@]}"); then
 			# TODO: be more specific?
 			error "failed to upgrade packages" < /dev/null
 		fi
@@ -864,9 +855,14 @@ function floxEdit() {
 	trace "$@"
 	local environment="$1"; shift
 	local system="$1"; shift
-	local -a invocation=("$@")
+	parseNixArgs "$@" && set -- "${_cmdArgs[@]}"
 
 	local inputFile
+
+	# Our -f|--file arg collides with the same argument as used
+	# by nix (build|eval|develop), so parse this out of $@ before
+	# calling parseFloxFlakeArgs.
+	local -a otherArgs=()
 	while [[ "$#" -gt 0 ]]; do
 		# 'flox edit' args.
 		case "$1" in
@@ -874,6 +870,17 @@ function floxEdit() {
 			shift
 			inputFile="$1"; shift
 			;;
+		*)
+			otherArgs+=("$1"); shift
+			;;
+		esac
+	done
+
+	parseFloxFlakeArgs "${otherArgs[@]}" && set -- "${_cmdArgs[@]}"
+	local -a invocation=("$@")
+
+	while [[ "$#" -gt 0 ]]; do
+		case "$1" in
 		# Any other options are unrecognised.
 		*)
 			usage | error "unknown option '$1'"
@@ -984,7 +991,7 @@ EOF
 			)
 
 			# TODO: return early if no changes have been made instead of rebuilding?
-			if envPackage=$($invoke_nix build --impure --no-link --print-out-paths "$workDir/$nextGen#.floxEnvs.$system.default"); then
+			if envPackage=$($invoke_nix "${_nixArgs[@]}" build --impure --no-link --print-out-paths "$workDir/$nextGen#.floxEnvs.$system.default" "${_floxFlakeArgs[@]}"); then
 				: confirmed valid config
 				break
 			else
@@ -1039,6 +1046,8 @@ function floxImport() {
 	trace "$@"
 	local environment="$1"; shift
 	local system="$1"; shift
+	parseNixArgs "$@" && set -- "${_cmdArgs[@]}"
+	parseFloxFlakeArgs "$@" && set -- "${_cmdArgs[@]}"
 	local -a invocation=("$@")
 
 	# Create shared clone for importing new generation.
@@ -1083,7 +1092,7 @@ function floxImport() {
 		[ -n "$envPackage" ] || error "failed to render new environment" </dev/null
 		;;
 	2)
-		envPackage=$($invoke_nix build --impure --no-link --print-out-paths "$workDir/$nextGen#.floxEnvs.$system.default")
+		envPackage=$($invoke_nix "${_nixArgs[@]}" build --impure --no-link --print-out-paths "$workDir/$nextGen#.floxEnvs.$system.default" "${_floxFlakeArgs[@]}")
 		;;
 	*)
 		error "unknown version: $currentGenVersion" </dev/null
