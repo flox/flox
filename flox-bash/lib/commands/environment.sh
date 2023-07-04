@@ -1131,8 +1131,6 @@ function floxExport() {
 	trace "$@"
 	local environment="$1"; shift
 	local system="$1"; shift
-	parseNixArgs "$@" && set -- "${_cmdArgs[@]}"
-	parseFloxFlakeArgs "$@" && set -- "${_cmdArgs[@]}"
 	# set $branchName,$floxNixDir,$environment{Name,Alias,Owner,System,BaseDir,BinDir,ParentDir,MetaDir}
 	eval $(decodeEnvironment "$environment")
 	# This is the easy one; just export all the generations. It's up to the
@@ -1147,8 +1145,6 @@ function floxHistory() {
 	trace "$@"
 	local environment="$1"; shift
 	local system="$1"; shift
-	parseNixArgs "$@" && set -- "${_cmdArgs[@]}"
-	parseFloxFlakeArgs "$@" && set -- "${_cmdArgs[@]}"
 	# set $branchName,$floxNixDir,$environment{Name,Alias,Owner,System,BaseDir,BinDir,ParentDir,MetaDir}
 	eval $(decodeEnvironment "$environment")
 
@@ -1191,8 +1187,6 @@ function floxGenerations() {
 	trace "$@"
 	local environment="$1"; shift
 	local system="$1"; shift
-	parseNixArgs "$@" && set -- "${_cmdArgs[@]}"
-	parseFloxFlakeArgs "$@" && set -- "${_cmdArgs[@]}"
 
 	local -i displayJSON=0
 	while test $# -gt 0; do
@@ -1230,8 +1224,6 @@ function floxRollback() {
 	trace "$@"
 	local environment="$1"; shift
 	local system="$1"; shift
-	parseNixArgs "$@" && set -- "${_cmdArgs[@]}"
-	parseFloxFlakeArgs "$@" && set -- "${_cmdArgs[@]}"
 	local subcommand="$1"; shift
 	local -a invocation=("$@")
 
@@ -1309,8 +1301,6 @@ function floxDestroy() {
 	trace "$@"
 	local environment="$1"; shift
 	local system="$1"; shift
-	parseNixArgs "$@" && set -- "${_cmdArgs[@]}"
-	parseFloxFlakeArgs "$@" && set -- "${_cmdArgs[@]}"
 	# set $branchName,$floxNixDir,$environment{Name,Alias,Owner,System,BaseDir,BinDir,ParentDir,MetaDir}
 	eval $(decodeEnvironment "$environment")
 	local originArg=
@@ -1431,8 +1421,6 @@ function floxPushPull() {
 	local action="$1"; shift
 	local environment="$1"; shift
 	local system="$1"; shift
-	parseNixArgs "$@" && set -- "${_cmdArgs[@]}"
-	parseFloxFlakeArgs "$@" && set -- "${_cmdArgs[@]}"
 	# set $branchName,$floxNixDir,$environment{Name,Alias,Owner,System,BaseDir,BinDir,ParentDir,MetaDir}
 	eval $(decodeEnvironment "$environment")
 	local forceArg=
