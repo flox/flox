@@ -66,6 +66,11 @@ impl<'flox> Publish<'flox> {
         }
         todo!()
     }
+
+    /// read out the current publish state
+    pub fn analysis(&self) -> Option<&CatalogEntry> {
+        self.analysis.as_ref()
+    }
 }
 
 #[derive(Error, Debug)]
