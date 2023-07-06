@@ -548,7 +548,7 @@ function floxPublish() {
 	if [[ -n "$uploadTo" ]]; then
 		$invoke_nix "${_nixArgs[@]}" copy --to "$uploadTo" "${outpaths[@]}"
 		# Enhance eval data with remote binary substituter.
-		evalAndBuildAndSource=$(echo "$evalAndBuildAndSource" | $_builtfilter_rs --substitutor "$downloadFrom" )
+		evalAndBuildAndSource=$(echo "$evalAndBuildAndSource" | $_builtfilter_rs --substituter "$downloadFrom" )
 	fi
 
 	### Next section cribbed from: github:flox/catalog-ingest#publish
