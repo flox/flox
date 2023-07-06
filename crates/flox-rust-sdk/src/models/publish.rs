@@ -1,7 +1,14 @@
+use std::path::PathBuf;
+
 use flox_types::catalog::CatalogEntry;
+use runix::arguments::flake::FlakeArgs;
+use runix::command::Eval;
+use runix::command_line::NixCommandLine;
 use runix::flake_ref::git::GitRef;
+use runix::flake_ref::indirect::IndirectRef;
+use runix::flake_ref::path::PathRef;
 use runix::flake_ref::{protocol, FlakeRef};
-use runix::installable::AttrPath;
+use runix::installable::{AttrPath, Installable};
 use thiserror::Error;
 
 use crate::flox::Flox;
@@ -35,6 +42,50 @@ impl<'flox> Publish<'flox> {
 
     /// run analysis on the package and add to state
     pub async fn analyze(self) -> PublishResult<Publish<'flox>> {
+        let _nix: NixCommandLine = self.flox.nix(Default::default());
+
+        let analysis_attr_path = {
+            let mut attrpath = AttrPath::default();
+            attrpath
+                .push_attr("")
+                .and_then(|path| path.push_attr("analysis"))
+                .and_then(|path| path.push_attr("eval"))
+                .unwrap();
+            attrpath.extend(self.attr_path);
+            attrpath
+        };
+
+        let nixpkgs_flakeref =
+            FlakeRef::Indirect(IndirectRef::new("nixpkgs-flox".into(), Default::default()));
+
+        let analyzer_flakeref =
+            FlakeRef::Path(PathRef::new(PathBuf::from("asd"), Default::default()));
+
+        let _eval_analysis_command = Eval {
+            flake: FlakeArgs {
+                override_inputs: [
+                    ("target".to_string(), self.publish_ref.into_inner()).into(),
+                    (
+                        "target/flox-floxpkgs/nixpkgs/nixpkgs".to_string(),
+                        nixpkgs_flakeref,
+                    )
+                        .into(),
+                ]
+                .to_vec(),
+                no_write_lock_file: true.into(),
+            },
+            eval_args: runix::arguments::EvalArgs {
+                installable: Some(
+                    Installable {
+                        flakeref: analyzer_flakeref,
+                        attr_path: analysis_attr_path,
+                    }
+                    .into(),
+                ),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
         todo!()
     }
 
@@ -98,6 +149,14 @@ impl PublishRef {
         match self {
             PublishRef::Ssh(ref ssh_ref) => ssh_ref.url.as_str().to_owned(),
             PublishRef::Https(ref https_ref) => https_ref.url.as_str().to_owned(),
+        }
+    }
+
+    /// return the a flakeref type for the wrapped refs
+    fn into_inner(self) -> FlakeRef {
+        match self {
+            PublishRef::Ssh(ssh_ref) => FlakeRef::GitSsh(ssh_ref),
+            PublishRef::Https(https_ref) => FlakeRef::GitHttps(https_ref),
         }
     }
 }
