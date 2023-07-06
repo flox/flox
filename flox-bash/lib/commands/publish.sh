@@ -310,7 +310,7 @@ function floxPublish() {
 				fi
 			fi
 		fi
-		canonicalFlakeRef="${buildRepositoryBase}?rev=${upstreamRev}"
+		canonicalFlakeRef="${buildRepositoryBase}?rev=${upstreamRev}&allRefs=1"
 		;;
 	esac
 
