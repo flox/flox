@@ -115,6 +115,7 @@ in
       nix-editor
       util-linuxMinimal
       semver
+      inputs.flox-floxpkgs.packages.builtfilter
     ];
     makeFlags =
       [
