@@ -11,9 +11,11 @@ use crate::providers::git::{GitCommandProvider as Git, GitProvider};
 #[allow(dead_code)] // until we implement methods for Publish
 pub struct Publish<'flox> {
     flox: &'flox Flox,
+    /// The published _upstream_ source
     publish_ref: PublishRef,
+    /// The published attrpath
+    /// Should be fully resolved to avoid ambiguity
     attr_path: AttrPath,
-    catalog: Git,
     analysis: Option<CatalogEntry>, // model as type state?
 }
 
@@ -23,34 +25,10 @@ impl<'flox> Publish<'flox> {
         publish_ref: PublishRef,
         attr_path: AttrPath,
     ) -> PublishResult<Publish<'flox>> {
-        let url = match publish_ref {
-            PublishRef::Ssh(ref ssh_ref) => ssh_ref.url.as_str().to_owned(),
-
-            PublishRef::Https(ref https_ref) => https_ref.url.as_str().to_owned(),
-        };
-
-        let repo_dir = tempfile::tempdir_in(&flox.temp_dir).unwrap().into_path(); // todo catch error
-        let catalog = <Git as GitProvider>::clone(url, &repo_dir, false)
-            .await
-            .unwrap(); // todo: catch error
-
-        if catalog.list_branches().await.unwrap() // todo: catch error
-            .into_iter().any(|info| info.name == "catalog")
-        {
-            catalog.checkout("catalog", false).await.unwrap(); // todo: catch error
-        } else {
-            todo!();
-            // catalog.checkout("catalog", true).await.unwrap(); // todo: catch error
-
-            // catalog.set_upstream("origin", "catalog").await.unwrap();  // todo: implement
-            //                                                               todo: catch error
-        }
-
         Ok(Self {
             flox,
             publish_ref,
             attr_path,
-            catalog,
             analysis: None,
         })
     }
@@ -67,6 +45,25 @@ impl<'flox> Publish<'flox> {
 
     /// write snapshot to catalog and push to origin
     pub async fn push_catalog(self) -> PublishResult<()> {
+        let url = self.publish_ref.clone_url();
+        let repo_dir = tempfile::tempdir_in(&self.flox.temp_dir)
+            .unwrap()
+            .into_path(); // todo catch error
+        let catalog = <Git as GitProvider>::clone(url, &repo_dir, false)
+            .await
+            .unwrap(); // todo: catch error
+
+        if catalog.list_branches().await.unwrap() // todo: catch error
+            .into_iter().any(|info| info.name == "catalog")
+        {
+            catalog.checkout("catalog", false).await.unwrap(); // todo: catch error
+        } else {
+            todo!();
+            // catalog.checkout("catalog", true).await.unwrap(); // todo: catch error
+
+            // catalog.set_upstream("origin", "catalog").await.unwrap();  // todo: implement
+            //                                                               todo: catch error
+        }
         todo!()
     }
 }
@@ -88,6 +85,16 @@ pub enum PublishRef {
     Ssh(GitRef<protocol::SSH>),
     Https(GitRef<protocol::HTTPS>),
     // File(GitRef<protocol::File>),
+}
+
+impl PublishRef {
+    /// extract an url for cloning with git
+    fn clone_url(&self) -> String {
+        match self {
+            PublishRef::Ssh(ref ssh_ref) => ssh_ref.url.as_str().to_owned(),
+            PublishRef::Https(ref https_ref) => https_ref.url.as_str().to_owned(),
+        }
+    }
 }
 
 impl TryFrom<FlakeRef> for PublishRef {
