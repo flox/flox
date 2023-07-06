@@ -1,6 +1,5 @@
 use std::path::PathBuf;
 
-use flox_types::catalog::CatalogEntry;
 use runix::arguments::flake::FlakeArgs;
 use runix::command::Eval;
 use runix::command_line::NixCommandLine;
@@ -9,6 +8,8 @@ use runix::flake_ref::indirect::IndirectRef;
 use runix::flake_ref::path::PathRef;
 use runix::flake_ref::{protocol, FlakeRef};
 use runix::installable::{AttrPath, Installable};
+use runix::{RunJson, RunTyped};
+use serde_json::Value;
 use thiserror::Error;
 
 use crate::flox::Flox;
@@ -23,7 +24,7 @@ pub struct Publish<'flox> {
     /// The published attrpath
     /// Should be fully resolved to avoid ambiguity
     attr_path: AttrPath,
-    analysis: Option<CatalogEntry>, // model as type state?
+    analysis: Option<Value>, // model as type state?
 }
 
 impl<'flox> Publish<'flox> {
@@ -42,7 +43,7 @@ impl<'flox> Publish<'flox> {
 
     /// run analysis on the package and add to state
     pub async fn analyze(self) -> PublishResult<Publish<'flox>> {
-        let _nix: NixCommandLine = self.flox.nix(Default::default());
+        let nix: NixCommandLine = self.flox.nix(Default::default());
 
         let analysis_attr_path = {
             let mut attrpath = AttrPath::default();
@@ -61,10 +62,10 @@ impl<'flox> Publish<'flox> {
         let analyzer_flakeref =
             FlakeRef::Path(PathRef::new(PathBuf::from("asd"), Default::default()));
 
-        let _eval_analysis_command = Eval {
+        let eval_analysis_command = Eval {
             flake: FlakeArgs {
                 override_inputs: [
-                    ("target".to_string(), self.publish_ref.into_inner()).into(),
+                    ("target".to_string(), self.publish_ref.clone().into_inner()).into(),
                     (
                         "target/flox-floxpkgs/nixpkgs/nixpkgs".to_string(),
                         nixpkgs_flakeref,
@@ -86,6 +87,22 @@ impl<'flox> Publish<'flox> {
             },
             ..Default::default()
         };
+
+        let _analytics_json = eval_analysis_command
+            .run_json(&nix, &Default::default())
+            .await
+            .unwrap();
+
+        let _locked_ref_command: runix::command::FlakeMetadata = runix::command::FlakeMetadata {
+            flake_ref: Some(self.publish_ref.into_inner().into()),
+            ..Default::default()
+        };
+
+        let _locked_ref = _locked_ref_command
+            .run_typed(&nix, &Default::default())
+            .await
+            .unwrap();
+
         todo!()
     }
 
@@ -119,7 +136,7 @@ impl<'flox> Publish<'flox> {
     }
 
     /// read out the current publish state
-    pub fn analysis(&self) -> Option<&CatalogEntry> {
+    pub fn analysis(&self) -> Option<&Value> {
         self.analysis.as_ref()
     }
 }
