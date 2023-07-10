@@ -45,19 +45,19 @@ pub struct Publish<'flox, State> {
 }
 
 impl<'flox> Publish<'flox, Empty> {
-    pub async fn new(
+    pub fn new(
         flox: &'flox Flox,
         publish_ref: PublishRef,
         attr_path: AttrPath,
         stability: Stability,
-    ) -> PublishResult<Publish<'flox, Empty>> {
-        Ok(Self {
+    ) -> Publish<'flox, Empty> {
+        Self {
             flox,
             publish_ref,
             attr_path,
             stability,
             analysis: Empty,
-        })
+        }
     }
 
     /// run analysis on the package and switch to next state
@@ -73,8 +73,10 @@ impl<'flox> Publish<'flox, Empty> {
         let nixpkgs_flakeref =
             FlakeRef::Indirect(IndirectRef::new("nixpkgs-flox".into(), Default::default()));
 
-        let analyzer_flakeref =
-            FlakeRef::Path(PathRef::new(PathBuf::from("asd"), Default::default()));
+        let analyzer_flakeref = FlakeRef::Path(PathRef::new(
+            PathBuf::from(env!("FLOX_ANALYZER_SRC")),
+            Default::default(),
+        ));
 
         let eval_analysis_command = Eval {
             flake: FlakeArgs {
