@@ -240,3 +240,35 @@ pub enum ConvertFlakeRefError {
     #[error("Unsupported flakeref for publish: {0}")]
     UnsupportedTarget(FlakeRef),
 }
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+    use crate::flox::tests::flox_instance;
+    use crate::prelude::Channel;
+
+    #[tokio::test]
+    async fn creates_catalog_entry() {
+        let (mut flox, _temp_dir_handle) = flox_instance();
+
+        flox.channels.register_channel(
+            "nixpkgs-flox",
+            Channel::from("github:flox/nixpkgs/stable".parse::<FlakeRef>().unwrap()),
+        );
+
+        let publish_ref: PublishRef = "git+ssh://git@github.com/flox/flox"
+            .parse::<FlakeRef>()
+            .unwrap()
+            .try_into()
+            .unwrap();
+
+        let attr_path = ["packages", "aarch64-darwin", "flox"].try_into().unwrap();
+        let stability = Stability::Stable;
+        let publish = Publish::new(&flox, publish_ref, attr_path, stability);
+
+        let value = publish.analyze().await.unwrap().analysis().to_owned();
+
+        println!("{}", serde_json::to_string_pretty(&value).unwrap());
+    }
+}
