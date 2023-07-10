@@ -67,7 +67,7 @@ impl<'flox> Publish<'flox> {
                     ("target".to_string(), self.publish_ref.clone().into_inner()).into(),
                     (
                         "target/flox-floxpkgs/nixpkgs/nixpkgs".to_string(),
-                        nixpkgs_flakeref,
+                        nixpkgs_flakeref, // stability overide has already been applied, not duplicating that code here
                     )
                         .into(),
                 ]
