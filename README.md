@@ -55,9 +55,9 @@ Install packages from [the biggest open source repository
 (nixpkgs)][post-nixpkgs] that contains **more that 80.000 packages**.
 
 With `flox` you can:<br/>
-&rarr; [Create composable environments][basics]<br/>
-&rarr; [Share your environments with others][share-envs]<br/>
-&rarr; [Build container images][images]<br/>
+&rarr; [Create composable environments](https://floxdev.com/docs/tutorials/projects)<br/>
+&rarr; [Share your environments with others](https://floxdev.com/docs/cookbook/managed-environments/#share-an-environment)<br/>
+&rarr; [Build container images](https://floxdev.com/docs/tutorials/build-container-images)<br/>
 &rarr; [... and much more][docs]<br/>
 
 <div align="center">
