@@ -10,7 +10,7 @@ use runix::flake_ref::path::PathRef;
 use runix::flake_ref::{protocol, FlakeRef};
 use runix::installable::{AttrPath, Installable};
 use runix::{RunJson, RunTyped};
-use serde_json::Value;
+use serde_json::{json, Value};
 use thiserror::Error;
 
 use crate::flox::Flox;
@@ -46,7 +46,7 @@ impl<'flox> Publish<'flox> {
     }
 
     /// run analysis on the package and add to state
-    pub async fn analyze(self) -> PublishResult<Publish<'flox>> {
+    pub async fn analyze(mut self) -> PublishResult<Publish<'flox>> {
         let nix: NixCommandLine = self.flox.nix(Default::default());
 
         let analysis_attr_path = {
@@ -87,22 +87,36 @@ impl<'flox> Publish<'flox> {
             ..Default::default()
         };
 
-        let _analytics_json = eval_analysis_command
+        let mut analytics_json = eval_analysis_command
             .run_json(&nix, &Default::default())
             .await
             .unwrap();
 
-        let _locked_ref_command: runix::command::FlakeMetadata = runix::command::FlakeMetadata {
-            flake_ref: Some(self.publish_ref.into_inner().into()),
-            ..Default::default()
+        let locked_ref = {
+            let locked_ref_command: runix::command::FlakeMetadata = runix::command::FlakeMetadata {
+                flake_ref: Some(self.publish_ref.clone().into_inner().into()),
+                ..Default::default()
+            };
+
+            locked_ref_command
+                .run_typed(&nix, &Default::default())
+                .await
+                .unwrap()
         };
 
-        let _locked_ref = _locked_ref_command
-            .run_typed(&nix, &Default::default())
-            .await
-            .unwrap();
+        // DEVIATION FROM BASH: using `locked` here instead of `resolved`
+        //                      this is used to reproduce the package,
+        //                        but is essentially redundant because of the `source.locked`
+        analytics_json["element"]["url"] = json!(locked_ref.locked.to_string());
+        analytics_json["source"] = json!({
+            "locked": locked_ref.locked,
+            "original": locked_ref.original,
+            "remote": locked_ref.original,
+        });
+        analytics_json["eval"]["stability"] = json!(self.stability);
 
-        todo!()
+        let _ = self.analysis.insert(analytics_json);
+        Ok(self)
     }
 
     /// copy the outputs and dependencies of the package to binary store
