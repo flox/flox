@@ -1,5 +1,7 @@
+use std::ops::Deref;
 use std::path::PathBuf;
 
+use derive_more::{Deref, DerefMut};
 use flox_types::stability::Stability;
 use runix::arguments::flake::FlakeArgs;
 use runix::command::Eval;
@@ -16,9 +18,22 @@ use thiserror::Error;
 use crate::flox::Flox;
 use crate::providers::git::{GitCommandProvider as Git, GitProvider};
 
+/// Publish state before analyzing
+///
+/// Prevents other actions to commence without analyzing the package first
+struct Empty;
+
+/// Publish state after collecting nix metadata
+///
+/// Json value (ideally a [flox_types::catalog::CatalogEntry],
+/// but that's currently broken on account of some flakerefs)
+#[derive(Debug, Deref, DerefMut)]
+struct NixAnalysis(Value);
+
 /// State for the publish algorihm
-#[allow(dead_code)] // until we implement methods for Publish
-pub struct Publish<'flox> {
+///
+/// Transitions through typestates to ensure we don't invoke invalid operations
+pub struct Publish<'flox, State> {
     flox: &'flox Flox,
     /// The published _upstream_ source
     publish_ref: PublishRef,
@@ -26,27 +41,27 @@ pub struct Publish<'flox> {
     /// Should be fully resolved to avoid ambiguity
     attr_path: AttrPath,
     stability: Stability,
-    analysis: Option<Value>, // model as type state?
+    analysis: State,
 }
 
-impl<'flox> Publish<'flox> {
+impl<'flox> Publish<'flox, Empty> {
     pub async fn new(
         flox: &'flox Flox,
         publish_ref: PublishRef,
         attr_path: AttrPath,
         stability: Stability,
-    ) -> PublishResult<Publish<'flox>> {
+    ) -> PublishResult<Publish<'flox, Empty>> {
         Ok(Self {
             flox,
             publish_ref,
             attr_path,
             stability,
-            analysis: None,
+            analysis: Empty,
         })
     }
 
-    /// run analysis on the package and add to state
-    pub async fn analyze(mut self) -> PublishResult<Publish<'flox>> {
+    /// run analysis on the package and switch to next state
+    pub async fn analyze(self) -> PublishResult<Publish<'flox, NixAnalysis>> {
         let nix: NixCommandLine = self.flox.nix(Default::default());
 
         let analysis_attr_path = {
@@ -115,10 +130,17 @@ impl<'flox> Publish<'flox> {
         });
         analytics_json["eval"]["stability"] = json!(self.stability);
 
-        let _ = self.analysis.insert(analytics_json);
-        Ok(self)
+        Ok(Publish {
+            flox: self.flox,
+            publish_ref: self.publish_ref,
+            attr_path: self.attr_path,
+            stability: self.stability,
+            analysis: NixAnalysis(analytics_json),
+        })
     }
+}
 
+impl<'flox> Publish<'flox, NixAnalysis> {
     /// copy the outputs and dependencies of the package to binary store
     pub async fn upload_binary(&self) -> PublishResult<()> {
         todo!()
@@ -149,8 +171,8 @@ impl<'flox> Publish<'flox> {
     }
 
     /// read out the current publish state
-    pub fn analysis(&self) -> Option<&Value> {
-        self.analysis.as_ref()
+    pub fn analysis(&self) -> &Value {
+        self.analysis.deref()
     }
 }
 
