@@ -50,13 +50,8 @@ impl<'flox> Publish<'flox> {
         let nix: NixCommandLine = self.flox.nix(Default::default());
 
         let analysis_attr_path = {
-            let mut attrpath = AttrPath::default();
-            attrpath
-                .push_attr("")
-                .and_then(|path| path.push_attr("analysis"))
-                .and_then(|path| path.push_attr("eval"))
-                .unwrap();
-            attrpath.extend(self.attr_path);
+            let mut attrpath = AttrPath::try_from(["", "analysis", "eval"]).unwrap();
+            attrpath.extend(self.attr_path.clone());
             attrpath
         };
 
