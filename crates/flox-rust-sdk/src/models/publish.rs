@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+use flox_types::stability::Stability;
 use runix::arguments::flake::FlakeArgs;
 use runix::command::Eval;
 use runix::command_line::NixCommandLine;
@@ -24,6 +25,7 @@ pub struct Publish<'flox> {
     /// The published attrpath
     /// Should be fully resolved to avoid ambiguity
     attr_path: AttrPath,
+    stability: Stability,
     analysis: Option<Value>, // model as type state?
 }
 
@@ -32,11 +34,13 @@ impl<'flox> Publish<'flox> {
         flox: &'flox Flox,
         publish_ref: PublishRef,
         attr_path: AttrPath,
+        stability: Stability,
     ) -> PublishResult<Publish<'flox>> {
         Ok(Self {
             flox,
             publish_ref,
             attr_path,
+            stability,
             analysis: None,
         })
     }
