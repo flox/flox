@@ -250,6 +250,8 @@ mod tests {
 
     #[tokio::test]
     async fn creates_catalog_entry() {
+        env_logger::init();
+
         let (mut flox, _temp_dir_handle) = flox_instance();
 
         flox.channels.register_channel(
