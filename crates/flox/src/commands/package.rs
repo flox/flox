@@ -7,6 +7,7 @@ use bpaf::{construct, Bpaf, Parser};
 use crossterm::tty::IsTty;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::project::Project;
+use flox_rust_sdk::models::publish::Publish;
 use flox_rust_sdk::models::root::transaction::ReadOnly;
 use flox_rust_sdk::models::root::{self, Closed, Root};
 use flox_rust_sdk::nix::arguments::eval::EvaluationArgs;
@@ -22,7 +23,7 @@ use indoc::indoc;
 use itertools::Itertools;
 use log::{debug, info};
 
-use crate::commands::package::interface::ResolveInstallable;
+use crate::commands::package::interface::{PackageCommands, ResolveInstallable};
 use crate::config::features::Feature;
 use crate::config::Config;
 use crate::utils::dialog::{Dialog, Text};
@@ -201,6 +202,14 @@ pub(crate) mod interface {
     parseable!(Publish, publish);
 
     #[derive(Bpaf, Clone, Debug)]
+    pub struct PublishV2 {
+        /// Package to publish
+        #[bpaf(external(InstallableArgument::positional), optional, catch)]
+        pub installable_arg: Option<InstallableArgument<Parsed, PublishInstallable>>,
+    }
+    parseable!(PublishV2, publish_v2);
+
+    #[derive(Bpaf, Clone, Debug)]
     pub struct Shell {
         #[bpaf(short('A'), hide)]
         pub _attr_flag: bool,
@@ -279,6 +288,9 @@ pub(crate) mod interface {
         /// build and publish project to flox channel
         #[bpaf(command)]
         Publish(#[bpaf(external(WithPassthru::parse))] WithPassthru<Publish>),
+        /// build and publish project to flox channel
+        #[bpaf(command, hide)]
+        Publish2(#[bpaf(external(WithPassthru::parse))] WithPassthru<PublishV2>),
         /// run app from current project
         #[bpaf(command)]
         Run(#[bpaf(external(WithPassthru::parse))] WithPassthru<Run>),
@@ -300,41 +312,61 @@ pub(crate) mod interface {
     }
 }
 
-impl interface::PackageCommands {
+impl PackageCommands {
     pub async fn handle(self, config: Config, flox: Flox) -> Result<()> {
         match self {
-            interface::PackageCommands::Develop(_) => subcommand_metric!("develop"),
-            interface::PackageCommands::Init(_) => subcommand_metric!("init"),
-            interface::PackageCommands::Build(_) => subcommand_metric!("build"),
-            interface::PackageCommands::PrintDevEnv(_) => subcommand_metric!("print-dev-env"),
-            interface::PackageCommands::Publish(_) => subcommand_metric!("publish"),
-            interface::PackageCommands::Run(_) => subcommand_metric!("run"),
-            interface::PackageCommands::Shell(_) => subcommand_metric!("shell"),
-            interface::PackageCommands::Eval(_) => subcommand_metric!("eval"),
-            interface::PackageCommands::Bundle(_) => subcommand_metric!("bundle"),
-            interface::PackageCommands::Containerize(_) => subcommand_metric!("containerize"),
-            interface::PackageCommands::Flake(_) => subcommand_metric!("flake"),
+            PackageCommands::Develop(_) => subcommand_metric!("develop"),
+            PackageCommands::Init(_) => subcommand_metric!("init"),
+            PackageCommands::Build(_) => subcommand_metric!("build"),
+            PackageCommands::PrintDevEnv(_) => subcommand_metric!("print-dev-env"),
+            PackageCommands::Publish(_) => subcommand_metric!("publish"),
+            PackageCommands::Publish2(_) => subcommand_metric!("publish_v2"),
+            PackageCommands::Run(_) => subcommand_metric!("run"),
+            PackageCommands::Shell(_) => subcommand_metric!("shell"),
+            PackageCommands::Eval(_) => subcommand_metric!("eval"),
+            PackageCommands::Bundle(_) => subcommand_metric!("bundle"),
+            PackageCommands::Containerize(_) => subcommand_metric!("containerize"),
+            PackageCommands::Flake(_) => subcommand_metric!("flake"),
         }
 
         match self {
             _ if Feature::Nix.is_forwarded()? => flox_forward(&flox).await?,
 
             // Unification implementation of Develop is not yet implemented in rust
-            interface::PackageCommands::Develop(_) if Feature::Develop.is_forwarded()? => {
+            PackageCommands::Develop(_) if Feature::Develop.is_forwarded()? => {
                 flox_forward(&flox).await?
             },
 
             // Unification implementation of print-dev-env is not yet implemented in rust
-            interface::PackageCommands::PrintDevEnv(_) if Feature::Develop.is_forwarded()? => {
+            PackageCommands::PrintDevEnv(_) if Feature::Develop.is_forwarded()? => {
                 flox_forward(&flox).await?
             },
 
             // `flox publish` is not yet implemented in rust
-            interface::PackageCommands::Publish(_) if Feature::Publish.is_forwarded()? => {
+            PackageCommands::Publish(_) if Feature::Publish.is_forwarded()? => {
                 flox_forward(&flox).await?
             },
 
-            interface::PackageCommands::Init(command) => {
+            PackageCommands::Publish2(args) => {
+                let Installable {
+                    flakeref,
+                    attr_path,
+                } = args
+                    .inner
+                    .installable_arg
+                    .unwrap_or_default()
+                    .resolve_installable(&flox)
+                    .await?;
+
+                let publish_ref = flakeref.try_into()?;
+                let publish = Publish::new(&flox, publish_ref, attr_path, config.flox.stability);
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(publish.analyze().await?.analysis())?
+                );
+            },
+
+            PackageCommands::Init(command) => {
                 let cwd = std::env::current_dir()?;
                 let basename = cwd
                     .file_name()
@@ -385,7 +417,7 @@ impl interface::PackageCommands {
 
                 info!("Run 'flox develop' to enter the project environment.")
             },
-            interface::PackageCommands::Build(command) => {
+            PackageCommands::Build(command) => {
                 let installable_arg = command
                     .inner
                     .installable_arg
@@ -397,7 +429,7 @@ impl interface::PackageCommands {
                     .build::<NixCommandLine>()
                     .await?;
             },
-            interface::PackageCommands::Develop(command) => {
+            PackageCommands::Develop(command) => {
                 let installable_arg = command
                     .inner
                     .installable_arg
@@ -409,7 +441,7 @@ impl interface::PackageCommands {
                     .develop::<NixCommandLine>()
                     .await?
             },
-            interface::PackageCommands::Run(command) => {
+            PackageCommands::Run(command) => {
                 let installable_arg = command
                     .inner
                     .installable_arg
@@ -421,7 +453,7 @@ impl interface::PackageCommands {
                     .run::<NixCommandLine>()
                     .await?
             },
-            interface::PackageCommands::Shell(command) => {
+            PackageCommands::Shell(command) => {
                 let installable_arg = command
                     .inner
                     .installable_arg
@@ -433,7 +465,7 @@ impl interface::PackageCommands {
                     .shell::<NixCommandLine>()
                     .await?
             },
-            interface::PackageCommands::Eval(command) => {
+            PackageCommands::Eval(command) => {
                 let nix = flox.nix::<NixCommandLine>(command.nix_args);
                 let command = EvalComm {
                     flake: FlakeArgs {
@@ -445,7 +477,7 @@ impl interface::PackageCommands {
 
                 command.run(&nix, &NixArgs::default()).await?
             },
-            interface::PackageCommands::Bundle(command) => {
+            PackageCommands::Bundle(command) => {
                 let installable_arg = ResolveInstallable::<GitCommandProvider>::installable(
                     &command.inner.installable_arg,
                     &flox,
@@ -463,7 +495,7 @@ impl interface::PackageCommands {
                     .bundle::<NixCommandLine>(bundler)
                     .await?
             },
-            interface::PackageCommands::Containerize(command) => {
+            PackageCommands::Containerize(command) => {
                 let mut installable = env_ref_to_installable::<GitCommandProvider>(
                     &flox,
                     "containerize",
@@ -523,7 +555,7 @@ impl interface::PackageCommands {
                     .await
                     .context("Container script failed to run")?;
             },
-            interface::PackageCommands::Flake(command) => {
+            PackageCommands::Flake(command) => {
                 /// A custom nix command that passes its arguments to `nix flake`
                 #[derive(Debug, Clone)]
                 pub struct FlakeCommand {
