@@ -61,6 +61,14 @@ impl<'flox> Publish<'flox, Empty> {
     }
 
     /// run analysis on the package and switch to next state
+    ///
+    /// It uses an analyzer flake to extract eval metadata of the derivation.
+    /// The analyzer applies a function to all packages in a `target` flake
+    /// and provides the result under `#analysis.eval.<full attrpath of the package>`.
+    ///
+    /// We evalaute this analysis as json, to which we add
+    /// * source urls for reproducibility
+    /// * the nixpkgs stability being used to create the package
     pub async fn analyze(self) -> PublishResult<Publish<'flox, NixAnalysis>> {
         let nix: NixCommandLine = self.flox.nix(Default::default());
 
