@@ -102,7 +102,13 @@ impl<'flox> Publish<'flox, Empty> {
 
         let analysis_attr_path = {
             let mut attrpath = AttrPath::try_from(["", "analysis", "eval"]).unwrap();
-            attrpath.extend(self.attr_path.clone());
+            attrpath.extend(
+                self.attr_path
+                    .clone()
+                    .into_iter()
+                    .peekable()
+                    .skip_while(|attr| attr.as_ref() == ""),
+            );
             attrpath
         };
 
@@ -305,7 +311,9 @@ mod tests {
             .try_into()
             .unwrap();
 
-        let attr_path = ["packages", "aarch64-darwin", "flox"].try_into().unwrap();
+        let attr_path = ["", "packages", "aarch64-darwin", "flox"]
+            .try_into()
+            .unwrap();
         let stability = Stability::Stable;
         let publish = Publish::new(&flox, publish_ref, attr_path, stability);
 
