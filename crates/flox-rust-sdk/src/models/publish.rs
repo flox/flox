@@ -24,14 +24,14 @@ use crate::providers::git::{GitCommandProvider as Git, GitProvider};
 /// Publish state before analyzing
 ///
 /// Prevents other actions to commence without analyzing the package first
-struct Empty;
+pub struct Empty;
 
 /// Publish state after collecting nix metadata
 ///
 /// Json value (ideally a [flox_types::catalog::CatalogEntry],
 /// but that's currently broken on account of some flakerefs)
 #[derive(Debug, Deref, DerefMut)]
-struct NixAnalysis(Value);
+pub struct NixAnalysis(Value);
 
 /// State for the publish algorihm
 ///
