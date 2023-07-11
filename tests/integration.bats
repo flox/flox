@@ -99,19 +99,19 @@ setup_file() {
 }
 
 @test "flox create -e $TEST_ENVIRONMENT" {
-  run $FLOX_CLI create -e $TEST_ENVIRONMENT
+  run $FLOX_CLI create -e "$TEST_ENVIRONMENT"
   assert_success
   assert_output --partial "created environment $TEST_ENVIRONMENT ($NIX_SYSTEM)"
 }
 
 @test "flox create -e $TEST_ENVIRONMENT fails when run again" {
-  run $FLOX_CLI create -e $TEST_ENVIRONMENT
+  run $FLOX_CLI create -e "$TEST_ENVIRONMENT"
   assert_failure
   assert_output --partial "ERROR: environment $TEST_ENVIRONMENT ($NIX_SYSTEM) already exists"
 }
 
 @test "flox install hello" {
-  run $FLOX_CLI install -e $TEST_ENVIRONMENT hello
+  run $FLOX_CLI install -e "$TEST_ENVIRONMENT" hello
   assert_success
   assert_output --partial "Installed 'hello' package(s) into '$TEST_ENVIRONMENT' environment."
 }
@@ -511,10 +511,10 @@ setup_file() {
 }
 
 @test "flox.nix after installing by nixpkgs flake should contain package" {
-  EDITOR=cat run $FLOX_CLI edit -e "$TEST_ENVIRONMENT"
+  EDITOR='cat' run $FLOX_CLI edit -e "$TEST_ENVIRONMENT"
   assert_success
   assert_output --partial 'packages.nixpkgs.cowsay = {};'
-  ! assert_output --partial "created generation"
+  refute_output --partial "created generation"
 }
 
 @test "flox remove by nixpkgs flake 1" {
@@ -527,8 +527,8 @@ setup_file() {
   run $FLOX_CLI list -e "$TEST_ENVIRONMENT"
   assert_success
   assert_output --regexp "[0-9]+ +$HELLO_PACKAGE +$HELLO_PACKAGE_FIRST8"
-  ! assert_output --partial "nixpkgs#cowsay"
-  ! assert_output --partial "stable.nixpkgs-flox.cowsay"
+  refute_output --partial "nixpkgs#cowsay"
+  refute_output --partial "stable.nixpkgs-flox.cowsay"
 }
 
 @test "flox import from $FLOX_TEST_HOME/floxExport.tar" {

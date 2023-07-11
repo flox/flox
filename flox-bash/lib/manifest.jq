@@ -293,7 +293,8 @@ def flakerefToElementV2(args): expectedArgs(2; args) |
   # Look to see if user provided some string that exactly matches
   # the final part of the flake attrPath, e.g. "hello".
   $elements | map(select(
-    (.originalUrl == "flake:\(args[0])") and
+    ((.originalUrl|type) == "string") and
+    (.originalUrl|test("(flake:)?\(args[0])")) and
     (.attrPath | endswith(args[1]))
   )) | .[0] as $weakestMatch |
   # Prefer full match over partial over weakest match if any exist.
