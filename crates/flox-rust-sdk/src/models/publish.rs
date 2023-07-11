@@ -296,6 +296,7 @@ mod tests {
     use crate::flox::tests::flox_instance;
     use crate::prelude::Channel;
 
+    #[cfg(feature = "impure-unit-tests")] // disabled for offline builds, TODO fix tests to work with local repos
     #[tokio::test]
     async fn creates_catalog_entry() {
         env_logger::init();
