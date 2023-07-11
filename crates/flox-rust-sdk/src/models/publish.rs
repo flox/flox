@@ -112,8 +112,10 @@ impl<'flox> Publish<'flox, Empty> {
             attrpath
         };
 
-        let nixpkgs_flakeref =
-            FlakeRef::Indirect(IndirectRef::new("nixpkgs-flox".into(), Default::default()));
+        let nixpkgs_flakeref = FlakeRef::Indirect(IndirectRef::new(
+            format!("nixpkgs-{}", self.stability),
+            Default::default(),
+        ));
 
         let analyzer_flakeref = FlakeRef::Path(PathRef::new(
             PathBuf::from(env!("FLOX_ANALYZER_SRC")),
@@ -126,7 +128,7 @@ impl<'flox> Publish<'flox, Empty> {
                     ("target".to_string(), self.publish_ref.clone().into_inner()).into(),
                     (
                         "target/flox-floxpkgs/nixpkgs/nixpkgs".to_string(),
-                        nixpkgs_flakeref, // stability overide has already been applied, not duplicating that code here
+                        nixpkgs_flakeref,
                     )
                         .into(),
                 ]
@@ -301,7 +303,7 @@ mod tests {
         let (mut flox, _temp_dir_handle) = flox_instance();
 
         flox.channels.register_channel(
-            "nixpkgs-flox",
+            "nixpkgs-stable",
             Channel::from("github:flox/nixpkgs/stable".parse::<FlakeRef>().unwrap()),
         );
 
