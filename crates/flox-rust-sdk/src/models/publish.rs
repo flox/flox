@@ -170,12 +170,15 @@ impl<'flox> Publish<'flox, Empty> {
 
 impl<'flox> Publish<'flox, NixAnalysis> {
     /// copy the outputs and dependencies of the package to binary store
-    pub async fn upload_binary(&self) -> PublishResult<()> {
+    pub async fn upload_binary(self) -> PublishResult<Publish<'flox, NixAnalysis>> {
         todo!()
     }
 
     #[allow(unused)] // until implemented
-    async fn check_binary_cache(&self, substituter: SubstituterUrl) -> PublishResult<CacheMeta> {
+    async fn get_binary_cache_metadata(
+        &self,
+        substituter: SubstituterUrl,
+    ) -> PublishResult<CacheMeta> {
         todo!()
     }
 
