@@ -567,44 +567,78 @@ function floxRemove() {
 	# and then remove or upgrade them by position only.
 	local -a pkgArgs=()
 	local -a pkgPositionArgs=()
-	for pkg in ${removeArgs[@]}; do
-		pkgArg=$(floxpkgArg "$pkg")
+	local wdman="$environmentWorkDir/x/manifest.json";
+	local frErr=
+	# Push shell options before modifying them so that they can be restored.
+	local oldOpts="$(shopt -p)";
+	shopt -s extglob;
+	# Determine the type of URI we're installing, and convert it to a positional
+	# index ( like the ones seen in the left column of `flox list -e ENV;' ).
+	for pkg in "${removeArgs[@]}"; do
+		pkgArg="$(floxpkgArg "$pkg")"
 		pkgArgs+=("$pkgArg")
 		position=
-		if [[ "$pkgArg" == *#* ]]; then
-			position=$(manifest $environmentWorkDir/x/manifest.json flakerefToPosition "$pkgArg") ||
-				error "Package '$pkg' not found in '$environmentAlias' environment." </dev/null
-		elif [[ "$pkgArg" =~ ^[0-9]+$ ]]; then
-			position="$pkgArg"
-		else
-			position=$(manifest $environmentWorkDir/x/manifest.json storepathToPosition "$pkgArg") ||
-				error "Package '$pkg' not found in '$environmentAlias' environment." </dev/null
-		fi
-		pkgPositionArgs+=($position)
+		# TODO: don't parse URIs with `jq'.
+		case "$pkgArg" in
+			# Remove by installable URI: `nixpkgs#cowsay'
+			*#*)
+				if ! position="$(
+						manifest "$wdman" flakerefToPosition "$pkgArg"
+					 )"
+				then
+				  frErr="Package '$pkg' not found in '$environmentAlias'";
+				  frErr="$frErr environment.";
+				  error "$frErr" </dev/null
+				fi
+			;;
+			# Remove by index: 0, 420, etc
+			+([0-9]))
+				position="$pkgArg";
+			;;
+			# Fallback to removal by Nix store path ( hopefully )
+		    *)
+				if ! position="$(
+					 	manifest "$wdman" storepathToPosition "$pkgArg"
+					 )"
+				then
+				  frErr="Package '$pkg' not found in '$environmentAlias'";
+				  frErr="$frErr environment.";
+				  error "$frErr" </dev/null
+				fi
+			;;
+		esac
+		pkgPositionArgs+=("$position")
 	done
+	# Reset shell options to "pop" `shopt -s extglob'.
+	eval "$oldOpts";
+
 	# Look up floxpkg name(s) from position.
 	local -a pkgNames=()
-	for position in ${pkgPositionArgs[@]}; do
-		pkgNames+=("$(manifest $environmentWorkDir/x/manifest.json positionToFloxpkg "$position")") ||
+	for position in "${pkgPositionArgs[@]}"; do
+		pkgNames+=("$(manifest "$wdman" positionToFloxpkg "$position")") ||
 			error "failed to look up package name for position \"$position\" in environment $environment" </dev/null
 	done
 
-	case $currentGenVersion in
+	case "$currentGenVersion" in
 	1)
 		# Render a new environment with 'nix profile remove'.
-		$invoke_nix "${_nixArgs[@]}" profile remove --profile $environmentWorkDir/x "${pkgPositionArgs[@]}" "${_floxFlakeArgs[@]}"
-		envPackage=$($_realpath $environmentWorkDir/x/.)
+		$invoke_nix "${_nixArgs[@]}" profile remove                    \
+			--profile "$environmentWorkDir/x" "${pkgPositionArgs[@]}"  \
+			          "${_floxFlakeArgs[@]}"
+		envPackage=$($_realpath "$environmentWorkDir/x/.")
 
 		# That went well, update metadata accordingly.
 		# Expand the compact JSON rendered by default.
-		$_jq . $environmentWorkDir/x/manifest.json > $workDir/$nextGen/manifest.json
-		$_git -C $workDir add $nextGen/manifest.json
+		$_jq . "$wdman" > "$workDir/$nextGen/manifest.json"
+		$_git -C "$workDir" add "$nextGen/manifest.json"
 
 		# Generate declarative manifest.
 		# First add the top half with packages section removed.
 		if [ -n "$currentGen" ]; then
 			# Include everything up to the snipline.
-			$_awk "{if (/$snipline/) {exit} else {print}}" "$workDir/$currentGen/manifest.toml" > $workDir/$nextGen/manifest.toml
+			$_awk "{if (/$snipline/) {exit} else {print}}"  \
+				  "$workDir/$currentGen/manifest.toml"      \
+				  > $workDir/$nextGen/manifest.toml
 		else
 			# Bootstrap with prototype manifest.
 			$_cat > $workDir/$nextGen/manifest.toml <<EOF
