@@ -1,11 +1,14 @@
 use std::ops::Deref;
 use std::path::PathBuf;
 
-use derive_more::{Deref, DerefMut};
+use derive_more::{Deref, DerefMut, Display};
+use flox_types::catalog::cache::{CacheMeta, SubstituterUrl};
 use flox_types::stability::Stability;
+use futures::TryFutureExt;
 use runix::arguments::flake::FlakeArgs;
 use runix::command::Eval;
-use runix::command_line::NixCommandLine;
+use runix::command_line::{NixCommandLine, NixCommandLineRunJsonError};
+use runix::flake_metadata::FlakeMetadata;
 use runix::flake_ref::git::GitRef;
 use runix::flake_ref::indirect::IndirectRef;
 use runix::flake_ref::path::PathRef;
@@ -70,6 +73,31 @@ impl<'flox> Publish<'flox, Empty> {
     /// * source urls for reproducibility
     /// * the nixpkgs stability being used to create the package
     pub async fn analyze(self) -> PublishResult<Publish<'flox, NixAnalysis>> {
+        let mut drv_metadata_json = self.get_drv_metadata().await?;
+        let flake_metadata = self.get_flake_metadata().await?;
+
+        // DEVIATION FROM BASH: using `locked` here instead of `resolved`
+        //                      this is used to reproduce the package,
+        //                      but is essentially redundant because of the `source.locked`
+        drv_metadata_json["element"]["url"] = json!(flake_metadata.locked.to_string());
+        drv_metadata_json["source"] = json!({
+            "locked": flake_metadata.locked,
+            "original": flake_metadata.original,
+            "remote": flake_metadata.original,
+        });
+        drv_metadata_json["eval"]["stability"] = json!(self.stability);
+
+        Ok(Publish {
+            flox: self.flox,
+            publish_ref: self.publish_ref,
+            attr_path: self.attr_path,
+            stability: self.stability,
+            analysis: NixAnalysis(drv_metadata_json),
+        })
+    }
+
+    /// extract metadata of the published derivation using the analyzer flake
+    async fn get_drv_metadata(&self) -> PublishResult<Value> {
         let nix: NixCommandLine = self.flox.nix(Default::default());
 
         let analysis_attr_path = {
@@ -112,47 +140,42 @@ impl<'flox> Publish<'flox, Empty> {
             ..Default::default()
         };
 
-        let mut analytics_json = eval_analysis_command
+        eval_analysis_command
             .run_json(&nix, &Default::default())
+            .map_err(|nix_error| {
+                PublishError::DrvMetadata(
+                    self.attr_path.clone(),
+                    self.publish_ref.clone(),
+                    nix_error,
+                )
+            })
             .await
-            .unwrap();
+    }
 
-        let locked_ref = {
-            let locked_ref_command: runix::command::FlakeMetadata = runix::command::FlakeMetadata {
-                flake_ref: Some(self.publish_ref.clone().into_inner().into()),
-                ..Default::default()
-            };
+    /// Resolve the metadata of the flake holding the published package
+    async fn get_flake_metadata(&self) -> PublishResult<FlakeMetadata> {
+        let nix: NixCommandLine = self.flox.nix(Default::default());
 
-            locked_ref_command
-                .run_typed(&nix, &Default::default())
-                .await
-                .unwrap()
+        let locked_ref_command = runix::command::FlakeMetadata {
+            flake_ref: Some(self.publish_ref.clone().into_inner().into()),
+            ..Default::default()
         };
 
-        // DEVIATION FROM BASH: using `locked` here instead of `resolved`
-        //                      this is used to reproduce the package,
-        //                        but is essentially redundant because of the `source.locked`
-        analytics_json["element"]["url"] = json!(locked_ref.locked.to_string());
-        analytics_json["source"] = json!({
-            "locked": locked_ref.locked,
-            "original": locked_ref.original,
-            "remote": locked_ref.original,
-        });
-        analytics_json["eval"]["stability"] = json!(self.stability);
-
-        Ok(Publish {
-            flox: self.flox,
-            publish_ref: self.publish_ref,
-            attr_path: self.attr_path,
-            stability: self.stability,
-            analysis: NixAnalysis(analytics_json),
-        })
+        locked_ref_command
+            .run_typed(&nix, &Default::default())
+            .map_err(|nix_err| PublishError::FlakeMetadata(self.publish_ref.clone(), nix_err))
+            .await
     }
 }
 
 impl<'flox> Publish<'flox, NixAnalysis> {
     /// copy the outputs and dependencies of the package to binary store
     pub async fn upload_binary(&self) -> PublishResult<()> {
+        todo!()
+    }
+
+    #[allow(unused)] // until implemented
+    async fn check_binary_cache(&self, substituter: SubstituterUrl) -> PublishResult<CacheMeta> {
         todo!()
     }
 
@@ -187,7 +210,13 @@ impl<'flox> Publish<'flox, NixAnalysis> {
 }
 
 #[derive(Error, Debug)]
-pub enum PublishError {}
+pub enum PublishError {
+    #[error("Failed to load metadata for the package '{0}' in '{1}': {2}")]
+    DrvMetadata(AttrPath, PublishRef, NixCommandLineRunJsonError),
+
+    #[error("Failed to load metadata for flake '{0}': {1}")]
+    FlakeMetadata(PublishRef, NixCommandLineRunJsonError),
+}
 
 type PublishResult<T> = Result<T, PublishError>;
 
@@ -198,7 +227,7 @@ type PublishResult<T> = Result<T, PublishError>;
 /// This enum represents the subset of flakerefs we can use,
 /// so we can avoid parsing and converting flakerefs within publish.
 /// [GitRef<protocol::File>] should in most cases be resolved to a remote type.
-#[derive(PartialEq, Eq, Clone)]
+#[derive(PartialEq, Eq, Clone, Debug, Display)]
 pub enum PublishRef {
     Ssh(GitRef<protocol::SSH>),
     Https(GitRef<protocol::HTTPS>),
