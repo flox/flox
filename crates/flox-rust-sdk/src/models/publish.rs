@@ -35,7 +35,7 @@ pub struct NixAnalysis(Value);
 
 /// State for the publish algorihm
 ///
-/// Transitions through typestates to ensure we don't invoke invalid operations
+/// The analysis field tracks the transition from Empty -> NixAnalysis to ensure we don't invoke invalid operations
 pub struct Publish<'flox, State> {
     flox: &'flox Flox,
     /// The published _upstream_ source
@@ -63,7 +63,7 @@ impl<'flox> Publish<'flox, Empty> {
         }
     }
 
-    /// run analysis on the package and switch to next state
+    /// Run analysis on the package and switch to next state.
     ///
     /// It uses an analyzer flake to extract eval metadata of the derivation.
     /// The analyzer applies a function to all packages in a `target` flake
@@ -79,6 +79,7 @@ impl<'flox> Publish<'flox, Empty> {
         // DEVIATION FROM BASH: using `locked` here instead of `resolved`
         //                      this is used to reproduce the package,
         //                      but is essentially redundant because of the `source.locked`
+       // TODO it would be better if we didn't have to do post processing of the analysis for parity with calls to readPackage in https://github.com/flox/floxpkgs/blob/master/modules/common.nix
         drv_metadata_json["element"]["url"] = json!(flake_metadata.locked.to_string());
         drv_metadata_json["source"] = json!({
             "locked": flake_metadata.locked,
@@ -96,7 +97,7 @@ impl<'flox> Publish<'flox, Empty> {
         })
     }
 
-    /// extract metadata of the published derivation using the analyzer flake
+    /// Extract metadata of the published derivation using the analyzer flake.
     async fn get_drv_metadata(&self) -> PublishResult<Value> {
         let nix: NixCommandLine = self.flox.nix(Default::default());
 
@@ -177,7 +178,7 @@ impl<'flox> Publish<'flox, Empty> {
 }
 
 impl<'flox> Publish<'flox, NixAnalysis> {
-    /// copy the outputs and dependencies of the package to binary store
+    /// Copy the outputs and dependencies of the package to binary store
     pub async fn upload_binary(self) -> PublishResult<Publish<'flox, NixAnalysis>> {
         todo!()
     }
@@ -190,7 +191,7 @@ impl<'flox> Publish<'flox, NixAnalysis> {
         todo!()
     }
 
-    /// write snapshot to catalog and push to origin
+    /// Write snapshot to catalog and push to origin
     pub async fn push_catalog(self) -> PublishResult<()> {
         let url = self.publish_ref.clone_url();
         let repo_dir = tempfile::tempdir_in(&self.flox.temp_dir)
@@ -214,7 +215,7 @@ impl<'flox> Publish<'flox, NixAnalysis> {
         todo!()
     }
 
-    /// read out the current publish state
+    /// Read out the current publish state
     pub fn analysis(&self) -> &Value {
         self.analysis.deref()
     }
@@ -246,7 +247,7 @@ pub enum PublishRef {
 }
 
 impl PublishRef {
-    /// extract an url for cloning with git
+    /// Extract a URL for cloning with git
     fn clone_url(&self) -> String {
         match self {
             PublishRef::Ssh(ref ssh_ref) => ssh_ref.url.as_str().to_owned(),
@@ -254,7 +255,7 @@ impl PublishRef {
         }
     }
 
-    /// return the a flakeref type for the wrapped refs
+    /// Return the [FlakeRef] type for the wrapped refs
     fn into_inner(self) -> FlakeRef {
         match self {
             PublishRef::Ssh(ssh_ref) => FlakeRef::GitSsh(ssh_ref),
