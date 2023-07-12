@@ -72,14 +72,14 @@ impl<'flox> Publish<'flox, Empty> {
     /// We evalaute this analysis as json, to which we add
     /// * source urls for reproducibility
     /// * the nixpkgs stability being used to create the package
-    pub async fn analyze(self) -> PublishResult<Publish<'flox, NixAnalysis>> {
+    pub async fn analyze(self) -> Result<Publish<'flox, NixAnalysis>, PublishError> {
         let mut drv_metadata_json = self.get_drv_metadata().await?;
         let flake_metadata = self.get_flake_metadata().await?;
 
         // DEVIATION FROM BASH: using `locked` here instead of `resolved`
         //                      this is used to reproduce the package,
         //                      but is essentially redundant because of the `source.locked`
-       // TODO it would be better if we didn't have to do post processing of the analysis for parity with calls to readPackage in https://github.com/flox/floxpkgs/blob/master/modules/common.nix
+        // TODO it would be better if we didn't have to do post processing of the analysis for parity with calls to readPackage in https://github.com/flox/floxpkgs/blob/master/modules/common.nix
         drv_metadata_json["element"]["url"] = json!(flake_metadata.locked.to_string());
         drv_metadata_json["source"] = json!({
             "locked": flake_metadata.locked,
@@ -98,7 +98,7 @@ impl<'flox> Publish<'flox, Empty> {
     }
 
     /// Extract metadata of the published derivation using the analyzer flake.
-    async fn get_drv_metadata(&self) -> PublishResult<Value> {
+    async fn get_drv_metadata(&self) -> Result<Value, PublishError> {
         let nix: NixCommandLine = self.flox.nix(Default::default());
 
         let analysis_attr_path = {
@@ -162,7 +162,7 @@ impl<'flox> Publish<'flox, Empty> {
     }
 
     /// Resolve the metadata of the flake holding the published package
-    async fn get_flake_metadata(&self) -> PublishResult<FlakeMetadata> {
+    async fn get_flake_metadata(&self) -> Result<FlakeMetadata, PublishError> {
         let nix: NixCommandLine = self.flox.nix(Default::default());
 
         let locked_ref_command = runix::command::FlakeMetadata {
@@ -179,7 +179,7 @@ impl<'flox> Publish<'flox, Empty> {
 
 impl<'flox> Publish<'flox, NixAnalysis> {
     /// Copy the outputs and dependencies of the package to binary store
-    pub async fn upload_binary(self) -> PublishResult<Publish<'flox, NixAnalysis>> {
+    pub async fn upload_binary(self) -> Result<Publish<'flox, NixAnalysis>, PublishError> {
         todo!()
     }
 
@@ -187,12 +187,12 @@ impl<'flox> Publish<'flox, NixAnalysis> {
     async fn get_binary_cache_metadata(
         &self,
         substituter: SubstituterUrl,
-    ) -> PublishResult<CacheMeta> {
+    ) -> Result<CacheMeta, PublishError> {
         todo!()
     }
 
     /// Write snapshot to catalog and push to origin
-    pub async fn push_catalog(self) -> PublishResult<()> {
+    pub async fn push_catalog(self) -> Result<(), PublishError> {
         let url = self.publish_ref.clone_url();
         let repo_dir = tempfile::tempdir_in(&self.flox.temp_dir)
             .unwrap()
@@ -229,8 +229,6 @@ pub enum PublishError {
     #[error("Failed to load metadata for flake '{0}': {1}")]
     FlakeMetadata(PublishRef, NixCommandLineRunJsonError),
 }
-
-type PublishResult<T> = Result<T, PublishError>;
 
 /// Publishable FlakeRefs
 ///
