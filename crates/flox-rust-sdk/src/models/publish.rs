@@ -37,10 +37,18 @@ pub struct NixAnalysis(Value);
 ///
 /// The analysis field tracks the transition from Empty -> NixAnalysis to ensure we don't invoke invalid operations
 pub struct Publish<'flox, State> {
+    /// A shared flox session
+    ///
+    /// Nearly all comands require shared state from the [Flox] object.
+    /// Save a reference to it to simplify the method signatures.
     flox: &'flox Flox,
     /// The published _upstream_ source
     publish_ref: PublishRef,
-    /// The published attrpath
+    /// The attr_path of the published package in the source flake (`publish_ref`)
+    ///
+    /// E.g. when publishing `git+https://github.com/flox/flox#packages.aarch64-darwin.flox`
+    /// this is: `packages.aarch64-darwin.flox`
+    ///
     /// Should be fully resolved to avoid ambiguity
     attr_path: AttrPath,
     stability: Stability,
@@ -48,6 +56,7 @@ pub struct Publish<'flox, State> {
 }
 
 impl<'flox> Publish<'flox, Empty> {
+    /// Create a new [Publish] instance at first without any metadata
     pub fn new(
         flox: &'flox Flox,
         publish_ref: PublishRef,
@@ -65,11 +74,7 @@ impl<'flox> Publish<'flox, Empty> {
 
     /// Run analysis on the package and switch to next state.
     ///
-    /// It uses an analyzer flake to extract eval metadata of the derivation.
-    /// The analyzer applies a function to all packages in a `target` flake
-    /// and provides the result under `#analysis.eval.<full attrpath of the package>`.
-    ///
-    /// We evalaute this analysis as json, to which we add
+    /// We evalaute pacakge metadata as json, to which we add
     /// * source urls for reproducibility
     /// * the nixpkgs stability being used to create the package
     pub async fn analyze(self) -> Result<Publish<'flox, NixAnalysis>, PublishError> {
@@ -98,9 +103,16 @@ impl<'flox> Publish<'flox, Empty> {
     }
 
     /// Extract metadata of the published derivation using the analyzer flake.
+    ///
+    ///  It uses an analyzer flake to extract eval metadata of the derivation.
+    /// The analyzer applies a function to all packages in a `target` flake
+    /// and provides the result under `#analysis.eval.<full attrpath of the package>`.
     async fn get_drv_metadata(&self) -> Result<Value, PublishError> {
         let nix: NixCommandLine = self.flox.nix(Default::default());
 
+        // create the analysis.eval.<full attrpath of the package> attr path
+        // take care to remove any leading `""` from the original attri_path
+        // used to signal strict paths (a flox concept, to be upstreamed)
         let analysis_attr_path = {
             let mut attrpath = AttrPath::try_from(["", "analysis", "eval"]).unwrap();
             attrpath.extend(
@@ -118,6 +130,7 @@ impl<'flox> Publish<'flox, Empty> {
             Default::default(),
         ));
 
+        // We bundle the analyzer flake with flox (see the package definition for flox)
         let analyzer_flakeref = FlakeRef::Path(PathRef::new(
             PathBuf::from(env!("FLOX_ANALYZER_SRC")),
             Default::default(),
@@ -126,7 +139,14 @@ impl<'flox> Publish<'flox, Empty> {
         let eval_analysis_command = Eval {
             flake: FlakeArgs {
                 override_inputs: [
+                    // The analyzer flake provides analysis outputs for the flake input `target`
+                    // Here, we're setting the target flake to our source flake.
                     ("target".to_string(), self.publish_ref.clone().into_inner()).into(),
+                    // Stabilities are managed by overriding the `flox-floxpkgs/nixpkgs/nixpkgs` input to
+                    // `nixpkgs-<stability>`.
+                    // The analyzer flake adds an additional indirection,
+                    // so we have to do the override manually.
+                    // This is the `nixpkgs-<stability>` portion.
                     (
                         "target/flox-floxpkgs/nixpkgs/nixpkgs".to_string(),
                         nixpkgs_flakeref,
@@ -134,6 +154,7 @@ impl<'flox> Publish<'flox, Empty> {
                         .into(),
                 ]
                 .to_vec(),
+                // The analyzer flake is bundles with flox as a nix store path and thus read-only.
                 no_write_lock_file: true.into(),
             },
             eval_args: runix::arguments::EvalArgs {
@@ -183,6 +204,8 @@ impl<'flox> Publish<'flox, NixAnalysis> {
         todo!()
     }
 
+    /// Check whether a store path is substitutable by a given substituter
+    /// and return the associated metadata.
     #[allow(unused)] // until implemented
     async fn get_binary_cache_metadata(
         &self,
