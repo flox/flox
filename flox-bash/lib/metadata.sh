@@ -643,8 +643,7 @@ function getSetOrigin() {
 	local origin=""
 	if [[ -d "$environmentMetaDir" ]]; then
 		origin="$(
-		  $_git -C "$environmentMetaDir" "config" "--get" "remote.origin.url"  \
-			  || :
+		  $_git -C "$environmentMetaDir" config --get "remote.origin.url" || :
 	    )"
 	fi
 	if [[ -z "$origin" ]]; then
