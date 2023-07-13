@@ -215,7 +215,7 @@ function temporaryAssert008Schema {
 
 	# Use the presence of manifest.toml in the current generation as
 	# an indication that the repository has NOT been converted.
-	[ -e "$currentGenDir/manifest.toml" ] || return 0
+	[[ -e "$currentGenDir/manifest.toml" ]] || return 0
 
 	# Prompt user to confirm they want to change the format.
 	local _warnMsg="floxmeta repository ($currentGenDir) using deprecated "
@@ -236,7 +236,8 @@ function temporaryAssert008Schema {
 	         "${_nix_editor?}" "$nextGenDir/pkgs/default/flox.nix"  \
 			 > "$tmpScript"
 
-	# Similarly use nix-editor to transfer aliases and env vars from manifest.toml.
+	# Similarly use nix-editor to transfer aliases and env vars from
+	# manifest.toml.
 	# jq outputs something like 'value'.
 	# Arguments to nix-editor have to be double quoted, so wrap with
 	# '"', resulting in '"''value''"'
@@ -308,12 +309,14 @@ function temporaryAssert008Schema {
 }
 # /XXX
 
-# XXX TEMPORARY function to rename "$name{,-*-link}" -> "$system.$name{,-*-link}"
+# XXX TEMPORARY function to rename
+# "$name{,-*-link}" -> "$system.$name{,-*-link}"
 #     **Delete after 20230222**
 function temporaryAssert009LinkLayout() {
 	trace "$@"
 	local environment="$1"; shift
-	# set $branchName,$floxNixDir,$environment{Name,Alias,Owner,System,BaseDir,BinDir,ParentDir,MetaDir}
+	# set $branchName,$floxNixDir,
+	#     $environment{Name,Alias,Owner,System,BaseDir,BinDir,ParentDir,MetaDir}
 	eval "$(decodeEnvironment "$environment")"
 	# The alias is either "owner/name" or "name" based on the owner, so
 	# we can't use that. Instead construct our own fully-qualified
@@ -524,9 +527,9 @@ function checkGhAuth {
 
 		# gh auth login will automatically add credential helpers to the users
 		# global git config.
-		# Since flox will set the git credential helper manually where its needed
-		# and we want to avoid writing user files, trick gh to modify a temporary,
-		# discarded file instead
+		# Since flox will set the git credential helper manually where its
+		# needed and we want to avoid writing user files, trick gh to modify a
+		# temporary, discarded file instead
 		GIT_CONFIG_GLOBAL="$(mkTempFile)" $_gh auth login -h "$hostname"
 		info ""
 	done
@@ -559,7 +562,7 @@ function promptMetaOrigin() {
 	  echo ''
 	} >&2
 	server="$(
-		multChoice "Where would you like to host your 'floxmeta' repository?" \
+		multChoice "Where would you like to host your 'floxmeta' repository?"  \
 			"git server" "github.com" "gitlab.com" "bitbucket.org" "other"
 	)"
 
@@ -942,7 +945,8 @@ function commitTransaction() {
 	local nextGenVersion="$1"; shift
 	local invocation="$*"
 	local result=""
-	# set $branchName,$floxNixDir,$environment{Name,Alias,Owner,System,BaseDir,BinDir,ParentDir,MetaDir}
+	# set $branchName,$floxNixDir,
+	#     $environment{Name,Alias,Owner,System,BaseDir,BinDir,ParentDir,MetaDir}
 	eval "$(decodeEnvironment "$environment")"
 
 	# If this is a project environment there will be no $environmentMetaDir,
