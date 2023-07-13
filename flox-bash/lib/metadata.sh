@@ -287,7 +287,7 @@ function temporaryAssert008Schema {
 	if ! envPackage="$(
 	       ${invoke_nix?} build --impure --no-link --print-out-paths           \
 			              "$nextGenDir#.floxEnvs.${environmentSystem?}.default"
-		 )"
+	     )"
 	then
 		error "failed to install packages: ${pkgArgs?[*]}" < /dev/null
 	fi
@@ -323,7 +323,7 @@ function temporaryAssert009LinkLayout() {
 	# name by removing the system from environmentName.
 	local environmentBasename="${environmentName?/$environmentSystem\./}"
 	for i in "${environmentParentDir?}/${environmentBasename}"        \
-		     "${environmentParentDir}/${environmentBasename}-*-link"
+		     "${environmentParentDir}/${environmentBasename}-"*-link
 	do
 		if [[ -L "$i" ]]; then
 			local x
@@ -332,14 +332,14 @@ function temporaryAssert009LinkLayout() {
 			$environmentSystem.$environmentBasename*)
 				# Already renamed, all good.
 				: ;;
-			$environmentBasename-*-link|/nix/store/*)
+			${environmentBasename}-*-link|/nix/store/*)
 				# Old link - rename and leave forwarding link in its place.
 				local y
 				y="${environmentSystem}.$($_basename "$i")"
 				if [[ -L "${environmentParentDir}/$y" ]]; then
 					${_rm?} "$i"
 				else
-					$_mv "$i" "${environmentParentDir}/$y"
+					$_mv "$i" "$environmentParentDir/$y"
 				fi
 				${_ln?} -s "$y" "$i"
 				;;
@@ -954,7 +954,7 @@ function commitTransaction() {
 	# retreat.
 	if [ -z "$environmentMetaDir" ]; then
 		if ${_cmp?} -s "$workDir/next/pkgs/default/flox.nix"  \
-		               "${protoPkgDir?}/flox.nix"
+		               "$floxNixDir/flox.nix"
 		then
 			result="project-environment-no-changes"
 		else
