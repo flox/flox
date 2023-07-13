@@ -66,6 +66,8 @@ def searchEntriesToPrettyBlocks:
     }
   );
 
+# Convert a list of search entries to a list of simplified flox tuples with
+# their descriptions, discarding multiple entries for a single floxref.
 def searchEntriesToPrettyConcise:
   group_by(.floxref)|
   map(
@@ -74,6 +76,7 @@ def searchEntriesToPrettyConcise:
     ( if .stability == "stable" then "" else .stability + "." end ) +
     ( if .channel == "nixpkgs-flox" then "" else .channel + "." end ) +
     .attrPath +
+    # add | for column
     ( if ( .description == null ) or ( .description == "" ) then "" else "|" + .description end)
   );
 
