@@ -146,7 +146,7 @@ function hash_commands() {
 # avoid leaking Nix paths into the commands we invoke.
 # TODO replace each use of $_cut and $_tr with shell equivalents.
 hash_commands \
-	ansifilter awk basename bash cat chmod cmp column cp curl cut dasel date dirname \
+	ansifilter awk builtfilter-rs basename bash cat chmod cmp column cp curl cut dasel date dirname \
 	getent gh git grep gum id jq ln man mkdir mktemp mv nix nix-editor nix-store \
 	pwd readlink realpath rm rmdir sed sh sleep sort stat tail tar tee \
 	touch tr uname uuid xargs zgrep semver

@@ -2,6 +2,7 @@
   self,
   flox-src,
   inputs,
+  capacitated,
   stdenv,
   ansifilter,
   bashInteractive,
@@ -115,6 +116,7 @@ in
       nix-editor
       util-linuxMinimal
       semver
+      capacitated.flox-floxpkgs.packages.builtfilter
     ];
     makeFlags =
       [
