@@ -19,7 +19,7 @@ def nixPkgToCatalogPkg( $channel ):
   $key[1] as $system|
   $key[2] as $stability|
   ( $key[3:]|join( "." ) ) as $attrPathVersion|
-  .key    = $catalog + "." + $system + "." + $channel + "." + $attrPathVersion|
+  .key    = $catalog + "." + $system + "." + $stability + "." + $channel + "." + $attrPathVersion|
   .value += {
     catalog:         $catalog
   , system:          $system
