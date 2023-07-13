@@ -12,17 +12,18 @@ shopt -s extglob
 # Allow globs to return the empty list.
 shopt -s nullglob
 
-set -eu;
-set -o pipefail;
+# TODO: One day we can turn these on...
+# set -eu;
+# set -o pipefail;
 
 # Pull in utility functions early.
-. $_lib/utils.sh
+. "$_lib/utils.sh"
 
 # Import library functions.
-. $_lib/metadata.sh
+. "$_lib/metadata.sh"
 
 # Import command functions.
-. $_lib/commands.sh
+. "$_lib/commands.sh"
 
 #
 # Parse flox configuration files in TOML format. Order of processing:
@@ -42,8 +43,8 @@ read_flox_conf()
 	# single invocation and then selecting multiple values using jq.
 	for f in "$_prefix/etc/flox.toml" "/etc/flox.toml" "$FLOX_CONFIG_HOME/flox.toml"
 	do
-		if [ -f "$f" ]; then
-		for i in $@
+		if [[ -f "$f" ]]; then
+		for i in "$@"
 			do
 				# Use `cat` to open files because it produces a clear and concise
 				# message when file is not found or not readable. By comparison
@@ -54,9 +55,9 @@ read_flox_conf()
 				#
 				# Use the `jq` `tojson()` function to escape quotes contained in
 				# values.
-				$_cat "$f" | \
-				$_dasel -r toml -w json | \
-				$_jq -r --arg var $i 'if has($var) then "FLOX_CONF_\($var)=\(.[$var] | tojson)" else empty end'
+				#shellcheck disable=SC2016
+				$_cat "$f" | $_dasel -r toml -w json \
+					|$_jq -r --arg var "$i" 'if has($var) then "FLOX_CONF_\($var)=\(.[$var] | tojson)" else empty end'
 			done
 		fi
 	done
@@ -65,8 +66,10 @@ read_flox_conf()
 nix_show_config()
 {
 	local -a _cline
+	#shellcheck disable=SC2162
 	$_nix show-config | while read -a _cline
 	do
+		if [[ -z "${_cline[*]}" ]]; then continue; fi
 		case "${_cline[0]}" in
 		# List below the parameters you want to use within the script.
 		system)
@@ -145,18 +148,18 @@ declare floxFlakeRegistry="$FLOX_CONFIG_HOME/floxFlakeRegistry.json"
 # Manage user-specific nix.conf for use with flox only.
 # XXX May need further consideration for Enterprise.
 declare nixConf="$FLOX_CONFIG_HOME/nix.conf"
-tmpNixConf=$($_mktemp --tmpdir=$FLOX_CONFIG_HOME)
+tmpNixConf="$($_mktemp --tmpdir="$FLOX_CONFIG_HOME")"
 # We want the file in alphabetical order to ease comparing it.
 # The consideration of access tokens is somewhat out of order.
 # The remaining elements are appended below.
-$_cat > $tmpNixConf <<EOF
+$_cat > "$tmpNixConf" <<EOF
 # Automatically generated - do not edit.
 accept-flake-config = true
 connect-timeout = 5
 EOF
 
 # Ensure file is secure before appending access token(s).
-$_chmod 600 $tmpNixConf
+${_chmod?} 600 "$tmpNixConf"
 
 # Look for github tokens from multiple sources:
 #   1. the user's own .config/nix/nix.conf, else

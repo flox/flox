@@ -1114,6 +1114,7 @@ function listEnvironments() {
 	. <($invoke_git -C "$environmentMetaDir" branch -av | $_sed 's/^\*//'  \
 		| while read -a _cline
 		do
+			if [[ -z "${_cline[*]}" ]]; then continue; fi
 			_remote=$($_dirname "${_cline[0]}")
 			_branch=$($_basename "${_cline[0]}")
 			if [[ "$_branch" =~ ^$system.* ]]; then
@@ -1205,11 +1206,13 @@ EOF
 function doAutoUpdate() {
 	trace "$@"
 	local environment="$1"; shift
-	case "$FLOX_AUTOUPDATE" in
+	case "${FLOX_AUTOUPDATE:-}" in
 	0|1|2) echo "$FLOX_AUTOUPDATE";;
 	"") echo 1;;
 	*)
-		warn "ignoring invalid value '$FLOX_AUTOUPDATE' for '\$FLOX_AUTOUPDATE'"
+		local _warnMsg="ignoring invalid value '${FLOX_AUTOUPDATE:-}' for ";
+		_warnMsg="$_warnMsg'\$FLOX_AUTOUPDATE'"
+		warn "$_warnMsg"
 		echo 1;;
 	esac
 }

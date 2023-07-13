@@ -123,8 +123,10 @@ function floxActivate() {
 	# and contains the list of fully-qualified active environments by path,
 	# e.g. /Users/floxfan/.local/share/flox/environments/local/default.
 	# Load this variable into an associative array for convenient lookup.
-	IFS=: read -ra _flox_original_active_environments_array  \
-	               <<< "$FLOX_ACTIVE_ENVIRONMENTS"
+	if [[ -n "${FLOX_ACTIVE_ENVIRONMENTS:-}" ]]; then
+	  IFS=: read -ra _flox_original_active_environments_array  \
+	                 <<< "$FLOX_ACTIVE_ENVIRONMENTS"
+	fi
 	for i in "${_flox_original_active_environments_array[@]}"; do
 		_flox_active_environments_hash["$i"]=1
 	done
@@ -134,17 +136,17 @@ function floxActivate() {
 	# activation scripts multiple times.
 	for i in "${environments[@]}"; do
 		_environments_requested+=("$i")
-		if [ -z "${_flox_active_environments_hash[$i]}" ]; then
+		if [[ "${_flox_active_environments_hash[$i]:+${_flox_active_environments_hash[$i]}}" != 1 ]]; then
 			# Only warn if not a project or the default environment.
-			if [[ "$i" != "$defaultEnv" && ! "$i" =~ '#' ]]; then
-				[ -d "$i/." ] || warn "INFO environment not found: $i"
+			if [[ "$i" != "${defaultEnv?}" && ! "$i" =~ '#' ]]; then
+				[[ -d "$i/." ]] || warn "INFO environment not found: $i"
 			fi
 			_environments_to_activate+=("$i")
 			_flox_active_environments_hash["$i"]=1
-		elif [ "$i" != "$defaultEnv" ]; then
+		elif [[ "$i" != "$defaultEnv" ]]; then
 			# Only warn if in an interactive session, and don't warn when
 			# attempting to activate the default env.
-			if [ "$interactive" -eq 1 ]; then
+			if [[ "${interactive?}" -eq 1 ]]; then
 				warn "INFO not running hooks for active environment: $i"
 			fi
 		fi
@@ -153,7 +155,7 @@ function floxActivate() {
 	# Add "default" to end of the list if it's not already there.
 	# Do this separately from loop above to detect when people
 	# explicitly attempt to activate default env twice.
-	if [ -z "${_flox_active_environments_hash[$defaultEnv]}" ]; then
+	if [[  "${_flox_active_environments_hash[$defaultEnv]:+${_flox_active_environments_hash[$defaultEnv]}}" != 1 ]]; then
 		_environments_requested+=("$defaultEnv")
 		_environments_to_activate+=("$defaultEnv")
 		_flox_active_environments_hash["$defaultEnv"]=1
@@ -179,7 +181,7 @@ function floxActivate() {
 				if [ "$autoUpdate" -eq 1 ]; then
 					# set $branchName,$floxNixDir,$environment{Name,Alias,Owner,System,BaseDir,BinDir,ParentDir,MetaDir}
 					eval "$(decodeEnvironment "$environment")"
-					if $_gum confirm "'$environmentAlias' is at generation $updateGen, pull latest version?"; then
+					if ${_gum?} confirm "'${environmentAlias?}' is at generation $updateGen, pull latest version?"; then
 						floxPushPull pull "$environment" "$system"
 					fi
 				else # $autoUpdate == 2, aka always pull without prompting
@@ -235,9 +237,9 @@ function floxActivate() {
 		flox_prompt_environments_prepend+=("$environmentAlias")
 	done
 	PATH="$(joinString ':' "${path_prepend[@]}" "$PATH")"
-	XDG_DATA_DIRS="$(joinString ':' "${xdg_data_dirs_prepend[@]}" "$XDG_DATA_DIRS")"
-	FLOX_ACTIVE_ENVIRONMENTS="$(joinString ':' "${flox_active_environments_prepend[@]}" "$FLOX_ACTIVE_ENVIRONMENTS")"
-	FLOX_PROMPT_ENVIRONMENTS="$(joinString ' ' "${flox_prompt_environments_prepend[@]}" "$FLOX_PROMPT_ENVIRONMENTS")"
+	XDG_DATA_DIRS="$(joinString ':' "${xdg_data_dirs_prepend[@]}" "${XDG_DATA_DIRS:-}")"
+	FLOX_ACTIVE_ENVIRONMENTS="$(joinString ':' "${flox_active_environments_prepend[@]}" "${FLOX_ACTIVE_ENVIRONMENTS:-}")"
+	FLOX_PROMPT_ENVIRONMENTS="$(joinString ' ' "${flox_prompt_environments_prepend[@]}" "${FLOX_PROMPT_ENVIRONMENTS:-}")"
 	export PATH XDG_DATA_DIRS FLOX_ACTIVE_ENVIRONMENTS FLOX_PROMPT_ENVIRONMENTS
 
 	# Darwin has a "path_helper" which indiscriminately reorders the path to
@@ -312,13 +314,14 @@ function floxActivate() {
 
 	# Set the init script to self-destruct upon activation (unless debugging).
 	# Very James Bond.
-	[ "$debug" -gt 0 ] || echo "$_rm $rcScript" >> "$rcScript"
+	[ "${debug?}" -gt 0 ] || echo "${_rm?} $rcScript" >> "$rcScript"
 
 	# If invoking a command, go ahead and exec().
 	if [ "${#cmdArgs[@]}" -gt 0 ]; then
 		# Command case - source "rc" script and exec command.
+		#shellcheck disable=SC1090
 		source "$rcScript"
-		[ "$verbose" -eq 0 ] || pprint "+$colorBold" exec "${cmdArgs[@]}" "$colorReset" 1>&2
+		[ "${verbose?}" -eq 0 ] || pprint "+${colorBold?}" exec "${cmdArgs[@]}" "${colorReset?}" 1>&2
 		exec "${cmdArgs[@]}" # Does not return.
 	fi
 
@@ -333,10 +336,10 @@ function floxActivate() {
 	# Our only real defense against this sort of "double activation"
 	# is to put guards around our configuration, just as C include
 	# files have had since the dawn of time.
-	if [ -z "$FLOX_PROMPT_DISABLE" ]; then
+	if [[ -z "${FLOX_PROMPT_DISABLE:-}" ]]; then
 		case "$rcShell" in
 		*bash)
-			cat "$_etc/flox.prompt.bashrc" >> "$rcScript"
+			cat "${_etc?}/flox.prompt.bashrc" >> "$rcScript"
 			;;
 		*zsh)
 			cat "$_etc/flox.zdotdir/prompt.zshrc" >> "$rcScript"

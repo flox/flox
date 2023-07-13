@@ -327,8 +327,8 @@ function invoke() {
 	local BASH_XTRACEFD=9
 	trace "$@"
 	local vars=()
-	if [ $verbose -ge $minverbosity ]; then
-		for i in ${exported_variables[$1]}; do
+	if [[ "${verbose?}" -ge "$minverbosity" ]]; then
+		for i in ${exported_variables["$1"]:+${exported_variables["$i"]}}; do
 			vars+=($(eval "echo $i=\${$i}"))
 		done
 		pprint "+$colorBold" "${vars[@]}" "$@" "$colorReset" 1>&2
@@ -1537,7 +1537,7 @@ function joinString() {
 			case "$i" in
 			"") : ;;
 			*)
-				if [ -z "${seen["$i"]}" ]; then
+				if [[ "${seen["$i"]:+${seen["$i"]}}" != 1 ]]; then
 					if [ -n "$accum" ]; then
 						accum="${accum}${separator}${i}"
 					else
