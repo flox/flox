@@ -710,7 +710,7 @@ function getSetOrigin() {
 				${invoke_mv?} --verbose                                  \
 				              "$FLOX_META/$newEnvironmentOwner"{,".$$"}
 			fi
-			if [ -d "$FLOX_META/local" ]; then
+			if [[ -d "$FLOX_META/local" ]]; then
 				$invoke_mv "$FLOX_META/local" "$FLOX_META/$newEnvironmentOwner"
 			fi
 			$invoke_ln -s -f "$newEnvironmentOwner" "$FLOX_META/local"
@@ -725,7 +725,7 @@ function getSetOrigin() {
 				$invoke_mv --verbose                                        \
 				           "$FLOX_ENVIRONMENTS/$newEnvironmentOwner"{,.$$}
 			fi
-			if [ -d "$FLOX_ENVIRONMENTS/local" ]; then
+			if [[ -d "$FLOX_ENVIRONMENTS/local" ]]; then
 				$invoke_mv "$FLOX_ENVIRONMENTS/local"                 \
 				           "$FLOX_ENVIRONMENTS/$newEnvironmentOwner"
 			fi
@@ -736,7 +736,7 @@ function getSetOrigin() {
 			rewriteURLs "$FLOX_ENVIRONMENTS/local" "$origin"
 		fi
 
-		[ -d "$environmentMetaDir" ] || gitInitFloxmeta "$environmentMetaDir"
+		[[ -d "$environmentMetaDir" ]] || gitInitFloxmeta "$environmentMetaDir"
 		$invoke_git -C "$environmentMetaDir" "remote" "add" "origin" "$origin"
 	fi
 
@@ -834,7 +834,7 @@ function beginTransaction() {
 	                 --quiet refs/remotes/origin/"$branchName"
 	then
 		$invoke_git -C "$workDir" checkout --quiet --track origin/"$branchName"
-	elif [ $createBranch -eq 1 ]; then
+	elif [[ $createBranch -eq 1 ]]; then
 		$invoke_git -C "$workDir" checkout --quiet --orphan "$branchName"
 		$invoke_git -C "$workDir" ls-files                                   \
 			| $_xargs --no-run-if-empty "$_git" -C "$workDir" rm --quiet -f
@@ -952,7 +952,7 @@ function commitTransaction() {
 	# and correspondingly nothing to commit or push. The only thing we need
 	# to do in this instance is update the activation link and bid a hasty
 	# retreat.
-	if [ -z "$environmentMetaDir" ]; then
+	if [[ -z "$environmentMetaDir" ]]; then
 		if ${_cmp?} -s "$workDir/next/pkgs/default/flox.nix"  \
 		               "$floxNixDir/flox.nix"
 		then
@@ -1298,7 +1298,7 @@ function trailingAsyncFetch() {
 		fi
 	done
 	# Make every effort to stay hidden in the background unless debugging.
-	if [ "${debug?}" -gt 0 ]; then
+	if [[ "${debug?}" -gt 0 ]]; then
 		( _trailingAsyncFetch "${!trailingAsyncFetchMetaDirs[@]}" </dev/null & )
 	else
 		( _trailingAsyncFetch "${!trailingAsyncFetchMetaDirs[@]}" </dev/null &
