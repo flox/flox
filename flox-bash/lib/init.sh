@@ -1,15 +1,19 @@
+# -*- mode: sh; sh-shell: bash; -*-
 # Set prefix (again) to assist with debugging independently of flox.sh.
 _prefix="@@PREFIX@@"
-_prefix=${_prefix:-.}
-_lib=$_prefix/lib
-_libexec=$_prefix/libexec
-_etc=$_prefix/etc
+_prefix="${_prefix:-.}"
+_lib="$_prefix/lib"
+_libexec="$_prefix/libexec"
+_etc="$_prefix/etc"
 
 # Use extended glob functionality throughout.
 shopt -s extglob
 
 # Allow globs to return the empty list.
 shopt -s nullglob
+
+set -eu;
+set -o pipefail;
 
 # Pull in utility functions early.
 . $_lib/utils.sh
@@ -204,7 +208,7 @@ if [ -f "$FLOX_CONFIG_HOME/tokens" ]; then
 	done
 fi
 # Append all available tokens to nix.conf.
-if [ ${#accessTokens[@]} -gt 0 ]; then
+if [[ "${#accessTokens[@]}" -gt 0 ]]; then
 	echo "extra-access-tokens = ${accessTokens[@]}" >> $tmpNixConf
 fi
 
@@ -270,7 +274,7 @@ EOF
 # XXX Remove after closed beta.
 
 # Honor existing GIT_CONFIG_SYSTEM variable and/or default /etc/gitconfig.
-if [ -n "$GIT_CONFIG_SYSTEM" ]; then
+if [ -n "${GIT_CONFIG_SYSTEM:-}" ]; then
 	if [ -n "$FLOX_ORIGINAL_GIT_CONFIG_SYSTEM" ]; then
 		# Reset GIT_CONFIG_SYSTEM to reflect the original value
 		# observed before starting flox subshell (see below).
@@ -284,11 +288,13 @@ fi
 
 # If system gitconfig exists then include it, but check first to make sure
 # user hasn't requested that we include our own gitconfig file(!).
-if [ -e "$GIT_CONFIG_SYSTEM" -a "$GIT_CONFIG_SYSTEM" != "$gitConfig" ]; then
+if [[ -n "${GIT_CONFIG_SYSTEM:-}" ]] && [[ -e "$GIT_CONFIG_SYSTEM" ]] &&  \
+   [[ "$GIT_CONFIG_SYSTEM" != "$gitConfig" ]]
+then
 	# Save first/original observed variable to disambiguate our use
 	# of GIT_CONFIG_SYSTEM in subshells.
 	export FLOX_ORIGINAL_GIT_CONFIG_SYSTEM="$GIT_CONFIG_SYSTEM"
-	$_cat >> $tmpGitConfig <<EOF
+	$_cat >> "$tmpGitConfig" <<EOF
 [include]
 	path = $GIT_CONFIG_SYSTEM
 
@@ -296,23 +302,23 @@ EOF
 fi
 
 # Compare generated gitconfig to cached version.
-if $_cmp --quiet $tmpGitConfig $gitConfig; then
-	$_rm $tmpGitConfig
+if $_cmp --quiet "$tmpGitConfig" "$gitConfig"; then
+	$_rm "$tmpGitConfig"
 else
 	warn "Updating $gitConfig"
-	$_mv -f $tmpGitConfig $gitConfig
+	$_mv -f "$tmpGitConfig" "$gitConfig"
 fi
 
 # Override system gitconfig.
 export GIT_CONFIG_SYSTEM="$gitConfig"
 
-if [ -n "$NIX_GET_COMPLETIONS" ]; then
+if [ -n "${NIX_GET_COMPLETIONS:-}" ]; then
 	export FLOX_ORIGINAL_NIX_GET_COMPLETIONS="$NIX_GET_COMPLETIONS"
 	unset NIX_GET_COMPLETIONS
 fi
 
 # Load nix configuration (must happen after setting NIX_USER_CONF_FILES)
-eval $(nix_show_config)
+eval "$(nix_show_config)"
 
 # Set FLOX_SYSTEM for this invocation. Be sure to inherit FLOX_SYSTEM
 # from the environment if defined.
@@ -329,10 +335,10 @@ declare defaultEnv="$FLOX_ENVIRONMENTS/$defaultEnvironmentOwner/$FLOX_SYSTEM.def
 # placeholder for functionality. Expect it to figure prominently in
 # tenant customizations.
 eval "$(read_flox_conf git_base_url)"
-if [ -z "$FLOX_CONF_git_base_url" ]; then
+if [ -z "${FLOX_CONF_git_base_url:-}" ]; then
 	# attempt to read old bash floxpkgs.gitBaseURL value from old flox.toml
 	eval "$(read_flox_conf floxpkgs)"
-	if [ -n "$FLOX_CONF_floxpkgs" ]; then
+	if [ -n "${FLOX_CONF_floxpkgs:-}" ]; then
 		FLOX_CONF_git_base_url="$($_jq -r -n --argjson floxpkgs "$FLOX_CONF_floxpkgs" '$floxpkgs["gitBaseURL"]')"
 	else
 		warn "could not read git_base_url from config; defaulting to https://github.com/"
@@ -341,7 +347,7 @@ if [ -z "$FLOX_CONF_git_base_url" ]; then
 fi
 
 # Bootstrap user-specific configuration.
-. $_lib/bootstrap.sh
+. "$_lib/bootstrap.sh"
 
 # Populate user-specific flake registry.
 declare -A validChannels=()
@@ -351,11 +357,9 @@ updateFloxFlakeRegistry
 # `tar` without the `-f` flag and will therefore honor the `TAPE` variable
 # over STDIN (to reproduce, try running `TAPE=none flox shell`).
 # XXX Still needed??? Probably delete ...
-if [ -n "$TAPE" ]; then
-	unset TAPE
-fi
+unset TAPE
 
 # Timestamp
-now=$($_date +%s)
+now="$($_date +%s)"
 
 # vim:ts=4:noet:syntax=bash

@@ -187,8 +187,8 @@ function temporaryAssert007Schema {
 	done
 
 	# Commit, reading commit message from STDIN.
-	$invoke_git -C "$repoDir" commit \
-		--quiet -m "$USER converted to 0.0.7 floxmeta schema"
+	$invoke_git -C "$repoDir" commit                                   \
+	            --quiet -m "$USER converted to 0.0.7 floxmeta schema"
 	$invoke_git -C "$repoDir" push --quiet
 
 	warn "Conversion complete. Please re-run command."
@@ -763,7 +763,7 @@ function beginTransaction() {
 	# If this is a project environment there will be no $environmentMetaDir.
 	# Create a simulated generation environment so that we don't have to
 	# create project-specific versions of all the calling functions.
-	if [[ -z "$environmentMetaDir" ]]; then
+	if [[ -z "${environmentMetaDir:-}" ]]; then
 		# Create a fake environmentMetaDir.
 		environmentMetaDir="$(mkTempDir)"
 		gitInitFloxmeta "$environmentMetaDir"
@@ -952,7 +952,7 @@ function commitTransaction() {
 	# and correspondingly nothing to commit or push. The only thing we need
 	# to do in this instance is update the activation link and bid a hasty
 	# retreat.
-	if [[ -z "$environmentMetaDir" ]]; then
+	if [[ -z "${environmentMetaDir:-}" ]]; then
 		if ${_cmp?} -s "$workDir/next/pkgs/default/flox.nix"  \
 		               "$floxNixDir/flox.nix"
 		then
@@ -985,7 +985,7 @@ function commitTransaction() {
 	# Activate the new generation just as Nix would have done.
 	# First check to see if the environment has actually changed,
 	# and if not then return immediately.
-	local oldEnvPackage
+	local oldEnvPackage=
 	if [[ -e "$environment" ]]; then
 		oldEnvPackage="$(
 		  registry "$workDir/metadata.json" 1 get generations "$currentGen" path
@@ -1293,7 +1293,7 @@ function trailingAsyncFetch() {
 		# $environment{Name,Alias,Owner,System,BaseDir,BinDir,ParentDir,MetaDir}
 		eval "$(decodeEnvironment "$environment")"
 		# $environmentMetaDir will be blank for project environments.
-		if [[ -n "$environmentMetaDir" ]]; then
+		if [[ -n "${environmentMetaDir:-}" ]]; then
 			trailingAsyncFetchMetaDirs["$environmentMetaDir"]=1
 		fi
 	done

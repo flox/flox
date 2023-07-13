@@ -1,3 +1,4 @@
+# -*- mode: sh; sh-shell: bash; -*-
 #
 # Utility functions.
 #
@@ -7,8 +8,11 @@ ESC="\x1b["
 
 # flox color palette.
 #201e7b, nearest named: midnight blue(HTML104), dark slate blue(HTML122)*
+#shellcheck disable=SC2034
+{
 DARKBLUE="32;30;123"
 DARKBLUE256=17 # NavyBlue, by eye
+
 #58569c, nearest named: dark slate blue(HTML122), slate blue(HTML123)*
 LIGHTBLUE="88;86;156"
 LIGHTBLUE256=61 # SlateBlue3
@@ -51,6 +55,7 @@ colorUnderline="${ESC}4m"
 colorSlowBlink="${ESC}5m"
 colorRapidBlink="${ESC}6m"
 colorReverseVideo="${ESC}7m"
+}
 
 # Set gum color palette.
 export GUM_SPIN_SPINNER_FOREGROUND=$DARKPEACH256
@@ -81,7 +86,7 @@ function pprint() {
 	# Step through args and encase with single-quotes those which need it.
 	local space=""
 	for i in "$@"; do
-		if [ -z "$i" ]; then
+		if [[ -z "$i" ]]; then
 			# empty arg
 			echo -e -n "$space''"
 		elif [[ "$i" =~ ^\'.*\'$ ]]; then
@@ -112,7 +117,7 @@ function trace() {
 	# Redirect the output of set -x to /dev/null
 	exec 9>/dev/null
 	local BASH_XTRACEFD=9
-	[ ${debug:-0} -gt 0 ] || return 0
+	[[ "${debug:-0}" -gt 0 ]] || return 0
 	echo -e "trace:${filecolor}${BASH_SOURCE[2]}:${BASH_LINENO[1]}${colorReset} ${funccolor}${FUNCNAME[1]}${colorReset}( ${argscolor}$(pprint "$@")${colorReset} )" 1>&2
 }
 
@@ -122,20 +127,20 @@ function hash_commands() {
 	trace "$@"
 	set -h # explicitly enable hashing
 	local PATH=@@FLOXPATH@@:$PATH
-	for i in $@; do
-		_i=${i//-/_} # Pesky utilities containing dashes require rewrite.
-		hash $i # Dies with useful/precise error on failure when not found.
-		declare -g _$_i=$(type -P $i)
+	for i in "$@"; do
+		_i="${i//-/_}" # Pesky utilities containing dashes require rewrite.
+		hash "$i" # Dies with useful/precise error on failure when not found.
+		declare -g "_$_i"="$(type -P "$i")"
 
 		# Define $invoke_<name> variables for those invocations we'd
 		# like to wrap with the invoke() subroutine.
-		declare -g invoke_$_i="invoke $(type -P $i)"
+		declare -g "invoke_$_i"="invoke $(type -P $i)"
 
 		# Some commands require certain environment variables to work properly.
 		# Make note of them here for displaying verbose output in invoke().
 		case $i in
 		nix | nix-store)
-			exported_variables[$(type -P $i)]="NIX_REMOTE NIX_SSL_CERT_FILE NIX_USER_CONF_FILES GIT_CONFIG_SYSTEM" ;;
+			exported_variables["$(type -P "$i")"]="NIX_REMOTE NIX_SSL_CERT_FILE NIX_USER_CONF_FILES GIT_CONFIG_SYSTEM" ;;
 		*) ;;
 		esac
 	done
@@ -171,8 +176,8 @@ editorCommand=${EDITOR:-${VISUAL:-${bestAvailableEditor:-vi}}}
 
 # Short name for this script, derived from $0.
 me="${0##*/}"
-mespaces=$(echo $me | $_tr '[a-z]' ' ')
-medashes=$(echo $me | $_tr '[a-z]' '-')
+mespaces=$(echo "$me" | $_tr '[a-z]' ' ')
+medashes=$(echo "$me" | $_tr '[a-z]' '-')
 
 # info() prints to STDERR
 function info() {

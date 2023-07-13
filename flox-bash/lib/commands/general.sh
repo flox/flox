@@ -1,3 +1,4 @@
+# -*- mode: sh; sh-shell: bash; -*-
 ## General commands
 
 _general_commands+=("channels")
