@@ -354,6 +354,7 @@ fi
 
 # Populate user-specific flake registry.
 declare -A validChannels=()
+#shellcheck disable=SC2119
 updateFloxFlakeRegistry
 
 # Leave it to Bob to figure out that Nix 2.3 has the bug that it invokes

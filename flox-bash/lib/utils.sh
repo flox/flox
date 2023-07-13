@@ -1191,6 +1191,7 @@ function validateFlakeURL() {
 #
 # Merge user-subscribed and flox-provided channels in a single JSON stream.
 #
+#shellcheck disable=SC2120
 function getChannelsJSON() {
 	trace "$@"
 	# Combine flox-provided and user channels in a single stream.
@@ -1214,6 +1215,7 @@ function updateFloxFlakeRegistry() {
 	# Render Nix flake registry using flox and user-provided entries.
 	# Note: avoids problems to let nix create the temporary file.
 	tmpFloxFlakeRegistry=$($_mktemp --dry-run --tmpdir=$FLOX_CONFIG_HOME)
+    #shellcheck disable=SC2119
 	. <(getChannelsJSON | $_jq -r '
 	  to_entries | sort_by(.key) | map(
 	    "minverbosity=2 $invoke_nix registry add --registry $tmpFloxFlakeRegistry \"\(.key)\" \"\(.value.url)\" && validChannels[\(.key)]=\"\(.value.type)\""
@@ -1231,10 +1233,10 @@ function updateFloxFlakeRegistry() {
 	minverbosity=2 $invoke_nix registry add --registry $tmpFloxFlakeRegistry nixpkgs-unstable github:flox/nixpkgs/unstable
 
 	# order of keys is not relevant for json data
-	if [ -f $floxFlakeRegistry ] && $_cmp --quiet <($_jq -S < $tmpFloxFlakeRegistry) <($_jq -S < $floxFlakeRegistry); then
-		$_rm $tmpFloxFlakeRegistry
+	if [[ -f "${floxFlakeRegistry?}" ]] && $_cmp --quiet <($_jq -S < "$tmpFloxFlakeRegistry") <($_jq -S < "$floxFlakeRegistry"); then
+		$_rm "$tmpFloxFlakeRegistry"
 	else
-		$_mv -f $tmpFloxFlakeRegistry $floxFlakeRegistry
+		$_mv -f "$tmpFloxFlakeRegistry" "$floxFlakeRegistry"
 	fi
 }
 
@@ -1243,7 +1245,7 @@ function updateFloxFlakeRegistry() {
 #
 function searchChannels() {
 	trace "$@"
-	local regexp="$1"; shift
+	shift;  # skip first "regexp" argument
 	# XXX Passing optional arguments with bash is .. problematic.
 	# XXX Walk through the remaining arguments looking for options
 	# XXX and valid channel references.
