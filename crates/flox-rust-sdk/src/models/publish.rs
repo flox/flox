@@ -332,6 +332,12 @@ impl UpstreamCatalog<'_> {
         self.0.commit("Added snapshot").await?; // TODO: pass message in here? commit in separate method?
         Ok(())
     }
+
+    /// Pushing a catalog consumes the catalog object.
+    async fn push_catalog(self) -> Result<(), PublishError> {
+        self.0.push("origin").await?;
+        Ok(())
+    }
 }
 
 #[derive(Error, Debug)]
