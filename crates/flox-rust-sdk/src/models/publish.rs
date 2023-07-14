@@ -222,7 +222,9 @@ impl<'flox> Publish<'flox, NixAnalysis> {
 
     /// Write snapshot to catalog and push to origin
     pub async fn push_snapshot(&self) -> Result<(), PublishError> {
-        let mut upstream_repo = UpstreamRepo::clone(&self.publish_ref, &self.flox.temp_dir).await?;
+        let mut upstream_repo =
+            UpstreamRepo::clone_repo(&self.publish_flake_ref, &self.flox.temp_dir).await?;
+        let catalog = upstream_repo.get_catalog(&self.flox.system).await?;
         if let Ok(Some(_)) = catalog.get_snapshot(self.analysis()) {
         let catalog = upstream_repo.get_catalog(&self.flox.system).await?;
             Err(PublishError::SnapshotExists)?;
@@ -248,7 +250,7 @@ struct UpstreamRepo(Git);
 
 impl UpstreamRepo {
     /// Clone the upstream repo
-    async fn clone(
+    async fn clone_repo(
         publish_ref: &PublishRef,
         temp_dir: impl AsRef<Path>,
     ) -> Result<Self, PublishError> {
