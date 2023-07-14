@@ -1,8 +1,9 @@
 use std::ops::Deref;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use derive_more::{Deref, DerefMut, Display};
 use flox_types::catalog::cache::{CacheMeta, SubstituterUrl};
+use flox_types::catalog::System;
 use flox_types::stability::Stability;
 use futures::TryFutureExt;
 use runix::arguments::flake::FlakeArgs;
@@ -19,7 +20,7 @@ use serde_json::{json, Value};
 use thiserror::Error;
 
 use crate::flox::Flox;
-use crate::providers::git::{GitCommandProvider as Git, GitProvider};
+use crate::providers::git::{GitCommandError, GitCommandProvider as Git, GitProvider};
 
 /// Publish state before analyzing
 ///
@@ -248,6 +249,25 @@ impl<'flox> Publish<'flox, NixAnalysis> {
     }
 }
 
+struct UpstreamRepo(Git);
+
+impl UpstreamRepo {
+    /// Clone the upstream repo
+    async fn clone(
+        publish_ref: &PublishRef,
+        temp_dir: impl AsRef<Path>,
+    ) -> Result<Self, PublishError> {
+        let url = publish_ref.clone_url();
+        let repo_dir = tempfile::tempdir_in(temp_dir).unwrap().into_path(); // todo catch error
+        let repo = <Git as GitProvider>::clone(&url, &repo_dir, false).await?;
+
+        Ok(Self(repo))
+    }
+
+    fn catalog_branch_name(system: &System) -> String {
+        format!("catalog/{system}")
+    }
+}
 #[derive(Error, Debug)]
 pub enum PublishError {
     #[error("Failed to load metadata for the package '{0}' in '{1}': {2}")]
@@ -255,6 +275,8 @@ pub enum PublishError {
 
     #[error("Failed to load metadata for flake '{0}': {1}")]
     FlakeMetadata(PublishFlakeRef, NixCommandLineRunJsonError),
+    #[error("Failed to run git operation: {0}")]
+    GitOperation(#[from] GitCommandError),
 }
 
 /// Publishable FlakeRefs
