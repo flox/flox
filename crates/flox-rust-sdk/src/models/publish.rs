@@ -1,5 +1,6 @@
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
+use std::{fs, io};
 
 use derive_more::{Deref, DerefMut, Display};
 use flox_types::catalog::cache::{CacheMeta, SubstituterUrl};
@@ -304,6 +305,19 @@ impl UpstreamCatalog<'_> {
         path.set_file_name(format!("{}.json", snapshot["eval"]["meta"]["version"]));
         path
     }
+
+    /// Try retrieving a snapshot from the catalog
+    /// TODO: better addressing (attrpath + version + drv hash?)
+    fn get_snapshot(&self, snapshot: &Value) -> Result<Option<Value>, PublishError> {
+        let path = self.get_snapshot_path(snapshot);
+        let read_snapshot = match fs::read_to_string(path) {
+            Ok(s) => Some(serde_json::from_str(&s)?),
+            Err(e) if e.kind() == io::ErrorKind::NotFound => None,
+            Err(e) => Err(e)?,
+        };
+
+        Ok(read_snapshot)
+    }
 }
 
 #[derive(Error, Debug)]
@@ -313,8 +327,15 @@ pub enum PublishError {
 
     #[error("Failed to load metadata for flake '{0}': {1}")]
     FlakeMetadata(PublishFlakeRef, NixCommandLineRunJsonError),
+
+    #[error("Failed reading snapshot data: {0}")]
+    ReadSnapshot(#[from] serde_json::Error),
+
     #[error("Failed to run git operation: {0}")]
     GitOperation(#[from] GitCommandError),
+
+    #[error("Failed to run IO operation: {0}")]
+    IoOperation(#[from] std::io::Error),
 }
 
 /// Publishable FlakeRefs
