@@ -267,7 +267,27 @@ impl UpstreamRepo {
     fn catalog_branch_name(system: &System) -> String {
         format!("catalog/{system}")
     }
+
+    async fn get_catalog(&mut self, system: &System) -> Result<UpstreamCatalog, PublishError> {
+        if self.0.list_branches().await? // todo: catch error
+            .into_iter().any(|info| info.name == Self::catalog_branch_name(system))
+        {
+            self.0
+                .checkout(&Self::catalog_branch_name(system), false)
+                .await?; // todo: catch error
+        } else {
+            self.0
+                .checkout(&Self::catalog_branch_name(system), true)
+                .await?;
+            self.0
+                .set_origin(&Self::catalog_branch_name(system), "origin")
+                .await?;
+        }
+        Ok(UpstreamCatalog(&self.0))
+    }
 }
+
+struct UpstreamCatalog<'a>(&'a Git);
 #[derive(Error, Debug)]
 pub enum PublishError {
     #[error("Failed to load metadata for the package '{0}' in '{1}': {2}")]
