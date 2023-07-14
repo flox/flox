@@ -346,7 +346,7 @@ pub enum PublishError {
     DrvMetadata(AttrPath, PublishFlakeRef, NixCommandLineRunJsonError),
 
     #[error("Failed to load metadata for flake '{0}': {1}")]
-    FlakeMetadata(PublishFlakeRef, NixCommandLineRunJsonError),
+    FlakeMetadata(String, NixCommandLineRunJsonError),
 
     #[error("Failed reading snapshot data: {0}")]
     ReadSnapshot(#[from] serde_json::Error),
