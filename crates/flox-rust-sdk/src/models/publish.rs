@@ -288,6 +288,24 @@ impl UpstreamRepo {
 }
 
 struct UpstreamCatalog<'a>(&'a Git);
+
+impl UpstreamCatalog<'_> {
+    /// Mostly naïve approxiaton of a snapshot path
+    /// TODO: fix before releasing this PR!
+    fn get_snapshot_path(&self, snapshot: &Value) -> PathBuf {
+        let mut path = self
+            .0
+            .workdir()
+            .unwrap()
+            .join("packages")
+            .join(snapshot["eval"]["meta"]["pname"].to_string());
+        snapshot["eval"]["meta"]["version"].to_string();
+
+        path.set_file_name(format!("{}.json", snapshot["eval"]["meta"]["version"]));
+        path
+    }
+}
+
 #[derive(Error, Debug)]
 pub enum PublishError {
     #[error("Failed to load metadata for the package '{0}' in '{1}': {2}")]
