@@ -239,6 +239,11 @@ impl<'flox> Publish<'flox, NixAnalysis> {
     }
 }
 
+/// Representation of an exclusive clone of an upstream repo
+///
+/// [UpstreamRepo] and [UpstreamCatalog] ensure safe access to individual catalog branches.
+/// Every [UpstreamRepo] instance represents an exclusive clone
+/// and can only ever create a single [UpstreamCatalog] instance at a time.
 struct UpstreamRepo(Git);
 
 impl UpstreamRepo {
@@ -258,6 +263,10 @@ impl UpstreamRepo {
         format!("catalog/{system}")
     }
 
+    /// Create an [UpstreamCatalog] by checking out or creating a catalog branch.
+    ///
+    /// `Git` objects can switch branches at any time leaving the repo in an unknown state.
+    /// [get_catalog] ensures that only one [UpstreamCatalog] exists at a time by requiring a `&mut self`.
     async fn get_catalog(&mut self, system: &System) -> Result<UpstreamCatalog, PublishError> {
         if self.0.list_branches().await? // todo: catch error
             .into_iter().any(|info| info.name == Self::catalog_branch_name(system))
@@ -277,6 +286,11 @@ impl UpstreamRepo {
     }
 }
 
+/// Representation of a specific catalog branch in an exclusive clone of an upstream repo.
+///
+/// [UpstreamCatalog] guaranteesd that during its lifetime all operations on the underlying git repo
+/// are performed on a single branch,
+/// and that the branch is pushed to upstream before a new branch can be checked out.
 struct UpstreamCatalog<'a>(&'a Git);
 
 impl UpstreamCatalog<'_> {
@@ -322,7 +336,10 @@ impl UpstreamCatalog<'_> {
         Ok(())
     }
 
-    /// Pushing a catalog consumes the catalog object.
+    /// Push the catalog branch to origin
+    ///
+    /// Pushing a catalog consumes the catalog instance,
+    /// which in turn enables any other methods on the [UpstreamRepo] that created this instance.
     async fn push_catalog(self) -> Result<(), PublishError> {
         self.0.push("origin").await?;
         Ok(())
