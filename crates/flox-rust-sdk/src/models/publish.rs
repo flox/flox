@@ -221,27 +221,16 @@ impl<'flox> Publish<'flox, NixAnalysis> {
     }
 
     /// Write snapshot to catalog and push to origin
-    pub async fn push_catalog(self) -> Result<(), PublishError> {
-        let url = self.publish_flake_ref.clone_url();
-        let repo_dir = tempfile::tempdir_in(&self.flox.temp_dir)
-            .unwrap()
-            .into_path(); // todo catch error
-        let catalog = <Git as GitProvider>::clone(url, &repo_dir, false)
-            .await
-            .unwrap(); // todo: catch error
-
-        if catalog.list_branches().await.unwrap() // todo: catch error
-            .into_iter().any(|info| info.name == "catalog")
-        {
-            catalog.checkout("catalog", false).await.unwrap(); // todo: catch error
-        } else {
-            todo!();
-            // catalog.checkout("catalog", true).await.unwrap(); // todo: catch error
-
-            // catalog.set_upstream("origin", "catalog").await.unwrap();  // todo: implement
-            //                                                               todo: catch error
+    pub async fn push_snapshot(&self) -> Result<(), PublishError> {
+        let mut upstream_repo = UpstreamRepo::clone(&self.publish_ref, &self.flox.temp_dir).await?;
+        if let Ok(Some(_)) = catalog.get_snapshot(self.analysis()) {
+        let catalog = upstream_repo.get_catalog(&self.flox.system).await?;
+            Err(PublishError::SnapshotExists)?;
         }
-        todo!()
+        catalog.add_snapshot(self.analysis()).await?;
+        catalog.push_catalog().await?;
+
+        Ok(())
     }
 
     /// Read out the current publish state
@@ -356,6 +345,9 @@ pub enum PublishError {
 
     #[error("Failed to run IO operation: {0}")]
     IoOperation(#[from] std::io::Error),
+
+    #[error("Already published")]
+    SnapshotExists,
 }
 
 /// Publishable FlakeRefs
