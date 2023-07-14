@@ -1,3 +1,4 @@
+# -*- mode: sh; sh-shell: bash; -*-
 #
 # lib/commands.sh: one function for each subcommand
 #

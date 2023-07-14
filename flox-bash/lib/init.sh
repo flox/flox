@@ -1,9 +1,10 @@
+# -*- mode: sh; sh-shell: bash; -*-
 # Set prefix (again) to assist with debugging independently of flox.sh.
 _prefix="@@PREFIX@@"
-_prefix=${_prefix:-.}
-_lib=$_prefix/lib
-_libexec=$_prefix/libexec
-_etc=$_prefix/etc
+_prefix="${_prefix:-.}"
+_lib="$_prefix/lib"
+_libexec="$_prefix/libexec"
+_etc="$_prefix/etc"
 
 # Use extended glob functionality throughout.
 shopt -s extglob
@@ -11,14 +12,18 @@ shopt -s extglob
 # Allow globs to return the empty list.
 shopt -s nullglob
 
+# TODO: One day we can turn these on...
+# set -eu;
+# set -o pipefail;
+
 # Pull in utility functions early.
-. $_lib/utils.sh
+. "$_lib/utils.sh"
 
 # Import library functions.
-. $_lib/metadata.sh
+. "$_lib/metadata.sh"
 
 # Import command functions.
-. $_lib/commands.sh
+. "$_lib/commands.sh"
 
 #
 # Parse flox configuration files in TOML format. Order of processing:
@@ -38,8 +43,8 @@ read_flox_conf()
 	# single invocation and then selecting multiple values using jq.
 	for f in "$_prefix/etc/flox.toml" "/etc/flox.toml" "$FLOX_CONFIG_HOME/flox.toml"
 	do
-		if [ -f "$f" ]; then
-		for i in $@
+		if [[ -f "$f" ]]; then
+		for i in "$@"
 			do
 				# Use `cat` to open files because it produces a clear and concise
 				# message when file is not found or not readable. By comparison
@@ -50,9 +55,9 @@ read_flox_conf()
 				#
 				# Use the `jq` `tojson()` function to escape quotes contained in
 				# values.
-				$_cat "$f" | \
-				$_dasel -r toml -w json | \
-				$_jq -r --arg var $i 'if has($var) then "FLOX_CONF_\($var)=\(.[$var] | tojson)" else empty end'
+				#shellcheck disable=SC2016
+				$_cat "$f" | $_dasel -r toml -w json \
+					|$_jq -r --arg var "$i" 'if has($var) then "FLOX_CONF_\($var)=\(.[$var] | tojson)" else empty end'
 			done
 		fi
 	done
@@ -61,8 +66,10 @@ read_flox_conf()
 nix_show_config()
 {
 	local -a _cline
+	#shellcheck disable=SC2162
 	$_nix show-config | while read -a _cline
 	do
+		if [[ -z "${_cline[*]}" ]]; then continue; fi
 		case "${_cline[0]}" in
 		# List below the parameters you want to use within the script.
 		system)
@@ -141,18 +148,18 @@ declare floxFlakeRegistry="$FLOX_CONFIG_HOME/floxFlakeRegistry.json"
 # Manage user-specific nix.conf for use with flox only.
 # XXX May need further consideration for Enterprise.
 declare nixConf="$FLOX_CONFIG_HOME/nix.conf"
-tmpNixConf=$($_mktemp --tmpdir=$FLOX_CONFIG_HOME)
+tmpNixConf="$($_mktemp --tmpdir="$FLOX_CONFIG_HOME")"
 # We want the file in alphabetical order to ease comparing it.
 # The consideration of access tokens is somewhat out of order.
 # The remaining elements are appended below.
-$_cat > $tmpNixConf <<EOF
+$_cat > "$tmpNixConf" <<EOF
 # Automatically generated - do not edit.
 accept-flake-config = true
 connect-timeout = 5
 EOF
 
 # Ensure file is secure before appending access token(s).
-$_chmod 600 $tmpNixConf
+${_chmod?} 600 "$tmpNixConf"
 
 # Look for github tokens from multiple sources:
 #   1. the user's own .config/nix/nix.conf, else
@@ -204,7 +211,7 @@ if [ -f "$FLOX_CONFIG_HOME/tokens" ]; then
 	done
 fi
 # Append all available tokens to nix.conf.
-if [ ${#accessTokens[@]} -gt 0 ]; then
+if [[ "${#accessTokens[@]}" -gt 0 ]]; then
 	echo "extra-access-tokens = ${accessTokens[@]}" >> $tmpNixConf
 fi
 
@@ -270,7 +277,7 @@ EOF
 # XXX Remove after closed beta.
 
 # Honor existing GIT_CONFIG_SYSTEM variable and/or default /etc/gitconfig.
-if [ -n "$GIT_CONFIG_SYSTEM" ]; then
+if [ -n "${GIT_CONFIG_SYSTEM:-}" ]; then
 	if [ -n "$FLOX_ORIGINAL_GIT_CONFIG_SYSTEM" ]; then
 		# Reset GIT_CONFIG_SYSTEM to reflect the original value
 		# observed before starting flox subshell (see below).
@@ -284,11 +291,13 @@ fi
 
 # If system gitconfig exists then include it, but check first to make sure
 # user hasn't requested that we include our own gitconfig file(!).
-if [ -e "$GIT_CONFIG_SYSTEM" -a "$GIT_CONFIG_SYSTEM" != "$gitConfig" ]; then
+if [[ -n "${GIT_CONFIG_SYSTEM:-}" ]] && [[ -e "$GIT_CONFIG_SYSTEM" ]] &&  \
+   [[ "$GIT_CONFIG_SYSTEM" != "$gitConfig" ]]
+then
 	# Save first/original observed variable to disambiguate our use
 	# of GIT_CONFIG_SYSTEM in subshells.
 	export FLOX_ORIGINAL_GIT_CONFIG_SYSTEM="$GIT_CONFIG_SYSTEM"
-	$_cat >> $tmpGitConfig <<EOF
+	$_cat >> "$tmpGitConfig" <<EOF
 [include]
 	path = $GIT_CONFIG_SYSTEM
 
@@ -296,23 +305,23 @@ EOF
 fi
 
 # Compare generated gitconfig to cached version.
-if $_cmp --quiet $tmpGitConfig $gitConfig; then
-	$_rm $tmpGitConfig
+if $_cmp --quiet "$tmpGitConfig" "$gitConfig"; then
+	$_rm "$tmpGitConfig"
 else
 	warn "Updating $gitConfig"
-	$_mv -f $tmpGitConfig $gitConfig
+	$_mv -f "$tmpGitConfig" "$gitConfig"
 fi
 
 # Override system gitconfig.
 export GIT_CONFIG_SYSTEM="$gitConfig"
 
-if [ -n "$NIX_GET_COMPLETIONS" ]; then
+if [ -n "${NIX_GET_COMPLETIONS:-}" ]; then
 	export FLOX_ORIGINAL_NIX_GET_COMPLETIONS="$NIX_GET_COMPLETIONS"
 	unset NIX_GET_COMPLETIONS
 fi
 
 # Load nix configuration (must happen after setting NIX_USER_CONF_FILES)
-eval $(nix_show_config)
+eval "$(nix_show_config)"
 
 # Set FLOX_SYSTEM for this invocation. Be sure to inherit FLOX_SYSTEM
 # from the environment if defined.
@@ -329,10 +338,10 @@ declare defaultEnv="$FLOX_ENVIRONMENTS/$defaultEnvironmentOwner/$FLOX_SYSTEM.def
 # placeholder for functionality. Expect it to figure prominently in
 # tenant customizations.
 eval "$(read_flox_conf git_base_url)"
-if [ -z "$FLOX_CONF_git_base_url" ]; then
+if [ -z "${FLOX_CONF_git_base_url:-}" ]; then
 	# attempt to read old bash floxpkgs.gitBaseURL value from old flox.toml
 	eval "$(read_flox_conf floxpkgs)"
-	if [ -n "$FLOX_CONF_floxpkgs" ]; then
+	if [ -n "${FLOX_CONF_floxpkgs:-}" ]; then
 		FLOX_CONF_git_base_url="$($_jq -r -n --argjson floxpkgs "$FLOX_CONF_floxpkgs" '$floxpkgs["gitBaseURL"]')"
 	else
 		warn "could not read git_base_url from config; defaulting to https://github.com/"
@@ -341,21 +350,20 @@ if [ -z "$FLOX_CONF_git_base_url" ]; then
 fi
 
 # Bootstrap user-specific configuration.
-. $_lib/bootstrap.sh
+. "$_lib/bootstrap.sh"
 
 # Populate user-specific flake registry.
 declare -A validChannels=()
+#shellcheck disable=SC2119
 updateFloxFlakeRegistry
 
 # Leave it to Bob to figure out that Nix 2.3 has the bug that it invokes
 # `tar` without the `-f` flag and will therefore honor the `TAPE` variable
 # over STDIN (to reproduce, try running `TAPE=none flox shell`).
 # XXX Still needed??? Probably delete ...
-if [ -n "$TAPE" ]; then
-	unset TAPE
-fi
+unset TAPE
 
 # Timestamp
-now=$($_date +%s)
+now="$($_date +%s)"
 
 # vim:ts=4:noet:syntax=bash

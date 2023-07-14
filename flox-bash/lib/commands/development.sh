@@ -1,3 +1,4 @@
+# -*- mode: sh; sh-shell: bash; -*-
 ## Development commands
 
 # flox init
