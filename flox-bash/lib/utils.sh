@@ -328,7 +328,7 @@ function invoke() {
 	trace "$@"
 	local vars=()
 	if [[ "${verbose?}" -ge "$minverbosity" ]]; then
-		for i in ${exported_variables["$1"]:+${exported_variables["$i"]}}; do
+		for i in ${exported_variables["$1"]}; do
 			vars+=($(eval "echo $i=\${$i}"))
 		done
 		pprint "+$colorBold" "${vars[@]}" "$@" "$colorReset" 1>&2
