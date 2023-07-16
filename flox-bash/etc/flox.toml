@@ -2,4 +2,5 @@
 # Company-specific defaults in /etc/flox.toml.
 # User-specific overrides in ~/.config/flox/flox.toml.
 
-git_base_url = "https://github.com/"
+# TODO: change to "https://meta.flox.dev/" or similar, stop relying on ssh.
+git_base_url = "git+ssh://git.saas.floxdev.com/"

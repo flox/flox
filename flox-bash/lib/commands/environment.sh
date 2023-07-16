@@ -1449,7 +1449,7 @@ function floxDestroy() {
 		fi
 		if [ -n "$origin" ]; then
 			$invoke_git -C "$environmentMetaDir" branch -rd origin/"$branchName" || true
-			githubHelperGit -C "$environmentMetaDir" push origin --delete "$branchName" || true
+			floxmetaHelperGit origin "$environmentMetaDir" push origin --delete "$branchName" || true
 		fi
 		$invoke_rm --verbose -f ${links[@]}
 		if [ ${#directories[@]} -gt 0 ]; then
@@ -1524,7 +1524,7 @@ function floxPushPull() {
 	origin=$(getSetOrigin "$environment" | $_sort -u)
 
 	# Perform a fetch to get remote data into sync.
-	githubHelperGit -C "$environmentMetaDir" fetch origin
+	floxmetaHelperGit origin "$environmentMetaDir" fetch origin
 
 	# Create an ephemeral clone with which to perform the synchronization.
 	local tmpDir
@@ -1533,7 +1533,7 @@ function floxPushPull() {
 
 	# Add the upstream remote to the ephemeral clone.
 	$invoke_git -C $tmpDir remote add upstream $origin
-	githubHelperGit -C $tmpDir fetch --quiet --all
+	floxmetaHelperGit upstream $tmpDir fetch --quiet --all
 
 	# Check out the relevant branch. Can be complicated in the event
 	# that this is the first pull of a brand-new branch.
@@ -1553,10 +1553,10 @@ function floxPushPull() {
 
 	# Then push or pull.
 	if [ "$action" = "push" ]; then
-		githubHelperGit -C $tmpDir push $forceArg upstream origin/"$branchName":refs/heads/"$branchName" ||
+		floxmetaHelperGit upstream $tmpDir push $forceArg upstream origin/"$branchName":refs/heads/"$branchName" ||
 			error "repeat command with '--force' to overwrite" < /dev/null
 		# Push succeeded, ensure that $environmentMetaDir has remote ref for this branch.
-		githubHelperGit -C "$environmentMetaDir" fetch --quiet origin
+		floxmetaHelperGit origin "$environmentMetaDir" fetch --quiet origin
 	elif [ "$action" = "pull" ]; then
 		# Slightly different here; we first attempt to rebase and do
 		# a hard reset if invoked with --force.
@@ -1599,7 +1599,7 @@ function floxGit() {
 	local -a invocation=("$@")
 	# set $branchName,$floxNixDir,$environment{Name,Alias,Owner,System,BaseDir,BinDir,ParentDir,MetaDir}
 	eval $(decodeEnvironment "$environment")
-	githubHelperGit -C $environmentMetaDir ${args[@]}
+	floxmetaHelperGit origin $environmentMetaDir ${args[@]}
 }
 
 # vim:ts=4:noet:syntax=bash

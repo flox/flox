@@ -28,6 +28,7 @@
   man,
   nix-editor,
   nixStable,
+  openssh,
   pandoc,
   parser-util,
   pkgs,
@@ -116,6 +117,7 @@ in
       man
       nixPatched
       nix-editor
+      openssh
       util-linuxMinimal
       semver
       builtfilter-rs

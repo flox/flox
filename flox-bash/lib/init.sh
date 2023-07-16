@@ -248,33 +248,10 @@ $_cat > $tmpGitConfig <<EOF
 	name = Flox User
 	email = floxuser@example.invalid
 
-# Use only https for accessing flox utility libraries.
-[url "https://github.com/flox/capacitor"]
-	insteadOf = "ssh://git@github.com/flox/capacitor"
-	insteadOf = "git@github.com:flox/capacitor"
-
-[url "https://github.com/flox/nixpkgs-flox"]
-	insteadOf = "ssh://git@github.com/flox/nixpkgs-flox"
-	insteadOf = "git@github.com:flox/nixpkgs-flox"
-
-[url "https://github.com/flox/nixpkgs-catalog"]
-	insteadOf = "ssh://git@github.com/flox/nixpkgs-catalog"
-	insteadOf = "git@github.com:flox/nixpkgs-catalog"
-
-[url "https://github.com/flox/catalog-ingest"]
-	insteadOf = "ssh://git@github.com/flox/catalog-ingest"
-	insteadOf = "git@github.com:flox/catalog-ingest"
-
-[url "https://github.com/flox/flox-extras"]
-	insteadOf = "ssh://git@github.com/flox/flox-extras"
-	insteadOf = "git@github.com:flox/flox-extras"
-
-[url "https://github.com/flox/bundlers"]
-	insteadOf = "ssh://git@github.com/flox/bundlers"
-	insteadOf = "git@github.com:flox/bundlers"
+[init]
+    defaultBranch = main
 
 EOF
-# XXX Remove after closed beta.
 
 # Honor existing GIT_CONFIG_SYSTEM variable and/or default /etc/gitconfig.
 if [ -n "${GIT_CONFIG_SYSTEM:-}" ]; then
@@ -315,6 +292,40 @@ fi
 # Override system gitconfig.
 export GIT_CONFIG_SYSTEM="$gitConfig"
 
+# -----------------
+
+# Similarly configure ssh config by way of $GIT_CONFIG_SYSTEM. Note that
+# we do it by way of this env variable because Nix doesn't provide a
+# passthru mechanism for passing options to git invocations. (?)
+sshConfig="$FLOX_CONFIG_HOME/sshconfig"
+
+tmpSshConfig=$($_mktemp --tmpdir=$FLOX_CONFIG_HOME)
+$_chmod 600 $tmpSshConfig
+$_cat >> $tmpSshConfig <<EOF
+# Automatically generated - do not edit.
+PasswordAuthentication no
+EOF
+for i in $FLOX_CONFIG_HOME/sshkeys/*; do
+	$_cat >> $tmpSshConfig <<EOF
+
+Host $($_basename "$i")
+    User gitolite
+    Hostname saas.floxdev.com
+    PreferredAuthentications publickey
+    IdentityFile $i
+EOF
+done
+
+# Compare generated gitconfig to cached version.
+if $_cmp --quiet "$tmpSshConfig" "$sshConfig"; then
+	$_rm "$tmpSshConfig"
+else
+	warn "Updating $sshConfig"
+	$_mv -f "$tmpSshConfig" "$sshConfig"
+fi
+
+# -----------------
+
 if [ -n "${NIX_GET_COMPLETIONS:-}" ]; then
 	export FLOX_ORIGINAL_NIX_GET_COMPLETIONS="$NIX_GET_COMPLETIONS"
 	unset NIX_GET_COMPLETIONS
@@ -344,8 +355,7 @@ if [ -z "${FLOX_CONF_git_base_url:-}" ]; then
 	if [ -n "${FLOX_CONF_floxpkgs:-}" ]; then
 		FLOX_CONF_git_base_url="$($_jq -r -n --argjson floxpkgs "$FLOX_CONF_floxpkgs" '$floxpkgs["gitBaseURL"]')"
 	else
-		warn "could not read git_base_url from config; defaulting to https://github.com/"
-		FLOX_CONF_git_base_url="https://github.com/"
+		error "could not read git_base_url from config" </dev/null
 	fi
 fi
 

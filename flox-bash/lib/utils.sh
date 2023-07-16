@@ -140,7 +140,9 @@ function hash_commands() {
 		# Make note of them here for displaying verbose output in invoke().
 		case "$i" in
 		nix | nix-store)
-			exported_variables["$(type -P "$i")"]="NIX_REMOTE NIX_SSL_CERT_FILE NIX_USER_CONF_FILES GIT_CONFIG_SYSTEM" ;;
+			exported_variables["$(type -P "$i")"]="NIX_REMOTE NIX_SSL_CERT_FILE NIX_USER_CONF_FILES GIT_CONFIG_SYSTEM GIT_SSH_COMMAND" ;;
+		git)
+			exported_variables["$(type -P "$i")"]="GIT_CONFIG_SYSTEM GIT_SSH_COMMAND" ;;
 		*) :; ;;
 		esac
 	done
@@ -154,7 +156,7 @@ hash_commands                                                                  \
 	ansifilter awk 'builtfilter-rs' basename bash cat chmod cmp column cp      \
 	curl cut dasel date dirname getent gh git grep gum id jq ln man mkdir      \
 	mktemp mv nix 'nix-editor' 'nix-store' pwd readlink realpath rm rmdir sed  \
-	sh sleep sort stat tail tar tee touch tr uname uuid xargs zgrep            \
+	sh sleep sort ssh stat tail tar tee touch tr uname uuid xargs zgrep        \
 	semver 'parser-util'
 
 # Return full path of first command available in PATH.
