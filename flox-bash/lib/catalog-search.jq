@@ -45,35 +45,39 @@ def catalogPkgToSearchEntry:
 
 # Convert a list of search entries to pretty results grouped by package name.
 # This returns an attrset mapping "floxrefs" to pretty strings.
-def searchEntriesToPrettyBlocks( $showDetail ):
+def searchEntriesToPrettyBlocks:
   reduce .[] as $x (
     {};
-    ( if $showDetail then $x.pname else (
-        ( if $x.stability == "stable" then "" else $x.stability + "." end ) +
-        ( if $x.channel == "nixpkgs-flox" then "" else $x.channel + "." end ) +
-        $x.attrPath
-      ) end
-    ) as $alias|
     # Results are grouped under short headers which might have a description.
-    ( if ( $x.description == null ) or ( $x.description == "" ) then $alias else
-        $alias + ( if $showDetail then " - " else "|" end ) + $x.description
+    ( if ( $x.description == null ) or ( $x.description == "" ) then $x.pname else
+        $x.pname + " - " + $x.description
       end
     ) as $header|
-    ( if $showDetail then $header else $x.floxref end ) as $key|
     # The first time seeing a floxref construct an array containing a
     # header as the previous value, otherwise use the previous array.
-    ( if .[$key] then .[$key] else [$header] end ) as $prev|
+    ( if .[$header] then .[$header] else [$header] end ) as $prev|
     # Merge result with existing collection.
     # This potentially "updates" existing elements.
     . * {
-      # Only include `$line' when `$showDetail' is enabled.
-      "\($key)":
-        # When `showDetails' is active, be show multiple lines under each header
-        # as `<stability>.<channel>.<attrPath>@<version>'.
-        ( if ( $showDetail|not ) then $prev else
-            ( $prev + [( "  " + $x.floxref + "@" + $x.version )] )
-          end )
+      "\($header)":
+        # Show multiple lines under each header as
+        # `<stability>.<channel>.<attrPath>@<version>'.
+        ( $prev + [( "  " + $x.floxref + "@" + $x.version )] )
     }
+  );
+
+# Convert a list of search entries to a list of simplified flox tuples with
+# their descriptions, discarding multiple entries for a single floxref.
+def searchEntriesToPrettyConcise:
+  group_by(.floxref)|
+  map(
+    # discard all but the first entry for each floxref
+    .[0]|
+    ( if .stability == "stable" then "" else .stability + "." end ) +
+    ( if .channel == "nixpkgs-flox" then "" else .channel + "." end ) +
+    .attrPath +
+    # add | for column
+    ( if ( .description == null ) or ( .description == "" ) then "" else "|" + .description end)
   );
 
 
@@ -82,11 +86,16 @@ def searchEntriesToPrettyBlocks( $showDetail ):
 # Convert a list of search entries to pretty results by package name.
 # This returns a single string ready for printing.
 def searchEntriesToPretty( $showDetail ):
-  searchEntriesToPrettyBlocks( $showDetail )|
-  # Sort by key.
-  to_entries|sort_by( .key )|
-  # Join floxref arrays by newline.
-  map( .value|join( "\n" ) )|
+  (if $showDetail then
+    searchEntriesToPrettyBlocks|
+    # Sort by key.
+    to_entries|sort_by( .key )|
+    # Join floxref arrays by newline.
+    map( .value|join( "\n" ) )
+  else
+    searchEntriesToPrettyConcise
+  end
+  )|
   # Our desire is to separate groupings of output with a newline but
   # unfortunately the Linux version of `column' which supports the
   # `--keep-empty-lines' option is not available on Darwin, so we
