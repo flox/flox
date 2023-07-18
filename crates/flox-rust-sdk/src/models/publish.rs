@@ -44,7 +44,7 @@ pub struct Publish<'flox, State> {
     flox: &'flox Flox,
     /// The published _upstream_ source
     publish_flake_ref: PublishFlakeRef,
-    /// The attr_path of the published package in the source flake (`publish_ref`)
+    /// The attr_path of the published package in the source flake (`publish_flake_ref`)
     ///
     /// E.g. when publishing `git+https://github.com/flox/flox#packages.aarch64-darwin.flox`
     /// this is: `packages.aarch64-darwin.flox`
@@ -59,13 +59,13 @@ impl<'flox> Publish<'flox, Empty> {
     /// Create a new [Publish] instance at first without any metadata
     pub fn new(
         flox: &'flox Flox,
-        publish_ref: PublishFlakeRef,
+        publish_flake_ref: PublishFlakeRef,
         attr_path: AttrPath,
         stability: Stability,
     ) -> Publish<'flox, Empty> {
         Self {
             flox,
-            publish_flake_ref: publish_ref,
+            publish_flake_ref,
             attr_path,
             stability,
             analysis: Empty,
@@ -301,7 +301,7 @@ impl TryFrom<FlakeRef> for PublishFlakeRef {
     type Error = ConvertFlakeRefError;
 
     fn try_from(value: FlakeRef) -> Result<Self, Self::Error> {
-        let publish_ref = match value {
+        let publish_flake_ref = match value {
             FlakeRef::GitSsh(ssh_ref) => Self::Ssh(ssh_ref),
             FlakeRef::GitHttps(https_ref) => Self::Https(https_ref),
             // resolve upstream for local git repo
@@ -312,7 +312,7 @@ impl TryFrom<FlakeRef> for PublishFlakeRef {
             FlakeRef::Gitlab(_) => todo!(),
             _ => Err(ConvertFlakeRefError::UnsupportedTarget(value))?,
         };
-        Ok(publish_ref)
+        Ok(publish_flake_ref)
     }
 }
 
@@ -342,7 +342,7 @@ mod tests {
             Channel::from("github:flox/nixpkgs/stable".parse::<FlakeRef>().unwrap()),
         );
 
-        let publish_ref: PublishFlakeRef = "git+ssh://git@github.com/flox/flox"
+        let publish_flake_ref: PublishFlakeRef = "git+ssh://git@github.com/flox/flox"
             .parse::<FlakeRef>()
             .unwrap()
             .try_into()
@@ -352,7 +352,7 @@ mod tests {
             .try_into()
             .unwrap();
         let stability = Stability::Stable;
-        let publish = Publish::new(&flox, publish_ref, attr_path, stability);
+        let publish = Publish::new(&flox, publish_flake_ref, attr_path, stability);
 
         let value = publish.analyze().await.unwrap().analysis().to_owned();
 
