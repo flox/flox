@@ -43,7 +43,7 @@ pub struct Publish<'flox, State> {
     /// Save a reference to it to simplify the method signatures.
     flox: &'flox Flox,
     /// The published _upstream_ source
-    publish_ref: PublishRef,
+    publish_flake_ref: PublishFlakeRef,
     /// The attr_path of the published package in the source flake (`publish_ref`)
     ///
     /// E.g. when publishing `git+https://github.com/flox/flox#packages.aarch64-darwin.flox`
@@ -59,13 +59,13 @@ impl<'flox> Publish<'flox, Empty> {
     /// Create a new [Publish] instance at first without any metadata
     pub fn new(
         flox: &'flox Flox,
-        publish_ref: PublishRef,
+        publish_ref: PublishFlakeRef,
         attr_path: AttrPath,
         stability: Stability,
     ) -> Publish<'flox, Empty> {
         Self {
             flox,
-            publish_ref,
+            publish_flake_ref: publish_ref,
             attr_path,
             stability,
             analysis: Empty,
@@ -95,7 +95,7 @@ impl<'flox> Publish<'flox, Empty> {
 
         Ok(Publish {
             flox: self.flox,
-            publish_ref: self.publish_ref,
+            publish_flake_ref: self.publish_flake_ref,
             attr_path: self.attr_path,
             stability: self.stability,
             analysis: NixAnalysis(drv_metadata_json),
@@ -141,7 +141,11 @@ impl<'flox> Publish<'flox, Empty> {
                 override_inputs: [
                     // The analyzer flake provides analysis outputs for the flake input `target`
                     // Here, we're setting the target flake to our source flake.
-                    ("target".to_string(), self.publish_ref.clone().into_inner()).into(),
+                    (
+                        "target".to_string(),
+                        self.publish_flake_ref.clone().into_inner(),
+                    )
+                        .into(),
                     // Stabilities are managed by overriding the `flox-floxpkgs/nixpkgs/nixpkgs` input to
                     // `nixpkgs-<stability>`.
                     // The analyzer flake adds an additional indirection,
@@ -175,7 +179,7 @@ impl<'flox> Publish<'flox, Empty> {
             .map_err(|nix_error| {
                 PublishError::DrvMetadata(
                     self.attr_path.clone(),
-                    self.publish_ref.clone(),
+                    self.publish_flake_ref.clone(),
                     nix_error,
                 )
             })
@@ -187,13 +191,13 @@ impl<'flox> Publish<'flox, Empty> {
         let nix: NixCommandLine = self.flox.nix(Default::default());
 
         let locked_ref_command = runix::command::FlakeMetadata {
-            flake_ref: Some(self.publish_ref.clone().into_inner().into()),
+            flake_ref: Some(self.publish_flake_ref.clone().into_inner().into()),
             ..Default::default()
         };
 
         locked_ref_command
             .run_typed(&nix, &Default::default())
-            .map_err(|nix_err| PublishError::FlakeMetadata(self.publish_ref.clone(), nix_err))
+            .map_err(|nix_err| PublishError::FlakeMetadata(self.publish_flake_ref.clone(), nix_err))
             .await
     }
 }
@@ -216,7 +220,7 @@ impl<'flox> Publish<'flox, NixAnalysis> {
 
     /// Write snapshot to catalog and push to origin
     pub async fn push_catalog(self) -> Result<(), PublishError> {
-        let url = self.publish_ref.clone_url();
+        let url = self.publish_flake_ref.clone_url();
         let repo_dir = tempfile::tempdir_in(&self.flox.temp_dir)
             .unwrap()
             .into_path(); // todo catch error
@@ -247,10 +251,10 @@ impl<'flox> Publish<'flox, NixAnalysis> {
 #[derive(Error, Debug)]
 pub enum PublishError {
     #[error("Failed to load metadata for the package '{0}' in '{1}': {2}")]
-    DrvMetadata(AttrPath, PublishRef, NixCommandLineRunJsonError),
+    DrvMetadata(AttrPath, PublishFlakeRef, NixCommandLineRunJsonError),
 
     #[error("Failed to load metadata for flake '{0}': {1}")]
-    FlakeMetadata(PublishRef, NixCommandLineRunJsonError),
+    FlakeMetadata(PublishFlakeRef, NixCommandLineRunJsonError),
 }
 
 /// Publishable FlakeRefs
@@ -261,31 +265,31 @@ pub enum PublishError {
 /// so we can avoid parsing and converting flakerefs within publish.
 /// [GitRef<protocol::File>] should in most cases be resolved to a remote type.
 #[derive(PartialEq, Eq, Clone, Debug, Display)]
-pub enum PublishRef {
+pub enum PublishFlakeRef {
     Ssh(GitRef<protocol::SSH>),
     Https(GitRef<protocol::HTTPS>),
     // File(GitRef<protocol::File>),
 }
 
-impl PublishRef {
+impl PublishFlakeRef {
     /// Extract a URL for cloning with git
     fn clone_url(&self) -> String {
         match self {
-            PublishRef::Ssh(ref ssh_ref) => ssh_ref.url.as_str().to_owned(),
-            PublishRef::Https(ref https_ref) => https_ref.url.as_str().to_owned(),
+            PublishFlakeRef::Ssh(ref ssh_ref) => ssh_ref.url.as_str().to_owned(),
+            PublishFlakeRef::Https(ref https_ref) => https_ref.url.as_str().to_owned(),
         }
     }
 
     /// Return the [FlakeRef] type for the wrapped refs
     fn into_inner(self) -> FlakeRef {
         match self {
-            PublishRef::Ssh(ssh_ref) => FlakeRef::GitSsh(ssh_ref),
-            PublishRef::Https(https_ref) => FlakeRef::GitHttps(https_ref),
+            PublishFlakeRef::Ssh(ssh_ref) => FlakeRef::GitSsh(ssh_ref),
+            PublishFlakeRef::Https(https_ref) => FlakeRef::GitHttps(https_ref),
         }
     }
 }
 
-impl TryFrom<FlakeRef> for PublishRef {
+impl TryFrom<FlakeRef> for PublishFlakeRef {
     type Error = ConvertFlakeRefError;
 
     fn try_from(value: FlakeRef) -> Result<Self, Self::Error> {
@@ -330,7 +334,7 @@ mod tests {
             Channel::from("github:flox/nixpkgs/stable".parse::<FlakeRef>().unwrap()),
         );
 
-        let publish_ref: PublishRef = "git+ssh://git@github.com/flox/flox"
+        let publish_ref: PublishFlakeRef = "git+ssh://git@github.com/flox/flox"
             .parse::<FlakeRef>()
             .unwrap()
             .try_into()
