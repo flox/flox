@@ -264,6 +264,14 @@ pub enum PublishError {
 /// This enum represents the subset of flakerefs we can use,
 /// so we can avoid parsing and converting flakerefs within publish.
 /// [GitRef<protocol::File>] should in most cases be resolved to a remote type.
+///
+/// \* A publish allows other users to substitute or build a package
+/// (as log as repo name and references remain available).
+/// If you publish a local repository, all urls will refer to local paths,
+/// a snapshot cant be reproduced anywhere but the locla machine.
+///
+/// `flox publish git+file:///somewhere/local#package` would actually resolve git+file:///somewhere/local
+/// to the upstream repo defined by the current branche's remote.
 #[derive(PartialEq, Eq, Clone, Debug, Display)]
 pub enum PublishFlakeRef {
     Ssh(GitRef<protocol::SSH>),
