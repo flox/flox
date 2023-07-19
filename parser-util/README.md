@@ -1,74 +1,74 @@
-#+TITLE: =parse= Utility
+# `parse` Utility
 
 This project provides a minimal executable which exposes various Nix parsers
 ( and related utilities ) with trivial string and JSON input/output.
 
-** Parsers
+## Parsers
 
-*** =-r=  =parseAndResolveRef=
+### `-r`  `parseAndResolveRef``
 Accepts a flake-ref as an attribute set or URI string, performs resolution
 on indirect inputs, and prints a JSON object containing the original and
-resolved refs in string and /exploded/ attribute set form.
+resolved refs in string and _exploded_ attribute set form.
 
 This routine does not attempt to fetch the given URI and simply parses it
 and attempts resolution.
-This routine is faster than =-l= and will NOT throw an error if its
+This routine is faster than `-l` and will NOT throw an error if its
 inputs do not exist.
 
 
-*** =-l=  =lockFlake=
-An extended form =-r= which fetches and /locks/ the given input.
+### `-l`  `lockFlake`
+An extended form `-r` which fetches and _locks_ the given input.
 
-This routine is slower than =-r= and will throw an error if its
+This routine is slower than `-r` and will throw an error if its
 inputs do not exist.
 
 
-*** =-i= =parseInstallable=
-Parse an /installable/ URI, which is essentially a flake-ref followed by
-a =#= character with an attribute path and optionally a =^out1,out2,...=
+### `-i` `parseInstallable`
+Parse an _installable_ URI, which is essentially a flake-ref followed by
+a `#` character with an attribute path and optionally a `^out1,out2,...`
 list of outputs.
 
-The resulting =outputs= field will be either a list of strings
+The resulting `outputs` field will be either a list of strings
 corresponding to the given outputs if they were provided.
-If no =^= is given the string "default" is emitted.
-If =^*= is given the string "all" is emitted.
+If no `^` is given the string "default" is emitted.
+If `^*` is given the string "all" is emitted.
 
 
-*** =-u= =parseURI=
-Exposes the /low level/ URI parser used by =nix= which explodes a URI
-string into its components such as =authority=, =scheme=, =path=, etc.
+### `-u` `parseURI`
+Exposes the _low level_ URI parser used by `nix` which explodes a URI
+string into its components such as `authority`, `scheme`, `path`, etc.
 
 Notably query strings are exploded into an attribute set.
 
-The fields =authority= and =scheme.application= do not appear in some URIs
-and may be either =null= or a =string=.
+The fields `authority` and `scheme.application` do not appear in some URIs
+and may be either `null` or a `string`.
 
 
-** Invocation
+## Invocation
 
-#+BEGIN_SRC
+```
 parser-util [-r|-l|-i|-u] <URI|JSON-ATTRS>
 parser-util [-h|--help|--usage]
-#+END_SRC
+```
 
 The flags listed above may be given to indicate which parser should be used
 following by a single argument with a URI string or JSON string.
 
-If no flag is given =-i= will be used if the argument contains a =#=
-character, otherwise =-r= is used.
+If no flag is given `-i` will be used if the argument contains a `#`
+character, otherwise `-r` is used.
 In practice we advise that any scripts which use this utility explicitly
 provide the appropriate flag, it is optional for convenient
 interactive usage.
 
 
-** Example Usage
+## Example Usage
 
-*** Resolved Reference
+### Resolved Reference
 
-#+BEGIN_SRC shell
-$ parser-util -r 'flake:nixpkgs/23.05?dir=lib'|jq;
+``` shell
+$ parser-util -r 'flake:nixpkgs/23.05?dir`lib'|jq;
 {
-  "input": "flake:nixpkgs/23.05?dir=lib",
+  "input": "flake:nixpkgs/23.05?dir`lib",
   "originalRef": {
     "attrs": {
       "dir": "lib",
@@ -76,7 +76,7 @@ $ parser-util -r 'flake:nixpkgs/23.05?dir=lib'|jq;
       "ref": "23.05",
       "type": "indirect"
     },
-    "string": "flake:nixpkgs/23.05?dir=lib"
+    "string": "flake:nixpkgs/23.05?dir`lib"
   },
   "resolvedRef": {
     "attrs": {
@@ -86,7 +86,7 @@ $ parser-util -r 'flake:nixpkgs/23.05?dir=lib'|jq;
       "repo": "nixpkgs",
       "type": "github"
     },
-    "string": "github:NixOS/nixpkgs/23.05?dir=lib"
+    "string": "github:NixOS/nixpkgs/23.05?dir`lib"
   }
 }
 
@@ -110,7 +110,7 @@ $ parser-util -r '{
       "ref": "23.05",
       "type": "indirect"
     },
-    "string": "flake:nixpkgs/23.05?dir=lib"
+    "string": "flake:nixpkgs/23.05?dir`lib"
   },
   "resolvedRef": {
     "attrs": {
@@ -120,29 +120,29 @@ $ parser-util -r '{
       "repo": "nixpkgs",
       "type": "github"
     },
-    "string": "github:NixOS/nixpkgs/23.05?dir=lib"
+    "string": "github:NixOS/nixpkgs/23.05?dir`lib"
   }
 }
-#+END_SRC
+```
 
 
-*** Locked Flake
+### Locked Flake
 
-#+BEGIN_SRC shell
-$ parser-util -l 'flake:nixpkgs/23.05?dir=lib'|jq;
+``` shell
+$ parser-util -l 'flake:nixpkgs/23.05?dir`lib'|jq;
 {
-  "input": "flake:nixpkgs/23.05?dir=lib",
+  "input": "flake:nixpkgs/23.05?dir`lib",
   "lockedRef": {
     "attrs": {
       "dir": "lib",
       "lastModified": 1685566663,
-      "narHash": "sha256-btHN1czJ6rzteeCuE/PNrdssqYD2nIA4w48miQAFloM=",
+      "narHash": "sha256-btHN1czJ6rzteeCuE/PNrdssqYD2nIA4w48miQAFloM`",
       "owner": "NixOS",
       "repo": "nixpkgs",
       "rev": "4ecab3273592f27479a583fb6d975d4aba3486fe",
       "type": "github"
     },
-    "string": "github:NixOS/nixpkgs/4ecab3273592f27479a583fb6d975d4aba3486fe?dir=lib"
+    "string": "github:NixOS/nixpkgs/4ecab3273592f27479a583fb6d975d4aba3486fe?dir`lib"
   },
   "originalRef": {
     "attrs": {
@@ -151,7 +151,7 @@ $ parser-util -l 'flake:nixpkgs/23.05?dir=lib'|jq;
       "ref": "23.05",
       "type": "indirect"
     },
-    "string": "flake:nixpkgs/23.05?dir=lib"
+    "string": "flake:nixpkgs/23.05?dir`lib"
   },
   "resolvedRef": {
     "attrs": {
@@ -161,16 +161,16 @@ $ parser-util -l 'flake:nixpkgs/23.05?dir=lib'|jq;
       "repo": "nixpkgs",
       "type": "github"
     },
-    "string": "github:NixOS/nixpkgs/23.05?dir=lib"
+    "string": "github:NixOS/nixpkgs/23.05?dir`lib"
   }
 }
-#+END_SRC
+```
 
 
 *** Plain URIs
 
-#+BEGIN_SRC shell
-$ parser-util -u 'flake:nixpkgs/23.05?dir=lib'|jq;
+``` shell
+$ parser-util -u 'flake:nixpkgs/23.05?dir`lib'|jq;
 {
   "authority": null,
   "base": "flake:nixpkgs/23.05",
@@ -185,12 +185,12 @@ $ parser-util -u 'flake:nixpkgs/23.05?dir=lib'|jq;
     "transport": "flake"
   }
 }
-#+END_SRC
+```
 
 
-*** Installables
+### Installables
 
-#+BEGIN_SRC shell
+``` shell
 $ parser-util -i 'nixpkgs/23.05#sqlite^bin,dev,out,debug'|jq;
 {
   "attrPath": [
@@ -246,4 +246,4 @@ $ parser-util -i 'nixpkgs/23.05#sqlite'|jq;
     "string": "flake:nixpkgs/23.05"
   }
 }
-#+END_SRC
+```
