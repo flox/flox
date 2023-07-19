@@ -17,7 +17,7 @@ inputs do not exist.
 
 
 ### `-l`  `lockFlake`
-An extended form `-r` which fetches and _locks_ the given input.
+An extended form of `-r` which fetches and _locks_ the given input.
 
 This routine is slower than `-r` and will throw an error if its
 inputs do not exist.
