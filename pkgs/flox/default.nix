@@ -46,7 +46,7 @@
       NIX_BASH_COMPLETION_SCRIPT = ../../crates/flox/src/static/nix_bash_completion.sh;
       NIX_ZSH_COMPLETION_SCRIPT = ../../crates/flox/src/static/nix_zsh_completion.sh;
 
-      # bundling of an internally used nix scripts
+      # bundling of internally used nix scripts
       FLOX_RESOLVER_SRC = ../../resolver;
       FLOX_ANALYZER_SRC = ../../flox-bash/lib/catalog-ingest;
 

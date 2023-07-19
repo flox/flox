@@ -28,7 +28,7 @@ pub struct Empty;
 
 /// Publish state after collecting nix metadata
 ///
-/// Json value (ideally a [flox_types::catalog::CatalogEntry],
+/// JSON value (ideally a [flox_types::catalog::CatalogEntry],
 /// but that's currently broken on account of some flakerefs)
 #[derive(Debug, Deref, DerefMut)]
 pub struct NixAnalysis(Value);
@@ -39,7 +39,7 @@ pub struct NixAnalysis(Value);
 pub struct Publish<'flox, State> {
     /// A shared flox session
     ///
-    /// Nearly all comands require shared state from the [Flox] object.
+    /// Nearly all commands require shared state from the [Flox] object.
     /// Save a reference to it to simplify the method signatures.
     flox: &'flox Flox,
     /// The published _upstream_ source
@@ -74,8 +74,8 @@ impl<'flox> Publish<'flox, Empty> {
 
     /// Run analysis on the package and switch to next state.
     ///
-    /// We evalaute pacakge metadata as json, to which we add
-    /// * source urls for reproducibility
+    /// We evaluate package metadata as JSON, to which we add
+    /// * source URLs for reproducibility
     /// * the nixpkgs stability being used to create the package
     pub async fn analyze(self) -> Result<Publish<'flox, NixAnalysis>, PublishError> {
         let mut drv_metadata_json = self.get_drv_metadata().await?;
@@ -104,14 +104,14 @@ impl<'flox> Publish<'flox, Empty> {
 
     /// Extract metadata of the published derivation using the analyzer flake.
     ///
-    ///  It uses an analyzer flake to extract eval metadata of the derivation.
+    /// It uses an analyzer flake to extract eval metadata of the derivation.
     /// The analyzer applies a function to all packages in a `target` flake
     /// and provides the result under `#analysis.eval.<full attrpath of the package>`.
     async fn get_drv_metadata(&self) -> Result<Value, PublishError> {
         let nix: NixCommandLine = self.flox.nix(Default::default());
 
-        // create the analysis.eval.<full attrpath of the package> attr path
-        // take care to remove any leading `""` from the original attri_path
+        // Create the analysis.eval.<full attrpath of the package> attr path
+        // taking care to remove any leading `""` from the original attr_path
         // used to signal strict paths (a flox concept, to be upstreamed)
         let analysis_attr_path = {
             let mut attrpath = AttrPath::try_from(["", "analysis", "eval"]).unwrap();
@@ -158,7 +158,7 @@ impl<'flox> Publish<'flox, Empty> {
                         .into(),
                 ]
                 .to_vec(),
-                // The analyzer flake is bundles with flox as a nix store path and thus read-only.
+                // The analyzer flake is bundled with flox as a nix store path and thus read-only.
                 no_write_lock_file: true.into(),
             },
             eval_args: runix::arguments::EvalArgs {
@@ -266,12 +266,12 @@ pub enum PublishError {
 /// [GitRef<protocol::File>] should in most cases be resolved to a remote type.
 ///
 /// \* A publish allows other users to substitute or build a package
-/// (as log as repo name and references remain available).
+/// (as long as repo name and references remain available).
 /// If you publish a local repository, all urls will refer to local paths,
-/// a snapshot cant be reproduced anywhere but the locla machine.
+/// so a snapshot can't be reproduced anywhere but the local machine.
 ///
 /// `flox publish git+file:///somewhere/local#package` would actually resolve git+file:///somewhere/local
-/// to the upstream repo defined by the current branche's remote.
+/// to the upstream repo defined by the current branch's remote.
 #[derive(PartialEq, Eq, Clone, Debug, Display)]
 pub enum PublishFlakeRef {
     Ssh(GitRef<protocol::SSH>),
