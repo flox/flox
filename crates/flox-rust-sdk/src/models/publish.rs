@@ -181,7 +181,7 @@ impl<'flox> Publish<'flox, Empty> {
             .map_err(|nix_error| {
                 PublishError::DrvMetadata(
                     self.attr_path.clone(),
-                    self.publish_flake_ref.clone(),
+                    self.publish_flake_ref.to_string(),
                     nix_error,
                 )
             })
@@ -352,7 +352,7 @@ impl UpstreamCatalog<'_> {
 #[derive(Error, Debug)]
 pub enum PublishError {
     #[error("Failed to load metadata for the package '{0}' in '{1}': {2}")]
-    DrvMetadata(AttrPath, PublishFlakeRef, NixCommandLineRunJsonError),
+    DrvMetadata(AttrPath, String, NixCommandLineRunJsonError),
 
     #[error("Failed to load metadata for flake '{0}': {1}")]
     FlakeMetadata(String, NixCommandLineRunJsonError),
