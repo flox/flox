@@ -1,4 +1,4 @@
-# `parse` Utility
+# `parser-util`
 
 This project provides a minimal executable which exposes various Nix parsers
 ( and related utilities ) with trivial string and JSON input/output.
