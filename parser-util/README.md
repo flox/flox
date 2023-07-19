@@ -68,7 +68,7 @@ interactive usage.
 ``` shell
 $ parser-util -r 'flake:nixpkgs/23.05?dir`lib'|jq;
 {
-  "input": "flake:nixpkgs/23.05?dir`lib",
+  "input": "flake:nixpkgs/23.05?dir=lib",
   "originalRef": {
     "attrs": {
       "dir": "lib",
@@ -76,7 +76,7 @@ $ parser-util -r 'flake:nixpkgs/23.05?dir`lib'|jq;
       "ref": "23.05",
       "type": "indirect"
     },
-    "string": "flake:nixpkgs/23.05?dir`lib"
+    "string": "flake:nixpkgs/23.05?dir=lib"
   },
   "resolvedRef": {
     "attrs": {
@@ -86,7 +86,7 @@ $ parser-util -r 'flake:nixpkgs/23.05?dir`lib'|jq;
       "repo": "nixpkgs",
       "type": "github"
     },
-    "string": "github:NixOS/nixpkgs/23.05?dir`lib"
+    "string": "github:NixOS/nixpkgs/23.05?dir=lib"
   }
 }
 
@@ -110,7 +110,7 @@ $ parser-util -r '{
       "ref": "23.05",
       "type": "indirect"
     },
-    "string": "flake:nixpkgs/23.05?dir`lib"
+    "string": "flake:nixpkgs/23.05?dir=lib"
   },
   "resolvedRef": {
     "attrs": {
@@ -120,7 +120,7 @@ $ parser-util -r '{
       "repo": "nixpkgs",
       "type": "github"
     },
-    "string": "github:NixOS/nixpkgs/23.05?dir`lib"
+    "string": "github:NixOS/nixpkgs/23.05?dir=lib"
   }
 }
 ```
@@ -129,9 +129,9 @@ $ parser-util -r '{
 ### Locked Flake
 
 ``` shell
-$ parser-util -l 'flake:nixpkgs/23.05?dir`lib'|jq;
+$ parser-util -l 'flake:nixpkgs/23.05?dir=lib'|jq;
 {
-  "input": "flake:nixpkgs/23.05?dir`lib",
+  "input": "flake:nixpkgs/23.05?dir=lib",
   "lockedRef": {
     "attrs": {
       "dir": "lib",
@@ -142,7 +142,7 @@ $ parser-util -l 'flake:nixpkgs/23.05?dir`lib'|jq;
       "rev": "4ecab3273592f27479a583fb6d975d4aba3486fe",
       "type": "github"
     },
-    "string": "github:NixOS/nixpkgs/4ecab3273592f27479a583fb6d975d4aba3486fe?dir`lib"
+    "string": "github:NixOS/nixpkgs/4ecab3273592f27479a583fb6d975d4aba3486fe?dir=lib"
   },
   "originalRef": {
     "attrs": {
@@ -151,7 +151,7 @@ $ parser-util -l 'flake:nixpkgs/23.05?dir`lib'|jq;
       "ref": "23.05",
       "type": "indirect"
     },
-    "string": "flake:nixpkgs/23.05?dir`lib"
+    "string": "flake:nixpkgs/23.05?dir=lib"
   },
   "resolvedRef": {
     "attrs": {
@@ -161,7 +161,7 @@ $ parser-util -l 'flake:nixpkgs/23.05?dir`lib'|jq;
       "repo": "nixpkgs",
       "type": "github"
     },
-    "string": "github:NixOS/nixpkgs/23.05?dir`lib"
+    "string": "github:NixOS/nixpkgs/23.05?dir=lib"
   }
 }
 ```
@@ -170,7 +170,7 @@ $ parser-util -l 'flake:nixpkgs/23.05?dir`lib'|jq;
 *** Plain URIs
 
 ``` shell
-$ parser-util -u 'flake:nixpkgs/23.05?dir`lib'|jq;
+$ parser-util -u 'flake:nixpkgs/23.05?dir=lib'|jq;
 {
   "authority": null,
   "base": "flake:nixpkgs/23.05",
