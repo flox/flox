@@ -66,7 +66,7 @@ interactive usage.
 ### Resolved Reference
 
 ``` shell
-$ parser-util -r 'flake:nixpkgs/23.05?dir`lib'|jq;
+$ parser-util -r 'flake:nixpkgs/23.05?dir=lib'|jq;
 {
   "input": "flake:nixpkgs/23.05?dir=lib",
   "originalRef": {
