@@ -2,3 +2,5 @@
 /result*
 .env
 .pre-commit-config.yaml
+.ccls
+.ccls-cache
