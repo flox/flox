@@ -5,7 +5,7 @@ This project provides a minimal executable which exposes various Nix parsers
 
 ## Parsers
 
-### `-r`  `parseAndResolveRef``
+### `-r`  `parseAndResolveRef`
 Accepts a flake-ref as an attribute set or URI string, performs resolution
 on indirect inputs, and prints a JSON object containing the original and
 resolved refs in string and _exploded_ attribute set form.
