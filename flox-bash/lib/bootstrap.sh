@@ -1,3 +1,4 @@
+# -*- mode: sh; sh-shell: bash; -*-
 # Boolean to track whether this is the initial bootstrap.
 declare -i _initial_bootstrap=0
 

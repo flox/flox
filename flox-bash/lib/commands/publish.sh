@@ -1,3 +1,4 @@
+# -*- mode: sh; sh-shell: bash; -*-
 ## Development commands
 
 # Splitting out "flox publish" into its own module because it is
