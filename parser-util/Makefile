@@ -71,10 +71,13 @@ nix_LDFLAGS := $(nix_LDFLAGS)
 # ---------------------------------------------------------------------------- #
 
 
-CXXFLAGS ?= $(EXTRA_CFLAGS) $(EXTRA_CXXFLAGS)
+CXXFLAGS ?=
+CXXFLAGS += $(EXTRA_CFLAGS) $(EXTRA_CXXFLAGS)
 CXXFLAGS += $(nix_CFLAGS) $(nljson_CFLAGS)
 
-LDFLAGS  ?= $(EXTRA_LDFLAGS)
+LDFLAGS ?=
+LDFLAGS += $(EXTRA_LDFLAGS)
+LDFLAGS += $(nix_LDFLAGS)
 
 ifneq ($(DEBUG),)
 	CXXFLAGS += -ggdb3 -pg

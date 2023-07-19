@@ -1,6 +1,7 @@
 /target
-/result*
 .env
 .pre-commit-config.yaml
 .ccls
 .ccls-cache
+result
+result-*
