@@ -51,19 +51,19 @@ parseURI( const char * arg )
       nix::ParsedURL       url    = nix::parseURL( arg );
       nix::ParsedUrlScheme scheme = nix::parseUrlScheme( url.scheme );
 
-      nlohmann::json s = {
+      nlohmann::json schemeJSON = {
         { "full",        url.scheme       }
       , { "application", nlohmann::json() }
       , { "transport",   scheme.transport }
       };
       if ( scheme.application.has_value() )
         {
-          s["application"] = scheme.application.value();
+          schemeJSON["application"] = scheme.application.value();
         }
 
       nlohmann::json j = {
         { "base",      std::move( url.base )     }
-      , { "scheme",    std::move( s )            }
+      , { "scheme",    std::move( schemeJSON )   }
       , { "authority", nlohmann::json()          }
       , { "path",      std::move( url.path )     }
       , { "fragment",  std::move( url.fragment ) }
