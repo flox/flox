@@ -167,7 +167,7 @@ $ parser-util -l 'flake:nixpkgs/23.05?dir=lib'|jq;
 ```
 
 
-*** Plain URIs
+### Plain URIs
 
 ``` shell
 $ parser-util -u 'flake:nixpkgs/23.05?dir=lib'|jq;
@@ -244,6 +244,78 @@ $ parser-util -i 'nixpkgs/23.05#sqlite'|jq;
       "type": "indirect"
     },
     "string": "flake:nixpkgs/23.05"
+  }
+}
+```
+
+## Output Formats
+
+### `-r`  `parseAndResolveRef`
+
+```
+{
+  "input": <STRING> | <ATTRS>
+, "originalRef": {
+    "attrs": <ATTRS>
+  , "string": <STRING>
+  }
+, "resolvedRef": {
+    "attrs": <ATTRS>
+  , "string": <STRING>
+  }
+}
+```
+
+
+### `-l`  `lockFlake`
+
+```
+{
+  "input": <STRING> | <ATTRS>
+, "originalRef": {
+    "attrs": <ATTRS>
+  , "string": <STRING>
+  }
+, "resolvedRef": {
+    "attrs": <ATTRS>
+  , "string": <STRING>
+  }
+, "lockedRef": {
+    "attrs": <ATTRS>
+  , "string": <STRING>
+  }
+}
+```
+
+
+### `-i`  `parseInstallable`
+
+```
+{
+  "input": <STRING>
+, "attrPath": [<STRING>...]
+, "outputs": ( "all" | "default" | [<STRING>...] )
+, "ref": {
+    "attrs": <ATTRS>
+  , "string": <STRING>
+  }
+}
+```
+
+
+### `-u` `parseURI`
+
+```
+{
+  "authority": ( null | <STRING> )
+, "base": <STRING>
+, "fragment": <STRING>
+, "path": <STRING>
+, "query": { <KEY>: ( <STRING> | null )... }
+, "scheme": {
+    "application": ( null | <STRING> )
+  , "full": <STRING>
+  , "transport": <STRING>
   }
 }
 ```
