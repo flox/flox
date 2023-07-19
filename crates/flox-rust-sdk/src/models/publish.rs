@@ -199,7 +199,9 @@ impl<'flox> Publish<'flox, Empty> {
 
         locked_ref_command
             .run_typed(&nix, &Default::default())
-            .map_err(|nix_err| PublishError::FlakeMetadata(self.publish_flake_ref.clone(), nix_err))
+            .map_err(|nix_err| {
+                PublishError::FlakeMetadata(self.publish_flake_ref.to_string(), nix_err)
+            })
             .await
     }
 }
@@ -226,7 +228,6 @@ impl<'flox> Publish<'flox, NixAnalysis> {
             UpstreamRepo::clone_repo(&self.publish_flake_ref, &self.flox.temp_dir).await?;
         let catalog = upstream_repo.get_catalog(&self.flox.system).await?;
         if let Ok(Some(_)) = catalog.get_snapshot(self.analysis()) {
-        let catalog = upstream_repo.get_catalog(&self.flox.system).await?;
             Err(PublishError::SnapshotExists)?;
         }
         catalog.add_snapshot(self.analysis()).await?;
@@ -251,10 +252,10 @@ struct UpstreamRepo(Git);
 impl UpstreamRepo {
     /// Clone the upstream repo
     async fn clone_repo(
-        publish_ref: &PublishRef,
+        publish_flake_ref: &PublishFlakeRef,
         temp_dir: impl AsRef<Path>,
     ) -> Result<Self, PublishError> {
-        let url = publish_ref.clone_url();
+        let url = publish_flake_ref.clone_url();
         let repo_dir = tempfile::tempdir_in(temp_dir).unwrap().into_path(); // todo catch error
         let repo = <Git as GitProvider>::clone(&url, &repo_dir, false).await?;
 
