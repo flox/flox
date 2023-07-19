@@ -66,8 +66,8 @@ util() {
 cmds=(
   ansifilter awk basename bash cat chmod cmp column cp curl cut dasel date
   dirname getent gh git grep gum id jq ln man mkdir mktemp mv nix nix-editor
-  nix-store pwd readlink realpath rm rmdir sed sh sleep sort stat tail tar tee
-  touch tr uname uuid xargs zgrep semver
+  'nix-store' pwd readlink realpath rm rmdir sed sh sleep sort stat tail tar tee
+  touch tr uname uuid xargs zgrep semver 'parser-util'
 );
 
 
@@ -75,9 +75,10 @@ cmds=(
 
 @test "runtime dependencies in '/nix/store'" {
   for p in "${cmds[@]}"; do
-    run util echo "\$_$p";
+    _p="${p//-/_}";
+    run util echo "\$_$_p";
     assert_output --regexp "^/nix/store/.*/$p\$";
-    run util echo "\$invoke_$p";
+    run util echo "\$invoke_$_p";
     assert_output --regexp "^invoke /nix/store/.*/$p\$";
   done
 }
@@ -93,6 +94,16 @@ cmds=(
   run "$FLOX_CLI" activate -e "$TEST_ENVIRONMENT" --  \
         bash -c "echo \"\${_${cmds[1]}:-NOPE}\";";
   assert_output --partial NOPE;
+}
+
+
+# ---------------------------------------------------------------------------- #
+
+# TODO: this can be removed when we have integrated `parser-util' into some
+# commands, but for now we just want to be sure that it's callable.
+@test "ensure 'parser-util' can be run" {
+  run util "\$_parser_util --help";
+  assert_success;
 }
 
 

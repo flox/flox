@@ -239,8 +239,8 @@ parseInstallable( nix::EvalState & state, const char * arg )
 /* -------------------------------------------------------------------------- */
 
 static const char usageMsg[] =
-    "Usage: parser [-r|-l|-i|-u] <URI|JSON-ATTRS>\n"
-    "Usage: parser <-h|--help|--usage>";
+    "Usage: parser-util [-r|-l|-i|-u] <URI|JSON-ATTRS>\n"
+    "Usage: parser-util <-h|--help|--usage>";
 
 
   int

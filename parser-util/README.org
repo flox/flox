@@ -47,8 +47,8 @@ and may be either =null= or a =string=.
 ** Invocation
 
 #+BEGIN_SRC
-parser [-r|-l|-i|-u] <URI|JSON-ATTRS>
-parser [-h|--help|--usage]
+parser-util [-r|-l|-i|-u] <URI|JSON-ATTRS>
+parser-util [-h|--help|--usage]
 #+END_SRC
 
 The flags listed above may be given to indicate which parser should be used
@@ -66,7 +66,7 @@ interactive usage.
 *** Resolved Reference
 
 #+BEGIN_SRC shell
-$ parse -r 'flake:nixpkgs/23.05?dir=lib'|jq;
+$ parser-util -r 'flake:nixpkgs/23.05?dir=lib'|jq;
 {
   "input": "flake:nixpkgs/23.05?dir=lib",
   "originalRef": {
@@ -90,7 +90,7 @@ $ parse -r 'flake:nixpkgs/23.05?dir=lib'|jq;
   }
 }
 
-$ parse -r '{
+$ parser-util -r '{
     "type": "indirect"
   , "id":   "nixpkgs"
   , "ref":  "23.05"
@@ -129,7 +129,7 @@ $ parse -r '{
 *** Locked Flake
 
 #+BEGIN_SRC shell
-$ parse -l 'flake:nixpkgs/23.05?dir=lib'|jq;
+$ parser-util -l 'flake:nixpkgs/23.05?dir=lib'|jq;
 {
   "input": "flake:nixpkgs/23.05?dir=lib",
   "lockedRef": {
@@ -170,7 +170,7 @@ $ parse -l 'flake:nixpkgs/23.05?dir=lib'|jq;
 *** Plain URIs
 
 #+BEGIN_SRC shell
-$ parse -u 'flake:nixpkgs/23.05?dir=lib'|jq;
+$ parser-util -u 'flake:nixpkgs/23.05?dir=lib'|jq;
 {
   "authority": null,
   "base": "flake:nixpkgs/23.05",
@@ -191,7 +191,7 @@ $ parse -u 'flake:nixpkgs/23.05?dir=lib'|jq;
 *** Installables
 
 #+BEGIN_SRC shell
-$ parse -i 'nixpkgs/23.05#sqlite^bin,dev,out,debug'|jq;
+$ parser-util -i 'nixpkgs/23.05#sqlite^bin,dev,out,debug'|jq;
 {
   "attrPath": [
     "sqlite"
@@ -213,7 +213,7 @@ $ parse -i 'nixpkgs/23.05#sqlite^bin,dev,out,debug'|jq;
   }
 }
 
-$ parse -i 'nixpkgs/23.05#sqlite^*'|jq;
+$ parser-util -i 'nixpkgs/23.05#sqlite^*'|jq;
 {
   "attrPath": [
     "sqlite"
@@ -230,7 +230,7 @@ $ parse -i 'nixpkgs/23.05#sqlite^*'|jq;
   }
 }
 
-$ parse -i 'nixpkgs/23.05#sqlite'|jq;
+$ parser-util -i 'nixpkgs/23.05#sqlite'|jq;
 {
   "attrPath": [
     "sqlite"

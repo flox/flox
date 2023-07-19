@@ -29,6 +29,7 @@
   nix-editor,
   nixStable,
   pandoc,
+  parser-util,
   pkgs,
   shellcheck,
   shfmt,
@@ -117,6 +118,7 @@ in
       util-linuxMinimal
       semver
       capacitated.flox-floxpkgs.packages.builtfilter
+      parser-util
     ];
     makeFlags =
       [

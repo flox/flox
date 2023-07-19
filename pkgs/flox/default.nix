@@ -16,6 +16,7 @@
   pkg-config,
   darwin,
   flox-bash,
+  parser-util,
   pandoc,
   cacert,
   glibcLocales,
@@ -36,6 +37,7 @@
       # rather than relying on or modifying the user's `PATH` variable
       NIX_BIN = "${flox-bash}/libexec/flox/nix";
       GIT_BIN = "${gitMinimal}/bin/git";
+      PARSER_UTIL_BIN = parser-util.outPath + "/bin/parser-util";
 
       # path to bash impl of flox to dispatch unimplemented commands to
       FLOX_SH = "${flox-bash}/libexec/flox/flox";
