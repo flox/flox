@@ -61,7 +61,7 @@ parseURI( const char * arg )
           schemeJSON["application"] = scheme.application.value();
         }
 
-      nlohmann::json j = {
+      nlohmann::json uriJSON = {
         { "base",      std::move( url.base )     }
       , { "scheme",    std::move( schemeJSON )   }
       , { "authority", nlohmann::json()          }
@@ -71,10 +71,10 @@ parseURI( const char * arg )
       };
       if ( url.authority.has_value() )
         {
-          j["authority"] = url.authority.value();
+          uriJSON["authority"] = url.authority.value();
         }
 
-      return j;
+      return uriJSON;
     }
   catch( std::exception & e )
     {
