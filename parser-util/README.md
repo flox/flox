@@ -136,7 +136,7 @@ $ parser-util -l 'flake:nixpkgs/23.05?dir=lib'|jq;
     "attrs": {
       "dir": "lib",
       "lastModified": 1685566663,
-      "narHash": "sha256-btHN1czJ6rzteeCuE/PNrdssqYD2nIA4w48miQAFloM`",
+      "narHash": "sha256-btHN1czJ6rzteeCuE/PNrdssqYD2nIA4w48miQAFloM=",
       "owner": "NixOS",
       "repo": "nixpkgs",
       "rev": "4ecab3273592f27479a583fb6d975d4aba3486fe",
