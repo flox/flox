@@ -3,7 +3,7 @@ use flox_types::stability::Stability;
 use runix::arguments::flake::FlakeArgs;
 use runix::arguments::{BundleArgs, NixArgs};
 use runix::command::{Build, Bundle, Develop, Run as RunCommand, Shell};
-use runix::installable::Installable;
+use runix::installable::{FlakeAttribute, Installable};
 use runix::{NixBackend, Run};
 use thiserror::Error;
 
@@ -12,7 +12,7 @@ use crate::flox::{Flox, FloxNixApi};
 #[derive(Constructor)]
 pub struct Package<'flox> {
     flox: &'flox Flox,
-    installable: Installable,
+    flake_attribute: FlakeAttribute,
     stability: Stability,
     nix_arguments: Vec<String>,
 }
@@ -101,7 +101,7 @@ impl Package<'_> {
 
         let command = Build {
             flake: self.flake_args().map_err(PackageError::FlakeArgs)?,
-            installables: [self.installable.clone()].into(),
+            installables: [self.flake_attribute.clone().into()].into(),
             ..Default::default()
         };
 
@@ -125,7 +125,7 @@ impl Package<'_> {
 
         let command = Develop {
             flake: self.flake_args().map_err(PackageError::FlakeArgs)?,
-            installable: self.installable.clone().into(),
+            installable: Installable::FlakeAttribute(self.flake_attribute.clone()).into(),
             ..Default::default()
         };
 
@@ -149,7 +149,7 @@ impl Package<'_> {
 
         let command = RunCommand {
             flake: self.flake_args().map_err(PackageError::FlakeArgs)?,
-            installable: self.installable.clone().into(),
+            installable: Installable::FlakeAttribute(self.flake_attribute.clone()).into(),
             ..Default::default()
         };
 
@@ -173,7 +173,7 @@ impl Package<'_> {
 
         let command = Shell {
             flake: self.flake_args().map_err(PackageError::FlakeArgs)?,
-            installables: [self.installable.clone()].into(),
+            installables: [self.flake_attribute.clone().into()].into(),
             ..Default::default()
         };
 
@@ -200,7 +200,7 @@ impl Package<'_> {
 
         let command = Bundle {
             flake: self.flake_args().map_err(PackageError::FlakeArgs)?,
-            installable: self.installable.clone().into(),
+            installable: Installable::FlakeAttribute(self.flake_attribute.clone()).into(),
             bundle_args: BundleArgs {
                 bundler: Some(bundler.into()),
             },

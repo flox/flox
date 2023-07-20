@@ -8,7 +8,7 @@ use std::str::FromStr;
 use anyhow::{anyhow, bail, Context, Result};
 use bpaf::Parser;
 use flox_rust_sdk::flox::{EnvironmentRef, Flox, FloxInstallable, ResolvedInstallableMatch};
-use flox_rust_sdk::prelude::Installable;
+use flox_rust_sdk::prelude::FlakeAttribute;
 use flox_rust_sdk::providers::git::{GitCommandProvider, GitProvider};
 use indoc::indoc;
 use itertools::Itertools;
@@ -200,7 +200,7 @@ impl<Matching: InstallableDef + 'static> InstallableArgument<Parsed, Matching> {
     }
 
     /// called at runtime to extract single installable from CLI input
-    pub async fn resolve_installable(&self, flox: &Flox) -> Result<Installable> {
+    pub async fn resolve_flake_attribute(&self, flox: &Flox) -> Result<FlakeAttribute> {
         let drv = InstallableKind::any(Matching::DERIVATION_TYPES).unwrap();
         let matches = self.resolve_matches(flox).await?;
 
@@ -268,12 +268,12 @@ pub async fn resolve_installable_from_matches(
     derivation_type: &str,
     arg_flag: Option<&str>,
     mut matches: Vec<ResolvedInstallableMatch>,
-) -> Result<Installable> {
+) -> Result<FlakeAttribute> {
     match matches.len() {
         0 => {
             bail!("No matching installables found");
         },
-        1 => Ok(matches.remove(0).installable()),
+        1 => Ok(matches.remove(0).flake_attribute()),
         _ => {
             let mut prefixes_total: HashSet<String> = HashSet::new();
             let mut prefixes_with: HashMap<String, HashSet<String>> = HashMap::new();
@@ -391,7 +391,7 @@ pub async fn resolve_installable_from_matches(
                 .with_context(|| format!("Failed to prompt for {derivation_type} choice"))?
                 .0;
 
-            let installable = matches.remove(sel).installable();
+            let flake_attribute = matches.remove(sel).flake_attribute();
 
             warn!(
                 "HINT: avoid selecting a {} next time with:\n  $ flox {} {}",
@@ -400,7 +400,7 @@ pub async fn resolve_installable_from_matches(
                 shell_escape::escape(choices.remove(sel).1.into())
             );
 
-            Ok(installable)
+            Ok(flake_attribute)
         },
     }
 }

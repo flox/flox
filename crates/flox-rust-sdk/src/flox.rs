@@ -15,7 +15,7 @@ use runix::arguments::{EvalArgs, NixArgs};
 use runix::command::{Eval, FlakeMetadata};
 use runix::command_line::{DefaultArgs, NixCommandLine};
 use runix::flake_ref::path::PathRef;
-use runix::installable::{AttrPath, Installable};
+use runix::installable::{AttrPath, FlakeAttribute, Installable};
 use runix::{NixBackend, RunJson};
 use serde::Deserialize;
 use thiserror::Error;
@@ -120,7 +120,7 @@ pub struct ResolvedInstallableMatch {
 }
 
 impl ResolvedInstallableMatch {
-    pub fn installable(self) -> Installable {
+    pub fn flake_attribute(self) -> FlakeAttribute {
         // Join the prefix and key into a safe attrpath, adding the associated system if present
         let attr_path = {
             let mut builder = AttrPath::default();
@@ -138,7 +138,7 @@ impl ResolvedInstallableMatch {
             builder
         };
 
-        Installable {
+        FlakeAttribute {
             flakeref: self.flakeref.parse().unwrap(),
             attr_path,
         }
@@ -151,11 +151,11 @@ impl Flox {
     ///  TODO: consume [Option<FloxInstallable>]
     pub fn package(
         &self,
-        installable: Installable,
+        flake_attribute: FlakeAttribute,
         stability: Stability,
         nix_arguments: Vec<String>,
     ) -> Package {
-        Package::new(self, installable, stability, nix_arguments)
+        Package::new(self, flake_attribute, stability, nix_arguments)
     }
 
     pub fn resource<X>(&self, x: X) -> Root<root::Closed<X>> {
@@ -366,7 +366,7 @@ impl Flox {
         let eval_apply = format!(r#"(x: ({}))"#, installable_resolve_strs.join(" ++ "));
 
         // The super resolver we're currently using to evaluate multiple whole flakerefs at once
-        let resolve_installable = Installable {
+        let resolve_flake_attribute = FlakeAttribute {
             flakeref: FlakeRef::Path(PathRef {
                 path: Path::new(env!("FLOX_RESOLVER_SRC")).to_path_buf(),
                 attributes: Default::default(),
@@ -404,7 +404,7 @@ impl Flox {
             },
             // Use the super resolver as the installable (which we use as this only takes one)
             eval_args: EvalArgs {
-                installable: Some(resolve_installable.into()),
+                installable: Some(Installable::FlakeAttribute(resolve_flake_attribute).into()),
                 apply: Some(eval_apply.into()),
             },
             ..Default::default()
@@ -602,8 +602,8 @@ pub mod tests {
             None,
         );
         assert_eq!(
-            Installable::from_str("github:flox/flox#.packages.aarch64-darwin.flox").unwrap(),
-            resolved.installable(),
+            FlakeAttribute::from_str("github:flox/flox#.packages.aarch64-darwin.flox").unwrap(),
+            resolved.flake_attribute(),
         );
     }
 }

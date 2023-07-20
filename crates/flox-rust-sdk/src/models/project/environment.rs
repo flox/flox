@@ -7,7 +7,7 @@ use runix::arguments::eval::EvaluationArgs;
 use runix::arguments::{BuildArgs, EvalArgs};
 use runix::command::{Build, Eval};
 use runix::command_line::{NixCommandLine, NixCommandLineRunJsonError};
-use runix::installable::{Installable, ParseInstallableError};
+use runix::installable::{FlakeAttribute, Installable, ParseInstallableError};
 use runix::{NixBackend, Run, RunJson, RunTyped};
 use thiserror::Error;
 
@@ -53,13 +53,19 @@ impl<Git: GitProvider, A: GitAccess<Git>> Environment<'_, Git, A> {
     //    todo!("to be replaced by catalog")
     // }
 
-    /// get an installable for this environment
+    /// get a flake_attribute for this environment
     // todo: share with named env
-    pub fn installable(&self) -> Result<Installable, ParseInstallableError> {
-        Ok(Installable {
+    pub fn flake_attribute(&self) -> Result<FlakeAttribute, ParseInstallableError> {
+        Ok(FlakeAttribute {
             flakeref: self.project.flakeref(),
             attr_path: ["", "floxEnvs", &self.system, &self.name].try_into()?,
         })
+    }
+
+    /// get an installable for this environment
+    // todo: share with named env
+    pub fn installable(&self) -> Result<Installable, ParseInstallableError> {
+        Ok(self.flake_attribute()?.into())
     }
 
     pub async fn installed_store_paths(
@@ -68,15 +74,15 @@ impl<Git: GitProvider, A: GitAccess<Git>> Environment<'_, Git, A> {
     ) -> Result<Vec<StorePath>, ProjectEnvironmentError> {
         let nix = flox.nix::<NixCommandLine>(Default::default());
 
-        let mut installable = self.installable()?;
-        installable.attr_path.push_attr("installedStorePaths")?;
+        let mut flake_attribute = self.flake_attribute()?;
+        flake_attribute.attr_path.push_attr("installedStorePaths")?;
 
         let eval = Eval {
             eval: EvaluationArgs {
                 impure: true.into(),
             },
             eval_args: EvalArgs {
-                installable: Some(installable.into()),
+                installable: Some(Installable::FlakeAttribute(flake_attribute).into()),
                 apply: None,
             },
             ..Eval::default()
@@ -94,15 +100,15 @@ impl<Git: GitProvider, A: GitAccess<Git>> Environment<'_, Git, A> {
     pub async fn catalog(&self, flox: &Flox) -> Result<EnvCatalog, ProjectEnvironmentError> {
         let nix = flox.nix::<NixCommandLine>(Default::default());
 
-        let mut installable = self.installable()?;
-        installable.attr_path.push_attr("catalog")?;
+        let mut flake_attribute = self.flake_attribute()?;
+        flake_attribute.attr_path.push_attr("catalog")?;
 
         let eval = Eval {
             eval: EvaluationArgs {
                 impure: true.into(),
             },
             eval_args: EvalArgs {
-                installable: Some(installable.into()),
+                installable: Some(Installable::FlakeAttribute(flake_attribute).into()),
                 apply: None,
             },
             ..Eval::default()
