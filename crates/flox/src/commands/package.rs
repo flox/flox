@@ -534,6 +534,7 @@ impl PackageCommands {
                     installables: [installable.into()].into(),
                     eval: EvaluationArgs {
                         impure: true.into(),
+                        ..Default::default()
                     },
                     ..Default::default()
                 };

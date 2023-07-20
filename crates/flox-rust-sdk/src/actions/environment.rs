@@ -282,6 +282,7 @@ impl<'flox> Environment<'flox> {
             installables: [temp_installable].into(),
             eval: EvaluationArgs {
                 impure: true.into(),
+                ..Default::default()
             },
             ..Default::default()
         };
