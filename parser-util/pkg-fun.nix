@@ -25,8 +25,9 @@ in
         notIgnored = ! (builtins.elem bname ignores);
         notObject = (builtins.match ".*\\.o" name) == null;
         notResult = (builtins.match "result(-*)?" bname) == null;
+        notJSON = (builtins.match ".*\\.json" name) == null;
       in
-        notIgnored && notObject && notResult;
+        notIgnored && notObject && notResult && notJSON;
     };
     inherit boost_CFLAGS nix_INCDIR libExt;
     nativeBuildInputs = [pkg-config];

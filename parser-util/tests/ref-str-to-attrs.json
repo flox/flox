@@ -1,0 +1,1148 @@
+[
+  {
+    "input": ".",
+    "originalRef": {
+      "attrs": {
+        "path": "/tmp/parser-util-test-root",
+        "type": "path"
+      },
+      "string": "path:/tmp/parser-util-test-root"
+    },
+    "resolvedRef": {
+      "attrs": {
+        "path": "/tmp/parser-util-test-root",
+        "type": "path"
+      },
+      "string": "path:/tmp/parser-util-test-root"
+    }
+  },
+  {
+    "input": ".?dir=bar",
+    "originalRef": {
+      "attrs": {
+        "path": "/tmp/parser-util-test-root",
+        "type": "path"
+      },
+      "string": "path:/tmp/parser-util-test-root"
+    },
+    "resolvedRef": {
+      "attrs": {
+        "path": "/tmp/parser-util-test-root",
+        "type": "path"
+      },
+      "string": "path:/tmp/parser-util-test-root"
+    }
+  },
+  {
+    "input": "file+file:///home/user/.zshrc",
+    "originalRef": {
+      "attrs": {
+        "type": "file",
+        "url": "file:///home/user/.zshrc"
+      },
+      "string": "file:///home/user/.zshrc"
+    },
+    "resolvedRef": {
+      "attrs": {
+        "type": "file",
+        "url": "file:///home/user/.zshrc"
+      },
+      "string": "file:///home/user/.zshrc"
+    }
+  },
+  {
+    "input": "file:///home/user/file.tar",
+    "originalRef": {
+      "attrs": {
+        "type": "tarball",
+        "url": "file:///home/user/file.tar"
+      },
+      "string": "file:///home/user/file.tar"
+    },
+    "resolvedRef": {
+      "attrs": {
+        "type": "tarball",
+        "url": "file:///home/user/file.tar"
+      },
+      "string": "file:///home/user/file.tar"
+    }
+  },
+  {
+    "input": "file:///home/user/file.tar.bz2",
+    "originalRef": {
+      "attrs": {
+        "type": "tarball",
+        "url": "file:///home/user/file.tar.bz2"
+      },
+      "string": "file:///home/user/file.tar.bz2"
+    },
+    "resolvedRef": {
+      "attrs": {
+        "type": "tarball",
+        "url": "file:///home/user/file.tar.bz2"
+      },
+      "string": "file:///home/user/file.tar.bz2"
+    }
+  },
+  {
+    "input": "file:///home/user/file.tar.gz",
+    "originalRef": {
+      "attrs": {
+        "type": "tarball",
+        "url": "file:///home/user/file.tar.gz"
+      },
+      "string": "file:///home/user/file.tar.gz"
+    },
+    "resolvedRef": {
+      "attrs": {
+        "type": "tarball",
+        "url": "file:///home/user/file.tar.gz"
+      },
+      "string": "file:///home/user/file.tar.gz"
+    }
+  },
+  {
+    "input": "file:///home/user/file.tar.xz",
+    "originalRef": {
+      "attrs": {
+        "type": "tarball",
+        "url": "file:///home/user/file.tar.xz"
+      },
+      "string": "file:///home/user/file.tar.xz"
+    },
+    "resolvedRef": {
+      "attrs": {
+        "type": "tarball",
+        "url": "file:///home/user/file.tar.xz"
+      },
+      "string": "file:///home/user/file.tar.xz"
+    }
+  },
+  {
+    "input": "file:///home/user/file.tar.zst",
+    "originalRef": {
+      "attrs": {
+        "type": "tarball",
+        "url": "file:///home/user/file.tar.zst"
+      },
+      "string": "file:///home/user/file.tar.zst"
+    },
+    "resolvedRef": {
+      "attrs": {
+        "type": "tarball",
+        "url": "file:///home/user/file.tar.zst"
+      },
+      "string": "file:///home/user/file.tar.zst"
+    }
+  },
+  {
+    "input": "file:///home/user/file.zip",
+    "originalRef": {
+      "attrs": {
+        "type": "tarball",
+        "url": "file:///home/user/file.zip"
+      },
+      "string": "file:///home/user/file.zip"
+    },
+    "resolvedRef": {
+      "attrs": {
+        "type": "tarball",
+        "url": "file:///home/user/file.zip"
+      },
+      "string": "file:///home/user/file.zip"
+    }
+  },
+  {
+    "input": "file:///home/user/.zshrc",
+    "originalRef": {
+      "attrs": {
+        "type": "file",
+        "url": "file:///home/user/.zshrc"
+      },
+      "string": "file:///home/user/.zshrc"
+    },
+    "resolvedRef": {
+      "attrs": {
+        "type": "file",
+        "url": "file:///home/user/.zshrc"
+      },
+      "string": "file:///home/user/.zshrc"
+    }
+  },
+  {
+    "input": "file+http://registry.npmjs.org/lodash",
+    "originalRef": {
+      "attrs": {
+        "type": "file",
+        "url": "http://registry.npmjs.org/lodash"
+      },
+      "string": "http://registry.npmjs.org/lodash"
+    },
+    "resolvedRef": {
+      "attrs": {
+        "type": "file",
+        "url": "http://registry.npmjs.org/lodash"
+      },
+      "string": "http://registry.npmjs.org/lodash"
+    }
+  },
+  {
+    "input": "file+https://registry.npmjs.org/lodash",
+    "originalRef": {
+      "attrs": {
+        "type": "file",
+        "url": "https://registry.npmjs.org/lodash"
+      },
+      "string": "https://registry.npmjs.org/lodash"
+    },
+    "resolvedRef": {
+      "attrs": {
+        "type": "file",
+        "url": "https://registry.npmjs.org/lodash"
+      },
+      "string": "https://registry.npmjs.org/lodash"
+    }
+  },
+  {
+    "input": "file+https://registry.npmjs.org/lodash?_rev=xxxxxxx",
+    "originalRef": {
+      "attrs": {
+        "type": "file",
+        "url": "https://registry.npmjs.org/lodash?_rev=xxxxxxx"
+      },
+      "string": "https://registry.npmjs.org/lodash?_rev=xxxxxxx"
+    },
+    "resolvedRef": {
+      "attrs": {
+        "type": "file",
+        "url": "https://registry.npmjs.org/lodash?_rev=xxxxxxx"
+      },
+      "string": "https://registry.npmjs.org/lodash?_rev=xxxxxxx"
+    }
+  },
+  {
+    "input": "flake:nixpkgs",
+    "originalRef": {
+      "attrs": {
+        "id": "nixpkgs",
+        "type": "indirect"
+      },
+      "string": "flake:nixpkgs"
+    },
+    "resolvedRef": {
+      "attrs": {
+        "lastModified": 1689413807,
+        "narHash": "sha256-exuzOvOhGAEKWQKwDuZAL4N8a1I837hH5eocaTcIbLc=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "46ed466081b9cad1125b11f11a2af5cc40b942c7",
+        "type": "github"
+      },
+      "string": "github:NixOS/nixpkgs/46ed466081b9cad1125b11f11a2af5cc40b942c7"
+    }
+  },
+  {
+    "input": "flake:nixpkgs/a3a3dda3bacf61e8a39258a0ed9c924eeca8e293",
+    "originalRef": {
+      "attrs": {
+        "id": "nixpkgs",
+        "rev": "a3a3dda3bacf61e8a39258a0ed9c924eeca8e293",
+        "type": "indirect"
+      },
+      "string": "flake:nixpkgs/a3a3dda3bacf61e8a39258a0ed9c924eeca8e293"
+    },
+    "resolvedRef": {
+      "attrs": {
+        "lastModified": 1689413807,
+        "narHash": "sha256-exuzOvOhGAEKWQKwDuZAL4N8a1I837hH5eocaTcIbLc=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "a3a3dda3bacf61e8a39258a0ed9c924eeca8e293",
+        "type": "github"
+      },
+      "string": "github:NixOS/nixpkgs/a3a3dda3bacf61e8a39258a0ed9c924eeca8e293"
+    }
+  },
+  {
+    "input": "flake:nixpkgs?dir=lib",
+    "originalRef": {
+      "attrs": {
+        "dir": "lib",
+        "id": "nixpkgs",
+        "type": "indirect"
+      },
+      "string": "flake:nixpkgs?dir=lib"
+    },
+    "resolvedRef": {
+      "attrs": {
+        "dir": "lib",
+        "lastModified": 1689413807,
+        "narHash": "sha256-exuzOvOhGAEKWQKwDuZAL4N8a1I837hH5eocaTcIbLc=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "46ed466081b9cad1125b11f11a2af5cc40b942c7",
+        "type": "github"
+      },
+      "string": "github:NixOS/nixpkgs/46ed466081b9cad1125b11f11a2af5cc40b942c7?dir=lib"
+    }
+  },
+  {
+    "input": "flake:nixpkgs/REF",
+    "originalRef": {
+      "attrs": {
+        "id": "nixpkgs",
+        "ref": "REF",
+        "type": "indirect"
+      },
+      "string": "flake:nixpkgs/REF"
+    },
+    "resolvedRef": {
+      "attrs": {
+        "lastModified": 1689413807,
+        "narHash": "sha256-exuzOvOhGAEKWQKwDuZAL4N8a1I837hH5eocaTcIbLc=",
+        "owner": "NixOS",
+        "ref": "REF",
+        "repo": "nixpkgs",
+        "type": "github"
+      },
+      "string": "github:NixOS/nixpkgs/REF"
+    }
+  },
+  {
+    "input": "flake:nixpkgs/REF?dir=lib",
+    "originalRef": {
+      "attrs": {
+        "dir": "lib",
+        "id": "nixpkgs",
+        "ref": "REF",
+        "type": "indirect"
+      },
+      "string": "flake:nixpkgs/REF?dir=lib"
+    },
+    "resolvedRef": {
+      "attrs": {
+        "dir": "lib",
+        "lastModified": 1689413807,
+        "narHash": "sha256-exuzOvOhGAEKWQKwDuZAL4N8a1I837hH5eocaTcIbLc=",
+        "owner": "NixOS",
+        "ref": "REF",
+        "repo": "nixpkgs",
+        "type": "github"
+      },
+      "string": "github:NixOS/nixpkgs/REF?dir=lib"
+    }
+  },
+  {
+    "input": "./foo",
+    "originalRef": {
+      "attrs": {
+        "path": "/tmp/parser-util-test-root/foo",
+        "type": "path"
+      },
+      "string": "path:/tmp/parser-util-test-root/foo"
+    },
+    "resolvedRef": {
+      "attrs": {
+        "path": "/tmp/parser-util-test-root/foo",
+        "type": "path"
+      },
+      "string": "path:/tmp/parser-util-test-root/foo"
+    }
+  },
+  {
+    "input": "/foo",
+    "originalRef": {
+      "attrs": {
+        "path": "/foo",
+        "type": "path"
+      },
+      "string": "path:/foo"
+    },
+    "resolvedRef": {
+      "attrs": {
+        "path": "/foo",
+        "type": "path"
+      },
+      "string": "path:/foo"
+    }
+  },
+  {
+    "input": "/foo/bar",
+    "originalRef": {
+      "attrs": {
+        "path": "/foo/bar",
+        "type": "path"
+      },
+      "string": "path:/foo/bar"
+    },
+    "resolvedRef": {
+      "attrs": {
+        "path": "/foo/bar",
+        "type": "path"
+      },
+      "string": "path:/foo/bar"
+    }
+  },
+  {
+    "input": "/foo/bar/baz",
+    "originalRef": {
+      "attrs": {
+        "path": "/foo/bar/baz",
+        "type": "path"
+      },
+      "string": "path:/foo/bar/baz"
+    },
+    "resolvedRef": {
+      "attrs": {
+        "path": "/foo/bar/baz",
+        "type": "path"
+      },
+      "string": "path:/foo/bar/baz"
+    }
+  },
+  {
+    "input": "/foo/bar/baz?dir=quux",
+    "originalRef": {
+      "attrs": {
+        "path": "/foo/bar/baz",
+        "type": "path"
+      },
+      "string": "path:/foo/bar/baz"
+    },
+    "resolvedRef": {
+      "attrs": {
+        "path": "/foo/bar/baz",
+        "type": "path"
+      },
+      "string": "path:/foo/bar/baz"
+    }
+  },
+  {
+    "input": "./foo?dir=bar",
+    "originalRef": {
+      "attrs": {
+        "path": "/tmp/parser-util-test-root/foo",
+        "type": "path"
+      },
+      "string": "path:/tmp/parser-util-test-root/foo"
+    },
+    "resolvedRef": {
+      "attrs": {
+        "path": "/tmp/parser-util-test-root/foo",
+        "type": "path"
+      },
+      "string": "path:/tmp/parser-util-test-root/foo"
+    }
+  },
+  {
+    "input": "git+http://github.com/flox/flox.git",
+    "originalRef": {
+      "attrs": {
+        "type": "git",
+        "url": "http://github.com/flox/flox.git"
+      },
+      "string": "git+http://github.com/flox/flox.git"
+    },
+    "resolvedRef": {
+      "attrs": {
+        "type": "git",
+        "url": "http://github.com/flox/flox.git"
+      },
+      "string": "git+http://github.com/flox/flox.git"
+    }
+  },
+  {
+    "input": "git+https://github.com/flox/flox/archive/main.tar.gz",
+    "originalRef": {
+      "attrs": {
+        "type": "git",
+        "url": "https://github.com/flox/flox/archive/main.tar.gz"
+      },
+      "string": "git+https://github.com/flox/flox/archive/main.tar.gz"
+    },
+    "resolvedRef": {
+      "attrs": {
+        "type": "git",
+        "url": "https://github.com/flox/flox/archive/main.tar.gz"
+      },
+      "string": "git+https://github.com/flox/flox/archive/main.tar.gz"
+    }
+  },
+  {
+    "input": "git+https://github.com/flox/flox.git",
+    "originalRef": {
+      "attrs": {
+        "type": "git",
+        "url": "https://github.com/flox/flox.git"
+      },
+      "string": "git+https://github.com/flox/flox.git"
+    },
+    "resolvedRef": {
+      "attrs": {
+        "type": "git",
+        "url": "https://github.com/flox/flox.git"
+      },
+      "string": "git+https://github.com/flox/flox.git"
+    }
+  },
+  {
+    "input": "github:flox/flox",
+    "originalRef": {
+      "attrs": {
+        "owner": "flox",
+        "repo": "flox",
+        "type": "github"
+      },
+      "string": "github:flox/flox"
+    },
+    "resolvedRef": {
+      "attrs": {
+        "owner": "flox",
+        "repo": "flox",
+        "type": "github"
+      },
+      "string": "github:flox/flox"
+    }
+  },
+  {
+    "input": "github:flox/flox/a3a3dda3bacf61e8a39258a0ed9c924eeca8e293",
+    "originalRef": {
+      "attrs": {
+        "owner": "flox",
+        "repo": "flox",
+        "rev": "a3a3dda3bacf61e8a39258a0ed9c924eeca8e293",
+        "type": "github"
+      },
+      "string": "github:flox/flox/a3a3dda3bacf61e8a39258a0ed9c924eeca8e293"
+    },
+    "resolvedRef": {
+      "attrs": {
+        "owner": "flox",
+        "repo": "flox",
+        "rev": "a3a3dda3bacf61e8a39258a0ed9c924eeca8e293",
+        "type": "github"
+      },
+      "string": "github:flox/flox/a3a3dda3bacf61e8a39258a0ed9c924eeca8e293"
+    }
+  },
+  {
+    "input": "github:flox/flox/main",
+    "originalRef": {
+      "attrs": {
+        "owner": "flox",
+        "ref": "main",
+        "repo": "flox",
+        "type": "github"
+      },
+      "string": "github:flox/flox/main"
+    },
+    "resolvedRef": {
+      "attrs": {
+        "owner": "flox",
+        "ref": "main",
+        "repo": "flox",
+        "type": "github"
+      },
+      "string": "github:flox/flox/main"
+    }
+  },
+  {
+    "input": "github:flox/flox?ref=refs/heads/main&dir=lib",
+    "originalRef": {
+      "attrs": {
+        "dir": "lib",
+        "owner": "flox",
+        "ref": "refs/heads/main",
+        "repo": "flox",
+        "type": "github"
+      },
+      "string": "github:flox/flox/refs/heads/main?dir=lib"
+    },
+    "resolvedRef": {
+      "attrs": {
+        "dir": "lib",
+        "owner": "flox",
+        "ref": "refs/heads/main",
+        "repo": "flox",
+        "type": "github"
+      },
+      "string": "github:flox/flox/refs/heads/main?dir=lib"
+    }
+  },
+  {
+    "input": "github:flox/flox/refs/heads/main?dir=lib",
+    "originalRef": {
+      "attrs": {
+        "dir": "lib",
+        "owner": "flox",
+        "ref": "refs/heads/main",
+        "repo": "flox",
+        "type": "github"
+      },
+      "string": "github:flox/flox/refs/heads/main?dir=lib"
+    },
+    "resolvedRef": {
+      "attrs": {
+        "dir": "lib",
+        "owner": "flox",
+        "ref": "refs/heads/main",
+        "repo": "flox",
+        "type": "github"
+      },
+      "string": "github:flox/flox/refs/heads/main?dir=lib"
+    }
+  },
+  {
+    "input": "gitlab:flox/flox",
+    "originalRef": {
+      "attrs": {
+        "owner": "flox",
+        "repo": "flox",
+        "type": "gitlab"
+      },
+      "string": "gitlab:flox/flox"
+    },
+    "resolvedRef": {
+      "attrs": {
+        "owner": "flox",
+        "repo": "flox",
+        "type": "gitlab"
+      },
+      "string": "gitlab:flox/flox"
+    }
+  },
+  {
+    "input": "gitlab:flox/flox/a3a3dda3bacf61e8a39258a0ed9c924eeca8e293",
+    "originalRef": {
+      "attrs": {
+        "owner": "flox",
+        "repo": "flox",
+        "rev": "a3a3dda3bacf61e8a39258a0ed9c924eeca8e293",
+        "type": "gitlab"
+      },
+      "string": "gitlab:flox/flox/a3a3dda3bacf61e8a39258a0ed9c924eeca8e293"
+    },
+    "resolvedRef": {
+      "attrs": {
+        "owner": "flox",
+        "repo": "flox",
+        "rev": "a3a3dda3bacf61e8a39258a0ed9c924eeca8e293",
+        "type": "gitlab"
+      },
+      "string": "gitlab:flox/flox/a3a3dda3bacf61e8a39258a0ed9c924eeca8e293"
+    }
+  },
+  {
+    "input": "gitlab:flox/flox/main",
+    "originalRef": {
+      "attrs": {
+        "owner": "flox",
+        "ref": "main",
+        "repo": "flox",
+        "type": "gitlab"
+      },
+      "string": "gitlab:flox/flox/main"
+    },
+    "resolvedRef": {
+      "attrs": {
+        "owner": "flox",
+        "ref": "main",
+        "repo": "flox",
+        "type": "gitlab"
+      },
+      "string": "gitlab:flox/flox/main"
+    }
+  },
+  {
+    "input": "gitlab:flox/flox?ref=refs/heads/main&dir=lib",
+    "originalRef": {
+      "attrs": {
+        "dir": "lib",
+        "owner": "flox",
+        "ref": "refs/heads/main",
+        "repo": "flox",
+        "type": "gitlab"
+      },
+      "string": "gitlab:flox/flox/refs/heads/main?dir=lib"
+    },
+    "resolvedRef": {
+      "attrs": {
+        "dir": "lib",
+        "owner": "flox",
+        "ref": "refs/heads/main",
+        "repo": "flox",
+        "type": "gitlab"
+      },
+      "string": "gitlab:flox/flox/refs/heads/main?dir=lib"
+    }
+  },
+  {
+    "input": "gitlab:flox/flox/refs/heads/main?dir=lib",
+    "originalRef": {
+      "attrs": {
+        "dir": "lib",
+        "owner": "flox",
+        "ref": "refs/heads/main",
+        "repo": "flox",
+        "type": "gitlab"
+      },
+      "string": "gitlab:flox/flox/refs/heads/main?dir=lib"
+    },
+    "resolvedRef": {
+      "attrs": {
+        "dir": "lib",
+        "owner": "flox",
+        "ref": "refs/heads/main",
+        "repo": "flox",
+        "type": "gitlab"
+      },
+      "string": "gitlab:flox/flox/refs/heads/main?dir=lib"
+    }
+  },
+  {
+    "input": "git+ssh://git@github.com/flox/flox.git",
+    "originalRef": {
+      "attrs": {
+        "type": "git",
+        "url": "ssh://git@github.com/flox/flox.git"
+      },
+      "string": "git+ssh://git@github.com/flox/flox.git"
+    },
+    "resolvedRef": {
+      "attrs": {
+        "type": "git",
+        "url": "ssh://git@github.com/flox/flox.git"
+      },
+      "string": "git+ssh://git@github.com/flox/flox.git"
+    }
+  },
+  {
+    "input": "git+ssh://git@github.com/flox/flox.git?ref=main",
+    "originalRef": {
+      "attrs": {
+        "ref": "main",
+        "type": "git",
+        "url": "ssh://git@github.com/flox/flox.git"
+      },
+      "string": "git+ssh://git@github.com/flox/flox.git?ref=main"
+    },
+    "resolvedRef": {
+      "attrs": {
+        "ref": "main",
+        "type": "git",
+        "url": "ssh://git@github.com/flox/flox.git"
+      },
+      "string": "git+ssh://git@github.com/flox/flox.git?ref=main"
+    }
+  },
+  {
+    "input": "http://registry.npmjs.org/lodash",
+    "originalRef": {
+      "attrs": {
+        "type": "file",
+        "url": "http://registry.npmjs.org/lodash"
+      },
+      "string": "http://registry.npmjs.org/lodash"
+    },
+    "resolvedRef": {
+      "attrs": {
+        "type": "file",
+        "url": "http://registry.npmjs.org/lodash"
+      },
+      "string": "http://registry.npmjs.org/lodash"
+    }
+  },
+  {
+    "input": "http://registry.npmjs.org/lodash/-/lodash-4.17.21.tgz",
+    "originalRef": {
+      "attrs": {
+        "type": "tarball",
+        "url": "http://registry.npmjs.org/lodash/-/lodash-4.17.21.tgz"
+      },
+      "string": "http://registry.npmjs.org/lodash/-/lodash-4.17.21.tgz"
+    },
+    "resolvedRef": {
+      "attrs": {
+        "type": "tarball",
+        "url": "http://registry.npmjs.org/lodash/-/lodash-4.17.21.tgz"
+      },
+      "string": "http://registry.npmjs.org/lodash/-/lodash-4.17.21.tgz"
+    }
+  },
+  {
+    "input": "https://registry.npmjs.org/lodash",
+    "originalRef": {
+      "attrs": {
+        "type": "file",
+        "url": "https://registry.npmjs.org/lodash"
+      },
+      "string": "https://registry.npmjs.org/lodash"
+    },
+    "resolvedRef": {
+      "attrs": {
+        "type": "file",
+        "url": "https://registry.npmjs.org/lodash"
+      },
+      "string": "https://registry.npmjs.org/lodash"
+    }
+  },
+  {
+    "input": "https://registry.npmjs.org/lodash/-/lodash-4.17.21.tgz",
+    "originalRef": {
+      "attrs": {
+        "type": "tarball",
+        "url": "https://registry.npmjs.org/lodash/-/lodash-4.17.21.tgz"
+      },
+      "string": "https://registry.npmjs.org/lodash/-/lodash-4.17.21.tgz"
+    },
+    "resolvedRef": {
+      "attrs": {
+        "type": "tarball",
+        "url": "https://registry.npmjs.org/lodash/-/lodash-4.17.21.tgz"
+      },
+      "string": "https://registry.npmjs.org/lodash/-/lodash-4.17.21.tgz"
+    }
+  },
+  {
+    "input": "https://registry.npmjs.org/lodash/-/lodash-4.17.21.tgz?x=1",
+    "originalRef": {
+      "attrs": {
+        "type": "tarball",
+        "url": "https://registry.npmjs.org/lodash/-/lodash-4.17.21.tgz?x=1"
+      },
+      "string": "https://registry.npmjs.org/lodash/-/lodash-4.17.21.tgz?x=1"
+    },
+    "resolvedRef": {
+      "attrs": {
+        "type": "tarball",
+        "url": "https://registry.npmjs.org/lodash/-/lodash-4.17.21.tgz?x=1"
+      },
+      "string": "https://registry.npmjs.org/lodash/-/lodash-4.17.21.tgz?x=1"
+    }
+  },
+  {
+    "input": "nixpkgs",
+    "originalRef": {
+      "attrs": {
+        "id": "nixpkgs",
+        "type": "indirect"
+      },
+      "string": "flake:nixpkgs"
+    },
+    "resolvedRef": {
+      "attrs": {
+        "lastModified": 1689413807,
+        "narHash": "sha256-exuzOvOhGAEKWQKwDuZAL4N8a1I837hH5eocaTcIbLc=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "46ed466081b9cad1125b11f11a2af5cc40b942c7",
+        "type": "github"
+      },
+      "string": "github:NixOS/nixpkgs/46ed466081b9cad1125b11f11a2af5cc40b942c7"
+    }
+  },
+  {
+    "input": "nixpkgs/a3a3dda3bacf61e8a39258a0ed9c924eeca8e293",
+    "originalRef": {
+      "attrs": {
+        "id": "nixpkgs",
+        "rev": "a3a3dda3bacf61e8a39258a0ed9c924eeca8e293",
+        "type": "indirect"
+      },
+      "string": "flake:nixpkgs/a3a3dda3bacf61e8a39258a0ed9c924eeca8e293"
+    },
+    "resolvedRef": {
+      "attrs": {
+        "lastModified": 1689413807,
+        "narHash": "sha256-exuzOvOhGAEKWQKwDuZAL4N8a1I837hH5eocaTcIbLc=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "a3a3dda3bacf61e8a39258a0ed9c924eeca8e293",
+        "type": "github"
+      },
+      "string": "github:NixOS/nixpkgs/a3a3dda3bacf61e8a39258a0ed9c924eeca8e293"
+    }
+  },
+  {
+    "input": "nixpkgs/REF",
+    "originalRef": {
+      "attrs": {
+        "id": "nixpkgs",
+        "ref": "REF",
+        "type": "indirect"
+      },
+      "string": "flake:nixpkgs/REF"
+    },
+    "resolvedRef": {
+      "attrs": {
+        "lastModified": 1689413807,
+        "narHash": "sha256-exuzOvOhGAEKWQKwDuZAL4N8a1I837hH5eocaTcIbLc=",
+        "owner": "NixOS",
+        "ref": "REF",
+        "repo": "nixpkgs",
+        "type": "github"
+      },
+      "string": "github:NixOS/nixpkgs/REF"
+    }
+  },
+  {
+    "input": "path:./foo",
+    "originalRef": {
+      "attrs": {
+        "path": "./foo",
+        "type": "path"
+      },
+      "string": "path:./foo"
+    },
+    "resolvedRef": {
+      "attrs": {
+        "path": "./foo",
+        "type": "path"
+      },
+      "string": "path:./foo"
+    }
+  },
+  {
+    "input": "path:/foo",
+    "originalRef": {
+      "attrs": {
+        "path": "/foo",
+        "type": "path"
+      },
+      "string": "path:/foo"
+    },
+    "resolvedRef": {
+      "attrs": {
+        "path": "/foo",
+        "type": "path"
+      },
+      "string": "path:/foo"
+    }
+  },
+  {
+    "input": "path:./foo/bar",
+    "originalRef": {
+      "attrs": {
+        "path": "./foo/bar",
+        "type": "path"
+      },
+      "string": "path:./foo/bar"
+    },
+    "resolvedRef": {
+      "attrs": {
+        "path": "./foo/bar",
+        "type": "path"
+      },
+      "string": "path:./foo/bar"
+    }
+  },
+  {
+    "input": "path:/foo/bar",
+    "originalRef": {
+      "attrs": {
+        "path": "/foo/bar",
+        "type": "path"
+      },
+      "string": "path:/foo/bar"
+    },
+    "resolvedRef": {
+      "attrs": {
+        "path": "/foo/bar",
+        "type": "path"
+      },
+      "string": "path:/foo/bar"
+    }
+  },
+  {
+    "input": "path:./foo/bar/baz",
+    "originalRef": {
+      "attrs": {
+        "path": "./foo/bar/baz",
+        "type": "path"
+      },
+      "string": "path:./foo/bar/baz"
+    },
+    "resolvedRef": {
+      "attrs": {
+        "path": "./foo/bar/baz",
+        "type": "path"
+      },
+      "string": "path:./foo/bar/baz"
+    }
+  },
+  {
+    "input": "path:/foo/bar/baz",
+    "originalRef": {
+      "attrs": {
+        "path": "/foo/bar/baz",
+        "type": "path"
+      },
+      "string": "path:/foo/bar/baz"
+    },
+    "resolvedRef": {
+      "attrs": {
+        "path": "/foo/bar/baz",
+        "type": "path"
+      },
+      "string": "path:/foo/bar/baz"
+    }
+  },
+  {
+    "input": "sourcehut:flox/flox",
+    "originalRef": {
+      "attrs": {
+        "owner": "flox",
+        "repo": "flox",
+        "type": "sourcehut"
+      },
+      "string": "sourcehut:flox/flox"
+    },
+    "resolvedRef": {
+      "attrs": {
+        "owner": "flox",
+        "repo": "flox",
+        "type": "sourcehut"
+      },
+      "string": "sourcehut:flox/flox"
+    }
+  },
+  {
+    "input": "sourcehut:flox/flox/a3a3dda3bacf61e8a39258a0ed9c924eeca8e293",
+    "originalRef": {
+      "attrs": {
+        "owner": "flox",
+        "repo": "flox",
+        "rev": "a3a3dda3bacf61e8a39258a0ed9c924eeca8e293",
+        "type": "sourcehut"
+      },
+      "string": "sourcehut:flox/flox/a3a3dda3bacf61e8a39258a0ed9c924eeca8e293"
+    },
+    "resolvedRef": {
+      "attrs": {
+        "owner": "flox",
+        "repo": "flox",
+        "rev": "a3a3dda3bacf61e8a39258a0ed9c924eeca8e293",
+        "type": "sourcehut"
+      },
+      "string": "sourcehut:flox/flox/a3a3dda3bacf61e8a39258a0ed9c924eeca8e293"
+    }
+  },
+  {
+    "input": "sourcehut:flox/flox/main",
+    "originalRef": {
+      "attrs": {
+        "owner": "flox",
+        "ref": "main",
+        "repo": "flox",
+        "type": "sourcehut"
+      },
+      "string": "sourcehut:flox/flox/main"
+    },
+    "resolvedRef": {
+      "attrs": {
+        "owner": "flox",
+        "ref": "main",
+        "repo": "flox",
+        "type": "sourcehut"
+      },
+      "string": "sourcehut:flox/flox/main"
+    }
+  },
+  {
+    "input": "sourcehut:flox/flox?ref=refs/heads/main&dir=lib",
+    "originalRef": {
+      "attrs": {
+        "dir": "lib",
+        "owner": "flox",
+        "ref": "refs/heads/main",
+        "repo": "flox",
+        "type": "sourcehut"
+      },
+      "string": "sourcehut:flox/flox/refs/heads/main?dir=lib"
+    },
+    "resolvedRef": {
+      "attrs": {
+        "dir": "lib",
+        "owner": "flox",
+        "ref": "refs/heads/main",
+        "repo": "flox",
+        "type": "sourcehut"
+      },
+      "string": "sourcehut:flox/flox/refs/heads/main?dir=lib"
+    }
+  },
+  {
+    "input": "sourcehut:flox/flox/refs/heads/main?dir=lib",
+    "originalRef": {
+      "attrs": {
+        "dir": "lib",
+        "owner": "flox",
+        "ref": "refs/heads/main",
+        "repo": "flox",
+        "type": "sourcehut"
+      },
+      "string": "sourcehut:flox/flox/refs/heads/main?dir=lib"
+    },
+    "resolvedRef": {
+      "attrs": {
+        "dir": "lib",
+        "owner": "flox",
+        "ref": "refs/heads/main",
+        "repo": "flox",
+        "type": "sourcehut"
+      },
+      "string": "sourcehut:flox/flox/refs/heads/main?dir=lib"
+    }
+  },
+  {
+    "input": "tarball+file:///home/user/file",
+    "originalRef": {
+      "attrs": {
+        "type": "tarball",
+        "url": "file:///home/user/file"
+      },
+      "string": "file:///home/user/file"
+    },
+    "resolvedRef": {
+      "attrs": {
+        "type": "tarball",
+        "url": "file:///home/user/file"
+      },
+      "string": "file:///home/user/file"
+    }
+  },
+  {
+    "input": "tarball+file:/home/user/file",
+    "originalRef": {
+      "attrs": {
+        "type": "tarball",
+        "url": "file:/home/user/file"
+      },
+      "string": "file:/home/user/file"
+    },
+    "resolvedRef": {
+      "attrs": {
+        "type": "tarball",
+        "url": "file:/home/user/file"
+      },
+      "string": "file:/home/user/file"
+    }
+  },
+  {
+    "input": "tarball+file:///home/user/file.tgz",
+    "originalRef": {
+      "attrs": {
+        "type": "tarball",
+        "url": "file:///home/user/file.tgz"
+      },
+      "string": "file:///home/user/file.tgz"
+    },
+    "resolvedRef": {
+      "attrs": {
+        "type": "tarball",
+        "url": "file:///home/user/file.tgz"
+      },
+      "string": "file:///home/user/file.tgz"
+    }
+  }
+]

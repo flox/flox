@@ -95,8 +95,7 @@ parseAndResolveRef( nix::EvalState & state, const char * arg )
 {
   bool isJSONArg = strchr( arg, '{' ) != nullptr;
 
-  nlohmann::json rawInput =
-    isJSONArg ? nlohmann::json::parse( arg ) : arg;
+  nlohmann::json rawInput = isJSONArg ? nlohmann::json::parse( arg ) : arg;
 
   try
     {
@@ -104,15 +103,25 @@ parseAndResolveRef( nix::EvalState & state, const char * arg )
         isJSONArg ? nix::FlakeRef::fromAttrs(
                       nix::fetchers::jsonToAttrs( rawInput )
                     )
-                  : nix::parseFlakeRef( arg, nix::absPath( "." ) );
+                  : nix::parseFlakeRef( arg, nix::absPath( "." ), true, false );
 
-      nix::FlakeRef resolvedRef = originalRef.resolve( state.store );
-
-      return {
-        { "input",       std::move( rawInput ) }
-      , { "originalRef", originalRef           }
-      , { "resolvedRef", resolvedRef           }
-      };
+      try
+        {
+          nix::FlakeRef resolvedRef = originalRef.resolve( state.store );
+          return {
+            { "input",       std::move( rawInput ) }
+          , { "originalRef", originalRef           }
+          , { "resolvedRef", resolvedRef           }
+          };
+        }
+      catch( ... )
+        {
+          return {
+            { "input",       std::move( rawInput ) }
+          , { "originalRef", originalRef           }
+          , { "resolvedRef", nlohmann::json()      }
+          };
+        }
     }
   catch( std::exception & e )
     {
@@ -210,7 +219,6 @@ parseInstallable( nix::EvalState & state, const char * arg )
         {
           outputs = "default";
         }
-
 
       return {
         { "input",    std::move( arg ) }
