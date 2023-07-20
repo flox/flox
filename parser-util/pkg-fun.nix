@@ -10,6 +10,8 @@
   nix,
   boost,
   bats,
+  gnused,
+  jq,
 }: let
   boost_CFLAGS = "-I" + boost + "/include";
   libExt = stdenv.hostPlatform.extensions.sharedLibrary;
@@ -36,7 +38,14 @@ in
         notIgnored && notObject && notResult && notJSON;
     };
     inherit boost_CFLAGS nix_INCDIR libExt;
-    nativeBuildInputs = [pkg-config batsWith];
+    nativeBuildInputs = [
+      # required for builds:
+      pkg-config
+      # required for tests:
+      batsWith
+      gnused
+      jq
+    ];
     buildInputs = [nlohmann_json nix.dev boost];
     makeFlags = [
       "libExt='${libExt}'"

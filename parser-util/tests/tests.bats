@@ -22,6 +22,9 @@ setup_file() {
   : "${JQ:=jq}";
   : "${SED:=sed}";
 
+  # Test data contains paths that resolve `.' ( `PWD' ) references
+  # to `/tmp/parser-util-test/root'.
+  # We substitute those expectations with our actual `PWD' before testing.
   $SED "s,\/tmp\/parser-util-test-root,$PWD,g"     \
        "$BATS_TEST_DIRNAME/ref-str-to-attrs.json"  \
        > ./ref-str-to-attrs.json;
