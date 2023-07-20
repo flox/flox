@@ -259,12 +259,15 @@ $ parser-util -i 'nixpkgs/23.05#sqlite'|jq;
     "attrs": <ATTRS>
   , "string": <STRING>
   }
-, "resolvedRef": {
+, "resolvedRef": ( null | {
     "attrs": <ATTRS>
   , "string": <STRING>
-  }
+  } )
 }
 ```
+
+`resolvedRef` may be null if you fail to resolve an indirect _flake-ref_.
+In such a case we still emit the parsed reference in `originalRef`.
 
 
 ### `-l`  `lockFlake`
