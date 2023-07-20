@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::ops::Deref;
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -7,7 +8,10 @@ use flox_types::catalog::cache::{CacheMeta, SubstituterUrl};
 use flox_types::stability::Stability;
 use futures::TryFutureExt;
 use log::debug;
+use runix::arguments::common::NixCommonArgs;
+use runix::arguments::eval::EvaluationArgs;
 use runix::arguments::flake::FlakeArgs;
+use runix::arguments::NixArgs;
 use runix::command::Eval;
 use runix::command_line::{NixCommandLine, NixCommandLineRunJsonError};
 use runix::flake_metadata::FlakeMetadata;
@@ -17,7 +21,8 @@ use runix::flake_ref::indirect::IndirectRef;
 use runix::flake_ref::path::PathRef;
 use runix::flake_ref::protocol::{WrappedUrl, WrappedUrlParseError};
 use runix::flake_ref::{protocol, FlakeRef};
-use runix::installable::{AttrPath, FlakeAttribute};
+use runix::installable::{AttrPath, FlakeAttribute, Installable};
+use runix::store_path::{StorePath, StorePathError};
 use runix::{RunJson, RunTyped};
 use serde_json::{json, Value};
 use thiserror::Error;
@@ -212,14 +217,52 @@ impl<'flox> Publish<'flox, NixAnalysis> {
         todo!()
     }
 
-    /// Check whether a store path is substitutable by a given substituter
-    /// and return the associated metadata.
-    #[allow(unused)] // until implemented
+    #[allow(dead_code)] // until consumed by cli
+    /// Check whether store paths are substitutable by a given substituter and
+    /// return the associated metadata.
+    ///
+    /// If substituter is None, the local store will be used, which is probably
+    /// only useful for testing.
     async fn get_binary_cache_metadata(
         &self,
-        substituter: SubstituterUrl,
+        substituter: Option<SubstituterUrl>,
     ) -> Result<CacheMeta, PublishError> {
-        todo!()
+        let nix: NixCommandLine = self.flox.nix(Default::default());
+        let store_paths = self.analysis()["element"]["store_paths"]
+            .as_array()
+            // TODO use CatalogEntry and then we don't need to unwrap
+            .unwrap()
+            .iter()
+            .map(|value| {
+                // TODO use CatalogEntry and then we don't need to unwrap
+                StorePath::from_path(value.as_str().unwrap())
+                    .map_err(PublishError::ParseStorePath)
+                    .map(Installable::StorePath)
+            })
+            .collect::<Result<Vec<Installable>, _>>()?;
+        let path_info_command = runix::command::PathInfo {
+            installables: store_paths.into(),
+            eval: EvaluationArgs {
+                eval_store: Some("auto".to_string().into()),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let narinfos = path_info_command
+            .run_typed(&nix, &NixArgs {
+                common: NixCommonArgs {
+                    store: substituter.clone().map(|url| url.to_string().into()),
+                },
+                ..Default::default()
+            })
+            .map_err(PublishError::PathInfo)
+            .await?;
+        Ok(CacheMeta {
+            cache_url: substituter.unwrap_or(SubstituterUrl::parse("file:///nix/store").unwrap()),
+            narinfo: narinfos,
+            _other: BTreeMap::new(),
+        })
     }
 
     /// Write snapshot to catalog and push to origin
@@ -259,6 +302,12 @@ pub enum PublishError {
 
     #[error("Failed to load metadata for flake '{0}': {1}")]
     FlakeMetadata(PublishFlakeRef, NixCommandLineRunJsonError),
+
+    #[error("Failed to parse store path {0}")]
+    ParseStorePath(StorePathError),
+
+    #[error("Failed to invoke path-info: {0}")]
+    PathInfo(NixCommandLineRunJsonError),
 }
 
 /// Publishable FlakeRefs
@@ -543,13 +592,63 @@ pub enum ConvertFlakeRefError {
 #[cfg(test)]
 mod tests {
 
-    use std::fs;
-    use std::path::Path;
     use std::str::FromStr;
 
     use super::*;
     use crate::flox::tests::flox_instance;
-    use crate::prelude::Channel;
+
+    #[cfg(feature = "impure-unit-tests")] // /nix/store is not accessible in the sandbox
+    #[tokio::test]
+    /// Check that adds_substituter_metadata correctly returns the validity of
+    /// a bad path and a good path, judging against the local /nix/store.
+    async fn adds_substituter_metadata() {
+        let (flox, _temp_dir_handle) = flox_instance();
+
+        let flake_ref = "git+ssh://git@github.com/flox/dummy"
+            .parse::<FlakeRef>()
+            .unwrap();
+
+        let publish_flake_ref = PublishFlakeRef::from_flake_ref(flake_ref, &flox, false)
+            .await
+            .unwrap();
+
+        let bad_path = "/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-a";
+        let flox_sh_path = env!("FLOX_SH_PATH");
+        let publish: Publish<'_, NixAnalysis> = Publish {
+            flox: &flox,
+            publish_flake_ref,
+            attr_path: [""].try_into().unwrap(),
+            stability: Stability::Stable,
+            analysis: NixAnalysis(json!({
+                "element": {
+                    "store_paths": [
+                        flox_sh_path,
+                        bad_path,
+                    ],
+                },
+            })),
+        };
+
+        let narinfos = publish
+            .get_binary_cache_metadata(None)
+            .await
+            .unwrap()
+            .narinfo;
+
+        // flox is valid
+        assert_eq!(narinfos.len(), 2);
+        let flox_narinfo = narinfos
+            .iter()
+            .find(|narinfo| narinfo.path.to_string_lossy() == flox_sh_path)
+            .unwrap();
+        assert!(flox_narinfo.valid);
+        // bad path is not valid
+        let bad_path_narinfo = narinfos
+            .iter()
+            .find(|narinfo| narinfo.path.to_string_lossy() == bad_path)
+            .unwrap();
+        assert!(!bad_path_narinfo.valid);
+    }
 
     #[cfg(feature = "impure-unit-tests")] // disabled for offline builds, TODO fix tests to work with local repos
     #[tokio::test]

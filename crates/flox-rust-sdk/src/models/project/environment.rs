@@ -74,6 +74,7 @@ impl<Git: GitProvider, A: GitAccess<Git>> Environment<'_, Git, A> {
         let eval = Eval {
             eval: EvaluationArgs {
                 impure: true.into(),
+                ..Default::default()
             },
             eval_args: EvalArgs {
                 installable: Some(flake_attribute.into()),
@@ -100,6 +101,7 @@ impl<Git: GitProvider, A: GitAccess<Git>> Environment<'_, Git, A> {
         let eval = Eval {
             eval: EvaluationArgs {
                 impure: true.into(),
+                ..Default::default()
             },
             eval_args: EvalArgs {
                 installable: Some(flake_attribute.into()),
@@ -148,6 +150,7 @@ impl<Git: GitProvider, A: GitAccess<Git>> Environment<'_, Git, A> {
             installables: [self.flake_attribute()?.into()].into(),
             eval: runix::arguments::eval::EvaluationArgs {
                 impure: true.into(),
+                ..Default::default()
             },
             build: BuildArgs {
                 out_link: Some(self.out_link().into()),
