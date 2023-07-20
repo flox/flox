@@ -22,7 +22,7 @@ setup_file() {
   : "${JQ:=jq}";
   : "${SED:=sed}";
 
-  $SED "s,\/tmp\/parser-util-test-root,$PWD"       \
+  $SED "s,\/tmp\/parser-util-test-root,$PWD,g"     \
        "$BATS_TEST_DIRNAME/ref-str-to-attrs.json"  \
        > ./ref-str-to-attrs.json;
 
@@ -30,6 +30,14 @@ setup_file() {
 }
 
 teardown_file() { popd >/dev/null||cd /; }
+
+
+# ---------------------------------------------------------------------------- #
+
+@test "parser-util --help" {
+  run $PARSER_UTIL --help;
+  assert_success;
+}
 
 
 # ---------------------------------------------------------------------------- #
@@ -45,7 +53,8 @@ teardown_file() { popd >/dev/null||cd /; }
     _str="$( $JQ -rcS ".[$_i].input" ./ref-str-to-attrs.json; )";
     _expected="$( $JQ -rcS ".[$_i]" ./ref-str-to-attrs.json; )";
     _rsl="$( $PARSER_UTIL -r "$_str"|$JQ -rcS; )";
-    assert [[ "$_expected" = "$_rsl" ]];
+    assert test "$_expected" = "$_rsl";
+    _i="$(( _i + 1 ))";
   done
 }
 

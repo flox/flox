@@ -9,10 +9,16 @@
   nlohmann_json,
   nix,
   boost,
+  bats,
 }: let
   boost_CFLAGS = "-I" + boost + "/include";
   libExt = stdenv.hostPlatform.extensions.sharedLibrary;
   nix_INCDIR = nix.dev + "/include";
+  batsWith = bats.withLibraries (p: [
+    p.bats-assert
+    p.bats-file
+    p.bats-support
+  ]);
 in
   stdenv.mkDerivation {
     pname = "parser-util";
@@ -30,7 +36,7 @@ in
         notIgnored && notObject && notResult && notJSON;
     };
     inherit boost_CFLAGS nix_INCDIR libExt;
-    nativeBuildInputs = [pkg-config];
+    nativeBuildInputs = [pkg-config batsWith];
     buildInputs = [nlohmann_json nix.dev boost];
     makeFlags = [
       "libExt='${libExt}'"
@@ -45,8 +51,6 @@ in
       fi
       runHook postConfigure;
     '';
-    # Checks require internet
-    doCheck = false;
     doInstallCheck = false;
   }
 # ---------------------------------------------------------------------------- #

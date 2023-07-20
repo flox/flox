@@ -27,6 +27,7 @@ CP         ?= cp
 TR         ?= tr
 SED        ?= sed
 TEST       ?= test
+BATS       ?= bats
 
 
 # ---------------------------------------------------------------------------- #
@@ -123,9 +124,13 @@ install-bin: $(addprefix $(BINDIR)/,$(BINS))
 
 # ---------------------------------------------------------------------------- #
 
-# TODO
-check:
-	@echo TODO
+check: bin/parser-util FORCE
+	@if ! $(BATS) --help >/dev/null 2>&1; then                            \
+	  echo 'check: Cannot run bats executable. Did you install it?' >&2;  \
+	  exit 1;                                                             \
+	fi;                                                                   \
+	export PARSER_UTIL='$(MAKEFILE_DIR)/bin/parser-util';                 \
+	$(BATS) '$(MAKEFILE_DIR)/tests';
 
 
 # ---------------------------------------------------------------------------- #
