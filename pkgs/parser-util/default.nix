@@ -1,1 +1,1 @@
-import ../../parser-util/pkg-fun.nix
+{inputs, ...}: inputs.parser-util.packages.parser-util

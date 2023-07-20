@@ -515,6 +515,22 @@
         "type": "github"
       }
     },
+    "nixpkgs_10": {
+      "locked": {
+        "lastModified": 1689261696,
+        "narHash": "sha256-LzfUtFs9MQRvIoQ3MfgSuipBVMXslMPH/vZ+nM40LkA=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "df1eee2aa65052a18121ed4971081576b25d6b5c",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "ref": "nixpkgs-unstable",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
     "nixpkgs_2": {
       "locked": {
         "lastModified": 1674236650,
@@ -645,16 +661,15 @@
     },
     "nixpkgs_9": {
       "locked": {
-        "lastModified": 1689261696,
-        "narHash": "sha256-LzfUtFs9MQRvIoQ3MfgSuipBVMXslMPH/vZ+nM40LkA=",
+        "lastModified": 1686178082,
+        "narHash": "sha256-ll289AxpC7tomi516m5w8yG/U81k3IR68VGui19pRyw=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "df1eee2aa65052a18121ed4971081576b25d6b5c",
+        "rev": "b9e05544c9b0a382d3416d602791a63ec2e63217",
         "type": "github"
       },
       "original": {
         "owner": "NixOS",
-        "ref": "nixpkgs-unstable",
         "repo": "nixpkgs",
         "type": "github"
       }
@@ -754,11 +769,31 @@
         "type": "github"
       }
     },
+    "parser-util": {
+      "inputs": {
+        "nixpkgs": "nixpkgs_9"
+      },
+      "locked": {
+        "lastModified": 1689882507,
+        "narHash": "sha256-gxBV0jyj5PXpZj6QRInx4ws0KfYlP+EvdwJ5fdzUMXk=",
+        "owner": "flox",
+        "repo": "parser-util",
+        "rev": "097f8edf633fdd215cebd3faba222ef4fc4ee2c3",
+        "type": "github"
+      },
+      "original": {
+        "owner": "flox",
+        "ref": "v0.1.0",
+        "repo": "parser-util",
+        "type": "github"
+      }
+    },
     "root": {
       "inputs": {
         "crane": "crane",
         "floco": "floco",
         "flox-floxpkgs": "flox-floxpkgs",
+        "parser-util": "parser-util",
         "shellHooks": "shellHooks_2"
       }
     },
@@ -843,7 +878,7 @@
         "flake-compat": "flake-compat_4",
         "flake-utils": "flake-utils_4",
         "gitignore": "gitignore_2",
-        "nixpkgs": "nixpkgs_9",
+        "nixpkgs": "nixpkgs_10",
         "nixpkgs-stable": "nixpkgs-stable_3"
       },
       "locked": {
