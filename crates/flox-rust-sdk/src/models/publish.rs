@@ -280,7 +280,7 @@ pub enum PublishError {
 pub enum PublishFlakeRef {
     Ssh(GitRef<protocol::SSH>),
     Https(GitRef<protocol::HTTPS>),
-    // File(GitRef<protocol::File>),
+    File(GitRef<protocol::File>),
 }
 
 impl PublishFlakeRef {
@@ -289,6 +289,7 @@ impl PublishFlakeRef {
         match self {
             PublishFlakeRef::Ssh(ref ssh_ref) => ssh_ref.url.as_str().to_owned(),
             PublishFlakeRef::Https(ref https_ref) => https_ref.url.as_str().to_owned(),
+            PublishFlakeRef::File(ref file_ref) => file_ref.url.as_str().to_owned(),
         }
     }
 
@@ -297,6 +298,7 @@ impl PublishFlakeRef {
         match self {
             PublishFlakeRef::Ssh(ssh_ref) => FlakeRef::GitSsh(ssh_ref),
             PublishFlakeRef::Https(https_ref) => FlakeRef::GitHttps(https_ref),
+            PublishFlakeRef::File(file_ref) => FlakeRef::GitPath(file_ref),
         }
     }
 
@@ -422,6 +424,10 @@ impl PublishFlakeRef {
                 attributes,
             )),
             "https" => Self::Https(GitRef::new(
+                WrappedUrl::try_from(remote_url).unwrap(),
+                attributes,
+            )),
+            "file" => Self::File(GitRef::new(
                 WrappedUrl::try_from(remote_url).unwrap(),
                 attributes,
             )),
