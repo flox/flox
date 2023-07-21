@@ -445,8 +445,7 @@ impl GitProvider for GitCommandProvider {
         let _out = GitCommandProvider::run_command(
             GitCommandProvider::new_command(&self.workdir)
                 .arg("branch")
-                .arg(branch)
-                .arg("--set-upstream")
+                .arg("--set-upstream-to")
                 .arg(format!("{origin_name}/{branch}")),
         )
         .await?;
