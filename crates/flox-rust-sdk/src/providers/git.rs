@@ -482,6 +482,7 @@ impl GitProvider for GitCommandProvider {
                 },
                 Ok(reference) => reference
                     .to_string_lossy()
+                    .trim()
                     .split_once('/')
                     .map(|(name, branch)| (name.to_string(), Some(branch.to_string())))
                     .unwrap(),
@@ -496,6 +497,7 @@ impl GitProvider for GitCommandProvider {
         )
         .await?
         .to_string_lossy()
+        .trim()
         .to_string();
 
         let branch_and_commit = match remote_branch {
