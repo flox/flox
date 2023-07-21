@@ -48,6 +48,7 @@ pub trait GitProvider: Send + Sized + std::fmt::Debug {
         + 'static;
     type FetchError: std::error::Error;
     type SetOriginError: std::error::Error;
+    type GetOriginError: std::error::Error;
 
     async fn discover<P: AsRef<Path>>(path: P) -> Result<Self, Self::DiscoverError>;
     async fn init<P: AsRef<Path>>(path: P, bare: bool) -> Result<Self, Self::InitError>;
@@ -79,6 +80,10 @@ pub trait GitProvider: Send + Sized + std::fmt::Debug {
     async fn push(&self, remote: &str) -> Result<(), Self::PushError>;
     async fn set_origin(&self, branch: &str, origin_name: &str)
         -> Result<(), Self::SetOriginError>;
+
+    async fn get_origin(
+        &self,
+    ) -> Result<(String, String, Option<(String, String)>), Self::GetOriginError>;
 
     fn workdir(&self) -> Option<&Path>;
     fn path(&self) -> &Path;
@@ -120,6 +125,7 @@ impl GitProvider for LibGit2Provider {
     type CommitError = EmptyError;
     type DiscoverError = git2::Error;
     type FetchError = EmptyError;
+    type GetOriginError = EmptyError;
     type InitError = git2::Error;
     type ListBranchesError = EmptyError;
     type MvError = EmptyError;
@@ -211,6 +217,12 @@ impl GitProvider for LibGit2Provider {
         todo!()
     }
 
+    async fn get_origin(
+        &self,
+    ) -> Result<(String, String, Option<(String, String)>), Self::GetOriginError> {
+        todo!()
+    }
+
     fn workdir(&self) -> Option<&Path> {
         self.repository.workdir()
     }
@@ -296,6 +308,7 @@ impl GitProvider for GitCommandProvider {
     type CommitError = GitCommandError;
     type DiscoverError = GitCommandDiscoverError;
     type FetchError = GitCommandError;
+    type GetOriginError = GitCommandError;
     type InitError = GitCommandError;
     type ListBranchesError = GitCommandError;
     type MvError = GitCommandError;
@@ -439,6 +452,70 @@ impl GitProvider for GitCommandProvider {
         .await?;
 
         Ok(())
+    }
+
+    /// Retrieve information about the remot origin for the current branch/repo
+    ///
+    /// Return a tuple containing
+    ///
+    /// 1. the remote name of the current branch (or "origin" if no upstream configured)
+    /// 2. the remote url
+    /// 3. (if configured) a tuple containing
+    ///    1. the upstream branch name
+    ///    2. the current revision of the branch
+    async fn get_origin(
+        &self,
+    ) -> Result<(String, String, Option<(String, String)>), Self::GetOriginError> {
+        let (remote_name, remote_branch) = {
+            let reference = GitCommandProvider::run_command(
+                GitCommandProvider::new_command(&self.workdir)
+                    .arg("rev-parse")
+                    .arg("--abbrev-ref")
+                    .arg("--symbolic-full-name")
+                    .arg("@{u}"),
+            )
+            .await;
+
+            match reference {
+                Err(_) => {
+                    error!("Couldn't determine upstream remote name for the current branch, defaulting to 'origin'");
+                    ("origin".to_string(), None)
+                },
+                Ok(reference) => reference
+                    .to_string_lossy()
+                    .split_once('/')
+                    .map(|(name, branch)| (name.to_string(), Some(branch.to_string())))
+                    .unwrap(),
+            }
+        };
+
+        let url = GitCommandProvider::run_command(
+            GitCommandProvider::new_command(&self.workdir)
+                .arg("remote")
+                .arg("get-url")
+                .arg(&remote_name),
+        )
+        .await?
+        .to_string_lossy()
+        .to_string();
+
+        let branch_and_commit = match remote_branch {
+            Some(branch) => Some((
+                branch.clone(),
+                GitCommandProvider::run_command(
+                    GitCommandProvider::new_command(&self.workdir)
+                        .arg("ls-remote")
+                        .arg(&remote_name)
+                        .arg(&branch),
+                )
+                .await?
+                .to_string_lossy()[0..40]
+                    .to_string(),
+            )),
+            None => None,
+        };
+
+        Ok((remote_name.to_string(), url, branch_and_commit))
     }
 
     async fn mv(&self, from: &Path, to: &Path) -> Result<(), Self::MvError> {
