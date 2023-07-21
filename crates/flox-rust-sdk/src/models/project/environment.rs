@@ -7,7 +7,7 @@ use runix::arguments::eval::EvaluationArgs;
 use runix::arguments::{BuildArgs, EvalArgs};
 use runix::command::{Build, Eval};
 use runix::command_line::{NixCommandLine, NixCommandLineRunJsonError};
-use runix::installable::{FlakeAttribute, Installable, ParseInstallableError};
+use runix::installable::{FlakeAttribute, ParseInstallableError};
 use runix::{NixBackend, Run, RunJson, RunTyped};
 use thiserror::Error;
 
@@ -60,12 +60,6 @@ impl<Git: GitProvider, A: GitAccess<Git>> Environment<'_, Git, A> {
             flakeref: self.project.flakeref(),
             attr_path: ["", "floxEnvs", &self.system, &self.name].try_into()?,
         })
-    }
-
-    /// get an installable for this environment
-    // todo: share with named env
-    pub fn installable(&self) -> Result<Installable, ParseInstallableError> {
-        Ok(self.flake_attribute()?.into())
     }
 
     pub async fn installed_store_paths(
@@ -151,7 +145,7 @@ impl<Git: GitProvider, A: GitAccess<Git>> Environment<'_, Git, A> {
         let nix: Nix = self.project.flox.nix([].to_vec());
 
         let build = Build {
-            installables: [self.installable()?].into(),
+            installables: [self.flake_attribute()?.into()].into(),
             eval: runix::arguments::eval::EvaluationArgs {
                 impure: true.into(),
             },
