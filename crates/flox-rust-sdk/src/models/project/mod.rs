@@ -110,10 +110,10 @@ impl<'flox, Git: GitProvider> Guard<Project<'flox, Git, ReadOnly<Git>>, Root<'fl
 
         FlakeInit {
             template: Some(
-                Installable::FlakeAttribute(FlakeAttribute {
+                FlakeAttribute {
                     flakeref: IndirectRef::new("flox".to_string(), Default::default()).into(),
                     attr_path: ["", "templates", "_init"].try_into().unwrap(),
-                })
+                }
                 .into(),
             ),
             ..Default::default()
@@ -300,10 +300,10 @@ impl<'flox, Git: GitProvider, Access: GitAccess<Git>> Project<'flox, Git, Access
             eval_args: EvalArgs {
                 apply: Some(nix_apply_expr.into()),
                 installable: Some(
-                    Installable::FlakeAttribute(FlakeAttribute {
+                    FlakeAttribute {
                         flakeref: self.flakeref(),
                         attr_path: ["floxEnvs".to_string()].try_into().unwrap(),
-                    })
+                    }
                     .into(),
                 ),
             },
@@ -346,10 +346,10 @@ impl<'flox, Git: GitProvider, Access: GitAccess<Git>> Project<'flox, Git, Access
             eval_args: EvalArgs {
                 apply: Some(nix_apply_expr.into()),
                 installable: Some(
-                    Installable::FlakeAttribute(FlakeAttribute {
+                    FlakeAttribute {
                         flakeref: self.flakeref(),
                         attr_path: ["floxEnvs".to_string()].try_into().unwrap(),
-                    })
+                    }
                     .into(),
                 ),
             },

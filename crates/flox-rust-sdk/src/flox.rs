@@ -15,7 +15,7 @@ use runix::arguments::{EvalArgs, NixArgs};
 use runix::command::{Eval, FlakeMetadata};
 use runix::command_line::{DefaultArgs, NixCommandLine};
 use runix::flake_ref::path::PathRef;
-use runix::installable::{AttrPath, FlakeAttribute, Installable};
+use runix::installable::{AttrPath, FlakeAttribute};
 use runix::{NixBackend, RunJson};
 use serde::Deserialize;
 use thiserror::Error;
@@ -404,7 +404,7 @@ impl Flox {
             },
             // Use the super resolver as the installable (which we use as this only takes one)
             eval_args: EvalArgs {
-                installable: Some(Installable::FlakeAttribute(resolve_flake_attribute).into()),
+                installable: Some(resolve_flake_attribute.into()),
                 apply: Some(eval_apply.into()),
             },
             ..Default::default()

@@ -82,7 +82,7 @@ impl<Git: GitProvider, A: GitAccess<Git>> Environment<'_, Git, A> {
                 impure: true.into(),
             },
             eval_args: EvalArgs {
-                installable: Some(Installable::FlakeAttribute(flake_attribute).into()),
+                installable: Some(flake_attribute.into()),
                 apply: None,
             },
             ..Eval::default()
@@ -108,7 +108,7 @@ impl<Git: GitProvider, A: GitAccess<Git>> Environment<'_, Git, A> {
                 impure: true.into(),
             },
             eval_args: EvalArgs {
-                installable: Some(Installable::FlakeAttribute(flake_attribute).into()),
+                installable: Some(flake_attribute.into()),
                 apply: None,
             },
             ..Eval::default()

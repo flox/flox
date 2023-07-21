@@ -125,7 +125,7 @@ impl Package<'_> {
 
         let command = Develop {
             flake: self.flake_args().map_err(PackageError::FlakeArgs)?,
-            installable: Installable::FlakeAttribute(self.flake_attribute.clone()).into(),
+            installable: self.flake_attribute.clone().into(),
             ..Default::default()
         };
 
@@ -149,7 +149,7 @@ impl Package<'_> {
 
         let command = RunCommand {
             flake: self.flake_args().map_err(PackageError::FlakeArgs)?,
-            installable: Installable::FlakeAttribute(self.flake_attribute.clone()).into(),
+            installable: self.flake_attribute.clone().into(),
             ..Default::default()
         };
 
@@ -200,7 +200,7 @@ impl Package<'_> {
 
         let command = Bundle {
             flake: self.flake_args().map_err(PackageError::FlakeArgs)?,
-            installable: Installable::FlakeAttribute(self.flake_attribute.clone()).into(),
+            installable: self.flake_attribute.clone().into(),
             bundle_args: BundleArgs {
                 bundler: Some(bundler.into()),
             },
