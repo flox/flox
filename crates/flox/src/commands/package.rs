@@ -7,7 +7,7 @@ use bpaf::{construct, Bpaf, Parser};
 use crossterm::tty::IsTty;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::project::Project;
-use flox_rust_sdk::models::publish::Publish;
+use flox_rust_sdk::models::publish::{Publish, PublishFlakeRef};
 use flox_rust_sdk::models::root::transaction::ReadOnly;
 use flox_rust_sdk::models::root::{self, Closed, Root};
 use flox_rust_sdk::nix::arguments::eval::EvaluationArgs;
@@ -360,7 +360,8 @@ impl PackageCommands {
                     .resolve_flake_attribute(&flox)
                     .await?;
 
-                let publish_ref = flakeref.try_into()?;
+                let publish_ref =
+                    PublishFlakeRef::from_flake_ref(flakeref, &flox, false, false).await?;
                 let publish = Publish::new(&flox, publish_ref, attr_path, config.flox.stability);
                 println!(
                     "{}",

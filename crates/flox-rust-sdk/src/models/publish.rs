@@ -6,6 +6,7 @@ use derive_more::{Deref, DerefMut, Display};
 use flox_types::catalog::cache::{CacheMeta, SubstituterUrl};
 use flox_types::stability::Stability;
 use futures::TryFutureExt;
+use log::info;
 use runix::arguments::flake::FlakeArgs;
 use runix::command::Eval;
 use runix::command_line::{NixCommandLine, NixCommandLineRunJsonError};
@@ -22,7 +23,7 @@ use serde_json::{json, Value};
 use thiserror::Error;
 
 use crate::flox::Flox;
-use crate::providers::git::{GitCommandProvider as Git, GitProvider};
+use crate::providers::git::{GitCommandError, GitCommandProvider as Git, GitProvider};
 
 /// Publish state before analyzing
 ///
@@ -358,20 +359,101 @@ impl PublishFlakeRef {
     }
 }
 
-impl TryFrom<FlakeRef> for PublishFlakeRef {
-    type Error = ConvertFlakeRefError;
+    async fn from_git_path(
+        file_ref: GitRef<protocol::File>,
+        allow_dirty: bool,
+        accept_upstream: bool,
+        nix: &NixCommandLine,
+    ) -> Result<Self, ConvertFlakeRefError> {
+        let local_metadata = {
+            let command = runix::command::FlakeMetadata {
+                flake_ref: Some(FlakeRef::GitPath(file_ref.clone()).into()),
+                ..Default::default()
+            };
+            command
+                .run_typed(nix, &Default::default())
+                .await
+                .map_err(ConvertFlakeRefError::LocalFlakeMetadata)?
+        };
 
-    fn try_from(value: FlakeRef) -> Result<Self, Self::Error> {
-        let publish_flake_ref = match value {
+        if local_metadata.revision.is_none() && !allow_dirty {
+            Err(ConvertFlakeRefError::LocalFlakeDirty)?;
+        }
+
+        let repo = Git::discover(file_ref.url.path())
+            .await
+            .map_err(|_| ConvertFlakeRefError::RepoNotFound(file_ref.url.path().into()))?;
+
+        let (remote_name, remote_url, branch_and_commit) = repo
+            .get_origin()
+            .await
+            .map_err(ConvertFlakeRefError::NoRemote)?;
+
+        let (branch, commit) = if let Some((branch, commit)) = branch_and_commit {
+            (branch, commit)
+        } else {
+            Err(ConvertFlakeRefError::RemoteBranchNotFound)?
+        };
+
+        info!("Resolved local flake to remote '{remote_name}:{branch}' at '{remote_url}'");
+
+        // dirty checked above
+        if let Some(local_rev) = local_metadata.revision {
+            if local_rev.as_ref() != commit && !accept_upstream {
+                Err(ConvertFlakeRefError::RemoteBranchNotSync(
+                    local_rev.to_string(),
+                    commit,
+                ))?
+            }
+        }
+
+        let remote_url = git_url_parse::normalize_url(&remote_url)
+            .map_err(|e| ConvertFlakeRefError::UnknownRemoteUrl(e.to_string()))?;
+
+        let mut attributes = file_ref.attributes;
+        attributes.rev = None;
+        attributes.last_modified = None;
+        attributes.rev_count = None;
+        attributes.reference = Some(branch);
+
+        let remote_flake_ref = match remote_url.scheme() {
+            "ssh" => Self::Ssh(GitRef::new(
+                WrappedUrl::try_from(remote_url).unwrap(),
+                attributes,
+            )),
+            "https" => Self::Https(GitRef::new(
+                WrappedUrl::try_from(remote_url).unwrap(),
+                attributes,
+            )),
+            _ => Err(ConvertFlakeRefError::UnsupportedGitUrl(remote_url))?,
+        };
+        Ok(remote_flake_ref)
+    }
+
+    pub async fn from_flake_ref(
+        flake_ref: FlakeRef,
+        flox: &Flox,
+        allow_dirty: bool,
+        accept_upstream: bool,
+    ) -> Result<Self, ConvertFlakeRefError> {
+        let publish_flake_ref = match flake_ref {
             FlakeRef::GitSsh(ssh_ref) => Self::Ssh(ssh_ref),
             FlakeRef::GitHttps(https_ref) => Self::Https(https_ref),
             // resolve upstream for local git repo
-            FlakeRef::GitPath(_) => todo!(),
+            FlakeRef::GitPath(file_ref) => {
+                Self::from_git_path(
+                    file_ref,
+                    allow_dirty,
+                    accept_upstream,
+                    &flox.nix(Default::default()),
+                )
+                .await?
+            },
             // resolve indirect ref to direct ref (recursively)
             FlakeRef::Indirect(_) => todo!(),
             FlakeRef::Github(_) => todo!(),
             FlakeRef::Gitlab(_) => todo!(),
-            _ => Err(ConvertFlakeRefError::UnsupportedTarget(value))?,
+            _ => Err(ConvertFlakeRefError::UnsupportedTarget(flake_ref))?,
         };
         Ok(publish_flake_ref)
     }
@@ -385,6 +467,30 @@ pub enum ConvertFlakeRefError {
 
     #[error("Invalid URL after conversion: {0}: {1}")]
     InvalidResultUrl(String, WrappedUrlParseError),
+
+    #[error("Couldn't find a local git repository in: {0}")]
+    RepoNotFound(PathBuf),
+
+    #[error("Couldn't find remote")]
+    NoRemote(GitCommandError),
+
+    #[error("Couldn't get metadata for local flake")]
+    LocalFlakeMetadata(NixCommandLineRunJsonError),
+
+    #[error("Local flake contains uncommitted changes")]
+    LocalFlakeDirty,
+
+    #[error("Current branch in local flake does not have a remote configured")]
+    RemoteBranchNotFound,
+
+    #[error("Local repo out of sync with remote: local: {0}, remote: {1}")]
+    RemoteBranchNotSync(String, String),
+
+    #[error("Failed normalizing git url: {0}")]
+    UnknownRemoteUrl(String),
+    #[error("Unsupported git remote URL: {0}")]
+
+    UnsupportedGitUrl(url::Url),
 }
 
 #[cfg(test)]
@@ -406,10 +512,12 @@ mod tests {
             Channel::from("github:flox/nixpkgs/stable".parse::<FlakeRef>().unwrap()),
         );
 
-        let publish_flake_ref: PublishFlakeRef = "git+ssh://git@github.com/flox/flox"
+        let flake_ref = "git+ssh://git@github.com/flox/flox"
             .parse::<FlakeRef>()
-            .unwrap()
-            .try_into()
+            .unwrap();
+
+        let publish_flake_ref = PublishFlakeRef::from_flake_ref(flake_ref, &flox, false, false)
+            .await
             .unwrap();
 
         let attr_path = ["", "packages", "aarch64-darwin", "flox"]
