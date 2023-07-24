@@ -80,9 +80,9 @@ setup_file() {
     flake:nixpkgs                   # with explicit scheme
     nixpkgs/23.05                   # with path ref
     flake:nixpkgs/23.05
-    "nixpkgs?ref=23.05"             # with query ref
+    'nixpkgs?ref=23.05'             # with query ref
     ## XXX this fails with `nix' v2.15.x:  "nixpkgs?ref=refs/heads/23.05"
-    "flake:nixpkgs?ref=refs/heads/23.05"  # full ref
+    'flake:nixpkgs?ref=refs/heads/23.05'  # full ref
     "nixpkgs/$_nixpkgs_rev"         # with path rev
     "flake:nixpkgs/$_nixpkgs_rev"
     "flake:nixpkgs?rev=$_nixpkgs_rev"
@@ -109,24 +109,24 @@ setup_file() {
     "github:NixOS/nixpkgs?rev=$_nixpkgs_rev&dir=lib"
 
     # git flake
-    'git@github.com/NixOS/nixpkgs'
-    'git@github.com/NixOS/nixpkgs?ref=23.05&allRefs=1'
-    "git@github.com/NixOS/nixpkgs?rev=$_nixpkgs_rev"
-    'git@github.com/NixOS/nixpkgs?dir=lib'
-    "git@github.com/NixOS/nixpkgs?ref=23.05&dir=lib"
-    "git@github.com/NixOS/nixpkgs?rev=$_nixpkgs_rev&dir=lib"
-    'git+ssh@github.com/NixOS/nixpkgs'
-    'git+ssh@github.com/NixOS/nixpkgs?ref=23.05&allRefs=1'
-    "git+ssh@github.com/NixOS/nixpkgs?rev=$_nixpkgs_rev"
-    'git+ssh@github.com/NixOS/nixpkgs?dir=lib'
-    "git+ssh@github.com/NixOS/nixpkgs?ref=23.05&dir=lib"
-    "git+ssh@github.com/NixOS/nixpkgs?rev=$_nixpkgs_rev&dir=lib"
-    'git+https@github.com/NixOS/nixpkgs'
-    'git+https@github.com/NixOS/nixpkgs?ref=23.05&allRefs=1'
-    "git+https@github.com/NixOS/nixpkgs?rev=$_nixpkgs_rev"
-    'git+https@github.com/NixOS/nixpkgs?dir=lib'
-    "git+https@github.com/NixOS/nixpkgs?ref=23.05&dir=lib"
-    "git+https@github.com/NixOS/nixpkgs?rev=$_nixpkgs_rev&dir=lib"
+    'git:git@github.com/NixOS/nixpkgs'
+    'git:git@github.com/NixOS/nixpkgs?ref=23.05&allRefs=1'
+    "git:git@github.com/NixOS/nixpkgs?rev=$_nixpkgs_rev"
+    'git:git@github.com/NixOS/nixpkgs?dir=lib'
+    "git:git@github.com/NixOS/nixpkgs?ref=23.05&dir=lib"
+    "git:git@github.com/NixOS/nixpkgs?rev=$_nixpkgs_rev&dir=lib"
+    'git+ssh://git@github.com/NixOS/nixpkgs'
+    'git+ssh://git@github.com/NixOS/nixpkgs?ref=23.05&allRefs=1'
+    "git+ssh://git@github.com/NixOS/nixpkgs?rev=$_nixpkgs_rev"
+    'git+ssh://git@github.com/NixOS/nixpkgs?dir=lib'
+    "git+ssh://git@github.com/NixOS/nixpkgs?ref=23.05&dir=lib"
+    "git+ssh://git@github.com/NixOS/nixpkgs?rev=$_nixpkgs_rev&dir=lib"
+    'git+https://git@github.com/NixOS/nixpkgs'
+    'git+https://git@github.com/NixOS/nixpkgs?ref=23.05&allRefs=1'
+    "git+https://git@github.com/NixOS/nixpkgs?rev=$_nixpkgs_rev"
+    'git+https://git@github.com/NixOS/nixpkgs?dir=lib'
+    "git+https://git@github.com/NixOS/nixpkgs?ref=23.05&dir=lib"
+    "git+https://git@github.com/NixOS/nixpkgs?rev=$_nixpkgs_rev&dir=lib"
 
     # indirect catalog
     nixpkgs-flox
