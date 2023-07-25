@@ -361,7 +361,7 @@ impl PublishFlakeRef {
     }
 }
 
-    async fn from_git_path(
+    async fn from_git_file_flake_ref(
         file_ref: GitRef<protocol::File>,
         allow_dirty: bool,
         accept_upstream: bool,
@@ -447,7 +447,7 @@ impl PublishFlakeRef {
             FlakeRef::GitHttps(https_ref) => Self::Https(https_ref),
             // resolve upstream for local git repo
             FlakeRef::GitPath(file_ref) => {
-                Self::from_git_path(
+                Self::from_git_file_flake_ref(
                     file_ref,
                     allow_dirty,
                     accept_upstream,
@@ -618,7 +618,7 @@ mod tests {
             GitRef::from_str(&format!("git+file://{}", repo_dir.to_string_lossy())).unwrap();
 
         assert!(matches!(
-            PublishFlakeRef::from_git_path(
+            PublishFlakeRef::from_git_file_flake_ref(
                 flake_ref.clone(),
                 false,
                 false,
@@ -655,7 +655,7 @@ mod tests {
         let flake_ref =
             GitRef::from_str(&format!("git+file://{}", repo_dir.to_string_lossy())).unwrap();
 
-        PublishFlakeRef::from_git_path(
+        PublishFlakeRef::from_git_file_flake_ref(
             flake_ref.clone(),
             false,
             false,
