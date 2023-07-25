@@ -252,8 +252,7 @@ $_cat > $tmpGitConfig <<EOF
     defaultBranch = main
 
 [credential "https://git.saas.floxdev.com/"]
-    username = api
-    helper = "!f() { test \"$1\" = get && $_gh auth token; }; f"
+    helper = "!f() { test \"\$1\" = get && printf \"username=%s\\\\npassword=%s\\\\n\" $defaultEnvironmentOwner \"\$($_gh auth token)\"; }; f"
 
 EOF
 
