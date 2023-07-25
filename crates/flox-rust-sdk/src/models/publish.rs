@@ -361,12 +361,27 @@ impl PublishFlakeRef {
     }
 }
 
+    /// Resolve a git+file flake ref to a git+https reference
+    ///
+    /// Reproducing a snapshot from source requires access to the original repo.
+    /// Including a local file reference in the snapshot,
+    /// means its practically only possible to reproduce for the original creator.
+    /// Thus, we resolve a local branch to it's upstream remote and branch.
+    ///
+    /// For local repositories we also check
+    /// whether the repository contains any uncommitted changes
+    /// and is in sync with its upstream branch.
     async fn from_git_file_flake_ref(
         file_ref: GitRef<protocol::File>,
         allow_dirty: bool,
         accept_upstream: bool,
         nix: &NixCommandLine,
     ) -> Result<Self, ConvertFlakeRefError> {
+        // Get nix metadata for the referred flake
+        // Successfully aquiring metadata proofs the path
+        // - is in fact a flake
+        // - is a git repository
+        // - the path is not dirty (no uncommitted changes)
         let local_metadata = {
             let command = runix::command::FlakeMetadata {
                 flake_ref: Some(FlakeRef::GitPath(file_ref.clone()).into()),
@@ -382,15 +397,27 @@ impl PublishFlakeRef {
             Err(ConvertFlakeRefError::LocalFlakeDirty)?;
         }
 
+        // Create a handle to the git repo
         let repo = Git::discover(file_ref.url.path())
             .await
             .map_err(|_| ConvertFlakeRefError::RepoNotFound(file_ref.url.path().into()))?;
 
+        // Get the upstream branch information.
+        // This is essentialy
+        //
+        //   upstream_ref = git rev-parse @{u}
+        //   (remote_name, branch_name) = split_once "/" upstream_ref
+        //   upstream_url = git remote get-url ${remote_name}
+        //   upstream_rev = git ls-remote ${remote_name} ${branch_name}
+        //
+        // The current branch MUST have an upstream ref configured
+        // which resolves to a valid rev on the remote.
         let (remote_name, remote_url, branch_and_commit) = repo
             .get_origin()
             .await
             .map_err(ConvertFlakeRefError::NoRemote)?;
 
+        // Ensure the remote branch exists
         let (remote_branch, remote_revision) = if let Some((branch, commit)) = branch_and_commit {
             (branch, commit)
         } else {
@@ -399,7 +426,11 @@ impl PublishFlakeRef {
 
         info!("Resolved local flake to remote '{remote_name}:{remote_branch}' at '{remote_url}'");
 
-        // dirty checked above
+        // Check whether the local branch is in sync with its upstream branch,
+        // to ensure we publish the intended revision,
+        // by comparing the local revision to the one found upstream.
+        //
+        // Dirty branches are already permitted due to the filter above.
         if let Some(local_rev) = local_metadata.revision {
             if local_rev.as_ref() != remote_revision && !accept_upstream {
                 Err(ConvertFlakeRefError::RemoteBranchNotSync(
@@ -409,9 +440,15 @@ impl PublishFlakeRef {
             }
         }
 
+        // Git supports special urls for e.g. ssh repos, e.g.
+        //
+        //   git@github.com:flox/flox
+        //
+        // Normalize these urls to proper URLs for the use with nix.
         let remote_url = git_url_parse::normalize_url(&remote_url)
             .map_err(|e| ConvertFlakeRefError::UnknownRemoteUrl(e.to_string()))?;
 
+        // Copy the flakeref attributes but unlock it in support of preferred upstream refs
         let mut attributes = file_ref.attributes;
         attributes.last_modified = None;
         attributes.rev_count = None;
@@ -427,6 +464,9 @@ impl PublishFlakeRef {
                 WrappedUrl::try_from(remote_url).unwrap(),
                 attributes,
             )),
+            // Resolving to a local remote is an error case most of the time
+            // but technically valid and required for testing.
+            // `File` variants are filtered out at a higher level
             "file" => Self::File(GitRef::new(
                 WrappedUrl::try_from(remote_url).unwrap(),
                 attributes,
