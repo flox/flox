@@ -310,7 +310,7 @@ impl PublishFlakeRef {
     ) -> Result<Self, ConvertFlakeRefError> {
         let host = attributes.host.unwrap_or("github.com".to_string());
 
-        let url_str = format!("https://{host}/{owner}/{repo}");
+        let url_str = format!("ssh://git@{host}/{owner}/{repo}");
         let url = WrappedUrl::from_str(&url_str)
             .map_err(|e| ConvertFlakeRefError::InvalidResultUrl(url_str, e))?;
 
@@ -329,7 +329,7 @@ impl PublishFlakeRef {
             attributes: git_attributes,
         };
 
-        Ok(Self::Https(git_ref))
+        Ok(Self::Ssh(git_ref))
     }
 }
 
