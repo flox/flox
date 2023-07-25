@@ -13,9 +13,15 @@ use log::debug;
 use runix::arguments::common::NixCommonArgs;
 use runix::arguments::eval::EvaluationArgs;
 use runix::arguments::flake::FlakeArgs;
-use runix::arguments::NixArgs;
-use runix::command::Eval;
-use runix::command_line::{NixCommandLine, NixCommandLineRunJsonError};
+use runix::arguments::{NixArgs, StoreSignArgs};
+use runix::command::{Eval, Eval, StoreSign};
+use runix::command_line::{
+    NixCommandLine,
+    NixCommandLine,
+    NixCommandLineRunError,
+    NixCommandLineRunJsonError,
+    NixCommandLineRunJsonError,
+};
 use runix::flake_metadata::FlakeMetadata;
 use runix::flake_ref::git::{GitAttributes, GitRef};
 use runix::flake_ref::git_service::{service, GitServiceRef};
@@ -25,7 +31,7 @@ use runix::flake_ref::protocol::{WrappedUrl, WrappedUrlParseError};
 use runix::flake_ref::{protocol, FlakeRef};
 use runix::installable::{AttrPath, FlakeAttribute, Installable};
 use runix::store_path::{StorePath, StorePathError};
-use runix::{RunJson, RunTyped};
+use runix::{Run, RunJson, RunTyped};
 use serde_json::{json, Value};
 use thiserror::Error;
 
@@ -224,6 +230,37 @@ impl<'flox> Publish<'flox, NixAnalysis> {
     /// Read out the current publish state
     pub fn analysis(&self) -> &Value {
         self.analysis.deref()
+    }
+
+    /// Sign the binary
+    ///
+    /// Requires a valid signing key
+    pub async fn sign_binary(
+        self,
+        key_file: impl AsRef<Path>,
+    ) -> Result<Publish<'flox, NixAnalysis>, PublishError> {
+        let nix = self.flox.nix(Default::default());
+        let installable = Installable {
+            flakeref: self.publish_flake_ref.clone().into_inner(),
+            attr_path: self.attr_path.clone(),
+        };
+
+        let sign_command = StoreSign {
+            store_sign: StoreSignArgs {
+                key_file: key_file.as_ref().into(),
+                recursive: Some(true.into()),
+            },
+            installables: [installable].into(),
+            eval: Default::default(),
+            flake: Default::default(),
+        };
+
+        sign_command
+            .run(&nix, &Default::default())
+            .await
+            .map_err(PublishError::SignPackage)?;
+
+        Ok(self)
     }
 
     /// Copy the outputs and dependencies of the package to binary store
@@ -432,7 +469,10 @@ pub enum PublishError {
     DrvMetadata(AttrPath, String, NixCommandLineRunJsonError),
 
     #[error("Failed to load metadata for flake '{0}': {1}")]
-    FlakeMetadata(String, NixCommandLineRunJsonError),
+    FlakeMetadata(PublishFlakeRef, NixCommandLineRunJsonError),
+
+    #[error("Failed to sign package: {0}")]
+    SignPackage(NixCommandLineRunError),
 
     #[error("Failed reading snapshot data: {0}")]
     ReadSnapshot(#[from] serde_json::Error),
@@ -445,7 +485,7 @@ pub enum PublishError {
 
     #[error("Already published")]
     SnapshotExists,
-  
+
     #[error("Failed to parse store path {0}")]
     ParseStorePath(StorePathError),
 
