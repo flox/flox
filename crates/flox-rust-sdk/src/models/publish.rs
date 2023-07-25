@@ -339,7 +339,7 @@ impl PublishFlakeRef {
             let url = WrappedUrl::from_str(&url_str)
                 .map_err(|e| ConvertFlakeRefError::InvalidResultUrl(url_str, e))?;
 
-            Self::Ssh(GitRef {
+            Self::Https(GitRef {
                 url,
                 attributes: git_attributes,
             })
@@ -427,10 +427,10 @@ mod tests {
     fn convert_github_ref() {
         // simple github references
         let flake_ref = GitServiceRef::<service::Github>::from_str("github:flox/flox").unwrap();
-        let publish_flake_ref = PublishFlakeRef::from_github_ref(flake_ref, true).unwrap();
+        let publish_flake_ref = PublishFlakeRef::from_github_ref(flake_ref, false).unwrap();
         assert_eq!(
             publish_flake_ref.to_string(),
-            "git+https://github.com/flox/flox"
+            "git+ssh://git@github.com/flox/flox"
         );
 
         // github references with explicit host param
@@ -438,29 +438,29 @@ mod tests {
             "github:flox/flox?host=github.myenterprise.com",
         )
         .unwrap();
-        let publish_flake_ref = PublishFlakeRef::from_github_ref(flake_ref, true).unwrap();
+        let publish_flake_ref = PublishFlakeRef::from_github_ref(flake_ref, false).unwrap();
         assert_eq!(
             publish_flake_ref.to_string(),
-            "git+https://github.myenterprise.com/flox/flox"
+            "git+ssh://git@github.myenterprise.com/flox/flox"
         );
 
         // github references with dir param
         let flake_ref =
             GitServiceRef::<service::Github>::from_str("github:flox/flox?dir=somwhere/inside")
                 .unwrap();
-        let publish_flake_ref = PublishFlakeRef::from_github_ref(flake_ref, true).unwrap();
+        let publish_flake_ref = PublishFlakeRef::from_github_ref(flake_ref, false).unwrap();
         assert_eq!(
             publish_flake_ref.to_string(),
-            "git+https://github.com/flox/flox?dir=somwhere%2Finside"
+            "git+ssh://git@github.com/flox/flox?dir=somwhere%2Finside"
         );
 
         // github references with git ref
         let flake_ref =
             GitServiceRef::<service::Github>::from_str("github:flox/flox/feat/test").unwrap();
-        let publish_flake_ref = PublishFlakeRef::from_github_ref(flake_ref, true).unwrap();
+        let publish_flake_ref = PublishFlakeRef::from_github_ref(flake_ref, false).unwrap();
         assert_eq!(
             publish_flake_ref.to_string(),
-            "git+https://github.com/flox/flox?ref=feat%2Ftest"
+            "git+ssh://git@github.com/flox/flox?ref=feat%2Ftest"
         );
 
         // github references with git rev
@@ -468,10 +468,18 @@ mod tests {
             "github:flox/flox/49335c4bade5b3feb7378f9af8e9a528d9c4103e",
         )
         .unwrap();
+        let publish_flake_ref = PublishFlakeRef::from_github_ref(flake_ref, false).unwrap();
+        assert_eq!(
+            publish_flake_ref.to_string(),
+            "git+ssh://git@github.com/flox/flox?allRefs=1&rev=49335c4bade5b3feb7378f9af8e9a528d9c4103e"
+        );
+
+        // simple github references
+        let flake_ref = GitServiceRef::<service::Github>::from_str("github:flox/flox").unwrap();
         let publish_flake_ref = PublishFlakeRef::from_github_ref(flake_ref, true).unwrap();
         assert_eq!(
             publish_flake_ref.to_string(),
-            "git+https://github.com/flox/flox?allRefs=1&rev=49335c4bade5b3feb7378f9af8e9a528d9c4103e"
+            "git+https://github.com/flox/flox"
         );
     }
 }
