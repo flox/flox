@@ -307,12 +307,9 @@ impl PublishFlakeRef {
             attributes,
             ..
         }: GitServiceRef<service::Github>,
+        prefer_https: bool,
     ) -> Result<Self, ConvertFlakeRefError> {
         let host = attributes.host.unwrap_or("github.com".to_string());
-
-        let url_str = format!("ssh://git@{host}/{owner}/{repo}");
-        let url = WrappedUrl::from_str(&url_str)
-            .map_err(|e| ConvertFlakeRefError::InvalidResultUrl(url_str, e))?;
 
         let only_rev = attributes.rev.is_some() && attributes.reference.is_none();
 
@@ -324,12 +321,27 @@ impl PublishFlakeRef {
             ..Default::default()
         };
 
-        let git_ref = GitRef {
-            url,
-            attributes: git_attributes,
+        let publish_flake_ref = if prefer_https {
+            let url_str = format!("https://{host}/{owner}/{repo}");
+            let url = WrappedUrl::from_str(&url_str)
+                .map_err(|e| ConvertFlakeRefError::InvalidResultUrl(url_str, e))?;
+
+            Self::Ssh(GitRef {
+                url,
+                attributes: git_attributes,
+            })
+        } else {
+            let url_str = format!("ssh://git@{host}/{owner}/{repo}");
+            let url = WrappedUrl::from_str(&url_str)
+                .map_err(|e| ConvertFlakeRefError::InvalidResultUrl(url_str, e))?;
+
+            Self::Ssh(GitRef {
+                url,
+                attributes: git_attributes,
+            })
         };
 
-        Ok(Self::Ssh(git_ref))
+        Ok(publish_flake_ref)
     }
 }
 
