@@ -4,7 +4,7 @@ use std::os::unix::ffi::OsStringExt;
 use std::path::{Path, PathBuf};
 
 use async_trait::async_trait;
-use log::{debug, error};
+use log::{debug, error, warn};
 use thiserror::Error;
 use tokio::process::Command;
 
@@ -501,18 +501,23 @@ impl GitProvider for GitCommandProvider {
         .to_string();
 
         let branch_and_commit = match remote_branch {
-            Some(branch) => Some((
-                branch.clone(),
-                GitCommandProvider::run_command(
+            Some(branch) => 'get_commit: {
+                let commit = GitCommandProvider::run_command(
                     GitCommandProvider::new_command(&self.workdir)
                         .arg("ls-remote")
                         .arg(&remote_name)
                         .arg(&branch),
                 )
-                .await?
-                .to_string_lossy()[0..40]
-                    .to_string(),
-            )),
+                .await?;
+
+                let commit = if commit.len() < 40 {
+                    warn!("No commit found upstream for ref {branch}");
+                    break 'get_commit None;
+                } else {
+                    commit.to_string_lossy()[..40].to_string()
+                };
+                Some((branch, commit))
+            },
             None => None,
         };
 
