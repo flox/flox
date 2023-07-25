@@ -234,6 +234,9 @@ impl<'flox> Publish<'flox, NixAnalysis> {
 
     /// Sign the binary
     ///
+    /// The current implementation does not involve any state transition,
+    /// making signing an optional operation.
+    ///
     /// Requires a valid signing key
     pub async fn sign_binary(
         self,
