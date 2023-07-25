@@ -1,4 +1,4 @@
-use runix::types::DerivationPath;
+use runix::DerivationPath;
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
 

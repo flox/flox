@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use runix::narinfo::Narinfo;
 use serde::ser::SerializeSeq;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -61,21 +62,4 @@ pub struct CacheMeta {
     pub narinfo: Vec<Narinfo>,
     #[serde(flatten)]
     pub _other: BTreeMap<String, Value>,
-}
-
-fn default_true() -> bool {
-    true
-}
-
-/// Narinfo stores information output by `nix path-info --json`
-#[derive(Serialize, Deserialize, Clone)]
-pub struct Narinfo {
-    pub path: DerivationPath,
-    // TODO remove this default once https://github.com/NixOS/nix/pull/7924 has
-    // made it's way into our version of Nix
-    #[serde(default = "default_true")]
-    pub valid: bool,
-    // TODO add other fields
-    #[serde(flatten)]
-    _other: HashMap<String, Value>,
 }
