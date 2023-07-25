@@ -452,6 +452,7 @@ impl PublishFlakeRef {
         let mut attributes = file_ref.attributes;
         attributes.last_modified = None;
         attributes.rev_count = None;
+        attributes.nar_hash = None;
         attributes.rev = Some(remote_revision.parse().unwrap());
         attributes.reference = Some(remote_branch);
 
