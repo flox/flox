@@ -251,6 +251,10 @@ $_cat > $tmpGitConfig <<EOF
 [init]
     defaultBranch = main
 
+[credential "https://git.saas.floxdev.com/"]
+    username = api
+    helper = "!f() { test \"$1\" = get && $_gh auth token; }; f"
+
 EOF
 
 # Honor existing GIT_CONFIG_SYSTEM variable and/or default /etc/gitconfig.
