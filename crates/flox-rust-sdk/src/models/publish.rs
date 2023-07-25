@@ -299,6 +299,18 @@ impl PublishFlakeRef {
         }
     }
 
+    /// Resolve `github:` flakerefs to a "proper" git url.
+    ///
+    /// Unlike nix operations publish is writing to the targeted git repository.
+    /// To allow native git operations on the remote,
+    /// the `github:` shorthand must be exanded to an `ssh` or `https` url.
+    ///
+    /// By default we resolve ssh urls,
+    /// since (publishing) users will more likely have ssh configured,
+    /// rather than (often insecure) token access.
+    /// In cases where https token access is granted by another tool (e.g. gh),
+    /// or within github actions we can prefer https URLs,
+    /// so not to require an ssh setup to be present.
     #[allow(unused)]
     fn from_github_ref(
         GitServiceRef {
@@ -317,6 +329,7 @@ impl PublishFlakeRef {
             rev: attributes.rev,
             reference: attributes.reference,
             dir: attributes.dir,
+            // Nix needs either a `?ref=` or `allRefs=1` set to fetch a revision
             all_refs: only_rev.then_some(true),
             ..Default::default()
         };
