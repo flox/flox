@@ -391,20 +391,20 @@ impl PublishFlakeRef {
             .await
             .map_err(ConvertFlakeRefError::NoRemote)?;
 
-        let (branch, commit) = if let Some((branch, commit)) = branch_and_commit {
+        let (remote_branch, remote_revision) = if let Some((branch, commit)) = branch_and_commit {
             (branch, commit)
         } else {
             Err(ConvertFlakeRefError::RemoteBranchNotFound)?
         };
 
-        info!("Resolved local flake to remote '{remote_name}:{branch}' at '{remote_url}'");
+        info!("Resolved local flake to remote '{remote_name}:{remote_branch}' at '{remote_url}'");
 
         // dirty checked above
         if let Some(local_rev) = local_metadata.revision {
-            if local_rev.as_ref() != commit && !accept_upstream {
+            if local_rev.as_ref() != remote_revision && !accept_upstream {
                 Err(ConvertFlakeRefError::RemoteBranchNotSync(
                     local_rev.to_string(),
-                    commit,
+                    remote_revision.clone(),
                 ))?
             }
         }
@@ -413,10 +413,10 @@ impl PublishFlakeRef {
             .map_err(|e| ConvertFlakeRefError::UnknownRemoteUrl(e.to_string()))?;
 
         let mut attributes = file_ref.attributes;
-        attributes.rev = None;
         attributes.last_modified = None;
         attributes.rev_count = None;
-        attributes.reference = Some(branch);
+        attributes.rev = Some(remote_revision.parse().unwrap());
+        attributes.reference = Some(remote_branch);
 
         let remote_flake_ref = match remote_url.scheme() {
             "ssh" => Self::Ssh(GitRef::new(
