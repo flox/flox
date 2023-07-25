@@ -1,9 +1,4 @@
 {
-  # Packages
-  # "version" is optional, otherwise the latest is used. Try `flox search`
-  # packages.nixpkgs-flox.figlet = {};
-  # packages.nixpkgs-flox.bat = { version = "0.22.1"; };
-
   # Activation Extensions
   # Provides an extensible `<env>/etc/profile` script.
   # see 'man flox-activate' for more information on Language Packs.
@@ -33,4 +28,9 @@
 
   # Environment variables
   # environmentVariables.LANG = "en_US.UTF-8";
+
+  # Packages
+  # "version" is optional, otherwise the latest is used. Try `flox search`
+  # packages.nixpkgs-flox.figlet = {};
+  # packages.nixpkgs-flox.bat = { version = "0.22.1"; };
 }
