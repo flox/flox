@@ -414,7 +414,7 @@ mod tests {
     fn convert_github_ref() {
         // simple github references
         let flake_ref = GitServiceRef::<service::Github>::from_str("github:flox/flox").unwrap();
-        let publish_flake_ref = PublishFlakeRef::from_github_ref(flake_ref).unwrap();
+        let publish_flake_ref = PublishFlakeRef::from_github_ref(flake_ref, true).unwrap();
         assert_eq!(
             publish_flake_ref.to_string(),
             "git+https://github.com/flox/flox"
@@ -425,7 +425,7 @@ mod tests {
             "github:flox/flox?host=github.myenterprise.com",
         )
         .unwrap();
-        let publish_flake_ref = PublishFlakeRef::from_github_ref(flake_ref).unwrap();
+        let publish_flake_ref = PublishFlakeRef::from_github_ref(flake_ref, true).unwrap();
         assert_eq!(
             publish_flake_ref.to_string(),
             "git+https://github.myenterprise.com/flox/flox"
@@ -435,7 +435,7 @@ mod tests {
         let flake_ref =
             GitServiceRef::<service::Github>::from_str("github:flox/flox?dir=somwhere/inside")
                 .unwrap();
-        let publish_flake_ref = PublishFlakeRef::from_github_ref(flake_ref).unwrap();
+        let publish_flake_ref = PublishFlakeRef::from_github_ref(flake_ref, true).unwrap();
         assert_eq!(
             publish_flake_ref.to_string(),
             "git+https://github.com/flox/flox?dir=somwhere%2Finside"
@@ -444,7 +444,7 @@ mod tests {
         // github references with git ref
         let flake_ref =
             GitServiceRef::<service::Github>::from_str("github:flox/flox/feat/test").unwrap();
-        let publish_flake_ref = PublishFlakeRef::from_github_ref(flake_ref).unwrap();
+        let publish_flake_ref = PublishFlakeRef::from_github_ref(flake_ref, true).unwrap();
         assert_eq!(
             publish_flake_ref.to_string(),
             "git+https://github.com/flox/flox?ref=feat%2Ftest"
@@ -455,7 +455,7 @@ mod tests {
             "github:flox/flox/49335c4bade5b3feb7378f9af8e9a528d9c4103e",
         )
         .unwrap();
-        let publish_flake_ref = PublishFlakeRef::from_github_ref(flake_ref).unwrap();
+        let publish_flake_ref = PublishFlakeRef::from_github_ref(flake_ref, true).unwrap();
         assert_eq!(
             publish_flake_ref.to_string(),
             "git+https://github.com/flox/flox?allRefs=1&rev=49335c4bade5b3feb7378f9af8e9a528d9c4103e"
