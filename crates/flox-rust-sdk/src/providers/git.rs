@@ -291,7 +291,7 @@ pub enum GitCommandDiscoverError {
 pub enum GitCommandGetOriginError {
     #[error(transparent)]
     Command(#[from] GitCommandError),
-    #[error("Couldn't determine upstream remote name for the current")]
+    #[error("Couldn't determine upstream remote name for the current HEAD")]
     NoUpstream,
 }
 
