@@ -360,7 +360,7 @@ impl PackageCommands {
                     .resolve_flake_attribute(&flox)
                     .await?;
 
-                let publish_ref = PublishFlakeRef::from_flake_ref(flakeref, &flox).await?;
+                let publish_ref = PublishFlakeRef::from_flake_ref(flakeref, &flox, false).await?;
                 let publish = Publish::new(&flox, publish_ref, attr_path, config.flox.stability);
                 println!(
                     "{}",

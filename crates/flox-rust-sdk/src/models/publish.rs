@@ -473,6 +473,7 @@ impl PublishFlakeRef {
     pub async fn from_flake_ref(
         flake_ref: FlakeRef,
         flox: &Flox,
+        git_service_prefer_https: bool,
     ) -> Result<Self, ConvertFlakeRefError> {
         let publish_flake_ref = match flake_ref {
             FlakeRef::GitSsh(ssh_ref) => Self::Ssh(ssh_ref),
@@ -483,7 +484,9 @@ impl PublishFlakeRef {
             },
             // resolve indirect ref to direct ref (recursively)
             FlakeRef::Indirect(_) => todo!(),
-            FlakeRef::Github(_) => todo!(),
+            FlakeRef::Github(github_ref) => {
+                Self::from_github_ref(github_ref, git_service_prefer_https)?
+            },
             FlakeRef::Gitlab(_) => todo!(),
             _ => Err(ConvertFlakeRefError::UnsupportedTarget(flake_ref))?,
         };
@@ -547,7 +550,7 @@ mod tests {
             .parse::<FlakeRef>()
             .unwrap();
 
-        let publish_flake_ref = PublishFlakeRef::from_flake_ref(flake_ref, &flox)
+        let publish_flake_ref = PublishFlakeRef::from_flake_ref(flake_ref, &flox, false)
             .await
             .unwrap();
 
