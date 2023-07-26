@@ -699,4 +699,36 @@ mod tests {
         .await
         .unwrap();
     }
+
+    #[cfg(feature = "impure-unit-tests")] // disabled for offline builds, TODO fix tests to work with local repos
+    #[tokio::test]
+    async fn git_file_error_if_no_upstream() {
+        use std::fs;
+        use std::path::Path;
+        use std::str::FromStr;
+        env_logger::init();
+
+        let (flox, _temp_dir_handle) = flox_instance();
+        let repo_dir = _temp_dir_handle.path().join("repo");
+
+        fs::create_dir(&repo_dir).unwrap();
+        let repo = Git::init(&repo_dir, false).await.unwrap();
+
+        fs::write(repo_dir.join("flake.nix"), "{ outputs = _: {}; }").unwrap();
+        repo.add(&[Path::new(".")]).await.unwrap();
+        repo.commit("Commit flake").await.unwrap();
+
+        let flake_ref =
+            GitRef::from_str(&format!("git+file://{}", repo_dir.to_string_lossy())).unwrap();
+
+        let result = PublishFlakeRef::from_git_file_flake_ref(
+            flake_ref.clone(),
+            false,
+            false,
+            &flox.nix(Default::default()),
+        )
+        .await;
+
+        assert!(matches!(result, Err(ConvertFlakeRefError::NoRemote(_))));
+    }
 }
