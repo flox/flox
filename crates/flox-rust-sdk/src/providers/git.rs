@@ -462,6 +462,13 @@ impl GitProvider for GitCommandProvider {
     /// 3. (if configured) a tuple containing
     ///    1. the upstream branch name
     ///    2. the current revision of the branch
+    ///
+    /// This is essentialy
+    ///
+    ///   upstream_ref = git rev-parse @{u}
+    ///   (remote_name, branch_name) = split_once "/" upstream_ref
+    ///   upstream_url = git remote get-url ${remote_name}
+    ///   upstream_rev = git ls-remote ${remote_name} ${branch_name}
     async fn get_origin(
         &self,
     ) -> Result<(String, String, Option<(String, String)>), Self::GetOriginError> {
