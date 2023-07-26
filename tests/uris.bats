@@ -21,18 +21,8 @@
 # ( misleading name ) lock-files.
 #
 # Relevant commands:
-# | create        | env |             |       |         |
 # | init          | env | installable | flake |         |
-# | activate      | env |             |       |         |
-# | list          | env |             |       |         |
-# | edit          | env |             |       |         |
-# | destroy       | env |             |       |         |
-# | rollback      | env |             |       |         |
 # | upgrade       | env | installable | flake | floxpkg |
-# | push          | env |             |       |         |
-# | pull          | env |             |       |         |
-# | bundle        | env |             |       |         |
-# | containerize  | env |             |       |         |
 # | subscribe     |     |             | flake |         |
 # | unsubscribe   |     |             | flake |         |
 # | install       | env | installable | flake | floxpkg |
@@ -138,14 +128,54 @@ setup_file() {
 }
 
 
+# ---------------------------------------------------------------------------- #
+
+# Helpers for project based tests.
+# You can define and redefine `setup' and `teardown' around blocks of tests
+# which use these routines.
+# When restoring "normal" setup/teardown use `common_test_(setup|teardown)'.
+
+setup_project() {
+  export PROJECT_DIR="$BATS_TEST_TMPDIR/project-$BATS_TEST_NUMBER";
+  rm -rf "$PROJECT_DIR";
+  mkdir -p "$PROJECT_DIR";
+  pushd "$PROJECT_DIR" >/dev/null||exit;
+  git init;
+}
+
+teardown_project() {
+  popd >/dev/null||exit;
+  rm -rf "$PROJECT_DIR";
+  unset PROJECT_DIR;
+}
+
+
+# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! #
+#
+# Beginning project based tests
+#
+# ---------------------------------------------------------------------------- #
+
+setup()    { common_test_setup; setup_project;        }
+teardown() { teardown_project;  common_test_teardown; }
 
 # ---------------------------------------------------------------------------- #
 
-@test "'flox activate' " {
+@test "'flox init -t $URI'" {
+  setup_project;
   run sh -c "$_inline_cmd";
   assert_success;
-  assert_output --partial - < tests/hello-cowsay.out;
 }
+
+
+# ---------------------------------------------------------------------------- #
+#
+# Ending project based tests
+#
+# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! #
+
+setup()    { common_test_setup; }
+teardown() { common_test_teardown; }
 
 
 # ---------------------------------------------------------------------------- #
