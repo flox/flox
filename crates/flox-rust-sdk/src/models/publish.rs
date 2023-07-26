@@ -23,7 +23,7 @@ use serde_json::{json, Value};
 use thiserror::Error;
 
 use crate::flox::Flox;
-use crate::providers::git::{GitCommandError, GitCommandProvider as Git, GitProvider};
+use crate::providers::git::{GitCommandGetOriginError, GitCommandProvider as Git, GitProvider};
 
 /// Publish state before analyzing
 ///
@@ -412,17 +412,13 @@ impl PublishFlakeRef {
         //
         // The current branch MUST have an upstream ref configured
         // which resolves to a valid rev on the remote.
-        let (remote_name, remote_url, branch_and_commit) = repo
+        let (remote_name, remote_url, remote_branch, remote_revision) = repo
             .get_origin()
             .await
             .map_err(ConvertFlakeRefError::NoRemote)?;
 
         // Ensure the remote branch exists
-        let (remote_branch, remote_revision) = if let Some((branch, commit)) = branch_and_commit {
-            (branch, commit)
-        } else {
-            Err(ConvertFlakeRefError::RemoteBranchNotFound)?
-        };
+        let remote_revision = remote_revision.ok_or(ConvertFlakeRefError::RemoteBranchNotFound)?;
 
         info!("Resolved local flake to remote '{remote_name}:{remote_branch}' at '{remote_url}'");
 
@@ -519,7 +515,7 @@ pub enum ConvertFlakeRefError {
     RepoNotFound(PathBuf),
 
     #[error("Couldn't find remote")]
-    NoRemote(GitCommandError),
+    NoRemote(GitCommandGetOriginError),
 
     #[error("Couldn't get metadata for local flake")]
     LocalFlakeMetadata(NixCommandLineRunJsonError),
