@@ -8,7 +8,7 @@ use itertools::Itertools;
 use log::debug;
 use runix::flake_ref::git::{GitAttributes, GitRef};
 use runix::flake_ref::FlakeRef;
-use runix::installable::Installable;
+use runix::installable::FlakeAttribute;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use url::Url;
@@ -315,10 +315,10 @@ impl<'flox, Git: GitProvider> Environment<'flox, Git, ReadOnly<Git>> {
         })
     }
 
-    pub async fn installable(
+    pub async fn flake_attribute(
         &self,
         generation: Option<&str>,
-    ) -> Result<Installable, GenerationError<Git>> {
+    ) -> Result<FlakeAttribute, GenerationError<Git>> {
         let git = &self.floxmeta.access.git();
         let metadata = self.metadata().await?;
 
@@ -337,7 +337,7 @@ impl<'flox, Git: GitProvider> Environment<'flox, Git, ReadOnly<Git>> {
             },
         });
 
-        Ok(Installable {
+        Ok(FlakeAttribute {
             flakeref,
             attr_path: ["", "floxEnvs", "default"].try_into().unwrap(),
         })

@@ -16,7 +16,7 @@ use runix::flake_ref::indirect::IndirectRef;
 use runix::flake_ref::path::PathRef;
 use runix::flake_ref::protocol::{WrappedUrl, WrappedUrlParseError};
 use runix::flake_ref::{protocol, FlakeRef};
-use runix::installable::{AttrPath, Installable};
+use runix::installable::{AttrPath, FlakeAttribute};
 use runix::{RunJson, RunTyped};
 use serde_json::{json, Value};
 use thiserror::Error;
@@ -166,7 +166,7 @@ impl<'flox> Publish<'flox, Empty> {
             },
             eval_args: runix::arguments::EvalArgs {
                 installable: Some(
-                    Installable {
+                    FlakeAttribute {
                         flakeref: analyzer_flakeref,
                         attr_path: analysis_attr_path,
                     }

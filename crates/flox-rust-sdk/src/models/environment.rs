@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 
-use runix::installable::{Installable, ParseInstallableError};
+use runix::installable::{FlakeAttribute, ParseInstallableError};
 use serde_json::Value;
 use thiserror::Error;
 
@@ -22,17 +22,17 @@ pub enum CommonEnvironment<'flox, Git: GitProvider> {
 }
 
 impl<'flox, Git: GitProvider> CommonEnvironment<'flox, Git> {
-    /// get an installbale for the environment
-    /// todo installable should be constructed earlier
-    pub async fn installable(
+    /// get a flake attribute for the environment
+    /// todo flake_attribute should be constructed earlier
+    pub async fn flake_attribute(
         &self,
-    ) -> Result<Installable, EnvironmentError<GenerationError<Git>, ParseInstallableError>> {
+    ) -> Result<FlakeAttribute, EnvironmentError<GenerationError<Git>, ParseInstallableError>> {
         match self {
             CommonEnvironment::Named(n) => n
-                .installable(Default::default())
+                .flake_attribute(Default::default())
                 .await
                 .map_err(EnvironmentError::Named),
-            CommonEnvironment::Project(p) => p.installable().map_err(EnvironmentError::Project),
+            CommonEnvironment::Project(p) => p.flake_attribute().map_err(EnvironmentError::Project),
         }
     }
 
