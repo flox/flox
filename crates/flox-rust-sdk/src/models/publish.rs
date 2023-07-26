@@ -359,7 +359,6 @@ impl PublishFlakeRef {
 
         Ok(publish_flake_ref)
     }
-}
 
     /// Resolve a git+file flake ref to a git+https reference
     ///
@@ -532,7 +531,6 @@ pub enum ConvertFlakeRefError {
     #[error("Failed normalizing git url: {0}")]
     UnknownRemoteUrl(String),
     #[error("Unsupported git remote URL: {0}")]
-
     UnsupportedGitUrl(url::Url),
 }
 
