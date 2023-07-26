@@ -372,8 +372,6 @@ impl PublishFlakeRef {
     /// and is in sync with its upstream branch.
     async fn from_git_file_flake_ref(
         file_ref: GitRef<protocol::File>,
-        allow_dirty: bool,
-        accept_upstream: bool,
         nix: &NixCommandLine,
     ) -> Result<Self, ConvertFlakeRefError> {
         // Get nix metadata for the referred flake
@@ -392,7 +390,7 @@ impl PublishFlakeRef {
                 .map_err(ConvertFlakeRefError::LocalFlakeMetadata)?
         };
 
-        if local_metadata.revision.is_none() && !allow_dirty {
+        if local_metadata.revision.is_none() {
             Err(ConvertFlakeRefError::LocalFlakeDirty)?;
         }
 
@@ -427,7 +425,7 @@ impl PublishFlakeRef {
         //
         // Dirty branches are already permitted due to the filter above.
         if let Some(local_rev) = local_metadata.revision {
-            if local_rev.as_ref() != remote_revision && !accept_upstream {
+            if local_rev.as_ref() != remote_revision {
                 Err(ConvertFlakeRefError::RemoteBranchNotSync(
                     local_rev.to_string(),
                     remote_revision.clone(),
@@ -475,21 +473,13 @@ impl PublishFlakeRef {
     pub async fn from_flake_ref(
         flake_ref: FlakeRef,
         flox: &Flox,
-        allow_dirty: bool,
-        accept_upstream: bool,
     ) -> Result<Self, ConvertFlakeRefError> {
         let publish_flake_ref = match flake_ref {
             FlakeRef::GitSsh(ssh_ref) => Self::Ssh(ssh_ref),
             FlakeRef::GitHttps(https_ref) => Self::Https(https_ref),
             // resolve upstream for local git repo
             FlakeRef::GitPath(file_ref) => {
-                Self::from_git_file_flake_ref(
-                    file_ref,
-                    allow_dirty,
-                    accept_upstream,
-                    &flox.nix(Default::default()),
-                )
-                .await?
+                Self::from_git_file_flake_ref(file_ref, &flox.nix(Default::default())).await?
             },
             // resolve indirect ref to direct ref (recursively)
             FlakeRef::Indirect(_) => todo!(),
@@ -557,7 +547,7 @@ mod tests {
             .parse::<FlakeRef>()
             .unwrap();
 
-        let publish_flake_ref = PublishFlakeRef::from_flake_ref(flake_ref, &flox, false, false)
+        let publish_flake_ref = PublishFlakeRef::from_flake_ref(flake_ref, &flox)
             .await
             .unwrap();
 
@@ -655,8 +645,6 @@ mod tests {
         assert!(matches!(
             PublishFlakeRef::from_git_file_flake_ref(
                 flake_ref.clone(),
-                false,
-                false,
                 &flox.nix(Default::default())
             )
             .await,
@@ -690,14 +678,9 @@ mod tests {
         let flake_ref =
             GitRef::from_str(&format!("git+file://{}", repo_dir.to_string_lossy())).unwrap();
 
-        PublishFlakeRef::from_git_file_flake_ref(
-            flake_ref.clone(),
-            false,
-            false,
-            &flox.nix(Default::default()),
-        )
-        .await
-        .unwrap();
+        PublishFlakeRef::from_git_file_flake_ref(flake_ref.clone(), &flox.nix(Default::default()))
+            .await
+            .unwrap();
     }
 
     #[cfg(feature = "impure-unit-tests")] // disabled for offline builds, TODO fix tests to work with local repos
@@ -723,8 +706,6 @@ mod tests {
 
         let result = PublishFlakeRef::from_git_file_flake_ref(
             flake_ref.clone(),
-            false,
-            false,
             &flox.nix(Default::default()),
         )
         .await;
