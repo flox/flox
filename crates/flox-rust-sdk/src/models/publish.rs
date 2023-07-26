@@ -378,7 +378,7 @@ impl PublishFlakeRef {
         nix: &NixCommandLine,
     ) -> Result<Self, ConvertFlakeRefError> {
         // Get nix metadata for the referred flake
-        // Successfully aquiring metadata proofs the path
+        // Successfully acquiring metadata proves the path
         // - is in fact a flake
         // - is a git repository
         // - the path is not dirty (no uncommitted changes)
