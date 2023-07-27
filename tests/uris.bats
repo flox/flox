@@ -161,9 +161,25 @@ teardown() { teardown_project;  common_test_teardown; }
 
 # ---------------------------------------------------------------------------- #
 
-@test "'flox init -t $URI'" {
-  setup_project;
-  run sh -c "$_inline_cmd";
+@test "'flox init -t github:flox/floxpkgs#project'" {
+  run "$FLOX_CLI" init -n "${PWD##*/}" -t 'github:flox/floxpkgs#project';
+  assert_success;
+}
+
+
+# ---------------------------------------------------------------------------- #
+
+@test "'flox init -t github:flox/floxpkgs/master#project'" {
+  run "$FLOX_CLI" init -n "${PWD##*/}" -t 'github:flox/floxpkgs/master#project';
+  assert_success;
+}
+
+
+# ---------------------------------------------------------------------------- #
+
+@test "'flox init -t github:flox/floxpkgs/refs/heads/master#project'" {
+  run "$FLOX_CLI" init -n "${PWD##*/}"                                       \
+                       -t 'github:flox/floxpkgs/refs/heads/master#project';
   assert_success;
 }
 
