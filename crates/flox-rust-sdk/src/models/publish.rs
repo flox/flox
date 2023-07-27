@@ -635,6 +635,7 @@ mod tests {
         );
     }
 
+    /// Red path test: expect error if no upstream set for the current branch
     #[cfg(feature = "impure-unit-tests")] // disabled for offline builds, TODO fix tests to work with local repos
     #[tokio::test]
     async fn git_file_error_if_dirty() {
@@ -646,6 +647,7 @@ mod tests {
         fs::create_dir(&repo_dir).unwrap();
         let repo = Git::init(&repo_dir, false).await.unwrap();
 
+        // create a file and stage it without committing, so that the repo is dirty
         fs::write(repo_dir.join("flake.nix"), "{ outputs = _: {}; }").unwrap();
         repo.add(&[Path::new(".")]).await.unwrap();
 
@@ -662,32 +664,61 @@ mod tests {
         ));
     }
 
+    /// Green path test: resolve a branch and revision of upstream repo
+    /// Here, the "upstream" repo is just "the repo itself" (git remote add upstream .)
+    /// Note that there are many steps to this.
+    /// However in pracitice this operates on clones of upstream repos, where remote
+    /// (and often remote branches) are already set.
     #[cfg(feature = "impure-unit-tests")] // disabled for offline builds, TODO fix tests to work with local repos
     #[tokio::test]
-    async fn git_file_error_if_dirty2() {
+    async fn git_file_resolve_branch_and_rev() {
         env_logger::init();
 
         let (flox, _temp_dir_handle) = flox_instance();
         let repo_dir = _temp_dir_handle.path().join("repo");
 
+        // create a repo
         fs::create_dir(&repo_dir).unwrap();
         let repo = Git::init(&repo_dir, false).await.unwrap();
 
+        // use a custom name as the default branch name might be affected by the user's git conf
+        repo.rename_branch("test/branch").await.unwrap();
+
+        // commit a file
         fs::write(repo_dir.join("flake.nix"), "{ outputs = _: {}; }").unwrap();
         repo.add(&[Path::new(".")]).await.unwrap();
         repo.commit("Commit flake").await.unwrap();
+
+        // add a remote
         repo.add_remote("upstream", &repo_dir.to_string_lossy())
             .await
             .unwrap();
         repo.fetch().await.unwrap();
-        repo.set_origin("master", "upstream").await.unwrap();
+
+        // set the origin
+        repo.set_origin("test/branch", "upstream").await.unwrap();
 
         let flake_ref =
             GitRef::from_str(&format!("git+file://{}", repo_dir.to_string_lossy())).unwrap();
 
-        PublishFlakeRef::from_git_file_flake_ref(flake_ref.clone(), &flox.nix(Default::default()))
-            .await
-            .unwrap();
+        let publish_flake_ref = PublishFlakeRef::from_git_file_flake_ref(
+            flake_ref.clone(),
+            &flox.nix(Default::default()),
+        )
+        .await
+        .unwrap();
+        assert!(matches!(
+            publish_flake_ref,
+            PublishFlakeRef::File(GitRef {
+                url: _,
+                attributes: GitAttributes {
+                    rev: Some(_),
+                    reference: Some(reference),
+                    ..
+                }}
+            )
+            if reference == "test/branch"
+        ))
     }
 
     #[cfg(feature = "impure-unit-tests")] // disabled for offline builds, TODO fix tests to work with local repos
