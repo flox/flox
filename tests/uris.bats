@@ -160,6 +160,11 @@ teardown() { project_teardown; common_test_teardown; }
 
 # ---------------------------------------------------------------------------- #
 
+# `flox init' tests
+# -----------------
+
+# bats file_tags=uri, uri:project, init
+
 @test "'flox init -t github:flox/floxpkgs#project'" {
   run "$FLOX_CLI" init -n "${PWD##*/}" -t 'github:flox/floxpkgs#project';
   assert_success;
@@ -170,16 +175,19 @@ teardown() { project_teardown; common_test_teardown; }
 }
 
 
-# ---------------------------------------------------------------------------- #
-
 @test "'flox init -t github:flox/floxpkgs/master#project'" {
   run "$FLOX_CLI" init -n "${PWD##*/}" -t 'github:flox/floxpkgs/master#project';
   assert_success;
   assert test -f "./shells/${PWD##*/}/default.nix";
 }
 
+@test "'flox init -t github:flox/floxpkgs?ref=master#project'" {
+  run "$FLOX_CLI" init -n "${PWD##*/}"                                \
+                       -t 'github:flox/floxpkgs?ref=master#project';
+  assert_success;
+  assert test -f "./shells/${PWD##*/}/default.nix";
+}
 
-# ---------------------------------------------------------------------------- #
 
 @test "'flox init -t github:flox/floxpkgs/refs/heads/master#project'" {
   run "$FLOX_CLI" init -n "${PWD##*/}"                                       \
@@ -189,7 +197,14 @@ teardown() { project_teardown; common_test_teardown; }
 }
 
 
-# ---------------------------------------------------------------------------- #
+@test "'flox init -t github:flox/floxpkgs?ref=refs/heads/master#project'" {
+  run "$FLOX_CLI" init                                                      \
+                  -n "${PWD##*/}"                                           \
+                  -t 'github:flox/floxpkgs?ref=refs/heads/master#project';
+  assert_success;
+  assert test -f "./shells/${PWD##*/}/default.nix";
+}
+
 
 @test "'flox init -t github:flox/floxpkgs/<REV>#project'" {
   run "$FLOX_CLI" init -n "${PWD##*/}"                                    \
@@ -199,7 +214,13 @@ teardown() { project_teardown; common_test_teardown; }
 }
 
 
-# ---------------------------------------------------------------------------- #
+@test "'flox init -t github:flox/floxpkgs?rev=<REV>#project'" {
+  run "$FLOX_CLI" init -n "${PWD##*/}"                                        \
+                       -t "github:flox/floxpkgs?rev=$_floxpkgs_rev#project";
+  assert_success;
+  assert test -f "./shells/${PWD##*/}/default.nix";
+}
+
 
 @test "'flox init -t <ABS-PATH>#project'" {
   git clone --depth 1 https://github.com/flox/floxpkgs.git  \
@@ -210,8 +231,6 @@ teardown() { project_teardown; common_test_teardown; }
 }
 
 
-# ---------------------------------------------------------------------------- #
-
 @test "'flox init -t <REL-PATH>#project'" {
   git clone --depth 1 https://github.com/flox/floxpkgs.git  \
                       "$BATS_TEST_TMPDIR/floxpkgs";
@@ -219,6 +238,21 @@ teardown() { project_teardown; common_test_teardown; }
   assert_success;
   assert test -f "./shells/${PWD##*/}/default.nix";
 }
+
+# TODO: git, tarball
+
+
+# ---------------------------------------------------------------------------- #
+
+# bats file_tags=uri, uri:project
+
+
+# TODO: develop
+# TODO: build
+# TODO: run
+# TODO: print-dev-env
+# TODO: shell
+# TODO: eval
 
 
 # ---------------------------------------------------------------------------- #
