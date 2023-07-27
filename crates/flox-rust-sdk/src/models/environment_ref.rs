@@ -6,7 +6,7 @@ use runix::command::{Eval, FlakeMetadata};
 use runix::flake_ref::git::{GitAttributes, GitRef};
 use runix::flake_ref::path::PathRef;
 use runix::flake_ref::FlakeRef;
-use runix::installable::Installable;
+use runix::installable::FlakeAttribute;
 use runix::{NixBackend, RunJson};
 use thiserror::Error;
 use url::Url;
@@ -26,7 +26,7 @@ pub static DEFAULT_OWNER: &str = "local";
 #[derive(Debug)]
 pub struct Project<'flox> {
     pub flox: &'flox Flox,
-    pub installable: Installable,
+    pub flake_attribute: FlakeAttribute,
     pub workdir: PathBuf, // todo https://github.com/flox/runix/issues/7
     pub name: String,
 }
@@ -114,7 +114,7 @@ impl<'flox> Project<'flox> {
                     flox,
                     workdir: workdir.to_owned(),
                     name: m.key.last().ok_or(FindProjectError::NoName)?.to_owned(),
-                    installable: m.installable(),
+                    flake_attribute: m.flake_attribute(),
                 })
             })
             .collect()
@@ -249,7 +249,7 @@ impl<'flox> Named {
     }
 
     /// Convert an environment reference to an installable
-    fn get_installable(&self, flox: &Flox, system: &str, gen: &str) -> Installable {
+    fn get_installable(&self, flox: &Flox, system: &str, gen: &str) -> FlakeAttribute {
         let flakeref = FlakeRef::GitPath(GitRef {
             // we can unwrap here since we construct and know the path
             url: Url::from_file_path(Self::meta_dir(flox).join(&self.owner))
@@ -263,7 +263,7 @@ impl<'flox> Named {
             },
         });
 
-        Installable {
+        FlakeAttribute {
             flakeref,
             // The git branch varies but the name always remains `default`,
             // which comes from the template
@@ -394,12 +394,12 @@ impl EnvironmentRef<'_> {
         Ok(environment_refs)
     }
 
-    pub async fn get_latest_installable<'flox, Git: GitProvider>(
+    pub async fn get_latest_flake_attribute<'flox, Git: GitProvider>(
         &self,
         flox: &'flox Flox,
-    ) -> Result<Installable, NamedGetCurrentGenError<Git>> {
+    ) -> Result<FlakeAttribute, NamedGetCurrentGenError<Git>> {
         match self {
-            EnvironmentRef::Project(project_ref) => Ok(project_ref.installable.clone()),
+            EnvironmentRef::Project(project_ref) => Ok(project_ref.flake_attribute.clone()),
             EnvironmentRef::Named(named_ref) => {
                 let gen = named_ref.get_current_gen(flox).await?;
                 Ok(named_ref.get_installable(flox, &flox.system, &gen))
@@ -422,11 +422,11 @@ impl EnvironmentRef<'_> {
             },
             EnvironmentRef::Project(Project {
                 flox,
-                installable,
+                flake_attribute,
                 workdir,
                 name,
             }) => {
-                let path = match &installable.flakeref {
+                let path = match &flake_attribute.flakeref {
                     runix::flake_ref::FlakeRef::Path(PathRef { path, .. }) => path.clone(),
                     runix::flake_ref::FlakeRef::GitPath(GitRef { url, .. }) => {
                         url.to_file_path().unwrap()
@@ -439,13 +439,13 @@ impl EnvironmentRef<'_> {
                     .guard::<Git>()
                     .await?
                     .open()
-                    .map_err(|_| CastError::NotFound(installable.to_string()))?;
+                    .map_err(|_| CastError::NotFound(flake_attribute.to_string()))?;
 
                 let project = git
                     .guard()
                     .await?
                     .open()
-                    .map_err(|_| CastError::NotFound(installable.to_string()))?;
+                    .map_err(|_| CastError::NotFound(flake_attribute.to_string()))?;
 
                 let environment = project.environment(name).await?;
 

@@ -1,5 +1,6 @@
 use std::ops::Deref;
 use std::path::PathBuf;
+use std::str::FromStr;
 
 use derive_more::{Deref, DerefMut, Display};
 use flox_types::catalog::cache::{CacheMeta, SubstituterUrl};
@@ -9,11 +10,13 @@ use runix::arguments::flake::FlakeArgs;
 use runix::command::Eval;
 use runix::command_line::{NixCommandLine, NixCommandLineRunJsonError};
 use runix::flake_metadata::FlakeMetadata;
-use runix::flake_ref::git::GitRef;
+use runix::flake_ref::git::{GitAttributes, GitRef};
+use runix::flake_ref::git_service::{service, GitServiceRef};
 use runix::flake_ref::indirect::IndirectRef;
 use runix::flake_ref::path::PathRef;
+use runix::flake_ref::protocol::{WrappedUrl, WrappedUrlParseError};
 use runix::flake_ref::{protocol, FlakeRef};
-use runix::installable::{AttrPath, Installable};
+use runix::installable::{AttrPath, FlakeAttribute};
 use runix::{RunJson, RunTyped};
 use serde_json::{json, Value};
 use thiserror::Error;
@@ -163,7 +166,7 @@ impl<'flox> Publish<'flox, Empty> {
             },
             eval_args: runix::arguments::EvalArgs {
                 installable: Some(
-                    Installable {
+                    FlakeAttribute {
                         flakeref: analyzer_flakeref,
                         attr_path: analysis_attr_path,
                     }
@@ -295,6 +298,64 @@ impl PublishFlakeRef {
             PublishFlakeRef::Https(https_ref) => FlakeRef::GitHttps(https_ref),
         }
     }
+
+    /// Resolve `github:` flakerefs to a "proper" git url.
+    ///
+    /// Unlike nix operations publish is writing to the targeted git repository.
+    /// To allow native git operations on the remote,
+    /// the `github:` shorthand must be exanded to an `ssh` or `https` url.
+    ///
+    /// By default we resolve ssh urls,
+    /// since (publishing) users will more likely have ssh configured,
+    /// rather than (often insecure) token access.
+    /// In cases where https token access is granted by another tool (e.g. gh),
+    /// or within github actions we can prefer https URLs,
+    /// so not to require an ssh setup to be present.
+    #[allow(unused)]
+    fn from_github_ref(
+        GitServiceRef {
+            owner,
+            repo,
+            attributes,
+            ..
+        }: GitServiceRef<service::Github>,
+        prefer_https: bool,
+    ) -> Result<Self, ConvertFlakeRefError> {
+        let host = attributes.host.unwrap_or("github.com".to_string());
+
+        let only_rev = attributes.rev.is_some() && attributes.reference.is_none();
+
+        let git_attributes = GitAttributes {
+            rev: attributes.rev,
+            reference: attributes.reference,
+            dir: attributes.dir,
+            // Nix needs either a `?ref=` or `allRefs=1` set to fetch a revision
+            all_refs: only_rev.then_some(true),
+            ..Default::default()
+        };
+
+        let publish_flake_ref = if prefer_https {
+            let url_str = format!("https://{host}/{owner}/{repo}");
+            let url = WrappedUrl::from_str(&url_str)
+                .map_err(|e| ConvertFlakeRefError::InvalidResultUrl(url_str, e))?;
+
+            Self::Https(GitRef {
+                url,
+                attributes: git_attributes,
+            })
+        } else {
+            let url_str = format!("ssh://git@{host}/{owner}/{repo}");
+            let url = WrappedUrl::from_str(&url_str)
+                .map_err(|e| ConvertFlakeRefError::InvalidResultUrl(url_str, e))?;
+
+            Self::Ssh(GitRef {
+                url,
+                attributes: git_attributes,
+            })
+        };
+
+        Ok(publish_flake_ref)
+    }
 }
 
 impl TryFrom<FlakeRef> for PublishFlakeRef {
@@ -321,6 +382,9 @@ impl TryFrom<FlakeRef> for PublishFlakeRef {
 pub enum ConvertFlakeRefError {
     #[error("Unsupported flakeref for publish: {0}")]
     UnsupportedTarget(FlakeRef),
+
+    #[error("Invalid URL after conversion: {0}: {1}")]
+    InvalidResultUrl(String, WrappedUrlParseError),
 }
 
 #[cfg(test)]
@@ -357,5 +421,65 @@ mod tests {
         let value = publish.analyze().await.unwrap().analysis().to_owned();
 
         println!("{}", serde_json::to_string_pretty(&value).unwrap());
+    }
+
+    #[test]
+    fn convert_github_ref() {
+        // simple github references
+        let flake_ref = GitServiceRef::<service::Github>::from_str("github:flox/flox").unwrap();
+        let publish_flake_ref = PublishFlakeRef::from_github_ref(flake_ref, false).unwrap();
+        assert_eq!(
+            publish_flake_ref.to_string(),
+            "git+ssh://git@github.com/flox/flox"
+        );
+
+        // github references with explicit host param
+        let flake_ref = GitServiceRef::<service::Github>::from_str(
+            "github:flox/flox?host=github.myenterprise.com",
+        )
+        .unwrap();
+        let publish_flake_ref = PublishFlakeRef::from_github_ref(flake_ref, false).unwrap();
+        assert_eq!(
+            publish_flake_ref.to_string(),
+            "git+ssh://git@github.myenterprise.com/flox/flox"
+        );
+
+        // github references with dir param
+        let flake_ref =
+            GitServiceRef::<service::Github>::from_str("github:flox/flox?dir=somwhere/inside")
+                .unwrap();
+        let publish_flake_ref = PublishFlakeRef::from_github_ref(flake_ref, false).unwrap();
+        assert_eq!(
+            publish_flake_ref.to_string(),
+            "git+ssh://git@github.com/flox/flox?dir=somwhere%2Finside"
+        );
+
+        // github references with git ref
+        let flake_ref =
+            GitServiceRef::<service::Github>::from_str("github:flox/flox/feat/test").unwrap();
+        let publish_flake_ref = PublishFlakeRef::from_github_ref(flake_ref, false).unwrap();
+        assert_eq!(
+            publish_flake_ref.to_string(),
+            "git+ssh://git@github.com/flox/flox?ref=feat%2Ftest"
+        );
+
+        // github references with git rev
+        let flake_ref = GitServiceRef::<service::Github>::from_str(
+            "github:flox/flox/49335c4bade5b3feb7378f9af8e9a528d9c4103e",
+        )
+        .unwrap();
+        let publish_flake_ref = PublishFlakeRef::from_github_ref(flake_ref, false).unwrap();
+        assert_eq!(
+            publish_flake_ref.to_string(),
+            "git+ssh://git@github.com/flox/flox?allRefs=1&rev=49335c4bade5b3feb7378f9af8e9a528d9c4103e"
+        );
+
+        // simple github references
+        let flake_ref = GitServiceRef::<service::Github>::from_str("github:flox/flox").unwrap();
+        let publish_flake_ref = PublishFlakeRef::from_github_ref(flake_ref, true).unwrap();
+        assert_eq!(
+            publish_flake_ref.to_string(),
+            "git+https://github.com/flox/flox"
+        );
     }
 }
