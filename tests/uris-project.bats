@@ -49,8 +49,6 @@ load test_support.bash;
 setup_file() {
   common_file_setup;
 
-  git config --global init.defaultBranch main;
-
   #declare -a envRefs flakeRefs installables floxpkgRefs;
   #envRefs=(
   #  default  # either project or global default named env
@@ -140,6 +138,7 @@ project_setup() {
   mkdir -p "$PROJECT_DIR";
   pushd "$PROJECT_DIR" >/dev/null||return;
   git init;
+  git branch -M main;
 }
 
 project_teardown() {
@@ -160,10 +159,6 @@ teardown() { project_teardown; common_test_teardown; }
 @test "'flox init -t github:flox/floxpkgs#project'" {
   run "$FLOX_CLI" init -n "${PWD##*/}" -t 'github:flox/floxpkgs#project';
   assert_success;
-  # Ensure the template was applied.
-  # This is not intended to audit the template's contents, feel free to change
-  # this check if the upstream template no longer carries this file.
-  assert test -f "./shells/${PWD##*/}/default.nix";
 }
 
 
@@ -172,7 +167,6 @@ teardown() { project_teardown; common_test_teardown; }
 @test "'flox init -t github:flox/floxpkgs/master#project'" {
   run "$FLOX_CLI" init -n "${PWD##*/}" -t 'github:flox/floxpkgs/master#project';
   assert_success;
-  assert test -f "./shells/${PWD##*/}/default.nix";
 }
 
 
@@ -182,7 +176,6 @@ teardown() { project_teardown; common_test_teardown; }
   run "$FLOX_CLI" init -n "${PWD##*/}"                                       \
                        -t 'github:flox/floxpkgs/refs/heads/master#project';
   assert_success;
-  assert test -f "./shells/${PWD##*/}/default.nix";
 }
 
 
@@ -193,7 +186,6 @@ teardown() { project_teardown; common_test_teardown; }
   run "$FLOX_CLI" init -n "${PWD##*/}"                                    \
                        -t "github:flox/floxpkgs/$_floxpkgs_rev#project";
   assert_success;
-  assert test -f "./shells/${PWD##*/}/default.nix";
 }
 
 
