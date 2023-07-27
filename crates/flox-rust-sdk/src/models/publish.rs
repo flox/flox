@@ -536,6 +536,10 @@ pub enum ConvertFlakeRefError {
 #[cfg(test)]
 mod tests {
 
+    use std::fs;
+    use std::path::Path;
+    use std::str::FromStr;
+
     use super::*;
     use crate::flox::tests::flox_instance;
     use crate::prelude::Channel;
