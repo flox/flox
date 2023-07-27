@@ -26,12 +26,9 @@ setup_file() {
   # Suppresses warning messages that clutter backtraces.
   git config --global init.defaultBranch main;
 
-  export _nixpkgs_rev="4ecab3273592f27479a583fb6d975d4aba3486fe";
   export _floxpkgs_rev="2c75b96bc3e8c78b516b1fc44dbf95deae6affca";
 
-  # Ensure we have the `nixpkgs' and `nixpkgs-flox' aliases.
-  $FLOX_CLI nix registry add nixpkgs        github:NixOS/nixpkgs;
-  $FLOX_CLI nix registry add nixpkgs-flox   github:flox/nixpkgs-flox;
+  # Create an alias for testing indirects
   $FLOX_CLI nix registry add floxpkgs-alias github:flox/floxpkgs;
 }
 
