@@ -208,6 +208,10 @@ pub(crate) mod interface {
         /// Package to publish
         #[bpaf(external(InstallableArgument::positional), optional, catch)]
         pub installable_arg: Option<InstallableArgument<Parsed, PublishInstallable>>,
+
+        /// Prefer https access to repositories published with a `github:` reference
+        #[bpaf(long)]
+        pub prefer_https: bool,
     }
     parseable!(PublishV2, publish_v2);
 
@@ -350,23 +354,39 @@ impl PackageCommands {
             },
 
             PackageCommands::Publish2(args) => {
-                let FlakeAttribute {
-                    flakeref,
-                    attr_path,
-                    outputs: _,
-                } = args
+                let installable = args
                     .inner
                     .installable_arg
                     .unwrap_or_default()
                     .resolve_flake_attribute(&flox)
                     .await?;
 
-                let publish_ref = PublishFlakeRef::from_flake_ref(flakeref, &flox, false).await?;
-                let publish = Publish::new(&flox, publish_ref, attr_path, config.flox.stability);
-                println!(
-                    "{}",
-                    serde_json::to_string_pretty(publish.analyze().await?.analysis())?
+                let original_flakeref = &installable.flakeref;
+                let publish_flakeref = PublishFlakeRef::from_flake_ref(
+                    installable.flakeref.clone(),
+                    &flox,
+                    args.inner.prefer_https,
+                )
+                .await?;
+
+                if &publish_flakeref != original_flakeref {
+                    info!("Resolved {} to {}", original_flakeref, publish_flakeref);
+                }
+
+                let publish = Publish::new(
+                    &flox,
+                    publish_flakeref,
+                    installable.attr_path.clone(),
+                    config.flox.stability,
                 );
+
+                // retrieve eval metadata
+                info!("Getting metadata for {installable}...");
+                let publish = publish.analyze().await?;
+
+                let analysis = publish.analysis();
+
+                println!("{}", serde_json::to_string(analysis)?);
             },
 
             PackageCommands::Init(command) => {
