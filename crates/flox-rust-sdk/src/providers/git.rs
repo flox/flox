@@ -15,6 +15,13 @@ pub trait GitDiscoverError {
     fn not_found(&self) -> bool;
 }
 
+pub struct OriginInfo {
+    pub name: String,
+    pub url: String,
+    pub reference: String,
+    pub revision: Option<String>,
+}
+
 pub struct BranchInfo {
     pub name: String,
     pub remote: Option<String>,
@@ -81,9 +88,7 @@ pub trait GitProvider: Send + Sized + std::fmt::Debug {
     async fn set_origin(&self, branch: &str, origin_name: &str)
         -> Result<(), Self::SetOriginError>;
 
-    async fn get_origin(
-        &self,
-    ) -> Result<(String, String, String, Option<String>), Self::GetOriginError>;
+    async fn get_origin(&self) -> Result<OriginInfo, Self::GetOriginError>;
 
     fn workdir(&self) -> Option<&Path>;
     fn path(&self) -> &Path;
@@ -217,9 +222,7 @@ impl GitProvider for LibGit2Provider {
         todo!()
     }
 
-    async fn get_origin(
-        &self,
-    ) -> Result<(String, String, String, Option<String>), Self::GetOriginError> {
+    async fn get_origin(&self) -> Result<OriginInfo, Self::GetOriginError> {
         todo!()
     }
 
@@ -476,9 +479,7 @@ impl GitProvider for GitCommandProvider {
     ///   (remote_name, branch_name) = split_once "/" upstream_ref
     ///   upstream_url = git remote get-url ${remote_name}
     ///   upstream_rev = git ls-remote ${remote_name} ${branch_name}
-    async fn get_origin(
-        &self,
-    ) -> Result<(String, String, String, Option<String>), Self::GetOriginError> {
+    async fn get_origin(&self) -> Result<OriginInfo, Self::GetOriginError> {
         let (remote_name, remote_branch) = {
             let reference = GitCommandProvider::run_command(
                 GitCommandProvider::new_command(&self.workdir)
@@ -523,12 +524,12 @@ impl GitProvider for GitCommandProvider {
             remote_revision
         };
 
-        Ok((
-            remote_name.to_string(),
+        Ok(OriginInfo {
+            name: remote_name.to_string(),
             url,
-            remote_branch.to_string(),
-            remote_revision,
-        ))
+            reference: remote_branch.to_string(),
+            revision: remote_revision,
+        })
     }
 
     async fn mv(&self, from: &Path, to: &Path) -> Result<(), Self::MvError> {

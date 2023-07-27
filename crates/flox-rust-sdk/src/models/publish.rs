@@ -409,15 +409,22 @@ impl PublishFlakeRef {
         //
         // The current branch MUST have an upstream ref configured
         // which resolves to a valid rev on the remote.
-        let (remote_name, remote_url, remote_branch, remote_revision) = repo
+        let remote = repo
             .get_origin()
             .await
             .map_err(ConvertFlakeRefError::NoRemote)?;
 
         // Ensure the remote branch exists
-        let remote_revision = remote_revision.ok_or(ConvertFlakeRefError::RemoteBranchNotFound)?;
+        let remote_revision = remote
+            .revision
+            .ok_or(ConvertFlakeRefError::RemoteBranchNotFound)?;
 
-        info!("Resolved local flake to remote '{remote_name}:{remote_branch}' at '{remote_url}'");
+        info!(
+            "Resolved local flake to remote '{name}:{reference}' at '{url}'",
+            name = remote.name,
+            reference = remote.reference,
+            url = remote.url
+        );
 
         // Check whether the local branch is in sync with its upstream branch,
         // to ensure we publish the intended revision
@@ -438,7 +445,7 @@ impl PublishFlakeRef {
         //   git@github.com:flox/flox
         //
         // Normalize these urls to proper URLs for the use with nix.
-        let remote_url = git_url_parse::normalize_url(&remote_url)
+        let remote_url = git_url_parse::normalize_url(&remote.url)
             .map_err(|e| ConvertFlakeRefError::UnknownRemoteUrl(e.to_string()))?;
 
         // Copy the flakeref attributes but unlock it in support of preferred upstream refs
@@ -452,7 +459,7 @@ impl PublishFlakeRef {
                 .parse()
                 .expect("failed parsing revision returned by git"),
         );
-        attributes.reference = Some(remote_branch);
+        attributes.reference = Some(remote.reference);
 
         let remote_flake_ref = match remote_url.scheme() {
             "ssh" => Self::Ssh(GitRef::new(
