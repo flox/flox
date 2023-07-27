@@ -446,7 +446,12 @@ impl PublishFlakeRef {
         attributes.last_modified = None;
         attributes.rev_count = None;
         attributes.nar_hash = None;
-        attributes.rev = Some(remote_revision.parse().unwrap());
+        // safe unwrap: remote revision is provided by git and is thus expected to match the revision regex
+        attributes.rev = Some(
+            remote_revision
+                .parse()
+                .expect("failed parsing revision returned by git"),
+        );
         attributes.reference = Some(remote_branch);
 
         let remote_flake_ref = match remote_url.scheme() {
