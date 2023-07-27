@@ -426,7 +426,7 @@ impl PublishFlakeRef {
         // Dirty branches are already permitted due to the filter above.
         if let Some(local_rev) = local_metadata.revision {
             if local_rev.as_ref() != remote_revision {
-                Err(ConvertFlakeRefError::RemoteBranchNotSync(
+                Err(ConvertFlakeRefError::RemoteBranchNotSynced(
                     local_rev.to_string(),
                     remote_revision.clone(),
                 ))?
@@ -524,7 +524,7 @@ pub enum ConvertFlakeRefError {
     RemoteBranchNotFound,
 
     #[error("Local repo out of sync with remote: local: {0}, remote: {1}")]
-    RemoteBranchNotSync(String, String),
+    RemoteBranchNotSynced(String, String),
 
     #[error("Failed normalizing git url: {0}")]
     UnknownRemoteUrl(String),
