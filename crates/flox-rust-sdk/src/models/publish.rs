@@ -790,6 +790,23 @@ impl PublishFlakeRef {
     }
 }
 
+impl PartialEq<FlakeRef> for PublishFlakeRef {
+    fn eq(&self, other: &FlakeRef) -> bool {
+        match (self, other) {
+            (PublishFlakeRef::Https(this), FlakeRef::GitHttps(other)) => this == other,
+            (PublishFlakeRef::Ssh(this), FlakeRef::GitSsh(other)) => this == other,
+            (PublishFlakeRef::File(this), FlakeRef::GitPath(other)) => this == other,
+            _ => false,
+        }
+    }
+}
+
+impl PartialEq<PublishFlakeRef> for FlakeRef {
+    fn eq(&self, other: &PublishFlakeRef) -> bool {
+        other == self
+    }
+}
+
 /// Errors arising from convert
 #[derive(Error, Debug)]
 pub enum ConvertFlakeRefError {
