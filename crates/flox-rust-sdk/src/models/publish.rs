@@ -629,9 +629,6 @@ mod tests {
     #[cfg(feature = "impure-unit-tests")] // disabled for offline builds, TODO fix tests to work with local repos
     #[tokio::test]
     async fn git_file_error_if_dirty() {
-        use std::fs;
-        use std::path::Path;
-        use std::str::FromStr;
         env_logger::init();
 
         let (flox, _temp_dir_handle) = flox_instance();
@@ -659,9 +656,6 @@ mod tests {
     #[cfg(feature = "impure-unit-tests")] // disabled for offline builds, TODO fix tests to work with local repos
     #[tokio::test]
     async fn git_file_error_if_dirty2() {
-        use std::fs;
-        use std::path::Path;
-        use std::str::FromStr;
         env_logger::init();
 
         let (flox, _temp_dir_handle) = flox_instance();
@@ -690,9 +684,6 @@ mod tests {
     #[cfg(feature = "impure-unit-tests")] // disabled for offline builds, TODO fix tests to work with local repos
     #[tokio::test]
     async fn git_file_error_if_no_upstream() {
-        use std::fs;
-        use std::path::Path;
-        use std::str::FromStr;
         env_logger::init();
 
         let (flox, _temp_dir_handle) = flox_instance();
