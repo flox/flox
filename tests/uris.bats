@@ -49,7 +49,15 @@ load test_support.bash;
 setup_file() {
   common_file_setup;
 
+  # Suppresses warning messages that clutter backtraces.
   git config --global init.defaultBranch main;
+
+  export _nixpkgs_rev="4ecab3273592f27479a583fb6d975d4aba3486fe";
+  export _floxpkgs_rev="2c75b96bc3e8c78b516b1fc44dbf95deae6affca";
+
+  # Ensure we have the `nixpkgs' and `nixpkgs-flox' aliases.
+  $FLOX_CLI nix registry add nixpkgs      github:NixOS/nixpkgs;
+  $FLOX_CLI nix registry add nixpkgs-flox github:flox/nixpkgs-flox;
 
   #declare -a envRefs flakeRefs installables floxpkgRefs;
   #envRefs=(
@@ -59,11 +67,6 @@ setup_file() {
   #  .#foo    # project named env
   #  ./foo    # project subdir env
   #);
-  #export _nixpkgs_rev="4ecab3273592f27479a583fb6d975d4aba3486fe";
-
-  ## Ensure we have the `nixpkgs' and `nixpkgs-flox' aliases.
-  #$FLOX_CLI nix registry add nixpkgs      github:NixOS/nixpkgs;
-  #$FLOX_CLI nix registry add nixpkgs-flox github:flox/nixpkgs-flox;
 
   ## Define a few flake refs
   #flakeRefs=(
@@ -189,9 +192,30 @@ teardown() { project_teardown; common_test_teardown; }
 # ---------------------------------------------------------------------------- #
 
 @test "'flox init -t github:flox/floxpkgs/<REV>#project'" {
-  _floxpkgs_rev="2c75b96bc3e8c78b516b1fc44dbf95deae6affca";
   run "$FLOX_CLI" init -n "${PWD##*/}"                                    \
                        -t "github:flox/floxpkgs/$_floxpkgs_rev#project";
+  assert_success;
+  assert test -f "./shells/${PWD##*/}/default.nix";
+}
+
+
+# ---------------------------------------------------------------------------- #
+
+@test "'flox init -t <ABS-PATH>#project'" {
+  git clone --depth 1 https://github.com/flox/floxpkgs.git  \
+                      "$BATS_TEST_TMPDIR/floxpkgs";
+  run "$FLOX_CLI" init -n "${PWD##*/}" -t "$BATS_TEST_TMPDIR/floxpkgs#project";
+  assert_success;
+  assert test -f "./shells/${PWD##*/}/default.nix";
+}
+
+
+# ---------------------------------------------------------------------------- #
+
+@test "'flox init -t <REL-PATH>#project'" {
+  git clone --depth 1 https://github.com/flox/floxpkgs.git  \
+                      "$BATS_TEST_TMPDIR/floxpkgs";
+  run "$FLOX_CLI" init -n "${PWD##*/}" -t "../floxpkgs#project";
   assert_success;
   assert test -f "./shells/${PWD##*/}/default.nix";
 }
