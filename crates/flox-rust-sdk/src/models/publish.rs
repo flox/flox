@@ -6,7 +6,7 @@ use derive_more::{Deref, DerefMut, Display};
 use flox_types::catalog::cache::{CacheMeta, SubstituterUrl};
 use flox_types::stability::Stability;
 use futures::TryFutureExt;
-use log::info;
+use log::debug;
 use runix::arguments::flake::FlakeArgs;
 use runix::command::Eval;
 use runix::command_line::{NixCommandLine, NixCommandLineRunJsonError};
@@ -419,7 +419,7 @@ impl PublishFlakeRef {
             .revision
             .ok_or(ConvertFlakeRefError::RemoteBranchNotFound)?;
 
-        info!(
+        debug!(
             "Resolved local flake to remote '{name}:{reference}' at '{url}'",
             name = remote.name,
             reference = remote.reference,
