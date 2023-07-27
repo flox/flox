@@ -461,11 +461,11 @@ impl GitProvider for GitCommandProvider {
         Ok(())
     }
 
-    /// Retrieve information about the remot origin for the current branch/repo
+    /// Retrieve information about the remote origin for the current branch/repo
     ///
     /// Return a tuple containing
     ///
-    /// 1. the remote name of the current branch (or "origin" if no upstream configured)
+    /// 1. the remote name of the current branch
     /// 2. the remote url
     /// 3. the upstream branch name
     /// 4. the current revision of the upstream branch

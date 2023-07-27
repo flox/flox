@@ -363,9 +363,9 @@ impl PublishFlakeRef {
     /// Resolve a git+file flake ref to a git+https reference
     ///
     /// Reproducing a snapshot from source requires access to the original repo.
-    /// Including a local file reference in the snapshot,
-    /// means its practically only possible to reproduce for the original creator.
-    /// Thus, we resolve a local branch to it's upstream remote and branch.
+    /// Including a local file reference in the snapshot
+    /// means it's practically only possible to reproduce for the original creator.
+    /// Thus, we resolve a local branch to its upstream remote and branch.
     ///
     /// For local repositories we also check
     /// whether the repository contains any uncommitted changes
@@ -420,7 +420,7 @@ impl PublishFlakeRef {
         info!("Resolved local flake to remote '{remote_name}:{remote_branch}' at '{remote_url}'");
 
         // Check whether the local branch is in sync with its upstream branch,
-        // to ensure we publish the intended revision,
+        // to ensure we publish the intended revision
         // by comparing the local revision to the one found upstream.
         //
         // Dirty branches are already permitted due to the filter above.
@@ -523,6 +523,7 @@ pub enum ConvertFlakeRefError {
 
     #[error("Failed normalizing git url: {0}")]
     UnknownRemoteUrl(String),
+
     #[error("Unsupported git remote URL: {0}")]
     UnsupportedGitUrl(url::Url),
 }
