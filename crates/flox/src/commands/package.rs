@@ -472,7 +472,11 @@ impl PackageCommands {
                 let nix = flox.nix::<NixCommandLine>(command.nix_args);
                 let command = EvalComm {
                     flake: FlakeArgs {
-                        override_inputs: [config.flox.stability.as_override()].into(),
+                        override_inputs: if config.flox.stability == Default::default() {
+                            vec![]
+                        } else {
+                            vec![config.flox.stability.as_override()]
+                        },
                         ..FlakeArgs::default()
                     },
                     ..Default::default()
@@ -601,7 +605,11 @@ impl PackageCommands {
                 FlakeCommand {
                     subcommand: command.inner.subcommand.to_owned(),
                     default_flake_args: FlakeArgs {
-                        override_inputs: [config.flox.stability.as_override()].into(),
+                        override_inputs: if config.flox.stability == Default::default() {
+                            vec![]
+                        } else {
+                            vec![config.flox.stability.as_override()]
+                        },
                         ..Default::default()
                     },
                     args: command.nix_args,
