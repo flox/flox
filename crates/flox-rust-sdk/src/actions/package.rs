@@ -84,7 +84,11 @@ where
 impl Package<'_> {
     fn flake_args(&self) -> Result<FlakeArgs, ()> {
         Ok(FlakeArgs {
-            override_inputs: vec![self.stability.as_override()],
+            override_inputs: if self.stability == Default::default() {
+                vec![]
+            } else {
+                vec![self.stability.as_override()]
+            },
             ..Default::default()
         })
     }
