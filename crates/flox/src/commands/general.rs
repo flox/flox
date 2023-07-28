@@ -52,10 +52,15 @@ impl GeneralCommands {
                     }
                 };
 
-                flox.channels.register_channel(
-                    "nixpkgs",
-                    Channel::from_str(&format!("github:flox/nixpkgs/{}", config.flox.stability))?,
-                );
+                if config.flox.stability != Default::default() {
+                    flox.channels.register_channel(
+                        "nixpkgs",
+                        Channel::from_str(&format!(
+                            "github:flox/nixpkgs/{}",
+                            config.flox.stability
+                        ))?,
+                    );
+                }
 
                 let nix: NixCommandLine = flox.nix(Default::default());
 
