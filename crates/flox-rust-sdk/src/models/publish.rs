@@ -654,7 +654,7 @@ mod tests {
         fs::create_dir(&repo_dir).unwrap();
         let repo = Git::init(&repo_dir, false).await.unwrap();
 
-        // create a file and stage it without committing, so that the repo is dirty
+        // create a file and stage it without committing so that the repo is dirty
         fs::write(repo_dir.join("flake.nix"), "{ outputs = _: {}; }").unwrap();
         repo.add(&[Path::new(".")]).await.unwrap();
 
@@ -674,7 +674,7 @@ mod tests {
     /// Green path test: resolve a branch and revision of upstream repo
     /// Here, the "upstream" repo is just "the repo itself" (git remote add upstream .)
     /// Note that there are many steps to this.
-    /// However in pracitice this operates on clones of upstream repos, where remote
+    /// However in practice this operates on clones of upstream repos, where remote
     /// (and often remote branches) are already set.
     #[cfg(feature = "impure-unit-tests")] // disabled for offline builds, TODO fix tests to work with local repos
     #[tokio::test]
