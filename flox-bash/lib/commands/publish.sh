@@ -459,7 +459,7 @@ function floxPublish() {
 	else
 		gitClone="$tmpdir"
 		warn "Cloning $channelRepository ..."
-		$invoke_gh repo clone "$channelRepository" "$gitClone"
+		$invoke_flox_gh repo clone "$channelRepository" "$gitClone"
 	fi
 
 	# Then build package.

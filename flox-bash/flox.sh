@@ -288,7 +288,7 @@ envs | environments)
 	;;
 
 gh)
-	verboseExec $_gh "$@"
+	verboseExec $_flox_gh "$@"
 	;;
 
 init)

@@ -1,0 +1,227 @@
+diff --git a/cmd/gh/main.go b/cmd/gh/main.go
+index 15af907..6611799 100644
+--- a/cmd/gh/main.go
++++ b/cmd/gh/main.go
+@@ -55,17 +55,6 @@ func mainRun() exitCode {
+ 
+ 	ctx := context.Background()
+ 
+-	updateCtx, updateCancel := context.WithCancel(ctx)
+-	defer updateCancel()
+-	updateMessageChan := make(chan *update.ReleaseInfo)
+-	go func() {
+-		rel, err := checkForUpdate(updateCtx, cmdFactory, buildVersion)
+-		if err != nil && hasDebug {
+-			fmt.Fprintf(stderr, "warning: checking for update failed: %v", err)
+-		}
+-		updateMessageChan <- rel
+-	}()
+-
+ 	if !cmdFactory.IOStreams.ColorEnabled() {
+ 		surveyCore.DisableColor = true
+ 		ansi.DisableColors(true)
+@@ -159,25 +148,6 @@ func mainRun() exitCode {
+ 		return exitError
+ 	}
+ 
+-	updateCancel() // if the update checker hasn't completed by now, abort it
+-	newRelease := <-updateMessageChan
+-	if newRelease != nil {
+-		isHomebrew := isUnderHomebrew(cmdFactory.Executable())
+-		if isHomebrew && isRecentRelease(newRelease.PublishedAt) {
+-			// do not notify Homebrew users before the version bump had a chance to get merged into homebrew-core
+-			return exitOK
+-		}
+-		fmt.Fprintf(stderr, "\n\n%s %s → %s\n",
+-			ansi.Color("A new release of gh is available:", "yellow"),
+-			ansi.Color(strings.TrimPrefix(buildVersion, "v"), "cyan"),
+-			ansi.Color(strings.TrimPrefix(newRelease.Version, "v"), "cyan"))
+-		if isHomebrew {
+-			fmt.Fprintf(stderr, "To upgrade, run: %s\n", "brew upgrade gh")
+-		}
+-		fmt.Fprintf(stderr, "%s\n\n",
+-			ansi.Color(newRelease.URL, "yellow"))
+-	}
+-
+ 	return exitOK
+ }
+ 
+diff --git a/internal/authflow/flow.go b/internal/authflow/flow.go
+index ddac948..78be21e 100644
+--- a/internal/authflow/flow.go
++++ b/internal/authflow/flow.go
+@@ -19,10 +19,10 @@ import (
+ )
+ 
+ var (
+-	// The "GitHub CLI" OAuth app
+-	oauthClientID = "178c6fc778ccc68e1d6a"
++	// The "flox CLI" OAuth app
++	oauthClientID = "b819ed5468f121e0286a"
+ 	// This value is safe to be embedded in version control
+-	oauthClientSecret = "34ddeff2b558a23d38fba8a6de74f086ede1cc0b"
++	oauthClientSecret = "422c509cff3285b3e8fcdd9da4e324518327bd50"
+ 
+ 	jsonTypeRE = regexp.MustCompile(`[/+]json($|;)`)
+ )
+@@ -38,8 +38,7 @@ func AuthFlow(oauthHost string, IO *iostreams.IOStreams, notice string, addition
+ 		httpClient.Transport = verboseLog(IO.ErrOut, logTraffic, IO.ColorEnabled())(httpClient.Transport)
+ 	}
+ 
+-	minimumScopes := []string{"repo", "read:org", "gist"}
+-	scopes := append(minimumScopes, additionalScopes...)
++	scopes := []string{}
+ 
+ 	callbackURI := "http://127.0.0.1/callback"
+ 	if ghinstance.IsEnterprise(oauthHost) {
+diff --git a/pkg/cmd/auth/login/login.go b/pkg/cmd/auth/login/login.go
+index 84894bf..8bbcae0 100644
+--- a/pkg/cmd/auth/login/login.go
++++ b/pkg/cmd/auth/login/login.go
+@@ -61,7 +61,7 @@ func NewCmdLogin(f *cmdutil.Factory, runF func(*LoginOptions) error) *cobra.Comm
+ 			authentication token will be stored internally.
+ 
+ 			Alternatively, use %[1]s--with-token%[1]s to pass in a token on standard input.
+-			The minimum required scopes for the token are: "repo", "read:org".
++			There are no minimum required scopes for the token.
+ 
+ 			Alternatively, gh will use the authentication token found in environment variables.
+ 			This method is most suitable for "headless" use of gh such as in automation. See
+diff --git a/pkg/cmd/auth/shared/login_flow.go b/pkg/cmd/auth/shared/login_flow.go
+index 7c2ff16..0bc3a9b 100644
+--- a/pkg/cmd/auth/shared/login_flow.go
++++ b/pkg/cmd/auth/shared/login_flow.go
+@@ -8,7 +8,6 @@ import (
+ 	"os"
+ 	"strings"
+ 
+-	"github.com/MakeNowJust/heredoc"
+ 	"github.com/cli/cli/v2/api"
+ 	"github.com/cli/cli/v2/git"
+ 	"github.com/cli/cli/v2/internal/authflow"
+@@ -66,19 +65,11 @@ func Login(opts *LoginOptions) error {
+ 		gitProtocol = strings.ToLower(proto)
+ 	}
+ 
+-	var additionalScopes []string
+-
+ 	credentialFlow := &GitCredentialFlow{
+ 		Executable: opts.Executable,
+ 		Prompter:   opts.Prompter,
+ 		GitClient:  opts.GitClient,
+ 	}
+-	if opts.Interactive && gitProtocol == "https" {
+-		if err := credentialFlow.Prompt(hostname); err != nil {
+-			return err
+-		}
+-		additionalScopes = append(additionalScopes, credentialFlow.Scopes()...)
+-	}
+ 
+ 	var keyToUpload string
+ 	keyTitle := defaultSSHKeyTitle
+@@ -119,17 +110,6 @@ func Login(opts *LoginOptions) error {
+ 				keyToUpload = keyPair.PublicKeyPath
+ 			}
+ 		}
+-
+-		if keyToUpload != "" {
+-			var err error
+-			keyTitle, err = opts.Prompter.Input(
+-				"Title for your SSH key:", defaultSSHKeyTitle)
+-			if err != nil {
+-				return err
+-			}
+-
+-			additionalScopes = append(additionalScopes, "admin:public_key")
+-		}
+ 	}
+ 
+ 	var authMode int
+@@ -152,18 +132,12 @@ func Login(opts *LoginOptions) error {
+ 
+ 	if authMode == 0 {
+ 		var err error
+-		authToken, username, err = authflow.AuthFlow(hostname, opts.IO, "", append(opts.Scopes, additionalScopes...), opts.Interactive, opts.Browser)
++		authToken, username, err = authflow.AuthFlow(hostname, opts.IO, "", opts.Scopes, opts.Interactive, opts.Browser)
+ 		if err != nil {
+ 			return fmt.Errorf("failed to authenticate via web browser: %w", err)
+ 		}
+ 		fmt.Fprintf(opts.IO.ErrOut, "%s Authentication complete.\n", cs.SuccessIcon())
+ 	} else {
+-		minimumScopes := append([]string{"repo", "read:org"}, additionalScopes...)
+-		fmt.Fprint(opts.IO.ErrOut, heredoc.Docf(`
+-			Tip: you can generate a Personal Access Token here https://%s/settings/tokens
+-			The minimum required scopes are %s.
+-		`, hostname, scopesSentence(minimumScopes, ghinstance.IsEnterprise(hostname))))
+-
+ 		var err error
+ 		authToken, err = opts.Prompter.AuthToken()
+ 		if err != nil {
+diff --git a/pkg/cmd/auth/shared/oauth_scopes.go b/pkg/cmd/auth/shared/oauth_scopes.go
+index 8d99960..49af3aa 100644
+--- a/pkg/cmd/auth/shared/oauth_scopes.go
++++ b/pkg/cmd/auth/shared/oauth_scopes.go
+@@ -63,44 +63,14 @@ func GetScopes(httpClient httpClient, hostname, authToken string) (string, error
+ 
+ // HasMinimumScopes performs a GitHub API request and returns an error if the token used in the request
+ // lacks the minimum required scopes for performing API operations with gh.
++// FLOX: any token is sufficient for identifying the user.
+ func HasMinimumScopes(httpClient httpClient, hostname, authToken string) error {
+-	scopesHeader, err := GetScopes(httpClient, hostname, authToken)
+-	if err != nil {
+-		return err
+-	}
+-
+-	return HeaderHasMinimumScopes(scopesHeader)
++	return HeaderHasMinimumScopes("")
+ }
+ 
+ // HeaderHasMinimumScopes parses the comma separated scopesHeader string and returns an error
+ // if it lacks the minimum required scopes for performing API operations with gh.
++// FLOX: any token is sufficient for identifying the user.
+ func HeaderHasMinimumScopes(scopesHeader string) error {
+-	if scopesHeader == "" {
+-		// if the token reports no scopes, assume that it's an integration token and give up on
+-		// detecting its capabilities
+-		return nil
+-	}
+-
+-	search := map[string]bool{
+-		"repo":      false,
+-		"read:org":  false,
+-		"admin:org": false,
+-	}
+-	for _, s := range strings.Split(scopesHeader, ",") {
+-		search[strings.TrimSpace(s)] = true
+-	}
+-
+-	var missingScopes []string
+-	if !search["repo"] {
+-		missingScopes = append(missingScopes, "repo")
+-	}
+-
+-	if !search["read:org"] && !search["write:org"] && !search["admin:org"] {
+-		missingScopes = append(missingScopes, "read:org")
+-	}
+-
+-	if len(missingScopes) > 0 {
+-		return &MissingScopesError{MissingScopes: missingScopes}
+-	}
+ 	return nil
+ }
+diff --git a/pkg/cmd/auth/status/status.go b/pkg/cmd/auth/status/status.go
+index 77a5f12..26bf2df 100644
+--- a/pkg/cmd/auth/status/status.go
++++ b/pkg/cmd/auth/status/status.go
+@@ -147,9 +147,9 @@ func statusRun(opts *StatusOptions) error {
+ 			addMsg("%s Token: %s", cs.SuccessIcon(), displayToken(token, opts.ShowToken))
+ 
+ 			if scopesHeader != "" {
+-				addMsg("%s Token scopes: %s", cs.SuccessIcon(), scopesHeader)
++				addMsg("%s Token scopes: %s", cs.Red("X"), scopesHeader)
+ 			} else if expectScopes(token) {
+-				addMsg("%s Token scopes: none", cs.Red("X"))
++				addMsg("%s Token scopes: none", cs.SuccessIcon())
+ 			}
+ 		}
+ 	}

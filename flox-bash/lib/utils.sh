@@ -143,6 +143,8 @@ function hash_commands() {
 			exported_variables["$(type -P "$i")"]="NIX_REMOTE NIX_SSL_CERT_FILE NIX_USER_CONF_FILES GIT_CONFIG_SYSTEM GIT_SSH_COMMAND" ;;
 		git)
 			exported_variables["$(type -P "$i")"]="GIT_CONFIG_SYSTEM GIT_SSH_COMMAND" ;;
+		flox-gh)
+			exported_variables["$(type -P "$i")"]="FLOX_CONFIG_HOME FLOX_STATE_HOME FLOX_DATA_HOME" ;;
 		*) :; ;;
 		esac
 	done
@@ -154,7 +156,7 @@ function hash_commands() {
 # TODO replace each use of $_cut and $_tr with shell equivalents.
 hash_commands                                                                  \
 	ansifilter awk 'builtfilter-rs' basename bash cat chmod cmp column cp      \
-	curl cut dasel date dirname getent gh git grep gum id jq ln man mkdir      \
+	curl cut dasel date dirname flox-gh getent git grep gum id jq ln man mkdir \
 	mktemp mv nix 'nix-editor' 'nix-store' pwd readlink realpath rm rmdir sed  \
 	sh sleep sort ssh stat tail tar tee touch tr uname uuid xargs zgrep        \
 	semver 'parser-util'
@@ -1340,16 +1342,16 @@ function ensureGHRepoExists() {
 	# and confirm that repository exists.
 	if ! checkGitRepoExists "$origin"; then
 		if [[ "${origin,,}" =~ github ]]; then
-			( $_gh auth status >/dev/null 2>&1 ) ||
+			( $_flox_gh auth status >/dev/null 2>&1 ) ||
 				# gh auth login will automatically add credential helpers to the users
 				# global git config.
 				# Since flox will set the git credential helper manually where its needed
 				# and we want to avoid writing user files, trick gh to modify a temporary,
 				# discarded file instead
-				GIT_CONFIG_GLOBAL="$(mkTempFile)" $_gh auth login
-			( $_gh repo view "$origin" >/dev/null 2>&1 ) || (
+				GIT_CONFIG_GLOBAL="$(mkTempFile)" $_flox_gh auth login
+			( $_flox_gh repo view "$origin" >/dev/null 2>&1 ) || (
 				set -x
-				$_gh repo create \
+				$_flox_gh repo create \
 					--"$visibility" "$origin" \
 					--template "$template"
 			)

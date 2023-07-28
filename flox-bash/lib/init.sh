@@ -119,11 +119,12 @@ export FLOX_STABILITY="${FLOX_STABILITY:-stable}"
 export FLOX_CACHE_HOME="${FLOX_CACHE_HOME:-${XDG_CACHE_HOME:-$HOME/.cache}/flox}"
 export FLOX_META="${FLOX_META:-$FLOX_CACHE_HOME/meta}"
 export FLOX_DATA_HOME="${FLOX_DATA_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/flox}"
+export FLOX_STATE_HOME="${FLOX_STATE_HOME:-${XDG_STATE_HOME:-$HOME/.local/state}/flox}"
 export FLOX_ENVIRONMENTS="${FLOX_ENVIRONMENTS:-$FLOX_DATA_HOME/environments}"
 export XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
 export FLOX_CONFIG_HOME="${FLOX_CONFIG_HOME:-$XDG_CONFIG_HOME/flox}"
-$_mkdir -p "$FLOX_CACHE_HOME" "$FLOX_META" "$FLOX_DATA_HOME" "$FLOX_ENVIRONMENTS" "$FLOX_CONFIG_HOME"
-for i in "$FLOX_CACHE_HOME" "$FLOX_META" "$FLOX_DATA_HOME" "$FLOX_ENVIRONMENTS" "$FLOX_CONFIG_HOME"; do
+$_mkdir -p "$FLOX_CACHE_HOME" "$FLOX_META" "$FLOX_DATA_HOME" "$FLOX_STATE_HOME" "$FLOX_ENVIRONMENTS" "$FLOX_CONFIG_HOME"
+for i in "$FLOX_CACHE_HOME" "$FLOX_META" "$FLOX_DATA_HOME" "$FLOX_STATE_HOME" "$FLOX_ENVIRONMENTS" "$FLOX_CONFIG_HOME"; do
 	# if $i is writable, do nothing, else try to create $i
 	[ -w "$i" ] || $_mkdir -p "$i" || \
 		error "directory '$i' not writable ... aborting" < /dev/null
@@ -252,7 +253,7 @@ $_cat > $tmpGitConfig <<EOF
     defaultBranch = main
 
 [credential "https://git.saas.floxdev.com/"]
-    helper = "!f() { test \"\$1\" = get && printf \"username=%s\\\\npassword=%s\\\\n\" $defaultEnvironmentOwner \"\$($_gh auth token)\"; }; f"
+    helper = "!f() { test \"\$1\" = get && printf \"username=%s\\\\npassword=%s\\\\n\" $defaultEnvironmentOwner \"\$($_flox_gh auth token)\"; }; f"
 
 EOF
 

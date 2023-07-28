@@ -426,7 +426,7 @@ function githubHelperGit() {
 	trace "$@"
 	# For github.com specifically, set authentication helper.
 	$invoke_git                                                                \
-		-c "credential.https://github.com.helper=!${_gh?} auth git-credential" \
+		-c "credential.https://github.com.helper=!${_flox_gh?} auth git-credential" \
 		"$@"
 }
 
@@ -626,7 +626,7 @@ function checkGhAuth {
 	trace "$@"
 	local hostname="$1"; shift
 	# Repeat login attempts until we're successfully logged in.
-	while ! $_gh auth status -h "$hostname" >/dev/null 2>&1; do
+	while ! $_flox_gh auth status -h "$hostname" >/dev/null 2>&1; do
 		initialGreeting
 		warn "Invoking 'gh auth login -h $hostname'"
 
@@ -635,7 +635,7 @@ function checkGhAuth {
 		# Since flox will set the git credential helper manually where its
 		# needed and we want to avoid writing user files, trick gh to modify a
 		# temporary, discarded file instead
-		GIT_CONFIG_GLOBAL="$(mkTempFile)" $_gh auth login -h "$hostname"
+		GIT_CONFIG_GLOBAL="$(mkTempFile)" $_flox_gh auth login -h "$hostname"
 		info ""
 	done
 }
@@ -783,7 +783,7 @@ function getSetOrigin() {
 			local ghAuthHandle
 			#shellcheck disable=2016
 			if ghAuthHandle="$(
-			     $_gh auth status |&  \
+			     $_flox_gh auth status |&  \
 				   $_awk '/Logged in to github.com as/ {print $7}')"
 			then
 				origin="${git_base_url/+ssh/}$ghAuthHandle/$repoName"
