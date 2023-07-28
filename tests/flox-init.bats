@@ -7,8 +7,16 @@
 # This sub-command's `--template' option takes an "installable" URI as its
 # argument, and we focus on auditing various URI edge cases here.
 #
-# NOTE: the URIs accepted by `flox init --template <URI>' do not accept an
+# NOTE: The URIs accepted by `flox init --template <URI>' do not accept an
 # extended output spec ( `^out,bin,dev' suffix ).
+#
+# XXX: Tests in this file often use `assertTemplateApplied' to determine whether
+# `flox init -t [<URL>#]project -n <NAME>;' succeeded.
+# At time of writing <2023-07-28> this checks for the existence of
+# `./shells/<NAME>/default.nix'.
+# If our `project' template changes in the future, then you should also modify
+# `assertTemplateApplied' with a new suitable check.
+# Such a change may also require `_floxpkgs_rev' to be changed to a new `rev'.
 #
 #
 # ---------------------------------------------------------------------------- #
@@ -26,6 +34,9 @@ setup_file() {
   # Suppresses warning messages that clutter backtraces.
   git config --global init.defaultBranch main;
 
+  # This revision number is arbitrary, it is really just used to validate the
+  # URI parser's `rev' handling.
+  # Having said that, it was chosen such that `assertTemplateApplied' works.
   export _floxpkgs_rev="2c75b96bc3e8c78b516b1fc44dbf95deae6affca";
 
   # Create an alias for testing indirects
@@ -60,67 +71,79 @@ teardown() { project_teardown; common_test_teardown; }
 
 # ---------------------------------------------------------------------------- #
 
+# Get the name of the current project, being the basename of `PWD'.
+getProjName() { echo "${PWD##*/}"; }
+
+# Ensure the template was applied.
+# This is not intended to audit the template's contents, feel free to change
+# this check if the upstream template no longer carries this file.
+assertTemplateApplied() {
+  assert test -f "./shells/$( getProjName; )/default.nix";
+}
+
+
+# ---------------------------------------------------------------------------- #
+
+
 # bats test_tags=uri:github
 @test "'flox init -t github:flox/floxpkgs#project'" {
-  run "$FLOX_CLI" init -n "${PWD##*/}" -t 'github:flox/floxpkgs#project';
+  run "$FLOX_CLI" init -n "$( getProjName; )" -t 'github:flox/floxpkgs#project';
   assert_success;
-  # Ensure the template was applied.
-  # This is not intended to audit the template's contents, feel free to change
-  # this check if the upstream template no longer carries this file.
-  assert test -f "./shells/${PWD##*/}/default.nix";
+  assertTemplateApplied;
 }
 
 
 # bats test_tags=uri:github
 @test "'flox init -t github:flox/floxpkgs/master#project'" {
-  run "$FLOX_CLI" init -n "${PWD##*/}" -t 'github:flox/floxpkgs/master#project';
+  run "$FLOX_CLI" init -n "$( getProjName; )"                     \
+                       -t 'github:flox/floxpkgs/master#project';
   assert_success;
-  assert test -f "./shells/${PWD##*/}/default.nix";
+  assertTemplateApplied;
 }
 
 # bats test_tags=uri:github
 @test "'flox init -t github:flox/floxpkgs?ref=master#project'" {
-  run "$FLOX_CLI" init -n "${PWD##*/}"                                \
+  run "$FLOX_CLI" init -n "$( getProjName; )"                         \
                        -t 'github:flox/floxpkgs?ref=master#project';
   assert_success;
-  assert test -f "./shells/${PWD##*/}/default.nix";
+  assertTemplateApplied;
 }
 
 
 # bats test_tags=uri:github
 @test "'flox init -t github:flox/floxpkgs/refs/heads/master#project'" {
-  run "$FLOX_CLI" init -n "${PWD##*/}"                                       \
+  run "$FLOX_CLI" init -n "$( getProjName; )"                                \
                        -t 'github:flox/floxpkgs/refs/heads/master#project';
   assert_success;
-  assert test -f "./shells/${PWD##*/}/default.nix";
+  assertTemplateApplied;
 }
 
 
 # bats test_tags=uri:github
 @test "'flox init -t github:flox/floxpkgs?ref=refs/heads/master#project'" {
   run "$FLOX_CLI" init                                                      \
-                  -n "${PWD##*/}"                                           \
+                  -n "$( getProjName; )"                                    \
                   -t 'github:flox/floxpkgs?ref=refs/heads/master#project';
   assert_success;
-  assert test -f "./shells/${PWD##*/}/default.nix";
+  assertTemplateApplied;
 }
 
 
 # bats test_tags=uri:github
 @test "'flox init -t github:flox/floxpkgs/<REV>#project'" {
-  run "$FLOX_CLI" init -n "${PWD##*/}"                                    \
+  run "$FLOX_CLI" init -n "$( getProjName; )"                             \
                        -t "github:flox/floxpkgs/$_floxpkgs_rev#project";
   assert_success;
-  assert test -f "./shells/${PWD##*/}/default.nix";
+  assertTemplateApplied;
 }
 
 
 # bats test_tags=uri:github
 @test "'flox init -t github:flox/floxpkgs?rev=<REV>#project'" {
-  run "$FLOX_CLI" init -n "${PWD##*/}"                                        \
+  run "$FLOX_CLI" init -n "$( getProjName; )"                                 \
                        -t "github:flox/floxpkgs?rev=$_floxpkgs_rev#project";
   assert_success;
-  assert test -f "./shells/${PWD##*/}/default.nix";
+  assertTemplateApplied;
 }
 
 
@@ -130,18 +153,19 @@ teardown() { project_teardown; common_test_teardown; }
 @test "'flox init -t <ABS-PATH>#project'" {
   git clone --depth 1 https://github.com/flox/floxpkgs.git  \
                       "$BATS_TEST_TMPDIR/floxpkgs";
-  run "$FLOX_CLI" init -n "${PWD##*/}" -t "$BATS_TEST_TMPDIR/floxpkgs#project";
+  run "$FLOX_CLI" init -n "$( getProjName; )"                    \
+                       -t "$BATS_TEST_TMPDIR/floxpkgs#project";
   assert_success;
-  assert test -f "./shells/${PWD##*/}/default.nix";
+  assertTemplateApplied;
 }
 
 # bats test_tags=uri:file, uri:git, uri:git_file
 @test "'flox init -t <REL-PATH>#project'" {
   git clone --depth 1 https://github.com/flox/floxpkgs.git  \
                       "$BATS_TEST_TMPDIR/floxpkgs";
-  run "$FLOX_CLI" init -n "${PWD##*/}" -t "../floxpkgs#project";
+  run "$FLOX_CLI" init -n "$( getProjName; )" -t "../floxpkgs#project";
   assert_success;
-  assert test -f "./shells/${PWD##*/}/default.nix";
+  assertTemplateApplied;
 }
 
 
@@ -149,71 +173,74 @@ teardown() { project_teardown; common_test_teardown; }
 
 #bats test_tags=uri:indirect, uri:indirect:github
 @test "'flox init -t floxpkgs-alias#project'" {
-  run "$FLOX_CLI" init -n "${PWD##*/}" -t "floxpkgs-alias#project";
+  run "$FLOX_CLI" init -n "$( getProjName; )" -t "floxpkgs-alias#project";
   assert_success;
-  assert test -f "./shells/${PWD##*/}/default.nix";
+  assertTemplateApplied;
 }
 
 
 #bats test_tags=uri:indirect, uri:indirect:github
 @test "'flox init -t flake:floxpkgs-alias#project'" {
-  run "$FLOX_CLI" init -n "${PWD##*/}" -t "flake:floxpkgs-alias#project";
+  run "$FLOX_CLI" init -n "$( getProjName; )" -t "flake:floxpkgs-alias#project";
   assert_success;
-  assert test -f "./shells/${PWD##*/}/default.nix";
+  assertTemplateApplied;
 }
 
 
 #bats test_tags=uri:indirect, uri:indirect:github
 @test "'flox init -t floxpkgs-alias/master#project'" {
-  run "$FLOX_CLI" init -n "${PWD##*/}" -t "floxpkgs-alias/master#project";
+  run "$FLOX_CLI" init -n "$( getProjName; )"               \
+                       -t "floxpkgs-alias/master#project";
   assert_success;
-  assert test -f "./shells/${PWD##*/}/default.nix";
+  assertTemplateApplied;
 }
 
 
 #bats test_tags=uri:indirect, uri:indirect:github
 @test "'flox init -t flake:floxpkgs-alias/master#project'" {
-  run "$FLOX_CLI" init -n "${PWD##*/}" -t "flake:floxpkgs-alias/master#project";
+  run "$FLOX_CLI" init -n "$( getProjName; )"                     \
+                       -t "flake:floxpkgs-alias/master#project";
   assert_success;
-  assert test -f "./shells/${PWD##*/}/default.nix";
+  assertTemplateApplied;
 }
 
 
 #bats test_tags=uri:indirect, uri:indirect:github
 @test "'flox init -t flake:floxpkgs-alias?ref=master#project'" {
-  run "$FLOX_CLI" init -n "${PWD##*/}"                                \
+  run "$FLOX_CLI" init -n "$( getProjName; )"                         \
                        -t "flake:floxpkgs-alias?ref=master#project";
   assert_success;
-  assert test -f "./shells/${PWD##*/}/default.nix";
+  assertTemplateApplied;
 }
 
 
 #bats test_tags=uri:indirect, uri:indirect:github
 @test "'flox init -t floxpkgs-alias?ref=master#project' (expect fail)" {
   skip "FIXME: indirect flake-refs require scheme prefix to use parameters.";
-  run "$FLOX_CLI" init -n "${PWD##*/}" -t "floxpkgs-alias?ref=master#project";
+  run "$FLOX_CLI" init -n "$( getProjName; )"                   \
+                       -t "floxpkgs-alias?ref=master#project";
   assert_failure;
-  refute test -f "./shells/${PWD##*/}/default.nix";
+  refute test -f "./shells/$( getProjName; )/default.nix";
 }
 
 
 #bats test_tags=uri:indirect, uri:indirect:github
 @test "'flox init -t floxpkgs-alias/refs/heads/master#project' (expect fail)" {
   skip "FIXME: indirect flake-refs require scheme prefix to use parameters.";
-  run "$FLOX_CLI" init -n "${PWD##*/}"                                 \
+  run "$FLOX_CLI" init -n "$( getProjName; )"                          \
                        -t "floxpkgs-alias/refs/heads/master#project";
   assert_failure;
-  refute test -f "./shells/${PWD##*/}/default.nix";
+  refute test -f "./shells/$( getProjName; )/default.nix";
 }
 
 
 #bats test_tags=uri:indirect, uri:indirect:github
 @test "'flox init -t flake:floxpkgs-alias?ref=refs/heads/master#project'" {
   run "$FLOX_CLI" init                                                      \
-                  -n "${PWD##*/}"                                           \
+                  -n "$( getProjName; )"                                    \
                   -t "flake:floxpkgs-alias?ref=refs/heads/master#project";
   assert_success;
-  assert test -f "./shells/${PWD##*/}/default.nix";
+  assertTemplateApplied;
 }
 
 
