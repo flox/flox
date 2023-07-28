@@ -680,7 +680,7 @@ mod tests {
     #[cfg(feature = "impure-unit-tests")] // disabled for offline builds, TODO fix tests to work with local repos
     #[tokio::test]
     async fn creates_catalog_entry() {
-        env_logger::init();
+        let _ = env_logger::try_init();
 
         let (mut flox, _temp_dir_handle) = flox_instance();
 
@@ -772,7 +772,7 @@ mod tests {
     #[cfg(feature = "impure-unit-tests")] // disabled for offline builds, TODO fix tests to work with local repos
     #[tokio::test]
     async fn git_file_error_if_dirty() {
-        env_logger::init();
+        let _ = env_logger::try_init();
 
         let (flox, _temp_dir_handle) = flox_instance();
         let repo_dir = _temp_dir_handle.path().join("repo");
@@ -805,7 +805,7 @@ mod tests {
     #[cfg(feature = "impure-unit-tests")] // disabled for offline builds, TODO fix tests to work with local repos
     #[tokio::test]
     async fn git_file_resolve_branch_and_rev() {
-        env_logger::init();
+        let _ = env_logger::try_init();
 
         let (flox, _temp_dir_handle) = flox_instance();
         let repo_dir = _temp_dir_handle.path().join("repo");
@@ -857,7 +857,7 @@ mod tests {
     #[cfg(feature = "impure-unit-tests")] // disabled for offline builds, TODO fix tests to work with local repos
     #[tokio::test]
     async fn git_file_error_if_no_upstream() {
-        env_logger::init();
+        let _ = env_logger::try_init();
 
         let (flox, _temp_dir_handle) = flox_instance();
         let repo_dir = _temp_dir_handle.path().join("repo");
