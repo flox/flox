@@ -315,17 +315,28 @@ struct UpstreamCatalog<'a>(&'a Git);
 
 impl UpstreamCatalog<'_> {
     /// Mostly naïve approxiaton of a snapshot path
-    /// TODO: fix before releasing this PR!
+    ///
+    ///     /packages/<pname>/<version>.json
+    ///
+    /// TODO: fix before releasing publish!
     fn get_snapshot_path(&self, snapshot: &Value) -> PathBuf {
-        let mut path = self
+        let path = self
             .0
             .workdir()
             .unwrap()
             .join("packages")
-            .join(snapshot["eval"]["meta"]["pname"].to_string());
-        snapshot["eval"]["meta"]["version"].to_string();
+            .join(
+                snapshot["eval"]["meta"]["pname"]
+                    .as_str()
+                    .expect("'pname' is expected to be a string"),
+            )
+            .join(format!(
+                "{}.json",
+                snapshot["eval"]["meta"]["version"]
+                    .as_str()
+                    .expect("'version' is expected to be a string")
+            ));
 
-        path.set_file_name(format!("{}.json", snapshot["eval"]["meta"]["version"]));
         path
     }
 
