@@ -897,4 +897,159 @@ mod tests {
 
         assert!(matches!(result, Err(ConvertFlakeRefError::NoRemote(_))));
     }
+
+    /// Check if we successfully clone a repo
+    #[tokio::test]
+    async fn upstream_repo_from_url() {
+        let _ = env_logger::try_init();
+
+        let (_flox, temp_dir_handle) = flox_instance();
+        let repo_dir = temp_dir_handle.path().join("repo");
+
+        // create a repo
+        fs::create_dir(&repo_dir).unwrap();
+        let repo = Git::init(&repo_dir, false).await.unwrap();
+
+        UpstreamRepo::clone_repo(
+            repo.workdir().unwrap().to_string_lossy(),
+            temp_dir_handle.path(),
+        )
+        .await
+        .expect("Should clone repo");
+    }
+
+    /// Check if we successfully clone a repo
+    #[tokio::test]
+    async fn create_catalog_branch() {
+        let _ = env_logger::try_init();
+        let (_flox, temp_dir_handle) = flox_instance();
+        let repo_dir = temp_dir_handle.path().join("repo");
+
+        // create a repo
+        fs::create_dir(&repo_dir).unwrap();
+        let repo = Git::init(&repo_dir, false).await.unwrap();
+        let mut repo = UpstreamRepo::clone_repo(
+            repo.workdir().unwrap().to_string_lossy(),
+            temp_dir_handle.path(),
+        )
+        .await
+        .expect("Should clone repo");
+
+        assert!(repo.0.list_branches().await.unwrap().is_empty());
+
+        let catalog = repo
+            .get_or_create_catalog(&"aarch64-darwin".to_string())
+            .await
+            .expect("Should create branch");
+
+        // commit a file to the branch to crate the first reference
+        fs::write(catalog.0.workdir().unwrap().join(".tag"), "").unwrap();
+        catalog.0.add(&[Path::new(".tag")]).await.unwrap();
+        catalog.0.commit("root commit").await.unwrap();
+
+        assert_eq!(catalog.0.list_branches().await.unwrap().len(), 1);
+    }
+
+    /// Check if we successfully clone a repo
+    #[tokio::test]
+    async fn test_add_snapshot() {
+        let _ = env_logger::try_init();
+        let (_flox, temp_dir_handle) = flox_instance();
+        let repo_dir = temp_dir_handle.path().join("repo");
+
+        let snapshot = json!({
+            "eval": {
+                "meta": {
+                    "pname": "pkg",
+                    "version": "0.1.1"
+                }
+            }
+        });
+
+        // create a repo
+        fs::create_dir(&repo_dir).unwrap();
+        let repo = Git::init(&repo_dir, false).await.unwrap();
+        let mut repo = UpstreamRepo::clone_repo(
+            repo.workdir().unwrap().to_string_lossy(),
+            temp_dir_handle.path(),
+        )
+        .await
+        .expect("Should clone repo");
+
+        let catalog = repo
+            .get_or_create_catalog(&"aarch64-darwin".to_string())
+            .await
+            .expect("Should create branch");
+
+        catalog
+            .add_snapshot(&snapshot)
+            .await
+            .expect("Should add snapshot");
+
+        assert_eq!(
+            catalog
+                .get_snapshot(&snapshot)
+                .unwrap()
+                .expect("should find written snapshot"),
+            snapshot
+        );
+    }
+
+    /// Check if we successfully clone a repo
+    #[tokio::test]
+    async fn test_push_snapshot() {
+        let _ = env_logger::try_init();
+        let (_flox, temp_dir_handle) = flox_instance();
+        let repo_dir = temp_dir_handle.path().join("repo");
+
+        let snapshot = json!({
+            "eval": {
+                "meta": {
+                    "pname": "pkg",
+                    "version": "0.1.1"
+                }
+            }
+        });
+
+        // create an "upstream" repo
+        fs::create_dir(&repo_dir).unwrap();
+        let upstream_repo = Git::init(&repo_dir, false).await.unwrap();
+
+        // clone a "downstream"
+        let mut repo = UpstreamRepo::clone_repo(
+            upstream_repo.workdir().unwrap().to_string_lossy(),
+            temp_dir_handle.path(),
+        )
+        .await
+        .expect("Should clone repo");
+
+        // get a catalog, write a snapshot and push to upstream
+        let catalog = repo
+            .get_or_create_catalog(&"aarch64-darwin".to_string())
+            .await
+            .expect("Should create branch");
+
+        catalog
+            .add_snapshot(&snapshot)
+            .await
+            .expect("Should add snapshot");
+        catalog.push_catalog().await.expect("Should push catalog");
+
+        // checkout the new brnach upstream to check if the file got written
+        upstream_repo
+            .checkout(
+                &UpstreamRepo::catalog_branch_name(&"aarch64-darwin".to_string()),
+                false,
+            )
+            .await
+            .expect("catalog branch should exist upstream");
+
+        let snapshot_path = repo_dir.join("packages").join("pkg").join("0.1.1.json");
+        assert!(snapshot_path.exists());
+
+        let snapshot_actual: Value =
+            serde_json::from_str(&fs::read_to_string(&snapshot_path).unwrap()).unwrap();
+
+        assert_eq!(snapshot_actual, snapshot_actual);
+    }
 }
