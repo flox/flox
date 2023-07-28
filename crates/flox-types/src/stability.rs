@@ -10,8 +10,9 @@ use serde::{Deserialize, Serialize};
 )]
 #[serde(rename_all = "camelCase")]
 pub enum Stability {
-    #[display(fmt = "stable")]
     #[default]
+    Unspecified,
+    #[display(fmt = "stable")]
     Stable,
     #[display(fmt = "unstable")]
     Unstable,
