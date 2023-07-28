@@ -4,7 +4,7 @@ use std::os::unix::ffi::OsStringExt;
 use std::path::{Path, PathBuf};
 
 use async_trait::async_trait;
-use log::{debug, error};
+use log::{debug, error, warn};
 use thiserror::Error;
 use tokio::process::Command;
 
@@ -13,6 +13,13 @@ pub enum EmptyError {}
 
 pub trait GitDiscoverError {
     fn not_found(&self) -> bool;
+}
+
+pub struct OriginInfo {
+    pub name: String,
+    pub url: String,
+    pub reference: String,
+    pub revision: Option<String>,
 }
 
 pub struct BranchInfo {
@@ -48,6 +55,7 @@ pub trait GitProvider: Send + Sized + std::fmt::Debug {
         + 'static;
     type FetchError: std::error::Error;
     type SetOriginError: std::error::Error;
+    type GetOriginError: std::error::Error;
 
     async fn discover<P: AsRef<Path>>(path: P) -> Result<Self, Self::DiscoverError>;
     async fn init<P: AsRef<Path>>(path: P, bare: bool) -> Result<Self, Self::InitError>;
@@ -79,6 +87,8 @@ pub trait GitProvider: Send + Sized + std::fmt::Debug {
     async fn push(&self, remote: &str) -> Result<(), Self::PushError>;
     async fn set_origin(&self, branch: &str, origin_name: &str)
         -> Result<(), Self::SetOriginError>;
+
+    async fn get_origin(&self) -> Result<OriginInfo, Self::GetOriginError>;
 
     fn workdir(&self) -> Option<&Path>;
     fn path(&self) -> &Path;
@@ -120,6 +130,7 @@ impl GitProvider for LibGit2Provider {
     type CommitError = EmptyError;
     type DiscoverError = git2::Error;
     type FetchError = EmptyError;
+    type GetOriginError = EmptyError;
     type InitError = git2::Error;
     type ListBranchesError = EmptyError;
     type MvError = EmptyError;
@@ -211,6 +222,10 @@ impl GitProvider for LibGit2Provider {
         todo!()
     }
 
+    async fn get_origin(&self) -> Result<OriginInfo, Self::GetOriginError> {
+        todo!()
+    }
+
     fn workdir(&self) -> Option<&Path> {
         self.repository.workdir()
     }
@@ -275,6 +290,14 @@ pub enum GitCommandDiscoverError {
     UnexpectedOutput(String),
 }
 
+#[derive(Error, Debug)]
+pub enum GitCommandGetOriginError {
+    #[error(transparent)]
+    Command(#[from] GitCommandError),
+    #[error("Couldn't determine upstream remote name for the current HEAD")]
+    NoUpstream,
+}
+
 impl GitDiscoverError for GitCommandDiscoverError {
     fn not_found(&self) -> bool {
         match self {
@@ -296,6 +319,7 @@ impl GitProvider for GitCommandProvider {
     type CommitError = GitCommandError;
     type DiscoverError = GitCommandDiscoverError;
     type FetchError = GitCommandError;
+    type GetOriginError = GitCommandGetOriginError;
     type InitError = GitCommandError;
     type ListBranchesError = GitCommandError;
     type MvError = GitCommandError;
@@ -432,13 +456,80 @@ impl GitProvider for GitCommandProvider {
         let _out = GitCommandProvider::run_command(
             GitCommandProvider::new_command(&self.workdir)
                 .arg("branch")
-                .arg(branch)
-                .arg("--set-upstream")
+                .arg("--set-upstream-to")
                 .arg(format!("{origin_name}/{branch}")),
         )
         .await?;
 
         Ok(())
+    }
+
+    /// Retrieve information about the remote origin for the current branch/repo
+    ///
+    /// Return a tuple containing
+    ///
+    /// 1. the remote name of the current branch
+    /// 2. the remote url
+    /// 3. the upstream branch name
+    /// 4. the current revision of the upstream branch
+    ///
+    /// This is essentialy
+    ///
+    ///   upstream_ref = git rev-parse @{u}
+    ///   (remote_name, branch_name) = split_once "/" upstream_ref
+    ///   upstream_url = git remote get-url ${remote_name}
+    ///   upstream_rev = git ls-remote ${remote_name} ${branch_name}
+    async fn get_origin(&self) -> Result<OriginInfo, Self::GetOriginError> {
+        let (remote_name, remote_branch) = {
+            let reference = GitCommandProvider::run_command(
+                GitCommandProvider::new_command(&self.workdir)
+                    .arg("rev-parse")
+                    .arg("--abbrev-ref")
+                    .arg("--symbolic-full-name")
+                    .arg("@{u}"),
+            )
+            .await
+            .map_err(|_| GitCommandGetOriginError::NoUpstream)?;
+            let as_str = reference.to_string_lossy();
+            let (remote_name, remote_branch) = as_str.trim().split_once('/').unwrap();
+            (remote_name.to_string(), remote_branch.to_string())
+        };
+
+        let url = GitCommandProvider::run_command(
+            GitCommandProvider::new_command(&self.workdir)
+                .arg("remote")
+                .arg("get-url")
+                .arg(&remote_name),
+        )
+        .await?
+        .to_string_lossy()
+        .trim()
+        .to_string();
+
+        let remote_revision = {
+            let remote_revision = GitCommandProvider::run_command(
+                GitCommandProvider::new_command(&self.workdir)
+                    .arg("ls-remote")
+                    .arg(&remote_name)
+                    .arg(&remote_branch),
+            )
+            .await?;
+
+            let remote_revision = if remote_revision.len() < 40 {
+                warn!("No commit found found upstream for ref {remote_branch}");
+                None
+            } else {
+                Some(remote_revision.to_string_lossy()[..40].to_string())
+            };
+            remote_revision
+        };
+
+        Ok(OriginInfo {
+            name: remote_name.to_string(),
+            url,
+            reference: remote_branch.to_string(),
+            revision: remote_revision,
+        })
     }
 
     async fn mv(&self, from: &Path, to: &Path) -> Result<(), Self::MvError> {

@@ -12,6 +12,7 @@
     # MFB: commented 20230527, breaks the floxpkgs-internal pkgset.
     # inputs.nixpkgs.follows = "/flox-floxpkgs/nixpkgs";
   };
+  inputs.parser-util.url = "github:flox/parser-util/v0";
 
   outputs = inputs:
     inputs.flox-floxpkgs.project inputs (_: {});

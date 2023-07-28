@@ -126,7 +126,7 @@ declare -A exported_variables
 function hash_commands() {
 	trace "$@"
 	set -h # explicitly enable hashing
-	local PATH=@@FLOXPATH@@:$PATH
+	local PATH="@@FLOXPATH@@:$PATH"
 	for i in "$@"; do
 		_i="${i//-/_}" # Pesky utilities containing dashes require rewrite.
 		hash "$i" # Dies with useful/precise error on failure when not found.
@@ -134,14 +134,14 @@ function hash_commands() {
 
 		# Define $invoke_<name> variables for those invocations we'd
 		# like to wrap with the invoke() subroutine.
-		declare -g "invoke_$_i"="invoke $(type -P $i)"
+		declare -g "invoke_$_i"="invoke $(type -P "$i")"
 
 		# Some commands require certain environment variables to work properly.
 		# Make note of them here for displaying verbose output in invoke().
-		case $i in
+		case "$i" in
 		nix | nix-store)
 			exported_variables["$(type -P "$i")"]="NIX_REMOTE NIX_SSL_CERT_FILE NIX_USER_CONF_FILES GIT_CONFIG_SYSTEM" ;;
-		*) ;;
+		*) :; ;;
 		esac
 	done
 }
@@ -150,11 +150,12 @@ function hash_commands() {
 # Note that we specifically avoid modifying the PATH environment variable to
 # avoid leaking Nix paths into the commands we invoke.
 # TODO replace each use of $_cut and $_tr with shell equivalents.
-hash_commands \
-	ansifilter awk builtfilter-rs basename bash cat chmod cmp column cp curl cut dasel date dirname \
-	getent gh git grep gum id jq ln man mkdir mktemp mv nix nix-editor nix-store \
-	pwd readlink realpath rm rmdir sed sh sleep sort stat tail tar tee \
-	touch tr uname uuid xargs zgrep semver
+hash_commands                                                                  \
+	ansifilter awk 'builtfilter-rs' basename bash cat chmod cmp column cp      \
+	curl cut dasel date dirname getent gh git grep gum id jq ln man mkdir      \
+	mktemp mv nix 'nix-editor' 'nix-store' pwd readlink realpath rm rmdir sed  \
+	sh sleep sort stat tail tar tee touch tr uname uuid xargs zgrep            \
+	semver 'parser-util'
 
 # Return full path of first command available in PATH.
 #
@@ -162,17 +163,18 @@ hash_commands \
 function first_in_PATH() {
 	trace "$@"
 	set -h # explicitly enable hashing
-	local PATH=@@FLOXPATH@@:$PATH
-	for i in $@; do
-		if hash $i 2>/dev/null; then
-			echo $(type -P $i)
+	local PATH="@@FLOXPATH@@:$PATH"
+	for i in "$@"; do
+		if hash "$i" 2>/dev/null; then
+			type -P "$i"
 			return
 		fi
 	done
 }
 
 bestAvailableEditor=$(first_in_PATH vim vi nano emacs ed)
-editorCommand=${EDITOR:-${VISUAL:-${bestAvailableEditor:-vi}}}
+editorCommand="${EDITOR:-${VISUAL:-${bestAvailableEditor:-vi}}}"
+export editorCommand
 
 # Short name for this script, derived from $0.
 me="${0##*/}"
