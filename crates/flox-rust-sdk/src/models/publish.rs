@@ -216,6 +216,11 @@ impl<'flox> Publish<'flox, Empty> {
 }
 
 impl<'flox> Publish<'flox, NixAnalysis> {
+    /// Read out the current publish state
+    pub fn analysis(&self) -> &Value {
+        self.analysis.deref()
+    }
+
     /// Copy the outputs and dependencies of the package to binary store
     pub async fn upload_binary(self) -> Result<Publish<'flox, NixAnalysis>, PublishError> {
         todo!()
@@ -234,20 +239,24 @@ impl<'flox> Publish<'flox, NixAnalysis> {
     /// Write snapshot to catalog and push to origin
     pub async fn push_snapshot(&self) -> Result<(), PublishError> {
         let mut upstream_repo =
-            UpstreamRepo::clone_repo(&self.publish_flake_ref, &self.flox.temp_dir).await?;
-        let catalog = upstream_repo.get_catalog(&self.flox.system).await?;
+            UpstreamRepo::clone_repo(self.publish_flake_ref.clone_url(), &self.flox.temp_dir)
+                .await?;
+        self.push_snapshot_to(&mut upstream_repo).await
+    }
+
+    /// Write snapshot to a catalog and push to 'origin'
+    ///
+    /// Internal method to test
+    async fn push_snapshot_to(&self, upstream_repo: &mut UpstreamRepo) -> Result<(), PublishError> {
+        let catalog = upstream_repo
+            .get_or_create_catalog(&self.flox.system)
+            .await?;
         if let Ok(Some(_)) = catalog.get_snapshot(self.analysis()) {
             Err(PublishError::SnapshotExists)?;
         }
         catalog.add_snapshot(self.analysis()).await?;
         catalog.push_catalog().await?;
-
         Ok(())
-    }
-
-    /// Read out the current publish state
-    pub fn analysis(&self) -> &Value {
-        self.analysis.deref()
     }
 }
 
@@ -259,14 +268,13 @@ impl<'flox> Publish<'flox, NixAnalysis> {
 struct UpstreamRepo(Git);
 
 impl UpstreamRepo {
-    /// Clone the upstream repo
+    /// Clone an upstream repo
     async fn clone_repo(
-        publish_flake_ref: &PublishFlakeRef,
+        url: impl AsRef<str>,
         temp_dir: impl AsRef<Path>,
     ) -> Result<Self, PublishError> {
-        let url = publish_flake_ref.clone_url();
         let repo_dir = tempfile::tempdir_in(temp_dir).unwrap().into_path(); // todo catch error
-        let repo = <Git as GitProvider>::clone(&url, &repo_dir, false).await?;
+        let repo = <Git as GitProvider>::clone(url.as_ref(), &repo_dir, false).await?;
 
         Ok(Self(repo))
     }
@@ -279,7 +287,10 @@ impl UpstreamRepo {
     ///
     /// `Git` objects can switch branches at any time leaving the repo in an unknown state.
     /// [get_catalog] ensures that only one [UpstreamCatalog] exists at a time by requiring a `&mut self`.
-    async fn get_catalog(&mut self, system: &System) -> Result<UpstreamCatalog, PublishError> {
+    async fn get_or_create_catalog(
+        &mut self,
+        system: &System,
+    ) -> Result<UpstreamCatalog, PublishError> {
         if self.0.list_branches().await? // todo: catch error
             .into_iter().any(|info| info.name == Self::catalog_branch_name(system))
         {
@@ -289,9 +300,6 @@ impl UpstreamRepo {
         } else {
             self.0
                 .checkout(&Self::catalog_branch_name(system), true)
-                .await?;
-            self.0
-                .set_origin(&Self::catalog_branch_name(system), "origin")
                 .await?;
         }
         Ok(UpstreamCatalog(&self.0))
