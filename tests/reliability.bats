@@ -2,13 +2,13 @@
 # -*- mode: bats; -*-
 # ============================================================================ #
 #
-# Test the `flox run' subcommand.
+# Test the `flox' usage of stabilities.
 #
 # ---------------------------------------------------------------------------- #
 
 load test_support.bash;
 
-# bats file_tags=run
+# bats file_tags=stability
 
 
 # ---------------------------------------------------------------------------- #
@@ -45,7 +45,7 @@ setup() {
   [ "$before" != "$after" ]
 }
 
-@test "flox should use only use stability when specified" {
+@test "flox should use only use stability when specified and not the lock" {
   $FLOX_CLI flake lock --override-input flox-floxpkgs/nixpkgs/nixpkgs github:flox/nixpkgs/stable.20230603;
   before=$($FLOX_CLI eval --stability stable -v .#hello --json )
   $FLOX_CLI flake lock --override-input flox-floxpkgs/nixpkgs/nixpkgs github:flox/nixpkgs/stable.20230701;
