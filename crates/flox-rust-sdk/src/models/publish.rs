@@ -357,9 +357,15 @@ impl UpstreamCatalog<'_> {
     ///
     /// Consumers should check if a snapshot already exists with [Self::get_snapshot]
     async fn add_snapshot(&self, snapshot: &Value) -> Result<(), PublishError> {
+        let path = self.get_snapshot_path(snapshot);
+
+        fs::create_dir_all(path.parent().unwrap())?; // only an issue for a git repo in /
+
         let mut snapshot_file = fs::OpenOptions::new()
             .create_new(true)
-            .open(self.get_snapshot_path(snapshot))?;
+            .write(true)
+            .open(&path)?;
+
         serde_json::to_writer(&mut snapshot_file, snapshot)?;
 
         self.0.add(&[&self.get_snapshot_path(snapshot)]).await?;
