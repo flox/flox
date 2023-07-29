@@ -156,10 +156,10 @@ function hash_commands() {
 # TODO replace each use of $_cut and $_tr with shell equivalents.
 hash_commands                                                                  \
 	ansifilter awk 'builtfilter-rs' basename bash cat chmod cmp column cp      \
-	curl cut dasel date dirname flox-gh getent git grep gum id jq ln man mkdir \
-	mktemp mv nix 'nix-editor' 'nix-store' pwd readlink realpath rm rmdir sed  \
-	sh sleep sort ssh stat tail tar tee touch tr uname uuid xargs zgrep        \
-	semver 'parser-util'
+	curl cut dasel date dirname flox-gh getent gh git grep gum id jq ln man    \
+	mkdir mktemp mv nix 'nix-editor' 'nix-store' 'parser-util' pwd readlink    \
+	realpath rm rmdir sed semver sh sleep sort ssh stat tail tar tee touch tr  \
+	uname uuid xargs zgrep
 
 # Return full path of first command available in PATH.
 #
