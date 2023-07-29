@@ -249,9 +249,6 @@ $_cat > $tmpGitConfig <<EOF
 	name = Flox User
 	email = floxuser@example.invalid
 
-[init]
-    defaultBranch = main
-
 [credential "https://git.saas.floxdev.com/"]
     helper = "!f() { test \"\$1\" = get && printf \"username=%s\\\\npassword=%s\\\\n\" $defaultEnvironmentOwner \"\$($_flox_gh auth token -h github.com)\"; }; f"
 

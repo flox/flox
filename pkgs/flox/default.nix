@@ -25,6 +25,8 @@
   fd,
   gnused,
   gitMinimal,
+  flox-gh,
+  gh,
 }: let
   # crane (<https://crane.dev/>) library for building rust packages
   craneLib = inputs.crane.mkLib nixpkgs;
@@ -129,6 +131,11 @@ in
       pname = cargoToml.package.name;
       version = envs.FLOX_VERSION;
       src = flox-src;
+      postPatch = ''
+        substituteInPlace crates/flox/src/utils/init/gitConfig.in \
+	  --replace __flox_gh__ ${flox-gh}/bin/flox-gh \
+	  --replace __gh__ ${gh}/bin/gh
+      '';
 
       cargoArtifacts = cargoDepsArtifacts;
 

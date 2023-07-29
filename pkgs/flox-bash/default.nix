@@ -159,8 +159,6 @@ in
       mkdir -p $out/libexec
       makeWrapper ${nixPatched}/bin/nix $out/libexec/flox/nix --argv0 '$0' \
         --prefix PATH : "${lib.makeBinPath [git]}"
-      makeWrapper ${gh}/bin/gh $out/libexec/flox/gh --argv0 '$0' \
-        --prefix PATH : "${lib.makeBinPath [git]}"
 
       # Rewrite /usr/bin/env bash to the full path of bashInteractive.
       # Use --host to resolve using the runtime path.
