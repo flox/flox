@@ -1,5 +1,5 @@
 diff --git a/cmd/gh/main.go b/cmd/gh/main.go
-index 15af907..6611799 100644
+index 15af9072..66117990 100644
 --- a/cmd/gh/main.go
 +++ b/cmd/gh/main.go
 @@ -55,17 +55,6 @@ func mainRun() exitCode {
@@ -47,7 +47,7 @@ index 15af907..6611799 100644
  }
  
 diff --git a/internal/authflow/flow.go b/internal/authflow/flow.go
-index ddac948..78be21e 100644
+index ddac948c..78be21ef 100644
 --- a/internal/authflow/flow.go
 +++ b/internal/authflow/flow.go
 @@ -19,10 +19,10 @@ import (
@@ -75,7 +75,7 @@ index ddac948..78be21e 100644
  	callbackURI := "http://127.0.0.1/callback"
  	if ghinstance.IsEnterprise(oauthHost) {
 diff --git a/pkg/cmd/auth/login/login.go b/pkg/cmd/auth/login/login.go
-index 84894bf..8bbcae0 100644
+index 84894bf1..352304a3 100644
 --- a/pkg/cmd/auth/login/login.go
 +++ b/pkg/cmd/auth/login/login.go
 @@ -61,7 +61,7 @@ func NewCmdLogin(f *cmdutil.Factory, runF func(*LoginOptions) error) *cobra.Comm
@@ -87,8 +87,62 @@ index 84894bf..8bbcae0 100644
  
  			Alternatively, gh will use the authentication token found in environment variables.
  			This method is most suitable for "headless" use of gh such as in automation. See
+@@ -144,11 +144,7 @@ func loginRun(opts *LoginOptions) error {
+ 
+ 	hostname := opts.Hostname
+ 	if opts.Interactive && hostname == "" {
+-		var err error
+-		hostname, err = promptForHostname(opts)
+-		if err != nil {
+-			return err
+-		}
++		hostname = "github.com"
+ 	}
+ 
+ 	// The go-gh Config object currently does not support case-insensitive lookups for host names,
+@@ -204,23 +200,3 @@ func loginRun(opts *LoginOptions) error {
+ 		SecureStorage: !opts.InsecureStorage,
+ 	})
+ }
+-
+-func promptForHostname(opts *LoginOptions) (string, error) {
+-	options := []string{"GitHub.com", "GitHub Enterprise Server"}
+-	hostType, err := opts.Prompter.Select(
+-		"What account do you want to log into?",
+-		options[0],
+-		options)
+-	if err != nil {
+-		return "", err
+-	}
+-
+-	isEnterprise := hostType == 1
+-
+-	hostname := ghinstance.Default()
+-	if isEnterprise {
+-		hostname, err = opts.Prompter.InputHostname()
+-	}
+-
+-	return hostname, err
+-}
+diff --git a/pkg/cmd/auth/shared/git_credential.go b/pkg/cmd/auth/shared/git_credential.go
+index 8624cf00..026d5bcf 100644
+--- a/pkg/cmd/auth/shared/git_credential.go
++++ b/pkg/cmd/auth/shared/git_credential.go
+@@ -32,11 +32,7 @@ func (flow *GitCredentialFlow) Prompt(hostname string) error {
+ 		return nil
+ 	}
+ 
+-	result, err := flow.Prompter.Confirm("Authenticate Git with your GitHub credentials?", true)
+-	if err != nil {
+-		return err
+-	}
+-	flow.shouldSetup = result
++	flow.shouldSetup = true
+ 
+ 	if flow.shouldSetup {
+ 		if isGitMissing(gitErr) {
 diff --git a/pkg/cmd/auth/shared/login_flow.go b/pkg/cmd/auth/shared/login_flow.go
-index 7c2ff16..0bc3a9b 100644
+index 7c2ff163..5034cd8e 100644
 --- a/pkg/cmd/auth/shared/login_flow.go
 +++ b/pkg/cmd/auth/shared/login_flow.go
 @@ -8,7 +8,6 @@ import (
@@ -99,8 +153,24 @@ index 7c2ff16..0bc3a9b 100644
  	"github.com/cli/cli/v2/api"
  	"github.com/cli/cli/v2/git"
  	"github.com/cli/cli/v2/internal/authflow"
-@@ -66,19 +65,11 @@ func Login(opts *LoginOptions) error {
- 		gitProtocol = strings.ToLower(proto)
+@@ -51,34 +50,14 @@ func Login(opts *LoginOptions) error {
+ 
+ 	gitProtocol := strings.ToLower(opts.GitProtocol)
+ 	if opts.Interactive && gitProtocol == "" {
+-		options := []string{
+-			"HTTPS",
+-			"SSH",
+-		}
+-		result, err := opts.Prompter.Select(
+-			"What is your preferred protocol for Git operations?",
+-			options[0],
+-			options)
+-		if err != nil {
+-			return err
+-		}
+-		proto := options[result]
+-		gitProtocol = strings.ToLower(proto)
++		gitProtocol = "https"
  	}
  
 -	var additionalScopes []string
@@ -119,7 +189,7 @@ index 7c2ff16..0bc3a9b 100644
  
  	var keyToUpload string
  	keyTitle := defaultSSHKeyTitle
-@@ -119,17 +110,6 @@ func Login(opts *LoginOptions) error {
+@@ -119,17 +98,6 @@ func Login(opts *LoginOptions) error {
  				keyToUpload = keyPair.PublicKeyPath
  			}
  		}
@@ -137,7 +207,7 @@ index 7c2ff16..0bc3a9b 100644
  	}
  
  	var authMode int
-@@ -152,18 +132,12 @@ func Login(opts *LoginOptions) error {
+@@ -152,18 +120,12 @@ func Login(opts *LoginOptions) error {
  
  	if authMode == 0 {
  		var err error
@@ -157,8 +227,99 @@ index 7c2ff16..0bc3a9b 100644
  		var err error
  		authToken, err = opts.Prompter.AuthToken()
  		if err != nil {
+@@ -183,11 +145,6 @@ func Login(opts *LoginOptions) error {
+ 		}
+ 	}
+ 
+-	if gitProtocol != "" {
+-		fmt.Fprintf(opts.IO.ErrOut, "- gh config set -h %s git_protocol %s\n", hostname, gitProtocol)
+-		fmt.Fprintf(opts.IO.ErrOut, "%s Configured git protocol\n", cs.SuccessIcon())
+-	}
+-
+ 	if err := cfg.Login(hostname, username, authToken, gitProtocol, opts.SecureStorage); err != nil {
+ 		return err
+ 	}
+@@ -216,18 +173,6 @@ func Login(opts *LoginOptions) error {
+ 	return nil
+ }
+ 
+-func scopesSentence(scopes []string, isEnterprise bool) string {
+-	quoted := make([]string, len(scopes))
+-	for i, s := range scopes {
+-		quoted[i] = fmt.Sprintf("'%s'", s)
+-		if s == "workflow" && isEnterprise {
+-			// remove when GHE 2.x reaches EOL
+-			quoted[i] += " (GHE 3.0+)"
+-		}
+-	}
+-	return strings.Join(quoted, ", ")
+-}
+-
+ func sshKeyUpload(httpClient *http.Client, hostname, keyFile string, title string) (bool, error) {
+ 	f, err := os.Open(keyFile)
+ 	if err != nil {
+diff --git a/pkg/cmd/auth/shared/login_flow_test.go b/pkg/cmd/auth/shared/login_flow_test.go
+index 92ae7591..8bd2949f 100644
+--- a/pkg/cmd/auth/shared/login_flow_test.go
++++ b/pkg/cmd/auth/shared/login_flow_test.go
+@@ -114,55 +114,3 @@ func TestLogin_ssh(t *testing.T) {
+ 	assert.Equal(t, "ATOKEN", cfg["example.com:oauth_token"])
+ 	assert.Equal(t, "ssh", cfg["example.com:git_protocol"])
+ }
+-
+-func Test_scopesSentence(t *testing.T) {
+-	type args struct {
+-		scopes       []string
+-		isEnterprise bool
+-	}
+-	tests := []struct {
+-		name string
+-		args args
+-		want string
+-	}{
+-		{
+-			name: "basic scopes",
+-			args: args{
+-				scopes:       []string{"repo", "read:org"},
+-				isEnterprise: false,
+-			},
+-			want: "'repo', 'read:org'",
+-		},
+-		{
+-			name: "empty",
+-			args: args{
+-				scopes:       []string(nil),
+-				isEnterprise: false,
+-			},
+-			want: "",
+-		},
+-		{
+-			name: "workflow scope for dotcom",
+-			args: args{
+-				scopes:       []string{"repo", "workflow"},
+-				isEnterprise: false,
+-			},
+-			want: "'repo', 'workflow'",
+-		},
+-		{
+-			name: "workflow scope for GHE",
+-			args: args{
+-				scopes:       []string{"repo", "workflow"},
+-				isEnterprise: true,
+-			},
+-			want: "'repo', 'workflow' (GHE 3.0+)",
+-		},
+-	}
+-	for _, tt := range tests {
+-		t.Run(tt.name, func(t *testing.T) {
+-			if got := scopesSentence(tt.args.scopes, tt.args.isEnterprise); got != tt.want {
+-				t.Errorf("scopesSentence() = %q, want %q", got, tt.want)
+-			}
+-		})
+-	}
+-}
 diff --git a/pkg/cmd/auth/shared/oauth_scopes.go b/pkg/cmd/auth/shared/oauth_scopes.go
-index 8d99960..49af3aa 100644
+index 8d999601..49af3aa6 100644
 --- a/pkg/cmd/auth/shared/oauth_scopes.go
 +++ b/pkg/cmd/auth/shared/oauth_scopes.go
 @@ -63,44 +63,14 @@ func GetScopes(httpClient httpClient, hostname, authToken string) (string, error
@@ -210,10 +371,18 @@ index 8d99960..49af3aa 100644
  	return nil
  }
 diff --git a/pkg/cmd/auth/status/status.go b/pkg/cmd/auth/status/status.go
-index 77a5f12..26bf2df 100644
+index 77a5f125..55135aa1 100644
 --- a/pkg/cmd/auth/status/status.go
 +++ b/pkg/cmd/auth/status/status.go
-@@ -147,9 +147,9 @@ func statusRun(opts *StatusOptions) error {
+@@ -139,17 +139,12 @@ func statusRun(opts *StatusOptions) error {
+ 			}
+ 
+ 			addMsg("%s Logged in to %s as %s (%s)", cs.SuccessIcon(), hostname, cs.Bold(username), tokenSource)
+-			proto, _ := authCfg.GitProtocol(hostname)
+-			if proto != "" {
+-				addMsg("%s Git operations for %s configured to use %s protocol.",
+-					cs.SuccessIcon(), hostname, cs.Bold(proto))
+-			}
  			addMsg("%s Token: %s", cs.SuccessIcon(), displayToken(token, opts.ShowToken))
  
  			if scopesHeader != "" {
