@@ -239,7 +239,7 @@ export NIX_SSL_CERT_FILE="${NIX_SSL_CERT_FILE:-$SSL_CERT_FILE}"
 # Similarly configure git config by way of $GIT_CONFIG_SYSTEM. Note that
 # we do it by way of this env variable because Nix doesn't provide a
 # passthru mechanism for passing options to git invocations. (?)
-gitConfig="$FLOX_CONFIG_HOME/gitconfig"
+floxmetaGitConfig="$FLOX_CONFIG_HOME/gitconfig"
 
 tmpGitConfig=$($_mktemp --tmpdir=$FLOX_CONFIG_HOME)
 $_chmod 600 $tmpGitConfig
@@ -258,78 +258,13 @@ $_cat > $tmpGitConfig <<EOF
 
 EOF
 
-# Honor existing GIT_CONFIG_SYSTEM variable and/or default /etc/gitconfig.
-if [ -n "${GIT_CONFIG_SYSTEM:-}" ]; then
-	if [ -n "$FLOX_ORIGINAL_GIT_CONFIG_SYSTEM" ]; then
-		# Reset GIT_CONFIG_SYSTEM to reflect the original value
-		# observed before starting flox subshell (see below).
-		GIT_CONFIG_SYSTEM="$FLOX_ORIGINAL_GIT_CONFIG_SYSTEM"
-	fi
-else
-	if [ -e "/etc/gitconfig" ]; then
-		GIT_CONFIG_SYSTEM="/etc/gitconfig"
-	fi
-fi
-
-# If system gitconfig exists then include it, but check first to make sure
-# user hasn't requested that we include our own gitconfig file(!).
-if [[ -n "${GIT_CONFIG_SYSTEM:-}" ]] && [[ -e "$GIT_CONFIG_SYSTEM" ]] &&  \
-   [[ "$GIT_CONFIG_SYSTEM" != "$gitConfig" ]]
-then
-	# Save first/original observed variable to disambiguate our use
-	# of GIT_CONFIG_SYSTEM in subshells.
-	export FLOX_ORIGINAL_GIT_CONFIG_SYSTEM="$GIT_CONFIG_SYSTEM"
-	$_cat >> "$tmpGitConfig" <<EOF
-[include]
-	path = $GIT_CONFIG_SYSTEM
-
-EOF
-fi
-
 # Compare generated gitconfig to cached version.
-if $_cmp --quiet "$tmpGitConfig" "$gitConfig"; then
+if $_cmp --quiet "$tmpGitConfig" "$floxmetaGitConfig"; then
 	$_rm "$tmpGitConfig"
 else
-	warn "Updating $gitConfig"
-	$_mv -f "$tmpGitConfig" "$gitConfig"
+	warn "Updating $floxmetaGitConfig"
+	$_mv -f "$tmpGitConfig" "$floxmetaGitConfig"
 fi
-
-# Override system gitconfig.
-export GIT_CONFIG_SYSTEM="$gitConfig"
-
-# -----------------
-
-# Similarly configure ssh config by way of $GIT_CONFIG_SYSTEM. Note that
-# we do it by way of this env variable because Nix doesn't provide a
-# passthru mechanism for passing options to git invocations. (?)
-sshConfig="$FLOX_CONFIG_HOME/sshconfig"
-
-tmpSshConfig=$($_mktemp --tmpdir=$FLOX_CONFIG_HOME)
-$_chmod 600 $tmpSshConfig
-$_cat >> $tmpSshConfig <<EOF
-# Automatically generated - do not edit.
-PasswordAuthentication no
-EOF
-for i in $FLOX_CONFIG_HOME/sshkeys/*; do
-	$_cat >> $tmpSshConfig <<EOF
-
-Host $($_basename "$i")
-    User gitolite
-    Hostname saas.floxdev.com
-    PreferredAuthentications publickey
-    IdentityFile $i
-EOF
-done
-
-# Compare generated gitconfig to cached version.
-if $_cmp --quiet "$tmpSshConfig" "$sshConfig"; then
-	$_rm "$tmpSshConfig"
-else
-	warn "Updating $sshConfig"
-	$_mv -f "$tmpSshConfig" "$sshConfig"
-fi
-
-# -----------------
 
 if [ -n "${NIX_GET_COMPLETIONS:-}" ]; then
 	export FLOX_ORIGINAL_NIX_GET_COMPLETIONS="$NIX_GET_COMPLETIONS"

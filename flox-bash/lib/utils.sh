@@ -1330,7 +1330,7 @@ function selectAttrPath() {
 function checkGitRepoExists() {
 	trace "$@"
 	local origin="${1/\?*/}"
-	githubHelperGit ls-remote "$origin" >/dev/null 2>&1
+	$_invoke_git ls-remote "$origin" >/dev/null 2>&1
 }
 
 function ensureGHRepoExists() {
