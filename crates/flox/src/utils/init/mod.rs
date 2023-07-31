@@ -95,11 +95,9 @@ pub async fn init_git_conf(temp_dir: &Path, config_dir: &Path) -> Result<()> {
     // the flox specific git config
     let git_config = format!(
         include_str!("./gitConfig.in"),
-        floxhub_credential_helper = format!(
-            r#"f() {{ test \"$1\" = get && printf \"username=%s\\npassword=%s\\n\" {} \"$(__flox_gh__ auth token -h github.com)\"; }}; f"#,
-            "limeytexan" // default_owner
-        ),
-        github_credential_helper = "!__gh__ auth git-credential"
+        default_owner = "limeytexan", // TODO: fix
+        flox_gh_bin = env!("FLOX_GH_BIN"),
+        gh_bin = env!("GH_BIN")
     );
 
     // write or update gitconfig if needed

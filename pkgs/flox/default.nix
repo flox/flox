@@ -40,6 +40,8 @@
       NIX_BIN = "${flox-bash}/libexec/flox/nix";
       GIT_BIN = "${gitMinimal}/bin/git";
       PARSER_UTIL_BIN = parser-util.outPath + "/bin/parser-util";
+      FLOX_GH_BIN = flox-gh.outPath + "/bin/flox-gh";
+      GH_BIN = gh.outPath + "/bin/gh";
 
       # path to bash impl of flox to dispatch unimplemented commands to
       FLOX_SH = "${flox-bash}/libexec/flox/flox";
@@ -131,11 +133,6 @@ in
       pname = cargoToml.package.name;
       version = envs.FLOX_VERSION;
       src = flox-src;
-      postPatch = ''
-        substituteInPlace crates/flox/src/utils/init/gitConfig.in \
-	  --replace __flox_gh__ ${flox-gh}/bin/flox-gh \
-	  --replace __gh__ ${gh}/bin/gh
-      '';
 
       cargoArtifacts = cargoDepsArtifacts;
 

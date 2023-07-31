@@ -250,12 +250,11 @@ $_cat > $tmpGitConfig <<EOF
 	email = floxuser@example.invalid
 
 [credential "https://git.saas.floxdev.com/"]
-    helper = "!f() { test \"\$1\" = get && printf \"username=%s\\\\npassword=%s\\\\n\" $defaultEnvironmentOwner \"\$($_flox_gh auth token -h github.com)\"; }; f"
+	helper = "!f() { test \"\$1\" = get && printf \"username=%s\\\\npassword=%s\\\\n\" $defaultEnvironmentOwner \"\$($_flox_gh auth token -h github.com)\"; }; f"
 
 # Temporary while we transition to flox gitforge.
 [credential "https://github.com/"]
-    helper = "!${_gh?} auth git-credential"
-
+	helper = "!${_gh?} auth git-credential"
 EOF
 
 # Compare generated gitconfig to cached version.

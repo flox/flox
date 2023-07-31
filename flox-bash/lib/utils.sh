@@ -588,9 +588,10 @@ function initFloxUserMetaJSON() {
 	registry "$workDir"/floxUserMeta.json 1 get floxClientUUID >/dev/null 2>&1 || \
 		registry "$workDir"/floxUserMeta.json 1 set floxClientUUID $($_uuid)
 
-	# Add and commit.
+	# Add floxUserMeta.json.
 	$invoke_git -C "$workDir" add floxUserMeta.json
-	$invoke_git -C "$workDir" commit -m "$message" --quiet
+	# And commit, taking care to use floxmetaHelperGit for setting user email.
+	floxmetaHelperGit -C "$workDir" commit -m "$message" --quiet
 
 	# Push changes back to bare repository.
 	$_git -C $workDir push --quiet origin $defaultBranch
