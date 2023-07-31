@@ -140,9 +140,9 @@ function hash_commands() {
 		# Make note of them here for displaying verbose output in invoke().
 		case "$i" in
 		nix | nix-store)
-			exported_variables["$(type -P "$i")"]="NIX_REMOTE NIX_SSL_CERT_FILE NIX_USER_CONF_FILES GIT_CONFIG_SYSTEM GIT_SSH_COMMAND" ;;
+			exported_variables["$(type -P "$i")"]="NIX_REMOTE NIX_SSL_CERT_FILE NIX_USER_CONF_FILES GIT_CONFIG_GLOBAL GIT_CONFIG_SYSTEM" ;;
 		git)
-			exported_variables["$(type -P "$i")"]="FLOX_CONFIG_HOME FLOX_STATE_HOME FLOX_DATA_HOME GIT_CONFIG_SYSTEM GIT_SSH_COMMAND" ;;
+			exported_variables["$(type -P "$i")"]="FLOX_CONFIG_HOME FLOX_STATE_HOME FLOX_DATA_HOME GIT_CONFIG_GLOBAL GIT_CONFIG_SYSTEM" ;;
 		flox-gh)
 			exported_variables["$(type -P "$i")"]="FLOX_CONFIG_HOME FLOX_STATE_HOME FLOX_DATA_HOME" ;;
 		*) :; ;;

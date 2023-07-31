@@ -397,11 +397,8 @@ function temporaryMigrateGitHubTo030Floxdev() {
 			for i in $workDir/.git/refs/remotes/oldorigin/*; do
 				branchName="$($_basename "$i")"
 				if [[ $branchName == "floxmain" ]]; then
-					# Always push floxmain and just accept the risk that users may
-					# have different clones out of sync on different hosts/systems,
-					# but otherwise don't push a branch if it already exists on
-					# the new origin.
-					floxmetaHelperGit -C "$workDir" push --force --quiet neworigin "oldorigin/$branchName:refs/heads/$branchName"
+					# Push to floxmain last.
+					continue
 				elif [[ -e "$workDir/.git/refs/remotes/neworigin/$branchName" ]]; then
 					warn "$branchName already exists upstream, skipping"
 				else
@@ -409,6 +406,11 @@ function temporaryMigrateGitHubTo030Floxdev() {
 					floxmetaHelperGit -C "$workDir" push --quiet neworigin "oldorigin/$branchName:refs/heads/$branchName"
 				fi
 			done
+			# Always push floxmain and just accept the risk that users may
+			# have different clones out of sync on different hosts/systems,
+			# but otherwise don't push a branch if it already exists on
+			# the new origin.
+			floxmetaHelperGit -C "$workDir" push --force --quiet neworigin "oldorigin/floxmain:refs/heads/floxmain"
 			# Finally delete original origin and rename neworigin into place.
 			$invoke_git -C "$realEnvironmentMetaDir" remote set-url origin "$neworigin"
 			floxmetaHelperGit -C "$realEnvironmentMetaDir" fetch --quiet
