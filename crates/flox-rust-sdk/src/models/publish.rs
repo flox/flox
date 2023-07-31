@@ -918,6 +918,9 @@ mod tests {
         .expect("Should clone repo");
     }
 
+    // disabled because nix build does not have git user/email config,
+    // TODO fix tests to work with local repos
+    #[cfg(feature = "impure-unit-tests")]
     /// Check if we successfully clone a repo
     #[tokio::test]
     async fn create_catalog_branch() {
@@ -950,6 +953,9 @@ mod tests {
         assert_eq!(catalog.0.list_branches().await.unwrap().len(), 1);
     }
 
+    // disabled because nix build does not have git user/email config,
+    // TODO fix tests to work with local repos
+    #[cfg(feature = "impure-unit-tests")]
     /// Check if we successfully clone a repo
     #[tokio::test]
     async fn test_add_snapshot() {
@@ -995,6 +1001,9 @@ mod tests {
         );
     }
 
+    // disabled because nix build does not have git user/email config,
+    // TODO fix tests to work with local repos
+    #[cfg(feature = "impure-unit-tests")]
     /// Check if we successfully clone a repo
     #[tokio::test]
     async fn test_push_snapshot() {
