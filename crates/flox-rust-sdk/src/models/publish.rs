@@ -316,7 +316,7 @@ struct UpstreamCatalog<'a>(&'a Git);
 impl UpstreamCatalog<'_> {
     /// Mostly naïve approxiaton of a snapshot path
     ///
-    ///     /packages/<pname>/<version>.json
+    ///  /packages/<pname>/<version>.json
     ///
     /// TODO: fix before releasing publish!
     fn get_snapshot_path(&self, snapshot: &Value) -> PathBuf {
