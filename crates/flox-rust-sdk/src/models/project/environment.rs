@@ -188,7 +188,7 @@ impl<Git: GitProvider, A: GitAccess<Git>> Environment<'_, Git, A> {
     {
         let nix = self.project.flox.nix(Default::default());
 
-        let mut installable = self.installable().unwrap();
+        let mut installable = self.flake_attribute().unwrap();
         // attributes are known safe values
         installable
             .attr_path

@@ -431,14 +431,13 @@ impl EnvironmentRef<'_> {
     where
         Eval: RunJson<Nix>,
     {
-        let env = match &self {
+        let env: CommonEnvironment<'flox, Git> = match self {
             EnvironmentRef::Named(Named { owner, name }) => {
                 let floxmeta = Floxmeta::get_floxmeta(flox, owner).await?;
                 let environment = floxmeta.environment(name).await?;
                 CommonEnvironment::Named(environment)
             },
             EnvironmentRef::Project(Project {
-                flox,
                 flake_attribute,
                 workdir,
                 name,
