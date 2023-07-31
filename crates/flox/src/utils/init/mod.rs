@@ -1,4 +1,5 @@
 use std::collections::{BTreeMap, HashMap};
+use std::env;
 use std::path::Path;
 
 use anyhow::{Context, Result};
@@ -6,7 +7,7 @@ use indexmap::IndexMap;
 use indoc::indoc;
 use log::{debug, info};
 use serde::Deserialize;
-use tokio::io::AsyncWriteExt;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 mod logger;
 mod metrics;
@@ -90,7 +91,7 @@ pub fn init_access_tokens(
 }
 
 pub async fn init_git_conf(temp_dir: &Path, config_dir: &Path) -> Result<()> {
-    let flox_system_conf_path = config_dir.join("gitconfig");
+    let flox_global_conf_path = config_dir.join("gitconfig");
 
     // the flox specific git config
     let git_config = format!(
@@ -101,19 +102,32 @@ pub async fn init_git_conf(temp_dir: &Path, config_dir: &Path) -> Result<()> {
     );
 
     // write or update gitconfig if needed
-    // create a file in the process directory containing the git config
-    let temp_system_conf_path = temp_dir.join("gitconfig");
-    tokio::fs::OpenOptions::new()
-        .write(true)
-        .mode(0o600)
-        .create_new(true)
-        .open(&temp_system_conf_path)
-        .await?
-        .write_all(git_config.as_bytes())
-        .await?;
+    if !flox_global_conf_path.exists() || {
+        let mut contents = String::new(); // todo: allocate once with some room
 
-    info!("Updating {:#?}", &flox_system_conf_path);
-    tokio::fs::rename(temp_system_conf_path, &flox_system_conf_path).await?;
+        tokio::fs::OpenOptions::new()
+            .read(true)
+            .open(&flox_global_conf_path)
+            .await?
+            .read_to_string(&mut contents)
+            .await?;
+
+        contents != git_config
+    } {
+        // create a file in the process directory containing the git config
+        let temp_global_conf_path = temp_dir.join("gitconfig");
+        tokio::fs::OpenOptions::new()
+            .write(true)
+            .mode(0o600)
+            .create_new(true)
+            .open(&temp_global_conf_path)
+            .await?
+            .write_all(git_config.as_bytes())
+            .await?;
+
+        info!("Updating {:#?}", &flox_global_conf_path);
+        tokio::fs::rename(temp_global_conf_path, &flox_global_conf_path).await?;
+    }
 
     Ok(())
 }
