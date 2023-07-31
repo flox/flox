@@ -80,7 +80,9 @@ impl From<InstalledPackage> for FloxPackage {
     fn from(value: InstalledPackage) -> Self {
         match value {
             InstalledPackage::Catalog(triple, _) => Self::Triple(triple),
-            InstalledPackage::Installable(installable, _) => Self::Installable(installable),
+            InstalledPackage::Installable(flake_attr, _) => {
+                Self::Installable(Installable::FlakeAttribute(flake_attr))
+            },
             InstalledPackage::StorePath(path) => Self::StorePath(path),
         }
     }
