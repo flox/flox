@@ -119,7 +119,7 @@
       pkg-config # for openssl
     ];
 
-    inherit (envs) LIBSSH2_SYS_USE_PKG_CONFIG;
+    inherit (envs) LIBSSH2_SYS_USE_PKG_CONFIG PARSER_UTIL_BIN;
   };
 in
   craneLib.buildPackage ({
