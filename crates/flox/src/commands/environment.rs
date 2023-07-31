@@ -1,15 +1,18 @@
 use std::path::PathBuf;
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use bpaf::{construct, Bpaf, Parser, ShellComp};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::CommonEnvironment;
 use flox_rust_sdk::models::floxmeta::Floxmeta;
+use flox_rust_sdk::nix::command::StoreGc;
 use flox_rust_sdk::nix::command_line::NixCommandLine;
+use flox_rust_sdk::nix::Run;
 use flox_rust_sdk::prelude::flox_package::FloxPackage;
 use flox_rust_sdk::providers::git::{GitCommandProvider, GitProvider};
 use flox_types::constants::{DEFAULT_CHANNEL, LATEST_VERSION};
 use itertools::Itertools;
+use log::info;
 use serde_json::json;
 
 use crate::config::features::Feature;
@@ -26,6 +29,28 @@ pub type EnvironmentRef = String;
 
 impl EnvironmentCommands {
     pub async fn handle(&self, flox: Flox) -> Result<()> {
+        match self {
+            EnvironmentCommands::List { .. } => subcommand_metric!("list"),
+            EnvironmentCommands::Envs => subcommand_metric!("envs"),
+            EnvironmentCommands::Activate { .. } => subcommand_metric!("activate"),
+            EnvironmentCommands::Create { .. } => subcommand_metric!("create"),
+            EnvironmentCommands::Destroy { .. } => subcommand_metric!("destroy"),
+            EnvironmentCommands::Edit { .. } => subcommand_metric!("edit"),
+            EnvironmentCommands::Export { .. } => subcommand_metric!("export"),
+            EnvironmentCommands::Generations { .. } => subcommand_metric!("generations"),
+            EnvironmentCommands::Git { .. } => subcommand_metric!("git"),
+            EnvironmentCommands::History { .. } => subcommand_metric!("history"),
+            EnvironmentCommands::Import { .. } => subcommand_metric!("import"),
+            EnvironmentCommands::Install { .. } => subcommand_metric!("install"),
+            EnvironmentCommands::Push { .. } => subcommand_metric!("push"),
+            EnvironmentCommands::Pull { .. } => subcommand_metric!("pull"),
+            EnvironmentCommands::Remove { .. } => subcommand_metric!("remove"),
+            EnvironmentCommands::Rollback { .. } => subcommand_metric!("rollback"),
+            EnvironmentCommands::SwitchGeneration { .. } => subcommand_metric!("switch"),
+            EnvironmentCommands::Upgrade { .. } => subcommand_metric!("upgrade"),
+            EnvironmentCommands::WipeHistory { .. } => subcommand_metric!("wipe-history"),
+        }
+
         match self {
             EnvironmentCommands::List {
                 environment_args: _,
@@ -89,8 +114,6 @@ impl EnvironmentCommands {
                 environment_args: EnvironmentArgs { .. },
                 environment,
             } if !Feature::Env.is_forwarded()? => {
-                subcommand_metric!("install");
-
                 let packages: Vec<_> = packages
                     .iter()
                     .map(|package| FloxPackage::parse(package, &flox.channels, DEFAULT_CHANNEL))
@@ -117,6 +140,53 @@ impl EnvironmentCommands {
                     .install(&packages)
                     .await
                     .map_err(|_| anyhow::anyhow!("could not install packages"))?;
+            },
+
+            EnvironmentCommands::WipeHistory {
+                // TODO use environment_args.system?
+                environment_args: _,
+                environment,
+            } => {
+                let environment_name = environment.as_ref().map(|e| e.to_str().unwrap());
+                let environment_ref: environment_ref::EnvironmentRef =
+                    resolve_environment_ref::<GitCommandProvider>(
+                        &flox,
+                        "wipe-history",
+                        environment_name,
+                    )
+                    .await?;
+
+                let environment = environment_ref
+                    .to_env::<GitCommandProvider, NixCommandLine>(&flox)
+                    .await
+                    .context("Environment not found")?;
+
+                match environment {
+                    CommonEnvironment::Named(env) => {
+                        if env.delete_symlinks().await? {
+                            // The flox nix instance is created with `--quiet --quiet`
+                            // because nix logs are passed to stderr unfiltered.
+                            // nix store gc logs are more useful,
+                            // thus we use 3 `--verbose` to have them appear.
+                            let nix = flox.nix::<NixCommandLine>(vec![
+                                "--verbose".to_string(),
+                                "--verbose".to_string(),
+                                "--verbose".to_string(),
+                            ]);
+                            let store_gc_command = StoreGc {
+                                ..StoreGc::default()
+                            };
+
+                            info!("Running garbage collection. This may take a while...");
+                            store_gc_command.run(&nix, &Default::default()).await?;
+                        } else {
+                            info!("No old generations found to clean up.")
+                        }
+                    },
+                    CommonEnvironment::Project(_) => {
+                        bail!("can't wipe-history for project environment; project environments only keep the most recent build.");
+                    },
+                }
             },
 
             _ => flox_forward(&flox).await?,
@@ -204,7 +274,7 @@ pub enum EnvironmentCommands {
 
     /// activate environment:
     ///
-    /// * in current shell: . <(flox activate)
+    /// * in current shell: eval "$(flox activate)"
     /// * in subshell: flox activate
     /// * for command: flox activate -- <command> <args>
     #[bpaf(command)]
@@ -253,6 +323,10 @@ pub enum EnvironmentCommands {
 
         #[bpaf(long, short, argument("ENV"))]
         environment: Option<EnvironmentRef>,
+
+        /// Replace environment declaration with that in FILE
+        #[bpaf(long, short, argument("FILE"))]
+        file: Option<PathBuf>,
     },
 
     /// export declarative environment manifest to STDOUT
@@ -430,7 +504,7 @@ pub enum EnvironmentCommands {
         packages: Vec<String>,
     },
 
-    /// delete non-current versions of an environment
+    /// delete builds of non-current versions of an environment
     #[bpaf(command("wipe-history"))]
     WipeHistory {
         #[bpaf(external(environment_args), group_help("Environment Options"))]

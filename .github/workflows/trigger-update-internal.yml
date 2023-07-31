@@ -1,9 +1,10 @@
-name: "Trigger Update of floxpkgs/index"
+name: "Trigger Update of floxpkgs-intenal"
 
 on:
   push:
     branches:
       - main
+      - latest
   workflow_dispatch:
 
 jobs:

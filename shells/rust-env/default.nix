@@ -32,6 +32,7 @@ mkShell ({
       clippy
       rust-analyzer
       rust.packages.stable.rustPlatform.rustLibSrc
+      rustc
     ];
     shellHook = ''
       ${self.checks.pre-commit-check.shellHook}

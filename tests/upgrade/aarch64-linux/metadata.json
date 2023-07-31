@@ -1,0 +1,24 @@
+{
+  "currentGen": "2",
+  "generations": {
+    "1": {
+      "created": 1679335276,
+      "lastActive": 1679335293,
+      "logMessage": [
+        "rok installed stable.nixpkgs-flox-upgrade-test.curl"
+      ],
+      "path": "/nix/store/29wzdqb26g7g3pap4w70xwyr7k5bwczb-floxShell",
+      "version": 2
+    },
+    "2": {
+      "created": 1679335293,
+      "lastActive": 1679335293,
+      "logMessage": [
+        "rok installed stable.nixpkgs-flox-upgrade-test.ripgrep"
+      ],
+      "path": "/nix/store/d0cqq408dfkgxcf36cjgqyywkawh38kb-floxShell",
+      "version": 2
+    }
+  },
+  "version": 1
+}

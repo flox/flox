@@ -4,7 +4,8 @@ use std::path::Path;
 
 use anyhow::{Context, Result};
 use indexmap::IndexMap;
-use log::{debug, info};
+use indoc::indoc;
+use log::{debug, info, warn};
 use serde::Deserialize;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
@@ -28,16 +29,29 @@ pub fn init_access_tokens(
 
     #[derive(Deserialize)]
     struct GhHost {
-        oauth_token: String,
+        oauth_token: Option<String>,
     }
 
     let gh_config_file = xdg::BaseDirectories::with_prefix("gh")?.get_config_file("hosts.yml");
     let gh_tokens: BTreeMap<String, String> = if gh_config_file.exists() {
-        serde_yaml::from_reader::<_, IndexMap<String, GhHost>>(std::fs::File::open(gh_config_file)?)
-            .context("Could not read `gh` config file")?
-            .into_iter()
-            .map(|(k, v)| (k, v.oauth_token))
-            .collect()
+        serde_yaml::from_reader::<_, IndexMap<String, GhHost>>(std::fs::File::open(
+            &gh_config_file,
+        )?)
+        .context("Could not read `gh` config file")?
+        .into_iter()
+        .filter_map(|(host, v)| {
+            if v.oauth_token.is_none() {
+                warn!(
+                    indoc! {"
+                    gh config ({gh_config_file:?}): {host}: no `oauth_token` specified
+                "},
+                    gh_config_file = gh_config_file,
+                    host = host
+                );
+            }
+            v.oauth_token.map(|token| (host, token))
+        })
+        .collect()
     } else {
         Default::default()
     };
@@ -55,7 +69,7 @@ pub fn init_access_tokens(
 
             match (k.trim(), v.trim()) {
                 ("access-tokens", tt) | ("extra-access-tokens", tt) => {
-                    tokens.extend(tt.split_ascii_whitespace().into_iter().map(|t| {
+                    tokens.extend(tt.split_ascii_whitespace().map(|t| {
                         let (tk, tv) = t.split_once('=').unwrap();
                         (tk.to_string(), tv.to_string())
                     }));
@@ -165,7 +179,7 @@ pub async fn init_git_conf(temp_dir: &Path, config_dir: &Path) -> Result<()> {
             .write_all(git_config.as_bytes())
             .await?;
 
-        info!("Updating git config {:#?}", &flox_system_conf_path);
+        info!("Updating {:#?}", &flox_system_conf_path);
         tokio::fs::rename(temp_system_conf_path, &flox_system_conf_path).await?;
     }
 

@@ -10,14 +10,14 @@ use flox_rust_sdk::nix::Run;
 use flox_rust_sdk::prelude::Channel;
 use flox_types::stability::Stability;
 use fslock::LockFile;
-use log::warn;
+use indoc::indoc;
+use log::info;
 use serde::Serialize;
 use tokio::fs;
 use toml_edit::Key;
 
 use crate::config::features::Feature;
-use crate::config::Config;
-use crate::utils::init::init_telemetry_consent;
+use crate::config::{Config, ReadWriteError, FLOX_CONFIG_FILE};
 use crate::utils::metrics::{
     METRICS_EVENTS_FILE_NAME,
     METRICS_LOCK_FILE_NAME,
@@ -31,12 +31,17 @@ pub struct GeneralArgs {}
 impl GeneralCommands {
     pub async fn handle(&self, mut config: Config, mut flox: Flox) -> Result<()> {
         match self {
+            GeneralCommands::Gh(_) => subcommand_metric!("gh"),
+            GeneralCommands::Config(_) => subcommand_metric!("config"),
+            GeneralCommands::ResetMetrics => subcommand_metric!("reset-metrics"),
+            GeneralCommands::Nix(_) => subcommand_metric!("nix"),
+        }
+
+        match self {
             GeneralCommands::Nix(_) if Feature::Nix.is_forwarded()? => flox_forward(&flox).await?,
 
             // To be moved to packages - figure out completions again
             GeneralCommands::Nix(wrapped) => {
-                subcommand_metric!("nix");
-
                 // mutable state hurray :/
                 config.flox.stability = {
                     if let Some(ref stability) = wrapped.stability {
@@ -82,7 +87,19 @@ impl GeneralCommands {
                     }
                 }
 
-                init_telemetry_consent(&flox.data_dir, &flox.cache_dir).await?;
+                let notice = indoc! {"
+                    Sucessfully reset telemetry ID for this machine!
+
+                    A new ID will be assigned next time you use flox.
+
+                    The collection of metrics can be disabled in the following ways:
+
+                      environment: FLOX_DISABLE_METRICS=true
+                        user-wide: flox config --set-bool disable_metrics true
+                      system-wide: update /etc/flox.toml as described in flox(1)
+                "};
+
+                info!("{notice}");
             },
 
             GeneralCommands::Config(config_args) => config_args.handle(config, flox).await?,
@@ -137,40 +154,28 @@ impl ConfigArgs {
             key: impl AsRef<str>,
             value: Option<V>,
         ) -> Result<()> {
-            let key_path = Key::parse(key.as_ref()).context("Could not parse key")?;
+            let query = Key::parse(key.as_ref()).context("Could not parse key")?;
 
-            let config_file_path = config_dir.join("flox.toml");
-            let config_file_contents = match fs::read_to_string(&config_file_path).await {
-                Ok(s) => Ok(Some(s)),
-                Err(e) if e.kind() == io::ErrorKind::NotFound => {
-                    warn!("No existing user config file found");
-                    Ok(None)
-                },
-                Err(e) => Err(e).context("Could read current config file.\nPlease verify the format or reset using `flox config --reset`"),
-            }?;
-            let config_file_contents = Config::write_to(config_file_contents, &key_path, value)
-                .context("Could not write config value")?;
+            let config_file_path = config_dir.join(FLOX_CONFIG_FILE);
 
-            write_config(temp_dir, config_dir, config_file_contents).await?;
-            Ok(())
-        }
-
-        async fn write_config(
-            temp_dir: &Path,
-            config_dir: &Path,
-            content: impl AsRef<[u8]>,
-        ) -> Result<()> {
-            let tempfile = tempfile::Builder::new().tempfile_in(temp_dir)?;
-            fs::write(&tempfile, content)
-                .await
-                .context("Could not write config file")?;
-            tempfile.persist(config_dir.join("flox.toml"))?;
+            match Config::write_to_in(config_file_path, temp_dir, &query, value) {
+                err @ Err(ReadWriteError::ReadConfig(_)) => err.context("Could not read current config file.\nPlease verify the format or reset using `flox config --reset`")?,
+                err @ Err(_) => err?,
+                Ok(()) => ()
+            }
             Ok(())
         }
 
         match self {
             ConfigArgs::List => println!("{}", config.get(&[])?),
-            ConfigArgs::Reset => write_config(&flox.temp_dir, &flox.config_dir, "").await?,
+            ConfigArgs::Reset => {
+                match fs::remove_file(&flox.config_dir.join(FLOX_CONFIG_FILE)).await {
+                    Err(err) if err.kind() != io::ErrorKind::NotFound => {
+                        Err(err).context("Could not reset config file")?
+                    },
+                    _ => (),
+                }
+            },
             ConfigArgs::Set(ConfigSet { key, value, .. }) => {
                 update_config(&flox.config_dir, &flox.temp_dir, key, Some(value)).await?
             },
@@ -194,8 +199,8 @@ impl ConfigArgs {
                     key,
                     Some(
                         value
-                            .parse::<i32>()
-                            .context(format!("could not parse '{value}' as number"))?,
+                            .parse::<bool>()
+                            .context(format!("could not parse '{value}' as bool"))?,
                     ),
                 )
                 .await?

@@ -10,16 +10,15 @@ on:
           Which SemVer component shall this release increment?
           Leave on 'AUTO' to have commitizen pick the increment based on commits.
         options:
-        - AUTO
-        - MINOR
-        - PATCH
+          - AUTO
+          - MINOR
+          - PATCH
 
 jobs:
   # This workflow will do three things:
   # 1) it creates a release commit and tag on `develop`
   # 2) it merges the release into `main` (the prerelease branch)
   # 3) it fast-forwards `origin/{release}` and pushes the tag in an atomic operation
-
 
   increment-patch:
     if: ${{ startsWith( github.ref_name, 'release/' ) }}
@@ -54,12 +53,17 @@ jobs:
           git pull origin main:main
           bash .github/scripts/release.sh
 
-      - name: "Update release branch"
-        run: |
-          # update the PR branch
-          # this way github will accept the push to main as a closing commit for the PR
-          git push --force origin HEAD
-
       - name: "Push `${{ steps.tag.outputs.TAG }} (tag), main (branch)"
         run: |
-          git push --atomic origin ${{ steps.tag.outputs.TAG }} HEAD:main
+          # push (1) the release tag (2) main branch (3) release "pointer" branch
+          # the "latest" branch must not divert from the history of "main" anyway
+          # so pusing to latest is just forwarding the branch
+          git push --atomic origin \
+            ${{ steps.tag.outputs.TAG }} \
+            +${{ steps.tag.outputs.TAG }}~0:refs/heads/main \
+            +${{ steps.tag.outputs.TAG }}~0:refs/heads/latest 
+          
+          # update the PR branch so github will close the PR
+          # todo: close pr as a separate step through API?
+          git push --force origin HEAD
+

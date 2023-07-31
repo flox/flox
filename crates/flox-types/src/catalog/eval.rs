@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 
+use runix::DerivationPath;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use serde_with::skip_serializing_none;

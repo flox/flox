@@ -15,7 +15,7 @@ use runix::arguments::{EvalArgs, NixArgs};
 use runix::command::{Eval, FlakeMetadata};
 use runix::command_line::{DefaultArgs, NixCommandLine};
 use runix::flake_ref::path::PathRef;
-use runix::installable::{AttrPath, Installable};
+use runix::installable::{AttrPath, FlakeAttribute};
 use runix::{NixBackend, RunJson};
 use serde::Deserialize;
 use thiserror::Error;
@@ -32,7 +32,7 @@ use crate::models::root::transaction::ReadOnly;
 use crate::models::root::{self, Root};
 use crate::providers::git::GitProvider;
 
-static INPUT_CHARS: Lazy<Vec<char>> = Lazy::new(|| ('a'..='t').into_iter().collect());
+static INPUT_CHARS: Lazy<Vec<char>> = Lazy::new(|| ('a'..='t').collect());
 
 pub const FLOX_SH: &str = env!("FLOX_SH");
 pub const FLOX_VERSION: &str = env!("FLOX_VERSION");
@@ -120,7 +120,7 @@ pub struct ResolvedInstallableMatch {
 }
 
 impl ResolvedInstallableMatch {
-    pub fn installable(self) -> Installable {
+    pub fn flake_attribute(self) -> FlakeAttribute {
         // Join the prefix and key into a safe attrpath, adding the associated system if present
         let attr_path = {
             let mut builder = AttrPath::default();
@@ -138,7 +138,7 @@ impl ResolvedInstallableMatch {
             builder
         };
 
-        Installable {
+        FlakeAttribute {
             flakeref: self.flakeref.parse().unwrap(),
             attr_path,
         }
@@ -151,11 +151,11 @@ impl Flox {
     ///  TODO: consume [Option<FloxInstallable>]
     pub fn package(
         &self,
-        installable: Installable,
+        flake_attribute: FlakeAttribute,
         stability: Stability,
         nix_arguments: Vec<String>,
     ) -> Package {
-        Package::new(self, installable, stability, nix_arguments)
+        Package::new(self, flake_attribute, stability, nix_arguments)
     }
 
     pub fn resource<X>(&self, x: X) -> Root<root::Closed<X>> {
@@ -213,10 +213,10 @@ impl Flox {
                 // if we can't parse the flake_ref we warn but keep it
                 // this is until we can be sure enought that our flake_ref parser is robust
                 if let Err(e) = parsed_flake_ref {
-                    warn!(
+                    debug!(
                         indoc! {"
-                        Could not parse flake_ref {flakeref}
-                        {e:?}
+                        Could not parse default flake_ref {flakeref}
+                        {e}
                    "},
                         flakeref = flakeref,
                         e = e
@@ -366,7 +366,7 @@ impl Flox {
         let eval_apply = format!(r#"(x: ({}))"#, installable_resolve_strs.join(" ++ "));
 
         // The super resolver we're currently using to evaluate multiple whole flakerefs at once
-        let resolve_installable = Installable {
+        let resolve_flake_attribute = FlakeAttribute {
             flakeref: FlakeRef::Path(PathRef {
                 path: Path::new(env!("FLOX_RESOLVER_SRC")).to_path_buf(),
                 attributes: Default::default(),
@@ -391,7 +391,7 @@ impl Flox {
                                 warn!(
                                     indoc! {"
                                     Could not parse flake_ref {flakeref}
-                                    {e:?}
+                                    {e}
                                 "},
                                     flakeref = flakeref,
                                     e = e
@@ -404,7 +404,7 @@ impl Flox {
             },
             // Use the super resolver as the installable (which we use as this only takes one)
             eval_args: EvalArgs {
-                installable: Some(resolve_installable.into()),
+                installable: Some(resolve_flake_attribute.into()),
                 apply: Some(eval_apply.into()),
             },
             ..Default::default()
@@ -445,7 +445,7 @@ impl Flox {
     ///
     /// The constructor will perform backend specific configuration measures
     /// and return a fresh initialized backend.
-    pub fn nix<Nix: FloxNixApi>(&self, extra_args: Vec<String>) -> Nix {
+    pub fn nix<Nix: FloxNixApi>(&self, mut caller_extra_args: Vec<String>) -> Nix {
         use std::io::Write;
         use std::os::unix::prelude::OpenOptionsExt;
 
@@ -543,6 +543,9 @@ impl Flox {
             ..Default::default()
         };
 
+        let mut extra_args = vec!["--quiet".to_string(), "--quiet".to_string()];
+        extra_args.append(&mut caller_extra_args);
+
         let default_nix_args = DefaultArgs {
             environment,
             common_args,
@@ -555,8 +558,38 @@ impl Flox {
 }
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
+    use tempfile::TempDir;
+
     use super::*;
+
+    pub fn flox_instance() -> (Flox, TempDir) {
+        let tempdir_handle = tempfile::tempdir_in(std::env::temp_dir()).unwrap();
+
+        let cache_dir = tempdir_handle.path().join("caches");
+        let data_dir = tempdir_handle.path().join(".local/share/flox");
+        let temp_dir = tempdir_handle.path().join("temp");
+        let config_dir = tempdir_handle.path().join("config");
+
+        std::fs::create_dir_all(&cache_dir).unwrap();
+        std::fs::create_dir_all(&temp_dir).unwrap();
+        std::fs::create_dir_all(&config_dir).unwrap();
+
+        let mut channels = ChannelRegistry::default();
+        channels.register_channel("flox", "github:flox/floxpkgs/master".parse().unwrap());
+
+        let flox = Flox {
+            system: "aarch64-darwin".to_string(),
+            cache_dir,
+            data_dir,
+            temp_dir,
+            config_dir,
+            channels,
+            ..Default::default()
+        };
+
+        (flox, tempdir_handle)
+    }
 
     #[test]
     fn test_resolved_installable_match_to_installable() {
@@ -569,8 +602,8 @@ mod tests {
             None,
         );
         assert_eq!(
-            Installable::from_str("github:flox/flox#.packages.aarch64-darwin.flox").unwrap(),
-            resolved.installable(),
+            FlakeAttribute::from_str("github:flox/flox#.packages.aarch64-darwin.flox").unwrap(),
+            resolved.flake_attribute(),
         );
     }
 }

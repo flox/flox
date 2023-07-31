@@ -1,0 +1,120 @@
+# ============================================================================ #
+#
+#
+#
+# ---------------------------------------------------------------------------- #
+#
+name: "Test GPG Sign Settings with Flox CLI"
+
+on:
+  push:
+    branches:
+      -  main
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+
+# ---------------------------------------------------------------------------- #
+
+jobs:
+  gpg-test:
+    runs-on: ubuntu-latest
+    env:
+      SYSTEM: x86_64-linux
+      SSH_AUTH_SOCK: /tmp/ssh_agent.sock
+
+    steps:
+      - uses: cachix/install-nix-action@11f4ad19be46fd34c005a2864996d8f197fb51c6
+        with:
+          install_url: https://releases.nixos.org/nix/nix-2.13.3/install
+          nix_path: nixpkgs=channel:nixpkgs-22.05
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+            access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
+            substituters = https://cache.nixos.org
+            trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= flox-store-public-0:8c/B+kjIaQ+BloCmNkRUKwaVPFWkriSAd0JJvuDu4F0=
+            trusted-substituters = https://cache.floxdev.com
+            max-jobs = auto
+            cores = 0
+            substitute = true
+            builders-use-substitutes = true
+            fallback = true
+            connect-timeout = 5
+            stalled-download-timeout = 90
+            timeout = 0
+
+      - name: Git and SSH Setup
+        run: |
+          set -eu;
+          set -o pipefail;
+          mkdir -p /home/runner/.ssh;
+          ssh-keyscan github.com >> /home/runner/.ssh/known_hosts;
+          ssh-keygen -f /home/runner/.ssh/id_rsa -t rsa -N ''  \
+                     -C gha@floxdev.com;
+          chmod 600 /home/runner/.ssh/id_rsa;
+          ssh-agent -a "$SSH_AUTH_SOCK" > /dev/null;
+          ssh-add /home/runner/.ssh/id_rsa;
+          git config --global user.email "gha@floxdev.com";
+          git config --global user.name "Flox GitHubActions";
+
+      - uses: actions/checkout@v3
+
+      - name: Install Flox
+        run: |
+          set -eu;
+          set -o pipefail;
+          nix profile install '.#flox' -L --show-trace -v;
+          echo "# ============================================================================ #" >&2;
+          { printf '    bash   version: '; bash --version|head -n1;      } >&2;
+          { printf '    nix    version: '; nix  --version;               } >&2;
+          { printf '    flox   version: '; flox --version|cut -d' ' -f2; } >&2;
+          echo "# ---------------------------------------------------------------------------- #" >&2;
+
+# ---------------------------------------------------------------------------- #
+
+      - name: GPG Signature Setup
+        run: |
+          git config --global gpg.format ssh;
+          git config --global user.signingkey /home/runner/.ssh/id_rsa.pub;
+
+      - name: Create Env (Without Signing)
+        run: |
+          set -eu;
+          set -o pipefail;
+          flox create -e foo;
+          flox install -e foo cowsay;
+          eval "$( flox activate -e foo; )";
+          cowsay "No Signature" >&2;
+
+      - name: Create Env (Global Signing)
+        run: |
+          set -eu;
+          set -o pipefail;
+          git config --global commit.gpgsign true;
+          flox create -e bar;
+          flox install -e bar cowsay;
+          eval "$( flox activate -e bar; )";
+          cowsay "Signature set in Global Config" >&2;
+          git config --global --unset commit.gpgsign;
+
+      - name: Create Env (User Signing)
+        run: |
+          set -eu;
+          set -o pipefail;
+          git config commit.gpgsign true;
+          flox create -e quux;
+          flox install -e quux cowsay;
+          eval "$( flox activate -e quux; )";
+          cowsay "Signature set in User Config" >&2;
+          git config --unset commit.gpgsign;
+
+
+# ---------------------------------------------------------------------------- #
+#
+#
+#
+# ============================================================================ #

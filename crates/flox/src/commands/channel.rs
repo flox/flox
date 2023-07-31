@@ -13,9 +13,9 @@ use regex::Regex;
 use serde_json::json;
 
 use crate::config::features::Feature;
-use crate::flox_forward;
 use crate::utils::dialog::{Dialog, Select, Text};
 use crate::utils::init::{DEFAULT_CHANNELS, HIDDEN_CHANNELS};
+use crate::{flox_forward, subcommand_metric};
 
 #[derive(Bpaf, Clone)]
 pub struct ChannelArgs {}
@@ -30,6 +30,13 @@ enum ChannelType {
 
 impl ChannelCommands {
     pub async fn handle(&self, flox: Flox) -> Result<()> {
+        match self {
+            ChannelCommands::Subscribe(_) => subcommand_metric!("subscribe"),
+            ChannelCommands::Unsubscribe { .. } => subcommand_metric!("unsubscribe"),
+            ChannelCommands::Search { .. } => subcommand_metric!("search"),
+            ChannelCommands::Channels { .. } => subcommand_metric!("channels"),
+        }
+
         match self {
             _ if Feature::Channels.is_forwarded()? => flox_forward(&flox).await?,
             ChannelCommands::Channels { json } => {
@@ -258,10 +265,19 @@ pub enum ChannelCommands {
         json: bool,
 
         /// print extended search results
-        #[bpaf(long, short)]
-        verbose: bool,
+        #[bpaf(short, long, long("verbose"), short('v'))]
+        long: bool,
 
-        #[bpaf(positional("search term"))]
+        /// force update of catalogs from remote sources before searching
+        #[bpaf(long)]
+        refresh: bool,
+
+        /// query string of the form `<REGEX>[@<SEMVER-RANGE>]` used to filter
+        /// match against package names/descriptions, and semantic version.
+        /// Regex pattern is `PCRE` style, and semver ranges use the
+        /// `node-semver` syntax.
+        /// Exs: `(hello|coreutils)`, `node@>=16`, `coreutils@9.1`
+        #[bpaf(positional("search-term"))]
         search_term: Option<String>,
     },
 

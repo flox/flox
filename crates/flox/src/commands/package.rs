@@ -1,12 +1,13 @@
 use std::env;
 use std::fmt::Debug;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use anyhow::{bail, Context, Result};
 use bpaf::{construct, Bpaf, Parser};
 use crossterm::tty::IsTty;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::project::Project;
+use flox_rust_sdk::models::publish::{Publish, PublishFlakeRef};
 use flox_rust_sdk::models::root::transaction::ReadOnly;
 use flox_rust_sdk::models::root::{self, Closed, Root};
 use flox_rust_sdk::nix::arguments::eval::EvaluationArgs;
@@ -15,39 +16,38 @@ use flox_rust_sdk::nix::arguments::NixArgs;
 use flox_rust_sdk::nix::command::{Build, BuildOut, Eval as EvalComm};
 use flox_rust_sdk::nix::command_line::{Group, NixCliCommand, NixCommandLine, ToArgs};
 use flox_rust_sdk::nix::{Run as RunC, RunTyped};
-use flox_rust_sdk::prelude::Installable;
+use flox_rust_sdk::prelude::FlakeAttribute;
 use flox_rust_sdk::providers::git::{GitCommandProvider, GitProvider};
 use flox_types::stability::Stability;
 use indoc::indoc;
-use inquire::error::InquireResult;
 use itertools::Itertools;
 use log::{debug, info};
 
-use crate::commands::package::interface::ResolveInstallable;
+use crate::commands::package::interface::{PackageCommands, ResolveInstallable};
 use crate::config::features::Feature;
 use crate::config::Config;
-use crate::utils::dialog::{Confirm, Dialog, Text};
+use crate::utils::dialog::{Dialog, Text};
 use crate::utils::resolve_environment_ref;
 use crate::{flox_forward, subcommand_metric};
 
-async fn env_ref_to_installable<Git: GitProvider + 'static>(
+async fn env_ref_to_flake_attribute<Git: GitProvider + 'static>(
     flox: &Flox,
     subcommand: &str,
     environment_name: &str,
-) -> anyhow::Result<Installable> {
+) -> anyhow::Result<FlakeAttribute> {
     let env_ref = resolve_environment_ref::<Git>(flox, subcommand, Some(environment_name)).await?;
-    Ok(env_ref.get_latest_installable::<Git>(flox).await?)
+    Ok(env_ref.get_latest_flake_attribute::<Git>(flox).await?)
 }
 
 pub(crate) mod interface {
     use async_trait::async_trait;
     use bpaf::{Bpaf, Parser};
     use flox_rust_sdk::flox::Flox;
-    use flox_rust_sdk::prelude::Installable;
+    use flox_rust_sdk::prelude::FlakeAttribute;
     use flox_rust_sdk::providers::git::GitProvider;
 
     use super::parseable_macro::parseable;
-    use super::{env_ref_to_installable, Parseable, WithPassthru};
+    use super::{env_ref_to_flake_attribute, Parseable, WithPassthru};
     use crate::utils::installables::{
         BuildInstallable,
         BundleInstallable,
@@ -80,17 +80,19 @@ pub(crate) mod interface {
 
     #[async_trait(?Send)]
     pub trait ResolveInstallable<Git: GitProvider> {
-        async fn installable(&self, flox: &Flox) -> anyhow::Result<Installable>;
+        async fn installable(&self, flox: &Flox) -> anyhow::Result<FlakeAttribute>;
     }
 
     #[async_trait(?Send)]
     impl<T: InstallableDef + 'static, Git: GitProvider + 'static> ResolveInstallable<Git>
         for PosOrEnv<T>
     {
-        async fn installable(&self, flox: &Flox) -> anyhow::Result<Installable> {
+        async fn installable(&self, flox: &Flox) -> anyhow::Result<FlakeAttribute> {
             Ok(match self {
-                PosOrEnv::Pos(i) => i.resolve_installable(flox).await?,
-                PosOrEnv::Env(n) => env_ref_to_installable::<Git>(flox, T::SUBCOMMAND, n).await?,
+                PosOrEnv::Pos(i) => i.resolve_flake_attribute(flox).await?,
+                PosOrEnv::Env(n) => {
+                    env_ref_to_flake_attribute::<Git>(flox, T::SUBCOMMAND, n).await?
+                },
             })
         }
     }
@@ -99,7 +101,7 @@ pub(crate) mod interface {
     impl<T: InstallableDef + 'static, Git: GitProvider + 'static> ResolveInstallable<Git>
         for Option<PosOrEnv<T>>
     {
-        async fn installable(&self, flox: &Flox) -> anyhow::Result<Installable> {
+        async fn installable(&self, flox: &Flox) -> anyhow::Result<FlakeAttribute> {
             Ok(match self {
                 Some(x) => ResolveInstallable::<Git>::installable(x, flox).await?,
                 None => {
@@ -125,8 +127,6 @@ pub(crate) mod interface {
         pub(crate) template: Option<InstallableArgument<Parsed, TemplateInstallable>>,
         #[bpaf(long("name"), short('n'), argument("name"))]
         pub(crate) name: Option<String>,
-        #[bpaf(short('i'), long("init-git"), switch)]
-        pub(crate) init_git: bool,
     }
     pub(crate) fn template_arg(
     ) -> impl Parser<Option<InstallableArgument<Parsed, TemplateInstallable>>> {
@@ -202,6 +202,14 @@ pub(crate) mod interface {
         pub(crate) _installable_arg: Option<InstallableArgument<Parsed, PublishInstallable>>,
     }
     parseable!(Publish, publish);
+
+    #[derive(Bpaf, Clone, Debug)]
+    pub struct PublishV2 {
+        /// Package to publish
+        #[bpaf(external(InstallableArgument::positional), optional, catch)]
+        pub installable_arg: Option<InstallableArgument<Parsed, PublishInstallable>>,
+    }
+    parseable!(PublishV2, publish_v2);
 
     #[derive(Bpaf, Clone, Debug)]
     pub struct Shell {
@@ -282,6 +290,9 @@ pub(crate) mod interface {
         /// build and publish project to flox channel
         #[bpaf(command)]
         Publish(#[bpaf(external(WithPassthru::parse))] WithPassthru<Publish>),
+        /// build and publish project to flox channel
+        #[bpaf(command, hide)]
+        Publish2(#[bpaf(external(WithPassthru::parse))] WithPassthru<PublishV2>),
         /// run app from current project
         #[bpaf(command)]
         Run(#[bpaf(external(WithPassthru::parse))] WithPassthru<Run>),
@@ -303,29 +314,61 @@ pub(crate) mod interface {
     }
 }
 
-impl interface::PackageCommands {
+impl PackageCommands {
     pub async fn handle(self, config: Config, flox: Flox) -> Result<()> {
+        match self {
+            PackageCommands::Develop(_) => subcommand_metric!("develop"),
+            PackageCommands::Init(_) => subcommand_metric!("init"),
+            PackageCommands::Build(_) => subcommand_metric!("build"),
+            PackageCommands::PrintDevEnv(_) => subcommand_metric!("print-dev-env"),
+            PackageCommands::Publish(_) => subcommand_metric!("publish"),
+            PackageCommands::Publish2(_) => subcommand_metric!("publish_v2"),
+            PackageCommands::Run(_) => subcommand_metric!("run"),
+            PackageCommands::Shell(_) => subcommand_metric!("shell"),
+            PackageCommands::Eval(_) => subcommand_metric!("eval"),
+            PackageCommands::Bundle(_) => subcommand_metric!("bundle"),
+            PackageCommands::Containerize(_) => subcommand_metric!("containerize"),
+            PackageCommands::Flake(_) => subcommand_metric!("flake"),
+        }
+
         match self {
             _ if Feature::Nix.is_forwarded()? => flox_forward(&flox).await?,
 
             // Unification implementation of Develop is not yet implemented in rust
-            interface::PackageCommands::Develop(_) if Feature::Develop.is_forwarded()? => {
+            PackageCommands::Develop(_) if Feature::Develop.is_forwarded()? => {
                 flox_forward(&flox).await?
             },
 
             // Unification implementation of print-dev-env is not yet implemented in rust
-            interface::PackageCommands::PrintDevEnv(_) if Feature::Develop.is_forwarded()? => {
+            PackageCommands::PrintDevEnv(_) if Feature::Develop.is_forwarded()? => {
                 flox_forward(&flox).await?
             },
 
             // `flox publish` is not yet implemented in rust
-            interface::PackageCommands::Publish(_) if Feature::Publish.is_forwarded()? => {
+            PackageCommands::Publish(_) if Feature::Publish.is_forwarded()? => {
                 flox_forward(&flox).await?
             },
 
-            interface::PackageCommands::Init(command) => {
-                subcommand_metric!("init");
+            PackageCommands::Publish2(args) => {
+                let FlakeAttribute {
+                    flakeref,
+                    attr_path,
+                } = args
+                    .inner
+                    .installable_arg
+                    .unwrap_or_default()
+                    .resolve_flake_attribute(&flox)
+                    .await?;
 
+                let publish_ref = PublishFlakeRef::from_flake_ref(flakeref, &flox, false).await?;
+                let publish = Publish::new(&flox, publish_ref, attr_path, config.flox.stability);
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(publish.analyze().await?.analysis())?
+                );
+            },
+
+            PackageCommands::Init(command) => {
                 let cwd = std::env::current_dir()?;
                 let basename = cwd
                     .file_name()
@@ -333,7 +376,7 @@ impl interface::PackageCommands {
                     .unwrap_or("NAME")
                     .to_owned();
 
-                let git_repo = ensure_project_repo(&flox, cwd, &command).await?;
+                let git_repo = ensure_project_repo(&flox, cwd).await?;
                 let project = ensure_project(git_repo, &command).await?;
 
                 // Check if template exists before asking for project's name
@@ -341,26 +384,29 @@ impl interface::PackageCommands {
                     .inner
                     .template
                     .unwrap_or_default()
-                    .resolve_installable(&flox)
-                    .await?;
+                    .resolve_flake_attribute(&flox)
+                    .await?
+                    .into();
 
                 let name = match command.inner.name {
                     Some(n) => n,
                     None => {
+                        // Comment this out since we're using mkShell instead of
+                        // root-level flox.nix
                         // TODO: find a better way to not hardcode this
-                        if template.to_string() == "flake:flox#.\"templates\".\"project\"" {
-                            "default".to_string()
-                        } else {
-                            let dialog = Dialog {
-                                message: "Enter package name",
-                                help_message: None,
-                                typed: Text {
-                                    default: Some(&basename),
-                                },
-                            };
+                        // if template.to_string() == "flake:flox#.templates.project" {
+                        //     "default".to_string()
+                        // } else {
+                        let dialog = Dialog {
+                            message: "Enter package name",
+                            help_message: None,
+                            typed: Text {
+                                default: Some(&basename),
+                            },
+                        };
 
-                            dialog.prompt().await.context("Failed to prompt for name")?
-                        }
+                        dialog.prompt().await.context("Failed to prompt for name")?
+                        // }
                     },
                 };
 
@@ -372,66 +418,57 @@ impl interface::PackageCommands {
                         .await?;
                 }
 
-                info!("Run 'flox activate' to enter the environment.")
+                info!("Run 'flox develop' to enter the project environment.")
             },
-            interface::PackageCommands::Build(command) => {
-                subcommand_metric!("build");
+            PackageCommands::Build(command) => {
                 let installable_arg = command
                     .inner
                     .installable_arg
                     .unwrap_or_default()
-                    .resolve_installable(&flox)
+                    .resolve_flake_attribute(&flox)
                     .await?;
 
                 flox.package(installable_arg, config.flox.stability, command.nix_args)
                     .build::<NixCommandLine>()
                     .await?;
             },
-            interface::PackageCommands::Develop(command) => {
-                subcommand_metric!("develop");
-
+            PackageCommands::Develop(command) => {
                 let installable_arg = command
                     .inner
                     .installable_arg
                     .unwrap_or_default()
-                    .resolve_installable(&flox)
+                    .resolve_flake_attribute(&flox)
                     .await?;
 
                 flox.package(installable_arg, config.flox.stability, command.nix_args)
                     .develop::<NixCommandLine>()
                     .await?
             },
-            interface::PackageCommands::Run(command) => {
-                subcommand_metric!("run");
-
+            PackageCommands::Run(command) => {
                 let installable_arg = command
                     .inner
                     .installable_arg
                     .unwrap_or_default()
-                    .resolve_installable(&flox)
+                    .resolve_flake_attribute(&flox)
                     .await?;
 
                 flox.package(installable_arg, config.flox.stability, command.nix_args)
                     .run::<NixCommandLine>()
                     .await?
             },
-            interface::PackageCommands::Shell(command) => {
-                subcommand_metric!("shell");
-
+            PackageCommands::Shell(command) => {
                 let installable_arg = command
                     .inner
                     .installable_arg
                     .unwrap_or_default()
-                    .resolve_installable(&flox)
+                    .resolve_flake_attribute(&flox)
                     .await?;
 
                 flox.package(installable_arg, config.flox.stability, command.nix_args)
                     .shell::<NixCommandLine>()
                     .await?
             },
-            interface::PackageCommands::Eval(command) => {
-                subcommand_metric!("eval");
-
+            PackageCommands::Eval(command) => {
                 let nix = flox.nix::<NixCommandLine>(command.nix_args);
                 let command = EvalComm {
                     flake: FlakeArgs {
@@ -443,9 +480,7 @@ impl interface::PackageCommands {
 
                 command.run(&nix, &NixArgs::default()).await?
             },
-            interface::PackageCommands::Bundle(command) => {
-                subcommand_metric!("bundle");
-
+            PackageCommands::Bundle(command) => {
                 let installable_arg = ResolveInstallable::<GitCommandProvider>::installable(
                     &command.inner.installable_arg,
                     &flox,
@@ -456,17 +491,15 @@ impl interface::PackageCommands {
                     .inner
                     .bundler_arg
                     .unwrap_or_default()
-                    .resolve_installable(&flox)
+                    .resolve_flake_attribute(&flox)
                     .await?;
 
                 flox.package(installable_arg, config.flox.stability, command.nix_args)
-                    .bundle::<NixCommandLine>(bundler)
+                    .bundle::<NixCommandLine>(bundler.into())
                     .await?
             },
-            interface::PackageCommands::Containerize(command) => {
-                subcommand_metric!("containerize");
-
-                let mut installable = env_ref_to_installable::<GitCommandProvider>(
+            PackageCommands::Containerize(command) => {
+                let mut installable = env_ref_to_flake_attribute::<GitCommandProvider>(
                     &flox,
                     "containerize",
                     &command.inner.environment_name.unwrap_or_default(),
@@ -498,7 +531,7 @@ impl interface::PackageCommands {
                 info!("Building container...");
 
                 let command = Build {
-                    installables: [installable].into(),
+                    installables: [installable.into()].into(),
                     eval: EvaluationArgs {
                         impure: true.into(),
                     },
@@ -525,7 +558,7 @@ impl interface::PackageCommands {
                     .await
                     .context("Container script failed to run")?;
             },
-            interface::PackageCommands::Flake(command) => {
+            PackageCommands::Flake(command) => {
                 /// A custom nix command that passes its arguments to `nix flake`
                 #[derive(Debug, Clone)]
                 pub struct FlakeCommand {
@@ -582,11 +615,10 @@ impl interface::PackageCommands {
     }
 }
 
-async fn ensure_project_repo<'flox>(
-    flox: &'flox Flox,
+async fn ensure_project_repo(
+    flox: &Flox,
     cwd: PathBuf,
-    command: &WithPassthru<interface::Init>,
-) -> Result<root::Root<'flox, Closed<GitCommandProvider>>, anyhow::Error> {
+) -> Result<root::Root<Closed<GitCommandProvider>>, anyhow::Error> {
     match flox
         .resource(cwd)
         .guard::<GitCommandProvider>()
@@ -602,34 +634,12 @@ async fn ensure_project_repo<'flox>(
             );
             Ok(p)
         },
-        Err(g) => {
-            async fn prompt(path: &Path) -> InquireResult<bool> {
-                let dialog = Dialog {
-                    message: &format!("The current directory is not in a Git repository, would you like to create one in {path:?}?"),
-                    help_message: None,
-                    typed: Confirm {
-                        default: Some(false)
-                    }
-                };
+        Err(_) => bail!(indoc! {"
+            You must be inside of a Git repository to initialize a project
 
-                dialog.prompt().await
-            }
-
-            if command.inner.init_git || prompt(g.path()).await? {
-                let p = g.init_git().await?;
-
-                info!(
-                    "Created git repo{}",
-                    p.workdir()
-                        .map(|p| format!(": {}", p.display()))
-                        .unwrap_or_else(|| "".to_owned())
-                );
-
-                Ok(p)
-            } else {
-                bail!("You must be inside of a Git repository to initialize a project");
-            }
-        },
+            To provide the best possible experience, projects must be under version control.
+            Please initialize a project in an existing repo or create one using 'git init'.
+        "}),
     }
 }
 

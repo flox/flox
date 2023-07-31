@@ -1,9 +1,9 @@
 use std::borrow::Cow;
 
 use flox_types::catalog::CatalogEntry;
-use runix::installable::{Installable, ParseInstallableError};
 use runix::store_path::StorePath;
 use super::flox_package::{FloxPackage, FloxTriple};
+use runix::installable::{FlakeAttribute, ParseInstallableError};
 use serde_json::Value;
 use thiserror::Error;
 use super::floxmeta::environment::GenerationError;
@@ -13,6 +13,10 @@ use super::{floxmeta, project};
 use crate::providers::git::GitProvider;
 
 pub static CATALOG_JSON: &str = "catalog.json";
+// don't forget to update the man page
+pub const DEFAULT_KEEP_GENERATIONS: usize = 10;
+// don't forget to update the man page
+pub const DEFAULT_MAX_AGE_DAYS: u32 = 90;
 
 pub enum CommonEnvironment<'flox, Git: GitProvider> {
     Named(floxmeta::environment::Environment<'flox, Git, ReadOnly<Git>>),
@@ -26,17 +30,17 @@ pub enum InstalledPackage {
 }
 
 impl<'flox, Git: GitProvider> CommonEnvironment<'flox, Git> {
-    /// get an installbale for the environment
-    /// todo installable should be constructed earlier
-    pub async fn installable(
+    /// get a flake attribute for the environment
+    /// todo flake_attribute should be constructed earlier
+    pub async fn flake_attribute(
         &self,
-    ) -> Result<Installable, EnvironmentError<GenerationError<Git>, ParseInstallableError>> {
+    ) -> Result<FlakeAttribute, EnvironmentError<GenerationError<Git>, ParseInstallableError>> {
         match self {
             CommonEnvironment::Named(n) => n
-                .installable(Default::default())
+                .flake_attribute(Default::default())
                 .await
                 .map_err(EnvironmentError::Named),
-            CommonEnvironment::Project(p) => p.installable().map_err(EnvironmentError::Project),
+            CommonEnvironment::Project(p) => p.flake_attribute().map_err(EnvironmentError::Project),
         }
     }
 

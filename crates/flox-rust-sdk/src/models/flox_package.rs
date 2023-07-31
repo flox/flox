@@ -6,7 +6,7 @@ use derive_more::From;
 use flox_types::catalog::System;
 use flox_types::stability::Stability;
 use runix::flake_ref::indirect::IndirectRef;
-use runix::installable::{AttrPath, Attribute, Installable, ParseInstallableError};
+use runix::installable::{AttrPath, Attribute, FlakeAttribute, Installable, ParseInstallableError};
 use runix::store_path::StorePath;
 use thiserror::Error;
 
@@ -39,9 +39,9 @@ impl FloxPackage {
             }
         }
 
-        // return if looks like installable
+        // return if looks like flake attribute
         if package.contains('#') {
-            return Ok(Self::Installable(Installable::from_str(package)?));
+            return Ok(Self::Installable(FlakeAttribute::from_str(package)?.into()));
         }
 
         // resolve triple
@@ -190,10 +190,11 @@ impl FloxTriple {
 
         let attrpath = attrpath.as_slice().try_into().unwrap();
 
-        Installable {
+        FlakeAttribute {
             flakeref: flakeref.into(),
             attr_path: attrpath,
         }
+        .into()
     }
 }
 
@@ -216,7 +217,7 @@ impl Display for FloxPackage {
 mod tests {
     use flox_types::constants::DEFAULT_CHANNEL;
     use once_cell::sync::Lazy;
-    use runix::flake_ref::path::PathRef;
+    use runix::flake_ref::git::GitRef;
 
     use super::*;
     use crate::flox::FLOX_SH;
@@ -299,14 +300,27 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "In the nix sandbox the current directory is not a flake nor a repo due to file filters)"]
     fn parse_flakeref() {
-        let expected = FloxPackage::Installable(Installable {
-            flakeref: runix::flake_ref::FlakeRef::Path(PathRef {
-                path: Path::new(".").to_path_buf(),
-                attributes: Default::default(),
-            }),
-            attr_path: ["packages", "aarch64-darwin", "flox"].try_into().unwrap(),
-        });
+        let expected = FloxPackage::Installable(
+            FlakeAttribute {
+                // during tests and build the current dir is set to the manifest dir
+                flakeref: runix::flake_ref::FlakeRef::GitPath(GitRef {
+                    url: url::Url::from_file_path(
+                        Path::new(env!("CARGO_MANIFEST_DIR"))
+                            .ancestors()
+                            .nth(2)
+                            .unwrap(),
+                    )
+                    .unwrap()
+                    .try_into()
+                    .unwrap(),
+                    attributes: Default::default(),
+                }),
+                attr_path: ["packages", "aarch64-darwin", "flox"].try_into().unwrap(),
+            }
+            .into(),
+        );
         let parsed =
             FloxPackage::parse(".#packages.aarch64-darwin.flox", &CHANNELS, DEFAULT_CHANNEL)
                 .expect("should parse");

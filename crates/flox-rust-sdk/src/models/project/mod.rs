@@ -8,7 +8,7 @@ use runix::command::{Eval, FlakeInit};
 use runix::flake_ref::git::{GitAttributes, GitRef};
 use runix::flake_ref::indirect::IndirectRef;
 use runix::flake_ref::FlakeRef;
-use runix::installable::Installable;
+use runix::installable::{FlakeAttribute, Installable};
 use runix::{NixBackend, Run, RunJson};
 use tempfile::TempDir;
 use thiserror::Error;
@@ -110,7 +110,7 @@ impl<'flox, Git: GitProvider> Guard<Project<'flox, Git, ReadOnly<Git>>, Root<'fl
 
         FlakeInit {
             template: Some(
-                Installable {
+                FlakeAttribute {
                     flakeref: IndirectRef::new("flox".to_string(), Default::default()).into(),
                     attr_path: ["", "templates", "_init"].try_into().unwrap(),
                 }
@@ -231,36 +231,38 @@ impl<'flox, Git: GitProvider, Access: GitAccess<Git>> Project<'flox, Git, Access
         .await
         .map_err(InitFloxPackageError::NixInit)?;
 
-        let old_proto_pkg_path = root.join("pkgs").join(PACKAGE_NAME_PLACEHOLDER);
+        // Comment this out since we're using mkShell instead of
+        // root-level flox.nix
+        // TODO: really find a better way to not hardcode this
+        // if template.to_string() == "flake:flox#.\"templates\".\"project\"" {
+        //     repo.add(&[&root.join("flox.nix")])
+        //         .await
+        //         .map_err(InitFloxPackageError::GitAdd)?;
+        // }
+        for dir_name in ["pkgs", "shells"] {
+            let old_path = root.join(dir_name).join(PACKAGE_NAME_PLACEHOLDER);
+            if old_path.exists() {
+                let new_path = root.join(dir_name).join(name);
 
-        if !old_proto_pkg_path.exists() {
-            // TODO: really find a better way to not hardcode this
-            if template.to_string() == "flake:flox#.\"templates\".\"project\"" {
-                repo.add(&[&root.join("flox.nix")])
+                repo.mv(&old_path, &new_path)
+                    .await
+                    .map_err(InitFloxPackageError::GitMv)?;
+                info!(
+                    "moved: {} -> {}",
+                    old_path.to_string_lossy(),
+                    new_path.to_string_lossy()
+                );
+
+                // our minimal "templating" - Replace any occurrences of
+                // PACKAGE_NAME_PLACEHOLDER with name
+                find_and_replace(&new_path, PACKAGE_NAME_PLACEHOLDER, name)
+                    .await
+                    .map_err(InitFloxPackageError::<Nix, Git>::ReplacePackageName)?;
+
+                repo.add(&[&new_path])
                     .await
                     .map_err(InitFloxPackageError::GitAdd)?;
             }
-        } else {
-            let new_proto_pkg_path = root.join("pkgs").join(name);
-
-            repo.mv(&old_proto_pkg_path, &new_proto_pkg_path)
-                .await
-                .map_err(InitFloxPackageError::GitMv)?;
-            info!(
-                "moved: {} -> {}",
-                old_proto_pkg_path.to_string_lossy(),
-                new_proto_pkg_path.to_string_lossy()
-            );
-
-            // our minimal "templating" - Replace any occurrences of
-            // PACKAGE_NAME_PLACEHOLDER with name
-            find_and_replace(&new_proto_pkg_path, PACKAGE_NAME_PLACEHOLDER, name)
-                .await
-                .map_err(InitFloxPackageError::<Nix, Git>::ReplacePackageName)?;
-
-            repo.add(&[&new_proto_pkg_path])
-                .await
-                .map_err(InitFloxPackageError::GitAdd)?;
         }
 
         Ok(())
@@ -298,7 +300,7 @@ impl<'flox, Git: GitProvider, Access: GitAccess<Git>> Project<'flox, Git, Access
             eval_args: EvalArgs {
                 apply: Some(nix_apply_expr.into()),
                 installable: Some(
-                    Installable {
+                    FlakeAttribute {
                         flakeref: self.flakeref(),
                         attr_path: ["floxEnvs".to_string()].try_into().unwrap(),
                     }
@@ -344,7 +346,7 @@ impl<'flox, Git: GitProvider, Access: GitAccess<Git>> Project<'flox, Git, Access
             eval_args: EvalArgs {
                 apply: Some(nix_apply_expr.into()),
                 installable: Some(
-                    Installable {
+                    FlakeAttribute {
                         flakeref: self.flakeref(),
                         attr_path: ["floxEnvs".to_string()].try_into().unwrap(),
                     }
@@ -588,38 +590,10 @@ where
 }
 
 #[cfg(test)]
-mod tests {
-    use std::env;
-
+pub mod tests {
     use super::*;
-    use crate::prelude::ChannelRegistry;
+    use crate::flox::tests::flox_instance;
     use crate::providers::git::GitCommandProvider;
-
-    fn flox_instance() -> (Flox, TempDir) {
-        let tempdir_handle = tempfile::tempdir_in(std::env::temp_dir()).unwrap();
-
-        let cache_dir = tempdir_handle.path().join("caches");
-        let temp_dir = tempdir_handle.path().join("temp");
-        let config_dir = tempdir_handle.path().join("config");
-
-        std::fs::create_dir_all(&cache_dir).unwrap();
-        std::fs::create_dir_all(&temp_dir).unwrap();
-        std::fs::create_dir_all(&config_dir).unwrap();
-
-        let mut channels = ChannelRegistry::default();
-        channels.register_channel("flox", "github:flox/floxpkgs/master".parse().unwrap());
-
-        let flox = Flox {
-            system: "aarch64-darwin".to_string(),
-            cache_dir,
-            temp_dir,
-            config_dir,
-            channels,
-            ..Default::default()
-        };
-
-        (flox, tempdir_handle)
-    }
 
     #[tokio::test]
     async fn fail_without_git() {
@@ -661,7 +635,7 @@ mod tests {
     #[tokio::test]
     async fn create_project() {
         let temp_home = tempfile::tempdir().unwrap();
-        env::set_var("HOME", temp_home.path());
+        std::env::set_var("HOME", temp_home.path());
 
         let (flox, tempdir_handle) = flox_instance();
 
