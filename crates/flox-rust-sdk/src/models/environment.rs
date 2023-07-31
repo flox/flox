@@ -3,11 +3,10 @@ use std::borrow::Cow;
 use flox_types::catalog::CatalogEntry;
 use runix::installable::{FlakeAttribute, ParseInstallableError};
 use runix::store_path::StorePath;
-use super::flox_package::{FloxPackage, FloxTriple};
-use serde_json::Value;
 use thiserror::Error;
+
+use super::flox_package::{FloxPackage, FloxTriple};
 use super::floxmeta::environment::GenerationError;
-use super::flox_package::FloxPackage;
 use super::root::transaction::ReadOnly;
 use super::{floxmeta, project};
 use crate::providers::git::GitProvider;
@@ -25,7 +24,7 @@ pub enum CommonEnvironment<'flox, Git: GitProvider> {
 
 pub enum InstalledPackage {
     Catalog(FloxTriple, CatalogEntry),
-    Installable(Installable, CatalogEntry),
+    Installable(FlakeAttribute, CatalogEntry),
     StorePath(StorePath),
 }
 

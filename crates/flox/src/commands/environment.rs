@@ -4,6 +4,7 @@ use anyhow::{bail, Context, Result};
 use bpaf::{construct, Bpaf, Parser, ShellComp};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::CommonEnvironment;
+use flox_rust_sdk::models::environment_ref;
 use flox_rust_sdk::models::floxmeta::Floxmeta;
 use flox_rust_sdk::nix::command::StoreGc;
 use flox_rust_sdk::nix::command_line::NixCommandLine;
@@ -147,7 +148,7 @@ impl EnvironmentCommands {
                 environment_args: _,
                 environment,
             } => {
-                let environment_name = environment.as_ref().map(|e| e.to_str().unwrap());
+                let environment_name = environment.as_deref();
                 let environment_ref: environment_ref::EnvironmentRef =
                     resolve_environment_ref::<GitCommandProvider>(
                         &flox,
