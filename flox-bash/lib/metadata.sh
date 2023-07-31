@@ -112,6 +112,7 @@ snipline="------------------------ >8 ------------------------"
 # gitInitFloxmeta($repoDir,$defaultBranch)
 #
 declare defaultBranch="floxmain"
+# TODO: remove once fully migrated to flox gitforge
 function gitInitFloxmeta() {
 	trace "$@"
 	local repoDir="$1"; shift
@@ -807,8 +808,6 @@ function getSetOrigin() {
 		$invoke_git -C "$environmentMetaDir" "remote" "add" "origin" "$origin"
 	fi
 
-	# ensureGHRepoExists "$origin" private                                \
-	#                    "https://github.com/flox/floxmeta-template.git"
 	echo "$origin"
 }
 

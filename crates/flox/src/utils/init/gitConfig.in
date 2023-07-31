@@ -2,9 +2,10 @@
 [user]
 	name = Flox User
 	email = floxuser@example.invalid
-{floxhub_credential_helper}
+
+[credential "https://git.saas.floxdev.com/"]
+	helper = "!{floxhub_credential_helper}"
 
 # Temporary while we transition to flox gitforge.
 [credential "https://github.com/"]
-    helper = "!__gh__ auth git-credential"
-{original_include}
+	helper = "!{github_credential_helper}"

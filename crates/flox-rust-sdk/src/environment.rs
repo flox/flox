@@ -74,10 +74,6 @@ pub fn default_nix_subprocess_env() -> HashMap<String, String> {
     //     "NIX_USER_CONF_FILES".to_string(),
     //     format!("{}/.config/flox/nix.conf", home),
     // );
-    // env_map.insert(
-    //     "GIT_CONFIG_SYSTEM".to_string(),
-    //     format!("{}/.config/flox/gitconfig", home),
-    // );
 
     env_map
 }
