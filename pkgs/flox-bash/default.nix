@@ -86,7 +86,6 @@
 
   # read commitizen config file as the single source of version
   czToml = lib.importTOML (flox-src + "/.cz.toml");
-
 in
   stdenv.mkDerivation rec {
     pname = "flox-bash";
