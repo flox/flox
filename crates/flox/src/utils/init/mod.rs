@@ -96,7 +96,6 @@ pub async fn init_git_conf(temp_dir: &Path, config_dir: &Path) -> Result<()> {
     // the flox specific git config
     let git_config = format!(
         include_str!("./gitConfig.in"),
-        default_owner = "limeytexan", // TODO: fix
         flox_gh_bin = env!("FLOX_GH_BIN"),
         gh_bin = env!("GH_BIN")
     );

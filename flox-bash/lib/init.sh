@@ -250,7 +250,7 @@ $_cat > $tmpGitConfig <<EOF
 	email = floxuser@example.invalid
 
 [credential "https://git.saas.floxdev.com/"]
-	helper = "!f() { test \"\$1\" = get && printf \"username=%s\\\\npassword=%s\\\\n\" $defaultEnvironmentOwner \"\$($_flox_gh auth token -h github.com)\"; }; f"
+	helper = "!$_flox_gh auth token --git-credential-helper"
 
 # Temporary while we transition to flox gitforge.
 [credential "https://github.com/"]

@@ -394,3 +394,48 @@ index 77a5f125..55135aa1 100644
  			}
  		}
  	}
+diff --git a/pkg/cmd/auth/token/token.go b/pkg/cmd/auth/token/token.go
+index fee8dc63..5d29a696 100644
+--- a/pkg/cmd/auth/token/token.go
++++ b/pkg/cmd/auth/token/token.go
+@@ -13,8 +13,9 @@ type TokenOptions struct {
+ 	IO     *iostreams.IOStreams
+ 	Config func() (config.Config, error)
+ 
+-	Hostname      string
+-	SecureStorage bool
++	Hostname            string
++	SecureStorage       bool
++	GitCredentialHelper bool
+ }
+ 
+ func NewCmdToken(f *cmdutil.Factory, runF func(*TokenOptions) error) *cobra.Command {
+@@ -39,6 +40,7 @@ func NewCmdToken(f *cmdutil.Factory, runF func(*TokenOptions) error) *cobra.Comm
+ 	cmd.Flags().StringVarP(&opts.Hostname, "hostname", "h", "", "The hostname of the GitHub instance authenticated with")
+ 	cmd.Flags().BoolVarP(&opts.SecureStorage, "secure-storage", "", false, "Search only secure credential store for authentication token")
+ 	_ = cmd.Flags().MarkHidden("secure-storage")
++	cmd.Flags().BoolVarP(&opts.GitCredentialHelper, "git-credential-helper", "", false, "Emit username and password fields for use as git credential helper")
+ 
+ 	return cmd
+ }
+@@ -66,7 +68,19 @@ func tokenRun(opts *TokenOptions) error {
+ 	}
+ 
+ 	if val != "" {
+-		fmt.Fprintf(opts.IO.Out, "%s\n", val)
++		if opts.GitCredentialHelper {
++			var user string
++			user, _ = authCfg.User(hostname)
++			if val == "" {
++				return fmt.Errorf("no user")
++			}
++
++			// flox: hacking existing token command/functionality as expedient
++			// path to helper method while we work to integrate Auth0.
++			fmt.Fprintf(opts.IO.Out, "username=%s\npassword=%s\n", user, val)
++		} else {
++			fmt.Fprintf(opts.IO.Out, "%s\n", val)
++		}
+ 	}
+ 	return nil
+ }
