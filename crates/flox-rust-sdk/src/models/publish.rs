@@ -1044,7 +1044,7 @@ mod tests {
             .expect("Should add snapshot");
         catalog.push_catalog().await.expect("Should push catalog");
 
-        // checkout the new brnach upstream to check if the file got written
+        // checkout the new branch upstream to check if the file got written
         upstream_repo
             .checkout(
                 &UpstreamRepo::catalog_branch_name(&"aarch64-darwin".to_string()),
