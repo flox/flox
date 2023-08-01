@@ -59,7 +59,7 @@ def isPackage:
 def isCatalogPackage:
   isPackage and has("publish_element");
 
-def packagePNames(keys):
+def packageAttrNames(keys):
   # Recurse, adding to keys as we go.
   to_entries | map(
     (keys + [.key]) as $newkeys |
@@ -74,7 +74,7 @@ def packagePNames(keys):
       # Return all keys including the last one.
       $newkeys
     else (
-      .value | packagePNames($newkeys)[]
+      .value | packageAttrNames($newkeys)[]
     ) end
   );
 
@@ -83,7 +83,7 @@ def packagePaths(catalog):
     .key as $channel |
     .value | to_entries | map(
       .key as $system |
-      .value | packagePNames([]) | map(
+      .value | packageAttrNames([]) | map(
         [ $channel, $system ] + . | flatten
       )
     )
