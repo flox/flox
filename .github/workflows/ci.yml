@@ -36,7 +36,7 @@ jobs:
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
     - name: Test
-      run: flox develop -c '.#flox' -c cargo test --workspace
+      run: flox develop '.#flox' -c cargo test --workspace
       
     - name: Build
       run: flox build '${{ matrix.package }}' -L --print-out-paths
