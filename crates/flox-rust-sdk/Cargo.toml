@@ -31,6 +31,7 @@ walkdir = "2"
 indoc = "2.0.1"
 itertools = "0.10.5"
 chrono = "0.4.24"
+git-url-parse = "0.4.4"
 
 
 [dev-dependencies]

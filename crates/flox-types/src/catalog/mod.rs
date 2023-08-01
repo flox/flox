@@ -20,7 +20,6 @@ pub use eval::Eval;
 mod source;
 pub use source::Source;
 
-pub type DerivationPath = PathBuf;
 pub type StorePath = PathBuf;
 pub type AttrPath = Vec<String>;
 /// The "meaningful" component of an AttrPath. This excludes derivation type,

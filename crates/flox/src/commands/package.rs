@@ -7,7 +7,7 @@ use bpaf::{construct, Bpaf, Parser};
 use crossterm::tty::IsTty;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::project::Project;
-use flox_rust_sdk::models::publish::Publish;
+use flox_rust_sdk::models::publish::{Publish, PublishFlakeRef};
 use flox_rust_sdk::models::root::transaction::ReadOnly;
 use flox_rust_sdk::models::root::{self, Closed, Root};
 use flox_rust_sdk::nix::arguments::eval::EvaluationArgs;
@@ -16,7 +16,7 @@ use flox_rust_sdk::nix::arguments::NixArgs;
 use flox_rust_sdk::nix::command::{Build, BuildOut, Eval as EvalComm};
 use flox_rust_sdk::nix::command_line::{Group, NixCliCommand, NixCommandLine, ToArgs};
 use flox_rust_sdk::nix::{Run as RunC, RunTyped};
-use flox_rust_sdk::prelude::Installable;
+use flox_rust_sdk::prelude::FlakeAttribute;
 use flox_rust_sdk::providers::git::{GitCommandProvider, GitProvider};
 use flox_types::stability::Stability;
 use indoc::indoc;
@@ -30,24 +30,24 @@ use crate::utils::dialog::{Dialog, Text};
 use crate::utils::resolve_environment_ref;
 use crate::{flox_forward, subcommand_metric};
 
-async fn env_ref_to_installable<Git: GitProvider + 'static>(
+async fn env_ref_to_flake_attribute<Git: GitProvider + 'static>(
     flox: &Flox,
     subcommand: &str,
     environment_name: &str,
-) -> anyhow::Result<Installable> {
+) -> anyhow::Result<FlakeAttribute> {
     let env_ref = resolve_environment_ref::<Git>(flox, subcommand, Some(environment_name)).await?;
-    Ok(env_ref.get_latest_installable::<Git>(flox).await?)
+    Ok(env_ref.get_latest_flake_attribute::<Git>(flox).await?)
 }
 
 pub(crate) mod interface {
     use async_trait::async_trait;
     use bpaf::{Bpaf, Parser};
     use flox_rust_sdk::flox::Flox;
-    use flox_rust_sdk::prelude::Installable;
+    use flox_rust_sdk::prelude::FlakeAttribute;
     use flox_rust_sdk::providers::git::GitProvider;
 
     use super::parseable_macro::parseable;
-    use super::{env_ref_to_installable, Parseable, WithPassthru};
+    use super::{env_ref_to_flake_attribute, Parseable, WithPassthru};
     use crate::utils::installables::{
         BuildInstallable,
         BundleInstallable,
@@ -80,17 +80,19 @@ pub(crate) mod interface {
 
     #[async_trait(?Send)]
     pub trait ResolveInstallable<Git: GitProvider> {
-        async fn installable(&self, flox: &Flox) -> anyhow::Result<Installable>;
+        async fn installable(&self, flox: &Flox) -> anyhow::Result<FlakeAttribute>;
     }
 
     #[async_trait(?Send)]
     impl<T: InstallableDef + 'static, Git: GitProvider + 'static> ResolveInstallable<Git>
         for PosOrEnv<T>
     {
-        async fn installable(&self, flox: &Flox) -> anyhow::Result<Installable> {
+        async fn installable(&self, flox: &Flox) -> anyhow::Result<FlakeAttribute> {
             Ok(match self {
-                PosOrEnv::Pos(i) => i.resolve_installable(flox).await?,
-                PosOrEnv::Env(n) => env_ref_to_installable::<Git>(flox, T::SUBCOMMAND, n).await?,
+                PosOrEnv::Pos(i) => i.resolve_flake_attribute(flox).await?,
+                PosOrEnv::Env(n) => {
+                    env_ref_to_flake_attribute::<Git>(flox, T::SUBCOMMAND, n).await?
+                },
             })
         }
     }
@@ -99,7 +101,7 @@ pub(crate) mod interface {
     impl<T: InstallableDef + 'static, Git: GitProvider + 'static> ResolveInstallable<Git>
         for Option<PosOrEnv<T>>
     {
-        async fn installable(&self, flox: &Flox) -> anyhow::Result<Installable> {
+        async fn installable(&self, flox: &Flox) -> anyhow::Result<FlakeAttribute> {
             Ok(match self {
                 Some(x) => ResolveInstallable::<Git>::installable(x, flox).await?,
                 None => {
@@ -348,17 +350,17 @@ impl PackageCommands {
             },
 
             PackageCommands::Publish2(args) => {
-                let Installable {
+                let FlakeAttribute {
                     flakeref,
                     attr_path,
                 } = args
                     .inner
                     .installable_arg
                     .unwrap_or_default()
-                    .resolve_installable(&flox)
+                    .resolve_flake_attribute(&flox)
                     .await?;
 
-                let publish_ref = flakeref.try_into()?;
+                let publish_ref = PublishFlakeRef::from_flake_ref(flakeref, &flox, false).await?;
                 let publish = Publish::new(&flox, publish_ref, attr_path, config.flox.stability);
                 println!(
                     "{}",
@@ -382,8 +384,9 @@ impl PackageCommands {
                     .inner
                     .template
                     .unwrap_or_default()
-                    .resolve_installable(&flox)
-                    .await?;
+                    .resolve_flake_attribute(&flox)
+                    .await?
+                    .into();
 
                 let name = match command.inner.name {
                     Some(n) => n,
@@ -422,7 +425,7 @@ impl PackageCommands {
                     .inner
                     .installable_arg
                     .unwrap_or_default()
-                    .resolve_installable(&flox)
+                    .resolve_flake_attribute(&flox)
                     .await?;
 
                 flox.package(installable_arg, config.flox.stability, command.nix_args)
@@ -434,7 +437,7 @@ impl PackageCommands {
                     .inner
                     .installable_arg
                     .unwrap_or_default()
-                    .resolve_installable(&flox)
+                    .resolve_flake_attribute(&flox)
                     .await?;
 
                 flox.package(installable_arg, config.flox.stability, command.nix_args)
@@ -446,7 +449,7 @@ impl PackageCommands {
                     .inner
                     .installable_arg
                     .unwrap_or_default()
-                    .resolve_installable(&flox)
+                    .resolve_flake_attribute(&flox)
                     .await?;
 
                 flox.package(installable_arg, config.flox.stability, command.nix_args)
@@ -458,7 +461,7 @@ impl PackageCommands {
                     .inner
                     .installable_arg
                     .unwrap_or_default()
-                    .resolve_installable(&flox)
+                    .resolve_flake_attribute(&flox)
                     .await?;
 
                 flox.package(installable_arg, config.flox.stability, command.nix_args)
@@ -488,15 +491,15 @@ impl PackageCommands {
                     .inner
                     .bundler_arg
                     .unwrap_or_default()
-                    .resolve_installable(&flox)
+                    .resolve_flake_attribute(&flox)
                     .await?;
 
                 flox.package(installable_arg, config.flox.stability, command.nix_args)
-                    .bundle::<NixCommandLine>(bundler)
+                    .bundle::<NixCommandLine>(bundler.into())
                     .await?
             },
             PackageCommands::Containerize(command) => {
-                let mut installable = env_ref_to_installable::<GitCommandProvider>(
+                let mut installable = env_ref_to_flake_attribute::<GitCommandProvider>(
                     &flox,
                     "containerize",
                     &command.inner.environment_name.unwrap_or_default(),
@@ -528,7 +531,7 @@ impl PackageCommands {
                 info!("Building container...");
 
                 let command = Build {
-                    installables: [installable].into(),
+                    installables: [installable.into()].into(),
                     eval: EvaluationArgs {
                         impure: true.into(),
                     },

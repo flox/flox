@@ -6,7 +6,7 @@ use runix::arguments::eval::EvaluationArgs;
 use runix::arguments::NixArgs;
 use runix::command::Build;
 use runix::flake_ref::path::PathRef;
-use runix::installable::{AttrPath, Installable, ParseInstallableError};
+use runix::installable::{AttrPath, FlakeAttribute, ParseInstallableError};
 use runix::{NixBackend, Run};
 use thiserror::Error;
 use {fs_extra, nix_editor, tempfile};
@@ -270,13 +270,14 @@ impl<'flox> Environment<'flox> {
 
         let nix_args = NixArgs::default();
 
-        let temp_installable = Installable {
+        let temp_installable = FlakeAttribute {
             flakeref: runix::flake_ref::FlakeRef::Path(PathRef::new(
                 temp_flake_dir,
                 Default::default(),
             )),
             attr_path: self.attr_path.parse::<AttrPath>().unwrap(),
-        };
+        }
+        .into();
         let command = Build {
             installables: [temp_installable].into(),
             eval: EvaluationArgs {

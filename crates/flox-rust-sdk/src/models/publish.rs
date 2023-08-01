@@ -1,25 +1,29 @@
 use std::ops::Deref;
 use std::path::PathBuf;
+use std::str::FromStr;
 
 use derive_more::{Deref, DerefMut, Display};
 use flox_types::catalog::cache::{CacheMeta, SubstituterUrl};
 use flox_types::stability::Stability;
 use futures::TryFutureExt;
+use log::debug;
 use runix::arguments::flake::FlakeArgs;
 use runix::command::Eval;
 use runix::command_line::{NixCommandLine, NixCommandLineRunJsonError};
 use runix::flake_metadata::FlakeMetadata;
-use runix::flake_ref::git::GitRef;
+use runix::flake_ref::git::{GitAttributes, GitRef};
+use runix::flake_ref::git_service::{service, GitServiceRef};
 use runix::flake_ref::indirect::IndirectRef;
 use runix::flake_ref::path::PathRef;
+use runix::flake_ref::protocol::{WrappedUrl, WrappedUrlParseError};
 use runix::flake_ref::{protocol, FlakeRef};
-use runix::installable::{AttrPath, Installable};
+use runix::installable::{AttrPath, FlakeAttribute};
 use runix::{RunJson, RunTyped};
 use serde_json::{json, Value};
 use thiserror::Error;
 
 use crate::flox::Flox;
-use crate::providers::git::{GitCommandProvider as Git, GitProvider};
+use crate::providers::git::{GitCommandGetOriginError, GitCommandProvider as Git, GitProvider};
 
 /// Publish state before analyzing
 ///
@@ -163,7 +167,7 @@ impl<'flox> Publish<'flox, Empty> {
             },
             eval_args: runix::arguments::EvalArgs {
                 installable: Some(
-                    Installable {
+                    FlakeAttribute {
                         flakeref: analyzer_flakeref,
                         attr_path: analysis_attr_path,
                     }
@@ -276,7 +280,7 @@ pub enum PublishError {
 pub enum PublishFlakeRef {
     Ssh(GitRef<protocol::SSH>),
     Https(GitRef<protocol::HTTPS>),
-    // File(GitRef<protocol::File>),
+    File(GitRef<protocol::File>),
 }
 
 impl PublishFlakeRef {
@@ -285,6 +289,7 @@ impl PublishFlakeRef {
         match self {
             PublishFlakeRef::Ssh(ref ssh_ref) => ssh_ref.url.as_str().to_owned(),
             PublishFlakeRef::Https(ref https_ref) => https_ref.url.as_str().to_owned(),
+            PublishFlakeRef::File(ref file_ref) => file_ref.url.as_str().to_owned(),
         }
     }
 
@@ -293,24 +298,209 @@ impl PublishFlakeRef {
         match self {
             PublishFlakeRef::Ssh(ssh_ref) => FlakeRef::GitSsh(ssh_ref),
             PublishFlakeRef::Https(https_ref) => FlakeRef::GitHttps(https_ref),
+            PublishFlakeRef::File(file_ref) => FlakeRef::GitPath(file_ref),
         }
     }
-}
 
-impl TryFrom<FlakeRef> for PublishFlakeRef {
-    type Error = ConvertFlakeRefError;
+    /// Resolve `github:` flakerefs to a "proper" git url.
+    ///
+    /// Unlike nix operations publish is writing to the targeted git repository.
+    /// To allow native git operations on the remote,
+    /// the `github:` shorthand must be exanded to an `ssh` or `https` url.
+    ///
+    /// By default we resolve ssh urls,
+    /// since (publishing) users will more likely have ssh configured,
+    /// rather than (often insecure) token access.
+    /// In cases where https token access is granted by another tool (e.g. gh),
+    /// or within github actions we can prefer https URLs,
+    /// so not to require an ssh setup to be present.
+    #[allow(unused)]
+    fn from_github_ref(
+        GitServiceRef {
+            owner,
+            repo,
+            attributes,
+            ..
+        }: GitServiceRef<service::Github>,
+        prefer_https: bool,
+    ) -> Result<Self, ConvertFlakeRefError> {
+        let host = attributes.host.unwrap_or("github.com".to_string());
 
-    fn try_from(value: FlakeRef) -> Result<Self, Self::Error> {
-        let publish_flake_ref = match value {
+        let only_rev = attributes.rev.is_some() && attributes.reference.is_none();
+
+        let git_attributes = GitAttributes {
+            rev: attributes.rev,
+            reference: attributes.reference,
+            dir: attributes.dir,
+            // Nix needs either a `?ref=` or `allRefs=1` set to fetch a revision
+            all_refs: only_rev.then_some(true),
+            ..Default::default()
+        };
+
+        let publish_flake_ref = if prefer_https {
+            let url_str = format!("https://{host}/{owner}/{repo}");
+            let url = WrappedUrl::from_str(&url_str)
+                .map_err(|e| ConvertFlakeRefError::InvalidResultUrl(url_str, e))?;
+
+            Self::Https(GitRef {
+                url,
+                attributes: git_attributes,
+            })
+        } else {
+            let url_str = format!("ssh://git@{host}/{owner}/{repo}");
+            let url = WrappedUrl::from_str(&url_str)
+                .map_err(|e| ConvertFlakeRefError::InvalidResultUrl(url_str, e))?;
+
+            Self::Ssh(GitRef {
+                url,
+                attributes: git_attributes,
+            })
+        };
+
+        Ok(publish_flake_ref)
+    }
+
+    /// Resolve a git+file flake ref to a git+https reference
+    ///
+    /// Reproducing a snapshot from source requires access to the original repo.
+    /// Including a local file reference in the snapshot
+    /// means it's practically only possible to reproduce for the original creator.
+    /// Thus, we resolve a local branch to its upstream remote and branch.
+    ///
+    /// For local repositories we also check
+    /// whether the repository contains any uncommitted changes
+    /// and is in sync with its upstream branch.
+    async fn from_git_file_flake_ref(
+        file_ref: GitRef<protocol::File>,
+        nix: &NixCommandLine,
+    ) -> Result<Self, ConvertFlakeRefError> {
+        // Get nix metadata for the referred flake
+        // Successfully acquiring metadata proves the path
+        // - is in fact a flake
+        // - is a git repository
+        // - the path is not dirty (no uncommitted changes)
+        let local_metadata = {
+            let command = runix::command::FlakeMetadata {
+                flake_ref: Some(FlakeRef::GitPath(file_ref.clone()).into()),
+                ..Default::default()
+            };
+            command
+                .run_typed(nix, &Default::default())
+                .await
+                .map_err(ConvertFlakeRefError::LocalFlakeMetadata)?
+        };
+
+        if local_metadata.revision.is_none() {
+            Err(ConvertFlakeRefError::LocalFlakeDirty)?;
+        }
+
+        // Create a handle to the git repo
+        let repo = Git::discover(file_ref.url.path())
+            .await
+            .map_err(|_| ConvertFlakeRefError::RepoNotFound(file_ref.url.path().into()))?;
+
+        // Get the upstream branch information.
+        // This is essentialy
+        //
+        //   upstream_ref = git rev-parse @{u}
+        //   (remote_name, branch_name) = split_once "/" upstream_ref
+        //   upstream_url = git remote get-url ${remote_name}
+        //   upstream_rev = git ls-remote ${remote_name} ${branch_name}
+        //
+        // The current branch MUST have an upstream ref configured
+        // which resolves to a valid rev on the remote.
+        let remote = repo
+            .get_origin()
+            .await
+            .map_err(ConvertFlakeRefError::NoRemote)?;
+
+        // Ensure the remote branch exists
+        let remote_revision = remote
+            .revision
+            .ok_or(ConvertFlakeRefError::RemoteBranchNotFound)?;
+
+        debug!(
+            "Resolved local flake to remote '{name}:{reference}' at '{url}'",
+            name = remote.name,
+            reference = remote.reference,
+            url = remote.url
+        );
+
+        // Check whether the local branch is in sync with its upstream branch,
+        // to ensure we publish the intended revision
+        // by comparing the local revision to the one found upstream.
+        //
+        // Dirty branches are already permitted due to the filter above.
+        if let Some(local_rev) = local_metadata.revision {
+            if local_rev.as_ref() != remote_revision {
+                Err(ConvertFlakeRefError::RemoteBranchNotSynced(
+                    local_rev.to_string(),
+                    remote_revision.clone(),
+                ))?
+            }
+        }
+
+        // Git supports special urls for e.g. ssh repos, e.g.
+        //
+        //   git@github.com:flox/flox
+        //
+        // Normalize these urls to proper URLs for the use with nix.
+        let remote_url = git_url_parse::normalize_url(&remote.url)
+            .map_err(|e| ConvertFlakeRefError::UnknownRemoteUrl(e.to_string()))?;
+
+        // Copy the flakeref attributes but unlock it in support of preferred upstream refs
+        let mut attributes = file_ref.attributes;
+        attributes.last_modified = None;
+        attributes.rev_count = None;
+        attributes.nar_hash = None;
+        // safe unwrap: remote revision is provided by git and is thus expected to match the revision regex
+        attributes.rev = Some(
+            remote_revision
+                .parse()
+                .expect("failed parsing revision returned by git"),
+        );
+        attributes.reference = Some(remote.reference);
+
+        let remote_flake_ref = match remote_url.scheme() {
+            "ssh" => Self::Ssh(GitRef::new(
+                WrappedUrl::try_from(remote_url).unwrap(),
+                attributes,
+            )),
+            "https" => Self::Https(GitRef::new(
+                WrappedUrl::try_from(remote_url).unwrap(),
+                attributes,
+            )),
+            // Resolving to a local remote is an error case most of the time
+            // but technically valid and required for testing.
+            // `File` variants are filtered out at a higher level
+            "file" => Self::File(GitRef::new(
+                WrappedUrl::try_from(remote_url).unwrap(),
+                attributes,
+            )),
+            _ => Err(ConvertFlakeRefError::UnsupportedGitUrl(remote_url))?,
+        };
+        Ok(remote_flake_ref)
+    }
+
+    pub async fn from_flake_ref(
+        flake_ref: FlakeRef,
+        flox: &Flox,
+        git_service_prefer_https: bool,
+    ) -> Result<Self, ConvertFlakeRefError> {
+        let publish_flake_ref = match flake_ref {
             FlakeRef::GitSsh(ssh_ref) => Self::Ssh(ssh_ref),
             FlakeRef::GitHttps(https_ref) => Self::Https(https_ref),
             // resolve upstream for local git repo
-            FlakeRef::GitPath(_) => todo!(),
+            FlakeRef::GitPath(file_ref) => {
+                Self::from_git_file_flake_ref(file_ref, &flox.nix(Default::default())).await?
+            },
             // resolve indirect ref to direct ref (recursively)
             FlakeRef::Indirect(_) => todo!(),
-            FlakeRef::Github(_) => todo!(),
+            FlakeRef::Github(github_ref) => {
+                Self::from_github_ref(github_ref, git_service_prefer_https)?
+            },
             FlakeRef::Gitlab(_) => todo!(),
-            _ => Err(ConvertFlakeRefError::UnsupportedTarget(value))?,
+            _ => Err(ConvertFlakeRefError::UnsupportedTarget(flake_ref))?,
         };
         Ok(publish_flake_ref)
     }
@@ -321,10 +511,41 @@ impl TryFrom<FlakeRef> for PublishFlakeRef {
 pub enum ConvertFlakeRefError {
     #[error("Unsupported flakeref for publish: {0}")]
     UnsupportedTarget(FlakeRef),
+
+    #[error("Invalid URL after conversion: {0}: {1}")]
+    InvalidResultUrl(String, WrappedUrlParseError),
+
+    #[error("Couldn't find a local git repository in: {0}")]
+    RepoNotFound(PathBuf),
+
+    #[error("Couldn't find remote")]
+    NoRemote(GitCommandGetOriginError),
+
+    #[error("Couldn't get metadata for local flake")]
+    LocalFlakeMetadata(NixCommandLineRunJsonError),
+
+    #[error("Local flake contains uncommitted changes")]
+    LocalFlakeDirty,
+
+    #[error("Current branch in local flake does not have a remote configured")]
+    RemoteBranchNotFound,
+
+    #[error("Local repo out of sync with remote: local: {0}, remote: {1}")]
+    RemoteBranchNotSynced(String, String),
+
+    #[error("Failed normalizing git url: {0}")]
+    UnknownRemoteUrl(String),
+
+    #[error("Unsupported git remote URL: {0}")]
+    UnsupportedGitUrl(url::Url),
 }
 
 #[cfg(test)]
 mod tests {
+
+    use std::fs;
+    use std::path::Path;
+    use std::str::FromStr;
 
     use super::*;
     use crate::flox::tests::flox_instance;
@@ -342,10 +563,12 @@ mod tests {
             Channel::from("github:flox/nixpkgs/stable".parse::<FlakeRef>().unwrap()),
         );
 
-        let publish_flake_ref: PublishFlakeRef = "git+ssh://git@github.com/flox/flox"
+        let flake_ref = "git+ssh://git@github.com/flox/flox"
             .parse::<FlakeRef>()
-            .unwrap()
-            .try_into()
+            .unwrap();
+
+        let publish_flake_ref = PublishFlakeRef::from_flake_ref(flake_ref, &flox, false)
+            .await
             .unwrap();
 
         let attr_path = ["", "packages", "aarch64-darwin", "flox"]
@@ -357,5 +580,178 @@ mod tests {
         let value = publish.analyze().await.unwrap().analysis().to_owned();
 
         println!("{}", serde_json::to_string_pretty(&value).unwrap());
+    }
+
+    #[test]
+    fn convert_github_ref() {
+        // simple github references
+        let flake_ref = GitServiceRef::<service::Github>::from_str("github:flox/flox").unwrap();
+        let publish_flake_ref = PublishFlakeRef::from_github_ref(flake_ref, false).unwrap();
+        assert_eq!(
+            publish_flake_ref.to_string(),
+            "git+ssh://git@github.com/flox/flox"
+        );
+
+        // github references with explicit host param
+        let flake_ref = GitServiceRef::<service::Github>::from_str(
+            "github:flox/flox?host=github.myenterprise.com",
+        )
+        .unwrap();
+        let publish_flake_ref = PublishFlakeRef::from_github_ref(flake_ref, false).unwrap();
+        assert_eq!(
+            publish_flake_ref.to_string(),
+            "git+ssh://git@github.myenterprise.com/flox/flox"
+        );
+
+        // github references with dir param
+        let flake_ref =
+            GitServiceRef::<service::Github>::from_str("github:flox/flox?dir=somwhere/inside")
+                .unwrap();
+        let publish_flake_ref = PublishFlakeRef::from_github_ref(flake_ref, false).unwrap();
+        assert_eq!(
+            publish_flake_ref.to_string(),
+            "git+ssh://git@github.com/flox/flox?dir=somwhere%2Finside"
+        );
+
+        // github references with git ref
+        let flake_ref =
+            GitServiceRef::<service::Github>::from_str("github:flox/flox/feat/test").unwrap();
+        let publish_flake_ref = PublishFlakeRef::from_github_ref(flake_ref, false).unwrap();
+        assert_eq!(
+            publish_flake_ref.to_string(),
+            "git+ssh://git@github.com/flox/flox?ref=feat%2Ftest"
+        );
+
+        // github references with git rev
+        let flake_ref = GitServiceRef::<service::Github>::from_str(
+            "github:flox/flox/49335c4bade5b3feb7378f9af8e9a528d9c4103e",
+        )
+        .unwrap();
+        let publish_flake_ref = PublishFlakeRef::from_github_ref(flake_ref, false).unwrap();
+        assert_eq!(
+            publish_flake_ref.to_string(),
+            "git+ssh://git@github.com/flox/flox?allRefs=1&rev=49335c4bade5b3feb7378f9af8e9a528d9c4103e"
+        );
+
+        // simple github references
+        let flake_ref = GitServiceRef::<service::Github>::from_str("github:flox/flox").unwrap();
+        let publish_flake_ref = PublishFlakeRef::from_github_ref(flake_ref, true).unwrap();
+        assert_eq!(
+            publish_flake_ref.to_string(),
+            "git+https://github.com/flox/flox"
+        );
+    }
+
+    /// Red path test: expect error if no upstream set for the current branch
+    #[cfg(feature = "impure-unit-tests")] // disabled for offline builds, TODO fix tests to work with local repos
+    #[tokio::test]
+    async fn git_file_error_if_dirty() {
+        env_logger::init();
+
+        let (flox, _temp_dir_handle) = flox_instance();
+        let repo_dir = _temp_dir_handle.path().join("repo");
+
+        fs::create_dir(&repo_dir).unwrap();
+        let repo = Git::init(&repo_dir, false).await.unwrap();
+
+        // create a file and stage it without committing so that the repo is dirty
+        fs::write(repo_dir.join("flake.nix"), "{ outputs = _: {}; }").unwrap();
+        repo.add(&[Path::new(".")]).await.unwrap();
+
+        let flake_ref =
+            GitRef::from_str(&format!("git+file://{}", repo_dir.to_string_lossy())).unwrap();
+
+        assert!(matches!(
+            PublishFlakeRef::from_git_file_flake_ref(
+                flake_ref.clone(),
+                &flox.nix(Default::default())
+            )
+            .await,
+            Err(ConvertFlakeRefError::LocalFlakeDirty)
+        ));
+    }
+
+    /// Green path test: resolve a branch and revision of upstream repo
+    /// Here, the "upstream" repo is just "the repo itself" (git remote add upstream .)
+    /// Note that there are many steps to this.
+    /// However in practice this operates on clones of upstream repos, where remote
+    /// (and often remote branches) are already set.
+    #[cfg(feature = "impure-unit-tests")] // disabled for offline builds, TODO fix tests to work with local repos
+    #[tokio::test]
+    async fn git_file_resolve_branch_and_rev() {
+        env_logger::init();
+
+        let (flox, _temp_dir_handle) = flox_instance();
+        let repo_dir = _temp_dir_handle.path().join("repo");
+
+        // create a repo
+        fs::create_dir(&repo_dir).unwrap();
+        let repo = Git::init(&repo_dir, false).await.unwrap();
+
+        // use a custom name as the default branch name might be affected by the user's git conf
+        repo.rename_branch("test/branch").await.unwrap();
+
+        // commit a file
+        fs::write(repo_dir.join("flake.nix"), "{ outputs = _: {}; }").unwrap();
+        repo.add(&[Path::new(".")]).await.unwrap();
+        repo.commit("Commit flake").await.unwrap();
+
+        // add a remote
+        repo.add_remote("upstream", &repo_dir.to_string_lossy())
+            .await
+            .unwrap();
+        repo.fetch().await.unwrap();
+
+        // set the origin
+        repo.set_origin("test/branch", "upstream").await.unwrap();
+
+        let flake_ref =
+            GitRef::from_str(&format!("git+file://{}", repo_dir.to_string_lossy())).unwrap();
+
+        let publish_flake_ref = PublishFlakeRef::from_git_file_flake_ref(
+            flake_ref.clone(),
+            &flox.nix(Default::default()),
+        )
+        .await
+        .unwrap();
+        assert!(matches!(
+            publish_flake_ref,
+            PublishFlakeRef::File(GitRef {
+                url: _,
+                attributes: GitAttributes {
+                    rev: Some(_),
+                    reference: Some(reference),
+                    ..
+                }}
+            )
+            if reference == "test/branch"
+        ))
+    }
+
+    #[cfg(feature = "impure-unit-tests")] // disabled for offline builds, TODO fix tests to work with local repos
+    #[tokio::test]
+    async fn git_file_error_if_no_upstream() {
+        env_logger::init();
+
+        let (flox, _temp_dir_handle) = flox_instance();
+        let repo_dir = _temp_dir_handle.path().join("repo");
+
+        fs::create_dir(&repo_dir).unwrap();
+        let repo = Git::init(&repo_dir, false).await.unwrap();
+
+        fs::write(repo_dir.join("flake.nix"), "{ outputs = _: {}; }").unwrap();
+        repo.add(&[Path::new(".")]).await.unwrap();
+        repo.commit("Commit flake").await.unwrap();
+
+        let flake_ref =
+            GitRef::from_str(&format!("git+file://{}", repo_dir.to_string_lossy())).unwrap();
+
+        let result = PublishFlakeRef::from_git_file_flake_ref(
+            flake_ref.clone(),
+            &flox.nix(Default::default()),
+        )
+        .await;
+
+        assert!(matches!(result, Err(ConvertFlakeRefError::NoRemote(_))));
     }
 }

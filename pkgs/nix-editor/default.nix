@@ -1,15 +1,11 @@
-{
-  rustPlatform,
-  fetchFromGitHub,
-}:
+{rustPlatform}:
 rustPlatform.buildRustPackage rec {
   pname = "nix-editor";
-  version = "0.3.0-beta.1";
-  src = fetchFromGitHub {
-    owner = "vlinkz";
-    repo = pname;
-    rev = version;
-    sha256 = "sha256-yjiYbBJNzsG6kAS6aRbqmMyiwEimT1/wzg4MUWwzNco=";
+  version = "0.3.0";
+  src = builtins.fetchGit {
+    url = "https://github.com/vlinkz/nix-editor.git";
+    rev = "ee45ac30a6e8bf1cbf40a5c1518eedd39a51fec1";
+    ref = "main";
   };
 
   cargoLock = {
