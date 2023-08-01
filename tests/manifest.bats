@@ -23,7 +23,7 @@ setup() {
 
 manifest() {
   local _manifest="$1"; shift;
-  jq -n -e -r -f "$MANIFEST_JQ" --arg system "${NIX_SYSTEM?}"         \
+  jq -n -e -r -f "$MANIFEST_JQ" --arg system "${NIX_SYSTEM?}"  \
      --slurpfile manifest "$_manifest" --args -- "$@";
 }
 
