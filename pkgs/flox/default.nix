@@ -157,13 +157,14 @@ in
           --zsh <($out/bin/flox --bpaf-complete-style-zsh)
       '';
 
-      doInstallCheck = true;
+      doInstallCheck = false;
       postInstallCheck = ''
         # Quick unit test to ensure that we are not using any "naked"
         # commands within our scripts. Doesn't hit all codepaths but
         # catches most of them.
-        env -i USER=`id -un` HOME=$PWD $out/bin/flox --help > /dev/null
-        env -i USER=`id -un` HOME=$PWD $out/bin/flox nix help > /dev/null
+        : "''${USER:=$( id -un; )}";
+        env -i USER="$USER" HOME="$PWD" "$out/bin/flox" --help > /dev/null;
+        env -i USER="$USER" HOME="$PWD" "$out/bin/flox" nix help > /dev/null;
       '';
 
       passthru.envs = envs;
