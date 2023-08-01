@@ -278,48 +278,51 @@ setup_file() {
 }
 
 @test "flox remove channel package by index" {
-  TEST_CASE_ENVIRONMENT=$(echo $RANDOM | md5sum | head -c 20; echo)
+  TEST_CASE_ENVIRONMENT="$(echo $RANDOM | md5sum | head -c 20; echo)"
 
-  run $FLOX_CLI install -e $TEST_CASE_ENVIRONMENT hello
+  run $FLOX_CLI install -e "$TEST_CASE_ENVIRONMENT" hello
   assert_success
 
-  run $FLOX_CLI list -e $TEST_CASE_ENVIRONMENT
+  run $FLOX_CLI list -e "$TEST_CASE_ENVIRONMENT"
   assert_success
-  assert_output --regexp "0  stable.nixpkgs-flox.hello +"$VERSION_REGEX
+  assert_output --regexp "0 +stable.nixpkgs-flox.hello +$VERSION_REGEX"
 
-  run $FLOX_CLI remove -e $TEST_CASE_ENVIRONMENT 0
+  run $FLOX_CLI remove -e "$TEST_CASE_ENVIRONMENT" 0
   assert_success
-  assert_output --partial "Removed '0' package(s) from '$TEST_CASE_ENVIRONMENT' environment."
+  assert_output --partial                                                \
+    "Removed '0' package(s) from '$TEST_CASE_ENVIRONMENT' environment."
 
-  run $FLOX_CLI list -e $TEST_CASE_ENVIRONMENT
+  run $FLOX_CLI list -e "$TEST_CASE_ENVIRONMENT"
   assert_success
-  ! assert_output --partial "stable.nixpkgs-flox.hello"
+  refute_output --partial "stable.nixpkgs-flox.hello"
 
   # teardown
-  run $FLOX_CLI destroy -e $TEST_CASE_ENVIRONMENT -f
+  run $FLOX_CLI destroy -e "$TEST_CASE_ENVIRONMENT" -f
   assert_success
 }
 
 @test "flox remove flake package by index" {
-  TEST_CASE_ENVIRONMENT=$(echo $RANDOM | md5sum | head -c 20; echo)
+  TEST_CASE_ENVIRONMENT="$(echo $RANDOM | md5sum | head -c 20; echo)"
 
-  run $FLOX_CLI install -e $TEST_CASE_ENVIRONMENT nixpkgs#hello
+  run $FLOX_CLI install -e "$TEST_CASE_ENVIRONMENT" nixpkgs#hello
   assert_success
 
-  run $FLOX_CLI list -e $TEST_CASE_ENVIRONMENT
+  run $FLOX_CLI list -e "$TEST_CASE_ENVIRONMENT"
   assert_success
-  assert_output --regexp "0  nixpkgs#hello  hello-"$VERSION_REGEX
+  assert_output --regexp  \
+    "0 +nixpkgs#legacyPackages\.$NIX_SYSTEM\.hello +$VERSION_REGEX"
 
-  run $FLOX_CLI remove -e $TEST_CASE_ENVIRONMENT 0
+  run $FLOX_CLI remove -e "$TEST_CASE_ENVIRONMENT" 0
   assert_success
-  assert_output --partial "Removed '0' package(s) from '$TEST_CASE_ENVIRONMENT' environment."
+  assert_output --partial  \
+    "Removed '0' package(s) from '$TEST_CASE_ENVIRONMENT' environment."
 
-  run $FLOX_CLI list -e $TEST_CASE_ENVIRONMENT
+  run $FLOX_CLI list -e "$TEST_CASE_ENVIRONMENT"
   assert_success
-  ! assert_output --partial "nixpkgs#hello"
+  refute_output --partial "nixpkgs#legacyPackages.$NIX_SYSTEM.hello"
 
   # teardown
-  run $FLOX_CLI destroy -e $TEST_CASE_ENVIRONMENT -f
+  run $FLOX_CLI destroy -e "$TEST_CASE_ENVIRONMENT" -f
   assert_success
 }
 
@@ -337,7 +340,7 @@ setup_file() {
 # rm upgrade.tar
 # flox unsubscribe nixpkgs-flox-upgrade-test
 @test "flox upgrade" {
-  case $NIX_SYSTEM in
+  case "$NIX_SYSTEM" in
   aarch64-darwin)
     RG_PATH="/nix/store/ix73alhygpflvq50fimdgwl1x2f8yv7y-ripgrep-13.0.0/bin/rg"
     CURL_PATH="/nix/store/8nv1g4ymxi2f96pbl1jy9h625v2risd8-curl-7.86.0-bin/bin/curl"

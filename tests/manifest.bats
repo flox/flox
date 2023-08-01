@@ -61,6 +61,16 @@ manifest2() { manifest "$MANIFESTS_DIR/manifest-v2.json" "$@"; }
 
 
 # ---------------------------------------------------------------------------- #
+
+@test "flakerefToFloxpkg 'github:NixOS/nixpkgs/refs/head/master#hello'" {
+  run manifest2 flakerefToFloxpkg                                \
+                'github:NixOS/nixpkgs/refs/heads/master#hello';
+  assert_success;
+  assert_output --partial 'github:NixOS/nixpkgs/refs/heads/master#hello';
+}
+
+
+# ---------------------------------------------------------------------------- #
 #
 #
 #
