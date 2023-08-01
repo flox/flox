@@ -150,11 +150,11 @@ in
 
       # bundle manpages and completion scripts
       postInstall = ''
-        installManPage ${manpages}/*
-        installShellCompletion --cmd flox \
-          --bash <($out/bin/flox --bpaf-complete-style-bash) \
-          --fish <($out/bin/flox --bpaf-complete-style-fish) \
-          --zsh <($out/bin/flox --bpaf-complete-style-zsh)
+        installManPage ${manpages}/*;
+        installShellCompletion --cmd flox                         \
+          --bash <( "$out/bin/flox" --bpaf-complete-style-bash; ) \
+          --fish <( "$out/bin/flox" --bpaf-complete-style-fish; ) \
+          --zsh <( "$out/bin/flox" --bpaf-complete-style-zsh; );
       '';
 
       doInstallCheck = false;
