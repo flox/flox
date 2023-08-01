@@ -101,6 +101,10 @@ common_file_setup() {
 #shellcheck disable=SC2119
 setup_file() { common_file_setup; }
 
+# Added for consistency with `teardown' routines.
+common_test_setup() { :; }
+setup() { common_test_setup; }
+
 
 # ---------------------------------------------------------------------------- #
 
