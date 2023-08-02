@@ -1531,6 +1531,10 @@ function floxPushPull() {
 	tmpDir=$(mkTempDir)
 	$invoke_git clone --quiet --shared "$environmentMetaDir" $tmpDir
 
+	# XXX Temporary migrate floxmeta from github.com -> floxdev.com with upgrade to 0.3.0
+	temporaryMigrateGitHubTo030Floxdev "$tmpDir"
+	# /XXX
+
 	# Add the upstream remote to the ephemeral clone.
 	$invoke_git -C $tmpDir remote add upstream $origin
 	floxmetaHelperGit -C $tmpDir fetch --quiet --all
