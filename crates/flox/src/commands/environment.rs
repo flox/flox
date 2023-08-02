@@ -149,12 +149,12 @@ impl EnvironmentCommands {
                 // }
 
                 let mut environment = environment
-                    .modify_in(tempfile::tempdir_in(flox.temp_dir).unwrap().into_path())
+                    .modify_in(tempfile::tempdir_in(&flox.temp_dir).unwrap().into_path())
                     .await
                     .context("Could not make modifyable copy of environment")?;
 
                 environment
-                    .install(packages)
+                    .install(packages, &flox.nix(Default::default()), &flox.system)
                     .await
                     .context("could not install packages")?;
 
@@ -177,12 +177,12 @@ impl EnvironmentCommands {
                 let environment =
                     resolve_environment(&flox, environment.as_deref(), "install").await?;
                 let mut environment = environment
-                    .modify_in(tempfile::tempdir_in(flox.temp_dir).unwrap().into_path())
+                    .modify_in(tempfile::tempdir_in(&flox.temp_dir).unwrap().into_path())
                     .await
                     .context("Could not make modifyable copy of environment")?;
 
                 environment
-                    .uninstall(packages)
+                    .uninstall(packages, &flox.nix(Default::default()), &flox.system)
                     .await
                     .context("could not uninstall packages")?;
 
