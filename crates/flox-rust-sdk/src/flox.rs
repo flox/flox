@@ -162,15 +162,15 @@ impl Flox {
         Root::closed(self, x)
     }
 
-    pub async fn environment_ref<Git: GitProvider, Nix: FloxNixApi>(
+    pub fn environment_ref<Git: GitProvider, Nix: FloxNixApi>(
         &self,
         name: &str,
-    ) -> Result<Vec<EnvironmentRef>, EnvironmentRefError<Git, Nix>>
+    ) -> Result<Vec<EnvironmentRef>, EnvironmentRefError>
     where
         Eval: RunJson<Nix>,
         FlakeMetadata: RunJson<Nix>,
     {
-        EnvironmentRef::find(self, Some(name)).await
+        EnvironmentRef::find(self, Some(name))
     }
 
     pub fn environment(&self, dir: PathBuf) -> Result<Environment, EnvironmentError> {

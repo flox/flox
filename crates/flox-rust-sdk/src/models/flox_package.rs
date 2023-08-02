@@ -60,12 +60,12 @@ impl FloxPackage {
                 Some(([installable.to_string()].to_vec(), None))
             },
             FloxPackage::Triple(FloxTriple {
-                stability,
+                stability: _,
                 channel,
                 name,
                 version,
             }) => {
-                let attrpath = [stability.to_string(), channel.to_string()]
+                let attrpath = [channel.to_string()]
                     .into_iter()
                     .chain(name.iter().map(|i| i.as_ref().to_owned()))
                     .collect();

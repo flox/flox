@@ -1,20 +1,17 @@
 use std::path::PathBuf;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 use bpaf::{construct, Bpaf, Parser, ShellComp};
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::models::environment::CommonEnvironment;
+use flox_rust_sdk::models::environment::{DotFloxDir, Environment, EnvironmentError2, Read};
 use flox_rust_sdk::models::environment_ref;
-use flox_rust_sdk::models::floxmeta::Floxmeta;
 use flox_rust_sdk::nix::command::StoreGc;
 use flox_rust_sdk::nix::command_line::NixCommandLine;
 use flox_rust_sdk::nix::Run;
 use flox_rust_sdk::prelude::flox_package::FloxPackage;
-use flox_rust_sdk::providers::git::{GitCommandProvider, GitProvider};
 use flox_types::constants::{DEFAULT_CHANNEL, LATEST_VERSION};
 use itertools::Itertools;
 use log::info;
-use serde_json::json;
 
 use crate::config::features::Feature;
 use crate::utils::resolve_environment_ref;
@@ -53,61 +50,74 @@ impl EnvironmentCommands {
         }
 
         match self {
+            EnvironmentCommands::Create {
+                environment_args: _,
+                environment,
+            } => {
+                let current_dir = std::env::current_dir().unwrap();
+
+                let mut dot_flox_dir = match DotFloxDir::open(&current_dir) {
+                    Ok(d) => d,
+                    Err(EnvironmentError2::NoDotFloxFound) => DotFloxDir::new(&current_dir)?,
+                    Err(e) => Err(e)?,
+                };
+
+                let env = dot_flox_dir
+                    .create_env(environment.as_deref().unwrap_or("default"))
+                    .await?;
+
+                println!(
+                    "Created environment {name} in {path:?}",
+                    name = environment_ref::EnvironmentRef::from(env),
+                    path = current_dir
+                );
+            },
+
             EnvironmentCommands::List {
                 environment_args: _,
                 environment,
                 json: _,
                 generation: _,
             } if !Feature::Env.is_forwarded()? => {
-                let environment =
-                    resolve_environment(&flox, environment.as_deref(), "install").await?;
+                let env = resolve_environment(&flox, environment.as_deref(), "install").await?;
 
-                match environment {
-                    CommonEnvironment::Named(env) => {
-                        let generation = env.generation(Default::default()).await?;
-                        println!("{}", serde_json::to_string_pretty(&generation).unwrap())
-                    },
-                    CommonEnvironment::Project(env) => {
-                        let catalog = env.catalog(&flox).await?;
-                        let installed_store_paths = env.installed_store_paths(&flox).await?;
+                let catalog = env
+                    .catalog(&flox.nix(Default::default()), &flox.system)
+                    .await
+                    .context("Could not get catalog")?;
+                // let installed_store_paths = env.installed_store_paths(&flox).await?;
 
-                        println!("Packages in {env}:");
-                        for (publish_element, _) in catalog.entries.iter() {
-                            if publish_element.version != LATEST_VERSION {
-                                println!(
-                                    "{} {}",
-                                    publish_element.to_flox_tuple(),
-                                    publish_element.version
-                                )
-                            } else {
-                                println!("{}", publish_element.to_flox_tuple())
-                            }
-                        }
-                        for store_path in installed_store_paths.iter() {
-                            println!("{}", store_path.to_string_lossy())
-                        }
-                    },
+                println!(
+                    "Packages in {}:",
+                    environment_ref::EnvironmentRef::from(env)
+                );
+                for (publish_element, _) in catalog.entries.iter() {
+                    if publish_element.version != LATEST_VERSION {
+                        println!(
+                            "{} {}",
+                            publish_element.to_flox_tuple(),
+                            publish_element.version
+                        )
+                    } else {
+                        println!("{}", publish_element.to_flox_tuple())
+                    }
                 }
+                // for store_path in installed_store_paths.iter() {
+                //     println!("{}", store_path.to_string_lossy())
+                // }
             },
 
             EnvironmentCommands::Envs if !Feature::Env.is_forwarded()? => {
-                let floxmetas = Floxmeta::<GitCommandProvider, _>::list_floxmetas(&flox).await?;
+                let dot_flox_dir = DotFloxDir::discover(std::env::current_dir().unwrap())?;
+                let envs = dot_flox_dir
+                    .environments()?
+                    .into_iter()
+                    .map(environment_ref::EnvironmentRef::from);
 
-                let mut values = Vec::new();
-
-                for meta in floxmetas {
-                    let envs = meta.environments().await?;
-                    let mut dir = meta.git().workdir();
-                    let dir = dir.get_or_insert_with(|| meta.git().path());
-
-                    values.push(json!({
-                        "type": "floxmeta",
-                        "path": dir,
-                        "envs": envs,
-                    }));
+                println!("Envs in {:?}", dot_flox_dir.path());
+                for env in envs {
+                    println!("- {env}");
                 }
-
-                println!("{}", serde_json::to_string_pretty(&values)?);
             },
 
             EnvironmentCommands::Install {
@@ -127,20 +137,56 @@ impl EnvironmentCommands {
                     resolve_environment(&flox, environment.as_deref(), "install").await?;
 
                 // todo use set?
-                let installed = environment
-                    .packages()
-                    .into_iter()
-                    .map(From::from)
-                    .collect::<Vec<FloxPackage>>();
+                // let installed = environment
+                //     .packages(&flox.nix(Default::default()), &flox.system)
+                //     .await?
+                //     .into_iter()
+                //     .map(From::from)
+                //     .collect::<Vec<FloxPackage>>();
 
-                if let Some(installed) = packages.iter().find(|pkg| installed.contains(pkg)) {
-                    anyhow::bail!("{installed} is already installed");
-                }
+                // if let Some(installed) = packages.iter().find(|pkg| installed.contains(pkg)) {
+                //     anyhow::bail!("{installed} is already installed");
+                // }
+
+                let mut environment = environment
+                    .modify_in(tempfile::tempdir_in(flox.temp_dir).unwrap().into_path())
+                    .await
+                    .context("Could not make modifyable copy of environment")?;
 
                 environment
-                    .install(&packages)
+                    .install(packages)
                     .await
-                    .map_err(|_| anyhow::anyhow!("could not install packages"))?;
+                    .context("could not install packages")?;
+
+                environment.finish().context("Could not apply changes")?;
+            },
+
+            EnvironmentCommands::Remove {
+                environment_args: _,
+                environment,
+                packages,
+            } => {
+                let packages: Vec<_> = packages
+                    .iter()
+                    .map(|package| FloxPackage::parse(package, &flox.channels, DEFAULT_CHANNEL))
+                    .collect::<Result<Vec<_>, _>>()?
+                    .into_iter()
+                    .dedup()
+                    .collect();
+
+                let environment =
+                    resolve_environment(&flox, environment.as_deref(), "install").await?;
+                let mut environment = environment
+                    .modify_in(tempfile::tempdir_in(flox.temp_dir).unwrap().into_path())
+                    .await
+                    .context("Could not make modifyable copy of environment")?;
+
+                environment
+                    .uninstall(packages)
+                    .await
+                    .context("could not uninstall packages")?;
+
+                environment.finish().context("Could not apply changes")?;
             },
 
             EnvironmentCommands::WipeHistory {
@@ -150,43 +196,28 @@ impl EnvironmentCommands {
             } => {
                 let environment_name = environment.as_deref();
                 let environment_ref: environment_ref::EnvironmentRef =
-                    resolve_environment_ref::<GitCommandProvider>(
-                        &flox,
-                        "wipe-history",
-                        environment_name,
-                    )
-                    .await?;
+                    resolve_environment_ref(&flox, "wipe-history", environment_name).await?;
 
-                let environment = environment_ref
-                    .to_env::<GitCommandProvider, NixCommandLine>(&flox)
-                    .await
-                    .context("Environment not found")?;
+                let env = environment_ref.to_env().context("Environment not found")?;
 
-                match environment {
-                    CommonEnvironment::Named(env) => {
-                        if env.delete_symlinks().await? {
-                            // The flox nix instance is created with `--quiet --quiet`
-                            // because nix logs are passed to stderr unfiltered.
-                            // nix store gc logs are more useful,
-                            // thus we use 3 `--verbose` to have them appear.
-                            let nix = flox.nix::<NixCommandLine>(vec![
-                                "--verbose".to_string(),
-                                "--verbose".to_string(),
-                                "--verbose".to_string(),
-                            ]);
-                            let store_gc_command = StoreGc {
-                                ..StoreGc::default()
-                            };
+                if env.delete_symlinks()? {
+                    // The flox nix instance is created with `--quiet --quiet`
+                    // because nix logs are passed to stderr unfiltered.
+                    // nix store gc logs are more useful,
+                    // thus we use 3 `--verbose` to have them appear.
+                    let nix = flox.nix::<NixCommandLine>(vec![
+                        "--verbose".to_string(),
+                        "--verbose".to_string(),
+                        "--verbose".to_string(),
+                    ]);
+                    let store_gc_command = StoreGc {
+                        ..StoreGc::default()
+                    };
 
-                            info!("Running garbage collection. This may take a while...");
-                            store_gc_command.run(&nix, &Default::default()).await?;
-                        } else {
-                            info!("No old generations found to clean up.")
-                        }
-                    },
-                    CommonEnvironment::Project(_) => {
-                        bail!("can't wipe-history for project environment; project environments only keep the most recent build.");
-                    },
+                    info!("Running garbage collection. This may take a while...");
+                    store_gc_command.run(&nix, &Default::default()).await?;
+                } else {
+                    info!("No old generations found to clean up.")
                 }
             },
 
@@ -201,12 +232,10 @@ async fn resolve_environment<'flox>(
     flox: &'flox Flox,
     environment_name: Option<&str>,
     subcommand: &str,
-) -> Result<CommonEnvironment<'flox, GitCommandProvider>, anyhow::Error> {
-    let environment_ref =
-        resolve_environment_ref::<GitCommandProvider>(flox, subcommand, environment_name).await?;
+) -> Result<Environment<Read>, anyhow::Error> {
+    let environment_ref = resolve_environment_ref(flox, subcommand, environment_name).await?;
     let environment = environment_ref
-        .to_env::<GitCommandProvider, NixCommandLine>(flox)
-        .await
+        .to_env()
         .context("Could not use environment")?;
     Ok(environment)
 }
