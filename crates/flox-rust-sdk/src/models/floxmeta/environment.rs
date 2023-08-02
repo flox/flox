@@ -15,7 +15,6 @@ use url::Url;
 
 use super::{Floxmeta, GetFloxmetaError, TransactionCommitError, TransactionEnterError};
 use crate::models::environment::{DEFAULT_KEEP_GENERATIONS, DEFAULT_MAX_AGE_DAYS};
-use crate::models::environment_ref::Named;
 use crate::models::root::transaction::{GitAccess, GitSandBox, ReadOnly};
 use crate::providers::git::{BranchInfo, GitProvider};
 
@@ -253,15 +252,14 @@ impl<'flox, Git: GitProvider> Environment<'flox, Git, ReadOnly<Git>> {
         Cow::Borrowed(&self.local)
     }
 
-    pub fn as_env_ref(&self) -> Named {
-        Named {
-            name: self.name.to_string(),
-            owner: self.floxmeta.owner.to_string(),
-        }
-    }
-
     fn symlink_path(&self, generation: &str) -> PathBuf {
-        let owner_dir = Named::associated_owner_dir(self.floxmeta.flox, &self.floxmeta.owner);
+        let owner_dir = self
+            .floxmeta
+            .flox
+            .data_dir
+            .join("environments")
+            .join(self.floxmeta.owner());
+
         owner_dir.join(format!(
             "{system}.{name}-{generation}-link",
             system = self.system,
