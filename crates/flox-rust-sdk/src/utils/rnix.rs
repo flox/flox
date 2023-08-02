@@ -129,7 +129,6 @@ impl AttrSetExt for rnix::ast::AttrSet {
                         },
                     }
             }
-            dbg!(&value);
             // exact match
             return Some(value);
         }

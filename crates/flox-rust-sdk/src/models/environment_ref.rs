@@ -1,18 +1,16 @@
+use std::convert::Infallible;
 use std::fmt::Display;
 use std::io::{self, ErrorKind};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
+use std::str::FromStr;
 
 use log::debug;
 use runix::command::{Eval, FlakeMetadata};
-use runix::flake_ref::git::{GitAttributes, GitRef};
-use runix::flake_ref::path::PathRef;
-use runix::flake_ref::FlakeRef;
 use runix::installable::FlakeAttribute;
 use runix::{NixBackend, RunJson};
 use thiserror::Error;
-use url::Url;
 
-use super::environment::CommonEnvironment;
+use super::environment::{DotFloxDir, Environment, EnvironmentError2, Read, State};
 use super::flox_installable::{FloxInstallable, ParseFloxInstallableError};
 use super::floxmeta::{self, Floxmeta, GetFloxmetaError};
 use super::project::{self, OpenProjectError};
@@ -205,10 +203,6 @@ impl<'flox> Named {
         }
     }
 
-    fn meta_dir(flox: &Flox) -> PathBuf {
-        flox.cache_dir.join("meta")
-    }
-
     /// Return path to the environment data dir for an owner,
     /// e.g. ~/.local/share/flox/environments/owner
     pub fn associated_owner_dir(flox: &Flox, owner: &str) -> PathBuf {
@@ -249,34 +243,7 @@ impl<'flox> Named {
         }
     }
 
-    /// Convert an environment reference to an installable
-    fn get_installable(&self, flox: &Flox, system: &str, gen: &str) -> FlakeAttribute {
-        let flakeref = FlakeRef::GitPath(GitRef {
-            // we can unwrap here since we construct and know the path
-            url: Url::from_file_path(Self::meta_dir(flox).join(&self.owner))
-                .unwrap()
-                .try_into()
-                .unwrap(),
-            attributes: GitAttributes {
-                reference: format!("{system}.{name}", name = self.name).into(),
-                dir: Path::new(gen).to_path_buf().into(),
-                ..Default::default()
-            },
-        });
-
-        FlakeAttribute {
-            flakeref,
-            // The git branch varies but the name always remains `default`,
-            // which comes from the template
-            // https://github.com/flox/flox-bash-private/tree/main/lib/templateFloxEnv/pkgs/default
-            // and does not get renamed.
-            //
-            // enforce exact attr path (<flakeref>#.floxEnvs.<system>.default)
-            attr_path: ["", "floxEnvs", system, "default"].try_into().unwrap(),
-            outputs: Default::default(),
-        }
-    }
-
+    #[allow(unused)] // contents might be useful later
     async fn get_current_gen<Git: GitProvider>(
         &self,
         flox: &'flox Flox,
@@ -311,165 +278,100 @@ impl<'flox> Named {
 }
 
 #[derive(Debug, Clone)]
-pub enum EnvironmentRef<'flox> {
-    Named(Named),
-    Project(Project<'flox>),
+pub struct EnvironmentRef {
+    owner: Option<String>,
+    name: String,
 }
 
-impl Display for EnvironmentRef<'_> {
+impl Display for EnvironmentRef {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            EnvironmentRef::Named(Named { owner, name }) => {
-                if owner != DEFAULT_OWNER {
-                    write!(f, "{owner}/")?
-                }
-                write!(f, "{owner}/{name}")
-            },
-            EnvironmentRef::Project(Project { workdir, name, .. }) => {
-                write!(f, "{name} {workdir:?}")
-            },
+        if let Some(ref owner) = self.owner {
+            write!(f, "{owner}/")?;
+        }
+        write!(f, "{}", self.name)
+    }
+}
+
+impl FromStr for EnvironmentRef {
+    type Err = Infallible;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if let Some((owner, name)) = s.split_once('/') {
+            Ok(Self {
+                owner: Some(owner.to_string()),
+                name: name.to_string(),
+            })
+        } else {
+            Ok(Self {
+                owner: None,
+                name: s.to_string(),
+            })
+        }
+    }
+}
+
+impl<S: State> From<Environment<S>> for EnvironmentRef {
+    fn from(env: Environment<S>) -> Self {
+        EnvironmentRef {
+            name: env.name().to_string(),
+            owner: env.owner().map(ToString::to_string),
         }
     }
 }
 
 #[derive(Error, Debug)]
-pub enum EnvironmentRefError<Git: GitProvider, Nix: FloxNixApi>
-where
-    Eval: RunJson<Nix>,
-{
-    #[error("Error finding project environment: {0}")]
-    Project(FindProjectError<Nix>),
-    #[error("Error finding named environment: {0}")]
-    Named(FindNamedError<Git>),
+pub enum EnvironmentRefError {
+    #[error(transparent)]
+    Environment(EnvironmentError2),
+
     #[error("Name format is invalid")]
     Invalid,
 }
 
 #[allow(unused)]
-impl EnvironmentRef<'_> {
-    /// Returns a list of all matches for a user specified environment, including both named and
-    /// project environment matches
-    pub async fn find<'flox, Nix: FloxNixApi, Git: GitProvider>(
-        flox: &'flox Flox,
+impl EnvironmentRef {
+    /// Returns a list of all matches for a user specified environment
+    pub fn find(
+        flox: &Flox,
         environment_name: Option<&str>,
-    ) -> Result<(Vec<EnvironmentRef<'flox>>), EnvironmentRefError<Git, Nix>>
-    where
-        Eval: RunJson<Nix>,
-        FlakeMetadata: RunJson<Nix>,
-    {
-        let (not_proj, not_named) = match environment_name {
-            Some(name) => {
-                debug!("Finding environment for {}", name);
+    ) -> Result<(Vec<EnvironmentRef>), EnvironmentRefError> {
+        let dot_flox_dir = DotFloxDir::discover(std::env::current_dir().unwrap())
+            .map_err(EnvironmentRefError::Environment)?;
 
-                // Assume packages do not have '/' in their name
-                // This is a weak assumption that is "mostly" true
-                let not_proj = name.contains('/');
+        let env_ref = environment_name.map(
+            |n| n.parse::<EnvironmentRef>().unwrap(), /* infallible */
+        );
 
-                let not_named =
-                    // Skip named resolution if name starts with floxEnvs. or .floxEnvs.
-                    name.starts_with("floxEnvs.") || name.starts_with(".floxEnvs.")
-                    // Don't allow # in named environments as they look like flakerefs
-                    || name.contains('#');
-
-                // houston we have a problem
-                if not_proj && not_named {
-                    return Err(EnvironmentRefError::Invalid);
+        let mut environment_refs = dot_flox_dir
+            .environments()
+            .map_err(EnvironmentRefError::Environment)?;
+        if let Some(env_ref) = env_ref {
+            environment_refs.retain(|env| {
+                if env_ref.owner.is_some() {
+                    env_ref.owner.as_deref() == env.owner() && env_ref.name == env.name()
+                } else {
+                    env_ref.name == env.owner().unwrap_or_else(|| env.name())
                 }
-                (not_proj, not_named)
-            },
-            None => {
-                debug!("Finding environments");
-                (false, false)
-            },
-        };
-
-        let mut environment_refs = Vec::new();
-
-        if !not_proj {
-            match Project::find::<Nix, Git>(flox, environment_name).await {
-                Err(e @ (FindProjectError::NotInGitRepo | FindProjectError::NotProject)) => {
-                    debug!("{}", e);
-                },
-                Err(err) => return Err(EnvironmentRefError::Project(err)),
-                Ok(ps) => {
-                    for p in ps {
-                        environment_refs.push(EnvironmentRef::Project(p));
-                    }
-                },
-            };
+            });
         }
 
-        if !not_named {
-            match Named::find(flox, environment_name).await {
-                Err(err) => return Err(EnvironmentRefError::Named(err)),
-                Ok(None) => {},
-                Ok(Some(n)) => {
-                    environment_refs.push(EnvironmentRef::Named(n));
-                },
-            };
-        }
-
-        Ok(environment_refs)
+        Ok(environment_refs.into_iter().map(|env| env.into()).collect())
     }
 
     pub async fn get_latest_flake_attribute<'flox, Git: GitProvider>(
         &self,
         flox: &'flox Flox,
-    ) -> Result<FlakeAttribute, NamedGetCurrentGenError<Git>> {
-        match self {
-            EnvironmentRef::Project(project_ref) => Ok(project_ref.flake_attribute.clone()),
-            EnvironmentRef::Named(named_ref) => {
-                let gen = named_ref.get_current_gen(flox).await?;
-                Ok(named_ref.get_installable(flox, &flox.system, &gen))
-            },
-        }
+    ) -> Result<FlakeAttribute, EnvironmentRefError> {
+        let env = self.to_env()?;
+        Ok(env.flake_attribute(&flox.system))
     }
 
-    pub async fn to_env<'flox, Git: GitProvider + 'flox, Nix: FloxNixApi>(
-        &self,
-        flox: &'flox Flox,
-    ) -> Result<CommonEnvironment<'flox, Git>, CastError<Git, Nix>>
-    where
-        Eval: RunJson<Nix>,
-    {
-        let env: CommonEnvironment<'flox, Git> = match self {
-            EnvironmentRef::Named(Named { owner, name }) => {
-                let floxmeta = Floxmeta::get_floxmeta(flox, owner).await?;
-                let environment = floxmeta.environment(name).await?;
-                CommonEnvironment::Named(environment)
-            },
-            EnvironmentRef::Project(Project {
-                flake_attribute,
-                workdir,
-                name,
-                ..
-            }) => {
-                let path = match &flake_attribute.flakeref {
-                    runix::flake_ref::FlakeRef::Path(PathRef { path, .. }) => path.clone(),
-                    runix::flake_ref::FlakeRef::GitPath(GitRef { url, .. }) => {
-                        url.to_file_path().unwrap()
-                    },
-                    _ => Err(CastError::InvalidFlakeRef)?,
-                };
-
-                let git = flox
-                    .resource(path)
-                    .guard::<Git>()
-                    .await?
-                    .open()
-                    .map_err(|_| CastError::NotFound(flake_attribute.to_string()))?;
-
-                let project = git
-                    .guard()
-                    .await?
-                    .open()
-                    .map_err(|_| CastError::NotFound(flake_attribute.to_string()))?;
-
-                let environment = project.environment(name).await?;
-
-                CommonEnvironment::Project(environment)
-            },
-        };
+    pub fn to_env(&self) -> Result<Environment<Read>, EnvironmentRefError> {
+        let dot_flox_dir = DotFloxDir::discover(std::env::current_dir().unwrap())
+            .map_err(EnvironmentRefError::Environment)?;
+        let env = dot_flox_dir
+            .environment(self.owner.clone(), &self.name)
+            .map_err(EnvironmentRefError::Environment)?;
         Ok(env)
     }
 }
