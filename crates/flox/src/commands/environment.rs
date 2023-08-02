@@ -127,6 +127,15 @@ impl EnvironmentCommands {
                     .context("Failed applying environemnt changes")?;
             },
 
+            EnvironmentCommands::Destroy { environment, .. } if !Feature::Env.is_forwarded()? => {
+                let environment =
+                    resolve_environment(&flox, environment.as_deref(), "install").await?;
+
+                environment
+                    .delete()
+                    .context("Failed to delete environment")?;
+            },
+
             EnvironmentCommands::Activate {
                 environment_args: _,
                 environment,
