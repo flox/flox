@@ -105,8 +105,7 @@ impl<S: State> Environment<S> {
         Ok(())
     }
 
-    // internal
-    fn flox_nix_path(&self) -> PathBuf {
+    pub fn flox_nix_path(&self) -> PathBuf {
         self.path.join("pkgs").join("default").join("flox.nix")
     }
 
@@ -191,7 +190,7 @@ impl Environment<Read> {
 }
 
 impl Environment<Modify> {
-    async fn set_environment(
+    pub async fn set_environment(
         &mut self,
         mut flox_nix_content: impl std::io::Read,
         nix: &NixCommandLine,

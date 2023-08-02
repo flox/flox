@@ -1,6 +1,9 @@
-use std::path::PathBuf;
+use std::fs::File;
+use std::io::stdin;
+use std::path::{Path, PathBuf};
+use std::process::Command;
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use bpaf::{construct, Bpaf, Parser, ShellComp};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{DotFloxDir, Environment, EnvironmentError2, Read};
@@ -12,9 +15,10 @@ use flox_rust_sdk::nix::Run;
 use flox_rust_sdk::prelude::flox_package::FloxPackage;
 use flox_types::constants::{DEFAULT_CHANNEL, LATEST_VERSION};
 use itertools::Itertools;
-use log::info;
+use log::{error, info};
 
 use crate::config::features::Feature;
+use crate::utils::dialog::{Confirm, Dialog};
 use crate::utils::resolve_environment_ref;
 use crate::{flox_forward, subcommand_metric};
 
@@ -51,6 +55,78 @@ impl EnvironmentCommands {
         }
 
         match self {
+            EnvironmentCommands::Edit {
+                environment_args: _,
+                environment,
+                file,
+            } if !Feature::Env.is_forwarded()? => 'edit: {
+                let environment =
+                    resolve_environment(&flox, environment.as_deref(), "install").await?;
+                let mut environment = environment
+                    .modify_in(tempfile::tempdir_in(&flox.temp_dir).unwrap().into_path())
+                    .await?;
+
+                let nix = flox.nix(Default::default());
+
+                if let Some(file) = file {
+                    let file: Box<dyn std::io::Read> = if file == Path::new("-") {
+                        Box::new(stdin())
+                    } else {
+                        Box::new(File::open(file).unwrap())
+                    };
+
+                    environment
+                        .set_environment(file, &nix, &flox.system)
+                        .await?;
+                    break 'edit;
+                }
+
+                let editor = std::env::var("EDITOR").context("$EDITOR not set")?;
+                if !Dialog::can_prompt() {
+                    bail!("Can't open editor in non interactive context");
+                }
+
+                loop {
+                    let path = environment.flox_nix_path();
+                    let mut command = Command::new(&editor);
+                    command.arg(&path);
+
+                    let child = command.spawn().context("editor command failed")?;
+                    let _ = child.wait_with_output().context("editor command failed")?;
+
+                    match environment
+                        .set_environment(
+                            std::fs::read_to_string(&path).unwrap().as_bytes(),
+                            &nix,
+                            &flox.system,
+                        )
+                        .await
+                    {
+                        Ok(_) => {
+                            break;
+                        },
+                        Err(e) => {
+                            error!("Environment invalid, building resulted in an error: {e}");
+                            let again = Dialog {
+                                message: "Continue editing?",
+                                help_message: Default::default(),
+                                typed: Confirm {
+                                    default: Some(true),
+                                },
+                            }
+                            .prompt()
+                            .await?;
+                            if !again {
+                                break 'edit;
+                            }
+                        },
+                    };
+                }
+                environment
+                    .finish()
+                    .context("Failed applying environemnt changes")?;
+            },
+
             EnvironmentCommands::Activate {
                 environment_args: _,
                 environment,
