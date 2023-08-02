@@ -5,7 +5,8 @@ use bpaf::{construct, Bpaf, Parser, ShellComp};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{DotFloxDir, Environment, EnvironmentError2, Read};
 use flox_rust_sdk::models::environment_ref;
-use flox_rust_sdk::nix::command::StoreGc;
+use flox_rust_sdk::nix::arguments::eval::EvaluationArgs;
+use flox_rust_sdk::nix::command::{Shell, StoreGc};
 use flox_rust_sdk::nix::command_line::NixCommandLine;
 use flox_rust_sdk::nix::Run;
 use flox_rust_sdk::prelude::flox_package::FloxPackage;
@@ -50,6 +51,26 @@ impl EnvironmentCommands {
         }
 
         match self {
+            EnvironmentCommands::Activate {
+                environment_args: _,
+                environment,
+                arguments: _,
+            } if !Feature::Env.is_forwarded()? => {
+                let environment = environment.first().map(|e| e.as_ref());
+                let environment = resolve_environment(&flox, environment, "install").await?;
+
+                let command = Shell {
+                    eval: EvaluationArgs {
+                        impure: true.into(),
+                    },
+                    installables: [environment.flake_attribute(&flox.system).into()].into(),
+                    ..Default::default()
+                };
+
+                let nix = flox.nix(Default::default());
+                command.run(&nix, &Default::default()).await?
+            },
+
             EnvironmentCommands::Create {
                 environment_args: _,
                 environment,
