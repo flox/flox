@@ -5,13 +5,13 @@ use itertools::Itertools;
 use rnix::ast::{AttrSet, Expr};
 use rowan::ast::AstNode;
 use runix::arguments::eval::EvaluationArgs;
-use runix::arguments::EvalArgs;
-use runix::command::Eval;
-use runix::command_line::{NixCommandLine, NixCommandLineRunJsonError};
+use runix::arguments::{BuildArgs, EvalArgs};
+use runix::command::{Build, Eval};
+use runix::command_line::{NixCommandLine, NixCommandLineRunError, NixCommandLineRunJsonError};
 use runix::flake_ref::path::PathRef;
 use runix::installable::FlakeAttribute;
 use runix::store_path::StorePath;
-use runix::RunJson;
+use runix::{Run, RunJson};
 use thiserror::Error;
 use walkdir::WalkDir;
 
@@ -71,10 +71,37 @@ impl<S: State> Environment<S> {
         }
     }
 
+    #[allow(dead_code)] // used later
+    fn out_link(&self) -> PathBuf {
+        self.path.join("gc-root")
+    }
+
     // todo: do a nix build
     //       how / when to set gc root?
-    async fn build(&self) -> Result<(), EnvironmentError2> {
+    async fn build(
+        &self,
+        nix: &NixCommandLine,
+        system: impl AsRef<str>,
+    ) -> Result<(), EnvironmentError2> {
         println!("building with nix ....");
+
+        let build = Build {
+            installables: [self.flake_attribute(system).into()].into(),
+            eval: runix::arguments::eval::EvaluationArgs {
+                impure: true.into(),
+            },
+            build: BuildArgs {
+                // out_link: Some(self.out_link().into()),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        build
+            .run(nix, &Default::default())
+            .await
+            .map_err(EnvironmentError2::Build)?;
+
         Ok(())
     }
 
@@ -167,6 +194,8 @@ impl Environment<Modify> {
     async fn set_environment(
         &mut self,
         mut flox_nix_content: impl std::io::Read,
+        nix: &NixCommandLine,
+        system: impl AsRef<str>,
     ) -> Result<&mut Self, EnvironmentError2> {
         let mut flox_nix = std::fs::OpenOptions::new()
             .write(true)
@@ -174,13 +203,15 @@ impl Environment<Modify> {
             .open(self.flox_nix_path())
             .unwrap();
         std::io::copy(&mut flox_nix_content, &mut flox_nix).unwrap();
-        self.build().await?; // unwrap
+        self.build(nix, system).await?; // unwrap
         Ok(self)
     }
 
     pub async fn install(
         &mut self,
         packages: impl IntoIterator<Item = FloxPackage>,
+        nix: &NixCommandLine,
+        system: impl AsRef<str>,
     ) -> Result<&mut Self, EnvironmentError2> {
         let packages = packages
             .into_iter()
@@ -222,12 +253,15 @@ impl Environment<Modify> {
             .replace_with(edited.syntax().green().into_owned());
         let new_content = nixpkgs_fmt::reformat_string(&green_tree.to_string());
 
-        self.set_environment(new_content.as_bytes()).await
+        self.set_environment(new_content.as_bytes(), nix, system)
+            .await
     }
 
     pub async fn uninstall(
         &mut self,
         packages: impl IntoIterator<Item = FloxPackage>,
+        nix: &NixCommandLine,
+        system: impl AsRef<str>,
     ) -> Result<&mut Self, EnvironmentError2> {
         let packages = packages
             .into_iter()
@@ -259,13 +293,14 @@ impl Environment<Modify> {
                 .unwrap_or_else(|| panic!("path not found, {path_in_packages:?}"))
                 .syntax()
                 .index();
-            edited = edited.remove_child(index - 1); // yikes
+            edited = edited.remove_child(index - 2); // yikes
         }
 
         let green_tree = config_attrset.syntax().replace_with(edited);
         let new_content = nixpkgs_fmt::reformat_string(&green_tree.to_string());
 
-        self.set_environment(new_content.as_bytes()).await
+        self.set_environment(dbg!(new_content).as_bytes(), nix, system)
+            .await
     }
 
     pub fn finish(self) -> Result<Environment<Read>, EnvironmentError2> {
@@ -467,6 +502,8 @@ pub enum EnvironmentError2 {
     EvalCatalog(NixCommandLineRunJsonError),
     #[error("ParseCatalog({0})")]
     ParseCatalog(serde_json::Error),
+    #[error("Build({0})")]
+    Build(NixCommandLineRunError),
 }
 
 fn find_attrs(mut expr: Expr) -> Result<AttrSet, ()> {
@@ -571,7 +608,7 @@ mod tests {
 
     #[tokio::test]
     async fn edit_env() {
-        let tempdir = tempfile::tempdir().unwrap();
+        let (flox, tempdir) = flox_instance();
         let sandbox_path = tempdir.path().join("sandbox");
         std::fs::create_dir(&sandbox_path).unwrap();
 
@@ -585,7 +622,13 @@ mod tests {
         { }
         "#;
 
-        env.set_environment(new_env_str.as_bytes()).await.unwrap();
+        env.set_environment(
+            new_env_str.as_bytes(),
+            &flox.nix(Default::default()),
+            flox.system,
+        )
+        .await
+        .unwrap();
 
         assert_eq!(
             std::fs::read_to_string(env.flox_nix_path()).unwrap(),
@@ -603,6 +646,9 @@ mod tests {
     #[tokio::test]
     async fn test_install() {
         let (mut flox, tempdir) = flox_instance();
+        flox.channels
+            .register_channel("nixpkgs-flox", "github:flox/nixpkgs-flox".parse().unwrap());
+        let (nix, system) = (flox.nix(Default::default()), flox.system);
 
         let sandbox_path = tempdir.path().join("sandbox");
         std::fs::create_dir(&sandbox_path).unwrap();
@@ -611,18 +657,21 @@ mod tests {
         let env = dot_flox_dir.create_env("test").await.unwrap();
         let mut env = env.modify_in(&sandbox_path).await.unwrap();
 
-        flox.channels
-            .register_channel("nixpkgs-flox", "github:flox/nixpkgs-flox".parse().unwrap());
-
         let empty_env_str = r#"{ }"#;
-        env.set_environment(empty_env_str.as_bytes()).await.unwrap();
+        env.set_environment(empty_env_str.as_bytes(), &nix, &system)
+            .await
+            .unwrap();
 
-        env.install([FloxPackage::Triple(FloxTriple {
-            stability: Stability::Stable,
-            channel: "nixpkgs-flox".to_string(),
-            name: ["hello"].try_into().unwrap(),
-            version: None,
-        })])
+        env.install(
+            [FloxPackage::Triple(FloxTriple {
+                stability: Stability::Stable,
+                channel: "nixpkgs-flox".to_string(),
+                name: ["hello"].try_into().unwrap(),
+                version: None,
+            })],
+            &nix,
+            &system,
+        )
         .await
         .unwrap();
 
@@ -642,16 +691,16 @@ mod tests {
             installed_env_str
         );
 
-        let catalog = env
-            .catalog(&flox.nix(Default::default()), flox.system)
-            .await
-            .unwrap();
+        let catalog = env.catalog(&nix, &system).await.unwrap();
         assert!(!catalog.entries.is_empty());
     }
 
     #[tokio::test]
     async fn test_uninstall() {
         let (mut flox, tempdir) = flox_instance();
+        flox.channels
+            .register_channel("nixpkgs-flox", "github:flox/nixpkgs-flox".parse().unwrap());
+        let (nix, system) = (flox.nix(Default::default()), flox.system);
 
         let sandbox_path = tempdir.path().join("sandbox");
         std::fs::create_dir(&sandbox_path).unwrap();
@@ -660,11 +709,13 @@ mod tests {
         let env = dot_flox_dir.create_env("test").await.unwrap();
         let mut env = env.modify_in(&sandbox_path).await.unwrap();
 
-        flox.channels
-            .register_channel("nixpkgs-flox", "github:flox/nixpkgs-flox".parse().unwrap());
+        let empty_env_str = indoc! {"
+            { }
+        "};
 
-        let empty_env_str = r#"{ }"#;
-        env.set_environment(empty_env_str.as_bytes()).await.unwrap();
+        env.set_environment(empty_env_str.as_bytes(), &nix, &system)
+            .await
+            .unwrap();
 
         let package = FloxPackage::Triple(FloxTriple {
             stability: Stability::Stable,
@@ -673,7 +724,7 @@ mod tests {
             version: None,
         });
 
-        env.install([package.clone()]).await.unwrap();
+        env.install([package.clone()], &nix, &system).await.unwrap();
 
         let installed_env_str = indoc! {r#"
             { packages."nixpkgs-flox".hello = { }; }
@@ -684,25 +735,21 @@ mod tests {
             installed_env_str
         );
 
-        let catalog = env
-            .catalog(&flox.nix(Default::default()), &flox.system)
-            .await
-            .unwrap();
+        let catalog = env.catalog(&nix, &system).await.unwrap();
         assert!(!catalog.entries.is_empty());
 
-        env.uninstall([package.clone()]).await.unwrap();
+        env.uninstall([package.clone()], &nix, &system)
+            .await
+            .unwrap();
 
-        let env = env.finish().unwrap();
+        let env: Environment<Read> = env.finish().unwrap();
 
         assert_eq!(
             std::fs::read_to_string(env.flox_nix_path()).unwrap(),
             empty_env_str
         );
 
-        let catalog = env
-            .catalog(&flox.nix(Default::default()), flox.system)
-            .await
-            .unwrap();
+        let catalog = env.catalog(&nix, &system).await.unwrap();
         assert!(catalog.entries.is_empty());
     }
 }
