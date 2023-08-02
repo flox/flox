@@ -37,6 +37,7 @@
   util-linuxMinimal,
   which,
   semver,
+  builtfilter-rs,
 }: let
   # The getent package can be found in pkgs.unixtools.
   inherit (pkgs.unixtools) getent;
@@ -117,7 +118,7 @@ in
       nix-editor
       util-linuxMinimal
       semver
-      capacitated.flox-floxpkgs.packages.builtfilter
+      builtfilter-rs
       parser-util
     ];
     makeFlags =

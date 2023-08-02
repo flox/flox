@@ -1,0 +1,19 @@
+[package]
+name = "builtfilter-rs"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+flox-types = { git = "https://github.com/flox/flox" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1"
+serde_with = "1"
+anyhow = "1"
+log = "0.4"
+env_logger = "0.9"
+futures = "0.3"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "process"] }
+par-stream = {version="0.10", features = ["runtime-tokio"]}
+clap = {version = "3", features=["derive"]}
