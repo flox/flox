@@ -187,6 +187,11 @@ impl Environment<Read> {
             state: Modify { origin: self },
         })
     }
+
+    pub fn delete(self) -> Result<(), EnvironmentError2> {
+        std::fs::remove_dir_all(self.path).map_err(EnvironmentError2::DeleteEnvironement)?;
+        Ok(())
+    }
 }
 
 impl Environment<Modify> {
@@ -485,6 +490,8 @@ pub enum EnvironmentError2 {
     ReadEnvDir(std::io::Error),
     #[error("MakeSandbox({0})")]
     MakeSandbox(std::io::Error),
+    #[error("DeleteEnvironment({0})")]
+    DeleteEnvironement(std::io::Error),
 
     #[error("EnvNotFound")]
     EnvNotFound,
