@@ -13,8 +13,8 @@ use log::{debug, error};
 use runix::arguments::common::NixCommonArgs;
 use runix::arguments::eval::EvaluationArgs;
 use runix::arguments::flake::FlakeArgs;
+use runix::command::{Build, Eval, StoreSign};
 use runix::arguments::{CopyArgs, NixArgs, StoreSignArgs};
-use runix::command::{Eval, StoreSign};
 use runix::command_line::{NixCommandLine, NixCommandLineRunError, NixCommandLineRunJsonError};
 use runix::flake_metadata::FlakeMetadata;
 use runix::flake_ref::git::{GitAttributes, GitRef};
@@ -225,6 +225,20 @@ impl<'flox> Publish<'flox, NixAnalysis> {
     /// Read out the current publish state
     pub fn analysis(&self) -> &Value {
         self.analysis.deref()
+    }
+
+    pub async fn build(&self) -> Result<(), PublishError> {
+        let nix = self.flox.nix(Default::default());
+        let command = Build {
+            installables: [self.installable()].into(),
+            ..Default::default()
+        };
+
+        command
+            .run(&nix, &Default::default())
+            .await
+            .map_err(PublishError::Build)?;
+        Ok(())
     }
 
     /// Sign the binary
@@ -525,6 +539,9 @@ pub enum PublishError {
 
     #[error("Failed to invoke path-info: {0}")]
     PathInfo(NixCommandLineRunJsonError),
+
+    #[error("Failed to invoke build: {0}")]
+    Build(NixCommandLineRunError),
 
     #[error("Failed to invoke copy: {0}")]
     Copy(NixCommandLineRunError),

@@ -411,6 +411,12 @@ impl PackageCommands {
                 info!("Getting metadata for {installable}...");
                 let publish = publish.analyze().await?;
 
+                // build binary
+                info!("Building {installable}...");
+                publish.build().await?;
+                info!("done!");
+
+                // sign binary
                 let sign_key = args.inner.sign_key.or(config.flox.sign_key);
                 if let Some(sign_key) = sign_key {
                     info!("Signing binary...");
