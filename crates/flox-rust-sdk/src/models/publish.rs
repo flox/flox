@@ -13,7 +13,7 @@ use log::debug;
 use runix::arguments::common::NixCommonArgs;
 use runix::arguments::eval::EvaluationArgs;
 use runix::arguments::flake::FlakeArgs;
-use runix::arguments::NixArgs;
+use runix::arguments::{CopyArgs, NixArgs};
 use runix::command::Eval;
 use runix::command_line::{NixCommandLine, NixCommandLineRunError, NixCommandLineRunJsonError};
 use runix::flake_metadata::FlakeMetadata;
@@ -239,15 +239,14 @@ impl<'flox> Publish<'flox, NixAnalysis> {
                 eval_store: Some("auto".to_string().into()),
                 ..Default::default()
             },
-            ..Default::default()
-        };
-
-        let nix_args = NixArgs {
-            common: NixCommonArgs {
-                store: substituter.clone().map(|url| url.to_string().into()),
+            copy_args: CopyArgs {
+                to: substituter.clone().map(|url| url.to_string().into()),
+                ..Default::default()
             },
             ..Default::default()
         };
+
+        let nix_args = Default::default();
 
         copy_command
             .run(&nix, &nix_args)
