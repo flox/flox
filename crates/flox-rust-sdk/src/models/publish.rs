@@ -233,10 +233,7 @@ impl<'flox> Publish<'flox, NixAnalysis> {
     /// making signing an optional operation.
     ///
     /// Requires a valid signing key
-    pub async fn sign_binary(
-        self,
-        key_file: impl AsRef<Path>,
-    ) -> Result<Publish<'flox, NixAnalysis>, PublishError> {
+    pub async fn sign_binary(&self, key_file: impl AsRef<Path>) -> Result<(), PublishError> {
         let nix = self.flox.nix(Default::default());
         let installable = self.installable();
 
@@ -255,7 +252,7 @@ impl<'flox> Publish<'flox, NixAnalysis> {
             .await
             .map_err(PublishError::SignPackage)?;
 
-        Ok(self)
+        Ok(())
     }
 
     /// Construct an installable type from the upstream flakeref and attrpath
@@ -270,7 +267,7 @@ impl<'flox> Publish<'flox, NixAnalysis> {
 
     /// Copy the outputs and dependencies of the package to binary store
     pub async fn upload_binary(
-        self,
+        &self,
         substituter: Option<SubstituterUrl>,
     ) -> Result<(), PublishError> {
         let nix: NixCommandLine = self.flox.nix(Default::default());
@@ -557,7 +554,7 @@ pub enum PublishFlakeRef {
 
 impl PublishFlakeRef {
     /// Extract a URL for cloning with git
-    fn clone_url(&self) -> String {
+    pub fn clone_url(&self) -> String {
         match self {
             PublishFlakeRef::Ssh(ref ssh_ref) => ssh_ref.url.as_str().to_owned(),
             PublishFlakeRef::Https(ref https_ref) => https_ref.url.as_str().to_owned(),
