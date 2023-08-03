@@ -21,7 +21,7 @@ use flox_rust_sdk::providers::git::{GitCommandProvider, GitProvider};
 use flox_types::stability::Stability;
 use indoc::indoc;
 use itertools::Itertools;
-use log::{debug, info};
+use log::{debug, info, warn};
 
 use crate::commands::package::interface::{PackageCommands, ResolveInstallable};
 use crate::config::features::Feature;
@@ -402,7 +402,7 @@ impl PackageCommands {
 
                 let publish = Publish::new(
                     &flox,
-                    publish_flakeref,
+                    publish_flakeref.clone(),
                     installable.attr_path.clone(),
                     config.flox.stability,
                 );
@@ -411,9 +411,56 @@ impl PackageCommands {
                 info!("Getting metadata for {installable}...");
                 let publish = publish.analyze().await?;
 
-                let analysis = publish.analysis();
+                let sign_key = args.inner.sign_key.or(config.flox.sign_key);
+                if let Some(sign_key) = sign_key {
+                    info!("Signing binary...");
+                    publish.sign_binary(&sign_key).await.with_context(|| {
+                        format!("Could not sign binary with sign-key {sign_key:?}")
+                    })?;
+                    info!("done!");
+                } else {
+                    warn!("No sign key specified, skipping signing!")
+                }
 
-                println!("{}", serde_json::to_string(analysis)?);
+                let cache_url = args.inner.cache_url.or(config.flox.cache_url);
+
+                let substituter_url = args
+                    .inner
+                    .substituter_url
+                    .or(config.flox.substituter_url)
+                    .or(cache_url.clone());
+
+                if let Some(cache_url) = cache_url {
+                    info!("Uploading binary...");
+                    publish
+                        .upload_binary(Some(cache_url))
+                        .await
+                        .context("Failid uploading binary")?;
+                    info!("done!");
+                } else {
+                    warn!("No cache url specified, binary not uploaded!")
+                }
+
+                if let Some(substituter_url) = substituter_url {
+                    info!("Checking substituters...");
+                    publish
+                        .upload_binary(Some(substituter_url))
+                        .await
+                        .context("Failed checking substituters")?;
+                    info!("done!");
+                } else {
+                    warn!("No substituter url specified, substitution not checked!")
+                }
+
+                if args.inner.json {
+                    let analysis = publish.analysis();
+
+                    println!("{}", serde_json::to_string(analysis)?);
+                } else {
+                    info!("Uploading snapshot to {}...", publish_flakeref.clone_url());
+                    publish.push_snapshot().await.context("Failed to upload")?;
+                    info!("Publish complete");
+                }
             },
 
             PackageCommands::Init(command) => {
