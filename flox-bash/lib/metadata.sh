@@ -587,6 +587,24 @@ EOF
 	${_rmdir?} "$tmpDir"
 }
 
+function checkGhAuth {
+	trace "$@"
+	local hostname="$1"; shift
+	# Repeat login attempts until we're successfully logged in.
+	while ! $_flox_gh auth status -h "$hostname" >/dev/null 2>&1; do
+		initialGreeting
+		warn "Invoking 'gh auth login -h $hostname'"
+
+		# gh auth login will automatically add credential helpers to the users
+		# global git config.
+		# Since flox will set the git credential helper manually where its
+		# needed and we want to avoid writing user files, trick gh to modify a
+		# temporary, discarded file instead
+		GIT_CONFIG_GLOBAL="$(mkTempFile)" $_flox_gh auth login -h "$hostname"
+		info ""
+	done
+}
+
 function checkFloxGhAuth {
 	trace "$@"
 	local hostname="$1"; shift
@@ -640,7 +658,7 @@ function promptMetaOrigin() {
 	github.com)
 		echo "Great, let's start by getting you logged into $server." >&2
 		# For github.com only, use the `gh` CLI to make things easy.
-		checkFloxGhAuth "$server"
+		checkGhAuth "$server"
 		if organization="$(getUsernameFromGhAuth "$server")"; then
 			echo "Success! You are logged into $server as $organization." >&2
 		else
@@ -728,16 +746,7 @@ function getSetOrigin() {
 		elif [[ "${interactive?}" -eq 1 ]]; then
 			local defaultOrigin
 			if [[ "$environmentOwner" == "local" ]]; then
-				# Log into the flox CLI OAuth app.
-				checkFloxGhAuth "$server"
-				# Parse the username and password (token) using the credential helper.
-				username="$(getUsernameFromGhAuth "$server")"; then
 				#shellcheck disable=SC2119
-				# Take 'floxmeta' repo name from environment, if defined. Primarily used
-				# for testing repo creation, because you cannot simply rename a repo
-				# without GitHub helpfully redirecting requests to the renamed repo.
-				local repoName="${FLOXMETA_REPO_NAME:-floxmeta}"
-				echo "$defaultURL$organization/$repoName"
 				defaultOrigin="$(promptMetaOrigin)"
 			else
 				# Strange to have a profile on disk in a named without a
