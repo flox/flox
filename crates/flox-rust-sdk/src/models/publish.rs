@@ -945,7 +945,7 @@ mod tests {
             .await
             .expect("Should create branch");
 
-        // commit a file to the branch to crate the first reference
+        // commit a file to the branch to crate the first reference on the orphan branch
         fs::write(catalog.0.workdir().unwrap().join(".tag"), "").unwrap();
         catalog.0.add(&[Path::new(".tag")]).await.unwrap();
         catalog.0.commit("root commit").await.unwrap();
