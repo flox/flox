@@ -1,10 +1,12 @@
 use std::collections::BTreeMap;
 use std::ops::Deref;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
+use std::{fs, io};
 
 use derive_more::{Deref, DerefMut, Display};
 use flox_types::catalog::cache::{CacheMeta, SubstituterUrl};
+use flox_types::catalog::System;
 use flox_types::stability::Stability;
 use futures::TryFutureExt;
 use log::debug;
@@ -28,7 +30,12 @@ use serde_json::{json, Value};
 use thiserror::Error;
 
 use crate::flox::Flox;
-use crate::providers::git::{GitCommandGetOriginError, GitCommandProvider as Git, GitProvider};
+use crate::providers::git::{
+    GitCommandError,
+    GitCommandGetOriginError,
+    GitCommandProvider as Git,
+    GitProvider,
+};
 
 /// Publish state before analyzing
 ///
@@ -188,7 +195,7 @@ impl<'flox> Publish<'flox, Empty> {
             .map_err(|nix_error| {
                 PublishError::DrvMetadata(
                     self.attr_path.clone(),
-                    self.publish_flake_ref.clone(),
+                    self.publish_flake_ref.to_string(),
                     nix_error,
                 )
             })
@@ -206,12 +213,19 @@ impl<'flox> Publish<'flox, Empty> {
 
         locked_ref_command
             .run_typed(&nix, &Default::default())
-            .map_err(|nix_err| PublishError::FlakeMetadata(self.publish_flake_ref.clone(), nix_err))
+            .map_err(|nix_err| {
+                PublishError::FlakeMetadata(self.publish_flake_ref.to_string(), nix_err)
+            })
             .await
     }
 }
 
 impl<'flox> Publish<'flox, NixAnalysis> {
+    /// Read out the current publish state
+    pub fn analysis(&self) -> &Value {
+        self.analysis.deref()
+    }
+
     /// Copy the outputs and dependencies of the package to binary store
     pub async fn upload_binary(self) -> Result<Publish<'flox, NixAnalysis>, PublishError> {
         todo!()
@@ -266,43 +280,172 @@ impl<'flox> Publish<'flox, NixAnalysis> {
     }
 
     /// Write snapshot to catalog and push to origin
-    pub async fn push_catalog(self) -> Result<(), PublishError> {
-        let url = self.publish_flake_ref.clone_url();
-        let repo_dir = tempfile::tempdir_in(&self.flox.temp_dir)
-            .unwrap()
-            .into_path(); // todo catch error
-        let catalog = <Git as GitProvider>::clone(url, &repo_dir, false)
-            .await
-            .unwrap(); // todo: catch error
-
-        if catalog.list_branches().await.unwrap() // todo: catch error
-            .into_iter().any(|info| info.name == "catalog")
-        {
-            catalog.checkout("catalog", false).await.unwrap(); // todo: catch error
-        } else {
-            todo!();
-            // catalog.checkout("catalog", true).await.unwrap(); // todo: catch error
-
-            // catalog.set_upstream("origin", "catalog").await.unwrap();  // todo: implement
-            //                                                               todo: catch error
-        }
-        todo!()
+    pub async fn push_snapshot(&self) -> Result<(), PublishError> {
+        let mut upstream_repo =
+            UpstreamRepo::clone_repo(self.publish_flake_ref.clone_url(), &self.flox.temp_dir)
+                .await?;
+        self.push_snapshot_to(&mut upstream_repo).await
     }
 
-    /// Read out the current publish state
-    pub fn analysis(&self) -> &Value {
-        self.analysis.deref()
+    /// Write snapshot to a catalog and push to 'origin'
+    ///
+    /// Internal method to test
+    async fn push_snapshot_to(&self, upstream_repo: &mut UpstreamRepo) -> Result<(), PublishError> {
+        let catalog = upstream_repo
+            .get_or_create_catalog(&self.flox.system)
+            .await?;
+        if let Ok(Some(_)) = catalog.get_snapshot(self.analysis()) {
+            Err(PublishError::SnapshotExists)?;
+        }
+        catalog.add_snapshot(self.analysis()).await?;
+        catalog.push_catalog().await?;
+        Ok(())
+    }
+}
+
+/// Representation of an exclusive clone of an upstream repo
+///
+/// [UpstreamRepo] and [UpstreamCatalog] ensure safe access to individual catalog branches.
+/// Every [UpstreamRepo] instance represents an exclusive clone
+/// and can only ever create a single [UpstreamCatalog] instance at a time.
+struct UpstreamRepo(Git);
+
+impl UpstreamRepo {
+    /// Clone an upstream repo
+    async fn clone_repo(
+        url: impl AsRef<str>,
+        temp_dir: impl AsRef<Path>,
+    ) -> Result<Self, PublishError> {
+        let repo_dir = tempfile::tempdir_in(temp_dir).unwrap().into_path(); // todo catch error
+        let repo = <Git as GitProvider>::clone(url.as_ref(), &repo_dir, false).await?;
+
+        Ok(Self(repo))
+    }
+
+    fn catalog_branch_name(system: &System) -> String {
+        format!("catalog/{system}")
+    }
+
+    /// Create an [UpstreamCatalog] by checking out or creating a catalog branch.
+    ///
+    /// `Git` objects can switch branches at any time leaving the repo in an unknown state.
+    /// [get_catalog] ensures that only one [UpstreamCatalog] exists at a time by requiring a `&mut self`.
+    async fn get_or_create_catalog(
+        &mut self,
+        system: &System,
+    ) -> Result<UpstreamCatalog, PublishError> {
+        if self.0.list_branches().await? // todo: catch error
+            .into_iter().any(|info| info.name == Self::catalog_branch_name(system))
+        {
+            self.0
+                .checkout(&Self::catalog_branch_name(system), false)
+                .await?; // todo: catch error
+        } else {
+            self.0
+                .checkout(&Self::catalog_branch_name(system), true)
+                .await?;
+        }
+        Ok(UpstreamCatalog(&self.0))
+    }
+}
+
+/// Representation of a specific catalog branch in an exclusive clone of an upstream repo.
+///
+/// [UpstreamCatalog] guaranteesd that during its lifetime all operations on the underlying git repo
+/// are performed on a single branch,
+/// and that the branch is pushed to upstream before a new branch can be checked out.
+struct UpstreamCatalog<'a>(&'a Git);
+
+impl UpstreamCatalog<'_> {
+    /// Mostly naïve approxiaton of a snapshot path
+    ///
+    ///  /packages/<pname>/<version>.json
+    ///
+    /// TODO: fix before releasing publish!
+    fn get_snapshot_path(&self, snapshot: &Value) -> PathBuf {
+        let path = self
+            .0
+            .workdir()
+            .unwrap()
+            .join("packages")
+            .join(
+                snapshot["eval"]["meta"]["pname"]
+                    .as_str()
+                    .expect("'pname' is expected to be a string"),
+            )
+            .join(format!(
+                "{}.json",
+                snapshot["eval"]["meta"]["version"]
+                    .as_str()
+                    .expect("'version' is expected to be a string")
+            ));
+
+        path
+    }
+
+    /// Try retrieving a snapshot from the catalog
+    /// TODO: better addressing (attrpath + version + drv hash?)
+    fn get_snapshot(&self, snapshot: &Value) -> Result<Option<Value>, PublishError> {
+        let path = self.get_snapshot_path(snapshot);
+        let read_snapshot = match fs::read_to_string(path) {
+            Ok(s) => Some(serde_json::from_str(&s)?),
+            Err(e) if e.kind() == io::ErrorKind::NotFound => None,
+            Err(e) => Err(e)?,
+        };
+
+        Ok(read_snapshot)
+    }
+
+    /// [Value] to be [flox_types::catalog::CatalogEntry]
+    ///
+    /// Consumers should check if a snapshot already exists with [Self::get_snapshot]
+    async fn add_snapshot(&self, snapshot: &Value) -> Result<(), PublishError> {
+        let path = self.get_snapshot_path(snapshot);
+
+        fs::create_dir_all(path.parent().unwrap())?; // only an issue for a git repo in /
+
+        let mut snapshot_file = fs::OpenOptions::new()
+            .create_new(true)
+            .write(true)
+            .open(&path)?;
+
+        serde_json::to_writer(&mut snapshot_file, snapshot)?;
+
+        self.0.add(&[&self.get_snapshot_path(snapshot)]).await?;
+        self.0.commit("Added snapshot").await?; // TODO: pass message in here? commit in separate method?
+        Ok(())
+    }
+
+    /// Push the catalog branch to origin
+    ///
+    /// Pushing a catalog consumes the catalog instance,
+    /// which in turn enables any other methods on the [UpstreamRepo] that created this instance.
+    async fn push_catalog(self) -> Result<(), PublishError> {
+        self.0.push("origin").await?;
+        Ok(())
     }
 }
 
 #[derive(Error, Debug)]
 pub enum PublishError {
     #[error("Failed to load metadata for the package '{0}' in '{1}': {2}")]
-    DrvMetadata(AttrPath, PublishFlakeRef, NixCommandLineRunJsonError),
+    DrvMetadata(AttrPath, String, NixCommandLineRunJsonError),
 
     #[error("Failed to load metadata for flake '{0}': {1}")]
-    FlakeMetadata(PublishFlakeRef, NixCommandLineRunJsonError),
+    FlakeMetadata(String, NixCommandLineRunJsonError),
 
+    #[error("Failed reading snapshot data: {0}")]
+    ReadSnapshot(#[from] serde_json::Error),
+
+    #[error("Failed to run git operation: {0}")]
+    GitOperation(#[from] GitCommandError),
+
+    #[error("Failed to run IO operation: {0}")]
+    IoOperation(#[from] std::io::Error),
+
+    #[error("Already published")]
+    SnapshotExists,
+  
     #[error("Failed to parse store path {0}")]
     ParseStorePath(StorePathError),
 
@@ -653,7 +796,7 @@ mod tests {
     #[cfg(feature = "impure-unit-tests")] // disabled for offline builds, TODO fix tests to work with local repos
     #[tokio::test]
     async fn creates_catalog_entry() {
-        env_logger::init();
+        let _ = env_logger::try_init();
 
         let (mut flox, _temp_dir_handle) = flox_instance();
 
@@ -745,7 +888,7 @@ mod tests {
     #[cfg(feature = "impure-unit-tests")] // disabled for offline builds, TODO fix tests to work with local repos
     #[tokio::test]
     async fn git_file_error_if_dirty() {
-        env_logger::init();
+        let _ = env_logger::try_init();
 
         let (flox, _temp_dir_handle) = flox_instance();
         let repo_dir = _temp_dir_handle.path().join("repo");
@@ -778,7 +921,7 @@ mod tests {
     #[cfg(feature = "impure-unit-tests")] // disabled for offline builds, TODO fix tests to work with local repos
     #[tokio::test]
     async fn git_file_resolve_branch_and_rev() {
-        env_logger::init();
+        let _ = env_logger::try_init();
 
         let (flox, _temp_dir_handle) = flox_instance();
         let repo_dir = _temp_dir_handle.path().join("repo");
@@ -830,7 +973,7 @@ mod tests {
     #[cfg(feature = "impure-unit-tests")] // disabled for offline builds, TODO fix tests to work with local repos
     #[tokio::test]
     async fn git_file_error_if_no_upstream() {
-        env_logger::init();
+        let _ = env_logger::try_init();
 
         let (flox, _temp_dir_handle) = flox_instance();
         let repo_dir = _temp_dir_handle.path().join("repo");
@@ -852,5 +995,169 @@ mod tests {
         .await;
 
         assert!(matches!(result, Err(ConvertFlakeRefError::NoRemote(_))));
+    }
+
+    /// Check if we successfully clone a repo
+    #[tokio::test]
+    async fn upstream_repo_from_url() {
+        let _ = env_logger::try_init();
+
+        let (_flox, temp_dir_handle) = flox_instance();
+        let repo_dir = temp_dir_handle.path().join("repo");
+
+        // create a repo
+        fs::create_dir(&repo_dir).unwrap();
+        let repo = Git::init(&repo_dir, false).await.unwrap();
+
+        UpstreamRepo::clone_repo(
+            repo.workdir().unwrap().to_string_lossy(),
+            temp_dir_handle.path(),
+        )
+        .await
+        .expect("Should clone repo");
+    }
+
+    // disabled because nix build does not have git user/email config,
+    // TODO fix tests to work with local repos
+    #[cfg(feature = "impure-unit-tests")]
+    /// Check if we successfully clone a repo
+    #[tokio::test]
+    async fn create_catalog_branch() {
+        let _ = env_logger::try_init();
+        let (_flox, temp_dir_handle) = flox_instance();
+        let repo_dir = temp_dir_handle.path().join("repo");
+
+        // create a repo
+        fs::create_dir(&repo_dir).unwrap();
+        let repo = Git::init(&repo_dir, false).await.unwrap();
+        let mut repo = UpstreamRepo::clone_repo(
+            repo.workdir().unwrap().to_string_lossy(),
+            temp_dir_handle.path(),
+        )
+        .await
+        .expect("Should clone repo");
+
+        assert!(repo.0.list_branches().await.unwrap().is_empty());
+
+        let catalog = repo
+            .get_or_create_catalog(&"aarch64-darwin".to_string())
+            .await
+            .expect("Should create branch");
+
+        // commit a file to the branch to crate the first reference on the orphan branch
+        fs::write(catalog.0.workdir().unwrap().join(".tag"), "").unwrap();
+        catalog.0.add(&[Path::new(".tag")]).await.unwrap();
+        catalog.0.commit("root commit").await.unwrap();
+
+        assert_eq!(catalog.0.list_branches().await.unwrap().len(), 1);
+    }
+
+    // disabled because nix build does not have git user/email config,
+    // TODO fix tests to work with local repos
+    #[cfg(feature = "impure-unit-tests")]
+    /// Check if we successfully clone a repo
+    #[tokio::test]
+    async fn test_add_snapshot() {
+        let _ = env_logger::try_init();
+        let (_flox, temp_dir_handle) = flox_instance();
+        let repo_dir = temp_dir_handle.path().join("repo");
+
+        let snapshot = json!({
+            "eval": {
+                "meta": {
+                    "pname": "pkg",
+                    "version": "0.1.1"
+                }
+            }
+        });
+
+        // create a repo
+        fs::create_dir(&repo_dir).unwrap();
+        let repo = Git::init(&repo_dir, false).await.unwrap();
+        let mut repo = UpstreamRepo::clone_repo(
+            repo.workdir().unwrap().to_string_lossy(),
+            temp_dir_handle.path(),
+        )
+        .await
+        .expect("Should clone repo");
+
+        let catalog = repo
+            .get_or_create_catalog(&"aarch64-darwin".to_string())
+            .await
+            .expect("Should create branch");
+
+        catalog
+            .add_snapshot(&snapshot)
+            .await
+            .expect("Should add snapshot");
+
+        assert_eq!(
+            catalog
+                .get_snapshot(&snapshot)
+                .unwrap()
+                .expect("should find written snapshot"),
+            snapshot
+        );
+    }
+
+    // disabled because nix build does not have git user/email config,
+    // TODO fix tests to work with local repos
+    #[cfg(feature = "impure-unit-tests")]
+    /// Check if we successfully clone a repo
+    #[tokio::test]
+    async fn test_push_snapshot() {
+        let _ = env_logger::try_init();
+        let (_flox, temp_dir_handle) = flox_instance();
+        let repo_dir = temp_dir_handle.path().join("repo");
+
+        let snapshot = json!({
+            "eval": {
+                "meta": {
+                    "pname": "pkg",
+                    "version": "0.1.1"
+                }
+            }
+        });
+
+        // create an "upstream" repo
+        fs::create_dir(&repo_dir).unwrap();
+        let upstream_repo = Git::init(&repo_dir, false).await.unwrap();
+
+        // clone a "downstream"
+        let mut repo = UpstreamRepo::clone_repo(
+            upstream_repo.workdir().unwrap().to_string_lossy(),
+            temp_dir_handle.path(),
+        )
+        .await
+        .expect("Should clone repo");
+
+        // get a catalog, write a snapshot and push to upstream
+        let catalog = repo
+            .get_or_create_catalog(&"aarch64-darwin".to_string())
+            .await
+            .expect("Should create branch");
+
+        catalog
+            .add_snapshot(&snapshot)
+            .await
+            .expect("Should add snapshot");
+        catalog.push_catalog().await.expect("Should push catalog");
+
+        // checkout the new branch upstream to check if the file got written
+        upstream_repo
+            .checkout(
+                &UpstreamRepo::catalog_branch_name(&"aarch64-darwin".to_string()),
+                false,
+            )
+            .await
+            .expect("catalog branch should exist upstream");
+
+        let snapshot_path = repo_dir.join("packages").join("pkg").join("0.1.1.json");
+        assert!(snapshot_path.exists());
+
+        let snapshot_actual: Value =
+            serde_json::from_str(&fs::read_to_string(&snapshot_path).unwrap()).unwrap();
+
+        assert_eq!(snapshot_actual, snapshot_actual);
     }
 }

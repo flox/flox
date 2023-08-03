@@ -665,6 +665,7 @@ impl GitProvider for GitCommandProvider {
     async fn push(&self, remote: &str) -> Result<(), Self::PushError> {
         let mut command = GitCommandProvider::new_command(&self.workdir());
         command.arg("push");
+        command.arg("-u");
         command.arg(remote);
         command.arg("HEAD");
 
