@@ -741,6 +741,7 @@ dependencies = [
  "tracing",
  "tracing-log",
  "tracing-subscriber",
+ "url",
  "uuid",
  "xdg",
 ]

@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use tempfile::PersistError;
 use thiserror::Error;
 use toml_edit::{Document, Item, Key, Table, TableLike};
+use url::Url;
 use xdg::BaseDirectories;
 
 /// Name of flox managed directories (config, data, cache)
@@ -49,7 +50,12 @@ pub struct FloxConfig {
     #[serde(default)]
     pub stability: Stability,
 
-    pub default_substituter: String, // Todo: use Url type?
+    /// The url we push _to_
+    pub cache_url: Option<Url>,
+    /// The url we push _from_
+    pub substituter_url: Option<Url>,
+    /// Path to signing key
+    pub sign_key: Option<PathBuf>,
 
     #[serde(flatten)]
     pub instance: InstanceConfig,
