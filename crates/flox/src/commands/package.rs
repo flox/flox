@@ -40,11 +40,14 @@ async fn env_ref_to_flake_attribute<Git: GitProvider + 'static>(
 }
 
 pub(crate) mod interface {
+    use std::path::PathBuf;
+
     use async_trait::async_trait;
     use bpaf::{Bpaf, Parser};
     use flox_rust_sdk::flox::Flox;
     use flox_rust_sdk::prelude::FlakeAttribute;
     use flox_rust_sdk::providers::git::GitProvider;
+    use flox_types::catalog::cache::SubstituterUrl;
 
     use super::parseable_macro::parseable;
     use super::{env_ref_to_flake_attribute, Parseable, WithPassthru};
@@ -205,13 +208,37 @@ pub(crate) mod interface {
 
     #[derive(Bpaf, Clone, Debug)]
     pub struct PublishV2 {
-        /// Package to publish
-        #[bpaf(external(InstallableArgument::positional), optional, catch)]
-        pub installable_arg: Option<InstallableArgument<Parsed, PublishInstallable>>,
-
         /// Prefer https access to repositories published with a `github:` reference
         #[bpaf(long)]
         pub prefer_https: bool,
+
+        /// Optional signing key file to sign the binary with
+        ///
+        /// When ommitted, reads from the config
+        #[bpaf(long, short('k'))]
+        pub sign_key: Option<PathBuf>,
+
+        /// Url of a binary cache to push binaries _to_
+        ///
+        /// When ommitted, reads from the config
+        #[bpaf(long, short('c'))]
+        pub cache_url: Option<SubstituterUrl>,
+
+        /// Url of a substituter to pull binaries _from_
+        ///
+        /// When ommitted, uses the value for cache-url and falls back to the config
+        #[bpaf(long, short('s'))]
+        pub substituter_url: Option<SubstituterUrl>,
+
+        /// Print snapshot to stdout instead of oploading it to the catalog
+        ///
+        /// When ommitted, uses the value for cache-url and falls back to the config
+        #[bpaf(long, hide)]
+        pub json: bool,
+
+        /// Package to publish
+        #[bpaf(external(InstallableArgument::positional), optional, catch)]
+        pub installable_arg: Option<InstallableArgument<Parsed, PublishInstallable>>,
     }
     parseable!(PublishV2, publish_v2);
 
