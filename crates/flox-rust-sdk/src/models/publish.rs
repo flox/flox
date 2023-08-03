@@ -349,7 +349,7 @@ impl<'flox> Publish<'flox, NixAnalysis> {
     }
 
     fn store_paths(&self) -> Result<Vec<Installable>, PublishError> {
-        let store_paths = dbg!(self.analysis())["element"]["store_paths"]
+        let store_paths = self.analysis()["element"]["storePaths"]
             .as_array()
             // TODO use CatalogEntry and then we don't need to unwrap
             .unwrap()
@@ -894,7 +894,7 @@ mod tests {
             stability: Stability::Stable,
             analysis: NixAnalysis(json!({
                 "element": {
-                    "store_paths": [
+                    "storePaths": [
                         flox_sh_path,
                         bad_path,
                     ],
