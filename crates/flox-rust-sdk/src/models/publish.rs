@@ -14,14 +14,8 @@ use runix::arguments::common::NixCommonArgs;
 use runix::arguments::eval::EvaluationArgs;
 use runix::arguments::flake::FlakeArgs;
 use runix::arguments::{NixArgs, StoreSignArgs};
-use runix::command::{Eval, Eval, StoreSign};
-use runix::command_line::{
-    NixCommandLine,
-    NixCommandLine,
-    NixCommandLineRunError,
-    NixCommandLineRunJsonError,
-    NixCommandLineRunJsonError,
-};
+use runix::command::{Eval, StoreSign};
+use runix::command_line::{NixCommandLine, NixCommandLineRunError, NixCommandLineRunJsonError};
 use runix::flake_metadata::FlakeMetadata;
 use runix::flake_ref::git::{GitAttributes, GitRef};
 use runix::flake_ref::git_service::{service, GitServiceRef};
@@ -243,17 +237,18 @@ impl<'flox> Publish<'flox, NixAnalysis> {
         key_file: impl AsRef<Path>,
     ) -> Result<Publish<'flox, NixAnalysis>, PublishError> {
         let nix = self.flox.nix(Default::default());
-        let installable = Installable {
+        let flake_attribute = FlakeAttribute {
             flakeref: self.publish_flake_ref.clone().into_inner(),
             attr_path: self.attr_path.clone(),
-        };
+        }
+        .into();
 
         let sign_command = StoreSign {
             store_sign: StoreSignArgs {
                 key_file: key_file.as_ref().into(),
                 recursive: Some(true.into()),
             },
-            installables: [installable].into(),
+            installables: [flake_attribute].into(),
             eval: Default::default(),
             flake: Default::default(),
         };
@@ -472,7 +467,7 @@ pub enum PublishError {
     DrvMetadata(AttrPath, String, NixCommandLineRunJsonError),
 
     #[error("Failed to load metadata for flake '{0}': {1}")]
-    FlakeMetadata(PublishFlakeRef, NixCommandLineRunJsonError),
+    FlakeMetadata(String, NixCommandLineRunJsonError),
 
     #[error("Failed to sign package: {0}")]
     SignPackage(NixCommandLineRunError),
@@ -782,6 +777,7 @@ mod tests {
 
     use super::*;
     use crate::flox::tests::flox_instance;
+    use crate::prelude::Channel;
 
     #[cfg(feature = "impure-unit-tests")] // /nix/store is not accessible in the sandbox
     #[tokio::test]
