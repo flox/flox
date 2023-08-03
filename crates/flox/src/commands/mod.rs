@@ -199,10 +199,15 @@ impl FloxArgs {
 
                 let mut flox = flox;
                 // more mutable state hurray :/
-                flox.channels.register_channel(
-                    "nixpkgs",
-                    Channel::from_str(&format!("github:flox/nixpkgs/{}", config.flox.stability))?,
-                );
+                if config.flox.stability != Default::default() {
+                    flox.channels.register_channel(
+                        "nixpkgs",
+                        Channel::from_str(&format!(
+                            "github:flox/nixpkgs/{}",
+                            config.flox.stability
+                        ))?,
+                    );
+                }
                 command.handle(config, flox).await?
             },
             Commands::Environment(ref environment) => environment.handle(flox).await?,

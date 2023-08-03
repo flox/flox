@@ -60,6 +60,10 @@ pub struct CacheMeta {
     #[serde_as(as = "DisplayFromStr")]
     pub cache_url: SubstituterUrl,
     pub narinfo: Vec<Narinfo>,
+    /// TODO drop this
+    ///
+    /// Some older catalog entries have a state field which has since been
+    /// dropped
     #[serde(flatten)]
     pub _other: BTreeMap<String, Value>,
 }

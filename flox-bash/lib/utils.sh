@@ -344,6 +344,21 @@ function invoke() {
 # Accessor method for jq-based manifest library functions.
 # N.B. requires $manifest variable pointing to manifest.json file.
 #
+# COMMANDS
+#   floxpkgToFlakeRef TRIPLE       Convert `flox' "triple" to flake-ref
+#   flakerefToFloxpkg INST         Covert an installable URI to `flox' "triple"
+#   floxpkgToPosition TRIPLE       Lookup the index of a `flox' "triple"
+#   flakerefToPosition INST        Lookup the index of an installable URI
+#   storepathToPosition PATH       Lookup the index of a `/nix/store' path
+#   positionToFloxpkg INDEX        Emit unresolved installable URI for an index
+#   listEnvironment                List installables as "INDEX INSTALLABLE NAME"
+#   listFlakesInEnvironment        List installable URIs
+#   listStorePaths                 List installables' `/nix/store/' paths
+#   flakerefToNixEditorArgs INST   Emit `nix-editor' args for an installable
+#   floxpkgToNixEditorArgs TRIPLE  Emit `nix-editor' args for `flox' "triple"
+#   positionToCatalogPath INDEX    Emit installable URI for an index iff it is a
+#                                  catalog package, e.g. `evalCatalog.**'
+#   dump                           Pretty print raw `manifest.json' file
 function manifest() {
 	trace "$@"
 	local manifest="$1"; shift
@@ -358,7 +373,7 @@ function manifest() {
 
 	# N.B jq invocation aborts if it cannot slurp a file, so if the registry
 	# doesn't already exist (with nonzero size) then replace with bootstrap.
-	if [ -s "$manifest" ]; then
+	if [[ -s "$manifest" ]]; then
 		jqargs+=("--slurpfile" "manifest" "$manifest")
 	else
 		jqargs+=("--argjson" "manifest" '[{"elements": [], "version": 1}]')
@@ -372,80 +387,7 @@ function manifest() {
 	jqargs+=("--args" "--" "$@")
 
 	# Finally invoke jq.
-	minverbosity=2 $invoke_jq "${jqargs[@]}"
-}
-
-#
-# manifestTOML(command,[args])
-#
-# Accessor method for declarative TOML manifest library functions.
-# Expects to read a manifest.toml passed in STDIN.
-#
-function manifestTOML() {
-	trace "$@"
-	# jq args:
-	#   -r \                        # raw output (i.e. don't add quotes)
-	#   -f $_lib/manifest.jq \      # the manifest processing library
-	#   --arg system $system \      # set "$system"
-	#   --slurpfile manifest "$1" \ # slurp json into "$manifest"
-	local jqargs=("-r" "-f" "$_lib/manifestTOML.jq")
-
-	# Add "slurp" mode for pulling manifest from STDIN.
-	jqargs+=("-s")
-
-	# Append various args.
-	jqargs+=("--arg" "system" "$FLOX_SYSTEM")
-	jqargs+=("--argjson" "verbose" "$verbose")
-	jqargs+=("--arg" "environmentOwner" "$environmentOwner")
-	jqargs+=("--arg" "environmentName" "$environmentName")
-	jqargs+=("--arg" "FLOX_PATH_PREPEND" "$FLOX_PATH_PREPEND")
-
-	# Append remaining args using jq "--args" flag and "--" to
-	# prevent jq from interpreting provided args as options.
-	jqargs+=("--args" "--" "$@")
-
-	# Finally invoke jq.
-	minverbosity=2 $invoke_dasel -f - -r toml -w json | $invoke_jq "${jqargs[@]}"
-}
-
-#
-# renderManifestTOML(path/to/manifest.toml)
-#
-# Invokes commands to create a profile package from the supplied
-# manifest.toml file. To be replaced by renderFloxEnv() someday soon.
-#
-function renderManifestTOML() {
-	trace "$@"
-	local manifest_toml="$1"; shift
-
-	# Derive a list of Nix installables.
-	local -a installables=($($_cat $manifest_toml | manifestTOML installables))
-
-	# Convert this list of installables to a list of floxpkgArgs.
-	local -a floxpkgArgs
-	for i in "${installables[@]}"; do
-		floxpkgArgs+=("$(floxpkgArg "$i")")
-	done
-
-	if [ ${#floxpkgArgs[@]} -gt 0 ]; then
-		# Now we use this list of floxpkgArgs to create a temporary profile.
-		local tmpdir
-		tmpdir=$(mkTempDir)
-		$invoke_nix profile install --impure --profile $tmpdir/profile "${floxpkgArgs[@]}"
-
-		# If we've gotten this far we have a profile. Follow the links to
-		# identify the package, then (carefully) discard the tmpdir.
-		environmentPackage=$(cd $tmpdir && readlink $(readlink profile))
-		$_rm -f $tmpdir/profile $tmpdir/profile-1-link
-		$_rmdir $tmpdir
-		if [ -n "$environmentPackage" ]; then
-			echo $environmentPackage
-		else
-			error "failed to render new environment" </dev/null
-		fi
-	else
-		error "rendered empty environment" < /dev/null
-	fi
+	minverbosity=2 ${invoke_jq?} "${jqargs[@]}"
 }
 
 # boolPrompt($prompt, $default)
@@ -456,33 +398,23 @@ function boolPrompt() {
 	trace "$@"
 	local prompt="$1"; shift
 	local default="$1"; shift
-	local defaultLower
-	defaultLower=$(echo $default | $_tr A-Z a-z)
-	local defaultrc
-	case "$defaultLower" in
-	n|no) defaultrc=1 ;;
-	y|yes) defaultrc=0 ;;
-	*)
-		error "boolPrompt() called with invalid default" < /dev/null
-		;;
+	local defaultrc defaultPrompt
+	case "${default,,}" in
+	  n|no)  defaultrc=1; defaultPrompt='y/N'; ;;
+	  y|yes) defaultrc=0; defaultPrompt='Y/n'; ;;
+	  *) error "boolPrompt() called with invalid default" < /dev/null; ;;
 	esac
-	[ $interactive -eq 1 ] || return $defaultrc
-	local defaultCaps
-	defaultCaps=$(echo $default | tr a-z A-Z)
-	local defaultPrompt
-	defaultPrompt=$(echo "y/n" | tr "$defaultLower" "$defaultCaps")
+	[[ "${interactive?}" -eq 1 ]] || return "$defaultrc"
 	local value
-	read -e -p "$prompt ($defaultPrompt) " value
-	local valueLower
-	valueLower=$(echo $value | tr A-Z a-z)
-	case "$valueLower" in
-	n|no) return 1 ;;
-	y|yes) return 0 ;;
-	"") return $defaultrc ;;
-	*)
-		echo "invalid response \"$value\" .. try again" 1>&2
-		boolPrompt "$prompt" "$default"
-		;;
+	read -r -e -p "$prompt ($defaultPrompt) " value
+	case "${value,,}" in
+	  n|no)  return 1; ;;
+	  y|yes) return 0; ;;
+	  "")    return "$defaultrc"; ;;
+	  *)
+	  	echo "invalid response \"$value\" .. try again" 1>&2
+	  	boolPrompt "$prompt" "$default"
+	  ;;
 	esac
 }
 
@@ -495,19 +427,21 @@ function promptInput() {
 	local prompt="$1"; shift
 	local value="$1"; shift
 	# If not interactive then go with the default.(?)
-	[ $interactive -eq 1 ] || {
+	if [[ "$interactive" -ne 1 ]]; then
 		echo "$value"
 		return 0
-	}
+	fi
 	# Just assume a reasonable(?) screen width if COLUMNS not set.
-	local -i columns=${COLUMNS:-80}
+	local -i columns="${COLUMNS:-80}"
 	local -i width
-	width=$(( $columns - ${#prompt} ))
-	if [ $width -gt 0 ]; then
-		$_gum input --placeholder "$placeholder" --prompt "$prompt " --value "$value" --width $width
+	width=$(( "$columns" - "${#prompt}" ))
+	if [[ "$width" -gt 0 ]]; then
+		${_gum?} input --placeholder "$placeholder" --prompt "$prompt "  \
+			           --value "$value" --width "$width"
 	else
 		# If the math doesn't work then let gum choose what to do.
-		$_gum input --placeholder "$placeholder" --prompt "$prompt " --value "$value"
+		$_gum input --placeholder "$placeholder" --prompt "$prompt "  \
+			        --value "$value"
 	fi
 }
 

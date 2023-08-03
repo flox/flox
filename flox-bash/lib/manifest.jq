@@ -4,8 +4,24 @@
 # Usage:
 #   jq -e -n -r -s -f <this file> \
 #     --slurpfile manifest <path/to/manifest.json>
+#     --arg system <x86_64|aarch64>-<linux|darwin>
 #     --args <function> <funcargs>
 #
+# Commands:
+#   floxpkgToFlakeRef TRIPLE       Convert `flox' "triple" to flake-ref
+#   flakerefToFloxpkg INST         Covert an installable URI to `flox' "triple"
+#   floxpkgToPosition TRIPLE       Lookup the index of a `flox' "triple"
+#   flakerefToPosition INST        Lookup the index of an installable URI
+#   storepathToPosition PATH       Lookup the index of a `/nix/store' path
+#   positionToFloxpkg INDEX        Emit unresolved installable URI for an index
+#   listEnvironment                List installables as "INDEX INSTALLABLE NAME"
+#   listFlakesInEnvironment        List installable URIs
+#   listStorePaths                 List installables' `/nix/store/' paths
+#   flakerefToNixEditorArgs INST   Emit `nix-editor' args for an installable
+#   floxpkgToNixEditorArgs TRIPLE  Emit `nix-editor' args for `flox' "triple"
+#   positionToCatalogPath INDEX    Emit installable URI for an index iff it is a
+#                                  catalog package, e.g. `evalCatalog.**'
+#   dump                           Pretty print raw `manifest.json' file
 
 # Start by defining some constants.
 $ARGS.positional[0] as $function
@@ -93,9 +109,6 @@ def flakerefToFloxpkg(args): expectedArgs(1; args) |
       $flakeAttrPathArray[2] as $stability |
       ( $flakeAttrPathArray[3:] | join(".") ) as $attrPath |
       "\($stability).\($channel).\($attrPath)"
-    ) elif ($flakeType == "legacyPackages") then (
-      ( $flakeAttrPathArray[2:] | join(".") ) as $attrPath |
-      "\($channel)#\($attrPath)"
     ) else $flakeref end
   end;
 
@@ -119,9 +132,6 @@ def elementToFloxpkg:
       ( $attrPathArray[3:] | join(".") ) as $attrPath |
       "\($stability).\($channel).\($attrPath)"
     ) end
-  ) elif ($flakeType == "legacyPackages") then (
-    ( $attrPathArray[2:] | join(".") ) as $attrPath |
-    "\($channel)#\($attrPath)"
   ) else (
     # Punt? Just print the flake reference.
     [ $element["originalUrl"], $element["attrPath"] ] | join("#")
@@ -141,34 +151,35 @@ def flakerefToCatalogPath(args): expectedArgs(1; args) |
     ".[\"\($channel)\"][\"\($system)\"][\"\($stability)\"][\"\($attrPath)\"]"
   ) else empty end;
 
-# Pull pname attribute from flakeref (for sorting).
-def flakerefToPname(args): expectedArgs(1; args) |
+# Pull AttrName attribute from flakeref (for sorting).
+def flakerefToAttrName(args): expectedArgs(1; args) |
   flakerefToFloxpkg(args) |
   split(".") | .[2:] | join(".");
 
-# Add position and package{Name,PName,Version} as we define $elements.
+# Add position and package{Name,AttrName,Version} as we define $elements.
 ( $manifest[].elements | to_entries | map(
   ( .value.storePaths[0] | .[44:] ) as $packageName |
   ( if ( .value | has("attrPath") ) then (
-    ( .value | elementToFloxpkg | split(".")[2:] | join(".") | split("@")[0] ) as $packagePName |
-    ( $packageName | ltrimstr("\($packagePName)-") ) as $packageVersion |
-    [ $packagePName, $packageVersion ]
+    ( .value | elementToFloxpkg | split(".")[2:] | join(".") | split("@")[0]
+    ) as $packageAttrName |
+    ( $packageName | ltrimstr("\($packageAttrName)-") ) as $packageVersion |
+    [ $packageAttrName, $packageVersion ]
   ) else (
     # When installing by store path we don't have the provenance to
-    # precisely know what part of the "name" is the "pname" as opposed
+    # precisely know what part of the "name" is the "attrName" as opposed
     # to the "version", so don't guess and instead present the beginning
     # characters of the path checksum as the version.
     ( .value.storePaths[0] | .[11:19] ) as $packageVersion |
     [ $packageName, $packageVersion ]
-  ) end ) as $packagePNameVersion |
+  ) end ) as $packageAttrNameVersion |
   .value * {
     position:.key,
     packageName:$packageName,
-    packagePName:$packagePNameVersion[0],
-    packageVersion:$packagePNameVersion[1],
+    packageAttrName:$packageAttrNameVersion[0],
+    packageVersion:$packageAttrNameVersion[1],
     packageIdentifier: (
       if .value.attrPath then
-        flakerefToPname(["\(.value.originalUrl)#\(.value.attrPath)"])
+        flakerefToAttrName(["\(.value.originalUrl)#\(.value.attrPath)"])
       else
         $packageName
       end
@@ -177,40 +188,6 @@ def flakerefToPname(args): expectedArgs(1; args) |
 ) ) as $elements
 |
 
-def evalCatalogFlakerefToTOML(arg):
-  flakerefToFloxpkg([arg]) | split(".") |
-  .[0] as $stability |
-  .[1] as $channel |
-  (.[2:] | join(".")) as $nameAttrPath |
-  "  [packages.\"\($nameAttrPath)\"]
-  channel = \"\($channel)\"
-  stability = \"\($stability)\"
-";
-
-def legacyPackagesFlakerefToTOML(arg):
-  arg | split("#") |
-  .[0] as $originalUrl |
-  .[1] as $attrPath |
-  "  [packages.\"\($attrPath)\"]
-  originalUrl = \"\($originalUrl)\"
-  attrPath = \"\($attrPath)\"
-";
-
-def flakerefToTOML(arg):
-  if (arg | contains("#evalCatalog.\($system).")) then
-    evalCatalogFlakerefToTOML(arg)
-  else
-    legacyPackagesFlakerefToTOML(arg)
-  end;
-
-def storePathsToTOML(storePaths):
-  ( "\"" + ( storePaths | join("\",\n      \"") ) + "\"" ) as $storePaths |
-  ( storePaths[0] | .[44:] ) as $pkgname |
-  "  [packages.\"\($pkgname)\"]
-  storePaths = [
-    \($storePaths)
-  ]
-";
 
 def floxpkgToAttrPath(args): expectedArgs(1; args) |
   ["evalCatalog", $system, args[0]] | join(".");
@@ -239,13 +216,6 @@ def catalogPathFromElement:
     flakerefToCatalogPath(["\(.originalUrl)#\(.attrPath)"])
   else
     .storePaths[]
-  end;
-
-def TOMLFromElement:
-  if .attrPath then
-    flakerefToTOML("\(.originalUrl)#\(.attrPath)")
-  else
-    storePathsToTOML(.storePaths)
   end;
 
 def flakerefFromElementV1:
@@ -352,7 +322,7 @@ def listEnvironment(args):
       "\($position | tostring) \($floxpkgArg) \($storePaths)"
     ) | join("\n")
   elif args[0] == "--json" then (
-    $elements | sort_by(.packageIdentifier) | unique_by(.packageIdentifier) | map(
+    $elements|sort_by(.packageIdentifier)|unique_by(.packageIdentifier)|map(
       . as $datum |
       ($datum | floxpkgFromElement) as $floxpkgArg |
       {"floxpkgArg": $floxpkgArg} * $datum
@@ -365,22 +335,19 @@ def listEnvironment(args):
     error("unknown option: " + args[0])
   end;
 
-def listEnvironmentTOML(args): expectedArgs(0; args) |
-  $elements | sort_by(.packageIdentifier) | unique_by(.packageIdentifier) |
-    map(TOMLFromElement) as $TOMLelements |
-  (["[packages]"] + $TOMLelements) | join("\n");
-
 def listFlakesInEnvironment(args): expectedArgs(0; args) |
   ( $elements | map(
     if .attrPath then lockedFlakerefFromElement else empty end
   ) ) as $flakesInEnvironment |
-  if ($flakesInEnvironment | length) == 0 then " " else ($flakesInEnvironment | .[]) end;
+  if ($flakesInEnvironment | length) == 0 then " "
+                                          else ($flakesInEnvironment | .[]) end;
 
 def listStorePaths(args): expectedArgs(0; args) |
   ( $elements | map(.storePaths) | flatten ) as $anonStorePaths |
   if ($anonStorePaths | length) == 0 then " " else ($anonStorePaths | .[]) end;
 
-# return an attrPath and any other args to pass for installation. Only the attrPath is used for removals
+# return an attrPath and any other args to pass for installation.
+# Only the attrPath is used for removals
 def flakerefToNixEditorArgs(args): expectedArgs(1; args) |
   args[0] as $flakeref |
   ( $flakeref | split("#") | .[0] ) as $flakeOriginalUrl |
@@ -390,14 +357,18 @@ def flakerefToNixEditorArgs(args): expectedArgs(1; args) |
   ( $flakeAttrPath | split(".") ) as $flakeAttrPathArray |
   ( $flakeOriginalUrl | ltrimstr("flake:") ) as $rawChannel |
   ( "\"" + $rawChannel + "\"" ) as $quotedChannel |
-  ( if ($rawChannel | test(":|/|\\.")) then $quotedChannel else $rawChannel end ) as $channel |
-  # Current format starting 9/17/22: flake:<channel>#evalCatalog.<system>.<stability>.<name>
+  ( if ($rawChannel | test(":|/|\\.")) then $quotedChannel else $rawChannel end
+  ) as $channel |
+  # Current format starting 9/17/22:
+  #   flake:<channel>#evalCatalog.<system>.<stability>.<name>
   $flakeAttrPathArray[0] as $flakeType |
   if ($flakeType == "evalCatalog") then (
     $flakeAttrPathArray[2] as $stability |
     ( $flakeAttrPathArray[3:] | join(".") ) as $attrPath |
-    [ ( if ($stability != "stable") then "stability=\"\($stability)\";" else empty end ),
-      ( if $flakeAttrPathVersion then "version=\"\($flakeAttrPathVersion)\";" else empty end ) ]
+    [ ( if ($stability != "stable") then "stability=\"\($stability)\";"
+                                    else empty end ),
+      ( if $flakeAttrPathVersion then "version=\"\($flakeAttrPathVersion)\";"
+                                 else empty end ) ]
       | join(" ") as $editorAttributes |
     ["packages.\($channel).\($attrPath)","-v","{\($editorAttributes)}"]
   ) elif ($flakeType == "legacyPackages") then (
@@ -433,16 +404,6 @@ def _floxpkgToNixEditorArgs(args): expectedArgs(1; args) |
 def floxpkgToNixEditorArgs(args): expectedArgs(1; args) |
   _floxpkgToNixEditorArgs(args)[];
 
-def convert007to008(args):
-  args[0] as $nixEditor |
-  args[1] as $floxNix |
-  (args | length) as $argc |
-  $elements | map(
-    floxpkgFromElement as $floxpkg |
-    _floxpkgToNixEditorArgs([$floxpkg]) as $nixEditorArgs |
-    "\($nixEditor) -i \($floxNix) '" + ($nixEditorArgs | join("' '")) + "'"
-  ) | join("\n");
-
 # For debugging.
 def dump(args): expectedArgs(0; args) |
   $manifest | .[];
@@ -457,16 +418,19 @@ def dump(args): expectedArgs(0; args) |
 else if $function == "flakerefToFloxpkg"       then flakerefToFloxpkg($funcargs)
 else if $function == "floxpkgToPosition"       then floxpkgToPosition($funcargs)
 else if $function == "flakerefToPosition"      then flakerefToPosition($funcargs)
-else if $function == "storepathToPosition"     then storepathToPosition($funcargs)
 else if $function == "positionToFloxpkg"       then positionToFloxpkg($funcargs)
 else if $function == "listEnvironment"         then listEnvironment($funcargs)
-else if $function == "listEnvironmentTOML"     then listEnvironmentTOML($funcargs)
-else if $function == "convert007to008"         then convert007to008($funcargs)
-else if $function == "listFlakesInEnvironment" then listFlakesInEnvironment($funcargs)
 else if $function == "listStorePaths"          then listStorePaths($funcargs)
-else if $function == "flakerefToNixEditorArgs" then flakerefToNixEditorArgs($funcargs)
-else if $function == "floxpkgToNixEditorArgs"  then floxpkgToNixEditorArgs($funcargs)
-else if $function == "positionToCatalogPath"   then positionToCatalogPath($funcargs)
 else if $function == "dump"                    then dump($funcargs)
+else if $function == "storepathToPosition"
+then storepathToPosition($funcargs)
+else if $function == "listFlakesInEnvironment"
+then listFlakesInEnvironment($funcargs)
+else if $function == "flakerefToNixEditorArgs"
+then flakerefToNixEditorArgs($funcargs)
+else if $function == "floxpkgToNixEditorArgs"
+then floxpkgToNixEditorArgs($funcargs)
+else if $function == "positionToCatalogPath"
+then positionToCatalogPath($funcargs)
 else error("unknown function: \"\($function)\"")
-end end end end end end end end end end end end end end end
+end end end end end end end end end end end end end
