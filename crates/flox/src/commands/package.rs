@@ -2,7 +2,7 @@ use std::env;
 use std::fmt::Debug;
 use std::path::PathBuf;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use bpaf::{construct, Bpaf, Parser};
 use crossterm::tty::IsTty;
 use flox_rust_sdk::flox::Flox;
@@ -21,7 +21,7 @@ use flox_rust_sdk::providers::git::{GitCommandProvider, GitProvider};
 use flox_types::stability::Stability;
 use indoc::indoc;
 use itertools::Itertools;
-use log::{debug, info, warn};
+use log::{debug, info};
 
 use crate::commands::package::interface::{PackageCommands, ResolveInstallable};
 use crate::config::features::Feature;
@@ -417,46 +417,54 @@ impl PackageCommands {
                 info!("done!");
 
                 // sign binary
-                let sign_key = args.inner.sign_key.or(config.flox.sign_key);
-                if let Some(sign_key) = sign_key {
-                    info!("Signing binary...");
-                    publish.sign_binary(&sign_key).await.with_context(|| {
-                        format!("Could not sign binary with sign-key {sign_key:?}")
+                let sign_key = args
+                    .inner
+                    .sign_key
+                    .or(config.flox.sign_key)
+                    .ok_or_else(|| {
+                        anyhow!(indoc! {"
+                    Signing key is required!
+                    Provide using `--sign-key` or the `sign_key` config key
+                "})
                     })?;
-                    info!("done!");
-                } else {
-                    warn!("No sign key specified, skipping signing!")
-                }
 
-                let cache_url = args.inner.cache_url.or(config.flox.cache_url);
+                info!("Signing binary...");
+                publish
+                    .sign_binary(&sign_key)
+                    .await
+                    .with_context(|| format!("Could not sign binary with sign-key {sign_key:?}"))?;
+                info!("done!");
+
+                let cache_url =
+                    args.inner
+                        .cache_url
+                        .or(config.flox.cache_url)
+                        .ok_or_else(|| {
+                            anyhow!(indoc! {"
+                    Cache url is required!
+                    Provide using `--cache-url` or the `cache_url` config key
+                "})
+                        })?;
 
                 let substituter_url = args
                     .inner
                     .substituter_url
                     .or(config.flox.substituter_url)
-                    .or(cache_url.clone());
+                    .unwrap_or(cache_url.clone());
 
-                if let Some(cache_url) = cache_url {
-                    info!("Uploading binary...");
-                    publish
-                        .upload_binary(Some(cache_url))
-                        .await
-                        .context("Failid uploading binary")?;
-                    info!("done!");
-                } else {
-                    warn!("No cache url specified, binary not uploaded!")
-                }
+                info!("Uploading binary...");
+                publish
+                    .upload_binary(Some(cache_url))
+                    .await
+                    .context("Failid uploading binary")?;
+                info!("done!");
 
-                if let Some(substituter_url) = substituter_url {
-                    info!("Checking substituters...");
-                    publish
-                        .check_substituter(substituter_url)
-                        .await
-                        .context("Failed checking substituters")?;
-                    info!("done!");
-                } else {
-                    warn!("No substituter url specified, substitution not checked!")
-                }
+                info!("Checking substituters...");
+                publish
+                    .check_substituter(substituter_url)
+                    .await
+                    .context("Failed checking substituters")?;
+                info!("done!");
 
                 if args.inner.json {
                     let analysis = publish.analysis();
