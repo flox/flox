@@ -348,6 +348,12 @@ impl<'flox> Publish<'flox, NixAnalysis> {
         })
     }
 
+    /// Extract the store paths from the snapshot
+    ///
+    /// This should be equivalent to `<installable>^*` without evaluation.
+    /// Since the publish evaluates purely, nix's eval cache may serve the same purpose now.
+    ///
+    /// Todo: https://github.com/flox/runix/issues/41
     fn store_paths(&self) -> Result<Vec<Installable>, PublishError> {
         let store_paths = self.analysis()["element"]["storePaths"]
             .as_array()
