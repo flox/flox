@@ -27,7 +27,7 @@ pub const DEFAULT_MAX_AGE_DAYS: u32 = 90;
 
 pub enum InstalledPackage {
     Catalog(FloxTriple, CatalogEntry),
-    Installable(FlakeAttribute, CatalogEntry),
+    FlakeAttribute(FlakeAttribute, CatalogEntry),
     StorePath(StorePath),
 }
 
