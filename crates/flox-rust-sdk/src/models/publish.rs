@@ -445,7 +445,7 @@ pub enum PublishError {
 
     #[error("Already published")]
     SnapshotExists,
-  
+
     #[error("Failed to parse store path {0}")]
     ParseStorePath(StorePathError),
 

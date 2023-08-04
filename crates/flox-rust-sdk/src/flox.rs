@@ -440,7 +440,7 @@ impl Flox {
 
     /// Produce a new Nix Backend
     ///
-    /// This method performs backend independen configuration of nix
+    /// This method performs backend independent configuration of nix
     /// and passes itself and the default config to the constructor of the Nix Backend
     ///
     /// The constructor will perform backend specific configuration measures
