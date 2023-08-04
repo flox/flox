@@ -308,6 +308,27 @@ impl<'flox> Publish<'flox, NixAnalysis> {
         Ok(())
     }
 
+    pub async fn check_substituter(
+        &mut self,
+        substituter: SubstituterUrl,
+    ) -> Result<(), PublishError> {
+        let cache_meta = self.get_binary_cache_metadata(Some(substituter)).await?;
+        let cache_meta_json =
+            serde_json::to_value(cache_meta).map_err(PublishError::SerializeCacheMeta)?;
+        let mut caches = self
+            .analysis
+            .0
+            .get("cache")
+            .map(|v| v.as_array().expect("invalid metadata").to_owned())
+            .unwrap_or_default();
+
+        caches.push(cache_meta_json);
+
+        self.analysis.0["cache"] = Value::Array(caches);
+
+        Ok(())
+    }
+
     #[allow(dead_code)] // until consumed by cli
     /// Check whether store paths are substitutable by a given substituter and
     /// return the associated metadata.
@@ -564,6 +585,9 @@ pub enum PublishError {
 
     #[error("Failed to invoke copy: {0}")]
     Copy(NixCommandLineRunError),
+
+    #[error("Failed to serialize cache metadata: {0}")]
+    SerializeCacheMeta(serde_json::Error),
 }
 
 /// Publishable FlakeRefs

@@ -409,7 +409,7 @@ impl PackageCommands {
 
                 // retrieve eval metadata
                 info!("Getting metadata for {installable}...");
-                let publish = publish.analyze().await?;
+                let mut publish = publish.analyze().await?;
 
                 // build binary
                 info!("Building {installable}...");
@@ -450,7 +450,7 @@ impl PackageCommands {
                 if let Some(substituter_url) = substituter_url {
                     info!("Checking substituters...");
                     publish
-                        .upload_binary(Some(substituter_url))
+                        .check_substituter(substituter_url)
                         .await
                         .context("Failed checking substituters")?;
                     info!("done!");
