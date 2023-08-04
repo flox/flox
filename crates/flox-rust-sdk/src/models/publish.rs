@@ -444,34 +444,47 @@ struct UpstreamCatalog<'a>(&'a Git);
 impl UpstreamCatalog<'_> {
     /// Mostly naïve approxiaton of a snapshot path
     ///
-    ///  /packages/<pname>/<version>.json
+    ///  /catalog/<namespace '/'-separated>/<version>-<(filename outPaths[0])[..8]>.json
     ///
-    /// TODO: fix before releasing publish!
-    fn get_snapshot_path(&self, snapshot: &Value) -> PathBuf {
-        let path = self
-            .0
-            .workdir()
+    /// see [tests::test_get_snapshot_path] for an example
+    fn get_snapshot_path(snapshot: &Value) -> PathBuf {
+        let mut path = PathBuf::from("catalog");
+
+        let attr_path = snapshot["eval"]["attrPath"]
+            .as_array()
             .unwrap()
-            .join("packages")
-            .join(
-                snapshot["eval"]["meta"]["pname"]
-                    .as_str()
-                    .expect("'pname' is expected to be a string"),
-            )
-            .join(format!(
-                "{}.json",
-                snapshot["eval"]["meta"]["version"]
-                    .as_str()
-                    .expect("'version' is expected to be a string")
-            ));
+            .iter()
+            .skip(2)
+            .map(|v| v.as_str().unwrap());
+
+        path.extend(attr_path);
+
+        let version = snapshot["eval"]["meta"]["version"]
+            .as_str()
+            .expect("invalid metadata");
+        let nix_out_hash = &Path::new(
+            snapshot["element"]["storePaths"][0]
+                .as_str()
+                .expect("invalid metadata"),
+        )
+        .file_name()
+        .unwrap()
+        .to_string_lossy()[0..8];
+
+        path.push(format!("{version}-{nix_out_hash}.json"));
 
         path
+    }
+
+    /// Get the workdir of the checked-out repo
+    fn workdir(&self) -> &Path {
+        self.0.workdir().unwrap()
     }
 
     /// Try retrieving a snapshot from the catalog
     /// TODO: better addressing (attrpath + version + drv hash?)
     fn get_snapshot(&self, snapshot: &Value) -> Result<Option<Value>, PublishError> {
-        let path = self.get_snapshot_path(snapshot);
+        let path = self.workdir().join(Self::get_snapshot_path(snapshot));
         let read_snapshot = match fs::read_to_string(path) {
             Ok(s) => Some(serde_json::from_str(&s)?),
             Err(e) if e.kind() == io::ErrorKind::NotFound => None,
@@ -485,7 +498,7 @@ impl UpstreamCatalog<'_> {
     ///
     /// Consumers should check if a snapshot already exists with [Self::get_snapshot]
     async fn add_snapshot(&self, snapshot: &Value) -> Result<(), PublishError> {
-        let path = self.get_snapshot_path(snapshot);
+        let path = self.workdir().join(Self::get_snapshot_path(snapshot));
 
         fs::create_dir_all(path.parent().unwrap())?; // only an issue for a git repo in /
 
@@ -496,7 +509,7 @@ impl UpstreamCatalog<'_> {
 
         serde_json::to_writer(&mut snapshot_file, snapshot)?;
 
-        self.0.add(&[&self.get_snapshot_path(snapshot)]).await?;
+        self.0.add(&[&path]).await?;
         self.0.commit("Added snapshot").await?; // TODO: pass message in here? commit in separate method?
         Ok(())
     }
@@ -863,12 +876,31 @@ mod tests {
 
     use std::str::FromStr;
 
+    use once_cell::sync::Lazy;
     use runix::url_parser::PARSER_UTIL_BIN_PATH;
 
     use super::*;
     use crate::flox::tests::flox_instance;
     #[cfg(feature = "impure-unit-tests")]
     use crate::prelude::Channel;
+
+    static EXAMPLE_CATALOG_ENTRY: Lazy<Value> = Lazy::new(|| {
+        json!({
+            "eval": {
+                "attrPath": ["packages", "aarch64-darwin", "flox"],
+                "meta": {
+                    "version": "0.0.0-r42"
+                }
+                // other entries omitted
+            },
+            "element": {
+                "storePaths": [
+                    "/nix/store/2rrfpkq6cr8ppip9szl0z1qfdlskdinq-flox-0.0.0-r42",
+                    "/nix/store/k11z2k4iyf3sjfca1vfg935vss9v8y03-flox-0.0.0-r42-man"
+                ]
+            }
+        })
+    });
 
     #[cfg(feature = "impure-unit-tests")] // /nix/store is not accessible in the sandbox
     #[tokio::test]
@@ -1182,6 +1214,16 @@ mod tests {
         assert_eq!(catalog.0.list_branches().await.unwrap().len(), 1);
     }
 
+    #[test]
+    fn test_get_snapshot_path() {
+        let snapshot = EXAMPLE_CATALOG_ENTRY.deref();
+
+        let expected = PathBuf::from("catalog/flox/0.0.0-r42-2rrfpkq6.json");
+        let actual = UpstreamCatalog::get_snapshot_path(snapshot);
+
+        assert_eq!(actual, expected);
+    }
+
     // disabled because nix build does not have git user/email config,
     // TODO fix tests to work with local repos
     #[cfg(feature = "impure-unit-tests")]
@@ -1192,14 +1234,7 @@ mod tests {
         let (_flox, temp_dir_handle) = flox_instance();
         let repo_dir = temp_dir_handle.path().join("repo");
 
-        let snapshot = json!({
-            "eval": {
-                "meta": {
-                    "pname": "pkg",
-                    "version": "0.1.1"
-                }
-            }
-        });
+        let snapshot = EXAMPLE_CATALOG_ENTRY.deref();
 
         // create a repo
         fs::create_dir(&repo_dir).unwrap();
@@ -1217,13 +1252,13 @@ mod tests {
             .expect("Should create branch");
 
         catalog
-            .add_snapshot(&snapshot)
+            .add_snapshot(snapshot)
             .await
             .expect("Should add snapshot");
 
         assert_eq!(
-            catalog
-                .get_snapshot(&snapshot)
+            &catalog
+                .get_snapshot(snapshot)
                 .unwrap()
                 .expect("should find written snapshot"),
             snapshot
@@ -1240,14 +1275,7 @@ mod tests {
         let (_flox, temp_dir_handle) = flox_instance();
         let repo_dir = temp_dir_handle.path().join("repo");
 
-        let snapshot = json!({
-            "eval": {
-                "meta": {
-                    "pname": "pkg",
-                    "version": "0.1.1"
-                }
-            }
-        });
+        let snapshot = EXAMPLE_CATALOG_ENTRY.deref();
 
         // create an "upstream" repo
         fs::create_dir(&repo_dir).unwrap();
@@ -1268,7 +1296,7 @@ mod tests {
             .expect("Should create branch");
 
         catalog
-            .add_snapshot(&snapshot)
+            .add_snapshot(snapshot)
             .await
             .expect("Should add snapshot");
         catalog.push_catalog().await.expect("Should push catalog");
@@ -1282,7 +1310,7 @@ mod tests {
             .await
             .expect("catalog branch should exist upstream");
 
-        let snapshot_path = repo_dir.join("packages").join("pkg").join("0.1.1.json");
+        let snapshot_path = repo_dir.join(UpstreamCatalog::get_snapshot_path(snapshot));
         assert!(snapshot_path.exists());
 
         let snapshot_actual: Value =
