@@ -10,6 +10,7 @@ use anyhow::{Context, Result};
 use bpaf::{Bpaf, Parser};
 use flox_rust_sdk::flox::{Flox, DEFAULT_OWNER, FLOX_VERSION};
 use flox_rust_sdk::models::floxmeta::{Floxmeta, GetFloxmetaError};
+use flox_rust_sdk::nix::command_line::NixCommandLine;
 use flox_rust_sdk::prelude::Channel;
 use flox_rust_sdk::providers::git::GitCommandProvider;
 use log::{debug, info};
@@ -165,6 +166,13 @@ impl FloxArgs {
             channels,
             ..boostrap_flox
         };
+
+        // Set the global Nix config via the environment variables in flox.default_args so that
+        // subprocesses called by `flox` (e.g. `parser-util`) can inherit them.
+        let nix_backend: NixCommandLine = flox.nix(vec![]);
+        for (name, value) in nix_backend.defaults.environment.iter() {
+            std::env::set_var(name, value);
+        }
 
         // in debug mode keep the tempdir to reproduce nix commands
         if self.debug || matches!(self.verbosity, Verbosity::Verbose(1..)) {

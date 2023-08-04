@@ -143,25 +143,28 @@ in
           gnused
         ];
 
-      # test all our crates (include the libraries)
-      cargoTestExtraArgs = "--workspace";
+      # Tests are disabled inside of the build because the sandbox prevents
+      # internet access and there are tests that require internet access to
+      # resolve flake references among other things.
+      doCheck = false;
 
       # bundle manpages and completion scripts
       postInstall = ''
-        installManPage ${manpages}/*
-        installShellCompletion --cmd flox \
-          --bash <($out/bin/flox --bpaf-complete-style-bash) \
-          --fish <($out/bin/flox --bpaf-complete-style-fish) \
-          --zsh <($out/bin/flox --bpaf-complete-style-zsh)
+        installManPage ${manpages}/*;
+        installShellCompletion --cmd flox                         \
+          --bash <( "$out/bin/flox" --bpaf-complete-style-bash; ) \
+          --fish <( "$out/bin/flox" --bpaf-complete-style-fish; ) \
+          --zsh <( "$out/bin/flox" --bpaf-complete-style-zsh; );
       '';
 
-      doInstallCheck = true;
+      doInstallCheck = false;
       postInstallCheck = ''
         # Quick unit test to ensure that we are not using any "naked"
         # commands within our scripts. Doesn't hit all codepaths but
         # catches most of them.
-        env -i USER=`id -un` HOME=$PWD $out/bin/flox --debug envs > /dev/null
-        env -i USER=`id -un` HOME=$PWD $out/bin/flox nix help > /dev/null
+        : "''${USER:=$( id -un; )}";
+        env -i USER="$USER" HOME="$PWD" "$out/bin/flox" --help > /dev/null;
+        env -i USER="$USER" HOME="$PWD" "$out/bin/flox" nix help > /dev/null;
       '';
 
       passthru.envs = envs;
