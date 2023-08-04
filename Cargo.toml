@@ -3,6 +3,57 @@ members = ["crates/*"]
 
 default-members = ["crates/flox"]
 
+[workspace.dependencies]
+anyhow = "1"
+async-trait = "0.1.52"
+bpaf = { version = "0.7.9", features = ["derive", "autocomplete"] }
+chrono = "0.4.24"
+config = "0.13.1"
+crossterm = "0.26"
+derive_more = "0.99.17"
+dirs = "5.0.0"
+flox-rust-sdk = { path = "crates/flox-rust-sdk" }
+flox-types = { path = "crates/flox-types" }
+fs_extra = "1.2.0"
+fslock = "0.2.1"
+futures = "0.3"
+git-url-parse = "0.4.4"
+git2 = "0.16.1"
+indexmap = { version = "1.9", features = ["serde"] }
+indoc = "2.0.1"
+inquire = "0.6.0"
+itertools = "0.10.5"
+log = "0.4.17"
+nix = "0.26"
+nix-editor = "0.3.0"
+once_cell = "1.16.0"
+pathdiff = "0.2"
+pretty_assertions = "1.3"
+regex = "1"
+reqwest = { version = "0.11", features = ["json"] }
+rnix = "0.11"
+# temporary, only needed so that CI will run with `parser-util` running in `runix`
+runix = { git = "https://github.com/flox/runix", branch = "working-parser-util" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1"
+serde_variant = "0.1.1"
+serde_with = "2.0.1"
+serde_yaml = "0.9"
+shell-escape = "0.1.5"
+supports-color = "2.0.0"
+sys-info = "0.9"
+tempfile = "3.4.0"
+thiserror = "1"
+time = { version = "0.3", features = ["serde", "formatting"] }
+tokio = { version = "1", features = ["full"] }
+toml_edit = { version = "0.19", features = ["serde"] }
+tracing = "0.1"
+tracing-log = { version = "0.1", features = ["env_logger"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+url = "2.4"
+uuid = { version = "1.2", features = ["serde", "v4"] }
+walkdir = "2"
+xdg = "2.4"
+
 [patch.crates-io]
 bpaf = { git = "https://github.com/ysndr/bpaf", branch = "error/more-suggestions" }
-runix = { git = "https://github.com/flox/runix" }
