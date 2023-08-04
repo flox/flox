@@ -39,4 +39,4 @@ to a generic builder for `<template>`.
     Queried interactively if controlling TTY is attached
 
 [ \--template `<template>` | -t `<template>` ]
-:   Template to creat new package definition from.
+:   Template to create new package definition from.

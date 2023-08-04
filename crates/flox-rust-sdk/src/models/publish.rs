@@ -13,7 +13,7 @@ use log::debug;
 use runix::arguments::common::NixCommonArgs;
 use runix::arguments::eval::EvaluationArgs;
 use runix::arguments::flake::FlakeArgs;
-use runix::arguments::{NixArgs, StoreSignArgs};
+use runix::arguments::{CopyArgs, NixArgs, StoreSignArgs};
 use runix::command::{Eval, StoreSign};
 use runix::command_line::{NixCommandLine, NixCommandLineRunError, NixCommandLineRunJsonError};
 use runix::flake_metadata::FlakeMetadata;
@@ -262,8 +262,32 @@ impl<'flox> Publish<'flox, NixAnalysis> {
     }
 
     /// Copy the outputs and dependencies of the package to binary store
-    pub async fn upload_binary(self) -> Result<Publish<'flox, NixAnalysis>, PublishError> {
-        todo!()
+    pub async fn upload_binary(
+        self,
+        substituter: Option<SubstituterUrl>,
+    ) -> Result<(), PublishError> {
+        let nix: NixCommandLine = self.flox.nix(Default::default());
+        let store_paths = self.store_paths()?;
+        let copy_command = runix::command::NixCopy {
+            installables: store_paths.into(),
+            eval: EvaluationArgs {
+                eval_store: Some("auto".to_string().into()),
+                ..Default::default()
+            },
+            copy_args: CopyArgs {
+                to: substituter.clone().map(|url| url.to_string().into()),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let nix_args = Default::default();
+
+        copy_command
+            .run(&nix, &nix_args)
+            .map_err(PublishError::Copy)
+            .await?;
+        Ok(())
     }
 
     #[allow(dead_code)] // until consumed by cli
@@ -277,6 +301,36 @@ impl<'flox> Publish<'flox, NixAnalysis> {
         substituter: Option<SubstituterUrl>,
     ) -> Result<CacheMeta, PublishError> {
         let nix: NixCommandLine = self.flox.nix(Default::default());
+        let store_paths = self.store_paths()?;
+        let path_info_command = runix::command::PathInfo {
+            installables: store_paths.into(),
+            eval: EvaluationArgs {
+                eval_store: Some("auto".to_string().into()),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let nix_args = NixArgs {
+            common: NixCommonArgs {
+                store: substituter.clone().map(|url| url.to_string().into()),
+            },
+            ..Default::default()
+        };
+
+        let narinfos = path_info_command
+            .run_typed(&nix, &nix_args)
+            .map_err(PublishError::PathInfo)
+            .await?;
+
+        Ok(CacheMeta {
+            cache_url: substituter.unwrap_or(SubstituterUrl::parse("file:///nix/store").unwrap()),
+            narinfo: narinfos,
+            _other: BTreeMap::new(),
+        })
+    }
+
+    fn store_paths(&self) -> Result<Vec<Installable>, PublishError> {
         let store_paths = self.analysis()["element"]["store_paths"]
             .as_array()
             // TODO use CatalogEntry and then we don't need to unwrap
@@ -289,29 +343,7 @@ impl<'flox> Publish<'flox, NixAnalysis> {
                     .map(Installable::StorePath)
             })
             .collect::<Result<Vec<Installable>, _>>()?;
-        let path_info_command = runix::command::PathInfo {
-            installables: store_paths.into(),
-            eval: EvaluationArgs {
-                eval_store: Some("auto".to_string().into()),
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-
-        let narinfos = path_info_command
-            .run_typed(&nix, &NixArgs {
-                common: NixCommonArgs {
-                    store: substituter.clone().map(|url| url.to_string().into()),
-                },
-                ..Default::default()
-            })
-            .map_err(PublishError::PathInfo)
-            .await?;
-        Ok(CacheMeta {
-            cache_url: substituter.unwrap_or(SubstituterUrl::parse("file:///nix/store").unwrap()),
-            narinfo: narinfos,
-            _other: BTreeMap::new(),
-        })
+        Ok(store_paths)
     }
 
     /// Write snapshot to catalog and push to origin
@@ -489,6 +521,9 @@ pub enum PublishError {
 
     #[error("Failed to invoke path-info: {0}")]
     PathInfo(NixCommandLineRunJsonError),
+
+    #[error("Failed to invoke copy: {0}")]
+    Copy(NixCommandLineRunError),
 }
 
 /// Publishable FlakeRefs
