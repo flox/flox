@@ -13,8 +13,8 @@ use log::debug;
 use runix::arguments::common::NixCommonArgs;
 use runix::arguments::eval::EvaluationArgs;
 use runix::arguments::flake::FlakeArgs;
-use runix::arguments::{CopyArgs, NixArgs};
-use runix::command::Eval;
+use runix::arguments::{CopyArgs, NixArgs, StoreSignArgs};
+use runix::command::{Eval, StoreSign};
 use runix::command_line::{NixCommandLine, NixCommandLineRunError, NixCommandLineRunJsonError};
 use runix::flake_metadata::FlakeMetadata;
 use runix::flake_ref::git::{GitAttributes, GitRef};
@@ -224,6 +224,41 @@ impl<'flox> Publish<'flox, NixAnalysis> {
     /// Read out the current publish state
     pub fn analysis(&self) -> &Value {
         self.analysis.deref()
+    }
+
+    /// Sign the binary
+    ///
+    /// The current implementation does not involve any state transition,
+    /// making signing an optional operation.
+    ///
+    /// Requires a valid signing key
+    pub async fn sign_binary(
+        self,
+        key_file: impl AsRef<Path>,
+    ) -> Result<Publish<'flox, NixAnalysis>, PublishError> {
+        let nix = self.flox.nix(Default::default());
+        let flake_attribute = FlakeAttribute {
+            flakeref: self.publish_flake_ref.clone().into_inner(),
+            attr_path: self.attr_path.clone(),
+        }
+        .into();
+
+        let sign_command = StoreSign {
+            store_sign: StoreSignArgs {
+                key_file: key_file.as_ref().into(),
+                recursive: Some(true.into()),
+            },
+            installables: [flake_attribute].into(),
+            eval: Default::default(),
+            flake: Default::default(),
+        };
+
+        sign_command
+            .run(&nix, &Default::default())
+            .await
+            .map_err(PublishError::SignPackage)?;
+
+        Ok(self)
     }
 
     /// Copy the outputs and dependencies of the package to binary store
@@ -465,6 +500,9 @@ pub enum PublishError {
 
     #[error("Failed to load metadata for flake '{0}': {1}")]
     FlakeMetadata(String, NixCommandLineRunJsonError),
+
+    #[error("Failed to sign package: {0}")]
+    SignPackage(NixCommandLineRunError),
 
     #[error("Failed reading snapshot data: {0}")]
     ReadSnapshot(#[from] serde_json::Error),
