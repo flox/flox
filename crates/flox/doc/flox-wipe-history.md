@@ -21,7 +21,7 @@ the environment
 
 `wipe-history` cleans up old builds of an environment, but it does not delete
 the description of generations, so they can still be switched to with
-[`flox-rollback`(1)](./flox-rollback).
+[`flox-rollback`(1)](./flox-rollback.md).
 `wipe-history` always keeps the 10 most recent generations, and it only deletes
 generations that have not been created or switched to for more than 90 days.
 In the process, a garbage collection of the entirety of `/nix/store` is
