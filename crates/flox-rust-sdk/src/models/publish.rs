@@ -9,7 +9,7 @@ use flox_types::catalog::cache::{CacheMeta, SubstituterUrl};
 use flox_types::catalog::System;
 use flox_types::stability::Stability;
 use futures::TryFutureExt;
-use log::debug;
+use log::{debug, error};
 use runix::arguments::common::NixCommonArgs;
 use runix::arguments::eval::EvaluationArgs;
 use runix::arguments::flake::FlakeArgs;
@@ -141,8 +141,10 @@ impl<'flox> Publish<'flox, Empty> {
             attrpath
         };
 
+        let nixpkgs_with_stability = format!("nixpkgs-{}", self.stability);
         let nixpkgs_flakeref = FlakeRef::Indirect(IndirectRef::new(
-            format!("nixpkgs-{}", self.stability),
+            format!("flake:{}", nixpkgs_with_stability),
+            nixpkgs_with_stability,
             Default::default(),
         ));
 
@@ -752,22 +754,42 @@ impl PublishFlakeRef {
         flox: &Flox,
         git_service_prefer_https: bool,
     ) -> Result<Self, ConvertFlakeRefError> {
-        let publish_flake_ref = match flake_ref {
-            FlakeRef::GitSsh(ssh_ref) => Self::Ssh(ssh_ref),
-            FlakeRef::GitHttps(https_ref) => Self::Https(https_ref),
-            // resolve upstream for local git repo
-            FlakeRef::GitPath(file_ref) => {
-                Self::from_git_file_flake_ref(file_ref, &flox.nix(Default::default())).await?
-            },
-            // resolve indirect ref to direct ref (recursively)
-            FlakeRef::Indirect(_) => todo!(),
-            FlakeRef::Github(github_ref) => {
-                Self::from_github_ref(github_ref, git_service_prefer_https)?
-            },
-            FlakeRef::Gitlab(_) => todo!(),
-            _ => Err(ConvertFlakeRefError::UnsupportedTarget(flake_ref))?,
+        // This should really be a recursive function, but that requires two things:
+        // - Making this return type Pin<Box<impl Future<Output = ...>>>
+        // - That all Futures that this one depends on are Send
+        // It turns out we can't do that because the GitProvider trait doesn't require the Futures it
+        // returns to be Send. Instead of a recursive call we do this loop until we no longer have
+        // an indirect flake reference.
+        let mut flake_ref = flake_ref;
+        let publish_flakeref = loop {
+            match flake_ref.clone() {
+                FlakeRef::GitSsh(ssh_ref) => {
+                    break Self::Ssh(ssh_ref);
+                },
+                FlakeRef::GitHttps(https_ref) => {
+                    break Self::Https(https_ref);
+                },
+                // resolve upstream for local git repo
+                FlakeRef::GitPath(file_ref) => {
+                    break Self::from_git_file_flake_ref(file_ref, &flox.nix(Default::default()))
+                        .await?;
+                },
+                // resolve indirect ref to direct ref (recursively)
+                FlakeRef::Indirect(indirect) => match indirect.resolve()? {
+                    FlakeRef::Indirect(_) => unreachable!(),
+                    other_flakeref => {
+                        flake_ref = other_flakeref;
+                        continue;
+                    },
+                },
+                FlakeRef::Github(github_ref) => {
+                    break Self::from_github_ref(github_ref, git_service_prefer_https)?;
+                },
+                FlakeRef::Gitlab(_) => todo!(),
+                _ => return Err(ConvertFlakeRefError::UnsupportedTarget(flake_ref.clone()))?,
+            };
         };
-        Ok(publish_flake_ref)
+        Ok(publish_flakeref)
     }
 }
 
@@ -803,6 +825,9 @@ pub enum ConvertFlakeRefError {
 
     #[error("Unsupported git remote URL: {0}")]
     UnsupportedGitUrl(url::Url),
+
+    #[error("Failed to parse URL")]
+    URLParseFailed(#[from] crate::nix::url_parser::UrlParseError),
 }
 
 #[cfg(test)]
@@ -810,8 +835,11 @@ mod tests {
 
     use std::str::FromStr;
 
+    use runix::url_parser::PARSER_UTIL_BIN_PATH;
+
     use super::*;
     use crate::flox::tests::flox_instance;
+    #[cfg(feature = "impure-unit-tests")]
     use crate::prelude::Channel;
 
     #[cfg(feature = "impure-unit-tests")] // /nix/store is not accessible in the sandbox
@@ -1233,5 +1261,15 @@ mod tests {
             serde_json::from_str(&fs::read_to_string(&snapshot_path).unwrap()).unwrap();
 
         assert_eq!(snapshot_actual, snapshot_actual);
+    }
+
+    #[tokio::test]
+    async fn resolves_indirect_ref_to_gitfile() {
+        let indirect_ref = FlakeRef::from_url("flake:flox", PARSER_UTIL_BIN_PATH).unwrap();
+        let (flox, _temp_dir_handle) = flox_instance();
+        let publishable = PublishFlakeRef::from_flake_ref(indirect_ref, &flox, true)
+            .await
+            .unwrap();
+        assert!(matches!(publishable, PublishFlakeRef::Https(_)));
     }
 }

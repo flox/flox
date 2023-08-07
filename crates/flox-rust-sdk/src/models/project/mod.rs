@@ -111,7 +111,12 @@ impl<'flox, Git: GitProvider> Guard<Project<'flox, Git, ReadOnly<Git>>, Root<'fl
         FlakeInit {
             template: Some(
                 FlakeAttribute {
-                    flakeref: IndirectRef::new("flox".to_string(), Default::default()).into(),
+                    flakeref: IndirectRef::new(
+                        "flake:flox".to_string(),
+                        "flox".to_string(),
+                        Default::default(),
+                    )
+                    .into(),
                     attr_path: ["", "templates", "_init"].try_into().unwrap(),
                 }
                 .into(),
