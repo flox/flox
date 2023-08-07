@@ -486,9 +486,10 @@ impl UpstreamCatalog<'_> {
 
         path.extend(attr_path);
 
-        let version = snapshot["eval"]["meta"]["version"]
+        let version = &snapshot["eval"]["version"]
             .as_str()
             .expect("invalid metadata");
+
         let nix_out_hash = &Path::new(
             snapshot["element"]["storePaths"][0]
                 .as_str()
@@ -509,7 +510,6 @@ impl UpstreamCatalog<'_> {
     }
 
     /// Try retrieving a snapshot from the catalog
-    /// TODO: better addressing (attrpath + version + drv hash?)
     fn get_snapshot(&self, snapshot: &Value) -> Result<Option<Value>, PublishError> {
         let path = self.workdir().join(Self::get_snapshot_path(snapshot));
         let read_snapshot = match fs::read_to_string(path) {
@@ -918,9 +918,7 @@ mod tests {
         json!({
             "eval": {
                 "attrPath": ["packages", "aarch64-darwin", "flox"],
-                "meta": {
-                    "version": "0.0.0-r42"
-                }
+                "version": "0.0.0-r42"
                 // other entries omitted
             },
             "element": {
