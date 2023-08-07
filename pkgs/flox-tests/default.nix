@@ -17,6 +17,7 @@
   gnutar,
   jq,
   nix-editor,
+  nix-serve,
   openssh,
   parallel,
   unixtools,
@@ -46,6 +47,7 @@
     gnutar
     jq
     nix-editor
+    nix-serve
     openssh
     parallel
     unixtools.util-linux
