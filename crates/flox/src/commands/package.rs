@@ -456,7 +456,7 @@ impl PackageCommands {
                 publish
                     .upload_binary(Some(cache_url))
                     .await
-                    .context("Failid uploading binary")?;
+                    .context("Failed uploading binary")?;
                 info!("done!");
 
                 info!("Checking substituters...");
