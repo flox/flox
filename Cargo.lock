@@ -1987,7 +1987,7 @@ dependencies = [
 [[package]]
 name = "runix"
 version = "0.2.0"
-source = "git+https://github.com/flox/runix?branch=try-installable-parser#3275ddd3ecbeefa7ba6466386d4045be94e8ac3b"
+source = "git+https://github.com/flox/runix#20ccaf44e44b776607d38d9e81713d3247747f16"
 dependencies = [
  "async-trait",
  "chrono",
