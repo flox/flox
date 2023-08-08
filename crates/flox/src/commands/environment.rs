@@ -147,6 +147,7 @@ impl EnvironmentCommands {
                 let command = Shell {
                     eval: EvaluationArgs {
                         impure: true.into(),
+                        ..Default::default()
                     },
                     installables: [environment.flake_attribute(&flox.system).into()].into(),
                     ..Default::default()

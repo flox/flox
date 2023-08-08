@@ -89,6 +89,7 @@ impl<S: State> Environment<S> {
             installables: [self.flake_attribute(system).into()].into(),
             eval: runix::arguments::eval::EvaluationArgs {
                 impure: true.into(),
+                ..Default::default()
             },
             build: BuildArgs {
                 // out_link: Some(self.out_link().into()),
@@ -120,6 +121,7 @@ impl<S: State> Environment<S> {
         let eval = Eval {
             eval: EvaluationArgs {
                 impure: true.into(),
+                ..Default::default()
             },
             eval_args: EvalArgs {
                 installable: Some(flake_attribute.into()),

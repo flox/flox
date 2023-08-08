@@ -20,6 +20,7 @@ serde_with.workspace = true
 thiserror.workspace = true
 anyhow.workspace = true
 nix-editor.workspace = true
+nixpkgs-fmt.workspace = true
 tempfile.workspace = true
 fs_extra.workspace = true
 futures.workspace = true
@@ -32,7 +33,7 @@ indoc.workspace = true
 itertools.workspace = true
 chrono.workspace = true
 git-url-parse.workspace = true
-
+rowan.workspace = true
 
 [dev-dependencies]
 anyhow = "1.0.65"
