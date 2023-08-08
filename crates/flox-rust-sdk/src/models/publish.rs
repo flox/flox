@@ -12,7 +12,7 @@ use futures::TryFutureExt;
 use log::{debug, error};
 use runix::arguments::common::NixCommonArgs;
 use runix::arguments::eval::EvaluationArgs;
-use runix::arguments::flake::FlakeArgs;
+use runix::arguments::flake::{FlakeArgs, OverrideInput};
 use runix::arguments::{CopyArgs, NixArgs, StoreSignArgs};
 use runix::command::{Build, Eval, StoreSign};
 use runix::command_line::{NixCommandLine, NixCommandLineRunError, NixCommandLineRunJsonError};
@@ -142,38 +142,44 @@ impl<'flox> Publish<'flox, Empty> {
             attrpath
         };
 
-        let nixpkgs_with_stability = format!("nixpkgs-{}", self.stability);
-        let nixpkgs_flakeref =
-            FlakeRef::Indirect(IndirectRef::new(nixpkgs_with_stability, Default::default()));
-
         // We bundle the analyzer flake with flox (see the package definition for flox)
         let analyzer_flakeref = FlakeRef::Path(PathRef::new(
             PathBuf::from(env!("FLOX_ANALYZER_SRC")),
             Default::default(),
         ));
 
+        let mut override_inputs = [
+            // The analyzer flake provides analysis outputs for the flake input `target`
+            // Here, we're setting the target flake to our source flake.
+            OverrideInput {
+                from: "target".to_string(),
+                to: self.publish_flake_ref.clone().into_inner(),
+            },
+        ]
+        .to_vec();
+
+        if self.stability != Stability::Unspecified {
+            let nixpkgs_flakeref = FlakeRef::Indirect(IndirectRef::new(
+                format!("nixpkgs-{}", self.stability),
+                Default::default(),
+            ));
+
+            // Stabilities are managed by overriding the `flox-floxpkgs/nixpkgs/nixpkgs` input to
+            // `nixpkgs-<stability>`.
+            // The analyzer flake adds an additional indirection,
+            // so we have to do the override manually.
+            // However, since https://github.com/flox/flox/pull/182,
+            // we only set this when a stability is specified
+            // This is the `nixpkgs-<stability>` portion.
+            override_inputs.push(OverrideInput {
+                from: "target/flox-floxpkgs/nixpkgs/nixpkgs".to_string(),
+                to: nixpkgs_flakeref,
+            });
+        }
+
         let eval_analysis_command = Eval {
             flake: FlakeArgs {
-                override_inputs: [
-                    // The analyzer flake provides analysis outputs for the flake input `target`
-                    // Here, we're setting the target flake to our source flake.
-                    (
-                        "target".to_string(),
-                        self.publish_flake_ref.clone().into_inner(),
-                    )
-                        .into(),
-                    // Stabilities are managed by overriding the `flox-floxpkgs/nixpkgs/nixpkgs` input to
-                    // `nixpkgs-<stability>`.
-                    // The analyzer flake adds an additional indirection,
-                    // so we have to do the override manually.
-                    // This is the `nixpkgs-<stability>` portion.
-                    (
-                        "target/flox-floxpkgs/nixpkgs/nixpkgs".to_string(),
-                        nixpkgs_flakeref,
-                    )
-                        .into(),
-                ]
-                .to_vec(),
+                override_inputs,
                 // The analyzer flake is bundled with flox as a nix store path and thus read-only.
                 no_write_lock_file: true.into(),
             },
