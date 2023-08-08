@@ -19,7 +19,6 @@ url.workspace = true
 serde_with.workspace = true
 thiserror.workspace = true
 anyhow.workspace = true
-nix-editor.workspace = true
 nixpkgs-fmt.workspace = true
 tempfile.workspace = true
 fs_extra.workspace = true
