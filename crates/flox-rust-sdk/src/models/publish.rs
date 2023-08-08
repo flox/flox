@@ -142,11 +142,8 @@ impl<'flox> Publish<'flox, Empty> {
         };
 
         let nixpkgs_with_stability = format!("nixpkgs-{}", self.stability);
-        let nixpkgs_flakeref = FlakeRef::Indirect(IndirectRef::new(
-            format!("flake:{}", nixpkgs_with_stability),
-            nixpkgs_with_stability,
-            Default::default(),
-        ));
+        let nixpkgs_flakeref =
+            FlakeRef::Indirect(IndirectRef::new(nixpkgs_with_stability, Default::default()));
 
         // We bundle the analyzer flake with flox (see the package definition for flox)
         let analyzer_flakeref = FlakeRef::Path(PathRef::new(
@@ -759,7 +756,8 @@ impl PublishFlakeRef {
         // - That all Futures that this one depends on are Send
         // It turns out we can't do that because the GitProvider trait doesn't require the Futures it
         // returns to be Send. Instead of a recursive call we do this loop until we no longer have
-        // an indirect flake reference.
+        // an indirect flake reference. It should run a maximum of twice (once if `flake_ref` isn't indirect,
+        // twice if it is indirect).
         let mut flake_ref = flake_ref;
         let publish_flakeref = loop {
             match flake_ref.clone() {
@@ -776,6 +774,8 @@ impl PublishFlakeRef {
                 },
                 // resolve indirect ref to direct ref (recursively)
                 FlakeRef::Indirect(indirect) => match indirect.resolve()? {
+                    // Resolving an indirect reference shouldn't give you back
+                    // another indirect reference.
                     FlakeRef::Indirect(_) => unreachable!(),
                     other_flakeref => {
                         flake_ref = other_flakeref;
@@ -1264,12 +1264,15 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn resolves_indirect_ref_to_gitfile() {
+    async fn resolves_indirect_ref_to_git_https() {
         let indirect_ref = FlakeRef::from_url("flake:flox", PARSER_UTIL_BIN_PATH).unwrap();
         let (flox, _temp_dir_handle) = flox_instance();
         let publishable = PublishFlakeRef::from_flake_ref(indirect_ref, &flox, true)
             .await
             .unwrap();
-        assert!(matches!(publishable, PublishFlakeRef::Https(_)));
+        let expected = PublishFlakeRef::Https(
+            GitRef::from_str("git+https://github.com/flox/floxpkgs?ref=master").unwrap(),
+        );
+        assert_eq!(publishable, expected);
     }
 }

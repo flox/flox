@@ -146,11 +146,7 @@ impl FloxTriple {
     }
 
     pub fn into_installable(self, system: System) -> Installable {
-        let flakeref = IndirectRef::new(
-            format!("flake:{}", self.channel),
-            self.channel,
-            Default::default(),
-        );
+        let flakeref = IndirectRef::new(self.channel, Default::default());
         let version_attr = self.version.map(|version| version.replace('.', "_"));
 
         let mut attrpath: Vec<String> = Vec::new();
