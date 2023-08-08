@@ -47,7 +47,7 @@ impl EnvironmentCommands {
             EnvironmentCommands::Install { .. } => subcommand_metric!("install"),
             EnvironmentCommands::Push { .. } => subcommand_metric!("push"),
             EnvironmentCommands::Pull { .. } => subcommand_metric!("pull"),
-            EnvironmentCommands::Remove { .. } => subcommand_metric!("remove"),
+            EnvironmentCommands::Uninstall { .. } => subcommand_metric!("remove"),
             EnvironmentCommands::Rollback { .. } => subcommand_metric!("rollback"),
             EnvironmentCommands::SwitchGeneration { .. } => subcommand_metric!("switch"),
             EnvironmentCommands::Upgrade { .. } => subcommand_metric!("upgrade"),
@@ -268,7 +268,7 @@ impl EnvironmentCommands {
                 environment.finish().context("Could not apply changes")?;
             },
 
-            EnvironmentCommands::Remove {
+            EnvironmentCommands::Uninstall {
                 environment_args: _,
                 environment,
                 packages,
@@ -587,8 +587,8 @@ pub enum EnvironmentCommands {
     },
 
     /// remove packages from an environment
-    #[bpaf(command, long("rm"), long("uninstall"))]
-    Remove {
+    #[bpaf(command, long("remove"), long("rm"))]
+    Uninstall {
         #[bpaf(external(environment_args), group_help("Environment Options"))]
         environment_args: EnvironmentArgs,
 
