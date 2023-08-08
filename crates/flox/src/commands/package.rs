@@ -212,15 +212,15 @@ pub(crate) mod interface {
         #[bpaf(long)]
         pub prefer_https: bool,
 
-        /// Optional signing key file to sign the binary with
+        /// Signing key file to sign the binary with
         ///
-        /// When ommitted, reads from the config
+        /// When omitted, reads from the config
         #[bpaf(long, short('k'))]
         pub sign_key: Option<PathBuf>,
 
         /// Url of a binary cache to push binaries _to_
         ///
-        /// When ommitted, reads from the config
+        /// When omitted, reads from the config
         #[bpaf(long, short('c'))]
         pub cache_url: Option<SubstituterUrl>,
 
@@ -232,7 +232,7 @@ pub(crate) mod interface {
 
         /// Print snapshot to stdout instead of oploading it to the catalog
         ///
-        /// When ommitted, uses the value for cache-url and falls back to the config
+        /// When omitted, uses the value for cache-url and falls back to the config
         #[bpaf(long, hide)]
         pub json: bool,
 
@@ -321,7 +321,7 @@ pub(crate) mod interface {
         /// build and publish project to flox channel
         #[bpaf(command)]
         Publish(#[bpaf(external(WithPassthru::parse))] WithPassthru<Publish>),
-        /// build and publish project to flox channel
+        /// build package and publish to flox channel
         #[bpaf(command, hide)]
         Publish2(#[bpaf(external(WithPassthru::parse))] WithPassthru<PublishV2>),
         /// run app from current project
