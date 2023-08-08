@@ -75,6 +75,26 @@ setup() {
     assert_success
 }
 
+# Publish requires a signing key.
+# Without a key, flox will fail with a meaningful error.
+@test "flox publish fails without signing-key" {
+    unset FLOX_SIGN_KEY
+
+    run $FLOX_CLI -v publish2 "$CHANNEL#hello"
+    assert_failure
+    assert_output --partial "Signing key is required!"
+}
+
+# Publish requires a cache url.
+# Without a cache url, flox will fail with a meaningful error.
+@test "flox publish fails without cache url" {
+    unset FLOX_CACHE_URL
+
+    run $FLOX_CLI -v publish2 "$CHANNEL#hello"
+    assert_failure
+    assert_output --partial "Cache url is required!"
+}
+
 teardown_file() {
     kill "$NIX_SERVE_PID"
 }
