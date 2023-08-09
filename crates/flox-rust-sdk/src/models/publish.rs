@@ -303,9 +303,8 @@ impl<'flox> Publish<'flox, NixAnalysis> {
         substituter: Option<SubstituterUrl>,
     ) -> Result<(), PublishError> {
         let nix: NixCommandLine = self.flox.nix(Default::default());
-        let store_paths = self.store_paths()?;
         let copy_command = runix::command::NixCopy {
-            installables: store_paths.into(),
+            installables: [self.installable()].into(),
             eval: EvaluationArgs {
                 eval_store: Some("auto".to_string().into()),
                 ..Default::default()
@@ -358,9 +357,8 @@ impl<'flox> Publish<'flox, NixAnalysis> {
         substituter: Option<SubstituterUrl>,
     ) -> Result<CacheMeta, PublishError> {
         let nix: NixCommandLine = self.flox.nix(Default::default());
-        let store_paths = self.store_paths()?;
         let path_info_command = runix::command::PathInfo {
-            installables: store_paths.into(),
+            installables: [self.installable()].into(),
             eval: EvaluationArgs {
                 eval_store: Some("auto".to_string().into()),
                 ..Default::default()
@@ -385,28 +383,6 @@ impl<'flox> Publish<'flox, NixAnalysis> {
             narinfo: narinfos,
             _other: BTreeMap::new(),
         })
-    }
-
-    /// Extract the store paths from the snapshot
-    ///
-    /// This should be equivalent to `<installable>^*` without evaluation.
-    /// Since the publish evaluates purely, nix's eval cache may serve the same purpose now.
-    ///
-    /// Todo: https://github.com/flox/runix/issues/41
-    fn store_paths(&self) -> Result<Vec<Installable>, PublishError> {
-        let store_paths = self.analysis()["element"]["storePaths"]
-            .as_array()
-            // TODO use CatalogEntry and then we don't need to unwrap
-            .unwrap()
-            .iter()
-            .map(|value| {
-                // TODO use CatalogEntry and then we don't need to unwrap
-                StorePath::from_path(value.as_str().unwrap())
-                    .map_err(PublishError::ParseStorePath)
-                    .map(Installable::StorePath)
-            })
-            .collect::<Result<Vec<Installable>, _>>()?;
-        Ok(store_paths)
     }
 
     /// Write snapshot to catalog and push to origin
