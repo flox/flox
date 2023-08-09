@@ -777,7 +777,7 @@ impl PublishFlakeRef {
                     .await?;
             },
             FlakeRef::Github(github_ref) => {
-                break Self::from_github_ref(github_ref, git_service_prefer_https)?;
+                Self::from_github_ref(github_ref, git_service_prefer_https)?;
             },
             FlakeRef::Gitlab(_) => todo!(),
             // Resolving an indirect reference shouldn't give you back
