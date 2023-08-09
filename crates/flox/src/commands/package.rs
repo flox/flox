@@ -208,12 +208,6 @@ pub(crate) mod interface {
 
     #[derive(Bpaf, Clone, Debug)]
     pub struct PublishV2 {
-        /// Prefer https access to repositories published with a `github:` reference
-        ///
-        /// `ssh` is used by default.
-        #[bpaf(long)]
-        pub prefer_https: bool,
-
         /// Signing key file to sign the binary with
         ///
         /// When omitted, reads from the config
@@ -235,6 +229,12 @@ pub(crate) mod interface {
         /// Print snapshot JSON to stdout instead of uploading it to the catalog
         #[bpaf(long, hide)]
         pub json: bool,
+
+        /// Prefer https access to repositories published with a `github:` reference
+        ///
+        /// `ssh` is used by default.
+        #[bpaf(long)]
+        pub prefer_https: bool,
 
         /// Package to publish
         #[bpaf(external(InstallableArgument::positional), optional, catch)]
