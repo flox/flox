@@ -169,7 +169,7 @@ impl FloxArgs {
 
         // Set the global Nix config via the environment variables in flox.default_args so that
         // subprocesses called by `flox` (e.g. `parser-util`) can inherit them.
-        flox.nix::<NixCommandLine>(vec![]).export_config_env_vars();
+        flox.nix::<NixCommandLine>(vec![]).export_env_vars();
 
         // in debug mode keep the tempdir to reproduce nix commands
         if self.debug || matches!(self.verbosity, Verbosity::Verbose(1..)) {

@@ -1258,7 +1258,7 @@ mod tests {
         let indirect_ref = FlakeRef::from_url("flake:flox", PARSER_UTIL_BIN_PATH).unwrap();
         let (flox, _temp_dir_handle) = flox_instance();
         // Need to expose the custom registry to `parser-util` via environment variable
-        flox.nix::<NixCommandLine>(vec![]).export_config_env_vars();
+        flox.nix::<NixCommandLine>(vec![]).export_env_vars();
         let publishable = PublishFlakeRef::from_flake_ref(indirect_ref, &flox, true)
             .await
             .unwrap();
