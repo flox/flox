@@ -25,7 +25,7 @@ use runix::flake_ref::protocol::{WrappedUrl, WrappedUrlParseError};
 use runix::flake_ref::{protocol, FlakeRef};
 use runix::installable::{AttrPath, FlakeAttribute, Installable};
 use runix::store_path::{StorePath, StorePathError};
-use runix::url_parser::UrlParseError;
+use runix::url_parser::{InstallableOutputs, UrlParseError};
 use runix::{Run, RunJson, RunTyped};
 use serde_json::{json, Value};
 use thiserror::Error;
@@ -182,6 +182,7 @@ impl<'flox> Publish<'flox, Empty> {
                     FlakeAttribute {
                         flakeref: analyzer_flakeref,
                         attr_path: analysis_attr_path,
+                        outputs: InstallableOutputs::Default,
                     }
                     .into(),
                 ),
@@ -237,18 +238,14 @@ impl<'flox> Publish<'flox, NixAnalysis> {
         key_file: impl AsRef<Path>,
     ) -> Result<Publish<'flox, NixAnalysis>, PublishError> {
         let nix = self.flox.nix(Default::default());
-        let flake_attribute = FlakeAttribute {
-            flakeref: self.publish_flake_ref.clone().into_inner(),
-            attr_path: self.attr_path.clone(),
-        }
-        .into();
+        let installable = self.installable();
 
         let sign_command = StoreSign {
             store_sign: StoreSignArgs {
                 key_file: key_file.as_ref().into(),
                 recursive: Some(true.into()),
             },
-            installables: [flake_attribute].into(),
+            installables: [installable].into(),
             eval: Default::default(),
             flake: Default::default(),
         };
@@ -259,6 +256,16 @@ impl<'flox> Publish<'flox, NixAnalysis> {
             .map_err(PublishError::SignPackage)?;
 
         Ok(self)
+    }
+
+    /// Construct an installable type from the upstream flakeref and attrpath
+    fn installable(&self) -> Installable {
+        FlakeAttribute {
+            flakeref: self.publish_flake_ref.clone().into_inner(),
+            attr_path: self.attr_path.clone(),
+            outputs: InstallableOutputs::All,
+        }
+        .into()
     }
 
     /// Copy the outputs and dependencies of the package to binary store

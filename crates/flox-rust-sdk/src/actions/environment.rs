@@ -276,6 +276,7 @@ impl<'flox> Environment<'flox> {
                 Default::default(),
             )),
             attr_path: self.attr_path.parse::<AttrPath>().unwrap(),
+            outputs: Default::default(),
         }
         .into();
         let command = Build {

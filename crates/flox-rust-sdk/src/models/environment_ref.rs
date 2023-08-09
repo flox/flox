@@ -272,6 +272,7 @@ impl<'flox> Named {
             //
             // enforce exact attr path (<flakeref>#.floxEnvs.<system>.default)
             attr_path: ["", "floxEnvs", system, "default"].try_into().unwrap(),
+            outputs: Default::default(),
         }
     }
 

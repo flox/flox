@@ -59,6 +59,7 @@ impl<Git: GitProvider, A: GitAccess<Git>> Environment<'_, Git, A> {
         Ok(FlakeAttribute {
             flakeref: self.project.flakeref(),
             attr_path: ["", "floxEnvs", &self.system, &self.name].try_into()?,
+            outputs: Default::default(),
         })
     }
 

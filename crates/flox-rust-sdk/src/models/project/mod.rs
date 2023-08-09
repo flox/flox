@@ -113,6 +113,7 @@ impl<'flox, Git: GitProvider> Guard<Project<'flox, Git, ReadOnly<Git>>, Root<'fl
                 FlakeAttribute {
                     flakeref: IndirectRef::new("flox".to_string(), Default::default()).into(),
                     attr_path: ["", "templates", "_init"].try_into().unwrap(),
+                    outputs: Default::default(),
                 }
                 .into(),
             ),
@@ -303,6 +304,7 @@ impl<'flox, Git: GitProvider, Access: GitAccess<Git>> Project<'flox, Git, Access
                     FlakeAttribute {
                         flakeref: self.flakeref(),
                         attr_path: ["floxEnvs".to_string()].try_into().unwrap(),
+                        outputs: Default::default(),
                     }
                     .into(),
                 ),
@@ -349,6 +351,7 @@ impl<'flox, Git: GitProvider, Access: GitAccess<Git>> Project<'flox, Git, Access
                     FlakeAttribute {
                         flakeref: self.flakeref(),
                         attr_path: ["floxEnvs".to_string()].try_into().unwrap(),
+                        outputs: Default::default(),
                     }
                     .into(),
                 ),
