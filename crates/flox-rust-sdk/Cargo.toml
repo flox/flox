@@ -8,6 +8,7 @@ edition = "2021"
 [dependencies]
 flox-types.workspace = true
 tokio.workspace = true
+tokio-test.workspace = true
 rnix.workspace = true
 serde.workspace = true
 serde_json.workspace = true

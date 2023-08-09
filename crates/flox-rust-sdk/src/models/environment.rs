@@ -31,20 +31,15 @@ pub enum InstalledPackage {
     StorePath(StorePath),
 }
 
+/// Struct representing a local environment in a given location and state
 #[derive(Debug)]
 pub struct Environment<S> {
+    /// absolute path to the environment, typically within `<...>/.flox/name`
     path: PathBuf,
+    /// Access state of the environment
+    ///
+    /// Implementations distinguish whether whe can [Modify] or only [Read] and environment
     state: S,
-}
-
-impl<S: State> State for Environment<S> {
-    fn owner(&self) -> Option<&str> {
-        self.state.owner()
-    }
-
-    fn name(&self) -> &str {
-        self.state.name()
-    }
 }
 
 impl<S> PartialEq for Environment<S> {
@@ -53,7 +48,41 @@ impl<S> PartialEq for Environment<S> {
     }
 }
 
+/// Implementation for an environment in any state
 impl<S: State> Environment<S> {
+    /// Get the owner of the environment
+    ///
+    /// **(experimental)**
+    pub fn owner(&self) -> Option<&str> {
+        self.state.owner()
+    }
+
+    /// Get the name of the environment
+    pub fn name(&self) -> &str {
+        self.state.name()
+    }
+
+    /// Turn the environment into a flake attribute,
+    /// a precise url to interact with the environment via nix
+    ///
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// # use flox_rust_sdk::models::environment::{DotFloxDir, Environment, Read};
+    /// # use std::path::PathBuf;
+    /// # let tempdir = tempfile::tempdir().unwrap();
+    /// # let path = tempdir.path().canonicalize().unwrap().to_string_lossy().into_owned();
+    /// # let system = "aarch64-darwin";
+    ///
+    /// let mut dot_flox = DotFloxDir::new(&path).unwrap();
+    /// let env = dot_flox.create_env("test_env").await.unwrap();
+    ///
+    /// let flake_attribute = format!("path:{path}/.flox/test_env#.floxEnvs.{system}.default")
+    ///     .parse()
+    ///     .unwrap();
+    /// assert_eq!(env.flake_attribute(system), flake_attribute)
+    ///
+    /// # })
+    /// ```
     pub fn flake_attribute(&self, system: impl AsRef<str>) -> FlakeAttribute {
         let flakeref = PathRef {
             path: self.path.clone(),
@@ -71,13 +100,12 @@ impl<S: State> Environment<S> {
         }
     }
 
-    #[allow(dead_code)] // used later
-    fn out_link(&self) -> PathBuf {
-        self.path.join("gc-root")
+    /// Path to the environment definition file
+    pub fn flox_nix_path(&self) -> PathBuf {
+        self.path.join("pkgs").join("default").join("flox.nix")
     }
 
-    // todo: do a nix build
-    //       how / when to set gc root?
+    /// Build the evironment derivation using nix
     async fn build(
         &self,
         nix: &NixCommandLine,
@@ -106,10 +134,9 @@ impl<S: State> Environment<S> {
         Ok(())
     }
 
-    pub fn flox_nix_path(&self) -> PathBuf {
-        self.path.join("pkgs").join("default").join("flox.nix")
-    }
-
+    /// Get a catalog of installed packages from the environment
+    ///
+    /// Evaluated using nix from the environment definition.
     pub async fn catalog(
         &self,
         nix: &NixCommandLine,
@@ -138,6 +165,9 @@ impl<S: State> Environment<S> {
         serde_json::from_value(catalog_value).map_err(EnvironmentError2::ParseCatalog)
     }
 
+    /// List all Packages in the environment
+    ///
+    /// Currently unused, supposed to be a cleaned up version of [`Environment<_>::catalog`]
     pub async fn packages(
         &self,
         _nix: &NixCommandLine,
@@ -146,12 +176,23 @@ impl<S: State> Environment<S> {
         todo!()
     }
 
+    /// Remove gc-roots
+    ///
+    /// Currently stubbed out due to missing activation that could need linked results
     pub fn delete_symlinks(&self) -> Result<bool, EnvironmentError2> {
         // todo
         Ok(false)
     }
 }
 
+/// Implementations for environments in a "reading" state.
+///
+/// Changes to environments should be atomic,
+/// so that possibly breaking modifications to the environment can be safely discarded.
+/// When environment objects are created they are in a "reading" state.
+/// To make modifications we copy the environment into a temporary sandbox.
+/// Within the sandbox we can make modifications and verify them by building the environment.
+/// When verified, we can move the sandboxed environment back to its original location.
 impl Environment<Read> {
     /// Open an environment at a given path
     ///
@@ -179,6 +220,10 @@ impl Environment<Read> {
         })
     }
 
+    /// Copy the environment to a sandbox directory given by `path`
+    ///
+    /// Typically within [Flox.temp_dir].
+    /// This implementation tries to stay independent of the [Flox] struct for now.
     pub async fn modify_in(
         self,
         path: impl AsRef<Path>,
@@ -193,13 +238,25 @@ impl Environment<Read> {
         })
     }
 
+    /// Delete the environment
+    ///
+    /// While destructive, no transaction is needed to verify changes.
     pub fn delete(self) -> Result<(), EnvironmentError2> {
         std::fs::remove_dir_all(self.path).map_err(EnvironmentError2::DeleteEnvironement)?;
         Ok(())
     }
 }
 
+/// Implementations for environments in a "modifiable" state.
+///
+/// Created by [`Environment<Read>::modify_in`].
+/// Provides methods to edit the environment definition file
+/// and commit changes back to the original location of the environemnt.
 impl Environment<Modify> {
+    /// Low level method replacing the definition file content.
+    /// After writing the file, we verify if by trying to build the environment.
+    ///
+    /// This might be deferred to the [`Environment<Modify>::finish`] method in the future.
     pub async fn set_environment(
         &mut self,
         mut flox_nix_content: impl std::io::Read,
@@ -216,6 +273,9 @@ impl Environment<Modify> {
         Ok(self)
     }
 
+    /// Install packages by converting a [FloxPackage]s into attributes in the `flox.nix` format,
+    /// and then using [`rnix`](https://crates.io/crates/rnix) to merge these attributes into the
+    /// environment definition file.
     pub async fn install(
         &mut self,
         packages: impl IntoIterator<Item = FloxPackage>,
@@ -266,6 +326,9 @@ impl Environment<Modify> {
             .await
     }
 
+    /// Uninstall packages by converting a [FloxPackage]s into attributes in the `flox.nix` format,
+    /// and then using [`rnix`](https://crates.io/crates/rnix) to remove these attributes from the
+    /// environment definition file.
     pub async fn uninstall(
         &mut self,
         packages: impl IntoIterator<Item = FloxPackage>,
@@ -312,6 +375,7 @@ impl Environment<Modify> {
             .await
     }
 
+    /// Commmit changes, by moving modified files back to the original (read only) location
     pub fn finish(self) -> Result<Environment<Read>, EnvironmentError2> {
         fs_extra::dir::move_dir(
             &self.path,
@@ -325,8 +389,11 @@ impl Environment<Modify> {
     }
 }
 
+/// Access Environment Metadata stored within the State ([Read]/[Modify])
 pub trait State {
+    /// Get the owner of the environment
     fn owner(&self) -> Option<&str>;
+    /// Get the name of the environment
     fn name(&self) -> &str;
 }
 
@@ -348,6 +415,7 @@ impl State for Read {
 
 #[derive(Debug)]
 pub struct Modify {
+    /// The original [Read]-Only Environment
     origin: Environment<Read>,
 }
 
@@ -361,11 +429,14 @@ impl State for Modify {
     }
 }
 
+/// Object tracking an environment collection (`.flox`) folder
 pub struct DotFloxDir {
     path: PathBuf,
 }
 
 impl DotFloxDir {
+    /// Find the closest `.flox` starting with `current_dir`
+    /// and looking up ancestor directories until `/`
     pub fn discover(current_dir: impl AsRef<Path>) -> Result<Self, EnvironmentError2> {
         let dot_flox = current_dir
             .as_ref()
@@ -376,6 +447,9 @@ impl DotFloxDir {
         Self::open(dot_flox)
     }
 
+    /// Open a `.flox` directory in a specific path.
+    ///
+    /// The method expects a path that _contains_ a `.flox` directory!
     pub fn open(path: impl AsRef<Path>) -> Result<Self, EnvironmentError2> {
         let dot_flox = path.as_ref().join(".flox");
         if !dot_flox.exists() {
@@ -392,15 +466,25 @@ impl DotFloxDir {
         Ok(Self { path })
     }
 
+    /// Create a new `.flox` directory in a specific path or open it if it exists.
+    ///
+    /// The method creates or opens a `.flox` directory _contained_ within `path`!
     pub fn new(path: impl AsRef<Path>) -> Result<DotFloxDir, EnvironmentError2> {
-        std::fs::create_dir(path.as_ref().join(".flox")).expect("create dot_flox dir");
+        if !path.as_ref().join(".flox").exists() {
+            std::fs::create_dir(path.as_ref().join(".flox"))
+                .map_err(EnvironmentError2::CreateDotFlox)?;
+        }
         Self::open(path)
     }
 
+    /// Get the basepath of the `.flox` dir
+    ///
+    /// This is the path that _contains_ the `.flox` dir!
     pub fn path(&self) -> &Path {
         &self.path
     }
 
+    /// List the environments defined in the `.flox` dir.
     pub fn environments(&self) -> Result<Vec<Environment<Read>>, EnvironmentError2> {
         self.path
             .read_dir()
@@ -429,6 +513,7 @@ impl DotFloxDir {
             .collect()
     }
 
+    /// Get a specific environment from the `.flox` dir
     pub fn environment(
         &self,
         owner: Option<String>,
@@ -446,6 +531,7 @@ impl DotFloxDir {
         )
     }
 
+    /// Create a new environment in the `.flox` dir
     pub async fn create_env(
         &mut self,
         name: impl AsRef<str>,
@@ -487,6 +573,8 @@ pub enum EnvironmentError2 {
     DotFloxNotADirectory,
     #[error("DotFloxCanonicalize({0})")]
     DotFloxCanonicalize(std::io::Error),
+    #[error("CreateDotFlox({0})")]
+    CreateDotFlox(std::io::Error),
     #[error("ReadDotFlox({0})")]
     ReadDotFlox(std::io::Error),
     #[error("ReadOwnerDir({0})")]
@@ -517,6 +605,8 @@ pub enum EnvironmentError2 {
     Build(NixCommandLineRunError),
 }
 
+/// Within a nix AST, find the first definition of an attribute set,
+/// that is not part of a `let` expression or a where clause
 fn find_attrs(mut expr: Expr) -> Result<AttrSet, ()> {
     loop {
         match expr {
@@ -529,6 +619,7 @@ fn find_attrs(mut expr: Expr) -> Result<AttrSet, ()> {
     }
 }
 
+/// Copy a whole directory recursively ignoring the original permissions
 async fn cp_r(from: impl AsRef<Path>, to: &impl AsRef<Path>) -> Result<(), std::io::Error> {
     for entry in WalkDir::new(&from).into_iter().skip(1) {
         let entry = entry.unwrap();
