@@ -228,6 +228,13 @@ impl<'flox> Publish<'flox, Empty> {
 }
 
 impl<'flox> Publish<'flox, NixAnalysis> {
+    fn stability_overrides(&self) -> Vec<OverrideInput> {
+        match self.stability {
+            Stability::Unspecified => [].into(),
+            ref s => [s.as_override()].into(),
+        }
+    }
+
     /// Read out the current publish state
     pub fn analysis(&self) -> &Value {
         self.analysis.deref()
@@ -235,8 +242,13 @@ impl<'flox> Publish<'flox, NixAnalysis> {
 
     pub async fn build(&self) -> Result<(), PublishError> {
         let nix = self.flox.nix(Default::default());
+
         let command = Build {
             installables: [self.installable()].into(),
+            flake: FlakeArgs {
+                override_inputs: self.stability_overrides(),
+                ..Default::default()
+            },
             ..Default::default()
         };
 
