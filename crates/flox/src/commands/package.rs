@@ -228,7 +228,7 @@ pub(crate) mod interface {
 
         /// Url of a substituter to pull binaries _from_
         ///
-        /// When ommitted, uses the value for cache-url and falls back to the config
+        /// When ommitted, falls back to the config or uses the value for cache-url and
         #[bpaf(long, short('s'))]
         pub substituter_url: Option<SubstituterUrl>,
 
