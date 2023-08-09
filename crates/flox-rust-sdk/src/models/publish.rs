@@ -784,7 +784,6 @@ impl PublishFlakeRef {
             // another indirect reference.            
             FlakeRef::Indirect(_) => unreachable!(),
             _ => return Err(ConvertFlakeRefError::UnsupportedTarget(flake_ref.clone()))?,
-            };
         };
         Ok(publish_flakeref)
     }
