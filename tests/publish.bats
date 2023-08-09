@@ -60,8 +60,8 @@ setup() {
     git -C "$CHANNEL" branch --set-upstream-to="origin/$(git -C "$CHANNEL" branch --show-current)"
 
     # Set the `sign_key` config value
-    export FLOX_SIGN_KEY="$(mktemp)"
-    $FLOX_CLI nix key generate-secret --key-name "test" >"$FLOX_SIGN_KEY"
+    export FLOX_SIGNING_KEY="$(mktemp)"
+    $FLOX_CLI nix key generate-secret --key-name "test" >"$FLOX_SIGNING_KEY"
 }
 
 # Given a valid pacakge, a signing key and a binary cache,
@@ -78,7 +78,7 @@ setup() {
 # Publish requires a signing key.
 # Without a key, flox will fail with a meaningful error.
 @test "flox publish fails without signing-key" {
-    unset FLOX_SIGN_KEY
+    unset FLOX_SIGNING_KEY
 
     run $FLOX_CLI -v publish2 "$CHANNEL#hello"
     assert_failure
