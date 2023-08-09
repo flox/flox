@@ -209,6 +209,8 @@ pub(crate) mod interface {
     #[derive(Bpaf, Clone, Debug)]
     pub struct PublishV2 {
         /// Prefer https access to repositories published with a `github:` reference
+        ///
+        /// `ssh` is used by default.
         #[bpaf(long)]
         pub prefer_https: bool,
 
@@ -230,9 +232,7 @@ pub(crate) mod interface {
         #[bpaf(long, short('s'))]
         pub substituter_url: Option<SubstituterUrl>,
 
-        /// Print snapshot to stdout instead of oploading it to the catalog
-        ///
-        /// When omitted, uses the value for cache-url and falls back to the config
+        /// Print snapshot JSON to stdout instead of uploading it to the catalog
         #[bpaf(long, hide)]
         pub json: bool,
 
@@ -452,18 +452,18 @@ impl PackageCommands {
                     .or(config.flox.substituter_url)
                     .unwrap_or(cache_url.clone());
 
-                info!("Uploading binary...");
+                info!("Uploading binary to {cache_url}...");
                 publish
                     .upload_binary(Some(cache_url))
                     .await
                     .context("Failed uploading binary")?;
                 info!("done!");
 
-                info!("Checking substituters...");
+                info!("Checking binary can be downloaded from {substituter_url}...");
                 publish
                     .check_substituter(substituter_url)
                     .await
-                    .context("Failed checking substituters")?;
+                    .context("Binary cannot be downloaded")?;
                 info!("done!");
 
                 if args.inner.json {
@@ -473,6 +473,7 @@ impl PackageCommands {
                 } else {
                     info!("Uploading snapshot to {}...", publish_flakeref.clone_url());
                     publish.push_snapshot().await.context("Failed to upload")?;
+                    info!("done!");
                     info!("Publish complete");
                 }
             },

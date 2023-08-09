@@ -36,7 +36,7 @@ setup_file() {
 # The setup will create a channel repo with a `hello` package.
 # `flox publish2` resolves local repositories to their upstream counterpart.
 # Since we don't want to manage and pollute upstream repositories,
-# we set the reposotry as its own remote, and can verify publishes by checking
+# we set the repository as its own remote, and can verify publishes by checking
 # out the respective catalog branch.
 # Note: this is not the intended production use as it causes system dependent
 #       snapshots, but it is a minimally invasive solution for testing.
