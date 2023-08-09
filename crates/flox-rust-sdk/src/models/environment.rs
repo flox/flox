@@ -153,7 +153,10 @@ impl<S: State> Environment<S> {
 }
 
 impl Environment<Read> {
-    fn new(
+    /// Open an environment at a given path
+    ///
+    /// Ensure that the path exists and contains files that "look" like an environment
+    fn open(
         owner: Option<String>,
         name: String,
         path: impl AsRef<Path>,
@@ -436,7 +439,7 @@ impl DotFloxDir {
             path = path.join(owner);
         }
         path = path.join(name.as_ref());
-        Environment::new(
+        Environment::open(
             owner.as_ref().map(ToString::to_string),
             name.as_ref().to_string(),
             path,
@@ -463,7 +466,7 @@ impl DotFloxDir {
             .await
             .expect("copy template");
 
-        Environment::new(None, name.as_ref().to_string(), env_dir)
+        Environment::open(None, name.as_ref().to_string(), env_dir)
     }
 
     #[allow(dead_code)]
