@@ -210,19 +210,22 @@ pub(crate) mod interface {
     pub struct PublishV2 {
         /// Signing key file to sign the binary with
         ///
-        /// When omitted, reads from the config
+        /// When omitted, reads from the config.
+        /// See flox-config(1) for more details.
         #[bpaf(long, short('k'))]
         pub signing_key: Option<PathBuf>,
 
         /// Url of a binary cache to push binaries _to_
         ///
-        /// When omitted, reads from the config
+        /// When omitted, reads from the config.
+        /// See flox-config(1) for more details.
         #[bpaf(long, short('c'))]
         pub cache_url: Option<SubstituterUrl>,
 
-        /// Url of a substituter to pull binaries _from_
+        /// URL of a substituter to pull binaries _from_
         ///
-        /// When ommitted, falls back to the config or uses the value for cache-url and
+        /// When ommitted, falls back to the config or uses the value for cache-url.
+        /// See flox-config(1) for more details.
         #[bpaf(long, short('s'))]
         pub substituter_url: Option<SubstituterUrl>,
 
