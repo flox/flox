@@ -218,7 +218,7 @@ pub(crate) mod interface {
         ///
         /// When omitted, reads from the config
         #[bpaf(long, short('k'))]
-        pub sign_key: Option<PathBuf>,
+        pub signing_key: Option<PathBuf>,
 
         /// Url of a binary cache to push binaries _to_
         ///
@@ -419,8 +419,8 @@ impl PackageCommands {
                 // sign binary
                 let sign_key = args
                     .inner
-                    .sign_key
-                    .or(config.flox.sign_key)
+                    .signing_key
+                    .or(config.flox.signing_key)
                     .ok_or_else(|| {
                         anyhow!(indoc! {"
                     Signing key is required!

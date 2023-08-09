@@ -55,7 +55,7 @@ pub struct FloxConfig {
     /// The url we push _from_
     pub substituter_url: Option<Url>,
     /// Path to signing key
-    pub sign_key: Option<PathBuf>,
+    pub signing_key: Option<PathBuf>,
 
     #[serde(flatten)]
     pub instance: InstanceConfig,
