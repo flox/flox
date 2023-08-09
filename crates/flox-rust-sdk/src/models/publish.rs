@@ -760,32 +760,26 @@ impl PublishFlakeRef {
         // an indirect flake reference. It should run a maximum of twice (once if `flake_ref` isn't indirect,
         // twice if it is indirect).
         let flake_ref = if let FlakeRef::Indirect(indirect) = flake_ref {
-            indirect.resolve()? 
+            indirect.resolve()?
         } else {
             flake_ref
         };
-        let publish_flakeref = match flake_ref.clone() {
-            FlakeRef::GitSsh(ssh_ref) => {
-                Self::Ssh(ssh_ref);
-            },
-            FlakeRef::GitHttps(https_ref) => {
-                Self::Https(https_ref);
-            },
+        match flake_ref {
+            FlakeRef::GitSsh(ssh_ref) => Ok(Self::Ssh(ssh_ref)),
+            FlakeRef::GitHttps(https_ref) => Ok(Self::Https(https_ref)),
             // resolve upstream for local git repo
             FlakeRef::GitPath(file_ref) => {
-                Self::from_git_file_flake_ref(file_ref, &flox.nix(Default::default()))
-                    .await?;
+                Self::from_git_file_flake_ref(file_ref, &flox.nix(Default::default())).await
             },
             FlakeRef::Github(github_ref) => {
-                Self::from_github_ref(github_ref, git_service_prefer_https)?;
+                Self::from_github_ref(github_ref, git_service_prefer_https)
             },
             FlakeRef::Gitlab(_) => todo!(),
             // Resolving an indirect reference shouldn't give you back
-            // another indirect reference.            
+            // another indirect reference.
             FlakeRef::Indirect(_) => unreachable!(),
-            _ => return Err(ConvertFlakeRefError::UnsupportedTarget(flake_ref.clone()))?,
-        };
-        Ok(publish_flakeref)
+            _ => Err(ConvertFlakeRefError::UnsupportedTarget(flake_ref.clone())),
+        }
     }
 }
 
