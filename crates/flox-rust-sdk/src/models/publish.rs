@@ -25,6 +25,7 @@ use runix::flake_ref::protocol::{WrappedUrl, WrappedUrlParseError};
 use runix::flake_ref::{protocol, FlakeRef};
 use runix::installable::{AttrPath, FlakeAttribute, Installable};
 use runix::store_path::{StorePath, StorePathError};
+use runix::url_parser::UrlParseError;
 use runix::{Run, RunJson, RunTyped};
 use serde_json::{json, Value};
 use thiserror::Error;
@@ -827,7 +828,7 @@ pub enum ConvertFlakeRefError {
     UnsupportedGitUrl(url::Url),
 
     #[error("Failed to parse URL")]
-    URLParseFailed(#[from] crate::nix::url_parser::UrlParseError),
+    URLParseFailed(#[from] UrlParseError),
 }
 
 #[cfg(test)]
