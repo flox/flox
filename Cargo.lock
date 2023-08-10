@@ -1986,7 +1986,7 @@ dependencies = [
 [[package]]
 name = "runix"
 version = "0.2.0"
-source = "git+https://github.com/flox/runix?branch=resolve-flakeref-to-gitref#37d54a10c5bfabb73361fa07527330885d9edba6"
+source = "git+https://github.com/flox/runix#114199ca0a4f0fbaa35611413479b00c2a4e56fa"
 dependencies = [
  "async-trait",
  "chrono",
