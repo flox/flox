@@ -237,6 +237,38 @@ impl<'flox> Publish<'flox, NixAnalysis> {
         }
     }
 
+    /// Construct an installable type from the upstream flakeref and attrpath
+    fn installable(&self) -> Installable {
+        FlakeAttribute {
+            flakeref: self.publish_flake_ref.clone().into_inner(),
+            attr_path: self.attr_path.clone(),
+            outputs: InstallableOutputs::All,
+        }
+        .into()
+    }
+
+    /// Extract the store paths from the snapshot
+    ///
+    /// This should be equivalent to `<installable>^*` without evaluation.
+    /// Since the publish evaluates purely, nix's eval cache may serve the same purpose now.
+    ///
+    /// Todo: https://github.com/flox/runix/issues/41
+    fn store_paths(&self) -> Result<Vec<Installable>, PublishError> {
+        let store_paths = self.analysis()["element"]["storePaths"]
+            .as_array()
+            // TODO use CatalogEntry and then we don't need to unwrap
+            .unwrap()
+            .iter()
+            .map(|value| {
+                // TODO use CatalogEntry and then we don't need to unwrap
+                StorePath::from_path(value.as_str().unwrap())
+                    .map_err(PublishError::ParseStorePath)
+                    .map(Installable::StorePath)
+            })
+            .collect::<Result<Vec<Installable>, _>>()?;
+        Ok(store_paths)
+    }
+
     /// Read out the current publish state
     pub fn analysis(&self) -> &Value {
         self.analysis.deref()
@@ -269,14 +301,13 @@ impl<'flox> Publish<'flox, NixAnalysis> {
     /// Requires a valid signing key
     pub async fn sign_binary(&self, key_file: impl AsRef<Path>) -> Result<(), PublishError> {
         let nix = self.flox.nix(Default::default());
-        let installable = self.installable();
 
         let sign_command = StoreSign {
             store_sign: StoreSignArgs {
                 key_file: key_file.as_ref().into(),
                 recursive: Some(true.into()),
             },
-            installables: [installable].into(),
+            installables: self.store_paths()?.into(),
             eval: Default::default(),
             flake: Default::default(),
         };
@@ -289,16 +320,6 @@ impl<'flox> Publish<'flox, NixAnalysis> {
         Ok(())
     }
 
-    /// Construct an installable type from the upstream flakeref and attrpath
-    fn installable(&self) -> Installable {
-        FlakeAttribute {
-            flakeref: self.publish_flake_ref.clone().into_inner(),
-            attr_path: self.attr_path.clone(),
-            outputs: InstallableOutputs::All,
-        }
-        .into()
-    }
-
     /// Copy the outputs and dependencies of the package to binary store
     pub async fn upload_binary(
         &self,
@@ -306,7 +327,7 @@ impl<'flox> Publish<'flox, NixAnalysis> {
     ) -> Result<(), PublishError> {
         let nix: NixCommandLine = self.flox.nix(Default::default());
         let copy_command = runix::command::NixCopy {
-            installables: [self.installable()].into(),
+            installables: self.store_paths()?.into(),
             eval: EvaluationArgs {
                 eval_store: Some("auto".to_string().into()),
                 ..Default::default()
@@ -348,7 +369,6 @@ impl<'flox> Publish<'flox, NixAnalysis> {
         Ok(())
     }
 
-    #[allow(dead_code)] // until consumed by cli
     /// Check whether store paths are substitutable by a given substituter and
     /// return the associated metadata.
     ///
@@ -360,7 +380,7 @@ impl<'flox> Publish<'flox, NixAnalysis> {
     ) -> Result<CacheMeta, PublishError> {
         let nix: NixCommandLine = self.flox.nix(Default::default());
         let path_info_command = runix::command::PathInfo {
-            installables: [self.installable()].into(),
+            installables: self.store_paths()?.into(),
             eval: EvaluationArgs {
                 eval_store: Some("auto".to_string().into()),
                 ..Default::default()
