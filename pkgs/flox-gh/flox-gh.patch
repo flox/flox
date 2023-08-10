@@ -1,3 +1,9 @@
+commit 86a8c1d07bf5c157b61879f36b2605b9fd3c4111
+Author: Michael Brantley <brantley@floxdev.com>
+Date:   Thu Aug 10 15:52:53 2023 -0400
+
+    flox patches for v2.32.1
+
 diff --git a/.github/workflows/deployment.yml b/.github/workflows/deployment.yml
 index 3974737a..19adeab2 100644
 --- a/.github/workflows/deployment.yml
@@ -37,8 +43,21 @@ index 2596fa76..b97ca2bd 100644
            PRID: ${{ github.event.pull_request.node_id }}
            PRBODY: ${{ github.event.pull_request.body }}
            PRNUM: ${{ github.event.pull_request.number }}
+diff --git a/api/queries_repo.go b/api/queries_repo.go
+index ba94edef..c967350d 100644
+--- a/api/queries_repo.go
++++ b/api/queries_repo.go
+@@ -218,7 +218,7 @@ func (r Repository) RepoName() string {
+ 	return r.Name
+ }
+ 
+-// RepoHost is the GitHub hostname of the repository
++// RepoHost is the flox hostname of the repository
+ func (r Repository) RepoHost() string {
+ 	return r.hostname
+ }
 diff --git a/cmd/gh/main.go b/cmd/gh/main.go
-index 15af9072..66117990 100644
+index 15af9072..fbebb513 100644
 --- a/cmd/gh/main.go
 +++ b/cmd/gh/main.go
 @@ -55,17 +55,6 @@ func mainRun() exitCode {
@@ -59,6 +78,15 @@ index 15af9072..66117990 100644
  	if !cmdFactory.IOStreams.ColorEnabled() {
  		surveyCore.DisableColor = true
  		ansi.DisableColors(true)
+@@ -145,7 +134,7 @@ func mainRun() exitCode {
+ 
+ 		var httpErr api.HTTPError
+ 		if errors.As(err, &httpErr) && httpErr.StatusCode == 401 {
+-			fmt.Fprintln(stderr, "Try authenticating with:  gh auth login")
++			fmt.Fprintln(stderr, "Try authenticating with:  flox login")
+ 		} else if u := factory.SSOURL(); u != "" {
+ 			// handles organization SAML enforcement error
+ 			fmt.Fprintf(stderr, "Authorize in your web browser:  %s\n", u)
 @@ -159,25 +148,6 @@ func mainRun() exitCode {
  		return exitError
  	}
@@ -85,6 +113,19 @@ index 15af9072..66117990 100644
  	return exitOK
  }
  
+diff --git a/context/remote.go b/context/remote.go
+index 3540ad95..06efaa6b 100644
+--- a/context/remote.go
++++ b/context/remote.go
+@@ -93,7 +93,7 @@ func (r Remote) RepoOwner() string {
+ 	return r.Repo.RepoOwner()
+ }
+ 
+-// RepoHost is the GitHub hostname that the remote points to
++// RepoHost is the flox hostname that the remote points to
+ func (r Remote) RepoHost() string {
+ 	return r.Repo.RepoHost()
+ }
 diff --git a/internal/authflow/flow.go b/internal/authflow/flow.go
 index ddac948c..78be21ef 100644
 --- a/internal/authflow/flow.go
@@ -113,11 +154,58 @@ index ddac948c..78be21ef 100644
  
  	callbackURI := "http://127.0.0.1/callback"
  	if ghinstance.IsEnterprise(oauthHost) {
+diff --git a/internal/ghinstance/host.go b/internal/ghinstance/host.go
+index 729d47f3..76186032 100644
+--- a/internal/ghinstance/host.go
++++ b/internal/ghinstance/host.go
+@@ -6,16 +6,16 @@ import (
+ 	"strings"
+ )
+ 
+-// DefaultHostname is the domain name of the default GitHub instance.
++// DefaultHostname is the domain name of the default flox instance.
+ const defaultHostname = "github.com"
+ 
+-// Localhost is the domain name of a local GitHub instance.
++// Localhost is the domain name of a local flox instance.
+ const localhost = "github.localhost"
+ 
+-// TenancyHost is the domain name of a tenancy GitHub instance.
++// TenancyHost is the domain name of a tenancy flox instance.
+ const tenancyHost = "ghe.com"
+ 
+-// Default returns the host name of the default GitHub instance.
++// Default returns the host name of the default flox instance.
+ func Default() string {
+ 	return defaultHostname
+ }
+@@ -43,7 +43,7 @@ func isGarage(h string) bool {
+ 	return strings.EqualFold(h, "garage.github.com")
+ }
+ 
+-// NormalizeHostname returns the canonical host name of a GitHub instance.
++// NormalizeHostname returns the canonical host name of a flox instance.
+ func NormalizeHostname(h string) string {
+ 	hostname := strings.ToLower(h)
+ 	if strings.HasSuffix(hostname, "."+defaultHostname) {
+diff --git a/internal/ghrepo/repo_test.go b/internal/ghrepo/repo_test.go
+index 7ea6b059..6d62ab09 100644
+--- a/internal/ghrepo/repo_test.go
++++ b/internal/ghrepo/repo_test.go
+@@ -44,7 +44,7 @@ func Test_repoFromURL(t *testing.T) {
+ 			err:    errors.New("invalid path: /monalisa/octo-cat/pulls"),
+ 		},
+ 		{
+-			name:   "non-GitHub hostname",
++			name:   "non-flox hostname",
+ 			input:  "https://example.com/one/two",
+ 			result: "one/two",
+ 			host:   "example.com",
 diff --git a/pkg/cmd/api/api.go b/pkg/cmd/api/api.go
-index 82eaecb8..3faf432b 100644
+index 3ac83ad6..46ff87e3 100644
 --- a/pkg/cmd/api/api.go
 +++ b/pkg/cmd/api/api.go
-@@ -168,7 +168,7 @@ func NewCmdApi(f *cmdutil.Factory, runF func(*ApiOptions) error) *cobra.Command
+@@ -169,13 +169,13 @@ func NewCmdApi(f *cmdutil.Factory, runF func(*ApiOptions) error) *cobra.Command
  		`),
  		Annotations: map[string]string{
  			"help:environment": heredoc.Doc(`
@@ -126,11 +214,37 @@ index 82eaecb8..3faf432b 100644
  				github.com API requests.
  
  				GH_ENTERPRISE_TOKEN, GITHUB_ENTERPRISE_TOKEN (in order of precedence): an
+ 				authentication token for API requests to GitHub Enterprise.
+ 
+-				GH_HOST: make the request to a GitHub host other than github.com.
++				GH_HOST: make the request to a flox host other than github.com.
+ 			`),
+ 		},
+ 		Args: cobra.ExactArgs(1),
+@@ -224,7 +224,7 @@ func NewCmdApi(f *cmdutil.Factory, runF func(*ApiOptions) error) *cobra.Command
+ 		},
+ 	}
+ 
+-	cmd.Flags().StringVar(&opts.Hostname, "hostname", "", "The GitHub hostname for the request (default \"github.com\")")
++	cmd.Flags().StringVar(&opts.Hostname, "hostname", "", "The flox hostname for the request (default \"github.com\")")
+ 	cmd.Flags().StringVarP(&opts.RequestMethod, "method", "X", "GET", "The HTTP method for the request")
+ 	cmd.Flags().StringArrayVarP(&opts.MagicFields, "field", "F", nil, "Add a typed parameter in `key=value` format")
+ 	cmd.Flags().StringArrayVarP(&opts.RawFields, "raw-field", "f", nil, "Add a string parameter in `key=value` format")
 diff --git a/pkg/cmd/auth/login/login.go b/pkg/cmd/auth/login/login.go
-index 84894bf1..66515649 100644
+index 84894bf1..387bd9e8 100644
 --- a/pkg/cmd/auth/login/login.go
 +++ b/pkg/cmd/auth/login/login.go
-@@ -61,13 +61,13 @@ func NewCmdLogin(f *cmdutil.Factory, runF func(*LoginOptions) error) *cobra.Comm
+@@ -53,31 +53,31 @@ func NewCmdLogin(f *cmdutil.Factory, runF func(*LoginOptions) error) *cobra.Comm
+ 	cmd := &cobra.Command{
+ 		Use:   "login",
+ 		Args:  cobra.ExactArgs(0),
+-		Short: "Authenticate with a GitHub host",
++		Short: "Authenticate with a flox host",
+ 		Long: heredoc.Docf(`
+-			Authenticate with a GitHub host.
++			Authenticate with a flox host.
+ 
+ 			The default authentication mode is a web-based browser flow. After completion, an
  			authentication token will be stored internally.
  
  			Alternatively, use %[1]s--with-token%[1]s to pass in a token on standard input.
@@ -146,6 +260,29 @@ index 84894bf1..66515649 100644
  		`, "`"),
  		Example: heredoc.Doc(`
  			# start interactive setup
+-			$ gh auth login
++			$ flox login
+ 
+ 			# authenticate against github.com by reading the token from a file
+-			$ gh auth login --with-token < mytoken.txt
++			$ flox login --with-token < mytoken.txt
+ 
+-			# authenticate with a specific GitHub instance
+-			$ gh auth login --hostname enterprise.internal
++			# authenticate with a specific flox instance
++			$ flox login --hostname enterprise.internal
+ 		`),
+ 		RunE: func(cmd *cobra.Command, args []string) error {
+ 			if tokenStdin && opts.Web {
+@@ -119,7 +119,7 @@ func NewCmdLogin(f *cmdutil.Factory, runF func(*LoginOptions) error) *cobra.Comm
+ 		},
+ 	}
+ 
+-	cmd.Flags().StringVarP(&opts.Hostname, "hostname", "h", "", "The hostname of the GitHub instance to authenticate with")
++	cmd.Flags().StringVarP(&opts.Hostname, "hostname", "h", "", "The hostname of the flox instance to authenticate with")
+ 	cmd.Flags().StringSliceVarP(&opts.Scopes, "scopes", "s", nil, "Additional authentication scopes to request")
+ 	cmd.Flags().BoolVar(&tokenStdin, "with-token", false, "Read token from standard input")
+ 	cmd.Flags().BoolVarP(&opts.Web, "web", "w", false, "Open a browser to authenticate")
 @@ -144,11 +144,7 @@ func loginRun(opts *LoginOptions) error {
  
  	hostname := opts.Hostname
@@ -184,7 +321,7 @@ index 84894bf1..66515649 100644
 -	return hostname, err
 -}
 diff --git a/pkg/cmd/auth/login/login_test.go b/pkg/cmd/auth/login/login_test.go
-index 72d796a3..0c759b68 100644
+index 72d796a3..456a9862 100644
 --- a/pkg/cmd/auth/login/login_test.go
 +++ b/pkg/cmd/auth/login/login_test.go
 @@ -344,14 +344,14 @@ func Test_loginRun_nontty(t *testing.T) {
@@ -204,6 +341,163 @@ index 72d796a3..0c759b68 100644
  				To have GitHub CLI store credentials instead, first clear the value from the environment.
  			`),
  		},
+@@ -495,7 +495,7 @@ func Test_loginRun_Survey(t *testing.T) {
+ 					switch prompt {
+ 					case "What is your preferred protocol for Git operations?":
+ 						return prompter.IndexFor(opts, "HTTPS")
+-					case "How would you like to authenticate GitHub CLI?":
++					case "How would you like to authenticate flox CLI?":
+ 						return prompter.IndexFor(opts, "Paste an authentication token")
+ 					}
+ 					return -1, prompter.NoSuchPromptErr(prompt)
+@@ -532,7 +532,7 @@ func Test_loginRun_Survey(t *testing.T) {
+ 						return prompter.IndexFor(opts, "GitHub Enterprise Server")
+ 					case "What is your preferred protocol for Git operations?":
+ 						return prompter.IndexFor(opts, "HTTPS")
+-					case "How would you like to authenticate GitHub CLI?":
++					case "How would you like to authenticate flox CLI?":
+ 						return prompter.IndexFor(opts, "Paste an authentication token")
+ 					}
+ 					return -1, prompter.NoSuchPromptErr(prompt)
+@@ -572,7 +572,7 @@ func Test_loginRun_Survey(t *testing.T) {
+ 						return prompter.IndexFor(opts, "GitHub.com")
+ 					case "What is your preferred protocol for Git operations?":
+ 						return prompter.IndexFor(opts, "HTTPS")
+-					case "How would you like to authenticate GitHub CLI?":
++					case "How would you like to authenticate flox CLI?":
+ 						return prompter.IndexFor(opts, "Paste an authentication token")
+ 					}
+ 					return -1, prompter.NoSuchPromptErr(prompt)
+@@ -603,7 +603,7 @@ func Test_loginRun_Survey(t *testing.T) {
+ 						return prompter.IndexFor(opts, "GitHub.com")
+ 					case "What is your preferred protocol for Git operations?":
+ 						return prompter.IndexFor(opts, "SSH")
+-					case "How would you like to authenticate GitHub CLI?":
++					case "How would you like to authenticate flox CLI?":
+ 						return prompter.IndexFor(opts, "Paste an authentication token")
+ 					}
+ 					return -1, prompter.NoSuchPromptErr(prompt)
+@@ -622,7 +622,7 @@ func Test_loginRun_Survey(t *testing.T) {
+ 					switch prompt {
+ 					case "What is your preferred protocol for Git operations?":
+ 						return prompter.IndexFor(opts, "HTTPS")
+-					case "How would you like to authenticate GitHub CLI?":
++					case "How would you like to authenticate flox CLI?":
+ 						return prompter.IndexFor(opts, "Paste an authentication token")
+ 					}
+ 					return -1, prompter.NoSuchPromptErr(prompt)
+diff --git a/pkg/cmd/auth/logout/logout.go b/pkg/cmd/auth/logout/logout.go
+index c871a533..2b435331 100644
+--- a/pkg/cmd/auth/logout/logout.go
++++ b/pkg/cmd/auth/logout/logout.go
+@@ -32,17 +32,17 @@ func NewCmdLogout(f *cmdutil.Factory, runF func(*LogoutOptions) error) *cobra.Co
+ 	cmd := &cobra.Command{
+ 		Use:   "logout",
+ 		Args:  cobra.ExactArgs(0),
+-		Short: "Log out of a GitHub host",
+-		Long: heredoc.Doc(`Remove authentication for a GitHub host.
++		Short: "Log out of a flox host",
++		Long: heredoc.Doc(`Remove authentication for a flox host.
+ 
+ 			This command removes the authentication configuration for a host either specified
+ 			interactively or via --hostname.
+ 		`),
+ 		Example: heredoc.Doc(`
+-			$ gh auth logout
++			$ flox logout
+ 			# => select what host to log out of via a prompt
+ 
+-			$ gh auth logout --hostname enterprise.internal
++			$ flox logout --hostname enterprise.internal
+ 			# => log out of specified host
+ 		`),
+ 		RunE: func(cmd *cobra.Command, args []string) error {
+@@ -57,7 +57,7 @@ func NewCmdLogout(f *cmdutil.Factory, runF func(*LogoutOptions) error) *cobra.Co
+ 		},
+ 	}
+ 
+-	cmd.Flags().StringVarP(&opts.Hostname, "hostname", "h", "", "The hostname of the GitHub instance to log out of")
++	cmd.Flags().StringVarP(&opts.Hostname, "hostname", "h", "", "The hostname of the flox instance to log out of")
+ 
+ 	return cmd
+ }
+diff --git a/pkg/cmd/auth/refresh/refresh.go b/pkg/cmd/auth/refresh/refresh.go
+index 4debd0a4..f00a6648 100644
+--- a/pkg/cmd/auth/refresh/refresh.go
++++ b/pkg/cmd/auth/refresh/refresh.go
+@@ -100,7 +100,7 @@ func NewCmdRefresh(f *cmdutil.Factory, runF func(*RefreshOptions) error) *cobra.
+ 		},
+ 	}
+ 
+-	cmd.Flags().StringVarP(&opts.Hostname, "hostname", "h", "", "The GitHub host to use for authentication")
++	cmd.Flags().StringVarP(&opts.Hostname, "hostname", "h", "", "The flox host to use for authentication")
+ 	cmd.Flags().StringSliceVarP(&opts.Scopes, "scopes", "s", nil, "Additional authentication scopes for gh to have")
+ 	cmd.Flags().StringSliceVarP(&opts.RemoveScopes, "remove-scopes", "r", nil, "Authentication scopes to remove from gh")
+ 	cmd.Flags().BoolVar(&opts.ResetScopes, "reset-scopes", false, "Reset authentication scopes to the default minimum set of scopes")
+@@ -123,7 +123,7 @@ func refreshRun(opts *RefreshOptions) error {
+ 
+ 	candidates := authCfg.Hosts()
+ 	if len(candidates) == 0 {
+-		return fmt.Errorf("not logged in to any hosts. Use 'gh auth login' to authenticate with a host")
++		return fmt.Errorf("not logged in to any hosts. Use 'flox login' to authenticate with a host")
+ 	}
+ 
+ 	hostname := opts.Hostname
+@@ -147,7 +147,7 @@ func refreshRun(opts *RefreshOptions) error {
+ 		}
+ 
+ 		if !found {
+-			return fmt.Errorf("not logged in to %s. use 'gh auth login' to authenticate with this host", hostname)
++			return fmt.Errorf("not logged in to %s. use 'flox login' to authenticate with this host", hostname)
+ 		}
+ 	}
+ 
+diff --git a/pkg/cmd/auth/setupgit/setupgit.go b/pkg/cmd/auth/setupgit/setupgit.go
+index a3c991f4..a373ef34 100644
+--- a/pkg/cmd/auth/setupgit/setupgit.go
++++ b/pkg/cmd/auth/setupgit/setupgit.go
+@@ -83,8 +83,8 @@ func setupGitRun(opts *SetupGitOptions) error {
+ 	if len(hostnames) == 0 {
+ 		fmt.Fprintf(
+ 			stderr,
+-			"You are not logged into any GitHub hosts. Run %s to authenticate.\n",
+-			cs.Bold("gh auth login"),
++			"You are not logged into any flox hosts. Run %s to authenticate.\n",
++			cs.Bold("flox login"),
+ 		)
+ 
+ 		return cmdutil.SilentError
+@@ -94,7 +94,7 @@ func setupGitRun(opts *SetupGitOptions) error {
+ 
+ 	if opts.Hostname != "" {
+ 		if !has(opts.Hostname, hostnames) {
+-			return fmt.Errorf("You are not logged into the GitHub host %q\n", opts.Hostname)
++			return fmt.Errorf("You are not logged into the flox host %q\n", opts.Hostname)
+ 		}
+ 		hostnamesToSetup = []string{opts.Hostname}
+ 	}
+diff --git a/pkg/cmd/auth/setupgit/setupgit_test.go b/pkg/cmd/auth/setupgit/setupgit_test.go
+index 635cece8..0f6ffc66 100644
+--- a/pkg/cmd/auth/setupgit/setupgit_test.go
++++ b/pkg/cmd/auth/setupgit/setupgit_test.go
+@@ -47,7 +47,7 @@ func Test_setupGitRun(t *testing.T) {
+ 				},
+ 			},
+ 			expectedErr:    "SilentError",
+-			expectedErrOut: "You are not logged into any GitHub hosts. Run gh auth login to authenticate.\n",
++			expectedErrOut: "You are not logged into any flox hosts. Run flox login to authenticate.\n",
+ 		},
+ 		{
+ 			name: "not authenticated with the hostname given as flag",
+@@ -63,7 +63,7 @@ func Test_setupGitRun(t *testing.T) {
+ 					return cfg, nil
+ 				},
+ 			},
+-			expectedErr:    "You are not logged into the GitHub host \"foo\"\n",
++			expectedErr:    "You are not logged into the flox host \"foo\"\n",
+ 			expectedErrOut: "",
+ 		},
+ 		{
 diff --git a/pkg/cmd/auth/shared/git_credential.go b/pkg/cmd/auth/shared/git_credential.go
 index 8624cf00..026d5bcf 100644
 --- a/pkg/cmd/auth/shared/git_credential.go
@@ -222,7 +516,7 @@ index 8624cf00..026d5bcf 100644
  	if flow.shouldSetup {
  		if isGitMissing(gitErr) {
 diff --git a/pkg/cmd/auth/shared/login_flow.go b/pkg/cmd/auth/shared/login_flow.go
-index 7c2ff163..5034cd8e 100644
+index 7c2ff163..e273b6ae 100644
 --- a/pkg/cmd/auth/shared/login_flow.go
 +++ b/pkg/cmd/auth/shared/login_flow.go
 @@ -8,7 +8,6 @@ import (
@@ -287,6 +581,15 @@ index 7c2ff163..5034cd8e 100644
  	}
  
  	var authMode int
+@@ -139,7 +107,7 @@ func Login(opts *LoginOptions) error {
+ 		options := []string{"Login with a web browser", "Paste an authentication token"}
+ 		var err error
+ 		authMode, err = opts.Prompter.Select(
+-			"How would you like to authenticate GitHub CLI?",
++			"How would you like to authenticate flox CLI?",
+ 			options[0],
+ 			options)
+ 		if err != nil {
 @@ -152,18 +120,12 @@ func Login(opts *LoginOptions) error {
  
  	if authMode == 0 {
@@ -339,9 +642,18 @@ index 7c2ff163..5034cd8e 100644
  	f, err := os.Open(keyFile)
  	if err != nil {
 diff --git a/pkg/cmd/auth/shared/login_flow_test.go b/pkg/cmd/auth/shared/login_flow_test.go
-index 92ae7591..8bd2949f 100644
+index 92ae7591..764287d6 100644
 --- a/pkg/cmd/auth/shared/login_flow_test.go
 +++ b/pkg/cmd/auth/shared/login_flow_test.go
+@@ -50,7 +50,7 @@ func TestLogin_ssh(t *testing.T) {
+ 		switch prompt {
+ 		case "What is your preferred protocol for Git operations?":
+ 			return prompter.IndexFor(opts, "SSH")
+-		case "How would you like to authenticate GitHub CLI?":
++		case "How would you like to authenticate flox CLI?":
+ 			return prompter.IndexFor(opts, "Paste an authentication token")
+ 		}
+ 		return -1, prompter.NoSuchPromptErr(prompt)
 @@ -114,55 +114,3 @@ func TestLogin_ssh(t *testing.T) {
  	assert.Equal(t, "ATOKEN", cfg["example.com:oauth_token"])
  	assert.Equal(t, "ssh", cfg["example.com:git_protocol"])
@@ -451,10 +763,40 @@ index 8d999601..49af3aa6 100644
  	return nil
  }
 diff --git a/pkg/cmd/auth/status/status.go b/pkg/cmd/auth/status/status.go
-index 77a5f125..55135aa1 100644
+index 77a5f125..c6ecd295 100644
 --- a/pkg/cmd/auth/status/status.go
 +++ b/pkg/cmd/auth/status/status.go
-@@ -139,17 +139,12 @@ func statusRun(opts *StatusOptions) error {
+@@ -38,7 +38,7 @@ func NewCmdStatus(f *cmdutil.Factory, runF func(*StatusOptions) error) *cobra.Co
+ 		Short: "View authentication status",
+ 		Long: heredoc.Doc(`Verifies and displays information about your authentication state.
+ 
+-			This command will test your authentication state for each GitHub host that gh knows about and
++			This command will test your authentication state for each flox host that gh knows about and
+ 			report on any issues.
+ 		`),
+ 		RunE: func(cmd *cobra.Command, args []string) error {
+@@ -74,7 +74,7 @@ func statusRun(opts *StatusOptions) error {
+ 	hostnames := authCfg.Hosts()
+ 	if len(hostnames) == 0 {
+ 		fmt.Fprintf(stderr,
+-			"You are not logged into any GitHub hosts. Run %s to authenticate.\n", cs.Bold("gh auth login"))
++			"You are not logged into any flox hosts. Run %s to authenticate.\n", cs.Bold("flox login"))
+ 		return cmdutil.SilentError
+ 	}
+ 
+@@ -111,9 +111,9 @@ func statusRun(opts *StatusOptions) error {
+ 			addMsg("- The %s token in %s is no longer valid.", cs.Bold(hostname), tokenSource)
+ 			if tokenIsWriteable {
+ 				addMsg("- To re-authenticate, run: %s %s",
+-					cs.Bold("gh auth login -h"), cs.Bold(hostname))
++					cs.Bold("flox login -h"), cs.Bold(hostname))
+ 				addMsg("- To forget about this host, run: %s %s",
+-					cs.Bold("gh auth logout -h"), cs.Bold(hostname))
++					cs.Bold("flox logout -h"), cs.Bold(hostname))
+ 			}
+ 			failed = true
+ 			continue
+@@ -139,24 +139,19 @@ func statusRun(opts *StatusOptions) error {
  			}
  
  			addMsg("%s Logged in to %s as %s (%s)", cs.SuccessIcon(), hostname, cs.Bold(username), tokenSource)
@@ -474,8 +816,40 @@ index 77a5f125..55135aa1 100644
  			}
  		}
  	}
+ 
+ 	if !isHostnameFound {
+ 		fmt.Fprintf(stderr,
+-			"Hostname %q not found among authenticated GitHub hosts\n", opts.Hostname)
++			"Hostname %q not found among authenticated flox hosts\n", opts.Hostname)
+ 		return cmdutil.SilentError
+ 	}
+ 
+diff --git a/pkg/cmd/auth/status/status_test.go b/pkg/cmd/auth/status/status_test.go
+index e1860420..198dd3db 100644
+--- a/pkg/cmd/auth/status/status_test.go
++++ b/pkg/cmd/auth/status/status_test.go
+@@ -161,8 +161,8 @@ func Test_statusRun(t *testing.T) {
+ 				joel.miller
+ 				  X joel.miller: authentication failed
+ 				  - The joel.miller token in GH_CONFIG_DIR/hosts.yml is no longer valid.
+-				  - To re-authenticate, run: gh auth login -h joel.miller
+-				  - To forget about this host, run: gh auth logout -h joel.miller
++				  - To re-authenticate, run: flox login -h joel.miller
++				  - To forget about this host, run: flox logout -h joel.miller
+ 				
+ 				github.com
+ 				  ✓ Logged in to github.com as tess (GH_CONFIG_DIR/hosts.yml)
+@@ -301,7 +301,7 @@ func Test_statusRun(t *testing.T) {
+ 			},
+ 			httpStubs:  func(reg *httpmock.Registry) {},
+ 			wantErr:    "SilentError",
+-			wantErrOut: "Hostname \"github.example.com\" not found among authenticated GitHub hosts\n",
++			wantErrOut: "Hostname \"github.example.com\" not found among authenticated flox hosts\n",
+ 		},
+ 	}
+ 
 diff --git a/pkg/cmd/auth/token/token.go b/pkg/cmd/auth/token/token.go
-index fee8dc63..96854ad3 100644
+index fee8dc63..f628d24e 100644
 --- a/pkg/cmd/auth/token/token.go
 +++ b/pkg/cmd/auth/token/token.go
 @@ -13,8 +13,9 @@ type TokenOptions struct {
@@ -490,8 +864,12 @@ index fee8dc63..96854ad3 100644
  }
  
  func NewCmdToken(f *cmdutil.Factory, runF func(*TokenOptions) error) *cobra.Command {
-@@ -39,6 +40,7 @@ func NewCmdToken(f *cmdutil.Factory, runF func(*TokenOptions) error) *cobra.Comm
- 	cmd.Flags().StringVarP(&opts.Hostname, "hostname", "h", "", "The hostname of the GitHub instance authenticated with")
+@@ -36,9 +37,10 @@ func NewCmdToken(f *cmdutil.Factory, runF func(*TokenOptions) error) *cobra.Comm
+ 		},
+ 	}
+ 
+-	cmd.Flags().StringVarP(&opts.Hostname, "hostname", "h", "", "The hostname of the GitHub instance authenticated with")
++	cmd.Flags().StringVarP(&opts.Hostname, "hostname", "h", "", "The hostname of the flox instance authenticated with")
  	cmd.Flags().BoolVarP(&opts.SecureStorage, "secure-storage", "", false, "Search only secure credential store for authentication token")
  	_ = cmd.Flags().MarkHidden("secure-storage")
 +	cmd.Flags().StringVarP(&opts.GitCredentialHelper, "git-credential-helper", "", "", "Emit username and password fields for use as git credential helper")
@@ -519,6 +897,22 @@ index fee8dc63..96854ad3 100644
  	}
  	return nil
  }
+diff --git a/pkg/cmd/factory/remote_resolver.go b/pkg/cmd/factory/remote_resolver.go
+index 6ef7c5e0..a5592983 100644
+--- a/pkg/cmd/factory/remote_resolver.go
++++ b/pkg/cmd/factory/remote_resolver.go
+@@ -85,9 +85,9 @@ func (rr *remoteResolver) Resolver() func() (context.Remotes, error) {
+ 			if isHostEnv(src) {
+ 				return nil, fmt.Errorf("none of the git remotes configured for this repository correspond to the %s environment variable. Try adding a matching remote or unsetting the variable.", src)
+ 			} else if cfg.Authentication().HasEnvToken() {
+-				return nil, errors.New("set the GH_HOST environment variable to specify which GitHub host to use")
++				return nil, errors.New("set the GH_HOST environment variable to specify which flox host to use")
+ 			}
+-			return nil, errors.New("none of the git remotes configured for this repository point to a known GitHub host. To tell gh about a new GitHub host, please use `gh auth login`")
++			return nil, errors.New("none of the git remotes configured for this repository point to a known flox host. To tell gh about a new flox host, please use `flox login`")
+ 		}
+ 
+ 		return cachedRemotes, nil
 diff --git a/pkg/cmd/pr/diff/diff_test.go b/pkg/cmd/pr/diff/diff_test.go
 index cff9f04c..ca8d99f0 100644
 --- a/pkg/cmd/pr/diff/diff_test.go
@@ -773,10 +1167,20 @@ index 5c76c141..9ef275f2 100644
  	for _, tt := range tests {
  		t.Run(tt.name, func(t *testing.T) {
 diff --git a/pkg/cmd/root/help.go b/pkg/cmd/root/help.go
-index 860fb22c..5e978d9f 100644
+index 860fb22c..ad4850c2 100644
 --- a/pkg/cmd/root/help.go
 +++ b/pkg/cmd/root/help.go
-@@ -192,21 +192,21 @@ Read the manual at https://cli.github.com/manual`})
+@@ -171,9 +171,6 @@ func rootHelpFunc(f *cmdutil.Factory, command *cobra.Command, args []string) {
+ 	if _, ok := command.Annotations["help:environment"]; ok {
+ 		helpEntries = append(helpEntries, helpEntry{"ENVIRONMENT VARIABLES", command.Annotations["help:environment"]})
+ 	}
+-	helpEntries = append(helpEntries, helpEntry{"LEARN MORE", `
+-Use 'gh <command> <subcommand> --help' for more information about a command.
+-Read the manual at https://cli.github.com/manual`})
+ 
+ 	out := f.IOStreams.Out
+ 	for _, e := range helpEntries {
+@@ -192,21 +189,21 @@ Read the manual at https://cli.github.com/manual`})
  func authHelp() string {
  	if os.Getenv("GITHUB_ACTIONS") == "true" {
  		return heredoc.Doc(`
@@ -796,17 +1200,27 @@ index 860fb22c..5e978d9f 100644
  	}
  
  	return heredoc.Doc(`
- 		To get started with GitHub CLI, please run:  gh auth login
+-		To get started with GitHub CLI, please run:  gh auth login
 -		Alternatively, populate the GH_TOKEN environment variable with a GitHub API authentication token.
++		To get started with GitHub CLI, please run:  flox login
 +		Alternatively, populate the FLOX_GH_TOKEN environment variable with a GitHub API authentication token.
  	`)
  }
  
 diff --git a/pkg/cmd/root/help_topic.go b/pkg/cmd/root/help_topic.go
-index 7db69466..49e15d4c 100644
+index 7db69466..c198c4e6 100644
 --- a/pkg/cmd/root/help_topic.go
 +++ b/pkg/cmd/root/help_topic.go
-@@ -42,7 +42,7 @@ var HelpTopics = []helpTopic{
+@@ -34,7 +34,7 @@ var HelpTopics = []helpTopic{
+ 			  You can run "C:\Program Files\Git\bin\bash.exe" from any terminal emulator to continue
+ 			  using all of the tooling in Git For Windows without MinTTY.
+ 
+-			- Prefix invocations of gh with winpty, eg: "winpty gh auth login".
++			- Prefix invocations of gh with winpty, eg: "winpty flox login".
+ 			  NOTE: this can lead to some UI bugs.
+ 		`),
+ 	},
+@@ -42,14 +42,14 @@ var HelpTopics = []helpTopic{
  		name:  "environment",
  		short: "Environment variables that can be used with gh",
  		long: heredoc.Doc(`
@@ -814,6 +1228,14 @@ index 7db69466..49e15d4c 100644
 +			FLOX_GH_TOKEN, FLOX_GITHUB_TOKEN (in order of precedence): an authentication token for github.com
  			API requests. Setting this avoids being prompted to authenticate and takes precedence over
  			previously stored credentials.
+ 
+ 			GH_ENTERPRISE_TOKEN, GITHUB_ENTERPRISE_TOKEN (in order of precedence): an authentication
+ 			token for API requests to GitHub Enterprise. When setting this, also set GH_HOST.
+ 
+-			GH_HOST: specify the GitHub hostname for commands that would otherwise assume the
++			GH_HOST: specify the flox hostname for commands that would otherwise assume the
+ 			"github.com" host when not in a context of an existing repository. When setting this, 
+ 			also set GH_ENTERPRISE_TOKEN.
  
 diff --git a/pkg/cmdutil/auth_check_test.go b/pkg/cmdutil/auth_check_test.go
 index fa8bd80e..c742534d 100644
