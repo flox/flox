@@ -287,8 +287,12 @@ envs | environments)
 	floxEnvironments "$FLOX_SYSTEM" "${invocation_args[@]}"
 	;;
 
+login|logout)
+	floxLoginLogout "$subcommand" "$@"
+	;;
+
 gh)
-	verboseExec $_flox_gh "$@"
+	verboseExec $_gh "$@"
 	;;
 
 init)

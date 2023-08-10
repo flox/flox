@@ -215,7 +215,7 @@ impl WrappedNix {
     }
 }
 
-/// Access to the nix CLI
+/// Access to the gh CLI
 #[derive(Clone, Debug, Bpaf)]
 pub struct Gh {
     #[bpaf(any("gh arguments and options", not_help))]
@@ -225,6 +225,50 @@ impl Gh {
     pub async fn handle(self, _config: Config, flox: Flox) -> Result<()> {
         subcommand_metric!("gh");
         flox_forward(&flox).await
+    }
+}
+
+/// Log into the flox-gh CLI
+#[derive(Clone, Debug, Bpaf)]
+pub enum LoginArgs {
+    /// the hostname of the flox hub to authenticate with
+    Hostname(#[bpaf(any("hostname"))] Vec<String>),
+    /// save authentication credentials in plain text instead of credential store
+    #[bpaf(command("insecure-storage"))]
+    InsecureStorage,
+    /// read token from standard input
+    #[bpaf(command("with-token"))]
+    WithToken,
+}
+
+impl LoginArgs {
+    async fn handle(&self, flox: Flox) -> Result<()> {
+        match self {
+            LoginArgs::Hostname(_) => flox_forward(&flox).await?,
+            LoginArgs::InsecureStorage => flox_forward(&flox).await?,
+            LoginArgs::WithToken => flox_forward(&flox).await?,
+        }
+        Ok(())
+    }
+}
+
+/// Log out of the flox-gh CLI
+#[derive(Clone, Debug, Bpaf)]
+pub enum LogoutArgs {
+    /// the hostname of the flox hub to log out of
+    Hostname(#[bpaf(any("hostname"))] Vec<String>),
+    /// find authentication credentials in plain text instead of credential store
+    #[bpaf(command("insecure-storage"))]
+    InsecureStorage,
+}
+
+impl LogoutArgs {
+    async fn handle(&self, flox: Flox) -> Result<()> {
+        match self {
+            LogoutArgs::Hostname(_) => flox_forward(&flox).await?,
+            LogoutArgs::InsecureStorage => flox_forward(&flox).await?,
+        }
+        Ok(())
     }
 }
 

@@ -482,6 +482,10 @@ enum InternalCommands {
     Develop(#[bpaf(external(WithPassthru::parse))] WithPassthru<package::Develop>),
     #[bpaf(command)]
     Gh(#[bpaf(external(general::gh))] general::Gh),
+    #[bpaf(command)]
+    Login(#[bpaf(external(general::gh))] general::Login),
+    #[bpaf(command)]
+    Logout(#[bpaf(external(general::gh))] general::Logout),
 }
 
 impl InternalCommands {
@@ -522,6 +526,8 @@ impl InternalCommands {
             InternalCommands::Eval(args) => args.handle(config, flox).await?,
             InternalCommands::Develop(args) => args.handle(config, flox).await?,
             InternalCommands::Gh(args) => args.handle(config, flox).await?,
+            InternalCommands::Login(args) => args.handle(config, flox).await?,
+            InternalCommands::Logout(args) => args.handle(config, flox).await?,
         }
         Ok(())
     }

@@ -378,4 +378,28 @@ function floxEnvironments() {
 	done
 }
 
+_general_commands+=("login")
+_general_commands+=("logout")
+_usage["login"]="log into floxhub"
+_usage["logout"]="log out"
+_usage_options["login"]="[--status]"
+_usage_options["logout"]="[--status]"
+function floxLoginLogout() {
+	trace "$@"
+	local subcommand="$1"; shift
+	local -a floxLoginLogoutArgs=()
+	while [[ "$#" -gt 0 ]]; do
+		case "$1" in
+		--status) # takes zero args
+			# `flox {login,logout} --status` is an alias for `$_flox_gh auth status`
+			subcommand="status"; shift
+			;;
+		*)
+			floxLoginLogoutArgs+=("$1"); shift
+			;;
+		esac
+	done
+	verboseExec $_flox_gh auth "$subcommand" "${floxLoginLogoutArgs[@]}"
+}
+
 # vim:ts=4:noet:syntax=bash
