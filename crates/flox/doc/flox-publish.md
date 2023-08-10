@@ -10,12 +10,30 @@ flox-publish - build and publish project to flox channel
 
 # SYNOPSIS
 
-flox [ `<general-options>` ] publish [ `<options>` ]
+flox [ `<general-options>` ] publish [ `<options>` ] [`<package>`]
 
 # DESCRIPTION
 
-Perform a build, (optionally) copy binaries to a cache,
-and add package metadata to a flox channel.
+Adds metadata to a catalog for the package identified by `<package>`
+or dynamically selected from a choice of packages in the current directory.
+
+Prior to to submitting the metadata,
+it will verify that the package can be built from its _upstream_ location
+and optionally sign and cache the resulting binary.
+
+The package must be defined in a remote git repository and be referred to
+either directly by a `git+ssh://<url>[#<package>]` url or another url that
+can be resolved to an upstream git resource.
+Packages referred to by a `github:<user>/<owner>[#<package>]` URL are
+resolved to `ssh://git@github.com` by default or `https://github.com`,
+if `--prefer-https` is provided.
+Packages in a local repository will be built from the upstream branch.
+The local branch must be clean (i.e. have no uncommited changes) and
+must be at the same revision as its upstream.
+
+The metadata will be published in a `catalog/<system>` branch on the
+upstream repository.
+
 
 # OPTIONS
 
@@ -26,48 +44,35 @@ and add package metadata to a flox channel.
 
 ## Publish Options
 
- `[ --build-repo <URL> ]`
-:   The URL of the git repository from which to `flox build` the package.
-    This is used both to build the package as it is being published
-    and embedded in catalog metadata so that the package can be built
-    from source if it cannot be fetched from a binary store.
-
-    (Nix experts will recognize this repository as the source flake
-    for the package.)
-
-`[ --channel-repo <URL> ]`
-:   The URL of the git channel repository to which package
-    metadata should be published.
-    See **subscribe** and **search** for descriptions on
-    the use of channel repositories.
-
-`[ --upload-to <URL> ]`
+`[ --cache-url <URL> | -c <URL> ]`
 :   The URL of a binary cache location to which built package(s)
     should be copied.
 
-`[ --download-from <URL> ]`
-:   The URL from which built packages will be served at
+    If not provided will attempt to read the `cache_url` config value.
+
+`[ --substituter-url <URL> | -s <URL> ]`
+:   The URL of a substituter from which built packages will be served at
     installation time.
     This URL typically refers to the same underlying resource
-    as specified by the `--upload-to` argument, but using
-    a different transport. For example, we upload packages
-    to the (writable, authenticated) s3://flox-store-public URL,
-    but users download these packages from the (read-only,
-    unauthenticated) https://cache.floxdev.com endpoint.
+    as specified by the `--cache-url` argument, but using
+    a different transport. For example, to upload packages
+    to a (writable, authenticated) `s3://` URL,
+    but download these packages from an (read-only,
+    unauthenticated) `https://cache.floxdev.com endpoint``.
 
-    If not provided the `--download-from` argument will default to
-    the same value as provided for the `--upload-to` argument.
+    If not provided the `--substituter-url` argument will default to
+    the `substituter_url` config value,
+    or same value as provided for the `--cache-url` argument.
 
-`[ --render-path <dir> ]`
-:   Sets the directory name for rendering the catalog
-    within the git repository
-    specified by the `--catalog-repo` flag.
-    Defaults to "catalog" if not specified.
-
-`[ --key-file <file> ]`
+`[ --sign-key <file> | -k <file> ]`
 :   Used for identifying the path to the private key
-    to be used in signing packages
-    before analysis and upload.
+    to be used to sign packages before upload.
+    If not provided the, will default to the `sign_key` config value.
+
+
+`--prefer-https`
+:   Resolve `github:` urls to `https://github.com`,
+    instead of `ssh://git@github.com`.
 
 When invoked without arguments, will prompt the user for the required values.
 

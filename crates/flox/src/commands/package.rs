@@ -321,12 +321,9 @@ pub(crate) mod interface {
         /// print shell code that can be sourced by bash to reproduce the development environment
         #[bpaf(command("print-dev-env"))]
         PrintDevEnv(#[bpaf(external(WithPassthru::parse))] WithPassthru<PrintDevEnv>),
-        /// build and publish project to flox channel
-        #[bpaf(command)]
-        Publish(#[bpaf(external(WithPassthru::parse))] WithPassthru<Publish>),
         /// build package and publish to flox channel
-        #[bpaf(command, hide)]
-        Publish2(#[bpaf(external(WithPassthru::parse))] WithPassthru<PublishV2>),
+        #[bpaf(command)]
+        Publish(#[bpaf(external(WithPassthru::parse))] WithPassthru<PublishV2>),
         /// run app from current project
         #[bpaf(command)]
         Run(#[bpaf(external(WithPassthru::parse))] WithPassthru<Run>),
@@ -356,7 +353,6 @@ impl PackageCommands {
             PackageCommands::Build(_) => subcommand_metric!("build"),
             PackageCommands::PrintDevEnv(_) => subcommand_metric!("print-dev-env"),
             PackageCommands::Publish(_) => subcommand_metric!("publish"),
-            PackageCommands::Publish2(_) => subcommand_metric!("publish_v2"),
             PackageCommands::Run(_) => subcommand_metric!("run"),
             PackageCommands::Shell(_) => subcommand_metric!("shell"),
             PackageCommands::Eval(_) => subcommand_metric!("eval"),
@@ -378,12 +374,7 @@ impl PackageCommands {
                 flox_forward(&flox).await?
             },
 
-            // `flox publish` is not yet implemented in rust
-            PackageCommands::Publish(_) if Feature::Publish.is_forwarded()? => {
-                flox_forward(&flox).await?
-            },
-
-            PackageCommands::Publish2(args) => {
+            PackageCommands::Publish(args) => {
                 let installable = args
                     .inner
                     .installable_arg

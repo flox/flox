@@ -2,7 +2,7 @@
 # -*- mode: bats; -*-
 # ============================================================================ #
 #
-# Test `flox publish2` command
+# Test `flox publish` command
 #
 # This subcommand requires the configuration of a `cache_url`, i.e. a store to
 # copy binaries to, as well as a `sign_key` file to enfore signing binaries.
@@ -34,7 +34,7 @@ setup_file() {
 
 # Giving each test an individual channel to allow parallel runs.
 # The setup will create a channel repo with a `hello` package.
-# `flox publish2` resolves local repositories to their upstream counterpart.
+# `flox publish` resolves local repositories to their upstream counterpart.
 # Since we don't want to manage and pollute upstream repositories,
 # we set the repository as its own remote, and can verify publishes by checking
 # out the respective catalog branch.
@@ -65,9 +65,9 @@ setup() {
 }
 
 # Given a valid pacakge, a signing key and a binary cache,
-# flox publish2 is expected to succeed.
-@test "flox publish2" {
-    run $FLOX_CLI -v publish2 "$CHANNEL#hello"
+# flox publish is expected to succeed.
+@test "flox publish" {
+    run $FLOX_CLI -v publish "$CHANNEL#hello"
     assert_success
 
     local EXPECTED_PATH=catalog/hello/$HELLO_VERSION-$HELLO_HASH_FIRST_8.json
@@ -80,7 +80,7 @@ setup() {
 @test "flox publish fails without signing-key" {
     unset FLOX_SIGNING_KEY
 
-    run $FLOX_CLI -v publish2 "$CHANNEL#hello"
+    run $FLOX_CLI -v publish "$CHANNEL#hello"
     assert_failure
     assert_output --partial "Signing key is required!"
 }
@@ -90,7 +90,7 @@ setup() {
 @test "flox publish fails without cache url" {
     unset FLOX_CACHE_URL
 
-    run $FLOX_CLI -v publish2 "$CHANNEL#hello"
+    run $FLOX_CLI -v publish "$CHANNEL#hello"
     assert_failure
     assert_output --partial "Cache url is required!"
 }
