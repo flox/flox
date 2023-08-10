@@ -403,6 +403,38 @@ impl PackageCommands {
                     info!("Resolved {} to {}", original_flakeref, publish_flakeref);
                 }
 
+                // validate arguments
+
+                let sign_key = args
+                    .inner
+                    .signing_key
+                    .or(config.flox.signing_key)
+                    .ok_or_else(|| {
+                        anyhow!(indoc! {"
+                            Signing key is required!
+                            Provide using `--sign-key` or the `sign_key` config key
+                        "})
+                    })?;
+
+                let cache_url =
+                    args.inner
+                        .cache_url
+                        .or(config.flox.cache_url)
+                        .ok_or_else(|| {
+                            anyhow!(indoc! {"
+                            Cache url is required!
+                            Provide using `--cache-url` or the `cache_url` config key
+                        "})
+                        })?;
+
+                let substituter_url = args
+                    .inner
+                    .substituter_url
+                    .or(config.flox.substituter_url)
+                    .unwrap_or(cache_url.clone());
+
+                // run publish steps
+
                 let publish = Publish::new(
                     &flox,
                     publish_flakeref.clone(),
@@ -420,16 +452,6 @@ impl PackageCommands {
                 info!("done!");
 
                 // sign binary
-                let sign_key = args
-                    .inner
-                    .signing_key
-                    .or(config.flox.signing_key)
-                    .ok_or_else(|| {
-                        anyhow!(indoc! {"
-                    Signing key is required!
-                    Provide using `--sign-key` or the `sign_key` config key
-                "})
-                    })?;
 
                 info!("Signing binary...");
                 publish
@@ -438,23 +460,7 @@ impl PackageCommands {
                     .with_context(|| format!("Could not sign binary with sign-key {sign_key:?}"))?;
                 info!("done!");
 
-                let cache_url =
-                    args.inner
-                        .cache_url
-                        .or(config.flox.cache_url)
-                        .ok_or_else(|| {
-                            anyhow!(indoc! {"
-                    Cache url is required!
-                    Provide using `--cache-url` or the `cache_url` config key
-                "})
-                        })?;
-
-                let substituter_url = args
-                    .inner
-                    .substituter_url
-                    .or(config.flox.substituter_url)
-                    .unwrap_or(cache_url.clone());
-
+                // caching binary
                 info!("Uploading binary to {cache_url}...");
                 publish
                     .upload_binary(Some(cache_url))
