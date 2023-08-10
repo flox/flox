@@ -175,39 +175,6 @@ pub(crate) mod interface {
 
     #[derive(Bpaf, Clone, Debug)]
     pub struct Publish {
-        #[bpaf(short('A'), hide)]
-        pub _attr_flag: bool,
-
-        /// The --channel-repo determines the upstream repository containing
-        #[bpaf(argument("REPO"))]
-        pub channel_repo: Option<String>,
-
-        #[bpaf(argument("REPO"))]
-        pub build_repo: Option<String>,
-
-        #[bpaf(argument("URL"))]
-        pub upload_to: Option<String>,
-
-        #[bpaf(argument("URL"))]
-        pub download_from: Option<String>,
-
-        #[bpaf(argument("DIR"))]
-        pub render_path: Option<String>,
-
-        #[bpaf(argument("FILE"))]
-        pub key_file: Option<String>,
-
-        #[bpaf(argument("FILE"))]
-        pub publish_system: Option<String>,
-
-        /// Package to publish
-        #[bpaf(external(InstallableArgument::positional), optional, catch)]
-        pub(crate) _installable_arg: Option<InstallableArgument<Parsed, PublishInstallable>>,
-    }
-    parseable!(Publish, publish);
-
-    #[derive(Bpaf, Clone, Debug)]
-    pub struct PublishV2 {
         /// Signing key file to sign the binary with
         ///
         /// When omitted, reads from the config.
@@ -243,7 +210,7 @@ pub(crate) mod interface {
         #[bpaf(external(InstallableArgument::positional), optional, catch)]
         pub installable_arg: Option<InstallableArgument<Parsed, PublishInstallable>>,
     }
-    parseable!(PublishV2, publish_v2);
+    parseable!(Publish, publish);
 
     #[derive(Bpaf, Clone, Debug)]
     pub struct Shell {
@@ -323,7 +290,7 @@ pub(crate) mod interface {
         PrintDevEnv(#[bpaf(external(WithPassthru::parse))] WithPassthru<PrintDevEnv>),
         /// build package and publish to flox channel
         #[bpaf(command)]
-        Publish(#[bpaf(external(WithPassthru::parse))] WithPassthru<PublishV2>),
+        Publish(#[bpaf(external(WithPassthru::parse))] WithPassthru<Publish>),
         /// run app from current project
         #[bpaf(command)]
         Run(#[bpaf(external(WithPassthru::parse))] WithPassthru<Run>),
