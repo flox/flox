@@ -194,7 +194,7 @@ pub(crate) mod interface {
         /// When ommitted, falls back to the config or uses the value for cache-url.
         /// See flox-config(1) for more details.
         #[bpaf(long, short('s'))]
-        pub substituter_url: Option<SubstituterUrl>,
+        pub public_cache_url: Option<SubstituterUrl>,
 
         /// Print snapshot JSON to stdout instead of uploading it to the catalog
         #[bpaf(long, hide)]
@@ -387,8 +387,8 @@ impl PackageCommands {
 
                 let substituter_url = args
                     .inner
-                    .substituter_url
-                    .or(config.flox.substituter_url)
+                    .public_cache_url
+                    .or(config.flox.public_cache_url)
                     .unwrap_or(cache_url.clone());
 
                 // run publish steps

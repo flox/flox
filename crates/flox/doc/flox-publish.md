@@ -50,8 +50,8 @@ upstream repository.
 
     If not provided will attempt to read the `cache_url` config value.
 
-`[ --substituter-url <URL> | -s <URL> ]`
-:   The URL of a substituter from which built packages will be served at
+`[ --public-cache-url <URL> | -s <URL> ]`
+:   The URL of a cache from which built packages will be served at
     installation time.
     This URL typically refers to the same underlying resource
     as specified by the `--cache-url` argument, but using
@@ -60,11 +60,11 @@ upstream repository.
     but download these packages from an (read-only,
     unauthenticated) `https://cache.floxdev.com endpoint``.
 
-    If not provided the `--substituter-url` argument will default to
-    the `substituter_url` config value,
+    If not provided the `--public-cache-url` argument will default to
+    the `public_cache_url` config value,
     or same value as provided for the `--cache-url` argument.
 
-`[ --sign-key <file> | -k <file> ]`
+`[ --signing-key <file> | -k <file> ]`
 :   Used for identifying the path to the private key
     to be used to sign packages before upload.
     If not provided the, will default to the `sign_key` config value.
