@@ -9,7 +9,7 @@ use flox_types::catalog::cache::{CacheMeta, SubstituterUrl};
 use flox_types::catalog::System;
 use flox_types::stability::Stability;
 use futures::TryFutureExt;
-use log::debug;
+use log::{debug, error};
 use runix::arguments::common::NixCommonArgs;
 use runix::arguments::eval::EvaluationArgs;
 use runix::arguments::flake::FlakeArgs;
@@ -25,6 +25,7 @@ use runix::flake_ref::protocol::{WrappedUrl, WrappedUrlParseError};
 use runix::flake_ref::{protocol, FlakeRef};
 use runix::installable::{AttrPath, FlakeAttribute, Installable};
 use runix::store_path::{StorePath, StorePathError};
+use runix::url_parser::{InstallableOutputs, UrlParseError};
 use runix::{Run, RunJson, RunTyped};
 use serde_json::{json, Value};
 use thiserror::Error;
@@ -141,10 +142,9 @@ impl<'flox> Publish<'flox, Empty> {
             attrpath
         };
 
-        let nixpkgs_flakeref = FlakeRef::Indirect(IndirectRef::new(
-            format!("nixpkgs-{}", self.stability),
-            Default::default(),
-        ));
+        let nixpkgs_with_stability = format!("nixpkgs-{}", self.stability);
+        let nixpkgs_flakeref =
+            FlakeRef::Indirect(IndirectRef::new(nixpkgs_with_stability, Default::default()));
 
         // We bundle the analyzer flake with flox (see the package definition for flox)
         let analyzer_flakeref = FlakeRef::Path(PathRef::new(
@@ -182,6 +182,7 @@ impl<'flox> Publish<'flox, Empty> {
                     FlakeAttribute {
                         flakeref: analyzer_flakeref,
                         attr_path: analysis_attr_path,
+                        outputs: InstallableOutputs::Default,
                     }
                     .into(),
                 ),
@@ -237,18 +238,14 @@ impl<'flox> Publish<'flox, NixAnalysis> {
         key_file: impl AsRef<Path>,
     ) -> Result<Publish<'flox, NixAnalysis>, PublishError> {
         let nix = self.flox.nix(Default::default());
-        let flake_attribute = FlakeAttribute {
-            flakeref: self.publish_flake_ref.clone().into_inner(),
-            attr_path: self.attr_path.clone(),
-        }
-        .into();
+        let installable = self.installable();
 
         let sign_command = StoreSign {
             store_sign: StoreSignArgs {
                 key_file: key_file.as_ref().into(),
                 recursive: Some(true.into()),
             },
-            installables: [flake_attribute].into(),
+            installables: [installable].into(),
             eval: Default::default(),
             flake: Default::default(),
         };
@@ -259,6 +256,16 @@ impl<'flox> Publish<'flox, NixAnalysis> {
             .map_err(PublishError::SignPackage)?;
 
         Ok(self)
+    }
+
+    /// Construct an installable type from the upstream flakeref and attrpath
+    fn installable(&self) -> Installable {
+        FlakeAttribute {
+            flakeref: self.publish_flake_ref.clone().into_inner(),
+            attr_path: self.attr_path.clone(),
+            outputs: InstallableOutputs::All,
+        }
+        .into()
     }
 
     /// Copy the outputs and dependencies of the package to binary store
@@ -752,22 +759,34 @@ impl PublishFlakeRef {
         flox: &Flox,
         git_service_prefer_https: bool,
     ) -> Result<Self, ConvertFlakeRefError> {
-        let publish_flake_ref = match flake_ref {
-            FlakeRef::GitSsh(ssh_ref) => Self::Ssh(ssh_ref),
-            FlakeRef::GitHttps(https_ref) => Self::Https(https_ref),
+        // This should really be a recursive function, but that requires two things:
+        // - Making this return type Pin<Box<impl Future<Output = ...>>>
+        // - That all Futures that this one depends on are Send
+        // It turns out we can't do that because the GitProvider trait doesn't require the Futures it
+        // returns to be Send. Instead of a recursive call we do this loop until we no longer have
+        // an indirect flake reference. It should run a maximum of twice (once if `flake_ref` isn't indirect,
+        // twice if it is indirect).
+        let flake_ref = if let FlakeRef::Indirect(indirect) = flake_ref {
+            indirect.resolve()?
+        } else {
+            flake_ref
+        };
+        match flake_ref {
+            FlakeRef::GitSsh(ssh_ref) => Ok(Self::Ssh(ssh_ref)),
+            FlakeRef::GitHttps(https_ref) => Ok(Self::Https(https_ref)),
             // resolve upstream for local git repo
             FlakeRef::GitPath(file_ref) => {
-                Self::from_git_file_flake_ref(file_ref, &flox.nix(Default::default())).await?
+                Self::from_git_file_flake_ref(file_ref, &flox.nix(Default::default())).await
             },
-            // resolve indirect ref to direct ref (recursively)
-            FlakeRef::Indirect(_) => todo!(),
             FlakeRef::Github(github_ref) => {
-                Self::from_github_ref(github_ref, git_service_prefer_https)?
+                Self::from_github_ref(github_ref, git_service_prefer_https)
             },
             FlakeRef::Gitlab(_) => todo!(),
-            _ => Err(ConvertFlakeRefError::UnsupportedTarget(flake_ref))?,
-        };
-        Ok(publish_flake_ref)
+            // Resolving an indirect reference shouldn't give you back
+            // another indirect reference.
+            FlakeRef::Indirect(_) => unreachable!(),
+            _ => Err(ConvertFlakeRefError::UnsupportedTarget(flake_ref.clone())),
+        }
     }
 }
 
@@ -803,6 +822,9 @@ pub enum ConvertFlakeRefError {
 
     #[error("Unsupported git remote URL: {0}")]
     UnsupportedGitUrl(url::Url),
+
+    #[error("Failed to parse URL")]
+    URLParseFailed(#[from] UrlParseError),
 }
 
 #[cfg(test)]
@@ -810,8 +832,11 @@ mod tests {
 
     use std::str::FromStr;
 
+    use runix::url_parser::PARSER_UTIL_BIN_PATH;
+
     use super::*;
     use crate::flox::tests::flox_instance;
+    #[cfg(feature = "impure-unit-tests")]
     use crate::prelude::Channel;
 
     #[cfg(feature = "impure-unit-tests")] // /nix/store is not accessible in the sandbox
@@ -1233,5 +1258,20 @@ mod tests {
             serde_json::from_str(&fs::read_to_string(&snapshot_path).unwrap()).unwrap();
 
         assert_eq!(snapshot_actual, snapshot_actual);
+    }
+
+    #[tokio::test]
+    async fn resolves_indirect_ref_to_git_https() {
+        let indirect_ref = FlakeRef::from_url("flake:flox", PARSER_UTIL_BIN_PATH).unwrap();
+        let (flox, _temp_dir_handle) = flox_instance();
+        // Need to expose the custom registry to `parser-util` via environment variable
+        flox.nix::<NixCommandLine>(vec![]).export_env_vars();
+        let publishable = PublishFlakeRef::from_flake_ref(indirect_ref, &flox, true)
+            .await
+            .unwrap();
+        let expected = PublishFlakeRef::Https(
+            GitRef::from_str("git+https://github.com/flox/floxpkgs?ref=master").unwrap(),
+        );
+        assert_eq!(publishable, expected);
     }
 }

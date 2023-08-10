@@ -353,6 +353,7 @@ impl PackageCommands {
                 let FlakeAttribute {
                     flakeref,
                     attr_path,
+                    outputs: _,
                 } = args
                     .inner
                     .installable_arg

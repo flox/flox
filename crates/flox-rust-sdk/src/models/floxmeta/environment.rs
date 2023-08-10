@@ -340,6 +340,7 @@ impl<'flox, Git: GitProvider> Environment<'flox, Git, ReadOnly<Git>> {
         Ok(FlakeAttribute {
             flakeref,
             attr_path: ["", "floxEnvs", "default"].try_into().unwrap(),
+            outputs: Default::default(),
         })
     }
 
