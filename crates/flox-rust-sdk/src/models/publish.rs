@@ -9,6 +9,7 @@ use flox_types::catalog::cache::{CacheMeta, SubstituterUrl};
 use flox_types::catalog::System;
 use flox_types::stability::Stability;
 use futures::TryFutureExt;
+use itertools::Itertools;
 use log::{debug, error};
 use runix::arguments::common::NixCommonArgs;
 use runix::arguments::eval::EvaluationArgs;
@@ -28,6 +29,7 @@ use runix::store_path::{StorePath, StorePathError};
 use runix::url_parser::{InstallableOutputs, UrlParseError};
 use runix::{Run, RunJson, RunTyped};
 use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 use crate::flox::Flox;
@@ -484,14 +486,19 @@ impl UpstreamCatalog<'_> {
             .as_str()
             .expect("invalid metadata");
 
-        let nix_out_hash = &Path::new(
-            snapshot["element"]["storePaths"][0]
-                .as_str()
-                .expect("invalid metadata"),
-        )
-        .file_name()
-        .unwrap()
-        .to_string_lossy()[0..8];
+        let nix_out_hash = &{
+            let hasher = snapshot["element"]["storePaths"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|value| value.as_str().expect("Invalid metadata"))
+                .sorted()
+                .fold(Sha256::new(), |mut hasher, path| {
+                    hasher.update(path);
+                    hasher
+                });
+            format!("{:x}", hasher.finalize())
+        }[0..8];
 
         path.push(format!("{version}-{nix_out_hash}.json"));
 
@@ -1240,7 +1247,7 @@ mod tests {
     fn test_get_snapshot_path() {
         let snapshot = EXAMPLE_CATALOG_ENTRY.deref();
 
-        let expected = PathBuf::from("catalog/flox/0.0.0-r42-2rrfpkq6.json");
+        let expected = PathBuf::from("catalog/flox/0.0.0-r42-828d710f.json");
         let actual = UpstreamCatalog::get_snapshot_path(snapshot);
 
         assert_eq!(actual, expected);
