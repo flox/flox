@@ -1,22 +1,20 @@
 {
-  inputs,
   pkgs,
   lib,
-  self,
   ...
 }: let
-  cargoToml = lib.importTOML "${self}/builtfilter-rs/Cargo.toml";
+  src = ../../builtfilter-rs;
+  cargoToml = lib.importTOML "${src}/Cargo.toml";
 in
   pkgs.rustPlatform.buildRustPackage
-  rec
   {
     pname = cargoToml.package.name;
     version = cargoToml.package.version;
     cargoLock = {
-      lockFile = src + "/Cargo.lock";
+      lockFile = "${src}/Cargo.lock";
       allowBuiltinFetchGit = true;
     };
-    src = self + "/builtfilter-rs";
+    src = src;
     nativeBuildInputs = [pkgs.pkg-config];
     buildInputs =
       [pkgs.openssl]
