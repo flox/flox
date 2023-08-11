@@ -4,6 +4,7 @@ use std::{env, fs};
 
 use anyhow::{Context, Result};
 use config::{Config as HierarchicalConfig, Environment};
+use flox_types::catalog::System;
 use flox_types::stability::Stability;
 use itertools::{Either, Itertools};
 use log::{debug, trace, warn};
@@ -48,6 +49,7 @@ pub struct FloxConfig {
     pub config_dir: PathBuf,
     #[serde(default)]
     pub stability: Stability,
+    pub system: Option<System>,
 
     pub default_substituter: String, // Todo: use Url type?
 

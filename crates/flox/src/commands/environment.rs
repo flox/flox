@@ -21,10 +21,7 @@ use crate::utils::resolve_environment_ref;
 use crate::{flox_forward, subcommand_metric};
 
 #[derive(Bpaf, Clone)]
-pub struct EnvironmentArgs {
-    #[bpaf(short, long, argument("SYSTEM"))]
-    pub system: Option<String>,
-}
+pub struct EnvironmentArgs {}
 
 pub type EnvironmentRef = PathBuf;
 

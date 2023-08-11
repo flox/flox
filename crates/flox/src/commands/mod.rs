@@ -13,6 +13,7 @@ use flox_rust_sdk::models::floxmeta::{Floxmeta, GetFloxmetaError};
 use flox_rust_sdk::nix::command_line::NixCommandLine;
 use flox_rust_sdk::prelude::Channel;
 use flox_rust_sdk::providers::git::GitCommandProvider;
+use flox_types::catalog::System;
 use log::{debug, info};
 use tempfile::TempDir;
 use toml_edit::Key;
@@ -72,6 +73,10 @@ pub struct FloxArgs {
     /// Debug mode.
     #[bpaf(long, switch, many, map(vec_not_empty))]
     pub debug: bool,
+
+    /// System to realize commands for
+    #[bpaf(long, argument("system"))]
+    pub system: Option<System>,
 
     #[bpaf(external(commands))]
     command: Commands,
@@ -162,8 +167,14 @@ impl FloxArgs {
         let user_channels = user_meta.channels.unwrap_or_default();
         let channels = init_channels(user_channels)?;
 
+        let system = self
+            .system
+            .or(config.flox.system.clone())
+            .unwrap_or(boostrap_flox.system);
+
         let flox = Flox {
             channels,
+            system,
             ..boostrap_flox
         };
 
