@@ -591,8 +591,7 @@ function checkGhAuth {
 	trace "$@"
 	local hostname="$1"; shift
 	# Repeat login attempts until we're successfully logged in.
-	while ! $_flox_gh auth status -h "$hostname" >/dev/null 2>&1; do
-		initialGreeting
+	while ! $_gh auth status -h "$hostname" >/dev/null 2>&1; do
 		warn "Invoking 'gh auth login -h $hostname'"
 
 		# gh auth login will automatically add credential helpers to the users
@@ -600,7 +599,7 @@ function checkGhAuth {
 		# Since flox will set the git credential helper manually where its
 		# needed and we want to avoid writing user files, trick gh to modify a
 		# temporary, discarded file instead
-		GIT_CONFIG_GLOBAL="$(mkTempFile)" $_flox_gh auth login -h "$hostname"
+		GIT_CONFIG_GLOBAL="$(mkTempFile)" $_gh auth login -h "$hostname"
 		info ""
 	done
 }
@@ -621,14 +620,9 @@ function checkFloxGhAuth {
 		GIT_CONFIG_GLOBAL="$(mkTempFile)" $_flox_gh auth login -h "$hostname"
 		info ""
 	done
-}
-
-function getUsernameFromGhAuth {
-	trace "$@"
-	local hostname="$1"; shift
 	# Get github username from gh data, if known.
-	[[ -s "$XDG_CONFIG_HOME/gh/hosts.yml" ]]
-	${_dasel?} -f "$XDG_CONFIG_HOME/gh/hosts.yml" "${hostname//./\\.}.user"
+	[[ -s "$FLOX_CONFIG_HOME/gh/hosts.yml" ]]
+	${_dasel?} -f "$FLOX_CONFIG_HOME/gh/hosts.yml" "${hostname//./\\.}.user"
 }
 
 #
@@ -641,65 +635,39 @@ function getUsernameFromGhAuth {
 function promptMetaOrigin() {
 	trace "$@"
 
-	local server organization defaultOrigin origin
-
+	local baseURL organization
 	{
 	  echo ''
 	  printf '%s' "flox uses git to store and exchange metadata "  \
 		          "between users and machines."
 	  echo ''
 	} >&2
-	server="$(
-		multChoice "Where would you like to host your 'floxmeta' repository?"  \
-			"git server" "github.com" "gitlab.com" "bitbucket.org" "other"
-	)"
 
-	case "$server" in
-	github.com)
-		echo "Great, let's start by getting you logged into $server." >&2
-		# For github.com only, use the `gh` CLI to make things easy.
-		checkGhAuth "$server"
-		if organization="$(getUsernameFromGhAuth "$server")"; then
-			echo "Success! You are logged into $server as $organization." >&2
+	local _prompt="Base URL for 'floxmeta' repository: "
+	#shellcheck disable=SC2162
+	baseURL="$git_base_url"
+	read -e -p "$_prompt" baseURL
+
+	# If using floxhub then login using github.com OAuth.
+	if [[ "$baseURL" == "$git_base_url" ]]; then
+		if organization="$(checkFloxGhAuth "github.com")"; then
+			echo "Success! You are logged in as $organization." >&2
 		else
-			printf '%s' "Hmmm ... could not log you into $server. "  \
+			printf '%s' "Hmmm ... could not log in with github.com OAuth. "  \
 			       "No problem, we can find another way." >&2
 		fi
-		;;
-	other)
-		#shellcheck disable=SC2162
-		read -e -p "git server for storing profile metadata: " server
-		;;
-	esac
+	fi
 
 	local _prompt="organization (or username) on $server for creating the "
 	_prompt="$_prompt'floxmeta' repository: "
 	#shellcheck disable=SC2162
 	[[ -n "$organization" ]] || read -e -p "$_prompt" organization
 
-	local protocol
-	# TODO support ssh+git, but only support https for now, since we use https
-	# when we use the gh CLI
-	# protocol=$(
-	# 	multChoice "What is your preferred protocol for Git operations?" \
-	# 		"protocol" "https" "ssh+git"
-	# )
-	protocol="https"
-
-	case "$protocol" in
-	https)
-		defaultURL="https://$server/"
-		;;
-	ssh+git)
-		defaultURL="git+ssh://git@$server/"
-		;;
-	esac
-
 	# Take 'floxmeta' repo name from environment, if defined. Primarily used
 	# for testing repo creation, because you cannot simply rename a repo
 	# without GitHub helpfully redirecting requests to the renamed repo.
 	local repoName="${FLOXMETA_REPO_NAME:-floxmeta}"
-	echo "$defaultURL$organization/$repoName"
+	echo "$baseURL$organization/$repoName"
 }
 
 #

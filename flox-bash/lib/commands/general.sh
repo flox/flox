@@ -399,7 +399,7 @@ function floxLoginLogout() {
 			;;
 		esac
 	done
-	verboseExec $_flox_gh auth "$subcommand" "${floxLoginLogoutArgs[@]}"
+	$invoke_flox_gh auth "$subcommand" "${floxLoginLogoutArgs[@]}"
 }
 
 # vim:ts=4:noet:syntax=bash
