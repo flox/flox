@@ -49,6 +49,7 @@ pub struct FloxConfig {
     pub config_dir: PathBuf,
     #[serde(default)]
     pub stability: Stability,
+    // Not useful most of the time, but it can be useful on systems that support multiple architectures, e.g. x86_64 can run i386 executables
     pub system: Option<System>,
 
     pub default_substituter: String, // Todo: use Url type?
