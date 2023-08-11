@@ -24,6 +24,7 @@ and optionally sign and cache the resulting binary.
 The package must be defined in a remote git repository and be referred to
 either directly by a `git+ssh://<url>[#<package>]` url or another url that
 can be resolved to an upstream git resource.
+Packages in local repositories are resolved to the current branch's upstream branch.
 Packages referred to by a `github:<user>/<owner>[#<package>]` URL are
 resolved to `ssh://git@github.com` by default or `https://github.com`,
 if `--prefer-https` is provided.
