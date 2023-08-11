@@ -506,6 +506,10 @@ impl UpstreamCatalog<'_> {
             .as_str()
             .expect("invalid metadata");
 
+        // Add a hash of all storePaths to the snapshot path.
+        // This prevents collisions between publishes of different outputs, and
+        // it prevents collisions between multiple publishes of the same version
+        // of a package when the package has changed.
         let nix_out_hash = &{
             let hasher = snapshot["element"]["storePaths"]
                 .as_array()
