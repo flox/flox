@@ -418,7 +418,7 @@ impl PackageCommands {
                     .with_context(|| format!("Could not sign binary with sign-key {sign_key:?}"))?;
                 info!("done!");
 
-                // caching binary
+                // cache binary
                 info!("Uploading binary to {cache_url}...");
                 publish
                     .upload_binary(Some(cache_url))
