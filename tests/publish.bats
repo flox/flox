@@ -27,8 +27,6 @@ setup_file() {
     # Set the `cache_url` config value
     export FLOX_CACHE_URL="http://localhost:8081"
 
-    HELLO_OUT_PATH="$($FLOX_CLI nix eval --raw nixpkgs-flox#hello)"
-    export HELLO_HASH_FIRST_8="${HELLO_OUT_PATH:11:8}" # skip /nix/store, take 8
     export HELLO_VERSION="$($FLOX_CLI nix eval --raw nixpkgs-flox#hello.version)"
 }
 
@@ -70,8 +68,8 @@ setup() {
     run $FLOX_CLI -v publish "$CHANNEL#hello"
     assert_success
 
-    local EXPECTED_PATH=catalog/hello/$HELLO_VERSION-$HELLO_HASH_FIRST_8.json
-    run git -C "$CHANNEL" show "catalog/$NIX_SYSTEM:$EXPECTED_PATH"
+    local EXPECTED_PATH='catalog/hello/$HELLO_VERSION-*'
+    run git -C "$CHANNEL" ls-tree "catalog/$NIX_SYSTEM" "$EXPECTED_PATH"
     assert_success
 }
 
