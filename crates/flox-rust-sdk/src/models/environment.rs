@@ -97,6 +97,7 @@ impl<S: State> Environment<S> {
         FlakeAttribute {
             flakeref,
             attr_path,
+            outputs: Default::default(),
         }
     }
 

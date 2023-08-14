@@ -140,6 +140,7 @@ impl ResolvedInstallableMatch {
         FlakeAttribute {
             flakeref: self.flakeref.parse().unwrap(),
             attr_path,
+            outputs: Default::default(),
         }
     }
 }
@@ -367,6 +368,7 @@ impl Flox {
                 attributes: Default::default(),
             }),
             attr_path: ["", "resolve"].try_into().unwrap(),
+            outputs: Default::default(),
         };
 
         let command = Eval {

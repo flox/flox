@@ -667,6 +667,7 @@ dependencies = [
  "tracing",
  "tracing-log",
  "tracing-subscriber",
+ "url",
  "uuid",
  "xdg",
 ]
@@ -698,6 +699,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_with",
+ "sha2",
  "tempfile",
  "thiserror",
  "tokio",
@@ -1901,7 +1903,7 @@ dependencies = [
 [[package]]
 name = "runix"
 version = "0.2.0"
-source = "git+https://github.com/flox/runix#96145bd2ab290549844762d0e5e554c38793df91"
+source = "git+https://github.com/flox/runix#114199ca0a4f0fbaa35611413479b00c2a4e56fa"
 dependencies = [
  "async-trait",
  "chrono",

@@ -9,12 +9,13 @@ use flox_types::catalog::cache::{CacheMeta, SubstituterUrl};
 use flox_types::catalog::System;
 use flox_types::stability::Stability;
 use futures::TryFutureExt;
-use log::debug;
+use itertools::Itertools;
+use log::{debug, error};
 use runix::arguments::common::NixCommonArgs;
 use runix::arguments::eval::EvaluationArgs;
-use runix::arguments::flake::FlakeArgs;
+use runix::arguments::flake::{FlakeArgs, OverrideInput};
 use runix::arguments::{CopyArgs, NixArgs, StoreSignArgs};
-use runix::command::{Eval, StoreSign};
+use runix::command::{Build, Eval, StoreSign};
 use runix::command_line::{NixCommandLine, NixCommandLineRunError, NixCommandLineRunJsonError};
 use runix::flake_metadata::FlakeMetadata;
 use runix::flake_ref::git::{GitAttributes, GitRef};
@@ -25,8 +26,10 @@ use runix::flake_ref::protocol::{WrappedUrl, WrappedUrlParseError};
 use runix::flake_ref::{protocol, FlakeRef};
 use runix::installable::{AttrPath, FlakeAttribute, Installable};
 use runix::store_path::{StorePath, StorePathError};
+use runix::url_parser::{InstallableOutputs, UrlParseError};
 use runix::{Run, RunJson, RunTyped};
 use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 use crate::flox::Flox;
@@ -141,39 +144,44 @@ impl<'flox> Publish<'flox, Empty> {
             attrpath
         };
 
-        let nixpkgs_flakeref = FlakeRef::Indirect(IndirectRef::new(
-            format!("nixpkgs-{}", self.stability),
-            Default::default(),
-        ));
-
         // We bundle the analyzer flake with flox (see the package definition for flox)
         let analyzer_flakeref = FlakeRef::Path(PathRef::new(
             PathBuf::from(env!("FLOX_ANALYZER_SRC")),
             Default::default(),
         ));
 
+        let mut override_inputs = [
+            // The analyzer flake provides analysis outputs for the flake input `target`
+            // Here, we're setting the target flake to our source flake.
+            OverrideInput {
+                from: "target".to_string(),
+                to: self.publish_flake_ref.clone().into_inner(),
+            },
+        ]
+        .to_vec();
+
+        if self.stability != Stability::Unspecified {
+            let nixpkgs_flakeref = FlakeRef::Indirect(IndirectRef::new(
+                format!("nixpkgs-{}", self.stability),
+                Default::default(),
+            ));
+
+            // Stabilities are managed by overriding the `flox-floxpkgs/nixpkgs/nixpkgs` input to
+            // `nixpkgs-<stability>`.
+            // The analyzer flake adds an additional indirection,
+            // so we have to do the override manually.
+            // However, since https://github.com/flox/flox/pull/182,
+            // we only set this when a stability is specified
+            // This is the `nixpkgs-<stability>` portion.
+            override_inputs.push(OverrideInput {
+                from: "target/flox-floxpkgs/nixpkgs/nixpkgs".to_string(),
+                to: nixpkgs_flakeref,
+            });
+        }
+
         let eval_analysis_command = Eval {
             flake: FlakeArgs {
-                override_inputs: [
-                    // The analyzer flake provides analysis outputs for the flake input `target`
-                    // Here, we're setting the target flake to our source flake.
-                    (
-                        "target".to_string(),
-                        self.publish_flake_ref.clone().into_inner(),
-                    )
-                        .into(),
-                    // Stabilities are managed by overriding the `flox-floxpkgs/nixpkgs/nixpkgs` input to
-                    // `nixpkgs-<stability>`.
-                    // The analyzer flake adds an additional indirection,
-                    // so we have to do the override manually.
-                    // This is the `nixpkgs-<stability>` portion.
-                    (
-                        "target/flox-floxpkgs/nixpkgs/nixpkgs".to_string(),
-                        nixpkgs_flakeref,
-                    )
-                        .into(),
-                ]
-                .to_vec(),
+                override_inputs,
                 // The analyzer flake is bundled with flox as a nix store path and thus read-only.
                 no_write_lock_file: true.into(),
             },
@@ -182,6 +190,7 @@ impl<'flox> Publish<'flox, Empty> {
                     FlakeAttribute {
                         flakeref: analyzer_flakeref,
                         attr_path: analysis_attr_path,
+                        outputs: InstallableOutputs::Default,
                     }
                     .into(),
                 ),
@@ -221,9 +230,67 @@ impl<'flox> Publish<'flox, Empty> {
 }
 
 impl<'flox> Publish<'flox, NixAnalysis> {
+    fn stability_overrides(&self) -> Vec<OverrideInput> {
+        match self.stability {
+            Stability::Unspecified => [].into(),
+            ref s => [s.as_override()].into(),
+        }
+    }
+
+    /// Construct an installable type from the upstream flakeref and attrpath
+    fn installable(&self) -> Installable {
+        FlakeAttribute {
+            flakeref: self.publish_flake_ref.clone().into_inner(),
+            attr_path: self.attr_path.clone(),
+            outputs: InstallableOutputs::All,
+        }
+        .into()
+    }
+
+    /// Extract the store paths from the snapshot
+    ///
+    /// This should be equivalent to `<installable>^*` without evaluation.
+    /// Since the publish evaluates purely, nix's eval cache may serve the same purpose now.
+    ///
+    /// Todo: https://github.com/flox/runix/issues/41
+    fn store_paths(&self) -> Result<Vec<Installable>, PublishError> {
+        let store_paths = self.analysis()["element"]["storePaths"]
+            .as_array()
+            // TODO use CatalogEntry and then we don't need to unwrap
+            .unwrap()
+            .iter()
+            .map(|value| {
+                // TODO use CatalogEntry and then we don't need to unwrap
+                StorePath::from_path(value.as_str().unwrap())
+                    .map_err(PublishError::ParseStorePath)
+                    .map(Installable::StorePath)
+            })
+            .collect::<Result<Vec<Installable>, _>>()?;
+        Ok(store_paths)
+    }
+
     /// Read out the current publish state
     pub fn analysis(&self) -> &Value {
         self.analysis.deref()
+    }
+
+    pub async fn build(&self) -> Result<(), PublishError> {
+        let nix = self.flox.nix(Default::default());
+
+        let command = Build {
+            installables: [self.installable()].into(),
+            flake: FlakeArgs {
+                override_inputs: self.stability_overrides(),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        command
+            .run(&nix, &Default::default())
+            .await
+            .map_err(PublishError::Build)?;
+        Ok(())
     }
 
     /// Sign the binary
@@ -232,23 +299,15 @@ impl<'flox> Publish<'flox, NixAnalysis> {
     /// making signing an optional operation.
     ///
     /// Requires a valid signing key
-    pub async fn sign_binary(
-        self,
-        key_file: impl AsRef<Path>,
-    ) -> Result<Publish<'flox, NixAnalysis>, PublishError> {
+    pub async fn sign_binary(&self, key_file: impl AsRef<Path>) -> Result<(), PublishError> {
         let nix = self.flox.nix(Default::default());
-        let flake_attribute = FlakeAttribute {
-            flakeref: self.publish_flake_ref.clone().into_inner(),
-            attr_path: self.attr_path.clone(),
-        }
-        .into();
 
         let sign_command = StoreSign {
             store_sign: StoreSignArgs {
                 key_file: key_file.as_ref().into(),
                 recursive: Some(true.into()),
             },
-            installables: [flake_attribute].into(),
+            installables: self.store_paths()?.into(),
             eval: Default::default(),
             flake: Default::default(),
         };
@@ -258,18 +317,17 @@ impl<'flox> Publish<'flox, NixAnalysis> {
             .await
             .map_err(PublishError::SignPackage)?;
 
-        Ok(self)
+        Ok(())
     }
 
     /// Copy the outputs and dependencies of the package to binary store
     pub async fn upload_binary(
-        self,
+        &self,
         substituter: Option<SubstituterUrl>,
     ) -> Result<(), PublishError> {
         let nix: NixCommandLine = self.flox.nix(Default::default());
-        let store_paths = self.store_paths()?;
         let copy_command = runix::command::NixCopy {
-            installables: store_paths.into(),
+            installables: self.store_paths()?.into(),
             eval: EvaluationArgs {
                 eval_store: Some("auto".to_string().into()),
                 ..Default::default()
@@ -290,7 +348,27 @@ impl<'flox> Publish<'flox, NixAnalysis> {
         Ok(())
     }
 
-    #[allow(dead_code)] // until consumed by cli
+    pub async fn check_substituter(
+        &mut self,
+        substituter: SubstituterUrl,
+    ) -> Result<(), PublishError> {
+        let cache_meta = self.get_binary_cache_metadata(Some(substituter)).await?;
+        let cache_meta_json =
+            serde_json::to_value(cache_meta).map_err(PublishError::SerializeCacheMeta)?;
+        let mut caches = self
+            .analysis
+            .0
+            .get("cache")
+            .map(|v| v.as_array().expect("invalid metadata").to_owned())
+            .unwrap_or_default();
+
+        caches.push(cache_meta_json);
+
+        self.analysis.0["cache"] = Value::Array(caches);
+
+        Ok(())
+    }
+
     /// Check whether store paths are substitutable by a given substituter and
     /// return the associated metadata.
     ///
@@ -301,9 +379,8 @@ impl<'flox> Publish<'flox, NixAnalysis> {
         substituter: Option<SubstituterUrl>,
     ) -> Result<CacheMeta, PublishError> {
         let nix: NixCommandLine = self.flox.nix(Default::default());
-        let store_paths = self.store_paths()?;
         let path_info_command = runix::command::PathInfo {
-            installables: store_paths.into(),
+            installables: self.store_paths()?.into(),
             eval: EvaluationArgs {
                 eval_store: Some("auto".to_string().into()),
                 ..Default::default()
@@ -328,22 +405,6 @@ impl<'flox> Publish<'flox, NixAnalysis> {
             narinfo: narinfos,
             _other: BTreeMap::new(),
         })
-    }
-
-    fn store_paths(&self) -> Result<Vec<Installable>, PublishError> {
-        let store_paths = self.analysis()["element"]["store_paths"]
-            .as_array()
-            // TODO use CatalogEntry and then we don't need to unwrap
-            .unwrap()
-            .iter()
-            .map(|value| {
-                // TODO use CatalogEntry and then we don't need to unwrap
-                StorePath::from_path(value.as_str().unwrap())
-                    .map_err(PublishError::ParseStorePath)
-                    .map(Installable::StorePath)
-            })
-            .collect::<Result<Vec<Installable>, _>>()?;
-        Ok(store_paths)
     }
 
     /// Write snapshot to catalog and push to origin
@@ -426,34 +487,56 @@ struct UpstreamCatalog<'a>(&'a Git);
 impl UpstreamCatalog<'_> {
     /// Mostly naïve approxiaton of a snapshot path
     ///
-    ///  /packages/<pname>/<version>.json
+    ///  /catalog/<namespace '/'-separated>/<version>-<(filename outPaths[0])[..8]>.json
     ///
-    /// TODO: fix before releasing publish!
-    fn get_snapshot_path(&self, snapshot: &Value) -> PathBuf {
-        let path = self
-            .0
-            .workdir()
+    /// see [tests::test_get_snapshot_path] for an example
+    fn get_snapshot_path(snapshot: &Value) -> PathBuf {
+        let mut path = PathBuf::from("catalog");
+
+        let attr_path = snapshot["eval"]["attrPath"]
+            .as_array()
             .unwrap()
-            .join("packages")
-            .join(
-                snapshot["eval"]["meta"]["pname"]
-                    .as_str()
-                    .expect("'pname' is expected to be a string"),
-            )
-            .join(format!(
-                "{}.json",
-                snapshot["eval"]["meta"]["version"]
-                    .as_str()
-                    .expect("'version' is expected to be a string")
-            ));
+            .iter()
+            .skip(2)
+            .map(|v| v.as_str().unwrap());
+
+        path.extend(attr_path);
+
+        let version = &snapshot["eval"]["version"]
+            .as_str()
+            .expect("invalid metadata");
+
+        // Add a hash of all storePaths to the snapshot path.
+        // This prevents collisions between publishes of different outputs, and
+        // it prevents collisions between multiple publishes of the same version
+        // of a package when the package has changed.
+        let nix_out_hash = &{
+            let hasher = snapshot["element"]["storePaths"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|value| value.as_str().expect("Invalid metadata"))
+                .sorted()
+                .fold(Sha256::new(), |mut hasher, path| {
+                    hasher.update(path);
+                    hasher
+                });
+            format!("{:x}", hasher.finalize())
+        }[0..8];
+
+        path.push(format!("{version}-{nix_out_hash}.json"));
 
         path
     }
 
+    /// Get the workdir of the checked-out repo
+    fn workdir(&self) -> &Path {
+        self.0.workdir().unwrap()
+    }
+
     /// Try retrieving a snapshot from the catalog
-    /// TODO: better addressing (attrpath + version + drv hash?)
     fn get_snapshot(&self, snapshot: &Value) -> Result<Option<Value>, PublishError> {
-        let path = self.get_snapshot_path(snapshot);
+        let path = self.workdir().join(Self::get_snapshot_path(snapshot));
         let read_snapshot = match fs::read_to_string(path) {
             Ok(s) => Some(serde_json::from_str(&s)?),
             Err(e) if e.kind() == io::ErrorKind::NotFound => None,
@@ -467,7 +550,7 @@ impl UpstreamCatalog<'_> {
     ///
     /// Consumers should check if a snapshot already exists with [Self::get_snapshot]
     async fn add_snapshot(&self, snapshot: &Value) -> Result<(), PublishError> {
-        let path = self.get_snapshot_path(snapshot);
+        let path = self.workdir().join(Self::get_snapshot_path(snapshot));
 
         fs::create_dir_all(path.parent().unwrap())?; // only an issue for a git repo in /
 
@@ -478,7 +561,7 @@ impl UpstreamCatalog<'_> {
 
         serde_json::to_writer(&mut snapshot_file, snapshot)?;
 
-        self.0.add(&[&self.get_snapshot_path(snapshot)]).await?;
+        self.0.add(&[&path]).await?;
         self.0.commit("Added snapshot").await?; // TODO: pass message in here? commit in separate method?
         Ok(())
     }
@@ -522,8 +605,14 @@ pub enum PublishError {
     #[error("Failed to invoke path-info: {0}")]
     PathInfo(NixCommandLineRunJsonError),
 
+    #[error("Failed to invoke build: {0}")]
+    Build(NixCommandLineRunError),
+
     #[error("Failed to invoke copy: {0}")]
     Copy(NixCommandLineRunError),
+
+    #[error("Failed to serialize cache metadata: {0}")]
+    SerializeCacheMeta(serde_json::Error),
 }
 
 /// Publishable FlakeRefs
@@ -550,7 +639,7 @@ pub enum PublishFlakeRef {
 
 impl PublishFlakeRef {
     /// Extract a URL for cloning with git
-    fn clone_url(&self) -> String {
+    pub fn clone_url(&self) -> String {
         match self {
             PublishFlakeRef::Ssh(ref ssh_ref) => ssh_ref.url.as_str().to_owned(),
             PublishFlakeRef::Https(ref https_ref) => https_ref.url.as_str().to_owned(),
@@ -752,22 +841,51 @@ impl PublishFlakeRef {
         flox: &Flox,
         git_service_prefer_https: bool,
     ) -> Result<Self, ConvertFlakeRefError> {
-        let publish_flake_ref = match flake_ref {
-            FlakeRef::GitSsh(ssh_ref) => Self::Ssh(ssh_ref),
-            FlakeRef::GitHttps(https_ref) => Self::Https(https_ref),
+        // This should really be a recursive function, but that requires two things:
+        // - Making this return type Pin<Box<impl Future<Output = ...>>>
+        // - That all Futures that this one depends on are Send
+        // It turns out we can't do that because the GitProvider trait doesn't require the Futures it
+        // returns to be Send. Instead of a recursive call we do this loop until we no longer have
+        // an indirect flake reference. It should run a maximum of twice (once if `flake_ref` isn't indirect,
+        // twice if it is indirect).
+        let flake_ref = if let FlakeRef::Indirect(indirect) = flake_ref {
+            indirect.resolve()?
+        } else {
+            flake_ref
+        };
+        match flake_ref {
+            FlakeRef::GitSsh(ssh_ref) => Ok(Self::Ssh(ssh_ref)),
+            FlakeRef::GitHttps(https_ref) => Ok(Self::Https(https_ref)),
             // resolve upstream for local git repo
             FlakeRef::GitPath(file_ref) => {
-                Self::from_git_file_flake_ref(file_ref, &flox.nix(Default::default())).await?
+                Self::from_git_file_flake_ref(file_ref, &flox.nix(Default::default())).await
             },
-            // resolve indirect ref to direct ref (recursively)
-            FlakeRef::Indirect(_) => todo!(),
             FlakeRef::Github(github_ref) => {
-                Self::from_github_ref(github_ref, git_service_prefer_https)?
+                Self::from_github_ref(github_ref, git_service_prefer_https)
             },
             FlakeRef::Gitlab(_) => todo!(),
-            _ => Err(ConvertFlakeRefError::UnsupportedTarget(flake_ref))?,
-        };
-        Ok(publish_flake_ref)
+            // Resolving an indirect reference shouldn't give you back
+            // another indirect reference.
+            FlakeRef::Indirect(_) => unreachable!(),
+            _ => Err(ConvertFlakeRefError::UnsupportedTarget(flake_ref.clone())),
+        }
+    }
+}
+
+impl PartialEq<FlakeRef> for PublishFlakeRef {
+    fn eq(&self, other: &FlakeRef) -> bool {
+        match (self, other) {
+            (PublishFlakeRef::Https(this), FlakeRef::GitHttps(other)) => this == other,
+            (PublishFlakeRef::Ssh(this), FlakeRef::GitSsh(other)) => this == other,
+            (PublishFlakeRef::File(this), FlakeRef::GitPath(other)) => this == other,
+            _ => false,
+        }
+    }
+}
+
+impl PartialEq<PublishFlakeRef> for FlakeRef {
+    fn eq(&self, other: &PublishFlakeRef) -> bool {
+        other == self
     }
 }
 
@@ -803,6 +921,9 @@ pub enum ConvertFlakeRefError {
 
     #[error("Unsupported git remote URL: {0}")]
     UnsupportedGitUrl(url::Url),
+
+    #[error("Failed to parse URL")]
+    URLParseFailed(#[from] UrlParseError),
 }
 
 #[cfg(test)]
@@ -810,9 +931,29 @@ mod tests {
 
     use std::str::FromStr;
 
+    use once_cell::sync::Lazy;
+    use runix::url_parser::PARSER_UTIL_BIN_PATH;
+
     use super::*;
     use crate::flox::tests::flox_instance;
+    #[cfg(feature = "impure-unit-tests")]
     use crate::prelude::Channel;
+
+    static EXAMPLE_CATALOG_ENTRY: Lazy<Value> = Lazy::new(|| {
+        json!({
+            "eval": {
+                "attrPath": ["packages", "aarch64-darwin", "flox"],
+                "version": "0.0.0-r42"
+                // other entries omitted
+            },
+            "element": {
+                "storePaths": [
+                    "/nix/store/2rrfpkq6cr8ppip9szl0z1qfdlskdinq-flox-0.0.0-r42",
+                    "/nix/store/k11z2k4iyf3sjfca1vfg935vss9v8y03-flox-0.0.0-r42-man"
+                ]
+            }
+        })
+    });
 
     #[cfg(feature = "impure-unit-tests")] // /nix/store is not accessible in the sandbox
     #[tokio::test]
@@ -838,7 +979,7 @@ mod tests {
             stability: Stability::Stable,
             analysis: NixAnalysis(json!({
                 "element": {
-                    "store_paths": [
+                    "storePaths": [
                         flox_sh_path,
                         bad_path,
                     ],
@@ -1126,6 +1267,16 @@ mod tests {
         assert_eq!(catalog.0.list_branches().await.unwrap().len(), 1);
     }
 
+    #[test]
+    fn test_get_snapshot_path() {
+        let snapshot = EXAMPLE_CATALOG_ENTRY.deref();
+
+        let expected = PathBuf::from("catalog/flox/0.0.0-r42-828d710f.json");
+        let actual = UpstreamCatalog::get_snapshot_path(snapshot);
+
+        assert_eq!(actual, expected);
+    }
+
     // disabled because nix build does not have git user/email config,
     // TODO fix tests to work with local repos
     #[cfg(feature = "impure-unit-tests")]
@@ -1136,14 +1287,7 @@ mod tests {
         let (_flox, temp_dir_handle) = flox_instance();
         let repo_dir = temp_dir_handle.path().join("repo");
 
-        let snapshot = json!({
-            "eval": {
-                "meta": {
-                    "pname": "pkg",
-                    "version": "0.1.1"
-                }
-            }
-        });
+        let snapshot = EXAMPLE_CATALOG_ENTRY.deref();
 
         // create a repo
         fs::create_dir(&repo_dir).unwrap();
@@ -1161,13 +1305,13 @@ mod tests {
             .expect("Should create branch");
 
         catalog
-            .add_snapshot(&snapshot)
+            .add_snapshot(snapshot)
             .await
             .expect("Should add snapshot");
 
         assert_eq!(
-            catalog
-                .get_snapshot(&snapshot)
+            &catalog
+                .get_snapshot(snapshot)
                 .unwrap()
                 .expect("should find written snapshot"),
             snapshot
@@ -1184,14 +1328,7 @@ mod tests {
         let (_flox, temp_dir_handle) = flox_instance();
         let repo_dir = temp_dir_handle.path().join("repo");
 
-        let snapshot = json!({
-            "eval": {
-                "meta": {
-                    "pname": "pkg",
-                    "version": "0.1.1"
-                }
-            }
-        });
+        let snapshot = EXAMPLE_CATALOG_ENTRY.deref();
 
         // create an "upstream" repo
         fs::create_dir(&repo_dir).unwrap();
@@ -1212,7 +1349,7 @@ mod tests {
             .expect("Should create branch");
 
         catalog
-            .add_snapshot(&snapshot)
+            .add_snapshot(snapshot)
             .await
             .expect("Should add snapshot");
         catalog.push_catalog().await.expect("Should push catalog");
@@ -1226,12 +1363,27 @@ mod tests {
             .await
             .expect("catalog branch should exist upstream");
 
-        let snapshot_path = repo_dir.join("packages").join("pkg").join("0.1.1.json");
+        let snapshot_path = repo_dir.join(UpstreamCatalog::get_snapshot_path(snapshot));
         assert!(snapshot_path.exists());
 
         let snapshot_actual: Value =
             serde_json::from_str(&fs::read_to_string(&snapshot_path).unwrap()).unwrap();
 
         assert_eq!(snapshot_actual, snapshot_actual);
+    }
+
+    #[tokio::test]
+    async fn resolves_indirect_ref_to_git_https() {
+        let indirect_ref = FlakeRef::from_url("flake:flox", PARSER_UTIL_BIN_PATH).unwrap();
+        let (flox, _temp_dir_handle) = flox_instance();
+        // Need to expose the custom registry to `parser-util` via environment variable
+        flox.nix::<NixCommandLine>(vec![]).export_env_vars();
+        let publishable = PublishFlakeRef::from_flake_ref(indirect_ref, &flox, true)
+            .await
+            .unwrap();
+        let expected = PublishFlakeRef::Https(
+            GitRef::from_str("git+https://github.com/flox/floxpkgs?ref=master").unwrap(),
+        );
+        assert_eq!(publishable, expected);
     }
 }

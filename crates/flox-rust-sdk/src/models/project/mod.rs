@@ -110,6 +110,7 @@ impl<'flox, Git: GitProvider> Guard<Project<'flox, Git, ReadOnly<Git>>, Root<'fl
                 FlakeAttribute {
                     flakeref: IndirectRef::new("flox".to_string(), Default::default()).into(),
                     attr_path: ["", "templates", "_init"].try_into().unwrap(),
+                    outputs: Default::default(),
                 }
                 .into(),
             ),

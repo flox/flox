@@ -34,6 +34,7 @@ itertools.workspace = true
 chrono.workspace = true
 git-url-parse.workspace = true
 rowan.workspace = true
+sha2.workspace = true
 
 [dev-dependencies]
 anyhow = "1.0.65"

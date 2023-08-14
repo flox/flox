@@ -169,10 +169,7 @@ impl FloxArgs {
 
         // Set the global Nix config via the environment variables in flox.default_args so that
         // subprocesses called by `flox` (e.g. `parser-util`) can inherit them.
-        let nix_backend: NixCommandLine = flox.nix(vec![]);
-        for (name, value) in nix_backend.defaults.environment.iter() {
-            std::env::set_var(name, value);
-        }
+        flox.nix::<NixCommandLine>(vec![]).export_env_vars();
 
         // in debug mode keep the tempdir to reproduce nix commands
         if self.debug || matches!(self.verbosity, Verbosity::Verbose(1..)) {
@@ -228,6 +225,7 @@ impl FloxArgs {
 }
 
 /// Transparent separation of different categories of commands
+#[allow(clippy::large_enum_variant)] // there's only a single instance of this enum
 #[derive(Bpaf, Clone)]
 pub enum Commands {
     Package {

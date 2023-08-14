@@ -203,6 +203,7 @@ impl FloxTriple {
         FlakeAttribute {
             flakeref: flakeref.into(),
             attr_path: attrpath,
+            outputs: Default::default(),
         }
         .into()
     }
@@ -327,6 +328,7 @@ mod tests {
                 attributes: Default::default(),
             }),
             attr_path: ["packages", "aarch64-darwin", "flox"].try_into().unwrap(),
+            outputs: Default::default(),
         });
         let parsed =
             FloxPackage::parse(".#packages.aarch64-darwin.flox", &CHANNELS, DEFAULT_CHANNEL)
