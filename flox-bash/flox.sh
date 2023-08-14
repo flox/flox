@@ -125,8 +125,8 @@ if [ -z "$subcommand" ]; then
 fi
 
 # Flox aliases
-if [ "$subcommand" = "rm" ]; then
-	subcommand=remove
+if [ "$subcommand" = "rm" ] || [ "$subcommand" = "uninstall" ]; then
+       subcommand=remove
 fi
 
 # Store the original subcommand invocation arguments.
