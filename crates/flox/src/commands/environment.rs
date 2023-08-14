@@ -36,7 +36,7 @@ impl EnvironmentCommands {
             EnvironmentCommands::List { .. } => subcommand_metric!("list"),
             EnvironmentCommands::Envs => subcommand_metric!("envs"),
             EnvironmentCommands::Activate { .. } => subcommand_metric!("activate"),
-            EnvironmentCommands::Create { .. } => subcommand_metric!("create"),
+            EnvironmentCommands::Init { .. } => subcommand_metric!("init"),
             EnvironmentCommands::Destroy { .. } => subcommand_metric!("destroy"),
             EnvironmentCommands::Edit { .. } => subcommand_metric!("edit"),
             EnvironmentCommands::Export { .. } => subcommand_metric!("export"),
@@ -157,7 +157,7 @@ impl EnvironmentCommands {
                 command.run(&nix, &Default::default()).await?
             },
 
-            EnvironmentCommands::Create {
+            EnvironmentCommands::Init {
                 environment_args: _,
                 environment,
             } => {
@@ -427,8 +427,8 @@ pub enum EnvironmentCommands {
     },
 
     /// create an environment
-    #[bpaf(command)]
-    Create {
+    #[bpaf(command, long("create"))]
+    Init {
         #[bpaf(external(environment_args), group_help("Environment Options"))]
         environment_args: EnvironmentArgs,
 

@@ -276,9 +276,11 @@ pub(crate) mod interface {
 
     #[derive(Bpaf, Clone, Debug)]
     pub enum PackageCommands {
+        // [c1]: only one init command
         /// initialize flox expressions for current project
-        #[bpaf(command)]
-        Init(#[bpaf(external(WithPassthru::parse))] WithPassthru<Init>),
+        #[bpaf(command, hide)]
+        InitPackage(#[bpaf(external(WithPassthru::parse))] WithPassthru<Init>),
+
         /// build package from current project
         #[bpaf(command)]
         Build(#[bpaf(external(WithPassthru::parse))] WithPassthru<Build>),
@@ -315,8 +317,8 @@ pub(crate) mod interface {
 impl PackageCommands {
     pub async fn handle(self, config: Config, flox: Flox) -> Result<()> {
         match self {
+            PackageCommands::InitPackage(_) => subcommand_metric!("init-package"),
             PackageCommands::Develop(_) => subcommand_metric!("develop"),
-            PackageCommands::Init(_) => subcommand_metric!("init"),
             PackageCommands::Build(_) => subcommand_metric!("build"),
             PackageCommands::PrintDevEnv(_) => subcommand_metric!("print-dev-env"),
             PackageCommands::Publish(_) => subcommand_metric!("publish"),
@@ -445,7 +447,7 @@ impl PackageCommands {
                 }
             },
 
-            PackageCommands::Init(command) => {
+            PackageCommands::InitPackage(command) => {
                 let cwd = std::env::current_dir()?;
                 let basename = cwd
                     .file_name()
