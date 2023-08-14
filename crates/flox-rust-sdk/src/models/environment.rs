@@ -1,4 +1,5 @@
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 
 use flox_types::catalog::{CatalogEntry, EnvCatalog};
 use itertools::Itertools;
@@ -15,6 +16,7 @@ use runix::{Run, RunJson};
 use thiserror::Error;
 use walkdir::WalkDir;
 
+use super::environment_ref::{EnvironmentName, EnvironmentRef, EnvironmentRefError};
 use super::flox_package::{FloxPackage, FloxTriple};
 use crate::utils::copy_file_without_permissions;
 use crate::utils::rnix::{AttrSetExt, StrExt};
@@ -50,16 +52,9 @@ impl<S> PartialEq for Environment<S> {
 
 /// Implementation for an environment in any state
 impl<S: State> Environment<S> {
-    /// Get the owner of the environment
-    ///
-    /// **(experimental)**
-    pub fn owner(&self) -> Option<&str> {
-        self.state.owner()
-    }
-
-    /// Get the name of the environment
-    pub fn name(&self) -> &str {
-        self.state.name()
+    /// Get the environment ref for this environment
+    pub fn environment_ref(&self) -> &EnvironmentRef {
+        self.state.environment_ref()
     }
 
     /// Turn the environment into a flake attribute,
@@ -197,11 +192,7 @@ impl Environment<Read> {
     /// Open an environment at a given path
     ///
     /// Ensure that the path exists and contains files that "look" like an environment
-    fn open(
-        owner: Option<String>,
-        name: String,
-        path: impl AsRef<Path>,
-    ) -> Result<Self, EnvironmentError2> {
+    fn open(ident: EnvironmentRef, path: impl AsRef<Path>) -> Result<Self, EnvironmentError2> {
         let path = path.as_ref().to_path_buf();
 
         if !path.exists() {
@@ -216,7 +207,7 @@ impl Environment<Read> {
 
         Ok(Self {
             path,
-            state: Read { owner, name },
+            state: Read { ident },
         })
     }
 
@@ -391,25 +382,17 @@ impl Environment<Modify> {
 
 /// Access Environment Metadata stored within the State ([Read]/[Modify])
 pub trait State {
-    /// Get the owner of the environment
-    fn owner(&self) -> Option<&str>;
-    /// Get the name of the environment
-    fn name(&self) -> &str;
+    fn environment_ref(&self) -> &EnvironmentRef;
 }
 
 #[derive(Debug, PartialEq)]
 pub struct Read {
-    owner: Option<String>,
-    name: String,
+    ident: EnvironmentRef,
 }
 
 impl State for Read {
-    fn owner(&self) -> Option<&str> {
-        self.owner.as_deref()
-    }
-
-    fn name(&self) -> &str {
-        &self.name
+    fn environment_ref(&self) -> &EnvironmentRef {
+        &self.ident
     }
 }
 
@@ -420,12 +403,8 @@ pub struct Modify {
 }
 
 impl State for Modify {
-    fn owner(&self) -> Option<&str> {
-        self.origin.state.owner()
-    }
-
-    fn name(&self) -> &str {
-        self.origin.state.name()
+    fn environment_ref(&self) -> &EnvironmentRef {
+        self.origin.environment_ref()
     }
 }
 
@@ -485,13 +464,17 @@ impl DotFloxDir {
     }
 
     /// List the environments defined in the `.flox` dir.
+    // todo: eliminate unwraps
     pub fn environments(&self) -> Result<Vec<Environment<Read>>, EnvironmentError2> {
         self.path
             .read_dir()
             .map_err(EnvironmentError2::ReadDotFlox)?
             .map(|env_or_user| {
                 let env_or_user = env_or_user.map_err(EnvironmentError2::ReadDotFlox)?;
-                let envs = match self.environment(None, env_or_user.file_name().to_string_lossy()) {
+                let ident =
+                    EnvironmentRef::new(None::<&str>, env_or_user.file_name().to_string_lossy())
+                        .unwrap();
+                let envs = match self.environment(ident) {
                     Ok(env) => vec![env],
                     Err(EnvironmentError2::DirectoryNotAnEnv) => env_or_user
                         .path()
@@ -500,8 +483,11 @@ impl DotFloxDir {
                         .map(|env| {
                             let env = env.map_err(EnvironmentError2::ReadDotFlox)?;
                             self.environment(
-                                Some(env_or_user.file_name().to_string_lossy().to_string()),
-                                env.file_name().to_string_lossy(),
+                                EnvironmentRef::new(
+                                    Some(&env_or_user.file_name().to_string_lossy()),
+                                    env.file_name().to_string_lossy(),
+                                )
+                                .unwrap(),
                             )
                         })
                         .collect::<Result<Vec<Environment<Read>>, EnvironmentError2>>()?,
@@ -516,19 +502,14 @@ impl DotFloxDir {
     /// Get a specific environment from the `.flox` dir
     pub fn environment(
         &self,
-        owner: Option<String>,
-        name: impl AsRef<str>,
+        ident: EnvironmentRef,
     ) -> Result<Environment<Read>, EnvironmentError2> {
         let mut path = self.path.clone();
-        if let Some(ref owner) = owner.as_ref() {
-            path = path.join(owner);
+        if let Some(ref owner) = ident.owner() {
+            path = path.join(owner.as_ref());
         }
-        path = path.join(name.as_ref());
-        Environment::open(
-            owner.as_ref().map(ToString::to_string),
-            name.as_ref().to_string(),
-            path,
-        )
+        path = path.join(ident.name().as_ref());
+        Environment::open(ident, path)
     }
 
     /// Create a new environment in the `.flox` dir
@@ -536,11 +517,12 @@ impl DotFloxDir {
         &mut self,
         name: impl AsRef<str>,
     ) -> Result<Environment<Read>, EnvironmentError2> {
-        if name.as_ref().chars().any(|c| ['/', '~'].contains(&c)) {
-            Err(EnvironmentError2::InvalidName)?
-        }
+        let name = EnvironmentName::from_str(name.as_ref())?;
 
-        if self.environment(None, &name).is_ok() {
+        if self
+            .environment(EnvironmentRef::new_from_parts(None, name.clone()))
+            .is_ok()
+        {
             Err(EnvironmentError2::EnvironmentExists)?
         }
 
@@ -552,7 +534,7 @@ impl DotFloxDir {
             .await
             .expect("copy template");
 
-        Environment::open(None, name.as_ref().to_string(), env_dir)
+        Environment::open(EnvironmentRef::new_from_parts(None, name), env_dir)
     }
 
     #[allow(dead_code)]
@@ -567,6 +549,9 @@ impl DotFloxDir {
 
 #[derive(Debug, Error)]
 pub enum EnvironmentError2 {
+    #[error("ParseEnvRef")]
+    ParseEnvRef(#[from] EnvironmentRefError),
+
     #[error("NoDotFloxFound")]
     NoDotFloxFound,
     #[error("DotFloxNotADirectory")]
@@ -659,14 +644,15 @@ mod tests {
 
         assert!(matches!(
             dot_flox_dir.create_env("test/bla").await,
-            Err(EnvironmentError2::InvalidName)
+            Err(EnvironmentError2::ParseEnvRef(
+                EnvironmentRefError::InvalidName
+            ))
         ));
 
         let expected = Environment {
             path: dot_flox_dir.path.join("test"),
             state: Read {
-                name: "test".to_string(),
-                owner: None,
+                ident: EnvironmentRef::new(None, "test").unwrap(),
             },
         };
 

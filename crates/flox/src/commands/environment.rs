@@ -175,7 +175,7 @@ impl EnvironmentCommands {
 
                 println!(
                     "Created environment {name} in {path:?}",
-                    name = environment_ref::EnvironmentRef::from(env),
+                    name = env.environment_ref(),
                     path = current_dir
                 );
             },
@@ -194,10 +194,7 @@ impl EnvironmentCommands {
                     .context("Could not get catalog")?;
                 // let installed_store_paths = env.installed_store_paths(&flox).await?;
 
-                println!(
-                    "Packages in {}:",
-                    environment_ref::EnvironmentRef::from(env)
-                );
+                println!("Packages in {}:", env.environment_ref());
                 for (publish_element, _) in catalog.entries.iter() {
                     if publish_element.version != LATEST_VERSION {
                         println!(
@@ -216,14 +213,11 @@ impl EnvironmentCommands {
 
             EnvironmentCommands::Envs if !Feature::Env.is_forwarded()? => {
                 let dot_flox_dir = DotFloxDir::discover(std::env::current_dir().unwrap())?;
-                let envs = dot_flox_dir
-                    .environments()?
-                    .into_iter()
-                    .map(environment_ref::EnvironmentRef::from);
+                let envs = dot_flox_dir.environments()?.into_iter();
 
                 println!("Envs in {:?}", dot_flox_dir.path());
                 for env in envs {
-                    println!("- {env}");
+                    println!("- {env}", env = env.environment_ref());
                 }
             },
 
