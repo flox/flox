@@ -23,6 +23,7 @@ use thiserror::Error;
 use crate::actions::package::Package;
 use crate::environment::{self, default_nix_subprocess_env};
 use crate::models::channels::ChannelRegistry;
+use crate::models::environment::EnvironmentError2;
 pub use crate::models::environment_ref::{self, *};
 use crate::models::flake_ref::FlakeRef;
 pub use crate::models::flox_installable::*;
@@ -165,7 +166,7 @@ impl Flox {
     pub fn environment_ref<Git: GitProvider, Nix: FloxNixApi>(
         &self,
         name: &str,
-    ) -> Result<Vec<EnvironmentRef>, EnvironmentRefError>
+    ) -> Result<Vec<EnvironmentRef>, EnvironmentError2>
     where
         Eval: RunJson<Nix>,
         FlakeMetadata: RunJson<Nix>,
