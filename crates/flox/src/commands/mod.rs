@@ -225,6 +225,7 @@ impl FloxArgs {
 }
 
 /// Transparent separation of different categories of commands
+#[allow(clippy::large_enum_variant)] // there's only a single instance of this enum
 #[derive(Bpaf, Clone)]
 pub enum Commands {
     Package {
