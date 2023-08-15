@@ -426,7 +426,7 @@ pub enum EnvironmentCommands {
     },
 
     /// remove packages from an environment
-    #[bpaf(command, long("rm"))]
+    #[bpaf(command, long("rm"), long("uninstall"))]
     Remove {
         #[bpaf(external(environment_args), group_help("Environment Options"))]
         environment_args: EnvironmentArgs,

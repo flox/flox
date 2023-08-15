@@ -38,6 +38,7 @@ serde_json = "1"
 serde_variant = "0.1.1"
 serde_with = "2.0.1"
 serde_yaml = "0.9"
+sha2 = "0.10.7"
 shell-escape = "0.1.5"
 supports-color = "2.0.0"
 sys-info = "0.9"
@@ -53,6 +54,7 @@ url = "2.4"
 uuid = { version = "1.2", features = ["serde", "v4"] }
 walkdir = "2"
 xdg = "2.4"
+
 
 [patch.crates-io]
 bpaf = { git = "https://github.com/ysndr/bpaf", branch = "error/more-suggestions" }

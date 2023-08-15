@@ -2,7 +2,7 @@ use std::env;
 use std::fmt::Debug;
 use std::path::PathBuf;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use bpaf::{construct, Bpaf, Parser};
 use crossterm::tty::IsTty;
 use flox_rust_sdk::flox::Flox;
@@ -40,11 +40,14 @@ async fn env_ref_to_flake_attribute<Git: GitProvider + 'static>(
 }
 
 pub(crate) mod interface {
+    use std::path::PathBuf;
+
     use async_trait::async_trait;
     use bpaf::{Bpaf, Parser};
     use flox_rust_sdk::flox::Flox;
     use flox_rust_sdk::prelude::FlakeAttribute;
     use flox_rust_sdk::providers::git::GitProvider;
+    use flox_types::catalog::cache::SubstituterUrl;
 
     use super::parseable_macro::parseable;
     use super::{env_ref_to_flake_attribute, Parseable, WithPassthru};
@@ -172,44 +175,42 @@ pub(crate) mod interface {
 
     #[derive(Bpaf, Clone, Debug)]
     pub struct Publish {
-        #[bpaf(short('A'), hide)]
-        pub _attr_flag: bool,
+        /// Signing key file to sign the binary with
+        ///
+        /// When omitted, reads from the config.
+        /// See flox-config(1) for more details.
+        #[bpaf(long, short('k'))]
+        pub signing_key: Option<PathBuf>,
 
-        /// The --channel-repo determines the upstream repository containing
-        #[bpaf(argument("REPO"))]
-        pub channel_repo: Option<String>,
+        /// Url of a binary cache to push binaries _to_
+        ///
+        /// When omitted, reads from the config.
+        /// See flox-config(1) for more details.
+        #[bpaf(long, short('c'))]
+        pub cache_url: Option<SubstituterUrl>,
 
-        #[bpaf(argument("REPO"))]
-        pub build_repo: Option<String>,
+        /// URL of a substituter to pull binaries _from_
+        ///
+        /// When ommitted, falls back to the config or uses the value for cache-url.
+        /// See flox-config(1) for more details.
+        #[bpaf(long, short('s'))]
+        pub public_cache_url: Option<SubstituterUrl>,
 
-        #[bpaf(argument("URL"))]
-        pub upload_to: Option<String>,
+        /// Print snapshot JSON to stdout instead of uploading it to the catalog
+        #[bpaf(long, hide)]
+        pub json: bool,
 
-        #[bpaf(argument("URL"))]
-        pub download_from: Option<String>,
+        /// Prefer https access to repositories published with a `github:` reference
+        ///
+        /// `ssh` is used by default.
+        #[bpaf(long)]
+        pub prefer_https: bool,
 
-        #[bpaf(argument("DIR"))]
-        pub render_path: Option<String>,
-
-        #[bpaf(argument("FILE"))]
-        pub key_file: Option<String>,
-
-        #[bpaf(argument("FILE"))]
-        pub publish_system: Option<String>,
-
-        /// Package to publish
-        #[bpaf(external(InstallableArgument::positional), optional, catch)]
-        pub(crate) _installable_arg: Option<InstallableArgument<Parsed, PublishInstallable>>,
-    }
-    parseable!(Publish, publish);
-
-    #[derive(Bpaf, Clone, Debug)]
-    pub struct PublishV2 {
         /// Package to publish
         #[bpaf(external(InstallableArgument::positional), optional, catch)]
         pub installable_arg: Option<InstallableArgument<Parsed, PublishInstallable>>,
     }
-    parseable!(PublishV2, publish_v2);
+    parseable!(Publish, publish);
 
     #[derive(Bpaf, Clone, Debug)]
     pub struct Shell {
@@ -287,12 +288,9 @@ pub(crate) mod interface {
         /// print shell code that can be sourced by bash to reproduce the development environment
         #[bpaf(command("print-dev-env"))]
         PrintDevEnv(#[bpaf(external(WithPassthru::parse))] WithPassthru<PrintDevEnv>),
-        /// build and publish project to flox channel
+        /// build package and publish to flox channel
         #[bpaf(command)]
         Publish(#[bpaf(external(WithPassthru::parse))] WithPassthru<Publish>),
-        /// build and publish project to flox channel
-        #[bpaf(command, hide)]
-        Publish2(#[bpaf(external(WithPassthru::parse))] WithPassthru<PublishV2>),
         /// run app from current project
         #[bpaf(command)]
         Run(#[bpaf(external(WithPassthru::parse))] WithPassthru<Run>),
@@ -322,7 +320,6 @@ impl PackageCommands {
             PackageCommands::Build(_) => subcommand_metric!("build"),
             PackageCommands::PrintDevEnv(_) => subcommand_metric!("print-dev-env"),
             PackageCommands::Publish(_) => subcommand_metric!("publish"),
-            PackageCommands::Publish2(_) => subcommand_metric!("publish_v2"),
             PackageCommands::Run(_) => subcommand_metric!("run"),
             PackageCommands::Shell(_) => subcommand_metric!("shell"),
             PackageCommands::Eval(_) => subcommand_metric!("eval"),
@@ -344,29 +341,108 @@ impl PackageCommands {
                 flox_forward(&flox).await?
             },
 
-            // `flox publish` is not yet implemented in rust
-            PackageCommands::Publish(_) if Feature::Publish.is_forwarded()? => {
-                flox_forward(&flox).await?
-            },
-
-            PackageCommands::Publish2(args) => {
-                let FlakeAttribute {
-                    flakeref,
-                    attr_path,
-                    outputs: _,
-                } = args
+            PackageCommands::Publish(args) => {
+                let installable = args
                     .inner
                     .installable_arg
                     .unwrap_or_default()
                     .resolve_flake_attribute(&flox)
                     .await?;
 
-                let publish_ref = PublishFlakeRef::from_flake_ref(flakeref, &flox, false).await?;
-                let publish = Publish::new(&flox, publish_ref, attr_path, config.flox.stability);
-                println!(
-                    "{}",
-                    serde_json::to_string_pretty(publish.analyze().await?.analysis())?
+                let original_flakeref = &installable.flakeref;
+                let publish_flakeref = PublishFlakeRef::from_flake_ref(
+                    installable.flakeref.clone(),
+                    &flox,
+                    args.inner.prefer_https,
+                )
+                .await?;
+
+                if &publish_flakeref != original_flakeref {
+                    info!("Resolved {} to {}", original_flakeref, publish_flakeref);
+                }
+
+                // validate arguments
+
+                let sign_key = args
+                    .inner
+                    .signing_key
+                    .or(config.flox.signing_key)
+                    .ok_or_else(|| {
+                        anyhow!(indoc! {"
+                            Signing key is required!
+                            Provide using `--sign-key` or the `sign_key` config key
+                        "})
+                    })?;
+
+                let cache_url =
+                    args.inner
+                        .cache_url
+                        .or(config.flox.cache_url)
+                        .ok_or_else(|| {
+                            anyhow!(indoc! {"
+                            Cache url is required!
+                            Provide using `--cache-url` or the `cache_url` config key
+                        "})
+                        })?;
+
+                let substituter_url = args
+                    .inner
+                    .public_cache_url
+                    .or(config.flox.public_cache_url)
+                    .unwrap_or(cache_url.clone());
+
+                // run publish steps
+
+                let publish = Publish::new(
+                    &flox,
+                    publish_flakeref.clone(),
+                    installable.attr_path.clone(),
+                    config.flox.stability,
                 );
+
+                // retrieve eval metadata
+                info!("Getting metadata for {installable}...");
+                let mut publish = publish.analyze().await?;
+
+                // build binary
+                info!("Building {installable}...");
+                publish.build().await?;
+                info!("done!");
+
+                // sign binary
+
+                info!("Signing binary...");
+                publish
+                    .sign_binary(&sign_key)
+                    .await
+                    .with_context(|| format!("Could not sign binary with sign-key {sign_key:?}"))?;
+                info!("done!");
+
+                // cache binary
+                info!("Uploading binary to {cache_url}...");
+                publish
+                    .upload_binary(Some(cache_url))
+                    .await
+                    .context("Failed uploading binary")?;
+                info!("done!");
+
+                info!("Checking binary can be downloaded from {substituter_url}...");
+                publish
+                    .check_substituter(substituter_url)
+                    .await
+                    .context("Binary cannot be downloaded")?;
+                info!("done!");
+
+                if args.inner.json {
+                    let analysis = publish.analysis();
+
+                    println!("{}", serde_json::to_string(analysis)?);
+                } else {
+                    info!("Uploading snapshot to {}...", publish_flakeref.clone_url());
+                    publish.push_snapshot().await.context("Failed to upload")?;
+                    info!("done!");
+                    info!("Publish complete");
+                }
             },
 
             PackageCommands::Init(command) => {
