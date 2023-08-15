@@ -1259,6 +1259,7 @@ function searchChannels() {
 	  -e ".sqlite' is busy" \
 	  -e " Added input " \
 	  -e " follows " \
+	  -e " does not provide attribute " \
 	  -e "\([0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]\)" \
 	  ${_stderrFiles[@]} 1>&2 || true
 	#shellcheck disable=SC2016

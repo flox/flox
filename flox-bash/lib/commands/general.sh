@@ -215,8 +215,8 @@ function floxSearch() {
 	if [[ "$#" -gt 0 ]]; then
 		usage | error "extra arguments \"$*\""
 	fi
-	: "${GREP_COLOR:=1;32}"
-	export GREP_COLOR
+	: "${GREP_COLORS:=mt=1;32}"
+	export GREP_COLORS
 
 	# TODO: handle lines which contain `|' in their descriptions
 	if [[ "$showDetail" = true ]]; then
