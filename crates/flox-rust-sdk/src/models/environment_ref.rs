@@ -5,7 +5,7 @@ use derive_more::{AsRef, Deref, Display};
 use runix::installable::FlakeAttribute;
 use thiserror::Error;
 
-use super::environment::{DotFloxDir, Environment, EnvironmentError2, Read};
+use super::environment::{Environment, EnvironmentError2, Read};
 use crate::flox::Flox;
 use crate::providers::git::GitProvider;
 
@@ -91,30 +91,30 @@ impl EnvironmentRef {
         flox: &Flox,
         environment_name: Option<&str>,
     ) -> Result<(Vec<EnvironmentRef>), EnvironmentError2> {
-        let dot_flox_dir = DotFloxDir::discover(std::env::current_dir().unwrap())?;
+        let discovered = Environment::discover(std::env::current_dir().unwrap())?
+            .map(|env| env.environment_ref().clone());
 
-        let env_ref = environment_name
+        let searched = environment_name
             .map(|n| n.parse::<EnvironmentRef>())
             .transpose()?;
 
-        let mut environment_refs = dot_flox_dir.environments()?;
+        let discovered = if let Some(env_ref) = searched {
+            discovered
+                .into_iter()
+                .filter(|discovered| {
+                    if env_ref.owner.is_some() {
+                        env_ref.owner == discovered.owner && env_ref.name == discovered.name
+                    } else {
+                        env_ref.name == discovered.name
+                            || Some(env_ref.name.as_ref()) == discovered.owner.as_deref()
+                    }
+                })
+                .collect()
+        } else {
+            discovered.into_iter().collect()
+        };
 
-        if let Some(env_ref) = env_ref {
-            environment_refs.retain(|env| {
-                if env_ref.owner.is_some() {
-                    env_ref.owner == env.environment_ref().owner
-                        && env_ref.name == env.environment_ref().name
-                } else {
-                    env_ref.name == env.environment_ref().name
-                        || Some(env_ref.name.as_ref()) == env.environment_ref().owner.as_deref()
-                }
-            });
-        }
-
-        Ok(environment_refs
-            .into_iter()
-            .map(|env| env.environment_ref().clone())
-            .collect())
+        Ok(discovered)
     }
 
     // only used by some autocompletion logic
@@ -127,9 +127,10 @@ impl EnvironmentRef {
         Ok(env.flake_attribute(&flox.system))
     }
 
+    // only used by some autocompletion logic
+    // TODO: remove?
     pub fn to_env(&self) -> Result<Environment<Read>, EnvironmentError2> {
-        let dot_flox_dir = DotFloxDir::discover(std::env::current_dir().unwrap())?;
-        let env = dot_flox_dir.environment(self.clone())?;
+        let env = Environment::open(std::env::current_dir().unwrap(), self.clone())?;
         Ok(env)
     }
 
