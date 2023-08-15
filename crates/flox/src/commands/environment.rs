@@ -164,20 +164,32 @@ impl EnvironmentCommands {
                 environment,
             } => {
                 let current_dir = std::env::current_dir().unwrap();
-                let name = environment
-                    .clone()
-                    .or(current_dir
+                let home_dir = dirs::home_dir().unwrap();
+
+                let name = if let Some(name) = environment.clone() {
+                    name
+                } else if current_dir == home_dir {
+                    "default".to_string()
+                } else {
+                    current_dir
                         .file_name()
-                        .map(|n| n.to_string_lossy().to_string()))
-                    .context("Can't init in root")?;
+                        .map(|n| n.to_string_lossy().to_string())
+                        .context("Can't init in root")?
+                };
+
                 let name = EnvironmentName::from_str(&name)?;
 
                 let env = Environment::init(&current_dir, name).await?;
 
                 println!(
-                    "Created environment {name} in {path:?}",
+                    indoc::indoc! {"
+                    ✨ created environment {name} ({system})
+
+                    Enter the environment with \"flox activate\"
+                    Search and install packages with \"flox search {{packagename}}\" and \"flox install {{packagename}}\"
+                    "},
                     name = env.environment_ref(),
-                    path = current_dir
+                    system = flox.system
                 );
             },
 
@@ -216,7 +228,7 @@ impl EnvironmentCommands {
                 let env = Environment::discover(std::env::current_dir().unwrap())?;
 
                 if let Some(env) = env {
-                    println!("Env {} in {:?}", env.environment_ref(), env.flox_nix_path());
+                    println!("{}", env.environment_ref());
                 } else {
                     println!();
                 }

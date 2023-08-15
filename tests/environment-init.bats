@@ -47,30 +47,31 @@ setup_file() {
 
   run "$FLOX_CLI" envs
   assert_success
-  assert_output --partial "- test"
-
+  assert_output "test"
 }
 
 @test "c2: If the user is in ~ the environment should be called 'default'." {
 
-  HOME="$PWD"
+  skip "Can't mock user / home dir"
+
+  export HOME="$PROJECT_DIR"
 
   run "$FLOX_CLI" init
   assert_success
 
   run "$FLOX_CLI" envs
   assert_success
-  assert_output --partial "- default"
+  assert_output "default"
 
 }
 
 @test "c4: custom name option 1: flox init accepts -e for a user defined name" {
-  run "$FLOX_CLI" init -e "test"
+  run "$FLOX_CLI" init -e "other-test"
   assert_success
 
   run "$FLOX_CLI" envs
   assert_success
-  assert_output --partial "- test"
+  assert_output --partial "other-test"
 }
 
 @test "c6: a single directory for state" {
@@ -86,10 +87,10 @@ setup_file() {
   assert_success
 
   assert_output - <<EOF
-✨ created environment {test} ($FLOX_SYSTEM)
+✨ created environment test ($FLOX_SYSTEM)
 
 Enter the environment with "flox activate"
-Search and install packages with "flox search {packagename}" and "flox install {packagename}
+Search and install packages with "flox search {packagename}" and "flox install {packagename}"
 EOF
 
 }

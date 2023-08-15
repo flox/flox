@@ -234,6 +234,7 @@ impl Environment<Read> {
 
         // assume only one entry in .flox
         let env = dot_flox
+            .join(".flox")
             .read_dir()
             .map_err(EnvironmentError2::ReadDotFlox)?
             .next()
