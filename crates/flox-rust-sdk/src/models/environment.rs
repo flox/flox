@@ -39,7 +39,7 @@ pub struct Environment<S> {
     path: PathBuf,
     /// Access state of the environment
     ///
-    /// Implementations distinguish whether whe can [Modify] or only [Read] and environment
+    /// Implementations distinguish whether whe can [Modify] or only [Read] an environment
     state: S,
 }
 
