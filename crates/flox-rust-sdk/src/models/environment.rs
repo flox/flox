@@ -2,7 +2,6 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use flox_types::catalog::{CatalogEntry, EnvCatalog};
-use itertools::Itertools;
 use rnix::ast::{AttrSet, Expr};
 use rowan::ast::AstNode;
 use runix::arguments::eval::EvaluationArgs;
@@ -62,14 +61,15 @@ impl<S: State> Environment<S> {
     ///
     /// ```
     /// # tokio_test::block_on(async {
-    /// # use flox_rust_sdk::models::environment::{DotFloxDir, Environment, Read};
+    /// # use flox_rust_sdk::models::environment::{Environment, Read};
     /// # use std::path::PathBuf;
     /// # let tempdir = tempfile::tempdir().unwrap();
     /// # let path = tempdir.path().canonicalize().unwrap().to_string_lossy().into_owned();
     /// # let system = "aarch64-darwin";
     ///
-    /// let mut dot_flox = DotFloxDir::new(&path).unwrap();
-    /// let env = dot_flox.create_env("test_env").await.unwrap();
+    /// let env = Environment::init(&path, "test_env".parse().unwrap())
+    ///     .await
+    ///     .unwrap();
     ///
     /// let flake_attribute = format!("path:{path}/.flox/test_env#.floxEnvs.{system}.default")
     ///     .parse()
@@ -193,23 +193,84 @@ impl Environment<Read> {
     /// Open an environment at a given path
     ///
     /// Ensure that the path exists and contains files that "look" like an environment
-    fn open(ident: EnvironmentRef, path: impl AsRef<Path>) -> Result<Self, EnvironmentError2> {
+    pub fn open(path: impl AsRef<Path>, ident: EnvironmentRef) -> Result<Self, EnvironmentError2> {
         let path = path.as_ref().to_path_buf();
+        let dot_flox_path = path.join(".flox");
+        let env_path = dot_flox_path.join(ident.name().as_ref());
 
-        if !path.exists() {
+        if !env_path.exists() {
             Err(EnvironmentError2::EnvNotFound)?
         }
-        if !path.is_dir() {
+
+        if !env_path.is_dir() {
             Err(EnvironmentError2::EnvNotADirectory)?
         }
-        if !path.join("flake.nix").exists() {
+
+        let env_path = env_path
+            .canonicalize()
+            .map_err(EnvironmentError2::EnvCanonicalize)?;
+        if !env_path.join("flake.nix").exists() {
             Err(EnvironmentError2::DirectoryNotAnEnv)?
         }
 
         Ok(Self {
-            path,
+            path: env_path,
             state: Read { ident },
         })
+    }
+
+    /// Find the closest `.flox` starting with `current_dir`
+    /// and looking up ancestor directories until `/`
+    pub fn discover(current_dir: impl AsRef<Path>) -> Result<Option<Self>, EnvironmentError2> {
+        let dot_flox = current_dir
+            .as_ref()
+            .ancestors()
+            .find(|ancestor| ancestor.join(".flox").exists());
+
+        let dot_flox = if let Some(dot_flox) = dot_flox {
+            dot_flox
+        } else {
+            return Ok(None);
+        };
+
+        // assume only one entry in .flox
+        let env = dot_flox
+            .read_dir()
+            .map_err(EnvironmentError2::ReadDotFlox)?
+            .next()
+            .ok_or(EnvironmentError2::EmptyDotFlox)?
+            .map_err(EnvironmentError2::ReadEnvDir)?;
+
+        let name = EnvironmentName::from_str(&env.file_name().to_string_lossy())
+            .map_err(EnvironmentError2::ParseEnvRef)?;
+
+        Some(Self::open(
+            current_dir,
+            EnvironmentRef::new_from_parts(None, name),
+        ))
+        .transpose()
+    }
+
+    /// Create a new env in a `.flox` directory within a specific path or open it if it exists.
+    ///
+    /// The method creates or opens a `.flox` directory _contained_ within `path`!
+    pub async fn init(
+        path: impl AsRef<Path>,
+        name: EnvironmentName,
+    ) -> Result<Self, EnvironmentError2> {
+        if Self::open(&path, EnvironmentRef::new_from_parts(None, name.clone())).is_ok() {
+            Err(EnvironmentError2::EnvironmentExists)?;
+        }
+
+        let env_dir = path.as_ref().join(".flox").join(name.as_ref());
+
+        std::fs::create_dir_all(&env_dir).map_err(EnvironmentError2::InitEnv)?;
+
+        cp_r(env!("FLOX_ENV_TEMPLATE"), &env_dir)
+            .await
+            .map_err(EnvironmentError2::InitEnv)?;
+
+        Self::open(path, EnvironmentRef::new_from_parts(None, name))
     }
 
     /// Copy the environment to a sandbox directory given by `path`
@@ -409,180 +470,32 @@ impl State for Modify {
     }
 }
 
-/// Object tracking an environment collection (`.flox`) folder
-pub struct DotFloxDir {
-    path: PathBuf,
-}
-
-impl DotFloxDir {
-    /// Find the closest `.flox` starting with `current_dir`
-    /// and looking up ancestor directories until `/`
-    pub fn discover(current_dir: impl AsRef<Path>) -> Result<Self, EnvironmentError2> {
-        let dot_flox = current_dir
-            .as_ref()
-            .ancestors()
-            .find(|ancestor| ancestor.join(".flox").exists())
-            .ok_or(EnvironmentError2::NoDotFloxFound)?;
-
-        Self::open(dot_flox)
-    }
-
-    /// Open a `.flox` directory in a specific path.
-    ///
-    /// The method expects a path that _contains_ a `.flox` directory!
-    pub fn open(path: impl AsRef<Path>) -> Result<Self, EnvironmentError2> {
-        let dot_flox = path.as_ref().join(".flox");
-        if !dot_flox.exists() {
-            Err(EnvironmentError2::NoDotFloxFound)?
-        }
-        if !dot_flox.is_dir() {
-            Err(EnvironmentError2::DotFloxNotADirectory)?
-        }
-
-        let path = dot_flox
-            .canonicalize()
-            .map_err(EnvironmentError2::DotFloxCanonicalize)?;
-
-        Ok(Self { path })
-    }
-
-    /// Create a new `.flox` directory in a specific path or open it if it exists.
-    ///
-    /// The method creates or opens a `.flox` directory _contained_ within `path`!
-    pub fn new(path: impl AsRef<Path>) -> Result<DotFloxDir, EnvironmentError2> {
-        if !path.as_ref().join(".flox").exists() {
-            std::fs::create_dir(path.as_ref().join(".flox"))
-                .map_err(EnvironmentError2::CreateDotFlox)?;
-        }
-        Self::open(path)
-    }
-
-    /// Get the basepath of the `.flox` dir
-    ///
-    /// This is the path that _contains_ the `.flox` dir!
-    pub fn path(&self) -> &Path {
-        &self.path
-    }
-
-    /// List the environments defined in the `.flox` dir.
-    // todo: eliminate unwraps
-    pub fn environments(&self) -> Result<Vec<Environment<Read>>, EnvironmentError2> {
-        self.path
-            .read_dir()
-            .map_err(EnvironmentError2::ReadDotFlox)?
-            .map(|env_or_user| {
-                let env_or_user = env_or_user.map_err(EnvironmentError2::ReadDotFlox)?;
-                let ident =
-                    EnvironmentRef::new(None::<&str>, env_or_user.file_name().to_string_lossy())
-                        .unwrap();
-                let envs = match self.environment(ident) {
-                    Ok(env) => vec![env],
-                    Err(EnvironmentError2::DirectoryNotAnEnv) => env_or_user
-                        .path()
-                        .read_dir()
-                        .map_err(EnvironmentError2::ReadOwnerDir)?
-                        .map(|env| {
-                            let env = env.map_err(EnvironmentError2::ReadDotFlox)?;
-                            self.environment(
-                                EnvironmentRef::new(
-                                    Some(&env_or_user.file_name().to_string_lossy()),
-                                    env.file_name().to_string_lossy(),
-                                )
-                                .unwrap(),
-                            )
-                        })
-                        .collect::<Result<Vec<Environment<Read>>, EnvironmentError2>>()?,
-                    Err(e) => Err(e)?,
-                };
-                Ok(envs)
-            })
-            .flatten_ok()
-            .collect()
-    }
-
-    /// Get a specific environment from the `.flox` dir
-    pub fn environment(
-        &self,
-        ident: EnvironmentRef,
-    ) -> Result<Environment<Read>, EnvironmentError2> {
-        let mut path = self.path.clone();
-        if let Some(ref owner) = ident.owner() {
-            path = path.join(owner.as_ref());
-        }
-        path = path.join(ident.name().as_ref());
-        Environment::open(ident, path)
-    }
-
-    /// Create a new environment in the `.flox` dir
-    pub async fn create_env(
-        &mut self,
-        name: impl AsRef<str>,
-    ) -> Result<Environment<Read>, EnvironmentError2> {
-        let name = EnvironmentName::from_str(name.as_ref())?;
-
-        if self
-            .environment(EnvironmentRef::new_from_parts(None, name.clone()))
-            .is_ok()
-        {
-            Err(EnvironmentError2::EnvironmentExists)?
-        }
-
-        let env_dir = self.path.join(name.as_ref());
-
-        std::fs::create_dir(self.path.join(name.as_ref())).expect("create env dir");
-
-        cp_r(env!("FLOX_ENV_TEMPLATE"), &env_dir)
-            .await
-            .expect("copy template");
-
-        Environment::open(EnvironmentRef::new_from_parts(None, name), env_dir)
-    }
-
-    #[allow(dead_code)]
-    fn pull_env(
-        _owner: impl AsRef<str>,
-        _name: impl AsRef<str>,
-        _auth: (),
-    ) -> Result<Environment<Read>, EnvironmentError2> {
-        todo!() // figure out pulling in next phase
-    }
-}
-
 #[derive(Debug, Error)]
 pub enum EnvironmentError2 {
     #[error("ParseEnvRef")]
     ParseEnvRef(#[from] EnvironmentRefError),
-
-    #[error("NoDotFloxFound")]
-    NoDotFloxFound,
-    #[error("DotFloxNotADirectory")]
-    DotFloxNotADirectory,
+    #[error("EmptyDotFlox")]
+    EmptyDotFlox,
     #[error("DotFloxCanonicalize({0})")]
-    DotFloxCanonicalize(std::io::Error),
-    #[error("CreateDotFlox({0})")]
-    CreateDotFlox(std::io::Error),
+    EnvCanonicalize(std::io::Error),
     #[error("ReadDotFlox({0})")]
     ReadDotFlox(std::io::Error),
-    #[error("ReadOwnerDir({0})")]
-    ReadOwnerDir(std::io::Error),
     #[error("ReadEnvDir({0})")]
     ReadEnvDir(std::io::Error),
     #[error("MakeSandbox({0})")]
     MakeSandbox(std::io::Error),
     #[error("DeleteEnvironment({0})")]
     DeleteEnvironement(std::io::Error),
-
+    #[error("InitEnv({0})")]
+    InitEnv(std::io::Error),
     #[error("EnvNotFound")]
     EnvNotFound,
     #[error("EnvNotADirectory")]
     EnvNotADirectory,
     #[error("DirectoryNotAnEnv")]
     DirectoryNotAnEnv,
-
     #[error("EnvironmentExists")]
     EnvironmentExists,
-    #[error("InvalidName")]
-    InvalidName,
     #[error("EvalCatalog({0})")]
     EvalCatalog(NixCommandLineRunJsonError),
     #[error("ParseCatalog({0})")]
@@ -629,40 +542,36 @@ mod tests {
     use super::*;
     use crate::flox::tests::flox_instance;
 
-    #[test]
-    fn create_dot_flox() {
-        let tempdir = tempfile::tempdir().unwrap();
-        let _dot_flox_dir = DotFloxDir::new(tempdir.path()).unwrap();
-        assert!(tempdir.path().join(".flox").exists());
-    }
-
     #[tokio::test]
     async fn create_env() {
         let tempdir = tempfile::tempdir().unwrap();
-        let mut dot_flox_dir = DotFloxDir::new(tempdir.path()).unwrap();
+        let before = Environment::open(
+            tempdir.path(),
+            EnvironmentRef::new_from_parts(None, EnvironmentName::from_str("test").unwrap()),
+        );
 
-        assert_eq!(&dot_flox_dir.environments().unwrap(), &[]);
-
-        assert!(matches!(
-            dot_flox_dir.create_env("test/bla").await,
-            Err(EnvironmentError2::ParseEnvRef(
-                EnvironmentRefError::InvalidName
-            ))
-        ));
+        assert!(
+            matches!(before, Err(EnvironmentError2::EnvNotFound)),
+            "{before:?}"
+        );
 
         let expected = Environment {
-            path: dot_flox_dir.path.join("test"),
+            path: tempdir
+                .path()
+                .to_path_buf()
+                .canonicalize()
+                .unwrap()
+                .join(".flox/test"),
             state: Read {
                 ident: EnvironmentRef::new(None, "test").unwrap(),
             },
         };
 
-        let actual = dot_flox_dir.create_env("test").await.unwrap();
+        let actual = Environment::init(tempdir.path(), EnvironmentName::from_str("test").unwrap())
+            .await
+            .unwrap();
 
         assert_eq!(actual, expected);
-        assert_eq!(actual.state, expected.state);
-
-        assert_eq!(&dot_flox_dir.environments().unwrap(), &[expected]);
 
         assert!(actual.path.join("flake.nix").exists());
         assert!(actual
@@ -683,8 +592,9 @@ mod tests {
     #[tokio::test]
     async fn flake_attribute() {
         let tempdir = tempfile::tempdir().unwrap();
-        let mut dot_flox_dir = DotFloxDir::new(tempdir.path()).unwrap();
-        let env = dot_flox_dir.create_env("test").await.unwrap();
+        let env: Environment<Read> = Environment::init(tempdir.path(), "test".parse().unwrap())
+            .await
+            .unwrap();
 
         assert_eq!(
             env.flake_attribute("aarch64-darwin").to_string(),
@@ -696,13 +606,16 @@ mod tests {
     }
 
     #[tokio::test]
+    #[cfg(feature = "impure-unit-tests")]
     async fn edit_env() {
         let (flox, tempdir) = flox_instance();
         let sandbox_path = tempdir.path().join("sandbox");
         std::fs::create_dir(&sandbox_path).unwrap();
 
-        let mut dot_flox_dir = DotFloxDir::new(tempdir.path()).unwrap();
-        let env = dot_flox_dir.create_env("test").await.unwrap();
+        let env: Environment<Read> = Environment::init(tempdir.path(), "test".parse().unwrap())
+            .await
+            .unwrap();
+
         let mut env = env.modify_in(&sandbox_path).await.unwrap();
 
         assert_eq!(env.path, sandbox_path);
@@ -733,6 +646,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[cfg(feature = "impure-unit-tests")]
     async fn test_install() {
         let (mut flox, tempdir) = flox_instance();
         flox.channels
@@ -741,9 +655,10 @@ mod tests {
 
         let sandbox_path = tempdir.path().join("sandbox");
         std::fs::create_dir(&sandbox_path).unwrap();
+        let env: Environment<Read> = Environment::init(tempdir.path(), "test".parse().unwrap())
+            .await
+            .unwrap();
 
-        let mut dot_flox_dir = DotFloxDir::new(tempdir.path()).unwrap();
-        let env = dot_flox_dir.create_env("test").await.unwrap();
         let mut env = env.modify_in(&sandbox_path).await.unwrap();
 
         let empty_env_str = r#"{ }"#;
@@ -785,6 +700,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[cfg(feature = "impure-unit-tests")]
     async fn test_uninstall() {
         let (mut flox, tempdir) = flox_instance();
         flox.channels
@@ -794,8 +710,10 @@ mod tests {
         let sandbox_path = tempdir.path().join("sandbox");
         std::fs::create_dir(&sandbox_path).unwrap();
 
-        let mut dot_flox_dir = DotFloxDir::new(tempdir.path()).unwrap();
-        let env = dot_flox_dir.create_env("test").await.unwrap();
+        let env: Environment<Read> = Environment::init(tempdir.path(), "test".parse().unwrap())
+            .await
+            .unwrap();
+
         let mut env = env.modify_in(&sandbox_path).await.unwrap();
 
         let empty_env_str = indoc! {"

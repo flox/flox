@@ -1,12 +1,14 @@
+use std::env::current_dir;
 use std::fs::File;
 use std::io::stdin;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::str::FromStr;
 
 use anyhow::{bail, Context, Result};
 use bpaf::{construct, Bpaf, Parser, ShellComp};
-use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::models::environment::{DotFloxDir, Environment, EnvironmentError2, Read};
+use flox_rust_sdk::flox::{EnvironmentName, Flox};
+use flox_rust_sdk::models::environment::{Environment, Read};
 use flox_rust_sdk::models::environment_ref;
 use flox_rust_sdk::nix::arguments::eval::EvaluationArgs;
 use flox_rust_sdk::nix::command::{Shell, StoreGc};
@@ -162,16 +164,15 @@ impl EnvironmentCommands {
                 environment,
             } => {
                 let current_dir = std::env::current_dir().unwrap();
+                let name = environment
+                    .clone()
+                    .or(current_dir
+                        .file_name()
+                        .map(|n| n.to_string_lossy().to_string()))
+                    .context("Can't init in root")?;
+                let name = EnvironmentName::from_str(&name)?;
 
-                let mut dot_flox_dir = match DotFloxDir::open(&current_dir) {
-                    Ok(d) => d,
-                    Err(EnvironmentError2::NoDotFloxFound) => DotFloxDir::new(&current_dir)?,
-                    Err(e) => Err(e)?,
-                };
-
-                let env = dot_flox_dir
-                    .create_env(environment.as_deref().unwrap_or("default"))
-                    .await?;
+                let env = Environment::init(&current_dir, name).await?;
 
                 println!(
                     "Created environment {name} in {path:?}",
@@ -212,12 +213,12 @@ impl EnvironmentCommands {
             },
 
             EnvironmentCommands::Envs if !Feature::Env.is_forwarded()? => {
-                let dot_flox_dir = DotFloxDir::discover(std::env::current_dir().unwrap())?;
-                let envs = dot_flox_dir.environments()?.into_iter();
+                let env = Environment::discover(std::env::current_dir().unwrap())?;
 
-                println!("Envs in {:?}", dot_flox_dir.path());
-                for env in envs {
-                    println!("- {env}", env = env.environment_ref());
+                if let Some(env) = env {
+                    println!("Env {} in {:?}", env.environment_ref(), env.flox_nix_path());
+                } else {
+                    println!();
                 }
             },
 
@@ -299,7 +300,8 @@ impl EnvironmentCommands {
                 let environment_ref: environment_ref::EnvironmentRef =
                     resolve_environment_ref(&flox, "wipe-history", environment_name).await?;
 
-                let env = environment_ref.to_env().context("Environment not found")?;
+                let env = Environment::open(current_dir().unwrap(), environment_ref)
+                    .context("Environment not found")?;
 
                 if env.delete_symlinks()? {
                     // The flox nix instance is created with `--quiet --quiet`
