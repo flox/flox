@@ -41,7 +41,7 @@ pub fn init_access_tokens(
         .into_iter()
         .filter_map(|(host, v)| {
             if v.oauth_token.is_none() {
-                warn!(
+                debug!(
                     indoc! {"
                     gh config ({gh_config_file:?}): {host}: no `oauth_token` specified
                 "},
