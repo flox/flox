@@ -107,7 +107,7 @@ impl<S: State> Environment<S> {
         nix: &NixCommandLine,
         system: impl AsRef<str>,
     ) -> Result<(), EnvironmentError2> {
-        println!("building with nix ....");
+        debug!("building with nix ....");
 
         let build = Build {
             installables: [self.flake_attribute(system).into()].into(),
