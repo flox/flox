@@ -11,7 +11,7 @@ use rnix::ast::{AttrSet, Expr};
 use rowan::ast::AstNode;
 use runix::arguments::eval::EvaluationArgs;
 use runix::arguments::{BuildArgs, EvalArgs};
-use runix::command::{Build, Eval};
+use runix::command::{Build, Eval, Shell};
 use runix::command_line::{NixCommandLine, NixCommandLineRunError, NixCommandLineRunJsonError};
 use runix::flake_ref::path::PathRef;
 use runix::installable::FlakeAttribute;
@@ -530,6 +530,8 @@ pub enum EnvironmentError2 {
     UpdateManifest(std::io::Error),
     #[error("OpenManifest({0})")]
     OpenManifest(std::io::Error),
+    #[error("Activate({0})")]
+    Activate(NixCommandLineRunError),
 }
 
 /// Within a nix AST, find the first definition of an attribute set,
