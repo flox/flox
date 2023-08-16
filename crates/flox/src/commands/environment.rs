@@ -162,7 +162,7 @@ impl EnvironmentCommands {
             EnvironmentCommands::Init {
                 environment_args: _,
                 environment,
-            } => {
+            } if !Feature::Env.is_forwarded()? => {
                 let current_dir = std::env::current_dir().unwrap();
                 let home_dir = dirs::home_dir().unwrap();
 
@@ -279,7 +279,7 @@ impl EnvironmentCommands {
                 environment_args: _,
                 environment,
                 packages,
-            } => {
+            } if !Feature::Env.is_forwarded()? => {
                 let packages: Vec<_> = packages
                     .iter()
                     .map(|package| FloxPackage::parse(package, &flox.channels, DEFAULT_CHANNEL))
