@@ -278,7 +278,7 @@ pub(crate) mod interface {
     pub enum PackageCommands {
         // [c1]: only one init command
         /// initialize flox expressions for current project
-        #[bpaf(command, hide)]
+        #[bpaf(command("init-package"), hide)]
         InitPackage(#[bpaf(external(WithPassthru::parse))] WithPassthru<Init>),
 
         /// build package from current project
