@@ -2,6 +2,7 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use flox_types::catalog::{CatalogEntry, EnvCatalog};
+use log::debug;
 use rnix::ast::{AttrSet, Expr};
 use rowan::ast::AstNode;
 use runix::arguments::eval::EvaluationArgs;
