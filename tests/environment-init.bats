@@ -87,7 +87,7 @@ setup_file() {
   assert_success
 
   assert_output - <<EOF
-✨ created environment test ($FLOX_SYSTEM)
+✨ created environment test ($NIX_SYSTEM)
 
 Enter the environment with "flox activate"
 Search and install packages with "flox search {packagename}" and "flox install {packagename}"
