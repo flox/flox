@@ -384,6 +384,15 @@ function temporaryMigrateGitHubTo030Floxdev() {
 		done
 		neworigin="${git_base_url}$organization/$reponame"
 		if ${invoke_gum?} confirm "Migrate to $neworigin?"; then
+			# Start by logging them into floxhub using github.com OAuth.
+			info "Great - let's start by getting you logged into floxHub"
+			info "using your GitHub credential. Note that this does _not_"
+			info "provide flox with any access to your data on GitHub."
+			if organization="$(checkFloxGhAuth "github.com")"; then
+				info "Success! You are logged in as $organization."
+			else
+				error '%s' "could not log in to $neworigin" </dev/null
+			fi
 			# Pull in latest data from old origin.
 			$invoke_git -C "$workDir" remote add oldorigin $origin
 			floxmetaHelperGit -C "$workDir" fetch --quiet oldorigin
