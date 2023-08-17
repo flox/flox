@@ -3,7 +3,7 @@
 	name = Flox User
 	email = floxuser@example.invalid
 
-[credential "https://git.saas.floxdev.com/"]
+[credential "https://git.hub.flox.dev/"]
 	helper = "!{flox_gh_bin} auth token --git-credential-helper"
 
 # Temporary while we transition to flox gitforge.

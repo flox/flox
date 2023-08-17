@@ -3,4 +3,4 @@
 # User-specific overrides in ~/.config/flox/flox.toml.
 
 # TODO: change to "https://meta.flox.dev/" or similar, stop relying on ssh.
-git_base_url = "https://git.saas.floxdev.com/"
+git_base_url = "https://git.hub.flox.dev/"
