@@ -470,7 +470,7 @@ EOF
 		$_git -C $workDir add $nextGen/pkgs/default/flox.nix
 
 		local envPackage
-		if ! envPackage=$($invoke_nix "${_nixArgs[@]}" build --impure --no-link --print-out-paths -L "$workDir/$nextGen#.floxEnvs.$system.default" "${_floxFlakeArgs[@]}"); then
+		if ! envPackage=$($invoke_nix "${_nixArgs[@]}" build --impure --no-link --print-out-paths "$workDir/$nextGen#.floxEnvs.$system.default" "${_floxFlakeArgs[@]}"); then
 			error "failed to install packages: ${pkgArgs[@]}" < /dev/null
 		fi
 
