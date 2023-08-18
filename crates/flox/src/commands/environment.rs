@@ -8,7 +8,12 @@ use std::str::FromStr;
 use anyhow::{bail, Context, Result};
 use bpaf::{construct, Bpaf, Parser, ShellComp};
 use flox_rust_sdk::flox::{EnvironmentName, Flox};
-use flox_rust_sdk::models::environment::{Environment, Read};
+use flox_rust_sdk::models::environment::{
+    Environment,
+    Original,
+    PathEnvironment,
+    TemporaryEnvironment,
+};
 use flox_rust_sdk::models::environment_ref;
 use flox_rust_sdk::nix::arguments::eval::EvaluationArgs;
 use flox_rust_sdk::nix::command::{Shell, StoreGc};
@@ -62,22 +67,22 @@ impl EnvironmentCommands {
                 environment,
                 file,
             } if !Feature::Env.is_forwarded()? => 'edit: {
-                let environment =
+                let mut environment =
                     resolve_environment(&flox, environment.as_deref(), "install").await?;
-                let mut environment = environment
+                let mut temporary_environment = environment
                     .modify_in(tempfile::tempdir_in(&flox.temp_dir).unwrap().into_path())
                     .await?;
 
                 let nix = flox.nix(Default::default());
 
                 if let Some(file) = file {
-                    let file: Box<dyn std::io::Read> = if file == Path::new("-") {
+                    let file: Box<dyn std::io::Read + Send> = if file == Path::new("-") {
                         Box::new(stdin())
                     } else {
                         Box::new(File::open(file).unwrap())
                     };
 
-                    environment
+                    temporary_environment
                         .set_environment(file, &nix, &flox.system)
                         .await?;
                     break 'edit;
@@ -89,14 +94,14 @@ impl EnvironmentCommands {
                 }
 
                 loop {
-                    let path = environment.flox_nix_path();
+                    let path = temporary_environment.flox_nix_path();
                     let mut command = Command::new(&editor);
                     command.arg(&path);
 
                     let child = command.spawn().context("editor command failed")?;
                     let _ = child.wait_with_output().context("editor command failed")?;
 
-                    match environment
+                    match temporary_environment
                         .set_environment(
                             std::fs::read_to_string(&path).unwrap().as_bytes(),
                             &nix,
@@ -125,8 +130,8 @@ impl EnvironmentCommands {
                     };
                 }
                 environment
-                    .finish()
-                    .context("Failed applying environemnt changes")?;
+                    .replace_with(temporary_environment)
+                    .context("Failed applying environment changes")?;
             },
 
             EnvironmentCommands::Destroy { environment, .. } if !Feature::Env.is_forwarded()? => {
@@ -179,7 +184,9 @@ impl EnvironmentCommands {
 
                 let name = EnvironmentName::from_str(&name)?;
 
-                let env = Environment::init(&current_dir, name).await?;
+                let env =
+                    PathEnvironment::<Original>::init(&current_dir, name, flox.temp_dir.clone())
+                        .await?;
 
                 println!(
                     indoc::indoc! {"
@@ -225,7 +232,10 @@ impl EnvironmentCommands {
             },
 
             EnvironmentCommands::Envs if !Feature::Env.is_forwarded()? => {
-                let env = Environment::discover(std::env::current_dir().unwrap())?;
+                let env = PathEnvironment::<Original>::discover(
+                    std::env::current_dir().unwrap(),
+                    flox.temp_dir.clone(),
+                )?;
 
                 if let Some(env) = env {
                     println!("{}", env.environment_ref());
@@ -247,7 +257,7 @@ impl EnvironmentCommands {
                     .dedup()
                     .collect();
 
-                let environment =
+                let mut environment =
                     resolve_environment(&flox, environment.as_deref(), "install").await?;
 
                 // todo use set?
@@ -262,17 +272,10 @@ impl EnvironmentCommands {
                 //     anyhow::bail!("{installed} is already installed");
                 // }
 
-                let mut environment = environment
-                    .modify_in(tempfile::tempdir_in(&flox.temp_dir).unwrap().into_path())
-                    .await
-                    .context("Could not make modifyable copy of environment")?;
-
                 environment
                     .install(packages, &flox.nix(Default::default()), &flox.system)
                     .await
                     .context("could not install packages")?;
-
-                environment.finish().context("Could not apply changes")?;
             },
 
             EnvironmentCommands::Uninstall {
@@ -288,19 +291,13 @@ impl EnvironmentCommands {
                     .dedup()
                     .collect();
 
-                let environment =
+                let mut environment =
                     resolve_environment(&flox, environment.as_deref(), "install").await?;
-                let mut environment = environment
-                    .modify_in(tempfile::tempdir_in(&flox.temp_dir).unwrap().into_path())
-                    .await
-                    .context("Could not make modifyable copy of environment")?;
 
                 environment
                     .uninstall(packages, &flox.nix(Default::default()), &flox.system)
                     .await
                     .context("could not uninstall packages")?;
-
-                environment.finish().context("Could not apply changes")?;
             },
 
             EnvironmentCommands::WipeHistory {
@@ -312,8 +309,12 @@ impl EnvironmentCommands {
                 let environment_ref: environment_ref::EnvironmentRef =
                     resolve_environment_ref(&flox, "wipe-history", environment_name).await?;
 
-                let env = Environment::open(current_dir().unwrap(), environment_ref)
-                    .context("Environment not found")?;
+                let env = PathEnvironment::<Original>::open(
+                    current_dir().unwrap(),
+                    environment_ref,
+                    flox.temp_dir.clone(),
+                )
+                .context("Environment not found")?;
 
                 if env.delete_symlinks()? {
                     // The flox nix instance is created with `--quiet --quiet`
@@ -347,10 +348,10 @@ async fn resolve_environment<'flox>(
     flox: &'flox Flox,
     environment_name: Option<&str>,
     subcommand: &str,
-) -> Result<Environment<Read>, anyhow::Error> {
+) -> Result<PathEnvironment<Original>, anyhow::Error> {
     let environment_ref = resolve_environment_ref(flox, subcommand, environment_name).await?;
     let environment = environment_ref
-        .to_env()
+        .to_env(flox.temp_dir.clone())
         .context("Could not use environment")?;
     Ok(environment)
 }
