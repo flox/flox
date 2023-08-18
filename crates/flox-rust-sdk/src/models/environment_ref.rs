@@ -1,11 +1,12 @@
 use std::fmt::Display;
+use std::path::PathBuf;
 use std::str::FromStr;
 
 use derive_more::{AsRef, Deref, Display};
 use runix::installable::FlakeAttribute;
 use thiserror::Error;
 
-use super::environment::{Environment, EnvironmentError2, Read};
+use super::environment::{Environment, EnvironmentError2, Original, PathEnvironment};
 use crate::flox::Flox;
 use crate::providers::git::GitProvider;
 
@@ -91,8 +92,11 @@ impl EnvironmentRef {
         flox: &Flox,
         environment_name: Option<&str>,
     ) -> Result<(Vec<EnvironmentRef>), EnvironmentError2> {
-        let discovered = Environment::discover(std::env::current_dir().unwrap())?
-            .map(|env| env.environment_ref().clone());
+        let discovered = PathEnvironment::<Original>::discover(
+            std::env::current_dir().unwrap(),
+            flox.temp_dir.clone(),
+        )?
+        .map(|env| env.environment_ref().clone());
 
         let searched = environment_name
             .map(|n| n.parse::<EnvironmentRef>())
@@ -123,14 +127,21 @@ impl EnvironmentRef {
         &self,
         flox: &'flox Flox,
     ) -> Result<FlakeAttribute, EnvironmentError2> {
-        let env = self.to_env()?;
+        let env = self.to_env(flox.temp_dir.clone())?;
         Ok(env.flake_attribute(&flox.system))
     }
 
     // only used by some autocompletion logic
     // TODO: remove?
-    pub fn to_env(&self) -> Result<Environment<Read>, EnvironmentError2> {
-        let env = Environment::open(std::env::current_dir().unwrap(), self.clone())?;
+    pub fn to_env(
+        &self,
+        temp_dir: PathBuf,
+    ) -> Result<PathEnvironment<Original>, EnvironmentError2> {
+        let env = PathEnvironment::<Original>::open(
+            std::env::current_dir().unwrap(),
+            self.clone(),
+            temp_dir,
+        )?;
         Ok(env)
     }
 

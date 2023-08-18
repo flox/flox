@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
+use async_trait::async_trait;
 use flox_types::catalog::{CatalogEntry, EnvCatalog};
 use log::debug;
 use rnix::ast::{AttrSet, Expr};
@@ -33,75 +34,91 @@ pub enum InstalledPackage {
     StorePath(StorePath),
 }
 
-/// Struct representing a local environment in a given location and state
+#[async_trait(?Send)]
+pub trait Environment {
+    type ConcreteTemporary;
+
+    async fn build(
+        &self,
+        nix: &NixCommandLine,
+        system: impl AsRef<str>,
+    ) -> Result<(), EnvironmentError2>;
+    async fn install(
+        &mut self,
+        packages: impl IntoIterator<Item = FloxPackage>,
+        nix: &NixCommandLine,
+        system: impl AsRef<str> + Send,
+    ) -> Result<&mut Self, EnvironmentError2>;
+    async fn uninstall(
+        &mut self,
+        packages: impl IntoIterator<Item = FloxPackage>,
+        nix: &NixCommandLine,
+        system: impl AsRef<str> + Send,
+    ) -> Result<&mut Self, EnvironmentError2>;
+    fn environment_ref(&self) -> &EnvironmentRef;
+    async fn catalog(
+        &self,
+        nix: &NixCommandLine,
+        system: impl AsRef<str>,
+    ) -> Result<EnvCatalog, EnvironmentError2>;
+    async fn packages(
+        &self,
+        _nix: &NixCommandLine,
+        _system: impl AsRef<str>,
+    ) -> Result<Vec<FloxPackage>, EnvironmentError2>;
+    async fn modify_in(
+        &mut self,
+        path: impl AsRef<Path>,
+    ) -> Result<Self::ConcreteTemporary, EnvironmentError2>;
+    fn replace_with(
+        &mut self,
+        temporary_environment: Self::ConcreteTemporary,
+    ) -> Result<(), EnvironmentError2>;
+}
+
+#[async_trait]
+pub trait TemporaryEnvironment {
+    async fn set_environment(
+        &mut self,
+        mut flox_nix_content: impl std::io::Read + Send,
+        nix: &NixCommandLine,
+        system: impl AsRef<str> + Send,
+    ) -> Result<(), EnvironmentError2>;
+}
+
+/// Struct representing a local environment in a given location
 #[derive(Debug)]
-pub struct Environment<S> {
+pub struct PathEnvironment<S: EnvironmentState> {
     /// absolute path to the environment, typically within `<...>/.flox/name`
     path: PathBuf,
-    /// Access state of the environment
-    ///
-    /// Implementations distinguish whether whe can [Modify] or only [Read] an environment
+    environment_ref: EnvironmentRef,
     state: S,
 }
 
-impl<S> PartialEq for Environment<S> {
+/// Changes to environments should be atomic,
+/// so that possibly breaking modifications to the environment can be safely discarded.
+/// When environment objects are created with [EnvironmentState] [Original] they
+/// are in a "reading" state.
+/// To make modifications we copy the environment into a temporary sandbox.
+/// Within the sandbox we can make modifications and verify them by building the environment.
+/// When verified, we can move the sandboxed environment back to its original location.
+#[derive(Debug)]
+pub struct Original {
+    /// directory to create temporary environments in (usually flox.temp_dir)
+    temp_dir: PathBuf,
+}
+pub struct Temporary;
+pub trait EnvironmentState {}
+impl EnvironmentState for Original {}
+impl EnvironmentState for Temporary {}
+
+impl<S: EnvironmentState> PartialEq for PathEnvironment<S> {
     fn eq(&self, other: &Self) -> bool {
         self.path == other.path
     }
 }
 
-/// Implementation for an environment in any state
-impl<S: State> Environment<S> {
-    /// Get the environment ref for this environment
-    pub fn environment_ref(&self) -> &EnvironmentRef {
-        self.state.environment_ref()
-    }
-
-    /// Turn the environment into a flake attribute,
-    /// a precise url to interact with the environment via nix
-    ///
-    /// ```
-    /// # tokio_test::block_on(async {
-    /// # use flox_rust_sdk::models::environment::{Environment, Read};
-    /// # use std::path::PathBuf;
-    /// # let tempdir = tempfile::tempdir().unwrap();
-    /// # let path = tempdir.path().canonicalize().unwrap().to_string_lossy().into_owned();
-    /// # let system = "aarch64-darwin";
-    ///
-    /// let env = Environment::init(&path, "test_env".parse().unwrap())
-    ///     .await
-    ///     .unwrap();
-    ///
-    /// let flake_attribute = format!("path:{path}/.flox/test_env#.floxEnvs.{system}.default")
-    ///     .parse()
-    ///     .unwrap();
-    /// assert_eq!(env.flake_attribute(system), flake_attribute)
-    ///
-    /// # })
-    /// ```
-    pub fn flake_attribute(&self, system: impl AsRef<str>) -> FlakeAttribute {
-        let flakeref = PathRef {
-            path: self.path.clone(),
-            attributes: Default::default(),
-        }
-        .into();
-
-        let attr_path = ["", "floxEnvs", system.as_ref(), "default"]
-            .try_into()
-            .unwrap(); // validated attributes
-
-        FlakeAttribute {
-            flakeref,
-            attr_path,
-            outputs: Default::default(),
-        }
-    }
-
-    /// Path to the environment definition file
-    pub fn flox_nix_path(&self) -> PathBuf {
-        self.path.join("pkgs").join("default").join("flox.nix")
-    }
-
+impl<S: EnvironmentState> PathEnvironment<S> {
     /// Build the evironment derivation using nix
     async fn build(
         &self,
@@ -130,212 +147,33 @@ impl<S: State> Environment<S> {
 
         Ok(())
     }
+}
 
-    /// Get a catalog of installed packages from the environment
-    ///
-    /// Evaluated using nix from the environment definition.
-    pub async fn catalog(
+#[async_trait(?Send)]
+impl Environment for PathEnvironment<Original> {
+    type ConcreteTemporary = PathEnvironment<Temporary>;
+
+    async fn build(
         &self,
         nix: &NixCommandLine,
         system: impl AsRef<str>,
-    ) -> Result<EnvCatalog, EnvironmentError2> {
-        let mut flake_attribute = self.flake_attribute(system);
-        flake_attribute.attr_path.push_attr("catalog").unwrap(); // valid attribute name, should not fail
-
-        let eval = Eval {
-            eval: EvaluationArgs {
-                impure: true.into(),
-                ..Default::default()
-            },
-            eval_args: EvalArgs {
-                installable: Some(flake_attribute.into()),
-                apply: None,
-            },
-            ..Eval::default()
-        };
-
-        let catalog_value: serde_json::Value = eval
-            .run_json(nix, &Default::default())
-            .await
-            .map_err(EnvironmentError2::EvalCatalog)?;
-
-        serde_json::from_value(catalog_value).map_err(EnvironmentError2::ParseCatalog)
+    ) -> Result<(), EnvironmentError2> {
+        self.build(nix, system).await
     }
 
-    /// List all Packages in the environment
-    ///
-    /// Currently unused, supposed to be a cleaned up version of [`Environment<_>::catalog`]
-    pub async fn packages(
-        &self,
-        _nix: &NixCommandLine,
-        _system: impl AsRef<str>,
-    ) -> Result<Vec<FloxPackage>, EnvironmentError2> {
-        todo!()
-    }
-
-    /// Remove gc-roots
-    ///
-    /// Currently stubbed out due to missing activation that could need linked results
-    pub fn delete_symlinks(&self) -> Result<bool, EnvironmentError2> {
-        // todo
-        Ok(false)
-    }
-}
-
-/// Implementations for environments in a "reading" state.
-///
-/// Changes to environments should be atomic,
-/// so that possibly breaking modifications to the environment can be safely discarded.
-/// When environment objects are created they are in a "reading" state.
-/// To make modifications we copy the environment into a temporary sandbox.
-/// Within the sandbox we can make modifications and verify them by building the environment.
-/// When verified, we can move the sandboxed environment back to its original location.
-impl Environment<Read> {
-    /// Open an environment at a given path
-    ///
-    /// Ensure that the path exists and contains files that "look" like an environment
-    pub fn open(path: impl AsRef<Path>, ident: EnvironmentRef) -> Result<Self, EnvironmentError2> {
-        let path = path.as_ref().to_path_buf();
-        let dot_flox_path = path.join(".flox");
-        let env_path = dot_flox_path.join(ident.name().as_ref());
-
-        if !env_path.exists() {
-            Err(EnvironmentError2::EnvNotFound)?
-        }
-
-        if !env_path.is_dir() {
-            Err(EnvironmentError2::EnvNotADirectory)?
-        }
-
-        let env_path = env_path
-            .canonicalize()
-            .map_err(EnvironmentError2::EnvCanonicalize)?;
-        if !env_path.join("flake.nix").exists() {
-            Err(EnvironmentError2::DirectoryNotAnEnv)?
-        }
-
-        Ok(Self {
-            path: env_path,
-            state: Read { ident },
-        })
-    }
-
-    /// Find the closest `.flox` starting with `current_dir`
-    /// and looking up ancestor directories until `/`
-    pub fn discover(current_dir: impl AsRef<Path>) -> Result<Option<Self>, EnvironmentError2> {
-        let dot_flox = current_dir
-            .as_ref()
-            .ancestors()
-            .find(|ancestor| ancestor.join(".flox").exists());
-
-        let dot_flox = if let Some(dot_flox) = dot_flox {
-            dot_flox
-        } else {
-            return Ok(None);
-        };
-
-        // assume only one entry in .flox
-        let env = dot_flox
-            .join(".flox")
-            .read_dir()
-            .map_err(EnvironmentError2::ReadDotFlox)?
-            .next()
-            .ok_or(EnvironmentError2::EmptyDotFlox)?
-            .map_err(EnvironmentError2::ReadEnvDir)?;
-
-        let name = EnvironmentName::from_str(&env.file_name().to_string_lossy())
-            .map_err(EnvironmentError2::ParseEnvRef)?;
-
-        Some(Self::open(
-            current_dir,
-            EnvironmentRef::new_from_parts(None, name),
-        ))
-        .transpose()
-    }
-
-    /// Create a new env in a `.flox` directory within a specific path or open it if it exists.
-    ///
-    /// The method creates or opens a `.flox` directory _contained_ within `path`!
-    pub async fn init(
-        path: impl AsRef<Path>,
-        name: EnvironmentName,
-    ) -> Result<Self, EnvironmentError2> {
-        if Self::open(&path, EnvironmentRef::new_from_parts(None, name.clone())).is_ok() {
-            Err(EnvironmentError2::EnvironmentExists)?;
-        }
-
-        let env_dir = path.as_ref().join(".flox").join(name.as_ref());
-
-        std::fs::create_dir_all(&env_dir).map_err(EnvironmentError2::InitEnv)?;
-
-        cp_r(env!("FLOX_ENV_TEMPLATE"), &env_dir)
-            .await
-            .map_err(EnvironmentError2::InitEnv)?;
-
-        Self::open(path, EnvironmentRef::new_from_parts(None, name))
-    }
-
-    /// Copy the environment to a sandbox directory given by `path`
-    ///
-    /// Typically within [Flox.temp_dir].
-    /// This implementation tries to stay independent of the [Flox] struct for now.
-    pub async fn modify_in(
-        self,
-        path: impl AsRef<Path>,
-    ) -> Result<Environment<Modify>, EnvironmentError2> {
-        cp_r(&self.path, &path)
-            .await
-            .map_err(EnvironmentError2::MakeSandbox)?;
-
-        Ok(Environment {
-            path: path.as_ref().to_path_buf(),
-            state: Modify { origin: self },
-        })
-    }
-
-    /// Delete the environment
-    ///
-    /// While destructive, no transaction is needed to verify changes.
-    pub fn delete(self) -> Result<(), EnvironmentError2> {
-        std::fs::remove_dir_all(self.path).map_err(EnvironmentError2::DeleteEnvironement)?;
-        Ok(())
-    }
-}
-
-/// Implementations for environments in a "modifiable" state.
-///
-/// Created by [`Environment<Read>::modify_in`].
-/// Provides methods to edit the environment definition file
-/// and commit changes back to the original location of the environemnt.
-impl Environment<Modify> {
-    /// Low level method replacing the definition file content.
-    /// After writing the file, we verify if by trying to build the environment.
-    ///
-    /// This might be deferred to the [`Environment<Modify>::finish`] method in the future.
-    pub async fn set_environment(
-        &mut self,
-        mut flox_nix_content: impl std::io::Read,
-        nix: &NixCommandLine,
-        system: impl AsRef<str>,
-    ) -> Result<&mut Self, EnvironmentError2> {
-        let mut flox_nix = std::fs::OpenOptions::new()
-            .write(true)
-            .truncate(true)
-            .open(self.flox_nix_path())
-            .unwrap();
-        std::io::copy(&mut flox_nix_content, &mut flox_nix).unwrap();
-        self.build(nix, system).await?; // unwrap
-        Ok(self)
+    /// Get the environment ref for this environment
+    fn environment_ref(&self) -> &EnvironmentRef {
+        &self.environment_ref
     }
 
     /// Install packages by converting a [FloxPackage]s into attributes in the `flox.nix` format,
     /// and then using [`rnix`](https://crates.io/crates/rnix) to merge these attributes into the
     /// environment definition file.
-    pub async fn install(
+    async fn install(
         &mut self,
         packages: impl IntoIterator<Item = FloxPackage>,
         nix: &NixCommandLine,
-        system: impl AsRef<str>,
+        system: impl AsRef<str> + Send,
     ) -> Result<&mut Self, EnvironmentError2> {
         let packages = packages
             .into_iter()
@@ -377,18 +215,28 @@ impl Environment<Modify> {
             .replace_with(edited.syntax().green().into_owned());
         let new_content = nixpkgs_fmt::reformat_string(&green_tree.to_string());
 
-        self.set_environment(new_content.as_bytes(), nix, system)
-            .await
+        let mut temporary_environment = self
+            .modify_in(
+                tempfile::tempdir_in(self.state.temp_dir.clone())
+                    .unwrap()
+                    .into_path(),
+            )
+            .await?;
+        temporary_environment
+            .set_environment(new_content.as_bytes(), nix, system)
+            .await?;
+        self.replace_with(temporary_environment)?;
+        Ok(self)
     }
 
     /// Uninstall packages by converting a [FloxPackage]s into attributes in the `flox.nix` format,
     /// and then using [`rnix`](https://crates.io/crates/rnix) to remove these attributes from the
     /// environment definition file.
-    pub async fn uninstall(
+    async fn uninstall(
         &mut self,
         packages: impl IntoIterator<Item = FloxPackage>,
         nix: &NixCommandLine,
-        system: impl AsRef<str>,
+        system: impl AsRef<str> + Send,
     ) -> Result<&mut Self, EnvironmentError2> {
         let packages = packages
             .into_iter()
@@ -426,49 +274,290 @@ impl Environment<Modify> {
         let green_tree = config_attrset.syntax().replace_with(edited);
         let new_content = nixpkgs_fmt::reformat_string(&green_tree.to_string());
 
-        self.set_environment(dbg!(new_content).as_bytes(), nix, system)
+        let mut temporary_environment = self
+            .modify_in(
+                tempfile::tempdir_in(self.state.temp_dir.clone())
+                    .unwrap()
+                    .into_path(),
+            )
+            .await?;
+        temporary_environment
+            .set_environment(new_content.as_bytes(), nix, system)
+            .await?;
+        self.replace_with(temporary_environment)?;
+        Ok(self)
+    }
+
+    /// Get a catalog of installed packages from the environment
+    ///
+    /// Evaluated using nix from the environment definition.
+    async fn catalog(
+        &self,
+        nix: &NixCommandLine,
+        system: impl AsRef<str>,
+    ) -> Result<EnvCatalog, EnvironmentError2> {
+        let mut flake_attribute = self.flake_attribute(system);
+        flake_attribute.attr_path.push_attr("catalog").unwrap(); // valid attribute name, should not fail
+
+        let eval = Eval {
+            eval: EvaluationArgs {
+                impure: true.into(),
+                ..Default::default()
+            },
+            eval_args: EvalArgs {
+                installable: Some(flake_attribute.into()),
+                apply: None,
+            },
+            ..Eval::default()
+        };
+
+        let catalog_value: serde_json::Value = eval
+            .run_json(nix, &Default::default())
             .await
+            .map_err(EnvironmentError2::EvalCatalog)?;
+
+        serde_json::from_value(catalog_value).map_err(EnvironmentError2::ParseCatalog)
+    }
+
+    /// List all Packages in the environment
+    ///
+    /// Currently unused, supposed to be a cleaned up version of [`Environment<_>::catalog`]
+    async fn packages(
+        &self,
+        _nix: &NixCommandLine,
+        _system: impl AsRef<str>,
+    ) -> Result<Vec<FloxPackage>, EnvironmentError2> {
+        todo!()
+    }
+
+    /// Copy the environment to a sandbox directory given by `path`
+    ///
+    /// Typically within [Flox.temp_dir].
+    /// This implementation tries to stay independent of the [Flox] struct for now.
+    async fn modify_in(
+        &mut self,
+        path: impl AsRef<Path>,
+    ) -> Result<PathEnvironment<Temporary>, EnvironmentError2> {
+        cp_r(&self.path, &path)
+            .await
+            .map_err(EnvironmentError2::MakeSandbox)?;
+
+        Ok(PathEnvironment {
+            path: path.as_ref().to_path_buf(),
+            environment_ref: self.environment_ref.clone(),
+            state: Temporary,
+        })
     }
 
     /// Commmit changes, by moving modified files back to the original (read only) location
-    pub fn finish(self) -> Result<Environment<Read>, EnvironmentError2> {
+    fn replace_with(
+        &mut self,
+        temporary_environment: PathEnvironment<Temporary>,
+    ) -> Result<(), EnvironmentError2> {
         fs_extra::dir::move_dir(
-            &self.path,
-            &self.state.origin.path,
+            temporary_environment.path,
+            self.path.clone(),
             &fs_extra::dir::CopyOptions::new()
                 .overwrite(true)
                 .content_only(true),
         )
         .expect("replace origin");
-        Ok(self.state.origin)
+        Ok(())
     }
 }
 
-/// Access Environment Metadata stored within the State ([Read]/[Modify])
-pub trait State {
-    fn environment_ref(&self) -> &EnvironmentRef;
-}
+impl<S: EnvironmentState> PathEnvironment<S> {
+    /// Remove gc-roots
+    ///
+    /// Currently stubbed out due to missing activation that could need linked results
+    pub fn delete_symlinks(&self) -> Result<bool, EnvironmentError2> {
+        // todo
+        Ok(false)
+    }
 
-#[derive(Debug, PartialEq)]
-pub struct Read {
-    ident: EnvironmentRef,
-}
+    /// Turn the environment into a flake attribute,
+    /// a precise url to interact with the environment via nix
+    ///
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// # use flox_rust_sdk::models::environment::{Original,PathEnvironment};
+    /// # use std::path::PathBuf;
+    /// # let tempdir = tempfile::tempdir().unwrap();
+    /// # let environment_temp_dir = tempfile::tempdir().unwrap();
+    /// # let path = tempdir.path().canonicalize().unwrap().to_string_lossy().into_owned();
+    /// # let system = "aarch64-darwin";
+    ///
+    /// let env = PathEnvironment::<Original>::init(
+    ///     &path,
+    ///     "test_env".parse().unwrap(),
+    ///     environment_temp_dir.into_path(),
+    /// )
+    /// .await
+    /// .unwrap();
+    ///
+    /// let flake_attribute = format!("path:{path}/.flox/test_env#.floxEnvs.{system}.default")
+    ///     .parse()
+    ///     .unwrap();
+    /// assert_eq!(env.flake_attribute(system), flake_attribute)
+    ///
+    /// # })
+    /// ```
+    pub fn flake_attribute(&self, system: impl AsRef<str>) -> FlakeAttribute {
+        let flakeref = PathRef {
+            path: self.path.clone(),
+            attributes: Default::default(),
+        }
+        .into();
 
-impl State for Read {
-    fn environment_ref(&self) -> &EnvironmentRef {
-        &self.ident
+        let attr_path = ["", "floxEnvs", system.as_ref(), "default"]
+            .try_into()
+            .unwrap(); // validated attributes
+
+        FlakeAttribute {
+            flakeref,
+            attr_path,
+            outputs: Default::default(),
+        }
+    }
+
+    /// Path to the environment definition file
+    pub fn flox_nix_path(&self) -> PathBuf {
+        self.path.join("pkgs").join("default").join("flox.nix")
+    }
+
+    /// Open an environment at a given path
+    ///
+    /// Ensure that the path exists and contains files that "look" like an environment
+    pub fn open(
+        path: impl AsRef<Path>,
+        ident: EnvironmentRef,
+        temp_dir: PathBuf,
+    ) -> Result<PathEnvironment<Original>, EnvironmentError2> {
+        let path = path.as_ref().to_path_buf();
+        let dot_flox_path = path.join(".flox");
+        let env_path = dot_flox_path.join(ident.name().as_ref());
+
+        if !env_path.exists() {
+            Err(EnvironmentError2::EnvNotFound)?
+        }
+
+        if !env_path.is_dir() {
+            Err(EnvironmentError2::EnvNotADirectory)?
+        }
+
+        let env_path = env_path
+            .canonicalize()
+            .map_err(EnvironmentError2::EnvCanonicalize)?;
+        if !env_path.join("flake.nix").exists() {
+            Err(EnvironmentError2::DirectoryNotAnEnv)?
+        }
+
+        Ok(PathEnvironment {
+            path: env_path,
+            environment_ref: ident,
+            state: Original { temp_dir },
+        })
+    }
+
+    /// Find the closest `.flox` starting with `current_dir`
+    /// and looking up ancestor directories until `/`
+    pub fn discover(
+        current_dir: impl AsRef<Path>,
+        temp_dir: PathBuf,
+    ) -> Result<Option<PathEnvironment<Original>>, EnvironmentError2> {
+        let dot_flox = current_dir
+            .as_ref()
+            .ancestors()
+            .find(|ancestor| ancestor.join(".flox").exists());
+
+        let dot_flox = if let Some(dot_flox) = dot_flox {
+            dot_flox
+        } else {
+            return Ok(None);
+        };
+
+        // assume only one entry in .flox
+        let env = dot_flox
+            .join(".flox")
+            .read_dir()
+            .map_err(EnvironmentError2::ReadDotFlox)?
+            .next()
+            .ok_or(EnvironmentError2::EmptyDotFlox)?
+            .map_err(EnvironmentError2::ReadEnvDir)?;
+
+        let name = EnvironmentName::from_str(&env.file_name().to_string_lossy())
+            .map_err(EnvironmentError2::ParseEnvRef)?;
+
+        Some(Self::open(
+            current_dir,
+            EnvironmentRef::new_from_parts(None, name),
+            temp_dir,
+        ))
+        .transpose()
+    }
+
+    /// Create a new env in a `.flox` directory within a specific path or open it if it exists.
+    ///
+    /// The method creates or opens a `.flox` directory _contained_ within `path`!
+    pub async fn init(
+        path: impl AsRef<Path>,
+        name: EnvironmentName,
+        temp_dir: PathBuf,
+    ) -> Result<PathEnvironment<Original>, EnvironmentError2> {
+        if Self::open(
+            &path,
+            EnvironmentRef::new_from_parts(None, name.clone()),
+            temp_dir.clone(),
+        )
+        .is_ok()
+        {
+            Err(EnvironmentError2::EnvironmentExists)?;
+        }
+
+        let env_dir = path.as_ref().join(".flox").join(name.as_ref());
+
+        std::fs::create_dir_all(&env_dir).map_err(EnvironmentError2::InitEnv)?;
+
+        cp_r(env!("FLOX_ENV_TEMPLATE"), &env_dir)
+            .await
+            .map_err(EnvironmentError2::InitEnv)?;
+
+        Self::open(path, EnvironmentRef::new_from_parts(None, name), temp_dir)
+    }
+
+    /// Delete the environment
+    ///
+    /// While destructive, no transaction is needed to verify changes.
+    pub fn delete(self) -> Result<(), EnvironmentError2> {
+        std::fs::remove_dir_all(self.path).map_err(EnvironmentError2::DeleteEnvironement)?;
+        Ok(())
     }
 }
 
-#[derive(Debug)]
-pub struct Modify {
-    /// The original [Read]-Only Environment
-    origin: Environment<Read>,
-}
-
-impl State for Modify {
-    fn environment_ref(&self) -> &EnvironmentRef {
-        self.origin.environment_ref()
+/// Implementations for environments in a "modifiable" state.
+///
+/// Created by [`PathEnvironment<Original>::modify_in`].
+/// Allows editing the environment definition file.
+#[async_trait]
+impl TemporaryEnvironment for PathEnvironment<Temporary> {
+    /// Low level method replacing the definition file content.
+    /// After writing the file, we verify if by trying to build the environment.
+    ///
+    /// This might be deferred to the [`PathEnvironment<Original>::replace_with`] method in the future.
+    async fn set_environment(
+        &mut self,
+        mut flox_nix_content: impl std::io::Read + Send,
+        nix: &NixCommandLine,
+        system: impl AsRef<str> + Send,
+    ) -> Result<(), EnvironmentError2> {
+        let mut flox_nix = std::fs::OpenOptions::new()
+            .write(true)
+            .truncate(true)
+            .open(self.flox_nix_path())
+            .unwrap();
+        std::io::copy(&mut flox_nix_content, &mut flox_nix).unwrap();
+        self.build(nix, system).await?; // unwrap
+        Ok(())
     }
 }
 
@@ -538,18 +627,16 @@ async fn cp_r(from: impl AsRef<Path>, to: &impl AsRef<Path>) -> Result<(), std::
 
 #[cfg(test)]
 mod tests {
-    use flox_types::stability::Stability;
-    use indoc::indoc;
-
     use super::*;
-    use crate::flox::tests::flox_instance;
 
     #[tokio::test]
     async fn create_env() {
         let tempdir = tempfile::tempdir().unwrap();
-        let before = Environment::open(
+        let environment_temp_dir = tempfile::tempdir().unwrap();
+        let before = PathEnvironment::<Original>::open(
             tempdir.path(),
             EnvironmentRef::new_from_parts(None, EnvironmentName::from_str("test").unwrap()),
+            environment_temp_dir.path().to_path_buf(),
         );
 
         assert!(
@@ -557,21 +644,26 @@ mod tests {
             "{before:?}"
         );
 
-        let expected = Environment {
+        let expected = PathEnvironment {
             path: tempdir
                 .path()
                 .to_path_buf()
                 .canonicalize()
                 .unwrap()
                 .join(".flox/test"),
-            state: Read {
-                ident: EnvironmentRef::new(None, "test").unwrap(),
+            environment_ref: EnvironmentRef::new(None, "test").unwrap(),
+            state: Original {
+                temp_dir: environment_temp_dir.path().to_path_buf(),
             },
         };
 
-        let actual = Environment::init(tempdir.path(), EnvironmentName::from_str("test").unwrap())
-            .await
-            .unwrap();
+        let actual = PathEnvironment::<Original>::init(
+            tempdir.path(),
+            EnvironmentName::from_str("test").unwrap(),
+            environment_temp_dir.into_path(),
+        )
+        .await
+        .unwrap();
 
         assert_eq!(actual, expected);
 
@@ -594,9 +686,14 @@ mod tests {
     #[tokio::test]
     async fn flake_attribute() {
         let tempdir = tempfile::tempdir().unwrap();
-        let env: Environment<Read> = Environment::init(tempdir.path(), "test".parse().unwrap())
-            .await
-            .unwrap();
+        let environment_temp_dir = tempfile::tempdir().unwrap();
+        let env = PathEnvironment::<Original>::init(
+            tempdir.path(),
+            "test".parse().unwrap(),
+            environment_temp_dir.into_path(),
+        )
+        .await
+        .unwrap();
 
         assert_eq!(
             env.flake_attribute("aarch64-darwin").to_string(),
