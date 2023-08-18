@@ -351,6 +351,56 @@ function temporaryAssert009LinkLayout() {
 }
 # /XXX
 
+# floxmetaHelperGit($remoteName, $cloneDir)
+#
+# Invokes git in provided directory with appropriate helper configured.
+#
+# First argument is the name of the remote for which "help" is needed,
+# and the second argument is the directory of the git clone.
+function floxmetaHelperGit() {
+	trace "$@"
+	local remoteName="$1"; shift
+	local cloneDir="$1"; shift
+
+	# Invoke helper differently based on floxmeta clone remote URL.  Access
+	# to github.com should *supplement* the user's git config with the `gh`
+	# git-credential helper, while access to floxHub should *override* all
+	# user git config with flox-provided defaults.
+	local remoteURL
+	remoteURL="$(
+		$_git -C "$cloneDir" config --get "remote.$remoteName.url" || :
+	)"
+	case "$remoteURL" in
+	https://git.hub.flox.dev/*)
+		# floxHub: override all user-supplied git configuration by fully
+		# specifying GIT_CONFIG_* variables. Note: we are avoiding use of
+		# the deprecated GIT_CONFIG_NOSYSTEM variable as described in:
+		# https://stackoverflow.com/questions/43881807/how-to-tell-git-to-ignore-global-config
+		GIT_CONFIG_SYSTEM=/dev/null GIT_CONFIG_GLOBAL=/dev/null \
+		$invoke_git -C "$cloneDir" \
+			-c "credential.https://git.hub.flox.dev.helper=!${_flox_gh?} auth token --git-credential-helper" \
+			"$@"
+		;;
+	/*)
+		# Path-based remotes don't need a helper, but we do want to disable
+		# all user git configuration to ensure nothing interferes with our
+		# use of git.
+		GIT_CONFIG_SYSTEM=/dev/null GIT_CONFIG_GLOBAL=/dev/null \
+		$invoke_git -C "$cloneDir" \
+			"$@"
+		;;
+	*)
+		# For all others, honor the user's local git configuration and *add*
+		# the `gh` git-credential helper for github.com only as was done with
+		# previous versions of flox.
+		$invoke_git -C "$cloneDir" \
+			-c "credential.https://github.com.helper=!${_gh?} auth git-credential" \
+			"$@"
+		;;
+	esac
+
+}
+
 # XXX TEMPORARY function to migrate floxmeta repositories from
 # github.com -> git.floxdev.com
 #     **Delete after GA**
@@ -395,10 +445,10 @@ function temporaryMigrateGitHubTo030Floxdev() {
 			fi
 			# Pull in latest data from old origin.
 			$invoke_git -C "$workDir" remote add oldorigin $origin
-			floxmetaHelperGit -C "$workDir" fetch --quiet oldorigin
+			floxmetaHelperGit oldorigin "$workDir" fetch --quiet oldorigin
 			# Merely fetching the repository creates it on the new origin.
 			$invoke_git -C "$workDir" remote add neworigin $neworigin
-			floxmetaHelperGit -C "$workDir" fetch --quiet neworigin
+			floxmetaHelperGit neworigin "$workDir" fetch --quiet neworigin
 			# Push refs for each branch previously defined on the origin.
 			local branchName
 			# XXX take advantage of knowledge of internal git file layout
@@ -412,7 +462,7 @@ function temporaryMigrateGitHubTo030Floxdev() {
 					warn "$branchName already exists upstream, skipping"
 				else
 					warn "migrating branch: $branchName"
-					floxmetaHelperGit -C "$workDir" push --quiet neworigin "oldorigin/$branchName:refs/heads/$branchName"
+					floxmetaHelperGit neworigin "$workDir" push --quiet neworigin "oldorigin/$branchName:refs/heads/$branchName"
 				fi
 			done
 			if [[ -e "$workDir/.git/refs/remotes/oldorigin/floxmain" ]]; then
@@ -420,11 +470,11 @@ function temporaryMigrateGitHubTo030Floxdev() {
 				# have different clones out of sync on different hosts/systems,
 				# but otherwise don't push a branch if it already exists on
 				# the new origin.
-				floxmetaHelperGit -C "$workDir" push --force --quiet neworigin "oldorigin/floxmain:refs/heads/floxmain"
+				floxmetaHelperGit neworigin "$workDir" push --force --quiet neworigin "oldorigin/floxmain:refs/heads/floxmain"
 			fi
 			# Finally replace original origin remote with new one.
 			$invoke_git -C "$realEnvironmentMetaDir" remote set-url origin "$neworigin"
-			floxmetaHelperGit -C "$realEnvironmentMetaDir" fetch --quiet
+			floxmetaHelperGit origin "$realEnvironmentMetaDir" fetch --quiet
 			info "successfully migrated data from $origin to $neworigin .. please re-run your command"
 			exit 0
 		fi
@@ -433,17 +483,6 @@ function temporaryMigrateGitHubTo030Floxdev() {
 }
 # /XXX
 
-# floxmetaHelperGit()
-#
-# Invokes git in provided directory with appropriate helper configured.
-#
-# First argument is the name of the remote for which "help" is needed,
-# and the second argument is the directory of the git clone.
-function floxmetaHelperGit() {
-	trace "$@"
-	GIT_CONFIG_SYSTEM=/dev/null GIT_CONFIG_GLOBAL="$floxmetaGitConfig" $invoke_git "$@"
-}
-
 function metaGit() {
 	trace "$@"
 	local environment="$1"; shift
@@ -451,7 +490,7 @@ function metaGit() {
 	#     $environment{Name,Alias,Owner,System,BaseDir,BinDir,ParentDir,MetaDir}
 	eval "$(decodeEnvironment "$environment")"
 
-	floxmetaHelperGit -C "$environmentMetaDir" "$@"
+	floxmetaHelperGit origin "$environmentMetaDir" "$@"
 }
 
 # Performs a 'git show branch:file' for the purpose of fishing
@@ -885,7 +924,7 @@ function beginTransaction() {
 	if $invoke_git -C "$environmentMetaDir" show-ref                   \
 		           --quiet refs/remotes/origin/HEAD 2>/dev/null
 	then
-		floxmetaHelperGit -C "$environmentMetaDir" fetch origin
+		floxmetaHelperGit origin "$environmentMetaDir" fetch origin
 	fi
 
 	# Create an ephemeral clone.
@@ -1166,7 +1205,7 @@ function listEnvironments() {
 		      < /dev/null
 
 	# Start by updating all remotes in the clone dir.
-	floxmetaHelperGit -C "$environmentMetaDir" fetch --quiet --all
+	floxmetaHelperGit origin "$environmentMetaDir" fetch --quiet --all
 
 	# Derive all known branches. Recall branches will be of the form:
 	#   remotes/origin/x86_64-linux.default
@@ -1348,7 +1387,7 @@ function updateAvailable() {
 function _trailingAsyncFetch() {
 	trace "$@"
 	for metaDir in "$@"; do
-		floxmetaHelperGit -C "$metaDir" fetch origin || :
+		floxmetaHelperGit origin "$metaDir" fetch origin || :
 	done
 	exit 0
 }

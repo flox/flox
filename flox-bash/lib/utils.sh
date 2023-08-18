@@ -590,8 +590,11 @@ function initFloxUserMetaJSON() {
 
 	# Add floxUserMeta.json.
 	$invoke_git -C "$workDir" add floxUserMeta.json
-	# And commit, taking care to use floxmetaHelperGit for setting user email.
-	floxmetaHelperGit -C "$workDir" commit -m "$message" --quiet
+	# And commit, taking care to set user name and email to flox defaults.
+	$invoke_git -C "$workDir" \
+		-c "user.name=Flox User" \
+		-c "user.email=floxuser@example.invalid" \
+		commit -m "$message" --quiet
 
 	# Push changes back to bare repository.
 	$_git -C $workDir push --quiet origin $defaultBranch

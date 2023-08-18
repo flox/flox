@@ -1,8 +1,4 @@
 # Automatically generated - do not edit.
-[user]
-	name = Flox User
-	email = floxuser@example.invalid
-
 [credential "https://git.hub.flox.dev/"]
 	helper = "!{flox_gh_bin} auth token --git-credential-helper"
 
