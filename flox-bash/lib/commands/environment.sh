@@ -188,7 +188,7 @@ function floxList() {
 		# Remove the catalog.nix file (if found).
 		$_rm -f $newCatalogJSON
 		# Otherwise Nix eval won't be able to find any of the files.
-		$_git -C $workDir add $nextGen
+		floxmetaGit -C $workDir add $nextGen
 
 		if $invoke_nix "${_nixArgs[@]}" eval "$workDir/$nextGen#floxEnvs.$environmentSystem.default.catalog" --impure --json "${_floxFlakeArgs[@]}" > $newCatalogJSON; then
 			$invoke_jq -n -f $_lib/diff-catalogs.jq \
@@ -262,14 +262,14 @@ deleted if you build \`flox' from source and/or run the test suite.";
 
 	# To see if it already exists simply assert that the workdir doesn't
 	# already have an "origin" reference for the branch.
-	if $invoke_git -C $workDir show-ref --quiet refs/remotes/origin/"$branchName" >/dev/null; then
+	if floxmetaGitVerbose -C $workDir show-ref --quiet refs/remotes/origin/"$branchName" >/dev/null; then
 		error "environment $environmentAlias ($system) already exists" < /dev/null
 	fi
 
 	# Construct and render the new manifest.json in the metadata workDir.
 	$_cp --no-preserve=mode -rT $_lib/templateFloxEnv $workDir/$nextGen
 	# otherwise Nix build won't be able to find any of the files
-	$_git -C $workDir add $nextGen
+	floxmetaGit -C $workDir add $nextGen
 
 	local envPackage
 	if ! envPackage=$($invoke_nix "${_nixArgs[@]}" build --impure --no-link --print-out-paths "$workDir/$nextGen#.floxEnvs.$system.default" "${_floxFlakeArgs[@]}"); then
@@ -279,8 +279,8 @@ deleted if you build \`flox' from source and/or run the test suite.";
 	# catalog.json should be empty, but keep these lines for the sake of consistent boilerplate
 	$_jq . --sort-keys $envPackage/catalog.json > $workDir/$nextGen/pkgs/default/catalog.json
 	$_jq . --sort-keys $envPackage/manifest.json > $workDir/$nextGen/manifest.json
-	$_git -C $workDir add $nextGen/pkgs/default/catalog.json
-	$_git -C $workDir add $nextGen/manifest.json
+	floxmetaGit -C $workDir add $nextGen/pkgs/default/catalog.json
+	floxmetaGit -C $workDir add $nextGen/manifest.json
 
 	# Commit the transaction.
 	commitTransaction create $environment $workDir $envPackage \
@@ -418,7 +418,7 @@ function floxInstall() {
 			# Expand the compact JSON rendered by default.
 			$_jq . $environmentWorkDir/x/manifest.json > $workDir/$nextGen/manifest.json
 		fi
-		$_git -C $workDir add $nextGen/manifest.json
+		floxmetaGit -C $workDir add $nextGen/manifest.json
 
 		# Take this opportunity to compare the current and next generations before building.
 		local envPackage
@@ -446,7 +446,7 @@ EOF
 		# Then append the updated packages list derived from manifest.json.
 		echo "# $snipline" >> $workDir/$nextGen/manifest.toml
 		manifest "$workDir/$nextGen/manifest.json" listEnvironmentTOML >> $workDir/$nextGen/manifest.toml
-		$_git -C $workDir add $nextGen/manifest.toml
+		floxmetaGit -C $workDir add $nextGen/manifest.toml
 		;;
 	2)
 		# Construct and render the new manifest.json in the metadata workDir.
@@ -460,14 +460,14 @@ EOF
 			$_cp --no-preserve=mode -rT $_lib/templateFloxEnv $workDir/$nextGen
 		fi
 		# otherwise Nix build won't be able to find any of the files
-		$_git -C $workDir add $nextGen
+		floxmetaGit -C $workDir add $nextGen
 
 		# Modify the declarative environment to add the new installables.
 		for versionedPkgArg in ${versionedPkgArgs[@]}; do
 			# That's it; invoke the editor to add the package.
 			nixEditor $environment $workDir/$nextGen/pkgs/default/flox.nix install "$versionedPkgArg"
 		done
-		$_git -C $workDir add $nextGen/pkgs/default/flox.nix
+		floxmetaGit -C $workDir add $nextGen/pkgs/default/flox.nix
 
 		local envPackage
 		if ! envPackage=$($invoke_nix "${_nixArgs[@]}" build --impure --no-link --print-out-paths "$workDir/$nextGen#.floxEnvs.$system.default" "${_floxFlakeArgs[@]}"); then
@@ -476,8 +476,8 @@ EOF
 
 		$_jq . --sort-keys $envPackage/catalog.json > $workDir/$nextGen/pkgs/default/catalog.json
 		$_jq . --sort-keys $envPackage/manifest.json > $workDir/$nextGen/manifest.json
-		$_git -C $workDir add $nextGen/pkgs/default/catalog.json
-		$_git -C $workDir add $nextGen/manifest.json
+		floxmetaGit -C $workDir add $nextGen/pkgs/default/catalog.json
+		floxmetaGit -C $workDir add $nextGen/manifest.json
 		;;
 	*)
 		error "unknown version: $currentGenVersion" < /dev/null
@@ -631,7 +631,7 @@ function floxRemove() {
 		# That went well, update metadata accordingly.
 		# Expand the compact JSON rendered by default.
 		$_jq . "$wdman" > "$workDir/$nextGen/manifest.json"
-		$_git -C "$workDir" add "$nextGen/manifest.json"
+		floxmetaGit -C "$workDir" add "$nextGen/manifest.json"
 
 		# Generate declarative manifest.
 		# First add the top half with packages section removed.
@@ -651,7 +651,7 @@ EOF
 		# Then append the updated packages list derived from manifest.json.
 		echo "# $snipline" >> $workDir/$nextGen/manifest.toml
 		manifest "$workDir/$nextGen/manifest.json" listEnvironmentTOML >> $workDir/$nextGen/manifest.toml
-		$_git -C $workDir add $nextGen/manifest.toml
+		floxmetaGit -C $workDir add $nextGen/manifest.toml
 		;;
 	2)
 		# Create an ephemeral copy of the current generation to delete from.
@@ -660,14 +660,14 @@ EOF
 		# Always refresh the flake.{nix,lock} files with each new generation.
 		$_cp -f --no-preserve=mode $_lib/templateFloxEnv/flake.{nix,lock} -t $workDir/$nextGen
 		# otherwise Nix build won't be able to find any of the files
-		$_git -C $workDir add $nextGen
+		floxmetaGit -C $workDir add $nextGen
 
 		# Step through floxtuples removing packages.
 		for pkgName in ${pkgNames[@]}; do
 			# That's it; invoke the editor to remove the package.
 			nixEditor $environment $workDir/$nextGen/pkgs/default/flox.nix delete "$pkgName"
 		done
-		$_git -C $workDir add $nextGen/pkgs/default/flox.nix
+		floxmetaGit -C $workDir add $nextGen/pkgs/default/flox.nix
 
 		local envPackage
 		if ! envPackage=$($invoke_nix "${_nixArgs[@]}" build --impure --no-link --print-out-paths "$workDir/$nextGen#.floxEnvs.$system.default" "${_floxFlakeArgs[@]}"); then
@@ -676,8 +676,8 @@ EOF
 
 		$_jq . --sort-keys $envPackage/catalog.json > $workDir/$nextGen/pkgs/default/catalog.json
 		$_jq . --sort-keys $envPackage/manifest.json > $workDir/$nextGen/manifest.json
-		$_git -C $workDir add $nextGen/pkgs/default/catalog.json
-		$_git -C $workDir add $nextGen/manifest.json
+		floxmetaGit -C $workDir add $nextGen/pkgs/default/catalog.json
+		floxmetaGit -C $workDir add $nextGen/manifest.json
 		;;
 	*)
 		error "unknown version: $currentGenVersion" </dev/null
@@ -834,7 +834,7 @@ function floxUpgrade() {
 		# That went well, update metadata accordingly.
 		# Expand the compact JSON rendered by default.
 		$_jq . $environmentWorkDir/x/manifest.json > $workDir/$nextGen/manifest.json
-		$_git -C $workDir add $nextGen/manifest.json
+		floxmetaGit -C $workDir add $nextGen/manifest.json
 
 		# Generate declarative manifest.
 		# First add the top half with packages section removed.
@@ -852,7 +852,7 @@ EOF
 		# Then append the updated packages list derived from manifest.json.
 		echo "# $snipline" >> $workDir/$nextGen/manifest.toml
 		manifest "$workDir/$nextGen/manifest.json" listEnvironmentTOML >> $workDir/$nextGen/manifest.toml
-		$_git -C $workDir add $nextGen/manifest.toml
+		floxmetaGit -C $workDir add $nextGen/manifest.toml
 		;;
 	2)
 		# Create an ephemeral copy of the current generation to upgrade.
@@ -861,7 +861,7 @@ EOF
 		# Always refresh the flake.{nix,lock} files with each new generation.
 		$_cp -f --no-preserve=mode $_lib/templateFloxEnv/flake.{nix,lock} -t $workDir/$nextGen
 		# otherwise Nix build won't be able to find any of the files
-		$_git -C $workDir add $nextGen
+		floxmetaGit -C $workDir add $nextGen
 
 		# To upgrade a package, we remove its entry from the ephemeral
 		# catalog.json file. This essentially makes it unlocked, and Nix
@@ -888,8 +888,8 @@ EOF
 
 		$_jq . --sort-keys $envPackage/catalog.json > $workDir/$nextGen/pkgs/default/catalog.json
 		$_jq . --sort-keys $envPackage/manifest.json > $workDir/$nextGen/manifest.json
-		$_git -C $workDir add $nextGen/pkgs/default/catalog.json
-		$_git -C $workDir add $nextGen/manifest.json
+		floxmetaGit -C $workDir add $nextGen/pkgs/default/catalog.json
+		floxmetaGit -C $workDir add $nextGen/manifest.json
 		;;
 	*)
 		error "unknown version: $currentGenVersion" </dev/null
@@ -1019,7 +1019,7 @@ EOF
 			warn "No environment changes detected .. exiting"
 			exit 0
 		fi
-		$_git -C $workDir add $nextGen/manifest.toml
+		floxmetaGit -C $workDir add $nextGen/manifest.toml
 
 		# Now render the environment package from the manifest.toml. This pulls
 		# from the latest catalog by design and will upgrade everything.
@@ -1039,7 +1039,7 @@ EOF
 			$_cp --no-preserve=mode -rT $_lib/templateFloxEnv $workDir/$nextGen
 		fi
 		# otherwise Nix build won't be able to find any of the files
-		$_git -C $workDir add $nextGen
+		floxmetaGit -C $workDir add $nextGen
 
 		# Edit nextGen manifest.toml file.
 		while true; do
@@ -1072,10 +1072,10 @@ EOF
 				fi
 			fi
 		done
-		$_git -C $workDir add $nextGen/pkgs/default/flox.nix
+		floxmetaGit -C $workDir add $nextGen/pkgs/default/flox.nix
 		# copy the potentially updated catalog
 		$_jq . --sort-keys $envPackage/catalog.json > $workDir/$nextGen/pkgs/default/catalog.json
-		$_git -C $workDir add $workDir/$nextGen/pkgs/default/catalog.json
+		floxmetaGit -C $workDir add $workDir/$nextGen/pkgs/default/catalog.json
 		;;
 	*)
 		error "unknown version: $currentGenVersion" </dev/null
@@ -1085,7 +1085,7 @@ EOF
 	# Copy the manifest.json (lock file) from the freshly-rendered
 	# package into the floxmeta repo.
 	$_jq . --sort-keys $envPackage/manifest.json > $workDir/$nextGen/manifest.json
-	$_git -C $workDir add $nextGen/manifest.json
+	floxmetaGit -C $workDir add $nextGen/manifest.json
 
 	# That went well. Go ahead and commit the transaction.
 	local result=$(commitTransaction edit $environment $workDir $envPackage \
@@ -1140,7 +1140,7 @@ function floxImport() {
 	# Move latest generation from extracted data and insert as nextGen.
 	$invoke_rmdir $workDir/$nextGen
 	$invoke_mv $tmpDir/$currentGen $workDir/$nextGen
-	$invoke_git -C $workDir add $nextGen
+	floxmetaGitVerbose -C $workDir add $nextGen
 
 	# Detect version and act accordingly.
 	local -i currentGenVersion
@@ -1168,7 +1168,7 @@ function floxImport() {
 	# package into the floxmeta repo, using jq to expand it out of
 	# the concise format generated by Nix.
 	$_jq . $envPackage/manifest.json > $workDir/$nextGen/manifest.json
-	$_git -C $workDir add $nextGen/manifest.json
+	floxmetaGit -C $workDir add $nextGen/manifest.json
 
 	# That went well. Go ahead and commit the transaction.
 	local result=$(commitTransaction import $environment $workDir $envPackage \
@@ -1237,9 +1237,9 @@ function floxHistory() {
 		esac
 	done
 	if [ $displayJSON -gt 0 ]; then
-		$invoke_git -C $environmentMetaDir log $branchName --pretty="$logFormat" | $_jq -s .
+		floxmetaGitVerbose -C $environmentMetaDir log $branchName --pretty="$logFormat" | $_jq -s .
 	else
-		$invoke_git -C $environmentMetaDir log $branchName --pretty="$logFormat"
+		floxmetaGitVerbose -C $environmentMetaDir log $branchName --pretty="$logFormat"
 	fi
 }
 
@@ -1398,14 +1398,14 @@ function floxDestroy() {
 
 	# Look for a local branch.
 	local localBranch=
-	if $invoke_git -C "$environmentMetaDir" show-ref --quiet refs/heads/"$branchName" >/dev/null; then
+	if floxmetaGitVerbose -C "$environmentMetaDir" show-ref --quiet refs/heads/"$branchName" >/dev/null; then
 		localBranch="$branchName"
 		warnings+=(" - the $branchName branch in $environmentMetaDir")
 	fi
 
 	# Look for an origin branch.
 	local origin=
-	if $invoke_git -C "$environmentMetaDir" show-ref --quiet refs/remotes/origin/"$branchName" >/dev/null; then
+	if floxmetaGitVerbose -C "$environmentMetaDir" show-ref --quiet refs/remotes/origin/"$branchName" >/dev/null; then
 		local -i deleteOrigin=0
 		if [ -n "$originArg" ]; then
 			deleteOrigin=1
@@ -1439,16 +1439,16 @@ function floxDestroy() {
 			# TODO: remove once we move exclusively to the use of bare clones.
 			# Start by changing to the (default) floxmain branch to ensure
 			# we're not attempting to delete the current branch.
-			[ "$($_git -C "$environmentMetaDir" rev-parse --is-bare-repository)" == "true" ] || \
-				$invoke_git -C "$environmentMetaDir" checkout --quiet "$defaultBranch" 2>/dev/null || true
+			[ "$(floxmetaGit -C "$environmentMetaDir" rev-parse --is-bare-repository)" == "true" ] || \
+				floxmetaGitVerbose -C "$environmentMetaDir" checkout --quiet "$defaultBranch" 2>/dev/null || true
 			# /TODO
 
 			# Ensure following commands always succeed so that subsequent
 			# invocations can reach the --origin remote removal below.
-			$invoke_git -C "$environmentMetaDir" branch -D "$branchName" || true
+			floxmetaGitVerbose -C "$environmentMetaDir" branch -D "$branchName" || true
 		fi
 		if [ -n "$origin" ]; then
-			$invoke_git -C "$environmentMetaDir" branch -rd origin/"$branchName" || true
+			floxmetaGitVerbose -C "$environmentMetaDir" branch -rd origin/"$branchName" || true
 			floxmetaHelperGit origin "$environmentMetaDir" push origin --delete "$branchName" || true
 		fi
 		$invoke_rm --verbose -f ${links[@]}
@@ -1529,24 +1529,24 @@ function floxPushPull() {
 	# Create an ephemeral clone with which to perform the synchronization.
 	local tmpDir
 	tmpDir=$(mkTempDir)
-	$invoke_git clone --quiet --shared "$environmentMetaDir" $tmpDir
+	floxmetaGitVerbose clone --quiet --shared "$environmentMetaDir" $tmpDir
 
 	# XXX Temporary migrate floxmeta from github.com -> floxdev.com with upgrade to 0.3.0
 	temporaryMigrateGitHubTo030Floxdev "$tmpDir"
 	# /XXX
 
 	# Add the upstream remote to the ephemeral clone.
-	$invoke_git -C $tmpDir remote add upstream $origin
+	floxmetaGitVerbose -C $tmpDir remote add upstream $origin
 	floxmetaHelperGit upstream $tmpDir fetch --quiet upstream
 
 	# Check out the relevant branch. Can be complicated in the event
 	# that this is the first pull of a brand-new branch.
-	if $invoke_git -C "$tmpDir" show-ref --quiet refs/heads/"$branchName"; then
-		$invoke_git -C "$tmpDir" checkout "$branchName"
-	elif $invoke_git -C "$tmpDir" show-ref --quiet refs/remotes/origin/"$branchName"; then
-		$invoke_git -C "$tmpDir" checkout --quiet --track origin/"$branchName"
-	elif $invoke_git -C "$tmpDir" show-ref --quiet refs/remotes/upstream/"$branchName"; then
-		$invoke_git -C "$tmpDir" checkout --quiet --track upstream/"$branchName"
+	if floxmetaGitVerbose -C "$tmpDir" show-ref --quiet refs/heads/"$branchName"; then
+		floxmetaGitVerbose -C "$tmpDir" checkout "$branchName"
+	elif floxmetaGitVerbose -C "$tmpDir" show-ref --quiet refs/remotes/origin/"$branchName"; then
+		floxmetaGitVerbose -C "$tmpDir" checkout --quiet --track origin/"$branchName"
+	elif floxmetaGitVerbose -C "$tmpDir" show-ref --quiet refs/remotes/upstream/"$branchName"; then
+		floxmetaGitVerbose -C "$tmpDir" checkout --quiet --track upstream/"$branchName"
 	else
 		# XXX Why would you ever push/pull a branch that does not exist?
 		# We previously created the branch when pulling a nonexistent
@@ -1564,17 +1564,17 @@ function floxPushPull() {
 	elif [ "$action" = "pull" ]; then
 		# Slightly different here; we first attempt to rebase and do
 		# a hard reset if invoked with --force.
-		if $invoke_git -C "$tmpDir" show-ref --quiet refs/remotes/upstream/"$branchName"; then
+		if floxmetaGitVerbose -C "$tmpDir" show-ref --quiet refs/remotes/upstream/"$branchName"; then
 			if [ -z "$forceArg" ]; then
-				$invoke_git -C $tmpDir rebase --quiet upstream/"$branchName" ||
+				floxmetaGitVerbose -C $tmpDir rebase --quiet upstream/"$branchName" ||
 					error "repeat command with '--force' to overwrite" < /dev/null
 			else
-				$invoke_git -C $tmpDir reset --quiet --hard upstream/"$branchName"
+				floxmetaGitVerbose -C $tmpDir reset --quiet --hard upstream/"$branchName"
 			fi
 			# Set receive.denyCurrentBranch=updateInstead before pushing
 			# to update both the bare repository and the checked out branch.
-			$invoke_git -C "$environmentMetaDir" config receive.denyCurrentBranch updateInstead
-			$invoke_git -C $tmpDir push $forceArg origin
+			floxmetaGitVerbose -C "$environmentMetaDir" config receive.denyCurrentBranch updateInstead
+			floxmetaGitVerbose -C $tmpDir push $forceArg origin
 			if [ $floxmain -eq 1 ]; then
 				: # nothing to do
 			elif [ $noRender -gt 0 ]; then

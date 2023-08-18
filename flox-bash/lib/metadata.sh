@@ -108,6 +108,35 @@
 
 snipline="------------------------ >8 ------------------------"
 
+# floxmetaGit()
+#
+# Wrap git invocations for all floxmeta repositories and clones.
+function floxmetaGit() {
+	trace "$@"
+	# 1. Override all user-supplied git configuration by fully specifying
+	#    GIT_CONFIG_* variables. Note: we are avoiding use of the deprecated
+	#    GIT_CONFIG_NOSYSTEM variable as described in:
+	#      https://stackoverflow.com/questions/43881807/how-to-tell-git-to-ignore-global-config
+	# 2. Specify `user.{name,email}` as required for commits.
+	GIT_CONFIG_SYSTEM=/dev/null GIT_CONFIG_GLOBAL=/dev/null \
+	$_git \
+		-c "user.name=Flox User" \
+		-c "user.email=floxuser@example.invalid" \
+		"$@"
+}
+
+# floxmetaGitVerbose()
+#
+# As above, but print out git invocations with the --verbose flag.
+function floxmetaGitVerbose() {
+	trace "$@"
+	GIT_CONFIG_SYSTEM=/dev/null GIT_CONFIG_GLOBAL=/dev/null \
+	$invoke_git \
+		-c "user.name=Flox User" \
+		-c "user.email=floxuser@example.invalid" \
+		"$@"
+}
+
 #
 # gitInitFloxmeta($repoDir,$defaultBranch)
 #
@@ -121,15 +150,15 @@ function gitInitFloxmeta() {
 	# git, which will ignore unrecognized `-c` options.
 	${invoke_git?} -c init.defaultBranch="${defaultBranch}" init  \
 	               --bare --quiet "$repoDir"
-	$invoke_git -C "$repoDir" config pull.rebase true
-	$invoke_git -C "$repoDir" config receive.denyCurrentBranch updateInstead
+	floxmetaGitVerbose -C "$repoDir" config pull.rebase true
+	floxmetaGitVerbose -C "$repoDir" config receive.denyCurrentBranch updateInstead
 	# A commit is needed in order to make the branch visible.
 	local tmpDir
 	tmpDir="$(mkTempDir)"
-	$invoke_git clone --quiet --shared "$repoDir" "$tmpDir"
-	$invoke_git -C "$tmpDir" commit --quiet --allow-empty \
+	floxmetaGitVerbose clone --quiet --shared "$repoDir" "$tmpDir"
+	floxmetaGitVerbose -C "$tmpDir" commit --quiet --allow-empty \
 		-m "$USER created repository"
-	$invoke_git -C "$tmpDir" push --quiet origin "$defaultBranch"
+	floxmetaGitVerbose -C "$tmpDir" push --quiet origin "$defaultBranch"
 }
 
 # XXX TEMPORARY function to convert old-style "1.json" -> "1/manifest.json"
@@ -153,7 +182,7 @@ function temporaryAssert007Schema {
 			local gen
 			gen="$(${_basename?} "$file" .json)"
 			${invoke_mkdir?} -p "$repoDir/${gen}"
-			$invoke_git -C "$repoDir" mv "$file" "${gen}/manifest.json"
+			floxmetaGitVerbose -C "$repoDir" mv "$file" "${gen}/manifest.json"
 			# Constructing the manifest.toml is not as straightforward.
 			# The pre-0.0.7 format didn't include a generation-specific
 			# manifest.toml, but rather forced you to go back to a previous
@@ -164,7 +193,7 @@ function temporaryAssert007Schema {
 			#
 			# To create the old generation-specific manifest start by
 			# including everything up to the snipline.
-			$invoke_git -C "$repoDir" show "HEAD:manifest.toml" 2>/dev/null  \
+			floxmetaGitVerbose -C "$repoDir" show "HEAD:manifest.toml" 2>/dev/null  \
 				| ${_awk?} "{if (/$snipline/) {exit} else {print}}"          \
 				        > "$repoDir/$gen/manifest.toml"
 
@@ -173,12 +202,12 @@ function temporaryAssert007Schema {
 			echo "# $snipline" >> "$repoDir/$gen/manifest.toml"
 			manifest "$repoDir/$gen/manifest.json" listEnvironmentTOML  \
 			         >> "$repoDir/$gen/manifest.toml"
-			$invoke_git -C "$repoDir" add "$gen/manifest.toml"
+			floxmetaGitVerbose -C "$repoDir" add "$gen/manifest.toml"
 			;;
 		manifest.json)
-			$invoke_git -C "$repoDir" rm "$file" ;;
+			floxmetaGitVerbose -C "$repoDir" rm "$file" ;;
 		manifest.toml)
-			$invoke_git -C "$repoDir" rm "$file" ;;
+			floxmetaGitVerbose -C "$repoDir" rm "$file" ;;
 		metadata.json)
 			: leave intact ;;
 		*)
@@ -188,9 +217,9 @@ function temporaryAssert007Schema {
 	done
 
 	# Commit, reading commit message from STDIN.
-	$invoke_git -C "$repoDir" commit                                   \
-	            --quiet -m "$USER converted to 0.0.7 floxmeta schema"
-	$invoke_git -C "$repoDir" push --quiet
+	floxmetaGitVerbose -C "$repoDir" \
+		commit --quiet -m "$USER converted to 0.0.7 floxmeta schema"
+	floxmetaGitVerbose -C "$repoDir" push --quiet
 
 	warn "Conversion complete. Please re-run command."
 	exit 0
@@ -228,7 +257,7 @@ function temporaryAssert008Schema {
 	# Files in the Nix store are read-only.
 	${_cp?} --no-preserve=mode -rT "${_lib?}/templateFloxEnv" "$nextGenDir"
 	# otherwise Nix build won't be able to find any of the files
-	$_git -C "$workDir" add "$nextGen"
+	floxmetaGit -C "$workDir" add "$nextGen"
 
 	# Use nix-editor to transfer packages from the current manifest.json file.
 	local tmpScript
@@ -282,7 +311,7 @@ function temporaryAssert008Schema {
 	               "$nextGenDir/pkgs/default/flox.nix" > "$tmpFloxNix"
 	${_mv?} -f "$tmpFloxNix" "$nextGenDir/pkgs/default/flox.nix"
 
-	$_git -C "$repoDir" add "$nextGen/pkgs/default/flox.nix"
+	floxmetaGit -C "$repoDir" add "$nextGen/pkgs/default/flox.nix"
 
 	local envPackage
 	if ! envPackage="$(${invoke_nix?} build --impure --no-link --print-out-paths \
@@ -294,8 +323,8 @@ function temporaryAssert008Schema {
 	${_jq?} . --sort-keys "$envPackage/catalog.json"  \
 	        > "$nextGenDir/pkgs/default/catalog.json"
 	$_jq . --sort-keys "$envPackage/manifest.json" > "$nextGenDir/manifest.json"
-	$_git -C "$repoDir" add "$nextGen/pkgs/default/catalog.json"
-	$_git -C "$repoDir" add "$nextGen/manifest.json"
+	floxmetaGit -C "$repoDir" add "$nextGen/pkgs/default/catalog.json"
+	floxmetaGit -C "$repoDir" add "$nextGen/manifest.json"
 
 	result="$(
 	  commitTransaction temporaryAssert008Schema "$environment" "$repoDir"  \
@@ -368,16 +397,11 @@ function floxmetaHelperGit() {
 	# user git config with flox-provided defaults.
 	local remoteURL
 	remoteURL="$(
-		$_git -C "$cloneDir" config --get "remote.$remoteName.url" || :
+		floxmetaGit -C "$cloneDir" config --get "remote.$remoteName.url" || :
 	)"
 	case "$remoteURL" in
 	https://git.hub.flox.dev/*)
-		# floxHub: override all user-supplied git configuration by fully
-		# specifying GIT_CONFIG_* variables. Note: we are avoiding use of
-		# the deprecated GIT_CONFIG_NOSYSTEM variable as described in:
-		# https://stackoverflow.com/questions/43881807/how-to-tell-git-to-ignore-global-config
-		GIT_CONFIG_SYSTEM=/dev/null GIT_CONFIG_GLOBAL=/dev/null \
-		$invoke_git -C "$cloneDir" \
+		floxmetaGit -C "$cloneDir" \
 			-c "credential.https://git.hub.flox.dev.helper=!${_flox_gh?} auth token --git-credential-helper" \
 			"$@"
 		;;
@@ -385,14 +409,15 @@ function floxmetaHelperGit() {
 		# Path-based remotes don't need a helper, but we do want to disable
 		# all user git configuration to ensure nothing interferes with our
 		# use of git.
-		GIT_CONFIG_SYSTEM=/dev/null GIT_CONFIG_GLOBAL=/dev/null \
-		$invoke_git -C "$cloneDir" \
+		floxmetaGit -C "$cloneDir" \
 			"$@"
 		;;
 	*)
 		# For all others, honor the user's local git configuration and *add*
 		# the `gh` git-credential helper for github.com only as was done with
-		# previous versions of flox.
+		# previous versions of flox. Note that this is the one place we invoke
+		# git directly without using floxmetaGit() because we sometimes need to
+		# pull in the user's git configuration to access github.com.
 		$invoke_git -C "$cloneDir" \
 			-c "credential.https://github.com.helper=!${_gh?} auth git-credential" \
 			"$@"
@@ -412,12 +437,12 @@ function temporaryMigrateGitHubTo030Floxdev() {
 	# Identify the real environmentMetaDir from the workdir clone.
 	local realEnvironmentMetaDir
 	realEnvironmentMetaDir="$(
-		$_git -C "$workDir" config --get "remote.origin.url" || :
+		floxmetaGit -C "$workDir" config --get "remote.origin.url" || :
 	)"
 	# Assert origin is the new one, otherwise offer to migrate.
 	local origin
 	origin="$(
-		$_git -C "$realEnvironmentMetaDir" config --get "remote.origin.url" || :
+		floxmetaGit -C "$realEnvironmentMetaDir" config --get "remote.origin.url" || :
 	)"
 	case "$origin" in
 	"$git_base_url"*)
@@ -444,10 +469,10 @@ function temporaryMigrateGitHubTo030Floxdev() {
 				error '%s' "could not log in to $neworigin" </dev/null
 			fi
 			# Pull in latest data from old origin.
-			$invoke_git -C "$workDir" remote add oldorigin $origin
+			floxmetaGitVerbose -C "$workDir" remote add oldorigin $origin
 			floxmetaHelperGit oldorigin "$workDir" fetch --quiet oldorigin
 			# Merely fetching the repository creates it on the new origin.
-			$invoke_git -C "$workDir" remote add neworigin $neworigin
+			floxmetaGitVerbose -C "$workDir" remote add neworigin $neworigin
 			floxmetaHelperGit neworigin "$workDir" fetch --quiet neworigin
 			# Push refs for each branch previously defined on the origin.
 			local branchName
@@ -473,7 +498,7 @@ function temporaryMigrateGitHubTo030Floxdev() {
 				floxmetaHelperGit neworigin "$workDir" push --force --quiet neworigin "oldorigin/floxmain:refs/heads/floxmain"
 			fi
 			# Finally replace original origin remote with new one.
-			$invoke_git -C "$realEnvironmentMetaDir" remote set-url origin "$neworigin"
+			floxmetaGitVerbose -C "$realEnvironmentMetaDir" remote set-url origin "$neworigin"
 			floxmetaHelperGit origin "$realEnvironmentMetaDir" fetch --quiet
 			info "successfully migrated data from $origin to $neworigin .. please re-run your command"
 			exit 0
@@ -504,10 +529,10 @@ function metaGitShow() {
 	eval "$(decodeEnvironment "$environment")"
 
 	# First assert the relevant branch exists.
-	if $_git -C "$environmentMetaDir" show-ref    \
+	if floxmetaGit -C "$environmentMetaDir" show-ref    \
 	         --quiet refs/heads/"${branchName?}"
 	then
-		$invoke_git -C "$environmentMetaDir" show "${branchName}:${filename}"
+		floxmetaGitVerbose -C "$environmentMetaDir" show "${branchName}:${filename}"
 	else
 		local _errMsg="environment '$environmentOwner/$environmentName' not "
 		_errMsg="$_errMsg found for system '$environmentSystem'"
@@ -749,7 +774,7 @@ function getSetOrigin() {
 	local origin=""
 	if [[ -d "$environmentMetaDir" ]]; then
 		origin="$(
-		  $_git -C "$environmentMetaDir" config --get "remote.origin.url" || :
+		  floxmetaGit -C "$environmentMetaDir" config --get "remote.origin.url" || :
 		)"
 	fi
 	if [[ -z "$origin" ]]; then
@@ -843,7 +868,7 @@ function getSetOrigin() {
 		fi
 
 		[[ -d "$environmentMetaDir" ]] || gitInitFloxmeta "$environmentMetaDir"
-		$invoke_git -C "$environmentMetaDir" "remote" "add" "origin" "$origin"
+		floxmetaGitVerbose -C "$environmentMetaDir" "remote" "add" "origin" "$origin"
 	fi
 
 	echo "$origin"
@@ -873,7 +898,7 @@ function beginTransaction() {
 		gitInitFloxmeta "$environmentMetaDir"
 
 		# Create an ephemeral clone in $workDir.
-		$invoke_git clone --quiet --shared "$environmentMetaDir" "$workDir"
+		floxmetaGitVerbose clone --quiet --shared "$environmentMetaDir" "$workDir"
 
 		# Use registry function to initialize metadata.json.
 		registry "$workDir/metadata.json" 1 set currentGen 1
@@ -921,29 +946,29 @@ function beginTransaction() {
 	fi
 
 	# Perform a fetch to get remote data into sync.
-	if $invoke_git -C "$environmentMetaDir" show-ref                   \
+	if floxmetaGitVerbose -C "$environmentMetaDir" show-ref                   \
 		           --quiet refs/remotes/origin/HEAD 2>/dev/null
 	then
 		floxmetaHelperGit origin "$environmentMetaDir" fetch origin
 	fi
 
 	# Create an ephemeral clone.
-	$invoke_git clone --quiet --shared "$environmentMetaDir" "$workDir"
+	floxmetaGitVerbose clone --quiet --shared "$environmentMetaDir" "$workDir"
 
 	# Check out the relevant branch. Can be complicated in the event
 	# that this is the first pull of a brand-new branch.
-	if $invoke_git -C "$workDir" show-ref --quiet refs/heads/"$branchName"; then
-		$invoke_git -C "$workDir" checkout --quiet "$branchName"
-	elif $invoke_git -C "$workDir" show-ref  \
+	if floxmetaGitVerbose -C "$workDir" show-ref --quiet refs/heads/"$branchName"; then
+		floxmetaGitVerbose -C "$workDir" checkout --quiet "$branchName"
+	elif floxmetaGitVerbose -C "$workDir" show-ref  \
 	                 --quiet refs/remotes/origin/"$branchName"
 	then
-		$invoke_git -C "$workDir" checkout --quiet --track origin/"$branchName"
+		floxmetaGitVerbose -C "$workDir" checkout --quiet --track origin/"$branchName"
 	elif [[ $createBranch -eq 1 ]]; then
-		$invoke_git -C "$workDir" checkout --quiet --orphan "$branchName"
-		$invoke_git -C "$workDir" ls-files                                   \
-			| $_xargs --no-run-if-empty "$_git" -C "$workDir" rm --quiet -f
+		floxmetaGitVerbose -C "$workDir" checkout --quiet --orphan "$branchName"
+		floxmetaGitVerbose -C "$workDir" ls-files                                   \
+			| $_xargs --no-run-if-empty floxmetaGit -C "$workDir" rm --quiet -f
 		# A commit is needed in order to make the branch visible.
-		$invoke_git -C "$workDir" commit --quiet --allow-empty \
+		floxmetaGitVerbose -C "$workDir" commit --quiet --allow-empty \
 			-m "$USER created environment $environmentName ($environmentSystem)"
 	else
 		local _errMsg="environment ${environmentAlias?} (${environmentSystem?})"
@@ -1147,7 +1172,7 @@ function commitTransaction() {
 			"$currentGen" lastActive "$now"
 
 	# Mark the metadata.json file to be included with the commit.
-	$invoke_git -C "$workDir" add "metadata.json"
+	floxmetaGitVerbose -C "$workDir" add "metadata.json"
 
 	# Now that metadata is recorded, actually put the change
 	# into effect. Must be done before calling commitMessage().
@@ -1173,14 +1198,14 @@ function commitTransaction() {
 		"$environment" "$oldEnvPackage" "$environmentPackage" \
 		"$logMessage" "${invocation[@]}")"
 
-	$invoke_git -C "$workDir" commit -m "$message" --quiet
-	$invoke_git -C "$workDir" push --quiet --set-upstream origin "$branchName"
+	floxmetaGitVerbose -C "$workDir" commit -m "$message" --quiet
+	floxmetaGitVerbose -C "$workDir" push --quiet --set-upstream origin "$branchName"
 
 	# Tom's feature: teach a man to fish with (-v|--verbose)
 	if [[ "$verbose" -ge 1 ]] && [[ "$currentGenVersion" -eq 2 ]] &&  \
 	   [[ "$nextGenVersion" -eq 2 ]]
 	then
-		$invoke_git -C "$workDir" diff                                      \
+		floxmetaGitVerbose -C "$workDir" diff                                      \
 		               "HEAD:{$currentGen,$nextGen}/pkgs/default/flox.nix"  \
 					   2>/dev/null
 		warn "$createdOrSwitchedTo generation $nextGen"
@@ -1200,7 +1225,7 @@ function listEnvironments() {
 	environmentOwner="$($_basename "$environmentMetaDir")"
 
 	# Quick sanity check .. is this a git repo?
-	$_git -C "$environmentMetaDir" rev-parse 2> /dev/null ||         \
+	floxmetaGit -C "$environmentMetaDir" rev-parse 2> /dev/null ||         \
 		error "not a git clone? Please remove: $environmentMetaDir"  \
 		      < /dev/null
 
@@ -1215,7 +1240,7 @@ function listEnvironments() {
 	local -A _origin
 	local -a _cline
 	#shellcheck disable=2162,1090
-	. <($invoke_git -C "$environmentMetaDir" branch -av | $_sed 's/^\*//'  \
+	. <(floxmetaGitVerbose -C "$environmentMetaDir" branch -av | $_sed 's/^\*//'  \
 		| while read -a _cline
 		do
 			if [[ -z "${_cline[*]}" ]]; then continue; fi
@@ -1262,7 +1287,7 @@ function listEnvironments() {
 		if [[ -n "$__local" ]]; then
 			local __metadata
 			__metadata="$(mkTempFile)"
-			if $invoke_git -C "$environmentMetaDir" show  \
+			if floxmetaGitVerbose -C "$environmentMetaDir" show  \
 			               "$__local:metadata.json" > "$__metadata" 2>/dev/null
 			then
 				__commit="$__local"
@@ -1272,7 +1297,7 @@ function listEnvironments() {
 		if [[ -n "$__origin" ]] && [[ "$__origin" != "$__local" ]]; then
 			local __metadata
 			__metadata="$(mkTempFile)"
-			if $invoke_git -C "$environmentMetaDir" show  \
+			if floxmetaGitVerbose -C "$environmentMetaDir" show  \
 			               "$__origin:metadata.json" > "$__metadata" 2>/dev/null
 			then
 				__commit="$__commit (remote $__origin)"
@@ -1338,23 +1363,23 @@ function updateAvailable() {
 
 	# First calculate current generation number.
 	if [[ -d "$environmentMetaDir" ]]; then
-		if $_git -C "$environmentMetaDir" show-ref             \
+		if floxmetaGit -C "$environmentMetaDir" show-ref             \
 			     --quiet refs/heads/"$branchName" 2>/dev/null
 		then
 			local tmpfile
 			tmpfile="$(mkTempFile)"
-			if $invoke_git -C "$environmentMetaDir" show  \
+			if floxmetaGitVerbose -C "$environmentMetaDir" show  \
 			               "${branchName}:metadata.json"  \
 						   > "$tmpfile" 2>/dev/null
 			then
 				local -i currentGen
 				if currentGen="$(registry "$tmpfile" 1 get currentGen)"; then
 					# If that worked then calculate generation number upstream.
-					if $_git -C "$environmentMetaDir" show-ref          \
+					if floxmetaGit -C "$environmentMetaDir" show-ref          \
 					         --quiet refs/remotes/origin/"$branchName"  \
 							 2>/dev/null
 					then
-						if $invoke_git -C "$environmentMetaDir" show         \
+						if floxmetaGitVerbose -C "$environmentMetaDir" show         \
 							           "origin/${branchName}:metadata.json"  \
 									   > "$tmpfile" 2>/dev/null
 						then

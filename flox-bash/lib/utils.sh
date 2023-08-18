@@ -460,7 +460,7 @@ function gitConfigSet() {
 	do
 		read -e -p "$prompt" -i "$value" value
 		if boolPrompt "OK to invoke: 'git config --global $varname \"$value\"'" "yes"; then
-			$_git config --global "$varname" "$value"
+			floxmetaGit config --global "$varname" "$value"
 			break
 		else
 			info "OK, will try that again"
@@ -575,11 +575,11 @@ function initFloxUserMetaJSON() {
 	# Create ephemeral clone.
 	local workDir
 	workDir=$(mkTempDir)
-	$_git clone --quiet --shared "$userFloxMetaCloneDir" $workDir
+	floxmetaGit clone --quiet --shared "$userFloxMetaCloneDir" $workDir
 
 	# Start by checking out the floxmain branch, which is guaranteed to
 	# exist because it's found in github:flox/floxmeta-template.
-	$_git -C "$workDir" checkout --quiet "$defaultBranch"
+	floxmetaGit -C "$workDir" checkout --quiet "$defaultBranch"
 
 	# Capture STDIN to the new file.
 	$_cat > "$workDir"/floxUserMeta.json
@@ -588,16 +588,12 @@ function initFloxUserMetaJSON() {
 	registry "$workDir"/floxUserMeta.json 1 get floxClientUUID >/dev/null 2>&1 || \
 		registry "$workDir"/floxUserMeta.json 1 set floxClientUUID $($_uuid)
 
-	# Add floxUserMeta.json.
-	$invoke_git -C "$workDir" add floxUserMeta.json
-	# And commit, taking care to set user name and email to flox defaults.
-	$invoke_git -C "$workDir" \
-		-c "user.name=Flox User" \
-		-c "user.email=floxuser@example.invalid" \
-		commit -m "$message" --quiet
+	# Add floxUserMeta.json and commit.
+	floxmetaGitVerbose -C "$workDir" add floxUserMeta.json
+	floxmetaGitVerbose -C "$workDir" commit -m "$message" --quiet
 
 	# Push changes back to bare repository.
-	$_git -C $workDir push --quiet origin $defaultBranch
+	floxmetaGit -C $workDir push --quiet origin $defaultBranch
 }
 
 #
@@ -618,7 +614,7 @@ function floxUserMetaRegistry() {
 		local floxUserMetaTemplate='{"channels":{}, "version":1}'
 		$_jq -n -r -S "$floxUserMetaTemplate" |
 			initFloxUserMetaJSON "init: floxUserMeta.json"
-		$_git -C "$userFloxMetaCloneDir" show "$defaultBranch:floxUserMeta.json" >$floxUserMeta
+		floxmetaGit -C "$userFloxMetaCloneDir" show "$defaultBranch:floxUserMeta.json" >$floxUserMeta
 	fi
 
 	case "$verb" in
@@ -630,16 +626,16 @@ function floxUserMetaRegistry() {
 		# Create ephemeral clone.
 		local workDir
 		workDir=$(mkTempDir)
-		$_git clone --quiet --shared "$userFloxMetaCloneDir" $workDir
+		floxmetaGit clone --quiet --shared "$userFloxMetaCloneDir" $workDir
 		# Check out the floxmain branch in the ephemeral clone.
-		$_git -C "$workDir" checkout --quiet $defaultBranch
+		floxmetaGit -C "$workDir" checkout --quiet $defaultBranch
 		# Modify the registry file
 		registry "$workDir/floxUserMeta.json" 1 "$verb" $@
-		$_git -C $workDir add "floxUserMeta.json"
-		$_git -C $workDir commit -m "$invocation_string" --quiet
-		$_git -C $workDir push --quiet --set-upstream origin $defaultBranch
+		floxmetaGit -C $workDir add "floxUserMeta.json"
+		floxmetaGit -C $workDir commit -m "$invocation_string" --quiet
+		floxmetaGit -C $workDir push --quiet --set-upstream origin $defaultBranch
 		# Refresh temporary $floxUserMeta (used for this invocation only).
-		$_git -C "$userFloxMetaCloneDir" show "$defaultBranch:floxUserMeta.json" >$floxUserMeta
+		floxmetaGit -C "$userFloxMetaCloneDir" show "$defaultBranch:floxUserMeta.json" >$floxUserMeta
 		;;
 	*)
 		error "floxUserMetaRegistry(): unsupported operation '$verb'" </dev/null
@@ -702,7 +698,7 @@ function environmentRegistry() {
 				local dn
 				dn=$($_dirname $registry)
 				[ ! -e "$dn/.git" ] || \
-					$_git -C $dn add $($_basename $registry)
+					floxmetaGit -C $dn add $($_basename $registry)
 			else
 				error "something went wrong" < /dev/null
 			fi
