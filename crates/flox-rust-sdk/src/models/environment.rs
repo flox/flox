@@ -108,7 +108,7 @@ pub trait TemporaryEnvironment {
 
 /// Struct representing a local environment in a given location
 #[derive(Debug)]
-pub struct PathEnvironment<S: EnvironmentState> {
+pub struct PathEnvironment<S> {
     /// absolute path to the environment, typically within `<...>/.flox/name`
     path: PathBuf,
     /// The [EnvironmentRef] this env is created from (and validated against)
@@ -133,7 +133,7 @@ pub trait EnvironmentState {}
 impl EnvironmentState for Original {}
 impl EnvironmentState for Temporary {}
 
-impl<S: EnvironmentState> PartialEq for PathEnvironment<S> {
+impl<S> PartialEq for PathEnvironment<S> {
     fn eq(&self, other: &Self) -> bool {
         self.path == other.path
     }
