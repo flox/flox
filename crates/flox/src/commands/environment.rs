@@ -8,12 +8,7 @@ use std::str::FromStr;
 use anyhow::{bail, Context, Result};
 use bpaf::{construct, Bpaf, Parser, ShellComp};
 use flox_rust_sdk::flox::{EnvironmentName, Flox};
-use flox_rust_sdk::models::environment::{
-    Environment,
-    Original,
-    PathEnvironment,
-    TemporaryEnvironment,
-};
+use flox_rust_sdk::models::environment::{Environment, Original, PathEnvironment};
 use flox_rust_sdk::models::environment_ref;
 use flox_rust_sdk::nix::arguments::eval::EvaluationArgs;
 use flox_rust_sdk::nix::command::{Shell, StoreGc};
@@ -69,22 +64,21 @@ impl EnvironmentCommands {
             } if !Feature::Env.is_forwarded()? => 'edit: {
                 let mut environment =
                     resolve_environment(&flox, environment.as_deref(), "install").await?;
-                let mut temporary_environment = environment
-                    .modify_in(tempfile::tempdir_in(&flox.temp_dir).unwrap().into_path())
-                    .await?;
+                let mut temporary_environment = environment.make_temporary().await?;
 
                 let nix = flox.nix(Default::default());
 
                 if let Some(file) = file {
-                    let file: Box<dyn std::io::Read + Send> = if file == Path::new("-") {
+                    let mut file: Box<dyn std::io::Read + Send> = if file == Path::new("-") {
                         Box::new(stdin())
                     } else {
                         Box::new(File::open(file).unwrap())
                     };
 
-                    temporary_environment
-                        .set_environment(file, &nix, &flox.system)
-                        .await?;
+                    let mut contents = String::new();
+                    file.read_to_string(&mut contents)?;
+                    temporary_environment.update_manifest(&contents)?;
+                    temporary_environment.build(&nix, &flox.system).await?;
                     break 'edit;
                 }
 
@@ -94,21 +88,18 @@ impl EnvironmentCommands {
                 }
 
                 loop {
-                    let path = temporary_environment.flox_nix_path();
+                    let path = temporary_environment.manifest_path();
                     let mut command = Command::new(&editor);
                     command.arg(&path);
 
                     let child = command.spawn().context("editor command failed")?;
                     let _ = child.wait_with_output().context("editor command failed")?;
 
-                    match temporary_environment
-                        .set_environment(
-                            std::fs::read_to_string(&path).unwrap().as_bytes(),
-                            &nix,
-                            &flox.system,
-                        )
-                        .await
-                    {
+                    let contents = std::fs::read_to_string(path)?;
+                    temporary_environment.update_manifest(&contents)?;
+                    let build_result = temporary_environment.build(&nix, &flox.system).await;
+
+                    match build_result {
                         Ok(_) => {
                             break;
                         },
@@ -249,7 +240,7 @@ impl EnvironmentCommands {
                 environment_args: EnvironmentArgs { .. },
                 environment,
             } if !Feature::Env.is_forwarded()? => {
-                let packages: Vec<_> = packages
+                let mut packages: Vec<_> = packages
                     .iter()
                     .map(|package| FloxPackage::parse(package, &flox.channels, DEFAULT_CHANNEL))
                     .collect::<Result<Vec<_>, _>>()?
@@ -273,7 +264,11 @@ impl EnvironmentCommands {
                 // }
 
                 environment
-                    .install(packages, &flox.nix(Default::default()), &flox.system)
+                    .install(
+                        packages.drain(..),
+                        &flox.nix(Default::default()),
+                        &flox.system,
+                    )
                     .await
                     .context("could not install packages")?;
             },
@@ -283,7 +278,7 @@ impl EnvironmentCommands {
                 environment,
                 packages,
             } if !Feature::Env.is_forwarded()? => {
-                let packages: Vec<_> = packages
+                let mut packages: Vec<_> = packages
                     .iter()
                     .map(|package| FloxPackage::parse(package, &flox.channels, DEFAULT_CHANNEL))
                     .collect::<Result<Vec<_>, _>>()?
@@ -295,7 +290,11 @@ impl EnvironmentCommands {
                     resolve_environment(&flox, environment.as_deref(), "install").await?;
 
                 environment
-                    .uninstall(packages, &flox.nix(Default::default()), &flox.system)
+                    .uninstall(
+                        packages.drain(..),
+                        &flox.nix(Default::default()),
+                        &flox.system,
+                    )
                     .await
                     .context("could not uninstall packages")?;
             },

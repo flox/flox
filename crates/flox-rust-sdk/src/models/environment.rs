@@ -1,4 +1,5 @@
 use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
@@ -18,7 +19,12 @@ use runix::{Run, RunJson};
 use thiserror::Error;
 use walkdir::WalkDir;
 
-use super::environment_ref::{EnvironmentName, EnvironmentRef, EnvironmentRefError};
+use super::environment_ref::{
+    EnvironmentName,
+    EnvironmentOwner,
+    EnvironmentRef,
+    EnvironmentRefError,
+};
 use super::flox_package::{FloxPackage, FloxTriple};
 use crate::utils::copy_file_without_permissions;
 use crate::utils::rnix::{AttrSetExt, StrExt};
@@ -35,63 +41,51 @@ pub enum InstalledPackage {
     StorePath(StorePath),
 }
 
-#[async_trait(?Send)]
+#[async_trait]
 pub trait Environment {
-    type ConcreteTemporary;
-
     /// Build the environment and create a result link as gc-root
     async fn build(
         &self,
         nix: &NixCommandLine,
-        system: impl AsRef<str>,
+        system: impl AsRef<str> + Send,
     ) -> Result<(), EnvironmentError2>;
 
     /// Install packages to the environment atomically
     async fn install(
         &mut self,
-        packages: impl IntoIterator<Item = FloxPackage>,
+        packages: impl Iterator<Item = FloxPackage> + Send,
         nix: &NixCommandLine,
         system: impl AsRef<str> + Send,
-    ) -> Result<&mut Self, EnvironmentError2>;
+    ) -> Result<(), EnvironmentError2>;
 
     /// Uninstall packages from the environment atomically
     async fn uninstall(
         &mut self,
-        packages: impl IntoIterator<Item = FloxPackage>,
+        packages: impl Iterator<Item = FloxPackage> + Send,
         nix: &NixCommandLine,
         system: impl AsRef<str> + Send,
-    ) -> Result<&mut Self, EnvironmentError2>;
+    ) -> Result<(), EnvironmentError2>;
+
+    /// Activate this environment
+    async fn activate(&self, nix: &NixCommandLine) -> Result<(), EnvironmentError2>;
+
+    /// Atomically edit this environment, ensuring that it still builds
+    async fn edit(&self) -> Result<(), EnvironmentError2>;
+
+    async fn catalog(
+        &self,
+        nix: &NixCommandLine,
+        system: impl AsRef<str> + Send,
+    ) -> Result<EnvCatalog, EnvironmentError2>;
 
     /// Return the [EnvironmentRef] for the environment for identification
     fn environment_ref(&self) -> &EnvironmentRef;
 
-    /// Read the catalog for this environment
-    ///
-    /// The catalog contains information about the locked sources of installed packages.
-    async fn catalog(
-        &self,
-        nix: &NixCommandLine,
-        system: impl AsRef<str>,
-    ) -> Result<EnvCatalog, EnvironmentError2>;
+    /// Returns the environment owner
+    fn owner(&self) -> Option<EnvironmentOwner>;
 
-    /// List the installed packages
-    async fn packages(
-        &self,
-        nix: &NixCommandLine,
-        system: impl AsRef<str>,
-    ) -> Result<Vec<FloxPackage>, EnvironmentError2>;
-
-    /// Create a temporary environment that can be modified freely
-    async fn modify_in(
-        &mut self,
-        path: impl AsRef<Path>,
-    ) -> Result<Self::ConcreteTemporary, EnvironmentError2>;
-
-    /// Apply the changes made in a temporary environment
-    fn replace_with(
-        &mut self,
-        temporary_environment: Self::ConcreteTemporary,
-    ) -> Result<(), EnvironmentError2>;
+    /// Returns the environment name
+    fn name(&self) -> EnvironmentName;
 
     /// Delete the Environment
     fn delete(self) -> Result<(), EnvironmentError2>;
@@ -107,32 +101,39 @@ pub trait TemporaryEnvironment {
     ) -> Result<(), EnvironmentError2>;
 }
 
-/// Struct representing a local environment in a given location
+/// Struct representing a local environment
+///
+/// This environment performs transactional edits by first copying the environment
+/// to a temporary directory, making changes there, and attempting to build the
+/// environment. If the build succeeds, the edit is considered a success and the
+/// original environment contents are overwritten with the contents of the temporary
+/// directory.
+///
+/// The transaction status is captured via the `state` field.
 #[derive(Debug)]
 pub struct PathEnvironment<S> {
-    /// absolute path to the environment, typically within `<...>/.flox/name`
-    path: PathBuf,
+    /// Absolute path to the environment, typically within `<...>/.flox/name`
+    pub path: PathBuf,
+
+    /// The temporary directory that this environment will use during transactions
+    pub temp_dir: PathBuf,
+
     /// The [EnvironmentRef] this env is created from (and validated against)
-    environment_ref: EnvironmentRef,
-    state: S,
+    pub environment_ref: EnvironmentRef,
+
+    /// The transaction state
+    pub state: S,
 }
 
-/// Changes to environments should be atomic,
-/// so that possibly breaking modifications to the environment can be safely discarded.
-/// When environment objects are created with [EnvironmentState] [Original] they
-/// are in a "reading" state.
-/// To make modifications we copy the environment into a temporary sandbox.
-/// Within the sandbox we can make modifications and verify them by building the environment.
-/// When verified, we can move the sandboxed environment back to its original location.
-#[derive(Debug)]
-pub struct Original {
-    /// directory to create temporary environments in (usually flox.temp_dir)
-    temp_dir: PathBuf,
-}
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+pub struct Original;
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub struct Temporary;
-pub trait EnvironmentState {}
-impl EnvironmentState for Original {}
-impl EnvironmentState for Temporary {}
+
+/// A marker trait used to identify types that represent transaction states
+pub trait TransactionState: Send + Sync {}
+impl TransactionState for Original {}
+impl TransactionState for Temporary {}
 
 impl<S> PartialEq for PathEnvironment<S> {
     fn eq(&self, other: &Self) -> bool {
@@ -140,12 +141,61 @@ impl<S> PartialEq for PathEnvironment<S> {
     }
 }
 
-impl<S: EnvironmentState> PathEnvironment<S> {
-    /// Build the evironment derivation using nix
+impl<S: TransactionState> PathEnvironment<S> {
+    /// Makes a temporary copy of the environment so edits can be applied without modifying the original environment
+    pub async fn make_temporary(&self) -> Result<PathEnvironment<Temporary>, EnvironmentError2> {
+        copy_dir_recursively_without_permissions(&self.path, &self.temp_dir)
+            .await
+            .map_err(EnvironmentError2::MakeTemporaryEnv)?;
+        Ok(PathEnvironment {
+            path: self.temp_dir.clone(),
+            temp_dir: self.temp_dir.clone(),
+            environment_ref: self.environment_ref.clone(),
+            state: Temporary,
+        })
+    }
+
+    /// Updates the environment manifest with the provided contents
+    pub fn update_manifest(&mut self, contents: &impl AsRef<str>) -> Result<(), EnvironmentError2> {
+        let mut manifest_file = std::fs::OpenOptions::new()
+            .write(true)
+            .truncate(true)
+            .open(self.manifest_path())
+            .map_err(EnvironmentError2::OpenManifest)?;
+        manifest_file
+            .write_all(contents.as_ref().as_bytes())
+            .map_err(EnvironmentError2::UpdateManifest)?;
+        Ok(())
+    }
+
+    /// Replace the contents of this environment's `.flox` with that of another environment's `.flox`
+    pub fn replace_with(
+        &mut self,
+        replacement: PathEnvironment<Temporary>,
+    ) -> Result<(), EnvironmentError2> {
+        fs_extra::dir::move_dir(
+            &replacement.path,
+            &self.path,
+            &fs_extra::dir::CopyOptions::new()
+                .overwrite(true)
+                .content_only(true),
+        )
+        .expect("replace origin");
+        std::fs::create_dir(&replacement.path).expect("recreate temp dir");
+        Ok(())
+    }
+}
+
+#[async_trait]
+impl<S> Environment for PathEnvironment<S>
+where
+    S: TransactionState,
+{
+    /// Build the environment and create a result link as gc-root
     async fn build(
         &self,
         nix: &NixCommandLine,
-        system: impl AsRef<str>,
+        system: impl AsRef<str> + Send,
     ) -> Result<(), EnvironmentError2> {
         debug!("building with nix ....");
 
@@ -169,86 +219,67 @@ impl<S: EnvironmentState> PathEnvironment<S> {
 
         Ok(())
     }
-}
 
-#[async_trait(?Send)]
-impl Environment for PathEnvironment<Original> {
-    type ConcreteTemporary = PathEnvironment<Temporary>;
-
-    async fn build(
-        &self,
+    /// Install packages to the environment atomically
+    async fn install(
+        &mut self,
+        packages: impl Iterator<Item = FloxPackage> + Send,
         nix: &NixCommandLine,
-        system: impl AsRef<str>,
+        system: impl AsRef<str> + Send,
     ) -> Result<(), EnvironmentError2> {
-        self.build(nix, system).await
+        let mut temp_env = self.make_temporary().await?;
+        let current_manifest_contents = fs::read_to_string(temp_env.manifest_path())
+            .map_err(EnvironmentError2::ReadManifest)?;
+        let new_manifest_contents =
+            flox_nix_content_with_new_packages(&current_manifest_contents, packages)?;
+        temp_env.update_manifest(&new_manifest_contents)?;
+        temp_env.build(nix, system).await?;
+        self.replace_with(temp_env)?;
+        Ok(())
     }
 
-    /// Get the environment ref for this environment
+    /// Uninstall packages from the environment atomically
+    async fn uninstall(
+        &mut self,
+        packages: impl Iterator<Item = FloxPackage> + Send,
+        nix: &NixCommandLine,
+        system: impl AsRef<str> + Send,
+    ) -> Result<(), EnvironmentError2> {
+        let mut temp_env = self.make_temporary().await?;
+        let current_manifest_contents = fs::read_to_string(temp_env.manifest_path())
+            .map_err(EnvironmentError2::ReadManifest)?;
+        let new_manifest_contents =
+            flox_nix_content_with_packages_removed(&current_manifest_contents, packages)?;
+        temp_env.update_manifest(&new_manifest_contents)?;
+        temp_env.build(nix, system).await?;
+        self.replace_with(temp_env)?;
+        Ok(())
+    }
+
+    /// Activate this environment
+    /// TODO: remove this `allow` once the method is filled out
+    #[allow(unused_variables)]
+    async fn activate(&self, nix: &NixCommandLine) -> Result<(), EnvironmentError2> {
+        todo!()
+    }
+
+    /// Atomically edit this environment, ensuring that it still builds
+    async fn edit(&self) -> Result<(), EnvironmentError2> {
+        todo!()
+    }
+
+    /// Return the [EnvironmentRef] for the environment for identification
     fn environment_ref(&self) -> &EnvironmentRef {
         &self.environment_ref
     }
 
-    /// Install packages by converting a [FloxPackage]s into attributes in the `flox.nix` format,
-    /// and then using [`rnix`](https://crates.io/crates/rnix) to merge these attributes into the
-    /// environment definition file.
-    async fn install(
-        &mut self,
-        packages: impl IntoIterator<Item = FloxPackage>,
-        nix: &NixCommandLine,
-        system: impl AsRef<str> + Send,
-    ) -> Result<&mut Self, EnvironmentError2> {
-        let flox_nix_content =
-            fs::read_to_string(self.flox_nix_path()).map_err(EnvironmentError2::ReadFloxNix)?;
-        let new_content = flox_nix_content_with_new_packages(&flox_nix_content, packages)?;
-
-        let mut temporary_environment = self
-            .modify_in(
-                tempfile::tempdir_in(self.state.temp_dir.clone())
-                    .unwrap()
-                    .into_path(),
-            )
-            .await?;
-        temporary_environment
-            .set_environment(new_content.as_bytes(), nix, system)
-            .await?;
-        self.replace_with(temporary_environment)?;
-        Ok(self)
-    }
-
-    /// Uninstall packages by converting a [FloxPackage]s into attributes in the `flox.nix` format,
-    /// and then using [`rnix`](https://crates.io/crates/rnix) to remove these attributes from the
-    /// environment definition file.
-    async fn uninstall(
-        &mut self,
-        packages: impl IntoIterator<Item = FloxPackage>,
-        nix: &NixCommandLine,
-        system: impl AsRef<str> + Send,
-    ) -> Result<&mut Self, EnvironmentError2> {
-        let flox_nix_content =
-            fs::read_to_string(self.flox_nix_path()).map_err(EnvironmentError2::ReadFloxNix)?;
-        let new_content = flox_nix_content_with_packages_removed(&flox_nix_content, packages)?;
-
-        let mut temporary_environment = self
-            .modify_in(
-                tempfile::tempdir_in(self.state.temp_dir.clone())
-                    .unwrap()
-                    .into_path(),
-            )
-            .await?;
-        temporary_environment
-            .set_environment(new_content.as_bytes(), nix, system)
-            .await?;
-        self.replace_with(temporary_environment)?;
-        Ok(self)
-    }
-
-    /// Get a catalog of installed packages from the environment
+    /// Get a catalog of installed packages from this environment
     ///
     /// Evaluated using nix from the environment definition.
     async fn catalog(
         &self,
         nix: &NixCommandLine,
-        system: impl AsRef<str>,
+        system: impl AsRef<str> + Send,
     ) -> Result<EnvCatalog, EnvironmentError2> {
         let mut flake_attribute = self.flake_attribute(system);
         flake_attribute.attr_path.push_attr("catalog").unwrap(); // valid attribute name, should not fail
@@ -273,63 +304,24 @@ impl Environment for PathEnvironment<Original> {
         serde_json::from_value(catalog_value).map_err(EnvironmentError2::ParseCatalog)
     }
 
-    /// List all Packages in the environment
-    ///
-    /// Currently unused, supposed to be a cleaned up version of [`Environment<_>::catalog`]
-    async fn packages(
-        &self,
-        _nix: &NixCommandLine,
-        _system: impl AsRef<str>,
-    ) -> Result<Vec<FloxPackage>, EnvironmentError2> {
-        todo!()
+    /// Returns the environment owner
+    fn owner(&self) -> Option<EnvironmentOwner> {
+        self.environment_ref.owner().cloned()
     }
 
-    /// Copy the environment to a sandbox directory given by `path`
-    ///
-    /// Typically within [Flox.temp_dir].
-    /// This implementation tries to stay independent of the [Flox] struct for now.
-    async fn modify_in(
-        &mut self,
-        path: impl AsRef<Path>,
-    ) -> Result<PathEnvironment<Temporary>, EnvironmentError2> {
-        copy_dir_recursively_without_permissions(&self.path, &path)
-            .await
-            .map_err(EnvironmentError2::MakeSandbox)?;
-
-        Ok(PathEnvironment {
-            path: path.as_ref().to_path_buf(),
-            environment_ref: self.environment_ref.clone(),
-            state: Temporary,
-        })
+    /// Returns the environment name
+    fn name(&self) -> EnvironmentName {
+        self.environment_ref.name().clone()
     }
 
-    /// Commmit changes, by moving modified files back to the original (read only) location
-    fn replace_with(
-        &mut self,
-        temporary_environment: PathEnvironment<Temporary>,
-    ) -> Result<(), EnvironmentError2> {
-        fs_extra::dir::move_dir(
-            &temporary_environment.path,
-            &self.path,
-            &fs_extra::dir::CopyOptions::new()
-                .overwrite(true)
-                .content_only(true),
-        )
-        .expect("replace origin");
-        std::fs::create_dir(&temporary_environment.path).expect("recreate temp dir");
-        Ok(())
-    }
-
-    /// Delete the environment
-    ///
-    /// While destructive, no transaction is needed to verify changes.
+    /// Delete the Environment
     fn delete(self) -> Result<(), EnvironmentError2> {
         std::fs::remove_dir_all(self.path).map_err(EnvironmentError2::DeleteEnvironement)?;
         Ok(())
     }
 }
 
-impl<S: EnvironmentState> PathEnvironment<S> {
+impl<S: TransactionState> PathEnvironment<S> {
     /// Remove gc-roots
     ///
     /// Currently stubbed out due to missing activation that could need linked results
@@ -384,7 +376,7 @@ impl<S: EnvironmentState> PathEnvironment<S> {
     }
 
     /// Path to the environment definition file
-    pub fn flox_nix_path(&self) -> PathBuf {
+    pub fn manifest_path(&self) -> PathBuf {
         self.path.join("pkgs").join("default").join("flox.nix")
     }
 }
@@ -421,9 +413,8 @@ impl PathEnvironment<Original> {
         Ok(PathEnvironment {
             path: env_path,
             environment_ref: ident,
-            state: Original {
-                temp_dir: temp_dir.as_ref().to_path_buf(),
-            },
+            temp_dir: temp_dir.as_ref().to_path_buf(),
+            state: Original,
         })
     }
 
@@ -486,7 +477,7 @@ impl PathEnvironment<Original> {
 
         std::fs::create_dir_all(&env_dir).map_err(EnvironmentError2::InitEnv)?;
 
-        copy_dir_recursively_without_permissions(env!("FLOX_ENV_TEMPLATE"), &env_dir)
+        copy_dir_recursively_without_permissions(&env!("FLOX_ENV_TEMPLATE"), &env_dir)
             .await
             .map_err(EnvironmentError2::InitEnv)?;
 
@@ -513,7 +504,7 @@ impl TemporaryEnvironment for PathEnvironment<Temporary> {
         let mut flox_nix = std::fs::OpenOptions::new()
             .write(true)
             .truncate(true)
-            .open(self.flox_nix_path())
+            .open(self.manifest_path())
             .unwrap();
         std::io::copy(&mut flox_nix_content, &mut flox_nix).unwrap();
         self.build(nix, system).await?; // unwrap
@@ -553,8 +544,14 @@ pub enum EnvironmentError2 {
     ParseCatalog(serde_json::Error),
     #[error("Build({0})")]
     Build(NixCommandLineRunError),
-    #[error("ReadFloxNix({0})")]
-    ReadFloxNix(std::io::Error),
+    #[error("ReadManifest({0})")]
+    ReadManifest(std::io::Error),
+    #[error("MakeTemporaryEnv({0})")]
+    MakeTemporaryEnv(std::io::Error),
+    #[error("UpdateManifest({0})")]
+    UpdateManifest(std::io::Error),
+    #[error("OpenManifest({0})")]
+    OpenManifest(std::io::Error),
 }
 
 /// Within a nix AST, find the first definition of an attribute set,
@@ -573,12 +570,12 @@ fn find_attrs(mut expr: Expr) -> Result<AttrSet, ()> {
 
 /// Copy a whole directory recursively ignoring the original permissions
 async fn copy_dir_recursively_without_permissions(
-    from: impl AsRef<Path>,
+    from: &impl AsRef<Path>,
     to: &impl AsRef<Path>,
 ) -> Result<(), std::io::Error> {
-    for entry in WalkDir::new(&from).into_iter().skip(1) {
+    for entry in WalkDir::new(from).into_iter().skip(1) {
         let entry = entry.unwrap();
-        let new_path = to.as_ref().join(entry.path().strip_prefix(&from).unwrap());
+        let new_path = to.as_ref().join(entry.path().strip_prefix(from).unwrap());
         if entry.file_type().is_dir() {
             tokio::fs::create_dir(new_path).await.unwrap()
         } else {
@@ -592,14 +589,12 @@ async fn copy_dir_recursively_without_permissions(
 
 /// insert packages into the content of a flox.nix file
 fn flox_nix_content_with_new_packages(
-    flox_nix_content: &str,
-    packages: impl IntoIterator<Item = FloxPackage>,
+    flox_nix_content: &impl AsRef<str>,
+    packages: impl Iterator<Item = FloxPackage>,
 ) -> Result<String, EnvironmentError2> {
-    let packages = packages
-        .into_iter()
-        .map(|package| package.flox_nix_attribute().unwrap());
+    let packages = packages.map(|package| package.flox_nix_attribute().unwrap());
 
-    let mut root = rnix::Root::parse(flox_nix_content)
+    let mut root = rnix::Root::parse(flox_nix_content.as_ref())
         .ok()
         .unwrap()
         .expr()
@@ -636,14 +631,12 @@ fn flox_nix_content_with_new_packages(
 
 /// remove packages from the content of a flox.nix file
 fn flox_nix_content_with_packages_removed(
-    flox_nix_content: &str,
-    packages: impl IntoIterator<Item = FloxPackage>,
+    flox_nix_content: &impl AsRef<str>,
+    packages: impl Iterator<Item = FloxPackage>,
 ) -> Result<String, EnvironmentError2> {
-    let packages = packages
-        .into_iter()
-        .map(|package| package.flox_nix_attribute().unwrap());
+    let packages = packages.map(|package| package.flox_nix_attribute().unwrap());
 
-    let mut root = rnix::Root::parse(flox_nix_content)
+    let mut root = rnix::Root::parse(flox_nix_content.as_ref())
         .ok()
         .unwrap()
         .expr()
@@ -677,11 +670,8 @@ fn flox_nix_content_with_packages_removed(
 
 #[cfg(test)]
 mod tests {
-    use flox_types::stability::Stability;
-    use indoc::indoc;
 
     use super::*;
-    use crate::flox::tests::flox_instance;
 
     #[tokio::test]
     async fn create_env() {
@@ -706,9 +696,8 @@ mod tests {
                 .unwrap()
                 .join(".flox/test"),
             environment_ref: EnvironmentRef::new(None, "test").unwrap(),
-            state: Original {
-                temp_dir: environment_temp_dir.path().to_path_buf(),
-            },
+            temp_dir: environment_temp_dir.path().to_path_buf(),
+            state: Original,
         };
 
         let actual = PathEnvironment::<Original>::init(
