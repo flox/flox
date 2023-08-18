@@ -587,6 +587,7 @@ async fn cp_r(from: impl AsRef<Path>, to: &impl AsRef<Path>) -> Result<(), std::
     Ok(())
 }
 
+/// insert packages into the content of a flox.nix file
 fn flox_nix_content_with_new_packages(
     flox_nix_content: &str,
     packages: impl IntoIterator<Item = FloxPackage>,
@@ -630,6 +631,7 @@ fn flox_nix_content_with_new_packages(
     Ok(new_content)
 }
 
+/// remove packages from the content of a flox.nix file
 fn flox_nix_content_with_packages_removed(
     flox_nix_content: &str,
     packages: impl IntoIterator<Item = FloxPackage>,
