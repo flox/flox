@@ -38,38 +38,55 @@ pub enum InstalledPackage {
 pub trait Environment {
     type ConcreteTemporary;
 
+    /// Build the environment and create a result link as gc-root
     async fn build(
         &self,
         nix: &NixCommandLine,
         system: impl AsRef<str>,
     ) -> Result<(), EnvironmentError2>;
+
+    /// Install packages to the environment atomically
     async fn install(
         &mut self,
         packages: impl IntoIterator<Item = FloxPackage>,
         nix: &NixCommandLine,
         system: impl AsRef<str> + Send,
     ) -> Result<&mut Self, EnvironmentError2>;
+
+    /// Uninstall remove pacakges from the environment atomically
     async fn uninstall(
         &mut self,
         packages: impl IntoIterator<Item = FloxPackage>,
         nix: &NixCommandLine,
         system: impl AsRef<str> + Send,
     ) -> Result<&mut Self, EnvironmentError2>;
+
+    /// Return the [EnvironmentRef] for the environment for identification
     fn environment_ref(&self) -> &EnvironmentRef;
+
+    /// Read the catalog for this environment
+    ///
+    /// The catalog contains information about the locked sources of installed packages.
     async fn catalog(
         &self,
         nix: &NixCommandLine,
         system: impl AsRef<str>,
     ) -> Result<EnvCatalog, EnvironmentError2>;
+
+    /// List the installed packages
     async fn packages(
         &self,
-        _nix: &NixCommandLine,
-        _system: impl AsRef<str>,
+        nix: &NixCommandLine,
+        system: impl AsRef<str>,
     ) -> Result<Vec<FloxPackage>, EnvironmentError2>;
+
+    /// Create a temporary environment that can be modified freely
     async fn modify_in(
         &mut self,
         path: impl AsRef<Path>,
     ) -> Result<Self::ConcreteTemporary, EnvironmentError2>;
+
+    /// Apply the changes made in a temporary environment
     fn replace_with(
         &mut self,
         temporary_environment: Self::ConcreteTemporary,
@@ -91,6 +108,7 @@ pub trait TemporaryEnvironment {
 pub struct PathEnvironment<S: EnvironmentState> {
     /// absolute path to the environment, typically within `<...>/.flox/name`
     path: PathBuf,
+    /// The [EnvironmentRef] this env is created from (and validated against)
     environment_ref: EnvironmentRef,
     state: S,
 }
