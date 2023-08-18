@@ -453,15 +453,18 @@ impl<S: EnvironmentState> PathEnvironment<S> {
     pub fn flox_nix_path(&self) -> PathBuf {
         self.path.join("pkgs").join("default").join("flox.nix")
     }
+}
 
+/// Constructors of PathEnvironments
+impl PathEnvironment<Original> {
     /// Open an environment at a given path
     ///
     /// Ensure that the path exists and contains files that "look" like an environment
     pub fn open(
         path: impl AsRef<Path>,
         ident: EnvironmentRef,
-        temp_dir: PathBuf,
-    ) -> Result<PathEnvironment<Original>, EnvironmentError2> {
+        temp_dir: impl AsRef<Path>,
+    ) -> Result<Self, EnvironmentError2> {
         let path = path.as_ref().to_path_buf();
         let dot_flox_path = path.join(".flox");
         let env_path = dot_flox_path.join(ident.name().as_ref());
@@ -484,7 +487,9 @@ impl<S: EnvironmentState> PathEnvironment<S> {
         Ok(PathEnvironment {
             path: env_path,
             environment_ref: ident,
-            state: Original { temp_dir },
+            state: Original {
+                temp_dir: temp_dir.as_ref().to_path_buf(),
+            },
         })
     }
 
@@ -492,8 +497,8 @@ impl<S: EnvironmentState> PathEnvironment<S> {
     /// and looking up ancestor directories until `/`
     pub fn discover(
         current_dir: impl AsRef<Path>,
-        temp_dir: PathBuf,
-    ) -> Result<Option<PathEnvironment<Original>>, EnvironmentError2> {
+        temp_dir: impl AsRef<Path>,
+    ) -> Result<Option<Self>, EnvironmentError2> {
         let dot_flox = current_dir
             .as_ref()
             .ancestors()
@@ -531,12 +536,12 @@ impl<S: EnvironmentState> PathEnvironment<S> {
     pub async fn init(
         path: impl AsRef<Path>,
         name: EnvironmentName,
-        temp_dir: PathBuf,
-    ) -> Result<PathEnvironment<Original>, EnvironmentError2> {
+        temp_dir: impl AsRef<Path>,
+    ) -> Result<Self, EnvironmentError2> {
         if Self::open(
             &path,
             EnvironmentRef::new_from_parts(None, name.clone()),
-            temp_dir.clone(),
+            &temp_dir,
         )
         .is_ok()
         {
