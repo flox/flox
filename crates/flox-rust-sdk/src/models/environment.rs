@@ -1,3 +1,4 @@
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
@@ -196,45 +197,9 @@ impl Environment for PathEnvironment<Original> {
         nix: &NixCommandLine,
         system: impl AsRef<str> + Send,
     ) -> Result<&mut Self, EnvironmentError2> {
-        let packages = packages
-            .into_iter()
-            .map(|package| package.flox_nix_attribute().unwrap());
-
-        // assume flake exists locally
-        let flox_nix_path = self.flox_nix_path();
-        let flox_nix_content: String = std::fs::read_to_string(&flox_nix_path).unwrap();
-
-        let mut root = rnix::Root::parse(&flox_nix_content)
-            .ok()
-            .unwrap()
-            .expr()
-            .unwrap();
-
-        if let Expr::Lambda(lambda) = root {
-            root = lambda.body().unwrap();
-        }
-
-        let config_attrset = find_attrs(root.clone()).unwrap();
-        let mut edited = config_attrset.clone();
-
-        for (path, version) in packages {
-            let mut value = rnix::ast::AttrSet::new();
-            if let Some(version) = version {
-                value = value.insert_unchecked(
-                    ["version"],
-                    rnix::ast::Str::new(&version).syntax().to_owned(),
-                );
-            }
-
-            let mut path_in_packages = vec!["packages".to_string()];
-            path_in_packages.extend_from_slice(&path);
-            edited = edited.insert_unchecked(path_in_packages, value.syntax().to_owned());
-        }
-
-        let green_tree = config_attrset
-            .syntax()
-            .replace_with(edited.syntax().green().into_owned());
-        let new_content = nixpkgs_fmt::reformat_string(&green_tree.to_string());
+        let flox_nix_content =
+            fs::read_to_string(self.flox_nix_path()).map_err(EnvironmentError2::ReadFloxNix)?;
+        let new_content = flox_nix_content_with_new_packages(&flox_nix_content, packages)?;
 
         let mut temporary_environment = self
             .modify_in(
@@ -259,41 +224,9 @@ impl Environment for PathEnvironment<Original> {
         nix: &NixCommandLine,
         system: impl AsRef<str> + Send,
     ) -> Result<&mut Self, EnvironmentError2> {
-        let packages = packages
-            .into_iter()
-            .map(|package| package.flox_nix_attribute().unwrap());
-
-        // assume flake exists locally
-        let flox_nix_path = self.flox_nix_path();
-        let flox_nix_content: String = std::fs::read_to_string(&flox_nix_path).unwrap();
-
-        let mut root = rnix::Root::parse(&flox_nix_content)
-            .ok()
-            .unwrap()
-            .expr()
-            .unwrap();
-
-        if let Expr::Lambda(lambda) = root {
-            root = lambda.body().unwrap();
-        }
-
-        let config_attrset = find_attrs(root.clone()).unwrap();
-        let mut edited = config_attrset.clone().syntax().green().into_owned();
-
-        for (path, _version) in packages {
-            let mut path_in_packages = vec!["packages".to_string()];
-            path_in_packages.extend_from_slice(&path);
-
-            let index = config_attrset
-                .find_by_path(&path_in_packages)
-                .unwrap_or_else(|| panic!("path not found, {path_in_packages:?}"))
-                .syntax()
-                .index();
-            edited = edited.remove_child(index - 2); // yikes
-        }
-
-        let green_tree = config_attrset.syntax().replace_with(edited);
-        let new_content = nixpkgs_fmt::reformat_string(&green_tree.to_string());
+        let flox_nix_content =
+            fs::read_to_string(self.flox_nix_path()).map_err(EnvironmentError2::ReadFloxNix)?;
+        let new_content = flox_nix_content_with_packages_removed(&flox_nix_content, packages)?;
 
         let mut temporary_environment = self
             .modify_in(
@@ -620,6 +553,8 @@ pub enum EnvironmentError2 {
     ParseCatalog(serde_json::Error),
     #[error("Build({0})")]
     Build(NixCommandLineRunError),
+    #[error("ReadFloxNix({0})")]
+    ReadFloxNix(std::io::Error),
 }
 
 /// Within a nix AST, find the first definition of an attribute set,
@@ -652,6 +587,89 @@ async fn cp_r(from: impl AsRef<Path>, to: &impl AsRef<Path>) -> Result<(), std::
     Ok(())
 }
 
+fn flox_nix_content_with_new_packages(
+    flox_nix_content: &str,
+    packages: impl IntoIterator<Item = FloxPackage>,
+) -> Result<String, EnvironmentError2> {
+    let packages = packages
+        .into_iter()
+        .map(|package| package.flox_nix_attribute().unwrap());
+
+    let mut root = rnix::Root::parse(flox_nix_content)
+        .ok()
+        .unwrap()
+        .expr()
+        .unwrap();
+
+    if let Expr::Lambda(lambda) = root {
+        root = lambda.body().unwrap();
+    }
+
+    let config_attrset = find_attrs(root.clone()).unwrap();
+    #[allow(clippy::redundant_clone)] // required for rnix reasons, i think
+    let mut edited = config_attrset.clone();
+
+    for (path, version) in packages {
+        let mut value = rnix::ast::AttrSet::new();
+        if let Some(version) = version {
+            value = value.insert_unchecked(
+                ["version"],
+                rnix::ast::Str::new(&version).syntax().to_owned(),
+            );
+        }
+
+        let mut path_in_packages = vec!["packages".to_string()];
+        path_in_packages.extend_from_slice(&path);
+        edited = edited.insert_unchecked(path_in_packages, value.syntax().to_owned());
+    }
+
+    let green_tree = config_attrset
+        .syntax()
+        .replace_with(edited.syntax().green().into_owned());
+    let new_content = nixpkgs_fmt::reformat_string(&green_tree.to_string());
+    Ok(new_content)
+}
+
+fn flox_nix_content_with_packages_removed(
+    flox_nix_content: &str,
+    packages: impl IntoIterator<Item = FloxPackage>,
+) -> Result<String, EnvironmentError2> {
+    let packages = packages
+        .into_iter()
+        .map(|package| package.flox_nix_attribute().unwrap());
+
+    let mut root = rnix::Root::parse(flox_nix_content)
+        .ok()
+        .unwrap()
+        .expr()
+        .unwrap();
+
+    if let Expr::Lambda(lambda) = root {
+        root = lambda.body().unwrap();
+    }
+
+    let config_attrset = find_attrs(root.clone()).unwrap();
+
+    #[allow(clippy::redundant_clone)] // required for rnix reasons, i think
+    let mut edited = config_attrset.clone().syntax().green().into_owned();
+
+    for (path, _version) in packages {
+        let mut path_in_packages = vec!["packages".to_string()];
+        path_in_packages.extend_from_slice(&path);
+
+        let index = config_attrset
+            .find_by_path(&path_in_packages)
+            .unwrap_or_else(|| panic!("path not found, {path_in_packages:?}"))
+            .syntax()
+            .index();
+        edited = edited.remove_child(index - 2); // yikes
+    }
+
+    let green_tree = config_attrset.syntax().replace_with(edited);
+    let new_content = nixpkgs_fmt::reformat_string(&green_tree.to_string());
+    Ok(new_content)
+}
+
 #[cfg(test)]
 mod tests {
     use flox_types::stability::Stability;
@@ -667,7 +685,7 @@ mod tests {
         let before = PathEnvironment::<Original>::open(
             tempdir.path(),
             EnvironmentRef::new_from_parts(None, EnvironmentName::from_str("test").unwrap()),
-            environment_temp_dir.path().to_path_buf(),
+            environment_temp_dir.path(),
         );
 
         assert!(
