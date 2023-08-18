@@ -23,7 +23,6 @@ use crate::config::{Config, FLOX_CONFIG_FILE};
 use crate::utils::init::{
     init_access_tokens,
     init_channels,
-    init_git_conf,
     init_telemetry,
     init_uuid,
     telemetry_opt_out_needs_migration,
@@ -114,8 +113,6 @@ impl FloxArgs {
         // `temp_dir` will automatically be removed from disk when the function returns
         let temp_dir = TempDir::new_in(process_dir)?;
         let temp_dir_path = temp_dir.path().to_owned();
-
-        init_git_conf(temp_dir.path(), &config.flox.config_dir).await?;
 
         // migrate metrics denial
         // metrics could be turned off by writing an empty UUID file

@@ -236,31 +236,6 @@ export NIX_USER_CONF_FILES="$nixConf"
 export SSL_CERT_FILE="${SSL_CERT_FILE:-@@NIXPKGS_CACERT_BUNDLE_CRT@@}"
 export NIX_SSL_CERT_FILE="${NIX_SSL_CERT_FILE:-$SSL_CERT_FILE}"
 
-# Similarly configure git config by way of $GIT_CONFIG_GLOBAL. Note that
-# we do it by way of this env variable because Nix doesn't provide a
-# passthru mechanism for passing options to git invocations. (?)
-floxmetaGitConfig="$FLOX_CONFIG_HOME/gitconfig"
-
-tmpGitConfig=$($_mktemp --tmpdir=$FLOX_CONFIG_HOME)
-$_chmod 600 $tmpGitConfig
-$_cat > $tmpGitConfig <<EOF
-# Automatically generated - do not edit.
-[credential "https://git.hub.flox.dev/"]
-	helper = "!$_flox_gh auth token --git-credential-helper"
-
-# Temporary while we transition to flox gitforge.
-[credential "https://github.com/"]
-	helper = "!${_gh?} auth git-credential"
-EOF
-
-# Compare generated gitconfig to cached version.
-if $_cmp --quiet "$tmpGitConfig" "$floxmetaGitConfig"; then
-	$_rm "$tmpGitConfig"
-else
-	warn "Updating $floxmetaGitConfig"
-	$_mv -f "$tmpGitConfig" "$floxmetaGitConfig"
-fi
-
 if [ -n "${NIX_GET_COMPLETIONS:-}" ]; then
 	export FLOX_ORIGINAL_NIX_GET_COMPLETIONS="$NIX_GET_COMPLETIONS"
 	unset NIX_GET_COMPLETIONS

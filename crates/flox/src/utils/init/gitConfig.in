@@ -1,7 +1,0 @@
-# Automatically generated - do not edit.
-[credential "https://git.hub.flox.dev/"]
-	helper = "!{flox_gh_bin} auth token --git-credential-helper"
-
-# Temporary while we transition to flox gitforge.
-[credential "https://github.com/"]
-	helper = "!{gh_bin} auth git-credential"

@@ -296,11 +296,6 @@ impl<'flox, Git: GitProvider> Floxmeta<'flox, Git, GitSandBox<Git>> {
         self,
         message: &str,
     ) -> Result<Floxmeta<'flox, Git, ReadOnly<Git>>, TransactionCommitError<Git>> {
-        let orig_git_config_global = std::env::var("GIT_CONFIG_GLOBAL");
-        std::env::set_var("GIT_CONFIG_GLOBAL", self.flox.config_dir.join("gitconfig"));
-        let orig_git_config_system = std::env::var("GIT_CONFIG_SYSTEM");
-        std::env::set_var("GIT_CONFIG_SYSTEM", "/dev/null");
-
         self.access
             .git()
             .commit(message)
@@ -311,13 +306,6 @@ impl<'flox, Git: GitProvider> Floxmeta<'flox, Git, GitSandBox<Git>> {
             .push("origin")
             .await
             .map_err(TransactionCommitError::GitPush)?;
-
-        if let Ok(orig_git_config_global) = orig_git_config_global {
-            std::env::set_var("GIT_CONFIG_GLOBAL", orig_git_config_global);
-        }
-        if let Ok(orig_git_config_system) = orig_git_config_system {
-            std::env::set_var("GIT_CONFIG_SYSTEM", orig_git_config_system);
-        }
 
         Ok(Floxmeta {
             owner: self.owner,
