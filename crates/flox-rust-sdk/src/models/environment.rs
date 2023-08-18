@@ -91,6 +91,9 @@ pub trait Environment {
         &mut self,
         temporary_environment: Self::ConcreteTemporary,
     ) -> Result<(), EnvironmentError2>;
+
+    /// Delete the Environment
+    fn delete(self) -> Result<(), EnvironmentError2>;
 }
 
 #[async_trait]
@@ -382,6 +385,14 @@ impl Environment for PathEnvironment<Original> {
         .expect("replace origin");
         Ok(())
     }
+
+    /// Delete the environment
+    ///
+    /// While destructive, no transaction is needed to verify changes.
+    fn delete(self) -> Result<(), EnvironmentError2> {
+        std::fs::remove_dir_all(self.path).map_err(EnvironmentError2::DeleteEnvironement)?;
+        Ok(())
+    }
 }
 
 impl<S: EnvironmentState> PathEnvironment<S> {
@@ -541,14 +552,6 @@ impl<S: EnvironmentState> PathEnvironment<S> {
             .map_err(EnvironmentError2::InitEnv)?;
 
         Self::open(path, EnvironmentRef::new_from_parts(None, name), temp_dir)
-    }
-
-    /// Delete the environment
-    ///
-    /// While destructive, no transaction is needed to verify changes.
-    pub fn delete(self) -> Result<(), EnvironmentError2> {
-        std::fs::remove_dir_all(self.path).map_err(EnvironmentError2::DeleteEnvironement)?;
-        Ok(())
     }
 }
 
