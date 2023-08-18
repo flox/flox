@@ -54,7 +54,7 @@ pub trait Environment {
         system: impl AsRef<str> + Send,
     ) -> Result<&mut Self, EnvironmentError2>;
 
-    /// Uninstall remove pacakges from the environment atomically
+    /// Uninstall packages from the environment atomically
     async fn uninstall(
         &mut self,
         packages: impl IntoIterator<Item = FloxPackage>,
