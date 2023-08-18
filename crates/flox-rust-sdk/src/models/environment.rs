@@ -292,7 +292,7 @@ impl Environment for PathEnvironment<Original> {
         &mut self,
         path: impl AsRef<Path>,
     ) -> Result<PathEnvironment<Temporary>, EnvironmentError2> {
-        cp_r(&self.path, &path)
+        copy_dir_recursively_without_permissions(&self.path, &path)
             .await
             .map_err(EnvironmentError2::MakeSandbox)?;
 
@@ -486,7 +486,7 @@ impl PathEnvironment<Original> {
 
         std::fs::create_dir_all(&env_dir).map_err(EnvironmentError2::InitEnv)?;
 
-        cp_r(env!("FLOX_ENV_TEMPLATE"), &env_dir)
+        copy_dir_recursively_without_permissions(env!("FLOX_ENV_TEMPLATE"), &env_dir)
             .await
             .map_err(EnvironmentError2::InitEnv)?;
 
@@ -572,7 +572,10 @@ fn find_attrs(mut expr: Expr) -> Result<AttrSet, ()> {
 }
 
 /// Copy a whole directory recursively ignoring the original permissions
-async fn cp_r(from: impl AsRef<Path>, to: &impl AsRef<Path>) -> Result<(), std::io::Error> {
+async fn copy_dir_recursively_without_permissions(
+    from: impl AsRef<Path>,
+    to: &impl AsRef<Path>,
+) -> Result<(), std::io::Error> {
     for entry in WalkDir::new(&from).into_iter().skip(1) {
         let entry = entry.unwrap();
         let new_path = to.as_ref().join(entry.path().strip_prefix(&from).unwrap());
