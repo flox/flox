@@ -376,13 +376,14 @@ impl Environment for PathEnvironment<Original> {
         temporary_environment: PathEnvironment<Temporary>,
     ) -> Result<(), EnvironmentError2> {
         fs_extra::dir::move_dir(
-            temporary_environment.path,
-            self.path.clone(),
+            &temporary_environment.path,
+            &self.path,
             &fs_extra::dir::CopyOptions::new()
                 .overwrite(true)
                 .content_only(true),
         )
         .expect("replace origin");
+        std::fs::create_dir(&temporary_environment.path).expect("recreate temp dir");
         Ok(())
     }
 
@@ -653,7 +654,11 @@ async fn cp_r(from: impl AsRef<Path>, to: &impl AsRef<Path>) -> Result<(), std::
 
 #[cfg(test)]
 mod tests {
+    use flox_types::stability::Stability;
+    use indoc::indoc;
+
     use super::*;
+    use crate::flox::tests::flox_instance;
 
     #[tokio::test]
     async fn create_env() {
@@ -737,32 +742,33 @@ mod tests {
         let sandbox_path = tempdir.path().join("sandbox");
         std::fs::create_dir(&sandbox_path).unwrap();
 
-        let env: Environment<Read> = Environment::init(tempdir.path(), "test".parse().unwrap())
+        let mut env = PathEnvironment::init(tempdir.path(), "test".parse().unwrap(), &sandbox_path)
             .await
             .unwrap();
 
-        let mut env = env.modify_in(&sandbox_path).await.unwrap();
+        let mut temp_env = env.modify_in(&sandbox_path).await.unwrap();
 
-        assert_eq!(env.path, sandbox_path);
+        assert_eq!(temp_env.path, sandbox_path);
 
         let new_env_str = r#"
         { }
         "#;
 
-        env.set_environment(
-            new_env_str.as_bytes(),
-            &flox.nix(Default::default()),
-            flox.system,
-        )
-        .await
-        .unwrap();
+        temp_env
+            .set_environment(
+                new_env_str.as_bytes(),
+                &flox.nix(Default::default()),
+                flox.system,
+            )
+            .await
+            .unwrap();
 
         assert_eq!(
-            std::fs::read_to_string(env.flox_nix_path()).unwrap(),
+            std::fs::read_to_string(temp_env.flox_nix_path()).unwrap(),
             new_env_str
         );
 
-        let env = env.finish().unwrap();
+        env.replace_with(temp_env).unwrap();
 
         assert_eq!(
             std::fs::read_to_string(env.flox_nix_path()).unwrap(),
@@ -780,16 +786,20 @@ mod tests {
 
         let sandbox_path = tempdir.path().join("sandbox");
         std::fs::create_dir(&sandbox_path).unwrap();
-        let env: Environment<Read> = Environment::init(tempdir.path(), "test".parse().unwrap())
+
+        let mut env = PathEnvironment::init(tempdir.path(), "test".parse().unwrap(), &sandbox_path)
             .await
             .unwrap();
 
-        let mut env = env.modify_in(&sandbox_path).await.unwrap();
+        let mut temp_env = env.modify_in(&sandbox_path).await.unwrap();
 
         let empty_env_str = r#"{ }"#;
-        env.set_environment(empty_env_str.as_bytes(), &nix, &system)
+        temp_env
+            .set_environment(empty_env_str.as_bytes(), &nix, &system)
             .await
             .unwrap();
+
+        env.replace_with(temp_env).unwrap();
 
         env.install(
             [FloxPackage::Triple(FloxTriple {
@@ -813,13 +823,6 @@ mod tests {
             installed_env_str
         );
 
-        let env = env.finish().unwrap();
-
-        assert_eq!(
-            std::fs::read_to_string(env.flox_nix_path()).unwrap(),
-            installed_env_str
-        );
-
         let catalog = env.catalog(&nix, &system).await.unwrap();
         assert!(!catalog.entries.is_empty());
     }
@@ -835,19 +838,22 @@ mod tests {
         let sandbox_path = tempdir.path().join("sandbox");
         std::fs::create_dir(&sandbox_path).unwrap();
 
-        let env: Environment<Read> = Environment::init(tempdir.path(), "test".parse().unwrap())
+        let mut env = PathEnvironment::init(tempdir.path(), "test".parse().unwrap(), &sandbox_path)
             .await
             .unwrap();
 
-        let mut env = env.modify_in(&sandbox_path).await.unwrap();
+        let mut temp_env = env.modify_in(&sandbox_path).await.unwrap();
 
         let empty_env_str = indoc! {"
             { }
         "};
 
-        env.set_environment(empty_env_str.as_bytes(), &nix, &system)
+        temp_env
+            .set_environment(empty_env_str.as_bytes(), &nix, &system)
             .await
             .unwrap();
+
+        env.replace_with(temp_env).unwrap();
 
         let package = FloxPackage::Triple(FloxTriple {
             stability: Stability::Stable,
@@ -873,8 +879,6 @@ mod tests {
         env.uninstall([package.clone()], &nix, &system)
             .await
             .unwrap();
-
-        let env: Environment<Read> = env.finish().unwrap();
 
         assert_eq!(
             std::fs::read_to_string(env.flox_nix_path()).unwrap(),
