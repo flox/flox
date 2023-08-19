@@ -155,19 +155,6 @@ impl<S: TransactionState> PathEnvironment<S> {
         })
     }
 
-    /// Updates the environment manifest with the provided contents
-    pub fn update_manifest(&mut self, contents: &impl AsRef<str>) -> Result<(), EnvironmentError2> {
-        let mut manifest_file = std::fs::OpenOptions::new()
-            .write(true)
-            .truncate(true)
-            .open(self.manifest_path())
-            .map_err(EnvironmentError2::OpenManifest)?;
-        manifest_file
-            .write_all(contents.as_ref().as_bytes())
-            .map_err(EnvironmentError2::UpdateManifest)?;
-        Ok(())
-    }
-
     /// Replace the contents of this environment's `.flox` with that of another environment's `.flox`
     pub fn replace_with(
         &mut self,
@@ -182,6 +169,21 @@ impl<S: TransactionState> PathEnvironment<S> {
         )
         .expect("replace origin");
         std::fs::create_dir(&replacement.path).expect("recreate temp dir");
+        Ok(())
+    }
+}
+
+impl PathEnvironment<Temporary> {
+    /// Updates the environment manifest with the provided contents
+    pub fn update_manifest(&mut self, contents: &impl AsRef<str>) -> Result<(), EnvironmentError2> {
+        let mut manifest_file = std::fs::OpenOptions::new()
+            .write(true)
+            .truncate(true)
+            .open(self.manifest_path())
+            .map_err(EnvironmentError2::OpenManifest)?;
+        manifest_file
+            .write_all(contents.as_ref().as_bytes())
+            .map_err(EnvironmentError2::UpdateManifest)?;
         Ok(())
     }
 }
@@ -227,11 +229,14 @@ where
         nix: &NixCommandLine,
         system: impl AsRef<str> + Send,
     ) -> Result<(), EnvironmentError2> {
-        let mut temp_env = self.make_temporary().await?;
-        let current_manifest_contents = fs::read_to_string(temp_env.manifest_path())
-            .map_err(EnvironmentError2::ReadManifest)?;
+        // We modify the contents of the manifest first so that someday in the future
+        // when the `flox_nix_content...` function returns whether the file was actually
+        // modified we can skip creating the temp dir when the file isn't modified.
+        let current_manifest_contents =
+            fs::read_to_string(self.manifest_path()).map_err(EnvironmentError2::ReadManifest)?;
         let new_manifest_contents =
             flox_nix_content_with_new_packages(&current_manifest_contents, packages)?;
+        let mut temp_env = self.make_temporary().await?;
         temp_env.update_manifest(&new_manifest_contents)?;
         temp_env.build(nix, system).await?;
         self.replace_with(temp_env)?;
@@ -245,11 +250,14 @@ where
         nix: &NixCommandLine,
         system: impl AsRef<str> + Send,
     ) -> Result<(), EnvironmentError2> {
-        let mut temp_env = self.make_temporary().await?;
-        let current_manifest_contents = fs::read_to_string(temp_env.manifest_path())
-            .map_err(EnvironmentError2::ReadManifest)?;
+        // We modify the contents of the manifest first so that someday in the future
+        // when the `flox_nix_content...` function returns whether the file was actually
+        // modified we can skip creating the temp dir when the file isn't modified.
+        let current_manifest_contents =
+            fs::read_to_string(self.manifest_path()).map_err(EnvironmentError2::ReadManifest)?;
         let new_manifest_contents =
             flox_nix_content_with_packages_removed(&current_manifest_contents, packages)?;
+        let mut temp_env = self.make_temporary().await?;
         temp_env.update_manifest(&new_manifest_contents)?;
         temp_env.build(nix, system).await?;
         self.replace_with(temp_env)?;
@@ -588,6 +596,9 @@ async fn copy_dir_recursively_without_permissions(
 }
 
 /// insert packages into the content of a flox.nix file
+///
+/// TODO: At some point this should indicate whether the contents were actually changed
+/// (e.g. the user tries to install a package that's already installed).
 fn flox_nix_content_with_new_packages(
     flox_nix_content: &impl AsRef<str>,
     packages: impl Iterator<Item = FloxPackage>,
@@ -630,6 +641,9 @@ fn flox_nix_content_with_new_packages(
 }
 
 /// remove packages from the content of a flox.nix file
+///
+/// TODO: At some point this should indicate whether the contents were actually changed
+/// (e.g. the user tries to install a package that's already installed).
 fn flox_nix_content_with_packages_removed(
     flox_nix_content: &impl AsRef<str>,
     packages: impl Iterator<Item = FloxPackage>,
