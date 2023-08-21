@@ -11,7 +11,7 @@ use thiserror::Error;
 use tokio::fs::{self, OpenOptions};
 use tokio::io::AsyncWriteExt;
 
-pub mod environment;
+mod environment;
 pub mod user_meta;
 use environment::{Metadata, METADATA_JSON};
 

@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 
 use log::info;
-use runix::arguments::{EvalArgs, NixArgs};
+use runix::arguments::NixArgs;
 use runix::command::{Eval, FlakeInit};
 use runix::flake_ref::git::{GitAttributes, GitRef};
 use runix::flake_ref::indirect::IndirectRef;
@@ -14,7 +14,6 @@ use tempfile::TempDir;
 use thiserror::Error;
 use walkdir::WalkDir;
 
-use self::environment::Environment;
 use super::root::transaction::{GitAccess, GitSandBox, ReadOnly};
 use super::root::{Closed, Root};
 use crate::flox::{Flox, FloxNixApi};
@@ -23,14 +22,12 @@ use crate::utils::errors::IoError;
 use crate::utils::guard::Guard;
 use crate::utils::{copy_file_without_permissions, find_and_replace, FindAndReplaceError};
 
-pub mod environment;
-
 static PACKAGE_NAME_PLACEHOLDER: &str = "__PACKAGE_NAME__";
 
-#[derive(Debug)]
 /// A representation of a project, i.e. a git repo with a flake.nix
 ///
 /// We assume the flake.nix follows the capacitor output schema
+#[derive(Debug)]
 pub struct Project<'flox, Git: GitProvider, Access: GitAccess<Git>> {
     flox: &'flox Flox,
     git: Access,
@@ -174,16 +171,6 @@ impl<'flox, Git: GitProvider, Access: GitAccess<Git>> Project<'flox, Git, Access
         }
     }
 
-    /// Get a the directory for links of rendered enviroments
-    ///
-    /// ## Panics
-    ///
-    /// Panics if flake is not a local repository
-    /// todo: handling of other flake refs
-    pub(crate) fn environment_out_link_dir(&self) -> PathBuf {
-        self.flake_root().unwrap().join(".flox").join("envs")
-    }
-
     /// flakeref for the project
     // todo: base project on FlakeRefs
     pub fn flakeref(&self) -> FlakeRef {
@@ -279,99 +266,6 @@ impl<'flox, Git: GitProvider, Access: GitAccess<Git>> Project<'flox, Git, Access
             .map_err(CleanupInitializerError::RemoveFlake)?;
 
         Ok(())
-    }
-
-    /// Get a particular environment by name
-    /// (attr path once nested packages are implemented)
-    pub async fn environment<Nix: FloxNixApi>(
-        &self,
-        name: &str,
-    ) -> Result<Environment<'flox, Git, ReadOnly<Git>>, GetEnvironmentError<Nix>>
-    where
-        Eval: RunJson<Nix>,
-    {
-        let nix = self.flox.nix::<Nix>(Default::default());
-
-        let nix_apply_expr = format!(
-            r#"systems: (systems."{}" or {{}}) ? "{name}""#,
-            self.flox.system
-        );
-
-        let eval = Eval {
-            eval_args: EvalArgs {
-                apply: Some(nix_apply_expr.into()),
-                installable: Some(
-                    FlakeAttribute {
-                        flakeref: self.flakeref(),
-                        attr_path: ["floxEnvs".to_string()].try_into().unwrap(),
-                        outputs: Default::default(),
-                    }
-                    .into(),
-                ),
-            },
-            ..Eval::default()
-        };
-
-        let has_env = eval
-            .run_json(&nix, &Default::default())
-            .await
-            .map_err(GetEnvironmentError::GetEnvExists)?;
-        let has_env: bool =
-            serde_json::from_value(has_env).map_err(GetEnvironmentError::DecodeEval)?;
-
-        if !has_env {
-            return Err(GetEnvironmentError::NotFound);
-        }
-
-        Ok(Environment {
-            name: name.to_string(),
-            system: self.flox.system.clone(),
-            project: Project::new(self.flox, self.git.read_only(), self.subdir.clone()),
-        })
-    }
-
-    /// List environments in this project
-    pub async fn environments<Nix: FloxNixApi>(
-        &'flox self,
-    ) -> Result<Vec<Environment<'flox, Git, ReadOnly<Git>>>, GetEnvironmentsError<Nix>>
-    where
-        Eval: RunJson<Nix>,
-    {
-        let nix = self.flox.nix::<Nix>(Default::default());
-
-        let nix_apply_expr = format!(
-            r#"systems: builtins.attrNames (systems."{}" or {{}})"#,
-            self.flox.system
-        );
-
-        let eval = Eval {
-            eval_args: EvalArgs {
-                apply: Some(nix_apply_expr.into()),
-                installable: Some(
-                    FlakeAttribute {
-                        flakeref: self.flakeref(),
-                        attr_path: ["floxEnvs".to_string()].try_into().unwrap(),
-                        outputs: Default::default(),
-                    }
-                    .into(),
-                ),
-            },
-            ..Eval::default()
-        };
-
-        let names = eval.run_json(&nix, &Default::default()).await.unwrap();
-        let names = serde_json::from_value::<Vec<String>>(names).unwrap();
-
-        let envs = names
-            .into_iter()
-            .map(|name| Environment {
-                name,
-                system: self.flox.system.clone(),
-                project: Project::new(self.flox, self.git.read_only(), self.subdir.clone()),
-            })
-            .collect();
-
-        Ok(envs)
     }
 }
 
@@ -632,56 +526,5 @@ pub mod tests {
             .expect("Openeing project dir should succeed")
             .open()
             .expect_err("Should error without flake.nix");
-    }
-
-    #[cfg(feature = "impure-unit-tests")]
-    #[tokio::test]
-    async fn create_project() {
-        let temp_home = tempfile::tempdir().unwrap();
-        std::env::set_var("HOME", temp_home.path());
-
-        let (flox, tempdir_handle) = flox_instance();
-
-        let project_dir = tempfile::tempdir_in(tempdir_handle.path()).unwrap();
-        let _project_git = GitCommandProvider::init(project_dir.path(), false)
-            .await
-            .expect("should create git repo");
-
-        let project = flox
-            .resource(project_dir.path().to_path_buf())
-            .guard::<GitCommandProvider>()
-            .await
-            .expect("Finding dir should succeed")
-            .open()
-            .expect("should find git repo")
-            .guard()
-            .await
-            .expect("Openeing project dir should succeed")
-            .init_project(Vec::new())
-            .await
-            .expect("Should init a new project");
-
-        let envs = project
-            .environments()
-            .await
-            .expect("should find empty floxEnvs");
-        assert!(envs.is_empty());
-
-        let (project, mut index) = project
-            .enter_transaction()
-            .await
-            .expect("Should be able to make sandbox");
-
-        project.create_default_env(&mut index).await;
-
-        let project = project
-            .commit_transaction(index, "unused")
-            .await
-            .expect("Should commit transaction");
-
-        project
-            .environment("default")
-            .await
-            .expect("should find new environment");
     }
 }

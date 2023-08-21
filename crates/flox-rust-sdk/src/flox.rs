@@ -20,7 +20,6 @@ use runix::{NixBackend, RunJson};
 use serde::Deserialize;
 use thiserror::Error;
 
-use crate::actions::environment::{Environment, EnvironmentError};
 use crate::actions::package::Package;
 use crate::environment::{self, default_nix_subprocess_env};
 use crate::models::channels::ChannelRegistry;
@@ -161,21 +160,6 @@ impl Flox {
 
     pub fn resource<X>(&self, x: X) -> Root<root::Closed<X>> {
         Root::closed(self, x)
-    }
-
-    pub async fn environment_ref<Git: GitProvider, Nix: FloxNixApi>(
-        &self,
-        name: &str,
-    ) -> Result<Vec<EnvironmentRef>, EnvironmentRefError<Git, Nix>>
-    where
-        Eval: RunJson<Nix>,
-        FlakeMetadata: RunJson<Nix>,
-    {
-        EnvironmentRef::find(self, Some(name)).await
-    }
-
-    pub fn environment(&self, dir: PathBuf) -> Result<Environment, EnvironmentError> {
-        Environment::new(self, dir)
     }
 
     pub async fn floxmeta<Git: GitProvider>(

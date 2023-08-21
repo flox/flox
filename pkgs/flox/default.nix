@@ -68,6 +68,9 @@
       FLOX_VERSION = "${cargoToml.package.version}-${inputs.flox-floxpkgs.lib.getRev self}";
       # Reexport of the platform flox is being built for
       NIX_TARGET_SYSTEM = targetPlatform.system;
+
+      # flox env template used to create new environments
+      FLOX_ENV_TEMPLATE = ../../flox-bash/lib/templateFloxEnv;
     }
     // lib.optionalAttrs hostPlatform.isDarwin {
       NIX_COREFOUNDATION_RPATH = "${darwin.CF}/Library/Frameworks";

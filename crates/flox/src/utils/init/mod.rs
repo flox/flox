@@ -5,7 +5,7 @@ use std::path::Path;
 use anyhow::{Context, Result};
 use indexmap::IndexMap;
 use indoc::indoc;
-use log::{debug, info, warn};
+use log::{debug, info};
 use serde::Deserialize;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 

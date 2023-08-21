@@ -10,13 +10,14 @@ use runix::installable::{AttrPath, Attribute, FlakeAttribute, Installable, Parse
 use runix::store_path::StorePath;
 use thiserror::Error;
 
+use super::environment::InstalledPackage;
 use crate::prelude::ChannelRegistry;
 
 #[derive(Debug, PartialEq, Eq, Clone, From)]
 pub enum FloxPackage {
     Id(usize),
     StorePath(StorePath),
-    Installable(Installable),
+    FlakeAttribute(FlakeAttribute),
     Triple(FloxTriple),
 }
 
@@ -40,7 +41,7 @@ impl FloxPackage {
 
         // return if looks like flake attribute
         if package.contains('#') {
-            return Ok(Self::Installable(FlakeAttribute::from_str(package)?.into()));
+            return Ok(Self::FlakeAttribute(FlakeAttribute::from_str(package)?));
         }
 
         // resolve triple
@@ -49,6 +50,49 @@ impl FloxPackage {
             channels,
             default_channel,
         )?))
+    }
+
+    pub fn flox_nix_attribute(&self) -> Option<(Vec<String>, Option<String>)> {
+        match self {
+            FloxPackage::Id(_) => None,
+            FloxPackage::StorePath(path) => Some(([path.to_string()].to_vec(), None)),
+            FloxPackage::FlakeAttribute(flake_attribute) => {
+                let path = [
+                    [flake_attribute.flakeref.to_string()].to_vec(),
+                    flake_attribute
+                        .attr_path
+                        .iter()
+                        .map(ToString::to_string)
+                        .collect(),
+                ]
+                .concat();
+
+                Some((path, None))
+            },
+            FloxPackage::Triple(FloxTriple {
+                stability: _,
+                channel,
+                name,
+                version,
+            }) => {
+                let attrpath = [channel.to_string()]
+                    .into_iter()
+                    .chain(name.iter().map(|i| i.as_ref().to_owned()))
+                    .collect();
+
+                Some((attrpath, version.to_owned()))
+            },
+        }
+    }
+}
+
+impl From<InstalledPackage> for FloxPackage {
+    fn from(value: InstalledPackage) -> Self {
+        match value {
+            InstalledPackage::Catalog(triple, _) => Self::Triple(triple),
+            InstalledPackage::FlakeAttribute(flake_attr, _) => Self::FlakeAttribute(flake_attr),
+            InstalledPackage::StorePath(path) => Self::StorePath(path),
+        }
     }
 }
 
@@ -269,26 +313,23 @@ mod tests {
     #[test]
     #[ignore = "In the nix sandbox the current directory is not a flake nor a repo due to file filters)"]
     fn parse_flakeref() {
-        let expected = FloxPackage::Installable(
-            FlakeAttribute {
-                // during tests and build the current dir is set to the manifest dir
-                flakeref: runix::flake_ref::FlakeRef::GitPath(GitRef {
-                    url: url::Url::from_file_path(
-                        Path::new(env!("CARGO_MANIFEST_DIR"))
-                            .ancestors()
-                            .nth(2)
-                            .unwrap(),
-                    )
-                    .unwrap()
-                    .try_into()
-                    .unwrap(),
-                    attributes: Default::default(),
-                }),
-                attr_path: ["packages", "aarch64-darwin", "flox"].try_into().unwrap(),
-                outputs: Default::default(),
-            }
-            .into(),
-        );
+        let expected = FloxPackage::FlakeAttribute(FlakeAttribute {
+            // during tests and build the current dir is set to the manifest dir
+            flakeref: runix::flake_ref::FlakeRef::GitPath(GitRef {
+                url: url::Url::from_file_path(
+                    Path::new(env!("CARGO_MANIFEST_DIR"))
+                        .ancestors()
+                        .nth(2)
+                        .unwrap(),
+                )
+                .unwrap()
+                .try_into()
+                .unwrap(),
+                attributes: Default::default(),
+            }),
+            attr_path: ["packages", "aarch64-darwin", "flox"].try_into().unwrap(),
+            outputs: Default::default(),
+        });
         let parsed =
             FloxPackage::parse(".#packages.aarch64-darwin.flox", &CHANNELS, DEFAULT_CHANNEL)
                 .expect("should parse");

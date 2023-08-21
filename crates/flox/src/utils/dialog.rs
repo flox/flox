@@ -76,18 +76,32 @@ impl<'a> Dialog<'a, Confirm> {
     }
 }
 
-impl<'a, T: Display + Send + 'static> Dialog<'a, Select<T>> {
+struct Choice(usize, String);
+impl Display for Choice {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.1.fmt(f)
+    }
+}
+
+impl<'a, T: Display> Dialog<'a, Select<T>> {
     #[allow(dead_code)]
     pub async fn prompt(self) -> inquire::error::InquireResult<T> {
         let message = self.message.to_owned();
         let help_message = self.help_message.map(ToOwned::to_owned);
-        let options = self.typed.options;
+        let mut options = self.typed.options;
 
-        tokio::task::spawn_blocking(move || {
+        let choices = options
+            .iter()
+            .map(ToString::to_string)
+            .enumerate()
+            .map(|(id, value)| Choice(id, value))
+            .collect();
+
+        let Choice(id, _) = tokio::task::spawn_blocking(move || {
             let _stderr_lock = TERMINAL_STDERR.blocking_lock();
 
             let mut dialog =
-                inquire::Select::new(&message, options).with_render_config(flox_theme());
+                inquire::Select::new(&message, choices).with_render_config(flox_theme());
 
             if let Some(ref help_message) = help_message {
                 dialog = dialog.with_help_message(help_message);
@@ -96,19 +110,28 @@ impl<'a, T: Display + Send + 'static> Dialog<'a, Select<T>> {
             dialog.prompt()
         })
         .await
-        .expect("Failed to join blocking dialog")
+        .expect("Failed to join blocking dialog")?;
+
+        Ok(options.remove(id))
     }
 
     pub async fn raw_prompt(self) -> inquire::error::InquireResult<(usize, T)> {
         let message = self.message.to_owned();
         let help_message = self.help_message.map(ToOwned::to_owned);
-        let options = self.typed.options;
+        let mut options = self.typed.options;
 
-        tokio::task::spawn_blocking(move || {
+        let choices = options
+            .iter()
+            .map(ToString::to_string)
+            .enumerate()
+            .map(|(id, value)| Choice(id, value))
+            .collect();
+
+        let (raw_id, Choice(id, _)) = tokio::task::spawn_blocking(move || {
             let _stderr_lock = TERMINAL_STDERR.blocking_lock();
 
             let mut dialog =
-                inquire::Select::new(&message, options).with_render_config(flox_theme());
+                inquire::Select::new(&message, choices).with_render_config(flox_theme());
 
             if let Some(ref help_message) = help_message {
                 dialog = dialog.with_help_message(help_message);
@@ -120,7 +143,9 @@ impl<'a, T: Display + Send + 'static> Dialog<'a, Select<T>> {
             }
         })
         .await
-        .expect("Failed to join blocking dialog")
+        .expect("Failed to join blocking dialog")?;
+
+        Ok((raw_id, options.remove(id)))
     }
 }
 
