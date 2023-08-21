@@ -91,16 +91,6 @@ pub trait Environment {
     fn delete(self) -> Result<(), EnvironmentError2>;
 }
 
-#[async_trait]
-pub trait TemporaryEnvironment {
-    async fn set_environment(
-        &mut self,
-        mut flox_nix_content: impl std::io::Read + Send,
-        nix: &NixCommandLine,
-        system: impl AsRef<str> + Send,
-    ) -> Result<(), EnvironmentError2>;
-}
-
 /// Struct representing a local environment
 ///
 /// This environment performs transactional edits by first copying the environment
@@ -144,11 +134,15 @@ impl<S> PartialEq for PathEnvironment<S> {
 impl<S: TransactionState> PathEnvironment<S> {
     /// Makes a temporary copy of the environment so edits can be applied without modifying the original environment
     pub async fn make_temporary(&self) -> Result<PathEnvironment<Temporary>, EnvironmentError2> {
-        copy_dir_recursively_without_permissions(&self.path, &self.temp_dir)
+        let transaction_dir =
+            tempfile::tempdir_in(&self.temp_dir).map_err(EnvironmentError2::MakeSandbox)?;
+
+        copy_dir_recursively_without_permissions(&self.path, &transaction_dir)
             .await
             .map_err(EnvironmentError2::MakeTemporaryEnv)?;
+
         Ok(PathEnvironment {
-            path: self.temp_dir.clone(),
+            path: transaction_dir.into_path(),
             temp_dir: self.temp_dir.clone(),
             environment_ref: self.environment_ref.clone(),
             state: Temporary,
@@ -161,14 +155,14 @@ impl<S: TransactionState> PathEnvironment<S> {
         replacement: PathEnvironment<Temporary>,
     ) -> Result<(), EnvironmentError2> {
         fs_extra::dir::move_dir(
-            &replacement.path,
+            replacement.path,
             &self.path,
             &fs_extra::dir::CopyOptions::new()
                 .overwrite(true)
                 .content_only(true),
         )
         .expect("replace origin");
-        std::fs::create_dir(&replacement.path).expect("recreate temp dir");
+        // std::fs::create_dir(&replacement.path).expect("recreate temp dir");
         Ok(())
     }
 }
@@ -493,33 +487,6 @@ impl PathEnvironment<Original> {
     }
 }
 
-/// Implementations for environments in a "modifiable" state.
-///
-/// Created by [`PathEnvironment<Original>::make_temporary`].
-/// Allows editing the environment definition file.
-#[async_trait]
-impl TemporaryEnvironment for PathEnvironment<Temporary> {
-    /// Low level method replacing the definition file content.
-    /// After writing the file, we verify if by trying to build the environment.
-    ///
-    /// This might be deferred to the [`PathEnvironment<Original>::replace_with`] method in the future.
-    async fn set_environment(
-        &mut self,
-        mut flox_nix_content: impl std::io::Read + Send,
-        nix: &NixCommandLine,
-        system: impl AsRef<str> + Send,
-    ) -> Result<(), EnvironmentError2> {
-        let mut flox_nix = std::fs::OpenOptions::new()
-            .write(true)
-            .truncate(true)
-            .open(self.manifest_path())
-            .unwrap();
-        std::io::copy(&mut flox_nix_content, &mut flox_nix).unwrap();
-        self.build(nix, system).await?; // unwrap
-        Ok(())
-    }
-}
-
 #[derive(Debug, Error)]
 pub enum EnvironmentError2 {
     #[error("ParseEnvRef")]
@@ -775,7 +742,7 @@ mod tests {
     #[tokio::test]
     #[cfg(feature = "impure-unit-tests")]
     async fn edit_env() {
-        let (flox, tempdir) = flox_instance();
+        let (_flox, tempdir) = flox_instance();
         let sandbox_path = tempdir.path().join("sandbox");
         std::fs::create_dir(&sandbox_path).unwrap();
 
@@ -785,20 +752,13 @@ mod tests {
 
         let mut temp_env = env.make_temporary().await.unwrap();
 
-        assert_eq!(temp_env.path, sandbox_path);
+        assert_eq!(temp_env.path.parent().unwrap(), sandbox_path);
 
         let new_env_str = r#"
         { }
         "#;
 
-        temp_env
-            .set_environment(
-                new_env_str.as_bytes(),
-                &flox.nix(Default::default()),
-                flox.system,
-            )
-            .await
-            .unwrap();
+        temp_env.update_manifest(&new_env_str).unwrap();
 
         assert_eq!(
             std::fs::read_to_string(temp_env.manifest_path()).unwrap(),
@@ -831,10 +791,7 @@ mod tests {
         let mut temp_env = env.make_temporary().await.unwrap();
 
         let empty_env_str = r#"{ }"#;
-        temp_env
-            .set_environment(empty_env_str.as_bytes(), &nix, &system)
-            .await
-            .unwrap();
+        temp_env.update_manifest(&empty_env_str).unwrap();
 
         env.replace_with(temp_env).unwrap();
 
@@ -885,10 +842,7 @@ mod tests {
             { }
         "};
 
-        temp_env
-            .set_environment(empty_env_str.as_bytes(), &nix, &system)
-            .await
-            .unwrap();
+        temp_env.update_manifest(&empty_env_str).unwrap();
 
         env.replace_with(temp_env).unwrap();
 
