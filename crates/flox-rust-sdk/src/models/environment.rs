@@ -779,7 +779,7 @@ mod tests {
             .await
             .unwrap();
 
-        let mut temp_env = env.modify_in(&sandbox_path).await.unwrap();
+        let mut temp_env = env.make_temporary().await.unwrap();
 
         assert_eq!(temp_env.path, sandbox_path);
 
@@ -797,14 +797,14 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            std::fs::read_to_string(temp_env.flox_nix_path()).unwrap(),
+            std::fs::read_to_string(temp_env.manifest_path()).unwrap(),
             new_env_str
         );
 
         env.replace_with(temp_env).unwrap();
 
         assert_eq!(
-            std::fs::read_to_string(env.flox_nix_path()).unwrap(),
+            std::fs::read_to_string(env.manifest_path()).unwrap(),
             new_env_str
         );
     }
@@ -824,7 +824,7 @@ mod tests {
             .await
             .unwrap();
 
-        let mut temp_env = env.modify_in(&sandbox_path).await.unwrap();
+        let mut temp_env = env.make_temporary().await.unwrap();
 
         let empty_env_str = r#"{ }"#;
         temp_env
@@ -852,7 +852,7 @@ mod tests {
         "#};
 
         assert_eq!(
-            std::fs::read_to_string(env.flox_nix_path()).unwrap(),
+            std::fs::read_to_string(env.manifest_path()).unwrap(),
             installed_env_str
         );
 
@@ -875,7 +875,7 @@ mod tests {
             .await
             .unwrap();
 
-        let mut temp_env = env.modify_in(&sandbox_path).await.unwrap();
+        let mut temp_env = env.make_temporary().await.unwrap();
 
         let empty_env_str = indoc! {"
             { }
@@ -902,7 +902,7 @@ mod tests {
         "#};
 
         assert_eq!(
-            std::fs::read_to_string(env.flox_nix_path()).unwrap(),
+            std::fs::read_to_string(env.manifest_path()).unwrap(),
             installed_env_str
         );
 
@@ -914,7 +914,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            std::fs::read_to_string(env.flox_nix_path()).unwrap(),
+            std::fs::read_to_string(env.manifest_path()).unwrap(),
             empty_env_str
         );
 
