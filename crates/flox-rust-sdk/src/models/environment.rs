@@ -685,7 +685,14 @@ fn flox_nix_content_with_packages_removed(
 #[cfg(test)]
 mod tests {
 
+    #[cfg(feature = "impure-unit-tests")]
+    use flox_types::stability::Stability;
+    #[cfg(feature = "impure-unit-tests")]
+    use indoc::indoc;
+
     use super::*;
+    #[cfg(feature = "impure-unit-tests")]
+    use crate::flox::tests::flox_instance;
 
     #[tokio::test]
     async fn create_env() {
