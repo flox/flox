@@ -53,7 +53,7 @@ pub trait Environment {
     /// Install packages to the environment atomically
     async fn install(
         &mut self,
-        packages: impl Iterator<Item = FloxPackage> + Send,
+        packages: impl IntoIterator<Item = FloxPackage> + Send,
         nix: &NixCommandLine,
         system: impl AsRef<str> + Send,
     ) -> Result<(), EnvironmentError2>;
@@ -61,7 +61,7 @@ pub trait Environment {
     /// Uninstall packages from the environment atomically
     async fn uninstall(
         &mut self,
-        packages: impl Iterator<Item = FloxPackage> + Send,
+        packages: impl IntoIterator<Item = FloxPackage> + Send,
         nix: &NixCommandLine,
         system: impl AsRef<str> + Send,
     ) -> Result<(), EnvironmentError2>;
@@ -225,7 +225,7 @@ where
     /// Install packages to the environment atomically
     async fn install(
         &mut self,
-        packages: impl Iterator<Item = FloxPackage> + Send,
+        packages: impl IntoIterator<Item = FloxPackage> + Send,
         nix: &NixCommandLine,
         system: impl AsRef<str> + Send,
     ) -> Result<(), EnvironmentError2> {
@@ -246,7 +246,7 @@ where
     /// Uninstall packages from the environment atomically
     async fn uninstall(
         &mut self,
-        packages: impl Iterator<Item = FloxPackage> + Send,
+        packages: impl IntoIterator<Item = FloxPackage> + Send,
         nix: &NixCommandLine,
         system: impl AsRef<str> + Send,
     ) -> Result<(), EnvironmentError2> {
@@ -601,9 +601,11 @@ async fn copy_dir_recursively_without_permissions(
 /// (e.g. the user tries to install a package that's already installed).
 fn flox_nix_content_with_new_packages(
     flox_nix_content: &impl AsRef<str>,
-    packages: impl Iterator<Item = FloxPackage>,
+    packages: impl IntoIterator<Item = FloxPackage>,
 ) -> Result<String, EnvironmentError2> {
-    let packages = packages.map(|package| package.flox_nix_attribute().unwrap());
+    let packages = packages
+        .into_iter()
+        .map(|package| package.flox_nix_attribute().unwrap());
 
     let mut root = rnix::Root::parse(flox_nix_content.as_ref())
         .ok()
@@ -646,9 +648,11 @@ fn flox_nix_content_with_new_packages(
 /// (e.g. the user tries to install a package that's already installed).
 fn flox_nix_content_with_packages_removed(
     flox_nix_content: &impl AsRef<str>,
-    packages: impl Iterator<Item = FloxPackage>,
+    packages: impl IntoIterator<Item = FloxPackage>,
 ) -> Result<String, EnvironmentError2> {
-    let packages = packages.map(|package| package.flox_nix_attribute().unwrap());
+    let packages = packages
+        .into_iter()
+        .map(|package| package.flox_nix_attribute().unwrap());
 
     let mut root = rnix::Root::parse(flox_nix_content.as_ref())
         .ok()
