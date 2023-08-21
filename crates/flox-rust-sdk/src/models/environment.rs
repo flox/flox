@@ -495,7 +495,7 @@ impl PathEnvironment<Original> {
 
 /// Implementations for environments in a "modifiable" state.
 ///
-/// Created by [`PathEnvironment<Original>::modify_in`].
+/// Created by [`PathEnvironment<Original>::make_temporary`].
 /// Allows editing the environment definition file.
 #[async_trait]
 impl TemporaryEnvironment for PathEnvironment<Temporary> {
