@@ -33,7 +33,6 @@ impl ChannelCommands {
         match self {
             ChannelCommands::Subscribe(_) => subcommand_metric!("subscribe"),
             ChannelCommands::Unsubscribe { .. } => subcommand_metric!("unsubscribe"),
-            ChannelCommands::Search { .. } => subcommand_metric!("search"),
             ChannelCommands::Channels { .. } => subcommand_metric!("channels"),
         }
 
@@ -239,6 +238,87 @@ impl ChannelCommands {
     }
 }
 
+/// search packages in subscribed channels
+#[derive(Bpaf, Clone)]
+#[bpaf(command)]
+pub struct Search {
+    #[bpaf(short, long, argument("channel"))]
+    pub channel: Vec<ChannelRef>,
+
+    /// print search as JSON
+    #[bpaf(long)]
+    pub json: bool,
+
+    /// print extended search results
+    #[bpaf(short, long, long("verbose"), short('v'))]
+    pub long: bool,
+
+    /// force update of catalogs from remote sources before searching
+    #[bpaf(long)]
+    pub refresh: bool,
+
+    /// query string of the form `<REGEX>[@<SEMVER-RANGE>]` used to filter
+    /// match against package names/descriptions, and semantic version.
+    /// Regex pattern is `PCRE` style, and semver ranges use the
+    /// `node-semver` syntax.
+    /// Exs: `(hello|coreutils)`, `node@>=16`, `coreutils@9.1`
+    #[bpaf(positional("search-term"))]
+    pub search_term: Option<String>,
+}
+
+impl Search {
+    pub async fn handle(self, flox: Flox) -> Result<()> {
+        let channels = flox
+            .channels
+            .iter()
+            .filter_map(|entry| {
+                if HIDDEN_CHANNELS.contains_key(&*entry.from.id) {
+                    None
+                } else if DEFAULT_CHANNELS.contains_key(&*entry.from.id) {
+                    Some((ChannelType::Flox, entry))
+                } else {
+                    Some((ChannelType::User, entry))
+                }
+            })
+            .sorted_by(|a, b| Ord::cmp(a, b));
+
+        if self.json {
+            let mut map = serde_json::Map::new();
+            for (channel, entry) in channels {
+                map.insert(
+                    entry.from.id.to_string(),
+                    json!({
+                        "type": channel.to_string(),
+                        "url": entry.to.to_string()
+                    }),
+                );
+            }
+
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&serde_json::Value::Object(map))?
+            )
+        } else {
+            let width = channels
+                .clone()
+                .map(|(_, entry)| entry.from.id.len())
+                .reduce(|acc, e| acc.max(e))
+                .unwrap_or(8);
+
+            println!("{ch:<width$}   TYPE   URL", ch = "CHANNEL");
+            for (channel, entry) in channels {
+                println!(
+                    "{from:<width$} | {ty} | {url}",
+                    from = entry.from.id,
+                    ty = channel,
+                    url = entry.to
+                )
+            }
+        }
+        Ok(())
+    }
+}
+
 #[derive(Bpaf, Clone)]
 pub enum ChannelCommands {
     /// subscribe to channel URL
@@ -252,33 +332,6 @@ pub enum ChannelCommands {
         /// If omitted, flow will prompt for the name interactively
         #[bpaf(positional("channel"), optional)]
         channel: Option<ChannelRef>,
-    },
-
-    /// search packages in subscribed channels
-    #[bpaf(command)]
-    Search {
-        #[bpaf(short, long, argument("channel"))]
-        channel: Vec<ChannelRef>,
-
-        /// print search as JSON
-        #[bpaf(long)]
-        json: bool,
-
-        /// print extended search results
-        #[bpaf(short, long, long("verbose"), short('v'))]
-        long: bool,
-
-        /// force update of catalogs from remote sources before searching
-        #[bpaf(long)]
-        refresh: bool,
-
-        /// query string of the form `<REGEX>[@<SEMVER-RANGE>]` used to filter
-        /// match against package names/descriptions, and semantic version.
-        /// Regex pattern is `PCRE` style, and semver ranges use the
-        /// `node-semver` syntax.
-        /// Exs: `(hello|coreutils)`, `node@>=16`, `coreutils@9.1`
-        #[bpaf(positional("search-term"))]
-        search_term: Option<String>,
     },
 
     /// list all subscribed channels
