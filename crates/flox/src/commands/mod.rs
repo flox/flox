@@ -211,11 +211,34 @@ impl FloxArgs {
 #[allow(clippy::large_enum_variant)] // there's only a single instance of this enum
 #[derive(Bpaf, Clone)]
 enum Commands {
-    Development,
-    General,
-    // Development(#[bpaf(external(local_development_commands))] LocalDevelopmentCommands),
+    Development(#[bpaf(external(local_development_commands))]LocalDevelopmentCommands),
 }
 
+/// Local Development Commands
+#[derive(Bpaf, Clone)]
+enum LocalDevelopmentCommands {
+
+    Init(#[bpaf(external(environment::init))] environment::Init),
+    Activate(#[bpaf(external(environment::activate))] environment::Activate),
+    Install(#[bpaf(external(environment::install))] environment::Install),
+    Uninstall(#[bpaf(external(environment::uninstall))] environment::Uninstall),
+    Edit(#[bpaf(external(environment::edit))] environment::Edit),
+    List(#[bpaf(external(environment::list))] environment::List),
+}
+
+impl LocalDevelopmentCommands {
+    async fn handle(self, flox: Flox) -> Result<()> {
+        match self {
+            LocalDevelopmentCommands::Init(args) => args.handle(flox).await?,
+            LocalDevelopmentCommands::Activate(args) => args.handle(flox).await?,
+            LocalDevelopmentCommands::Edit(args) => args.handle(flox).await?,
+            LocalDevelopmentCommands::Install(args) => args.handle(flox).await?,
+            LocalDevelopmentCommands::Uninstall(args) => args.handle(flox).await?,
+            LocalDevelopmentCommands::List(args) => args.handle(flox).await?,
+        }
+        Ok(())
+    }
+}
 /// Special command to check for the presence of the `--prefix` flag.
 ///
 /// With `--prefix` the application will print the prefix of the program
