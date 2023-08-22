@@ -243,7 +243,9 @@ pub(crate) mod interface {
             .optional()
     }
 
+    /// Containerize an environment
     #[derive(Bpaf, Clone, Debug)]
+    #[bpaf(command)]
     pub struct Containerize {
         /// Environment to containerize
         #[bpaf(long("environment"), short('e'), argument("ENV"))]

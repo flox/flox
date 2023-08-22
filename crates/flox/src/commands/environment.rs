@@ -583,7 +583,7 @@ impl ImportFile {
     }
 }
 
-/// send environment metadata to remote registry
+/// Send environment to flox hub
 #[derive(Bpaf, Clone)]
 #[bpaf(command)]
 pub struct Push {
@@ -615,7 +615,7 @@ pub enum PushFloxmainOrEnv {
     },
 }
 
-/// pull environment metadata from remote registry
+/// Pull environment from flox hub
 #[derive(Bpaf, Clone)]
 #[bpaf(command)]
 pub struct Pull {
