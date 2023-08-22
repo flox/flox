@@ -217,9 +217,9 @@ enum Commands {
 /// Local Development Commands
 #[derive(Bpaf, Clone)]
 enum LocalDevelopmentCommands {
-
     Init(#[bpaf(external(environment::init))] environment::Init),
     Activate(#[bpaf(external(environment::activate))] environment::Activate),
+    Search(#[bpaf(external(channel::search))] channel::Search),
     Install(#[bpaf(external(environment::install))] environment::Install),
     Uninstall(#[bpaf(external(environment::uninstall))] environment::Uninstall),
     Edit(#[bpaf(external(environment::edit))] environment::Edit),
@@ -238,6 +238,7 @@ impl LocalDevelopmentCommands {
             LocalDevelopmentCommands::List(args) => args.handle(flox).await?,
 
             LocalDevelopmentCommands::Nix(args) => args.handle(config, flox).await?,
+            LocalDevelopmentCommands::Search(args) => args.handle(flox).await?,
         }
         Ok(())
     }
