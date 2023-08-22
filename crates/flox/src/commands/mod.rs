@@ -224,10 +224,11 @@ enum LocalDevelopmentCommands {
     Uninstall(#[bpaf(external(environment::uninstall))] environment::Uninstall),
     Edit(#[bpaf(external(environment::edit))] environment::Edit),
     List(#[bpaf(external(environment::list))] environment::List),
+    Nix(#[bpaf(external(general::parse_nix_passthru))] general::WrappedNix),
 }
 
 impl LocalDevelopmentCommands {
-    async fn handle(self, flox: Flox) -> Result<()> {
+    async fn handle(self, config: Config, flox: Flox) -> Result<()> {
         match self {
             LocalDevelopmentCommands::Init(args) => args.handle(flox).await?,
             LocalDevelopmentCommands::Activate(args) => args.handle(flox).await?,
@@ -235,6 +236,8 @@ impl LocalDevelopmentCommands {
             LocalDevelopmentCommands::Install(args) => args.handle(flox).await?,
             LocalDevelopmentCommands::Uninstall(args) => args.handle(flox).await?,
             LocalDevelopmentCommands::List(args) => args.handle(flox).await?,
+
+            LocalDevelopmentCommands::Nix(args) => args.handle(config, flox).await?,
         }
         Ok(())
     }
