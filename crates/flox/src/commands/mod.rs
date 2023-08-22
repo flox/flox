@@ -200,9 +200,10 @@ impl FloxArgs {
         });
 
         // command handled above
-
-
-
+        match self.command.unwrap() {
+            Commands::Development(group) => group.handle(config, flox).await?,
+            Commands::Sharing(group) => group.handle(config, flox).await?,
+        }
         Ok(())
     }
 }
