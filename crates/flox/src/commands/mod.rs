@@ -13,7 +13,9 @@ use flox_rust_sdk::models::floxmeta::{Floxmeta, GetFloxmetaError};
 use flox_rust_sdk::nix::command_line::NixCommandLine;
 use flox_rust_sdk::prelude::Channel;
 use flox_rust_sdk::providers::git::GitCommandProvider;
+use indoc::formatdoc;
 use log::{debug, info};
+use once_cell::sync::Lazy;
 use tempfile::TempDir;
 use toml_edit::Key;
 
@@ -31,6 +33,18 @@ use crate::utils::init::{
     telemetry_opt_out_needs_migration,
 };
 use crate::utils::metrics::METRICS_UUID_FILE_NAME;
+
+static FLOX_WELCOME_MESSAGE: Lazy<String> = Lazy::new(|| {
+    formatdoc! {r#"
+    flox version {FLOX_VERSION}
+
+    Usage: flox OPTIONS (init|activate|search|install|...) [--help]
+
+    Use "flox --help" for full list of commands and more information
+
+    First time? Create an environment with "flox init"
+"#}
+});
 
 fn vec_len<T>(x: Vec<T>) -> usize {
     Vec::len(&x)
@@ -73,13 +87,19 @@ pub struct FloxArgs {
     #[bpaf(long, req_flag(()), many, map(vec_not_empty))]
     pub debug: bool,
 
-    #[bpaf(external(commands))]
-    command: Commands,
+    #[bpaf(external(commands), optional)]
+    command: Option<Commands>,
 }
 
 impl FloxArgs {
     /// Initialize the command line by creating an initial FloxBuilder
     pub async fn handle(self, mut config: crate::config::Config) -> Result<()> {
+        // Given no command, skip initialization and print welcome message
+        if self.command.is_none() {
+            println!("{}", &*FLOX_WELCOME_MESSAGE);
+            return Ok(());
+        }
+
         // ensure xdg dirs exist
         tokio::fs::create_dir_all(&config.flox.config_dir).await?;
         tokio::fs::create_dir_all(&config.flox.data_dir).await?;
@@ -185,7 +205,8 @@ impl FloxArgs {
             }
         });
 
-        match self.command {
+        // command handled above
+        match self.command.unwrap() {
             Commands::Package { options, command } => {
                 // Resolve stability from flag or config (which reads environment variables).
                 // If the stability is set by a flag, modify STABILITY env variable to match
