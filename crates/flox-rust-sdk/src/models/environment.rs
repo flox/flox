@@ -28,6 +28,7 @@ use super::environment_ref::{
 };
 use super::flox_package::{FloxPackage, FloxTriple};
 use crate::utils::copy_file_without_permissions;
+use crate::utils::errors::IoError;
 use crate::utils::rnix::{AttrSetExt, StrExt};
 
 pub static CATALOG_JSON: &str = "catalog.json";
@@ -57,7 +58,7 @@ pub trait Environment {
         packages: impl IntoIterator<Item = FloxPackage> + Send,
         nix: &NixCommandLine,
         system: impl AsRef<str> + Send,
-    ) -> Result<(), EnvironmentError2>;
+    ) -> Result<bool, EnvironmentError2>;
 
     /// Uninstall packages from the environment atomically
     async fn uninstall(
@@ -135,7 +136,7 @@ impl<S: TransactionState> PathEnvironment<S> {
         let transaction_dir =
             tempfile::tempdir_in(&self.temp_dir).map_err(EnvironmentError2::MakeSandbox)?;
 
-        copy_dir_recursively_without_permissions(&self.path, &transaction_dir)
+        copy_dir(&self.path, &transaction_dir, true)
             .await
             .map_err(EnvironmentError2::MakeTemporaryEnv)?;
 
@@ -148,20 +149,39 @@ impl<S: TransactionState> PathEnvironment<S> {
     }
 
     /// Replace the contents of this environment's `.flox` with that of another environment's `.flox`
+    ///
+    /// This may copy build symlinks, so the assumption is that building self
+    /// will result in the same out link as building the replacement.
     pub fn replace_with(
         &mut self,
         replacement: PathEnvironment<Temporary>,
     ) -> Result<(), EnvironmentError2> {
-        fs_extra::dir::move_dir(
-            replacement.path,
-            &self.path,
-            &fs_extra::dir::CopyOptions::new()
-                .overwrite(true)
-                .content_only(true),
-        )
-        .expect("replace origin");
-        // std::fs::create_dir(&replacement.path).expect("recreate temp dir");
+        let transaction_backup = self
+            .path
+            .parent()
+            .expect("path shouldn't be /")
+            .join(format!("{}.tmp", self.name().0));
+        if transaction_backup.exists() {
+            return Err(EnvironmentError2::PriorTransaction(transaction_backup));
+        }
+        fs::rename(&self.path, &transaction_backup)
+            .map_err(EnvironmentError2::BackupTransaction)?;
+        fs::rename(replacement.path, &self.path).map_err(EnvironmentError2::Move)?;
+        fs::remove_dir_all(transaction_backup).map_err(EnvironmentError2::RemoveBackup)?;
         Ok(())
+    }
+
+    /// Where to link a built environment to. The parent directory may not exist.
+    ///
+    /// When used as a lookup signals whether the environment has *at some point* been built before
+    /// and is "activatable". Note that the environment may have been modified since it was last built.
+    ///
+    /// Mind that an existing out link does not necessarily imply that the environment
+    /// can in fact be built.
+    pub fn out_link(&self, system: impl AsRef<str> + Send) -> PathBuf {
+        self.path
+            .join("builds")
+            .join(format!("{0}.{1}", system.as_ref(), self.name()))
     }
 }
 
@@ -185,7 +205,10 @@ impl<S> Environment for PathEnvironment<S>
 where
     S: TransactionState,
 {
-    /// Build the environment and create a result link as gc-root
+    /// Build the environment with side effects:
+    ///
+    /// - create a result link as gc-root
+    /// - copy catalog.json from the result into the environment
     async fn build(
         &self,
         nix: &NixCommandLine,
@@ -193,14 +216,16 @@ where
     ) -> Result<(), EnvironmentError2> {
         debug!("building with nix ....");
 
+        let out_link = self.out_link(system.as_ref());
+
         let build = Build {
-            installables: [self.flake_attribute(system).into()].into(),
+            installables: [self.flake_attribute(&system).into()].into(),
             eval: runix::arguments::eval::EvaluationArgs {
                 impure: true.into(),
                 ..Default::default()
             },
             build: BuildArgs {
-                // out_link: Some(self.out_link().into()),
+                out_link: Some(out_link.clone().into()),
                 ..Default::default()
             },
             ..Default::default()
@@ -211,28 +236,40 @@ where
             .await
             .map_err(EnvironmentError2::Build)?;
 
+        // environments potentially update their catalog in the process of a build because unlocked
+        // packages (e.g. nixpkgs-flox.hello) must be pinned to a specific version which is added to
+        // the catalog
+        let result_catalog_json = out_link.join(CATALOG_JSON);
+        copy_file_without_permissions(&result_catalog_json, self.catalog_path())
+            .await
+            .map_err(EnvironmentError2::CopyFile)?;
+
         Ok(())
     }
 
     /// Install packages to the environment atomically
+    ///
+    /// Returns true if the environment was modified and false otherwise.
     async fn install(
         &mut self,
         packages: impl IntoIterator<Item = FloxPackage> + Send,
         nix: &NixCommandLine,
         system: impl AsRef<str> + Send,
-    ) -> Result<(), EnvironmentError2> {
-        // We modify the contents of the manifest first so that someday in the future
-        // when the `flox_nix_content...` function returns whether the file was actually
-        // modified we can skip creating the temp dir when the file isn't modified.
+    ) -> Result<bool, EnvironmentError2> {
         let current_manifest_contents =
             fs::read_to_string(self.manifest_path()).map_err(EnvironmentError2::ReadManifest)?;
         let new_manifest_contents =
             flox_nix_content_with_new_packages(&current_manifest_contents, packages)?;
-        let mut temp_env = self.make_temporary().await?;
-        temp_env.update_manifest(&new_manifest_contents)?;
-        temp_env.build(nix, system).await?;
-        self.replace_with(temp_env)?;
-        Ok(())
+        match new_manifest_contents {
+            None => return Ok(false),
+            Some(new_manifest_contents) => {
+                let mut temp_env = self.make_temporary().await?;
+                temp_env.update_manifest(&new_manifest_contents)?;
+                temp_env.build(nix, system).await?;
+                self.replace_with(temp_env)?;
+                Ok(true)
+            },
+        }
     }
 
     /// Uninstall packages from the environment atomically
@@ -487,7 +524,7 @@ impl PathEnvironment<Original> {
 
         std::fs::create_dir_all(&env_dir).map_err(EnvironmentError2::InitEnv)?;
 
-        copy_dir_recursively_without_permissions(&env!("FLOX_ENV_TEMPLATE"), &env_dir)
+        copy_dir(&env!("FLOX_ENV_TEMPLATE"), &env_dir, false)
             .await
             .map_err(EnvironmentError2::InitEnv)?;
 
@@ -541,6 +578,16 @@ pub enum EnvironmentError2 {
     OpenManifest(std::io::Error),
     #[error("Activate({0})")]
     Activate(NixCommandLineRunError),
+    #[error("Prior transaction in progress. Delete {0} to discard.")]
+    PriorTransaction(PathBuf),
+    #[error("Failed to create backup for transaction: {0}")]
+    BackupTransaction(std::io::Error),
+    #[error("Failed to move modified environment into place: {0}")]
+    Move(std::io::Error),
+    #[error("Failed to remove transaction backup: {0}")]
+    RemoveBackup(std::io::Error),
+    #[error("Failed to copy file")]
+    CopyFile(IoError),
 }
 
 /// Within a nix AST, find the first definition of an attribute set,
@@ -558,19 +605,43 @@ fn find_attrs(mut expr: Expr) -> Result<AttrSet, ()> {
 }
 
 /// Copy a whole directory recursively ignoring the original permissions
-async fn copy_dir_recursively_without_permissions(
+///
+/// We need this because:
+/// 1. Sometimes we need to copy from the Nix store
+/// 2. fs_extra::dir::copy doesn't handle symlinks.
+///    See: https://github.com/webdesus/fs_extra/issues/61
+async fn copy_dir(
     from: &impl AsRef<Path>,
     to: &impl AsRef<Path>,
+    keep_permissions: bool,
 ) -> Result<(), std::io::Error> {
     for entry in WalkDir::new(from).into_iter().skip(1) {
         let entry = entry.unwrap();
         let new_path = to.as_ref().join(entry.path().strip_prefix(from).unwrap());
-        if entry.file_type().is_dir() {
-            tokio::fs::create_dir(new_path).await.unwrap()
-        } else {
-            copy_file_without_permissions(entry.path(), &new_path)
-                .await
-                .unwrap()
+        match entry.file_type() {
+            file_type if file_type.is_dir() => {
+                tokio::fs::create_dir(new_path).await.unwrap();
+            },
+            file_type if file_type.is_symlink() => {
+                let target = std::fs::read_link(entry.path())
+                // we know the path exists and is a symlink
+                .unwrap();
+                // If target is a relative symlink, this will potentially orphan
+                // it. But we're assuming it's absolute since we only copy links
+                // to the Nix store.
+                println!("new_path={}", new_path.to_string_lossy());
+                std::os::unix::fs::symlink(target, &new_path)?;
+                // TODO handle permissions
+            },
+            _ => {
+                if keep_permissions {
+                    fs::copy(entry.path(), &new_path)?;
+                } else {
+                    copy_file_without_permissions(entry.path(), &new_path)
+                        .await
+                        .unwrap();
+                }
+            },
         }
     }
     Ok(())
@@ -578,12 +649,12 @@ async fn copy_dir_recursively_without_permissions(
 
 /// insert packages into the content of a flox.nix file
 ///
-/// TODO: At some point this should indicate whether the contents were actually changed
+/// TODO: At some point this should return None if the contents were not changed,
 /// (e.g. the user tries to install a package that's already installed).
 fn flox_nix_content_with_new_packages(
     flox_nix_content: &impl AsRef<str>,
     packages: impl IntoIterator<Item = FloxPackage>,
-) -> Result<String, EnvironmentError2> {
+) -> Result<Option<String>, EnvironmentError2> {
     let packages = packages
         .into_iter()
         .map(|package| package.flox_nix_attribute().unwrap());
@@ -620,7 +691,7 @@ fn flox_nix_content_with_new_packages(
         .syntax()
         .replace_with(edited.syntax().green().into_owned());
     let new_content = nixpkgs_fmt::reformat_string(&green_tree.to_string());
-    Ok(new_content)
+    Ok(Some(new_content))
 }
 
 /// remove packages from the content of a flox.nix file
@@ -670,9 +741,7 @@ fn flox_nix_content_with_packages_removed(
 #[cfg(test)]
 mod tests {
 
-    #[cfg(feature = "impure-unit-tests")]
     use flox_types::stability::Stability;
-    #[cfg(feature = "impure-unit-tests")]
     use indoc::indoc;
 
     use super::*;
@@ -751,6 +820,31 @@ mod tests {
                 env.path.to_string_lossy()
             )
         )
+    }
+
+    #[tokio::test]
+    async fn test_flox_nix_content_with_new_packages() {
+        let old_content = indoc! {r#"
+            {
+                packages."nixpkgs-flox".hello = {};
+            }
+        "#};
+        let new_content =
+            flox_nix_content_with_new_packages(&old_content, [FloxPackage::Triple(FloxTriple {
+                stability: Stability::Stable,
+                channel: "nixpkgs-flox".to_string(),
+                name: ["hello"].try_into().unwrap(),
+                version: None,
+            })])
+            .unwrap()
+            .unwrap();
+        let expected = indoc! {r#"
+            {
+              packages."nixpkgs-flox".hello = { };
+              packages."nixpkgs-flox".hello = { };
+            }
+        "#};
+        pretty_assertions::assert_eq!(new_content, expected)
     }
 
     #[tokio::test]
@@ -833,6 +927,23 @@ mod tests {
 
         let catalog = env.catalog(&nix, &system).await.unwrap();
         assert!(!catalog.entries.is_empty());
+
+        assert!(env.out_link(&system).exists());
+        assert!(env.catalog_path().exists());
+
+        // Do a second install to make sure we can copy stuff like symlinks
+        env.install(
+            [FloxPackage::Triple(FloxTriple {
+                stability: Stability::Stable,
+                channel: "nixpkgs-flox".to_string(),
+                name: ["curl"].try_into().unwrap(),
+                version: None,
+            })],
+            &nix,
+            &system,
+        )
+        .await
+        .unwrap();
     }
 
     #[tokio::test]

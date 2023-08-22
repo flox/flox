@@ -13,7 +13,7 @@ use flox_rust_sdk::nix::arguments::eval::EvaluationArgs;
 use flox_rust_sdk::nix::command::{Shell, StoreGc};
 use flox_rust_sdk::nix::command_line::NixCommandLine;
 use flox_rust_sdk::nix::Run;
-use flox_rust_sdk::prelude::flox_package::FloxPackage;
+use flox_rust_sdk::prelude::flox_package::{packages_to_string, FloxPackage};
 use flox_types::constants::{DEFAULT_CHANNEL, LATEST_VERSION};
 use itertools::Itertools;
 use log::{error, info};
@@ -373,14 +373,32 @@ impl Install {
         //     anyhow::bail!("{installed} is already installed");
         // }
 
-        environment
+        let packages_str = packages_to_string(&packages);
+        let plural = packages.len() > 1;
+
+        if environment
             .install(
                 packages.drain(..),
                 &flox.nix(Default::default()),
                 &flox.system,
             )
             .await
-            .context("could not install packages")?;
+            .context("could not install packages")?
+        {
+            println!(
+                "✅ Installed {} into '{}' environment.",
+                packages_str,
+                environment.environment_ref()
+            );
+        } else {
+            let verb = if plural { "are" } else { "is" };
+            println!(
+                "No changes; {} {} already installed into '{}' environment.",
+                packages_str,
+                verb,
+                environment.environment_ref()
+            );
+        }
         Ok(())
     }
 }

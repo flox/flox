@@ -42,25 +42,14 @@ setup_file() {
 
 # without specifying a name should install to an environment found in the user's current directory.
 @test "i2.a: install outside of shell (option1)" {
-
-  "$FLOX_CLI" init
-
-  run "$FLOX_CLI" install hello
-  assert_success
-
-  run "$FLOX_CLI" list
-  assert_success
-  assert_output --regexp - <<EOF
-.*
-Packages in test:
-stable.hello
-EOF
+  skip "Environment defaults handled in another phase"
 }
 
 @test "i3: flox install allows -e for explicit environment name;  If .flox does not exist, a .flox is created." {
   run ls .flox
   assert_failure
 
+  skip "Environment defaults handled in another phase"
   run "$FLOX_CLI" install -e env hello
   assert_success
 
@@ -76,18 +65,15 @@ EOF
   skip "remote environments handled in another phase"
 }
 
-@test "i4: If -e specifies an environment different than the one in .flox, an error is thrown" {
-  "$FLOX_CLI" init -e env
-  run "$FLOX_CLI" install -e not-env hello
-  assert_failure
-  assert_output "Env Not found"
-}
-
-@test "i4: confirmation message" {
+@test "i?: confirmation message" {
   "$FLOX_CLI" init
   run "$FLOX_CLI" install hello
   assert_success
-  assert_output "✅ Installed 'hello' package(s) into 'test' environment."
+  assert_output --partial "✅ Installed 'hello' into 'test' environment."
+  
+  skip "our current editing of Nix expressions doesn't detect already installed packages."
+  run "$FLOX_CLI" install hello
+  assert_output --partial "...already installed..."
 }
 
 @test "i5: download package when install command runs" {

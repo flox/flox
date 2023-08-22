@@ -29,7 +29,7 @@ impl FromStr for EnvironmentOwner {
 }
 
 #[derive(Debug, Clone, PartialEq, AsRef, Display)]
-pub struct EnvironmentName(String);
+pub struct EnvironmentName(pub String);
 
 impl FromStr for EnvironmentName {
     type Err = EnvironmentRefError;
