@@ -16,6 +16,7 @@ use serde::Serialize;
 use tokio::fs;
 use toml_edit::Key;
 
+use crate::commands::not_help;
 use crate::config::features::Feature;
 use crate::config::{Config, ReadWriteError, FLOX_CONFIG_FILE};
 use crate::utils::metrics::{
@@ -121,7 +122,7 @@ impl GeneralCommands {
 pub enum GeneralCommands {
     /// access to the gh CLI
     #[bpaf(command, hide)]
-    Gh(#[bpaf(any("gh Arguments"))] Vec<String>),
+    Gh(#[bpaf(any("gh Arguments", Some))] Vec<String>),
 
     /// configure user parameters
     #[bpaf(command)]
@@ -136,9 +137,10 @@ pub enum GeneralCommands {
 }
 
 #[derive(Bpaf, Clone)]
+#[bpaf(fallback(ConfigArgs::List))]
 pub enum ConfigArgs {
     /// list the current values of all configurable paramers
-    #[bpaf(short, long, default)]
+    #[bpaf(short, long)]
     List,
     /// reset all configurable parameters to their default values without further confirmation.
     #[bpaf(short, long)]
@@ -295,29 +297,41 @@ pub struct WrappedNix {
 }
 fn parse_nix_passthru() -> impl Parser<WrappedNix> {
     fn nix_sub_command<const OFFSET: u8>() -> impl Parser<Vec<String>> {
-        bpaf::command(
-            "nix",
-            bpaf::any("NIX ARGUMENTS")
-                .guard(|item| item != "--stability", "Stability not expected")
-                .complete_shell(complete_nix_shell(OFFSET))
-                .many()
-                .to_options(),
-        )
-        .help("access to the nix CLI")
+        let free = bpaf::any("NIX ARGUMENTS", not_help)
+            .complete_shell(complete_nix_shell(OFFSET))
+            .many();
+
+        let strict = bpaf::positional("NIX ARGUMENTS AND OPTIONS")
+            .strict()
+            .many();
+
+        bpaf::construct!(free, strict).map(|(free, strict)| [free, strict].concat())
     }
+
     let with_stability = {
         let stability = bpaf::long("stability").argument("STABILITY").map(Some);
-        let nix = nix_sub_command::<2>();
-        bpaf::construct!(WrappedNix { stability, nix }).adjacent()
+        let nix_args = nix_sub_command::<2>();
+        bpaf::construct!(WrappedNix {
+            stability,
+            nix_args
+        })
+        .adjacent()
     };
 
     let without_stability = {
         let stability = bpaf::pure(Default::default());
-        let nix = nix_sub_command::<0>().hide();
-        bpaf::construct!(WrappedNix { nix, stability }).hide()
+        let nix_args = nix_sub_command::<0>().hide();
+        bpaf::construct!(WrappedNix {
+            nix_args,
+            stability
+        })
+        .hide()
     };
 
-    bpaf::construct!([without_stability, with_stability]).hide_usage()
+    bpaf::construct!([without_stability, with_stability])
+        .to_options()
+        .command("nix")
+        .help("Access to the nix CLI")
 }
 
 fn complete_nix_shell(offset: u8) -> bpaf::ShellComp {
