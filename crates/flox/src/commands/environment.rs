@@ -19,7 +19,7 @@ use flox_types::constants::{DEFAULT_CHANNEL, LATEST_VERSION};
 use itertools::Itertools;
 use log::{error, info};
 
-use crate::config::features::Feature;
+use crate::flox_forward;
 use crate::utils::dialog::{Confirm, Dialog};
 use crate::utils::resolve_environment_ref;
 use crate::{flox_forward, subcommand_metric};
@@ -357,9 +357,235 @@ async fn resolve_environment<'flox>(
 
 fn activate_run_args() -> impl Parser<Option<(String, Vec<String>)>> {
     let command = bpaf::positional("COMMAND").strict();
-    let args = bpaf::any("ARGUMENTS").many();
+    let args = bpaf::any("ARGUMENTS", Some).many();
 
-    bpaf::construct!(command, args).optional()
+    #[bpaf(long, short, argument("ENV"))]
+    environment: Option<EnvironmentRef>,
+
+    #[bpaf(positional("PACKAGES"), some("At least one package"))]
+    packages: Vec<String>,
+}
+impl Install {
+    pub async fn handle(self, flox: Flox) -> Result<()> {
+        let mut packages: Vec<_> = self
+            .packages
+            .iter()
+            .map(|package| FloxPackage::parse(package, &flox.channels, DEFAULT_CHANNEL))
+            .collect::<Result<Vec<_>, _>>()?
+            .into_iter()
+            .dedup()
+            .collect();
+
+        let mut environment =
+            resolve_environment(&flox, self.environment.as_deref(), "install").await?;
+
+        // todo use set?
+        // let installed = environment
+        //     .packages(&flox.nix(Default::default()), &flox.system)
+        //     .await?
+        //     .into_iter()
+        //     .map(From::from)
+        //     .collect::<Vec<FloxPackage>>();
+
+        // if let Some(installed) = packages.iter().find(|pkg| installed.contains(pkg)) {
+        //     anyhow::bail!("{installed} is already installed");
+        // }
+
+        environment
+            .install(
+                packages.drain(..),
+                &flox.nix(Default::default()),
+                &flox.system,
+            )
+            .await
+            .context("could not install packages")?;
+        Ok(())
+    }
+}
+/// remove packages from an environment
+#[derive(Bpaf, Clone)]
+#[bpaf(command, long("remove"), long("rm"))]
+pub struct Uninstall {
+    #[bpaf(external(environment_args), group_help("Environment Options"))]
+    environment_args: EnvironmentArgs,
+
+    #[bpaf(long, short, argument("ENV"))]
+    environment: Option<EnvironmentRef>,
+
+    #[bpaf(positional("PACKAGES"), some("At least one package"))]
+    packages: Vec<String>,
+}
+impl Uninstall {
+    pub async fn handle(self, flox: Flox) -> Result<()> {
+        let mut packages: Vec<_> = self
+            .packages
+            .iter()
+            .map(|package| FloxPackage::parse(package, &flox.channels, DEFAULT_CHANNEL))
+            .collect::<Result<Vec<_>, _>>()?
+            .into_iter()
+            .dedup()
+            .collect();
+
+        let mut environment =
+            resolve_environment(&flox, self.environment.as_deref(), "install").await?;
+
+        environment
+            .uninstall(
+                packages.drain(..),
+                &flox.nix(Default::default()),
+                &flox.system,
+            )
+            .await
+            .context("could not uninstall packages")?;
+        Ok(())
+    }
+}
+
+/// delete builds of non-current versions of an environment
+#[derive(Bpaf, Clone)]
+#[bpaf(command("wipe-history"))]
+pub struct WipeHistory {
+    #[bpaf(external(environment_args), group_help("Environment Options"))]
+    environment_args: EnvironmentArgs,
+
+    #[bpaf(long, short, argument("ENV"))]
+    environment: Option<EnvironmentRef>,
+}
+
+impl WipeHistory {
+    pub async fn handle(
+        Self {
+            // TODO use environment_args.system?
+            environment_args: _,
+            environment,
+        }: Self,
+        flox: Flox,
+    ) -> Result<()> {
+        let environment_name = environment.as_deref();
+        let environment_ref: environment_ref::EnvironmentRef =
+            resolve_environment_ref(&flox, "wipe-history", environment_name).await?;
+
+        let env = PathEnvironment::<Original>::open(
+            current_dir().unwrap(),
+            environment_ref,
+            flox.temp_dir.clone(),
+        )
+        .context("Environment not found")?;
+
+        if env.delete_symlinks()? {
+            // The flox nix instance is created with `--quiet --quiet`
+            // because nix logs are passed to stderr unfiltered.
+            // nix store gc logs are more useful,
+            // thus we use 3 `--verbose` to have them appear.
+            let nix = flox.nix::<NixCommandLine>(vec![
+                "--verbose".to_string(),
+                "--verbose".to_string(),
+                "--verbose".to_string(),
+            ]);
+            let store_gc_command = StoreGc {
+                ..StoreGc::default()
+            };
+
+            info!("Running garbage collection. This may take a while...");
+            store_gc_command.run(&nix, &Default::default()).await?;
+        } else {
+            info!("No old generations found to clean up.")
+        }
+        Ok(())
+    }
+}
+
+/// export declarative environment manifest to STDOUT
+#[derive(Bpaf, Clone)]
+#[bpaf(command)]
+pub struct Export {
+    #[bpaf(external(environment_args), group_help("Environment Options"))]
+    environment_args: EnvironmentArgs,
+
+    #[bpaf(long, short, argument("ENV"))]
+    environment: Option<EnvironmentRef>,
+}
+
+impl Export {
+    pub async fn handle(self, flox: Flox) -> Result<()> {
+        flox_forward(&flox).await
+    }
+}
+
+/// list environment generations with contents
+#[derive(Bpaf, Clone)]
+#[bpaf(command)]
+pub struct Generations {
+    #[bpaf(external(environment_args), group_help("Environment Options"))]
+    environment_args: EnvironmentArgs,
+
+    #[bpaf(long)]
+    json: bool,
+
+    #[bpaf(long, short, argument("ENV"))]
+    environment: Option<EnvironmentRef>,
+}
+impl Generations {
+    pub async fn handle(self, flox: Flox) -> Result<()> {
+        flox_forward(&flox).await
+    }
+}
+/// access to the git CLI for floxmeta repository
+#[derive(Bpaf, Clone)]
+#[bpaf(command)]
+pub struct Git {
+    #[bpaf(external(environment_args), group_help("Environment Options"))]
+    environment_args: EnvironmentArgs,
+
+    #[bpaf(long, short, argument("ENV"))]
+    environment: Option<EnvironmentRef>,
+
+    #[bpaf(any("Git Arguments", Some))]
+    git_arguments: Vec<String>,
+}
+impl Git {
+    pub async fn handle(self, flox: Flox) -> Result<()> {
+        flox_forward(&flox).await
+    }
+}
+
+/// show all versions of an environment
+#[derive(Bpaf, Clone)]
+#[bpaf(command)]
+pub struct History {
+    #[bpaf(long, short)]
+    oneline: bool,
+
+    #[bpaf(external(environment_args), group_help("Environment Options"))]
+    environment_args: EnvironmentArgs,
+
+    #[bpaf(long, short, argument("ENV"))]
+    environment: Option<EnvironmentRef>,
+}
+impl History {
+    pub async fn handle(self, flox: Flox) -> Result<()> {
+        flox_forward(&flox).await
+    }
+}
+
+/// import declarative environment manifest from STDIN as new generation
+#[derive(Bpaf, Clone)]
+#[bpaf(command)]
+pub struct Import {
+    #[bpaf(external(environment_args), group_help("Environment Options"))]
+    environment_args: EnvironmentArgs,
+
+    #[bpaf(long, short, argument("ENV"))]
+    environment: Option<EnvironmentRef>,
+
+    #[bpaf(external(ImportFile::parse), fallback(ImportFile::Stdin))]
+    file: ImportFile,
+}
+
+impl Import {
+    pub async fn handle(self, flox: Flox) -> Result<()> {
+        flox_forward(&flox).await
+    }
 }
 
 #[derive(Clone)]
@@ -370,16 +596,68 @@ pub enum ImportFile {
 
 impl ImportFile {
     fn parse() -> impl Parser<ImportFile> {
-        let stdin = bpaf::any::<char>("STDIN (-)")
-            .help("Use `-` to read from STDIN")
-            .complete(|_| vec![("-", Some("Read from STDIN"))])
-            .guard(|t| *t == '-', "Use `-` to read from STDIN")
-            .map(|_| ImportFile::Stdin);
+        let stdin = bpaf::any("STDIN (-)", |t: char| {
+            (t == '-').then_some(ImportFile::Stdin)
+        })
+        .help("Use `-` to read from STDIN")
+        .complete(|_| vec![("-", Some("Read from STDIN"))]);
         let path = bpaf::positional("PATH")
             .help("Path to export file")
             .complete_shell(ShellComp::File { mask: None })
             .map(ImportFile::Path);
         construct!([stdin, path])
+    }
+}
+
+/// send environment metadata to remote registry
+#[derive(Bpaf, Clone)]
+#[bpaf(command)]
+pub struct Push {
+    #[bpaf(external(environment_args), group_help("Environment Options"))]
+    environment_args: EnvironmentArgs,
+
+    #[bpaf(external(push_floxmain_or_env), optional)]
+    target: Option<PushFloxmainOrEnv>,
+
+    /// forceably overwrite the remote copy of the environment
+    #[bpaf(long, short)]
+    force: bool,
+}
+
+impl Push {
+    pub async fn handle(self, flox: Flox) -> Result<()> {
+        flox_forward(&flox).await
+    }
+}
+
+#[derive(Bpaf, Clone)]
+pub enum PushFloxmainOrEnv {
+    /// push the `floxmain` branch to sync configuration
+    #[bpaf(long, short)]
+    Main,
+    Env {
+        #[bpaf(long("environment"), short('e'), argument("ENV"))]
+        env: Option<EnvironmentRef>,
+    },
+}
+
+/// pull environment metadata from remote registry
+#[derive(Bpaf, Clone)]
+#[bpaf(command)]
+pub struct Pull {
+    #[bpaf(external(environment_args), group_help("Environment Options"))]
+    environment_args: EnvironmentArgs,
+
+    #[bpaf(external(pull_floxmain_or_env), optional)]
+    target: Option<PullFloxmainOrEnv>,
+
+    /// forceably overwrite the local copy of the environment
+    #[bpaf(long, short)]
+    force: bool,
+}
+impl Pull {
+    pub async fn handle(self, flox: Flox) -> Result<()> {
+        flox_forward(&flox).await
     }
 }
 
@@ -506,7 +784,7 @@ pub enum EnvironmentCommands {
         #[bpaf(long, short, argument("ENV"))]
         environment: Option<EnvironmentRef>,
 
-        #[bpaf(any("Git Arguments"))]
+        #[bpaf(any("Git Arguments", Some))]
         git_arguments: Vec<String>,
     },
 
@@ -659,13 +937,65 @@ pub enum EnvironmentCommands {
         environment: Option<EnvironmentRef>,
     },
 }
+impl Rollback {
+    pub async fn handle(self, flox: Flox) -> Result<()> {
+        flox_forward(&flox).await
+    }
+}
 
 #[derive(Bpaf, Clone)]
-pub enum ListOutput {
-    /// Include store paths of packages in the environment
-    #[bpaf(long("out-path"))]
-    OutPath,
-    /// Print as machine readable json
-    #[bpaf(long)]
-    Json,
+#[bpaf(command("switch-generation"))]
+pub struct SwitchGeneration {
+    #[bpaf(external(environment_args), group_help("Environment Options"))]
+    environment_args: EnvironmentArgs,
+
+    #[bpaf(long, short, argument("ENV"))]
+    environment: Option<EnvironmentRef>,
+
+    #[bpaf(positional("GENERATION"))]
+    generation: u32,
+}
+
+impl SwitchGeneration {
+    pub async fn handle(self, flox: Flox) -> Result<()> {
+        flox_forward(&flox).await
+    }
+}
+
+/// upgrade packages using their most recent flake
+#[derive(Bpaf, Clone)]
+#[bpaf(command)]
+pub struct Upgrade {
+    #[bpaf(external(environment_args), group_help("Environment Options"))]
+    environment_args: EnvironmentArgs,
+
+    #[bpaf(long, short, argument("ENV"))]
+    environment: Option<EnvironmentRef>,
+
+    #[bpaf(positional("PACKAGES"))]
+    packages: Vec<String>,
+}
+impl Upgrade {
+    pub async fn handle(self, flox: Flox) -> Result<()> {
+        flox_forward(&flox).await
+    }
+}
+
+async fn resolve_environment<'flox>(
+    flox: &'flox Flox,
+    environment_name: Option<&str>,
+    subcommand: &str,
+) -> Result<PathEnvironment<Original>, anyhow::Error> {
+    let environment_ref = resolve_environment_ref(flox, subcommand, environment_name).await?;
+    let environment = environment_ref
+        .to_env(flox.temp_dir.clone())
+        .context("Could not use environment")?;
+    Ok(environment)
+}
+
+fn activate_run_args() -> impl Parser<Option<(String, Vec<String>)>> {
+    let command = bpaf::positional("COMMAND").strict();
+    let args = bpaf::any("ARGUMENTS", Some).many();
+
+    bpaf::construct!(command, args).optional()
 }

@@ -69,7 +69,7 @@ pub(crate) mod interface {
         Env(String),
     }
     impl<T: 'static + InstallableDef> Parseable for PosOrEnv<T> {
-        fn parse() -> bpaf::parsers::ParseBox<Self> {
+        fn parse() -> Box<dyn bpaf::Parser<Self>> {
             let installable = InstallableArgument::positional().map(PosOrEnv::Pos);
             let environment = bpaf::long("environment")
                 .short('e')
@@ -776,14 +776,11 @@ impl<T> WithPassthru<T> {
         let nix_args = bpaf::positional("args")
             .strict()
             .many()
-            .anywhere()
             .fallback(Default::default())
             .hide();
 
-        let fake_args = bpaf::any("args")
-            .guard(
-                |m: &String| !["--help", "-h"].contains(&m.as_str()),
-                "asdas",
+        let fake_args = bpaf::any("args",
+                |m: String| (!["--help", "-h"].contains(&m.as_str())).then_some(m)
             )
             // .strict()
             .many();
@@ -799,11 +796,11 @@ impl<T> WithPassthru<T> {
 }
 
 pub trait Parseable: Sized {
-    fn parse() -> bpaf::parsers::ParseBox<Self>;
+    fn parse() -> Box<dyn bpaf::Parser<Self>>;
 }
 
 impl<T: Parseable + Debug + 'static> Parseable for WithPassthru<T> {
-    fn parse() -> bpaf::parsers::ParseBox<WithPassthru<T>> {
+    fn parse() -> Box<dyn bpaf::Parser<WithPassthru<T>>> {
         let parser = WithPassthru::with_parser(T::parse());
         construct!(parser)
     }
@@ -819,7 +816,7 @@ mod parseable_macro {
     macro_rules! parseable {
         ($type:ty, $parser:ident) => {
             impl crate::commands::package::Parseable for $type {
-                fn parse() -> bpaf::parsers::ParseBox<Self> {
+                fn parse() -> Box<dyn bpaf::Parser<Self>> {
                     let p = $parser();
                     bpaf::construct!(p)
                 }

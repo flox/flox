@@ -7,7 +7,7 @@ use std::str::FromStr;
 use std::{env, fs};
 
 use anyhow::{Context, Result};
-use bpaf::{Bpaf, Parser};
+use bpaf::{Args, Bpaf, Parser};
 use flox_rust_sdk::flox::{Flox, DEFAULT_OWNER, FLOX_VERSION};
 use flox_rust_sdk::models::floxmeta::{Floxmeta, GetFloxmetaError};
 use flox_rust_sdk::nix::command_line::NixCommandLine;
@@ -46,7 +46,7 @@ pub enum Verbosity {
         /// Verbose mode.
         ///
         /// Invoke multiple times for increasing detail.
-        #[bpaf(short('v'), long("verbose"), switch, many, map(vec_len))]
+        #[bpaf(short('v'), long("verbose"), req_flag(()), many, map(vec_len))]
         usize,
     ),
 
@@ -70,7 +70,7 @@ pub struct FloxArgs {
     pub verbosity: Verbosity,
 
     /// Debug mode.
-    #[bpaf(long, switch, many, map(vec_not_empty))]
+    #[bpaf(long, req_flag(()), many, map(vec_not_empty))]
     pub debug: bool,
 
     #[bpaf(external(commands))]
@@ -232,24 +232,24 @@ pub enum Commands {
         #[bpaf(external(package::package_args), group_help("Development Options"))]
         options: package::PackageArgs,
 
-        #[bpaf(external(package::interface::package_commands))]
         #[bpaf(group_help("Development Commands"))]
+        #[bpaf(external(package::interface::package_commands))]
         command: interface::PackageCommands,
     },
 
     Environment(
-        #[bpaf(external(environment::environment_commands))]
         #[bpaf(group_help("Environment Commands"))]
+        #[bpaf(external(environment::environment_commands))]
         EnvironmentCommands,
     ),
     Channel(
-        #[bpaf(external(channel::channel_commands))]
         #[bpaf(group_help("Channel Commands"))]
+        #[bpaf(external(channel::channel_commands))]
         ChannelCommands,
     ),
     General(
-        #[bpaf(external(general::general_commands))]
         #[bpaf(group_help("General Commands"))]
+        #[bpaf(external(general::general_commands))]
         GeneralCommands,
     ),
 }
@@ -262,14 +262,18 @@ pub enum Commands {
 pub struct Prefix {
     #[bpaf(long)]
     prefix: bool,
-    #[bpaf(any, many)]
+    #[bpaf(any("REST", Some), many)]
     _catchall: Vec<String>,
 }
 
 impl Prefix {
     /// Parses to [Self] and extract the `--prefix` flag
     pub fn check() -> bool {
-        prefix().to_options().try_run().unwrap_or_default().prefix
+        prefix()
+            .to_options()
+            .run_inner(Args::current_args())
+            .unwrap_or_default()
+            .prefix
     }
 }
 
@@ -282,7 +286,7 @@ pub struct BashPassthru {
     #[bpaf(long("bash-passthru"))]
     do_passthru: bool,
 
-    #[bpaf(any, many)]
+    #[bpaf(any("REST", Some), many)]
     flox_args: Vec<String>,
 }
 
@@ -290,12 +294,23 @@ impl BashPassthru {
     /// Parses to [Self] and extract the `--bash-passthru` flag
     /// returning a list of the remaining arguments if given.
     pub fn check() -> Option<Vec<String>> {
-        let passtrhu = bash_passthru().to_options().try_run().unwrap_or_default();
+        let passtrhu = bash_passthru()
+            .to_options()
+            .run_inner(Args::current_args())
+            .unwrap_or_default();
 
         if passtrhu.do_passthru {
             return Some(passtrhu.flox_args);
         }
 
         None
+    }
+}
+
+pub fn not_help(s: String) -> Option<String> {
+    if s == "--help" || s == "-h" {
+        None
+    } else {
+        Some(s)
     }
 }

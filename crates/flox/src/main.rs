@@ -6,7 +6,7 @@ use std::path::Path;
 use std::process::{ExitCode, ExitStatus};
 
 use anyhow::{anyhow, Context, Result};
-use bpaf::Parser;
+use bpaf::{Args, Doc, Parser};
 use commands::{BashPassthru, FloxArgs, Prefix};
 use flox_rust_sdk::environment::default_nix_subprocess_env;
 use itertools::Itertools;
@@ -53,45 +53,56 @@ async fn main() -> ExitCode {
     let (verbosity, debug) = {
         let verbosity_parser = commands::verbosity();
         let debug_parser = bpaf::long("debug").switch();
-        let other_parser = bpaf::any::<String>("ANY").many();
+        let other_parser = bpaf::any("ANY", Some::<String>).many();
 
         bpaf::construct!(verbosity_parser, debug_parser, other_parser)
             .map(|(v, d, _)| (v, d))
             .to_options()
-            .try_run()
+            .run_inner(Args::current_args())
             .unwrap_or_default()
     };
     init_logger(Some(verbosity), Some(debug));
 
-    let args = commands::flox_args().try_run().map_err(|err| match err {
-        bpaf::ParseFailure::Stdout(_) => err,
-        bpaf::ParseFailure::Stderr(message) => {
-            let mut help_args = env::args_os()
-                .skip(1)
-                .take_while(|arg| arg != "")
-                .collect_vec();
-            help_args.push(OsString::from("--help".to_string()));
-            let failure = commands::flox_args()
-                .run_inner(help_args[..].into())
-                .err()
-                .unwrap();
-            match failure {
-                bpaf::ParseFailure::Stdout(ref e) | bpaf::ParseFailure::Stderr(ref e) => {
-                    bpaf::ParseFailure::Stderr(format!("{message}\n\n{e}"))
-                },
-            }
-        },
-    });
+    let args = commands::flox_args()
+        .run_inner(Args::current_args())
+        .map_err(|err| match err {
+            bpaf::ParseFailure::Completion(c) => bpaf::ParseFailure::Completion(c),
+            bpaf::ParseFailure::Stdout(_, _) => err,
+            bpaf::ParseFailure::Stderr(mut message) => {
+                let mut help_args = env::args_os()
+                    .skip(1)
+                    .take_while(|arg| arg != "")
+                    .collect_vec();
+                help_args.push(OsString::from("--help".to_string()));
+                let failure = commands::flox_args()
+                    .run_inner(&help_args[..])
+                    .err()
+                    .unwrap();
+                match failure {
+                    bpaf::ParseFailure::Stdout(ref e, _) | bpaf::ParseFailure::Stderr(ref e) => {
+                        message.doc(&Doc::from("\n"));
+                        message.doc(e);
+
+                        bpaf::ParseFailure::Stderr(message)
+                    },
+                    _ => todo!(),
+                }
+            },
+        });
 
     if let Some(parse_err) = args.as_ref().err() {
         match parse_err {
-            bpaf::ParseFailure::Stdout(m) => {
+            bpaf::ParseFailure::Stdout(m, _) => {
                 print!("{m}");
                 return ExitCode::from(0);
             },
             bpaf::ParseFailure::Stderr(m) => {
                 error!("{m}");
                 return ExitCode::from(1);
+            },
+            bpaf::ParseFailure::Completion(c) => {
+                print!("{c}");
+                return ExitCode::from(0);
             },
         }
     }
