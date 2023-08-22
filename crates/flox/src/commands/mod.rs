@@ -3,7 +3,6 @@ mod environment;
 mod general;
 mod package;
 
-use std::str::FromStr;
 use std::{env, fs};
 
 use anyhow::{Context, Result};
@@ -11,7 +10,6 @@ use bpaf::{Args, Bpaf, Parser};
 use flox_rust_sdk::flox::{Flox, DEFAULT_OWNER, FLOX_VERSION};
 use flox_rust_sdk::models::floxmeta::{Floxmeta, GetFloxmetaError};
 use flox_rust_sdk::nix::command_line::NixCommandLine;
-use flox_rust_sdk::prelude::Channel;
 use flox_rust_sdk::providers::git::GitCommandProvider;
 use indoc::formatdoc;
 use log::{debug, info};
@@ -19,10 +17,6 @@ use once_cell::sync::Lazy;
 use tempfile::TempDir;
 use toml_edit::Key;
 
-use self::channel::ChannelCommands;
-use self::environment::EnvironmentCommands;
-use self::general::GeneralCommands;
-use self::package::interface;
 use crate::config::{Config, FLOX_CONFIG_FILE};
 use crate::utils::init::{
     init_access_tokens,
@@ -206,73 +200,19 @@ impl FloxArgs {
         });
 
         // command handled above
-        match self.command.unwrap() {
-            Commands::Package { options, command } => {
-                // Resolve stability from flag or config (which reads environment variables).
-                // If the stability is set by a flag, modify STABILITY env variable to match
-                // the set stability.
-                // Flox invocations in a child process will inherit hence inherit the stability.
 
-                // mutability, meh
-                config.flox.stability = {
-                    if let Some(ref stability) = options.stability {
-                        env::set_var("FLOX_STABILITY", stability.to_string());
-                        stability.clone()
-                    } else {
-                        config.flox.stability
-                    }
-                };
 
-                let mut flox = flox;
-                // more mutable state hurray :/
-                if config.flox.stability != Default::default() {
-                    flox.channels.register_channel(
-                        "nixpkgs",
-                        Channel::from_str(&format!(
-                            "github:flox/nixpkgs/{}",
-                            config.flox.stability
-                        ))?,
-                    );
-                }
-                command.handle(config, flox).await?
-            },
-            Commands::Environment(ref environment) => environment.handle(flox).await?,
-            Commands::Channel(ref channel) => channel.handle(flox).await?,
-            Commands::General(ref general) => general.handle(config, flox).await?,
-        }
 
         Ok(())
     }
 }
 
-/// Transparent separation of different categories of commands
 #[allow(clippy::large_enum_variant)] // there's only a single instance of this enum
 #[derive(Bpaf, Clone)]
-pub enum Commands {
-    Package {
-        #[bpaf(external(package::package_args), group_help("Development Options"))]
-        options: package::PackageArgs,
-
-        #[bpaf(group_help("Development Commands"))]
-        #[bpaf(external(package::interface::package_commands))]
-        command: interface::PackageCommands,
-    },
-
-    Environment(
-        #[bpaf(group_help("Environment Commands"))]
-        #[bpaf(external(environment::environment_commands))]
-        EnvironmentCommands,
-    ),
-    Channel(
-        #[bpaf(group_help("Channel Commands"))]
-        #[bpaf(external(channel::channel_commands))]
-        ChannelCommands,
-    ),
-    General(
-        #[bpaf(group_help("General Commands"))]
-        #[bpaf(external(general::general_commands))]
-        GeneralCommands,
-    ),
+enum Commands {
+    Development,
+    General,
+    // Development(#[bpaf(external(local_development_commands))] LocalDevelopmentCommands),
 }
 
 /// Special command to check for the presence of the `--prefix` flag.
