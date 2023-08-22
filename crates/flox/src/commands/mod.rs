@@ -28,6 +28,9 @@ use crate::utils::init::{
 };
 use crate::utils::metrics::METRICS_UUID_FILE_NAME;
 
+use self::package::{WithPassthru, Parseable};
+use self::package::interface::Run;
+
 static FLOX_WELCOME_MESSAGE: Lazy<String> = Lazy::new(|| {
     formatdoc! {r#"
     flox version {FLOX_VERSION}
@@ -223,6 +226,7 @@ enum LocalDevelopmentCommands {
     Install(#[bpaf(external(environment::install))] environment::Install),
     Uninstall(#[bpaf(external(environment::uninstall))] environment::Uninstall),
     Edit(#[bpaf(external(environment::edit))] environment::Edit),
+    Run(#[bpaf(external(WithPassthru::parse))] WithPassthru<Run>),
     List(#[bpaf(external(environment::list))] environment::List),
     Nix(#[bpaf(external(general::parse_nix_passthru))] general::WrappedNix),
 }
@@ -239,6 +243,7 @@ impl LocalDevelopmentCommands {
 
             LocalDevelopmentCommands::Nix(args) => args.handle(config, flox).await?,
             LocalDevelopmentCommands::Search(args) => args.handle(flox).await?,
+            LocalDevelopmentCommands::Run(_) => todo!(),
         }
         Ok(())
     }
