@@ -30,11 +30,11 @@ use crate::{flox_forward, subcommand_metric};
 pub struct GeneralArgs {}
 
 impl GeneralCommands {
-    pub async fn handle(&self, mut config: Config, mut flox: Flox) -> Result<()> {
+    pub async fn handle(self, mut config: Config, mut flox: Flox) -> Result<()> {
         match self {
             GeneralCommands::Gh(_) => subcommand_metric!("gh"),
             GeneralCommands::Config(_) => subcommand_metric!("config"),
-            GeneralCommands::ResetMetrics => subcommand_metric!("reset-metrics"),
+            GeneralCommands::ResetMetrics(_) => subcommand_metric!("reset-metrics"),
             GeneralCommands::Nix(_) => subcommand_metric!("nix"),
         }
 
@@ -42,71 +42,9 @@ impl GeneralCommands {
             GeneralCommands::Nix(_) if Feature::Nix.is_forwarded()? => flox_forward(&flox).await?,
 
             // To be moved to packages - figure out completions again
-            GeneralCommands::Nix(wrapped) => {
-                // mutable state hurray :/
-                config.flox.stability = {
-                    if let Some(ref stability) = wrapped.stability {
-                        env::set_var("FLOX_STABILITY", stability.to_string());
-                        stability.clone()
-                    } else {
-                        config.flox.stability
-                    }
-                };
+            GeneralCommands::Nix(wrapped) => wrapped.handle(config, flox).await?,
 
-                if config.flox.stability != Default::default() {
-                    flox.channels.register_channel(
-                        "nixpkgs",
-                        Channel::from_str(&format!(
-                            "github:flox/nixpkgs/{}",
-                            config.flox.stability
-                        ))?,
-                    );
-                }
-
-                let nix: NixCommandLine = flox.nix(Default::default());
-
-                RawCommand::new(wrapped.nix.to_owned())
-                    .run(&nix, &Default::default())
-                    .await?;
-            },
-
-            GeneralCommands::ResetMetrics => {
-                let mut metrics_lock =
-                    LockFile::open(&flox.cache_dir.join(METRICS_LOCK_FILE_NAME))?;
-                tokio::task::spawn_blocking(move || metrics_lock.lock()).await??;
-
-                if let Err(err) =
-                    tokio::fs::remove_file(flox.cache_dir.join(METRICS_EVENTS_FILE_NAME)).await
-                {
-                    match err.kind() {
-                        std::io::ErrorKind::NotFound => {},
-                        _ => Err(err)?,
-                    }
-                }
-
-                if let Err(err) =
-                    tokio::fs::remove_file(flox.data_dir.join(METRICS_UUID_FILE_NAME)).await
-                {
-                    match err.kind() {
-                        std::io::ErrorKind::NotFound => {},
-                        _ => Err(err)?,
-                    }
-                }
-
-                let notice = indoc! {"
-                    Sucessfully reset telemetry ID for this machine!
-
-                    A new ID will be assigned next time you use flox.
-
-                    The collection of metrics can be disabled in the following ways:
-
-                      environment: FLOX_DISABLE_METRICS=true
-                        user-wide: flox config --set-bool disable_metrics true
-                      system-wide: update /etc/flox.toml as described in flox(1)
-                "};
-
-                info!("{notice}");
-            },
+            GeneralCommands::ResetMetrics(args) => args.handle(config, flox).await?,
 
             GeneralCommands::Config(config_args) => config_args.handle(config, flox).await?,
 
@@ -130,10 +68,50 @@ pub enum GeneralCommands {
 
     /// reset the metrics queue (if any), reset metrics ID, and re-prompt for consent
     #[bpaf(command("reset-metrics"))]
-    ResetMetrics,
+    ResetMetrics(#[bpaf(external(reset_metrics))] ResetMetrics),
 
     /// access to the nix CLI
     Nix(#[bpaf(external(parse_nix_passthru))] WrappedNix),
+}
+
+#[derive(Bpaf, Clone)]
+pub struct ResetMetrics {}
+impl ResetMetrics {
+    pub async fn handle(self, config: Config, flox: Flox) -> Result<()> {
+        let mut metrics_lock = LockFile::open(&flox.cache_dir.join(METRICS_LOCK_FILE_NAME))?;
+        tokio::task::spawn_blocking(move || metrics_lock.lock()).await??;
+
+        if let Err(err) =
+            tokio::fs::remove_file(flox.cache_dir.join(METRICS_EVENTS_FILE_NAME)).await
+        {
+            match err.kind() {
+                std::io::ErrorKind::NotFound => {},
+                _ => Err(err)?,
+            }
+        }
+
+        if let Err(err) = tokio::fs::remove_file(flox.data_dir.join(METRICS_UUID_FILE_NAME)).await {
+            match err.kind() {
+                std::io::ErrorKind::NotFound => {},
+                _ => Err(err)?,
+            }
+        }
+
+        let notice = indoc! {"
+                    Sucessfully reset telemetry ID for this machine!
+
+                    A new ID will be assigned next time you use flox.
+
+                    The collection of metrics can be disabled in the following ways:
+
+                      environment: FLOX_DISABLE_METRICS=true
+                        user-wide: flox config --set-bool disable_metrics true
+                      system-wide: update /etc/flox.toml as described in flox(1)
+                "};
+
+        info!("{notice}");
+        Ok(())
+    }
 }
 
 #[derive(Bpaf, Clone)]
@@ -293,9 +271,38 @@ pub struct ConfigDelete {
 #[derive(Clone, Debug)]
 pub struct WrappedNix {
     stability: Option<Stability>,
-    nix: Vec<String>,
+    nix_args: Vec<String>,
 }
-fn parse_nix_passthru() -> impl Parser<WrappedNix> {
+
+impl WrappedNix {
+    pub async fn handle(self, mut config: Config, mut flox: Flox) -> Result<()> {
+        // mutable state hurray :/
+        config.flox.stability = {
+            if let Some(ref stability) = self.stability {
+                env::set_var("FLOX_STABILITY", stability.to_string());
+                stability.clone()
+            } else {
+                config.flox.stability
+            }
+        };
+
+        if config.flox.stability != Default::default() {
+            flox.channels.register_channel(
+                "nixpkgs",
+                Channel::from_str(&format!("github:flox/nixpkgs/{}", config.flox.stability))?,
+            );
+        }
+
+        let nix: NixCommandLine = flox.nix(Default::default());
+
+        RawCommand::new(self.nix_args.to_owned())
+            .run(&nix, &Default::default())
+            .await?;
+        Ok(())
+    }
+}
+
+pub fn parse_nix_passthru() -> impl Parser<WrappedNix> {
     fn nix_sub_command<const OFFSET: u8>() -> impl Parser<Vec<String>> {
         let free = bpaf::any("NIX ARGUMENTS", not_help)
             .complete_shell(complete_nix_shell(OFFSET))
