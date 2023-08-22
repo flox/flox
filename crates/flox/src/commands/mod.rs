@@ -17,6 +17,8 @@ use once_cell::sync::Lazy;
 use tempfile::TempDir;
 use toml_edit::Key;
 
+use self::package::interface::Run;
+use self::package::{Parseable, WithPassthru};
 use crate::config::{Config, FLOX_CONFIG_FILE};
 use crate::utils::init::{
     init_access_tokens,
@@ -27,9 +29,6 @@ use crate::utils::init::{
     telemetry_opt_out_needs_migration,
 };
 use crate::utils::metrics::METRICS_UUID_FILE_NAME;
-
-use self::package::{WithPassthru, Parseable};
-use self::package::interface::Run;
 
 static FLOX_WELCOME_MESSAGE: Lazy<String> = Lazy::new(|| {
     formatdoc! {r#"
@@ -214,7 +213,8 @@ impl FloxArgs {
 #[allow(clippy::large_enum_variant)] // there's only a single instance of this enum
 #[derive(Bpaf, Clone)]
 enum Commands {
-    Development(#[bpaf(external(local_development_commands))]LocalDevelopmentCommands),
+    Development(#[bpaf(external(local_development_commands))] LocalDevelopmentCommands),
+    Sharing(#[bpaf(external(sharing_commands))] SharingCommands),
 }
 
 /// Local Development Commands
@@ -244,6 +244,26 @@ impl LocalDevelopmentCommands {
             LocalDevelopmentCommands::Nix(args) => args.handle(config, flox).await?,
             LocalDevelopmentCommands::Search(args) => args.handle(flox).await?,
             LocalDevelopmentCommands::Run(_) => todo!(),
+        }
+        Ok(())
+    }
+}
+
+/// Sharing Commands
+#[derive(Bpaf, Clone)]
+enum SharingCommands {
+    Push(#[bpaf(external(environment::push))] environment::Push),
+    Pull(#[bpaf(external(environment::pull))] environment::Pull),
+    Containerize(
+        #[bpaf(external(package::interface::containerize))] package::interface::Containerize,
+    ),
+}
+impl SharingCommands {
+    async fn handle(self, config: Config, flox: Flox) -> Result<()> {
+        match self {
+            SharingCommands::Push(args) => args.handle(flox).await?,
+            SharingCommands::Pull(args) => args.handle(flox).await?,
+            SharingCommands::Containerize(_) => todo!(),
         }
         Ok(())
     }
