@@ -327,7 +327,7 @@ impl Envs {
     }
 }
 
-/// install a package into an environment
+/// Install a package into an environment
 #[derive(Bpaf, Clone)]
 #[bpaf(command)]
 pub struct Install {
