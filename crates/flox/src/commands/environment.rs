@@ -55,7 +55,7 @@ pub type EnvironmentRef = String;
 //             EnvironmentCommands::WipeHistory { .. } => subcommand_metric!("wipe-history"),
 //         }
 
-/// edit declarative environment configuration
+/// Edit declarative environment configuration
 #[derive(Bpaf, Clone)]
 #[bpaf(command)]
 pub struct Edit {
