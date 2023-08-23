@@ -18,7 +18,9 @@ use tempfile::TempDir;
 use toml_edit::Key;
 
 use self::package::{Parseable, Run, WithPassthru};
+use crate::config::features::Feature;
 use crate::config::{Config, FLOX_CONFIG_FILE};
+use crate::flox_forward;
 use crate::utils::init::{
     init_access_tokens,
     init_channels,
@@ -246,6 +248,18 @@ enum LocalDevelopmentCommands {
 impl LocalDevelopmentCommands {
     async fn handle(self, config: Config, flox: Flox) -> Result<()> {
         match self {
+            LocalDevelopmentCommands::Init(_)
+            | LocalDevelopmentCommands::Activate(_)
+            | LocalDevelopmentCommands::Edit(_)
+            | LocalDevelopmentCommands::Install(_)
+            | LocalDevelopmentCommands::Uninstall(_)
+            | LocalDevelopmentCommands::List(_)
+            | LocalDevelopmentCommands::Delete(_)
+                if Feature::Env.is_forwarded()? =>
+            {
+                flox_forward(&flox).await?
+            },
+
             LocalDevelopmentCommands::Init(args) => args.handle(flox).await?,
             LocalDevelopmentCommands::Activate(args) => args.handle(flox).await?,
             LocalDevelopmentCommands::Edit(args) => args.handle(flox).await?,
@@ -273,6 +287,11 @@ enum SharingCommands {
 impl SharingCommands {
     async fn handle(self, config: Config, flox: Flox) -> Result<()> {
         match self {
+            SharingCommands::Push(_) | SharingCommands::Pull(_)
+                if Feature::Env.is_forwarded()? =>
+            {
+                flox_forward(&flox).await?
+            },
             SharingCommands::Push(args) => args.handle(flox).await?,
             SharingCommands::Pull(args) => args.handle(flox).await?,
             SharingCommands::Containerize(args) => args.handle(config, flox).await?,
@@ -313,6 +332,26 @@ impl AdditionalCommands {
 
     async fn handle(self, config: Config, flox: Flox) -> Result<()> {
         match self {
+            // Environment commands feature gate
+            AdditionalCommands::Upgrade(_)
+            | AdditionalCommands::Import(_)
+            | AdditionalCommands::Export(_)
+            | AdditionalCommands::History(_)
+            | AdditionalCommands::PrintDevEnv(_)
+                if Feature::Env.is_forwarded()? =>
+            {
+                flox_forward(&flox).await?
+            },
+
+            // Channel Commands feature gate
+            AdditionalCommands::Channels(_)
+            | AdditionalCommands::Subscribe(_)
+            | AdditionalCommands::Unsubscribe(_)
+                if Feature::Channels.is_forwarded()? =>
+            {
+                flox_forward(&flox).await?
+            },
+
             AdditionalCommands::Documentation(args) => args.handle(),
             AdditionalCommands::Build(args) => args.handle(config, flox).await?,
             AdditionalCommands::Upgrade(args) => args.handle(flox).await?,
@@ -366,6 +405,17 @@ enum InternalCommands {
 impl InternalCommands {
     async fn handle(self, config: Config, flox: Flox) -> Result<()> {
         match self {
+            // Environment Commands feature gate
+            InternalCommands::Generations(_)
+            | InternalCommands::SwitchGeneration(_)
+            | InternalCommands::Rollback(_)
+            | InternalCommands::Envs(_)
+            | InternalCommands::Git(_)
+                if Feature::Env.is_forwarded()? =>
+            {
+                flox_forward(&flox).await?
+            },
+
             InternalCommands::ResetMetrics(args) => args.handle(config, flox).await?,
             InternalCommands::Generations(args) => args.handle(flox).await?,
             InternalCommands::SwitchGeneration(args) => args.handle(flox).await?,
