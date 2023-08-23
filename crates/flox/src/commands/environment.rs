@@ -136,7 +136,7 @@ impl Edit {
     }
 }
 
-/// remove all data pertaining to an environment
+/// Delete an environment
 #[derive(Bpaf, Clone)]
 #[bpaf(command)]
 pub struct Delete {
