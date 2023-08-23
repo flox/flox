@@ -349,6 +349,7 @@ enum InternalCommands {
         #[bpaf(external(environment::switch_generation))] environment::SwitchGeneration,
     ),
     Rollback(#[bpaf(external(environment::rollback))] environment::Rollback),
+    Envs(#[bpaf(external(environment::envs))] environment::Envs),
 }
 
 impl InternalCommands {
@@ -358,6 +359,7 @@ impl InternalCommands {
             InternalCommands::Generations(args) => args.handle(flox).await?,
             InternalCommands::SwitchGeneration(args) => args.handle(flox).await?,
             InternalCommands::Rollback(args) => args.handle(flox).await?,
+            InternalCommands::Envs(args) => args.handle(flox).await?,
         }
         Ok(())
     }
