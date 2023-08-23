@@ -57,7 +57,6 @@ pub type EnvironmentRef = String;
 
 /// Edit declarative environment configuration
 #[derive(Bpaf, Clone)]
-#[bpaf(command)]
 pub struct Edit {
     #[allow(dead_code)] // pending spec for `-e`, `--dir` behaviour
     #[bpaf(external(environment_args), group_help("Environment Options"))]
@@ -139,7 +138,6 @@ impl Edit {
 
 /// Delete an environment
 #[derive(Bpaf, Clone)]
-#[bpaf(command)]
 pub struct Delete {
     #[allow(dead_code)] // not yet handled in impl
     #[bpaf(short, long)]
@@ -171,13 +169,12 @@ impl Delete {
 
 /// Activate environment
 ///
-/// * in current shell: eval "$(flox activate)"
 ///
-/// * in subshell: flox activate
-///
-/// * for command: flox activate -- <command> <args>
+/// Modes:
+///  * in current shell: eval "$(flox activate)"
+///  * in subshell: flox activate
+///  * for command: flox activate -- <command> <args>
 #[derive(Bpaf, Clone)]
-#[bpaf(command)]
 pub struct Activate {
     #[allow(dead_code)] // pending spec for `-e`, `--dir` behaviour
     #[bpaf(external(environment_args), group_help("Environment Options"))]
@@ -213,7 +210,6 @@ impl Activate {
 
 /// Create an environment in the current directory
 #[derive(Bpaf, Clone)]
-#[bpaf(command, long("create"))]
 pub struct Init {
     #[allow(dead_code)] // pending spec for `-e`, `--dir` behaviour
     #[bpaf(external(environment_args), group_help("Environment Options"))]
@@ -259,7 +255,6 @@ impl Init {
 
 /// List (status?) packages installed in an environment
 #[derive(Bpaf, Clone)]
-#[bpaf(command)]
 pub struct List {
     #[allow(dead_code)] // pending spec for `-e`, `--dir` behaviour
     #[bpaf(external(environment_args), group_help("Environment Options"))]
@@ -321,7 +316,6 @@ impl List {
 /// Aliases:
 ///   environments, envs
 #[derive(Bpaf, Clone)]
-#[bpaf(command, long("environments"))]
 pub struct Envs;
 impl Envs {
     pub async fn handle(self, flox: Flox) -> Result<()> {
@@ -339,7 +333,6 @@ impl Envs {
 
 /// Install a package into an environment
 #[derive(Bpaf, Clone)]
-#[bpaf(command)]
 pub struct Install {
     #[allow(dead_code)] // pending spec for `-e`, `--dir` behaviour
     #[bpaf(external(environment_args), group_help("Environment Options"))]
@@ -391,7 +384,6 @@ impl Install {
 
 /// Uninstall installed packages from an environment
 #[derive(Bpaf, Clone)]
-#[bpaf(command, long("remove"), long("rm"))]
 pub struct Uninstall {
     #[allow(dead_code)] // pending spec for `-e`, `--dir` behaviour
     #[bpaf(external(environment_args), group_help("Environment Options"))]
@@ -431,7 +423,6 @@ impl Uninstall {
 
 /// delete builds of non-current versions of an environment
 #[derive(Bpaf, Clone)]
-#[bpaf(command("wipe-history"))]
 pub struct WipeHistory {
     #[allow(dead_code)] // pending spec for `-e`, `--dir` behaviour
     #[bpaf(external(environment_args), group_help("Environment Options"))]
@@ -479,7 +470,6 @@ impl WipeHistory {
 
 /// export declarative environment manifest to STDOUT
 #[derive(Bpaf, Clone)]
-#[bpaf(command)]
 pub struct Export {
     #[allow(dead_code)] // pending spec for `-e`, `--dir` behaviour
     #[bpaf(external(environment_args), group_help("Environment Options"))]
@@ -498,7 +488,6 @@ impl Export {
 
 /// list environment generations with contents
 #[derive(Bpaf, Clone)]
-#[bpaf(command)]
 pub struct Generations {
     #[allow(dead_code)] // pending spec for `-e`, `--dir` behaviour
     #[bpaf(external(environment_args), group_help("Environment Options"))]
@@ -519,7 +508,6 @@ impl Generations {
 }
 /// access to the git CLI for floxmeta repository
 #[derive(Bpaf, Clone)]
-#[bpaf(command)]
 pub struct Git {
     #[allow(dead_code)] // pending spec for `-e`, `--dir` behaviour
     #[bpaf(external(environment_args), group_help("Environment Options"))]
@@ -541,7 +529,6 @@ impl Git {
 
 /// show all versions of an environment
 #[derive(Bpaf, Clone)]
-#[bpaf(command)]
 pub struct History {
     #[allow(dead_code)] // not yet handled in impl
     #[bpaf(long, short)]
@@ -563,7 +550,6 @@ impl History {
 
 /// import declarative environment manifest from STDIN as new generation
 #[derive(Bpaf, Clone)]
-#[bpaf(command)]
 pub struct Import {
     #[allow(dead_code)] // pending spec for `-e`, `--dir` behaviour
     #[bpaf(external(environment_args), group_help("Environment Options"))]
@@ -607,7 +593,6 @@ impl ImportFile {
 
 /// Send environment to flox hub
 #[derive(Bpaf, Clone)]
-#[bpaf(command)]
 pub struct Push {
     #[allow(dead_code)] // pending spec for `-e`, `--dir` behaviour
     #[bpaf(external(environment_args), group_help("Environment Options"))]
@@ -642,7 +627,6 @@ pub enum PushFloxmainOrEnv {
 
 /// Pull environment from flox hub
 #[derive(Bpaf, Clone)]
-#[bpaf(command)]
 pub struct Pull {
     #[allow(dead_code)] // pending spec for `-e`, `--dir` behaviour
     #[bpaf(external(environment_args), group_help("Environment Options"))]
@@ -680,7 +664,6 @@ pub enum PullFloxmainOrEnv {
 
 /// rollback to the previous generation of an environment
 #[derive(Bpaf, Clone)]
-#[bpaf(command)]
 pub struct Rollback {
     #[allow(dead_code)] // pending spec for `-e`, `--dir` behaviour
     #[bpaf(external(environment_args), group_help("Environment Options"))]
@@ -705,7 +688,6 @@ impl Rollback {
 
 /// switch to a specific generation of an environment
 #[derive(Bpaf, Clone)]
-#[bpaf(command("switch-generation"))]
 pub struct SwitchGeneration {
     #[allow(dead_code)] // pending spec for `-e`, `--dir` behaviour
     #[bpaf(external(environment_args), group_help("Environment Options"))]
@@ -728,7 +710,6 @@ impl SwitchGeneration {
 
 /// upgrade packages using their most recent flake
 #[derive(Bpaf, Clone)]
-#[bpaf(command)]
 pub struct Upgrade {
     #[allow(dead_code)] // pending spec for `-e`, `--dir` behaviour
     #[bpaf(external(environment_args), group_help("Environment Options"))]

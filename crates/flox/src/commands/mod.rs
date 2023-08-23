@@ -231,17 +231,35 @@ enum Commands {
 /// Local Development Commands
 #[derive(Bpaf, Clone)]
 enum LocalDevelopmentCommands {
+    /// Create an environment in the current directory
+    #[bpaf(command, long("create"))]
     Init(#[bpaf(external(environment::init))] environment::Init),
+    /// Activate environment
+    #[bpaf(command)]
     Activate(#[bpaf(external(environment::activate))] environment::Activate),
+    /// Search packages in subscribed channels
+    #[bpaf(command)]
     Search(#[bpaf(external(channel::search))] channel::Search),
+    /// Install a package into an environment
+    #[bpaf(command)]
     Install(#[bpaf(external(environment::install))] environment::Install),
+    /// Uninstall installed packages from an environment
+    #[bpaf(command, long("remove"), long("rm"))]
     Uninstall(#[bpaf(external(environment::uninstall))] environment::Uninstall),
+    /// Edit declarative environment configuration
+    #[bpaf(command)]
     Edit(#[bpaf(external(environment::edit))] environment::Edit),
     /// Run app from current project
     #[bpaf(command)]
     Run(#[bpaf(external(WithPassthru::parse))] WithPassthru<Run>),
+    /// List (status?) packages installed in an environment
+    #[bpaf(command)]
     List(#[bpaf(external(environment::list))] environment::List),
+    /// Access to the nix CLI
+    #[bpaf(command)]
     Nix(#[bpaf(external(general::parse_nix_passthru))] general::WrappedNix),
+    /// Delete an environment
+    #[bpaf(command)]
     Delete(#[bpaf(external(environment::delete))] environment::Delete),
 }
 
@@ -278,7 +296,11 @@ impl LocalDevelopmentCommands {
 /// Sharing Commands
 #[derive(Bpaf, Clone)]
 enum SharingCommands {
+    /// Send environment to flox hub
+    #[bpaf(command)]
     Push(#[bpaf(external(environment::push))] environment::Push),
+    #[bpaf(command)]
+    /// Pull environment from flox hub
     Pull(#[bpaf(external(environment::pull))] environment::Pull),
     /// Containerize an environment
     #[bpaf(command)]
@@ -308,14 +330,23 @@ enum AdditionalCommands {
     ),
     #[bpaf(command, hide)]
     Build(#[bpaf(external(WithPassthru::parse), hide)] WithPassthru<package::Build>),
+    #[bpaf(command, hide)]
     Upgrade(#[bpaf(external(environment::upgrade), hide)] environment::Upgrade),
+    #[bpaf(command, hide)]
     Import(#[bpaf(external(environment::import), hide)] environment::Import),
+    #[bpaf(command, hide)]
     Export(#[bpaf(external(environment::export), hide)] environment::Export),
+    #[bpaf(command, hide)]
     Config(#[bpaf(external(general::config_args), hide)] general::ConfigArgs),
+    #[bpaf(command("wipe-history"), hide)]
     WipeHistory(#[bpaf(external(environment::wipe_history), hide)] environment::WipeHistory),
+    #[bpaf(command, hide)]
     Subscribe(#[bpaf(external(channel::subscribe), hide)] channel::Subscribe),
+    #[bpaf(command, hide)]
     Unsubscribe(#[bpaf(external(channel::unsubscribe), hide)] channel::Unsubscribe),
+    #[bpaf(command, hide)]
     Channels(#[bpaf(external(channel::channels), hide)] channel::Channels),
+    #[bpaf(command, hide)]
     History(#[bpaf(external(environment::history), hide)] environment::History),
     #[bpaf(command, hide)]
     PrintDevEnv(#[bpaf(external(WithPassthru::parse), hide)] WithPassthru<package::PrintDevEnv>),
@@ -382,13 +413,19 @@ impl AdditionalCommandsDocumentation {
 #[derive(Bpaf, Clone)]
 #[bpaf(hide)]
 enum InternalCommands {
+    #[bpaf(command("reset-metrics"))]
     ResetMetrics(#[bpaf(external(general::reset_metrics))] general::ResetMetrics),
+    #[bpaf(command)]
     Generations(#[bpaf(external(environment::generations))] environment::Generations),
+    #[bpaf(command("switch-generation"))]
     SwitchGeneration(
         #[bpaf(external(environment::switch_generation))] environment::SwitchGeneration,
     ),
+    #[bpaf(command)]
     Rollback(#[bpaf(external(environment::rollback))] environment::Rollback),
+    #[bpaf(command, long("environments"))]
     Envs(#[bpaf(external(environment::envs))] environment::Envs),
+    #[bpaf(command)]
     Git(#[bpaf(external(environment::git))] environment::Git),
     #[bpaf(command("init-package"))]
     InitPackage(#[bpaf(external(WithPassthru::parse))] WithPassthru<package::InitPackage>),
