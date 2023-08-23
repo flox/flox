@@ -44,27 +44,27 @@ EOF
 @test "f2: command grouping changes 1: Add 'Local Development Commands' and list in order" {
     run "$FLOX_CLI" --help
     assert_output --partial - << EOF
-    Local Development Commands
-      init               Create an environment in the current directory
-      activate           Activate environment
-      search             Search packages in subscribed channels
-      install            Install a package into an environment
-      uninstall          Uninstall installed packages from an environment
-      edit               Edit declarative environment configuration
-      run                Run app from current project
-      list               List (status?) packages installed in an environment
-      nix                Access to the nix CLI
-      delete             Delete an environment
+Local Development Commands
+    init           Create an environment in the current directory
+    activate       Activate environment
+    search         Search packages in subscribed channels
+    install        Install a package into an environment
+    uninstall      Uninstall installed packages from an environment
+    edit           Edit declarative environment configuration
+    run            Run app from current project
+    list           List (status?) packages installed in an environment
+    nix            Access to the nix CLI
+    delete         Delete an environment
 EOF
 }
 
 @test "f3: command grouping changes 2: introduce "Sharing Commands" and include 1/ push 2/ pull 3/ containerize" {
     run "$FLOX_CLI" --help
     assert_output --partial - << EOF
-    Sharing Commands
-      push               Send environment to flox hub
-      pull               Pull environment from flox hub
-      containerize       Containerize an environment
+Sharing Commands
+    push           Send environment to flox hub
+    pull           Pull environment from flox hub
+    containerize   Containerize an environment
 EOF
 }
 
