@@ -351,6 +351,8 @@ enum InternalCommands {
     Rollback(#[bpaf(external(environment::rollback))] environment::Rollback),
     Envs(#[bpaf(external(environment::envs))] environment::Envs),
     Git(#[bpaf(external(environment::git))] environment::Git),
+    #[bpaf(command("init-package"))]
+    InitPackage(#[bpaf(external(WithPassthru::parse))] WithPassthru<package::InitPackage>),
 }
 
 impl InternalCommands {
@@ -362,6 +364,7 @@ impl InternalCommands {
             InternalCommands::Rollback(args) => args.handle(flox).await?,
             InternalCommands::Envs(args) => args.handle(flox).await?,
             InternalCommands::Git(args) => args.handle(flox).await?,
+            InternalCommands::InitPackage(args) => args.handle(flox).await?,
         }
         Ok(())
     }

@@ -123,7 +123,7 @@ pub(crate) fn template_arg() -> impl Parser<Option<InstallableArgument<Parsed, T
 }
 parseable!(InitPackage, init_package);
 impl WithPassthru<InitPackage> {
-    pub async fn handle(self, config: Config, flox: Flox) -> Result<()> {
+    pub async fn handle(self, flox: Flox) -> Result<()> {
         let cwd = std::env::current_dir()?;
         let basename = cwd
             .file_name()
