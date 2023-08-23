@@ -258,22 +258,18 @@ pub struct Publish {
     pub installable_arg: Option<InstallableArgument<Parsed, PublishInstallable>>,
 }
 parseable!(Publish, publish);
-impl WithPassthru<Publish> {
+impl Publish {
     pub async fn handle(self, config: Config, flox: Flox) -> Result<()> {
         let installable = self
-            .inner
             .installable_arg
             .unwrap_or_default()
             .resolve_flake_attribute(&flox)
             .await?;
 
         let original_flakeref = &installable.flakeref;
-        let publish_flakeref = PublishFlakeRef::from_flake_ref(
-            installable.flakeref.clone(),
-            &flox,
-            self.inner.prefer_https,
-        )
-        .await?;
+        let publish_flakeref =
+            PublishFlakeRef::from_flake_ref(installable.flakeref.clone(), &flox, self.prefer_https)
+                .await?;
 
         if &publish_flakeref != original_flakeref {
             info!("Resolved {} to {}", original_flakeref, publish_flakeref);
@@ -282,7 +278,6 @@ impl WithPassthru<Publish> {
         // validate arguments
 
         let sign_key = self
-            .inner
             .signing_key
             .or(config.flox.signing_key)
             .ok_or_else(|| {
@@ -292,19 +287,14 @@ impl WithPassthru<Publish> {
                         "})
             })?;
 
-        let cache_url = self
-            .inner
-            .cache_url
-            .or(config.flox.cache_url)
-            .ok_or_else(|| {
-                anyhow!(indoc! {"
+        let cache_url = self.cache_url.or(config.flox.cache_url).ok_or_else(|| {
+            anyhow!(indoc! {"
                             Cache url is required!
                             Provide using `--cache-url` or the `cache_url` config key
                         "})
-            })?;
+        })?;
 
         let substituter_url = self
-            .inner
             .public_cache_url
             .or(config.flox.public_cache_url)
             .unwrap_or(cache_url.clone());
@@ -351,7 +341,7 @@ impl WithPassthru<Publish> {
             .context("Binary cannot be downloaded")?;
         info!("done!");
 
-        if self.inner.json {
+        if self.json {
             let analysis = publish.analysis();
 
             println!("{}", serde_json::to_string(analysis)?);

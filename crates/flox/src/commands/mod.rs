@@ -353,6 +353,8 @@ enum InternalCommands {
     Git(#[bpaf(external(environment::git))] environment::Git),
     #[bpaf(command("init-package"))]
     InitPackage(#[bpaf(external(WithPassthru::parse))] WithPassthru<package::InitPackage>),
+    #[bpaf(command)]
+    Publish(#[bpaf(external(package::publish))] package::Publish),
 }
 
 impl InternalCommands {
@@ -365,6 +367,7 @@ impl InternalCommands {
             InternalCommands::Envs(args) => args.handle(flox).await?,
             InternalCommands::Git(args) => args.handle(flox).await?,
             InternalCommands::InitPackage(args) => args.handle(flox).await?,
+            InternalCommands::Publish(args) => args.handle(config, flox).await?,
         }
         Ok(())
     }
