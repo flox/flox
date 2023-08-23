@@ -42,7 +42,10 @@ setup_test_basename() {
 # Ex: `test/foo.bats'  ->  `_testing_foo'
 setup_file_envname() {
   setup_test_basename;
-  : "${TEST_ENVIRONMENT:=${FLOX_TEST_ENVNAME_PREFIX}${BATS_TEST_BASENAME}}";
+  # Append random number to test environment to avoid collisions when
+  # pushing/pulling to floxhub.
+  local _random_8digits=$(shuf -i 10000000-99999999 -n 1);
+  : "${TEST_ENVIRONMENT:=${FLOX_TEST_ENVNAME_PREFIX}${BATS_TEST_BASENAME}-$_random_8digits}";
   export TEST_ENVIRONMENT;
 }
 

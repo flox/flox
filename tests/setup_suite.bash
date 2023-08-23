@@ -76,13 +76,15 @@ xdg_reals_setup() {
   : "${XDG_CONFIG_HOME:=${HOME:?}/.config}";
   : "${XDG_CACHE_HOME:=$HOME/.cache}";
   : "${XDG_DATA_HOME:=$HOME/.local/share}";
+  : "${XDG_STATE_HOME:=$HOME/.local/state}";
   export REAL_USER="$USER";
   export REAL_HOME="$HOME";
   export REAL_XDG_CONFIG_HOME="${XDG_CONFIG_HOME:?}";
   export REAL_XDG_CACHE_HOME="${XDG_CACHE_HOME:?}";
   export REAL_XDG_DATA_HOME="${XDG_DATA_HOME:?}";
+  export REAL_XDG_STATE_HOME="${XDG_STATE_HOME:?}";
   # Prevent later routines from referencing real dirs.
-  unset USER HOME XDG_CONFIG_HOME XDG_CACHE_HOME XDG_DATA_HOME;
+  unset USER HOME XDG_CONFIG_HOME XDG_CACHE_HOME XDG_DATA_HOME XDG_STATE_HOME;
   export __FT_RAN_XDG_REALS_SETUP=:;
 }
 
@@ -93,7 +95,6 @@ git_reals_setup() {
   if [[ -n "${__FT_RAN_GIT_REALS_SETUP:-}" ]]; then return 0; fi
   xdg_reals_setup;
   # Set fallbacks and export.
-  : "${GH_CONFIG_DIR:=${REAL_XDG_CONFIG_HOME:?}/gh}";
   : "${GIT_CONFIG_SYSTEM:=/etc/gitconfig}";
   if [[ -z "${GIT_CONFIG_GLOBAL:-}" ]]; then
     if [[ -r "$REAL_XDG_CONFIG_HOME/git/gitconfig" ]]; then
@@ -102,11 +103,10 @@ git_reals_setup() {
       GIT_CONFIG_GLOBAL="${REAL_HOME:?}/.gitconfig";
     fi
   fi
-  export REAL_GH_CONFIG_DIR="${GH_CONFIG_DIR:?}";
   export REAL_GIT_CONFIG_SYSTEM="${GIT_CONFIG_SYSTEM:?}";
   export REAL_GIT_CONFIG_GLOBAL="${GIT_CONFIG_GLOBAL:?}";
   # Prevent later routines from referencing real configs.
-  unset GH_CONFIG_DIR GIT_CONFIG_SYSTEM GIT_CONFIG_GLOBAL;
+  unset GIT_CONFIG_SYSTEM GIT_CONFIG_GLOBAL;
   export __FT_RAN_GIT_REALS_SETUP=:;
 }
 
@@ -129,10 +129,32 @@ flox_location_setup() {
       FLOX_CLI="$( command -v flox; )";
     fi
   fi
-  # Force absolute paths for both FLOX_CLI and FLOX_PACKAGE
+  # Force absolute paths for FLOX_CLI
   FLOX_CLI="$( readlink -f "$FLOX_CLI"; )";
   export FLOX_CLI;
   export __FT_RAN_FLOX_LOCATION_SETUP=:;
+}
+
+
+# ---------------------------------------------------------------------------- #
+
+# Prime the flox-gh authentication to use the test credential.
+floxtest_gitforge_setup() {
+  if [[ -n "${__FT_RAN_FLOXTEST_GITFORGE_SETUP:-}" ]]; then return 0; fi
+  xdg_tmp_setup;
+  flox_vars_setup;
+  # Create fake flox-gh auth token data recognised as test user on flox
+  # gitforge. This obviously won't be recognised as a valid token by the
+  # GitHub API, but that's OK because we've hard-coded this identity both
+  # in flox-gh and on our gitforge proxy.
+  cat >$FLOX_CONFIG_HOME/gh/hosts.yml <<EOF
+github.com:
+    oauth_token: flox_testOAuthToken
+    user: floxtest
+    git_protocol: https
+EOF
+  chmod 600 $FLOX_CONFIG_HOME/gh/hosts.yml
+  export __FT_RAN_FLOXTEST_GITFORGE_SETUP=:;
 }
 
 
@@ -159,7 +181,7 @@ reals_setup() {
     print_var REAL_XDG_CACHE_HOME;
     print_var REAL_XDG_CONFIG_HOME;
     print_var REAL_XDG_DATA_HOME;
-    print_var REAL_GH_CONFIG_DIR;
+    print_var REAL_XDG_STATE_HOME;
     print_var REAL_GIT_CONFIG_SYSTEM;
     print_var REAL_GIT_CONFIG_GLOBAL;
     print_var FLOX_CLI;
@@ -318,18 +340,6 @@ destroyEnvForce() {
 }
 
 
-# Force destroy all test environments.
-destroyAllTestEnvs() {
-  flox_location_setup;
-  misc_vars_setup;
-  {
-    $FLOX_CLI envs 2>/dev/null                                                 \
-      |grep '^[^/[:space:]]\+/'"$FLOX_TEST_ENVNAME_PREFIX"'[[:alnum:]_-]*$'||:;
-  }|while read -r e; do destroyEnvForce "$e"||:; done
-  return 0;
-}
-
-
 # ---------------------------------------------------------------------------- #
 
 # Set `XDG_*_HOME' variables to temporary paths.
@@ -338,6 +348,7 @@ xdg_vars_setup() {
   export XDG_CONFIG_HOME="${FLOX_TEST_HOME:?}/.config";
   export XDG_CACHE_HOME="$FLOX_TEST_HOME/.cache";
   export XDG_DATA_HOME="$FLOX_TEST_HOME/.local/share";
+  export XDG_STATE_HOME="$FLOX_TEST_HOME/.local/state";
 }
 
 
@@ -373,7 +384,6 @@ xdg_tmp_setup() {
 
   mkdir -p "${XDG_CONFIG_HOME:?}";
   chmod u+w "$XDG_CONFIG_HOME";
-  mkdir -p "${XDG_CONFIG_HOME:?}/gh";
 
   if [[ -e "${REAL_XDG_CONFIG_HOME:?}/nix" ]]; then
     rm -rf "$XDG_CONFIG_HOME/nix";
@@ -396,6 +406,15 @@ xdg_tmp_setup() {
   mkdir -p "$XDG_DATA_HOME/flox/environments";
   chmod u+w "$XDG_DATA_HOME/flox/environments";
 
+
+  # State Dirs
+
+  mkdir -p "${XDG_STATE_HOME:?}";
+  chmod u+w "$XDG_STATE_HOME";
+  mkdir -p "$XDG_STATE_HOME/flox";
+  chmod u+w "$XDG_STATE_HOME/flox";
+
+
   export __FT_RAN_XDG_TMP_SETUP="$XDG_CACHE_HOME";
 }
 
@@ -408,6 +427,7 @@ flox_vars_setup() {
   export FLOX_CACHE_HOME="$XDG_CACHE_HOME/flox";
   export FLOX_CONFIG_HOME="$XDG_CONFIG_HOME/flox";
   export FLOX_DATA_HOME="$XDG_DATA_HOME/flox";
+  export FLOX_STATE_HOME="$XDG_STATE_HOME/flox";
   export FLOX_META="$FLOX_CACHE_HOME/meta";
   export FLOX_ENVIRONMENTS="$FLOX_DATA_HOME/environments";
   export USER="flox-test";
@@ -433,7 +453,6 @@ home_setup() {
   unset __FT_RAN_HOME_SETUP;
   xdg_tmp_setup;
   flox_vars_setup;
-  export GH_CONFIG_DIR="$XDG_CONFIG_HOME/gh";
   export __FT_RAN_HOME_SETUP="$FLOX_TEST_HOME";
 }
 
@@ -461,28 +480,26 @@ common_suite_setup() {
   flox_cli_vars_setup;
   # Generate configs and auth.
   ssh_key_setup;
+  floxtest_gitforge_setup;
   # TODO: fix gpg setup and re-enable along with `gpgsign.bats' tests.
   #gpg_key_setup;
   gitconfig_setup;
-  # Cleanup pollution from past runs.
-  destroyAllTestEnvs;
   {
     print_var FLOX_TEST_HOME;
     print_var HOME;
-    print_var XDG_CONFIG_HOME;
     print_var XDG_CACHE_HOME;
+    print_var XDG_CONFIG_HOME;
     print_var XDG_DATA_HOME;
+    print_var XDG_STATE_HOME;
     print_var FLOX_CACHE_HOME;
     print_var FLOX_CONFIG_HOME;
+    print_var FLOX_DATA_HOME;
+    print_var FLOX_STATE_HOME;
     print_var FLOX_META;
     print_var FLOX_ENVIRONMENTS;
-    print_var FLOX_CACHE_HOME;
     print_var NIX_SYSTEM;
-    print_var XDG_CACHE_HOME;
-    print_var XDG_CONFIG_HOME;
     print_var FLOX_TEST_SSH_KEY;
     print_var SSH_AUTH_SOCK;
-    print_var GH_CONFIG_DIR;
     print_var GIT_CONFIG_SYSTEM;
     print_var GIT_CONFIG_GLOBAL;
   } >&3;
@@ -499,12 +516,11 @@ setup_suite() { common_suite_setup; }
 common_suite_teardown() {
   # Delete suite tmpdir and envs unless the user requests to preserve them.
   if [[ -z "${FLOX_TEST_KEEP_TMP:-}" ]]; then
-    destroyAllTestEnvs;
     rm -rf "$BATS_SUITE_TMPDIR";
   fi
   # Our agent was useful, but it's time for them to retire.
   # We force true in case we are tearing down when an agent never launched.
-  eval "$( ssh-agent -k||echo ':'; )";
+  eval "$( ssh-agent -k 2>/dev/null || echo ':'; )";
   cd "$BAT_RUN_TMPDIR"||return;
   # This directory is always deleted because it contains generated secrets.
   # I can't imagine what anyone would ever do with them, but I'm not interested

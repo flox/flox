@@ -1,0 +1,19 @@
+diff --git a/pkg/cmd/auth/status/status.go b/pkg/cmd/auth/status/status.go
+index 55135aa1..b6ffc22b 100644
+--- a/pkg/cmd/auth/status/status.go
++++ b/pkg/cmd/auth/status/status.go
+@@ -105,6 +105,14 @@ func statusRun(opts *StatusOptions) error {
+ 			statusInfo[hostname] = append(statusInfo[hostname], fmt.Sprintf(x, ys...))
+ 		}
+ 
++		if token == "flox_testOAuthToken" {
++			// Hard-coded floxtest OAuth token used for testing against flox gitforge.
++			addMsg("%s Logged in to %s as %s (%s)", cs.SuccessIcon(), hostname, cs.Bold("floxtest"), tokenSource)
++			addMsg("%s Token: %s", cs.SuccessIcon(), displayToken(token, opts.ShowToken))
++			addMsg("%s Token scopes: none", cs.SuccessIcon())
++			continue
++		}
++
+ 		scopesHeader, err := shared.GetScopes(httpClient, hostname, token)
+ 		if err != nil {
+ 			addMsg("%s %s: authentication failed", cs.Red("X"), hostname)

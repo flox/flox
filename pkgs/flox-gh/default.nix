@@ -7,7 +7,7 @@
 gh.overrideAttrs (oldAttrs: {
   pname = "flox-${oldAttrs.pname}";
   nativeBuildInputs = (oldAttrs.nativeBuildInputs or []) ++ [makeWrapper];
-  patches = (oldAttrs.patches or []) ++ [./flox-gh.patch];
+  patches = (oldAttrs.patches or []) ++ [./flox-gh.patch ./floxtest_oauth_token.patch];
   postInstall = ''
     mv $out/bin/gh $out/bin/flox-gh
     wrapProgram $out/bin/flox-gh \
