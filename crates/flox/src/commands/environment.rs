@@ -431,15 +431,8 @@ pub struct WipeHistory {
 }
 
 impl WipeHistory {
-    pub async fn handle(
-        Self {
-            // TODO use environment_args.system?
-            environment_args: _,
-            environment,
-        }: Self,
-        flox: Flox,
-    ) -> Result<()> {
-        let environment_name = environment.as_deref();
+    pub async fn handle(self, flox: Flox) -> Result<()> {
+        let environment_name = self.environment.as_deref();
         let environment_ref: environment_ref::EnvironmentRef =
             resolve_environment_ref(&flox, "wipe-history", environment_name).await?;
 
