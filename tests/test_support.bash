@@ -59,8 +59,7 @@ setup_file_envname() {
 setup_test_envname() {
   setup_test_basename;
   setup_file_envname;
-  TEST_ENVIRONMENT="$FLOX_TEST_ENVNAME_PREFIX$BATS_TEST_BASENAME";
-  TEST_ENVIRONMENT="$TEST_ENVIRONMENT$BATS_TEST_NUMBER";
+  TEST_ENVIRONMENT="$TEST_ENVIRONMENT-$BATS_TEST_NUMBER";
   export TEST_ENVIRONMENT;
 }
 
