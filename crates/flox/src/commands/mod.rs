@@ -211,6 +211,7 @@ impl FloxArgs {
             Commands::Development(group) => group.handle(config, flox).await?,
             Commands::Sharing(group) => group.handle(config, flox).await?,
             Commands::Additional(group) => group.handle(config, flox).await?,
+            Commands::Internal(group) => group.handle(config, flox).await?,
         }
         Ok(())
     }
@@ -222,6 +223,7 @@ enum Commands {
     Development(#[bpaf(external(local_development_commands))] LocalDevelopmentCommands),
     Sharing(#[bpaf(external(sharing_commands))] SharingCommands),
     Additional(#[bpaf(external(additional_commands))] AdditionalCommands),
+    Internal(#[bpaf(external(internal_commands))] InternalCommands),
 }
 
 /// Local Development Commands
@@ -334,6 +336,30 @@ struct AdditionalCommandsDocumentation;
 impl AdditionalCommandsDocumentation {
     fn handle(self) {
         println!("🥚");
+    }
+}
+
+/// Additional Commands. Use "flox COMMAND --help" for more info
+#[derive(Bpaf, Clone)]
+#[bpaf(hide)]
+enum InternalCommands {
+    ResetMetrics(#[bpaf(external(general::reset_metrics))] general::ResetMetrics),
+    Generations(#[bpaf(external(environment::generations))] environment::Generations),
+    SwitchGeneration(
+        #[bpaf(external(environment::switch_generation))] environment::SwitchGeneration,
+    ),
+    Rollback(#[bpaf(external(environment::rollback))] environment::Rollback),
+}
+
+impl InternalCommands {
+    async fn handle(self, config: Config, flox: Flox) -> Result<()> {
+        match self {
+            InternalCommands::ResetMetrics(args) => args.handle(config, flox).await?,
+            InternalCommands::Generations(args) => args.handle(flox).await?,
+            InternalCommands::SwitchGeneration(args) => args.handle(flox).await?,
+            InternalCommands::Rollback(args) => args.handle(flox).await?,
+        }
+        Ok(())
     }
 }
 
