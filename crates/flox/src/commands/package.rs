@@ -713,11 +713,9 @@ impl<T> WithPassthru<T> {
             // .strict()
             .many();
 
-        construct!(nix_args, inner, fake_args).map(|(mut nix_args, inner, mut fake_args)| {
+        construct!(inner, fake_args, nix_args).map(|(inner, mut fake_args, mut nix_args)| {
             // dbg!(&nix_args, &inner, &fake_args);
-
             nix_args.append(&mut fake_args);
-
             WithPassthru { inner, nix_args }
         })
     }
