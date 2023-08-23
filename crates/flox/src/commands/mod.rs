@@ -230,6 +230,7 @@ enum LocalDevelopmentCommands {
     Run(#[bpaf(external(WithPassthru::parse))] WithPassthru<Run>),
     List(#[bpaf(external(environment::list))] environment::List),
     Nix(#[bpaf(external(general::parse_nix_passthru))] general::WrappedNix),
+    Delete(#[bpaf(external(environment::delete))] environment::Delete),
 }
 
 impl LocalDevelopmentCommands {
@@ -244,6 +245,7 @@ impl LocalDevelopmentCommands {
             LocalDevelopmentCommands::Nix(args) => args.handle(config, flox).await?,
             LocalDevelopmentCommands::Search(args) => args.handle(flox).await?,
             LocalDevelopmentCommands::Run(args) => args.handle(config, flox).await?,
+            LocalDevelopmentCommands::Delete(args) => args.handle(flox).await?,
         }
         Ok(())
     }

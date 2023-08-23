@@ -139,7 +139,7 @@ impl Edit {
 /// remove all data pertaining to an environment
 #[derive(Bpaf, Clone)]
 #[bpaf(command)]
-pub struct Destroy {
+pub struct Delete {
     #[bpaf(short, long)]
     force: bool,
 
@@ -153,9 +153,10 @@ pub struct Destroy {
     environment: Option<EnvironmentRef>,
 }
 
-impl Destroy {
-    pub async fn handle(Self { environment, .. }: Self, flox: Flox) -> Result<()> {
-        let environment = resolve_environment(&flox, environment.as_deref(), "install").await?;
+impl Delete {
+    pub async fn handle(self, flox: Flox) -> Result<()> {
+        let environment =
+            resolve_environment(&flox, self.environment.as_deref(), "install").await?;
 
         environment
             .delete()
