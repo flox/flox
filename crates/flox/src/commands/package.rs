@@ -215,7 +215,7 @@ pub struct PrintDevEnv {
 }
 parseable!(PrintDevEnv, print_dev_env);
 impl WithPassthru<PrintDevEnv> {
-    pub async fn handle(self, config: Config, flox: Flox) -> Result<()> {
+    pub async fn handle(self, _config: Config, flox: Flox) -> Result<()> {
         flox_forward(&flox).await
     }
 }
@@ -384,10 +384,12 @@ impl WithPassthru<Shell> {
 #[derive(Bpaf, Clone, Debug)]
 pub struct Bundle {
     /// Bundler to use
+    #[allow(dead_code)] // not yet handled in impl
     #[bpaf(external)]
     pub(crate) bundler_arg: Option<InstallableArgument<Parsed, BundlerInstallable>>,
 
     /// Package or environment to bundle
+    #[allow(dead_code)] // not yet handled in impl
     #[bpaf(external(PosOrEnv::parse), optional, catch)]
     pub(crate) installable_arg: Option<PosOrEnv<BundleInstallable>>,
 
@@ -433,7 +435,7 @@ pub struct Containerize {
 }
 parseable!(Containerize, containerize);
 impl WithPassthru<Containerize> {
-    pub async fn handle(self, config: Config, flox: Flox) -> Result<()> {
+    pub async fn handle(self, _config: Config, flox: Flox) -> Result<()> {
         let mut installable = env_ref_to_flake_attribute::<GitCommandProvider>(
             &flox,
             "containerize",
