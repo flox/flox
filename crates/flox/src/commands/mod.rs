@@ -285,8 +285,21 @@ enum AdditionalCommands {
     Documentation(
         #[bpaf(external(AdditionalCommands::documentation))] AdditionalCommandsDocumentation,
     ),
-    Push(#[bpaf(external(environment::push), hide)] environment::Push),
-    Pull(#[bpaf(external(environment::pull), hide)] environment::Pull),
+    #[bpaf(command)]
+    Build(#[bpaf(external(WithPassthru::parse), hide)] WithPassthru<package::Build>),
+    Upgrade(#[bpaf(external(environment::upgrade), hide)] environment::Upgrade),
+    Import(#[bpaf(external(environment::import), hide)] environment::Import),
+    Export(#[bpaf(external(environment::export), hide)] environment::Export),
+    Config(#[bpaf(external(general::config_args), hide)] general::ConfigArgs),
+    WipeHistory(#[bpaf(external(environment::wipe_history), hide)] environment::WipeHistory),
+    Subscribe(#[bpaf(external(channel::subscribe), hide)] channel::Subscribe),
+    Unsubscribe(#[bpaf(external(channel::unsubscribe), hide)] channel::Unsubscribe),
+    Channels(#[bpaf(external(channel::channels), hide)] channel::Channels),
+    History(#[bpaf(external(environment::history), hide)] environment::History),
+    #[bpaf(command)]
+    PrintDevEnv(#[bpaf(external(WithPassthru::parse), hide)] WithPassthru<package::PrintDevEnv>),
+    #[bpaf(command)]
+    Shell(#[bpaf(external(WithPassthru::parse), hide)] WithPassthru<package::Shell>),
 }
 
 impl AdditionalCommands {
@@ -299,8 +312,18 @@ impl AdditionalCommands {
     async fn handle(self, config: Config, flox: Flox) -> Result<()> {
         match self {
             AdditionalCommands::Documentation(args) => args.handle(),
-            AdditionalCommands::Push(args) => args.handle(flox).await?,
-            AdditionalCommands::Pull(args) => args.handle(flox).await?,
+            AdditionalCommands::Build(args) => args.handle(config, flox).await?,
+            AdditionalCommands::Upgrade(args) => args.handle(flox).await?,
+            AdditionalCommands::Import(args) => args.handle(flox).await?,
+            AdditionalCommands::Export(args) => args.handle(flox).await?,
+            AdditionalCommands::Config(args) => args.handle(config, flox).await?,
+            AdditionalCommands::WipeHistory(args) => args.handle(flox).await?,
+            AdditionalCommands::Subscribe(args) => args.handle(flox).await?,
+            AdditionalCommands::Unsubscribe(args) => args.handle(flox).await?,
+            AdditionalCommands::Channels(args) => args.handle(flox)?,
+            AdditionalCommands::History(args) => args.handle(flox).await?,
+            AdditionalCommands::PrintDevEnv(args) => args.handle(config, flox).await?,
+            AdditionalCommands::Shell(args) => args.handle(config, flox).await?,
         }
         Ok(())
     }
