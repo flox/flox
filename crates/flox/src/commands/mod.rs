@@ -11,7 +11,7 @@ use flox_rust_sdk::flox::{Flox, DEFAULT_OWNER, FLOX_VERSION};
 use flox_rust_sdk::models::floxmeta::{Floxmeta, GetFloxmetaError};
 use flox_rust_sdk::nix::command_line::NixCommandLine;
 use flox_rust_sdk::providers::git::GitCommandProvider;
-use indoc::formatdoc;
+use indoc::{formatdoc, indoc};
 use log::{debug, info};
 use once_cell::sync::Lazy;
 use tempfile::TempDir;
@@ -40,6 +40,12 @@ static FLOX_WELCOME_MESSAGE: Lazy<String> = Lazy::new(|| {
     First time? Create an environment with "flox init"
 "#}
 });
+
+static ADDITIONAL_COMMANDS: &str = indoc! {"
+    build, upgrade, import, export, config, wipe-history, subscribe, unsubscribe,
+
+    channels, history, print-dev-env, shell
+"};
 
 fn vec_len<T>(x: Vec<T>) -> usize {
     Vec::len(&x)
@@ -204,6 +210,7 @@ impl FloxArgs {
         match self.command.unwrap() {
             Commands::Development(group) => group.handle(config, flox).await?,
             Commands::Sharing(group) => group.handle(config, flox).await?,
+            Commands::Additional(group) => group.handle(config, flox).await?,
         }
         Ok(())
     }
@@ -214,6 +221,7 @@ impl FloxArgs {
 enum Commands {
     Development(#[bpaf(external(local_development_commands))] LocalDevelopmentCommands),
     Sharing(#[bpaf(external(sharing_commands))] SharingCommands),
+    Additional(#[bpaf(external(additional_commands))] AdditionalCommands),
 }
 
 /// Local Development Commands
@@ -270,6 +278,42 @@ impl SharingCommands {
         Ok(())
     }
 }
+
+/// Additional Commands. Use "flox COMMAND --help" for more info
+#[derive(Bpaf, Clone)]
+enum AdditionalCommands {
+    Documentation(
+        #[bpaf(external(AdditionalCommands::documentation))] AdditionalCommandsDocumentation,
+    ),
+    Push(#[bpaf(external(environment::push), hide)] environment::Push),
+    Pull(#[bpaf(external(environment::pull), hide)] environment::Pull),
+}
+
+impl AdditionalCommands {
+    fn documentation() -> impl Parser<AdditionalCommandsDocumentation> {
+        bpaf::literal(ADDITIONAL_COMMANDS)
+            .hide_usage()
+            .map(|_| AdditionalCommandsDocumentation)
+    }
+
+    async fn handle(self, config: Config, flox: Flox) -> Result<()> {
+        match self {
+            AdditionalCommands::Documentation(args) => args.handle(),
+            AdditionalCommands::Push(args) => args.handle(flox).await?,
+            AdditionalCommands::Pull(args) => args.handle(flox).await?,
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone)]
+struct AdditionalCommandsDocumentation;
+impl AdditionalCommandsDocumentation {
+    fn handle(self) {
+        println!("🥚");
+    }
+}
+
 /// Special command to check for the presence of the `--prefix` flag.
 ///
 /// With `--prefix` the application will print the prefix of the program

@@ -71,9 +71,9 @@ EOF
 @test "f5: command grouping changes 3: move lesser used or not polished commands to 'Additional Commands' section with help tip." {
     run "$FLOX_CLI" --help
     assert_output --partial - << EOF
-    Additional Commands. Use 'flox COMMAND --help' for more info
-      build, upgrade, import, export, config, wipe, subscribe, unsubscribe,
-      channels, history, print-dev-env, shell
+Additional Commands. Use "flox COMMAND --help" for more info
+    build, upgrade, import, export, config, wipe-history, subscribe, unsubscribe,
+    channels, history, print-dev-env, shell
 EOF
 }
 
