@@ -147,6 +147,7 @@ floxtest_gitforge_setup() {
   # gitforge. This obviously won't be recognised as a valid token by the
   # GitHub API, but that's OK because we've hard-coded this identity both
   # in flox-gh and on our gitforge proxy.
+  mkdir -p $FLOX_CONFIG_HOME/gh
   cat >$FLOX_CONFIG_HOME/gh/hosts.yml <<EOF
 github.com:
     oauth_token: flox_testOAuthToken
