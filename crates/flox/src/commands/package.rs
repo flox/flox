@@ -203,18 +203,6 @@ impl WithPassthru<Build> {
     }
 }
 
-/// launch development shell for current project
-#[derive(Bpaf, Clone, Debug)]
-pub struct Develop {
-    #[bpaf(short('A'), hide)]
-    pub _attr_flag: bool,
-
-    /// Shell or package to develop on
-    #[bpaf(external(InstallableArgument::positional), optional, catch)]
-    pub(crate) installable_arg: Option<InstallableArgument<Parsed, DevelopInstallable>>,
-}
-parseable!(Develop, develop);
-
 /// print shell code that can be sourced by bash to reproduce the development environment
 #[derive(Bpaf, Clone, Debug)]
 pub struct PrintDevEnv {
