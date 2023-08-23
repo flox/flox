@@ -350,6 +350,7 @@ enum InternalCommands {
     ),
     Rollback(#[bpaf(external(environment::rollback))] environment::Rollback),
     Envs(#[bpaf(external(environment::envs))] environment::Envs),
+    Git(#[bpaf(external(environment::git))] environment::Git),
 }
 
 impl InternalCommands {
@@ -360,6 +361,7 @@ impl InternalCommands {
             InternalCommands::SwitchGeneration(args) => args.handle(flox).await?,
             InternalCommands::Rollback(args) => args.handle(flox).await?,
             InternalCommands::Envs(args) => args.handle(flox).await?,
+            InternalCommands::Git(args) => args.handle(flox).await?,
         }
         Ok(())
     }
