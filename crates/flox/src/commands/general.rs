@@ -268,6 +268,7 @@ pub struct ConfigDelete {
     key: String,
 }
 
+/// Access to the nix CLI
 #[derive(Clone, Debug)]
 pub struct WrappedNix {
     stability: Option<Stability>,
