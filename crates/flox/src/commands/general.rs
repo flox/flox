@@ -17,67 +17,18 @@ use tokio::fs;
 use toml_edit::Key;
 
 use crate::commands::not_help;
-use crate::config::features::Feature;
 use crate::config::{Config, ReadWriteError, FLOX_CONFIG_FILE};
 use crate::utils::metrics::{
     METRICS_EVENTS_FILE_NAME,
     METRICS_LOCK_FILE_NAME,
     METRICS_UUID_FILE_NAME,
 };
-use crate::{flox_forward, subcommand_metric};
 
-#[derive(Bpaf, Clone)]
-pub struct GeneralArgs {}
-
-impl GeneralCommands {
-    pub async fn handle(self, mut config: Config, mut flox: Flox) -> Result<()> {
-        match self {
-            GeneralCommands::Gh(_) => subcommand_metric!("gh"),
-            GeneralCommands::Config(_) => subcommand_metric!("config"),
-            GeneralCommands::ResetMetrics(_) => subcommand_metric!("reset-metrics"),
-            GeneralCommands::Nix(_) => subcommand_metric!("nix"),
-        }
-
-        match self {
-            GeneralCommands::Nix(_) if Feature::Nix.is_forwarded()? => flox_forward(&flox).await?,
-
-            // To be moved to packages - figure out completions again
-            GeneralCommands::Nix(wrapped) => wrapped.handle(config, flox).await?,
-
-            GeneralCommands::ResetMetrics(args) => args.handle(config, flox).await?,
-
-            GeneralCommands::Config(config_args) => config_args.handle(config, flox).await?,
-
-            _ if Feature::All.is_forwarded()? => flox_forward(&flox).await?,
-            _ => todo!(),
-        }
-        Ok(())
-    }
-}
-
-/// General Commands
-#[derive(Bpaf, Clone)]
-pub enum GeneralCommands {
-    /// access to the gh CLI
-    #[bpaf(command, hide)]
-    Gh(#[bpaf(any("gh Arguments", Some))] Vec<String>),
-
-    /// configure user parameters
-    #[bpaf(command)]
-    Config(#[bpaf(external(config_args))] ConfigArgs),
-
-    /// reset the metrics queue (if any), reset metrics ID, and re-prompt for consent
-    #[bpaf(command("reset-metrics"))]
-    ResetMetrics(#[bpaf(external(reset_metrics))] ResetMetrics),
-
-    /// access to the nix CLI
-    Nix(#[bpaf(external(parse_nix_passthru))] WrappedNix),
-}
-
+/// reset the metrics queue (if any), reset metrics ID, and re-prompt for consent
 #[derive(Bpaf, Clone)]
 pub struct ResetMetrics {}
 impl ResetMetrics {
-    pub async fn handle(self, config: Config, flox: Flox) -> Result<()> {
+    pub async fn handle(self, _config: Config, flox: Flox) -> Result<()> {
         let mut metrics_lock = LockFile::open(&flox.cache_dir.join(METRICS_LOCK_FILE_NAME))?;
         tokio::task::spawn_blocking(move || metrics_lock.lock()).await??;
 
@@ -131,7 +82,7 @@ pub enum ConfigArgs {
 
 impl ConfigArgs {
     /// handle config flags like commands
-    async fn handle(&self, config: Config, flox: Flox) -> Result<()> {
+    pub async fn handle(&self, config: Config, flox: Flox) -> Result<()> {
         /// wrapper around [Config::write_to]
         async fn update_config<V: Serialize>(
             config_dir: &Path,
