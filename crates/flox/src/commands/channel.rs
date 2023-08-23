@@ -238,7 +238,7 @@ impl ChannelCommands {
     }
 }
 
-/// search packages in subscribed channels
+/// Search packages in subscribed channels
 #[derive(Bpaf, Clone)]
 #[bpaf(command)]
 pub struct Search {
