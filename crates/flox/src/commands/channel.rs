@@ -28,7 +28,6 @@ enum ChannelType {
 
 /// Search packages in subscribed channels
 #[derive(Bpaf, Clone)]
-#[bpaf(command)]
 pub struct Search {
     #[bpaf(short, long, argument("channel"))]
     pub channel: Vec<ChannelRef>,
@@ -126,7 +125,6 @@ pub enum SubscribeArgs {
 
 /// Subscribe to channel URL
 #[derive(Bpaf, Clone)]
-#[bpaf(command("subscribe"))]
 pub struct Subscribe {
     #[bpaf(external(subscribe_args), optional)]
     args: Option<SubscribeArgs>,
@@ -237,7 +235,6 @@ impl Subscribe {
 
 /// Unsubscribe from a channel
 #[derive(Bpaf, Clone)]
-#[bpaf(command)]
 pub struct Unsubscribe {
     /// Channel name to unsubscribe.
     ///
@@ -295,7 +292,6 @@ impl Unsubscribe {
 
 /// List all subscribed channels
 #[derive(Bpaf, Clone)]
-#[bpaf(command)]
 pub struct Channels {
     /// print channels as JSON
     #[bpaf(long)]
