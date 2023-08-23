@@ -165,10 +165,12 @@ impl Delete {
     }
 }
 
-/// activate environment:
+/// Activate environment
 ///
 /// * in current shell: eval "$(flox activate)"
+///
 /// * in subshell: flox activate
+///
 /// * for command: flox activate -- <command> <args>
 #[derive(Bpaf, Clone)]
 #[bpaf(command)]
