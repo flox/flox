@@ -248,7 +248,7 @@ impl Init {
     }
 }
 
-/// list packages installed in an environment
+/// List (status?) packages installed in an environment
 #[derive(Bpaf, Clone)]
 #[bpaf(command)]
 pub struct List {
