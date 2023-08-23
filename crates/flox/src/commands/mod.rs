@@ -285,7 +285,7 @@ enum AdditionalCommands {
     Documentation(
         #[bpaf(external(AdditionalCommands::documentation))] AdditionalCommandsDocumentation,
     ),
-    #[bpaf(command)]
+    #[bpaf(command, hide)]
     Build(#[bpaf(external(WithPassthru::parse), hide)] WithPassthru<package::Build>),
     Upgrade(#[bpaf(external(environment::upgrade), hide)] environment::Upgrade),
     Import(#[bpaf(external(environment::import), hide)] environment::Import),
@@ -296,9 +296,9 @@ enum AdditionalCommands {
     Unsubscribe(#[bpaf(external(channel::unsubscribe), hide)] channel::Unsubscribe),
     Channels(#[bpaf(external(channel::channels), hide)] channel::Channels),
     History(#[bpaf(external(environment::history), hide)] environment::History),
-    #[bpaf(command)]
+    #[bpaf(command, hide)]
     PrintDevEnv(#[bpaf(external(WithPassthru::parse), hide)] WithPassthru<package::PrintDevEnv>),
-    #[bpaf(command)]
+    #[bpaf(command, hide)]
     Shell(#[bpaf(external(WithPassthru::parse), hide)] WithPassthru<package::Shell>),
 }
 
