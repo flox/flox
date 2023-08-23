@@ -377,7 +377,8 @@ impl Install {
         Ok(())
     }
 }
-/// remove packages from an environment
+
+/// Uninstall installed packages from an environment
 #[derive(Bpaf, Clone)]
 #[bpaf(command, long("remove"), long("rm"))]
 pub struct Uninstall {
