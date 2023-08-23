@@ -225,6 +225,8 @@ enum LocalDevelopmentCommands {
     Install(#[bpaf(external(environment::install))] environment::Install),
     Uninstall(#[bpaf(external(environment::uninstall))] environment::Uninstall),
     Edit(#[bpaf(external(environment::edit))] environment::Edit),
+    /// Run app from current project
+    #[bpaf(command)]
     Run(#[bpaf(external(WithPassthru::parse))] WithPassthru<Run>),
     List(#[bpaf(external(environment::list))] environment::List),
     Nix(#[bpaf(external(general::parse_nix_passthru))] general::WrappedNix),
@@ -239,10 +241,9 @@ impl LocalDevelopmentCommands {
             LocalDevelopmentCommands::Install(args) => args.handle(flox).await?,
             LocalDevelopmentCommands::Uninstall(args) => args.handle(flox).await?,
             LocalDevelopmentCommands::List(args) => args.handle(flox).await?,
-
             LocalDevelopmentCommands::Nix(args) => args.handle(config, flox).await?,
             LocalDevelopmentCommands::Search(args) => args.handle(flox).await?,
-            LocalDevelopmentCommands::Run(_) => todo!(),
+            LocalDevelopmentCommands::Run(args) => args.handle(config, flox).await?,
         }
         Ok(())
     }
@@ -253,6 +254,8 @@ impl LocalDevelopmentCommands {
 enum SharingCommands {
     Push(#[bpaf(external(environment::push))] environment::Push),
     Pull(#[bpaf(external(environment::pull))] environment::Pull),
+    /// Containerize an environment
+    #[bpaf(command)]
     Containerize(#[bpaf(external(WithPassthru::parse))] WithPassthru<package::Containerize>),
 }
 impl SharingCommands {
@@ -260,7 +263,7 @@ impl SharingCommands {
         match self {
             SharingCommands::Push(args) => args.handle(flox).await?,
             SharingCommands::Pull(args) => args.handle(flox).await?,
-            SharingCommands::Containerize(_) => todo!(),
+            SharingCommands::Containerize(args) => args.handle(config, flox).await?,
         }
         Ok(())
     }
