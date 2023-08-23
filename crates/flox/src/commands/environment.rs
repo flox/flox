@@ -325,10 +325,8 @@ impl List {
 pub struct Envs;
 impl Envs {
     pub async fn handle(self, flox: Flox) -> Result<()> {
-        let env = PathEnvironment::<Original>::discover(
-            std::env::current_dir().unwrap(),
-            flox.temp_dir.clone(),
-        )?;
+        let env =
+            PathEnvironment::<Original>::discover(std::env::current_dir().unwrap(), flox.temp_dir)?;
 
         if let Some(env) = env {
             println!("{}", env.environment_ref());
