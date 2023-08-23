@@ -17,8 +17,7 @@ use once_cell::sync::Lazy;
 use tempfile::TempDir;
 use toml_edit::Key;
 
-use self::package::interface::Run;
-use self::package::{Parseable, WithPassthru};
+use self::package::{Parseable, Run, WithPassthru};
 use crate::config::{Config, FLOX_CONFIG_FILE};
 use crate::utils::init::{
     init_access_tokens,
@@ -254,9 +253,7 @@ impl LocalDevelopmentCommands {
 enum SharingCommands {
     Push(#[bpaf(external(environment::push))] environment::Push),
     Pull(#[bpaf(external(environment::pull))] environment::Pull),
-    Containerize(
-        #[bpaf(external(package::interface::containerize))] package::interface::Containerize,
-    ),
+    Containerize(#[bpaf(external(WithPassthru::parse))] WithPassthru<package::Containerize>),
 }
 impl SharingCommands {
     async fn handle(self, config: Config, flox: Flox) -> Result<()> {
