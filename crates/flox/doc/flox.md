@@ -142,7 +142,7 @@ runtime environments, developer environments, and administration.
 **push** / **pull** [ \--force ]
 :   (`git`) Push or pull metadata to the environment's `floxmeta` repository.
 
-**destroy** [ \--origin ] [ \--force ]
+**delete** [ \--origin ] [ \--force ]
 :   Remove all local data pertaining to an environment.
 
 ## Development
@@ -297,7 +297,7 @@ flox install unstable.nixpkgs-flox.hello@2.10
 [`flox-config`(1)](./flox-config.md),
 [`flox-containerize`(1)](./flox-containerize.md),
 [`flox-create`(1)](./flox-create.md),
-[`flox-destroy`(1)](./flox-destroy.md),
+[`flox-delete`(1)](./flox-delete.md),
 [`flox-develop`(1)](./flox-develop.md),
 [`flox-edit`(1)](./flox-edit.md),
 [`flox-environments`(1)](./flox-environments.md),

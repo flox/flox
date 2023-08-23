@@ -68,7 +68,7 @@ setup_test_envname() {
 
 # Build `hello' and root it temporarily so it can be used as an
 # install target in various tests.
-# This symlink is destroyed by `common_teardown'.
+# This symlink is deleteed by `common_teardown'.
 hello_pkg_setup() {
   if [[ -n "${__FT_RAN_HELLO_PKG_SETUP:-}" ]]; then return 0; fi
   export HELLO_LINK="$BATS_SUITE_TMPDIR/gc-roots/hello";
@@ -95,7 +95,7 @@ common_file_setup() {
   # Generate a `TEST_ENVIRONMENT' name.
   setup_file_envname;
   # Remove any vestiges of previous test runs.
-  destroyEnvForce "$TEST_ENVIRONMENT";
+  deleteEnvForce "$TEST_ENVIRONMENT";
   # Setup a homedir associated with this file.
   if [[ "${1:-suite}" != test ]]; then home_setup "${1:-suite}"; fi
 }
@@ -113,7 +113,7 @@ setup() { common_test_setup; }
 common_file_teardown() {
   # Delete file tmpdir and env unless the user requests to preserve them.
   if [[ -z "${FLOX_TEST_KEEP_TMP:-}" ]]; then
-    destroyEnvForce "$TEST_ENVIRONMENT";
+    deleteEnvForce "$TEST_ENVIRONMENT";
     rm -rf "$BATS_FILE_TMPDIR";
   fi
   unset FLOX_TEST_HOME;
@@ -124,7 +124,7 @@ teardown_file() { common_file_teardown; }
 
 common_test_teardown() {
   # Delete test tmpdir unless the user requests to preserve them.
-  # XXX: We do not attempt to destroy envs here.
+  # XXX: We do not attempt to delete envs here.
   if [[ -z "${FLOX_TEST_KEEP_TMP:-}" ]]; then rm -rf "$BATS_TEST_TMPDIR"; fi
 }
 

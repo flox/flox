@@ -1,5 +1,5 @@
 ---
-title: FLOX-DESTROY
+title: FLOX-DELETE
 section: 1
 header: "flox User Manuals"
 ...
@@ -7,11 +7,11 @@ header: "flox User Manuals"
 
 # NAME
 
-flox-destroy - destroy an environment
+flox-delete - delete an environment
 
 # SYNOPSIS
 
-flox [ `<general-options>` ] destroy [ `<options>` ] [ \--origin ] [ \--force ]
+flox [ `<general-options>` ] delete [ `<options>` ] [ \--origin ] [ \--force ]
 
 # DESCRIPTION
 
@@ -31,7 +31,7 @@ confirmation dialog. (Required for non-interactive use.)
 ./include/environment-options.md
 ```
 
-## Destroy Options
+## Delete Options
 
 [ \--origin ]
 :   Also delete environment data previously pushed upstream.

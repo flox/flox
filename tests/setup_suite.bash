@@ -235,7 +235,7 @@ misc_vars_setup() {
   export VERSION_REGEX='[0-9]+\.[0-9.]+';
 
   # Used to generate environment names.
-  # All envs with this prefix are destroyed on startup and exit of this suite.
+  # All envs with this prefix are deleted on startup and exit of this suite.
   export FLOX_TEST_ENVNAME_PREFIX='_testing_';
 
   # Suppress warnings by `flox create' about environments named with
@@ -331,12 +331,12 @@ gitconfig_setup() {
 
 # ---------------------------------------------------------------------------- #
 
-# destroyEnvForce ENV_NAME
+# deleteEnvForce ENV_NAME
 # ------------------------
 # Force the destruction of an env including any remote metdata.
-destroyEnvForce() {
+deleteEnvForce() {
   flox_location_setup;
-  { $FLOX_CLI destroy -e "${1?}" --origin -f||:; } >/dev/null 2>&1;
+  { $FLOX_CLI delete -e "${1?}" --origin -f||:; } >/dev/null 2>&1;
   return 0;
 }
 
