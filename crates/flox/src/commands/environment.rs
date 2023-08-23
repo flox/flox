@@ -141,9 +141,11 @@ impl Edit {
 #[derive(Bpaf, Clone)]
 #[bpaf(command)]
 pub struct Delete {
+    #[allow(dead_code)] // not yet handled in impl
     #[bpaf(short, long)]
     force: bool,
 
+    #[allow(dead_code)] // not yet handled in impl
     #[bpaf(short, long)]
     origin: bool,
 
@@ -184,6 +186,7 @@ pub struct Activate {
     #[bpaf(long, short, argument("ENV"))]
     environment: Vec<EnvironmentRef>,
 
+    #[allow(dead_code)] // not yet handled in impl
     #[bpaf(external(activate_run_args))]
     arguments: Option<(String, Vec<String>)>,
 }
@@ -265,10 +268,12 @@ pub struct List {
     #[bpaf(long, short, argument("ENV"))]
     environment: Option<EnvironmentRef>,
 
+    #[allow(dead_code)] // not yet handled in impl
     #[bpaf(external(list_output), optional)]
     json: Option<ListOutput>,
 
     /// The generation to list, if not specified defaults to the current one
+    #[allow(dead_code)] // not yet handled in impl
     #[bpaf(positional("GENERATION"))]
     generation: Option<u32>,
 }
@@ -482,6 +487,7 @@ pub struct Export {
     #[bpaf(external(environment_args), group_help("Environment Options"))]
     environment_args: EnvironmentArgs,
 
+    #[allow(dead_code)] // not yet handled in impl
     #[bpaf(long, short, argument("ENV"))]
     environment: Option<EnvironmentRef>,
 }
@@ -500,9 +506,11 @@ pub struct Generations {
     #[bpaf(external(environment_args), group_help("Environment Options"))]
     environment_args: EnvironmentArgs,
 
+    #[allow(dead_code)] // not yet handled in impl
     #[bpaf(long)]
     json: bool,
 
+    #[allow(dead_code)] // not yet handled in impl
     #[bpaf(long, short, argument("ENV"))]
     environment: Option<EnvironmentRef>,
 }
@@ -519,9 +527,11 @@ pub struct Git {
     #[bpaf(external(environment_args), group_help("Environment Options"))]
     environment_args: EnvironmentArgs,
 
+    #[allow(dead_code)] // not yet handled in impl
     #[bpaf(long, short, argument("ENV"))]
     environment: Option<EnvironmentRef>,
 
+    #[allow(dead_code)] // not yet handled in impl
     #[bpaf(any("Git Arguments", Some))]
     git_arguments: Vec<String>,
 }
@@ -535,6 +545,7 @@ impl Git {
 #[derive(Bpaf, Clone)]
 #[bpaf(command)]
 pub struct History {
+    #[allow(dead_code)] // not yet handled in impl
     #[bpaf(long, short)]
     oneline: bool,
 
@@ -542,6 +553,7 @@ pub struct History {
     #[bpaf(external(environment_args), group_help("Environment Options"))]
     environment_args: EnvironmentArgs,
 
+    #[allow(dead_code)] // not yet handled in impl
     #[bpaf(long, short, argument("ENV"))]
     environment: Option<EnvironmentRef>,
 }
@@ -559,9 +571,11 @@ pub struct Import {
     #[bpaf(external(environment_args), group_help("Environment Options"))]
     environment_args: EnvironmentArgs,
 
+    #[allow(dead_code)] // not yet handled in impl
     #[bpaf(long, short, argument("ENV"))]
     environment: Option<EnvironmentRef>,
 
+    #[allow(dead_code)] // not yet handled in impl
     #[bpaf(external(ImportFile::parse), fallback(ImportFile::Stdin))]
     file: ImportFile,
 }
@@ -601,10 +615,12 @@ pub struct Push {
     #[bpaf(external(environment_args), group_help("Environment Options"))]
     environment_args: EnvironmentArgs,
 
+    #[allow(dead_code)] // not yet handled in impl
     #[bpaf(external(push_floxmain_or_env), optional)]
     target: Option<PushFloxmainOrEnv>,
 
     /// forceably overwrite the remote copy of the environment
+    #[allow(dead_code)] // not yet handled in impl
     #[bpaf(long, short)]
     force: bool,
 }
@@ -634,10 +650,12 @@ pub struct Pull {
     #[bpaf(external(environment_args), group_help("Environment Options"))]
     environment_args: EnvironmentArgs,
 
+    #[allow(dead_code)] // not yet handled in impl
     #[bpaf(external(pull_floxmain_or_env), optional)]
     target: Option<PullFloxmainOrEnv>,
 
     /// forceably overwrite the local copy of the environment
+    #[allow(dead_code)] // not yet handled in impl
     #[bpaf(long, short)]
     force: bool,
 }
@@ -671,11 +689,13 @@ pub struct Rollback {
     environment_args: EnvironmentArgs,
 
     #[bpaf(long, short, argument("ENV"))]
+    #[allow(dead_code)] // not yet handled in impl
     environment: Option<EnvironmentRef>,
 
     /// Generation to roll back to.
     ///
     /// If omitted, defaults to the previous generation.
+    #[allow(dead_code)] // not yet handled in impl
     #[bpaf(argument("GENERATION"))]
     to: Option<u32>,
 }
@@ -693,9 +713,11 @@ pub struct SwitchGeneration {
     #[bpaf(external(environment_args), group_help("Environment Options"))]
     environment_args: EnvironmentArgs,
 
+    #[allow(dead_code)] // not yet handled in impl
     #[bpaf(long, short, argument("ENV"))]
     environment: Option<EnvironmentRef>,
 
+    #[allow(dead_code)] // not yet handled in impl
     #[bpaf(positional("GENERATION"))]
     generation: u32,
 }
@@ -714,9 +736,11 @@ pub struct Upgrade {
     #[bpaf(external(environment_args), group_help("Environment Options"))]
     environment_args: EnvironmentArgs,
 
+    #[allow(dead_code)] // not yet handled in impl
     #[bpaf(long, short, argument("ENV"))]
     environment: Option<EnvironmentRef>,
 
+    #[allow(dead_code)] // not yet handled in impl
     #[bpaf(positional("PACKAGES"))]
     packages: Vec<String>,
 }
