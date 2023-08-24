@@ -188,7 +188,7 @@ pub struct Build {
 }
 parseable!(Build, build);
 impl WithPassthru<Build> {
-    pub async fn handle(self, config: Config, flox: Flox) -> Result<()> {
+    pub async fn handle(self, mut config: Config, flox: Flox) -> Result<()> {
         let installable_arg = self
             .inner
             .installable_arg
@@ -196,7 +196,9 @@ impl WithPassthru<Build> {
             .resolve_flake_attribute(&flox)
             .await?;
 
-        flox.package(installable_arg, config.flox.stability, self.nix_args)
+        let stability: Option<Stability> = config.override_stability(self.stability);
+
+        flox.package(installable_arg, stability, self.nix_args)
             .build::<NixCommandLine>()
             .await?;
         Ok(())
@@ -215,7 +217,9 @@ pub struct PrintDevEnv {
 }
 parseable!(PrintDevEnv, print_dev_env);
 impl WithPassthru<PrintDevEnv> {
-    pub async fn handle(self, _config: Config, flox: Flox) -> Result<()> {
+    pub async fn handle(self, mut config: Config, flox: Flox) -> Result<()> {
+        config.override_stability(self.stability);
+
         flox_forward(&flox).await
     }
 }
@@ -253,13 +257,17 @@ pub struct Publish {
     #[bpaf(long)]
     pub prefer_https: bool,
 
+    /// Stability to publish
+    #[bpaf(long, short)]
+    pub stability: Option<Stability>,
+
     /// Package to publish
     #[bpaf(external(InstallableArgument::positional), optional, catch)]
     pub installable_arg: Option<InstallableArgument<Parsed, PublishInstallable>>,
 }
 parseable!(Publish, publish);
 impl Publish {
-    pub async fn handle(self, config: Config, flox: Flox) -> Result<()> {
+    pub async fn handle(self, mut config: Config, flox: Flox) -> Result<()> {
         let installable = self
             .installable_arg
             .unwrap_or_default()
@@ -276,6 +284,11 @@ impl Publish {
         }
 
         // validate arguments
+
+        let stability = config.override_stability(self.stability).context(indoc! {"
+            Stability is required!
+            Provide using `--stability` or the `stability` config key
+        "})?;
 
         let sign_key = self
             .signing_key
@@ -305,7 +318,7 @@ impl Publish {
             &flox,
             publish_flakeref.clone(),
             installable.attr_path.clone(),
-            config.flox.stability,
+            stability,
         );
 
         // retrieve eval metadata
@@ -366,7 +379,7 @@ pub struct Shell {
 }
 parseable!(Shell, shell);
 impl WithPassthru<Shell> {
-    pub async fn handle(self, config: Config, flox: Flox) -> Result<()> {
+    pub async fn handle(self, mut config: Config, flox: Flox) -> Result<()> {
         let installable_arg = self
             .inner
             .installable_arg
@@ -374,7 +387,9 @@ impl WithPassthru<Shell> {
             .resolve_flake_attribute(&flox)
             .await?;
 
-        flox.package(installable_arg, config.flox.stability, self.nix_args)
+        let stability: Option<Stability> = config.override_stability(self.stability);
+
+        flox.package(installable_arg, stability, self.nix_args)
             .shell::<NixCommandLine>()
             .await?;
         Ok(())
@@ -383,6 +398,9 @@ impl WithPassthru<Shell> {
 
 #[derive(Bpaf, Clone, Debug)]
 pub struct Bundle {
+    #[bpaf(short('A'), hide)]
+    pub _attr_flag: bool,
+
     /// Bundler to use
     #[allow(dead_code)] // not yet handled in impl
     #[bpaf(external)]
@@ -392,9 +410,6 @@ pub struct Bundle {
     #[allow(dead_code)] // not yet handled in impl
     #[bpaf(external(PosOrEnv::parse), optional, catch)]
     pub(crate) installable_arg: Option<PosOrEnv<BundleInstallable>>,
-
-    #[bpaf(short('A'), hide)]
-    pub _attr_flag: bool,
 }
 parseable!(Bundle, bundle);
 pub(crate) fn bundler_arg() -> impl Parser<Option<InstallableArgument<Parsed, BundlerInstallable>>>
@@ -402,7 +417,7 @@ pub(crate) fn bundler_arg() -> impl Parser<Option<InstallableArgument<Parsed, Bu
     InstallableArgument::parse_with(bpaf::long("bundler").short('b').argument("bundler")).optional()
 }
 impl WithPassthru<Bundle> {
-    pub async fn handle(self, config: Config, flox: Flox) -> Result<()> {
+    pub async fn handle(self, mut config: Config, flox: Flox) -> Result<()> {
         let installable_arg = ResolveInstallable::<GitCommandProvider>::installable(
             &self.inner.installable_arg,
             &flox,
@@ -416,26 +431,27 @@ impl WithPassthru<Bundle> {
             .resolve_flake_attribute(&flox)
             .await?;
 
-        flox.package(installable_arg, config.flox.stability, self.nix_args)
+        let stability: Option<Stability> = config.override_stability(self.stability);
+
+        flox.package(installable_arg, stability, self.nix_args)
             .bundle::<NixCommandLine>(bundler.into())
             .await?;
         Ok(())
     }
 }
 
-/// Containerize an environment
 #[derive(Bpaf, Clone, Debug)]
 pub struct Containerize {
+    #[bpaf(short('A'), hide)]
+    pub _attr_flag: bool,
+
     /// Environment to containerize
     #[bpaf(long("environment"), short('e'), argument("ENV"))]
     pub(crate) environment_name: Option<String>,
-
-    #[bpaf(short('A'), hide)]
-    pub _attr_flag: bool,
 }
 parseable!(Containerize, containerize);
 impl WithPassthru<Containerize> {
-    pub async fn handle(self, _config: Config, flox: Flox) -> Result<()> {
+    pub async fn handle(self, mut config: Config, flox: Flox) -> Result<()> {
         let mut installable = env_ref_to_flake_attribute::<GitCommandProvider>(
             &flox,
             "containerize",
@@ -467,7 +483,14 @@ impl WithPassthru<Containerize> {
 
         info!("Building container...");
 
+        let stability: Option<Stability> = config.override_stability(self.stability);
+        let override_input = stability.as_ref().map(Stability::as_override);
+
         let command = BuildComm {
+            flake: FlakeArgs {
+                override_inputs: Vec::from_iter(override_input),
+                ..Default::default()
+            },
             installables: [installable.into()].into(),
             eval: EvaluationArgs {
                 impure: true.into(),
@@ -503,12 +526,13 @@ impl WithPassthru<Containerize> {
 pub struct Run {
     #[bpaf(short('A'), hide)]
     pub(crate) _attr_flag: bool,
+
     #[bpaf(external(InstallableArgument::positional), optional, catch)]
     pub(crate) installable_arg: Option<InstallableArgument<Parsed, RunInstallable>>,
 }
 parseable!(Run, run);
 impl WithPassthru<Run> {
-    pub async fn handle(self, config: Config, flox: Flox) -> Result<()> {
+    pub async fn handle(self, mut config: Config, flox: Flox) -> Result<()> {
         let installable_arg = self
             .inner
             .installable_arg
@@ -516,7 +540,9 @@ impl WithPassthru<Run> {
             .resolve_flake_attribute(&flox)
             .await?;
 
-        flox.package(installable_arg, config.flox.stability, self.nix_args)
+        let stability: Option<Stability> = config.override_stability(self.stability);
+
+        flox.package(installable_arg, stability, self.nix_args)
             .run::<NixCommandLine>()
             .await?;
         Ok(())
@@ -527,15 +553,13 @@ impl WithPassthru<Run> {
 pub struct Eval {}
 parseable!(Eval, eval);
 impl WithPassthru<Eval> {
-    pub async fn handle(self, config: Config, flox: Flox) -> Result<()> {
+    pub async fn handle(self, mut config: Config, flox: Flox) -> Result<()> {
         let nix = flox.nix::<NixCommandLine>(self.nix_args);
+        let stability = config.override_stability(self.stability);
+        let override_input = stability.as_ref().map(Stability::as_override);
         let command = EvalComm {
             flake: FlakeArgs {
-                override_inputs: if config.flox.stability == Default::default() {
-                    vec![]
-                } else {
-                    vec![config.flox.stability.as_override()]
-                },
+                override_inputs: Vec::from_iter(override_input),
                 ..FlakeArgs::default()
             },
             ..Default::default()
@@ -553,7 +577,7 @@ pub struct Flake {
 }
 parseable!(Flake, flake);
 impl WithPassthru<Flake> {
-    pub async fn handle(self, config: Config, flox: Flox) -> Result<()> {
+    pub async fn handle(self, mut config: Config, flox: Flox) -> Result<()> {
         /// A custom nix command that passes its arguments to `nix flake`
         #[derive(Debug, Clone)]
         pub struct FlakeCommand {
@@ -585,6 +609,9 @@ impl WithPassthru<Flake> {
         //       Yet, it could be implemented as a different group altogether (more cleanly?).
         let nix: NixCommandLine = flox.nix(Default::default());
 
+        let stability = config.override_stability(self.stability);
+        let override_input = stability.as_ref().map(Stability::as_override);
+
         // Flake commands should take `--stability`
         // Can't be a default on the `nix` instance, because that will apply it as a flag
         // on `nix flake` rather than `nix flake <subcommand>`.
@@ -595,11 +622,7 @@ impl WithPassthru<Flake> {
         FlakeCommand {
             subcommand: self.inner.subcommand.to_owned(),
             default_flake_args: FlakeArgs {
-                override_inputs: if config.flox.stability == Default::default() {
-                    vec![]
-                } else {
-                    vec![config.flox.stability.as_override()]
-                },
+                override_inputs: Vec::from_iter(override_input),
                 ..Default::default()
             },
             args: self.nix_args,
@@ -652,10 +675,7 @@ async fn ensure_project<'flox>(
 }
 
 #[derive(Bpaf, Clone, Debug)]
-pub struct PackageArgs {
-    #[bpaf(long, argument("STABILITY"))]
-    pub stability: Option<Stability>,
-}
+pub struct PackageArgs {}
 
 // impl PackageArgs {
 //     /// Resolve stability from flag or config (which reads environment variables).
@@ -674,12 +694,20 @@ pub struct PackageArgs {
 
 #[derive(Debug, Clone)]
 pub struct WithPassthru<T> {
+    /// stability to evaluate with
+    pub stability: Option<Stability>,
+
     pub inner: T,
     pub nix_args: Vec<String>,
 }
 
 impl<T> WithPassthru<T> {
     fn with_parser(inner: impl Parser<T>) -> impl Parser<Self> {
+        let stability = bpaf::long("stability")
+            .argument("stability")
+            .help("Stability to evaluate with")
+            .optional();
+
         let nix_args = bpaf::positional("args")
             .strict()
             .many()
@@ -692,11 +720,16 @@ impl<T> WithPassthru<T> {
             // .strict()
             .many();
 
-        construct!(inner, fake_args, nix_args).map(|(inner, mut fake_args, mut nix_args)| {
-            // dbg!(&nix_args, &inner, &fake_args);
-            nix_args.append(&mut fake_args);
-            WithPassthru { inner, nix_args }
-        })
+        construct!(stability, inner, fake_args, nix_args).map(
+            |(stability, inner, mut fake_args, mut nix_args)| {
+                nix_args.append(&mut fake_args);
+                WithPassthru {
+                    stability,
+                    inner,
+                    nix_args,
+                }
+            },
+        )
     }
 }
 
