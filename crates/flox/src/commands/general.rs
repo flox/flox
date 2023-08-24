@@ -1,5 +1,4 @@
 use std::path::Path;
-use std::str::FromStr;
 use std::{env, io};
 
 use anyhow::{Context, Result};
@@ -229,20 +228,11 @@ pub struct WrappedNix {
 impl WrappedNix {
     pub async fn handle(self, mut config: Config, mut flox: Flox) -> Result<()> {
         // mutable state hurray :/
-        config.flox.stability = {
-            if let Some(ref stability) = self.stability {
-                env::set_var("FLOX_STABILITY", stability.to_string());
-                stability.clone()
-            } else {
-                config.flox.stability
-            }
-        };
+        let stability = config.override_stability(self.stability);
 
-        if config.flox.stability != Default::default() {
-            flox.channels.register_channel(
-                "nixpkgs",
-                Channel::from_str(&format!("github:flox/nixpkgs/{}", config.flox.stability))?,
-            );
+        if let Some(stability) = stability {
+            flox.channels
+                .register_channel("nixpkgs", Channel::from(stability.as_flakeref()));
         }
 
         let nix: NixCommandLine = flox.nix(Default::default());

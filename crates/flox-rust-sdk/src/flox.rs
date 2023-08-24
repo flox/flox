@@ -152,7 +152,7 @@ impl Flox {
     pub fn package(
         &self,
         flake_attribute: FlakeAttribute,
-        stability: Stability,
+        stability: Option<Stability>,
         nix_arguments: Vec<String>,
     ) -> Package {
         Package::new(self, flake_attribute, stability, nix_arguments)
