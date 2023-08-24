@@ -1,0 +1,11 @@
+--- /etc/zshrc_Apple_Terminal.orig	2022-09-06 04:50:53.475362994 -0700
++++ /etc/zshrc_Apple_Terminal	2022-09-06 04:53:22.797914944 -0700
+@@ -99,7 +99,7 @@
+     SHELL_SESSION_DID_INIT=1
+ 
+     # Set up the session directory/file.
+-    SHELL_SESSION_DIR="${ZDOTDIR:-$HOME}/.zsh_sessions"
++    SHELL_SESSION_DIR="${SHELL_SESSION_DIR:-${ZDOTDIR:-$HOME}/.zsh_sessions}"
+     SHELL_SESSION_FILE="$SHELL_SESSION_DIR/$TERM_SESSION_ID.session"
+     mkdir -m 700 -p "$SHELL_SESSION_DIR"
+ 

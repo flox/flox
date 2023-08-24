@@ -1,0 +1,16 @@
+{
+  "elements": [
+    {
+      "active": true,
+      "attrPath": "evalCatalog.x86_64-linux.stable.curl",
+      "originalUrl": "flake:nixpkgs-flox-upgrade-test",
+      "outputs": null,
+      "storePaths": [
+        "/nix/store/m2h1p50yvcq5j9b3hkrwqnmrr9pbkzpz-curl-7.86.0-bin",
+        "/nix/store/qcq693pj82skmi25qd8qdcjf45rp41ar-curl-7.86.0-man"
+      ],
+      "url": "flake:nixpkgs-flox-upgrade-test/e4327de84f3aa8417e332a864c3b58c83b44832b"
+    }
+  ],
+  "version": 2
+}

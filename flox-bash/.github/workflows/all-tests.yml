@@ -1,0 +1,88 @@
+# ============================================================================ #
+#
+#
+#
+# ---------------------------------------------------------------------------- #
+#
+name: "Flox Tests"
+
+on:
+  push:
+    branches:
+      -  main
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+
+# ---------------------------------------------------------------------------- #
+
+jobs:
+  all-tests:
+    runs-on: ubuntu-latest
+    env:
+      SYSTEM: x86_64-linux
+      SSH_AUTH_SOCK: /tmp/ssh_agent.sock
+
+    steps:
+      - uses: cachix/install-nix-action@11f4ad19be46fd34c005a2864996d8f197fb51c6
+        with:
+          install_url: https://releases.nixos.org/nix/nix-2.13.3/install
+          nix_path: nixpkgs=channel:nixpkgs-22.05
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+            access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
+            substituters = https://cache.nixos.org
+            trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= flox-store-public-0:8c/B+kjIaQ+BloCmNkRUKwaVPFWkriSAd0JJvuDu4F0=
+            trusted-substituters = https://cache.floxdev.com
+            max-jobs = auto
+            cores = 0
+            substitute = true
+            builders-use-substitutes = true
+            fallback = true
+            connect-timeout = 5
+            stalled-download-timeout = 90
+            timeout = 0
+
+      - name: Git and SSH Setup
+        run: |
+          set -eu;
+          set -o pipefail;
+          mkdir -p /home/runner/.ssh;
+          ssh-keyscan github.com >> /home/runner/.ssh/known_hosts;
+          ssh-keygen -f /home/runner/.ssh/id_rsa -t rsa -N ''  \
+                     -C gha@floxdev.com;
+          chmod 600 /home/runner/.ssh/id_rsa;
+          ssh-agent -a "$SSH_AUTH_SOCK" > /dev/null;
+          ssh-add /home/runner/.ssh/id_rsa;
+          git config --global user.email "gha@floxdev.com";
+          git config --global user.name "Flox GitHubActions";
+
+      - uses: actions/checkout@v3
+
+      - name: Show Env
+        run: |
+          set -eu;
+          set -o pipefail;
+          echo "# ============================================================================ #" >&2;
+          { printf '    bash   version: '; bash --version|head -n1;      } >&2;
+          { printf '    nix    version: '; nix  --version;               } >&2;
+          echo "# ---------------------------------------------------------------------------- #" >&2;
+
+# ---------------------------------------------------------------------------- #
+
+      - name: Build and Test
+        run: |
+          set -eu;
+          set -o pipefail;
+          nix develop '.#flox' -L --show-trace -v -c make test;
+
+
+# ---------------------------------------------------------------------------- #
+#
+#
+#
+# ============================================================================ #

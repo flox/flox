@@ -1,0 +1,22 @@
+diff --git a/src/nix/profile.cc b/src/nix/profile.cc
+index a8ff9c78a..46d23de14 100644
+--- a/src/nix/profile.cc
++++ b/src/nix/profile.cc
+@@ -374,7 +374,7 @@ struct CmdProfileRemove : virtual EvalCommand, MixDefaultProfile, MixProfileElem
+                     warn("'%s' does not match any packages", regex->pattern);
+                 }
+             }
+-            warn ("Use 'nix profile list' to see the current profile.");
++            warn ("No packages removed.");
+         }
+         updateProfile(newManifest.build(store));
+     }
+@@ -453,7 +453,7 @@ struct CmdProfileUpgrade : virtual SourceExprCommand, MixDefaultProfile, MixProf
+                     warn("'%s' does not match any packages", regex->pattern);
+                 }
+             }
+-            warn ("Use 'nix profile list' to see the current profile.");
++            warn ("No packages upgraded.");
+         }
+ 
+         auto builtPaths = Installable::build(getEvalStore(), store, Realise::Outputs, installables, bmNormal);
