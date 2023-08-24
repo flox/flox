@@ -6,7 +6,7 @@ default-members = ["crates/flox"]
 [workspace.dependencies]
 anyhow = "1"
 async-trait = "0.1.52"
-bpaf = { version = "0.9.4", features = ["derive", "autocomplete"] }
+bpaf = { version = "0.9.5", features = ["derive", "autocomplete"] }
 chrono = "0.4.24"
 config = "0.13.1"
 crossterm = "0.26"
@@ -59,4 +59,3 @@ xdg = "2.4"
 
 
 [patch.crates-io]
-bpaf = { git = "https://github.com/pacak/bpaf", branch = "derive-alias" }
