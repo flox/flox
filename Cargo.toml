@@ -59,4 +59,4 @@ xdg = "2.4"
 
 
 [patch.crates-io]
-# bpaf = { git = "https://github.com/ysndr/bpaf", branch = "error/more-suggestions" }
+bpaf = { git = "https://github.com/pacak/bpaf", branch = "derive-alias" }
