@@ -1,0 +1,57 @@
+[package]
+name = "flox"
+version = "0.2.7"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+flox-rust-sdk.workspace = true
+flox-types.workspace = true
+anyhow.workspace = true
+tokio.workspace = true
+rnix.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_with.workspace = true
+serde_yaml.workspace = true
+async-trait.workspace = true
+log.workspace = true
+bpaf.workspace = true
+config.workspace = true
+dirs.workspace = true
+tempfile.workspace = true
+futures.workspace = true
+once_cell.workspace = true
+serde_variant.workspace = true
+itertools.workspace = true
+regex.workspace = true
+toml_edit.workspace = true
+supports-color.workspace = true
+inquire.workspace = true
+crossterm.workspace = true
+shell-escape.workspace = true
+xdg.workspace = true
+nix.workspace = true
+indoc.workspace = true
+derive_more.workspace = true
+time.workspace = true
+uuid.workspace = true
+reqwest.workspace = true
+sys-info.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+tracing-log.workspace = true
+fslock.workspace = true
+pathdiff.workspace = true
+indexmap.workspace = true
+url.workspace = true
+
+[dev-dependencies]
+temp-env = "0.3.2"
+
+
+[features]
+extra-tests = ["impure-unit-tests"]
+impure-unit-tests = []

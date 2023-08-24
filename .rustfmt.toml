@@ -1,0 +1,23 @@
+### These are somewhat opinionated changes to the defaults
+
+# Reduces diff sizes
+match_block_trailing_comma = true
+
+format_code_in_doc_comments = true
+
+### These basically make formatting more "automatic" - settings that enforce more style than default,
+### rather than really "changing" what the style is
+
+newline_style = "Unix"
+
+imports_granularity = "Module"
+imports_layout = "HorizontalVertical"
+group_imports = "StdExternalCrate"
+
+reorder_impl_items = true
+
+use_field_init_shorthand = true
+
+use_try_shorthand = true
+
+overflow_delimited_expr = true

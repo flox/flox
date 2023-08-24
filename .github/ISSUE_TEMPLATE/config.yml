@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Ask a question
+    url: https://discourse.floxdev.com/
+    about: Ask questions and discuss with other flox community members
+  - name: Learn how to contribute
+    url: https://github.com/flox/flox/blob/main/CONTRIBUTING.md
+    about: Learn how to contribute to flox
