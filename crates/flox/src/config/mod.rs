@@ -47,8 +47,8 @@ pub struct FloxConfig {
     pub cache_dir: PathBuf,
     pub data_dir: PathBuf,
     pub config_dir: PathBuf,
-    #[serde(default)]
-    pub stability: Stability,
+
+    pub stability: Option<Stability>,
 
     /// The url we push _to_
     pub cache_url: Option<Url>,

@@ -1,8 +1,8 @@
-use std::convert::Infallible;
 use std::str::FromStr;
 
 use derive_more::Display;
 use runix::arguments::flake::OverrideInput;
+use runix::flake_ref::FlakeRef;
 use serde::{Deserialize, Serialize};
 
 #[derive(
@@ -11,15 +11,12 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "camelCase")]
 pub enum Stability {
     #[default]
-    Unspecified,
     #[display(fmt = "stable")]
     Stable,
     #[display(fmt = "unstable")]
     Unstable,
     #[display(fmt = "staging")]
     Staging,
-    #[display(fmt = "{_0}")]
-    Other(String), // will need custom deserializer for this
 }
 
 impl Stability {
@@ -30,18 +27,16 @@ impl Stability {
         )
             .into()
     }
+
+    pub fn as_flakeref(&self) -> FlakeRef {
+        format!("github:flox/nixpkgs/{}", self).parse().unwrap() // known valid ref
+    }
 }
 
-// TODO: fix serde stuff for Stability...
 impl FromStr for Stability {
-    type Err = Infallible;
+    type Err = serde_json::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "stable" => Ok(Stability::Stable),
-            "unstable" => Ok(Self::Unstable),
-            "staging" => Ok(Stability::Staging),
-            _ => Ok(Stability::Other(s.to_string())),
-        }
+        serde_json::from_value(serde_json::Value::String(s.to_string()))
     }
 }

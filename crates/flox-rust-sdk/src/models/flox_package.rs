@@ -127,14 +127,7 @@ impl FloxTriple {
         };
 
         // try to interpret an attribute as a stability
-        let as_stability = |attr: &Attribute| -> Option<Stability> {
-            let stability = attr.as_ref().parse().unwrap();
-            if matches!(stability, Stability::Other(_)) {
-                None
-            } else {
-                Some(stability)
-            }
-        };
+        let as_stability = |attr: &Attribute| -> Option<Stability> { attr.as_ref().parse().ok() };
 
         // FloxTriple constructor private to the parse() function
         // - insert default channel and/or stability
