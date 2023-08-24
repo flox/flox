@@ -232,22 +232,22 @@ enum Commands {
 #[derive(Bpaf, Clone)]
 enum LocalDevelopmentCommands {
     /// Create an environment in the current directory
-    #[bpaf(command, long("create"))]
+    #[bpaf(command, short('i'), long("create"), short('c'))]
     Init(#[bpaf(external(environment::init))] environment::Init),
     /// Activate environment
-    #[bpaf(command)]
+    #[bpaf(command, short('a'), long("develop"))]
     Activate(#[bpaf(external(environment::activate))] environment::Activate),
     /// Search packages in subscribed channels
     #[bpaf(command)]
     Search(#[bpaf(external(channel::search))] channel::Search),
     /// Install a package into an environment
-    #[bpaf(command)]
+    #[bpaf(command, short('i'))]
     Install(#[bpaf(external(environment::install))] environment::Install),
     /// Uninstall installed packages from an environment
-    #[bpaf(command, long("remove"), long("rm"))]
+    #[bpaf(command, short('u'), long("remove"), long("rm"))]
     Uninstall(#[bpaf(external(environment::uninstall))] environment::Uninstall),
     /// Edit declarative environment configuration
-    #[bpaf(command)]
+    #[bpaf(command, short('e'))]
     Edit(#[bpaf(external(environment::edit))] environment::Edit),
     /// Run app from current project
     #[bpaf(command)]

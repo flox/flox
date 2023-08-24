@@ -12,6 +12,7 @@ use itertools::Itertools;
 use regex::Regex;
 use serde_json::json;
 
+use crate::subcommand_metric;
 use crate::utils::dialog::{Dialog, Select, Text};
 use crate::utils::init::{DEFAULT_CHANNELS, HIDDEN_CHANNELS};
 
@@ -55,6 +56,7 @@ pub struct Search {
 
 impl Search {
     pub async fn handle(self, flox: Flox) -> Result<()> {
+        subcommand_metric!("search");
         let channels = flox
             .channels
             .iter()
@@ -131,6 +133,7 @@ pub struct Subscribe {
 }
 impl Subscribe {
     pub async fn handle(self, flox: Flox) -> Result<()> {
+        subcommand_metric!("subscribe");
         // query name interactively if not provided
         let name = match &self.args {
             None => {
@@ -245,6 +248,7 @@ pub struct Unsubscribe {
 
 impl Unsubscribe {
     pub async fn handle(self, flox: Flox) -> Result<()> {
+        subcommand_metric!("unsubscribe");
         let floxmeta = flox
             .floxmeta::<GitCommandProvider>(DEFAULT_OWNER)
             .await
@@ -300,6 +304,7 @@ pub struct Channels {
 
 impl Channels {
     pub fn handle(self, flox: Flox) -> Result<()> {
+        subcommand_metric!("channels");
         let channels = flox
             .channels
             .iter()

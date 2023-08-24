@@ -17,6 +17,7 @@ use toml_edit::Key;
 
 use crate::commands::not_help;
 use crate::config::{Config, ReadWriteError, FLOX_CONFIG_FILE};
+use crate::subcommand_metric;
 use crate::utils::metrics::{
     METRICS_EVENTS_FILE_NAME,
     METRICS_LOCK_FILE_NAME,
@@ -28,6 +29,7 @@ use crate::utils::metrics::{
 pub struct ResetMetrics {}
 impl ResetMetrics {
     pub async fn handle(self, _config: Config, flox: Flox) -> Result<()> {
+        subcommand_metric!("reset-metrics");
         let mut metrics_lock = LockFile::open(&flox.cache_dir.join(METRICS_LOCK_FILE_NAME))?;
         tokio::task::spawn_blocking(move || metrics_lock.lock()).await??;
 
@@ -86,6 +88,8 @@ pub enum ConfigArgs {
 impl ConfigArgs {
     /// handle config flags like commands
     pub async fn handle(&self, config: Config, flox: Flox) -> Result<()> {
+        subcommand_metric!("config");
+
         /// wrapper around [Config::write_to]
         async fn update_config<V: Serialize>(
             config_dir: &Path,
@@ -225,6 +229,7 @@ pub struct WrappedNix {
 
 impl WrappedNix {
     pub async fn handle(self, mut config: Config, mut flox: Flox) -> Result<()> {
+        subcommand_metric!("nix");
         // mutable state hurray :/
         let stability = config.override_stability(self.stability);
 

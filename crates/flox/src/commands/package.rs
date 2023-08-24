@@ -24,9 +24,9 @@ use itertools::Itertools;
 use log::{debug, info};
 
 use crate::config::Config;
-use crate::flox_forward;
 use crate::utils::dialog::{Dialog, Text};
 use crate::utils::resolve_environment_ref;
+use crate::{flox_forward, subcommand_metric};
 
 async fn env_ref_to_flake_attribute<Git: GitProvider + 'static>(
     flox: &Flox,
@@ -124,6 +124,7 @@ pub(crate) fn template_arg() -> impl Parser<Option<InstallableArgument<Parsed, T
 parseable!(InitPackage, init_package);
 impl WithPassthru<InitPackage> {
     pub async fn handle(self, flox: Flox) -> Result<()> {
+        subcommand_metric!("init-package");
         let cwd = std::env::current_dir()?;
         let basename = cwd
             .file_name()
@@ -189,6 +190,7 @@ pub struct Build {
 parseable!(Build, build);
 impl WithPassthru<Build> {
     pub async fn handle(self, mut config: Config, flox: Flox) -> Result<()> {
+        subcommand_metric!("build");
         let installable_arg = self
             .inner
             .installable_arg
@@ -218,6 +220,7 @@ pub struct PrintDevEnv {
 parseable!(PrintDevEnv, print_dev_env);
 impl WithPassthru<PrintDevEnv> {
     pub async fn handle(self, mut config: Config, flox: Flox) -> Result<()> {
+        subcommand_metric!("print-dev-env");
         config.override_stability(self.stability);
 
         flox_forward(&flox).await
@@ -268,6 +271,7 @@ pub struct Publish {
 parseable!(Publish, publish);
 impl Publish {
     pub async fn handle(self, mut config: Config, flox: Flox) -> Result<()> {
+        subcommand_metric!("publish");
         let installable = self
             .installable_arg
             .unwrap_or_default()
@@ -380,6 +384,7 @@ pub struct Shell {
 parseable!(Shell, shell);
 impl WithPassthru<Shell> {
     pub async fn handle(self, mut config: Config, flox: Flox) -> Result<()> {
+        subcommand_metric!("shell");
         let installable_arg = self
             .inner
             .installable_arg
@@ -418,6 +423,7 @@ pub(crate) fn bundler_arg() -> impl Parser<Option<InstallableArgument<Parsed, Bu
 }
 impl WithPassthru<Bundle> {
     pub async fn handle(self, mut config: Config, flox: Flox) -> Result<()> {
+        subcommand_metric!("bundle");
         let installable_arg = ResolveInstallable::<GitCommandProvider>::installable(
             &self.inner.installable_arg,
             &flox,
@@ -452,6 +458,7 @@ pub struct Containerize {
 parseable!(Containerize, containerize);
 impl WithPassthru<Containerize> {
     pub async fn handle(self, mut config: Config, flox: Flox) -> Result<()> {
+        subcommand_metric!("containerize");
         let mut installable = env_ref_to_flake_attribute::<GitCommandProvider>(
             &flox,
             "containerize",
@@ -533,6 +540,7 @@ pub struct Run {
 parseable!(Run, run);
 impl WithPassthru<Run> {
     pub async fn handle(self, mut config: Config, flox: Flox) -> Result<()> {
+        subcommand_metric!("run");
         let installable_arg = self
             .inner
             .installable_arg
@@ -554,6 +562,7 @@ pub struct Eval {}
 parseable!(Eval, eval);
 impl WithPassthru<Eval> {
     pub async fn handle(self, mut config: Config, flox: Flox) -> Result<()> {
+        subcommand_metric!("eval");
         let nix = flox.nix::<NixCommandLine>(self.nix_args);
         let stability = config.override_stability(self.stability);
         let override_input = stability.as_ref().map(Stability::as_override);
@@ -578,6 +587,7 @@ pub struct Flake {
 parseable!(Flake, flake);
 impl WithPassthru<Flake> {
     pub async fn handle(self, mut config: Config, flox: Flox) -> Result<()> {
+        subcommand_metric!("flake");
         /// A custom nix command that passes its arguments to `nix flake`
         #[derive(Debug, Clone)]
         pub struct FlakeCommand {
