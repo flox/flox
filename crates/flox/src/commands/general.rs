@@ -67,15 +67,19 @@ impl ResetMetrics {
 #[derive(Bpaf, Clone)]
 #[bpaf(fallback(ConfigArgs::List))]
 pub enum ConfigArgs {
-    /// list the current values of all configurable paramers
+    /// List the current values of all configurable paramers
     #[bpaf(short, long)]
     List,
-    /// reset all configurable parameters to their default values without further confirmation.
+    /// Reset all configurable parameters to their default values without further confirmation.
     #[bpaf(short, long)]
     Reset,
+    /// Set a config value
     Set(#[bpaf(external(config_set))] ConfigSet),
+    /// Set a numeric config value
     SetNumber(#[bpaf(external(config_set_number))] ConfigSetNumber),
+    /// Set a boolean config value
     SetBool(#[bpaf(external(config_set_bool))] ConfigSetBool),
+    /// Delete a config value
     Delete(#[bpaf(external(config_delete))] ConfigDelete),
 }
 
@@ -148,7 +152,6 @@ impl ConfigArgs {
     }
 }
 
-/// Arguments for `flox config --set`
 #[derive(Debug, Clone, Bpaf)]
 #[bpaf(adjacent)]
 #[allow(unused)]
@@ -163,7 +166,6 @@ pub struct ConfigSet {
     value: String,
 }
 
-/// Arguments for `flox config --setNumber`
 #[derive(Debug, Clone, Bpaf)]
 #[bpaf(adjacent)]
 #[allow(unused)]
@@ -182,7 +184,6 @@ pub struct ConfigSetNumber {
     value: String,
 }
 
-/// Arguments for `flox config --setNumber`
 #[derive(Debug, Clone, Bpaf)]
 #[bpaf(adjacent)]
 #[allow(unused)]
@@ -202,16 +203,13 @@ pub struct ConfigSetBool {
     value: String,
 }
 
-/// bug in bpaf (<https://github.com/pacak/bpaf/issues/171>)
+// / bug in bpaf (<https://github.com/pacak/bpaf/issues/171>)
 // fn parse_bool() -> impl Parser<String> {
 //     bpaf::positional::<String>("bool")
 // }
 
-/// Arguments for `flox config --delete`
 #[derive(Debug, Clone, Bpaf)]
-#[bpaf(adjacent)]
 #[allow(unused)]
-/// delete <key> from config
 pub struct ConfigDelete {
     /// Configuration key
     #[bpaf(long("delete"), argument("key"))]

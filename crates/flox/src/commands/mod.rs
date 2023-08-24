@@ -329,29 +329,29 @@ enum AdditionalCommands {
         #[bpaf(external(AdditionalCommands::documentation))] AdditionalCommandsDocumentation,
     ),
     #[bpaf(command, hide)]
-    Build(#[bpaf(external(WithPassthru::parse), hide)] WithPassthru<package::Build>),
+    Build(#[bpaf(external(WithPassthru::parse))] WithPassthru<package::Build>),
     #[bpaf(command, hide)]
-    Upgrade(#[bpaf(external(environment::upgrade), hide)] environment::Upgrade),
+    Upgrade(#[bpaf(external(environment::upgrade))] environment::Upgrade),
     #[bpaf(command, hide)]
-    Import(#[bpaf(external(environment::import), hide)] environment::Import),
+    Import(#[bpaf(external(environment::import))] environment::Import),
     #[bpaf(command, hide)]
-    Export(#[bpaf(external(environment::export), hide)] environment::Export),
+    Export(#[bpaf(external(environment::export))] environment::Export),
     #[bpaf(command, hide)]
-    Config(#[bpaf(external(general::config_args), hide)] general::ConfigArgs),
+    Config(#[bpaf(external(general::config_args))] general::ConfigArgs),
     #[bpaf(command("wipe-history"), hide)]
-    WipeHistory(#[bpaf(external(environment::wipe_history), hide)] environment::WipeHistory),
+    WipeHistory(#[bpaf(external(environment::wipe_history))] environment::WipeHistory),
     #[bpaf(command, hide)]
-    Subscribe(#[bpaf(external(channel::subscribe), hide)] channel::Subscribe),
+    Subscribe(#[bpaf(external(channel::subscribe))] channel::Subscribe),
     #[bpaf(command, hide)]
-    Unsubscribe(#[bpaf(external(channel::unsubscribe), hide)] channel::Unsubscribe),
+    Unsubscribe(#[bpaf(external(channel::unsubscribe))] channel::Unsubscribe),
     #[bpaf(command, hide)]
-    Channels(#[bpaf(external(channel::channels), hide)] channel::Channels),
+    Channels(#[bpaf(external(channel::channels))] channel::Channels),
     #[bpaf(command, hide)]
-    History(#[bpaf(external(environment::history), hide)] environment::History),
+    History(#[bpaf(external(environment::history))] environment::History),
     #[bpaf(command, hide)]
-    PrintDevEnv(#[bpaf(external(WithPassthru::parse), hide)] WithPassthru<package::PrintDevEnv>),
+    PrintDevEnv(#[bpaf(external(WithPassthru::parse))] WithPassthru<package::PrintDevEnv>),
     #[bpaf(command, hide)]
-    Shell(#[bpaf(external(WithPassthru::parse), hide)] WithPassthru<package::Shell>),
+    Shell(#[bpaf(external(WithPassthru::parse))] WithPassthru<package::Shell>),
 }
 
 impl AdditionalCommands {
