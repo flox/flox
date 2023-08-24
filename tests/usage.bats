@@ -79,7 +79,7 @@ EOF
 
 @test "f6: remove stability from flox --help command: Only show stability for commands that support it" {
     run "$FLOX_CLI" --help
-    reject_output --partial "--stability"
+    refute_output --partial "--stability"
 }
 
 @test "f7: remove debug: don't show debug in flox and only show in flox --help {
