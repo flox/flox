@@ -423,6 +423,10 @@ enum InternalCommands {
     ),
     #[bpaf(command)]
     Rollback(#[bpaf(external(environment::rollback))] environment::Rollback),
+    /// List all available environments
+    ///
+    /// Aliases:
+    ///   environments, envs
     #[bpaf(command, long("environments"))]
     Envs(#[bpaf(external(environment::envs))] environment::Envs),
     #[bpaf(command)]

@@ -327,7 +327,7 @@ impl List {
 /// Aliases:
 ///   environments, envs
 #[derive(Bpaf, Clone)]
-pub struct Envs;
+pub struct Envs {}
 impl Envs {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("envs");
