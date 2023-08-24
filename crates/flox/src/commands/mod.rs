@@ -273,7 +273,6 @@ impl LocalDevelopmentCommands {
             | LocalDevelopmentCommands::Uninstall(_)
             | LocalDevelopmentCommands::List(_)
             | LocalDevelopmentCommands::Delete(_)
-            | LocalDevelopmentCommands::Search(_)
                 if Feature::Env.is_forwarded()? =>
             {
                 flox_forward(&flox).await?
