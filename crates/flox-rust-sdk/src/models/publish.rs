@@ -160,24 +160,22 @@ impl<'flox> Publish<'flox, Empty> {
         ]
         .to_vec();
 
-        if self.stability != Stability::Unspecified {
-            let nixpkgs_flakeref = FlakeRef::Indirect(IndirectRef::new(
-                format!("nixpkgs-{}", self.stability),
-                Default::default(),
-            ));
+        let nixpkgs_flakeref = FlakeRef::Indirect(IndirectRef::new(
+            format!("nixpkgs-{}", self.stability),
+            Default::default(),
+        ));
 
-            // Stabilities are managed by overriding the `flox-floxpkgs/nixpkgs/nixpkgs` input to
-            // `nixpkgs-<stability>`.
-            // The analyzer flake adds an additional indirection,
-            // so we have to do the override manually.
-            // However, since https://github.com/flox/flox/pull/182,
-            // we only set this when a stability is specified
-            // This is the `nixpkgs-<stability>` portion.
-            override_inputs.push(OverrideInput {
-                from: "target/flox-floxpkgs/nixpkgs/nixpkgs".to_string(),
-                to: nixpkgs_flakeref,
-            });
-        }
+        // Stabilities are managed by overriding the `flox-floxpkgs/nixpkgs/nixpkgs` input to
+        // `nixpkgs-<stability>`.
+        // The analyzer flake adds an additional indirection,
+        // so we have to do the override manually.
+        // However, since https://github.com/flox/flox/pull/182,
+        // we only set this when a stability is specified
+        // This is the `nixpkgs-<stability>` portion.
+        override_inputs.push(OverrideInput {
+            from: "target/flox-floxpkgs/nixpkgs/nixpkgs".to_string(),
+            to: nixpkgs_flakeref,
+        });
 
         let eval_analysis_command = Eval {
             flake: FlakeArgs {
@@ -230,13 +228,6 @@ impl<'flox> Publish<'flox, Empty> {
 }
 
 impl<'flox> Publish<'flox, NixAnalysis> {
-    fn stability_overrides(&self) -> Vec<OverrideInput> {
-        match self.stability {
-            Stability::Unspecified => [].into(),
-            ref s => [s.as_override()].into(),
-        }
-    }
-
     /// Construct an installable type from the upstream flakeref and attrpath
     fn installable(&self) -> Installable {
         FlakeAttribute {
@@ -280,7 +271,7 @@ impl<'flox> Publish<'flox, NixAnalysis> {
         let command = Build {
             installables: [self.installable()].into(),
             flake: FlakeArgs {
-                override_inputs: self.stability_overrides(),
+                override_inputs: [self.stability.as_override()].into(),
                 ..Default::default()
             },
             ..Default::default()
