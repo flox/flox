@@ -281,9 +281,6 @@ pub fn parse_nix_passthru() -> impl Parser<WrappedNix> {
     };
 
     bpaf::construct!([without_stability, with_stability])
-        .to_options()
-        .command("nix")
-        .help("Access to the nix CLI")
 }
 
 fn complete_nix_shell(offset: u8) -> bpaf::ShellComp {
