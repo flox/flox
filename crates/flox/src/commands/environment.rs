@@ -31,31 +31,6 @@ pub struct EnvironmentArgs {
 
 pub type EnvironmentRef = String;
 
-// impl EnvironmentCommands {
-//     pub async fn handle(&self, flox: Flox) -> Result<()> {
-
-//         match self {
-//             EnvironmentCommands::List { .. } => subcommand_metric!("list"),
-//             EnvironmentCommands::Envs => subcommand_metric!("envs"),
-//             EnvironmentCommands::Activate { .. } => subcommand_metric!("activate"),
-//             EnvironmentCommands::Init { .. } => subcommand_metric!("init"),
-//             EnvironmentCommands::Destroy { .. } => subcommand_metric!("destroy"),
-//             EnvironmentCommands::Edit { .. } => subcommand_metric!("edit"),
-//             EnvironmentCommands::Export { .. } => subcommand_metric!("export"),
-//             EnvironmentCommands::Generations { .. } => subcommand_metric!("generations"),
-//             EnvironmentCommands::Git { .. } => subcommand_metric!("git"),
-//             EnvironmentCommands::History { .. } => subcommand_metric!("history"),
-//             EnvironmentCommands::Import { .. } => subcommand_metric!("import"),
-//             EnvironmentCommands::Install { .. } => subcommand_metric!("install"),
-//             EnvironmentCommands::Push { .. } => subcommand_metric!("push"),
-//             EnvironmentCommands::Pull { .. } => subcommand_metric!("pull"),
-//             EnvironmentCommands::Uninstall { .. } => subcommand_metric!("remove"),
-//             EnvironmentCommands::Rollback { .. } => subcommand_metric!("rollback"),
-//             EnvironmentCommands::SwitchGeneration { .. } => subcommand_metric!("switch"),
-//             EnvironmentCommands::Upgrade { .. } => subcommand_metric!("upgrade"),
-//             EnvironmentCommands::WipeHistory { .. } => subcommand_metric!("wipe-history"),
-//         }
-
 /// Edit declarative environment configuration
 #[derive(Bpaf, Clone)]
 pub struct Edit {
@@ -70,12 +45,13 @@ pub struct Edit {
     #[bpaf(long, short, argument("FILE"))]
     file: Option<PathBuf>,
 }
+
 impl Edit {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("edit");
 
         let mut environment =
-            resolve_environment(&flox, self.environment.as_deref(), "install").await?;
+            resolve_environment(&flox, self.environment.as_deref(), "edit").await?;
         let mut temporary_environment = environment.make_temporary().await?;
 
         let nix = flox.nix(Default::default());
@@ -162,8 +138,7 @@ impl Delete {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("delete");
 
-        let environment =
-            resolve_environment(&flox, self.environment.as_deref(), "install").await?;
+        let environment = resolve_environment(&flox, self.environment.as_deref(), "delete").await?;
 
         environment
             .delete()
@@ -198,7 +173,7 @@ impl Activate {
         subcommand_metric!("activate");
 
         let environment = self.environment.first().map(|e| e.as_ref());
-        let environment = resolve_environment(&flox, environment, "install").await?;
+        let environment = resolve_environment(&flox, environment, "activate").await?;
 
         let command = Shell {
             eval: EvaluationArgs {
@@ -296,7 +271,7 @@ impl List {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("list");
 
-        let env = resolve_environment(&flox, self.environment.as_deref(), "install").await?;
+        let env = resolve_environment(&flox, self.environment.as_deref(), "list").await?;
 
         let catalog = env
             .catalog(&flox.nix(Default::default()), &flox.system)
@@ -357,6 +332,7 @@ pub struct Install {
     #[bpaf(positional("PACKAGES"), some("At least one package"))]
     packages: Vec<String>,
 }
+
 impl Install {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("install");
@@ -410,6 +386,7 @@ pub struct Uninstall {
     #[bpaf(positional("PACKAGES"), some("At least one package"))]
     packages: Vec<String>,
 }
+
 impl Uninstall {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("uninstall");
@@ -424,7 +401,7 @@ impl Uninstall {
             .collect();
 
         let mut environment =
-            resolve_environment(&flox, self.environment.as_deref(), "install").await?;
+            resolve_environment(&flox, self.environment.as_deref(), "uninstall").await?;
 
         environment
             .uninstall(
@@ -522,6 +499,7 @@ pub struct Generations {
     #[bpaf(long, short, argument("ENV"))]
     environment: Option<EnvironmentRef>,
 }
+
 impl Generations {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("generations");
@@ -544,6 +522,7 @@ pub struct Git {
     #[bpaf(any("Git Arguments", Some))]
     git_arguments: Vec<String>,
 }
+
 impl Git {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("git");
@@ -567,6 +546,7 @@ pub struct History {
     #[bpaf(long, short, argument("ENV"))]
     environment: Option<EnvironmentRef>,
 }
+
 impl History {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("history");
@@ -672,6 +652,7 @@ pub struct Pull {
     #[bpaf(long, short)]
     force: bool,
 }
+
 impl Pull {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("pull");

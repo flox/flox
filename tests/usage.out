@@ -42,7 +42,7 @@ environment commands:
          - list environment generations with contents
     flox rollback - roll back to the previous generation of an environment
     flox switch-generation - switch to a specific generation of an environment
-    flox destroy [--force] [--origin]
+    flox delete [--force] [--origin]
          - remove all data pertaining to an environment
     flox push [--force] [-m|--main]
          - send environment metadata to remote registry

@@ -225,7 +225,7 @@ setup_file() {
   assert_success
   assert_output --partial "# test comment"
 
-  run $FLOX_CLI destroy --force -e "$EDIT_ENVIRONMENT"
+  run $FLOX_CLI delete --force -e "$EDIT_ENVIRONMENT"
   assert_success
 }
 
@@ -297,7 +297,7 @@ setup_file() {
   refute_output --partial "stable.nixpkgs-flox.hello"
 
   # teardown
-  run $FLOX_CLI destroy -e "$TEST_CASE_ENVIRONMENT" -f
+  run $FLOX_CLI delete -e "$TEST_CASE_ENVIRONMENT" -f
   assert_success
 }
 
@@ -322,7 +322,7 @@ setup_file() {
   refute_output --partial "nixpkgs#legacyPackages.$NIX_SYSTEM.hello"
 
   # teardown
-  run $FLOX_CLI destroy -e "$TEST_CASE_ENVIRONMENT" -f
+  run $FLOX_CLI delete -e "$TEST_CASE_ENVIRONMENT" -f
   assert_success
 }
 
@@ -392,7 +392,7 @@ setup_file() {
   # teardown
   run $FLOX_CLI unsubscribe nixpkgs-flox-upgrade-test
   assert_success
-  run $FLOX_CLI destroy -e _upgrade_testing_ -f
+  run $FLOX_CLI delete -e _upgrade_testing_ -f
   assert_success
 }
 
@@ -488,8 +488,8 @@ setup_file() {
   assert_output --partial "Alias     $TEST_ENVIRONMENT"
 }
 
-@test "flox destroy local only" {
-  run $FLOX_CLI destroy -e $TEST_ENVIRONMENT -f
+@test "flox delete local only" {
+  run $FLOX_CLI delete -e $TEST_ENVIRONMENT -f
   assert_success
   assert_output --partial "WARNING: you are about to delete the following"
   assert_output --partial "Deleted branch"
@@ -541,7 +541,7 @@ setup_file() {
 }
 
 @test "tear down install test state" {
-  run sh -c "XDG_CONFIG_HOME=$REAL_XDG_CONFIG_HOME GH_CONFIG_DIR=$REAL_GH_CONFIG_DIR $FLOX_CLI destroy -e $TEST_ENVIRONMENT --origin -f"
+  run sh -c "XDG_CONFIG_HOME=$REAL_XDG_CONFIG_HOME GH_CONFIG_DIR=$REAL_GH_CONFIG_DIR $FLOX_CLI delete -e $TEST_ENVIRONMENT --origin -f"
   assert_output --partial "WARNING: you are about to delete the following"
   assert_output --partial "Deleted branch"
   assert_output --partial "removed"

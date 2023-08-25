@@ -128,6 +128,9 @@ fi
 if [ "$subcommand" = "rm" ] || [ "$subcommand" = "uninstall" ]; then
        subcommand=remove
 fi
+if [ "$subcommand" = "delete" ]; then
+  subcommand="destroy"
+fi
 
 # Store the original subcommand invocation arguments.
 declare -a invocation_args=("$@")

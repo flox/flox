@@ -70,8 +70,8 @@ and cleaning up after test runs.
     - This prevents tests which modify `gitconfig` from modifying a user's real
       configuration files, and prevents contamination between tests.
   + During `teardown_suite` we delete all `flox` environments with the prefix
-    `_testing_*` using `flox destroy NAME --force --origin`.
-    + This is performed by the helper function `destroyAllTestEnvs`.
+    `_testing_*` using `flox delete NAME --force --origin`.
+    + This is performed by the helper function `deleteAllTestEnvs`.
 - `setup_file` and `teardown_file`
   + Run once at the beginning and end of each `NAME.bats` file.
   + Test files may provide their own definitions of these routines, but we

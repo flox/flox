@@ -1,3 +1,4 @@
+use std::ffi::OsStr;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -318,7 +319,16 @@ where
 
     /// Delete the Environment
     fn delete(self) -> Result<(), EnvironmentError2> {
-        std::fs::remove_dir_all(self.path).map_err(EnvironmentError2::DeleteEnvironement)?;
+        // `self.path` refers to `.flox/<env>`, so we check that the parent exists and is called
+        // `.flox` before deleting the entire parent directory
+        let Some(env_parent) = self.path.parent() else {
+            return Err(EnvironmentError2::DotFloxNotFound);
+        };
+        if Some(OsStr::new(".flox")) == env_parent.file_name() {
+            std::fs::remove_dir_all(env_parent).map_err(EnvironmentError2::DeleteEnvironment)?;
+        } else {
+            return Err(EnvironmentError2::DotFloxNotFound);
+        }
         Ok(())
     }
 }
@@ -502,7 +512,9 @@ pub enum EnvironmentError2 {
     #[error("MakeSandbox({0})")]
     MakeSandbox(std::io::Error),
     #[error("DeleteEnvironment({0})")]
-    DeleteEnvironement(std::io::Error),
+    DeleteEnvironment(std::io::Error),
+    #[error("DotFloxNotFound")]
+    DotFloxNotFound,
     #[error("InitEnv({0})")]
     InitEnv(std::io::Error),
     #[error("EnvNotFound")]
