@@ -1,15 +1,13 @@
 use std::env;
-use std::ffi::OsString;
 use std::fmt::{Debug, Display};
 use std::os::unix::process::ExitStatusExt;
 use std::path::Path;
 use std::process::{ExitCode, ExitStatus};
 
 use anyhow::{anyhow, Context, Result};
-use bpaf::{Args, Doc, Parser};
+use bpaf::{Args, Parser};
 use commands::{BashPassthru, FloxArgs, Prefix};
 use flox_rust_sdk::environment::default_nix_subprocess_env;
-use itertools::Itertools;
 use log::{debug, error, warn};
 use tokio::process::Command;
 use utils::init::init_logger;
@@ -76,32 +74,7 @@ async fn main() -> ExitCode {
     // to work with the shell completion frontends
     //
     // Pass through Stdout failure; This represents `--help`
-    let args = commands::flox_args()
-        .run_inner(Args::current_args())
-        .map_err(|err| match err {
-            bpaf::ParseFailure::Completion(c) => bpaf::ParseFailure::Completion(c),
-            bpaf::ParseFailure::Stdout(_, _) => err,
-            bpaf::ParseFailure::Stderr(mut message) => {
-                let mut help_args = env::args_os()
-                    .skip(1)
-                    .take_while(|arg| arg != "")
-                    .collect_vec();
-                help_args.push(OsString::from("--help".to_string()));
-                let failure = commands::flox_args()
-                    .run_inner(&help_args[..])
-                    .err()
-                    .unwrap();
-                match failure {
-                    bpaf::ParseFailure::Stdout(ref e, _) | bpaf::ParseFailure::Stderr(ref e) => {
-                        message.doc(&Doc::from("\n"));
-                        message.doc(e);
-
-                        bpaf::ParseFailure::Stderr(message)
-                    },
-                    _ => todo!(),
-                }
-            },
-        });
+    let args = commands::flox_args().run_inner(Args::current_args());
 
     if let Some(parse_err) = args.as_ref().err() {
         match parse_err {
