@@ -16,6 +16,9 @@ gh.overrideAttrs (oldAttrs: {
       --run 'export XDG_CONFIG_HOME="$FLOX_CONFIG_HOME"' \
       --run 'export XDG_STATE_HOME="$FLOX_STATE_HOME"' \
       --run 'export XDG_DATA_HOME="$FLOX_DATA_HOME"' \
+      --run '# Unset gh-related environment variables.' \
+      --run 'unset GITHUB_TOKEN GH_TOKEN GITHUB_ENTERPRISE_TOKEN GH_ENTERPRISE_TOKEN' \
+      --run 'unset GH_CONFIG_DIR GH_HOST GH_PATH GH_REPO' \
       --prefix PATH : "${lib.makeBinPath [gitMinimal]}"
   '';
 })

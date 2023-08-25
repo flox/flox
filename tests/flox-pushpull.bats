@@ -17,6 +17,8 @@ setup_file() {
   common_file_setup;
   "$FLOX_CLI" create -e "$TEST_ENVIRONMENT";
   "$FLOX_CLI" install -e "$TEST_ENVIRONMENT" hello cowsay;
+  export GITHUB_TOKEN="ghx_bogus_token"
+  export GH_TOKEN="$GITHUB_TOKEN"
 }
 
 
