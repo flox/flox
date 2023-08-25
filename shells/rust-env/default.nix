@@ -16,6 +16,7 @@
   hivemind,
   cargo-watch,
   commitizen,
+  just,
 }:
 mkShell ({
     inputsFrom = [
@@ -33,6 +34,7 @@ mkShell ({
       rust-analyzer
       rust.packages.stable.rustPlatform.rustLibSrc
       rustc
+      just
     ];
     shellHook = ''
       ${self.checks.pre-commit-check.shellHook}
