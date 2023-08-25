@@ -20,7 +20,6 @@ use toml_edit::Key;
 use self::package::{Parseable, Run, WithPassthru};
 use crate::config::features::Feature;
 use crate::config::{Config, FLOX_CONFIG_FILE};
-use crate::flox_forward;
 use crate::utils::init::{
     init_access_tokens,
     init_channels,
@@ -30,6 +29,7 @@ use crate::utils::init::{
     telemetry_opt_out_needs_migration,
 };
 use crate::utils::metrics::METRICS_UUID_FILE_NAME;
+use crate::{flox_forward, subcommand_metric};
 
 static FLOX_WELCOME_MESSAGE: Lazy<String> = Lazy::new(|| {
     formatdoc! {r#"
@@ -266,19 +266,37 @@ enum LocalDevelopmentCommands {
 impl LocalDevelopmentCommands {
     async fn handle(self, config: Config, flox: Flox) -> Result<()> {
         match self {
-            LocalDevelopmentCommands::Init(_)
-            | LocalDevelopmentCommands::Activate(_)
-            | LocalDevelopmentCommands::Edit(_)
-            | LocalDevelopmentCommands::Install(_)
-            | LocalDevelopmentCommands::Uninstall(_)
-            | LocalDevelopmentCommands::List(_)
-            | LocalDevelopmentCommands::Delete(_)
-                if Feature::Env.is_forwarded()? =>
-            {
-                flox_forward(&flox).await?
+            LocalDevelopmentCommands::Init(_) if Feature::Env.is_forwarded()? => {
+                subcommand_metric!("init");
+                flox_forward(&flox).await?;
             },
-
+            LocalDevelopmentCommands::Activate(_) if Feature::Env.is_forwarded()? => {
+                subcommand_metric!("activate");
+                flox_forward(&flox).await?;
+            },
+            LocalDevelopmentCommands::Edit(_) if Feature::Env.is_forwarded()? => {
+                subcommand_metric!("edit");
+                flox_forward(&flox).await?;
+            },
+            LocalDevelopmentCommands::Install(_) if Feature::Env.is_forwarded()? => {
+                subcommand_metric!("install");
+                flox_forward(&flox).await?;
+            },
+            LocalDevelopmentCommands::Uninstall(_) if Feature::Env.is_forwarded()? => {
+                subcommand_metric!("uninstall");
+                flox_forward(&flox).await?;
+            },
+            LocalDevelopmentCommands::List(_) if Feature::Env.is_forwarded()? => {
+                subcommand_metric!("list");
+                flox_forward(&flox).await?;
+            },
+            LocalDevelopmentCommands::Delete(_) if Feature::Env.is_forwarded()? => {
+                subcommand_metric!("delete");
+                flox_forward(&flox).await?;
+            },
             LocalDevelopmentCommands::Search(_) if Feature::Channels.is_forwarded()? => {
+                subcommand_metric!("search");
+
                 flox_forward(&flox).await?
             },
 
@@ -313,10 +331,13 @@ enum SharingCommands {
 impl SharingCommands {
     async fn handle(self, config: Config, flox: Flox) -> Result<()> {
         match self {
-            SharingCommands::Push(_) | SharingCommands::Pull(_)
-                if Feature::Env.is_forwarded()? =>
-            {
-                flox_forward(&flox).await?
+            SharingCommands::Push(_) if Feature::Env.is_forwarded()? => {
+                subcommand_metric!("push");
+                flox_forward(&flox).await?;
+            },
+            SharingCommands::Pull(_) if Feature::Env.is_forwarded()? => {
+                subcommand_metric!("pull");
+                flox_forward(&flox).await?;
             },
             SharingCommands::Push(args) => args.handle(flox).await?,
             SharingCommands::Pull(args) => args.handle(flox).await?,
@@ -368,22 +389,26 @@ impl AdditionalCommands {
     async fn handle(self, config: Config, flox: Flox) -> Result<()> {
         match self {
             // Environment commands feature gate
-            AdditionalCommands::Upgrade(_)
-            | AdditionalCommands::Import(_)
-            | AdditionalCommands::Export(_)
-            | AdditionalCommands::History(_)
-            | AdditionalCommands::PrintDevEnv(_)
-                if Feature::Env.is_forwarded()? =>
-            {
-                flox_forward(&flox).await?
+            AdditionalCommands::Upgrade(_) if Feature::Env.is_forwarded()? => {
+                subcommand_metric!("upgrade");
+                flox_forward(&flox).await?;
+            },
+            AdditionalCommands::Import(_) if Feature::Env.is_forwarded()? => {
+                subcommand_metric!("import");
+                flox_forward(&flox).await?;
+            },
+            AdditionalCommands::Export(_) if Feature::Env.is_forwarded()? => {
+                subcommand_metric!("export");
+                flox_forward(&flox).await?;
+            },
+            AdditionalCommands::History(_) if Feature::Env.is_forwarded()? => {
+                subcommand_metric!("history");
+                flox_forward(&flox).await?;
             },
 
             // Channel Commands feature gate
-            AdditionalCommands::Channels(_)
-            | AdditionalCommands::Subscribe(_)
-            | AdditionalCommands::Unsubscribe(_)
-                if Feature::Channels.is_forwarded()? =>
-            {
+            AdditionalCommands::Channels(_) if Feature::Channels.is_forwarded()? => {
+                subcommand_metric!("channels");
                 flox_forward(&flox).await?
             },
 
