@@ -287,8 +287,8 @@ envs | environments)
 	floxEnvironments "$FLOX_SYSTEM" "${invocation_args[@]}"
 	;;
 
-login|logout)
-	floxLoginLogout "$subcommand" "$@"
+auth)
+	floxAuth "$@"
 	;;
 
 gh)
