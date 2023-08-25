@@ -5,9 +5,6 @@ use std::collections::HashMap;
 use std::env;
 pub static NIX_BIN: &str = env!("NIX_BIN");
 
-/// Environment variable key for the GitHub Api Key
-pub static GITHUB_TOKEN: &str = "GITHUB_TOKEN";
-
 /// Explicitly set environment for nix calls
 ///
 /// Nixpkgs itself is broken in that the packages it creates depends
