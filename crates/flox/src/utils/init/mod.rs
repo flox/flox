@@ -15,9 +15,6 @@ mod metrics;
 pub use logger::*;
 pub use metrics::*;
 
-const ENV_GIT_CONFIG_SYSTEM: &str = "GIT_CONFIG_SYSTEM";
-const ENV_FLOX_ORIGINAL_GIT_CONFIG_SYSTEM: &str = "FLOX_ORIGINAL_GIT_CONFIG_SYSTEM";
-
 mod channels;
 
 pub use channels::{init_channels, DEFAULT_CHANNELS, HIDDEN_CHANNELS};
@@ -91,108 +88,4 @@ pub fn init_access_tokens(
     tokens.dedup();
 
     Ok(tokens)
-}
-
-pub async fn init_git_conf(temp_dir: &Path, config_dir: &Path) -> Result<()> {
-    let flox_system_conf_path = config_dir.join("gitconfig");
-
-    // Get the backed up `GIT_CONFIG_SYSTEM` set by a parent invocation of `flox`
-    // May be empty if `GIT_CONFIG_SYSTEM` not set outside of flox.
-    // If not empty is expected to point to an existing file.
-    let backed_up_system_conf = match env::var(ENV_FLOX_ORIGINAL_GIT_CONFIG_SYSTEM) {
-        Result::Ok(c) => Some(c),
-        _ => None,
-    };
-
-    // `GIT_CONFIG_SYSTEM` as outside flox or by parent flox instance.
-    // Ignored if absent, empty or pointing to a non-existent file.
-    let current_system_conf = match env::var(ENV_GIT_CONFIG_SYSTEM) {
-        Result::Ok(c) if !c.is_empty() && Path::new(&c).exists() => Some(c),
-        _ => None,
-    };
-
-    // Recall or load the system config if it exists
-    let system_conf = match (
-        current_system_conf.as_deref(),
-        backed_up_system_conf.as_deref(),
-    ) {
-        // Use `GIT_CONFIG_SYSTEM` if `FLOX_ORIGINAL_GIT_CONFIG_SYSTEM` is not set.
-        // Ignore if `GIT_CONFIG_SYSTEM` is set to flox/gitconfgi to avoid circular imports.
-        // Corresponds to first/"outermost" invocation of flox.
-        (Some(c), None) if Path::new(c) != flox_system_conf_path => Some(c),
-
-        // No prior backed up system gitconfig
-        (_, Some("")) => None,
-
-        // If an original configuration was backed up, use that one.
-        // `GIT_CONFIG_SYSTEM` would refer to the one set by a parent flox instance
-        (_, Some(c)) => Some(c),
-
-        // If no backed up config extists, use the default global config file
-        // _ if Path::new("/etc/gitconfig").exists() => Some("/etc/gitconfig"),
-        _ if tokio::fs::metadata("/etc/gitconfig").await.is_ok() => Some("/etc/gitconfig"),
-
-        // if neither exists, no other system config is applied
-        _ => None,
-    };
-
-    // the flox specific git config
-    let git_config = format!(
-        include_str!("./gitConfig.in"),
-        original_include = system_conf
-            .as_ref()
-            .map(|c| format!(
-                indoc::indoc!(
-                    "
-
-[include]
-	path = {}
-
-"
-                ),
-                c
-            ))
-            .unwrap_or_default()
-    );
-
-    // write or update gitconfig if needed
-    if !flox_system_conf_path.exists() || {
-        let mut contents = String::new(); // todo: allocate once with some room
-
-        tokio::fs::OpenOptions::new()
-            .read(true)
-            .open(&flox_system_conf_path)
-            .await?
-            .read_to_string(&mut contents)
-            .await?;
-
-        contents != git_config
-    } {
-        // create a file in the process directory containing the git config
-        let temp_system_conf_path = temp_dir.join("gitconfig");
-        tokio::fs::OpenOptions::new()
-            .write(true)
-            .mode(0o600)
-            .create_new(true)
-            .open(&temp_system_conf_path)
-            .await?
-            .write_all(git_config.as_bytes())
-            .await?;
-
-        info!("Updating {:#?}", &flox_system_conf_path);
-        tokio::fs::rename(temp_system_conf_path, &flox_system_conf_path).await?;
-    }
-
-    // Set system config variable
-    env::set_var(ENV_GIT_CONFIG_SYSTEM, flox_system_conf_path);
-    // Set the `FLOX_ORIGINAL_GIT_CONFIG_SYSTEM` variable.
-    // This will be empty, if no system wide configuration is applied.
-    // In an inner invocation the existence of this variable means that `GIT_CONFIG_SYSTEM` was
-    // set by flox.
-    env::set_var(
-        ENV_FLOX_ORIGINAL_GIT_CONFIG_SYSTEM,
-        system_conf.unwrap_or_default(),
-    );
-
-    Ok(())
 }

@@ -25,6 +25,8 @@
   fd,
   gnused,
   gitMinimal,
+  flox-gh,
+  gh,
 }: let
   # crane (<https://crane.dev/>) library for building rust packages
   craneLib = inputs.crane.mkLib nixpkgs;
@@ -38,6 +40,8 @@
       NIX_BIN = "${flox-bash}/libexec/flox/nix";
       GIT_BIN = "${gitMinimal}/bin/git";
       PARSER_UTIL_BIN = parser-util.outPath + "/bin/parser-util";
+      FLOX_GH_BIN = flox-gh.outPath + "/bin/flox-gh";
+      GH_BIN = gh.outPath + "/bin/gh";
 
       # path to bash impl of flox to dispatch unimplemented commands to
       FLOX_SH = "${flox-bash}/libexec/flox/flox";

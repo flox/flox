@@ -5,9 +5,6 @@ use std::collections::HashMap;
 use std::env;
 pub static NIX_BIN: &str = env!("NIX_BIN");
 
-/// Environment variable key for the GitHub Api Key
-pub static GITHUB_TOKEN: &str = "GITHUB_TOKEN";
-
 /// Explicitly set environment for nix calls
 ///
 /// Nixpkgs itself is broken in that the packages it creates depends
@@ -73,10 +70,6 @@ pub fn default_nix_subprocess_env() -> HashMap<String, String> {
     // env_map.insert(
     //     "NIX_USER_CONF_FILES".to_string(),
     //     format!("{}/.config/flox/nix.conf", home),
-    // );
-    // env_map.insert(
-    //     "GIT_CONFIG_SYSTEM".to_string(),
-    //     format!("{}/.config/flox/gitconfig", home),
     // );
 
     env_map

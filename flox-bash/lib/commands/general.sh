@@ -378,4 +378,12 @@ function floxEnvironments() {
 	done
 }
 
+_general_commands+=("auth")
+_usage["auth"]="floxHub authentication commands"
+_usage_options["auth"]="(login|logout|status)"
+function floxAuth() {
+	trace "$@"
+	$invoke_flox_gh auth "$@"
+}
+
 # vim:ts=4:noet:syntax=bash

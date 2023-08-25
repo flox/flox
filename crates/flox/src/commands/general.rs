@@ -69,7 +69,7 @@ impl ResetMetrics {
 #[derive(Bpaf, Clone)]
 #[bpaf(fallback(ConfigArgs::List))]
 pub enum ConfigArgs {
-    /// List the current values of all configurable paramers
+    /// List the current values of all configurable parameters
     #[bpaf(short, long)]
     List,
     /// Reset all configurable parameters to their default values without further confirmation.
@@ -215,7 +215,7 @@ impl WrappedNix {
     }
 }
 
-/// Access to the nix CLI
+/// Access to the gh CLI
 #[derive(Clone, Debug, Bpaf)]
 pub struct Gh {
     #[bpaf(any("gh arguments and options", not_help))]
@@ -224,6 +224,19 @@ pub struct Gh {
 impl Gh {
     pub async fn handle(self, _config: Config, flox: Flox) -> Result<()> {
         subcommand_metric!("gh");
+        flox_forward(&flox).await
+    }
+}
+
+/// floxHub authentication commands
+#[derive(Clone, Debug, Bpaf)]
+pub struct Auth {
+    #[bpaf(any("(login|logout|status) [ <gh auth options> ]", not_help))]
+    _auth_args: Vec<String>,
+}
+impl Auth {
+    pub async fn handle(self, _config: Config, flox: Flox) -> Result<()> {
+        subcommand_metric!("auth");
         flox_forward(&flox).await
     }
 }

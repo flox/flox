@@ -119,11 +119,12 @@ export FLOX_STABILITY="${FLOX_STABILITY:-stable}"
 export FLOX_CACHE_HOME="${FLOX_CACHE_HOME:-${XDG_CACHE_HOME:-$HOME/.cache}/flox}"
 export FLOX_META="${FLOX_META:-$FLOX_CACHE_HOME/meta}"
 export FLOX_DATA_HOME="${FLOX_DATA_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/flox}"
+export FLOX_STATE_HOME="${FLOX_STATE_HOME:-${XDG_STATE_HOME:-$HOME/.local/state}/flox}"
 export FLOX_ENVIRONMENTS="${FLOX_ENVIRONMENTS:-$FLOX_DATA_HOME/environments}"
 export XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
 export FLOX_CONFIG_HOME="${FLOX_CONFIG_HOME:-$XDG_CONFIG_HOME/flox}"
-$_mkdir -p "$FLOX_CACHE_HOME" "$FLOX_META" "$FLOX_DATA_HOME" "$FLOX_ENVIRONMENTS" "$FLOX_CONFIG_HOME"
-for i in "$FLOX_CACHE_HOME" "$FLOX_META" "$FLOX_DATA_HOME" "$FLOX_ENVIRONMENTS" "$FLOX_CONFIG_HOME"; do
+$_mkdir -p "$FLOX_CACHE_HOME" "$FLOX_META" "$FLOX_DATA_HOME" "$FLOX_STATE_HOME" "$FLOX_ENVIRONMENTS" "$FLOX_CONFIG_HOME"
+for i in "$FLOX_CACHE_HOME" "$FLOX_META" "$FLOX_DATA_HOME" "$FLOX_STATE_HOME" "$FLOX_ENVIRONMENTS" "$FLOX_CONFIG_HOME"; do
 	# if $i is writable, do nothing, else try to create $i
 	[ -w "$i" ] || $_mkdir -p "$i" || \
 		error "directory '$i' not writable ... aborting" < /dev/null
@@ -235,86 +236,6 @@ export NIX_USER_CONF_FILES="$nixConf"
 export SSL_CERT_FILE="${SSL_CERT_FILE:-@@NIXPKGS_CACERT_BUNDLE_CRT@@}"
 export NIX_SSL_CERT_FILE="${NIX_SSL_CERT_FILE:-$SSL_CERT_FILE}"
 
-# Similarly configure git config by way of $GIT_CONFIG_SYSTEM. Note that
-# we do it by way of this env variable because Nix doesn't provide a
-# passthru mechanism for passing options to git invocations. (?)
-gitConfig="$FLOX_CONFIG_HOME/gitconfig"
-
-tmpGitConfig=$($_mktemp --tmpdir=$FLOX_CONFIG_HOME)
-$_chmod 600 $tmpGitConfig
-$_cat > $tmpGitConfig <<EOF
-# Automatically generated - do not edit.
-[user]
-	name = Flox User
-	email = floxuser@example.invalid
-
-# Use only https for accessing flox utility libraries.
-[url "https://github.com/flox/capacitor"]
-	insteadOf = "ssh://git@github.com/flox/capacitor"
-	insteadOf = "git@github.com:flox/capacitor"
-
-[url "https://github.com/flox/nixpkgs-flox"]
-	insteadOf = "ssh://git@github.com/flox/nixpkgs-flox"
-	insteadOf = "git@github.com:flox/nixpkgs-flox"
-
-[url "https://github.com/flox/nixpkgs-catalog"]
-	insteadOf = "ssh://git@github.com/flox/nixpkgs-catalog"
-	insteadOf = "git@github.com:flox/nixpkgs-catalog"
-
-[url "https://github.com/flox/catalog-ingest"]
-	insteadOf = "ssh://git@github.com/flox/catalog-ingest"
-	insteadOf = "git@github.com:flox/catalog-ingest"
-
-[url "https://github.com/flox/flox-extras"]
-	insteadOf = "ssh://git@github.com/flox/flox-extras"
-	insteadOf = "git@github.com:flox/flox-extras"
-
-[url "https://github.com/flox/bundlers"]
-	insteadOf = "ssh://git@github.com/flox/bundlers"
-	insteadOf = "git@github.com:flox/bundlers"
-
-EOF
-# XXX Remove after closed beta.
-
-# Honor existing GIT_CONFIG_SYSTEM variable and/or default /etc/gitconfig.
-if [ -n "${GIT_CONFIG_SYSTEM:-}" ]; then
-	if [ -n "$FLOX_ORIGINAL_GIT_CONFIG_SYSTEM" ]; then
-		# Reset GIT_CONFIG_SYSTEM to reflect the original value
-		# observed before starting flox subshell (see below).
-		GIT_CONFIG_SYSTEM="$FLOX_ORIGINAL_GIT_CONFIG_SYSTEM"
-	fi
-else
-	if [ -e "/etc/gitconfig" ]; then
-		GIT_CONFIG_SYSTEM="/etc/gitconfig"
-	fi
-fi
-
-# If system gitconfig exists then include it, but check first to make sure
-# user hasn't requested that we include our own gitconfig file(!).
-if [[ -n "${GIT_CONFIG_SYSTEM:-}" ]] && [[ -e "$GIT_CONFIG_SYSTEM" ]] &&  \
-   [[ "$GIT_CONFIG_SYSTEM" != "$gitConfig" ]]
-then
-	# Save first/original observed variable to disambiguate our use
-	# of GIT_CONFIG_SYSTEM in subshells.
-	export FLOX_ORIGINAL_GIT_CONFIG_SYSTEM="$GIT_CONFIG_SYSTEM"
-	$_cat >> "$tmpGitConfig" <<EOF
-[include]
-	path = $GIT_CONFIG_SYSTEM
-
-EOF
-fi
-
-# Compare generated gitconfig to cached version.
-if $_cmp --quiet "$tmpGitConfig" "$gitConfig"; then
-	$_rm "$tmpGitConfig"
-else
-	warn "Updating $gitConfig"
-	$_mv -f "$tmpGitConfig" "$gitConfig"
-fi
-
-# Override system gitconfig.
-export GIT_CONFIG_SYSTEM="$gitConfig"
-
 if [ -n "${NIX_GET_COMPLETIONS:-}" ]; then
 	export FLOX_ORIGINAL_NIX_GET_COMPLETIONS="$NIX_GET_COMPLETIONS"
 	unset NIX_GET_COMPLETIONS
@@ -344,8 +265,7 @@ if [ -z "${FLOX_CONF_git_base_url:-}" ]; then
 	if [ -n "${FLOX_CONF_floxpkgs:-}" ]; then
 		FLOX_CONF_git_base_url="$($_jq -r -n --argjson floxpkgs "$FLOX_CONF_floxpkgs" '$floxpkgs["gitBaseURL"]')"
 	else
-		warn "could not read git_base_url from config; defaulting to https://github.com/"
-		FLOX_CONF_git_base_url="https://github.com/"
+		error "could not read git_base_url from config" </dev/null
 	fi
 fi
 

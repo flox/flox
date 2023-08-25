@@ -12,6 +12,7 @@
   diffutils,
   expect,
   findutils,
+  flox-gh,
   gawk,
   gh,
   gnugrep,
@@ -28,6 +29,7 @@
   man,
   nix-editor,
   nixStable,
+  openssh,
   pandoc,
   parser-util,
   pkgs,
@@ -101,6 +103,7 @@ in
       dasel
       diffutils
       findutils
+      flox-gh
       gawk
       getent
       git
@@ -116,6 +119,7 @@ in
       man
       nixPatched
       nix-editor
+      openssh
       util-linuxMinimal
       semver
       builtfilter-rs

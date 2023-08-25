@@ -272,7 +272,7 @@ function floxPublish() {
 
 		# Figure out the HEAD version to derive canonical flake URL.
 		local upstreamRev
-		upstreamRev=$(githubHelperGit ls-remote "$buildRepositoryBase" "$headref")
+		upstreamRev=$($_git ls-remote "$buildRepositoryBase" "$headref")
 		# Keep only first 40 characters to remove the extra spaces and "HEAD" label.
 		upstreamRev=${upstreamRev:0:40}
 		# If we did derive the buildRepository from a local git clone, confirm
@@ -593,8 +593,8 @@ function floxPublish() {
 				while true; do
 					[ "$pushAttempt" -lt 3 ] ||
 						error "could not push to $channelRepository after $pushAttempt attempts" </dev/null
-					githubHelperGit -C "$gitClone" pull --rebase
-					if githubHelperGit -C "$gitClone" push; then
+					$_invoke_git -C "$gitClone" pull --rebase
+					if $_invoke_git -C "$gitClone" push; then
 						# Job done.
 						break
 					else

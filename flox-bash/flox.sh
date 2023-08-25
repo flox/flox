@@ -287,6 +287,10 @@ envs | environments)
 	floxEnvironments "$FLOX_SYSTEM" "${invocation_args[@]}"
 	;;
 
+auth)
+	floxAuth "$@"
+	;;
+
 gh)
 	verboseExec $_gh "$@"
 	;;

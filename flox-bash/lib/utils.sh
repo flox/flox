@@ -140,7 +140,11 @@ function hash_commands() {
 		# Make note of them here for displaying verbose output in invoke().
 		case "$i" in
 		nix | nix-store)
-			exported_variables["$(type -P "$i")"]="NIX_REMOTE NIX_SSL_CERT_FILE NIX_USER_CONF_FILES GIT_CONFIG_SYSTEM" ;;
+			exported_variables["$(type -P "$i")"]="NIX_REMOTE NIX_SSL_CERT_FILE NIX_USER_CONF_FILES GIT_CONFIG_GLOBAL GIT_CONFIG_SYSTEM" ;;
+		git)
+			exported_variables["$(type -P "$i")"]="FLOX_CONFIG_HOME FLOX_STATE_HOME FLOX_DATA_HOME GIT_CONFIG_GLOBAL GIT_CONFIG_SYSTEM" ;;
+		flox-gh)
+			exported_variables["$(type -P "$i")"]="FLOX_CONFIG_HOME FLOX_STATE_HOME FLOX_DATA_HOME" ;;
 		*) :; ;;
 		esac
 	done
@@ -152,10 +156,10 @@ function hash_commands() {
 # TODO replace each use of $_cut and $_tr with shell equivalents.
 hash_commands                                                                  \
 	ansifilter awk 'builtfilter-rs' basename bash cat chmod cmp column cp      \
-	curl cut dasel date dirname getent gh git grep gum id jq ln man mkdir      \
-	mktemp mv nix 'nix-editor' 'nix-store' pwd readlink realpath rm rmdir sed  \
-	sh sleep sort stat tail tar tee touch tr uname uuid xargs zgrep            \
-	semver 'parser-util'
+	curl cut dasel date dirname flox-gh getent gh git grep gum id jq ln man    \
+	mkdir mktemp mv nix 'nix-editor' 'nix-store' 'parser-util' pwd readlink    \
+	realpath rm rmdir sed semver sh sleep sort ssh stat tail tar tee touch tr  \
+	uname uuid xargs zgrep
 
 # Return full path of first command available in PATH.
 #
@@ -456,7 +460,7 @@ function gitConfigSet() {
 	do
 		read -e -p "$prompt" -i "$value" value
 		if boolPrompt "OK to invoke: 'git config --global $varname \"$value\"'" "yes"; then
-			$_git config --global "$varname" "$value"
+			floxmetaGit config --global "$varname" "$value"
 			break
 		else
 			info "OK, will try that again"
@@ -571,11 +575,11 @@ function initFloxUserMetaJSON() {
 	# Create ephemeral clone.
 	local workDir
 	workDir=$(mkTempDir)
-	$_git clone --quiet --shared "$userFloxMetaCloneDir" $workDir
+	floxmetaGit clone --quiet --shared "$userFloxMetaCloneDir" $workDir
 
 	# Start by checking out the floxmain branch, which is guaranteed to
 	# exist because it's found in github:flox/floxmeta-template.
-	$_git -C "$workDir" checkout --quiet "$defaultBranch"
+	floxmetaGit -C "$workDir" checkout --quiet "$defaultBranch"
 
 	# Capture STDIN to the new file.
 	$_cat > "$workDir"/floxUserMeta.json
@@ -584,12 +588,12 @@ function initFloxUserMetaJSON() {
 	registry "$workDir"/floxUserMeta.json 1 get floxClientUUID >/dev/null 2>&1 || \
 		registry "$workDir"/floxUserMeta.json 1 set floxClientUUID $($_uuid)
 
-	# Add and commit.
-	$invoke_git -C "$workDir" add floxUserMeta.json
-	$invoke_git -C "$workDir" commit -m "$message" --quiet
+	# Add floxUserMeta.json and commit.
+	floxmetaGitVerbose -C "$workDir" add floxUserMeta.json
+	floxmetaGitVerbose -C "$workDir" commit -m "$message" --quiet
 
 	# Push changes back to bare repository.
-	$_git -C $workDir push --quiet origin $defaultBranch
+	floxmetaGit -C $workDir push --quiet origin $defaultBranch
 }
 
 #
@@ -610,7 +614,7 @@ function floxUserMetaRegistry() {
 		local floxUserMetaTemplate='{"channels":{}, "version":1}'
 		$_jq -n -r -S "$floxUserMetaTemplate" |
 			initFloxUserMetaJSON "init: floxUserMeta.json"
-		$_git -C "$userFloxMetaCloneDir" show "$defaultBranch:floxUserMeta.json" >$floxUserMeta
+		floxmetaGit -C "$userFloxMetaCloneDir" show "$defaultBranch:floxUserMeta.json" >$floxUserMeta
 	fi
 
 	case "$verb" in
@@ -622,16 +626,16 @@ function floxUserMetaRegistry() {
 		# Create ephemeral clone.
 		local workDir
 		workDir=$(mkTempDir)
-		$_git clone --quiet --shared "$userFloxMetaCloneDir" $workDir
+		floxmetaGit clone --quiet --shared "$userFloxMetaCloneDir" $workDir
 		# Check out the floxmain branch in the ephemeral clone.
-		$_git -C "$workDir" checkout --quiet $defaultBranch
+		floxmetaGit -C "$workDir" checkout --quiet $defaultBranch
 		# Modify the registry file
 		registry "$workDir/floxUserMeta.json" 1 "$verb" $@
-		$_git -C $workDir add "floxUserMeta.json"
-		$_git -C $workDir commit -m "$invocation_string" --quiet
-		$_git -C $workDir push --quiet --set-upstream origin $defaultBranch
+		floxmetaGit -C $workDir add "floxUserMeta.json"
+		floxmetaGit -C $workDir commit -m "$invocation_string" --quiet
+		floxmetaGit -C $workDir push --quiet --set-upstream origin $defaultBranch
 		# Refresh temporary $floxUserMeta (used for this invocation only).
-		$_git -C "$userFloxMetaCloneDir" show "$defaultBranch:floxUserMeta.json" >$floxUserMeta
+		floxmetaGit -C "$userFloxMetaCloneDir" show "$defaultBranch:floxUserMeta.json" >$floxUserMeta
 		;;
 	*)
 		error "floxUserMetaRegistry(): unsupported operation '$verb'" </dev/null
@@ -694,7 +698,7 @@ function environmentRegistry() {
 				local dn
 				dn=$($_dirname $registry)
 				[ ! -e "$dn/.git" ] || \
-					$_git -C $dn add $($_basename $registry)
+					floxmetaGit -C $dn add $($_basename $registry)
 			else
 				error "something went wrong" < /dev/null
 			fi
@@ -1326,7 +1330,7 @@ function selectAttrPath() {
 function checkGitRepoExists() {
 	trace "$@"
 	local origin="${1/\?*/}"
-	githubHelperGit ls-remote "$origin" >/dev/null 2>&1
+	$_invoke_git ls-remote "$origin" >/dev/null 2>&1
 }
 
 function ensureGHRepoExists() {
