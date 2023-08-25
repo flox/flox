@@ -215,9 +215,17 @@ pub struct Develop {
 
     /// Shell or package to develop on
     #[bpaf(external(InstallableArgument::positional), optional, catch)]
-    pub(crate) installable_arg: Option<InstallableArgument<Parsed, DevelopInstallable>>,
+    pub(crate) _installable_arg: Option<InstallableArgument<Parsed, DevelopInstallable>>,
 }
 parseable!(Develop, develop);
+impl WithPassthru<Develop> {
+    pub async fn handle(self, mut config: Config, flox: Flox) -> Result<()> {
+        subcommand_metric!("develop");
+        config.override_stability(self.stability);
+
+        flox_forward(&flox).await
+    }
+}
 
 /// print shell code that can be sourced by bash to reproduce the development environment
 #[derive(Bpaf, Clone, Debug)]
