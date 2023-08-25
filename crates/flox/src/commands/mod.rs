@@ -259,7 +259,7 @@ enum LocalDevelopmentCommands {
     #[bpaf(command)]
     Nix(#[bpaf(external(general::parse_nix_passthru))] general::WrappedNix),
     /// Delete an environment
-    #[bpaf(command)]
+    #[bpaf(command, long("destroy"))]
     Delete(#[bpaf(external(environment::delete))] environment::Delete),
 }
 
