@@ -411,6 +411,14 @@ impl AdditionalCommands {
                 subcommand_metric!("channels");
                 flox_forward(&flox).await?
             },
+            AdditionalCommands::Subscribe(_) if Feature::Channels.is_forwarded()? => {
+                subcommand_metric!("channels");
+                flox_forward(&flox).await?
+            },
+            AdditionalCommands::Unsubscribe(_) if Feature::Channels.is_forwarded()? => {
+                subcommand_metric!("channels");
+                flox_forward(&flox).await?
+            },
 
             AdditionalCommands::Documentation(args) => args.handle(),
             AdditionalCommands::Build(args) => args.handle(config, flox).await?,
