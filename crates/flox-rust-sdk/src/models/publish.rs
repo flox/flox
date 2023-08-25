@@ -70,7 +70,7 @@ pub struct Publish<'flox, State> {
     ///
     /// Should be fully resolved to avoid ambiguity
     attr_path: AttrPath,
-    stability: Stability,
+    stability: Option<Stability>,
     analysis: State,
 }
 
@@ -80,7 +80,7 @@ impl<'flox> Publish<'flox, Empty> {
         flox: &'flox Flox,
         publish_flake_ref: PublishFlakeRef,
         attr_path: AttrPath,
-        stability: Stability,
+        stability: Option<Stability>,
     ) -> Publish<'flox, Empty> {
         Self {
             flox,
@@ -159,24 +159,24 @@ impl<'flox> Publish<'flox, Empty> {
             },
         ]
         .to_vec();
+        if let Some(ref stability) = self.stability {
+            let nixpkgs_flakeref = FlakeRef::Indirect(IndirectRef::new(
+                format!("nixpkgs-{}", stability),
+                Default::default(),
+            ));
 
-        let nixpkgs_flakeref = FlakeRef::Indirect(IndirectRef::new(
-            format!("nixpkgs-{}", self.stability),
-            Default::default(),
-        ));
-
-        // Stabilities are managed by overriding the `flox-floxpkgs/nixpkgs/nixpkgs` input to
-        // `nixpkgs-<stability>`.
-        // The analyzer flake adds an additional indirection,
-        // so we have to do the override manually.
-        // However, since https://github.com/flox/flox/pull/182,
-        // we only set this when a stability is specified
-        // This is the `nixpkgs-<stability>` portion.
-        override_inputs.push(OverrideInput {
-            from: "target/flox-floxpkgs/nixpkgs/nixpkgs".to_string(),
-            to: nixpkgs_flakeref,
-        });
-
+            // Stabilities are managed by overriding the `flox-floxpkgs/nixpkgs/nixpkgs` input to
+            // `nixpkgs-<stability>`.
+            // The analyzer flake adds an additional indirection,
+            // so we have to do the override manually.
+            // However, since https://github.com/flox/flox/pull/182,
+            // we only set this when a stability is specified
+            // This is the `nixpkgs-<stability>` portion.
+            override_inputs.push(OverrideInput {
+                from: "target/flox-floxpkgs/nixpkgs/nixpkgs".to_string(),
+                to: nixpkgs_flakeref,
+            });
+        }
         let eval_analysis_command = Eval {
             flake: FlakeArgs {
                 override_inputs,
@@ -271,7 +271,9 @@ impl<'flox> Publish<'flox, NixAnalysis> {
         let command = Build {
             installables: [self.installable()].into(),
             flake: FlakeArgs {
-                override_inputs: [self.stability.as_override()].into(),
+                override_inputs: Vec::from_iter(
+                    self.stability.as_ref().map(Stability::as_override),
+                ),
                 ..Default::default()
             },
             ..Default::default()
@@ -967,7 +969,7 @@ mod tests {
             flox: &flox,
             publish_flake_ref,
             attr_path: [""].try_into().unwrap(),
-            stability: Stability::Stable,
+            stability: Some(Stability::Stable),
             analysis: NixAnalysis(json!({
                 "element": {
                     "storePaths": [
@@ -1022,7 +1024,7 @@ mod tests {
         let attr_path = ["", "packages", "aarch64-darwin", "flox"]
             .try_into()
             .unwrap();
-        let stability = Stability::Stable;
+        let stability = Some(Stability::Stable);
         let publish = Publish::new(&flox, publish_flake_ref, attr_path, stability);
 
         let value = publish.analyze().await.unwrap().analysis().to_owned();

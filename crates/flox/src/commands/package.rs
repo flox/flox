@@ -289,10 +289,7 @@ impl Publish {
 
         // validate arguments
 
-        let stability = config.override_stability(self.stability).context(indoc! {"
-            Stability is required!
-            Provide using `--stability` or the `stability` config key
-        "})?;
+        let stability = config.override_stability(self.stability);
 
         let sign_key = self
             .signing_key
