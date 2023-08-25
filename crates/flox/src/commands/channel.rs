@@ -12,9 +12,10 @@ use itertools::Itertools;
 use regex::Regex;
 use serde_json::json;
 
-use crate::subcommand_metric;
+use crate::config::features::Feature;
 use crate::utils::dialog::{Dialog, Select, Text};
 use crate::utils::init::{DEFAULT_CHANNELS, HIDDEN_CHANNELS};
+use crate::{flox_bash_feature, subcommand_metric};
 
 #[derive(Bpaf, Clone)]
 pub struct ChannelArgs {}
@@ -57,6 +58,8 @@ pub struct Search {
 impl Search {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("search");
+        flox_bash_feature!(Feature::Channels, &flox);
+
         let channels = flox
             .channels
             .iter()

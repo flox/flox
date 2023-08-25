@@ -19,9 +19,10 @@ use flox_types::constants::{DEFAULT_CHANNEL, LATEST_VERSION};
 use itertools::Itertools;
 use log::{error, info};
 
+use crate::config::features::Feature;
 use crate::utils::dialog::{Confirm, Dialog};
 use crate::utils::resolve_environment_ref;
-use crate::{flox_forward, subcommand_metric};
+use crate::{flox_bash_feature, subcommand_metric};
 
 #[derive(Bpaf, Clone)]
 pub struct EnvironmentArgs {
@@ -30,31 +31,6 @@ pub struct EnvironmentArgs {
 }
 
 pub type EnvironmentRef = String;
-
-// impl EnvironmentCommands {
-//     pub async fn handle(&self, flox: Flox) -> Result<()> {
-
-//         match self {
-//             EnvironmentCommands::List { .. } => subcommand_metric!("list"),
-//             EnvironmentCommands::Envs => subcommand_metric!("envs"),
-//             EnvironmentCommands::Activate { .. } => subcommand_metric!("activate"),
-//             EnvironmentCommands::Init { .. } => subcommand_metric!("init"),
-//             EnvironmentCommands::Destroy { .. } => subcommand_metric!("destroy"),
-//             EnvironmentCommands::Edit { .. } => subcommand_metric!("edit"),
-//             EnvironmentCommands::Export { .. } => subcommand_metric!("export"),
-//             EnvironmentCommands::Generations { .. } => subcommand_metric!("generations"),
-//             EnvironmentCommands::Git { .. } => subcommand_metric!("git"),
-//             EnvironmentCommands::History { .. } => subcommand_metric!("history"),
-//             EnvironmentCommands::Import { .. } => subcommand_metric!("import"),
-//             EnvironmentCommands::Install { .. } => subcommand_metric!("install"),
-//             EnvironmentCommands::Push { .. } => subcommand_metric!("push"),
-//             EnvironmentCommands::Pull { .. } => subcommand_metric!("pull"),
-//             EnvironmentCommands::Uninstall { .. } => subcommand_metric!("remove"),
-//             EnvironmentCommands::Rollback { .. } => subcommand_metric!("rollback"),
-//             EnvironmentCommands::SwitchGeneration { .. } => subcommand_metric!("switch"),
-//             EnvironmentCommands::Upgrade { .. } => subcommand_metric!("upgrade"),
-//             EnvironmentCommands::WipeHistory { .. } => subcommand_metric!("wipe-history"),
-//         }
 
 /// Edit declarative environment configuration
 #[derive(Bpaf, Clone)]
@@ -73,6 +49,7 @@ pub struct Edit {
 impl Edit {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("edit");
+        flox_bash_feature!(Feature::Env, &flox);
 
         let mut environment =
             resolve_environment(&flox, self.environment.as_deref(), "install").await?;
@@ -161,6 +138,7 @@ pub struct Delete {
 impl Delete {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("delete");
+        flox_bash_feature!(Feature::Env, &flox);
 
         let environment =
             resolve_environment(&flox, self.environment.as_deref(), "install").await?;
@@ -196,6 +174,7 @@ pub struct Activate {
 impl Activate {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("activate");
+        flox_bash_feature!(Feature::Env, &flox);
 
         let environment = self.environment.first().map(|e| e.as_ref());
         let environment = resolve_environment(&flox, environment, "install").await?;
@@ -228,6 +207,7 @@ pub struct Init {
 impl Init {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("init");
+        flox_bash_feature!(Feature::Env, &flox);
 
         let current_dir = std::env::current_dir().unwrap();
         let home_dir = dirs::home_dir().unwrap();
@@ -295,6 +275,7 @@ pub enum ListOutput {
 impl List {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("list");
+        flox_bash_feature!(Feature::Env, &flox);
 
         let env = resolve_environment(&flox, self.environment.as_deref(), "install").await?;
 
@@ -331,6 +312,7 @@ pub struct Envs {}
 impl Envs {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("envs");
+        flox_bash_feature!(Feature::Env, &flox);
 
         let env =
             PathEnvironment::<Original>::discover(std::env::current_dir().unwrap(), flox.temp_dir)?;
@@ -360,6 +342,7 @@ pub struct Install {
 impl Install {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("install");
+        flox_bash_feature!(Feature::Env, &flox);
 
         let mut packages: Vec<_> = self
             .packages
@@ -413,6 +396,7 @@ pub struct Uninstall {
 impl Uninstall {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("uninstall");
+        flox_bash_feature!(Feature::Env, &flox);
 
         let mut packages: Vec<_> = self
             .packages
@@ -502,8 +486,8 @@ pub struct Export {
 impl Export {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("export");
-
-        flox_forward(&flox).await
+        flox_bash_feature!(Feature::Env, &flox);
+        todo!()
     }
 }
 
@@ -525,8 +509,8 @@ pub struct Generations {
 impl Generations {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("generations");
-
-        flox_forward(&flox).await
+        flox_bash_feature!(Feature::Env, &flox);
+        todo!()
     }
 }
 /// access to the git CLI for floxmeta repository
@@ -547,8 +531,8 @@ pub struct Git {
 impl Git {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("git");
-
-        flox_forward(&flox).await
+        flox_bash_feature!(Feature::Env, &flox);
+        todo!()
     }
 }
 
@@ -570,8 +554,8 @@ pub struct History {
 impl History {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("history");
-
-        flox_forward(&flox).await
+        flox_bash_feature!(Feature::Env, &flox);
+        todo!()
     }
 }
 
@@ -594,8 +578,8 @@ pub struct Import {
 impl Import {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("import");
-
-        flox_forward(&flox).await
+        flox_bash_feature!(Feature::Env, &flox);
+        todo!()
     }
 }
 
@@ -640,8 +624,8 @@ pub struct Push {
 impl Push {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("push");
-
-        flox_forward(&flox).await
+        flox_bash_feature!(Feature::Env, &flox);
+        todo!()
     }
 }
 
@@ -675,8 +659,8 @@ pub struct Pull {
 impl Pull {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("pull");
-
-        flox_forward(&flox).await
+        flox_bash_feature!(Feature::Env, &flox);
+        todo!()
     }
 }
 
@@ -717,7 +701,9 @@ impl Rollback {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("rollback");
 
-        flox_forward(&flox).await
+        flox_bash_feature!(Feature::Env, &flox);
+
+        todo!()
     }
 }
 
@@ -740,8 +726,8 @@ pub struct SwitchGeneration {
 impl SwitchGeneration {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("switch-generation");
-
-        flox_forward(&flox).await
+        flox_bash_feature!(Feature::Env, &flox);
+        todo!()
     }
 }
 
@@ -763,8 +749,8 @@ pub struct Upgrade {
 impl Upgrade {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("upgrade");
-
-        flox_forward(&flox).await
+        flox_bash_feature!(Feature::Env, &flox);
+        todo!()
     }
 }
 

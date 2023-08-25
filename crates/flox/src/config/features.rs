@@ -55,6 +55,16 @@ impl Feature {
     }
 }
 
+#[macro_export]
+macro_rules! flox_bash_feature {
+    ($arg:expr, $flox:expr) => {
+        let flox = $flox;
+        if $crate::config::features::Feature::is_forwarded(&$arg)? {
+            return $crate::flox_forward(&flox).await;
+        }
+    };
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Copy, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Impl {
