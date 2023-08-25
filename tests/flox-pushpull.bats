@@ -32,8 +32,8 @@ teardown() { common_test_teardown; }
 
 
 # bats test_tags=uri:github
-@test "'flox login --status'" {
-  run "$FLOX_CLI" login --status;
+@test "'flox auth status'" {
+  run "$FLOX_CLI" auth status;
   # N.B. the test token is a fake token for the floxtest user.
   assert_success;
   assert_output --partial "Logged in to github.com as floxtest ($FLOX_CONFIG_HOME/gh/hosts.yml)"
@@ -43,8 +43,8 @@ teardown() { common_test_teardown; }
 
 
 # bats test_tags=uri:github
-@test "'flox login --status --show-token'" {
-  run "$FLOX_CLI" login --status --show-token;
+@test "'flox auth status --show-token'" {
+  run "$FLOX_CLI" auth status --show-token;
   # N.B. the test token is a fake token for the floxtest user.
   assert_success;
   assert_output --partial "Logged in to github.com as floxtest ($FLOX_CONFIG_HOME/gh/hosts.yml)"
