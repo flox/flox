@@ -1,15 +1,13 @@
 use std::env;
-use std::ffi::OsString;
 use std::fmt::{Debug, Display};
 use std::os::unix::process::ExitStatusExt;
 use std::path::Path;
 use std::process::{ExitCode, ExitStatus};
 
 use anyhow::{anyhow, Context, Result};
-use bpaf::Parser;
+use bpaf::{Args, Parser};
 use commands::{BashPassthru, FloxArgs, Prefix};
 use flox_rust_sdk::environment::default_nix_subprocess_env;
-use itertools::Itertools;
 use log::{debug, error, warn};
 use tokio::process::Command;
 use utils::init::init_logger;
@@ -31,17 +29,23 @@ async fn run(args: FloxArgs) -> Result<()> {
 
 #[tokio::main]
 async fn main() -> ExitCode {
+    // initialize logger with "best guess" defaults
+    // updating the logger conf is cheap, so we reinitialize whenever we get more information
     init_logger(None, None);
 
     // redirect to flox early if `--bash-passthru` is present
     if let Some(args) = BashPassthru::check() {
-        return run_in_flox(None, &args)
-            .await
-            .unwrap_or_else(|run_error| {
+        let bash_command = run_in_flox(None, &args).await;
+
+        match bash_command {
+            // If calling the bash command caused an error, print the error and exit with status 1
+            Err(run_error) => {
                 error!("Error: {:?}", run_error);
-                1u8
-            })
-            .into();
+                return ExitCode::from(1);
+            },
+            // If _calling the bash command was successful, exit with its exit code
+            Ok(exit_code) => return ExitCode::from(exit_code),
+        };
     }
 
     // Quit early if `--prefix` is present
@@ -50,42 +54,31 @@ async fn main() -> ExitCode {
         return ExitCode::from(0);
     }
 
+    // Parse verbosity flags to affect help message/parse errors
     let (verbosity, debug) = {
         let verbosity_parser = commands::verbosity();
         let debug_parser = bpaf::long("debug").switch();
-        let other_parser = bpaf::any::<String>("ANY").many();
+        let other_parser = bpaf::any("ANY", Some::<String>).many();
 
         bpaf::construct!(verbosity_parser, debug_parser, other_parser)
             .map(|(v, d, _)| (v, d))
             .to_options()
-            .try_run()
+            .run_inner(Args::current_args())
             .unwrap_or_default()
     };
     init_logger(Some(verbosity), Some(debug));
 
-    let args = commands::flox_args().try_run().map_err(|err| match err {
-        bpaf::ParseFailure::Stdout(_) => err,
-        bpaf::ParseFailure::Stderr(message) => {
-            let mut help_args = env::args_os()
-                .skip(1)
-                .take_while(|arg| arg != "")
-                .collect_vec();
-            help_args.push(OsString::from("--help".to_string()));
-            let failure = commands::flox_args()
-                .run_inner(help_args[..].into())
-                .err()
-                .unwrap();
-            match failure {
-                bpaf::ParseFailure::Stdout(ref e) | bpaf::ParseFailure::Stderr(ref e) => {
-                    bpaf::ParseFailure::Stderr(format!("{message}\n\n{e}"))
-                },
-            }
-        },
-    });
+    // Run the argument parser
+    //
+    // Pass through Completion "failure"; In completion mode this needs to be printed as is
+    // to work with the shell completion frontends
+    //
+    // Pass through Stdout failure; This represents `--help`
+    let args = commands::flox_args().run_inner(Args::current_args());
 
     if let Some(parse_err) = args.as_ref().err() {
         match parse_err {
-            bpaf::ParseFailure::Stdout(m) => {
+            bpaf::ParseFailure::Stdout(m, _) => {
                 print!("{m}");
                 return ExitCode::from(0);
             },
@@ -93,10 +86,17 @@ async fn main() -> ExitCode {
                 error!("{m}");
                 return ExitCode::from(1);
             },
+            bpaf::ParseFailure::Completion(c) => {
+                print!("{c}");
+                return ExitCode::from(0);
+            },
         }
     }
+
+    // Errors handled above
     let args = args.unwrap();
 
+    // Run flox. Print errors and exit with status 1 on failure
     match run(args).await {
         Ok(()) => ExitCode::from(0),
         Err(e) => {

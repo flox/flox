@@ -3,24 +3,22 @@ mod environment;
 mod general;
 mod package;
 
-use std::str::FromStr;
 use std::{env, fs};
 
 use anyhow::{Context, Result};
-use bpaf::{Bpaf, Parser};
+use bpaf::{Args, Bpaf, Parser};
 use flox_rust_sdk::flox::{Flox, DEFAULT_OWNER, FLOX_VERSION};
 use flox_rust_sdk::models::floxmeta::{Floxmeta, GetFloxmetaError};
 use flox_rust_sdk::nix::command_line::NixCommandLine;
-use flox_rust_sdk::prelude::Channel;
 use flox_rust_sdk::providers::git::GitCommandProvider;
+use indoc::{formatdoc, indoc};
 use log::{debug, info};
+use once_cell::sync::Lazy;
 use tempfile::TempDir;
 use toml_edit::Key;
 
-use self::channel::ChannelCommands;
-use self::environment::EnvironmentCommands;
-use self::general::GeneralCommands;
-use self::package::interface;
+use self::package::{Parseable, Run, WithPassthru};
+use crate::config::features::Feature;
 use crate::config::{Config, FLOX_CONFIG_FILE};
 use crate::utils::init::{
     init_access_tokens,
@@ -31,6 +29,25 @@ use crate::utils::init::{
     telemetry_opt_out_needs_migration,
 };
 use crate::utils::metrics::METRICS_UUID_FILE_NAME;
+use crate::{flox_forward, subcommand_metric};
+
+static FLOX_WELCOME_MESSAGE: Lazy<String> = Lazy::new(|| {
+    formatdoc! {r#"
+    flox version {FLOX_VERSION}
+
+    Usage: flox OPTIONS (init|activate|search|install|...) [--help]
+
+    Use "flox --help" for full list of commands and more information
+
+    First time? Create an environment with "flox init"
+"#}
+});
+
+static ADDITIONAL_COMMANDS: &str = indoc! {"
+    build, upgrade, import, export, config, wipe-history, subscribe, unsubscribe,
+
+    channels, history, print-dev-env, shell
+"};
 
 fn vec_len<T>(x: Vec<T>) -> usize {
     Vec::len(&x)
@@ -46,7 +63,7 @@ pub enum Verbosity {
         /// Verbose mode.
         ///
         /// Invoke multiple times for increasing detail.
-        #[bpaf(short('v'), long("verbose"), switch, many, map(vec_len))]
+        #[bpaf(short('v'), long("verbose"), req_flag(()), many, map(vec_len))]
         usize,
     ),
 
@@ -70,16 +87,22 @@ pub struct FloxArgs {
     pub verbosity: Verbosity,
 
     /// Debug mode.
-    #[bpaf(long, switch, many, map(vec_not_empty))]
+    #[bpaf(long, req_flag(()), many, map(vec_not_empty))]
     pub debug: bool,
 
-    #[bpaf(external(commands))]
-    command: Commands,
+    #[bpaf(external(commands), optional)]
+    command: Option<Commands>,
 }
 
 impl FloxArgs {
     /// Initialize the command line by creating an initial FloxBuilder
     pub async fn handle(self, mut config: crate::config::Config) -> Result<()> {
+        // Given no command, skip initialization and print welcome message
+        if self.command.is_none() {
+            println!("{}", &*FLOX_WELCOME_MESSAGE);
+            return Ok(());
+        }
+
         // ensure xdg dirs exist
         tokio::fs::create_dir_all(&config.flox.config_dir).await?;
         tokio::fs::create_dir_all(&config.flox.data_dir).await?;
@@ -185,73 +208,323 @@ impl FloxArgs {
             }
         });
 
-        match self.command {
-            Commands::Package { options, command } => {
-                // Resolve stability from flag or config (which reads environment variables).
-                // If the stability is set by a flag, modify STABILITY env variable to match
-                // the set stability.
-                // Flox invocations in a child process will inherit hence inherit the stability.
-
-                // mutability, meh
-                config.flox.stability = {
-                    if let Some(ref stability) = options.stability {
-                        env::set_var("FLOX_STABILITY", stability.to_string());
-                        stability.clone()
-                    } else {
-                        config.flox.stability
-                    }
-                };
-
-                let mut flox = flox;
-                // more mutable state hurray :/
-                if config.flox.stability != Default::default() {
-                    flox.channels.register_channel(
-                        "nixpkgs",
-                        Channel::from_str(&format!(
-                            "github:flox/nixpkgs/{}",
-                            config.flox.stability
-                        ))?,
-                    );
-                }
-                command.handle(config, flox).await?
-            },
-            Commands::Environment(ref environment) => environment.handle(flox).await?,
-            Commands::Channel(ref channel) => channel.handle(flox).await?,
-            Commands::General(ref general) => general.handle(config, flox).await?,
+        // command handled above
+        match self.command.unwrap() {
+            Commands::Development(group) => group.handle(config, flox).await?,
+            Commands::Sharing(group) => group.handle(config, flox).await?,
+            Commands::Additional(group) => group.handle(config, flox).await?,
+            Commands::Internal(group) => group.handle(config, flox).await?,
         }
-
         Ok(())
     }
 }
 
-/// Transparent separation of different categories of commands
 #[allow(clippy::large_enum_variant)] // there's only a single instance of this enum
 #[derive(Bpaf, Clone)]
-pub enum Commands {
-    Package {
-        #[bpaf(external(package::package_args), group_help("Development Options"))]
-        options: package::PackageArgs,
+enum Commands {
+    Development(#[bpaf(external(local_development_commands))] LocalDevelopmentCommands),
+    Sharing(#[bpaf(external(sharing_commands))] SharingCommands),
+    Additional(#[bpaf(external(additional_commands))] AdditionalCommands),
+    Internal(#[bpaf(external(internal_commands))] InternalCommands),
+}
 
-        #[bpaf(external(package::interface::package_commands))]
-        #[bpaf(group_help("Development Commands"))]
-        command: interface::PackageCommands,
-    },
+/// Local Development Commands
+#[derive(Bpaf, Clone)]
+enum LocalDevelopmentCommands {
+    /// Create an environment in the current directory
+    #[bpaf(command, long("create"))]
+    Init(#[bpaf(external(environment::init))] environment::Init),
+    /// Activate environment
+    #[bpaf(command, long("develop"))]
+    Activate(#[bpaf(external(environment::activate))] environment::Activate),
+    /// Search packages in subscribed channels
+    #[bpaf(command)]
+    Search(#[bpaf(external(channel::search))] channel::Search),
+    /// Install a package into an environment
+    #[bpaf(command)]
+    Install(#[bpaf(external(environment::install))] environment::Install),
+    /// Uninstall installed packages from an environment
+    #[bpaf(command, long("remove"), long("rm"))]
+    Uninstall(#[bpaf(external(environment::uninstall))] environment::Uninstall),
+    /// Edit declarative environment configuration
+    #[bpaf(command)]
+    Edit(#[bpaf(external(environment::edit))] environment::Edit),
+    /// Run app from current project
+    #[bpaf(command)]
+    Run(#[bpaf(external(WithPassthru::parse))] WithPassthru<Run>),
+    /// List (status?) packages installed in an environment
+    #[bpaf(command)]
+    List(#[bpaf(external(environment::list))] environment::List),
+    /// Access to the nix CLI
+    #[bpaf(command)]
+    Nix(#[bpaf(external(general::parse_nix_passthru))] general::WrappedNix),
+    /// Delete an environment
+    #[bpaf(command, long("destroy"))]
+    Delete(#[bpaf(external(environment::delete))] environment::Delete),
+}
 
-    Environment(
-        #[bpaf(external(environment::environment_commands))]
-        #[bpaf(group_help("Environment Commands"))]
-        EnvironmentCommands,
+impl LocalDevelopmentCommands {
+    async fn handle(self, config: Config, flox: Flox) -> Result<()> {
+        match self {
+            LocalDevelopmentCommands::Init(_) if Feature::Env.is_forwarded()? => {
+                subcommand_metric!("init");
+                flox_forward(&flox).await?;
+            },
+            LocalDevelopmentCommands::Activate(_) if Feature::Env.is_forwarded()? => {
+                subcommand_metric!("activate");
+                flox_forward(&flox).await?;
+            },
+            LocalDevelopmentCommands::Edit(_) if Feature::Env.is_forwarded()? => {
+                subcommand_metric!("edit");
+                flox_forward(&flox).await?;
+            },
+            LocalDevelopmentCommands::Install(_) if Feature::Env.is_forwarded()? => {
+                subcommand_metric!("install");
+                flox_forward(&flox).await?;
+            },
+            LocalDevelopmentCommands::Uninstall(_) if Feature::Env.is_forwarded()? => {
+                subcommand_metric!("uninstall");
+                flox_forward(&flox).await?;
+            },
+            LocalDevelopmentCommands::List(_) if Feature::Env.is_forwarded()? => {
+                subcommand_metric!("list");
+                flox_forward(&flox).await?;
+            },
+            LocalDevelopmentCommands::Delete(_) if Feature::Env.is_forwarded()? => {
+                subcommand_metric!("delete");
+                flox_forward(&flox).await?;
+            },
+            LocalDevelopmentCommands::Search(_) if Feature::Channels.is_forwarded()? => {
+                subcommand_metric!("search");
+
+                flox_forward(&flox).await?
+            },
+
+            LocalDevelopmentCommands::Init(args) => args.handle(flox).await?,
+            LocalDevelopmentCommands::Activate(args) => args.handle(flox).await?,
+            LocalDevelopmentCommands::Edit(args) => args.handle(flox).await?,
+            LocalDevelopmentCommands::Install(args) => args.handle(flox).await?,
+            LocalDevelopmentCommands::Uninstall(args) => args.handle(flox).await?,
+            LocalDevelopmentCommands::List(args) => args.handle(flox).await?,
+            LocalDevelopmentCommands::Nix(args) => args.handle(config, flox).await?,
+            LocalDevelopmentCommands::Search(args) => args.handle(flox).await?,
+            LocalDevelopmentCommands::Run(args) => args.handle(config, flox).await?,
+            LocalDevelopmentCommands::Delete(args) => args.handle(flox).await?,
+        }
+        Ok(())
+    }
+}
+
+/// Sharing Commands
+#[derive(Bpaf, Clone)]
+enum SharingCommands {
+    /// Send environment to flox hub
+    #[bpaf(command)]
+    Push(#[bpaf(external(environment::push))] environment::Push),
+    #[bpaf(command)]
+    /// Pull environment from flox hub
+    Pull(#[bpaf(external(environment::pull))] environment::Pull),
+    /// Containerize an environment
+    #[bpaf(command)]
+    Containerize(#[bpaf(external(WithPassthru::parse))] WithPassthru<package::Containerize>),
+}
+impl SharingCommands {
+    async fn handle(self, config: Config, flox: Flox) -> Result<()> {
+        match self {
+            SharingCommands::Push(_) if Feature::Env.is_forwarded()? => {
+                subcommand_metric!("push");
+                flox_forward(&flox).await?;
+            },
+            SharingCommands::Pull(_) if Feature::Env.is_forwarded()? => {
+                subcommand_metric!("pull");
+                flox_forward(&flox).await?;
+            },
+            SharingCommands::Push(args) => args.handle(flox).await?,
+            SharingCommands::Pull(args) => args.handle(flox).await?,
+            SharingCommands::Containerize(args) => args.handle(config, flox).await?,
+        }
+        Ok(())
+    }
+}
+
+/// Additional Commands. Use "flox COMMAND --help" for more info
+#[derive(Bpaf, Clone)]
+enum AdditionalCommands {
+    Documentation(
+        #[bpaf(external(AdditionalCommands::documentation))] AdditionalCommandsDocumentation,
     ),
-    Channel(
-        #[bpaf(external(channel::channel_commands))]
-        #[bpaf(group_help("Channel Commands"))]
-        ChannelCommands,
+    #[bpaf(command, hide)]
+    Build(#[bpaf(external(WithPassthru::parse))] WithPassthru<package::Build>),
+    #[bpaf(command, hide)]
+    Upgrade(#[bpaf(external(environment::upgrade))] environment::Upgrade),
+    #[bpaf(command, hide)]
+    Import(#[bpaf(external(environment::import))] environment::Import),
+    #[bpaf(command, hide)]
+    Export(#[bpaf(external(environment::export))] environment::Export),
+    #[bpaf(command, hide)]
+    Config(#[bpaf(external(general::config_args))] general::ConfigArgs),
+    #[bpaf(command("wipe-history"), hide)]
+    WipeHistory(#[bpaf(external(environment::wipe_history))] environment::WipeHistory),
+    #[bpaf(command, hide)]
+    Subscribe(#[bpaf(external(channel::subscribe))] channel::Subscribe),
+    #[bpaf(command, hide)]
+    Unsubscribe(#[bpaf(external(channel::unsubscribe))] channel::Unsubscribe),
+    #[bpaf(command, hide)]
+    Channels(#[bpaf(external(channel::channels))] channel::Channels),
+    #[bpaf(command, hide)]
+    History(#[bpaf(external(environment::history))] environment::History),
+    #[bpaf(command, hide)]
+    PrintDevEnv(#[bpaf(external(WithPassthru::parse))] WithPassthru<package::PrintDevEnv>),
+    #[bpaf(command, hide)]
+    Shell(#[bpaf(external(WithPassthru::parse))] WithPassthru<package::Shell>),
+}
+
+impl AdditionalCommands {
+    fn documentation() -> impl Parser<AdditionalCommandsDocumentation> {
+        bpaf::literal(ADDITIONAL_COMMANDS)
+            .hide_usage()
+            .map(|_| AdditionalCommandsDocumentation)
+    }
+
+    async fn handle(self, config: Config, flox: Flox) -> Result<()> {
+        match self {
+            // Environment commands feature gate
+            AdditionalCommands::Upgrade(_) if Feature::Env.is_forwarded()? => {
+                subcommand_metric!("upgrade");
+                flox_forward(&flox).await?;
+            },
+            AdditionalCommands::Import(_) if Feature::Env.is_forwarded()? => {
+                subcommand_metric!("import");
+                flox_forward(&flox).await?;
+            },
+            AdditionalCommands::Export(_) if Feature::Env.is_forwarded()? => {
+                subcommand_metric!("export");
+                flox_forward(&flox).await?;
+            },
+            AdditionalCommands::History(_) if Feature::Env.is_forwarded()? => {
+                subcommand_metric!("history");
+                flox_forward(&flox).await?;
+            },
+
+            // Channel Commands feature gate
+            AdditionalCommands::Channels(_) if Feature::Channels.is_forwarded()? => {
+                subcommand_metric!("channels");
+                flox_forward(&flox).await?
+            },
+            AdditionalCommands::Subscribe(_) if Feature::Channels.is_forwarded()? => {
+                subcommand_metric!("channels");
+                flox_forward(&flox).await?
+            },
+            AdditionalCommands::Unsubscribe(_) if Feature::Channels.is_forwarded()? => {
+                subcommand_metric!("channels");
+                flox_forward(&flox).await?
+            },
+
+            AdditionalCommands::Documentation(args) => args.handle(),
+            AdditionalCommands::Build(args) => args.handle(config, flox).await?,
+            AdditionalCommands::Upgrade(args) => args.handle(flox).await?,
+            AdditionalCommands::Import(args) => args.handle(flox).await?,
+            AdditionalCommands::Export(args) => args.handle(flox).await?,
+            AdditionalCommands::Config(args) => args.handle(config, flox).await?,
+            AdditionalCommands::WipeHistory(args) => args.handle(flox).await?,
+            AdditionalCommands::Subscribe(args) => args.handle(flox).await?,
+            AdditionalCommands::Unsubscribe(args) => args.handle(flox).await?,
+            AdditionalCommands::Channels(args) => args.handle(flox)?,
+            AdditionalCommands::History(args) => args.handle(flox).await?,
+            AdditionalCommands::PrintDevEnv(args) => args.handle(config, flox).await?,
+            AdditionalCommands::Shell(args) => args.handle(config, flox).await?,
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone)]
+struct AdditionalCommandsDocumentation;
+impl AdditionalCommandsDocumentation {
+    fn handle(self) {
+        println!("🥚");
+    }
+}
+
+/// Additional Commands. Use "flox COMMAND --help" for more info
+#[derive(Bpaf, Clone)]
+#[bpaf(hide)]
+enum InternalCommands {
+    #[bpaf(command("reset-metrics"))]
+    ResetMetrics(#[bpaf(external(general::reset_metrics))] general::ResetMetrics),
+    #[bpaf(command)]
+    Generations(#[bpaf(external(environment::generations))] environment::Generations),
+    #[bpaf(command("switch-generation"))]
+    SwitchGeneration(
+        #[bpaf(external(environment::switch_generation))] environment::SwitchGeneration,
     ),
-    General(
-        #[bpaf(external(general::general_commands))]
-        #[bpaf(group_help("General Commands"))]
-        GeneralCommands,
-    ),
+    #[bpaf(command)]
+    Rollback(#[bpaf(external(environment::rollback))] environment::Rollback),
+    /// List all available environments
+    ///
+    /// Aliases:
+    ///   environments, envs
+    #[bpaf(command, long("environments"))]
+    Envs(#[bpaf(external(environment::envs))] environment::Envs),
+    #[bpaf(command)]
+    Git(#[bpaf(external(environment::git))] environment::Git),
+    #[bpaf(command("init-package"))]
+    InitPackage(#[bpaf(external(WithPassthru::parse))] WithPassthru<package::InitPackage>),
+    #[bpaf(command)]
+    Publish(#[bpaf(external(package::publish))] package::Publish),
+    #[bpaf(command)]
+    Bundle(#[bpaf(external(WithPassthru::parse))] WithPassthru<package::Bundle>),
+    #[bpaf(command)]
+    Flake(#[bpaf(external(WithPassthru::parse))] WithPassthru<package::Flake>),
+    #[bpaf(command)]
+    Eval(#[bpaf(external(WithPassthru::parse))] WithPassthru<package::Eval>),
+    #[bpaf(command)]
+    Develop(#[bpaf(external(WithPassthru::parse))] WithPassthru<package::Develop>),
+    #[bpaf(command)]
+    Gh(#[bpaf(external(general::gh))] general::Gh),
+}
+
+impl InternalCommands {
+    async fn handle(self, config: Config, flox: Flox) -> Result<()> {
+        match self {
+            // Environment Commands feature gate
+            InternalCommands::Generations(_) if Feature::Env.is_forwarded()? => {
+                subcommand_metric!("generations");
+                flox_forward(&flox).await?;
+            },
+            InternalCommands::SwitchGeneration(_) if Feature::Env.is_forwarded()? => {
+                subcommand_metric!("switch-generation");
+                flox_forward(&flox).await?;
+            },
+            InternalCommands::Rollback(_) if Feature::Env.is_forwarded()? => {
+                subcommand_metric!("rollback");
+                flox_forward(&flox).await?;
+            },
+            InternalCommands::Envs(_) if Feature::Env.is_forwarded()? => {
+                subcommand_metric!("envs");
+                flox_forward(&flox).await?;
+            },
+            InternalCommands::Git(_) if Feature::Env.is_forwarded()? => {
+                subcommand_metric!("git");
+                flox_forward(&flox).await?;
+            },
+
+            InternalCommands::ResetMetrics(args) => args.handle(config, flox).await?,
+            InternalCommands::Generations(args) => args.handle(flox).await?,
+            InternalCommands::SwitchGeneration(args) => args.handle(flox).await?,
+            InternalCommands::Rollback(args) => args.handle(flox).await?,
+            InternalCommands::Envs(args) => args.handle(flox).await?,
+            InternalCommands::Git(args) => args.handle(flox).await?,
+            InternalCommands::InitPackage(args) => args.handle(flox).await?,
+            InternalCommands::Publish(args) => args.handle(config, flox).await?,
+            InternalCommands::Bundle(args) => args.handle(config, flox).await?,
+            InternalCommands::Flake(args) => args.handle(config, flox).await?,
+            InternalCommands::Eval(args) => args.handle(config, flox).await?,
+            InternalCommands::Develop(args) => args.handle(config, flox).await?,
+            InternalCommands::Gh(args) => args.handle(config, flox).await?,
+        }
+        Ok(())
+    }
 }
 
 /// Special command to check for the presence of the `--prefix` flag.
@@ -262,14 +535,18 @@ pub enum Commands {
 pub struct Prefix {
     #[bpaf(long)]
     prefix: bool,
-    #[bpaf(any, many)]
+    #[bpaf(any("REST", Some), many)]
     _catchall: Vec<String>,
 }
 
 impl Prefix {
     /// Parses to [Self] and extract the `--prefix` flag
     pub fn check() -> bool {
-        prefix().to_options().try_run().unwrap_or_default().prefix
+        prefix()
+            .to_options()
+            .run_inner(Args::current_args())
+            .unwrap_or_default()
+            .prefix
     }
 }
 
@@ -282,7 +559,7 @@ pub struct BashPassthru {
     #[bpaf(long("bash-passthru"))]
     do_passthru: bool,
 
-    #[bpaf(any, many)]
+    #[bpaf(any("REST", Some), many)]
     flox_args: Vec<String>,
 }
 
@@ -290,12 +567,23 @@ impl BashPassthru {
     /// Parses to [Self] and extract the `--bash-passthru` flag
     /// returning a list of the remaining arguments if given.
     pub fn check() -> Option<Vec<String>> {
-        let passtrhu = bash_passthru().to_options().try_run().unwrap_or_default();
+        let passtrhu = bash_passthru()
+            .to_options()
+            .run_inner(Args::current_args())
+            .unwrap_or_default();
 
         if passtrhu.do_passthru {
             return Some(passtrhu.flox_args);
         }
 
         None
+    }
+}
+
+pub fn not_help(s: String) -> Option<String> {
+    if s == "--help" || s == "-h" {
+        None
+    } else {
+        Some(s)
     }
 }

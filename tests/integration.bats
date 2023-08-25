@@ -478,7 +478,7 @@ setup_file() {
 @test "flox environments takes no arguments" {
   run $FLOX_CLI environments -e $TEST_ENVIRONMENT
   assert_failure
-  assert_output --partial "-e is not expected in this context"
+  assert_output --partial '`-e` is not expected in this context'
 }
 
 @test "flox environments should at least contain $TEST_ENVIRONMENT" {

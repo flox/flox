@@ -1,5 +1,4 @@
 use std::path::Path;
-use std::str::FromStr;
 use std::{env, io};
 
 use anyhow::{Context, Result};
@@ -16,7 +15,7 @@ use serde::Serialize;
 use tokio::fs;
 use toml_edit::Key;
 
-use crate::config::features::Feature;
+use crate::commands::not_help;
 use crate::config::{Config, ReadWriteError, FLOX_CONFIG_FILE};
 use crate::utils::metrics::{
     METRICS_EVENTS_FILE_NAME,
@@ -25,74 +24,32 @@ use crate::utils::metrics::{
 };
 use crate::{flox_forward, subcommand_metric};
 
+/// reset the metrics queue (if any), reset metrics ID, and re-prompt for consent
 #[derive(Bpaf, Clone)]
-pub struct GeneralArgs {}
+pub struct ResetMetrics {}
+impl ResetMetrics {
+    pub async fn handle(self, _config: Config, flox: Flox) -> Result<()> {
+        subcommand_metric!("reset-metrics");
+        let mut metrics_lock = LockFile::open(&flox.cache_dir.join(METRICS_LOCK_FILE_NAME))?;
+        tokio::task::spawn_blocking(move || metrics_lock.lock()).await??;
 
-impl GeneralCommands {
-    pub async fn handle(&self, mut config: Config, mut flox: Flox) -> Result<()> {
-        match self {
-            GeneralCommands::Gh(_) => subcommand_metric!("gh"),
-            GeneralCommands::Config(_) => subcommand_metric!("config"),
-            GeneralCommands::ResetMetrics => subcommand_metric!("reset-metrics"),
-            GeneralCommands::Nix(_) => subcommand_metric!("nix"),
+        if let Err(err) =
+            tokio::fs::remove_file(flox.cache_dir.join(METRICS_EVENTS_FILE_NAME)).await
+        {
+            match err.kind() {
+                std::io::ErrorKind::NotFound => {},
+                _ => Err(err)?,
+            }
         }
 
-        match self {
-            GeneralCommands::Nix(_) if Feature::Nix.is_forwarded()? => flox_forward(&flox).await?,
+        if let Err(err) = tokio::fs::remove_file(flox.data_dir.join(METRICS_UUID_FILE_NAME)).await {
+            match err.kind() {
+                std::io::ErrorKind::NotFound => {},
+                _ => Err(err)?,
+            }
+        }
 
-            // To be moved to packages - figure out completions again
-            GeneralCommands::Nix(wrapped) => {
-                // mutable state hurray :/
-                config.flox.stability = {
-                    if let Some(ref stability) = wrapped.stability {
-                        env::set_var("FLOX_STABILITY", stability.to_string());
-                        stability.clone()
-                    } else {
-                        config.flox.stability
-                    }
-                };
-
-                if config.flox.stability != Default::default() {
-                    flox.channels.register_channel(
-                        "nixpkgs",
-                        Channel::from_str(&format!(
-                            "github:flox/nixpkgs/{}",
-                            config.flox.stability
-                        ))?,
-                    );
-                }
-
-                let nix: NixCommandLine = flox.nix(Default::default());
-
-                RawCommand::new(wrapped.nix.to_owned())
-                    .run(&nix, &Default::default())
-                    .await?;
-            },
-
-            GeneralCommands::ResetMetrics => {
-                let mut metrics_lock =
-                    LockFile::open(&flox.cache_dir.join(METRICS_LOCK_FILE_NAME))?;
-                tokio::task::spawn_blocking(move || metrics_lock.lock()).await??;
-
-                if let Err(err) =
-                    tokio::fs::remove_file(flox.cache_dir.join(METRICS_EVENTS_FILE_NAME)).await
-                {
-                    match err.kind() {
-                        std::io::ErrorKind::NotFound => {},
-                        _ => Err(err)?,
-                    }
-                }
-
-                if let Err(err) =
-                    tokio::fs::remove_file(flox.data_dir.join(METRICS_UUID_FILE_NAME)).await
-                {
-                    match err.kind() {
-                        std::io::ErrorKind::NotFound => {},
-                        _ => Err(err)?,
-                    }
-                }
-
-                let notice = indoc! {"
+        let notice = indoc! {"
                     Sucessfully reset telemetry ID for this machine!
 
                     A new ID will be assigned next time you use flox.
@@ -104,54 +61,35 @@ impl GeneralCommands {
                       system-wide: update /etc/flox.toml as described in flox(1)
                 "};
 
-                info!("{notice}");
-            },
-
-            GeneralCommands::Config(config_args) => config_args.handle(config, flox).await?,
-
-            _ if Feature::All.is_forwarded()? => flox_forward(&flox).await?,
-            _ => todo!(),
-        }
+        info!("{notice}");
         Ok(())
     }
 }
 
-/// General Commands
 #[derive(Bpaf, Clone)]
-pub enum GeneralCommands {
-    /// access to the gh CLI
-    #[bpaf(command, hide)]
-    Gh(#[bpaf(any("gh Arguments"))] Vec<String>),
-
-    /// configure user parameters
-    #[bpaf(command)]
-    Config(#[bpaf(external(config_args))] ConfigArgs),
-
-    /// reset the metrics queue (if any), reset metrics ID, and re-prompt for consent
-    #[bpaf(command("reset-metrics"))]
-    ResetMetrics,
-
-    /// access to the nix CLI
-    Nix(#[bpaf(external(parse_nix_passthru))] WrappedNix),
-}
-
-#[derive(Bpaf, Clone)]
+#[bpaf(fallback(ConfigArgs::List))]
 pub enum ConfigArgs {
-    /// list the current values of all configurable paramers
-    #[bpaf(short, long, default)]
+    /// List the current values of all configurable paramers
+    #[bpaf(short, long)]
     List,
-    /// reset all configurable parameters to their default values without further confirmation.
+    /// Reset all configurable parameters to their default values without further confirmation.
     #[bpaf(short, long)]
     Reset,
+    /// Set a config value
     Set(#[bpaf(external(config_set))] ConfigSet),
+    /// Set a numeric config value
     SetNumber(#[bpaf(external(config_set_number))] ConfigSetNumber),
+    /// Set a boolean config value
     SetBool(#[bpaf(external(config_set_bool))] ConfigSetBool),
+    /// Delete a config value
     Delete(#[bpaf(external(config_delete))] ConfigDelete),
 }
 
 impl ConfigArgs {
     /// handle config flags like commands
-    async fn handle(&self, config: Config, flox: Flox) -> Result<()> {
+    pub async fn handle(&self, config: Config, flox: Flox) -> Result<()> {
+        subcommand_metric!("config");
+
         /// wrapper around [Config::write_to]
         async fn update_config<V: Serialize>(
             config_dir: &Path,
@@ -185,30 +123,10 @@ impl ConfigArgs {
                 update_config(&flox.config_dir, &flox.temp_dir, key, Some(value)).await?
             },
             ConfigArgs::SetNumber(ConfigSetNumber { key, value, .. }) => {
-                update_config(
-                    &flox.config_dir,
-                    &flox.temp_dir,
-                    key,
-                    Some(
-                        value
-                            .parse::<i32>()
-                            .context(format!("could not parse '{value}' as number"))?,
-                    ),
-                )
-                .await?
+                update_config(&flox.config_dir, &flox.temp_dir, key, Some(value)).await?
             },
             ConfigArgs::SetBool(ConfigSetBool { key, value, .. }) => {
-                update_config(
-                    &flox.config_dir,
-                    &flox.temp_dir,
-                    key,
-                    Some(
-                        value
-                            .parse::<bool>()
-                            .context(format!("could not parse '{value}' as bool"))?,
-                    ),
-                )
-                .await?
+                update_config(&flox.config_dir, &flox.temp_dir, key, Some(value)).await?
             },
             ConfigArgs::Delete(ConfigDelete { key, .. }) => {
                 update_config::<()>(&flox.config_dir, &flox.temp_dir, key, None).await?
@@ -218,7 +136,6 @@ impl ConfigArgs {
     }
 }
 
-/// Arguments for `flox config --set`
 #[derive(Debug, Clone, Bpaf)]
 #[bpaf(adjacent)]
 #[allow(unused)]
@@ -233,7 +150,6 @@ pub struct ConfigSet {
     value: String,
 }
 
-/// Arguments for `flox config --setNumber`
 #[derive(Debug, Clone, Bpaf)]
 #[bpaf(adjacent)]
 #[allow(unused)]
@@ -245,14 +161,10 @@ pub struct ConfigSetNumber {
     #[bpaf(positional("key"))]
     key: String,
     /// Configuration Value (i32)
-    // we have to parse to int ourselves after reading the argument,
-    // as the bpaf error for parse failures here is not descriptive enough
-    // (<https://github.com/pacak/bpaf/issues/172>)
     #[bpaf(positional("number"))]
-    value: String,
+    value: i32,
 }
 
-/// Arguments for `flox config --setNumber`
 #[derive(Debug, Clone, Bpaf)]
 #[bpaf(adjacent)]
 #[allow(unused)]
@@ -265,59 +177,91 @@ pub struct ConfigSetBool {
     key: String,
     /// Configuration Value (bool)
     #[bpaf(positional("bool"))]
-    // #[bpaf(external(parse_bool))]
-    // we have to parse to int ourselves after reading the argument,
-    // as the bpaf error for parse failures here is not descriptive enough
-    // (<https://github.com/pacak/bpaf/issues/172>)
-    value: String,
+    value: bool,
 }
 
-/// bug in bpaf (<https://github.com/pacak/bpaf/issues/171>)
-// fn parse_bool() -> impl Parser<String> {
-//     bpaf::positional::<String>("bool")
-// }
-
-/// Arguments for `flox config --delete`
 #[derive(Debug, Clone, Bpaf)]
-#[bpaf(adjacent)]
 #[allow(unused)]
-/// delete <key> from config
 pub struct ConfigDelete {
     /// Configuration key
     #[bpaf(long("delete"), argument("key"))]
     key: String,
 }
 
+/// Access to the nix CLI
 #[derive(Clone, Debug)]
 pub struct WrappedNix {
     stability: Option<Stability>,
-    nix: Vec<String>,
+    nix_args: Vec<String>,
 }
-fn parse_nix_passthru() -> impl Parser<WrappedNix> {
-    fn nix_sub_command<const OFFSET: u8>() -> impl Parser<Vec<String>> {
-        bpaf::command(
-            "nix",
-            bpaf::any("NIX ARGUMENTS")
-                .guard(|item| item != "--stability", "Stability not expected")
-                .complete_shell(complete_nix_shell(OFFSET))
-                .many()
-                .to_options(),
-        )
-        .help("access to the nix CLI")
+
+impl WrappedNix {
+    pub async fn handle(self, mut config: Config, mut flox: Flox) -> Result<()> {
+        subcommand_metric!("nix");
+        // mutable state hurray :/
+        let stability = config.override_stability(self.stability);
+
+        if let Some(stability) = stability {
+            flox.channels
+                .register_channel("nixpkgs", Channel::from(stability.as_flakeref()));
+        }
+
+        let nix: NixCommandLine = flox.nix(Default::default());
+
+        RawCommand::new(self.nix_args.to_owned())
+            .run(&nix, &Default::default())
+            .await?;
+        Ok(())
     }
+}
+
+/// Access to the nix CLI
+#[derive(Clone, Debug, Bpaf)]
+pub struct Gh {
+    #[bpaf(any("gh arguments and options", not_help))]
+    _gh_args: Vec<String>,
+}
+impl Gh {
+    pub async fn handle(self, _config: Config, flox: Flox) -> Result<()> {
+        subcommand_metric!("gh");
+        flox_forward(&flox).await
+    }
+}
+
+pub fn parse_nix_passthru() -> impl Parser<WrappedNix> {
+    fn nix_sub_command<const OFFSET: u8>() -> impl Parser<Vec<String>> {
+        let free = bpaf::any("NIX ARGUMENTS", not_help)
+            .complete_shell(complete_nix_shell(OFFSET))
+            .many();
+
+        let strict = bpaf::positional("NIX ARGUMENTS AND OPTIONS")
+            .strict()
+            .many();
+
+        bpaf::construct!(free, strict).map(|(free, strict)| [free, strict].concat())
+    }
+
     let with_stability = {
         let stability = bpaf::long("stability").argument("STABILITY").map(Some);
-        let nix = nix_sub_command::<2>();
-        bpaf::construct!(WrappedNix { stability, nix }).adjacent()
+        let nix_args = nix_sub_command::<2>();
+        bpaf::construct!(WrappedNix {
+            stability,
+            nix_args
+        })
+        .adjacent()
     };
 
     let without_stability = {
         let stability = bpaf::pure(Default::default());
-        let nix = nix_sub_command::<0>().hide();
-        bpaf::construct!(WrappedNix { nix, stability }).hide()
+        let nix_args = nix_sub_command::<0>().hide();
+        bpaf::construct!(WrappedNix {
+            nix_args,
+            stability
+        })
+        .hide()
     };
 
-    bpaf::construct!([without_stability, with_stability]).hide_usage()
+    bpaf::construct!([without_stability, with_stability])
 }
 
 fn complete_nix_shell(offset: u8) -> bpaf::ShellComp {
