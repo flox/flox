@@ -17,12 +17,12 @@ use toml_edit::Key;
 
 use crate::commands::not_help;
 use crate::config::{Config, ReadWriteError, FLOX_CONFIG_FILE};
-use crate::subcommand_metric;
 use crate::utils::metrics::{
     METRICS_EVENTS_FILE_NAME,
     METRICS_LOCK_FILE_NAME,
     METRICS_UUID_FILE_NAME,
 };
+use crate::{flox_forward, subcommand_metric};
 
 /// reset the metrics queue (if any), reset metrics ID, and re-prompt for consent
 #[derive(Bpaf, Clone)]
@@ -212,6 +212,19 @@ impl WrappedNix {
             .run(&nix, &Default::default())
             .await?;
         Ok(())
+    }
+}
+
+/// Access to the nix CLI
+#[derive(Clone, Debug, Bpaf)]
+pub struct Gh {
+    #[bpaf(any("gh arguments and options", not_help))]
+    _gh_args: Vec<String>,
+}
+impl Gh {
+    pub async fn handle(self, _config: Config, flox: Flox) -> Result<()> {
+        subcommand_metric!("gh");
+        flox_forward(&flox).await
     }
 }
 

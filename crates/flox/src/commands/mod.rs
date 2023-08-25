@@ -480,6 +480,8 @@ enum InternalCommands {
     Eval(#[bpaf(external(WithPassthru::parse))] WithPassthru<package::Eval>),
     #[bpaf(command)]
     Develop(#[bpaf(external(WithPassthru::parse))] WithPassthru<package::Develop>),
+    #[bpaf(command)]
+    Gh(#[bpaf(external(general::gh))] general::Gh),
 }
 
 impl InternalCommands {
@@ -519,6 +521,7 @@ impl InternalCommands {
             InternalCommands::Flake(args) => args.handle(config, flox).await?,
             InternalCommands::Eval(args) => args.handle(config, flox).await?,
             InternalCommands::Develop(args) => args.handle(config, flox).await?,
+            InternalCommands::Gh(args) => args.handle(config, flox).await?,
         }
         Ok(())
     }
