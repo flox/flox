@@ -484,14 +484,25 @@ impl InternalCommands {
     async fn handle(self, config: Config, flox: Flox) -> Result<()> {
         match self {
             // Environment Commands feature gate
-            InternalCommands::Generations(_)
-            | InternalCommands::SwitchGeneration(_)
-            | InternalCommands::Rollback(_)
-            | InternalCommands::Envs(_)
-            | InternalCommands::Git(_)
-                if Feature::Env.is_forwarded()? =>
-            {
-                flox_forward(&flox).await?
+            InternalCommands::Generations(_) if Feature::Env.is_forwarded()? => {
+                subcommand_metric!("generations");
+                flox_forward(&flox).await?;
+            },
+            InternalCommands::SwitchGeneration(_) if Feature::Env.is_forwarded()? => {
+                subcommand_metric!("switch-generation");
+                flox_forward(&flox).await?;
+            },
+            InternalCommands::Rollback(_) if Feature::Env.is_forwarded()? => {
+                subcommand_metric!("rollback");
+                flox_forward(&flox).await?;
+            },
+            InternalCommands::Envs(_) if Feature::Env.is_forwarded()? => {
+                subcommand_metric!("envs");
+                flox_forward(&flox).await?;
+            },
+            InternalCommands::Git(_) if Feature::Env.is_forwarded()? => {
+                subcommand_metric!("git");
+                flox_forward(&flox).await?;
             },
 
             InternalCommands::ResetMetrics(args) => args.handle(config, flox).await?,
