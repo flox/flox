@@ -13,7 +13,7 @@ use crate::flox::{Flox, FloxNixApi};
 pub struct Package<'flox> {
     flox: &'flox Flox,
     flake_attribute: FlakeAttribute,
-    stability: Stability,
+    stability: Option<Stability>,
     nix_arguments: Vec<String>,
 }
 
@@ -83,12 +83,9 @@ where
 
 impl Package<'_> {
     fn flake_args(&self) -> Result<FlakeArgs, ()> {
+        let override_inputs = self.stability.as_ref().map(Stability::as_override);
         Ok(FlakeArgs {
-            override_inputs: if self.stability == Default::default() {
-                vec![]
-            } else {
-                vec![self.stability.as_override()]
-            },
+            override_inputs: Vec::from_iter(override_inputs),
             ..Default::default()
         })
     }

@@ -70,7 +70,7 @@ pub struct Publish<'flox, State> {
     ///
     /// Should be fully resolved to avoid ambiguity
     attr_path: AttrPath,
-    stability: Stability,
+    stability: Option<Stability>,
     analysis: State,
 }
 
@@ -80,7 +80,7 @@ impl<'flox> Publish<'flox, Empty> {
         flox: &'flox Flox,
         publish_flake_ref: PublishFlakeRef,
         attr_path: AttrPath,
-        stability: Stability,
+        stability: Option<Stability>,
     ) -> Publish<'flox, Empty> {
         Self {
             flox,
@@ -159,10 +159,9 @@ impl<'flox> Publish<'flox, Empty> {
             },
         ]
         .to_vec();
-
-        if self.stability != Stability::Unspecified {
+        if let Some(ref stability) = self.stability {
             let nixpkgs_flakeref = FlakeRef::Indirect(IndirectRef::new(
-                format!("nixpkgs-{}", self.stability),
+                format!("nixpkgs-{}", stability),
                 Default::default(),
             ));
 
@@ -178,7 +177,6 @@ impl<'flox> Publish<'flox, Empty> {
                 to: nixpkgs_flakeref,
             });
         }
-
         let eval_analysis_command = Eval {
             flake: FlakeArgs {
                 override_inputs,
@@ -230,13 +228,6 @@ impl<'flox> Publish<'flox, Empty> {
 }
 
 impl<'flox> Publish<'flox, NixAnalysis> {
-    fn stability_overrides(&self) -> Vec<OverrideInput> {
-        match self.stability {
-            Stability::Unspecified => [].into(),
-            ref s => [s.as_override()].into(),
-        }
-    }
-
     /// Construct an installable type from the upstream flakeref and attrpath
     fn installable(&self) -> Installable {
         FlakeAttribute {
@@ -280,7 +271,9 @@ impl<'flox> Publish<'flox, NixAnalysis> {
         let command = Build {
             installables: [self.installable()].into(),
             flake: FlakeArgs {
-                override_inputs: self.stability_overrides(),
+                override_inputs: Vec::from_iter(
+                    self.stability.as_ref().map(Stability::as_override),
+                ),
                 ..Default::default()
             },
             ..Default::default()
@@ -976,7 +969,7 @@ mod tests {
             flox: &flox,
             publish_flake_ref,
             attr_path: [""].try_into().unwrap(),
-            stability: Stability::Stable,
+            stability: Some(Stability::Stable),
             analysis: NixAnalysis(json!({
                 "element": {
                     "storePaths": [
@@ -1031,7 +1024,7 @@ mod tests {
         let attr_path = ["", "packages", "aarch64-darwin", "flox"]
             .try_into()
             .unwrap();
-        let stability = Stability::Stable;
+        let stability = Some(Stability::Stable);
         let publish = Publish::new(&flox, publish_flake_ref, attr_path, stability);
 
         let value = publish.analyze().await.unwrap().analysis().to_owned();

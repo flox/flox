@@ -12,10 +12,9 @@ use itertools::Itertools;
 use regex::Regex;
 use serde_json::json;
 
-use crate::config::features::Feature;
+use crate::subcommand_metric;
 use crate::utils::dialog::{Dialog, Select, Text};
 use crate::utils::init::{DEFAULT_CHANNELS, HIDDEN_CHANNELS};
-use crate::{flox_forward, subcommand_metric};
 
 #[derive(Bpaf, Clone)]
 pub struct ChannelArgs {}
@@ -28,266 +27,85 @@ enum ChannelType {
     Flox,
 }
 
-impl ChannelCommands {
-    pub async fn handle(&self, flox: Flox) -> Result<()> {
-        match self {
-            ChannelCommands::Subscribe(_) => subcommand_metric!("subscribe"),
-            ChannelCommands::Unsubscribe { .. } => subcommand_metric!("unsubscribe"),
-            ChannelCommands::Search { .. } => subcommand_metric!("search"),
-            ChannelCommands::Channels { .. } => subcommand_metric!("channels"),
-        }
+/// Search packages in subscribed channels
+#[derive(Bpaf, Clone)]
+pub struct Search {
+    #[bpaf(short, long, argument("channel"))]
+    pub channel: Vec<ChannelRef>,
 
-        match self {
-            _ if Feature::Channels.is_forwarded()? => flox_forward(&flox).await?,
-            ChannelCommands::Channels { json } => {
-                let channels = flox
-                    .channels
-                    .iter()
-                    .filter_map(|entry| {
-                        if HIDDEN_CHANNELS.contains_key(&*entry.from.id) {
-                            None
-                        } else if DEFAULT_CHANNELS.contains_key(&*entry.from.id) {
-                            Some((ChannelType::Flox, entry))
-                        } else {
-                            Some((ChannelType::User, entry))
-                        }
-                    })
-                    .sorted_by(|a, b| Ord::cmp(a, b));
+    /// print search as JSON
+    #[bpaf(long)]
+    pub json: bool,
 
-                if *json {
-                    let mut map = serde_json::Map::new();
-                    for (channel, entry) in channels {
-                        map.insert(
-                            entry.from.id.to_string(),
-                            json!({
-                                "type": channel.to_string(),
-                                "url": entry.to.to_string()
-                            }),
-                        );
-                    }
+    /// print extended search results
+    #[bpaf(short, long, long("verbose"), short('v'))]
+    pub long: bool,
 
-                    println!(
-                        "{}",
-                        serde_json::to_string_pretty(&serde_json::Value::Object(map))?
-                    )
-                } else {
-                    let width = channels
-                        .clone()
-                        .map(|(_, entry)| entry.from.id.len())
-                        .reduce(|acc, e| acc.max(e))
-                        .unwrap_or(8);
+    /// force update of catalogs from remote sources before searching
+    #[bpaf(long)]
+    pub refresh: bool,
 
-                    println!("{ch:<width$}   TYPE   URL", ch = "CHANNEL");
-                    for (channel, entry) in channels {
-                        println!(
-                            "{from:<width$} | {ty} | {url}",
-                            from = entry.from.id,
-                            ty = channel,
-                            url = entry.to
-                        )
-                    }
-                }
-            },
-
-            ChannelCommands::Subscribe(args) => {
-                // query name interactively if not provided
-                let name = match args {
-                    None => {
-                        Dialog {
-                            help_message: None,
-                            message: "Enter channel name to be added:",
-                            typed: Text { default: None },
-                        }
-                        .prompt()
-                        .await?
-                    },
-                    Some(SubscribeArgs::Name { name })
-                    | Some(SubscribeArgs::NameUrl { name, .. }) => name.to_string(),
-                };
-
-                // return if name invalid
-                if [HIDDEN_CHANNELS.keys(), DEFAULT_CHANNELS.keys()]
-                    .into_iter()
-                    .flatten()
-                    .contains(&name.as_str())
-                {
-                    bail!("'{name}' is a reserved channel name");
-                }
-
-                // return if name is invalid
-                if !Regex::new("^[a-zA-Z][a-zA-Z0-9_-]*$")
-                    .unwrap()
-                    .is_match(&name)
-                {
-                    bail!("invalid channel name '{name}', valid regexp: ^[a-zA-Z][a-zA-Z0-9_-]*$");
-                }
-
-                // query url interactively if not provided
-                let url = match args {
-                    None | Some(SubscribeArgs::Name { .. }) => {
-                        let default = FlakeRef::Github(GitServiceRef::new(
-                            name.to_string(),
-                            "floxpkgs".to_string(),
-                            GitServiceAttributes {
-                                reference: Some("master".to_string()),
-                                ..Default::default()
-                            },
-                        ));
-
-                        Dialog {
-                            help_message: None,
-                            message: &format!("Enter URL for '{name}' channel:"),
-                            typed: Text {
-                                default: Some(&default.to_string()),
-                            },
-                        }
-                        .prompt()
-                        .await?
-                    },
-                    Some(SubscribeArgs::NameUrl { url, .. }) => url.to_string(),
-                };
-
-                // attempt parsing url as flakeref (validation)
-                let url = url
-                    .parse::<FlakeRef>()
-                    .with_context(|| format!("'{url}' is not a valid url"))?;
-
-                // read user channels
-                let floxmeta = flox
-                    .floxmeta::<GitCommandProvider>(DEFAULT_OWNER)
-                    .await
-                    .context("Could not get default floxmeta")?;
-
-                let mut user_meta = floxmeta
-                    .user_meta()
-                    .await
-                    .context("Could not read user metadata")?;
-                let user_meta_channels = user_meta.channels.get_or_insert(Default::default());
-
-                // ensure channel does not yet exist
-                if user_meta_channels.contains_key(&name) {
-                    bail!("A channel subscription '{name}' already exists");
-                }
-
-                // validate the existence of the flake behind `url`
-                // candidate for a flakeref extension?
-                let nix = flox.nix::<NixCommandLine>(Default::default());
-                let command = FlakeMetadata {
-                    flake_ref: Some(url.clone().into()),
-                    ..Default::default()
-                };
-                let _ = command
-                    .run_json(&nix, &Default::default())
-                    .await
-                    .map_err(|_| anyhow::anyhow!("Could not verify channel URL: '{url}'"))?;
-
-                user_meta_channels.insert(name.to_string(), url.to_string());
-
-                // tansactionally update user meta file
-                floxmeta
-                    .set_user_meta(&user_meta, &format!("Subscribed to {url} as '{name}'"))
-                    .await?;
-            },
-
-            ChannelCommands::Unsubscribe { channel } => {
-                let floxmeta = flox
-                    .floxmeta::<GitCommandProvider>(DEFAULT_OWNER)
-                    .await
-                    .context("Could not get default floxmeta")?;
-
-                let mut user_meta = floxmeta
-                    .user_meta()
-                    .await
-                    .context("Could not read user metadata")?;
-                let user_meta_channels = user_meta.channels.get_or_insert(Default::default());
-
-                let channel = match channel {
-                    Some(channel) => channel.to_owned(),
-                    None => {
-                        let dialog = Dialog {
-                            help_message: None,
-                            message: "Enter channel name to be added:",
-                            typed: Select {
-                                options: user_meta_channels.keys().cloned().collect_vec(),
-                            },
-                        };
-
-                        dialog.prompt().await?
-                    },
-                };
-
-                if HIDDEN_CHANNELS
-                    .keys()
-                    .chain(DEFAULT_CHANNELS.keys())
-                    .contains(&channel.as_str())
-                {
-                    bail!("'{channel}' is a reserved channel name and can't be unsubscribed from");
-                }
-
-                if user_meta_channels.remove(&channel).is_none() {
-                    bail!("No subscription found for '{channel}'");
-                }
-
-                floxmeta
-                    .set_user_meta(&user_meta, &format!("Unsubscribed from '{channel}'"))
-                    .await?;
-            },
-            _ => todo!(),
-        }
-
-        Ok(())
-    }
+    /// query string of the form `<REGEX>[@<SEMVER-RANGE>]` used to filter
+    /// match against package names/descriptions, and semantic version.
+    /// Regex pattern is `PCRE` style, and semver ranges use the
+    /// `node-semver` syntax.
+    /// Exs: `(hello|coreutils)`, `node@>=16`, `coreutils@9.1`
+    #[bpaf(positional("search-term"))]
+    pub search_term: Option<String>,
 }
 
-#[derive(Bpaf, Clone)]
-pub enum ChannelCommands {
-    /// subscribe to channel URL
-    #[bpaf(command)]
-    Subscribe(#[bpaf(external(subscribe_args), optional)] Option<SubscribeArgs>),
+impl Search {
+    pub async fn handle(self, flox: Flox) -> Result<()> {
+        subcommand_metric!("search");
+        let channels = flox
+            .channels
+            .iter()
+            .filter_map(|entry| {
+                if HIDDEN_CHANNELS.contains_key(&*entry.from.id) {
+                    None
+                } else if DEFAULT_CHANNELS.contains_key(&*entry.from.id) {
+                    Some((ChannelType::Flox, entry))
+                } else {
+                    Some((ChannelType::User, entry))
+                }
+            })
+            .sorted_by(|a, b| Ord::cmp(a, b));
 
-    /// unsubscribe from a channel
-    #[bpaf(command)]
-    Unsubscribe {
-        /// channel name to unsubscribe.
-        /// If omitted, flow will prompt for the name interactively
-        #[bpaf(positional("channel"), optional)]
-        channel: Option<ChannelRef>,
-    },
+        if self.json {
+            let mut map = serde_json::Map::new();
+            for (channel, entry) in channels {
+                map.insert(
+                    entry.from.id.to_string(),
+                    json!({
+                        "type": channel.to_string(),
+                        "url": entry.to.to_string()
+                    }),
+                );
+            }
 
-    /// search packages in subscribed channels
-    #[bpaf(command)]
-    Search {
-        #[bpaf(short, long, argument("channel"))]
-        channel: Vec<ChannelRef>,
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&serde_json::Value::Object(map))?
+            )
+        } else {
+            let width = channels
+                .clone()
+                .map(|(_, entry)| entry.from.id.len())
+                .reduce(|acc, e| acc.max(e))
+                .unwrap_or(8);
 
-        /// print search as JSON
-        #[bpaf(long)]
-        json: bool,
-
-        /// print extended search results
-        #[bpaf(short, long, long("verbose"), short('v'))]
-        long: bool,
-
-        /// force update of catalogs from remote sources before searching
-        #[bpaf(long)]
-        refresh: bool,
-
-        /// query string of the form `<REGEX>[@<SEMVER-RANGE>]` used to filter
-        /// match against package names/descriptions, and semantic version.
-        /// Regex pattern is `PCRE` style, and semver ranges use the
-        /// `node-semver` syntax.
-        /// Exs: `(hello|coreutils)`, `node@>=16`, `coreutils@9.1`
-        #[bpaf(positional("search-term"))]
-        search_term: Option<String>,
-    },
-
-    /// list all subscribed channels
-    #[bpaf(command)]
-    Channels {
-        /// print channels as JSON
-        #[bpaf(long)]
-        json: bool,
-    },
+            println!("{ch:<width$}   TYPE   URL", ch = "CHANNEL");
+            for (channel, entry) in channels {
+                println!(
+                    "{from:<width$} | {ty} | {url}",
+                    from = entry.from.id,
+                    ty = channel,
+                    url = entry.to
+                )
+            }
+        }
+        Ok(())
+    }
 }
 
 #[derive(Bpaf, Clone)]
@@ -305,6 +123,237 @@ pub enum SubscribeArgs {
         #[bpaf(positional("name"))]
         name: ChannelRef,
     },
+}
+
+/// Subscribe to channel URL
+#[derive(Bpaf, Clone)]
+pub struct Subscribe {
+    #[bpaf(external(subscribe_args), optional)]
+    args: Option<SubscribeArgs>,
+}
+impl Subscribe {
+    pub async fn handle(self, flox: Flox) -> Result<()> {
+        subcommand_metric!("subscribe");
+        // query name interactively if not provided
+        let name = match &self.args {
+            None => {
+                Dialog {
+                    help_message: None,
+                    message: "Enter channel name to be added:",
+                    typed: Text { default: None },
+                }
+                .prompt()
+                .await?
+            },
+            Some(SubscribeArgs::Name { name }) | Some(SubscribeArgs::NameUrl { name, .. }) => {
+                name.to_string()
+            },
+        };
+
+        // return if name invalid
+        if [HIDDEN_CHANNELS.keys(), DEFAULT_CHANNELS.keys()]
+            .into_iter()
+            .flatten()
+            .contains(&name.as_str())
+        {
+            bail!("'{name}' is a reserved channel name");
+        }
+
+        // return if name is invalid
+        if !Regex::new("^[a-zA-Z][a-zA-Z0-9_-]*$")
+            .unwrap()
+            .is_match(&name)
+        {
+            bail!("invalid channel name '{name}', valid regexp: ^[a-zA-Z][a-zA-Z0-9_-]*$");
+        }
+
+        // query url interactively if not provided
+        let url = match self.args {
+            None | Some(SubscribeArgs::Name { .. }) => {
+                let default = FlakeRef::Github(GitServiceRef::new(
+                    name.to_string(),
+                    "floxpkgs".to_string(),
+                    GitServiceAttributes {
+                        reference: Some("master".to_string()),
+                        ..Default::default()
+                    },
+                ));
+
+                Dialog {
+                    help_message: None,
+                    message: &format!("Enter URL for '{name}' channel:"),
+                    typed: Text {
+                        default: Some(&default.to_string()),
+                    },
+                }
+                .prompt()
+                .await?
+            },
+            Some(SubscribeArgs::NameUrl { url, .. }) => url.to_string(),
+        };
+
+        // attempt parsing url as flakeref (validation)
+        let url = url
+            .parse::<FlakeRef>()
+            .with_context(|| format!("'{url}' is not a valid url"))?;
+
+        // read user channels
+        let floxmeta = flox
+            .floxmeta::<GitCommandProvider>(DEFAULT_OWNER)
+            .await
+            .context("Could not get default floxmeta")?;
+
+        let mut user_meta = floxmeta
+            .user_meta()
+            .await
+            .context("Could not read user metadata")?;
+        let user_meta_channels = user_meta.channels.get_or_insert(Default::default());
+
+        // ensure channel does not yet exist
+        if user_meta_channels.contains_key(&name) {
+            bail!("A channel subscription '{name}' already exists");
+        }
+
+        // validate the existence of the flake behind `url`
+        // candidate for a flakeref extension?
+        let nix = flox.nix::<NixCommandLine>(Default::default());
+        let command = FlakeMetadata {
+            flake_ref: Some(url.clone().into()),
+            ..Default::default()
+        };
+        let _ = command
+            .run_json(&nix, &Default::default())
+            .await
+            .map_err(|_| anyhow::anyhow!("Could not verify channel URL: '{url}'"))?;
+
+        user_meta_channels.insert(name.to_string(), url.to_string());
+
+        // tansactionally update user meta file
+        floxmeta
+            .set_user_meta(&user_meta, &format!("Subscribed to {url} as '{name}'"))
+            .await?;
+        Ok(())
+    }
+}
+
+/// Unsubscribe from a channel
+#[derive(Bpaf, Clone)]
+pub struct Unsubscribe {
+    /// Channel name to unsubscribe.
+    ///
+    /// If omitted, flow will prompt for the name interactively
+    #[bpaf(positional("channel"), optional)]
+    channel: Option<ChannelRef>,
+}
+
+impl Unsubscribe {
+    pub async fn handle(self, flox: Flox) -> Result<()> {
+        subcommand_metric!("unsubscribe");
+        let floxmeta = flox
+            .floxmeta::<GitCommandProvider>(DEFAULT_OWNER)
+            .await
+            .context("Could not get default floxmeta")?;
+
+        let mut user_meta = floxmeta
+            .user_meta()
+            .await
+            .context("Could not read user metadata")?;
+        let user_meta_channels = user_meta.channels.get_or_insert(Default::default());
+
+        let channel = match self.channel {
+            Some(channel) => channel.to_owned(),
+            None => {
+                let dialog = Dialog {
+                    help_message: None,
+                    message: "Enter channel name to be added:",
+                    typed: Select {
+                        options: user_meta_channels.keys().cloned().collect_vec(),
+                    },
+                };
+
+                dialog.prompt().await?
+            },
+        };
+
+        if HIDDEN_CHANNELS
+            .keys()
+            .chain(DEFAULT_CHANNELS.keys())
+            .contains(&channel.as_str())
+        {
+            bail!("'{channel}' is a reserved channel name and can't be unsubscribed from");
+        }
+
+        if user_meta_channels.remove(&channel).is_none() {
+            bail!("No subscription found for '{channel}'");
+        }
+
+        floxmeta
+            .set_user_meta(&user_meta, &format!("Unsubscribed from '{channel}'"))
+            .await?;
+        Ok(())
+    }
+}
+
+/// List all subscribed channels
+#[derive(Bpaf, Clone)]
+pub struct Channels {
+    /// print channels as JSON
+    #[bpaf(long)]
+    json: bool,
+}
+
+impl Channels {
+    pub fn handle(self, flox: Flox) -> Result<()> {
+        subcommand_metric!("channels");
+        let channels = flox
+            .channels
+            .iter()
+            .filter_map(|entry| {
+                if HIDDEN_CHANNELS.contains_key(&*entry.from.id) {
+                    None
+                } else if DEFAULT_CHANNELS.contains_key(&*entry.from.id) {
+                    Some((ChannelType::Flox, entry))
+                } else {
+                    Some((ChannelType::User, entry))
+                }
+            })
+            .sorted_by(|a, b| Ord::cmp(a, b));
+
+        if self.json {
+            let mut map = serde_json::Map::new();
+            for (channel, entry) in channels {
+                map.insert(
+                    entry.from.id.to_string(),
+                    json!({
+                        "type": channel.to_string(),
+                        "url": entry.to.to_string()
+                    }),
+                );
+            }
+
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&serde_json::Value::Object(map))?
+            )
+        } else {
+            let width = channels
+                .clone()
+                .map(|(_, entry)| entry.from.id.len())
+                .reduce(|acc, e| acc.max(e))
+                .unwrap_or(8);
+
+            println!("{ch:<width$}   TYPE   URL", ch = "CHANNEL");
+            for (channel, entry) in channels {
+                println!(
+                    "{from:<width$} | {ty} | {url}",
+                    from = entry.from.id,
+                    ty = channel,
+                    url = entry.to
+                )
+            }
+        }
+        Ok(())
+    }
 }
 
 pub type ChannelRef = String;

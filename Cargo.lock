@@ -167,20 +167,22 @@ dependencies = [
 
 [[package]]
 name = "bpaf"
-version = "0.7.9"
-source = "git+https://github.com/ysndr/bpaf?branch=error/more-suggestions#a82cdc69f9a56963b1e0c481593bef03c3c2b25f"
+version = "0.9.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1dc3b1bd654a8d16eea03586c3eee8ffd25c7f242b9eae9730cc442834fe56d9"
 dependencies = [
  "bpaf_derive",
 ]
 
 [[package]]
 name = "bpaf_derive"
-version = "0.3.4"
-source = "git+https://github.com/ysndr/bpaf?branch=error/more-suggestions#a82cdc69f9a56963b1e0c481593bef03c3c2b25f"
+version = "0.5.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "22cbaba260bbcbb69b0d54e9f0d83038a4568f3a5d1c95591fed5e8fee964539"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 1.0.109",
+ "syn 2.0.28",
 ]
 
 [[package]]
@@ -626,7 +628,7 @@ checksum = "6999dc1837253364c2ebb0704ba97994bd874e8f195d665c50b7548f6ea92764"
 
 [[package]]
 name = "flox"
-version = "0.2.7"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "async-trait",
