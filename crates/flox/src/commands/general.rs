@@ -123,30 +123,10 @@ impl ConfigArgs {
                 update_config(&flox.config_dir, &flox.temp_dir, key, Some(value)).await?
             },
             ConfigArgs::SetNumber(ConfigSetNumber { key, value, .. }) => {
-                update_config(
-                    &flox.config_dir,
-                    &flox.temp_dir,
-                    key,
-                    Some(
-                        value
-                            .parse::<i32>()
-                            .context(format!("could not parse '{value}' as number"))?,
-                    ),
-                )
-                .await?
+                update_config(&flox.config_dir, &flox.temp_dir, key, Some(value)).await?
             },
             ConfigArgs::SetBool(ConfigSetBool { key, value, .. }) => {
-                update_config(
-                    &flox.config_dir,
-                    &flox.temp_dir,
-                    key,
-                    Some(
-                        value
-                            .parse::<bool>()
-                            .context(format!("could not parse '{value}' as bool"))?,
-                    ),
-                )
-                .await?
+                update_config(&flox.config_dir, &flox.temp_dir, key, Some(value)).await?
             },
             ConfigArgs::Delete(ConfigDelete { key, .. }) => {
                 update_config::<()>(&flox.config_dir, &flox.temp_dir, key, None).await?
@@ -181,11 +161,8 @@ pub struct ConfigSetNumber {
     #[bpaf(positional("key"))]
     key: String,
     /// Configuration Value (i32)
-    // we have to parse to int ourselves after reading the argument,
-    // as the bpaf error for parse failures here is not descriptive enough
-    // (<https://github.com/pacak/bpaf/issues/172>)
     #[bpaf(positional("number"))]
-    value: String,
+    value: i32,
 }
 
 #[derive(Debug, Clone, Bpaf)]
@@ -200,17 +177,8 @@ pub struct ConfigSetBool {
     key: String,
     /// Configuration Value (bool)
     #[bpaf(positional("bool"))]
-    // #[bpaf(external(parse_bool))]
-    // we have to parse to int ourselves after reading the argument,
-    // as the bpaf error for parse failures here is not descriptive enough
-    // (<https://github.com/pacak/bpaf/issues/172>)
-    value: String,
+    value: bool,
 }
-
-// / bug in bpaf (<https://github.com/pacak/bpaf/issues/171>)
-// fn parse_bool() -> impl Parser<String> {
-//     bpaf::positional::<String>("bool")
-// }
 
 #[derive(Debug, Clone, Bpaf)]
 #[allow(unused)]
