@@ -69,7 +69,7 @@ impl ResetMetrics {
 #[derive(Bpaf, Clone)]
 #[bpaf(fallback(ConfigArgs::List))]
 pub enum ConfigArgs {
-    /// List the current values of all configurable paramers
+    /// List the current values of all configurable parameters
     #[bpaf(short, long)]
     List,
     /// Reset all configurable parameters to their default values without further confirmation.
@@ -228,47 +228,16 @@ impl Gh {
     }
 }
 
-/// Log into the flox-gh CLI
+/// floxHub authentication commands
 #[derive(Clone, Debug, Bpaf)]
-pub enum LoginArgs {
-    /// the hostname of the flox hub to authenticate with
-    Hostname(#[bpaf(any("hostname"))] Vec<String>),
-    /// save authentication credentials in plain text instead of credential store
-    #[bpaf(command("insecure-storage"))]
-    InsecureStorage,
-    /// read token from standard input
-    #[bpaf(command("with-token"))]
-    WithToken,
+pub struct Auth {
+    #[bpaf(any("(login|logout|status) [ <gh auth options> ]", not_help))]
+    _auth_args: Vec<String>,
 }
-
-impl LoginArgs {
-    async fn handle(&self, flox: Flox) -> Result<()> {
-        match self {
-            LoginArgs::Hostname(_) => flox_forward(&flox).await?,
-            LoginArgs::InsecureStorage => flox_forward(&flox).await?,
-            LoginArgs::WithToken => flox_forward(&flox).await?,
-        }
-        Ok(())
-    }
-}
-
-/// Log out of the flox-gh CLI
-#[derive(Clone, Debug, Bpaf)]
-pub enum LogoutArgs {
-    /// the hostname of the flox hub to log out of
-    Hostname(#[bpaf(any("hostname"))] Vec<String>),
-    /// find authentication credentials in plain text instead of credential store
-    #[bpaf(command("insecure-storage"))]
-    InsecureStorage,
-}
-
-impl LogoutArgs {
-    async fn handle(&self, flox: Flox) -> Result<()> {
-        match self {
-            LogoutArgs::Hostname(_) => flox_forward(&flox).await?,
-            LogoutArgs::InsecureStorage => flox_forward(&flox).await?,
-        }
-        Ok(())
+impl Auth {
+    pub async fn handle(self, _config: Config, flox: Flox) -> Result<()> {
+        subcommand_metric!("auth");
+        flox_forward(&flox).await
     }
 }
 
