@@ -295,6 +295,8 @@ where
             .await
             .map_err(EnvironmentError2::EvalCatalog)?;
 
+        std::fs::write(self.path.join("catalog.json"), catalog_value.to_string())
+            .map_err(EnvironmentError2::WriteCatalog)?;
         serde_json::from_value(catalog_value).map_err(EnvironmentError2::ParseCatalog)
     }
 
@@ -520,6 +522,8 @@ pub enum EnvironmentError2 {
     EvalCatalog(NixCommandLineRunJsonError),
     #[error("ParseCatalog({0})")]
     ParseCatalog(serde_json::Error),
+    #[error("WriteCatalog({0})")]
+    WriteCatalog(std::io::Error),
     #[error("Build({0})")]
     Build(NixCommandLineRunError),
     #[error("ReadManifest({0})")]

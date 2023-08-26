@@ -200,6 +200,7 @@ pub struct Init {
     #[bpaf(long, short, argument("ENV"))]
     environment: Option<EnvironmentRef>,
 }
+
 impl Init {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("init");
