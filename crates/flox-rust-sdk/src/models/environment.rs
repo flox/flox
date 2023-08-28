@@ -295,7 +295,7 @@ where
             .await
             .map_err(EnvironmentError2::EvalCatalog)?;
 
-        std::fs::write(self.path.join("catalog.json"), catalog_value.to_string())
+        std::fs::write(self.catalog_path(), catalog_value.to_string())
             .map_err(EnvironmentError2::WriteCatalog)?;
         serde_json::from_value(catalog_value).map_err(EnvironmentError2::ParseCatalog)
     }
@@ -383,6 +383,11 @@ impl<S: TransactionState> PathEnvironment<S> {
     /// Path to the environment definition file
     pub fn manifest_path(&self) -> PathBuf {
         self.path.join("pkgs").join("default").join("flox.nix")
+    }
+
+    /// Path to the environment's catalog
+    fn catalog_path(&self) -> PathBuf {
+        self.path.join("pkgs").join("default").join(CATALOG_JSON)
     }
 }
 
