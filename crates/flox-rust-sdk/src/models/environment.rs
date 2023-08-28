@@ -67,11 +67,8 @@ pub trait Environment {
         system: impl AsRef<str> + Send,
     ) -> Result<(), EnvironmentError2>;
 
-    /// Activate this environment
-    async fn activate(&self, nix: &NixCommandLine) -> Result<(), EnvironmentError2>;
-
     /// Atomically edit this environment, ensuring that it still builds
-    async fn edit(&self) -> Result<(), EnvironmentError2>;
+    async fn edit(&self, contents: &impl AsRef<str>) -> Result<(), EnvironmentError2>;
 
     async fn catalog(
         &self,
@@ -259,15 +256,9 @@ where
         Ok(())
     }
 
-    /// Activate this environment
-    /// TODO: remove this `allow` once the method is filled out
-    #[allow(unused_variables)]
-    async fn activate(&self, nix: &NixCommandLine) -> Result<(), EnvironmentError2> {
-        todo!()
-    }
-
+    #[allow(unused)]
     /// Atomically edit this environment, ensuring that it still builds
-    async fn edit(&self) -> Result<(), EnvironmentError2> {
+    async fn edit(&self, contents: &impl AsRef<str>) -> Result<(), EnvironmentError2> {
         todo!()
     }
 
