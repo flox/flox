@@ -65,8 +65,17 @@ setup_file() {
 
 }
 
-@test "c4: custom name option 1: flox init accepts -e for a user defined name" {
-  run "$FLOX_CLI" init -e "other-test"
+@test "c4: custom name option 1: flox init accepts -n for a user defined name" {
+  run "$FLOX_CLI" init -n "other-test"
+  assert_success
+
+  run "$FLOX_CLI" envs
+  assert_success
+  assert_output --partial "other-test"
+}
+
+@test "c4: custom name option 1: flox init accepts --name for a user defined name" {
+  run "$FLOX_CLI" init --name "other-test"
   assert_success
 
   run "$FLOX_CLI" envs
@@ -96,11 +105,11 @@ EOF
 }
 
 @test "c8: names don't conflict with flox hub: when naming with flox init -e do not allow '/'" {
-  run "$FLOX_CLI" init -e "owner/name"
+  run "$FLOX_CLI" init -n "owner/name"
   assert_failure
 }
 
 @test "c8: names don't conflict with flox hub: when naming with flox init -e do not allow ' ' (space)" {
-  run "$FLOX_CLI" init -e "na me"
+  run "$FLOX_CLI" init -n "na me"
   assert_failure
 }
