@@ -6,7 +6,7 @@ use anyhow::{Context, Result};
 use config::{Config as HierarchicalConfig, Environment};
 use flox_types::stability::Stability;
 use itertools::{Either, Itertools};
-use log::{debug, trace, warn};
+use log::{debug, trace};
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
 use tempfile::PersistError;
@@ -308,8 +308,8 @@ impl Config {
         let config_file_contents = match fs::read_to_string(&config_file_path) {
             Ok(s) => Ok(Some(s)),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                warn!(
-                    "No existing user config file found in {:?}",
+                debug!(
+                    "No existing user config file found in {:?}, creating it now",
                     config_file_path.as_ref()
                 );
                 Ok(None)
