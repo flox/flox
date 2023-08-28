@@ -3,7 +3,6 @@ use std::fs::File;
 use std::io::stdin;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::str::FromStr;
 
 use anyhow::{bail, Context, Result};
 use bpaf::{construct, Bpaf, Parser, ShellComp};
@@ -17,7 +16,7 @@ use flox_rust_sdk::nix::Run;
 use flox_rust_sdk::prelude::flox_package::FloxPackage;
 use flox_types::constants::{DEFAULT_CHANNEL, LATEST_VERSION};
 use itertools::Itertools;
-use log::{error, info};
+use log::{error, info, warn};
 
 use crate::utils::dialog::{Confirm, Dialog};
 use crate::utils::resolve_environment_ref;
@@ -197,28 +196,43 @@ pub struct Init {
     #[bpaf(external(environment_args), group_help("Environment Options"))]
     environment_args: EnvironmentArgs,
 
-    #[bpaf(long, short, argument("ENV"))]
+    #[bpaf(long, short, argument("ENV"), hide)]
     environment: Option<EnvironmentRef>,
+
+    /// Name of the environment
+    ///
+    /// "$(basename $PWD)" or "default" if in $HOME,
+    #[bpaf(long, short, argument("name"))]
+    name: Option<EnvironmentName>,
 }
 impl Init {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("init");
 
+        if self.environment.is_some() {
+            warn!(indoc::indoc! {"
+                '--environment', '-e' is depricated.
+                Use '(--name | -n) <name>' to create a named env.
+                Use 'flox (push | pull)' to create or download an existing environment.
+            "});
+        }
+
         let current_dir = std::env::current_dir().unwrap();
         let home_dir = dirs::home_dir().unwrap();
 
-        let name = if let Some(name) = self.environment.clone() {
+        let name = if let Some(env) = self.environment {
+            env.parse()?
+        } else if let Some(name) = self.name.clone() {
             name
         } else if current_dir == home_dir {
-            "default".to_string()
+            "default".parse()?
         } else {
             current_dir
                 .file_name()
                 .map(|n| n.to_string_lossy().to_string())
                 .context("Can't init in root")?
+                .parse()?
         };
-
-        let name = EnvironmentName::from_str(&name)?;
 
         let env =
             PathEnvironment::<Original>::init(&current_dir, name, flox.temp_dir.clone()).await?;
