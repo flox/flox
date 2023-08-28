@@ -280,7 +280,6 @@ impl List {
             .context("Could not get catalog")?;
         // let installed_store_paths = env.installed_store_paths(&flox).await?;
 
-        println!("Packages in {}:", env.environment_ref());
         for (publish_element, _) in catalog.entries.iter() {
             if publish_element.version != LATEST_VERSION {
                 println!(
