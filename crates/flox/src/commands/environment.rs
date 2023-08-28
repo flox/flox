@@ -16,7 +16,7 @@ use flox_rust_sdk::nix::Run;
 use flox_rust_sdk::prelude::flox_package::FloxPackage;
 use flox_types::constants::{DEFAULT_CHANNEL, LATEST_VERSION};
 use itertools::Itertools;
-use log::{error, info, warn};
+use log::{error, info};
 
 use crate::utils::dialog::{Confirm, Dialog};
 use crate::utils::resolve_environment_ref;
@@ -210,7 +210,7 @@ impl Init {
         subcommand_metric!("init");
 
         if self.environment.is_some() {
-            warn!(indoc::indoc! {"
+            bail!(indoc::indoc! {"
                 '--environment', '-e' is deprecated.
                 Use '(--name | -n) <name>' to create a named env.
                 Use 'flox (push | pull)' to create or download an existing environment.
@@ -220,9 +220,7 @@ impl Init {
         let current_dir = std::env::current_dir().unwrap();
         let home_dir = dirs::home_dir().unwrap();
 
-        let name = if let Some(env) = self.environment {
-            env.parse()?
-        } else if let Some(name) = self.name.clone() {
+        let name = if let Some(name) = self.name.clone() {
             name
         } else if current_dir == home_dir {
             "default".parse()?
