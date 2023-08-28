@@ -258,7 +258,7 @@ where
 
     #[allow(unused)]
     /// Atomically edit this environment, ensuring that it still builds
-    async fn edit(&self, contents: &impl AsRef<str>) -> Result<(), EnvironmentError2> {
+    async fn edit(&mut self, contents: &impl AsRef<str>) -> Result<(), EnvironmentError2> {
         todo!()
     }
 
