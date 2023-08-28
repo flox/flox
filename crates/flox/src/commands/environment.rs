@@ -156,14 +156,14 @@ impl Delete {
 ///  * for command: flox activate -- <command> <args>
 #[derive(Bpaf, Clone)]
 pub struct Activate {
-    #[allow(dead_code)] // pending spec for `-e`, `--dir` behaviour
+    #[allow(dead_code)] // TODO: pending spec for `-e`, `--dir` behaviour
     #[bpaf(external(environment_args), group_help("Environment Options"))]
     environment_args: EnvironmentArgs,
 
     #[bpaf(long, short, argument("ENV"))]
     environment: Vec<EnvironmentRef>,
 
-    #[allow(dead_code)] // not yet handled in impl
+    #[allow(dead_code)] // TODO: not yet handled in impl
     #[bpaf(external(activate_run_args))]
     arguments: Option<(String, Vec<String>)>,
 }
