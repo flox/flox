@@ -201,7 +201,7 @@ pub struct Init {
 
     /// Name of the environment
     ///
-    /// "$(basename $PWD)" or "default" if in $HOME,
+    /// "$(basename $PWD)" or "default" if in $HOME
     #[bpaf(long, short, argument("name"))]
     name: Option<EnvironmentName>,
 }
