@@ -211,7 +211,7 @@ impl Init {
 
         if self.environment.is_some() {
             warn!(indoc::indoc! {"
-                '--environment', '-e' is depricated.
+                '--environment', '-e' is deprecated.
                 Use '(--name | -n) <name>' to create a named env.
                 Use 'flox (push | pull)' to create or download an existing environment.
             "});
