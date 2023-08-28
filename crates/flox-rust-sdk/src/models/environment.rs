@@ -68,7 +68,7 @@ pub trait Environment {
     ) -> Result<(), EnvironmentError2>;
 
     /// Atomically edit this environment, ensuring that it still builds
-    async fn edit(&self, contents: &impl AsRef<str>) -> Result<(), EnvironmentError2>;
+    async fn edit(&mut self, contents: &impl AsRef<str>) -> Result<(), EnvironmentError2>;
 
     async fn catalog(
         &self,
