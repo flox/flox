@@ -52,7 +52,8 @@ setup_file() {
   "$FLOX_CLI" init
   run "$FLOX_CLI" list
   assert_success
-  assert_output --regexp ".*Packages in test:"
+  # There's no output without any packages installed, all you get is warnings about overrides
+  assert_output "warning: input 'flox-floxpkgs/etc-profiles' has an override for a non-existent input 'flox-floxpkgs'"
 }
 
 @test "'flox list' lists packages of environment in the current dir; One package from nixpkgs" {
@@ -63,8 +64,7 @@ setup_file() {
   assert_success
   assert_output --regexp - <<EOF
 .*
-Packages in test:
-stable.hello
+hello
 EOF
 }
 
@@ -76,8 +76,7 @@ EOF
   assert_success
   assert_output --regexp - <<EOF
 .*
-Packages in not-test:
-stable.hello
+hello
 EOF
 }
 
@@ -90,8 +89,7 @@ EOF
   assert_success
   assert_output --regexp - <<EOF
 .*
-Packages in not-test:
-stable.hello
+hello
 EOF
 }
 
