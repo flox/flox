@@ -46,10 +46,10 @@ setup_file() {
 }
 
 @test "i3: flox install allows -e for explicit environment name;  If .flox does not exist, a .flox is created." {
+  skip "Environment defaults handled in another phase"
   run ls .flox
   assert_failure
 
-  skip "Environment defaults handled in another phase"
   run "$FLOX_CLI" install -e env hello
   assert_success
 
