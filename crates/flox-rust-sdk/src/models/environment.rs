@@ -47,7 +47,7 @@ pub enum InstalledPackage {
 pub trait Environment {
     /// Build the environment and create a result link as gc-root
     async fn build(
-        &self,
+        &mut self,
         nix: &NixCommandLine,
         system: impl AsRef<str> + Send,
     ) -> Result<(), EnvironmentError2>;
@@ -210,7 +210,7 @@ where
     /// - create a result link as gc-root
     /// - copy catalog.json from the result into the environment
     async fn build(
-        &self,
+        &mut self,
         nix: &NixCommandLine,
         system: impl AsRef<str> + Send,
     ) -> Result<(), EnvironmentError2> {
