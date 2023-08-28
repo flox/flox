@@ -1,13 +1,10 @@
 use std::collections::{BTreeMap, HashMap};
-use std::env;
-use std::path::Path;
 
 use anyhow::{Context, Result};
 use indexmap::IndexMap;
 use indoc::indoc;
-use log::{debug, info};
+use log::debug;
 use serde::Deserialize;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 mod logger;
 mod metrics;
