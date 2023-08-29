@@ -51,7 +51,7 @@ impl Edit {
 
         let mut environment =
             resolve_environment(&flox, self.environment.as_deref(), "edit").await?;
-        let mut temporary_environment = environment.make_temporary().await?;
+        let mut temporary_environment = environment.make_temporary()?;
 
         let nix = flox.nix(Default::default());
 
@@ -234,7 +234,7 @@ impl Init {
         };
 
         let env =
-            PathEnvironment::<Original>::init(&current_dir, name, flox.temp_dir.clone()).await?;
+            PathEnvironment::<Original>::init(&current_dir, name, flox.temp_dir.clone())?;
 
         println!(
             indoc::indoc! {"

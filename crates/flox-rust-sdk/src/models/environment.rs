@@ -132,12 +132,11 @@ impl<S> PartialEq for PathEnvironment<S> {
 
 impl<S: TransactionState> PathEnvironment<S> {
     /// Makes a temporary copy of the environment so edits can be applied without modifying the original environment
-    pub async fn make_temporary(&self) -> Result<PathEnvironment<Temporary>, EnvironmentError2> {
+    pub fn make_temporary(&self) -> Result<PathEnvironment<Temporary>, EnvironmentError2> {
         let transaction_dir =
             tempfile::tempdir_in(&self.temp_dir).map_err(EnvironmentError2::MakeSandbox)?;
 
-        copy_dir(&self.path, &transaction_dir, true)
-            .await
+        copy_dir_recursive(&self.path, &transaction_dir, true)
             .map_err(EnvironmentError2::MakeTemporaryEnv)?;
 
         Ok(PathEnvironment {
@@ -241,8 +240,7 @@ where
         // packages (e.g. nixpkgs-flox.hello) must be pinned to a specific version which is added to
         // the catalog
         let result_catalog_json = out_link.join(CATALOG_JSON);
-        copy_file_without_permissions(&result_catalog_json, self.catalog_path())
-            .await
+        copy_file_without_permissions(result_catalog_json, self.catalog_path())
             .map_err(EnvironmentError2::CopyFile)?;
 
         Ok(())
@@ -264,7 +262,7 @@ where
         match new_manifest_contents {
             None => return Ok(false),
             Some(new_manifest_contents) => {
-                let mut temp_env = self.make_temporary().await?;
+                let mut temp_env = self.make_temporary()?;
                 temp_env.update_manifest(&new_manifest_contents)?;
                 temp_env.build(nix, system).await?;
                 self.replace_with(temp_env)?;
@@ -287,7 +285,7 @@ where
             fs::read_to_string(self.manifest_path()).map_err(EnvironmentError2::ReadManifest)?;
         let new_manifest_contents =
             flox_nix_content_with_packages_removed(&current_manifest_contents, packages)?;
-        let mut temp_env = self.make_temporary().await?;
+        let mut temp_env = self.make_temporary()?;
         temp_env.update_manifest(&new_manifest_contents)?;
         temp_env.build(nix, system).await?;
         self.replace_with(temp_env)?;
@@ -390,7 +388,6 @@ impl<S: TransactionState> PathEnvironment<S> {
     ///     "test_env".parse().unwrap(),
     ///     environment_temp_dir.into_path(),
     /// )
-    /// .await
     /// .unwrap();
     ///
     /// let flake_attribute = format!("path:{path}/.flox/test_env#.floxEnvs.{system}.default")
@@ -506,7 +503,7 @@ impl PathEnvironment<Original> {
     /// Create a new env in a `.flox` directory within a specific path or open it if it exists.
     ///
     /// The method creates or opens a `.flox` directory _contained_ within `path`!
-    pub async fn init(
+    pub fn init(
         path: impl AsRef<Path>,
         name: EnvironmentName,
         temp_dir: impl AsRef<Path>,
@@ -525,8 +522,7 @@ impl PathEnvironment<Original> {
 
         std::fs::create_dir_all(&env_dir).map_err(EnvironmentError2::InitEnv)?;
 
-        copy_dir(&env!("FLOX_ENV_TEMPLATE"), &env_dir, false)
-            .await
+        copy_dir_recursive(&env!("FLOX_ENV_TEMPLATE"), &env_dir, false)
             .map_err(EnvironmentError2::InitEnv)?;
 
         Self::open(path, EnvironmentRef::new_from_parts(None, name), temp_dir)
@@ -611,7 +607,7 @@ fn find_attrs(mut expr: Expr) -> Result<AttrSet, ()> {
 /// 1. Sometimes we need to copy from the Nix store
 /// 2. fs_extra::dir::copy doesn't handle symlinks.
 ///    See: https://github.com/webdesus/fs_extra/issues/61
-async fn copy_dir(
+fn copy_dir_recursive(
     from: &impl AsRef<Path>,
     to: &impl AsRef<Path>,
     keep_permissions: bool,
@@ -621,7 +617,7 @@ async fn copy_dir(
         let new_path = to.as_ref().join(entry.path().strip_prefix(from).unwrap());
         match entry.file_type() {
             file_type if file_type.is_dir() => {
-                tokio::fs::create_dir(new_path).await.unwrap();
+                std::fs::create_dir(new_path).unwrap();
             },
             file_type if file_type.is_symlink() => {
                 let target = std::fs::read_link(entry.path())
@@ -638,9 +634,7 @@ async fn copy_dir(
                 if keep_permissions {
                     fs::copy(entry.path(), &new_path)?;
                 } else {
-                    copy_file_without_permissions(entry.path(), &new_path)
-                        .await
-                        .unwrap();
+                    copy_file_without_permissions(entry.path(), &new_path).unwrap();
                 }
             },
         }
@@ -781,7 +775,6 @@ mod tests {
             EnvironmentName::from_str("test").unwrap(),
             environment_temp_dir.into_path(),
         )
-        .await
         .unwrap();
 
         assert_eq!(actual, expected);
@@ -811,7 +804,6 @@ mod tests {
             "test".parse().unwrap(),
             environment_temp_dir.into_path(),
         )
-        .await
         .unwrap();
 
         assert_eq!(
@@ -823,8 +815,8 @@ mod tests {
         )
     }
 
-    #[tokio::test]
-    async fn test_flox_nix_content_with_new_packages() {
+    #[test]
+    fn test_flox_nix_content_with_new_packages() {
         let old_content = indoc! {r#"
             {
                 packages."nixpkgs-flox".hello = {};
@@ -855,11 +847,10 @@ mod tests {
         let sandbox_path = tempdir.path().join("sandbox");
         std::fs::create_dir(&sandbox_path).unwrap();
 
-        let mut env = PathEnvironment::init(tempdir.path(), "test".parse().unwrap(), &sandbox_path)
-            .await
-            .unwrap();
+        let mut env =
+            PathEnvironment::init(tempdir.path(), "test".parse().unwrap(), &sandbox_path).unwrap();
 
-        let mut temp_env = env.make_temporary().await.unwrap();
+        let mut temp_env = env.make_temporary().unwrap();
 
         assert_eq!(temp_env.path.parent().unwrap(), sandbox_path);
 
@@ -893,11 +884,10 @@ mod tests {
         let sandbox_path = tempdir.path().join("sandbox");
         std::fs::create_dir(&sandbox_path).unwrap();
 
-        let mut env = PathEnvironment::init(tempdir.path(), "test".parse().unwrap(), &sandbox_path)
-            .await
-            .unwrap();
+        let mut env =
+            PathEnvironment::init(tempdir.path(), "test".parse().unwrap(), &sandbox_path).unwrap();
 
-        let mut temp_env = env.make_temporary().await.unwrap();
+        let mut temp_env = env.make_temporary().unwrap();
 
         let empty_env_str = r#"{ }"#;
         temp_env.update_manifest(&empty_env_str).unwrap();
@@ -958,11 +948,10 @@ mod tests {
         let sandbox_path = tempdir.path().join("sandbox");
         std::fs::create_dir(&sandbox_path).unwrap();
 
-        let mut env = PathEnvironment::init(tempdir.path(), "test".parse().unwrap(), &sandbox_path)
-            .await
-            .unwrap();
+        let mut env =
+            PathEnvironment::init(tempdir.path(), "test".parse().unwrap(), &sandbox_path).unwrap();
 
-        let mut temp_env = env.make_temporary().await.unwrap();
+        let mut temp_env = env.make_temporary().unwrap();
 
         let empty_env_str = indoc! {"
             { }
