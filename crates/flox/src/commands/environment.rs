@@ -155,14 +155,14 @@ impl Delete {
 ///  * for command: flox activate -- <command> <args>
 #[derive(Bpaf, Clone)]
 pub struct Activate {
-    #[allow(dead_code)] // pending spec for `-e`, `--dir` behaviour
+    #[allow(dead_code)] // TODO: pending spec for `-e`, `--dir` behaviour
     #[bpaf(external(environment_args), group_help("Environment Options"))]
     environment_args: EnvironmentArgs,
 
     #[bpaf(long, short, argument("ENV"))]
     environment: Vec<EnvironmentRef>,
 
-    #[allow(dead_code)] // not yet handled in impl
+    #[allow(dead_code)] // TODO: not yet handled in impl
     #[bpaf(external(activate_run_args))]
     arguments: Option<(String, Vec<String>)>,
 }
@@ -205,6 +205,7 @@ pub struct Init {
     #[bpaf(long, short, argument("name"))]
     name: Option<EnvironmentName>,
 }
+
 impl Init {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("init");
@@ -291,7 +292,6 @@ impl List {
             .context("Could not get catalog")?;
         // let installed_store_paths = env.installed_store_paths(&flox).await?;
 
-        println!("Packages in {}:", env.environment_ref());
         for (publish_element, _) in catalog.entries.iter() {
             if publish_element.version != LATEST_VERSION {
                 println!(

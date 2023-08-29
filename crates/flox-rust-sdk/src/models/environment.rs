@@ -11,7 +11,7 @@ use rnix::ast::{AttrSet, Expr};
 use rowan::ast::AstNode;
 use runix::arguments::eval::EvaluationArgs;
 use runix::arguments::{BuildArgs, EvalArgs};
-use runix::command::{Build, Eval};
+use runix::command::{Build, Eval, Shell};
 use runix::command_line::{NixCommandLine, NixCommandLineRunError, NixCommandLineRunJsonError};
 use runix::flake_ref::path::PathRef;
 use runix::installable::FlakeAttribute;
@@ -67,11 +67,8 @@ pub trait Environment {
         system: impl AsRef<str> + Send,
     ) -> Result<(), EnvironmentError2>;
 
-    /// Activate this environment
-    async fn activate(&self, nix: &NixCommandLine) -> Result<(), EnvironmentError2>;
-
     /// Atomically edit this environment, ensuring that it still builds
-    async fn edit(&self) -> Result<(), EnvironmentError2>;
+    async fn edit(&mut self, contents: &impl AsRef<str>) -> Result<(), EnvironmentError2>;
 
     async fn catalog(
         &self,
@@ -259,15 +256,9 @@ where
         Ok(())
     }
 
-    /// Activate this environment
-    /// TODO: remove this `allow` once the method is filled out
-    #[allow(unused_variables)]
-    async fn activate(&self, nix: &NixCommandLine) -> Result<(), EnvironmentError2> {
-        todo!()
-    }
-
+    #[allow(unused)]
     /// Atomically edit this environment, ensuring that it still builds
-    async fn edit(&self) -> Result<(), EnvironmentError2> {
+    async fn edit(&mut self, contents: &impl AsRef<str>) -> Result<(), EnvironmentError2> {
         todo!()
     }
 
@@ -304,6 +295,8 @@ where
             .await
             .map_err(EnvironmentError2::EvalCatalog)?;
 
+        std::fs::write(self.catalog_path(), catalog_value.to_string())
+            .map_err(EnvironmentError2::WriteCatalog)?;
         serde_json::from_value(catalog_value).map_err(EnvironmentError2::ParseCatalog)
     }
 
@@ -390,6 +383,11 @@ impl<S: TransactionState> PathEnvironment<S> {
     /// Path to the environment definition file
     pub fn manifest_path(&self) -> PathBuf {
         self.path.join("pkgs").join("default").join("flox.nix")
+    }
+
+    /// Path to the environment's catalog
+    fn catalog_path(&self) -> PathBuf {
+        self.path.join("pkgs").join("default").join(CATALOG_JSON)
     }
 }
 
@@ -529,6 +527,8 @@ pub enum EnvironmentError2 {
     EvalCatalog(NixCommandLineRunJsonError),
     #[error("ParseCatalog({0})")]
     ParseCatalog(serde_json::Error),
+    #[error("WriteCatalog({0})")]
+    WriteCatalog(std::io::Error),
     #[error("Build({0})")]
     Build(NixCommandLineRunError),
     #[error("ReadManifest({0})")]
@@ -539,6 +539,8 @@ pub enum EnvironmentError2 {
     UpdateManifest(std::io::Error),
     #[error("OpenManifest({0})")]
     OpenManifest(std::io::Error),
+    #[error("Activate({0})")]
+    Activate(NixCommandLineRunError),
 }
 
 /// Within a nix AST, find the first definition of an attribute set,
