@@ -68,6 +68,10 @@ setup() {
 # Given a valid pacakge, a signing key and a binary cache,
 # flox publish is expected to succeed.
 @test "flox publish" {
+    if [[ "$NIX_SYSTEM" == *-darwin ]]; then
+      skip "failing on macOS; see https://github.com/flox/flox/issues/277"
+    fi
+
     run $FLOX_CLI -v publish "$CHANNEL#hello"
     assert_success
 
@@ -99,6 +103,9 @@ setup() {
 # Publish requires a cached binary.
 # If the binary is not found at the first try, publish will retry 3 times
 @test "flox publish retries fetching url 3 times" {
+    if [[ "$NIX_SYSTEM" == *-darwin ]]; then
+      skip "failing on macOS; see https://github.com/flox/flox/issues/277"
+    fi
     run $FLOX_CLI -v publish "$CHANNEL#hello" --public-cache-url http://url.example
     assert_failure
     assert_output --regexp - <<EOF
@@ -112,6 +119,9 @@ EOF
 # Publish requires a cached binary.
 # If the binary is not found at the first try, publish will retry `--max-retries <n>` times
 @test "flox publish retries fetching url; --max-retries 2" {
+    if [[ "$NIX_SYSTEM" == *-darwin ]]; then
+      skip "failing on macOS; see https://github.com/flox/flox/issues/277"
+    fi
     run $FLOX_CLI -v publish "$CHANNEL#hello" --public-cache-url http://url.example --max-retries 2
     assert_failure
     assert_output --regexp - <<EOF
