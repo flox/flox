@@ -260,8 +260,8 @@ where
         let new_manifest_contents =
             flox_nix_content_with_new_packages(&current_manifest_contents, packages)?;
         match new_manifest_contents {
-            None => return Ok(false),
-            Some(new_manifest_contents) => {
+            ManifestContent::Unchanged => return Ok(false),
+            ManifestContent::Changed(new_manifest_contents) => {
                 let mut temp_env = self.make_temporary()?;
                 temp_env.update_manifest(&new_manifest_contents)?;
                 temp_env.build(nix, system).await?;
@@ -642,6 +642,11 @@ fn copy_dir_recursive(
     Ok(())
 }
 
+pub enum ManifestContent {
+    Unchanged,
+    Changed(String),
+}
+
 /// insert packages into the content of a flox.nix file
 ///
 /// TODO: At some point this should return None if the contents were not changed,
@@ -649,7 +654,7 @@ fn copy_dir_recursive(
 fn flox_nix_content_with_new_packages(
     flox_nix_content: &impl AsRef<str>,
     packages: impl IntoIterator<Item = FloxPackage>,
-) -> Result<Option<String>, EnvironmentError2> {
+) -> Result<ManifestContent, EnvironmentError2> {
     let packages = packages
         .into_iter()
         .map(|package| package.flox_nix_attribute().unwrap());
@@ -686,7 +691,7 @@ fn flox_nix_content_with_new_packages(
         .syntax()
         .replace_with(edited.syntax().green().into_owned());
     let new_content = nixpkgs_fmt::reformat_string(&green_tree.to_string());
-    Ok(Some(new_content))
+    Ok(ManifestContent::Changed(new_content))
 }
 
 /// remove packages from the content of a flox.nix file
@@ -823,14 +828,19 @@ mod tests {
             }
         "#};
         let new_content =
-            flox_nix_content_with_new_packages(&old_content, [FloxPackage::Triple(FloxTriple {
-                stability: Stability::Stable,
-                channel: "nixpkgs-flox".to_string(),
-                name: ["hello"].try_into().unwrap(),
-                version: None,
-            })])
+            match flox_nix_content_with_new_packages(&old_content, [FloxPackage::Triple(
+                FloxTriple {
+                    stability: Stability::Stable,
+                    channel: "nixpkgs-flox".to_string(),
+                    name: ["hello"].try_into().unwrap(),
+                    version: None,
+                },
+            )])
             .unwrap()
-            .unwrap();
+            {
+                ManifestContent::Changed(new_content) => new_content,
+                ManifestContent::Unchanged => panic!("contents should be changed"),
+            };
         let expected = indoc! {r#"
             {
               packages."nixpkgs-flox".hello = { };
