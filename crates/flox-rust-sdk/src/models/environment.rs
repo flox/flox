@@ -11,7 +11,7 @@ use rnix::ast::{AttrSet, Expr};
 use rowan::ast::AstNode;
 use runix::arguments::eval::EvaluationArgs;
 use runix::arguments::{BuildArgs, EvalArgs};
-use runix::command::{Build, Eval, Shell};
+use runix::command::{Build, Eval};
 use runix::command_line::{NixCommandLine, NixCommandLineRunError, NixCommandLineRunJsonError};
 use runix::flake_ref::path::PathRef;
 use runix::installable::FlakeAttribute;

@@ -69,7 +69,7 @@ EOF
 }
 
 @test "'flox list' lists packages of environment in the current dir; matching names" {
-  "$FLOX_CLI" init -e not-test
+  "$FLOX_CLI" init -n not-test
   "$FLOX_CLI" install -e not-test hello
 
   run "$FLOX_CLI" list -e not-test
@@ -82,7 +82,7 @@ EOF
 
 
 @test "'flox list' lists packages of environment in the current dir; no name" {
-  "$FLOX_CLI" init -e not-test
+  "$FLOX_CLI" init -n not-test
   "$FLOX_CLI" install -e not-test hello
 
   run "$FLOX_CLI" list
@@ -94,7 +94,7 @@ EOF
 }
 
 @test "'flox list' lists packages of environment in the current dir; no matching name" {
-  "$FLOX_CLI" init -e not-test
+  "$FLOX_CLI" init -n not-test
   "$FLOX_CLI" install -e not-test hello
 
   run "$FLOX_CLI" list -e test
