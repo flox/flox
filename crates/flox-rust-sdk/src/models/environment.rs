@@ -158,9 +158,7 @@ impl<S: TransactionState> PathEnvironment<S> {
     ) -> Result<(), EnvironmentError2> {
         let transaction_backup = self
             .path
-            .parent()
-            .expect("path shouldn't be /")
-            .join(format!("{}.tmp", self.name().0));
+            .with_file_name(format!("{}.tmp", self.name().as_ref()));
         if transaction_backup.exists() {
             return Err(EnvironmentError2::PriorTransaction(transaction_backup));
         }
