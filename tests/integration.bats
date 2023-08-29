@@ -345,6 +345,10 @@ setup_file() {
     RG_PATH="/nix/store/ix73alhygpflvq50fimdgwl1x2f8yv7y-ripgrep-13.0.0/bin/rg"
     CURL_PATH="/nix/store/8nv1g4ymxi2f96pbl1jy9h625v2risd8-curl-7.86.0-bin/bin/curl"
     ;;
+  x86_64-darwin)
+    RG_PATH="/nix/store/1h3ymrn6mai4y3z1gi13yl5alf15xixd-ripgrep-13.0.0/bin/rg"
+    CURL_PATH="/nix/store/sg2j79m7vbvynfd9kpn2hycva2c2y92w-curl-7.86.0-bin/bin/curl"
+    ;;
   aarch64-linux)
     RG_PATH="/nix/store/zcq437znz7080wc7gbhijdm5x66qk5lj-ripgrep-13.0.0/bin/rg"
     CURL_PATH="/nix/store/0b3a9wbhss293wd8qv6q6gfh2wgk34c6-curl-7.86.0-bin/bin/curl"

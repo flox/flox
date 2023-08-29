@@ -10,15 +10,18 @@ on:
 jobs:
 
   build:
-    name: Build ${{ matrix.package }}
-    runs-on: ubuntu-latest
+    name: ${{ matrix.package.job_description }} ${{ matrix.package.name }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
 
     strategy:
       matrix:
-        include:
-          - package: flox
-          - package: flox-bash
-          - package: nix-editor
+        package:
+        - {name: flox, job_description: "Build and test"}
+        - {name: flox-bash, job_description: "Build" }
+        - {name: nix-editor, job_description: "Build" }
+        os: 
+        - ubuntu-latest
+        - macos-latest
 
     steps:
     - name: Checkout
@@ -39,11 +42,11 @@ jobs:
       run: nix develop '.#rust-env' -c cargo test --locked --workspace
       
     - name: Build
-      run: flox build '${{ matrix.package }}' -L --print-out-paths
+      run: flox build '${{ matrix.package.name }}' -L --print-out-paths
 
     - name: Cache the store
       run: flox nix copy --all --to "$FLOX_SUBSTITUTER" -vv
 
     - name: Test
-      if: ${{ matrix.package == 'flox' }}
+      if: ${{ matrix.package.name == 'flox' }}
       run: nix run '.#flox-tests'
