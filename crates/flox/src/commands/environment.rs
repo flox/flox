@@ -7,7 +7,7 @@ use std::process::Command;
 use anyhow::{bail, Context, Result};
 use bpaf::{construct, Bpaf, Parser, ShellComp};
 use flox_rust_sdk::flox::{EnvironmentName, Flox};
-use flox_rust_sdk::models::environment::{Environment, Original, PathEnvironment};
+use flox_rust_sdk::models::environment::{Environment, Original, PathEnvironment, Temporary};
 use flox_rust_sdk::models::environment_ref;
 use flox_rust_sdk::nix::arguments::eval::EvaluationArgs;
 use flox_rust_sdk::nix::command::{Shell, StoreGc};
@@ -56,7 +56,56 @@ impl Edit {
 
         let nix = flox.nix(Default::default());
 
-        if let Some(file) = self.file {
+        match self.provided_manifest_contents()? {
+            // If provided with the contents of a manifest file, either via a path to a file or via
+            // contents piped to stdin, use those contents to try building the environment.
+            Some(new_manifest) => {
+                try_build(&mut temporary_environment, new_manifest, &nix, &flox.system).await?;
+                environment.replace_with(temporary_environment)?;
+                Ok(())
+            },
+            // If not provided with new manifest contents, let the user edit the file directly
+            // via $EDITOR (as long as `flox edit` was invoked interactively).
+            None => {
+                let editor = std::env::var("EDITOR").context("$EDITOR not set")?;
+                if !Dialog::can_prompt() {
+                    bail!("Can't open editor in non interactive context");
+                }
+                let path = temporary_environment.manifest_path();
+                let should_continue = Dialog {
+                    message: "Continue editing?",
+                    help_message: Default::default(),
+                    typed: Confirm {
+                        default: Some(true),
+                    },
+                };
+                // Let the user keep editing the file until the build succeeds or the user
+                // decides to stop.
+                loop {
+                    let new_manifest = Edit::edited_manifest_contents(&path, &editor)?;
+                    let build_result =
+                        try_build(&mut temporary_environment, new_manifest, &nix, &flox.system)
+                            .await;
+                    if let Err(e) = build_result {
+                        error!("Environment invalid, building resulted in an error: {e}");
+                        if !should_continue.clone().prompt().await? {
+                            return Ok(());
+                        }
+                    } else {
+                        break;
+                    }
+                }
+                environment
+                    .replace_with(temporary_environment)
+                    .context("Failed applying environment changes")?;
+                Ok(())
+            },
+        }
+    }
+
+    /// Retrieves the new manifest file contents if a new manifest file was provided
+    fn provided_manifest_contents(&self) -> Result<Option<String>> {
+        if let Some(ref file) = self.file {
             let mut file: Box<dyn std::io::Read + Send> = if file == Path::new("-") {
                 Box::new(stdin())
             } else {
@@ -65,54 +114,34 @@ impl Edit {
 
             let mut contents = String::new();
             file.read_to_string(&mut contents)?;
-            temporary_environment.update_manifest(&contents)?;
-            temporary_environment.build(&nix, &flox.system).await?;
-            return Ok(());
+            Ok(Some(contents))
+        } else {
+            Ok(None)
         }
-
-        let editor = std::env::var("EDITOR").context("$EDITOR not set")?;
-        if !Dialog::can_prompt() {
-            bail!("Can't open editor in non interactive context");
-        }
-
-        loop {
-            let path = temporary_environment.manifest_path();
-            let mut command = Command::new(&editor);
-            command.arg(&path);
-
-            let child = command.spawn().context("editor command failed")?;
-            let _ = child.wait_with_output().context("editor command failed")?;
-
-            let contents = std::fs::read_to_string(path)?;
-            temporary_environment.update_manifest(&contents)?;
-            let build_result = temporary_environment.build(&nix, &flox.system).await;
-
-            match build_result {
-                Ok(_) => {
-                    break;
-                },
-                Err(e) => {
-                    error!("Environment invalid, building resulted in an error: {e}");
-                    let again = Dialog {
-                        message: "Continue editing?",
-                        help_message: Default::default(),
-                        typed: Confirm {
-                            default: Some(true),
-                        },
-                    }
-                    .prompt()
-                    .await?;
-                    if !again {
-                        return Ok(());
-                    }
-                },
-            };
-        }
-        environment
-            .replace_with(temporary_environment)
-            .context("Failed applying environment changes")?;
-        Ok(())
     }
+
+    /// Gets a new set of manifest contents after a user edits the file
+    fn edited_manifest_contents(path: impl AsRef<Path>, editor: impl AsRef<str>) -> Result<String> {
+        let mut command = Command::new(editor.as_ref());
+        command.arg(path.as_ref());
+
+        let child = command.spawn().context("editor command failed")?;
+        let _ = child.wait_with_output().context("editor command failed")?;
+
+        let contents = std::fs::read_to_string(path)?;
+        Ok(contents)
+    }
+}
+
+async fn try_build(
+    temp_env: &mut PathEnvironment<Temporary>,
+    manifest_contents: impl AsRef<str>,
+    nix: &NixCommandLine,
+    system: impl AsRef<str> + Send,
+) -> Result<()> {
+    temp_env.update_manifest(&manifest_contents)?;
+    temp_env.build(nix, system).await?;
+    Ok(())
 }
 
 /// Delete an environment
