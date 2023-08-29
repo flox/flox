@@ -163,7 +163,12 @@ impl<S: TransactionState> PathEnvironment<S> {
         }
         fs::rename(&self.path, &transaction_backup)
             .map_err(EnvironmentError2::BackupTransaction)?;
-        fs::rename(replacement.path, &self.path).map_err(EnvironmentError2::Move)?;
+        // try to restore the backup if the move fails
+        if let Err(err) = fs::rename(replacement.path, &self.path) {
+            fs::rename(transaction_backup, &self.path)
+                .map_err(EnvironmentError2::AbortTransaction)?;
+            return Err(EnvironmentError2::Move(err));
+        }
         fs::remove_dir_all(transaction_backup).map_err(EnvironmentError2::RemoveBackup)?;
         Ok(())
     }
@@ -581,6 +586,8 @@ pub enum EnvironmentError2 {
     BackupTransaction(std::io::Error),
     #[error("Failed to move modified environment into place: {0}")]
     Move(std::io::Error),
+    #[error("Failed to abort transaction; backup could not be moved back into place: {0}")]
+    AbortTransaction(std::io::Error),
     #[error("Failed to remove transaction backup: {0}")]
     RemoveBackup(std::io::Error),
     #[error("Failed to copy file")]
