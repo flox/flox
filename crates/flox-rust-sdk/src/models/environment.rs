@@ -626,7 +626,6 @@ fn copy_dir_recursive(
                 // If target is a relative symlink, this will potentially orphan
                 // it. But we're assuming it's absolute since we only copy links
                 // to the Nix store.
-                println!("new_path={}", new_path.to_string_lossy());
                 std::os::unix::fs::symlink(target, &new_path)?;
                 // TODO handle permissions
             },
