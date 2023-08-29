@@ -387,16 +387,13 @@ impl Install {
             .context("could not install packages")?
         {
             println!(
-                "✅ Installed {} into '{}' environment.",
-                packages_str,
+                "✅ Installed {packages_str} into '{}' environment.",
                 environment.environment_ref()
             );
         } else {
             let verb = if plural { "are" } else { "is" };
             println!(
-                "No changes; {} {} already installed into '{}' environment.",
-                packages_str,
-                verb,
+                "No changes; {packages_str} {verb} already installed into '{}' environment.",
                 environment.environment_ref()
             );
         }
