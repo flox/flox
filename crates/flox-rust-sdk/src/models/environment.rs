@@ -176,7 +176,7 @@ impl<S: TransactionState> PathEnvironment<S> {
     ///
     /// Mind that an existing out link does not necessarily imply that the environment
     /// can in fact be built.
-    pub fn out_link(&self, system: impl AsRef<str> + Send) -> PathBuf {
+    fn out_link(&self, system: impl AsRef<str> + Send) -> PathBuf {
         self.path
             .join("builds")
             .join(format!("{0}.{1}", system.as_ref(), self.name()))
