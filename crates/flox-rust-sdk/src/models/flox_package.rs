@@ -236,22 +236,6 @@ impl Display for FloxPackage {
     }
 }
 
-pub fn packages_to_string(packages: &Vec<FloxPackage>) -> String {
-    match packages.len() {
-        0 => "".to_string(),
-        1 => format!("'{}'", packages[0]),
-        2 => format!("'{}' and '{}'", packages[0], packages[1]),
-        _ => {
-            let mut result = String::new();
-            for package in &packages[0..packages.len() - 1] {
-                result.push_str(&format!("'{}', ", package));
-            }
-            result.push_str(format!("and '{}'", packages[packages.len() - 1]).as_str());
-            result
-        },
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use flox_types::constants::DEFAULT_CHANNEL;
@@ -362,30 +346,5 @@ mod tests {
             FloxPackage::parse(".#packages.aarch64-darwin.flox", &CHANNELS, DEFAULT_CHANNEL)
                 .expect("should parse");
         assert_eq!(parsed, expected);
-    }
-
-    /// Helper function to create a triple from a string
-    fn create_triple(name: &str) -> FloxPackage {
-        FloxPackage::Triple(FloxTriple {
-            stability: Stability::Stable,
-            channel: "nixpkgs-flox".parse().unwrap(),
-            name: name.parse().unwrap(),
-            version: None,
-        })
-    }
-
-    #[test]
-    fn test_packages_to_string() {
-        let mut packages = vec![];
-        assert_eq!(packages_to_string(&packages), "");
-        packages.push(create_triple("hello"));
-        assert_eq!(packages_to_string(&packages), "'hello'");
-        packages.push(create_triple("curl"));
-        assert_eq!(packages_to_string(&packages), "'hello' and 'curl'");
-        packages.push(create_triple("ripgrep"));
-        assert_eq!(
-            packages_to_string(&packages),
-            "'hello', 'curl', and 'ripgrep'"
-        );
     }
 }

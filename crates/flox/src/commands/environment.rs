@@ -13,12 +13,13 @@ use flox_rust_sdk::nix::arguments::eval::EvaluationArgs;
 use flox_rust_sdk::nix::command::{Shell, StoreGc};
 use flox_rust_sdk::nix::command_line::NixCommandLine;
 use flox_rust_sdk::nix::Run;
-use flox_rust_sdk::prelude::flox_package::{packages_to_string, FloxPackage};
+use flox_rust_sdk::prelude::flox_package::FloxPackage;
 use flox_types::constants::{DEFAULT_CHANNEL, LATEST_VERSION};
 use itertools::Itertools;
 use log::{error, info};
 
 use crate::utils::dialog::{Confirm, Dialog};
+use crate::utils::display::packages_to_string;
 use crate::utils::resolve_environment_ref;
 use crate::{flox_forward, subcommand_metric};
 
