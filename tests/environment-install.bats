@@ -70,9 +70,13 @@ setup_file() {
   run "$FLOX_CLI" install hello
   assert_success
   assert_output --partial "✅ Installed 'hello' into 'test' environment."
-  
+}
+
+@test "i?: warning message if package is already installed
   skip "our current editing of Nix expressions doesn't detect already installed packages."
-  run "$FLOX_CLI" install hello
+  run "$FLOX_CLI" install hello # install once
+  run "$FLOX_CLI" install hello # try install again
+  assert_success
   assert_output --partial "...already installed..."
 }
 
