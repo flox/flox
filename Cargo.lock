@@ -694,6 +694,7 @@ dependencies = [
  "log",
  "nixpkgs-fmt",
  "once_cell",
+ "pretty_assertions",
  "regex",
  "rnix 0.11.0",
  "rowan 0.15.11",

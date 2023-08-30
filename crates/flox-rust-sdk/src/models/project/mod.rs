@@ -290,7 +290,6 @@ impl<'flox, Git: GitProvider> Project<'flox, Git, ReadOnly<Git>> {
                     .map_err(TransactionEnterError::CopyDir)?;
             } else {
                 copy_file_without_permissions(entry.path(), &new_path)
-                    .await
                     .map_err(TransactionEnterError::CopyFile)?;
             }
         }
