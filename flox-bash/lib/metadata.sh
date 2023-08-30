@@ -120,6 +120,7 @@ function floxmetaGit() {
 	# 2. Specify `user.{name,email}` as required for commits.
 	GIT_CONFIG_SYSTEM=/dev/null GIT_CONFIG_GLOBAL=/dev/null \
 	$_git \
+		-c "http.version=HTTP/1.1" \
 		-c "user.name=Flox User" \
 		-c "user.email=floxuser@example.invalid" \
 		"$@"
@@ -132,6 +133,7 @@ function floxmetaGitVerbose() {
 	trace "$@"
 	GIT_CONFIG_SYSTEM=/dev/null GIT_CONFIG_GLOBAL=/dev/null \
 	$invoke_git \
+		-c "http.version=HTTP/1.1" \
 		-c "user.name=Flox User" \
 		-c "user.email=floxuser@example.invalid" \
 		"$@"
