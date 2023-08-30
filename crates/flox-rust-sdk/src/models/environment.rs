@@ -182,7 +182,7 @@ impl<S: TransactionState> PathEnvironment<S> {
     /// can in fact be built.
     fn out_link(&self, system: impl AsRef<str> + Send) -> PathBuf {
         self.path
-            .join("builds")
+            .join("envs")
             .join(format!("{0}.{1}", system.as_ref(), self.name()))
     }
 }
