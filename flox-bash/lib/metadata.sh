@@ -444,20 +444,25 @@ function temporaryMigrateGitHubTo030Floxdev() {
 	origin="$(
 		floxmetaGit -C "$realEnvironmentMetaDir" config --get "remote.origin.url" || :
 	)"
+	# Iterate through origin parts to identify new origin.
+	local organization reponame neworigin
+	for x in $(IFS='/';echo $origin); do
+		organization="$reponame"
+		reponame="$x"
+	done
+	neworigin="${git_base_url}$organization/$reponame"
 	case "$origin" in
 	"$git_base_url"*)
 		: good
 		;;
+	https://github.com/flox/floxmeta | https://github.com/flox-examples/floxmeta)
+		# These are ours; quietly rewrite origin and carry on.
+		floxmetaGitVerbose -C "$realEnvironmentMetaDir" remote set-url origin "$neworigin"
+		floxmetaHelperGit origin "$realEnvironmentMetaDir" fetch --quiet
+		;;
 	https://github.com/*/floxmeta*)
 		# Prompt user to confirm they want to migrate.
 		warn "floxmeta repository ($origin) still on github.com."
-		# Iterate through parts to identify last two.
-		local organization reponame
-		for x in $(IFS='/';echo $origin); do
-			organization="$reponame"
-			reponame="$x"
-		done
-		neworigin="${git_base_url}$organization/$reponame"
 		if ${invoke_gum?} confirm "Migrate to $neworigin?"; then
 			# Start by logging them into floxhub using github.com OAuth.
 			info "Great - let's start by getting you logged into floxHub"
