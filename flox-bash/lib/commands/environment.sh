@@ -1531,7 +1531,7 @@ function floxPushPull() {
 	tmpDir=$(mkTempDir)
 	floxmetaGitVerbose clone --quiet --shared "$environmentMetaDir" $tmpDir
 
-	# XXX Temporary migrate floxmeta from github.com -> floxdev.com with upgrade to 0.3.0
+	# XXX Temporary migrate floxmeta from github.com -> flox.dev with upgrade to 0.3.0
 	temporaryMigrateGitHubTo030Floxdev "$tmpDir"
 	# /XXX
 
