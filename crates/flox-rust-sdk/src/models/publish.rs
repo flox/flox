@@ -429,7 +429,9 @@ impl<'flox> Publish<'flox, NixAnalysis> {
 /// [UpstreamRepo] and [UpstreamCatalog] ensure safe access to individual catalog branches.
 /// Every [UpstreamRepo] instance represents an exclusive clone
 /// and can only ever create a single [UpstreamCatalog] instance at a time.
-struct UpstreamRepo(Git);
+struct UpstreamRepo {
+    git: Git,
+}
 
 impl UpstreamRepo {
     /// Clone an upstream repo
@@ -438,9 +440,9 @@ impl UpstreamRepo {
         temp_dir: impl AsRef<Path>,
     ) -> Result<Self, PublishError> {
         let repo_dir = tempfile::tempdir_in(temp_dir).unwrap().into_path(); // todo catch error
-        let repo = <Git as GitProvider>::clone(url.as_ref(), &repo_dir, false).await?;
+        let git = <Git as GitProvider>::clone(url.as_ref(), &repo_dir, false).await?;
 
-        Ok(Self(repo))
+        Ok(Self { git })
     }
 
     fn catalog_branch_name(system: &System) -> String {
@@ -455,18 +457,18 @@ impl UpstreamRepo {
         &mut self,
         system: &System,
     ) -> Result<UpstreamCatalog, PublishError> {
-        if self.0.list_branches().await? // todo: catch error
+        if self.git.list_branches().await? // todo: catch error
             .into_iter().any(|info| info.name == Self::catalog_branch_name(system))
         {
-            self.0
+            self.git
                 .checkout(&Self::catalog_branch_name(system), false)
                 .await?; // todo: catch error
         } else {
-            self.0
+            self.git
                 .checkout(&Self::catalog_branch_name(system), true)
                 .await?;
         }
-        Ok(UpstreamCatalog { git: &self.0 })
+        Ok(UpstreamCatalog { git: &self.git })
     }
 }
 
@@ -1247,7 +1249,7 @@ mod tests {
         .await
         .expect("Should clone repo");
 
-        assert!(repo.0.list_branches().await.unwrap().is_empty());
+        assert!(repo.git.list_branches().await.unwrap().is_empty());
 
         let catalog = repo
             .get_or_create_catalog(&"aarch64-darwin".to_string())
