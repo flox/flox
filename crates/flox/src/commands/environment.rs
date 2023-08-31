@@ -7,7 +7,7 @@ use std::process::Command;
 use anyhow::{bail, Context, Result};
 use bpaf::{construct, Bpaf, Parser, ShellComp};
 use flox_rust_sdk::flox::{EnvironmentName, Flox};
-use flox_rust_sdk::models::environment::{Environment, Original, PathEnvironment, Temporary};
+use flox_rust_sdk::models::environment::{Environment, Original, PathEnvironment};
 use flox_rust_sdk::models::environment_ref;
 use flox_rust_sdk::nix::arguments::eval::EvaluationArgs;
 use flox_rust_sdk::nix::command::{Shell, StoreGc};
@@ -52,16 +52,13 @@ impl Edit {
 
         let mut environment =
             resolve_environment(&flox, self.environment.as_deref(), "edit").await?;
-        let mut temporary_environment = environment.make_temporary()?;
-
         let nix = flox.nix(Default::default());
 
         match self.provided_manifest_contents()? {
             // If provided with the contents of a manifest file, either via a path to a file or via
             // contents piped to stdin, use those contents to try building the environment.
             Some(new_manifest) => {
-                try_build(&mut temporary_environment, new_manifest, &nix, &flox.system).await?;
-                environment.replace_with(temporary_environment)?;
+                environment.edit(&nix, &flox.system, new_manifest).await?;
                 Ok(())
             },
             // If not provided with new manifest contents, let the user edit the file directly
@@ -71,7 +68,7 @@ impl Edit {
                 if !Dialog::can_prompt() {
                     bail!("Can't open editor in non interactive context");
                 }
-                let path = temporary_environment.manifest_path();
+                let path = environment.manifest_path();
                 let should_continue = Dialog {
                     message: "Continue editing?",
                     help_message: Default::default(),
@@ -83,10 +80,7 @@ impl Edit {
                 // decides to stop.
                 loop {
                     let new_manifest = Edit::edited_manifest_contents(&path, &editor)?;
-                    let build_result =
-                        try_build(&mut temporary_environment, new_manifest, &nix, &flox.system)
-                            .await;
-                    if let Err(e) = build_result {
+                    if let Err(e) = environment.edit(&nix, &flox.system, new_manifest).await {
                         error!("Environment invalid, building resulted in an error: {e}");
                         if !should_continue.clone().prompt().await? {
                             return Ok(());
@@ -95,9 +89,6 @@ impl Edit {
                         break;
                     }
                 }
-                environment
-                    .replace_with(temporary_environment)
-                    .context("Failed applying environment changes")?;
                 Ok(())
             },
         }
@@ -131,17 +122,6 @@ impl Edit {
         let contents = std::fs::read_to_string(path)?;
         Ok(contents)
     }
-}
-
-async fn try_build(
-    temp_env: &mut PathEnvironment<Temporary>,
-    manifest_contents: impl AsRef<str>,
-    nix: &NixCommandLine,
-    system: impl AsRef<str> + Send,
-) -> Result<()> {
-    temp_env.update_manifest(&manifest_contents)?;
-    temp_env.build(nix, system).await?;
-    Ok(())
 }
 
 /// Delete an environment
@@ -251,7 +231,7 @@ impl Init {
         let current_dir = std::env::current_dir().unwrap();
         let home_dir = dirs::home_dir().unwrap();
 
-        let name = if let Some(name) = self.name.clone() {
+        let name = if let Some(name) = self.name {
             name
         } else if current_dir == home_dir {
             "default".parse()?
@@ -263,8 +243,7 @@ impl Init {
                 .parse()?
         };
 
-        let env =
-            PathEnvironment::<Original>::init(&current_dir, name, flox.temp_dir.clone())?;
+        let env = PathEnvironment::<Original>::init(&current_dir, name, flox.temp_dir.clone())?;
 
         println!(
             indoc::indoc! {"

@@ -69,7 +69,12 @@ pub trait Environment {
     ) -> Result<(), EnvironmentError2>;
 
     /// Atomically edit this environment, ensuring that it still builds
-    async fn edit(&mut self, contents: &impl AsRef<str>) -> Result<(), EnvironmentError2>;
+    async fn edit(
+        &mut self,
+        nix: &NixCommandLine,
+        system: impl AsRef<str> + Send,
+        contents: impl AsRef<str> + Send,
+    ) -> Result<(), EnvironmentError2>;
 
     async fn catalog(
         &self,
@@ -297,10 +302,16 @@ where
         Ok(())
     }
 
-    #[allow(unused)]
     /// Atomically edit this environment, ensuring that it still builds
-    async fn edit(&mut self, contents: &impl AsRef<str>) -> Result<(), EnvironmentError2> {
-        todo!()
+    async fn edit(
+        &mut self,
+        nix: &NixCommandLine,
+        system: impl AsRef<str> + Send,
+        contents: impl AsRef<str> + Send,
+    ) -> Result<(), EnvironmentError2> {
+        self.transact_with_manifest_contents(contents, nix, system)
+            .await?;
+        Ok(())
     }
 
     /// Return the [EnvironmentRef] for the environment for identification
@@ -428,6 +439,20 @@ impl<S: TransactionState> PathEnvironment<S> {
     /// Path to the environment's catalog
     fn catalog_path(&self) -> PathBuf {
         self.path.join("pkgs").join("default").join(CATALOG_JSON)
+    }
+
+    /// Attempt to transactionally replace the manifest contents
+    async fn transact_with_manifest_contents(
+        &mut self,
+        manifest_contents: impl AsRef<str>,
+        nix: &NixCommandLine,
+        system: impl AsRef<str> + Send,
+    ) -> Result<(), EnvironmentError2> {
+        let mut temp_env = self.make_temporary()?;
+        temp_env.update_manifest(&manifest_contents)?;
+        temp_env.build(nix, system).await?;
+        self.replace_with(temp_env)?;
+        Ok(())
     }
 }
 
