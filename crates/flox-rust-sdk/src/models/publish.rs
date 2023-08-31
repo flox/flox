@@ -393,6 +393,16 @@ impl<'flox> Publish<'flox, NixAnalysis> {
             .map_err(PublishError::PathInfo)
             .await?;
 
+        let mut invalid_outputs = narinfos
+            .iter()
+            .filter(|n| !n.valid)
+            .map(|n| n.path.to_string_lossy().into_owned())
+            .peekable();
+
+        if invalid_outputs.peek().is_some() {
+            Err(PublishError::PathsNotCached(invalid_outputs.collect()))?;
+        }
+
         Ok(CacheMeta {
             cache_url: substituter.unwrap_or(SubstituterUrl::parse("file:///nix/store").unwrap()),
             narinfo: narinfos,
@@ -601,6 +611,9 @@ pub enum PublishError {
 
     #[error("Failed to invoke path-info: {0}")]
     PathInfo(NixCommandLineRunJsonError),
+
+    #[error("Store Paths not found in cache: [{}]", .0.join(", "))]
+    PathsNotCached(Vec<String>),
 
     #[error("Failed to invoke build: {0}")]
     Build(NixCommandLineRunError),
