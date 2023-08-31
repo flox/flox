@@ -249,25 +249,25 @@ impl WithPassthru<PrintDevEnv> {
 
 #[derive(Bpaf, Clone, Debug)]
 pub struct Publish {
-    /// Signing key file to sign the binary with
+    /// Path to signing key file to sign the binary with
     ///
     /// When omitted, reads from the config.
     /// See flox-config(1) for more details.
-    #[bpaf(long, short('k'))]
+    #[bpaf(long, short('k'), argument("path"))]
     pub signing_key: Option<PathBuf>,
 
     /// Url of a binary cache to push binaries _to_
     ///
     /// When omitted, reads from the config.
     /// See flox-config(1) for more details.
-    #[bpaf(long, short('c'))]
+    #[bpaf(long, short('c'), argument("url"))]
     pub cache_url: Option<SubstituterUrl>,
 
     /// URL of a substituter to pull binaries _from_
     ///
     /// When ommitted, falls back to the config or uses the value for cache-url.
     /// See flox-config(1) for more details.
-    #[bpaf(long, short('s'))]
+    #[bpaf(long, short('s'), argument("url"))]
     pub public_cache_url: Option<SubstituterUrl>,
 
     /// Print snapshot JSON to stdout instead of uploading it to the catalog
