@@ -93,6 +93,19 @@ setup() {
     assert_output --partial "Cache url is required!"
 }
 
+# Publish requires a cached binary.
+# If the binary is not found at the first try, publish will retry for 3 times
+@test "flox publish retries fetching url 3 times" {
+    run $FLOX_CLI -v publish "$CHANNEL#hello" --public-cache-url http://url.example
+    assert_failure
+    assert_output --regexp - <<EOF
+.*
+Checking binary can be downloaded from http://url\.example/\.\.\.
+.*
+(Unable to find binary at http://url\.example/: Failed to invoke path-info:.*){4}
+EOF
+}
+
 teardown_file() {
     kill "$NIX_SERVE_PID"
 }
