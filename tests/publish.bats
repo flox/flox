@@ -106,6 +106,19 @@ Checking binary can be downloaded from http://url\.example/\.\.\.
 EOF
 }
 
+# Publish requires a cached binary.
+# If the binary is not found at the first try, publish will retry for `--retry <n>` times
+@test "flox publish retries fetching url; --retry 2" {
+    run $FLOX_CLI -v publish "$CHANNEL#hello" --public-cache-url http://url.example --retry 2
+    assert_failure
+    assert_output --regexp - <<EOF
+.*
+Checking binary can be downloaded from http://url\.example/\.\.\.
+.*
+(Unable to find binary at http://url\.example/: Failed to invoke path-info:.*){3}
+EOF
+}
+
 teardown_file() {
     kill "$NIX_SERVE_PID"
 }
