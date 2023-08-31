@@ -1315,6 +1315,37 @@ mod tests {
         );
     }
 
+    /// Check if a newly created catalog branch is empty
+    #[tokio::test]
+    async fn test_create_catalog_branch_is_empty_orphan() {
+        let _ = env_logger::try_init();
+        let (_flox, temp_dir_handle) = flox_instance();
+        let repo_dir = temp_dir_handle.path().join("repo");
+
+        // create a repo
+        fs::create_dir(&repo_dir).unwrap();
+        let repo = Git::init(&repo_dir, false).await.unwrap();
+
+        // add a file
+        fs::write(repo_dir.join("test"), "").unwrap();
+        repo.add(&[&repo_dir.join("test")]).await.unwrap();
+        repo.commit("test").await.unwrap();
+
+        let mut repo = UpstreamRepo::clone_repo(
+            repo.workdir().unwrap().to_string_lossy(),
+            temp_dir_handle.path(),
+        )
+        .await
+        .expect("Should clone repo");
+
+        let catalog = repo
+            .get_or_create_catalog(&"aarch64-darwin".to_string())
+            .await
+            .expect("Should create branch");
+
+        assert!(!catalog.git.workdir().unwrap().join("test").exists());
+    }
+
     // disabled because nix build does not have git user/email config,
     // TODO fix tests to work with local repos
     #[cfg(feature = "impure-unit-tests")]
