@@ -467,6 +467,7 @@ impl UpstreamRepo {
             self.git
                 .checkout(&Self::catalog_branch_name(system), true)
                 .await?;
+            self.git.rm(&[Path::new(".")], true, true, false).await?;
         }
         Ok(UpstreamCatalog { git: &self.git })
     }
