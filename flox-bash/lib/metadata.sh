@@ -752,7 +752,7 @@ function beginTransaction() {
 	elif [[ $createBranch -eq 1 ]]; then
 		floxmetaGitVerbose -C "$workDir" checkout --quiet --orphan "$branchName"
 		floxmetaGitVerbose -C "$workDir" ls-files                                   \
-			| $_xargs --no-run-if-empty floxmetaGit -C "$workDir" rm --quiet -f
+			| $_xargs --no-run-if-empty "$_git" -C "$workDir" rm --quiet -f
 		# A commit is needed in order to make the branch visible.
 		floxmetaGitVerbose -C "$workDir" commit --quiet --allow-empty \
 			-m "$USER created environment $environmentName ($environmentSystem)"
