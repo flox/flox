@@ -59,16 +59,21 @@ upstream repository.
     a different transport. For example, to upload packages
     to a (writable, authenticated) `s3://` URL,
     but download these packages from an (read-only,
-    unauthenticated) `https://cache.floxdev.com endpoint``.
+    unauthenticated) `https://cache.floxdev.com endpoint`.
 
     If not provided the `--public-cache-url` argument will default to
     the `public_cache_url` config value,
     or same value as provided for the `--cache-url` argument.
 
+`[ --max-retries <number> ]`
+:   Number of retries if the binary is not found in the cache
+
+    If not provided, defaults to `3` retries
+
 `[ --signing-key <file> | -k <file> ]`
 :   Used for identifying the path to the private key
     to be used to sign packages before upload.
-    If not provided the, will default to the `sign_key` config value.
+    If not provided, defaults to the `signing_key` config value.
 
 
 `--prefer-https`
