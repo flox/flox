@@ -13,4 +13,4 @@ This release includes several performance improvements, bug fixes, and feature r
 - Updated output level of internal commands to forward more prompts and warnings to users, e.g. to provide passwords or yubikey input.
 - Squashed some bugs, improved error messages / UX output, updated manpages and fixed typos.
 
-We especially want to thank all our <a href="https://github.com/flox/flox">github.com/flox/flox</a> contributors and <a href="https://discourse.floxdev.com">discourse community</a> members for all your valuable feedback!
+We especially want to thank all our <a href="https://github.com/flox/flox">github.com/flox/flox</a> contributors and <a href="https://discourse.flox.dev">discourse community</a> members for all your valuable feedback!

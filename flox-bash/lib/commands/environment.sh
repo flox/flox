@@ -1335,6 +1335,10 @@ function floxRollback() {
 		1 \
 		"$me $subcommand ${invocation[*]}")
 
+	# Now that metadata has been updated, make sure environment and
+	# generation links are all in place.
+	syncEnvironment "$environment"
+
 	# Display user friendly message
 	eval $(decodeEnvironment "$environment")
 	local rollbackOrSwitch="Rolled back"
@@ -1531,7 +1535,7 @@ function floxPushPull() {
 	tmpDir=$(mkTempDir)
 	floxmetaGitVerbose clone --quiet --shared "$environmentMetaDir" $tmpDir
 
-	# XXX Temporary migrate floxmeta from github.com -> floxdev.com with upgrade to 0.3.0
+	# XXX Temporary migrate floxmeta from github.com -> flox.dev with upgrade to 0.3.0
 	temporaryMigrateGitHubTo030Floxdev "$tmpDir"
 	# /XXX
 
@@ -1583,10 +1587,6 @@ function floxPushPull() {
 					warn "REMINDER: invoke '$me pull -e $environmentName' before activating environment"
 				fi
 			else
-				# XXX temporary: as we change to version 0.0.9 the layout of environment
-				# links changes to embed the system type. Take this opportunity to rename
-				# those links if they exist.
-				temporaryAssert009LinkLayout "$environment"
 				syncEnvironment "$environment"
 			fi
 		else
