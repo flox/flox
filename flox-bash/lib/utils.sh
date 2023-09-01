@@ -1381,8 +1381,10 @@ function darwinPromptPatchFile() {
 	warn "seem to have been reverted, possibly by way of a recent OS update."
 	if $invoke_gum confirm --default="true" "Reapply flox patches to '$brokenFile'?"; then
 		# Intentionally relying on Mac versions of sudo and patch.
+		# Patch spits interactive output to STDOUT that should be
+		# going to STDERR, so be sure to redirect that accordingly.
 		( set -x && \
-			/usr/bin/sudo /usr/bin/patch -V none -p0 -d / --verbose < $patchFile ) || \
+			/usr/bin/sudo /usr/bin/patch -V none -p0 -d / --verbose < $patchFile 1>&2 ) || \
 			warn "problems applying '$patchFile' - please reinstall flox"
 	else
 		warn "OK, note you may encounter problems with zsh session history."
