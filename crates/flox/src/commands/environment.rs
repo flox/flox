@@ -64,11 +64,18 @@ impl Edit {
             // If not provided with new manifest contents, let the user edit the file directly
             // via $EDITOR (as long as `flox edit` was invoked interactively).
             None => {
-                let editor = std::env::var("EDITOR").context("$EDITOR not set")?;
-                if !Dialog::can_prompt() {
-                    bail!("Can't open editor in non interactive context");
-                }
-                let path = environment.manifest_path();
+                let editor = std::env::var("EDITOR")
+                    .or(std::env::var("VISUAL"))
+                    .context("no editor found; neither EDITOR nor VISUAL are set")?;
+                // TODO: check for interactivity before allowing the editor to be opened
+                let manifest_path = environment.manifest_path();
+                // Make a copy of the manifest for the user to edit so failed edits aren't left in
+                // the original manifest. You can't put creation/cleanup inside the `edited_manifest_contents`
+                // method because the temporary manifest needs to stick around in case the user wants
+                // or needs to make successive edits without starting over each time.
+                let tmp_manifest_path = flox.temp_dir.join("tmp_manifest.nix");
+                let _ = std::fs::remove_file(&tmp_manifest_path); // Remove any old copies
+                std::fs::copy(&manifest_path, &tmp_manifest_path)?;
                 let should_continue = Dialog {
                     message: "Continue editing?",
                     help_message: Default::default(),
@@ -79,16 +86,22 @@ impl Edit {
                 // Let the user keep editing the file until the build succeeds or the user
                 // decides to stop.
                 loop {
-                    let new_manifest = Edit::edited_manifest_contents(&path, &editor)?;
+                    let new_manifest = Edit::edited_manifest_contents(&tmp_manifest_path, &editor)?;
                     if let Err(e) = environment.edit(&nix, &flox.system, new_manifest).await {
-                        error!("Environment invalid, building resulted in an error: {e}");
+                        error!("Environment invalid; building resulted in an error: {e}");
+                        if !Dialog::can_prompt() {
+                            std::fs::remove_file(tmp_manifest_path)?;
+                            bail!("Can't prompt to continue editing in non-interactive context");
+                        }
                         if !should_continue.clone().prompt().await? {
-                            return Ok(());
+                            std::fs::remove_file(tmp_manifest_path)?;
+                            bail!("Environment editing cancelled");
                         }
                     } else {
                         break;
                     }
                 }
+                std::fs::remove_file(tmp_manifest_path)?;
                 Ok(())
             },
         }

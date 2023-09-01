@@ -34,7 +34,7 @@ EOF
 }:
 {
   packages.nixpkgs-flox.bat = { version = "0.22.1"; };
-  packages.nixpkgs-flox.ripgrep = {};
+  packages.nixpkgs-flox.hello = {};
   environmentVariables.FOO = "bar";
 }
 EOF
@@ -42,7 +42,8 @@ EOF
 
   # These tests are not run interactively, so we should't allow the CLI to try
   # opening a text editor in the first place.
-  export EDITOR=false;
+  unset EDITOR;
+  unset VISUAL;
 
   export PROJECT_DIR="${BATS_TEST_TMPDIR?}/test";
   rm -rf "$PROJECT_DIR";
@@ -85,6 +86,11 @@ setup_file() {
 check_manifest_unchanged() {
   current_contents=$(cat "$MANIFEST_PATH")
   [[ "$current_contents" = "$ORIGINAL_MANIFEST_CONTENTS" ]]
+}
+
+check_manifest_updated() {
+  current_contents=$(cat "$MANIFEST_PATH")
+  [[ "$current_contents" = "$NEW_MANIFEST_CONTENTS" ]]
 }
 
 
@@ -146,6 +152,26 @@ check_manifest_unchanged() {
 
 @test "'flox edit' fails when EDITOR is not set" {
   run "$FLOX_CLI" edit;
+  assert_failure;
+  run check_manifest_unchanged;
+  assert_success;
+}
+
+
+# ---------------------------------------------------------------------------- #
+
+@test "'flox edit' adds package with EDITOR" {
+  EDITOR="$TESTS_DIR/add-hello" run "$FLOX_CLI" edit;
+  assert_success;
+  run check_manifest_updated;
+  assert_success;
+}
+
+
+# ---------------------------------------------------------------------------- #
+
+@test "'flox edit' fails when EDITOR makes invalid edit" {
+  EDITOR="$TESTS_DIR/add-invalid-edit" run "$FLOX_CLI" edit;
   assert_failure;
   run check_manifest_unchanged;
   assert_success;
