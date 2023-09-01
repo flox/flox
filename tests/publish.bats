@@ -94,7 +94,7 @@ setup() {
 }
 
 # Publish requires a cached binary.
-# If the binary is not found at the first try, publish will retry for 3 times
+# If the binary is not found at the first try, publish will retry 3 times
 @test "flox publish retries fetching url 3 times" {
     run $FLOX_CLI -v publish "$CHANNEL#hello" --public-cache-url http://url.example
     assert_failure
