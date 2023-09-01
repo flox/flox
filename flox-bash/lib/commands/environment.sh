@@ -1335,6 +1335,10 @@ function floxRollback() {
 		1 \
 		"$me $subcommand ${invocation[*]}")
 
+	# Now that metadata has been updated, make sure environment and
+	# generation links are all in place.
+	syncEnvironment "$environment"
+
 	# Display user friendly message
 	eval $(decodeEnvironment "$environment")
 	local rollbackOrSwitch="Rolled back"
