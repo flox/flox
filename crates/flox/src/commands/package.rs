@@ -416,7 +416,7 @@ impl Publish {
             }
             // increase try count and wait
             *current_try += 1;
-            std::thread::sleep(Duration::from_secs(5));
+            tokio::time::sleep(Duration::from_secs(5)).await;
         };
 
         if !found_upstream {
