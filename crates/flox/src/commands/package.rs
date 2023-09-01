@@ -272,8 +272,8 @@ pub struct Publish {
     pub public_cache_url: Option<SubstituterUrl>,
 
     /// Number of retries if the binary was not found in the cache at the first time
-    #[bpaf(long, fallback(3), argument("number"))]
-    pub retry: i32,
+    #[bpaf(long("max-retries"), fallback(3), argument("number"))]
+    pub max_retries: i32,
 
     /// Print snapshot JSON to stdout instead of uploading it to the catalog
     #[bpaf(long, hide)]
@@ -392,7 +392,7 @@ impl Publish {
             if retry_count.is_none() && Dialog::can_prompt() {
                 let help_message = Some(format!(
                     "flox query {substituter_url} {} more times; waiting 5 seconds inbetween.",
-                    self.retry
+                    self.max_retries
                 ));
                 let confirm = Dialog {
                     message: "Keep looking for binary?",
@@ -411,7 +411,7 @@ impl Publish {
             let current_try = retry_count.get_or_insert(1);
 
             // return unsuccessful if max tries exceeded
-            if *current_try > self.retry {
+            if *current_try > self.max_retries {
                 break false;
             }
             // increase try count and wait
@@ -422,7 +422,7 @@ impl Publish {
         if !found_upstream {
             bail!(
                 "Unable to locate binary after retrying {} times",
-                self.retry
+                self.max_retries
             );
         }
 

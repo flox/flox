@@ -65,8 +65,8 @@ upstream repository.
     the `public_cache_url` config value,
     or same value as provided for the `--cache-url` argument.
 
-`[ --retry <number> ]`
-:   Number of retries if the binary was not found in the cache at the first time
+`[ --max-retries <number> ]`
+:   Number of retries if the binary is not found in the cache
 
     If not provided, defaults to `3` retries
 
