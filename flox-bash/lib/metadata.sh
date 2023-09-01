@@ -427,7 +427,7 @@ function floxmetaHelperGit() {
 }
 
 # XXX TEMPORARY function to migrate floxmeta repositories from
-# github.com -> git.floxdev.com
+# github.com -> git.flox.dev
 #     **Delete after GA**
 function temporaryMigrateGitHubTo030Floxdev() {
 	trace "$@"

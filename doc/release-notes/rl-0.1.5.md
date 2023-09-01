@@ -10,4 +10,4 @@ This release includes several bug fixes and feature refinements based on feedbac
 - Squashed some bugs, supressed superfluous warnings, and improved error messages / UX output.
 
 We especially want to thank all our <a href="https://github.com/flox/flox">github.com/flox/flox</a> contributors and 
-<a href="https://discourse.floxdev.com">discourse community</a> members for all your valuable feedback!
+<a href="https://discourse.flox.dev">discourse community</a> members for all your valuable feedback!
