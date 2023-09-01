@@ -54,6 +54,8 @@ use crate::utils::installables::{
 };
 use crate::utils::{InstallableArgument, InstallableDef, Parsed};
 
+const RETRY_SLEEP_DURATION: Duration = Duration::from_secs(5);
+
 #[derive(Clone, Debug)]
 pub enum PosOrEnv<T: InstallableDef> {
     Pos(InstallableArgument<Parsed, T>),
@@ -416,7 +418,7 @@ impl Publish {
             }
             // increase try count and wait
             *current_try += 1;
-            tokio::time::sleep(Duration::from_secs(5)).await;
+            tokio::time::sleep(RETRY_SLEEP_DURATION).await;
         };
 
         if !found_upstream {
