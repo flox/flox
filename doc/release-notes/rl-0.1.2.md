@@ -3,7 +3,7 @@
 This release introduces the ability to declare a project environment via a top-level `flox.nix` file.
 This file is a Nix set (a map) which lists the packages to be included in the environment.
 This way, you can `flox activate` at the project root, and instantiate an environment with all the packages you need to develop against that project.
-See the [documentation](https://floxdev.com/docs) for details.
+See the [documentation](https://flox.dev/docs) for details.
 
 - Added the ability to provide flox configuration files in TOML format, in 3 different places of the user's choosing read in the following order:
   - package defaults from `$PREFIX/etc/flox.toml` (PREFIX=${flox-bash})

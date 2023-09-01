@@ -252,7 +252,7 @@ function floxActivate() {
 	# unless we want to risk even further breakage by disabling path_helper in
 	# /etc/zprofile this is the best workaround we've come up with.
 	#
-	# https://discourse.floxdev.com/t/losing-part-of-my-shell-environment-when-using-flox-develop/556/2
+	# https://discourse.flox.dev/t/losing-part-of-my-shell-environment-when-using-flox-develop/556/2
 	if [[ -x /usr/libexec/path_helper ]] && [[ "$PATH" =~ ^/usr/local/bin: ]]
 	then
 		if [[ "${#cmdArgs[@]}" -eq 0 ]] && [[ "$spawnMode" -eq 0 ]]; then

@@ -57,7 +57,7 @@
       FLOX_ANALYZER_SRC = ../../flox-bash/lib/catalog-ingest;
 
       # Metrics subsystem configuration
-      METRICS_EVENTS_URL = "https://events.floxdev.com/capture";
+      METRICS_EVENTS_URL = "https://events.flox.dev/capture";
       METRICS_EVENTS_API_KEY = "phc_z4dOADAPvpU9VNzCjDD3pIJuSuGTyagKdFWfjak838Y";
 
       # the libssh crate wants to use its own libssh prebuilts
