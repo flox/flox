@@ -1583,10 +1583,6 @@ function floxPushPull() {
 					warn "REMINDER: invoke '$me pull -e $environmentName' before activating environment"
 				fi
 			else
-				# XXX temporary: as we change to version 0.0.9 the layout of environment
-				# links changes to embed the system type. Take this opportunity to rename
-				# those links if they exist.
-				temporaryAssert009LinkLayout "$environment"
 				syncEnvironment "$environment"
 			fi
 		else
