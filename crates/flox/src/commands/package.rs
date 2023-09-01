@@ -393,7 +393,7 @@ impl Publish {
             // else              assume yes, retry {self.retry} times
             if retry_count.is_none() && Dialog::can_prompt() {
                 let help_message = Some(format!(
-                    "flox query {substituter_url} {} more times; waiting 5 seconds inbetween.",
+                    "query {substituter_url} {} more times, waiting 5 seconds in-between.",
                     self.max_retries
                 ));
                 let confirm = Dialog {
