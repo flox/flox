@@ -2,12 +2,12 @@ pub mod errors;
 pub mod guard;
 pub mod rnix;
 use std::path::Path;
+use std::{fs, io};
 
 use ::log::debug;
 use thiserror::Error;
 use tokio::fs::OpenOptions;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::{fs, io};
 use walkdir;
 
 use self::errors::IoError;
@@ -72,7 +72,7 @@ pub async fn find_and_replace(
 
 /// Using fs::copy copies permissions from the Nix store, which we don't want, so open (or
 /// create) the files and copy with io::copy
-pub async fn copy_file_without_permissions(
+pub fn copy_file_without_permissions(
     from: impl AsRef<Path>,
     to: impl AsRef<Path>,
 ) -> Result<(), IoError> {
@@ -81,23 +81,18 @@ pub async fn copy_file_without_permissions(
         .truncate(true)
         .create(true)
         .open(&to)
-        .await
         .map_err(|io_err| IoError::Open {
             file: to.as_ref().to_path_buf(),
             err: io_err,
         })?;
-    let mut from_file = fs::File::open(&from)
-        .await
-        .map_err(|io_err| IoError::Open {
-            file: from.as_ref().to_path_buf(),
-            err: io_err,
-        })?;
+    let mut from_file = fs::File::open(&from).map_err(|io_err| IoError::Open {
+        file: from.as_ref().to_path_buf(),
+        err: io_err,
+    })?;
 
-    io::copy(&mut from_file, &mut to_file)
-        .await
-        .map_err(|io_err| IoError::Copy {
-            file: from.as_ref().to_path_buf(),
-            err: io_err,
-        })?;
+    io::copy(&mut from_file, &mut to_file).map_err(|io_err| IoError::Copy {
+        file: from.as_ref().to_path_buf(),
+        err: io_err,
+    })?;
     Ok(())
 }

@@ -211,9 +211,28 @@ pub enum ParseError {
     NoPackage,
 }
 
+impl Display for FloxTriple {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.stability != Stability::Stable {
+            write!(f, "{}.", self.stability)?;
+        }
+        if self.channel != "nixpkgs-flox" {
+            write!(f, "{}.", self.channel)?;
+        }
+        write!(f, "{}", self.name)?;
+        if let Some(version) = &self.version {
+            write!(f, "@{}", version)?;
+        }
+        Ok(())
+    }
+}
+
 impl Display for FloxPackage {
-    fn fmt(&self, _f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        todo!()
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            FloxPackage::Triple(triple) => write!(f, "{}", triple),
+            _ => todo!(),
+        }
     }
 }
 

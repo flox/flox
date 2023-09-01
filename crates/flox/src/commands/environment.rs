@@ -19,6 +19,7 @@ use itertools::Itertools;
 use log::{error, info};
 
 use crate::utils::dialog::{Confirm, Dialog};
+use crate::utils::display::packages_to_string;
 use crate::utils::resolve_environment_ref;
 use crate::{flox_forward, subcommand_metric};
 
@@ -51,7 +52,7 @@ impl Edit {
 
         let mut environment =
             resolve_environment(&flox, self.environment.as_deref(), "edit").await?;
-        let mut temporary_environment = environment.make_temporary().await?;
+        let mut temporary_environment = environment.make_temporary()?;
 
         let nix = flox.nix(Default::default());
 
@@ -221,7 +222,7 @@ impl Init {
         let current_dir = std::env::current_dir().unwrap();
         let home_dir = dirs::home_dir().unwrap();
 
-        let name = if let Some(name) = self.name.clone() {
+        let name = if let Some(name) = self.name {
             name
         } else if current_dir == home_dir {
             "default".parse()?
@@ -233,8 +234,7 @@ impl Init {
                 .parse()?
         };
 
-        let env =
-            PathEnvironment::<Original>::init(&current_dir, name, flox.temp_dir.clone()).await?;
+        let env = PathEnvironment::<Original>::init(&current_dir, name, flox.temp_dir.clone())?;
 
         println!(
             indoc::indoc! {"
@@ -373,14 +373,29 @@ impl Install {
         //     anyhow::bail!("{installed} is already installed");
         // }
 
-        environment
+        let packages_str = packages_to_string(&packages);
+        let plural = packages.len() > 1;
+
+        if environment
             .install(
                 packages.drain(..),
                 &flox.nix(Default::default()),
                 &flox.system,
             )
             .await
-            .context("could not install packages")?;
+            .context("could not install packages")?
+        {
+            println!(
+                "✅ Installed {packages_str} into '{}' environment.",
+                environment.environment_ref()
+            );
+        } else {
+            let verb = if plural { "are" } else { "is" };
+            println!(
+                "No changes; {packages_str} {verb} already installed into '{}' environment.",
+                environment.environment_ref()
+            );
+        }
         Ok(())
     }
 }

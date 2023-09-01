@@ -628,7 +628,7 @@ checksum = "6999dc1837253364c2ebb0704ba97994bd874e8f195d665c50b7548f6ea92764"
 
 [[package]]
 name = "flox"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -694,6 +694,7 @@ dependencies = [
  "log",
  "nixpkgs-fmt",
  "once_cell",
+ "pretty_assertions",
  "regex",
  "rnix 0.11.0",
  "rowan 0.15.11",
@@ -1905,7 +1906,7 @@ dependencies = [
 [[package]]
 name = "runix"
 version = "0.2.0"
-source = "git+https://github.com/flox/runix#5d7ce867fa831bf331f4ea84125778a2d6880ca6"
+source = "git+https://github.com/flox/runix#2d0a69340662460f253267ef5398b38a7bce4b4f"
 dependencies = [
  "async-trait",
  "chrono",
