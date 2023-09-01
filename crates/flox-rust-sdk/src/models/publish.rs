@@ -393,6 +393,16 @@ impl<'flox> Publish<'flox, NixAnalysis> {
             .map_err(PublishError::PathInfo)
             .await?;
 
+        let mut invalid_outputs = narinfos
+            .iter()
+            .filter(|n| !n.valid)
+            .map(|n| n.path.to_string_lossy().into_owned())
+            .peekable();
+
+        if invalid_outputs.peek().is_some() {
+            Err(PublishError::PathsNotCached(invalid_outputs.collect()))?;
+        }
+
         Ok(CacheMeta {
             cache_url: substituter.unwrap_or(SubstituterUrl::parse("file:///nix/store").unwrap()),
             narinfo: narinfos,
@@ -429,7 +439,9 @@ impl<'flox> Publish<'flox, NixAnalysis> {
 /// [UpstreamRepo] and [UpstreamCatalog] ensure safe access to individual catalog branches.
 /// Every [UpstreamRepo] instance represents an exclusive clone
 /// and can only ever create a single [UpstreamCatalog] instance at a time.
-struct UpstreamRepo(Git);
+struct UpstreamRepo {
+    git: Git,
+}
 
 impl UpstreamRepo {
     /// Clone an upstream repo
@@ -438,9 +450,9 @@ impl UpstreamRepo {
         temp_dir: impl AsRef<Path>,
     ) -> Result<Self, PublishError> {
         let repo_dir = tempfile::tempdir_in(temp_dir).unwrap().into_path(); // todo catch error
-        let repo = <Git as GitProvider>::clone(url.as_ref(), &repo_dir, false).await?;
+        let git = <Git as GitProvider>::clone(url.as_ref(), &repo_dir, false).await?;
 
-        Ok(Self(repo))
+        Ok(Self { git })
     }
 
     fn catalog_branch_name(system: &System) -> String {
@@ -455,18 +467,18 @@ impl UpstreamRepo {
         &mut self,
         system: &System,
     ) -> Result<UpstreamCatalog, PublishError> {
-        if self.0.list_branches().await? // todo: catch error
+        if self.git.list_branches().await? // todo: catch error
             .into_iter().any(|info| info.name == Self::catalog_branch_name(system))
         {
-            self.0
+            self.git
                 .checkout(&Self::catalog_branch_name(system), false)
                 .await?; // todo: catch error
         } else {
-            self.0
+            self.git
                 .checkout(&Self::catalog_branch_name(system), true)
                 .await?;
         }
-        Ok(UpstreamCatalog(&self.0))
+        Ok(UpstreamCatalog { git: &self.git })
     }
 }
 
@@ -475,7 +487,9 @@ impl UpstreamRepo {
 /// [UpstreamCatalog] guaranteesd that during its lifetime all operations on the underlying git repo
 /// are performed on a single branch,
 /// and that the branch is pushed to upstream before a new branch can be checked out.
-struct UpstreamCatalog<'a>(&'a Git);
+struct UpstreamCatalog<'a> {
+    git: &'a Git,
+}
 
 impl UpstreamCatalog<'_> {
     /// Mostly naïve approxiaton of a snapshot path
@@ -524,7 +538,7 @@ impl UpstreamCatalog<'_> {
 
     /// Get the workdir of the checked-out repo
     fn workdir(&self) -> &Path {
-        self.0.workdir().unwrap()
+        self.git.workdir().unwrap()
     }
 
     /// Try retrieving a snapshot from the catalog
@@ -554,8 +568,8 @@ impl UpstreamCatalog<'_> {
 
         serde_json::to_writer(&mut snapshot_file, snapshot)?;
 
-        self.0.add(&[&path]).await?;
-        self.0.commit("Added snapshot").await?; // TODO: pass message in here? commit in separate method?
+        self.git.add(&[&path]).await?;
+        self.git.commit("Added snapshot").await?; // TODO: pass message in here? commit in separate method?
         Ok(())
     }
 
@@ -564,7 +578,7 @@ impl UpstreamCatalog<'_> {
     /// Pushing a catalog consumes the catalog instance,
     /// which in turn enables any other methods on the [UpstreamRepo] that created this instance.
     async fn push_catalog(self) -> Result<(), PublishError> {
-        self.0.push("origin").await?;
+        self.git.push("origin").await?;
         Ok(())
     }
 }
@@ -597,6 +611,9 @@ pub enum PublishError {
 
     #[error("Failed to invoke path-info: {0}")]
     PathInfo(NixCommandLineRunJsonError),
+
+    #[error("Store Paths not found in cache: [{}]", .0.join(", "))]
+    PathsNotCached(Vec<String>),
 
     #[error("Failed to invoke build: {0}")]
     Build(NixCommandLineRunError),
@@ -1245,7 +1262,7 @@ mod tests {
         .await
         .expect("Should clone repo");
 
-        assert!(repo.0.list_branches().await.unwrap().is_empty());
+        assert!(repo.git.list_branches().await.unwrap().is_empty());
 
         let catalog = repo
             .get_or_create_catalog(&"aarch64-darwin".to_string())
@@ -1253,11 +1270,11 @@ mod tests {
             .expect("Should create branch");
 
         // commit a file to the branch to crate the first reference on the orphan branch
-        fs::write(catalog.0.workdir().unwrap().join(".tag"), "").unwrap();
-        catalog.0.add(&[Path::new(".tag")]).await.unwrap();
-        catalog.0.commit("root commit").await.unwrap();
+        fs::write(catalog.git.workdir().unwrap().join(".tag"), "").unwrap();
+        catalog.git.add(&[Path::new(".tag")]).await.unwrap();
+        catalog.git.commit("root commit").await.unwrap();
 
-        assert_eq!(catalog.0.list_branches().await.unwrap().len(), 1);
+        assert_eq!(catalog.git.list_branches().await.unwrap().len(), 1);
     }
 
     #[test]

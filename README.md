@@ -1,5 +1,5 @@
 <h1 align="center">
-  <a href="https://floxdev.com" target="_blank">
+  <a href="https://flox.dev" target="_blank">
     <picture>
       <source media="(prefers-color-scheme: dark)"  srcset="img/flox_orange_small.png" />
       <source media="(prefers-color-scheme: light)" srcset="img/flox_blue_small.png" />
@@ -24,11 +24,11 @@
 
 <h3 align="center">
    &emsp;
-   <a href="https://discourse.floxdev.com"><b>Discourse</b></a>
+   <a href="https://discourse.flox.dev"><b>Discourse</b></a>
    &emsp; | &emsp; 
-   <a href="https://floxdev.com/docs"><b>Documentation</b></a>
+   <a href="https://flox.dev/docs"><b>Documentation</b></a>
    &emsp; | &emsp; 
-   <a href="https://floxdev.com/blog"><b>Blog</b></a>
+   <a href="https://flox.dev/blog"><b>Blog</b></a>
    &emsp; | &emsp;  
    <a href="https://twitter.com/floxdevelopment"><b>Twitter</b></a>
    &emsp;
@@ -55,13 +55,13 @@ Install packages from [the biggest open source repository
 (nixpkgs)][post-nixpkgs] that contains **more that 80.000 packages**.
 
 With `flox` you can:<br/>
-&rarr; [Create composable environments](https://floxdev.com/docs/tutorials/projects)<br/>
-&rarr; [Share your environments with others](https://floxdev.com/docs/cookbook/managed-environments/#share-an-environment)<br/>
-&rarr; [Build container images](https://floxdev.com/docs/tutorials/build-container-images)<br/>
+&rarr; [Create composable environments](https://flox.dev/docs/tutorials/projects)<br/>
+&rarr; [Share your environments with others](https://flox.dev/docs/cookbook/managed-environments/#share-an-environment)<br/>
+&rarr; [Build container images](https://flox.dev/docs/tutorials/build-container-images)<br/>
 &rarr; [... and much more][docs]<br/>
 
 <div align="center">
-  <a href="https://floxdev.com/docs/#install-flox">
+  <a href="https://flox.dev/docs/#install-flox">
     <img alt="install flox" src="https://img.shields.io/badge/Install-flox-brightgreen?style=for-the-badge"/>
   </a>
 </div>
@@ -111,15 +111,15 @@ guide](./CONTRIBUTING.md) first.
 The flox CLI is licensed under the GPLv2. See [LICENSE](./LICENSE).
 
 
-[website]: https://floxdev.com
-[discourse]: https://discourse.floxdev.com
+[website]: https://flox.dev
+[discourse]: https://discourse.flox.dev
 [nix]: https://nixos.org
-[basics]:https://floxdev.com/docs/basics
-[share-envs]: https://floxdev.com/docs/share-environments
-[images]: https://floxdev.com/docs/build-container-images
-[docs]: https://floxdev.com/docs
+[basics]:https://flox.dev/docs/basics
+[share-envs]: https://flox.dev/docs/share-environments
+[images]: https://flox.dev/docs/build-container-images
+[docs]: https://flox.dev/docs
 [twitter]: https://twitter.com/floxdevelopment
 [matrix]: https://matrix.to/#/#flox:matrix.org
 [discord]: https://discord.gg/5H7hN57eQR
 [new-issue]: https://github.com/flox/flox/issues/new/choose
-[post-nixpkgs]: https://floxdev.com/blog/nixpkgs
+[post-nixpkgs]: https://flox.dev/blog/nixpkgs
