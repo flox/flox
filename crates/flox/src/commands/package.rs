@@ -1,6 +1,7 @@
 use std::env;
 use std::fmt::Debug;
 use std::path::PathBuf;
+use std::time::Duration;
 
 use anyhow::{anyhow, bail, Context, Result};
 use bpaf::{construct, Bpaf, Parser};
@@ -21,10 +22,10 @@ use flox_rust_sdk::providers::git::{GitCommandProvider, GitProvider};
 use flox_types::stability::Stability;
 use indoc::indoc;
 use itertools::Itertools;
-use log::{debug, info};
+use log::{debug, info, warn};
 
 use crate::config::Config;
-use crate::utils::dialog::{Dialog, Text};
+use crate::utils::dialog::{Confirm, Dialog, Text};
 use crate::utils::resolve_environment_ref;
 use crate::{flox_forward, subcommand_metric};
 
@@ -52,6 +53,8 @@ use crate::utils::installables::{
     TemplateInstallable,
 };
 use crate::utils::{InstallableArgument, InstallableDef, Parsed};
+
+const RETRY_SLEEP_DURATION: Duration = Duration::from_secs(5);
 
 #[derive(Clone, Debug)]
 pub enum PosOrEnv<T: InstallableDef> {
@@ -249,26 +252,30 @@ impl WithPassthru<PrintDevEnv> {
 
 #[derive(Bpaf, Clone, Debug)]
 pub struct Publish {
-    /// Signing key file to sign the binary with
+    /// Path to signing key file to sign the binary with
     ///
     /// When omitted, reads from the config.
     /// See flox-config(1) for more details.
-    #[bpaf(long, short('k'))]
+    #[bpaf(long, short('k'), argument("path"))]
     pub signing_key: Option<PathBuf>,
 
     /// Url of a binary cache to push binaries _to_
     ///
     /// When omitted, reads from the config.
     /// See flox-config(1) for more details.
-    #[bpaf(long, short('c'))]
+    #[bpaf(long, short('c'), argument("url"))]
     pub cache_url: Option<SubstituterUrl>,
 
     /// URL of a substituter to pull binaries _from_
     ///
     /// When ommitted, falls back to the config or uses the value for cache-url.
     /// See flox-config(1) for more details.
-    #[bpaf(long, short('s'))]
+    #[bpaf(long, short('s'), argument("url"))]
     pub public_cache_url: Option<SubstituterUrl>,
+
+    /// Number of retries if the binary was not found in the cache at the first time
+    #[bpaf(long("max-retries"), fallback(3), argument("number"))]
+    pub max_retries: i32,
 
     /// Print snapshot JSON to stdout instead of uploading it to the catalog
     #[bpaf(long, hide)]
@@ -369,10 +376,58 @@ impl Publish {
         info!("done!");
 
         info!("Checking binary can be downloaded from {substituter_url}...");
-        publish
-            .check_substituter(substituter_url)
-            .await
-            .context("Binary cannot be downloaded")?;
+
+        let mut retry_count = None;
+        let found_upstream = loop {
+            let check_result = publish.check_substituter(substituter_url.clone()).await;
+
+            if check_result.is_ok() {
+                break true;
+            }
+
+            let err = check_result.unwrap_err();
+            warn!("Unable to find binary at {substituter_url}: {err}");
+
+            // in first round:
+            // if we can prompt, confirm that we should retry
+            // else              assume yes, retry {self.retry} times
+            if retry_count.is_none() && Dialog::can_prompt() {
+                let help_message = Some(format!(
+                    "query {substituter_url} {} more times, waiting 5 seconds in-between.",
+                    self.max_retries
+                ));
+                let confirm = Dialog {
+                    message: "Keep looking for binary?",
+                    help_message: help_message.as_deref(),
+                    typed: Confirm {
+                        default: Some(true),
+                    },
+                };
+
+                if !confirm.prompt().await? {
+                    bail!("aborted publish!");
+                }
+            }
+
+            // get the current try count
+            let current_try = retry_count.get_or_insert(1);
+
+            // return unsuccessful if max tries exceeded
+            if *current_try > self.max_retries {
+                break false;
+            }
+            // increase try count and wait
+            *current_try += 1;
+            tokio::time::sleep(RETRY_SLEEP_DURATION).await;
+        };
+
+        if !found_upstream {
+            bail!(
+                "Unable to locate binary after retrying {} times",
+                self.max_retries
+            );
+        }
+
         info!("done!");
 
         if self.json {

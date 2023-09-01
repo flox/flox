@@ -222,7 +222,7 @@ impl Init {
         let current_dir = std::env::current_dir().unwrap();
         let home_dir = dirs::home_dir().unwrap();
 
-        let name = if let Some(name) = self.name.clone() {
+        let name = if let Some(name) = self.name {
             name
         } else if current_dir == home_dir {
             "default".parse()?
@@ -234,8 +234,7 @@ impl Init {
                 .parse()?
         };
 
-        let env =
-            PathEnvironment::<Original>::init(&current_dir, name, flox.temp_dir.clone())?;
+        let env = PathEnvironment::<Original>::init(&current_dir, name, flox.temp_dir.clone())?;
 
         println!(
             indoc::indoc! {"
