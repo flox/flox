@@ -28,7 +28,7 @@
   makeWrapper,
   man,
   nix-editor,
-  nixStable,
+  nixVersions,
   openssh,
   pandoc,
   parser-util,
@@ -47,7 +47,7 @@
   # Choose a smaller version of git.
   git = pkgs.gitMinimal;
 
-  nixPatched = nixStable.overrideAttrs (oldAttrs: {
+  nixPatched = nixVersions.nix_2_15.overrideAttrs (oldAttrs: {
     patches =
       (oldAttrs.patches or [])
       ++ [
