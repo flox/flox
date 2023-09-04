@@ -6,7 +6,7 @@ use std::process::{ExitCode, ExitStatus};
 
 use anyhow::{anyhow, Context, Result};
 use bpaf::{Args, Parser};
-use commands::{BashPassthru, FloxArgs, Prefix};
+use commands::{BashPassthru, FloxArgs, Prefix, Version};
 use flox_rust_sdk::environment::default_nix_subprocess_env;
 use log::{debug, error, warn};
 use tokio::process::Command;
@@ -54,6 +54,12 @@ async fn main() -> ExitCode {
         return ExitCode::from(0);
     }
 
+    // Quit early if `--version` is present
+    if Version::check() {
+        println!(env!("FLOX_VERSION"));
+        return ExitCode::from(0);
+    }
+
     // Parse verbosity flags to affect help message/parse errors
     let (verbosity, debug) = {
         let verbosity_parser = commands::verbosity();
@@ -74,7 +80,9 @@ async fn main() -> ExitCode {
     // to work with the shell completion frontends
     //
     // Pass through Stdout failure; This represents `--help`
-    let args = commands::flox_args().run_inner(Args::current_args());
+    let args = commands::flox_args()
+        .to_options()
+        .run_inner(Args::current_args());
 
     if let Some(parse_err) = args.as_ref().err() {
         match parse_err {
