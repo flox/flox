@@ -17,6 +17,7 @@ use flox_rust_sdk::prelude::flox_package::FloxPackage;
 use flox_types::constants::{DEFAULT_CHANNEL, LATEST_VERSION};
 use itertools::Itertools;
 use log::{error, info};
+use tempfile::NamedTempFile;
 
 use crate::utils::dialog::{Confirm, Dialog};
 use crate::utils::display::packages_to_string;
@@ -52,11 +53,60 @@ impl Edit {
 
         let mut environment =
             resolve_environment(&flox, self.environment.as_deref(), "edit").await?;
-        let mut temporary_environment = environment.make_temporary()?;
-
         let nix = flox.nix(Default::default());
 
-        if let Some(file) = self.file {
+        match self.provided_manifest_contents()? {
+            // If provided with the contents of a manifest file, either via a path to a file or via
+            // contents piped to stdin, use those contents to try building the environment.
+            Some(new_manifest) => {
+                environment.edit(&nix, &flox.system, new_manifest).await?;
+                Ok(())
+            },
+            // If not provided with new manifest contents, let the user edit the file directly
+            // via $EDITOR or $VISUAL (as long as `flox edit` was invoked interactively).
+            None => {
+                let editor = std::env::var("EDITOR")
+                    .or(std::env::var("VISUAL"))
+                    .context("no editor found; neither EDITOR nor VISUAL are set")?;
+                // TODO: check for interactivity before allowing the editor to be opened
+                let manifest_path = environment.manifest_path();
+                // Make a copy of the manifest for the user to edit so failed edits aren't left in
+                // the original manifest. You can't put creation/cleanup inside the `edited_manifest_contents`
+                // method because the temporary manifest needs to stick around in case the user wants
+                // or needs to make successive edits without starting over each time.
+                let tmp_manifest = NamedTempFile::new_in(&flox.temp_dir)?;
+                std::fs::copy(&manifest_path, &tmp_manifest)?;
+                let should_continue = Dialog {
+                    message: "Continue editing?",
+                    help_message: Default::default(),
+                    typed: Confirm {
+                        default: Some(true),
+                    },
+                };
+                // Let the user keep editing the file until the build succeeds or the user
+                // decides to stop.
+                loop {
+                    let new_manifest = Edit::edited_manifest_contents(&tmp_manifest, &editor)?;
+                    if let Err(e) = environment.edit(&nix, &flox.system, new_manifest).await {
+                        error!("Environment invalid; building resulted in an error: {e}");
+                        if !Dialog::can_prompt() {
+                            bail!("Can't prompt to continue editing in non-interactive context");
+                        }
+                        if !should_continue.clone().prompt().await? {
+                            bail!("Environment editing cancelled");
+                        }
+                    } else {
+                        break;
+                    }
+                }
+                Ok(())
+            },
+        }
+    }
+
+    /// Retrieves the new manifest file contents if a new manifest file was provided
+    fn provided_manifest_contents(&self) -> Result<Option<String>> {
+        if let Some(ref file) = self.file {
             let mut file: Box<dyn std::io::Read + Send> = if file == Path::new("-") {
                 Box::new(stdin())
             } else {
@@ -65,53 +115,22 @@ impl Edit {
 
             let mut contents = String::new();
             file.read_to_string(&mut contents)?;
-            temporary_environment.update_manifest(&contents)?;
-            temporary_environment.build(&nix, &flox.system).await?;
-            return Ok(());
+            Ok(Some(contents))
+        } else {
+            Ok(None)
         }
+    }
 
-        let editor = std::env::var("EDITOR").context("$EDITOR not set")?;
-        if !Dialog::can_prompt() {
-            bail!("Can't open editor in non interactive context");
-        }
+    /// Gets a new set of manifest contents after a user edits the file
+    fn edited_manifest_contents(path: impl AsRef<Path>, editor: impl AsRef<str>) -> Result<String> {
+        let mut command = Command::new(editor.as_ref());
+        command.arg(path.as_ref());
 
-        loop {
-            let path = temporary_environment.manifest_path();
-            let mut command = Command::new(&editor);
-            command.arg(&path);
+        let child = command.spawn().context("editor command failed")?;
+        let _ = child.wait_with_output().context("editor command failed")?;
 
-            let child = command.spawn().context("editor command failed")?;
-            let _ = child.wait_with_output().context("editor command failed")?;
-
-            let contents = std::fs::read_to_string(path)?;
-            temporary_environment.update_manifest(&contents)?;
-            let build_result = temporary_environment.build(&nix, &flox.system).await;
-
-            match build_result {
-                Ok(_) => {
-                    break;
-                },
-                Err(e) => {
-                    error!("Environment invalid, building resulted in an error: {e}");
-                    let again = Dialog {
-                        message: "Continue editing?",
-                        help_message: Default::default(),
-                        typed: Confirm {
-                            default: Some(true),
-                        },
-                    }
-                    .prompt()
-                    .await?;
-                    if !again {
-                        return Ok(());
-                    }
-                },
-            };
-        }
-        environment
-            .replace_with(temporary_environment)
-            .context("Failed applying environment changes")?;
-        Ok(())
+        let contents = std::fs::read_to_string(path)?;
+        Ok(contents)
     }
 }
 

@@ -10,6 +10,7 @@ pub struct Text<'a> {
 }
 
 #[allow(unused)]
+#[derive(Debug, Clone)]
 pub struct Confirm {
     pub default: Option<bool>,
 }
@@ -17,6 +18,7 @@ pub struct Select<T> {
     pub options: Vec<T>,
 }
 
+#[derive(Debug, Clone)]
 pub struct Dialog<'a, Type> {
     pub message: &'a str,
     pub help_message: Option<&'a str>,
