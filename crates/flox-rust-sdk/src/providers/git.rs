@@ -258,6 +258,11 @@ impl GitCommandProvider {
             c.arg(workdir.as_ref());
         }
 
+        c.arg("-c");
+        c.arg("user.name=Flox User");
+        c.arg("-c");
+        c.arg("user.email=floxuser@example.invalid");
+
         c
     }
 
