@@ -16,18 +16,18 @@ use url::Url;
 use super::{Floxmeta, GetFloxmetaError, TransactionCommitError, TransactionEnterError};
 use crate::models::environment::{DEFAULT_KEEP_GENERATIONS, DEFAULT_MAX_AGE_DAYS};
 use crate::models::root::transaction::{GitAccess, GitSandBox, ReadOnly};
-use crate::providers::git::{BranchInfo, GitProvider};
+use crate::providers::git::{BranchInfo, GitCommandError, GitProvider};
 
 pub const METADATA_JSON: &'_ str = "metadata.json";
 
 #[derive(Serialize, Debug)]
-pub struct Environment<'flox, Git: GitProvider, A: GitAccess<Git>> {
+pub struct Environment<'flox, A: GitAccess> {
     name: String,
     system: String,
     remote: Option<EnvBranch>,
     local: Option<EnvBranch>,
     #[serde(skip)]
-    floxmeta: Floxmeta<'flox, Git, A>,
+    floxmeta: Floxmeta<'flox, A>,
 }
 
 #[derive(Serialize, Debug, Clone)]
@@ -111,11 +111,11 @@ pub struct Generation {
 }
 
 /// Implementations for an opened floxmeta
-impl<'flox, Git: GitProvider, A: GitAccess<Git>> Floxmeta<'flox, Git, A> {
+impl<'flox, A: GitAccess> Floxmeta<'flox, A> {
     pub async fn environment(
         &self,
         name: &str,
-    ) -> Result<Environment<'flox, Git, ReadOnly<Git>>, GetEnvironmentError<Git>> {
+    ) -> Result<Environment<'flox, ReadOnly>, GetEnvironmentError> {
         self.environments()
             .await?
             .into_iter()
@@ -126,7 +126,7 @@ impl<'flox, Git: GitProvider, A: GitAccess<Git>> Floxmeta<'flox, Git, A> {
     /// Detect all environments from a floxmeta repo
     pub async fn environments(
         &self,
-    ) -> Result<Vec<Environment<'flox, Git, ReadOnly<Git>>>, GetEnvironmentsError<Git>> {
+    ) -> Result<Vec<Environment<'flox, ReadOnly>>, GetEnvironmentsError> {
         self.access
             .git()
             .fetch()
@@ -201,13 +201,12 @@ impl<'flox, Git: GitProvider, A: GitAccess<Git>> Floxmeta<'flox, Git, A> {
                         owner: self.owner.clone(),
                         flox: self.flox,
                         access: self.access.read_only(),
-                        _git: std::marker::PhantomData,
                     },
                 }
             })
             .fold(
                 HashMap::new(),
-                |mut merged: HashMap<_, Environment<_, _>>, mut env| {
+                |mut merged: HashMap<_, Environment<_>>, mut env| {
                     // emplace either remote or local in a reference we already stored
                     // assumes only at most one of each is present
                     if let Some(stored) = merged.get_mut(&(env.name.clone(), env.system.clone())) {
@@ -229,7 +228,7 @@ impl<'flox, Git: GitProvider, A: GitAccess<Git>> Floxmeta<'flox, Git, A> {
 }
 
 /// Implementations for an environment
-impl<'flox, Git: GitProvider> Environment<'flox, Git, ReadOnly<Git>> {
+impl<'flox> Environment<'flox, ReadOnly> {
     /// The name of the environment
     pub fn name(&self) -> Cow<str> {
         Cow::from(&self.name)
@@ -267,7 +266,7 @@ impl<'flox, Git: GitProvider> Environment<'flox, Git, ReadOnly<Git>> {
         ))
     }
 
-    pub async fn metadata(&self) -> Result<Metadata, MetadataError<Git>> {
+    pub async fn metadata(&self) -> Result<Metadata, MetadataError> {
         let git = &self.floxmeta.access.git();
         let metadata_str = git
             .show(&format!("{}.{}:{}", self.system, self.name, METADATA_JSON))
@@ -283,7 +282,7 @@ impl<'flox, Git: GitProvider> Environment<'flox, Git, ReadOnly<Git>> {
     pub async fn generation(
         &self,
         generation: Option<&str>,
-    ) -> Result<Generation, GenerationError<Git>> {
+    ) -> Result<Generation, GenerationError> {
         let git = &self.floxmeta.access.git();
         let mut metadata = self.metadata().await?;
 
@@ -316,7 +315,7 @@ impl<'flox, Git: GitProvider> Environment<'flox, Git, ReadOnly<Git>> {
     pub async fn flake_attribute(
         &self,
         generation: Option<&str>,
-    ) -> Result<FlakeAttribute, GenerationError<Git>> {
+    ) -> Result<FlakeAttribute, GenerationError> {
         let git = &self.floxmeta.access.git();
         let metadata = self.metadata().await?;
 
@@ -342,7 +341,7 @@ impl<'flox, Git: GitProvider> Environment<'flox, Git, ReadOnly<Git>> {
         })
     }
 
-    pub async fn delete_symlinks(&self) -> Result<bool, DeleteSymlinksError<Git>> {
+    pub async fn delete_symlinks(&self) -> Result<bool, DeleteSymlinksError> {
         let mut symlinks_to_delete = self.symlinks_to_delete(self.metadata().await?).peekable();
         if symlinks_to_delete.peek().is_some() {
             for symlink in self.symlinks_to_delete(self.metadata().await?) {
@@ -359,7 +358,7 @@ impl<'flox, Git: GitProvider> Environment<'flox, Git, ReadOnly<Git>> {
     fn symlinks_to_delete(
         &self,
         metadata: Metadata,
-    ) -> impl Iterator<Item = Result<PathBuf, DeleteSymlinksError<Git>>> + '_ {
+    ) -> impl Iterator<Item = Result<PathBuf, DeleteSymlinksError>> + '_ {
         let now = Utc::now();
         metadata
             .generations
@@ -375,7 +374,7 @@ impl<'flox, Git: GitProvider> Environment<'flox, Git, ReadOnly<Git>> {
                     .unwrap();
                 let days_since_active = now.signed_duration_since(last_active).num_days();
                 if days_since_active < 0 {
-                    return Some(Err(DeleteSymlinksError::<Git>::TimestampInFuture(
+                    return Some(Err(DeleteSymlinksError::TimestampInFuture(
                         generation,
                     )));
                 }
@@ -392,11 +391,11 @@ impl<'flox, Git: GitProvider> Environment<'flox, Git, ReadOnly<Git>> {
 /// Implementations for R/O only instances
 ///
 /// Mainly transformation into modifiable sandboxed instances
-impl<'flox, Git: GitProvider> Environment<'flox, Git, ReadOnly<Git>> {
+impl<'flox> Environment<'flox, ReadOnly> {
     /// Enter into editable mode by creating a git sandbox for the floxmeta
     pub async fn enter_transaction(
         self,
-    ) -> Result<Environment<'flox, Git, GitSandBox<Git>>, TransactionEnterError<Git>> {
+    ) -> Result<Environment<'flox, GitSandBox>, TransactionEnterError> {
         let floxmeta = self.floxmeta.enter_transaction().await?;
         Ok(Environment {
             name: self.name,
@@ -409,12 +408,12 @@ impl<'flox, Git: GitProvider> Environment<'flox, Git, ReadOnly<Git>> {
 }
 
 /// Implementations for sandboxed only Environments
-impl<'flox, Git: GitProvider> Environment<'flox, Git, GitSandBox<Git>> {
+impl<'flox> Environment<'flox, GitSandBox> {
     /// Commit changes to environment by closing the underlying transaction
     pub async fn commit_transaction(
         self,
         message: &'flox str,
-    ) -> Result<Environment<'_, Git, ReadOnly<Git>>, TransactionCommitError<Git>> {
+    ) -> Result<Environment<'_, ReadOnly>, TransactionCommitError> {
         let floxmeta = self.floxmeta.commit_transaction(message).await?;
         Ok(Environment {
             name: self.name,
@@ -427,42 +426,42 @@ impl<'flox, Git: GitProvider> Environment<'flox, Git, GitSandBox<Git>> {
 }
 
 #[derive(Error, Debug)]
-pub enum GetEnvironmentError<Git: GitProvider> {
+pub enum GetEnvironmentError {
     #[error("Environment not found")]
     NotFound,
     #[error(transparent)]
-    GetEnvironment(#[from] GetEnvironmentsError<Git>),
+    GetEnvironment(#[from] GetEnvironmentsError),
     #[error(transparent)]
-    GetFloxmeta(#[from] GetFloxmetaError<Git>),
+    GetFloxmeta(#[from] GetFloxmetaError),
 }
 
 #[derive(Error, Debug)]
-pub enum GetEnvironmentsError<Git: GitProvider> {
+pub enum GetEnvironmentsError {
     #[error("Failed listing environment branches: {0}")]
-    ListBranches(Git::ListBranchesError),
+    ListBranches(GitCommandError),
 
     #[error("Failed fetching environment branches: {0}")]
-    FetchBranches(Git::FetchError),
+    FetchBranches(GitCommandError),
 }
 
 #[derive(Error, Debug)]
-pub enum MetadataError<Git: GitProvider> {
+pub enum MetadataError {
     // todo: add environment name/path?
     #[error("Failed retrieving 'metadata.json': {0}")]
-    RetrieveMetadata(Git::ShowError),
+    RetrieveMetadata(GitCommandError),
 
     #[error("Failed parsing 'metadata.json': {0}")]
     ParseMetadata(serde_json::Error),
 }
 
 #[derive(Error, Debug)]
-pub enum CurrentGenerationError<Git: GitProvider> {
+pub enum CurrentGenerationError {
     #[error("Failed parsing 'metadata.json': {0}")]
-    Generation(#[from] GenerationError<Git>),
+    Generation(#[from] GenerationError),
 }
 
 #[derive(Error, Debug)]
-pub enum GenerationError<Git: GitProvider> {
+pub enum GenerationError {
     #[error("Empty Environment")]
     Empty,
 
@@ -470,26 +469,26 @@ pub enum GenerationError<Git: GitProvider> {
     NotFound,
 
     #[error(transparent)]
-    Metadata(#[from] MetadataError<Git>),
+    Metadata(#[from] MetadataError),
 
     #[error(transparent)]
-    Manifest(#[from] ManifestError<Git>),
+    Manifest(#[from] ManifestError),
 }
 
 #[derive(Error, Debug)]
-pub enum ManifestError<Git: GitProvider> {
+pub enum ManifestError {
     // todo: add environment name/path?
     #[error("Failed retrieving 'manifest.json': {0}")]
-    RetrieveManifest(Git::ShowError),
+    RetrieveManifest(GitCommandError),
 
     #[error("Failed parsing 'manifest.json': {0}")]
     ParseManifest(serde_json::Error),
 }
 
 #[derive(Error, Debug)]
-pub enum DeleteSymlinksError<Git: GitProvider> {
+pub enum DeleteSymlinksError {
     #[error(transparent)]
-    Metadata(#[from] MetadataError<Git>),
+    Metadata(#[from] MetadataError),
     #[error("Found generation with last active timestamp in the future: {0}")]
     TimestampInFuture(String),
 }
@@ -497,28 +496,22 @@ pub enum DeleteSymlinksError<Git: GitProvider> {
 #[cfg(test)]
 mod tests {
 
-    use std::marker::PhantomData;
-
     use chrono::Days;
 
     use super::*;
     use crate::flox::tests::flox_instance;
     use crate::flox::Flox;
     use crate::providers::git::tests::mock_provider;
-    use crate::providers::git::GitCommandProvider;
 
-    fn mock_environment(
-        flox: &Flox,
-    ) -> Environment<'_, GitCommandProvider, ReadOnly<GitCommandProvider>> {
+    fn mock_environment(flox: &Flox) -> Environment<'_, ReadOnly> {
         let owner = "owner";
         let name = "name";
         let system = "system";
 
-        let floxmeta = Floxmeta::<GitCommandProvider, ReadOnly<_>> {
+        let floxmeta = Floxmeta::<ReadOnly> {
             access: ReadOnly::new(mock_provider()),
             flox,
             owner: owner.to_string(),
-            _git: PhantomData::default(),
         };
 
         Environment {

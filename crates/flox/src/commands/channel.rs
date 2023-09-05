@@ -7,7 +7,6 @@ use flox_rust_sdk::nix::command_line::NixCommandLine;
 use flox_rust_sdk::nix::flake_ref::git_service::{GitServiceAttributes, GitServiceRef};
 use flox_rust_sdk::nix::flake_ref::FlakeRef;
 use flox_rust_sdk::nix::RunJson;
-use flox_rust_sdk::providers::git::GitCommandProvider;
 use itertools::Itertools;
 use regex::Regex;
 use serde_json::json;
@@ -199,7 +198,7 @@ impl Subscribe {
 
         // read user channels
         let floxmeta = flox
-            .floxmeta::<GitCommandProvider>(DEFAULT_OWNER)
+            .floxmeta(DEFAULT_OWNER)
             .await
             .context("Could not get default floxmeta")?;
 
@@ -250,7 +249,7 @@ impl Unsubscribe {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("unsubscribe");
         let floxmeta = flox
-            .floxmeta::<GitCommandProvider>(DEFAULT_OWNER)
+            .floxmeta(DEFAULT_OWNER)
             .await
             .context("Could not get default floxmeta")?;
 

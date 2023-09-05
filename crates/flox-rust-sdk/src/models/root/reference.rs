@@ -5,7 +5,12 @@ use std::path::PathBuf;
 use thiserror::Error;
 
 use super::{Closed, Root, RootGuard};
-use crate::providers::git::{GitDiscoverError, GitProvider};
+use crate::providers::git::{
+    GitCommandDiscoverError,
+    GitCommandProvider,
+    GitDiscoverError,
+    GitProvider,
+};
 use crate::utils::guard::Guard;
 
 /// Methods on a reference to a [Root] object
@@ -13,10 +18,13 @@ use crate::utils::guard::Guard;
 /// At this stage the root has not yet been verified.
 /// This state should be handled as a mere reference to a potential root of any kind
 impl<'flox> Root<'flox, Closed<PathBuf>> {
-    pub async fn guard<Git: GitProvider>(
+    pub async fn guard(
         self,
-    ) -> Result<RootGuard<'flox, Closed<Git>, Closed<PathBuf>>, ProjectDiscoverGitError<Git>> {
-        match Git::discover(&self.state.inner).await {
+    ) -> Result<
+        RootGuard<'flox, Closed<GitCommandProvider>, Closed<PathBuf>>,
+        ProjectDiscoverGitError,
+    > {
+        match GitCommandProvider::discover(&self.state.inner).await {
             Ok(repo) => Ok(Guard::Initialized(Root {
                 flox: self.flox,
                 state: Closed::new(repo),
@@ -31,7 +39,7 @@ impl<'flox> Root<'flox, Closed<PathBuf>> {
 }
 
 #[derive(Error, Debug)]
-pub enum ProjectDiscoverGitError<Git: GitProvider> {
+pub enum ProjectDiscoverGitError {
     #[error("Error attempting to discover repository: {0}")]
-    DiscoverRepoError(Git::DiscoverError),
+    DiscoverRepoError(GitCommandDiscoverError),
 }

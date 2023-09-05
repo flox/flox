@@ -10,7 +10,6 @@ use bpaf::{Args, Bpaf, Parser};
 use flox_rust_sdk::flox::{Flox, DEFAULT_OWNER, FLOX_VERSION};
 use flox_rust_sdk::models::floxmeta::{Floxmeta, GetFloxmetaError};
 use flox_rust_sdk::nix::command_line::NixCommandLine;
-use flox_rust_sdk::providers::git::GitCommandProvider;
 use indoc::{formatdoc, indoc};
 use log::{debug, info};
 use once_cell::sync::Lazy;
@@ -165,10 +164,7 @@ impl FloxArgs {
             uuid: init_uuid(&config.flox.data_dir).await?,
         };
 
-        let floxmeta = match boostrap_flox
-            .floxmeta::<GitCommandProvider>(DEFAULT_OWNER)
-            .await
-        {
+        let floxmeta = match boostrap_flox.floxmeta(DEFAULT_OWNER).await {
             Ok(floxmeta) => floxmeta,
             Err(GetFloxmetaError::NotFound(_)) => {
                 Floxmeta::create_floxmeta(&boostrap_flox, DEFAULT_OWNER)
