@@ -269,7 +269,7 @@ impl Init {
     }
 }
 
-/// List (status?) packages installed in an environment
+/// List packages installed in an environment
 #[derive(Bpaf, Clone)]
 pub struct List {
     #[allow(dead_code)] // pending spec for `-e`, `--dir` behaviour

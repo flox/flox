@@ -10,7 +10,7 @@
 # /etc/zprofile this is the best workaround we've come up with.
 #
 # See following URL for more detail:
-# https://discourse.floxdev.com/t/losing-part-of-my-shell-environment-when-using-flox-develop/556/2
+# https://discourse.flox.dev/t/losing-part-of-my-shell-environment-when-using-flox-develop/556/2
 #
 # Usage: echo $PATH | awk -v shellDialect=bash -f path/to/darwin-path-fixer.awk
 #

@@ -1,5 +1,5 @@
 <p>
-    <a href="https://floxdev.com" target="_blank">
+    <a href="https://flox.dev" target="_blank">
         <img src="../img/flox_blue_small.png" alt="flox logo" />
     </a>
 </p>
@@ -10,7 +10,7 @@
 
 ## flox (beta)
 
-The [flox](https://floxdev.com) CLI is a multi-platform environment manager
+The [flox](https://flox.dev) CLI is a multi-platform environment manager
 built on [Nix](https://github.com/nixOS/nix).
 
 <img style="float:right" alt="flox flywheel" align="right" width="280" src="../img/310703783_812187779826049_7314390197914243071_n.png">
@@ -27,11 +27,11 @@ With `flox` you can:
 ## Installation
 
 You can download the `flox` CLI via one of our native installers for Mac, Linux,
-or Windows WSL [here](https://floxdev.com/docs#install-flox).
+or Windows WSL [here](https://flox.dev/docs#install-flox).
 
 ## Usage
 
-See the [docs](https://floxdev.com/docs) for more detail on usage.
+See the [docs](https://flox.dev/docs) for more detail on usage.
 
 #### Search through available packages:
 
@@ -106,7 +106,7 @@ using [Nixpkgs](https://github.com/NixOS/nixpkgs).
 Using packages from a `flox` channel adds a few features to
 [Nixpkgs](https://github.com/NixOS/nixpkgs) such as: semantic versioning,
 stabilities, and guaranteed cache hits.
-See the [docs](https://floxdev.com/docs/basics) for more info.
+See the [docs](https://flox.dev/docs/basics) for more info.
 
 ## Contributing
 
@@ -119,7 +119,7 @@ The `flox` CLI is written in Rust.
 Building `flox` requires a running Nix daemon.
 
 The simplest way to build `flox` is via `flox`!
-- [Download and install](https://floxdev.com/docs/#install-flox) `flox`, then
+- [Download and install](https://flox.dev/docs/#install-flox) `flox`, then
   run `flox build flox-bash` in the project directory.
 
 If you're a Nix user, you can run the following:
@@ -143,7 +143,7 @@ The `flox` CLI is licensed under the GPLv2. See [LICENSE](./LICENSE).
 
 ## Community
 
-Find us on [Twitter](https://twitter.com/floxdevelopment) and [Discourse](https://discourse.floxdev.com).
+Find us on [Twitter](https://twitter.com/floxdevelopment) and [Discourse](https://discourse.flox.dev).
 
 For updates to the `flox` CLI, follow this repo on
 [GitHub](https://github.com/flox/flox)!

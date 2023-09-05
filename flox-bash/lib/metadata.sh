@@ -161,225 +161,6 @@ function gitInitFloxmeta() {
 	floxmetaGitVerbose -C "$tmpDir" push --quiet origin "$defaultBranch"
 }
 
-# XXX TEMPORARY function to convert old-style "1.json" -> "1/manifest.json"
-#     **Delete after 20221215**
-function temporaryAssert007Schema {
-	trace "$@"
-	local repoDir="$1"; shift
-
-	# Use the presence of manifest.toml in the top directory as
-	# an indication that the repository has NOT been converted.
-	[[ -e "$repoDir/manifest.toml" ]] || return 0
-
-	# Prompt user to confirm they want to change the format.
-	warn "floxmeta repository ($repoDir) using deprecated (<=0.0.6) format."
-	${invoke_gum?} confirm "Convert to latest (>=0.0.7) format?"
-
-	# Rename/move each file.
-	for file in $(${_git?} -C "$repoDir" ls-files); do
-		case "$file" in
-		[0-9]*.json)
-			local gen
-			gen="$(${_basename?} "$file" .json)"
-			${invoke_mkdir?} -p "$repoDir/${gen}"
-			floxmetaGitVerbose -C "$repoDir" mv "$file" "${gen}/manifest.json"
-			# Constructing the manifest.toml is not as straightforward.
-			# The pre-0.0.7 format didn't include a generation-specific
-			# manifest.toml, but rather forced you to go back to a previous
-			# git commit to find the corresponding version. Worse than that,
-			# when doing rollbacks and other generation flips the top half
-			# of the manifest.toml didn't change, which was arguably wrong
-			# (although appreciated as a feature by some).
-			#
-			# To create the old generation-specific manifest start by
-			# including everything up to the snipline.
-			floxmetaGitVerbose -C "$repoDir" show "HEAD:manifest.toml" 2>/dev/null  \
-				| ${_awk?} "{if (/$snipline/) {exit} else {print}}"          \
-				        > "$repoDir/$gen/manifest.toml"
-
-			# Then use the current generation's manifest.json to create
-			# the rest.
-			echo "# $snipline" >> "$repoDir/$gen/manifest.toml"
-			manifest "$repoDir/$gen/manifest.json" listEnvironmentTOML  \
-			         >> "$repoDir/$gen/manifest.toml"
-			floxmetaGitVerbose -C "$repoDir" add "$gen/manifest.toml"
-			;;
-		manifest.json)
-			floxmetaGitVerbose -C "$repoDir" rm "$file" ;;
-		manifest.toml)
-			floxmetaGitVerbose -C "$repoDir" rm "$file" ;;
-		metadata.json)
-			: leave intact ;;
-		*)
-			error "unknown file \"$file\" in $repoDir repository" < /dev/null
-			;;
-		esac
-	done
-
-	# Commit, reading commit message from STDIN.
-	floxmetaGitVerbose -C "$repoDir" \
-		commit --quiet -m "$USER converted to 0.0.7 floxmeta schema"
-	floxmetaGitVerbose -C "$repoDir" push --quiet
-
-	warn "Conversion complete. Please re-run command."
-	exit 0
-}
-# /XXX
-
-# XXX TEMPORARY function to convert nix-profile-style "1/manifest.toml"
-#     -> "1/pkgs/default/flox.nix"
-#     **Delete after 20230222**
-function temporaryAssert008Schema {
-	trace "$@"
-	local environment="$1"; shift
-	local repoDir="$1"; shift
-	# set $branchName,$floxNixDir,
-	#     $environment{Name,Alias,Owner,System,BaseDir,BinDir,ParentDir,MetaDir}
-	eval "$(decodeEnvironment "$environment")"
-	local currentGen
-	currentGen="$(${_readlink?} "$workDir/current" || :)"
-	local nextGen
-	nextGen="$(${_readlink?} "$workDir/next")"
-	local currentGenDir="$repoDir/$currentGen"
-	local nextGenDir="$repoDir/$nextGen"
-
-	# Use the presence of manifest.toml in the current generation as
-	# an indication that the repository has NOT been converted.
-	[[ -e "$currentGenDir/manifest.toml" ]] || return 0
-
-	# Prompt user to confirm they want to change the format.
-	local _warnMsg="floxmeta repository ($currentGenDir) using deprecated "
-	_warnMsg="$_warnMsg(<=0.0.7) format."
-	warn "$_warnMsg"
-	$invoke_gum confirm "Convert to latest (>=0.0.8) format?"
-
-	# Copy the template flox environment into the next generation.
-	# Files in the Nix store are read-only.
-	${_cp?} --no-preserve=mode -rT "${_lib?}/templateFloxEnv" "$nextGenDir"
-	# otherwise Nix build won't be able to find any of the files
-	floxmetaGit -C "$workDir" add "$nextGen"
-
-	# Use nix-editor to transfer packages from the current manifest.json file.
-	local tmpScript
-	tmpScript="$(mkTempFile)"
-	manifest "$currentGenDir/manifest.json" convert007to008         \
-	         "${_nix_editor?}" "$nextGenDir/pkgs/default/flox.nix"  \
-			 > "$tmpScript"
-
-	# Similarly use nix-editor to transfer aliases and env vars from
-	# manifest.toml.
-	# jq outputs something like 'value'.
-	# Arguments to nix-editor have to be double quoted, so wrap with
-	# '"', resulting in '"''value''"'
-	#shellcheck disable=2016
-	${invoke_dasel?} -w json -f "$currentGenDir/manifest.toml" |         \
-		${invoke_jq?} -r --arg dq "'\"'" --arg nixEditor "$_nix_editor"  \
-		              --arg file "$nextGenDir/pkgs/default/flox.nix"     \
-			'(.aliases//{}) | to_entries | map(($dq+(.value|@sh)+$dq
-             ) as $quotedValue |
-             "\($nixEditor) -i \($file) shell.aliases.\(.key) " +
-			 "-v \($quotedValue)")[]
-			 ' >> "$tmpScript"
-	#shellcheck disable=2016
-	$invoke_dasel -w json -f "$currentGenDir/manifest.toml" |         \
-		$invoke_jq -r --arg dq "'\"'" --arg nixEditor "$_nix_editor"  \
-		           --arg file "$nextGenDir/pkgs/default/flox.nix"     \
-			'(.environment//{}) | to_entries |
-			map(($dq+(.value|@sh)+$dq) as $quotedValue |
-			"\($nixEditor) -i \($file) environmentVariables.\(.key) " +
-			"-v \($quotedValue)")[]
-			' >> "$tmpScript"
-
-	#shellcheck disable=SC1090
-	if [[ "${verbose?}" -gt 0 ]]; then
-		( set -x && source "$tmpScript" )
-	else
-		source "$tmpScript"
-	fi
-
-	# Hooks are different. Nix editor doesn't know how to poke those in-between
-	# '' blocks.
-	local hookScript
-	hookScript="$(mkTempFile)"
-	local tmpFloxNix
-	tmpFloxNix="$(mkTempFile)"
-	$invoke_dasel -w json -f "$currentGenDir/manifest.toml" | \
-		$invoke_jq -r '
-		  (.hooks//{}) | to_entries | map(.value | gsub("\n"; "; "))[]
-		' > "$hookScript"
-	${invoke_awk?} "{print} /hook = / {system(\"cat $hookScript\")}"    \
-	               "$nextGenDir/pkgs/default/flox.nix" > "$tmpFloxNix"
-	${_mv?} -f "$tmpFloxNix" "$nextGenDir/pkgs/default/flox.nix"
-
-	floxmetaGit -C "$repoDir" add "$nextGen/pkgs/default/flox.nix"
-
-	local envPackage
-	if ! envPackage="$(${invoke_nix?} build --impure --no-link --print-out-paths \
-			              "$nextGenDir#.floxEnvs.${environmentSystem?}.default")"
-	then
-		error "failed to install packages: ${pkgArgs?[*]}" < /dev/null
-	fi
-
-	${_jq?} . --sort-keys "$envPackage/catalog.json"  \
-	        > "$nextGenDir/pkgs/default/catalog.json"
-	$_jq . --sort-keys "$envPackage/manifest.json" > "$nextGenDir/manifest.json"
-	floxmetaGit -C "$repoDir" add "$nextGen/pkgs/default/catalog.json"
-	floxmetaGit -C "$repoDir" add "$nextGen/manifest.json"
-
-	result="$(
-	  commitTransaction temporaryAssert008Schema "$environment" "$repoDir"  \
-		"$envPackage" "$USER converted to 0.0.8 floxmeta schema" 2          \
-		"${me?} automatic conversion"
-	)"
-
-	warn "Conversion complete. Please re-run command."
-	exit 0
-}
-# /XXX
-
-# XXX TEMPORARY function to rename
-# "$name{,-*-link}" -> "$system.$name{,-*-link}"
-#     **Delete after 20230222**
-function temporaryAssert009LinkLayout() {
-	trace "$@"
-	local environment="$1"; shift
-	# set $branchName,$floxNixDir,
-	#     $environment{Name,Alias,Owner,System,BaseDir,BinDir,ParentDir,MetaDir}
-	eval "$(decodeEnvironment "$environment")"
-	# The alias is either "owner/name" or "name" based on the owner, so
-	# we can't use that. Instead construct our own fully-qualified
-	# name by removing the system from environmentName.
-	local environmentBasename="${environmentName?/$environmentSystem\./}"
-	for i in "${environmentParentDir?}/${environmentBasename}"        \
-		     "${environmentParentDir}/${environmentBasename}-"*-link
-	do
-		if [[ -L "$i" ]]; then
-			local x
-			x="$($_readlink "$i")"
-			case "$x" in
-			$environmentSystem.$environmentBasename*)
-				# Already renamed, all good.
-				: ;;
-			${environmentBasename}-*-link|/nix/store/*)
-				# Old link - rename and leave forwarding link in its place.
-				local y
-				y="${environmentSystem}.$($_basename "$i")"
-				if [[ -L "${environmentParentDir}/$y" ]]; then
-					${_rm?} "$i"
-				else
-					$_mv "$i" "$environmentParentDir/$y"
-				fi
-				${_ln?} -s "$y" "$i"
-				;;
-			*)
-				warn "cruft detected - please remove: '$i'"
-				;;
-			esac
-		fi
-	done
-}
-# /XXX
-
 # floxmetaHelperGit($remoteName, $cloneDir)
 #
 # Invokes git in provided directory with appropriate helper configured.
@@ -427,7 +208,7 @@ function floxmetaHelperGit() {
 }
 
 # XXX TEMPORARY function to migrate floxmeta repositories from
-# github.com -> git.floxdev.com
+# github.com -> git.flox.dev
 #     **Delete after GA**
 function temporaryMigrateGitHubTo030Floxdev() {
 	trace "$@"
@@ -970,8 +751,7 @@ function beginTransaction() {
 		floxmetaGitVerbose -C "$workDir" checkout --quiet --track origin/"$branchName"
 	elif [[ $createBranch -eq 1 ]]; then
 		floxmetaGitVerbose -C "$workDir" checkout --quiet --orphan "$branchName"
-		floxmetaGitVerbose -C "$workDir" ls-files                                   \
-			| $_xargs --no-run-if-empty floxmetaGit -C "$workDir" rm --quiet -f
+		floxmetaGitVerbose -C "$workDir" rm --quiet --ignore-unmatch --force -r .
 		# A commit is needed in order to make the branch visible.
 		floxmetaGitVerbose -C "$workDir" commit --quiet --allow-empty \
 			-m "$USER created environment $environmentName ($environmentSystem)"
@@ -980,10 +760,6 @@ function beginTransaction() {
 		_errMsg="$_errMsg does not exist"
 		error "$_errMsg" < /dev/null
 	fi
-
-	# XXX Temporary covering transition from 0.0.6 -> 0.0.7
-	temporaryAssert007Schema "$workDir"
-	# /XXX
 
 	# Any function calling this one will probably be wanting to make
 	# some sort of change that will generate a new generation, so take
@@ -1007,10 +783,6 @@ function beginTransaction() {
 	nextGen="$(registry "$workDir/metadata.json" 1 nextGen)"
 	$invoke_mkdir -p "$workDir/$nextGen"
 	$invoke_ln -s "$nextGen" "$workDir/next"
-
-	# XXX Temporary covering transition from 0.0.7 -> 0.0.8
-	temporaryAssert008Schema "$environment" "$workDir"
-	# /XXX
 }
 
 #
@@ -1110,11 +882,6 @@ function commitTransaction() {
 	currentGen="$($_readlink "$workDir/current" || echo 0)"
 	local -i nextGen
 	nextGen="$($_readlink "$workDir/next")"
-
-	# XXX temporary: as we change to version 0.0.9 the layout of environment
-	# links changes to embed the system type. Take this opportunity to rename
-	# those links if they exist.
-	temporaryAssert009LinkLayout "$environment"
 
 	# Activate the new generation just as Nix would have done.
 	# First check to see if the environment has actually changed,
