@@ -10,7 +10,7 @@ use thiserror::Error;
 
 use super::{FetchError, Floxmeta, TransactionCommitError, TransactionEnterError};
 use crate::models::root::transaction::{GitAccess, GitSandBox, ReadOnly};
-use crate::providers::git::GitProvider;
+use crate::providers::git::{GitCommandError, GitProvider};
 
 pub(super) const FLOX_MAIN_BRANCH: &str = "floxmain";
 pub(super) const FLOX_USER_META_FILE: &str = "floxUserMeta.json";
@@ -29,11 +29,11 @@ pub struct UserMeta {
     pub version: Version<1>,
 }
 
-impl<'flox, Git: GitProvider, A: GitAccess<Git>> Floxmeta<'flox, Git, A> {
+impl<'flox, A: GitAccess> Floxmeta<'flox, A> {
     /// load and parse `floxUserMeta.json` file from floxmeta repo
     ///
     /// note: fetches updates from upstream (todo: is this a ui decision?)
-    pub async fn user_meta(&self) -> Result<UserMeta, GetUserMetaError<Git>> {
+    pub async fn user_meta(&self) -> Result<UserMeta, GetUserMetaError> {
         let user_meta_str = self
             .git()
             .show(&format!("{FLOX_MAIN_BRANCH}:{FLOX_USER_META_FILE}"))
@@ -44,14 +44,13 @@ impl<'flox, Git: GitProvider, A: GitAccess<Git>> Floxmeta<'flox, Git, A> {
     }
 }
 
-impl<'flox, Git: GitProvider> Floxmeta<'flox, Git, ReadOnly<Git>> {
+impl<'flox> Floxmeta<'flox, ReadOnly> {
     pub async fn set_user_meta(
-        &self,
+        self,
         user_meta: &UserMeta,
         message: &str,
-    ) -> Result<(), TransactionError<Git, SetUserMetaError<Git>>> {
+    ) -> Result<(), TransactionError<SetUserMetaError>> {
         let floxmeta_sandbox = self
-            .clone()
             .enter_transaction()
             .await
             .map_err(TransactionError::Enter)?;
@@ -73,12 +72,12 @@ impl<'flox, Git: GitProvider> Floxmeta<'flox, Git, ReadOnly<Git>> {
     }
 }
 
-impl<'flox, Git: GitProvider> Floxmeta<'flox, Git, GitSandBox<Git>> {
+impl<'flox> Floxmeta<'flox, GitSandBox> {
     /// write `floxUserMeta.json` file to floxmeta repo
     ///
     /// This is in a sandbox, where checkouts and adding files is allowed.
     /// It is assumed the correct branch is checked out before this function is called.
-    pub async fn set_user_meta(&self, user_meta: &UserMeta) -> Result<(), SetUserMetaError<Git>> {
+    pub async fn set_user_meta(&self, user_meta: &UserMeta) -> Result<(), SetUserMetaError> {
         let mut file = File::create(self.git().workdir().unwrap().join(FLOX_USER_META_FILE))
             .map_err(SetUserMetaError::OpenUserMetaFile)?;
 
@@ -94,39 +93,39 @@ impl<'flox, Git: GitProvider> Floxmeta<'flox, Git, GitSandBox<Git>> {
 }
 
 #[derive(Error, Debug)]
-pub enum TransactionError<Git: GitProvider, Inner> {
+pub enum TransactionError<Inner> {
     #[error(transparent)]
-    Enter(TransactionEnterError<Git>),
+    Enter(TransactionEnterError),
     #[error(transparent)]
     Inner(#[from] Inner),
     #[error(transparent)]
     Setup(anyhow::Error),
     #[error(transparent)]
-    Commit(TransactionCommitError<Git>),
+    Commit(TransactionCommitError),
 }
 
 #[derive(Error, Debug)]
-pub enum GetUserMetaError<Git: GitProvider> {
+pub enum GetUserMetaError {
     #[error(transparent)]
-    Fetch(#[from] FetchError<Git>),
+    Fetch(#[from] FetchError),
     #[error("Could not access 'userFloxMeta.json': {0}")]
-    Show(Git::ShowError),
+    Show(GitCommandError),
     #[error("Could not parse 'userFloxMeta.json': {0}")]
     Deserialize(#[from] serde_json::Error),
 }
 
 #[derive(Error, Debug)]
-pub enum SetUserMetaError<Git: GitProvider> {
+pub enum SetUserMetaError {
     #[error(transparent)]
-    Fetch(#[from] FetchError<Git>),
+    Fetch(#[from] FetchError),
     #[error("Could not checkout '{FLOX_MAIN_BRANCH}' branch: {0}")]
-    Checkout(Git::CheckoutError),
+    Checkout(GitCommandError),
     #[error("Could not open or create '{FLOX_USER_META_FILE}' file: {0}")]
     OpenUserMetaFile(std::io::Error),
     #[error("Could not serialize 'userFloxMeta.json': {0}")]
     Serialize(#[from] serde_json::Error),
     #[error("Could not add '{FLOX_USER_META_FILE}': {0}")]
-    Add(Git::AddError),
+    Add(GitCommandError),
 }
 
 #[cfg(feature = "impure-unit-tests")]
@@ -153,7 +152,7 @@ mod tests {
         .await
         .unwrap();
 
-        let floxmeta = Floxmeta::<GitCommandProvider, ReadOnly<_>>::get_floxmeta(&flox, "flox")
+        let floxmeta = Floxmeta::<ReadOnly>::get_floxmeta(&flox, "flox")
             .await
             .expect("Should open floxmeta repo");
 

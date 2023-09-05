@@ -162,10 +162,7 @@ impl Flox {
         Root::closed(self, x)
     }
 
-    pub async fn floxmeta<Git: GitProvider>(
-        &self,
-        owner: &str,
-    ) -> Result<Floxmeta<Git, ReadOnly<Git>>, GetFloxmetaError<Git>> {
+    pub async fn floxmeta(&self, owner: &str) -> Result<Floxmeta<ReadOnly>, GetFloxmetaError> {
         Floxmeta::get_floxmeta(self, owner).await
     }
 

@@ -719,12 +719,7 @@ async fn ensure_project_repo(
     flox: &Flox,
     cwd: PathBuf,
 ) -> Result<root::Root<Closed<GitCommandProvider>>, anyhow::Error> {
-    match flox
-        .resource(cwd)
-        .guard::<GitCommandProvider>()
-        .await?
-        .open()
-    {
+    match flox.resource(cwd).guard().await?.open() {
         Ok(p) => {
             info!(
                 "Found git repo{}",
@@ -747,7 +742,7 @@ async fn ensure_project_repo(
 async fn ensure_project<'flox>(
     git_repo: Root<'flox, Closed<GitCommandProvider>>,
     command: &WithPassthru<InitPackage>,
-) -> Result<Project<'flox, GitCommandProvider, ReadOnly<GitCommandProvider>>> {
+) -> Result<Project<'flox, ReadOnly>> {
     match git_repo.guard().await?.open() {
         Ok(x) => Ok(x),
         Err(g) => Ok(g
