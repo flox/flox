@@ -1,5 +1,4 @@
 use std::collections::BTreeMap;
-use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 
 use log::info;
@@ -17,7 +16,7 @@ use walkdir::WalkDir;
 use super::root::transaction::{GitAccess, GitSandBox, ReadOnly};
 use super::root::{Closed, Root};
 use crate::flox::{Flox, FloxNixApi};
-use crate::providers::git::GitProvider;
+use crate::providers::git::{GitCommandError, GitCommandProvider, GitProvider};
 use crate::utils::errors::IoError;
 use crate::utils::guard::Guard;
 use crate::utils::{copy_file_without_permissions, find_and_replace, FindAndReplaceError};
@@ -28,7 +27,7 @@ static PACKAGE_NAME_PLACEHOLDER: &str = "__PACKAGE_NAME__";
 ///
 /// We assume the flake.nix follows the capacitor output schema
 #[derive(Debug)]
-pub struct Project<'flox, Git: GitProvider, Access: GitAccess<Git>> {
+pub struct Project<'flox, Access: GitAccess> {
     flox: &'flox Flox,
     git: Access,
     /// subdir relative to the git workdir
@@ -47,19 +46,20 @@ pub struct Project<'flox, Git: GitProvider, Access: GitAccess<Git>> {
     ///       L flox.nix
     /// ```
     subdir: PathBuf,
-    _marker: PhantomData<Git>,
 }
 
 /// Upgrade paths from a git repo into an open Project
-impl<'flox, Git: GitProvider> Root<'flox, Closed<Git>> {
+impl<'flox> Root<'flox, Closed<GitCommandProvider>> {
     /// Guards opening a project
     ///
     /// - Resolves as initialized if a `flake.nix` is present
     /// - Resolves as uninitialized if not
     pub async fn guard(
         self,
-    ) -> Result<Guard<Project<'flox, Git, ReadOnly<Git>>, Root<'flox, Closed<Git>>>, OpenProjectError>
-    {
+    ) -> Result<
+        Guard<Project<'flox, ReadOnly>, Root<'flox, Closed<GitCommandProvider>>>,
+        OpenProjectError,
+    > {
         let repo = &self.state.inner;
 
         let root = repo.workdir().ok_or(OpenProjectError::WorkdirNotFound)?;
@@ -78,13 +78,13 @@ impl<'flox, Git: GitProvider> Root<'flox, Closed<Git>> {
 }
 
 /// Resolutions for unsucessful upgrades
-impl<'flox, Git: GitProvider> Guard<Project<'flox, Git, ReadOnly<Git>>, Root<'flox, Closed<Git>>> {
+impl<'flox> Guard<Project<'flox, ReadOnly>, Root<'flox, Closed<GitCommandProvider>>> {
     /// Initialize a new project in the workdir of a git root or return
     /// an existing project if it exists.
     pub async fn init_project<Nix: FloxNixApi>(
         self,
         nix_extra_args: Vec<String>,
-    ) -> Result<Project<'flox, Git, ReadOnly<Git>>, InitProjectError<Nix, Git>>
+    ) -> Result<Project<'flox, ReadOnly>, InitProjectError<Nix>>
     where
         FlakeInit: Run<Nix>,
     {
@@ -101,7 +101,7 @@ impl<'flox, Git: GitProvider> Guard<Project<'flox, Git, ReadOnly<Git>>, Root<'fl
 
         let root = repo
             .workdir()
-            .ok_or(InitProjectError::<Nix, Git>::WorkdirNotFound)?;
+            .ok_or(InitProjectError::<Nix>::WorkdirNotFound)?;
 
         let nix = uninit.flox.nix(nix_extra_args);
 
@@ -136,18 +136,13 @@ impl<'flox, Git: GitProvider> Guard<Project<'flox, Git, ReadOnly<Git>>, Root<'fl
 }
 
 /// Implementations for an opened project (read only)
-impl<'flox, Git: GitProvider, Access: GitAccess<Git>> Project<'flox, Git, Access> {
+impl<'flox, Access: GitAccess> Project<'flox, Access> {
     /// Construct a new Project object
     ///
     /// Private in this module, as intialization through git guard is prefered
     /// to provide project guarantees.
-    fn new(flox: &Flox, git: Access, subdir: PathBuf) -> Project<Git, Access> {
-        Project {
-            flox,
-            git,
-            subdir,
-            _marker: PhantomData,
-        }
+    fn new(flox: &Flox, git: Access, subdir: PathBuf) -> Project<Access> {
+        Project { flox, git, subdir }
     }
 
     /// Get the git root for a flake
@@ -196,7 +191,7 @@ impl<'flox, Git: GitProvider, Access: GitAccess<Git>> Project<'flox, Git, Access
         nix_extra_args: Vec<String>,
         template: Installable,
         name: &str,
-    ) -> Result<(), InitFloxPackageError<Nix, Git>>
+    ) -> Result<(), InitFloxPackageError<Nix>>
     where
         FlakeInit: Run<Nix>,
     {
@@ -245,7 +240,7 @@ impl<'flox, Git: GitProvider, Access: GitAccess<Git>> Project<'flox, Git, Access
                 // PACKAGE_NAME_PLACEHOLDER with name
                 find_and_replace(&new_path, PACKAGE_NAME_PLACEHOLDER, name)
                     .await
-                    .map_err(InitFloxPackageError::<Nix, Git>::ReplacePackageName)?;
+                    .map_err(InitFloxPackageError::<Nix>::ReplacePackageName)?;
 
                 repo.add(&[&new_path])
                     .await
@@ -270,10 +265,10 @@ impl<'flox, Git: GitProvider, Access: GitAccess<Git>> Project<'flox, Git, Access
 }
 
 /// Implementations exclusively for [ReadOnly] instances
-impl<'flox, Git: GitProvider> Project<'flox, Git, ReadOnly<Git>> {
+impl<'flox> Project<'flox, ReadOnly> {
     pub async fn enter_transaction(
         self,
-    ) -> Result<(Project<'flox, Git, GitSandBox<Git>>, Index), TransactionEnterError> {
+    ) -> Result<(Project<'flox, GitSandBox>, Index), TransactionEnterError> {
         let transaction_temp_dir =
             TempDir::new_in(&self.flox.temp_dir).map_err(TransactionEnterError::CreateTempdir)?;
 
@@ -294,7 +289,9 @@ impl<'flox, Git: GitProvider> Project<'flox, Git, ReadOnly<Git>> {
             }
         }
 
-        let git = Git::discover(transaction_temp_dir.path()).await.unwrap();
+        let git = GitCommandProvider::discover(transaction_temp_dir.path())
+            .await
+            .unwrap();
 
         let sandbox = self.git.to_sandbox_in(transaction_temp_dir, git);
 
@@ -303,7 +300,6 @@ impl<'flox, Git: GitProvider> Project<'flox, Git, ReadOnly<Git>> {
                 flox: self.flox,
                 git: sandbox,
                 subdir: self.subdir,
-                _marker: PhantomData,
             },
             Index::default(),
         ))
@@ -317,12 +313,12 @@ pub enum FileAction {
 }
 
 /// Implementations exclusively for [GitSandBox]ed instances
-impl<'flox, Git: GitProvider> Project<'flox, Git, GitSandBox<Git>> {
+impl<'flox> Project<'flox, GitSandBox> {
     pub async fn commit_transaction(
         self,
         index: Index,
         _message: &str,
-    ) -> Result<Project<'flox, Git, ReadOnly<Git>>, TransactionCommitError<Git>> {
+    ) -> Result<Project<'flox, ReadOnly>, TransactionCommitError> {
         let original = self.git.read_only();
 
         for (file, action) in index {
@@ -361,7 +357,6 @@ impl<'flox, Git: GitProvider> Project<'flox, Git, GitSandBox<Git>> {
             flox: self.flox,
             git: original,
             subdir: self.subdir,
-            _marker: PhantomData,
         })
     }
 
@@ -390,9 +385,11 @@ pub enum TransactionEnterError {
     CopyFile(IoError),
 }
 #[derive(Error, Debug)]
-pub enum TransactionCommitError<Git: GitProvider> {
-    GitCommit(Git::CommitError),
-    GitPush(Git::PushError),
+pub enum TransactionCommitError {
+    #[error("Failed committing transaction: {0}")]
+    GitCommit(GitCommandError),
+    #[error("Failed pushing transaction: {0}")]
+    GitPush(GitCommandError),
 }
 
 /// Errors occurring while trying to upgrade to an [`Open<Git>`] [Root]
@@ -403,7 +400,7 @@ pub enum OpenProjectError {
 }
 
 #[derive(Error, Debug)]
-pub enum InitProjectError<Nix: NixBackend, Git: GitProvider>
+pub enum InitProjectError<Nix: NixBackend>
 where
     FlakeInit: Run<Nix>,
 {
@@ -419,11 +416,11 @@ where
     #[error("Error writing to template file")]
     WriteTemplateFile(std::io::Error),
     #[error("Error new template file in Git")]
-    GitAdd(Git::AddError),
+    GitAdd(GitCommandError),
 }
 
 #[derive(Error, Debug)]
-pub enum InitFloxPackageError<Nix: NixBackend, Git: GitProvider>
+pub enum InitFloxPackageError<Nix: NixBackend>
 where
     FlakeInit: Run<Nix>,
 {
@@ -432,7 +429,7 @@ where
     #[error("Error initializing template with Nix")]
     NixInit(<FlakeInit as Run<Nix>>::Error),
     #[error("Error moving template file to named location using Git")]
-    MvNamed(Git::MvError),
+    MvNamed(GitCommandError),
     #[error("Error opening template file")]
     OpenTemplateFile(std::io::Error),
     #[error("Error reading template file contents")]
@@ -446,11 +443,11 @@ where
     #[error("Error opening new renamed file for writing")]
     OpenNamed(std::io::Error),
     #[error("Error removing old unnamed file using Git")]
-    RemoveUnnamedFile(Git::RmError),
+    RemoveUnnamedFile(GitCommandError),
     #[error("Error staging new renamed file in Git")]
-    GitAdd(Git::AddError),
+    GitAdd(GitCommandError),
     #[error("Error moving file in Git")]
-    GitMv(Git::MvError),
+    GitMv(GitCommandError),
     #[error("Error replacing {}: {0}", PACKAGE_NAME_PLACEHOLDER)]
     ReplacePackageName(FindAndReplaceError),
 }
@@ -498,7 +495,7 @@ pub mod tests {
         let project_dir = tempfile::tempdir_in(tempdir_handle.path()).unwrap();
 
         flox.resource(project_dir.path().to_path_buf())
-            .guard::<GitCommandProvider>()
+            .guard()
             .await
             .expect("Finding dir should succeed")
             .open()
@@ -515,7 +512,7 @@ pub mod tests {
             .expect("should create git repo");
 
         flox.resource(project_dir.path().to_path_buf())
-            .guard::<GitCommandProvider>()
+            .guard()
             .await
             .expect("Finding dir should succeed")
             .open()

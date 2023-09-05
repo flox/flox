@@ -1,4 +1,3 @@
-use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 
 use flox_types::version::Version;
@@ -21,20 +20,19 @@ use super::root::transaction::{GitAccess, GitSandBox, ReadOnly};
 use super::root::{Closed, Root};
 use crate::flox::Flox;
 use crate::models::floxmeta::user_meta::UserMeta;
-use crate::providers::git::GitProvider;
+use crate::providers::git::{GitCommandError, GitCommandProvider as Git, GitProvider};
 
 pub const FLOXMETA_DIR_NAME: &str = "meta";
 
 #[derive(Debug)]
-pub struct Floxmeta<'flox, Git: GitProvider, Access: GitAccess<Git>> {
+pub struct Floxmeta<'flox, Access> {
     pub(crate) flox: &'flox Flox,
     pub(crate) owner: String,
 
     pub(crate) access: Access,
-    pub(crate) _git: PhantomData<Git>,
 }
 
-impl<'flox, Git: GitProvider> Root<'flox, Closed<Git>> {
+impl<'flox> Root<'flox, Closed<Git>> {
     /// Guards opening a repo as floxmeta
     ///
     /// - Ensures that the repo is in fact a floxmeta directory
@@ -45,9 +43,7 @@ impl<'flox, Git: GitProvider> Root<'flox, Closed<Git>> {
     /// - if in the future these repositories are places in other places,
     ///   without provenance of the owner,
     ///   this guard should take the owner as an argument instead.
-    pub async fn guard_floxmeta(
-        self,
-    ) -> Result<Floxmeta<'flox, Git, ReadOnly<Git>>, OpenFloxmetaError> {
+    pub async fn guard_floxmeta(self) -> Result<Floxmeta<'flox, ReadOnly>, OpenFloxmetaError> {
         let owner = self
             .state
             .inner
@@ -61,27 +57,15 @@ impl<'flox, Git: GitProvider> Root<'flox, Closed<Git>> {
             owner: owner.into_owned(),
             flox: self.flox,
             access: ReadOnly::new(self.state.inner),
-            _git: PhantomData::default(),
         })
     }
 }
 
 impl<'flox> Root<'flox, Closed<String>> {}
 
-impl<'flox, Git: GitProvider> Clone for Floxmeta<'flox, Git, ReadOnly<Git>> {
-    fn clone(&self) -> Self {
-        Self {
-            flox: self.flox,
-            owner: self.owner.clone(),
-            access: self.access.read_only(),
-            _git: self._git,
-        }
-    }
-}
-
 /// Constructors and implementations for retrieving floxmeta handles
 /// and creating a writable transaction
-impl<'flox, Git: GitProvider> Floxmeta<'flox, Git, ReadOnly<Git>> {
+impl<'flox> Floxmeta<'flox, ReadOnly> {
     /// Creates a new floxmeta for the specified owner
     ///
     /// ## Return value
@@ -96,7 +80,7 @@ impl<'flox, Git: GitProvider> Floxmeta<'flox, Git, ReadOnly<Git>> {
     pub async fn create_floxmeta(
         flox: &'flox Flox,
         owner: &str,
-    ) -> Result<Floxmeta<'flox, Git, ReadOnly<Git>>, CreateFloxmetaError<Git>> {
+    ) -> Result<Floxmeta<'flox, ReadOnly>, CreateFloxmetaError> {
         let floxmeta_dir = flox.cache_dir.join(FLOXMETA_DIR_NAME);
         let user_floxmeta_dir = flox.cache_dir.join(FLOXMETA_DIR_NAME).join(owner);
         let user_floxmeta_prepare_dir = flox.temp_dir.join(FLOXMETA_DIR_NAME).join(owner);
@@ -122,7 +106,6 @@ impl<'flox, Git: GitProvider> Floxmeta<'flox, Git, ReadOnly<Git>> {
             owner: owner.to_string(),
             flox,
             access: ReadOnly::new(git),
-            _git: PhantomData::default(),
         };
 
         let user_meta = UserMeta {
@@ -165,7 +148,7 @@ impl<'flox, Git: GitProvider> Floxmeta<'flox, Git, ReadOnly<Git>> {
     /// - any **directory** in the cache dir cannot be resolved as a floxmeta repo
     pub async fn list_floxmetas(
         flox: &'flox Flox,
-    ) -> Result<Vec<Floxmeta<'flox, Git, ReadOnly<Git>>>, ListFloxmetaError<Git>> {
+    ) -> Result<Vec<Floxmeta<'flox, ReadOnly>>, ListFloxmetaError> {
         let metadir = flox.cache_dir.join(FLOXMETA_DIR_NAME);
 
         if !metadir.exists() {
@@ -223,11 +206,11 @@ impl<'flox, Git: GitProvider> Floxmeta<'flox, Git, ReadOnly<Git>> {
     pub async fn get_floxmeta(
         flox: &'flox Flox,
         owner: &str,
-    ) -> Result<Floxmeta<'flox, Git, ReadOnly<Git>>, GetFloxmetaError<Git>> {
+    ) -> Result<Floxmeta<'flox, ReadOnly>, GetFloxmetaError> {
         let floxmeta_dir = flox.cache_dir.join(FLOXMETA_DIR_NAME).join(owner);
         let git = flox
             .resource(floxmeta_dir.clone())
-            .guard::<Git>()
+            .guard()
             .await
             .map_err(|e| GetFloxmetaError::DiscoverGitDir(floxmeta_dir, e))?
             .ensure(|_| Err(GetFloxmetaError::NotFound(owner.to_string())))?;
@@ -239,14 +222,17 @@ impl<'flox, Git: GitProvider> Floxmeta<'flox, Git, ReadOnly<Git>> {
 
     pub async fn enter_transaction(
         self,
-    ) -> Result<Floxmeta<'flox, Git, GitSandBox<Git>>, TransactionEnterError<Git>> {
+    ) -> Result<Floxmeta<'flox, GitSandBox>, TransactionEnterError> {
         let transaction_temp_dir =
             TempDir::new_in(&self.flox.temp_dir).map_err(TransactionEnterError::CreateTempdir)?;
 
-        let transaction_git =
-            Git::clone(self.access.git().path(), transaction_temp_dir.path(), false)
-                .await
-                .map_err(TransactionEnterError::GitClone)?;
+        let transaction_git = <Git as GitProvider>::clone(
+            self.access.git().path(),
+            transaction_temp_dir.path(),
+            false,
+        )
+        .await
+        .map_err(TransactionEnterError::GitClone)?;
 
         let sandbox = self
             .access
@@ -256,15 +242,14 @@ impl<'flox, Git: GitProvider> Floxmeta<'flox, Git, ReadOnly<Git>> {
             owner: self.owner.clone(),
             flox: self.flox,
             access: sandbox,
-            _git: PhantomData::default(),
         })
     }
 }
 
 /// Constructors and implementations for retrieving floxmeta handles
 /// and creating a writable transaction
-impl<'flox, Git: GitProvider, Access: GitAccess<Git>> Floxmeta<'flox, Git, Access> {
-    pub async fn fetch(&self) -> Result<(), FetchError<Git>> {
+impl<'flox, Access: GitAccess> Floxmeta<'flox, Access> {
+    pub async fn fetch(&self) -> Result<(), FetchError> {
         self.git().fetch().await.map_err(FetchError)?;
         Ok(())
     }
@@ -279,15 +264,14 @@ impl<'flox, Git: GitProvider, Access: GitAccess<Git>> Floxmeta<'flox, Git, Acces
 }
 
 /// Constructors and implementations for writable (sandbox) floxmeta
-impl<'flox, Git: GitProvider> Floxmeta<'flox, Git, GitSandBox<Git>> {
+impl<'flox> Floxmeta<'flox, GitSandBox> {
     /// abort a transaction by discarding the temporary clone
-    pub async fn abort_transaction(self) -> Floxmeta<'flox, Git, ReadOnly<Git>> {
+    pub async fn abort_transaction(self) -> Floxmeta<'flox, ReadOnly> {
         let access = self.access.abort();
         Floxmeta {
             owner: self.owner,
             flox: self.flox,
             access,
-            _git: PhantomData::default(),
         }
     }
 
@@ -295,7 +279,7 @@ impl<'flox, Git: GitProvider> Floxmeta<'flox, Git, GitSandBox<Git>> {
     pub async fn commit_transaction(
         self,
         message: &str,
-    ) -> Result<Floxmeta<'flox, Git, ReadOnly<Git>>, TransactionCommitError<Git>> {
+    ) -> Result<Floxmeta<'flox, ReadOnly>, TransactionCommitError> {
         self.access
             .git()
             .commit(message)
@@ -311,11 +295,10 @@ impl<'flox, Git: GitProvider> Floxmeta<'flox, Git, GitSandBox<Git>> {
             owner: self.owner,
             flox: self.flox,
             access: self.access.abort(),
-            _git: PhantomData::default(),
         })
     }
 
-    pub async fn create_environment(&self, name: &str) -> Result<(), CreateEnvironmentError<Git>> {
+    pub async fn create_environment(&self, name: &str) -> Result<(), CreateEnvironmentError> {
         // todo make Self::environment(&self, name) produce a guard?
         if self.environment(name).await.is_ok() {
             return Err(CreateEnvironmentError::EnvironmentExists(
@@ -329,7 +312,7 @@ impl<'flox, Git: GitProvider> Floxmeta<'flox, Git, GitSandBox<Git>> {
             .git()
             .checkout(&branch_name, true)
             .await
-            .map_err(|e| CreateEnvironmentError::<Git>::GitCheckout(branch_name, e))?;
+            .map_err(|e| CreateEnvironmentError::GitCheckout(branch_name, e))?;
 
         let metadata = Metadata::default();
 
@@ -373,7 +356,7 @@ pub enum OpenFloxmetaError {
 
 /// Errors occurring while trying to create a floxmeta
 #[derive(Error, Debug)]
-pub enum CreateFloxmetaError<Git: GitProvider> {
+pub enum CreateFloxmetaError {
     #[error("A floxmeta '{0}' already exists")]
     Exists(String),
     #[error("Could not create floxmeta initial directory: {0}")]
@@ -383,21 +366,21 @@ pub enum CreateFloxmetaError<Git: GitProvider> {
     #[error("Could not move floxmeta repository to floxmeta home: {0}")]
     MoveFloxmeta(std::io::Error),
     #[error("Could not initialize git repo: {0}")]
-    Init(Git::InitError),
+    Init(GitCommandError),
     #[error("Could not make repo writable: {0}")]
-    Transacton(#[from] TransactionEnterError<Git>),
+    Transacton(#[from] TransactionEnterError),
     #[error("Could not rename 'floxmain' branch: {0}")]
-    Rename(Git::RenameError),
+    Rename(GitCommandError),
     #[error("Could not write back user metadata: {0}")]
-    UserMeta(#[from] SetUserMetaError<Git>),
+    UserMeta(#[from] SetUserMetaError),
     #[error("Could not write back initialized floxmeta")]
-    Commit(#[from] TransactionCommitError<Git>),
+    Commit(#[from] TransactionCommitError),
     #[error("Could not read created floxmeta: {0}")]
-    GetCreated(#[from] GetFloxmetaError<Git>),
+    GetCreated(#[from] GetFloxmetaError),
 }
 
 #[derive(Error, Debug)]
-pub enum InitFloxmetaError<Nix: NixBackend, Git: GitProvider>
+pub enum InitFloxmetaError<Nix: NixBackend>
 where
     FlakeInit: Run<Nix>,
 {
@@ -413,11 +396,11 @@ where
     #[error("Error writing to template file")]
     WriteTemplateFile(std::io::Error),
     #[error("Error new template file in Git")]
-    GitAdd(Git::AddError),
+    GitAdd(GitCommandError),
 }
 
 #[derive(Error, Debug)]
-pub enum ListFloxmetaError<Git: GitProvider> {
+pub enum ListFloxmetaError {
     #[error("Could not open floxmeta cache ({0:?}): ({1})")]
     OpenMetaDir(PathBuf, std::io::Error),
 
@@ -425,13 +408,13 @@ pub enum ListFloxmetaError<Git: GitProvider> {
     CreateMetaDir(PathBuf, std::io::Error),
 
     #[error(transparent)]
-    GetFloxmeta(#[from] GetFloxmetaError<Git>),
+    GetFloxmeta(#[from] GetFloxmetaError),
 }
 
 #[derive(Error, Debug)]
-pub enum GetFloxmetaError<Git: GitProvider> {
+pub enum GetFloxmetaError {
     #[error("Error opening floxmeta dir for ({0:?}): ({1})")]
-    DiscoverGitDir(PathBuf, ProjectDiscoverGitError<Git>),
+    DiscoverGitDir(PathBuf, ProjectDiscoverGitError),
 
     #[error("Error opening floxmeta dir for {0:?}: Not found")]
     NotFound(String),
@@ -441,12 +424,12 @@ pub enum GetFloxmetaError<Git: GitProvider> {
 }
 
 #[derive(Error, Debug)]
-pub enum CreateEnvironmentError<Git: GitProvider> {
+pub enum CreateEnvironmentError {
     #[error("Environment '{0}' ({1}) already exists")]
     EnvironmentExists(String, String),
 
     #[error("Failed checking out branch '{0}': {1}")]
-    GitCheckout(String, Git::CheckoutError),
+    GitCheckout(String, GitCommandError),
 
     #[error("Failed to open metadata file for writing: {0}")]
     OpenMetadataFile(std::io::Error),
@@ -458,27 +441,27 @@ pub enum CreateEnvironmentError<Git: GitProvider> {
     WriteMetadata(std::io::Error),
 
     #[error("Failed adding metadata to git index: {0}")]
-    GitAdd(Git::AddError),
+    GitAdd(GitCommandError),
 }
 
 #[derive(Error, Debug)]
-pub enum TransactionEnterError<Git: GitProvider> {
+pub enum TransactionEnterError {
     #[error("Failed to create tempdir for transaction")]
     CreateTempdir(std::io::Error),
     #[error("Failed to clone env into tempdir")]
-    GitClone(Git::CloneError),
+    GitClone(GitCommandError),
 }
 #[derive(Error, Debug)]
-pub enum TransactionCommitError<Git: GitProvider> {
+pub enum TransactionCommitError {
     #[error("Failed committing changes: {0}")]
-    GitCommit(Git::CommitError),
+    GitCommit(GitCommandError),
     #[error("Failed synchronizing changes: {0}")]
-    GitPush(Git::PushError),
+    GitPush(GitCommandError),
 }
 
 #[derive(Error, Debug)]
 #[error("Failed updating floxmeta: {0}")]
-pub struct FetchError<Git: GitProvider>(Git::FetchError);
+pub struct FetchError(GitCommandError);
 
 #[cfg(test)]
 #[cfg(feature = "impure-unit-tests")]
@@ -511,8 +494,7 @@ pub(super) mod floxmeta_tests {
     async fn fail_without_metadir() {
         let (flox, _tempdir_handle) = flox_instance();
 
-        let floxmeta =
-            Floxmeta::<GitCommandProvider, ReadOnly<_>>::get_floxmeta(&flox, "someone").await;
+        let floxmeta = Floxmeta::<ReadOnly>::get_floxmeta(&flox, "someone").await;
 
         assert!(matches!(floxmeta, Err(_)));
     }
@@ -526,7 +508,7 @@ pub(super) mod floxmeta_tests {
 
         let git = GitCommandProvider::init(&meta_repo, true).await.unwrap();
 
-        let floxmeta = Floxmeta::<GitCommandProvider, ReadOnly<_>>::get_floxmeta(&flox, "flox")
+        let floxmeta = Floxmeta::<ReadOnly>::get_floxmeta(&flox, "flox")
             .await
             .expect("Should open floxmeta repo");
         let environments = floxmeta
@@ -558,7 +540,7 @@ pub(super) mod floxmeta_tests {
 
         let _git = GitCommandProvider::init(&meta_repo, true).await.unwrap();
 
-        let floxmeta = Floxmeta::<GitCommandProvider, ReadOnly<_>>::get_floxmeta(&flox, "test")
+        let floxmeta = Floxmeta::<ReadOnly>::get_floxmeta(&flox, "test")
             .await
             .expect("Should open floxmeta repo");
 
@@ -604,16 +586,15 @@ pub(super) mod floxmeta_tests {
     async fn test_create_floxmeta() {
         let (flox, _tempdir_handle) = flox_instance();
 
-        Floxmeta::<GitCommandProvider, ReadOnly<_>>::get_floxmeta(&flox, "someone")
+        Floxmeta::<ReadOnly>::get_floxmeta(&flox, "someone")
             .await
             .expect_err("Should fail finding floxmeta");
-        let floxmeta =
-            Floxmeta::<GitCommandProvider, ReadOnly<_>>::create_floxmeta(&flox, "someone")
-                .await
-                .expect("should create a floxmeta");
+        let floxmeta = Floxmeta::<ReadOnly>::create_floxmeta(&flox, "someone")
+            .await
+            .expect("should create a floxmeta");
         floxmeta.user_meta().await.expect("should find user_meta");
 
-        Floxmeta::<GitCommandProvider, ReadOnly<_>>::create_floxmeta(&flox, "someone")
+        Floxmeta::<ReadOnly>::create_floxmeta(&flox, "someone")
             .await
             .expect_err("should fail if floxmeta exists");
     }
