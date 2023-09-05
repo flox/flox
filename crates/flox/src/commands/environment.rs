@@ -17,6 +17,7 @@ use flox_rust_sdk::prelude::flox_package::FloxPackage;
 use flox_types::constants::{DEFAULT_CHANNEL, LATEST_VERSION};
 use itertools::Itertools;
 use log::{error, info};
+use tempfile::NamedTempFile;
 
 use crate::utils::dialog::{Confirm, Dialog};
 use crate::utils::display::packages_to_string;
@@ -73,9 +74,8 @@ impl Edit {
                 // the original manifest. You can't put creation/cleanup inside the `edited_manifest_contents`
                 // method because the temporary manifest needs to stick around in case the user wants
                 // or needs to make successive edits without starting over each time.
-                let tmp_manifest_path = flox.temp_dir.join("tmp_manifest.nix");
-                let _ = std::fs::remove_file(&tmp_manifest_path); // Remove any old copies
-                std::fs::copy(&manifest_path, &tmp_manifest_path)?;
+                let tmp_manifest = NamedTempFile::new_in(&flox.temp_dir)?;
+                std::fs::copy(&manifest_path, &tmp_manifest)?;
                 let should_continue = Dialog {
                     message: "Continue editing?",
                     help_message: Default::default(),
@@ -86,22 +86,19 @@ impl Edit {
                 // Let the user keep editing the file until the build succeeds or the user
                 // decides to stop.
                 loop {
-                    let new_manifest = Edit::edited_manifest_contents(&tmp_manifest_path, &editor)?;
+                    let new_manifest = Edit::edited_manifest_contents(&tmp_manifest, &editor)?;
                     if let Err(e) = environment.edit(&nix, &flox.system, new_manifest).await {
                         error!("Environment invalid; building resulted in an error: {e}");
                         if !Dialog::can_prompt() {
-                            std::fs::remove_file(tmp_manifest_path)?;
                             bail!("Can't prompt to continue editing in non-interactive context");
                         }
                         if !should_continue.clone().prompt().await? {
-                            std::fs::remove_file(tmp_manifest_path)?;
                             bail!("Environment editing cancelled");
                         }
                     } else {
                         break;
                     }
                 }
-                std::fs::remove_file(tmp_manifest_path)?;
                 Ok(())
             },
         }
