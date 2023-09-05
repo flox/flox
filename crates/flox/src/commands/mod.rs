@@ -254,7 +254,7 @@ enum LocalDevelopmentCommands {
     /// Run app from current project
     #[bpaf(command)]
     Run(#[bpaf(external(WithPassthru::parse))] WithPassthru<Run>),
-    /// List (status?) packages installed in an environment
+    /// List packages installed in an environment
     #[bpaf(command)]
     List(#[bpaf(external(environment::list))] environment::List),
     /// Access to the nix CLI
