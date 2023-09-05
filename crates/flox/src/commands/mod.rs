@@ -77,7 +77,6 @@ impl Default for Verbosity {
 }
 
 #[derive(Bpaf)]
-#[bpaf(options, version(FLOX_VERSION))]
 pub struct FloxArgs {
     /// Verbose mode.
     ///
@@ -88,6 +87,12 @@ pub struct FloxArgs {
     /// Debug mode.
     #[bpaf(long, req_flag(()), many, map(vec_not_empty))]
     pub debug: bool,
+
+    /// With `--version` the application will print the version of the program
+    /// and quit early.
+    #[allow(dead_code)] // fake arg, `--version` is checked for separately (see [Version])
+    #[bpaf(external(version))]
+    version: Version,
 
     #[bpaf(external(commands), optional)]
     command: Option<Commands>,
@@ -249,7 +254,7 @@ enum LocalDevelopmentCommands {
     /// Run app from current project
     #[bpaf(command)]
     Run(#[bpaf(external(WithPassthru::parse))] WithPassthru<Run>),
-    /// List (status?) packages installed in an environment
+    /// List packages installed in an environment
     #[bpaf(command)]
     List(#[bpaf(external(environment::list))] environment::List),
     /// Access to the nix CLI
@@ -547,6 +552,27 @@ impl Prefix {
             .run_inner(Args::current_args())
             .unwrap_or_default()
             .prefix
+    }
+}
+
+/// Fake argument used to parse `--version` separately
+///
+/// bpaf allows `flox --invalid option --version`
+/// (https://github.com/pacak/bpaf/issues/288) but common utilities,
+/// such as git always require correct arguments even in the presence of
+/// short circuiting flags such as `--version`
+#[derive(Bpaf, Default)]
+pub struct Version(#[bpaf(long("version"))] bool);
+
+impl Version {
+    /// Parses to [Self] and extract the `--version` flag
+    pub fn check() -> bool {
+        bpaf::construct!(version(), flox_args())
+            .to_options()
+            .run_inner(bpaf::Args::current_args())
+            .map(|(v, _)| v)
+            .unwrap_or_default()
+            .0
     }
 }
 

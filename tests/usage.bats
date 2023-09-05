@@ -52,7 +52,7 @@ Local Development Commands
     uninstall      Uninstall installed packages from an environment
     edit           Edit declarative environment configuration
     run            Run app from current project
-    list           List (status?) packages installed in an environment
+    list           List packages installed in an environment
     nix            Access to the nix CLI
     delete         Delete an environment
 EOF
