@@ -230,10 +230,18 @@ impl Gh {
 
 /// floxHub authentication commands
 #[derive(Clone, Debug, Bpaf)]
-pub struct Auth {
-    #[bpaf(any("(login|logout|status) [ <gh auth options> ]", not_help))]
-    _auth_args: Vec<String>,
+pub enum Auth {
+    /// Login to floxhub
+    #[bpaf(command)]
+    Login(#[bpaf(any("gh option", not_help), help("gh auth login options"))] Vec<String>),
+    /// Logout of floxhub
+    #[bpaf(command)]
+    Logout(#[bpaf(any("gh option", not_help), help("gh auth logout options"))] Vec<String>),
+    /// Print login information
+    #[bpaf(command)]
+    Status(#[bpaf(any("gh option", not_help), help("gh auth status options"))] Vec<String>),
 }
+
 impl Auth {
     pub async fn handle(self, _config: Config, flox: Flox) -> Result<()> {
         subcommand_metric!("auth");
