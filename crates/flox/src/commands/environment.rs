@@ -63,7 +63,7 @@ impl Edit {
                 Ok(())
             },
             // If not provided with new manifest contents, let the user edit the file directly
-            // via $EDITOR (as long as `flox edit` was invoked interactively).
+            // via $EDITOR or $VISUAL (as long as `flox edit` was invoked interactively).
             None => {
                 let editor = std::env::var("EDITOR")
                     .or(std::env::var("VISUAL"))
