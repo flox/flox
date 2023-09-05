@@ -751,7 +751,7 @@ function beginTransaction() {
 		floxmetaGitVerbose -C "$workDir" checkout --quiet --track origin/"$branchName"
 	elif [[ $createBranch -eq 1 ]]; then
 		floxmetaGitVerbose -C "$workDir" checkout --quiet --orphan "$branchName"
-		floxmetaGitVerbose -C "$workDir" rm --quiet -f -r .
+		floxmetaGitVerbose -C "$workDir" rm --quiet --ignore-unmatch --force -r .
 		# A commit is needed in order to make the branch visible.
 		floxmetaGitVerbose -C "$workDir" commit --quiet --allow-empty \
 			-m "$USER created environment $environmentName ($environmentSystem)"
