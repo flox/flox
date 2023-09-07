@@ -487,51 +487,6 @@ function checkFloxGhAuth {
 }
 
 #
-# promptMetaOrigin()
-#
-# Guides user through the process of prompting for and/or creating
-# an origin for their floxmeta repository.
-#
-# shellcheck disable=SC2120
-function promptMetaOrigin() {
-	trace "$@"
-
-	local baseURL organization
-	{
-	  echo ''
-	  printf '%s' "flox uses git to store and exchange metadata "  \
-		          "between users and machines."
-	  echo ''
-	} >&2
-
-	local _prompt="Base URL for 'floxmeta' repository: "
-	#shellcheck disable=SC2162
-	baseURL="$git_base_url"
-	read -e -p "$_prompt" baseURL
-
-	# If using floxhub then login using github.com OAuth.
-	if [[ "$baseURL" == "$git_base_url" ]]; then
-		if organization="$(checkFloxGhAuth "github.com")"; then
-			echo "Success! You are logged in as $organization." >&2
-		else
-			printf '%s' "Hmmm ... could not log in with github.com OAuth. "  \
-			       "No problem, we can find another way." >&2
-		fi
-	fi
-
-	local _prompt="organization (or username) on $server for creating the "
-	_prompt="$_prompt'floxmeta' repository: "
-	#shellcheck disable=SC2162
-	[[ -n "$organization" ]] || read -e -p "$_prompt" organization
-
-	# Take 'floxmeta' repo name from environment, if defined. Primarily used
-	# for testing repo creation, because you cannot simply rename a repo
-	# without GitHub helpfully redirecting requests to the renamed repo.
-	local repoName="${FLOXMETA_REPO_NAME:-floxmeta}"
-	echo "$baseURL$organization/$repoName"
-}
-
-#
 # rewriteURLs()
 #
 # Function to inspect the entirety of a floxmeta repository and rewrite
@@ -567,29 +522,8 @@ function getSetOrigin() {
 
 		# Infer/set origin using a variety of information.
 		local repoName="${FLOXMETA_REPO_NAME:-floxmeta}"
-		if [[ "$environmentOwner" == "flox" ]] ||  \
-		   [[ "$environmentOwner" == "flox-examples" ]]
-		then
-			# We got this.
-			origin="https://github.com/$environmentOwner/floxmeta"
-		elif [[ "${interactive?}" -eq 1 ]]; then
-			local defaultOrigin
-			if [[ "$environmentOwner" == "local" ]]; then
-				#shellcheck disable=SC2119
-				defaultOrigin="$(promptMetaOrigin)"
-			else
-				# Strange to have a profile on disk in a named without a
-				# remote origin. Prompt user to confirm floxmeta repo on
-				# github.
-				defaultOrigin="${git_base_url?/+ssh/}"
-				defaultOrigin="$defaultOrigin$environmentOwner/$repoName"
-			fi
-			echo '' >&2
-			#shellcheck disable=SC2162
-			read -e                                                  \
-				-p "confirm git URL for storing profile metadata: "  \
-				-i "$defaultOrigin" origin
-		elif [[ "$environmentOwner" == "local" ]]; then
+
+		if [[ "$environmentOwner" == "local" ]]; then
 			# Used primarily for testing; provide default floxmeta origin
 			# based on GitHub handle observed by `gh` client.
 			local ghAuthHandle
