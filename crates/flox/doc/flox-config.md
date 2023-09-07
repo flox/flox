@@ -22,7 +22,7 @@ with their computed value.
 
 ## Key Format
 
-`<key>` supports dot-separated queries for nested vaules, e.g.
+`<key>` supports dot-separated queries for nested values, e.g.
 
 ```
 flox config --set 'nix.access_tokens."github.com"' "ghp_xxx"`
@@ -36,7 +36,7 @@ All config keys can be listed with
 flox config
 ```
 
-The dispalyed values are resolved by reading:
+The displayed values are resolved by reading:
 
 1. package defaults from `$PREFIX/etc/flox.toml`
 2. installation defaults from `/etc/flox.toml`

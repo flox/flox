@@ -145,7 +145,7 @@ mod tests {
         tokio::fs::create_dir_all(&meta_repo).await.unwrap();
 
         let _git = <GitCommandProvider as GitProvider>::clone(
-            "https://github.com/flox/floxmeta",
+            "https://git.hub.flox.dev/flox/floxmeta",
             &meta_repo,
             true,
         )
