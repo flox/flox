@@ -33,7 +33,7 @@ There are 3 configuration files available which are read in the following order:
   - priority order: flag, env, config file
 - `default_substituter = "https://cache.floxdev.com/"`
   - default cache to look up artifacts from
-- `git_base_url = "https://github.com/"`
+- `git_base_url = "https://git.hub.flox.dev/"`
   - assumes github(-enterprise) or github-like git forges
   - changed from `floxpkgs.gitBaseURL`
 - `nix = { access_tokens = {} }`

@@ -518,7 +518,7 @@ pub(super) mod floxmeta_tests {
 
         assert!(environments.is_empty());
 
-        git.add_remote("origin", "https://github.com/flox/floxmeta")
+        git.add_remote("origin", "https://git.hub.flox.dev/flox/floxmeta")
             .await
             .expect("Failed adding origin");
         git.fetch().await.expect("Failed fetching origin");

@@ -56,8 +56,8 @@ read_flox_conf()
 				# Use the `jq` `tojson()` function to escape quotes contained in
 				# values.
 				#shellcheck disable=SC2016
-				$_cat "$f" | $_dasel -r toml -w json \
-					|$_jq -r --arg var "$i" 'if has($var) then "FLOX_CONF_\($var)=\(.[$var] | tojson)" else empty end'
+				$_cat "$f" | $_dasel -r toml -w json | $_jq -r --arg var "$i" \
+				  'if has($var) then "FLOX_CONF_\($var)=\"${FLOX_CONF_\($var):-\(.[$var] | tojson)}\"" else empty end';
 			done
 		fi
 	done
