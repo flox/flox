@@ -1603,6 +1603,11 @@ function floxGit() {
 	local -a invocation=("$@")
 	# set $branchName,$floxNixDir,$environment{Name,Alias,Owner,System,BaseDir,BinDir,ParentDir,MetaDir}
 	eval $(decodeEnvironment "$environment")
+
+	# First make sure cloneDir exists as the clone of an existing origin.
+	local origin
+	origin=$(getSetOrigin "$environment" | $_sort -u)
+
 	floxmetaHelperGit origin $environmentMetaDir ${args[@]}
 }
 
