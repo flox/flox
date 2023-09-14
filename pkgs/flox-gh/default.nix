@@ -57,6 +57,8 @@ in
         --run '# Unset gh-related environment variables.'                        \
         --run 'unset GITHUB_TOKEN GH_TOKEN GITHUB_ENTERPRISE_TOKEN'              \
         --run 'unset GH_ENTERPRISE_TOKEN GH_CONFIG_DIR GH_HOST GH_PATH GH_REPO'  \
+        --run '# (re)Set GH_TOKEN from FLOX_GH_TOKEN environment variable.'      \
+        --run 'export GH_TOKEN=''${FLOX_GH_TOKEN:-}'                             \
         --prefix PATH : "${gitMinimal}/bin"                                      \
       ;
     '';
