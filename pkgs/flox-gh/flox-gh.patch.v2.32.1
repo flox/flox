@@ -503,10 +503,18 @@ index 77a5f125..b6ffc22b 100644
  		}
  	}
 diff --git a/pkg/cmd/auth/token/token.go b/pkg/cmd/auth/token/token.go
-index fee8dc63..96854ad3 100644
+index fee8dc63..c39589a3 100644
 --- a/pkg/cmd/auth/token/token.go
 +++ b/pkg/cmd/auth/token/token.go
-@@ -13,8 +13,9 @@ type TokenOptions struct {
+@@ -2,6 +2,7 @@ package token
+ 
+ import (
+ 	"fmt"
++	"os"
+ 
+ 	"github.com/cli/cli/v2/internal/config"
+ 	"github.com/cli/cli/v2/pkg/cmdutil"
+@@ -13,8 +14,9 @@ type TokenOptions struct {
  	IO     *iostreams.IOStreams
  	Config func() (config.Config, error)
  
@@ -518,7 +526,7 @@ index fee8dc63..96854ad3 100644
  }
  
  func NewCmdToken(f *cmdutil.Factory, runF func(*TokenOptions) error) *cobra.Command {
-@@ -39,6 +40,7 @@ func NewCmdToken(f *cmdutil.Factory, runF func(*TokenOptions) error) *cobra.Comm
+@@ -39,6 +41,7 @@ func NewCmdToken(f *cmdutil.Factory, runF func(*TokenOptions) error) *cobra.Comm
  	cmd.Flags().StringVarP(&opts.Hostname, "hostname", "h", "", "The hostname of the GitHub instance authenticated with")
  	cmd.Flags().BoolVarP(&opts.SecureStorage, "secure-storage", "", false, "Search only secure credential store for authentication token")
  	_ = cmd.Flags().MarkHidden("secure-storage")
@@ -526,7 +534,7 @@ index fee8dc63..96854ad3 100644
  
  	return cmd
  }
-@@ -66,7 +68,19 @@ func tokenRun(opts *TokenOptions) error {
+@@ -66,7 +69,25 @@ func tokenRun(opts *TokenOptions) error {
  	}
  
  	if val != "" {
@@ -534,10 +542,16 @@ index fee8dc63..96854ad3 100644
 +		if opts.GitCredentialHelper == "get" {
 +			var user string
 +			user, _ = authCfg.User(hostname)
-+			if val == "" {
++			// flox: when pulling token from environment there won't
++			// be a hosts.yml file to look up the host-to-username
++			// mapping so instead take it from the environment.
++			if user == "" {
++				user = os.Getenv("FLOX_TENANT")
++			}
++			// flox: if username is still not known then say so.
++			if user == "" {
 +				return fmt.Errorf("no user")
 +			}
-+
 +			// flox: hacking existing token command/functionality as expedient
 +			// path to helper method while we work to integrate Auth0.
 +			fmt.Fprintf(opts.IO.Out, "username=%s\npassword=%s\n", user, val)
