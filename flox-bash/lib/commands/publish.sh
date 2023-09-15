@@ -593,8 +593,8 @@ function floxPublish() {
 				while true; do
 					[ "$pushAttempt" -lt 3 ] ||
 						error "could not push to $channelRepository after $pushAttempt attempts" </dev/null
-					$_invoke_git -C "$gitClone" pull --rebase
-					if $_invoke_git -C "$gitClone" push; then
+					$invoke_git -C "$gitClone" pull --rebase
+					if $invoke_git -C "$gitClone" push; then
 						# Job done.
 						break
 					else
