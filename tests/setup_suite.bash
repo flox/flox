@@ -316,8 +316,6 @@ gitconfig_setup() {
   mkdir -p "$BATS_SUITE_TMPDIR/git";
   export GIT_CONFIG_SYSTEM="$BATS_SUITE_TMPDIR/git/gitconfig.system";
   # Handle config shared across whole test suite.
-  git config --system user.name  'Flox User';
-  git config --system user.email 'floxuser@example.invalid';
   git config --system gpg.format ssh;
   # Create a temporary `ssh' key for use by `git'.
   ssh_key_setup;

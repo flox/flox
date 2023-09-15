@@ -50,7 +50,10 @@ setup() {
     git -C "$CHANNEL" add flake.nix pkgs/hello/default.nix
     $FLOX_CLI flake update "$CHANNEL"
     git -C "$CHANNEL" add flake.lock
-    git -C "$CHANNEL" commit -m "root commit"
+    git -C "$CHANNEL" \
+        -c user.email="floxuser@example.invalid" \
+        -c user.name="Flox User" \
+        commit -m "root commit"
 
     # set remote to the local repository to minimize external state
     git -C "$CHANNEL" remote add origin "$CHANNEL"
