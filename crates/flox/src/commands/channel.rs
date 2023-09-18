@@ -1,3 +1,6 @@
+use std::env;
+use std::process::Command;
+
 use anyhow::{bail, Context, Result};
 use bpaf::Bpaf;
 use derive_more::Display;
@@ -53,6 +56,17 @@ pub struct Search {
     pub search_term: Option<String>,
 }
 
+// Try Using:
+//   $ NIX_CONFIG='allow-import-from-derivation = true'  \
+//     FLOX_FEATURES_CHANNELS=rust                       \
+//     ./target/debug/flox search hello;
+// Your first run will be slow, it's creating databases, but after that -
+//   it's fast!
+//
+// `NIX_CONFIG='allow-import-from-derivation = true'` is required because
+// `pkgdb` disables this by default, but some flakes require it.
+// Ideally this setting should be controlled by Registry preferences,
+// which is TODO.
 impl Search {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("search");
@@ -70,40 +84,66 @@ impl Search {
             })
             .sorted_by(|a, b| Ord::cmp(a, b));
 
-        if self.json {
-            let mut map = serde_json::Map::new();
-            for (channel, entry) in channels {
-                map.insert(
-                    entry.from.id.to_string(),
-                    json!({
-                        "type": channel.to_string(),
-                        "url": entry.to.to_string()
-                    }),
-                );
-            }
-
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&serde_json::Value::Object(map))?
-            )
-        } else {
-            let width = channels
-                .clone()
-                .map(|(_, entry)| entry.from.id.len())
-                .reduce(|acc, e| acc.max(e))
-                .unwrap_or(8);
-
-            println!("{ch:<width$}   TYPE   URL", ch = "CHANNEL");
-            for (channel, entry) in channels {
-                println!(
-                    "{from:<width$} | {ty} | {url}",
-                    from = entry.from.id,
-                    ty = channel,
-                    url = entry.to
-                )
-            }
+        // Create `registry` parameter for `pkgdb`
+        let mut priority: Vec<String> = Vec::new();
+        let mut inputs = serde_json::Map::new();
+        for (_, entry) in channels {
+            priority.push(entry.from.id.to_string());
+            inputs.insert(
+                entry.from.id.to_string(),
+                json!({"from": entry.from.to_string()}),
+            );
         }
-        Ok(())
+        let registry = json!({
+            "priority": priority,
+            "inputs": inputs,
+        });
+
+        // Create `query` parameter for `pkgdb`
+        let query = match self.search_term {
+            Some(search_term) => {
+                let mut query = serde_json::Map::new();
+                query.insert("match".to_string(), json!(search_term));
+                query
+            },
+            None => serde_json::Map::new(),
+        };
+
+        let params = json!({
+            "registry": registry,
+            "query": query,
+            // "semver": { "preferPreReleases": false }
+            // "systems": ["x86_64-linux", ...]
+        });
+
+        //println!(
+        //    "{}",
+        //    serde_json::to_string_pretty(&serde_json::Value::Object(map))?
+        //)
+
+        let pkgdb_bin: String = match env::var("PKGDB_BIN") {
+            Ok(val) => val,
+            Err(_) => "pkgdb".to_string(),
+        };
+
+        let output = Command::new(pkgdb_bin)
+            .arg("search")
+            .arg(params.to_string())
+            .output()?;
+        if output.status.success() {
+            let stdout = String::from_utf8(output.stdout)?;
+            for line in stdout.lines() {
+                println!("{}", line);
+            }
+            Ok(())
+        } else {
+            let stderr = String::from_utf8(output.stderr)?;
+            bail!(
+                "pkgdb exited with status code {}:\n{}",
+                output.status.code().unwrap_or(-1),
+                stderr
+            );
+        }
     }
 }
 

@@ -294,7 +294,6 @@ impl LocalDevelopmentCommands {
             },
             LocalDevelopmentCommands::Search(_) if Feature::Channels.is_forwarded()? => {
                 subcommand_metric!("search");
-
                 flox_forward(&flox).await?
             },
 
@@ -522,6 +521,7 @@ impl InternalCommands {
             InternalCommands::Eval(args) => args.handle(config, flox).await?,
             InternalCommands::Develop(args) => args.handle(config, flox).await?,
             InternalCommands::Gh(args) => args.handle(config, flox).await?,
+            //InternalCommands::PkgDb(args) => args.handle(config, flox).await?,
             InternalCommands::Auth(args) => args.handle(config, flox).await?,
         }
         Ok(())

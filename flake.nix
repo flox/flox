@@ -12,6 +12,7 @@
     rev = "e1231f054258f7d62652109725881767765b1efb";
   };
   inputs.parser-util.url = "github:flox/parser-util/v0";
+  inputs.pkgdb.url = "github:flox/pkgdb";
 
   outputs = inputs:
     inputs.flox-floxpkgs.project inputs (_: {});

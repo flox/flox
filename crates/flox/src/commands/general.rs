@@ -228,6 +228,19 @@ impl Gh {
     }
 }
 
+/// Access to the pkgdb CLI
+//#[derive(Clone, Debug, Bpaf)]
+//pub struct PkgDb {
+//    #[bpaf(any("pkgdb arguments and options", not_help))]
+//    _pkgdb_args: Vec<String>,
+//}
+//impl PkgDb {
+//    pub async fn handle(self, _config: Config, flox: Flox) -> Result<()> {
+//        subcommand_metric!("pkgdb");
+//        flox_forward(&flox).await
+//    }
+//}
+
 /// floxHub authentication commands
 #[derive(Clone, Debug, Bpaf)]
 pub enum Auth {
