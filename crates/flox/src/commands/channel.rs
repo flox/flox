@@ -57,9 +57,7 @@ pub struct Search {
 }
 
 // Try Using:
-//   $ NIX_CONFIG='allow-import-from-derivation = true'  \
-//     FLOX_FEATURES_CHANNELS=rust                       \
-//     ./target/debug/flox search hello;
+//   $ FLOX_FEATURES_CHANNELS=rust ./target/debug/flox search hello;
 // Your first run will be slow, it's creating databases, but after that -
 //   it's fast!
 //
