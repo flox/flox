@@ -521,7 +521,6 @@ impl InternalCommands {
             InternalCommands::Eval(args) => args.handle(config, flox).await?,
             InternalCommands::Develop(args) => args.handle(config, flox).await?,
             InternalCommands::Gh(args) => args.handle(config, flox).await?,
-            //InternalCommands::PkgDb(args) => args.handle(config, flox).await?,
             InternalCommands::Auth(args) => args.handle(config, flox).await?,
         }
         Ok(())
