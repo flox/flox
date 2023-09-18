@@ -66,7 +66,7 @@ pub trait Environment {
         packages: impl IntoIterator<Item = FloxPackage> + Send,
         nix: &NixCommandLine,
         system: impl AsRef<str> + Send,
-    ) -> Result<(), EnvironmentError2>;
+    ) -> Result<bool, EnvironmentError2>;
 
     /// Atomically edit this environment, ensuring that it still builds
     async fn edit(
@@ -259,6 +259,8 @@ where
     /// Install packages to the environment atomically
     ///
     /// Returns true if the environment was modified and false otherwise.
+    /// TODO: this should return a list of packages that were actually
+    /// installed rather than a bool.
     async fn install(
         &mut self,
         packages: impl IntoIterator<Item = FloxPackage> + Send,
@@ -271,35 +273,37 @@ where
             flox_nix_content_with_new_packages(&current_manifest_contents, packages)?;
         match new_manifest_contents {
             ManifestContent::Unchanged => return Ok(false),
-            ManifestContent::Changed(new_manifest_contents) => {
-                let mut temp_env = self.make_temporary()?;
-                temp_env.update_manifest(&new_manifest_contents)?;
-                temp_env.build(nix, system).await?;
-                self.replace_with(temp_env)?;
+            ManifestContent::Changed(contents) => {
+                self.transact_with_manifest_contents(contents, nix, system)
+                    .await?;
                 Ok(true)
             },
         }
     }
 
     /// Uninstall packages from the environment atomically
+    ///
+    /// Returns true if the environment was modified and false otherwise.
+    /// TODO: this should return a list of packages that were actually
+    /// uninstalled rather than a bool.
     async fn uninstall(
         &mut self,
         packages: impl IntoIterator<Item = FloxPackage> + Send,
         nix: &NixCommandLine,
         system: impl AsRef<str> + Send,
-    ) -> Result<(), EnvironmentError2> {
-        // We modify the contents of the manifest first so that someday in the future
-        // when the `flox_nix_content...` function returns whether the file was actually
-        // modified we can skip creating the temp dir when the file isn't modified.
+    ) -> Result<bool, EnvironmentError2> {
         let current_manifest_contents =
             fs::read_to_string(self.manifest_path()).map_err(EnvironmentError2::ReadManifest)?;
         let new_manifest_contents =
             flox_nix_content_with_packages_removed(&current_manifest_contents, packages)?;
-        let mut temp_env = self.make_temporary()?;
-        temp_env.update_manifest(&new_manifest_contents)?;
-        temp_env.build(nix, system).await?;
-        self.replace_with(temp_env)?;
-        Ok(())
+        match new_manifest_contents {
+            ManifestContent::Unchanged => return Ok(false),
+            ManifestContent::Changed(contents) => {
+                self.transact_with_manifest_contents(contents, nix, system)
+                    .await?;
+                Ok(true)
+            },
+        }
     }
 
     /// Atomically edit this environment, ensuring that it still builds
@@ -728,11 +732,11 @@ fn flox_nix_content_with_new_packages(
 /// remove packages from the content of a flox.nix file
 ///
 /// TODO: At some point this should indicate whether the contents were actually changed
-/// (e.g. the user tries to install a package that's already installed).
+/// (e.g. the user tries to uninstall a package that's not installed).
 fn flox_nix_content_with_packages_removed(
     flox_nix_content: &impl AsRef<str>,
     packages: impl IntoIterator<Item = FloxPackage>,
-) -> Result<String, EnvironmentError2> {
+) -> Result<ManifestContent, EnvironmentError2> {
     let packages = packages
         .into_iter()
         .map(|package| package.flox_nix_attribute().unwrap());
@@ -766,7 +770,7 @@ fn flox_nix_content_with_packages_removed(
 
     let green_tree = config_attrset.syntax().replace_with(edited);
     let new_content = nixpkgs_fmt::reformat_string(&green_tree.to_string());
-    Ok(new_content)
+    Ok(ManifestContent::Changed(new_content))
 }
 
 #[cfg(test)]
