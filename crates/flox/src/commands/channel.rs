@@ -87,6 +87,7 @@ impl Search {
         let mut priority: Vec<String> = Vec::new();
         let mut inputs = serde_json::Map::new();
         for (_, entry) in channels {
+            // TODO: handle `subtrees` and `stabilities`
             priority.push(entry.from.id.to_string());
             inputs.insert(
                 entry.from.id.to_string(),
@@ -96,6 +97,10 @@ impl Search {
         let registry = json!({
             "priority": priority,
             "inputs": inputs,
+            "default": json!({
+                "subtrees": null, // TODO
+                "stabilities": null,  // TODO
+            })
         });
 
         // Create `query` parameter for `pkgdb`
@@ -111,6 +116,8 @@ impl Search {
         let params = json!({
             "registry": registry,
             "query": query,
+            // These defaults are set by `pkgdb` but are shown here
+            // for visibility.
             // "semver": { "preferPreReleases": false }
             // "systems": ["x86_64-linux", ...]
         });
