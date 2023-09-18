@@ -65,11 +65,22 @@ setup_file() {
   skip "remote environments handled in another phase"
 }
 
-@test "i?: confirmation message" {
+@test "i?: install confirmation message" {
   "$FLOX_CLI" init
   run "$FLOX_CLI" install hello
   assert_success
   assert_output --partial "✅ Installed 'hello' into 'test' environment."
+}
+
+@test "uninstall confirmation message" {
+  "$FLOX_CLI" init
+  run "$FLOX_CLI" install hello
+  assert_success
+  assert_output --partial "✅ Installed 'hello' into 'test' environment."
+
+  run "$FLOX_CLI" uninstall hello
+  assert_success
+  assert_output --partial "🗑️ Uninstalled 'hello' from 'test' environment."
 }
 
 @test "i?: warning message if package is already installed {

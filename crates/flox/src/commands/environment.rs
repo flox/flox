@@ -449,14 +449,29 @@ impl Uninstall {
         let mut environment =
             resolve_environment(&flox, self.environment.as_deref(), "uninstall").await?;
 
-        environment
+        let packages_str = packages_to_string(&packages);
+        let plural = packages.len() > 1;
+
+        if environment
             .uninstall(
                 packages.drain(..),
                 &flox.nix(Default::default()),
                 &flox.system,
             )
             .await
-            .context("could not uninstall packages")?;
+            .context("could not uninstall packages")?
+        {
+            info!(
+                "🗑️ Uninstalled {packages_str} from '{}' environment.",
+                environment.environment_ref()
+            );
+        } else {
+            let verb = if plural { "are" } else { "is" };
+            info!(
+                "No changes; {packages_str} {verb} not installed in '{}' environment.",
+                environment.environment_ref()
+            );
+        }
         Ok(())
     }
 }
