@@ -61,10 +61,11 @@ pub struct Search {
 // Your first run will be slow, it's creating databases, but after that -
 //   it's fast!
 //
-// `NIX_CONFIG='allow-import-from-derivation = true'` is required because
+// `NIX_CONFIG='allow-import-from-derivation = true'` may be required because
 // `pkgdb` disables this by default, but some flakes require it.
 // Ideally this setting should be controlled by Registry preferences,
 // which is TODO.
+// Luckily most flakes don't.
 impl Search {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("search");
@@ -114,11 +115,6 @@ impl Search {
             // "systems": ["x86_64-linux", ...]
         });
 
-        //println!(
-        //    "{}",
-        //    serde_json::to_string_pretty(&serde_json::Value::Object(map))?
-        //)
-
         let pkgdb_bin: String = match env::var("PKGDB_BIN") {
             Ok(val) => val,
             Err(_) => "pkgdb".to_string(),
@@ -130,8 +126,39 @@ impl Search {
             .output()?;
         if output.status.success() {
             let stdout = String::from_utf8(output.stdout)?;
-            for line in stdout.lines() {
-                println!("{}", line);
+            if self.json {
+                let mut first = true;
+                for line in stdout.lines() {
+                    if first {
+                        first = false;
+                        print!("[ ");
+                    } else {
+                        print!(", ");
+                    }
+                    println!("{}", line);
+                }
+                println!("]");
+            } else {
+                for line in stdout.lines() {
+                    let entry: serde_json::Value = serde_json::from_str(line).unwrap();
+                    let input = entry.get("input").unwrap().as_str();
+                    let pname = entry.get("pname").unwrap().as_str();
+                    let attr_path = entry.get("path").unwrap().as_array().unwrap();
+                    let mut path: Vec<String> = Vec::new();
+                    for part in attr_path {
+                        path.push(part.as_str().unwrap().to_string())
+                    }
+                    print!("{}#{}: {}", input.unwrap(), path.join("."), pname.unwrap());
+
+                    if let Some(ver) = entry.get("version").unwrap().as_str() {
+                        print!("@{}", ver)
+                    }
+
+                    if let Some(desc) = entry.get("description").unwrap().as_str() {
+                        print!(" - {}", desc)
+                    }
+                    println!();
+                }
             }
             Ok(())
         } else {
