@@ -22,7 +22,9 @@ use crate::utils::copy_file_without_permissions;
 use crate::utils::errors::IoError;
 use crate::utils::rnix::{AttrSetExt, StrExt};
 
+mod managed_environment;
 pub mod path_environment;
+mod remote_environment;
 
 pub static CATALOG_JSON: &str = "catalog.json";
 // don't forget to update the man page
