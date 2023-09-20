@@ -491,16 +491,8 @@ impl WipeHistory {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("wipe-history");
 
-        let environment_name = self.environment.as_deref();
-        let environment_ref: environment_ref::EnvironmentRef =
-            resolve_environment_ref(&flox, "wipe-history", environment_name).await?;
-
-        let env = PathEnvironment::<Original>::open(
-            current_dir().unwrap(),
-            environment_ref,
-            flox.temp_dir.clone(),
-        )
-        .context("Environment not found")?;
+        let env=
+            resolve_environment(&flox, self.environment.as_deref(), "uninstall").await?;
 
         if env.delete_symlinks()? {
             // The flox nix instance is created with `--quiet --quiet`
@@ -813,9 +805,15 @@ impl Upgrade {
 async fn resolve_environment<'flox>(
     flox: &'flox Flox,
     environment_name: Option<&str>,
-    subcommand: &str,
+    _subcommand: &str,
 ) -> Result<PathEnvironment<Original>, anyhow::Error> {
-    let environment_ref = resolve_environment_ref(flox, subcommand, environment_name).await?;
+    let environment_refs =
+        flox_rust_sdk::models::environment_ref::EnvironmentRef::find(flox, environment_name)?;
+    let environment_ref = match environment_refs.len() {
+        0 => bail!("No environments found"),
+        1 => &environment_refs[0],
+        _ => bail!("Multiple environments found"),
+    };
     let environment = environment_ref
         .to_env(flox.temp_dir.clone())
         .context("Could not use environment")?;
