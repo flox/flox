@@ -29,6 +29,14 @@ enum ChannelType {
     Flox,
 }
 
+// Set at compile time, used as a fallback when `PKGDB` env variable is unset.
+pub static PKGDB_FALLBACK: &str = env!("PKGDB_BIN");
+
+// This is the `PKGDB` path that we actually use.
+// This is set once and prefers the `PKGDB` env variable, but will use
+// the fallback if it is unset.
+static mut PKGDB_BIN: Option<String> = None;
+
 /// Search packages in subscribed channels
 #[derive(Bpaf, Clone)]
 pub struct Search {
@@ -122,15 +130,39 @@ impl Search {
             // "systems": ["x86_64-linux", ...]
         });
 
-        let pkgdb_bin: String = match env::var("PKGDB_BIN") {
-            Ok(val) => val,
-            Err(_) => "pkgdb".to_string(),
-        };
+        // If the environment variable `PKGDB` is set then use it, otherwise
+        // fall back to the default `pkgdb` binary provided at build time.
+        let pkgdb_bin: String;
+        unsafe {
+            match PKGDB_BIN {
+                Some(_) => {},
+                None => {
+                    PKGDB_BIN = Some(match env::var("PKGDB") {
+                        Ok(val) => val,
+                        Err(_) => PKGDB_FALLBACK.to_string(),
+                    });
+                },
+            }
+            pkgdb_bin = PKGDB_BIN.clone().unwrap();
+        }
+
+        // TODO: I have no idea how to check verbosity here.
+        //// By default we run with `--quiet`, but if verbose is set then
+        //// stream stderr.
+        //let mut maybe_quiet: Vec<String> = Vec::new();
+        //if !self.verbose {
+        //    maybe_quiet.push("--quiet".to_string());
+        //}
+        //maybe_quiet.push("--quiet".to_string());
+        let maybe_quiet: Vec<String> = vec!["--quiet".to_string()];
 
         let output = Command::new(pkgdb_bin)
             .arg("search")
+            .args(maybe_quiet)
             .arg(params.to_string())
+            .stderr(std::process::Stdio::inherit())
             .output()?;
+
         if output.status.success() {
             let stdout = String::from_utf8(output.stdout)?;
             if self.json {
@@ -169,11 +201,9 @@ impl Search {
             }
             Ok(())
         } else {
-            let stderr = String::from_utf8(output.stderr)?;
             bail!(
-                "pkgdb exited with status code {}:\n{}",
-                output.status.code().unwrap_or(-1),
-                stderr
+                "pkgdb exited with status code {}",
+                output.status.code().unwrap_or(-1)
             );
         }
     }
