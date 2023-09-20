@@ -6,7 +6,8 @@ use derive_more::{AsRef, Deref, Display};
 use runix::installable::FlakeAttribute;
 use thiserror::Error;
 
-use super::environment::{Environment, EnvironmentError2, Original, PathEnvironment};
+use super::environment::path_environment::{Original, PathEnvironment};
+use super::environment::{Environment, EnvironmentError2};
 use crate::flox::Flox;
 use crate::providers::git::GitProvider;
 
