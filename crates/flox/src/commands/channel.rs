@@ -11,6 +11,7 @@ use flox_rust_sdk::nix::flake_ref::git_service::{GitServiceAttributes, GitServic
 use flox_rust_sdk::nix::flake_ref::FlakeRef;
 use flox_rust_sdk::nix::RunJson;
 use itertools::Itertools;
+use once_cell::sync::Lazy;
 use regex::Regex;
 use serde_json::json;
 
@@ -29,13 +30,11 @@ enum ChannelType {
     Flox,
 }
 
-// Set at compile time, used as a fallback when `PKGDB` env variable is unset.
-pub static PKGDB_FALLBACK: &str = env!("PKGDB_BIN");
-
 // This is the `PKGDB` path that we actually use.
 // This is set once and prefers the `PKGDB` env variable, but will use
-// the fallback if it is unset.
-static mut PKGDB_BIN: Option<String> = None;
+// the fallback to the binary available at build time if it is unset.
+pub static PKGDB_BIN: Lazy<String> =
+    Lazy::new(|| env::var("PKGDB").unwrap_or(env!("PKGDB_BIN").to_string()));
 
 /// Search packages in subscribed channels
 #[derive(Bpaf, Clone)]
@@ -130,22 +129,6 @@ impl Search {
             // "systems": ["x86_64-linux", ...]
         });
 
-        // If the environment variable `PKGDB` is set then use it, otherwise
-        // fall back to the default `pkgdb` binary provided at build time.
-        let pkgdb_bin: String;
-        unsafe {
-            match PKGDB_BIN {
-                Some(_) => {},
-                None => {
-                    PKGDB_BIN = Some(match env::var("PKGDB") {
-                        Ok(val) => val,
-                        Err(_) => PKGDB_FALLBACK.to_string(),
-                    });
-                },
-            }
-            pkgdb_bin = PKGDB_BIN.clone().unwrap();
-        }
-
         // TODO: I have no idea how to check verbosity here.
         //// By default we run with `--quiet`, but if verbose is set then
         //// stream stderr.
@@ -156,7 +139,7 @@ impl Search {
         //maybe_quiet.push("--quiet".to_string());
         let maybe_quiet: Vec<String> = vec!["--quiet".to_string()];
 
-        let output = Command::new(pkgdb_bin)
+        let output = Command::new(PKGDB_BIN.as_str())
             .arg("search")
             .args(maybe_quiet)
             .arg(params.to_string())
