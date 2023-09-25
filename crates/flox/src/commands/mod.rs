@@ -294,7 +294,6 @@ impl LocalDevelopmentCommands {
             },
             LocalDevelopmentCommands::Search(_) if Feature::Channels.is_forwarded()? => {
                 subcommand_metric!("search");
-
                 flox_forward(&flox).await?
             },
 

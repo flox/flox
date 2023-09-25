@@ -18,6 +18,7 @@
   flox-bash,
   parser-util,
   pandoc,
+  flox-pkgdb,
   cacert,
   glibcLocales,
   installShellFiles,
@@ -40,6 +41,7 @@
       NIX_BIN = "${flox-bash}/libexec/flox/nix";
       GIT_BIN = "${gitMinimal}/bin/git";
       PARSER_UTIL_BIN = parser-util.outPath + "/bin/parser-util";
+      PKGDB_BIN = flox-pkgdb.outPath + "/bin/pkgdb";
       FLOX_GH_BIN = flox-gh.outPath + "/bin/flox-gh";
       GH_BIN = gh.outPath + "/bin/gh";
 

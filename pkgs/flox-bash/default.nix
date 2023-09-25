@@ -32,6 +32,7 @@
   openssh,
   pandoc,
   parser-util,
+  flox-pkgdb,
   pkgs,
   shellcheck,
   shfmt,
@@ -124,6 +125,7 @@ in
       semver
       builtfilter-rs
       parser-util
+      flox-pkgdb
     ];
     makeFlags =
       [

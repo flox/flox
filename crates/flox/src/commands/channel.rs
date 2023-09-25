@@ -1,3 +1,6 @@
+use std::env;
+use std::process::Command;
+
 use anyhow::{bail, Context, Result};
 use bpaf::Bpaf;
 use derive_more::Display;
@@ -8,6 +11,7 @@ use flox_rust_sdk::nix::flake_ref::git_service::{GitServiceAttributes, GitServic
 use flox_rust_sdk::nix::flake_ref::FlakeRef;
 use flox_rust_sdk::nix::RunJson;
 use itertools::Itertools;
+use once_cell::sync::Lazy;
 use regex::Regex;
 use serde_json::json;
 
@@ -25,6 +29,12 @@ enum ChannelType {
     #[display(fmt = "flox")]
     Flox,
 }
+
+// This is the `PKGDB` path that we actually use.
+// This is set once and prefers the `PKGDB` env variable, but will use
+// the fallback to the binary available at build time if it is unset.
+pub static PKGDB_BIN: Lazy<String> =
+    Lazy::new(|| env::var("PKGDB").unwrap_or(env!("PKGDB_BIN").to_string()));
 
 /// Search packages in subscribed channels
 #[derive(Bpaf, Clone)]
@@ -53,6 +63,16 @@ pub struct Search {
     pub search_term: Option<String>,
 }
 
+// Try Using:
+//   $ FLOX_FEATURES_CHANNELS=rust ./target/debug/flox search hello;
+// Your first run will be slow, it's creating databases, but after that -
+//   it's fast!
+//
+// `NIX_CONFIG='allow-import-from-derivation = true'` may be required because
+// `pkgdb` disables this by default, but some flakes require it.
+// Ideally this setting should be controlled by Registry preferences,
+// which is TODO.
+// Luckily most flakes don't.
 impl Search {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("search");
@@ -70,40 +90,105 @@ impl Search {
             })
             .sorted_by(|a, b| Ord::cmp(a, b));
 
-        if self.json {
-            let mut map = serde_json::Map::new();
-            for (channel, entry) in channels {
-                map.insert(
-                    entry.from.id.to_string(),
-                    json!({
-                        "type": channel.to_string(),
-                        "url": entry.to.to_string()
-                    }),
-                );
-            }
-
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&serde_json::Value::Object(map))?
-            )
-        } else {
-            let width = channels
-                .clone()
-                .map(|(_, entry)| entry.from.id.len())
-                .reduce(|acc, e| acc.max(e))
-                .unwrap_or(8);
-
-            println!("{ch:<width$}   TYPE   URL", ch = "CHANNEL");
-            for (channel, entry) in channels {
-                println!(
-                    "{from:<width$} | {ty} | {url}",
-                    from = entry.from.id,
-                    ty = channel,
-                    url = entry.to
-                )
-            }
+        // Create `registry` parameter for `pkgdb`
+        let mut priority: Vec<String> = Vec::new();
+        let mut inputs = serde_json::Map::new();
+        for (_, entry) in channels {
+            // TODO: handle `subtrees` and `stabilities`
+            priority.push(entry.from.id.to_string());
+            inputs.insert(
+                entry.from.id.to_string(),
+                json!({"from": entry.from.to_string()}),
+            );
         }
-        Ok(())
+        let registry = json!({
+            "priority": priority,
+            "inputs": inputs,
+            "default": json!({
+                "subtrees": null, // TODO
+                "stabilities": null,  // TODO
+            })
+        });
+
+        // Create `query` parameter for `pkgdb`
+        let query = match self.search_term {
+            Some(search_term) => {
+                let mut query = serde_json::Map::new();
+                query.insert("match".to_string(), json!(search_term));
+                query
+            },
+            None => serde_json::Map::new(),
+        };
+
+        let params = json!({
+            "registry": registry,
+            "query": query,
+            // These defaults are set by `pkgdb` but are shown here
+            // for visibility.
+            // "semver": { "preferPreReleases": false }
+            // "systems": ["x86_64-linux", ...]
+        });
+
+        // TODO: I have no idea how to check verbosity here.
+        //// By default we run with `--quiet`, but if verbose is set then
+        //// stream stderr.
+        //let mut maybe_quiet: Vec<String> = Vec::new();
+        //if !self.verbose {
+        //    maybe_quiet.push("--quiet".to_string());
+        //}
+        //maybe_quiet.push("--quiet".to_string());
+        let maybe_quiet: Vec<String> = vec!["--quiet".to_string()];
+
+        let output = Command::new(PKGDB_BIN.as_str())
+            .arg("search")
+            .args(maybe_quiet)
+            .arg(params.to_string())
+            .stderr(std::process::Stdio::inherit())
+            .output()?;
+
+        if output.status.success() {
+            let stdout = String::from_utf8(output.stdout)?;
+            if self.json {
+                let mut first = true;
+                for line in stdout.lines() {
+                    if first {
+                        first = false;
+                        print!("[ ");
+                    } else {
+                        print!(", ");
+                    }
+                    println!("{}", line);
+                }
+                println!("]");
+            } else {
+                for line in stdout.lines() {
+                    let entry: serde_json::Value = serde_json::from_str(line).unwrap();
+                    let input = entry.get("input").unwrap().as_str();
+                    let pname = entry.get("pname").unwrap().as_str();
+                    let attr_path = entry.get("path").unwrap().as_array().unwrap();
+                    let mut path: Vec<String> = Vec::new();
+                    for part in attr_path {
+                        path.push(part.as_str().unwrap().to_string())
+                    }
+                    print!("{}#{}: {}", input.unwrap(), path.join("."), pname.unwrap());
+
+                    if let Some(ver) = entry.get("version").unwrap().as_str() {
+                        print!("@{}", ver)
+                    }
+
+                    if let Some(desc) = entry.get("description").unwrap().as_str() {
+                        print!(" - {}", desc)
+                    }
+                    println!();
+                }
+            }
+            Ok(())
+        } else {
+            bail!(
+                "pkgdb exited with status code {}",
+                output.status.code().unwrap_or(-1)
+            );
+        }
     }
 }
 
