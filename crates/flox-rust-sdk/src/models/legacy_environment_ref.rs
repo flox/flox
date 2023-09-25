@@ -11,14 +11,14 @@ use runix::{NixBackend, RunJson};
 use thiserror::Error;
 use url::Url;
 
-use super::legacy_environment::CommonEnvironment;
 use super::flox_installable::{FloxInstallable, ParseFloxInstallableError};
 use super::floxmeta::{self, Floxmeta, GetFloxmetaError};
+use super::legacy_environment::CommonEnvironment;
 use super::project::{self, OpenProjectError};
 use super::root::reference::ProjectDiscoverGitError;
 use super::root::transaction::{GitAccess, ReadOnly};
 use crate::flox::{Flox, FloxNixApi, ResolveFloxInstallableError};
-use crate::providers::git::{GitProvider, GitCommandError};
+use crate::providers::git::{GitCommandError, GitProvider};
 
 static DEFAULT_NAME: &str = "default";
 pub static DEFAULT_OWNER: &str = "local";
@@ -276,10 +276,7 @@ impl<'flox> Named {
         }
     }
 
-    async fn get_current_gen(
-        &self,
-        flox: &'flox Flox,
-    ) -> Result<String, NamedGetCurrentGenError> {
+    async fn get_current_gen(&self, flox: &'flox Flox) -> Result<String, NamedGetCurrentGenError> {
         let floxmeta = Floxmeta::<ReadOnly>::get_floxmeta(flox, &self.owner)
             .await
             .map_err(NamedGetCurrentGenError::GetFloxmeta)?;
@@ -292,7 +289,7 @@ impl<'flox> Named {
                 name = self.name
             ))
             .await
-            .map_err(|e| NamedGetCurrentGenError::Show(e))?;
+            .map_err(NamedGetCurrentGenError::Show)?;
 
         let out_str = out_os_str
             .to_str()

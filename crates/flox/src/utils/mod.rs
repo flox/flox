@@ -19,11 +19,11 @@ use once_cell::sync::Lazy;
 pub mod colors;
 mod completion;
 pub mod dialog;
+pub mod display;
 pub mod init;
 pub mod installables;
 pub mod logger;
 pub mod metrics;
-pub mod display;
 
 use regex::Regex;
 use tokio::sync::Mutex;
