@@ -34,7 +34,9 @@ async fn env_ref_to_flake_attribute<Git: GitProvider + 'static>(
     subcommand: &str,
     environment_name: &str,
 ) -> anyhow::Result<FlakeAttribute> {
-    let env_ref = resolve_environment_ref(flox, subcommand, Some(environment_name)).await?;
+    let env_ref =
+        resolve_environment_ref::<GitCommandProvider>(flox, subcommand, Some(environment_name))
+            .await?;
     Ok(env_ref.get_latest_flake_attribute::<Git>(flox).await?)
 }
 

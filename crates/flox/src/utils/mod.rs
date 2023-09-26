@@ -2,13 +2,15 @@ use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::io::Stderr;
 use std::marker::PhantomData;
+use std::path::Path;
 use std::str::FromStr;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use bpaf::Parser;
-use flox_rust_sdk::flox::{EnvironmentRef, Flox, FloxInstallable, ResolvedInstallableMatch};
+use flox_rust_sdk::flox::{Flox, FloxInstallable, ResolvedInstallableMatch};
+use flox_rust_sdk::models::legacy_environment_ref::EnvironmentRef;
 use flox_rust_sdk::prelude::FlakeAttribute;
-use flox_rust_sdk::providers::git::GitCommandProvider;
+use flox_rust_sdk::providers::git::{GitCommandProvider, GitProvider};
 use indoc::indoc;
 use itertools::Itertools;
 use log::{debug, error, warn};
@@ -411,18 +413,61 @@ pub async fn resolve_installable_from_matches(
 /// - return the match if there is only one
 /// - start an interactive dialog if multiple matches were found
 ///   and a controlling tty was detected
-pub async fn resolve_environment_ref<'flox>(
+pub async fn resolve_environment_ref<'flox, Git: GitProvider + 'static>(
     flox: &'flox Flox,
     subcommand: &str,
     environment_name: Option<&str>,
-) -> Result<EnvironmentRef> {
-    let environment_refs = EnvironmentRef::find(flox, environment_name)?;
-    match &environment_refs[..] {
-        [] => {
+) -> Result<EnvironmentRef<'flox>> {
+    let mut environment_refs = EnvironmentRef::find::<_, Git>(flox, environment_name).await?;
+    match environment_refs.len() {
+        0 => {
             bail!("No matching environments found");
         },
-        [r] => Ok(r.clone()),
-        choices => {
+        1 => Ok(environment_refs.remove(0)),
+        _ => {
+            let mut sources: HashSet<Option<&Path>> = HashSet::new();
+
+            for m in &environment_refs {
+                if let EnvironmentRef::Project(p) = m {
+                    sources.insert(Some(&p.workdir));
+                } else {
+                    sources.insert(None);
+                }
+            }
+
+            let current_dir = std::env::current_dir()?;
+
+            // Compile a list of choices for the user to choose from, and shorter choices for suggestions
+            let mut choices: Vec<(String, &String)> = environment_refs
+                .iter()
+                .map(
+                    // Format the results according to how verbose we have to be for disambiguation, only showing the flakeref or prefix when multiple are used
+                    |m| {
+                        let prefix: Cow<str> = match m {
+                            EnvironmentRef::Named(_) if sources.len() > 1 => "Named - ".into(),
+                            EnvironmentRef::Project(n) if sources.len() > 1 => {
+                                let rel = pathdiff::diff_paths(&n.workdir, &current_dir)
+                                    .ok_or_else(|| anyhow!("Project path should be absolute"))?;
+
+                                if rel == Path::new("") {
+                                    ". - ".into()
+                                } else {
+                                    format!("{} - ", rel.display()).into()
+                                }
+                            },
+                            _ => "".into(),
+                        };
+
+                        let name = match m {
+                            EnvironmentRef::Named(n) => &n.name,
+                            EnvironmentRef::Project(p) => &p.name,
+                        };
+
+                        Ok((format!("{prefix}{name}"), name))
+                    },
+                )
+                .collect::<Result<Vec<_>>>()?;
+
             if !Dialog::can_prompt() {
                 error!(
                     indoc! {"
@@ -434,10 +479,10 @@ pub async fn resolve_environment_ref<'flox>(
                     {choices_list}
                 "},
                     subcommand = subcommand,
-                    first_choice = choices.get(0).expect("Expected at least one choice"),
+                    first_choice = choices.get(0).expect("Expected at least one choice").1,
                     choices_list = choices
                         .iter()
-                        .map(|env_ref| format!("  - {env_ref}"))
+                        .map(|(long, _)| format!("  - {long}"))
                         .join("\n")
                 );
 
@@ -449,22 +494,24 @@ pub async fn resolve_environment_ref<'flox>(
                 message: &format!("Select an environment for flox {subcommand}"),
                 help_message: None,
                 typed: Select {
-                    options: choices.to_vec(),
+                    options: choices.iter().cloned().map(|(long, _)| long).collect(),
                 },
             };
 
-            let (_, selected) = dialog
+            let (sel, _) = dialog
                 .raw_prompt()
                 .await
                 .context("Failed to prompt for environment choice")?;
 
-            let escaped = shell_escape::escape(selected.to_string().into()).into_owned();
+            let escaped = shell_escape::escape(choices.remove(sel).1.into()).into_owned();
+
+            let environment_ref = environment_refs.remove(sel);
 
             warn!(
                 "HINT: avoid selecting an environment next time with:\n  $ flox {subcommand} -e {escaped}",
             );
 
-            Ok(selected)
+            Ok(environment_ref)
         },
     }
 }

@@ -1,4 +1,3 @@
-use std::env::current_dir;
 use std::fs::File;
 use std::io::stdin;
 use std::path::{Path, PathBuf};
@@ -8,7 +7,6 @@ use anyhow::{bail, Context, Result};
 use bpaf::{construct, Bpaf, Parser, ShellComp};
 use flox_rust_sdk::flox::{EnvironmentName, Flox};
 use flox_rust_sdk::models::environment::{Environment, Original, PathEnvironment};
-use flox_rust_sdk::models::environment_ref;
 use flox_rust_sdk::nix::arguments::eval::EvaluationArgs;
 use flox_rust_sdk::nix::command::{Shell, StoreGc};
 use flox_rust_sdk::nix::command_line::NixCommandLine;
@@ -21,7 +19,6 @@ use tempfile::NamedTempFile;
 
 use crate::utils::dialog::{Confirm, Dialog};
 use crate::utils::display::packages_to_string;
-use crate::utils::resolve_environment_ref;
 use crate::{flox_forward, subcommand_metric};
 
 #[derive(Bpaf, Clone)]
@@ -491,16 +488,7 @@ impl WipeHistory {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("wipe-history");
 
-        let environment_name = self.environment.as_deref();
-        let environment_ref: environment_ref::EnvironmentRef =
-            resolve_environment_ref(&flox, "wipe-history", environment_name).await?;
-
-        let env = PathEnvironment::<Original>::open(
-            current_dir().unwrap(),
-            environment_ref,
-            flox.temp_dir.clone(),
-        )
-        .context("Environment not found")?;
+        let env = resolve_environment(&flox, self.environment.as_deref(), "uninstall").await?;
 
         if env.delete_symlinks()? {
             // The flox nix instance is created with `--quiet --quiet`
@@ -813,9 +801,15 @@ impl Upgrade {
 async fn resolve_environment<'flox>(
     flox: &'flox Flox,
     environment_name: Option<&str>,
-    subcommand: &str,
+    _subcommand: &str,
 ) -> Result<PathEnvironment<Original>, anyhow::Error> {
-    let environment_ref = resolve_environment_ref(flox, subcommand, environment_name).await?;
+    let environment_refs =
+        flox_rust_sdk::models::environment_ref::EnvironmentRef::find(flox, environment_name)?;
+    let environment_ref = match environment_refs.len() {
+        0 => bail!("No matching environments found"),
+        1 => &environment_refs[0],
+        _ => bail!("Multiple environments found"),
+    };
     let environment = environment_ref
         .to_env(flox.temp_dir.clone())
         .context("Could not use environment")?;

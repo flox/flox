@@ -13,6 +13,7 @@ use tempfile::TempDir;
 use thiserror::Error;
 use walkdir::WalkDir;
 
+use self::environment::Environment;
 use super::root::transaction::{GitAccess, GitSandBox, ReadOnly};
 use super::root::{Closed, Root};
 use crate::flox::{Flox, FloxNixApi};
@@ -22,6 +23,8 @@ use crate::utils::guard::Guard;
 use crate::utils::{copy_file_without_permissions, find_and_replace, FindAndReplaceError};
 
 static PACKAGE_NAME_PLACEHOLDER: &str = "__PACKAGE_NAME__";
+
+pub mod environment;
 
 /// A representation of a project, i.e. a git repo with a flake.nix
 ///
@@ -137,6 +140,20 @@ impl<'flox> Guard<Project<'flox, ReadOnly>, Root<'flox, Closed<GitCommandProvide
 
 /// Implementations for an opened project (read only)
 impl<'flox, Access: GitAccess> Project<'flox, Access> {
+    pub(crate) fn environment_out_link_dir(&self) -> PathBuf {
+        unimplemented!()
+    }
+
+    pub async fn environment<Nix: FloxNixApi>(
+        &self,
+        _name: &str,
+    ) -> Result<Environment<'flox, ReadOnly>, GetEnvironmentError<Nix>>
+    where
+        Eval: RunJson<Nix>,
+    {
+        unimplemented!()
+    }
+
     /// Construct a new Project object
     ///
     /// Private in this module, as intialization through git guard is prefered
