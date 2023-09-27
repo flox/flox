@@ -87,11 +87,10 @@ pub struct FloxArgs {
     #[bpaf(long, req_flag(()), many, map(vec_not_empty))]
     pub debug: bool,
 
-    /// With `--version` the application will print the version of the program
-    /// and quit early.
+    /// Print the version of the program
     #[allow(dead_code)] // fake arg, `--version` is checked for separately (see [Version])
-    #[bpaf(external(version))]
-    version: Version,
+    #[bpaf(long)]
+    version: bool,
 
     #[bpaf(external(commands), optional)]
     command: Option<Commands>,
