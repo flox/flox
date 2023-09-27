@@ -157,7 +157,7 @@ function hash_commands() {
 hash_commands                                                                  \
 	ansifilter awk 'builtfilter-rs' basename bash cat chmod cmp column cp      \
 	curl cut dasel date dirname flox-gh getent gh git grep gum id jq ln man    \
-	mkdir mktemp mv nix 'nix-editor' 'nix-store' 'parser-util' pwd readlink    \
+	mkdir mktemp mv nix 'nix-editor' 'nix-store' 'parser-util' ps pwd readlink \
 	realpath rm rmdir sed semver sh sleep sort ssh stat tail tar tee touch tr  \
 	uname uuid xargs zgrep
 
@@ -1442,7 +1442,7 @@ function identifyParentShell() {
 			 -r "/proc/$FLOX_PARENT_PID/exe" ]; then
 			# Linux - use information from /proc.
 			parentShell="$($_readlink "/proc/$FLOX_PARENT_PID/exe")"
-		elif local psOutput="$(ps -c -o command= -p $FLOX_PARENT_PID 2>/dev/null)"; then
+		elif local psOutput="$($_ps -c -o command= -p $FLOX_PARENT_PID 2>/dev/null)"; then
 			# Darwin/other - use `ps` to guess the shell.
 			# Note that this value often comes back with a leading "-" character
 			# that is not part of the executable's path.
