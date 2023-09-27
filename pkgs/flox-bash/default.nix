@@ -32,6 +32,7 @@
   openssh,
   pandoc,
   parser-util,
+  ps,
   flox-pkgdb,
   pkgs,
   shellcheck,
@@ -121,6 +122,7 @@ in
       nixPatched
       nix-editor
       openssh
+      ps
       util-linuxMinimal
       semver
       builtfilter-rs
