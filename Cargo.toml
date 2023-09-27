@@ -23,6 +23,7 @@ indexmap = { version = "1.9", features = ["serde"] }
 indoc = "2.0.1"
 inquire = "0.6.0"
 itertools = "0.10.5"
+joinery = "3.1.0"
 log = "0.4.17"
 nix = "0.26"
 nixpkgs-fmt = "1.3.0"

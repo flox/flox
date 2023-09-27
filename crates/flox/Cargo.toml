@@ -47,6 +47,7 @@ fslock.workspace = true
 pathdiff.workspace = true
 indexmap.workspace = true
 url.workspace = true
+joinery.workspace = true
 
 [dev-dependencies]
 temp-env = "0.3.2"
