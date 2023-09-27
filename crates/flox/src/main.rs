@@ -56,7 +56,7 @@ async fn main() -> ExitCode {
 
     // Quit early if `--version` is present
     if Version::check() {
-        println!(env!("FLOX_VERSION"));
+        println!("Version: {}", env!("FLOX_VERSION"));
         return ExitCode::from(0);
     }
 
