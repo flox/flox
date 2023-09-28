@@ -89,7 +89,6 @@ impl Search {
         subcommand_metric!("search");
         let search_params = construct_search_params(&self.search_term, &flox)?;
         let search_params_json = serde_json::to_string(&search_params)?;
-        eprintln!("search params: {}", search_params_json);
 
         let output = Command::new(PKGDB_BIN.as_str())
             .arg("search")
@@ -164,7 +163,6 @@ fn construct_search_params(search_term: &Option<String>, flox: &Flox) -> Result<
         query,
         // FIXME: `pkgdb` is supposed to use defaults when passed an empty array
         //        so just pass the user's current system instead until that's fixed
-        systems: vec![flox.system.clone()],
         ..SearchParams::default()
     })
 }

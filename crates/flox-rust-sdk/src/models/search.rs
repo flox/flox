@@ -24,7 +24,7 @@ pub struct SearchParams {
     /// The collection of package sources to search
     pub registry: Registry,
     /// Which systems to search under
-    pub systems: Vec<String>,
+    pub systems: Option<Vec<String>>,
     /// Options for which packages should be allowed in search results
     pub allow: AllowOpts,
     /// Parameters for which semver versions should be allowed
@@ -193,7 +193,7 @@ mod test {
             .registry
             .inputs
             .insert("nixpkgs".into(), nixpkgs_registry);
-        params.systems = vec!["aarch64-darwin".into()];
+        params.systems = Some(vec!["aarch64-darwin".into()]);
         let results = call_pkgdb(&params).unwrap();
         assert_no_err_msg(results.stderr);
         // Useful for debugging
