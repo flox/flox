@@ -57,7 +57,9 @@ impl Edit {
             // If provided with the contents of a manifest file, either via a path to a file or via
             // contents piped to stdin, use those contents to try building the environment.
             Some(new_manifest) => {
-                environment.edit(&nix, &flox.system, new_manifest).await?;
+                environment
+                    .edit(&nix, flox.system.clone(), new_manifest)
+                    .await?;
                 Ok(())
             },
             // If not provided with new manifest contents, let the user edit the file directly
@@ -85,7 +87,10 @@ impl Edit {
                 // decides to stop.
                 loop {
                     let new_manifest = Edit::edited_manifest_contents(&tmp_manifest, &editor)?;
-                    if let Err(e) = environment.edit(&nix, &flox.system, new_manifest).await {
+                    if let Err(e) = environment
+                        .edit(&nix, flox.system.clone(), new_manifest)
+                        .await
+                    {
                         error!("Environment invalid; building resulted in an error: {e}");
                         if !Dialog::can_prompt() {
                             bail!("Can't prompt to continue editing in non-interactive context");
@@ -304,7 +309,7 @@ impl List {
         let env = resolve_environment(&flox, self.environment.as_deref(), "list").await?;
 
         let catalog = env
-            .catalog(&flox.nix(Default::default()), &flox.system)
+            .catalog(&flox.nix(Default::default()), flox.system)
             .await
             .context("Could not get catalog")?;
         // let installed_store_paths = env.installed_store_paths(&flox).await?;
@@ -366,7 +371,7 @@ impl Install {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("install");
 
-        let mut packages: Vec<_> = self
+        let packages: Vec<_> = self
             .packages
             .iter()
             .map(|package| FloxPackage::parse(package, &flox.channels, DEFAULT_CHANNEL))
@@ -394,11 +399,7 @@ impl Install {
         let plural = packages.len() > 1;
 
         if environment
-            .install(
-                packages.drain(..),
-                &flox.nix(Default::default()),
-                &flox.system,
-            )
+            .install(packages, &flox.nix(Default::default()), flox.system)
             .await
             .context("could not install packages")?
         {
@@ -435,7 +436,7 @@ impl Uninstall {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("uninstall");
 
-        let mut packages: Vec<_> = self
+        let packages: Vec<_> = self
             .packages
             .iter()
             .map(|package| FloxPackage::parse(package, &flox.channels, DEFAULT_CHANNEL))
@@ -451,11 +452,7 @@ impl Uninstall {
         let plural = packages.len() > 1;
 
         if environment
-            .uninstall(
-                packages.drain(..),
-                &flox.nix(Default::default()),
-                &flox.system,
-            )
+            .uninstall(packages, &flox.nix(Default::default()), flox.system)
             .await
             .context("could not uninstall packages")?
         {
