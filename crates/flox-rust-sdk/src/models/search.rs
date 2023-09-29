@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::io::BufRead;
 use std::str::FromStr;
 
+use flox_types::catalog::System;
 use flox_types::stability::Stability;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -26,7 +27,7 @@ pub struct SearchParams {
     /// The collection of package sources to search
     pub registry: Registry,
     /// Which systems to search under
-    pub systems: Option<Vec<String>>,
+    pub systems: Option<Vec<System>>,
     /// Options for which packages should be allowed in search results
     pub allow: AllowOpts,
     /// Parameters for which semver versions should be allowed
@@ -186,7 +187,7 @@ mod test {
     fn call_pkgdb(params: &SearchParams) -> Result<Output, Error> {
         let params_json = serde_json::to_string(params).unwrap();
         // Useful for debugging
-        eprintln!("json input:\n{}", params_json);
+        // eprintln!("json input:\n{}", params_json);
         let output = Command::new(PKGDB)
             .arg("search")
             .arg("--quiet")
@@ -204,7 +205,7 @@ mod test {
     }
 
     #[test]
-    fn constructs_valid_search_query() {
+    fn serializes_search_params() {
         let params = SearchParams {
             query: Query::from_str("hello@2.12.1").unwrap(),
             ..SearchParams::default()
@@ -214,7 +215,7 @@ mod test {
     }
 
     #[test]
-    fn parses_search_results() {
+    fn deserializes_search_results() {
         let mut params = SearchParams::default();
         params.query.r#match = Some("hello".into());
         let nixpkgs_flakeref = FlakeRef::from_str("github:NixOS/nixpkgs/nixpkgs-unstable").unwrap();
