@@ -6,8 +6,11 @@ use std::process::Command;
 use anyhow::{bail, Context, Result};
 use bpaf::{construct, Bpaf, Parser, ShellComp};
 use flox_rust_sdk::flox::{EnvironmentName, Flox};
+use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironment;
 use flox_rust_sdk::models::environment::path_environment::{Original, PathEnvironment};
+use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironment;
 use flox_rust_sdk::models::environment::Environment;
+use flox_rust_sdk::models::environment_ref;
 use flox_rust_sdk::nix::arguments::eval::EvaluationArgs;
 use flox_rust_sdk::nix::command::{Shell, StoreGc};
 use flox_rust_sdk::nix::command_line::NixCommandLine;
@@ -29,6 +32,56 @@ pub struct EnvironmentArgs {
 }
 
 pub type EnvironmentRef = String;
+
+#[derive(Bpaf, Clone)]
+pub enum EnvironmentSelect {
+    Dir(
+        /// Path containing a .flox/ directory
+        #[bpaf(long("dir"), short('d'), argument("path"))]
+        PathBuf,
+    ),
+    Remote(
+
+    /// A remote environment on floxhub
+    #[bpaf(long("remote"), short('r'), argument("owner/name"))] environment_ref::EnvironmentRef),
+}
+
+impl Default for EnvironmentSelect {
+    fn default() -> Self {
+        EnvironmentSelect::Dir(PathBuf::from("./"))
+    }
+}
+
+impl EnvironmentSelect {
+    fn resolve(&self, temp_dir: impl AsRef<Path>) -> Result<ConcreteEnvironment> {
+        let env = match self {
+            EnvironmentSelect::Dir(path) => ConcreteEnvironment::Path(
+                PathEnvironment::open(path, "default".parse().unwrap(), temp_dir)
+                    .context("Couldn't open path environment")?,
+            ),
+
+            EnvironmentSelect::Remote(_) => todo!(),
+        };
+
+        Ok(env)
+    }
+}
+
+enum ConcreteEnvironment {
+    Path(PathEnvironment<Original>),
+    Managed(ManagedEnvironment),
+    Remote(RemoteEnvironment),
+}
+
+impl ConcreteEnvironment {
+    fn into_dyn_environment(self) -> Box<dyn Environment> {
+        match self {
+            ConcreteEnvironment::Path(path_env) => Box::new(path_env),
+            ConcreteEnvironment::Managed(managed_env) => Box::new(managed_env),
+            ConcreteEnvironment::Remote(remote_env) => Box::new(remote_env),
+        }
+    }
+}
 
 /// Edit declarative environment configuration
 #[derive(Bpaf, Clone)]
