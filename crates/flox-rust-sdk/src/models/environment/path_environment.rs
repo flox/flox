@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use async_trait::async_trait;
-use flox_types::catalog::EnvCatalog;
+use flox_types::catalog::{EnvCatalog, System};
 use log::debug;
 use runix::arguments::eval::EvaluationArgs;
 use runix::arguments::{BuildArgs, EvalArgs};
@@ -155,11 +155,11 @@ where
     async fn build(
         &mut self,
         nix: &NixCommandLine,
-        system: impl AsRef<str> + Send,
+        system: System,
     ) -> Result<(), EnvironmentError2> {
         debug!("building with nix ....");
 
-        let out_link = self.out_link(system.as_ref());
+        let out_link = self.out_link(&system);
 
         let build = Build {
             installables: [self.flake_attribute(&system).into()].into(),
@@ -196,9 +196,9 @@ where
     /// installed rather than a bool.
     async fn install(
         &mut self,
-        packages: impl IntoIterator<Item = FloxPackage> + Send,
+        packages: Vec<FloxPackage>,
         nix: &NixCommandLine,
-        system: impl AsRef<str> + Send,
+        system: System,
     ) -> Result<bool, EnvironmentError2> {
         let current_manifest_contents =
             fs::read_to_string(self.manifest_path()).map_err(EnvironmentError2::ReadManifest)?;
@@ -221,9 +221,9 @@ where
     /// uninstalled rather than a bool.
     async fn uninstall(
         &mut self,
-        packages: impl IntoIterator<Item = FloxPackage> + Send,
+        packages: Vec<FloxPackage>,
         nix: &NixCommandLine,
-        system: impl AsRef<str> + Send,
+        system: System,
     ) -> Result<bool, EnvironmentError2> {
         let current_manifest_contents =
             fs::read_to_string(self.manifest_path()).map_err(EnvironmentError2::ReadManifest)?;
@@ -243,8 +243,8 @@ where
     async fn edit(
         &mut self,
         nix: &NixCommandLine,
-        system: impl AsRef<str> + Send,
-        contents: impl AsRef<str> + Send,
+        system: System,
+        contents: String,
     ) -> Result<(), EnvironmentError2> {
         self.transact_with_manifest_contents(contents, nix, system)
             .await?;
@@ -262,7 +262,7 @@ where
     async fn catalog(
         &self,
         nix: &NixCommandLine,
-        system: impl AsRef<str> + Send,
+        system: System,
     ) -> Result<EnvCatalog, EnvironmentError2> {
         let mut flake_attribute = self.flake_attribute(system);
         flake_attribute.attr_path.push_attr("catalog").unwrap(); // valid attribute name, should not fail
@@ -383,7 +383,7 @@ impl<S: TransactionState> PathEnvironment<S> {
         &mut self,
         manifest_contents: impl AsRef<str>,
         nix: &NixCommandLine,
-        system: impl AsRef<str> + Send,
+        system: System,
     ) -> Result<(), EnvironmentError2> {
         let mut temp_env = self.make_temporary()?;
         temp_env.update_manifest(&manifest_contents)?;
@@ -669,9 +669,10 @@ mod tests {
                 channel: "nixpkgs-flox".to_string(),
                 name: ["hello"].try_into().unwrap(),
                 version: None,
-            })],
+            })]
+            .to_vec(),
             &nix,
-            &system,
+            system.clone(),
         )
         .await
         .unwrap();
@@ -685,7 +686,7 @@ mod tests {
             installed_env_str
         );
 
-        let catalog = env.catalog(&nix, &system).await.unwrap();
+        let catalog = env.catalog(&nix, system.clone()).await.unwrap();
         assert!(!catalog.entries.is_empty());
 
         assert!(env.out_link(&system).exists());
@@ -698,9 +699,10 @@ mod tests {
                 channel: "nixpkgs-flox".to_string(),
                 name: ["curl"].try_into().unwrap(),
                 version: None,
-            })],
+            })]
+            .to_vec(),
             &nix,
-            &system,
+            system.clone(),
         )
         .await
         .unwrap();
@@ -737,7 +739,9 @@ mod tests {
             version: None,
         });
 
-        env.install([package.clone()], &nix, &system).await.unwrap();
+        env.install([package.clone()].to_vec(), &nix, system.clone())
+            .await
+            .unwrap();
 
         let installed_env_str = indoc! {r#"
             { packages."nixpkgs-flox".hello = { }; }
@@ -748,10 +752,10 @@ mod tests {
             installed_env_str
         );
 
-        let catalog = env.catalog(&nix, &system).await.unwrap();
+        let catalog = env.catalog(&nix, system.clone()).await.unwrap();
         assert!(!catalog.entries.is_empty());
 
-        env.uninstall([package.clone()], &nix, &system)
+        env.uninstall([package.clone()].to_vec(), &nix, system.clone())
             .await
             .unwrap();
 
@@ -760,7 +764,7 @@ mod tests {
             empty_env_str
         );
 
-        let catalog = env.catalog(&nix, &system).await.unwrap();
+        let catalog = env.catalog(&nix, system.clone()).await.unwrap();
         assert!(catalog.entries.is_empty());
     }
 }
