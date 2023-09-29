@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::env;
 use std::io::{BufWriter, Write};
 use std::process::Command;
+use std::str::FromStr;
 
 use anyhow::{bail, Context, Result};
 use bpaf::Bpaf;
@@ -87,6 +88,14 @@ pub struct Search {
 impl Search {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("search");
+
+        if self.search_term.is_none() {
+            bail!(
+                "'flox search' requires at least one search term, run 'flox search -h' for more information."
+            )
+        }
+
+        // eprintln!("term = '{}'", self.search_term.clone().unwrap());
         let search_params = construct_search_params(&self.search_term, &flox)?;
         let search_params_json = serde_json::to_string(&search_params)?;
 
@@ -151,10 +160,7 @@ fn construct_search_params(search_term: &Option<String>, flox: &Flox) -> Result<
 
     // Create `query` parameter for `pkgdb`
     let query = match search_term {
-        Some(search_term) => Query {
-            r#match: Some(search_term.clone()),
-            ..Query::default()
-        },
+        Some(search_term) => Query::from_str(search_term)?,
         None => Query::default(),
     };
 

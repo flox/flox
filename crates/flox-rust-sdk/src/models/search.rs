@@ -14,8 +14,10 @@ pub enum SearchError {
     Deserialize(#[from] serde_json::Error),
     #[error("couldn't parse stdout to separate JSON lines: {0}")]
     ParseStdout(#[from] std::io::Error),
+    #[error("invalid search term '{0}', try quoting the search term if this isn't what you searched for")]
+    SearchTerm(String),
     #[error("search produced an error: {0}")]
-    Search(Value),
+    PkgDb(Value),
 }
 
 /// The input parameters for the `pkgdb search` command
@@ -98,6 +100,36 @@ pub struct Query {
     pub r#match: Option<String>,
 }
 
+impl FromStr for Query {
+    type Err = SearchError;
+
+    // This can't actually error, but the trait requires an error type
+    fn from_str(search_term: &str) -> Result<Self, Self::Err> {
+        let q = match search_term.find('@') {
+            Some(idx) => {
+                // If we get a search term ending in '@' it most likely means the
+                // user didn't quote a search term that included a '>' character.
+                if idx >= search_term.len() - 1 {
+                    return Err(SearchError::SearchTerm(search_term.into()));
+                }
+                // Splitting at `idx` would include the `@`
+                let package = String::from(&search_term[..idx]);
+                let semver = String::from(&search_term[idx + 1..]);
+                Query {
+                    semver: Some(semver),
+                    r#match: Some(package),
+                    ..Query::default()
+                }
+            },
+            None => Query {
+                r#match: Some(search_term.into()),
+                ..Query::default()
+            },
+        };
+        Ok(q)
+    }
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct SearchResults {
     pub results: Vec<SearchResult>,
@@ -120,7 +152,7 @@ impl TryFrom<&[u8]> for SearchResults {
                     //
                     //       Once there's a spec for the error messages we can parse this into a typed container.
                     let err = Value::from_str(&text)?;
-                    return Err(SearchError::Search(err));
+                    return Err(SearchError::PkgDb(err));
                 },
             };
         }
@@ -154,7 +186,7 @@ mod test {
     fn call_pkgdb(params: &SearchParams) -> Result<Output, Error> {
         let params_json = serde_json::to_string(params).unwrap();
         // Useful for debugging
-        // eprintln!("json input:\n{}", params_json);
+        eprintln!("json input:\n{}", params_json);
         let output = Command::new(PKGDB)
             .arg("search")
             .arg("--quiet")
@@ -173,8 +205,10 @@ mod test {
 
     #[test]
     fn constructs_valid_search_query() {
-        let mut params = SearchParams::default();
-        params.query.r#match = Some("hello".into());
+        let params = SearchParams {
+            query: Query::from_str("hello@2.12.1").unwrap(),
+            ..SearchParams::default()
+        };
         let results = call_pkgdb(&params).unwrap();
         assert_no_err_msg(results.stderr);
     }

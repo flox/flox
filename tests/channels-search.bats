@@ -44,23 +44,105 @@ setup_file() {
 
 # ---------------------------------------------------------------------------- #
 
-@test "'flox search' can be called successfully" {
-  run $FLOX_CLI search hello;
+@test "can be called at all" {
+  run "$FLOX_CLI" search hello;
   assert_success;
 }
 
 
 # ---------------------------------------------------------------------------- #
 
-@test "'flox search' errors with no search term" {
-  run $FLOX_CLI search;
+@test "error with no search term" {
+  run "$FLOX_CLI" search;
   assert_failure;
+}
+
+# ---------------------------------------------------------------------------- #
+
+@test "helpful error with unquoted redirect: hello@>1 -> hello@" {
+  run "$FLOX_CLI" search hello@;
+  assert_failure;
+  assert_output --partial "try quoting";
 }
 
 
 # ---------------------------------------------------------------------------- #
 
-@test "'flox search' displays results" {
-  n_lines=$($FLOX_CLI search hello | wc -l);
-  assert [[ n_lines -gt 0 ]];
+@test "expected number of results" {
+  run "$FLOX_CLI" search hello;
+  n_lines="${#lines[@]}";
+  assert_equal "$n_lines" "4"
 }
+
+
+# ---------------------------------------------------------------------------- #
+
+@test "semver search: hello@2.10" {
+  run "$FLOX_CLI" search hello@2.10;
+  assert_output --partial "hello.2_10";
+  n_lines="${#lines[@]}";
+  assert_equal "$n_lines" "1"
+}
+
+
+# ---------------------------------------------------------------------------- #
+
+@test "semver search: 'hello@>=1'" {
+  run "$FLOX_CLI" search 'hello@>=1';
+  assert_output --partial "hello.latest";
+  assert_output --partial "hello.2_12_1";
+  assert_output --partial "hello.2_12";
+  assert_output --partial "hello.2_10";
+  n_lines="${#lines[@]}";
+  assert_equal "$n_lines" "4"
+}
+
+
+# ---------------------------------------------------------------------------- #
+
+@test "semver search: hello@2.x" {
+  run "$FLOX_CLI" search hello@2.x;
+  assert_output --partial "hello.latest";
+  assert_output --partial "hello.2_12_1";
+  assert_output --partial "hello.2_12";
+  assert_output --partial "hello.2_10";
+  n_lines="${#lines[@]}";
+  assert_equal "$n_lines" "4"
+}
+
+
+# ---------------------------------------------------------------------------- #
+
+@test "semver search: hello@=2.10" {
+  run "$FLOX_CLI" search hello@=2.10;
+  assert_output --partial "hello.2_10";
+  n_lines="${#lines[@]}";
+  assert_equal "$n_lines" "1"
+}
+
+
+# ---------------------------------------------------------------------------- #
+
+@test "semver search: hello@v2" {
+  run "$FLOX_CLI" search hello@v2;
+  assert_output --partial "hello.2_12_1";
+  assert_output --partial "hello.2_12";
+  assert_output --partial "hello.2_10";
+  assert_output --partial "hello.latest";
+  n_lines="${#lines[@]}";
+  assert_equal "$n_lines" "4"
+}
+
+
+# ---------------------------------------------------------------------------- #
+
+@test "semver search: 'hello@>1 <3'" {
+  run "$FLOX_CLI" search 'hello@>1 <3';
+  assert_output --partial "hello.2_12_1";
+  assert_output --partial "hello.2_12";
+  assert_output --partial "hello.2_10";
+  assert_output --partial "hello.latest";
+  n_lines="${#lines[@]}";
+  assert_equal "$n_lines" "4"
+}
+
