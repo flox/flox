@@ -234,10 +234,9 @@ mod tests {
 
     use tempfile::TempDir;
 
-    use super::*;
     use crate::flox::Flox;
     use crate::prelude::ChannelRegistry;
-    use crate::providers::git::GitCommandProvider;
+    use crate::providers::git::{GitCommandProvider, GitProvider};
 
     fn flox_instance() -> (Flox, TempDir) {
         let tempdir_handle = tempfile::tempdir_in(std::env::temp_dir()).unwrap();
@@ -281,7 +280,7 @@ mod tests {
 
         let project = flox
             .resource(project_dir.path().to_path_buf())
-            .guard::<GitCommandProvider>()
+            .guard()
             .await
             .expect("Finding dir should succeed")
             .open()
