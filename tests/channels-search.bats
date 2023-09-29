@@ -146,3 +146,20 @@ setup_file() {
   assert_equal "$n_lines" "4"
 }
 
+
+# ---------------------------------------------------------------------------- #
+
+@test "exact semver match listed first" {
+  run "$FLOX_CLI" search hello@2.12.1;
+  first_line=$(echo "$output" | head -n 1 | grep 2.12.1);
+  assert [ -n first_line ];
+}
+
+
+# ---------------------------------------------------------------------------- #
+
+@test "returns JSON" {
+  run "$FLOX_CLI" search hello --json;
+  version=$(echo "$output" | jq '.[0].version')
+  assert_equal "$version" '"2.12.1"';
+}
