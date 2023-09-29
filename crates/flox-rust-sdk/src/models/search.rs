@@ -17,7 +17,7 @@ pub enum SearchError {
     ParseStdout(#[from] std::io::Error),
     #[error("invalid search term '{0}', try quoting the search term if this isn't what you searched for")]
     SearchTerm(String),
-    #[error("search produced an error: {0}")]
+    #[error("search encountered an error: {0}")]
     PkgDb(Value),
 }
 
@@ -26,7 +26,7 @@ pub enum SearchError {
 pub struct SearchParams {
     /// The collection of package sources to search
     pub registry: Registry,
-    /// Which systems to search under
+    /// Which systems to search under, `None` falls back to `pkgdb` defaults
     pub systems: Option<Vec<System>>,
     /// Options for which packages should be allowed in search results
     pub allow: AllowOpts,
@@ -44,8 +44,7 @@ pub struct Registry {
     /// A list of package source names indicating the preference
     /// in which to list results
     pub priority: Vec<String>,
-    /// Default parameters for all package sources if none
-    /// are provided by the specific package source
+    /// Registry-wide defaults for inputs that don't provide them
     pub defaults: RegistryDefaults,
 }
 
@@ -61,7 +60,7 @@ pub struct RegistryDefaults {
 /// A package source
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RegistryInput {
-    /// The flakeref containing packages
+    /// The flake containing packages
     pub from: FlakeRef,
     /// An optional attr path to restrict the search to
     pub subtrees: Option<Vec<String>>,
@@ -86,7 +85,14 @@ pub struct SemverOpts {
     pub prefer_pre_releases: bool,
 }
 
-/// A non-mutually-exclusive set of options for defining a search query
+/// A set of options for defining a search query.
+///
+/// The search options aren't mutually exclusive. For instance, the query
+/// `hello@>=2` will populate the `match` field with `hello` and the `semver`
+/// field with `>=2`. The `match` field specifically searches the `name`, `pname`,
+/// and `description` fields.
+///
+/// The result of the query will be the logical AND of all provided parameters.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Query {
     /// Match against the full name of the package e.g. `<pname>-<version>`
@@ -131,6 +137,12 @@ impl FromStr for Query {
     }
 }
 
+/// The deserialized search results.
+///
+/// Note that the JSON results are returned by `pkgdb` one result per line
+/// without an enclosing `[]`, so the results returned by `pkgdb` can't be
+/// directly deserialized to a JSON object. To parse the results you should
+/// use the provided `TryFrom` impl.
 #[derive(Debug, Clone, Serialize)]
 pub struct SearchResults {
     pub results: Vec<SearchResult>,
@@ -161,16 +173,25 @@ impl TryFrom<&[u8]> for SearchResults {
     }
 }
 
+/// A package search result
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SearchResult {
+    /// Which input the package came from
     pub input: String,
+    /// The attribute path of the package inside the input
     #[serde(rename = "path")]
     pub attr_path: Vec<String>,
+    /// The package name
     pub pname: Option<String>,
+    /// The package version
     pub version: Option<String>,
+    /// The package description
     pub description: Option<String>,
+    /// Whether the package is marked "broken"
     pub broken: Option<bool>,
+    /// Whether the package has an unfree license
     pub unfree: Option<bool>,
+    /// Which license the package is licensed under
     pub license: Option<String>,
 }
 

@@ -95,7 +95,6 @@ impl Search {
             )
         }
 
-        // eprintln!("term = '{}'", self.search_term.clone().unwrap());
         let search_params = construct_search_params(&self.search_term, &flox)?;
         let search_params_json = serde_json::to_string(&search_params)?;
 
@@ -158,17 +157,12 @@ fn construct_search_params(search_term: &Option<String>, flox: &Flox) -> Result<
         defaults: RegistryDefaults::default(),
     };
 
-    // Create `query` parameter for `pkgdb`
-    let query = match search_term {
-        Some(search_term) => Query::from_str(search_term)?,
-        None => Query::default(),
-    };
+    // We've already checked that the search term is Some(_)
+    let query = Query::from_str(search_term.as_ref().unwrap())?;
 
     Ok(SearchParams {
         registry,
         query,
-        // FIXME: `pkgdb` is supposed to use defaults when passed an empty array
-        //        so just pass the user's current system instead until that's fixed
         ..SearchParams::default()
     })
 }
@@ -193,8 +187,8 @@ fn render_search_results(search_results: SearchResults, as_json: bool) -> Result
                 path_components.join_with(".").to_string()
             };
             let d = if let Some(ref d) = r.description {
-                // Some package descriptions contain newline characters,
-                // which breaks the typical formatting of search results.
+                // Some package descriptions contain newline characters
+                // which breaks formatting
                 d.replace('\n', " ")
             } else {
                 "<no description provided>".into()
