@@ -45,7 +45,7 @@
         else "";
       rev = self.revCount or self.shortRev or "dirty";
     in
-      cargoToml.package.version + "-" + prefix + rev;
+      cargoToml.package.version + "-" + prefix + (toString rev);
 
     # ------------------------------------------------------------------------ #
     eachDefaultSystemMap = let
