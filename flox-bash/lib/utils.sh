@@ -1394,19 +1394,21 @@ function darwinRepairFiles() {
 	trace "$@"
 	[ $interactive -eq 1 ] || return 0
 	# Only attempt to repair if /etc/zshrc* was patched at install time.
-	if [ -f /etc/zshrc -a -f /etc/zshrc.backup-before-flox ] &&
+	#shellcheck disable=SC2016
+	if [[ -f /etc/zshrc ]] && [[ -f /etc/zshrc.backup-before-flox ]] &&
 		! $_grep -q 'HISTFILE=${HISTFILE:-${ZDOTDIR:-$HOME}/.zsh_history}' /etc/zshrc; then
 		if $_cmp --quiet /etc/zshrc /etc/zshrc.backup-before-flox; then
-			darwinPromptPatchFile /etc/zshrc $_share/flox/files/darwin-zshrc.patch
+			darwinPromptPatchFile /etc/zshrc "$_share/flox/files/darwin-zshrc.patch"
 		else
 			warn "broken 'HISTFILE' variable assignment in /etc/zshrc - please reinstall flox"
 		fi
 		warn "continuing ..."
 	fi
-	if [ -f /etc/zshrc_Apple_Terminal -a -f /etc/zshrc_Apple_Terminal.backup-before-flox ] &&
+	#shellcheck disable=SC2016
+	if [[ -f /etc/zshrc_Apple_Terminal ]] && [[ -f /etc/zshrc_Apple_Terminal.backup-before-flox ]] &&
 		! $_grep -q 'SHELL_SESSION_DIR="${SHELL_SESSION_DIR:-${ZDOTDIR:-$HOME}/.zsh_sessions}"' /etc/zshrc_Apple_Terminal; then
 		if $_cmp --quiet /etc/zshrc_Apple_Terminal /etc/zshrc_Apple_Terminal.backup-before-flox; then
-			darwinPromptPatchFile /etc/zshrc_Apple_Terminal $_share/flox/files/darwin-zshrc_Apple_Terminal.patch
+			darwinPromptPatchFile /etc/zshrc_Apple_Terminal "$_share/flox/files/darwin-zshrc_Apple_Terminal.patch"
 		else
 			warn "broken 'SHELL_SESSION_DIR' variable assignment in /etc/zshrc - please reinstall flox"
 		fi
@@ -1434,6 +1436,7 @@ function identifyParentShell() {
 	local parentShell="${SHELL:-}" # default
 	local shellCmd="${parentShell/*\//}" # aka basename
 	local parentShellCmd="$shellCmd" # default
+	local psOutput;
 
 	# Only attempt a guess if we know our parent PID.
 	if [ -n "${FLOX_PARENT_PID:-}" ]; then
@@ -1442,7 +1445,7 @@ function identifyParentShell() {
 			 -r "/proc/$FLOX_PARENT_PID/exe" ]; then
 			# Linux - use information from /proc.
 			parentShell="$($_readlink "/proc/$FLOX_PARENT_PID/exe")"
-		elif local psOutput="$($_ps -c -o command= -p $FLOX_PARENT_PID 2>/dev/null)"; then
+		elif psOutput="$($_ps -c -o command= -p $FLOX_PARENT_PID 2>/dev/null)"; then
 			# Darwin/other - use `ps` to guess the shell.
 			# Note that this value often comes back with a leading "-" character
 			# that is not part of the executable's path.
@@ -1477,7 +1480,7 @@ function joinString() {
 	local separator="$1"; shift
 	local accum=
 	local -A seen
-	while test $# -gt 0; do
+	while test "$#" -gt 0; do
 		while IFS=$separator read -r i; do
 			case "$i" in
 			"") : ;;
@@ -1492,7 +1495,7 @@ function joinString() {
 				fi
 				;;
 			esac
-		done <<< $(echo "$1")
+		done <<< "$1"
 		shift
 	done
 	echo "$accum"

@@ -6,8 +6,11 @@
 {
   inputs.nixpkgs.url = "github:NixOS/nixpkgs";
 
+  # For `gh` CLI ( need a specific version )
+  inputs.nixpkgs-for-gh.url = "github:NixOS/nixpkgs/46ed466081b9cad1125b11f11a2af5cc40b942c7";
+
+  # Do not override `nixpkgs` input
   inputs.pkgdb.url = "github:flox/pkgdb";
-  inputs.pkgdb.inputs.nixpkgs.follows = "/nixpkgs";
 
   inputs.floco.follows = "/pkgdb/floco";
   inputs.floco.inputs.nixpkgs.follows = "/nixpkgs";
@@ -28,6 +31,7 @@
   outputs = {
     self,
     nixpkgs,
+    nixpkgs-for-gh,
     pkgdb,
     floco,
     parser-util,
@@ -67,14 +71,30 @@
     # ------------------------------------------------------------------------ #
 
     overlays.deps = nixpkgs.lib.composeManyExtensions [
-      pkgdb.overlays.default
       parser-util.overlays.default
+
+      # /Shrinkwrap/ `pkgdb' by cherry picking instead of merging.
+      (final: prev: let
+        pkgdbPkgsFor = builtins.getAttr prev.system pkgdb.packages;
+      in {
+        inherit (pkgdbPkgsFor) flox-pkgdb;
+      })
+
+      # /Shrinkwrap/ `gh' by cherry picking instead of merging.
+      (final: prev: let
+        ghPkgsFor =
+          builtins.getAttr prev.system nixpkgs-for-gh.legacyPackages;
+      in {
+        inherit (ghPkgsFor) gh;
+      })
     ];
+
     overlays.flox = final: prev: let
       callPackage = final.lib.callPackageWith (final
         // {
           inherit inputs self floxVersion;
           pkgsFor = final;
+          # We need v2.31.0, v2.32.0, or v2.32.1
         });
       genPkg = name: _: callPackage (./pkgs + ("/" + name)) {};
     in
