@@ -80,7 +80,7 @@
         inherit (pkgdbPkgsFor) flox-pkgdb;
       })
 
-      # Cherry pick and inject `gh` for older sources.
+      # Cherry pick `gh` recipe for older sources with updated deps.
       # We need v2.31.0, v2.32.0, or v2.32.1
       (final: prev: let
         ghPkgsFor =
