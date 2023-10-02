@@ -81,6 +81,7 @@
       })
 
       # /Shrinkwrap/ `gh' by cherry picking instead of merging.
+      # We need v2.31.0, v2.32.0, or v2.32.1
       (final: prev: let
         ghPkgsFor =
           builtins.getAttr prev.system nixpkgs-for-gh.legacyPackages;
@@ -94,7 +95,6 @@
         // {
           inherit inputs self floxVersion;
           pkgsFor = final;
-          # We need v2.31.0, v2.32.0, or v2.32.1
         });
       genPkg = name: _: callPackage (./pkgs + ("/" + name)) {};
     in
