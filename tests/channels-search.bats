@@ -2,9 +2,9 @@
 # -*- mode: bats; -*-
 # ============================================================================ #
 #
-# Test of rust impl of 'flox list'
+# Test of rust impl of `flox search`
 #
-# Tests are tentative, missing spec!
+# bats file_tags=search 
 #
 # ---------------------------------------------------------------------------- #
 
