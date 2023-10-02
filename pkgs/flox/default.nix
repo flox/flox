@@ -153,6 +153,9 @@ in
           gnused
         ];
 
+      # https://github.com/ipetkov/crane/issues/385
+      doNotLinkInheritedArtifacts = true;
+
       # Tests are disabled inside of the build because the sandbox prevents
       # internet access and there are tests that require internet access to
       # resolve flake references among other things.
