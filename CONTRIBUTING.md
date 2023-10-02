@@ -190,7 +190,7 @@ every change. In that case run the following:
 
 ```console
 $ nix develop --command 'cargo build';
-$ nix run '.#flox-tests' -- -- --flox ./target/debug/flox --watch;
+$ nix run '.#flox-tests' -- --flox ./target/debug/flox --watch;
 ```
 
 #### `bats` arguments
@@ -201,8 +201,7 @@ through to the inner command:
 
 ```console
 $ nix develop --command 'cargo build';
-$ nix run '.#flox-tests' -- -- \
-  --flox ./target/debug/flox -- -j 4;
+$ nix run '.#flox-tests' -- --flox ./target/debug/flox -- -j 4;
 ```
 This example tells `bats` to run 4 jobs in parallel.
 
@@ -211,16 +210,14 @@ You can specify which tests to run by passing arguments to either `flox-tests` o
 
 In order to run a specific test file, pass the path to the file to `flox-tests`:
 ```console
-$ nix run '.#flox-tests' -- -- \
---flox ./target/debug/flox ./tests/run.bats
+$ nix run '.#flox-tests' -- --flox ./target/debug/flox ./tests/run.bats;
 ```
 This example will only run tests in the `tests/run.bats` file.
 
 In order to run tests with a specific tag, you'll pass the `--filter-tags` option to `bats`:
 ```console
-$ nix run '.#flox-tests' -- -- \
---flox ./target/debug/flox -- \
---filter-tags activate
+$ nix run '.#flox-tests' -- --flox ./target/debug/flox  \
+                         -- --filter-tags activate;
 ```
 This example will only run tests tagged with `activate`.
 You can use boolean logic and specify the flag multiple times to run specific subsets of tests.
