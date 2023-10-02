@@ -39,10 +39,10 @@ jobs:
       run: nix develop '.#rust-env' -c cargo test --locked --workspace
       
     - name: Build
-      run: flox build '${{ matrix.package }}' -L --print-out-paths
+      run: nix build '${{ matrix.package }}' -L --print-out-paths
 
     - name: Cache the store
-      run: flox nix copy --all --to "$FLOX_SUBSTITUTER" -vv
+      run: nix copy --all --to "$FLOX_SUBSTITUTER" -vv
 
     - name: Test
       if: ${{ matrix.package == 'flox' }}
