@@ -7,13 +7,7 @@ use bpaf::Bpaf;
 use derive_more::Display;
 use flox_rust_sdk::flox::{Flox, DEFAULT_OWNER};
 use flox_rust_sdk::models::search::{
-    do_search,
-    Query,
-    Registry,
-    RegistryDefaults,
-    RegistryInput,
-    SearchParams,
-    SearchResults,
+    do_search, Query, Registry, RegistryDefaults, RegistryInput, SearchParams, SearchResults,
 };
 use flox_rust_sdk::nix::command::FlakeMetadata;
 use flox_rust_sdk::nix::command_line::NixCommandLine;
@@ -272,6 +266,21 @@ fn dedup_and_disambiguate_display_items(mut display_items: Vec<DisplayItem>) -> 
     }
 
     deduped_display_items
+}
+
+/// Show detailed package information
+#[derive(Bpaf, Clone)]
+pub struct Show {
+    /// The package to show detailed information about. Must be an exact match
+    /// for a package name e.g. something copy-pasted from the output of `flox search`.
+    #[bpaf(positional("search-term"))]
+    pub search_term: Option<String>,
+}
+
+impl Show {
+    pub async fn handle(self, _flox: Flox) -> Result<()> {
+        todo!()
+    }
 }
 
 #[derive(Bpaf, Clone)]

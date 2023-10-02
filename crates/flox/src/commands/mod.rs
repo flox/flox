@@ -237,6 +237,9 @@ enum LocalDevelopmentCommands {
     /// Search packages in subscribed channels
     #[bpaf(command)]
     Search(#[bpaf(external(channel::search))] channel::Search),
+    /// Show detailed information about a single package
+    #[bpaf(command, long("show"))]
+    Show(#[bpaf(external(channel::show))] channel::Show),
     /// Install a package into an environment
     #[bpaf(command)]
     Install(#[bpaf(external(environment::install))] environment::Install),
@@ -295,6 +298,10 @@ impl LocalDevelopmentCommands {
                 subcommand_metric!("search");
                 flox_forward(&flox).await?
             },
+            LocalDevelopmentCommands::Show(_) if Feature::Channels.is_forwarded()? => {
+                subcommand_metric!("show");
+                flox_forward(&flox).await?
+            },
 
             LocalDevelopmentCommands::Init(args) => args.handle(flox).await?,
             LocalDevelopmentCommands::Activate(args) => args.handle(flox).await?,
@@ -304,6 +311,7 @@ impl LocalDevelopmentCommands {
             LocalDevelopmentCommands::List(args) => args.handle(flox).await?,
             LocalDevelopmentCommands::Nix(args) => args.handle(config, flox).await?,
             LocalDevelopmentCommands::Search(args) => args.handle(flox).await?,
+            LocalDevelopmentCommands::Show(args) => args.handle(flox).await?,
             LocalDevelopmentCommands::Run(args) => args.handle(config, flox).await?,
             LocalDevelopmentCommands::Delete(args) => args.handle(flox).await?,
         }
