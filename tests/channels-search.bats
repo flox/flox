@@ -44,7 +44,7 @@ setup_file() {
 
 # ---------------------------------------------------------------------------- #
 
-@test "can be called at all" {
+@test "'flox search' can be called at all" {
   run "$FLOX_CLI" search hello;
   assert_success;
 }
@@ -52,14 +52,14 @@ setup_file() {
 
 # ---------------------------------------------------------------------------- #
 
-@test "error with no search term" {
+@test "'flox search' error with no search term" {
   run "$FLOX_CLI" search;
   assert_failure;
 }
 
 # ---------------------------------------------------------------------------- #
 
-@test "helpful error with unquoted redirect: hello@>1 -> hello@" {
+@test "'flox search' helpful error with unquoted redirect: hello@>1 -> hello@" {
   run "$FLOX_CLI" search hello@;
   assert_failure;
   assert_output --partial "try quoting";
@@ -68,7 +68,7 @@ setup_file() {
 
 # ---------------------------------------------------------------------------- #
 
-@test "expected number of results" {
+@test "'flox search' expected number of results" {
   run "$FLOX_CLI" search hello;
   n_lines="${#lines[@]}";
   assert_equal "$n_lines" "4"
@@ -77,7 +77,7 @@ setup_file() {
 
 # ---------------------------------------------------------------------------- #
 
-@test "semver search: hello@2.10" {
+@test "'flox search' semver search: hello@2.10" {
   run "$FLOX_CLI" search hello@2.10;
   assert_output --partial "hello.2_10";
   n_lines="${#lines[@]}";
@@ -87,7 +87,7 @@ setup_file() {
 
 # ---------------------------------------------------------------------------- #
 
-@test "semver search: 'hello@>=1'" {
+@test "'flox search' semver search: 'hello@>=1'" {
   run "$FLOX_CLI" search 'hello@>=1';
   assert_output --partial "hello.latest";
   assert_output --partial "hello.2_12_1";
@@ -100,7 +100,7 @@ setup_file() {
 
 # ---------------------------------------------------------------------------- #
 
-@test "semver search: hello@2.x" {
+@test "'flox search' semver search: hello@2.x" {
   run "$FLOX_CLI" search hello@2.x;
   assert_output --partial "hello.latest";
   assert_output --partial "hello.2_12_1";
@@ -113,7 +113,7 @@ setup_file() {
 
 # ---------------------------------------------------------------------------- #
 
-@test "semver search: hello@=2.10" {
+@test "'flox search' semver search: hello@=2.10" {
   run "$FLOX_CLI" search hello@=2.10;
   assert_output --partial "hello.2_10";
   n_lines="${#lines[@]}";
@@ -123,7 +123,7 @@ setup_file() {
 
 # ---------------------------------------------------------------------------- #
 
-@test "semver search: hello@v2" {
+@test "'flox search' semver search: hello@v2" {
   run "$FLOX_CLI" search hello@v2;
   assert_output --partial "hello.2_12_1";
   assert_output --partial "hello.2_12";
@@ -136,7 +136,7 @@ setup_file() {
 
 # ---------------------------------------------------------------------------- #
 
-@test "semver search: 'hello@>1 <3'" {
+@test "'flox search' semver search: 'hello@>1 <3'" {
   run "$FLOX_CLI" search 'hello@>1 <3';
   assert_output --partial "hello.2_12_1";
   assert_output --partial "hello.2_12";
@@ -149,7 +149,7 @@ setup_file() {
 
 # ---------------------------------------------------------------------------- #
 
-@test "exact semver match listed first" {
+@test "'flox search' exact semver match listed first" {
   run "$FLOX_CLI" search hello@2.12.1;
   first_line=$(echo "$output" | head -n 1 | grep 2.12.1);
   assert [ -n first_line ];
@@ -158,7 +158,7 @@ setup_file() {
 
 # ---------------------------------------------------------------------------- #
 
-@test "returns JSON" {
+@test "'flox search' returns JSON" {
   run "$FLOX_CLI" search hello --json;
   version=$(echo "$output" | jq '.[0].version')
   assert_equal "$version" '"2.12.1"';
