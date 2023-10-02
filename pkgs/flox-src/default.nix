@@ -3,12 +3,12 @@ builtins.path {
   name = "flox-src";
   path = self;
   filter = path: type:
-    ! builtins.elem path [
-      (self.outPath + "/flake.nix")
-      (self.outPath + "/flake.lock")
-      (self.outPath + "/pkgs")
-      (self.outPath + "/checks")
-      (self.outPath + "/tests")
-      (self.outPath + "/shells")
+    ! builtins.elem (baseNameOf path) [
+      "flake.nix"
+      "flake.lock"
+      "pkgs"
+      "checks"
+      "tests"
+      "shells"
     ];
 }

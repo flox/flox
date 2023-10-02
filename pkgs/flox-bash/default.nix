@@ -2,7 +2,6 @@
   self,
   flox-src,
   inputs,
-  capacitated,
   stdenv,
   ansifilter,
   bashInteractive,
@@ -42,6 +41,7 @@
   which,
   semver,
   builtfilter-rs,
+  floxVersion,
 }: let
   # The getent package can be found in pkgs.unixtools.
   inherit (pkgs.unixtools) getent;
@@ -91,7 +91,7 @@
 in
   stdenv.mkDerivation rec {
     pname = "flox-bash";
-    version = "${czToml.tool.commitizen.version}-${inputs.flox-floxpkgs.lib.getRev self}";
+    version = floxVersion;
     src = flox-src + "/flox-bash";
     nativeBuildInputs =
       [makeWrapper pandoc shellcheck shfmt which]

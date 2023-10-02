@@ -26,6 +26,7 @@
   # -------------------------------------------------------------------------- #
 
   outputs = {
+    self,
     nixpkgs,
     pkgdb,
     floco,
@@ -34,6 +35,18 @@
     crane,
     ...
   } @ inputs: let
+    # ------------------------------------------------------------------------ #
+    floxVersion = let
+      cargoToml =
+        builtins.fromTOML (builtins.readFile ./crates/flox/Cargo.toml);
+      prefix =
+        if self ? revCount
+        then "r"
+        else "";
+      rev = self.revCount or self.shortRev or "dirty";
+    in
+      cargoToml.package.version + "-" + prefix + rev;
+
     # ------------------------------------------------------------------------ #
     eachDefaultSystemMap = let
       defaultSystems = [
@@ -60,8 +73,8 @@
     overlays.flox = final: prev: let
       callPackage = final.lib.callPackageWith (final
         // {
-          inherit inputs;
-          self = toString ./.;
+          inherit inputs self floxVersion;
+          pkgsFor = final;
         });
       genPkg = name: _: callPackage (./pkgs + ("/" + name)) {};
     in
@@ -69,6 +82,21 @@
     overlays.default =
       nixpkgs.lib.composeExtensions overlays.deps
       overlays.flox;
+
+    # ------------------------------------------------------------------------ #
+
+    checks = eachDefaultSystemMap (system: let
+      pkgsFor =
+        (builtins.getAttr system nixpkgs.legacyPackages).extend
+        overlays.default;
+      pre-commit-check = pkgsFor.callPackage ./checks/pre-commit-check {
+        inherit shellHooks;
+        rustfmt = pkgsFor.rustfmt.override {asNightly = true;};
+      };
+    in {
+      inherit pre-commit-check;
+      default = pre-commit-check;
+    });
 
     # ------------------------------------------------------------------------ #
 
@@ -83,7 +111,6 @@
         builtfilter-rs
         flox-bash
         flox-gh
-        flox-src
         flox-tests
         nix-editor
         ;
@@ -97,12 +124,19 @@
       pkgsFor =
         (builtins.getAttr system nixpkgs.legacyPackages).extend
         overlays.default;
-      flox = pkgsFor.callPackage ./shells/flox {};
+      checksFor = builtins.getAttr system checks;
+      flox = pkgsFor.callPackage ./shells/flox {
+        inherit (checksFor) pre-commit-check;
+        rustfmt = pkgsFor.rustfmt.override {asNightly = true;};
+      };
     in {
       inherit flox;
       default = flox;
       ci = pkgsFor.callPackage ./shells/ci {};
-      rust-env = pkgsFor.callPackage ./shells/rust-env {};
+      rust-env = pkgsFor.callPackage ./shells/rust-env {
+        inherit (checksFor) pre-commit-check;
+        rustfmt = pkgsFor.rustfmt.override {asNightly = true;};
+      };
     });
   };
 }

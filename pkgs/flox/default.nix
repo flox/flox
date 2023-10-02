@@ -1,5 +1,4 @@
 {
-  nixpkgs,
   # self is a flake if this package is built locally, but if it's called as a proto, it's just the
   # source
   self,
@@ -28,9 +27,11 @@
   gitMinimal,
   flox-gh,
   gh,
+  pkgsFor,
+  floxVersion,
 }: let
   # crane (<https://crane.dev/>) library for building rust packages
-  craneLib = inputs.crane.mkLib nixpkgs;
+  craneLib = inputs.crane.mkLib pkgsFor;
 
   # build time environment variables
   envs =
@@ -38,16 +39,16 @@
       # 3rd party CLIs
       # we want to use our own binaries by absolute path
       # rather than relying on or modifying the user's `PATH` variable
-      NIX_BIN = "${flox-bash}/libexec/flox/nix";
-      GIT_BIN = "${gitMinimal}/bin/git";
+      NIX_BIN = flox-bash.outPath + "/libexec/flox/nix";
+      GIT_BIN = gitMinimal.outPath + "/bin/git";
       PARSER_UTIL_BIN = parser-util.outPath + "/bin/parser-util";
       PKGDB_BIN = flox-pkgdb.outPath + "/bin/pkgdb";
       FLOX_GH_BIN = flox-gh.outPath + "/bin/flox-gh";
       GH_BIN = gh.outPath + "/bin/gh";
 
       # path to bash impl of flox to dispatch unimplemented commands to
-      FLOX_SH = "${flox-bash}/libexec/flox/flox";
-      FLOX_SH_PATH = "${flox-bash}";
+      FLOX_SH = flox-bash.outPath + "/libexec/flox/flox";
+      FLOX_SH_PATH = flox-bash.outPath;
 
       # Modified nix completion scripts
       # used to pass through nix completion ability for `flox nix *`
@@ -68,10 +69,10 @@
       LIBSSH2_SYS_USE_PKG_CONFIG = "1";
 
       # used internally to ensure CA certificates are available
-      NIXPKGS_CACERT_BUNDLE_CRT = "${cacert}/etc/ssl/certs/ca-bundle.crt";
+      NIXPKGS_CACERT_BUNDLE_CRT = cacert.outPath + "/etc/ssl/certs/ca-bundle.crt";
 
       # The current version of flox being built
-      FLOX_VERSION = "${cargoToml.package.version}-${inputs.flox-floxpkgs.lib.getRev self}";
+      FLOX_VERSION = floxVersion;
       # Reexport of the platform flox is being built for
       NIX_TARGET_SYSTEM = targetPlatform.system;
 
