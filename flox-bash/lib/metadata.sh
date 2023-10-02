@@ -214,7 +214,7 @@ function temporaryMigrateGitHubTo030Floxdev() {
 	trace "$@"
 	local workDir="$1"; shift
 	# First assert that $git_base_url has not been overridden.
-	[[ "$git_base_url" == "https://git.hub.flox.dev/" ]] || return
+	[[ "$git_base_url" == "https://git.hub.flox.dev/" ]] || return 0
 	# Identify the real environmentMetaDir from the workdir clone.
 	local realEnvironmentMetaDir
 	realEnvironmentMetaDir="$(
