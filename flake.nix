@@ -73,20 +73,20 @@
     overlays.deps = nixpkgs.lib.composeManyExtensions [
       parser-util.overlays.default
 
-      # /Shrinkwrap/ `pkgdb' by cherry picking instead of merging.
+      # /Shrinkwrap/ `pkgdb' to preserve `cc' and `nix' versions.
       (final: prev: let
         pkgdbPkgsFor = builtins.getAttr prev.system pkgdb.packages;
       in {
         inherit (pkgdbPkgsFor) flox-pkgdb;
       })
 
-      # /Shrinkwrap/ `gh' by cherry picking instead of merging.
+      # Cherry pick and inject `gh` for older sources.
       # We need v2.31.0, v2.32.0, or v2.32.1
       (final: prev: let
         ghPkgsFor =
           builtins.getAttr prev.system nixpkgs-for-gh.legacyPackages;
       in {
-        inherit (ghPkgsFor) gh;
+        gh = final.callPackage ghPkgsFor.gh.override {};
       })
     ];
 
@@ -109,13 +109,11 @@
       pkgsFor =
         (builtins.getAttr system nixpkgs.legacyPackages).extend
         overlays.default;
+    in {
       pre-commit-check = pkgsFor.callPackage ./checks/pre-commit-check {
         inherit shellHooks;
         rustfmt = pkgsFor.rustfmt.override {asNightly = true;};
       };
-    in {
-      inherit pre-commit-check;
-      default = pre-commit-check;
     });
 
     # ------------------------------------------------------------------------ #
@@ -153,10 +151,13 @@
       inherit flox;
       default = flox;
       ci = pkgsFor.callPackage ./shells/ci {};
-      rust-env = pkgsFor.callPackage ./shells/rust-env {
-        inherit (checksFor) pre-commit-check;
-        rustfmt = pkgsFor.rustfmt.override {asNightly = true;};
-      };
+      # Legacy alias
+      rust-env = let
+        msg =
+          "XXX: `devShells.rust-env' is deprecated, use the "
+          + "`devShells.flox' or the default.";
+      in
+        builtins.trace msg flox;
     });
   };
 }

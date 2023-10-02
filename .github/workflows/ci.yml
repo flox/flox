@@ -36,7 +36,7 @@ jobs:
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
     - name: Test
-      run: nix develop '.#rust-env' -c cargo test --locked --workspace
+      run: nix develop -c cargo test --locked --workspace
       
     - name: Build
       run: nix build '${{ matrix.package }}' -L --print-out-paths

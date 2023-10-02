@@ -1,23 +1,17 @@
 {
-  mkShell,
-  lib,
-  rustfmt,
   clippy,
-  rust-analyzer,
-  darwin,
-  glibcLocales,
-  hostPlatform,
-  nix,
-  cargo,
-  rustc,
-  rust,
-  hivemind,
-  cargo-watch,
   commitizen,
-  rustPlatform,
   flox,
   flox-bash,
+  hivemind,
+  just,
+  mkShell,
   pre-commit-check,
+  rust,
+  rust-analyzer,
+  rustPlatform,
+  rustc,
+  rustfmt,
 }:
 mkShell ({
     inputsFrom = [
@@ -30,10 +24,10 @@ mkShell ({
       commitizen
       rustfmt
       hivemind
-      # cargo-watch
       clippy
       rust-analyzer
       rust.packages.stable.rustPlatform.rustLibSrc
+      just
     ];
     inherit (pre-commit-check) shellHook;
   }
