@@ -69,8 +69,13 @@ impl EnvironmentSelect {
 }
 
 enum ConcreteEnvironment {
+    /// Container for [PathEnvironment]
     Path(PathEnvironment<Original>),
+    /// Container for [ManagedEnvironment]
+    #[allow(unused)] // pending implementation of ManagedEnvironment
     Managed(ManagedEnvironment),
+    /// Container for [RemoteEnvironment]
+    #[allow(unused)] // pending implementation of RemoteEnvironment
     Remote(RemoteEnvironment),
 }
 
