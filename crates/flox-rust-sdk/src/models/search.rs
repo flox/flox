@@ -112,6 +112,11 @@ impl FromStr for Query {
 
     // This can't actually error, but the trait requires an error type
     fn from_str(search_term: &str) -> Result<Self, Self::Err> {
+        // If there's an '@' in the query, it means the user is trying to use the semver
+        // search capability. This means we need to split the query into package name and
+        // semver specifier parts. Note that the 'semver' field is distinct from the 'version'
+        // field in that the 'version' field refers to the '<pname>-<version>' form of the
+        // package name. The user doesn't search this field directly.
         let q = match search_term.split_once('@') {
             Some((package, semver)) => {
                 // If we get a search term ending in '@' it most likely means the
