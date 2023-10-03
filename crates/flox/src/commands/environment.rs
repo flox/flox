@@ -125,14 +125,12 @@ impl Edit {
                     .or(std::env::var("VISUAL"))
                     .context("no editor found; neither EDITOR nor VISUAL are set")?;
                 // TODO: check for interactivity before allowing the editor to be opened
-                let _manifest_path = todo!(); // environment.manifest_path(); dont forget to uncomment the file copy below
-
                 // Make a copy of the manifest for the user to edit so failed edits aren't left in
                 // the original manifest. You can't put creation/cleanup inside the `edited_manifest_contents`
                 // method because the temporary manifest needs to stick around in case the user wants
                 // or needs to make successive edits without starting over each time.
                 let tmp_manifest = NamedTempFile::new_in(&flox.temp_dir)?;
-                // std::fs::copy(todo!(), &tmp_manifest)?;
+                std::fs::write(&tmp_manifest, environment.manifest_content()?)?;
                 let should_continue = Dialog {
                     message: "Continue editing?",
                     help_message: Default::default(),
