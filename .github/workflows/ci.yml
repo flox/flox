@@ -35,23 +35,28 @@ jobs:
 
 
     - name: Build flox-gh
-      run: nix build '.#flox-gh' --no-update-lock-file -L --print-out-paths --no-link
+      run: nix build '.#flox-gh' -L --no-update-lock-file --print-out-paths --no-link
 
     - name: Build nix-editor
-      run: nix build '.#nix-editor' --no-update-lock-file -L --print-out-paths --no-link
+      run: nix build '.#nix-editor' -L --no-update-lock-file --print-out-paths --no-link
 
     - name: Build builtfilter-rs
-      run: nix build '.#builtfilter-rs' --no-update-lock-file -L --print-out-paths --no-link
+      run: nix build '.#builtfilter-rs' -L --no-update-lock-file --print-out-paths --no-link
 
     - name: Build flox-bash
-      run: nix build '.#flox-bash' --no-update-lock-file -L --print-out-paths --no-link
+      run: nix build '.#flox-bash' -L --no-update-lock-file --print-out-paths --no-link
 
-    # We want this link in order to run `flox-tests'
+    # We want this in order to run `flox-tests', but we do not want to dirty
+    # our workspace to avoid accidentally triggering rebuilds of
+    # `builtfilter-rs' or `flox-tests'.
     - name: Build flox
-      run: nix build -L --no-update-lock-file --print-out-paths
+      run: |
+        nix build -L --no-update-lock-file --print-out-paths
+        echo "FLOX_CLI=$( readlink -f ./result; )/bin/flox" >> "$GITHUB_ENV";
+        git clean -xfd;
 
     - name: Build flox-tests
-      run: nix build '.#flox-tests' --no-update-lock-file -L --print-out-paths --no-link
+      run: nix build '.#flox-tests' -L --no-update-lock-file --print-out-paths --no-link
 
     - name: Cache the store
       run: nix copy --all --to "$FLOX_SUBSTITUTER" -vv
@@ -59,8 +64,12 @@ jobs:
     - name: Rust Tests
       run: nix develop --no-update-lock-file -c cargo test --locked --workspace
 
+    # The cargo tests may have dirtied the workspace so we need to clean.
+    # We ultimately test against the `FLOX_CLI' env var's path set earlier.
     - name: Bats Test
-      run: nix run --no-update-lock-file '.#flox-tests'
+      run: |
+        git clean -xfd;
+        nix run --no-update-lock-file '.#flox-tests';
 
   # TODO: remove this job after merging to `main'
   # It is required because `Build * on *' is the name used in a GitHub branch
