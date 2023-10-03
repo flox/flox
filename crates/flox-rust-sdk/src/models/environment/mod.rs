@@ -83,6 +83,9 @@ pub trait Environment {
     /// Return the [EnvironmentRef] for the environment for identification
     fn environment_ref(&self) -> &EnvironmentRef;
 
+    /// Return a flake attribute installable for this environment
+    fn flake_attribute(&self, system: System) -> FlakeAttribute;
+
     /// Returns the environment owner
     fn owner(&self) -> Option<EnvironmentOwner>;
 
