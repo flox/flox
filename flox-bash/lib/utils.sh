@@ -1438,10 +1438,12 @@ function identifyParentShell() {
 	# Only attempt a guess if we know our parent PID.
 	if [ -n "${FLOX_PARENT_PID:-}" ]; then
 		# First attempt to identify details of parent shell process.
-		if [ -L "/proc/$FLOX_PARENT_PID/exe" -a \
-			 -r "/proc/$FLOX_PARENT_PID/exe" ]; then
-			# Linux - use information from /proc.
-			parentShell="$($_readlink "/proc/$FLOX_PARENT_PID/exe")"
+		if [ -r "/proc/$FLOX_PARENT_PID/cmdline" ]; then
+			# Linux - use information from /proc. bash can be invoked as sh, so we use
+			# argv[0] rather than /proc/$FLOX_PARENT_PID/exe
+			# -d '' splits on null bytes
+			mapfile -d '' cmdline < "/proc/$FLOX_PARENT_PID/cmdline"
+			parentShell="${cmdline[0]}"
 		elif local psOutput="$($_ps -c -o command= -p $FLOX_PARENT_PID 2>/dev/null)"; then
 			# Darwin/other - use `ps` to guess the shell.
 			# Note that this value often comes back with a leading "-" character
