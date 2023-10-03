@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use flox_types::catalog::{EnvCatalog, System};
 use runix::command_line::NixCommandLine;
+use runix::installable::FlakeAttribute;
 
 use super::{Environment, EnvironmentError2};
 use crate::models::environment_ref::{EnvironmentName, EnvironmentOwner, EnvironmentRef};
@@ -70,6 +71,11 @@ impl Environment for ManagedEnvironment {
     /// Return the [EnvironmentRef] for the environment for identification
     #[allow(unused)]
     fn environment_ref(&self) -> &EnvironmentRef {
+        todo!()
+    }
+
+    #[allow(unused)]
+    fn flake_attribute(&self, _system: System) -> FlakeAttribute {
         todo!()
     }
 

@@ -316,6 +316,10 @@ where
         }
         Ok(())
     }
+
+    fn flake_attribute(&self, system: System) -> FlakeAttribute {
+        self.flake_attribute(system)
+    }
 }
 
 impl<S: TransactionState> PathEnvironment<S> {
