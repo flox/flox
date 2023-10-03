@@ -200,8 +200,7 @@ where
         nix: &NixCommandLine,
         system: System,
     ) -> Result<bool, EnvironmentError2> {
-        let current_manifest_contents =
-            fs::read_to_string(self.manifest_path()).map_err(EnvironmentError2::ReadManifest)?;
+        let current_manifest_contents = self.manifest_content()?;
         let new_manifest_contents =
             flox_nix_content_with_new_packages(&current_manifest_contents, packages)?;
         match new_manifest_contents {
@@ -225,8 +224,8 @@ where
         nix: &NixCommandLine,
         system: System,
     ) -> Result<bool, EnvironmentError2> {
-        let current_manifest_contents =
-            fs::read_to_string(self.manifest_path()).map_err(EnvironmentError2::ReadManifest)?;
+        let current_manifest_contents = self.manifest_content()?;
+
         let new_manifest_contents =
             flox_nix_content_with_packages_removed(&current_manifest_contents, packages)?;
         match new_manifest_contents {
@@ -287,6 +286,10 @@ where
         std::fs::write(self.catalog_path(), catalog_value.to_string())
             .map_err(EnvironmentError2::WriteCatalog)?;
         serde_json::from_value(catalog_value).map_err(EnvironmentError2::ParseCatalog)
+    }
+
+    fn manifest_content(&self) -> Result<String, EnvironmentError2> {
+        fs::read_to_string(self.manifest_path()).map_err(EnvironmentError2::ReadManifest)
     }
 
     /// Returns the environment owner
@@ -629,17 +632,11 @@ mod tests {
 
         temp_env.update_manifest(&new_env_str).unwrap();
 
-        assert_eq!(
-            std::fs::read_to_string(temp_env.manifest_path()).unwrap(),
-            new_env_str
-        );
+        assert_eq!(temp_env.manifest_content().unwrap(), new_env_str);
 
         env.replace_with(temp_env).unwrap();
 
-        assert_eq!(
-            std::fs::read_to_string(env.manifest_path()).unwrap(),
-            new_env_str
-        );
+        assert_eq!(env.manifest_content().unwrap(), new_env_str);
     }
 
     #[tokio::test]
@@ -681,10 +678,7 @@ mod tests {
             { packages."nixpkgs-flox".hello = { }; }
         "#};
 
-        assert_eq!(
-            std::fs::read_to_string(env.manifest_path()).unwrap(),
-            installed_env_str
-        );
+        assert_eq!(env.manifest_content().unwrap(), installed_env_str);
 
         let catalog = env.catalog(&nix, system.clone()).await.unwrap();
         assert!(!catalog.entries.is_empty());
@@ -747,10 +741,7 @@ mod tests {
             { packages."nixpkgs-flox".hello = { }; }
         "#};
 
-        assert_eq!(
-            std::fs::read_to_string(env.manifest_path()).unwrap(),
-            installed_env_str
-        );
+        assert_eq!(env.manifest_content().unwrap(), installed_env_str);
 
         let catalog = env.catalog(&nix, system.clone()).await.unwrap();
         assert!(!catalog.entries.is_empty());
@@ -759,10 +750,7 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(
-            std::fs::read_to_string(env.manifest_path()).unwrap(),
-            empty_env_str
-        );
+        assert_eq!(env.manifest_content().unwrap(), empty_env_str);
 
         let catalog = env.catalog(&nix, system.clone()).await.unwrap();
         assert!(catalog.entries.is_empty());
