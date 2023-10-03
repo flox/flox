@@ -319,14 +319,6 @@ where
 }
 
 impl<S: TransactionState> PathEnvironment<S> {
-    /// Remove gc-roots
-    ///
-    /// Currently stubbed out due to missing activation that could need linked results
-    pub fn delete_symlinks(&self) -> Result<bool, EnvironmentError2> {
-        // todo
-        Ok(false)
-    }
-
     /// Turn the environment into a flake attribute,
     /// a precise url to interact with the environment via nix
     ///
