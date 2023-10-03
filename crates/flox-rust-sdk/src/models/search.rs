@@ -197,65 +197,74 @@ pub struct SearchResult {
 
 #[cfg(test)]
 mod test {
-    use std::process::{Command, Output};
     use std::str::FromStr;
 
-    use anyhow::Error;
-
     use super::*;
-    const PKGDB: &'_ str = env!("PKGDB_BIN");
 
-    fn call_pkgdb(params: &SearchParams) -> Result<Output, Error> {
-        let params_json = serde_json::to_string(params).unwrap();
-        // Useful for debugging
-        // eprintln!("json input:\n{}", params_json);
-        let output = Command::new(PKGDB)
-            .arg("search")
-            .arg("--quiet")
-            .arg(params_json)
-            .output();
-        output.map_err(Error::from)
-    }
+    const EXAMPLE_SEARCH_TERM: &'_ str = "hello@2.12.1";
 
-    fn assert_no_err_msg(stderr: Vec<u8>) {
-        if !stderr.is_empty() {
-            let err_msg = String::from_utf8(stderr).unwrap();
-            // We know this will fail, but this way we'll get to see the error message from pkgdb
-            assert_eq!(String::from(""), err_msg);
+    const EXAMPLE_PARAMS: &'_ str = r#"{
+        "registry": {
+            "inputs": {},
+            "priority": [],
+            "defaults": {
+                "subtrees": null,
+                "stabilities": null
+            }
+        },
+        "systems": null,
+        "allow": {
+            "unfree": false,
+            "broken": false,
+            "licenses": null
+        },
+        "semver": {
+            "preferPreReleases": false
+        },
+        "query": {
+            "name": null,
+            "pname": null,
+            "version": null,
+            "semver": "2.12.1",
+            "match": "hello"
         }
-    }
+    }"#;
+
+    // This is illegible when put on a single line, but the deserializer will fail due to
+    // the newlines. You'll need to `EXAMPLE_SEARCH_RESULTS.replace('\n', "").as_bytes()`
+    // to deserialize it.
+    const EXAMPLE_SEARCH_RESULTS: &'_ str = r#"{
+        "broken": false,
+        "description": "A program that produces a familiar, friendly greeting",
+        "input": "nixpkgs",
+        "license": "GPL-3.0-or-later",
+        "path": [
+            "legacyPackages",
+            "aarch64-darwin",
+            "hello"
+        ],
+        "pname": "hello",
+        "unfree": false,
+        "version": "2.12.1"
+    }"#;
 
     #[test]
     fn serializes_search_params() {
         let params = SearchParams {
-            query: Query::from_str("hello@2.12.1").unwrap(),
+            query: Query::from_str(EXAMPLE_SEARCH_TERM).unwrap(),
             ..SearchParams::default()
         };
-        let results = call_pkgdb(&params).unwrap();
-        assert_no_err_msg(results.stderr);
+        let json = serde_json::to_string(&params).unwrap();
+        // Convert both to `serde_json::Value` to test equality without worrying about whitespace
+        let params_value: serde_json::Value = serde_json::from_str(&json).unwrap();
+        let example_value: serde_json::Value = serde_json::from_str(EXAMPLE_PARAMS).unwrap();
+        assert_eq!(params_value, example_value);
     }
 
     #[test]
     fn deserializes_search_results() {
-        let mut params = SearchParams::default();
-        params.query.r#match = Some("hello".into());
-        let nixpkgs_flakeref = FlakeRef::from_str("github:NixOS/nixpkgs/nixpkgs-unstable").unwrap();
-        let nixpkgs_registry = RegistryInput {
-            from: nixpkgs_flakeref,
-            subtrees: Some(vec!["legacyPackages".into()]),
-            stabilities: None,
-        };
-        params
-            .registry
-            .inputs
-            .insert("nixpkgs".into(), nixpkgs_registry);
-        params.systems = Some(vec!["aarch64-darwin".into()]);
-        let results = call_pkgdb(&params).unwrap();
-        assert_no_err_msg(results.stderr);
-        // Useful for debugging
-        // let string_results = String::from_utf8(results.stdout.clone()).unwrap();
-        // eprintln!("json results:\n{}", string_results);
-        let search_results = SearchResults::try_from(results.stdout.as_slice()).unwrap();
-        assert!(search_results.results.len() > 1);
+        let search_results =
+            SearchResults::try_from(EXAMPLE_SEARCH_RESULTS.replace('\n', "").as_bytes()).unwrap();
+        assert!(search_results.results.len() == 1);
     }
 }
