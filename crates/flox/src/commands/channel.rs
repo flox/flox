@@ -197,12 +197,7 @@ fn render_search_results(search_results: SearchResults, as_json: bool) -> Result
     // do buffered writes than to lock `stdout` on every write.
     let mut writer = BufWriter::new(std::io::stdout());
     for (attr, desc) in summarized_results.iter() {
-        writer.write_fmt(format_args!(
-            "{:<width$}  {}\n",
-            attr,
-            desc,
-            width = attr_col_width
-        ))?;
+        writeln!(&mut writer, "{attr:<attr_col_width$}  {desc}")?;
     }
     Ok(())
 }
