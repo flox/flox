@@ -55,3 +55,12 @@ jobs:
 
     - name: Bats Test
       run: nix run '.#flox-tests'
+
+  # TODO: remove this job after merging to `main'
+  # It is required because `Build flox-bash' is the name used in a GitHub branch
+  # protection rule.
+  deprecated:
+    name: Build flox-bash
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo 'TODO: Remove "Build flox-bash" branch protection rule.'
