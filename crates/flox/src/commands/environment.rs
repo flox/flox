@@ -245,8 +245,8 @@ pub struct Activate {
     #[bpaf(external(environment_args), group_help("Environment Options"))]
     environment_args: EnvironmentArgs,
 
-    #[bpaf(long, short, argument("ENV"))]
-    environment: Vec<EnvironmentRef>,
+    #[bpaf(external(environment_select), fallback(Default::default()))]
+    environment: EnvironmentSelect,
 
     #[allow(dead_code)] // TODO: not yet handled in impl
     #[bpaf(external(activate_run_args))]
@@ -257,15 +257,17 @@ impl Activate {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("activate");
 
-        let environment = self.environment.first().map(|e| e.as_ref());
-        let environment = resolve_environment(&flox, environment, "activate").await?;
+        let environment = self
+            .environment
+            .resolve(tempfile::tempdir_in(&flox.temp_dir)?.into_path())?
+            .into_dyn_environment();
 
         let command = Shell {
             eval: EvaluationArgs {
                 impure: true.into(),
                 ..Default::default()
             },
-            installables: [environment.flake_attribute(&flox.system).into()].into(),
+            installables: [environment.flake_attribute(flox.system.clone()).into()].into(),
             ..Default::default()
         };
 
@@ -868,24 +870,6 @@ impl Upgrade {
 
         flox_forward(&flox).await
     }
-}
-
-async fn resolve_environment<'flox>(
-    flox: &'flox Flox,
-    environment_name: Option<&str>,
-    _subcommand: &str,
-) -> Result<PathEnvironment<Original>, anyhow::Error> {
-    let environment_refs =
-        flox_rust_sdk::models::environment_ref::EnvironmentRef::find(flox, environment_name)?;
-    let environment_ref = match environment_refs.len() {
-        0 => bail!("No matching environments found"),
-        1 => &environment_refs[0],
-        _ => bail!("Multiple environments found"),
-    };
-    let environment = environment_ref
-        .to_env(flox.temp_dir.clone())
-        .context("Could not use environment")?;
-    Ok(environment)
 }
 
 fn activate_run_args() -> impl Parser<Option<(String, Vec<String>)>> {
