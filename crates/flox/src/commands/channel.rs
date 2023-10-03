@@ -72,7 +72,7 @@ pub struct Search {
     /// `node-semver` syntax.
     /// Exs: `(hello|coreutils)`, `node@>=16`, `coreutils@9.1`
     #[bpaf(positional("search-term"))]
-    pub search_term: Option<String>,
+    pub search_term: String,
 }
 
 // Try Using:
@@ -88,12 +88,6 @@ pub struct Search {
 impl Search {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("search");
-
-        if self.search_term.is_none() {
-            bail!(
-                "'flox search' requires at least one search term, run 'flox search -h' for more information."
-            )
-        }
 
         let search_params = construct_search_params(&self.search_term, &flox)?;
         let search_params_json = serde_json::to_string(&search_params)?;
@@ -123,7 +117,7 @@ impl Search {
     }
 }
 
-fn construct_search_params(search_term: &Option<String>, flox: &Flox) -> Result<SearchParams> {
+fn construct_search_params(search_term: &str, flox: &Flox) -> Result<SearchParams> {
     let channels = flox
         .channels
         .iter()
@@ -158,7 +152,7 @@ fn construct_search_params(search_term: &Option<String>, flox: &Flox) -> Result<
     };
 
     // We've already checked that the search term is Some(_)
-    let query = Query::from_str(search_term.as_ref().unwrap())?;
+    let query = Query::from_str(search_term)?;
 
     Ok(SearchParams {
         registry,
