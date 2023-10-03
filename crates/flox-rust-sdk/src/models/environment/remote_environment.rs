@@ -63,6 +63,11 @@ impl Environment for RemoteEnvironment {
         todo!()
     }
 
+    /// Extract the current content of the manifest
+    fn manifest_content(&self) -> Result<String, EnvironmentError2> {
+        todo!()
+    }
+
     /// Return the [EnvironmentRef] for the environment for identification
     #[allow(unused)]
     fn environment_ref(&self) -> &EnvironmentRef {

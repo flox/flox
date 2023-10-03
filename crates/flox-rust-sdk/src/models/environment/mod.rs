@@ -77,6 +77,9 @@ pub trait Environment {
         system: System,
     ) -> Result<EnvCatalog, EnvironmentError2>;
 
+    /// Extract the current content of the manifest
+    fn manifest_content(&self) -> Result<String, EnvironmentError2>;
+
     /// Return the [EnvironmentRef] for the environment for identification
     fn environment_ref(&self) -> &EnvironmentRef;
 

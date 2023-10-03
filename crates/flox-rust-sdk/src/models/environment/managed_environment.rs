@@ -53,6 +53,11 @@ impl Environment for ManagedEnvironment {
         todo!()
     }
 
+    /// Extract the current content of the manifest
+    fn manifest_content(&self) -> Result<String, EnvironmentError2> {
+        todo!()
+    }
+
     #[allow(unused)]
     async fn catalog(
         &self,
