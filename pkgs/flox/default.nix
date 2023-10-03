@@ -28,6 +28,7 @@
   gh,
   pkgsFor,
   floxVersion,
+  flox-pkgdb,
 }: let
   # crane (<https://crane.dev/>) library for building rust packages
   craneLib = inputs.crane.mkLib pkgsFor;
@@ -41,7 +42,7 @@
       NIX_BIN = flox-bash.outPath + "/libexec/flox/nix";
       GIT_BIN = gitMinimal.outPath + "/bin/git";
       PARSER_UTIL_BIN = parser-util.outPath + "/bin/parser-util";
-      PKGDB_BIN = pkgdb.outPath + "/bin/pkgdb";
+      PKGDB_BIN = flox-pkgdb.outPath + "/bin/pkgdb";
       FLOX_GH_BIN = flox-gh.outPath + "/bin/flox-gh";
       GH_BIN = gh.outPath + "/bin/gh";
 

@@ -32,7 +32,6 @@
   pandoc,
   parser-util,
   ps,
-  pkgs,
   shellcheck,
   shfmt,
   substituteAll,
@@ -41,14 +40,13 @@
   semver,
   builtfilter-rs,
   floxVersion,
+  flox-pkgdb,
+  unixtools,
+  gitMinimal,
+  cacert,
+  glibcLocales,
+  darwin,
 }: let
-  pkgdb = inputs.pkgdb.packages.flox-pkgdb;
-  # The getent package can be found in pkgs.unixtools.
-  inherit (pkgs.unixtools) getent;
-
-  # Choose a smaller version of git.
-  git = pkgs.gitMinimal;
-
   nixPatched = nixVersions.nix_2_15.overrideAttrs (oldAttrs: {
     patches =
       (oldAttrs.patches or [])
@@ -68,16 +66,16 @@
       (builtins.readFile ./activate.bash)
       + (builtins.readFile ./activate.darwin.bash)
     );
-    inherit (pkgs) cacert;
-    inherit (pkgs.darwin) locale;
-    coreFoundation = pkgs.darwin.CF;
+    inherit cacert;
+    inherit (darwin) locale;
+    coreFoundation = darwin.CF;
   };
   floxActivateBashLinux = substituteAll {
     src = builtins.toFile "activate.bash" (
       (builtins.readFile ./activate.bash)
       + (builtins.readFile ./activate.linux.bash)
     );
-    inherit (pkgs) cacert glibcLocales;
+    inherit cacert glibcLocales;
   };
   floxActivateBash =
     if hostPlatform.isLinux
@@ -107,8 +105,8 @@ in
       findutils
       flox-gh
       gawk
-      getent
-      git
+      unixtools.getent
+      gitMinimal
       gh
       gnugrep
       gnused
@@ -127,22 +125,22 @@ in
       semver
       builtfilter-rs
       parser-util
-      pkgdb
+      flox-pkgdb
     ];
     makeFlags =
       [
         "PREFIX=$(out)"
         "VERSION=${version}"
         "FLOXPATH=$(out)/libexec/flox:${lib.makeBinPath buildInputs}"
-        "NIXPKGS_CACERT_BUNDLE_CRT=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
+        "NIXPKGS_CACERT_BUNDLE_CRT=${cacert}/etc/ssl/certs/ca-bundle.crt"
         "FLOX_ACTIVATE_BASH=${floxActivateBash}"
       ]
       ++ lib.optionals hostPlatform.isLinux [
-        "LOCALE_ARCHIVE=${pkgs.glibcLocales}/lib/locale/locale-archive"
+        "LOCALE_ARCHIVE=${glibcLocales}/lib/locale/locale-archive"
       ]
       ++ lib.optionals hostPlatform.isDarwin [
-        "NIX_COREFOUNDATION_RPATH=${pkgs.darwin.CF}/Library/Frameworks"
-        "PATH_LOCALE=${pkgs.darwin.locale}/share/locale"
+        "NIX_COREFOUNDATION_RPATH=${darwin.CF}/Library/Frameworks"
+        "PATH_LOCALE=${darwin.locale}/share/locale"
       ];
 
     postInstall = ''
@@ -161,9 +159,9 @@ in
       #
       mkdir -p $out/libexec
       makeWrapper ${nixPatched}/bin/nix $out/libexec/flox/nix --argv0 '$0' \
-        --prefix PATH : "${lib.makeBinPath [git]}"
+        --prefix PATH : "${lib.makeBinPath [gitMinimal]}"
       makeWrapper ${gh}/bin/gh $out/libexec/flox/gh --argv0 '$0' \
-        --prefix PATH : "${lib.makeBinPath [git]}"
+        --prefix PATH : "${lib.makeBinPath [gitMinimal]}"
 
       # Rewrite /usr/bin/env bash to the full path of bashInteractive.
       # Use --host to resolve using the runtime path.
