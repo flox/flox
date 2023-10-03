@@ -4,6 +4,7 @@ use std::str::FromStr;
 
 use derive_more::{AsRef, Deref, Display};
 use runix::installable::FlakeAttribute;
+use serde_with::{DeserializeFromStr, SerializeDisplay};
 use thiserror::Error;
 
 use super::environment::path_environment::{Original, PathEnvironment};
@@ -14,7 +15,7 @@ use crate::providers::git::GitProvider;
 pub static DEFAULT_NAME: &str = "default";
 pub static DEFAULT_OWNER: &str = "local";
 
-#[derive(Debug, Clone, PartialEq, AsRef, Deref, Display)]
+#[derive(Debug, Clone, PartialEq, AsRef, Deref, Display, DeserializeFromStr, SerializeDisplay)]
 pub struct EnvironmentOwner(String);
 
 impl FromStr for EnvironmentOwner {
@@ -29,7 +30,7 @@ impl FromStr for EnvironmentOwner {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, AsRef, Display)]
+#[derive(Debug, Clone, PartialEq, AsRef, Display, DeserializeFromStr, SerializeDisplay)]
 pub struct EnvironmentName(String);
 
 impl FromStr for EnvironmentName {

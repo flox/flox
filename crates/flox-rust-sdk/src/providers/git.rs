@@ -361,6 +361,29 @@ impl GitCommandProvider {
         }
     }
 
+    pub fn commit_on_branch(&self, commit: &str, branch: &str) -> Result<bool, GitCommandError> {
+        if !self.contains_commit(commit)? {
+            return Ok(false);
+        }
+
+        let result = GitCommandProvider::run_command(
+            GitCommandProvider::new_command(&Some(&self.path))
+                .arg("merge-base")
+                .arg("--is-ancestor")
+                .arg(commit)
+                .arg(branch),
+        );
+        match result {
+            Ok(_) => Ok(true),
+            Err(GitCommandError::BadExit(_, stdout, stderr))
+                if stdout.is_empty() && stderr.is_empty() =>
+            {
+                Ok(false)
+            },
+            Err(e) => Err(e),
+        }
+    }
+
     /// Create branch at a specified revision
     pub fn create_branch(&self, name: &str, rev: &str) -> Result<(), GitCommandError> {
         GitCommandProvider::run_command(
@@ -372,6 +395,7 @@ impl GitCommandProvider {
         Ok(())
     }
 
+    /// Reset branch to rev or create it if it does not exist
     pub fn reset_branch(&self, name: &str, rev: &str) -> Result<(), GitCommandError> {
         GitCommandProvider::run_command(
             GitCommandProvider::new_command(&Some(&self.path))
@@ -897,7 +921,7 @@ pub mod tests {
         (git_command_provider, tempdir_handle)
     }
 
-    async fn commit_file(repo: &GitCommandProvider, filename: &str) {
+    pub async fn commit_file(repo: &GitCommandProvider, filename: &str) {
         let file = repo.path.join(filename);
         fs::write(&file, filename).unwrap();
         repo.add(&[&file]).await.unwrap();
@@ -967,6 +991,40 @@ pub mod tests {
                 _
             ))),
         ));
+    }
+
+    #[tokio::test]
+    async fn test_commit_on_branch() {
+        let (repo, _tempdir_handle) = init_temp_repo(false).await;
+        repo.checkout("branch_1", true).await.unwrap();
+        commit_file(&repo, "dummy").await;
+        let hash_1 = repo.branch_hash("branch_1").unwrap();
+        commit_file(&repo, "dummy_2").await;
+
+        assert_ne!(repo.branch_hash("branch_1").unwrap(), hash_1);
+        assert!(repo.commit_on_branch(&hash_1, "branch_1").unwrap());
+    }
+
+    #[tokio::test]
+    async fn test_commit_not_on_branch() {
+        let (repo, _tempdir_handle) = init_temp_repo(false).await;
+        repo.checkout("branch_1", true).await.unwrap();
+        commit_file(&repo, "dummy").await;
+        let hash_1 = repo.branch_hash("branch_1").unwrap();
+
+        repo.checkout("branch_2", true).await.unwrap();
+        commit_file(&repo, "dummy_2").await;
+
+        assert!(!repo.commit_on_branch(&hash_1, "branch_2").unwrap());
+    }
+
+    #[tokio::test]
+    async fn test_commit_not_on_any_branch() {
+        let (repo, _tempdir_handle) = init_temp_repo(false).await;
+        repo.checkout("branch_1", true).await.unwrap();
+        commit_file(&repo, "dummy").await;
+
+        assert!(!repo.commit_on_branch("XXX", "branch_1").unwrap());
     }
 
     #[tokio::test]
@@ -1120,7 +1178,7 @@ pub mod tests {
     }
 
     #[tokio::test]
-    async fn test_reset_branch() {
+    async fn test_reset_branch_existing() {
         // create two branches in repo: branch_1 and branch_2
         let (repo, _tempdir_handle) = init_temp_repo(false).await;
         repo.checkout("branch_1", true).await.unwrap();
@@ -1134,5 +1192,21 @@ pub mod tests {
         assert_ne!(repo.branch_hash("branch_1").unwrap(), hash_branch_2);
         repo.reset_branch("branch_1", &hash_branch_2).unwrap();
         assert_eq!(repo.branch_hash("branch_1").unwrap(), hash_branch_2)
+    }
+
+    #[tokio::test]
+    async fn test_reset_branch_new() {
+        // create two branches in repo: branch_1 and branch_2
+        let (repo, _tempdir_handle) = init_temp_repo(false).await;
+        repo.checkout("branch_1", true).await.unwrap();
+        commit_file(&repo, "dummy").await;
+
+        repo.checkout("branch_2", true).await.unwrap();
+        commit_file(&repo, "dummy_2").await;
+        let hash_branch_2 = repo.branch_hash("branch_2").unwrap();
+
+        // reset branch_1 to branch_2
+        repo.reset_branch("branch_3", &hash_branch_2).unwrap();
+        assert_eq!(repo.branch_hash("branch_3").unwrap(), hash_branch_2)
     }
 }
