@@ -44,6 +44,7 @@ setup_file() {
   export FLOX_FEATURES_CHANNELS=rust;
 }
 
+
 # ---------------------------------------------------------------------------- #
 
 @test "'flox search' can be called at all" {

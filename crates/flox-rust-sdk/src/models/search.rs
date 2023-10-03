@@ -22,6 +22,11 @@ pub enum SearchError {
 }
 
 /// The input parameters for the `pkgdb search` command
+///
+/// C++ docs: https://flox.github.io/pkgdb/structflox_1_1pkgdb_1_1PkgQueryArgs.html
+///
+/// Note that `pkgdb` uses inheritance/mixins to construct the search parameters, so some fields
+/// are on `PkgQueryArgs` and some are on `PkgDescriptorBase`.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct SearchParams {
     /// The collection of package sources to search
@@ -37,6 +42,8 @@ pub struct SearchParams {
 }
 
 /// A collection of package sources
+///
+/// C++ docs: https://flox.github.io/pkgdb/classflox_1_1Registry.html
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Registry {
     /// The names and flakerefs of the package sources
@@ -49,6 +56,8 @@ pub struct Registry {
 }
 
 /// Default search parameters for a package source
+///
+/// C++ docs: https://flox.github.io/pkgdb/structflox_1_1InputPreferences.html
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct RegistryDefaults {
     /// An optional attr path to restrict the search to
@@ -58,6 +67,9 @@ pub struct RegistryDefaults {
 }
 
 /// A package source
+///
+/// TODO: flatten a RegistryDefaults into this struct
+/// C++ docs: https://flox.github.io/pkgdb/structflox_1_1RegistryInput.html
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RegistryInput {
     /// The flake containing packages
@@ -68,7 +80,9 @@ pub struct RegistryInput {
     pub stabilities: Option<Vec<Stability>>,
 }
 
-/// Which packages should be allowed in search results
+/// Which packages should be allowed in search results.
+///
+/// C++ docs: https://flox.github.io/pkgdb/structflox_1_1pkgdb_1_1QueryPreferences_1_1Allows.html
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AllowOpts {
     /// Whether packages with unfree licenses should be included
@@ -79,6 +93,9 @@ pub struct AllowOpts {
     pub licenses: Option<Vec<String>>,
 }
 
+/// Options regarding the ability to perform a semver search.
+///
+/// C++ docs: https://flox.github.io/pkgdb/structflox_1_1pkgdb_1_1QueryPreferences_1_1Semver.html
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct SemverOpts {
@@ -93,6 +110,10 @@ pub struct SemverOpts {
 /// and `description` fields.
 ///
 /// The result of the query will be the logical AND of all provided parameters.
+///
+/// C++ docs: https://flox.github.io/pkgdb/structflox_1_1search_1_1SearchQuery.html
+/// Note that the `match` field here becomes the `partialMatch` field on the
+/// C++ struct.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Query {
     /// Match against the full name of the package e.g. `<pname>-<version>`
