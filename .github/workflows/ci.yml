@@ -40,8 +40,9 @@ jobs:
     - name: Build flox-bash
       run: nix build '.#flox-bash' -L --print-out-paths --no-link
 
+    # We want this link in order to run `flox-tests'
     - name: Build flox
-      run: nix build -L --print-out-paths --no-link
+      run: nix build -L --print-out-paths
 
     - name: Build flox-tests
       run: nix build '.#flox-tests' -L --print-out-paths --no-link
