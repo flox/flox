@@ -7,7 +7,12 @@
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/23.05";
 
   # For `gh` CLI ( need a specific version )
-  inputs.nixpkgs-for-gh.url = "github:NixOS/nixpkgs/46ed466081b9cad1125b11f11a2af5cc40b942c7";
+  inputs.nixpkgs-for-gh = {
+    type = "github";
+    owner = "NixOS";
+    repo = "nixpkgs";
+    rev = "46ed466081b9cad1125b11f11a2af5cc40b942c7";
+  };
 
   # Do not override `nixpkgs` input
   inputs.pkgdb.url = "github:flox/pkgdb";
@@ -71,7 +76,8 @@
     # ------------------------------------------------------------------------ #
 
     overlays.deps = nixpkgs.lib.composeManyExtensions [
-      parser-util.overlays.default
+      parser-util.overlays.default # for `parser-util'
+      floco.overlays.default # for `semver'
 
       # /Shrinkwrap/ `pkgdb' to preserve `cc' and `nix' versions.
       (final: prev: let
