@@ -10,15 +10,8 @@ on:
 jobs:
 
   build:
-    name: Build ${{ matrix.package }}
+    name: Build flox
     runs-on: ubuntu-latest
-
-    strategy:
-      matrix:
-        include:
-          - package: flox
-          - package: flox-bash
-          - package: nix-editor
 
     steps:
     - name: Checkout
@@ -35,16 +28,29 @@ jobs:
         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
-    - name: Build
-      run: nix build '.#${{ matrix.package }}' -L --print-out-paths
+    - name: Build flox-gh
+      run: nix build '.#flox-gh' -L --print-out-paths --no-link
 
-    - name: Test
-      if: ${{ matrix.package == 'flox' }}
-      run: nix develop -c cargo test --locked --workspace
+    - name: Build nix-editor
+      run: nix build '.#nix-editor' -L --print-out-paths --no-link
+
+    - name: Build builtfilter-rs
+      run: nix build '.#builtfilter-rs' -L --print-out-paths --no-link
+
+    - name: Build flox-bash
+      run: nix build '.#flox-bash' -L --print-out-paths --no-link
+
+    - name: Build flox
+      run: nix build -L --print-out-paths --no-link
+
+    - name: Build flox-tests
+      run: nix build '.#flox-tests' -L --print-out-paths --no-link
 
     - name: Cache the store
       run: nix copy --all --to "$FLOX_SUBSTITUTER" -vv
 
-    - name: Test
-      if: ${{ matrix.package == 'flox' }}
+    - name: Rust Tests
+      run: nix develop -c cargo test --locked --workspace
+
+    - name: Bats Test
       run: nix run '.#flox-tests'
