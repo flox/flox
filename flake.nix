@@ -4,7 +4,7 @@
 #
 # ---------------------------------------------------------------------------- #
 {
-  inputs.nixpkgs.url = "github:NixOS/nixpkgs";
+  inputs.nixpkgs.url = "github:NixOS/nixpkgs/23.05";
 
   # For `gh` CLI ( need a specific version )
   inputs.nixpkgs-for-gh.url = "github:NixOS/nixpkgs/46ed466081b9cad1125b11f11a2af5cc40b942c7";
