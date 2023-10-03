@@ -10,9 +10,14 @@ on:
 jobs:
 
   build:
-    name: Build flox
-    runs-on: ubuntu-latest
+    name: Build and test flox on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
 
+    strategy:
+      matrix:
+        os: 
+        - ubuntu-latest
+        - macos-latest
     steps:
     - name: Checkout
       uses: actions/checkout@v3
@@ -27,6 +32,7 @@ jobs:
         substituter-key: ${{ secrets.FLOX_STORE_PUBLIC_NIX_SECRET_KEY }}
         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
 
     - name: Build flox-gh
       run: nix build '.#flox-gh' -L --print-out-paths --no-link
@@ -57,11 +63,18 @@ jobs:
       run: nix run '.#flox-tests'
 
   # TODO: remove this job after merging to `main'
-  # It is required because `Build flox-bash' is the name used in a GitHub branch
+  # It is required because `Build flox-bash on *' is the name used in a GitHub branch
   # protection rule.
-  deprecated:
-    name: Build flox-bash
+  deprecated-linux:
+    name: Build flox-bash on ubuntu-latest
     runs-on: ubuntu-latest
     steps:
       - run: |
-          echo 'TODO: Remove "Build flox-bash" branch protection rule.'
+          echo 'TODO: Remove "Build flox-bash on ubuntu-latest" branch protection rule.'
+  
+  deprecated-darwin:
+    name: Build flox-bash on macos-latest
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo 'TODO: Remove "Build flox-bash on macos-latest" branch protection rule.'

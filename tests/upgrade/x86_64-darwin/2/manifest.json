@@ -1,0 +1,26 @@
+{
+  "elements": [
+    {
+      "active": true,
+      "attrPath": "evalCatalog.x86_64-darwin.stable.curl",
+      "originalUrl": "nixpkgs-flox-upgrade-test",
+      "outputs": null,
+      "storePaths": [
+        "/nix/store/sg2j79m7vbvynfd9kpn2hycva2c2y92w-curl-7.86.0-bin",
+        "/nix/store/1c0bg8p6gm95pqfhq3aphw0lyjp10blr-curl-7.86.0-man"
+      ],
+      "url": "flake:nixpkgs-flox-upgrade-test/e4327de84f3aa8417e332a864c3b58c83b44832b"
+    },
+    {
+      "active": true,
+      "attrPath": "evalCatalog.x86_64-darwin.stable.ripgrep",
+      "originalUrl": "nixpkgs-flox-upgrade-test",
+      "outputs": null,
+      "storePaths": [
+        "/nix/store/1h3ymrn6mai4y3z1gi13yl5alf15xixd-ripgrep-13.0.0"
+      ],
+      "url": "flake:nixpkgs-flox-upgrade-test/e4327de84f3aa8417e332a864c3b58c83b44832b"
+    }
+  ],
+  "version": 2
+}

@@ -1,0 +1,87 @@
+{
+  "nixpkgs-flox-upgrade-test": {
+    "x86_64-darwin": {
+      "stable": {
+        "curl": {
+          "latest": {
+            "cache": {
+              "bin": {
+                "https://cache.nixos.org": {}
+              },
+              "dev": {
+                "https://cache.nixos.org": {}
+              },
+              "devdoc": {
+                "https://cache.nixos.org": {}
+              },
+              "man": {
+                "https://cache.nixos.org": {}
+              },
+              "out": {
+                "https://cache.nixos.org": {}
+              }
+            },
+            "element": {
+              "attrPath": [
+                "legacyPackages",
+                "x86_64-darwin",
+                "curl"
+              ],
+              "originalUrl": "flake:nixpkgs",
+              "outputs": null,
+              "storePaths": [
+                "/nix/store/sg2j79m7vbvynfd9kpn2hycva2c2y92w-curl-7.86.0-bin",
+                "/nix/store/1c0bg8p6gm95pqfhq3aphw0lyjp10blr-curl-7.86.0-man"
+              ],
+              "url": "github:flox/nixpkgs/fad51abd42ca17a60fc1d4cb9382e2d79ae31836"
+            },
+            "eval": {
+              "meta": {
+                "description": "A command line tool for transferring files with URL syntax",
+                "outputsToInstall": [
+                  "bin",
+                  "man"
+                ],
+                "position": "/nix/store/wh4nnz2ga9lpxl406ia1cnsi891xaa4x-source/pkgs/tools/networking/curl/default.nix:185",
+                "unfree": false
+              },
+              "name": "curl-7.86.0",
+              "outputs": {
+                "bin": "/nix/store/sg2j79m7vbvynfd9kpn2hycva2c2y92w-curl-7.86.0-bin",
+                "dev": "/nix/store/7zcmqgqnf9pmp3j5b97vd86aj7j0ch4v-curl-7.86.0-dev",
+                "devdoc": "/nix/store/vqiralva8ryxigjzx27b91cl1p08l5r3-curl-7.86.0-devdoc",
+                "man": "/nix/store/1c0bg8p6gm95pqfhq3aphw0lyjp10blr-curl-7.86.0-man",
+                "out": "/nix/store/88jadv0bnmkkyfplq51gmjwa6zzfjk1l-curl-7.86.0"
+              },
+              "pname": "curl",
+              "system": "x86_64-darwin",
+              "version": "7.86.0"
+            },
+            "publish_element": {
+              "attrPath": [
+                "evalCatalog",
+                "x86_64-darwin",
+                "stable",
+                "curl"
+              ],
+              "originalUrl": "nixpkgs-flox-upgrade-test",
+              "storePaths": [
+                "/nix/store/sg2j79m7vbvynfd9kpn2hycva2c2y92w-curl-7.86.0-bin",
+                "/nix/store/1c0bg8p6gm95pqfhq3aphw0lyjp10blr-curl-7.86.0-man"
+              ],
+              "url": "flake:nixpkgs-flox-upgrade-test/e4327de84f3aa8417e332a864c3b58c83b44832b"
+            },
+            "schema": 1,
+            "source": {
+              "locked": {
+                "lastModified": 1671983799,
+                "revCount": 437630
+              }
+            },
+            "type": "catalogRender"
+          }
+        }
+      }
+    }
+  }
+}

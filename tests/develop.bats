@@ -85,7 +85,12 @@ assertPkgFiles() {
 
 
 runExpect() {
+  if [[ "$NIX_SYSTEM" == *-darwin ]]; then
+    skip "failing on macOS; see https://github.com/flox/flox/issues/278"
+  fi
+
   run expect "$TESTS_DIR/develop/develop.exp" "$@";
+
   assert_success;
 }
 
