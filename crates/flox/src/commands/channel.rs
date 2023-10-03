@@ -144,7 +144,7 @@ fn construct_search_params(search_term: &Option<String>, flox: &Flox) -> Result<
     for (_, entry) in channels {
         priority.push(entry.from.id.to_string());
         let input = RegistryInput {
-            from: FlakeRef::Indirect(entry.from.clone()),
+            from: entry.to.clone(),
             // TODO: handle `subtrees` and `stabilities`
             subtrees: None,
             stabilities: None,
