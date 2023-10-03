@@ -1,4 +1,4 @@
-bats_invocation := "flox run '.#flox-tests' -- -- --flox target/debug/flox"
+bats_invocation := "nix run '.#flox-tests' -- --flox target/debug/flox"
 cargo_test_invocation := "cargo test --workspace"
 
 _default:
@@ -7,7 +7,7 @@ _default:
 # Run the 'bats' test suite
 bats-tests +test_files="":
     @cargo build
-    @flox build flox-bash
+    @nix build '.#flox-bash'
     @export FLOX_SH_PATH="$PWD/result"
     @export FLOX_SH="$PWD/result/libexec/flox/flox"
     @{{bats_invocation}} {{test_files}}
@@ -30,4 +30,4 @@ test-all: impure-tests bats-tests
 work:
     @# Note that this command is only really useful if you have
     @# `just` installed outside of the `flox` environment already
-    @flox develop rust-env
+    @nix develop
