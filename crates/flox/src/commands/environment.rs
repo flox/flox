@@ -593,6 +593,7 @@ pub struct Export {
     #[bpaf(external(environment_args), group_help("Environment Options"))]
     environment_args: EnvironmentArgs,
 
+    #[allow(unused)] // Command currently forwarded
     #[bpaf(external(environment_select), fallback(Default::default()))]
     environment: EnvironmentSelect,
 }
@@ -616,6 +617,7 @@ pub struct Generations {
     #[bpaf(long)]
     json: bool,
 
+    #[allow(unused)] // Command currently forwarded
     #[bpaf(external(environment_select), fallback(Default::default()))]
     environment: EnvironmentSelect,
 }
@@ -627,6 +629,7 @@ impl Generations {
         flox_forward(&flox).await
     }
 }
+
 /// access to the git CLI for floxmeta repository
 #[derive(Bpaf, Clone)]
 pub struct Git {
@@ -634,6 +637,7 @@ pub struct Git {
     #[bpaf(external(environment_args), group_help("Environment Options"))]
     environment_args: EnvironmentArgs,
 
+    #[allow(unused)] // Command currently forwarded
     #[bpaf(external(environment_select), fallback(Default::default()))]
     environment: EnvironmentSelect,
 
@@ -661,6 +665,7 @@ pub struct History {
     #[bpaf(external(environment_args), group_help("Environment Options"))]
     environment_args: EnvironmentArgs,
 
+    #[allow(unused)] // Command currently forwarded
     #[bpaf(external(environment_select), fallback(Default::default()))]
     environment: EnvironmentSelect,
 }
@@ -680,6 +685,7 @@ pub struct Import {
     #[bpaf(external(environment_args), group_help("Environment Options"))]
     environment_args: EnvironmentArgs,
 
+    #[allow(unused)] // Command currently forwarded
     #[bpaf(external(environment_select), fallback(Default::default()))]
     environment: EnvironmentSelect,
 
@@ -826,6 +832,7 @@ pub struct SwitchGeneration {
     #[bpaf(external(environment_args), group_help("Environment Options"))]
     environment_args: EnvironmentArgs,
 
+    #[allow(unused)] // Command currently forwarded
     #[bpaf(external(environment_select), fallback(Default::default()))]
     environment: EnvironmentSelect,
 
@@ -849,6 +856,7 @@ pub struct Upgrade {
     #[bpaf(external(environment_args), group_help("Environment Options"))]
     environment_args: EnvironmentArgs,
 
+    #[allow(unused)] // Command currently forwarded
     #[bpaf(external(environment_select), fallback(Default::default()))]
     environment: EnvironmentSelect,
 
