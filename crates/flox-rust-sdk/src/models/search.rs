@@ -26,7 +26,7 @@ pub enum SearchError {
 pub struct SearchParams {
     /// The collection of package sources to search
     pub registry: Registry,
-    /// Which systems to search under, `None` falls back to `pkgdb` defaults
+    /// Which systems to search under. `None` falls back to `pkgdb` defaults
     pub systems: Option<Vec<System>>,
     /// Options for which packages should be allowed in search results
     pub allow: AllowOpts,
