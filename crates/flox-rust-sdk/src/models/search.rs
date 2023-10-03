@@ -112,24 +112,21 @@ impl FromStr for Query {
 
     // This can't actually error, but the trait requires an error type
     fn from_str(search_term: &str) -> Result<Self, Self::Err> {
-        let q = match search_term.find('@') {
-            Some(idx) => {
+        let q = match search_term.split_once('@') {
+            Some((package, semver)) => {
                 // If we get a search term ending in '@' it most likely means the
                 // user didn't quote a search term that included a '>' character.
-                if idx >= search_term.len() - 1 {
+                if semver.is_empty() {
                     return Err(SearchError::SearchTerm(search_term.into()));
                 }
-                // Splitting at `idx` would include the `@`
-                let package = String::from(&search_term[..idx]);
-                let semver = String::from(&search_term[idx + 1..]);
                 Query {
-                    semver: Some(semver),
-                    r#match: Some(package),
+                    semver: Some(semver.to_string()),
+                    r#match: Some(package.to_string()),
                     ..Query::default()
                 }
             },
             None => Query {
-                r#match: Some(search_term.into()),
+                r#match: Some(search_term.to_string()),
                 ..Query::default()
             },
         };
