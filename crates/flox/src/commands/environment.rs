@@ -556,9 +556,7 @@ impl WipeHistory {
             .resolve(tempfile::tempdir_in(&flox.temp_dir)?.into_path())?
             .into_dyn_environment();
 
-        if todo!()
-        /* env.delete_symlinks()? */
-        {
+        if env.delete_symlinks()? {
             // The flox nix instance is created with `--quiet --quiet`
             // because nix logs are passed to stderr unfiltered.
             // nix store gc logs are more useful,

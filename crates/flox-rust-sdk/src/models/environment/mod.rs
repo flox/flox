@@ -93,6 +93,11 @@ pub trait Environment {
     fn delete(self) -> Result<(), EnvironmentError2>
     where
         Self: Sized;
+
+    /// Remove gc-roots
+    fn delete_symlinks(&self) -> Result<bool, EnvironmentError2> {
+        Ok(false)
+    }
 }
 
 #[derive(Debug, Error)]
