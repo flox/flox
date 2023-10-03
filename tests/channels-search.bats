@@ -19,6 +19,8 @@ project_setup() {
   rm -rf "$PROJECT_DIR"
   mkdir -p "$PROJECT_DIR"
   pushd "$PROJECT_DIR" >/dev/null || return
+  PROJECT_REGISTRY="$BATS_TEST_DIR/search/registry.json"
+  export NIX_CONFIG="flake-registry = $PWD/registry.json"
 }
 
 project_teardown() {
@@ -56,6 +58,7 @@ setup_file() {
   run "$FLOX_CLI" search;
   assert_failure;
 }
+
 
 # ---------------------------------------------------------------------------- #
 

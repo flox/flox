@@ -1,0 +1,17 @@
+{
+    "flakes": [
+        {
+            "from": {
+                "id": "whatever",
+                "type": "indirect"
+            },
+            "to": {
+                "owner": "flox",
+                "repo": "nixpkgs-flox",
+                "type": "github",
+                "rev": "7b381d8d081e946d48390b4755bd5f1ce47a0711"
+            }
+        }
+    ],
+    "version": 2
+}
