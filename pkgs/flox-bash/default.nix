@@ -32,7 +32,6 @@
   pandoc,
   parser-util,
   ps,
-  flox-pkgdb,
   pkgs,
   shellcheck,
   shfmt,
@@ -43,6 +42,7 @@
   builtfilter-rs,
   floxVersion,
 }: let
+  pkgdb = inputs.pkgdb.packages.flox-pkgdb;
   # The getent package can be found in pkgs.unixtools.
   inherit (pkgs.unixtools) getent;
 
@@ -127,7 +127,7 @@ in
       semver
       builtfilter-rs
       parser-util
-      flox-pkgdb
+      pkgdb
     ];
     makeFlags =
       [
