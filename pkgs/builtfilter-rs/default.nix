@@ -3,7 +3,7 @@
   lib,
   ...
 }: let
-  src = ../../builtfilter-rs;
+  src = builtins.path {path = ../../builtfilter-rs;};
   cargoToml = lib.importTOML (src + "/Cargo.toml");
 in
   pkgs.rustPlatform.buildRustPackage

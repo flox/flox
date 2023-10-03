@@ -1,7 +1,4 @@
 {
-  # self is a flake if this package is built locally, but if it's called as a proto, it's just the
-  # source
-  self,
   flox-src,
   inputs,
   lib,
@@ -56,8 +53,8 @@
       NIX_ZSH_COMPLETION_SCRIPT = ../../crates/flox/src/static/nix_zsh_completion.sh;
 
       # bundling of internally used nix scripts
-      FLOX_RESOLVER_SRC = ../../resolver;
-      FLOX_ANALYZER_SRC = ../../flox-bash/lib/catalog-ingest;
+      FLOX_RESOLVER_SRC = builtins.path {path = ../../resolver;};
+      FLOX_ANALYZER_SRC = builtins.path {path = ../../flox-bash/lib/catalog-ingest;};
 
       # Metrics subsystem configuration
       METRICS_EVENTS_URL = "https://events.flox.dev/capture";
@@ -77,7 +74,7 @@
       NIX_TARGET_SYSTEM = targetPlatform.system;
 
       # flox env template used to create new environments
-      FLOX_ENV_TEMPLATE = ../../flox-bash/lib/templateFloxEnv;
+      FLOX_ENV_TEMPLATE = builtins.path {path = ../../flox-bash/lib/templateFloxEnv;};
     }
     // lib.optionalAttrs hostPlatform.isDarwin {
       NIX_COREFOUNDATION_RPATH = "${darwin.CF}/Library/Frameworks";

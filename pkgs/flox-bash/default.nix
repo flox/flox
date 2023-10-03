@@ -1,5 +1,4 @@
 {
-  self,
   flox-src,
   inputs,
   stdenv,
@@ -90,7 +89,7 @@ in
   stdenv.mkDerivation rec {
     pname = "flox-bash";
     version = floxVersion;
-    src = flox-src + "/flox-bash";
+    src = builtins.path {path = flox-src + "/flox-bash";};
     nativeBuildInputs =
       [makeWrapper pandoc shellcheck shfmt which]
       # nix-provided expect not working on Darwin (#441)
