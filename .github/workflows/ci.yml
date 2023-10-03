@@ -63,4 +63,5 @@ jobs:
     name: Build flox-bash
     runs-on: ubuntu-latest
     steps:
-      - run: echo 'TODO: Remove "Build flox-bash" branch protection rule.'
+      - run: |
+          echo 'TODO: Remove "Build flox-bash" branch protection rule.'
