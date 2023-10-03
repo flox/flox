@@ -35,11 +35,12 @@ jobs:
         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
-    - name: Test
-      run: nix develop -c cargo test --locked --workspace
-      
     - name: Build
       run: nix build '.#${{ matrix.package }}' -L --print-out-paths
+
+    - name: Test
+      if: ${{ matrix.package == 'flox' }}
+      run: nix develop -c cargo test --locked --workspace
 
     - name: Cache the store
       run: nix copy --all --to "$FLOX_SUBSTITUTER" -vv
