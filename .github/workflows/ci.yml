@@ -63,18 +63,18 @@ jobs:
       run: nix run '.#flox-tests'
 
   # TODO: remove this job after merging to `main'
-  # It is required because `Build flox-bash on *' is the name used in a GitHub branch
+  # It is required because `Build * on *' is the name used in a GitHub branch
   # protection rule.
-  deprecated-linux:
-    name: Build flox-bash on ubuntu-latest
+  deprecated:
     runs-on: ubuntu-latest
+    strategy:
+      os:
+        - ubuntu-latest
+        - macos-latest
+      package:
+        - flox-bash
+        - nix-editor
+    name: Build ${{ matrix.package }} on ${{ matrix.os }}
     steps:
       - run: |
-          echo 'TODO: Remove "Build flox-bash on ubuntu-latest" branch protection rule.'
-  
-  deprecated-darwin:
-    name: Build flox-bash on macos-latest
-    runs-on: ubuntu-latest
-    steps:
-      - run: |
-          echo 'TODO: Remove "Build flox-bash on macos-latest" branch protection rule.'
+          echo 'TODO: Remove "Build ${{ matrix.package }} on ${{ matrix.os }}" branch protection rule.'
