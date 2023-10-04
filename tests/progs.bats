@@ -87,11 +87,11 @@ cmds=(
 # ---------------------------------------------------------------------------- #
 
 @test "ensure activated shell doesn't inherit '_${cmds[1]}'" {
-  run "$FLOX_CLI" create -e "$TEST_ENVIRONMENT";
+  run "$FLOX_CLI" --bash-passthru create -e "$TEST_ENVIRONMENT";
   assert_success;
-  run "$FLOX_CLI" install -e "$TEST_ENVIRONMENT" hello bash;
+  run "$FLOX_CLI" --bash-passthru install -e "$TEST_ENVIRONMENT" hello bash;
   assert_success;
-  run "$FLOX_CLI" activate -e "$TEST_ENVIRONMENT" --  \
+  run "$FLOX_CLI" --bash-passthru activate -e "$TEST_ENVIRONMENT" --  \
         bash -c "echo \"\${_${cmds[1]}:-NOPE}\";";
   assert_output --partial NOPE;
 }

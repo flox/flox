@@ -1,11 +1,11 @@
 set attr [lindex $argv 0]
 set flox $env(FLOX_CLI)
 if {$attr eq ""} {
-    set cmd "$flox -v develop"
-    spawn $flox -v develop
+    set cmd "$flox --bash-passthru -v develop"
+    spawn $flox --bash-passthru -v develop
 } else {
-    set cmd "$flox -v develop $attr"
-    spawn $flox -v develop $attr
+    set cmd "$flox --bash-passthru -v develop $attr"
+    spawn $flox --bash-passthru -v develop $attr
 }
 set timeout 30
 expect {
