@@ -284,7 +284,7 @@ impl GitCommandProvider {
         Ok(OsString::from_vec(out.stdout))
     }
 
-    /// open repo, erroring if path is not a repo or is a subdirectory of a repo
+    /// Open a repo, erroring if `path` is not a repo or is a subdirectory of a repo
     pub fn open<P: AsRef<Path>>(path: P) -> Result<Self, GitCommandOpenError> {
         let path = path.as_ref().to_path_buf();
 
