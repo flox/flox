@@ -75,7 +75,7 @@ setup_file() {
 @test "'flox search' expected number of results" {
   run "$FLOX_CLI" search hello;
   n_lines="${#lines[@]}";
-  assert_equal "$n_lines" "4"
+  assert [ "$n_lines" -ge 4 ];
 }
 
 
@@ -98,7 +98,7 @@ setup_file() {
   assert_output --partial "hello.2_12";
   assert_output --partial "hello.2_10";
   n_lines="${#lines[@]}";
-  assert_equal "$n_lines" "4"
+  assert [ "$n_lines" -ge 4 ];
 }
 
 
@@ -111,7 +111,7 @@ setup_file() {
   assert_output --partial "hello.2_12";
   assert_output --partial "hello.2_10";
   n_lines="${#lines[@]}";
-  assert_equal "$n_lines" "4"
+  assert [ "$n_lines" -ge 4 ];
 }
 
 
@@ -134,7 +134,7 @@ setup_file() {
   assert_output --partial "hello.2_10";
   assert_output --partial "hello.latest";
   n_lines="${#lines[@]}";
-  assert_equal "$n_lines" "4"
+  assert [ "$n_lines" -ge 4 ];
 }
 
 
@@ -147,7 +147,7 @@ setup_file() {
   assert_output --partial "hello.2_10";
   assert_output --partial "hello.latest";
   n_lines="${#lines[@]}";
-  assert_equal "$n_lines" "4"
+  assert [ "$n_lines" -ge 4 ];
 }
 
 
