@@ -2,11 +2,11 @@ use std::ffi::{OsStr, OsString};
 use std::fmt;
 use std::os::unix::ffi::OsStringExt;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
 use async_trait::async_trait;
 use log::{debug, error, warn};
 use thiserror::Error;
-use tokio::process::Command;
 
 #[derive(Error, Debug)]
 pub enum EmptyError {}
@@ -266,9 +266,9 @@ impl GitCommandProvider {
         c
     }
 
-    async fn run_command(command: &mut Command) -> Result<OsString, GitCommandError> {
-        debug!(target: "posix", "{:?}", command.as_std());
-        let out = command.output().await?;
+    fn run_command(command: &mut Command) -> Result<OsString, GitCommandError> {
+        debug!(target: "posix", "{:?}", command);
+        let out = command.output()?;
 
         if !out.status.success() {
             let stdout = String::from_utf8_lossy(&out.stdout).to_string();
@@ -339,8 +339,7 @@ impl GitProvider for GitCommandProvider {
             GitCommandProvider::new_command(&Some(&path))
                 .arg("rev-parse")
                 .arg("--is-bare-repository"),
-        )
-        .await?;
+        )?;
 
         let out_str = out
             .to_str()
@@ -362,8 +361,7 @@ impl GitProvider for GitCommandProvider {
             GitCommandProvider::new_command(&Some(&path))
                 .arg("rev-parse")
                 .arg("--show-toplevel"),
-        )
-        .await?;
+        )?;
 
         let out_str = out
             .to_str()
@@ -387,7 +385,7 @@ impl GitProvider for GitCommandProvider {
             command.arg("--bare");
         }
 
-        let _out = GitCommandProvider::run_command(&mut command).await?;
+        let _out = GitCommandProvider::run_command(&mut command)?;
 
         Ok(GitCommandProvider {
             workdir: Some(path.as_ref().into()),
@@ -409,7 +407,7 @@ impl GitProvider for GitCommandProvider {
         command.arg(origin.as_ref());
         command.arg("./");
 
-        let _out = GitCommandProvider::run_command(&mut command).await?;
+        let _out = GitCommandProvider::run_command(&mut command)?;
         Ok(GitCommandProvider {
             workdir: (!bare).then(|| path.as_ref().to_path_buf()),
             path: path.as_ref().into(),
@@ -425,7 +423,7 @@ impl GitProvider for GitCommandProvider {
 
         command.arg(name);
 
-        let _out = GitCommandProvider::run_command(&mut command).await?;
+        let _out = GitCommandProvider::run_command(&mut command)?;
         Ok(())
     }
 
@@ -436,8 +434,7 @@ impl GitProvider for GitCommandProvider {
                 .arg("add")
                 .arg(origin_name)
                 .arg(url),
-        )
-        .await?;
+        )?;
 
         Ok(())
     }
@@ -448,8 +445,7 @@ impl GitProvider for GitCommandProvider {
                 .arg("branch")
                 .arg("-m")
                 .arg(new_name),
-        )
-        .await?;
+        )?;
         Ok(())
     }
 
@@ -463,8 +459,7 @@ impl GitProvider for GitCommandProvider {
                 .arg("branch")
                 .arg("--set-upstream-to")
                 .arg(format!("{origin_name}/{branch}")),
-        )
-        .await?;
+        )?;
 
         Ok(())
     }
@@ -493,7 +488,6 @@ impl GitProvider for GitCommandProvider {
                     .arg("--symbolic-full-name")
                     .arg("@{u}"),
             )
-            .await
             .map_err(|_| GitCommandGetOriginError::NoUpstream)?;
             let as_str = reference.to_string_lossy();
             let (remote_name, remote_branch) = as_str.trim().split_once('/').unwrap();
@@ -505,8 +499,7 @@ impl GitProvider for GitCommandProvider {
                 .arg("remote")
                 .arg("get-url")
                 .arg(&remote_name),
-        )
-        .await?
+        )?
         .to_string_lossy()
         .trim()
         .to_string();
@@ -517,8 +510,7 @@ impl GitProvider for GitCommandProvider {
                     .arg("ls-remote")
                     .arg(&remote_name)
                     .arg(&remote_branch),
-            )
-            .await?;
+            )?;
 
             let remote_revision = if remote_revision.len() < 40 {
                 warn!("No commit found found upstream for ref {remote_branch}");
@@ -543,8 +535,7 @@ impl GitProvider for GitCommandProvider {
                 .arg("mv")
                 .arg(format!("{}", from.as_os_str().to_string_lossy()))
                 .arg(format!("{}", to.as_os_str().to_string_lossy())),
-        )
-        .await?;
+        )?;
 
         Ok(())
     }
@@ -574,7 +565,7 @@ impl GitProvider for GitCommandProvider {
             command.arg(format!("{}", path.as_os_str().to_string_lossy()));
         }
 
-        let _out = GitCommandProvider::run_command(&mut command).await?;
+        let _out = GitCommandProvider::run_command(&mut command)?;
 
         Ok(())
     }
@@ -586,7 +577,7 @@ impl GitProvider for GitCommandProvider {
             command.arg(path);
         }
 
-        let _out = GitCommandProvider::run_command(&mut command).await?;
+        let _out = GitCommandProvider::run_command(&mut command)?;
 
         Ok(())
     }
@@ -596,7 +587,7 @@ impl GitProvider for GitCommandProvider {
         command.arg("commit");
         command.args(["-m", message]);
 
-        let _out = GitCommandProvider::run_command(&mut command).await?;
+        let _out = GitCommandProvider::run_command(&mut command)?;
         Ok(())
     }
 
@@ -605,7 +596,7 @@ impl GitProvider for GitCommandProvider {
         command.arg("show");
         command.arg(object);
 
-        Ok(GitCommandProvider::run_command(&mut command).await?)
+        Ok(GitCommandProvider::run_command(&mut command)?)
     }
 
     async fn list_branches(&self) -> Result<Vec<BranchInfo>, Self::ListBranchesError> {
@@ -613,8 +604,7 @@ impl GitProvider for GitCommandProvider {
         command.arg("branch");
         command.args(["--all", "--verbose"]);
 
-        let info = GitCommandProvider::run_command(&mut command)
-            .await?
+        let info = GitCommandProvider::run_command(&mut command)?
             .to_string_lossy()
             .lines()
             .map(|line| {
@@ -662,8 +652,7 @@ impl GitProvider for GitCommandProvider {
             GitCommandProvider::new_command(&self.workdir.as_deref().or(Some(&self.path)))
                 .arg("fetch")
                 .arg("--all"),
-        )
-        .await?;
+        )?;
         Ok(())
     }
 
@@ -674,7 +663,7 @@ impl GitProvider for GitCommandProvider {
         command.arg(remote);
         command.arg("HEAD");
 
-        let _out = GitCommandProvider::run_command(&mut command).await?;
+        let _out = GitCommandProvider::run_command(&mut command)?;
         Ok(())
     }
 
