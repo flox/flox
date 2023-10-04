@@ -243,7 +243,7 @@ pub enum GitCommandError {
     BadExit(i32, String, String),
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct GitCommandProvider {
     workdir: Option<PathBuf>,
     path: PathBuf,
@@ -283,6 +283,62 @@ impl GitCommandProvider {
 
         Ok(OsString::from_vec(out.stdout))
     }
+
+    /// open repo, erroring if path is not a repo or is a subdirectory of a repo
+    pub fn open<P: AsRef<Path>>(path: P) -> Result<Self, GitCommandOpenError> {
+        let path = path.as_ref().to_path_buf();
+
+        let out = GitCommandProvider::run_command(
+            GitCommandProvider::new_command(&Some(&path))
+                .arg("rev-parse")
+                .arg("--is-bare-repository"),
+        )?;
+
+        let out_str = out
+            .to_str()
+            .ok_or(GitCommandDiscoverError::GitDirEncoding)?;
+
+        let bare = out_str
+            .trim()
+            .parse::<bool>()
+            .map_err(|_| GitCommandDiscoverError::UnexpectedOutput(out_str.to_string()))?;
+
+        let toplevel_or_git_dir = if bare {
+            GitCommandProvider::run_command(
+                GitCommandProvider::new_command(&Some(&path))
+                    .arg("rev-parse")
+                    .arg("--absolute-git-dir"),
+            )?
+        } else {
+            GitCommandProvider::run_command(
+                GitCommandProvider::new_command(&Some(&path))
+                    .arg("rev-parse")
+                    .arg("--show-toplevel"),
+            )?
+        };
+
+        let canonicalized = PathBuf::from(
+            toplevel_or_git_dir
+                .to_str()
+                .ok_or(GitCommandDiscoverError::GitDirEncoding)?
+                .trim(),
+        )
+        .canonicalize()
+        .map_err(GitCommandOpenError::Canonicalize)?;
+
+        if canonicalized
+            != path
+                .canonicalize()
+                .map_err(GitCommandOpenError::Canonicalize)?
+        {
+            return Err(GitCommandOpenError::Subdirectory);
+        }
+
+        Ok(GitCommandProvider {
+            workdir: (!bare).then(|| path.clone()),
+            path,
+        })
+    }
 }
 
 #[derive(Error, Debug)]
@@ -293,6 +349,18 @@ pub enum GitCommandDiscoverError {
     GitDirEncoding,
     #[error("Git returned an uexpected output: {0}")]
     UnexpectedOutput(String),
+}
+
+#[derive(Error, Debug)]
+pub enum GitCommandOpenError {
+    #[error(transparent)]
+    Command(#[from] GitCommandError),
+    #[error(transparent)]
+    Discover(#[from] GitCommandDiscoverError),
+    #[error("Path is subdirectory of a git repository")]
+    Subdirectory,
+    #[error("Could not canonicalize path: {0}")]
+    Canonicalize(std::io::Error),
 }
 
 #[derive(Error, Debug)]
@@ -687,5 +755,79 @@ pub mod tests {
             workdir: None,
             path: PathBuf::from("/does-not-exist"),
         }
+    }
+
+    async fn init_temp_repo(bare: bool) -> (GitCommandProvider, tempfile::TempDir) {
+        let tempdir_handle = tempfile::tempdir_in(std::env::temp_dir()).unwrap();
+
+        let git_command_provider = GitCommandProvider::init(tempdir_handle.path(), bare)
+            .await
+            .unwrap();
+        (git_command_provider, tempdir_handle)
+    }
+
+    #[tokio::test]
+    async fn test_open() {
+        let (_, tempdir_handle) = init_temp_repo(false).await;
+        let path = tempdir_handle.path().to_path_buf();
+        assert_eq!(
+            GitCommandProvider::open(path.clone()).unwrap(),
+            GitCommandProvider {
+                workdir: Some(path.clone()),
+                path
+            }
+        );
+    }
+
+    // test opening a bare repo succeeds
+    #[tokio::test]
+    async fn test_open_bare() {
+        let (_, tempdir_handle) = init_temp_repo(true).await;
+        let path = tempdir_handle.path().to_path_buf();
+        assert_eq!(
+            GitCommandProvider::open(path.clone()).unwrap(),
+            GitCommandProvider {
+                workdir: None,
+                path
+            }
+        );
+    }
+
+    // test opening a subdirectory of a repo fails
+    #[tokio::test]
+    async fn test_open_subdirectory() {
+        let (_, tempdir_handle) = init_temp_repo(false).await;
+        let path = tempdir_handle.path().to_path_buf();
+
+        let subdirectory = path.join("subdirectory");
+        std::fs::create_dir(subdirectory.clone()).unwrap();
+
+        assert!(matches!(
+            GitCommandProvider::open(subdirectory),
+            Err(GitCommandOpenError::Subdirectory),
+        ));
+    }
+
+    // test opening a subdirectory of a bare repo fails
+    #[tokio::test]
+    async fn test_open_subdirectory_bare() {
+        let (_, tempdir_handle) = init_temp_repo(true).await;
+
+        assert!(matches!(
+            GitCommandProvider::open(tempdir_handle.path().join("branches")),
+            Err(GitCommandOpenError::Subdirectory),
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_open_nonexistent() {
+        assert!(matches!(
+            GitCommandProvider::open(PathBuf::from("/does-not-exist")),
+            Err(GitCommandOpenError::Command(GitCommandError::BadExit(
+                128,
+                _,
+                _
+            ))),
+        ));
     }
 }
