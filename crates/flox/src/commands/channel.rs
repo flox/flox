@@ -1,7 +1,5 @@
 use std::collections::HashMap;
-use std::env;
 use std::io::{BufWriter, Write};
-use std::process::Command;
 use std::str::FromStr;
 
 use anyhow::{bail, Context, Result};
@@ -9,6 +7,7 @@ use bpaf::Bpaf;
 use derive_more::Display;
 use flox_rust_sdk::flox::{Flox, DEFAULT_OWNER};
 use flox_rust_sdk::models::search::{
+    do_search,
     Query,
     Registry,
     RegistryDefaults,
@@ -23,7 +22,6 @@ use flox_rust_sdk::nix::flake_ref::FlakeRef;
 use flox_rust_sdk::nix::RunJson;
 use itertools::Itertools;
 use joinery::Joinable;
-use once_cell::sync::Lazy;
 use regex::Regex;
 use serde_json::json;
 
@@ -41,12 +39,6 @@ enum ChannelType {
     #[display(fmt = "flox")]
     Flox,
 }
-
-// This is the `PKGDB` path that we actually use.
-// This is set once and prefers the `PKGDB` env variable, but will use
-// the fallback to the binary available at build time if it is unset.
-pub static PKGDB_BIN: Lazy<String> =
-    Lazy::new(|| env::var("PKGDB").unwrap_or(env!("PKGDB_BIN").to_string()));
 
 /// Search packages in subscribed channels
 #[derive(Bpaf, Clone)]
@@ -92,26 +84,23 @@ impl Search {
         let search_params = construct_search_params(&self.search_term, &flox)?;
         let search_params_json = serde_json::to_string(&search_params)?;
 
-        let output = Command::new(PKGDB_BIN.as_str())
-            .arg("search")
-            .arg("--quiet")
-            .arg(search_params_json)
-            .stderr(std::process::Stdio::inherit())
-            .output()?;
+        let (results, exit_status) = do_search(&search_params_json)?;
 
-        if output.status.success() {
-            // FIXME: We may have warnings on `stderr` even with a successful call to `pkgdb`.
-            //        We aren't checking that at all at the moment because better overall error handling
-            //        is coming in a later PR.
-            let search_results = SearchResults::try_from(output.stdout.as_slice())?;
-            render_search_results(search_results, self.json)?;
+        // Render what we have no matter what, then indicate whether we encountered an error.
+        // FIXME: We may have warnings on `stderr` even with a successful call to `pkgdb`.
+        //        We aren't checking that at all at the moment because better overall error handling
+        //        is coming in a later PR.
+        if self.json {
+            render_search_results_json(&results)?;
+        } else {
+            render_search_results(&results)?;
+        }
+        if exit_status.success() {
             Ok(())
         } else {
-            let err_msg = String::from_utf8_lossy(&output.stdout);
             bail!(
-                "pkgdb exited with status code {}: {}",
-                output.status.code().unwrap_or(-1),
-                err_msg
+                "pkgdb exited with status code: {}",
+                exit_status.code().unwrap_or(-1),
             );
         }
     }
@@ -162,12 +151,7 @@ fn construct_search_params(search_term: &str, flox: &Flox) -> Result<SearchParam
 }
 
 // This is likely to change significantly after the output format of search results is specced out
-fn render_search_results(search_results: SearchResults, as_json: bool) -> Result<()> {
-    if as_json {
-        let json = serde_json::to_string(&search_results.results)?;
-        println!("{}", json);
-        return Ok(());
-    }
+fn render_search_results(search_results: &SearchResults) -> Result<()> {
     let summarized_results = search_results
         .results
         .iter()
@@ -199,6 +183,12 @@ fn render_search_results(search_results: SearchResults, as_json: bool) -> Result
     for (attr, desc) in summarized_results.iter() {
         writeln!(&mut writer, "{attr:<attr_col_width$}  {desc}")?;
     }
+    Ok(())
+}
+
+fn render_search_results_json(search_results: &SearchResults) -> Result<()> {
+    let json = serde_json::to_string(&search_results.results)?;
+    println!("{}", json);
     Ok(())
 }
 

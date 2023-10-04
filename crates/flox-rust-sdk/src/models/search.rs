@@ -1,24 +1,35 @@
 use std::collections::HashMap;
-use std::io::BufRead;
+use std::env;
+use std::io::{BufRead, BufReader};
+use std::process::{Command, ExitStatus, Stdio};
 use std::str::FromStr;
 
 use flox_types::catalog::System;
 use flox_types::stability::Stability;
+use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::nix::flake_ref::FlakeRef;
+
+// This is the `PKGDB` path that we actually use.
+// This is set once and prefers the `PKGDB` env variable, but will use
+// the fallback to the binary available at build time if it is unset.
+pub static PKGDB_BIN: Lazy<String> =
+    Lazy::new(|| env::var("PKGDB").unwrap_or(env!("PKGDB_BIN").to_string()));
 
 #[derive(Debug, thiserror::Error)]
 pub enum SearchError {
     #[error("failed to deserialize search result from JSON: {0}")]
     Deserialize(#[from] serde_json::Error),
     #[error("couldn't parse stdout to separate JSON lines: {0}")]
-    ParseStdout(#[from] std::io::Error),
+    ParseStdout(std::io::Error),
     #[error("invalid search term '{0}', try quoting the search term if this isn't what you searched for")]
     SearchTerm(String),
     #[error("search encountered an error: {0}")]
     PkgDb(Value),
+    #[error("search encountered an error: {0}")]
+    PkgDbCall(std::io::Error),
 }
 
 /// The input parameters for the `pkgdb search` command
@@ -174,10 +185,12 @@ pub struct SearchResults {
 impl TryFrom<&[u8]> for SearchResults {
     type Error = SearchError;
 
+    // Note, this impl isn't actually used in the CLI, it's leftover from a previous iteration on the design.
+    // It still works, so we should keep it around. It may prove useful for testing or something.
     fn try_from(bytes: &[u8]) -> Result<Self, Self::Error> {
         let mut results = Vec::new();
         for maybe_line in bytes.lines() {
-            let text = maybe_line?;
+            let text = maybe_line.map_err(SearchError::ParseStdout)?;
             match serde_json::from_str(&text) {
                 Ok(search_result) => results.push(search_result),
                 Err(_) => {
@@ -194,6 +207,58 @@ impl TryFrom<&[u8]> for SearchResults {
         }
         Ok(SearchResults { results })
     }
+}
+
+/// Read search results from a buffered input source.
+///
+/// Fails fast on reading the first error.
+pub fn collect_results(
+    result_reader: impl BufRead,
+    _err_reader: impl BufRead,
+) -> Result<SearchResults, SearchError> {
+    let mut results = Vec::new();
+    for maybe_line in result_reader.lines() {
+        let text = maybe_line.map_err(SearchError::ParseStdout)?;
+        match serde_json::from_str(&text) {
+            Ok(search_result) => results.push(search_result),
+            Err(_) => {
+                // TODO: Errors are currently emitted to stdout as JSON, but there's no spec for the errors.
+                //       For now if we can't turn the text into a SearchResult, we assume that it's an
+                //       error message. If parsing that into a serde_json::Value fails, something else went
+                //       pretty wrong.
+                //
+                //       Once there's a spec for the error messages we can parse this into a typed container.
+                let err = Value::from_str(&text)?;
+                return Err(SearchError::PkgDb(err));
+            },
+        };
+    }
+    Ok(SearchResults { results })
+}
+
+/// Calls `pkgdb` to get search results
+pub fn do_search(search_params: &str) -> Result<(SearchResults, ExitStatus), SearchError> {
+    let mut pkgdb = Command::new(PKGDB_BIN.as_str())
+        .arg("search")
+        .arg("--quiet")
+        .arg(search_params)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(SearchError::PkgDbCall)?;
+
+    // SAFETY: Could panic if somehow we aren't capturing `stdout`, but
+    //         we _need_ to capture `stdout` to read the search results
+    //         anyway. This is an error you would absolutely encounter
+    //         during integration tests, so it's safe to unwrap here.
+    let output_reader = BufReader::new(pkgdb.stdout.take().unwrap());
+    let err_reader = BufReader::new(pkgdb.stderr.take().unwrap());
+
+    let results = collect_results(output_reader, err_reader)?;
+
+    let exit_status = pkgdb.wait().map_err(SearchError::PkgDbCall)?;
+
+    Ok((results, exit_status))
 }
 
 /// A package search result
