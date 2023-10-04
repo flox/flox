@@ -771,7 +771,7 @@ pub mod tests {
         let (_, tempdir_handle) = init_temp_repo(false).await;
         let path = tempdir_handle.path().to_path_buf();
         assert_eq!(
-            GitCommandProvider::open(path.clone()).unwrap(),
+            GitCommandProvider::open(&path).unwrap(),
             GitCommandProvider {
                 workdir: Some(path.clone()),
                 path
@@ -785,7 +785,7 @@ pub mod tests {
         let (_, tempdir_handle) = init_temp_repo(true).await;
         let path = tempdir_handle.path().to_path_buf();
         assert_eq!(
-            GitCommandProvider::open(path.clone()).unwrap(),
+            GitCommandProvider::open(&path).unwrap(),
             GitCommandProvider {
                 workdir: None,
                 path
@@ -800,7 +800,7 @@ pub mod tests {
         let path = tempdir_handle.path().to_path_buf();
 
         let subdirectory = path.join("subdirectory");
-        std::fs::create_dir(subdirectory.clone()).unwrap();
+        std::fs::create_dir(&subdirectory).unwrap();
 
         assert!(matches!(
             GitCommandProvider::open(subdirectory),
