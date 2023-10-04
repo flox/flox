@@ -23,10 +23,10 @@ setup_file() {
   hello_pkg_setup;
   deleteEnvForce "${TEST_ENVIRONMENT}-1";
   deleteEnvForce "${TEST_ENVIRONMENT}-2";
-  $FLOX_CLI create  -e "${TEST_ENVIRONMENT}-1";
-  $FLOX_CLI install -e "${TEST_ENVIRONMENT}-1" "$HELLO_PACKAGE";
-  $FLOX_CLI create  -e "${TEST_ENVIRONMENT}-2";
-  $FLOX_CLI install -e "${TEST_ENVIRONMENT}-2" "$HELLO_PACKAGE";
+  $FLOX_CLI --bash-passthru create  -e "${TEST_ENVIRONMENT}-1";
+  $FLOX_CLI --bash-passthru install -e "${TEST_ENVIRONMENT}-1" "$HELLO_PACKAGE";
+  $FLOX_CLI --bash-passthru create  -e "${TEST_ENVIRONMENT}-2";
+  $FLOX_CLI --bash-passthru install -e "${TEST_ENVIRONMENT}-2" "$HELLO_PACKAGE";
 }
 
 teardown_file() {
@@ -41,7 +41,7 @@ teardown_file() {
 
 @test "flox activate on multiple environments" {
   #shellcheck disable=SC2016
-  run "$FLOX_CLI" activate                                   \
+  run "$FLOX_CLI" --bash-passthru activate                                   \
       -e "${TEST_ENVIRONMENT}-1" -e "${TEST_ENVIRONMENT}-2"  \
       -- bash -c 'test -d "$FLOX_ENV" && echo "FLOX_ENV: $FLOX_ENV"';
   assert_success;

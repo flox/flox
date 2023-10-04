@@ -45,23 +45,7 @@ setup_file() {
   skip "Environment defaults handled in another phase"
 }
 
-@test "i3: flox install allows -e for explicit environment name;  If .flox does not exist, a .flox is created." {
-  skip "Environment defaults handled in another phase"
-  run ls .flox
-  assert_failure
-
-  run "$FLOX_CLI" install -e env hello
-  assert_success
-
-  run ls .flox
-  assert_success
-}
-
-@test "i3: flox install allows -e for explicit environment name;  If the environment is not staged in FLOX_META, it is pulled" {
-  skip "remote environments handled in another phase"
-}
-
-@test "i3: flox install allows -e for explicit environment name; If the environment exists in FLOX_META or locally, .flox is a link" {
+@test "flox install allows -r for installing to a specific remote environment name, creating a new generation." {
   skip "remote environments handled in another phase"
 }
 

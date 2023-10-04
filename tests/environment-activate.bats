@@ -44,7 +44,7 @@ project_teardown() {
 }
 
 activate_local_env() {
-  run "$FLOX_CLI" activate -e "$PROJECT_NAME";
+  run "$FLOX_CLI" activate -d "$PROJECT_DIR";
 }
 
 
@@ -101,7 +101,7 @@ env_is_activated() {
 
 @test "a3: 'flox activate' accepts explicit environment name" {
   skip FIXME;
-  run "$FLOX_CLI" activate -e "$PROJECT_NAME"
+  run "$FLOX_CLI" activate -d "$PROJECT_DIR"
   assert_success;
   is_activated=$(env_is_activated "$PROJECT_NAME");
   assert_equal "$is_activated" "1";
@@ -113,7 +113,7 @@ env_is_activated() {
 @test "a4: 'flox activate' modifies shell prompt with 'bash'" {
   skip FIXME;
   prompt_before="${PS1@P}";
-  bash -c '"$FLOX_CLI" activate -e "$PROJECT_NAME"';
+  bash -c '"$FLOX_CLI" activate -d "$PROJECT_DIR"';
   assert_success;
   prompt_after="${PS1@P}";
   assert_not_equal prompt_before prompt_after;
@@ -126,7 +126,7 @@ env_is_activated() {
 @test "a4: 'flox activate' modifies shell prompt with 'zsh'" {
   skip FIXME;
   prompt_before="${(%%)PS1}";
-  zsh -c '"$FLOX_CLI" activate -e "$PROJECT_NAME"';
+  zsh -c '"$FLOX_CLI" activate -d "$PROJECT_DIR"';
   assert_success;
   prompt_after="${(%%)PS1}";
   assert_not_equal prompt_before prompt_after;
