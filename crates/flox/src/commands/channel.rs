@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io::{BufWriter, Write};
 use std::str::FromStr;
 
@@ -89,9 +89,9 @@ impl Search {
         //        We aren't checking that at all at the moment because better overall error handling
         //        is coming in a later PR.
         if self.json {
-            render_search_results_json(&results)?;
+            render_search_results_json(results)?;
         } else {
-            render_search_results(&results)?;
+            render_search_results(results)?;
         }
         if exit_status.success() {
             Ok(())
@@ -148,41 +148,108 @@ fn construct_search_params(search_term: &str, flox: &Flox) -> Result<SearchParam
     })
 }
 
-// This is likely to change significantly after the output format of search results is specced out
-fn render_search_results(search_results: &SearchResults) -> Result<()> {
-    let summarized_results = search_results
+/// An intermediate representation of a search result used for rendering
+#[derive(Debug, PartialEq, Clone)]
+struct DisplayItem {
+    /// The input that the package came from
+    input: String,
+    /// The displayable part of the package's attribute path
+    package: String,
+    /// The package description
+    description: Option<String>,
+    /// Whether to join the `input` and `package` fields when rendering
+    join: bool,
+}
+
+fn render_search_results(mut search_results: SearchResults) -> Result<()> {
+    // Search results contain a lot of information, but all we need is the input (for disambiguating them)
+    // and the attribute path components that we should show the user.
+    let mut display_items = search_results
         .results
-        .iter()
+        .drain(..)
         .map(|r| {
-            let path_components = r.attr_path.clone();
-            let flake_attr = if !DEFAULT_CHANNELS.contains_key(r.input.as_str()) {
-                vec![r.input.clone(), path_components.join(".")].join("#")
-            } else {
-                path_components.join(".")
-            };
-            let d = if let Some(ref d) = r.description {
-                // Some package descriptions contain newline characters
-                // which breaks formatting
-                d.replace('\n', " ")
-            } else {
-                "<no description provided>".into()
-            };
-            (flake_attr, d)
+            let input = r.input;
+            // This is a little trick for pattern matching on arrays/slices/Vecs. You have to
+            // convert a `Vec` to a slice first (slices and arrays already work), but then you
+            // can destructure it like you would any other struct. You also need to convert
+            // `String`s to `&str`s since there's no way to write a `String` literal.
+            let attrs = r.attr_path.iter().map(|a| a.as_str()).collect::<Vec<_>>();
+            let package_attrs = match attrs.as_slice() {
+                // This matches any slice elements between `_stability` and `_version`
+                // which allows us to catch things like `pythonPackages.foo`.
+                //                                             VVVVV
+                ["catalog", _system, _stability, package_attrs @ .., _version] => {
+                    Ok::<Vec<&str>, anyhow::Error>(package_attrs.to_vec())
+                },
+                ["legacyPackages", _system, package] => Ok(vec![*package]),
+                ["packages", _system, package] => Ok(vec![*package]),
+                _ => {
+                    let installable = vec![input, r.attr_path.join(".")].join("#");
+                    bail!("invalid search result: {}", installable);
+                },
+            }?;
+            Ok(DisplayItem {
+                input,
+                package: package_attrs.join("."),
+                description: r.description.map(|s| s.replace('\n', " ")),
+                join: false,
+            })
         })
-        .collect::<Vec<_>>();
-    let attr_col_width = summarized_results
+        .collect::<Result<Vec<_>>>()?;
+    // All items with the same package name from the same input (e.g. different versions) will
+    // be consecutive and look the same. `Vec::dedup` only removes consecutive duplicates, so
+    // we're safe.
+    display_items.dedup();
+
+    // Detect duplicates across inputs before printing anything since needing to print the package
+    // source/input will affect the column width.
+    let mut package_set = HashSet::new();
+    let mut duplicates = HashSet::new();
+    for d in display_items.iter() {
+        // We insert both the input and the package to distinguish between (1) multiple versions
+        // of this package from the same input and (2) different inputs that contain this package.
+        // `insert` returns `false` if the set already contained this value
+        if !package_set.insert(d.package.clone()) {
+            duplicates.insert(d.package.clone());
+        }
+    }
+
+    // Determine the column width
+    display_items.iter_mut().for_each(|d| {
+        if duplicates.contains(&d.package) {
+            d.join = true;
+        }
+    });
+    let column_width = display_items
         .iter()
-        .fold(0, |cw, (attr, _)| usize::max(cw, attr.len()));
-    // Depending on the search query there could be a ton of results, better to
-    // do buffered writes than to lock `stdout` on every write.
+        .map(|d| {
+            if d.join {
+                vec![d.input.clone(), d.package.clone()].join(".").len()
+            } else {
+                d.package.len()
+            }
+        })
+        .max()
+        .unwrap(); // SAFETY: could panic if `inputs_and_packages` is empty, but we know it's not
+                   // Depending on the search query there could be a ton of results, better to
+                   // do buffered writes than to lock `stdout` on every write.
+
+    // Finally print something
     let mut writer = BufWriter::new(std::io::stdout());
-    for (attr, desc) in summarized_results.iter() {
-        writeln!(&mut writer, "{attr:<attr_col_width$}  {desc}")?;
+    let default_desc = String::from("<no description provided>");
+    for d in display_items.drain(..) {
+        let package = if d.join {
+            vec![d.input, d.package].join(".")
+        } else {
+            d.package
+        };
+        let desc: String = d.description.unwrap_or(default_desc.clone());
+        writeln!(&mut writer, "{package:<column_width$}  {desc}")?;
     }
     Ok(())
 }
 
-fn render_search_results_json(search_results: &SearchResults) -> Result<()> {
+fn render_search_results_json(search_results: SearchResults) -> Result<()> {
     let json = serde_json::to_string(&search_results.results)?;
     println!("{}", json);
     Ok(())
