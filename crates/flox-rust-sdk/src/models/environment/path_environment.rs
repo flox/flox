@@ -399,31 +399,37 @@ impl PathEnvironment<Original> {
     /// Ensure that the path exists and contains files that "look" like an environment
     pub fn open(
         path: impl AsRef<Path>,
-        ident: EnvironmentRef,
         temp_dir: impl AsRef<Path>,
     ) -> Result<Self, EnvironmentError2> {
         let path = path.as_ref().to_path_buf();
         let dot_flox_path = path.join(".flox");
-        let env_path = dot_flox_path.join(ident.name().as_ref());
+        let env_dir_entry = dot_flox_path
+            .read_dir()
+            .map_err(EnvironmentError2::ReadDotFlox)?
+            .find_map(|entry| {
+                let entry = entry.ok()?;
+                let path = entry.path();
+                if path.is_dir() {
+                    Some(entry)
+                } else {
+                    None
+                }
+            })
+            .ok_or(EnvironmentError2::EnvNotFound)?;
 
-        if !env_path.exists() {
-            Err(EnvironmentError2::EnvNotFound)?
-        }
-
-        if !env_path.is_dir() {
-            Err(EnvironmentError2::EnvNotADirectory)?
-        }
-
-        let env_path = env_path
+        let env_path = env_dir_entry
+            .path()
             .canonicalize()
             .map_err(EnvironmentError2::EnvCanonicalize)?;
         if !env_path.join("flake.nix").exists() {
             Err(EnvironmentError2::DirectoryNotAnEnv)?
         }
 
+        let name = EnvironmentName::from_str(&env_dir_entry.file_name().to_string_lossy())?;
+
         Ok(PathEnvironment {
             path: env_path,
-            environment_ref: ident,
+            environment_ref: EnvironmentRef::new_from_parts(None, name),
             temp_dir: temp_dir.as_ref().to_path_buf(),
             state: Original,
         })
@@ -446,24 +452,7 @@ impl PathEnvironment<Original> {
             return Ok(None);
         };
 
-        // assume only one entry in .flox
-        let env = dot_flox
-            .join(".flox")
-            .read_dir()
-            .map_err(EnvironmentError2::ReadDotFlox)?
-            .next()
-            .ok_or(EnvironmentError2::EmptyDotFlox)?
-            .map_err(EnvironmentError2::ReadEnvDir)?;
-
-        let name = EnvironmentName::from_str(&env.file_name().to_string_lossy())
-            .map_err(EnvironmentError2::ParseEnvRef)?;
-
-        Some(Self::open(
-            current_dir,
-            EnvironmentRef::new_from_parts(None, name),
-            temp_dir,
-        ))
-        .transpose()
+        Some(Self::open(current_dir, temp_dir)).transpose()
     }
 
     /// Create a new env in a `.flox` directory within a specific path or open it if it exists.
@@ -474,13 +463,7 @@ impl PathEnvironment<Original> {
         name: EnvironmentName,
         temp_dir: impl AsRef<Path>,
     ) -> Result<Self, EnvironmentError2> {
-        if Self::open(
-            &path,
-            EnvironmentRef::new_from_parts(None, name.clone()),
-            &temp_dir,
-        )
-        .is_ok()
-        {
+        if Self::open(&path, &temp_dir).is_ok() {
             Err(EnvironmentError2::EnvironmentExists)?;
         }
 
@@ -491,7 +474,7 @@ impl PathEnvironment<Original> {
         copy_dir_recursive(&env!("FLOX_ENV_TEMPLATE"), &env_dir, false)
             .map_err(EnvironmentError2::InitEnv)?;
 
-        Self::open(path, EnvironmentRef::new_from_parts(None, name), temp_dir)
+        Self::open(path, temp_dir)
     }
 }
 
@@ -510,14 +493,10 @@ mod tests {
     async fn create_env() {
         let tempdir = tempfile::tempdir().unwrap();
         let environment_temp_dir = tempfile::tempdir().unwrap();
-        let before = PathEnvironment::<Original>::open(
-            tempdir.path(),
-            EnvironmentRef::new_from_parts(None, EnvironmentName::from_str("test").unwrap()),
-            environment_temp_dir.path(),
-        );
+        let before = PathEnvironment::<Original>::open(tempdir.path(), environment_temp_dir.path());
 
         assert!(
-            matches!(before, Err(EnvironmentError2::EnvNotFound)),
+            matches!(before, Err(EnvironmentError2::ReadDotFlox(_))),
             "{before:?}"
         );
 

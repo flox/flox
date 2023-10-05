@@ -57,8 +57,7 @@ impl EnvironmentSelect {
     fn to_concrete_environment(&self, temp_dir: impl AsRef<Path>) -> Result<ConcreteEnvironment> {
         let env = match self {
             EnvironmentSelect::Dir(path) => ConcreteEnvironment::Path(
-                PathEnvironment::open(path, "default".parse().unwrap(), temp_dir)
-                    .context("Couldn't open path environment")?,
+                PathEnvironment::open(path, temp_dir).context("No matching environments found")?,
             ),
 
             EnvironmentSelect::Remote(_) => todo!(),
