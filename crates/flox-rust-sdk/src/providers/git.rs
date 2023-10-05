@@ -286,20 +286,19 @@ impl GitCommandProvider {
 
     /// Open a repo, erroring if `path` is not a repo or is a subdirectory of a repo
     pub fn open<P: AsRef<Path>>(path: P) -> Result<Self, GitCommandOpenError> {
-        let out = GitCommandProvider::run_command(
+        let out_str = GitCommandProvider::run_command(
             GitCommandProvider::new_command(&Some(&path))
                 .arg("rev-parse")
                 .arg("--is-bare-repository"),
-        )?;
-
-        let out_str = out
-            .to_str()
-            .ok_or(GitCommandDiscoverError::GitDirEncoding)?;
+        )?
+        .to_str()
+        .ok_or(GitCommandDiscoverError::GitDirEncoding)?
+        .to_string();
 
         let bare = out_str
             .trim()
             .parse::<bool>()
-            .map_err(|_| GitCommandDiscoverError::UnexpectedOutput(out_str.to_string()))?;
+            .map_err(|_| GitCommandDiscoverError::UnexpectedOutput(out_str))?;
 
         let toplevel_or_git_dir = if bare {
             GitCommandProvider::run_command(
@@ -403,20 +402,19 @@ impl GitProvider for GitCommandProvider {
     type ShowError = GitCommandError;
 
     async fn discover<P: AsRef<Path>>(path: P) -> Result<Self, Self::DiscoverError> {
-        let out = GitCommandProvider::run_command(
+        let out_str = GitCommandProvider::run_command(
             GitCommandProvider::new_command(&Some(&path))
                 .arg("rev-parse")
                 .arg("--is-bare-repository"),
-        )?;
-
-        let out_str = out
-            .to_str()
-            .ok_or(GitCommandDiscoverError::GitDirEncoding)?;
+        )?
+        .to_str()
+        .ok_or(GitCommandDiscoverError::GitDirEncoding)?
+        .to_string();
 
         let bare = out_str
             .trim()
             .parse::<bool>()
-            .map_err(|_| GitCommandDiscoverError::UnexpectedOutput(out_str.to_string()))?;
+            .map_err(|_| GitCommandDiscoverError::UnexpectedOutput(out_str))?;
 
         if bare {
             return Ok(GitCommandProvider {
