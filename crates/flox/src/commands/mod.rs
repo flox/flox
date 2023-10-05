@@ -579,8 +579,10 @@ pub struct BashPassthru {
     #[bpaf(long("bash-passthru"))]
     do_passthru: bool,
 
+    // swallows '--' arguments
+    // hence the arguments are determined differently below.
     #[bpaf(any("REST", Some), many)]
-    flox_args: Vec<String>,
+    _flox_args: Vec<String>,
 }
 
 impl BashPassthru {
@@ -593,7 +595,12 @@ impl BashPassthru {
             .unwrap_or_default();
 
         if passtrhu.do_passthru {
-            return Some(passtrhu.flox_args);
+            return Some(
+                std::env::args()
+                    .skip(1)
+                    .filter(|arg| arg != "--bash-passthru")
+                    .collect(),
+            );
         }
 
         None
