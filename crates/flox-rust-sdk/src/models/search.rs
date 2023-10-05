@@ -22,7 +22,7 @@ pub static PKGDB_BIN: Lazy<String> =
 pub enum SearchError {
     #[error("failed to deserialize from JSON: {0}")]
     Deserialize(serde_json::Error),
-    #[error("failed to serialzie search params to JSON: {0}")]
+    #[error("failed to serialize search params to JSON: {0}")]
     Serialize(serde_json::Error),
     #[error("couldn't split stdout into individual lines: {0}")]
     ParseStdout(std::io::Error),
