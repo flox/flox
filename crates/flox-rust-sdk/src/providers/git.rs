@@ -286,8 +286,6 @@ impl GitCommandProvider {
 
     /// Open a repo, erroring if `path` is not a repo or is a subdirectory of a repo
     pub fn open<P: AsRef<Path>>(path: P) -> Result<Self, GitCommandOpenError> {
-        let path = path.as_ref().to_path_buf();
-
         let out = GitCommandProvider::run_command(
             GitCommandProvider::new_command(&Some(&path))
                 .arg("rev-parse")
@@ -325,6 +323,8 @@ impl GitCommandProvider {
         )
         .canonicalize()
         .map_err(GitCommandOpenError::Canonicalize)?;
+
+        let path = path.as_ref().to_path_buf();
 
         if canonicalized
             != path
