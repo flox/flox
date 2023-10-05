@@ -21,7 +21,6 @@ use flox_rust_sdk::nix::flake_ref::git_service::{GitServiceAttributes, GitServic
 use flox_rust_sdk::nix::flake_ref::FlakeRef;
 use flox_rust_sdk::nix::RunJson;
 use itertools::Itertools;
-use joinery::Joinable;
 use regex::Regex;
 use serde_json::json;
 
@@ -82,9 +81,8 @@ impl Search {
         subcommand_metric!("search");
 
         let search_params = construct_search_params(&self.search_term, &flox)?;
-        let search_params_json = serde_json::to_string(&search_params)?;
 
-        let (results, exit_status) = do_search(&search_params_json)?;
+        let (results, exit_status) = do_search(&search_params)?;
 
         // Render what we have no matter what, then indicate whether we encountered an error.
         // FIXME: We may have warnings on `stderr` even with a successful call to `pkgdb`.
@@ -158,11 +156,9 @@ fn render_search_results(search_results: &SearchResults) -> Result<()> {
         .map(|r| {
             let path_components = r.attr_path.clone();
             let flake_attr = if !DEFAULT_CHANNELS.contains_key(r.input.as_str()) {
-                vec![r.input.clone(), path_components.join_with(".").to_string()]
-                    .join_with("#")
-                    .to_string()
+                vec![r.input.clone(), path_components.join(".")].join("#")
             } else {
-                path_components.join_with(".").to_string()
+                path_components.join(".")
             };
             let d = if let Some(ref d) = r.description {
                 // Some package descriptions contain newline characters

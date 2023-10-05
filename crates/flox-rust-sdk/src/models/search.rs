@@ -20,9 +20,11 @@ pub static PKGDB_BIN: Lazy<String> =
 
 #[derive(Debug, thiserror::Error)]
 pub enum SearchError {
-    #[error("failed to deserialize search result from JSON: {0}")]
-    Deserialize(#[from] serde_json::Error),
-    #[error("couldn't parse stdout to separate JSON lines: {0}")]
+    #[error("failed to deserialize from JSON: {0}")]
+    Deserialize(serde_json::Error),
+    #[error("failed to serialzie search params to JSON: {0}")]
+    Serialize(serde_json::Error),
+    #[error("couldn't split stdout into individual lines: {0}")]
     ParseStdout(std::io::Error),
     #[error("invalid search term '{0}', try quoting the search term if this isn't what you searched for")]
     SearchTerm(String),
@@ -200,7 +202,7 @@ impl TryFrom<&[u8]> for SearchResults {
                     //       pretty wrong.
                     //
                     //       Once there's a spec for the error messages we can parse this into a typed container.
-                    let err = Value::from_str(&text)?;
+                    let err = Value::from_str(&text).map_err(SearchError::Deserialize)?;
                     return Err(SearchError::PkgDb(err));
                 },
             };
@@ -209,39 +211,43 @@ impl TryFrom<&[u8]> for SearchResults {
     }
 }
 
-/// Read search results from a buffered input source.
-///
-/// Fails fast on reading the first error.
-pub fn collect_results(
-    result_reader: impl BufRead,
-    _err_reader: impl BufRead,
-) -> Result<SearchResults, SearchError> {
-    let mut results = Vec::new();
-    for maybe_line in result_reader.lines() {
-        let text = maybe_line.map_err(SearchError::ParseStdout)?;
-        match serde_json::from_str(&text) {
-            Ok(search_result) => results.push(search_result),
-            Err(_) => {
-                // TODO: Errors are currently emitted to stdout as JSON, but there's no spec for the errors.
-                //       For now if we can't turn the text into a SearchResult, we assume that it's an
-                //       error message. If parsing that into a serde_json::Value fails, something else went
-                //       pretty wrong.
-                //
-                //       Once there's a spec for the error messages we can parse this into a typed container.
-                let err = Value::from_str(&text)?;
-                return Err(SearchError::PkgDb(err));
-            },
-        };
+impl SearchResults {
+    /// Read search results from a buffered input source.
+    ///
+    /// Fails fast on reading the first error.
+    pub fn collect_results(
+        result_reader: impl BufRead,
+        _err_reader: impl BufRead,
+    ) -> Result<Self, SearchError> {
+        let mut results = Vec::new();
+        for maybe_line in result_reader.lines() {
+            let text = maybe_line.map_err(SearchError::ParseStdout)?;
+            match serde_json::from_str(&text) {
+                Ok(search_result) => results.push(search_result),
+                Err(_) => {
+                    // TODO: Errors are currently emitted to stdout as JSON, but there's no spec for the errors.
+                    //       For now if we can't turn the text into a SearchResult, we assume that it's an
+                    //       error message. If parsing that into a serde_json::Value fails, something else went
+                    //       pretty wrong.
+                    //
+                    //       Once there's a spec for the error messages we can parse this into a typed container.
+                    let err = Value::from_str(&text).map_err(SearchError::Deserialize)?;
+                    return Err(SearchError::PkgDb(err));
+                },
+            };
+        }
+        Ok(SearchResults { results })
     }
-    Ok(SearchResults { results })
 }
 
 /// Calls `pkgdb` to get search results
-pub fn do_search(search_params: &str) -> Result<(SearchResults, ExitStatus), SearchError> {
-    let mut pkgdb = Command::new(PKGDB_BIN.as_str())
+pub fn do_search(search_params: &SearchParams) -> Result<(SearchResults, ExitStatus), SearchError> {
+    let json = serde_json::to_string(search_params).map_err(SearchError::Serialize)?;
+
+    let mut pkgdb_process = Command::new(PKGDB_BIN.as_str())
         .arg("search")
         .arg("--quiet")
-        .arg(search_params)
+        .arg(json)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
@@ -251,12 +257,12 @@ pub fn do_search(search_params: &str) -> Result<(SearchResults, ExitStatus), Sea
     //         we _need_ to capture `stdout` to read the search results
     //         anyway. This is an error you would absolutely encounter
     //         during integration tests, so it's safe to unwrap here.
-    let output_reader = BufReader::new(pkgdb.stdout.take().unwrap());
-    let err_reader = BufReader::new(pkgdb.stderr.take().unwrap());
+    let output_reader = BufReader::new(pkgdb_process.stdout.take().unwrap());
+    let err_reader = BufReader::new(pkgdb_process.stderr.take().unwrap());
 
-    let results = collect_results(output_reader, err_reader)?;
+    let results = SearchResults::collect_results(output_reader, err_reader)?;
 
-    let exit_status = pkgdb.wait().map_err(SearchError::PkgDbCall)?;
+    let exit_status = pkgdb_process.wait().map_err(SearchError::PkgDbCall)?;
 
     Ok((results, exit_status))
 }
