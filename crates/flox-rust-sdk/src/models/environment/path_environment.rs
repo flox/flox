@@ -441,18 +441,18 @@ impl PathEnvironment<Original> {
         current_dir: impl AsRef<Path>,
         temp_dir: impl AsRef<Path>,
     ) -> Result<Option<Self>, EnvironmentError2> {
-        let dot_flox = current_dir
+        let maybe_dot_flox = current_dir
             .as_ref()
             .ancestors()
             .find(|ancestor| ancestor.join(".flox").exists());
 
-        let dot_flox = if let Some(dot_flox) = dot_flox {
-            dot_flox
+        let with_dot_flox = if let Some(with_dot_flox) = maybe_dot_flox {
+            with_dot_flox
         } else {
             return Ok(None);
         };
 
-        Some(Self::open(current_dir, temp_dir)).transpose()
+        Some(Self::open(with_dot_flox, temp_dir)).transpose()
     }
 
     /// Create a new env in a `.flox` directory within a specific path or open it if it exists.
