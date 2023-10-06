@@ -28,6 +28,8 @@ use crate::subcommand_metric;
 use crate::utils::dialog::{Dialog, Select, Text};
 use crate::utils::init::{DEFAULT_CHANNELS, HIDDEN_CHANNELS};
 
+const SEPARATOR: &'_ str = ":";
+
 #[derive(Bpaf, Clone)]
 pub struct ChannelArgs {}
 
@@ -161,44 +163,30 @@ struct DisplayItem {
     join: bool,
 }
 
+// FIXME: try 'python@>=2 <3', you get way more results than you should
+
 fn render_search_results(mut search_results: SearchResults) -> Result<()> {
-    // Search results contain a lot of information, but all we need is the input (for disambiguating them)
-    // and the attribute path components that we should show the user.
-
     // FIXME: Debugging
-    search_results.results.iter().for_each(|x| {
-        eprintln!("{}", x.input);
-    });
+    // search_results.results.iter().for_each(|x| {
+    //     eprintln!("{x:?}");
+    // });
 
-    let mut display_items = search_results
+    // Nothing to display
+    if search_results.results.is_empty() {
+        return Ok(());
+    }
+    // Search results contain a lot of information, but all we need for rendering are
+    // the input, the package subpath (e.g. "python310Packages.flask"), and the description.
+    let display_items = search_results
         .results
         .drain(..)
         .map(|r| {
-            let input = r.input;
-            // This is a little trick for pattern matching on arrays/slices/Vecs. You have to
-            // convert a `Vec` to a slice first (slices and arrays already work), but then you
-            // can destructure it like you would any other struct. You also need to convert
-            // `String`s to `&str`s since there's no way to write a `String` literal.
-            let attrs = r.abs_path.iter().map(|a| a.as_str()).collect::<Vec<_>>();
-            let package_attrs = match attrs.as_slice() {
-                // This matches any slice elements between `_stability` and `_version`
-                // which allows us to catch things like `pythonPackages.foo`.
-                //                                             VVVVV
-                ["catalog", _system, _stability, package_attrs @ .., _version] => {
-                    Ok::<Vec<&str>, anyhow::Error>(package_attrs.to_vec())
-                },
-                ["legacyPackages", _system, package] => Ok(vec![*package]),
-                ["packages", _system, package] => Ok(vec![*package]),
-                _ => {
-                    let installable = vec![input, r.abs_path.join(".")].join("#");
-                    bail!("invalid search result: {}", installable);
-                },
-            }?;
+            let join = !DEFAULT_CHANNELS.contains_key(r.input.as_str());
             Ok(DisplayItem {
-                input,
-                package: package_attrs.join("."),
+                input: r.input,
+                package: r.pkg_subpath.join("."),
                 description: r.description.map(|s| s.replace('\n', " ")),
-                join: false,
+                join,
             })
         })
         .collect::<Result<Vec<_>>>()?;
@@ -208,48 +196,31 @@ fn render_search_results(mut search_results: SearchResults) -> Result<()> {
     //     eprintln!("{}", x.input);
     // });
 
-    // All items with the same package name from the same input (e.g. different versions) will
-    // be consecutive and look the same. `Vec::dedup` only removes consecutive duplicates, so
-    // we're safe.
-    display_items.dedup();
-
-    // Detect duplicates across inputs before printing anything since needing to print the package
-    // source/input will affect the column width.
-    let mut package_set = HashSet::new();
-    let mut duplicates = HashSet::new();
-    for d in display_items.iter() {
-        // We insert both the input and the package to distinguish between (1) multiple versions
-        // of this package from the same input and (2) different inputs that contain this package.
-        // `insert` returns `false` if the set already contained this value
-        if !package_set.insert(d.package.clone()) {
-            duplicates.insert(d.package.clone());
-        }
+    let deduped_display_items = dedup_and_disambiguate_display_items(display_items);
+    if deduped_display_items.is_empty() {
+        bail!("deduplicating search results failed");
     }
 
-    // Determine the column width
-    display_items.iter_mut().for_each(|d| {
-        if duplicates.contains(&d.package) {
-            d.join = true;
-        }
-    });
-    let column_width = display_items
+    let column_width = deduped_display_items
         .iter()
         .map(|d| {
             if d.join {
-                vec![d.input.clone(), d.package.clone()].join(".").len()
+                vec![d.input.as_str(), d.package.as_str()]
+                    .join(SEPARATOR)
+                    .len()
             } else {
                 d.package.len()
             }
         })
         .max()
-        .unwrap(); // SAFETY: could panic if `display_items` is empty, but we know it's not
+        .unwrap(); // SAFETY: could panic if `deduped_display_items` is empty, but we know it's not
 
     // Finally print something
     let mut writer = BufWriter::new(std::io::stdout());
     let default_desc = String::from("<no description provided>");
-    for d in display_items.drain(..) {
+    for d in deduped_display_items.into_iter() {
         let package = if d.join {
-            vec![d.input, d.package].join(".")
+            vec![d.input, d.package].join(SEPARATOR)
         } else {
             d.package
         };
@@ -263,6 +234,54 @@ fn render_search_results_json(search_results: SearchResults) -> Result<()> {
     let json = serde_json::to_string(&search_results.results)?;
     println!("{}", json);
     Ok(())
+}
+
+/// Deduplicate and disambiguate display items.
+///
+/// This gets complicated because we have to satisfy a few constraints:
+/// - The order of results from `pkgdb` is important (best matches come first),
+///   so that order must be preserved.
+/// - Versions shouldn't appear in the output, so multiple package versions from a single
+///   input should be deduplicated.
+/// - Packages that appear in more than one input need to be disambiguated by prepending
+///   the name of the input and a separator.
+fn dedup_and_disambiguate_display_items(mut display_items: Vec<DisplayItem>) -> Vec<DisplayItem> {
+    let mut package_to_inputs: HashMap<String, HashSet<String>> = HashMap::new();
+    for d in display_items.iter() {
+        // Build a collection of packages and which inputs they are seen in
+        package_to_inputs
+            .entry(d.package.clone())
+            .and_modify(|inputs| {
+                inputs.insert(d.input.clone());
+            })
+            .or_insert_with(|| {
+                let mut inputs = HashSet::new();
+                inputs.insert(d.input.clone());
+                inputs
+            });
+    }
+
+    // For any package that comes from more than one input, mark it as needing to be joined
+    for d in display_items.iter_mut() {
+        if let Some(inputs) = package_to_inputs.get(&d.package) {
+            d.join = inputs.len() > 1 || d.join;
+        }
+    }
+
+    let mut deduped_display_items = Vec::new();
+    for d in display_items.into_iter() {
+        if let Some(inputs) = package_to_inputs.get_mut(d.package.as_str()) {
+            // Remove this input so this (input, package) pair is never seen again
+            if inputs.remove(&d.input) {
+                deduped_display_items.push(d.clone());
+            }
+            if inputs.is_empty() {
+                package_to_inputs.remove(&d.package);
+            }
+        }
+    }
+
+    deduped_display_items
 }
 
 #[derive(Bpaf, Clone)]
