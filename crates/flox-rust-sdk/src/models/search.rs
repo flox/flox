@@ -272,9 +272,26 @@ pub fn do_search(search_params: &SearchParams) -> Result<(SearchResults, ExitSta
 pub struct SearchResult {
     /// Which input the package came from
     pub input: String,
-    /// The attribute path of the package inside the input
-    #[serde(rename = "path")]
-    pub attr_path: Vec<String>,
+    /// The full attribute path of the package inside the input.
+    ///
+    /// Most attributes in the attribute path are broken out into other subfields
+    /// with the exception of the package version for a package from a catalog
+    /// (i.e. the last attribute in the path). This attribute can be extracted from
+    #[serde(rename = "absPath")]
+    pub abs_path: Vec<String>,
+    /// Which subtree the package is under e.g. "catalog", "legacyPackages", etc
+    pub subtree: String,
+    /// The system that the package can be built for
+    pub system: String,
+    /// If the package comes from a catalog, which stability it comes from
+    pub stability: Option<String>,
+    /// The set of attributes that make up this package in particular.
+    ///
+    /// In the case of something like `hello`, this will simply be `["hello"]`,
+    /// but for a package that comes from a nested package set this will be
+    /// something like `["python310Packages", "flask"]`.
+    #[serde(rename = "pkgSubPath")]
+    pub pkg_subpath: Vec<String>,
     /// The package name
     pub pname: Option<String>,
     /// The package version
@@ -332,11 +349,15 @@ mod test {
         "description": "A program that produces a familiar, friendly greeting",
         "input": "nixpkgs",
         "license": "GPL-3.0-or-later",
-        "path": [
+        "absPath": [
             "legacyPackages",
             "aarch64-darwin",
             "hello"
         ],
+        "subtree": "legacyPackages",
+        "system": "aarch64-darwin",
+        "pkgSubPath": ["hello"],
+        "stability": null,
         "pname": "hello",
         "unfree": false,
         "version": "2.12.1"

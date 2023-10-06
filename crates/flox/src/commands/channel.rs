@@ -164,6 +164,12 @@ struct DisplayItem {
 fn render_search_results(mut search_results: SearchResults) -> Result<()> {
     // Search results contain a lot of information, but all we need is the input (for disambiguating them)
     // and the attribute path components that we should show the user.
+
+    // FIXME: Debugging
+    search_results.results.iter().for_each(|x| {
+        eprintln!("{}", x.input);
+    });
+
     let mut display_items = search_results
         .results
         .drain(..)
@@ -173,7 +179,7 @@ fn render_search_results(mut search_results: SearchResults) -> Result<()> {
             // convert a `Vec` to a slice first (slices and arrays already work), but then you
             // can destructure it like you would any other struct. You also need to convert
             // `String`s to `&str`s since there's no way to write a `String` literal.
-            let attrs = r.attr_path.iter().map(|a| a.as_str()).collect::<Vec<_>>();
+            let attrs = r.abs_path.iter().map(|a| a.as_str()).collect::<Vec<_>>();
             let package_attrs = match attrs.as_slice() {
                 // This matches any slice elements between `_stability` and `_version`
                 // which allows us to catch things like `pythonPackages.foo`.
@@ -184,7 +190,7 @@ fn render_search_results(mut search_results: SearchResults) -> Result<()> {
                 ["legacyPackages", _system, package] => Ok(vec![*package]),
                 ["packages", _system, package] => Ok(vec![*package]),
                 _ => {
-                    let installable = vec![input, r.attr_path.join(".")].join("#");
+                    let installable = vec![input, r.abs_path.join(".")].join("#");
                     bail!("invalid search result: {}", installable);
                 },
             }?;
@@ -196,6 +202,12 @@ fn render_search_results(mut search_results: SearchResults) -> Result<()> {
             })
         })
         .collect::<Result<Vec<_>>>()?;
+
+    // FIXME: Debugging
+    // display_items.iter().for_each(|x| {
+    //     eprintln!("{}", x.input);
+    // });
+
     // All items with the same package name from the same input (e.g. different versions) will
     // be consecutive and look the same. `Vec::dedup` only removes consecutive duplicates, so
     // we're safe.
@@ -230,9 +242,7 @@ fn render_search_results(mut search_results: SearchResults) -> Result<()> {
             }
         })
         .max()
-        .unwrap(); // SAFETY: could panic if `inputs_and_packages` is empty, but we know it's not
-                   // Depending on the search query there could be a ton of results, better to
-                   // do buffered writes than to lock `stdout` on every write.
+        .unwrap(); // SAFETY: could panic if `display_items` is empty, but we know it's not
 
     // Finally print something
     let mut writer = BufWriter::new(std::io::stdout());
