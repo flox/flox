@@ -285,6 +285,8 @@ impl GitCommandProvider {
     }
 
     /// Open a repo, erroring if `path` is not a repo or is a subdirectory of a repo
+    //
+    // TODO should share more code with discover?
     pub fn open<P: AsRef<Path>>(path: P) -> Result<Self, GitCommandOpenError> {
         let out_str = GitCommandProvider::run_command(
             GitCommandProvider::new_command(&Some(&path))
