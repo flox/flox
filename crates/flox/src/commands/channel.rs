@@ -93,7 +93,7 @@ impl Search {
         if self.json {
             render_search_results_json(results)?;
         } else {
-            render_search_results(results)?;
+            render_search_results_user_facing(results)?;
         }
         if exit_status.success() {
             Ok(())
@@ -146,6 +146,7 @@ fn construct_search_params(search_term: &str, flox: &Flox) -> Result<SearchParam
     Ok(SearchParams {
         registry,
         query,
+        systems: Some(vec![flox.system.clone()]),
         ..SearchParams::default()
     })
 }
@@ -165,12 +166,7 @@ struct DisplayItem {
 
 // FIXME: try 'python@>=2 <3', you get way more results than you should
 
-fn render_search_results(mut search_results: SearchResults) -> Result<()> {
-    // FIXME: Debugging
-    // search_results.results.iter().for_each(|x| {
-    //     eprintln!("{x:?}");
-    // });
-
+fn render_search_results_user_facing(mut search_results: SearchResults) -> Result<()> {
     // Nothing to display
     if search_results.results.is_empty() {
         return Ok(());
@@ -181,7 +177,8 @@ fn render_search_results(mut search_results: SearchResults) -> Result<()> {
         .results
         .drain(..)
         .map(|r| {
-            let join = !DEFAULT_CHANNELS.contains_key(r.input.as_str());
+            // let join = !DEFAULT_CHANNELS.contains_key(r.input.as_str());
+            let join = false;
             Ok(DisplayItem {
                 input: r.input,
                 package: r.pkg_subpath.join("."),
@@ -190,11 +187,6 @@ fn render_search_results(mut search_results: SearchResults) -> Result<()> {
             })
         })
         .collect::<Result<Vec<_>>>()?;
-
-    // FIXME: Debugging
-    // display_items.iter().for_each(|x| {
-    //     eprintln!("{}", x.input);
-    // });
 
     let deduped_display_items = dedup_and_disambiguate_display_items(display_items);
     if deduped_display_items.is_empty() {

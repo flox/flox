@@ -173,6 +173,20 @@ impl FromStr for Query {
     }
 }
 
+/// Which subtree a package is under.
+///
+/// This identifies which kind of package source a package came from (catalog, flake, or nixpkgs).
+#[derive(Debug, PartialEq, Eq, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Subtree {
+    /// The package came from a catalog
+    Catalog,
+    /// The package came from a nixpkgs checkout
+    LegacyPackages,
+    /// The package came from an arbitrary flake
+    Packages,
+}
+
 /// The deserialized search results.
 ///
 /// Note that the JSON results are returned by `pkgdb` one result per line
@@ -280,7 +294,7 @@ pub struct SearchResult {
     #[serde(rename = "absPath")]
     pub abs_path: Vec<String>,
     /// Which subtree the package is under e.g. "catalog", "legacyPackages", etc
-    pub subtree: String,
+    pub subtree: Subtree,
     /// The system that the package can be built for
     pub system: String,
     /// If the package comes from a catalog, which stability it comes from

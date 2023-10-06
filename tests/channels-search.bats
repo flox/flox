@@ -19,7 +19,6 @@ project_setup() {
   rm -rf "$PROJECT_DIR"
   mkdir -p "$PROJECT_DIR"
   pushd "$PROJECT_DIR" >/dev/null || return
-  PROJECT_REGISTRY="$BATS_TEST_DIR/search/registry.json"
 }
 
 project_teardown() {
@@ -41,6 +40,14 @@ teardown() {
 
 setup_file() {
   export FLOX_FEATURES_CHANNELS=rust;
+
+  # Necessary to make search results consistent for local dev and CI
+  # This variable sets `Flox.system`, which we pass along to `pkgdb`
+  # in the "systems" search parameter.
+  export NIX_TARGET_SYSTEM=x86_64-linux;
+
+  # Separator character for ambiguous package sources
+  export SEP=":";
 }
 
 
@@ -74,7 +81,10 @@ setup_file() {
 @test "'flox search' expected number of results" {
   run "$FLOX_CLI" search hello;
   n_lines="${#lines[@]}";
-  assert [ "$n_lines" -ge 4 ];
+  # hello - matches name
+  # hello-wayland - matches name
+  # gnome.iagno - match Ot(hello) in description
+  assert_equal "$n_lines" 3;
 }
 
 
@@ -82,80 +92,8 @@ setup_file() {
 
 @test "'flox search' semver search: hello@2.10" {
   run "$FLOX_CLI" search hello@2.10;
-  assert_output --partial "hello.2_10";
   n_lines="${#lines[@]}";
-  assert_equal "$n_lines" "1"
-}
-
-
-# ---------------------------------------------------------------------------- #
-
-@test "'flox search' semver search: 'hello@>=1'" {
-  run "$FLOX_CLI" search 'hello@>=1';
-  assert_output --partial "hello.latest";
-  assert_output --partial "hello.2_12_1";
-  assert_output --partial "hello.2_12";
-  assert_output --partial "hello.2_10";
-  n_lines="${#lines[@]}";
-  assert [ "$n_lines" -ge 4 ];
-}
-
-
-# ---------------------------------------------------------------------------- #
-
-@test "'flox search' semver search: hello@2.x" {
-  run "$FLOX_CLI" search hello@2.x;
-  assert_output --partial "hello.latest";
-  assert_output --partial "hello.2_12_1";
-  assert_output --partial "hello.2_12";
-  assert_output --partial "hello.2_10";
-  n_lines="${#lines[@]}";
-  assert [ "$n_lines" -ge 4 ];
-}
-
-
-# ---------------------------------------------------------------------------- #
-
-@test "'flox search' semver search: hello@=2.10" {
-  run "$FLOX_CLI" search hello@=2.10;
-  assert_output --partial "hello.2_10";
-  n_lines="${#lines[@]}";
-  assert_equal "$n_lines" "1"
-}
-
-
-# ---------------------------------------------------------------------------- #
-
-@test "'flox search' semver search: hello@v2" {
-  run "$FLOX_CLI" search hello@v2;
-  assert_output --partial "hello.2_12_1";
-  assert_output --partial "hello.2_12";
-  assert_output --partial "hello.2_10";
-  assert_output --partial "hello.latest";
-  n_lines="${#lines[@]}";
-  assert [ "$n_lines" -ge 4 ];
-}
-
-
-# ---------------------------------------------------------------------------- #
-
-@test "'flox search' semver search: 'hello@>1 <3'" {
-  run "$FLOX_CLI" search 'hello@>1 <3';
-  assert_output --partial "hello.2_12_1";
-  assert_output --partial "hello.2_12";
-  assert_output --partial "hello.2_10";
-  assert_output --partial "hello.latest";
-  n_lines="${#lines[@]}";
-  assert [ "$n_lines" -ge 4 ];
-}
-
-
-# ---------------------------------------------------------------------------- #
-
-@test "'flox search' exact semver match listed first" {
-  run "$FLOX_CLI" search hello@2.12.1;
-  first_line=$(echo "$output" | head -n 1 | grep 2.12.1);
-  assert [ -n first_line ];
+  assert_equal "$n_lines" 1;
 }
 
 
@@ -165,4 +103,83 @@ setup_file() {
   run "$FLOX_CLI" search hello --json;
   version=$(echo "$output" | jq '.[0].version')
   assert_equal "$version" '"2.12.1"';
+}
+
+
+# ---------------------------------------------------------------------------- #
+
+@test "'flox search' semver search: 'hello@>=1'" {
+  run "$FLOX_CLI" search 'hello@>=1' --json;
+  versions=$(echo "$output" | jq -c 'map(.absPath | last)');
+  # first 4 results are 'hello', last two are 'gnome.iagno'
+  assert_equal "$versions" '["2_12_1","latest","2_12","2_10","3_38_1","latest"]';
+}
+
+
+# ---------------------------------------------------------------------------- #
+
+@test "'flox search' semver search: hello@2.x" {
+  run "$FLOX_CLI" search hello@2.x --json;
+  versions=$(echo "$output" | jq -c 'map(.absPath | last)');
+  assert_equal "$versions" '["2_12_1","latest","2_12","2_10"]';
+}
+
+
+# ---------------------------------------------------------------------------- #
+
+@test "'flox search' semver search: hello@=2.10" {
+  run "$FLOX_CLI" search hello@=2.10;
+  n_lines="${#lines[@]}";
+  assert_equal "$n_lines" "1";
+}
+
+
+# ---------------------------------------------------------------------------- #
+
+@test "'flox search' semver search: hello@v2" {
+  run "$FLOX_CLI" search hello@v2 --json;
+  versions=$(echo "$output" | jq -c 'map(.absPath | last)');
+  assert_equal "$versions" '["2_12_1","latest","2_12","2_10"]';
+}
+
+
+# ---------------------------------------------------------------------------- #
+
+@test "'flox search' semver search: 'hello@>1 <3'" {
+  run "$FLOX_CLI" search 'hello@>1 <3' --json;
+  versions=$(echo "$output" | jq -c 'map(.absPath | last)');
+  assert_equal "$versions" '["2_12_1","latest","2_12","2_10"]';
+}
+
+
+# ---------------------------------------------------------------------------- #
+
+@test "'flox search' exact semver match listed first" {
+  run "$FLOX_CLI" search hello@2.12.1 --json;
+  first_line=$(echo "$output" | head -n 1 | grep 2.12.1);
+  assert [ -n first_line ];
+}
+
+
+# ---------------------------------------------------------------------------- #
+
+@test "'flox search' disambiguates package sources" {
+  run "$FLOX_CLI" subscribe nixpkgs2 github:NixOS/nixpkgs/release-23.05;
+  assert_success;
+  unset output;
+  run "$FLOX_CLI" search hello;
+  assert_output --partial "nixpkgs2${SEP}";
+  assert_output --partial "nixpkgs-flox${SEP}"
+  run "$FLOX_CLI" unsubscribe nixpkgs2;
+  assert_success;
+}
+
+
+# ---------------------------------------------------------------------------- #
+
+@test "'flox search' displays unambiguous packages without separator" {
+  run "$FLOX_CLI" search hello;
+  packages=$(echo "$output" | cut -d ' ' -f 1)
+  # $'foo' syntax allows you to put backslash escapes in literal strings
+  assert_equal "$packages" $'hello\nhello-wayland\ngnome.iagno';
 }
