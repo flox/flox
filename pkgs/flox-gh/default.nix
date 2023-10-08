@@ -1,13 +1,37 @@
-{
-  gh,
-  gitMinimal,
-  lib,
-  makeWrapper,
-}:
-gh.overrideAttrs (oldAttrs: {
-  pname = "flox-${oldAttrs.pname}";
-  nativeBuildInputs = (oldAttrs.nativeBuildInputs or []) ++ [makeWrapper];
-  patches = (oldAttrs.patches or []) ++ [(./flox-gh.patch + ".v${oldAttrs.version}")];
+{ lib, fetchFromGitHub, buildGoModule, installShellFiles, stdenv, testers, gh, gitMinimal, makeWrapper }:
+
+buildGoModule rec {
+  pname = "flox-gh";
+  version = "2.32.1";
+
+  src = fetchFromGitHub {
+    owner = "cli";
+    repo = "cli";
+    rev = "v${version}";
+    hash = "sha256-DfcafkgauO0mlMEJTfR7hjnkY1QJ4dUyrWv/bqJlVAo=";
+  };
+
+  vendorHash = "sha256-7Izhqma/zukH9M7EvV9I4axefVaTDoNVXQmLx+GjAt0=";
+
+  nativeBuildInputs = [ installShellFiles makeWrapper ];
+
+  patches = [(./flox-gh.patch + ".v${version}")];
+
+  buildPhase = ''
+    runHook preBuild
+    make GO_LDFLAGS="-s -w" GH_VERSION=${version} bin/gh ${lib.optionalString (stdenv.buildPlatform.canExecute stdenv.hostPlatform) "manpages"}
+    runHook postBuild
+  '';
+
+  installPhase = ''
+    runHook preInstall
+    install -Dm755 bin/gh -t $out/bin
+    runHook postInstall
+  '';
+
+  # most tests require network access
+  doCheck = false;
+
   postInstall = ''
     mv $out/bin/gh $out/bin/flox-gh
     wrapProgram $out/bin/flox-gh \
@@ -21,4 +45,4 @@ gh.overrideAttrs (oldAttrs: {
       --run 'unset GH_CONFIG_DIR GH_HOST GH_PATH GH_REPO' \
       --prefix PATH : "${lib.makeBinPath [gitMinimal]}"
   '';
-})
+}
