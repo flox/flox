@@ -34,6 +34,14 @@ pub enum SearchError {
     PkgDbCall(std::io::Error),
 }
 
+#[derive(Debug, thiserror::Error)]
+pub enum ShowError {
+    #[error("failed to perform search: {0}")]
+    Search(#[from] SearchError),
+    #[error("invalid search term: {0}")]
+    InvalidSearchTerm(String),
+}
+
 /// The input parameters for the `pkgdb search` command
 ///
 /// C++ docs: https://flox.github.io/pkgdb/structflox_1_1pkgdb_1_1PkgQueryArgs.html
