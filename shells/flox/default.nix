@@ -28,6 +28,7 @@ mkShell ({
       rust-analyzer
       rust.packages.stable.rustPlatform.rustLibSrc
       just
+      rustc
     ];
     inherit (pre-commit-check) shellHook;
   }
