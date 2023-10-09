@@ -48,11 +48,6 @@ setup_file() {
 
   # Separator character for ambiguous package sources
   export SEP=":";
-
-  # The current system
-  _os=$(uname -s)
-  _cpu=$(uname -m)
-  export THIS_SYSTEM="$_cpu-${_os,,}"
 }
 
 
@@ -86,23 +81,17 @@ setup_file() {
 @test "'flox search' expected number of results: 'hello'" {
   run "$FLOX_CLI" search hello;
   n_lines="${#lines[@]}";
-  case $THIS_SYSTEM in
-    "arm64-darwin")
+  case "$NIX_SYSTEM" in
+    *-darwin)
       # just 'hello'
-      assert_equal "$n_lines" 1
+      assert_equal "$n_lines" 1;
       ;;
-    "x86_64-darwin")
-      # just 'hello'
-      assert_equal "$n_lines" 1
-      ;;
-    "x86_64-linux")
+    *-linux)
       # hello - matches name
       # hello-wayland - matches name
       # gnome.iagno - matches Ot(hello) in description
       assert_equal "$n_lines" 3;
       ;;
-    # Note: We'll have to add an additional case for "arm64-linux"
-    #       if we ever start testing that system in CI
   esac
 }
 
@@ -120,7 +109,7 @@ setup_file() {
 
 @test "'flox search' returns JSON" {
   run "$FLOX_CLI" search hello --json;
-  version=$(echo "$output" | jq '.[0].version')
+  version="$(echo "$output" | jq '.[0].version')";
   assert_equal "$version" '"2.12.1"';
 }
 
@@ -129,20 +118,15 @@ setup_file() {
 
 @test "'flox search' semver search: 'hello@>=1'" {
   run "$FLOX_CLI" search 'hello@>=1' --json;
-  versions=$(echo "$output" | jq -c 'map(.absPath | last)');
+  versions="$(echo "$output" | jq -c 'map(.absPath | last)')";
   case $THIS_SYSTEM in
-    "arm64-darwin")
+    *-darwin)
       assert_equal "$versions" '["2_12_1","latest","2_12","2_10"]';
       ;;
-    "x86_64-darwin")
-      assert_equal "$versions" '["2_12_1","latest","2_12","2_10"]';
-      ;;
-    "x86_64-linux")
+    *-linux)
       # first 4 results are 'hello', last two are 'gnome.iagno'
       assert_equal "$versions" '["2_12_1","latest","2_12","2_10","3_38_1","latest"]';
       ;;
-    # Note: We'll have to add an additional case for "arm64-linux"
-    #       if we ever start testing that system in CI
   esac
 }
 
@@ -151,7 +135,7 @@ setup_file() {
 
 @test "'flox search' semver search: hello@2.x" {
   run "$FLOX_CLI" search hello@2.x --json;
-  versions=$(echo "$output" | jq -c 'map(.absPath | last)');
+  versions="$(echo "$output" | jq -c 'map(.absPath | last)')";
   assert_equal "$versions" '["2_12_1","latest","2_12","2_10"]';
 }
 
@@ -169,7 +153,7 @@ setup_file() {
 
 @test "'flox search' semver search: hello@v2" {
   run "$FLOX_CLI" search hello@v2 --json;
-  versions=$(echo "$output" | jq -c 'map(.absPath | last)');
+  versions="$(echo "$output" | jq -c 'map(.absPath | last)')";
   assert_equal "$versions" '["2_12_1","latest","2_12","2_10"]';
 }
 
@@ -178,7 +162,7 @@ setup_file() {
 
 @test "'flox search' semver search: 'hello@>1 <3'" {
   run "$FLOX_CLI" search 'hello@>1 <3' --json;
-  versions=$(echo "$output" | jq -c 'map(.absPath | last)');
+  versions="$(echo "$output" | jq -c 'map(.absPath | last)')";
   assert_equal "$versions" '["2_12_1","latest","2_12","2_10"]';
 }
 
@@ -187,7 +171,7 @@ setup_file() {
 
 @test "'flox search' exact semver match listed first" {
   run "$FLOX_CLI" search hello@2.12.1 --json;
-  first_line=$(echo "$output" | head -n 1 | grep 2.12.1);
+  first_line="$(echo "$output" | head -n 1 | grep 2.12.1)";
   assert [ -n first_line ];
 }
 
@@ -210,19 +194,14 @@ setup_file() {
 
 @test "'flox search' displays unambiguous packages without separator" {
   run "$FLOX_CLI" search hello;
-  packages=$(echo "$output" | cut -d ' ' -f 1)
+  packages="$(echo "$output" | cut -d ' ' -f 1)";
   case $THIS_SYSTEM in
-    "arm64-darwin")
+    *-darwin)
       assert_equal "$packages" "hello";
       ;;
-    "x86_64-darwin")
-      assert_equal "$packages" "hello";
-      ;;
-    "x86_64-linux")
+    *-linux)
       # $'foo' syntax allows you to put backslash escapes in literal strings
       assert_equal "$packages" $'hello\nhello-wayland\ngnome.iagno';
       ;;
-    # Note: We'll have to add an additional case for "arm64-linux"
-    #       if we ever start testing that system in CI
   esac
 }
