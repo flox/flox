@@ -1,17 +1,26 @@
-use std::env;
-use std::process::Command;
+use std::collections::HashMap;
+use std::io::{BufWriter, Write};
+use std::str::FromStr;
 
 use anyhow::{bail, Context, Result};
 use bpaf::Bpaf;
 use derive_more::Display;
 use flox_rust_sdk::flox::{Flox, DEFAULT_OWNER};
+use flox_rust_sdk::models::search::{
+    do_search,
+    Query,
+    Registry,
+    RegistryDefaults,
+    RegistryInput,
+    SearchParams,
+    SearchResults,
+};
 use flox_rust_sdk::nix::command::FlakeMetadata;
 use flox_rust_sdk::nix::command_line::NixCommandLine;
 use flox_rust_sdk::nix::flake_ref::git_service::{GitServiceAttributes, GitServiceRef};
 use flox_rust_sdk::nix::flake_ref::FlakeRef;
 use flox_rust_sdk::nix::RunJson;
 use itertools::Itertools;
-use once_cell::sync::Lazy;
 use regex::Regex;
 use serde_json::json;
 
@@ -29,12 +38,6 @@ enum ChannelType {
     #[display(fmt = "flox")]
     Flox,
 }
-
-// This is the `PKGDB` path that we actually use.
-// This is set once and prefers the `PKGDB` env variable, but will use
-// the fallback to the binary available at build time if it is unset.
-pub static PKGDB_BIN: Lazy<String> =
-    Lazy::new(|| env::var("PKGDB").unwrap_or(env!("PKGDB_BIN").to_string()));
 
 /// Search packages in subscribed channels
 #[derive(Bpaf, Clone)]
@@ -60,7 +63,7 @@ pub struct Search {
     /// `node-semver` syntax.
     /// Exs: `(hello|coreutils)`, `node@>=16`, `coreutils@9.1`
     #[bpaf(positional("search-term"))]
-    pub search_term: Option<String>,
+    pub search_term: String,
 }
 
 // Try Using:
@@ -76,120 +79,113 @@ pub struct Search {
 impl Search {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("search");
-        let channels = flox
-            .channels
-            .iter()
-            .filter_map(|entry| {
-                if HIDDEN_CHANNELS.contains_key(&*entry.from.id) {
-                    None
-                } else if DEFAULT_CHANNELS.contains_key(&*entry.from.id) {
-                    Some((ChannelType::Flox, entry))
-                } else {
-                    Some((ChannelType::User, entry))
-                }
-            })
-            .sorted_by(|a, b| Ord::cmp(a, b));
 
-        // Create `registry` parameter for `pkgdb`
-        let mut priority: Vec<String> = Vec::new();
-        let mut inputs = serde_json::Map::new();
-        for (_, entry) in channels {
-            // TODO: handle `subtrees` and `stabilities`
-            priority.push(entry.from.id.to_string());
-            inputs.insert(
-                entry.from.id.to_string(),
-                json!({"from": entry.from.to_string()}),
-            );
+        let search_params = construct_search_params(&self.search_term, &flox)?;
+
+        let (results, exit_status) = do_search(&search_params)?;
+
+        // Render what we have no matter what, then indicate whether we encountered an error.
+        // FIXME: We may have warnings on `stderr` even with a successful call to `pkgdb`.
+        //        We aren't checking that at all at the moment because better overall error handling
+        //        is coming in a later PR.
+        if self.json {
+            render_search_results_json(&results)?;
+        } else {
+            render_search_results(&results)?;
         }
-        let registry = json!({
-            "priority": priority,
-            "inputs": inputs,
-            "default": json!({
-                "subtrees": null, // TODO
-                "stabilities": null,  // TODO
-            })
-        });
-
-        // Create `query` parameter for `pkgdb`
-        let query = match self.search_term {
-            Some(search_term) => {
-                let mut query = serde_json::Map::new();
-                query.insert("match".to_string(), json!(search_term));
-                query
-            },
-            None => serde_json::Map::new(),
-        };
-
-        let params = json!({
-            "registry": registry,
-            "query": query,
-            // These defaults are set by `pkgdb` but are shown here
-            // for visibility.
-            // "semver": { "preferPreReleases": false }
-            // "systems": ["x86_64-linux", ...]
-        });
-
-        // TODO: I have no idea how to check verbosity here.
-        //// By default we run with `--quiet`, but if verbose is set then
-        //// stream stderr.
-        //let mut maybe_quiet: Vec<String> = Vec::new();
-        //if !self.verbose {
-        //    maybe_quiet.push("--quiet".to_string());
-        //}
-        //maybe_quiet.push("--quiet".to_string());
-        let maybe_quiet: Vec<String> = vec!["--quiet".to_string()];
-
-        let output = Command::new(PKGDB_BIN.as_str())
-            .arg("search")
-            .args(maybe_quiet)
-            .arg(params.to_string())
-            .stderr(std::process::Stdio::inherit())
-            .output()?;
-
-        if output.status.success() {
-            let stdout = String::from_utf8(output.stdout)?;
-            if self.json {
-                let mut first = true;
-                for line in stdout.lines() {
-                    if first {
-                        first = false;
-                        print!("[ ");
-                    } else {
-                        print!(", ");
-                    }
-                    println!("{}", line);
-                }
-                println!("]");
-            } else {
-                for line in stdout.lines() {
-                    let entry: serde_json::Value = serde_json::from_str(line).unwrap();
-                    let input = entry.get("input").unwrap().as_str();
-                    let pname = entry.get("pname").unwrap().as_str();
-                    let attr_path = entry.get("path").unwrap().as_array().unwrap();
-                    let mut path: Vec<String> = Vec::new();
-                    for part in attr_path {
-                        path.push(part.as_str().unwrap().to_string())
-                    }
-                    print!("{}#{}: {}", input.unwrap(), path.join("."), pname.unwrap());
-
-                    if let Some(ver) = entry.get("version").unwrap().as_str() {
-                        print!("@{}", ver)
-                    }
-
-                    if let Some(desc) = entry.get("description").unwrap().as_str() {
-                        print!(" - {}", desc)
-                    }
-                    println!();
-                }
-            }
+        if exit_status.success() {
             Ok(())
         } else {
             bail!(
-                "pkgdb exited with status code {}",
-                output.status.code().unwrap_or(-1)
+                "pkgdb exited with status code: {}",
+                exit_status.code().unwrap_or(-1),
             );
         }
     }
+}
+
+fn construct_search_params(search_term: &str, flox: &Flox) -> Result<SearchParams> {
+    let channels = flox
+        .channels
+        .iter()
+        .filter_map(|entry| {
+            if HIDDEN_CHANNELS.contains_key(&*entry.from.id) {
+                None
+            } else if DEFAULT_CHANNELS.contains_key(&*entry.from.id) {
+                Some((ChannelType::Flox, entry))
+            } else {
+                Some((ChannelType::User, entry))
+            }
+        })
+        .sorted();
+
+    // Create `registry` parameter for `pkgdb`
+    let mut priority: Vec<String> = Vec::new();
+    let mut inputs = HashMap::new();
+    for (_, entry) in channels {
+        priority.push(entry.from.id.to_string());
+        let input = RegistryInput {
+            from: entry.to.clone(),
+            // TODO: handle `subtrees` and `stabilities`
+            subtrees: None,
+            stabilities: None,
+        };
+        inputs.insert(entry.from.id.to_string(), input);
+    }
+    let registry = Registry {
+        inputs,
+        priority,
+        defaults: RegistryDefaults::default(),
+    };
+
+    // We've already checked that the search term is Some(_)
+    let query = Query::from_str(search_term)?;
+
+    Ok(SearchParams {
+        registry,
+        query,
+        ..SearchParams::default()
+    })
+}
+
+// This is likely to change significantly after the output format of search results is specced out
+fn render_search_results(search_results: &SearchResults) -> Result<()> {
+    let summarized_results = search_results
+        .results
+        .iter()
+        .map(|r| {
+            let path_components = r.attr_path.clone();
+            let flake_attr = if !DEFAULT_CHANNELS.contains_key(r.input.as_str()) {
+                vec![r.input.clone(), path_components.join(".")].join("#")
+            } else {
+                path_components.join(".")
+            };
+            let d = if let Some(ref d) = r.description {
+                // Some package descriptions contain newline characters
+                // which breaks formatting
+                d.replace('\n', " ")
+            } else {
+                "<no description provided>".into()
+            };
+            (flake_attr, d)
+        })
+        .collect::<Vec<_>>();
+    let attr_col_width = summarized_results
+        .iter()
+        .fold(0, |cw, (attr, _)| usize::max(cw, attr.len()));
+    // Depending on the search query there could be a ton of results, better to
+    // do buffered writes than to lock `stdout` on every write.
+    let mut writer = BufWriter::new(std::io::stdout());
+    for (attr, desc) in summarized_results.iter() {
+        writeln!(&mut writer, "{attr:<attr_col_width$}  {desc}")?;
+    }
+    Ok(())
+}
+
+fn render_search_results_json(search_results: &SearchResults) -> Result<()> {
+    let json = serde_json::to_string(&search_results.results)?;
+    println!("{}", json);
+    Ok(())
 }
 
 #[derive(Bpaf, Clone)]
