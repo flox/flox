@@ -45,8 +45,8 @@ pub struct PathEnvironment<S> {
     /// The temporary directory that this environment will use during transactions
     pub temp_dir: PathBuf,
 
-    /// The [EnvironmentRef] this env is created from (and validated against)
-    pub environment_ref: EnvironmentRef,
+    /// The [EnvironmentName] of this environment
+    pub name: EnvironmentName,
 
     /// The transaction state
     pub state: S,
@@ -80,7 +80,7 @@ impl<S: TransactionState> PathEnvironment<S> {
         Ok(PathEnvironment {
             path: transaction_dir.into_path(),
             temp_dir: self.temp_dir.clone(),
-            environment_ref: self.environment_ref.clone(),
+            name: self.name.clone(),
             state: Temporary,
         })
     }
@@ -251,8 +251,8 @@ where
     }
 
     /// Return the [EnvironmentRef] for the environment for identification
-    fn environment_ref(&self) -> &EnvironmentRef {
-        &self.environment_ref
+    fn environment_ref(&self) -> EnvironmentRef {
+        EnvironmentRef::new_from_parts(None, self.name.clone())
     }
 
     /// Get a catalog of installed packages from this environment
@@ -294,12 +294,12 @@ where
 
     /// Returns the environment owner
     fn owner(&self) -> Option<EnvironmentOwner> {
-        self.environment_ref.owner().cloned()
+        None
     }
 
     /// Returns the environment name
     fn name(&self) -> EnvironmentName {
-        self.environment_ref.name().clone()
+        self.name.clone()
     }
 
     /// Delete the Environment
@@ -429,7 +429,7 @@ impl PathEnvironment<Original> {
 
         Ok(PathEnvironment {
             path: env_path,
-            environment_ref: EnvironmentRef::new_from_parts(None, name),
+            name,
             temp_dir: temp_dir.as_ref().to_path_buf(),
             state: Original,
         })
@@ -507,7 +507,7 @@ mod tests {
                 .canonicalize()
                 .unwrap()
                 .join(".flox/test"),
-            environment_ref: EnvironmentRef::new(None, "test").unwrap(),
+            name: EnvironmentName::from_str("test").unwrap(),
             temp_dir: environment_temp_dir.path().to_path_buf(),
             state: Original,
         };
