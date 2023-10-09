@@ -81,7 +81,7 @@ pub trait Environment {
     fn manifest_content(&self) -> Result<String, EnvironmentError2>;
 
     /// Return the [EnvironmentRef] for the environment for identification
-    fn environment_ref(&self) -> &EnvironmentRef;
+    fn environment_ref(&self) -> EnvironmentRef;
 
     /// Return a flake attribute installable for this environment
     // TODO consider removing this from the trait

@@ -70,7 +70,7 @@ impl Environment for ManagedEnvironment {
 
     /// Return the [EnvironmentRef] for the environment for identification
     #[allow(unused)]
-    fn environment_ref(&self) -> &EnvironmentRef {
+    fn environment_ref(&self) -> EnvironmentRef {
         todo!()
     }
 
