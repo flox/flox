@@ -48,6 +48,11 @@ setup_file() {
 
   # Separator character for ambiguous package sources
   export SEP=":";
+
+  # The current system
+  _os=$(uname -s)
+  _cpu=$(uname -m)
+  export THIS_SYSTEM="$_cpu-${_os,,}"
 }
 
 
@@ -78,13 +83,27 @@ setup_file() {
 
 # ---------------------------------------------------------------------------- #
 
-@test "'flox search' expected number of results" {
+@test "'flox search' expected number of results: 'hello'" {
   run "$FLOX_CLI" search hello;
   n_lines="${#lines[@]}";
-  # hello - matches name
-  # hello-wayland - matches name
-  # gnome.iagno - match Ot(hello) in description
-  assert_equal "$n_lines" 3;
+  case $THIS_SYSTEM in
+    "arm64-darwin")
+      # just 'hello'
+      assert_equal "$n_lines" 1
+      ;;
+    "x86_64-darwin")
+      # just 'hello'
+      assert_equal "$n_lines" 1
+      ;;
+    "x86_64-linux")
+      # hello - matches name
+      # hello-wayland - matches name
+      # gnome.iagno - matches Ot(hello) in description
+      assert_equal "$n_lines" 3;
+      ;;
+    # Note: We'll have to add an additional case for "arm64-linux"
+    #       if we ever start testing that system in CI
+  esac
 }
 
 
@@ -111,8 +130,20 @@ setup_file() {
 @test "'flox search' semver search: 'hello@>=1'" {
   run "$FLOX_CLI" search 'hello@>=1' --json;
   versions=$(echo "$output" | jq -c 'map(.absPath | last)');
-  # first 4 results are 'hello', last two are 'gnome.iagno'
-  assert_equal "$versions" '["2_12_1","latest","2_12","2_10","3_38_1","latest"]';
+  case $THIS_SYSTEM in
+    "arm64-darwin")
+      assert_equal "$versions" '["2_12_1","latest","2_12","2_10"]';
+      ;;
+    "x86_64-darwin")
+      assert_equal "$versions" '["2_12_1","latest","2_12","2_10"]';
+      ;;
+    "x86_64-linux")
+      # first 4 results are 'hello', last two are 'gnome.iagno'
+      assert_equal "$versions" '["2_12_1","latest","2_12","2_10","3_38_1","latest"]';
+      ;;
+    # Note: We'll have to add an additional case for "arm64-linux"
+    #       if we ever start testing that system in CI
+  esac
 }
 
 
@@ -163,7 +194,7 @@ setup_file() {
 
 # ---------------------------------------------------------------------------- #
 
-@test "'flox search' disambiguates package sources" {
+@test "'flox search' displays ambiguous packages with separator" {
   run "$FLOX_CLI" subscribe nixpkgs2 github:NixOS/nixpkgs/release-23.05;
   assert_success;
   unset output;
@@ -180,6 +211,18 @@ setup_file() {
 @test "'flox search' displays unambiguous packages without separator" {
   run "$FLOX_CLI" search hello;
   packages=$(echo "$output" | cut -d ' ' -f 1)
-  # $'foo' syntax allows you to put backslash escapes in literal strings
-  assert_equal "$packages" $'hello\nhello-wayland\ngnome.iagno';
+  case $THIS_SYSTEM in
+    "arm64-darwin")
+      assert_equal "$packages" "hello";
+      ;;
+    "x86_64-darwin")
+      assert_equal "$packages" "hello";
+      ;;
+    "x86_64-linux")
+      # $'foo' syntax allows you to put backslash escapes in literal strings
+      assert_equal "$packages" $'hello\nhello-wayland\ngnome.iagno';
+      ;;
+    # Note: We'll have to add an additional case for "arm64-linux"
+    #       if we ever start testing that system in CI
+  esac
 }
