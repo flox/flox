@@ -358,7 +358,7 @@ pub struct Install {
     #[bpaf(long, short, argument("ENV"))]
     environment: Option<EnvironmentRef>,
 
-    #[bpaf(positional("PACKAGES"), some("At least one package"))]
+    #[bpaf(positional("PACKAGES"), some("Must specify at least one package"))]
     packages: Vec<String>,
 }
 
@@ -427,7 +427,7 @@ pub struct Uninstall {
     #[bpaf(long, short, argument("ENV"))]
     environment: Option<EnvironmentRef>,
 
-    #[bpaf(positional("PACKAGES"), some("At least one package"))]
+    #[bpaf(positional("PACKAGES"), some("Must specify at least one package"))]
     packages: Vec<String>,
 }
 
