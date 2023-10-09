@@ -84,6 +84,7 @@ pub trait Environment {
     fn environment_ref(&self) -> &EnvironmentRef;
 
     /// Return a flake attribute installable for this environment
+    // TODO consider removing this from the trait
     fn flake_attribute(&self, system: System) -> FlakeAttribute;
 
     /// Returns the environment owner
@@ -98,6 +99,7 @@ pub trait Environment {
         Self: Sized;
 
     /// Remove gc-roots
+    // TODO consider renaming or removing - we might not support this for PathEnvironment
     fn delete_symlinks(&self) -> Result<bool, EnvironmentError2> {
         Ok(false)
     }
