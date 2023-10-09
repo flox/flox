@@ -6,14 +6,6 @@
 {
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/23.05";
 
-  # For `gh` CLI ( need a specific version )
-  inputs.nixpkgs-for-gh = {
-    type = "github";
-    owner = "NixOS";
-    repo = "nixpkgs";
-    rev = "46ed466081b9cad1125b11f11a2af5cc40b942c7";
-  };
-
   # Do not override `nixpkgs` input
   inputs.pkgdb.url = "github:flox/pkgdb";
 
@@ -36,7 +28,6 @@
   outputs = {
     self,
     nixpkgs,
-    nixpkgs-for-gh,
     pkgdb,
     floco,
     parser-util,
@@ -75,25 +66,17 @@
 
     # ------------------------------------------------------------------------ #
 
+    # /Shrinkwrap/ `pkgdb' to preserve `cc' and `nix' versions.
+    overlays.pkgdb-shrinkwrap = final: prev: let
+      pkgdbPkgsFor = builtins.getAttr prev.system pkgdb.packages;
+    in {
+      inherit (pkgdbPkgsFor) flox-pkgdb;
+    };
+
     overlays.deps = nixpkgs.lib.composeManyExtensions [
       parser-util.overlays.default # for `parser-util'
       floco.overlays.default # for `semver'
-
-      # /Shrinkwrap/ `pkgdb' to preserve `cc' and `nix' versions.
-      (final: prev: let
-        pkgdbPkgsFor = builtins.getAttr prev.system pkgdb.packages;
-      in {
-        inherit (pkgdbPkgsFor) flox-pkgdb;
-      })
-
-      # Cherry pick `gh` recipe for older sources with updated deps.
-      # We need v2.31.0, v2.32.0, or v2.32.1
-      (final: prev: let
-        ghPkgsFor =
-          builtins.getAttr prev.system nixpkgs-for-gh.legacyPackages;
-      in {
-        gh = final.callPackage ghPkgsFor.gh.override {};
-      })
+      overlays.pkgdb-shrinkwrap
     ];
 
     overlays.flox = final: prev: let
@@ -105,6 +88,7 @@
       genPkg = name: _: callPackage (./pkgs + ("/" + name)) {};
     in
       builtins.mapAttrs genPkg (builtins.readDir ./pkgs);
+
     overlays.default =
       nixpkgs.lib.composeExtensions overlays.deps
       overlays.flox;

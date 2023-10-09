@@ -142,22 +142,6 @@
         "type": "github"
       }
     },
-    "nixpkgs-for-gh": {
-      "locked": {
-        "lastModified": 1689413807,
-        "narHash": "sha256-exuzOvOhGAEKWQKwDuZAL4N8a1I837hH5eocaTcIbLc=",
-        "owner": "NixOS",
-        "repo": "nixpkgs",
-        "rev": "46ed466081b9cad1125b11f11a2af5cc40b942c7",
-        "type": "github"
-      },
-      "original": {
-        "owner": "NixOS",
-        "repo": "nixpkgs",
-        "rev": "46ed466081b9cad1125b11f11a2af5cc40b942c7",
-        "type": "github"
-      }
-    },
     "nixpkgs-stable": {
       "locked": {
         "lastModified": 1685801374,
@@ -239,7 +223,6 @@
           "floco"
         ],
         "nixpkgs": "nixpkgs",
-        "nixpkgs-for-gh": "nixpkgs-for-gh",
         "parser-util": "parser-util",
         "pkgdb": "pkgdb",
         "shellHooks": "shellHooks"

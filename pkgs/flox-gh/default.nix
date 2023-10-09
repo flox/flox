@@ -1,55 +1,63 @@
 {
-  lib,
   fetchFromGitHub,
   buildGoModule,
   installShellFiles,
   stdenv,
   gitMinimal,
   makeWrapper,
-}:
-buildGoModule rec {
-  pname = "flox-gh";
+}: let
   version = "2.32.1";
+in
+  buildGoModule {
+    pname = "flox-gh";
 
-  src = fetchFromGitHub {
-    owner = "cli";
-    repo = "cli";
-    rev = "v${version}";
-    hash = "sha256-DfcafkgauO0mlMEJTfR7hjnkY1QJ4dUyrWv/bqJlVAo=";
-  };
+    inherit version;
 
-  vendorHash = "sha256-7Izhqma/zukH9M7EvV9I4axefVaTDoNVXQmLx+GjAt0=";
+    src = fetchFromGitHub {
+      owner = "cli";
+      repo = "cli";
+      rev = "v${version}";
+      hash = "sha256-DfcafkgauO0mlMEJTfR7hjnkY1QJ4dUyrWv/bqJlVAo=";
+    };
 
-  nativeBuildInputs = [installShellFiles makeWrapper];
+    vendorHash = "sha256-7Izhqma/zukH9M7EvV9I4axefVaTDoNVXQmLx+GjAt0=";
 
-  patches = [(./flox-gh.patch + ".v${version}")];
+    nativeBuildInputs = [installShellFiles makeWrapper];
 
-  buildPhase = ''
-    runHook preBuild
-    make GO_LDFLAGS="-s -w" GH_VERSION=${version} bin/gh ${lib.optionalString (stdenv.buildPlatform.canExecute stdenv.hostPlatform) "manpages"}
-    runHook postBuild
-  '';
+    patches = [./flox-gh.patch.v2.32.1];
 
-  installPhase = ''
-    runHook preInstall
-    install -Dm755 bin/gh -t $out/bin
-    runHook postInstall
-  '';
+    buildPhase = let
+      maybeManpages =
+        if stdenv.buildPlatform.canExecute stdenv.hostPlatform
+        then "manpages"
+        else "";
+    in ''
+      runHook preBuild;
+      make GO_LDFLAGS='-s -w' GH_VERSION=${version} bin/gh ${maybeManpages};
+      runHook postBuild;
+    '';
 
-  # most tests require network access
-  doCheck = false;
+    installPhase = ''
+      runHook preInstall;
+      install -Dm755 bin/gh -t "$out/bin";
+      runHook postInstall;
+    '';
 
-  postInstall = ''
-    mv $out/bin/gh $out/bin/flox-gh
-    wrapProgram $out/bin/flox-gh \
-      --run '# This script should only be invoked by flox with $FLOX_*_HOME defined.' \
-      --run 'set -eu' \
-      --run 'export XDG_CONFIG_HOME="$FLOX_CONFIG_HOME"' \
-      --run 'export XDG_STATE_HOME="$FLOX_STATE_HOME"' \
-      --run 'export XDG_DATA_HOME="$FLOX_DATA_HOME"' \
-      --run '# Unset gh-related environment variables.' \
-      --run 'unset GITHUB_TOKEN GH_TOKEN GITHUB_ENTERPRISE_TOKEN GH_ENTERPRISE_TOKEN' \
-      --run 'unset GH_CONFIG_DIR GH_HOST GH_PATH GH_REPO' \
-      --prefix PATH : "${lib.makeBinPath [gitMinimal]}"
-  '';
-}
+    # most tests require network access
+    doCheck = false;
+
+    postInstall = ''
+      mv "$out/bin/gh" "$out/bin/flox-gh";
+      wrapProgram "$out/bin/flox-gh"                                             \
+        --run '# This should only be invoked by flox with $FLOX_*_HOME defined.' \
+        --run 'set -eu'                                                          \
+        --run 'export XDG_CONFIG_HOME="$FLOX_CONFIG_HOME"'                       \
+        --run 'export XDG_STATE_HOME="$FLOX_STATE_HOME"'                         \
+        --run 'export XDG_DATA_HOME="$FLOX_DATA_HOME"'                           \
+        --run '# Unset gh-related environment variables.'                        \
+        --run 'unset GITHUB_TOKEN GH_TOKEN GITHUB_ENTERPRISE_TOKEN'              \
+        --run 'unset GH_ENTERPRISE_TOKEN GH_CONFIG_DIR GH_HOST GH_PATH GH_REPO'  \
+        --prefix PATH : "${gitMinimal}/bin"                                      \
+      ;
+    '';
+  }
