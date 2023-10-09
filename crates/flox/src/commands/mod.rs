@@ -579,8 +579,13 @@ pub struct BashPassthru {
     #[bpaf(long("bash-passthru"))]
     do_passthru: bool,
 
-    // swallows '--' arguments
-    // hence the arguments are determined differently below.
+    // bpaf parses all arguments and collects them into a Vec
+    // however by doing so it also (correctly) parses `--` as a
+    // delimiter.
+    // The delimiter is _not_ part of the collected arguments.
+    // When passing on this parsed list of args, `--` will be missing,
+    // causing invalid arguments to e.g. `flox-bash activate`.
+    // Hence the arguments are determined differently below, which adds `--` back in.
     #[bpaf(any("REST", Some), many)]
     _flox_args: Vec<String>,
 }
