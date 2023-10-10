@@ -599,13 +599,17 @@ impl BashPassthru {
             .run_inner(Args::current_args())
             .unwrap_or_default();
 
+        let args = std::env::args()
+            .skip(1)
+            .filter(|arg| arg != "--bash-passthru")
+            .collect();
+
         if passtrhu.do_passthru {
-            return Some(
-                std::env::args()
-                    .skip(1)
-                    .filter(|arg| arg != "--bash-passthru")
-                    .collect(),
-            );
+            return Some(args);
+        }
+
+        if let Ok("true") = env::var("FLOX_BASH_PASSTHRU").as_deref() {
+            return Some(args);
         }
 
         None
