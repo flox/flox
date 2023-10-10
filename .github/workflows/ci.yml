@@ -21,7 +21,6 @@ jobs:
       fail-fast: false
       matrix:
         os:
-        - ubuntu-22.04-8core
         - macos-latest
 
     steps:
