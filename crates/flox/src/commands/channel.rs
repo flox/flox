@@ -31,6 +31,7 @@ use crate::utils::dialog::{Dialog, Select, Text};
 use crate::utils::init::{DEFAULT_CHANNELS, HIDDEN_CHANNELS};
 
 const SEARCH_INPUT_SEPARATOR: &'_ str = ":";
+const SEARCH_INPUT_SEPARATOR: &'_ str = ":";
 
 #[derive(Bpaf, Clone)]
 pub struct ChannelArgs {}
@@ -110,7 +111,7 @@ impl Search {
 
 fn construct_search_params(search_term: &str, flox: &Flox) -> Result<SearchParams> {
     // Create `registry` parameter for `pkgdb`
-    let (inputs, priority) = collect_inputs(flox);
+    let (inputs, priority) = collect_manifest_inputs(flox);
     let registry = Registry {
         inputs,
         priority,
@@ -128,7 +129,11 @@ fn construct_search_params(search_term: &str, flox: &Flox) -> Result<SearchParam
     })
 }
 
-fn collect_inputs(flox: &Flox) -> (HashMap<String, RegistryInput>, Vec<String>) {
+/// This function is a hack to convert the current subscriptions into a format
+/// that matches the search spec, which expects sources to come from the manifest.
+///
+/// This is temporary and will be removed once we have a functioning manifest.
+fn collect_manifest_inputs(flox: &Flox) -> (HashMap<String, RegistryInput>, Vec<String>) {
     let channels = flox
         .channels
         .iter()
@@ -318,14 +323,14 @@ impl Show {
 
 fn construct_show_params(search_term: &str, flox: &Flox) -> Result<SearchParams> {
     let parts = search_term
-        .split(SEPARATOR)
+        .split(SEARCH_INPUT_SEPARATOR)
         .map(String::from)
         .collect::<Vec<_>>();
-    let (input_name, package_name) = match parts.len() {
-        1 => Ok((None, Some(parts[0].clone()))),
-        2 => Ok((Some(parts[0].clone()), Some(parts[1].clone()))),
-        _ => Err(ShowError::InvalidSearchTerm(search_term.into())),
-    }?;
+    let (input_name, package_name) = match parts.as_slice() {
+        [package_name] => (None, Some(package_name.to_owned())),
+        [input_name, package_name] => (Some(input_name.to_owned()), Some(package_name.to_owned())),
+        _ => Err(ShowError::InvalidSearchTerm(search_term.to_owned()))?,
+    };
 
     // If we're given a specific input to search, only search that one,
     // otherwise build the whole list of inputs to search
@@ -340,13 +345,13 @@ fn construct_show_params(search_term: &str, flox: &Flox) -> Result<SearchParams>
                 stabilities: None,
             })
         else {
-            bail!("registry did not contain an input named '{}'", input_name)
+            bail!("manifest did not contain an input named '{}'", input_name)
         };
         let mut inputs = HashMap::new();
         inputs.insert(input_name.clone(), reg_input);
         (inputs, vec![input_name])
     } else {
-        collect_inputs(flox)
+        collect_manifest_inputs(flox)
     };
 
     // Only search the registry input that the search result comes from
