@@ -39,16 +39,17 @@ jobs:
         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
-    - name: Test
+    - name: Cargo Test
       run: nix develop '.#rust-env' -c cargo test --locked --workspace
-      
+
     - name: Build
       run: flox build '${{ matrix.package.name }}' -L --print-out-paths
+
+    - name: Functional Test
+      if: ${{ matrix.package.name == 'flox' }}
+      run: nix run '.#flox-tests'
 
     - name: Cache the store
       if: ${{ always() }}
       run: flox nix copy --all --to "$FLOX_SUBSTITUTER" -vv
 
-    - name: Test
-      if: ${{ matrix.package.name == 'flox' }}
-      run: nix run '.#flox-tests'
