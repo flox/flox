@@ -39,8 +39,8 @@ jobs:
         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
-    #- name: Cargo Test
-    #  run: nix develop '.#rust-env' -c cargo test --locked --workspace
+    - name: Cargo Test
+      run: nix develop '.#rust-env' -c cargo test --locked --workspace
 
     - name: Build
       run: flox build '${{ matrix.package.name }}' -L --print-out-paths
