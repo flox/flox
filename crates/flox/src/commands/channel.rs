@@ -298,6 +298,7 @@ pub struct Show {
 
 impl Show {
     pub async fn handle(self, flox: Flox) -> Result<()> {
+        subcommand_metric!("show");
         let search_params = construct_show_params(&self.search_term, &flox)?;
 
         let (search_results, exit_status) = do_search(&search_params)?;
