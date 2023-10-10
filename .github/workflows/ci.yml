@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - main
+      - fix-stability-bump-cache-problem
   pull_request:
 
 jobs:
