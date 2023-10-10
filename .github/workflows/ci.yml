@@ -45,7 +45,7 @@ jobs:
     - name: Build
       run: flox build '${{ matrix.package.name }}' -L --print-out-paths
 
-    - name: Functional Test
+    - name: Integration Tests
       if: ${{ matrix.package.name == 'flox' }}
       run: nix run '.#flox-tests'
 
