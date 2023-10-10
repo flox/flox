@@ -28,7 +28,7 @@ use crate::subcommand_metric;
 use crate::utils::dialog::{Dialog, Select, Text};
 use crate::utils::init::{DEFAULT_CHANNELS, HIDDEN_CHANNELS};
 
-const SEPARATOR: &'_ str = ":";
+const SEARCH_INPUT_SEPARATOR: &'_ str = ":";
 
 #[derive(Bpaf, Clone)]
 pub struct ChannelArgs {}
@@ -160,13 +160,11 @@ struct DisplayItem {
     package: String,
     /// The package description
     description: Option<String>,
-    /// Whether to join the `input` and `package` fields when rendering
-    join: bool,
+    /// Whether to join the `input` and `package` fields with a separator when rendering
+    render_with_input: bool,
 }
 
-// FIXME: try 'python@>=2 <3', you get way more results than you should
-
-fn render_search_results_user_facing(mut search_results: SearchResults) -> Result<()> {
+fn render_search_results_user_facing(search_results: SearchResults) -> Result<()> {
     // Nothing to display
     if search_results.results.is_empty() {
         return Ok(());
@@ -175,15 +173,13 @@ fn render_search_results_user_facing(mut search_results: SearchResults) -> Resul
     // the input, the package subpath (e.g. "python310Packages.flask"), and the description.
     let display_items = search_results
         .results
-        .drain(..)
+        .into_iter()
         .map(|r| {
-            // let join = !DEFAULT_CHANNELS.contains_key(r.input.as_str());
-            let join = false;
             Ok(DisplayItem {
                 input: r.input,
                 package: r.pkg_subpath.join("."),
                 description: r.description.map(|s| s.replace('\n', " ")),
-                join,
+                render_with_input: false,
             })
         })
         .collect::<Result<Vec<_>>>()?;
@@ -196,10 +192,8 @@ fn render_search_results_user_facing(mut search_results: SearchResults) -> Resul
     let column_width = deduped_display_items
         .iter()
         .map(|d| {
-            if d.join {
-                vec![d.input.as_str(), d.package.as_str()]
-                    .join(SEPARATOR)
-                    .len()
+            if d.render_with_input {
+                d.input.len() + d.package.len() + SEARCH_INPUT_SEPARATOR.len()
             } else {
                 d.package.len()
             }
@@ -211,8 +205,8 @@ fn render_search_results_user_facing(mut search_results: SearchResults) -> Resul
     let mut writer = BufWriter::new(std::io::stdout());
     let default_desc = String::from("<no description provided>");
     for d in deduped_display_items.into_iter() {
-        let package = if d.join {
-            vec![d.input, d.package].join(SEPARATOR)
+        let package = if d.render_with_input {
+            [d.input, d.package].join(SEARCH_INPUT_SEPARATOR)
         } else {
             d.package
         };
@@ -240,30 +234,34 @@ fn render_search_results_json(search_results: SearchResults) -> Result<()> {
 fn dedup_and_disambiguate_display_items(mut display_items: Vec<DisplayItem>) -> Vec<DisplayItem> {
     let mut package_to_inputs: HashMap<String, HashSet<String>> = HashMap::new();
     for d in display_items.iter() {
-        // Build a collection of packages and which inputs they are seen in
+        // Build a collection of packages and which inputs they are seen in so we can tell
+        // which packages need to be disambiguated when rendering search results.
         package_to_inputs
             .entry(d.package.clone())
             .and_modify(|inputs| {
                 inputs.insert(d.input.clone());
             })
-            .or_insert_with(|| {
-                let mut inputs = HashSet::new();
-                inputs.insert(d.input.clone());
-                inputs
-            });
+            .or_insert_with(|| HashSet::from_iter([d.input.clone()]));
     }
 
     // For any package that comes from more than one input, mark it as needing to be joined
     for d in display_items.iter_mut() {
         if let Some(inputs) = package_to_inputs.get(&d.package) {
-            d.join = inputs.len() > 1 || d.join;
+            d.render_with_input = inputs.len() > 1;
         }
     }
 
+    // For each package in the search results, `package_to_inputs` contains the set of
+    // inputs that the package is found in. Logically `package_to_inputs` contains
+    // (package, input) pairs. If the `package` and `input` from a `DisplayItem` are
+    // found in `package_to_inputs` it means that we have not yet seen this (package, input)
+    // pair and we should render it (e.g. add it to `deduped_display_items`). Once we've
+    // done that we remove this (package, input) pair from `package_to_inputs` so that
+    // we never see that pair again.
     let mut deduped_display_items = Vec::new();
     for d in display_items.into_iter() {
         if let Some(inputs) = package_to_inputs.get_mut(d.package.as_str()) {
-            // Remove this input so this (input, package) pair is never seen again
+            // Remove this input so this (package, input) pair is never seen again
             if inputs.remove(&d.input) {
                 deduped_display_items.push(d.clone());
             }
