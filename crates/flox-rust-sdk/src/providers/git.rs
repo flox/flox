@@ -972,25 +972,26 @@ pub mod tests {
     #[tokio::test]
     async fn test_branch_hash() {
         let (repo, _tempdir_handle) = init_temp_repo(false).await;
+        repo.checkout("branch_1", true).await.unwrap();
 
         commit_file(&repo, "dummy").await;
 
-        assert!(repo.branch_hash("main").unwrap().len() == 40);
+        assert!(repo.branch_hash("branch_1").unwrap().len() == 40);
     }
 
     #[tokio::test]
     async fn test_branch_does_not_exist() {
         let (repo, _tempdir_handle) = init_temp_repo(false).await;
 
-        assert!(!repo.has_branch("main").unwrap());
+        assert!(!repo.has_branch("branch_1").unwrap());
     }
 
     #[tokio::test]
     async fn test_create_branch() {
         let (repo, _tempdir_handle) = init_temp_repo(false).await;
-
+        repo.checkout("branch_1", true).await.unwrap();
         commit_file(&repo, "dummy").await;
-        let hash = repo.branch_hash("main").unwrap();
+        let hash = repo.branch_hash("branch_1").unwrap();
 
         repo.create_branch("test", &hash).unwrap();
         assert_eq!(repo.branch_hash("test").unwrap(), hash)
@@ -999,16 +1000,17 @@ pub mod tests {
     // test that clone_branch only clones the specified branch
     #[tokio::test]
     async fn test_clone_branch() {
-        // create two branches, main and branch_2, in repo
+        // create two branches in repo: branch_1 and branch_2
         let (repo, _tempdir_handle) = init_temp_repo(false).await;
+        repo.checkout("branch_1", true).await.unwrap();
         commit_file(&repo, "dummy").await;
-        let hash_main = repo.branch_hash("main").unwrap();
+        let hash_branch_1 = repo.branch_hash("branch_1").unwrap();
 
         repo.checkout("branch_2", true).await.unwrap();
         commit_file(&repo, "dummy_2").await;
         let hash_branch_2 = repo.branch_hash("branch_2").unwrap();
 
-        // clone only main branch to repo_2
+        // clone only branch_1 branch to repo_2
         let tempdir_handle_2 = tempfile::tempdir_in(std::env::temp_dir()).unwrap();
         // Specify file:// so that extra commits aren't copied
         // "If you specify file://, Git fires up the processes that it normally
@@ -1017,24 +1019,25 @@ pub mod tests {
         let repo_2 = GitCommandProvider::clone_branch(
             format!("file://{}", &repo.path.to_str().unwrap()),
             tempdir_handle_2.path(),
-            "main",
+            "branch_1",
             true,
         )
         .unwrap();
 
-        // assert repo_2 has main branch with the correct hash, but does not have
+        // assert repo_2 has branch_1 branch with the correct hash, but does not have
         // branch_2 or the commit on branch_2
-        assert_eq!(repo_2.branch_hash("main").unwrap(), hash_main);
+        assert_eq!(repo_2.branch_hash("branch_1").unwrap(), hash_branch_1);
         assert!(!repo_2.has_branch("branch_2").unwrap());
         assert!(!repo_2.contains_commit(&hash_branch_2).unwrap());
     }
 
     #[tokio::test]
     async fn test_fetch_branch() {
-        // create three branches in repo: main, branch_2, and branch_3
+        // create three branches in repo: branch_1, branch_2, and branch_3
         let (repo, _tempdir_handle) = init_temp_repo(false).await;
+        repo.checkout("branch_1", true).await.unwrap();
         commit_file(&repo, "dummy").await;
-        let hash_main = repo.branch_hash("main").unwrap();
+        let hash_branch_1 = repo.branch_hash("branch_1").unwrap();
 
         repo.checkout("branch_2", true).await.unwrap();
         commit_file(&repo, "dummy_2").await;
@@ -1044,19 +1047,19 @@ pub mod tests {
         commit_file(&repo, "dummy_3").await;
         let hash_branch_3 = repo.branch_hash("branch_3").unwrap();
 
-        // clone only main branch to repo_2
+        // clone only branch_1 branch to repo_2
         let tempdir_handle_2 = tempfile::tempdir_in(std::env::temp_dir()).unwrap();
         // Specify file:// so that extra commits aren't copied
         let repo_2 = GitCommandProvider::clone_branch(
             format!("file://{}", &repo.path.to_str().unwrap()),
             tempdir_handle_2.path(),
-            "main",
+            "branch_1",
             false,
         )
         .unwrap();
 
-        // repo_2 has main but not the commit on branch_2
-        assert_eq!(repo_2.branch_hash("main").unwrap(), hash_main);
+        // repo_2 has branch_1 but not the commit on branch_2
+        assert_eq!(repo_2.branch_hash("branch_1").unwrap(), hash_branch_1);
         assert!(!repo_2.contains_commit(&hash_branch_2).unwrap());
 
         // fetch branch_2
@@ -1069,8 +1072,9 @@ pub mod tests {
 
     #[tokio::test]
     async fn test_fetch_ref() {
-        // create three branches in repo: main, branch_2, and branch_3
+        // create three branches in repo: branch_1, branch_2, and branch_3
         let (repo, _tempdir_handle) = init_temp_repo(false).await;
+        repo.checkout("branch_1", true).await.unwrap();
         commit_file(&repo, "dummy").await;
 
         repo.checkout("branch_2", true).await.unwrap();
@@ -1081,13 +1085,13 @@ pub mod tests {
         commit_file(&repo, "dummy_3").await;
         let hash_branch_3 = repo.branch_hash("branch_3").unwrap();
 
-        // clone only main branch to repo_2
+        // clone only branch_1 to repo_2
         let tempdir_handle_2 = tempfile::tempdir_in(std::env::temp_dir()).unwrap();
         // Specify file:// so that extra commits aren't copied
         let repo_2 = GitCommandProvider::clone_branch(
             format!("file://{}", &repo.path.to_str().unwrap()),
             tempdir_handle_2.path(),
-            "main",
+            "branch_1",
             false,
         )
         .unwrap();
@@ -1101,11 +1105,12 @@ pub mod tests {
     #[tokio::test]
     async fn test_fetch_bad_ref() {
         let (repo, _tempdir_handle) = init_temp_repo(false).await;
+        repo.checkout("branch_1", true).await.unwrap();
         commit_file(&repo, "dummy").await;
 
         let tempdir_handle_2 = tempfile::tempdir_in(std::env::temp_dir()).unwrap();
         let repo_2 =
-            GitCommandProvider::clone_branch(&repo.path, tempdir_handle_2.path(), "main", true)
+            GitCommandProvider::clone_branch(&repo.path, tempdir_handle_2.path(), "branch_1", true)
                 .unwrap();
 
         assert!(matches!(
@@ -1116,16 +1121,18 @@ pub mod tests {
 
     #[tokio::test]
     async fn test_reset_branch() {
-        // create two branches, main and branch_2, in repo
+        // create two branches in repo: branch_1 and branch_2
         let (repo, _tempdir_handle) = init_temp_repo(false).await;
+        repo.checkout("branch_1", true).await.unwrap();
         commit_file(&repo, "dummy").await;
+
         repo.checkout("branch_2", true).await.unwrap();
         commit_file(&repo, "dummy_2").await;
         let hash_branch_2 = repo.branch_hash("branch_2").unwrap();
 
-        // reset main to branch_2
-        assert_ne!(repo.branch_hash("main").unwrap(), hash_branch_2);
-        repo.reset_branch("main", &hash_branch_2).unwrap();
-        assert_eq!(repo.branch_hash("main").unwrap(), hash_branch_2)
+        // reset branch_1 to branch_2
+        assert_ne!(repo.branch_hash("branch_1").unwrap(), hash_branch_2);
+        repo.reset_branch("branch_1", &hash_branch_2).unwrap();
+        assert_eq!(repo.branch_hash("branch_1").unwrap(), hash_branch_2)
     }
 }
