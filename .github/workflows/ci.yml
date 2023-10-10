@@ -20,7 +20,7 @@ jobs:
         - {name: flox-bash, job_description: "Build" }
         - {name: nix-editor, job_description: "Build" }
         os: 
-        - ubuntu-latest
+        - ubuntu-22.04-8core
         - macos-latest
 
     steps:
