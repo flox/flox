@@ -45,6 +45,7 @@ jobs:
       run: flox build '${{ matrix.package.name }}' -L --print-out-paths
 
     - name: Cache the store
+      if: ${{ always() }}
       run: flox nix copy --all --to "$FLOX_SUBSTITUTER" -vv
 
     - name: Test
