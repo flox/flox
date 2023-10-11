@@ -127,7 +127,10 @@ packagePaths($unique_b) as $unique_b_paths |
     . as $packagePath |
     ( $unique_a | getpath($packagePath) ) as $package_a |
     ( $unique_b | getpath($packagePath) ) as $package_b |
-    if ($package_a != null) then [$packagePath, $package_b] else empty end
+    if ($package_a != null) then [$packagePath, {
+      "from-package": $package_a,
+      "to-package": $package_b
+    }] else empty end
   )
 ) | flatten(1) as $upgrades |
 
