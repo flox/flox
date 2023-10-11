@@ -31,7 +31,6 @@ use crate::utils::dialog::{Dialog, Select, Text};
 use crate::utils::init::{DEFAULT_CHANNELS, HIDDEN_CHANNELS};
 
 const SEARCH_INPUT_SEPARATOR: &'_ str = ":";
-const SEARCH_INPUT_SEPARATOR: &'_ str = ":";
 
 #[derive(Bpaf, Clone)]
 pub struct ChannelArgs {}
