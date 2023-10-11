@@ -13,7 +13,9 @@ use flox_rust_sdk::models::search::{
     RegistryDefaults,
     RegistryInput,
     SearchParams,
+    SearchResult,
     SearchResults,
+    ShowError,
 };
 use flox_rust_sdk::nix::command::FlakeMetadata;
 use flox_rust_sdk::nix::command_line::NixCommandLine;
@@ -107,6 +109,30 @@ impl Search {
 }
 
 fn construct_search_params(search_term: &str, flox: &Flox) -> Result<SearchParams> {
+    // Create `registry` parameter for `pkgdb`
+    let (inputs, priority) = collect_manifest_inputs(flox);
+    let registry = Registry {
+        inputs,
+        priority,
+        defaults: RegistryDefaults::default(),
+    };
+
+    // We've already checked that the search term is Some(_)
+    let query = Query::from_str(search_term)?;
+
+    Ok(SearchParams {
+        registry,
+        query,
+        systems: Some(vec![flox.system.clone()]),
+        ..SearchParams::default()
+    })
+}
+
+/// This function is a hack to convert the current subscriptions into a format
+/// that matches the search spec, which expects sources to come from the manifest.
+///
+/// This is temporary and will be removed once we have a functioning manifest.
+fn collect_manifest_inputs(flox: &Flox) -> (HashMap<String, RegistryInput>, Vec<String>) {
     let channels = flox
         .channels
         .iter()
@@ -134,21 +160,7 @@ fn construct_search_params(search_term: &str, flox: &Flox) -> Result<SearchParam
         };
         inputs.insert(entry.from.id.to_string(), input);
     }
-    let registry = Registry {
-        inputs,
-        priority,
-        defaults: RegistryDefaults::default(),
-    };
-
-    // We've already checked that the search term is Some(_)
-    let query = Query::from_str(search_term)?;
-
-    Ok(SearchParams {
-        registry,
-        query,
-        systems: Some(vec![flox.system.clone()]),
-        ..SearchParams::default()
-    })
+    (inputs, priority)
 }
 
 /// An intermediate representation of a search result used for rendering
@@ -272,6 +284,106 @@ fn dedup_and_disambiguate_display_items(mut display_items: Vec<DisplayItem>) -> 
     }
 
     deduped_display_items
+}
+
+/// Show detailed package information
+#[derive(Bpaf, Clone)]
+pub struct Show {
+    /// The package to show detailed information about. Must be an exact match
+    /// for a package name e.g. something copy-pasted from the output of `flox search`.
+    #[bpaf(positional("search-term"))]
+    pub search_term: String,
+}
+
+impl Show {
+    pub async fn handle(self, flox: Flox) -> Result<()> {
+        subcommand_metric!("show");
+        let search_params = construct_show_params(&self.search_term, &flox)?;
+
+        let (search_results, exit_status) = do_search(&search_params)?;
+
+        if search_results.results.is_empty() {
+            bail!("no packages matched this search term: {}", self.search_term);
+        }
+        // Render what we have no matter what, then indicate whether we encountered an error.
+        // FIXME: We may have warnings on `stderr` even with a successful call to `pkgdb`.
+        //        We aren't checking that at all at the moment because better overall error handling
+        //        is coming in a later PR.
+        render_show(search_results.results.as_slice())?;
+        if exit_status.success() {
+            Ok(())
+        } else {
+            bail!(
+                "pkgdb exited with status code: {}",
+                exit_status.code().unwrap_or(-1),
+            );
+        }
+    }
+}
+
+fn construct_show_params(search_term: &str, flox: &Flox) -> Result<SearchParams> {
+    let parts = search_term
+        .split(SEARCH_INPUT_SEPARATOR)
+        .map(String::from)
+        .collect::<Vec<_>>();
+    let (input_name, package_name) = match parts.as_slice() {
+        [package_name] => (None, Some(package_name.to_owned())),
+        [input_name, package_name] => (Some(input_name.to_owned()), Some(package_name.to_owned())),
+        _ => Err(ShowError::InvalidSearchTerm(search_term.to_owned()))?,
+    };
+
+    // If we're given a specific input to search, only search that one,
+    // otherwise build the whole list of inputs to search
+    let (inputs, priority) = if let Some(input_name) = input_name {
+        let Some(reg_input) = flox
+            .channels
+            .iter()
+            .find(|entry| entry.from.id == input_name)
+            .map(|entry| RegistryInput {
+                from: entry.to.clone(),
+                subtrees: None,
+                stabilities: None,
+            })
+        else {
+            bail!("manifest did not contain an input named '{}'", input_name)
+        };
+        let mut inputs = HashMap::new();
+        inputs.insert(input_name.clone(), reg_input);
+        (inputs, vec![input_name])
+    } else {
+        collect_manifest_inputs(flox)
+    };
+
+    // Only search the registry input that the search result comes from
+    let registry = Registry {
+        inputs,
+        priority,
+        ..Registry::default()
+    };
+    let query = Query {
+        r#match: package_name,
+        ..Query::default()
+    };
+
+    Ok(SearchParams {
+        registry,
+        query,
+        ..SearchParams::default()
+    })
+}
+
+fn render_show(search_results: &[SearchResult]) -> Result<()> {
+    // FIXME: Proper rendering is coming later
+    for package in search_results.iter() {
+        let pkg_name = package.pkg_subpath.join(".");
+        let description = package
+            .description
+            .as_ref()
+            .map(|d| d.replace('\n', " "))
+            .unwrap_or("<no description provided>".into());
+        println!("{} - {}", pkg_name, description);
+    }
+    Ok(())
 }
 
 #[derive(Bpaf, Clone)]
