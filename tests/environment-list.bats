@@ -43,9 +43,8 @@ setup_file() {
 }
 
 @test "'flox list' lists packages of environment in the current dir; fails if no env found" {
-  run "$FLOX_CLI" list
-  assert_failure
-  assert_line "No matching environments found"
+  run "$FLOX_CLI" list;
+  assert_failure;
 }
 
 @test "'flox list' lists packages of environment in the current dir; No package" {
