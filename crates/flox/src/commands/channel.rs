@@ -156,7 +156,7 @@ fn render_search_results(search_results: &SearchResults) -> Result<()> {
         .map(|r| {
             let path_components = r.attr_path.clone();
             let flake_attr = if !DEFAULT_CHANNELS.contains_key(r.input.as_str()) {
-                vec![r.input.clone(), path_components.join(".")].join("#")
+                [r.input.clone(), path_components.join(".")].join("#")
             } else {
                 path_components.join(".")
             };

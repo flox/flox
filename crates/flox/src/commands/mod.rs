@@ -579,8 +579,15 @@ pub struct BashPassthru {
     #[bpaf(long("bash-passthru"))]
     do_passthru: bool,
 
+    // bpaf parses all arguments and collects them into a Vec
+    // however by doing so it also (correctly) parses `--` as a
+    // delimiter.
+    // The delimiter is _not_ part of the collected arguments.
+    // When passing on this parsed list of args, `--` will be missing,
+    // causing invalid arguments to e.g. `flox-bash activate`.
+    // Hence the arguments are determined differently below, which adds `--` back in.
     #[bpaf(any("REST", Some), many)]
-    flox_args: Vec<String>,
+    _flox_args: Vec<String>,
 }
 
 impl BashPassthru {
@@ -593,7 +600,12 @@ impl BashPassthru {
             .unwrap_or_default();
 
         if passtrhu.do_passthru {
-            return Some(passtrhu.flox_args);
+            return Some(
+                std::env::args()
+                    .skip(1)
+                    .filter(|arg| arg != "--bash-passthru")
+                    .collect(),
+            );
         }
 
         None
