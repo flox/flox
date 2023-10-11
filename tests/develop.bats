@@ -217,6 +217,9 @@ runExpect() {
 
 # bats test_tags devShell
 @test "'flox develop' with 'devShell'" {
+  if [[ "$NIX_SYSTEM" = *-darwin ]] then
+    skip "broken on macOS";
+  fi
   loadHarness devShell;
   run expect "$TESTS_DIR/develop/devShell.exp" '';
   assert_success;

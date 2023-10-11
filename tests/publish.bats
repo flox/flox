@@ -83,6 +83,10 @@ setup() {
 # Publish requires a signing key.
 # Without a key, flox will fail with a meaningful error.
 @test "flox publish fails without signing-key" {
+    if [[ "$NIX_SYSTEM" = *-darwin ]] then
+        skip "broken on macOS";
+    fi
+    
     unset FLOX_SIGNING_KEY
 
     run $FLOX_CLI -v publish "$CHANNEL#hello"

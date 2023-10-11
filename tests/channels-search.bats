@@ -41,11 +41,6 @@ teardown() {
 setup_file() {
   export FLOX_FEATURES_CHANNELS=rust;
 
-  # Necessary to make search results consistent for local dev and CI
-  # This variable sets `Flox.system`, which we pass along to `pkgdb`
-  # in the "systems" search parameter.
-  export NIX_TARGET_SYSTEM=x86_64-linux;
-
   # Separator character for ambiguous package sources
   export SEP=":";
 }
