@@ -83,10 +83,6 @@ setup() {
 # Publish requires a signing key.
 # Without a key, flox will fail with a meaningful error.
 @test "flox publish fails without signing-key" {
-    if [[ "$NIX_SYSTEM" = *-darwin ]] then
-        skip "broken on macOS";
-    fi
-    
     unset FLOX_SIGNING_KEY
 
     run $FLOX_CLI -v publish "$CHANNEL#hello"
@@ -97,17 +93,10 @@ setup() {
 # Publish requires a cache url.
 # Without a cache url, flox will fail with a meaningful error.
 @test "flox publish fails without cache url" {
-    case "$NIX_SYSTEM" in
-        *-darwin)
-            skip "Flaky on macOS";
-            ;;
-        *-linux)
-            unset FLOX_CACHE_URL;
-            run $FLOX_CLI -v publish "$CHANNEL#hello";
-            assert_failure;
-            assert_output --partial "Cache url is required!";
-            ;;
-    esac
+    unset FLOX_CACHE_URL;
+    run $FLOX_CLI -v publish "$CHANNEL#hello";
+    assert_failure;
+    assert_output --partial "Cache url is required!";
 }
 
 # Publish requires a cached binary.
