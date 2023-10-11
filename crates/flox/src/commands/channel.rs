@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io::{BufWriter, Write};
 use std::str::FromStr;
 
@@ -27,6 +27,8 @@ use serde_json::json;
 use crate::subcommand_metric;
 use crate::utils::dialog::{Dialog, Select, Text};
 use crate::utils::init::{DEFAULT_CHANNELS, HIDDEN_CHANNELS};
+
+const SEARCH_INPUT_SEPARATOR: &'_ str = ":";
 
 #[derive(Bpaf, Clone)]
 pub struct ChannelArgs {}
@@ -89,9 +91,9 @@ impl Search {
         //        We aren't checking that at all at the moment because better overall error handling
         //        is coming in a later PR.
         if self.json {
-            render_search_results_json(&results)?;
+            render_search_results_json(results)?;
         } else {
-            render_search_results(&results)?;
+            render_search_results_user_facing(results)?;
         }
         if exit_status.success() {
             Ok(())
@@ -144,48 +146,132 @@ fn construct_search_params(search_term: &str, flox: &Flox) -> Result<SearchParam
     Ok(SearchParams {
         registry,
         query,
+        systems: Some(vec![flox.system.clone()]),
         ..SearchParams::default()
     })
 }
 
-// This is likely to change significantly after the output format of search results is specced out
-fn render_search_results(search_results: &SearchResults) -> Result<()> {
-    let summarized_results = search_results
+/// An intermediate representation of a search result used for rendering
+#[derive(Debug, PartialEq, Clone)]
+struct DisplayItem {
+    /// The input that the package came from
+    input: String,
+    /// The displayable part of the package's attribute path
+    package: String,
+    /// The package description
+    description: Option<String>,
+    /// Whether to join the `input` and `package` fields with a separator when rendering
+    render_with_input: bool,
+}
+
+fn render_search_results_user_facing(search_results: SearchResults) -> Result<()> {
+    // Nothing to display
+    if search_results.results.is_empty() {
+        return Ok(());
+    }
+    // Search results contain a lot of information, but all we need for rendering are
+    // the input, the package subpath (e.g. "python310Packages.flask"), and the description.
+    let display_items = search_results
         .results
-        .iter()
+        .into_iter()
         .map(|r| {
-            let path_components = r.attr_path.clone();
-            let flake_attr = if !DEFAULT_CHANNELS.contains_key(r.input.as_str()) {
-                [r.input.clone(), path_components.join(".")].join("#")
-            } else {
-                path_components.join(".")
-            };
-            let d = if let Some(ref d) = r.description {
-                // Some package descriptions contain newline characters
-                // which breaks formatting
-                d.replace('\n', " ")
-            } else {
-                "<no description provided>".into()
-            };
-            (flake_attr, d)
+            Ok(DisplayItem {
+                input: r.input,
+                package: r.pkg_subpath.join("."),
+                description: r.description.map(|s| s.replace('\n', " ")),
+                render_with_input: false,
+            })
         })
-        .collect::<Vec<_>>();
-    let attr_col_width = summarized_results
+        .collect::<Result<Vec<_>>>()?;
+
+    let deduped_display_items = dedup_and_disambiguate_display_items(display_items);
+    if deduped_display_items.is_empty() {
+        bail!("deduplicating search results failed");
+    }
+
+    let column_width = deduped_display_items
         .iter()
-        .fold(0, |cw, (attr, _)| usize::max(cw, attr.len()));
-    // Depending on the search query there could be a ton of results, better to
-    // do buffered writes than to lock `stdout` on every write.
+        .map(|d| {
+            if d.render_with_input {
+                d.input.len() + d.package.len() + SEARCH_INPUT_SEPARATOR.len()
+            } else {
+                d.package.len()
+            }
+        })
+        .max()
+        .unwrap(); // SAFETY: could panic if `deduped_display_items` is empty, but we know it's not
+
+    // Finally print something
     let mut writer = BufWriter::new(std::io::stdout());
-    for (attr, desc) in summarized_results.iter() {
-        writeln!(&mut writer, "{attr:<attr_col_width$}  {desc}")?;
+    let default_desc = String::from("<no description provided>");
+    for d in deduped_display_items.into_iter() {
+        let package = if d.render_with_input {
+            [d.input, d.package].join(SEARCH_INPUT_SEPARATOR)
+        } else {
+            d.package
+        };
+        let desc: String = d.description.unwrap_or(default_desc.clone());
+        writeln!(&mut writer, "{package:<column_width$}  {desc}")?;
     }
     Ok(())
 }
 
-fn render_search_results_json(search_results: &SearchResults) -> Result<()> {
+fn render_search_results_json(search_results: SearchResults) -> Result<()> {
     let json = serde_json::to_string(&search_results.results)?;
     println!("{}", json);
     Ok(())
+}
+
+/// Deduplicate and disambiguate display items.
+///
+/// This gets complicated because we have to satisfy a few constraints:
+/// - The order of results from `pkgdb` is important (best matches come first),
+///   so that order must be preserved.
+/// - Versions shouldn't appear in the output, so multiple package versions from a single
+///   input should be deduplicated.
+/// - Packages that appear in more than one input need to be disambiguated by prepending
+///   the name of the input and a separator.
+fn dedup_and_disambiguate_display_items(mut display_items: Vec<DisplayItem>) -> Vec<DisplayItem> {
+    let mut package_to_inputs: HashMap<String, HashSet<String>> = HashMap::new();
+    for d in display_items.iter() {
+        // Build a collection of packages and which inputs they are seen in so we can tell
+        // which packages need to be disambiguated when rendering search results.
+        package_to_inputs
+            .entry(d.package.clone())
+            .and_modify(|inputs| {
+                inputs.insert(d.input.clone());
+            })
+            .or_insert_with(|| HashSet::from_iter([d.input.clone()]));
+    }
+
+    // For any package that comes from more than one input, mark it as needing to be joined
+    for d in display_items.iter_mut() {
+        if let Some(inputs) = package_to_inputs.get(&d.package) {
+            d.render_with_input = inputs.len() > 1;
+        }
+    }
+
+    // For each package in the search results, `package_to_inputs` contains the set of
+    // inputs that the package is found in. Logically `package_to_inputs` contains
+    // (package, input) pairs. If the `package` and `input` from a `DisplayItem` are
+    // found in `package_to_inputs` it means that we have not yet seen this (package, input)
+    // pair and we should render it (e.g. add it to `deduped_display_items`). Once we've
+    // done that we remove this (package, input) pair from `package_to_inputs` so that
+    // we never see that pair again.
+    let mut deduped_display_items = Vec::new();
+    for d in display_items.into_iter() {
+        if let Some(inputs) = package_to_inputs.get_mut(d.package.as_str()) {
+            // Remove this input so this (package, input) pair is never seen again
+            if inputs.remove(&d.input) {
+                deduped_display_items.push(d.clone());
+            }
+            if inputs.is_empty() {
+                package_to_inputs.remove(&d.package);
+            }
+        }
+    }
+
+    deduped_display_items
 }
 
 #[derive(Bpaf, Clone)]
