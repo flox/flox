@@ -203,7 +203,7 @@ runExpect() {
 
 @test "'flox develop' toplevel with 'flox install' env" {
   loadHarness toplevel-flox-nix;
-  run "$FLOX_CLI" install -e '.#default' hello;
+  run "$FLOX_CLI" --bash-passthru install -e '.#default' hello;
   assert_success;
   # for some reason expect hangs forever when SHELL=zsh and I don't feel like
   # debugging why

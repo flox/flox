@@ -35,6 +35,7 @@ async fn main() -> ExitCode {
 
     // redirect to flox early if `--bash-passthru` is present
     if let Some(args) = BashPassthru::check() {
+        set_parent_process_id();
         let bash_command = run_in_flox(None, &args).await;
 
         match bash_command {

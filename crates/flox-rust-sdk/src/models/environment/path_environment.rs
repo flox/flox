@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use async_trait::async_trait;
-use flox_types::catalog::EnvCatalog;
+use flox_types::catalog::{EnvCatalog, System};
 use log::debug;
 use runix::arguments::eval::EvaluationArgs;
 use runix::arguments::{BuildArgs, EvalArgs};
@@ -45,8 +45,8 @@ pub struct PathEnvironment<S> {
     /// The temporary directory that this environment will use during transactions
     pub temp_dir: PathBuf,
 
-    /// The [EnvironmentRef] this env is created from (and validated against)
-    pub environment_ref: EnvironmentRef,
+    /// The [EnvironmentName] of this environment
+    pub name: EnvironmentName,
 
     /// The transaction state
     pub state: S,
@@ -80,7 +80,7 @@ impl<S: TransactionState> PathEnvironment<S> {
         Ok(PathEnvironment {
             path: transaction_dir.into_path(),
             temp_dir: self.temp_dir.clone(),
-            environment_ref: self.environment_ref.clone(),
+            name: self.name.clone(),
             state: Temporary,
         })
     }
@@ -155,11 +155,11 @@ where
     async fn build(
         &mut self,
         nix: &NixCommandLine,
-        system: impl AsRef<str> + Send,
+        system: System,
     ) -> Result<(), EnvironmentError2> {
         debug!("building with nix ....");
 
-        let out_link = self.out_link(system.as_ref());
+        let out_link = self.out_link(&system);
 
         let build = Build {
             installables: [self.flake_attribute(&system).into()].into(),
@@ -196,12 +196,11 @@ where
     /// installed rather than a bool.
     async fn install(
         &mut self,
-        packages: impl IntoIterator<Item = FloxPackage> + Send,
+        packages: Vec<FloxPackage>,
         nix: &NixCommandLine,
-        system: impl AsRef<str> + Send,
+        system: System,
     ) -> Result<bool, EnvironmentError2> {
-        let current_manifest_contents =
-            fs::read_to_string(self.manifest_path()).map_err(EnvironmentError2::ReadManifest)?;
+        let current_manifest_contents = self.manifest_content()?;
         let new_manifest_contents =
             flox_nix_content_with_new_packages(&current_manifest_contents, packages)?;
         match new_manifest_contents {
@@ -221,12 +220,12 @@ where
     /// uninstalled rather than a bool.
     async fn uninstall(
         &mut self,
-        packages: impl IntoIterator<Item = FloxPackage> + Send,
+        packages: Vec<FloxPackage>,
         nix: &NixCommandLine,
-        system: impl AsRef<str> + Send,
+        system: System,
     ) -> Result<bool, EnvironmentError2> {
-        let current_manifest_contents =
-            fs::read_to_string(self.manifest_path()).map_err(EnvironmentError2::ReadManifest)?;
+        let current_manifest_contents = self.manifest_content()?;
+
         let new_manifest_contents =
             flox_nix_content_with_packages_removed(&current_manifest_contents, packages)?;
         match new_manifest_contents {
@@ -243,8 +242,8 @@ where
     async fn edit(
         &mut self,
         nix: &NixCommandLine,
-        system: impl AsRef<str> + Send,
-        contents: impl AsRef<str> + Send,
+        system: System,
+        contents: String,
     ) -> Result<(), EnvironmentError2> {
         self.transact_with_manifest_contents(contents, nix, system)
             .await?;
@@ -252,8 +251,8 @@ where
     }
 
     /// Return the [EnvironmentRef] for the environment for identification
-    fn environment_ref(&self) -> &EnvironmentRef {
-        &self.environment_ref
+    fn environment_ref(&self) -> EnvironmentRef {
+        EnvironmentRef::new_from_parts(None, self.name.clone())
     }
 
     /// Get a catalog of installed packages from this environment
@@ -262,7 +261,7 @@ where
     async fn catalog(
         &self,
         nix: &NixCommandLine,
-        system: impl AsRef<str> + Send,
+        system: System,
     ) -> Result<EnvCatalog, EnvironmentError2> {
         let mut flake_attribute = self.flake_attribute(system);
         flake_attribute.attr_path.push_attr("catalog").unwrap(); // valid attribute name, should not fail
@@ -289,14 +288,18 @@ where
         serde_json::from_value(catalog_value).map_err(EnvironmentError2::ParseCatalog)
     }
 
+    fn manifest_content(&self) -> Result<String, EnvironmentError2> {
+        fs::read_to_string(self.manifest_path()).map_err(EnvironmentError2::ReadManifest)
+    }
+
     /// Returns the environment owner
     fn owner(&self) -> Option<EnvironmentOwner> {
-        self.environment_ref.owner().cloned()
+        None
     }
 
     /// Returns the environment name
     fn name(&self) -> EnvironmentName {
-        self.environment_ref.name().clone()
+        self.name.clone()
     }
 
     /// Delete the Environment
@@ -313,17 +316,13 @@ where
         }
         Ok(())
     }
+
+    fn flake_attribute(&self, system: System) -> FlakeAttribute {
+        self.flake_attribute(system)
+    }
 }
 
 impl<S: TransactionState> PathEnvironment<S> {
-    /// Remove gc-roots
-    ///
-    /// Currently stubbed out due to missing activation that could need linked results
-    pub fn delete_symlinks(&self) -> Result<bool, EnvironmentError2> {
-        // todo
-        Ok(false)
-    }
-
     /// Turn the environment into a flake attribute,
     /// a precise url to interact with the environment via nix
     ///
@@ -383,7 +382,7 @@ impl<S: TransactionState> PathEnvironment<S> {
         &mut self,
         manifest_contents: impl AsRef<str>,
         nix: &NixCommandLine,
-        system: impl AsRef<str> + Send,
+        system: System,
     ) -> Result<(), EnvironmentError2> {
         let mut temp_env = self.make_temporary()?;
         temp_env.update_manifest(&manifest_contents)?;
@@ -400,31 +399,37 @@ impl PathEnvironment<Original> {
     /// Ensure that the path exists and contains files that "look" like an environment
     pub fn open(
         path: impl AsRef<Path>,
-        ident: EnvironmentRef,
         temp_dir: impl AsRef<Path>,
     ) -> Result<Self, EnvironmentError2> {
         let path = path.as_ref().to_path_buf();
         let dot_flox_path = path.join(".flox");
-        let env_path = dot_flox_path.join(ident.name().as_ref());
+        let env_dir_entry = dot_flox_path
+            .read_dir()
+            .map_err(EnvironmentError2::ReadDotFlox)?
+            .find_map(|entry| {
+                let entry = entry.ok()?;
+                let path = entry.path();
+                if path.is_dir() {
+                    Some(entry)
+                } else {
+                    None
+                }
+            })
+            .ok_or(EnvironmentError2::EnvNotFound)?;
 
-        if !env_path.exists() {
-            Err(EnvironmentError2::EnvNotFound)?
-        }
-
-        if !env_path.is_dir() {
-            Err(EnvironmentError2::EnvNotADirectory)?
-        }
-
-        let env_path = env_path
+        let env_path = env_dir_entry
+            .path()
             .canonicalize()
             .map_err(EnvironmentError2::EnvCanonicalize)?;
         if !env_path.join("flake.nix").exists() {
             Err(EnvironmentError2::DirectoryNotAnEnv)?
         }
 
+        let name = EnvironmentName::from_str(&env_dir_entry.file_name().to_string_lossy())?;
+
         Ok(PathEnvironment {
             path: env_path,
-            environment_ref: ident,
+            name,
             temp_dir: temp_dir.as_ref().to_path_buf(),
             state: Original,
         })
@@ -436,35 +441,18 @@ impl PathEnvironment<Original> {
         current_dir: impl AsRef<Path>,
         temp_dir: impl AsRef<Path>,
     ) -> Result<Option<Self>, EnvironmentError2> {
-        let dot_flox = current_dir
+        let maybe_dot_flox = current_dir
             .as_ref()
             .ancestors()
             .find(|ancestor| ancestor.join(".flox").exists());
 
-        let dot_flox = if let Some(dot_flox) = dot_flox {
-            dot_flox
+        let with_dot_flox = if let Some(with_dot_flox) = maybe_dot_flox {
+            with_dot_flox
         } else {
             return Ok(None);
         };
 
-        // assume only one entry in .flox
-        let env = dot_flox
-            .join(".flox")
-            .read_dir()
-            .map_err(EnvironmentError2::ReadDotFlox)?
-            .next()
-            .ok_or(EnvironmentError2::EmptyDotFlox)?
-            .map_err(EnvironmentError2::ReadEnvDir)?;
-
-        let name = EnvironmentName::from_str(&env.file_name().to_string_lossy())
-            .map_err(EnvironmentError2::ParseEnvRef)?;
-
-        Some(Self::open(
-            current_dir,
-            EnvironmentRef::new_from_parts(None, name),
-            temp_dir,
-        ))
-        .transpose()
+        Some(Self::open(with_dot_flox, temp_dir)).transpose()
     }
 
     /// Create a new env in a `.flox` directory within a specific path or open it if it exists.
@@ -475,13 +463,7 @@ impl PathEnvironment<Original> {
         name: EnvironmentName,
         temp_dir: impl AsRef<Path>,
     ) -> Result<Self, EnvironmentError2> {
-        if Self::open(
-            &path,
-            EnvironmentRef::new_from_parts(None, name.clone()),
-            &temp_dir,
-        )
-        .is_ok()
-        {
+        if Self::open(&path, &temp_dir).is_ok() {
             Err(EnvironmentError2::EnvironmentExists)?;
         }
 
@@ -492,7 +474,7 @@ impl PathEnvironment<Original> {
         copy_dir_recursive(&env!("FLOX_ENV_TEMPLATE"), &env_dir, false)
             .map_err(EnvironmentError2::InitEnv)?;
 
-        Self::open(path, EnvironmentRef::new_from_parts(None, name), temp_dir)
+        Self::open(path, temp_dir)
     }
 }
 
@@ -511,14 +493,10 @@ mod tests {
     async fn create_env() {
         let tempdir = tempfile::tempdir().unwrap();
         let environment_temp_dir = tempfile::tempdir().unwrap();
-        let before = PathEnvironment::<Original>::open(
-            tempdir.path(),
-            EnvironmentRef::new_from_parts(None, EnvironmentName::from_str("test").unwrap()),
-            environment_temp_dir.path(),
-        );
+        let before = PathEnvironment::<Original>::open(tempdir.path(), environment_temp_dir.path());
 
         assert!(
-            matches!(before, Err(EnvironmentError2::EnvNotFound)),
+            matches!(before, Err(EnvironmentError2::ReadDotFlox(_))),
             "{before:?}"
         );
 
@@ -529,7 +507,7 @@ mod tests {
                 .canonicalize()
                 .unwrap()
                 .join(".flox/test"),
-            environment_ref: EnvironmentRef::new(None, "test").unwrap(),
+            name: EnvironmentName::from_str("test").unwrap(),
             temp_dir: environment_temp_dir.path().to_path_buf(),
             state: Original,
         };
@@ -629,17 +607,11 @@ mod tests {
 
         temp_env.update_manifest(&new_env_str).unwrap();
 
-        assert_eq!(
-            std::fs::read_to_string(temp_env.manifest_path()).unwrap(),
-            new_env_str
-        );
+        assert_eq!(temp_env.manifest_content().unwrap(), new_env_str);
 
         env.replace_with(temp_env).unwrap();
 
-        assert_eq!(
-            std::fs::read_to_string(env.manifest_path()).unwrap(),
-            new_env_str
-        );
+        assert_eq!(env.manifest_content().unwrap(), new_env_str);
     }
 
     #[tokio::test]
@@ -669,9 +641,10 @@ mod tests {
                 channel: "nixpkgs-flox".to_string(),
                 name: ["hello"].try_into().unwrap(),
                 version: None,
-            })],
+            })]
+            .to_vec(),
             &nix,
-            &system,
+            system.clone(),
         )
         .await
         .unwrap();
@@ -680,12 +653,9 @@ mod tests {
             { packages."nixpkgs-flox".hello = { }; }
         "#};
 
-        assert_eq!(
-            std::fs::read_to_string(env.manifest_path()).unwrap(),
-            installed_env_str
-        );
+        assert_eq!(env.manifest_content().unwrap(), installed_env_str);
 
-        let catalog = env.catalog(&nix, &system).await.unwrap();
+        let catalog = env.catalog(&nix, system.clone()).await.unwrap();
         assert!(!catalog.entries.is_empty());
 
         assert!(env.out_link(&system).exists());
@@ -698,9 +668,10 @@ mod tests {
                 channel: "nixpkgs-flox".to_string(),
                 name: ["curl"].try_into().unwrap(),
                 version: None,
-            })],
+            })]
+            .to_vec(),
             &nix,
-            &system,
+            system.clone(),
         )
         .await
         .unwrap();
@@ -737,30 +708,26 @@ mod tests {
             version: None,
         });
 
-        env.install([package.clone()], &nix, &system).await.unwrap();
+        env.install([package.clone()].to_vec(), &nix, system.clone())
+            .await
+            .unwrap();
 
         let installed_env_str = indoc! {r#"
             { packages."nixpkgs-flox".hello = { }; }
         "#};
 
-        assert_eq!(
-            std::fs::read_to_string(env.manifest_path()).unwrap(),
-            installed_env_str
-        );
+        assert_eq!(env.manifest_content().unwrap(), installed_env_str);
 
-        let catalog = env.catalog(&nix, &system).await.unwrap();
+        let catalog = env.catalog(&nix, system.clone()).await.unwrap();
         assert!(!catalog.entries.is_empty());
 
-        env.uninstall([package.clone()], &nix, &system)
+        env.uninstall([package.clone()].to_vec(), &nix, system.clone())
             .await
             .unwrap();
 
-        assert_eq!(
-            std::fs::read_to_string(env.manifest_path()).unwrap(),
-            empty_env_str
-        );
+        assert_eq!(env.manifest_content().unwrap(), empty_env_str);
 
-        let catalog = env.catalog(&nix, &system).await.unwrap();
+        let catalog = env.catalog(&nix, system.clone()).await.unwrap();
         assert!(catalog.entries.is_empty());
     }
 }
