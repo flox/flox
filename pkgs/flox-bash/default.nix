@@ -14,6 +14,7 @@
   findutils,
   flox-gh,
   gawk,
+  gitMinimal,
   gh,
   gnugrep,
   gnused,
@@ -45,9 +46,6 @@
   pkgdb = inputs.pkgdb.packages.flox-pkgdb;
   # The getent package can be found in pkgs.unixtools.
   inherit (pkgs.unixtools) getent;
-
-  # Choose a smaller version of git.
-  git = pkgs.gitMinimal;
 
   nixPatched = nixVersions.nix_2_15.overrideAttrs (oldAttrs: {
     patches =
@@ -108,7 +106,7 @@ in
       flox-gh
       gawk
       getent
-      git
+      gitMinimal
       gh
       gnugrep
       gnused
@@ -161,9 +159,9 @@ in
       #
       mkdir -p $out/libexec
       makeWrapper ${nixPatched}/bin/nix $out/libexec/flox/nix --argv0 '$0' \
-        --prefix PATH : "${lib.makeBinPath [git]}"
+        --prefix PATH : "${gitMinimal}/bin"
       makeWrapper ${gh}/bin/gh $out/libexec/flox/gh --argv0 '$0' \
-        --prefix PATH : "${lib.makeBinPath [git]}"
+        --prefix PATH : "${gitMinimal}/bin"
 
       # Rewrite /usr/bin/env bash to the full path of bashInteractive.
       # Use --host to resolve using the runtime path.
