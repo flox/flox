@@ -7,6 +7,10 @@ on:
       - main
   pull_request:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
 
   build:
@@ -34,6 +38,14 @@ jobs:
         substituter-key: ${{ secrets.FLOX_STORE_PUBLIC_NIX_SECRET_KEY }}
         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+    - name: Restore Nix Caches
+      id: nix-cache-restore
+      uses: actions/cache/restore@v3
+      with:
+        path: |
+          ~/.cache/nix
+        key: ${{ runner.os }}-nix-cache
 
     # This is used to detect any new store paths we create while running builds
     # so that they can be pushed to caches.
@@ -118,6 +130,15 @@ jobs:
       run: |
         git clean -xfd;
         nix run --no-update-lock-file '.#flox-tests';
+
+    - name: Save Nix Caches
+      id: nix-cache-save
+      uses: actions/cache/save@v3
+      if: ${{ always() }}
+      with:
+        path: |
+          ~/.cache/nix
+        key: ${{ steps.nix-cache-restore.outputs.cache-primary-key }}
 
 
   # TODO: remove this job after merging to `main'
