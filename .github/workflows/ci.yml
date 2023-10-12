@@ -149,7 +149,7 @@ jobs:
     strategy:
       matrix:
         os:
-        - ubuntu-latest
+        - ubuntu-22.04-8core
         - macos-latest
         package:
         - flox-bash
