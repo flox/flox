@@ -59,7 +59,9 @@ jobs:
         echo "STORE_PATHS_FILE=$STORE_PATHS_FILE" >> "$GITHUB_ENV";
         find "$NIX_STORE_DIR" -maxdepth 1 -mindepth 1 -type d -o -type l  \
           |sort > "$STORE_PATHS_FILE";
-        echo "Have $( wc -l "$STORE_PATHS_FILE"; ) $NIX_STORE_DIR paths" >&2;
+        echo "Have $(
+          wc -l "$STORE_PATHS_FILE"|cut -d' ' -f1;
+        ) $NIX_STORE_DIR paths" >&2;
 
     - name: Build flox-gh
       run: |
@@ -113,7 +115,7 @@ jobs:
         comm -13 "$STORE_PATHS_FILE" "$STORE_PATHS_FILE2"  \
              > "$NEW_STORE_PATHS_FILE";
         echo "Have $(
-          wc -l "$NEW_STORE_PATHS_FILE";
+          wc -l "$NEW_STORE_PATHS_FILE"|cut -d' ' -f1;
         ) new $NIX_STORE_DIR paths" >&2;
         # Allow pushing to fail.
         cat "$NEW_STORE_PATHS_FILE"                           \
