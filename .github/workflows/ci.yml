@@ -139,8 +139,3 @@ jobs:
         path: |
           ~/.cache/nix
         key: ${{ steps.nix-cache-restore.outputs.cache-primary-key }}
-      - run: |
-          printf '%s' 'TODO: Remove "Build ${{ matrix.package }} on'     \
-                      ' ${{ matrix.os }}" branch protection rule.' >&2;
-          echo '' >&2;
-
