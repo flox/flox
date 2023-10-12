@@ -77,7 +77,7 @@ jobs:
 
     - name: Build flox
       run: |
-        flox nix build -L --no-update-lock-file --print-out-paths;
+        flox nix build '.#flox' -L --no-update-lock-file --print-out-paths;
         echo "FLOX_CLI=$( readlink -f ./result; )/bin/flox" >> "$GITHUB_ENV";
         rm ./result;
 
