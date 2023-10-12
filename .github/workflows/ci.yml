@@ -59,7 +59,6 @@ jobs:
       run: nix build '.#flox-tests' -L --no-update-lock-file --print-out-paths --no-link
 
     - name: Integration Tests
-      if: ${{ matrix.package.name == 'flox' }}
       run: nix run '.#flox-tests'
 
     - name: Cache the store
