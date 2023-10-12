@@ -6,8 +6,11 @@ use std::process::Command;
 use anyhow::{bail, Context, Result};
 use bpaf::{construct, Bpaf, Parser, ShellComp};
 use flox_rust_sdk::flox::{EnvironmentName, Flox};
+use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironment;
 use flox_rust_sdk::models::environment::path_environment::{Original, PathEnvironment};
+use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironment;
 use flox_rust_sdk::models::environment::Environment;
+use flox_rust_sdk::models::environment_ref;
 use flox_rust_sdk::nix::arguments::eval::EvaluationArgs;
 use flox_rust_sdk::nix::command::{Shell, StoreGc};
 use flox_rust_sdk::nix::command_line::NixCommandLine;
@@ -30,6 +33,61 @@ pub struct EnvironmentArgs {
 
 pub type EnvironmentRef = String;
 
+#[derive(Bpaf, Clone)]
+pub enum EnvironmentSelect {
+    Dir(
+        /// Path containing a .flox/ directory
+        #[bpaf(long("dir"), short('d'), argument("path"))]
+        PathBuf,
+    ),
+    Remote(
+        /// A remote environment on floxhub
+        #[bpaf(long("remote"), short('r'), argument("owner/name"))]
+        environment_ref::EnvironmentRef,
+    ),
+}
+
+impl Default for EnvironmentSelect {
+    fn default() -> Self {
+        EnvironmentSelect::Dir(PathBuf::from("./"))
+    }
+}
+
+impl EnvironmentSelect {
+    fn to_concrete_environment(&self, temp_dir: impl AsRef<Path>) -> Result<ConcreteEnvironment> {
+        let env = match self {
+            EnvironmentSelect::Dir(path) => ConcreteEnvironment::Path(
+                PathEnvironment::open(path, temp_dir).context("No matching environments found")?,
+            ),
+
+            EnvironmentSelect::Remote(_) => todo!(),
+        };
+
+        Ok(env)
+    }
+}
+
+enum ConcreteEnvironment {
+    /// Container for [PathEnvironment]
+    Path(PathEnvironment<Original>),
+    /// Container for [ManagedEnvironment]
+    #[allow(unused)] // pending implementation of ManagedEnvironment
+    Managed(ManagedEnvironment),
+    /// Container for [RemoteEnvironment]
+    #[allow(unused)] // pending implementation of RemoteEnvironment
+    Remote(RemoteEnvironment),
+}
+
+impl ConcreteEnvironment {
+    fn into_dyn_environment(self) -> Box<dyn Environment> {
+        match self {
+            ConcreteEnvironment::Path(path_env) => Box::new(path_env),
+            ConcreteEnvironment::Managed(managed_env) => Box::new(managed_env),
+            ConcreteEnvironment::Remote(remote_env) => Box::new(remote_env),
+        }
+    }
+}
+
 /// Edit declarative environment configuration
 #[derive(Bpaf, Clone)]
 pub struct Edit {
@@ -37,8 +95,8 @@ pub struct Edit {
     #[bpaf(external(environment_args), group_help("Environment Options"))]
     environment_args: EnvironmentArgs,
 
-    #[bpaf(long, short, argument("ENV"))]
-    environment: Option<EnvironmentRef>,
+    #[bpaf(external(environment_select), fallback(Default::default()))]
+    environment: EnvironmentSelect,
 
     /// Replace environment declaration with that in FILE
     #[bpaf(long, short, argument("FILE"))]
@@ -49,15 +107,19 @@ impl Edit {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("edit");
 
-        let mut environment =
-            resolve_environment(&flox, self.environment.as_deref(), "edit").await?;
+        let mut environment = self
+            .environment
+            .to_concrete_environment(tempfile::tempdir_in(&flox.temp_dir)?.into_path())?
+            .into_dyn_environment();
         let nix = flox.nix(Default::default());
 
         match self.provided_manifest_contents()? {
             // If provided with the contents of a manifest file, either via a path to a file or via
             // contents piped to stdin, use those contents to try building the environment.
             Some(new_manifest) => {
-                environment.edit(&nix, &flox.system, new_manifest).await?;
+                environment
+                    .edit(&nix, flox.system.clone(), new_manifest)
+                    .await?;
                 Ok(())
             },
             // If not provided with new manifest contents, let the user edit the file directly
@@ -67,13 +129,12 @@ impl Edit {
                     .or(std::env::var("VISUAL"))
                     .context("no editor found; neither EDITOR nor VISUAL are set")?;
                 // TODO: check for interactivity before allowing the editor to be opened
-                let manifest_path = environment.manifest_path();
                 // Make a copy of the manifest for the user to edit so failed edits aren't left in
                 // the original manifest. You can't put creation/cleanup inside the `edited_manifest_contents`
                 // method because the temporary manifest needs to stick around in case the user wants
                 // or needs to make successive edits without starting over each time.
                 let tmp_manifest = NamedTempFile::new_in(&flox.temp_dir)?;
-                std::fs::copy(&manifest_path, &tmp_manifest)?;
+                std::fs::write(&tmp_manifest, environment.manifest_content()?)?;
                 let should_continue = Dialog {
                     message: "Continue editing?",
                     help_message: Default::default(),
@@ -85,7 +146,10 @@ impl Edit {
                 // decides to stop.
                 loop {
                     let new_manifest = Edit::edited_manifest_contents(&tmp_manifest, &editor)?;
-                    if let Err(e) = environment.edit(&nix, &flox.system, new_manifest).await {
+                    if let Err(e) = environment
+                        .edit(&nix, flox.system.clone(), new_manifest)
+                        .await
+                    {
                         error!("Environment invalid; building resulted in an error: {e}");
                         if !Dialog::can_prompt() {
                             bail!("Can't prompt to continue editing in non-interactive context");
@@ -147,19 +211,22 @@ pub struct Delete {
     #[bpaf(external(environment_args), group_help("Environment Options"))]
     environment_args: EnvironmentArgs,
 
-    #[bpaf(long, short, argument("ENV"))]
-    environment: Option<EnvironmentRef>,
+    #[bpaf(external(environment_select), fallback(Default::default()))]
+    environment: EnvironmentSelect,
 }
 
 impl Delete {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("delete");
+        match self
+            .environment
+            .to_concrete_environment(tempfile::tempdir_in(flox.temp_dir)?.into_path())?
+        {
+            ConcreteEnvironment::Path(environment) => environment.delete()?,
+            ConcreteEnvironment::Managed(environment) => environment.delete()?,
+            ConcreteEnvironment::Remote(environment) => environment.delete()?,
+        }
 
-        let environment = resolve_environment(&flox, self.environment.as_deref(), "delete").await?;
-
-        environment
-            .delete()
-            .context("Failed to delete environment")?;
         Ok(())
     }
 }
@@ -177,8 +244,8 @@ pub struct Activate {
     #[bpaf(external(environment_args), group_help("Environment Options"))]
     environment_args: EnvironmentArgs,
 
-    #[bpaf(long, short, argument("ENV"))]
-    environment: Vec<EnvironmentRef>,
+    #[bpaf(external(environment_select), fallback(Default::default()))]
+    environment: EnvironmentSelect,
 
     #[allow(dead_code)] // TODO: not yet handled in impl
     #[bpaf(external(activate_run_args))]
@@ -189,15 +256,17 @@ impl Activate {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("activate");
 
-        let environment = self.environment.first().map(|e| e.as_ref());
-        let environment = resolve_environment(&flox, environment, "activate").await?;
+        let environment = self
+            .environment
+            .to_concrete_environment(tempfile::tempdir_in(&flox.temp_dir)?.into_path())?
+            .into_dyn_environment();
 
         let command = Shell {
             eval: EvaluationArgs {
                 impure: true.into(),
                 ..Default::default()
             },
-            installables: [environment.flake_attribute(&flox.system).into()].into(),
+            installables: [environment.flake_attribute(flox.system.clone()).into()].into(),
             ..Default::default()
         };
 
@@ -274,8 +343,8 @@ pub struct List {
     #[bpaf(external(environment_args), group_help("Environment Options"))]
     environment_args: EnvironmentArgs,
 
-    #[bpaf(long, short, argument("ENV"))]
-    environment: Option<EnvironmentRef>,
+    #[bpaf(external(environment_select), fallback(Default::default()))]
+    environment: EnvironmentSelect,
 
     #[allow(dead_code)] // not yet handled in impl
     #[bpaf(external(list_output), optional)]
@@ -301,10 +370,13 @@ impl List {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("list");
 
-        let env = resolve_environment(&flox, self.environment.as_deref(), "list").await?;
+        let env = self
+            .environment
+            .to_concrete_environment(tempfile::tempdir_in(&flox.temp_dir)?.into_path())?
+            .into_dyn_environment();
 
         let catalog = env
-            .catalog(&flox.nix(Default::default()), &flox.system)
+            .catalog(&flox.nix(Default::default()), flox.system)
             .await
             .context("Could not get catalog")?;
         // let installed_store_paths = env.installed_store_paths(&flox).await?;
@@ -355,8 +427,8 @@ pub struct Install {
     #[bpaf(external(environment_args), group_help("Environment Options"))]
     environment_args: EnvironmentArgs,
 
-    #[bpaf(long, short, argument("ENV"))]
-    environment: Option<EnvironmentRef>,
+    #[bpaf(external(environment_select), fallback(Default::default()))]
+    environment: EnvironmentSelect,
 
     #[bpaf(positional("PACKAGES"), some("Must specify at least one package"))]
     packages: Vec<String>,
@@ -366,7 +438,7 @@ impl Install {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("install");
 
-        let mut packages: Vec<_> = self
+        let packages: Vec<_> = self
             .packages
             .iter()
             .map(|package| FloxPackage::parse(package, &flox.channels, DEFAULT_CHANNEL))
@@ -375,8 +447,10 @@ impl Install {
             .dedup()
             .collect();
 
-        let mut environment =
-            resolve_environment(&flox, self.environment.as_deref(), "install").await?;
+        let mut environment = self
+            .environment
+            .to_concrete_environment(tempfile::tempdir_in(&flox.temp_dir)?.into_path())?
+            .into_dyn_environment();
 
         // todo use set?
         // let installed = environment
@@ -394,11 +468,7 @@ impl Install {
         let plural = packages.len() > 1;
 
         if environment
-            .install(
-                packages.drain(..),
-                &flox.nix(Default::default()),
-                &flox.system,
-            )
+            .install(packages, &flox.nix(Default::default()), flox.system)
             .await
             .context("could not install packages")?
         {
@@ -424,8 +494,8 @@ pub struct Uninstall {
     #[bpaf(external(environment_args), group_help("Environment Options"))]
     environment_args: EnvironmentArgs,
 
-    #[bpaf(long, short, argument("ENV"))]
-    environment: Option<EnvironmentRef>,
+    #[bpaf(external(environment_select), fallback(Default::default()))]
+    environment: EnvironmentSelect,
 
     #[bpaf(positional("PACKAGES"), some("Must specify at least one package"))]
     packages: Vec<String>,
@@ -435,7 +505,7 @@ impl Uninstall {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("uninstall");
 
-        let mut packages: Vec<_> = self
+        let packages: Vec<_> = self
             .packages
             .iter()
             .map(|package| FloxPackage::parse(package, &flox.channels, DEFAULT_CHANNEL))
@@ -444,18 +514,16 @@ impl Uninstall {
             .dedup()
             .collect();
 
-        let mut environment =
-            resolve_environment(&flox, self.environment.as_deref(), "uninstall").await?;
+        let mut environment = self
+            .environment
+            .to_concrete_environment(tempfile::tempdir_in(&flox.temp_dir)?.into_path())?
+            .into_dyn_environment();
 
         let packages_str = packages_to_string(&packages);
         let plural = packages.len() > 1;
 
         if environment
-            .uninstall(
-                packages.drain(..),
-                &flox.nix(Default::default()),
-                &flox.system,
-            )
+            .uninstall(packages, &flox.nix(Default::default()), flox.system)
             .await
             .context("could not uninstall packages")?
         {
@@ -481,15 +549,18 @@ pub struct WipeHistory {
     #[bpaf(external(environment_args), group_help("Environment Options"))]
     environment_args: EnvironmentArgs,
 
-    #[bpaf(long, short, argument("ENV"))]
-    environment: Option<EnvironmentRef>,
+    #[bpaf(external(environment_select), fallback(Default::default()))]
+    environment: EnvironmentSelect,
 }
 
 impl WipeHistory {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("wipe-history");
 
-        let env = resolve_environment(&flox, self.environment.as_deref(), "uninstall").await?;
+        let env = self
+            .environment
+            .to_concrete_environment(tempfile::tempdir_in(&flox.temp_dir)?.into_path())?
+            .into_dyn_environment();
 
         if env.delete_symlinks()? {
             // The flox nix instance is created with `--quiet --quiet`
@@ -521,9 +592,9 @@ pub struct Export {
     #[bpaf(external(environment_args), group_help("Environment Options"))]
     environment_args: EnvironmentArgs,
 
-    #[allow(dead_code)] // not yet handled in impl
-    #[bpaf(long, short, argument("ENV"))]
-    environment: Option<EnvironmentRef>,
+    #[allow(unused)] // Command currently forwarded
+    #[bpaf(external(environment_select), fallback(Default::default()))]
+    environment: EnvironmentSelect,
 }
 
 impl Export {
@@ -545,9 +616,9 @@ pub struct Generations {
     #[bpaf(long)]
     json: bool,
 
-    #[allow(dead_code)] // not yet handled in impl
-    #[bpaf(long, short, argument("ENV"))]
-    environment: Option<EnvironmentRef>,
+    #[allow(unused)] // Command currently forwarded
+    #[bpaf(external(environment_select), fallback(Default::default()))]
+    environment: EnvironmentSelect,
 }
 
 impl Generations {
@@ -557,6 +628,7 @@ impl Generations {
         flox_forward(&flox).await
     }
 }
+
 /// access to the git CLI for floxmeta repository
 #[derive(Bpaf, Clone)]
 pub struct Git {
@@ -564,9 +636,9 @@ pub struct Git {
     #[bpaf(external(environment_args), group_help("Environment Options"))]
     environment_args: EnvironmentArgs,
 
-    #[allow(dead_code)] // not yet handled in impl
-    #[bpaf(long, short, argument("ENV"))]
-    environment: Option<EnvironmentRef>,
+    #[allow(unused)] // Command currently forwarded
+    #[bpaf(external(environment_select), fallback(Default::default()))]
+    environment: EnvironmentSelect,
 
     #[allow(dead_code)] // not yet handled in impl
     #[bpaf(any("Git Arguments", Some))]
@@ -592,9 +664,9 @@ pub struct History {
     #[bpaf(external(environment_args), group_help("Environment Options"))]
     environment_args: EnvironmentArgs,
 
-    #[allow(dead_code)] // not yet handled in impl
-    #[bpaf(long, short, argument("ENV"))]
-    environment: Option<EnvironmentRef>,
+    #[allow(unused)] // Command currently forwarded
+    #[bpaf(external(environment_select), fallback(Default::default()))]
+    environment: EnvironmentSelect,
 }
 
 impl History {
@@ -612,9 +684,9 @@ pub struct Import {
     #[bpaf(external(environment_args), group_help("Environment Options"))]
     environment_args: EnvironmentArgs,
 
-    #[allow(dead_code)] // not yet handled in impl
-    #[bpaf(long, short, argument("ENV"))]
-    environment: Option<EnvironmentRef>,
+    #[allow(unused)] // Command currently forwarded
+    #[bpaf(external(environment_select), fallback(Default::default()))]
+    environment: EnvironmentSelect,
 
     #[allow(dead_code)] // not yet handled in impl
     #[bpaf(external(ImportFile::parse), fallback(ImportFile::Stdin))]
@@ -759,9 +831,9 @@ pub struct SwitchGeneration {
     #[bpaf(external(environment_args), group_help("Environment Options"))]
     environment_args: EnvironmentArgs,
 
-    #[allow(dead_code)] // not yet handled in impl
-    #[bpaf(long, short, argument("ENV"))]
-    environment: Option<EnvironmentRef>,
+    #[allow(unused)] // Command currently forwarded
+    #[bpaf(external(environment_select), fallback(Default::default()))]
+    environment: EnvironmentSelect,
 
     #[allow(dead_code)] // not yet handled in impl
     #[bpaf(positional("GENERATION"))]
@@ -783,9 +855,9 @@ pub struct Upgrade {
     #[bpaf(external(environment_args), group_help("Environment Options"))]
     environment_args: EnvironmentArgs,
 
-    #[allow(dead_code)] // not yet handled in impl
-    #[bpaf(long, short, argument("ENV"))]
-    environment: Option<EnvironmentRef>,
+    #[allow(unused)] // Command currently forwarded
+    #[bpaf(external(environment_select), fallback(Default::default()))]
+    environment: EnvironmentSelect,
 
     #[allow(dead_code)] // not yet handled in impl
     #[bpaf(positional("PACKAGES"))]
@@ -797,24 +869,6 @@ impl Upgrade {
 
         flox_forward(&flox).await
     }
-}
-
-async fn resolve_environment<'flox>(
-    flox: &'flox Flox,
-    environment_name: Option<&str>,
-    _subcommand: &str,
-) -> Result<PathEnvironment<Original>, anyhow::Error> {
-    let environment_refs =
-        flox_rust_sdk::models::environment_ref::EnvironmentRef::find(flox, environment_name)?;
-    let environment_ref = match environment_refs.len() {
-        0 => bail!("No matching environments found"),
-        1 => &environment_refs[0],
-        _ => bail!("Multiple environments found"),
-    };
-    let environment = environment_ref
-        .to_env(flox.temp_dir.clone())
-        .context("Could not use environment")?;
-    Ok(environment)
 }
 
 fn activate_run_args() -> impl Parser<Option<(String, Vec<String>)>> {

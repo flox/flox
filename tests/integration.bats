@@ -99,37 +99,37 @@ setup_file() {
 }
 
 @test "flox create -e $TEST_ENVIRONMENT" {
-  run $FLOX_CLI create -e "$TEST_ENVIRONMENT"
+  run $FLOX_CLI --bash-passthru create -e "$TEST_ENVIRONMENT"
   assert_success
   assert_output --partial "created environment $TEST_ENVIRONMENT ($NIX_SYSTEM)"
 }
 
 @test "flox create -e $TEST_ENVIRONMENT fails when run again" {
-  run $FLOX_CLI create -e "$TEST_ENVIRONMENT"
+  run $FLOX_CLI --bash-passthru create -e "$TEST_ENVIRONMENT"
   assert_failure
   assert_output --partial "ERROR: environment $TEST_ENVIRONMENT ($NIX_SYSTEM) already exists"
 }
 
 @test "flox install hello" {
-  run $FLOX_CLI install -e "$TEST_ENVIRONMENT" hello
+  run $FLOX_CLI --bash-passthru install -e "$TEST_ENVIRONMENT" hello
   assert_success
   assert_output --partial "Installed 'hello' package(s) into '$TEST_ENVIRONMENT' environment."
 }
 
 @test "flox export -> import is a no-op" {
-  run sh -c "$FLOX_CLI export -e $TEST_ENVIRONMENT | $FLOX_CLI --debug import -e $TEST_ENVIRONMENT"
+  run sh -c "$FLOX_CLI --bash-passthru export -e $TEST_ENVIRONMENT | $FLOX_CLI --bash-passthru --debug import -e $TEST_ENVIRONMENT"
   assert_success
   assert_output --partial "No environment changes detected"
 }
 
 @test "flox install nixpkgs-flox.hello" {
-  run $FLOX_CLI install -e $TEST_ENVIRONMENT nixpkgs-flox.hello
+  run $FLOX_CLI --bash-passthru install -e $TEST_ENVIRONMENT nixpkgs-flox.hello
   assert_success
   assert_output --partial "No change! Package(s) 'nixpkgs-flox.hello' already installed into '$TEST_ENVIRONMENT' environment."
 }
 
 @test "flox install stable.nixpkgs-flox.hello" {
-  run $FLOX_CLI install -e $TEST_ENVIRONMENT stable.nixpkgs-flox.hello
+  run $FLOX_CLI --bash-passthru install -e $TEST_ENVIRONMENT stable.nixpkgs-flox.hello
   assert_success
   assert_output --partial "No change! Package(s) 'stable.nixpkgs-flox.hello' already installed into '$TEST_ENVIRONMENT' environment."
 }
@@ -142,19 +142,19 @@ setup_file() {
 }
 
 @test "flox install stable.nixpkgs-flox-dup.hello" {
-  run $FLOX_CLI install -e $TEST_ENVIRONMENT stable.nixpkgs-flox-dup.hello
+  run $FLOX_CLI --bash-passthru install -e $TEST_ENVIRONMENT stable.nixpkgs-flox-dup.hello
   assert_failure
   assert_output --regexp ".*error: package nixpkgs-flox.$NIX_SYSTEM.stable.hello.latest is identical to package nixpkgs-flox-dup.$NIX_SYSTEM.stable.hello.latest"
 }
 
 @test "flox install cowsay jq dasel" {
-  run $FLOX_CLI --debug install -e $TEST_ENVIRONMENT cowsay jq dasel
+  run $FLOX_CLI  --bash-passthru --debug install -e $TEST_ENVIRONMENT cowsay jq dasel
   assert_success
   assert_output --partial "created generation 3"
 }
 
 @test "flox list after install should contain cowsay and hello" {
-  run $FLOX_CLI list -e $TEST_ENVIRONMENT
+  run $FLOX_CLI --bash-passthru list -e $TEST_ENVIRONMENT
   assert_success
   assert_output --regexp "0  stable.nixpkgs-flox.cowsay +"$VERSION_REGEX
   assert_output --regexp "1  stable.nixpkgs-flox.dasel +"$VERSION_REGEX
@@ -163,13 +163,13 @@ setup_file() {
 }
 
 @test "flox edit remove hello" {
-  EDITOR=./tests/remove-hello run $FLOX_CLI edit -e $TEST_ENVIRONMENT
+  EDITOR=./tests/remove-hello run $FLOX_CLI --bash-passthru edit -e $TEST_ENVIRONMENT
   assert_success
   assert_output --partial "Environment '$TEST_ENVIRONMENT' modified."
 }
 
 @test "verify flox edit removed hello from manifest.json" {
-  run $FLOX_CLI list -e $TEST_ENVIRONMENT
+  run $FLOX_CLI --bash-passthru list -e $TEST_ENVIRONMENT
   assert_success
   assert_output --regexp "0  stable.nixpkgs-flox.cowsay +"$VERSION_REGEX
   assert_output --regexp "1  stable.nixpkgs-flox.dasel +"$VERSION_REGEX
@@ -178,7 +178,7 @@ setup_file() {
 }
 
 @test "verify flox edit removed hello from flox.nix" {
-  EDITOR=cat run $FLOX_CLI edit -e $TEST_ENVIRONMENT
+  EDITOR=cat run $FLOX_CLI --bash-passthru edit -e $TEST_ENVIRONMENT
   assert_success
   assert_output --partial 'nixpkgs-flox.cowsay = {'
   assert_output --partial 'nixpkgs-flox.dasel = {'
@@ -188,13 +188,13 @@ setup_file() {
 }
 
 @test "flox edit add hello" {
-  EDITOR=./tests/add-hello run $FLOX_CLI edit -e $TEST_ENVIRONMENT
+  EDITOR=./tests/add-hello run $FLOX_CLI --bash-passthru edit -e $TEST_ENVIRONMENT
   assert_success
   assert_output --partial "Environment '$TEST_ENVIRONMENT' modified."
 }
 
 @test "verify flox edit added hello to manifest.json" {
-  run $FLOX_CLI list -e $TEST_ENVIRONMENT
+  run $FLOX_CLI --bash-passthru list -e $TEST_ENVIRONMENT
   assert_success
   assert_output --regexp "0  stable.nixpkgs-flox.cowsay +"$VERSION_REGEX
   assert_output --regexp "1  stable.nixpkgs-flox.dasel +"$VERSION_REGEX
@@ -203,7 +203,7 @@ setup_file() {
 }
 
 @test "verify flox edit added hello to flox.nix" {
-  EDITOR=cat run $FLOX_CLI edit -e $TEST_ENVIRONMENT
+  EDITOR=cat run $FLOX_CLI --bash-passthru edit -e $TEST_ENVIRONMENT
   assert_success
   assert_output --partial 'nixpkgs-flox.cowsay = {'
   assert_output --partial 'nixpkgs-flox.dasel = {'
@@ -214,29 +214,29 @@ setup_file() {
 
 @test "flox edit preserves comments" {
   EDIT_ENVIRONMENT=_edit_testing_
-  run $FLOX_CLI create -e "$EDIT_ENVIRONMENT"
+  run $FLOX_CLI --bash-passthru create -e "$EDIT_ENVIRONMENT"
   assert_success
 
-  EDITOR=./tests/add-comment run $FLOX_CLI edit -e "$EDIT_ENVIRONMENT"
+  EDITOR=./tests/add-comment run $FLOX_CLI --bash-passthru edit -e "$EDIT_ENVIRONMENT"
   assert_success
   assert_output --partial "Environment '$EDIT_ENVIRONMENT' modified."
 
-  EDITOR=cat run $FLOX_CLI edit -e "$EDIT_ENVIRONMENT"
+  EDITOR=cat run $FLOX_CLI --bash-passthru edit -e "$EDIT_ENVIRONMENT"
   assert_success
   assert_output --partial "# test comment"
 
-  run $FLOX_CLI delete --force -e "$EDIT_ENVIRONMENT"
+  run $FLOX_CLI --bash-passthru delete --force -e "$EDIT_ENVIRONMENT"
   assert_success
 }
 
 @test "flox remove hello" {
-  run $FLOX_CLI remove -e $TEST_ENVIRONMENT hello
+  run $FLOX_CLI --bash-passthru remove -e $TEST_ENVIRONMENT hello
   assert_success
   assert_output --partial "Removed 'hello' package(s) from '$TEST_ENVIRONMENT' environment."
 }
 
 @test "flox list after remove should not contain hello" {
-  run $FLOX_CLI list -e $TEST_ENVIRONMENT
+  run $FLOX_CLI --bash-passthru list -e $TEST_ENVIRONMENT
   assert_success
   assert_output --regexp "0  stable.nixpkgs-flox.cowsay +"$VERSION_REGEX
   assert_output --regexp "1  stable.nixpkgs-flox.dasel +"$VERSION_REGEX
@@ -245,7 +245,7 @@ setup_file() {
 }
 
 @test "flox list of generation 3 should contain hello" {
-  run $FLOX_CLI list -e $TEST_ENVIRONMENT 3
+  run $FLOX_CLI --bash-passthru list -e $TEST_ENVIRONMENT 3
   assert_success
   assert_output --regexp "0  stable.nixpkgs-flox.cowsay +"$VERSION_REGEX
   assert_output --regexp "1  stable.nixpkgs-flox.dasel +"$VERSION_REGEX
@@ -254,7 +254,7 @@ setup_file() {
 }
 
 @test "flox history should contain the install and removal of stable.nixpkgs-flox.hello" {
-  run $FLOX_CLI history -e $TEST_ENVIRONMENT
+  run $FLOX_CLI --bash-passthru history -e $TEST_ENVIRONMENT
   assert_success
   assert_output --partial "removed stable.nixpkgs-flox.hello"
   assert_output --partial "installed stable.nixpkgs-flox.cowsay stable.nixpkgs-flox.jq stable.nixpkgs-flox.dasel"
@@ -263,7 +263,7 @@ setup_file() {
 }
 
 @test "flox remove from nonexistent environment should fail" {
-  run $FLOX_CLI remove -e does-not-exist hello
+  run $FLOX_CLI --bash-passthru remove -e does-not-exist hello
   assert_failure
   assert_output --partial "ERROR: environment does-not-exist ($NIX_SYSTEM) does not exist"
   run sh -c "$FLOX_CLI git branch -a | grep -q does-not-exist"
@@ -280,49 +280,49 @@ setup_file() {
 @test "flox remove channel package by index" {
   TEST_CASE_ENVIRONMENT="$(echo $RANDOM | md5sum | head -c 20; echo)"
 
-  run $FLOX_CLI install -e "$TEST_CASE_ENVIRONMENT" hello
+  run $FLOX_CLI --bash-passthru install -e "$TEST_CASE_ENVIRONMENT" hello
   assert_success
 
-  run $FLOX_CLI list -e "$TEST_CASE_ENVIRONMENT"
+  run $FLOX_CLI --bash-passthru list -e "$TEST_CASE_ENVIRONMENT"
   assert_success
   assert_output --regexp "0 +stable.nixpkgs-flox.hello +$VERSION_REGEX"
 
-  run $FLOX_CLI remove -e "$TEST_CASE_ENVIRONMENT" 0
+  run $FLOX_CLI --bash-passthru remove -e "$TEST_CASE_ENVIRONMENT" 0
   assert_success
   assert_output --partial                                                \
     "Removed '0' package(s) from '$TEST_CASE_ENVIRONMENT' environment."
 
-  run $FLOX_CLI list -e "$TEST_CASE_ENVIRONMENT"
+  run $FLOX_CLI --bash-passthru list -e "$TEST_CASE_ENVIRONMENT"
   assert_success
   refute_output --partial "stable.nixpkgs-flox.hello"
 
   # teardown
-  run $FLOX_CLI delete -e "$TEST_CASE_ENVIRONMENT" -f
+  run $FLOX_CLI --bash-passthru delete -e "$TEST_CASE_ENVIRONMENT" -f
   assert_success
 }
 
 @test "flox remove flake package by index" {
   TEST_CASE_ENVIRONMENT="$(echo $RANDOM | md5sum | head -c 20; echo)"
 
-  run $FLOX_CLI install -e "$TEST_CASE_ENVIRONMENT" nixpkgs#hello
+  run $FLOX_CLI --bash-passthru install -e "$TEST_CASE_ENVIRONMENT" nixpkgs#hello
   assert_success
 
-  run $FLOX_CLI list -e "$TEST_CASE_ENVIRONMENT"
+  run $FLOX_CLI --bash-passthru list -e "$TEST_CASE_ENVIRONMENT"
   assert_success
   assert_output --regexp  \
     "0 +nixpkgs#legacyPackages\.$NIX_SYSTEM\.hello +$VERSION_REGEX"
 
-  run $FLOX_CLI remove -e "$TEST_CASE_ENVIRONMENT" 0
+  run $FLOX_CLI --bash-passthru remove -e "$TEST_CASE_ENVIRONMENT" 0
   assert_success
   assert_output --partial  \
     "Removed '0' package(s) from '$TEST_CASE_ENVIRONMENT' environment."
 
-  run $FLOX_CLI list -e "$TEST_CASE_ENVIRONMENT"
+  run $FLOX_CLI --bash-passthru list -e "$TEST_CASE_ENVIRONMENT"
   assert_success
   refute_output --partial "nixpkgs#legacyPackages.$NIX_SYSTEM.hello"
 
   # teardown
-  run $FLOX_CLI delete -e "$TEST_CASE_ENVIRONMENT" -f
+  run $FLOX_CLI --bash-passthru delete -e "$TEST_CASE_ENVIRONMENT" -f
   assert_success
 }
 
@@ -368,40 +368,40 @@ setup_file() {
   run $FLOX_CLI subscribe nixpkgs-flox-upgrade-test github:flox/nixpkgs-flox/master
   assert_success
   # Note the use of --dereference to copy flake.{nix,lock} as files.
-  run sh -c "tar -cf - --dereference --mode u+w -C $TESTS_DIR/upgrade/$NIX_SYSTEM . | $FLOX_CLI import -e _upgrade_testing_"
+  run sh -c "tar -cf - --dereference --mode u+w -C $TESTS_DIR/upgrade/$NIX_SYSTEM . | $FLOX_CLI --bash-passthru import -e _upgrade_testing_"
   assert_success
-  run $FLOX_CLI activate -e _upgrade_testing_ -- sh -xc 'realpath $(which rg)'
+  run $FLOX_CLI --bash-passthru activate -e _upgrade_testing_ -- sh -xc 'realpath $(which rg)'
   assert_output --partial "$RG_PATH"
-  run $FLOX_CLI activate -e _upgrade_testing_ -- sh -xc 'realpath $(which curl)'
+  run $FLOX_CLI --bash-passthru activate -e _upgrade_testing_ -- sh -xc 'realpath $(which curl)'
   assert_output --partial "$CURL_PATH"
 
   # upgrade ripgrep but not curl
-  run $FLOX_CLI upgrade -e _upgrade_testing_ ripgrep
+  run $FLOX_CLI --bash-passthru upgrade -e _upgrade_testing_ ripgrep
   assert_success
   assert_output --partial "Environment '_upgrade_testing_' upgraded."
-  run $FLOX_CLI activate -e _upgrade_testing_ -- sh -xc 'realpath $(which rg)'
+  run $FLOX_CLI --bash-passthru activate -e _upgrade_testing_ -- sh -xc 'realpath $(which rg)'
   ! assert_output --partial "$RG_PATH"
-  run $FLOX_CLI activate -e _upgrade_testing_ -- sh -xc 'realpath $(which curl)'
+  run $FLOX_CLI --bash-passthru activate -e _upgrade_testing_ -- sh -xc 'realpath $(which curl)'
   assert_output --partial "$CURL_PATH"
 
   # upgrade everything
-  run $FLOX_CLI --debug upgrade -e _upgrade_testing_
+  run $FLOX_CLI --bash-passthru --debug upgrade -e _upgrade_testing_
   assert_success
   assert_output --partial "Environment '_upgrade_testing_' upgraded."
-  run $FLOX_CLI activate -e _upgrade_testing_ -- sh -xc 'realpath $(which rg)'
+  run $FLOX_CLI --bash-passthru activate -e _upgrade_testing_ -- sh -xc 'realpath $(which rg)'
   ! assert_output --partial "$RG_PATH"
-  run $FLOX_CLI activate -e _upgrade_testing_ -- sh -xc 'realpath $(which curl)'
+  run $FLOX_CLI --bash-passthru activate -e _upgrade_testing_ -- sh -xc 'realpath $(which curl)'
   ! assert_output --partial "$CURL_PATH"
 
   # teardown
   run $FLOX_CLI unsubscribe nixpkgs-flox-upgrade-test
   assert_success
-  run $FLOX_CLI delete -e _upgrade_testing_ -f
+  run $FLOX_CLI --bash-passthru delete -e _upgrade_testing_ -f
   assert_success
 }
 
 @test "flox upgrade of nonexistent environment should fail" {
-  run $FLOX_CLI upgrade -e does-not-exist
+  run $FLOX_CLI --bash-passthru upgrade -e does-not-exist
   assert_failure
   assert_output --partial "ERROR: environment does-not-exist ($NIX_SYSTEM) does not exist"
   run sh -c "$FLOX_CLI git branch -a | grep -q does-not-exist"
@@ -417,7 +417,7 @@ setup_file() {
 }
 
 @test "flox rollback of nonexistent environment should fail" {
-  run $FLOX_CLI rollback -e does-not-exist
+  run $FLOX_CLI --bash-passthru rollback -e does-not-exist
   assert_failure
   assert_output --partial "ERROR: environment does-not-exist ($NIX_SYSTEM) does not exist"
   run sh -c "$FLOX_CLI git branch -a | grep -q does-not-exist"
@@ -433,13 +433,13 @@ setup_file() {
 }
 
 @test "flox rollback" {
-  run $FLOX_CLI rollback -e $TEST_ENVIRONMENT
+  run $FLOX_CLI --bash-passthru rollback -e $TEST_ENVIRONMENT
   assert_success
   assert_output --partial "Rolled back environment '$TEST_ENVIRONMENT' from generation 6 to 5."
 }
 
 @test "flox list after rollback should reflect generation 2" {
-  run $FLOX_CLI list -e $TEST_ENVIRONMENT
+  run $FLOX_CLI --bash-passthru list -e $TEST_ENVIRONMENT
   assert_success
   assert_output --regexp "0  stable.nixpkgs-flox.cowsay +"$VERSION_REGEX
   assert_output --regexp "1  stable.nixpkgs-flox.dasel +"$VERSION_REGEX
@@ -448,10 +448,10 @@ setup_file() {
 }
 
 @test "flox rollback --to 4" {
-  run $FLOX_CLI rollback --to 4 -e $TEST_ENVIRONMENT
+  run $FLOX_CLI --bash-passthru rollback --to 4 -e $TEST_ENVIRONMENT
   assert_success
   assert_output --regexp "Rolled back environment '$TEST_ENVIRONMENT' from generation [0-9]+ to 4."
-  run $FLOX_CLI list -e $TEST_ENVIRONMENT
+  run $FLOX_CLI --bash-passthru list -e $TEST_ENVIRONMENT
   assert_success
   assert_output --partial "Curr Gen  4"
   assert_output --regexp "0  stable.nixpkgs-flox.cowsay +"$VERSION_REGEX
@@ -461,10 +461,10 @@ setup_file() {
 }
 
 @test "flox switch-generation 2" {
-  run $FLOX_CLI switch-generation 2 -e $TEST_ENVIRONMENT
+  run $FLOX_CLI --bash-passthru switch-generation 2 -e $TEST_ENVIRONMENT
   assert_success
   assert_output --regexp "Switched environment '$TEST_ENVIRONMENT' from generation [0-9]+ to 2."
-  run $FLOX_CLI list -e $TEST_ENVIRONMENT
+  run $FLOX_CLI --bash-passthru list -e $TEST_ENVIRONMENT
   assert_success
   assert_output --partial "Curr Gen  2"
   assert_output --regexp "0  stable.nixpkgs-flox.hello +"$VERSION_REGEX
@@ -474,26 +474,26 @@ setup_file() {
 }
 
 @test "flox switch-generation 9999" {
-  run $FLOX_CLI switch-generation 9999 -e $TEST_ENVIRONMENT
+  run $FLOX_CLI --bash-passthru switch-generation 9999 -e $TEST_ENVIRONMENT
   assert_failure
   assert_output --partial "ERROR: could not find environment data for generation '9999'"
 }
 
 @test "flox environments takes no arguments" {
-  run $FLOX_CLI environments -e $TEST_ENVIRONMENT
+  run $FLOX_CLI --bash-passthru environments -e $TEST_ENVIRONMENT
   assert_failure
-  assert_output --partial '`-e` is not expected in this context'
+  # assert_output --partial '`-e` is not expected in this context' # this is a bpaf error, cant expect that with --bash-passthru`
 }
 
 @test "flox environments should at least contain $TEST_ENVIRONMENT" {
-  run $FLOX_CLI --debug environments
+  run $FLOX_CLI --bash-passthru --debug environments
   assert_success
   assert_output --partial "/$TEST_ENVIRONMENT"
   assert_output --partial "Alias     $TEST_ENVIRONMENT"
 }
 
 @test "flox delete local only" {
-  run $FLOX_CLI delete -e $TEST_ENVIRONMENT -f
+  run $FLOX_CLI --bash-passthru delete -e $TEST_ENVIRONMENT -f
   assert_success
   assert_output --partial "WARNING: you are about to delete the following"
   assert_output --partial "Deleted branch"
@@ -501,37 +501,37 @@ setup_file() {
 }
 
 @test "flox install by /nix/store path" {
-  run $FLOX_CLI install -e $TEST_ENVIRONMENT "$HELLO_PACKAGE"
+  run $FLOX_CLI --bash-passthru install -e $TEST_ENVIRONMENT "$HELLO_PACKAGE"
   assert_success
   assert_output --partial "Installed '$HELLO_PACKAGE' package(s) into '$TEST_ENVIRONMENT' environment."
 }
 
 @test "flox install by nixpkgs flake" {
-  run $FLOX_CLI install -e $TEST_ENVIRONMENT "nixpkgs#cowsay"
+  run $FLOX_CLI --bash-passthru install -e $TEST_ENVIRONMENT "nixpkgs#cowsay"
   assert_success
   assert_output --partial "Installed 'nixpkgs#cowsay' package(s) into '$TEST_ENVIRONMENT' environment."
 }
 
 @test "flox export to $FLOX_TEST_HOME/floxExport.tar" {
-  run sh -c "$FLOX_CLI export -e $TEST_ENVIRONMENT > $FLOX_TEST_HOME/floxExport.tar"
+  run sh -c "$FLOX_CLI --bash-passthru export -e $TEST_ENVIRONMENT > $FLOX_TEST_HOME/floxExport.tar"
   assert_success
 }
 
 @test "flox.nix after installing by nixpkgs flake should contain package" {
-  EDITOR='cat' run $FLOX_CLI edit -e "$TEST_ENVIRONMENT"
+  EDITOR='cat' run $FLOX_CLI --bash-passthru edit -e "$TEST_ENVIRONMENT"
   assert_success
   assert_output --partial 'packages.nixpkgs.cowsay = {};'
   refute_output --partial "created generation"
 }
 
 @test "flox remove by nixpkgs flake 1" {
-  run $FLOX_CLI remove -e "$TEST_ENVIRONMENT" "nixpkgs#cowsay"
+  run $FLOX_CLI --bash-passthru remove -e "$TEST_ENVIRONMENT" "nixpkgs#cowsay"
   assert_success
   assert_output --partial "Removed 'nixpkgs#cowsay' package(s) from '$TEST_ENVIRONMENT' environment."
 }
 
 @test "flox list after remove by nixpkgs flake 2 should not contain package" {
-  run $FLOX_CLI list -e "$TEST_ENVIRONMENT"
+  run $FLOX_CLI --bash-passthru list -e "$TEST_ENVIRONMENT"
   assert_success
   assert_output --regexp "[0-9]+ +$HELLO_PACKAGE +$HELLO_PACKAGE_FIRST8"
   refute_output --partial "nixpkgs#cowsay"
@@ -539,13 +539,13 @@ setup_file() {
 }
 
 @test "flox import from $FLOX_TEST_HOME/floxExport.tar" {
-  run sh -c "$FLOX_CLI import -e $TEST_ENVIRONMENT < $FLOX_TEST_HOME/floxExport.tar"
+  run sh -c "$FLOX_CLI --bash-passthru import -e $TEST_ENVIRONMENT < $FLOX_TEST_HOME/floxExport.tar"
   assert_success
   assert_output --partial "Environment '$TEST_ENVIRONMENT' imported."
 }
 
 @test "tear down install test state" {
-  run sh -c "XDG_CONFIG_HOME=$REAL_XDG_CONFIG_HOME GH_CONFIG_DIR=$REAL_GH_CONFIG_DIR $FLOX_CLI delete -e $TEST_ENVIRONMENT --origin -f"
+  run sh -c "XDG_CONFIG_HOME=$REAL_XDG_CONFIG_HOME GH_CONFIG_DIR=$REAL_GH_CONFIG_DIR $FLOX_CLI --bash-passthru delete -e $TEST_ENVIRONMENT --origin -f"
   assert_output --partial "WARNING: you are about to delete the following"
   assert_output --partial "Deleted branch"
   assert_output --partial "removed"

@@ -79,9 +79,9 @@ pub fn init_access_tokens(
 
     let mut tokens = Vec::new();
 
-    tokens.extend(nix_tokens.into_iter());
-    tokens.extend(gh_tokens.into_iter());
-    tokens.extend(config_tokens.clone().into_iter());
+    tokens.extend(nix_tokens);
+    tokens.extend(gh_tokens);
+    tokens.extend(config_tokens.clone());
     tokens.dedup();
 
     Ok(tokens)

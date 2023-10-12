@@ -19,16 +19,16 @@ load test_support.bash;
 
 setup_file() {
   common_file_setup;
-  "$FLOX_CLI" create -e "$TEST_ENVIRONMENT";
-  "$FLOX_CLI" install -e "$TEST_ENVIRONMENT" hello cowsay;
+  "$FLOX_CLI" --bash-passthru create -e "$TEST_ENVIRONMENT";
+  "$FLOX_CLI" --bash-passthru install -e "$TEST_ENVIRONMENT" hello cowsay;
 
   # Run by various shells to test that `flox activate ... -- ...;' works.
-  _inline_cmd="$FLOX_CLI activate -e '$TEST_ENVIRONMENT'";
+  _inline_cmd="$FLOX_CLI --bash-passthru activate -e '$TEST_ENVIRONMENT'";
   _inline_cmd="$_inline_cmd -- sh -c 'hello|cowsay'";
   export _inline_cmd;
 
   # Run by various shells to test that `eval "$( flox activate ...; )";' works.
-  _eval_cmd="eval \"\$( $FLOX_CLI activate -e '$TEST_ENVIRONMENT'; )\"";
+  _eval_cmd="eval \"\$( $FLOX_CLI --bash-passthru activate -e '$TEST_ENVIRONMENT'; )\"";
   _eval_cmd="$_eval_cmd; hello|cowsay;";
   export _eval_cmd;
 }
@@ -108,10 +108,10 @@ setup_file() {
 # ---------------------------------------------------------------------------- #
 
 @test "'flox activate' accepts '-s,--system' options" {
-  run "$FLOX_CLI" activate -e "$TEST_ENVIRONMENT" --system "$NIX_SYSTEM"  \
+  run "$FLOX_CLI" --bash-passthru activate -e "$TEST_ENVIRONMENT" --system "$NIX_SYSTEM"  \
                            -- sh -c ':'
   assert_success
-  run "$FLOX_CLI" activate -e "$TEST_ENVIRONMENT" -s "$NIX_SYSTEM"  \
+  run "$FLOX_CLI" --bash-passthru activate -e "$TEST_ENVIRONMENT" -s "$NIX_SYSTEM"  \
                            -- sh -c ':'
   assert_success
 }
