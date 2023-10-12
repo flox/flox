@@ -115,8 +115,8 @@ jobs:
         echo "Have $(
           wc -l "$NEW_STORE_PATHS_FILE";
         ) new $NIX_STORE_DIR paths" >&2;
-        xargs -r -a "$NEW_STORE_PATHS_FILE" -n100          \
-              flox nix -- copy --to "$FLOX_SUBSTITUTER" -vv;
+        cat "$NEW_STORE_PATHS_FILE"|xargs -r -n100  \
+          |nix copy --stdin --to "$FLOX_SUBSTITUTER" -vv;
 
     # These cannot be run offline so we need to build in our tree.
     - name: Rust Tests
