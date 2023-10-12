@@ -58,9 +58,6 @@ jobs:
     - name: Build flox-tests
       run: nix build '.#flox-tests' -L --no-update-lock-file --print-out-paths --no-link
 
-    - name: Integration Tests
-      run: nix run '.#flox-tests'
-
     - name: Cache the store
       if: ${{ always() }}
       run: nix copy --all --to "$FLOX_SUBSTITUTER" -vv
@@ -74,21 +71,3 @@ jobs:
       run: |
         git clean -xfd;
         nix run --no-update-lock-file '.#flox-tests';
-
-  # TODO: remove this job after merging to `main'
-  # It is required because `Build * on *' is the name used in a GitHub branch
-  # protection rule.
-  deprecated:
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        os:
-        - ubuntu-latest
-        - macos-latest
-        package:
-        - flox-bash
-        - nix-editor
-    name: Build ${{ matrix.package }} on ${{ matrix.os }}
-    steps:
-      - run: |
-          echo 'TODO: Remove "Build ${{ matrix.package }} on ${{ matrix.os }}" branch protection rule.'
