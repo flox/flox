@@ -36,15 +36,15 @@
       # 3rd party CLIs
       # we want to use our own binaries by absolute path
       # rather than relying on or modifying the user's `PATH` variable
-      NIX_BIN = flox-bash.outPath + "/libexec/flox/nix";
-      GIT_BIN = gitMinimal.outPath + "/bin/git";
+      NIX_BIN = "${flox-bash}/libexec/flox/nix";
+      GIT_BIN = "${gitMinimal}/bin/git";
       PARSER_UTIL_BIN = parser-util.outPath + "/bin/parser-util";
       PKGDB_BIN = flox-pkgdb.outPath + "/bin/pkgdb";
       FLOX_GH_BIN = flox-gh.outPath + "/bin/flox-gh";
       GH_BIN = gh.outPath + "/bin/gh";
 
       # path to bash impl of flox to dispatch unimplemented commands to
-      FLOX_SH = flox-bash.outPath + "/libexec/flox/flox";
+      FLOX_SH = "${flox-bash}/libexec/flox/flox";
       FLOX_SH_PATH = flox-bash.outPath;
 
       # Modified nix completion scripts
