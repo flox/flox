@@ -2,7 +2,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use async_trait::async_trait;
-use flox_types::catalog::{CatalogEntry, EnvCatalog};
+use flox_types::catalog::{CatalogEntry, EnvCatalog, System};
 use rnix::ast::{AttrSet, Expr};
 use rowan::ast::AstNode;
 use runix::command_line::{NixCommandLine, NixCommandLineRunError, NixCommandLineRunJsonError};
@@ -22,9 +22,9 @@ use crate::utils::copy_file_without_permissions;
 use crate::utils::errors::IoError;
 use crate::utils::rnix::{AttrSetExt, StrExt};
 
-mod managed_environment;
+pub mod managed_environment;
 pub mod path_environment;
-mod remote_environment;
+pub mod remote_environment;
 
 pub static CATALOG_JSON: &str = "catalog.json";
 // don't forget to update the man page
@@ -44,41 +44,48 @@ pub trait Environment {
     async fn build(
         &mut self,
         nix: &NixCommandLine,
-        system: impl AsRef<str> + Send,
+        system: System,
     ) -> Result<(), EnvironmentError2>;
 
     /// Install packages to the environment atomically
     async fn install(
         &mut self,
-        packages: impl IntoIterator<Item = FloxPackage> + Send,
+        packages: Vec<FloxPackage>,
         nix: &NixCommandLine,
-        system: impl AsRef<str> + Send,
+        system: System,
     ) -> Result<bool, EnvironmentError2>;
 
     /// Uninstall packages from the environment atomically
     async fn uninstall(
         &mut self,
-        packages: impl IntoIterator<Item = FloxPackage> + Send,
+        packages: Vec<FloxPackage>,
         nix: &NixCommandLine,
-        system: impl AsRef<str> + Send,
+        system: System,
     ) -> Result<bool, EnvironmentError2>;
 
     /// Atomically edit this environment, ensuring that it still builds
     async fn edit(
         &mut self,
         nix: &NixCommandLine,
-        system: impl AsRef<str> + Send,
-        contents: impl AsRef<str> + Send,
+        system: System,
+        contents: String,
     ) -> Result<(), EnvironmentError2>;
 
     async fn catalog(
         &self,
         nix: &NixCommandLine,
-        system: impl AsRef<str> + Send,
+        system: System,
     ) -> Result<EnvCatalog, EnvironmentError2>;
 
+    /// Extract the current content of the manifest
+    fn manifest_content(&self) -> Result<String, EnvironmentError2>;
+
     /// Return the [EnvironmentRef] for the environment for identification
-    fn environment_ref(&self) -> &EnvironmentRef;
+    fn environment_ref(&self) -> EnvironmentRef;
+
+    /// Return a flake attribute installable for this environment
+    // TODO consider removing this from the trait
+    fn flake_attribute(&self, system: System) -> FlakeAttribute;
 
     /// Returns the environment owner
     fn owner(&self) -> Option<EnvironmentOwner>;
@@ -87,7 +94,15 @@ pub trait Environment {
     fn name(&self) -> EnvironmentName;
 
     /// Delete the Environment
-    fn delete(self) -> Result<(), EnvironmentError2>;
+    fn delete(self) -> Result<(), EnvironmentError2>
+    where
+        Self: Sized;
+
+    /// Remove gc-roots
+    // TODO consider renaming or removing - we might not support this for PathEnvironment
+    fn delete_symlinks(&self) -> Result<bool, EnvironmentError2> {
+        Ok(false)
+    }
 }
 
 #[derive(Debug, Error)]

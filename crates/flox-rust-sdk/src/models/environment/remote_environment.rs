@@ -1,6 +1,7 @@
 use async_trait::async_trait;
-use flox_types::catalog::EnvCatalog;
+use flox_types::catalog::{EnvCatalog, System};
 use runix::command_line::NixCommandLine;
+use runix::installable::FlakeAttribute;
 
 use super::{Environment, EnvironmentError2};
 use crate::models::environment_ref::{EnvironmentName, EnvironmentOwner, EnvironmentRef};
@@ -16,7 +17,7 @@ impl Environment for RemoteEnvironment {
     async fn build(
         &mut self,
         nix: &NixCommandLine,
-        system: impl AsRef<str> + Send,
+        system: System,
     ) -> Result<(), EnvironmentError2> {
         todo!()
     }
@@ -25,9 +26,9 @@ impl Environment for RemoteEnvironment {
     #[allow(unused)]
     async fn install(
         &mut self,
-        packages: impl IntoIterator<Item = FloxPackage> + Send,
+        packages: Vec<FloxPackage>,
         nix: &NixCommandLine,
-        system: impl AsRef<str> + Send,
+        system: System,
     ) -> Result<bool, EnvironmentError2> {
         todo!()
     }
@@ -36,9 +37,9 @@ impl Environment for RemoteEnvironment {
     #[allow(unused)]
     async fn uninstall(
         &mut self,
-        packages: impl IntoIterator<Item = FloxPackage> + Send,
+        packages: Vec<FloxPackage>,
         nix: &NixCommandLine,
-        system: impl AsRef<str> + Send,
+        system: System,
     ) -> Result<bool, EnvironmentError2> {
         todo!()
     }
@@ -48,8 +49,8 @@ impl Environment for RemoteEnvironment {
     async fn edit(
         &mut self,
         nix: &NixCommandLine,
-        system: impl AsRef<str> + Send,
-        contents: impl AsRef<str> + Send,
+        system: System,
+        contents: String,
     ) -> Result<(), EnvironmentError2> {
         todo!()
     }
@@ -58,14 +59,24 @@ impl Environment for RemoteEnvironment {
     async fn catalog(
         &self,
         nix: &NixCommandLine,
-        system: impl AsRef<str> + Send,
+        system: System,
     ) -> Result<EnvCatalog, EnvironmentError2> {
+        todo!()
+    }
+
+    /// Extract the current content of the manifest
+    fn manifest_content(&self) -> Result<String, EnvironmentError2> {
         todo!()
     }
 
     /// Return the [EnvironmentRef] for the environment for identification
     #[allow(unused)]
-    fn environment_ref(&self) -> &EnvironmentRef {
+    fn environment_ref(&self) -> EnvironmentRef {
+        todo!()
+    }
+
+    #[allow(unused)]
+    fn flake_attribute(&self, system: System) -> FlakeAttribute {
         todo!()
     }
 

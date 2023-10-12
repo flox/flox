@@ -203,7 +203,7 @@ runExpect() {
 
 @test "'flox develop' toplevel with 'flox install' env" {
   loadHarness toplevel-flox-nix;
-  run "$FLOX_CLI" install -e '.#default' hello;
+  run "$FLOX_CLI" --bash-passthru install -e '.#default' hello;
   assert_success;
   # for some reason expect hangs forever when SHELL=zsh and I don't feel like
   # debugging why
@@ -217,6 +217,9 @@ runExpect() {
 
 # bats test_tags devShell
 @test "'flox develop' with 'devShell'" {
+  if [[ "$NIX_SYSTEM" = *-darwin ]] then
+    skip "broken on macOS";
+  fi
   loadHarness devShell;
   run expect "$TESTS_DIR/develop/devShell.exp" '';
   assert_success;

@@ -237,6 +237,9 @@ enum LocalDevelopmentCommands {
     /// Search packages in subscribed channels
     #[bpaf(command)]
     Search(#[bpaf(external(channel::search))] channel::Search),
+    /// Show detailed information about a single package
+    #[bpaf(command, long("show"))]
+    Show(#[bpaf(external(channel::show))] channel::Show),
     /// Install a package into an environment
     #[bpaf(command)]
     Install(#[bpaf(external(environment::install))] environment::Install),
@@ -295,6 +298,10 @@ impl LocalDevelopmentCommands {
                 subcommand_metric!("search");
                 flox_forward(&flox).await?
             },
+            LocalDevelopmentCommands::Show(_) if Feature::Channels.is_forwarded()? => {
+                subcommand_metric!("show");
+                flox_forward(&flox).await?
+            },
 
             LocalDevelopmentCommands::Init(args) => args.handle(flox).await?,
             LocalDevelopmentCommands::Activate(args) => args.handle(flox).await?,
@@ -304,6 +311,7 @@ impl LocalDevelopmentCommands {
             LocalDevelopmentCommands::List(args) => args.handle(flox).await?,
             LocalDevelopmentCommands::Nix(args) => args.handle(config, flox).await?,
             LocalDevelopmentCommands::Search(args) => args.handle(flox).await?,
+            LocalDevelopmentCommands::Show(args) => args.handle(flox).await?,
             LocalDevelopmentCommands::Run(args) => args.handle(config, flox).await?,
             LocalDevelopmentCommands::Delete(args) => args.handle(flox).await?,
         }
@@ -579,8 +587,15 @@ pub struct BashPassthru {
     #[bpaf(long("bash-passthru"))]
     do_passthru: bool,
 
+    // bpaf parses all arguments and collects them into a Vec
+    // however by doing so it also (correctly) parses `--` as a
+    // delimiter.
+    // The delimiter is _not_ part of the collected arguments.
+    // When passing on this parsed list of args, `--` will be missing,
+    // causing invalid arguments to e.g. `flox-bash activate`.
+    // Hence the arguments are determined differently below, which adds `--` back in.
     #[bpaf(any("REST", Some), many)]
-    flox_args: Vec<String>,
+    _flox_args: Vec<String>,
 }
 
 impl BashPassthru {
@@ -592,8 +607,17 @@ impl BashPassthru {
             .run_inner(Args::current_args())
             .unwrap_or_default();
 
+        let args = std::env::args()
+            .skip(1)
+            .filter(|arg| arg != "--bash-passthru")
+            .collect();
+
         if passtrhu.do_passthru {
-            return Some(passtrhu.flox_args);
+            return Some(args);
+        }
+
+        if let Ok("true") = env::var("FLOX_BASH_PASSTHRU").as_deref() {
+            return Some(args);
         }
 
         None

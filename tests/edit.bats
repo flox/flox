@@ -25,7 +25,7 @@ setup_file() {
 # If each test shared an env their edits may cause a race condition.
 setup() {
   setup_test_envname;
-  $FLOX_CLI create -e "$TEST_ENVIRONMENT";
+  $FLOX_CLI --bash-passthru create -e "$TEST_ENVIRONMENT";
 }
 
 
@@ -33,11 +33,11 @@ setup() {
 
 # test reading from a file
 @test "'flox edit -f FILE'" {
-  run $FLOX_CLI edit -e "$TEST_ENVIRONMENT" -f "$TESTS_DIR/test-flox.nix";
+  run $FLOX_CLI --bash-passthru edit -e "$TEST_ENVIRONMENT" -f "$TESTS_DIR/test-flox.nix";
   assert_success;
   assert_output --partial "Environment '$TEST_ENVIRONMENT' modified.";
 
-  run sh -c "EDITOR=cat $FLOX_CLI edit -e '$TEST_ENVIRONMENT';";
+  run sh -c "EDITOR=cat $FLOX_CLI --bash-passthru edit -e '$TEST_ENVIRONMENT';";
   assert_success;
   assert_output --partial 'environmentVariables.test = "file"';
 }
@@ -48,11 +48,11 @@ setup() {
 # test reading from stdin
 @test "'flox edit -f -'" {
   run sh -c "echo '{ environmentVariables.test = \"stdin\"; }' |
-              $FLOX_CLI edit -e '$TEST_ENVIRONMENT' --file -;";
+              $FLOX_CLI --bash-passthru edit -e '$TEST_ENVIRONMENT' --file -;";
   assert_success;
   assert_output --partial "Environment '$TEST_ENVIRONMENT' modified.";
 
-  run sh -c "EDITOR=cat $FLOX_CLI edit -e '$TEST_ENVIRONMENT';";
+  run sh -c "EDITOR=cat $FLOX_CLI --bash-passthru edit -e '$TEST_ENVIRONMENT';";
   assert_success;
   assert_output --partial 'environmentVariables.test = "stdin";';
 }
