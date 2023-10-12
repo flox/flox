@@ -42,9 +42,9 @@ jobs:
         NIX_STORE_DIR="$(
           flox nix eval --impure --raw --expr builtins.storeDir;
         )";
-        echo "NIX_STORE_DIR='$NIX_STORE_DIR'" >> "$GITHUB_ENV";
+        echo "NIX_STORE_DIR=$NIX_STORE_DIR" >> "$GITHUB_ENV";
         STORE_PATHS_FILE="$( mktemp; )";
-        echo "STORE_PATHS_FILE='$STORE_PATHS_FILE'" >> "$GITHUB_ENV";
+        echo "STORE_PATHS_FILE=$STORE_PATHS_FILE" >> "$GITHUB_ENV";
         find "$NIX_STORE_DIR" -maxdepth 1 -mindepth 1 -type d -o -type l  \
           |sort > "$STORE_PATHS_FILE";
         echo "Have $( wc -l "$STORE_PATHS_FILE"; ) $NIX_STORE_DIR paths" >&2;
