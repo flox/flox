@@ -43,9 +43,8 @@ setup_file() {
 }
 
 @test "'flox list' lists packages of environment in the current dir; fails if no env found" {
-  run "$FLOX_CLI" list
-  assert_failure
-  assert_output "No matching environments found"
+  run "$FLOX_CLI" list;
+  assert_failure;
 }
 
 @test "'flox list' lists packages of environment in the current dir; No package" {
@@ -66,38 +65,4 @@ setup_file() {
 .*
 hello
 EOF
-}
-
-@test "'flox list' lists packages of environment in the current dir; matching names" {
-  "$FLOX_CLI" init -n not-test
-  "$FLOX_CLI" install -e not-test hello
-
-  run "$FLOX_CLI" list -e not-test
-  assert_success
-  assert_output --regexp - <<EOF
-.*
-hello
-EOF
-}
-
-
-@test "'flox list' lists packages of environment in the current dir; no name" {
-  "$FLOX_CLI" init -n not-test
-  "$FLOX_CLI" install -e not-test hello
-
-  run "$FLOX_CLI" list
-  assert_success
-  assert_output --regexp - <<EOF
-.*
-hello
-EOF
-}
-
-@test "'flox list' lists packages of environment in the current dir; no matching name" {
-  "$FLOX_CLI" init -n not-test
-  "$FLOX_CLI" install -e not-test hello
-
-  run "$FLOX_CLI" list -e test
-  assert_failure
-  assert_output "No matching environments found"
 }

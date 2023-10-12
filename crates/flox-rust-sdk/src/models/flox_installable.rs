@@ -6,7 +6,7 @@ use thiserror::Error;
 // Matches against strings which are likely to be flakerefs
 // Such as: `github:NixOS/nixpkgs`, `.`, `../somedir`, etc
 static PROBABLY_FLAKEREF_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r#"^(?:\.?\.?/|\.$|[a-z+]+:)"#).unwrap());
+    Lazy::new(|| Regex::new(r"^(?:\.?\.?/|\.$|[a-z+]+:)").unwrap());
 
 #[derive(PartialEq, Eq, Clone, Debug, Default)]
 pub struct FloxInstallable {

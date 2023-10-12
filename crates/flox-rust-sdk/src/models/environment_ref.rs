@@ -138,11 +138,7 @@ impl EnvironmentRef {
         &self,
         temp_dir: PathBuf,
     ) -> Result<PathEnvironment<Original>, EnvironmentError2> {
-        let env = PathEnvironment::<Original>::open(
-            std::env::current_dir().unwrap(),
-            self.clone(),
-            temp_dir,
-        )?;
+        let env = PathEnvironment::<Original>::open(std::env::current_dir().unwrap(), temp_dir)?;
         Ok(env)
     }
 
