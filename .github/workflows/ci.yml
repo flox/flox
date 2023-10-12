@@ -10,16 +10,12 @@ on:
 jobs:
 
   build:
-    name: ${{ matrix.package.job_description }} ${{ matrix.package.name }} on ${{ matrix.os }}
+    name: Build and test flox on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
 
     strategy:
       matrix:
-        package:
-        - {name: flox, job_description: "Build and test"}
-        - {name: flox-bash, job_description: "Build" }
-        - {name: nix-editor, job_description: "Build" }
-        os: 
+        os:
         - ubuntu-latest
         - macos-latest
 
@@ -38,15 +34,108 @@ jobs:
         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
-    - name: Test
-      run: nix develop '.#rust-env' -c cargo test --locked --workspace
-      
-    - name: Build
-      run: flox build '${{ matrix.package.name }}' -L --print-out-paths
+    # This is used to detect any new store paths we create while running builds
+    # so that they can be pushed to caches.
+    - name: Record Nix Store Paths
+      run: |
+        NIX_STORE_DIR="$(
+          flox nix eval --impure --raw --expr builtins.storeDir;
+        )";
+        echo "NIX_STORE_DIR='$NIX_STORE_DIR'" >> "$GITHUB_ENV";
+        STORE_PATHS_FILE="$( mktemp; )";
+        echo "STORE_PATHS_FILE='$STORE_PATHS_FILE'" >> "$GITHUB_ENV";
+        find "$NIX_STORE_DIR" -maxdepth 1 -mindepth 1 -type d -o -type l  \
+          |sort > "$STORE_PATHS_FILE";
+        echo "Have $( wc -l "$STORE_PATHS_FILE"; ) $NIX_STORE_DIR paths" >&2;
 
-    - name: Cache the store
-      run: flox nix copy --all --to "$FLOX_SUBSTITUTER" -vv
+    - name: Build flox-gh
+      run: |
+        flox nix build '.#flox-gh' -L --no-update-lock-file      \
+                                   --print-out-paths --no-link;
 
-    - name: Test
-      if: ${{ matrix.package.name == 'flox' }}
-      run: nix run '.#flox-tests'
+    - name: Build nix-editor
+      run: |
+        flox nix build '.#nix-editor' -L --no-update-lock-file      \
+                                      --print-out-paths --no-link;
+
+    - name: Build builtfilter-rs
+      run: |
+        flox nix build '.#builtfilter-rs' -L --no-update-lock-file      \
+                                          --print-out-paths --no-link;
+
+    - name: Build flox-bash
+      run: |
+        flox nix build '.#flox-bash' -L --no-update-lock-file      \
+                                     --print-out-paths --no-link;
+
+    # These cannot be run offline so we need to build in our tree.
+    # This just builds the `rust-env' deps so that they can get cached.
+    - name: Build Rust Env
+      run: |
+        nix develop '.#rust-env' --no-update-lock-file -c  true;
+
+    - name: Build flox
+      run: |
+        flox nix build -L --no-update-lock-file --print-out-paths;
+        echo "FLOX_CLI=$( readlink -f ./result; )/bin/flox" >> "$GITHUB_ENV";
+        rm ./result;
+
+    - name: Build flox-tests
+      run: |
+        flox nix build '.#flox-tests' -L --no-update-lock-file      \
+                                      --print-out-paths --no-link;
+
+    - name: Push New Store Paths
+      if: ${{ always() }}
+      run: |
+        # Since we run onconditionally we need to bail early in case the
+        # `STORE_PATHS_FILE' was never created.
+        if [[ -z "${STORE_PATHS_FILE:-}" ]]; then
+          echo "No old store paths were cached. Skipping push." >&2;
+          exit 1;
+        fi
+        STORE_PATHS_FILE2="$( mktemp; )";
+        find "$NIX_STORE_DIR" -maxdepth 1 -mindepth 1 -type d -o -type l  \
+          |sort > "$STORE_PATHS_FILE2";
+        NEW_STORE_PATHS_FILE="$( mktemp; )";
+        comm -13 "$STORE_PATHS_FILE" "$STORE_PATHS_FILE2"  \
+             > "$NEW_STORE_PATHS_FILE";
+        echo "Have $(
+          wc -l "$NEW_STORE_PATHS_FILE";
+        ) new $NIX_STORE_DIR paths" >&2;
+        xargs -r -a "$NEW_STORE_PATHS_FILE" -n100          \
+              flox nix copy --to "$FLOX_SUBSTITUTER" -vv;
+
+    # These cannot be run offline so we need to build in our tree.
+    - name: Rust Tests
+      run: |
+        git clean -xfd;
+        nix develop '.#rust-env' --no-update-lock-file   \
+                    -c cargo test --locked --workspace;
+
+    # We ultimately test against the `FLOX_CLI' env var's path set earlier.
+    - name: Bats Tests
+      run: |
+        git clean -xfd;
+        nix run --no-update-lock-file '.#flox-tests';
+
+
+  # TODO: remove this job after merging to `main'
+  # It is required because `Build * on *' is the name used in a GitHub branch
+  # protection rule.
+  deprecated:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os:
+        - ubuntu-latest
+        - macos-latest
+        package:
+        - flox-bash
+        - nix-editor
+    name: Build ${{ matrix.package }} on ${{ matrix.os }}
+    steps:
+      - run: |
+          printf '%s' 'TODO: Remove "Build ${{ matrix.package }} on'     \
+                      ' ${{ matrix.os }}" branch protection rule.' >&2;
+          echo '' >&2;
