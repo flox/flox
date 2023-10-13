@@ -7,9 +7,9 @@
 #        Otherwise return `null`.
 #
 # @param sourceInfo A `sourceInfo` object, being the result of a
-#                  `builtins.fetchTree` call.
-#                  For flakes the `sourceInfo` object is available as `self` or
-#                  the amalgamated `inputs` argument.
+#                   `builtins.fetchTree` call.
+#                   For flakes the `sourceInfo` object is available as `self` or
+#                   the amalgamated `inputs` argument.
 #
 # @param gitDir Absolute path to the git repository's `.git` directory.
 #               There is no way to access this from `sourceInfo` alone, so it
