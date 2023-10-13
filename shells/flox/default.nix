@@ -30,6 +30,6 @@ mkShell ({
       rustc
       just
     ];
-    inherit (self.checks.pre-commit-check) shellHook;
+    inherit (pre-commit-check) shellHook;
   }
   // flox.envs)
