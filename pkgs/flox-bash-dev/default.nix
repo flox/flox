@@ -1,5 +1,5 @@
 {self}:
-self.packages.overrideAttrs (prev: {
+self.packages.flox-bash.overrideAttrs (prev: {
   version = let
     prefixMatch = builtins.match "([^-]+)-.*" prev.version;
   in
