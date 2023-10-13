@@ -1,5 +1,7 @@
 # ============================================================================ #
 #
+# @fn getRevTag
+#
 # @brief Get a `rev` tag from a `sourceInfo` object if it is associated with the
 #        `main` or `master` branches of a git repository.
 #        Otherwise return `null`.
@@ -32,11 +34,13 @@ sourceInfo: gitDir: let
   # ---------------------------------------------------------------------------- #
 
   # @brief Parse a refspec from a file.
+  # To find `ref` we have to read the `HEAD` file in the `.git` directory.
+  #
   # @param relPath Relative path to a file containing a refspec.
   #        For example `HEAD` or `refs/remotes/origin/HEAD`.
+  #
   # @return The refspec, or `null` if the file does not exist or does not
   #         contain a refspec.
-  # To find `ref` we have to read the `HEAD` file in the `.git` directory.
   readRef = relPath: let
     headFile = gitDir + ("/" + relPath);
     headContents = builtins.readFile headFile;
