@@ -13,7 +13,7 @@
 }:
 mkShell ({
     inputsFrom = [
-      self.packages.flox
+      self.packages.flox-dev
       self.packages.flox.passthru.flox-bash
     ];
     RUST_SRC_PATH = self.packages.flox.passthru.rustPlatform.rustLibSrc.outPath;
