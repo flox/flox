@@ -19,7 +19,7 @@ mkShell ({
       flox-bash
     ];
     RUST_SRC_PATH = rustPlatform.rustLibSrc.outPath;
-    RUSTFMT = rustfmt.outPath + "/bin/rustfmt";
+    RUSTFMT = "${rustfmt}/bin/rustfmt";
     packages = [
       commitizen
       rustfmt
@@ -27,9 +27,9 @@ mkShell ({
       clippy
       rust-analyzer
       rust.packages.stable.rustPlatform.rustLibSrc
-      just
       rustc
+      just
     ];
-    inherit (pre-commit-check) shellHook;
+    inherit (self.checks.pre-commit-check) shellHook;
   }
   // flox.envs)

@@ -12,6 +12,7 @@
   findutils,
   flox-gh,
   gawk,
+  gitMinimal,
   gh,
   gnugrep,
   gnused,
@@ -41,11 +42,12 @@
   floxVersion,
   flox-pkgdb,
   unixtools,
-  gitMinimal,
   cacert,
   glibcLocales,
   darwin,
 }: let
+  pkgdb = inputs.pkgdb.packages.flox-pkgdb;
+
   nixPatched = nixVersions.nix_2_15.overrideAttrs (oldAttrs: {
     patches =
       (oldAttrs.patches or [])
@@ -158,9 +160,9 @@ in
       #
       mkdir -p $out/libexec
       makeWrapper ${nixPatched}/bin/nix $out/libexec/flox/nix --argv0 '$0' \
-        --prefix PATH : "${lib.makeBinPath [gitMinimal]}"
+        --prefix PATH : "${gitMinimal}/bin"
       makeWrapper ${gh}/bin/gh $out/libexec/flox/gh --argv0 '$0' \
-        --prefix PATH : "${lib.makeBinPath [gitMinimal]}"
+        --prefix PATH : "${gitMinimal}/bin"
 
       # Rewrite /usr/bin/env bash to the full path of bashInteractive.
       # Use --host to resolve using the runtime path.
