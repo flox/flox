@@ -89,7 +89,10 @@
 in
   stdenv.mkDerivation rec {
     pname = "flox-bash";
-    inherit (czToml.tool.commitizen) version;
+    version =
+      czToml.tool.commitizen.version
+      + "-"
+      + (inputs.flox-floxpkgs.lib.getRev self);
     src = flox-src + "/flox-bash";
     nativeBuildInputs =
       [makeWrapper pandoc shellcheck shfmt which]
