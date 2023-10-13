@@ -71,7 +71,15 @@
       NIXPKGS_CACERT_BUNDLE_CRT = "${cacert}/etc/ssl/certs/ca-bundle.crt";
 
       # The current version of flox being built
-      FLOX_VERSION = "${cargoToml.package.version}-${inputs.flox-floxpkgs.lib.getRev self}";
+      FLOX_VERSION = let
+        sourceInfo = self.sourceInfo or self;
+        getRevTag = import ../../lib/getRevTag.nix;
+        revTag = getRevTag sourceInfo (toString ../../.git);
+        inherit (cargoToml.package) version;
+      in
+        if revTag != null
+        then version + "-" + revTag
+        else version;
       # Reexport of the platform flox is being built for
       NIX_TARGET_SYSTEM = targetPlatform.system;
 
