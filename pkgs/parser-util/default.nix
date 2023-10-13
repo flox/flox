@@ -1,1 +1,1 @@
-{inputs, ...}: inputs.parser-util.packages.parser-util
+{inputs, callPackage, ...}: callPackage (inputs.parser-util + "/pkg-fun.nix") {}
