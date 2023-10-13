@@ -34,7 +34,6 @@ sourceInfo: gitDir: let
   # ---------------------------------------------------------------------------- #
 
   # @brief Parse a refspec from a file.
-  # To find `ref` we have to read the `HEAD` file in the `.git` directory.
   #
   # @param relPath Relative path to a file containing a refspec.
   #        For example `HEAD` or `refs/remotes/origin/HEAD`.
