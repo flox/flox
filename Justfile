@@ -30,4 +30,4 @@ test-all: impure-tests bats-tests
 work:
     @# Note that this command is only really useful if you have
     @# `just` installed outside of the `flox` environment already
-    @flox develop rust-env
+    @flox develop flox

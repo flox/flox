@@ -40,23 +40,27 @@
       # rather than relying on or modifying the user's `PATH` variable
       NIX_BIN = "${flox-bash}/libexec/flox/nix";
       GIT_BIN = "${gitMinimal}/bin/git";
-      PARSER_UTIL_BIN = parser-util.outPath + "/bin/parser-util";
-      PKGDB_BIN = pkgdb.outPath + "/bin/pkgdb";
-      FLOX_GH_BIN = flox-gh.outPath + "/bin/flox-gh";
-      GH_BIN = gh.outPath + "/bin/gh";
+      PARSER_UTIL_BIN = "${parser-util}/bin/parser-util";
+      PKGDB_BIN = "${pkgdb}/bin/pkgdb";
+      FLOX_GH_BIN = "${flox-gh}/bin/flox-gh";
+      GH_BIN = "${gh}/bin/gh";
 
       # path to bash impl of flox to dispatch unimplemented commands to
       FLOX_SH = "${flox-bash}/libexec/flox/flox";
-      FLOX_SH_PATH = "${flox-bash}";
+      FLOX_SH_PATH = flox-bash.outPath;
 
       # Modified nix completion scripts
       # used to pass through nix completion ability for `flox nix *`
-      NIX_BASH_COMPLETION_SCRIPT = ../../crates/flox/src/static/nix_bash_completion.sh;
-      NIX_ZSH_COMPLETION_SCRIPT = ../../crates/flox/src/static/nix_zsh_completion.sh;
+      NIX_BASH_COMPLETION_SCRIPT =
+        ../../crates/flox/src/static/nix_bash_completion.sh;
+      NIX_ZSH_COMPLETION_SCRIPT =
+        ../../crates/flox/src/static/nix_zsh_completion.sh;
 
       # bundling of internally used nix scripts
-      FLOX_RESOLVER_SRC = ../../resolver;
-      FLOX_ANALYZER_SRC = ../../flox-bash/lib/catalog-ingest;
+      FLOX_RESOLVER_SRC = builtins.path {path = ../../resolver;};
+      FLOX_ANALYZER_SRC = builtins.path {
+        path = ../../flox-bash/lib/catalog-ingest;
+      };
 
       # Metrics subsystem configuration
       METRICS_EVENTS_URL = "https://events.flox.dev/capture";
@@ -80,11 +84,14 @@
         if revTag != null
         then version + "-" + revTag
         else version;
+
       # Reexport of the platform flox is being built for
       NIX_TARGET_SYSTEM = targetPlatform.system;
 
       # flox env template used to create new environments
-      FLOX_ENV_TEMPLATE = ../../flox-bash/lib/templateFloxEnv;
+      FLOX_ENV_TEMPLATE = builtins.path {
+        path = ../../flox-bash/lib/templateFloxEnv;
+      };
     }
     // lib.optionalAttrs hostPlatform.isDarwin {
       NIX_COREFOUNDATION_RPATH = "${darwin.CF}/Library/Frameworks";

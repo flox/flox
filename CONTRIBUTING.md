@@ -12,7 +12,7 @@ Currently this repo houses three rust crates:
 ## Development
 
 ```
-$ flox develop .#rust-env
+$ flox develop .#flox
 ```
 
 This sets up an environment with dependencies, rust toolchain, variable
