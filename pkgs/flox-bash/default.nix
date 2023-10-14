@@ -29,7 +29,6 @@
   makeWrapper,
   man,
   nix-editor,
-  nixVersions,
   openssh,
   pandoc,
   parser-util,
@@ -42,23 +41,14 @@
   which,
   semver,
   builtfilter-rs,
+  pkgdb,
+  flox-nix,
 }: let
-  pkgdb = inputs.pkgdb.packages.flox-pkgdb;
+  # pkgdb = inputs.pkgdb.packages.flox-pkgdb;
   # The getent package can be found in pkgs.unixtools.
   inherit (pkgs.unixtools) getent;
 
-  nixPatched = nixVersions.nix_2_15.overrideAttrs (oldAttrs: {
-    patches =
-      (oldAttrs.patches or [])
-      ++ [
-        ./nix-patches/CmdProfileBuild.patch
-        ./nix-patches/CmdSearchAttributes.patch
-        ./nix-patches/update-profile-list-warning.patch
-        ./nix-patches/multiple-github-tokens.2.13.2.patch
-        ./nix-patches/curl_flox_version.patch
-        ./nix-patches/no-default-prefixes-hash.2.15.1.patch
-      ];
-  });
+  nixPatched = flox-nix;
 
   # TODO: floxActivateFish, etc.
   floxActivateBashDarwin = substituteAll {

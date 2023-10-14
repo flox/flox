@@ -4,6 +4,6 @@
   flox-nix,
   ...
 }:
-callPackage (inputs.parser-util + "/pkg-fun.nix") {
+callPackage (inputs.pkgdb + "/pkg-fun.nix") {
   nix = flox-nix;
 }

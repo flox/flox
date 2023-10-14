@@ -27,10 +27,10 @@
   gitMinimal,
   flox-gh,
   gh,
+  pkgdb,
 }: let
   # crane (<https://crane.dev/>) library for building rust packages
   craneLib = inputs.crane.mkLib nixpkgs;
-  pkgdb = inputs.pkgdb.packages.flox-pkgdb;
 
   # build time environment variables
   envs =

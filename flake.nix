@@ -13,6 +13,7 @@
   };
   inputs.parser-util.url = "github:flox/parser-util/v0";
   inputs.pkgdb.url = "github:flox/pkgdb";
+  inputs.sqlite3pp.url = "github:aakropotkin/sqlite3pp";
 
   outputs = inputs:
     inputs.flox-floxpkgs.project inputs (_: {});
