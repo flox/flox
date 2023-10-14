@@ -44,7 +44,6 @@
   pkgdb,
   flox-nix,
 }: let
-  # pkgdb = inputs.pkgdb.packages.flox-pkgdb;
   # The getent package can be found in pkgs.unixtools.
   inherit (pkgs.unixtools) getent;
 
