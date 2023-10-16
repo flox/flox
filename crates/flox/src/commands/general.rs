@@ -228,10 +228,24 @@ impl Gh {
     }
 }
 
+/// Learning how to create a command
+#[derive(Clone, Debug, Bpaf)]
+pub enum Yadda {
+    /// Login to floxhub (requires an existing github account)
+    #[bpaf(command)]
+    Yadda(#[bpaf(any("yadda option", not_help), help("flox yadda yadda options"))] Vec<String>),
+}
+impl Yadda {
+    pub async fn handle(self, _config: Config, _flox: Flox) -> Result<()> {
+        subcommand_metric!("yadda");
+        Ok(())
+    }
+}
+
 /// floxHub authentication commands
 #[derive(Clone, Debug, Bpaf)]
 pub enum Auth {
-    /// Login to floxhub
+    /// Login to floxhub (requires an existing github account)
     #[bpaf(command)]
     Login(#[bpaf(any("gh option", not_help), help("gh auth login options"))] Vec<String>),
     /// Logout of floxhub

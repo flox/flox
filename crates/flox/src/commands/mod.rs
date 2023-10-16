@@ -488,6 +488,9 @@ enum InternalCommands {
     Gh(#[bpaf(external(general::gh))] general::Gh),
     #[bpaf(command)]
     Auth(#[bpaf(external(general::auth))] general::Auth),
+    /// YADDA YADDA
+    #[bpaf(command)]
+    Yadda(#[bpaf(external(general::yadda))] general::Yadda),
 }
 
 impl InternalCommands {
@@ -529,6 +532,7 @@ impl InternalCommands {
             InternalCommands::Develop(args) => args.handle(config, flox).await?,
             InternalCommands::Gh(args) => args.handle(config, flox).await?,
             InternalCommands::Auth(args) => args.handle(config, flox).await?,
+            InternalCommands::Yadda(args) => args.handle(config, flox).await?,
         }
         Ok(())
     }
