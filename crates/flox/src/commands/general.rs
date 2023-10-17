@@ -11,7 +11,8 @@ use flox_types::stability::Stability;
 use fslock::LockFile;
 use indoc::indoc;
 use log::info;
-use serde::Serialize;
+use reqwest::{Client, Error};
+use serde::{Deserialize, Serialize};
 use tokio::fs;
 use toml_edit::Key;
 
@@ -228,18 +229,71 @@ impl Gh {
     }
 }
 
+#[derive(Deserialize)]
+struct DeviceCodeResponse {
+    device_code: String,
+    user_code: String,
+    verification_uri: String,
+}
+
+#[derive(Deserialize)]
+struct TokenResponse {
+    access_token: String,
+}
+
 /// Learning how to create a command
 #[derive(Clone, Debug, Bpaf)]
-pub enum Yadda {
+pub enum Auth2 {
     /// Login to floxhub (requires an existing github account)
     #[bpaf(command)]
-    Yadda(#[bpaf(any("yadda option", not_help), help("flox yadda yadda options"))] Vec<String>),
+    Login,
 }
-impl Yadda {
-    pub async fn handle(self, _config: Config, _flox: Flox) -> Result<()> {
-        subcommand_metric!("yadda");
-        Ok(())
+impl Auth2 {
+    pub async fn handle(self, config: Config, _flox: Flox) -> Result<()> {
+        subcommand_metric!("auth2");
+        match self {
+            Auth2::Login => Ok(self.authenticate_with_github(&config).await?),
+        }
     }
+
+    async fn authenticate_with_github(&self, config: &Config) -> Result<(), anyhow::Error> {
+        // Step 1: Request device code
+        let device_code_response = request_device_code(config).await?;
+
+        println!("Go to: {}", device_code_response.verification_uri);
+        println!("Enter code: {}", device_code_response.user_code);
+
+        // Step 2: Poll for token
+        let token_response = poll_for_token(config, &device_code_response.device_code).await?;
+
+        println!("Access Token: {}", token_response.access_token);
+
+        Ok(()) // Return Ok(()) to indicate success
+    }
+}
+async fn request_device_code(_config: &Config) -> Result<DeviceCodeResponse, Error> {
+    let client = Client::new();
+    let response = client
+        .post("https://github.com/login/device/code")
+        .form(&[("client_id", "YOUR_CLIENT_ID"), ("scope", "read:user")])
+        .send()
+        .await?;
+    let device_code_response: DeviceCodeResponse = response.json().await?;
+    Ok(device_code_response)
+}
+
+async fn poll_for_token(_config: &Config, device_code: &str) -> Result<TokenResponse, Error> {
+    let client = Client::new();
+    let response = client
+        .post("https://github.com/login/oauth/access_token")
+        .form(&[
+            ("client_id", "YOUR_CLIENT_ID"),
+            ("device_code", device_code),
+        ])
+        .send()
+        .await?;
+    let token_response: TokenResponse = response.json().await?;
+    Ok(token_response)
 }
 
 /// floxHub authentication commands
