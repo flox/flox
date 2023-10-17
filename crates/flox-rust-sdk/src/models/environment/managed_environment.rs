@@ -223,14 +223,8 @@ impl ManagedEnvironment {
         };
 
         Ok(match maybe_lock {
-            // local_rev is Some
-            Some(
-                lock @ GenerationLock {
-                    rev: _,
-                    local_rev: Some(_),
-                    version: _,
-                },
-            ) => {
+            // Use local_rev if we have it
+            Some(lock) if lock.local_rev.is_some() => {
                 // Because a single floxmeta clone contains multiple
                 // environments, `local_rev` might refer to a commit on a
                 // branch for another environment. We protect against this
@@ -258,7 +252,7 @@ impl ManagedEnvironment {
                 // from other environments.
                 if !floxmeta
                     .git
-                    .commit_on_branch(&lock.rev, &remote_branch)
+                    .branch_contains_commit(&lock.rev, &remote_branch)
                     .map_err(ManagedEnvironmentError::Git)?
                 {
                     // Maybe the lock refers to a new generation that has
@@ -277,7 +271,7 @@ impl ManagedEnvironment {
                 }
                 if !floxmeta
                     .git
-                    .commit_on_branch(&lock.rev, &remote_branch)
+                    .branch_contains_commit(&lock.rev, &remote_branch)
                     .map_err(ManagedEnvironmentError::Git)?
                 {
                     Err(ManagedEnvironmentError::RevDoesNotExist)?;
@@ -299,7 +293,7 @@ impl ManagedEnvironment {
                 let lock = GenerationLock {
                     rev,
                     local_rev: None,
-                    version: Version::<1>{},
+                    version: Version::<1> {},
                 };
                 let lock_contents = serde_json::to_string_pretty(&lock)
                     .map_err(ManagedEnvironmentError::SerializeLock)?;
@@ -369,7 +363,7 @@ mod test {
     use super::*;
     use crate::flox::tests::flox_instance;
     use crate::models::environment::{DOT_FLOX, ENVIRONMENT_POINTER_FILENAME};
-    use crate::models::floxmetav2::user_dir;
+    use crate::models::floxmetav2::floxmeta_dir;
     use crate::providers::git::tests::commit_file;
     use crate::providers::git::{GitCommandProvider, GitProvider};
 
@@ -398,7 +392,7 @@ mod test {
     }
 
     async fn create_floxmeta(flox: &Flox, remote_path: &PathBuf, branch: &str) -> FloxmetaV2 {
-        let user_floxmeta_dir = user_dir(&flox, &TEST_POINTER.owner);
+        let user_floxmeta_dir = floxmeta_dir(&flox, &TEST_POINTER.owner);
         fs::create_dir_all(&user_floxmeta_dir).unwrap();
         GitCommandProvider::clone_branch(
             format!("file://{}", remote_path.to_string_lossy()),
@@ -450,7 +444,7 @@ mod test {
         assert_eq!(lock, GenerationLock {
             rev: hash_2.clone(),
             local_rev: None,
-            version: Version::<1>{},
+            version: Version::<1> {},
         });
 
         assert_eq!(floxmeta.git.branch_hash(&branch).unwrap(), hash_2);
@@ -485,7 +479,7 @@ mod test {
         let lock = GenerationLock {
             rev: hash_1.clone(),
             local_rev: None,
-            version: Version::<1>{},
+            version: Version::<1> {},
         };
         let dot_flox_path = flox.temp_dir.join(DOT_FLOX);
         create_dot_flox(&dot_flox_path, &TEST_POINTER, Some(&lock));
@@ -497,7 +491,7 @@ mod test {
         assert_eq!(lock, GenerationLock {
             rev: hash_1.clone(),
             local_rev: None,
-            version: Version::<1>{},
+            version: Version::<1> {},
         });
 
         assert_eq!(floxmeta.git.branch_hash(&branch).unwrap(), hash_1);
@@ -540,7 +534,7 @@ mod test {
         let lock = GenerationLock {
             rev: hash_2.clone(),
             local_rev: None,
-            version: Version::<1>{},
+            version: Version::<1> {},
         };
         create_dot_flox(&dot_flox_path, &TEST_POINTER, Some(&lock));
 
@@ -551,7 +545,7 @@ mod test {
         assert_eq!(lock, GenerationLock {
             rev: hash_2.clone(),
             local_rev: None,
-            version: Version::<1>{},
+            version: Version::<1> {},
         });
 
         assert_eq!(floxmeta.git.branch_hash(&branch).unwrap(), hash_3);
@@ -591,7 +585,7 @@ mod test {
         let lock = GenerationLock {
             rev: hash_2.clone(),
             local_rev: None,
-            version: Version::<1>{},
+            version: Version::<1> {},
         };
         create_dot_flox(&dot_flox_path, &TEST_POINTER, Some(&lock));
 
@@ -635,7 +629,7 @@ mod test {
         let lock = GenerationLock {
             rev: "does not exist".to_string(),
             local_rev: None,
-            version: Version::<1>{},
+            version: Version::<1> {},
         };
         create_dot_flox(&dot_flox_path, &TEST_POINTER, Some(&lock));
 
@@ -678,7 +672,7 @@ mod test {
         let lock = GenerationLock {
             rev: hash_1.clone(),
             local_rev: Some(hash_1.clone()),
-            version: Version::<1>{},
+            version: Version::<1> {},
         };
         create_dot_flox(&dot_flox_path, &TEST_POINTER, Some(&lock));
 
@@ -723,7 +717,7 @@ mod test {
         let lock = GenerationLock {
             rev: hash_1.clone(),
             local_rev: Some("does not exist".to_string()),
-            version: Version::<1>{},
+            version: Version::<1> {},
         };
         create_dot_flox(&dot_flox_path, &TEST_POINTER, Some(&lock));
 
@@ -759,7 +753,7 @@ mod test {
         let lock = GenerationLock {
             rev: hash_1.clone(),
             local_rev: Some(hash_1.clone()),
-            version: Version::<1>{},
+            version: Version::<1> {},
         };
         ManagedEnvironment::ensure_branch(&branch, &lock, &floxmeta).unwrap();
         assert_eq!(floxmeta.git.branch_hash(&branch).unwrap(), hash_1);
@@ -791,7 +785,7 @@ mod test {
 
         // Create a mock floxmeta (note clone is used instead of clone_branch,
         // which is used in create_floxmeta, because we need both branches)
-        let user_floxmeta_dir = user_dir(&flox, &TEST_POINTER.owner);
+        let user_floxmeta_dir = floxmeta_dir(&flox, &TEST_POINTER.owner);
         fs::create_dir_all(&user_floxmeta_dir).unwrap();
         <GitCommandProvider as GitProvider>::clone(
             format!("file://{}", remote_path.to_string_lossy()),
@@ -806,7 +800,7 @@ mod test {
         let lock = GenerationLock {
             rev: hash_1.clone(),
             local_rev: Some(hash_2.clone()),
-            version: Version::<1>{},
+            version: Version::<1> {},
         };
         ManagedEnvironment::ensure_branch(&branch, &lock, &floxmeta).unwrap();
         assert_eq!(floxmeta.git.branch_hash(&branch).unwrap(), hash_2);
@@ -837,7 +831,7 @@ mod test {
         let lock = GenerationLock {
             rev: hash_1.clone(),
             local_rev: Some(hash_1.clone()),
-            version: Version::<1>{},
+            version: Version::<1> {},
         };
         ManagedEnvironment::ensure_branch("branch_2", &lock, &floxmeta).unwrap();
         assert_eq!(floxmeta.git.branch_hash("branch_2").unwrap(), hash_1);

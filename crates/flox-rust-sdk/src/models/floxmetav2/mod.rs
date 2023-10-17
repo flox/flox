@@ -33,7 +33,7 @@ pub enum FloxmetaV2Error {
 }
 
 impl FloxmetaV2 {
-    fn open_in(path: impl AsRef<Path>) -> Result<Self, FloxmetaV2Error> {
+    fn open_path(path: impl AsRef<Path>) -> Result<Self, FloxmetaV2Error> {
         let git = GitCommandProvider::open(path).map_err(FloxmetaV2Error::Open)?;
         Ok(FloxmetaV2 { git })
     }
@@ -46,9 +46,9 @@ impl FloxmetaV2 {
     }
 
     pub fn open(flox: &Flox, pointer: &ManagedPointer) -> Result<Self, FloxmetaV2Error> {
-        let user_floxmeta_dir = user_dir(flox, &pointer.owner);
+        let user_floxmeta_dir = floxmeta_dir(flox, &pointer.owner);
         if user_floxmeta_dir.exists() {
-            let floxmeta = FloxmetaV2::open_in(user_floxmeta_dir)?;
+            let floxmeta = FloxmetaV2::open_path(user_floxmeta_dir)?;
             let branch = remote_branch_name(&flox.system, pointer);
             if !floxmeta
                 .git
@@ -67,7 +67,7 @@ impl FloxmetaV2 {
     }
 }
 
-pub(super) fn user_dir(flox: &Flox, owner: &EnvironmentOwner) -> PathBuf {
+pub(super) fn floxmeta_dir(flox: &Flox, owner: &EnvironmentOwner) -> PathBuf {
     flox.data_dir
         .join(FLOXMETA_DIR_NAME)
         .join(owner.to_string())

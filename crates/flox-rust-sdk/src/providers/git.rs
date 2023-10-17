@@ -361,7 +361,12 @@ impl GitCommandProvider {
         }
     }
 
-    pub fn commit_on_branch(&self, commit: &str, branch: &str) -> Result<bool, GitCommandError> {
+    /// Check if commit exists and is part of the branch's history
+    pub fn branch_contains_commit(
+        &self,
+        commit: &str,
+        branch: &str,
+    ) -> Result<bool, GitCommandError> {
         if !self.contains_commit(commit)? {
             return Ok(false);
         }
@@ -994,15 +999,17 @@ pub mod tests {
     }
 
     #[tokio::test]
-    async fn test_commit_on_branch() {
+    async fn test_branch_contains_commit() {
         let (repo, _tempdir_handle) = init_temp_repo(false).await;
         repo.checkout("branch_1", true).await.unwrap();
         commit_file(&repo, "dummy").await;
         let hash_1 = repo.branch_hash("branch_1").unwrap();
         commit_file(&repo, "dummy_2").await;
+        let hash_2 = repo.branch_hash("branch_1").unwrap();
 
         assert_ne!(repo.branch_hash("branch_1").unwrap(), hash_1);
-        assert!(repo.commit_on_branch(&hash_1, "branch_1").unwrap());
+        assert!(repo.branch_contains_commit(&hash_1, "branch_1").unwrap());
+        assert!(repo.branch_contains_commit(&hash_2, "branch_1").unwrap());
     }
 
     #[tokio::test]
@@ -1015,7 +1022,7 @@ pub mod tests {
         repo.checkout("branch_2", true).await.unwrap();
         commit_file(&repo, "dummy_2").await;
 
-        assert!(!repo.commit_on_branch(&hash_1, "branch_2").unwrap());
+        assert!(!repo.branch_contains_commit(&hash_1, "branch_2").unwrap());
     }
 
     #[tokio::test]
@@ -1024,7 +1031,7 @@ pub mod tests {
         repo.checkout("branch_1", true).await.unwrap();
         commit_file(&repo, "dummy").await;
 
-        assert!(!repo.commit_on_branch("XXX", "branch_1").unwrap());
+        assert!(!repo.branch_contains_commit("XXX", "branch_1").unwrap());
     }
 
     #[tokio::test]
