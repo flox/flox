@@ -13,24 +13,53 @@ concurrency:
 
 jobs:
 
-  build:
-    name: Build and test flox on ${{ matrix.os }}
+  cargo-test:
+    name: "Run Cargo Tests"
     runs-on: ${{ matrix.os }}
 
     strategy:
       fail-fast: false
       matrix:
         os:
-        - ubuntu-22.04-8core
-        - macos-latest
+        - "ubuntu-22.04-8core"
+        - "macos-latest"
 
     steps:
-    - name: Checkout
+    - name: "Checkout"
       uses: actions/checkout@v3
       with:
         fetch-depth: 0
 
-    - name: Install flox
+    - name: "Install flox"
+      uses: flox/install-flox-action@next
+      with:
+        github-access-token: ${{ secrets.NIX_GIT_TOKEN }}
+        substituter: s3://flox-store
+        substituter-key: ${{ secrets.FLOX_STORE_PUBLIC_NIX_SECRET_KEY }}
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+    - name: "Cargo Test"
+      run: nix develop '.#flox' --command cargo test;
+
+  nix-build:
+    name: "Build and run Integrational Tests"
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+        - "ubuntu-22.04-8core"
+        - "macos-latest"
+
+    steps:
+    - name: "Checkout"
+      uses: actions/checkout@v3
+      with:
+        fetch-depth: 0
+
+    - name: "Install flox"
       uses: flox/install-flox-action@next
       with:
         github-access-token: ${{ secrets.NIX_GIT_TOKEN }}
@@ -58,11 +87,6 @@ jobs:
       run: |
         flox nix -- build '.#flox-bash-dev' -L --no-update-lock-file      \
                                             --print-out-paths --no-link;
-
-    # These cannot be run offline so we need to build in our tree.
-    # This just builds the `flox' deps so that they can get cached.
-    - name: Build Rust Env
-      run: flox nix -- develop '.#flox' --no-update-lock-file -c true;
 
     - name: Build flox
       run: |
