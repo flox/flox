@@ -80,4 +80,4 @@ jobs:
     - name: Bats Tests
       run: |
         git clean -xfd;
-        nix run --no-update-lock-file '.#flox-tests';
+        nix run --extra-experimental-features "nix-command flakes" --no-update-lock-file '.#flox-tests';
