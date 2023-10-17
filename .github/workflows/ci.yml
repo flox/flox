@@ -39,8 +39,11 @@ jobs:
         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
+    - name: "Development environment"
+      run: nix develop -L '.#flox' --extra-experimental-features "nix-command flakes" --command true
+
     - name: "Cargo Test"
-      run: nix develop '.#flox' --extra-experimental-features "nix-command flakes" --command cargo test;
+      run: nix develop -L '.#flox' --extra-experimental-features "nix-command flakes" --command cargo test
 
   nix-build:
     name: "Build and run Integrational Tests"
