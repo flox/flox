@@ -40,7 +40,7 @@ jobs:
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
     - name: "Cargo Test"
-      run: nix develop '.#flox' --command cargo test;
+      run: nix develop '.#flox' --extra-experimental-features "nix-command flakes" --command cargo test;
 
   nix-build:
     name: "Build and run Integrational Tests"
