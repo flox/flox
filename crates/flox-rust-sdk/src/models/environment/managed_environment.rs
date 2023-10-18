@@ -1,3 +1,4 @@
+use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::{fs, io};
 
@@ -148,8 +149,13 @@ impl Environment for ManagedEnvironment {
 }
 
 impl ManagedEnvironment {
-    pub fn encode(pointer: &ManagedPointer, _path: impl AsRef<Path>) -> String {
-        format!("todo-{}", pointer.name)
+    /// Returns the branch name inside of the `FloxMeta` repo corresponding to this
+    /// managed environment.
+    pub fn encode(path: impl AsRef<Path>) -> String {
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        path.as_ref().hash(&mut hasher);
+        let path_hash = hasher.finish();
+        format!("{:X}", path_hash)
     }
 
     /// Open a managed environment by reading its lockfile and ensuring there is
@@ -346,7 +352,7 @@ fn branch_name(system: &str, pointer: &ManagedPointer, dot_flox_path: impl AsRef
         "{}.{}.{}",
         system,
         pointer.name,
-        ManagedEnvironment::encode(pointer, dot_flox_path)
+        ManagedEnvironment::encode(dot_flox_path)
     )
 }
 
