@@ -397,7 +397,7 @@ mod test {
         }
     }
 
-    async fn create_floxmeta(flox: &Flox, remote_path: &Path, branch: &str) -> FloxmetaV2 {
+    fn create_floxmeta(flox: &Flox, remote_path: &Path, branch: &str) -> FloxmetaV2 {
         let user_floxmeta_dir = floxmeta_dir(flox, &TEST_POINTER.owner);
         fs::create_dir_all(&user_floxmeta_dir).unwrap();
         GitCommandProvider::clone_branch(
@@ -433,7 +433,7 @@ mod test {
         commit_file(&remote, "file 1").await;
 
         // create a mock floxmeta
-        let floxmeta = create_floxmeta(&flox, &remote_path, &branch).await;
+        let floxmeta = create_floxmeta(&flox, &remote_path, &branch);
 
         // add a second commit to the remote
         commit_file(&remote, "file 2").await;
@@ -479,7 +479,7 @@ mod test {
         let hash_1 = remote.branch_hash(&branch).unwrap();
 
         // create a mock floxmeta
-        let floxmeta = create_floxmeta(&flox, &remote_path, &branch).await;
+        let floxmeta = create_floxmeta(&flox, &remote_path, &branch);
 
         // create a .flox directory
         let lock = GenerationLock {
@@ -525,7 +525,7 @@ mod test {
         commit_file(&remote, "file 1").await;
 
         // create a mock floxmeta
-        let floxmeta = create_floxmeta(&flox, &remote_path, &branch).await;
+        let floxmeta = create_floxmeta(&flox, &remote_path, &branch);
 
         // add a second commit to the remote
         commit_file(&remote, "file 2").await;
@@ -579,7 +579,7 @@ mod test {
         commit_file(&remote, "file 1").await;
 
         // create a mock floxmeta
-        let floxmeta = create_floxmeta(&flox, &remote_path, &branch).await;
+        let floxmeta = create_floxmeta(&flox, &remote_path, &branch);
 
         // add a second branch to the remote
         remote.checkout("branch_2", true).await.unwrap();
@@ -624,7 +624,7 @@ mod test {
         commit_file(&remote, "file 1").await;
 
         // create a mock floxmeta
-        let floxmeta = create_floxmeta(&flox, &remote_path, &branch).await;
+        let floxmeta = create_floxmeta(&flox, &remote_path, &branch);
 
         // add a second commit to the remote
         commit_file(&remote, "file 2").await;
@@ -671,7 +671,7 @@ mod test {
         let hash_1 = remote.branch_hash(&branch).unwrap();
 
         // create a mock floxmeta
-        let floxmeta = create_floxmeta(&flox, &remote_path, &branch).await;
+        let floxmeta = create_floxmeta(&flox, &remote_path, &branch);
 
         // create a .flox directory
         let dot_flox_path = flox.temp_dir.join(DOT_FLOX);
@@ -716,7 +716,7 @@ mod test {
         let hash_1 = remote.branch_hash(&branch).unwrap();
 
         // create a mock floxmeta
-        let floxmeta = create_floxmeta(&flox, &remote_path, &branch).await;
+        let floxmeta = create_floxmeta(&flox, &remote_path, &branch);
 
         // create a .flox directory
         let dot_flox_path = flox.temp_dir.join(DOT_FLOX);
@@ -754,7 +754,7 @@ mod test {
         let hash_1 = remote.branch_hash(&branch).unwrap();
 
         // create a mock floxmeta
-        let floxmeta = create_floxmeta(&flox, &remote_path, &branch).await;
+        let floxmeta = create_floxmeta(&flox, &remote_path, &branch);
 
         let lock = GenerationLock {
             rev: hash_1.clone(),
@@ -832,7 +832,7 @@ mod test {
         let hash_1 = remote.branch_hash(&branch).unwrap();
 
         // create a mock floxmeta
-        let floxmeta = create_floxmeta(&flox, &remote_path, &branch).await;
+        let floxmeta = create_floxmeta(&flox, &remote_path, &branch);
 
         let lock = GenerationLock {
             rev: hash_1.clone(),
