@@ -1,16 +1,19 @@
-use std::fs;
 use std::path::{Path, PathBuf};
+use std::{fs, io};
 
 use async_trait::async_trait;
 use flox_types::catalog::{CatalogEntry, EnvCatalog, System};
+use flox_types::version::Version;
 use rnix::ast::{AttrSet, Expr};
 use rowan::ast::AstNode;
 use runix::command_line::{NixCommandLine, NixCommandLineRunError, NixCommandLineRunJsonError};
 use runix::installable::FlakeAttribute;
 use runix::store_path::StorePath;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use walkdir::WalkDir;
 
+use self::managed_environment::ManagedEnvironmentError;
 use super::environment_ref::{
     EnvironmentName,
     EnvironmentOwner,
@@ -26,7 +29,9 @@ pub mod managed_environment;
 pub mod path_environment;
 pub mod remote_environment;
 
-pub static CATALOG_JSON: &str = "catalog.json";
+pub const CATALOG_JSON: &str = "catalog.json";
+pub const DOT_FLOX: &str = ".flox";
+pub const ENVIRONMENT_POINTER_FILENAME: &str = "env.json";
 // don't forget to update the man page
 pub const DEFAULT_KEEP_GENERATIONS: usize = 10;
 // don't forget to update the man page
@@ -105,6 +110,42 @@ pub trait Environment {
     }
 }
 
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[serde(untagged)]
+pub enum EnvironmentPointer {
+    Managed(ManagedPointer),
+    Path(PathPointer),
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+pub struct PathPointer {
+    name: EnvironmentName,
+    version: Version<1>,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+pub struct ManagedPointer {
+    pub owner: EnvironmentOwner,
+    pub name: EnvironmentName,
+    version: Version<1>,
+}
+
+impl EnvironmentPointer {
+    pub fn open(path: impl AsRef<Path>) -> Result<EnvironmentPointer, EnvironmentError2> {
+        let dot_flox_path = path.as_ref().join(DOT_FLOX);
+        let pointer_path = dot_flox_path.join(ENVIRONMENT_POINTER_FILENAME);
+        let pointer_contents = match fs::read(pointer_path) {
+            Ok(contents) => contents,
+            Err(err) => match err.kind() {
+                io::ErrorKind::NotFound => Err(EnvironmentError2::DirectoryNotAnEnv)?,
+                _ => Err(EnvironmentError2::ReadEnvironmentMetadata(err))?,
+            },
+        };
+
+        serde_json::from_slice(&pointer_contents).map_err(EnvironmentError2::ParseEnvJson)
+    }
+}
+
 #[derive(Debug, Error)]
 pub enum EnvironmentError2 {
     #[error("ParseEnvRef")]
@@ -143,6 +184,8 @@ pub enum EnvironmentError2 {
     Build(NixCommandLineRunError),
     #[error("ReadManifest({0})")]
     ReadManifest(std::io::Error),
+    #[error("ReadEnvironmentMetadata({0})")]
+    ReadEnvironmentMetadata(std::io::Error),
     #[error("MakeTemporaryEnv({0})")]
     MakeTemporaryEnv(std::io::Error),
     #[error("UpdateManifest({0})")]
@@ -163,6 +206,10 @@ pub enum EnvironmentError2 {
     RemoveBackup(std::io::Error),
     #[error("Failed to copy file")]
     CopyFile(IoError),
+    #[error("Failed parsing contents of env.json file: {0}")]
+    ParseEnvJson(serde_json::Error),
+    #[error(transparent)]
+    ManagedEnvironment(#[from] ManagedEnvironmentError),
 }
 
 /// Within a nix AST, find the first definition of an attribute set,
@@ -314,4 +361,76 @@ fn flox_nix_content_with_packages_removed(
     let green_tree = config_attrset.syntax().replace_with(edited);
     let new_content = nixpkgs_fmt::reformat_string(&green_tree.to_string());
     Ok(ManifestContent::Changed(new_content))
+}
+
+#[cfg(test)]
+mod test {
+    use std::str::FromStr;
+
+    use super::*;
+
+    const MANAGED_ENV_JSON: &'_ str = r#"{
+        "name": "name",
+        "owner": "owner",
+        "version": 1
+    }"#;
+
+    const PATH_ENV_JSON: &'_ str = r#"{
+        "name": "name",
+        "version": 1
+    }"#;
+
+    #[test]
+    fn serializes_managed_environment_pointer() {
+        let managed_pointer = EnvironmentPointer::Managed(ManagedPointer {
+            name: EnvironmentName::from_str("name").unwrap(),
+            owner: EnvironmentOwner::from_str("owner").unwrap(),
+            version: Version::<1> {},
+        });
+
+        let json = serde_json::to_string(&managed_pointer).unwrap();
+        // Convert both to `serde_json::Value` to test equality without worrying about whitespace
+        let roundtrip_value: serde_json::Value = serde_json::from_str(&json).unwrap();
+        let example_value: serde_json::Value = serde_json::from_str(MANAGED_ENV_JSON).unwrap();
+        assert_eq!(roundtrip_value, example_value);
+    }
+
+    #[test]
+    fn deserializes_managed_environment_pointer() {
+        let managed_pointer: EnvironmentPointer = serde_json::from_str(MANAGED_ENV_JSON).unwrap();
+        assert_eq!(
+            managed_pointer,
+            EnvironmentPointer::Managed(ManagedPointer {
+                name: EnvironmentName::from_str("name").unwrap(),
+                owner: EnvironmentOwner::from_str("owner").unwrap(),
+                version: Version::<1> {},
+            })
+        );
+    }
+
+    #[test]
+    fn serializes_path_environment_pointer() {
+        let path_pointer = EnvironmentPointer::Path(PathPointer {
+            name: EnvironmentName::from_str("name").unwrap(),
+            version: Version::<1> {},
+        });
+
+        let json = serde_json::to_string(&path_pointer).unwrap();
+        // Convert both to `serde_json::Value` to test equality without worrying about whitespace
+        let roundtrip_value: serde_json::Value = serde_json::from_str(&json).unwrap();
+        let example_value: serde_json::Value = serde_json::from_str(PATH_ENV_JSON).unwrap();
+        assert_eq!(roundtrip_value, example_value);
+    }
+
+    #[test]
+    fn deserializes_path_environment_pointer() {
+        let path_pointer: EnvironmentPointer = serde_json::from_str(PATH_ENV_JSON).unwrap();
+        assert_eq!(
+            path_pointer,
+            EnvironmentPointer::Path(PathPointer {
+                name: EnvironmentName::from_str("name").unwrap(),
+                version: Version::<1> {},
+            })
+        );
+    }
 }
