@@ -120,6 +120,7 @@ pub enum EnvironmentPointer {
     Path(PathPointer),
 }
 
+/// implies the current directory
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct PathPointer {
     pub name: EnvironmentName,

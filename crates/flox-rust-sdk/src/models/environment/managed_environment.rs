@@ -22,7 +22,7 @@ const GENERATION_LOCK_FILENAME: &str = "env.lock";
 
 #[derive(Debug)]
 pub struct ManagedEnvironment {
-    // typically `<...>/.flox`
+    /// Path to the project's .flox directory
     _path: PathBuf,
     _pointer: ManagedPointer,
     _system: String,
@@ -51,6 +51,8 @@ pub enum ManagedEnvironmentError {
     WriteLock(io::Error),
     #[error("couldn't serialize environment lockfile: {0}")]
     SerializeLock(serde_json::Error),
+    #[error("couldn't create symlink to project: {0}")]
+    SomeError(std::io::Error),
 }
 
 #[derive(Debug, Deserialize, PartialEq, Serialize)]
@@ -154,8 +156,22 @@ impl ManagedEnvironment {
     pub fn encode(path: impl AsRef<Path>) -> String {
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
         path.as_ref().hash(&mut hasher);
-        let path_hash = hasher.finish();
-        format!("{:X}", path_hash)
+        format!("{:X}", hasher.finish())
+    }
+
+    /// Creates a symlink pointing from the `FloxMeta` back to the project environment
+    /// using this managed environment.
+    pub fn create_reverse_symlink_if_not_exists(
+        flox: &Flox,
+        path: impl AsRef<Path>,
+    ) -> Result<(), ManagedEnvironmentError> {
+        let links_dir = reverse_links_dir(flox);
+        let encoded = ManagedEnvironment::encode(&path);
+        let link = links_dir.join(encoded);
+        if !link.exists() {
+            std::os::unix::fs::symlink(path, link).map_err(ManagedEnvironmentError::SomeError)?;
+        }
+        Ok(())
     }
 
     /// Open a managed environment by reading its lockfile and ensuring there is
@@ -196,6 +212,7 @@ impl ManagedEnvironment {
             &lock,
             &floxmeta,
         )?;
+        ManagedEnvironment::create_reverse_symlink_if_not_exists(flox, &dot_flox_path)?;
 
         Ok(ManagedEnvironment {
             _path: dot_flox_path.as_ref().to_path_buf(),
@@ -358,6 +375,10 @@ fn branch_name(system: &str, pointer: &ManagedPointer, dot_flox_path: impl AsRef
 
 pub fn remote_branch_name(system: &str, pointer: &ManagedPointer) -> String {
     format!("{}.{}", system, pointer.name)
+}
+
+pub fn reverse_links_dir(flox: &Flox) -> PathBuf {
+    flox.data_dir.join("links")
 }
 
 #[cfg(test)]
