@@ -151,8 +151,7 @@ impl Environment for ManagedEnvironment {
 }
 
 impl ManagedEnvironment {
-    /// Returns the branch name inside of the `FloxMeta` repo corresponding to this
-    /// managed environment.
+    /// Returns a unique identifier for the location of the project.
     pub fn encode(path: impl AsRef<Path>) -> String {
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
         path.as_ref().hash(&mut hasher);
@@ -160,8 +159,8 @@ impl ManagedEnvironment {
     }
 
     /// Creates a symlink pointing from the `FloxMeta` back to the project environment
-    /// using this managed environment.
-    pub fn create_reverse_symlink_if_not_exists(
+    /// using this managed environment if the symlink doesn't already exist.
+    pub fn ensure_reverse_link(
         flox: &Flox,
         path: impl AsRef<Path>,
     ) -> Result<(), ManagedEnvironmentError> {
@@ -212,7 +211,7 @@ impl ManagedEnvironment {
             &lock,
             &floxmeta,
         )?;
-        ManagedEnvironment::create_reverse_symlink_if_not_exists(flox, &dot_flox_path)?;
+        ManagedEnvironment::ensure_reverse_link(flox, &dot_flox_path)?;
 
         Ok(ManagedEnvironment {
             _path: dot_flox_path.as_ref().to_path_buf(),
