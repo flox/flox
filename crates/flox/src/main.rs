@@ -119,7 +119,7 @@ async fn main() -> ExitCode {
             ExitCode::from(1)
         },
     };
-    log::logger().flush();
+    utils::init::flush_logger();
     exit_code
 }
 

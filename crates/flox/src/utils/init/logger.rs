@@ -1,3 +1,5 @@
+use std::io::Write;
+
 use log::{debug, error};
 use once_cell::sync::OnceCell;
 use tracing_subscriber::prelude::*;
@@ -112,4 +114,16 @@ pub fn init_logger(verbosity: Option<Verbosity>, debug: Option<bool>) {
     }) {
         error!("Updating logger filter failed: {}", err);
     }
+}
+
+pub fn flush_logger() {
+    if LOGGER_HANDLE.get().is_none() {
+        return;
+    }
+
+    let (_, fmt_handle) = LOGGER_HANDLE.get().unwrap();
+
+    let _ = fmt_handle.modify(|l| {
+        let _ = l.writer_mut().flush();
+    });
 }
