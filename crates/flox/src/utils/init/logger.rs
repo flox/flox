@@ -117,13 +117,9 @@ pub fn init_logger(verbosity: Option<Verbosity>, debug: Option<bool>) {
 }
 
 pub fn flush_logger() {
-    if LOGGER_HANDLE.get().is_none() {
-        return;
+    if let Some((_, fmt_handle)) = LOGGER_HANDLE.get() {
+        let _ = fmt_handle.modify(|l| {
+            let _ = l.writer_mut().flush();
+        });
     }
-
-    let (_, fmt_handle) = LOGGER_HANDLE.get().unwrap();
-
-    let _ = fmt_handle.modify(|l| {
-        let _ = l.writer_mut().flush();
-    });
 }
