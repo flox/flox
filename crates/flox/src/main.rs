@@ -106,7 +106,7 @@ async fn main() -> ExitCode {
     let args = args.unwrap();
 
     // Run flox. Print errors and exit with status 1 on failure
-    match run(args).await {
+    let exit_code = match run(args).await {
         Ok(()) => ExitCode::from(0),
         Err(e) => {
             // Do not print any error if caused by wrapped flox (sh)
@@ -118,7 +118,9 @@ async fn main() -> ExitCode {
 
             ExitCode::from(1)
         },
-    }
+    };
+    utils::init::flush_logger();
+    exit_code
 }
 
 #[derive(Debug)]
