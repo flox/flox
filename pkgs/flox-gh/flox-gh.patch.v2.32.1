@@ -140,7 +140,7 @@ index 3ac83ad6..b7120dd1 100644
  
  				GH_ENTERPRISE_TOKEN, GITHUB_ENTERPRISE_TOKEN (in order of precedence): an
 diff --git a/pkg/cmd/auth/login/login.go b/pkg/cmd/auth/login/login.go
-index 84894bf1..66515649 100644
+index 84894bf1..6cc8e0f6 100644
 --- a/pkg/cmd/auth/login/login.go
 +++ b/pkg/cmd/auth/login/login.go
 @@ -61,13 +61,13 @@ func NewCmdLogin(f *cmdutil.Factory, runF func(*LoginOptions) error) *cobra.Comm
@@ -172,6 +172,15 @@ index 84894bf1..66515649 100644
  	}
  
  	// The go-gh Config object currently does not support case-insensitive lookups for host names,
+@@ -158,7 +154,7 @@ func loginRun(opts *LoginOptions) error {
+ 
+ 	if src, writeable := shared.AuthTokenWriteable(authCfg, hostname); !writeable {
+ 		fmt.Fprintf(opts.IO.ErrOut, "The value of the %s environment variable is being used for authentication.\n", src)
+-		fmt.Fprint(opts.IO.ErrOut, "To have GitHub CLI store credentials instead, first clear the value from the environment.\n")
++		fmt.Fprint(opts.IO.ErrOut, "To have flox CLI store credentials instead, first clear the value from the environment.\n")
+ 		return cmdutil.SilentError
+ 	}
+ 
 @@ -204,23 +200,3 @@ func loginRun(opts *LoginOptions) error {
  		SecureStorage: !opts.InsecureStorage,
  	})
@@ -197,10 +206,10 @@ index 84894bf1..66515649 100644
 -	return hostname, err
 -}
 diff --git a/pkg/cmd/auth/login/login_test.go b/pkg/cmd/auth/login/login_test.go
-index 72d796a3..0c759b68 100644
+index 72d796a3..fc475bfd 100644
 --- a/pkg/cmd/auth/login/login_test.go
 +++ b/pkg/cmd/auth/login/login_test.go
-@@ -344,14 +344,14 @@ func Test_loginRun_nontty(t *testing.T) {
+@@ -344,15 +344,15 @@ func Test_loginRun_nontty(t *testing.T) {
  			},
  			cfgStubs: func(c *config.ConfigMock) {
  				authCfg := c.Authentication()
@@ -213,10 +222,125 @@ index 72d796a3..0c759b68 100644
  			wantErr: "SilentError",
  			wantStderr: heredoc.Doc(`
 -				The value of the GH_TOKEN environment variable is being used for authentication.
+-				To have GitHub CLI store credentials instead, first clear the value from the environment.
 +				The value of the FLOX_GH_TOKEN environment variable is being used for authentication.
- 				To have GitHub CLI store credentials instead, first clear the value from the environment.
++				To have flox CLI store credentials instead, first clear the value from the environment.
  			`),
  		},
+ 		{
+@@ -371,7 +371,7 @@ func Test_loginRun_nontty(t *testing.T) {
+ 			wantErr: "SilentError",
+ 			wantStderr: heredoc.Doc(`
+ 				The value of the GH_ENTERPRISE_TOKEN environment variable is being used for authentication.
+-				To have GitHub CLI store credentials instead, first clear the value from the environment.
++				To have flox CLI store credentials instead, first clear the value from the environment.
+ 			`),
+ 		},
+ 		{
+@@ -495,7 +495,7 @@ func Test_loginRun_Survey(t *testing.T) {
+ 					switch prompt {
+ 					case "What is your preferred protocol for Git operations?":
+ 						return prompter.IndexFor(opts, "HTTPS")
+-					case "How would you like to authenticate GitHub CLI?":
++					case "How would you like to authenticate flox CLI?":
+ 						return prompter.IndexFor(opts, "Paste an authentication token")
+ 					}
+ 					return -1, prompter.NoSuchPromptErr(prompt)
+@@ -532,7 +532,7 @@ func Test_loginRun_Survey(t *testing.T) {
+ 						return prompter.IndexFor(opts, "GitHub Enterprise Server")
+ 					case "What is your preferred protocol for Git operations?":
+ 						return prompter.IndexFor(opts, "HTTPS")
+-					case "How would you like to authenticate GitHub CLI?":
++					case "How would you like to authenticate flox CLI?":
+ 						return prompter.IndexFor(opts, "Paste an authentication token")
+ 					}
+ 					return -1, prompter.NoSuchPromptErr(prompt)
+@@ -572,7 +572,7 @@ func Test_loginRun_Survey(t *testing.T) {
+ 						return prompter.IndexFor(opts, "GitHub.com")
+ 					case "What is your preferred protocol for Git operations?":
+ 						return prompter.IndexFor(opts, "HTTPS")
+-					case "How would you like to authenticate GitHub CLI?":
++					case "How would you like to authenticate flox CLI?":
+ 						return prompter.IndexFor(opts, "Paste an authentication token")
+ 					}
+ 					return -1, prompter.NoSuchPromptErr(prompt)
+@@ -603,7 +603,7 @@ func Test_loginRun_Survey(t *testing.T) {
+ 						return prompter.IndexFor(opts, "GitHub.com")
+ 					case "What is your preferred protocol for Git operations?":
+ 						return prompter.IndexFor(opts, "SSH")
+-					case "How would you like to authenticate GitHub CLI?":
++					case "How would you like to authenticate flox CLI?":
+ 						return prompter.IndexFor(opts, "Paste an authentication token")
+ 					}
+ 					return -1, prompter.NoSuchPromptErr(prompt)
+@@ -622,7 +622,7 @@ func Test_loginRun_Survey(t *testing.T) {
+ 					switch prompt {
+ 					case "What is your preferred protocol for Git operations?":
+ 						return prompter.IndexFor(opts, "HTTPS")
+-					case "How would you like to authenticate GitHub CLI?":
++					case "How would you like to authenticate flox CLI?":
+ 						return prompter.IndexFor(opts, "Paste an authentication token")
+ 					}
+ 					return -1, prompter.NoSuchPromptErr(prompt)
+diff --git a/pkg/cmd/auth/logout/logout.go b/pkg/cmd/auth/logout/logout.go
+index c871a533..ed22885a 100644
+--- a/pkg/cmd/auth/logout/logout.go
++++ b/pkg/cmd/auth/logout/logout.go
+@@ -103,7 +103,7 @@ func logoutRun(opts *LogoutOptions) error {
+ 
+ 	if src, writeable := shared.AuthTokenWriteable(authCfg, hostname); !writeable {
+ 		fmt.Fprintf(opts.IO.ErrOut, "The value of the %s environment variable is being used for authentication.\n", src)
+-		fmt.Fprint(opts.IO.ErrOut, "To erase credentials stored in GitHub CLI, first clear the value from the environment.\n")
++		fmt.Fprint(opts.IO.ErrOut, "To erase credentials stored in flox CLI, first clear the value from the environment.\n")
+ 		return cmdutil.SilentError
+ 	}
+ 
+diff --git a/pkg/cmd/auth/refresh/refresh.go b/pkg/cmd/auth/refresh/refresh.go
+index 4debd0a4..58fb4ce6 100644
+--- a/pkg/cmd/auth/refresh/refresh.go
++++ b/pkg/cmd/auth/refresh/refresh.go
+@@ -153,7 +153,7 @@ func refreshRun(opts *RefreshOptions) error {
+ 
+ 	if src, writeable := shared.AuthTokenWriteable(authCfg, hostname); !writeable {
+ 		fmt.Fprintf(opts.IO.ErrOut, "The value of the %s environment variable is being used for authentication.\n", src)
+-		fmt.Fprint(opts.IO.ErrOut, "To refresh credentials stored in GitHub CLI, first clear the value from the environment.\n")
++		fmt.Fprint(opts.IO.ErrOut, "To refresh credentials stored in flox CLI, first clear the value from the environment.\n")
+ 		return cmdutil.SilentError
+ 	}
+ 
+diff --git a/pkg/cmd/auth/setupgit/setupgit.go b/pkg/cmd/auth/setupgit/setupgit.go
+index a3c991f4..5fd2f350 100644
+--- a/pkg/cmd/auth/setupgit/setupgit.go
++++ b/pkg/cmd/auth/setupgit/setupgit.go
+@@ -31,23 +31,23 @@ func NewCmdSetupGit(f *cmdutil.Factory, runF func(*SetupGitOptions) error) *cobr
+ 
+ 	cmd := &cobra.Command{
+ 		Use:   "setup-git",
+-		Short: "Setup git with GitHub CLI",
++		Short: "Setup git with flox CLI",
+ 		Long: heredoc.Docf(`
+-			This command configures git to use GitHub CLI as a credential helper.
++			This command configures git to use flox CLI as a credential helper.
+ 			For more information on git credential helpers please reference:
+ 			https://git-scm.com/docs/gitcredentials.
+ 
+-			By default, GitHub CLI will be set as the credential helper for all authenticated hosts.
++			By default, flox CLI will be set as the credential helper for all authenticated hosts.
+ 			If there is no authenticated hosts the command fails with an error.
+ 
+ 			Alternatively, use the %[1]s--hostname%[1]s flag to specify a single host to be configured.
+ 			If the host is not authenticated with, the command fails with an error.
+ 		`, "`"),
+ 		Example: heredoc.Doc(`
+-			# Configure git to use GitHub CLI as the credential helper for all authenticated hosts
++			# Configure git to use flox CLI as the credential helper for all authenticated hosts
+ 			$ gh auth setup-git
+ 
+-			# Configure git to use GitHub CLI as the credential helper for enterprise.internal host
++			# Configure git to use flox CLI as the credential helper for enterprise.internal host
+ 			$ gh auth setup-git --hostname enterprise.internal
+ 		`),
+ 		RunE: func(cmd *cobra.Command, args []string) error {
 diff --git a/pkg/cmd/auth/shared/git_credential.go b/pkg/cmd/auth/shared/git_credential.go
 index 8624cf00..026d5bcf 100644
 --- a/pkg/cmd/auth/shared/git_credential.go
@@ -235,7 +359,7 @@ index 8624cf00..026d5bcf 100644
  	if flow.shouldSetup {
  		if isGitMissing(gitErr) {
 diff --git a/pkg/cmd/auth/shared/login_flow.go b/pkg/cmd/auth/shared/login_flow.go
-index 7c2ff163..5034cd8e 100644
+index 7c2ff163..70d6e091 100644
 --- a/pkg/cmd/auth/shared/login_flow.go
 +++ b/pkg/cmd/auth/shared/login_flow.go
 @@ -8,7 +8,6 @@ import (
@@ -246,6 +370,15 @@ index 7c2ff163..5034cd8e 100644
  	"github.com/cli/cli/v2/api"
  	"github.com/cli/cli/v2/git"
  	"github.com/cli/cli/v2/internal/authflow"
+@@ -19,7 +18,7 @@ import (
+ 	"github.com/cli/cli/v2/pkg/ssh"
+ )
+ 
+-const defaultSSHKeyTitle = "GitHub CLI"
++const defaultSSHKeyTitle = "flox CLI"
+ 
+ type iconfig interface {
+ 	Login(string, string, string, string, bool) error
 @@ -51,34 +50,14 @@ func Login(opts *LoginOptions) error {
  
  	gitProtocol := strings.ToLower(opts.GitProtocol)
@@ -300,6 +433,15 @@ index 7c2ff163..5034cd8e 100644
  	}
  
  	var authMode int
+@@ -139,7 +107,7 @@ func Login(opts *LoginOptions) error {
+ 		options := []string{"Login with a web browser", "Paste an authentication token"}
+ 		var err error
+ 		authMode, err = opts.Prompter.Select(
+-			"How would you like to authenticate GitHub CLI?",
++			"How would you like to authenticate flox CLI?",
+ 			options[0],
+ 			options)
+ 		if err != nil {
 @@ -152,18 +120,12 @@ func Login(opts *LoginOptions) error {
  
  	if authMode == 0 {
@@ -352,9 +494,18 @@ index 7c2ff163..5034cd8e 100644
  	f, err := os.Open(keyFile)
  	if err != nil {
 diff --git a/pkg/cmd/auth/shared/login_flow_test.go b/pkg/cmd/auth/shared/login_flow_test.go
-index 92ae7591..8bd2949f 100644
+index 92ae7591..764287d6 100644
 --- a/pkg/cmd/auth/shared/login_flow_test.go
 +++ b/pkg/cmd/auth/shared/login_flow_test.go
+@@ -50,7 +50,7 @@ func TestLogin_ssh(t *testing.T) {
+ 		switch prompt {
+ 		case "What is your preferred protocol for Git operations?":
+ 			return prompter.IndexFor(opts, "SSH")
+-		case "How would you like to authenticate GitHub CLI?":
++		case "How would you like to authenticate flox CLI?":
+ 			return prompter.IndexFor(opts, "Paste an authentication token")
+ 		}
+ 		return -1, prompter.NoSuchPromptErr(prompt)
 @@ -114,55 +114,3 @@ func TestLogin_ssh(t *testing.T) {
  	assert.Equal(t, "ATOKEN", cfg["example.com:oauth_token"])
  	assert.Equal(t, "ssh", cfg["example.com:git_protocol"])

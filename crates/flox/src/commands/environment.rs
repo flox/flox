@@ -9,7 +9,7 @@ use flox_rust_sdk::flox::{EnvironmentName, Flox};
 use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironment;
 use flox_rust_sdk::models::environment::path_environment::{Original, PathEnvironment};
 use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironment;
-use flox_rust_sdk::models::environment::Environment;
+use flox_rust_sdk::models::environment::{Environment, EnvironmentPointer, DOT_FLOX};
 use flox_rust_sdk::models::environment_ref;
 use flox_rust_sdk::nix::arguments::eval::EvaluationArgs;
 use flox_rust_sdk::nix::command::{Shell, StoreGc};
@@ -54,12 +54,17 @@ impl Default for EnvironmentSelect {
 }
 
 impl EnvironmentSelect {
-    fn to_concrete_environment(&self, temp_dir: impl AsRef<Path>) -> Result<ConcreteEnvironment> {
+    fn to_concrete_environment(&self, flox: &Flox) -> Result<ConcreteEnvironment> {
         let env = match self {
-            EnvironmentSelect::Dir(path) => ConcreteEnvironment::Path(
-                PathEnvironment::open(path, temp_dir).context("No matching environments found")?,
-            ),
-
+            EnvironmentSelect::Dir(path) => match EnvironmentPointer::open(path)? {
+                EnvironmentPointer::Path(_path_pointer) => {
+                    let dot_flox_path = path.join(DOT_FLOX);
+                    ConcreteEnvironment::Path(PathEnvironment::open(dot_flox_path, &flox.temp_dir)?)
+                },
+                EnvironmentPointer::Managed(managed_pointer) => ConcreteEnvironment::Managed(
+                    ManagedEnvironment::open(flox, managed_pointer, path)?,
+                ),
+            },
             EnvironmentSelect::Remote(_) => todo!(),
         };
 
@@ -109,7 +114,7 @@ impl Edit {
 
         let mut environment = self
             .environment
-            .to_concrete_environment(tempfile::tempdir_in(&flox.temp_dir)?.into_path())?
+            .to_concrete_environment(&flox)?
             .into_dyn_environment();
         let nix = flox.nix(Default::default());
 
@@ -218,10 +223,7 @@ pub struct Delete {
 impl Delete {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("delete");
-        match self
-            .environment
-            .to_concrete_environment(tempfile::tempdir_in(flox.temp_dir)?.into_path())?
-        {
+        match self.environment.to_concrete_environment(&flox)? {
             ConcreteEnvironment::Path(environment) => environment.delete()?,
             ConcreteEnvironment::Managed(environment) => environment.delete()?,
             ConcreteEnvironment::Remote(environment) => environment.delete()?,
@@ -258,7 +260,7 @@ impl Activate {
 
         let environment = self
             .environment
-            .to_concrete_environment(tempfile::tempdir_in(&flox.temp_dir)?.into_path())?
+            .to_concrete_environment(&flox)?
             .into_dyn_environment();
 
         let command = Shell {
@@ -372,7 +374,7 @@ impl List {
 
         let env = self
             .environment
-            .to_concrete_environment(tempfile::tempdir_in(&flox.temp_dir)?.into_path())?
+            .to_concrete_environment(&flox)?
             .into_dyn_environment();
 
         let catalog = env
@@ -449,7 +451,7 @@ impl Install {
 
         let mut environment = self
             .environment
-            .to_concrete_environment(tempfile::tempdir_in(&flox.temp_dir)?.into_path())?
+            .to_concrete_environment(&flox)?
             .into_dyn_environment();
 
         // todo use set?
@@ -516,7 +518,7 @@ impl Uninstall {
 
         let mut environment = self
             .environment
-            .to_concrete_environment(tempfile::tempdir_in(&flox.temp_dir)?.into_path())?
+            .to_concrete_environment(&flox)?
             .into_dyn_environment();
 
         let packages_str = packages_to_string(&packages);
@@ -559,7 +561,7 @@ impl WipeHistory {
 
         let env = self
             .environment
-            .to_concrete_environment(tempfile::tempdir_in(&flox.temp_dir)?.into_path())?
+            .to_concrete_environment(&flox)?
             .into_dyn_environment();
 
         if env.delete_symlinks()? {
