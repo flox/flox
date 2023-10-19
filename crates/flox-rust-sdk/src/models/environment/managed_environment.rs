@@ -52,7 +52,9 @@ pub enum ManagedEnvironmentError {
     #[error("couldn't serialize environment lockfile: {0}")]
     SerializeLock(serde_json::Error),
     #[error("couldn't create symlink to project: {0}")]
-    SomeError(std::io::Error),
+    ReverseLink(std::io::Error),
+    #[error("couldn't create links directory: {0}")]
+    CreateLinksDir(std::io::Error),
 }
 
 #[derive(Debug, Deserialize, PartialEq, Serialize)]
@@ -165,10 +167,15 @@ impl ManagedEnvironment {
         path: impl AsRef<Path>,
     ) -> Result<(), ManagedEnvironmentError> {
         let links_dir = reverse_links_dir(flox);
+        if !links_dir.exists() {
+            std::fs::create_dir_all(&links_dir).map_err(ManagedEnvironmentError::CreateLinksDir)?;
+        }
         let encoded = ManagedEnvironment::encode(&path);
         let link = links_dir.join(encoded);
-        if !link.exists() {
-            std::os::unix::fs::symlink(path, link).map_err(ManagedEnvironmentError::SomeError)?;
+        // Do not use `Path.exists` to check whether the link exists. It will return `false` if
+        // the symlink is broken or if you can't read the file metadata due to permissions errors.
+        if !link.is_symlink() {
+            std::os::unix::fs::symlink(path, link).map_err(ManagedEnvironmentError::ReverseLink)?;
         }
         Ok(())
     }
@@ -861,5 +868,76 @@ mod test {
         };
         ManagedEnvironment::ensure_branch("branch_2", &lock, &floxmeta).unwrap();
         assert_eq!(floxmeta.git.branch_hash("branch_2").unwrap(), hash_1);
+    }
+
+    #[test]
+    fn stable_encode_name() {
+        let path = PathBuf::from_str("foo").unwrap();
+        let encode1 = ManagedEnvironment::encode(&path);
+        let encode2 = ManagedEnvironment::encode(&path);
+        assert_eq!(encode1, encode2);
+    }
+
+    #[test]
+    fn creates_reverse_links_dir() {
+        let (flox, _) = flox_instance();
+        let path = PathBuf::from_str("foo").unwrap();
+        let links_dir = reverse_links_dir(&flox);
+        assert!(!links_dir.exists());
+        ManagedEnvironment::ensure_reverse_link(&flox, path).unwrap();
+        assert!(links_dir.exists());
+    }
+
+    #[test]
+    fn creates_reverse_link() {
+        let (flox, _) = flox_instance();
+        let links_dir = reverse_links_dir(&flox);
+        let path = PathBuf::from_str("foo").unwrap();
+        // There are no links if the directory hasn't been created
+        assert!(!links_dir.exists());
+        // Create the reverse link
+        ManagedEnvironment::ensure_reverse_link(&flox, &path).unwrap();
+        assert_eq!(links_dir.read_dir().unwrap().count(), 1);
+        let link_name = links_dir
+            .read_dir()
+            .unwrap()
+            .next()
+            .unwrap()
+            .unwrap()
+            .file_name();
+        let expected_link_name = ManagedEnvironment::encode(&path);
+        assert_eq!(link_name.to_str().unwrap(), &expected_link_name);
+    }
+
+    #[test]
+    fn noop_when_symlink_exists() {
+        let (flox, _) = flox_instance();
+        let links_dir = reverse_links_dir(&flox);
+        let path = PathBuf::from_str("foo").unwrap();
+        // There are no links if the directory hasn't been created
+        assert!(!links_dir.exists());
+        // Create the reverse link
+        ManagedEnvironment::ensure_reverse_link(&flox, &path).unwrap();
+        assert_eq!(links_dir.read_dir().unwrap().count(), 1);
+        let link_name = links_dir
+            .read_dir()
+            .unwrap()
+            .next()
+            .unwrap()
+            .unwrap()
+            .file_name();
+        let expected_link_name = ManagedEnvironment::encode(&path);
+        assert_eq!(link_name.to_str().unwrap(), &expected_link_name);
+        // Ensure that the link exists, checking that another one hasn't been created
+        ManagedEnvironment::ensure_reverse_link(&flox, &path).unwrap();
+        assert_eq!(links_dir.read_dir().unwrap().count(), 1);
+        let link_name = links_dir
+            .read_dir()
+            .unwrap()
+            .next()
+            .unwrap()
+            .unwrap()
+            .file_name();
+        assert_eq!(link_name.to_str().unwrap(), &expected_link_name);
     }
 }
