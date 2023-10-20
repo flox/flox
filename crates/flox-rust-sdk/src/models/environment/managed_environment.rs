@@ -351,7 +351,7 @@ fn branch_name(system: &str, pointer: &ManagedPointer, dot_flox_path: impl AsRef
 }
 
 pub fn remote_branch_name(system: &str, pointer: &ManagedPointer) -> String {
-    format!("{}.{}", system, pointer.owner)
+    format!("{}.{}", system, pointer.name)
 }
 
 #[cfg(test)]

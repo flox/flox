@@ -1,7 +1,8 @@
 [workspace]
 members = ["crates/*"]
-
 default-members = ["crates/flox"]
+
+resolver = "2"
 
 [workspace.dependencies]
 anyhow = "1"
