@@ -128,16 +128,15 @@
     },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1685566663,
-        "narHash": "sha256-btHN1czJ6rzteeCuE/PNrdssqYD2nIA4w48miQAFloM=",
+        "lastModified": 1691697597,
+        "narHash": "sha256-ceZ8kndUbs9S1mpB+8DyegukCz4cl+VvVphctdG+RSQ=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "4ecab3273592f27479a583fb6d975d4aba3486fe",
+        "rev": "8a584ba59f5934de6abf8ccf71508145c505e280",
         "type": "github"
       },
       "original": {
         "owner": "NixOS",
-        "ref": "23.05",
         "repo": "nixpkgs",
         "type": "github"
       }
@@ -154,21 +153,6 @@
       "original": {
         "owner": "NixOS",
         "ref": "nixos-23.05",
-        "repo": "nixpkgs",
-        "type": "github"
-      }
-    },
-    "nixpkgs_2": {
-      "locked": {
-        "lastModified": 1691697597,
-        "narHash": "sha256-ceZ8kndUbs9S1mpB+8DyegukCz4cl+VvVphctdG+RSQ=",
-        "owner": "NixOS",
-        "repo": "nixpkgs",
-        "rev": "8a584ba59f5934de6abf8ccf71508145c505e280",
-        "type": "github"
-      },
-      "original": {
-        "owner": "NixOS",
         "repo": "nixpkgs",
         "type": "github"
       }
@@ -198,7 +182,7 @@
       "inputs": {
         "argparse": "argparse",
         "floco": "floco",
-        "nixpkgs": "nixpkgs_2",
+        "nixpkgs": "nixpkgs",
         "sqlite3pp": "sqlite3pp"
       },
       "locked": {
@@ -222,7 +206,10 @@
           "pkgdb",
           "floco"
         ],
-        "nixpkgs": "nixpkgs",
+        "nixpkgs": [
+          "pkgdb",
+          "nixpkgs"
+        ],
         "parser-util": "parser-util",
         "pkgdb": "pkgdb",
         "shellHooks": "shellHooks"
