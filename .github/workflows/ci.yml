@@ -85,8 +85,8 @@ jobs:
 
     # These cannot be run offline so we need to build in our tree.
     # This just builds the `flox' deps so that they can get cached.
-    - name: Build Rust Env
-      run: nix develop '.#rust-env' --no-update-lock-file -c true;
+    - name: Build Development Env
+      run: nix develop '.#flox' --no-update-lock-file -c true;
 
     - name: Build flox
       run: |
