@@ -4,10 +4,10 @@
 #
 # ---------------------------------------------------------------------------- #
 {
-  inputs.nixpkgs.url = "github:NixOS/nixpkgs/23.05";
-
   # Do not override `nixpkgs` input
   inputs.pkgdb.url = "github:flox/pkgdb";
+
+  inputs.nixpkgs.follows = "/pkgdb/nixpkgs";
 
   inputs.floco.follows = "/pkgdb/floco";
   inputs.floco.inputs.nixpkgs.follows = "/nixpkgs";
