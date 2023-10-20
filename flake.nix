@@ -141,13 +141,6 @@
       inherit flox;
       default = flox;
       ci = pkgsFor.callPackage ./shells/ci {};
-      # Legacy alias
-      rust-env = let
-        msg =
-          "XXX: `devShells.rust-env' is deprecated, use the "
-          + "`devShells.flox' or the default.";
-      in
-        builtins.trace msg flox;
     });
   };
 }
