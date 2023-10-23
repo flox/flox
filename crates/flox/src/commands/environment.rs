@@ -64,9 +64,13 @@ impl EnvironmentSelect {
     fn to_concrete_environment(&self, flox: &Flox) -> Result<ConcreteEnvironment> {
         let env = match self {
             EnvironmentSelect::Dir(path) => match EnvironmentPointer::open(path)? {
-                EnvironmentPointer::Path(_path_pointer) => {
+                EnvironmentPointer::Path(path_pointer) => {
                     let dot_flox_path = path.join(DOT_FLOX);
-                    ConcreteEnvironment::Path(PathEnvironment::open(dot_flox_path, &flox.temp_dir)?)
+                    ConcreteEnvironment::Path(PathEnvironment::open(
+                        path_pointer,
+                        dot_flox_path,
+                        &flox.temp_dir,
+                    )?)
                 },
                 EnvironmentPointer::Managed(managed_pointer) => ConcreteEnvironment::Managed(
                     ManagedEnvironment::open(flox, managed_pointer, path)?,
@@ -329,7 +333,11 @@ impl Init {
                 .parse()?
         };
 
-        let env = PathEnvironment::<Original>::init(&current_dir, name, flox.temp_dir.clone())?;
+        let env = PathEnvironment::<Original>::init(
+            PathPointer::new(name),
+            &current_dir,
+            flox.temp_dir.clone(),
+        )?;
 
         println!(
             indoc::indoc! {"

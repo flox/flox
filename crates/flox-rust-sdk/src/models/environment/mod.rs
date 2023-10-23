@@ -230,6 +230,10 @@ pub enum EnvironmentError2 {
     CopyFile(IoError),
     #[error("Failed parsing contents of env.json file: {0}")]
     ParseEnvJson(serde_json::Error),
+    #[error("Failed serializing contents of env.json file: {0}")]
+    SerializeEnvJson(serde_json::Error),
+    #[error("Failed write env.json file: {0}")]
+    WriteEnvJson(std::io::Error),
     #[error(transparent)]
     ManagedEnvironment(#[from] ManagedEnvironmentError),
 }
