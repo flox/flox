@@ -51,7 +51,7 @@ EOF
   pushd "$PROJECT_DIR" >/dev/null || return;
 
   "$FLOX_CLI" init
-  export MANIFEST_PATH="$PROJECT_DIR/.flox/test/pkgs/default/flox.nix";
+  export MANIFEST_PATH="$PROJECT_DIR/.flox/env/pkgs/default/flox.nix";
   echo "$ORIGINAL_MANIFEST_CONTENTS" > "$MANIFEST_PATH";
   export EXTERNAL_MANIFEST_PATH="$PROJECT_DIR/input.nix";
   echo "$NEW_MANIFEST_CONTENTS" > "$EXTERNAL_MANIFEST_PATH";
