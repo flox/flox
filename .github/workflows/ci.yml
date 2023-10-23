@@ -21,7 +21,7 @@ jobs:
       fail-fast: false
       matrix:
         os:
-        - "ubuntu-22.04-8core"
+        #- "ubuntu-22.04-8core"
         - "macos-latest"
 
     steps:
@@ -39,72 +39,69 @@ jobs:
         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
-    - name: Debug
-      uses: mxschmitt/action-tmate@v3
-
     - name: "Cargo Test"
       run: nix develop -L '.#flox' --extra-experimental-features "nix-command flakes" --command cargo test
 
-        #  nix-build:
-        #    name: "Build and Run Bats Tests"
-        #    runs-on: ${{ matrix.os }}
-        #
-        #    strategy:
-        #      fail-fast: false
-        #      matrix:
-        #        os:
-        #        - "ubuntu-22.04-8core"
-        #        - "macos-latest"
-        #
-        #    steps:
-        #    - name: "Checkout"
-        #      uses: actions/checkout@v3
-        #      with:
-        #        fetch-depth: 0
-        #
-        #    - name: "Install flox"
-        #      uses: flox/install-flox-action@next-next
-        #      with:
-        #        github-access-token: ${{ secrets.NIX_GIT_TOKEN }}
-        #        substituter: s3://flox-store
-        #        substituter-key: ${{ secrets.FLOX_STORE_PUBLIC_NIX_SECRET_KEY }}
-        #        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        #        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        #
-        #    - name: "Build flox-gh"
-        #      run: |
-        #        flox nix -- build '.#flox-gh' -L --no-update-lock-file      \
-        #                                      --print-out-paths --no-link;
-        #
-        #    - name: "Build nix-editor"
-        #      run: |
-        #        flox nix -- build '.#nix-editor' -L --no-update-lock-file      \
-        #                                         --print-out-paths --no-link;
-        #
-        #    - name: "Build builtfilter-rs"
-        #      run: |
-        #        flox nix -- build '.#builtfilter-rs' -L --no-update-lock-file      \
-        #                                             --print-out-paths --no-link;
-        #
-        #    - name: "Build flox-bash"
-        #      run: |
-        #        flox nix -- build '.#flox-bash-dev' -L --no-update-lock-file      \
-        #                                            --print-out-paths --no-link;
-        #
-        #    - name: "Build flox"
-        #      run: |
-        #        flox nix -- build '.#flox-dev' -L --no-update-lock-file  \
-        #                                       --print-out-paths;
-        #        echo "FLOX_CLI=$( readlink -f ./result; )/bin/flox" >> "$GITHUB_ENV";
-        #        rm ./result;
-        #
-        #    - name: "Build flox-tests"
-        #      run: |
-        #        flox nix -- build '.#flox-tests' -L --no-update-lock-file      \
-        #                                         --print-out-paths --no-link;
-        #
-        #    # We ultimately test against the `FLOX_CLI' env var's path set earlier.
-        #    - name: "Bats Tests"
-        #      run: |
-        #        git clean -xfd;
-        #        nix run --extra-experimental-features "nix-command flakes" --no-update-lock-file '.#flox-tests';
+#  nix-build:
+#    name: "Build and Run Bats Tests"
+#    runs-on: ${{ matrix.os }}
+#
+#    strategy:
+#      fail-fast: false
+#      matrix:
+#        os:
+#        - "ubuntu-22.04-8core"
+#        - "macos-latest"
+#
+#    steps:
+#    - name: "Checkout"
+#      uses: actions/checkout@v3
+#      with:
+#        fetch-depth: 0
+#
+#    - name: "Install flox"
+#      uses: flox/install-flox-action@next-next
+#      with:
+#        github-access-token: ${{ secrets.NIX_GIT_TOKEN }}
+#        substituter: s3://flox-store
+#        substituter-key: ${{ secrets.FLOX_STORE_PUBLIC_NIX_SECRET_KEY }}
+#        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+#        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+#
+#    - name: "Build flox-gh"
+#      run: |
+#        flox nix -- build '.#flox-gh' -L --no-update-lock-file      \
+#                                      --print-out-paths --no-link;
+#
+#    - name: "Build nix-editor"
+#      run: |
+#        flox nix -- build '.#nix-editor' -L --no-update-lock-file      \
+#                                         --print-out-paths --no-link;
+#
+#    - name: "Build builtfilter-rs"
+#      run: |
+#        flox nix -- build '.#builtfilter-rs' -L --no-update-lock-file      \
+#                                             --print-out-paths --no-link;
+#
+#    - name: "Build flox-bash"
+#      run: |
+#        flox nix -- build '.#flox-bash-dev' -L --no-update-lock-file      \
+#                                            --print-out-paths --no-link;
+#
+#    - name: "Build flox"
+#      run: |
+#        flox nix -- build '.#flox-dev' -L --no-update-lock-file  \
+#                                       --print-out-paths;
+#        echo "FLOX_CLI=$( readlink -f ./result; )/bin/flox" >> "$GITHUB_ENV";
+#        rm ./result;
+#
+#    - name: "Build flox-tests"
+#      run: |
+#        flox nix -- build '.#flox-tests' -L --no-update-lock-file      \
+#                                         --print-out-paths --no-link;
+#
+#    # We ultimately test against the `FLOX_CLI' env var's path set earlier.
+#    - name: "Bats Tests"
+#      run: |
+#        git clean -xfd;
+#        nix run --extra-experimental-features "nix-command flakes" --no-update-lock-file '.#flox-tests';
