@@ -1,3 +1,4 @@
+mod auth;
 mod channel;
 mod environment;
 mod general;
@@ -490,7 +491,7 @@ enum InternalCommands {
     Auth(#[bpaf(external(general::auth))] general::Auth),
     ///Auth2
     #[bpaf(command)]
-    Auth2(#[bpaf(external(general::auth2))] general::Auth2),
+    Auth2(#[bpaf(external(auth::auth2))] auth::Auth2),
 }
 
 impl InternalCommands {

@@ -47,6 +47,8 @@ fslock.workspace = true
 pathdiff.workspace = true
 indexmap.workspace = true
 url.workspace = true
+openssl.workspace = true
+chrono.workspace = true
 
 [dev-dependencies]
 temp-env = "0.3.2"
