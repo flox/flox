@@ -120,10 +120,20 @@ pub enum EnvironmentPointer {
     Path(PathPointer),
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct PathPointer {
     pub name: EnvironmentName,
     version: Version<1>,
+}
+
+impl PathPointer {
+    /// Create a new [PathPointer] with the given name.
+    pub fn new(name: EnvironmentName) -> Self {
+        Self {
+            name,
+            version: Version::<1>,
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
