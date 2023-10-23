@@ -374,35 +374,35 @@ mod test {
     });
 
     fn create_dot_flox(
-        dot_flox_path: &PathBuf,
+        dot_flox_path: &Path,
         pointer: &ManagedPointer,
         lock: Option<&GenerationLock>,
     ) {
-        fs::create_dir(&dot_flox_path).unwrap();
+        fs::create_dir(dot_flox_path).unwrap();
         let pointer_path = dot_flox_path.join(ENVIRONMENT_POINTER_FILENAME);
         fs::write(
-            &pointer_path,
+            pointer_path,
             serde_json::to_string_pretty(&pointer).unwrap(),
         )
         .unwrap();
         if let Some(lock) = lock {
             let lock_path = dot_flox_path.join(GENERATION_LOCK_FILENAME);
-            fs::write(&lock_path, serde_json::to_string_pretty(lock).unwrap()).unwrap();
+            fs::write(lock_path, serde_json::to_string_pretty(lock).unwrap()).unwrap();
         }
     }
 
-    async fn create_floxmeta(flox: &Flox, remote_path: &PathBuf, branch: &str) -> FloxmetaV2 {
-        let user_floxmeta_dir = floxmeta_dir(&flox, &TEST_POINTER.owner);
+    async fn create_floxmeta(flox: &Flox, remote_path: &Path, branch: &str) -> FloxmetaV2 {
+        let user_floxmeta_dir = floxmeta_dir(flox, &TEST_POINTER.owner);
         fs::create_dir_all(&user_floxmeta_dir).unwrap();
         GitCommandProvider::clone_branch(
             format!("file://{}", remote_path.to_string_lossy()),
             user_floxmeta_dir,
-            &branch,
+            branch,
             true,
         )
         .unwrap();
 
-        FloxmetaV2::open(&flox, &TEST_POINTER).unwrap()
+        FloxmetaV2::open(flox, &TEST_POINTER).unwrap()
     }
 
     /// Test that when ensure_locked has input state of:
@@ -440,7 +440,7 @@ mod test {
         ManagedEnvironment::ensure_locked(&flox, &TEST_POINTER, &dot_flox_path, &floxmeta).unwrap();
 
         let lock_path = dot_flox_path.join(GENERATION_LOCK_FILENAME);
-        let lock: GenerationLock = serde_json::from_slice(&fs::read(&lock_path).unwrap()).unwrap();
+        let lock: GenerationLock = serde_json::from_slice(&fs::read(lock_path).unwrap()).unwrap();
         assert_eq!(lock, GenerationLock {
             rev: hash_2.clone(),
             local_rev: None,
@@ -487,7 +487,7 @@ mod test {
         ManagedEnvironment::ensure_locked(&flox, &TEST_POINTER, &dot_flox_path, &floxmeta).unwrap();
 
         let lock_path = dot_flox_path.join(GENERATION_LOCK_FILENAME);
-        let lock: GenerationLock = serde_json::from_slice(&fs::read(&lock_path).unwrap()).unwrap();
+        let lock: GenerationLock = serde_json::from_slice(&fs::read(lock_path).unwrap()).unwrap();
         assert_eq!(lock, GenerationLock {
             rev: hash_1.clone(),
             local_rev: None,
@@ -541,7 +541,7 @@ mod test {
         ManagedEnvironment::ensure_locked(&flox, &TEST_POINTER, &dot_flox_path, &floxmeta).unwrap();
 
         let lock_path = dot_flox_path.join(GENERATION_LOCK_FILENAME);
-        let lock: GenerationLock = serde_json::from_slice(&fs::read(&lock_path).unwrap()).unwrap();
+        let lock: GenerationLock = serde_json::from_slice(&fs::read(lock_path).unwrap()).unwrap();
         assert_eq!(lock, GenerationLock {
             rev: hash_2.clone(),
             local_rev: None,
@@ -682,7 +682,7 @@ mod test {
 
         assert_eq!(
             lock,
-            serde_json::from_slice(&fs::read(&lock_path).unwrap()).unwrap()
+            serde_json::from_slice(&fs::read(lock_path).unwrap()).unwrap()
         );
 
         assert_eq!(floxmeta.git.branch_hash(&branch).unwrap(), hash_1);
