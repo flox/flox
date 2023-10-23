@@ -110,6 +110,9 @@ pub trait Environment {
     }
 }
 
+/// A pointer to an environment, either managed or path.
+/// This is used to determine the type of an environment at a given path.
+/// See [EnvironmentPointer::open].
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 #[serde(untagged)]
 pub enum EnvironmentPointer {
