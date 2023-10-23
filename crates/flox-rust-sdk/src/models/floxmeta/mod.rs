@@ -496,7 +496,7 @@ pub(super) mod floxmeta_tests {
 
         let floxmeta = Floxmeta::<ReadOnly>::get_floxmeta(&flox, "someone").await;
 
-        assert!(matches!(floxmeta, Err(_)));
+        assert!(floxmeta.is_err());
     }
 
     #[tokio::test]
