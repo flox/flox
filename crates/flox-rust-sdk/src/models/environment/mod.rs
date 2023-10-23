@@ -122,7 +122,7 @@ pub enum EnvironmentPointer {
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct PathPointer {
-    name: EnvironmentName,
+    pub name: EnvironmentName,
     version: Version<1>,
 }
 

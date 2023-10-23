@@ -9,7 +9,14 @@ use flox_rust_sdk::flox::{EnvironmentName, Flox};
 use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironment;
 use flox_rust_sdk::models::environment::path_environment::{Original, PathEnvironment};
 use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironment;
-use flox_rust_sdk::models::environment::{Environment, EnvironmentPointer, DOT_FLOX};
+use flox_rust_sdk::models::environment::{
+    Environment,
+    EnvironmentError2,
+    EnvironmentPointer,
+    ManagedPointer,
+    PathPointer,
+    DOT_FLOX,
+};
 use flox_rust_sdk::models::environment_ref;
 use flox_rust_sdk::nix::arguments::eval::EvaluationArgs;
 use flox_rust_sdk::nix::command::{Shell, StoreGc};
@@ -407,16 +414,21 @@ impl List {
 #[derive(Bpaf, Clone)]
 pub struct Envs {}
 impl Envs {
-    pub async fn handle(self, flox: Flox) -> Result<()> {
+    /// List all available environments
+    /// Currently at most one (in the current directory).
+    /// This methods is to be changed or removed eventually.
+    pub async fn handle(self, _flox: Flox) -> Result<()> {
         subcommand_metric!("envs");
 
-        let env =
-            PathEnvironment::<Original>::discover(std::env::current_dir().unwrap(), flox.temp_dir)?;
+        let env = EnvironmentPointer::open(std::env::current_dir().unwrap());
 
-        if let Some(env) = env {
-            println!("{}", env.environment_ref());
-        } else {
-            println!();
+        match env {
+            Ok(EnvironmentPointer::Path(PathPointer { name, .. })) => println!("{name}"),
+            Ok(EnvironmentPointer::Managed(ManagedPointer { name, owner, .. })) => {
+                println!("{owner}/{name}",)
+            },
+            Err(EnvironmentError2::DirectoryNotAnEnv) => println!(),
+            Err(e) => bail!(e),
         }
         Ok(())
     }
