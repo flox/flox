@@ -164,7 +164,7 @@ These cover code authored in Rust, but does not explicitly cover code authored
 in `<flox>/flox-bash/`.
 
 ```console
-$ flox develop flox --command 'cargo test';
+$ nix develop --command 'cargo test';
 ```
 
 ### Integration tests
@@ -174,10 +174,9 @@ They are located in the `<flox>/tests` folder.
 To run them:
 
 ```console
-$ flox develop flox --command 'cargo build';
-$ flox run '.#flox-tests' -- -- --flox ./target/debug/flox;
+$ nix develop --command 'cargo build';
+$ nix run '.#flox-tests' -- --flox ./target/debug/flox;
 ```
-The first `--` separates the `flox run` command from any arguments you'd like to supply to `nix run`.
 The second `--` separates the `nix run` arguments from arguments supplied to the `flox-tests` script defined in `pkgs/flox-tests/default.nix`.
 The `--flox` flag specifies which `flox` executable to use as by default `flox` will be picked from the environment.
 A third `--` can be used to pass arguments to `bats`.
@@ -190,8 +189,8 @@ When working on the test you would probably want to run them continuously on
 every change. In that case run the following:
 
 ```console
-$ flox develop flox --command 'cargo build';
-$ flox run '.#flox-tests' -- -- --flox ./target/debug/flox --watch;
+$ nix develop --command 'cargo build';
+$ nix run '.#flox-tests' -- --flox ./target/debug/flox --watch;
 ```
 
 #### `bats` arguments
@@ -201,9 +200,8 @@ Failing to wrap will cause `flox` to "consume" the `--` rather than pass it
 through to the inner command:
 
 ```console
-$ flox develop flox --command 'cargo build';
-$ flox run '.#flox-tests' -- -- \
-  --flox ./target/debug/flox -- -j 4;
+$ nix develop --command 'cargo build';
+$ nix run '.#flox-tests' -- --flox ./target/debug/flox -- -j 4;
 ```
 This example tells `bats` to run 4 jobs in parallel.
 
@@ -212,16 +210,14 @@ You can specify which tests to run by passing arguments to either `flox-tests` o
 
 In order to run a specific test file, pass the path to the file to `flox-tests`:
 ```console
-$ flox run '.#flox-tests' -- -- \
---flox ./target/debug/flox ./tests/run.bats
+$ nix run '.#flox-tests' -- --flox ./target/debug/flox ./tests/run.bats;
 ```
 This example will only run tests in the `tests/run.bats` file.
 
 In order to run tests with a specific tag, you'll pass the `--filter-tags` option to `bats`:
 ```console
-$ flox run '.#flox-tests' -- -- \
---flox ./target/debug/flox -- \
---filter-tags activate
+$ nix run '.#flox-tests' -- --flox ./target/debug/flox  \
+                         -- --filter-tags activate;
 ```
 This example will only run tests tagged with `activate`.
 You can use boolean logic and specify the flag multiple times to run specific subsets of tests.

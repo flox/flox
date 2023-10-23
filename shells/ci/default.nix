@@ -1,12 +1,14 @@
 {
   mkShell,
-  self,
   commitizen,
+  cargo,
+  rustc,
 }:
 mkShell {
   inputsFrom = [];
   packages = [
     commitizen
-    self.packages.flox.passthru.rustPlatform.rust.cargo
+    cargo
+    rustc
   ];
 }

@@ -1,26 +1,28 @@
 {
-  mkShell,
-  self,
-  rustfmt,
   clippy,
+  commitizen,
+  flox,
+  flox-bash,
+  hivemind,
+  just,
+  mkShell,
+  pre-commit-check,
+  rust,
   rust-analyzer,
   rustPlatform,
   rustc,
-  rust,
-  hivemind,
-  commitizen,
-  just,
+  rustfmt,
 }:
 mkShell ({
     inputsFrom = [
-      self.packages.flox-dev
-      self.packages.flox-bash-dev
+      flox
+      flox-bash
     ];
-    RUST_SRC_PATH = self.packages.flox.passthru.rustPlatform.rustLibSrc.outPath;
-    RUSTFMT = "${self.checks.pre-commit-check.passthru.rustfmt}/bin/rustfmt";
+    RUST_SRC_PATH = rustPlatform.rustLibSrc.outPath;
+    RUSTFMT = "${rustfmt}/bin/rustfmt";
     packages = [
       commitizen
-      self.checks.pre-commit-check.passthru.rustfmt
+      rustfmt
       hivemind
       clippy
       rust-analyzer
@@ -28,6 +30,6 @@ mkShell ({
       rustc
       just
     ];
-    inherit (self.checks.pre-commit-check) shellHook;
+    inherit (pre-commit-check) shellHook;
   }
-  // self.packages.flox.envs)
+  // flox.envs)

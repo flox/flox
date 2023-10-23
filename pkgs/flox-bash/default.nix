@@ -1,8 +1,6 @@
 {
-  self,
   flox-src,
   inputs,
-  capacitated,
   stdenv,
   ansifilter,
   bashInteractive,
@@ -34,7 +32,6 @@
   pandoc,
   parser-util,
   ps,
-  pkgs,
   shellcheck,
   shfmt,
   substituteAll,
@@ -42,10 +39,14 @@
   which,
   semver,
   builtfilter-rs,
+  floxVersion,
+  flox-pkgdb,
+  unixtools,
+  cacert,
+  glibcLocales,
+  darwin,
 }: let
   pkgdb = inputs.pkgdb.packages.flox-pkgdb;
-  # The getent package can be found in pkgs.unixtools.
-  inherit (pkgs.unixtools) getent;
 
   nixPatched = nixVersions.nix_2_15.overrideAttrs (oldAttrs: {
     patches =
@@ -66,16 +67,16 @@
       (builtins.readFile ./activate.bash)
       + (builtins.readFile ./activate.darwin.bash)
     );
-    inherit (pkgs) cacert;
-    inherit (pkgs.darwin) locale;
-    coreFoundation = pkgs.darwin.CF;
+    inherit cacert;
+    inherit (darwin) locale;
+    coreFoundation = darwin.CF;
   };
   floxActivateBashLinux = substituteAll {
     src = builtins.toFile "activate.bash" (
       (builtins.readFile ./activate.bash)
       + (builtins.readFile ./activate.linux.bash)
     );
-    inherit (pkgs) cacert glibcLocales;
+    inherit cacert glibcLocales;
   };
   floxActivateBash =
     if hostPlatform.isLinux
@@ -89,11 +90,8 @@
 in
   stdenv.mkDerivation rec {
     pname = "flox-bash";
-    version =
-      czToml.tool.commitizen.version
-      + "-"
-      + (inputs.flox-floxpkgs.lib.getRev self);
-    src = flox-src + "/flox-bash";
+    version = floxVersion;
+    src = builtins.path {path = flox-src + "/flox-bash";};
     nativeBuildInputs =
       [makeWrapper pandoc shellcheck shfmt which]
       # nix-provided expect not working on Darwin (#441)
@@ -108,7 +106,7 @@ in
       findutils
       flox-gh
       gawk
-      getent
+      unixtools.getent
       gitMinimal
       gh
       gnugrep
@@ -128,22 +126,22 @@ in
       semver
       builtfilter-rs
       parser-util
-      pkgdb
+      flox-pkgdb
     ];
     makeFlags =
       [
         "PREFIX=$(out)"
         "VERSION=${version}"
         "FLOXPATH=$(out)/libexec/flox:${lib.makeBinPath buildInputs}"
-        "NIXPKGS_CACERT_BUNDLE_CRT=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
+        "NIXPKGS_CACERT_BUNDLE_CRT=${cacert}/etc/ssl/certs/ca-bundle.crt"
         "FLOX_ACTIVATE_BASH=${floxActivateBash}"
       ]
       ++ lib.optionals hostPlatform.isLinux [
-        "LOCALE_ARCHIVE=${pkgs.glibcLocales}/lib/locale/locale-archive"
+        "LOCALE_ARCHIVE=${glibcLocales}/lib/locale/locale-archive"
       ]
       ++ lib.optionals hostPlatform.isDarwin [
-        "NIX_COREFOUNDATION_RPATH=${pkgs.darwin.CF}/Library/Frameworks"
-        "PATH_LOCALE=${pkgs.darwin.locale}/share/locale"
+        "NIX_COREFOUNDATION_RPATH=${darwin.CF}/Library/Frameworks"
+        "PATH_LOCALE=${darwin.locale}/share/locale"
       ];
 
     postInstall = ''
