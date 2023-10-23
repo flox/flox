@@ -173,13 +173,16 @@ impl ManagedEnvironment {
         Ok(format!("{:X}", hasher.finish()))
     }
 
-    /// Returns the path to an environment given the branch name in the floxmeta repository
+    /// Returns the path to an environment given the branch name in the floxmeta repository.
+    ///
+    /// Will only error if the symlink doesn't exist, the path the symlink points to doesn't
+    /// exist, or if the branch name is malformed.
     #[allow(unused)]
     fn decode(flox: &Flox, branch: &impl AsRef<str>) -> Result<PathBuf, ManagedEnvironmentError> {
         let branch_name = branch.as_ref();
         branch_name
             .split('.')
-            .next_back()
+            .nth(2)
             .map(|hash| {
                 let links_dir = reverse_links_dir(flox);
                 let link = links_dir.join(hash);
