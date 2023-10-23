@@ -131,6 +131,15 @@ pub struct ManagedPointer {
 }
 
 impl EnvironmentPointer {
+    /// The function attempts to open an environment at the specified path
+    /// by reading the contents of a file named .flox/[ENVIRONMENT_POINTER_FILENAME].
+    /// If the file is found and its contents can be deserialized,
+    /// the function returns an [EnvironmentPointer] containing information about the environment.
+    /// If reading or parsing the file fails, an [EnvironmentError2] is returned.
+    ///
+    /// Use this method to determine the type of an environment at a given path.
+    /// The result should be used to call the appropriate `open` method
+    /// on either [PathEnvironment] or [ManagedEnvironment].
     pub fn open(path: impl AsRef<Path>) -> Result<EnvironmentPointer, EnvironmentError2> {
         let dot_flox_path = path.as_ref().join(DOT_FLOX);
         let pointer_path = dot_flox_path.join(ENVIRONMENT_POINTER_FILENAME);
