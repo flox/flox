@@ -301,8 +301,9 @@ pub struct Init {
     #[bpaf(external(environment_args), group_help("Environment Options"))]
     environment_args: EnvironmentArgs,
 
-    #[bpaf(long, short, argument("ENV"), hide)]
-    environment: Option<EnvironmentRef>,
+    /// Directory to create the environment in (default: current directory)
+    #[bpaf(long, short, argument("path"))]
+    dir: Option<PathBuf>,
 
     /// Name of the environment
     ///
@@ -315,34 +316,23 @@ impl Init {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("init");
 
-        if self.environment.is_some() {
-            bail!(indoc::indoc! {"
-                '--environment', '-e' is deprecated.
-                Use '(--name | -n) <name>' to create a named env.
-                Use 'flox (push | pull)' to create or download an existing environment.
-            "});
-        }
+        let dir = self.dir.unwrap_or_else(|| std::env::current_dir().unwrap());
 
-        let current_dir = std::env::current_dir().unwrap();
         let home_dir = dirs::home_dir().unwrap();
 
         let name = if let Some(name) = self.name {
             name
-        } else if current_dir == home_dir {
+        } else if dir == home_dir {
             "default".parse()?
         } else {
-            current_dir
-                .file_name()
+            dir.file_name()
                 .map(|n| n.to_string_lossy().to_string())
                 .context("Can't init in root")?
                 .parse()?
         };
 
-        let env = PathEnvironment::<Original>::init(
-            PathPointer::new(name),
-            &current_dir,
-            flox.temp_dir.clone(),
-        )?;
+        let env =
+            PathEnvironment::<Original>::init(PathPointer::new(name), &dir, flox.temp_dir.clone())?;
 
         println!(
             indoc::indoc! {"
