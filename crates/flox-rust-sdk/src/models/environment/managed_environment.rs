@@ -196,6 +196,9 @@ impl ManagedEnvironment {
 
     /// Creates a symlink pointing from the `FloxMeta` back to the project environment
     /// using this managed environment if the symlink doesn't already exist.
+    ///
+    /// Iff an environment in `<path>` refers to a branch `<system>.<name>.<encode(path)>`
+    /// then `reverse_links_dir(_).join(encode(path))` is a link to <path>
     fn ensure_reverse_link(
         flox: &Flox,
         path: impl AsRef<Path>,
