@@ -1,4 +1,4 @@
-use std::hash::{Hash, Hasher};
+use std::os::unix::prelude::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::{fs, io};
 
@@ -163,14 +163,12 @@ impl Environment for ManagedEnvironment {
 impl ManagedEnvironment {
     /// Returns a unique identifier for the location of the project.
     fn encode(path: impl AsRef<Path>) -> Result<String, ManagedEnvironmentError> {
-        let mut hasher = std::collections::hash_map::DefaultHasher::new();
         let path =
             std::fs::canonicalize(&path).map_err(|e| ManagedEnvironmentError::Canonicalize {
                 path: path.as_ref().to_path_buf(),
                 err: e,
             })?;
-        path.as_path().hash(&mut hasher);
-        Ok(format!("{:X}", hasher.finish()))
+        Ok(format!("{}", blake3::hash(path.as_os_str().as_bytes())))
     }
 
     /// Returns the path to an environment given the branch name in the floxmeta repository.
