@@ -86,42 +86,6 @@ jobs:
         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
-    - name: "Build flox-gh"
-      run: |
-        nix build -L \
-            --extra-experimental-features "nix-command flakes" \
-            --no-update-lock-file \
-            --print-out-paths \
-            --no-link \
-            '.#flox-gh'
-
-    - name: "Build nix-editor"
-      run: |
-        nix build -L \
-            --extra-experimental-features "nix-command flakes" \
-            --no-update-lock-file \
-            --print-out-paths \
-            --no-link \
-            '.#nix-editor'
-
-    - name: "Build builtfilter-rs"
-      run: |
-        nix build -L \
-            --extra-experimental-features "nix-command flakes" \
-            --no-update-lock-file \
-            --print-out-paths \
-            --no-link \
-            '.#builtfilter-rs'
-
-    - name: "Build flox-bash"
-      run: |
-        nix build  -L \
-            --extra-experimental-features "nix-command flakes" \
-            --no-update-lock-file \
-            --print-out-paths \
-            --no-link \
-            '.#flox-bash'
-
     - name: "Build flox"
       run: |
         nix build '.#flox' -L \
