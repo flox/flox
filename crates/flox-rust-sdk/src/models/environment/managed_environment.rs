@@ -1,3 +1,4 @@
+use std::os::unix::prelude::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::{fs, io};
 
@@ -21,7 +22,7 @@ const GENERATION_LOCK_FILENAME: &str = "env.lock";
 
 #[derive(Debug)]
 pub struct ManagedEnvironment {
-    // typically `<...>/.flox`
+    /// Path to the directory containing `env.json`
     _path: PathBuf,
     _pointer: ManagedPointer,
     _system: String,
@@ -50,6 +51,18 @@ pub enum ManagedEnvironmentError {
     WriteLock(io::Error),
     #[error("couldn't serialize environment lockfile: {0}")]
     SerializeLock(serde_json::Error),
+    #[error("couldn't create symlink to project: {0}")]
+    ReverseLink(std::io::Error),
+    #[error("couldn't create links directory: {0}")]
+    CreateLinksDir(std::io::Error),
+    #[error("couldn't canonicalize path '{path}': {err}")]
+    Canonicalize { path: PathBuf, err: std::io::Error },
+    #[error("attempted to open the empty path ''")]
+    EmptyPath,
+    #[error("floxmeta branch name was malformed: {0}")]
+    BadBranchName(String),
+    #[error("project wasn't found at path {path}: {err}")]
+    ProjectNotFound { path: PathBuf, err: std::io::Error },
 }
 
 #[derive(Debug, Deserialize, PartialEq, Serialize)]
@@ -148,8 +161,61 @@ impl Environment for ManagedEnvironment {
 }
 
 impl ManagedEnvironment {
-    pub fn encode(pointer: &ManagedPointer, _path: impl AsRef<Path>) -> String {
-        format!("todo-{}", pointer.name)
+    /// Returns a unique identifier for the location of the project.
+    fn encode(path: impl AsRef<Path>) -> Result<String, ManagedEnvironmentError> {
+        let path =
+            std::fs::canonicalize(&path).map_err(|e| ManagedEnvironmentError::Canonicalize {
+                path: path.as_ref().to_path_buf(),
+                err: e,
+            })?;
+        Ok(format!("{}", blake3::hash(path.as_os_str().as_bytes())))
+    }
+
+    /// Returns the path to an environment given the branch name in the floxmeta repository.
+    ///
+    /// Will only error if the symlink doesn't exist, the path the symlink points to doesn't
+    /// exist, or if the branch name is malformed.
+    #[allow(unused)]
+    fn decode(flox: &Flox, branch: &impl AsRef<str>) -> Result<PathBuf, ManagedEnvironmentError> {
+        let branch_name = branch.as_ref();
+        branch_name
+            .split('.')
+            .nth(2)
+            .map(|hash| {
+                let links_dir = reverse_links_dir(flox);
+                let link = links_dir.join(hash);
+                std::fs::read_link(&link)
+                    .map_err(|e| ManagedEnvironmentError::ProjectNotFound { path: link, err: e })
+            })
+            .unwrap_or(Err(ManagedEnvironmentError::BadBranchName(String::from(
+                branch_name,
+            ))))
+    }
+
+    /// Creates a symlink pointing from the `FloxMeta` back to the project environment
+    /// using this managed environment if the symlink doesn't already exist.
+    ///
+    /// Iff an environment in `<path>` refers to a branch `<system>.<name>.<encode(path)>`
+    /// then `reverse_links_dir(_).join(encode(path))` is a link to <path>
+    fn ensure_reverse_link(
+        flox: &Flox,
+        path: impl AsRef<Path>,
+    ) -> Result<(), ManagedEnvironmentError> {
+        let links_dir = reverse_links_dir(flox);
+        let encoded = ManagedEnvironment::encode(&path)?;
+        let link = links_dir.join(encoded);
+        if !links_dir.exists() {
+            std::fs::create_dir_all(&links_dir).map_err(ManagedEnvironmentError::CreateLinksDir)?;
+            std::os::unix::fs::symlink(path, link).map_err(ManagedEnvironmentError::ReverseLink)?;
+        } else {
+            // Do not use `Path.exists` to check whether the link exists. It will return `false` if
+            // the symlink is broken or if you can't read the file metadata due to permissions errors.
+            if !link.is_symlink() {
+                std::os::unix::fs::symlink(path, link)
+                    .map_err(ManagedEnvironmentError::ReverseLink)?;
+            }
+        }
+        Ok(())
     }
 
     /// Open a managed environment by reading its lockfile and ensuring there is
@@ -186,10 +252,11 @@ impl ManagedEnvironment {
 
         let lock = Self::ensure_locked(flox, &pointer, &dot_flox_path, &floxmeta)?;
         Self::ensure_branch(
-            &branch_name(&flox.system, &pointer, &dot_flox_path),
+            &branch_name(&flox.system, &pointer, &dot_flox_path)?,
             &lock,
             &floxmeta,
         )?;
+        ManagedEnvironment::ensure_reverse_link(flox, &dot_flox_path)?;
 
         Ok(ManagedEnvironment {
             _path: dot_flox_path.as_ref().to_path_buf(),
@@ -341,22 +408,40 @@ impl ManagedEnvironment {
     }
 }
 
-fn branch_name(system: &str, pointer: &ManagedPointer, dot_flox_path: impl AsRef<Path>) -> String {
-    format!(
+fn branch_name(
+    system: &str,
+    pointer: &ManagedPointer,
+    dot_flox_path: impl AsRef<Path>,
+) -> Result<String, ManagedEnvironmentError> {
+    Ok(format!(
         "{}.{}.{}",
         system,
         pointer.name,
-        ManagedEnvironment::encode(pointer, dot_flox_path)
-    )
+        ManagedEnvironment::encode(dot_flox_path)?
+    ))
 }
 
+/// The original branch name of an environment that is used to sync an environment with the hub
 pub fn remote_branch_name(system: &str, pointer: &ManagedPointer) -> String {
     format!("{}.{}", system, pointer.name)
+}
+
+/// Path to the directory that contains symlinks
+/// that map unique branch ids to
+/// the directories linking to the environment.
+///
+/// see also: [ManagedEnvironment::encode],
+///           [ManagedEnvironment::decode],
+///           [ManagedEnvironment::ensure_reverse_link],
+///           [branch_name]
+fn reverse_links_dir(flox: &Flox) -> PathBuf {
+    flox.data_dir.join("links")
 }
 
 #[cfg(test)]
 mod test {
     use std::str::FromStr;
+    use std::time::Duration;
 
     use once_cell::sync::Lazy;
 
@@ -391,7 +476,7 @@ mod test {
         }
     }
 
-    async fn create_floxmeta(flox: &Flox, remote_path: &Path, branch: &str) -> FloxmetaV2 {
+    fn create_floxmeta(flox: &Flox, remote_path: &Path, branch: &str) -> FloxmetaV2 {
         let user_floxmeta_dir = floxmeta_dir(flox, &TEST_POINTER.owner);
         fs::create_dir_all(&user_floxmeta_dir).unwrap();
         GitCommandProvider::clone_branch(
@@ -427,7 +512,7 @@ mod test {
         commit_file(&remote, "file 1").await;
 
         // create a mock floxmeta
-        let floxmeta = create_floxmeta(&flox, &remote_path, &branch).await;
+        let floxmeta = create_floxmeta(&flox, &remote_path, &branch);
 
         // add a second commit to the remote
         commit_file(&remote, "file 2").await;
@@ -473,7 +558,7 @@ mod test {
         let hash_1 = remote.branch_hash(&branch).unwrap();
 
         // create a mock floxmeta
-        let floxmeta = create_floxmeta(&flox, &remote_path, &branch).await;
+        let floxmeta = create_floxmeta(&flox, &remote_path, &branch);
 
         // create a .flox directory
         let lock = GenerationLock {
@@ -519,7 +604,7 @@ mod test {
         commit_file(&remote, "file 1").await;
 
         // create a mock floxmeta
-        let floxmeta = create_floxmeta(&flox, &remote_path, &branch).await;
+        let floxmeta = create_floxmeta(&flox, &remote_path, &branch);
 
         // add a second commit to the remote
         commit_file(&remote, "file 2").await;
@@ -573,7 +658,7 @@ mod test {
         commit_file(&remote, "file 1").await;
 
         // create a mock floxmeta
-        let floxmeta = create_floxmeta(&flox, &remote_path, &branch).await;
+        let floxmeta = create_floxmeta(&flox, &remote_path, &branch);
 
         // add a second branch to the remote
         remote.checkout("branch_2", true).await.unwrap();
@@ -618,7 +703,7 @@ mod test {
         commit_file(&remote, "file 1").await;
 
         // create a mock floxmeta
-        let floxmeta = create_floxmeta(&flox, &remote_path, &branch).await;
+        let floxmeta = create_floxmeta(&flox, &remote_path, &branch);
 
         // add a second commit to the remote
         commit_file(&remote, "file 2").await;
@@ -665,7 +750,7 @@ mod test {
         let hash_1 = remote.branch_hash(&branch).unwrap();
 
         // create a mock floxmeta
-        let floxmeta = create_floxmeta(&flox, &remote_path, &branch).await;
+        let floxmeta = create_floxmeta(&flox, &remote_path, &branch);
 
         // create a .flox directory
         let dot_flox_path = flox.temp_dir.join(DOT_FLOX);
@@ -710,7 +795,7 @@ mod test {
         let hash_1 = remote.branch_hash(&branch).unwrap();
 
         // create a mock floxmeta
-        let floxmeta = create_floxmeta(&flox, &remote_path, &branch).await;
+        let floxmeta = create_floxmeta(&flox, &remote_path, &branch);
 
         // create a .flox directory
         let dot_flox_path = flox.temp_dir.join(DOT_FLOX);
@@ -748,7 +833,7 @@ mod test {
         let hash_1 = remote.branch_hash(&branch).unwrap();
 
         // create a mock floxmeta
-        let floxmeta = create_floxmeta(&flox, &remote_path, &branch).await;
+        let floxmeta = create_floxmeta(&flox, &remote_path, &branch);
 
         let lock = GenerationLock {
             rev: hash_1.clone(),
@@ -826,7 +911,7 @@ mod test {
         let hash_1 = remote.branch_hash(&branch).unwrap();
 
         // create a mock floxmeta
-        let floxmeta = create_floxmeta(&flox, &remote_path, &branch).await;
+        let floxmeta = create_floxmeta(&flox, &remote_path, &branch);
 
         let lock = GenerationLock {
             rev: hash_1.clone(),
@@ -835,5 +920,138 @@ mod test {
         };
         ManagedEnvironment::ensure_branch("branch_2", &lock, &floxmeta).unwrap();
         assert_eq!(floxmeta.git.branch_hash("branch_2").unwrap(), hash_1);
+    }
+
+    #[test]
+    fn stable_encode_name() {
+        // Ensure that running the encode function gives you the same results
+        // with the same input e.g. doesn't depend on time, etc
+        let (_flox, tmp_dir) = flox_instance();
+        let path = tmp_dir.path().join("foo");
+        std::fs::File::create(&path).unwrap();
+        let encode1 = ManagedEnvironment::encode(&path).unwrap();
+        std::thread::sleep(Duration::from_millis(1_000));
+        let encode2 = ManagedEnvironment::encode(&path).unwrap();
+        assert_eq!(encode1, encode2);
+    }
+
+    #[test]
+    fn canonicalized_paths_encode_the_same() {
+        let (_flox, tmp) = flox_instance();
+        // std::fs::canonicalize requires that the path being checked actually exists,
+        // so we're going to create a directory structure under a temporary directory.
+        let parent_dir = tmp.into_path();
+        let subdir = parent_dir.join("foo/bar/baz");
+        std::fs::create_dir_all(&subdir).unwrap();
+        let path = subdir.join("file.txt");
+        let _file = std::fs::File::create(&path).unwrap();
+        // Make sure the path is canonicalized internally before hashing
+        let canonicalized = std::fs::canonicalize(&path).unwrap();
+        let c_encoded = ManagedEnvironment::encode(canonicalized).unwrap();
+        let encoded = ManagedEnvironment::encode(&path).unwrap();
+        assert_eq!(
+            c_encoded, encoded,
+            "sane path is canonicalized before encoding"
+        );
+        // Now do the same thing with cursed paths
+        let up_down = path.parent().unwrap().join("../../bar/baz/file.txt");
+        let encoded = ManagedEnvironment::encode(up_down).unwrap();
+        assert_eq!(
+            c_encoded, encoded,
+            "cursed path is canonicalized before encoding"
+        );
+    }
+
+    #[test]
+    fn creates_reverse_links_dir() {
+        let (flox, tmp_dir) = flox_instance();
+        let path = tmp_dir.path().join("foo");
+        std::fs::File::create(&path).unwrap();
+        let links_dir = reverse_links_dir(&flox);
+        assert!(!links_dir.exists());
+        ManagedEnvironment::ensure_reverse_link(&flox, path).unwrap();
+        assert!(links_dir.exists());
+    }
+
+    #[test]
+    fn creates_reverse_link() {
+        let (flox, tmp_dir) = flox_instance();
+        let links_dir = reverse_links_dir(&flox);
+        let path = tmp_dir.path().join("foo");
+        std::fs::File::create(&path).unwrap();
+        // There are no links if the directory hasn't been created
+        assert!(!links_dir.exists());
+        // Create the reverse link
+        ManagedEnvironment::ensure_reverse_link(&flox, &path).unwrap();
+        // Ensure that only one symlink was created.
+        assert_eq!(links_dir.read_dir().unwrap().count(), 1);
+        let link_name = links_dir
+            .read_dir()
+            .unwrap()
+            .next()
+            .unwrap()
+            .unwrap()
+            .file_name();
+        let expected_link_name = ManagedEnvironment::encode(&path).unwrap();
+        assert_eq!(link_name.to_str().unwrap(), &expected_link_name);
+    }
+
+    #[test]
+    fn noop_when_symlink_exists() {
+        let (flox, tmp_dir) = flox_instance();
+        let links_dir = reverse_links_dir(&flox);
+        let path = tmp_dir.path().join("foo");
+        std::fs::File::create(&path).unwrap();
+        // There are no links if the directory hasn't been created
+        assert!(!links_dir.exists());
+        // Create the reverse link
+        ManagedEnvironment::ensure_reverse_link(&flox, &path).unwrap();
+        // Ensure that only one symlink was created.
+        assert_eq!(links_dir.read_dir().unwrap().count(), 1);
+        let link_name = links_dir
+            .read_dir()
+            .unwrap()
+            .next()
+            .unwrap()
+            .unwrap()
+            .file_name();
+        let expected_link_name = ManagedEnvironment::encode(&path).unwrap();
+        assert_eq!(link_name.to_str().unwrap(), &expected_link_name);
+        // Ensure that the link exists, checking that another one hasn't been created
+        ManagedEnvironment::ensure_reverse_link(&flox, &path).unwrap();
+        assert_eq!(links_dir.read_dir().unwrap().count(), 1);
+        let link_name = links_dir
+            .read_dir()
+            .unwrap()
+            .next()
+            .unwrap()
+            .unwrap()
+            .file_name();
+        assert_eq!(link_name.to_str().unwrap(), &expected_link_name);
+    }
+
+    #[test]
+    fn decode_branch_name_to_path() {
+        let (flox, tmp_dir) = flox_instance();
+        let links_dir = reverse_links_dir(&flox);
+        let path = tmp_dir.path().join("foo");
+        std::fs::File::create(&path).unwrap();
+        // There are no links if the directory hasn't been created
+        assert!(!links_dir.exists());
+        // Create the reverse link
+        ManagedEnvironment::ensure_reverse_link(&flox, &path).unwrap();
+        // Ensure that only one symlink was created.
+        assert_eq!(links_dir.read_dir().unwrap().count(), 1);
+        // Decode the branch name and assert that it's the same path we created before
+        let pointer = ManagedPointer {
+            owner: EnvironmentOwner::from_str("owner").unwrap(),
+            name: EnvironmentName::from_str("name").unwrap(),
+            version: Version::<1>,
+        };
+        let branch_name = branch_name(&flox.system, &pointer, &path).unwrap();
+        let decoded_path = ManagedEnvironment::decode(&flox, &branch_name).unwrap();
+        let canonicalized_decoded_path = std::fs::canonicalize(decoded_path).unwrap();
+        let canonicalized_path = std::fs::canonicalize(&path).unwrap();
+        assert_eq!(canonicalized_path, canonicalized_decoded_path);
     }
 }

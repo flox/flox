@@ -1,16 +1,9 @@
 use std::fmt::Display;
-use std::path::PathBuf;
 use std::str::FromStr;
 
 use derive_more::{AsRef, Deref, Display};
-use runix::installable::FlakeAttribute;
 use serde_with::{DeserializeFromStr, SerializeDisplay};
 use thiserror::Error;
-
-use super::environment::path_environment::{Original, PathEnvironment};
-use super::environment::{Environment, EnvironmentError2};
-use crate::flox::Flox;
-use crate::providers::git::GitProvider;
 
 pub static DEFAULT_NAME: &str = "default";
 pub static DEFAULT_OWNER: &str = "local";
@@ -87,62 +80,7 @@ pub enum EnvironmentRefError {
     InvalidOwner,
 }
 
-#[allow(unused)]
 impl EnvironmentRef {
-    /// Returns a list of all matches for a user specified environment
-    pub fn find(
-        flox: &Flox,
-        environment_name: Option<&str>,
-    ) -> Result<(Vec<EnvironmentRef>), EnvironmentError2> {
-        let discovered = PathEnvironment::<Original>::discover(
-            std::env::current_dir().unwrap(),
-            flox.temp_dir.clone(),
-        )?
-        .map(|env| env.environment_ref().clone());
-
-        let searched = environment_name
-            .map(|n| n.parse::<EnvironmentRef>())
-            .transpose()?;
-
-        let discovered = if let Some(env_ref) = searched {
-            discovered
-                .into_iter()
-                .filter(|discovered| {
-                    if env_ref.owner.is_some() {
-                        env_ref.owner == discovered.owner && env_ref.name == discovered.name
-                    } else {
-                        env_ref.name == discovered.name
-                            || Some(env_ref.name.as_ref()) == discovered.owner.as_deref()
-                    }
-                })
-                .collect()
-        } else {
-            discovered.into_iter().collect()
-        };
-
-        Ok(discovered)
-    }
-
-    // only used by some autocompletion logic
-    // TODO: remove?
-    pub async fn get_latest_flake_attribute<'flox, Git: GitProvider>(
-        &self,
-        flox: &'flox Flox,
-    ) -> Result<FlakeAttribute, EnvironmentError2> {
-        let env = self.to_env(flox.temp_dir.clone())?;
-        Ok(env.flake_attribute(&flox.system))
-    }
-
-    // only used by some autocompletion logic
-    // TODO: remove?
-    pub fn to_env(
-        &self,
-        temp_dir: PathBuf,
-    ) -> Result<PathEnvironment<Original>, EnvironmentError2> {
-        let env = PathEnvironment::<Original>::open(std::env::current_dir().unwrap(), temp_dir)?;
-        Ok(env)
-    }
-
     pub fn owner(&self) -> Option<&EnvironmentOwner> {
         self.owner.as_ref()
     }
