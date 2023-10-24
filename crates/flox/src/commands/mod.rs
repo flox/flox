@@ -11,7 +11,7 @@ use flox_rust_sdk::flox::{Flox, DEFAULT_OWNER, FLOX_VERSION};
 use flox_rust_sdk::models::floxmeta::{Floxmeta, GetFloxmetaError};
 use flox_rust_sdk::nix::command_line::NixCommandLine;
 use indoc::{formatdoc, indoc};
-use log::{debug, info};
+use log::{debug, info, warn};
 use once_cell::sync::Lazy;
 use tempfile::TempDir;
 use toml_edit::Key;
@@ -204,6 +204,8 @@ impl FloxArgs {
                 let _ = fs::remove_dir_all(&temp_dir_path);
             }
         });
+
+        check_deprecated_commands(self.command.as_ref().unwrap());
 
         // command handled above
         match self.command.unwrap() {
@@ -440,6 +442,43 @@ impl AdditionalCommands {
         }
         Ok(())
     }
+}
+
+#[allow(clippy::match_single_binding)]
+fn check_deprecated_commands(commands: &Commands) {
+    match commands {
+        Commands::Development(development_commands) => match development_commands {
+            _ => { /* none deprecated */ },
+        },
+        Commands::Sharing(sharing_commands) => match sharing_commands {
+            _ => { /* none deprecated */ },
+        },
+        Commands::Additional(additional_commands) => match additional_commands {
+            AdditionalCommands::Build(_) => deprecate_command("build"),
+            AdditionalCommands::Subscribe(_) => deprecate_command("subscribe"),
+            AdditionalCommands::Unsubscribe(_) => deprecate_command("unsubscribe"),
+            AdditionalCommands::Channels(_) => deprecate_command("channels"),
+            AdditionalCommands::PrintDevEnv(_) => deprecate_command("print-dev-env"),
+            AdditionalCommands::Shell(_) => deprecate_command("shell"),
+            _ => { /* not deprecated */ },
+        },
+        Commands::Internal(internal_commands) => match internal_commands {
+            InternalCommands::Bundle(_) => deprecate_command("bundle"),
+            InternalCommands::Flake(_) => deprecate_command("flake"),
+            InternalCommands::Eval(_) => deprecate_command("eval"),
+            InternalCommands::Develop(_) => deprecate_command("develop"),
+            InternalCommands::Publish(_) => deprecate_command("publish"),
+            InternalCommands::InitPackage(_) => deprecate_command("init-package"),
+            _ => { /* not deprecated */ },
+        },
+    }
+}
+
+fn deprecate_command(cmd: &str) {
+    warn!("----------------------------------------- deprecated command -----------------------------------------");
+    warn!("`flox {cmd}` is being deprecated and will be removed in the next release");
+    warn!("More information at: https://discourse.flox.dev/t/breaking-changes-in-flox-post-0-3-5-october-2023/813");
+    warn!("------------------------------------------------------------------------------------------------------");
 }
 
 #[derive(Clone)]
