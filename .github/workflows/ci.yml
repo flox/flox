@@ -112,7 +112,7 @@ jobs:
 
     - name: "Build flox"
       run: |
-        nix build '.#flox' -L 
+        nix build '.#flox' -L \
             --extra-experimental-features "nix-command flakes" \
             --no-update-lock-file \
             --print-out-paths \
