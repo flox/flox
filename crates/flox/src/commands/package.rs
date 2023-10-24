@@ -326,7 +326,7 @@ impl Publish {
             .ok_or_else(|| {
                 anyhow!(indoc! {"
                             Signing key is required!
-                            Provide using `--sign-key` or the `sign_key` config key
+                            Provide using `--signing-key` or the `signing_key` config key
                         "})
             })?;
 
