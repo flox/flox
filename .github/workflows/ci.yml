@@ -22,7 +22,7 @@ jobs:
       matrix:
         os:
         - "ubuntu-22.04-8core"
-        - "macos-13"
+        - "macos-latest"
 
     steps:
     - name: "Checkout"
