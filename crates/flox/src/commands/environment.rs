@@ -9,7 +9,14 @@ use flox_rust_sdk::flox::{EnvironmentName, Flox};
 use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironment;
 use flox_rust_sdk::models::environment::path_environment::{Original, PathEnvironment};
 use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironment;
-use flox_rust_sdk::models::environment::{Environment, EnvironmentPointer, DOT_FLOX};
+use flox_rust_sdk::models::environment::{
+    Environment,
+    EnvironmentError2,
+    EnvironmentPointer,
+    ManagedPointer,
+    PathPointer,
+    DOT_FLOX,
+};
 use flox_rust_sdk::models::environment_ref;
 use flox_rust_sdk::nix::arguments::eval::EvaluationArgs;
 use flox_rust_sdk::nix::command::{Shell, StoreGc};
@@ -56,14 +63,23 @@ impl Default for EnvironmentSelect {
 impl EnvironmentSelect {
     fn to_concrete_environment(&self, flox: &Flox) -> Result<ConcreteEnvironment> {
         let env = match self {
-            EnvironmentSelect::Dir(path) => match EnvironmentPointer::open(path)? {
-                EnvironmentPointer::Path(_path_pointer) => {
-                    let dot_flox_path = path.join(DOT_FLOX);
-                    ConcreteEnvironment::Path(PathEnvironment::open(dot_flox_path, &flox.temp_dir)?)
-                },
-                EnvironmentPointer::Managed(managed_pointer) => ConcreteEnvironment::Managed(
-                    ManagedEnvironment::open(flox, managed_pointer, path)?,
-                ),
+            EnvironmentSelect::Dir(path) => {
+                let pointer = EnvironmentPointer::open(path)
+                    .with_context(|| format!("No environment found in {path:?}"))?;
+
+                match pointer {
+                    EnvironmentPointer::Path(path_pointer) => {
+                        let dot_flox_path = path.join(DOT_FLOX);
+                        ConcreteEnvironment::Path(PathEnvironment::open(
+                            path_pointer,
+                            dot_flox_path,
+                            &flox.temp_dir,
+                        )?)
+                    },
+                    EnvironmentPointer::Managed(managed_pointer) => ConcreteEnvironment::Managed(
+                        ManagedEnvironment::open(flox, managed_pointer, path)?,
+                    ),
+                }
             },
             EnvironmentSelect::Remote(_) => todo!(),
         };
@@ -322,7 +338,11 @@ impl Init {
                 .parse()?
         };
 
-        let env = PathEnvironment::<Original>::init(&current_dir, name, flox.temp_dir.clone())?;
+        let env = PathEnvironment::<Original>::init(
+            PathPointer::new(name),
+            &current_dir,
+            flox.temp_dir.clone(),
+        )?;
 
         println!(
             indoc::indoc! {"
@@ -407,16 +427,21 @@ impl List {
 #[derive(Bpaf, Clone)]
 pub struct Envs {}
 impl Envs {
-    pub async fn handle(self, flox: Flox) -> Result<()> {
+    /// List all available environments
+    /// Currently at most one (in the current directory).
+    /// This methods is to be changed or removed eventually.
+    pub async fn handle(self, _flox: Flox) -> Result<()> {
         subcommand_metric!("envs");
 
-        let env =
-            PathEnvironment::<Original>::discover(std::env::current_dir().unwrap(), flox.temp_dir)?;
+        let env = EnvironmentPointer::open(std::env::current_dir().unwrap());
 
-        if let Some(env) = env {
-            println!("{}", env.environment_ref());
-        } else {
-            println!();
+        match env {
+            Ok(EnvironmentPointer::Path(PathPointer { name, .. })) => println!("{name}"),
+            Ok(EnvironmentPointer::Managed(ManagedPointer { name, owner, .. })) => {
+                println!("{owner}/{name}",)
+            },
+            Err(EnvironmentError2::EnvNotFound) => println!(),
+            Err(e) => bail!(e),
         }
         Ok(())
     }

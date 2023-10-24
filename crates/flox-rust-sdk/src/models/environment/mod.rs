@@ -110,6 +110,9 @@ pub trait Environment {
     }
 }
 
+/// A pointer to an environment, either managed or path.
+/// This is used to determine the type of an environment at a given path.
+/// See [EnvironmentPointer::open].
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 #[serde(untagged)]
 pub enum EnvironmentPointer {
@@ -117,10 +120,20 @@ pub enum EnvironmentPointer {
     Path(PathPointer),
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct PathPointer {
-    name: EnvironmentName,
+    pub name: EnvironmentName,
     version: Version<1>,
+}
+
+impl PathPointer {
+    /// Create a new [PathPointer] with the given name.
+    pub fn new(name: EnvironmentName) -> Self {
+        Self {
+            name,
+            version: Version::<1>,
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
@@ -131,13 +144,22 @@ pub struct ManagedPointer {
 }
 
 impl EnvironmentPointer {
+    /// The function attempts to open an environment at the specified path
+    /// by reading the contents of a file named .flox/[ENVIRONMENT_POINTER_FILENAME].
+    /// If the file is found and its contents can be deserialized,
+    /// the function returns an [EnvironmentPointer] containing information about the environment.
+    /// If reading or parsing the file fails, an [EnvironmentError2] is returned.
+    ///
+    /// Use this method to determine the type of an environment at a given path.
+    /// The result should be used to call the appropriate `open` method
+    /// on either [PathEnvironment] or [ManagedEnvironment].
     pub fn open(path: impl AsRef<Path>) -> Result<EnvironmentPointer, EnvironmentError2> {
         let dot_flox_path = path.as_ref().join(DOT_FLOX);
         let pointer_path = dot_flox_path.join(ENVIRONMENT_POINTER_FILENAME);
         let pointer_contents = match fs::read(pointer_path) {
             Ok(contents) => contents,
             Err(err) => match err.kind() {
-                io::ErrorKind::NotFound => Err(EnvironmentError2::DirectoryNotAnEnv)?,
+                io::ErrorKind::NotFound => Err(EnvironmentError2::EnvNotFound)?,
                 _ => Err(EnvironmentError2::ReadEnvironmentMetadata(err))?,
             },
         };
@@ -208,6 +230,10 @@ pub enum EnvironmentError2 {
     CopyFile(IoError),
     #[error("Failed parsing contents of env.json file: {0}")]
     ParseEnvJson(serde_json::Error),
+    #[error("Failed serializing contents of env.json file: {0}")]
+    SerializeEnvJson(serde_json::Error),
+    #[error("Failed write env.json file: {0}")]
+    WriteEnvJson(std::io::Error),
     #[error(transparent)]
     ManagedEnvironment(#[from] ManagedEnvironmentError),
 }
