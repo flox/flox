@@ -1,8 +1,4 @@
 {
-  nixpkgs,
-  # self is a flake if this package is built locally, but if it's called as a proto, it's just the
-  # source
-  self,
   flox-src,
   inputs,
   lib,
@@ -27,10 +23,12 @@
   gitMinimal,
   flox-gh,
   gh,
+  pkgsFor,
+  floxVersion,
+  flox-pkgdb,
 }: let
   # crane (<https://crane.dev/>) library for building rust packages
-  craneLib = inputs.crane.mkLib nixpkgs;
-  pkgdb = inputs.pkgdb.packages.flox-pkgdb;
+  craneLib = inputs.crane.mkLib pkgsFor;
 
   # build time environment variables
   envs =
@@ -41,7 +39,7 @@
       NIX_BIN = "${flox-bash}/libexec/flox/nix";
       GIT_BIN = "${gitMinimal}/bin/git";
       PARSER_UTIL_BIN = "${parser-util}/bin/parser-util";
-      PKGDB_BIN = "${pkgdb}/bin/pkgdb";
+      PKGDB_BIN = "${flox-pkgdb}/bin/pkgdb";
       FLOX_GH_BIN = "${flox-gh}/bin/flox-gh";
       GH_BIN = "${gh}/bin/gh";
 
@@ -72,14 +70,10 @@
       LIBSSH2_SYS_USE_PKG_CONFIG = "1";
 
       # used internally to ensure CA certificates are available
-      NIXPKGS_CACERT_BUNDLE_CRT = "${cacert}/etc/ssl/certs/ca-bundle.crt";
+      NIXPKGS_CACERT_BUNDLE_CRT = cacert.outPath + "/etc/ssl/certs/ca-bundle.crt";
 
       # The current version of flox being built
-      FLOX_VERSION =
-        cargoToml.package.version
-        + "-"
-        + (inputs.flox-floxpkgs.lib.getRev self);
-
+      FLOX_VERSION = floxVersion;
       # Reexport of the platform flox is being built for
       NIX_TARGET_SYSTEM = targetPlatform.system;
 
@@ -161,6 +155,9 @@ in
           installShellFiles
           gnused
         ];
+
+      # https://github.com/ipetkov/crane/issues/385
+      doNotLinkInheritedArtifacts = true;
 
       # Tests are disabled inside of the build because the sandbox prevents
       # internet access and there are tests that require internet access to

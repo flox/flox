@@ -1,12 +1,17 @@
 {
-  inputs,
-  nixpkgs,
-  lib,
+  shellHooks,
+  rustfmt,
+  cargo,
+  commitizen,
+  clippy,
+  alejandra,
+  system,
+  ...
 }: let
-  rustfmt = nixpkgs.rustfmt.override {asNightly = true;};
+  shellHooksLib = builtins.getAttr system shellHooks.lib;
 in
-  (inputs.shellHooks.lib.run {
-    src = ../..;
+  (shellHooksLib.run {
+    src = builtins.path {path = ../..;};
     hooks = {
       alejandra.enable = true;
       rustfmt.enable = true;
@@ -15,7 +20,7 @@ in
     };
     settings.clippy.denyWarnings = true;
     tools = {
-      inherit (nixpkgs) cargo commitizen clippy rustfmt alejandra;
+      inherit cargo commitizen clippy rustfmt alejandra;
     };
   })
   // {passthru = {inherit rustfmt;};}
