@@ -116,10 +116,15 @@ pub trait Environment {
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 #[serde(untagged)]
 pub enum EnvironmentPointer {
+    /// Identifies an environment whose source of truth lies outside of the project itself
     Managed(ManagedPointer),
+    /// Identifies an environment whose source of truth lies inside the project
     Path(PathPointer),
 }
 
+/// The identifier for a project environment.
+///
+/// This is serialized to `env.json` inside the `.flox` directory
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct PathPointer {
     pub name: EnvironmentName,
@@ -136,6 +141,10 @@ impl PathPointer {
     }
 }
 
+/// The identifier for an environment that's defined outside of the project itself, and
+/// points to an environment owner and the name of the environment.
+///
+/// This is serialized to an `env.json` inside the `.flox` directory.
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct ManagedPointer {
     pub owner: EnvironmentOwner,
