@@ -420,6 +420,7 @@ fn branch_name(
     ))
 }
 
+/// The original branch name of an environment that is used to sync an environment with the hub
 pub fn remote_branch_name(system: &str, pointer: &ManagedPointer) -> String {
     format!("{}.{}", system, pointer.name)
 }
