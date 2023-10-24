@@ -32,7 +32,7 @@ jobs:
         fetch-depth: 0
 
     - name: "Install flox"
-      uses: flox/install-flox-action@next-next
+      uses: flox/install-flox-action@next
       with:
         github-access-token: ${{ secrets.NIX_GIT_TOKEN }}
         substituter: s3://flox-store
@@ -78,7 +78,7 @@ jobs:
         fetch-depth: 0
 
     - name: "Install flox"
-      uses: flox/install-flox-action@next-next
+      uses: flox/install-flox-action@next
       with:
         github-access-token: ${{ secrets.NIX_GIT_TOKEN }}
         substituter: s3://flox-store
