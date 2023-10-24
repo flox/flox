@@ -108,15 +108,15 @@ jobs:
             --no-update-lock-file \
             --print-out-paths \
             --no-link \
-            '.#flox-bash-dev'
+            '.#flox-bash'
 
     - name: "Build flox"
       run: |
-        nix build '.#flox-dev' -L 
+        nix build '.#flox' -L 
             --extra-experimental-features "nix-command flakes" \
             --no-update-lock-file \
             --print-out-paths \
-            '.#flox-dev'
+            '.#flox'
         echo "FLOX_CLI=$(readlink -f ./result; )/bin/flox" >> "$GITHUB_ENV"
         rm ./result
 
