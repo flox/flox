@@ -63,18 +63,23 @@ impl Default for EnvironmentSelect {
 impl EnvironmentSelect {
     fn to_concrete_environment(&self, flox: &Flox) -> Result<ConcreteEnvironment> {
         let env = match self {
-            EnvironmentSelect::Dir(path) => match EnvironmentPointer::open(path)? {
-                EnvironmentPointer::Path(path_pointer) => {
-                    let dot_flox_path = path.join(DOT_FLOX);
-                    ConcreteEnvironment::Path(PathEnvironment::open(
-                        path_pointer,
-                        dot_flox_path,
-                        &flox.temp_dir,
-                    )?)
-                },
-                EnvironmentPointer::Managed(managed_pointer) => ConcreteEnvironment::Managed(
-                    ManagedEnvironment::open(flox, managed_pointer, path)?,
-                ),
+            EnvironmentSelect::Dir(path) => {
+                let pointer = EnvironmentPointer::open(path)
+                    .with_context(|| format!("No environment found in {path:?}"))?;
+
+                match pointer {
+                    EnvironmentPointer::Path(path_pointer) => {
+                        let dot_flox_path = path.join(DOT_FLOX);
+                        ConcreteEnvironment::Path(PathEnvironment::open(
+                            path_pointer,
+                            dot_flox_path,
+                            &flox.temp_dir,
+                        )?)
+                    },
+                    EnvironmentPointer::Managed(managed_pointer) => ConcreteEnvironment::Managed(
+                        ManagedEnvironment::open(flox, managed_pointer, path)?,
+                    ),
+                }
             },
             EnvironmentSelect::Remote(_) => todo!(),
         };
@@ -435,7 +440,7 @@ impl Envs {
             Ok(EnvironmentPointer::Managed(ManagedPointer { name, owner, .. })) => {
                 println!("{owner}/{name}",)
             },
-            Err(EnvironmentError2::DirectoryNotAnEnv) => println!(),
+            Err(EnvironmentError2::EnvNotFound) => println!(),
             Err(e) => bail!(e),
         }
         Ok(())

@@ -159,7 +159,7 @@ impl EnvironmentPointer {
         let pointer_contents = match fs::read(pointer_path) {
             Ok(contents) => contents,
             Err(err) => match err.kind() {
-                io::ErrorKind::NotFound => Err(EnvironmentError2::DirectoryNotAnEnv)?,
+                io::ErrorKind::NotFound => Err(EnvironmentError2::EnvNotFound)?,
                 _ => Err(EnvironmentError2::ReadEnvironmentMetadata(err))?,
             },
         };

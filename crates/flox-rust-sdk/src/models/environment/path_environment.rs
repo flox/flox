@@ -438,7 +438,7 @@ impl PathEnvironment<Original> {
         temp_dir: impl AsRef<Path>,
     ) -> Result<Self, EnvironmentError2> {
         match EnvironmentPointer::open(path.as_ref()) {
-            Err(EnvironmentError2::DirectoryNotAnEnv) => {},
+            Err(EnvironmentError2::EnvNotFound) => {},
             Err(e) => Err(e)?,
             Ok(_) => Err(EnvironmentError2::EnvironmentExists)?,
         }
