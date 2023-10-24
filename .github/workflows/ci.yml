@@ -4,7 +4,8 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - main
+      - "ci-parallelize"
+      - "main"
   pull_request:
 
 concurrency:
