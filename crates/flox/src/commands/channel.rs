@@ -96,15 +96,16 @@ impl Search {
             render_search_results_json(results)?;
         } else {
             render_search_results_user_facing(results)?;
+            println!("Use `flox show {{package}}` to see available versions");
         }
-        if exit_status.success() {
-            Ok(())
-        } else {
+        if !exit_status.success() {
             bail!(
                 "pkgdb exited with status code: {}",
                 exit_status.code().unwrap_or(-1),
             );
-        }
+        };
+
+        Ok(())
     }
 }
 

@@ -4,7 +4,7 @@
 #
 # Test of rust impl of `flox search`
 #
-# bats file_tags=search 
+# bats file_tags=search
 #
 # ---------------------------------------------------------------------------- #
 
@@ -40,6 +40,8 @@ teardown() {
 
 setup_file() {
   export FLOX_FEATURES_CHANNELS=rust;
+
+  export SHOW_HINT="Use \`flox show {package}\` to see available versions"
 
   # Separator character for ambiguous package sources
   export SEP=":";
@@ -79,13 +81,15 @@ setup_file() {
   case "$NIX_SYSTEM" in
     *-darwin)
       # just 'hello'
-      assert_equal "$n_lines" 1;
+      assert_equal "$n_lines" 2; # search line + show hint
+      assert_equal "${lines[-1]}" "$SHOW_HINT"
       ;;
     *-linux)
       # hello - matches name
       # hello-wayland - matches name
       # gnome.iagno - matches Ot(hello) in description
-      assert_equal "$n_lines" 3;
+      assert_equal "$n_lines" 4; # 4 search lines + show hint
+      assert_equal "${lines[-1]}" "$SHOW_HINT"
       ;;
   esac
 }
@@ -96,7 +100,8 @@ setup_file() {
 @test "'flox search' semver search: hello@2.10" {
   run "$FLOX_CLI" search hello@2.10;
   n_lines="${#lines[@]}";
-  assert_equal "$n_lines" 1;
+  assert_equal "$n_lines" 2; # search line + show hint
+  assert_equal "${lines[-1]}" "$SHOW_HINT"
 }
 
 
@@ -140,7 +145,8 @@ setup_file() {
 @test "'flox search' semver search: hello@=2.10" {
   run "$FLOX_CLI" search hello@=2.10;
   n_lines="${#lines[@]}";
-  assert_equal "$n_lines" "1";
+  assert_equal "$n_lines" "2"; # search line + show hint
+  assert_equal "${lines[-1]}" "$SHOW_HINT"
 }
 
 
@@ -199,4 +205,12 @@ setup_file() {
       assert_equal "$packages" $'hello\nhello-wayland\ngnome.iagno';
       ;;
   esac
+}
+
+# ---------------------------------------------------------------------------- #
+
+@test "'flox search' hints at 'flox show'" {
+  run "$FLOX_CLI" search hello;
+  assert_success
+  assert_equal "${lines[-1]}" "$SHOW_HINT"
 }
