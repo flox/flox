@@ -50,7 +50,6 @@ setup_file() {
 }
 
 @test "i?: install confirmation message" {
-  skip "Re-enable when `PathEnvironment`s use env.json"
   "$FLOX_CLI" init
   run "$FLOX_CLI" install hello
   assert_success
@@ -58,7 +57,6 @@ setup_file() {
 }
 
 @test "uninstall confirmation message" {
-  skip "Re-enable when `PathEnvironment`s use env.json"
   "$FLOX_CLI" init
   run "$FLOX_CLI" install hello
   assert_success

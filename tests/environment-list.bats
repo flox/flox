@@ -48,7 +48,6 @@ setup_file() {
 }
 
 @test "'flox list' lists packages of environment in the current dir; No package" {
-  skip "Re-enable when `PathEnvironment`s use env.json"
   "$FLOX_CLI" init
   run "$FLOX_CLI" list
   assert_success
@@ -57,7 +56,6 @@ setup_file() {
 }
 
 @test "'flox list' lists packages of environment in the current dir; One package from nixpkgs" {
-  skip "Re-enable when `PathEnvironment`s use env.json"
   "$FLOX_CLI" init
   "$FLOX_CLI" install hello
 

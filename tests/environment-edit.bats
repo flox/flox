@@ -97,7 +97,6 @@ check_manifest_updated() {
 # ---------------------------------------------------------------------------- #
 
 @test "'flox edit' accepts contents via filename" {
-  skip "Re-enable when `PathEnvironment`s use env.json"
   run cat "$EXTERNAL_MANIFEST_PATH"
   run "$FLOX_CLI" edit -f "$EXTERNAL_MANIFEST_PATH";
   assert_success;
@@ -109,7 +108,6 @@ check_manifest_updated() {
 # ---------------------------------------------------------------------------- #
 
 @test "'flox edit' accepts contents via pipe to stdin" {
-  skip "Re-enable when `PathEnvironment`s use env.json"
   run sh -c "cat ${EXTERNAL_MANIFEST_PATH} | ${FLOX_CLI} edit -f -";
   assert_success;
   # Get the contents as they appear in the actual manifest after the operation
@@ -163,7 +161,6 @@ check_manifest_updated() {
 # ---------------------------------------------------------------------------- #
 
 @test "'flox edit' adds package with EDITOR" {
-  skip "Re-enable when `PathEnvironment`s use env.json"
   EDITOR="$TESTS_DIR/add-hello" run "$FLOX_CLI" edit;
   assert_success;
   run check_manifest_updated;

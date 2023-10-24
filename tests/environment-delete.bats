@@ -58,7 +58,6 @@ env_exists() {
 # ---------------------------------------------------------------------------- #
 
 @test "deletes existing environment" {
-  skip "Re-enable when `PathEnvironment`s use env.json"
   run "$FLOX_CLI" init;
   assert_success;
   # run env_exists "$(basename $PWD)";
@@ -75,7 +74,6 @@ env_exists() {
 # ---------------------------------------------------------------------------- #
 
 @test "error message when called without .flox directory" {
-  skip "Re-enable when `PathEnvironment`s use env.json"
   run dot_flox_exists;
   assert_failure;
   run "$FLOX_CLI" delete;
