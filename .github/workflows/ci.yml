@@ -40,11 +40,12 @@ jobs:
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
     - name: "Cargo Test"
-      run: nix develop -L \
-        --extra-experimental-features "nix-command flakes" \
-        --no-update-lock-file \
-        '.#flox' \
-        --command cargo test --locked --workspace;
+      run: |
+        nix develop -L \
+          --extra-experimental-features "nix-command flakes" \
+          --no-update-lock-file \
+          '.#flox' \
+          --command cargo test --locked --workspace;
 
 #  nix-build:
 #    name: "Build and Run Bats Tests"
