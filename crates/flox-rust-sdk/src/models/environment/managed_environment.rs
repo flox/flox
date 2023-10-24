@@ -425,6 +425,14 @@ pub fn remote_branch_name(system: &str, pointer: &ManagedPointer) -> String {
     format!("{}.{}", system, pointer.name)
 }
 
+/// Path to the directory that contains symlinks
+/// that map unique branch ids to
+/// the directories linking to the environment.
+///
+/// see also: [ManagedEnvironment::encode],
+///           [ManagedEnvironment::decode],
+///           [ManagedEnvironment::ensure_reverse_link],
+///           [branch_name]
 fn reverse_links_dir(flox: &Flox) -> PathBuf {
     flox.data_dir.join("links")
 }
