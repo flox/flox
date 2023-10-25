@@ -16,6 +16,7 @@ use flox_rust_sdk::models::search::{
     SearchResult,
     SearchResults,
     ShowError,
+    Subtree,
 };
 use flox_rust_sdk::nix::command::FlakeMetadata;
 use flox_rust_sdk::nix::command_line::NixCommandLine;
@@ -31,6 +32,7 @@ use crate::utils::dialog::{Dialog, Select, Text};
 use crate::utils::init::{DEFAULT_CHANNELS, HIDDEN_CHANNELS};
 
 const SEARCH_INPUT_SEPARATOR: &'_ str = ":";
+const DEFAULT_DESCRIPTION: &'_ str = "<no description provided>";
 
 #[derive(Bpaf, Clone)]
 pub struct ChannelArgs {}
@@ -216,7 +218,7 @@ fn render_search_results_user_facing(search_results: SearchResults) -> Result<()
 
     // Finally print something
     let mut writer = BufWriter::new(std::io::stdout());
-    let default_desc = String::from("<no description provided>");
+    let default_desc = String::from(DEFAULT_DESCRIPTION);
     for d in deduped_display_items.into_iter() {
         let package = if d.render_with_input {
             [d.input, d.package].join(SEARCH_INPUT_SEPARATOR)
@@ -310,7 +312,7 @@ impl Show {
         // FIXME: We may have warnings on `stderr` even with a successful call to `pkgdb`.
         //        We aren't checking that at all at the moment because better overall error handling
         //        is coming in a later PR.
-        render_show(search_results.results.as_slice())?;
+        render_show(search_results.results.as_slice(), true)?;
         if exit_status.success() {
             Ok(())
         } else {
@@ -373,17 +375,73 @@ fn construct_show_params(search_term: &str, flox: &Flox) -> Result<SearchParams>
     })
 }
 
-fn render_show(search_results: &[SearchResult]) -> Result<()> {
-    // FIXME: Proper rendering is coming later
+fn render_show(search_results: &[SearchResult], all: bool) -> Result<()> {
+    let mut pkg_name = None;
+    let mut results = Vec::new();
+    // Collect all versions of the top search result
     for package in search_results.iter() {
-        let pkg_name = package.pkg_subpath.join(".");
-        let description = package
-            .description
-            .as_ref()
-            .map(|d| d.replace('\n', " "))
-            .unwrap_or("<no description provided>".into());
-        println!("{} - {}", pkg_name, description);
+        let this_pkg_name = package.pkg_subpath.join(".");
+        if pkg_name.is_none() {
+            pkg_name = Some(this_pkg_name.clone());
+        }
+        if pkg_name == Some(this_pkg_name) {
+            results.push(package);
+        }
+        // let description = package
+        //     .description
+        //     .as_ref()
+        //     .map(|d| d.replace('\n', " "))
+        //     .unwrap_or("<no description provided>".into());
+        // println!("{} - {}", this_pkg_name, description);
     }
+    if results.is_empty() {
+        // This should never happen since we've already checked that the
+        // set of results is non-empty.
+        bail!("no packages found");
+    }
+    let pkg_name = pkg_name.unwrap();
+    let description = results[0]
+        .description
+        .as_ref()
+        .map(|d| d.replace('\n', " "))
+        .unwrap_or(DEFAULT_DESCRIPTION.into());
+    let versions = if all {
+        let multiple_versions = results
+            .iter()
+            .filter_map(|sr| {
+                // Don't show a "latest" search result, it's just
+                // a duplicate
+                if sr.subtree == Subtree::Catalog
+                    && sr
+                        .abs_path
+                        .last()
+                        .map(|version| version == "latest")
+                        .unwrap_or(false)
+                {
+                    return None;
+                }
+                let name = sr.pkg_subpath.join(".");
+                // TODO: what if one of the search results doesn't have a version?
+                if let Some(version) = sr.version.clone() {
+                    Some([name, version].join("@"))
+                } else {
+                    Some(name)
+                }
+            })
+            .collect::<Vec<_>>();
+        multiple_versions.join(", ")
+    } else {
+        let sr = results[0];
+        let name = sr.pkg_subpath.join(".");
+        let version = sr.version.clone();
+        if let Some(version) = version {
+            [name, version].join("@")
+        } else {
+            name
+        }
+    };
+    println!("{pkg_name} - {description}");
+    println!("    {pkg_name} - {versions}");
     Ok(())
 }
 
