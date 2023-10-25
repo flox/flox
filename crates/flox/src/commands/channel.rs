@@ -425,12 +425,9 @@ fn render_show(search_results: &[SearchResult], all: bool) -> Result<()> {
                     return None;
                 }
                 let name = sr.pkg_subpath.join(".");
-                // TODO: what if one of the search results doesn't have a version?
-                if let Some(version) = sr.version.clone() {
-                    Some([name, version].join("@"))
-                } else {
-                    Some(name)
-                }
+                // We don't print packages that don't have a version since
+                // the resolver will always rank versioned packages higher.
+                sr.version.clone().map(|version| [name, version].join("@"))
             })
             .collect::<Vec<_>>();
         multiple_versions.join(", ")
