@@ -296,6 +296,10 @@ pub struct Show {
     /// for a package name e.g. something copy-pasted from the output of `flox search`.
     #[bpaf(positional("search-term"))]
     pub search_term: String,
+
+    /// Whether to show all available package versions
+    #[bpaf(long)]
+    pub all: bool,
 }
 
 impl Show {
@@ -312,7 +316,7 @@ impl Show {
         // FIXME: We may have warnings on `stderr` even with a successful call to `pkgdb`.
         //        We aren't checking that at all at the moment because better overall error handling
         //        is coming in a later PR.
-        render_show(search_results.results.as_slice(), true)?;
+        render_show(search_results.results.as_slice(), self.all)?;
         if exit_status.success() {
             Ok(())
         } else {
