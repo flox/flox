@@ -35,6 +35,7 @@ git-url-parse.workspace = true
 rowan.workspace = true
 sha2.workspace = true
 blake3.workspace = true
+toml_edit.workspace = true
 
 [dev-dependencies]
 anyhow = "1.0.65"
