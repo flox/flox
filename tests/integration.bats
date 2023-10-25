@@ -33,6 +33,9 @@ setup_file() {
 }
 
 @test "flox eval" {
+
+  skip "DEPRECATED"
+
   # Evaluate a Nix expression given on the command line:
   run $FLOX_CLI eval --expr '1 + 2'
   assert_success
