@@ -17,6 +17,7 @@ load test_support.bash
 # ---------------------------------------------------------------------------- #
 
 setup_file() {
+  skip "Skipping --bash-passthu tests";
   common_file_setup;
   require_expect;
   hello_pkg_setup;

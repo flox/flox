@@ -8,8 +8,6 @@ _default:
 bats-tests +test_files="":
     @cargo build
     @nix build '.#flox-bash'
-    @export FLOX_SH_PATH="$PWD/result"
-    @export FLOX_SH="$PWD/result/libexec/flox/flox"
     @{{bats_invocation}} {{test_files}}
 
 # Run the Rust unit tests

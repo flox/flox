@@ -334,7 +334,8 @@ gitconfig_setup() {
 # Force the destruction of an env including any remote metdata.
 deleteEnvForce() {
   flox_location_setup;
-  { $FLOX_CLI --bash-passthru delete -e "${1?}" --origin -f||:; } >/dev/null 2>&1;
+  # TODO delete using Rust
+  # { $FLOX_CLI --bash-passthru delete -e "${1?}" --origin -f||:; } >/dev/null 2>&1;
   return 0;
 }
 

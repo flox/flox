@@ -1,5 +1,4 @@
 use anyhow::Result;
-use log::debug;
 use serde::{Deserialize, Serialize};
 
 use super::Config;
@@ -21,15 +20,18 @@ pub enum Feature {
 }
 
 impl Feature {
+    // Leaving this code as it may be useful for feature flagging, but it's
+    // currently dead as it's a remnant of bash passthrough
+    #[allow(unused)]
     pub fn implementation(&self) -> Result<Impl> {
         let map = Config::parse()?.features;
 
         Ok(match self {
-            Feature::All => *map.get(self).unwrap_or(&Impl::Bash),
+            Feature::All => *map.get(self).unwrap_or(&Impl::Rust),
             Feature::Env => *map
                 .get(self)
                 .or_else(|| map.get(&Self::All))
-                .unwrap_or(&Impl::Bash),
+                .unwrap_or(&Impl::Rust),
             Feature::Nix => *map
                 .get(self)
                 .or_else(|| map.get(&Self::All))
@@ -37,21 +39,8 @@ impl Feature {
             Feature::Develop | Feature::Publish | Feature::Channels => *map
                 .get(self)
                 .or_else(|| map.get(&Self::All))
-                .unwrap_or(&Impl::Bash),
+                .unwrap_or(&Impl::Rust),
         })
-    }
-
-    pub fn is_forwarded(&self) -> Result<bool> {
-        if self.implementation()? == Impl::Bash {
-            let env_name = format!(
-                "FLOX_FEATURES_{}",
-                serde_variant::to_variant_name(self)?.to_uppercase()
-            );
-            debug!("`{env_name}` unset or not \"rust\", falling back to legacy flox");
-            Ok(true)
-        } else {
-            Ok(false)
-        }
     }
 }
 
@@ -59,5 +48,4 @@ impl Feature {
 #[serde(rename_all = "lowercase")]
 pub enum Impl {
     Rust,
-    Bash,
 }

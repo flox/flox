@@ -33,7 +33,6 @@ use crate::providers::git::GitProvider;
 
 static INPUT_CHARS: Lazy<Vec<char>> = Lazy::new(|| ('a'..='t').collect());
 
-pub const FLOX_SH: &str = env!("FLOX_SH");
 pub const FLOX_VERSION: &str = env!("FLOX_VERSION");
 
 /// The main API struct for our flox implementation
