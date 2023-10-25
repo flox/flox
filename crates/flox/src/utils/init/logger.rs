@@ -117,3 +117,11 @@ pub fn init_logger(verbosity: Option<Verbosity>, debug: Option<bool>) {
         error!("Updating logger filter failed: {}", err);
     }
 }
+
+pub fn flush_logger() {
+    if let Some((_, fmt_handle)) = LOGGER_HANDLE.get() {
+        let _ = fmt_handle.modify(|l| {
+            let _ = l.writer_mut().flush();
+        });
+    }
+}
