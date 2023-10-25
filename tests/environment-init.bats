@@ -113,3 +113,34 @@ EOF
   run "$FLOX_CLI" init -n "na me"
   assert_failure
 }
+
+
+function check_with_dir() {
+  run ls -A "$PROJECT_DIR"
+  assert_output "other"
+  run ls -A "$PROJECT_DIR/other"
+  assert_output ".flox"
+}
+
+@test "c2.1: \`flox init\` with \`--dir <path>\` will create an environment in \`<path>\`. (relative)" {
+  mkdir -p "$PROJECT_DIR/other"
+
+  run "$FLOX_CLI" init -d ./other
+  assert_success
+  check_with_dir
+}
+
+
+@test "c2.1: \`flox init\` with \`--dir <path>\` will create an environment in \`<path>\`. (absolute)" {
+  mkdir -p "$PROJECT_DIR/other"
+
+  run "$FLOX_CLI" init -d "$PROJECT_DIR/other"
+  assert_success
+  check_with_dir
+}
+
+@test "c2.1: \`flox init\` with \`--dir <path>\` will create an environment in \`<path>\`. (create dir)" {
+  run "$FLOX_CLI" init -d "$PROJECT_DIR/other"
+  assert_success
+  check_with_dir
+}
