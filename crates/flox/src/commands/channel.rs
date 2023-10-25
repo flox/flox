@@ -292,14 +292,14 @@ fn dedup_and_disambiguate_display_items(mut display_items: Vec<DisplayItem>) -> 
 /// Show detailed package information
 #[derive(Bpaf, Clone)]
 pub struct Show {
+    /// Whether to show all available package versions
+    #[bpaf(long)]
+    pub all: bool,
+
     /// The package to show detailed information about. Must be an exact match
     /// for a package name e.g. something copy-pasted from the output of `flox search`.
     #[bpaf(positional("search-term"))]
     pub search_term: String,
-
-    /// Whether to show all available package versions
-    #[bpaf(long)]
-    pub all: bool,
 }
 
 impl Show {
