@@ -57,7 +57,7 @@ jobs:
         nix develop -L \
           --extra-experimental-features "nix-command flakes" \
           --no-update-lock-file \
-          '.#flox' \
+          '.#ci' \
             --command cargo test --locked --workspace;
 
   nix-build:
