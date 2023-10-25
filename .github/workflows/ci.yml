@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - main
+      - "main"
   pull_request:
 
 concurrency:
@@ -13,25 +13,25 @@ concurrency:
 
 jobs:
 
-  build:
-    name: Build and test flox on ${{ matrix.os }}
+  cargo-test:
+    name: "Run Cargo Tests"
     runs-on: ${{ matrix.os }}
 
     strategy:
       fail-fast: false
       matrix:
         os:
-        - ubuntu-22.04-8core
-        - macos-latest
+        - "ubuntu-22.04-8core"
+        - "macos-latest"
 
     steps:
-    - name: Checkout
+    - name: "Checkout"
       uses: actions/checkout@v3
       with:
         fetch-depth: 0
 
-    - name: Install flox
-      uses: flox/install-flox-action@c9b5e339b0670d375c9c66329c9473c7dde403ab
+    - name: "Install flox"
+      uses: flox/install-flox-action@main
       with:
         github-access-token: ${{ secrets.NIX_GIT_TOKEN }}
         substituter: s3://flox-store
@@ -39,106 +39,76 @@ jobs:
         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
-    - name: Restore Nix Caches
-      id: nix-cache-restore
-      uses: actions/cache/restore@v3
+    - name: "Cache cargo"
+      uses: actions/cache@v3
       with:
         path: |
-          ~/.cache/nix
-        key: ${{ runner.os }}-nix-cache
+          ~/.cargo/bin/
+          ~/.cargo/registry/index/
+          ~/.cargo/registry/cache/
+          ~/.cargo/git/db/
+          target/
+        key: cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: cargo-${{ runner.os }}-
 
-    # This is used to detect any new store paths we create while running builds
-    # so that they can be pushed to caches.
-    - name: Record Nix Store Paths
+    - name: "Cargo Test"
       run: |
-        NIX_STORE_DIR="$(
-          nix eval --impure --raw --expr builtins.storeDir;
-        )";
-        echo "NIX_STORE_DIR=$NIX_STORE_DIR" >> "$GITHUB_ENV";
-        STORE_PATHS_FILE="$( mktemp; )";
-        echo "STORE_PATHS_FILE=$STORE_PATHS_FILE" >> "$GITHUB_ENV";
-        find "$NIX_STORE_DIR" -maxdepth 1 -mindepth 1 -type d -o -type l  \
-          |sort > "$STORE_PATHS_FILE";
-        echo "Have $(
-          wc -l "$STORE_PATHS_FILE"|cut -d' ' -f1;
-        ) $NIX_STORE_DIR paths" >&2;
+        nix develop -L \
+          --extra-experimental-features "nix-command flakes" \
+          --no-update-lock-file \
+          '.#flox' \
+            --command cargo test --locked --workspace;
 
-    - name: Build flox-gh
-      run: |
-        nix build '.#flox-gh' -L --no-update-lock-file      \
-                              --print-out-paths --no-link;
+  nix-build:
+    name: "Build and Run Bats Tests"
+    runs-on: ${{ matrix.os }}
 
-    - name: Build nix-editor
-      run: |
-        nix build '.#nix-editor' -L --no-update-lock-file      \
-                                 --print-out-paths --no-link;
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+        - "ubuntu-22.04-8core"
+        - "macos-latest"
 
-    - name: Build builtfilter-rs
-      run: |
-        nix build '.#builtfilter-rs' -L --no-update-lock-file      \
-                                     --print-out-paths --no-link;
-
-    - name: Build flox-bash
-      run: |
-        nix build '.#flox-bash' -L --no-update-lock-file      \
-                                --print-out-paths --no-link;
-
-    # These cannot be run offline so we need to build in our tree.
-    # This just builds the `flox' deps so that they can get cached.
-    - name: Build Development Env
-      run: nix develop '.#flox' --no-update-lock-file -c true;
-
-    - name: Build flox
-      run: |
-        nix build '.#flox' -L --no-update-lock-file --print-out-paths;
-        echo "FLOX_CLI=$( readlink -f ./result; )/bin/flox" >> "$GITHUB_ENV";
-        rm ./result;
-
-    - name: Build flox-tests
-      run: |
-        nix build '.#flox-tests' -L --no-update-lock-file      \
-                                 --print-out-paths --no-link;
-
-    - name: Push New Store Paths
-      if: ${{ always() }}
-      run: |
-        # Since we run onconditionally we need to bail early in case the
-        # `STORE_PATHS_FILE' was never created.
-        if [[ -z "${STORE_PATHS_FILE:-}" ]]; then
-          echo "No old store paths were cached. Skipping push." >&2;
-          exit 1;
-        fi
-        STORE_PATHS_FILE2="$( mktemp; )";
-        find "$NIX_STORE_DIR" -maxdepth 1 -mindepth 1 -type d -o -type l  \
-          |sort > "$STORE_PATHS_FILE2";
-        NEW_STORE_PATHS_FILE="$( mktemp; )";
-        comm -13 "$STORE_PATHS_FILE" "$STORE_PATHS_FILE2"  \
-             > "$NEW_STORE_PATHS_FILE";
-        echo "Have $(
-          wc -l "$NEW_STORE_PATHS_FILE"|cut -d' ' -f1;
-        ) new $NIX_STORE_DIR paths" >&2;
-        # Allow pushing to fail.
-        cat "$NEW_STORE_PATHS_FILE"                            \
-          |xargs -r nix copy --to "$FLOX_SUBSTITUTER" -vv||:;
-
-    # These cannot be run offline so we need to build in our tree.
-    - name: Rust Tests
-      run: |
-        git clean -xfd;
-        nix develop '.#flox' --no-update-lock-file   \
-                    -c cargo test --locked --workspace;
-
-    # We ultimately test against the `FLOX_CLI' env var's path set earlier.
-    - name: Bats Tests
-      run: |
-        git clean -xfd;
-        nix run --no-update-lock-file '.#flox-tests';
-
-    - name: Save Nix Caches
-      id: nix-cache-save
-      uses: actions/cache/save@v3
-      if: ${{ always() }}
+    steps:
+    - name: "Checkout"
+      uses: actions/checkout@v3
       with:
-        path: |
-          ~/.cache/nix
-        key: ${{ steps.nix-cache-restore.outputs.cache-primary-key }}
+        fetch-depth: 0
+
+    - name: "Install flox"
+      uses: flox/install-flox-action@main
+      with:
+        github-access-token: ${{ secrets.NIX_GIT_TOKEN }}
+        substituter: s3://flox-store
+        substituter-key: ${{ secrets.FLOX_STORE_PUBLIC_NIX_SECRET_KEY }}
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+    - name: "Build flox"
+      run: |
+        nix build '.#flox' -L \
+            --extra-experimental-features "nix-command flakes" \
+            --no-update-lock-file \
+            --print-out-paths \
+            '.#flox'
+        echo "FLOX_CLI=$(readlink -f ./result; )/bin/flox" >> "$GITHUB_ENV"
+        rm ./result
+
+    - name: "Build flox-tests"
+      run: |
+        nix build -L \
+            --extra-experimental-features "nix-command flakes" \
+            --no-update-lock-file \
+            --print-out-paths \
+            --no-link \
+            '.#flox-tests'
+
+    # We test against the `FLOX_CLI' env var's path set earlier.
+    - name: "Bats Tests"
+      run: |
+        git clean -xfd
+        nix run \
+            --extra-experimental-features "nix-command flakes" \
+            --no-update-lock-file \
+            '.#flox-tests'
