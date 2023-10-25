@@ -180,6 +180,9 @@ setup_file() {
 # ---------------------------------------------------------------------------- #
 
 @test "'flox search' displays ambiguous packages with separator" {
+
+  skip "DEPRECATED"
+
   run "$FLOX_CLI" subscribe nixpkgs2 github:NixOS/nixpkgs/release-23.05;
   assert_success;
   unset output;
