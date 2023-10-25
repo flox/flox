@@ -1,3 +1,5 @@
+use std::io::Write;
+
 use log::{debug, error};
 use once_cell::sync::OnceCell;
 use tracing_subscriber::prelude::*;
@@ -19,14 +21,16 @@ impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for LockingTerminalStderr {
 impl std::io::Write for LockingTerminalStderr {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         let buf_vec = buf.to_vec();
-        tokio::task::spawn_blocking(move || {
-            TERMINAL_STDERR.blocking_lock().write(buf_vec.as_slice())
-        });
+        if let Ok(mut guard) = TERMINAL_STDERR.lock() {
+            guard.write_all(buf_vec.as_slice())?;
+        }
         Ok(buf.len())
     }
 
     fn flush(&mut self) -> std::io::Result<()> {
-        tokio::task::spawn_blocking(move || TERMINAL_STDERR.blocking_lock().flush());
+        if let Ok(mut guard) = TERMINAL_STDERR.lock() {
+            guard.flush()?
+        }
         Ok(())
     }
 }

@@ -32,7 +32,7 @@ impl<'a> Dialog<'a, Text<'a>> {
         let default = self.typed.default.map(ToOwned::to_owned);
 
         tokio::task::spawn_blocking(move || {
-            let _stderr_lock = TERMINAL_STDERR.blocking_lock();
+            let _stderr_lock = TERMINAL_STDERR.lock();
 
             let mut dialog = inquire::Text::new(&message).with_render_config(flox_theme());
 
@@ -59,7 +59,7 @@ impl<'a> Dialog<'a, Confirm> {
         let default = self.typed.default;
 
         tokio::task::spawn_blocking(move || {
-            let _stderr_lock = TERMINAL_STDERR.blocking_lock();
+            let _stderr_lock = TERMINAL_STDERR.lock();
 
             let mut dialog = inquire::Confirm::new(&message).with_render_config(flox_theme());
 
@@ -100,7 +100,7 @@ impl<'a, T: Display> Dialog<'a, Select<T>> {
             .collect();
 
         let Choice(id, _) = tokio::task::spawn_blocking(move || {
-            let _stderr_lock = TERMINAL_STDERR.blocking_lock();
+            let _stderr_lock = TERMINAL_STDERR.lock();
 
             let mut dialog =
                 inquire::Select::new(&message, choices).with_render_config(flox_theme());
@@ -130,7 +130,7 @@ impl<'a, T: Display> Dialog<'a, Select<T>> {
             .collect();
 
         let (raw_id, Choice(id, _)) = tokio::task::spawn_blocking(move || {
-            let _stderr_lock = TERMINAL_STDERR.blocking_lock();
+            let _stderr_lock = TERMINAL_STDERR.lock();
 
             let mut dialog =
                 inquire::Select::new(&message, choices).with_render_config(flox_theme());
