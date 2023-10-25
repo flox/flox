@@ -27,7 +27,7 @@ within which all relevant metadata of the environment will be tracked.
 The `--dir` flag can be used to create an environment in another location.
 
 If an environment already exists in the current directory,
-or the path specified using `--dir`, an error is returned.
+or the path specified using `--dir` exists, an error is returned.
 
 # OPTIONS
 
