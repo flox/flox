@@ -748,9 +748,9 @@ impl GitProvider for GitCommandProvider {
         };
 
         Ok(OriginInfo {
-            name: remote_name.to_string(),
+            name: remote_name,
             url,
-            reference: remote_branch.to_string(),
+            reference: remote_branch,
             revision: remote_revision,
         })
     }

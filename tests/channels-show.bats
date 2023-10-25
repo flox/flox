@@ -78,3 +78,43 @@ setup_file() {
   run "$FLOX_CLI" show "$first_result";
   assert_success;
 }
+
+
+# ---------------------------------------------------------------------------- #
+
+@test "'flox show' - hello" {
+  run "$FLOX_CLI" show hello;
+  assert_success;
+  assert_equal "${lines[0]}" "hello - A program that produces a familiar, friendly greeting";
+  assert_equal "${lines[1]}" "    hello - hello@2.12.1";
+}
+
+
+# ---------------------------------------------------------------------------- #
+
+@test "'flox show' - hello --all" {
+  run "$FLOX_CLI" show hello --all;
+  assert_success;
+  assert_equal "${lines[0]}" "hello - A program that produces a familiar, friendly greeting";
+  assert_equal "${lines[1]}" "    hello - hello@2.12.1, hello@2.12, hello@2.10";
+}
+
+
+# ---------------------------------------------------------------------------- #
+
+@test "'flox show' - python27Full" {
+  run "$FLOX_CLI" show python27Full;
+  assert_success;
+  assert_equal "${lines[0]}" "python27Full - A high-level dynamically-typed programming language";
+  assert_equal "${lines[1]}" "    python27Full - python27Full@2.7.18";
+}
+
+
+# ---------------------------------------------------------------------------- #
+
+@test "'flox show' - python27Full --all" {
+  run "$FLOX_CLI" show python27Full --all;
+  assert_success;
+  assert_equal "${lines[0]}" "python27Full - A high-level dynamically-typed programming language";
+  assert_equal "${lines[1]}" "    python27Full - python27Full@2.7.18, python27Full@2.7.18.5";
+}
