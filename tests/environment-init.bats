@@ -47,7 +47,7 @@ setup_file() {
 
   run "$FLOX_CLI" envs
   assert_success
-  assert_output "test"
+  assert_line --index "-1" "test" # `envs` has deprecation warning in its output
 }
 
 @test "c2: If the user is in ~ the environment should be called 'default'." {
@@ -61,7 +61,7 @@ setup_file() {
 
   run "$FLOX_CLI" envs
   assert_success
-  assert_output "default"
+  assert_output --index "-1" "default" # `envs` has deprecation warning in its output
 
 }
 
