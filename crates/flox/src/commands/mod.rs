@@ -448,13 +448,18 @@ impl AdditionalCommands {
 fn check_deprecated_commands(commands: &Commands) {
     match commands {
         Commands::Development(development_commands) => match development_commands {
-            _ => { /* none deprecated */ },
+            LocalDevelopmentCommands::Run(_) => deprecate_command("run"),
+            LocalDevelopmentCommands::List(_) => deprecate_command("list"),
+            LocalDevelopmentCommands::Nix(_) => deprecate_command("nix"),
+            _ => { /* not deprecated */ },
         },
         Commands::Sharing(sharing_commands) => match sharing_commands {
             _ => { /* none deprecated */ },
         },
         Commands::Additional(additional_commands) => match additional_commands {
             AdditionalCommands::Build(_) => deprecate_command("build"),
+            AdditionalCommands::Import(_) => deprecate_command("import"),
+            AdditionalCommands::Export(_) => deprecate_command("export"),
             AdditionalCommands::Subscribe(_) => deprecate_command("subscribe"),
             AdditionalCommands::Unsubscribe(_) => deprecate_command("unsubscribe"),
             AdditionalCommands::Channels(_) => deprecate_command("channels"),
@@ -463,10 +468,12 @@ fn check_deprecated_commands(commands: &Commands) {
             _ => { /* not deprecated */ },
         },
         Commands::Internal(internal_commands) => match internal_commands {
+            InternalCommands::Develop(_) => deprecate_command("develop"),
+            InternalCommands::Envs(_) => deprecate_command("envs"),
+
             InternalCommands::Bundle(_) => deprecate_command("bundle"),
             InternalCommands::Flake(_) => deprecate_command("flake"),
             InternalCommands::Eval(_) => deprecate_command("eval"),
-            InternalCommands::Develop(_) => deprecate_command("develop"),
             InternalCommands::Publish(_) => deprecate_command("publish"),
             InternalCommands::InitPackage(_) => deprecate_command("init-package"),
             _ => { /* not deprecated */ },
