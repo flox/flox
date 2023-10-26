@@ -26,7 +26,7 @@ load test_support.bash;
 # ---------------------------------------------------------------------------- #
 
 setup_file() {
-  skip "Skipping --bash-passthu tests";
+  skip "Skipping --bash-passthru tests";
   common_file_setup;
   # We can't really parallelize these because we reuse the same test dirs.
   # e.g. `FLOX_TEST_HOME/develop' is used multiple times.

@@ -3,7 +3,7 @@
 load test_support.bash
 
 setup_file() {
-  skip "Skipping --bash-passthu tests";
+  skip "Skipping --bash-passthru tests";
   common_file_setup;
   hello_pkg_setup;
   # We can't really parallelize these because we depend on past test actions.

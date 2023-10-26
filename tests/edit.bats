@@ -12,7 +12,7 @@ load test_support.bash;
 # bats file_tags=edit
 
 setup_file() {
-  skip "Skipping --bash-passthu tests";
+  skip "Skipping --bash-passthru tests";
   common_file_setup;
   # If any of these tests attempt to open a text editor we want them to fail.
   # So we set the default editor to the executable `false' to ensure we
