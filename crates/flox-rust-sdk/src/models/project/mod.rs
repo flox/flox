@@ -14,6 +14,7 @@ use thiserror::Error;
 use walkdir::WalkDir;
 
 use self::environment::Environment;
+use super::environment::MANIFEST_FILENAME;
 use super::root::transaction::{GitAccess, GitSandBox, ReadOnly};
 use super::root::{Closed, Root};
 use crate::flox::{Flox, FloxNixApi};
@@ -231,14 +232,6 @@ impl<'flox, Access: GitAccess> Project<'flox, Access> {
         .await
         .map_err(InitFloxPackageError::NixInit)?;
 
-        // Comment this out since we're using mkShell instead of
-        // root-level flox.nix
-        // TODO: really find a better way to not hardcode this
-        // if template.to_string() == "flake:flox#.\"templates\".\"project\"" {
-        //     repo.add(&[&root.join("flox.nix")])
-        //         .await
-        //         .map_err(InitFloxPackageError::GitAdd)?;
-        // }
         for dir_name in ["pkgs", "shells"] {
             let old_path = root.join(dir_name).join(PACKAGE_NAME_PLACEHOLDER);
             if old_path.exists() {
@@ -379,7 +372,7 @@ impl<'flox> Project<'flox, GitSandBox> {
 
     /// create a new root
     pub async fn create_default_env(&self, index: &mut Index) {
-        let path = Path::new("flox.nix").to_path_buf();
+        let path = Path::new(MANIFEST_FILENAME).to_path_buf();
         tokio::fs::write(
             self.workdir().expect("only works with workdir").join(&path),
             include_str!("./flox.nix.in"),

@@ -53,7 +53,7 @@ LIB = \
        lib/templateFloxEnv/flake.lock \
        lib/templateFloxEnv/flake.nix \
        lib/templateFloxEnv/pkgs/default/default.nix \
-       lib/templateFloxEnv/pkgs/default/flox.nix
+       # lib/templateFloxEnv/pkgs/default/flox.nix
 SHARE = share/bash-completion/completions/flox
 ifeq ($(OS),darwin)
   SHARE += \

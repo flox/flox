@@ -76,7 +76,7 @@
 
       # flox env template used to create new environments
       FLOX_ENV_TEMPLATE = builtins.path {
-        path = ../../flox-bash/lib/templateFloxEnv;
+        path = ../../assets/templateFloxEnv;
       };
     }
     // lib.optionalAttrs hostPlatform.isDarwin {
