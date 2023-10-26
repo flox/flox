@@ -126,6 +126,7 @@
       ]
       ++ lib.optional hostPlatform.isDarwin [
         darwin.apple_sdk.frameworks.Security # git2 (and others)
+        darwin.apple_sdk.frameworks.SystemConfiguration
       ];
 
     nativeBuildInputs = [
