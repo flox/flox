@@ -224,7 +224,7 @@ pub struct Gh {
 impl Gh {
     pub async fn handle(self, _config: Config, _flox: Flox) -> Result<()> {
         subcommand_metric!("gh");
-        todo!("TODO")
+        todo!("deprecated")
     }
 }
 

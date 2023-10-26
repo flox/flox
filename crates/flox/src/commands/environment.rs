@@ -666,7 +666,7 @@ impl Git {
     pub async fn handle(self, _flox: Flox) -> Result<()> {
         subcommand_metric!("git");
 
-        todo!("TODO")
+        todo!("deprecated")
     }
 }
 
@@ -837,7 +837,7 @@ impl Rollback {
     pub async fn handle(self, _flox: Flox) -> Result<()> {
         subcommand_metric!("rollback");
 
-        todo!("TODO")
+        todo!("this command is planned for a future release")
     }
 }
 
@@ -861,7 +861,7 @@ impl SwitchGeneration {
     pub async fn handle(self, _flox: Flox) -> Result<()> {
         subcommand_metric!("switch-generation");
 
-        todo!("TODO")
+        todo!("this command is planned for a future release")
     }
 }
 
