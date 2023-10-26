@@ -41,6 +41,7 @@ setup() {
 
 
 teardown() {
+  skip
   cd "${FLOX_TEST_HOME?}"||return;
   if [[ -n "${HARNESS:-}" ]] && [[ -d "${FLOX_TEST_HOME?}/$HARNESS" ]]; then
     rm -rf "${FLOX_TEST_HOME:?}/$HARNESS";
