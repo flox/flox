@@ -28,8 +28,6 @@ jobs:
     steps:
     - name: "Checkout"
       uses: actions/checkout@v3
-      with:
-        fetch-depth: 0
 
     - name: "Install flox"
       uses: flox/install-flox-action@main
@@ -74,8 +72,6 @@ jobs:
     steps:
     - name: "Checkout"
       uses: actions/checkout@v3
-      with:
-        fetch-depth: 0
 
     - name: "Install flox"
       uses: flox/install-flox-action@main
@@ -88,7 +84,7 @@ jobs:
 
     - name: "Build flox"
       run: |
-        nix build '.#flox' -L \
+        nix build -L \
             --extra-experimental-features "nix-command flakes" \
             --no-update-lock-file \
             --print-out-paths \
