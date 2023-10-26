@@ -15,7 +15,7 @@ This release addresses several changes, bugs and improvements, including:
   - we are deprecating the following from the CLI. We need to do this to unblock some dependencies and we also are 
     taking a more holistic design pass based on existing usage. We fully plan on bringing these features 
     back–incorporating feedback. If you depend on them please stop upgrading flox for now and stay on 
-    version 0.3.5 or older.
+    version 0.3.6 or older.
     - `build`
     - `subscribe`
     - `unsubscribe`
