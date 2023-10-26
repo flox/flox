@@ -37,6 +37,6 @@ This release addresses several changes, bugs and improvements, including:
     - `envs`
     - `gh`
     - `git`
-- The flag `--long` has been removed from `flox search`.
+- Removed the flag `--long` from `flox search`.
 
 We especially want to thank all our github.com/flox/flox contributors and discourse community members for all your valuable feedback!
