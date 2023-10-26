@@ -55,10 +55,6 @@ pub struct Search {
     #[bpaf(long)]
     pub json: bool,
 
-    /// print extended search results
-    #[bpaf(short, long, long("verbose"), short('v'))]
-    pub long: bool,
-
     /// force update of catalogs from remote sources before searching
     #[bpaf(long)]
     pub refresh: bool,
