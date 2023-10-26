@@ -389,7 +389,6 @@ fn check_deprecated_commands(commands: &Commands) {
             _ => { /* not deprecated */ },
         },
         Commands::Internal(internal_commands) => match internal_commands {
-            InternalCommands::Develop(_) => deprecate_command("develop"),
             InternalCommands::Envs(_) => deprecate_command("envs"),
 
             InternalCommands::Bundle(_) => deprecate_command("bundle"),
