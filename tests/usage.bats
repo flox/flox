@@ -52,9 +52,6 @@ Local Development Commands
     install        Install a package into an environment
     uninstall      Uninstall installed packages from an environment
     edit           Edit declarative environment configuration
-    run            Run app from current project
-    list           List packages installed in an environment
-    nix            Access to the nix CLI
     delete         Delete an environment
 EOF
 }
@@ -73,8 +70,7 @@ EOF
     run "$FLOX_CLI" --help
     assert_output --partial - << EOF
 Additional Commands. Use "flox COMMAND --help" for more info
-    build, upgrade, import, export, config, wipe-history, subscribe, unsubscribe,
-    channels, history, print-dev-env, shell
+    upgrade, config, wipe-history, history
 EOF
 }
 

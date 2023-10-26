@@ -29,6 +29,7 @@ load test_support.bash;
 # ---------------------------------------------------------------------------- #
 
 setup_file() {
+  skip "package-init deprecated"
   common_file_setup;
 
   # Suppresses warning messages that clutter backtraces.
@@ -40,7 +41,7 @@ setup_file() {
   export _floxpkgs_rev="2c75b96bc3e8c78b516b1fc44dbf95deae6affca";
 
   # Create an alias for testing indirects
-  $FLOX_CLI nix registry add floxpkgs-alias github:flox/floxpkgs;
+  $NIX_BIN --experimental-features "nix-command flakes" registry add floxpkgs-alias github:flox/floxpkgs;
 }
 
 

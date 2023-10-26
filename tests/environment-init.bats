@@ -45,9 +45,9 @@ setup_file() {
   run "$FLOX_CLI" init
   assert_success
 
-  run "$FLOX_CLI" envs
+  run cat .flox/env.json
   assert_success
-  assert_line --index "-1" "test" # `envs` has deprecation warning in its output
+  assert_output --partial '"name": "test"'
 }
 
 @test "c2: If the user is in ~ the environment should be called 'default'." {
@@ -59,9 +59,9 @@ setup_file() {
   run "$FLOX_CLI" init
   assert_success
 
-  run "$FLOX_CLI" envs
+  run cat .flox/env.json
   assert_success
-  assert_output --index "-1" "default" # `envs` has deprecation warning in its output
+  assert_output --partial '"name": "default"'
 
 }
 
@@ -69,18 +69,18 @@ setup_file() {
   run "$FLOX_CLI" init -n "other-test"
   assert_success
 
-  run "$FLOX_CLI" envs
+  run cat .flox/env.json
   assert_success
-  assert_output --partial "other-test"
+  assert_output --partial '"name": "other-test"'
 }
 
 @test "c4: custom name option 1: flox init accepts --name for a user defined name" {
   run "$FLOX_CLI" init --name "other-test"
   assert_success
 
-  run "$FLOX_CLI" envs
+  run cat .flox/env.json
   assert_success
-  assert_output --partial "other-test"
+  assert_output --partial '"name": "other-test"'
 }
 
 @test "c6: a single directory for state" {

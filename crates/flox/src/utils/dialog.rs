@@ -5,10 +5,6 @@ use inquire::ui::{Attributes, RenderConfig, StyleSheet, Styled};
 
 use super::{colors, TERMINAL_STDERR};
 
-pub struct Text<'a> {
-    pub default: Option<&'a str>,
-}
-
 #[allow(unused)]
 #[derive(Debug, Clone)]
 pub struct Confirm {
@@ -23,32 +19,6 @@ pub struct Dialog<'a, Type> {
     pub message: &'a str,
     pub help_message: Option<&'a str>,
     pub typed: Type,
-}
-
-impl<'a> Dialog<'a, Text<'a>> {
-    pub async fn prompt(self) -> inquire::error::InquireResult<String> {
-        let message = self.message.to_owned();
-        let help_message = self.help_message.map(ToOwned::to_owned);
-        let default = self.typed.default.map(ToOwned::to_owned);
-
-        tokio::task::spawn_blocking(move || {
-            let _stderr_lock = TERMINAL_STDERR.lock();
-
-            let mut dialog = inquire::Text::new(&message).with_render_config(flox_theme());
-
-            if let Some(ref help_message) = help_message {
-                dialog = dialog.with_help_message(help_message);
-            }
-
-            if let Some(ref default) = default {
-                dialog = dialog.with_initial_value(default);
-            }
-
-            dialog.prompt()
-        })
-        .await
-        .expect("Failed to join blocking dialog")
-    }
 }
 
 impl<'a> Dialog<'a, Confirm> {

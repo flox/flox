@@ -66,7 +66,7 @@ loadHarness() {
   cd "$FLOX_TEST_HOME/$1"||return;
   export HARNESS="$1";
   # Pre-evaluate targets to avoid non-determinism in `expect' timeouts later.
-  $FLOX_CLI nix flake show >/dev/null 2>&1;
+  $NIX_BIN --experimental-features "nix-command flakes" flake show >/dev/null 2>&1;
 }
 
 
