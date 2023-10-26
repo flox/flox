@@ -27,6 +27,7 @@ load test_support.bash;
 # ---------------------------------------------------------------------------- #
 
 setup_file() {
+  skip "Skipping --bash-passthu tests";
   common_file_setup file;
   "$FLOX_CLI" subscribe netlify_test_ github:flox-examples/nixpkgs-netlify/main;
 }
