@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::{fs, io};
 
@@ -9,7 +10,6 @@ use runix::installable::FlakeAttribute;
 use runix::store_path::StorePath;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use toml_edit::{Document, Item, Table};
 use walkdir::WalkDir;
 
 use self::managed_environment::ManagedEnvironmentError;
@@ -20,6 +20,7 @@ use super::environment_ref::{
     EnvironmentRefError,
 };
 use super::flox_package::{FloxPackage, FloxTriple};
+use super::manifest::TomlEditError;
 use crate::utils::copy_file_without_permissions;
 use crate::utils::errors::IoError;
 
@@ -42,6 +43,14 @@ pub enum InstalledPackage {
     StorePath(StorePath),
 }
 
+/// The result of an installation attempt that contains the new manifest contents
+/// along with whether each package was already installed
+#[derive(Debug)]
+pub struct InstallationAttempt {
+    pub new_manifest: Option<String>,
+    pub already_installed: HashMap<String, bool>,
+}
+
 #[async_trait]
 pub trait Environment {
     /// Build the environment and create a result link as gc-root
@@ -57,7 +66,7 @@ pub trait Environment {
         packages: Vec<String>,
         nix: &NixCommandLine,
         system: System,
-    ) -> Result<bool, EnvironmentError2>;
+    ) -> Result<InstallationAttempt, EnvironmentError2>;
 
     /// Uninstall packages from the environment atomically
     async fn uninstall(
@@ -65,7 +74,7 @@ pub trait Environment {
         packages: Vec<FloxPackage>,
         nix: &NixCommandLine,
         system: System,
-    ) -> Result<bool, EnvironmentError2>;
+    ) -> Result<Option<String>, EnvironmentError2>;
 
     /// Atomically edit this environment, ensuring that it still builds
     async fn edit(
@@ -245,7 +254,7 @@ pub enum EnvironmentError2 {
     #[error(transparent)]
     ManagedEnvironment(#[from] ManagedEnvironmentError),
     #[error(transparent)]
-    Install(#[from] InstallError),
+    Install(#[from] TomlEditError),
 }
 
 /// Copy a whole directory recursively ignoring the original permissions
@@ -288,74 +297,6 @@ fn copy_dir_recursive(
     Ok(())
 }
 
-#[derive(Debug, thiserror::Error)]
-pub enum InstallError {
-    #[error("couldn't open the manifest at path {0}: {1}")]
-    OpenManifest(PathBuf, io::Error),
-    #[error("couldn't parse manifest contents: {0}")]
-    ParseManifest(toml_edit::TomlError),
-    #[error("package already installed")]
-    AlreadyInstalled,
-    #[error("'install' must be a table, but found {0} instead")]
-    MalformedManifest(String),
-    #[error("couldn't write modified manifest: {0}")]
-    WriteManifest(io::Error),
-}
-
-pub fn insert_packages(
-    manifest_contents: &str,
-    pkgs: impl Iterator<Item = String>,
-) -> Result<(Document, bool), InstallError> {
-    let mut changed = false;
-    let mut toml = manifest_contents
-        .parse::<Document>()
-        .map_err(InstallError::ParseManifest)?;
-    match toml.entry("install") {
-        toml_edit::Entry::Occupied(ref mut existing_installs) => {
-            if let Item::Table(ref mut installs) = existing_installs.get_mut() {
-                for pkg in pkgs {
-                    if !installs.contains_key(&pkg) {
-                        installs.insert(&pkg, Item::Table(Table::new()));
-                        changed = true;
-                    }
-                }
-                // TODO: Figure out a better sorting system
-                // installs.sort_values_by(|key1, _, key2, _| key1.cmp(key2));
-                Ok((toml, changed))
-            } else {
-                return Err(InstallError::MalformedManifest(
-                    existing_installs.get().type_name().into(),
-                ));
-            }
-        },
-        toml_edit::Entry::Vacant(empty_installs) => {
-            changed = true;
-            let mut installs_table = Table::new();
-            for pkg in pkgs {
-                installs_table.insert(&pkg, Item::Table(Table::new()));
-            }
-            // TODO: Figure out a better sorting system
-            // installs_table.sort_values_by(|key1, _, key2, _| key1.cmp(key2));
-            empty_installs.insert(Item::Table(installs_table));
-            Ok((toml, changed))
-        },
-    }
-}
-
-// FIXME: will be used in uninstall
-#[allow(unused)]
-pub fn contains_package(toml: &Document, pkg_name: &str) -> Result<bool, InstallError> {
-    if let Some(installs) = toml.get("install") {
-        if let Item::Table(installs_table) = installs {
-            Ok(installs_table.contains_key(pkg_name))
-        } else {
-            Err(InstallError::MalformedManifest(installs.type_name().into()))
-        }
-    } else {
-        Ok(false)
-    }
-}
-
 #[cfg(test)]
 mod test {
     use std::str::FromStr;
@@ -372,23 +313,6 @@ mod test {
         "name": "name",
         "version": 1
     }"#;
-
-    const DUMMY_MANIFEST: &str = r#"
-[install]
-hello = {}
-
-[install.ripgrep]
-[install.bat]
-        "#;
-
-    // This is an array of tables called `install` rather than a table called `install`.
-    const BAD_MANIFEST: &str = r#"
-[[install]]
-python = {}
-
-[[install]]
-ripgrep = {}
-        "#;
 
     #[test]
     fn serializes_managed_environment_pointer() {
@@ -442,48 +366,5 @@ ripgrep = {}
                 version: Version::<1> {},
             })
         );
-    }
-
-    #[test]
-    fn install_adds_new_package() {
-        let test_packages = vec!["python".to_owned()];
-        let pre_addition_toml = DUMMY_MANIFEST.parse::<Document>().unwrap();
-        assert!(!contains_package(&pre_addition_toml, &test_packages[0]).unwrap());
-        let (toml, changed) = insert_packages(DUMMY_MANIFEST, test_packages.iter().cloned())
-            .expect("couldn't add package");
-        assert!(changed, "manifest was changed by install");
-        assert!(contains_package(&toml, &test_packages[0]).unwrap());
-        eprintln!("{}", toml);
-    }
-
-    #[test]
-    fn no_change_adding_existing_package() {
-        let test_packages = vec!["hello".to_owned()];
-        let pre_addition_toml = DUMMY_MANIFEST.parse::<Document>().unwrap();
-        assert!(contains_package(&pre_addition_toml, &test_packages[0]).unwrap());
-        let (_toml, changed) =
-            insert_packages(DUMMY_MANIFEST, test_packages.iter().cloned()).unwrap();
-        assert!(
-            !changed,
-            "manifest shouldn't be changed installing existing package"
-        );
-    }
-
-    #[test]
-    fn install_adds_install_table_when_missing() {
-        let test_packages = vec!["foo".to_owned()];
-        let (toml, changed) = insert_packages("", test_packages.iter().cloned()).unwrap();
-        assert!(contains_package(&toml, &test_packages[0]).unwrap());
-        assert!(changed, "manifest was changed by install");
-    }
-
-    #[test]
-    fn install_error_when_manifest_malformed() {
-        let test_packages = vec!["foo".to_owned()];
-        let attempted_install = insert_packages(BAD_MANIFEST, test_packages.iter().cloned());
-        assert!(matches!(
-            attempted_install,
-            Err(InstallError::MalformedManifest(_))
-        ))
     }
 }
