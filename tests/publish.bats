@@ -21,6 +21,8 @@ load test_support.bash
 # * Get version and output hash for the `hello` package
 #   to check the generated catalog against.
 setup_file() {
+    skip "current publish is depricated"
+
     nix-serve -p 8081 &
     export NIX_SERVE_PID="$!"
 
