@@ -27,15 +27,6 @@ impl Credential {
             refresh_token: String::new(),
         }
     }
-
-    // pub fn is_expired(&self) -> bool {
-    //     let exp = match DateTime::parse_from_rfc3339(self.expiry.as_str()) {
-    //         Ok(time) => time,
-    //         Err(_) => return false,
-    //     };
-    //     let now = Utc::now();
-    //     now > exp
-    // }
 }
 
 #[derive(Debug, Clone)]
@@ -87,23 +78,6 @@ pub async fn authorize(
 
     flow.poll(20).await
 }
-
-// pub fn refresh(
-//     client_id: &str,
-//     refresh_token: &str,
-//     host: Option<String>,
-// ) -> Result<Credential, DeviceFlowError> {
-//     let my_string: String;
-//     let thost = match host {
-//         Some(string) => {
-//             my_string = string;
-//             Some(my_string.as_str())
-//         },
-//         None => None,
-//     };
-
-//     refresh_access_token(client_id, refresh_token, thost)
-// }
 
 #[derive(Debug, Clone)]
 pub enum DeviceFlowState {
@@ -253,46 +227,6 @@ fn calculate_expiry(expires_in: i64) -> String {
     expiry.to_rfc3339()
 }
 
-// fn refresh_access_token(
-//     client_id: &str,
-//     refresh_token: &str,
-//     maybe_host: Option<&str>,
-// ) -> Result<Credential, DeviceFlowError> {
-//     let host = match maybe_host {
-//         Some(string) => string,
-//         None => "github.com",
-//     };
-
-//     let client = reqwest::blocking::Client::new();
-//     let entry_url = format!("https://{}/login/oauth/access_token", &host);
-//     let request_body = format!(
-//         "client_id={}&refresh_token={}&client_secret=&grant_type=refresh_token",
-//         &client_id, &refresh_token
-//     );
-
-//     let res = client
-//         .post(&entry_url)
-//         .header("Accept", "application/json")
-//         .body(request_body)
-//         .send()?
-//         .json::<HashMap<String, serde_json::Value>>()?;
-
-//     if res.contains_key("error") {
-//         Err(credential_error(res["error"].as_str().unwrap().into()))
-//     } else {
-//         let mut credential = Credential::empty();
-//         // eprintln!("res: {:?}", &res);
-//         credential.token = res["access_token"].as_str().unwrap().to_string();
-
-//         if let Some(expires_in) = res.get("expires_in") {
-//             credential.expiry = calculate_expiry(expires_in.as_i64().unwrap());
-//             credential.refresh_token = res["refresh_token"].as_str().unwrap().to_string();
-//         }
-
-//         Ok(credential.clone())
-//     }
-// }
-
 pub fn credential_error(msg: String) -> DeviceFlowError {
     DeviceFlowError::GitHubError(msg)
 }
@@ -340,32 +274,17 @@ impl Auth2 {
         client_id.push_str("Iv1.3b00a7bb5f910259");
         let host = None;
         let cred: std::result::Result<Credential, DeviceFlowError>;
-        // let thiscred: Result<Credential, DeviceFlowError>;
         match self {
             Auth2::Login => {
-                //thiscred = authorize(client_id, host)
-                //println!("Hello, World!");
-                //Ok(())
                 cred = authorize(client_id, host).await;
 
-                // match args.refresh {
-                //     None => {
-                //         cred = authorize(client_id, host);
-                //     },
-                //     Some(rt) => {
-                //         cred = refresh(client_id.as_str(), rt.as_str(), host);
-                //     },
-                // }
                 match cred {
                     Ok(cred) => {
                         let json = serde_json::to_string_pretty(&cred).unwrap();
                         println!("{}", json);
                         Ok(())
                     },
-                    Err(err) => {
-                        //println!("Something went wrong: {:?}", err)
-                        Err(err.into())
-                    },
+                    Err(err) => Err(err.into()),
                 }
             },
         }
