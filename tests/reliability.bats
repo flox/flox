@@ -28,6 +28,7 @@ setup() {
 # ---------------------------------------------------------------------------- #
 
 @test "flox should reliably use a lock in a repo without specifying a stability" {
+  skip "deprecated commands";
   $FLOX_CLI flake lock --override-input flox-floxpkgs/nixpkgs/nixpkgs github:flox/nixpkgs/stable.20230603;
   before=$($FLOX_CLI eval .#hello --json )
   # simulate 30 days have passed and the lockfile updated

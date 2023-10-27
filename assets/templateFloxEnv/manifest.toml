@@ -1,0 +1,14 @@
+# Install packages
+[install]
+
+[install.hello]
+
+# Environment variables
+[vars]
+MY_VAR = "MY_VALUE"
+
+# Add a hook that's run when entering the environment
+# [hook]
+# script = """
+#     hello >&2
+# """

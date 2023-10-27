@@ -235,6 +235,7 @@ mod tests {
     use tempfile::TempDir;
 
     use crate::flox::Flox;
+    use crate::models::environment::MANIFEST_FILENAME;
     use crate::prelude::ChannelRegistry;
     use crate::providers::git::{GitCommandProvider, GitProvider};
 
@@ -301,7 +302,7 @@ mod tests {
         let mut flox_nix = tokio::fs::OpenOptions::new()
             .write(true)
             .truncate(true)
-            .open(project.flake_root().unwrap().join("flox.nix"))
+            .open(project.flake_root().unwrap().join(MANIFEST_FILENAME))
             .await
             .unwrap();
         flox_nix
