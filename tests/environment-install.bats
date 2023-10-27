@@ -50,15 +50,18 @@ setup_file() {
 }
 
 @test "'flox install' displays confirmation message" {
-  "$FLOX_CLI" init
-  run "$FLOX_CLI" install hello
-  assert_success
-  assert_output --partial "✅ Installed package 'hello'."
+  "$FLOX_CLI" init;
+  run "$FLOX_CLI" install hello;
+  assert_success;
+  assert_output --partial "✅ 'hello' installed to environment";
 }
 
 @test "'flox install' edits manifest" {
-  skip TODO
-  "$FLOX_CLI"
+  "$FLOX_CLI" init;
+  run "$FLOX_CLI" install foo;
+  assert_success;
+  contains_foo=$(cat "$PROJECT_DIR/.flox/env/manifest.toml" | grep "foo = ");
+  assert [ -n "$contains_foo" ];
 }
 
 @test "uninstall confirmation message" {
@@ -66,11 +69,11 @@ setup_file() {
   "$FLOX_CLI" init
   run "$FLOX_CLI" install hello
   assert_success
-  assert_output --partial "✅ Installed 'hello' into 'test' environment."
+  assert_output --partial "✅ 'hello' installed to environment."
 
   run "$FLOX_CLI" uninstall hello
   assert_success
-  assert_output --partial "🗑️ Uninstalled 'hello' from 'test' environment."
+  assert_output --partial "🗑️ 'hello' uninstalled from environment."
 }
 
 
