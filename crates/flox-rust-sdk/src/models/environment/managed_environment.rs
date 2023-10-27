@@ -87,7 +87,7 @@ impl Environment for ManagedEnvironment {
     #[allow(unused)]
     async fn install(
         &mut self,
-        packages: Vec<FloxPackage>,
+        packages: Vec<String>,
         nix: &NixCommandLine,
         system: System,
     ) -> Result<bool, EnvironmentError2> {

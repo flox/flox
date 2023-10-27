@@ -49,16 +49,20 @@ setup_file() {
   skip "remote environments handled in another phase"
 }
 
-@test "i?: install confirmation message" {
-  skip "FIXME: broken migrating to manifest.toml";
+@test "'flox install' displays confirmation message" {
   "$FLOX_CLI" init
   run "$FLOX_CLI" install hello
   assert_success
-  assert_output --partial "✅ Installed 'hello' into 'test' environment."
+  assert_output --partial "✅ Installed package 'hello'."
+}
+
+@test "'flox install' edits manifest" {
+  skip TODO
+  "$FLOX_CLI"
 }
 
 @test "uninstall confirmation message" {
-  skip "FIXME: broken migrating to manifest.toml";
+  skip TODO
   "$FLOX_CLI" init
   run "$FLOX_CLI" install hello
   assert_success
@@ -69,13 +73,6 @@ setup_file() {
   assert_output --partial "🗑️ Uninstalled 'hello' from 'test' environment."
 }
 
-@test "i?: warning message if package is already installed {
-  skip "our current editing of Nix expressions doesn't detect already installed packages."
-  run "$FLOX_CLI" install hello # install once
-  run "$FLOX_CLI" install hello # try install again
-  assert_success
-  assert_output --partial "...already installed..."
-}
 
 @test "i5: download package when install command runs" {
   skip "Don't know how to test, check out-link created?"

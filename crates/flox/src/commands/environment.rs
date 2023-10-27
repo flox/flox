@@ -421,51 +421,20 @@ pub struct Install {
 impl Install {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("install");
-
-        let packages: Vec<_> = self
-            .packages
-            .iter()
-            .map(|package| FloxPackage::parse(package, &flox.channels, DEFAULT_CHANNEL))
-            .collect::<Result<Vec<_>, _>>()?
-            .into_iter()
-            .dedup()
-            .collect();
-
         let mut environment = self
             .environment
             .to_concrete_environment(&flox)?
             .into_dyn_environment();
-
-        // todo use set?
-        // let installed = environment
-        //     .packages(&flox.nix(Default::default()), &flox.system)
-        //     .await?
-        //     .into_iter()
-        //     .map(From::from)
-        //     .collect::<Vec<FloxPackage>>();
-
-        // if let Some(installed) = packages.iter().find(|pkg| installed.contains(pkg)) {
-        //     anyhow::bail!("{installed} is already installed");
-        // }
-
-        let packages_str = packages_to_string(&packages);
-        let plural = packages.len() > 1;
-
-        if environment
-            .install(packages, &flox.nix(Default::default()), flox.system)
-            .await
-            .context("could not install packages")?
-        {
-            println!(
-                "✅ Installed {packages_str} into '{}' environment.",
-                environment.environment_ref()
-            );
+        let nix = flox.nix::<NixCommandLine>(vec![]);
+        let changed = environment
+            .install(self.packages.clone(), &nix, flox.system.clone())
+            .await?;
+        if changed {
+            for pkg in self.packages.iter() {
+                println!("✅ Installed {pkg} into environment.");
+            }
         } else {
-            let verb = if plural { "are" } else { "is" };
-            println!(
-                "No changes; {packages_str} {verb} already installed into '{}' environment.",
-                environment.environment_ref()
-            );
+            println!("package(s) already installed");
         }
         Ok(())
     }

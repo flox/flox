@@ -16,12 +16,10 @@ use runix::{Run, RunJson};
 
 use super::{
     copy_dir_recursive,
-    flox_nix_content_with_new_packages,
-    flox_nix_content_with_packages_removed,
+    insert_packages,
     Environment,
     EnvironmentError2,
     EnvironmentPointer,
-    ManifestContent,
     PathPointer,
     DOT_FLOX,
     ENVIRONMENT_POINTER_FILENAME,
@@ -204,20 +202,19 @@ where
     /// installed rather than a bool.
     async fn install(
         &mut self,
-        packages: Vec<FloxPackage>,
+        packages: Vec<String>,
         nix: &NixCommandLine,
         system: System,
     ) -> Result<bool, EnvironmentError2> {
         let current_manifest_contents = self.manifest_content()?;
-        let new_manifest_contents =
-            flox_nix_content_with_new_packages(&current_manifest_contents, packages)?;
-        match new_manifest_contents {
-            ManifestContent::Unchanged => return Ok(false),
-            ManifestContent::Changed(contents) => {
-                self.transact_with_manifest_contents(contents, nix, system)
-                    .await?;
-                Ok(true)
-            },
+        let (toml, changed) =
+            insert_packages(&current_manifest_contents, packages.iter().cloned())?;
+        if changed {
+            self.transact_with_manifest_contents(toml.to_string(), nix, system)
+                .await?;
+            Ok(true)
+        } else {
+            Ok(false)
         }
     }
 
@@ -228,22 +225,23 @@ where
     /// uninstalled rather than a bool.
     async fn uninstall(
         &mut self,
-        packages: Vec<FloxPackage>,
-        nix: &NixCommandLine,
-        system: System,
+        _packages: Vec<FloxPackage>,
+        _nix: &NixCommandLine,
+        _system: System,
     ) -> Result<bool, EnvironmentError2> {
-        let current_manifest_contents = self.manifest_content()?;
+        // let current_manifest_contents = self.manifest_content()?;
 
-        let new_manifest_contents =
-            flox_nix_content_with_packages_removed(&current_manifest_contents, packages)?;
-        match new_manifest_contents {
-            ManifestContent::Unchanged => return Ok(false),
-            ManifestContent::Changed(contents) => {
-                self.transact_with_manifest_contents(contents, nix, system)
-                    .await?;
-                Ok(true)
-            },
-        }
+        // let new_manifest_contents =
+        //     flox_nix_content_with_packages_removed(&current_manifest_contents, packages)?;
+        // match new_manifest_contents {
+        //     ManifestContent::Unchanged => return Ok(false),
+        //     ManifestContent::Changed(contents) => {
+        //         self.transact_with_manifest_contents(contents, nix, system)
+        //             .await?;
+        //         Ok(true)
+        //     },
+        // }
+        todo!()
     }
 
     /// Atomically edit this environment, ensuring that it still builds
@@ -470,13 +468,10 @@ impl PathEnvironment<Original> {
 #[cfg(test)]
 mod tests {
 
-    use flox_types::stability::Stability;
-    use indoc::indoc;
-
     use super::*;
     #[cfg(feature = "impure-unit-tests")]
     use crate::flox::tests::flox_instance;
-    use crate::prelude::flox_package::FloxTriple;
+    use crate::models::environment::MANIFEST_FILENAME;
 
     #[test]
     fn create_env() {
@@ -546,36 +541,6 @@ mod tests {
                 env.path.to_string_lossy()
             )
         )
-    }
-
-    #[test]
-    fn test_flox_nix_content_with_new_packages() {
-        let old_content = indoc! {r#"
-            {
-                packages."nixpkgs-flox".hello = {};
-            }
-        "#};
-        let new_content =
-            match flox_nix_content_with_new_packages(&old_content, [FloxPackage::Triple(
-                FloxTriple {
-                    stability: Stability::Stable,
-                    channel: "nixpkgs-flox".to_string(),
-                    name: ["hello"].try_into().unwrap(),
-                    version: None,
-                },
-            )])
-            .unwrap()
-            {
-                ManifestContent::Changed(new_content) => new_content,
-                ManifestContent::Unchanged => panic!("contents should be changed"),
-            };
-        let expected = indoc! {r#"
-            {
-              packages."nixpkgs-flox".hello = { };
-              packages."nixpkgs-flox".hello = { };
-            }
-        "#};
-        pretty_assertions::assert_eq!(new_content, expected)
     }
 
     #[tokio::test]
