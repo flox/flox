@@ -92,6 +92,12 @@ setup_file() {
   assert_output --partial "unsubscribed from channel 'flox-examples'"
 }
 
+@test "flox auth2 login" {
+  run $FLOX_CLI auth2 login
+  assert_output --partial "Please visit https://github.com/login/device in your browser"
+  assert_failure
+}
+
 @test "assert not logged into github" {
   run $FLOX_CLI gh auth status
   assert_failure
