@@ -27,8 +27,7 @@ use super::{
 };
 use crate::models::environment::CATALOG_JSON;
 use crate::models::environment_ref::{EnvironmentName, EnvironmentOwner, EnvironmentRef};
-use crate::models::manifest::insert_packages;
-use crate::prelude::flox_package::FloxPackage;
+use crate::models::manifest::{insert_packages, remove_packages};
 use crate::utils::copy_file_without_permissions;
 
 const ENVIRONMENT_DIR_NAME: &'_ str = "env";
@@ -228,23 +227,15 @@ where
     /// uninstalled rather than a bool.
     async fn uninstall(
         &mut self,
-        _packages: Vec<FloxPackage>,
+        packages: Vec<String>,
         _nix: &NixCommandLine,
         _system: System,
-    ) -> Result<Option<String>, EnvironmentError2> {
-        // let current_manifest_contents = self.manifest_content()?;
-
-        // let new_manifest_contents =
-        //     flox_nix_content_with_packages_removed(&current_manifest_contents, packages)?;
-        // match new_manifest_contents {
-        //     ManifestContent::Unchanged => return Ok(false),
-        //     ManifestContent::Changed(contents) => {
-        //         self.transact_with_manifest_contents(contents, nix, system)
-        //             .await?;
-        //         Ok(true)
-        //     },
-        // }
-        todo!()
+    ) -> Result<String, EnvironmentError2> {
+        let current_manifest_contents = self.manifest_content()?;
+        let toml = remove_packages(&current_manifest_contents, packages.iter().cloned())?;
+        // TODO: enable transactions once build is re-implemented
+        // self.transact_with_manifest_contents(toml.to_string(), nix, system).await?;
+        Ok(toml.to_string())
     }
 
     /// Atomically edit this environment, ensuring that it still builds

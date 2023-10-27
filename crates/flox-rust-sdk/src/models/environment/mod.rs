@@ -19,7 +19,7 @@ use super::environment_ref::{
     EnvironmentRef,
     EnvironmentRefError,
 };
-use super::flox_package::{FloxPackage, FloxTriple};
+use super::flox_package::FloxTriple;
 use super::manifest::TomlEditError;
 use crate::utils::copy_file_without_permissions;
 use crate::utils::errors::IoError;
@@ -71,10 +71,10 @@ pub trait Environment {
     /// Uninstall packages from the environment atomically
     async fn uninstall(
         &mut self,
-        packages: Vec<FloxPackage>,
+        packages: Vec<String>,
         nix: &NixCommandLine,
         system: System,
-    ) -> Result<Option<String>, EnvironmentError2>;
+    ) -> Result<String, EnvironmentError2>;
 
     /// Atomically edit this environment, ensuring that it still builds
     async fn edit(
