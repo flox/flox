@@ -42,9 +42,6 @@
       PKGDB_BIN = "${flox-pkgdb}/bin/pkgdb";
       FLOX_GH_BIN = "${flox-gh}/bin/flox-gh";
       GH_BIN = "${gh}/bin/gh";
-
-      # path to bash impl of flox to dispatch unimplemented commands to
-      FLOX_SH = "${flox-bash}/libexec/flox/flox";
       FLOX_SH_PATH = flox-bash.outPath;
 
       # Modified nix completion scripts

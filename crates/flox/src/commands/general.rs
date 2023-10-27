@@ -17,12 +17,12 @@ use toml_edit::Key;
 
 use crate::commands::not_help;
 use crate::config::{Config, ReadWriteError, FLOX_CONFIG_FILE};
+use crate::subcommand_metric;
 use crate::utils::metrics::{
     METRICS_EVENTS_FILE_NAME,
     METRICS_LOCK_FILE_NAME,
     METRICS_UUID_FILE_NAME,
 };
-use crate::{flox_forward, subcommand_metric};
 
 /// reset the metrics queue (if any), reset metrics ID, and re-prompt for consent
 #[derive(Bpaf, Clone)]
@@ -222,9 +222,9 @@ pub struct Gh {
     _gh_args: Vec<String>,
 }
 impl Gh {
-    pub async fn handle(self, _config: Config, flox: Flox) -> Result<()> {
+    pub async fn handle(self, _config: Config, _flox: Flox) -> Result<()> {
         subcommand_metric!("gh");
-        flox_forward(&flox).await
+        todo!("deprecated")
     }
 }
 
@@ -243,9 +243,9 @@ pub enum Auth {
 }
 
 impl Auth {
-    pub async fn handle(self, _config: Config, flox: Flox) -> Result<()> {
+    pub async fn handle(self, _config: Config, _flox: Flox) -> Result<()> {
         subcommand_metric!("auth");
-        flox_forward(&flox).await
+        todo!("this command is planned for a future release")
     }
 }
 

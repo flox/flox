@@ -26,6 +26,7 @@ load test_support.bash;
 # ---------------------------------------------------------------------------- #
 
 setup_file() {
+  skip "Skipping --bash-passthru tests";
   common_file_setup;
   # We can't really parallelize these because we reuse the same test dirs.
   # e.g. `FLOX_TEST_HOME/develop' is used multiple times.
@@ -40,6 +41,7 @@ setup() {
 
 
 teardown() {
+  skip
   cd "${FLOX_TEST_HOME?}"||return;
   if [[ -n "${HARNESS:-}" ]] && [[ -d "${FLOX_TEST_HOME?}/$HARNESS" ]]; then
     rm -rf "${FLOX_TEST_HOME:?}/$HARNESS";

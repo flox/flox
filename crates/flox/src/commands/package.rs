@@ -25,9 +25,9 @@ use itertools::Itertools;
 use log::{debug, info, warn};
 
 use crate::config::Config;
+use crate::subcommand_metric;
 use crate::utils::dialog::{Confirm, Dialog, Text};
 use crate::utils::resolve_environment_ref;
-use crate::{flox_forward, subcommand_metric};
 
 async fn env_ref_to_flake_attribute<Git: GitProvider + 'static>(
     flox: &Flox,
@@ -212,26 +212,6 @@ impl WithPassthru<Build> {
     }
 }
 
-/// launch development shell for current project
-#[derive(Bpaf, Clone, Debug)]
-pub struct Develop {
-    #[bpaf(short('A'), hide)]
-    pub _attr_flag: bool,
-
-    /// Shell or package to develop on
-    #[bpaf(external(InstallableArgument::positional), optional, catch)]
-    pub(crate) _installable_arg: Option<InstallableArgument<Parsed, DevelopInstallable>>,
-}
-parseable!(Develop, develop);
-impl WithPassthru<Develop> {
-    pub async fn handle(self, mut config: Config, flox: Flox) -> Result<()> {
-        subcommand_metric!("develop");
-        config.override_stability(self.stability);
-
-        flox_forward(&flox).await
-    }
-}
-
 /// print shell code that can be sourced by bash to reproduce the development environment
 #[derive(Bpaf, Clone, Debug)]
 pub struct PrintDevEnv {
@@ -244,11 +224,11 @@ pub struct PrintDevEnv {
 }
 parseable!(PrintDevEnv, print_dev_env);
 impl WithPassthru<PrintDevEnv> {
-    pub async fn handle(self, mut config: Config, flox: Flox) -> Result<()> {
+    pub async fn handle(self, mut config: Config, _flox: Flox) -> Result<()> {
         subcommand_metric!("print-dev-env");
         config.override_stability(self.stability);
 
-        flox_forward(&flox).await
+        todo!("deprecated");
     }
 }
 

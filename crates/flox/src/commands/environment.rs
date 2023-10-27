@@ -28,9 +28,9 @@ use itertools::Itertools;
 use log::{error, info};
 use tempfile::NamedTempFile;
 
+use crate::subcommand_metric;
 use crate::utils::dialog::{Confirm, Dialog};
 use crate::utils::display::packages_to_string;
-use crate::{flox_forward, subcommand_metric};
 
 #[derive(Bpaf, Clone)]
 pub struct EnvironmentArgs {
@@ -615,10 +615,10 @@ pub struct Export {
 }
 
 impl Export {
-    pub async fn handle(self, flox: Flox) -> Result<()> {
+    pub async fn handle(self, _flox: Flox) -> Result<()> {
         subcommand_metric!("export");
 
-        flox_forward(&flox).await
+        todo!("deprecated")
     }
 }
 
@@ -639,10 +639,10 @@ pub struct Generations {
 }
 
 impl Generations {
-    pub async fn handle(self, flox: Flox) -> Result<()> {
+    pub async fn handle(self, _flox: Flox) -> Result<()> {
         subcommand_metric!("generations");
 
-        flox_forward(&flox).await
+        todo!("this command is planned for a future release")
     }
 }
 
@@ -663,10 +663,10 @@ pub struct Git {
 }
 
 impl Git {
-    pub async fn handle(self, flox: Flox) -> Result<()> {
+    pub async fn handle(self, _flox: Flox) -> Result<()> {
         subcommand_metric!("git");
 
-        flox_forward(&flox).await
+        todo!("deprecated")
     }
 }
 
@@ -687,10 +687,10 @@ pub struct History {
 }
 
 impl History {
-    pub async fn handle(self, flox: Flox) -> Result<()> {
+    pub async fn handle(self, _flox: Flox) -> Result<()> {
         subcommand_metric!("history");
 
-        flox_forward(&flox).await
+        todo!("this command is planned for a future release")
     }
 }
 
@@ -711,10 +711,10 @@ pub struct Import {
 }
 
 impl Import {
-    pub async fn handle(self, flox: Flox) -> Result<()> {
+    pub async fn handle(self, _flox: Flox) -> Result<()> {
         subcommand_metric!("import");
 
-        flox_forward(&flox).await
+        todo!("deprecated")
     }
 }
 
@@ -757,10 +757,10 @@ pub struct Push {
 }
 
 impl Push {
-    pub async fn handle(self, flox: Flox) -> Result<()> {
+    pub async fn handle(self, _flox: Flox) -> Result<()> {
         subcommand_metric!("push");
 
-        flox_forward(&flox).await
+        todo!("this command is planned for a future release")
     }
 }
 
@@ -793,10 +793,10 @@ pub struct Pull {
 }
 
 impl Pull {
-    pub async fn handle(self, flox: Flox) -> Result<()> {
+    pub async fn handle(self, _flox: Flox) -> Result<()> {
         subcommand_metric!("pull");
 
-        flox_forward(&flox).await
+        todo!("this command is planned for a future release")
     }
 }
 
@@ -834,10 +834,10 @@ pub struct Rollback {
     to: Option<u32>,
 }
 impl Rollback {
-    pub async fn handle(self, flox: Flox) -> Result<()> {
+    pub async fn handle(self, _flox: Flox) -> Result<()> {
         subcommand_metric!("rollback");
 
-        flox_forward(&flox).await
+        todo!("this command is planned for a future release")
     }
 }
 
@@ -858,10 +858,10 @@ pub struct SwitchGeneration {
 }
 
 impl SwitchGeneration {
-    pub async fn handle(self, flox: Flox) -> Result<()> {
+    pub async fn handle(self, _flox: Flox) -> Result<()> {
         subcommand_metric!("switch-generation");
 
-        flox_forward(&flox).await
+        todo!("this command is planned for a future release")
     }
 }
 
@@ -881,10 +881,10 @@ pub struct Upgrade {
     packages: Vec<String>,
 }
 impl Upgrade {
-    pub async fn handle(self, flox: Flox) -> Result<()> {
+    pub async fn handle(self, _flox: Flox) -> Result<()> {
         subcommand_metric!("upgrade");
 
-        flox_forward(&flox).await
+        todo!("this command is planned for a future release")
     }
 }
 

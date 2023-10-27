@@ -1,23 +1,17 @@
 use std::env;
 use std::fmt::{Debug, Display};
-use std::os::unix::process::ExitStatusExt;
-use std::path::Path;
-use std::process::{ExitCode, ExitStatus};
+use std::process::ExitCode;
 
 use anyhow::{anyhow, Context, Result};
 use bpaf::{Args, Parser};
-use commands::{BashPassthru, FloxArgs, Prefix, Version};
-use flox_rust_sdk::environment::default_nix_subprocess_env;
-use log::{debug, error, warn};
-use tokio::process::Command;
+use commands::{FloxArgs, Prefix, Version};
+use log::{error, warn};
 use utils::init::init_logger;
 
 mod build;
 mod commands;
 mod config;
 mod utils;
-
-use flox_rust_sdk::flox::{Flox, FLOX_SH};
 
 async fn run(args: FloxArgs) -> Result<()> {
     init_logger(Some(args.verbosity.clone()), Some(args.debug));
@@ -32,22 +26,6 @@ async fn main() -> ExitCode {
     // initialize logger with "best guess" defaults
     // updating the logger conf is cheap, so we reinitialize whenever we get more information
     init_logger(None, None);
-
-    // redirect to flox early if `--bash-passthru` is present
-    if let Some(args) = BashPassthru::check() {
-        set_parent_process_id();
-        let bash_command = run_in_flox(None, &args).await;
-
-        match bash_command {
-            // If calling the bash command caused an error, print the error and exit with status 1
-            Err(run_error) => {
-                error!("Error: {:?}", run_error);
-                return ExitCode::from(1);
-            },
-            // If _calling the bash command was successful, exit with its exit code
-            Ok(exit_code) => return ExitCode::from(exit_code),
-        };
-    }
 
     // Quit early if `--prefix` is present
     if Prefix::check() {
@@ -131,44 +109,6 @@ impl Display for FloxShellErrorCode {
     }
 }
 impl std::error::Error for FloxShellErrorCode {}
-
-pub async fn flox_forward(flox: &Flox) -> Result<()> {
-    let result = run_in_flox(Some(flox), &env::args_os().collect::<Vec<_>>()[1..]).await?;
-    if !ExitStatus::from_raw(result as i32).success() {
-        Err(FloxShellErrorCode(ExitCode::from(result)))?
-    }
-
-    Ok(())
-}
-
-pub async fn run_in_flox(
-    _flox: Option<&Flox>,
-    args: &[impl AsRef<std::ffi::OsStr> + Debug],
-) -> Result<u8> {
-    debug!("Running in flox with arguments: {:?}", args);
-
-    let flox_bin = std::env::var("FLOX_BASH_PREFIX")
-        .map_or(Path::new(FLOX_SH).to_path_buf(), |prefix| {
-            Path::new(&prefix).join("bin").join("flox")
-        });
-
-    let status = Command::new(&flox_bin)
-        .args(args)
-        .envs(&default_nix_subprocess_env())
-        .spawn()
-        .expect("failed to spawn flox")
-        .wait()
-        .await
-        .context("fatal: failed executing {flox_bin}")?;
-
-    let code = status.code().unwrap_or_else(|| {
-        status
-            .signal()
-            .expect("Process terminated by unknown means")
-    }) as u8;
-
-    Ok(code)
-}
 
 /// Resets the `$USER`/`HOME` variables to match `euid`
 ///

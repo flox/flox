@@ -17,7 +17,6 @@ use tempfile::TempDir;
 use toml_edit::Key;
 
 use self::package::{Parseable, Run, WithPassthru};
-use crate::config::features::Feature;
 use crate::config::{Config, FLOX_CONFIG_FILE};
 use crate::utils::init::{
     init_access_tokens,
@@ -27,7 +26,6 @@ use crate::utils::init::{
     telemetry_opt_out_needs_migration,
 };
 use crate::utils::metrics::METRICS_UUID_FILE_NAME;
-use crate::{flox_forward, subcommand_metric};
 
 static FLOX_WELCOME_MESSAGE: Lazy<String> = Lazy::new(|| {
     formatdoc! {r#"
@@ -268,43 +266,6 @@ enum LocalDevelopmentCommands {
 impl LocalDevelopmentCommands {
     async fn handle(self, config: Config, flox: Flox) -> Result<()> {
         match self {
-            LocalDevelopmentCommands::Init(_) if Feature::Env.is_forwarded()? => {
-                subcommand_metric!("init");
-                flox_forward(&flox).await?;
-            },
-            LocalDevelopmentCommands::Activate(_) if Feature::Env.is_forwarded()? => {
-                subcommand_metric!("activate");
-                flox_forward(&flox).await?;
-            },
-            LocalDevelopmentCommands::Edit(_) if Feature::Env.is_forwarded()? => {
-                subcommand_metric!("edit");
-                flox_forward(&flox).await?;
-            },
-            LocalDevelopmentCommands::Install(_) if Feature::Env.is_forwarded()? => {
-                subcommand_metric!("install");
-                flox_forward(&flox).await?;
-            },
-            LocalDevelopmentCommands::Uninstall(_) if Feature::Env.is_forwarded()? => {
-                subcommand_metric!("uninstall");
-                flox_forward(&flox).await?;
-            },
-            LocalDevelopmentCommands::List(_) if Feature::Env.is_forwarded()? => {
-                subcommand_metric!("list");
-                flox_forward(&flox).await?;
-            },
-            LocalDevelopmentCommands::Delete(_) if Feature::Env.is_forwarded()? => {
-                subcommand_metric!("delete");
-                flox_forward(&flox).await?;
-            },
-            LocalDevelopmentCommands::Search(_) if Feature::Channels.is_forwarded()? => {
-                subcommand_metric!("search");
-                flox_forward(&flox).await?
-            },
-            LocalDevelopmentCommands::Show(_) if Feature::Channels.is_forwarded()? => {
-                subcommand_metric!("show");
-                flox_forward(&flox).await?
-            },
-
             LocalDevelopmentCommands::Init(args) => args.handle(flox).await?,
             LocalDevelopmentCommands::Activate(args) => args.handle(flox).await?,
             LocalDevelopmentCommands::Edit(args) => args.handle(flox).await?,
@@ -337,14 +298,6 @@ enum SharingCommands {
 impl SharingCommands {
     async fn handle(self, config: Config, flox: Flox) -> Result<()> {
         match self {
-            SharingCommands::Push(_) if Feature::Env.is_forwarded()? => {
-                subcommand_metric!("push");
-                flox_forward(&flox).await?;
-            },
-            SharingCommands::Pull(_) if Feature::Env.is_forwarded()? => {
-                subcommand_metric!("pull");
-                flox_forward(&flox).await?;
-            },
             SharingCommands::Push(args) => args.handle(flox).await?,
             SharingCommands::Pull(args) => args.handle(flox).await?,
             SharingCommands::Containerize(args) => args.handle(config, flox).await?,
@@ -394,38 +347,6 @@ impl AdditionalCommands {
 
     async fn handle(self, config: Config, flox: Flox) -> Result<()> {
         match self {
-            // Environment commands feature gate
-            AdditionalCommands::Upgrade(_) if Feature::Env.is_forwarded()? => {
-                subcommand_metric!("upgrade");
-                flox_forward(&flox).await?;
-            },
-            AdditionalCommands::Import(_) if Feature::Env.is_forwarded()? => {
-                subcommand_metric!("import");
-                flox_forward(&flox).await?;
-            },
-            AdditionalCommands::Export(_) if Feature::Env.is_forwarded()? => {
-                subcommand_metric!("export");
-                flox_forward(&flox).await?;
-            },
-            AdditionalCommands::History(_) if Feature::Env.is_forwarded()? => {
-                subcommand_metric!("history");
-                flox_forward(&flox).await?;
-            },
-
-            // Channel Commands feature gate
-            AdditionalCommands::Channels(_) if Feature::Channels.is_forwarded()? => {
-                subcommand_metric!("channels");
-                flox_forward(&flox).await?
-            },
-            AdditionalCommands::Subscribe(_) if Feature::Channels.is_forwarded()? => {
-                subcommand_metric!("channels");
-                flox_forward(&flox).await?
-            },
-            AdditionalCommands::Unsubscribe(_) if Feature::Channels.is_forwarded()? => {
-                subcommand_metric!("channels");
-                flox_forward(&flox).await?
-            },
-
             AdditionalCommands::Documentation(args) => args.handle(),
             AdditionalCommands::Build(args) => args.handle(config, flox).await?,
             AdditionalCommands::Upgrade(args) => args.handle(flox).await?,
@@ -468,7 +389,6 @@ fn check_deprecated_commands(commands: &Commands) {
             _ => { /* not deprecated */ },
         },
         Commands::Internal(internal_commands) => match internal_commands {
-            InternalCommands::Develop(_) => deprecate_command("develop"),
             InternalCommands::Envs(_) => deprecate_command("envs"),
 
             InternalCommands::Bundle(_) => deprecate_command("bundle"),
@@ -529,8 +449,6 @@ enum InternalCommands {
     #[bpaf(command)]
     Eval(#[bpaf(external(WithPassthru::parse))] WithPassthru<package::Eval>),
     #[bpaf(command)]
-    Develop(#[bpaf(external(WithPassthru::parse))] WithPassthru<package::Develop>),
-    #[bpaf(command)]
     Gh(#[bpaf(external(general::gh))] general::Gh),
     #[bpaf(command)]
     Auth(#[bpaf(external(general::auth))] general::Auth),
@@ -539,28 +457,6 @@ enum InternalCommands {
 impl InternalCommands {
     async fn handle(self, config: Config, flox: Flox) -> Result<()> {
         match self {
-            // Environment Commands feature gate
-            InternalCommands::Generations(_) if Feature::Env.is_forwarded()? => {
-                subcommand_metric!("generations");
-                flox_forward(&flox).await?;
-            },
-            InternalCommands::SwitchGeneration(_) if Feature::Env.is_forwarded()? => {
-                subcommand_metric!("switch-generation");
-                flox_forward(&flox).await?;
-            },
-            InternalCommands::Rollback(_) if Feature::Env.is_forwarded()? => {
-                subcommand_metric!("rollback");
-                flox_forward(&flox).await?;
-            },
-            InternalCommands::Envs(_) if Feature::Env.is_forwarded()? => {
-                subcommand_metric!("envs");
-                flox_forward(&flox).await?;
-            },
-            InternalCommands::Git(_) if Feature::Env.is_forwarded()? => {
-                subcommand_metric!("git");
-                flox_forward(&flox).await?;
-            },
-
             InternalCommands::ResetMetrics(args) => args.handle(config, flox).await?,
             InternalCommands::Generations(args) => args.handle(flox).await?,
             InternalCommands::SwitchGeneration(args) => args.handle(flox).await?,
@@ -572,7 +468,6 @@ impl InternalCommands {
             InternalCommands::Bundle(args) => args.handle(config, flox).await?,
             InternalCommands::Flake(args) => args.handle(config, flox).await?,
             InternalCommands::Eval(args) => args.handle(config, flox).await?,
-            InternalCommands::Develop(args) => args.handle(config, flox).await?,
             InternalCommands::Gh(args) => args.handle(config, flox).await?,
             InternalCommands::Auth(args) => args.handle(config, flox).await?,
         }
@@ -621,52 +516,6 @@ impl Version {
             .map(|(v, _)| v)
             .unwrap_or_default()
             .0
-    }
-}
-
-/// Special command to check for the presence of the `--bash-passthru`
-///
-/// With `--bash-passthru`,
-/// all arguments to `flox` are passed to `flox-bash`
-#[derive(Bpaf, Default, Debug)]
-pub struct BashPassthru {
-    #[bpaf(long("bash-passthru"))]
-    do_passthru: bool,
-
-    // bpaf parses all arguments and collects them into a Vec
-    // however by doing so it also (correctly) parses `--` as a
-    // delimiter.
-    // The delimiter is _not_ part of the collected arguments.
-    // When passing on this parsed list of args, `--` will be missing,
-    // causing invalid arguments to e.g. `flox-bash activate`.
-    // Hence the arguments are determined differently below, which adds `--` back in.
-    #[bpaf(any("REST", Some), many)]
-    _flox_args: Vec<String>,
-}
-
-impl BashPassthru {
-    /// Parses to [Self] and extract the `--bash-passthru` flag
-    /// returning a list of the remaining arguments if given.
-    pub fn check() -> Option<Vec<String>> {
-        let passtrhu = bash_passthru()
-            .to_options()
-            .run_inner(Args::current_args())
-            .unwrap_or_default();
-
-        let args = std::env::args()
-            .skip(1)
-            .filter(|arg| arg != "--bash-passthru")
-            .collect();
-
-        if passtrhu.do_passthru {
-            return Some(args);
-        }
-
-        if let Ok("true") = env::var("FLOX_BASH_PASSTHRU").as_deref() {
-            return Some(args);
-        }
-
-        None
     }
 }
 

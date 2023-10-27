@@ -14,6 +14,7 @@ load test_support.bash;
 # ---------------------------------------------------------------------------- #
 
 setup_file() {
+  skip "Skipping --bash-passthru tests";
   common_file_setup;
   "$FLOX_CLI" --bash-passthru create -e "$TEST_ENVIRONMENT";
   "$FLOX_CLI" --bash-passthru install -e "$TEST_ENVIRONMENT" hello cowsay;

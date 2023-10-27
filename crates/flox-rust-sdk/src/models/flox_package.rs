@@ -243,7 +243,6 @@ mod tests {
     use runix::flake_ref::git::GitRef;
 
     use super::*;
-    use crate::flox::FLOX_SH;
     use crate::prelude::Channel;
 
     static CHANNELS: Lazy<ChannelRegistry> = Lazy::new(|| {
@@ -310,8 +309,9 @@ mod tests {
 
     #[test]
     fn parse_store_path() {
-        let expected = FloxPackage::StorePath(StorePath::from_str(FLOX_SH).unwrap());
-        let parsed = FloxPackage::parse(FLOX_SH, &CHANNELS, DEFAULT_CHANNEL).expect("should parse");
+        let path = env!("FLOX_SH_PATH");
+        let expected = FloxPackage::StorePath(StorePath::from_str(path).unwrap());
+        let parsed = FloxPackage::parse(path, &CHANNELS, DEFAULT_CHANNEL).expect("should parse");
         assert_eq!(parsed, expected);
     }
 
