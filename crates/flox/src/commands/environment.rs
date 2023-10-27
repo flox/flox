@@ -420,9 +420,9 @@ impl Install {
             // Print which new packages were installed
             for pkg in self.packages.iter() {
                 if let Some(false) = installation.already_installed.get(pkg) {
-                    println!("✅ {pkg} installed to environment");
+                    println!("✅ '{pkg}' installed to environment");
                 } else {
-                    println!("🛑 {pkg} already installed");
+                    println!("🛑 '{pkg}' already installed");
                 }
             }
         } else {
