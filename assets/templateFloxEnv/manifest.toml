@@ -1,8 +1,6 @@
 # Install packages
 [install]
 
-[install.hello]
-
 # Environment variables
 [vars]
 MY_VAR = "MY_VALUE"
