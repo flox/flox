@@ -14,7 +14,10 @@ load test_support.bash;
 # ---------------------------------------------------------------------------- #
 
 # Suppress the creation of file/suite homedirs.
-setup_file() { common_file_setup test; }
+setup_file() {
+  skip "list deprecated";
+  common_file_setup test;
+}
 
 setup() {
   # Note the use of `-L' to copy flake.{nix,lock} as files.

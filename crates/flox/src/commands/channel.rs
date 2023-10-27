@@ -2,10 +2,10 @@ use std::collections::{HashMap, HashSet};
 use std::io::{BufWriter, Write};
 use std::str::FromStr;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{bail, Result};
 use bpaf::Bpaf;
 use derive_more::Display;
-use flox_rust_sdk::flox::{Flox, DEFAULT_OWNER};
+use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::search::{
     do_search,
     Query,
@@ -16,21 +16,15 @@ use flox_rust_sdk::models::search::{
     SearchResult,
     SearchResults,
     ShowError,
+    Subtree,
 };
-use flox_rust_sdk::nix::command::FlakeMetadata;
-use flox_rust_sdk::nix::command_line::NixCommandLine;
-use flox_rust_sdk::nix::flake_ref::git_service::{GitServiceAttributes, GitServiceRef};
-use flox_rust_sdk::nix::flake_ref::FlakeRef;
-use flox_rust_sdk::nix::RunJson;
 use itertools::Itertools;
-use regex::Regex;
-use serde_json::json;
 
 use crate::subcommand_metric;
-use crate::utils::dialog::{Dialog, Select, Text};
 use crate::utils::init::{DEFAULT_CHANNELS, HIDDEN_CHANNELS};
 
 const SEARCH_INPUT_SEPARATOR: &'_ str = ":";
+const DEFAULT_DESCRIPTION: &'_ str = "<no description provided>";
 
 #[derive(Bpaf, Clone)]
 pub struct ChannelArgs {}
@@ -52,10 +46,6 @@ pub struct Search {
     /// print search as JSON
     #[bpaf(long)]
     pub json: bool,
-
-    /// print extended search results
-    #[bpaf(short, long, long("verbose"), short('v'))]
-    pub long: bool,
 
     /// force update of catalogs from remote sources before searching
     #[bpaf(long)]
@@ -216,7 +206,7 @@ fn render_search_results_user_facing(search_results: SearchResults) -> Result<()
 
     // Finally print something
     let mut writer = BufWriter::new(std::io::stdout());
-    let default_desc = String::from("<no description provided>");
+    let default_desc = String::from(DEFAULT_DESCRIPTION);
     for d in deduped_display_items.into_iter() {
         let package = if d.render_with_input {
             [d.input, d.package].join(SEARCH_INPUT_SEPARATOR)
@@ -290,6 +280,10 @@ fn dedup_and_disambiguate_display_items(mut display_items: Vec<DisplayItem>) -> 
 /// Show detailed package information
 #[derive(Bpaf, Clone)]
 pub struct Show {
+    /// Whether to show all available package versions
+    #[bpaf(long)]
+    pub all: bool,
+
     /// The package to show detailed information about. Must be an exact match
     /// for a package name e.g. something copy-pasted from the output of `flox search`.
     #[bpaf(positional("search-term"))]
@@ -310,7 +304,7 @@ impl Show {
         // FIXME: We may have warnings on `stderr` even with a successful call to `pkgdb`.
         //        We aren't checking that at all at the moment because better overall error handling
         //        is coming in a later PR.
-        render_show(search_results.results.as_slice())?;
+        render_show(search_results.results.as_slice(), self.all)?;
         if exit_status.success() {
             Ok(())
         } else {
@@ -373,267 +367,71 @@ fn construct_show_params(search_term: &str, flox: &Flox) -> Result<SearchParams>
     })
 }
 
-fn render_show(search_results: &[SearchResult]) -> Result<()> {
-    // FIXME: Proper rendering is coming later
+fn render_show(search_results: &[SearchResult], all: bool) -> Result<()> {
+    let mut pkg_name = None;
+    let mut results = Vec::new();
+    // Collect all versions of the top search result
     for package in search_results.iter() {
-        let pkg_name = package.pkg_subpath.join(".");
-        let description = package
-            .description
-            .as_ref()
-            .map(|d| d.replace('\n', " "))
-            .unwrap_or("<no description provided>".into());
-        println!("{} - {}", pkg_name, description);
+        let this_pkg_name = package.pkg_subpath.join(".");
+        if pkg_name.is_none() {
+            pkg_name = Some(this_pkg_name.clone());
+        }
+        if pkg_name == Some(this_pkg_name) {
+            results.push(package);
+        }
+        // let description = package
+        //     .description
+        //     .as_ref()
+        //     .map(|d| d.replace('\n', " "))
+        //     .unwrap_or("<no description provided>".into());
+        // println!("{} - {}", this_pkg_name, description);
     }
+    if results.is_empty() {
+        // This should never happen since we've already checked that the
+        // set of results is non-empty.
+        bail!("no packages found");
+    }
+    let pkg_name = pkg_name.unwrap();
+    let description = results[0]
+        .description
+        .as_ref()
+        .map(|d| d.replace('\n', " "))
+        .unwrap_or(DEFAULT_DESCRIPTION.into());
+    let versions = if all {
+        let multiple_versions = results
+            .iter()
+            .filter_map(|sr| {
+                // Don't show a "latest" search result, it's just
+                // a duplicate
+                if sr.subtree == Subtree::Catalog
+                    && sr
+                        .abs_path
+                        .last()
+                        .map(|version| version == "latest")
+                        .unwrap_or(false)
+                {
+                    return None;
+                }
+                let name = sr.pkg_subpath.join(".");
+                // We don't print packages that don't have a version since
+                // the resolver will always rank versioned packages higher.
+                sr.version.clone().map(|version| [name, version].join("@"))
+            })
+            .collect::<Vec<_>>();
+        multiple_versions.join(", ")
+    } else {
+        let sr = results[0];
+        let name = sr.pkg_subpath.join(".");
+        let version = sr.version.clone();
+        if let Some(version) = version {
+            [name, version].join("@")
+        } else {
+            name
+        }
+    };
+    println!("{pkg_name} - {description}");
+    println!("    {pkg_name} - {versions}");
     Ok(())
 }
 
-#[derive(Bpaf, Clone)]
-pub enum SubscribeArgs {
-    NameUrl {
-        /// Name of the subscribed channel
-        #[bpaf(positional("name"))]
-        name: ChannelRef,
-        /// Url of the channel.
-        #[bpaf(positional("url"))]
-        url: Url,
-    },
-    Name {
-        /// Name of the subscribed channel
-        #[bpaf(positional("name"))]
-        name: ChannelRef,
-    },
-}
-
-/// Subscribe to channel URL
-#[derive(Bpaf, Clone)]
-pub struct Subscribe {
-    #[bpaf(external(subscribe_args), optional)]
-    args: Option<SubscribeArgs>,
-}
-impl Subscribe {
-    pub async fn handle(self, flox: Flox) -> Result<()> {
-        subcommand_metric!("subscribe");
-        // query name interactively if not provided
-        let name = match &self.args {
-            None => {
-                Dialog {
-                    help_message: None,
-                    message: "Enter channel name to be added:",
-                    typed: Text { default: None },
-                }
-                .prompt()
-                .await?
-            },
-            Some(SubscribeArgs::Name { name }) | Some(SubscribeArgs::NameUrl { name, .. }) => {
-                name.to_string()
-            },
-        };
-
-        // return if name invalid
-        if [HIDDEN_CHANNELS.keys(), DEFAULT_CHANNELS.keys()]
-            .into_iter()
-            .flatten()
-            .contains(&name.as_str())
-        {
-            bail!("'{name}' is a reserved channel name");
-        }
-
-        // return if name is invalid
-        if !Regex::new("^[a-zA-Z][a-zA-Z0-9_-]*$")
-            .unwrap()
-            .is_match(&name)
-        {
-            bail!("invalid channel name '{name}', valid regexp: ^[a-zA-Z][a-zA-Z0-9_-]*$");
-        }
-
-        // query url interactively if not provided
-        let url = match self.args {
-            None | Some(SubscribeArgs::Name { .. }) => {
-                let default = FlakeRef::Github(GitServiceRef::new(
-                    name.to_string(),
-                    "floxpkgs".to_string(),
-                    GitServiceAttributes {
-                        reference: Some("master".to_string()),
-                        ..Default::default()
-                    },
-                ));
-
-                Dialog {
-                    help_message: None,
-                    message: &format!("Enter URL for '{name}' channel:"),
-                    typed: Text {
-                        default: Some(&default.to_string()),
-                    },
-                }
-                .prompt()
-                .await?
-            },
-            Some(SubscribeArgs::NameUrl { url, .. }) => url.to_string(),
-        };
-
-        // attempt parsing url as flakeref (validation)
-        let url = url
-            .parse::<FlakeRef>()
-            .with_context(|| format!("'{url}' is not a valid url"))?;
-
-        // read user channels
-        let floxmeta = flox
-            .floxmeta(DEFAULT_OWNER)
-            .await
-            .context("Could not get default floxmeta")?;
-
-        let mut user_meta = floxmeta
-            .user_meta()
-            .await
-            .context("Could not read user metadata")?;
-        let user_meta_channels = user_meta.channels.get_or_insert(Default::default());
-
-        // ensure channel does not yet exist
-        if user_meta_channels.contains_key(&name) {
-            bail!("A channel subscription '{name}' already exists");
-        }
-
-        // validate the existence of the flake behind `url`
-        // candidate for a flakeref extension?
-        let nix = flox.nix::<NixCommandLine>(Default::default());
-        let command = FlakeMetadata {
-            flake_ref: Some(url.clone().into()),
-            ..Default::default()
-        };
-        let _ = command
-            .run_json(&nix, &Default::default())
-            .await
-            .map_err(|_| anyhow::anyhow!("Could not verify channel URL: '{url}'"))?;
-
-        user_meta_channels.insert(name.to_string(), url.to_string());
-
-        // tansactionally update user meta file
-        floxmeta
-            .set_user_meta(&user_meta, &format!("Subscribed to {url} as '{name}'"))
-            .await?;
-        Ok(())
-    }
-}
-
-/// Unsubscribe from a channel
-#[derive(Bpaf, Clone)]
-pub struct Unsubscribe {
-    /// Channel name to unsubscribe.
-    ///
-    /// If omitted, flow will prompt for the name interactively
-    #[bpaf(positional("channel"), optional)]
-    channel: Option<ChannelRef>,
-}
-
-impl Unsubscribe {
-    pub async fn handle(self, flox: Flox) -> Result<()> {
-        subcommand_metric!("unsubscribe");
-        let floxmeta = flox
-            .floxmeta(DEFAULT_OWNER)
-            .await
-            .context("Could not get default floxmeta")?;
-
-        let mut user_meta = floxmeta
-            .user_meta()
-            .await
-            .context("Could not read user metadata")?;
-        let user_meta_channels = user_meta.channels.get_or_insert(Default::default());
-
-        let channel = match self.channel {
-            Some(channel) => channel.to_owned(),
-            None => {
-                let dialog = Dialog {
-                    help_message: None,
-                    message: "Enter channel name to be added:",
-                    typed: Select {
-                        options: user_meta_channels.keys().cloned().collect_vec(),
-                    },
-                };
-
-                dialog.prompt().await?
-            },
-        };
-
-        if HIDDEN_CHANNELS
-            .keys()
-            .chain(DEFAULT_CHANNELS.keys())
-            .contains(&channel.as_str())
-        {
-            bail!("'{channel}' is a reserved channel name and can't be unsubscribed from");
-        }
-
-        if user_meta_channels.remove(&channel).is_none() {
-            bail!("No subscription found for '{channel}'");
-        }
-
-        floxmeta
-            .set_user_meta(&user_meta, &format!("Unsubscribed from '{channel}'"))
-            .await?;
-        Ok(())
-    }
-}
-
-/// List all subscribed channels
-#[derive(Bpaf, Clone)]
-pub struct Channels {
-    /// print channels as JSON
-    #[bpaf(long)]
-    json: bool,
-}
-
-impl Channels {
-    pub fn handle(self, flox: Flox) -> Result<()> {
-        subcommand_metric!("channels");
-        let channels = flox
-            .channels
-            .iter()
-            .filter_map(|entry| {
-                if HIDDEN_CHANNELS.contains_key(&*entry.from.id) {
-                    None
-                } else if DEFAULT_CHANNELS.contains_key(&*entry.from.id) {
-                    Some((ChannelType::Flox, entry))
-                } else {
-                    Some((ChannelType::User, entry))
-                }
-            })
-            .sorted_by(|a, b| Ord::cmp(a, b));
-
-        if self.json {
-            let mut map = serde_json::Map::new();
-            for (channel, entry) in channels {
-                map.insert(
-                    entry.from.id.to_string(),
-                    json!({
-                        "type": channel.to_string(),
-                        "url": entry.to.to_string()
-                    }),
-                );
-            }
-
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&serde_json::Value::Object(map))?
-            )
-        } else {
-            let width = channels
-                .clone()
-                .map(|(_, entry)| entry.from.id.len())
-                .reduce(|acc, e| acc.max(e))
-                .unwrap_or(8);
-
-            println!("{ch:<width$}   TYPE   URL", ch = "CHANNEL");
-            for (channel, entry) in channels {
-                println!(
-                    "{from:<width$} | {ty} | {url}",
-                    from = entry.from.id,
-                    ty = channel,
-                    url = entry.to
-                )
-            }
-        }
-        Ok(())
-    }
-}
-
 pub type ChannelRef = String;
-pub type Url = String;

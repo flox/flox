@@ -20,7 +20,6 @@ fs_extra = "1.2.0"
 fslock = "0.2.1"
 futures = "0.3"
 git-url-parse = "0.4.4"
-git2 = "0.16.1"
 indexmap = { version = "1.9", features = ["serde"] }
 indoc = "2.0.1"
 inquire = "0.6.0"

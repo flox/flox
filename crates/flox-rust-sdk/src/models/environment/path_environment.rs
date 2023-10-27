@@ -25,6 +25,7 @@ use super::{
     PathPointer,
     DOT_FLOX,
     ENVIRONMENT_POINTER_FILENAME,
+    MANIFEST_FILENAME,
 };
 use crate::models::environment::CATALOG_JSON;
 use crate::models::environment_ref::{EnvironmentName, EnvironmentOwner, EnvironmentRef};
@@ -374,7 +375,7 @@ impl<S: TransactionState> PathEnvironment<S> {
 
     /// Path to the environment definition file
     pub fn manifest_path(&self) -> PathBuf {
-        self.path.join("pkgs").join("default").join("flox.nix")
+        self.path.join(MANIFEST_FILENAME)
     }
 
     /// Path to the environment's catalog
@@ -451,8 +452,8 @@ impl PathEnvironment<Original> {
         let pointer_content =
             serde_json::to_string_pretty(&pointer).map_err(EnvironmentError2::SerializeEnvJson)?;
 
-        copy_dir_recursive(&env!("FLOX_ENV_TEMPLATE"), &env_dir, false)
-            .map_err(EnvironmentError2::InitEnv)?;
+        let template_path = env!("FLOX_ENV_TEMPLATE");
+        copy_dir_recursive(&template_path, &env_dir, false).map_err(EnvironmentError2::InitEnv)?;
 
         if let Err(e) = fs::write(
             dot_flox_path.join(ENVIRONMENT_POINTER_FILENAME),
@@ -515,19 +516,20 @@ mod tests {
 
         assert_eq!(actual, expected);
 
-        assert!(actual.path.join("flake.nix").exists());
-        assert!(actual
-            .path
-            .join("pkgs")
-            .join("default")
-            .join("flox.nix")
-            .exists());
-        assert!(actual
-            .path
-            .join("pkgs")
-            .join("default")
-            .join("default.nix")
-            .exists());
+        assert!(actual.path.join("flake.nix").exists(), "flake exists");
+        assert!(
+            actual.path.join(MANIFEST_FILENAME).exists(),
+            "manifest exists"
+        );
+        assert!(
+            actual
+                .path
+                .join("pkgs")
+                .join("default")
+                .join("default.nix")
+                .exists(),
+            "default.nix exists"
+        );
         assert!(actual.path.is_absolute());
     }
 

@@ -32,6 +32,7 @@ pub mod remote_environment;
 pub const CATALOG_JSON: &str = "catalog.json";
 pub const DOT_FLOX: &str = ".flox";
 pub const ENVIRONMENT_POINTER_FILENAME: &str = "env.json";
+pub const MANIFEST_FILENAME: &str = "manifest.toml";
 // don't forget to update the man page
 pub const DEFAULT_KEEP_GENERATIONS: usize = 10;
 // don't forget to update the man page

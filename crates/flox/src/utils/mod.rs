@@ -4,6 +4,7 @@ use std::io::Stderr;
 use std::marker::PhantomData;
 use std::path::Path;
 use std::str::FromStr;
+use std::sync::Mutex;
 
 use anyhow::{anyhow, bail, Context, Result};
 use bpaf::Parser;
@@ -26,7 +27,6 @@ pub mod logger;
 pub mod metrics;
 
 use regex::Regex;
-use tokio::sync::Mutex;
 
 use self::completion::FloxCompletionExt;
 use crate::utils::dialog::{Dialog, Select};

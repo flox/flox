@@ -17,6 +17,7 @@ load test_support.bash
 # ---------------------------------------------------------------------------- #
 
 setup_file() {
+  skip "Skipping --bash-passthru tests";
   common_file_setup;
   require_expect;
   hello_pkg_setup;
@@ -33,6 +34,9 @@ setup_file() {
 }
 
 @test "flox eval" {
+
+  skip "DEPRECATED"
+
   # Evaluate a Nix expression given on the command line:
   run $FLOX_CLI eval --expr '1 + 2'
   assert_success

@@ -1,5 +1,4 @@
 use std::ffi::{OsStr, OsString};
-use std::fmt;
 use std::os::unix::ffi::OsStringExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -92,147 +91,6 @@ pub trait GitProvider: Send + Sized + std::fmt::Debug {
 
     fn workdir(&self) -> Option<&Path>;
     fn path(&self) -> &Path;
-}
-
-#[derive(Error, Debug)]
-pub enum LibGit2NewError {
-    #[error("Error checking current directory: {0}")]
-    CurrentDirError(#[from] std::io::Error),
-    #[error("Error opening git repostory: {0}")]
-    OpenRepositoryError(#[from] git2::Error),
-}
-
-pub struct LibGit2Provider {
-    repository: git2::Repository,
-}
-
-impl fmt::Debug for LibGit2Provider {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("LibGit2Provider")
-            .field("workdir", &self.workdir())
-            .finish()
-    }
-}
-
-impl GitDiscoverError for git2::Error {
-    fn not_found(&self) -> bool {
-        self.code() == git2::ErrorCode::NotFound
-    }
-}
-
-#[async_trait(?Send)]
-// STUB
-impl GitProvider for LibGit2Provider {
-    type AddError = EmptyError;
-    type AddRemoteError = EmptyError;
-    type CheckoutError = EmptyError;
-    type CloneError = EmptyError;
-    type CommitError = EmptyError;
-    type DiscoverError = git2::Error;
-    type FetchError = EmptyError;
-    type GetOriginError = EmptyError;
-    type InitError = git2::Error;
-    type ListBranchesError = EmptyError;
-    type MvError = EmptyError;
-    type PushError = EmptyError;
-    type RenameError = EmptyError;
-    type RmError = EmptyError;
-    type SetOriginError = EmptyError;
-    type ShowError = EmptyError;
-
-    async fn discover<P: AsRef<Path>>(path: P) -> Result<Self, Self::DiscoverError> {
-        Ok(LibGit2Provider {
-            repository: git2::Repository::discover(path)?,
-        })
-    }
-
-    async fn init<P: AsRef<Path>>(path: P, bare: bool) -> Result<LibGit2Provider, Self::InitError> {
-        Ok(LibGit2Provider {
-            repository: if bare {
-                git2::Repository::init_bare(path)?
-            } else {
-                git2::Repository::init(path)?
-            },
-        })
-    }
-
-    async fn clone<O: AsRef<OsStr>, P: AsRef<Path>>(
-        _origin: O,
-        _path: P,
-        _bare: bool,
-    ) -> Result<Self, Self::CloneError> {
-        todo!()
-    }
-
-    async fn checkout(&self, _name: &str, _orphan: bool) -> Result<(), Self::CheckoutError> {
-        todo!()
-    }
-
-    async fn list_branches(&self) -> Result<Vec<BranchInfo>, Self::ListBranchesError> {
-        todo!()
-    }
-
-    async fn rename_branch(&self, _new_name: &str) -> Result<(), Self::RenameError> {
-        todo!()
-    }
-
-    async fn add_remote(&self, _origin_name: &str, _url: &str) -> Result<(), Self::AddRemoteError> {
-        todo!()
-    }
-
-    async fn mv(&self, _from: &Path, _to: &Path) -> Result<(), Self::MvError> {
-        todo!()
-    }
-
-    async fn rm(
-        &self,
-        _paths: &[&Path],
-        _recursive: bool,
-        _force: bool,
-        _cached: bool,
-    ) -> Result<(), Self::MvError> {
-        todo!()
-    }
-
-    async fn add(&self, _paths: &[&Path]) -> Result<(), Self::AddError> {
-        todo!()
-    }
-
-    async fn commit(&self, _message: &str) -> Result<(), Self::CommitError> {
-        todo!()
-    }
-
-    async fn show(&self, _object: &str) -> Result<OsString, Self::ShowError> {
-        todo!()
-    }
-
-    async fn fetch(&self) -> Result<(), Self::FetchError> {
-        todo!()
-    }
-
-    async fn push(&self, _remote: &str) -> Result<(), Self::PushError> {
-        todo!()
-    }
-
-    async fn set_origin(
-        &self,
-        _branch: &str,
-        _origin_name: &str,
-    ) -> Result<(), Self::SetOriginError> {
-        todo!()
-    }
-
-    async fn get_origin(&self) -> Result<OriginInfo, Self::GetOriginError> {
-        todo!()
-    }
-
-    fn workdir(&self) -> Option<&Path> {
-        self.repository.workdir()
-    }
-
-    fn path(&self) -> &Path {
-        self.repository.path()
-    }
 }
 
 #[derive(Error, Debug)]
@@ -748,9 +606,9 @@ impl GitProvider for GitCommandProvider {
         };
 
         Ok(OriginInfo {
-            name: remote_name.to_string(),
+            name: remote_name,
             url,
-            reference: remote_branch.to_string(),
+            reference: remote_branch,
             revision: remote_revision,
         })
     }

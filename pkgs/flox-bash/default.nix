@@ -2,52 +2,19 @@
   flox-src,
   inputs,
   stdenv,
-  ansifilter,
   bashInteractive,
-  coreutils,
-  curl,
-  dasel,
-  diffutils,
-  expect,
-  findutils,
-  flox-gh,
-  gawk,
   gitMinimal,
   gh,
-  gnugrep,
-  gnused,
-  gnutar,
-  gum,
-  gzip,
   hostPlatform,
-  jq,
-  less, # Required by man, believe it or not  :-(
   lib,
-  libossp_uuid,
   makeWrapper,
-  man,
-  nix-editor,
   nixVersions,
-  openssh,
   pandoc,
-  parser-util,
-  ps,
-  shellcheck,
-  shfmt,
-  substituteAll,
-  util-linuxMinimal,
-  which,
-  semver,
-  builtfilter-rs,
   floxVersion,
-  flox-pkgdb,
-  unixtools,
   cacert,
   glibcLocales,
   darwin,
 }: let
-  pkgdb = inputs.pkgdb.packages.flox-pkgdb;
-
   nixPatched = nixVersions.nix_2_15.overrideAttrs (oldAttrs: {
     patches =
       (oldAttrs.patches or [])
@@ -60,73 +27,13 @@
         ./nix-patches/no-default-prefixes-hash.2.15.1.patch
       ];
   });
-
-  # TODO: floxActivateFish, etc.
-  floxActivateBashDarwin = substituteAll {
-    src = builtins.toFile "activate.bash" (
-      (builtins.readFile ./activate.bash)
-      + (builtins.readFile ./activate.darwin.bash)
-    );
-    inherit cacert;
-    inherit (darwin) locale;
-    coreFoundation = darwin.CF;
-  };
-  floxActivateBashLinux = substituteAll {
-    src = builtins.toFile "activate.bash" (
-      (builtins.readFile ./activate.bash)
-      + (builtins.readFile ./activate.linux.bash)
-    );
-    inherit cacert glibcLocales;
-  };
-  floxActivateBash =
-    if hostPlatform.isLinux
-    then floxActivateBashLinux
-    else if hostPlatform.isDarwin
-    then floxActivateBashDarwin
-    else throw "unsupported system variant";
-
-  # read commitizen config file as the single source of version
-  czToml = lib.importTOML (flox-src + "/.cz.toml");
 in
   stdenv.mkDerivation rec {
     pname = "flox-bash";
     version = floxVersion;
     src = builtins.path {path = flox-src + "/flox-bash";};
-    nativeBuildInputs =
-      [makeWrapper pandoc shellcheck shfmt which]
-      # nix-provided expect not working on Darwin (#441)
-      ++ lib.optionals hostPlatform.isLinux [expect];
+    nativeBuildInputs = [makeWrapper pandoc];
     buildInputs = [
-      ansifilter
-      bashInteractive
-      coreutils
-      curl
-      dasel
-      diffutils
-      findutils
-      flox-gh
-      gawk
-      unixtools.getent
-      gitMinimal
-      gh
-      gnugrep
-      gnused
-      gnutar
-      gum
-      gzip
-      jq
-      less
-      libossp_uuid
-      man
-      nixPatched
-      nix-editor
-      openssh
-      ps
-      util-linuxMinimal
-      semver
-      builtfilter-rs
-      parser-util
-      flox-pkgdb
     ];
     makeFlags =
       [
@@ -134,7 +41,6 @@ in
         "VERSION=${version}"
         "FLOXPATH=$(out)/libexec/flox:${lib.makeBinPath buildInputs}"
         "NIXPKGS_CACERT_BUNDLE_CRT=${cacert}/etc/ssl/certs/ca-bundle.crt"
-        "FLOX_ACTIVATE_BASH=${floxActivateBash}"
       ]
       ++ lib.optionals hostPlatform.isLinux [
         "LOCALE_ARCHIVE=${glibcLocales}/lib/locale/locale-archive"
@@ -170,12 +76,6 @@ in
     '';
 
     doInstallCheck = true;
-    postInstallCheck = ''
-      # Quick unit test to ensure that we are not using any "naked"
-      # commands within our scripts. Doesn't hit all codepaths but
-      # catches most of them.
-      env -i USER=`id -un` HOME=$PWD $out/bin/flox help > /dev/null
-    '';
 
     passthru.nixPatched = nixPatched;
   }

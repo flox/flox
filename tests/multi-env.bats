@@ -19,6 +19,7 @@ delete_envs() {
 }
 
 setup_file() {
+  skip "Skipping --bash-passthru tests";
   common_file_setup;
   hello_pkg_setup;
   deleteEnvForce "${TEST_ENVIRONMENT}-1";

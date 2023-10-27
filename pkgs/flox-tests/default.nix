@@ -8,6 +8,7 @@
   entr,
   expect,
   findutils,
+  flox-bash,
   gawk,
   git,
   gnugrep,
@@ -108,6 +109,8 @@ in
           fi
           export FLOX_CLI;
         fi
+
+        export NIX_BIN="${flox-bash}/libexec/flox/nix";
 
         # Default flag values
         : "''${TESTS_DIR:=$PWD/tests}";

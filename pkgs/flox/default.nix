@@ -42,9 +42,6 @@
       PKGDB_BIN = "${flox-pkgdb}/bin/pkgdb";
       FLOX_GH_BIN = "${flox-gh}/bin/flox-gh";
       GH_BIN = "${gh}/bin/gh";
-
-      # path to bash impl of flox to dispatch unimplemented commands to
-      FLOX_SH = "${flox-bash}/libexec/flox/flox";
       FLOX_SH_PATH = flox-bash.outPath;
 
       # Modified nix completion scripts
@@ -79,7 +76,7 @@
 
       # flox env template used to create new environments
       FLOX_ENV_TEMPLATE = builtins.path {
-        path = ../../flox-bash/lib/templateFloxEnv;
+        path = ../../assets/templateFloxEnv;
       };
     }
     // lib.optionalAttrs hostPlatform.isDarwin {
@@ -126,6 +123,7 @@
       ]
       ++ lib.optional hostPlatform.isDarwin [
         darwin.apple_sdk.frameworks.Security # git2 (and others)
+        darwin.apple_sdk.frameworks.SystemConfiguration
       ];
 
     nativeBuildInputs = [

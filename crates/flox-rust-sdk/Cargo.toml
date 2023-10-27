@@ -27,7 +27,6 @@ futures.workspace = true
 regex.workspace = true
 once_cell.workspace = true
 uuid.workspace = true
-git2.workspace = true
 walkdir.workspace = true
 indoc.workspace = true
 itertools.workspace = true

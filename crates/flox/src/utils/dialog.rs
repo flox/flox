@@ -5,10 +5,6 @@ use inquire::ui::{Attributes, RenderConfig, StyleSheet, Styled};
 
 use super::{colors, TERMINAL_STDERR};
 
-pub struct Text<'a> {
-    pub default: Option<&'a str>,
-}
-
 #[allow(unused)]
 #[derive(Debug, Clone)]
 pub struct Confirm {
@@ -25,32 +21,6 @@ pub struct Dialog<'a, Type> {
     pub typed: Type,
 }
 
-impl<'a> Dialog<'a, Text<'a>> {
-    pub async fn prompt(self) -> inquire::error::InquireResult<String> {
-        let message = self.message.to_owned();
-        let help_message = self.help_message.map(ToOwned::to_owned);
-        let default = self.typed.default.map(ToOwned::to_owned);
-
-        tokio::task::spawn_blocking(move || {
-            let _stderr_lock = TERMINAL_STDERR.blocking_lock();
-
-            let mut dialog = inquire::Text::new(&message).with_render_config(flox_theme());
-
-            if let Some(ref help_message) = help_message {
-                dialog = dialog.with_help_message(help_message);
-            }
-
-            if let Some(ref default) = default {
-                dialog = dialog.with_initial_value(default);
-            }
-
-            dialog.prompt()
-        })
-        .await
-        .expect("Failed to join blocking dialog")
-    }
-}
-
 impl<'a> Dialog<'a, Confirm> {
     #[allow(unused)]
     pub async fn prompt(self) -> inquire::error::InquireResult<bool> {
@@ -59,7 +29,7 @@ impl<'a> Dialog<'a, Confirm> {
         let default = self.typed.default;
 
         tokio::task::spawn_blocking(move || {
-            let _stderr_lock = TERMINAL_STDERR.blocking_lock();
+            let _stderr_lock = TERMINAL_STDERR.lock();
 
             let mut dialog = inquire::Confirm::new(&message).with_render_config(flox_theme());
 
@@ -100,7 +70,7 @@ impl<'a, T: Display> Dialog<'a, Select<T>> {
             .collect();
 
         let Choice(id, _) = tokio::task::spawn_blocking(move || {
-            let _stderr_lock = TERMINAL_STDERR.blocking_lock();
+            let _stderr_lock = TERMINAL_STDERR.lock();
 
             let mut dialog =
                 inquire::Select::new(&message, choices).with_render_config(flox_theme());
@@ -130,7 +100,7 @@ impl<'a, T: Display> Dialog<'a, Select<T>> {
             .collect();
 
         let (raw_id, Choice(id, _)) = tokio::task::spawn_blocking(move || {
-            let _stderr_lock = TERMINAL_STDERR.blocking_lock();
+            let _stderr_lock = TERMINAL_STDERR.lock();
 
             let mut dialog =
                 inquire::Select::new(&message, choices).with_render_config(flox_theme());
