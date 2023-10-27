@@ -245,6 +245,9 @@ enum LocalDevelopmentCommands {
     /// Edit declarative environment configuration
     #[bpaf(command)]
     Edit(#[bpaf(external(environment::edit))] environment::Edit),
+    /// List packages installed in an environment
+    #[bpaf(command)]
+    List(#[bpaf(external(environment::list))] environment::List),
     /// Delete an environment
     #[bpaf(command, long("destroy"))]
     Delete(#[bpaf(external(environment::delete))] environment::Delete),
@@ -258,6 +261,7 @@ impl LocalDevelopmentCommands {
             LocalDevelopmentCommands::Edit(args) => args.handle(flox).await?,
             LocalDevelopmentCommands::Install(args) => args.handle(flox).await?,
             LocalDevelopmentCommands::Uninstall(args) => args.handle(flox).await?,
+            LocalDevelopmentCommands::List(args) => args.handle(flox).await?,
             LocalDevelopmentCommands::Search(args) => args.handle(flox).await?,
             LocalDevelopmentCommands::Show(args) => args.handle(flox).await?,
             LocalDevelopmentCommands::Delete(args) => args.handle(flox).await?,

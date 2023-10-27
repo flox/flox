@@ -16,7 +16,7 @@ use flox_rust_sdk::nix::command::{Shell, StoreGc};
 use flox_rust_sdk::nix::command_line::NixCommandLine;
 use flox_rust_sdk::nix::Run;
 use flox_rust_sdk::prelude::flox_package::FloxPackage;
-use flox_types::constants::DEFAULT_CHANNEL;
+use flox_types::constants::{DEFAULT_CHANNEL, LATEST_VERSION};
 use itertools::Itertools;
 use log::{error, info};
 use tempfile::NamedTempFile;
@@ -337,6 +337,69 @@ impl Init {
             name = env.environment_ref(),
             system = flox.system
         );
+        Ok(())
+    }
+}
+
+/// List packages installed in an environment
+#[derive(Bpaf, Clone)]
+pub struct List {
+    #[allow(dead_code)] // pending spec for `-e`, `--dir` behaviour
+    #[bpaf(external(environment_args), group_help("Environment Options"))]
+    environment_args: EnvironmentArgs,
+
+    #[bpaf(external(environment_select), fallback(Default::default()))]
+    environment: EnvironmentSelect,
+
+    #[allow(dead_code)] // not yet handled in impl
+    #[bpaf(external(list_output), optional)]
+    json: Option<ListOutput>,
+
+    /// The generation to list, if not specified defaults to the current one
+    #[allow(dead_code)] // not yet handled in impl
+    #[bpaf(positional("GENERATION"))]
+    generation: Option<u32>,
+}
+
+#[derive(Bpaf, Clone)]
+pub enum ListOutput {
+    /// Include store paths of packages in the environment
+    #[bpaf(long("out-path"))]
+    OutPath,
+    /// Print as machine readable json
+    #[bpaf(long)]
+    Json,
+}
+
+impl List {
+    pub async fn handle(self, flox: Flox) -> Result<()> {
+        subcommand_metric!("list");
+
+        let env = self
+            .environment
+            .to_concrete_environment(&flox)?
+            .into_dyn_environment();
+
+        let catalog = env
+            .catalog(&flox.nix(Default::default()), flox.system)
+            .await
+            .context("Could not get catalog")?;
+        // let installed_store_paths = env.installed_store_paths(&flox).await?;
+
+        for (publish_element, _) in catalog.entries.iter() {
+            if publish_element.version != LATEST_VERSION {
+                println!(
+                    "{} {}",
+                    publish_element.to_flox_tuple(),
+                    publish_element.version
+                )
+            } else {
+                println!("{}", publish_element.to_flox_tuple())
+            }
+        }
+        // for store_path in installed_store_paths.iter() {
+        //     println!("{}", store_path.to_string_lossy())
+        // }
         Ok(())
     }
 }

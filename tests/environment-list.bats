@@ -39,7 +39,6 @@ teardown() {
 }
 
 setup_file() {
-  skip "list not yet implemented"
   export FLOX_FEATURES_ENV=rust
 }
 
