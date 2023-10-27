@@ -3,7 +3,7 @@ use flox_types::catalog::{EnvCatalog, System};
 use runix::command_line::NixCommandLine;
 use runix::installable::FlakeAttribute;
 
-use super::{Environment, EnvironmentError2};
+use super::{Environment, EnvironmentError2, InstallationAttempt};
 use crate::models::environment_ref::{EnvironmentName, EnvironmentOwner, EnvironmentRef};
 use crate::prelude::flox_package::FloxPackage;
 
@@ -29,7 +29,7 @@ impl Environment for RemoteEnvironment {
         packages: Vec<String>,
         nix: &NixCommandLine,
         system: System,
-    ) -> Result<bool, EnvironmentError2> {
+    ) -> Result<InstallationAttempt, EnvironmentError2> {
         todo!()
     }
 
@@ -40,7 +40,7 @@ impl Environment for RemoteEnvironment {
         packages: Vec<FloxPackage>,
         nix: &NixCommandLine,
         system: System,
-    ) -> Result<bool, EnvironmentError2> {
+    ) -> Result<Option<String>, EnvironmentError2> {
         todo!()
     }
 

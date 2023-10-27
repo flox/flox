@@ -16,10 +16,10 @@ use runix::{Run, RunJson};
 
 use super::{
     copy_dir_recursive,
-    insert_packages,
     Environment,
     EnvironmentError2,
     EnvironmentPointer,
+    InstallationAttempt,
     PathPointer,
     DOT_FLOX,
     ENVIRONMENT_POINTER_FILENAME,
@@ -27,6 +27,7 @@ use super::{
 };
 use crate::models::environment::CATALOG_JSON;
 use crate::models::environment_ref::{EnvironmentName, EnvironmentOwner, EnvironmentRef};
+use crate::models::manifest::insert_packages;
 use crate::prelude::flox_package::FloxPackage;
 use crate::utils::copy_file_without_permissions;
 
@@ -203,19 +204,20 @@ where
     async fn install(
         &mut self,
         packages: Vec<String>,
-        nix: &NixCommandLine,
-        system: System,
-    ) -> Result<bool, EnvironmentError2> {
+        _nix: &NixCommandLine,
+        _system: System,
+    ) -> Result<InstallationAttempt, EnvironmentError2> {
         let current_manifest_contents = self.manifest_content()?;
-        let (toml, changed) =
-            insert_packages(&current_manifest_contents, packages.iter().cloned())?;
-        if changed {
-            self.transact_with_manifest_contents(toml.to_string(), nix, system)
-                .await?;
-            Ok(true)
-        } else {
-            Ok(false)
+        let installation = insert_packages(&current_manifest_contents, packages.iter().cloned())
+            .map(|insertion| InstallationAttempt {
+                new_manifest: insertion.new_toml.map(|toml| toml.to_string()),
+                already_installed: insertion.already_installed,
+            })?;
+        if installation.new_manifest.is_some() {
+            // TODO: enable transactions once build is re-implemented
+            // self.transact_with_manifest_contents(toml.to_string(), nix, system).await?;
         }
+        Ok(installation)
     }
 
     /// Uninstall packages from the environment atomically
@@ -228,7 +230,7 @@ where
         _packages: Vec<FloxPackage>,
         _nix: &NixCommandLine,
         _system: System,
-    ) -> Result<bool, EnvironmentError2> {
+    ) -> Result<Option<String>, EnvironmentError2> {
         // let current_manifest_contents = self.manifest_content()?;
 
         // let new_manifest_contents =
@@ -407,7 +409,9 @@ impl PathEnvironment<Original> {
         temp_dir: impl AsRef<Path>,
     ) -> Result<Self, EnvironmentError2> {
         let env_dir = dot_flox_path.as_ref().join(ENVIRONMENT_DIR_NAME);
+        tracing::debug!(?env_dir, "attempting to open environment directory");
         if !env_dir.exists() {
+            eprintln!("dir doesn't exist");
             Err(EnvironmentError2::EnvNotFound)?;
         }
 
