@@ -113,7 +113,8 @@ git_reals_setup() {
 
 # ---------------------------------------------------------------------------- #
 
-# Locate the `flox' executable to be tested against.
+# Locate the `flox' executable to be tested against and the `nix' executable to
+# use.
 flox_location_setup() {
   if [[ -n "${__FT_RAN_FLOX_LOCATION_SETUP:-}" ]]; then return 0; fi
   repo_root_setup;
@@ -129,6 +130,7 @@ flox_location_setup() {
       FLOX_CLI="$( command -v flox; )";
     fi
   fi
+
   # Force absolute paths for FLOX_CLI
   FLOX_CLI="$( readlink -f "$FLOX_CLI"; )";
   export FLOX_CLI;
@@ -186,6 +188,7 @@ reals_setup() {
     print_var REAL_GIT_CONFIG_SYSTEM;
     print_var REAL_GIT_CONFIG_GLOBAL;
     print_var FLOX_CLI;
+    print_var NIX_BIN;
   } >&3;
 }
 
@@ -194,9 +197,8 @@ reals_setup() {
 
 # Lookup system pair recognized by `nix' for this system.
 nix_system_setup() {
-  flox_location_setup;
   : "${NIX_SYSTEM:=$(
-    $FLOX_CLI nix eval --impure --expr builtins.currentSystem --raw;
+    $NIX_BIN --experimental-features nix-command eval --impure --expr builtins.currentSystem --raw;
   )}";
   export NIX_SYSTEM;
 }
@@ -207,9 +209,8 @@ nix_system_setup() {
 # Lookup the path to the Nix store.
 # This is mostly important for testing "single user installs"
 nix_store_dir_setup() {
-  flox_location_setup;
   : "${NIX_STORE:=$(
-    $FLOX_CLI nix eval --impure --expr builtins.storeDir --raw;
+    $NIX_BIN --experimental-features nix-command eval --impure --expr builtins.storeDir --raw;
   )}";
   export NIX_STORE;
 }

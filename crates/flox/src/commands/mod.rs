@@ -11,12 +11,12 @@ use flox_rust_sdk::flox::{Flox, DEFAULT_OWNER, FLOX_VERSION};
 use flox_rust_sdk::models::floxmeta::{Floxmeta, GetFloxmetaError};
 use flox_rust_sdk::nix::command_line::NixCommandLine;
 use indoc::{formatdoc, indoc};
-use log::{debug, info, warn};
+use log::{debug, info};
 use once_cell::sync::Lazy;
 use tempfile::TempDir;
 use toml_edit::Key;
 
-use self::package::{Parseable, Run, WithPassthru};
+use self::package::{Parseable, WithPassthru};
 use crate::config::{Config, FLOX_CONFIG_FILE};
 use crate::utils::init::{
     init_access_tokens,
@@ -40,9 +40,7 @@ static FLOX_WELCOME_MESSAGE: Lazy<String> = Lazy::new(|| {
 });
 
 static ADDITIONAL_COMMANDS: &str = indoc! {"
-    build, upgrade, import, export, config, wipe-history, subscribe, unsubscribe,
-
-    channels, history, print-dev-env, shell
+    upgrade, config, wipe-history, history
 "};
 
 fn vec_len<T>(x: Vec<T>) -> usize {
@@ -203,8 +201,6 @@ impl FloxArgs {
             }
         });
 
-        check_deprecated_commands(self.command.as_ref().unwrap());
-
         // command handled above
         match self.command.unwrap() {
             Commands::Development(group) => group.handle(config, flox).await?,
@@ -249,22 +245,16 @@ enum LocalDevelopmentCommands {
     /// Edit declarative environment configuration
     #[bpaf(command)]
     Edit(#[bpaf(external(environment::edit))] environment::Edit),
-    /// Run app from current project
-    #[bpaf(command)]
-    Run(#[bpaf(external(WithPassthru::parse))] WithPassthru<Run>),
     /// List packages installed in an environment
     #[bpaf(command)]
     List(#[bpaf(external(environment::list))] environment::List),
-    /// Access to the nix CLI
-    #[bpaf(command)]
-    Nix(#[bpaf(external(general::parse_nix_passthru))] general::WrappedNix),
     /// Delete an environment
     #[bpaf(command, long("destroy"))]
     Delete(#[bpaf(external(environment::delete))] environment::Delete),
 }
 
 impl LocalDevelopmentCommands {
-    async fn handle(self, config: Config, flox: Flox) -> Result<()> {
+    async fn handle(self, _config: Config, flox: Flox) -> Result<()> {
         match self {
             LocalDevelopmentCommands::Init(args) => args.handle(flox).await?,
             LocalDevelopmentCommands::Activate(args) => args.handle(flox).await?,
@@ -272,10 +262,8 @@ impl LocalDevelopmentCommands {
             LocalDevelopmentCommands::Install(args) => args.handle(flox).await?,
             LocalDevelopmentCommands::Uninstall(args) => args.handle(flox).await?,
             LocalDevelopmentCommands::List(args) => args.handle(flox).await?,
-            LocalDevelopmentCommands::Nix(args) => args.handle(config, flox).await?,
             LocalDevelopmentCommands::Search(args) => args.handle(flox).await?,
             LocalDevelopmentCommands::Show(args) => args.handle(flox).await?,
-            LocalDevelopmentCommands::Run(args) => args.handle(config, flox).await?,
             LocalDevelopmentCommands::Delete(args) => args.handle(flox).await?,
         }
         Ok(())
@@ -313,29 +301,13 @@ enum AdditionalCommands {
         #[bpaf(external(AdditionalCommands::documentation))] AdditionalCommandsDocumentation,
     ),
     #[bpaf(command, hide)]
-    Build(#[bpaf(external(WithPassthru::parse))] WithPassthru<package::Build>),
-    #[bpaf(command, hide)]
     Upgrade(#[bpaf(external(environment::upgrade))] environment::Upgrade),
-    #[bpaf(command, hide)]
-    Import(#[bpaf(external(environment::import))] environment::Import),
-    #[bpaf(command, hide)]
-    Export(#[bpaf(external(environment::export))] environment::Export),
     #[bpaf(command, hide)]
     Config(#[bpaf(external(general::config_args))] general::ConfigArgs),
     #[bpaf(command("wipe-history"), hide)]
     WipeHistory(#[bpaf(external(environment::wipe_history))] environment::WipeHistory),
     #[bpaf(command, hide)]
-    Subscribe(#[bpaf(external(channel::subscribe))] channel::Subscribe),
-    #[bpaf(command, hide)]
-    Unsubscribe(#[bpaf(external(channel::unsubscribe))] channel::Unsubscribe),
-    #[bpaf(command, hide)]
-    Channels(#[bpaf(external(channel::channels))] channel::Channels),
-    #[bpaf(command, hide)]
     History(#[bpaf(external(environment::history))] environment::History),
-    #[bpaf(command, hide)]
-    PrintDevEnv(#[bpaf(external(WithPassthru::parse))] WithPassthru<package::PrintDevEnv>),
-    #[bpaf(command, hide)]
-    Shell(#[bpaf(external(WithPassthru::parse))] WithPassthru<package::Shell>),
 }
 
 impl AdditionalCommands {
@@ -348,64 +320,13 @@ impl AdditionalCommands {
     async fn handle(self, config: Config, flox: Flox) -> Result<()> {
         match self {
             AdditionalCommands::Documentation(args) => args.handle(),
-            AdditionalCommands::Build(args) => args.handle(config, flox).await?,
             AdditionalCommands::Upgrade(args) => args.handle(flox).await?,
-            AdditionalCommands::Import(args) => args.handle(flox).await?,
-            AdditionalCommands::Export(args) => args.handle(flox).await?,
             AdditionalCommands::Config(args) => args.handle(config, flox).await?,
             AdditionalCommands::WipeHistory(args) => args.handle(flox).await?,
-            AdditionalCommands::Subscribe(args) => args.handle(flox).await?,
-            AdditionalCommands::Unsubscribe(args) => args.handle(flox).await?,
-            AdditionalCommands::Channels(args) => args.handle(flox)?,
             AdditionalCommands::History(args) => args.handle(flox).await?,
-            AdditionalCommands::PrintDevEnv(args) => args.handle(config, flox).await?,
-            AdditionalCommands::Shell(args) => args.handle(config, flox).await?,
         }
         Ok(())
     }
-}
-
-#[allow(clippy::match_single_binding)]
-fn check_deprecated_commands(commands: &Commands) {
-    match commands {
-        Commands::Development(development_commands) => match development_commands {
-            LocalDevelopmentCommands::Run(_) => deprecate_command("run"),
-            LocalDevelopmentCommands::List(_) => deprecate_command("list"),
-            LocalDevelopmentCommands::Nix(_) => deprecate_command("nix"),
-            _ => { /* not deprecated */ },
-        },
-        Commands::Sharing(sharing_commands) => match sharing_commands {
-            _ => { /* none deprecated */ },
-        },
-        Commands::Additional(additional_commands) => match additional_commands {
-            AdditionalCommands::Build(_) => deprecate_command("build"),
-            AdditionalCommands::Import(_) => deprecate_command("import"),
-            AdditionalCommands::Export(_) => deprecate_command("export"),
-            AdditionalCommands::Subscribe(_) => deprecate_command("subscribe"),
-            AdditionalCommands::Unsubscribe(_) => deprecate_command("unsubscribe"),
-            AdditionalCommands::Channels(_) => deprecate_command("channels"),
-            AdditionalCommands::PrintDevEnv(_) => deprecate_command("print-dev-env"),
-            AdditionalCommands::Shell(_) => deprecate_command("shell"),
-            _ => { /* not deprecated */ },
-        },
-        Commands::Internal(internal_commands) => match internal_commands {
-            InternalCommands::Envs(_) => deprecate_command("envs"),
-
-            InternalCommands::Bundle(_) => deprecate_command("bundle"),
-            InternalCommands::Flake(_) => deprecate_command("flake"),
-            InternalCommands::Eval(_) => deprecate_command("eval"),
-            InternalCommands::Publish(_) => deprecate_command("publish"),
-            InternalCommands::InitPackage(_) => deprecate_command("init-package"),
-            _ => { /* not deprecated */ },
-        },
-    }
-}
-
-fn deprecate_command(cmd: &str) {
-    warn!("----------------------------------------- deprecated command -----------------------------------------");
-    warn!("`flox {cmd}` is being deprecated and will be removed in the next release");
-    warn!("More information at: https://discourse.flox.dev/t/breaking-changes-in-flox-post-0-3-5-october-2023/813");
-    warn!("------------------------------------------------------------------------------------------------------");
 }
 
 #[derive(Clone)]
@@ -430,26 +351,6 @@ enum InternalCommands {
     ),
     #[bpaf(command)]
     Rollback(#[bpaf(external(environment::rollback))] environment::Rollback),
-    /// List all available environments
-    ///
-    /// Aliases:
-    ///   environments, envs
-    #[bpaf(command, long("environments"))]
-    Envs(#[bpaf(external(environment::envs))] environment::Envs),
-    #[bpaf(command)]
-    Git(#[bpaf(external(environment::git))] environment::Git),
-    #[bpaf(command("init-package"))]
-    InitPackage(#[bpaf(external(WithPassthru::parse))] WithPassthru<package::InitPackage>),
-    #[bpaf(command)]
-    Publish(#[bpaf(external(package::publish))] package::Publish),
-    #[bpaf(command)]
-    Bundle(#[bpaf(external(WithPassthru::parse))] WithPassthru<package::Bundle>),
-    #[bpaf(command)]
-    Flake(#[bpaf(external(WithPassthru::parse))] WithPassthru<package::Flake>),
-    #[bpaf(command)]
-    Eval(#[bpaf(external(WithPassthru::parse))] WithPassthru<package::Eval>),
-    #[bpaf(command)]
-    Gh(#[bpaf(external(general::gh))] general::Gh),
     #[bpaf(command)]
     Auth(#[bpaf(external(general::auth))] general::Auth),
 }
@@ -461,14 +362,6 @@ impl InternalCommands {
             InternalCommands::Generations(args) => args.handle(flox).await?,
             InternalCommands::SwitchGeneration(args) => args.handle(flox).await?,
             InternalCommands::Rollback(args) => args.handle(flox).await?,
-            InternalCommands::Envs(args) => args.handle(flox).await?,
-            InternalCommands::Git(args) => args.handle(flox).await?,
-            InternalCommands::InitPackage(args) => args.handle(flox).await?,
-            InternalCommands::Publish(args) => args.handle(config, flox).await?,
-            InternalCommands::Bundle(args) => args.handle(config, flox).await?,
-            InternalCommands::Flake(args) => args.handle(config, flox).await?,
-            InternalCommands::Eval(args) => args.handle(config, flox).await?,
-            InternalCommands::Gh(args) => args.handle(config, flox).await?,
             InternalCommands::Auth(args) => args.handle(config, flox).await?,
         }
         Ok(())

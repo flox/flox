@@ -1,13 +1,9 @@
+use std::io;
 use std::path::Path;
-use std::{env, io};
 
 use anyhow::{Context, Result};
-use bpaf::{Bpaf, Parser};
+use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::nix::command_line::{Group, NixCliCommand, NixCommandLine, ToArgs};
-use flox_rust_sdk::nix::Run;
-use flox_rust_sdk::prelude::Channel;
-use flox_types::stability::Stability;
 use fslock::LockFile;
 use indoc::indoc;
 use log::info;
@@ -188,46 +184,6 @@ pub struct ConfigDelete {
     key: String,
 }
 
-/// Access to the nix CLI
-#[derive(Clone, Debug)]
-pub struct WrappedNix {
-    stability: Option<Stability>,
-    nix_args: Vec<String>,
-}
-
-impl WrappedNix {
-    pub async fn handle(self, mut config: Config, mut flox: Flox) -> Result<()> {
-        subcommand_metric!("nix");
-        // mutable state hurray :/
-        let stability = config.override_stability(self.stability);
-
-        if let Some(stability) = stability {
-            flox.channels
-                .register_channel("nixpkgs", Channel::from(stability.as_flakeref()));
-        }
-
-        let nix: NixCommandLine = flox.nix(Default::default());
-
-        RawCommand::new(self.nix_args.to_owned())
-            .run(&nix, &Default::default())
-            .await?;
-        Ok(())
-    }
-}
-
-/// Access to the gh CLI
-#[derive(Clone, Debug, Bpaf)]
-pub struct Gh {
-    #[bpaf(any("gh arguments and options", not_help))]
-    _gh_args: Vec<String>,
-}
-impl Gh {
-    pub async fn handle(self, _config: Config, _flox: Flox) -> Result<()> {
-        subcommand_metric!("gh");
-        todo!("deprecated")
-    }
-}
-
 /// floxHub authentication commands
 #[derive(Clone, Debug, Bpaf)]
 pub enum Auth {
@@ -247,103 +203,4 @@ impl Auth {
         subcommand_metric!("auth");
         todo!("this command is planned for a future release")
     }
-}
-
-pub fn parse_nix_passthru() -> impl Parser<WrappedNix> {
-    fn nix_sub_command<const OFFSET: u8>() -> impl Parser<Vec<String>> {
-        let free = bpaf::any("NIX ARGUMENTS", not_help)
-            .complete_shell(complete_nix_shell(OFFSET))
-            .many();
-
-        let strict = bpaf::positional("NIX ARGUMENTS AND OPTIONS")
-            .strict()
-            .many();
-
-        bpaf::construct!(free, strict).map(|(free, strict)| [free, strict].concat())
-    }
-
-    let with_stability = {
-        let stability = bpaf::long("stability").argument("STABILITY").map(Some);
-        let nix_args = nix_sub_command::<2>();
-        bpaf::construct!(WrappedNix {
-            stability,
-            nix_args
-        })
-        .adjacent()
-    };
-
-    let without_stability = {
-        let stability = bpaf::pure(Default::default());
-        let nix_args = nix_sub_command::<0>().hide();
-        bpaf::construct!(WrappedNix {
-            nix_args,
-            stability
-        })
-        .hide()
-    };
-
-    bpaf::construct!([without_stability, with_stability])
-}
-
-fn complete_nix_shell(offset: u8) -> bpaf::ShellComp {
-    // Box::leak will effectively turn the String
-    // (that is produced by `replace`) insto a `&'static str`,
-    // at the cost of giving up memory management over that string.
-    //
-    // Note:
-    // We could use a `OnceCell` to ensure this leak happens only once.
-    // However, this should not be necessary after all,
-    // since the completion runs in its own process.
-    // Any memory it leaks will be cleared by the system allocator.
-    bpaf::ShellComp::Raw {
-        zsh: Box::leak(
-            format!(
-                "OFFSET={}; echo 'was' > /dev/stderr; source {}",
-                offset,
-                env!("NIX_ZSH_COMPLETION_SCRIPT")
-            )
-            .into_boxed_str(),
-        ),
-        bash: Box::leak(
-            format!(
-                "OFFSET={}; source {}; _nix_bash_completion",
-                offset,
-                env!("NIX_BASH_COMPLETION_SCRIPT")
-            )
-            .into_boxed_str(),
-        ),
-        fish: "",
-        elvish: "",
-    }
-}
-
-/// A raw nix command.
-///
-/// Will run `nix <default args> <self.args>...`
-///
-/// Doesn't permit the application of any default arguments set by flox,
-/// except nix configuration args and common nix command args.
-///
-/// See: [`nix --help`](https://nixos.org/manual/nix/unstable/command-ref/new-cli/nix.html)
-#[derive(Debug, Clone)]
-pub struct RawCommand {
-    args: Vec<String>,
-}
-
-impl RawCommand {
-    fn new(args: Vec<String>) -> Self {
-        RawCommand { args }
-    }
-}
-impl ToArgs for RawCommand {
-    fn to_args(&self) -> Vec<String> {
-        self.args.to_owned()
-    }
-}
-
-impl NixCliCommand for RawCommand {
-    type Own = Self;
-
-    const OWN_ARGS: Group<Self, Self::Own> = Some(|s| s.to_owned());
-    const SUBCOMMAND: &'static [&'static str] = &[];
 }

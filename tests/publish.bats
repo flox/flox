@@ -29,7 +29,7 @@ setup_file() {
     # Set the `cache_url` config value
     export FLOX_CACHE_URL="http://localhost:8081"
 
-    export HELLO_VERSION="$($FLOX_CLI nix eval --raw nixpkgs-flox#hello.version)"
+    export HELLO_VERSION="$($NIX_BIN --experimental-features nix-command eval --raw nixpkgs-flox#hello.version)"
 }
 
 # Giving each test an individual channel to allow parallel runs.
@@ -64,7 +64,7 @@ setup() {
 
     # Set the `sign_key` config value
     export FLOX_SIGNING_KEY="$(mktemp)"
-    $FLOX_CLI nix key generate-secret --key-name "test" >"$FLOX_SIGNING_KEY"
+    $NIX_BIN --experimental-features nix-command key generate-secret --key-name "test" >"$FLOX_SIGNING_KEY"
 }
 
 # Given a valid pacakge, a signing key and a binary cache,

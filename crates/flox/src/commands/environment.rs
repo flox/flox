@@ -4,19 +4,12 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use anyhow::{bail, Context, Result};
-use bpaf::{construct, Bpaf, Parser, ShellComp};
+use bpaf::{Bpaf, Parser};
 use flox_rust_sdk::flox::{EnvironmentName, Flox};
 use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironment;
 use flox_rust_sdk::models::environment::path_environment::{Original, PathEnvironment};
 use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironment;
-use flox_rust_sdk::models::environment::{
-    Environment,
-    EnvironmentError2,
-    EnvironmentPointer,
-    ManagedPointer,
-    PathPointer,
-    DOT_FLOX,
-};
+use flox_rust_sdk::models::environment::{Environment, EnvironmentPointer, PathPointer, DOT_FLOX};
 use flox_rust_sdk::models::environment_ref;
 use flox_rust_sdk::nix::arguments::eval::EvaluationArgs;
 use flox_rust_sdk::nix::command::{Shell, StoreGc};
@@ -411,32 +404,6 @@ impl List {
     }
 }
 
-/// list all available environments
-/// Aliases:
-///   environments, envs
-#[derive(Bpaf, Clone)]
-pub struct Envs {}
-impl Envs {
-    /// List all available environments
-    /// Currently at most one (in the current directory).
-    /// This methods is to be changed or removed eventually.
-    pub async fn handle(self, _flox: Flox) -> Result<()> {
-        subcommand_metric!("envs");
-
-        let env = EnvironmentPointer::open(std::env::current_dir().unwrap());
-
-        match env {
-            Ok(EnvironmentPointer::Path(PathPointer { name, .. })) => println!("{name}"),
-            Ok(EnvironmentPointer::Managed(ManagedPointer { name, owner, .. })) => {
-                println!("{owner}/{name}",)
-            },
-            Err(EnvironmentError2::EnvNotFound) => println!(),
-            Err(e) => bail!(e),
-        }
-        Ok(())
-    }
-}
-
 /// Install a package into an environment
 #[derive(Bpaf, Clone)]
 pub struct Install {
@@ -602,26 +569,6 @@ impl WipeHistory {
     }
 }
 
-/// export declarative environment manifest to STDOUT
-#[derive(Bpaf, Clone)]
-pub struct Export {
-    #[allow(dead_code)] // pending spec for `-e`, `--dir` behaviour
-    #[bpaf(external(environment_args), group_help("Environment Options"))]
-    environment_args: EnvironmentArgs,
-
-    #[allow(unused)] // Command currently forwarded
-    #[bpaf(external(environment_select), fallback(Default::default()))]
-    environment: EnvironmentSelect,
-}
-
-impl Export {
-    pub async fn handle(self, _flox: Flox) -> Result<()> {
-        subcommand_metric!("export");
-
-        todo!("deprecated")
-    }
-}
-
 /// list environment generations with contents
 #[derive(Bpaf, Clone)]
 pub struct Generations {
@@ -646,30 +593,6 @@ impl Generations {
     }
 }
 
-/// access to the git CLI for floxmeta repository
-#[derive(Bpaf, Clone)]
-pub struct Git {
-    #[allow(dead_code)] // pending spec for `-e`, `--dir` behaviour
-    #[bpaf(external(environment_args), group_help("Environment Options"))]
-    environment_args: EnvironmentArgs,
-
-    #[allow(unused)] // Command currently forwarded
-    #[bpaf(external(environment_select), fallback(Default::default()))]
-    environment: EnvironmentSelect,
-
-    #[allow(dead_code)] // not yet handled in impl
-    #[bpaf(any("Git Arguments", Some))]
-    git_arguments: Vec<String>,
-}
-
-impl Git {
-    pub async fn handle(self, _flox: Flox) -> Result<()> {
-        subcommand_metric!("git");
-
-        todo!("deprecated")
-    }
-}
-
 /// show all versions of an environment
 #[derive(Bpaf, Clone)]
 pub struct History {
@@ -691,51 +614,6 @@ impl History {
         subcommand_metric!("history");
 
         todo!("this command is planned for a future release")
-    }
-}
-
-/// import declarative environment manifest from STDIN as new generation
-#[derive(Bpaf, Clone)]
-pub struct Import {
-    #[allow(dead_code)] // pending spec for `-e`, `--dir` behaviour
-    #[bpaf(external(environment_args), group_help("Environment Options"))]
-    environment_args: EnvironmentArgs,
-
-    #[allow(unused)] // Command currently forwarded
-    #[bpaf(external(environment_select), fallback(Default::default()))]
-    environment: EnvironmentSelect,
-
-    #[allow(dead_code)] // not yet handled in impl
-    #[bpaf(external(ImportFile::parse), fallback(ImportFile::Stdin))]
-    file: ImportFile,
-}
-
-impl Import {
-    pub async fn handle(self, _flox: Flox) -> Result<()> {
-        subcommand_metric!("import");
-
-        todo!("deprecated")
-    }
-}
-
-#[derive(Clone)]
-pub enum ImportFile {
-    Stdin,
-    Path(PathBuf),
-}
-
-impl ImportFile {
-    fn parse() -> impl Parser<ImportFile> {
-        let stdin = bpaf::any("STDIN (-)", |t: char| {
-            (t == '-').then_some(ImportFile::Stdin)
-        })
-        .help("Use `-` to read from STDIN")
-        .complete(|_| vec![("-", Some("Read from STDIN"))]);
-        let path = bpaf::positional("PATH")
-            .help("Path to export file")
-            .complete_shell(ShellComp::File { mask: None })
-            .map(ImportFile::Path);
-        construct!([stdin, path])
     }
 }
 

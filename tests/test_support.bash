@@ -73,7 +73,7 @@ hello_pkg_setup() {
   if [[ -n "${__FT_RAN_HELLO_PKG_SETUP:-}" ]]; then return 0; fi
   export HELLO_LINK="$BATS_SUITE_TMPDIR/gc-roots/hello";
   mkdir -p "${HELLO_LINK%/*}";
-  $FLOX_CLI nix build 'nixpkgs#hello' --out-link "$HELLO_LINK";
+  $NIX_BIN --experimental-features "nix-command flakes" build 'nixpkgs#hello' --out-link "$HELLO_LINK";
   HELLO_PACKAGE="$( readlink -f "$HELLO_LINK"; )";
   # Get first 8 characters of store path hash.
   HELLO_PACKAGE_FIRST8="${HELLO_PACKAGE#"${NIX_STORE:-/nix/store}/"}";
