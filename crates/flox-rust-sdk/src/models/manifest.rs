@@ -13,6 +13,12 @@ pub enum TomlEditError {
     /// the format that we anticipated.
     #[error("'install' must be a table, but found {0} instead")]
     MalformedInstallTable(String),
+    /// The `[install]` table was missing entirely
+    #[error("'install' table not found")]
+    MissingInstallTable,
+    /// Tried to uninstall a package that wasn't installed
+    #[error("couldn't uninstall '{0}', wasn't previously installed")]
+    PackageNotFound(String),
 }
 
 /// Records the result of trying to install a collection of packages to the
@@ -46,13 +52,14 @@ pub fn insert_packages(
             debug!("editing existing [install] table");
             if let Item::Table(ref mut installs) = existing_installs.get_mut() {
                 for pkg in pkgs {
+                    debug!("checking for presence of package '{pkg}'");
                     if !installs.contains_key(&pkg) {
                         installs.insert(&pkg, Item::Value(Value::InlineTable(InlineTable::new())));
                         already_installed.insert(pkg.clone(), false);
-                        debug!("package {pkg} newly installed");
+                        debug!("package '{pkg}' newly installed");
                     } else {
                         already_installed.insert(pkg.clone(), true);
-                        debug!("package {pkg} already installed");
+                        debug!("package '{pkg}' already installed");
                     }
                 }
 
@@ -84,6 +91,40 @@ pub fn insert_packages(
         },
         already_installed,
     })
+}
+
+/// Remove package names from the `[install]` table of a manifest
+pub fn remove_packages(
+    manifest_contents: &str,
+    pkgs: impl Iterator<Item = String>,
+) -> Result<Document, TomlEditError> {
+    debug!("attempting to remove packages from the manifest");
+    let mut toml = manifest_contents
+        .parse::<Document>()
+        .map_err(TomlEditError::ParseManifest)?;
+    match toml.entry("install") {
+        toml_edit::Entry::Occupied(ref mut existing_installs) => {
+            debug!("editing existing [install] table");
+            if let Item::Table(ref mut installs) = existing_installs.get_mut() {
+                for pkg in pkgs {
+                    debug!("checking for presence of package '{pkg}'");
+                    if !installs.contains_key(&pkg) {
+                        debug!("package '{pkg}' wasn't found");
+                        return Err(TomlEditError::PackageNotFound(pkg.clone()));
+                    } else {
+                        installs.remove(&pkg);
+                        debug!("package '{pkg}' was removed");
+                    }
+                }
+            } else {
+                return Err(TomlEditError::MalformedInstallTable(
+                    existing_installs.get().type_name().into(),
+                ));
+            }
+        },
+        toml_edit::Entry::Vacant(_) => return Err(TomlEditError::MissingInstallTable),
+    };
+    Ok(toml)
 }
 
 // FIXME: will be used in uninstall
@@ -146,7 +187,7 @@ ripgrep = {}
         "#;
 
     #[test]
-    fn install_adds_new_package() {
+    fn insert_adds_new_package() {
         let test_packages = vec!["python".to_owned()];
         let pre_addition_toml = DUMMY_MANIFEST.parse::<Document>().unwrap();
         assert!(!contains_package(&pre_addition_toml, &test_packages[0]).unwrap());
@@ -176,7 +217,7 @@ ripgrep = {}
     }
 
     #[test]
-    fn install_adds_install_table_when_missing() {
+    fn insert_adds_install_table_when_missing() {
         let test_packages = vec!["foo".to_owned()];
         let insertion = insert_packages("", test_packages.iter().cloned()).unwrap();
         assert!(contains_package(&insertion.new_toml.clone().unwrap(), &test_packages[0]).unwrap());
@@ -191,12 +232,44 @@ ripgrep = {}
     }
 
     #[test]
-    fn install_error_when_manifest_malformed() {
+    fn insert_error_when_manifest_malformed() {
         let test_packages = vec!["foo".to_owned()];
-        let attempted_install = insert_packages(BAD_MANIFEST, test_packages.iter().cloned());
+        let attempted_insertion = insert_packages(BAD_MANIFEST, test_packages.iter().cloned());
         assert!(matches!(
-            attempted_install,
+            attempted_insertion,
             Err(TomlEditError::MalformedInstallTable(_))
         ))
+    }
+
+    #[test]
+    fn remove_error_when_manifest_malformed() {
+        let test_packages = vec!["hello".to_owned()];
+        let attempted_removal = remove_packages(BAD_MANIFEST, test_packages.iter().cloned());
+        assert!(matches!(
+            attempted_removal,
+            Err(TomlEditError::MalformedInstallTable(_))
+        ))
+    }
+
+    #[test]
+    fn error_when_install_table_missing() {
+        let test_packages = vec!["hello".to_owned()];
+        let removal = remove_packages("", test_packages.iter().cloned());
+        assert!(matches!(removal, Err(TomlEditError::MissingInstallTable)));
+    }
+
+    #[test]
+    fn removes_all_requested_packages() {
+        let test_packages = vec!["hello".to_owned(), "ripgrep".to_owned()];
+        let toml = remove_packages(DUMMY_MANIFEST, test_packages.iter().cloned()).unwrap();
+        assert!(!contains_package(&toml, "hello").unwrap());
+        assert!(!contains_package(&toml, "ripgrep").unwrap());
+    }
+
+    #[test]
+    fn error_when_removing_nonexistent_package() {
+        let test_packages = vec!["hello".to_owned(), "DOES_NOT_EXIST".to_owned()];
+        let removal = remove_packages(DUMMY_MANIFEST, test_packages.iter().cloned());
+        assert!(matches!(removal, Err(TomlEditError::PackageNotFound(_))));
     }
 }
