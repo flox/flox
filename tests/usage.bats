@@ -52,6 +52,7 @@ Local Development Commands
     install        Install a package into an environment
     uninstall      Uninstall installed packages from an environment
     edit           Edit declarative environment configuration
+    list           List packages installed in an environment
     delete         Delete an environment
 EOF
 }
