@@ -198,9 +198,10 @@ where
 
     /// Install packages to the environment atomically
     ///
-    /// Returns true if the environment was modified and false otherwise.
-    /// TODO: this should return a list of packages that were actually
-    /// installed rather than a bool.
+    /// Returns the new manifest content if the environment was modified. Also
+    /// returns a map of the packages that were already installed. The installation
+    /// will proceed if at least one of the requested packages were added to the
+    /// manifest.
     async fn install(
         &mut self,
         packages: Vec<String>,
@@ -409,9 +410,12 @@ impl PathEnvironment<Original> {
         temp_dir: impl AsRef<Path>,
     ) -> Result<Self, EnvironmentError2> {
         let env_dir = dot_flox_path.as_ref().join(ENVIRONMENT_DIR_NAME);
-        tracing::debug!(?env_dir, "attempting to open environment directory");
+        log::debug!(
+            "attempting to open environment directory: {}",
+            env_dir.display()
+        );
         if !env_dir.exists() {
-            eprintln!("dir doesn't exist");
+            log::debug!("environment directory desn't exist");
             Err(EnvironmentError2::EnvNotFound)?;
         }
 
@@ -474,6 +478,7 @@ mod tests {
 
     use super::*;
     #[cfg(feature = "impure-unit-tests")]
+    use crate::flox::tests::flox_instance;
     use crate::flox::tests::flox_instance;
     use crate::models::environment::MANIFEST_FILENAME;
 

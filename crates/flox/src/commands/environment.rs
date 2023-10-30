@@ -11,9 +11,7 @@ use flox_rust_sdk::models::environment::path_environment::{Original, PathEnviron
 use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironment;
 use flox_rust_sdk::models::environment::{
     Environment,
-    EnvironmentError2,
     EnvironmentPointer,
-    ManagedPointer,
     PathPointer,
     DOT_FLOX,
     MANIFEST_FILENAME,
