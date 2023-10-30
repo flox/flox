@@ -230,15 +230,13 @@ impl<A: GitAccess> Display for Environment<'_, A> {
 #[cfg(test)]
 #[cfg(feature = "impure-unit-tests")]
 mod tests {
-    use std::env;
 
     use tempfile::TempDir;
 
     use crate::flox::Flox;
-    use crate::models::environment::MANIFEST_FILENAME;
     use crate::prelude::ChannelRegistry;
-    use crate::providers::git::{GitCommandProvider, GitProvider};
 
+    #[allow(unused)]
     fn flox_instance() -> (Flox, TempDir) {
         let tempdir_handle = tempfile::tempdir_in(std::env::temp_dir()).unwrap();
 
