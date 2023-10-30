@@ -89,28 +89,30 @@ pub fn remove_packages(
     let mut toml = manifest_contents
         .parse::<Document>()
         .map_err(TomlEditError::ParseManifest)?;
-    match toml.entry("install") {
-        toml_edit::Entry::Occupied(ref mut existing_installs) => {
-            debug!("editing existing [install] table");
-            if let Item::Table(ref mut installs) = existing_installs.get_mut() {
-                for pkg in pkgs {
-                    debug!("checking for presence of package '{pkg}'");
-                    if !installs.contains_key(&pkg) {
-                        debug!("package '{pkg}' wasn't found");
-                        return Err(TomlEditError::PackageNotFound(pkg.clone()));
-                    } else {
-                        installs.remove(&pkg);
-                        debug!("package '{pkg}' was removed");
-                    }
-                }
-            } else {
-                return Err(TomlEditError::MalformedInstallTable(
-                    existing_installs.get().type_name().into(),
-                ));
-            }
-        },
-        toml_edit::Entry::Vacant(_) => return Err(TomlEditError::MissingInstallTable),
+
+    let installs_table = {
+        let installs_field = toml
+            .get_mut("install")
+            .ok_or(TomlEditError::MissingInstallTable)?;
+
+        let type_name = installs_field.type_name().into();
+
+        installs_field
+            .as_table_mut()
+            .ok_or(TomlEditError::MalformedInstallTable(type_name))?
     };
+
+    for pkg in pkgs {
+        debug!("checking for presence of package '{pkg}'");
+        if !installs_table.contains_key(&pkg) {
+            debug!("package '{pkg}' wasn't found");
+            return Err(TomlEditError::PackageNotFound(pkg.clone()));
+        } else {
+            installs_table.remove(&pkg);
+            debug!("package '{pkg}' was removed");
+        }
+    }
+
     Ok(toml)
 }
 
