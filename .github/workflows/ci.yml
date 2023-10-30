@@ -56,7 +56,7 @@ jobs:
           --extra-experimental-features "nix-command flakes" \
           --no-update-lock-file \
           '.#flox' \
-            --command cargo test --locked --workspace;
+            --command cargo test --locked --workspace -F extra-tests;
 
   nix-build:
     name: "Build and Run Bats Tests"
