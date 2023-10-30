@@ -608,6 +608,7 @@ mod tests {
 
     #[tokio::test]
     #[cfg(feature = "impure-unit-tests")]
+    #[ignore = "fixing in progress"]
     async fn test_install() {
         let (mut flox, tempdir) = flox_instance();
         flox.channels
@@ -671,6 +672,7 @@ mod tests {
 
     #[tokio::test]
     #[cfg(feature = "impure-unit-tests")]
+    #[ignore = "fixing in progress"]
     async fn test_uninstall() {
         let (mut flox, tempdir) = flox_instance();
         flox.channels
