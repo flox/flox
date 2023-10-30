@@ -267,12 +267,11 @@ pub enum Auth2 {
 impl Auth2 {
     pub async fn handle(self, _config: Config, _flox: Flox) -> Result<()> {
         subcommand_metric!("auth2");
-        let mut client_id = String::new();
         // TODO there is no obvious way to deal with
         // identifying configuration that is not hard-coded into source
         // feel free to suggest actionable alternatives that work in the existing
         // cli codebase
-        client_id.push_str("Iv1.3b00a7bb5f910259");
+        let client_id = env!("OAUTH_CLIENT_ID").to_string();
         let host = None;
         let cred: std::result::Result<Credential, DeviceFlowError>;
         match self {
