@@ -56,16 +56,8 @@ pub async fn authorize(
     client_id: String,
     host: Option<String>,
 ) -> Result<Credential, DeviceFlowError> {
-    let my_string: String;
-    let thost = match host {
-        Some(string) => {
-            my_string = string;
-            Some(my_string.as_str())
-        },
-        None => None,
-    };
 
-    let mut flow = DeviceFlow::start(client_id.as_str(), thost).await?;
+    let mut flow = DeviceFlow::start(client_id.as_str(), host).await?;
 
     // eprintln!("res is {:?}", res);
     info!(
