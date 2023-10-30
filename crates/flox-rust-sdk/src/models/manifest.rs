@@ -47,42 +47,29 @@ pub fn insert_packages(
     let mut toml = manifest_contents
         .parse::<Document>()
         .map_err(TomlEditError::ParseManifest)?;
-    match toml.entry("install") {
-        toml_edit::Entry::Occupied(ref mut existing_installs) => {
-            debug!("editing existing [install] table");
-            if let Item::Table(ref mut installs) = existing_installs.get_mut() {
-                for pkg in pkgs {
-                    debug!("checking for presence of package '{pkg}'");
-                    if !installs.contains_key(&pkg) {
-                        installs.insert(&pkg, Item::Value(Value::InlineTable(InlineTable::new())));
-                        already_installed.insert(pkg.clone(), false);
-                        debug!("package '{pkg}' newly installed");
-                    } else {
-                        already_installed.insert(pkg.clone(), true);
-                        debug!("package '{pkg}' already installed");
-                    }
-                }
 
-                // TODO: Figure out a better sorting system
-                // installs.sort_values_by(|key1, _, key2, _| key1.cmp(key2));
-            } else {
-                return Err(TomlEditError::MalformedInstallTable(
-                    existing_installs.get().type_name().into(),
-                ));
-            }
-        },
-        toml_edit::Entry::Vacant(empty_installs) => {
+    let install_table = {
+        let install_field = toml
+            .entry("install")
+            .or_insert_with(|| Item::Table(Table::new()));
+        let install_field_type = install_field.type_name().into();
+        install_field.as_table_mut().ok_or_else(|| {
             debug!("creating new [install] table");
-            let mut installs_table = Table::new();
-            for pkg in pkgs {
-                installs_table.insert(&pkg, Item::Value(Value::InlineTable(InlineTable::new())));
-                already_installed.insert(pkg.clone(), false);
-            }
-            // TODO: Figure out a better sorting system
-            // installs_table.sort_values_by(|key1, _, key2, _| key1.cmp(key2));
-            empty_installs.insert(Item::Table(installs_table));
-        },
+            TomlEditError::MalformedInstallTable(install_field_type)
+        })?
     };
+
+    for pkg in pkgs {
+        if !install_table.contains_key(&pkg) {
+            install_table.insert(&pkg, Item::Value(Value::InlineTable(InlineTable::new())));
+            already_installed.insert(pkg.clone(), false);
+            debug!("package '{pkg}' newly installed");
+        } else {
+            already_installed.insert(pkg.clone(), true);
+            debug!("package '{pkg}' already installed");
+        }
+    }
+
     Ok(PackageInsertion {
         new_toml: if !already_installed.values().all(|p| *p) {
             Some(toml)
