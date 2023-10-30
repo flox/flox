@@ -938,7 +938,6 @@ pub enum ConvertFlakeRefError {
 }
 
 #[cfg(test)]
-
 mod tests {
 
     use std::str::FromStr;
