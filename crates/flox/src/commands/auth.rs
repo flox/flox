@@ -68,7 +68,7 @@ pub async fn authorize(
     let mut flow = DeviceFlow::start(client_id.as_str(), thost).await?;
 
     // eprintln!("res is {:?}", res);
-    eprintln!(
+    info!(
         "Please visit {} in your browser",
         flow.verification_uri.clone().unwrap()
     );
