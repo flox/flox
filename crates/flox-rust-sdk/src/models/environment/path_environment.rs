@@ -517,10 +517,7 @@ mod tests {
         assert_eq!(actual, expected);
 
         assert!(actual.path.join("flake.nix").exists(), "flake exists");
-        assert!(
-            actual.path.join(MANIFEST_FILENAME).exists(),
-            "manifest exists"
-        );
+        assert!(actual.manifest_path().exists(), "manifest exists");
         assert!(
             actual
                 .path
