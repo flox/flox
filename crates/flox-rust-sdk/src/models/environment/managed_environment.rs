@@ -11,7 +11,7 @@ use runix::installable::FlakeAttribute;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use super::{Environment, EnvironmentError2, ManagedPointer};
+use super::{Environment, EnvironmentError2, InstallationAttempt, ManagedPointer};
 use crate::flox::Flox;
 use crate::models::environment_ref::{EnvironmentName, EnvironmentOwner, EnvironmentRef};
 use crate::models::floxmetav2::{FloxmetaV2, FloxmetaV2Error};
@@ -87,10 +87,10 @@ impl Environment for ManagedEnvironment {
     #[allow(unused)]
     async fn install(
         &mut self,
-        packages: Vec<FloxPackage>,
+        packages: Vec<String>,
         nix: &NixCommandLine,
         system: System,
-    ) -> Result<bool, EnvironmentError2> {
+    ) -> Result<InstallationAttempt, EnvironmentError2> {
         todo!()
     }
 
@@ -101,7 +101,7 @@ impl Environment for ManagedEnvironment {
         packages: Vec<FloxPackage>,
         nix: &NixCommandLine,
         system: System,
-    ) -> Result<bool, EnvironmentError2> {
+    ) -> Result<Option<String>, EnvironmentError2> {
         todo!()
     }
 

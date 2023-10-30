@@ -726,6 +726,8 @@ dependencies = [
  "thiserror",
  "tokio",
  "tokio-test",
+ "toml_edit",
+ "tracing",
  "url",
  "uuid",
  "walkdir",

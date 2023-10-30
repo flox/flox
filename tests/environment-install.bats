@@ -49,33 +49,33 @@ setup_file() {
   skip "remote environments handled in another phase"
 }
 
-@test "i?: install confirmation message" {
-  skip "FIXME: broken migrating to manifest.toml";
-  "$FLOX_CLI" init
-  run "$FLOX_CLI" install hello
-  assert_success
-  assert_output --partial "✅ Installed 'hello' into 'test' environment."
+@test "'flox install' displays confirmation message" {
+  "$FLOX_CLI" init;
+  run "$FLOX_CLI" install hello;
+  assert_success;
+  assert_output --partial "✅ 'hello' installed to environment";
+}
+
+@test "'flox install' edits manifest" {
+  "$FLOX_CLI" init;
+  run "$FLOX_CLI" install foo;
+  assert_success;
+  contains_foo=$(cat "$PROJECT_DIR/.flox/env/manifest.toml" | grep "foo = ");
+  assert [ -n "$contains_foo" ];
 }
 
 @test "uninstall confirmation message" {
-  skip "FIXME: broken migrating to manifest.toml";
+  skip TODO
   "$FLOX_CLI" init
   run "$FLOX_CLI" install hello
   assert_success
-  assert_output --partial "✅ Installed 'hello' into 'test' environment."
+  assert_output --partial "✅ 'hello' installed to environment."
 
   run "$FLOX_CLI" uninstall hello
   assert_success
-  assert_output --partial "🗑️ Uninstalled 'hello' from 'test' environment."
+  assert_output --partial "🗑️ 'hello' uninstalled from environment."
 }
 
-@test "i?: warning message if package is already installed {
-  skip "our current editing of Nix expressions doesn't detect already installed packages."
-  run "$FLOX_CLI" install hello # install once
-  run "$FLOX_CLI" install hello # try install again
-  assert_success
-  assert_output --partial "...already installed..."
-}
 
 @test "i5: download package when install command runs" {
   skip "Don't know how to test, check out-link created?"
