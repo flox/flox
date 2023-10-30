@@ -5,7 +5,6 @@ use runix::installable::FlakeAttribute;
 
 use super::{Environment, EnvironmentError2, InstallationAttempt};
 use crate::models::environment_ref::{EnvironmentName, EnvironmentOwner, EnvironmentRef};
-use crate::prelude::flox_package::FloxPackage;
 
 #[derive(Debug)]
 pub struct RemoteEnvironment;
@@ -37,10 +36,10 @@ impl Environment for RemoteEnvironment {
     #[allow(unused)]
     async fn uninstall(
         &mut self,
-        packages: Vec<FloxPackage>,
+        packages: Vec<String>,
         nix: &NixCommandLine,
         system: System,
-    ) -> Result<Option<String>, EnvironmentError2> {
+    ) -> Result<String, EnvironmentError2> {
         todo!()
     }
 

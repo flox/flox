@@ -60,22 +60,30 @@ setup_file() {
   "$FLOX_CLI" init;
   run "$FLOX_CLI" install foo;
   assert_success;
-  contains_foo=$(cat "$PROJECT_DIR/.flox/env/manifest.toml" | grep "foo = ");
-  assert [ -n "$contains_foo" ];
+  run grep "foo = {}" "$PROJECT_DIR/.flox/env/manifest.toml";
+  assert_success;
 }
 
 @test "uninstall confirmation message" {
-  skip TODO
   "$FLOX_CLI" init
   run "$FLOX_CLI" install hello
   assert_success
-  assert_output --partial "✅ 'hello' installed to environment."
+  assert_output --partial "✅ 'hello' installed to environment"
 
   run "$FLOX_CLI" uninstall hello
   assert_success
-  assert_output --partial "🗑️ 'hello' uninstalled from environment."
+  # Note that there's TWO spaces between the emoji and the package name
+  assert_output --partial "🗑️  'hello' uninstalled from environment"
 }
 
+@test "'flox uninstall' edits manifest" {
+  "$FLOX_CLI" init;
+  run "$FLOX_CLI" install foo;
+  assert_success;
+  run "$FLOX_CLI" uninstall foo;
+  run grep "foo = {}" "$PROJECT_DIR/.flox/env/manifest.toml";
+  assert_failure;
+}
 
 @test "i5: download package when install command runs" {
   skip "Don't know how to test, check out-link created?"

@@ -15,7 +15,6 @@ use super::{Environment, EnvironmentError2, InstallationAttempt, ManagedPointer}
 use crate::flox::Flox;
 use crate::models::environment_ref::{EnvironmentName, EnvironmentOwner, EnvironmentRef};
 use crate::models::floxmetav2::{FloxmetaV2, FloxmetaV2Error};
-use crate::prelude::flox_package::FloxPackage;
 use crate::providers::git::{GitCommandBranchHashError, GitCommandError};
 
 const GENERATION_LOCK_FILENAME: &str = "env.lock";
@@ -98,10 +97,10 @@ impl Environment for ManagedEnvironment {
     #[allow(unused)]
     async fn uninstall(
         &mut self,
-        packages: Vec<FloxPackage>,
+        packages: Vec<String>,
         nix: &NixCommandLine,
         system: System,
-    ) -> Result<Option<String>, EnvironmentError2> {
+    ) -> Result<String, EnvironmentError2> {
         todo!()
     }
 
