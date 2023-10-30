@@ -117,8 +117,14 @@ impl DeviceFlow {
     pub async fn start(
         client_id: &str,
         maybe_host: Option<&str>,
+        maybe_host: Option<String>,
     ) -> Result<DeviceFlow, DeviceFlowError> {
-        let mut flow = DeviceFlow::new(client_id, maybe_host);
+        let mut flow = DeviceFlow::new(
+            client_id,
+            maybe_host
+                .as_deref()
+                .unwrap_or_else(|| "github.com")
+        );
 
         flow.setup().await;
 
