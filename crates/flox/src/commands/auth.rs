@@ -72,7 +72,7 @@ pub async fn authorize(
         "Please visit {} in your browser",
         flow.verification_uri.clone().unwrap()
     );
-    eprintln!("And enter code: {}", flow.user_code.clone().unwrap());
+    info!("And enter code: {}", flow.user_code.clone().unwrap());
 
     thread::sleep(FIVE_SECONDS);
 
