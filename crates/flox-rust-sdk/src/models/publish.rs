@@ -938,6 +938,7 @@ pub enum ConvertFlakeRefError {
 }
 
 #[cfg(test)]
+
 mod tests {
 
     use std::str::FromStr;
@@ -968,6 +969,7 @@ mod tests {
 
     #[cfg(feature = "impure-unit-tests")] // /nix/store is not accessible in the sandbox
     #[tokio::test]
+    #[ignore = "disabled as `publish` is deprecated"]
     /// Check that adds_substituter_metadata correctly returns the validity of
     /// a bad path and a good path, judging against the local /nix/store.
     async fn adds_substituter_metadata() {
@@ -1021,6 +1023,7 @@ mod tests {
 
     #[cfg(feature = "impure-unit-tests")] // disabled for offline builds, TODO fix tests to work with local repos
     #[tokio::test]
+    #[ignore = "disabled as `publish` is deprecated"]
     async fn creates_catalog_entry() {
         let _ = env_logger::try_init();
 
@@ -1248,6 +1251,7 @@ mod tests {
     #[cfg(feature = "impure-unit-tests")]
     /// Check if we successfully clone a repo
     #[tokio::test]
+    #[ignore = "disabled as `publish` is deprecated"]
     async fn create_catalog_branch() {
         let _ = env_logger::try_init();
         let (_flox, temp_dir_handle) = flox_instance();
@@ -1293,6 +1297,7 @@ mod tests {
     #[cfg(feature = "impure-unit-tests")]
     /// Check if we successfully clone a repo
     #[tokio::test]
+    #[ignore = "disabled as `publish` is deprecated"]
     async fn test_add_snapshot() {
         let _ = env_logger::try_init();
         let (_flox, temp_dir_handle) = flox_instance();
@@ -1365,6 +1370,7 @@ mod tests {
     #[cfg(feature = "impure-unit-tests")]
     /// Check if we successfully clone a repo
     #[tokio::test]
+    #[ignore = "disabled as `publish` is deprecated"]
     async fn test_push_snapshot() {
         let _ = env_logger::try_init();
         let (_flox, temp_dir_handle) = flox_instance();
