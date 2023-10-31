@@ -65,6 +65,9 @@
 
       # oauth client id
       OAUTH_CLIENT_ID = "Iv1.3b00a7bb5f910259";
+      OAUTH_AUTH_URL = "https://0.0.0.0";
+      OAUTH_TOKEN_URL = "https://0.0.0.0";
+      OAUTH_DEVICE_AUTH_URL = "https://0.0.0.0";
 
       # the libssh crate wants to use its own libssh prebuilts
       # or build libssh from source.
