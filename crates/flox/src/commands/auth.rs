@@ -257,10 +257,14 @@ pub enum Auth2 {
     /// Login to floxhub (requires an existing github account)
     #[bpaf(command)]
     Login,
+
+    /// Logout from floxhub
+    #[bpaf(command)]
+    Logout,
 }
 
 impl Auth2 {
-    pub async fn handle(self, _config: Config, flox: Flox) -> Result<()> {
+    pub async fn handle(self, config: Config, flox: Flox) -> Result<()> {
         subcommand_metric!("auth2");
         // TODO there is no obvious way to deal with
         // identifying configuration that is not hard-coded into source
@@ -292,6 +296,19 @@ impl Auth2 {
                     },
                     Err(err) => Err(err.into()),
                 }
+            },
+            Auth2::Logout => {
+                if config.flox.floxhub_token.is_none() {
+                    info!("You are not logged in");
+                    return Ok(());
+                }
+
+                update_config::<String>(&flox.config_dir, &flox.temp_dir, "floxhub_token", None)
+                    .context("Could not remove token from user config")?;
+
+                info!("Logout successful");
+
+                Ok(())
             },
         }
     }
