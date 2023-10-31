@@ -266,36 +266,27 @@ pub enum Auth2 {
 impl Auth2 {
     pub async fn handle(self, config: Config, flox: Flox) -> Result<()> {
         subcommand_metric!("auth2");
-        // TODO there is no obvious way to deal with
-        // identifying configuration that is not hard-coded into source
-        // feel free to suggest actionable alternatives that work in the existing
-        // cli codebase
         let client_id = env!("OAUTH_CLIENT_ID").to_string();
-        let host = None;
-        let cred: std::result::Result<Credential, DeviceFlowError>;
         match self {
             Auth2::Login => {
-                cred = authorize(client_id, host).await;
+                let cred = authorize(client_id, None)
+                    .await
+                    .context("Could not authorize via oauth")?;
 
-                match cred {
-                    Ok(cred) => {
-                        debug!("Credentials received: {:?}", cred);
-                        debug!("Writing token to config");
+                debug!("Credentials received: {:?}", cred);
+                debug!("Writing token to config");
 
-                        update_config(
-                            &flox.config_dir,
-                            &flox.temp_dir,
-                            "floxhub_token",
-                            Some(cred.token),
-                        )
-                        .context("Could not write token to config")?;
+                update_config(
+                    &flox.config_dir,
+                    &flox.temp_dir,
+                    "floxhub_token",
+                    Some(cred.token),
+                )
+                .context("Could not write token to config")?;
 
-                        info!("Login successful");
+                info!("Login successful");
 
-                        Ok(())
-                    },
-                    Err(err) => Err(err.into()),
-                }
+                Ok(())
             },
             Auth2::Logout => {
                 if config.flox.floxhub_token.is_none() {
