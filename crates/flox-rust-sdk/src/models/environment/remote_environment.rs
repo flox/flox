@@ -1,10 +1,12 @@
+use std::path::PathBuf;
+
 use async_trait::async_trait;
 use flox_types::catalog::{EnvCatalog, System};
 use runix::command_line::NixCommandLine;
-use runix::installable::FlakeAttribute;
 
 use super::{Environment, EnvironmentError2, InstallationAttempt};
-use crate::models::environment_ref::{EnvironmentName, EnvironmentOwner, EnvironmentRef};
+use crate::flox::Flox;
+use crate::models::environment_ref::{EnvironmentName, EnvironmentRef};
 
 #[derive(Debug)]
 pub struct RemoteEnvironment;
@@ -16,7 +18,7 @@ impl Environment for RemoteEnvironment {
     async fn build(
         &mut self,
         nix: &NixCommandLine,
-        system: System,
+        system: &System,
     ) -> Result<(), EnvironmentError2> {
         todo!()
     }
@@ -75,13 +77,11 @@ impl Environment for RemoteEnvironment {
     }
 
     #[allow(unused)]
-    fn flake_attribute(&self, system: System) -> FlakeAttribute {
-        todo!()
-    }
-
-    /// Returns the environment owner
-    #[allow(unused)]
-    fn owner(&self) -> Option<EnvironmentOwner> {
+    async fn activation_path(
+        &mut self,
+        flox: &Flox,
+        nix: &NixCommandLine,
+    ) -> Result<PathBuf, EnvironmentError2> {
         todo!()
     }
 
