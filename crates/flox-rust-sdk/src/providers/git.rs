@@ -29,7 +29,7 @@ pub struct BranchInfo {
 
 // simple git provider for the tasks we need to provide in
 // flox
-pub trait GitProvider: Send + Sized + std::fmt::Debug {
+pub trait GitProvider: Sized + std::fmt::Debug {
     type InitError: std::error::Error;
     type CloneError: std::error::Error;
     type CommitError: std::error::Error;
