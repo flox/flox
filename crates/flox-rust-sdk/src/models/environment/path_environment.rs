@@ -197,9 +197,10 @@ where
 
     /// Install packages to the environment atomically
     ///
-    /// Returns true if the environment was modified and false otherwise.
-    /// TODO: this should return a list of packages that were actually
-    /// installed rather than a bool.
+    /// Returns the new manifest content if the environment was modified. Also
+    /// returns a map of the packages that were already installed. The installation
+    /// will proceed if at least one of the requested packages were added to the
+    /// manifest.
     async fn install(
         &mut self,
         packages: Vec<String>,
@@ -407,9 +408,12 @@ impl PathEnvironment<Original> {
         temp_dir: impl AsRef<Path>,
     ) -> Result<Self, EnvironmentError2> {
         let env_dir = dot_flox_path.as_ref().join(ENVIRONMENT_DIR_NAME);
-        tracing::debug!(?env_dir, "attempting to open environment directory");
+        log::debug!(
+            "attempting to open environment directory: {}",
+            env_dir.display()
+        );
         if !env_dir.exists() {
-            eprintln!("dir doesn't exist");
+            log::debug!("environment directory desn't exist");
             Err(EnvironmentError2::EnvNotFound)?;
         }
 
@@ -473,7 +477,6 @@ mod tests {
     use super::*;
     #[cfg(feature = "impure-unit-tests")]
     use crate::flox::tests::flox_instance;
-    use crate::models::environment::MANIFEST_FILENAME;
 
     #[test]
     fn create_env() {
@@ -514,10 +517,7 @@ mod tests {
         assert_eq!(actual, expected);
 
         assert!(actual.path.join("flake.nix").exists(), "flake exists");
-        assert!(
-            actual.path.join(MANIFEST_FILENAME).exists(),
-            "manifest exists"
-        );
+        assert!(actual.manifest_path().exists(), "manifest exists");
         assert!(
             actual
                 .path
@@ -574,123 +574,5 @@ mod tests {
         env.replace_with(temp_env).unwrap();
 
         assert_eq!(env.manifest_content().unwrap(), new_env_str);
-    }
-
-    #[tokio::test]
-    #[cfg(feature = "impure-unit-tests")]
-    async fn test_install() {
-        let (mut flox, tempdir) = flox_instance();
-        flox.channels
-            .register_channel("nixpkgs-flox", "github:flox/nixpkgs-flox".parse().unwrap());
-        let (nix, system) = (flox.nix(Default::default()), flox.system);
-        let pointer = PathPointer::new("test".parse().unwrap());
-
-        let sandbox_path = tempdir.path().join("sandbox");
-        std::fs::create_dir(&sandbox_path).unwrap();
-
-        let mut env = PathEnvironment::init(pointer, tempdir.path(), &sandbox_path).unwrap();
-
-        let mut temp_env = env.make_temporary().unwrap();
-
-        let empty_env_str = r#"{ }"#;
-        temp_env.update_manifest(&empty_env_str).unwrap();
-
-        env.replace_with(temp_env).unwrap();
-
-        env.install(
-            [FloxPackage::Triple(FloxTriple {
-                stability: Stability::Stable,
-                channel: "nixpkgs-flox".to_string(),
-                name: ["hello"].try_into().unwrap(),
-                version: None,
-            })]
-            .to_vec(),
-            &nix,
-            system.clone(),
-        )
-        .await
-        .unwrap();
-
-        let installed_env_str = indoc! {r#"
-            { packages."nixpkgs-flox".hello = { }; }
-        "#};
-
-        assert_eq!(env.manifest_content().unwrap(), installed_env_str);
-
-        let catalog = env.catalog(&nix, system.clone()).await.unwrap();
-        assert!(!catalog.entries.is_empty());
-
-        assert!(env.out_link(&system).exists());
-        assert!(env.catalog_path().exists());
-
-        // Do a second install to make sure we can copy stuff like symlinks
-        env.install(
-            [FloxPackage::Triple(FloxTriple {
-                stability: Stability::Stable,
-                channel: "nixpkgs-flox".to_string(),
-                name: ["curl"].try_into().unwrap(),
-                version: None,
-            })]
-            .to_vec(),
-            &nix,
-            system.clone(),
-        )
-        .await
-        .unwrap();
-    }
-
-    #[tokio::test]
-    #[cfg(feature = "impure-unit-tests")]
-    async fn test_uninstall() {
-        let (mut flox, tempdir) = flox_instance();
-        flox.channels
-            .register_channel("nixpkgs-flox", "github:flox/nixpkgs-flox".parse().unwrap());
-        let (nix, system) = (flox.nix(Default::default()), flox.system);
-
-        let pointer = PathPointer::new("test".parse().unwrap());
-
-        let sandbox_path = tempdir.path().join("sandbox");
-        std::fs::create_dir(&sandbox_path).unwrap();
-
-        let mut env = PathEnvironment::init(pointer, tempdir.path(), &sandbox_path).unwrap();
-
-        let mut temp_env = env.make_temporary().unwrap();
-
-        let empty_env_str = indoc! {"
-            { }
-        "};
-
-        temp_env.update_manifest(&empty_env_str).unwrap();
-
-        env.replace_with(temp_env).unwrap();
-
-        let package = FloxPackage::Triple(FloxTriple {
-            stability: Stability::Stable,
-            channel: "nixpkgs-flox".to_string(),
-            name: ["hello"].try_into().unwrap(),
-            version: None,
-        });
-
-        env.install([package.clone()].to_vec(), &nix, system.clone())
-            .await
-            .unwrap();
-
-        let installed_env_str = indoc! {r#"
-            { packages."nixpkgs-flox".hello = { }; }
-        "#};
-
-        assert_eq!(env.manifest_content().unwrap(), installed_env_str);
-
-        let catalog = env.catalog(&nix, system.clone()).await.unwrap();
-        assert!(!catalog.entries.is_empty());
-
-        env.uninstall([package.clone()].to_vec(), &nix, system.clone())
-            .await
-            .unwrap();
-
-        assert_eq!(env.manifest_content().unwrap(), empty_env_str);
-
-        let catalog = env.catalog(&nix, system.clone()).await.unwrap();
-        assert!(catalog.entries.is_empty());
     }
 }

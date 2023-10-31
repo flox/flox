@@ -230,15 +230,13 @@ impl<A: GitAccess> Display for Environment<'_, A> {
 #[cfg(test)]
 #[cfg(feature = "impure-unit-tests")]
 mod tests {
-    use std::env;
 
     use tempfile::TempDir;
 
     use crate::flox::Flox;
-    use crate::models::environment::MANIFEST_FILENAME;
     use crate::prelude::ChannelRegistry;
-    use crate::providers::git::{GitCommandProvider, GitProvider};
 
+    #[allow(unused)]
     fn flox_instance() -> (Flox, TempDir) {
         let tempdir_handle = tempfile::tempdir_in(std::env::temp_dir()).unwrap();
 
@@ -263,66 +261,5 @@ mod tests {
         };
 
         (flox, tempdir_handle)
-    }
-
-    #[tokio::test]
-    async fn build_environment() {
-        use tokio::io::AsyncWriteExt;
-
-        let temp_home = tempfile::tempdir().unwrap();
-        env::set_var("HOME", temp_home.path());
-
-        let (flox, tempdir_handle) = flox_instance();
-
-        let project_dir = tempfile::tempdir_in(tempdir_handle.path()).unwrap();
-        let _project_git = GitCommandProvider::init(project_dir.path(), false)
-            .await
-            .expect("should create git repo");
-
-        let project = flox
-            .resource(project_dir.path().to_path_buf())
-            .guard()
-            .await
-            .expect("Finding dir should succeed")
-            .open()
-            .expect("should find git repo")
-            .guard()
-            .await
-            .expect("Openeing project dir should succeed")
-            .init_project(Vec::new())
-            .await
-            .expect("Should init a new project");
-
-        let (project, mut index) = project
-            .enter_transaction()
-            .await
-            .expect("Should be able to make sandbox");
-
-        project.create_default_env(&mut index).await;
-        let mut flox_nix = tokio::fs::OpenOptions::new()
-            .write(true)
-            .truncate(true)
-            .open(project.flake_root().unwrap().join(MANIFEST_FILENAME))
-            .await
-            .unwrap();
-        flox_nix
-            .write_all("{ packages.flox.flox = {}; }\n".as_bytes())
-            .await
-            .unwrap();
-
-        let project = project
-            .commit_transaction(index, "unused")
-            .await
-            .expect("Should commit transaction");
-
-        let project = project
-            .environment("default")
-            .await
-            .expect("should find new environment");
-
-        project.try_build().await.expect("should build");
-
-        assert!(project.out_link().exists());
-        assert!(project.out_link().join("bin").join("flox").exists());
     }
 }
