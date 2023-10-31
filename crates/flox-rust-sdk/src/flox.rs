@@ -4,7 +4,6 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use derive_more::Constructor;
-use flox_types::stability::Stability;
 use indoc::indoc;
 use log::{debug, info, warn};
 use once_cell::sync::Lazy;
@@ -20,7 +19,6 @@ use runix::{NixBackend, RunJson};
 use serde::Deserialize;
 use thiserror::Error;
 
-use crate::actions::package::Package;
 use crate::environment::{self, default_nix_subprocess_env};
 use crate::models::channels::ChannelRegistry;
 pub use crate::models::environment_ref::{self, *};
@@ -145,27 +143,36 @@ impl ResolvedInstallableMatch {
 }
 
 impl Flox {
-    /// Provide the package scope to interact with raw packages, (build, develop, etc)
-    ///
-    ///  TODO: consume [Option<FloxInstallable>]
-    pub fn package(
-        &self,
-        flake_attribute: FlakeAttribute,
-        stability: Option<Stability>,
-        nix_arguments: Vec<String>,
-    ) -> Package {
-        Package::new(self, flake_attribute, stability, nix_arguments)
-    }
-
     pub fn resource<X>(&self, x: X) -> Root<root::Closed<X>> {
         Root::closed(self, x)
     }
 
+    // TODO: revisit this when we discussed floxmeta's role to contribute to config/channels
+    //       flox.floxmeta is referring to the legacy floxmeta implementation
+    //       and is currently only used by the CLI to read the channels from the users floxmain.
+    //
+    //       N.B.: Decide whether we want to keep the `Flox.<model>` API
+    //       to create instances of subsystem models
+    // region: revisit reg. channels
     pub async fn floxmeta(&self, owner: &str) -> Result<Floxmeta<ReadOnly>, GetFloxmetaError> {
         Floxmeta::get_floxmeta(self, owner).await
     }
 
-    /// Invoke Nix to convert a FloxInstallable into a list of matches
+    // endregion: revisit reg. channels
+
+    // TODO: deprecate, with building commands that used installables
+    // region: installables
+    /// Invoke Nix to convert a list of [FloxInstallable] into a list of guaranteed matches
+    ///
+    /// Tries to find a concrete nix installable from possibly ambiguous flox installables.
+    /// flox installables are ambiguous if they do not specify a flakeref or complete attribute path.
+    ///
+    /// We employ a resolver flake (<flox>/resolver/flake.nix)
+    /// to list all attribute paths available through the flakeref specified or default flakerefs.
+    /// We then filter the results by the attribute path and prefix specified in the flox installable.
+    ///
+    /// The result of this function is a list of matches that cant be disambiguated automatically.
+    /// In that case an error or interactive selection can be used by the caller to resolve the ambiguity.
     pub async fn resolve_matches<Nix: FloxNixApi, Git: GitProvider>(
         &self,
         flox_installables: &[FloxInstallable],
@@ -419,6 +426,8 @@ impl Flox {
             })
             .collect())
     }
+
+    // endregion: installables
 
     /// Produce a new Nix Backend
     ///

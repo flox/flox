@@ -86,39 +86,6 @@ impl<'a, T: Display> Dialog<'a, Select<T>> {
 
         Ok(options.remove(id))
     }
-
-    pub async fn raw_prompt(self) -> inquire::error::InquireResult<(usize, T)> {
-        let message = self.message.to_owned();
-        let help_message = self.help_message.map(ToOwned::to_owned);
-        let mut options = self.typed.options;
-
-        let choices = options
-            .iter()
-            .map(ToString::to_string)
-            .enumerate()
-            .map(|(id, value)| Choice(id, value))
-            .collect();
-
-        let (raw_id, Choice(id, _)) = tokio::task::spawn_blocking(move || {
-            let _stderr_lock = TERMINAL_STDERR.lock();
-
-            let mut dialog =
-                inquire::Select::new(&message, choices).with_render_config(flox_theme());
-
-            if let Some(ref help_message) = help_message {
-                dialog = dialog.with_help_message(help_message);
-            }
-
-            match dialog.raw_prompt() {
-                Ok(x) => Ok((x.index, x.value)),
-                Err(err) => Err(err),
-            }
-        })
-        .await
-        .expect("Failed to join blocking dialog")?;
-
-        Ok((raw_id, options.remove(id)))
-    }
 }
 
 impl Dialog<'_, ()> {

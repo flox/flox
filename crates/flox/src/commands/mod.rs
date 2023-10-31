@@ -1,7 +1,6 @@
 mod channel;
 mod environment;
 mod general;
-mod package;
 
 use std::{env, fs};
 
@@ -16,7 +15,6 @@ use once_cell::sync::Lazy;
 use tempfile::TempDir;
 use toml_edit::Key;
 
-use self::package::{Parseable, WithPassthru};
 use crate::config::{Config, FLOX_CONFIG_FILE};
 use crate::utils::init::{
     init_access_tokens,
@@ -159,6 +157,8 @@ impl FloxArgs {
             uuid: init_uuid(&config.flox.data_dir).await?,
         };
 
+        // TODO: revisit this when we discussed floxmeta's role to contribute to config/channels
+        // region: revisit reg. channels
         let floxmeta = match boostrap_flox.floxmeta(DEFAULT_OWNER).await {
             Ok(floxmeta) => floxmeta,
             Err(GetFloxmetaError::NotFound(_)) => {
@@ -182,6 +182,8 @@ impl FloxArgs {
             channels,
             ..boostrap_flox
         };
+
+        // endregion: revisit reg. channels
 
         // Set the global Nix config via the environment variables in flox.default_args so that
         // subprocesses called by `flox` (e.g. `parser-util`) can inherit them.
@@ -281,14 +283,14 @@ enum SharingCommands {
     Pull(#[bpaf(external(environment::pull))] environment::Pull),
     /// Containerize an environment
     #[bpaf(command)]
-    Containerize(#[bpaf(external(WithPassthru::parse))] WithPassthru<package::Containerize>),
+    Containerize(#[bpaf(external(environment::containerize))] environment::Containerize),
 }
 impl SharingCommands {
-    async fn handle(self, config: Config, flox: Flox) -> Result<()> {
+    async fn handle(self, _config: Config, flox: Flox) -> Result<()> {
         match self {
             SharingCommands::Push(args) => args.handle(flox).await?,
             SharingCommands::Pull(args) => args.handle(flox).await?,
-            SharingCommands::Containerize(args) => args.handle(config, flox).await?,
+            SharingCommands::Containerize(args) => args.handle(flox).await?,
         }
         Ok(())
     }
