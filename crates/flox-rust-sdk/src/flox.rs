@@ -160,6 +160,8 @@ impl Flox {
 
     // endregion: revisit reg. channels
 
+    // TODO: deprecate, with building commands that used installables
+    // region: installables
     /// Invoke Nix to convert a list of [FloxInstallable] into a list of guaranteed matches
     ///
     /// Tries to find a concrete nix installable from possibly ambiguous flox installables.
@@ -424,6 +426,8 @@ impl Flox {
             })
             .collect())
     }
+
+    // endregion: installables
 
     /// Produce a new Nix Backend
     ///
