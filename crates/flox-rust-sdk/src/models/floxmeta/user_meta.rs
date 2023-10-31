@@ -132,14 +132,13 @@ pub enum SetUserMetaError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::floxmeta::floxmeta_tests::flox_instance;
     use crate::models::floxmeta::FLOXMETA_DIR_NAME;
     use crate::models::root::transaction::ReadOnly;
     use crate::providers::git::GitCommandProvider;
 
     #[tokio::test]
     async fn user_meta() {
-        let (flox, _tempdir_handle) = flox_instance();
+        let (flox, _tempdir_handle) = crate::flox::tests::flox_instance();
 
         let meta_repo = flox.cache_dir.join(FLOXMETA_DIR_NAME).join("flox");
         tokio::fs::create_dir_all(&meta_repo).await.unwrap();

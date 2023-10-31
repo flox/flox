@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use flox_types::version::Version;
 use futures::{StreamExt, TryStreamExt};
@@ -7,12 +7,10 @@ use runix::command::FlakeInit;
 use runix::{NixBackend, Run};
 use tempfile::TempDir;
 use thiserror::Error;
-use tokio::fs::{self, OpenOptions};
-use tokio::io::AsyncWriteExt;
+use tokio::fs;
 
 pub mod environment;
 pub mod user_meta;
-use environment::{Metadata, METADATA_JSON};
 
 use self::user_meta::{SetUserMetaError, FLOX_USER_META_FILE};
 use super::root::reference::ProjectDiscoverGitError;
@@ -297,54 +295,6 @@ impl<'flox> Floxmeta<'flox, GitSandBox> {
             access: self.access.abort(),
         })
     }
-
-    pub async fn create_environment(&self, name: &str) -> Result<(), CreateEnvironmentError> {
-        // todo make Self::environment(&self, name) produce a guard?
-        if self.environment(name).await.is_ok() {
-            return Err(CreateEnvironmentError::EnvironmentExists(
-                name.to_string(),
-                self.flox.system.to_string(),
-            ));
-        }
-
-        let branch_name = format!("{}.{}", self.flox.system, name);
-        self.access
-            .git()
-            .checkout(&branch_name, true)
-            .await
-            .map_err(|e| CreateEnvironmentError::GitCheckout(branch_name, e))?;
-
-        let metadata = Metadata::default();
-
-        let mut metadata_json = OpenOptions::new()
-            .create_new(true)
-            .write(true)
-            .open(
-                self.access
-                    .git()
-                    .workdir()
-                    .expect("Workdir should exist during transaction")
-                    .join(METADATA_JSON),
-            )
-            .await
-            .map_err(CreateEnvironmentError::OpenMetadataFile)?;
-
-        metadata_json
-            .write_all(
-                serde_json::to_string_pretty(&metadata)
-                    .map_err(CreateEnvironmentError::SerializeMetadata)?
-                    .as_bytes(),
-            )
-            .await
-            .map_err(CreateEnvironmentError::WriteMetadata)?;
-
-        self.access
-            .git()
-            .add(&[Path::new(METADATA_JSON)])
-            .await
-            .map_err(CreateEnvironmentError::GitAdd)?;
-        Ok(())
-    }
 }
 
 /// Errors occurring while trying to upgrade to an [`Open<Git>`] [Root]
@@ -462,140 +412,3 @@ pub enum TransactionCommitError {
 #[derive(Error, Debug)]
 #[error("Failed updating floxmeta: {0}")]
 pub struct FetchError(GitCommandError);
-
-#[cfg(test)]
-#[cfg(feature = "impure-unit-tests")]
-pub(super) mod floxmeta_tests {
-    use tempfile::TempDir;
-
-    use super::*;
-    use crate::providers::git::GitCommandProvider;
-
-    pub(super) fn flox_instance() -> (Flox, TempDir) {
-        let tempdir_handle = tempfile::tempdir_in(std::env::temp_dir()).unwrap();
-
-        let cache_dir = tempdir_handle.path().join("caches");
-        let temp_dir = tempdir_handle.path().join("temp");
-
-        std::fs::create_dir_all(&cache_dir).unwrap();
-        std::fs::create_dir_all(&temp_dir).unwrap();
-
-        let flox = Flox {
-            system: "aarch64-darwin".to_string(),
-            cache_dir,
-            temp_dir,
-            ..Default::default()
-        };
-
-        (flox, tempdir_handle)
-    }
-
-    #[tokio::test]
-    async fn fail_without_metadir() {
-        let (flox, _tempdir_handle) = flox_instance();
-
-        let floxmeta = Floxmeta::<ReadOnly>::get_floxmeta(&flox, "someone").await;
-
-        assert!(floxmeta.is_err());
-    }
-
-    #[tokio::test]
-    async fn test_reading_remote_envs() {
-        let (flox, _tempdir_handle) = flox_instance();
-
-        let meta_repo = flox.cache_dir.join(FLOXMETA_DIR_NAME).join("flox");
-        tokio::fs::create_dir_all(&meta_repo).await.unwrap();
-
-        let git = GitCommandProvider::init(&meta_repo, true).await.unwrap();
-
-        let floxmeta = Floxmeta::<ReadOnly>::get_floxmeta(&flox, "flox")
-            .await
-            .expect("Should open floxmeta repo");
-        let environments = floxmeta
-            .environments()
-            .await
-            .expect("Should succeed with zero environment");
-
-        assert!(environments.is_empty());
-
-        git.add_remote("origin", "https://github.com/flox/floxmeta")
-            .await
-            .expect("Failed adding origin");
-        git.fetch().await.expect("Failed fetching origin");
-
-        let environments = floxmeta
-            .environments()
-            .await
-            .expect("Should succeed with zero environment");
-
-        assert!(!environments.is_empty());
-    }
-
-    #[tokio::test]
-    async fn test_create_env() {
-        let (flox, _tempdir_handle) = flox_instance();
-
-        let meta_repo = flox.cache_dir.join(FLOXMETA_DIR_NAME).join("test");
-        tokio::fs::create_dir_all(&meta_repo).await.unwrap();
-
-        let _git = GitCommandProvider::init(&meta_repo, true).await.unwrap();
-
-        let floxmeta = Floxmeta::<ReadOnly>::get_floxmeta(&flox, "test")
-            .await
-            .expect("Should open floxmeta repo");
-
-        let floxmeta = floxmeta
-            .enter_transaction()
-            .await
-            .expect("Should enter transaction");
-        floxmeta
-            .create_environment("xyz")
-            .await
-            .expect("Should create environment");
-
-        let floxmeta = floxmeta
-            .commit_transaction("Create environment")
-            .await
-            .expect("Should commit transaction");
-
-        let environments = floxmeta
-            .environments()
-            .await
-            .expect("Should find environments");
-        assert!(!environments.is_empty());
-
-        floxmeta
-            .environment("xyz")
-            .await
-            .expect("Should find 'xyz' environment");
-
-        let floxmeta = floxmeta
-            .enter_transaction()
-            .await
-            .expect("Should enter transaction");
-
-        assert!(matches!(
-            floxmeta.create_environment("xyz").await,
-            Err(CreateEnvironmentError::EnvironmentExists(_, _))
-        ));
-
-        let _ = floxmeta.abort_transaction().await;
-    }
-
-    #[tokio::test]
-    async fn test_create_floxmeta() {
-        let (flox, _tempdir_handle) = flox_instance();
-
-        Floxmeta::<ReadOnly>::get_floxmeta(&flox, "someone")
-            .await
-            .expect_err("Should fail finding floxmeta");
-        let floxmeta = Floxmeta::<ReadOnly>::create_floxmeta(&flox, "someone")
-            .await
-            .expect("should create a floxmeta");
-        floxmeta.user_meta().await.expect("should find user_meta");
-
-        Floxmeta::<ReadOnly>::create_floxmeta(&flox, "someone")
-            .await
-            .expect_err("should fail if floxmeta exists");
-    }
-}
