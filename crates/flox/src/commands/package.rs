@@ -1,25 +1,11 @@
-use std::env;
 use std::fmt::Debug;
 
-use anyhow::{bail, Context, Result};
 use bpaf::{construct, Bpaf, Parser};
-use crossterm::tty::IsTty;
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::nix::arguments::eval::EvaluationArgs;
-use flox_rust_sdk::nix::arguments::flake::FlakeArgs;
-use flox_rust_sdk::nix::arguments::NixArgs;
-use flox_rust_sdk::nix::command::{Build as BuildComm, BuildOut};
-use flox_rust_sdk::nix::command_line::NixCommandLine;
-use flox_rust_sdk::nix::RunTyped;
 use flox_rust_sdk::prelude::FlakeAttribute;
 use flox_rust_sdk::providers::git::{GitCommandProvider, GitProvider};
 use flox_types::stability::Stability;
-use indoc::indoc;
-use itertools::Itertools;
-use log::{debug, info};
 
-use crate::config::Config;
-use crate::subcommand_metric;
 use crate::utils::resolve_environment_ref;
 
 async fn env_ref_to_flake_attribute<Git: GitProvider + 'static>(
@@ -35,7 +21,6 @@ async fn env_ref_to_flake_attribute<Git: GitProvider + 'static>(
 
 use async_trait::async_trait;
 
-use self::parseable_macro::parseable;
 use crate::utils::{InstallableArgument, InstallableDef, Parsed};
 
 #[derive(Clone, Debug)]
@@ -88,89 +73,6 @@ impl<T: InstallableDef + 'static, Git: GitProvider + 'static> ResolveInstallable
                 .await?
             },
         })
-    }
-}
-
-#[derive(Bpaf, Clone, Debug)]
-pub struct Containerize {
-    #[bpaf(short('A'), hide)]
-    pub _attr_flag: bool,
-
-    /// Environment to containerize
-    #[bpaf(long("environment"), short('e'), argument("ENV"))]
-    pub(crate) environment_name: Option<String>,
-}
-parseable!(Containerize, containerize);
-impl WithPassthru<Containerize> {
-    pub async fn handle(self, mut config: Config, flox: Flox) -> Result<()> {
-        subcommand_metric!("containerize");
-        let mut installable = env_ref_to_flake_attribute::<GitCommandProvider>(
-            &flox,
-            "containerize",
-            &self.inner.environment_name.unwrap_or_default(),
-        )
-        .await?;
-
-        installable
-            .attr_path
-            .extend(["passthru", "streamLayeredImage"].map(|attr| attr.parse().unwrap()));
-
-        if std::io::stdout().is_tty() {
-            bail!(
-                indoc! {"
-                        'flox containerize' pipes a container image to stdout, but stdout is
-                        attached to the terminal. Instead, run this command as:
-
-                            $ {command} | docker load
-                    "},
-                command = env::args()
-                    .map(|arg| shell_escape::escape(arg.into()))
-                    .join(" ")
-            );
-        }
-
-        let nix = flox.nix::<NixCommandLine>(self.nix_args);
-
-        let nix_args = NixArgs::default();
-
-        info!("Building container...");
-
-        let stability: Option<Stability> = config.override_stability(self.stability);
-        let override_input = stability.as_ref().map(Stability::as_override);
-
-        let command = BuildComm {
-            flake: FlakeArgs {
-                override_inputs: Vec::from_iter(override_input),
-                ..Default::default()
-            },
-            installables: [installable.into()].into(),
-            eval: EvaluationArgs {
-                impure: true.into(),
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-
-        let mut out: BuildOut = command.run_typed(&nix, &nix_args).await?;
-
-        info!("Done.");
-
-        let script = out
-            .pop()
-            .context("Container script not built")?
-            .outputs
-            .remove("out")
-            .context("Container script output not found")?;
-
-        debug!("Got container script: {:?}", script);
-
-        tokio::process::Command::new(script)
-            .spawn()
-            .context("Failed to start container script")?
-            .wait()
-            .await
-            .context("Container script failed to run")?;
-        Ok(())
     }
 }
 

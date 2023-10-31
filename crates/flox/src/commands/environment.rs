@@ -716,6 +716,20 @@ impl Upgrade {
     }
 }
 
+#[derive(Bpaf, Clone, Debug)]
+pub struct Containerize {
+    #[allow(unused)]
+    #[bpaf(external(environment_select), fallback(Default::default()))]
+    environment: EnvironmentSelect,
+}
+impl Containerize {
+    pub async fn handle(self, _flox: Flox) -> Result<()> {
+        subcommand_metric!("containerize");
+
+        todo!("this command is planned for a future release");
+    }
+}
+
 fn activate_run_args() -> impl Parser<Option<(String, Vec<String>)>> {
     let command = bpaf::positional("COMMAND").strict();
     let args = bpaf::any("ARGUMENTS", Some).many();
