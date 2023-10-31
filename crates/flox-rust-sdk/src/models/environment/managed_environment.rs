@@ -497,24 +497,24 @@ mod test {
     /// It results in output state of:
     /// - lock at commit 2
     /// - floxmeta at commit 2
-    #[tokio::test]
-    async fn test_ensure_locked_case_1() {
+    #[test]
+    fn test_ensure_locked_case_1() {
         let (flox, _temp_dir_handle) = flox_instance();
 
         // create a mock remote
         let remote_path = flox.temp_dir.join("remote");
         fs::create_dir(&remote_path).unwrap();
-        let remote = GitCommandProvider::init(&remote_path, false).await.unwrap();
+        let remote = GitCommandProvider::init(&remote_path, false).unwrap();
 
         let branch = remote_branch_name(&flox.system, &TEST_POINTER);
-        remote.checkout(&branch, true).await.unwrap();
-        commit_file(&remote, "file 1").await;
+        remote.checkout(&branch, true).unwrap();
+        commit_file(&remote, "file 1");
 
         // create a mock floxmeta
         let floxmeta = create_floxmeta(&flox, &remote_path, &branch);
 
         // add a second commit to the remote
-        commit_file(&remote, "file 2").await;
+        commit_file(&remote, "file 2");
         let hash_2 = remote.branch_hash(&branch).unwrap();
 
         // create a .flox directory
@@ -542,18 +542,18 @@ mod test {
     /// It results in output state of:
     /// - lock at commit 1
     /// - floxmeta at commit 1
-    #[tokio::test]
-    async fn test_ensure_locked_case_2() {
+    #[test]
+    fn test_ensure_locked_case_2() {
         let (flox, _temp_dir_handle) = flox_instance();
 
         // create a mock remote
         let remote_path = flox.temp_dir.join("remote");
         fs::create_dir(&remote_path).unwrap();
-        let remote = GitCommandProvider::init(&remote_path, false).await.unwrap();
+        let remote = GitCommandProvider::init(&remote_path, false).unwrap();
 
         let branch = remote_branch_name(&flox.system, &TEST_POINTER);
-        remote.checkout(&branch, true).await.unwrap();
-        commit_file(&remote, "file 1").await;
+        remote.checkout(&branch, true).unwrap();
+        commit_file(&remote, "file 1");
         let hash_1 = remote.branch_hash(&branch).unwrap();
 
         // create a mock floxmeta
@@ -589,28 +589,28 @@ mod test {
     /// It results in output state of:
     /// - lock at commit 2
     /// - floxmeta at commit 3
-    #[tokio::test]
-    async fn test_ensure_locked_case_3() {
+    #[test]
+    fn test_ensure_locked_case_3() {
         let (flox, _temp_dir_handle) = flox_instance();
 
         // create a mock remote
         let remote_path = flox.temp_dir.join("remote");
         fs::create_dir(&remote_path).unwrap();
-        let remote = GitCommandProvider::init(&remote_path, false).await.unwrap();
+        let remote = GitCommandProvider::init(&remote_path, false).unwrap();
 
         let branch = remote_branch_name(&flox.system, &TEST_POINTER);
-        remote.checkout(&branch, true).await.unwrap();
-        commit_file(&remote, "file 1").await;
+        remote.checkout(&branch, true).unwrap();
+        commit_file(&remote, "file 1");
 
         // create a mock floxmeta
         let floxmeta = create_floxmeta(&flox, &remote_path, &branch);
 
         // add a second commit to the remote
-        commit_file(&remote, "file 2").await;
+        commit_file(&remote, "file 2");
         let hash_2 = remote.branch_hash(&branch).unwrap();
 
         // add a third commit to the remote
-        commit_file(&remote, "file 3").await;
+        commit_file(&remote, "file 3");
         let hash_3 = remote.branch_hash(&branch).unwrap();
 
         // create a .flox directory
@@ -643,25 +643,25 @@ mod test {
     ///
     /// It results in output state of:
     /// - error
-    #[tokio::test]
-    async fn test_ensure_locked_case_4() {
+    #[test]
+    fn test_ensure_locked_case_4() {
         let (flox, _temp_dir_handle) = flox_instance();
 
         // create a mock remote
         let remote_path = flox.temp_dir.join("remote");
         fs::create_dir(&remote_path).unwrap();
-        let remote = GitCommandProvider::init(&remote_path, false).await.unwrap();
+        let remote = GitCommandProvider::init(&remote_path, false).unwrap();
 
         let branch = remote_branch_name(&flox.system, &TEST_POINTER);
-        remote.checkout(&branch, true).await.unwrap();
-        commit_file(&remote, "file 1").await;
+        remote.checkout(&branch, true).unwrap();
+        commit_file(&remote, "file 1");
 
         // create a mock floxmeta
         let floxmeta = create_floxmeta(&flox, &remote_path, &branch);
 
         // add a second branch to the remote
-        remote.checkout("branch_2", true).await.unwrap();
-        commit_file(&remote, "file 2").await;
+        remote.checkout("branch_2", true).unwrap();
+        commit_file(&remote, "file 2");
         let hash_2 = remote.branch_hash("branch_2").unwrap();
 
         // create a .flox directory
@@ -688,24 +688,24 @@ mod test {
     ///
     /// It results in output state of:
     /// - error
-    #[tokio::test]
-    async fn test_ensure_locked_case_5() {
+    #[test]
+    fn test_ensure_locked_case_5() {
         let (flox, _temp_dir_handle) = flox_instance();
 
         // create a mock remote
         let remote_path = flox.temp_dir.join("remote");
         fs::create_dir(&remote_path).unwrap();
-        let remote = GitCommandProvider::init(&remote_path, false).await.unwrap();
+        let remote = GitCommandProvider::init(&remote_path, false).unwrap();
 
         let branch = remote_branch_name(&flox.system, &TEST_POINTER);
-        remote.checkout(&branch, true).await.unwrap();
-        commit_file(&remote, "file 1").await;
+        remote.checkout(&branch, true).unwrap();
+        commit_file(&remote, "file 1");
 
         // create a mock floxmeta
         let floxmeta = create_floxmeta(&flox, &remote_path, &branch);
 
         // add a second commit to the remote
-        commit_file(&remote, "file 2").await;
+        commit_file(&remote, "file 2");
         let hash_2 = remote.branch_hash(&branch).unwrap();
 
         // create a .flox directory
@@ -734,18 +734,18 @@ mod test {
     ///
     /// It results in output state of:
     /// - no change
-    #[tokio::test]
-    async fn test_ensure_locked_case_6() {
+    #[test]
+    fn test_ensure_locked_case_6() {
         let (flox, _temp_dir_handle) = flox_instance();
 
         // create a mock remote
         let remote_path = flox.temp_dir.join("remote");
         fs::create_dir(&remote_path).unwrap();
-        let remote = GitCommandProvider::init(&remote_path, false).await.unwrap();
+        let remote = GitCommandProvider::init(&remote_path, false).unwrap();
 
         let branch = remote_branch_name(&flox.system, &TEST_POINTER);
-        remote.checkout(&branch, true).await.unwrap();
-        commit_file(&remote, "file 1").await;
+        remote.checkout(&branch, true).unwrap();
+        commit_file(&remote, "file 1");
         let hash_1 = remote.branch_hash(&branch).unwrap();
 
         // create a mock floxmeta
@@ -779,18 +779,18 @@ mod test {
     ///
     /// It results in output state of:
     /// - error
-    #[tokio::test]
-    async fn test_ensure_locked_case_7() {
+    #[test]
+    fn test_ensure_locked_case_7() {
         let (flox, _temp_dir_handle) = flox_instance();
 
         // create a mock remote
         let remote_path = flox.temp_dir.join("remote");
         fs::create_dir(&remote_path).unwrap();
-        let remote = GitCommandProvider::init(&remote_path, false).await.unwrap();
+        let remote = GitCommandProvider::init(&remote_path, false).unwrap();
 
         let branch = remote_branch_name(&flox.system, &TEST_POINTER);
-        remote.checkout(&branch, true).await.unwrap();
-        commit_file(&remote, "file 1").await;
+        remote.checkout(&branch, true).unwrap();
+        commit_file(&remote, "file 1");
         let hash_1 = remote.branch_hash(&branch).unwrap();
 
         // create a mock floxmeta
@@ -817,18 +817,18 @@ mod test {
     /// - branch at commit 1
     /// - rev at commit 1
     /// - local_rev at commit 1
-    #[tokio::test]
-    async fn test_ensure_branch_noop() {
+    #[test]
+    fn test_ensure_branch_noop() {
         let (flox, _temp_dir_handle) = flox_instance();
 
         // create a mock remote
         let remote_path = flox.temp_dir.join("remote");
         fs::create_dir(&remote_path).unwrap();
-        let remote = GitCommandProvider::init(&remote_path, false).await.unwrap();
+        let remote = GitCommandProvider::init(&remote_path, false).unwrap();
 
         let branch = remote_branch_name(&flox.system, &TEST_POINTER);
-        remote.checkout(&branch, true).await.unwrap();
-        commit_file(&remote, "file 1").await;
+        remote.checkout(&branch, true).unwrap();
+        commit_file(&remote, "file 1");
         let hash_1 = remote.branch_hash(&branch).unwrap();
 
         // create a mock floxmeta
@@ -848,23 +848,23 @@ mod test {
     /// - rev at commit 1
     /// - local_rev at commit 2
     /// ensure_branch resets the branch to commit 2
-    #[tokio::test]
-    async fn test_ensure_branch_resets_branch() {
+    #[test]
+    fn test_ensure_branch_resets_branch() {
         let (flox, _temp_dir_handle) = flox_instance();
 
         // create a mock remote
         let remote_path = flox.temp_dir.join("remote");
         fs::create_dir(&remote_path).unwrap();
-        let remote = GitCommandProvider::init(&remote_path, false).await.unwrap();
+        let remote = GitCommandProvider::init(&remote_path, false).unwrap();
 
         let branch = remote_branch_name(&flox.system, &TEST_POINTER);
-        remote.checkout(&branch, true).await.unwrap();
-        commit_file(&remote, "file 1").await;
+        remote.checkout(&branch, true).unwrap();
+        commit_file(&remote, "file 1");
         let hash_1 = remote.branch_hash(&branch).unwrap();
 
         // add a second branch to the remote
-        remote.checkout("branch_2", true).await.unwrap();
-        commit_file(&remote, "file 2").await;
+        remote.checkout("branch_2", true).unwrap();
+        commit_file(&remote, "file 2");
         let hash_2 = remote.branch_hash("branch_2").unwrap();
 
         // Create a mock floxmeta (note clone is used instead of clone_branch,
@@ -876,7 +876,6 @@ mod test {
             user_floxmeta_dir,
             true,
         )
-        .await
         .unwrap();
 
         let floxmeta = FloxmetaV2::open(&flox, &TEST_POINTER).unwrap();
@@ -895,18 +894,18 @@ mod test {
     /// - rev at commit 1
     /// - local_rev at commit 1
     /// ensure_branch creates branch_2 at commit 1
-    #[tokio::test]
-    async fn test_ensure_branch_creates_branch() {
+    #[test]
+    fn test_ensure_branch_creates_branch() {
         let (flox, _temp_dir_handle) = flox_instance();
 
         // create a mock remote
         let remote_path = flox.temp_dir.join("remote");
         fs::create_dir(&remote_path).unwrap();
-        let remote = GitCommandProvider::init(&remote_path, false).await.unwrap();
+        let remote = GitCommandProvider::init(&remote_path, false).unwrap();
 
         let branch = remote_branch_name(&flox.system, &TEST_POINTER);
-        remote.checkout(&branch, true).await.unwrap();
-        commit_file(&remote, "file 1").await;
+        remote.checkout(&branch, true).unwrap();
+        commit_file(&remote, "file 1");
         let hash_1 = remote.branch_hash(&branch).unwrap();
 
         // create a mock floxmeta

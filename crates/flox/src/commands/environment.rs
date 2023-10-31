@@ -9,13 +9,7 @@ use flox_rust_sdk::flox::{EnvironmentName, Flox};
 use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironment;
 use flox_rust_sdk::models::environment::path_environment::{Original, PathEnvironment};
 use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironment;
-use flox_rust_sdk::models::environment::{
-    Environment,
-    EnvironmentPointer,
-    PathPointer,
-    DOT_FLOX,
-    MANIFEST_FILENAME,
-};
+use flox_rust_sdk::models::environment::{Environment, EnvironmentPointer, PathPointer, DOT_FLOX};
 use flox_rust_sdk::models::environment_ref;
 use flox_rust_sdk::models::manifest::list_packages;
 use flox_rust_sdk::nix::arguments::eval::EvaluationArgs;

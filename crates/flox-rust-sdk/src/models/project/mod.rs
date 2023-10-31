@@ -58,7 +58,7 @@ impl<'flox> Root<'flox, Closed<GitCommandProvider>> {
     ///
     /// - Resolves as initialized if a `flake.nix` is present
     /// - Resolves as uninitialized if not
-    pub async fn guard(
+    pub fn guard(
         self,
     ) -> Result<
         Guard<Project<'flox, ReadOnly>, Root<'flox, Closed<GitCommandProvider>>>,
@@ -128,7 +128,6 @@ impl<'flox> Guard<Project<'flox, ReadOnly>, Root<'flox, Closed<GitCommandProvide
         .map_err(InitProjectError::NixInitBase)?;
 
         repo.add(&[Path::new("flake.nix")])
-            .await
             .map_err(InitProjectError::GitAdd)?;
 
         Ok(Project::new(
@@ -145,7 +144,7 @@ impl<'flox, Access: GitAccess> Project<'flox, Access> {
         unimplemented!()
     }
 
-    pub async fn environment<Nix: FloxNixApi>(
+    pub fn environment<Nix: FloxNixApi>(
         &self,
         _name: &str,
     ) -> Result<Environment<'flox, ReadOnly>, GetEnvironmentError<Nix>>
@@ -238,7 +237,6 @@ impl<'flox, Access: GitAccess> Project<'flox, Access> {
                 let new_path = root.join(dir_name).join(name);
 
                 repo.mv(&old_path, &new_path)
-                    .await
                     .map_err(InitFloxPackageError::GitMv)?;
                 info!(
                     "moved: {} -> {}",
@@ -253,7 +251,6 @@ impl<'flox, Access: GitAccess> Project<'flox, Access> {
                     .map_err(InitFloxPackageError::<Nix>::ReplacePackageName)?;
 
                 repo.add(&[&new_path])
-                    .await
                     .map_err(InitFloxPackageError::GitAdd)?;
             }
         }
@@ -299,9 +296,7 @@ impl<'flox> Project<'flox, ReadOnly> {
             }
         }
 
-        let git = GitCommandProvider::discover(transaction_temp_dir.path())
-            .await
-            .unwrap();
+        let git = GitCommandProvider::discover(transaction_temp_dir.path()).unwrap();
 
         let sandbox = self.git.to_sandbox_in(transaction_temp_dir, git);
 
@@ -346,7 +341,7 @@ impl<'flox> Project<'flox, GitSandBox> {
                     .await
                     .unwrap();
 
-                    original.git().add(&[&file]).await.expect("should add file")
+                    original.git().add(&[&file]).expect("should add file")
                 },
                 FileAction::Delete => {
                     original
@@ -357,7 +352,6 @@ impl<'flox> Project<'flox, GitSandBox> {
                             false,
                             false,
                         )
-                        .await
                         .expect("should remove path");
                 },
             }
@@ -506,7 +500,6 @@ pub mod tests {
 
         flox.resource(project_dir.path().to_path_buf())
             .guard()
-            .await
             .expect("Finding dir should succeed")
             .open()
             .expect_err("should find empty dir");
@@ -517,18 +510,15 @@ pub mod tests {
         let (flox, tempdir_handle) = flox_instance();
 
         let project_dir = tempfile::tempdir_in(tempdir_handle.path()).unwrap();
-        let _project_git = GitCommandProvider::init(project_dir.path(), false)
-            .await
-            .expect("should create git repo");
+        let _project_git =
+            GitCommandProvider::init(project_dir.path(), false).expect("should create git repo");
 
         flox.resource(project_dir.path().to_path_buf())
             .guard()
-            .await
             .expect("Finding dir should succeed")
             .open()
             .expect("should find git repo")
             .guard()
-            .await
             .expect("Openeing project dir should succeed")
             .open()
             .expect_err("Should error without flake.nix");
