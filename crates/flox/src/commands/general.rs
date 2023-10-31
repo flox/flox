@@ -187,7 +187,7 @@ pub struct ConfigDelete {
 /// floxHub authentication commands
 #[derive(Clone, Debug, Bpaf)]
 pub enum Auth {
-    /// Login to floxhub
+    /// Login to floxhub (requires an existing github account)
     #[bpaf(command)]
     Login(#[bpaf(any("gh option", not_help), help("gh auth login options"))] Vec<String>),
     /// Logout of floxhub

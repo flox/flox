@@ -1,3 +1,4 @@
+mod auth;
 mod channel;
 mod environment;
 mod general;
@@ -355,6 +356,9 @@ enum InternalCommands {
     Rollback(#[bpaf(external(environment::rollback))] environment::Rollback),
     #[bpaf(command)]
     Auth(#[bpaf(external(general::auth))] general::Auth),
+    ///Auth2
+    #[bpaf(command)]
+    Auth2(#[bpaf(external(auth::auth2))] auth::Auth2),
 }
 
 impl InternalCommands {
@@ -365,6 +369,7 @@ impl InternalCommands {
             InternalCommands::SwitchGeneration(args) => args.handle(flox).await?,
             InternalCommands::Rollback(args) => args.handle(flox).await?,
             InternalCommands::Auth(args) => args.handle(config, flox).await?,
+            InternalCommands::Auth2(args) => args.handle(config, flox).await?,
         }
         Ok(())
     }

@@ -61,6 +61,9 @@
       METRICS_EVENTS_URL = "https://events.flox.dev/capture";
       METRICS_EVENTS_API_KEY = "phc_z4dOADAPvpU9VNzCjDD3pIJuSuGTyagKdFWfjak838Y";
 
+      # oauth client id
+      OAUTH_CLIENT_ID = "Iv1.3b00a7bb5f910259";
+
       # the libssh crate wants to use its own libssh prebuilts
       # or build libssh from source.
       # This env variable will entcourage it to link to the nix provided version
