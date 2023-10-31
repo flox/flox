@@ -18,13 +18,13 @@ use crate::utils::guard::Guard;
 /// At this stage the root has not yet been verified.
 /// This state should be handled as a mere reference to a potential root of any kind
 impl<'flox> Root<'flox, Closed<PathBuf>> {
-    pub async fn guard(
+    pub fn guard(
         self,
     ) -> Result<
         RootGuard<'flox, Closed<GitCommandProvider>, Closed<PathBuf>>,
         ProjectDiscoverGitError,
     > {
-        match GitCommandProvider::discover(&self.state.inner).await {
+        match GitCommandProvider::discover(&self.state.inner) {
             Ok(repo) => Ok(Guard::Initialized(Root {
                 flox: self.flox,
                 state: Closed::new(repo),

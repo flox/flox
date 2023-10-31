@@ -3,7 +3,6 @@ use std::os::unix::ffi::OsStringExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use async_trait::async_trait;
 use log::{debug, error, warn};
 use thiserror::Error;
 
@@ -30,8 +29,7 @@ pub struct BranchInfo {
 
 // simple git provider for the tasks we need to provide in
 // flox
-#[async_trait(?Send)]
-pub trait GitProvider: Send + Sized + std::fmt::Debug {
+pub trait GitProvider: Sized + std::fmt::Debug {
     type InitError: std::error::Error;
     type CloneError: std::error::Error;
     type CommitError: std::error::Error;
@@ -56,38 +54,37 @@ pub trait GitProvider: Send + Sized + std::fmt::Debug {
     type SetOriginError: std::error::Error;
     type GetOriginError: std::error::Error;
 
-    async fn discover<P: AsRef<Path>>(path: P) -> Result<Self, Self::DiscoverError>;
-    async fn init<P: AsRef<Path>>(path: P, bare: bool) -> Result<Self, Self::InitError>;
-    async fn clone<O: AsRef<OsStr>, P: AsRef<Path>>(
+    fn discover<P: AsRef<Path>>(path: P) -> Result<Self, Self::DiscoverError>;
+    fn init<P: AsRef<Path>>(path: P, bare: bool) -> Result<Self, Self::InitError>;
+    fn clone<O: AsRef<OsStr>, P: AsRef<Path>>(
         origin: O,
         path: P,
         bare: bool,
     ) -> Result<Self, Self::CloneError>;
 
-    async fn checkout(&self, name: &str, orphan: bool) -> Result<(), Self::CheckoutError>;
-    async fn list_branches(&self) -> Result<Vec<BranchInfo>, Self::ListBranchesError>;
-    async fn rename_branch(&self, new_name: &str) -> Result<(), Self::RenameError>;
+    fn checkout(&self, name: &str, orphan: bool) -> Result<(), Self::CheckoutError>;
+    fn list_branches(&self) -> Result<Vec<BranchInfo>, Self::ListBranchesError>;
+    fn rename_branch(&self, new_name: &str) -> Result<(), Self::RenameError>;
 
-    async fn add_remote(&self, origin_name: &str, url: &str) -> Result<(), Self::AddRemoteError>;
-    async fn mv(&self, from: &Path, to: &Path) -> Result<(), Self::MvError>;
-    async fn rm(
+    fn add_remote(&self, origin_name: &str, url: &str) -> Result<(), Self::AddRemoteError>;
+    fn mv(&self, from: &Path, to: &Path) -> Result<(), Self::MvError>;
+    fn rm(
         &self,
         paths: &[&Path],
         recursive: bool,
         force: bool,
         cached: bool,
     ) -> Result<(), Self::RmError>;
-    async fn add(&self, paths: &[&Path]) -> Result<(), Self::AddError>;
-    async fn commit(&self, message: &str) -> Result<(), Self::CommitError>;
+    fn add(&self, paths: &[&Path]) -> Result<(), Self::AddError>;
+    fn commit(&self, message: &str) -> Result<(), Self::CommitError>;
 
-    async fn show(&self, object: &str) -> Result<OsString, Self::ShowError>;
+    fn show(&self, object: &str) -> Result<OsString, Self::ShowError>;
 
-    async fn fetch(&self) -> Result<(), Self::FetchError>;
-    async fn push(&self, remote: &str) -> Result<(), Self::PushError>;
-    async fn set_origin(&self, branch: &str, origin_name: &str)
-        -> Result<(), Self::SetOriginError>;
+    fn fetch(&self) -> Result<(), Self::FetchError>;
+    fn push(&self, remote: &str) -> Result<(), Self::PushError>;
+    fn set_origin(&self, branch: &str, origin_name: &str) -> Result<(), Self::SetOriginError>;
 
-    async fn get_origin(&self) -> Result<OriginInfo, Self::GetOriginError>;
+    fn get_origin(&self) -> Result<OriginInfo, Self::GetOriginError>;
 
     fn workdir(&self) -> Option<&Path>;
     fn path(&self) -> &Path;
@@ -400,7 +397,6 @@ impl GitDiscoverError for GitCommandDiscoverError {
 
 /// A simple Git Provider that uses the git
 /// command. This would require that git is installed.
-#[async_trait(?Send)]
 impl GitProvider for GitCommandProvider {
     type AddError = GitCommandError;
     type AddRemoteError = GitCommandError;
@@ -419,7 +415,7 @@ impl GitProvider for GitCommandProvider {
     type SetOriginError = GitCommandError;
     type ShowError = GitCommandError;
 
-    async fn discover<P: AsRef<Path>>(path: P) -> Result<Self, Self::DiscoverError> {
+    fn discover<P: AsRef<Path>>(path: P) -> Result<Self, Self::DiscoverError> {
         let out_str = GitCommandProvider::run_command(
             GitCommandProvider::new_command(&Some(&path))
                 .arg("rev-parse")
@@ -459,10 +455,7 @@ impl GitProvider for GitCommandProvider {
         })
     }
 
-    async fn init<P: AsRef<Path>>(
-        path: P,
-        bare: bool,
-    ) -> Result<GitCommandProvider, Self::InitError> {
+    fn init<P: AsRef<Path>>(path: P, bare: bool) -> Result<GitCommandProvider, Self::InitError> {
         let mut command = GitCommandProvider::new_command(&Some(&path));
         command.arg("init");
         if bare {
@@ -477,7 +470,7 @@ impl GitProvider for GitCommandProvider {
         })
     }
 
-    async fn clone<O: AsRef<OsStr>, P: AsRef<Path>>(
+    fn clone<O: AsRef<OsStr>, P: AsRef<Path>>(
         origin: O,
         path: P,
         bare: bool,
@@ -498,7 +491,7 @@ impl GitProvider for GitCommandProvider {
         })
     }
 
-    async fn checkout(&self, name: &str, orphan: bool) -> Result<(), Self::CheckoutError> {
+    fn checkout(&self, name: &str, orphan: bool) -> Result<(), Self::CheckoutError> {
         let mut command = GitCommandProvider::new_command(&self.workdir());
         command.arg("checkout");
         if orphan {
@@ -511,7 +504,7 @@ impl GitProvider for GitCommandProvider {
         Ok(())
     }
 
-    async fn add_remote(&self, origin_name: &str, url: &str) -> Result<(), Self::AddRemoteError> {
+    fn add_remote(&self, origin_name: &str, url: &str) -> Result<(), Self::AddRemoteError> {
         let _out = GitCommandProvider::run_command(
             GitCommandProvider::new_command(&self.workdir)
                 .arg("remote")
@@ -523,7 +516,7 @@ impl GitProvider for GitCommandProvider {
         Ok(())
     }
 
-    async fn rename_branch(&self, new_name: &str) -> Result<(), Self::RenameError> {
+    fn rename_branch(&self, new_name: &str) -> Result<(), Self::RenameError> {
         let _out = GitCommandProvider::run_command(
             GitCommandProvider::new_command(&self.workdir)
                 .arg("branch")
@@ -533,11 +526,7 @@ impl GitProvider for GitCommandProvider {
         Ok(())
     }
 
-    async fn set_origin(
-        &self,
-        branch: &str,
-        origin_name: &str,
-    ) -> Result<(), Self::SetOriginError> {
+    fn set_origin(&self, branch: &str, origin_name: &str) -> Result<(), Self::SetOriginError> {
         let _out = GitCommandProvider::run_command(
             GitCommandProvider::new_command(&self.workdir)
                 .arg("branch")
@@ -563,7 +552,7 @@ impl GitProvider for GitCommandProvider {
     ///   (remote_name, branch_name) = split_once "/" upstream_ref
     ///   upstream_url = git remote get-url ${remote_name}
     ///   upstream_rev = git ls-remote ${remote_name} ${branch_name}
-    async fn get_origin(&self) -> Result<OriginInfo, Self::GetOriginError> {
+    fn get_origin(&self) -> Result<OriginInfo, Self::GetOriginError> {
         let (remote_name, remote_branch) = {
             let reference = GitCommandProvider::run_command(
                 GitCommandProvider::new_command(&self.workdir)
@@ -613,7 +602,7 @@ impl GitProvider for GitCommandProvider {
         })
     }
 
-    async fn mv(&self, from: &Path, to: &Path) -> Result<(), Self::MvError> {
+    fn mv(&self, from: &Path, to: &Path) -> Result<(), Self::MvError> {
         let _out = GitCommandProvider::run_command(
             GitCommandProvider::new_command(&self.workdir)
                 .arg("mv")
@@ -624,7 +613,7 @@ impl GitProvider for GitCommandProvider {
         Ok(())
     }
 
-    async fn rm(
+    fn rm(
         &self,
         paths: &[&Path],
         recursive: bool,
@@ -654,7 +643,7 @@ impl GitProvider for GitCommandProvider {
         Ok(())
     }
 
-    async fn add(&self, paths: &[&Path]) -> Result<(), Self::MvError> {
+    fn add(&self, paths: &[&Path]) -> Result<(), Self::MvError> {
         let mut command = GitCommandProvider::new_command(&self.workdir);
         command.arg("add");
         for path in paths {
@@ -666,7 +655,7 @@ impl GitProvider for GitCommandProvider {
         Ok(())
     }
 
-    async fn commit(&self, message: &str) -> Result<(), Self::CommitError> {
+    fn commit(&self, message: &str) -> Result<(), Self::CommitError> {
         let mut command = GitCommandProvider::new_command(&self.workdir());
         command.arg("commit");
         command.args(["-m", message]);
@@ -675,15 +664,15 @@ impl GitProvider for GitCommandProvider {
         Ok(())
     }
 
-    async fn show(&self, object: &str) -> Result<OsString, Self::ShowError> {
+    fn show(&self, object: &str) -> Result<OsString, Self::ShowError> {
         let mut command = GitCommandProvider::new_command(&Some(&self.path));
         command.arg("show");
         command.arg(object);
 
-        Ok(GitCommandProvider::run_command(&mut command)?)
+        GitCommandProvider::run_command(&mut command)
     }
 
-    async fn list_branches(&self) -> Result<Vec<BranchInfo>, Self::ListBranchesError> {
+    fn list_branches(&self) -> Result<Vec<BranchInfo>, Self::ListBranchesError> {
         let mut command = GitCommandProvider::new_command(&Some(&self.path));
         command.arg("branch");
         command.args(["--all", "--verbose"]);
@@ -731,7 +720,7 @@ impl GitProvider for GitCommandProvider {
         Ok(info)
     }
 
-    async fn fetch(&self) -> Result<(), Self::FetchError> {
+    fn fetch(&self) -> Result<(), Self::FetchError> {
         GitCommandProvider::run_command(
             GitCommandProvider::new_command(&self.workdir.as_deref().or(Some(&self.path)))
                 .arg("fetch")
@@ -740,7 +729,7 @@ impl GitProvider for GitCommandProvider {
         Ok(())
     }
 
-    async fn push(&self, remote: &str) -> Result<(), Self::PushError> {
+    fn push(&self, remote: &str) -> Result<(), Self::PushError> {
         let mut command = GitCommandProvider::new_command(&self.workdir());
         command.arg("push");
         command.arg("-u");
@@ -775,25 +764,23 @@ pub mod tests {
         }
     }
 
-    async fn init_temp_repo(bare: bool) -> (GitCommandProvider, tempfile::TempDir) {
+    fn init_temp_repo(bare: bool) -> (GitCommandProvider, tempfile::TempDir) {
         let tempdir_handle = tempfile::tempdir_in(std::env::temp_dir()).unwrap();
 
-        let git_command_provider = GitCommandProvider::init(tempdir_handle.path(), bare)
-            .await
-            .unwrap();
+        let git_command_provider = GitCommandProvider::init(tempdir_handle.path(), bare).unwrap();
         (git_command_provider, tempdir_handle)
     }
 
-    pub async fn commit_file(repo: &GitCommandProvider, filename: &str) {
+    pub fn commit_file(repo: &GitCommandProvider, filename: &str) {
         let file = repo.path.join(filename);
         fs::write(&file, filename).unwrap();
-        repo.add(&[&file]).await.unwrap();
-        repo.commit(filename).await.unwrap();
+        repo.add(&[&file]).unwrap();
+        repo.commit(filename).unwrap();
     }
 
-    #[tokio::test]
-    async fn test_open() {
-        let (_, tempdir_handle) = init_temp_repo(false).await;
+    #[test]
+    fn test_open() {
+        let (_, tempdir_handle) = init_temp_repo(false);
         let path = tempdir_handle.path().to_path_buf();
         assert_eq!(
             GitCommandProvider::open(&path).unwrap(),
@@ -805,9 +792,9 @@ pub mod tests {
     }
 
     // test opening a bare repo succeeds
-    #[tokio::test]
-    async fn test_open_bare() {
-        let (_, tempdir_handle) = init_temp_repo(true).await;
+    #[test]
+    fn test_open_bare() {
+        let (_, tempdir_handle) = init_temp_repo(true);
         let path = tempdir_handle.path().to_path_buf();
         assert_eq!(
             GitCommandProvider::open(&path).unwrap(),
@@ -819,9 +806,9 @@ pub mod tests {
     }
 
     // test opening a subdirectory of a repo fails
-    #[tokio::test]
-    async fn test_open_subdirectory() {
-        let (_, tempdir_handle) = init_temp_repo(false).await;
+    #[test]
+    fn test_open_subdirectory() {
+        let (_, tempdir_handle) = init_temp_repo(false);
         let path = tempdir_handle.path().to_path_buf();
 
         let subdirectory = path.join("subdirectory");
@@ -834,9 +821,9 @@ pub mod tests {
     }
 
     // test opening a subdirectory of a bare repo fails
-    #[tokio::test]
-    async fn test_open_subdirectory_bare() {
-        let (_, tempdir_handle) = init_temp_repo(true).await;
+    #[test]
+    fn test_open_subdirectory_bare() {
+        let (_, tempdir_handle) = init_temp_repo(true);
 
         assert!(matches!(
             GitCommandProvider::open(tempdir_handle.path().join("branches")),
@@ -844,8 +831,8 @@ pub mod tests {
         ));
     }
 
-    #[tokio::test]
-    async fn test_open_nonexistent() {
+    #[test]
+    fn test_open_nonexistent() {
         assert!(matches!(
             GitCommandProvider::open(PathBuf::from("/does-not-exist")),
             Err(GitCommandOpenError::Command(GitCommandError::BadExit(
@@ -856,13 +843,13 @@ pub mod tests {
         ));
     }
 
-    #[tokio::test]
-    async fn test_branch_contains_commit() {
-        let (repo, _tempdir_handle) = init_temp_repo(false).await;
-        repo.checkout("branch_1", true).await.unwrap();
-        commit_file(&repo, "dummy").await;
+    #[test]
+    fn test_branch_contains_commit() {
+        let (repo, _tempdir_handle) = init_temp_repo(false);
+        repo.checkout("branch_1", true).unwrap();
+        commit_file(&repo, "dummy");
         let hash_1 = repo.branch_hash("branch_1").unwrap();
-        commit_file(&repo, "dummy_2").await;
+        commit_file(&repo, "dummy_2");
         let hash_2 = repo.branch_hash("branch_1").unwrap();
 
         assert_ne!(repo.branch_hash("branch_1").unwrap(), hash_1);
@@ -870,50 +857,50 @@ pub mod tests {
         assert!(repo.branch_contains_commit(&hash_2, "branch_1").unwrap());
     }
 
-    #[tokio::test]
-    async fn test_commit_not_on_branch() {
-        let (repo, _tempdir_handle) = init_temp_repo(false).await;
-        repo.checkout("branch_1", true).await.unwrap();
-        commit_file(&repo, "dummy").await;
+    #[test]
+    fn test_commit_not_on_branch() {
+        let (repo, _tempdir_handle) = init_temp_repo(false);
+        repo.checkout("branch_1", true).unwrap();
+        commit_file(&repo, "dummy");
         let hash_1 = repo.branch_hash("branch_1").unwrap();
 
-        repo.checkout("branch_2", true).await.unwrap();
-        commit_file(&repo, "dummy_2").await;
+        repo.checkout("branch_2", true).unwrap();
+        commit_file(&repo, "dummy_2");
 
         assert!(!repo.branch_contains_commit(&hash_1, "branch_2").unwrap());
     }
 
-    #[tokio::test]
-    async fn test_commit_not_on_any_branch() {
-        let (repo, _tempdir_handle) = init_temp_repo(false).await;
-        repo.checkout("branch_1", true).await.unwrap();
-        commit_file(&repo, "dummy").await;
+    #[test]
+    fn test_commit_not_on_any_branch() {
+        let (repo, _tempdir_handle) = init_temp_repo(false);
+        repo.checkout("branch_1", true).unwrap();
+        commit_file(&repo, "dummy");
 
         assert!(!repo.branch_contains_commit("XXX", "branch_1").unwrap());
     }
 
-    #[tokio::test]
-    async fn test_branch_hash() {
-        let (repo, _tempdir_handle) = init_temp_repo(false).await;
-        repo.checkout("branch_1", true).await.unwrap();
+    #[test]
+    fn test_branch_hash() {
+        let (repo, _tempdir_handle) = init_temp_repo(false);
+        repo.checkout("branch_1", true).unwrap();
 
-        commit_file(&repo, "dummy").await;
+        commit_file(&repo, "dummy");
 
         assert!(repo.branch_hash("branch_1").unwrap().len() == 40);
     }
 
-    #[tokio::test]
-    async fn test_branch_does_not_exist() {
-        let (repo, _tempdir_handle) = init_temp_repo(false).await;
+    #[test]
+    fn test_branch_does_not_exist() {
+        let (repo, _tempdir_handle) = init_temp_repo(false);
 
         assert!(!repo.has_branch("branch_1").unwrap());
     }
 
-    #[tokio::test]
-    async fn test_create_branch() {
-        let (repo, _tempdir_handle) = init_temp_repo(false).await;
-        repo.checkout("branch_1", true).await.unwrap();
-        commit_file(&repo, "dummy").await;
+    #[test]
+    fn test_create_branch() {
+        let (repo, _tempdir_handle) = init_temp_repo(false);
+        repo.checkout("branch_1", true).unwrap();
+        commit_file(&repo, "dummy");
         let hash = repo.branch_hash("branch_1").unwrap();
 
         repo.create_branch("test", &hash).unwrap();
@@ -921,16 +908,16 @@ pub mod tests {
     }
 
     // test that clone_branch only clones the specified branch
-    #[tokio::test]
-    async fn test_clone_branch() {
+    #[test]
+    fn test_clone_branch() {
         // create two branches in repo: branch_1 and branch_2
-        let (repo, _tempdir_handle) = init_temp_repo(false).await;
-        repo.checkout("branch_1", true).await.unwrap();
-        commit_file(&repo, "dummy").await;
+        let (repo, _tempdir_handle) = init_temp_repo(false);
+        repo.checkout("branch_1", true).unwrap();
+        commit_file(&repo, "dummy");
         let hash_branch_1 = repo.branch_hash("branch_1").unwrap();
 
-        repo.checkout("branch_2", true).await.unwrap();
-        commit_file(&repo, "dummy_2").await;
+        repo.checkout("branch_2", true).unwrap();
+        commit_file(&repo, "dummy_2");
         let hash_branch_2 = repo.branch_hash("branch_2").unwrap();
 
         // clone only branch_1 branch to repo_2
@@ -954,20 +941,20 @@ pub mod tests {
         assert!(!repo_2.contains_commit(&hash_branch_2).unwrap());
     }
 
-    #[tokio::test]
-    async fn test_fetch_branch() {
+    #[test]
+    fn test_fetch_branch() {
         // create three branches in repo: branch_1, branch_2, and branch_3
-        let (repo, _tempdir_handle) = init_temp_repo(false).await;
-        repo.checkout("branch_1", true).await.unwrap();
-        commit_file(&repo, "dummy").await;
+        let (repo, _tempdir_handle) = init_temp_repo(false);
+        repo.checkout("branch_1", true).unwrap();
+        commit_file(&repo, "dummy");
         let hash_branch_1 = repo.branch_hash("branch_1").unwrap();
 
-        repo.checkout("branch_2", true).await.unwrap();
-        commit_file(&repo, "dummy_2").await;
+        repo.checkout("branch_2", true).unwrap();
+        commit_file(&repo, "dummy_2");
         let hash_branch_2 = repo.branch_hash("branch_2").unwrap();
 
-        repo.checkout("branch_3", true).await.unwrap();
-        commit_file(&repo, "dummy_3").await;
+        repo.checkout("branch_3", true).unwrap();
+        commit_file(&repo, "dummy_3");
         let hash_branch_3 = repo.branch_hash("branch_3").unwrap();
 
         // clone only branch_1 branch to repo_2
@@ -993,19 +980,19 @@ pub mod tests {
         assert!(!repo_2.contains_commit(&hash_branch_3).unwrap());
     }
 
-    #[tokio::test]
-    async fn test_fetch_ref() {
+    #[test]
+    fn test_fetch_ref() {
         // create three branches in repo: branch_1, branch_2, and branch_3
-        let (repo, _tempdir_handle) = init_temp_repo(false).await;
-        repo.checkout("branch_1", true).await.unwrap();
-        commit_file(&repo, "dummy").await;
+        let (repo, _tempdir_handle) = init_temp_repo(false);
+        repo.checkout("branch_1", true).unwrap();
+        commit_file(&repo, "dummy");
 
-        repo.checkout("branch_2", true).await.unwrap();
-        commit_file(&repo, "dummy_2").await;
+        repo.checkout("branch_2", true).unwrap();
+        commit_file(&repo, "dummy_2");
         let hash_branch_2 = repo.branch_hash("branch_2").unwrap();
 
-        repo.checkout("branch_3", true).await.unwrap();
-        commit_file(&repo, "dummy_3").await;
+        repo.checkout("branch_3", true).unwrap();
+        commit_file(&repo, "dummy_3");
         let hash_branch_3 = repo.branch_hash("branch_3").unwrap();
 
         // clone only branch_1 to repo_2
@@ -1025,11 +1012,11 @@ pub mod tests {
         assert!(!repo_2.contains_commit(&hash_branch_3).unwrap());
     }
 
-    #[tokio::test]
-    async fn test_fetch_bad_ref() {
-        let (repo, _tempdir_handle) = init_temp_repo(false).await;
-        repo.checkout("branch_1", true).await.unwrap();
-        commit_file(&repo, "dummy").await;
+    #[test]
+    fn test_fetch_bad_ref() {
+        let (repo, _tempdir_handle) = init_temp_repo(false);
+        repo.checkout("branch_1", true).unwrap();
+        commit_file(&repo, "dummy");
 
         let tempdir_handle_2 = tempfile::tempdir_in(std::env::temp_dir()).unwrap();
         let repo_2 =
@@ -1042,15 +1029,15 @@ pub mod tests {
         ));
     }
 
-    #[tokio::test]
-    async fn test_reset_branch_existing() {
+    #[test]
+    fn test_reset_branch_existing() {
         // create two branches in repo: branch_1 and branch_2
-        let (repo, _tempdir_handle) = init_temp_repo(false).await;
-        repo.checkout("branch_1", true).await.unwrap();
-        commit_file(&repo, "dummy").await;
+        let (repo, _tempdir_handle) = init_temp_repo(false);
+        repo.checkout("branch_1", true).unwrap();
+        commit_file(&repo, "dummy");
 
-        repo.checkout("branch_2", true).await.unwrap();
-        commit_file(&repo, "dummy_2").await;
+        repo.checkout("branch_2", true).unwrap();
+        commit_file(&repo, "dummy_2");
         let hash_branch_2 = repo.branch_hash("branch_2").unwrap();
 
         // reset branch_1 to branch_2
@@ -1059,15 +1046,15 @@ pub mod tests {
         assert_eq!(repo.branch_hash("branch_1").unwrap(), hash_branch_2)
     }
 
-    #[tokio::test]
-    async fn test_reset_branch_new() {
+    #[test]
+    fn test_reset_branch_new() {
         // create two branches in repo: branch_1 and branch_2
-        let (repo, _tempdir_handle) = init_temp_repo(false).await;
-        repo.checkout("branch_1", true).await.unwrap();
-        commit_file(&repo, "dummy").await;
+        let (repo, _tempdir_handle) = init_temp_repo(false);
+        repo.checkout("branch_1", true).unwrap();
+        commit_file(&repo, "dummy");
 
-        repo.checkout("branch_2", true).await.unwrap();
-        commit_file(&repo, "dummy_2").await;
+        repo.checkout("branch_2", true).unwrap();
+        commit_file(&repo, "dummy_2");
         let hash_branch_2 = repo.branch_hash("branch_2").unwrap();
 
         // reset branch_1 to branch_2

@@ -411,25 +411,22 @@ impl<'flox> Publish<'flox, NixAnalysis> {
     }
 
     /// Write snapshot to catalog and push to origin
-    pub async fn push_snapshot(&self) -> Result<(), PublishError> {
+    pub fn push_snapshot(&self) -> Result<(), PublishError> {
         let mut upstream_repo =
-            UpstreamRepo::clone_repo(self.publish_flake_ref.clone_url(), &self.flox.temp_dir)
-                .await?;
-        self.push_snapshot_to(&mut upstream_repo).await
+            UpstreamRepo::clone_repo(self.publish_flake_ref.clone_url(), &self.flox.temp_dir)?;
+        self.push_snapshot_to(&mut upstream_repo)
     }
 
     /// Write snapshot to a catalog and push to 'origin'
     ///
     /// Internal method to test
-    async fn push_snapshot_to(&self, upstream_repo: &mut UpstreamRepo) -> Result<(), PublishError> {
-        let catalog = upstream_repo
-            .get_or_create_catalog(&self.flox.system)
-            .await?;
+    fn push_snapshot_to(&self, upstream_repo: &mut UpstreamRepo) -> Result<(), PublishError> {
+        let catalog = upstream_repo.get_or_create_catalog(&self.flox.system)?;
         if let Ok(Some(_)) = catalog.get_snapshot(self.analysis()) {
             Err(PublishError::SnapshotExists)?;
         }
-        catalog.add_snapshot(self.analysis()).await?;
-        catalog.push_catalog().await?;
+        catalog.add_snapshot(self.analysis())?;
+        catalog.push_catalog()?;
         Ok(())
     }
 }
@@ -445,12 +442,9 @@ struct UpstreamRepo {
 
 impl UpstreamRepo {
     /// Clone an upstream repo
-    async fn clone_repo(
-        url: impl AsRef<str>,
-        temp_dir: impl AsRef<Path>,
-    ) -> Result<Self, PublishError> {
+    fn clone_repo(url: impl AsRef<str>, temp_dir: impl AsRef<Path>) -> Result<Self, PublishError> {
         let repo_dir = tempfile::tempdir_in(temp_dir).unwrap().into_path(); // todo catch error
-        let git = <Git as GitProvider>::clone(url.as_ref(), &repo_dir, false).await?;
+        let git = <Git as GitProvider>::clone(url.as_ref(), repo_dir, false)?;
 
         Ok(Self { git })
     }
@@ -463,21 +457,16 @@ impl UpstreamRepo {
     ///
     /// `Git` objects can switch branches at any time leaving the repo in an unknown state.
     /// [get_catalog] ensures that only one [UpstreamCatalog] exists at a time by requiring a `&mut self`.
-    async fn get_or_create_catalog(
-        &mut self,
-        system: &System,
-    ) -> Result<UpstreamCatalog, PublishError> {
-        if self.git.list_branches().await? // todo: catch error
+    fn get_or_create_catalog(&mut self, system: &System) -> Result<UpstreamCatalog, PublishError> {
+        if self.git.list_branches()? // todo: catch error
             .into_iter().any(|info| info.name == Self::catalog_branch_name(system))
         {
             self.git
-                .checkout(&Self::catalog_branch_name(system), false)
-                .await?; // todo: catch error
+                .checkout(&Self::catalog_branch_name(system), false)?; // todo: catch error
         } else {
             self.git
-                .checkout(&Self::catalog_branch_name(system), true)
-                .await?;
-            self.git.rm(&[Path::new(".")], true, true, false).await?;
+                .checkout(&Self::catalog_branch_name(system), true)?;
+            self.git.rm(&[Path::new(".")], true, true, false)?;
         }
         Ok(UpstreamCatalog { git: &self.git })
     }
@@ -557,7 +546,7 @@ impl UpstreamCatalog<'_> {
     /// [Value] to be [flox_types::catalog::CatalogEntry]
     ///
     /// Consumers should check if a snapshot already exists with [Self::get_snapshot]
-    async fn add_snapshot(&self, snapshot: &Value) -> Result<(), PublishError> {
+    fn add_snapshot(&self, snapshot: &Value) -> Result<(), PublishError> {
         let path = self.workdir().join(Self::get_snapshot_path(snapshot));
 
         fs::create_dir_all(path.parent().unwrap())?; // only an issue for a git repo in /
@@ -569,8 +558,8 @@ impl UpstreamCatalog<'_> {
 
         serde_json::to_writer(&mut snapshot_file, snapshot)?;
 
-        self.git.add(&[&path]).await?;
-        self.git.commit("Added snapshot").await?; // TODO: pass message in here? commit in separate method?
+        self.git.add(&[&path])?;
+        self.git.commit("Added snapshot")?; // TODO: pass message in here? commit in separate method?
         Ok(())
     }
 
@@ -578,8 +567,8 @@ impl UpstreamCatalog<'_> {
     ///
     /// Pushing a catalog consumes the catalog instance,
     /// which in turn enables any other methods on the [UpstreamRepo] that created this instance.
-    async fn push_catalog(self) -> Result<(), PublishError> {
-        self.git.push("origin").await?;
+    fn push_catalog(self) -> Result<(), PublishError> {
+        self.git.push("origin")?;
         Ok(())
     }
 }
@@ -761,7 +750,6 @@ impl PublishFlakeRef {
 
         // Create a handle to the git repo
         let repo = Git::discover(file_ref.url.path())
-            .await
             .map_err(|_| ConvertFlakeRefError::RepoNotFound(file_ref.url.path().into()))?;
 
         // Get the upstream branch information.
@@ -774,10 +762,7 @@ impl PublishFlakeRef {
         //
         // The current branch MUST have an upstream ref configured
         // which resolves to a valid rev on the remote.
-        let remote = repo
-            .get_origin()
-            .await
-            .map_err(ConvertFlakeRefError::NoRemote)?;
+        let remote = repo.get_origin().map_err(ConvertFlakeRefError::NoRemote)?;
 
         // Ensure the remote branch exists
         let remote_revision = remote
@@ -1122,11 +1107,11 @@ mod tests {
         let repo_dir = _temp_dir_handle.path().join("repo");
 
         fs::create_dir(&repo_dir).unwrap();
-        let repo = Git::init(&repo_dir, false).await.unwrap();
+        let repo = Git::init(&repo_dir, false).unwrap();
 
         // create a file and stage it without committing so that the repo is dirty
         fs::write(repo_dir.join("flake.nix"), "{ outputs = _: {}; }").unwrap();
-        repo.add(&[Path::new(".")]).await.unwrap();
+        repo.add(&[Path::new(".")]).unwrap();
 
         let flake_ref =
             GitRef::from_str(&format!("git+file://{}", repo_dir.to_string_lossy())).unwrap();
@@ -1156,24 +1141,23 @@ mod tests {
 
         // create a repo
         fs::create_dir(&repo_dir).unwrap();
-        let repo = Git::init(&repo_dir, false).await.unwrap();
+        let repo = Git::init(&repo_dir, false).unwrap();
 
         // use a custom name as the default branch name might be affected by the user's git conf
-        repo.rename_branch("test/branch").await.unwrap();
+        repo.rename_branch("test/branch").unwrap();
 
         // commit a file
         fs::write(repo_dir.join("flake.nix"), "{ outputs = _: {}; }").unwrap();
-        repo.add(&[Path::new(".")]).await.unwrap();
-        repo.commit("Commit flake").await.unwrap();
+        repo.add(&[Path::new(".")]).unwrap();
+        repo.commit("Commit flake").unwrap();
 
         // add a remote
         repo.add_remote("upstream", &repo_dir.to_string_lossy())
-            .await
             .unwrap();
-        repo.fetch().await.unwrap();
+        repo.fetch().unwrap();
 
         // set the origin
-        repo.set_origin("test/branch", "upstream").await.unwrap();
+        repo.set_origin("test/branch", "upstream").unwrap();
 
         let flake_ref =
             GitRef::from_str(&format!("git+file://{}", repo_dir.to_string_lossy())).unwrap();
@@ -1207,11 +1191,11 @@ mod tests {
         let repo_dir = _temp_dir_handle.path().join("repo");
 
         fs::create_dir(&repo_dir).unwrap();
-        let repo = Git::init(&repo_dir, false).await.unwrap();
+        let repo = Git::init(&repo_dir, false).unwrap();
 
         fs::write(repo_dir.join("flake.nix"), "{ outputs = _: {}; }").unwrap();
-        repo.add(&[Path::new(".")]).await.unwrap();
-        repo.commit("Commit flake").await.unwrap();
+        repo.add(&[Path::new(".")]).unwrap();
+        repo.commit("Commit flake").unwrap();
 
         let flake_ref =
             GitRef::from_str(&format!("git+file://{}", repo_dir.to_string_lossy())).unwrap();
@@ -1235,13 +1219,12 @@ mod tests {
 
         // create a repo
         fs::create_dir(&repo_dir).unwrap();
-        let repo = Git::init(&repo_dir, false).await.unwrap();
+        let repo = Git::init(&repo_dir, false).unwrap();
 
         UpstreamRepo::clone_repo(
             repo.workdir().unwrap().to_string_lossy(),
             temp_dir_handle.path(),
         )
-        .await
         .expect("Should clone repo");
     }
 
@@ -1258,27 +1241,25 @@ mod tests {
 
         // create a repo
         fs::create_dir(&repo_dir).unwrap();
-        let repo = Git::init(&repo_dir, false).await.unwrap();
+        let repo = Git::init(&repo_dir, false).unwrap();
         let mut repo = UpstreamRepo::clone_repo(
             repo.workdir().unwrap().to_string_lossy(),
             temp_dir_handle.path(),
         )
-        .await
         .expect("Should clone repo");
 
-        assert!(repo.git.list_branches().await.unwrap().is_empty());
+        assert!(repo.git.list_branches().unwrap().is_empty());
 
         let catalog = repo
             .get_or_create_catalog(&"aarch64-darwin".to_string())
-            .await
             .expect("Should create branch");
 
         // commit a file to the branch to crate the first reference on the orphan branch
         fs::write(catalog.git.workdir().unwrap().join(".tag"), "").unwrap();
-        catalog.git.add(&[Path::new(".tag")]).await.unwrap();
-        catalog.git.commit("root commit").await.unwrap();
+        catalog.git.add(&[Path::new(".tag")]).unwrap();
+        catalog.git.commit("root commit").unwrap();
 
-        assert_eq!(catalog.git.list_branches().await.unwrap().len(), 1);
+        assert_eq!(catalog.git.list_branches().unwrap().len(), 1);
     }
 
     #[test]
@@ -1306,23 +1287,18 @@ mod tests {
 
         // create a repo
         fs::create_dir(&repo_dir).unwrap();
-        let repo = Git::init(&repo_dir, false).await.unwrap();
+        let repo = Git::init(&repo_dir, false).unwrap();
         let mut repo = UpstreamRepo::clone_repo(
             repo.workdir().unwrap().to_string_lossy(),
             temp_dir_handle.path(),
         )
-        .await
         .expect("Should clone repo");
 
         let catalog = repo
             .get_or_create_catalog(&"aarch64-darwin".to_string())
-            .await
             .expect("Should create branch");
 
-        catalog
-            .add_snapshot(snapshot)
-            .await
-            .expect("Should add snapshot");
+        catalog.add_snapshot(snapshot).expect("Should add snapshot");
 
         assert_eq!(
             &catalog
@@ -1342,23 +1318,21 @@ mod tests {
 
         // create a repo
         fs::create_dir(&repo_dir).unwrap();
-        let repo = Git::init(&repo_dir, false).await.unwrap();
+        let repo = Git::init(&repo_dir, false).unwrap();
 
         // add a file
         fs::write(repo_dir.join("test"), "").unwrap();
-        repo.add(&[&repo_dir.join("test")]).await.unwrap();
-        repo.commit("test").await.unwrap();
+        repo.add(&[&repo_dir.join("test")]).unwrap();
+        repo.commit("test").unwrap();
 
         let mut repo = UpstreamRepo::clone_repo(
             repo.workdir().unwrap().to_string_lossy(),
             temp_dir_handle.path(),
         )
-        .await
         .expect("Should clone repo");
 
         let catalog = repo
             .get_or_create_catalog(&"aarch64-darwin".to_string())
-            .await
             .expect("Should create branch");
 
         assert!(!catalog.git.workdir().unwrap().join("test").exists());
@@ -1379,27 +1353,22 @@ mod tests {
 
         // create an "upstream" repo
         fs::create_dir(&repo_dir).unwrap();
-        let upstream_repo = Git::init(&repo_dir, false).await.unwrap();
+        let upstream_repo = Git::init(&repo_dir, false).unwrap();
 
         // clone a "downstream"
         let mut repo = UpstreamRepo::clone_repo(
             upstream_repo.workdir().unwrap().to_string_lossy(),
             temp_dir_handle.path(),
         )
-        .await
         .expect("Should clone repo");
 
         // get a catalog, write a snapshot and push to upstream
         let catalog = repo
             .get_or_create_catalog(&"aarch64-darwin".to_string())
-            .await
             .expect("Should create branch");
 
-        catalog
-            .add_snapshot(snapshot)
-            .await
-            .expect("Should add snapshot");
-        catalog.push_catalog().await.expect("Should push catalog");
+        catalog.add_snapshot(snapshot).expect("Should add snapshot");
+        catalog.push_catalog().expect("Should push catalog");
 
         // checkout the new branch upstream to check if the file got written
         upstream_repo
@@ -1407,7 +1376,6 @@ mod tests {
                 &UpstreamRepo::catalog_branch_name(&"aarch64-darwin".to_string()),
                 false,
             )
-            .await
             .expect("catalog branch should exist upstream");
 
         let snapshot_path = repo_dir.join(UpstreamCatalog::get_snapshot_path(snapshot));
