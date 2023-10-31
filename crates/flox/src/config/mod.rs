@@ -57,6 +57,9 @@ pub struct FloxConfig {
     /// Path to signing key
     pub signing_key: Option<PathBuf>,
 
+    /// Token to authenticate on floxhub
+    pub floxhub_token: Option<String>,
+
     #[serde(flatten)]
     pub instance: InstanceConfig,
 }
