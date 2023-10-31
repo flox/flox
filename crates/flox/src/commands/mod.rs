@@ -159,6 +159,8 @@ impl FloxArgs {
             uuid: init_uuid(&config.flox.data_dir).await?,
         };
 
+        // TODO: revisit this when we discussed floxmeta's role to contribute to config/channels
+        // region: revisit reg. channels
         let floxmeta = match boostrap_flox.floxmeta(DEFAULT_OWNER).await {
             Ok(floxmeta) => floxmeta,
             Err(GetFloxmetaError::NotFound(_)) => {
@@ -182,6 +184,8 @@ impl FloxArgs {
             channels,
             ..boostrap_flox
         };
+
+        // endregion: revisit reg. channels
 
         // Set the global Nix config via the environment variables in flox.default_args so that
         // subprocesses called by `flox` (e.g. `parser-util`) can inherit them.

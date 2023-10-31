@@ -147,9 +147,18 @@ impl Flox {
         Root::closed(self, x)
     }
 
+    // TODO: revisit this when we discussed floxmeta's role to contribute to config/channels
+    //       flox.floxmeta is referring to the legacy floxmeta implementation
+    //       and is currently only used by the CLI to read the channels from the users floxmain.
+    //
+    //       N.B.: Decide whether we want to keep the `Flox.<model>` API
+    //       to create instances of subsystem models
+    // region: revisit reg. channels
     pub async fn floxmeta(&self, owner: &str) -> Result<Floxmeta<ReadOnly>, GetFloxmetaError> {
         Floxmeta::get_floxmeta(self, owner).await
     }
+
+    // endregion: revisit reg. channels
 
     /// Invoke Nix to convert a FloxInstallable into a list of matches
     pub async fn resolve_matches<Nix: FloxNixApi, Git: GitProvider>(
