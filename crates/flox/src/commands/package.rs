@@ -1,6 +1,6 @@
 use std::fmt::Debug;
 
-use bpaf::{construct, Bpaf, Parser};
+use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::prelude::FlakeAttribute;
 use flox_rust_sdk::providers::git::{GitCommandProvider, GitProvider};
@@ -94,56 +94,8 @@ pub struct PackageArgs {}
 //     }
 // }
 
-#[derive(Debug, Clone)]
-pub struct WithPassthru<T> {
-    /// stability to evaluate with
-    pub stability: Option<Stability>,
-
-    pub inner: T,
-    pub nix_args: Vec<String>,
-}
-
-impl<T> WithPassthru<T> {
-    fn with_parser(inner: impl Parser<T>) -> impl Parser<Self> {
-        let stability = bpaf::long("stability")
-            .argument("stability")
-            .help("Stability to evaluate with")
-            .optional();
-
-        let nix_args = bpaf::positional("args")
-            .strict()
-            .many()
-            .fallback(Default::default())
-            .hide();
-
-        let fake_args = bpaf::any("args",
-                |m: String| (!["--help", "-h"].contains(&m.as_str())).then_some(m)
-            )
-            // .strict()
-            .many();
-
-        construct!(stability, inner, fake_args, nix_args).map(
-            |(stability, inner, mut fake_args, mut nix_args)| {
-                nix_args.append(&mut fake_args);
-                WithPassthru {
-                    stability,
-                    inner,
-                    nix_args,
-                }
-            },
-        )
-    }
-}
-
 pub trait Parseable: Sized {
     fn parse() -> Box<dyn bpaf::Parser<Self>>;
-}
-
-impl<T: Parseable + Debug + 'static> Parseable for WithPassthru<T> {
-    fn parse() -> Box<dyn bpaf::Parser<WithPassthru<T>>> {
-        let parser = WithPassthru::with_parser(T::parse());
-        construct!(parser)
-    }
 }
 
 mod parseable_macro {
