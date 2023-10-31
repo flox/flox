@@ -2,14 +2,15 @@
 use std::collections::HashMap;
 use std::{fmt, thread, time};
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use bpaf::Bpaf;
 use chrono::offset::Utc;
 use chrono::{DateTime, Duration};
 use flox_rust_sdk::flox::Flox;
-use log::info;
+use log::{debug, info};
 use serde::Serialize;
 
+use crate::commands::general::update_config;
 use crate::config::Config;
 use crate::subcommand_metric;
 
@@ -259,7 +260,7 @@ pub enum Auth2 {
 }
 
 impl Auth2 {
-    pub async fn handle(self, _config: Config, _flox: Flox) -> Result<()> {
+    pub async fn handle(self, _config: Config, flox: Flox) -> Result<()> {
         subcommand_metric!("auth2");
         // TODO there is no obvious way to deal with
         // identifying configuration that is not hard-coded into source
@@ -274,8 +275,19 @@ impl Auth2 {
 
                 match cred {
                     Ok(cred) => {
-                        let json = serde_json::to_string_pretty(&cred).unwrap();
-                        println!("{}", json);
+                        debug!("Credentials received: {:?}", cred);
+                        debug!("Writing token to config");
+
+                        update_config(
+                            &flox.config_dir,
+                            &flox.temp_dir,
+                            "floxhub_token",
+                            Some(cred.token),
+                        )
+                        .context("Could not write token to config")?;
+
+                        info!("Login successful");
+
                         Ok(())
                     },
                     Err(err) => Err(err.into()),
