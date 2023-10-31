@@ -53,9 +53,6 @@
 
       # bundling of internally used nix scripts
       FLOX_RESOLVER_SRC = builtins.path {path = ../../resolver;};
-      FLOX_ANALYZER_SRC = builtins.path {
-        path = ../../flox-bash/lib/catalog-ingest;
-      };
 
       # Metrics subsystem configuration
       METRICS_EVENTS_URL = "https://events.flox.dev/capture";
