@@ -326,20 +326,6 @@ impl Config {
 
         Ok(())
     }
-
-    /// If [Some] [Stability] provided, override config and set `FLOX_STABILITY` env var
-    ///
-    /// - The overriding stability is supplied by CLI args
-    /// - The env var will ensure that the selected is applied by default
-    ///   within a subshell started by flox
-    pub fn override_stability(&mut self, stability: Option<Stability>) -> Option<Stability> {
-        if let Some(stability) = stability {
-            debug!("Overriding stability to {}", stability);
-            env::set_var("FLOX_STABILITY", stability.to_string());
-            let _ = self.flox.stability.insert(stability);
-        }
-        self.flox.stability.clone()
-    }
 }
 
 fn mk_environment(envs: &mut Vec<(String, String)>, prefix: &str) -> Environment {
