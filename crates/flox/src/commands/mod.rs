@@ -1,7 +1,6 @@
 mod channel;
 mod environment;
 mod general;
-mod package;
 
 use std::{env, fs};
 
