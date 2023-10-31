@@ -22,7 +22,7 @@ use flox_rust_sdk::nix::arguments::eval::EvaluationArgs;
 use flox_rust_sdk::nix::command::{Shell, StoreGc};
 use flox_rust_sdk::nix::command_line::NixCommandLine;
 use flox_rust_sdk::nix::Run;
-use log::{debug, error, info, warn};
+use log::{debug, error, info};
 use tempfile::NamedTempFile;
 
 use crate::subcommand_metric;
@@ -400,21 +400,6 @@ impl Install {
             .install(self.packages.clone(), &nix, flox.system.clone())
             .await?;
         if installation.new_manifest.is_some() {
-            // Write the new manifest
-            match self.environment {
-                EnvironmentSelect::Dir(dir) => {
-                    let manifest_path = dir.join(".flox/env").join(MANIFEST_FILENAME);
-                    debug!("writing new manifest to {}", manifest_path.display());
-                    std::fs::write(
-                        dir.join(".flox/env").join(MANIFEST_FILENAME),
-                        &installation.new_manifest.unwrap(),
-                    )?;
-                },
-                EnvironmentSelect::Remote(_) => {
-                    warn!("remote environments not supported yet");
-                    // TODO: handle remote environments
-                },
-            }
             // Print which new packages were installed
             for pkg in self.packages.iter() {
                 if let Some(false) = installation.already_installed.get(pkg) {
@@ -454,19 +439,10 @@ impl Uninstall {
             .to_concrete_environment(&flox)?
             .into_dyn_environment();
         let nix = flox.nix::<NixCommandLine>(vec![]);
-        let new_manifest = environment
+        let _ = environment
             .uninstall(self.packages.clone(), &nix, flox.system.clone())
             .await?;
-        match self.environment {
-            EnvironmentSelect::Dir(dir) => {
-                let manifest_path = dir.join(".flox/env").join(MANIFEST_FILENAME);
-                debug!("writing new manifest to {}", manifest_path.display());
-                std::fs::write(dir.join(".flox/env").join(MANIFEST_FILENAME), new_manifest)?;
-            },
-            EnvironmentSelect::Remote(_) => {
-                // TODO: handle remote environments
-            },
-        }
+
         // Note, you need two spaces between this emoji and the package name
         // otherwise they appear right next to each other.
         self.packages

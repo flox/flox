@@ -213,9 +213,13 @@ where
                 new_manifest: insertion.new_toml.map(|toml| toml.to_string()),
                 already_installed: insertion.already_installed,
             })?;
-        if installation.new_manifest.is_some() {
+        if let Some(ref new_manifest) = installation.new_manifest {
             // TODO: enable transactions once build is re-implemented
             // self.transact_with_manifest_contents(toml.to_string(), nix, system).await?;
+            let manifest_path = self.manifest_path();
+            debug!("writing new manifest to {}", manifest_path.display());
+            std::fs::write(manifest_path, new_manifest)
+                .map_err(EnvironmentError2::UpdateManifest)?;
         }
         Ok(installation)
     }
@@ -235,6 +239,9 @@ where
         let toml = remove_packages(&current_manifest_contents, packages.iter().cloned())?;
         // TODO: enable transactions once build is re-implemented
         // self.transact_with_manifest_contents(toml.to_string(), nix, system).await?;
+        debug!("writing new manifest to {:?}", self.manifest_path());
+        std::fs::write(self.manifest_path(), toml.to_string())
+            .map_err(EnvironmentError2::UpdateManifest)?;
         Ok(toml.to_string())
     }
 
