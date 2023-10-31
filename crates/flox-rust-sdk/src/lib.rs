@@ -11,6 +11,5 @@ pub mod prelude {
     pub use crate::nix::installable::{FlakeAttribute, Installable};
 }
 
-pub mod actions;
 pub mod flox;
 pub use runix as nix;

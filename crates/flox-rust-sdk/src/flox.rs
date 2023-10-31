@@ -4,7 +4,6 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use derive_more::Constructor;
-use flox_types::stability::Stability;
 use indoc::indoc;
 use log::{debug, info, warn};
 use once_cell::sync::Lazy;
@@ -20,7 +19,6 @@ use runix::{NixBackend, RunJson};
 use serde::Deserialize;
 use thiserror::Error;
 
-use crate::actions::package::Package;
 use crate::environment::{self, default_nix_subprocess_env};
 use crate::models::channels::ChannelRegistry;
 pub use crate::models::environment_ref::{self, *};
@@ -145,18 +143,6 @@ impl ResolvedInstallableMatch {
 }
 
 impl Flox {
-    /// Provide the package scope to interact with raw packages, (build, develop, etc)
-    ///
-    ///  TODO: consume [Option<FloxInstallable>]
-    pub fn package(
-        &self,
-        flake_attribute: FlakeAttribute,
-        stability: Option<Stability>,
-        nix_arguments: Vec<String>,
-    ) -> Package {
-        Package::new(self, flake_attribute, stability, nix_arguments)
-    }
-
     pub fn resource<X>(&self, x: X) -> Root<root::Closed<X>> {
         Root::closed(self, x)
     }
