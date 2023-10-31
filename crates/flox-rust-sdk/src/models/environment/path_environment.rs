@@ -16,12 +16,10 @@ use runix::{Run, RunJson};
 
 use super::{
     copy_dir_recursive,
-    flox_nix_content_with_new_packages,
-    flox_nix_content_with_packages_removed,
     Environment,
     EnvironmentError2,
     EnvironmentPointer,
-    ManifestContent,
+    InstallationAttempt,
     PathPointer,
     DOT_FLOX,
     ENVIRONMENT_POINTER_FILENAME,
@@ -29,7 +27,7 @@ use super::{
 };
 use crate::models::environment::CATALOG_JSON;
 use crate::models::environment_ref::{EnvironmentName, EnvironmentOwner, EnvironmentRef};
-use crate::prelude::flox_package::FloxPackage;
+use crate::models::manifest::{insert_packages, remove_packages};
 use crate::utils::copy_file_without_permissions;
 
 const ENVIRONMENT_DIR_NAME: &'_ str = "env";
@@ -199,26 +197,27 @@ where
 
     /// Install packages to the environment atomically
     ///
-    /// Returns true if the environment was modified and false otherwise.
-    /// TODO: this should return a list of packages that were actually
-    /// installed rather than a bool.
+    /// Returns the new manifest content if the environment was modified. Also
+    /// returns a map of the packages that were already installed. The installation
+    /// will proceed if at least one of the requested packages were added to the
+    /// manifest.
     async fn install(
         &mut self,
-        packages: Vec<FloxPackage>,
-        nix: &NixCommandLine,
-        system: System,
-    ) -> Result<bool, EnvironmentError2> {
+        packages: Vec<String>,
+        _nix: &NixCommandLine,
+        _system: System,
+    ) -> Result<InstallationAttempt, EnvironmentError2> {
         let current_manifest_contents = self.manifest_content()?;
-        let new_manifest_contents =
-            flox_nix_content_with_new_packages(&current_manifest_contents, packages)?;
-        match new_manifest_contents {
-            ManifestContent::Unchanged => return Ok(false),
-            ManifestContent::Changed(contents) => {
-                self.transact_with_manifest_contents(contents, nix, system)
-                    .await?;
-                Ok(true)
-            },
+        let installation = insert_packages(&current_manifest_contents, packages.iter().cloned())
+            .map(|insertion| InstallationAttempt {
+                new_manifest: insertion.new_toml.map(|toml| toml.to_string()),
+                already_installed: insertion.already_installed,
+            })?;
+        if installation.new_manifest.is_some() {
+            // TODO: enable transactions once build is re-implemented
+            // self.transact_with_manifest_contents(toml.to_string(), nix, system).await?;
         }
+        Ok(installation)
     }
 
     /// Uninstall packages from the environment atomically
@@ -228,22 +227,15 @@ where
     /// uninstalled rather than a bool.
     async fn uninstall(
         &mut self,
-        packages: Vec<FloxPackage>,
-        nix: &NixCommandLine,
-        system: System,
-    ) -> Result<bool, EnvironmentError2> {
+        packages: Vec<String>,
+        _nix: &NixCommandLine,
+        _system: System,
+    ) -> Result<String, EnvironmentError2> {
         let current_manifest_contents = self.manifest_content()?;
-
-        let new_manifest_contents =
-            flox_nix_content_with_packages_removed(&current_manifest_contents, packages)?;
-        match new_manifest_contents {
-            ManifestContent::Unchanged => return Ok(false),
-            ManifestContent::Changed(contents) => {
-                self.transact_with_manifest_contents(contents, nix, system)
-                    .await?;
-                Ok(true)
-            },
-        }
+        let toml = remove_packages(&current_manifest_contents, packages.iter().cloned())?;
+        // TODO: enable transactions once build is re-implemented
+        // self.transact_with_manifest_contents(toml.to_string(), nix, system).await?;
+        Ok(toml.to_string())
     }
 
     /// Atomically edit this environment, ensuring that it still builds
@@ -409,7 +401,12 @@ impl PathEnvironment<Original> {
         temp_dir: impl AsRef<Path>,
     ) -> Result<Self, EnvironmentError2> {
         let env_dir = dot_flox_path.as_ref().join(ENVIRONMENT_DIR_NAME);
+        log::debug!(
+            "attempting to open environment directory: {}",
+            env_dir.display()
+        );
         if !env_dir.exists() {
+            log::debug!("environment directory desn't exist");
             Err(EnvironmentError2::EnvNotFound)?;
         }
 
@@ -470,13 +467,9 @@ impl PathEnvironment<Original> {
 #[cfg(test)]
 mod tests {
 
-    use flox_types::stability::Stability;
-    use indoc::indoc;
-
     use super::*;
     #[cfg(feature = "impure-unit-tests")]
     use crate::flox::tests::flox_instance;
-    use crate::prelude::flox_package::FloxTriple;
 
     #[test]
     fn create_env() {
@@ -517,10 +510,7 @@ mod tests {
         assert_eq!(actual, expected);
 
         assert!(actual.path.join("flake.nix").exists(), "flake exists");
-        assert!(
-            actual.path.join(MANIFEST_FILENAME).exists(),
-            "manifest exists"
-        );
+        assert!(actual.manifest_path().exists(), "manifest exists");
         assert!(
             actual
                 .path
@@ -551,36 +541,6 @@ mod tests {
         )
     }
 
-    #[test]
-    fn test_flox_nix_content_with_new_packages() {
-        let old_content = indoc! {r#"
-            {
-                packages."nixpkgs-flox".hello = {};
-            }
-        "#};
-        let new_content =
-            match flox_nix_content_with_new_packages(&old_content, [FloxPackage::Triple(
-                FloxTriple {
-                    stability: Stability::Stable,
-                    channel: "nixpkgs-flox".to_string(),
-                    name: ["hello"].try_into().unwrap(),
-                    version: None,
-                },
-            )])
-            .unwrap()
-            {
-                ManifestContent::Changed(new_content) => new_content,
-                ManifestContent::Unchanged => panic!("contents should be changed"),
-            };
-        let expected = indoc! {r#"
-            {
-              packages."nixpkgs-flox".hello = { };
-              packages."nixpkgs-flox".hello = { };
-            }
-        "#};
-        pretty_assertions::assert_eq!(new_content, expected)
-    }
-
     #[tokio::test]
     #[cfg(feature = "impure-unit-tests")]
     async fn edit_env() {
@@ -607,123 +567,5 @@ mod tests {
         env.replace_with(temp_env).unwrap();
 
         assert_eq!(env.manifest_content().unwrap(), new_env_str);
-    }
-
-    #[tokio::test]
-    #[cfg(feature = "impure-unit-tests")]
-    async fn test_install() {
-        let (mut flox, tempdir) = flox_instance();
-        flox.channels
-            .register_channel("nixpkgs-flox", "github:flox/nixpkgs-flox".parse().unwrap());
-        let (nix, system) = (flox.nix(Default::default()), flox.system);
-        let pointer = PathPointer::new("test".parse().unwrap());
-
-        let sandbox_path = tempdir.path().join("sandbox");
-        std::fs::create_dir(&sandbox_path).unwrap();
-
-        let mut env = PathEnvironment::init(pointer, tempdir.path(), &sandbox_path).unwrap();
-
-        let mut temp_env = env.make_temporary().unwrap();
-
-        let empty_env_str = r#"{ }"#;
-        temp_env.update_manifest(&empty_env_str).unwrap();
-
-        env.replace_with(temp_env).unwrap();
-
-        env.install(
-            [FloxPackage::Triple(FloxTriple {
-                stability: Stability::Stable,
-                channel: "nixpkgs-flox".to_string(),
-                name: ["hello"].try_into().unwrap(),
-                version: None,
-            })]
-            .to_vec(),
-            &nix,
-            system.clone(),
-        )
-        .await
-        .unwrap();
-
-        let installed_env_str = indoc! {r#"
-            { packages."nixpkgs-flox".hello = { }; }
-        "#};
-
-        assert_eq!(env.manifest_content().unwrap(), installed_env_str);
-
-        let catalog = env.catalog(&nix, system.clone()).await.unwrap();
-        assert!(!catalog.entries.is_empty());
-
-        assert!(env.out_link(&system).exists());
-        assert!(env.catalog_path().exists());
-
-        // Do a second install to make sure we can copy stuff like symlinks
-        env.install(
-            [FloxPackage::Triple(FloxTriple {
-                stability: Stability::Stable,
-                channel: "nixpkgs-flox".to_string(),
-                name: ["curl"].try_into().unwrap(),
-                version: None,
-            })]
-            .to_vec(),
-            &nix,
-            system.clone(),
-        )
-        .await
-        .unwrap();
-    }
-
-    #[tokio::test]
-    #[cfg(feature = "impure-unit-tests")]
-    async fn test_uninstall() {
-        let (mut flox, tempdir) = flox_instance();
-        flox.channels
-            .register_channel("nixpkgs-flox", "github:flox/nixpkgs-flox".parse().unwrap());
-        let (nix, system) = (flox.nix(Default::default()), flox.system);
-
-        let pointer = PathPointer::new("test".parse().unwrap());
-
-        let sandbox_path = tempdir.path().join("sandbox");
-        std::fs::create_dir(&sandbox_path).unwrap();
-
-        let mut env = PathEnvironment::init(pointer, tempdir.path(), &sandbox_path).unwrap();
-
-        let mut temp_env = env.make_temporary().unwrap();
-
-        let empty_env_str = indoc! {"
-            { }
-        "};
-
-        temp_env.update_manifest(&empty_env_str).unwrap();
-
-        env.replace_with(temp_env).unwrap();
-
-        let package = FloxPackage::Triple(FloxTriple {
-            stability: Stability::Stable,
-            channel: "nixpkgs-flox".to_string(),
-            name: ["hello"].try_into().unwrap(),
-            version: None,
-        });
-
-        env.install([package.clone()].to_vec(), &nix, system.clone())
-            .await
-            .unwrap();
-
-        let installed_env_str = indoc! {r#"
-            { packages."nixpkgs-flox".hello = { }; }
-        "#};
-
-        assert_eq!(env.manifest_content().unwrap(), installed_env_str);
-
-        let catalog = env.catalog(&nix, system.clone()).await.unwrap();
-        assert!(!catalog.entries.is_empty());
-
-        env.uninstall([package.clone()].to_vec(), &nix, system.clone())
-            .await
-            .unwrap();
-
-        assert_eq!(env.manifest_content().unwrap(), empty_env_str);
-
-        let catalog = env.catalog(&nix, system.clone()).await.unwrap();
-        assert!(catalog.entries.is_empty());
     }
 }

@@ -11,11 +11,10 @@ use runix::installable::FlakeAttribute;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use super::{Environment, EnvironmentError2, ManagedPointer};
+use super::{Environment, EnvironmentError2, InstallationAttempt, ManagedPointer};
 use crate::flox::Flox;
 use crate::models::environment_ref::{EnvironmentName, EnvironmentOwner, EnvironmentRef};
 use crate::models::floxmetav2::{FloxmetaV2, FloxmetaV2Error};
-use crate::prelude::flox_package::FloxPackage;
 use crate::providers::git::{GitCommandBranchHashError, GitCommandError};
 
 const GENERATION_LOCK_FILENAME: &str = "env.lock";
@@ -87,10 +86,10 @@ impl Environment for ManagedEnvironment {
     #[allow(unused)]
     async fn install(
         &mut self,
-        packages: Vec<FloxPackage>,
+        packages: Vec<String>,
         nix: &NixCommandLine,
         system: System,
-    ) -> Result<bool, EnvironmentError2> {
+    ) -> Result<InstallationAttempt, EnvironmentError2> {
         todo!()
     }
 
@@ -98,10 +97,10 @@ impl Environment for ManagedEnvironment {
     #[allow(unused)]
     async fn uninstall(
         &mut self,
-        packages: Vec<FloxPackage>,
+        packages: Vec<String>,
         nix: &NixCommandLine,
         system: System,
-    ) -> Result<bool, EnvironmentError2> {
+    ) -> Result<String, EnvironmentError2> {
         todo!()
     }
 

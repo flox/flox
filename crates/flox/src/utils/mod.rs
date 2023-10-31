@@ -20,7 +20,6 @@ use once_cell::sync::Lazy;
 pub mod colors;
 mod completion;
 pub mod dialog;
-pub mod display;
 pub mod init;
 pub mod installables;
 pub mod logger;

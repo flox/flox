@@ -1,7 +1,6 @@
 # Install packages
 [install]
-
-[install.hello]
+# hello = {}
 
 # Environment variables
 [vars]

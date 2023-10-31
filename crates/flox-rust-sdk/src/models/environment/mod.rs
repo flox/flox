@@ -1,11 +1,10 @@
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::{fs, io};
 
 use async_trait::async_trait;
 use flox_types::catalog::{CatalogEntry, EnvCatalog, System};
 use flox_types::version::Version;
-use rnix::ast::{AttrSet, Expr};
-use rowan::ast::AstNode;
 use runix::command_line::{NixCommandLine, NixCommandLineRunError, NixCommandLineRunJsonError};
 use runix::installable::FlakeAttribute;
 use runix::store_path::StorePath;
@@ -20,10 +19,10 @@ use super::environment_ref::{
     EnvironmentRef,
     EnvironmentRefError,
 };
-use super::flox_package::{FloxPackage, FloxTriple};
+use super::flox_package::FloxTriple;
+use super::manifest::TomlEditError;
 use crate::utils::copy_file_without_permissions;
 use crate::utils::errors::IoError;
-use crate::utils::rnix::{AttrSetExt, StrExt};
 
 pub mod managed_environment;
 pub mod path_environment;
@@ -44,6 +43,14 @@ pub enum InstalledPackage {
     StorePath(StorePath),
 }
 
+/// The result of an installation attempt that contains the new manifest contents
+/// along with whether each package was already installed
+#[derive(Debug)]
+pub struct InstallationAttempt {
+    pub new_manifest: Option<String>,
+    pub already_installed: HashMap<String, bool>,
+}
+
 #[async_trait]
 pub trait Environment {
     /// Build the environment and create a result link as gc-root
@@ -56,18 +63,18 @@ pub trait Environment {
     /// Install packages to the environment atomically
     async fn install(
         &mut self,
-        packages: Vec<FloxPackage>,
+        packages: Vec<String>,
         nix: &NixCommandLine,
         system: System,
-    ) -> Result<bool, EnvironmentError2>;
+    ) -> Result<InstallationAttempt, EnvironmentError2>;
 
     /// Uninstall packages from the environment atomically
     async fn uninstall(
         &mut self,
-        packages: Vec<FloxPackage>,
+        packages: Vec<String>,
         nix: &NixCommandLine,
         system: System,
-    ) -> Result<bool, EnvironmentError2>;
+    ) -> Result<String, EnvironmentError2>;
 
     /// Atomically edit this environment, ensuring that it still builds
     async fn edit(
@@ -246,20 +253,8 @@ pub enum EnvironmentError2 {
     WriteEnvJson(std::io::Error),
     #[error(transparent)]
     ManagedEnvironment(#[from] ManagedEnvironmentError),
-}
-
-/// Within a nix AST, find the first definition of an attribute set,
-/// that is not part of a `let` expression or a where clause
-fn find_attrs(mut expr: Expr) -> Result<AttrSet, ()> {
-    loop {
-        match expr {
-            Expr::LetIn(let_in) => expr = let_in.body().unwrap(),
-            Expr::With(with) => expr = with.body().unwrap(),
-
-            Expr::AttrSet(attrset) => return Ok(attrset),
-            _ => return Err(()),
-        }
-    }
+    #[error(transparent)]
+    Install(#[from] TomlEditError),
 }
 
 /// Copy a whole directory recursively ignoring the original permissions
@@ -300,103 +295,6 @@ fn copy_dir_recursive(
         }
     }
     Ok(())
-}
-
-pub enum ManifestContent {
-    Unchanged,
-    Changed(String),
-}
-
-/// insert packages into the content of a flox.nix file
-///
-/// TODO: At some point this should return Unchanged if the contents were not
-/// changed, (e.g. the user tries to install a package that's already
-/// installed).
-fn flox_nix_content_with_new_packages(
-    flox_nix_content: &impl AsRef<str>,
-    packages: impl IntoIterator<Item = FloxPackage>,
-) -> Result<ManifestContent, EnvironmentError2> {
-    let packages = packages
-        .into_iter()
-        .map(|package| package.flox_nix_attribute().unwrap());
-
-    let mut root = rnix::Root::parse(flox_nix_content.as_ref())
-        .ok()
-        .unwrap()
-        .expr()
-        .unwrap();
-
-    if let Expr::Lambda(lambda) = root {
-        root = lambda.body().unwrap();
-    }
-
-    let config_attrset = find_attrs(root.clone()).unwrap();
-    #[allow(clippy::redundant_clone)] // required for rnix reasons, i think
-    let mut edited = config_attrset.clone();
-
-    for (path, version) in packages {
-        let mut value = rnix::ast::AttrSet::new();
-        if let Some(version) = version {
-            value = value.insert_unchecked(
-                ["version"],
-                rnix::ast::Str::new(&version).syntax().to_owned(),
-            );
-        }
-
-        let mut path_in_packages = vec!["packages".to_string()];
-        path_in_packages.extend_from_slice(&path);
-        edited = edited.insert_unchecked(path_in_packages, value.syntax().to_owned());
-    }
-
-    let green_tree = config_attrset
-        .syntax()
-        .replace_with(edited.syntax().green().into_owned());
-    let new_content = nixpkgs_fmt::reformat_string(&green_tree.to_string());
-    Ok(ManifestContent::Changed(new_content))
-}
-
-/// remove packages from the content of a flox.nix file
-///
-/// TODO: At some point this should return Unchanged (e.g. the user tries to
-/// uninstall a package that's not installed).
-fn flox_nix_content_with_packages_removed(
-    flox_nix_content: &impl AsRef<str>,
-    packages: impl IntoIterator<Item = FloxPackage>,
-) -> Result<ManifestContent, EnvironmentError2> {
-    let packages = packages
-        .into_iter()
-        .map(|package| package.flox_nix_attribute().unwrap());
-
-    let mut root = rnix::Root::parse(flox_nix_content.as_ref())
-        .ok()
-        .unwrap()
-        .expr()
-        .unwrap();
-
-    if let Expr::Lambda(lambda) = root {
-        root = lambda.body().unwrap();
-    }
-
-    let config_attrset = find_attrs(root.clone()).unwrap();
-
-    #[allow(clippy::redundant_clone)] // required for rnix reasons, i think
-    let mut edited = config_attrset.clone().syntax().green().into_owned();
-
-    for (path, _version) in packages {
-        let mut path_in_packages = vec!["packages".to_string()];
-        path_in_packages.extend_from_slice(&path);
-
-        let index = config_attrset
-            .find_by_path(&path_in_packages)
-            .unwrap_or_else(|| panic!("path not found, {path_in_packages:?}"))
-            .syntax()
-            .index();
-        edited = edited.remove_child(index - 2); // yikes
-    }
-
-    let green_tree = config_attrset.syntax().replace_with(edited);
-    let new_content = nixpkgs_fmt::reformat_string(&green_tree.to_string());
-    Ok(ManifestContent::Changed(new_content))
 }
 
 #[cfg(test)]

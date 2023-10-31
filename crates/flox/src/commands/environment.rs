@@ -9,21 +9,24 @@ use flox_rust_sdk::flox::{EnvironmentName, Flox};
 use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironment;
 use flox_rust_sdk::models::environment::path_environment::{Original, PathEnvironment};
 use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironment;
-use flox_rust_sdk::models::environment::{Environment, EnvironmentPointer, PathPointer, DOT_FLOX};
+use flox_rust_sdk::models::environment::{
+    Environment,
+    EnvironmentPointer,
+    PathPointer,
+    DOT_FLOX,
+    MANIFEST_FILENAME,
+};
 use flox_rust_sdk::models::environment_ref;
+use flox_rust_sdk::models::manifest::list_packages;
 use flox_rust_sdk::nix::arguments::eval::EvaluationArgs;
 use flox_rust_sdk::nix::command::{Shell, StoreGc};
 use flox_rust_sdk::nix::command_line::NixCommandLine;
 use flox_rust_sdk::nix::Run;
-use flox_rust_sdk::prelude::flox_package::FloxPackage;
-use flox_types::constants::{DEFAULT_CHANNEL, LATEST_VERSION};
-use itertools::Itertools;
-use log::{error, info};
+use log::{debug, error, info, warn};
 use tempfile::NamedTempFile;
 
 use crate::subcommand_metric;
 use crate::utils::dialog::{Confirm, Dialog};
-use crate::utils::display::packages_to_string;
 
 #[derive(Bpaf, Clone)]
 pub struct EnvironmentArgs {
@@ -33,7 +36,7 @@ pub struct EnvironmentArgs {
 
 pub type EnvironmentRef = String;
 
-#[derive(Bpaf, Clone)]
+#[derive(Debug, Bpaf, Clone)]
 pub enum EnvironmentSelect {
     Dir(
         /// Path containing a .flox/ directory
@@ -344,31 +347,8 @@ impl Init {
 /// List packages installed in an environment
 #[derive(Bpaf, Clone)]
 pub struct List {
-    #[allow(dead_code)] // pending spec for `-e`, `--dir` behaviour
-    #[bpaf(external(environment_args), group_help("Environment Options"))]
-    environment_args: EnvironmentArgs,
-
     #[bpaf(external(environment_select), fallback(Default::default()))]
     environment: EnvironmentSelect,
-
-    #[allow(dead_code)] // not yet handled in impl
-    #[bpaf(external(list_output), optional)]
-    json: Option<ListOutput>,
-
-    /// The generation to list, if not specified defaults to the current one
-    #[allow(dead_code)] // not yet handled in impl
-    #[bpaf(positional("GENERATION"))]
-    generation: Option<u32>,
-}
-
-#[derive(Bpaf, Clone)]
-pub enum ListOutput {
-    /// Include store paths of packages in the environment
-    #[bpaf(long("out-path"))]
-    OutPath,
-    /// Print as machine readable json
-    #[bpaf(long)]
-    Json,
 }
 
 impl List {
@@ -380,26 +360,10 @@ impl List {
             .to_concrete_environment(&flox)?
             .into_dyn_environment();
 
-        let catalog = env
-            .catalog(&flox.nix(Default::default()), flox.system)
-            .await
-            .context("Could not get catalog")?;
-        // let installed_store_paths = env.installed_store_paths(&flox).await?;
-
-        for (publish_element, _) in catalog.entries.iter() {
-            if publish_element.version != LATEST_VERSION {
-                println!(
-                    "{} {}",
-                    publish_element.to_flox_tuple(),
-                    publish_element.version
-                )
-            } else {
-                println!("{}", publish_element.to_flox_tuple())
-            }
+        let manifest_contents = env.manifest_content()?;
+        if let Some(pkgs) = list_packages(&manifest_contents)? {
+            pkgs.iter().for_each(|pkg| println!("{}", pkg));
         }
-        // for store_path in installed_store_paths.iter() {
-        //     println!("{}", store_path.to_string_lossy())
-        // }
         Ok(())
     }
 }
@@ -422,50 +386,45 @@ impl Install {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("install");
 
-        let packages: Vec<_> = self
-            .packages
-            .iter()
-            .map(|package| FloxPackage::parse(package, &flox.channels, DEFAULT_CHANNEL))
-            .collect::<Result<Vec<_>, _>>()?
-            .into_iter()
-            .dedup()
-            .collect();
-
+        debug!(
+            "installing packages [{}] to {:?}",
+            self.packages.as_slice().join(", "),
+            self.environment
+        );
         let mut environment = self
             .environment
             .to_concrete_environment(&flox)?
             .into_dyn_environment();
-
-        // todo use set?
-        // let installed = environment
-        //     .packages(&flox.nix(Default::default()), &flox.system)
-        //     .await?
-        //     .into_iter()
-        //     .map(From::from)
-        //     .collect::<Vec<FloxPackage>>();
-
-        // if let Some(installed) = packages.iter().find(|pkg| installed.contains(pkg)) {
-        //     anyhow::bail!("{installed} is already installed");
-        // }
-
-        let packages_str = packages_to_string(&packages);
-        let plural = packages.len() > 1;
-
-        if environment
-            .install(packages, &flox.nix(Default::default()), flox.system)
-            .await
-            .context("could not install packages")?
-        {
-            println!(
-                "✅ Installed {packages_str} into '{}' environment.",
-                environment.environment_ref()
-            );
+        let nix = flox.nix::<NixCommandLine>(vec![]);
+        let installation = environment
+            .install(self.packages.clone(), &nix, flox.system.clone())
+            .await?;
+        if installation.new_manifest.is_some() {
+            // Write the new manifest
+            match self.environment {
+                EnvironmentSelect::Dir(dir) => {
+                    let manifest_path = dir.join(".flox/env").join(MANIFEST_FILENAME);
+                    debug!("writing new manifest to {}", manifest_path.display());
+                    std::fs::write(
+                        dir.join(".flox/env").join(MANIFEST_FILENAME),
+                        &installation.new_manifest.unwrap(),
+                    )?;
+                },
+                EnvironmentSelect::Remote(_) => {
+                    warn!("remote environments not supported yet");
+                    // TODO: handle remote environments
+                },
+            }
+            // Print which new packages were installed
+            for pkg in self.packages.iter() {
+                if let Some(false) = installation.already_installed.get(pkg) {
+                    info!("✅ '{pkg}' installed to environment");
+                } else {
+                    info!("🛑 '{pkg}' already installed");
+                }
+            }
         } else {
-            let verb = if plural { "are" } else { "is" };
-            println!(
-                "No changes; {packages_str} {verb} already installed into '{}' environment.",
-                environment.environment_ref()
-            );
+            info!("🛑 package(s) already installed");
         }
         Ok(())
     }
@@ -474,10 +433,6 @@ impl Install {
 /// Uninstall installed packages from an environment
 #[derive(Bpaf, Clone)]
 pub struct Uninstall {
-    #[allow(dead_code)] // pending spec for `-e`, `--dir` behaviour
-    #[bpaf(external(environment_args), group_help("Environment Options"))]
-    environment_args: EnvironmentArgs,
-
     #[bpaf(external(environment_select), fallback(Default::default()))]
     environment: EnvironmentSelect,
 
@@ -489,39 +444,34 @@ impl Uninstall {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("uninstall");
 
-        let packages: Vec<_> = self
-            .packages
-            .iter()
-            .map(|package| FloxPackage::parse(package, &flox.channels, DEFAULT_CHANNEL))
-            .collect::<Result<Vec<_>, _>>()?
-            .into_iter()
-            .dedup()
-            .collect();
-
+        debug!(
+            "uninstalling packages [{}] from {:?}",
+            self.packages.as_slice().join(", "),
+            self.environment
+        );
         let mut environment = self
             .environment
             .to_concrete_environment(&flox)?
             .into_dyn_environment();
-
-        let packages_str = packages_to_string(&packages);
-        let plural = packages.len() > 1;
-
-        if environment
-            .uninstall(packages, &flox.nix(Default::default()), flox.system)
-            .await
-            .context("could not uninstall packages")?
-        {
-            info!(
-                "🗑️ Uninstalled {packages_str} from '{}' environment.",
-                environment.environment_ref()
-            );
-        } else {
-            let verb = if plural { "are" } else { "is" };
-            info!(
-                "No changes; {packages_str} {verb} not installed in '{}' environment.",
-                environment.environment_ref()
-            );
+        let nix = flox.nix::<NixCommandLine>(vec![]);
+        let new_manifest = environment
+            .uninstall(self.packages.clone(), &nix, flox.system.clone())
+            .await?;
+        match self.environment {
+            EnvironmentSelect::Dir(dir) => {
+                let manifest_path = dir.join(".flox/env").join(MANIFEST_FILENAME);
+                debug!("writing new manifest to {}", manifest_path.display());
+                std::fs::write(dir.join(".flox/env").join(MANIFEST_FILENAME), new_manifest)?;
+            },
+            EnvironmentSelect::Remote(_) => {
+                // TODO: handle remote environments
+            },
         }
+        // Note, you need two spaces between this emoji and the package name
+        // otherwise they appear right next to each other.
+        self.packages
+            .iter()
+            .for_each(|p| info!("🗑️  '{p}' uninstalled from environment"));
         Ok(())
     }
 }
