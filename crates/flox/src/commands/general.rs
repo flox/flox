@@ -87,7 +87,7 @@ impl ConfigArgs {
         subcommand_metric!("config");
 
         /// wrapper around [Config::write_to]
-        async fn update_config<V: Serialize>(
+        fn update_config<V: Serialize>(
             config_dir: &Path,
             temp_dir: &Path,
             key: impl AsRef<str>,
@@ -116,16 +116,16 @@ impl ConfigArgs {
                 }
             },
             ConfigArgs::Set(ConfigSet { key, value, .. }) => {
-                update_config(&flox.config_dir, &flox.temp_dir, key, Some(value)).await?
+                update_config(&flox.config_dir, &flox.temp_dir, key, Some(value))?
             },
             ConfigArgs::SetNumber(ConfigSetNumber { key, value, .. }) => {
-                update_config(&flox.config_dir, &flox.temp_dir, key, Some(value)).await?
+                update_config(&flox.config_dir, &flox.temp_dir, key, Some(value))?
             },
             ConfigArgs::SetBool(ConfigSetBool { key, value, .. }) => {
-                update_config(&flox.config_dir, &flox.temp_dir, key, Some(value)).await?
+                update_config(&flox.config_dir, &flox.temp_dir, key, Some(value))?
             },
             ConfigArgs::Delete(ConfigDelete { key, .. }) => {
-                update_config::<()>(&flox.config_dir, &flox.temp_dir, key, None).await?
+                update_config::<()>(&flox.config_dir, &flox.temp_dir, key, None)?
             },
         }
         Ok(())

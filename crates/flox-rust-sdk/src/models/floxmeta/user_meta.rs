@@ -32,11 +32,10 @@ impl<'flox, A: GitAccess> Floxmeta<'flox, A> {
     /// load and parse `floxUserMeta.json` file from floxmeta repo
     ///
     /// note: fetches updates from upstream (todo: is this a ui decision?)
-    pub async fn user_meta(&self) -> Result<UserMeta, GetUserMetaError> {
+    pub fn user_meta(&self) -> Result<UserMeta, GetUserMetaError> {
         let user_meta_str = self
             .git()
             .show(&format!("{FLOX_MAIN_BRANCH}:{FLOX_USER_META_FILE}"))
-            .await
             .map_err(GetUserMetaError::Show)?;
         let user_meta = serde_json::from_str(&user_meta_str.to_string_lossy())?;
         Ok(user_meta)
@@ -48,7 +47,7 @@ impl<'flox> Floxmeta<'flox, GitSandBox> {
     ///
     /// This is in a sandbox, where checkouts and adding files is allowed.
     /// It is assumed the correct branch is checked out before this function is called.
-    pub async fn set_user_meta(&self, user_meta: &UserMeta) -> Result<(), SetUserMetaError> {
+    pub fn set_user_meta(&self, user_meta: &UserMeta) -> Result<(), SetUserMetaError> {
         let mut file = File::create(self.git().workdir().unwrap().join(FLOX_USER_META_FILE))
             .map_err(SetUserMetaError::OpenUserMetaFile)?;
 
@@ -56,7 +55,6 @@ impl<'flox> Floxmeta<'flox, GitSandBox> {
 
         self.git()
             .add(&[Path::new(FLOX_USER_META_FILE)])
-            .await
             .map_err(SetUserMetaError::Add)?;
 
         Ok(())

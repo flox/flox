@@ -40,7 +40,7 @@ impl<'flox> Root<'flox, Closed<Git>> {
     /// - if in the future these repositories are places in other places,
     ///   without provenance of the owner,
     ///   this guard should take the owner as an argument instead.
-    pub async fn guard_floxmeta(self) -> Result<Floxmeta<'flox, ReadOnly>, OpenFloxmetaError> {
+    pub fn guard_floxmeta(self) -> Result<Floxmeta<'flox, ReadOnly>, OpenFloxmetaError> {
         let owner = self
             .state
             .inner
@@ -93,9 +93,7 @@ impl<'flox> Floxmeta<'flox, ReadOnly> {
         // After finishing the initialization is complete and successful
         // the floxmeta is moved to its final place
         // TODO use --initial-branch instead of renaming to floxmeta
-        let git = Git::init(&user_floxmeta_prepare_dir, true)
-            .await
-            .map_err(CreateFloxmetaError::Init)?;
+        let git = Git::init(&user_floxmeta_prepare_dir, true).map_err(CreateFloxmetaError::Init)?;
 
         let floxmeta_prepare = Floxmeta {
             owner: owner.to_string(),
@@ -110,17 +108,14 @@ impl<'flox> Floxmeta<'flox, ReadOnly> {
             version: Version::<1>,
         };
 
-        let floxmeta = floxmeta_prepare.enter_transaction().await?;
+        let floxmeta = floxmeta_prepare.enter_transaction()?;
         floxmeta
             .access
             .git()
             .rename_branch("floxmain")
-            .await
             .map_err(CreateFloxmetaError::Rename)?;
-        floxmeta.set_user_meta(&user_meta).await?;
-        let _ = floxmeta
-            .commit_transaction(&format!("init: create {FLOX_USER_META_FILE}"))
-            .await?;
+        floxmeta.set_user_meta(&user_meta)?;
+        let _ = floxmeta.commit_transaction(&format!("init: create {FLOX_USER_META_FILE}"))?;
 
         fs::create_dir_all(floxmeta_dir)
             .await
@@ -129,7 +124,7 @@ impl<'flox> Floxmeta<'flox, ReadOnly> {
             .await
             .map_err(CreateFloxmetaError::MoveFloxmeta)?;
 
-        let floxmeta = Self::get_floxmeta(flox, owner).await?;
+        let floxmeta = Self::get_floxmeta(flox, owner)?;
 
         Ok(floxmeta)
     }
@@ -181,7 +176,7 @@ impl<'flox> Floxmeta<'flox, ReadOnly> {
         })
         .then(|dir| async move {
             let owner = dir.file_name().to_string_lossy().into_owned();
-            let floxmeta = Self::get_floxmeta(flox, &owner).await?;
+            let floxmeta = Self::get_floxmeta(flox, &owner)?;
             Ok(floxmeta)
         })
         .try_collect()
@@ -198,7 +193,7 @@ impl<'flox> Floxmeta<'flox, ReadOnly> {
     /// - the floxmeta dir does not exist
     /// - the floxmeta dir cannot be opened as a git repo
     /// - the floxmeta dir is not valid
-    pub async fn get_floxmeta(
+    pub fn get_floxmeta(
         flox: &'flox Flox,
         owner: &str,
     ) -> Result<Floxmeta<'flox, ReadOnly>, GetFloxmetaError> {
@@ -206,18 +201,15 @@ impl<'flox> Floxmeta<'flox, ReadOnly> {
         let git = flox
             .resource(floxmeta_dir.clone())
             .guard()
-            .await
             .map_err(|e| GetFloxmetaError::DiscoverGitDir(floxmeta_dir, e))?
             .ensure(|_| Err(GetFloxmetaError::NotFound(owner.to_string())))?;
 
-        let floxmeta = git.guard_floxmeta().await?;
+        let floxmeta = git.guard_floxmeta()?;
 
         Ok(floxmeta)
     }
 
-    pub async fn enter_transaction(
-        self,
-    ) -> Result<Floxmeta<'flox, GitSandBox>, TransactionEnterError> {
+    pub fn enter_transaction(self) -> Result<Floxmeta<'flox, GitSandBox>, TransactionEnterError> {
         let transaction_temp_dir =
             TempDir::new_in(&self.flox.temp_dir).map_err(TransactionEnterError::CreateTempdir)?;
 
@@ -226,7 +218,6 @@ impl<'flox> Floxmeta<'flox, ReadOnly> {
             transaction_temp_dir.path(),
             false,
         )
-        .await
         .map_err(TransactionEnterError::GitClone)?;
 
         let sandbox = self
@@ -244,8 +235,8 @@ impl<'flox> Floxmeta<'flox, ReadOnly> {
 /// Constructors and implementations for retrieving floxmeta handles
 /// and creating a writable transaction
 impl<'flox, Access: GitAccess> Floxmeta<'flox, Access> {
-    pub async fn fetch(&self) -> Result<(), FetchError> {
-        self.git().fetch().await.map_err(FetchError)?;
+    pub fn fetch(&self) -> Result<(), FetchError> {
+        self.git().fetch().map_err(FetchError)?;
         Ok(())
     }
 
@@ -261,7 +252,7 @@ impl<'flox, Access: GitAccess> Floxmeta<'flox, Access> {
 /// Constructors and implementations for writable (sandbox) floxmeta
 impl<'flox> Floxmeta<'flox, GitSandBox> {
     /// abort a transaction by discarding the temporary clone
-    pub async fn abort_transaction(self) -> Floxmeta<'flox, ReadOnly> {
+    pub fn abort_transaction(self) -> Floxmeta<'flox, ReadOnly> {
         let access = self.access.abort();
         Floxmeta {
             owner: self.owner,
@@ -271,19 +262,17 @@ impl<'flox> Floxmeta<'flox, GitSandBox> {
     }
 
     /// complete floxmeta transaction by committing staged changes and pushing to origin
-    pub async fn commit_transaction(
+    pub fn commit_transaction(
         self,
         message: &str,
     ) -> Result<Floxmeta<'flox, ReadOnly>, TransactionCommitError> {
         self.access
             .git()
             .commit(message)
-            .await
             .map_err(TransactionCommitError::GitCommit)?;
         self.access
             .git()
             .push("origin")
-            .await
             .map_err(TransactionCommitError::GitPush)?;
 
         Ok(Floxmeta {
