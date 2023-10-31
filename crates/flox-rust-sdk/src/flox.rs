@@ -160,7 +160,17 @@ impl Flox {
 
     // endregion: revisit reg. channels
 
-    /// Invoke Nix to convert a FloxInstallable into a list of matches
+    /// Invoke Nix to convert a list of [FloxInstallable] into a list of guaranteed matches
+    ///
+    /// Tries to find a concrete nix installable from possibly ambiguous flox installables.
+    /// flox installables are ambiguous if they do not specify a flakeref or complete attribute path.
+    ///
+    /// We employ a resolver flake (<flox>/resolver/flake.nix)
+    /// to list all attribute paths available through the flakeref specified or default flakerefs.
+    /// We then filter the results by the attribute path and prefix specified in the flox installable.
+    ///
+    /// The result of this function is a list of matches that cant be disambiguated automatically.
+    /// In that case an error or interactive selection can be used by the caller to resolve the ambiguity.
     pub async fn resolve_matches<Nix: FloxNixApi, Git: GitProvider>(
         &self,
         flox_installables: &[FloxInstallable],
