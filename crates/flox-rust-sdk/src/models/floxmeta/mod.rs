@@ -9,7 +9,6 @@ use tempfile::TempDir;
 use thiserror::Error;
 use tokio::fs;
 
-pub mod environment;
 pub mod user_meta;
 
 use self::user_meta::{SetUserMetaError, FLOX_USER_META_FILE};
