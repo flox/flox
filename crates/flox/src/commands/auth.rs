@@ -7,6 +7,7 @@ use bpaf::Bpaf;
 use chrono::offset::Utc;
 use chrono::{DateTime, Duration};
 use flox_rust_sdk::flox::Flox;
+use log::info;
 use serde::Serialize;
 
 use crate::config::Config;
@@ -56,7 +57,6 @@ pub async fn authorize(
     client_id: String,
     host: Option<String>,
 ) -> Result<Credential, DeviceFlowError> {
-
     let mut flow = DeviceFlow::start(client_id.as_str(), host).await?;
 
     // eprintln!("res is {:?}", res);
@@ -92,13 +92,10 @@ pub struct DeviceFlow {
 const FIVE_SECONDS: time::Duration = time::Duration::new(5, 0);
 
 impl DeviceFlow {
-    pub fn new(client_id: &str, maybe_host: Option<&str>) -> Self {
+    pub fn new(client_id: String, host: String) -> Self {
         Self {
-            client_id: String::from(client_id),
-            host: match maybe_host {
-                Some(string) => String::from(string),
-                None => String::from("github.com"),
-            },
+            client_id,
+            host,
             user_code: None,
             device_code: None,
             verification_uri: None,
@@ -108,14 +105,11 @@ impl DeviceFlow {
 
     pub async fn start(
         client_id: &str,
-        maybe_host: Option<&str>,
         maybe_host: Option<String>,
     ) -> Result<DeviceFlow, DeviceFlowError> {
         let mut flow = DeviceFlow::new(
-            client_id,
-            maybe_host
-                .as_deref()
-                .unwrap_or_else(|| "github.com")
+            client_id.to_string(),
+            maybe_host.unwrap_or_else(|| "github.com".to_string()),
         );
 
         flow.setup().await;
