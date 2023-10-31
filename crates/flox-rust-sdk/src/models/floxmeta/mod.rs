@@ -59,8 +59,6 @@ impl<'flox> Root<'flox, Closed<Git>> {
     }
 }
 
-impl<'flox> Root<'flox, Closed<String>> {}
-
 /// Constructors and implementations for retrieving floxmeta handles
 /// and creating a writable transaction
 impl<'flox> Floxmeta<'flox, ReadOnly> {

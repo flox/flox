@@ -2,14 +2,13 @@ use std::collections::BTreeMap;
 use std::fs::File;
 use std::path::Path;
 
-use anyhow::anyhow;
 use flox_types::version::Version;
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
 use thiserror::Error;
 
 use super::{FetchError, Floxmeta, TransactionCommitError, TransactionEnterError};
-use crate::models::root::transaction::{GitAccess, GitSandBox, ReadOnly};
+use crate::models::root::transaction::{GitAccess, GitSandBox};
 use crate::providers::git::{GitCommandError, GitProvider};
 
 pub(super) const FLOX_MAIN_BRANCH: &str = "floxmain";
@@ -41,34 +40,6 @@ impl<'flox, A: GitAccess> Floxmeta<'flox, A> {
             .map_err(GetUserMetaError::Show)?;
         let user_meta = serde_json::from_str(&user_meta_str.to_string_lossy())?;
         Ok(user_meta)
-    }
-}
-
-impl<'flox> Floxmeta<'flox, ReadOnly> {
-    pub async fn set_user_meta(
-        self,
-        user_meta: &UserMeta,
-        message: &str,
-    ) -> Result<(), TransactionError<SetUserMetaError>> {
-        let floxmeta_sandbox = self
-            .enter_transaction()
-            .await
-            .map_err(TransactionError::Enter)?;
-
-        floxmeta_sandbox
-            .git()
-            .checkout(FLOX_MAIN_BRANCH, false)
-            .await
-            .map_err(|e| TransactionError::Setup(anyhow!(e.to_string())))?;
-
-        floxmeta_sandbox.set_user_meta(user_meta).await?;
-
-        floxmeta_sandbox
-            .commit_transaction(message)
-            .await
-            .map_err(TransactionError::Commit)?;
-
-        Ok(())
     }
 }
 
@@ -126,62 +97,4 @@ pub enum SetUserMetaError {
     Serialize(#[from] serde_json::Error),
     #[error("Could not add '{FLOX_USER_META_FILE}': {0}")]
     Add(GitCommandError),
-}
-
-#[cfg(feature = "impure-unit-tests")]
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::models::floxmeta::FLOXMETA_DIR_NAME;
-    use crate::models::root::transaction::ReadOnly;
-    use crate::providers::git::GitCommandProvider;
-
-    #[tokio::test]
-    async fn user_meta() {
-        let (flox, _tempdir_handle) = crate::flox::tests::flox_instance();
-
-        let meta_repo = flox.cache_dir.join(FLOXMETA_DIR_NAME).join("flox");
-        tokio::fs::create_dir_all(&meta_repo).await.unwrap();
-
-        let _git = <GitCommandProvider as GitProvider>::clone(
-            "https://github.com/flox/floxmeta",
-            &meta_repo,
-            true,
-        )
-        .await
-        .unwrap();
-
-        let floxmeta = Floxmeta::<ReadOnly>::get_floxmeta(&flox, "flox")
-            .await
-            .expect("Should open floxmeta repo");
-
-        let user_meta = floxmeta
-            .user_meta()
-            .await
-            .expect("Should find floxUserMeta");
-
-        let floxmeta = floxmeta
-            .enter_transaction()
-            .await
-            .expect("Should enter transaction");
-        floxmeta.git().checkout("floxmain", false).await.unwrap();
-        floxmeta
-            .set_user_meta(&UserMeta {
-                channels: Some([].into()),
-                ..user_meta
-            })
-            .await
-            .expect("Should set usermeta");
-        let floxmeta = floxmeta
-            .commit_transaction("Write user meta")
-            .await
-            .expect("Should commit transaction");
-
-        let user_meta = floxmeta
-            .user_meta()
-            .await
-            .expect("Should find floxUserMeta");
-
-        assert!(user_meta.channels.unwrap().is_empty());
-    }
 }
