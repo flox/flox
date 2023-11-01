@@ -71,11 +71,8 @@ impl EnvironmentSelect {
                     },
                     EnvironmentPointer::Managed(managed_pointer) => {
                         debug!("detected concrete environment type: managed");
-                        ConcreteEnvironment::Managed(ManagedEnvironment::open(
-                            flox,
-                            managed_pointer,
-                            path,
-                        )?)
+                        let env = ManagedEnvironment::open(flox, managed_pointer, path)?;
+                        ConcreteEnvironment::Managed(env)
                     },
                 }
             },
