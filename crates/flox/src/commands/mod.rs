@@ -233,7 +233,7 @@ enum LocalDevelopmentCommands {
     /// Activate environment
     #[bpaf(command, long("develop"))]
     Activate(#[bpaf(external(environment::activate))] environment::Activate),
-    /// Search packages in subscribed channels
+    /// Search for packages to install
     #[bpaf(command)]
     Search(#[bpaf(external(channel::search))] channel::Search),
     /// Show detailed information about a single package

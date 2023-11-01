@@ -78,12 +78,8 @@ runtime environments, developer environments, and administration.
 :   Unsubscribe from the named channel.
     Will prompt for the channel name if not provided.
 
-**search** `<name>` [ (-c|\--channel) `<channel>` ] [ \--verbose ] [ \--refresh ]
+**search** `<name>` [ \--verbose ] [ \--refresh ]
 :   Search for available packages matching name.
-
-    All channels are searched by default, but if provided
-    the `(-c|--channel)` argument can be called multiple times
-    to specify the channel(s) to be searched.
 
     The cache of available packages is updated hourly, but if required
     you can invoke with `--refresh` to update the list before searching.
