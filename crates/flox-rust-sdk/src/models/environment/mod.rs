@@ -16,7 +16,6 @@ use self::managed_environment::ManagedEnvironmentError;
 use super::environment_ref::{
     EnvironmentName,
     EnvironmentOwner,
-    EnvironmentRef,
     EnvironmentRefError,
 };
 use super::flox_package::FloxTriple;
@@ -98,9 +97,6 @@ pub trait Environment {
 
     /// Extract the current content of the manifest
     fn manifest_content(&self) -> Result<String, EnvironmentError2>;
-
-    /// Return the [EnvironmentRef] for the environment for identification
-    fn environment_ref(&self) -> EnvironmentRef;
 
     /// Return a path containing the built environment and its activation script.
     ///

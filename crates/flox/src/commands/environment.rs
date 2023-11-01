@@ -6,8 +6,8 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use anyhow::{bail, Context, Result};
-use bpaf::Bpaf;
-use flox_rust_sdk::flox::{EnvironmentName, Flox};
+use bpaf::{Bpaf, Parser};
+use flox_rust_sdk::flox::{EnvironmentName, EnvironmentRef, Flox};
 use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironment;
 use flox_rust_sdk::models::environment::path_environment::{Original, PathEnvironment};
 use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironment;
@@ -28,8 +28,6 @@ pub struct EnvironmentArgs {
     #[bpaf(short, long, argument("SYSTEM"))]
     pub system: Option<String>,
 }
-
-pub type EnvironmentRef = String;
 
 #[derive(Debug, Bpaf, Clone)]
 pub enum EnvironmentSelect {
@@ -341,7 +339,7 @@ impl Init {
             Enter the environment with \"flox activate\"
             Search and install packages with \"flox search {{packagename}}\" and \"flox install {{packagename}}\"
             "},
-            name = env.environment_ref(),
+            name = env.name(),
             system = flox.system
         );
         Ok(())
