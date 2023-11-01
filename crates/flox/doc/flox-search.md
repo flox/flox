@@ -35,11 +35,6 @@ you can invoke with `--refresh` to update the list before searching.
 [ `<name>` ]
 :   package name to search for
 
-[ (-c|\--channel) `<channel>` ]...
-:   Specify the channel to be searched.
-    If unspecified searches all subscribed channels.
-    Can be given multiple times to search in more channels.
-
 [ \--refresh ]
 :   Update the list before searching.
 
