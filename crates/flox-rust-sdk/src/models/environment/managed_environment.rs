@@ -21,10 +21,10 @@ const GENERATION_LOCK_FILENAME: &str = "env.lock";
 #[derive(Debug)]
 pub struct ManagedEnvironment {
     /// Path to the directory containing `env.json`
-    _path: PathBuf,
+    path: PathBuf,
     pointer: ManagedPointer,
-    _system: String,
-    _floxmeta: FloxmetaV2,
+    system: String,
+    floxmeta: FloxmetaV2,
 }
 
 #[derive(Debug, Error)]
@@ -261,9 +261,9 @@ impl ManagedEnvironment {
         ManagedEnvironment::ensure_reverse_link(flox, &dot_flox_path)?;
 
         Ok(ManagedEnvironment {
-            _path: dot_flox_path.as_ref().to_path_buf(),
-            _system: flox.system.clone(),
-            _floxmeta: floxmeta,
+            path: dot_flox_path.as_ref().to_path_buf(),
+            system: flox.system.clone(),
+            floxmeta,
             pointer,
         })
     }
@@ -349,27 +349,7 @@ impl ManagedEnvironment {
             },
             // There's no lockfile, so write a new one with whatever remote
             // branch is after fetching.
-            None => {
-                let remote_branch = remote_branch_name(&flox.system, pointer);
-                floxmeta
-                    .git
-                    .fetch_branch("origin", &remote_branch)
-                    .map_err(ManagedEnvironmentError::Fetch)?;
-                let rev = floxmeta
-                    .git
-                    .branch_hash(&remote_branch)
-                    .map_err(ManagedEnvironmentError::GitBranchHash)?;
-                let lock = GenerationLock {
-                    rev,
-                    local_rev: None,
-                    version: Version::<1> {},
-                };
-                let lock_contents = serde_json::to_string_pretty(&lock)
-                    .map_err(ManagedEnvironmentError::SerializeLock)?;
-                debug!("writing rev '{}' to lockfile", lock.rev);
-                fs::write(&lock_path, lock_contents).map_err(ManagedEnvironmentError::WriteLock)?;
-                lock
-            },
+            None => lock_env(&flox.system, pointer, floxmeta, lock_path)?,
         })
     }
 
@@ -420,6 +400,33 @@ impl ManagedEnvironment {
     }
 }
 
+fn lock_env(
+    system: &str,
+    pointer: &ManagedPointer,
+    floxmeta: &FloxmetaV2,
+    lock_path: PathBuf,
+) -> Result<GenerationLock, EnvironmentError2> {
+    let remote_branch = remote_branch_name(system, pointer);
+    floxmeta
+        .git
+        .fetch_branch("origin", &remote_branch)
+        .map_err(ManagedEnvironmentError::Fetch)?;
+    let rev = floxmeta
+        .git
+        .branch_hash(&remote_branch)
+        .map_err(ManagedEnvironmentError::GitBranchHash)?;
+    let lock = GenerationLock {
+        rev,
+        local_rev: None,
+        version: Version::<1> {},
+    };
+    let lock_contents =
+        serde_json::to_string_pretty(&lock).map_err(ManagedEnvironmentError::SerializeLock)?;
+    debug!("writing rev '{}' to lockfile", lock.rev);
+    fs::write(lock_path, lock_contents).map_err(ManagedEnvironmentError::WriteLock)?;
+    Ok(lock)
+}
+
 fn branch_name(
     system: &str,
     pointer: &ManagedPointer,
@@ -452,6 +459,49 @@ fn reverse_links_dir(flox: &Flox) -> PathBuf {
 
 fn gcroots_dir(flox: &Flox, pointer: &ManagedPointer) -> PathBuf {
     flox.cache_dir.join("run").join(pointer.owner.to_string())
+}
+
+impl ManagedEnvironment {
+    #[allow(unused)]
+    fn pull(&mut self) -> Result<(), EnvironmentError2> {
+        self.floxmeta
+            .git
+            .fetch_branch("origin", &remote_branch_name(&self.system, &self.pointer))
+            .unwrap();
+
+        // try fast forward merge upstream env branch into local env branch
+        self.floxmeta
+            .git
+            .push2(
+                ".",
+                format!(
+                    "origin/{sync_branch}:refs/heads/{sync_branch}",
+                    sync_branch = remote_branch_name(&self.system, &self.pointer)
+                ),
+            )
+            .unwrap();
+
+        // try fast forward merge local env branch into project branch
+        self.floxmeta
+            .git
+            .push2(
+                ".",
+                format!(
+                    "refs/heads/{sync_branch}:refs/heads/{project_branch}",
+                    sync_branch = remote_branch_name(&self.system, &self.pointer),
+                    project_branch = branch_name(&self.system, &self.pointer, &self.path)?
+                ),
+            )
+            .unwrap();
+        lock_env(
+            &self.system,
+            &self.pointer,
+            &self.floxmeta,
+            self.path.join(GENERATION_LOCK_FILENAME),
+        )
+        .unwrap();
+        Ok(())
+    }
 }
 
 #[cfg(test)]
