@@ -26,8 +26,9 @@ use super::{
     MANIFEST_FILENAME,
 };
 use crate::environment::NIX_BIN;
+use crate::flox::Flox;
 use crate::models::environment::{BUILD_ENV_BIN, CATALOG_JSON, PATH_ENV_GCROOTS_DIR};
-use crate::models::environment_ref::{EnvironmentName, EnvironmentOwner, EnvironmentRef};
+use crate::models::environment_ref::{EnvironmentName, EnvironmentRef};
 use crate::models::manifest::{insert_packages, remove_packages};
 
 const ENVIRONMENT_DIR_NAME: &'_ str = "env";
@@ -124,7 +125,7 @@ impl<S: TransactionState> PathEnvironment<S> {
     ///
     /// Mind that an existing out link does not necessarily imply that the environment
     /// can in fact be built.
-    fn out_link(&self, system: System) -> Result<PathBuf, EnvironmentError2> {
+    fn out_link(&self, system: &System) -> Result<PathBuf, EnvironmentError2> {
         let run_dir = self
             .path
             .parent()
@@ -133,7 +134,7 @@ impl<S: TransactionState> PathEnvironment<S> {
         if !run_dir.exists() {
             std::fs::create_dir_all(&run_dir).map_err(EnvironmentError2::CreateGcRootDir)?;
         }
-        Ok(run_dir.join([system, self.name().to_string()].join(".")))
+        Ok(run_dir.join([system.clone(), self.name().to_string()].join(".")))
     }
 }
 
@@ -183,7 +184,7 @@ where
         );
         let build_output = std::process::Command::new(BUILD_ENV_BIN)
             .arg(NIX_BIN)
-            .arg(&system)
+            .arg(system)
             .arg(lockfile_path)
             .arg(self.out_link(system)?)
             .output()
@@ -327,7 +328,7 @@ where
         nix: &NixCommandLine,
     ) -> Result<PathBuf, EnvironmentError2> {
         self.build(nix, &flox.system).await?;
-        Ok(self.out_link(&flox.system))
+        Ok(self.out_link(&flox.system)?)
     }
 }
 

@@ -27,7 +27,6 @@
   floxVersion,
   flox-pkgdb,
   writeScript,
-  system,
 }: let
   # crane (<https://crane.dev/>) library for building rust packages
   craneLib = inputs.crane.mkLib pkgsFor;

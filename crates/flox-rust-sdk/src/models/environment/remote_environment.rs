@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use async_trait::async_trait;
 use flox_types::catalog::{EnvCatalog, System};
 use runix::command_line::NixCommandLine;
