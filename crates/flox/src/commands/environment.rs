@@ -581,16 +581,28 @@ pub enum PushFloxmainOrEnv {
     },
 }
 
+#[derive(Debug, Clone, Bpaf)]
+enum PullSelect {
+    New {
+        /// Directory to create the environment in (default: current directory)
+        dir: Option<PathBuf>,
+        /// ID of the environment to pull
+        remote: EnvironmentRef,
+    },
+    Existing(#[bpaf(external(environment_select))] EnvironmentSelect),
+}
+
+impl Default for PullSelect {
+    fn default() -> Self {
+        PullSelect::Existing(Default::default())
+    }
+}
+
 /// Pull environment from flox hub
 #[derive(Bpaf, Clone)]
 pub struct Pull {
-    #[allow(dead_code)] // pending spec for `-e`, `--dir` behaviour
-    #[bpaf(external(environment_args), group_help("Environment Options"))]
-    environment_args: EnvironmentArgs,
-
-    #[allow(dead_code)] // not yet handled in impl
-    #[bpaf(external(pull_floxmain_or_env), optional)]
-    target: Option<PullFloxmainOrEnv>,
+    #[bpaf(external(pull_select), fallback(Default::default()))]
+    pull_select: PullSelect,
 
     /// forceably overwrite the local copy of the environment
     #[allow(dead_code)] // not yet handled in impl
@@ -604,21 +616,6 @@ impl Pull {
 
         todo!("this command is planned for a future release")
     }
-}
-
-#[derive(Bpaf, Clone)]
-pub enum PullFloxmainOrEnv {
-    /// pull the `floxmain` branch to sync configuration
-    #[bpaf(long, short)]
-    Main,
-    Env {
-        #[bpaf(long("environment"), short('e'), argument("ENV"))]
-        env: Option<EnvironmentRef>,
-        /// do not actually render or create links to environments in the store.
-        /// (Flox internal use only.)
-        #[bpaf(long("no-render"))]
-        no_render: bool,
-    },
 }
 
 /// rollback to the previous generation of an environment
