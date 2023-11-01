@@ -37,7 +37,7 @@ enum ChannelType {
     Flox,
 }
 
-/// Search packages in subscribed channels
+/// Search for packages to install
 #[derive(Bpaf, Clone)]
 pub struct Search {
     /// print search as JSON
