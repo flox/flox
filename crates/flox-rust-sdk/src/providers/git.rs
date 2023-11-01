@@ -434,6 +434,20 @@ impl GitCommandProvider {
         Ok(())
     }
 
+    pub fn push2(
+        &self,
+        repository: impl AsRef<str>,
+        push_spec: impl AsRef<str>,
+    ) -> Result<(), GitCommandError> {
+        GitCommandProvider::run_command(
+            self.new_command()
+                .arg("push")
+                .arg(repository.as_ref())
+                .arg(push_spec.as_ref()),
+        )?;
+        Ok(())
+    }
+
     /// Update the options used by this provider.
     ///
     /// It is preferable to set the options when creating the provider
