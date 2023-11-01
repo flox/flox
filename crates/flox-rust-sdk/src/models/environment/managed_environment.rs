@@ -243,8 +243,14 @@ impl ManagedEnvironment {
         pointer: ManagedPointer,
         dot_flox_path: impl AsRef<Path>,
     ) -> Result<Self, EnvironmentError2> {
-        let floxmeta =
-            FloxmetaV2::open(flox, &pointer).map_err(ManagedEnvironmentError::OpenFloxmeta)?;
+        let floxmeta = match FloxmetaV2::open(flox, &pointer) {
+            Ok(floxmeta) => floxmeta,
+            Err(FloxmetaV2Error::NotFound(_)) => {
+                debug!("cloning floxmeta for {}", pointer.owner);
+                FloxmetaV2::clone(flox, &pointer).map_err(ManagedEnvironmentError::OpenFloxmeta)?
+            },
+            Err(e) => Err(ManagedEnvironmentError::OpenFloxmeta(e))?,
+        };
 
         let lock = Self::ensure_locked(flox, &pointer, &dot_flox_path, &floxmeta)?;
         Self::ensure_branch(

@@ -25,6 +25,8 @@ pub struct FloxmetaV2 {
 pub enum FloxmetaV2Error {
     #[error("No login token provided")]
     LoggedOut,
+    #[error("floxmeta for {0} not found")]
+    NotFound(String),
     #[error("Currently only hub.flox.dev is supported as a remote")]
     UnsupportedRemote,
     #[error("Could not open user environment directory {0}")]
@@ -33,24 +35,49 @@ pub enum FloxmetaV2Error {
     CheckForBranch(GitCommandBranchHashError),
     #[error("Failed to fetch environment: {0}")]
     FetchBranch(GitCommandError),
+    #[error("Failed to clone environment: {0}")]
+    CloneBranch(GitCommandError),
 }
 
 impl FloxmetaV2 {
-    fn open_path(
-        options: GitCommandOptions,
+    /// Clone the floxmeta repository for the given user to the given path
+    ///
+    /// Most of the time, you want to use [`FloxmetaV2::clone`] instead.
+    /// This is useful for testing and isolated remote operations.
+    pub fn clone_to(
+        flox: &Flox,
+        pointer: &ManagedPointer,
         path: impl AsRef<Path>,
     ) -> Result<Self, FloxmetaV2Error> {
-        let git = GitCommandProvider::open_with(options, path).map_err(FloxmetaV2Error::Open)?;
+        let token = flox
+            .floxhub_token
+            .as_ref()
+            .ok_or(FloxmetaV2Error::LoggedOut)?;
+
+        let git_options = floxmeta_git_options("https://git.hub.flox.dev", token);
+        let branch: String = remote_branch_name(&flox.system, pointer);
+
+        let git = GitCommandProvider::clone_branch_with(
+            git_options,
+            "https://git.hub.flox.dev",
+            path,
+            branch,
+            true,
+        )
+        .map_err(FloxmetaV2Error::CloneBranch)?;
+
         Ok(FloxmetaV2 { git })
     }
 
-    fn clone_in(
-        _path: impl AsRef<Path>,
-        _pointer: &ManagedPointer,
-    ) -> Result<Self, FloxmetaV2Error> {
-        todo!()
+    /// Clone the floxmeta repository for the given user to the default path
+    ///
+    /// Like [`FloxmetaV2::clone_to`], but uses the system path for floxmeta repositories in XDG_DATA_HOME
+    pub fn clone(flox: &Flox, pointer: &ManagedPointer) -> Result<Self, FloxmetaV2Error> {
+        Self::clone_to(flox, pointer, floxmeta_dir(flox, &pointer.owner))
     }
 
+    /// Open the floxmeta repository for the given user
+    /// and ensure a branch exists for the given environment.
     pub fn open(flox: &Flox, pointer: &ManagedPointer) -> Result<Self, FloxmetaV2Error> {
         let token = flox
             .floxhub_token
@@ -61,23 +88,22 @@ impl FloxmetaV2 {
 
         let user_floxmeta_dir = floxmeta_dir(flox, &pointer.owner);
 
-        if user_floxmeta_dir.exists() {
-            let floxmeta = FloxmetaV2::open_path(git_options, user_floxmeta_dir)?;
-            let branch = remote_branch_name(&flox.system, pointer);
-            if !floxmeta
-                .git
-                .has_branch(&branch)
-                .map_err(FloxmetaV2Error::CheckForBranch)?
-            {
-                floxmeta
-                    .git
-                    .fetch_branch("origin", &branch)
-                    .map_err(FloxmetaV2Error::FetchBranch)?;
-            }
-            Ok(floxmeta)
-        } else {
-            FloxmetaV2::clone_in(user_floxmeta_dir, pointer)
+        if !user_floxmeta_dir.exists() {
+            Err(FloxmetaV2Error::NotFound(pointer.owner.to_string()))?
         }
+
+        let git = GitCommandProvider::open_with(git_options, user_floxmeta_dir)
+            .map_err(FloxmetaV2Error::Open)?;
+        let branch: String = remote_branch_name(&flox.system, pointer);
+        if !git
+            .has_branch(&branch)
+            .map_err(FloxmetaV2Error::CheckForBranch)?
+        {
+            git.fetch_branch("origin", &branch)
+                .map_err(FloxmetaV2Error::FetchBranch)?;
+        }
+
+        Ok(FloxmetaV2 { git })
     }
 }
 
