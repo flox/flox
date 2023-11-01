@@ -499,7 +499,8 @@ mod test {
     /// - floxmeta at commit 2
     #[test]
     fn test_ensure_locked_case_1() {
-        let (flox, _temp_dir_handle) = flox_instance();
+        let (mut flox, _temp_dir_handle) = flox_instance();
+        flox.floxhub_token = Some("DUMMY_TOKEN".to_string());
 
         // create a mock remote
         let remote_path = flox.temp_dir.join("remote");
@@ -544,7 +545,8 @@ mod test {
     /// - floxmeta at commit 1
     #[test]
     fn test_ensure_locked_case_2() {
-        let (flox, _temp_dir_handle) = flox_instance();
+        let (mut flox, _temp_dir_handle) = flox_instance();
+        flox.floxhub_token = Some("DUMMY_TOKEN".to_string());
 
         // create a mock remote
         let remote_path = flox.temp_dir.join("remote");
@@ -591,7 +593,8 @@ mod test {
     /// - floxmeta at commit 3
     #[test]
     fn test_ensure_locked_case_3() {
-        let (flox, _temp_dir_handle) = flox_instance();
+        let (mut flox, _temp_dir_handle) = flox_instance();
+        flox.floxhub_token = Some("DUMMY_TOKEN".to_string());
 
         // create a mock remote
         let remote_path = flox.temp_dir.join("remote");
@@ -627,7 +630,7 @@ mod test {
         let lock_path = dot_flox_path.join(GENERATION_LOCK_FILENAME);
         let lock: GenerationLock = serde_json::from_slice(&fs::read(lock_path).unwrap()).unwrap();
         assert_eq!(lock, GenerationLock {
-            rev: hash_2.clone(),
+            rev: hash_2,
             local_rev: None,
             version: Version::<1> {},
         });
@@ -645,7 +648,8 @@ mod test {
     /// - error
     #[test]
     fn test_ensure_locked_case_4() {
-        let (flox, _temp_dir_handle) = flox_instance();
+        let (mut flox, _temp_dir_handle) = flox_instance();
+        flox.floxhub_token = Some("DUMMY_TOKEN".to_string());
 
         // create a mock remote
         let remote_path = flox.temp_dir.join("remote");
@@ -667,7 +671,7 @@ mod test {
         // create a .flox directory
         let dot_flox_path = flox.temp_dir.join(DOT_FLOX);
         let lock = GenerationLock {
-            rev: hash_2.clone(),
+            rev: hash_2,
             local_rev: None,
             version: Version::<1> {},
         };
@@ -690,7 +694,8 @@ mod test {
     /// - error
     #[test]
     fn test_ensure_locked_case_5() {
-        let (flox, _temp_dir_handle) = flox_instance();
+        let (mut flox, _temp_dir_handle) = flox_instance();
+        flox.floxhub_token = Some("DUMMY_TOKEN".to_string());
 
         // create a mock remote
         let remote_path = flox.temp_dir.join("remote");
@@ -736,7 +741,8 @@ mod test {
     /// - no change
     #[test]
     fn test_ensure_locked_case_6() {
-        let (flox, _temp_dir_handle) = flox_instance();
+        let (mut flox, _temp_dir_handle) = flox_instance();
+        flox.floxhub_token = Some("DUMMY_TOKEN".to_string());
 
         // create a mock remote
         let remote_path = flox.temp_dir.join("remote");
@@ -781,7 +787,8 @@ mod test {
     /// - error
     #[test]
     fn test_ensure_locked_case_7() {
-        let (flox, _temp_dir_handle) = flox_instance();
+        let (mut flox, _temp_dir_handle) = flox_instance();
+        flox.floxhub_token = Some("DUMMY_TOKEN".to_string());
 
         // create a mock remote
         let remote_path = flox.temp_dir.join("remote");
@@ -799,7 +806,7 @@ mod test {
         // create a .flox directory
         let dot_flox_path = flox.temp_dir.join(DOT_FLOX);
         let lock = GenerationLock {
-            rev: hash_1.clone(),
+            rev: hash_1,
             local_rev: Some("does not exist".to_string()),
             version: Version::<1> {},
         };
@@ -819,7 +826,8 @@ mod test {
     /// - local_rev at commit 1
     #[test]
     fn test_ensure_branch_noop() {
-        let (flox, _temp_dir_handle) = flox_instance();
+        let (mut flox, _temp_dir_handle) = flox_instance();
+        flox.floxhub_token = Some("DUMMY_TOKEN".to_string());
 
         // create a mock remote
         let remote_path = flox.temp_dir.join("remote");
@@ -850,7 +858,8 @@ mod test {
     /// ensure_branch resets the branch to commit 2
     #[test]
     fn test_ensure_branch_resets_branch() {
-        let (flox, _temp_dir_handle) = flox_instance();
+        let (mut flox, _temp_dir_handle) = flox_instance();
+        flox.floxhub_token = Some("DUMMY_TOKEN".to_string());
 
         // create a mock remote
         let remote_path = flox.temp_dir.join("remote");
@@ -881,7 +890,7 @@ mod test {
         let floxmeta = FloxmetaV2::open(&flox, &TEST_POINTER).unwrap();
 
         let lock = GenerationLock {
-            rev: hash_1.clone(),
+            rev: hash_1,
             local_rev: Some(hash_2.clone()),
             version: Version::<1> {},
         };
@@ -896,7 +905,8 @@ mod test {
     /// ensure_branch creates branch_2 at commit 1
     #[test]
     fn test_ensure_branch_creates_branch() {
-        let (flox, _temp_dir_handle) = flox_instance();
+        let (mut flox, _temp_dir_handle) = flox_instance();
+        flox.floxhub_token = Some("DUMMY_TOKEN".to_string());
 
         // create a mock remote
         let remote_path = flox.temp_dir.join("remote");
