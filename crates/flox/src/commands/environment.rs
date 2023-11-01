@@ -1,5 +1,7 @@
+use std::env;
 use std::fs::File;
 use std::io::stdin;
+use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -12,8 +14,7 @@ use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironment;
 use flox_rust_sdk::models::environment::{Environment, EnvironmentPointer, PathPointer, DOT_FLOX};
 use flox_rust_sdk::models::environment_ref;
 use flox_rust_sdk::models::manifest::list_packages;
-use flox_rust_sdk::nix::arguments::eval::EvaluationArgs;
-use flox_rust_sdk::nix::command::{Shell, StoreGc};
+use flox_rust_sdk::nix::command::StoreGc;
 use flox_rust_sdk::nix::command_line::NixCommandLine;
 use flox_rust_sdk::nix::Run;
 use log::{debug, error, info};
@@ -264,23 +265,40 @@ impl Activate {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("activate");
 
-        let environment = self
-            .environment
-            .to_concrete_environment(&flox)?
-            .into_dyn_environment();
+        let concrete_environment = self.environment.to_concrete_environment(&flox)?;
 
-        let command = Shell {
-            eval: EvaluationArgs {
-                impure: true.into(),
-                ..Default::default()
+        // TODO could move this to a pretty print method on the Environment trait?
+        let prompt_name = match concrete_environment {
+            // Note that the same environment could show up twice without any
+            // indication of which comes from which path
+            ConcreteEnvironment::Managed(ref managed) => {
+                format!("{}/{}", managed.owner(), managed.name())
             },
-            installables: [environment.flake_attribute(flox.system.clone()).into()].into(),
-            ..Default::default()
+            ConcreteEnvironment::Path(ref path) => path.name().to_string(),
+            _ => todo!(),
         };
 
+        let mut environment = concrete_environment.into_dyn_environment();
+
         let nix = flox.nix(Default::default());
-        command.run(&nix, &Default::default()).await?;
-        Ok(())
+        let activation_path = environment.activation_path(&flox, &nix).await?;
+
+        let flox_prompt_environments = env::var("FLOX_PROMPT_ENVIRONMENTS")
+            .map_or(prompt_name.clone(), |prompt_environments| {
+                format!("{prompt_environments} {prompt_name}")
+            });
+
+        // We don't have access to the current PS1 (it's not exported), so we
+        // can't modify it. Instead set FLOX_PROMPT_ENVIRONMENTS and let the
+        // activation script set PS1 based on that.
+        let error = Command::new(activation_path.join("activate"))
+            .env("FLOX_PROMPT_ENVIRONMENTS", flox_prompt_environments)
+            .env("FLOX_ENV", activation_path)
+            .exec();
+
+        // exec should never return
+
+        bail!("Failed to exec subshell: {error}");
     }
 }
 

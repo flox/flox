@@ -7,7 +7,6 @@ use flox_types::catalog::{EnvCatalog, System};
 use flox_types::version::Version;
 use log::debug;
 use runix::command_line::NixCommandLine;
-use runix::installable::FlakeAttribute;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -23,7 +22,7 @@ const GENERATION_LOCK_FILENAME: &str = "env.lock";
 pub struct ManagedEnvironment {
     /// Path to the directory containing `env.json`
     _path: PathBuf,
-    _pointer: ManagedPointer,
+    pointer: ManagedPointer,
     _system: String,
     _floxmeta: FloxmetaV2,
 }
@@ -77,7 +76,7 @@ impl Environment for ManagedEnvironment {
     async fn build(
         &mut self,
         nix: &NixCommandLine,
-        system: System,
+        system: &System,
     ) -> Result<(), EnvironmentError2> {
         todo!()
     }
@@ -135,15 +134,13 @@ impl Environment for ManagedEnvironment {
         todo!()
     }
 
-    #[allow(unused)]
-    fn flake_attribute(&self, _system: System) -> FlakeAttribute {
-        todo!()
-    }
-
-    /// Returns the environment owner
-    #[allow(unused)]
-    fn owner(&self) -> Option<EnvironmentOwner> {
-        todo!()
+    async fn activation_path(
+        &mut self,
+        flox: &Flox,
+        nix: &NixCommandLine,
+    ) -> Result<PathBuf, EnvironmentError2> {
+        self.build(nix, &flox.system).await?;
+        Ok(self.out_link(flox))
     }
 
     /// Returns the environment name
@@ -261,7 +258,7 @@ impl ManagedEnvironment {
             _path: dot_flox_path.as_ref().to_path_buf(),
             _system: flox.system.clone(),
             _floxmeta: floxmeta,
-            _pointer: pointer,
+            pointer,
         })
     }
 
@@ -405,6 +402,16 @@ impl ManagedEnvironment {
         }
         Ok(())
     }
+
+    /// Where to link a built environment to. The parent directory may not exist.
+    fn out_link(&self, flox: &Flox) -> PathBuf {
+        gcroots_dir(flox, &self.pointer).join(format!("{0}.{1}", flox.system, self.pointer.name))
+    }
+
+    /// Returns the environment owner
+    pub fn owner(&self) -> EnvironmentOwner {
+        self.pointer.owner.clone()
+    }
 }
 
 fn branch_name(
@@ -435,6 +442,10 @@ pub fn remote_branch_name(system: &str, pointer: &ManagedPointer) -> String {
 ///           [branch_name]
 fn reverse_links_dir(flox: &Flox) -> PathBuf {
     flox.data_dir.join("links")
+}
+
+fn gcroots_dir(flox: &Flox, pointer: &ManagedPointer) -> PathBuf {
+    flox.cache_dir.join("run").join(pointer.owner.to_string())
 }
 
 #[cfg(test)]

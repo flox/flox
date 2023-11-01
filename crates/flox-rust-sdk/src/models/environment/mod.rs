@@ -21,6 +21,7 @@ use super::environment_ref::{
 };
 use super::flox_package::FloxTriple;
 use super::manifest::TomlEditError;
+use crate::flox::Flox;
 use crate::utils::copy_file_without_permissions;
 use crate::utils::errors::IoError;
 
@@ -57,7 +58,7 @@ pub trait Environment {
     async fn build(
         &mut self,
         nix: &NixCommandLine,
-        system: System,
+        system: &System,
     ) -> Result<(), EnvironmentError2>;
 
     /// Install packages to the environment atomically
@@ -96,12 +97,16 @@ pub trait Environment {
     /// Return the [EnvironmentRef] for the environment for identification
     fn environment_ref(&self) -> EnvironmentRef;
 
-    /// Return a flake attribute installable for this environment
-    // TODO consider removing this from the trait
-    fn flake_attribute(&self, system: System) -> FlakeAttribute;
-
-    /// Returns the environment owner
-    fn owner(&self) -> Option<EnvironmentOwner>;
+    /// Return a path containing the built environment and its activation script.
+    ///
+    /// This should be a link to a store path so that it can be swapped
+    /// dynamically, i.e. so that install/edit can modify the environment
+    /// without requiring reactivation.
+    async fn activation_path(
+        &mut self,
+        flox: &Flox,
+        nix: &NixCommandLine,
+    ) -> Result<PathBuf, EnvironmentError2>;
 
     /// Returns the environment name
     fn name(&self) -> EnvironmentName;

@@ -25,8 +25,9 @@ use super::{
     ENVIRONMENT_POINTER_FILENAME,
     MANIFEST_FILENAME,
 };
+use crate::flox::Flox;
 use crate::models::environment::CATALOG_JSON;
-use crate::models::environment_ref::{EnvironmentName, EnvironmentOwner, EnvironmentRef};
+use crate::models::environment_ref::{EnvironmentName, EnvironmentRef};
 use crate::models::manifest::{insert_packages, remove_packages};
 use crate::utils::copy_file_without_permissions;
 
@@ -124,10 +125,10 @@ impl<S: TransactionState> PathEnvironment<S> {
     ///
     /// Mind that an existing out link does not necessarily imply that the environment
     /// can in fact be built.
-    fn out_link(&self, system: impl AsRef<str> + Send) -> PathBuf {
+    fn out_link(&self, system: &System) -> PathBuf {
         self.path
-            .join("envs")
-            .join(format!("{0}.{1}", system.as_ref(), self.name()))
+            .join("run")
+            .join(format!("{0}.{1}", system, self.name()))
     }
 }
 
@@ -161,14 +162,14 @@ where
     async fn build(
         &mut self,
         nix: &NixCommandLine,
-        system: System,
+        system: &System,
     ) -> Result<(), EnvironmentError2> {
         debug!("building with nix ....");
 
-        let out_link = self.out_link(&system);
+        let out_link = self.out_link(system);
 
         let build = Build {
-            installables: [self.flake_attribute(&system).into()].into(),
+            installables: [self.flake_attribute(system).into()].into(),
             eval: runix::arguments::eval::EvaluationArgs {
                 impure: true.into(),
                 ..Default::default()
@@ -299,11 +300,6 @@ where
         fs::read_to_string(self.manifest_path()).map_err(EnvironmentError2::ReadManifest)
     }
 
-    /// Returns the environment owner
-    fn owner(&self) -> Option<EnvironmentOwner> {
-        None
-    }
-
     /// Returns the environment name
     fn name(&self) -> EnvironmentName {
         self.pointer.name.clone()
@@ -324,37 +320,20 @@ where
         Ok(())
     }
 
-    fn flake_attribute(&self, system: System) -> FlakeAttribute {
-        self.flake_attribute(system)
+    async fn activation_path(
+        &mut self,
+        flox: &Flox,
+        nix: &NixCommandLine,
+    ) -> Result<PathBuf, EnvironmentError2> {
+        self.build(nix, &flox.system).await?;
+        Ok(self.out_link(&flox.system))
     }
 }
 
 impl<S: TransactionState> PathEnvironment<S> {
     /// Turn the environment into a flake attribute,
     /// a precise url to interact with the environment via nix
-    ///
-    /// ```
-    /// # use flox_rust_sdk::models::environment::PathPointer;
-    /// # use flox_rust_sdk::models::environment::path_environment::{Original,PathEnvironment};
-    /// # use std::path::PathBuf;
-    /// # let tempdir = tempfile::tempdir().unwrap();
-    /// # let environment_temp_dir = tempfile::tempdir().unwrap();
-    /// # let path = tempdir.path().canonicalize().unwrap().to_string_lossy().into_owned();
-    /// # let system = "aarch64-darwin";
-    ///
-    /// let env = PathEnvironment::<Original>::init(
-    ///     PathPointer::new("test_env".parse().unwrap()),
-    ///     &path,
-    ///     environment_temp_dir.into_path(),
-    /// )
-    /// .unwrap();
-    ///
-    /// let flake_attribute = format!("path:{path}/.flox/env#.floxEnvs.{system}.default")
-    ///     .parse()
-    ///     .unwrap();
-    /// assert_eq!(env.flake_attribute(system), flake_attribute)
-    /// ```
-    pub fn flake_attribute(&self, system: impl AsRef<str>) -> FlakeAttribute {
+    fn flake_attribute(&self, system: impl AsRef<str>) -> FlakeAttribute {
         let flakeref = PathRef {
             path: self.path.clone(),
             attributes: Default::default(),
@@ -391,7 +370,7 @@ impl<S: TransactionState> PathEnvironment<S> {
     ) -> Result<(), EnvironmentError2> {
         let mut temp_env = self.make_temporary()?;
         temp_env.update_manifest(&manifest_contents)?;
-        temp_env.build(nix, system).await?;
+        temp_env.build(nix, &system).await?;
         self.replace_with(temp_env)?;
         Ok(())
     }
