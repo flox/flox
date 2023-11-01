@@ -10,6 +10,7 @@ use crate::providers::git::{
     GitCommandBranchHashError,
     GitCommandError,
     GitCommandOpenError,
+    GitCommandOptions,
     GitCommandProvider,
 };
 
@@ -65,6 +66,31 @@ impl FloxmetaV2 {
             FloxmetaV2::clone_in(user_floxmeta_dir, pointer)
         }
     }
+}
+
+/// Returns the git options for interacting with floxmeta repositories
+// todo: move floxhub host and token to Flox, or integrate config...
+fn floxmeta_git_options(floxhub_host: &str, floxhub_token: &str) -> GitCommandOptions {
+    let mut options = GitCommandOptions::default();
+
+    // set the user config
+    // todo: eventually use the user's name and email once integrated with floxhub
+    options.add_config_flag("user.name", "Flox User");
+    options.add_config_flag("user.email", "floxuser@example.invalid");
+
+    // unset the global and system config
+    options.add_env_var("GIT_CONFIG_GLOBAL", "/dev/null");
+    options.add_env_var("GIT_CONFIG_SYSTEM", "/dev/null");
+
+    // Set authentication with the floxhub token using an inline credential helper.
+    // The credential helper should help avoinding a leak of the token in the process list.
+    options.add_env_var("FLOX_FLOXHUB_TOKEN", floxhub_token);
+    options.add_config_flag(
+        &format!("credentials.{floxhub_host}.helper"),
+        "!f(){ echo ${FLOX_FLOXHUB_TOKEN}; }; f",
+    );
+
+    options
 }
 
 pub(super) fn floxmeta_dir(flox: &Flox, owner: &EnvironmentOwner) -> PathBuf {
