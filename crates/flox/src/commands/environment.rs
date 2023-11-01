@@ -67,9 +67,10 @@ impl EnvironmentSelect {
                             &flox.temp_dir,
                         )?)
                     },
-                    EnvironmentPointer::Managed(managed_pointer) => ConcreteEnvironment::Managed(
-                        ManagedEnvironment::open(flox, managed_pointer, path)?,
-                    ),
+                    EnvironmentPointer::Managed(managed_pointer) => {
+                        let env = ManagedEnvironment::open(flox, managed_pointer, path)?;
+                        ConcreteEnvironment::Managed(env)
+                    },
                 }
             },
             EnvironmentSelect::Remote(_) => todo!(),
