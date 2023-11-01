@@ -12,7 +12,7 @@
   pandoc,
   floxVersion,
   cacert,
-  glibcLocales,
+  glibcLocalesUtf8,
   darwin,
 }: let
   nixPatched = nixVersions.nix_2_15.overrideAttrs (oldAttrs: {
@@ -43,7 +43,7 @@ in
         "NIXPKGS_CACERT_BUNDLE_CRT=${cacert}/etc/ssl/certs/ca-bundle.crt"
       ]
       ++ lib.optionals hostPlatform.isLinux [
-        "LOCALE_ARCHIVE=${glibcLocales}/lib/locale/locale-archive"
+        "LOCALE_ARCHIVE=${glibcLocalesUtf8}/lib/locale/locale-archive"
       ]
       ++ lib.optionals hostPlatform.isDarwin [
         "NIX_COREFOUNDATION_RPATH=${darwin.CF}/Library/Frameworks"
