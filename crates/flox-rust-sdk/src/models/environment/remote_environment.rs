@@ -6,7 +6,7 @@ use runix::command_line::NixCommandLine;
 
 use super::{Environment, EnvironmentError2, InstallationAttempt};
 use crate::flox::Flox;
-use crate::models::environment_ref::{EnvironmentName, EnvironmentRef};
+use crate::models::environment_ref::EnvironmentName;
 
 #[derive(Debug)]
 pub struct RemoteEnvironment;
@@ -67,12 +67,6 @@ impl Environment for RemoteEnvironment {
 
     /// Extract the current content of the manifest
     fn manifest_content(&self) -> Result<String, EnvironmentError2> {
-        todo!()
-    }
-
-    /// Return the [EnvironmentRef] for the environment for identification
-    #[allow(unused)]
-    fn environment_ref(&self) -> EnvironmentRef {
         todo!()
     }
 

@@ -43,7 +43,7 @@ use crate::models::environment::{
     CATALOG_JSON,
     ENV_FROM_LOCKFILE_PATH,
 };
-use crate::models::environment_ref::{EnvironmentName, EnvironmentRef};
+use crate::models::environment_ref::EnvironmentName;
 use crate::models::manifest::{insert_packages, remove_packages};
 use crate::models::search::PKGDB_BIN;
 
@@ -306,11 +306,6 @@ where
         self.transact_with_manifest_contents(contents, nix, system)
             .await?;
         Ok(())
-    }
-
-    /// Return the [EnvironmentRef] for the environment for identification
-    fn environment_ref(&self) -> EnvironmentRef {
-        EnvironmentRef::new_from_parts(None, self.pointer.name.clone())
     }
 
     /// Get a catalog of installed packages from this environment
