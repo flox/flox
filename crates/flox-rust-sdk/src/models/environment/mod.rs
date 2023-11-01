@@ -266,8 +266,8 @@ pub enum EnvironmentError2 {
     Install(#[from] TomlEditError),
     #[error("couldn't locate the manifest for this environment")]
     ManifestNotFound,
-    #[error("couldn't locate gc roots directory")]
-    GcRootsDirNotFound,
+    #[error("failed to create GC roots directory: {0}")]
+    CreateGcRootDir(std::io::Error),
     #[error("error building environment: {0}")]
     BuildEnvCall(std::io::Error),
     #[error("error building environment: {0}")]

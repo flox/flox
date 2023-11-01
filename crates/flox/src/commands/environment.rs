@@ -5,7 +5,7 @@ use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{bail, Context, Result};
 use bpaf::{Bpaf, Parser};
 use flox_rust_sdk::flox::{EnvironmentName, Flox};
 use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironment;
@@ -17,7 +17,7 @@ use flox_rust_sdk::models::manifest::list_packages;
 use flox_rust_sdk::nix::command::StoreGc;
 use flox_rust_sdk::nix::command_line::NixCommandLine;
 use flox_rust_sdk::nix::Run;
-use log::{debug, error, info, warn};
+use log::{debug, error, info};
 use tempfile::NamedTempFile;
 
 use crate::subcommand_metric;

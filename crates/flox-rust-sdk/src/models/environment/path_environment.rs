@@ -3,17 +3,16 @@ use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-use anyhow::bail;
 use async_trait::async_trait;
 use flox_types::catalog::{EnvCatalog, System};
 use log::debug;
 use runix::arguments::eval::EvaluationArgs;
-use runix::arguments::{BuildArgs, EvalArgs};
-use runix::command::{Build, Eval};
+use runix::arguments::EvalArgs;
+use runix::command::Eval;
 use runix::command_line::NixCommandLine;
 use runix::flake_ref::path::PathRef;
 use runix::installable::FlakeAttribute;
-use runix::{Run, RunJson};
+use runix::RunJson;
 
 use super::{
     copy_dir_recursive,
@@ -30,7 +29,6 @@ use crate::environment::NIX_BIN;
 use crate::models::environment::{BUILD_ENV, CATALOG_JSON, PATH_ENV_GCROOTS_DIR};
 use crate::models::environment_ref::{EnvironmentName, EnvironmentOwner, EnvironmentRef};
 use crate::models::manifest::{insert_packages, remove_packages};
-use crate::utils::copy_file_without_permissions;
 
 const ENVIRONMENT_DIR_NAME: &'_ str = "env";
 
@@ -126,10 +124,16 @@ impl<S: TransactionState> PathEnvironment<S> {
     ///
     /// Mind that an existing out link does not necessarily imply that the environment
     /// can in fact be built.
-    fn out_link(&self, system: &System) -> PathBuf {
-        self.path
-            .join("run")
-            .join(format!("{0}.{1}", system, self.name()))
+    fn out_link(&self, system: System) -> Result<PathBuf, EnvironmentError2> {
+        let run_dir = self
+            .path
+            .parent()
+            .ok_or(EnvironmentError2::DotFloxNotFound)?
+            .join(PATH_ENV_GCROOTS_DIR);
+        if !run_dir.exists() {
+            std::fs::create_dir_all(&run_dir).map_err(EnvironmentError2::CreateGcRootDir)?;
+        }
+        Ok(run_dir.join([system, self.name().to_string()].join(".")))
     }
 }
 
@@ -181,7 +185,7 @@ where
             .arg(NIX_BIN)
             .arg(&system)
             .arg(lockfile_path)
-            .arg(self.gc_root_path(system)?)
+            .arg(self.out_link(system)?)
             .output()
             .map_err(EnvironmentError2::BuildEnvCall)?;
 
@@ -351,19 +355,6 @@ impl<S: TransactionState> PathEnvironment<S> {
     /// Path to the environment definition file
     pub fn manifest_path(&self) -> PathBuf {
         self.path.join(MANIFEST_FILENAME)
-    }
-
-    /// Path to the GC roots directory
-    pub fn gc_root_path(&self, system: System) -> Result<PathBuf, EnvironmentError2> {
-        let run_dir = self
-            .path
-            .parent()
-            .ok_or(EnvironmentError2::DotFloxNotFound)?
-            .join(PATH_ENV_GCROOTS_DIR);
-        if !run_dir.exists() {
-            return Err(EnvironmentError2::GcRootsDirNotFound);
-        }
-        Ok(run_dir.join([system, self.name().to_string()].join(".")))
     }
 
     /// Path to the environment's catalog
