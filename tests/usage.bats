@@ -47,7 +47,7 @@ EOF
 Local Development Commands
     init           Create an environment in the current directory
     activate       Activate environment
-    search         Search packages in subscribed channels
+    search         Search for packages to install
     show           Show detailed information about a single package
     install        Install a package into an environment
     uninstall      Uninstall installed packages from an environment
