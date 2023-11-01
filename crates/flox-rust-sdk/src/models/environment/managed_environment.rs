@@ -457,7 +457,7 @@ fn gcroots_dir(flox: &Flox, pointer: &ManagedPointer) -> PathBuf {
 
 impl ManagedEnvironment {
     #[allow(unused)]
-    fn pull(&mut self) -> Result<(), EnvironmentError2> {
+    pub fn pull(&mut self) -> Result<(), EnvironmentError2> {
         self.floxmeta
             .git
             .fetch_branch("origin", &remote_branch_name(&self.system, &self.pointer))

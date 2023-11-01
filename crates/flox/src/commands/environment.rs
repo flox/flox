@@ -1,5 +1,5 @@
 use std::env;
-use std::fs::File;
+use std::fs::{self, File};
 use std::io::stdin;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
@@ -11,7 +11,14 @@ use flox_rust_sdk::flox::{EnvironmentName, EnvironmentRef, Flox};
 use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironment;
 use flox_rust_sdk::models::environment::path_environment::{Original, PathEnvironment};
 use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironment;
-use flox_rust_sdk::models::environment::{Environment, EnvironmentPointer, PathPointer, DOT_FLOX};
+use flox_rust_sdk::models::environment::{
+    Environment,
+    EnvironmentPointer,
+    ManagedPointer,
+    PathPointer,
+    DOT_FLOX,
+    ENVIRONMENT_POINTER_FILENAME,
+};
 use flox_rust_sdk::models::environment_ref;
 use flox_rust_sdk::models::manifest::list_packages;
 use flox_rust_sdk::nix::command::StoreGc;
@@ -611,10 +618,50 @@ pub struct Pull {
 }
 
 impl Pull {
-    pub async fn handle(self, _flox: Flox) -> Result<()> {
+    pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("pull");
+        match self.pull_select {
+            PullSelect::New { dir, remote } => {
+                let dir = dir.unwrap_or_else(|| std::env::current_dir().unwrap());
+                Self::pull_new_environment(&flox, dir.join(DOT_FLOX), remote)?;
+            },
+            PullSelect::Existing(_) => todo!(),
+        }
 
-        todo!("this command is planned for a future release")
+        Ok(())
+    }
+
+    /// Pull a new environment from floxhub into the given directory
+    ///
+    /// This will create a new environment in the given directory.
+    /// Uses [ManagedEnvironment::open] which will try to clone the environment.
+    ///
+    /// If the directory already exists, this will fail early.
+    /// If opening the environment fails, the .flox/ directory will be cleaned up.
+    fn pull_new_environment(
+        flox: &Flox,
+        dot_flox_path: PathBuf,
+        env_ref: EnvironmentRef,
+    ) -> Result<()> {
+        if dot_flox_path.exists() {
+            bail!("Cannot pull a new environment into an existing one")
+        }
+        let pointer = ManagedPointer::from(env_ref);
+
+        let pointer_content =
+            serde_json::to_string_pretty(&pointer).context("Could not serialize pointer")?;
+        let pointer_path = dot_flox_path.join(ENVIRONMENT_POINTER_FILENAME);
+
+        fs::create_dir_all(&dot_flox_path).context("Could not create .flox/ directory")?;
+        fs::write(pointer_path, pointer_content).context("Could not write pointer")?;
+
+        let result = ManagedEnvironment::open(flox, pointer, &dot_flox_path)
+            .context("Could not initialize environment");
+        if let Err(err) = result {
+            fs::remove_dir_all(dot_flox_path).context("Could not clean up .flox/ directory")?;
+            Err(err)?;
+        }
+        Ok(())
     }
 }
 
