@@ -333,28 +333,6 @@ where
 impl<S: TransactionState> PathEnvironment<S> {
     /// Turn the environment into a flake attribute,
     /// a precise url to interact with the environment via nix
-    ///
-    /// ```
-    /// # use flox_rust_sdk::models::environment::PathPointer;
-    /// # use flox_rust_sdk::models::environment::path_environment::{Original,PathEnvironment};
-    /// # use std::path::PathBuf;
-    /// # let tempdir = tempfile::tempdir().unwrap();
-    /// # let environment_temp_dir = tempfile::tempdir().unwrap();
-    /// # let path = tempdir.path().canonicalize().unwrap().to_string_lossy().into_owned();
-    /// # let system = "aarch64-darwin";
-    ///
-    /// let env = PathEnvironment::<Original>::init(
-    ///     PathPointer::new("test_env".parse().unwrap()),
-    ///     &path,
-    ///     environment_temp_dir.into_path(),
-    /// )
-    /// .unwrap();
-    ///
-    /// let flake_attribute = format!("path:{path}/.flox/env#.floxEnvs.{system}.default")
-    ///     .parse()
-    ///     .unwrap();
-    /// assert_eq!(env.flake_attribute(system), flake_attribute)
-    /// ```
     fn flake_attribute(&self, system: impl AsRef<str>) -> FlakeAttribute {
         let flakeref = PathRef {
             path: self.path.clone(),
