@@ -40,9 +40,6 @@ enum ChannelType {
 /// Search packages in subscribed channels
 #[derive(Bpaf, Clone)]
 pub struct Search {
-    #[bpaf(short, long, argument("channel"))]
-    pub channel: Vec<ChannelRef>,
-
     /// print search as JSON
     #[bpaf(long)]
     pub json: bool,
@@ -433,5 +430,3 @@ fn render_show(search_results: &[SearchResult], all: bool) -> Result<()> {
     println!("    {pkg_name} - {versions}");
     Ok(())
 }
-
-pub type ChannelRef = String;
