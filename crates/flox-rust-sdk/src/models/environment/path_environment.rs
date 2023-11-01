@@ -181,7 +181,7 @@ where
             .arg(NIX_BIN)
             .arg(&system)
             .arg(lockfile_path)
-            .arg(self.gc_roots_name(system))
+            .arg(self.gc_root_path(system)?)
             .output()
             .map_err(EnvironmentError2::BuildEnvCall)?;
 
@@ -354,8 +354,16 @@ impl<S: TransactionState> PathEnvironment<S> {
     }
 
     /// Path to the GC roots directory
-    pub fn gc_roots_name(&self, system: System) -> String {
-        [system, self.name().to_string()].join(".")
+    pub fn gc_root_path(&self, system: System) -> Result<PathBuf, EnvironmentError2> {
+        let run_dir = self
+            .path
+            .parent()
+            .ok_or(EnvironmentError2::DotFloxNotFound)?
+            .join(PATH_ENV_GCROOTS_DIR);
+        if !run_dir.exists() {
+            return Err(EnvironmentError2::GcRootsDirNotFound);
+        }
+        Ok(run_dir.join([system, self.name().to_string()].join(".")))
     }
 
     /// Path to the environment's catalog
