@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::ffi::{OsStr, OsString};
 use std::os::unix::ffi::OsStringExt;
 use std::path::{Path, PathBuf};
@@ -98,27 +99,90 @@ pub enum GitCommandError {
     BadExit(i32, String, String),
 }
 
+/// Configuration options for the git command
+///
+/// Used by [GitCommandProvider] to create commands with consistent options.
+#[derive(Clone, Debug, PartialEq)]
+pub struct GitCommandOptions {
+    exe: String,
+    config: BTreeMap<String, String>,
+    envs: BTreeMap<String, String>,
+}
+
+impl Default for GitCommandOptions {
+    /// By default, use the git binary bundled with flox
+    fn default() -> Self {
+        Self {
+            exe: String::from(env!("GIT_BIN")),
+            config: Default::default(),
+            envs: Default::default(),
+        }
+    }
+}
+
+/// Modifying options for the git command
+///
+/// Custom abstractions can be added on top of this through extension traits or functions.
+impl GitCommandOptions {
+    /// Create a new set of options with default values using the bundled git binary
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Set the git binary to use
+    pub fn set_exe<E: AsRef<str>>(&mut self, exe: E) {
+        self.exe = exe.as_ref().to_string();
+    }
+
+    /// set a git config flag that is passed to git
+    pub fn add_config_flag<V: AsRef<str>>(&mut self, key: &str, value: V) {
+        self.config
+            .insert(key.to_string(), value.as_ref().to_string());
+    }
+
+    /// set an environment variable that is passed to git
+    pub fn add_env_var<V: AsRef<str>>(&mut self, var: &str, value: V) {
+        self.envs
+            .insert(var.to_string(), value.as_ref().to_string());
+    }
+
+    /// Create a new [Command] with the current options prepopulated
+    ///
+    /// For all configuration flags the arguments `-c <flag>=<value>` are added.
+    /// All env vars are set on the command.
+    pub fn new_command(&self) -> Command {
+        let mut c = Command::new(&self.exe);
+
+        for (flag, value) in &self.config {
+            c.arg("-c");
+            c.arg(format!("{}={}", flag, value));
+        }
+
+        for (var, value) in &self.envs {
+            c.env(var, value);
+        }
+
+        c
+    }
+}
+
+/// A representation of a git repository using the `git` CLI
 #[derive(Clone, Debug, PartialEq)]
 pub struct GitCommandProvider {
+    options: GitCommandOptions,
     workdir: Option<PathBuf>,
     path: PathBuf,
 }
 
 impl GitCommandProvider {
-    fn new_command<P: AsRef<Path>>(w: &Option<P>) -> Command {
-        let mut c = Command::new(env!("GIT_BIN"));
-
-        if let Some(workdir) = w.as_ref() {
-            c.arg("-C");
-            c.arg(workdir.as_ref());
-        }
-
-        c.arg("-c");
-        c.arg("user.name=Flox User");
-        c.arg("-c");
-        c.arg("user.email=floxuser@example.invalid");
-
-        c
+    /// Create a new [Command] with the current [GitCommandOptions]
+    /// and the current working directory set to the path of the repo.
+    ///
+    /// In most cases this should be used over [GitCommandProvider::new_command]
+    pub fn new_command(&self) -> Command {
+        let mut command = self.options.new_command();
+        command.args(["-C", self.path.to_str().unwrap()]);
+        command
     }
 
     fn run_command(command: &mut Command) -> Result<OsString, GitCommandError> {
@@ -140,66 +204,85 @@ impl GitCommandProvider {
     }
 
     /// Open a repo, erroring if `path` is not a repo or is a subdirectory of a repo
-    //
-    // TODO should share more code with discover?
-    pub fn open<P: AsRef<Path>>(path: P) -> Result<Self, GitCommandOpenError> {
-        let out_str = GitCommandProvider::run_command(
-            GitCommandProvider::new_command(&Some(&path))
+    pub fn open_with<P: AsRef<Path>>(
+        options: GitCommandOptions,
+        path: P,
+    ) -> Result<Self, GitCommandOpenError> {
+        let bare = {
+            let mut command = options.new_command();
+            command
+                .args(["-C", path.as_ref().to_str().unwrap()])
                 .arg("rev-parse")
-                .arg("--is-bare-repository"),
-        )?
-        .to_str()
-        .ok_or(GitCommandDiscoverError::GitDirEncoding)?
-        .to_string();
+                .arg("--is-bare-repository");
 
-        let bare = out_str
-            .trim()
-            .parse::<bool>()
-            .map_err(|_| GitCommandDiscoverError::UnexpectedOutput(out_str))?;
-
-        let toplevel_or_git_dir = if bare {
-            GitCommandProvider::run_command(
-                GitCommandProvider::new_command(&Some(&path))
-                    .arg("rev-parse")
-                    .arg("--absolute-git-dir"),
-            )?
-        } else {
-            GitCommandProvider::run_command(
-                GitCommandProvider::new_command(&Some(&path))
-                    .arg("rev-parse")
-                    .arg("--show-toplevel"),
-            )?
-        };
-
-        let canonicalized = PathBuf::from(
-            toplevel_or_git_dir
+            let out_str = GitCommandProvider::run_command(&mut command)?
                 .to_str()
                 .ok_or(GitCommandDiscoverError::GitDirEncoding)?
-                .trim(),
-        )
-        .canonicalize()
-        .map_err(GitCommandOpenError::Canonicalize)?;
+                .to_string();
 
-        let path = path.as_ref().to_path_buf();
+            out_str
+                .trim()
+                .parse::<bool>()
+                .map_err(|_| GitCommandDiscoverError::UnexpectedOutput(out_str))?
+        };
 
-        if canonicalized
-            != path
+        // resolved and canonicalized path to the git repo
+        let resolved_path = {
+            let toplevel_or_git_dir = if bare {
+                let mut command = options.new_command();
+
+                command
+                    .args(["-C", path.as_ref().to_str().unwrap()])
+                    .arg("rev-parse")
+                    .arg("--absolute-git-dir");
+                GitCommandProvider::run_command(&mut command)?
+            } else {
+                let mut command = options.new_command();
+                command
+                    .args(["-C", path.as_ref().to_str().unwrap()])
+                    .arg("rev-parse")
+                    .arg("--show-toplevel");
+                GitCommandProvider::run_command(&mut command)?
+            };
+
+            let toplevel_or_git_dir = toplevel_or_git_dir
+                .to_str()
+                .ok_or(GitCommandDiscoverError::GitDirEncoding)?
+                .trim();
+
+            PathBuf::from(toplevel_or_git_dir)
                 .canonicalize()
                 .map_err(GitCommandOpenError::Canonicalize)?
-        {
+        };
+
+        let path = path
+            .as_ref()
+            .canonicalize()
+            .map_err(GitCommandOpenError::Canonicalize)?;
+
+        if resolved_path != path {
             return Err(GitCommandOpenError::Subdirectory);
         }
 
         Ok(GitCommandProvider {
+            options,
             workdir: (!bare).then(|| path.clone()),
             path,
         })
     }
 
+    /// Open a repo with default options,
+    /// erroring if `path` is not a repo or is a subdirectory of a repo
+    //
+    // TODO should share more code with discover?
+    pub fn open<P: AsRef<Path>>(path: P) -> Result<Self, GitCommandOpenError> {
+        GitCommandProvider::open_with(GitCommandOptions::default(), path)
+    }
+
     /// Checks if the specified revision identifies a commit in the repo
     pub fn contains_commit(&self, rev: &str) -> Result<bool, GitCommandError> {
         let result = GitCommandProvider::run_command(
-            GitCommandProvider::new_command(&Some(&self.path))
+            self.new_command()
                 .arg("rev-parse")
                 .arg("--quiet")
                 .arg("--verify")
@@ -227,7 +310,7 @@ impl GitCommandProvider {
         }
 
         let result = GitCommandProvider::run_command(
-            GitCommandProvider::new_command(&Some(&self.path))
+            self.new_command()
                 .arg("merge-base")
                 .arg("--is-ancestor")
                 .arg(commit)
@@ -246,19 +329,14 @@ impl GitCommandProvider {
 
     /// Create branch at a specified revision
     pub fn create_branch(&self, name: &str, rev: &str) -> Result<(), GitCommandError> {
-        GitCommandProvider::run_command(
-            GitCommandProvider::new_command(&Some(&self.path))
-                .arg("branch")
-                .arg(name)
-                .arg(rev),
-        )?;
+        GitCommandProvider::run_command(self.new_command().arg("branch").arg(name).arg(rev))?;
         Ok(())
     }
 
     /// Reset branch to rev or create it if it does not exist
     pub fn reset_branch(&self, name: &str, rev: &str) -> Result<(), GitCommandError> {
         GitCommandProvider::run_command(
-            GitCommandProvider::new_command(&Some(&self.path))
+            self.new_command()
                 .arg("branch")
                 .arg("--force")
                 .arg(name)
@@ -270,7 +348,7 @@ impl GitCommandProvider {
     /// Return the hash of a branch or error if it does not exist
     pub fn branch_hash(&self, name: &str) -> Result<String, GitCommandBranchHashError> {
         let result = GitCommandProvider::run_command(
-            GitCommandProvider::new_command(&Some(&self.path))
+            self.new_command()
                 .arg("show-ref")
                 .arg("--hash")
                 .arg(format!("refs/heads/{}", name)),
@@ -297,13 +375,17 @@ impl GitCommandProvider {
         }
     }
 
-    pub fn clone_branch(
+    /// Clone a branch from a remote repository
+    pub fn clone_branch_with(
+        options: GitCommandOptions,
         origin: impl AsRef<OsStr>,
         path: impl AsRef<Path>,
-        branch: &str,
+        branch: impl AsRef<OsStr>,
         bare: bool,
     ) -> Result<GitCommandProvider, GitCommandError> {
-        let mut command = GitCommandProvider::new_command(&Some(&path));
+        let mut command = options.new_command();
+        command.args(["-C", path.as_ref().to_str().unwrap()]);
+
         command
             .arg("clone")
             .arg("--single-branch")
@@ -318,15 +400,26 @@ impl GitCommandProvider {
         GitCommandProvider::run_command(&mut command)?;
 
         Ok(GitCommandProvider {
+            options,
             workdir: (!bare).then(|| path.as_ref().to_path_buf()),
             path: path.as_ref().into(),
         })
     }
 
+    /// Clone a branch from a remote repository using default options
+    pub fn clone_branch(
+        origin: impl AsRef<OsStr>,
+        path: impl AsRef<Path>,
+        branch: &str,
+        bare: bool,
+    ) -> Result<GitCommandProvider, GitCommandError> {
+        Self::clone_branch_with(GitCommandOptions::default(), origin, path, branch, bare)
+    }
+
     /// Fetch branch and update the corresponding local ref
     pub fn fetch_branch(&self, repository: &str, branch: &str) -> Result<(), GitCommandError> {
         GitCommandProvider::run_command(
-            GitCommandProvider::new_command(&Some(&self.path))
+            self.new_command()
                 .arg("fetch")
                 .arg(repository)
                 .arg(format!("refs/heads/{branch}:refs/heads/{branch}")),
@@ -336,12 +429,33 @@ impl GitCommandProvider {
 
     pub fn fetch_ref(&self, repository: &str, r#ref: &str) -> Result<(), GitCommandError> {
         GitCommandProvider::run_command(
-            GitCommandProvider::new_command(&Some(&self.path))
-                .arg("fetch")
-                .arg(repository)
-                .arg(r#ref),
+            self.new_command().arg("fetch").arg(repository).arg(r#ref),
         )?;
         Ok(())
+    }
+
+    /// Update the options used by this provider.
+    ///
+    /// It is preferable to set the options when creating the provider
+    /// via [GitCommandProvider::open_with] or [GitCommandProvider::clone_branch_with].
+    pub fn set_options(&mut self, options: GitCommandOptions) {
+        self.options = options;
+    }
+
+    /// Get the options used by this provider
+    ///
+    /// This can be used to create a new provider with the same options
+    /// or modify the options of this provider.
+    pub fn get_options(&self) -> &GitCommandOptions {
+        &self.options
+    }
+
+    /// Get a mutable reference to the options used by this provider
+    ///
+    /// This can be used to create a new provider with the same options
+    /// or modify the options of this provider without cloning.
+    pub fn get_options_mut(&mut self) -> &mut GitCommandOptions {
+        &mut self.options
     }
 }
 
@@ -415,9 +529,13 @@ impl GitProvider for GitCommandProvider {
     type SetOriginError = GitCommandError;
     type ShowError = GitCommandError;
 
+    /// Discover a git repository at `path` and return a provider with default options
     fn discover<P: AsRef<Path>>(path: P) -> Result<Self, Self::DiscoverError> {
+        let options = GitCommandOptions::default();
         let out_str = GitCommandProvider::run_command(
-            GitCommandProvider::new_command(&Some(&path))
+            options
+                .new_command()
+                .current_dir(&path)
                 .arg("rev-parse")
                 .arg("--is-bare-repository"),
         )?
@@ -432,13 +550,16 @@ impl GitProvider for GitCommandProvider {
 
         if bare {
             return Ok(GitCommandProvider {
+                options: GitCommandOptions::default(),
                 workdir: None,
                 path: path.as_ref().to_path_buf(),
             });
         }
 
         let out = GitCommandProvider::run_command(
-            GitCommandProvider::new_command(&Some(&path))
+            options
+                .new_command()
+                .current_dir(&path)
                 .arg("rev-parse")
                 .arg("--show-toplevel"),
         )?;
@@ -450,13 +571,17 @@ impl GitProvider for GitCommandProvider {
         let workdir = PathBuf::from(out_str.trim());
 
         Ok(GitCommandProvider {
+            options,
             workdir: Some(workdir.clone()),
             path: workdir,
         })
     }
 
     fn init<P: AsRef<Path>>(path: P, bare: bool) -> Result<GitCommandProvider, Self::InitError> {
-        let mut command = GitCommandProvider::new_command(&Some(&path));
+        let options = GitCommandOptions::default();
+        let mut command = options.new_command();
+        command.args(["-C", path.as_ref().to_str().unwrap()]);
+
         command.arg("init");
         if bare {
             command.arg("--bare");
@@ -465,6 +590,7 @@ impl GitProvider for GitCommandProvider {
         let _out = GitCommandProvider::run_command(&mut command)?;
 
         Ok(GitCommandProvider {
+            options,
             workdir: Some(path.as_ref().into()),
             path: path.as_ref().into(),
         })
@@ -475,7 +601,9 @@ impl GitProvider for GitCommandProvider {
         path: P,
         bare: bool,
     ) -> Result<Self, Self::CloneError> {
-        let mut command = GitCommandProvider::new_command(&Some(&path));
+        let options = GitCommandOptions::default();
+        let mut command = options.new_command();
+        command.current_dir(&path);
         command.arg("clone");
         if bare {
             command.arg("--bare");
@@ -486,13 +614,14 @@ impl GitProvider for GitCommandProvider {
 
         let _out = GitCommandProvider::run_command(&mut command)?;
         Ok(GitCommandProvider {
+            options,
             workdir: (!bare).then(|| path.as_ref().to_path_buf()),
             path: path.as_ref().into(),
         })
     }
 
     fn checkout(&self, name: &str, orphan: bool) -> Result<(), Self::CheckoutError> {
-        let mut command = GitCommandProvider::new_command(&self.workdir());
+        let mut command = self.new_command();
         command.arg("checkout");
         if orphan {
             command.arg("--orphan");
@@ -506,7 +635,7 @@ impl GitProvider for GitCommandProvider {
 
     fn add_remote(&self, origin_name: &str, url: &str) -> Result<(), Self::AddRemoteError> {
         let _out = GitCommandProvider::run_command(
-            GitCommandProvider::new_command(&self.workdir)
+            self.new_command()
                 .arg("remote")
                 .arg("add")
                 .arg(origin_name)
@@ -518,17 +647,14 @@ impl GitProvider for GitCommandProvider {
 
     fn rename_branch(&self, new_name: &str) -> Result<(), Self::RenameError> {
         let _out = GitCommandProvider::run_command(
-            GitCommandProvider::new_command(&self.workdir)
-                .arg("branch")
-                .arg("-m")
-                .arg(new_name),
+            self.new_command().arg("branch").arg("-m").arg(new_name),
         )?;
         Ok(())
     }
 
     fn set_origin(&self, branch: &str, origin_name: &str) -> Result<(), Self::SetOriginError> {
         let _out = GitCommandProvider::run_command(
-            GitCommandProvider::new_command(&self.workdir)
+            self.new_command()
                 .arg("branch")
                 .arg("--set-upstream-to")
                 .arg(format!("{origin_name}/{branch}")),
@@ -555,7 +681,7 @@ impl GitProvider for GitCommandProvider {
     fn get_origin(&self) -> Result<OriginInfo, Self::GetOriginError> {
         let (remote_name, remote_branch) = {
             let reference = GitCommandProvider::run_command(
-                GitCommandProvider::new_command(&self.workdir)
+                self.new_command()
                     .arg("rev-parse")
                     .arg("--abbrev-ref")
                     .arg("--symbolic-full-name")
@@ -568,7 +694,7 @@ impl GitProvider for GitCommandProvider {
         };
 
         let url = GitCommandProvider::run_command(
-            GitCommandProvider::new_command(&self.workdir)
+            self.new_command()
                 .arg("remote")
                 .arg("get-url")
                 .arg(&remote_name),
@@ -579,7 +705,7 @@ impl GitProvider for GitCommandProvider {
 
         let remote_revision = {
             let remote_revision = GitCommandProvider::run_command(
-                GitCommandProvider::new_command(&self.workdir)
+                self.new_command()
                     .arg("ls-remote")
                     .arg(&remote_name)
                     .arg(&remote_branch),
@@ -604,7 +730,7 @@ impl GitProvider for GitCommandProvider {
 
     fn mv(&self, from: &Path, to: &Path) -> Result<(), Self::MvError> {
         let _out = GitCommandProvider::run_command(
-            GitCommandProvider::new_command(&self.workdir)
+            self.new_command()
                 .arg("mv")
                 .arg(format!("{}", from.as_os_str().to_string_lossy()))
                 .arg(format!("{}", to.as_os_str().to_string_lossy())),
@@ -620,7 +746,7 @@ impl GitProvider for GitCommandProvider {
         force: bool,
         cached: bool,
     ) -> Result<(), Self::MvError> {
-        let mut command = GitCommandProvider::new_command(&self.workdir);
+        let mut command = self.new_command();
 
         command.arg("rm");
 
@@ -644,7 +770,7 @@ impl GitProvider for GitCommandProvider {
     }
 
     fn add(&self, paths: &[&Path]) -> Result<(), Self::MvError> {
-        let mut command = GitCommandProvider::new_command(&self.workdir);
+        let mut command = self.new_command();
         command.arg("add");
         for path in paths {
             command.arg(path);
@@ -656,7 +782,7 @@ impl GitProvider for GitCommandProvider {
     }
 
     fn commit(&self, message: &str) -> Result<(), Self::CommitError> {
-        let mut command = GitCommandProvider::new_command(&self.workdir());
+        let mut command = self.new_command();
         command.arg("commit");
         command.args(["-m", message]);
 
@@ -665,7 +791,7 @@ impl GitProvider for GitCommandProvider {
     }
 
     fn show(&self, object: &str) -> Result<OsString, Self::ShowError> {
-        let mut command = GitCommandProvider::new_command(&Some(&self.path));
+        let mut command = self.new_command();
         command.arg("show");
         command.arg(object);
 
@@ -673,7 +799,7 @@ impl GitProvider for GitCommandProvider {
     }
 
     fn list_branches(&self) -> Result<Vec<BranchInfo>, Self::ListBranchesError> {
-        let mut command = GitCommandProvider::new_command(&Some(&self.path));
+        let mut command = self.new_command();
         command.arg("branch");
         command.args(["--all", "--verbose"]);
 
@@ -721,16 +847,12 @@ impl GitProvider for GitCommandProvider {
     }
 
     fn fetch(&self) -> Result<(), Self::FetchError> {
-        GitCommandProvider::run_command(
-            GitCommandProvider::new_command(&self.workdir.as_deref().or(Some(&self.path)))
-                .arg("fetch")
-                .arg("--all"),
-        )?;
+        GitCommandProvider::run_command(self.new_command().arg("fetch").arg("--all"))?;
         Ok(())
     }
 
     fn push(&self, remote: &str) -> Result<(), Self::PushError> {
-        let mut command = GitCommandProvider::new_command(&self.workdir());
+        let mut command = self.new_command();
         command.arg("push");
         command.arg("-u");
         command.arg(remote);
@@ -759,6 +881,7 @@ pub mod tests {
     /// A provider with path set to /does-not-exist for use in tests
     pub fn mock_provider() -> GitCommandProvider {
         GitCommandProvider {
+            options: GitCommandOptions::default(),
             workdir: None,
             path: PathBuf::from("/does-not-exist"),
         }
@@ -785,8 +908,9 @@ pub mod tests {
         assert_eq!(
             GitCommandProvider::open(&path).unwrap(),
             GitCommandProvider {
-                workdir: Some(path.clone()),
-                path
+                options: GitCommandOptions::default(),
+                workdir: Some(path.canonicalize().unwrap()),
+                path: path.canonicalize().unwrap()
             }
         );
     }
@@ -799,8 +923,9 @@ pub mod tests {
         assert_eq!(
             GitCommandProvider::open(&path).unwrap(),
             GitCommandProvider {
+                options: GitCommandOptions::default(),
                 workdir: None,
-                path
+                path: path.canonicalize().unwrap()
             }
         );
     }
