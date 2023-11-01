@@ -26,7 +26,7 @@ use super::{
     MANIFEST_FILENAME,
 };
 use crate::environment::NIX_BIN;
-use crate::models::environment::{BUILD_ENV, CATALOG_JSON, PATH_ENV_GCROOTS_DIR};
+use crate::models::environment::{BUILD_ENV_BIN, CATALOG_JSON, PATH_ENV_GCROOTS_DIR};
 use crate::models::environment_ref::{EnvironmentName, EnvironmentOwner, EnvironmentRef};
 use crate::models::manifest::{insert_packages, remove_packages};
 
@@ -181,7 +181,7 @@ where
             "building environment: system={system}, lockfilePath={}",
             lockfile_path.display()
         );
-        let build_output = std::process::Command::new(BUILD_ENV)
+        let build_output = std::process::Command::new(BUILD_ENV_BIN)
             .arg(NIX_BIN)
             .arg(&system)
             .arg(lockfile_path)

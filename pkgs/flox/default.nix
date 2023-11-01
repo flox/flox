@@ -46,7 +46,7 @@
       GH_BIN = "${gh}/bin/gh";
       FLOX_SH_PATH = flox-bash.outPath;
       ENV_FROM_LOCKFILE_PATH = ../../assets/mkEnv/env-from-lockfile.nix;
-      BUILD_ENV = writeScript "build-env" ''
+      BUILD_ENV_BIN = writeScript "build-env" ''
         NIX="$1";
         SYSTEM="$2";
         LOCKFILE_PATH="$3";

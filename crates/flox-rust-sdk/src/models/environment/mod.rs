@@ -40,7 +40,7 @@ pub const DEFAULT_KEEP_GENERATIONS: usize = 10;
 pub const DEFAULT_MAX_AGE_DAYS: u32 = 90;
 
 // Path to the executable that builds environments
-const BUILD_ENV: &'_ str = env!("BUILD_ENV");
+const BUILD_ENV_BIN: &'_ str = env!("BUILD_ENV_BIN");
 
 pub enum InstalledPackage {
     Catalog(FloxTriple, CatalogEntry),
