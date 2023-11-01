@@ -26,13 +26,15 @@
   pkgsFor,
   floxVersion,
   flox-pkgdb,
+  writeScript,
+  system,
 }: let
   # crane (<https://crane.dev/>) library for building rust packages
   craneLib = inputs.crane.mkLib pkgsFor;
 
   # build time environment variables
   envs =
-    {
+    rec {
       # 3rd party CLIs
       # we want to use our own binaries by absolute path
       # rather than relying on or modifying the user's `PATH` variable
@@ -43,6 +45,14 @@
       FLOX_GH_BIN = "${flox-gh}/bin/flox-gh";
       GH_BIN = "${gh}/bin/gh";
       FLOX_SH_PATH = flox-bash.outPath;
+      ENV_FROM_LOCKFILE_PATH = ../../assets/mkEnv/env-from-lockfile.nix;
+      BUILD_ENV = writeScript "build-env" ''
+        NIX="$1";
+        SYSTEM="$2";
+        LOCKFILE_PATH="$3";
+        OUTLINK_PREFIX="$4";
+        "$NIX" build --file ${ENV_FROM_LOCKFILE_PATH} --out-link "$OUTLINK_PREFIX" --print-out-paths --arg lockfilePath "$LOCKFILE_PATH" --argstr system "$SYSTEM"
+      '';
 
       # Modified nix completion scripts
       # used to pass through nix completion ability for `flox nix *`

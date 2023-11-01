@@ -3,6 +3,7 @@ use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
+use anyhow::bail;
 use async_trait::async_trait;
 use flox_types::catalog::{EnvCatalog, System};
 use log::debug;
@@ -25,9 +26,9 @@ use super::{
     ENVIRONMENT_POINTER_FILENAME,
     MANIFEST_FILENAME,
 };
-use crate::flox::Flox;
-use crate::models::environment::CATALOG_JSON;
-use crate::models::environment_ref::{EnvironmentName, EnvironmentRef};
+use crate::environment::NIX_BIN;
+use crate::models::environment::{BUILD_ENV, CATALOG_JSON, PATH_ENV_GCROOTS_DIR};
+use crate::models::environment_ref::{EnvironmentName, EnvironmentOwner, EnvironmentRef};
 use crate::models::manifest::{insert_packages, remove_packages};
 use crate::utils::copy_file_without_permissions;
 
@@ -44,7 +45,7 @@ const ENVIRONMENT_DIR_NAME: &'_ str = "env";
 /// The transaction status is captured via the `state` field.
 #[derive(Debug)]
 pub struct PathEnvironment<S> {
-    /// Absolute path to the environment, typically within `<...>/.flox/name`
+    /// Absolute path to the environment, typically `<...>/.flox/env`
     pub path: PathBuf,
 
     /// The temporary directory that this environment will use during transactions
@@ -161,37 +162,33 @@ where
     /// into the environment to avoid relocking.
     async fn build(
         &mut self,
-        nix: &NixCommandLine,
+        _nix: &NixCommandLine,
         system: &System,
     ) -> Result<(), EnvironmentError2> {
-        debug!("building with nix ....");
-
-        let out_link = self.out_link(system);
-
-        let build = Build {
-            installables: [self.flake_attribute(system).into()].into(),
-            eval: runix::arguments::eval::EvaluationArgs {
-                impure: true.into(),
-                ..Default::default()
-            },
-            build: BuildArgs {
-                out_link: Some(out_link.clone().into()),
-                ..Default::default()
-            },
-            ..Default::default()
+        debug!("building project environment at {}", self.path.display());
+        let manifest_path = self.manifest_path();
+        let lockfile_path = {
+            // TODO: generate a lockfile with pkgdb
+            manifest_path.parent().unwrap().join("dummy_lockfile.json")
         };
+        debug!("generated lockfile: {}", lockfile_path.display());
 
-        build
-            .run(nix, &Default::default())
-            .await
-            .map_err(EnvironmentError2::Build)?;
+        debug!(
+            "building environment: system={system}, lockfilePath={}",
+            lockfile_path.display()
+        );
+        let build_output = std::process::Command::new(BUILD_ENV)
+            .arg(NIX_BIN)
+            .arg(&system)
+            .arg(lockfile_path)
+            .arg(self.gc_roots_name(system))
+            .output()
+            .map_err(EnvironmentError2::BuildEnvCall)?;
 
-        // environments potentially update their catalog in the process of a build because unlocked
-        // packages (e.g. nixpkgs-flox.hello) must be pinned to a specific version which is added to
-        // the catalog
-        let result_catalog_json = out_link.join(CATALOG_JSON);
-        copy_file_without_permissions(result_catalog_json, self.catalog_path())
-            .map_err(EnvironmentError2::CopyFile)?;
+        if !build_output.status.success() {
+            let stderr = String::from_utf8_lossy(&build_output.stderr);
+            return Err(EnvironmentError2::BuildEnv(stderr.to_string()));
+        }
 
         Ok(())
     }
@@ -356,6 +353,11 @@ impl<S: TransactionState> PathEnvironment<S> {
         self.path.join(MANIFEST_FILENAME)
     }
 
+    /// Path to the GC roots directory
+    pub fn gc_roots_name(&self, system: System) -> String {
+        [system, self.name().to_string()].join(".")
+    }
+
     /// Path to the environment's catalog
     fn catalog_path(&self) -> PathBuf {
         self.path.join("pkgs").join("default").join(CATALOG_JSON)
@@ -400,8 +402,7 @@ impl PathEnvironment<Original> {
             .canonicalize()
             .map_err(EnvironmentError2::EnvCanonicalize)?;
 
-        // TODO: replace with checks for manifest file once we transition
-        if !env_path.join("flake.nix").exists() {
+        if !env_path.join(MANIFEST_FILENAME).exists() {
             Err(EnvironmentError2::DirectoryNotAnEnv)?
         }
 
