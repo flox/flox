@@ -156,6 +156,7 @@ impl FloxArgs {
             temp_dir: temp_dir_path.clone(),
             system: env!("NIX_TARGET_SYSTEM").to_string(),
             uuid: init_uuid(&config.flox.data_dir).await?,
+            floxhub_token: config.flox.floxhub_token.clone(),
         };
 
         // TODO: revisit this when we discussed floxmeta's role to contribute to config/channels

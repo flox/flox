@@ -75,6 +75,7 @@ impl FloxCompletionExt for Flox {
             netrc_file,
             access_tokens,
             uuid: uuid::Uuid::nil(),
+            floxhub_token: config.flox.floxhub_token,
         })
     }
 
