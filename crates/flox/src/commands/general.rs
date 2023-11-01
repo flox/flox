@@ -85,26 +85,6 @@ impl ConfigArgs {
     /// handle config flags like commands
     pub async fn handle(&self, config: Config, flox: Flox) -> Result<()> {
         subcommand_metric!("config");
-
-        /// wrapper around [Config::write_to]
-        async fn update_config<V: Serialize>(
-            config_dir: &Path,
-            temp_dir: &Path,
-            key: impl AsRef<str>,
-            value: Option<V>,
-        ) -> Result<()> {
-            let query = Key::parse(key.as_ref()).context("Could not parse key")?;
-
-            let config_file_path = config_dir.join(FLOX_CONFIG_FILE);
-
-            match Config::write_to_in(config_file_path, temp_dir, &query, value) {
-                err @ Err(ReadWriteError::ReadConfig(_)) => err.context("Could not read current config file.\nPlease verify the format or reset using `flox config --reset`")?,
-                err @ Err(_) => err?,
-                Ok(()) => ()
-            }
-            Ok(())
-        }
-
         match self {
             ConfigArgs::List => println!("{}", config.get(&[])?),
             ConfigArgs::Reset => {
@@ -116,16 +96,16 @@ impl ConfigArgs {
                 }
             },
             ConfigArgs::Set(ConfigSet { key, value, .. }) => {
-                update_config(&flox.config_dir, &flox.temp_dir, key, Some(value)).await?
+                update_config(&flox.config_dir, &flox.temp_dir, key, Some(value))?
             },
             ConfigArgs::SetNumber(ConfigSetNumber { key, value, .. }) => {
-                update_config(&flox.config_dir, &flox.temp_dir, key, Some(value)).await?
+                update_config(&flox.config_dir, &flox.temp_dir, key, Some(value))?
             },
             ConfigArgs::SetBool(ConfigSetBool { key, value, .. }) => {
-                update_config(&flox.config_dir, &flox.temp_dir, key, Some(value)).await?
+                update_config(&flox.config_dir, &flox.temp_dir, key, Some(value))?
             },
             ConfigArgs::Delete(ConfigDelete { key, .. }) => {
-                update_config::<()>(&flox.config_dir, &flox.temp_dir, key, None).await?
+                update_config::<()>(&flox.config_dir, &flox.temp_dir, key, None)?
             },
         }
         Ok(())
@@ -182,6 +162,25 @@ pub struct ConfigDelete {
     /// Configuration key
     #[bpaf(long("delete"), argument("key"))]
     key: String,
+}
+
+/// wrapper around [Config::write_to]
+pub(super) fn update_config<V: Serialize>(
+    config_dir: &Path,
+    temp_dir: &Path,
+    key: impl AsRef<str>,
+    value: Option<V>,
+) -> Result<()> {
+    let query = Key::parse(key.as_ref()).context("Could not parse key")?;
+
+    let config_file_path = config_dir.join(FLOX_CONFIG_FILE);
+
+    match Config::write_to_in(config_file_path, temp_dir, &query, value) {
+                err @ Err(ReadWriteError::ReadConfig(_)) => err.context("Could not read current config file.\nPlease verify the format or reset using `flox config --reset`")?,
+                err @ Err(_) => err?,
+                Ok(()) => ()
+            }
+    Ok(())
 }
 
 /// floxHub authentication commands

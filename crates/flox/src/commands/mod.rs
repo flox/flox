@@ -160,7 +160,7 @@ impl FloxArgs {
 
         // TODO: revisit this when we discussed floxmeta's role to contribute to config/channels
         // region: revisit reg. channels
-        let floxmeta = match boostrap_flox.floxmeta(DEFAULT_OWNER).await {
+        let floxmeta = match boostrap_flox.floxmeta(DEFAULT_OWNER) {
             Ok(floxmeta) => floxmeta,
             Err(GetFloxmetaError::NotFound(_)) => {
                 Floxmeta::create_floxmeta(&boostrap_flox, DEFAULT_OWNER)
@@ -173,7 +173,6 @@ impl FloxArgs {
         //  Floxmeta::create_floxmeta creates an intial user_meta
         let user_meta = floxmeta
             .user_meta()
-            .await
             .context("Could not get user metadata")?;
 
         let user_channels = user_meta.channels.unwrap_or_default();

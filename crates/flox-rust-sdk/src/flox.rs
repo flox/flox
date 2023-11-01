@@ -154,8 +154,8 @@ impl Flox {
     //       N.B.: Decide whether we want to keep the `Flox.<model>` API
     //       to create instances of subsystem models
     // region: revisit reg. channels
-    pub async fn floxmeta(&self, owner: &str) -> Result<Floxmeta<ReadOnly>, GetFloxmetaError> {
-        Floxmeta::get_floxmeta(self, owner).await
+    pub fn floxmeta(&self, owner: &str) -> Result<Floxmeta<ReadOnly>, GetFloxmetaError> {
+        Floxmeta::get_floxmeta(self, owner)
     }
 
     // endregion: revisit reg. channels
