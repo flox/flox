@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::ffi::{OsStr, OsString};
 use std::os::unix::ffi::OsStringExt;
 use std::path::{Path, PathBuf};
@@ -98,6 +99,78 @@ pub enum GitCommandError {
     BadExit(i32, String, String),
 }
 
+/// Configuration options for the git command
+///
+/// Used by [GitCommandProvider] to create commands with consistent options.
+#[derive(Clone, Debug, PartialEq)]
+pub struct GitCommandOptions {
+    exe: String,
+    config: BTreeMap<String, String>,
+    envs: BTreeMap<String, String>,
+}
+
+impl Default for GitCommandOptions {
+    /// By default, use the git binary bundled with flox
+    fn default() -> Self {
+        Self {
+            exe: String::from(env!("GIT_BIN")),
+            config: Default::default(),
+            envs: Default::default(),
+        }
+    }
+}
+
+/// Modifying options for the git command
+///
+/// Custom abstractions can be added on top of this through extension traits or functions.
+impl GitCommandOptions {
+    /// Create a new set of options with default values using the bundled git binary
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Set the git binary to use
+    pub fn set_exe<E: AsRef<str>>(&mut self, exe: E) {
+        self.exe = exe.as_ref().to_string();
+    }
+
+    /// set a git config flag that is passed to git
+    pub fn add_config_flag<V: AsRef<str>>(&mut self, key: &str, value: V) {
+        self.config
+            .insert(key.to_string(), value.as_ref().to_string());
+    }
+
+    /// set an environment variable that is passed to git
+    pub fn add_env_var<V: AsRef<str>>(&mut self, var: &str, value: V) {
+        self.envs
+            .insert(var.to_string(), value.as_ref().to_string());
+    }
+
+    /// Create a new [Command] with the current options prepopulated
+    ///
+    /// If not [None] the workdir is set by adding `-C <workdir>` arguments to the command.
+    /// For all configuration flags the arguments `-c <flag>=<value>` are added.
+    /// All env vars are set on the command.
+    pub fn new_command<P: AsRef<Path>>(&self, workdir: Option<P>) -> Command {
+        let mut c = Command::new(&self.exe);
+
+        if let Some(workdir) = workdir {
+            c.arg("-C");
+            c.arg(workdir.as_ref());
+        }
+
+        for (flag, value) in &self.config {
+            c.arg("-c");
+            c.arg(format!("{}={}", flag, value));
+        }
+
+        for (var, value) in &self.envs {
+            c.env(var, value);
+        }
+
+        c
+    }
+}
 #[derive(Clone, Debug, PartialEq)]
 pub struct GitCommandProvider {
     workdir: Option<PathBuf>,
