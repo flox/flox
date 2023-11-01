@@ -63,7 +63,7 @@ teardown() {
 @test "'build-env' builds fresh environment" {
   run "$FLOX_CLI" init;
   assert_success;
-  run "$BUILD_ENV" "$NIX_BIN" "$NIX_SYSTEM" "$PROJECT_DIR/.flox/env/dummy_lockfile.json" "$PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME";
+  run "$BUILD_ENV_BIN" "$NIX_BIN" "$NIX_SYSTEM" "$PROJECT_DIR/.flox/env/dummy_lockfile.json" "$PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME";
   assert_success;
   run [ -d "$PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME" ];
   assert_success;
