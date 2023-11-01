@@ -12,7 +12,7 @@ use thiserror::Error;
 
 use super::{Environment, EnvironmentError2, InstallationAttempt, ManagedPointer};
 use crate::flox::Flox;
-use crate::models::environment_ref::{EnvironmentName, EnvironmentOwner, EnvironmentRef};
+use crate::models::environment_ref::{EnvironmentName, EnvironmentOwner};
 use crate::models::floxmetav2::{FloxmetaV2, FloxmetaV2Error};
 use crate::providers::git::{GitCommandBranchHashError, GitCommandError};
 
@@ -125,12 +125,6 @@ impl Environment for ManagedEnvironment {
         nix: &NixCommandLine,
         system: System,
     ) -> Result<EnvCatalog, EnvironmentError2> {
-        todo!()
-    }
-
-    /// Return the [EnvironmentRef] for the environment for identification
-    #[allow(unused)]
-    fn environment_ref(&self) -> EnvironmentRef {
         todo!()
     }
 
