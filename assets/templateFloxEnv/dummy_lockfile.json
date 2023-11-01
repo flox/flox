@@ -200,7 +200,8 @@
                 },
                 "subtrees": [
                     "legacyPackages"
-                ]
+                ],
+                "url": "github:NixOS/nixpkgs/e8039594435c68eb4f780f3e9bf3972a7399c4b1"
             }
         },
         "priority": []
