@@ -77,9 +77,20 @@ impl FloxmetaV2 {
         Self::clone_to(flox, pointer, floxmeta_dir(flox, &pointer.owner))
     }
 
-    /// Open the floxmeta repository for the given user
-    /// and ensure a branch exists for the given environment.
-    pub fn open(flox: &Flox, pointer: &ManagedPointer) -> Result<Self, FloxmetaV2Error> {
+    /// Open a floxmeta repository at a given path
+    /// and ensure a branch exists for a given environment.
+    ///
+    /// This is useful for testing and isolated remote operations.
+    /// Branch name, token and host are however still derived from the environment pointer
+    /// and metadata provided by the flox reference.
+    /// Ideally, these could be passed as parameters.
+    ///
+    /// In most cases, you want to use [`FloxmetaV2::open`] instead which provides the flox defaults.
+    pub fn open_at(
+        flox: &Flox,
+        pointer: &ManagedPointer,
+        user_floxmeta_dir: impl AsRef<Path>,
+    ) -> Result<Self, FloxmetaV2Error> {
         let token = flox
             .floxhub_token
             .as_ref()
@@ -87,9 +98,7 @@ impl FloxmetaV2 {
 
         let git_options = floxmeta_git_options(&flox.floxhub_host, token);
 
-        let user_floxmeta_dir = floxmeta_dir(flox, &pointer.owner);
-
-        if !user_floxmeta_dir.exists() {
+        if !user_floxmeta_dir.as_ref().exists() {
             Err(FloxmetaV2Error::NotFound(pointer.owner.to_string()))?
         }
 
@@ -105,6 +114,14 @@ impl FloxmetaV2 {
         }
 
         Ok(FloxmetaV2 { git })
+    }
+
+    /// Open a floxmeta repository for a given user
+    ///
+    /// Like [`FloxmetaV2::open_at`], but uses the system path for floxmeta repositories in XDG_DATA_HOME.
+    pub fn open(flox: &Flox, pointer: &ManagedPointer) -> Result<Self, FloxmetaV2Error> {
+        let user_floxmeta_dir = floxmeta_dir(flox, &pointer.owner);
+        Self::open_at(flox, pointer, user_floxmeta_dir)
     }
 }
 
