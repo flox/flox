@@ -15,7 +15,6 @@ use crate::providers::git::{
 };
 
 pub const FLOXMETA_DIR_NAME: &str = "meta";
-pub const DEFAULT_FLOXHUB_URL: &str = "https://git.hub.flox.dev";
 
 #[derive(Debug)]
 pub struct FloxmetaV2 {
@@ -50,17 +49,18 @@ impl FloxmetaV2 {
         pointer: &ManagedPointer,
         path: impl AsRef<Path>,
     ) -> Result<Self, FloxmetaV2Error> {
+        let host = flox.floxhub_host.as_str();
         let token = flox
             .floxhub_token
             .as_ref()
             .ok_or(FloxmetaV2Error::LoggedOut)?;
 
-        let git_options = floxmeta_git_options(DEFAULT_FLOXHUB_URL, token);
+        let git_options = floxmeta_git_options(&flox.floxhub_host, token);
         let branch: String = remote_branch_name(&flox.system, pointer);
 
         let git = GitCommandProvider::clone_branch_with(
             git_options,
-            DEFAULT_FLOXHUB_URL,
+            format!("{host}/{}/floxmeta", pointer.owner),
             path,
             branch,
             true,
@@ -85,7 +85,7 @@ impl FloxmetaV2 {
             .as_ref()
             .ok_or(FloxmetaV2Error::LoggedOut)?;
 
-        let git_options = floxmeta_git_options(DEFAULT_FLOXHUB_URL, token);
+        let git_options = floxmeta_git_options(&flox.floxhub_host, token);
 
         let user_floxmeta_dir = floxmeta_dir(flox, &pointer.owner);
 
