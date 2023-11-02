@@ -384,7 +384,6 @@ impl GitCommandProvider {
         bare: bool,
     ) -> Result<GitCommandProvider, GitCommandError> {
         let mut command = options.new_command();
-        command.args(["-C", path.as_ref().to_str().unwrap()]);
 
         command
             .arg("clone")
@@ -393,7 +392,8 @@ impl GitCommandProvider {
             .arg("--branch")
             .arg(branch)
             .arg(origin)
-            .arg("./");
+            .arg(path.as_ref());
+
         if bare {
             command.arg("--bare");
         }
