@@ -413,6 +413,20 @@ impl List {
     }
 }
 
+fn environment_description(environment: &ConcreteEnvironment) -> String {
+    match environment {
+        ConcreteEnvironment::Managed(environment) => {
+            format!("{}/{}", environment.owner(), environment.name())
+        },
+        ConcreteEnvironment::Path(environment) => format!(
+            "{} at {}",
+            environment.name(),
+            environment.path.to_string_lossy()
+        ),
+        _ => todo!(),
+    }
+}
+
 /// Install a package into an environment
 #[derive(Bpaf, Clone)]
 pub struct Install {
@@ -436,10 +450,9 @@ impl Install {
             self.packages.as_slice().join(", "),
             self.environment
         );
-        let mut environment = self
-            .environment
-            .to_concrete_environment(&flox)?
-            .into_dyn_environment();
+        let concrete_environment = self.environment.to_concrete_environment(&flox)?;
+        let description = environment_description(&concrete_environment);
+        let mut environment = concrete_environment.into_dyn_environment();
         let nix = flox.nix::<NixCommandLine>(vec![]);
         let installation = environment
             .install(self.packages.clone(), &nix, flox.system.clone())
@@ -448,13 +461,13 @@ impl Install {
             // Print which new packages were installed
             for pkg in self.packages.iter() {
                 if let Some(false) = installation.already_installed.get(pkg) {
-                    info!("✅ '{pkg}' installed to environment");
+                    info!("✅ '{pkg}' installed to environment {description}");
                 } else {
-                    info!("🛑 '{pkg}' already installed");
+                    info!("🛑 '{pkg}' already installed to environment {description}");
                 }
             }
         } else {
-            info!("🛑 package(s) already installed");
+            info!("🛑 package(s) already installed to environment {description}");
         }
         Ok(())
     }
@@ -479,10 +492,9 @@ impl Uninstall {
             self.packages.as_slice().join(", "),
             self.environment
         );
-        let mut environment = self
-            .environment
-            .to_concrete_environment(&flox)?
-            .into_dyn_environment();
+        let concrete_environment = self.environment.to_concrete_environment(&flox)?;
+        let description = environment_description(&concrete_environment);
+        let mut environment = concrete_environment.into_dyn_environment();
         let nix = flox.nix::<NixCommandLine>(vec![]);
         let _ = environment
             .uninstall(self.packages.clone(), &nix, flox.system.clone())
@@ -492,7 +504,7 @@ impl Uninstall {
         // otherwise they appear right next to each other.
         self.packages
             .iter()
-            .for_each(|p| info!("🗑️  '{p}' uninstalled from environment"));
+            .for_each(|p| info!("🗑️  '{p}' uninstalled from environment {description}"));
         Ok(())
     }
 }
