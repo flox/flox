@@ -41,7 +41,8 @@
     "packages": {
         "bad": {
             "aarch64-darwin": null,
-            "x86_64-linux": null
+            "x86_64-linux": null,
+            "x86_64-darwin": null
         },
         "charasay": {
             "aarch64-darwin": {
@@ -84,6 +85,28 @@
                 "path": [
                     "legacyPackages",
                     "x86_64-linux",
+                    "charasay"
+                ],
+                "url": "github:NixOS/nixpkgs/e8039594435c68eb4f780f3e9bf3972a7399c4b1"
+            },
+            "x86_64-darwin": {
+                "info": {
+                    "license": "MIT",
+                    "pname": "charasay",
+                    "version": "2.0.0"
+                },
+                "input": {
+                    "locked": {
+                        "owner": "NixOS",
+                        "repo": "nixpkgs",
+                        "rev": "e8039594435c68eb4f780f3e9bf3972a7399c4b1",
+                        "type": "github"
+                    },
+                    "name": "nixpkgs"
+                },
+                "path": [
+                    "legacyPackages",
+                    "x86_64-darwin",
                     "charasay"
                 ],
                 "url": "github:NixOS/nixpkgs/e8039594435c68eb4f780f3e9bf3972a7399c4b1"
@@ -135,6 +158,29 @@
                     "pip"
                 ],
                 "url": "github:NixOS/nixpkgs/e8039594435c68eb4f780f3e9bf3972a7399c4b1"
+            },
+            "x86_64-darwin": {
+                "info": {
+                    "license": null,
+                    "pname": "pip",
+                    "version": "23.0.1"
+                },
+                "input": {
+                    "locked": {
+                        "owner": "NixOS",
+                        "repo": "nixpkgs",
+                        "rev": "e8039594435c68eb4f780f3e9bf3972a7399c4b1",
+                        "type": "github"
+                    },
+                    "name": "nixpkgs"
+                },
+                "path": [
+                    "legacyPackages",
+                    "x86_64-darwin",
+                    "python310Packages",
+                    "pip"
+                ],
+                "url": "github:NixOS/nixpkgs/e8039594435c68eb4f780f3e9bf3972a7399c4b1"
             }
         },
         "curl": {
@@ -178,6 +224,28 @@
                 "path": [
                     "legacyPackages",
                     "x86_64-linux",
+                    "curl"
+                ],
+                "url": "github:NixOS/nixpkgs/e8039594435c68eb4f780f3e9bf3972a7399c4b1"
+            },
+            "x86_64-darwin": {
+                "info": {
+                    "license": null,
+                    "pname": "curl",
+                    "version": "23.0.1"
+                },
+                "input": {
+                    "locked": {
+                        "owner": "NixOS",
+                        "repo": "nixpkgs",
+                        "rev": "e8039594435c68eb4f780f3e9bf3972a7399c4b1",
+                        "type": "github"
+                    },
+                    "name": "nixpkgs"
+                },
+                "path": [
+                    "legacyPackages",
+                    "x86_64-darwin",
                     "curl"
                 ],
                 "url": "github:NixOS/nixpkgs/e8039594435c68eb4f780f3e9bf3972a7399c4b1"
