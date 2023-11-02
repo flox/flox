@@ -155,3 +155,47 @@ pub(super) fn floxmeta_dir(flox: &Flox, owner: &EnvironmentOwner) -> PathBuf {
         .join(FLOXMETA_DIR_NAME)
         .join(owner.to_string())
 }
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+    use std::str::FromStr;
+
+    use super::*;
+    use crate::flox::tests::flox_instance;
+    use crate::flox::EnvironmentName;
+    use crate::providers::git::GitProvider;
+
+    #[test]
+    fn clone_repo() {
+        env_logger::init();
+
+        let (mut flox, tempdir) = flox_instance();
+
+        let pointer = ManagedPointer::new(
+            EnvironmentOwner::from_str("floxtest").unwrap(),
+            EnvironmentName::from_str("test").unwrap(),
+        );
+        let source_path = tempdir.path().join("source");
+
+        let _ = {
+            let source_path = source_path.join("floxtest/floxmeta");
+            fs::create_dir_all(&source_path).unwrap();
+            let git = GitCommandProvider::init(source_path, false).unwrap();
+            git.rename_branch(&remote_branch_name(&flox.system, &pointer))
+                .unwrap();
+            fs::write(git.path().join("test.txt"), "test").unwrap();
+            git.add(&[Path::new("test.txt")]).unwrap();
+            git.commit("test").unwrap();
+            git
+        };
+
+        flox.floxhub_token = Some("no token needed here".to_string());
+        flox.floxhub_host = format!("file://{}", source_path.to_string_lossy());
+
+        FloxmetaV2::clone_to(&flox, &pointer, tempdir.path().join("dest"))
+            .expect("Cloning a floxmeta repo should succeed");
+        FloxmetaV2::open_at(&flox, &pointer, tempdir.path().join("dest"))
+            .expect("Opening a floxmeta repo should succeed");
+    }
+}
