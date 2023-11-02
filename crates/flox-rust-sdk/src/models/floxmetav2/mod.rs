@@ -157,6 +157,7 @@ pub(super) fn floxmeta_dir(flox: &Flox, owner: &EnvironmentOwner) -> PathBuf {
 }
 
 #[cfg(test)]
+#[cfg(feature = "impure-unit-tests")]
 mod tests {
     use std::fs;
     use std::str::FromStr;
@@ -197,5 +198,41 @@ mod tests {
             .expect("Cloning a floxmeta repo should succeed");
         FloxmetaV2::open_at(&flox, &pointer, tempdir.path().join("dest"))
             .expect("Opening a floxmeta repo should succeed");
+    }
+
+    /// "floxtest" has a branch "default" and "nondefault" on floxhub.
+    /// We check if we can clone them and pull them into an existing clone.
+    #[test]
+    fn clone_from_floxhub() {
+        env_logger::init();
+
+        let (mut flox, _) = flox_instance();
+
+        let pointer = ManagedPointer::new(
+            EnvironmentOwner::from_str("floxtest").unwrap(),
+            EnvironmentName::from_str("default").unwrap(),
+        );
+
+        flox.floxhub_token = Some("flox_testOAuthToken".to_string());
+        flox.floxhub_host = "https://git.hub.flox.dev".to_string();
+
+        FloxmetaV2::clone(&flox, &pointer)
+            .expect("Cloning a floxmeta repo from floxhub should succeed");
+
+        let pointer_other_success = ManagedPointer::new(
+            EnvironmentOwner::from_str("floxtest").unwrap(),
+            EnvironmentName::from_str("nondefault").unwrap(),
+        );
+
+        FloxmetaV2::open(&flox, &pointer_other_success)
+            .expect("Should pull other branch 'nondefault' from floxhub");
+
+        let pointer_other_failure = ManagedPointer::new(
+            EnvironmentOwner::from_str("floxtest").unwrap(),
+            EnvironmentName::from_str("nonexistent").unwrap(),
+        );
+
+        FloxmetaV2::open(&flox, &pointer_other_failure)
+            .expect_err("Should fail pulling branch 'nonexistent' from floxhub");
     }
 }
