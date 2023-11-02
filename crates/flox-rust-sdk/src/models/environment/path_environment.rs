@@ -44,7 +44,7 @@ const ENVIRONMENT_DIR_NAME: &'_ str = "env";
 /// The transaction status is captured via the `state` field.
 #[derive(Debug)]
 pub struct PathEnvironment<S> {
-    /// Absolute path to the environment, typically `<...>/.flox/env`
+    /// Absolute path to the environment, typically `<...>/.flox`
     pub path: PathBuf,
 
     /// The temporary directory that this environment will use during transactions
@@ -309,13 +309,9 @@ where
 
     /// Delete the Environment
     fn delete(self) -> Result<(), EnvironmentError2> {
-        // `self.path` refers to `.flox/<env>`, so we check that the parent exists and is called
-        // `.flox` before deleting the entire parent directory
-        let Some(env_parent) = self.path.parent() else {
-            return Err(EnvironmentError2::DotFloxNotFound);
-        };
-        if Some(OsStr::new(".flox")) == env_parent.file_name() {
-            std::fs::remove_dir_all(env_parent).map_err(EnvironmentError2::DeleteEnvironment)?;
+        let dot_flox = &self.path;
+        if Some(OsStr::new(".flox")) == dot_flox.file_name() {
+            std::fs::remove_dir_all(dot_flox).map_err(EnvironmentError2::DeleteEnvironment)?;
         } else {
             return Err(EnvironmentError2::DotFloxNotFound);
         }
@@ -355,7 +351,7 @@ impl<S: TransactionState> PathEnvironment<S> {
 
     /// Path to the environment definition file
     pub fn manifest_path(&self) -> PathBuf {
-        self.path.join(MANIFEST_FILENAME)
+        self.path.join(ENVIRONMENT_DIR_NAME).join(MANIFEST_FILENAME)
     }
 
     /// Path to the environment's catalog
@@ -388,17 +384,17 @@ impl PathEnvironment<Original> {
         dot_flox_path: impl AsRef<Path>,
         temp_dir: impl AsRef<Path>,
     ) -> Result<Self, EnvironmentError2> {
-        let env_dir = dot_flox_path.as_ref().join(ENVIRONMENT_DIR_NAME);
-        log::debug!(
-            "attempting to open environment directory: {}",
-            env_dir.display()
-        );
-        if !env_dir.exists() {
-            log::debug!("environment directory desn't exist");
-            Err(EnvironmentError2::EnvNotFound)?;
+        let dot_flox = dot_flox_path.as_ref();
+        log::debug!("attempting to open .flox directory: {}", dot_flox.display());
+        if !dot_flox.exists() {
+            Err(EnvironmentError2::DotFloxNotFound)?;
         }
 
-        let env_path = env_dir
+        let env_path = dot_flox.join(ENVIRONMENT_DIR_NAME);
+        if !env_path.exists() {
+            Err(EnvironmentError2::EnvNotFound)?;
+        }
+        let env_path = env_path
             .canonicalize()
             .map_err(EnvironmentError2::EnvCanonicalize)?;
 
@@ -407,7 +403,7 @@ impl PathEnvironment<Original> {
         }
 
         Ok(PathEnvironment {
-            path: env_path,
+            path: dot_flox.to_owned(),
             pointer,
             temp_dir: temp_dir.as_ref().to_path_buf(),
             state: Original,
@@ -419,16 +415,16 @@ impl PathEnvironment<Original> {
     /// The method creates or opens a `.flox` directory _contained_ within `path`!
     pub fn init(
         pointer: PathPointer,
-        path: impl AsRef<Path>,
+        dot_flox_parent_path: impl AsRef<Path>,
         temp_dir: impl AsRef<Path>,
     ) -> Result<Self, EnvironmentError2> {
-        match EnvironmentPointer::open(path.as_ref()) {
+        match EnvironmentPointer::open(dot_flox_parent_path.as_ref()) {
             Err(EnvironmentError2::EnvNotFound) => {},
             Err(e) => Err(e)?,
             Ok(_) => Err(EnvironmentError2::EnvironmentExists)?,
         }
 
-        let dot_flox_path = path.as_ref().join(DOT_FLOX);
+        let dot_flox_path = dot_flox_parent_path.as_ref().join(DOT_FLOX);
 
         let env_dir = dot_flox_path.join(ENVIRONMENT_DIR_NAME);
         std::fs::create_dir_all(&env_dir).map_err(EnvironmentError2::InitEnv)?;
@@ -476,12 +472,7 @@ mod tests {
         );
 
         let expected = PathEnvironment {
-            path: environment_temp_dir
-                .path()
-                .to_path_buf()
-                .canonicalize()
-                .unwrap()
-                .join(".flox/env"),
+            path: environment_temp_dir.path().to_path_buf().join(".flox"),
             pointer: PathPointer::new("test".parse().unwrap()),
             temp_dir: temp_dir.path().to_path_buf(),
             state: Original,
@@ -496,11 +487,19 @@ mod tests {
 
         assert_eq!(actual, expected);
 
-        assert!(actual.path.join("flake.nix").exists(), "flake exists");
+        assert!(
+            actual
+                .path
+                .join(ENVIRONMENT_DIR_NAME)
+                .join("flake.nix")
+                .exists(),
+            "flake exists"
+        );
         assert!(actual.manifest_path().exists(), "manifest exists");
         assert!(
             actual
                 .path
+                .join(ENVIRONMENT_DIR_NAME)
                 .join("pkgs")
                 .join("default")
                 .join("default.nix")
