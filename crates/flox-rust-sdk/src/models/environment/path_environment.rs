@@ -118,19 +118,20 @@ impl<S: TransactionState> PathEnvironment<S> {
         Ok(())
     }
 
-    /// Where to link a built environment to. The parent directory may not exist.
+    /// Where to link a built environment to. The path may not exist if the environment has
+    /// never been built.
     ///
-    /// When used as a lookup signals whether the environment has *at some point* been built before
-    /// and is "activatable". Note that the environment may have been modified since it was last built.
+    /// The existence of this path guarantees exactly two things:
+    /// - The environment was built at some point in the past.
+    /// - The environment can be activated.
     ///
-    /// Mind that an existing out link does not necessarily imply that the environment
-    /// can in fact be built.
+    /// The existence of this path explicitly _does not_ guarantee that the current
+    /// state of the environment is "buildable". The environment may have been modified
+    /// since it was last built and therefore may no longer build. Thus, the presence of
+    /// this path doesn't guarantee that the current environment can be built,
+    /// just that it built at some point in the past.
     fn out_link(&self, system: &System) -> Result<PathBuf, EnvironmentError2> {
-        let run_dir = self
-            .path
-            .parent()
-            .ok_or(EnvironmentError2::DotFloxNotFound)?
-            .join(PATH_ENV_GCROOTS_DIR);
+        let run_dir = self.path.join(PATH_ENV_GCROOTS_DIR);
         if !run_dir.exists() {
             std::fs::create_dir_all(&run_dir).map_err(EnvironmentError2::CreateGcRootDir)?;
         }

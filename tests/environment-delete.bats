@@ -37,10 +37,6 @@ teardown() {
   common_test_teardown
 }
 
-setup_file() {
-  export FLOX_FEATURES_ENV=rust
-}
-
 dot_flox_exists() {
   # Since the return value is based on the exit code of `test`:
   # 0 = true
