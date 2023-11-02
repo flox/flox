@@ -501,7 +501,7 @@ mod tests {
                 .join(ENVIRONMENT_DIR_NAME)
                 .join("flake.nix")
                 .exists(),
-            "flake exists"
+            "flake does not exist"
         );
         assert!(actual.manifest_path().exists(), "manifest exists");
         assert!(
