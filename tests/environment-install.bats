@@ -36,10 +36,6 @@ teardown() {
   common_test_teardown
 }
 
-setup_file() {
-  export FLOX_FEATURES_ENV=rust
-}
-
 # without specifying a name should install to an environment found in the user's current directory.
 @test "i2.a: install outside of shell (option1)" {
   skip "Environment defaults handled in another phase"

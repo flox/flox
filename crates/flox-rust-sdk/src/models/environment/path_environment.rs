@@ -7,12 +7,12 @@ use async_trait::async_trait;
 use flox_types::catalog::{EnvCatalog, System};
 use log::debug;
 use runix::arguments::eval::EvaluationArgs;
-use runix::arguments::{BuildArgs, EvalArgs};
-use runix::command::{Build, Eval};
+use runix::arguments::EvalArgs;
+use runix::command::Eval;
 use runix::command_line::NixCommandLine;
 use runix::flake_ref::path::PathRef;
 use runix::installable::FlakeAttribute;
-use runix::{Run, RunJson};
+use runix::RunJson;
 
 use super::{
     copy_dir_recursive,
@@ -25,11 +25,16 @@ use super::{
     ENVIRONMENT_POINTER_FILENAME,
     MANIFEST_FILENAME,
 };
+use crate::environment::NIX_BIN;
 use crate::flox::Flox;
-use crate::models::environment::CATALOG_JSON;
+use crate::models::environment::{
+    BUILD_ENV_BIN,
+    CATALOG_JSON,
+    ENV_FROM_LOCKFILE_PATH,
+    PATH_ENV_GCROOTS_DIR,
+};
 use crate::models::environment_ref::{EnvironmentName, EnvironmentRef};
 use crate::models::manifest::{insert_packages, remove_packages};
-use crate::utils::copy_file_without_permissions;
 
 const ENVIRONMENT_DIR_NAME: &'_ str = "env";
 
@@ -44,7 +49,7 @@ const ENVIRONMENT_DIR_NAME: &'_ str = "env";
 /// The transaction status is captured via the `state` field.
 #[derive(Debug)]
 pub struct PathEnvironment<S> {
-    /// Absolute path to the environment, typically within `<...>/.flox/name`
+    /// Absolute path to the environment, typically `<...>/.flox`
     pub path: PathBuf,
 
     /// The temporary directory that this environment will use during transactions
@@ -118,17 +123,24 @@ impl<S: TransactionState> PathEnvironment<S> {
         Ok(())
     }
 
-    /// Where to link a built environment to. The parent directory may not exist.
+    /// Where to link a built environment to. The path may not exist if the environment has
+    /// never been built.
     ///
-    /// When used as a lookup signals whether the environment has *at some point* been built before
-    /// and is "activatable". Note that the environment may have been modified since it was last built.
+    /// The existence of this path guarantees exactly two things:
+    /// - The environment was built at some point in the past.
+    /// - The environment can be activated.
     ///
-    /// Mind that an existing out link does not necessarily imply that the environment
-    /// can in fact be built.
-    fn out_link(&self, system: &System) -> PathBuf {
-        self.path
-            .join("run")
-            .join(format!("{0}.{1}", system, self.name()))
+    /// The existence of this path explicitly _does not_ guarantee that the current
+    /// state of the environment is "buildable". The environment may have been modified
+    /// since it was last built and therefore may no longer build. Thus, the presence of
+    /// this path doesn't guarantee that the current environment can be built,
+    /// just that it built at some point in the past.
+    fn out_link(&self, system: &System) -> Result<PathBuf, EnvironmentError2> {
+        let run_dir = self.path.join(PATH_ENV_GCROOTS_DIR);
+        if !run_dir.exists() {
+            std::fs::create_dir_all(&run_dir).map_err(EnvironmentError2::CreateGcRootDir)?;
+        }
+        Ok(run_dir.join([system.clone(), self.name().to_string()].join(".")))
     }
 }
 
@@ -161,37 +173,35 @@ where
     /// into the environment to avoid relocking.
     async fn build(
         &mut self,
-        nix: &NixCommandLine,
+        _nix: &NixCommandLine,
         system: &System,
     ) -> Result<(), EnvironmentError2> {
-        debug!("building with nix ....");
-
-        let out_link = self.out_link(system);
-
-        let build = Build {
-            installables: [self.flake_attribute(system).into()].into(),
-            eval: runix::arguments::eval::EvaluationArgs {
-                impure: true.into(),
-                ..Default::default()
-            },
-            build: BuildArgs {
-                out_link: Some(out_link.clone().into()),
-                ..Default::default()
-            },
-            ..Default::default()
+        debug!("building project environment at {}", self.path.display());
+        let manifest_path = self.manifest_path();
+        let lockfile_path = {
+            // TODO: generate a lockfile with pkgdb
+            manifest_path.parent().unwrap().join("dummy_lockfile.json")
         };
+        debug!("generated lockfile: {}", lockfile_path.display());
 
-        build
-            .run(nix, &Default::default())
-            .await
-            .map_err(EnvironmentError2::Build)?;
+        debug!(
+            "building environment: system={system}, lockfilePath={}",
+            lockfile_path.display()
+        );
 
-        // environments potentially update their catalog in the process of a build because unlocked
-        // packages (e.g. nixpkgs-flox.hello) must be pinned to a specific version which is added to
-        // the catalog
-        let result_catalog_json = out_link.join(CATALOG_JSON);
-        copy_file_without_permissions(result_catalog_json, self.catalog_path())
-            .map_err(EnvironmentError2::CopyFile)?;
+        let build_output = std::process::Command::new(BUILD_ENV_BIN)
+            .arg(NIX_BIN)
+            .arg(system)
+            .arg(lockfile_path)
+            .arg(self.out_link(system)?)
+            .arg(ENV_FROM_LOCKFILE_PATH)
+            .output()
+            .map_err(EnvironmentError2::BuildEnvCall)?;
+
+        if !build_output.status.success() {
+            let stderr = String::from_utf8_lossy(&build_output.stderr);
+            return Err(EnvironmentError2::BuildEnv(stderr.to_string()));
+        }
 
         Ok(())
     }
@@ -307,13 +317,9 @@ where
 
     /// Delete the Environment
     fn delete(self) -> Result<(), EnvironmentError2> {
-        // `self.path` refers to `.flox/<env>`, so we check that the parent exists and is called
-        // `.flox` before deleting the entire parent directory
-        let Some(env_parent) = self.path.parent() else {
-            return Err(EnvironmentError2::DotFloxNotFound);
-        };
-        if Some(OsStr::new(".flox")) == env_parent.file_name() {
-            std::fs::remove_dir_all(env_parent).map_err(EnvironmentError2::DeleteEnvironment)?;
+        let dot_flox = &self.path;
+        if Some(OsStr::new(".flox")) == dot_flox.file_name() {
+            std::fs::remove_dir_all(dot_flox).map_err(EnvironmentError2::DeleteEnvironment)?;
         } else {
             return Err(EnvironmentError2::DotFloxNotFound);
         }
@@ -326,7 +332,7 @@ where
         nix: &NixCommandLine,
     ) -> Result<PathBuf, EnvironmentError2> {
         self.build(nix, &flox.system).await?;
-        Ok(self.out_link(&flox.system))
+        Ok(self.out_link(&flox.system)?)
     }
 }
 
@@ -353,7 +359,7 @@ impl<S: TransactionState> PathEnvironment<S> {
 
     /// Path to the environment definition file
     pub fn manifest_path(&self) -> PathBuf {
-        self.path.join(MANIFEST_FILENAME)
+        self.path.join(ENVIRONMENT_DIR_NAME).join(MANIFEST_FILENAME)
     }
 
     /// Path to the environment's catalog
@@ -386,27 +392,26 @@ impl PathEnvironment<Original> {
         dot_flox_path: impl AsRef<Path>,
         temp_dir: impl AsRef<Path>,
     ) -> Result<Self, EnvironmentError2> {
-        let env_dir = dot_flox_path.as_ref().join(ENVIRONMENT_DIR_NAME);
-        log::debug!(
-            "attempting to open environment directory: {}",
-            env_dir.display()
-        );
-        if !env_dir.exists() {
-            log::debug!("environment directory desn't exist");
-            Err(EnvironmentError2::EnvNotFound)?;
+        let dot_flox = dot_flox_path.as_ref();
+        log::debug!("attempting to open .flox directory: {}", dot_flox.display());
+        if !dot_flox.exists() {
+            Err(EnvironmentError2::DotFloxNotFound)?;
         }
 
-        let env_path = env_dir
+        let env_path = dot_flox.join(ENVIRONMENT_DIR_NAME);
+        if !env_path.exists() {
+            Err(EnvironmentError2::EnvNotFound)?;
+        }
+        let env_path = env_path
             .canonicalize()
             .map_err(EnvironmentError2::EnvCanonicalize)?;
 
-        // TODO: replace with checks for manifest file once we transition
-        if !env_path.join("flake.nix").exists() {
+        if !env_path.join(MANIFEST_FILENAME).exists() {
             Err(EnvironmentError2::DirectoryNotAnEnv)?
         }
 
         Ok(PathEnvironment {
-            path: env_path,
+            path: dot_flox.to_owned(),
             pointer,
             temp_dir: temp_dir.as_ref().to_path_buf(),
             state: Original,
@@ -418,16 +423,16 @@ impl PathEnvironment<Original> {
     /// The method creates or opens a `.flox` directory _contained_ within `path`!
     pub fn init(
         pointer: PathPointer,
-        path: impl AsRef<Path>,
+        dot_flox_parent_path: impl AsRef<Path>,
         temp_dir: impl AsRef<Path>,
     ) -> Result<Self, EnvironmentError2> {
-        match EnvironmentPointer::open(path.as_ref()) {
+        match EnvironmentPointer::open(dot_flox_parent_path.as_ref()) {
             Err(EnvironmentError2::EnvNotFound) => {},
             Err(e) => Err(e)?,
             Ok(_) => Err(EnvironmentError2::EnvironmentExists)?,
         }
 
-        let dot_flox_path = path.as_ref().join(DOT_FLOX);
+        let dot_flox_path = dot_flox_parent_path.as_ref().join(DOT_FLOX);
 
         let env_dir = dot_flox_path.join(ENVIRONMENT_DIR_NAME);
         std::fs::create_dir_all(&env_dir).map_err(EnvironmentError2::InitEnv)?;
@@ -475,12 +480,7 @@ mod tests {
         );
 
         let expected = PathEnvironment {
-            path: environment_temp_dir
-                .path()
-                .to_path_buf()
-                .canonicalize()
-                .unwrap()
-                .join(".flox/env"),
+            path: environment_temp_dir.path().to_path_buf().join(".flox"),
             pointer: PathPointer::new("test".parse().unwrap()),
             temp_dir: temp_dir.path().to_path_buf(),
             state: Original,
@@ -495,11 +495,19 @@ mod tests {
 
         assert_eq!(actual, expected);
 
-        assert!(actual.path.join("flake.nix").exists(), "flake exists");
+        assert!(
+            actual
+                .path
+                .join(ENVIRONMENT_DIR_NAME)
+                .join("flake.nix")
+                .exists(),
+            "flake does not exist"
+        );
         assert!(actual.manifest_path().exists(), "manifest exists");
         assert!(
             actual
                 .path
+                .join(ENVIRONMENT_DIR_NAME)
                 .join("pkgs")
                 .join("default")
                 .join("default.nix")

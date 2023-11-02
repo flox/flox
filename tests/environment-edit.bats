@@ -77,10 +77,6 @@ teardown() {
   common_test_teardown;
 }
 
-setup_file() {
-  export FLOX_FEATURES_ENV=rust
-}
-
 # ---------------------------------------------------------------------------- #
 
 check_manifest_unchanged() {

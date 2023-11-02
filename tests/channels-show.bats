@@ -38,10 +38,6 @@ teardown() {
   common_test_teardown;
 }
 
-setup_file() {
-  export FLOX_FEATURES_CHANNELS=rust;
-}
-
 # ---------------------------------------------------------------------------- #
 
 @test "'flox show' can be called at all" {

@@ -37,22 +37,11 @@ teardown() {
   common_test_teardown
 }
 
-setup_file() {
-  export FLOX_FEATURES_ENV=rust
-}
-
 dot_flox_exists() {
   # Since the return value is based on the exit code of `test`:
   # 0 = true
   # 1 = false
-  [[ -d .flox ]];
-}
-
-env_exists() {
-  # Since the return value is based on the exit code of `test`:
-  # 0 = true
-  # 1 = false
-  [[ -d ".flox/$1" ]];
+  [[ -d "$PROJECT_DIR/.flox" ]];
 }
 
 # ---------------------------------------------------------------------------- #
@@ -60,12 +49,10 @@ env_exists() {
 @test "deletes existing environment" {
   run "$FLOX_CLI" init;
   assert_success;
-  # run env_exists "$(basename $PWD)";
   run dot_flox_exists;
   assert_success;
   run "$FLOX_CLI" delete;
   assert_success;
-  # run env_exists "$(basename $PWD)";
   run dot_flox_exists;
   assert_failure;
 }

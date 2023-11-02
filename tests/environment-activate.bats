@@ -19,7 +19,6 @@ load test_support.bash;
 
 setup_file() {
   common_file_setup;
-  export FLOX_FEATURES_ENV="rust";
 }
 
 

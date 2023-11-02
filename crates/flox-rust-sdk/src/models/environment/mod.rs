@@ -33,10 +33,15 @@ pub const CATALOG_JSON: &str = "catalog.json";
 pub const DOT_FLOX: &str = ".flox";
 pub const ENVIRONMENT_POINTER_FILENAME: &str = "env.json";
 pub const MANIFEST_FILENAME: &str = "manifest.toml";
+pub const PATH_ENV_GCROOTS_DIR: &str = "run";
 // don't forget to update the man page
 pub const DEFAULT_KEEP_GENERATIONS: usize = 10;
 // don't forget to update the man page
 pub const DEFAULT_MAX_AGE_DAYS: u32 = 90;
+
+// Path to the executable that builds environments
+const BUILD_ENV_BIN: &'_ str = env!("BUILD_ENV_BIN");
+const ENV_FROM_LOCKFILE_PATH: &str = env!("ENV_FROM_LOCKFILE_PATH");
 
 pub enum InstalledPackage {
     Catalog(FloxTriple, CatalogEntry),
@@ -260,6 +265,14 @@ pub enum EnvironmentError2 {
     ManagedEnvironment(#[from] ManagedEnvironmentError),
     #[error(transparent)]
     Install(#[from] TomlEditError),
+    #[error("couldn't locate the manifest for this environment")]
+    ManifestNotFound,
+    #[error("failed to create GC roots directory: {0}")]
+    CreateGcRootDir(std::io::Error),
+    #[error("error building environment: {0}")]
+    BuildEnvCall(std::io::Error),
+    #[error("error building environment: {0}")]
+    BuildEnv(String),
 }
 
 /// Copy a whole directory recursively ignoring the original permissions

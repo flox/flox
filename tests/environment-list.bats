@@ -38,10 +38,6 @@ teardown() {
   common_test_teardown
 }
 
-setup_file() {
-  export FLOX_FEATURES_ENV=rust
-}
-
 @test "'flox list' lists packages of environment in the current dir; fails if no env found" {
   run "$FLOX_CLI" list;
   assert_failure;

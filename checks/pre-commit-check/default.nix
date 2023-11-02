@@ -3,7 +3,6 @@
   rustfmt,
   cargo,
   commitizen,
-  clippy,
   alejandra,
   system,
   ...
@@ -15,12 +14,10 @@ in
     hooks = {
       alejandra.enable = true;
       rustfmt.enable = true;
-      clippy.enable = true;
       commitizen.enable = true;
     };
-    settings.clippy.denyWarnings = true;
     tools = {
-      inherit cargo commitizen clippy rustfmt alejandra;
+      inherit cargo commitizen rustfmt alejandra;
     };
   })
   // {passthru = {inherit rustfmt;};}
