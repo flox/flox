@@ -39,8 +39,6 @@ teardown() {
 }
 
 setup_file() {
-  export FLOX_FEATURES_CHANNELS=rust;
-
   export SHOW_HINT="Use \`flox show {package}\` to see available versions"
 
   # Separator character for ambiguous package sources

@@ -36,10 +36,6 @@ teardown() {
   common_test_teardown
 }
 
-setup_file() {
-  export FLOX_FEATURES_ENV=rust
-}
-
 @test "c2: flox init without a name should create an environment named the same as the directory the user is in" {
 
   run "$FLOX_CLI" init

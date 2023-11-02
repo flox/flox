@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use anyhow::{bail, Context, Result};
-use bpaf::{Bpaf, Parser};
+use bpaf::Bpaf;
 use flox_rust_sdk::flox::{EnvironmentName, Flox};
 use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironment;
 use flox_rust_sdk::models::environment::path_environment::{Original, PathEnvironment};
@@ -240,25 +240,16 @@ impl Delete {
     }
 }
 
-/// Activate environment
+/// Activate an environment
 ///
-///
-/// Modes:
-///  * in current shell: eval "$(flox activate)"
-///  * in subshell: flox activate
-///  * for command: flox activate -- <command> <args>
+/// When called with no arguments `flox activate` will look for a `.flox` directory
+/// in the current directory. Calling `flox activate` in your home directory will
+/// activate a default environment. Environments in other directories and remote
+/// environments are activated with the `-d` and `-r` flags respectively.
 #[derive(Bpaf, Clone)]
 pub struct Activate {
-    #[allow(dead_code)] // TODO: pending spec for `-e`, `--dir` behaviour
-    #[bpaf(external(environment_args), group_help("Environment Options"))]
-    environment_args: EnvironmentArgs,
-
     #[bpaf(external(environment_select), fallback(Default::default()))]
     environment: EnvironmentSelect,
-
-    #[allow(dead_code)] // TODO: not yet handled in impl
-    #[bpaf(external(activate_run_args))]
-    arguments: Option<(String, Vec<String>)>,
 }
 
 impl Activate {
@@ -716,11 +707,4 @@ impl Containerize {
 
         todo!("this command is planned for a future release");
     }
-}
-
-fn activate_run_args() -> impl Parser<Option<(String, Vec<String>)>> {
-    let command = bpaf::positional("COMMAND").strict();
-    let args = bpaf::any("ARGUMENTS", Some).many();
-
-    bpaf::construct!(command, args).optional()
 }
