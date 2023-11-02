@@ -615,12 +615,16 @@ enum PullSelect {
         /// ID of the environment to pull
         remote: EnvironmentRef,
     },
-    Existing(#[bpaf(external(environment_select))] EnvironmentSelect),
+    Existing {
+        dir: Option<PathBuf>,
+    },
 }
 
 impl Default for PullSelect {
     fn default() -> Self {
-        PullSelect::Existing(Default::default())
+        PullSelect::Existing {
+            dir: Default::default(),
+        }
     }
 }
 
@@ -644,8 +648,36 @@ impl Pull {
                 let dir = dir.unwrap_or_else(|| std::env::current_dir().unwrap());
                 Self::pull_new_environment(&flox, dir.join(DOT_FLOX), remote)?;
             },
-            PullSelect::Existing(_) => todo!(),
+            PullSelect::Existing { dir } => {
+                let dir = dir.unwrap_or_else(|| std::env::current_dir().unwrap());
+                let pointer = {
+                    let p = EnvironmentPointer::open(dir.join(DOT_FLOX))
+                        .with_context(|| format!("No environment found in {dir:?}"))?;
+                    match p {
+                        EnvironmentPointer::Managed(managed_pointer) => managed_pointer,
+                        EnvironmentPointer::Path(_) => bail!("Cannot pull into a path environment"),
+                    }
+                };
+
+                Self::pull_existing_environment(&flox, dir.join(DOT_FLOX), pointer)?;
+            },
         }
+
+        Ok(())
+    }
+
+    /// Update an existing environment with the latest version from floxhub
+    ///
+    /// Opens the environment and calls [ManagedEnvironment::pull] on it,
+    /// which will update the lockfile.
+    fn pull_existing_environment(
+        flox: &Flox,
+        dot_flox_path: PathBuf,
+        pointer: ManagedPointer,
+    ) -> Result<()> {
+        let mut env = ManagedEnvironment::open(flox, pointer, dot_flox_path)
+            .context("Could not initialize environment")?;
+        env.pull().context("Could not pull environment")?;
 
         Ok(())
     }
