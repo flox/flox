@@ -76,6 +76,7 @@ impl FloxCompletionExt for Flox {
             access_tokens,
             uuid: uuid::Uuid::nil(),
             floxhub_token: config.flox.floxhub_token,
+            floxhub_host: "https://git.hub.flox.dev".to_string(),
         })
     }
 
