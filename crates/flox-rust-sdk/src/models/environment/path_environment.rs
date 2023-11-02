@@ -183,6 +183,7 @@ where
             "building environment: system={system}, lockfilePath={}",
             lockfile_path.display()
         );
+
         let build_output = std::process::Command::new(BUILD_ENV_BIN)
             .arg(NIX_BIN)
             .arg(system)

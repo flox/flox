@@ -189,6 +189,8 @@ reals_setup() {
     print_var REAL_GIT_CONFIG_GLOBAL;
     print_var FLOX_CLI;
     print_var NIX_BIN;
+    print_var ENV_FROM_LOCKFILE_PATH;
+    print_var BUILD_ENV_BIN;
   } >&3;
 }
 
