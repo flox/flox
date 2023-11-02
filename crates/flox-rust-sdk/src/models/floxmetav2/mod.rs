@@ -143,8 +143,8 @@ fn floxmeta_git_options(floxhub_host: &str, floxhub_token: &str) -> GitCommandOp
     // The credential helper should help avoinding a leak of the token in the process list.
     options.add_env_var("FLOX_FLOXHUB_TOKEN", floxhub_token);
     options.add_config_flag(
-        &format!("credentials.{floxhub_host}.helper"),
-        "!f(){ echo ${FLOX_FLOXHUB_TOKEN}; }; f",
+        &format!("credential.{floxhub_host}.helper"),
+        r#"!f(){ echo "username=oauth"; echo "password=$FLOX_FLOXHUB_TOKEN;"; }; f"#,
     );
 
     options
