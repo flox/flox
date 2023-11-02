@@ -27,7 +27,12 @@ use super::{
 };
 use crate::environment::NIX_BIN;
 use crate::flox::Flox;
-use crate::models::environment::{BUILD_ENV_BIN, CATALOG_JSON, PATH_ENV_GCROOTS_DIR};
+use crate::models::environment::{
+    BUILD_ENV_BIN,
+    CATALOG_JSON,
+    ENV_FROM_LOCKFILE_PATH,
+    PATH_ENV_GCROOTS_DIR,
+};
 use crate::models::environment_ref::{EnvironmentName, EnvironmentRef};
 use crate::models::manifest::{insert_packages, remove_packages};
 
@@ -189,6 +194,7 @@ where
             .arg(system)
             .arg(lockfile_path)
             .arg(self.out_link(system)?)
+            .arg(ENV_FROM_LOCKFILE_PATH)
             .output()
             .map_err(EnvironmentError2::BuildEnvCall)?;
 

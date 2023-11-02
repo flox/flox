@@ -41,6 +41,7 @@ pub const DEFAULT_MAX_AGE_DAYS: u32 = 90;
 
 // Path to the executable that builds environments
 const BUILD_ENV_BIN: &'_ str = env!("BUILD_ENV_BIN");
+const ENV_FROM_LOCKFILE_PATH: &str = env!("ENV_FROM_LOCKFILE_PATH");
 
 pub enum InstalledPackage {
     Catalog(FloxTriple, CatalogEntry),
