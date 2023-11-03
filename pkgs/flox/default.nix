@@ -15,7 +15,7 @@
   parser-util,
   pandoc,
   cacert,
-  glibcLocales,
+  glibcLocalesUtf8,
   installShellFiles,
   runCommand,
   fd,
@@ -86,7 +86,7 @@
       PATH_LOCALE = "${darwin.locale}/share/locale";
     }
     // lib.optionalAttrs hostPlatform.isLinux {
-      LOCALE_ARCHIVE = "${glibcLocales}/lib/locale/locale-archive";
+      LOCALE_ARCHIVE = "${glibcLocalesUtf8}/lib/locale/locale-archive";
     };
 
   # compiled manpages
