@@ -181,10 +181,8 @@ where
     /// Build the environment with side effects:
     ///
     /// - Create a result link as gc-root.
-    /// - Copy catalog.json from the result into the environment. Whenever the
-    /// environment is built, the lock is potentially updated. The lockfile is
-    /// an input to the build and allows skipping relocking, so we copy it back
-    /// into the environment to avoid relocking.
+    /// - Create a lockfile if one doesn't already exist, updating it with
+    ///   any new packages.
     async fn build(
         &mut self,
         _nix: &NixCommandLine,
