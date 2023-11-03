@@ -463,18 +463,6 @@ impl ManagedEnvironment {
             .fetch_branch("origin", &remote_branch_name(&self.system, &self.pointer))
             .unwrap();
 
-        // try fast forward merge upstream env branch into local env branch
-        self.floxmeta
-            .git
-            .push2(
-                ".",
-                format!(
-                    "origin/{sync_branch}:refs/heads/{sync_branch}",
-                    sync_branch = remote_branch_name(&self.system, &self.pointer)
-                ),
-            )
-            .unwrap();
-
         // try fast forward merge local env branch into project branch
         self.floxmeta
             .git
