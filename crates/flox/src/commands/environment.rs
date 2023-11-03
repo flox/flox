@@ -9,11 +9,15 @@ use anyhow::{bail, Context, Result};
 use bpaf::Bpaf;
 use crossterm::{cursor, QueueableCommand};
 use flox_rust_sdk::flox::{EnvironmentName, EnvironmentRef, Flox};
-use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironment;
+use flox_rust_sdk::models::environment::managed_environment::{
+    ManagedEnvironment,
+    ManagedEnvironmentError,
+};
 use flox_rust_sdk::models::environment::path_environment::{Original, PathEnvironment};
 use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironment;
 use flox_rust_sdk::models::environment::{
     Environment,
+    EnvironmentError2,
     EnvironmentPointer,
     ManagedPointer,
     PathPointer,
@@ -21,10 +25,12 @@ use flox_rust_sdk::models::environment::{
     ENVIRONMENT_POINTER_FILENAME,
 };
 use flox_rust_sdk::models::environment_ref;
+use flox_rust_sdk::models::floxmetav2::FloxmetaV2Error;
 use flox_rust_sdk::models::manifest::list_packages;
 use flox_rust_sdk::nix::command::StoreGc;
 use flox_rust_sdk::nix::command_line::NixCommandLine;
 use flox_rust_sdk::nix::Run;
+use indoc::indoc;
 use log::{debug, error, info};
 use tempfile::NamedTempFile;
 
@@ -676,7 +682,7 @@ impl Pull {
         pointer: ManagedPointer,
     ) -> Result<()> {
         let mut env = ManagedEnvironment::open(flox, pointer, dot_flox_path)
-            .context("Could not initialize environment")?;
+            .context("Could not open environment")?;
         env.pull().context("Could not pull environment")?;
 
         Ok(())
@@ -706,9 +712,19 @@ impl Pull {
         fs::create_dir_all(&dot_flox_path).context("Could not create .flox/ directory")?;
         fs::write(pointer_path, pointer_content).context("Could not write pointer")?;
 
-        let result = ManagedEnvironment::open(flox, pointer, &dot_flox_path)
-            .context("Could not initialize environment");
+        let result = ManagedEnvironment::open(flox, pointer, &dot_flox_path);
         if let Err(err) = result {
+            if let EnvironmentError2::ManagedEnvironment(ManagedEnvironmentError::OpenFloxmeta(
+                FloxmetaV2Error::LoggedOut,
+            )) = err
+            {
+                bail!(indoc! {"
+                Could not pull environment: not logged in to floxhub.
+
+                Please login to floxhub with `flox auth login`
+                "});
+            }
+
             fs::remove_dir_all(dot_flox_path).context("Could not clean up .flox/ directory")?;
             Err(err)?;
         }
