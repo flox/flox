@@ -63,6 +63,8 @@ pub enum ManagedEnvironmentError {
     ProjectNotFound { path: PathBuf, err: std::io::Error },
     #[error("upstream floxmeta branch diverged from local branch")]
     Diverged,
+    #[error("failed to push environment: {0}")]
+    Push(GitCommandError),
 }
 
 #[derive(Debug, Deserialize, PartialEq, Serialize)]
@@ -512,6 +514,39 @@ fn gcroots_dir(flox: &Flox, owner: &EnvironmentOwner) -> PathBuf {
 }
 
 impl ManagedEnvironment {
+    pub fn push(&mut self) -> Result<(), ManagedEnvironmentError> {
+        let project_branch = branch_name(&self.system, &self.pointer, &self.path)?;
+        let sync_branch = remote_branch_name(&self.system, &self.pointer);
+
+        // Fetch the remote branch into FETCH_HEAD
+        self.floxmeta
+            .git
+            .fetch_ref("origin", &format!("{sync_branch}:",))
+            .unwrap();
+
+        // Check whether we can fast-forward merge the remote branch into the local branch
+        // In not the environment has diverged.
+        let consistent_history = self
+            .floxmeta
+            .git
+            .branch_contains_commit("FETCH_HEAD", &project_branch)
+            .map_err(ManagedEnvironmentError::Git)?;
+
+        if !consistent_history {
+            Err(ManagedEnvironmentError::Diverged)?;
+        }
+
+        self.floxmeta
+            .git
+            .push_ref("origin", format!("{}:{}", project_branch, sync_branch))
+            .map_err(ManagedEnvironmentError::Push)?;
+
+        // update local envorinment branch, should be fast-forward and a noop if the branches didn't diverge
+        self.pull()?;
+
+        Ok(())
+    }
+
     #[allow(unused)]
     pub fn pull(&mut self) -> Result<(), ManagedEnvironmentError> {
         // Fetch the remote branch into FETCH_HEAD
