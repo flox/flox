@@ -61,6 +61,8 @@ pub enum ManagedEnvironmentError {
     BadBranchName(String),
     #[error("project wasn't found at path {path}: {err}")]
     ProjectNotFound { path: PathBuf, err: std::io::Error },
+    #[error("upstream floxmeta branch diverged from local branch")]
+    Diverged,
 }
 
 #[derive(Debug, Deserialize, PartialEq, Serialize)]
@@ -473,11 +475,29 @@ fn gcroots_dir(flox: &Flox, pointer: &ManagedPointer) -> PathBuf {
 
 impl ManagedEnvironment {
     #[allow(unused)]
-    pub fn pull(&mut self) -> Result<(), EnvironmentError2> {
+    pub fn pull(&mut self) -> Result<(), ManagedEnvironmentError> {
+        // Fetch the remote branch into FETCH_HEAD
         self.floxmeta
             .git
-            .fetch_branch("origin", &remote_branch_name(&self.system, &self.pointer))
+            .fetch_ref(
+                "origin",
+                &format!("{}:", remote_branch_name(&self.system, &self.pointer)),
+            )
             .unwrap();
+
+        // Check whether we can fast-forward merge the remote branch into the local branch
+        // In not the environment has diverged.
+        let consistent_history = self
+            .floxmeta
+            .git
+            .branch_contains_commit(
+                "FETCH_HEAD",
+                &remote_branch_name(&self.system, &self.pointer),
+            )
+            .map_err(ManagedEnvironmentError::Git)?;
+        if !consistent_history {
+            Err(ManagedEnvironmentError::Diverged)?;
+        }
 
         // try fast forward merge local env branch into project branch
         self.floxmeta
@@ -485,12 +505,12 @@ impl ManagedEnvironment {
             .push2(
                 ".",
                 format!(
-                    "refs/heads/{sync_branch}:refs/heads/{project_branch}",
-                    sync_branch = remote_branch_name(&self.system, &self.pointer),
+                    "FETCH_HEAD:refs/heads/{project_branch}",
                     project_branch = branch_name(&self.system, &self.pointer, &self.path)?
                 ),
             )
             .unwrap();
+
         lock_env(
             &self.system,
             &self.pointer,
