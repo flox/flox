@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use anyhow::{bail, Context, Result};
-use bpaf::{Bpaf, Parser};
+use bpaf::Bpaf;
 use flox_rust_sdk::flox::{EnvironmentName, EnvironmentRef, Flox};
 use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironment;
 use flox_rust_sdk::models::environment::path_environment::{Original, PathEnvironment};
