@@ -361,7 +361,13 @@ impl ManagedEnvironment {
             },
             // There's no lockfile, so write a new one with whatever remote
             // branch is after fetching.
-            None => lock_env(&flox.system, pointer, floxmeta, lock_path)?,
+            None => {
+                floxmeta
+                    .git
+                    .fetch_branch("origin", &remote_branch_name(&flox.system, pointer))
+                    .map_err(ManagedEnvironmentError::Fetch)?;
+                write_pointer_lockfile(&flox.system, pointer, floxmeta, lock_path)?
+            },
         })
     }
 
@@ -412,17 +418,13 @@ impl ManagedEnvironment {
     }
 }
 
-fn lock_env(
+fn write_pointer_lockfile(
     system: &str,
     pointer: &ManagedPointer,
     floxmeta: &FloxmetaV2,
     lock_path: PathBuf,
 ) -> Result<GenerationLock, EnvironmentError2> {
     let remote_branch = remote_branch_name(system, pointer);
-    floxmeta
-        .git
-        .fetch_branch("origin", &remote_branch)
-        .map_err(ManagedEnvironmentError::Fetch)?;
     let rev = floxmeta
         .git
         .branch_hash(&remote_branch)
@@ -511,7 +513,7 @@ impl ManagedEnvironment {
             )
             .unwrap();
 
-        lock_env(
+        write_pointer_lockfile(
             &self.system,
             &self.pointer,
             &self.floxmeta,
