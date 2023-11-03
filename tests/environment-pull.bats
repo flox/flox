@@ -183,7 +183,7 @@ function update_dummy_env() {
   assert [ "$LOCKED_FIRST_BEFORE" != "$LOCKED_SECOND" ]
 
   # after pulling first env, its at the rame rev as the second that was pulled after the update
-  "$FLOX_CLI" pull --remote owner/name --dir second  # dummy remote as we are not actually pulling anything
+  "$FLOX_CLI" pull --dir second  # dummy remote as we are not actually pulling anything
   assert [ "$LOCKED_FIRST_BEFORE" != "$LOCKED_FIRST_AFTER" ]
   assert [ "$LOCKED_FIRST_BEFORE" == "$LOCKED_SECOND" ]
 }
