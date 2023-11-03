@@ -491,8 +491,8 @@ impl ManagedEnvironment {
             .floxmeta
             .git
             .branch_contains_commit(
-                "FETCH_HEAD",
                 &remote_branch_name(&self.system, &self.pointer),
+                "FETCH_HEAD",
             )
             .map_err(ManagedEnvironmentError::Git)?;
         if !consistent_history {
