@@ -14,7 +14,7 @@ use thiserror::Error;
 use walkdir::WalkDir;
 
 use self::environment::Environment;
-use super::environment::MANIFEST_FILENAME;
+use super::environment::path_environment::MANIFEST_FILENAME;
 use super::root::transaction::{GitAccess, GitSandBox, ReadOnly};
 use super::root::{Closed, Root};
 use crate::flox::{Flox, FloxNixApi};

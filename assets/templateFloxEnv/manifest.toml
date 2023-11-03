@@ -2,6 +2,10 @@
 [install]
 # hello = {}
 
+[registry.inputs.nixpkgs]
+from = { type = "github", owner = "NixOS", repo = "nixpkgs", rev = "e8039594435c68eb4f780f3e9bf3972a7399c4b1" }
+subtrees = ["legacyPackages"]
+
 # Environment variables
 [vars]
 MY_VAR = "MY_VALUE"

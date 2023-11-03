@@ -62,6 +62,10 @@ impl Search {
         debug!("performing search for term: {}", self.search_term);
 
         let search_params = construct_search_params(&self.search_term, &flox)?;
+        debug!(
+            "search parameters: {}",
+            serde_json::to_string(&search_params).unwrap_or("<failed to serialize>".to_string())
+        );
 
         let (results, exit_status) = do_search(&search_params)?;
         debug!("search call exit status: {}", exit_status.to_string());
@@ -76,7 +80,7 @@ impl Search {
         } else {
             debug!("printing search results as user facing");
             render_search_results_user_facing(results)?;
-            println!("Use `flox show {{package}}` to see available versions");
+            eprintln!("\nUse `flox show {{package}}` to see available versions");
         }
         if !exit_status.success() {
             bail!(
