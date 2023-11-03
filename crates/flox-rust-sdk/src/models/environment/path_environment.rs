@@ -1,3 +1,12 @@
+//! The directory structure for a path environment looks like this:
+//! .flox/
+//!     ENVIRONMENT_POINTER_FILENAME
+//!     ENVIRONMENT_DIR_NAME/
+//!         MANIFEST_FILENAME
+//!         LOCKFILE_FILENAME
+//!     PATH_ENV_GCROOTS_DIR_NAME/
+//!         $system.$name (out link)
+
 use std::ffi::OsStr;
 use std::fs;
 use std::io::Write;
@@ -42,15 +51,6 @@ pub const MANIFEST_FILENAME: &str = "manifest.toml";
 pub const LOCKFILE_FILENAME: &str = "manifest.lock";
 pub const PATH_ENV_GCROOTS_DIR_NAME: &str = "run";
 pub const ENVIRONMENT_DIR_NAME: &str = "env";
-
-!// The directory structure for a path environment looks like this:
-!// .flox/
-!//     ENVIRONMENT_POINTER_FILENAME
-!//     ENVIRONMENT_DIR_NAME/
-!//         MANIFEST_FILENAME
-!//         LOCKFILE_FILENAME
-!//     PATH_ENV_GCROOTS_DIR_NAME/
-!//         $system.$name (out link)
 
 /// Struct representing a local environment
 ///
