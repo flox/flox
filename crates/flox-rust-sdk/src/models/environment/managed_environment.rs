@@ -434,7 +434,7 @@ fn lock_env(
     };
     let lock_contents =
         serde_json::to_string_pretty(&lock).map_err(ManagedEnvironmentError::SerializeLock)?;
-    debug!("writing rev '{}' to lockfile", lock.rev);
+    debug!("writing rev '{}' to lockfile to {:?}", lock.rev, lock_path);
     fs::write(lock_path, lock_contents).map_err(ManagedEnvironmentError::WriteLock)?;
     Ok(lock)
 }
@@ -485,8 +485,8 @@ impl ManagedEnvironment {
             )
             .unwrap();
 
-        // Check whether we can fast-forward merge the remote branch into the local branch
-        // In not the environment has diverged.
+        // Check whether we can fast-forward merge the remote branch into the local branch,
+        // if not the environment has diverged.
         let consistent_history = self
             .floxmeta
             .git
@@ -502,7 +502,7 @@ impl ManagedEnvironment {
         // try fast forward merge local env branch into project branch
         self.floxmeta
             .git
-            .push2(
+            .push_ref(
                 ".",
                 format!(
                     "FETCH_HEAD:refs/heads/{project_branch}",

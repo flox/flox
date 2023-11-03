@@ -434,7 +434,8 @@ impl GitCommandProvider {
         Ok(())
     }
 
-    pub fn push2(
+    /// Like [GitCommandProvider::push] but allows to specify the refspec explicitly
+    pub fn push_ref(
         &self,
         repository: impl AsRef<str>,
         push_spec: impl AsRef<str>,
