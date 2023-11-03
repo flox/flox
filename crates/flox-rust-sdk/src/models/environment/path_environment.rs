@@ -28,7 +28,7 @@ use super::{
 use crate::environment::NIX_BIN;
 use crate::flox::Flox;
 use crate::models::environment::{
-    resolve_manifest_to_lockfile,
+    lock_manifest,
     PkgDbError,
     BUILD_ENV_BIN,
     CATALOG_JSON,
@@ -200,7 +200,7 @@ where
             debug!("no existing lockfile found");
             None
         };
-        let mut lockfile_json = resolve_manifest_to_lockfile(
+        let mut lockfile_json = lock_manifest(
             Path::new(&PKGDB_BIN.as_str()),
             &manifest_path,
             maybe_lockfile,

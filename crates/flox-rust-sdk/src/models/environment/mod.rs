@@ -350,8 +350,8 @@ fn copy_dir_recursive(
     Ok(())
 }
 
-/// Use pkgdb to resolve a manifest into a lockfile
-pub fn resolve_manifest_to_lockfile(
+/// Use pkgdb to lock a manifest
+pub fn lock_manifest(
     pkgdb: &Path,
     manifest_path: &Path,
     existing_lockfile_path: Option<&Path>,
@@ -359,16 +359,13 @@ pub fn resolve_manifest_to_lockfile(
     let canoncial_manifest_path = manifest_path
         .canonicalize()
         .map_err(EnvironmentError2::OpenManifest)?;
-    let canonical_lockfile_path = existing_lockfile_path.map(|p| p.canonicalize());
     let mut pkgdb_cmd = Command::new(pkgdb);
     pkgdb_cmd.arg("lock").arg(canoncial_manifest_path);
-    if let Some(lf_path) = canonical_lockfile_path {
-        match lf_path {
-            Ok(lf_path) => {
-                pkgdb_cmd.arg(lf_path);
-            },
-            Err(err) => return Err(EnvironmentError2::BadLockfilePath(err)),
-        };
+    if let Some(lf_path) = existing_lockfile_path {
+        let canonical_lockfile_path = lf_path
+            .canonicalize()
+            .map_err(EnvironmentError2::BadLockfilePath)?;
+        pkgdb_cmd.arg(canonical_lockfile_path);
     }
     let output = pkgdb_cmd.output().map_err(EnvironmentError2::PkgDbCall)?;
     let lockfile_json: Value =
