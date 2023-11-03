@@ -1,7 +1,7 @@
 mod auth;
-mod channel;
 mod environment;
 mod general;
+mod search;
 
 use std::{env, fs};
 
@@ -235,10 +235,10 @@ enum LocalDevelopmentCommands {
     Activate(#[bpaf(external(environment::activate))] environment::Activate),
     /// Search for packages to install
     #[bpaf(command)]
-    Search(#[bpaf(external(channel::search))] channel::Search),
+    Search(#[bpaf(external(search::search))] search::Search),
     /// Show detailed information about a single package
     #[bpaf(command, long("show"))]
-    Show(#[bpaf(external(channel::show))] channel::Show),
+    Show(#[bpaf(external(search::show))] search::Show),
     /// Install a package into an environment
     #[bpaf(command)]
     Install(#[bpaf(external(environment::install))] environment::Install),
