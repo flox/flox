@@ -580,13 +580,10 @@ impl History {
 /// Send environment to flox hub
 #[derive(Bpaf, Clone)]
 pub struct Push {
-    #[allow(dead_code)] // pending spec for `-e`, `--dir` behaviour
-    #[bpaf(external(environment_args), group_help("Environment Options"))]
-    environment_args: EnvironmentArgs,
-
-    #[allow(dead_code)] // not yet handled in impl
-    #[bpaf(external(push_floxmain_or_env), optional)]
-    target: Option<PushFloxmainOrEnv>,
+    /// Directory to push the environment from (default: current directory)
+    dir: Option<PathBuf>,
+    /// ID of the environment to push top
+    remote: Option<EnvironmentRef>,
 
     /// forceably overwrite the remote copy of the environment
     #[allow(dead_code)] // not yet handled in impl
@@ -595,22 +592,29 @@ pub struct Push {
 }
 
 impl Push {
-    pub async fn handle(self, _flox: Flox) -> Result<()> {
+    pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("push");
+        let dir = self.dir.unwrap_or_else(|| std::env::current_dir().unwrap());
 
-        todo!("this command is planned for a future release")
+        match EnvironmentPointer::open(&dir)? {
+            EnvironmentPointer::Managed(managed_pointer) => {
+                if self.remote.is_some() {
+                    bail!("Environment already linked to a remote")
+                }
+
+                Self::push_managed_env(&flox, managed_pointer, dir)
+            },
+            EnvironmentPointer::Path(_) => todo!(),
+        }
     }
-}
 
-#[derive(Bpaf, Clone)]
-pub enum PushFloxmainOrEnv {
-    /// push the `floxmain` branch to sync configuration
-    #[bpaf(long, short)]
-    Main,
-    Env {
-        #[bpaf(long("environment"), short('e'), argument("ENV"))]
-        env: Option<EnvironmentRef>,
-    },
+    fn push_managed_env(flox: &Flox, managed_pointer: ManagedPointer, dir: PathBuf) -> Result<()> {
+        let mut env = ManagedEnvironment::open(flox, managed_pointer, dir.join(DOT_FLOX))
+            .context("Could not open environment")?;
+        env.push().context("Could not push environment")?;
+
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, Bpaf)]
