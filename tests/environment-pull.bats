@@ -192,3 +192,11 @@ function update_dummy_env() {
 @test "l6.b: installing in one directory doesn't show in the other until it is pushed and pulled again" {
   skip "pulling is not yet implemtened"
 }
+
+# bats test_tags=pull:floxhub
+# try pulling from floxhub authenticated with a test token
+@test "l?: pull environment from floxhub" {
+  unset __FLOX_FLOXHUB_URL;
+  run "$FLOX_CLI" pull --remote floxtest/default
+  assert_success
+}
