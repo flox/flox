@@ -296,11 +296,17 @@ pub struct PkgDbError {
     pub category_message: String,
     /// The more contextual message for the specific error that occurred.
     pub context_message: String,
+    /// The underlying error message if an exception was caught.
+    pub caught_message: String,
 }
 
 impl Display for PkgDbError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}: {}", self.category_message, self.context_message)
+        write!(
+            f,
+            "{}: {}: {}",
+            self.category_message, self.context_message, self.caught_message
+        )
     }
 }
 
