@@ -32,7 +32,7 @@ project_setup() {
   rm -rf "$PROJECT_DIR";
   mkdir -p "$PROJECT_DIR";
   pushd "$PROJECT_DIR" >/dev/null||return;
-  git init;
+  $FLOX_CLI init -d "$PROJECT_DIR";
 }
 
 project_teardown() {
@@ -73,6 +73,17 @@ env_is_activated() {
   done
   echo "$is_activated";
 }
+
+# ---------------------------------------------------------------------------- #
+
+@test "activate modifies prompt and puts package in path" {
+  run $FLOX_CLI install -d "$PROJECT_DIR" hello;
+  assert_success
+  assert_output --partial "✅ 'hello' installed to environment"
+  SHELL=bash run expect -d "$TESTS_DIR/activate/activate.exp" "$PROJECT_DIR";
+  assert_success;
+}
+
 
 # ---------------------------------------------------------------------------- #
 
