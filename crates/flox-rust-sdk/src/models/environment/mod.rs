@@ -348,12 +348,12 @@ fn copy_dir_recursive(
 pub fn resolve_manifest_to_lockfile(
     pkgdb: &Path,
     manifest_path: &Path,
-    lockfile_path: Option<&Path>,
+    existing_lockfile_path: Option<&Path>,
 ) -> Result<serde_json::Value, EnvironmentError2> {
     let canoncial_manifest_path = manifest_path
         .canonicalize()
         .map_err(EnvironmentError2::OpenManifest)?;
-    let canonical_lockfile_path = lockfile_path.map(|p| p.canonicalize());
+    let canonical_lockfile_path = existing_lockfile_path.map(|p| p.canonicalize());
     let mut pkgdb_cmd = Command::new(pkgdb);
     pkgdb_cmd.arg("lock").arg(canoncial_manifest_path);
     if let Some(lf_path) = canonical_lockfile_path {

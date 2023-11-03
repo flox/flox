@@ -78,15 +78,11 @@ setup_file() {
   n_lines="${#lines[@]}";
   case "$NIX_SYSTEM" in
     *-darwin)
-      # just 'hello'
       assert_equal "$n_lines" 11; # search line + show hint
       assert_equal "${lines[-1]}" "$SHOW_HINT"
       ;;
     *-linux)
-      # hello - matches name
-      # hello-wayland - matches name
-      # gnome.iagno - matches Ot(hello) in description
-      assert_equal "$n_lines" 4; # 4 search lines + show hint
+      assert_equal "$n_lines" 11; # 4 search lines + show hint
       assert_equal "${lines[-1]}" "$SHOW_HINT"
       ;;
   esac
