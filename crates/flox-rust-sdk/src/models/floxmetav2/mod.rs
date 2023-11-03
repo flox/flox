@@ -169,7 +169,7 @@ mod tests {
 
     #[test]
     fn clone_repo() {
-        env_logger::init();
+        let _ = env_logger::try_init();
 
         let (mut flox, tempdir) = flox_instance();
 
@@ -204,7 +204,7 @@ mod tests {
     /// We check if we can clone them and pull them into an existing clone.
     #[test]
     fn clone_from_floxhub() {
-        env_logger::init();
+        let _ = env_logger::try_init();
 
         let (mut flox, _) = flox_instance();
 
