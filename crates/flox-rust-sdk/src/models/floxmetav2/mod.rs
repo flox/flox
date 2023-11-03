@@ -45,9 +45,9 @@ impl FloxmetaV2 {
     /// Most of the time, you want to use [`FloxmetaV2::clone`] instead.
     /// This is useful for testing and isolated remote operations.
     pub fn clone_to(
+        path: impl AsRef<Path>,
         flox: &Flox,
         pointer: &ManagedPointer,
-        path: impl AsRef<Path>,
     ) -> Result<Self, FloxmetaV2Error> {
         let host = flox.floxhub_host.as_str();
         let token = flox
@@ -74,7 +74,7 @@ impl FloxmetaV2 {
     ///
     /// Like [`FloxmetaV2::clone_to`], but uses the system path for floxmeta repositories in XDG_DATA_HOME
     pub fn clone(flox: &Flox, pointer: &ManagedPointer) -> Result<Self, FloxmetaV2Error> {
-        Self::clone_to(flox, pointer, floxmeta_dir(flox, &pointer.owner))
+        Self::clone_to(floxmeta_dir(flox, &pointer.owner), flox, pointer)
     }
 
     /// Open a floxmeta repository at a given path
@@ -87,9 +87,9 @@ impl FloxmetaV2 {
     ///
     /// In most cases, you want to use [`FloxmetaV2::open`] instead which provides the flox defaults.
     pub fn open_at(
+        user_floxmeta_dir: impl AsRef<Path>,
         flox: &Flox,
         pointer: &ManagedPointer,
-        user_floxmeta_dir: impl AsRef<Path>,
     ) -> Result<Self, FloxmetaV2Error> {
         let token = flox
             .floxhub_token
@@ -121,7 +121,7 @@ impl FloxmetaV2 {
     /// Like [`FloxmetaV2::open_at`], but uses the system path for floxmeta repositories in XDG_DATA_HOME.
     pub fn open(flox: &Flox, pointer: &ManagedPointer) -> Result<Self, FloxmetaV2Error> {
         let user_floxmeta_dir = floxmeta_dir(flox, &pointer.owner);
-        Self::open_at(flox, pointer, user_floxmeta_dir)
+        Self::open_at(user_floxmeta_dir, flox, pointer)
     }
 }
 
@@ -194,9 +194,9 @@ mod tests {
         flox.floxhub_token = Some("no token needed here".to_string());
         flox.floxhub_host = format!("file://{}", source_path.to_string_lossy());
 
-        FloxmetaV2::clone_to(&flox, &pointer, tempdir.path().join("dest"))
+        FloxmetaV2::clone_to(tempdir.path().join("dest"), &flox, &pointer)
             .expect("Cloning a floxmeta repo should succeed");
-        FloxmetaV2::open_at(&flox, &pointer, tempdir.path().join("dest"))
+        FloxmetaV2::open_at(tempdir.path().join("dest"), &flox, &pointer)
             .expect("Opening a floxmeta repo should succeed");
     }
 
