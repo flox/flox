@@ -56,7 +56,7 @@ impl FloxmetaV2 {
             .ok_or(FloxmetaV2Error::LoggedOut)?;
 
         let git_options = floxmeta_git_options(&flox.floxhub_host, token);
-        let branch: String = remote_branch_name(&flox.system, pointer);
+        let branch = remote_branch_name(&flox.system, pointer);
 
         let git = GitCommandProvider::clone_branch_with(
             git_options,

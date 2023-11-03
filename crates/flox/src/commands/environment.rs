@@ -622,6 +622,7 @@ enum PullSelect {
         remote: EnvironmentRef,
     },
     Existing {
+        /// Directory containing a managed environment to pull
         dir: Option<PathBuf>,
     },
 }
@@ -652,10 +653,16 @@ impl Pull {
         match self.pull_select {
             PullSelect::New { dir, remote } => {
                 let dir = dir.unwrap_or_else(|| std::env::current_dir().unwrap());
+
+                debug!("Resolved user intent: pull {remote:?} into {dir:?}");
+
                 Self::pull_new_environment(&flox, dir.join(DOT_FLOX), remote)?;
             },
             PullSelect::Existing { dir } => {
                 let dir = dir.unwrap_or_else(|| std::env::current_dir().unwrap());
+
+                debug!("Resolved user intent: pull changes for environment found in {dir:?}");
+
                 let pointer = {
                     let p = EnvironmentPointer::open(&dir)
                         .with_context(|| format!("No environment found in {dir:?}"))?;
