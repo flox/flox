@@ -183,9 +183,12 @@ function update_dummy_env() {
   assert [ "$LOCKED_FIRST_BEFORE" != "$LOCKED_SECOND" ]
 
   # after pulling first env, its at the rame rev as the second that was pulled after the update
-  "$FLOX_CLI" pull --dir second  # dummy remote as we are not actually pulling anything
-  assert [ "$LOCKED_FIRST_BEFORE" != "$LOCKED_FIRST_AFTER" ]
-  assert [ "$LOCKED_FIRST_BEFORE" == "$LOCKED_SECOND" ]
+  "$FLOX_CLI" pull --dir first  # dummy remote as we are not actually pulling anything
+
+  LOCKED_FIRST_AFTER_PULL=$(cat ./first/.flox/env.lock | jq -r '.rev')
+
+  assert [ "$LOCKED_FIRST_BEFORE" != "$LOCKED_FIRST_AFTER_PULL" ]
+  assert [ "$LOCKED_FIRST_AFTER_PULL" == "$LOCKED_SECOND" ]
 }
 
 # bats test_tags=pull:l6,pull:l6:b
