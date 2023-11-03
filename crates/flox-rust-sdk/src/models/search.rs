@@ -5,7 +5,6 @@ use std::process::{Command, ExitStatus, Stdio};
 use std::str::FromStr;
 
 use flox_types::catalog::System;
-use flox_types::stability::Stability;
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -83,8 +82,6 @@ pub struct Registry {
 pub struct RegistryDefaults {
     /// An optional attr path to restrict the search to
     pub subtrees: Option<Vec<String>>,
-    /// Which stabilities should be included in results
-    pub stabilities: Option<Vec<Stability>>,
 }
 
 /// A package source
@@ -97,8 +94,6 @@ pub struct RegistryInput {
     pub from: FlakeRef,
     /// An optional attr path to restrict the search to
     pub subtrees: Option<Vec<String>>,
-    /// Which stabilities should be included in the search results
-    pub stabilities: Option<Vec<Stability>>,
 }
 
 /// Which packages should be allowed in search results.
@@ -291,6 +286,7 @@ pub fn do_search(search_params: &SearchParams) -> Result<(SearchResults, ExitSta
 
 /// A package search result
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SearchResult {
     /// Which input the package came from
     pub input: String,
@@ -299,21 +295,16 @@ pub struct SearchResult {
     /// Most attributes in the attribute path are broken out into other subfields
     /// with the exception of the package version for a package from a catalog
     /// (i.e. the last attribute in the path). This attribute can be extracted from
-    #[serde(rename = "absPath")]
     pub abs_path: Vec<String>,
     /// Which subtree the package is under e.g. "catalog", "legacyPackages", etc
     pub subtree: Subtree,
     /// The system that the package can be built for
     pub system: String,
-    /// If the package comes from a catalog, which stability it comes from
-    pub stability: Option<String>,
-    /// The set of attributes that make up this package in particular.
+    /// The part of the attribute path after `<subtree>.<system>`.
     ///
-    /// In the case of something like `hello`, this will simply be `["hello"]`,
-    /// but for a package that comes from a nested package set this will be
-    /// something like `["python310Packages", "flask"]`.
-    #[serde(rename = "pkgSubPath")]
-    pub pkg_subpath: Vec<String>,
+    /// For an arbitrary flake this will simply be the name of the package, but
+    /// for nixpkgs this can be something like `python310Packages.flask`
+    pub rel_path: Vec<String>,
     /// The package name
     pub pname: Option<String>,
     /// The package version
@@ -326,6 +317,8 @@ pub struct SearchResult {
     pub unfree: Option<bool>,
     /// Which license the package is licensed under
     pub license: Option<String>,
+    /// The database ID of this package
+    pub id: u64,
 }
 
 #[cfg(test)]
@@ -341,8 +334,7 @@ mod test {
             "inputs": {},
             "priority": [],
             "defaults": {
-                "subtrees": null,
-                "stabilities": null
+                "subtrees": null
             }
         },
         "systems": null,
@@ -376,13 +368,16 @@ mod test {
             "aarch64-darwin",
             "hello"
         ],
+        "relPath": [
+            "hello"
+        ],
         "subtree": "legacyPackages",
         "system": "aarch64-darwin",
-        "pkgSubPath": ["hello"],
         "stability": null,
         "pname": "hello",
         "unfree": false,
-        "version": "2.12.1"
+        "version": "2.12.1",
+        "id": 420
     }"#;
 
     #[test]

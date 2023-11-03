@@ -4,7 +4,6 @@ use std::str::FromStr;
 
 use anyhow::{bail, Result};
 use bpaf::Bpaf;
-use derive_more::Display;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::search::{
     do_search,
@@ -18,24 +17,16 @@ use flox_rust_sdk::models::search::{
     ShowError,
     Subtree,
 };
-use itertools::Itertools;
+use log::debug;
+use serde_json::json;
 
 use crate::subcommand_metric;
-use crate::utils::init::{DEFAULT_CHANNELS, HIDDEN_CHANNELS};
 
 const SEARCH_INPUT_SEPARATOR: &'_ str = ":";
 const DEFAULT_DESCRIPTION: &'_ str = "<no description provided>";
 
 #[derive(Bpaf, Clone)]
 pub struct ChannelArgs {}
-
-#[derive(Debug, PartialEq, PartialOrd, Ord, Eq, Display, Clone, Copy)]
-enum ChannelType {
-    #[display(fmt = "user")]
-    User,
-    #[display(fmt = "flox")]
-    Flox,
-}
 
 /// Search for packages to install
 #[derive(Bpaf, Clone)]
@@ -57,8 +48,6 @@ pub struct Search {
     pub search_term: String,
 }
 
-// Try Using:
-//   $ FLOX_FEATURES_CHANNELS=rust ./target/debug/flox search hello;
 // Your first run will be slow, it's creating databases, but after that -
 //   it's fast!
 //
@@ -70,18 +59,22 @@ pub struct Search {
 impl Search {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("search");
+        debug!("performing search for term: {}", self.search_term);
 
         let search_params = construct_search_params(&self.search_term, &flox)?;
 
         let (results, exit_status) = do_search(&search_params)?;
+        debug!("search call exit status: {}", exit_status.to_string());
 
         // Render what we have no matter what, then indicate whether we encountered an error.
         // FIXME: We may have warnings on `stderr` even with a successful call to `pkgdb`.
         //        We aren't checking that at all at the moment because better overall error handling
         //        is coming in a later PR.
         if self.json {
+            debug!("printing search results as JSON");
             render_search_results_json(results)?;
         } else {
+            debug!("printing search results as user facing");
             render_search_results_user_facing(results)?;
             println!("Use `flox show {{package}}` to see available versions");
         }
@@ -99,6 +92,10 @@ impl Search {
 fn construct_search_params(search_term: &str, flox: &Flox) -> Result<SearchParams> {
     // Create `registry` parameter for `pkgdb`
     let (inputs, priority) = collect_manifest_inputs(flox);
+    debug!(
+        "collected manifest inputs named: {}",
+        inputs.keys().cloned().collect::<Vec<_>>().join(", ")
+    );
     let registry = Registry {
         inputs,
         priority,
@@ -107,47 +104,35 @@ fn construct_search_params(search_term: &str, flox: &Flox) -> Result<SearchParam
 
     // We've already checked that the search term is Some(_)
     let query = Query::from_str(search_term)?;
-
-    Ok(SearchParams {
+    let params = SearchParams {
         registry,
         query,
         systems: Some(vec![flox.system.clone()]),
         ..SearchParams::default()
-    })
+    };
+    debug!("search params: {:?}", params);
+    Ok(params)
 }
 
 /// This function is a hack to convert the current subscriptions into a format
 /// that matches the search spec, which expects sources to come from the manifest.
 ///
 /// This is temporary and will be removed once we have a functioning manifest.
-fn collect_manifest_inputs(flox: &Flox) -> (HashMap<String, RegistryInput>, Vec<String>) {
-    let channels = flox
-        .channels
-        .iter()
-        .filter_map(|entry| {
-            if HIDDEN_CHANNELS.contains_key(&*entry.from.id) {
-                None
-            } else if DEFAULT_CHANNELS.contains_key(&*entry.from.id) {
-                Some((ChannelType::Flox, entry))
-            } else {
-                Some((ChannelType::User, entry))
-            }
-        })
-        .sorted();
-
-    // Create `registry` parameter for `pkgdb`
-    let mut priority: Vec<String> = Vec::new();
-    let mut inputs = HashMap::new();
-    for (_, entry) in channels {
-        priority.push(entry.from.id.to_string());
-        let input = RegistryInput {
-            from: entry.to.clone(),
-            // TODO: handle `subtrees` and `stabilities`
-            subtrees: None,
-            stabilities: None,
-        };
-        inputs.insert(entry.from.id.to_string(), input);
-    }
+fn collect_manifest_inputs(_flox: &Flox) -> (HashMap<String, RegistryInput>, Vec<String>) {
+    let priority = vec!["nixpkgs".to_string()];
+    let nixpkgs_json = json!({
+        "type": "github",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "e8039594435c68eb4f780f3e9bf3972a7399c4b1",
+    });
+    let reg_input = RegistryInput {
+        from: serde_json::from_value(nixpkgs_json).unwrap(),
+        subtrees: Some(vec!["legacyPackages".to_string()]),
+    };
+    let inputs = [("nixpkgs".to_string(), reg_input)]
+        .into_iter()
+        .collect::<HashMap<_, _>>();
     (inputs, priority)
 }
 
@@ -177,7 +162,7 @@ fn render_search_results_user_facing(search_results: SearchResults) -> Result<()
         .map(|r| {
             Ok(DisplayItem {
                 input: r.input,
-                package: r.pkg_subpath.join("."),
+                package: r.rel_path.join("."),
                 description: r.description.map(|s| s.replace('\n', " ")),
                 render_with_input: false,
             })
@@ -334,7 +319,6 @@ fn construct_show_params(search_term: &str, flox: &Flox) -> Result<SearchParams>
             .map(|entry| RegistryInput {
                 from: entry.to.clone(),
                 subtrees: None,
-                stabilities: None,
             })
         else {
             bail!("manifest did not contain an input named '{}'", input_name)
@@ -369,19 +353,13 @@ fn render_show(search_results: &[SearchResult], all: bool) -> Result<()> {
     let mut results = Vec::new();
     // Collect all versions of the top search result
     for package in search_results.iter() {
-        let this_pkg_name = package.pkg_subpath.join(".");
+        let this_pkg_name = package.rel_path.join(".");
         if pkg_name.is_none() {
             pkg_name = Some(this_pkg_name.clone());
         }
         if pkg_name == Some(this_pkg_name) {
             results.push(package);
         }
-        // let description = package
-        //     .description
-        //     .as_ref()
-        //     .map(|d| d.replace('\n', " "))
-        //     .unwrap_or("<no description provided>".into());
-        // println!("{} - {}", this_pkg_name, description);
     }
     if results.is_empty() {
         // This should never happen since we've already checked that the
@@ -409,7 +387,7 @@ fn render_show(search_results: &[SearchResult], all: bool) -> Result<()> {
                 {
                     return None;
                 }
-                let name = sr.pkg_subpath.join(".");
+                let name = sr.rel_path.join(".");
                 // We don't print packages that don't have a version since
                 // the resolver will always rank versioned packages higher.
                 sr.version.clone().map(|version| [name, version].join("@"))
@@ -418,7 +396,7 @@ fn render_show(search_results: &[SearchResult], all: bool) -> Result<()> {
         multiple_versions.join(", ")
     } else {
         let sr = results[0];
-        let name = sr.pkg_subpath.join(".");
+        let name = sr.rel_path.join(".");
         let version = sr.version.clone();
         if let Some(version) = version {
             [name, version].join("@")

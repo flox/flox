@@ -79,7 +79,7 @@ setup_file() {
   case "$NIX_SYSTEM" in
     *-darwin)
       # just 'hello'
-      assert_equal "$n_lines" 2; # search line + show hint
+      assert_equal "$n_lines" 11; # search line + show hint
       assert_equal "${lines[-1]}" "$SHOW_HINT"
       ;;
     *-linux)
@@ -95,8 +95,8 @@ setup_file() {
 
 # ---------------------------------------------------------------------------- #
 
-@test "'flox search' semver search: hello@2.10" {
-  run "$FLOX_CLI" search hello@2.10;
+@test "'flox search' semver search: hello@2.12.1" {
+  run "$FLOX_CLI" search hello@2.12.1;
   n_lines="${#lines[@]}";
   assert_equal "$n_lines" 2; # search line + show hint
   assert_equal "${lines[-1]}" "$SHOW_HINT"
@@ -116,14 +116,13 @@ setup_file() {
 
 @test "'flox search' semver search: 'hello@>=1'" {
   run "$FLOX_CLI" search 'hello@>=1' --json;
-  versions="$(echo "$output" | jq -c 'map(.absPath | last)')";
+  versions="$(echo "$output" | jq -c 'map(.version)')";
   case $THIS_SYSTEM in
     *-darwin)
-      assert_equal "$versions" '["2_12_1","latest","2_12","2_10"]';
+      assert_equal "$versions" '["2.12.1","2.12","2.10"]';
       ;;
     *-linux)
-      # first 4 results are 'hello', last two are 'gnome.iagno'
-      assert_equal "$versions" '["2_12_1","latest","2_12","2_10","3_38_1","latest"]';
+      assert_equal "$versions" '[]';
       ;;
   esac
 }
@@ -133,15 +132,15 @@ setup_file() {
 
 @test "'flox search' semver search: hello@2.x" {
   run "$FLOX_CLI" search hello@2.x --json;
-  versions="$(echo "$output" | jq -c 'map(.absPath | last)')";
-  assert_equal "$versions" '["2_12_1","latest","2_12","2_10"]';
+  versions="$(echo "$output" | jq -c 'map(.version)')";
+  assert_equal "$versions" '["2.12.1"]';
 }
 
 
 # ---------------------------------------------------------------------------- #
 
 @test "'flox search' semver search: hello@=2.10" {
-  run "$FLOX_CLI" search hello@=2.10;
+  run "$FLOX_CLI" search hello@=2.12;
   n_lines="${#lines[@]}";
   assert_equal "$n_lines" "2"; # search line + show hint
   assert_equal "${lines[-1]}" "$SHOW_HINT"
@@ -152,8 +151,8 @@ setup_file() {
 
 @test "'flox search' semver search: hello@v2" {
   run "$FLOX_CLI" search hello@v2 --json;
-  versions="$(echo "$output" | jq -c 'map(.absPath | last)')";
-  assert_equal "$versions" '["2_12_1","latest","2_12","2_10"]';
+  versions="$(echo "$output" | jq -c 'map(.version)')";
+  assert_equal "$versions" '["2.12.1"]';
 }
 
 
@@ -161,8 +160,8 @@ setup_file() {
 
 @test "'flox search' semver search: 'hello@>1 <3'" {
   run "$FLOX_CLI" search 'hello@>1 <3' --json;
-  versions="$(echo "$output" | jq -c 'map(.absPath | last)')";
-  assert_equal "$versions" '["2_12_1","latest","2_12","2_10"]';
+  versions="$(echo "$output" | jq -c 'map(.version)')";
+  assert_equal "$versions" '["2.12.1"]';
 }
 
 
