@@ -1,5 +1,7 @@
 use std::collections::HashMap;
+use std::fmt::Display;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::{fs, io};
 
 use async_trait::async_trait;
@@ -9,6 +11,7 @@ use runix::command_line::{NixCommandLine, NixCommandLineRunError, NixCommandLine
 use runix::installable::FlakeAttribute;
 use runix::store_path::StorePath;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use thiserror::Error;
 use walkdir::WalkDir;
 
@@ -32,8 +35,6 @@ pub mod remote_environment;
 pub const CATALOG_JSON: &str = "catalog.json";
 pub const DOT_FLOX: &str = ".flox";
 pub const ENVIRONMENT_POINTER_FILENAME: &str = "env.json";
-pub const MANIFEST_FILENAME: &str = "manifest.toml";
-pub const PATH_ENV_GCROOTS_DIR: &str = "run";
 // don't forget to update the man page
 pub const DEFAULT_KEEP_GENERATIONS: usize = 10;
 // don't forget to update the man page
@@ -239,7 +240,7 @@ pub enum EnvironmentError2 {
     MakeTemporaryEnv(std::io::Error),
     #[error("UpdateManifest({0})")]
     UpdateManifest(std::io::Error),
-    #[error("OpenManifest({0})")]
+    #[error("couldn't open manifest: {0}")]
     OpenManifest(std::io::Error),
     #[error("Activate({0})")]
     Activate(NixCommandLineRunError),
@@ -273,6 +274,40 @@ pub enum EnvironmentError2 {
     BuildEnvCall(std::io::Error),
     #[error("error building environment: {0}")]
     BuildEnv(String),
+    #[error("provided lockfile path doesn't exist: {0}")]
+    BadLockfilePath(std::io::Error),
+    #[error("call to pkgdb failed: {0}")]
+    PkgDbCall(std::io::Error),
+    #[error("couldn't parse lockfile as JSON: {0}")]
+    ParseLockfileJSON(serde_json::Error),
+    #[error("couldn't write new lockfile contents: {0}")]
+    WriteLockfile(std::io::Error),
+    #[error("registry resolution failed: {0}")]
+    FailedResolution(PkgDbError),
+}
+
+/// A struct representing error messages coming from pkgdb
+#[derive(Debug, Deserialize)]
+pub struct PkgDbError {
+    /// The exit code of pkgdb, can be used to programmatically determine
+    /// the category of error.
+    pub exit_code: u64,
+    /// The generic message for this category of error.
+    pub category_message: String,
+    /// The more contextual message for the specific error that occurred.
+    pub context_message: String,
+    /// The underlying error message if an exception was caught.
+    pub caught_message: String,
+}
+
+impl Display for PkgDbError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}: {}: {}",
+            self.category_message, self.context_message, self.caught_message
+        )
+    }
 }
 
 /// Copy a whole directory recursively ignoring the original permissions
@@ -313,6 +348,29 @@ fn copy_dir_recursive(
         }
     }
     Ok(())
+}
+
+/// Use pkgdb to lock a manifest
+pub fn lock_manifest(
+    pkgdb: &Path,
+    manifest_path: &Path,
+    existing_lockfile_path: Option<&Path>,
+) -> Result<serde_json::Value, EnvironmentError2> {
+    let canoncial_manifest_path = manifest_path
+        .canonicalize()
+        .map_err(EnvironmentError2::OpenManifest)?;
+    let mut pkgdb_cmd = Command::new(pkgdb);
+    pkgdb_cmd.arg("lock").arg(canoncial_manifest_path);
+    if let Some(lf_path) = existing_lockfile_path {
+        let canonical_lockfile_path = lf_path
+            .canonicalize()
+            .map_err(EnvironmentError2::BadLockfilePath)?;
+        pkgdb_cmd.arg(canonical_lockfile_path);
+    }
+    let output = pkgdb_cmd.output().map_err(EnvironmentError2::PkgDbCall)?;
+    let lockfile_json: Value =
+        serde_json::from_slice(&output.stdout).map_err(EnvironmentError2::ParseLockfileJSON)?;
+    Ok(lockfile_json)
 }
 
 #[cfg(test)]

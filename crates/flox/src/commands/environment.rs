@@ -60,6 +60,7 @@ impl EnvironmentSelect {
 
                 match pointer {
                     EnvironmentPointer::Path(path_pointer) => {
+                        debug!("detected concrete environment type: path");
                         let dot_flox_path = path.join(DOT_FLOX);
                         ConcreteEnvironment::Path(PathEnvironment::open(
                             path_pointer,
@@ -67,9 +68,14 @@ impl EnvironmentSelect {
                             &flox.temp_dir,
                         )?)
                     },
-                    EnvironmentPointer::Managed(managed_pointer) => ConcreteEnvironment::Managed(
-                        ManagedEnvironment::open(flox, managed_pointer, path)?,
-                    ),
+                    EnvironmentPointer::Managed(managed_pointer) => {
+                        debug!("detected concrete environment type: managed");
+                        ConcreteEnvironment::Managed(ManagedEnvironment::open(
+                            flox,
+                            managed_pointer,
+                            path,
+                        )?)
+                    },
                 }
             },
             EnvironmentSelect::Remote(_) => todo!(),
@@ -282,7 +288,9 @@ impl Activate {
         // We don't have access to the current PS1 (it's not exported), so we
         // can't modify it. Instead set FLOX_PROMPT_ENVIRONMENTS and let the
         // activation script set PS1 based on that.
-        let error = Command::new(activation_path.join("activate"))
+        let activation_script = activation_path.join("activate");
+        debug!("running activation script: {}", activation_script.display());
+        let error = Command::new(activation_script)
             .env("FLOX_PROMPT_ENVIRONMENTS", flox_prompt_environments)
             .env("FLOX_ENV", activation_path)
             .exec();
