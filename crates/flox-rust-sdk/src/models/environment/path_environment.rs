@@ -43,14 +43,14 @@ pub const LOCKFILE_FILENAME: &str = "manifest.lock";
 pub const PATH_ENV_GCROOTS_DIR_NAME: &str = "run";
 pub const ENVIRONMENT_DIR_NAME: &'_ str = "env";
 
-// The directory structure for a path environment looks like this:
-// .flox/
-//     ENVIRONMENT_POINTER_FILENAME
-//     ENVIRONMENT_DIR_NAME/
-//         MANIFEST_FILENAME
-//         LOCKFILE_FILENAME
-//     PATH_ENV_GCROOTS_DIR_NAME/
-//         $system.$name (out link)
+!// The directory structure for a path environment looks like this:
+!// .flox/
+!//     ENVIRONMENT_POINTER_FILENAME
+!//     ENVIRONMENT_DIR_NAME/
+!//         MANIFEST_FILENAME
+!//         LOCKFILE_FILENAME
+!//     PATH_ENV_GCROOTS_DIR_NAME/
+!//         $system.$name (out link)
 
 /// Struct representing a local environment
 ///
