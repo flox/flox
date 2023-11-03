@@ -651,7 +651,7 @@ impl Pull {
             PullSelect::Existing { dir } => {
                 let dir = dir.unwrap_or_else(|| std::env::current_dir().unwrap());
                 let pointer = {
-                    let p = EnvironmentPointer::open(dir.join(DOT_FLOX))
+                    let p = EnvironmentPointer::open(&dir)
                         .with_context(|| format!("No environment found in {dir:?}"))?;
                     match p {
                         EnvironmentPointer::Managed(managed_pointer) => managed_pointer,
