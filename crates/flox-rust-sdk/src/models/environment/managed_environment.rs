@@ -245,14 +245,30 @@ impl ManagedEnvironment {
             },
             Err(e) => Err(ManagedEnvironmentError::OpenFloxmeta(e))?,
         };
+        Self::open_with(floxmeta, flox, pointer, dot_flox_path)
+    }
 
+    /// Open a managed environment backed by a provided floxmeta clone.
+    /// Ensure a branch for the environment exists in floxmeta and that there is
+    /// a _unique_ branch to track its state.
+    ///
+    /// This method is primarily useful for testing.
+    /// In most cases, you want to use [`ManagedEnvironment::open`] instead which provides the flox defaults.
+    fn open_with(
+        floxmeta: FloxmetaV2,
+        flox: &Flox,
+        pointer: ManagedPointer,
+        dot_flox_path: impl AsRef<Path>,
+    ) -> Result<Self, EnvironmentError2> {
         let lock = Self::ensure_locked(flox, &pointer, &dot_flox_path, &floxmeta)?;
+
         Self::ensure_branch(
             &branch_name(&flox.system, &pointer, &dot_flox_path)?,
             &lock,
             &floxmeta,
         )?;
-        ManagedEnvironment::ensure_reverse_link(flox, &dot_flox_path)?;
+
+        Self::ensure_reverse_link(flox, &dot_flox_path)?;
 
         Ok(ManagedEnvironment {
             path: dot_flox_path.as_ref().to_path_buf(),
