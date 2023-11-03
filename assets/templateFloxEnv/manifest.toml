@@ -3,7 +3,7 @@
 # hello = {}
 
 [registry.inputs.nixpkgs]
-from = { type = "github", owner = "NixOS", repo = "nixpkgs", rev = "e8039594435c68eb4f780f3e9bf3972a7399c4b1" }
+from = { type = "github", owner = "NixOS", repo = "nixpkgs" }
 subtrees = ["legacyPackages"]
 
 # Environment variables
