@@ -171,14 +171,13 @@ function update_dummy_env() {
   mkdir first second
 
   "$FLOX_CLI" pull --remote owner/name --dir first  # dummy remote as we are not actually pulling anything
-  LOCKED_FIRST_BEFORE=$(cat .flox/env.lock | jq -r '.rev')
+  LOCKED_FIRST_BEFORE=$(cat ./first/.flox/env.lock | jq -r '.rev')
 
   update_dummy_env "owner" "name"
-
-  "$FLOX_CLI" pull --remote owner/name --dir first  # dummy remote as we are not actually pulling anything
-  LOCKED_SECOND=$(cat .flox/env.lock | jq -r '.rev')
-
   LOCKED_FIRST_AFTER=$(cat ./first/.flox/env.lock | jq -r '.rev')
+
+  "$FLOX_CLI" pull --remote owner/name --dir second  # dummy remote as we are not actually pulling anything
+  LOCKED_SECOND=$(cat ./second/.flox/env.lock | jq -r '.rev')
 
   assert [ "$LOCKED_FIRST_BEFORE" == "$LOCKED_FIRST_AFTER" ]
   assert [ "$LOCKED_FIRST_BEFORE" != "$LOCKED_SECOND" ]
