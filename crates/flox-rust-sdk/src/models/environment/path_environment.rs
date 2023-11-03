@@ -41,7 +41,7 @@ use crate::models::search::PKGDB_BIN;
 pub const MANIFEST_FILENAME: &str = "manifest.toml";
 pub const LOCKFILE_FILENAME: &str = "manifest.lock";
 pub const PATH_ENV_GCROOTS_DIR_NAME: &str = "run";
-pub const ENVIRONMENT_DIR_NAME: &'_ str = "env";
+pub const ENVIRONMENT_DIR_NAME: &str = "env";
 
 !// The directory structure for a path environment looks like this:
 !// .flox/
