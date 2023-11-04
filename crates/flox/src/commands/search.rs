@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::io::{BufWriter, Write};
 use std::str::FromStr;
 
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::search::{
@@ -79,8 +79,7 @@ impl Search {
             render_search_results_json(results)?;
         } else {
             debug!("printing search results as user facing");
-            render_search_results_user_facing(results)?;
-            eprintln!("\nUse `flox show {{package}}` to see available versions");
+            render_search_results_user_facing(&self.search_term, results)?;
         }
         if !exit_status.success() {
             bail!(
@@ -153,10 +152,13 @@ struct DisplayItem {
     render_with_input: bool,
 }
 
-fn render_search_results_user_facing(search_results: SearchResults) -> Result<()> {
+fn render_search_results_user_facing(
+    search_term: &str,
+    search_results: SearchResults,
+) -> Result<()> {
     // Nothing to display
     if search_results.results.is_empty() {
-        return Ok(());
+        bail!("No packages matched this search term: {}", search_term);
     }
     // Search results contain a lot of information, but all we need for rendering are
     // the input, the package subpath (e.g. "python310Packages.flask"), and the description.
@@ -202,6 +204,8 @@ fn render_search_results_user_facing(search_results: SearchResults) -> Result<()
         let desc: String = d.description.unwrap_or(default_desc.clone());
         writeln!(&mut writer, "{package:<column_width$}  {desc}")?;
     }
+    writer.flush().context("couldn't flush search results")?;
+    eprintln!("\nUse `flox show {{package}}` to see available versions");
     Ok(())
 }
 

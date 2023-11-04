@@ -210,3 +210,13 @@ setup_file() {
   assert_success
   assert_equal "${lines[-1]}" "$SHOW_HINT"
 }
+
+
+# ---------------------------------------------------------------------------- #
+
+@test "'flox search' error message when no results" {
+  run "$FLOX_CLI" search surely_doesnt_exist;
+  assert_equal "${#lines[@]}" 1;
+  # There's a leading `ERROR: ` that's left off when run non-interactively
+  assert_output "No packages matched this search term: surely_doesnt_exist";
+}
