@@ -1,12 +1,13 @@
 use std::env;
 use std::fs::File;
-use std::io::stdin;
+use std::io::{stdin, Write};
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use anyhow::{bail, Context, Result};
 use bpaf::Bpaf;
+use crossterm::{cursor, QueueableCommand};
 use flox_rust_sdk::flox::{EnvironmentName, Flox};
 use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironment;
 use flox_rust_sdk::models::environment::path_environment::{Original, PathEnvironment};
@@ -276,9 +277,23 @@ impl Activate {
         };
 
         let mut environment = concrete_environment.into_dyn_environment();
-
         let nix = flox.nix(Default::default());
+
+        let mut stderr = std::io::stdout();
+        stderr
+            .queue(cursor::SavePosition)
+            .context("couldn't set cursor positon")?;
+        stderr
+            .write_all("Building environment...".as_bytes())
+            .context("could't write progress message")?;
+        stderr.flush().context("could't flush stderr")?;
+
         let activation_path = environment.activation_path(&flox, &nix).await?;
+
+        stderr
+            .queue(cursor::RestorePosition)
+            .context("couldn't restore cursor position")?;
+        stderr.flush().context("could't flush stderr")?;
 
         let flox_prompt_environments = env::var("FLOX_PROMPT_ENVIRONMENTS")
             .map_or(prompt_name.clone(), |prompt_environments| {
