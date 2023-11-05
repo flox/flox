@@ -167,32 +167,39 @@ mod tests {
     use crate::flox::EnvironmentName;
     use crate::providers::git::GitProvider;
 
+    /// Create an upstream floxmeta repository with an environment under a given base path
+    fn create_fake_floxmeta(
+        floxhub_base_path: &Path,
+        flox: &Flox,
+        pointer: &ManagedPointer,
+    ) -> GitCommandProvider {
+        let floxmeta_path = floxhub_base_path.join(format!("{}/floxmeta", pointer.owner));
+        fs::create_dir_all(&floxmeta_path).unwrap();
+        let git = GitCommandProvider::init(floxmeta_path, false).unwrap();
+        git.rename_branch(&remote_branch_name(&flox.system, pointer))
+            .unwrap();
+        fs::write(git.path().join("test.txt"), "test").unwrap();
+        git.add(&[Path::new("test.txt")]).unwrap();
+        git.commit("test").unwrap();
+        git
+    }
+
+    /// Test whether a floxmeta repository can be successfully cloned
+    /// from a given floxhub host (here a git file:// url pointing to a fake floxmeta repo)
+    /// and opened from an existing clone.
     #[test]
     fn clone_repo() {
         let _ = env_logger::try_init();
 
         let (mut flox, tempdir) = flox_instance();
 
-        let pointer = ManagedPointer::new(
-            EnvironmentOwner::from_str("floxtest").unwrap(),
-            EnvironmentName::from_str("test").unwrap(),
-        );
+        let pointer = ManagedPointer::new("floxtest".parse().unwrap(), "test".parse().unwrap());
         let source_path = tempdir.path().join("source");
-
-        let _ = {
-            let source_path = source_path.join("floxtest/floxmeta");
-            fs::create_dir_all(&source_path).unwrap();
-            let git = GitCommandProvider::init(source_path, false).unwrap();
-            git.rename_branch(&remote_branch_name(&flox.system, &pointer))
-                .unwrap();
-            fs::write(git.path().join("test.txt"), "test").unwrap();
-            git.add(&[Path::new("test.txt")]).unwrap();
-            git.commit("test").unwrap();
-            git
-        };
 
         flox.floxhub_token = Some("no token needed here".to_string());
         flox.floxhub_host = format!("file://{}", source_path.to_string_lossy());
+
+        create_fake_floxmeta(&source_path, &flox, &pointer);
 
         FloxmetaV2::clone_to(tempdir.path().join("dest"), &flox, &pointer)
             .expect("Cloning a floxmeta repo should succeed");
@@ -200,8 +207,14 @@ mod tests {
             .expect("Opening a floxmeta repo should succeed");
     }
 
-    /// "floxtest" has a branch "default" and "nondefault" on floxhub.
-    /// We check if we can clone them and pull them into an existing clone.
+    /// Test whether a floxmeta repository can be successfully cloned from floxhub
+    /// and other branches are fetched lazily when opened.
+    ///
+    /// Finally, verify that non-existent environments correctly fail to be opened.
+    ///
+    /// Uses the environments `floxtest/default` and `floxtest/nondefault`
+    /// which are prepared on the host `https://git.hub.flox.dev`.
+    /// Tries to authenticate with a test token that grants access to floxtest.
     #[test]
     fn clone_from_floxhub() {
         let _ = env_logger::try_init();
