@@ -528,7 +528,8 @@ impl ManagedEnvironment {
 
         fs::create_dir_all(&temp_floxmeta_path).unwrap();
 
-        let temp_floxmeta = FloxmetaV2::new_in(&temp_floxmeta_path, flox, &pointer).unwrap();
+        let temp_floxmeta = FloxmetaV2::new_in(&temp_floxmeta_path, flox, &pointer)
+            .map_err(ManagedEnvironmentError::OpenFloxmeta)?;
 
         let generation_dir = temp_floxmeta_path.join("0");
         fs::create_dir_all(&generation_dir).unwrap();

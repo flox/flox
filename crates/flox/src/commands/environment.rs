@@ -5,7 +5,7 @@ use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use bpaf::Bpaf;
 use crossterm::{cursor, QueueableCommand};
 use flox_rust_sdk::flox::{EnvironmentName, EnvironmentOwner, EnvironmentRef, Flox};
@@ -641,9 +641,22 @@ impl Push {
             owner.parse().unwrap(),
             &flox.temp_dir,
         )
+        .map_err(Self::convert_error)
         .unwrap();
 
         Ok(())
+    }
+
+    fn convert_error(err: ManagedEnvironmentError) -> anyhow::Error {
+        if let ManagedEnvironmentError::OpenFloxmeta(FloxmetaV2Error::LoggedOut) = err {
+            anyhow!(indoc! {"
+                Could not push environment: not logged in to floxhub.
+
+                Please login to floxhub with `flox auth login`
+                "})
+        } else {
+            anyhow!(err)
+        }
     }
 }
 
@@ -753,23 +766,28 @@ impl Pull {
         fs::create_dir_all(&dot_flox_path).context("Could not create .flox/ directory")?;
         fs::write(pointer_path, pointer_content).context("Could not write pointer")?;
 
-        let result = ManagedEnvironment::open(flox, pointer, &dot_flox_path);
+        let result =
+            ManagedEnvironment::open(flox, pointer, &dot_flox_path).map_err(Self::convert_error);
         if let Err(err) = result {
-            if let EnvironmentError2::ManagedEnvironment(ManagedEnvironmentError::OpenFloxmeta(
-                FloxmetaV2Error::LoggedOut,
-            )) = err
-            {
-                bail!(indoc! {"
-                Could not pull environment: not logged in to floxhub.
-
-                Please login to floxhub with `flox auth login`
-                "});
-            }
-
             fs::remove_dir_all(dot_flox_path).context("Could not clean up .flox/ directory")?;
             Err(err)?;
         }
         Ok(())
+    }
+
+    fn convert_error(err: EnvironmentError2) -> anyhow::Error {
+        if let EnvironmentError2::ManagedEnvironment(ManagedEnvironmentError::OpenFloxmeta(
+            FloxmetaV2Error::LoggedOut,
+        )) = err
+        {
+            anyhow!(indoc! {"
+                Could not pull environment: not logged in to floxhub.
+
+                Please login to floxhub with `flox auth login`
+                "})
+        } else {
+            anyhow!(err)
+        }
     }
 }
 
