@@ -8,12 +8,12 @@ use std::process::Command;
 use anyhow::{bail, Context, Result};
 use bpaf::Bpaf;
 use crossterm::{cursor, QueueableCommand};
-use flox_rust_sdk::flox::{EnvironmentName, EnvironmentRef, Flox};
+use flox_rust_sdk::flox::{EnvironmentName, EnvironmentOwner, EnvironmentRef, Flox};
 use flox_rust_sdk::models::environment::managed_environment::{
     ManagedEnvironment,
     ManagedEnvironmentError,
 };
-use flox_rust_sdk::models::environment::path_environment::{Original, PathEnvironment};
+use flox_rust_sdk::models::environment::path_environment::{self, Original, PathEnvironment};
 use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironment;
 use flox_rust_sdk::models::environment::{
     Environment,
@@ -582,8 +582,10 @@ impl History {
 pub struct Push {
     /// Directory to push the environment from (default: current directory)
     dir: Option<PathBuf>,
-    /// ID of the environment to push top
-    remote: Option<EnvironmentRef>,
+
+    /// Owner to push push environment to (default: current user)
+    #[bpaf(long, short)]
+    owner: Option<EnvironmentOwner>,
 
     /// forceably overwrite the remote copy of the environment
     #[allow(dead_code)] // not yet handled in impl
@@ -598,13 +600,19 @@ impl Push {
 
         match EnvironmentPointer::open(&dir)? {
             EnvironmentPointer::Managed(managed_pointer) => {
-                if self.remote.is_some() {
+                if self.owner.is_some() {
                     bail!("Environment already linked to a remote")
                 }
 
                 Self::push_managed_env(&flox, managed_pointer, dir)
             },
-            EnvironmentPointer::Path(_) => todo!(),
+            EnvironmentPointer::Path(path_pointer) => {
+                if self.owner.is_none() {
+                    bail!("curent user can't be determined yet, please specify explicitly");
+                }
+
+                Self::push_make_managed(&flox, path_pointer, &dir, self.owner.unwrap())
+            },
         }
     }
 
@@ -612,6 +620,28 @@ impl Push {
         let mut env = ManagedEnvironment::open(flox, managed_pointer, dir.join(DOT_FLOX))
             .context("Could not open environment")?;
         env.push().context("Could not push environment")?;
+
+        Ok(())
+    }
+
+    fn push_make_managed(
+        flox: &Flox,
+        path_pointer: PathPointer,
+        dir: &Path,
+        owner: EnvironmentOwner,
+    ) -> Result<()> {
+        let dot_flox_path = dir.join(DOT_FLOX);
+        let path_environment =
+            path_environment::PathEnvironment::open(path_pointer, dot_flox_path, &flox.temp_dir)
+                .unwrap();
+
+        ManagedEnvironment::push_new(
+            flox,
+            path_environment,
+            owner.parse().unwrap(),
+            &flox.temp_dir,
+        )
+        .unwrap();
 
         Ok(())
     }

@@ -8,13 +8,16 @@ use flox_types::version::Version;
 use log::debug;
 use runix::command_line::NixCommandLine;
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use thiserror::Error;
 
+use super::path_environment::{Original, PathEnvironment};
 use super::{Environment, EnvironmentError2, InstallationAttempt, ManagedPointer};
 use crate::flox::Flox;
+use crate::models::environment::copy_dir_recursive;
 use crate::models::environment_ref::{EnvironmentName, EnvironmentOwner};
 use crate::models::floxmetav2::{FloxmetaV2, FloxmetaV2Error};
-use crate::providers::git::{GitCommandBranchHashError, GitCommandError};
+use crate::providers::git::{GitCommandBranchHashError, GitCommandError, GitProvider};
 
 const GENERATION_LOCK_FILENAME: &str = "env.lock";
 
@@ -514,6 +517,62 @@ fn gcroots_dir(flox: &Flox, owner: &EnvironmentOwner) -> PathBuf {
 }
 
 impl ManagedEnvironment {
+    pub fn push_new(
+        flox: &Flox,
+        path_environment: PathEnvironment<Original>,
+        owner: EnvironmentOwner,
+        temp_path: &Path,
+    ) -> Result<Self, ManagedEnvironmentError> {
+        let pointer = ManagedPointer::new(owner, path_environment.name());
+        let temp_floxmeta_path = temp_path.join("floxmeta");
+
+        fs::create_dir_all(&temp_floxmeta_path).unwrap();
+
+        let temp_floxmeta = FloxmetaV2::new_in(&temp_floxmeta_path, flox, &pointer).unwrap();
+
+        let generation_dir = temp_floxmeta_path.join("0");
+        fs::create_dir_all(&generation_dir).unwrap();
+        copy_dir_recursive(&path_environment.path, &generation_dir, false).unwrap();
+
+        fs::write(
+            temp_floxmeta_path.join("env.json"),
+            serde_json::to_string(&json!({
+                "type": "upstream",
+                "currentGen": "0"
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+
+        temp_floxmeta.git.add(&[Path::new(".")]).unwrap();
+        temp_floxmeta
+            .git
+            .commit(&format!(
+                "initialize environment {}/{} with first generation",
+                &pointer.owner, &pointer.name
+            ))
+            .unwrap();
+
+        temp_floxmeta
+            .git
+            .add_remote(
+                "origin",
+                &format!("{}/{}/floxmeta", flox.floxhub_host, &pointer.owner),
+            )
+            .unwrap();
+        temp_floxmeta.git.push("origin").unwrap();
+
+        fs::write(
+            temp_floxmeta_path.join("env.json"),
+            serde_json::to_string(&pointer).unwrap(),
+        )
+        .unwrap();
+
+        let env = ManagedEnvironment::open(flox, pointer, path_environment.path).unwrap();
+
+        Ok(env)
+    }
+
     pub fn push(&mut self) -> Result<(), ManagedEnvironmentError> {
         let project_branch = branch_name(&self.system, &self.pointer, &self.path)?;
         let sync_branch = remote_branch_name(&self.system, &self.pointer);
