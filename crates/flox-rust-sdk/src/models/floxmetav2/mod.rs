@@ -12,6 +12,7 @@ use crate::providers::git::{
     GitCommandOpenError,
     GitCommandOptions,
     GitCommandProvider,
+    GitProvider,
 };
 
 pub const FLOXMETA_DIR_NAME: &str = "meta";
@@ -122,6 +123,25 @@ impl FloxmetaV2 {
     pub fn open(flox: &Flox, pointer: &ManagedPointer) -> Result<Self, FloxmetaV2Error> {
         let user_floxmeta_dir = floxmeta_dir(flox, &pointer.owner);
         Self::open_at(user_floxmeta_dir, flox, pointer)
+    }
+
+    pub fn new_in(
+        user_floxmeta_dir: impl AsRef<Path>,
+        flox: &Flox,
+        pointer: &ManagedPointer,
+    ) -> Result<Self, FloxmetaV2Error> {
+        let token = flox
+            .floxhub_token
+            .as_ref()
+            .ok_or(FloxmetaV2Error::LoggedOut)?;
+
+        let git_options = floxmeta_git_options(&flox.floxhub_host, token);
+
+        let git = GitCommandProvider::init_with(git_options, user_floxmeta_dir, false).unwrap();
+        git.rename_branch(&remote_branch_name(&flox.system, pointer))
+            .unwrap();
+
+        Ok(FloxmetaV2 { git })
     }
 }
 
