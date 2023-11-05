@@ -8,7 +8,7 @@ use flox_types::version::Version;
 use log::debug;
 use runix::command_line::NixCommandLine;
 use serde::{Deserialize, Serialize};
-use serde_json::json;
+use serde_json::{json, Value};
 use thiserror::Error;
 
 use super::path_environment::{Original, PathEnvironment};
@@ -122,8 +122,30 @@ impl Environment for ManagedEnvironment {
     }
 
     /// Extract the current content of the manifest
+    ///
+    /// WIP!
+    /// TODO: errors!
     fn manifest_content(&self) -> Result<String, EnvironmentError2> {
-        todo!()
+        let metadata_content = self
+            .floxmeta
+            .git
+            .show(&format!(
+                "{}:env.json",
+                branch_name(&self.system, &self.pointer, &self.path)?
+            ))
+            .unwrap();
+        let metadata: Value = serde_json::from_slice(metadata_content.as_bytes()).unwrap();
+        let current_gen = metadata["currentGen"].as_str().unwrap();
+        let manifest = self
+            .floxmeta
+            .git
+            .show(&format!(
+                "{}:{}/env/manifest.toml",
+                branch_name(&self.system, &self.pointer, &self.path)?,
+                current_gen
+            ))
+            .unwrap();
+        Ok(manifest.to_string_lossy().into())
     }
 
     #[allow(unused)]
