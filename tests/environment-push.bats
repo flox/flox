@@ -43,6 +43,26 @@ teardown() {
 }
 
 
+function make_dummy_floxmeta() {
+  OWNER="$1"; shift;
+
+  FLOXHUB_FLOXMETA_DIR="$BATS_TEST_TMPDIR/floxhub/$OWNER/floxmeta"
+
+  mkdir -p "$FLOXHUB_FLOXMETA_DIR"
+  pushd "$FLOXHUB_FLOXMETA_DIR"
+
+  # todo: fake a real upstream env
+  git init --initial-branch="dummy"
+
+  git config user.name "test"
+  git config user.email "test@email.address"
+
+  touch "dummy"
+  git add .
+  git commit -m "initial commit"
+
+  popd >/dev/null || return
+}
 
 # simulate a dummy env update pushed to floxhub
 function update_dummy_env() {
@@ -73,4 +93,31 @@ function update_dummy_env() {
   run "$FLOX_CLI" push --owner owner # dummy owner
   assert_failure
   assert_output --partial 'Please login to floxhub with `flox auth login`'
+}
+
+
+# bats test_tags=push:h2
+@test "l2: push login: running flox push before user has login metadata prompts the user to login" {
+  make_dummy_floxmeta "owner"
+
+
+  mkdir -p "machine_a"
+  mkdir -p "machine_b"
+
+  pushd "machine_a" >/dev/null || return
+  "$FLOX_CLI" init --name "test"
+  "$FLOX_CLI" install hello
+  "$FLOX_CLI" push --owner owner
+  popd >/dev/null || return
+
+
+  pushd "machine_b" >/dev/null || return
+  run "$FLOX_CLI" pull --remote owner/test
+  assert_success
+
+  run "$FLOX_CLI" list
+  assert_success
+  assert_line "hello"
+
+  popd >/dev/null || return
 }
