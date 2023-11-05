@@ -282,7 +282,7 @@ impl ManagedEnvironment {
 
     /// Ensure:
     /// - a lockfile exists
-    /// - the commit in the lockfile (`local_rev` or `rev``) exists in floxmeta
+    /// - the commit in the lockfile (`local_rev` or `rev`) exists in floxmeta
     ///
     /// This may perform a fetch.
     fn ensure_locked(
@@ -408,8 +408,16 @@ impl ManagedEnvironment {
     }
 
     /// Where to link a built environment to. The parent directory may not exist.
+    ///
+    /// Todo: use `branch_name` as currently all instances of the same environment
+    ///       will resolve to the same outpath violating the specified requirement
+    ///       of unique/independent instances.
+    ///       Consider using `branch_name` with `unwrap()` (as an instance method
+    ///       the existence of a .flox dir is already proven) or change
+    ///       [ManagedEnvironment::encode] to expect canonicalized paths.
     fn out_link(&self, flox: &Flox) -> PathBuf {
-        gcroots_dir(flox, &self.pointer).join(format!("{0}.{1}", flox.system, self.pointer.name))
+        gcroots_dir(flox, &self.pointer.owner)
+            .join(format!("{0}.{1}", flox.system, self.pointer.name))
     }
 
     /// Returns the environment owner
@@ -418,6 +426,11 @@ impl ManagedEnvironment {
     }
 }
 
+/// Write a pointer lockfile to the specified `lock_path` storing the
+/// current git revision of the tracked upstream repository identified by a `pointer`.
+///
+/// When committed to a project, guarantees
+/// that the same version of the linked environment is used by all clones.
 fn write_pointer_lockfile(
     system: &str,
     pointer: &ManagedPointer,
@@ -441,6 +454,21 @@ fn write_pointer_lockfile(
     Ok(lock)
 }
 
+/// Unique branch name for a specific link.
+///
+/// Use this function over [`remote_branch_name`] within the context of an instance of [ManagedEnvironment]
+///
+/// When pulling the same remote environment in multiple directories,
+/// unique copies of the environment are created.
+/// I.e. `install`ing a package in one directory does not affect the other
+/// until synchronized through floxhub.
+/// To identify the individual branches per directory,
+/// the directory path is encoded using [`ManagedEnvironment::encode`].
+///
+/// `dot_flox_path` is expected to point to the `.flox/` directory
+/// that link to an environment identified by `pointer`.
+/// `dot_flox_path` does _not_ need to be passed in its canonicalized form;
+/// [`ManagedEnvironment::encode`] will canonicalize the path if necessary.
 fn branch_name(
     system: &str,
     pointer: &ManagedPointer,
@@ -455,6 +483,13 @@ fn branch_name(
 }
 
 /// The original branch name of an environment that is used to sync an environment with the hub
+///
+/// In most cases [`branch_name`] should be used over this,
+/// within the context of an instance of [ManagedEnvironment].
+///
+/// [`remote_branch_name`] is primarily used when talking to upstream on floxhub,
+/// during opening to reconciliate with the upsream repo
+/// as well as during [`ManagedEnvironment::pull`].
 pub fn remote_branch_name(system: &str, pointer: &ManagedPointer) -> String {
     format!("{}.{}", system, pointer.name)
 }
@@ -471,8 +506,9 @@ fn reverse_links_dir(flox: &Flox) -> PathBuf {
     flox.data_dir.join("links")
 }
 
-fn gcroots_dir(flox: &Flox, pointer: &ManagedPointer) -> PathBuf {
-    flox.cache_dir.join("run").join(pointer.owner.to_string())
+/// Directory containing nix gc roots for (previous) builds of environments of a given owner
+fn gcroots_dir(flox: &Flox, owner: &EnvironmentOwner) -> PathBuf {
+    flox.cache_dir.join("run").join(owner.as_str())
 }
 
 impl ManagedEnvironment {
