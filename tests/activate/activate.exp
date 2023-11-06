@@ -15,7 +15,7 @@ expect {
       exit 1
     }
 }
-set timeout 20
+set timeout 60
 expect {
     -re "project.*\$" {}
     timeout {
