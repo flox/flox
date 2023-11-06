@@ -15,7 +15,7 @@ _floxPrompt2="${colorPrompt2}[$FLOX_PROMPT_ENVIRONMENTS]"
 _flox=$(echo -e -n "${colorBold}${FLOX_PROMPT-$_floxPrompt1} ${_floxPrompt2}${colorReset} ")
 unset _esc colorReset colorBold colorPrompt1 colorPrompt2 _floxPrompt1 _floxPrompt2
 
-if [ -n "$_flox" -a -n "${PS1:-}" ]
+if [ -n "$_flox" ] && [ -n "${PS1:-}" ]
 then
     # Start by saving the original value of PS1.
     if [ -z "$FLOX_SAVE_PS1" ]; then
