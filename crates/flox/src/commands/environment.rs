@@ -5,15 +5,15 @@ use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use bpaf::Bpaf;
 use crossterm::{cursor, QueueableCommand};
-use flox_rust_sdk::flox::{EnvironmentName, EnvironmentRef, Flox};
+use flox_rust_sdk::flox::{EnvironmentName, EnvironmentOwner, EnvironmentRef, Flox};
 use flox_rust_sdk::models::environment::managed_environment::{
     ManagedEnvironment,
     ManagedEnvironmentError,
 };
-use flox_rust_sdk::models::environment::path_environment::{Original, PathEnvironment};
+use flox_rust_sdk::models::environment::path_environment::{self, Original, PathEnvironment};
 use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironment;
 use flox_rust_sdk::models::environment::{
     Environment,
@@ -580,13 +580,12 @@ impl History {
 /// Send environment to flox hub
 #[derive(Bpaf, Clone)]
 pub struct Push {
-    #[allow(dead_code)] // pending spec for `-e`, `--dir` behaviour
-    #[bpaf(external(environment_args), group_help("Environment Options"))]
-    environment_args: EnvironmentArgs,
+    /// Directory to push the environment from (default: current directory)
+    dir: Option<PathBuf>,
 
-    #[allow(dead_code)] // not yet handled in impl
-    #[bpaf(external(push_floxmain_or_env), optional)]
-    target: Option<PushFloxmainOrEnv>,
+    /// Owner to push push environment to (default: current user)
+    #[bpaf(long, short)]
+    owner: Option<EnvironmentOwner>,
 
     /// forceably overwrite the remote copy of the environment
     #[allow(dead_code)] // not yet handled in impl
@@ -595,22 +594,70 @@ pub struct Push {
 }
 
 impl Push {
-    pub async fn handle(self, _flox: Flox) -> Result<()> {
+    pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("push");
+        let dir = self.dir.unwrap_or_else(|| std::env::current_dir().unwrap());
 
-        todo!("this command is planned for a future release")
+        match EnvironmentPointer::open(&dir)? {
+            EnvironmentPointer::Managed(managed_pointer) => {
+                if self.owner.is_some() {
+                    bail!("Environment already linked to a remote")
+                }
+
+                Self::push_managed_env(&flox, managed_pointer, dir)
+            },
+            EnvironmentPointer::Path(path_pointer) => {
+                if self.owner.is_none() {
+                    bail!("curent user can't be determined yet, please specify explicitly");
+                }
+
+                Self::push_make_managed(&flox, path_pointer, &dir, self.owner.unwrap())
+            },
+        }
     }
-}
 
-#[derive(Bpaf, Clone)]
-pub enum PushFloxmainOrEnv {
-    /// push the `floxmain` branch to sync configuration
-    #[bpaf(long, short)]
-    Main,
-    Env {
-        #[bpaf(long("environment"), short('e'), argument("ENV"))]
-        env: Option<EnvironmentRef>,
-    },
+    fn push_managed_env(flox: &Flox, managed_pointer: ManagedPointer, dir: PathBuf) -> Result<()> {
+        let mut env = ManagedEnvironment::open(flox, managed_pointer, dir.join(DOT_FLOX))
+            .context("Could not open environment")?;
+        env.push().context("Could not push environment")?;
+
+        Ok(())
+    }
+
+    fn push_make_managed(
+        flox: &Flox,
+        path_pointer: PathPointer,
+        dir: &Path,
+        owner: EnvironmentOwner,
+    ) -> Result<()> {
+        let dot_flox_path = dir.join(DOT_FLOX);
+        let path_environment =
+            path_environment::PathEnvironment::open(path_pointer, dot_flox_path, &flox.temp_dir)
+                .unwrap();
+
+        ManagedEnvironment::push_new(
+            flox,
+            path_environment,
+            owner.parse().unwrap(),
+            &flox.temp_dir,
+        )
+        .map_err(Self::convert_error)
+        .unwrap();
+
+        Ok(())
+    }
+
+    fn convert_error(err: ManagedEnvironmentError) -> anyhow::Error {
+        if let ManagedEnvironmentError::OpenFloxmeta(FloxmetaV2Error::LoggedOut) = err {
+            anyhow!(indoc! {"
+                Could not push environment: not logged in to floxhub.
+
+                Please login to floxhub with `flox auth login`
+                "})
+        } else {
+            anyhow!(err)
+        }
+    }
 }
 
 #[derive(Debug, Clone, Bpaf)]
@@ -719,23 +766,28 @@ impl Pull {
         fs::create_dir_all(&dot_flox_path).context("Could not create .flox/ directory")?;
         fs::write(pointer_path, pointer_content).context("Could not write pointer")?;
 
-        let result = ManagedEnvironment::open(flox, pointer, &dot_flox_path);
+        let result =
+            ManagedEnvironment::open(flox, pointer, &dot_flox_path).map_err(Self::convert_error);
         if let Err(err) = result {
-            if let EnvironmentError2::ManagedEnvironment(ManagedEnvironmentError::OpenFloxmeta(
-                FloxmetaV2Error::LoggedOut,
-            )) = err
-            {
-                bail!(indoc! {"
-                Could not pull environment: not logged in to floxhub.
-
-                Please login to floxhub with `flox auth login`
-                "});
-            }
-
             fs::remove_dir_all(dot_flox_path).context("Could not clean up .flox/ directory")?;
             Err(err)?;
         }
         Ok(())
+    }
+
+    fn convert_error(err: EnvironmentError2) -> anyhow::Error {
+        if let EnvironmentError2::ManagedEnvironment(ManagedEnvironmentError::OpenFloxmeta(
+            FloxmetaV2Error::LoggedOut,
+        )) = err
+        {
+            anyhow!(indoc! {"
+                Could not pull environment: not logged in to floxhub.
+
+                Please login to floxhub with `flox auth login`
+                "})
+        } else {
+            anyhow!(err)
+        }
     }
 }
 

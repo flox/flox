@@ -8,13 +8,16 @@ use flox_types::version::Version;
 use log::debug;
 use runix::command_line::NixCommandLine;
 use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
 use thiserror::Error;
 
+use super::path_environment::{Original, PathEnvironment};
 use super::{Environment, EnvironmentError2, InstallationAttempt, ManagedPointer};
 use crate::flox::Flox;
+use crate::models::environment::copy_dir_recursive;
 use crate::models::environment_ref::{EnvironmentName, EnvironmentOwner};
 use crate::models::floxmetav2::{FloxmetaV2, FloxmetaV2Error};
-use crate::providers::git::{GitCommandBranchHashError, GitCommandError};
+use crate::providers::git::{GitCommandBranchHashError, GitCommandError, GitProvider};
 
 const GENERATION_LOCK_FILENAME: &str = "env.lock";
 
@@ -63,6 +66,8 @@ pub enum ManagedEnvironmentError {
     ProjectNotFound { path: PathBuf, err: std::io::Error },
     #[error("upstream floxmeta branch diverged from local branch")]
     Diverged,
+    #[error("failed to push environment: {0}")]
+    Push(GitCommandError),
 }
 
 #[derive(Debug, Deserialize, PartialEq, Serialize)]
@@ -117,8 +122,30 @@ impl Environment for ManagedEnvironment {
     }
 
     /// Extract the current content of the manifest
+    ///
+    /// WIP!
+    /// TODO: errors!
     fn manifest_content(&self) -> Result<String, EnvironmentError2> {
-        todo!()
+        let metadata_content = self
+            .floxmeta
+            .git
+            .show(&format!(
+                "{}:env.json",
+                branch_name(&self.system, &self.pointer, &self.path)?
+            ))
+            .unwrap();
+        let metadata: Value = serde_json::from_slice(metadata_content.as_bytes()).unwrap();
+        let current_gen = metadata["currentGen"].as_str().unwrap();
+        let manifest = self
+            .floxmeta
+            .git
+            .show(&format!(
+                "{}:{}/env/manifest.toml",
+                branch_name(&self.system, &self.pointer, &self.path)?,
+                current_gen
+            ))
+            .unwrap();
+        Ok(manifest.to_string_lossy().into())
     }
 
     #[allow(unused)]
@@ -512,6 +539,96 @@ fn gcroots_dir(flox: &Flox, owner: &EnvironmentOwner) -> PathBuf {
 }
 
 impl ManagedEnvironment {
+    pub fn push_new(
+        flox: &Flox,
+        path_environment: PathEnvironment<Original>,
+        owner: EnvironmentOwner,
+        temp_path: &Path,
+    ) -> Result<Self, ManagedEnvironmentError> {
+        let pointer = ManagedPointer::new(owner, path_environment.name());
+        let temp_floxmeta_path = temp_path.join("floxmeta");
+
+        fs::create_dir_all(&temp_floxmeta_path).unwrap();
+
+        let temp_floxmeta = FloxmetaV2::new_in(&temp_floxmeta_path, flox, &pointer)
+            .map_err(ManagedEnvironmentError::OpenFloxmeta)?;
+
+        let generation_dir = temp_floxmeta_path.join("0");
+        fs::create_dir_all(&generation_dir).unwrap();
+        copy_dir_recursive(&path_environment.path, &generation_dir, false).unwrap();
+
+        fs::write(
+            temp_floxmeta_path.join("env.json"),
+            serde_json::to_string(&json!({
+                "type": "upstream",
+                "currentGen": "0"
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+
+        temp_floxmeta.git.add(&[Path::new(".")]).unwrap();
+        temp_floxmeta
+            .git
+            .commit(&format!(
+                "initialize environment {}/{} with first generation",
+                &pointer.owner, &pointer.name
+            ))
+            .unwrap();
+
+        temp_floxmeta
+            .git
+            .add_remote(
+                "origin",
+                &format!("{}/{}/floxmeta", flox.floxhub_host, &pointer.owner),
+            )
+            .unwrap();
+        temp_floxmeta.git.push("origin").unwrap();
+
+        fs::write(
+            temp_floxmeta_path.join("env.json"),
+            serde_json::to_string(&pointer).unwrap(),
+        )
+        .unwrap();
+
+        let env = ManagedEnvironment::open(flox, pointer, path_environment.path).unwrap();
+
+        Ok(env)
+    }
+
+    pub fn push(&mut self) -> Result<(), ManagedEnvironmentError> {
+        let project_branch = branch_name(&self.system, &self.pointer, &self.path)?;
+        let sync_branch = remote_branch_name(&self.system, &self.pointer);
+
+        // Fetch the remote branch into FETCH_HEAD
+        self.floxmeta
+            .git
+            .fetch_ref("origin", &format!("{sync_branch}:",))
+            .unwrap();
+
+        // Check whether we can fast-forward merge the remote branch into the local branch
+        // In not the environment has diverged.
+        let consistent_history = self
+            .floxmeta
+            .git
+            .branch_contains_commit("FETCH_HEAD", &project_branch)
+            .map_err(ManagedEnvironmentError::Git)?;
+
+        if !consistent_history {
+            Err(ManagedEnvironmentError::Diverged)?;
+        }
+
+        self.floxmeta
+            .git
+            .push_ref("origin", format!("{}:{}", project_branch, sync_branch))
+            .map_err(ManagedEnvironmentError::Push)?;
+
+        // update local envorinment branch, should be fast-forward and a noop if the branches didn't diverge
+        self.pull()?;
+
+        Ok(())
+    }
+
     #[allow(unused)]
     pub fn pull(&mut self) -> Result<(), ManagedEnvironmentError> {
         // Fetch the remote branch into FETCH_HEAD
