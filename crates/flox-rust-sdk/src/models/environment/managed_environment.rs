@@ -543,8 +543,8 @@ impl ManagedEnvironment {
             .push_ref(
                 ".",
                 format!(
-                    "FETCH_HEAD:refs/heads/{project_branch}",
-                    project_branch = branch_name(&self.system, &self.pointer, &self.path)?
+                    "FETCH_HEAD:refs/heads/{sync_branch}",
+                    sync_branch = remote_branch_name(&self.system, &self.pointer)
                 ),
             )
             .unwrap();
