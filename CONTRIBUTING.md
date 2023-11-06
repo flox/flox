@@ -1,7 +1,7 @@
 # Flox CLI and Library
 
 ## Quick Start
-```
+```console
 $ cd git clone git@github.com/flox/flox.git;
 $ cd flox;
 # Enter Dev Shell
@@ -25,7 +25,7 @@ Currently this repo houses three rust crates:
 
 ## Development
 
-```
+```console
 $ nix develop .#flox;
 ```
 
@@ -36,16 +36,16 @@ In the environment, use [`cargo`](https://doc.rust-lang.org/cargo/)
 to build the rust based cli.
 
 - build and run flox
-   ```
+   ```console
    $ cargo run -- <args>
    ```
 - build a debug build of flox
-   ```
+   ```console
    $ cargo build
    # builds to ./target/debug/flox
    ```
 - build an optimized release build of flox
-   ```
+   ```console
    $ cargo build --release
    # builds to ./target/release/flox
    ```
@@ -56,7 +56,7 @@ cargo based builds should only be used locally.
 Flox must be buildable using `flox` or `nix`.
 
 - format rust code:
-  ```
+  ```console
   $ cargo fmt
   $ cargo fmt --check # just check
   ```
@@ -64,17 +64,17 @@ Flox must be buildable using `flox` or `nix`.
   `.rustfmt.toml`.
   A pre-commit hook is set up to check rust file formatting.
 - format nix code
-  ```
+  ```console
   $ alejandra .
   $ alejandra . --check # just check
   ```
   A pre-commit hook is set up to check nix file formatting.
 - lint rust
-  ```
+  ```console
   $ cargo clippy --all
   ```
 - lint all files (including for formatting):
-  ```
+  ```console
   $ pre-commit run -a
   ```
 
@@ -141,13 +141,13 @@ committed.
 
 You can also run
 
-```
+```console
 $ cz c
 ```
 
 or
 
-```
+```console
 $ cz commit
 ```
 
