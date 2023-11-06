@@ -3,12 +3,12 @@ mod environment;
 mod general;
 mod search;
 
+use std::collections::BTreeMap;
 use std::{env, fs};
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use bpaf::{Args, Bpaf, Parser};
-use flox_rust_sdk::flox::{Flox, DEFAULT_OWNER, FLOX_VERSION};
-use flox_rust_sdk::models::floxmeta::{Floxmeta, GetFloxmetaError};
+use flox_rust_sdk::flox::{Flox, FLOX_VERSION};
 use flox_rust_sdk::nix::command_line::NixCommandLine;
 use indoc::{formatdoc, indoc};
 use log::{debug, info};
@@ -159,32 +159,12 @@ impl FloxArgs {
             floxhub_token: config.flox.floxhub_token.clone(),
         };
 
-        // TODO: revisit this when we discussed floxmeta's role to contribute to config/channels
-        // region: revisit reg. channels
-        let floxmeta = match boostrap_flox.floxmeta(DEFAULT_OWNER) {
-            Ok(floxmeta) => floxmeta,
-            Err(GetFloxmetaError::NotFound(_)) => {
-                Floxmeta::create_floxmeta(&boostrap_flox, DEFAULT_OWNER)
-                    .await
-                    .context("Could not create 'floxmeta'")?
-            },
-            Err(e) => Err(e).context("Could not read 'floxmeta'")?,
-        };
-
-        //  Floxmeta::create_floxmeta creates an intial user_meta
-        let user_meta = floxmeta
-            .user_meta()
-            .context("Could not get user metadata")?;
-
-        let user_channels = user_meta.channels.unwrap_or_default();
-        let channels = init_channels(user_channels)?;
+        let channels = init_channels(BTreeMap::new())?;
 
         let flox = Flox {
             channels,
             ..boostrap_flox
         };
-
-        // endregion: revisit reg. channels
 
         // Set the global Nix config via the environment variables in flox.default_args so that
         // subprocesses called by `flox` (e.g. `parser-util`) can inherit them.
