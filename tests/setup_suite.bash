@@ -187,8 +187,8 @@ build_env_bin_setup() {
   if [[ -n "${__FT_RAN_BUILD_ENV_LOCATION_SETUP:-}" ]]; then return 0; fi
   repo_root_setup;
   if [[ -z "${BUILD_ENV_BIN:-}" ]]; then
-    if [[ -r "${REPO_ROOT:?}/assets/mkEnv/build-env.sh" ]]; then
-      BUILD_ENV_BIN="$REPO_ROOT/assets/mkEnv/build-env.sh";
+    if [[ -r "${REPO_ROOT:?}/assets/build-env.sh" ]]; then
+      BUILD_ENV_BIN="$REPO_ROOT/assets/build-env.sh";
     else
       echo "ERROR: couldn't locate build-env.sh" >&2;
       exit 1;

@@ -292,7 +292,7 @@ impl Activate {
             .queue(cursor::SavePosition)
             .context("couldn't set cursor positon")?;
         stderr
-            .write_all("Building environment...".as_bytes())
+            .write_all("Building environment...\n".as_bytes())
             .context("could't write progress message")?;
         stderr.flush().context("could't flush stderr")?;
 
@@ -303,20 +303,31 @@ impl Activate {
             .context("couldn't restore cursor position")?;
         stderr.flush().context("could't flush stderr")?;
 
+        let activation_script = activation_path.join("activate").into_os_string();
+
+        // We don't have access to the current PS1 (it's not exported), so we
+        // can't modify it. Instead set FLOX_PROMPT_ENVIRONMENTS and let the
+        // activation script set PS1 based on that.
         let flox_prompt_environments = env::var("FLOX_PROMPT_ENVIRONMENTS")
             .map_or(prompt_name.clone(), |prompt_environments| {
                 format!("{prompt_environments} {prompt_name}")
             });
 
-        // We don't have access to the current PS1 (it's not exported), so we
-        // can't modify it. Instead set FLOX_PROMPT_ENVIRONMENTS and let the
-        // activation script set PS1 based on that.
-        let activation_script = activation_path.join("activate");
-        debug!("running activation script: {}", activation_script.display());
-        let error = Command::new(activation_script)
+        // TODO more sophisticated detection?
+        let shell = env::var("SHELL").unwrap();
+        let mut command = Command::new(&shell);
+        command
             .env("FLOX_PROMPT_ENVIRONMENTS", flox_prompt_environments)
-            .env("FLOX_ENV", activation_path)
-            .exec();
+            .env("FLOX_ENV", activation_path);
+
+        if shell.ends_with("bash") {
+            command.arg("--rcfile").arg(activation_script)
+        } else {
+            bail!("Unsupported SHELL '{shell}'");
+        };
+
+        debug!("running activation command: {:?}", command);
+        let error = command.exec();
 
         // exec should never return
 
