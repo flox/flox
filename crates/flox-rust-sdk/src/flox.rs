@@ -66,6 +66,7 @@ pub struct Flox {
     pub uuid: uuid::Uuid,
 
     pub floxhub_token: Option<String>,
+    pub floxhub_host: String,
 }
 
 pub trait FloxNixApi: NixBackend {

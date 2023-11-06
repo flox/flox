@@ -16,15 +16,10 @@ use thiserror::Error;
 use walkdir::WalkDir;
 
 use self::managed_environment::ManagedEnvironmentError;
-use super::environment_ref::{
-    EnvironmentName,
-    EnvironmentOwner,
-    EnvironmentRef,
-    EnvironmentRefError,
-};
+use super::environment_ref::{EnvironmentName, EnvironmentOwner, EnvironmentRefError};
 use super::flox_package::FloxTriple;
 use super::manifest::TomlEditError;
-use crate::flox::Flox;
+use crate::flox::{EnvironmentRef, Flox};
 use crate::utils::copy_file_without_permissions;
 use crate::utils::errors::IoError;
 
@@ -100,9 +95,6 @@ pub trait Environment {
     /// Extract the current content of the manifest
     fn manifest_content(&self) -> Result<String, EnvironmentError2>;
 
-    /// Return the [EnvironmentRef] for the environment for identification
-    fn environment_ref(&self) -> EnvironmentRef;
-
     /// Return a path containing the built environment and its activation script.
     ///
     /// This should be a link to a store path so that it can be swapped
@@ -164,11 +156,22 @@ impl PathPointer {
 /// points to an environment owner and the name of the environment.
 ///
 /// This is serialized to an `env.json` inside the `.flox` directory.
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Serialize, Clone, Deserialize, PartialEq)]
 pub struct ManagedPointer {
     pub owner: EnvironmentOwner,
     pub name: EnvironmentName,
     version: Version<1>,
+}
+
+impl ManagedPointer {
+    /// Create a new [ManagedPointer] with the given owner and name.
+    pub fn new(owner: EnvironmentOwner, name: EnvironmentName) -> Self {
+        Self {
+            name,
+            owner,
+            version: Version::<1>,
+        }
+    }
 }
 
 impl EnvironmentPointer {
@@ -193,6 +196,12 @@ impl EnvironmentPointer {
         };
 
         serde_json::from_slice(&pointer_contents).map_err(EnvironmentError2::ParseEnvJson)
+    }
+}
+
+impl From<EnvironmentRef> for ManagedPointer {
+    fn from(value: EnvironmentRef) -> Self {
+        Self::new(value.owner().clone(), value.name().clone())
     }
 }
 

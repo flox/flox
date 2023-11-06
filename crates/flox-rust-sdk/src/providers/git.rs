@@ -203,6 +203,28 @@ impl GitCommandProvider {
         Ok(OsString::from_vec(out.stdout))
     }
 
+    pub fn init_with<P: AsRef<Path>>(
+        options: GitCommandOptions,
+        path: P,
+        bare: bool,
+    ) -> Result<GitCommandProvider, GitCommandError> {
+        let mut command = options.new_command();
+        command.args(["-C", path.as_ref().to_str().unwrap()]);
+
+        command.arg("init");
+        if bare {
+            command.arg("--bare");
+        }
+
+        let _out = GitCommandProvider::run_command(&mut command)?;
+
+        Ok(GitCommandProvider {
+            options,
+            workdir: Some(path.as_ref().into()),
+            path: path.as_ref().into(),
+        })
+    }
+
     /// Open a repo, erroring if `path` is not a repo or is a subdirectory of a repo
     pub fn open_with<P: AsRef<Path>>(
         options: GitCommandOptions,
@@ -384,7 +406,6 @@ impl GitCommandProvider {
         bare: bool,
     ) -> Result<GitCommandProvider, GitCommandError> {
         let mut command = options.new_command();
-        command.args(["-C", path.as_ref().to_str().unwrap()]);
 
         command
             .arg("clone")
@@ -393,7 +414,8 @@ impl GitCommandProvider {
             .arg("--branch")
             .arg(branch)
             .arg(origin)
-            .arg("./");
+            .arg(path.as_ref());
+
         if bare {
             command.arg("--bare");
         }
@@ -430,6 +452,21 @@ impl GitCommandProvider {
     pub fn fetch_ref(&self, repository: &str, r#ref: &str) -> Result<(), GitCommandError> {
         GitCommandProvider::run_command(
             self.new_command().arg("fetch").arg(repository).arg(r#ref),
+        )?;
+        Ok(())
+    }
+
+    /// Like [GitCommandProvider::push] but allows to specify the refspec explicitly
+    pub fn push_ref(
+        &self,
+        repository: impl AsRef<str>,
+        push_spec: impl AsRef<str>,
+    ) -> Result<(), GitCommandError> {
+        GitCommandProvider::run_command(
+            self.new_command()
+                .arg("push")
+                .arg(repository.as_ref())
+                .arg(push_spec.as_ref()),
         )?;
         Ok(())
     }
@@ -579,21 +616,7 @@ impl GitProvider for GitCommandProvider {
 
     fn init<P: AsRef<Path>>(path: P, bare: bool) -> Result<GitCommandProvider, Self::InitError> {
         let options = GitCommandOptions::default();
-        let mut command = options.new_command();
-        command.args(["-C", path.as_ref().to_str().unwrap()]);
-
-        command.arg("init");
-        if bare {
-            command.arg("--bare");
-        }
-
-        let _out = GitCommandProvider::run_command(&mut command)?;
-
-        Ok(GitCommandProvider {
-            options,
-            workdir: Some(path.as_ref().into()),
-            path: path.as_ref().into(),
-        })
+        Self::init_with(options, path, bare)
     }
 
     fn clone<O: AsRef<OsStr>, P: AsRef<Path>>(
