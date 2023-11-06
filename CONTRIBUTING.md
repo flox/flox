@@ -1,5 +1,19 @@
 # Flox CLI and Library
 
+## Quick Start
+```
+$ cd git clone git@github.com/flox/flox.git;
+$ cd flox;
+# Enter Dev Shell
+$ nix develop;
+# Build `flox'
+$ cargo build;
+# Run the build
+$ ./target/debug/flox --help;
+# Run the test suite ( requires `./tests/debug/flox' )
+$ nix run '.#flox-tests';
+```
+
 ## Contents of the Repo
 
 Currently this repo houses three rust crates:
@@ -12,7 +26,7 @@ Currently this repo houses three rust crates:
 ## Development
 
 ```
-$ flox develop .#flox
+$ nix develop .#flox;
 ```
 
 This sets up an environment with dependencies, rust toolchain, variable
