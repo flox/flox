@@ -145,7 +145,7 @@ function update_dummy_env() {
   assert [ "$LOCKED_BEFORE" != "$LOCKED_AFTER" ]
 }
 
-# bats test_tags=pull:l3,pull:l3:a
+# bats test_tags=pull:l3,pull:l3:b
 @test "l3.b: pulling without namespace/environment respects --dir" {
 
   "$FLOX_CLI" pull --remote owner/name --dir ./inner # dummy remote as we are not actually pulling anything
