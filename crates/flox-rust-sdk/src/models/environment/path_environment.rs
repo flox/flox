@@ -38,7 +38,6 @@ use crate::environment::NIX_BIN;
 use crate::flox::Flox;
 use crate::models::environment::{
     lock_manifest,
-    PkgDbError,
     BUILD_ENV_BIN,
     CATALOG_JSON,
     ENV_FROM_LOCKFILE_PATH,
