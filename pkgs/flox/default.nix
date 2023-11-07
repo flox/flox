@@ -147,6 +147,7 @@ in
       src = flox-src;
 
       cargoArtifacts = cargoDepsArtifacts;
+      doNotLinkInheritedArtifacts = true;
 
       outputs = ["out" "man"];
       outputsToInstall = ["out" "man"];
