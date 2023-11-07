@@ -7,6 +7,7 @@ use std::{fs, io};
 use async_trait::async_trait;
 use flox_types::catalog::{CatalogEntry, EnvCatalog, System};
 use flox_types::version::Version;
+use log::debug;
 use runix::command_line::{NixCommandLine, NixCommandLineRunError, NixCommandLineRunJsonError};
 use runix::installable::FlakeAttribute;
 use runix::store_path::StorePath;
@@ -381,6 +382,7 @@ pub fn lock_manifest(
             .map_err(EnvironmentError2::BadLockfilePath)?;
         pkgdb_cmd.arg(canonical_lockfile_path);
     }
+    debug!(target: "posix", "locking manifest with command: {pkgdb_cmd:?}");
     let output = pkgdb_cmd.output().map_err(EnvironmentError2::PkgDbCall)?;
     // If command fails, try to parse stdout as a PkgDbError
     if !output.status.success() {
