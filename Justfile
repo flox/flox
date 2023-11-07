@@ -1,5 +1,6 @@
-bats_invocation := "nix run '.#flox-tests' -- --flox target/debug/flox"
+nix_options := "--extra-experimental-features nix-command --extra-experimental-features flakes"
 cargo_test_invocation := "cargo test --workspace"
+bats_invocation := "nix --extra-experimental-features nix-command --extra-experimental-features flakes run '.#flox-tests' -- --flox target/debug/flox"
 
 _default:
     @just --list --unsorted
@@ -7,7 +8,7 @@ _default:
 # Run the 'bats' test suite
 bats-tests +test_files="":
     @cargo build
-    @nix build '.#flox-bash'
+    @nix build {{nix_options}} '.#flox-bash'
     @{{bats_invocation}} {{test_files}}
 
 # Run the Rust unit tests
@@ -28,12 +29,12 @@ test-all: impure-tests bats-tests
 work:
     @# Note that this command is only really useful if you have
     @# `just` installed outside of the `flox` environment already
-    @nix develop
+    @nix {{nix_options}} develop
 
 # Bump all flake dependencies and commit with a descriptive message
 bump-all:
-    @nix flake update --commit-lock-file --commit-lockfile-summary "chore: flake bump"
+    @nix {{nix_options}} flake update --commit-lock-file --commit-lockfile-summary "chore: flake bump"
 
 # Bump a specific flake input and commit with a descriptive message
 bump input:
-    @nix flake lock --update-input {{input}} --commit-lock-file --commit-lockfile-summary "chore: bump '{{input}}' flake input"
+    @nix {{nix_options}} flake lock --update-input {{input}} --commit-lock-file --commit-lockfile-summary "chore: bump '{{input}}' flake input"
