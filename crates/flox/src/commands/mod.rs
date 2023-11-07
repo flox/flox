@@ -170,22 +170,24 @@ impl FloxArgs {
 
         // TODO: revisit this when we discussed floxmeta's role to contribute to config/channels
         // region: revisit reg. channels
-        let floxmeta = match boostrap_flox.floxmeta(DEFAULT_OWNER) {
-            Ok(floxmeta) => floxmeta,
-            Err(GetFloxmetaError::NotFound(_)) => {
-                Floxmeta::create_floxmeta(&boostrap_flox, DEFAULT_OWNER)
-                    .await
-                    .context("Could not create 'floxmeta'")?
-            },
-            Err(e) => Err(e).context("Could not read 'floxmeta'")?,
-        };
+        // let floxmeta = match boostrap_flox.floxmeta(DEFAULT_OWNER) {
+        //     Ok(floxmeta) => floxmeta,
+        //     Err(GetFloxmetaError::NotFound(_)) => {
+        //         Floxmeta::create_floxmeta(&boostrap_flox, DEFAULT_OWNER)
+        //             .await
+        //             .context("Could not create 'floxmeta'")?
+        //     },
+        //     Err(e) => Err(e).context("Could not read 'floxmeta'")?,
+        // };
 
-        //  Floxmeta::create_floxmeta creates an intial user_meta
-        let user_meta = floxmeta
-            .user_meta()
-            .context("Could not get user metadata")?;
+        // //  Floxmeta::create_floxmeta creates an intial user_meta
+        // let user_meta = floxmeta
+        //     .user_meta()
+        //     .context("Could not get user metadata")?;
 
-        let user_channels = user_meta.channels.unwrap_or_default();
+        // let user_channels = user_meta.channels.unwrap_or_default();
+        use std::collections::BTreeMap;
+        let user_channels = BTreeMap::new();
         let channels = init_channels(user_channels)?;
 
         let flox = Flox {

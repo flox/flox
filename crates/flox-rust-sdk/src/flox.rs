@@ -7,6 +7,7 @@ use derive_more::Constructor;
 use indoc::indoc;
 use log::{debug, info, warn};
 use once_cell::sync::Lazy;
+use reqwest;
 use runix::arguments::common::NixCommonArgs;
 use runix::arguments::config::NixConfigArgs;
 use runix::arguments::flake::{FlakeArgs, OverrideInput};
@@ -16,7 +17,7 @@ use runix::command_line::{DefaultArgs, NixCommandLine};
 use runix::flake_ref::path::PathRef;
 use runix::installable::{AttrPath, FlakeAttribute};
 use runix::{NixBackend, RunJson};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::environment::{self, default_nix_subprocess_env};
@@ -551,9 +552,46 @@ impl Flox {
     }
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+struct GitHubUser {
+    login: String,
+}
+
+pub struct GitHubClient {
+    base_url: String,
+    oauth_token: String,
+}
+
+impl GitHubClient {
+    pub async fn new(base_url: &str, oauth_token: &str) -> Self {
+        GitHubClient {
+            base_url: base_url.to_string(),
+            oauth_token: oauth_token.to_string(),
+        }
+    }
+
+    pub async fn get_username(&self) -> Result<String, reqwest::Error> {
+        let url = format!("{}/user", self.base_url);
+        let client = reqwest::Client::new();
+        let response = client
+            .get(&url)
+            .header("Authorization", format!("token {}", self.oauth_token))
+            .send()
+            .await?;
+
+        if response.status().is_success() {
+            let user: GitHubUser = response.json().await?;
+            Ok(user.login)
+        } else {
+            Err(response.error_for_status().unwrap_err())
+        }
+    }
+}
+
 #[cfg(test)]
 pub mod tests {
     use tempfile::TempDir;
+    use tokio::test;
 
     use super::*;
 
@@ -586,7 +624,7 @@ pub mod tests {
     }
 
     #[test]
-    fn test_resolved_installable_match_to_installable() {
+    async fn test_resolved_installable_match_to_installable() {
         let resolved = ResolvedInstallableMatch::new(
             "github:flox/flox".to_string(),
             "packages".to_string(),
@@ -599,5 +637,32 @@ pub mod tests {
             FlakeAttribute::from_str("github:flox/flox#.packages.aarch64-darwin.flox").unwrap(),
             resolved.flake_attribute(),
         );
+    }
+
+    use mockito;
+
+    use crate::flox::GitHubClient;
+
+    #[test]
+    async fn test_get_username() {
+        let mock_response = serde_json::json!({
+            "login": "exampleuser"
+        });
+        let mut server = mockito::Server::new();
+        let mock_server_url = server.url();
+        let mock_server = server
+            .mock("GET", "/user")
+            .match_header("Authorization", "token your_oauth_token")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(mock_response.to_string())
+            .create();
+
+        let github_client = GitHubClient::new(&mock_server_url, "your_oauth_token").await;
+
+        let username = github_client.get_username().await;
+        assert_eq!(username.unwrap(), "exampleuser".to_string());
+
+        mock_server.assert();
     }
 }

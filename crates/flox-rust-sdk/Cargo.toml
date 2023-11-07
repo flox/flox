@@ -37,11 +37,13 @@ sha2.workspace = true
 blake3.workspace = true
 toml_edit.workspace = true
 tracing.workspace = true
+reqwest.workspace = true
 
 [dev-dependencies]
 anyhow = "1.0.65"
 dotenv = "0.15.0"
 env_logger = "0.10"
+mockito = "1.2.0"
 pretty_assertions.workspace = true
 
 [features]

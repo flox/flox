@@ -53,7 +53,6 @@ chrono.workspace = true
 [dev-dependencies]
 temp-env = "0.3.2"
 
-
 [features]
 extra-tests = ["impure-unit-tests"]
 impure-unit-tests = []
