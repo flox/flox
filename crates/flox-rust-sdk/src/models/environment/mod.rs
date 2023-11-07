@@ -287,12 +287,14 @@ pub enum EnvironmentError2 {
     BadLockfilePath(std::io::Error),
     #[error("call to pkgdb failed: {0}")]
     PkgDbCall(std::io::Error),
+    #[error("couldn't parse pkgdb error as JSON: {0}")]
+    ParsePkgDbError(String),
     #[error("couldn't parse lockfile as JSON: {0}")]
     ParseLockfileJSON(serde_json::Error),
     #[error("couldn't write new lockfile contents: {0}")]
     WriteLockfile(std::io::Error),
-    #[error("registry resolution failed: {0}")]
-    FailedResolution(PkgDbError),
+    #[error("locking manifest failed: {0}")]
+    LockManifest(PkgDbError),
 }
 
 /// A struct representing error messages coming from pkgdb
@@ -304,18 +306,21 @@ pub struct PkgDbError {
     /// The generic message for this category of error.
     pub category_message: String,
     /// The more contextual message for the specific error that occurred.
-    pub context_message: String,
+    pub context_message: Option<String>,
     /// The underlying error message if an exception was caught.
-    pub caught_message: String,
+    pub caught_message: Option<String>,
 }
 
 impl Display for PkgDbError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}: {}: {}",
-            self.category_message, self.context_message, self.caught_message
-        )
+        write!(f, "{}", self.category_message)?;
+        if let Some(ref context_message) = self.context_message {
+            write!(f, ": {}", context_message)?;
+        }
+        if let Some(ref caught_message) = self.caught_message {
+            write!(f, ": {}", caught_message)?;
+        }
+        Ok(())
     }
 }
 
@@ -377,9 +382,21 @@ pub fn lock_manifest(
         pkgdb_cmd.arg(canonical_lockfile_path);
     }
     let output = pkgdb_cmd.output().map_err(EnvironmentError2::PkgDbCall)?;
-    let lockfile_json: Value =
-        serde_json::from_slice(&output.stdout).map_err(EnvironmentError2::ParseLockfileJSON)?;
-    Ok(lockfile_json)
+    // If command fails, try to parse stdout as a PkgDbError
+    if !output.status.success() {
+        if let Ok::<PkgDbError, _>(pkgdb_err) = serde_json::from_slice(&output.stdout) {
+            Err(EnvironmentError2::LockManifest(pkgdb_err))
+        } else {
+            Err(EnvironmentError2::ParsePkgDbError(
+                String::from_utf8_lossy(&output.stdout).to_string(),
+            ))
+        }
+    // If command succeeds, try to parse stdout as JSON value
+    } else {
+        let lockfile_json: Value =
+            serde_json::from_slice(&output.stdout).map_err(EnvironmentError2::ParseLockfileJSON)?;
+        Ok(lockfile_json)
+    }
 }
 
 #[cfg(test)]
