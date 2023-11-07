@@ -416,7 +416,12 @@ impl List {
 fn environment_description(environment: &ConcreteEnvironment) -> String {
     match environment {
         ConcreteEnvironment::Managed(environment) => {
-            format!("{}/{}", environment.owner(), environment.name())
+            format!(
+                "{}/{} at {}",
+                environment.owner(),
+                environment.name(),
+                environment.path.to_string_lossy()
+            )
         },
         ConcreteEnvironment::Path(environment) => format!(
             "{} at {}",

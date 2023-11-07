@@ -24,7 +24,8 @@ const GENERATION_LOCK_FILENAME: &str = "env.lock";
 #[derive(Debug)]
 pub struct ManagedEnvironment {
     /// Path to the directory containing `env.json`
-    path: PathBuf,
+    // TODO might be better to keep this private
+    pub path: PathBuf,
     pointer: ManagedPointer,
     system: String,
     floxmeta: FloxmetaV2,
