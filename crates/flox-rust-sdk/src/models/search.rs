@@ -131,6 +131,7 @@ pub struct SemverOpts {
 /// Note that the `match` field here becomes the `partialMatch` field on the
 /// C++ struct.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "kebab-case")]
 pub struct Query {
     /// Match against the full name of the package e.g. `<pname>-<version>`
     pub name: Option<String>,
@@ -142,13 +143,13 @@ pub struct Query {
     pub semver: Option<String>,
     /// Match against a regular expression
     pub r#match: Option<String>,
+    /// Match against the package name
+    pub match_name: Option<String>,
 }
 
-impl FromStr for Query {
-    type Err = SearchError;
-
+impl Query {
     // This can't actually error, but the trait requires an error type
-    fn from_str(search_term: &str) -> Result<Self, Self::Err> {
+    pub fn from_str(search_term: &str, prefer_match_name: bool) -> Result<Self, SearchError> {
         // If there's an '@' in the query, it means the user is trying to use the semver
         // search capability. This means we need to split the query into package name and
         // semver specifier parts. Note that the 'semver' field is distinct from the 'version'
@@ -161,15 +162,25 @@ impl FromStr for Query {
                 if semver.is_empty() {
                     return Err(SearchError::SearchTerm(search_term.into()));
                 }
-                Query {
+                let mut q = Query {
                     semver: Some(semver.to_string()),
-                    r#match: Some(package.to_string()),
                     ..Query::default()
+                };
+                if prefer_match_name {
+                    q.match_name = Some(package.to_string());
+                } else {
+                    q.r#match = Some(package.to_string());
                 }
+                q
             },
-            None => Query {
-                r#match: Some(search_term.to_string()),
-                ..Query::default()
+            None => {
+                let mut q = Query::default();
+                if prefer_match_name {
+                    q.match_name = Some(search_term.to_string());
+                } else {
+                    q.r#match = Some(search_term.to_string());
+                }
+                q
             },
         };
         Ok(q)
@@ -351,7 +362,8 @@ mod test {
             "pname": null,
             "version": null,
             "semver": "2.12.1",
-            "match": "hello"
+            "match": "hello",
+            "match-name": null
         }
     }"#;
 
@@ -383,7 +395,7 @@ mod test {
     #[test]
     fn serializes_search_params() {
         let params = SearchParams {
-            query: Query::from_str(EXAMPLE_SEARCH_TERM).unwrap(),
+            query: Query::from_str(EXAMPLE_SEARCH_TERM, false).unwrap(),
             ..SearchParams::default()
         };
         let json = serde_json::to_string(&params).unwrap();

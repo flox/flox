@@ -1,6 +1,5 @@
 use std::collections::{HashMap, HashSet};
 use std::io::{BufWriter, Write};
-use std::str::FromStr;
 
 use anyhow::{bail, Context, Result};
 use bpaf::Bpaf;
@@ -20,6 +19,7 @@ use flox_rust_sdk::models::search::{
 use log::debug;
 use serde_json::json;
 
+use crate::config::features::{Features, SearchStrategy};
 use crate::subcommand_metric;
 
 const SEARCH_INPUT_SEPARATOR: &'_ str = ":";
@@ -106,7 +106,10 @@ fn construct_search_params(search_term: &str, flox: &Flox) -> Result<SearchParam
     };
 
     // We've already checked that the search term is Some(_)
-    let query = Query::from_str(search_term)?;
+    let query = Query::from_str(
+        search_term,
+        Features::parse()?.search_strategy == SearchStrategy::MatchName,
+    )?;
     let params = SearchParams {
         registry,
         query,

@@ -220,3 +220,14 @@ setup_file() {
   # There's a leading `ERROR: ` that's left off when run non-interactively
   assert_output "No packages matched this search term: surely_doesnt_exist";
 }
+
+# ---------------------------------------------------------------------------- #
+
+@test "'flox search' with 'FLOX_FEATURES_SEARCH_STRATEGY=match-name' shows fewer packages" {
+
+  MATCH="$(FLOX_FEATURES_SEARCH_STRATEGY=match "$FLOX_CLI" search node | wc -l)";
+  MATCH_NAME="$(FLOX_FEATURES_SEARCH_STRATEGY=match-name "$FLOX_CLI" search node | wc -l)";
+
+  assert [ "$MATCH_NAME" -lt "$MATCH" ];
+
+}
