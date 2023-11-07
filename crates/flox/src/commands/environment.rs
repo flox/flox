@@ -292,7 +292,7 @@ impl Activate {
             .queue(cursor::SavePosition)
             .context("couldn't set cursor positon")?;
         stderr
-            .write_all("Building environment...".as_bytes())
+            .write_all("Building environment...\n".as_bytes())
             .context("could't write progress message")?;
         stderr.flush().context("could't flush stderr")?;
 
@@ -303,20 +303,31 @@ impl Activate {
             .context("couldn't restore cursor position")?;
         stderr.flush().context("could't flush stderr")?;
 
+        let activation_script = activation_path.join("activate").into_os_string();
+
+        // We don't have access to the current PS1 (it's not exported), so we
+        // can't modify it. Instead set FLOX_PROMPT_ENVIRONMENTS and let the
+        // activation script set PS1 based on that.
         let flox_prompt_environments = env::var("FLOX_PROMPT_ENVIRONMENTS")
             .map_or(prompt_name.clone(), |prompt_environments| {
                 format!("{prompt_environments} {prompt_name}")
             });
 
-        // We don't have access to the current PS1 (it's not exported), so we
-        // can't modify it. Instead set FLOX_PROMPT_ENVIRONMENTS and let the
-        // activation script set PS1 based on that.
-        let activation_script = activation_path.join("activate");
-        debug!("running activation script: {}", activation_script.display());
-        let error = Command::new(activation_script)
+        // TODO more sophisticated detection?
+        let shell = env::var("SHELL").unwrap();
+        let mut command = Command::new(&shell);
+        command
             .env("FLOX_PROMPT_ENVIRONMENTS", flox_prompt_environments)
-            .env("FLOX_ENV", activation_path)
-            .exec();
+            .env("FLOX_ENV", activation_path);
+
+        if shell.ends_with("bash") {
+            command.arg("--rcfile").arg(activation_script)
+        } else {
+            bail!("Unsupported SHELL '{shell}'");
+        };
+
+        debug!("running activation command: {:?}", command);
+        let error = command.exec();
 
         // exec should never return
 
@@ -402,6 +413,25 @@ impl List {
     }
 }
 
+fn environment_description(environment: &ConcreteEnvironment) -> String {
+    match environment {
+        ConcreteEnvironment::Managed(environment) => {
+            format!(
+                "{}/{} at {}",
+                environment.owner(),
+                environment.name(),
+                environment.path.to_string_lossy()
+            )
+        },
+        ConcreteEnvironment::Path(environment) => format!(
+            "{} at {}",
+            environment.name(),
+            environment.path.to_string_lossy()
+        ),
+        _ => todo!(),
+    }
+}
+
 /// Install a package into an environment
 #[derive(Bpaf, Clone)]
 pub struct Install {
@@ -425,10 +455,9 @@ impl Install {
             self.packages.as_slice().join(", "),
             self.environment
         );
-        let mut environment = self
-            .environment
-            .to_concrete_environment(&flox)?
-            .into_dyn_environment();
+        let concrete_environment = self.environment.to_concrete_environment(&flox)?;
+        let description = environment_description(&concrete_environment);
+        let mut environment = concrete_environment.into_dyn_environment();
         let nix = flox.nix::<NixCommandLine>(vec![]);
         let installation = environment
             .install(self.packages.clone(), &nix, flox.system.clone())
@@ -437,13 +466,13 @@ impl Install {
             // Print which new packages were installed
             for pkg in self.packages.iter() {
                 if let Some(false) = installation.already_installed.get(pkg) {
-                    info!("✅ '{pkg}' installed to environment");
+                    info!("✅ '{pkg}' installed to environment {description}");
                 } else {
-                    info!("🛑 '{pkg}' already installed");
+                    info!("🛑 '{pkg}' already installed to environment {description}");
                 }
             }
         } else {
-            info!("🛑 package(s) already installed");
+            info!("🛑 package(s) already installed to environment {description}");
         }
         Ok(())
     }
@@ -468,10 +497,9 @@ impl Uninstall {
             self.packages.as_slice().join(", "),
             self.environment
         );
-        let mut environment = self
-            .environment
-            .to_concrete_environment(&flox)?
-            .into_dyn_environment();
+        let concrete_environment = self.environment.to_concrete_environment(&flox)?;
+        let description = environment_description(&concrete_environment);
+        let mut environment = concrete_environment.into_dyn_environment();
         let nix = flox.nix::<NixCommandLine>(vec![]);
         let _ = environment
             .uninstall(self.packages.clone(), &nix, flox.system.clone())
@@ -481,7 +509,7 @@ impl Uninstall {
         // otherwise they appear right next to each other.
         self.packages
             .iter()
-            .for_each(|p| info!("🗑️  '{p}' uninstalled from environment"));
+            .for_each(|p| info!("🗑️  '{p}' uninstalled from environment {description}"));
         Ok(())
     }
 }
