@@ -82,7 +82,7 @@ env_is_activated() {
   run $FLOX_CLI install -d "$PROJECT_DIR" hello;
   assert_success;
   assert_output --partial "✅ 'hello' installed to environment";
-  "$PKGDB_BIN" lock "$PROJECT_DIR/.flox/env/manifest.toml"
+  NIX_CONFIG="extra-experimental-features = flakes" "$PKGDB_BIN" lock "$PROJECT_DIR/.flox/env/manifest.toml"
   # TODO might want to also warm up env-from-lockfile once url is added to the lockfile
   # "$BUILD_ENV_BIN" "$NIX_BIN" "$NIX_SYSTEM" "$PROJECT_DIR/.flox/env/manifest.lock" "$PROJECT_DIR/.flox/run/$PROJECT_NAME.$NIX_SYSTEM" "$ENV_FROM_LOCKFILE_PATH";
 }
