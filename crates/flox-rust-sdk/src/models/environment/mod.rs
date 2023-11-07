@@ -314,10 +314,10 @@ pub struct PkgDbError {
 impl Display for PkgDbError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.category_message)?;
-        if let Some(context_message) = &self.context_message {
+        if let Some(ref context_message) = self.context_message {
             write!(f, ": {}", context_message)?;
         }
-        if let Some(caught_message) = &self.caught_message {
+        if let Some(ref caught_message) = self.caught_message {
             write!(f, ": {}", caught_message)?;
         }
         Ok(())
