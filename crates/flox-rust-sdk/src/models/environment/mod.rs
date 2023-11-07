@@ -382,6 +382,7 @@ pub fn lock_manifest(
         pkgdb_cmd.arg(canonical_lockfile_path);
     }
     let output = pkgdb_cmd.output().map_err(EnvironmentError2::PkgDbCall)?;
+    // If command fails, try to parse stdout as a PkgDbError
     if !output.status.success() {
         if let Ok::<PkgDbError, _>(pkgdb_err) = serde_json::from_slice(&output.stdout) {
             Err(EnvironmentError2::LockManifest(pkgdb_err))
@@ -390,6 +391,7 @@ pub fn lock_manifest(
                 String::from_utf8_lossy(&output.stdout).to_string(),
             ))
         }
+    // If command succeeds, try to parse stdout as JSON value
     } else {
         let lockfile_json: Value =
             serde_json::from_slice(&output.stdout).map_err(EnvironmentError2::ParseLockfileJSON)?;
