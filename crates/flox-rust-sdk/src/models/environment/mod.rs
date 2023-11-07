@@ -377,7 +377,7 @@ pub fn lock_manifest(
             .map_err(EnvironmentError2::BadLockfilePath)?;
         pkgdb_cmd.arg(canonical_lockfile_path);
     }
-    debug!("locking manifest with command: {:?}", pkgdb_cmd);
+    debug!(target: "posix", "locking manifest with command: {pkgdb_cmd:?}");
     let output = pkgdb_cmd.output().map_err(EnvironmentError2::PkgDbCall)?;
     let lockfile_json: Value =
         serde_json::from_slice(&output.stdout).map_err(EnvironmentError2::ParseLockfileJSON)?;
