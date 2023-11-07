@@ -205,9 +205,6 @@ where
             &manifest_path,
             maybe_lockfile,
         )?;
-        if let Ok::<PkgDbError, _>(pkgdb_err) = serde_json::from_value(lockfile_json.clone()) {
-            return Err(EnvironmentError2::FailedResolution(pkgdb_err));
-        }
         // TODO: pkgdb needs to add a `url` field, until that's done we do it manually
         let nixpkgs_url = Value::String(
             "github:NixOS/nixpkgs/e8039594435c68eb4f780f3e9bf3972a7399c4b1".to_string(),
