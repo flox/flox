@@ -205,15 +205,11 @@ where
             maybe_lockfile,
         )?;
         // TODO: pkgdb needs to add a `url` field, until that's done we do it manually
-        let nixpkgs_url = Value::String(
-            "github:NixOS/nixpkgs/e8039594435c68eb4f780f3e9bf3972a7399c4b1".to_string(),
-        );
+        let rev = lockfile_json["registry"]["inputs"]["nixpkgs"]["from"]["rev"]
+            .as_str()
+            .ok_or(EnvironmentError2::RevNotString)?;
+        let nixpkgs_url = Value::String(format!("github:NixOS/nixpkgs/{rev}"));
         lockfile_json["registry"]["inputs"]["nixpkgs"]["url"] = nixpkgs_url.clone();
-        if let Value::Object(ref mut packages) = lockfile_json["packages"] {
-            for (_p_name, p_value) in packages.iter_mut() {
-                p_value[system]["url"] = nixpkgs_url.clone();
-            }
-        }
         debug!("generated lockfile, writing to {}", lockfile_path.display());
         std::fs::write(&lockfile_path, lockfile_json.to_string())
             .map_err(EnvironmentError2::WriteLockfile)?;
