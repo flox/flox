@@ -33,6 +33,9 @@ project_setup() {
   mkdir -p "$PROJECT_DIR";
   pushd "$PROJECT_DIR" >/dev/null||return;
   $FLOX_CLI init -d "$PROJECT_DIR";
+  sed -i \
+    's/from = { type = "github", owner = "NixOS", repo = "nixpkgs" }/from = { type = "github", owner = "NixOS", repo = "nixpkgs", rev = "e8039594435c68eb4f780f3e9bf3972a7399c4b1" }/' \
+    "$PROJECT_DIR/.flox/env/manifest.toml";
 }
 
 project_teardown() {
@@ -82,7 +85,7 @@ env_is_activated() {
   run $FLOX_CLI install -d "$PROJECT_DIR" hello;
   assert_success;
   assert_output --partial "✅ 'hello' installed to environment";
-  NIX_CONFIG="extra-experimental-features = flakes" "$PKGDB_BIN" lock "$PROJECT_DIR/.flox/env/manifest.toml"
+  NIX_CONFIG="extra-experimental-features = flakes" "$PKGDB_BIN" manifest lock "$PROJECT_DIR/.flox/env/manifest.toml"
   # TODO might want to also warm up env-from-lockfile once url is added to the lockfile
   # "$BUILD_ENV_BIN" "$NIX_BIN" "$NIX_SYSTEM" "$PROJECT_DIR/.flox/env/manifest.lock" "$PROJECT_DIR/.flox/run/$PROJECT_NAME.$NIX_SYSTEM" "$ENV_FROM_LOCKFILE_PATH";
 }
