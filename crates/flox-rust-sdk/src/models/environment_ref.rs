@@ -40,16 +40,13 @@ impl FromStr for EnvironmentName {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct EnvironmentRef {
-    owner: Option<EnvironmentOwner>,
+    owner: EnvironmentOwner,
     name: EnvironmentName,
 }
 
 impl Display for EnvironmentRef {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if let Some(ref owner) = self.owner {
-            write!(f, "{owner}/")?;
-        }
-        write!(f, "{}", self.name)
+        write!(f, "{}/{}", self.owner, self.name)
     }
 }
 
@@ -57,17 +54,11 @@ impl FromStr for EnvironmentRef {
     type Err = EnvironmentRefError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if let Some((owner, name)) = s.split_once('/') {
-            Ok(Self {
-                owner: Some(EnvironmentOwner::from_str(owner)?),
-                name: EnvironmentName::from_str(name)?,
-            })
-        } else {
-            Ok(Self {
-                owner: None,
-                name: EnvironmentName::from_str(s)?,
-            })
-        }
+        let (owner, name) = s.split_once('/').ok_or(EnvironmentRefError::InvalidOwner)?;
+        Ok(Self {
+            owner: EnvironmentOwner::from_str(owner)?,
+            name: EnvironmentName::from_str(name)?,
+        })
     }
 }
 
@@ -81,25 +72,22 @@ pub enum EnvironmentRefError {
 }
 
 impl EnvironmentRef {
-    pub fn owner(&self) -> Option<&EnvironmentOwner> {
-        self.owner.as_ref()
+    pub fn owner(&self) -> &EnvironmentOwner {
+        &self.owner
     }
 
     pub fn name(&self) -> &EnvironmentName {
         &self.name
     }
 
-    pub fn new(owner: Option<&str>, name: impl AsRef<str>) -> Result<Self, EnvironmentRefError> {
+    pub fn new(owner: impl AsRef<str>, name: impl AsRef<str>) -> Result<Self, EnvironmentRefError> {
         Ok(Self {
+            owner: EnvironmentOwner::from_str(owner.as_ref())?,
             name: EnvironmentName::from_str(name.as_ref())?,
-            owner: owner
-                .as_ref()
-                .map(|o| EnvironmentOwner::from_str(o))
-                .transpose()?,
         })
     }
 
-    pub fn new_from_parts(owner: Option<EnvironmentOwner>, name: EnvironmentName) -> Self {
+    pub fn new_from_parts(owner: EnvironmentOwner, name: EnvironmentName) -> Self {
         Self { owner, name }
     }
 }

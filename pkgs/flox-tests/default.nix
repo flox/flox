@@ -8,6 +8,7 @@
   entr,
   expect,
   findutils,
+  flox,
   flox-bash,
   gawk,
   git,
@@ -57,6 +58,7 @@ in
   writeShellScriptBin "flox-tests" ''
 
         export PATH="${lib.makeBinPath paths}"
+        export PKGDB_BIN="${flox.PKGDB_BIN}"
 
         usage() {
               cat << EOF

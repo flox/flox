@@ -1,22 +1,36 @@
 use std::env;
-use std::fs::File;
-use std::io::stdin;
+use std::fs::{self, File};
+use std::io::{stdin, Write};
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use bpaf::Bpaf;
-use flox_rust_sdk::flox::{EnvironmentName, Flox};
-use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironment;
-use flox_rust_sdk::models::environment::path_environment::{Original, PathEnvironment};
+use crossterm::{cursor, QueueableCommand};
+use flox_rust_sdk::flox::{EnvironmentName, EnvironmentOwner, EnvironmentRef, Flox};
+use flox_rust_sdk::models::environment::managed_environment::{
+    ManagedEnvironment,
+    ManagedEnvironmentError,
+};
+use flox_rust_sdk::models::environment::path_environment::{self, Original, PathEnvironment};
 use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironment;
-use flox_rust_sdk::models::environment::{Environment, EnvironmentPointer, PathPointer, DOT_FLOX};
+use flox_rust_sdk::models::environment::{
+    Environment,
+    EnvironmentError2,
+    EnvironmentPointer,
+    ManagedPointer,
+    PathPointer,
+    DOT_FLOX,
+    ENVIRONMENT_POINTER_FILENAME,
+};
 use flox_rust_sdk::models::environment_ref;
+use flox_rust_sdk::models::floxmetav2::FloxmetaV2Error;
 use flox_rust_sdk::models::manifest::list_packages;
 use flox_rust_sdk::nix::command::StoreGc;
 use flox_rust_sdk::nix::command_line::NixCommandLine;
 use flox_rust_sdk::nix::Run;
+use indoc::indoc;
 use log::{debug, error, info};
 use tempfile::NamedTempFile;
 
@@ -28,8 +42,6 @@ pub struct EnvironmentArgs {
     #[bpaf(short, long, argument("SYSTEM"))]
     pub system: Option<String>,
 }
-
-pub type EnvironmentRef = String;
 
 #[derive(Debug, Bpaf, Clone)]
 pub enum EnvironmentSelect {
@@ -60,6 +72,7 @@ impl EnvironmentSelect {
 
                 match pointer {
                     EnvironmentPointer::Path(path_pointer) => {
+                        debug!("detected concrete environment type: path");
                         let dot_flox_path = path.join(DOT_FLOX);
                         ConcreteEnvironment::Path(PathEnvironment::open(
                             path_pointer,
@@ -67,9 +80,11 @@ impl EnvironmentSelect {
                             &flox.temp_dir,
                         )?)
                     },
-                    EnvironmentPointer::Managed(managed_pointer) => ConcreteEnvironment::Managed(
-                        ManagedEnvironment::open(flox, managed_pointer, path)?,
-                    ),
+                    EnvironmentPointer::Managed(managed_pointer) => {
+                        debug!("detected concrete environment type: managed");
+                        let env = ManagedEnvironment::open(flox, managed_pointer, path)?;
+                        ConcreteEnvironment::Managed(env)
+                    },
                 }
             },
             EnvironmentSelect::Remote(_) => todo!(),
@@ -270,22 +285,49 @@ impl Activate {
         };
 
         let mut environment = concrete_environment.into_dyn_environment();
-
         let nix = flox.nix(Default::default());
+
+        let mut stderr = std::io::stdout();
+        stderr
+            .queue(cursor::SavePosition)
+            .context("couldn't set cursor positon")?;
+        stderr
+            .write_all("Building environment...\n".as_bytes())
+            .context("could't write progress message")?;
+        stderr.flush().context("could't flush stderr")?;
+
         let activation_path = environment.activation_path(&flox, &nix).await?;
 
+        stderr
+            .queue(cursor::RestorePosition)
+            .context("couldn't restore cursor position")?;
+        stderr.flush().context("could't flush stderr")?;
+
+        let activation_script = activation_path.join("activate").into_os_string();
+
+        // We don't have access to the current PS1 (it's not exported), so we
+        // can't modify it. Instead set FLOX_PROMPT_ENVIRONMENTS and let the
+        // activation script set PS1 based on that.
         let flox_prompt_environments = env::var("FLOX_PROMPT_ENVIRONMENTS")
             .map_or(prompt_name.clone(), |prompt_environments| {
                 format!("{prompt_environments} {prompt_name}")
             });
 
-        // We don't have access to the current PS1 (it's not exported), so we
-        // can't modify it. Instead set FLOX_PROMPT_ENVIRONMENTS and let the
-        // activation script set PS1 based on that.
-        let error = Command::new(activation_path.join("activate"))
+        // TODO more sophisticated detection?
+        let shell = env::var("SHELL").unwrap();
+        let mut command = Command::new(&shell);
+        command
             .env("FLOX_PROMPT_ENVIRONMENTS", flox_prompt_environments)
-            .env("FLOX_ENV", activation_path)
-            .exec();
+            .env("FLOX_ENV", activation_path);
+
+        if shell.ends_with("bash") {
+            command.arg("--rcfile").arg(activation_script)
+        } else {
+            bail!("Unsupported SHELL '{shell}'");
+        };
+
+        debug!("running activation command: {:?}", command);
+        let error = command.exec();
 
         // exec should never return
 
@@ -340,7 +382,7 @@ impl Init {
             Enter the environment with \"flox activate\"
             Search and install packages with \"flox search {{packagename}}\" and \"flox install {{packagename}}\"
             "},
-            name = env.environment_ref(),
+            name = env.name(),
             system = flox.system
         );
         Ok(())
@@ -371,6 +413,25 @@ impl List {
     }
 }
 
+fn environment_description(environment: &ConcreteEnvironment) -> String {
+    match environment {
+        ConcreteEnvironment::Managed(environment) => {
+            format!(
+                "{}/{} at {}",
+                environment.owner(),
+                environment.name(),
+                environment.path.to_string_lossy()
+            )
+        },
+        ConcreteEnvironment::Path(environment) => format!(
+            "{} at {}",
+            environment.name(),
+            environment.path.to_string_lossy()
+        ),
+        _ => todo!(),
+    }
+}
+
 /// Install a package into an environment
 #[derive(Bpaf, Clone)]
 pub struct Install {
@@ -394,10 +455,9 @@ impl Install {
             self.packages.as_slice().join(", "),
             self.environment
         );
-        let mut environment = self
-            .environment
-            .to_concrete_environment(&flox)?
-            .into_dyn_environment();
+        let concrete_environment = self.environment.to_concrete_environment(&flox)?;
+        let description = environment_description(&concrete_environment);
+        let mut environment = concrete_environment.into_dyn_environment();
         let nix = flox.nix::<NixCommandLine>(vec![]);
         let installation = environment
             .install(self.packages.clone(), &nix, flox.system.clone())
@@ -406,13 +466,13 @@ impl Install {
             // Print which new packages were installed
             for pkg in self.packages.iter() {
                 if let Some(false) = installation.already_installed.get(pkg) {
-                    info!("✅ '{pkg}' installed to environment");
+                    info!("✅ '{pkg}' installed to environment {description}");
                 } else {
-                    info!("🛑 '{pkg}' already installed");
+                    info!("🛑 '{pkg}' already installed to environment {description}");
                 }
             }
         } else {
-            info!("🛑 package(s) already installed");
+            info!("🛑 package(s) already installed to environment {description}");
         }
         Ok(())
     }
@@ -437,10 +497,9 @@ impl Uninstall {
             self.packages.as_slice().join(", "),
             self.environment
         );
-        let mut environment = self
-            .environment
-            .to_concrete_environment(&flox)?
-            .into_dyn_environment();
+        let concrete_environment = self.environment.to_concrete_environment(&flox)?;
+        let description = environment_description(&concrete_environment);
+        let mut environment = concrete_environment.into_dyn_environment();
         let nix = flox.nix::<NixCommandLine>(vec![]);
         let _ = environment
             .uninstall(self.packages.clone(), &nix, flox.system.clone())
@@ -450,7 +509,7 @@ impl Uninstall {
         // otherwise they appear right next to each other.
         self.packages
             .iter()
-            .for_each(|p| info!("🗑️  '{p}' uninstalled from environment"));
+            .for_each(|p| info!("🗑️  '{p}' uninstalled from environment {description}"));
         Ok(())
     }
 }
@@ -549,13 +608,12 @@ impl History {
 /// Send environment to flox hub
 #[derive(Bpaf, Clone)]
 pub struct Push {
-    #[allow(dead_code)] // pending spec for `-e`, `--dir` behaviour
-    #[bpaf(external(environment_args), group_help("Environment Options"))]
-    environment_args: EnvironmentArgs,
+    /// Directory to push the environment from (default: current directory)
+    dir: Option<PathBuf>,
 
-    #[allow(dead_code)] // not yet handled in impl
-    #[bpaf(external(push_floxmain_or_env), optional)]
-    target: Option<PushFloxmainOrEnv>,
+    /// Owner to push push environment to (default: current user)
+    #[bpaf(long, short)]
+    owner: Option<EnvironmentOwner>,
 
     /// forceably overwrite the remote copy of the environment
     #[allow(dead_code)] // not yet handled in impl
@@ -564,34 +622,99 @@ pub struct Push {
 }
 
 impl Push {
-    pub async fn handle(self, _flox: Flox) -> Result<()> {
+    pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("push");
+        let dir = self.dir.unwrap_or_else(|| std::env::current_dir().unwrap());
 
-        todo!("this command is planned for a future release")
+        match EnvironmentPointer::open(&dir)? {
+            EnvironmentPointer::Managed(managed_pointer) => {
+                if self.owner.is_some() {
+                    bail!("Environment already linked to a remote")
+                }
+
+                Self::push_managed_env(&flox, managed_pointer, dir)
+            },
+            EnvironmentPointer::Path(path_pointer) => {
+                if self.owner.is_none() {
+                    bail!("curent user can't be determined yet, please specify explicitly");
+                }
+
+                Self::push_make_managed(&flox, path_pointer, &dir, self.owner.unwrap())
+            },
+        }
+    }
+
+    fn push_managed_env(flox: &Flox, managed_pointer: ManagedPointer, dir: PathBuf) -> Result<()> {
+        let mut env = ManagedEnvironment::open(flox, managed_pointer, dir.join(DOT_FLOX))
+            .context("Could not open environment")?;
+        env.push().context("Could not push environment")?;
+
+        Ok(())
+    }
+
+    fn push_make_managed(
+        flox: &Flox,
+        path_pointer: PathPointer,
+        dir: &Path,
+        owner: EnvironmentOwner,
+    ) -> Result<()> {
+        let dot_flox_path = dir.join(DOT_FLOX);
+        let path_environment =
+            path_environment::PathEnvironment::open(path_pointer, dot_flox_path, &flox.temp_dir)
+                .unwrap();
+
+        ManagedEnvironment::push_new(
+            flox,
+            path_environment,
+            owner.parse().unwrap(),
+            &flox.temp_dir,
+        )
+        .map_err(Self::convert_error)
+        .unwrap();
+
+        Ok(())
+    }
+
+    fn convert_error(err: ManagedEnvironmentError) -> anyhow::Error {
+        if let ManagedEnvironmentError::OpenFloxmeta(FloxmetaV2Error::LoggedOut) = err {
+            anyhow!(indoc! {"
+                Could not push environment: not logged in to floxhub.
+
+                Please login to floxhub with `flox auth login`
+                "})
+        } else {
+            anyhow!(err)
+        }
     }
 }
 
-#[derive(Bpaf, Clone)]
-pub enum PushFloxmainOrEnv {
-    /// push the `floxmain` branch to sync configuration
-    #[bpaf(long, short)]
-    Main,
-    Env {
-        #[bpaf(long("environment"), short('e'), argument("ENV"))]
-        env: Option<EnvironmentRef>,
+#[derive(Debug, Clone, Bpaf)]
+enum PullSelect {
+    New {
+        /// Directory to create the environment in (default: current directory)
+        dir: Option<PathBuf>,
+        /// ID of the environment to pull
+        remote: EnvironmentRef,
     },
+    Existing {
+        /// Directory containing a managed environment to pull
+        dir: Option<PathBuf>,
+    },
+}
+
+impl Default for PullSelect {
+    fn default() -> Self {
+        PullSelect::Existing {
+            dir: Default::default(),
+        }
+    }
 }
 
 /// Pull environment from flox hub
 #[derive(Bpaf, Clone)]
 pub struct Pull {
-    #[allow(dead_code)] // pending spec for `-e`, `--dir` behaviour
-    #[bpaf(external(environment_args), group_help("Environment Options"))]
-    environment_args: EnvironmentArgs,
-
-    #[allow(dead_code)] // not yet handled in impl
-    #[bpaf(external(pull_floxmain_or_env), optional)]
-    target: Option<PullFloxmainOrEnv>,
+    #[bpaf(external(pull_select), fallback(Default::default()))]
+    pull_select: PullSelect,
 
     /// forceably overwrite the local copy of the environment
     #[allow(dead_code)] // not yet handled in impl
@@ -600,26 +723,100 @@ pub struct Pull {
 }
 
 impl Pull {
-    pub async fn handle(self, _flox: Flox) -> Result<()> {
+    pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("pull");
+        match self.pull_select {
+            PullSelect::New { dir, remote } => {
+                let dir = dir.unwrap_or_else(|| std::env::current_dir().unwrap());
 
-        todo!("this command is planned for a future release")
+                debug!("Resolved user intent: pull {remote:?} into {dir:?}");
+
+                Self::pull_new_environment(&flox, dir.join(DOT_FLOX), remote)?;
+            },
+            PullSelect::Existing { dir } => {
+                let dir = dir.unwrap_or_else(|| std::env::current_dir().unwrap());
+
+                debug!("Resolved user intent: pull changes for environment found in {dir:?}");
+
+                let pointer = {
+                    let p = EnvironmentPointer::open(&dir)
+                        .with_context(|| format!("No environment found in {dir:?}"))?;
+                    match p {
+                        EnvironmentPointer::Managed(managed_pointer) => managed_pointer,
+                        EnvironmentPointer::Path(_) => bail!("Cannot pull into a path environment"),
+                    }
+                };
+
+                Self::pull_existing_environment(&flox, dir.join(DOT_FLOX), pointer)?;
+            },
+        }
+
+        Ok(())
     }
-}
 
-#[derive(Bpaf, Clone)]
-pub enum PullFloxmainOrEnv {
-    /// pull the `floxmain` branch to sync configuration
-    #[bpaf(long, short)]
-    Main,
-    Env {
-        #[bpaf(long("environment"), short('e'), argument("ENV"))]
-        env: Option<EnvironmentRef>,
-        /// do not actually render or create links to environments in the store.
-        /// (Flox internal use only.)
-        #[bpaf(long("no-render"))]
-        no_render: bool,
-    },
+    /// Update an existing environment with the latest version from floxhub
+    ///
+    /// Opens the environment and calls [ManagedEnvironment::pull] on it,
+    /// which will update the lockfile.
+    fn pull_existing_environment(
+        flox: &Flox,
+        dot_flox_path: PathBuf,
+        pointer: ManagedPointer,
+    ) -> Result<()> {
+        let mut env = ManagedEnvironment::open(flox, pointer, dot_flox_path)
+            .context("Could not open environment")?;
+        env.pull().context("Could not pull environment")?;
+
+        Ok(())
+    }
+
+    /// Pull a new environment from floxhub into the given directory
+    ///
+    /// This will create a new environment in the given directory.
+    /// Uses [ManagedEnvironment::open] which will try to clone the environment.
+    ///
+    /// If the directory already exists, this will fail early.
+    /// If opening the environment fails, the .flox/ directory will be cleaned up.
+    fn pull_new_environment(
+        flox: &Flox,
+        dot_flox_path: PathBuf,
+        env_ref: EnvironmentRef,
+    ) -> Result<()> {
+        if dot_flox_path.exists() {
+            bail!("Cannot pull a new environment into an existing one")
+        }
+        let pointer = ManagedPointer::from(env_ref);
+
+        let pointer_content =
+            serde_json::to_string_pretty(&pointer).context("Could not serialize pointer")?;
+        let pointer_path = dot_flox_path.join(ENVIRONMENT_POINTER_FILENAME);
+
+        fs::create_dir_all(&dot_flox_path).context("Could not create .flox/ directory")?;
+        fs::write(pointer_path, pointer_content).context("Could not write pointer")?;
+
+        let result =
+            ManagedEnvironment::open(flox, pointer, &dot_flox_path).map_err(Self::convert_error);
+        if let Err(err) = result {
+            fs::remove_dir_all(dot_flox_path).context("Could not clean up .flox/ directory")?;
+            Err(err)?;
+        }
+        Ok(())
+    }
+
+    fn convert_error(err: EnvironmentError2) -> anyhow::Error {
+        if let EnvironmentError2::ManagedEnvironment(ManagedEnvironmentError::OpenFloxmeta(
+            FloxmetaV2Error::LoggedOut,
+        )) = err
+        {
+            anyhow!(indoc! {"
+                Could not pull environment: not logged in to floxhub.
+
+                Please login to floxhub with `flox auth login`
+                "})
+        } else {
+            anyhow!(err)
+        }
+    }
 }
 
 /// rollback to the previous generation of an environment

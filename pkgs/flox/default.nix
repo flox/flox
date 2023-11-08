@@ -31,7 +31,10 @@
   craneLib = inputs.crane.mkLib pkgsFor;
 
   # build time environment variables
-  envs =
+  envs = let
+    # we need to pull all of the scripts in the mkEnv directory into /nix/store
+    mkEnv = ../../assets/mkEnv;
+  in
     {
       # 3rd party CLIs
       # we want to use our own binaries by absolute path
@@ -43,8 +46,8 @@
       FLOX_GH_BIN = "${flox-gh}/bin/flox-gh";
       GH_BIN = "${gh}/bin/gh";
       FLOX_SH_PATH = flox-bash.outPath;
-      ENV_FROM_LOCKFILE_PATH = ../../assets/mkEnv/env-from-lockfile.nix;
-      BUILD_ENV_BIN = ../../assets/mkEnv/build-env.sh;
+      ENV_FROM_LOCKFILE_PATH = "${mkEnv}/env-from-lockfile.nix";
+      BUILD_ENV_BIN = ../../assets/build-env.sh;
 
       # Modified nix completion scripts
       # used to pass through nix completion ability for `flox nix *`

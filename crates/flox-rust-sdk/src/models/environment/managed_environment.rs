@@ -8,23 +8,27 @@ use flox_types::version::Version;
 use log::debug;
 use runix::command_line::NixCommandLine;
 use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
 use thiserror::Error;
 
+use super::path_environment::{Original, PathEnvironment};
 use super::{Environment, EnvironmentError2, InstallationAttempt, ManagedPointer};
 use crate::flox::Flox;
-use crate::models::environment_ref::{EnvironmentName, EnvironmentOwner, EnvironmentRef};
+use crate::models::environment::copy_dir_recursive;
+use crate::models::environment_ref::{EnvironmentName, EnvironmentOwner};
 use crate::models::floxmetav2::{FloxmetaV2, FloxmetaV2Error};
-use crate::providers::git::{GitCommandBranchHashError, GitCommandError};
+use crate::providers::git::{GitCommandBranchHashError, GitCommandError, GitProvider};
 
 const GENERATION_LOCK_FILENAME: &str = "env.lock";
 
 #[derive(Debug)]
 pub struct ManagedEnvironment {
     /// Path to the directory containing `env.json`
-    _path: PathBuf,
+    // TODO might be better to keep this private
+    pub path: PathBuf,
     pointer: ManagedPointer,
-    _system: String,
-    _floxmeta: FloxmetaV2,
+    system: String,
+    floxmeta: FloxmetaV2,
 }
 
 #[derive(Debug, Error)]
@@ -61,6 +65,10 @@ pub enum ManagedEnvironmentError {
     BadBranchName(String),
     #[error("project wasn't found at path {path}: {err}")]
     ProjectNotFound { path: PathBuf, err: std::io::Error },
+    #[error("upstream floxmeta branch diverged from local branch")]
+    Diverged,
+    #[error("failed to push environment: {0}")]
+    Push(GitCommandError),
 }
 
 #[derive(Debug, Deserialize, PartialEq, Serialize)]
@@ -115,8 +123,30 @@ impl Environment for ManagedEnvironment {
     }
 
     /// Extract the current content of the manifest
+    ///
+    /// WIP!
+    /// TODO: errors!
     fn manifest_content(&self) -> Result<String, EnvironmentError2> {
-        todo!()
+        let metadata_content = self
+            .floxmeta
+            .git
+            .show(&format!(
+                "{}:env.json",
+                branch_name(&self.system, &self.pointer, &self.path)?
+            ))
+            .unwrap();
+        let metadata: Value = serde_json::from_slice(metadata_content.as_bytes()).unwrap();
+        let current_gen = metadata["currentGen"].as_str().unwrap();
+        let manifest = self
+            .floxmeta
+            .git
+            .show(&format!(
+                "{}:{}/env/manifest.toml",
+                branch_name(&self.system, &self.pointer, &self.path)?,
+                current_gen
+            ))
+            .unwrap();
+        Ok(manifest.to_string_lossy().into())
     }
 
     #[allow(unused)]
@@ -125,12 +155,6 @@ impl Environment for ManagedEnvironment {
         nix: &NixCommandLine,
         system: System,
     ) -> Result<EnvCatalog, EnvironmentError2> {
-        todo!()
-    }
-
-    /// Return the [EnvironmentRef] for the environment for identification
-    #[allow(unused)]
-    fn environment_ref(&self) -> EnvironmentRef {
         todo!()
     }
 
@@ -243,28 +267,50 @@ impl ManagedEnvironment {
         pointer: ManagedPointer,
         dot_flox_path: impl AsRef<Path>,
     ) -> Result<Self, EnvironmentError2> {
-        let floxmeta =
-            FloxmetaV2::open(flox, &pointer).map_err(ManagedEnvironmentError::OpenFloxmeta)?;
+        let floxmeta = match FloxmetaV2::open(flox, &pointer) {
+            Ok(floxmeta) => floxmeta,
+            Err(FloxmetaV2Error::NotFound(_)) => {
+                debug!("cloning floxmeta for {}", pointer.owner);
+                FloxmetaV2::clone(flox, &pointer).map_err(ManagedEnvironmentError::OpenFloxmeta)?
+            },
+            Err(e) => Err(ManagedEnvironmentError::OpenFloxmeta(e))?,
+        };
+        Self::open_with(floxmeta, flox, pointer, dot_flox_path)
+    }
 
+    /// Open a managed environment backed by a provided floxmeta clone.
+    /// Ensure a branch for the environment exists in floxmeta and that there is
+    /// a _unique_ branch to track its state.
+    ///
+    /// This method is primarily useful for testing.
+    /// In most cases, you want to use [`ManagedEnvironment::open`] instead which provides the flox defaults.
+    fn open_with(
+        floxmeta: FloxmetaV2,
+        flox: &Flox,
+        pointer: ManagedPointer,
+        dot_flox_path: impl AsRef<Path>,
+    ) -> Result<Self, EnvironmentError2> {
         let lock = Self::ensure_locked(flox, &pointer, &dot_flox_path, &floxmeta)?;
+
         Self::ensure_branch(
             &branch_name(&flox.system, &pointer, &dot_flox_path)?,
             &lock,
             &floxmeta,
         )?;
-        ManagedEnvironment::ensure_reverse_link(flox, &dot_flox_path)?;
+
+        Self::ensure_reverse_link(flox, &dot_flox_path)?;
 
         Ok(ManagedEnvironment {
-            _path: dot_flox_path.as_ref().to_path_buf(),
-            _system: flox.system.clone(),
-            _floxmeta: floxmeta,
+            path: dot_flox_path.as_ref().to_path_buf(),
+            system: flox.system.clone(),
+            floxmeta,
             pointer,
         })
     }
 
     /// Ensure:
     /// - a lockfile exists
-    /// - the commit in the lockfile (`local_rev` or `rev``) exists in floxmeta
+    /// - the commit in the lockfile (`local_rev` or `rev`) exists in floxmeta
     ///
     /// This may perform a fetch.
     fn ensure_locked(
@@ -344,25 +390,11 @@ impl ManagedEnvironment {
             // There's no lockfile, so write a new one with whatever remote
             // branch is after fetching.
             None => {
-                let remote_branch = remote_branch_name(&flox.system, pointer);
                 floxmeta
                     .git
-                    .fetch_branch("origin", &remote_branch)
+                    .fetch_branch("origin", &remote_branch_name(&flox.system, pointer))
                     .map_err(ManagedEnvironmentError::Fetch)?;
-                let rev = floxmeta
-                    .git
-                    .branch_hash(&remote_branch)
-                    .map_err(ManagedEnvironmentError::GitBranchHash)?;
-                let lock = GenerationLock {
-                    rev,
-                    local_rev: None,
-                    version: Version::<1> {},
-                };
-                let lock_contents = serde_json::to_string_pretty(&lock)
-                    .map_err(ManagedEnvironmentError::SerializeLock)?;
-                debug!("writing rev '{}' to lockfile", lock.rev);
-                fs::write(&lock_path, lock_contents).map_err(ManagedEnvironmentError::WriteLock)?;
-                lock
+                write_pointer_lockfile(&flox.system, pointer, floxmeta, lock_path)?
             },
         })
     }
@@ -404,8 +436,16 @@ impl ManagedEnvironment {
     }
 
     /// Where to link a built environment to. The parent directory may not exist.
+    ///
+    /// Todo: use `branch_name` as currently all instances of the same environment
+    ///       will resolve to the same outpath violating the specified requirement
+    ///       of unique/independent instances.
+    ///       Consider using `branch_name` with `unwrap()` (as an instance method
+    ///       the existence of a .flox dir is already proven) or change
+    ///       [ManagedEnvironment::encode] to expect canonicalized paths.
     fn out_link(&self, flox: &Flox) -> PathBuf {
-        gcroots_dir(flox, &self.pointer).join(format!("{0}.{1}", flox.system, self.pointer.name))
+        gcroots_dir(flox, &self.pointer.owner)
+            .join(format!("{0}.{1}", flox.system, self.pointer.name))
     }
 
     /// Returns the environment owner
@@ -414,6 +454,49 @@ impl ManagedEnvironment {
     }
 }
 
+/// Write a pointer lockfile to the specified `lock_path` storing the
+/// current git revision of the tracked upstream repository identified by a `pointer`.
+///
+/// When committed to a project, guarantees
+/// that the same version of the linked environment is used by all clones.
+fn write_pointer_lockfile(
+    system: &str,
+    pointer: &ManagedPointer,
+    floxmeta: &FloxmetaV2,
+    lock_path: PathBuf,
+) -> Result<GenerationLock, EnvironmentError2> {
+    let remote_branch = remote_branch_name(system, pointer);
+    let rev = floxmeta
+        .git
+        .branch_hash(&remote_branch)
+        .map_err(ManagedEnvironmentError::GitBranchHash)?;
+    let lock = GenerationLock {
+        rev,
+        local_rev: None,
+        version: Version::<1> {},
+    };
+    let lock_contents =
+        serde_json::to_string_pretty(&lock).map_err(ManagedEnvironmentError::SerializeLock)?;
+    debug!("writing rev '{}' to lockfile to {:?}", lock.rev, lock_path);
+    fs::write(lock_path, lock_contents).map_err(ManagedEnvironmentError::WriteLock)?;
+    Ok(lock)
+}
+
+/// Unique branch name for a specific link.
+///
+/// Use this function over [`remote_branch_name`] within the context of an instance of [ManagedEnvironment]
+///
+/// When pulling the same remote environment in multiple directories,
+/// unique copies of the environment are created.
+/// I.e. `install`ing a package in one directory does not affect the other
+/// until synchronized through floxhub.
+/// To identify the individual branches per directory,
+/// the directory path is encoded using [`ManagedEnvironment::encode`].
+///
+/// `dot_flox_path` is expected to point to the `.flox/` directory
+/// that link to an environment identified by `pointer`.
+/// `dot_flox_path` does _not_ need to be passed in its canonicalized form;
+/// [`ManagedEnvironment::encode`] will canonicalize the path if necessary.
 fn branch_name(
     system: &str,
     pointer: &ManagedPointer,
@@ -428,6 +511,13 @@ fn branch_name(
 }
 
 /// The original branch name of an environment that is used to sync an environment with the hub
+///
+/// In most cases [`branch_name`] should be used over this,
+/// within the context of an instance of [ManagedEnvironment].
+///
+/// [`remote_branch_name`] is primarily used when talking to upstream on floxhub,
+/// during opening to reconciliate with the upsream repo
+/// as well as during [`ManagedEnvironment::pull`].
 pub fn remote_branch_name(system: &str, pointer: &ManagedPointer) -> String {
     format!("{}.{}", system, pointer.name)
 }
@@ -444,8 +534,148 @@ fn reverse_links_dir(flox: &Flox) -> PathBuf {
     flox.data_dir.join("links")
 }
 
-fn gcroots_dir(flox: &Flox, pointer: &ManagedPointer) -> PathBuf {
-    flox.cache_dir.join("run").join(pointer.owner.to_string())
+/// Directory containing nix gc roots for (previous) builds of environments of a given owner
+fn gcroots_dir(flox: &Flox, owner: &EnvironmentOwner) -> PathBuf {
+    flox.cache_dir.join("run").join(owner.as_str())
+}
+
+impl ManagedEnvironment {
+    pub fn push_new(
+        flox: &Flox,
+        path_environment: PathEnvironment<Original>,
+        owner: EnvironmentOwner,
+        temp_path: &Path,
+    ) -> Result<Self, ManagedEnvironmentError> {
+        let pointer = ManagedPointer::new(owner, path_environment.name());
+        let temp_floxmeta_path = temp_path.join("floxmeta");
+
+        fs::create_dir_all(&temp_floxmeta_path).unwrap();
+
+        let temp_floxmeta = FloxmetaV2::new_in(&temp_floxmeta_path, flox, &pointer)
+            .map_err(ManagedEnvironmentError::OpenFloxmeta)?;
+
+        let generation_dir = temp_floxmeta_path.join("0");
+        fs::create_dir_all(&generation_dir).unwrap();
+        copy_dir_recursive(&path_environment.path, &generation_dir, false).unwrap();
+
+        fs::write(
+            temp_floxmeta_path.join("env.json"),
+            serde_json::to_string(&json!({
+                "type": "upstream",
+                "currentGen": "0"
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+
+        temp_floxmeta.git.add(&[Path::new(".")]).unwrap();
+        temp_floxmeta
+            .git
+            .commit(&format!(
+                "initialize environment {}/{} with first generation",
+                &pointer.owner, &pointer.name
+            ))
+            .unwrap();
+
+        temp_floxmeta
+            .git
+            .add_remote(
+                "origin",
+                &format!("{}/{}/floxmeta", flox.floxhub_host, &pointer.owner),
+            )
+            .unwrap();
+        temp_floxmeta.git.push("origin").unwrap();
+
+        fs::write(
+            temp_floxmeta_path.join("env.json"),
+            serde_json::to_string(&pointer).unwrap(),
+        )
+        .unwrap();
+
+        let env = ManagedEnvironment::open(flox, pointer, path_environment.path).unwrap();
+
+        Ok(env)
+    }
+
+    pub fn push(&mut self) -> Result<(), ManagedEnvironmentError> {
+        let project_branch = branch_name(&self.system, &self.pointer, &self.path)?;
+        let sync_branch = remote_branch_name(&self.system, &self.pointer);
+
+        // Fetch the remote branch into FETCH_HEAD
+        self.floxmeta
+            .git
+            .fetch_ref("origin", &format!("{sync_branch}:",))
+            .unwrap();
+
+        // Check whether we can fast-forward merge the remote branch into the local branch
+        // In not the environment has diverged.
+        let consistent_history = self
+            .floxmeta
+            .git
+            .branch_contains_commit("FETCH_HEAD", &project_branch)
+            .map_err(ManagedEnvironmentError::Git)?;
+
+        if !consistent_history {
+            Err(ManagedEnvironmentError::Diverged)?;
+        }
+
+        self.floxmeta
+            .git
+            .push_ref("origin", format!("{}:{}", project_branch, sync_branch))
+            .map_err(ManagedEnvironmentError::Push)?;
+
+        // update local envorinment branch, should be fast-forward and a noop if the branches didn't diverge
+        self.pull()?;
+
+        Ok(())
+    }
+
+    #[allow(unused)]
+    pub fn pull(&mut self) -> Result<(), ManagedEnvironmentError> {
+        // Fetch the remote branch into FETCH_HEAD
+        self.floxmeta
+            .git
+            .fetch_ref(
+                "origin",
+                &format!("{}:", remote_branch_name(&self.system, &self.pointer)),
+            )
+            .unwrap();
+
+        // Check whether we can fast-forward merge the remote branch into the local branch,
+        // if not the environment has diverged.
+        let consistent_history = self
+            .floxmeta
+            .git
+            .branch_contains_commit(
+                &remote_branch_name(&self.system, &self.pointer),
+                "FETCH_HEAD",
+            )
+            .map_err(ManagedEnvironmentError::Git)?;
+        if !consistent_history {
+            Err(ManagedEnvironmentError::Diverged)?;
+        }
+
+        // try fast forward merge local env branch into project branch
+        self.floxmeta
+            .git
+            .push_ref(
+                ".",
+                format!(
+                    "FETCH_HEAD:refs/heads/{sync_branch}",
+                    sync_branch = remote_branch_name(&self.system, &self.pointer)
+                ),
+            )
+            .unwrap();
+
+        write_pointer_lockfile(
+            &self.system,
+            &self.pointer,
+            &self.floxmeta,
+            self.path.join(GENERATION_LOCK_FILENAME),
+        )
+        .unwrap();
+        Ok(())
+    }
 }
 
 #[cfg(test)]

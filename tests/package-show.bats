@@ -49,6 +49,7 @@ teardown() {
 # ---------------------------------------------------------------------------- #
 
 @test "'flox show' accepts specific input" {
+  skip DEPRECATED;
   run "$FLOX_CLI" show nixpkgs-flox:hello;
   assert_success;
   # TODO: better testing once the formatting is implemented
@@ -68,6 +69,7 @@ teardown() {
 # ---------------------------------------------------------------------------- #
 
 @test "'flox show' accepts search output with separator" {
+  skip DEPRECATED;
   run "$FLOX_CLI" search nixpkgs-flox:hello;
   assert_success;
   first_result="${lines[0]%% *}";
@@ -92,7 +94,7 @@ teardown() {
   run "$FLOX_CLI" show hello --all;
   assert_success;
   assert_equal "${lines[0]}" "hello - A program that produces a familiar, friendly greeting";
-  assert_equal "${lines[1]}" "    hello - hello@2.12.1, hello@2.12, hello@2.10";
+  assert_equal "${lines[1]}" "    hello - hello@2.12.1";
 }
 
 
@@ -102,7 +104,7 @@ teardown() {
   run "$FLOX_CLI" show python27Full;
   assert_success;
   assert_equal "${lines[0]}" "python27Full - A high-level dynamically-typed programming language";
-  assert_equal "${lines[1]}" "    python27Full - python27Full@2.7.18";
+  assert_equal "${lines[1]}" "    python27Full - python27Full@2.7.18.6";
 }
 
 
@@ -112,5 +114,5 @@ teardown() {
   run "$FLOX_CLI" show python27Full --all;
   assert_success;
   assert_equal "${lines[0]}" "python27Full - A high-level dynamically-typed programming language";
-  assert_equal "${lines[1]}" "    python27Full - python27Full@2.7.18, python27Full@2.7.18.5";
+  assert_equal "${lines[1]}" "    python27Full - python27Full@2.7.18.6";
 }

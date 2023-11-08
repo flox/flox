@@ -1,3 +1,12 @@
+//! The directory structure for a path environment looks like this:
+//! .flox/
+//!     ENVIRONMENT_POINTER_FILENAME
+//!     ENVIRONMENT_DIR_NAME/
+//!         MANIFEST_FILENAME
+//!         LOCKFILE_FILENAME
+//!     PATH_ENV_GCROOTS_DIR_NAME/
+//!         $system.$name (out link)
+
 use std::ffi::OsStr;
 use std::fs;
 use std::io::Write;
@@ -13,6 +22,7 @@ use runix::command_line::NixCommandLine;
 use runix::flake_ref::path::PathRef;
 use runix::installable::FlakeAttribute;
 use runix::RunJson;
+use serde_json::Value;
 
 use super::{
     copy_dir_recursive,
@@ -23,20 +33,23 @@ use super::{
     PathPointer,
     DOT_FLOX,
     ENVIRONMENT_POINTER_FILENAME,
-    MANIFEST_FILENAME,
 };
 use crate::environment::NIX_BIN;
 use crate::flox::Flox;
 use crate::models::environment::{
+    lock_manifest,
     BUILD_ENV_BIN,
     CATALOG_JSON,
     ENV_FROM_LOCKFILE_PATH,
-    PATH_ENV_GCROOTS_DIR,
 };
-use crate::models::environment_ref::{EnvironmentName, EnvironmentRef};
+use crate::models::environment_ref::EnvironmentName;
 use crate::models::manifest::{insert_packages, remove_packages};
+use crate::models::search::PKGDB_BIN;
 
-const ENVIRONMENT_DIR_NAME: &'_ str = "env";
+pub const MANIFEST_FILENAME: &str = "manifest.toml";
+pub const LOCKFILE_FILENAME: &str = "manifest.lock";
+pub const PATH_ENV_GCROOTS_DIR_NAME: &str = "run";
+pub const ENVIRONMENT_DIR_NAME: &str = "env";
 
 /// Struct representing a local environment
 ///
@@ -136,7 +149,7 @@ impl<S: TransactionState> PathEnvironment<S> {
     /// this path doesn't guarantee that the current environment can be built,
     /// just that it built at some point in the past.
     fn out_link(&self, system: &System) -> Result<PathBuf, EnvironmentError2> {
-        let run_dir = self.path.join(PATH_ENV_GCROOTS_DIR);
+        let run_dir = self.path.join(PATH_ENV_GCROOTS_DIR_NAME);
         if !run_dir.exists() {
             std::fs::create_dir_all(&run_dir).map_err(EnvironmentError2::CreateGcRootDir)?;
         }
@@ -167,10 +180,8 @@ where
     /// Build the environment with side effects:
     ///
     /// - Create a result link as gc-root.
-    /// - Copy catalog.json from the result into the environment. Whenever the
-    /// environment is built, the lock is potentially updated. The lockfile is
-    /// an input to the build and allows skipping relocking, so we copy it back
-    /// into the environment to avoid relocking.
+    /// - Create a lockfile if one doesn't already exist, updating it with
+    ///   any new packages.
     async fn build(
         &mut self,
         _nix: &NixCommandLine,
@@ -178,11 +189,30 @@ where
     ) -> Result<(), EnvironmentError2> {
         debug!("building project environment at {}", self.path.display());
         let manifest_path = self.manifest_path();
-        let lockfile_path = {
-            // TODO: generate a lockfile with pkgdb
-            manifest_path.parent().unwrap().join("dummy_lockfile.json")
+        let lockfile_path = self.lockfile_path();
+        let maybe_lockfile = if lockfile_path.exists() {
+            debug!("found existing lockfile: {}", lockfile_path.display());
+            // TODO: not yet implemented in pkgdb
+            // Some(lockfile_path.as_ref())
+            None
+        } else {
+            debug!("no existing lockfile found");
+            None
         };
-        debug!("generated lockfile: {}", lockfile_path.display());
+        let mut lockfile_json = lock_manifest(
+            Path::new(&PKGDB_BIN.as_str()),
+            &manifest_path,
+            maybe_lockfile,
+        )?;
+        // TODO: pkgdb needs to add a `url` field, until that's done we do it manually
+        let rev = lockfile_json["registry"]["inputs"]["nixpkgs"]["from"]["rev"]
+            .as_str()
+            .ok_or(EnvironmentError2::RevNotString)?;
+        let nixpkgs_url = Value::String(format!("github:NixOS/nixpkgs/{rev}"));
+        lockfile_json["registry"]["inputs"]["nixpkgs"]["url"] = nixpkgs_url.clone();
+        debug!("generated lockfile, writing to {}", lockfile_path.display());
+        std::fs::write(&lockfile_path, lockfile_json.to_string())
+            .map_err(EnvironmentError2::WriteLockfile)?;
 
         debug!(
             "building environment: system={system}, lockfilePath={}",
@@ -202,6 +232,8 @@ where
             let stderr = String::from_utf8_lossy(&build_output.stderr);
             return Err(EnvironmentError2::BuildEnv(stderr.to_string()));
         }
+
+        // TODO: check the contents of the gc root to see if it's empty
 
         Ok(())
     }
@@ -266,11 +298,6 @@ where
         self.transact_with_manifest_contents(contents, nix, system)
             .await?;
         Ok(())
-    }
-
-    /// Return the [EnvironmentRef] for the environment for identification
-    fn environment_ref(&self) -> EnvironmentRef {
-        EnvironmentRef::new_from_parts(None, self.pointer.name.clone())
     }
 
     /// Get a catalog of installed packages from this environment
@@ -360,6 +387,11 @@ impl<S: TransactionState> PathEnvironment<S> {
     /// Path to the environment definition file
     pub fn manifest_path(&self) -> PathBuf {
         self.path.join(ENVIRONMENT_DIR_NAME).join(MANIFEST_FILENAME)
+    }
+
+    /// Path to the lockfile. The path may not exist.
+    pub fn lockfile_path(&self) -> PathBuf {
+        self.path.join(ENVIRONMENT_DIR_NAME).join(LOCKFILE_FILENAME)
     }
 
     /// Path to the environment's catalog
