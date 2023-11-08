@@ -15,6 +15,8 @@ use toml_edit::{Document, Item, Key, Table, TableLike};
 use url::Url;
 use xdg::BaseDirectories;
 
+use self::features::Features;
+
 /// Name of flox managed directories (config, data, cache)
 const FLOX_DIR_NAME: &'_ str = "flox";
 const FLOX_SH_PATH: &'_ str = env!("FLOX_SH_PATH");
@@ -35,7 +37,7 @@ pub struct Config {
     pub github: GithubConfig,
 
     #[serde(default)]
-    pub features: HashMap<features::Feature, features::Impl>,
+    pub features: Features,
 }
 
 // TODO: move to flox_sdk?

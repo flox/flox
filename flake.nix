@@ -7,21 +7,21 @@
   # Do not override `nixpkgs` input
   inputs.pkgdb.url = "github:flox/pkgdb";
 
-  inputs.nixpkgs.follows = "/pkgdb/nixpkgs";
+  inputs.nixpkgs.follows = "pkgdb/nixpkgs";
 
-  inputs.floco.follows = "/pkgdb/floco";
-  inputs.floco.inputs.nixpkgs.follows = "/nixpkgs";
+  inputs.floco.follows = "pkgdb/floco";
+  inputs.floco.inputs.nixpkgs.follows = "nixpkgs";
 
   inputs.parser-util.url = "github:flox/parser-util";
-  inputs.parser-util.inputs.nixpkgs.follows = "/nixpkgs";
+  inputs.parser-util.inputs.nixpkgs.follows = "nixpkgs";
 
   inputs.shellHooks.url = "github:cachix/pre-commit-hooks.nix";
-  inputs.shellHooks.inputs.nixpkgs.follows = "/nixpkgs";
+  inputs.shellHooks.inputs.nixpkgs.follows = "nixpkgs";
 
   inputs.crane.url = "github:ipetkov/crane";
-  inputs.crane.inputs.nixpkgs.follows = "/nixpkgs";
-  inputs.crane.inputs.flake-compat.follows = "/shellHooks/flake-compat";
-  inputs.crane.inputs.flake-utils.follows = "/shellHooks/flake-utils";
+  inputs.crane.inputs.nixpkgs.follows = "nixpkgs";
+  inputs.crane.inputs.flake-compat.follows = "shellHooks/flake-compat";
+  inputs.crane.inputs.flake-utils.follows = "shellHooks/flake-utils";
 
   # -------------------------------------------------------------------------- #
 
