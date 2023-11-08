@@ -292,6 +292,8 @@ pub enum EnvironmentError2 {
     ParsePkgDbError(String),
     #[error("couldn't parse lockfile as JSON: {0}")]
     ParseLockfileJSON(serde_json::Error),
+    #[error("couldn't parse nixpkgs rev as a string")]
+    RevNotString,
     #[error("couldn't write new lockfile contents: {0}")]
     WriteLockfile(std::io::Error),
     #[error("locking manifest failed: {0}")]
@@ -371,11 +373,13 @@ pub fn lock_manifest(
     manifest_path: &Path,
     existing_lockfile_path: Option<&Path>,
 ) -> Result<serde_json::Value, EnvironmentError2> {
-    let canoncial_manifest_path = manifest_path
+    let canonical_manifest_path = manifest_path
         .canonicalize()
         .map_err(EnvironmentError2::OpenManifest)?;
     let mut pkgdb_cmd = Command::new(pkgdb);
-    pkgdb_cmd.arg("lock").arg(canoncial_manifest_path);
+    pkgdb_cmd
+        .args(["manifest", "lock"])
+        .arg(canonical_manifest_path);
     if let Some(lf_path) = existing_lockfile_path {
         let canonical_lockfile_path = lf_path
             .canonicalize()
