@@ -563,24 +563,23 @@ pub struct GitHubClient {
 }
 
 impl GitHubClient {
-    pub async fn new(base_url: &str, oauth_token: &str) -> Self {
+    pub fn new(base_url: String, oauth_token: String) -> Self {
         GitHubClient {
-            base_url: base_url.to_string(),
-            oauth_token: oauth_token.to_string(),
+            base_url,
+            oauth_token,
         }
     }
 
-    pub async fn get_username(&self) -> Result<String, reqwest::Error> {
+    pub fn get_username(&self) -> Result<String, reqwest::Error> {
         let url = format!("{}/user", self.base_url);
-        let client = reqwest::Client::new();
+        let client = reqwest::blocking::Client::new();
         let response = client
-            .get(&url)
+            .get(url)
             .header("Authorization", format!("token {}", self.oauth_token))
-            .send()
-            .await?;
+            .send()?;
 
         if response.status().is_success() {
-            let user: GitHubUser = response.json().await?;
+            let user: GitHubUser = response.json()?;
             Ok(user.login)
         } else {
             Err(response.error_for_status().unwrap_err())
@@ -642,8 +641,8 @@ pub mod tests {
 
     use crate::flox::GitHubClient;
 
-    #[tokio::test]
-    async fn test_get_username() {
+    #[test]
+    fn test_get_username() {
         let mock_response = serde_json::json!({
             "login": "exampleuser"
         });
@@ -657,9 +656,9 @@ pub mod tests {
             .with_body(mock_response.to_string())
             .create();
 
-        let github_client = GitHubClient::new(&mock_server_url, "your_oauth_token").await;
+        let github_client = GitHubClient::new(mock_server_url, "your_oauth_token".to_string());
 
-        let username = github_client.get_username().await.unwrap();
+        let username = github_client.get_username().unwrap();
         assert_eq!(username, "exampleuser".to_string());
 
         mock_server.assert();
