@@ -8,7 +8,7 @@ use std::process::Command;
 use anyhow::{anyhow, bail, Context, Result};
 use bpaf::Bpaf;
 use crossterm::{cursor, QueueableCommand};
-use flox_rust_sdk::flox::{EnvironmentName, EnvironmentOwner, EnvironmentRef, Flox};
+use flox_rust_sdk::flox::{EnvironmentName, EnvironmentOwner, EnvironmentRef, Flox, GitHubClient};
 use flox_rust_sdk::models::environment::managed_environment::{
     ManagedEnvironment,
     ManagedEnvironmentError,
@@ -635,11 +635,21 @@ impl Push {
                 Self::push_managed_env(&flox, managed_pointer, dir)
             },
             EnvironmentPointer::Path(path_pointer) => {
-                if self.owner.is_none() {
-                    bail!("curent user can't be determined yet, please specify explicitly");
-                }
-
-                Self::push_make_managed(&flox, path_pointer, &dir, self.owner.unwrap())
+                let owner = if let Some(owner) = self.owner {
+                    owner
+                } else {
+                    let client = GitHubClient::new(
+                        "github.com".to_string(),
+                        flox.floxhub_token.clone().context("Need to be logged in")?,
+                    );
+                    let user_name = client
+                        .get_username()
+                        .context("Could not get username from github")?;
+                    user_name
+                        .parse::<EnvironmentOwner>()
+                        .context("Invalid owner name")?
+                };
+                Self::push_make_managed(&flox, path_pointer, &dir, owner)
             },
         }
     }
