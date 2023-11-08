@@ -12,7 +12,7 @@
   inputs.floco.follows = "pkgdb/floco";
   inputs.floco.inputs.nixpkgs.follows = "nixpkgs";
 
-  inputs.parser-util.url = "github:flox/parser-util/v0";
+  inputs.parser-util.url = "github:flox/parser-util";
   inputs.parser-util.inputs.nixpkgs.follows = "nixpkgs";
 
   inputs.shellHooks.url = "github:cachix/pre-commit-hooks.nix";
@@ -76,6 +76,7 @@
     overlays.deps = nixpkgs.lib.composeManyExtensions [
       parser-util.overlays.default # for `parser-util'
       floco.overlays.default # for `semver'
+      pkgdb.overlays.default
       overlays.pkgdb-shrinkwrap
     ];
 

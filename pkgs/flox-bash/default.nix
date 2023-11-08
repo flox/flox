@@ -8,14 +8,14 @@
   hostPlatform,
   lib,
   makeWrapper,
-  nixVersions,
+  nix,
   pandoc,
   floxVersion,
   cacert,
   glibcLocalesUtf8,
   darwin,
 }: let
-  nixPatched = nixVersions.nix_2_15;
+  nixPatched = nix;
 in
   stdenv.mkDerivation rec {
     pname = "flox-bash";
