@@ -222,16 +222,72 @@ This example tells `bats` to run 4 jobs in parallel.
 #### Running subsets of tests
 You can specify which tests to run by passing arguments to either `flox-tests` or by directly passing arguments to `bats`.
 
+##### Running a specific file
 In order to run a specific test file, pass the path to the file to `flox-tests`:
 ```console
 $ nix run '.#flox-tests' -- --flox ./target/debug/flox ./tests/run.bats;
+$ or, using the Justfile
+$ just bats-file ./tests/run.bats
 ```
 This example will only run tests in the `tests/run.bats` file.
+
+
+##### Running tagged tests
+When writing integration tests it's important to add tags to each test to identify which subsystems the integration test is using.
+This makes it easier to target a test run at the subsystem you're working on.
+
+You add tags to a test with a special comment:
+```
+# bats test_tags=foo,bar,baz
+@test "this is the name of my test" {
+   run "$FLOX_CLI" --help;
+   assert_success;
+}
+```
+
+You can apply a tag to tests in a file with another special comment, which applies the tags to all of the tests that come after the comment:
+```
+# bats file_tags=foo
+
+@test "this is the name of my test" {
+   run "$FLOX_CLI" --help;
+   assert_success;
+}
+
+
+@test "this is the name of my test" {
+   run "$FLOX_CLI" --help;
+   assert_success;
+}
+```
+
+Tags cannot contain whitespace, but may contain `-`, `_`, and `:`, where `:` is used for namespacing.
+
+The list of tags to use for integration tests is as follows:
+- `init`
+- `build_env`
+- `install`
+- `uninstall`
+- `activate`
+- `push`
+- `pull`
+- `search`
+- `edit`
+- `list`
+- `delete`
+- `upgrade`
+- `project_env`
+- `managed_env`
+- `remote_env`
+
+Some of these tags will overlap. For example, the `build_env` tag should be used any time an environment is built, so there is overlap with `install`, `activate`, etc.
 
 In order to run tests with a specific tag, you'll pass the `--filter-tags` option to `bats`:
 ```console
 $ nix run '.#flox-tests' -- --flox ./target/debug/flox  \
                          -- --filter-tags activate;
+$ # or, using the Justfile
+$ just bats-tests --filter-tags activate
 ```
 This example will only run tests tagged with `activate`.
 You can use boolean logic and specify the flag multiple times to run specific subsets of tests.
