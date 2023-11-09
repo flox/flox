@@ -639,11 +639,12 @@ impl Push {
                     owner
                 } else {
                     let client = GitHubClient::new(
-                        "github.com".to_string(),
+                        "https://api.github.com".to_string(),
                         flox.floxhub_token.clone().context("Need to be logged in")?,
                     );
                     let user_name = client
                         .get_username()
+                        .await
                         .context("Could not get username from github")?;
                     user_name
                         .parse::<EnvironmentOwner>()
