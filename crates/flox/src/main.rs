@@ -5,6 +5,7 @@ use std::process::ExitCode;
 use anyhow::{anyhow, Context, Result};
 use bpaf::{Args, Parser};
 use commands::{FloxArgs, Prefix, Version};
+use flox_rust_sdk::models::environment::init_global_manifest;
 use log::{error, warn};
 use utils::init::init_logger;
 
@@ -17,7 +18,9 @@ async fn run(args: FloxArgs) -> Result<()> {
     init_logger(Some(args.verbosity.clone()), Some(args.debug));
     set_user()?;
     set_parent_process_id();
-    args.handle(config::Config::parse()?).await?;
+    let config = config::Config::parse()?;
+    init_global_manifest(&config.flox.config_dir.join("global-manifest.toml"))?;
+    args.handle(config).await?;
     Ok(())
 }
 
