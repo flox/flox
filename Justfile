@@ -6,10 +6,14 @@ _default:
     @just --list --unsorted
 
 # Run the 'bats' test suite
-bats-tests +test_files="":
-    @cargo build
-    @nix build {{nix_options}} '.#flox-bash'
-    @{{bats_invocation}} {{test_files}}
+bats-tests +bats_args="":
+    @cargo build -q
+    @{{bats_invocation}} -- {{bats_args}}
+
+# Run a specific 'bats' test file
+bats-file file:
+    @cargo build -q
+    @{{bats_invocation}} "{{file}}"
 
 # Run the Rust unit tests
 unit-tests regex="":
