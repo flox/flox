@@ -334,8 +334,6 @@ pub struct SearchResult {
 
 #[cfg(test)]
 mod test {
-    use std::str::FromStr;
-
     use super::*;
 
     const EXAMPLE_SEARCH_TERM: &'_ str = "hello@2.12.1";

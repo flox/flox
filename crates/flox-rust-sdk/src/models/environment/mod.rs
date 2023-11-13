@@ -40,6 +40,7 @@ pub const DEFAULT_MAX_AGE_DAYS: u32 = 90;
 const BUILD_ENV_BIN: &'_ str = env!("BUILD_ENV_BIN");
 const ENV_FROM_LOCKFILE_PATH: &str = env!("ENV_FROM_LOCKFILE_PATH");
 const GLOBAL_MANIFEST_TEMPLATE: &str = env!("GLOBAL_MANIFEST_TEMPLATE");
+const GLOBAL_MANIFEST_FILENAME: &str = "global-manifest.toml";
 
 pub enum InstalledPackage {
     Catalog(FloxTriple, CatalogEntry),
@@ -414,12 +415,19 @@ pub fn lock_manifest(
 pub fn init_global_manifest(global_manifest_path: &Path) -> Result<(), EnvironmentError2> {
     if !global_manifest_path.exists() {
         let global_manifest_template_contents =
-            std::fs::read_to_string(&Path::new(GLOBAL_MANIFEST_TEMPLATE))
+            std::fs::read_to_string(Path::new(GLOBAL_MANIFEST_TEMPLATE))
                 .map_err(EnvironmentError2::ReadGlobalManifestTemplate)?;
         std::fs::write(global_manifest_path, global_manifest_template_contents)
             .map_err(EnvironmentError2::InitGlobalManifest)?;
     }
     Ok(())
+}
+
+/// Returns the path to the global manifest
+pub fn global_manifest_path(flox: &Flox) -> PathBuf {
+    let path = flox.config_dir.join(GLOBAL_MANIFEST_FILENAME);
+    debug!("global manifest path is {}", path.display());
+    path
 }
 
 #[cfg(test)]

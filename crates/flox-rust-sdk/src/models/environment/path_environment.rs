@@ -8,7 +8,7 @@
 //!         $system.$name (out link)
 
 use std::ffi::OsStr;
-use std::fs;
+use std::fs::{self};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
@@ -209,7 +209,7 @@ where
             .as_str()
             .ok_or(EnvironmentError2::RevNotString)?;
         let nixpkgs_url = Value::String(format!("github:NixOS/nixpkgs/{rev}"));
-        lockfile_json["registry"]["inputs"]["nixpkgs"]["url"] = nixpkgs_url.clone();
+        lockfile_json["registry"]["inputs"]["nixpkgs"]["url"] = nixpkgs_url;
         debug!("generated lockfile, writing to {}", lockfile_path.display());
         std::fs::write(&lockfile_path, lockfile_json.to_string())
             .map_err(EnvironmentError2::WriteLockfile)?;
@@ -457,24 +457,42 @@ impl PathEnvironment<Original> {
         pointer: PathPointer,
         dot_flox_parent_path: impl AsRef<Path>,
         temp_dir: impl AsRef<Path>,
+        global_manifest_path: impl AsRef<Path>,
     ) -> Result<Self, EnvironmentError2> {
         match EnvironmentPointer::open(dot_flox_parent_path.as_ref()) {
             Err(EnvironmentError2::EnvNotFound) => {},
             Err(e) => Err(e)?,
             Ok(_) => Err(EnvironmentError2::EnvironmentExists)?,
         }
-
         let dot_flox_path = dot_flox_parent_path.as_ref().join(DOT_FLOX);
-
         let env_dir = dot_flox_path.join(ENVIRONMENT_DIR_NAME);
+        debug!("creating env dir: {}", env_dir.display());
         std::fs::create_dir_all(&env_dir).map_err(EnvironmentError2::InitEnv)?;
-
         let pointer_content =
             serde_json::to_string_pretty(&pointer).map_err(EnvironmentError2::SerializeEnvJson)?;
-
         let template_path = env!("FLOX_ENV_TEMPLATE");
+        debug!(
+            "copying environment template from {} to {}",
+            template_path,
+            env_dir.display()
+        );
         copy_dir_recursive(&template_path, &env_dir, false).map_err(EnvironmentError2::InitEnv)?;
 
+        // Extend the template manifest with the global manifest
+        let mut manifest_file = std::fs::File::options()
+            .append(true)
+            .open(env_dir.join(MANIFEST_FILENAME))
+            .map_err(EnvironmentError2::OpenManifest)?;
+        manifest_file
+            .write_all("\n".as_bytes())
+            .map_err(EnvironmentError2::UpdateManifest)?;
+        let global_manifest_contents = std::fs::read_to_string(global_manifest_path.as_ref())
+            .map_err(EnvironmentError2::ReadManifest)?;
+        manifest_file
+            .write_all(global_manifest_contents.as_bytes())
+            .map_err(EnvironmentError2::UpdateManifest)?;
+
+        // Write the `env.json` file
         if let Err(e) = fs::write(
             dot_flox_path.join(ENVIRONMENT_POINTER_FILENAME),
             pointer_content,
@@ -491,8 +509,8 @@ impl PathEnvironment<Original> {
 mod tests {
 
     use super::*;
-    #[cfg(feature = "impure-unit-tests")]
     use crate::flox::tests::flox_instance;
+    use crate::models::environment::global_manifest_path;
 
     #[test]
     fn create_env() {
@@ -518,10 +536,15 @@ mod tests {
             state: Original,
         };
 
+        let (flox, _tmp_handle) = flox_instance();
+        let global_manifest_path = global_manifest_path(&flox);
+        // Write dummy contents to the global manifest
+        std::fs::write(&global_manifest_path, "dummy contents").unwrap();
         let actual = PathEnvironment::<Original>::init(
             pointer,
             environment_temp_dir.into_path(),
             temp_dir.path(),
+            global_manifest_path,
         )
         .unwrap();
 
@@ -555,8 +578,17 @@ mod tests {
         let environment_temp_dir = tempfile::tempdir().unwrap();
         let pointer = PathPointer::new("test".parse().unwrap());
 
-        let env =
-            PathEnvironment::<Original>::init(pointer, environment_temp_dir, temp_dir).unwrap();
+        let (flox, _tmp_handle) = flox_instance();
+        let global_manifest_path = global_manifest_path(&flox);
+        // Write dummy contents to the global manifest
+        std::fs::write(&global_manifest_path, "dummy contents").unwrap();
+        let env = PathEnvironment::<Original>::init(
+            pointer,
+            environment_temp_dir,
+            temp_dir,
+            global_manifest_path,
+        )
+        .unwrap();
 
         assert_eq!(
             env.flake_attribute("aarch64-darwin").to_string(),
@@ -570,13 +602,17 @@ mod tests {
     #[tokio::test]
     #[cfg(feature = "impure-unit-tests")]
     async fn edit_env() {
-        let (_flox, tempdir) = flox_instance();
+        let (flox, tempdir) = flox_instance();
         let pointer = PathPointer::new("test".parse().unwrap());
 
         let sandbox_path = tempdir.path().join("sandbox");
         std::fs::create_dir(&sandbox_path).unwrap();
 
-        let mut env = PathEnvironment::init(pointer, &tempdir, &sandbox_path).unwrap();
+        let global_manifest_path = global_manifest_path(&flox);
+        // Write dummy contents to the global manifest
+        std::fs::write(&global_manifest_path, "dummy contents").unwrap();
+        let mut env =
+            PathEnvironment::init(pointer, &tempdir, &sandbox_path, global_manifest_path).unwrap();
 
         let mut temp_env = env.make_temporary().unwrap();
 
