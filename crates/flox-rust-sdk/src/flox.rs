@@ -8,6 +8,7 @@ use indoc::indoc;
 use log::{debug, info, warn};
 use once_cell::sync::Lazy;
 use reqwest;
+use reqwest::header::USER_AGENT;
 use runix::arguments::common::NixCommonArgs;
 use runix::arguments::config::NixConfigArgs;
 use runix::arguments::flake::{FlakeArgs, OverrideInput};
@@ -570,16 +571,18 @@ impl GitHubClient {
         }
     }
 
-    pub fn get_username(&self) -> Result<String, reqwest::Error> {
+    pub async fn get_username(&self) -> Result<String, reqwest::Error> {
         let url = format!("{}/user", self.base_url);
-        let client = reqwest::blocking::Client::new();
-        let response = client
+        let client = reqwest::Client::new();
+        let request = client
             .get(url)
-            .header("Authorization", format!("token {}", self.oauth_token))
-            .send()?;
+            .header(USER_AGENT, "flox cli")
+            .bearer_auth(&self.oauth_token);
+
+        let response = request.send().await?;
 
         if response.status().is_success() {
-            let user: GitHubUser = response.json()?;
+            let user: GitHubUser = response.json().await?;
             Ok(user.login)
         } else {
             Err(response.error_for_status().unwrap_err())
@@ -589,6 +592,7 @@ impl GitHubClient {
 
 #[cfg(test)]
 pub mod tests {
+    use reqwest::header::AUTHORIZATION;
     use tempfile::TempDir;
 
     use super::*;
@@ -641,8 +645,8 @@ pub mod tests {
 
     use crate::flox::GitHubClient;
 
-    #[test]
-    fn test_get_username() {
+    #[tokio::test]
+    async fn test_get_username() {
         let mock_response = serde_json::json!({
             "login": "exampleuser"
         });
@@ -650,7 +654,8 @@ pub mod tests {
         let mock_server_url = server.url();
         let mock_server = server
             .mock("GET", "/user")
-            .match_header("Authorization", "token your_oauth_token")
+            .match_header(AUTHORIZATION.as_str(), "Bearer your_oauth_token")
+            .match_header(USER_AGENT.as_str(), "flox cli")
             .with_status(200)
             .with_header("content-type", "application/json")
             .with_body(mock_response.to_string())
@@ -658,7 +663,7 @@ pub mod tests {
 
         let github_client = GitHubClient::new(mock_server_url, "your_oauth_token".to_string());
 
-        let username = github_client.get_username().unwrap();
+        let username = github_client.get_username().await.unwrap();
         assert_eq!(username, "exampleuser".to_string());
 
         mock_server.assert();
