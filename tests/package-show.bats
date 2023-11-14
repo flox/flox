@@ -19,6 +19,9 @@ project_setup() {
   rm -rf "$PROJECT_DIR"
   mkdir -p "$PROJECT_DIR"
   pushd "$PROJECT_DIR" >/dev/null || return
+  run "$FLOX_CLI" init;
+  assert_success;
+  unset output;
 }
 
 project_teardown() {
@@ -41,9 +44,6 @@ teardown() {
 # ---------------------------------------------------------------------------- #
 
 @test "'flox show' can be called at all" {
-  run "$FLOX_CLI" init;
-  assert_success;
-  unset output;
   run "$FLOX_CLI" show hello;
   assert_success;
 }
@@ -53,9 +53,6 @@ teardown() {
 
 @test "'flox show' accepts specific input" {
   skip DEPRECATED;
-  run "$FLOX_CLI" init;
-  assert_success;
-  unset output;
   run "$FLOX_CLI" show nixpkgs-flox:hello;
   assert_success;
   # TODO: better testing once the formatting is implemented
@@ -64,9 +61,6 @@ teardown() {
 # ---------------------------------------------------------------------------- #
 
 @test "'flox show' accepts search output without separator" {
-  run "$FLOX_CLI" init;
-  assert_success;
-  unset output;
   run "$FLOX_CLI" search hello;
   assert_success;
   first_result="${lines[0]%% *}";
@@ -79,9 +73,6 @@ teardown() {
 
 @test "'flox show' accepts search output with separator" {
   skip DEPRECATED;
-  run "$FLOX_CLI" init;
-  assert_success;
-  unset output;
   run "$FLOX_CLI" search nixpkgs-flox:hello;
   assert_success;
   first_result="${lines[0]%% *}";
@@ -93,9 +84,6 @@ teardown() {
 # ---------------------------------------------------------------------------- #
 
 @test "'flox show' - hello" {
-  run "$FLOX_CLI" init;
-  assert_success;
-  unset output;
   run "$FLOX_CLI" show hello;
   assert_success;
   assert_equal "${lines[0]}" "hello - A program that produces a familiar, friendly greeting";
@@ -106,9 +94,6 @@ teardown() {
 # ---------------------------------------------------------------------------- #
 
 @test "'flox show' - hello --all" {
-  run "$FLOX_CLI" init;
-  assert_success;
-  unset output;
   run "$FLOX_CLI" show hello --all;
   assert_success;
   assert_equal "${lines[0]}" "hello - A program that produces a familiar, friendly greeting";
@@ -119,9 +104,6 @@ teardown() {
 # ---------------------------------------------------------------------------- #
 
 @test "'flox show' - python27Full" {
-  run "$FLOX_CLI" init;
-  assert_success;
-  unset output;
   run "$FLOX_CLI" show python27Full;
   assert_success;
   assert_equal "${lines[0]}" "python27Full - A high-level dynamically-typed programming language";
@@ -132,9 +114,6 @@ teardown() {
 # ---------------------------------------------------------------------------- #
 
 @test "'flox show' - python27Full --all" {
-  run "$FLOX_CLI" init;
-  assert_success;
-  unset output;
   run "$FLOX_CLI" show python27Full --all;
   assert_success;
   assert_equal "${lines[0]}" "python27Full - A high-level dynamically-typed programming language";
