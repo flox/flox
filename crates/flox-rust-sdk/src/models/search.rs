@@ -1,15 +1,13 @@
-use std::collections::HashMap;
 use std::env;
 use std::io::{BufRead, BufReader};
+use std::path::PathBuf;
 use std::process::{Command, ExitStatus, Stdio};
 use std::str::FromStr;
 
-use flox_types::catalog::System;
+use log::debug;
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-
-use crate::nix::flake_ref::FlakeRef;
 
 // This is the `PKGDB` path that we actually use.
 // This is set once and prefers the `PKGDB` env variable, but will use
@@ -31,6 +29,10 @@ pub enum SearchError {
     PkgDb(Value),
     #[error("search encountered an error: {0}")]
     PkgDbCall(std::io::Error),
+    #[error("failed to canonicalize manifest path: {0}")]
+    CanonicalManifestPath(std::io::Error),
+    #[error("inline manifest was malformed: {0}")]
+    InlineManifestMalformed(String),
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -47,75 +49,67 @@ pub enum ShowError {
 ///
 /// Note that `pkgdb` uses inheritance/mixins to construct the search parameters, so some fields
 /// are on `PkgQueryArgs` and some are on `PkgDescriptorBase`.
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SearchParams {
-    /// The collection of package sources to search
-    pub registry: Registry,
-    /// Which systems to search under. `None` falls back to `pkgdb` defaults
-    pub systems: Option<Vec<System>>,
-    /// Options for which packages should be allowed in search results
-    pub allow: AllowOpts,
-    /// Parameters for which semver versions should be allowed
-    pub semver: SemverOpts,
+    /// Either an absolute path to a manifest or an inline JSON manifest
+    pub manifest: SearchManifest,
     /// Parameters for the actual search query
     pub query: Query,
 }
 
-/// A collection of package sources
-///
-/// C++ docs: https://flox.github.io/pkgdb/classflox_1_1Registry.html
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct Registry {
-    /// The names and flakerefs of the package sources
-    pub inputs: HashMap<String, RegistryInput>,
-    /// A list of package source names indicating the preference
-    /// in which to list results
-    pub priority: Vec<String>,
-    /// Registry-wide defaults for inputs that don't provide them
-    pub defaults: RegistryDefaults,
+/// Either an absolute path to a manifest or an inline JSON manifest
+#[derive(Debug, Deserialize, Serialize, Clone)]
+#[serde(untagged)]
+pub enum SearchManifest {
+    /// An absolute path to a manifest
+    Path(PathBuf),
+    /// An inline JSON manifest
+    Json(serde_json::Value),
 }
 
-/// Default search parameters for a package source
-///
-/// C++ docs: https://flox.github.io/pkgdb/structflox_1_1InputPreferences.html
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct RegistryDefaults {
-    /// An optional attr path to restrict the search to
-    pub subtrees: Option<Vec<String>>,
+impl TryFrom<PathBuf> for SearchManifest {
+    type Error = SearchError;
+
+    fn try_from(value: PathBuf) -> Result<Self, Self::Error> {
+        let canonical_path = value
+            .canonicalize()
+            .map_err(SearchError::CanonicalManifestPath)?;
+        Ok(SearchManifest::Path(canonical_path))
+    }
 }
 
-/// A package source
-///
-/// TODO: flatten a RegistryDefaults into this struct
-/// C++ docs: https://flox.github.io/pkgdb/structflox_1_1RegistryInput.html
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RegistryInput {
-    /// The flake containing packages
-    pub from: FlakeRef,
-    /// An optional attr path to restrict the search to
-    pub subtrees: Option<Vec<String>>,
+impl TryFrom<serde_json::Value> for SearchManifest {
+    type Error = SearchError;
+
+    fn try_from(value: Value) -> Result<Self, Self::Error> {
+        match value {
+            Value::Null => Err(SearchError::InlineManifestMalformed(
+                "inline manifest must be a JSON object but found 'null'".into(),
+            )),
+            Value::Bool(_) => Err(SearchError::InlineManifestMalformed(
+                "inline manifest must be a JSON object but found bool".into(),
+            )),
+            Value::Number(_) => Err(SearchError::InlineManifestMalformed(
+                "inline manifest must be a JSON object but found number".into(),
+            )),
+            Value::String(_) => Err(SearchError::InlineManifestMalformed(
+                "inline manifest must be a JSON object but found string".into(),
+            )),
+            Value::Array(_) => Err(SearchError::InlineManifestMalformed(
+                "inline manifest must be a JSON object but found array".into(),
+            )),
+            Value::Object(value) => Ok(SearchManifest::Json(Value::Object(value))),
+        }
+    }
 }
 
-/// Which packages should be allowed in search results.
-///
-/// C++ docs: https://flox.github.io/pkgdb/structflox_1_1pkgdb_1_1QueryPreferences_1_1Allows.html
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct AllowOpts {
-    /// Whether packages with unfree licenses should be included
-    pub unfree: bool,
-    /// Whether packages that are marked "broken" should be included
-    pub broken: bool,
-    /// A whitelist of package licenses
-    pub licenses: Option<Vec<String>>,
-}
-
-/// Options regarding the ability to perform a semver search.
-///
-/// C++ docs: https://flox.github.io/pkgdb/structflox_1_1pkgdb_1_1QueryPreferences_1_1Semver.html
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-#[serde(rename_all = "camelCase")]
-pub struct SemverOpts {
-    pub prefer_pre_releases: bool,
+impl std::fmt::Display for SearchManifest {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SearchManifest::Path(path) => write!(f, "{}", path.display()),
+            SearchManifest::Json(json) => write!(f, "{}", json),
+        }
+    }
 }
 
 /// A set of options for defining a search query.
@@ -271,6 +265,7 @@ impl SearchResults {
 /// Calls `pkgdb` to get search results
 pub fn do_search(search_params: &SearchParams) -> Result<(SearchResults, ExitStatus), SearchError> {
     let json = serde_json::to_string(search_params).map_err(SearchError::Serialize)?;
+    debug!("search params json: {}", json);
 
     let mut pkgdb_process = Command::new(PKGDB_BIN.as_str())
         .arg("search")
@@ -339,22 +334,7 @@ mod test {
     const EXAMPLE_SEARCH_TERM: &'_ str = "hello@2.12.1";
 
     const EXAMPLE_PARAMS: &'_ str = r#"{
-        "registry": {
-            "inputs": {},
-            "priority": [],
-            "defaults": {
-                "subtrees": null
-            }
-        },
-        "systems": null,
-        "allow": {
-            "unfree": false,
-            "broken": false,
-            "licenses": null
-        },
-        "semver": {
-            "preferPreReleases": false
-        },
+        "manifest": "/path/to/manifest",
         "query": {
             "name": null,
             "pname": null,
@@ -393,8 +373,8 @@ mod test {
     #[test]
     fn serializes_search_params() {
         let params = SearchParams {
+            manifest: SearchManifest::Path("/path/to/manifest".into()),
             query: Query::from_str(EXAMPLE_SEARCH_TERM, false).unwrap(),
-            ..SearchParams::default()
         };
         let json = serde_json::to_string(&params).unwrap();
         // Convert both to `serde_json::Value` to test equality without worrying about whitespace

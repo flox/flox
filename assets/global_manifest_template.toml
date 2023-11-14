@@ -15,4 +15,4 @@ broken = false
 [options.semver]
 # Whether unstable/pre-release versions of software should be
 # preferred over the latest stable release in search/install results.
-prefer-pre-release = false
+prefer-pre-releases = false

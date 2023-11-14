@@ -11,3 +11,6 @@
 script = """
   echo "Welcome to your flox environment!";
 """
+
+[registry.inputs.nixpkgs]
+from = { type = "github", owner = "NixOS", repo = "nixpkgs", ref = "release-23.05" }
