@@ -164,7 +164,7 @@ fn floxmeta_git_options(floxhub_host: &str, floxhub_token: &str) -> GitCommandOp
     options.add_env_var("FLOX_FLOXHUB_TOKEN", floxhub_token);
     options.add_config_flag(
         &format!("credential.{floxhub_host}.helper"),
-        r#"!f(){ echo "username=oauth"; echo "password=$FLOX_FLOXHUB_TOKEN;"; }; f"#,
+        r#"!f(){ echo "username=oauth"; echo "password=$FLOX_FLOXHUB_TOKEN"; }; f"#,
     );
 
     options
