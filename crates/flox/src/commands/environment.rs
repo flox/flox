@@ -15,7 +15,6 @@ use flox_rust_sdk::models::environment::managed_environment::{
 };
 use flox_rust_sdk::models::environment::path_environment::{self, Original, PathEnvironment};
 use flox_rust_sdk::models::environment::{
-    global_manifest_path,
     Environment,
     EnvironmentError2,
     EnvironmentPointer,
@@ -301,16 +300,10 @@ impl Init {
                 .parse()?
         };
 
-        let global_manifest_path = global_manifest_path(&flox);
-        debug!(
-            "global manifest path exists: {}",
-            global_manifest_path.exists()
-        );
         let env = PathEnvironment::<Original>::init(
             PathPointer::new(env_name),
             &dir,
             flox.temp_dir.clone(),
-            global_manifest_path,
         )?;
 
         println!(
