@@ -4,10 +4,11 @@ use std::io::{BufWriter, Write};
 use anyhow::{bail, Context, Result};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
+use flox_rust_sdk::models::environment::{global_manifest_path, Environment};
 use flox_rust_sdk::models::search::{
     do_search,
+    PathOrJson,
     Query,
-    SearchManifest,
     SearchParams,
     SearchResult,
     SearchResults,
@@ -19,6 +20,7 @@ use log::debug;
 use crate::commands::{ConcreteEnvironment, EnvironmentSelect};
 use crate::config::features::{Features, SearchStrategy};
 use crate::subcommand_metric;
+use crate::utils::toml_to_json;
 
 const SEARCH_INPUT_SEPARATOR: &'_ str = ":";
 const DEFAULT_DESCRIPTION: &'_ str = "<no description provided>";
@@ -59,13 +61,48 @@ impl Search {
         subcommand_metric!("search");
         debug!("performing search for term: {}", self.search_term);
 
-        let env = match EnvironmentSelect::default().to_concrete_environment(&flox)? {
-            ConcreteEnvironment::Path(path_env) => path_env,
-            _ => bail!("search is only available for path environments"),
-        };
+        let (manifest, lockfile) =
+            match EnvironmentSelect::default().to_concrete_environment(&flox)? {
+                ConcreteEnvironment::Path(path_env) => {
+                    debug!("searching path environment: {:?}", path_env);
+                    let lockfile = path_env // may not exist
+                        .lockfile_path()
+                        .canonicalize()
+                        .ok()
+                        .map(PathOrJson::Path);
+                    let manifest = path_env.manifest_path().try_into()?;
+                    (manifest, lockfile)
+                },
+                ConcreteEnvironment::Managed(managed_env) => {
+                    let json = toml_to_json(
+                        managed_env
+                            .manifest_content()
+                            .context("couldn't retrieve environment manifest")?
+                            .as_str(),
+                    )
+                    .context("couldn't convert manifest to JSON")?;
+                    let manifest = PathOrJson::Json(json);
+                    (manifest, None)
+                },
+                ConcreteEnvironment::Remote(remote_env) => {
+                    let json = toml_to_json(
+                        remote_env
+                            .manifest_content()
+                            .context("couldn't retrieve environment manifest")?
+                            .as_str(),
+                    )
+                    .context("couldn't convert manifest to JSON")?;
+                    let manifest = PathOrJson::Json(json);
+                    (manifest, None)
+                },
+            };
 
-        let search_params =
-            construct_search_params(&self.search_term, env.manifest_path().try_into()?)?;
+        let search_params = construct_search_params(
+            &self.search_term,
+            manifest,
+            global_manifest_path(&flox).try_into()?,
+            lockfile,
+        )?;
 
         let (results, exit_status) = do_search(&search_params)?;
         debug!("search call exit status: {}", exit_status.to_string());
@@ -92,12 +129,22 @@ impl Search {
     }
 }
 
-fn construct_search_params(search_term: &str, manifest: SearchManifest) -> Result<SearchParams> {
+fn construct_search_params(
+    search_term: &str,
+    manifest: PathOrJson,
+    global_manifest: PathOrJson,
+    lockfile: Option<PathOrJson>,
+) -> Result<SearchParams> {
     let query = Query::from_str(
         search_term,
         Features::parse()?.search_strategy == SearchStrategy::MatchName,
     )?;
-    let params = SearchParams { manifest, query };
+    let params = SearchParams {
+        manifest,
+        global_manifest,
+        lockfile,
+        query,
+    };
     debug!("search params raw: {:?}", params);
     Ok(params)
 }
@@ -250,8 +297,47 @@ impl Show {
             ConcreteEnvironment::Path(path_env) => path_env,
             _ => bail!("search is only available for path environments"),
         };
-        let search_params =
-            construct_show_params(&self.search_term, env.manifest_path().try_into()?)?;
+        let (manifest, lockfile) =
+            match EnvironmentSelect::default().to_concrete_environment(&flox)? {
+                ConcreteEnvironment::Path(path_env) => {
+                    debug!("searching path environment: {:?}", path_env);
+                    let lockfile = path_env // may not exist
+                        .lockfile_path()
+                        .canonicalize()
+                        .ok()
+                        .map(PathOrJson::Path);
+                    let manifest = path_env.manifest_path().try_into()?;
+                    (manifest, lockfile)
+                },
+                ConcreteEnvironment::Managed(managed_env) => {
+                    let json = toml_to_json(
+                        managed_env
+                            .manifest_content()
+                            .context("couldn't retrieve environment manifest")?
+                            .as_str(),
+                    )
+                    .context("couldn't convert manifest to JSON")?;
+                    let manifest = PathOrJson::Json(json);
+                    (manifest, None)
+                },
+                ConcreteEnvironment::Remote(remote_env) => {
+                    let json = toml_to_json(
+                        remote_env
+                            .manifest_content()
+                            .context("couldn't retrieve environment manifest")?
+                            .as_str(),
+                    )
+                    .context("couldn't convert manifest to JSON")?;
+                    let manifest = PathOrJson::Json(json);
+                    (manifest, None)
+                },
+            };
+        let search_params = construct_show_params(
+            &self.search_term,
+            manifest,
+            global_manifest_path(&flox).try_into()?,
+            lockfile,
+        )?;
 
         let (search_results, exit_status) = do_search(&search_params)?;
 
@@ -274,7 +360,12 @@ impl Show {
     }
 }
 
-fn construct_show_params(search_term: &str, manifest: SearchManifest) -> Result<SearchParams> {
+fn construct_show_params(
+    search_term: &str,
+    manifest: PathOrJson,
+    global_manifest: PathOrJson,
+    lockfile: Option<PathOrJson>,
+) -> Result<SearchParams> {
     let parts = search_term
         .split(SEARCH_INPUT_SEPARATOR)
         .map(String::from)
@@ -289,7 +380,12 @@ fn construct_show_params(search_term: &str, manifest: SearchManifest) -> Result<
         package_name.as_ref().unwrap(), // We already know it's Some(_)
         Features::parse()?.search_strategy == SearchStrategy::MatchName,
     )?;
-    let search_params = SearchParams { manifest, query };
+    let search_params = SearchParams {
+        manifest,
+        global_manifest,
+        lockfile,
+        query,
+    };
     debug!("show params raw: {:?}", search_params);
     Ok(search_params)
 }

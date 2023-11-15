@@ -50,9 +50,14 @@ pub enum ShowError {
 /// Note that `pkgdb` uses inheritance/mixins to construct the search parameters, so some fields
 /// are on `PkgQueryArgs` and some are on `PkgDescriptorBase`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub struct SearchParams {
     /// Either an absolute path to a manifest or an inline JSON manifest
-    pub manifest: SearchManifest,
+    pub manifest: PathOrJson,
+    /// Either an absolute path to a manifest or an inline JSON manifest
+    pub global_manifest: PathOrJson,
+    /// An optional exisiting lockfile
+    pub lockfile: Option<PathOrJson>,
     /// Parameters for the actual search query
     pub query: Query,
 }
@@ -60,25 +65,25 @@ pub struct SearchParams {
 /// Either an absolute path to a manifest or an inline JSON manifest
 #[derive(Debug, Deserialize, Serialize, Clone)]
 #[serde(untagged)]
-pub enum SearchManifest {
+pub enum PathOrJson {
     /// An absolute path to a manifest
     Path(PathBuf),
     /// An inline JSON manifest
     Json(serde_json::Value),
 }
 
-impl TryFrom<PathBuf> for SearchManifest {
+impl TryFrom<PathBuf> for PathOrJson {
     type Error = SearchError;
 
     fn try_from(value: PathBuf) -> Result<Self, Self::Error> {
         let canonical_path = value
             .canonicalize()
             .map_err(SearchError::CanonicalManifestPath)?;
-        Ok(SearchManifest::Path(canonical_path))
+        Ok(PathOrJson::Path(canonical_path))
     }
 }
 
-impl TryFrom<serde_json::Value> for SearchManifest {
+impl TryFrom<serde_json::Value> for PathOrJson {
     type Error = SearchError;
 
     fn try_from(value: Value) -> Result<Self, Self::Error> {
@@ -98,16 +103,16 @@ impl TryFrom<serde_json::Value> for SearchManifest {
             Value::Array(_) => Err(SearchError::InlineManifestMalformed(
                 "inline manifest must be a JSON object but found array".into(),
             )),
-            Value::Object(value) => Ok(SearchManifest::Json(Value::Object(value))),
+            Value::Object(value) => Ok(PathOrJson::Json(Value::Object(value))),
         }
     }
 }
 
-impl std::fmt::Display for SearchManifest {
+impl std::fmt::Display for PathOrJson {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            SearchManifest::Path(path) => write!(f, "{}", path.display()),
-            SearchManifest::Json(json) => write!(f, "{}", json),
+            PathOrJson::Path(path) => write!(f, "{}", path.display()),
+            PathOrJson::Json(json) => write!(f, "{}", json),
         }
     }
 }
@@ -270,6 +275,7 @@ pub fn do_search(search_params: &SearchParams) -> Result<(SearchResults, ExitSta
     let mut pkgdb_process = Command::new(PKGDB_BIN.as_str())
         .arg("search")
         .arg("--quiet")
+        .arg("--ga-registry")
         .arg(json)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -335,6 +341,8 @@ mod test {
 
     const EXAMPLE_PARAMS: &'_ str = r#"{
         "manifest": "/path/to/manifest",
+        "global-manifest": "/path/to/manifest",
+        "lockfile": null,
         "query": {
             "name": null,
             "pname": null,
@@ -373,7 +381,9 @@ mod test {
     #[test]
     fn serializes_search_params() {
         let params = SearchParams {
-            manifest: SearchManifest::Path("/path/to/manifest".into()),
+            manifest: PathOrJson::Path("/path/to/manifest".into()),
+            global_manifest: PathOrJson::Path("/path/to/manifest".into()),
+            lockfile: None,
             query: Query::from_str(EXAMPLE_SEARCH_TERM, false).unwrap(),
         };
         let json = serde_json::to_string(&params).unwrap();
