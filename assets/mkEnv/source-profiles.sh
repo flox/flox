@@ -39,8 +39,10 @@ if [ -d "$FLOX_ENV/etc/profile.d" ]; then
   declare -a _prof_scripts;
   _prof_scripts=( $(
     case "$( detect_shell; )" in
-      zsh) set -o nullglob; ;;
-      *)   shopt -s nullglob; ;;
+      # Add opening parenthesis to case statements since otherwise bash 3 gets
+      # confused by the closing parenthesis
+      (zsh) set -o nullglob; ;;
+      (*)   shopt -s nullglob; ;;
     esac
     echo "$FLOX_ENV/etc/profile.d"/*.sh;
   ) );

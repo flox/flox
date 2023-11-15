@@ -12,7 +12,18 @@ colorPrompt1="\[${_esc}38;5;${FLOX_PROMPT_COLOR_1}m\]"
 colorPrompt2="\[${_esc}38;5;${FLOX_PROMPT_COLOR_2}m\]"
 _floxPrompt1="${colorPrompt1}flox"
 _floxPrompt2="${colorPrompt2}[$FLOX_PROMPT_ENVIRONMENTS]"
-_flox=$(echo -e -n "${colorBold}${FLOX_PROMPT-$_floxPrompt1} ${_floxPrompt2}${colorReset} ")
+# nixpkgs#bash doesn't have readline, so the prompt gets garbled if we use escapes.
+# Detect if we have readline by checking for progcomp; support for progcomp is
+# disabled when readline is not present, see:
+# https://git.savannah.gnu.org/cgit/bash.git/tree/bashline.c#n23
+# Note that we set colors even if support for progcomp is compiled in, but it is
+# turned off.
+if [[ $(shopt) =~ progcomp ]]; then
+    _flox=$(echo -e -n "${colorBold}${FLOX_PROMPT-$_floxPrompt1} ${_floxPrompt2}${colorReset} ")
+else
+    _flox=$(echo -e -n "${FLOX_PROMPT-flox} [$FLOX_PROMPT_ENVIRONMENTS] ")
+fi
+
 unset _esc colorReset colorBold colorPrompt1 colorPrompt2 _floxPrompt1 _floxPrompt2
 
 if [ -n "$_flox" ] && [ -n "${PS1:-}" ]
