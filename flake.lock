@@ -194,11 +194,11 @@
         "sqlite3pp": "sqlite3pp"
       },
       "locked": {
-        "lastModified": 1699904977,
-        "narHash": "sha256-Aw9HRvSxMlleAa7eODTht3VWLlETMo8xzEOCg2167Og=",
+        "lastModified": 1700006802,
+        "narHash": "sha256-nvN91C4HM/YStSZZQyHI9h/DkOm4Nefy7I7hbuW74Gk=",
         "owner": "flox",
         "repo": "pkgdb",
-        "rev": "9bbf075a043d153f06baa0c84aa7fd52999987b0",
+        "rev": "91b0901717c15919777d30e48bc0f0f2861e0193",
         "type": "github"
       },
       "original": {
