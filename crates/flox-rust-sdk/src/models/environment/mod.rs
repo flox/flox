@@ -14,7 +14,6 @@ use runix::store_path::StorePath;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use thiserror::Error;
-use uuid::timestamp::context;
 use walkdir::WalkDir;
 
 use self::managed_environment::ManagedEnvironmentError;
@@ -329,7 +328,7 @@ impl<'de> Deserialize<'de> for PkgDbError {
             .get("exit_code")
             .ok_or_else(|| serde::de::Error::missing_field("exit_code"))?
             .as_u64()
-            .ok_or_else(|| serde::de::Error::custom("exit_code is not an unsigned integer"))?;
+            .ok_or_else(|| serde::de::Error::custom("exit code is not an unsigned integer"))?;
         let category_message = map
             .get("category_message")
             .ok_or_else(|| serde::de::Error::missing_field("category_message"))?
