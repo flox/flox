@@ -587,7 +587,7 @@ impl ManagedEnvironment {
         temp_floxmeta.git.push("origin").unwrap();
 
         fs::write(
-            temp_floxmeta_path.join("env.json"),
+            path_environment.path.join("env.json"),
             serde_json::to_string(&pointer).unwrap(),
         )
         .unwrap();
