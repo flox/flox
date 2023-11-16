@@ -14,6 +14,7 @@ use runix::store_path::StorePath;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use thiserror::Error;
+use uuid::timestamp::context;
 use walkdir::WalkDir;
 
 use self::managed_environment::ManagedEnvironmentError;
@@ -307,7 +308,7 @@ pub enum EnvironmentError2 {
 }
 
 /// A struct representing error messages coming from pkgdb
-#[derive(Debug, Deserialize)]
+#[derive(Debug)]
 pub struct PkgDbError {
     /// The exit code of pkgdb, can be used to programmatically determine
     /// the category of error.
@@ -315,23 +316,101 @@ pub struct PkgDbError {
     /// The generic message for this category of error.
     pub category_message: String,
     /// The more contextual message for the specific error that occurred.
-    pub context_message: Option<String>,
-    /// The underlying error message if an exception was caught.
-    pub caught_message: Option<String>,
+    pub context_message: Option<ContextMsgError>,
+}
+
+impl<'de> Deserialize<'de> for PkgDbError {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let map = serde_json::Map::<String, Value>::deserialize(deserializer)?;
+        let exit_code = map
+            .get("exit_code")
+            .ok_or_else(|| serde::de::Error::missing_field("exit_code"))?
+            .as_u64()
+            .ok_or_else(|| serde::de::Error::custom("exit_code is not an unsigned integer"))?;
+        let category_message = map
+            .get("category_message")
+            .ok_or_else(|| serde::de::Error::missing_field("category_message"))?
+            .as_str()
+            .ok_or_else(|| serde::de::Error::custom("category message was not a string"))
+            .map(|m| m.to_owned())?;
+        let context_message_contents = map
+            .get("context_message")
+            .map(|m| {
+                m.as_str()
+                    .ok_or_else(|| serde::de::Error::custom("context message was not a string"))
+                    .map(|m| m.to_owned())
+            })
+            .transpose()?;
+        let caught_message_contents = map
+            .get("caught_message")
+            .map(|m| {
+                m.as_str()
+                    .ok_or_else(|| serde::de::Error::custom("caught message was not a string"))
+                    .map(|m| m.to_owned())
+            })
+            .transpose()?;
+        let context_message = context_message_contents.map(|m| ContextMsgError {
+            message: m,
+            caught: caught_message_contents.map(|m| CaughtMsgError { message: m }),
+        });
+        Ok(PkgDbError {
+            exit_code,
+            category_message,
+            context_message,
+        })
+    }
 }
 
 impl Display for PkgDbError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.category_message)?;
-        if let Some(ref context_message) = self.context_message {
-            write!(f, ": {}", context_message)?;
-        }
-        if let Some(ref caught_message) = self.caught_message {
-            write!(f, ": {}", caught_message)?;
-        }
         Ok(())
     }
 }
+
+impl std::error::Error for PkgDbError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        self.context_message
+            .as_ref()
+            .map(|s| s as &dyn std::error::Error)
+    }
+}
+
+/// A struct representing the context message from a pkgdb error
+#[derive(Debug, Deserialize)]
+pub struct ContextMsgError {
+    pub message: String,
+    pub caught: Option<CaughtMsgError>,
+}
+
+impl Display for ContextMsgError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.message)
+    }
+}
+
+impl std::error::Error for ContextMsgError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        self.caught.as_ref().map(|s| s as &dyn std::error::Error)
+    }
+}
+
+/// A struct representing the caught message from a pkgdb error
+#[derive(Debug, Deserialize)]
+pub struct CaughtMsgError {
+    pub message: String,
+}
+
+impl Display for CaughtMsgError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.message)
+    }
+}
+
+impl std::error::Error for CaughtMsgError {}
 
 /// Copy a whole directory recursively ignoring the original permissions
 ///
