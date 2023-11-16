@@ -293,10 +293,6 @@ pub struct Show {
 impl Show {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("show");
-        let env = match EnvironmentSelect::default().to_concrete_environment(&flox)? {
-            ConcreteEnvironment::Path(path_env) => path_env,
-            _ => bail!("search is only available for path environments"),
-        };
         let (manifest, lockfile) =
             match EnvironmentSelect::default().to_concrete_environment(&flox)? {
                 ConcreteEnvironment::Path(path_env) => {
