@@ -20,8 +20,6 @@
 
   inputs.crane.url = "github:ipetkov/crane";
   inputs.crane.inputs.nixpkgs.follows = "nixpkgs";
-  inputs.crane.inputs.flake-compat.follows = "shellHooks/flake-compat";
-  inputs.crane.inputs.flake-utils.follows = "shellHooks/flake-utils";
 
   # -------------------------------------------------------------------------- #
 
