@@ -8,7 +8,7 @@
 //!         $system.$name (out link)
 
 use std::ffi::OsStr;
-use std::fs;
+use std::fs::{self};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
@@ -209,7 +209,7 @@ where
             .as_str()
             .ok_or(EnvironmentError2::RevNotString)?;
         let nixpkgs_url = Value::String(format!("github:NixOS/nixpkgs/{rev}"));
-        lockfile_json["registry"]["inputs"]["nixpkgs"]["url"] = nixpkgs_url.clone();
+        lockfile_json["registry"]["inputs"]["nixpkgs"]["url"] = nixpkgs_url;
         debug!("generated lockfile, writing to {}", lockfile_path.display());
         std::fs::write(&lockfile_path, lockfile_json.to_string())
             .map_err(EnvironmentError2::WriteLockfile)?;
@@ -463,18 +463,21 @@ impl PathEnvironment<Original> {
             Err(e) => Err(e)?,
             Ok(_) => Err(EnvironmentError2::EnvironmentExists)?,
         }
-
         let dot_flox_path = dot_flox_parent_path.as_ref().join(DOT_FLOX);
-
         let env_dir = dot_flox_path.join(ENVIRONMENT_DIR_NAME);
+        debug!("creating env dir: {}", env_dir.display());
         std::fs::create_dir_all(&env_dir).map_err(EnvironmentError2::InitEnv)?;
-
         let pointer_content =
             serde_json::to_string_pretty(&pointer).map_err(EnvironmentError2::SerializeEnvJson)?;
-
         let template_path = env!("FLOX_ENV_TEMPLATE");
+        debug!(
+            "copying environment template from {} to {}",
+            template_path,
+            env_dir.display()
+        );
         copy_dir_recursive(&template_path, &env_dir, false).map_err(EnvironmentError2::InitEnv)?;
 
+        // Write the `env.json` file
         if let Err(e) = fs::write(
             dot_flox_path.join(ENVIRONMENT_POINTER_FILENAME),
             pointer_content,

@@ -19,6 +19,9 @@ project_setup() {
   rm -rf "$PROJECT_DIR"
   mkdir -p "$PROJECT_DIR"
   pushd "$PROJECT_DIR" >/dev/null || return
+  run "$FLOX_CLI" init;
+  assert_success;
+  unset output;
 }
 
 project_teardown() {
@@ -74,16 +77,16 @@ setup_file() {
 # ---------------------------------------------------------------------------- #
 
 @test "'flox search' expected number of results: 'hello'" {
-  run "$FLOX_CLI" search hello;
+  run --separate-stderr "$FLOX_CLI" search hello;
   n_lines="${#lines[@]}";
   case "$NIX_SYSTEM" in
     *-darwin)
       assert_equal "$n_lines" 11; # search line + show hint
-      assert_equal "${lines[-1]}" "$SHOW_HINT"
+      assert_equal "$stderr" "$SHOW_HINT"
       ;;
     *-linux)
       assert_equal "$n_lines" 11; # 4 search lines + show hint
-      assert_equal "${lines[-1]}" "$SHOW_HINT"
+      assert_equal "$stderr" "$SHOW_HINT"
       ;;
   esac
 }
@@ -176,9 +179,6 @@ setup_file() {
 
   skip "DEPRECATED"
 
-  run "$FLOX_CLI" subscribe nixpkgs2 github:NixOS/nixpkgs/release-23.05;
-  assert_success;
-  unset output;
   run "$FLOX_CLI" search hello;
   assert_output --partial "nixpkgs2${SEP}";
   assert_output --partial "nixpkgs-flox${SEP}"
@@ -206,9 +206,9 @@ setup_file() {
 # ---------------------------------------------------------------------------- #
 
 @test "'flox search' hints at 'flox show'" {
-  run "$FLOX_CLI" search hello;
+  run --separate-stderr "$FLOX_CLI" search hello;
   assert_success
-  assert_equal "${lines[-1]}" "$SHOW_HINT"
+  assert_equal "$stderr" "$SHOW_HINT"
 }
 
 

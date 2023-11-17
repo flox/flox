@@ -39,6 +39,8 @@ pub const DEFAULT_MAX_AGE_DAYS: u32 = 90;
 // Path to the executable that builds environments
 const BUILD_ENV_BIN: &'_ str = env!("BUILD_ENV_BIN");
 const ENV_FROM_LOCKFILE_PATH: &str = env!("ENV_FROM_LOCKFILE_PATH");
+const GLOBAL_MANIFEST_TEMPLATE: &str = env!("GLOBAL_MANIFEST_TEMPLATE");
+const GLOBAL_MANIFEST_FILENAME: &str = "global-manifest.toml";
 
 pub enum InstalledPackage {
     Catalog(FloxTriple, CatalogEntry),
@@ -298,6 +300,10 @@ pub enum EnvironmentError2 {
     WriteLockfile(std::io::Error),
     #[error("locking manifest failed: {0}")]
     LockManifest(PkgDbError),
+    #[error("couldn't create the global manifest: {0}")]
+    InitGlobalManifest(std::io::Error),
+    #[error("couldn't read global manifest template: {0}")]
+    ReadGlobalManifestTemplate(std::io::Error),
 }
 
 /// A struct representing error messages coming from pkgdb
@@ -403,6 +409,25 @@ pub fn lock_manifest(
             serde_json::from_slice(&output.stdout).map_err(EnvironmentError2::ParseLockfileJSON)?;
         Ok(lockfile_json)
     }
+}
+
+/// Initialize the global manifest if it doesn't exist already
+pub fn init_global_manifest(global_manifest_path: &Path) -> Result<(), EnvironmentError2> {
+    if !global_manifest_path.exists() {
+        let global_manifest_template_contents =
+            std::fs::read_to_string(Path::new(GLOBAL_MANIFEST_TEMPLATE))
+                .map_err(EnvironmentError2::ReadGlobalManifestTemplate)?;
+        std::fs::write(global_manifest_path, global_manifest_template_contents)
+            .map_err(EnvironmentError2::InitGlobalManifest)?;
+    }
+    Ok(())
+}
+
+/// Returns the path to the global manifest
+pub fn global_manifest_path(flox: &Flox) -> PathBuf {
+    let path = flox.config_dir.join(GLOBAL_MANIFEST_FILENAME);
+    debug!("global manifest path is {}", path.display());
+    path
 }
 
 #[cfg(test)]

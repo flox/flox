@@ -19,6 +19,9 @@ project_setup() {
   rm -rf "$PROJECT_DIR"
   mkdir -p "$PROJECT_DIR"
   pushd "$PROJECT_DIR" >/dev/null || return
+  run "$FLOX_CLI" init;
+  assert_success;
+  unset output;
 }
 
 project_teardown() {

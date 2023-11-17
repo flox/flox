@@ -14,7 +14,6 @@ use flox_rust_sdk::models::environment::managed_environment::{
     ManagedEnvironmentError,
 };
 use flox_rust_sdk::models::environment::path_environment::{self, Original, PathEnvironment};
-use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironment;
 use flox_rust_sdk::models::environment::{
     Environment,
     EnvironmentError2,
@@ -24,7 +23,6 @@ use flox_rust_sdk::models::environment::{
     DOT_FLOX,
     ENVIRONMENT_POINTER_FILENAME,
 };
-use flox_rust_sdk::models::environment_ref;
 use flox_rust_sdk::models::floxmetav2::FloxmetaV2Error;
 use flox_rust_sdk::models::manifest::list_packages;
 use flox_rust_sdk::nix::command::StoreGc;
@@ -34,6 +32,8 @@ use indoc::indoc;
 use log::{debug, error, info};
 use tempfile::NamedTempFile;
 
+use super::{environment_select, EnvironmentSelect};
+use crate::commands::ConcreteEnvironment;
 use crate::subcommand_metric;
 use crate::utils::dialog::{Confirm, Dialog};
 
@@ -41,78 +41,6 @@ use crate::utils::dialog::{Confirm, Dialog};
 pub struct EnvironmentArgs {
     #[bpaf(short, long, argument("SYSTEM"))]
     pub system: Option<String>,
-}
-
-#[derive(Debug, Bpaf, Clone)]
-pub enum EnvironmentSelect {
-    Dir(
-        /// Path containing a .flox/ directory
-        #[bpaf(long("dir"), short('d'), argument("path"))]
-        PathBuf,
-    ),
-    Remote(
-        /// A remote environment on floxhub
-        #[bpaf(long("remote"), short('r'), argument("owner/name"))]
-        environment_ref::EnvironmentRef,
-    ),
-}
-
-impl Default for EnvironmentSelect {
-    fn default() -> Self {
-        EnvironmentSelect::Dir(PathBuf::from("./"))
-    }
-}
-
-impl EnvironmentSelect {
-    fn to_concrete_environment(&self, flox: &Flox) -> Result<ConcreteEnvironment> {
-        let env = match self {
-            EnvironmentSelect::Dir(path) => {
-                let pointer = EnvironmentPointer::open(path)
-                    .with_context(|| format!("No environment found in {path:?}"))?;
-
-                match pointer {
-                    EnvironmentPointer::Path(path_pointer) => {
-                        debug!("detected concrete environment type: path");
-                        let dot_flox_path = path.join(DOT_FLOX);
-                        ConcreteEnvironment::Path(PathEnvironment::open(
-                            path_pointer,
-                            dot_flox_path,
-                            &flox.temp_dir,
-                        )?)
-                    },
-                    EnvironmentPointer::Managed(managed_pointer) => {
-                        debug!("detected concrete environment type: managed");
-                        let env = ManagedEnvironment::open(flox, managed_pointer, path)?;
-                        ConcreteEnvironment::Managed(env)
-                    },
-                }
-            },
-            EnvironmentSelect::Remote(_) => todo!(),
-        };
-
-        Ok(env)
-    }
-}
-
-enum ConcreteEnvironment {
-    /// Container for [PathEnvironment]
-    Path(PathEnvironment<Original>),
-    /// Container for [ManagedEnvironment]
-    #[allow(unused)] // pending implementation of ManagedEnvironment
-    Managed(ManagedEnvironment),
-    /// Container for [RemoteEnvironment]
-    #[allow(unused)] // pending implementation of RemoteEnvironment
-    Remote(RemoteEnvironment),
-}
-
-impl ConcreteEnvironment {
-    fn into_dyn_environment(self) -> Box<dyn Environment> {
-        match self {
-            ConcreteEnvironment::Path(path_env) => Box::new(path_env),
-            ConcreteEnvironment::Managed(managed_env) => Box::new(managed_env),
-            ConcreteEnvironment::Remote(remote_env) => Box::new(remote_env),
-        }
-    }
 }
 
 /// Edit declarative environment configuration
@@ -349,8 +277,8 @@ pub struct Init {
     /// Name of the environment
     ///
     /// "$(basename $PWD)" or "default" if in $HOME
-    #[bpaf(long, short, argument("name"))]
-    name: Option<EnvironmentName>,
+    #[bpaf(long("name"), short('n'), argument("name"))]
+    env_name: Option<EnvironmentName>,
 }
 
 impl Init {
@@ -361,7 +289,7 @@ impl Init {
 
         let home_dir = dirs::home_dir().unwrap();
 
-        let name = if let Some(name) = self.name {
+        let env_name = if let Some(name) = self.env_name {
             name
         } else if dir == home_dir {
             "default".parse()?
@@ -372,8 +300,11 @@ impl Init {
                 .parse()?
         };
 
-        let env =
-            PathEnvironment::<Original>::init(PathPointer::new(name), &dir, flox.temp_dir.clone())?;
+        let env = PathEnvironment::<Original>::init(
+            PathPointer::new(env_name),
+            &dir,
+            flox.temp_dir.clone(),
+        )?;
 
         println!(
             indoc::indoc! {"
