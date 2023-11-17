@@ -120,12 +120,12 @@ impl<S: TransactionState> PathEnvironment<S> {
         copy_dir_recursive(&self.path, &transaction_dir, true)
             .map_err(EnvironmentError2::MakeTemporaryEnv)?;
 
-        Ok(PathEnvironment {
-            path: transaction_dir.into_path(),
-            temp_dir: self.temp_dir.clone(),
-            pointer: self.pointer.clone(),
-            state: Temporary,
-        })
+        PathEnvironment::new(
+            transaction_dir.into_path(),
+            self.pointer.clone(),
+            self.temp_dir.clone(),
+            Temporary,
+        )
     }
 
     /// Replace the contents of this environment's `.flox` with that of another environment's `.flox`
@@ -524,17 +524,18 @@ mod tests {
             "{before:?}"
         );
 
-        let expected = PathEnvironment {
-            path: environment_temp_dir.path().to_path_buf().join(".flox"),
-            pointer: PathPointer::new("test".parse().unwrap()),
-            temp_dir: temp_dir.path().to_path_buf(),
-            state: Original,
-        };
-
         let actual = PathEnvironment::<Original>::init(
             pointer,
-            environment_temp_dir.into_path(),
+            environment_temp_dir.path(),
             temp_dir.path(),
+        )
+        .unwrap();
+
+        let expected = PathEnvironment::new(
+            environment_temp_dir.into_path().join(".flox"),
+            PathPointer::new("test".parse().unwrap()),
+            temp_dir.path().to_path_buf(),
+            Original,
         )
         .unwrap();
 
