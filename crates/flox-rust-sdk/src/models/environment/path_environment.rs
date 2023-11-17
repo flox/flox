@@ -594,7 +594,10 @@ mod tests {
 
         let mut temp_env = env.make_temporary().unwrap();
 
-        assert_eq!(temp_env.path.parent().unwrap(), sandbox_path);
+        assert_eq!(
+            temp_env.path.parent().unwrap(),
+            sandbox_path.canonicalize().unwrap()
+        );
 
         let new_env_str = r#"
         { }
