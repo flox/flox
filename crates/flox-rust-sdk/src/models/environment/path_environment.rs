@@ -94,6 +94,24 @@ impl<S> PartialEq for PathEnvironment<S> {
 }
 
 impl<S: TransactionState> PathEnvironment<S> {
+    pub fn new(
+        path: impl AsRef<Path>,
+        pointer: PathPointer,
+        temp_dir: impl AsRef<Path>,
+        state: S,
+    ) -> Result<Self, EnvironmentError2> {
+        Ok(Self {
+            // path must be absolute as it is used to set FLOX_ENV
+            path: path
+                .as_ref()
+                .canonicalize()
+                .map_err(EnvironmentError2::EnvCanonicalize)?,
+            pointer,
+            temp_dir: temp_dir.as_ref().to_path_buf(),
+            state,
+        })
+    }
+
     /// Makes a temporary copy of the environment so edits can be applied without modifying the original environment
     pub fn make_temporary(&self) -> Result<PathEnvironment<Temporary>, EnvironmentError2> {
         let transaction_dir =
@@ -102,12 +120,12 @@ impl<S: TransactionState> PathEnvironment<S> {
         copy_dir_recursive(&self.path, &transaction_dir, true)
             .map_err(EnvironmentError2::MakeTemporaryEnv)?;
 
-        Ok(PathEnvironment {
-            path: transaction_dir.into_path(),
-            temp_dir: self.temp_dir.clone(),
-            pointer: self.pointer.clone(),
-            state: Temporary,
-        })
+        PathEnvironment::new(
+            transaction_dir.into_path(),
+            self.pointer.clone(),
+            self.temp_dir.clone(),
+            Temporary,
+        )
     }
 
     /// Replace the contents of this environment's `.flox` with that of another environment's `.flox`
@@ -434,20 +452,12 @@ impl PathEnvironment<Original> {
         if !env_path.exists() {
             Err(EnvironmentError2::EnvNotFound)?;
         }
-        let env_path = env_path
-            .canonicalize()
-            .map_err(EnvironmentError2::EnvCanonicalize)?;
 
         if !env_path.join(MANIFEST_FILENAME).exists() {
             Err(EnvironmentError2::DirectoryNotAnEnv)?
         }
 
-        Ok(PathEnvironment {
-            path: dot_flox.to_owned(),
-            pointer,
-            temp_dir: temp_dir.as_ref().to_path_buf(),
-            state: Original,
-        })
+        PathEnvironment::new(dot_flox, pointer, temp_dir, Original)
     }
 
     /// Create a new env in a `.flox` directory within a specific path or open it if it exists.
@@ -514,17 +524,18 @@ mod tests {
             "{before:?}"
         );
 
-        let expected = PathEnvironment {
-            path: environment_temp_dir.path().to_path_buf().join(".flox"),
-            pointer: PathPointer::new("test".parse().unwrap()),
-            temp_dir: temp_dir.path().to_path_buf(),
-            state: Original,
-        };
-
         let actual = PathEnvironment::<Original>::init(
             pointer,
-            environment_temp_dir.into_path(),
+            environment_temp_dir.path(),
             temp_dir.path(),
+        )
+        .unwrap();
+
+        let expected = PathEnvironment::new(
+            environment_temp_dir.into_path().join(".flox"),
+            PathPointer::new("test".parse().unwrap()),
+            temp_dir.path().to_path_buf(),
+            Original,
         )
         .unwrap();
 
@@ -583,7 +594,10 @@ mod tests {
 
         let mut temp_env = env.make_temporary().unwrap();
 
-        assert_eq!(temp_env.path.parent().unwrap(), sandbox_path);
+        assert_eq!(
+            temp_env.path.parent().unwrap(),
+            sandbox_path.canonicalize().unwrap()
+        );
 
         let new_env_str = r#"
         { }
