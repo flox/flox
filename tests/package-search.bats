@@ -81,11 +81,11 @@ setup_file() {
   n_lines="${#lines[@]}";
   case "$NIX_SYSTEM" in
     *-darwin)
-      assert_equal "$n_lines" 11; # search line + show hint
+      assert_equal "$n_lines" 10; # search line + show hint
       assert_equal "$stderr" "$SHOW_HINT"
       ;;
     *-linux)
-      assert_equal "$n_lines" 11; # 4 search lines + show hint
+      assert_equal "$n_lines" 10; # 4 search lines + show hint
       assert_equal "$stderr" "$SHOW_HINT"
       ;;
   esac
