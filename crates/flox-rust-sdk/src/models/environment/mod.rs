@@ -385,6 +385,7 @@ pub fn lock_manifest(
     let mut pkgdb_cmd = Command::new(pkgdb);
     pkgdb_cmd
         .args(["manifest", "lock"])
+        .arg("--ga-registry")
         .arg(canonical_manifest_path);
     if let Some(lf_path) = existing_lockfile_path {
         let canonical_lockfile_path = lf_path
