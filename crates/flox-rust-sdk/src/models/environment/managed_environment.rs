@@ -558,6 +558,7 @@ impl ManagedEnvironment {
         path_environment: PathEnvironment<Original>,
         owner: EnvironmentOwner,
         temp_path: &Path,
+        force: bool,
     ) -> Result<Self, ManagedEnvironmentError> {
         let pointer = ManagedPointer::new(owner, path_environment.name());
         let temp_floxmeta_path = temp_path.join("floxmeta");
@@ -597,7 +598,7 @@ impl ManagedEnvironment {
                 &format!("{}/{}/floxmeta", flox.floxhub_host, &pointer.owner),
             )
             .unwrap();
-        temp_floxmeta.git.push("origin").unwrap();
+        temp_floxmeta.git.push("origin", force).unwrap();
 
         fs::write(
             path_environment.path.join("env.json"),
@@ -610,7 +611,7 @@ impl ManagedEnvironment {
         Ok(env)
     }
 
-    pub fn push(&mut self) -> Result<(), ManagedEnvironmentError> {
+    pub fn push(&mut self, force: bool) -> Result<(), ManagedEnvironmentError> {
         let project_branch = branch_name(&self.system, &self.pointer, &self.path)?;
         let sync_branch = remote_branch_name(&self.system, &self.pointer);
 
@@ -621,20 +622,26 @@ impl ManagedEnvironment {
             .unwrap();
 
         // Check whether we can fast-forward merge the remote branch into the local branch
-        // In not the environment has diverged.
-        let consistent_history = self
-            .floxmeta
-            .git
-            .branch_contains_commit("FETCH_HEAD", &project_branch)
-            .map_err(ManagedEnvironmentError::Git)?;
+        // If "not" the environment has diverged.
+        // if --force flag is not set we will run this check
+        if !force {
+            let consistent_history = self
+                .floxmeta
+                .git
+                .branch_contains_commit("FETCH_HEAD", &project_branch)
+                .map_err(ManagedEnvironmentError::Git)?;
 
-        if !consistent_history {
-            Err(ManagedEnvironmentError::Diverged)?;
+            if !consistent_history {
+                Err(ManagedEnvironmentError::Diverged)?;
+            }
         }
-
         self.floxmeta
             .git
-            .push_ref("origin", format!("{}:{}", project_branch, sync_branch))
+            .push_ref(
+                "origin",
+                format!("{}:{}", project_branch, sync_branch),
+                force,
+            )
             .map_err(ManagedEnvironmentError::Push)?;
 
         // update local envorinment branch, should be fast-forward and a noop if the branches didn't diverge
@@ -677,6 +684,7 @@ impl ManagedEnvironment {
                     "FETCH_HEAD:refs/heads/{sync_branch}",
                     sync_branch = remote_branch_name(&self.system, &self.pointer)
                 ),
+                false, // Set the force parameter to false or true based on your requirement
             )
             .unwrap();
 
