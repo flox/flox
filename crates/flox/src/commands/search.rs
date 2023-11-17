@@ -4,12 +4,11 @@ use std::io::{BufWriter, Write};
 use anyhow::{bail, Context, Result};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
+use flox_rust_sdk::models::environment::{global_manifest_path, Environment};
 use flox_rust_sdk::models::search::{
     do_search,
+    PathOrJson,
     Query,
-    Registry,
-    RegistryDefaults,
-    RegistryInput,
     SearchParams,
     SearchResult,
     SearchResults,
@@ -17,10 +16,11 @@ use flox_rust_sdk::models::search::{
     Subtree,
 };
 use log::debug;
-use serde_json::json;
 
+use crate::commands::{ConcreteEnvironment, EnvironmentSelect};
 use crate::config::features::{Features, SearchStrategy};
 use crate::subcommand_metric;
+use crate::utils::toml_to_json;
 
 const SEARCH_INPUT_SEPARATOR: &'_ str = ":";
 const DEFAULT_DESCRIPTION: &'_ str = "<no description provided>";
@@ -61,11 +61,48 @@ impl Search {
         subcommand_metric!("search");
         debug!("performing search for term: {}", self.search_term);
 
-        let search_params = construct_search_params(&self.search_term, &flox)?;
-        debug!(
-            "search parameters: {}",
-            serde_json::to_string(&search_params).unwrap_or("<failed to serialize>".to_string())
-        );
+        let (manifest, lockfile) =
+            match EnvironmentSelect::default().to_concrete_environment(&flox)? {
+                ConcreteEnvironment::Path(path_env) => {
+                    debug!("searching path environment: {:?}", path_env);
+                    let lockfile = path_env // may not exist
+                        .lockfile_path()
+                        .canonicalize()
+                        .ok()
+                        .map(PathOrJson::Path);
+                    let manifest = path_env.manifest_path().try_into()?;
+                    (manifest, lockfile)
+                },
+                ConcreteEnvironment::Managed(managed_env) => {
+                    let json = toml_to_json(
+                        managed_env
+                            .manifest_content()
+                            .context("couldn't retrieve environment manifest")?
+                            .as_str(),
+                    )
+                    .context("couldn't convert manifest to JSON")?;
+                    let manifest = PathOrJson::Json(json);
+                    (manifest, None)
+                },
+                ConcreteEnvironment::Remote(remote_env) => {
+                    let json = toml_to_json(
+                        remote_env
+                            .manifest_content()
+                            .context("couldn't retrieve environment manifest")?
+                            .as_str(),
+                    )
+                    .context("couldn't convert manifest to JSON")?;
+                    let manifest = PathOrJson::Json(json);
+                    (manifest, None)
+                },
+            };
+
+        let search_params = construct_search_params(
+            &self.search_term,
+            manifest,
+            global_manifest_path(&flox).try_into()?,
+            lockfile,
+        )?;
 
         let (results, exit_status) = do_search(&search_params)?;
         debug!("search call exit status: {}", exit_status.to_string());
@@ -92,54 +129,24 @@ impl Search {
     }
 }
 
-fn construct_search_params(search_term: &str, flox: &Flox) -> Result<SearchParams> {
-    // Create `registry` parameter for `pkgdb`
-    let (inputs, priority) = collect_manifest_inputs(flox);
-    debug!(
-        "collected manifest inputs named: {}",
-        inputs.keys().cloned().collect::<Vec<_>>().join(", ")
-    );
-    let registry = Registry {
-        inputs,
-        priority,
-        defaults: RegistryDefaults::default(),
-    };
-
-    // We've already checked that the search term is Some(_)
+fn construct_search_params(
+    search_term: &str,
+    manifest: PathOrJson,
+    global_manifest: PathOrJson,
+    lockfile: Option<PathOrJson>,
+) -> Result<SearchParams> {
     let query = Query::from_str(
         search_term,
         Features::parse()?.search_strategy == SearchStrategy::MatchName,
     )?;
     let params = SearchParams {
-        registry,
+        manifest,
+        global_manifest,
+        lockfile,
         query,
-        systems: Some(vec![flox.system.clone()]),
-        ..SearchParams::default()
     };
-    debug!("search params: {:?}", params);
+    debug!("search params raw: {:?}", params);
     Ok(params)
-}
-
-/// This function is a hack to convert the current subscriptions into a format
-/// that matches the search spec, which expects sources to come from the manifest.
-///
-/// This is temporary and will be removed once we have a functioning manifest.
-fn collect_manifest_inputs(_flox: &Flox) -> (HashMap<String, RegistryInput>, Vec<String>) {
-    let priority = vec!["nixpkgs".to_string()];
-    let nixpkgs_json = json!({
-        "type": "github",
-        "owner": "NixOS",
-        "repo": "nixpkgs",
-        "rev": "e8039594435c68eb4f780f3e9bf3972a7399c4b1",
-    });
-    let reg_input = RegistryInput {
-        from: serde_json::from_value(nixpkgs_json).unwrap(),
-        subtrees: Some(vec!["legacyPackages".to_string()]),
-    };
-    let inputs = [("nixpkgs".to_string(), reg_input)]
-        .into_iter()
-        .collect::<HashMap<_, _>>();
-    (inputs, priority)
 }
 
 /// An intermediate representation of a search result used for rendering
@@ -286,7 +293,47 @@ pub struct Show {
 impl Show {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("show");
-        let search_params = construct_show_params(&self.search_term, &flox)?;
+        let (manifest, lockfile) =
+            match EnvironmentSelect::default().to_concrete_environment(&flox)? {
+                ConcreteEnvironment::Path(path_env) => {
+                    debug!("searching path environment: {:?}", path_env);
+                    let lockfile = path_env // may not exist
+                        .lockfile_path()
+                        .canonicalize()
+                        .ok()
+                        .map(PathOrJson::Path);
+                    let manifest = path_env.manifest_path().try_into()?;
+                    (manifest, lockfile)
+                },
+                ConcreteEnvironment::Managed(managed_env) => {
+                    let json = toml_to_json(
+                        managed_env
+                            .manifest_content()
+                            .context("couldn't retrieve environment manifest")?
+                            .as_str(),
+                    )
+                    .context("couldn't convert manifest to JSON")?;
+                    let manifest = PathOrJson::Json(json);
+                    (manifest, None)
+                },
+                ConcreteEnvironment::Remote(remote_env) => {
+                    let json = toml_to_json(
+                        remote_env
+                            .manifest_content()
+                            .context("couldn't retrieve environment manifest")?
+                            .as_str(),
+                    )
+                    .context("couldn't convert manifest to JSON")?;
+                    let manifest = PathOrJson::Json(json);
+                    (manifest, None)
+                },
+            };
+        let search_params = construct_show_params(
+            &self.search_term,
+            manifest,
+            global_manifest_path(&flox).try_into()?,
+            lockfile,
+        )?;
 
         let (search_results, exit_status) = do_search(&search_params)?;
 
@@ -309,54 +356,34 @@ impl Show {
     }
 }
 
-fn construct_show_params(search_term: &str, flox: &Flox) -> Result<SearchParams> {
+fn construct_show_params(
+    search_term: &str,
+    manifest: PathOrJson,
+    global_manifest: PathOrJson,
+    lockfile: Option<PathOrJson>,
+) -> Result<SearchParams> {
     let parts = search_term
         .split(SEARCH_INPUT_SEPARATOR)
         .map(String::from)
         .collect::<Vec<_>>();
-    let (input_name, package_name) = match parts.as_slice() {
+    let (_input_name, package_name) = match parts.as_slice() {
         [package_name] => (None, Some(package_name.to_owned())),
         [input_name, package_name] => (Some(input_name.to_owned()), Some(package_name.to_owned())),
         _ => Err(ShowError::InvalidSearchTerm(search_term.to_owned()))?,
     };
 
-    // If we're given a specific input to search, only search that one,
-    // otherwise build the whole list of inputs to search
-    let (inputs, priority) = if let Some(input_name) = input_name {
-        let Some(reg_input) = flox
-            .channels
-            .iter()
-            .find(|entry| entry.from.id == input_name)
-            .map(|entry| RegistryInput {
-                from: entry.to.clone(),
-                subtrees: None,
-            })
-        else {
-            bail!("manifest did not contain an input named '{}'", input_name)
-        };
-        let mut inputs = HashMap::new();
-        inputs.insert(input_name.clone(), reg_input);
-        (inputs, vec![input_name])
-    } else {
-        collect_manifest_inputs(flox)
-    };
-
-    // Only search the registry input that the search result comes from
-    let registry = Registry {
-        inputs,
-        priority,
-        ..Registry::default()
-    };
-    let query = Query {
-        r#match: package_name,
-        ..Query::default()
-    };
-
-    Ok(SearchParams {
-        registry,
+    let query = Query::from_str(
+        package_name.as_ref().unwrap(), // We already know it's Some(_)
+        Features::parse()?.search_strategy == SearchStrategy::MatchName,
+    )?;
+    let search_params = SearchParams {
+        manifest,
+        global_manifest,
+        lockfile,
         query,
-        ..SearchParams::default()
-    })
+    };
+    debug!("show params raw: {:?}", search_params);
+    Ok(search_params)
 }
 
 fn render_show(search_results: &[SearchResult], all: bool) -> Result<()> {

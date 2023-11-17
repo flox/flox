@@ -8,7 +8,7 @@
 //!         $system.$name (out link)
 
 use std::ffi::OsStr;
-use std::fs;
+use std::fs::{self};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
@@ -94,6 +94,24 @@ impl<S> PartialEq for PathEnvironment<S> {
 }
 
 impl<S: TransactionState> PathEnvironment<S> {
+    pub fn new(
+        path: impl AsRef<Path>,
+        pointer: PathPointer,
+        temp_dir: impl AsRef<Path>,
+        state: S,
+    ) -> Result<Self, EnvironmentError2> {
+        Ok(Self {
+            // path must be absolute as it is used to set FLOX_ENV
+            path: path
+                .as_ref()
+                .canonicalize()
+                .map_err(EnvironmentError2::EnvCanonicalize)?,
+            pointer,
+            temp_dir: temp_dir.as_ref().to_path_buf(),
+            state,
+        })
+    }
+
     /// Makes a temporary copy of the environment so edits can be applied without modifying the original environment
     pub fn make_temporary(&self) -> Result<PathEnvironment<Temporary>, EnvironmentError2> {
         let transaction_dir =
@@ -102,12 +120,12 @@ impl<S: TransactionState> PathEnvironment<S> {
         copy_dir_recursive(&self.path, &transaction_dir, true)
             .map_err(EnvironmentError2::MakeTemporaryEnv)?;
 
-        Ok(PathEnvironment {
-            path: transaction_dir.into_path(),
-            temp_dir: self.temp_dir.clone(),
-            pointer: self.pointer.clone(),
-            state: Temporary,
-        })
+        PathEnvironment::new(
+            transaction_dir.into_path(),
+            self.pointer.clone(),
+            self.temp_dir.clone(),
+            Temporary,
+        )
     }
 
     /// Replace the contents of this environment's `.flox` with that of another environment's `.flox`
@@ -209,7 +227,7 @@ where
             .as_str()
             .ok_or(EnvironmentError2::RevNotString)?;
         let nixpkgs_url = Value::String(format!("github:NixOS/nixpkgs/{rev}"));
-        lockfile_json["registry"]["inputs"]["nixpkgs"]["url"] = nixpkgs_url.clone();
+        lockfile_json["registry"]["inputs"]["nixpkgs"]["url"] = nixpkgs_url;
         debug!("generated lockfile, writing to {}", lockfile_path.display());
         std::fs::write(&lockfile_path, lockfile_json.to_string())
             .map_err(EnvironmentError2::WriteLockfile)?;
@@ -434,20 +452,12 @@ impl PathEnvironment<Original> {
         if !env_path.exists() {
             Err(EnvironmentError2::EnvNotFound)?;
         }
-        let env_path = env_path
-            .canonicalize()
-            .map_err(EnvironmentError2::EnvCanonicalize)?;
 
         if !env_path.join(MANIFEST_FILENAME).exists() {
             Err(EnvironmentError2::DirectoryNotAnEnv)?
         }
 
-        Ok(PathEnvironment {
-            path: dot_flox.to_owned(),
-            pointer,
-            temp_dir: temp_dir.as_ref().to_path_buf(),
-            state: Original,
-        })
+        PathEnvironment::new(dot_flox, pointer, temp_dir, Original)
     }
 
     /// Create a new env in a `.flox` directory within a specific path or open it if it exists.
@@ -463,18 +473,21 @@ impl PathEnvironment<Original> {
             Err(e) => Err(e)?,
             Ok(_) => Err(EnvironmentError2::EnvironmentExists)?,
         }
-
         let dot_flox_path = dot_flox_parent_path.as_ref().join(DOT_FLOX);
-
         let env_dir = dot_flox_path.join(ENVIRONMENT_DIR_NAME);
+        debug!("creating env dir: {}", env_dir.display());
         std::fs::create_dir_all(&env_dir).map_err(EnvironmentError2::InitEnv)?;
-
         let pointer_content =
             serde_json::to_string_pretty(&pointer).map_err(EnvironmentError2::SerializeEnvJson)?;
-
         let template_path = env!("FLOX_ENV_TEMPLATE");
+        debug!(
+            "copying environment template from {} to {}",
+            template_path,
+            env_dir.display()
+        );
         copy_dir_recursive(&template_path, &env_dir, false).map_err(EnvironmentError2::InitEnv)?;
 
+        // Write the `env.json` file
         if let Err(e) = fs::write(
             dot_flox_path.join(ENVIRONMENT_POINTER_FILENAME),
             pointer_content,
@@ -511,17 +524,18 @@ mod tests {
             "{before:?}"
         );
 
-        let expected = PathEnvironment {
-            path: environment_temp_dir.path().to_path_buf().join(".flox"),
-            pointer: PathPointer::new("test".parse().unwrap()),
-            temp_dir: temp_dir.path().to_path_buf(),
-            state: Original,
-        };
-
         let actual = PathEnvironment::<Original>::init(
             pointer,
-            environment_temp_dir.into_path(),
+            environment_temp_dir.path(),
             temp_dir.path(),
+        )
+        .unwrap();
+
+        let expected = PathEnvironment::new(
+            environment_temp_dir.into_path().join(".flox"),
+            PathPointer::new("test".parse().unwrap()),
+            temp_dir.path().to_path_buf(),
+            Original,
         )
         .unwrap();
 
@@ -580,7 +594,10 @@ mod tests {
 
         let mut temp_env = env.make_temporary().unwrap();
 
-        assert_eq!(temp_env.path.parent().unwrap(), sandbox_path);
+        assert_eq!(
+            temp_env.path.parent().unwrap(),
+            sandbox_path.canonicalize().unwrap()
+        );
 
         let new_env_str = r#"
         { }

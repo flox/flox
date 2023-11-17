@@ -37,6 +37,24 @@ expect {
     }
 }
 
+# check for hello after changing directory
+send "cd ..\n"
+expect {
+    -re "project.*\$" {}
+    timeout {
+      puts stderr "Reached timeout running 'cd ..'"
+      exit 1
+    }
+}
+send "{ command -v hello||which hello||type -P hello; } 2>&1\n"
+expect {
+    -re "project-\\d+/\.flox/run/.*\.project-\\d+/bin/hello" {}
+    timeout {
+      puts stderr "Reached timeout locating 'hello'"
+      exit 1
+    }
+}
+
 expect {
     # TODO check prompt colors
     -re "flox .*\\\[project-\\d+\\\]" {}

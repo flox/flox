@@ -23,7 +23,7 @@ const GENERATION_LOCK_FILENAME: &str = "env.lock";
 
 #[derive(Debug)]
 pub struct ManagedEnvironment {
-    /// Path to the directory containing `env.json`
+    /// Absolute path to the directory containing `env.json`
     // TODO might be better to keep this private
     pub path: PathBuf,
     pointer: ManagedPointer,
@@ -181,6 +181,24 @@ impl Environment for ManagedEnvironment {
 }
 
 impl ManagedEnvironment {
+    pub fn new(
+        path: impl AsRef<Path>,
+        pointer: ManagedPointer,
+        system: String,
+        floxmeta: FloxmetaV2,
+    ) -> Result<Self, EnvironmentError2> {
+        Ok(Self {
+            // path must be absolute as it is used to set FLOX_ENV
+            path: path
+                .as_ref()
+                .canonicalize()
+                .map_err(EnvironmentError2::EnvCanonicalize)?,
+            pointer,
+            system,
+            floxmeta,
+        })
+    }
+
     /// Returns a unique identifier for the location of the project.
     fn encode(path: impl AsRef<Path>) -> Result<String, ManagedEnvironmentError> {
         let path =
@@ -300,12 +318,7 @@ impl ManagedEnvironment {
 
         Self::ensure_reverse_link(flox, &dot_flox_path)?;
 
-        Ok(ManagedEnvironment {
-            path: dot_flox_path.as_ref().to_path_buf(),
-            system: flox.system.clone(),
-            floxmeta,
-            pointer,
-        })
+        ManagedEnvironment::new(dot_flox_path, pointer, flox.system.clone(), floxmeta)
     }
 
     /// Ensure:
@@ -587,7 +600,7 @@ impl ManagedEnvironment {
         temp_floxmeta.git.push("origin").unwrap();
 
         fs::write(
-            temp_floxmeta_path.join("env.json"),
+            path_environment.path.join("env.json"),
             serde_json::to_string(&pointer).unwrap(),
         )
         .unwrap();

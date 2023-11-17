@@ -82,6 +82,11 @@
       FLOX_ENV_TEMPLATE = builtins.path {
         path = ../../assets/templateFloxEnv;
       };
+
+      # The global manifest we generate if one does not exist
+      GLOBAL_MANIFEST_TEMPLATE = builtins.path {
+        path = ../../assets/global_manifest_template.toml;
+      };
     }
     // lib.optionalAttrs hostPlatform.isDarwin {
       NIX_COREFOUNDATION_RPATH = "${darwin.CF}/Library/Frameworks";

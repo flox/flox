@@ -1,17 +1,13 @@
-# Install packages
-[install]
+# List packages you wish to install in your environment under
+# the `[install]` table
+# [install] 
 # hello = {}
+# nodejs = { version = "^16.4.2" } 
 
-[registry.inputs.nixpkgs]
-from = { type = "github", owner = "NixOS", repo = "nixpkgs" }
-subtrees = ["legacyPackages"]
-
-# Environment variables
-[vars]
-MY_VAR = "MY_VALUE"
-
-# Add a hook that's run when entering the environment
-# [hook]
-# script = """
-#     hello >&2
-# """
+# Set your activation hook ( run when entering the environment )
+# You can write this inline with the `script` field, or provide a
+# relative path to a file using the `file` field.
+[hook]
+script = """
+  echo "Welcome to your flox environment!";
+"""

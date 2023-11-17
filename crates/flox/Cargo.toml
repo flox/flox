@@ -49,6 +49,7 @@ indexmap.workspace = true
 url.workspace = true
 openssl.workspace = true
 chrono.workspace = true
+toml = "0.8.8"
 
 [dev-dependencies]
 temp-env = "0.3.2"
