@@ -547,7 +547,6 @@ pub struct Push {
     owner: Option<EnvironmentOwner>,
 
     /// forceably overwrite the remote copy of the environment
-    #[allow(dead_code)] // not yet handled in impl
     #[bpaf(long, short)]
     force: bool,
 }
