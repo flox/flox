@@ -30,10 +30,10 @@
   # crane (<https://crane.dev/>) library for building rust packages
   craneLib = inputs.crane.mkLib pkgsFor;
 
-  mkEnv = ../../assets/mkEnv;
-
   # build time environment variables
-  envs =
+  envs = let
+    mkEnv = ../../assets/mkEnv;
+  in
     {
       # 3rd party CLIs
       # we want to use our own binaries by absolute path
@@ -171,18 +171,13 @@ in
       # resolve flake references among other things.
       doCheck = false;
 
+      # bundle manpages and completion scripts
       postInstall = ''
-        # copy profile.d scripts
-        mkdir -p $out/etc/profile.d
-        cp -R ${mkEnv}/profile.d/* $out/etc/profile.d/
-
-        # bundle manpages and completion scripts
         installManPage ${manpages}/*;
         installShellCompletion --cmd flox                         \
           --bash <( "$out/bin/flox" --bpaf-complete-style-bash; ) \
           --fish <( "$out/bin/flox" --bpaf-complete-style-fish; ) \
           --zsh <( "$out/bin/flox" --bpaf-complete-style-zsh; );
-
       '';
 
       doInstallCheck = false;
