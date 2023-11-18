@@ -76,16 +76,34 @@ setup_file() {
 
 # ---------------------------------------------------------------------------- #
 
+@test "'FLOX_FEATURES_SEARCH_STRATEGY=match flox search' expected number of results: 'hello'" {
+  FLOX_FEATURES_SEARCH_STRATEGY=match run --separate-stderr "$FLOX_CLI" search hello;
+  n_lines="${#lines[@]}";
+  case "$NIX_SYSTEM" in
+    *-darwin)
+      assert_equal "$n_lines" 11;
+      assert_equal "$stderr" "$SHOW_HINT"
+      ;;
+    *-linux)
+      assert_equal "$n_lines" 11;
+      assert_equal "$stderr" "$SHOW_HINT"
+      ;;
+  esac
+}
+
+
+# ---------------------------------------------------------------------------- #
+
 @test "'flox search' expected number of results: 'hello'" {
   run --separate-stderr "$FLOX_CLI" search hello;
   n_lines="${#lines[@]}";
   case "$NIX_SYSTEM" in
     *-darwin)
-      assert_equal "$n_lines" 11; # search line + show hint
+      assert_equal "$n_lines" 10;
       assert_equal "$stderr" "$SHOW_HINT"
       ;;
     *-linux)
-      assert_equal "$n_lines" 11; # 4 search lines + show hint
+      assert_equal "$n_lines" 10;
       assert_equal "$stderr" "$SHOW_HINT"
       ;;
   esac

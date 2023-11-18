@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::fmt::Display;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::{fs, io};
@@ -20,6 +19,7 @@ use self::managed_environment::ManagedEnvironmentError;
 use super::environment_ref::{EnvironmentName, EnvironmentOwner, EnvironmentRefError};
 use super::flox_package::FloxTriple;
 use super::manifest::TomlEditError;
+use super::pkgdb_errors::PkgDbError;
 use crate::flox::{EnvironmentRef, Flox};
 use crate::utils::copy_file_without_permissions;
 use crate::utils::errors::IoError;
@@ -304,33 +304,6 @@ pub enum EnvironmentError2 {
     InitGlobalManifest(std::io::Error),
     #[error("couldn't read global manifest template: {0}")]
     ReadGlobalManifestTemplate(std::io::Error),
-}
-
-/// A struct representing error messages coming from pkgdb
-#[derive(Debug, Deserialize)]
-pub struct PkgDbError {
-    /// The exit code of pkgdb, can be used to programmatically determine
-    /// the category of error.
-    pub exit_code: u64,
-    /// The generic message for this category of error.
-    pub category_message: String,
-    /// The more contextual message for the specific error that occurred.
-    pub context_message: Option<String>,
-    /// The underlying error message if an exception was caught.
-    pub caught_message: Option<String>,
-}
-
-impl Display for PkgDbError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.category_message)?;
-        if let Some(ref context_message) = self.context_message {
-            write!(f, ": {}", context_message)?;
-        }
-        if let Some(ref caught_message) = self.caught_message {
-            write!(f, ": {}", caught_message)?;
-        }
-        Ok(())
-    }
 }
 
 /// Copy a whole directory recursively ignoring the original permissions

@@ -10,5 +10,6 @@ pub use runix::{flake_ref, registry};
 pub mod floxmeta;
 pub mod floxmetav2;
 pub mod manifest;
+pub mod pkgdb_errors;
 pub mod project;
 pub mod search;
