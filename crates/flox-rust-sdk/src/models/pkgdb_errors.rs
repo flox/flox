@@ -10,7 +10,7 @@ pub struct PkgDbError {
     /// the category of error.
     pub exit_code: u64,
     /// The generic message for this category of error.
-    pub category_message: String,
+    pub category_message: Option<String>,
     /// The more contextual message for the specific error that occurred.
     pub context_message: Option<ContextMsgError>,
 }
@@ -28,10 +28,12 @@ impl<'de> Deserialize<'de> for PkgDbError {
             .ok_or_else(|| serde::de::Error::custom("exit code is not an unsigned integer"))?;
         let category_message = map
             .get("category_message")
-            .ok_or_else(|| serde::de::Error::missing_field("category_message"))?
-            .as_str()
-            .ok_or_else(|| serde::de::Error::custom("category message was not a string"))
-            .map(|m| m.to_owned())?;
+            .map(|m| {
+                m.as_str()
+                    .ok_or_else(|| serde::de::Error::custom("category message was not a string"))
+                    .map(|m| m.to_owned())
+            })
+            .transpose()?;
         let context_message_contents = map
             .get("context_message")
             .map(|m| {
@@ -62,7 +64,11 @@ impl<'de> Deserialize<'de> for PkgDbError {
 
 impl Display for PkgDbError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.category_message)?;
+        if let Some(category_message) = &self.category_message {
+            write!(f, "{}", category_message)?;
+        } else {
+            write!(f, "error calling pkgdb")?;
+        }
         Ok(())
     }
 }
