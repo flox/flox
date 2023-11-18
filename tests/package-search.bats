@@ -257,7 +257,7 @@ setup_file() {
   run --separate-stderr "$FLOX_CLI" search hello;
   assert_success;
   n_lines="${#lines[@]}";
-  assert_equal "$n_lines" 11; # search results from global manifest registry
+  assert_equal "$n_lines" 10; # search results from global manifest registry
 }
 
 
@@ -268,5 +268,5 @@ setup_file() {
   run --separate-stderr "$FLOX_CLI" search hello;
   assert_success;
   n_lines="${#lines[@]}";
-  assert_equal "$n_lines" 11; # search results from global manifest registry
+  assert_equal "$n_lines" 10; # search results from global manifest registry
 }
