@@ -4,7 +4,7 @@ use std::io::{BufWriter, Write};
 use anyhow::{bail, Context, Result};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::models::environment::{global_manifest_path, Environment};
+use flox_rust_sdk::models::environment::{global_manifest_path, manifest_and_lockfile};
 use flox_rust_sdk::models::search::{
     do_search,
     PathOrJson,
@@ -17,10 +17,8 @@ use flox_rust_sdk::models::search::{
 };
 use log::debug;
 
-use crate::commands::{ConcreteEnvironment, EnvironmentSelect};
 use crate::config::features::{Features, SearchStrategy};
 use crate::subcommand_metric;
-use crate::utils::toml_to_json;
 
 const SEARCH_INPUT_SEPARATOR: &'_ str = ":";
 const DEFAULT_DESCRIPTION: &'_ str = "<no description provided>";
@@ -61,47 +59,16 @@ impl Search {
         subcommand_metric!("search");
         debug!("performing search for term: {}", self.search_term);
 
-        let (manifest, lockfile) =
-            match EnvironmentSelect::default().to_concrete_environment(&flox)? {
-                ConcreteEnvironment::Path(path_env) => {
-                    debug!("searching path environment: {:?}", path_env);
-                    let lockfile = path_env // may not exist
-                        .lockfile_path()
-                        .canonicalize()
-                        .ok()
-                        .map(PathOrJson::Path);
-                    let manifest = path_env.manifest_path().try_into()?;
-                    (manifest, lockfile)
-                },
-                ConcreteEnvironment::Managed(managed_env) => {
-                    let json = toml_to_json(
-                        managed_env
-                            .manifest_content()
-                            .context("couldn't retrieve environment manifest")?
-                            .as_str(),
-                    )
-                    .context("couldn't convert manifest to JSON")?;
-                    let manifest = PathOrJson::Json(json);
-                    (manifest, None)
-                },
-                ConcreteEnvironment::Remote(remote_env) => {
-                    let json = toml_to_json(
-                        remote_env
-                            .manifest_content()
-                            .context("couldn't retrieve environment manifest")?
-                            .as_str(),
-                    )
-                    .context("couldn't convert manifest to JSON")?;
-                    let manifest = PathOrJson::Json(json);
-                    (manifest, None)
-                },
-            };
-
+        let (manifest, lockfile) = manifest_and_lockfile(
+            &std::env::current_dir()
+                .context("failed while getting the path of the current directory")?,
+        )
+        .context("failed while looking for manifest and lockfile")?;
         let search_params = construct_search_params(
             &self.search_term,
-            manifest,
+            manifest.map(|p| p.try_into()).transpose()?,
             global_manifest_path(&flox).try_into()?,
-            lockfile,
+            lockfile.map(|p| p.try_into()).transpose()?,
         )?;
 
         let (results, exit_status) = do_search(&search_params)?;
@@ -131,7 +98,7 @@ impl Search {
 
 fn construct_search_params(
     search_term: &str,
-    manifest: PathOrJson,
+    manifest: Option<PathOrJson>,
     global_manifest: PathOrJson,
     lockfile: Option<PathOrJson>,
 ) -> Result<SearchParams> {
@@ -293,46 +260,17 @@ pub struct Show {
 impl Show {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("show");
-        let (manifest, lockfile) =
-            match EnvironmentSelect::default().to_concrete_environment(&flox)? {
-                ConcreteEnvironment::Path(path_env) => {
-                    debug!("searching path environment: {:?}", path_env);
-                    let lockfile = path_env // may not exist
-                        .lockfile_path()
-                        .canonicalize()
-                        .ok()
-                        .map(PathOrJson::Path);
-                    let manifest = path_env.manifest_path().try_into()?;
-                    (manifest, lockfile)
-                },
-                ConcreteEnvironment::Managed(managed_env) => {
-                    let json = toml_to_json(
-                        managed_env
-                            .manifest_content()
-                            .context("couldn't retrieve environment manifest")?
-                            .as_str(),
-                    )
-                    .context("couldn't convert manifest to JSON")?;
-                    let manifest = PathOrJson::Json(json);
-                    (manifest, None)
-                },
-                ConcreteEnvironment::Remote(remote_env) => {
-                    let json = toml_to_json(
-                        remote_env
-                            .manifest_content()
-                            .context("couldn't retrieve environment manifest")?
-                            .as_str(),
-                    )
-                    .context("couldn't convert manifest to JSON")?;
-                    let manifest = PathOrJson::Json(json);
-                    (manifest, None)
-                },
-            };
+
+        let (manifest, lockfile) = manifest_and_lockfile(
+            &std::env::current_dir()
+                .context("failed while getting the path of the current directory")?,
+        )
+        .context("failed while looking for manifest and lockfile")?;
         let search_params = construct_show_params(
             &self.search_term,
-            manifest,
+            manifest.map(|p| p.try_into()).transpose()?,
             global_manifest_path(&flox).try_into()?,
-            lockfile,
+            lockfile.map(|p| p.try_into()).transpose()?,
         )?;
 
         let (search_results, exit_status) = do_search(&search_params)?;
@@ -358,7 +296,7 @@ impl Show {
 
 fn construct_show_params(
     search_term: &str,
-    manifest: PathOrJson,
+    manifest: Option<PathOrJson>,
     global_manifest: PathOrJson,
     lockfile: Option<PathOrJson>,
 ) -> Result<SearchParams> {
