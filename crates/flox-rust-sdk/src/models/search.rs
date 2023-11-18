@@ -53,7 +53,7 @@ pub enum ShowError {
 #[serde(rename_all = "kebab-case")]
 pub struct SearchParams {
     /// Either an absolute path to a manifest or an inline JSON manifest
-    pub manifest: PathOrJson,
+    pub manifest: Option<PathOrJson>,
     /// Either an absolute path to a manifest or an inline JSON manifest
     pub global_manifest: PathOrJson,
     /// An optional exisiting lockfile
@@ -381,7 +381,7 @@ mod test {
     #[test]
     fn serializes_search_params() {
         let params = SearchParams {
-            manifest: PathOrJson::Path("/path/to/manifest".into()),
+            manifest: Some(PathOrJson::Path("/path/to/manifest".into())),
             global_manifest: PathOrJson::Path("/path/to/manifest".into()),
             lockfile: None,
             query: Query::from_str(EXAMPLE_SEARCH_TERM, false).unwrap(),
