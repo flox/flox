@@ -17,7 +17,7 @@ impl Features {
 #[derive(Clone, Debug, Deserialize, Serialize, Default, PartialEq)]
 #[serde(rename_all = "kebab-case")]
 pub enum SearchStrategy {
-    #[default]
     Match,
+    #[default]
     MatchName,
 }

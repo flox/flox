@@ -119,3 +119,21 @@ teardown() {
   assert_equal "${lines[0]}" "python27Full - A high-level dynamically-typed programming language";
   assert_equal "${lines[1]}" "    python27Full - python27Full@2.7.18.6";
 }
+
+
+# ---------------------------------------------------------------------------- #
+
+@test "'flox show' works in project without manifest or lockfile" {
+  rm -f "$PROJECT_DIR/.flox/manifest.toml";
+  run --separate-stderr "$FLOX_CLI" show hello;
+  assert_success;
+}
+
+
+# ---------------------------------------------------------------------------- #
+
+@test "'flox show' works outside of projects" {
+  rm -rf "$PROJECT_DIR/.flox";
+  run --separate-stderr "$FLOX_CLI" show hello;
+  assert_success;
+}

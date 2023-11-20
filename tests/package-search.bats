@@ -76,16 +76,34 @@ setup_file() {
 
 # ---------------------------------------------------------------------------- #
 
+@test "'FLOX_FEATURES_SEARCH_STRATEGY=match flox search' expected number of results: 'hello'" {
+  FLOX_FEATURES_SEARCH_STRATEGY=match run --separate-stderr "$FLOX_CLI" search hello;
+  n_lines="${#lines[@]}";
+  case "$NIX_SYSTEM" in
+    *-darwin)
+      assert_equal "$n_lines" 11;
+      assert_equal "$stderr" "$SHOW_HINT"
+      ;;
+    *-linux)
+      assert_equal "$n_lines" 11;
+      assert_equal "$stderr" "$SHOW_HINT"
+      ;;
+  esac
+}
+
+
+# ---------------------------------------------------------------------------- #
+
 @test "'flox search' expected number of results: 'hello'" {
   run --separate-stderr "$FLOX_CLI" search hello;
   n_lines="${#lines[@]}";
   case "$NIX_SYSTEM" in
     *-darwin)
-      assert_equal "$n_lines" 11; # search line + show hint
+      assert_equal "$n_lines" 10;
       assert_equal "$stderr" "$SHOW_HINT"
       ;;
     *-linux)
-      assert_equal "$n_lines" 11; # 4 search lines + show hint
+      assert_equal "$n_lines" 10;
       assert_equal "$stderr" "$SHOW_HINT"
       ;;
   esac
@@ -230,4 +248,25 @@ setup_file() {
 
   assert [ "$MATCH_NAME" -lt "$MATCH" ];
 
+}
+
+# ---------------------------------------------------------------------------- #
+
+@test "'flox search' works in project without manifest or lockfile" {
+  rm -f "$PROJECT_DIR/.flox/manifest.toml";
+  run --separate-stderr "$FLOX_CLI" search hello;
+  assert_success;
+  n_lines="${#lines[@]}";
+  assert_equal "$n_lines" 10; # search results from global manifest registry
+}
+
+
+# ---------------------------------------------------------------------------- #
+
+@test "'flox search' works outside of projects" {
+  rm -rf "$PROJECT_DIR/.flox";
+  run --separate-stderr "$FLOX_CLI" search hello;
+  assert_success;
+  n_lines="${#lines[@]}";
+  assert_equal "$n_lines" 10; # search results from global manifest registry
 }

@@ -2,12 +2,13 @@ use std::env;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 use std::process::{Command, ExitStatus, Stdio};
-use std::str::FromStr;
 
 use log::debug;
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+
+use super::pkgdb_errors::PkgDbError;
 
 // This is the `PKGDB` path that we actually use.
 // This is set once and prefers the `PKGDB` env variable, but will use
@@ -25,8 +26,8 @@ pub enum SearchError {
     ParseStdout(std::io::Error),
     #[error("invalid search term '{0}', try quoting the search term if this isn't what you searched for")]
     SearchTerm(String),
-    #[error("search encountered an error: {0}")]
-    PkgDb(Value),
+    #[error("search encountered an error")]
+    PkgDb(#[from] PkgDbError),
     #[error("search encountered an error: {0}")]
     PkgDbCall(std::io::Error),
     #[error("failed to canonicalize manifest path: {0}")]
@@ -53,7 +54,7 @@ pub enum ShowError {
 #[serde(rename_all = "kebab-case")]
 pub struct SearchParams {
     /// Either an absolute path to a manifest or an inline JSON manifest
-    pub manifest: PathOrJson,
+    pub manifest: Option<PathOrJson>,
     /// Either an absolute path to a manifest or an inline JSON manifest
     pub global_manifest: PathOrJson,
     /// An optional exisiting lockfile
@@ -223,13 +224,9 @@ impl TryFrom<&[u8]> for SearchResults {
             match serde_json::from_str(&text) {
                 Ok(search_result) => results.push(search_result),
                 Err(_) => {
-                    // TODO: Errors are currently emitted to stdout as JSON, but there's no spec for the errors.
-                    //       For now if we can't turn the text into a SearchResult, we assume that it's an
-                    //       error message. If parsing that into a serde_json::Value fails, something else went
-                    //       pretty wrong.
-                    //
-                    //       Once there's a spec for the error messages we can parse this into a typed container.
-                    let err = Value::from_str(&text).map_err(SearchError::Deserialize)?;
+                    let mut deserializer = serde_json::Deserializer::from_str(&text);
+                    let err = PkgDbError::deserialize(&mut deserializer)
+                        .map_err(SearchError::Deserialize)?;
                     return Err(SearchError::PkgDb(err));
                 },
             };
@@ -252,13 +249,9 @@ impl SearchResults {
             match serde_json::from_str(&text) {
                 Ok(search_result) => results.push(search_result),
                 Err(_) => {
-                    // TODO: Errors are currently emitted to stdout as JSON, but there's no spec for the errors.
-                    //       For now if we can't turn the text into a SearchResult, we assume that it's an
-                    //       error message. If parsing that into a serde_json::Value fails, something else went
-                    //       pretty wrong.
-                    //
-                    //       Once there's a spec for the error messages we can parse this into a typed container.
-                    let err = Value::from_str(&text).map_err(SearchError::Deserialize)?;
+                    let mut deserializer = serde_json::Deserializer::from_str(&text);
+                    let err = PkgDbError::deserialize(&mut deserializer)
+                        .map_err(SearchError::Deserialize)?;
                     return Err(SearchError::PkgDb(err));
                 },
             };
@@ -381,7 +374,7 @@ mod test {
     #[test]
     fn serializes_search_params() {
         let params = SearchParams {
-            manifest: PathOrJson::Path("/path/to/manifest".into()),
+            manifest: Some(PathOrJson::Path("/path/to/manifest".into())),
             global_manifest: PathOrJson::Path("/path/to/manifest".into()),
             lockfile: None,
             query: Query::from_str(EXAMPLE_SEARCH_TERM, false).unwrap(),
