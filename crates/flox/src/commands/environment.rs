@@ -563,6 +563,7 @@ impl Push {
                 }
 
                 Self::push_managed_env(&flox, managed_pointer, dir, self.force)
+                    .context("Could not push managed environment")?;
             },
             EnvironmentPointer::Path(path_pointer) => {
                 let owner = if let Some(owner) = self.owner {
@@ -581,8 +582,10 @@ impl Push {
                         .context("Invalid owner name")?
                 };
                 Self::push_make_managed(&flox, path_pointer, &dir, owner, self.force)
+                    .context("Could not push new environment")?;
             },
         }
+        Ok(())
     }
 
     fn push_managed_env(
@@ -608,8 +611,7 @@ impl Push {
     ) -> Result<()> {
         let dot_flox_path = dir.join(DOT_FLOX);
         let path_environment =
-            path_environment::PathEnvironment::open(path_pointer, dot_flox_path, &flox.temp_dir)
-                .unwrap();
+            path_environment::PathEnvironment::open(path_pointer, dot_flox_path, &flox.temp_dir)?;
 
         ManagedEnvironment::push_new(
             flox,
@@ -618,8 +620,7 @@ impl Push {
             &flox.temp_dir,
             force,
         )
-        .map_err(Self::convert_error)
-        .unwrap();
+        .map_err(Self::convert_error)?;
 
         Ok(())
     }
