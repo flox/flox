@@ -350,7 +350,8 @@ fn environment_description(environment: &ConcreteEnvironment) -> String {
             format!(
                 "{}/{} at {}",
                 environment.owner(),
-                environment.name(),
+                "<TODO: name>",
+                // environment.name(),
                 environment.path.to_string_lossy()
             )
         },
