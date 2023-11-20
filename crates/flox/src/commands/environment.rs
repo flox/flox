@@ -714,7 +714,7 @@ impl Pull {
     ) -> Result<()> {
         let mut env = ManagedEnvironment::open(flox, pointer, dot_flox_path)
             .context("Could not open environment")?;
-        env.pull().context("Could not pull environment")?;
+        env.pull(false).context("Could not pull environment")?;
 
         Ok(())
     }

@@ -623,7 +623,7 @@ impl ManagedEnvironment {
 
         // Check whether we can fast-forward merge the remote branch into the local branch
         // If "not" the environment has diverged.
-        // if --force flag is not set we will run this check
+        // if `--force` flag is set we skip this check
         if !force {
             let consistent_history = self
                 .floxmeta
@@ -645,13 +645,12 @@ impl ManagedEnvironment {
             .map_err(ManagedEnvironmentError::Push)?;
 
         // update local envorinment branch, should be fast-forward and a noop if the branches didn't diverge
-        self.pull()?;
+        self.pull(force)?;
 
         Ok(())
     }
 
-    #[allow(unused)]
-    pub fn pull(&mut self) -> Result<(), ManagedEnvironmentError> {
+    pub fn pull(&mut self, force: bool) -> Result<(), ManagedEnvironmentError> {
         // Fetch the remote branch into FETCH_HEAD
         self.floxmeta
             .git
@@ -663,16 +662,19 @@ impl ManagedEnvironment {
 
         // Check whether we can fast-forward merge the remote branch into the local branch,
         // if not the environment has diverged.
-        let consistent_history = self
-            .floxmeta
-            .git
-            .branch_contains_commit(
-                &remote_branch_name(&self.system, &self.pointer),
-                "FETCH_HEAD",
-            )
-            .map_err(ManagedEnvironmentError::Git)?;
-        if !consistent_history {
-            Err(ManagedEnvironmentError::Diverged)?;
+        // if `--force` flag is set we skip this check
+        if !force {
+            let consistent_history = self
+                .floxmeta
+                .git
+                .branch_contains_commit(
+                    &remote_branch_name(&self.system, &self.pointer),
+                    "FETCH_HEAD",
+                )
+                .map_err(ManagedEnvironmentError::Git)?;
+            if !consistent_history {
+                Err(ManagedEnvironmentError::Diverged)?;
+            }
         }
 
         // try fast forward merge local env branch into project branch
@@ -684,7 +686,7 @@ impl ManagedEnvironment {
                     "FETCH_HEAD:refs/heads/{sync_branch}",
                     sync_branch = remote_branch_name(&self.system, &self.pointer)
                 ),
-                false, // Set the force parameter to false or true based on your requirement
+                force, // Set the force parameter to false or true based on your requirement
             )
             .unwrap();
 
