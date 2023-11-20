@@ -883,6 +883,7 @@ impl GitProvider for GitCommandProvider {
     fn push(&self, remote: &str, force: bool) -> Result<(), Self::PushError> {
         let mut command = self.new_command();
         command.arg("push");
+        command.arg("--porcelain");
         command.arg("-u");
         command.arg(remote);
         command.arg("HEAD");

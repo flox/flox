@@ -598,7 +598,18 @@ impl ManagedEnvironment {
                 &format!("{}/{}/floxmeta", flox.floxhub_host, &pointer.owner),
             )
             .unwrap();
-        temp_floxmeta.git.push("origin", force).unwrap();
+
+        match temp_floxmeta.git.push("origin", force) {
+            Err(GitCommandError::BadExit(1, details, _))
+                if details
+                    .lines()
+                    .any(|s| s.split('\t').last() == Some("[rejected] (fetch first)")) =>
+            {
+                Err(ManagedEnvironmentError::Diverged)?
+            },
+            Err(e) => Err(ManagedEnvironmentError::Push(e))?,
+            _ => {},
+        }
 
         fs::write(
             path_environment.path.join("env.json"),
