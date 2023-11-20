@@ -60,18 +60,13 @@ pub struct InstallationAttempt {
 #[async_trait]
 pub trait Environment {
     /// Build the environment and create a result link as gc-root
-    async fn build(
-        &mut self,
-        nix: &NixCommandLine,
-        system: &System,
-    ) -> Result<(), EnvironmentError2>;
+    async fn build(&mut self, flox: &Flox) -> Result<(), EnvironmentError2>;
 
     /// Install packages to the environment atomically
     async fn install(
         &mut self,
         packages: Vec<String>,
-        nix: &NixCommandLine,
-        system: System,
+        flox: &Flox,
     ) -> Result<InstallationAttempt, EnvironmentError2>;
 
     /// Uninstall packages from the environment atomically
@@ -83,12 +78,7 @@ pub trait Environment {
     ) -> Result<String, EnvironmentError2>;
 
     /// Atomically edit this environment, ensuring that it still builds
-    async fn edit(
-        &mut self,
-        nix: &NixCommandLine,
-        system: System,
-        contents: String,
-    ) -> Result<(), EnvironmentError2>;
+    async fn edit(&mut self, flox: &Flox, contents: String) -> Result<(), EnvironmentError2>;
 
     async fn catalog(
         &self,
@@ -104,11 +94,7 @@ pub trait Environment {
     /// This should be a link to a store path so that it can be swapped
     /// dynamically, i.e. so that install/edit can modify the environment
     /// without requiring reactivation.
-    async fn activation_path(
-        &mut self,
-        flox: &Flox,
-        nix: &NixCommandLine,
-    ) -> Result<PathBuf, EnvironmentError2>;
+    async fn activation_path(&mut self, flox: &Flox) -> Result<PathBuf, EnvironmentError2>;
 
     /// Returns the environment name
     fn name(&self) -> EnvironmentName;
@@ -215,20 +201,20 @@ pub enum EnvironmentError2 {
     ParseEnvRef(#[from] EnvironmentRefError),
     #[error("EmptyDotFlox")]
     EmptyDotFlox,
-    #[error("DotFloxCanonicalize({0})")]
-    EnvCanonicalize(std::io::Error),
-    #[error("ReadDotFlox({0})")]
-    ReadDotFlox(std::io::Error),
-    #[error("ReadEnvDir({0})")]
-    ReadEnvDir(std::io::Error),
-    #[error("MakeSandbox({0})")]
-    MakeSandbox(std::io::Error),
-    #[error("DeleteEnvironment({0})")]
-    DeleteEnvironment(std::io::Error),
+    #[error("DotFloxCanonicalize")]
+    EnvCanonicalize(#[source] std::io::Error),
+    #[error("ReadDotFlox")]
+    ReadDotFlox(#[source] std::io::Error),
+    #[error("ReadEnvDir")]
+    ReadEnvDir(#[source] std::io::Error),
+    #[error("MakeSandbox")]
+    MakeSandbox(#[source] std::io::Error),
+    #[error("DeleteEnvironment")]
+    DeleteEnvironment(#[source] std::io::Error),
     #[error("DotFloxNotFound")]
     DotFloxNotFound,
-    #[error("InitEnv({0})")]
-    InitEnv(std::io::Error),
+    #[error("InitEnv")]
+    InitEnv(#[source] std::io::Error),
     #[error("EnvNotFound")]
     EnvNotFound,
     #[error("EnvNotADirectory")]
@@ -237,74 +223,74 @@ pub enum EnvironmentError2 {
     DirectoryNotAnEnv,
     #[error("EnvironmentExists")]
     EnvironmentExists,
-    #[error("EvalCatalog({0})")]
-    EvalCatalog(NixCommandLineRunJsonError),
-    #[error("ParseCatalog({0})")]
-    ParseCatalog(serde_json::Error),
-    #[error("WriteCatalog({0})")]
-    WriteCatalog(std::io::Error),
-    #[error("Build({0})")]
-    Build(NixCommandLineRunError),
-    #[error("ReadManifest({0})")]
-    ReadManifest(std::io::Error),
-    #[error("ReadEnvironmentMetadata({0})")]
-    ReadEnvironmentMetadata(std::io::Error),
-    #[error("MakeTemporaryEnv({0})")]
-    MakeTemporaryEnv(std::io::Error),
-    #[error("UpdateManifest({0})")]
-    UpdateManifest(std::io::Error),
-    #[error("couldn't open manifest: {0}")]
-    OpenManifest(std::io::Error),
-    #[error("Activate({0})")]
-    Activate(NixCommandLineRunError),
+    #[error("EvalCatalog")]
+    EvalCatalog(#[source] NixCommandLineRunJsonError),
+    #[error("ParseCatalog")]
+    ParseCatalog(#[source] serde_json::Error),
+    #[error("WriteCatalog")]
+    WriteCatalog(#[source] std::io::Error),
+    #[error("Build")]
+    Build(#[source] NixCommandLineRunError),
+    #[error("ReadManifest")]
+    ReadManifest(#[source] std::io::Error),
+    #[error("ReadEnvironmentMetadata")]
+    ReadEnvironmentMetadata(#[source] std::io::Error),
+    #[error("MakeTemporaryEnv")]
+    MakeTemporaryEnv(#[source] std::io::Error),
+    #[error("UpdateManifest")]
+    UpdateManifest(#[source] std::io::Error),
+    #[error("couldn't open manifest")]
+    OpenManifest(#[source] std::io::Error),
+    #[error("Activate")]
+    Activate(#[source] NixCommandLineRunError),
     #[error("Prior transaction in progress. Delete {0} to discard.")]
     PriorTransaction(PathBuf),
-    #[error("Failed to create backup for transaction: {0}")]
-    BackupTransaction(std::io::Error),
-    #[error("Failed to move modified environment into place: {0}")]
-    Move(std::io::Error),
-    #[error("Failed to abort transaction; backup could not be moved back into place: {0}")]
-    AbortTransaction(std::io::Error),
-    #[error("Failed to remove transaction backup: {0}")]
-    RemoveBackup(std::io::Error),
+    #[error("Failed to create backup for transaction")]
+    BackupTransaction(#[source] std::io::Error),
+    #[error("Failed to move modified environment into place")]
+    Move(#[source] std::io::Error),
+    #[error("Failed to abort transaction; backup could not be moved back into place")]
+    AbortTransaction(#[source] std::io::Error),
+    #[error("Failed to remove transaction backup")]
+    RemoveBackup(#[source] std::io::Error),
     #[error("Failed to copy file")]
-    CopyFile(IoError),
-    #[error("Failed parsing contents of env.json file: {0}")]
-    ParseEnvJson(serde_json::Error),
-    #[error("Failed serializing contents of env.json file: {0}")]
-    SerializeEnvJson(serde_json::Error),
-    #[error("Failed write env.json file: {0}")]
-    WriteEnvJson(std::io::Error),
+    CopyFile(#[source] IoError),
+    #[error("Failed parsing contents of env.json file")]
+    ParseEnvJson(#[source] serde_json::Error),
+    #[error("Failed serializing contents of env.json file")]
+    SerializeEnvJson(#[source] serde_json::Error),
+    #[error("Failed write env.json file")]
+    WriteEnvJson(#[source] std::io::Error),
     #[error(transparent)]
     ManagedEnvironment(#[from] ManagedEnvironmentError),
     #[error(transparent)]
     Install(#[from] TomlEditError),
     #[error("couldn't locate the manifest for this environment")]
     ManifestNotFound,
-    #[error("failed to create GC roots directory: {0}")]
-    CreateGcRootDir(std::io::Error),
-    #[error("error building environment: {0}")]
-    BuildEnvCall(std::io::Error),
+    #[error("failed to create GC roots directory")]
+    CreateGcRootDir(#[source] std::io::Error),
+    #[error("error building environment")]
+    BuildEnvCall(#[source] std::io::Error),
     #[error("error building environment: {0}")]
     BuildEnv(String),
-    #[error("provided lockfile path doesn't exist: {0}")]
-    BadLockfilePath(std::io::Error),
-    #[error("call to pkgdb failed: {0}")]
-    PkgDbCall(std::io::Error),
+    #[error("provided lockfile path doesn't exist")]
+    BadLockfilePath(#[source] std::io::Error),
+    #[error("call to pkgdb failed")]
+    PkgDbCall(#[source] std::io::Error),
     #[error("couldn't parse pkgdb error as JSON: {0}")]
     ParsePkgDbError(String),
-    #[error("couldn't parse lockfile as JSON: {0}")]
-    ParseLockfileJSON(serde_json::Error),
+    #[error("couldn't parse lockfile as JSON")]
+    ParseLockfileJSON(#[source] serde_json::Error),
     #[error("couldn't parse nixpkgs rev as a string")]
     RevNotString,
-    #[error("couldn't write new lockfile contents: {0}")]
-    WriteLockfile(std::io::Error),
-    #[error("locking manifest failed: {0}")]
-    LockManifest(PkgDbError),
-    #[error("couldn't create the global manifest: {0}")]
-    InitGlobalManifest(std::io::Error),
-    #[error("couldn't read global manifest template: {0}")]
-    ReadGlobalManifestTemplate(std::io::Error),
+    #[error("couldn't write new lockfile contents")]
+    WriteLockfile(#[source] std::io::Error),
+    #[error("locking manifest failed")]
+    LockManifest(#[source] PkgDbError),
+    #[error("couldn't create the global manifest")]
+    InitGlobalManifest(#[source] std::io::Error),
+    #[error("couldn't read global manifest template")]
+    ReadGlobalManifestTemplate(#[source] std::io::Error),
     #[error("provided path couldn't be canonicalized: {path}")]
     CanonicalPath {
         path: PathBuf,
@@ -358,21 +344,27 @@ pub fn lock_manifest(
     pkgdb: &Path,
     manifest_path: &Path,
     existing_lockfile_path: Option<&Path>,
+    global_manifest_path: &Path,
 ) -> Result<serde_json::Value, EnvironmentError2> {
     let canonical_manifest_path = manifest_path
         .canonicalize()
         .map_err(EnvironmentError2::OpenManifest)?;
+
     let mut pkgdb_cmd = Command::new(pkgdb);
     pkgdb_cmd
-        .args(["manifest", "lock", "--ga-registry"])
-        .arg(canonical_manifest_path);
+        .args(["manifest", "lock"])
+        .arg("--ga-registry")
+        .arg("--global-manifest")
+        .arg(global_manifest_path);
     if let Some(lf_path) = existing_lockfile_path {
         let canonical_lockfile_path = lf_path
             .canonicalize()
             .map_err(EnvironmentError2::BadLockfilePath)?;
-        pkgdb_cmd.arg(canonical_lockfile_path);
+        pkgdb_cmd.arg("--lockfile").arg(canonical_lockfile_path);
     }
-    debug!(target: "posix", "locking manifest with command: {pkgdb_cmd:?}");
+    pkgdb_cmd.arg(canonical_manifest_path);
+
+    debug!("locking manifest with command: {pkgdb_cmd:?}");
     let output = pkgdb_cmd.output().map_err(EnvironmentError2::PkgDbCall)?;
     // If command fails, try to parse stdout as a PkgDbError
     if !output.status.success() {

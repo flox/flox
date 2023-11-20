@@ -15,11 +15,7 @@ pub struct RemoteEnvironment;
 impl Environment for RemoteEnvironment {
     /// Build the environment and create a result link as gc-root
     #[allow(unused)]
-    async fn build(
-        &mut self,
-        nix: &NixCommandLine,
-        system: &System,
-    ) -> Result<(), EnvironmentError2> {
+    async fn build(&mut self, flox: &Flox) -> Result<(), EnvironmentError2> {
         todo!()
     }
 
@@ -28,8 +24,7 @@ impl Environment for RemoteEnvironment {
     async fn install(
         &mut self,
         packages: Vec<String>,
-        nix: &NixCommandLine,
-        system: System,
+        flox: &Flox,
     ) -> Result<InstallationAttempt, EnvironmentError2> {
         todo!()
     }
@@ -47,12 +42,7 @@ impl Environment for RemoteEnvironment {
 
     /// Atomically edit this environment, ensuring that it still builds
     #[allow(unused)]
-    async fn edit(
-        &mut self,
-        nix: &NixCommandLine,
-        system: System,
-        contents: String,
-    ) -> Result<(), EnvironmentError2> {
+    async fn edit(&mut self, flox: &Flox, contents: String) -> Result<(), EnvironmentError2> {
         todo!()
     }
 
@@ -71,11 +61,7 @@ impl Environment for RemoteEnvironment {
     }
 
     #[allow(unused)]
-    async fn activation_path(
-        &mut self,
-        flox: &Flox,
-        nix: &NixCommandLine,
-    ) -> Result<PathBuf, EnvironmentError2> {
+    async fn activation_path(&mut self, flox: &Flox) -> Result<PathBuf, EnvironmentError2> {
         todo!()
     }
 

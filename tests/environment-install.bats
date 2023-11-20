@@ -54,9 +54,9 @@ teardown() {
 
 @test "'flox install' edits manifest" {
   "$FLOX_CLI" init;
-  run "$FLOX_CLI" install foo;
+  run "$FLOX_CLI" install hello;
   assert_success;
-  run grep "foo = {}" "$PROJECT_DIR/.flox/env/manifest.toml";
+  run grep "hello = {}" "$PROJECT_DIR/.flox/env/manifest.toml";
   assert_success;
 }
 
@@ -74,10 +74,10 @@ teardown() {
 
 @test "'flox uninstall' edits manifest" {
   "$FLOX_CLI" init;
-  run "$FLOX_CLI" install foo;
+  run "$FLOX_CLI" install hello;
   assert_success;
-  run "$FLOX_CLI" uninstall foo;
-  run grep "foo = {}" "$PROJECT_DIR/.flox/env/manifest.toml";
+  run "$FLOX_CLI" uninstall hello;
+  run grep "^hello = {}" "$PROJECT_DIR/.flox/env/manifest.toml";
   assert_failure;
 }
 

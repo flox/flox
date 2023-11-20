@@ -29,15 +29,6 @@ pub struct PackageInsertion {
 }
 
 /// Insert package names into the `[install]` table of a manifest.
-///
-/// Packages are always inserted as "tables", meaning a package `foo` will appear
-/// as `[install.foo]`. The form you may be more familiar with:
-/// ```toml
-/// [install]
-/// foo = {}
-/// ```
-/// is called an "inline table" and the `toml_edit` library has middling support
-/// for entries in this form.
 pub fn insert_packages(
     manifest_contents: &str,
     pkgs: impl Iterator<Item = String>,
@@ -116,10 +107,8 @@ pub fn remove_packages(
     Ok(toml)
 }
 
-// FIXME: will be used in uninstall
 /// Check whether a TOML document contains a line declaring that the provided package
 /// should be installed.
-#[allow(unused)]
 pub fn contains_package(toml: &Document, pkg_name: &str) -> Result<bool, TomlEditError> {
     if let Some(installs) = toml.get("install") {
         if let Item::Table(installs_table) = installs {
