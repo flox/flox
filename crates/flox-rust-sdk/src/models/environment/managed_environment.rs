@@ -383,7 +383,7 @@ impl ManagedEnvironment {
                     // from another environment.
                     floxmeta
                         .git
-                        .fetch_branch("origin", &remote_branch)
+                        .fetch_ref("origin", &format!("+{0}:{0}", remote_branch))
                         .map_err(|err| match err {
                             GitCommandError::BadExit(_, _, _) => {
                                 ManagedEnvironmentError::Fetch(err)
