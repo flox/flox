@@ -648,6 +648,9 @@ enum PullSelect {
     Existing {
         /// Directory containing a managed environment to pull
         dir: Option<PathBuf>,
+        /// forceably overwrite the local copy of the environment
+        #[bpaf(long, short)]
+        force: bool,
     },
 }
 
@@ -655,6 +658,7 @@ impl Default for PullSelect {
     fn default() -> Self {
         PullSelect::Existing {
             dir: Default::default(),
+            force: Default::default(),
         }
     }
 }
@@ -664,11 +668,6 @@ impl Default for PullSelect {
 pub struct Pull {
     #[bpaf(external(pull_select), fallback(Default::default()))]
     pull_select: PullSelect,
-
-    /// forceably overwrite the local copy of the environment
-    #[allow(dead_code)] // not yet handled in impl
-    #[bpaf(long, short)]
-    force: bool,
 }
 
 impl Pull {
@@ -682,7 +681,7 @@ impl Pull {
 
                 Self::pull_new_environment(&flox, dir.join(DOT_FLOX), remote)?;
             },
-            PullSelect::Existing { dir } => {
+            PullSelect::Existing { dir, force } => {
                 let dir = dir.unwrap_or_else(|| std::env::current_dir().unwrap());
 
                 debug!("Resolved user intent: pull changes for environment found in {dir:?}");
@@ -696,7 +695,7 @@ impl Pull {
                     }
                 };
 
-                Self::pull_existing_environment(&flox, dir.join(DOT_FLOX), pointer)?;
+                Self::pull_existing_environment(&flox, dir.join(DOT_FLOX), pointer, force)?;
             },
         }
 
@@ -711,10 +710,11 @@ impl Pull {
         flox: &Flox,
         dot_flox_path: PathBuf,
         pointer: ManagedPointer,
+        force: bool,
     ) -> Result<()> {
         let mut env = ManagedEnvironment::open(flox, pointer, dot_flox_path)
             .context("Could not open environment")?;
-        env.pull(false).context("Could not pull environment")?;
+        env.pull(force).context("Could not pull environment")?;
 
         Ok(())
     }
