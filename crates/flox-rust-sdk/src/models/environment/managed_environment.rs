@@ -617,6 +617,14 @@ impl ManagedEnvironment {
         )
         .unwrap();
 
+        write_pointer_lockfile(
+            &flox.system,
+            &pointer,
+            &temp_floxmeta,
+            path_environment.path.join(GENERATION_LOCK_FILENAME),
+        )
+        .unwrap();
+
         let env = ManagedEnvironment::open(flox, pointer, path_environment.path).unwrap();
 
         Ok(env)
