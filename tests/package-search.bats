@@ -249,3 +249,24 @@ setup_file() {
   assert [ "$MATCH_NAME" -lt "$MATCH" ];
 
 }
+
+# ---------------------------------------------------------------------------- #
+
+@test "'flox search' works in project without manifest or lockfile" {
+  rm -f "$PROJECT_DIR/.flox/manifest.toml";
+  run --separate-stderr "$FLOX_CLI" search hello;
+  assert_success;
+  n_lines="${#lines[@]}";
+  assert_equal "$n_lines" 10; # search results from global manifest registry
+}
+
+
+# ---------------------------------------------------------------------------- #
+
+@test "'flox search' works outside of projects" {
+  rm -rf "$PROJECT_DIR/.flox";
+  run --separate-stderr "$FLOX_CLI" search hello;
+  assert_success;
+  n_lines="${#lines[@]}";
+  assert_equal "$n_lines" 10; # search results from global manifest registry
+}
