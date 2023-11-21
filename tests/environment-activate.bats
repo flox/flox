@@ -87,11 +87,32 @@ env_is_activated() {
 }
 
 # ---------------------------------------------------------------------------- #
+
 @test "activate modifies prompt and puts package in path" {
   run $FLOX_CLI install -d "$PROJECT_DIR" hello;
   assert_success
   assert_output --partial "✅ 'hello' installed to environment"
-  SHELL=bash run expect -d "$TESTS_DIR/activate/activate.exp" "$PROJECT_DIR";
+  SHELL=bash run expect -d "$TESTS_DIR/activate/hello.exp" "$PROJECT_DIR";
+  assert_success;
+}
+
+
+# ---------------------------------------------------------------------------- #
+
+@test "activate runs hook" {
+  SHELL=bash run expect -d "$TESTS_DIR/activate/hook.exp" "$PROJECT_DIR";
+  assert_success;
+}
+
+
+# ---------------------------------------------------------------------------- #
+
+@test "activate respects ~/.bashrc" {
+  echo "alias test_alias='echo testing'" > "$HOME/.bashrc";
+  # TODO: flox will set HOME if it doesn't match the home of the user with
+  # current euid. I'm not sure if we should change that, but for now just set
+  # USER to REAL_USER.
+  SHELL=bash USER="$REAL_USER" run expect -d "$TESTS_DIR/activate/bashrc.exp" "$PROJECT_DIR";
   assert_success;
 }
 
