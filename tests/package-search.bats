@@ -280,7 +280,7 @@ setup_file() {
 
 # ---------------------------------------------------------------------------- #
 
-@test "'flox search' uses locked revision when available" {
+@test "'flox show' uses locked revision when available" {
   rm -rf "$PROJECT_DIR/.flox";
   mkdir -p "$PROJECT_DIR/.flox";
   {
