@@ -24,11 +24,9 @@
     (builtins.map tryGetDrv
       (builtins.attrValues lockfileContents.packages.${system}));
 
-  mkEnv = ./.;
-
   profiledScripts = pkgs.runCommand "flox-profile.d-scripts" {} ''
     mkdir -p $out/etc/profile.d
-    cp -R ${mkEnv}/profile.d/* $out/etc/profile.d/
+    cp -R ${./profile.d}/* $out/etc/profile.d/
   '';
 
   activateScript = pkgs.writeTextFile {
