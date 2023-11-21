@@ -9,6 +9,7 @@
   lockfileContents = builtins.fromJSON (builtins.readFile lockfilePath);
   nixpkgsFlake = builtins.getFlake lockfileContents.registry.inputs.nixpkgs.url;
   pkgs = nixpkgsFlake.legacyPackages.${system};
+  lib = nixpkgsFlake.lib;
   # Convert manifest elements to derivations.
   tryGetDrv = package: let
     flake = builtins.getFlake package.input.url;
@@ -28,9 +29,20 @@
     destination = "/activate";
     # TODO don't hardcode 0100_common-paths.sh
     text = ''
+      # We use --rcfile to activate using bash which skips sourcing ~/.bashrc,
+      # so source that here.
+      if [ -f ~/.bashrc ]
+      then
+          source ~/.bashrc
+      fi
+
       . ${./set-prompt.sh}
       . ${./profile.d/0100_common-paths.sh}
       . ${./source-profiles.sh}
+
+      ${lib.optionalString (lockfileContents ? manifest.hook.script) ''
+        ${lockfileContents.manifest.hook.script}
+      ''}
     '';
   };
 in

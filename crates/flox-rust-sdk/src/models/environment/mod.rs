@@ -364,7 +364,7 @@ pub fn lock_manifest(
         .map_err(EnvironmentError2::OpenManifest)?;
     let mut pkgdb_cmd = Command::new(pkgdb);
     pkgdb_cmd
-        .args(["manifest", "lock"])
+        .args(["manifest", "lock", "--ga-registry"])
         .arg(canonical_manifest_path);
     if let Some(lf_path) = existing_lockfile_path {
         let canonical_lockfile_path = lf_path
