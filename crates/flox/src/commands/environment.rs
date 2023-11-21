@@ -8,7 +8,7 @@ use std::process::Command;
 use anyhow::{anyhow, bail, Context, Result};
 use bpaf::Bpaf;
 use crossterm::{cursor, QueueableCommand};
-use flox_rust_sdk::flox::{EnvironmentName, EnvironmentOwner, EnvironmentRef, Flox, GitHubClient};
+use flox_rust_sdk::flox::{Auth0Client, EnvironmentName, EnvironmentOwner, EnvironmentRef, Flox};
 use flox_rust_sdk::models::environment::managed_environment::{
     ManagedEnvironment,
     ManagedEnvironmentError,
@@ -570,8 +570,10 @@ impl Push {
                 let owner = if let Some(owner) = self.owner {
                     owner
                 } else {
-                    let client = GitHubClient::new(
-                        "https://api.github.com".to_string(),
+                    let base_url = std::env::var("FLOX_OAUTH_BASE_URL")
+                        .unwrap_or(env!("OAUTH_BASE_URL").to_string());
+                    let client = Auth0Client::new(
+                        base_url,
                         flox.floxhub_token.clone().context("Need to be logged in")?,
                     );
                     let user_name = client

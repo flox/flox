@@ -553,26 +553,32 @@ impl Flox {
     }
 }
 
+/// Requires login with auth0 with "openid" and "profile" scopes
+/// https://auth0.com/docs/scopes/current/oidc-scopes
+/// See also: `authenticate` in `flox/src/commands/auth.rs` where we set the scopes
 #[derive(Debug, Serialize, Deserialize)]
-struct GitHubUser {
-    login: String,
+struct Auth0User {
+    /// full name of the user
+    name: String,
+    /// nickname of the user (e.g. github username)
+    nickname: String,
 }
 
-pub struct GitHubClient {
+pub struct Auth0Client {
     base_url: String,
     oauth_token: String,
 }
 
-impl GitHubClient {
+impl Auth0Client {
     pub fn new(base_url: String, oauth_token: String) -> Self {
-        GitHubClient {
+        Auth0Client {
             base_url,
             oauth_token,
         }
     }
 
     pub async fn get_username(&self) -> Result<String, reqwest::Error> {
-        let url = format!("{}/user", self.base_url);
+        let url = format!("{}/userinfo", self.base_url);
         let client = reqwest::Client::new();
         let request = client
             .get(url)
@@ -582,8 +588,8 @@ impl GitHubClient {
         let response = request.send().await?;
 
         if response.status().is_success() {
-            let user: GitHubUser = response.json().await?;
-            Ok(user.login)
+            let user: Auth0User = response.json().await?;
+            Ok(user.nickname)
         } else {
             Err(response.error_for_status().unwrap_err())
         }
@@ -643,17 +649,18 @@ pub mod tests {
 
     use mockito;
 
-    use crate::flox::GitHubClient;
+    use crate::flox::Auth0Client;
 
     #[tokio::test]
     async fn test_get_username() {
         let mock_response = serde_json::json!({
-            "login": "exampleuser"
+            "nickname": "exampleuser",
+            "name": "Example User",
         });
         let mut server = mockito::Server::new();
         let mock_server_url = server.url();
         let mock_server = server
-            .mock("GET", "/user")
+            .mock("GET", "/userinfo")
             .match_header(AUTHORIZATION.as_str(), "Bearer your_oauth_token")
             .match_header(USER_AGENT.as_str(), "flox cli")
             .with_status(200)
@@ -661,7 +668,7 @@ pub mod tests {
             .with_body(mock_response.to_string())
             .create();
 
-        let github_client = GitHubClient::new(mock_server_url, "your_oauth_token".to_string());
+        let github_client = Auth0Client::new(mock_server_url, "your_oauth_token".to_string());
 
         let username = github_client.get_username().await.unwrap();
         assert_eq!(username, "exampleuser".to_string());
