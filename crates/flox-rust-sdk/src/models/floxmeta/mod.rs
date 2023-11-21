@@ -272,7 +272,7 @@ impl<'flox> Floxmeta<'flox, GitSandBox> {
             .map_err(TransactionCommitError::GitCommit)?;
         self.access
             .git()
-            .push("origin")
+            .push("origin", false)
             .map_err(TransactionCommitError::GitPush)?;
 
         Ok(Floxmeta {

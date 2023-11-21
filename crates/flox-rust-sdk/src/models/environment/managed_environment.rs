@@ -383,7 +383,7 @@ impl ManagedEnvironment {
                     // from another environment.
                     floxmeta
                         .git
-                        .fetch_branch("origin", &remote_branch)
+                        .fetch_ref("origin", &format!("+{0}:{0}", remote_branch))
                         .map_err(|err| match err {
                             GitCommandError::BadExit(_, _, _) => {
                                 ManagedEnvironmentError::Fetch(err)
@@ -403,9 +403,11 @@ impl ManagedEnvironment {
             // There's no lockfile, so write a new one with whatever remote
             // branch is after fetching.
             None => {
+                let remote_branch = remote_branch_name(&flox.system, pointer);
+
                 floxmeta
                     .git
-                    .fetch_branch("origin", &remote_branch_name(&flox.system, pointer))
+                    .fetch_ref("origin", &format!("+{0}:{0}", remote_branch))
                     .map_err(ManagedEnvironmentError::Fetch)?;
                 write_pointer_lockfile(&flox.system, pointer, floxmeta, lock_path)?
             },
@@ -558,6 +560,7 @@ impl ManagedEnvironment {
         path_environment: PathEnvironment<Original>,
         owner: EnvironmentOwner,
         temp_path: &Path,
+        force: bool,
     ) -> Result<Self, ManagedEnvironmentError> {
         let pointer = ManagedPointer::new(owner, path_environment.name());
         let temp_floxmeta_path = temp_path.join("floxmeta");
@@ -597,11 +600,30 @@ impl ManagedEnvironment {
                 &format!("{}/{}/floxmeta", flox.floxhub_host, &pointer.owner),
             )
             .unwrap();
-        temp_floxmeta.git.push("origin").unwrap();
+
+        match temp_floxmeta.git.push("origin", force) {
+            Err(GitCommandError::BadExit(1, details, _))
+                if details
+                    .lines()
+                    .any(|s| s.split('\t').last() == Some("[rejected] (fetch first)")) =>
+            {
+                Err(ManagedEnvironmentError::Diverged)?
+            },
+            Err(e) => Err(ManagedEnvironmentError::Push(e))?,
+            _ => {},
+        }
 
         fs::write(
             path_environment.path.join("env.json"),
             serde_json::to_string(&pointer).unwrap(),
+        )
+        .unwrap();
+
+        write_pointer_lockfile(
+            &flox.system,
+            &pointer,
+            &temp_floxmeta,
+            path_environment.path.join(GENERATION_LOCK_FILENAME),
         )
         .unwrap();
 
@@ -610,7 +632,7 @@ impl ManagedEnvironment {
         Ok(env)
     }
 
-    pub fn push(&mut self) -> Result<(), ManagedEnvironmentError> {
+    pub fn push(&mut self, force: bool) -> Result<(), ManagedEnvironmentError> {
         let project_branch = branch_name(&self.system, &self.pointer, &self.path)?;
         let sync_branch = remote_branch_name(&self.system, &self.pointer);
 
@@ -621,30 +643,35 @@ impl ManagedEnvironment {
             .unwrap();
 
         // Check whether we can fast-forward merge the remote branch into the local branch
-        // In not the environment has diverged.
-        let consistent_history = self
-            .floxmeta
-            .git
-            .branch_contains_commit("FETCH_HEAD", &project_branch)
-            .map_err(ManagedEnvironmentError::Git)?;
+        // If "not" the environment has diverged.
+        // if `--force` flag is set we skip this check
+        if !force {
+            let consistent_history = self
+                .floxmeta
+                .git
+                .branch_contains_commit("FETCH_HEAD", &project_branch)
+                .map_err(ManagedEnvironmentError::Git)?;
 
-        if !consistent_history {
-            Err(ManagedEnvironmentError::Diverged)?;
+            if !consistent_history {
+                Err(ManagedEnvironmentError::Diverged)?;
+            }
         }
-
         self.floxmeta
             .git
-            .push_ref("origin", format!("{}:{}", project_branch, sync_branch))
+            .push_ref(
+                "origin",
+                format!("{}:{}", project_branch, sync_branch),
+                force,
+            )
             .map_err(ManagedEnvironmentError::Push)?;
 
         // update local envorinment branch, should be fast-forward and a noop if the branches didn't diverge
-        self.pull()?;
+        self.pull(force)?;
 
         Ok(())
     }
 
-    #[allow(unused)]
-    pub fn pull(&mut self) -> Result<(), ManagedEnvironmentError> {
+    pub fn pull(&mut self, force: bool) -> Result<(), ManagedEnvironmentError> {
         // Fetch the remote branch into FETCH_HEAD
         self.floxmeta
             .git
@@ -656,16 +683,19 @@ impl ManagedEnvironment {
 
         // Check whether we can fast-forward merge the remote branch into the local branch,
         // if not the environment has diverged.
-        let consistent_history = self
-            .floxmeta
-            .git
-            .branch_contains_commit(
-                &remote_branch_name(&self.system, &self.pointer),
-                "FETCH_HEAD",
-            )
-            .map_err(ManagedEnvironmentError::Git)?;
-        if !consistent_history {
-            Err(ManagedEnvironmentError::Diverged)?;
+        // if `--force` flag is set we skip this check
+        if !force {
+            let consistent_history = self
+                .floxmeta
+                .git
+                .branch_contains_commit(
+                    &remote_branch_name(&self.system, &self.pointer),
+                    "FETCH_HEAD",
+                )
+                .map_err(ManagedEnvironmentError::Git)?;
+            if !consistent_history {
+                Err(ManagedEnvironmentError::Diverged)?;
+            }
         }
 
         // try fast forward merge local env branch into project branch
@@ -677,6 +707,7 @@ impl ManagedEnvironment {
                     "FETCH_HEAD:refs/heads/{sync_branch}",
                     sync_branch = remote_branch_name(&self.system, &self.pointer)
                 ),
+                force, // Set the force parameter to false or true based on your requirement
             )
             .unwrap();
 
