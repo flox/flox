@@ -186,7 +186,7 @@ impl GitCommandProvider {
     }
 
     fn run_command(command: &mut Command) -> Result<OsString, GitCommandError> {
-        debug!(target: "posix", "{:?}", command);
+        debug!("{:?}", command);
         let out = command.output()?;
 
         if !out.status.success() {

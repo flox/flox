@@ -76,7 +76,6 @@ pub fn remove_packages(
     manifest_contents: &str,
     pkgs: &[String],
 ) -> Result<Document, TomlEditError> {
-    println!("MANIFEST CONTENTS BEFORE: {}", manifest_contents);
     debug!("attempting to remove packages from the manifest");
     let mut toml = manifest_contents
         .parse::<Document>()
@@ -105,7 +104,6 @@ pub fn remove_packages(
         }
     }
 
-    println!("MANIFEST CONTENTS AFTER: {}", toml);
     Ok(toml)
 }
 
