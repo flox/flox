@@ -7,17 +7,25 @@ use chrono::offset::Utc;
 use chrono::{DateTime, Duration};
 use flox_rust_sdk::flox::{Auth0Client, Flox};
 use log::{debug, info};
-use oauth2::basic::BasicClient;
+use oauth2::basic::{
+    BasicErrorResponse,
+    BasicRevocationErrorResponse,
+    BasicTokenIntrospectionResponse,
+    BasicTokenType,
+};
 use oauth2::{
     AuthUrl,
+    Client,
     ClientId,
     DeviceAuthorizationUrl,
     Scope,
     StandardDeviceAuthorizationResponse,
+    StandardRevocableToken,
+    StandardTokenResponse,
     TokenResponse,
     TokenUrl,
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::commands::general::update_config;
 use crate::config::Config;
@@ -36,7 +44,7 @@ pub struct Credential {
 /// Environment variables can be used to override the compile time constants during testing.
 /// For use in production, the compile time constants should be used.
 /// For multitenency, we will integrate with the config subsystem later.
-fn create_oauth_client() -> Result<BasicClient> {
+fn create_oauth_client() -> Result<FloxTokenClient> {
     let auth_url = AuthUrl::new(
         std::env::var("FLOX_OAUTH_AUTH_URL").unwrap_or(env!("OAUTH_AUTH_URL").to_string()),
     )
@@ -53,12 +61,21 @@ fn create_oauth_client() -> Result<BasicClient> {
     let client_id = ClientId::new(
         std::env::var("FLOX_OAUTH_CLIENT_ID").unwrap_or(env!("OAUTH_CLIENT_ID").to_string()),
     );
-    let client = BasicClient::new(client_id, None, auth_url, Some(token_url))
+    let client = FloxTokenClient::new(client_id, None, auth_url, Some(token_url))
         .set_device_authorization_url(device_auth_url);
     Ok(client)
 }
 
-pub async fn authorize(client: BasicClient) -> Result<Credential> {
+pub type FloxTokenClient = Client<
+    BasicErrorResponse,
+    StandardTokenResponse<ExtraFields, BasicTokenType>,
+    BasicTokenType,
+    BasicTokenIntrospectionResponse,
+    StandardRevocableToken,
+    BasicRevocationErrorResponse,
+>;
+
+pub async fn authorize(client: FloxTokenClient) -> Result<Credential> {
     let details: StandardDeviceAuthorizationResponse = client
         .exchange_device_code()
         .unwrap()
@@ -84,13 +101,23 @@ pub async fn authorize(client: BasicClient) -> Result<Credential> {
             Some(TOKEN_INPUT_TIMEOUT),
         )
         .await
-        .context("Could not authorize via oauth")?;
+        .context("Could not authorize via oauth")
+        .unwrap();
+
+    dbg!(token_result.extra_fields().id_token.secret());
 
     Ok(Credential {
         token: token_result.access_token().secret().to_string(),
         expiry: calculate_expiry(token_result.expires_in().unwrap().as_secs() as i64),
     })
 }
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct ExtraFields {
+    id_token: oauth2::AccessToken,
+}
+impl oauth2::ExtraDeviceAuthorizationFields for ExtraFields {}
+impl oauth2::ExtraTokenFields for ExtraFields {}
 
 fn calculate_expiry(expires_in: i64) -> String {
     let expires_in = Duration::seconds(expires_in);
