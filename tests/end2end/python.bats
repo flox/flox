@@ -9,7 +9,7 @@
 
 load test_support.bash;
 
-# bats file_tags=python
+# bats file_tags=end2end,python
 
 # ---------------------------------------------------------------------------- #
 
