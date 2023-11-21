@@ -15,20 +15,26 @@ load test_support.bash
 # Helpers for project based tests.
 
 project_setup() {
-  export PROJECT_DIR="${BATS_TEST_TMPDIR?}/test"
-  rm -rf "$PROJECT_DIR"
-  mkdir -p "$PROJECT_DIR"
-  pushd "$PROJECT_DIR" >/dev/null || return
+  export PROJECT_DIR="${BATS_TEST_TMPDIR?}/test";
+  rm -rf "$PROJECT_DIR";
+  mkdir -p "$PROJECT_DIR";
+  pushd "$PROJECT_DIR" >/dev/null||return;
   run "$FLOX_CLI" init;
   assert_success;
   unset output;
+
+  if [[ -z "${PKGDB_BIN}" ]]; then
+    echo "You must set \$PKGDB_BIN to run these tests" >&2;
+    exit 1;
+  fi
 }
 
 project_teardown() {
   popd >/dev/null || return
   rm -rf "${PROJECT_DIR?}"
-  unset PROJECT_DIR
+  unset PROJECT_DIR;
 }
+
 
 # ---------------------------------------------------------------------------- #
 
@@ -36,6 +42,7 @@ setup() {
   common_test_setup;
   project_setup;
 }
+
 teardown() {
   project_teardown;
   common_test_teardown;
@@ -43,7 +50,6 @@ teardown() {
 
 setup_file() {
   export SHOW_HINT="Use \`flox show {package}\` to see available versions"
-
   # Separator character for ambiguous package sources
   export SEP=":";
 }
@@ -270,3 +276,42 @@ setup_file() {
   n_lines="${#lines[@]}";
   assert_equal "$n_lines" 10; # search results from global manifest registry
 }
+
+
+# ---------------------------------------------------------------------------- #
+
+@test "'flox search' uses locked revision when available" {
+  rm -rf "$PROJECT_DIR/.flox";
+  mkdir -p "$PROJECT_DIR/.flox";
+  {
+    echo 'options.systems = ["x86_64-linux"]';
+    echo 'install.nodejs = {}';
+  } > "$PROJECT_DIR/.flox/manifest.toml";
+
+  # Force lockfile to pin a specific revision of `nixpkgs'
+  run --separate-stderr sh -c                                                  \
+   "_PKGDB_GA_REGISTRY_REF_OR_REV='9faf91e6d0b7743d41cce3b63a8e5c733dc696a3'   \
+    $PKGDB_BIN manifest lock --ga-registry '$PROJECT_DIR/.flox/manifest.toml'  \
+                             > '$PROJECT_DIR/.flox/manifest.lock';";
+  assert_success;
+  unset output;
+
+  # Ensure the locked revision is what we expect.
+  run --separate-stderr jq -r '.registry.inputs.nixpkgs.from.rev'  \
+                              "$PROJECT_DIR/.flox/manifest.lock";
+  assert_success;
+  assert_output "9faf91e6d0b7743d41cce3b63a8e5c733dc696a3";
+  unset output;
+
+  # Search for a package that's not in the locked revision
+  run --separate-stderr sh -c "$FLOX_CLI show nodejs|tail -n1";
+  assert_success;
+  assert_output '    nodejs - nodejs@18.16.0';
+}
+
+
+# ---------------------------------------------------------------------------- #
+#
+#
+#
+# ============================================================================ #
