@@ -109,3 +109,11 @@ jobs:
             --extra-experimental-features "nix-command flakes" \
             --no-update-lock-file \
             '.#flox-tests'
+
+    - name: "Bats end2end Tests"
+      run: |
+        git clean -xfd
+        nix run \
+            --extra-experimental-features "nix-command flakes" \
+            --no-update-lock-file \
+            '.#flox-tests-end2end'

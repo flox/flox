@@ -24,6 +24,7 @@
   unixtools,
   which,
   writeShellScriptBin,
+  testsDir ? "/tests",
 }: let
   batsWith = bats.withLibraries (p: [
     p.bats-assert
@@ -69,7 +70,7 @@ in
 
     Available options:
         -F, --flox          Path to flox binary (Default: flox)
-        -T, --tests         Path to folder of tests (Default: $PWD/tests)
+        -T, --tests         Path to folder of tests (Default: $PWD${testsDir})
         -W, --watch         Run tests in a continuous watch mode
         -h, --help          Prints help information
     EOF
@@ -115,7 +116,7 @@ in
         export NIX_BIN="${flox-bash}/libexec/flox/nix";
 
         # Default flag values
-        : "''${TESTS_DIR:=$PWD/tests}";
+        : "''${TESTS_DIR:=$PWD${testsDir}}";
         export TESTS_DIR FLOX_CLI;
 
         if [[ "''${#_TESTS[@]}" -lt 1 ]]; then
