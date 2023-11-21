@@ -114,6 +114,7 @@
     in {
       inherit
         (pkgsFor)
+        env-builder
         flox
         builtfilter-rs
         flox-bash
