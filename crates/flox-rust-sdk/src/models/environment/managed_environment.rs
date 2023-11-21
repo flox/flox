@@ -100,8 +100,7 @@ impl Environment for ManagedEnvironment {
     async fn uninstall(
         &mut self,
         packages: Vec<String>,
-        nix: &NixCommandLine,
-        system: System,
+        flox: &Flox,
     ) -> Result<String, EnvironmentError2> {
         todo!()
     }

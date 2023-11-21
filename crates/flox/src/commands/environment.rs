@@ -422,10 +422,7 @@ impl Uninstall {
         let concrete_environment = self.environment.to_concrete_environment(&flox)?;
         let description = environment_description(&concrete_environment);
         let mut environment = concrete_environment.into_dyn_environment();
-        let nix = flox.nix::<NixCommandLine>(vec![]);
-        let _ = environment
-            .uninstall(self.packages.clone(), &nix, flox.system.clone())
-            .await?;
+        let _ = environment.uninstall(self.packages.clone(), &flox).await?;
 
         // Note, you need two spaces between this emoji and the package name
         // otherwise they appear right next to each other.

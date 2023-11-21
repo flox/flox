@@ -178,6 +178,7 @@ impl<S: TransactionState> PathEnvironment<S> {
 impl PathEnvironment<Temporary> {
     /// Updates the environment manifest with the provided contents
     pub fn update_manifest(&mut self, contents: &impl AsRef<str>) -> Result<(), EnvironmentError2> {
+        debug!("writing new manifest to {}", self.manifest_path().display());
         let mut manifest_file = std::fs::OpenOptions::new()
             .write(true)
             .truncate(true)
@@ -258,18 +259,16 @@ where
         flox: &Flox,
     ) -> Result<InstallationAttempt, EnvironmentError2> {
         let current_manifest_contents = self.manifest_content()?;
-        let installation = insert_packages(&current_manifest_contents, packages.iter().cloned())
-            .map(|insertion| InstallationAttempt {
-                new_manifest: insertion.new_toml.map(|toml| toml.to_string()),
-                already_installed: insertion.already_installed,
+        let installation =
+            insert_packages(&current_manifest_contents, &packages).map(|insertion| {
+                InstallationAttempt {
+                    new_manifest: insertion.new_toml.map(|toml| toml.to_string()),
+                    already_installed: insertion.already_installed,
+                }
             })?;
         if let Some(ref new_manifest) = installation.new_manifest {
             self.transact_with_manifest_contents(new_manifest, flox)
                 .await?;
-            let manifest_path = self.manifest_path();
-            debug!("writing new manifest to {}", manifest_path.display());
-            std::fs::write(manifest_path, new_manifest)
-                .map_err(EnvironmentError2::UpdateManifest)?;
         }
         Ok(installation)
     }
@@ -282,16 +281,12 @@ where
     async fn uninstall(
         &mut self,
         packages: Vec<String>,
-        _nix: &NixCommandLine,
-        _system: System,
+        flox: &Flox,
     ) -> Result<String, EnvironmentError2> {
         let current_manifest_contents = self.manifest_content()?;
-        let toml = remove_packages(&current_manifest_contents, packages.iter().cloned())?;
-        // TODO: enable transactions once build is re-implemented
-        // self.transact_with_manifest_contents(toml.to_string(), nix, system).await?;
-        debug!("writing new manifest to {:?}", self.manifest_path());
-        std::fs::write(self.manifest_path(), toml.to_string())
-            .map_err(EnvironmentError2::UpdateManifest)?;
+        let toml = remove_packages(&current_manifest_contents, &packages)?;
+        self.transact_with_manifest_contents(toml.to_string(), flox)
+            .await?;
         Ok(toml.to_string())
     }
 
@@ -402,9 +397,13 @@ impl<S: TransactionState> PathEnvironment<S> {
         manifest_contents: impl AsRef<str>,
         flox: &Flox,
     ) -> Result<(), EnvironmentError2> {
+        debug!("transaction: making temporary environment");
         let mut temp_env = self.make_temporary()?;
+        debug!("transaction: updating manifest");
         temp_env.update_manifest(&manifest_contents)?;
+        debug!("transaction: building environment");
         temp_env.build(flox).await?;
+        debug!("transaction: replacing environment");
         self.replace_with(temp_env)?;
         Ok(())
     }

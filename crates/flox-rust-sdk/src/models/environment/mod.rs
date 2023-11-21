@@ -73,8 +73,7 @@ pub trait Environment {
     async fn uninstall(
         &mut self,
         packages: Vec<String>,
-        nix: &NixCommandLine,
-        system: System,
+        flox: &Flox,
     ) -> Result<String, EnvironmentError2>;
 
     /// Atomically edit this environment, ensuring that it still builds
@@ -368,6 +367,14 @@ pub fn lock_manifest(
     let output = pkgdb_cmd.output().map_err(EnvironmentError2::PkgDbCall)?;
     // If command fails, try to parse stdout as a PkgDbError
     if !output.status.success() {
+        eprintln!(
+            "pkgdb stdout content: {}",
+            String::from_utf8_lossy(&output.stdout)
+        );
+        eprintln!(
+            "pkgdb stderr content: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
         if let Ok::<PkgDbError, _>(pkgdb_err) = serde_json::from_slice(&output.stdout) {
             Err(EnvironmentError2::LockManifest(pkgdb_err))
         } else {
