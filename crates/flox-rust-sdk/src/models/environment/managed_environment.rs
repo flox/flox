@@ -403,9 +403,11 @@ impl ManagedEnvironment {
             // There's no lockfile, so write a new one with whatever remote
             // branch is after fetching.
             None => {
+                let remote_branch = remote_branch_name(&flox.system, pointer);
+
                 floxmeta
                     .git
-                    .fetch_branch("origin", &remote_branch_name(&flox.system, pointer))
+                    .fetch_ref("origin", &format!("+{0}:{0}", remote_branch))
                     .map_err(ManagedEnvironmentError::Fetch)?;
                 write_pointer_lockfile(&flox.system, pointer, floxmeta, lock_path)?
             },
