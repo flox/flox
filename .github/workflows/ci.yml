@@ -30,7 +30,7 @@ jobs:
       uses: actions/checkout@v3
 
     - name: "Install flox"
-      uses: flox/install-flox-action@main
+      uses: flox/install-flox-action@github-token-in-nix-conf
       with:
         github-access-token: ${{ secrets.NIX_GIT_TOKEN }}
         substituter: s3://flox-store
@@ -74,7 +74,7 @@ jobs:
       uses: actions/checkout@v3
 
     - name: "Install flox"
-      uses: flox/install-flox-action@main
+      uses: flox/install-flox-action@github-token-in-nix-conf
       with:
         github-access-token: ${{ secrets.NIX_GIT_TOKEN }}
         substituter: s3://flox-store
