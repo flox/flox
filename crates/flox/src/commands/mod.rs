@@ -227,6 +227,7 @@ enum Commands {
     Additional(#[bpaf(external(additional_commands))] AdditionalCommands),
     Internal(#[bpaf(external(internal_commands))] InternalCommands),
 }
+///flox is a virtual environment and package manager all in one. With flox you create development environments that layer and replace dependencies just where it matters, making them portable across the full software lifecycle.
 
 /// Local Development Commands
 #[derive(Bpaf, Clone)]
@@ -234,13 +235,13 @@ enum LocalDevelopmentCommands {
     /// Create an environment in the current directory
     #[bpaf(command, long("create"))]
     Init(#[bpaf(external(environment::init))] environment::Init),
-    /// Activate environment
+    /// Enter the environment
     #[bpaf(command, long("develop"))]
     Activate(#[bpaf(external(environment::activate))] environment::Activate),
-    /// Search for packages to install
+    /// Search for system or library packages to install
     #[bpaf(command)]
     Search(#[bpaf(external(search::search))] search::Search),
-    /// Show detailed information about a single package
+    /// Show details about a single package
     #[bpaf(command, long("show"))]
     Show(#[bpaf(external(search::show))] search::Show),
     /// Install a package into an environment
@@ -249,7 +250,7 @@ enum LocalDevelopmentCommands {
     /// Uninstall installed packages from an environment
     #[bpaf(command, long("remove"), long("rm"))]
     Uninstall(#[bpaf(external(environment::uninstall))] environment::Uninstall),
-    /// Edit declarative environment configuration
+    /// Edit declarative environment configuration file
     #[bpaf(command)]
     Edit(#[bpaf(external(environment::edit))] environment::Edit),
     /// List packages installed in an environment
