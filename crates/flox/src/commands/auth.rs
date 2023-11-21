@@ -5,7 +5,7 @@ use anyhow::{Context, Result};
 use bpaf::Bpaf;
 use chrono::offset::Utc;
 use chrono::{DateTime, Duration};
-use flox_rust_sdk::flox::Flox;
+use flox_rust_sdk::flox::{Auth0Client, Flox};
 use log::{debug, info};
 use oauth2::basic::BasicClient;
 use oauth2::{
@@ -109,6 +109,10 @@ pub enum Auth2 {
     /// Logout from floxhub
     #[bpaf(command)]
     Logout,
+
+    /// Get current username
+    #[bpaf(command, hide)]
+    User,
 }
 
 impl Auth2 {
@@ -149,6 +153,16 @@ impl Auth2 {
 
                 info!("Logout successful");
 
+                Ok(())
+            },
+            Auth2::User => {
+                let token = config.flox.floxhub_token.context("You are not logged in")?;
+
+                let user = Auth0Client::new(env!("OAUTH_BASE_URL").to_string(), token)
+                    .get_username()
+                    .await
+                    .context("Could not get user details")?;
+                println!("{user}");
                 Ok(())
             },
         }
