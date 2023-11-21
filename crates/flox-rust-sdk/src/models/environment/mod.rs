@@ -21,7 +21,6 @@ use super::flox_package::FloxTriple;
 use super::manifest::TomlEditError;
 use super::pkgdb_errors::PkgDbError;
 use crate::flox::{EnvironmentRef, Flox};
-use crate::models::environment::path_environment::{LOCKFILE_FILENAME, MANIFEST_FILENAME};
 use crate::utils::copy_file_without_permissions;
 use crate::utils::errors::IoError;
 
@@ -30,8 +29,6 @@ pub mod path_environment;
 pub mod remote_environment;
 
 pub const CATALOG_JSON: &str = "catalog.json";
-pub const DOT_FLOX: &str = ".flox";
-pub const ENVIRONMENT_POINTER_FILENAME: &str = "env.json";
 // don't forget to update the man page
 pub const DEFAULT_KEEP_GENERATIONS: usize = 10;
 // don't forget to update the man page
@@ -40,8 +37,15 @@ pub const DEFAULT_MAX_AGE_DAYS: u32 = 90;
 // Path to the executable that builds environments
 const BUILD_ENV_BIN: &'_ str = env!("BUILD_ENV_BIN");
 const ENV_FROM_LOCKFILE_PATH: &str = env!("ENV_FROM_LOCKFILE_PATH");
-const GLOBAL_MANIFEST_TEMPLATE: &str = env!("GLOBAL_MANIFEST_TEMPLATE");
-const GLOBAL_MANIFEST_FILENAME: &str = "global-manifest.toml";
+
+pub const DOT_FLOX: &str = ".flox";
+pub const ENVIRONMENT_POINTER_FILENAME: &str = "env.json";
+pub const GLOBAL_MANIFEST_TEMPLATE: &str = env!("GLOBAL_MANIFEST_TEMPLATE");
+pub const GLOBAL_MANIFEST_FILENAME: &str = "global-manifest.toml";
+pub const MANIFEST_FILENAME: &str = "manifest.toml";
+pub const LOCKFILE_FILENAME: &str = "manifest.lock";
+pub const PATH_ENV_GCROOTS_DIR_NAME: &str = "run";
+pub const ENV_DIR_NAME: &str = "env";
 
 pub enum InstalledPackage {
     Catalog(FloxTriple, CatalogEntry),
@@ -401,25 +405,34 @@ pub fn global_manifest_path(flox: &Flox) -> PathBuf {
     path
 }
 
-/// Searches upwards for a `.flox` directory, returning the path if found.
-pub fn find_dot_flox_upwards(start_path: &Path) -> Result<Option<PathBuf>, EnvironmentError2> {
-    let mut path = start_path
+/// Searches for a `.flox` directory, returning the path if found.
+///
+/// The search first looks whether the current directory contains a `.flox` directory,
+/// and if not, it searches upwards, stopping at the root directory.
+pub fn find_dot_flox(initial_dir: &Path) -> Result<Option<PathBuf>, EnvironmentError2> {
+    let path = initial_dir
         .canonicalize()
         .map_err(|e| EnvironmentError2::CanonicalPath {
-            path: start_path.to_path_buf(),
+            path: initial_dir.to_path_buf(),
             source: e,
         })?;
-    while path != Path::new("/") {
-        if let Some(parent) = path.parent() {
-            let tentative_dot_flox = parent.join(DOT_FLOX);
-            if tentative_dot_flox.exists() && tentative_dot_flox.is_dir() {
-                return Ok(Some(tentative_dot_flox));
-            } else {
-                path = parent.to_path_buf();
-            }
-            continue;
+    let mut tentative_dot_flox = path.join(DOT_FLOX);
+    debug!(
+        "looking for .flox: starting_path={}",
+        tentative_dot_flox.display()
+    );
+    // Look for an immediate child named `.flox`
+    if tentative_dot_flox.exists() {
+        debug!(".flox found: path={}", tentative_dot_flox.display());
+        return Ok(Some(tentative_dot_flox));
+    }
+    // Search upwards for a .flox
+    while let Some(grandparent) = tentative_dot_flox.parent().and_then(|p| p.parent()) {
+        tentative_dot_flox = grandparent.join(DOT_FLOX);
+        if tentative_dot_flox.exists() {
+            debug!(".flox found: path={}", tentative_dot_flox.display());
+            return Ok(Some(tentative_dot_flox));
         }
-        break;
     }
     Ok(None)
 }
@@ -429,21 +442,32 @@ pub fn find_dot_flox_upwards(start_path: &Path) -> Result<Option<PathBuf>, Envir
 pub fn manifest_and_lockfile(
     current_dir: &Path,
 ) -> Result<(Option<PathBuf>, Option<PathBuf>), EnvironmentError2> {
-    if let Some(dot_flox_path) = find_dot_flox_upwards(current_dir)? {
-        let manifest_path = dot_flox_path.join(MANIFEST_FILENAME);
-        let lockfile_path = dot_flox_path.join(LOCKFILE_FILENAME);
-        let lockfile = if lockfile_path.exists() {
-            Some(lockfile_path)
-        } else {
-            None
-        };
+    debug!(
+        "locating manifest and lockfile: starting_path={}",
+        current_dir.display()
+    );
+    if let Some(dot_flox_path) = find_dot_flox(current_dir)? {
+        let manifest_path = dot_flox_path.join(ENV_DIR_NAME).join(MANIFEST_FILENAME);
+        debug!("checking manifest: path={}", manifest_path.display());
         let manifest = if manifest_path.exists() {
+            debug!("manifest exists");
             Some(manifest_path)
         } else {
+            debug!("manifest doesn't exist");
+            None
+        };
+        let lockfile_path = dot_flox_path.join(ENV_DIR_NAME).join(LOCKFILE_FILENAME);
+        debug!("checking lockfile: path={}", lockfile_path.display());
+        let lockfile = if lockfile_path.exists() {
+            debug!("lockfile exists");
+            Some(lockfile_path)
+        } else {
+            debug!("lockfile doesn't exist");
             None
         };
         return Ok((manifest, lockfile));
     }
+    debug!("didn't find manifest or lockfile");
     Ok((None, None))
 }
 
@@ -519,12 +543,23 @@ mod test {
     }
 
     #[test]
+    fn discovers_immediate_child_dot_flox() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let actual_dot_flox = temp_dir.path().join(DOT_FLOX);
+        std::fs::create_dir_all(&actual_dot_flox).unwrap();
+        let found_dot_flox = find_dot_flox(temp_dir.path())
+            .unwrap()
+            .expect("expected to find dot flox");
+        assert_eq!(found_dot_flox, actual_dot_flox.canonicalize().unwrap());
+    }
+
+    #[test]
     fn discovers_existing_upwards_dot_flox() {
         let temp_dir = tempfile::tempdir().unwrap();
         let actual_dot_flox = temp_dir.path().join(DOT_FLOX);
         let start_path = actual_dot_flox.join("foo").join("bar");
         std::fs::create_dir_all(&start_path).unwrap();
-        let found_dot_flox = find_dot_flox_upwards(&start_path)
+        let found_dot_flox = find_dot_flox(&start_path)
             .unwrap()
             .expect("expected to find dot flox");
         assert_eq!(found_dot_flox, actual_dot_flox.canonicalize().unwrap());
@@ -535,7 +570,7 @@ mod test {
         let temp_dir = tempfile::tempdir().unwrap();
         let actual_dot_flox = temp_dir.path().join(DOT_FLOX);
         std::fs::create_dir_all(&actual_dot_flox).unwrap();
-        let found_dot_flox = find_dot_flox_upwards(&actual_dot_flox)
+        let found_dot_flox = find_dot_flox(&actual_dot_flox)
             .unwrap()
             .expect("expected to find dot flox");
         assert_eq!(found_dot_flox, actual_dot_flox.canonicalize().unwrap());
@@ -546,7 +581,7 @@ mod test {
         let temp_dir = tempfile::tempdir().unwrap();
         let start_path = temp_dir.path().join("foo").join("bar");
         std::fs::create_dir_all(&start_path).unwrap();
-        let found_dot_flox = find_dot_flox_upwards(&start_path).unwrap();
+        let found_dot_flox = find_dot_flox(&start_path).unwrap();
         assert_eq!(found_dot_flox, None);
     }
 
@@ -554,7 +589,7 @@ mod test {
     fn error_when_discovering_dot_flox_in_nonexistent_directory() {
         let temp_dir = tempfile::tempdir().unwrap();
         let start_path = temp_dir.path().join("foo").join("bar");
-        let found_dot_flox = find_dot_flox_upwards(&start_path);
+        let found_dot_flox = find_dot_flox(&start_path);
         assert!(found_dot_flox.is_err());
     }
 }

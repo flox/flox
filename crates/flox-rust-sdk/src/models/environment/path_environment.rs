@@ -32,6 +32,8 @@ use super::{
     PathPointer,
     DOT_FLOX,
     ENVIRONMENT_POINTER_FILENAME,
+    LOCKFILE_FILENAME,
+    PATH_ENV_GCROOTS_DIR_NAME,
 };
 use crate::environment::NIX_BIN;
 use crate::flox::Flox;
@@ -40,16 +42,13 @@ use crate::models::environment::{
     lock_manifest,
     BUILD_ENV_BIN,
     CATALOG_JSON,
+    ENV_DIR_NAME,
     ENV_FROM_LOCKFILE_PATH,
+    MANIFEST_FILENAME,
 };
 use crate::models::environment_ref::EnvironmentName;
 use crate::models::manifest::{insert_packages, remove_packages};
 use crate::models::search::PKGDB_BIN;
-
-pub const MANIFEST_FILENAME: &str = "manifest.toml";
-pub const LOCKFILE_FILENAME: &str = "manifest.lock";
-pub const PATH_ENV_GCROOTS_DIR_NAME: &str = "run";
-pub const ENVIRONMENT_DIR_NAME: &str = "env";
 
 /// Struct representing a local environment
 ///
@@ -140,16 +139,36 @@ impl<S: TransactionState> PathEnvironment<S> {
             .path
             .with_file_name(format!("{}.tmp", self.name().as_ref()));
         if transaction_backup.exists() {
+            debug!(
+                "transaction backup exists: {}",
+                transaction_backup.display()
+            );
             return Err(EnvironmentError2::PriorTransaction(transaction_backup));
         }
+        debug!(
+            "backing up env: from={}, to={}",
+            self.path.display(),
+            transaction_backup.display()
+        );
         fs::rename(&self.path, &transaction_backup)
             .map_err(EnvironmentError2::BackupTransaction)?;
         // try to restore the backup if the move fails
+        debug!(
+            "replacing original env: from={}, to={}",
+            replacement.path.display(),
+            self.path.display()
+        );
         if let Err(err) = fs::rename(replacement.path, &self.path) {
+            debug!(
+                "failed to replace env, restoring backup: from={}, to={}",
+                transaction_backup.display(),
+                self.path.display(),
+            );
             fs::rename(transaction_backup, &self.path)
                 .map_err(EnvironmentError2::AbortTransaction)?;
             return Err(EnvironmentError2::Move(err));
         }
+        debug!("removing backup: path={}", transaction_backup.display());
         fs::remove_dir_all(transaction_backup).map_err(EnvironmentError2::RemoveBackup)?;
         Ok(())
     }
@@ -378,12 +397,12 @@ impl<S: TransactionState> PathEnvironment<S> {
 
     /// Path to the environment definition file
     pub fn manifest_path(&self) -> PathBuf {
-        self.path.join(ENVIRONMENT_DIR_NAME).join(MANIFEST_FILENAME)
+        self.path.join(ENV_DIR_NAME).join(MANIFEST_FILENAME)
     }
 
     /// Path to the lockfile. The path may not exist.
     pub fn lockfile_path(&self) -> PathBuf {
-        self.path.join(ENVIRONMENT_DIR_NAME).join(LOCKFILE_FILENAME)
+        self.path.join(ENV_DIR_NAME).join(LOCKFILE_FILENAME)
     }
 
     /// Path to the environment's catalog
@@ -425,7 +444,7 @@ impl PathEnvironment<Original> {
             Err(EnvironmentError2::DotFloxNotFound)?;
         }
 
-        let env_path = dot_flox.join(ENVIRONMENT_DIR_NAME);
+        let env_path = dot_flox.join(ENV_DIR_NAME);
         if !env_path.exists() {
             Err(EnvironmentError2::EnvNotFound)?;
         }
@@ -451,7 +470,7 @@ impl PathEnvironment<Original> {
             Ok(_) => Err(EnvironmentError2::EnvironmentExists)?,
         }
         let dot_flox_path = dot_flox_parent_path.as_ref().join(DOT_FLOX);
-        let env_dir = dot_flox_path.join(ENVIRONMENT_DIR_NAME);
+        let env_dir = dot_flox_path.join(ENV_DIR_NAME);
         debug!("creating env dir: {}", env_dir.display());
         std::fs::create_dir_all(&env_dir).map_err(EnvironmentError2::InitEnv)?;
         let pointer_content =
@@ -519,18 +538,14 @@ mod tests {
         assert_eq!(actual, expected);
 
         assert!(
-            actual
-                .path
-                .join(ENVIRONMENT_DIR_NAME)
-                .join("flake.nix")
-                .exists(),
+            actual.path.join(ENV_DIR_NAME).join("flake.nix").exists(),
             "flake does not exist"
         );
         assert!(actual.manifest_path().exists(), "manifest exists");
         assert!(
             actual
                 .path
-                .join(ENVIRONMENT_DIR_NAME)
+                .join(ENV_DIR_NAME)
                 .join("pkgs")
                 .join("default")
                 .join("default.nix")
