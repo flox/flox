@@ -12,6 +12,7 @@ use oauth2::{
     AuthUrl,
     ClientId,
     DeviceAuthorizationUrl,
+    Scope,
     StandardDeviceAuthorizationResponse,
     TokenResponse,
     TokenUrl,
@@ -59,11 +60,13 @@ fn create_oauth_client() -> Result<BasicClient> {
 
 pub async fn authorize(client: BasicClient) -> Result<Credential> {
     let details: StandardDeviceAuthorizationResponse = client
-                .exchange_device_code()
-                .unwrap()
-                // .add_scope(Scope::new("read".to_string()))
-                .request_async(oauth2::reqwest::async_http_client)
-                .await.context("Could not request device code")?;
+        .exchange_device_code()
+        .unwrap()
+        .add_scope(Scope::new("openid".to_string()))
+        .add_scope(Scope::new("profile".to_string()))
+        .request_async(oauth2::reqwest::async_http_client)
+        .await
+        .context("Could not request device code")?;
 
     debug!("Device code details: {details:#?}");
 
