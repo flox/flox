@@ -1,0 +1,40 @@
+# Activate a project environment using --dir and check an alias is loaded from
+# ~/.bashrc
+
+set dir [lindex $argv 0]
+set flox $env(FLOX_CLI)
+puts puts
+puts $env(HOME)
+
+set cmd "$flox activate --dir $dir"
+spawn $flox activate --dir $dir
+expect {
+    "Building environment..." {}
+    timeout {
+      puts stderr "Reached timeout running '$cmd'"
+      exit 1
+    }
+}
+set timeout 300
+expect {
+    -re "project.*\$" {}
+    timeout {
+      puts stderr "Reached timeout running '$cmd'"
+      exit 1
+    }
+}
+
+# activation is the only thing that should take very long so set a low timeout
+set timeout 1
+
+# check for alias
+send "type test_alias\n"
+expect {
+    "test_alias is aliased to `echo testing'" {}
+    timeout {
+      puts stderr "Reached timeout checking for test_alias"
+      exit 1
+    }
+}
+
+exit 0

@@ -84,9 +84,12 @@ function update_dummy_env() {
 
 
 # bats test_tags=push:h1
-@test "l1: push login: running flox push before user has login metadata prompts the user to login" {
+@test "h1: push login: running flox push before user has login metadata prompts the user to login" {
+  make_dummy_floxmeta "owner"
 
   unset FLOX_FLOXHUB_TOKEN; # logout, effectively
+
+  "$FLOX_CLI" config
 
   run "$FLOX_CLI" init
 
@@ -97,7 +100,7 @@ function update_dummy_env() {
 
 
 # bats test_tags=push:h2
-@test "l2: push login: running flox push before user has login metadata prompts the user to login" {
+@test "h2: push login: running flox push before user has login metadata prompts the user to login" {
   make_dummy_floxmeta "owner"
 
 
@@ -119,5 +122,63 @@ function update_dummy_env() {
   assert_success
   assert_line "hello"
 
+  popd >/dev/null || return
+}
+
+
+# bats test_tags=push:h5
+@test "h5: unique upstream environments: if you attempt to flox push an environment with the same name but different provenance from upstream then the push should fail with a message." {
+  make_dummy_floxmeta "owner"
+
+  mkdir -p "machine_a"
+  mkdir -p "machine_b"
+
+  # Create an environment owner/test on machine_a and push it to floxhub
+  pushd "machine_a" >/dev/null || return
+  "$FLOX_CLI" init --name "test"
+  "$FLOX_CLI" install vim
+  "$FLOX_CLI" push --owner owner
+  popd >/dev/null || return
+
+  # Create an environment owner/test on machine_b and try to push it to floxhub
+  # this should fail as an envrioment with the same name but different provenance already exists on floxhub
+  pushd "machine_b" >/dev/null || return
+  "$FLOX_CLI" init --name "test"
+  "$FLOX_CLI" install emacs
+
+  run "$FLOX_CLI" push --owner owner
+  assert_failure
+  assert_output --partial "upstream floxmeta branch diverged from local branch"
+  popd >/dev/null || return
+}
+
+
+# bats test_tags=push:h6
+@test "h6: force push upstream: adding -f option to flox push will force push an environment upstream even if an existing environment of the same name exists with different provenance." {
+  make_dummy_floxmeta "owner"
+
+  mkdir -p "machine_a" "machine_b" "machine_c"
+
+  # Create an environment owner/test on machine_a and push it to floxhub
+  pushd "machine_a" >/dev/null || return
+  "$FLOX_CLI" init --name "test"
+  "$FLOX_CLI" install vim
+  "$FLOX_CLI" push --owner owner
+  popd >/dev/null || return
+
+  # Create an environment owner/test on machine_b and force-push it to floxhub
+  pushd "machine_b" >/dev/null || return
+  "$FLOX_CLI" init --name "test"
+  "$FLOX_CLI" install emacs
+  run "$FLOX_CLI" push --owner owner --force
+  assert_success
+  popd >/dev/null || return
+
+  # Pull the environment owner/test on machine_c and check that it has the emacs package
+  pushd "machine_c" >/dev/null || return
+  "$FLOX_CLI" pull --remote owner/test
+  run "$FLOX_CLI" list
+  assert_success
+  assert_line "emacs"
   popd >/dev/null || return
 }

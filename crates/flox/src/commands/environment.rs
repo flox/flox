@@ -350,7 +350,8 @@ fn environment_description(environment: &ConcreteEnvironment) -> String {
             format!(
                 "{}/{} at {}",
                 environment.owner(),
-                environment.name(),
+                "<TODO: name>",
+                // environment.name(),
                 environment.path.to_string_lossy()
             )
         },
@@ -547,7 +548,6 @@ pub struct Push {
     owner: Option<EnvironmentOwner>,
 
     /// forceably overwrite the remote copy of the environment
-    #[allow(dead_code)] // not yet handled in impl
     #[bpaf(long, short)]
     force: bool,
 }
@@ -563,7 +563,8 @@ impl Push {
                     bail!("Environment already linked to a remote")
                 }
 
-                Self::push_managed_env(&flox, managed_pointer, dir)
+                Self::push_managed_env(&flox, managed_pointer, dir, self.force)
+                    .context("Could not push managed environment")?;
             },
             EnvironmentPointer::Path(path_pointer) => {
                 let owner = if let Some(owner) = self.owner {
@@ -581,38 +582,46 @@ impl Push {
                         .parse::<EnvironmentOwner>()
                         .context("Invalid owner name")?
                 };
-                Self::push_make_managed(&flox, path_pointer, &dir, owner)
+                Self::push_make_managed(&flox, path_pointer, &dir, owner, self.force)
+                    .context("Could not push new environment")?;
             },
         }
+        Ok(())
     }
 
-    fn push_managed_env(flox: &Flox, managed_pointer: ManagedPointer, dir: PathBuf) -> Result<()> {
+    fn push_managed_env(
+        flox: &Flox,
+        managed_pointer: ManagedPointer,
+        dir: PathBuf,
+        force: bool,
+    ) -> Result<()> {
         let mut env = ManagedEnvironment::open(flox, managed_pointer, dir.join(DOT_FLOX))
             .context("Could not open environment")?;
-        env.push().context("Could not push environment")?;
+        env.push(force).context("Could not push environment")?;
 
         Ok(())
     }
 
+    /// pushes a path environment in a directory to floxhub and makes it a managed environment
     fn push_make_managed(
         flox: &Flox,
         path_pointer: PathPointer,
         dir: &Path,
         owner: EnvironmentOwner,
+        force: bool,
     ) -> Result<()> {
         let dot_flox_path = dir.join(DOT_FLOX);
         let path_environment =
-            path_environment::PathEnvironment::open(path_pointer, dot_flox_path, &flox.temp_dir)
-                .unwrap();
+            path_environment::PathEnvironment::open(path_pointer, dot_flox_path, &flox.temp_dir)?;
 
         ManagedEnvironment::push_new(
             flox,
             path_environment,
             owner.parse().unwrap(),
             &flox.temp_dir,
+            force,
         )
-        .map_err(Self::convert_error)
-        .unwrap();
+        .map_err(Self::convert_error)?;
 
         Ok(())
     }
@@ -641,6 +650,9 @@ enum PullSelect {
     Existing {
         /// Directory containing a managed environment to pull
         dir: Option<PathBuf>,
+        /// forceably overwrite the local copy of the environment
+        #[bpaf(long, short)]
+        force: bool,
     },
 }
 
@@ -648,6 +660,7 @@ impl Default for PullSelect {
     fn default() -> Self {
         PullSelect::Existing {
             dir: Default::default(),
+            force: Default::default(),
         }
     }
 }
@@ -657,11 +670,6 @@ impl Default for PullSelect {
 pub struct Pull {
     #[bpaf(external(pull_select), fallback(Default::default()))]
     pull_select: PullSelect,
-
-    /// forceably overwrite the local copy of the environment
-    #[allow(dead_code)] // not yet handled in impl
-    #[bpaf(long, short)]
-    force: bool,
 }
 
 impl Pull {
@@ -675,7 +683,7 @@ impl Pull {
 
                 Self::pull_new_environment(&flox, dir.join(DOT_FLOX), remote)?;
             },
-            PullSelect::Existing { dir } => {
+            PullSelect::Existing { dir, force } => {
                 let dir = dir.unwrap_or_else(|| std::env::current_dir().unwrap());
 
                 debug!("Resolved user intent: pull changes for environment found in {dir:?}");
@@ -689,7 +697,7 @@ impl Pull {
                     }
                 };
 
-                Self::pull_existing_environment(&flox, dir.join(DOT_FLOX), pointer)?;
+                Self::pull_existing_environment(&flox, dir.join(DOT_FLOX), pointer, force)?;
             },
         }
 
@@ -704,10 +712,11 @@ impl Pull {
         flox: &Flox,
         dot_flox_path: PathBuf,
         pointer: ManagedPointer,
+        force: bool,
     ) -> Result<()> {
         let mut env = ManagedEnvironment::open(flox, pointer, dot_flox_path)
             .context("Could not open environment")?;
-        env.pull().context("Could not pull environment")?;
+        env.pull(force).context("Could not pull environment")?;
 
         Ok(())
     }

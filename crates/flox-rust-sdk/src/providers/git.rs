@@ -82,7 +82,7 @@ pub trait GitProvider: Sized + std::fmt::Debug {
     fn show(&self, object: &str) -> Result<OsString, Self::ShowError>;
 
     fn fetch(&self) -> Result<(), Self::FetchError>;
-    fn push(&self, remote: &str) -> Result<(), Self::PushError>;
+    fn push(&self, remote: &str, force: bool) -> Result<(), Self::PushError>;
     fn set_origin(&self, branch: &str, origin_name: &str) -> Result<(), Self::SetOriginError>;
 
     fn get_origin(&self) -> Result<OriginInfo, Self::GetOriginError>;
@@ -461,13 +461,19 @@ impl GitCommandProvider {
         &self,
         repository: impl AsRef<str>,
         push_spec: impl AsRef<str>,
+        force: bool,
     ) -> Result<(), GitCommandError> {
-        GitCommandProvider::run_command(
-            self.new_command()
-                .arg("push")
-                .arg(repository.as_ref())
-                .arg(push_spec.as_ref()),
-        )?;
+        let mut command = self.new_command();
+        command
+            .arg("push")
+            .arg(repository.as_ref())
+            .arg(push_spec.as_ref());
+
+        if force {
+            command.arg("--force");
+        }
+
+        GitCommandProvider::run_command(&mut command)?;
         Ok(())
     }
 
@@ -874,12 +880,17 @@ impl GitProvider for GitCommandProvider {
         Ok(())
     }
 
-    fn push(&self, remote: &str) -> Result<(), Self::PushError> {
+    fn push(&self, remote: &str, force: bool) -> Result<(), Self::PushError> {
         let mut command = self.new_command();
         command.arg("push");
+        command.arg("--porcelain");
         command.arg("-u");
         command.arg(remote);
         command.arg("HEAD");
+
+        if force {
+            command.arg("--force");
+        }
 
         let _out = GitCommandProvider::run_command(&mut command)?;
         Ok(())
