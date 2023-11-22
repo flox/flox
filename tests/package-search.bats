@@ -282,23 +282,24 @@ setup_file() {
 
 @test "'flox show' uses locked revision when available" {
   rm -rf "$PROJECT_DIR/.flox";
-  mkdir -p "$PROJECT_DIR/.flox";
+  mkdir -p "$PROJECT_DIR/.flox/env";
+  # Note: at some point it may also be necessary to create a .flox/env.json
   {
     echo 'options.systems = ["x86_64-linux"]';
     echo 'install.nodejs = {}';
-  } > "$PROJECT_DIR/.flox/manifest.toml";
+  } > "$PROJECT_DIR/.flox/env/manifest.toml";
 
   # Force lockfile to pin a specific revision of `nixpkgs'
   run --separate-stderr sh -c                                                  \
    "_PKGDB_GA_REGISTRY_REF_OR_REV='9faf91e6d0b7743d41cce3b63a8e5c733dc696a3'   \
-    $PKGDB_BIN manifest lock --ga-registry '$PROJECT_DIR/.flox/manifest.toml'  \
-                             > '$PROJECT_DIR/.flox/manifest.lock';";
+    $PKGDB_BIN manifest lock --ga-registry '$PROJECT_DIR/.flox/env/manifest.toml'  \
+                             > '$PROJECT_DIR/.flox/env/manifest.lock';";
   assert_success;
   unset output;
 
   # Ensure the locked revision is what we expect.
   run --separate-stderr jq -r '.registry.inputs.nixpkgs.from.rev'  \
-                              "$PROJECT_DIR/.flox/manifest.lock";
+                              "$PROJECT_DIR/.flox/env/manifest.lock";
   assert_success;
   assert_output "9faf91e6d0b7743d41cce3b63a8e5c733dc696a3";
   unset output;
