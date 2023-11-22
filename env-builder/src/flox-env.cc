@@ -111,6 +111,28 @@ createUserEnv( EvalState &          state,
   auto manifestFile
     = state.store->addTextToStore( "env-manifest.nix", nlohmann::json(lockfile.getLockfileRaw()).dump(), references);
 
+  /* Get the environment builder expression. */
+  Value envBuilder;
+  state.eval( state.parseExprFromString(
+#include "buildenv.nix.gen.hh"
+                ,
+                state.rootPath( CanonPath::root ) ),
+              envBuilder );
+
+  /* Construct a Nix expression that calls the user environment
+   * builder with the manifest as argument. */
+  auto attrs = state.buildBindings( 3 );
+  state.mkStorePathString( manifestFile, attrs.alloc( "manifest" ) );
+  attrs.insert( state.symbols.create( "derivations" ), &environment_drvs );
+  Value args;
+  args.mkAttrs( attrs );
+
+  Value topLevel;
+  topLevel.mkApp( &envBuilder, &args );
+
+  debug( "evaluating user environment builder" );
+  state.forceValue( topLevel,
+                    [&]() { return topLevel.determinePos( noPos ); } );
 }
 
 
