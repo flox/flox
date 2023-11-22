@@ -81,11 +81,7 @@ pub struct GenerationLock {
 #[async_trait]
 impl Environment for ManagedEnvironment {
     #[allow(unused)]
-    async fn build(
-        &mut self,
-        nix: &NixCommandLine,
-        system: &System,
-    ) -> Result<(), EnvironmentError2> {
+    async fn build(&mut self, flox: &Flox) -> Result<(), EnvironmentError2> {
         todo!()
     }
 
@@ -94,8 +90,7 @@ impl Environment for ManagedEnvironment {
     async fn install(
         &mut self,
         packages: Vec<String>,
-        nix: &NixCommandLine,
-        system: System,
+        flox: &Flox,
     ) -> Result<InstallationAttempt, EnvironmentError2> {
         todo!()
     }
@@ -105,20 +100,14 @@ impl Environment for ManagedEnvironment {
     async fn uninstall(
         &mut self,
         packages: Vec<String>,
-        nix: &NixCommandLine,
-        system: System,
+        flox: &Flox,
     ) -> Result<String, EnvironmentError2> {
         todo!()
     }
 
     /// Atomically edit this environment, ensuring that it still builds
     #[allow(unused)]
-    async fn edit(
-        &mut self,
-        nix: &NixCommandLine,
-        system: System,
-        contents: String,
-    ) -> Result<(), EnvironmentError2> {
+    async fn edit(&mut self, flox: &Flox, contents: String) -> Result<(), EnvironmentError2> {
         todo!()
     }
 
@@ -158,12 +147,8 @@ impl Environment for ManagedEnvironment {
         todo!()
     }
 
-    async fn activation_path(
-        &mut self,
-        flox: &Flox,
-        nix: &NixCommandLine,
-    ) -> Result<PathBuf, EnvironmentError2> {
-        self.build(nix, &flox.system).await?;
+    async fn activation_path(&mut self, flox: &Flox) -> Result<PathBuf, EnvironmentError2> {
+        self.build(flox).await?;
         Ok(self.out_link(flox))
     }
 

@@ -21,7 +21,6 @@ use super::flox_package::FloxTriple;
 use super::manifest::TomlEditError;
 use super::pkgdb_errors::PkgDbError;
 use crate::flox::{EnvironmentRef, Flox};
-use crate::models::environment::path_environment::{LOCKFILE_FILENAME, MANIFEST_FILENAME};
 use crate::utils::copy_file_without_permissions;
 use crate::utils::errors::IoError;
 
@@ -30,8 +29,6 @@ pub mod path_environment;
 pub mod remote_environment;
 
 pub const CATALOG_JSON: &str = "catalog.json";
-pub const DOT_FLOX: &str = ".flox";
-pub const ENVIRONMENT_POINTER_FILENAME: &str = "env.json";
 // don't forget to update the man page
 pub const DEFAULT_KEEP_GENERATIONS: usize = 10;
 // don't forget to update the man page
@@ -40,8 +37,15 @@ pub const DEFAULT_MAX_AGE_DAYS: u32 = 90;
 // Path to the executable that builds environments
 const BUILD_ENV_BIN: &'_ str = env!("BUILD_ENV_BIN");
 const ENV_FROM_LOCKFILE_PATH: &str = env!("ENV_FROM_LOCKFILE_PATH");
-const GLOBAL_MANIFEST_TEMPLATE: &str = env!("GLOBAL_MANIFEST_TEMPLATE");
-const GLOBAL_MANIFEST_FILENAME: &str = "global-manifest.toml";
+
+pub const DOT_FLOX: &str = ".flox";
+pub const ENVIRONMENT_POINTER_FILENAME: &str = "env.json";
+pub const GLOBAL_MANIFEST_TEMPLATE: &str = env!("GLOBAL_MANIFEST_TEMPLATE");
+pub const GLOBAL_MANIFEST_FILENAME: &str = "global-manifest.toml";
+pub const MANIFEST_FILENAME: &str = "manifest.toml";
+pub const LOCKFILE_FILENAME: &str = "manifest.lock";
+pub const PATH_ENV_GCROOTS_DIR_NAME: &str = "run";
+pub const ENV_DIR_NAME: &str = "env";
 
 pub enum InstalledPackage {
     Catalog(FloxTriple, CatalogEntry),
@@ -60,35 +64,24 @@ pub struct InstallationAttempt {
 #[async_trait]
 pub trait Environment {
     /// Build the environment and create a result link as gc-root
-    async fn build(
-        &mut self,
-        nix: &NixCommandLine,
-        system: &System,
-    ) -> Result<(), EnvironmentError2>;
+    async fn build(&mut self, flox: &Flox) -> Result<(), EnvironmentError2>;
 
     /// Install packages to the environment atomically
     async fn install(
         &mut self,
         packages: Vec<String>,
-        nix: &NixCommandLine,
-        system: System,
+        flox: &Flox,
     ) -> Result<InstallationAttempt, EnvironmentError2>;
 
     /// Uninstall packages from the environment atomically
     async fn uninstall(
         &mut self,
         packages: Vec<String>,
-        nix: &NixCommandLine,
-        system: System,
+        flox: &Flox,
     ) -> Result<String, EnvironmentError2>;
 
     /// Atomically edit this environment, ensuring that it still builds
-    async fn edit(
-        &mut self,
-        nix: &NixCommandLine,
-        system: System,
-        contents: String,
-    ) -> Result<(), EnvironmentError2>;
+    async fn edit(&mut self, flox: &Flox, contents: String) -> Result<(), EnvironmentError2>;
 
     async fn catalog(
         &self,
@@ -104,11 +97,7 @@ pub trait Environment {
     /// This should be a link to a store path so that it can be swapped
     /// dynamically, i.e. so that install/edit can modify the environment
     /// without requiring reactivation.
-    async fn activation_path(
-        &mut self,
-        flox: &Flox,
-        nix: &NixCommandLine,
-    ) -> Result<PathBuf, EnvironmentError2>;
+    async fn activation_path(&mut self, flox: &Flox) -> Result<PathBuf, EnvironmentError2>;
 
     /// Returns the environment name
     fn name(&self) -> EnvironmentName;
@@ -215,20 +204,20 @@ pub enum EnvironmentError2 {
     ParseEnvRef(#[from] EnvironmentRefError),
     #[error("EmptyDotFlox")]
     EmptyDotFlox,
-    #[error("DotFloxCanonicalize({0})")]
-    EnvCanonicalize(std::io::Error),
-    #[error("ReadDotFlox({0})")]
-    ReadDotFlox(std::io::Error),
-    #[error("ReadEnvDir({0})")]
-    ReadEnvDir(std::io::Error),
-    #[error("MakeSandbox({0})")]
-    MakeSandbox(std::io::Error),
-    #[error("DeleteEnvironment({0})")]
-    DeleteEnvironment(std::io::Error),
+    #[error("DotFloxCanonicalize")]
+    EnvCanonicalize(#[source] std::io::Error),
+    #[error("ReadDotFlox")]
+    ReadDotFlox(#[source] std::io::Error),
+    #[error("ReadEnvDir")]
+    ReadEnvDir(#[source] std::io::Error),
+    #[error("MakeSandbox")]
+    MakeSandbox(#[source] std::io::Error),
+    #[error("DeleteEnvironment")]
+    DeleteEnvironment(#[source] std::io::Error),
     #[error("DotFloxNotFound")]
     DotFloxNotFound,
-    #[error("InitEnv({0})")]
-    InitEnv(std::io::Error),
+    #[error("InitEnv")]
+    InitEnv(#[source] std::io::Error),
     #[error("EnvNotFound")]
     EnvNotFound,
     #[error("EnvNotADirectory")]
@@ -237,74 +226,74 @@ pub enum EnvironmentError2 {
     DirectoryNotAnEnv,
     #[error("EnvironmentExists")]
     EnvironmentExists,
-    #[error("EvalCatalog({0})")]
-    EvalCatalog(NixCommandLineRunJsonError),
-    #[error("ParseCatalog({0})")]
-    ParseCatalog(serde_json::Error),
-    #[error("WriteCatalog({0})")]
-    WriteCatalog(std::io::Error),
-    #[error("Build({0})")]
-    Build(NixCommandLineRunError),
-    #[error("ReadManifest({0})")]
-    ReadManifest(std::io::Error),
-    #[error("ReadEnvironmentMetadata({0})")]
-    ReadEnvironmentMetadata(std::io::Error),
-    #[error("MakeTemporaryEnv({0})")]
-    MakeTemporaryEnv(std::io::Error),
-    #[error("UpdateManifest({0})")]
-    UpdateManifest(std::io::Error),
-    #[error("couldn't open manifest: {0}")]
-    OpenManifest(std::io::Error),
-    #[error("Activate({0})")]
-    Activate(NixCommandLineRunError),
+    #[error("EvalCatalog")]
+    EvalCatalog(#[source] NixCommandLineRunJsonError),
+    #[error("ParseCatalog")]
+    ParseCatalog(#[source] serde_json::Error),
+    #[error("WriteCatalog")]
+    WriteCatalog(#[source] std::io::Error),
+    #[error("Build")]
+    Build(#[source] NixCommandLineRunError),
+    #[error("ReadManifest")]
+    ReadManifest(#[source] std::io::Error),
+    #[error("ReadEnvironmentMetadata")]
+    ReadEnvironmentMetadata(#[source] std::io::Error),
+    #[error("MakeTemporaryEnv")]
+    MakeTemporaryEnv(#[source] std::io::Error),
+    #[error("UpdateManifest")]
+    UpdateManifest(#[source] std::io::Error),
+    #[error("couldn't open manifest")]
+    OpenManifest(#[source] std::io::Error),
+    #[error("Activate")]
+    Activate(#[source] NixCommandLineRunError),
     #[error("Prior transaction in progress. Delete {0} to discard.")]
     PriorTransaction(PathBuf),
-    #[error("Failed to create backup for transaction: {0}")]
-    BackupTransaction(std::io::Error),
-    #[error("Failed to move modified environment into place: {0}")]
-    Move(std::io::Error),
-    #[error("Failed to abort transaction; backup could not be moved back into place: {0}")]
-    AbortTransaction(std::io::Error),
-    #[error("Failed to remove transaction backup: {0}")]
-    RemoveBackup(std::io::Error),
+    #[error("Failed to create backup for transaction")]
+    BackupTransaction(#[source] std::io::Error),
+    #[error("Failed to move modified environment into place")]
+    Move(#[source] std::io::Error),
+    #[error("Failed to abort transaction; backup could not be moved back into place")]
+    AbortTransaction(#[source] std::io::Error),
+    #[error("Failed to remove transaction backup")]
+    RemoveBackup(#[source] std::io::Error),
     #[error("Failed to copy file")]
-    CopyFile(IoError),
-    #[error("Failed parsing contents of env.json file: {0}")]
-    ParseEnvJson(serde_json::Error),
-    #[error("Failed serializing contents of env.json file: {0}")]
-    SerializeEnvJson(serde_json::Error),
-    #[error("Failed write env.json file: {0}")]
-    WriteEnvJson(std::io::Error),
+    CopyFile(#[source] IoError),
+    #[error("Failed parsing contents of env.json file")]
+    ParseEnvJson(#[source] serde_json::Error),
+    #[error("Failed serializing contents of env.json file")]
+    SerializeEnvJson(#[source] serde_json::Error),
+    #[error("Failed write env.json file")]
+    WriteEnvJson(#[source] std::io::Error),
     #[error(transparent)]
     ManagedEnvironment(#[from] ManagedEnvironmentError),
     #[error(transparent)]
     Install(#[from] TomlEditError),
     #[error("couldn't locate the manifest for this environment")]
     ManifestNotFound,
-    #[error("failed to create GC roots directory: {0}")]
-    CreateGcRootDir(std::io::Error),
-    #[error("error building environment: {0}")]
-    BuildEnvCall(std::io::Error),
+    #[error("failed to create GC roots directory")]
+    CreateGcRootDir(#[source] std::io::Error),
+    #[error("error building environment")]
+    BuildEnvCall(#[source] std::io::Error),
     #[error("error building environment: {0}")]
     BuildEnv(String),
-    #[error("provided lockfile path doesn't exist: {0}")]
-    BadLockfilePath(std::io::Error),
-    #[error("call to pkgdb failed: {0}")]
-    PkgDbCall(std::io::Error),
+    #[error("provided lockfile path doesn't exist")]
+    BadLockfilePath(#[source] std::io::Error),
+    #[error("call to pkgdb failed")]
+    PkgDbCall(#[source] std::io::Error),
     #[error("couldn't parse pkgdb error as JSON: {0}")]
     ParsePkgDbError(String),
-    #[error("couldn't parse lockfile as JSON: {0}")]
-    ParseLockfileJSON(serde_json::Error),
+    #[error("couldn't parse lockfile as JSON")]
+    ParseLockfileJSON(#[source] serde_json::Error),
     #[error("couldn't parse nixpkgs rev as a string")]
     RevNotString,
-    #[error("couldn't write new lockfile contents: {0}")]
-    WriteLockfile(std::io::Error),
-    #[error("locking manifest failed: {0}")]
-    LockManifest(PkgDbError),
-    #[error("couldn't create the global manifest: {0}")]
-    InitGlobalManifest(std::io::Error),
-    #[error("couldn't read global manifest template: {0}")]
-    ReadGlobalManifestTemplate(std::io::Error),
+    #[error("couldn't write new lockfile contents")]
+    WriteLockfile(#[source] std::io::Error),
+    #[error("locking manifest failed")]
+    LockManifest(#[source] PkgDbError),
+    #[error("couldn't create the global manifest")]
+    InitGlobalManifest(#[source] std::io::Error),
+    #[error("couldn't read global manifest template")]
+    ReadGlobalManifestTemplate(#[source] std::io::Error),
     #[error("provided path couldn't be canonicalized: {path}")]
     CanonicalPath {
         path: PathBuf,
@@ -358,21 +347,27 @@ pub fn lock_manifest(
     pkgdb: &Path,
     manifest_path: &Path,
     existing_lockfile_path: Option<&Path>,
+    global_manifest_path: &Path,
 ) -> Result<serde_json::Value, EnvironmentError2> {
     let canonical_manifest_path = manifest_path
         .canonicalize()
         .map_err(EnvironmentError2::OpenManifest)?;
+
     let mut pkgdb_cmd = Command::new(pkgdb);
     pkgdb_cmd
-        .args(["manifest", "lock", "--ga-registry"])
-        .arg(canonical_manifest_path);
+        .args(["manifest", "lock"])
+        .arg("--ga-registry")
+        .arg("--global-manifest")
+        .arg(global_manifest_path);
     if let Some(lf_path) = existing_lockfile_path {
         let canonical_lockfile_path = lf_path
             .canonicalize()
             .map_err(EnvironmentError2::BadLockfilePath)?;
-        pkgdb_cmd.arg(canonical_lockfile_path);
+        pkgdb_cmd.arg("--lockfile").arg(canonical_lockfile_path);
     }
-    debug!(target: "posix", "locking manifest with command: {pkgdb_cmd:?}");
+    pkgdb_cmd.arg(canonical_manifest_path);
+
+    debug!("locking manifest with command: {pkgdb_cmd:?}");
     let output = pkgdb_cmd.output().map_err(EnvironmentError2::PkgDbCall)?;
     // If command fails, try to parse stdout as a PkgDbError
     if !output.status.success() {
@@ -410,25 +405,34 @@ pub fn global_manifest_path(flox: &Flox) -> PathBuf {
     path
 }
 
-/// Searches upwards for a `.flox` directory, returning the path if found.
-pub fn find_dot_flox_upwards(start_path: &Path) -> Result<Option<PathBuf>, EnvironmentError2> {
-    let mut path = start_path
+/// Searches for a `.flox` directory, returning the path if found.
+///
+/// The search first looks whether the current directory contains a `.flox` directory,
+/// and if not, it searches upwards, stopping at the root directory.
+pub fn find_dot_flox(initial_dir: &Path) -> Result<Option<PathBuf>, EnvironmentError2> {
+    let path = initial_dir
         .canonicalize()
         .map_err(|e| EnvironmentError2::CanonicalPath {
-            path: start_path.to_path_buf(),
+            path: initial_dir.to_path_buf(),
             source: e,
         })?;
-    while path != Path::new("/") {
-        if let Some(parent) = path.parent() {
-            let tentative_dot_flox = parent.join(DOT_FLOX);
-            if tentative_dot_flox.exists() && tentative_dot_flox.is_dir() {
-                return Ok(Some(tentative_dot_flox));
-            } else {
-                path = parent.to_path_buf();
-            }
-            continue;
+    let mut tentative_dot_flox = path.join(DOT_FLOX);
+    debug!(
+        "looking for .flox: starting_path={}",
+        tentative_dot_flox.display()
+    );
+    // Look for an immediate child named `.flox`
+    if tentative_dot_flox.exists() {
+        debug!(".flox found: path={}", tentative_dot_flox.display());
+        return Ok(Some(tentative_dot_flox));
+    }
+    // Search upwards for a .flox
+    while let Some(grandparent) = tentative_dot_flox.parent().and_then(|p| p.parent()) {
+        tentative_dot_flox = grandparent.join(DOT_FLOX);
+        if tentative_dot_flox.exists() {
+            debug!(".flox found: path={}", tentative_dot_flox.display());
+            return Ok(Some(tentative_dot_flox));
         }
-        break;
     }
     Ok(None)
 }
@@ -438,21 +442,32 @@ pub fn find_dot_flox_upwards(start_path: &Path) -> Result<Option<PathBuf>, Envir
 pub fn manifest_and_lockfile(
     current_dir: &Path,
 ) -> Result<(Option<PathBuf>, Option<PathBuf>), EnvironmentError2> {
-    if let Some(dot_flox_path) = find_dot_flox_upwards(current_dir)? {
-        let manifest_path = dot_flox_path.join(MANIFEST_FILENAME);
-        let lockfile_path = dot_flox_path.join(LOCKFILE_FILENAME);
-        let lockfile = if lockfile_path.exists() {
-            Some(lockfile_path)
-        } else {
-            None
-        };
+    debug!(
+        "locating manifest and lockfile: starting_path={}",
+        current_dir.display()
+    );
+    if let Some(dot_flox_path) = find_dot_flox(current_dir)? {
+        let manifest_path = dot_flox_path.join(ENV_DIR_NAME).join(MANIFEST_FILENAME);
+        debug!("checking manifest: path={}", manifest_path.display());
         let manifest = if manifest_path.exists() {
+            debug!("manifest exists");
             Some(manifest_path)
         } else {
+            debug!("manifest doesn't exist");
+            None
+        };
+        let lockfile_path = dot_flox_path.join(ENV_DIR_NAME).join(LOCKFILE_FILENAME);
+        debug!("checking lockfile: path={}", lockfile_path.display());
+        let lockfile = if lockfile_path.exists() {
+            debug!("lockfile exists");
+            Some(lockfile_path)
+        } else {
+            debug!("lockfile doesn't exist");
             None
         };
         return Ok((manifest, lockfile));
     }
+    debug!("didn't find manifest or lockfile");
     Ok((None, None))
 }
 
@@ -528,12 +543,23 @@ mod test {
     }
 
     #[test]
+    fn discovers_immediate_child_dot_flox() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let actual_dot_flox = temp_dir.path().join(DOT_FLOX);
+        std::fs::create_dir_all(&actual_dot_flox).unwrap();
+        let found_dot_flox = find_dot_flox(temp_dir.path())
+            .unwrap()
+            .expect("expected to find dot flox");
+        assert_eq!(found_dot_flox, actual_dot_flox.canonicalize().unwrap());
+    }
+
+    #[test]
     fn discovers_existing_upwards_dot_flox() {
         let temp_dir = tempfile::tempdir().unwrap();
         let actual_dot_flox = temp_dir.path().join(DOT_FLOX);
         let start_path = actual_dot_flox.join("foo").join("bar");
         std::fs::create_dir_all(&start_path).unwrap();
-        let found_dot_flox = find_dot_flox_upwards(&start_path)
+        let found_dot_flox = find_dot_flox(&start_path)
             .unwrap()
             .expect("expected to find dot flox");
         assert_eq!(found_dot_flox, actual_dot_flox.canonicalize().unwrap());
@@ -544,7 +570,7 @@ mod test {
         let temp_dir = tempfile::tempdir().unwrap();
         let actual_dot_flox = temp_dir.path().join(DOT_FLOX);
         std::fs::create_dir_all(&actual_dot_flox).unwrap();
-        let found_dot_flox = find_dot_flox_upwards(&actual_dot_flox)
+        let found_dot_flox = find_dot_flox(&actual_dot_flox)
             .unwrap()
             .expect("expected to find dot flox");
         assert_eq!(found_dot_flox, actual_dot_flox.canonicalize().unwrap());
@@ -555,7 +581,7 @@ mod test {
         let temp_dir = tempfile::tempdir().unwrap();
         let start_path = temp_dir.path().join("foo").join("bar");
         std::fs::create_dir_all(&start_path).unwrap();
-        let found_dot_flox = find_dot_flox_upwards(&start_path).unwrap();
+        let found_dot_flox = find_dot_flox(&start_path).unwrap();
         assert_eq!(found_dot_flox, None);
     }
 
@@ -563,7 +589,7 @@ mod test {
     fn error_when_discovering_dot_flox_in_nonexistent_directory() {
         let temp_dir = tempfile::tempdir().unwrap();
         let start_path = temp_dir.path().join("foo").join("bar");
-        let found_dot_flox = find_dot_flox_upwards(&start_path);
+        let found_dot_flox = find_dot_flox(&start_path);
         assert!(found_dot_flox.is_err());
     }
 }

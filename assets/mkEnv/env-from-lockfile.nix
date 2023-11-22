@@ -5,7 +5,7 @@
   ...
 }: let
   lockfileContents = builtins.fromJSON (builtins.readFile lockfilePath);
-  nixpkgsFlake = builtins.getFlake lockfileContents.registry.inputs.nixpkgs.url;
+  nixpkgsFlake = with lockfileContents.registry.inputs.nixpkgs.from; builtins.getFlake "${type}:${owner}/${repo}/${rev}";
   pkgs = nixpkgsFlake.legacyPackages.${system};
   lib = nixpkgsFlake.lib;
 

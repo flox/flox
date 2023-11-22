@@ -22,7 +22,6 @@ use runix::command_line::NixCommandLine;
 use runix::flake_ref::path::PathRef;
 use runix::installable::FlakeAttribute;
 use runix::RunJson;
-use serde_json::Value;
 
 use super::{
     copy_dir_recursive,
@@ -33,23 +32,23 @@ use super::{
     PathPointer,
     DOT_FLOX,
     ENVIRONMENT_POINTER_FILENAME,
+    LOCKFILE_FILENAME,
+    PATH_ENV_GCROOTS_DIR_NAME,
 };
 use crate::environment::NIX_BIN;
 use crate::flox::Flox;
 use crate::models::environment::{
+    global_manifest_path,
     lock_manifest,
     BUILD_ENV_BIN,
     CATALOG_JSON,
+    ENV_DIR_NAME,
     ENV_FROM_LOCKFILE_PATH,
+    MANIFEST_FILENAME,
 };
 use crate::models::environment_ref::EnvironmentName;
 use crate::models::manifest::{insert_packages, remove_packages};
 use crate::models::search::PKGDB_BIN;
-
-pub const MANIFEST_FILENAME: &str = "manifest.toml";
-pub const LOCKFILE_FILENAME: &str = "manifest.lock";
-pub const PATH_ENV_GCROOTS_DIR_NAME: &str = "run";
-pub const ENVIRONMENT_DIR_NAME: &str = "env";
 
 /// Struct representing a local environment
 ///
@@ -140,16 +139,36 @@ impl<S: TransactionState> PathEnvironment<S> {
             .path
             .with_file_name(format!("{}.tmp", self.name().as_ref()));
         if transaction_backup.exists() {
+            debug!(
+                "transaction backup exists: {}",
+                transaction_backup.display()
+            );
             return Err(EnvironmentError2::PriorTransaction(transaction_backup));
         }
+        debug!(
+            "backing up env: from={}, to={}",
+            self.path.display(),
+            transaction_backup.display()
+        );
         fs::rename(&self.path, &transaction_backup)
             .map_err(EnvironmentError2::BackupTransaction)?;
         // try to restore the backup if the move fails
+        debug!(
+            "replacing original env: from={}, to={}",
+            replacement.path.display(),
+            self.path.display()
+        );
         if let Err(err) = fs::rename(replacement.path, &self.path) {
+            debug!(
+                "failed to replace env, restoring backup: from={}, to={}",
+                transaction_backup.display(),
+                self.path.display(),
+            );
             fs::rename(transaction_backup, &self.path)
                 .map_err(EnvironmentError2::AbortTransaction)?;
             return Err(EnvironmentError2::Move(err));
         }
+        debug!("removing backup: path={}", transaction_backup.display());
         fs::remove_dir_all(transaction_backup).map_err(EnvironmentError2::RemoveBackup)?;
         Ok(())
     }
@@ -178,6 +197,7 @@ impl<S: TransactionState> PathEnvironment<S> {
 impl PathEnvironment<Temporary> {
     /// Updates the environment manifest with the provided contents
     pub fn update_manifest(&mut self, contents: &impl AsRef<str>) -> Result<(), EnvironmentError2> {
+        debug!("writing new manifest to {}", self.manifest_path().display());
         let mut manifest_file = std::fs::OpenOptions::new()
             .write(true)
             .truncate(true)
@@ -200,48 +220,38 @@ where
     /// - Create a result link as gc-root.
     /// - Create a lockfile if one doesn't already exist, updating it with
     ///   any new packages.
-    async fn build(
-        &mut self,
-        _nix: &NixCommandLine,
-        system: &System,
-    ) -> Result<(), EnvironmentError2> {
+    async fn build(&mut self, flox: &Flox) -> Result<(), EnvironmentError2> {
         debug!("building project environment at {}", self.path.display());
         let manifest_path = self.manifest_path();
         let lockfile_path = self.lockfile_path();
         let maybe_lockfile = if lockfile_path.exists() {
             debug!("found existing lockfile: {}", lockfile_path.display());
-            // TODO: not yet implemented in pkgdb
-            // Some(lockfile_path.as_ref())
-            None
+            Some(lockfile_path.as_ref())
         } else {
             debug!("no existing lockfile found");
             None
         };
-        let mut lockfile_json = lock_manifest(
+        let lockfile_json = lock_manifest(
             Path::new(&PKGDB_BIN.as_str()),
             &manifest_path,
             maybe_lockfile,
+            &global_manifest_path(flox),
         )?;
-        // TODO: pkgdb needs to add a `url` field, until that's done we do it manually
-        let rev = lockfile_json["registry"]["inputs"]["nixpkgs"]["from"]["rev"]
-            .as_str()
-            .ok_or(EnvironmentError2::RevNotString)?;
-        let nixpkgs_url = Value::String(format!("github:NixOS/nixpkgs/{rev}"));
-        lockfile_json["registry"]["inputs"]["nixpkgs"]["url"] = nixpkgs_url;
         debug!("generated lockfile, writing to {}", lockfile_path.display());
         std::fs::write(&lockfile_path, lockfile_json.to_string())
             .map_err(EnvironmentError2::WriteLockfile)?;
 
         debug!(
-            "building environment: system={system}, lockfilePath={}",
+            "building environment: system={}, lockfilePath={}",
+            &flox.system,
             lockfile_path.display()
         );
 
         let build_output = std::process::Command::new(BUILD_ENV_BIN)
             .arg(NIX_BIN)
-            .arg(system)
+            .arg(&flox.system)
             .arg(lockfile_path)
-            .arg(self.out_link(system)?)
+            .arg(self.out_link(&flox.system)?)
             .arg(ENV_FROM_LOCKFILE_PATH)
             .output()
             .map_err(EnvironmentError2::BuildEnvCall)?;
@@ -265,22 +275,19 @@ where
     async fn install(
         &mut self,
         packages: Vec<String>,
-        _nix: &NixCommandLine,
-        _system: System,
+        flox: &Flox,
     ) -> Result<InstallationAttempt, EnvironmentError2> {
         let current_manifest_contents = self.manifest_content()?;
-        let installation = insert_packages(&current_manifest_contents, packages.iter().cloned())
-            .map(|insertion| InstallationAttempt {
-                new_manifest: insertion.new_toml.map(|toml| toml.to_string()),
-                already_installed: insertion.already_installed,
+        let installation =
+            insert_packages(&current_manifest_contents, &packages).map(|insertion| {
+                InstallationAttempt {
+                    new_manifest: insertion.new_toml.map(|toml| toml.to_string()),
+                    already_installed: insertion.already_installed,
+                }
             })?;
         if let Some(ref new_manifest) = installation.new_manifest {
-            // TODO: enable transactions once build is re-implemented
-            // self.transact_with_manifest_contents(toml.to_string(), nix, system).await?;
-            let manifest_path = self.manifest_path();
-            debug!("writing new manifest to {}", manifest_path.display());
-            std::fs::write(manifest_path, new_manifest)
-                .map_err(EnvironmentError2::UpdateManifest)?;
+            self.transact_with_manifest_contents(new_manifest, flox)
+                .await?;
         }
         Ok(installation)
     }
@@ -293,28 +300,18 @@ where
     async fn uninstall(
         &mut self,
         packages: Vec<String>,
-        _nix: &NixCommandLine,
-        _system: System,
+        flox: &Flox,
     ) -> Result<String, EnvironmentError2> {
         let current_manifest_contents = self.manifest_content()?;
-        let toml = remove_packages(&current_manifest_contents, packages.iter().cloned())?;
-        // TODO: enable transactions once build is re-implemented
-        // self.transact_with_manifest_contents(toml.to_string(), nix, system).await?;
-        debug!("writing new manifest to {:?}", self.manifest_path());
-        std::fs::write(self.manifest_path(), toml.to_string())
-            .map_err(EnvironmentError2::UpdateManifest)?;
+        let toml = remove_packages(&current_manifest_contents, &packages)?;
+        self.transact_with_manifest_contents(toml.to_string(), flox)
+            .await?;
         Ok(toml.to_string())
     }
 
     /// Atomically edit this environment, ensuring that it still builds
-    async fn edit(
-        &mut self,
-        nix: &NixCommandLine,
-        system: System,
-        contents: String,
-    ) -> Result<(), EnvironmentError2> {
-        self.transact_with_manifest_contents(contents, nix, system)
-            .await?;
+    async fn edit(&mut self, flox: &Flox, contents: String) -> Result<(), EnvironmentError2> {
+        self.transact_with_manifest_contents(contents, flox).await?;
         Ok(())
     }
 
@@ -371,12 +368,8 @@ where
         Ok(())
     }
 
-    async fn activation_path(
-        &mut self,
-        flox: &Flox,
-        nix: &NixCommandLine,
-    ) -> Result<PathBuf, EnvironmentError2> {
-        self.build(nix, &flox.system).await?;
+    async fn activation_path(&mut self, flox: &Flox) -> Result<PathBuf, EnvironmentError2> {
+        self.build(flox).await?;
         Ok(self.out_link(&flox.system)?)
     }
 }
@@ -404,12 +397,12 @@ impl<S: TransactionState> PathEnvironment<S> {
 
     /// Path to the environment definition file
     pub fn manifest_path(&self) -> PathBuf {
-        self.path.join(ENVIRONMENT_DIR_NAME).join(MANIFEST_FILENAME)
+        self.path.join(ENV_DIR_NAME).join(MANIFEST_FILENAME)
     }
 
     /// Path to the lockfile. The path may not exist.
     pub fn lockfile_path(&self) -> PathBuf {
-        self.path.join(ENVIRONMENT_DIR_NAME).join(LOCKFILE_FILENAME)
+        self.path.join(ENV_DIR_NAME).join(LOCKFILE_FILENAME)
     }
 
     /// Path to the environment's catalog
@@ -421,12 +414,15 @@ impl<S: TransactionState> PathEnvironment<S> {
     async fn transact_with_manifest_contents(
         &mut self,
         manifest_contents: impl AsRef<str>,
-        nix: &NixCommandLine,
-        system: System,
+        flox: &Flox,
     ) -> Result<(), EnvironmentError2> {
+        debug!("transaction: making temporary environment");
         let mut temp_env = self.make_temporary()?;
+        debug!("transaction: updating manifest");
         temp_env.update_manifest(&manifest_contents)?;
-        temp_env.build(nix, &system).await?;
+        debug!("transaction: building environment");
+        temp_env.build(flox).await?;
+        debug!("transaction: replacing environment");
         self.replace_with(temp_env)?;
         Ok(())
     }
@@ -448,7 +444,7 @@ impl PathEnvironment<Original> {
             Err(EnvironmentError2::DotFloxNotFound)?;
         }
 
-        let env_path = dot_flox.join(ENVIRONMENT_DIR_NAME);
+        let env_path = dot_flox.join(ENV_DIR_NAME);
         if !env_path.exists() {
             Err(EnvironmentError2::EnvNotFound)?;
         }
@@ -474,7 +470,7 @@ impl PathEnvironment<Original> {
             Ok(_) => Err(EnvironmentError2::EnvironmentExists)?,
         }
         let dot_flox_path = dot_flox_parent_path.as_ref().join(DOT_FLOX);
-        let env_dir = dot_flox_path.join(ENVIRONMENT_DIR_NAME);
+        let env_dir = dot_flox_path.join(ENV_DIR_NAME);
         debug!("creating env dir: {}", env_dir.display());
         std::fs::create_dir_all(&env_dir).map_err(EnvironmentError2::InitEnv)?;
         let pointer_content =
@@ -534,7 +530,7 @@ mod tests {
         let expected = PathEnvironment::new(
             environment_temp_dir.into_path().join(".flox"),
             PathPointer::new("test".parse().unwrap()),
-            temp_dir.path().to_path_buf(),
+            temp_dir.path(),
             Original,
         )
         .unwrap();
@@ -542,18 +538,14 @@ mod tests {
         assert_eq!(actual, expected);
 
         assert!(
-            actual
-                .path
-                .join(ENVIRONMENT_DIR_NAME)
-                .join("flake.nix")
-                .exists(),
+            actual.path.join(ENV_DIR_NAME).join("flake.nix").exists(),
             "flake does not exist"
         );
         assert!(actual.manifest_path().exists(), "manifest exists");
         assert!(
             actual
                 .path
-                .join(ENVIRONMENT_DIR_NAME)
+                .join(ENV_DIR_NAME)
                 .join("pkgs")
                 .join("default")
                 .join("default.nix")
