@@ -291,14 +291,10 @@ setup_file() {
        > "$PROJECT_DIR/.flox/env/manifest.toml";
 
   # Search for a package with `pkgdb`
-  run sh -c "$PKGDB_BIN search --ga-registry '{
+  run --separate-stderr sh -c "$PKGDB_BIN search --ga-registry '{
       \"manifest\": \"$PROJECT_DIR/.flox/env/manifest.toml\",
       \"query\": { \"match-name\": \"nodejs\" }
-    }'|head -n1;";
-  #run --separate-stderr sh -c "$PKGDB_BIN search --ga-registry '{
-  #    \"manifest\": \"$PROJECT_DIR/.flox/env/manifest.toml\",
-  #    \"query\": { \"match-name\": \"nodejs\" }
-  #  }'|head -n1|jq -r '.version';";
+    }'|head -n1|jq -r '.version';";
   assert_success;
   assert_output '18.16.0';
   unset output;
