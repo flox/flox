@@ -158,12 +158,14 @@ impl<S: TransactionState> PathEnvironment<S> {
             replacement.path.display(),
             self.path.display()
         );
-        if let Err(err) = fs::rename(replacement.path, &self.path) {
+        if let Err(err) = copy_dir_recursive(&replacement.path, &self.path, true) {
             debug!(
-                "failed to replace env, restoring backup: from={}, to={}",
+                "failed to replace env ({}), restoring backup: from={}, to={}",
+                err,
                 transaction_backup.display(),
                 self.path.display(),
             );
+            fs::remove_dir_all(&self.path).map_err(EnvironmentError2::AbortTransaction)?;
             fs::rename(transaction_backup, &self.path)
                 .map_err(EnvironmentError2::AbortTransaction)?;
             return Err(EnvironmentError2::Move(err));
