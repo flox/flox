@@ -227,7 +227,7 @@ enum Commands {
     Additional(#[bpaf(external(additional_commands))] AdditionalCommands),
     Internal(#[bpaf(external(internal_commands))] InternalCommands),
 }
-///flox is a virtual environment and package manager all in one. With flox you create development environments that layer and replace dependencies just where it matters, making them portable across the full software lifecycle.
+/// flox is a virtual environment and package manager all in one. With flox you create development environments that layer and replace dependencies just where it matters, making them portable across the full software lifecycle.
 
 /// Local Development Commands
 #[derive(Bpaf, Clone)]
