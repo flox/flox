@@ -321,6 +321,42 @@ setup_file() {
 
   # Force lockfile to pin a specific revision of `nixpkgs'
   run --separate-stderr sh -c                                          \
+   "_PKGDB_GA_REGISTRY_REF_OR_REV='${PKGDB_NIXPKGS_REV_OLD?}'          \
+      $PKGDB_BIN manifest lock                                         \
+                 --ga-registry '$PROJECT_DIR/.flox/env/manifest.toml'  \
+                 > '$PROJECT_DIR/.flox/env/manifest.lock';";
+  assert_success;
+  unset output;
+
+  # Ensure the locked revision is what we expect.
+  run --separate-stderr jq -r '.registry.inputs.nixpkgs.from.rev'      \
+                              "$PROJECT_DIR/.flox/env/manifest.lock";
+  assert_success;
+  assert_output "$PKGDB_NIXPKGS_REV_OLD";
+  unset output;
+
+  # Search for a package with `pkgdb`
+  run --separate-stderr sh -c                                    \
+   "_PKGDB_GA_REGISTRY_REF_OR_REV='$PKGDB_NIXPKGS_REV_OLD'       \
+      $PKGDB_BIN search --ga-registry '{
+        \"manifest\": \"$PROJECT_DIR/.flox/env/manifest.toml\",
+        \"lockfile\": \"$PROJECT_DIR/.flox/env/manifest.lock\",
+        \"query\": { \"match-name\": \"nodejs\" }
+      }'|head -n1|jq -r '.version';"
+  assert_success;
+  assert_output '18.16.0';
+  unset output;
+
+  # Ensure the version of `nodejs' in our search results aligns with
+  # PKGDB_NIXPKGS_REV_OLD ( 18.16.0 ).
+  run --separate-stderr sh -c "$FLOX_CLI show nodejs|tail -n1";
+  assert_success;
+  assert_output '    nodejs - nodejs@18.16.0';
+  
+  # Repeat everything but with PKGDB_NIXPKGS_REV_NEW, expecting nodejs@18.17.1
+
+  # Force lockfile to pin a specific revision of `nixpkgs'
+  run --separate-stderr sh -c                                          \
    "_PKGDB_GA_REGISTRY_REF_OR_REV='${PKGDB_NIXPKGS_REV_NEW?}'          \
       $PKGDB_BIN manifest lock                                         \
                  --ga-registry '$PROJECT_DIR/.flox/env/manifest.toml'  \
@@ -347,8 +383,8 @@ setup_file() {
   assert_output '18.17.1';
   unset output;
 
-  # Ensure the version of `nodejs' in our search results aligns with the
-  # locked rev ( 18.17.1 ), instead of the `--ga-registry` default ( 18.16.0 ).
+  # Ensure the version of `nodejs' in our search results aligns with
+  # PKGDB_NIXPKGS_REV_NEW ( 18.17.1 ).
   run --separate-stderr sh -c "$FLOX_CLI show nodejs|tail -n1";
   assert_success;
   assert_output '    nodejs - nodejs@18.17.1';
