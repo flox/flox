@@ -201,5 +201,7 @@ in
       passthru.rustPlatform = rustPlatform;
       passthru.flox-bash = flox-bash;
       passthru.cargoDeps = cargoDepsArtifacts;
+      passthru.nixPatched = flox-bash.passthru.nixPatched;
+      passthru.pkgsFor = pkgsFor;
     }
     // envs)
