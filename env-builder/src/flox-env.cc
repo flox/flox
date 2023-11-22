@@ -47,6 +47,21 @@ createUserEnv( EvalState &          state,
       auto const & locked_package = package.second.value();
       locked_packages.push_back( locked_package );
     }
+
+  /**
+   * extract derivations
+   */
+
+  for ( auto const & package : locked_packages )
+    {
+
+      auto package_input_ref = FlakeRef( package.input );
+      auto package_flake
+        = flake::lockFlake( state, package_input_ref, flake::LockFlags {} );
+
+      Value attr;
+      flake::callFlake( state, package_flake, attr );
+    }
 }
 
 
