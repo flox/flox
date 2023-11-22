@@ -287,7 +287,7 @@ setup_file() {
 @test "'flox show' uses '_PKGDB_GA_REGISTRY_REF_OR_REV' revision" {
   mkdir -p "$PROJECT_DIR/.flox/env";
   # Note: at some point it may also be necessary to create a .flox/env.json
-  echo 'options.systems = ["x86_64-linux"]';      \
+  echo 'options.systems = ["x86_64-linux"]'       \
        > "$PROJECT_DIR/.flox/env/manifest.toml";
 
   # Search for a package with `pkgdb`
@@ -337,7 +337,7 @@ setup_file() {
 
   # Search for a package with `pkgdb`
   run --separate-stderr sh -c                                    \
-   "_PKGDB_GA_REGISTRY_REF_OR_REV='$PKGDB_NIXPKGS_REV_NEW'
+   "_PKGDB_GA_REGISTRY_REF_OR_REV='$PKGDB_NIXPKGS_REV_NEW'       \
       $PKGDB_BIN search --ga-registry '{
         \"manifest\": \"$PROJECT_DIR/.flox/env/manifest.toml\",
         \"lockfile\": \"$PROJECT_DIR/.flox/env/manifest.lock\",
