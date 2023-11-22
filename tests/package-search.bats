@@ -282,7 +282,7 @@ setup_file() {
 
 # ---------------------------------------------------------------------------- #
 
-# bats test_tags=search:project, search:manifest
+# bats test_tags=search:project, search:manifest, search:show
 
 @test "'flox show' uses '_PKGDB_GA_REGISTRY_REF_OR_REV' revision" {
   mkdir -p "$PROJECT_DIR/.flox/env";
@@ -309,7 +309,7 @@ setup_file() {
 
 # ---------------------------------------------------------------------------- #
 
-# bats test_tags=search:project, search:manifest, search:lockfile
+# bats test_tags=search:project, search:manifest, search:lockfile, search:show
 
 @test "'flox show' uses locked revision when available" {
   mkdir -p "$PROJECT_DIR/.flox/env";
