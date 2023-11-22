@@ -4,6 +4,8 @@
 #
 # Test flox init
 #
+# bats file_tags=init
+#
 # ---------------------------------------------------------------------------- #
 
 load test_support.bash
@@ -31,10 +33,14 @@ setup() {
   common_test_setup
   project_setup
 }
+
 teardown() {
   project_teardown
   common_test_teardown
 }
+
+
+# ---------------------------------------------------------------------------- #
 
 @test "c2: flox init without a name should create an environment named the same as the directory the user is in" {
 
@@ -140,3 +146,10 @@ function check_with_dir() {
   assert_success
   check_with_dir
 }
+
+
+# ---------------------------------------------------------------------------- #
+#
+#
+#
+# ============================================================================ #

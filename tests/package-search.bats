@@ -15,20 +15,21 @@ load test_support.bash
 # Helpers for project based tests.
 
 project_setup() {
-  export PROJECT_DIR="${BATS_TEST_TMPDIR?}/test"
-  rm -rf "$PROJECT_DIR"
-  mkdir -p "$PROJECT_DIR"
-  pushd "$PROJECT_DIR" >/dev/null || return
+  export PROJECT_DIR="${BATS_TEST_TMPDIR?}/test";
+  rm -rf "$PROJECT_DIR";
+  mkdir -p "$PROJECT_DIR";
+  pushd "$PROJECT_DIR" >/dev/null||return;
   run "$FLOX_CLI" init;
   assert_success;
   unset output;
 }
 
 project_teardown() {
-  popd >/dev/null || return
-  rm -rf "${PROJECT_DIR?}"
-  unset PROJECT_DIR
+  popd >/dev/null||return;
+  rm -rf "${PROJECT_DIR?}";
+  unset PROJECT_DIR;
 }
+
 
 # ---------------------------------------------------------------------------- #
 
@@ -36,16 +37,23 @@ setup() {
   common_test_setup;
   project_setup;
 }
+
 teardown() {
   project_teardown;
   common_test_teardown;
 }
 
 setup_file() {
-  export SHOW_HINT="Use \`flox show {package}\` to see available versions"
+  common_file_setup;
 
+  export SHOW_HINT="Use \`flox show {package}\` to see available versions"
   # Separator character for ambiguous package sources
   export SEP=":";
+
+  if [[ -z "${PKGDB_BIN}" ]]; then
+    echo "You must set \$PKGDB_BIN to run these tests" >&2;
+    exit 1;
+  fi
 }
 
 
@@ -270,3 +278,85 @@ setup_file() {
   n_lines="${#lines[@]}";
   assert_equal "$n_lines" 10; # search results from global manifest registry
 }
+
+
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=search:project, search:manifest, search:show
+
+@test "'flox show' uses '_PKGDB_GA_REGISTRY_REF_OR_REV' revision" {
+  mkdir -p "$PROJECT_DIR/.flox/env";
+  # Note: at some point it may also be necessary to create a .flox/env.json
+  echo 'options.systems = ["x86_64-linux"]'       \
+       > "$PROJECT_DIR/.flox/env/manifest.toml";
+
+  # Search for a package with `pkgdb`
+  run --separate-stderr sh -c "$PKGDB_BIN search --ga-registry '{
+      \"manifest\": \"$PROJECT_DIR/.flox/env/manifest.toml\",
+      \"query\": { \"match-name\": \"nodejs\" }
+    }'|head -n1|jq -r '.version';";
+  assert_success;
+  assert_output '18.16.0';
+  unset output;
+
+  # Ensure the version of `nodejs' in our search results aligns with the
+  # `--ga-registry` default ( 18.16.0 ).
+  run --separate-stderr sh -c "$FLOX_CLI show nodejs|tail -n1";
+  assert_success;
+  assert_output '    nodejs - nodejs@18.16.0';
+}
+
+
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=search:project, search:manifest, search:lockfile, search:show
+
+@test "'flox show' uses locked revision when available" {
+  mkdir -p "$PROJECT_DIR/.flox/env";
+  # Note: at some point it may also be necessary to create a .flox/env.json
+  {
+    echo 'options.systems = ["x86_64-linux"]';
+    echo 'install.nodejs = {}';
+  } > "$PROJECT_DIR/.flox/env/manifest.toml";
+
+  # Force lockfile to pin a specific revision of `nixpkgs'
+  run --separate-stderr sh -c                                          \
+   "_PKGDB_GA_REGISTRY_REF_OR_REV='${PKGDB_NIXPKGS_REV_NEW?}'          \
+      $PKGDB_BIN manifest lock                                         \
+                 --ga-registry '$PROJECT_DIR/.flox/env/manifest.toml'  \
+                 > '$PROJECT_DIR/.flox/env/manifest.lock';";
+  assert_success;
+  unset output;
+
+  # Ensure the locked revision is what we expect.
+  run --separate-stderr jq -r '.registry.inputs.nixpkgs.from.rev'      \
+                              "$PROJECT_DIR/.flox/env/manifest.lock";
+  assert_success;
+  assert_output "$PKGDB_NIXPKGS_REV_NEW";
+  unset output;
+
+  # Search for a package with `pkgdb`
+  run --separate-stderr sh -c                                    \
+   "_PKGDB_GA_REGISTRY_REF_OR_REV='$PKGDB_NIXPKGS_REV_NEW'       \
+      $PKGDB_BIN search --ga-registry '{
+        \"manifest\": \"$PROJECT_DIR/.flox/env/manifest.toml\",
+        \"lockfile\": \"$PROJECT_DIR/.flox/env/manifest.lock\",
+        \"query\": { \"match-name\": \"nodejs\" }
+      }'|head -n1|jq -r '.version';"
+  assert_success;
+  assert_output '18.17.1';
+  unset output;
+
+  # Ensure the version of `nodejs' in our search results aligns with the
+  # locked rev ( 18.17.1 ), instead of the `--ga-registry` default ( 18.16.0 ).
+  run --separate-stderr sh -c "$FLOX_CLI show nodejs|tail -n1";
+  assert_success;
+  assert_output '    nodejs - nodejs@18.17.1';
+}
+
+
+# ---------------------------------------------------------------------------- #
+#
+#
+#
+# ============================================================================ #
