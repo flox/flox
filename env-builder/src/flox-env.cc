@@ -51,6 +51,11 @@ createUserEnv( EvalState &          state,
   /**
    * extract derivations
    */
+  StorePathSet references;
+  std::vector<StorePathWithOutputs> drvsToBuild;
+  Value                             environment_drvs;
+  state.mkList( environment_drvs, locked_packages.size() );
+  size_t n = 0;
 
   for ( auto const & package : locked_packages )
     {
@@ -81,6 +86,22 @@ createUserEnv( EvalState &          state,
                        package.input );
         }
 
+      for ( const auto & [m, j] : enumerate( package_drv->queryOutputs() ) )
+        {
+          references.insert( *j.second );
+        }
+
+
+      if ( auto drvPath = package_drv->queryDrvPath() )
+        {
+          drvsToBuild.push_back( { *drvPath } );
+          references.insert( *drvPath );
+        }
+      ( environment_drvs.listElems()[n++] = state.allocValue() )->mkAttrs( attr.attrs );
+
+
+      // auto profile_d_scripts;
+      // auto activateScript
     }
 }
 
