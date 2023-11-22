@@ -1,0 +1,107 @@
+# Activate a project environment and check
+# - pip and python3 are installed
+# - 
+# Assume throughout that the project is named project-\d+
+
+set flox $env(FLOX_CLI)
+
+spawn $flox activate
+expect {
+    "Building environment..." {}
+    timeout {
+      puts stderr "Reached timeout running '$cmd'"
+      exit 1
+    }
+}
+set timeout 300
+expect {
+    -re "project.*\$" {}
+    timeout {
+      puts stderr "Reached timeout running '$cmd'"
+      exit 1
+    }
+}
+
+# activation is the only thing that should take very long so set a low timeout
+set timeout 1
+
+# check for python3
+send "{ command -v python3||which python3||type -P python3; } 2>&1\n"
+expect {
+    -re "\.flox/run/.*\.project-\\d+/bin/python3" {}
+    timeout {
+      puts stderr "Reached timeout locating 'python3'"
+      exit 1
+    }
+}
+
+# check for pip
+send "{ command -v pip||which pip||type -P pip; } 2>&1\n"
+expect {
+    -re "\.flox/run/.*\.project-\\d+/bin/pip" {}
+    timeout {
+      puts stderr "Reached timeout locating 'pip'"
+      exit 1
+    }
+}
+
+# check that pip is properly configured
+send "cat \$PIP_CONFIG_FILE\n"
+expect {
+    -re "require-virtualenv = true" {}
+    timeout {
+      puts stderr "Reached timeout running 'cat \$PIP_CONFIG_FILE'"
+      exit 1
+    }
+}
+
+# check pip install return correct error
+send "pip install requests\n"
+expect {
+    -re "ERROR: Could not find an activated virtualenv" {}
+    timeout {
+      puts stderr "Reached timeout running 'pip install requests'"
+      exit 1
+    }
+}
+
+# create python virtualenv
+send "python3 -m venv env\n"
+expect {
+    -re "flox .*\\\[project-\\d+\\\]" {}
+    timeout {
+      puts stderr "Reached timeout checking prompt"
+      exit 1
+    }
+}
+
+# create python virtualenv
+set timeout 30
+send "./env/bin/pip install requests\n"
+expect {
+    -re "Collecting requests" {}
+    timeout {
+      puts stderr "Reached timeout running 'pip install requests'"
+      exit 1
+    }
+}
+expect {
+    -re "flox .*\\\[project-\\d+\\\]" {}
+    timeout {
+      puts stderr "Reached timeout checking prompt"
+      exit 1
+    }
+}
+set timeout 1
+
+# test requests library in python 
+send "./env/bin/python -c 'import requests; print(requests.__path__)'\n"
+expect {
+    -re "\\\['.*/project-\\d+/env/lib/python\\d+.\\d+/site-packages/requests'\\\]" {}
+    timeout {
+      puts stderr "Reached timeout checking prompt"
+      exit 1
+    }
+}
+
+exit 0

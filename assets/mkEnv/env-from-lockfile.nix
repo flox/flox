@@ -1,8 +1,6 @@
 # Build an environment from a collection of packages
 {
-  lockfilePath ?
-    throw
-    "flox: You must provide the path to a lockfile.",
+  lockfilePath ? throw "flox: You must provide the path to a lockfile.",
   system ? builtins.currentSystem or "unknown",
   ...
 }: let
@@ -10,6 +8,7 @@
   nixpkgsFlake = builtins.getFlake lockfileContents.registry.inputs.nixpkgs.url;
   pkgs = nixpkgsFlake.legacyPackages.${system};
   lib = nixpkgsFlake.lib;
+
   # Convert manifest elements to derivations.
   tryGetDrv = package: let
     flake = builtins.getFlake package.input.url;
@@ -18,16 +17,22 @@
     if builtins.isNull package
     then null
     else drv;
+
   entries =
     builtins.filter
     (p: !builtins.isNull p)
     (builtins.map tryGetDrv
       (builtins.attrValues lockfileContents.packages.${system}));
+
+  profiledScripts = pkgs.runCommand "flox-profile.d-scripts" {} ''
+    mkdir -p $out/etc/profile.d
+    cp -R ${./profile.d}/* $out/etc/profile.d/
+  '';
+
   activateScript = pkgs.writeTextFile {
-    name = "activate";
+    name = "flox-activate";
     executable = true;
     destination = "/activate";
-    # TODO don't hardcode 0100_common-paths.sh
     text = ''
       # We use --rcfile to activate using bash which skips sourcing ~/.bashrc,
       # so source that here.
@@ -37,7 +42,6 @@
       fi
 
       . ${./set-prompt.sh}
-      . ${./profile.d/0100_common-paths.sh}
       . ${./source-profiles.sh}
 
       ${lib.optionalString (lockfileContents ? manifest.hook.script) ''
@@ -50,5 +54,8 @@ in
     name = "flox-env";
     paths =
       entries
-      ++ [activateScript];
+      ++ [
+        profiledScripts
+        activateScript
+      ];
   }
