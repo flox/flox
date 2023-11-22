@@ -14,9 +14,9 @@ _BUILT      := $(patsubst %,$(SRC_DIR)/%.gen.hh,$(_BUILT_SRCS))
 _BUILT_SRCS =
 
 BUILT_SRCS       += $(_BUILT)
-env-builder_SRCS += $(_BUILT)
-env-builder_SRCS += $(wildcard $(SRC_DIR)/*.cc)
 libenvbuilder_LDLIBS   += -lsqlite3
+env_builder_SRCS += $(_BUILT)
+env_builder_SRCS += $(wildcard $(SRC_DIR)/*.cc)
 
 
 # ---------------------------------------------------------------------------- #

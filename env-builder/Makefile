@@ -13,7 +13,7 @@ include mk/config.mk
 
 # ---------------------------------------------------------------------------- #
 
-BINS    =  env-builder
+BINS    =  env_builder
 LIBS    =  libenvbuilder
 HEADERS =  $(wildcard include/*.hh include/flox/*.hh include/nix/*.hh)
 
