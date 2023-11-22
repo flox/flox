@@ -197,6 +197,8 @@ impl FloxArgs {
             if !self.debug || !matches!(self.verbosity, Verbosity::Verbose(1..)) {
                 let _ = fs::remove_dir_all(&temp_dir_path);
             }
+
+            std::process::exit(130);
         });
 
         // command handled above
