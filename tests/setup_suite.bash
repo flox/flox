@@ -466,6 +466,41 @@ xdg_tmp_setup() {
 
 # ---------------------------------------------------------------------------- #
 
+# Set variables related to `pkgdb' settings.
+pkgdb_vars_setup() {
+  if [[ -n "${__FT_RAN_PKGDB_VARS_SETUP:-}" ]]; then return 0; fi
+
+  export _PKGDB_TEST_SUITE_MODE=:;
+
+  # This revision is a bit old, but it was created from `release-23.05'.
+  # Notably its default `nodejs' version is `18.16.0' which is referenced in
+  # some test cases.
+  PKGDB_NIXPKGS_REV_OLD='e8039594435c68eb4f780f3e9bf3972a7399c4b1';
+  # This revision is a bit newer, and was also created from `release-23.05'.
+  # Notably its default `nodejs' version is `18.17.1' which is referenced in
+  # some test cases.
+  PKGDB_NIXPKGS_REV_NEW='9faf91e6d0b7743d41cce3b63a8e5c733dc696a3';
+
+  PKGDB_NIXPKGS_REF_OLD="github:NixOS/nixpkgs/$PKGDB_NIXPKGS_REV_OLD";
+  PKGDB_NIXPKGS_REF_NEW="github:NixOS/nixpkgs/$PKGDB_NIXPKGS_REV_NEW";
+
+  # This causes `pkgdb' to use this revision for `nixpkgs' anywhere the
+  # `--ga-registry' flag is used.
+  # This is useful for testing `pkgdb' against a specific revision of `nixpkgs'
+  # so that we get consistent packages and improved caching.
+  _PKGDB_GA_REGISTRY_REF_OR_REV="$PKGDB_NIXPKGS_REV_OLD";
+
+
+  export PKGDB_NIXPKGS_REV_OLD PKGDB_NIXPKGS_REV_NEW  \
+         PKGDB_NIXPKGS_REF_OLD PKGDB_NIXPKGS_REF_NEW  \
+          _PKGDB_GA_REGISTRY_REF_OR_REV;
+
+  export __FT_RAN_PKGDB_VARS_SETUP=:;
+}
+
+
+# ---------------------------------------------------------------------------- #
+
 # This helper should be run after setting `FLOX_TEST_HOME'.
 flox_vars_setup() {
   xdg_vars_setup;
@@ -478,6 +513,7 @@ flox_vars_setup() {
   export USER="flox-test";
   export HOME="${FLOX_TEST_HOME:-$HOME}";
 }
+
 
 # ---------------------------------------------------------------------------- #
 
@@ -523,6 +559,7 @@ common_suite_setup() {
   nix_system_setup;
   misc_vars_setup;
   flox_cli_vars_setup;
+  pkgdb_vars_setup;
   # Generate configs and auth.
   ssh_key_setup;
   floxtest_gitforge_setup;
@@ -547,6 +584,11 @@ common_suite_setup() {
     print_var SSH_AUTH_SOCK;
     print_var GIT_CONFIG_SYSTEM;
     print_var GIT_CONFIG_GLOBAL;
+    print_var PKGDB_NIXPKGS_REV_NEW;
+    print_var PKGDB_NIXPKGS_REV_OLD;
+    print_var PKGDB_NIXPKGS_REF_NEW;
+    print_var PKGDB_NIXPKGS_REF_OLD;
+    print_var _PKGDB_GA_REGISTRY_REF_OR_REV;
   } >&3;
 }
 
