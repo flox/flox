@@ -20,8 +20,6 @@
 
   inputs.crane.url = "github:ipetkov/crane";
   inputs.crane.inputs.nixpkgs.follows = "nixpkgs";
-  inputs.crane.inputs.flake-compat.follows = "shellHooks/flake-compat";
-  inputs.crane.inputs.flake-utils.follows = "shellHooks/flake-utils";
 
   # -------------------------------------------------------------------------- #
 
@@ -86,7 +84,7 @@
           inherit inputs self floxVersion;
           pkgsFor = final;
         });
-      genPkg = name: _: callPackage (./pkgs + ("/" + name)) {};
+      genPkg = name: _: final.lib.makeOverridable (callPackage (./pkgs + ("/" + name))) {};
     in
       builtins.mapAttrs genPkg (builtins.readDir ./pkgs);
 
@@ -124,6 +122,7 @@
         nix-editor
         ;
       default = pkgsFor.flox;
+      flox-tests-end2end = pkgsFor.flox-tests.override {testsDir = "/tests/end2end";};
     });
     # ------------------------------------------------------------------------ #
   in {

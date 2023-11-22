@@ -32,7 +32,6 @@
 
   # build time environment variables
   envs = let
-    # we need to pull all of the scripts in the mkEnv directory into /nix/store
     mkEnv = ../../assets/mkEnv;
   in
     {

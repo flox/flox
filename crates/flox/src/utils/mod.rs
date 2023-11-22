@@ -2,7 +2,6 @@ use std::borrow::Cow;
 use std::io::Stderr;
 use std::sync::Mutex;
 
-use anyhow::Context;
 use once_cell::sync::Lazy;
 
 pub mod colors;
@@ -23,30 +22,4 @@ fn nix_str_safe(s: &str) -> Cow<str> {
     } else {
         format!("{s:?}").into()
     }
-}
-
-#[cfg(test)]
-mod test {
-    use super::*;
-
-    const TOML_CONTENTS: &str = r#"
-    [my_table]
-    foo = { bar = "baz" }
-
-    [some_table]
-    key = "value"
-    "#;
-
-    const JSON_CONTENTS: &str = r#"
-    {
-        "my_table": {
-            "foo": {
-                "bar": "baz"
-            }
-        },
-        "some_table": {
-            "key": "value"
-        }
-    }
-    "#;
 }

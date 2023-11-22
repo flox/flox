@@ -66,15 +66,12 @@ impl Edit {
             .environment
             .to_concrete_environment(&flox)?
             .into_dyn_environment();
-        let nix = flox.nix(Default::default());
 
         match self.provided_manifest_contents()? {
             // If provided with the contents of a manifest file, either via a path to a file or via
             // contents piped to stdin, use those contents to try building the environment.
             Some(new_manifest) => {
-                environment
-                    .edit(&nix, flox.system.clone(), new_manifest)
-                    .await?;
+                environment.edit(&flox, new_manifest).await?;
                 Ok(())
             },
             // If not provided with new manifest contents, let the user edit the file directly
@@ -101,10 +98,7 @@ impl Edit {
                 // decides to stop.
                 loop {
                     let new_manifest = Edit::edited_manifest_contents(&tmp_manifest, &editor)?;
-                    if let Err(e) = environment
-                        .edit(&nix, flox.system.clone(), new_manifest)
-                        .await
-                    {
+                    if let Err(e) = environment.edit(&flox, new_manifest).await {
                         error!("Environment invalid; building resulted in an error: {e}");
                         if !Dialog::can_prompt() {
                             bail!("Can't prompt to continue editing in non-interactive context");
@@ -213,7 +207,6 @@ impl Activate {
         };
 
         let mut environment = concrete_environment.into_dyn_environment();
-        let nix = flox.nix(Default::default());
 
         let mut stderr = std::io::stdout();
         stderr
@@ -224,7 +217,7 @@ impl Activate {
             .context("could't write progress message")?;
         stderr.flush().context("could't flush stderr")?;
 
-        let activation_path = environment.activation_path(&flox, &nix).await?;
+        let activation_path = environment.activation_path(&flox).await?;
 
         stderr
             .queue(cursor::RestorePosition)
@@ -390,10 +383,7 @@ impl Install {
         let concrete_environment = self.environment.to_concrete_environment(&flox)?;
         let description = environment_description(&concrete_environment);
         let mut environment = concrete_environment.into_dyn_environment();
-        let nix = flox.nix::<NixCommandLine>(vec![]);
-        let installation = environment
-            .install(self.packages.clone(), &nix, flox.system.clone())
-            .await?;
+        let installation = environment.install(self.packages.clone(), &flox).await?;
         if installation.new_manifest.is_some() {
             // Print which new packages were installed
             for pkg in self.packages.iter() {
@@ -432,10 +422,7 @@ impl Uninstall {
         let concrete_environment = self.environment.to_concrete_environment(&flox)?;
         let description = environment_description(&concrete_environment);
         let mut environment = concrete_environment.into_dyn_environment();
-        let nix = flox.nix::<NixCommandLine>(vec![]);
-        let _ = environment
-            .uninstall(self.packages.clone(), &nix, flox.system.clone())
-            .await?;
+        let _ = environment.uninstall(self.packages.clone(), &flox).await?;
 
         // Note, you need two spaces between this emoji and the package name
         // otherwise they appear right next to each other.

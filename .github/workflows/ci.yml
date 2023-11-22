@@ -89,10 +89,11 @@ jobs:
             --no-update-lock-file \
             --print-out-paths \
             '.#flox'
+        # We run bats tests later on against the `FLOX_CLI' env
         echo "FLOX_CLI=$(readlink -f ./result; )/bin/flox" >> "$GITHUB_ENV"
         rm ./result
 
-    - name: "Build flox-tests"
+    - name: "Build Bats Tests (./#flox-tests)"
       run: |
         nix build -L \
             --extra-experimental-features "nix-command flakes" \
@@ -101,11 +102,27 @@ jobs:
             --no-link \
             '.#flox-tests'
 
-    # We test against the `FLOX_CLI' env var's path set earlier.
-    - name: "Bats Tests"
+    - name: "Run Bats Tests (./#flox-tests)"
       run: |
         git clean -xfd
         nix run \
             --extra-experimental-features "nix-command flakes" \
             --no-update-lock-file \
             '.#flox-tests'
+
+    - name: "Build end2end Bats Tests (.#flox-tests-end2end)"
+      run: |
+        nix build -L \
+            --extra-experimental-features "nix-command flakes" \
+            --no-update-lock-file \
+            --print-out-paths \
+            --no-link \
+            '.#flox-tests-end2end'
+
+    - name: "Run Bats end2end Tests (./#flox-tests-end2end)"
+      run: |
+        git clean -xfd
+        nix run \
+            --extra-experimental-features "nix-command flakes" \
+            --no-update-lock-file \
+            '.#flox-tests-end2end'
