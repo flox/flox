@@ -103,6 +103,10 @@ createUserEnv( EvalState &          state,
       // auto profile_d_scripts;
       // auto activateScript
     }
+
+  state.store->buildPaths( toDerivedPaths( drvsToBuild ),
+                           state.repair ? bmRepair : bmNormal );
+
 }
 
 
