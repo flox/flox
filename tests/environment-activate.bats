@@ -100,6 +100,12 @@ env_is_activated() {
 # ---------------------------------------------------------------------------- #
 
 @test "activate runs hook" {
+  cat << "EOF" >> "$PROJECT_DIR/.flox/env/manifest.toml"
+[hook]
+script = """
+  echo "Welcome to your flox environment!";
+"""
+EOF
   SHELL=bash run expect -d "$TESTS_DIR/activate/hook.exp" "$PROJECT_DIR";
   assert_success;
 }
