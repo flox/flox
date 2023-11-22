@@ -61,6 +61,26 @@ createUserEnv( EvalState &          state,
 
       Value attr;
       flake::callFlake( state, package_flake, attr );
+      /* evaluate the package */
+      for ( auto path_segment : package.attrPath )
+        {
+          auto found = attr.attrs->find( state.symbols.create( path_segment ) );
+          if ( found == attr.attrs->end() )
+            {
+              throw Error( "Attribute '%s' not found in flake '%s'",
+                           path_segment,
+                           package.input );
+            }
+          attr = *found->value;
+        }
+
+      auto package_drv = getDerivation( state, attr, false );
+      if ( ! package_drv.has_value() )
+        {
+          throw Error( "Failed to get derivation for package '%s'",
+                       package.input );
+        }
+
     }
 }
 
