@@ -84,7 +84,7 @@
           inherit inputs self floxVersion;
           pkgsFor = final;
         });
-      genPkg = name: _: final.lib.makeOverridable (callPackage (./pkgs + ("/" + name))) {};
+      genPkg = name: _: callPackage (./pkgs + ("/" + name)) {};
     in
       builtins.mapAttrs genPkg (builtins.readDir ./pkgs);
 
