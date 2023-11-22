@@ -13,7 +13,8 @@
   boost,
   argparse,
   semver,
-  # sqlite3pp,
+  flox-pkgdb,
+  sqlite3pp,
   # sql-builder,
 }: let
   src = builtins.path {
@@ -47,11 +48,14 @@ in
       sqlite.dev
       nlohmann_json
       argparse
-      # sqlite3pp
+      flox-pkgdb
+      sqlite3pp
       # sql-builder
     ];
     nix_INCDIR = nix.dev.outPath + "/include";
     boost_CFLAGS = "-I" + boost.outPath + "/include";
+    pkgdb_CLFAGS = "-I" + flox-pkgdb.outPath + "/include";
+
     libExt = stdenv.hostPlatform.extensions.sharedLibrary;
     # sql_builder_CFLAGS = "-I" + sql-builder.outPath + "/include";
     # SEMVER_PATH = semver.outPath + "/bin/semver";
