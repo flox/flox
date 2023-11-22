@@ -23,7 +23,8 @@ namespace nix {
  * @param userEnv Path to the environment which should be queried.
  * @return A list of `derivation` metadata associated with installed packages.
  */
-DrvInfos queryInstalled( EvalState & state, const Path & userEnv );
+DrvInfos
+queryInstalled( EvalState & state, const Path & userEnv );
 
 
 /**
@@ -39,14 +40,14 @@ DrvInfos queryInstalled( EvalState & state, const Path & userEnv );
  * @return `true` iff the environment is created successfully;
  *         `false` if an error was encountered.
  */
-bool createUserEnv(       EvalState   & state
-                  ,       DrvInfos    & elems
-                  , const Path        & profile
-                  ,       bool          keepDerivations
-                  , const std::string & lockToken
-                  );
+bool
+createUserEnv( EvalState &         state,
+               DrvInfos &          elems,
+               const Path &        profile,
+               bool                keepDerivations,
+               const std::string & lockToken );
 
-}  /* End namespace `nix' */
+}  // namespace nix
 
 
 /* -------------------------------------------------------------------------- *

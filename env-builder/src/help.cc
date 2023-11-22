@@ -19,7 +19,7 @@ namespace flox {
 
 /* -------------------------------------------------------------------------- */
 
-  static void
+static void
 showUsageTop( std::ostream & fd, nix::MultiCommand & toplevel )
 {
   fd << "Usage: flox OPTIONS... (";
@@ -30,12 +30,12 @@ showUsageTop( std::ostream & fd, nix::MultiCommand & toplevel )
       switch ( command->category() )
         {
           case nix::Command::catDefault: break;
-          case flox::catLocal:           break;
-          case flox::catSharing:         break;
+          case flox::catLocal: break;
+          case flox::catSharing: break;
           /* Skip everyting else. */
-          case nix::catHelp:        continue; break;
+          case nix::catHelp: continue; break;
           case flox::catAdditional: continue; break;
-          default:                  continue; break;
+          default: continue; break;
         }
       fd << name << '|';
     }
@@ -45,7 +45,7 @@ showUsageTop( std::ostream & fd, nix::MultiCommand & toplevel )
 
 /* -------------------------------------------------------------------------- */
 
-  void
+void
 showSubcommandHelp( std::ostream & fd, nix::MultiCommand & command )
 {
   showUsageTop( fd, command );
@@ -53,16 +53,13 @@ showSubcommandHelp( std::ostream & fd, nix::MultiCommand & command )
   /* Show Options */
   fd << std::endl << "OPTIONS" << std::endl;
   std::unordered_map<std::string, std::string> optFlags;
-  size_t width = 0;
-  nlohmann::json j = command.toJSON();
-  if ( j.find( "flags" ) == j.end() )
-    {
-      j["flags"] = nlohmann::json::object();
-    }
+  size_t                                       width = 0;
+  nlohmann::json                               j     = command.toJSON();
+  if ( j.find( "flags" ) == j.end() ) { j["flags"] = nlohmann::json::object(); }
   for ( auto & [name, flag] : command.toJSON().at( "flags" ).items() )
     {
       std::string lhs( "--" + name );
-      auto mShort = flag.find( "shortName" );
+      auto        mShort = flag.find( "shortName" );
       if ( mShort != flag.end() )
         {
           lhs += ",-";
@@ -70,9 +67,8 @@ showSubcommandHelp( std::ostream & fd, nix::MultiCommand & command )
         }
       lhs += ' ';
       lhs += nix::concatStringsSep(
-               " "
-             , (std::vector<std::string>) flag.at( "labels" )
-             );
+        " ",
+        (std::vector<std::string>) flag.at( "labels" ) );
       /* Find the longest so we can align. */
       if ( width < lhs.size() ) { width = lhs.size(); }
       optFlags.emplace( name, lhs );
@@ -82,8 +78,8 @@ showSubcommandHelp( std::ostream & fd, nix::MultiCommand & command )
     {
       std::ostringstream oss;
       oss << std::left << std::setfill( ' ' ) << std::setw( width ) << lhs;
-      fd << "  " << oss.str() << "  "
-         << j.at( name ).at( "description" ) << std::endl;
+      fd << "  " << oss.str() << "  " << j.at( name ).at( "description" )
+         << std::endl;
     }
 
   /* Show Commands */
@@ -95,12 +91,12 @@ showSubcommandHelp( std::ostream & fd, nix::MultiCommand & command )
       switch ( commandFun()->category() )
         {
           case nix::Command::catDefault: break;
-          case flox::catLocal:           break;
-          case flox::catSharing:         break;
+          case flox::catLocal: break;
+          case flox::catSharing: break;
           /* Skip everyting else. */
-          case nix::catHelp:        continue; break;
+          case nix::catHelp: continue; break;
           case flox::catAdditional: continue; break;
-          default:                  continue; break;
+          default: continue; break;
         }
       if ( width < name.size() ) { width = name.size(); }
     }
@@ -132,10 +128,7 @@ showSubcommandHelp( std::ostream & fd, nix::MultiCommand & command )
                       fd << ',' << std::endl << "    ";
                       count = 4 + name.size();
                     }
-                  else
-                    {
-                      fd << ", ";
-                    }
+                  else { fd << ", "; }
                   fd << name;
                 }
             }
@@ -163,11 +156,10 @@ showSubcommandHelp( std::ostream & fd, nix::MultiCommand & command )
 
 /* -------------------------------------------------------------------------- */
 
-  static void
-showSubcommandUsage( std::ostream      & fd
-                   , std::string_view    name
-                   , nix::MultiCommand & command
-                   )
+static void
+showSubcommandUsage( std::ostream &      fd,
+                     std::string_view    name,
+                     nix::MultiCommand & command )
 {
   fd << "Usage: flox " << name << "OPTIONS... (";
   for ( auto & [name, commandFun] : command.commands )
@@ -177,12 +169,12 @@ showSubcommandUsage( std::ostream      & fd
       switch ( command->category() )
         {
           case nix::Command::catDefault: break;
-          case flox::catLocal:           break;
-          case flox::catSharing:         break;
+          case flox::catLocal: break;
+          case flox::catSharing: break;
           /* Skip everyting else. */
-          case nix::catHelp:        continue; break;
+          case nix::catHelp: continue; break;
           case flox::catAdditional: continue; break;
-          default:                  continue; break;
+          default: continue; break;
         }
       fd << name << '|';
     }
@@ -196,7 +188,7 @@ showSubcommandUsage( std::ostream      & fd
  * Render the help for the specified subcommand to stdout using
  * lowdown.
  */
-  void
+void
 showHelp( std::vector<std::string> subcommand, FloxArgs & toplevel )
 {
   showSubcommandHelp( std::cout, toplevel );
@@ -206,14 +198,14 @@ showHelp( std::vector<std::string> subcommand, FloxArgs & toplevel )
 
 /* -------------------------------------------------------------------------- */
 
-  static FloxArgs &
+static FloxArgs &
 getFloxArgs( nix::Command & cmd )
 {
   assert( cmd.parent );
   /* Find the "top level" command by traversing parents. */
   nix::MultiCommand * toplevel = cmd.parent;
   while ( toplevel->parent != nullptr ) { toplevel = toplevel->parent; }
-  return dynamic_cast<FloxArgs &>( * toplevel );
+  return dynamic_cast<FloxArgs &>( *toplevel );
 }
 
 
@@ -225,30 +217,35 @@ struct CmdHelp : nix::Command
 
   CmdHelp()
   {
-    expectArgs( {
-      .label   = "subcommand"
-    , .handler = { & subcommand }
-    } );
+    expectArgs( { .label = "subcommand", .handler = { &subcommand } } );
   }
 
-    std::string
+  std::string
   description() override
   {
     return "show help about `flox` or a particular subcommand";
   }
 
-  std::string doc() override { return "TODO"; }
+  std::string
+  doc() override
+  {
+    return "TODO";
+  }
 
-  nix::Command::Category category() override { return flox::catAdditional; }
+  nix::Command::Category
+  category() override
+  {
+    return flox::catAdditional;
+  }
 
-  void run() override
+  void
+  run() override
   {
     assert( parent );
     nix::MultiCommand * toplevel = parent;
     while ( toplevel->parent ) { toplevel = toplevel->parent; }
-    showHelp( subcommand, getFloxArgs( * this ) );
+    showHelp( subcommand, getFloxArgs( *this ) );
   }
-
 };
 
 static auto rCmdHelp = nix::registerCommand<CmdHelp>( "help" );
@@ -256,7 +253,7 @@ static auto rCmdHelp = nix::registerCommand<CmdHelp>( "help" );
 
 /* -------------------------------------------------------------------------- */
 
-}  /* End namespace `flox' */
+}  // namespace flox
 
 
 /* -------------------------------------------------------------------------- *

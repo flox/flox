@@ -41,7 +41,9 @@ static constexpr nix::Command::Category catAdditional = 203;
 
 /* -------------------------------------------------------------------------- */
 
-struct FloxArgs : virtual public nix::MultiCommand, virtual nix::MixCommonArgs
+struct FloxArgs
+  : virtual public nix::MultiCommand
+  , virtual nix::MixCommonArgs
 {
   bool useNet        = true;
   bool refresh       = false;
@@ -51,45 +53,52 @@ struct FloxArgs : virtual public nix::MultiCommand, virtual nix::MixCommonArgs
   FloxArgs();
 
   std::map<std::string, std::vector<std::string>> aliases = {
-  //   { "dev-shell",     { "develop"                } }
-  // , { "diff-closures", { "store", "diff-closures" } }
+    //   { "dev-shell",     { "develop"                } }
+    // , { "diff-closures", { "store", "diff-closures" } }
   };
 
   bool aliasUsed = false;
 
-    nix::Strings::iterator
+  nix::Strings::iterator
   rewriteArgs( nix::Strings & args, nix::Strings::iterator pos ) override;
 
-    std::string
+  std::string
   description() override
   {
     return "a tool for reproducible and declarative environment management";
   }
 
-  std::string doc() override { return "TODO"; }
+  std::string
+  doc() override
+  {
+    return "TODO";
+  }
 
   /* Plugins may add new subcommands. */
-    void
+  void
   pluginsInited() override
   {
     this->commands = nix::RegisterCommand::getCommandsFor( {} );
   }
 
-  nlohmann::json dumpCli();
+  nlohmann::json
+  dumpCli();
 
-};  /* End struct `FloxArgs' */
-
-
-/* -------------------------------------------------------------------------- */
-
-void showSubcommandHelp( FloxArgs & toplevel, nix::MultiCommand & command );
-
-void showHelp( std::vector<std::string> subcommand, FloxArgs & toplevel );
+}; /* End struct `FloxArgs' */
 
 
 /* -------------------------------------------------------------------------- */
 
-}  /* End namespace `flox' */
+void
+showSubcommandHelp( FloxArgs & toplevel, nix::MultiCommand & command );
+
+void
+showHelp( std::vector<std::string> subcommand, FloxArgs & toplevel );
+
+
+/* -------------------------------------------------------------------------- */
+
+}  // namespace flox
 
 
 /* -------------------------------------------------------------------------- *

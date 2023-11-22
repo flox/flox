@@ -7,17 +7,17 @@
  *
  * -------------------------------------------------------------------------- */
 
+#include <nix/build/personality.hh>
 #include <nix/command-installable-value.hh>
 #include <nix/common-args.hh>
-#include <nix/shared.hh>
-#include <nix/store-api.hh>
 #include <nix/derivations.hh>
-#include <nix/local-store.hh>
+#include <nix/eval.hh>
 #include <nix/finally.hh>
 #include <nix/fs-accessor.hh>
+#include <nix/local-store.hh>
 #include <nix/progress-bar.hh>
-#include <nix/eval.hh>
-#include <nix/build/personality.hh>
+#include <nix/shared.hh>
+#include <nix/store-api.hh>
 
 // #include "nix/run.hh"
 
@@ -99,7 +99,7 @@ namespace nix {
 
 /* -------------------------------------------------------------------------- */
 
-}  /* End namespace `nix' */
+}  // namespace nix
 
 
 /* -------------------------------------------------------------------------- */
@@ -109,7 +109,8 @@ namespace nix {
 
 //   using InstallablesCommand::run;
 
-//   std::vector<std::string> command = { getEnv( "SHELL" ).value_or( "bash" ) };
+//   std::vector<std::string> command = { getEnv( "SHELL" ).value_or( "bash" )
+//   };
 
 //   CmdShell()
 //   {
@@ -250,7 +251,8 @@ namespace nix {
 //     auto state = getEvalState();
 
 //     lockFlags.applyNixConfig = true;
-//     auto app = installable->toApp( * state ).resolve( getEvalStore(), store );
+//     auto app = installable->toApp( * state ).resolve( getEvalStore(), store
+//     );
 
 //     Strings allArgs { app.program };
 //     for ( auto & i : args ) { allArgs.push_back( i ); }
@@ -264,7 +266,7 @@ namespace nix {
 
 /* -------------------------------------------------------------------------- */
 
-  void
+void
 chrootHelper( int argc, char * argv[] )
 {
   int         p            = 1;
@@ -279,7 +281,7 @@ chrootHelper( int argc, char * argv[] )
   uid_t uid = getuid();
   uid_t gid = getgid();
 
-  if ( unshare( CLONE_NEWUSER | CLONE_NEWNS ) == -1)
+  if ( unshare( CLONE_NEWUSER | CLONE_NEWNS ) == -1 )
     {
       /* Try with just CLONE_NEWNS in case user namespaces are
        * specifically disabled. */
@@ -296,7 +298,7 @@ chrootHelper( int argc, char * argv[] )
    * but that doesn't work in a user namespace yet (Ubuntu has a
    * patch for this:
    * https://bugs.launchpad.net/ubuntu/+source/linux/+bug/1478578). */
-  if ( ! pathExists(storeDir ) )
+  if ( ! pathExists( storeDir ) )
     {
       // TODO: Use overlayfs?
 
@@ -304,13 +306,12 @@ chrootHelper( int argc, char * argv[] )
 
       createDirs( tmpDir + storeDir );
 
-      if ( mount( realStoreDir.c_str()
-                , ( tmpDir + storeDir ).c_str()
-                , ""
-                , MS_BIND
-                , 0
-                ) == -1
-         )
+      if ( mount( realStoreDir.c_str(),
+                  ( tmpDir + storeDir ).c_str(),
+                  "",
+                  MS_BIND,
+                  0 )
+           == -1 )
         {
           throw SysError( "mounting '%s' on '%s'", realStoreDir, storeDir );
         }
@@ -327,16 +328,11 @@ chrootHelper( int argc, char * argv[] )
                 {
                   throw SysError( "creating directory '%s'", dst );
                 }
-              if ( mount( src.c_str()
-                        , dst.c_str()
-                        , ""
-                        , MS_BIND | MS_REC
-                        , 0
-                        ) == -1
-                 )
-              {
-                throw SysError( "mounting '%s' on '%s'", src, dst );
-              }
+              if ( mount( src.c_str(), dst.c_str(), "", MS_BIND | MS_REC, 0 )
+                   == -1 )
+                {
+                  throw SysError( "mounting '%s' on '%s'", src, dst );
+                }
             }
           else if ( S_ISLNK( st.st_mode ) )
             {
@@ -345,9 +341,9 @@ chrootHelper( int argc, char * argv[] )
         }
 
       char * cwd = getcwd( 0, 0 );
-      if ( ! cwd ) { throw SysError("getting current directory"); }
+      if ( ! cwd ) { throw SysError( "getting current directory" ); }
 
-      Finally freeCwd( [&]() { free(cwd); } );
+      Finally freeCwd( [&]() { free( cwd ); } );
 
       if ( chroot( tmpDir.c_str() ) == -1 )
         {
@@ -361,13 +357,8 @@ chrootHelper( int argc, char * argv[] )
     }
   else
     {
-      if ( mount( realStoreDir.c_str()
-                , storeDir.c_str()
-                , ""
-                , MS_BIND
-                , 0
-                ) == -1
-         )
+      if ( mount( realStoreDir.c_str(), storeDir.c_str(), "", MS_BIND, 0 )
+           == -1 )
         {
           throw SysError( "mounting '%s' on '%s'", realStoreDir, storeDir );
         }
@@ -385,11 +376,9 @@ chrootHelper( int argc, char * argv[] )
 
 #else
   throw Error(
-    "mounting the Nix store on '%s' is not supported on this platform"
-  , storeDir
-  );
+    "mounting the Nix store on '%s' is not supported on this platform",
+    storeDir );
 #endif
-
 }
 
 
