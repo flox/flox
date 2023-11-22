@@ -19,7 +19,7 @@
 #include <nix/eval.hh>
 #include <nix/build/personality.hh>
 
-#include "nix/run.hh"
+// #include "nix/run.hh"
 
 #if __linux__
 #  include <sys/mount.h>
@@ -42,59 +42,59 @@ namespace nix {
 
 /* -------------------------------------------------------------------------- */
 
-  void
-runProgramInStore(       ref<Store>                        store
-                 , const std::string                     & program
-                 , const Strings                         & args
-                 ,       std::optional<std::string_view>   system
-                 )
-{
-  stopProgressBar();
+//   void
+// runProgramInStore(       ref<Store>                        store
+//                  , const std::string                     & program
+//                  , const Strings                         & args
+//                  ,       std::optional<std::string_view>   system
+//                  )
+// {
+//   stopProgressBar();
 
-  restoreProcessContext();
+//   restoreProcessContext();
 
-  /* If this is a diverted store (i.e. its "logical" location
-   * (typically /nix/store) differs from its "physical" location
-   * (e.g. /home/eelco/nix/store), then run the command in a
-   * chroot. For non-root users, this requires running it in new
-   * mount and user namespaces. Unfortunately,
-   * unshare(CLONE_NEWUSER) doesn't work in a multithreaded program
-   * (which "nix" is), so we exec() a single-threaded helper program
-   * (chrootHelper() below) to do the work. */
-  auto store2 = store.dynamic_pointer_cast<LocalFSStore>();
+//   /* If this is a diverted store (i.e. its "logical" location
+//    * (typically /nix/store) differs from its "physical" location
+//    * (e.g. /home/eelco/nix/store), then run the command in a
+//    * chroot. For non-root users, this requires running it in new
+//    * mount and user namespaces. Unfortunately,
+//    * unshare(CLONE_NEWUSER) doesn't work in a multithreaded program
+//    * (which "nix" is), so we exec() a single-threaded helper program
+//    * (chrootHelper() below) to do the work. */
+//   auto store2 = store.dynamic_pointer_cast<LocalFSStore>();
 
-  if ( ! store2 )
-    {
-      throw Error( "store '%s' is not a local store so it does not support "
-                   "command execution"
-                 , store->getUri()
-                 );
-    }
+//   if ( ! store2 )
+//     {
+//       throw Error( "store '%s' is not a local store so it does not support "
+//                    "command execution"
+//                  , store->getUri()
+//                  );
+//     }
 
-  if ( store->storeDir != store2->getRealStoreDir() )
-    {
-      Strings helperArgs = {
-        chrootHelperName
-      , store->storeDir
-      , store2->getRealStoreDir()
-      , std::string( system.value_or( "" ) )
-      , program
-      };
-      for ( auto & arg : args ) { helperArgs.push_back( arg ); }
+//   if ( store->storeDir != store2->getRealStoreDir() )
+//     {
+//       Strings helperArgs = {
+//         chrootHelperName
+//       , store->storeDir
+//       , store2->getRealStoreDir()
+//       , std::string( system.value_or( "" ) )
+//       , program
+//       };
+//       for ( auto & arg : args ) { helperArgs.push_back( arg ); }
 
-      execv( getSelfExe().value_or( "flox" ).c_str()
-           , stringsToCharPtrs( helperArgs ).data()
-           );
+//       execv( getSelfExe().value_or( "flox" ).c_str()
+//            , stringsToCharPtrs( helperArgs ).data()
+//            );
 
-      throw SysError( "could not execute chroot helper" );
-    }
+//       throw SysError( "could not execute chroot helper" );
+//     }
 
-  if ( system ) { setPersonality( * system ); }
+//   if ( system ) { setPersonality( * system ); }
 
-  execvp( program.c_str(), stringsToCharPtrs( args ).data() );
+//   execvp( program.c_str(), stringsToCharPtrs( args ).data() );
 
-  throw SysError( "unable to execute '%s'", program );
-}
+//   throw SysError( "unable to execute '%s'", program );
+// }
 
 
 /* -------------------------------------------------------------------------- */
