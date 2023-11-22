@@ -133,6 +133,20 @@ createUserEnv( EvalState &          state,
   debug( "evaluating user environment builder" );
   state.forceValue( topLevel,
                     [&]() { return topLevel.determinePos( noPos ); } );
+
+  NixStringContext context;
+  Attr &           aDrvPath( *topLevel.attrs->find( state.sDrvPath ) );
+  auto             topLevelDrv
+    = state.coerceToStorePath( aDrvPath.pos, *aDrvPath.value, context, "" );
+
+  /* Realise the resulting store expression. */
+  debug( "building user environment" );
+  std::vector<StorePathWithOutputs> topLevelDrvs;
+  topLevelDrvs.push_back( { topLevelDrv } );
+  state.store->buildPaths( toDerivedPaths( topLevelDrvs ),
+                           state.repair ? bmRepair : bmNormal );
+
+  printInfo( "built %s", topLevelDrv.to_string() );
 }
 
 
