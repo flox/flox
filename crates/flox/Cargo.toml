@@ -49,6 +49,7 @@ indexmap.workspace = true
 url.workspace = true
 openssl.workspace = true
 chrono.workspace = true
+oauth2.workspace = true
 toml = "0.8.8"
 
 [dev-dependencies]

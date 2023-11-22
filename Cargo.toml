@@ -59,6 +59,6 @@ url = "2.4"
 uuid = { version = "1.2", features = ["serde", "v4"] }
 walkdir = "2"
 xdg = "2.4"
-
+oauth2 = "4.4"
 
 [patch.crates-io]

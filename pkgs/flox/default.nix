@@ -33,6 +33,8 @@
   # build time environment variables
   envs = let
     mkEnv = ../../assets/mkEnv;
+
+    auth0BaseUrl = "https://dev-j4tiszdm1f0b70xf.us.auth0.com";
   in
     {
       # 3rd party CLIs
@@ -63,7 +65,11 @@
       METRICS_EVENTS_API_KEY = "phc_z4dOADAPvpU9VNzCjDD3pIJuSuGTyagKdFWfjak838Y";
 
       # oauth client id
-      OAUTH_CLIENT_ID = "Iv1.3b00a7bb5f910259";
+      OAUTH_CLIENT_ID = "s4BF6zGVcYh3gZUHwp6C4cGf3ey5Bwio";
+      OAUTH_BASE_URL = "${auth0BaseUrl}";
+      OAUTH_AUTH_URL = "${auth0BaseUrl}/authorize";
+      OAUTH_TOKEN_URL = "${auth0BaseUrl}/oauth/token";
+      OAUTH_DEVICE_AUTH_URL = "${auth0BaseUrl}/oauth/device/code";
 
       # the libssh crate wants to use its own libssh prebuilts
       # or build libssh from source.
