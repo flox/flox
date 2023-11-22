@@ -107,6 +107,10 @@ createUserEnv( EvalState &          state,
   state.store->buildPaths( toDerivedPaths( drvsToBuild ),
                            state.repair ? bmRepair : bmNormal );
 
+
+  auto manifestFile
+    = state.store->addTextToStore( "env-manifest.nix", nlohmann::json(lockfile.getLockfileRaw()).dump(), references);
+
 }
 
 
