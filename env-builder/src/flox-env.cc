@@ -78,12 +78,18 @@ createUserEnv( EvalState &          state,
         }
 
 
-      auto package_drv = getDerivation( state, attr, false );
+      auto package_drv = getDerivation( state, *output->value, false );
 
       for ( auto output : package_drv->queryOutputs() )
         {
-          if ( ! output.second.has_value() ) { continue; } // skip outputs without path
-          pkgs.emplace_back( output.second, true, package.priority );
+          if ( ! output.second.has_value() )
+            {
+              continue;
+            }  // skip outputs without path
+          pkgs.emplace_back(
+            state.store->printStorePath( output.second.value() ),
+            true,
+            package.priority );
           references.insert( output.second.value() );
         }
 
