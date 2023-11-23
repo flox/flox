@@ -62,19 +62,32 @@ createUserEnv( EvalState &          state,
       auto package_flake
         = flake::lockFlake( state, package_input_ref, flake::LockFlags {} );
 
-      Value attr;
-      flake::callFlake( state, package_flake, attr );
+      auto vFlake = state.allocValue();
+      flake::callFlake( state, package_flake, *vFlake );
+      state.forceAttrs( *vFlake, noPos, "while parsing flake" );
+
+
+      auto output = vFlake->attrs->get( state.symbols.create( "outputs" ) );
+
+
       /* evaluate the package */
       for ( auto path_segment : package.attrPath )
         {
-          auto found = attr.attrs->find( state.symbols.create( path_segment ) );
-          if ( found == attr.attrs->end() )
+          state.forceAttrs( *output->value,
+                            output->pos,
+                            "while parsing cached flake data" );
+
+          auto found
+            = output->value->attrs->get( state.symbols.create( path_segment ) );
+          if ( ! found )
             {
-              throw Error( "Attribute '%s' not found in flake '%s'",
+              std::ostringstream str;
+              output->value->print( state.symbols, str );
+              throw Error( "Attribute '%s' not found in set '%s'",
                            path_segment,
-                           package.input );
+                           str.str() );
             }
-          attr = *found->value;
+          output = found;
         }
 
 
