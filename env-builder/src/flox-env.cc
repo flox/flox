@@ -1,20 +1,20 @@
+#include "flox/flox-env.hh"
+#include <flox/resolver/lockfile.hh>
 #include <nix/builtins/buildenv.hh>
 #include <nix/command.hh>
 #include <nix/derivations.hh>
 #include <nix/eval-inline.hh>
 #include <nix/eval.hh>
 #include <nix/flake/flake.hh>
+#include <nix/get-drvs.hh>
 #include <nix/globals.hh>
 #include <nix/local-fs-store.hh>
 #include <nix/path-with-outputs.hh>
 #include <nix/profiles.hh>
 #include <nix/shared.hh>
 #include <nix/store-api.hh>
-#include <nix/user-env.hh>
 #include <nix/util.hh>
 #include <nlohmann/json.hpp>
-
-#include <flox/resolver/lockfile.hh>
 
 
 #ifndef ACTIVATION_SCRIPT_BIN
@@ -31,10 +31,9 @@ using namespace flox::resolver;
 
 
 StorePath
-createUserEnv( EvalState &          state,
+createFloxEnv( EvalState &          state,
                resolver::Lockfile & lockfile,
-               System &             system,
-               bool                 keepDerivations )
+               System &             system )
 {
 
 
@@ -94,9 +93,10 @@ createUserEnv( EvalState &          state,
                             output->pos,
                             "while parsing cached flake data" );
 
-          auto found
+          auto next
             = output->value->attrs->get( state.symbols.create( path_segment ) );
-          if ( ! found )
+
+          if ( ! next )
             {
               std::ostringstream str;
               output->value->print( state.symbols, str );
@@ -104,12 +104,19 @@ createUserEnv( EvalState &          state,
                            path_segment,
                            str.str() );
             }
-          output = found;
+          output = next;
         }
 
 
       auto package_drv = getDerivation( state, *output->value, false );
 
+      if ( ! package_drv.has_value() )
+        {
+          throw Error( "Failed to get derivation for package '%s'",
+                       nlohmann::json( package ).dump().c_str() );
+        }
+
+      /* Collect all outputs to include in the environment */
       for ( auto output : package_drv->queryOutputs() )
         {
           if ( ! output.second.has_value() )
@@ -123,21 +130,27 @@ createUserEnv( EvalState &          state,
           references.insert( output.second.value() );
         }
 
+      /* Collect drvs that may yet need to be built */
       if ( auto drvPath = package_drv->queryDrvPath() )
         {
           drvsToBuild.push_back( { *drvPath } );
         }
-
-
-      // todo: auto profile_d_scripts;
-      // todo: auto activateScript
     }
 
-
+  /* Build derivations that make up the environment */
   // todo check if this builds `outputsToInstall` only
   state.store->buildPaths( toDerivedPaths( drvsToBuild ),
                            state.repair ? bmRepair : bmNormal );
 
+  return createEnvironmentStorePath( state, pkgs, references );
+}
+
+const nix::StorePath &
+createEnvironmentStorePath( nix::EvalState & state,
+                            nix::Packages &  pkgs,
+                            nix::StorePathSet & references )
+{
+  /* build the profile into a tempdir */
   auto tempDir = createTempDir();
   buildProfile( tempDir, std::move( pkgs ) );
 
@@ -164,6 +177,8 @@ createUserEnv( EvalState &          state,
 
   StringSource source( sink.s );
   state.store->addToStore( info, source );
+
+  /* building environment done */
 
   return std::move( info.path );
 }
@@ -207,21 +222,17 @@ struct CmdBuildEnv : nix::EvalCommand
   void
   run( ref<Store> store ) override
   {
-    assert( parent );
-    nix::MultiCommand * toplevel = parent;
-    while ( toplevel->parent ) { toplevel = toplevel->parent; }
-
     printf( "lockfile: %s\n", lockfile_content.c_str() );
 
     LockfileRaw lockfile_raw = nlohmann::json::parse( lockfile_content );
+    auto lockfile = Lockfile( lockfile_raw );
 
     auto state = getEvalState();
 
-    auto system   = std::string( "aarch64-darwin" );
-    auto lockfile = Lockfile( lockfile_raw );
+    // todo: allow to specify system?
+    auto system = nix::nativeSystem;
 
-
-    auto store_path = flox::createUserEnv( *state, lockfile, system, false );
+    auto store_path = flox::createFloxEnv( *state, lockfile, system );
 
     printf( "store_path: %s\n", store->printStorePath( store_path ).c_str() );
 
@@ -235,8 +246,6 @@ struct CmdBuildEnv : nix::EvalCommand
           = store2->addPermRoot( store_path, absPath( out_link.value() ) );
         printf( "out_link_path: %s\n", out_link_path.c_str() );
       }
-
-    // showHelp( self, getFloxArgs( *this ) );
   }
 };
 
