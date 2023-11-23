@@ -34,10 +34,6 @@
 
 /* -------------------------------------------------------------------------- */
 
-extern std::string chrootHelperName;
-
-void chrootHelper( int argc, char * argv[] );
-
 
 /* -------------------------------------------------------------------------- */
 
@@ -95,14 +91,6 @@ std::string programPath;
 mainWrapped( int argc, char * argv[] )
 {
   savedArgv = argv;
-
-  /* The chroot helper needs to be run before any threads have
-   * been started. */
-  if ( ( 0 < argc ) && ( argv[0] == chrootHelperName ) )
-    {
-      chrootHelper( argc, argv );
-      return;
-    }
 
   initNix();
   initGC();
