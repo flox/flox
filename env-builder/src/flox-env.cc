@@ -17,6 +17,10 @@
 #include <flox/resolver/lockfile.hh>
 
 
+#ifndef ACTIVATION_SCRIPT_BIN
+#  define ACTIVATION_SCRIPT_BIN "invalid_activation_script_path"
+#endif
+
 /* -------------------------------------------------------------------------- */
 
 namespace flox {
@@ -24,6 +28,7 @@ using namespace nix;
 using namespace flox::resolver;
 
 /* -------------------------------------------------------------------------- */
+
 
 StorePath
 createUserEnv( EvalState &          state,
@@ -56,6 +61,17 @@ createUserEnv( EvalState &          state,
   StorePathSet                      references;
   std::vector<StorePathWithOutputs> drvsToBuild;
   Packages                          pkgs;
+
+  auto activation_script_path
+    = state.store->parseStorePath( ACTIVATION_SCRIPT_BIN );
+
+  state.store->ensurePath( activation_script_path );
+  references.insert( activation_script_path );
+  pkgs.emplace_back( state.store->printStorePath( activation_script_path ),
+                     true,
+                     0 );
+
+
   for ( auto const & package : locked_packages )
     {
 
@@ -116,6 +132,7 @@ createUserEnv( EvalState &          state,
       // todo: auto profile_d_scripts;
       // todo: auto activateScript
     }
+
 
   // todo check if this builds `outputsToInstall` only
   state.store->buildPaths( toDerivedPaths( drvsToBuild ),
@@ -210,15 +227,12 @@ struct CmdBuildEnv : nix::EvalCommand
 
     auto store2 = store.dynamic_pointer_cast<LocalFSStore>();
 
-    if ( ! store2 )
-      {
-        throw Error( "store is not a LocalFSStore" );
-      }
+    if ( ! store2 ) { throw Error( "store is not a LocalFSStore" ); }
 
     if ( out_link.has_value() )
       {
         auto out_link_path
-          = store2->addPermRoot( store_path, absPath(out_link.value()) );
+          = store2->addPermRoot( store_path, absPath( out_link.value() ) );
         printf( "out_link_path: %s\n", out_link_path.c_str() );
       }
 

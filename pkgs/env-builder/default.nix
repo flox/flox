@@ -15,8 +15,27 @@
   semver,
   flox-pkgdb,
   sqlite3pp,
+  writeTextFile,
   # sql-builder,
 }: let
+  activationScript = writeTextFile {
+    name = "flox-activate";
+    executable = true;
+    destination = "/activate";
+    text = ''
+      # We use --rcfile to activate using bash which skips sourcing ~/.bashrc,
+      # so source that here.
+      if [ -f ~/.bashrc ]
+      then
+          source ~/.bashrc
+      fi
+
+      . ${../../assets/mkEnv/set-prompt.sh}
+      . ${../../assets/mkEnv/source-profiles.sh}
+      . ${../../assets/mkEnv/run-activation-hook.sh}
+    '';
+  };
+
   src = builtins.path {
     path = "${self}/env-builder";
     filter = name: type: let
@@ -55,6 +74,8 @@ in
     nix_INCDIR = nix.dev.outPath + "/include";
     boost_CFLAGS = "-I" + boost.outPath + "/include";
     pkgdb_CLFAGS = "-I" + flox-pkgdb.outPath + "/include";
+
+    ACTIVATION_SCRIPT_BIN = activationScript;
 
     libExt = stdenv.hostPlatform.extensions.sharedLibrary;
     # sql_builder_CFLAGS = "-I" + sql-builder.outPath + "/include";

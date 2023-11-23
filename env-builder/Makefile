@@ -53,7 +53,7 @@ LDFLAGS += $(nix_LDFLAGS)
 
 
 bin_CPPFLAGS ?=
-bin_CXXFLAGS ?=
+bin_CXXFLAGS ?= -D'ACTIVATION_SCRIPT_BIN="$(ACTIVATION_SCRIPT_BIN)"'
 bin_LDFLAGS  ?= -Llib
 bin_LDLIBS   ?=
 
