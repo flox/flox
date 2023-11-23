@@ -1,3 +1,4 @@
+#include <nix/builtins/buildenv.hh>
 #include <nix/derivations.hh>
 #include <nix/eval-inline.hh>
 #include <nix/eval.hh>
@@ -23,7 +24,7 @@ using namespace flox::resolver;
 
 /* -------------------------------------------------------------------------- */
 
-bool
+StorePath
 createUserEnv( EvalState &          state,
                resolver::Lockfile & lockfile,
                System &             system,
@@ -51,12 +52,9 @@ createUserEnv( EvalState &          state,
   /**
    * extract derivations
    */
-  StorePathSet references;
+  StorePathSet                      references;
   std::vector<StorePathWithOutputs> drvsToBuild;
-  Value                             environment_drvs;
-  state.mkList( environment_drvs, locked_packages.size() );
-  size_t n = 0;
-
+  Packages                          pkgs;
   for ( auto const & package : locked_packages )
     {
 
@@ -79,74 +77,58 @@ createUserEnv( EvalState &          state,
           attr = *found->value;
         }
 
+
       auto package_drv = getDerivation( state, attr, false );
-      if ( ! package_drv.has_value() )
-        {
-          throw Error( "Failed to get derivation for package '%s'",
-                       package.input );
-        }
 
-      for ( const auto & [m, j] : enumerate( package_drv->queryOutputs() ) )
+      for ( auto output : package_drv->queryOutputs() )
         {
-          references.insert( *j.second );
+          if ( ! output.second.has_value() ) { continue; } // skip outputs without path
+          pkgs.emplace_back( output.second, true, package.priority );
+          references.insert( output.second.value() );
         }
-
 
       if ( auto drvPath = package_drv->queryDrvPath() )
         {
           drvsToBuild.push_back( { *drvPath } );
-          references.insert( *drvPath );
         }
-      ( environment_drvs.listElems()[n++] = state.allocValue() )->mkAttrs( attr.attrs );
 
 
-      // auto profile_d_scripts;
-      // auto activateScript
+      // todo: auto profile_d_scripts;
+      // todo: auto activateScript
     }
 
+  // todo check if this builds `outputsToInstall` only
   state.store->buildPaths( toDerivedPaths( drvsToBuild ),
                            state.repair ? bmRepair : bmNormal );
 
+  auto tempDir = createTempDir();
+  buildProfile( tempDir, std::move( pkgs ) );
 
-  auto manifestFile
-    = state.store->addTextToStore( "env-manifest.nix", nlohmann::json(lockfile.getLockfileRaw()).dump(), references);
+  /* Add the symlink tree to the store. */
+  StringSink sink;
+  dumpPath( tempDir, sink );
 
-  /* Get the environment builder expression. */
-  Value envBuilder;
-  state.eval( state.parseExprFromString(
-#include "buildenv.nix.gen.hh"
-                ,
-                state.rootPath( CanonPath::root ) ),
-              envBuilder );
+  auto narHash = hashString( htSHA256, sink.s );
+  ValidPathInfo info {
+            *state.store,
+            "profile",
+            FixedOutputInfo {
+                .method = FileIngestionMethod::Recursive,
+                .hash = narHash,
+                .references = {
+                    .others = std::move(references),
+                    // profiles never refer to themselves
+                    .self = false,
+                },
+            },
+            narHash,
+        };
+  info.narSize = sink.s.size();
 
-  /* Construct a Nix expression that calls the user environment
-   * builder with the manifest as argument. */
-  auto attrs = state.buildBindings( 3 );
-  state.mkStorePathString( manifestFile, attrs.alloc( "manifest" ) );
-  attrs.insert( state.symbols.create( "derivations" ), &environment_drvs );
-  Value args;
-  args.mkAttrs( attrs );
+  StringSource source( sink.s );
+  state.store->addToStore( info, source );
 
-  Value topLevel;
-  topLevel.mkApp( &envBuilder, &args );
-
-  debug( "evaluating user environment builder" );
-  state.forceValue( topLevel,
-                    [&]() { return topLevel.determinePos( noPos ); } );
-
-  NixStringContext context;
-  Attr &           aDrvPath( *topLevel.attrs->find( state.sDrvPath ) );
-  auto             topLevelDrv
-    = state.coerceToStorePath( aDrvPath.pos, *aDrvPath.value, context, "" );
-
-  /* Realise the resulting store expression. */
-  debug( "building user environment" );
-  std::vector<StorePathWithOutputs> topLevelDrvs;
-  topLevelDrvs.push_back( { topLevelDrv } );
-  state.store->buildPaths( toDerivedPaths( topLevelDrvs ),
-                           state.repair ? bmRepair : bmNormal );
-
-  printInfo( "built %s", topLevelDrv.to_string() );
+  return std::move( info.path );
 }
 
 
