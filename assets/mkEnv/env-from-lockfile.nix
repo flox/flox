@@ -49,6 +49,12 @@
       ''}
     '';
   };
+
+  lockfile = pkgs.writeTextFile {
+    name = "lockfile";
+    destination = "/manifest.lock";
+    text = builtins.readFile lockfilePath;
+  };
 in
   pkgs.symlinkJoin {
     name = "flox-env";
@@ -57,5 +63,6 @@ in
       ++ [
         profiledScripts
         activateScript
+        lockfile
       ];
   }

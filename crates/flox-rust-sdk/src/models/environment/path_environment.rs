@@ -14,6 +14,7 @@ use std::path::{Path, PathBuf};
 
 use async_trait::async_trait;
 use flox_types::catalog::{EnvCatalog, System};
+use futures::lock;
 use log::debug;
 use runix::arguments::eval::EvaluationArgs;
 use runix::arguments::EvalArgs;
@@ -226,13 +227,37 @@ where
         debug!("building project environment at {}", self.path.display());
         let manifest_path = self.manifest_path();
         let lockfile_path = self.lockfile_path();
-        let maybe_lockfile = if lockfile_path.exists() {
+        let maybe_lockfile: Option<&Path> = if lockfile_path.exists() {
             debug!("found existing lockfile: {}", lockfile_path.display());
             Some(lockfile_path.as_ref())
         } else {
             debug!("no existing lockfile found");
             None
         };
+
+        // Check if the lockfile has already been built
+        if let Some(old_lockfile) = maybe_lockfile {
+            let built_manifest_path = self.out_link(&flox.system)?.join(LOCKFILE_FILENAME);
+            if built_manifest_path.exists() {
+                let built_contents = fs::read_to_string(&built_manifest_path)
+                    .map_err(EnvironmentError2::ReadBuiltLockfile)?;
+                let old_contents = fs::read_to_string(&old_lockfile)
+                    .map_err(EnvironmentError2::ReadOldLockfile)?;
+                if built_contents == old_contents {
+                    debug!(
+                        "skipping build of old environment as {} contains the same contents as {}",
+                        built_manifest_path.display(),
+                        old_lockfile.display()
+                    );
+                    return Ok(());
+                } else {
+                    debug!("lockfile {} from old build of environment has different contents than current lockfile {}",
+                    built_manifest_path.display(),
+                    old_lockfile.display());
+                }
+            }
+        };
+
         let lockfile_json = lock_manifest(
             Path::new(&PKGDB_BIN.as_str()),
             &manifest_path,
@@ -243,18 +268,21 @@ where
         std::fs::write(&lockfile_path, lockfile_json.to_string())
             .map_err(EnvironmentError2::WriteLockfile)?;
 
-        debug!(
-            "building environment: system={}, lockfilePath={}",
-            &flox.system,
-            lockfile_path.display()
-        );
+        // We could diff the generated lockfile against a previously built
+        // lockfile, but it is unlikely that an old build would exist without an
+        // old lockfile.
 
-        let build_output = std::process::Command::new(BUILD_ENV_BIN)
+        let mut build_command = std::process::Command::new(BUILD_ENV_BIN);
+        build_command
             .arg(NIX_BIN)
             .arg(&flox.system)
             .arg(lockfile_path)
             .arg(self.out_link(&flox.system)?)
-            .arg(ENV_FROM_LOCKFILE_PATH)
+            .arg(ENV_FROM_LOCKFILE_PATH);
+
+        debug!("building environment with command: {:?}", build_command);
+
+        let build_output = build_command
             .output()
             .map_err(EnvironmentError2::BuildEnvCall)?;
 

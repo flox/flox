@@ -286,6 +286,10 @@ pub enum EnvironmentError2 {
     ParseLockfileJSON(#[source] serde_json::Error),
     #[error("couldn't parse nixpkgs rev as a string")]
     RevNotString,
+    #[error("couldn't read old lockfile contents")]
+    ReadOldLockfile(#[source] std::io::Error),
+    #[error("couldn't read old built lockfile contents")]
+    ReadBuiltLockfile(#[source] std::io::Error),
     #[error("couldn't write new lockfile contents")]
     WriteLockfile(#[source] std::io::Error),
     #[error("locking manifest failed")]
