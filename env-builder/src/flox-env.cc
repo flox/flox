@@ -1,4 +1,5 @@
 #include <nix/builtins/buildenv.hh>
+#include <nix/command.hh>
 #include <nix/derivations.hh>
 #include <nix/eval-inline.hh>
 #include <nix/eval.hh>
@@ -149,6 +150,62 @@ createUserEnv( EvalState &          state,
 
   return std::move( info.path );
 }
+
+
+struct CmdBuildEnv : nix::EvalCommand
+{
+  std::string lockfile_content;
+
+  CmdBuildEnv()
+  {
+    // expectArgs( { .label = "lockfile", .handler = { &lockfile_content } } );
+
+    addFlag( { .longName    = "lockfile",
+               .shortName   = 'l',
+               .description = "locked manifest",
+               .labels      = { "lockfile" },
+               .handler     = { &lockfile_content } } );
+  }
+
+  std::string
+  description() override
+  {
+    return "build flox env";
+  }
+
+  std::string
+  doc() override
+  {
+    return "TODO";
+  }
+
+
+  void
+  run( ref<Store> store ) override
+  {
+    assert( parent );
+    nix::MultiCommand * toplevel = parent;
+    while ( toplevel->parent ) { toplevel = toplevel->parent; }
+
+    printf( "lockfile: %s\n", lockfile_content.c_str() );
+
+    LockfileRaw lockfile_raw = nlohmann::json::parse( lockfile_content );
+
+    auto state = getEvalState();
+
+    auto system   = std::string( "aarch64-darwin" );
+    auto lockfile = Lockfile( lockfile_raw );
+
+
+    auto store_path = flox::createUserEnv( *state, lockfile, system, false );
+
+    printf( "store_path: %s\n", store->printStorePath( store_path ).c_str() );
+
+    // showHelp( self, getFloxArgs( *this ) );
+  }
+};
+
+static auto rCmdBuildEnv = nix::registerCommand<CmdBuildEnv>( "build-env" );
 
 
 /* -------------------------------------------------------------------------- */
