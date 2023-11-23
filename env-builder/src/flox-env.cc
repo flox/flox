@@ -154,7 +154,8 @@ createUserEnv( EvalState &          state,
 
 struct CmdBuildEnv : nix::EvalCommand
 {
-  std::string lockfile_content;
+  std::string              lockfile_content;
+  std::optional<nix::Path> out_link;
 
   CmdBuildEnv()
   {
@@ -165,6 +166,12 @@ struct CmdBuildEnv : nix::EvalCommand
                .description = "locked manifest",
                .labels      = { "lockfile" },
                .handler     = { &lockfile_content } } );
+
+    addFlag( { .longName    = "out-link",
+               .shortName   = 'o',
+               .description = "output link",
+               .labels      = { "out-link" },
+               .handler     = { &out_link } } );
   }
 
   std::string
@@ -200,6 +207,20 @@ struct CmdBuildEnv : nix::EvalCommand
     auto store_path = flox::createUserEnv( *state, lockfile, system, false );
 
     printf( "store_path: %s\n", store->printStorePath( store_path ).c_str() );
+
+    auto store2 = store.dynamic_pointer_cast<LocalFSStore>();
+
+    if ( ! store2 )
+      {
+        throw Error( "store is not a LocalFSStore" );
+      }
+
+    if ( out_link.has_value() )
+      {
+        auto out_link_path
+          = store2->addPermRoot( store_path, absPath(out_link.value()) );
+        printf( "out_link_path: %s\n", out_link_path.c_str() );
+      }
 
     // showHelp( self, getFloxArgs( *this ) );
   }
