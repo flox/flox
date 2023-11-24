@@ -3,6 +3,9 @@
 #include <nix/store-api.hh>
 
 #include <flox/resolver/lockfile.hh>
+#include <nix/builtins/buildenv.hh>
+#include <nix/eval.hh>
+
 
 /* -------------------------------------------------------------------------- */
 
