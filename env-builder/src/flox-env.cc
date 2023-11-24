@@ -254,8 +254,6 @@ struct CmdBuildEnv : nix::EvalCommand
 
   CmdBuildEnv()
   {
-    // expectArgs( { .label = "lockfile", .handler = { &lockfile_content } } );
-
     addFlag( { .longName    = "lockfile",
                .shortName   = 'l',
                .description = "locked manifest",
@@ -285,7 +283,7 @@ struct CmdBuildEnv : nix::EvalCommand
   void
   run( ref<Store> store ) override
   {
-    printf( "lockfile: %s\n", lockfile_content.c_str() );
+    fprintf(stderr, "lockfile: %s\n", lockfile_content.c_str() );
 
     LockfileRaw lockfile_raw = nlohmann::json::parse( lockfile_content );
     auto        lockfile     = Lockfile( lockfile_raw );
@@ -297,7 +295,7 @@ struct CmdBuildEnv : nix::EvalCommand
 
     auto store_path = flox::createFloxEnv( *state, lockfile, system );
 
-    printf( "store_path: %s\n", store->printStorePath( store_path ).c_str() );
+    printf( "%s", store->printStorePath( store_path ).c_str() );
 
     auto store2 = store.dynamic_pointer_cast<LocalFSStore>();
 
@@ -307,7 +305,7 @@ struct CmdBuildEnv : nix::EvalCommand
       {
         auto out_link_path
           = store2->addPermRoot( store_path, absPath( out_link.value() ) );
-        printf( "out_link_path: %s\n", out_link_path.c_str() );
+        fprintf( stderr, "out_link_path: %s\n", out_link_path.c_str() );
       }
   }
 };
