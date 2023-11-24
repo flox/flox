@@ -15,8 +15,8 @@ SRC_DIR := $(call getMakefileDir)
 
 BUILT_SRCS       +=
 envbuilder_SRCS +=
-env-builder_SRCS += $(wildcard $(SRC_DIR)/*.cc)
-env-builder_LDLIBS += -lflox-pkgdb
+flox-env-builder_SRCS += $(wildcard $(SRC_DIR)/*.cc)
+flox-env-builder_LDLIBS += -lflox-pkgdb
 libenvbuilder_LDLIBS += -lsqlite3
 
 
