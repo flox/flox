@@ -24,6 +24,7 @@
   pkgsFor,
   floxVersion,
   flox-pkgdb,
+  flox-env-builder,
 }: let
   # crane (<https://crane.dev/>) library for building rust packages
   craneLib = inputs.crane.mkLib pkgsFor;
