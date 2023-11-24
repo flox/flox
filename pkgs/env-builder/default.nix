@@ -63,7 +63,6 @@ in
     version = builtins.replaceStrings ["\n"] [""] (builtins.readFile "${src}/version");
     src = src;
 
-    propagatedBuildInputs = [semver nix.dev boost];
     nativeBuildInputs = [pkg-config];
     buildInputs = [
       sqlite.dev
