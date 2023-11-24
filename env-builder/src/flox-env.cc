@@ -201,13 +201,16 @@ createFloxEnv( EvalState &          state,
       if ( ! script_path.empty() )
         {
 
-          auto tempDir = createTempDir();
+          auto tempDir = std::filesystem::path( createTempDir() );
+          std::filesystem::create_directories( tempDir / "bin" );
           std::filesystem::copy_file( script_path,
-                                      std::filesystem::path( tempDir )
-                                        / "activation-hook.sh" );
+                                      tempDir / "bin" / "activation-hook.sh" );
+          std::filesystem::permissions( tempDir / "bin" / "activation-hook.sh",
+                                        std::filesystem::perms::owner_exec,
+                                        std::filesystem::perm_options::add );
 
           auto script_store_path
-            = state.store->addToStore( "activation-hook.sh", tempDir );
+            = state.store->addToStore( "activation-hook-script", tempDir );
 
           references.insert( script_store_path );
           pkgs.emplace_back( state.store->printStorePath( script_store_path ),
