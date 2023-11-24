@@ -29,6 +29,51 @@ using namespace flox::resolver;
 
 /* -------------------------------------------------------------------------- */
 
+const nix::StorePath &
+addDirToStore( EvalState &         state,
+               Path const &        dir,
+               nix::StorePathSet & references )
+{
+
+  /* Add the symlink tree to the store. */
+  StringSink sink;
+  dumpPath( dir, sink );
+
+  auto narHash = hashString( htSHA256, sink.s );
+  ValidPathInfo info {
+            *state.store,
+            "environment",
+            FixedOutputInfo {
+                .method = FileIngestionMethod::Recursive,
+                .hash = narHash,
+                .references = {
+                    .others = std::move(references),
+                    // profiles never refer to themselves
+                    .self = false,
+                },
+            },
+            narHash,
+        };
+  info.narSize = sink.s.size();
+
+  StringSource source( sink.s );
+  state.store->addToStore( info, source );
+  return std::move( info.path );
+}
+
+const nix::StorePath &
+createEnvironmentStorePath( nix::EvalState &    state,
+                            nix::Packages &     pkgs,
+                            nix::StorePathSet & references )
+{
+  /* build the profile into a tempdir */
+  auto tempDir = createTempDir();
+  buildProfile( tempDir, std::move( pkgs ) );
+  return addDirToStore( state, tempDir, references );
+}
+
+/* -------------------------------------------------------------------------- */
+
 
 StorePath
 createFloxEnv( EvalState &          state,
@@ -145,44 +190,6 @@ createFloxEnv( EvalState &          state,
   return createEnvironmentStorePath( state, pkgs, references );
 }
 
-const nix::StorePath &
-createEnvironmentStorePath( nix::EvalState & state,
-                            nix::Packages &  pkgs,
-                            nix::StorePathSet & references )
-{
-  /* build the profile into a tempdir */
-  auto tempDir = createTempDir();
-  buildProfile( tempDir, std::move( pkgs ) );
-
-  /* Add the symlink tree to the store. */
-  StringSink sink;
-  dumpPath( tempDir, sink );
-
-  auto narHash = hashString( htSHA256, sink.s );
-  ValidPathInfo info {
-            *state.store,
-            "profile",
-            FixedOutputInfo {
-                .method = FileIngestionMethod::Recursive,
-                .hash = narHash,
-                .references = {
-                    .others = std::move(references),
-                    // profiles never refer to themselves
-                    .self = false,
-                },
-            },
-            narHash,
-        };
-  info.narSize = sink.s.size();
-
-  StringSource source( sink.s );
-  state.store->addToStore( info, source );
-
-  /* building environment done */
-
-  return std::move( info.path );
-}
-
 
 struct CmdBuildEnv : nix::EvalCommand
 {
@@ -225,7 +232,7 @@ struct CmdBuildEnv : nix::EvalCommand
     printf( "lockfile: %s\n", lockfile_content.c_str() );
 
     LockfileRaw lockfile_raw = nlohmann::json::parse( lockfile_content );
-    auto lockfile = Lockfile( lockfile_raw );
+    auto        lockfile     = Lockfile( lockfile_raw );
 
     auto state = getEvalState();
 
