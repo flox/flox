@@ -35,7 +35,7 @@ using namespace flox::resolver;
 
 /* -------------------------------------------------------------------------- */
 
-const nix::StorePath &
+const nix::StorePath
 addDirToStore( EvalState &         state,
                Path const &        dir,
                nix::StorePathSet & references )
@@ -67,7 +67,7 @@ addDirToStore( EvalState &         state,
   return std::move( info.path );
 }
 
-const nix::StorePath &
+const nix::StorePath
 createEnvironmentStorePath( nix::EvalState &    state,
                             nix::Packages &     pkgs,
                             nix::StorePathSet & references )
@@ -295,7 +295,12 @@ struct CmdBuildEnv : nix::EvalCommand
 
     auto store_path = flox::createFloxEnv( *state, lockfile, system );
 
-    printf( "%s", store->printStorePath( store_path ).c_str() );
+    // throw Error( "store_path: asdasdasdsadasdsada\n"
+    //            );
+
+
+
+    std::cout << fmt( "%s\n", store->printStorePath( store_path ).c_str() );
 
     auto store2 = store.dynamic_pointer_cast<LocalFSStore>();
 
