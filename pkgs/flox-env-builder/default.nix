@@ -73,7 +73,7 @@ in
       # sql-builder
     ];
     # nix_INCDIR = nix.dev.outPath + "/include";
-    boost_CFLAGS = "-I" + boost.outPath + "/include";
+    boost_CPPFLAGS = "-I" + boost.dev.outPath + "/include";
     pkgdb_CLFAGS = "-I" + flox-pkgdb.outPath + "/include";
 
     ACTIVATION_SCRIPT_BIN = activationScript;
