@@ -175,15 +175,18 @@ createFloxEnv( EvalState &          state,
     }
 
   /* Build derivations that make up the environment */
-  // todo check if this builds `outputsToInstall` only
-  state.store->buildPaths( toDerivedPaths( drvsToBuild ),
-                           state.repair ? bmRepair : bmNormal );
+  // todo: check if this builds `outputsToInstall` only
+  // todo: do we need to honor repair flag? state.repair ? bmRepair : bmNormal
+  state.store->buildPaths( toDerivedPaths( drvsToBuild ) );
 
   // todo: is it script _xor_ file?
+  //       currently it is assumed that `hook.script` and `hook.file` are
+  //       mutually exclusive
   if ( auto hook = lockfile.getManifest().getManifestRaw().hook )
     {
       nix::Path script_path;
 
+      // either set script path to a temporary file
       if ( auto script = hook->script )
         {
           script_path = createTempFile().second;
@@ -192,7 +195,7 @@ createFloxEnv( EvalState &          state,
           file.close();
         }
 
-
+      // ... or to the file specified in the manifest
       if ( auto file = hook->file ) { script_path = file.value(); }
 
       if ( ! script_path.empty() )
