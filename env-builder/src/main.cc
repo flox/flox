@@ -274,9 +274,6 @@ FloxArgs::FloxArgs()
   , MixCommonArgs( "flox" )
 {
   this->categories.clear();
-  this->categories[flox::catLocal]      = "Local Development Commands";
-  this->categories[flox::catSharing]    = "Sharing Commands";
-  this->categories[flox::catAdditional] = "Additional Commands";
 
   this->addFlag( {
     .longName    = "help"

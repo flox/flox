@@ -30,11 +30,8 @@ showUsageTop( std::ostream & fd, nix::MultiCommand & toplevel )
       switch ( command->category() )
         {
           case nix::Command::catDefault: break;
-          case flox::catLocal: break;
-          case flox::catSharing: break;
           /* Skip everyting else. */
           case nix::catHelp: continue; break;
-          case flox::catAdditional: continue; break;
           default: continue; break;
         }
       fd << name << '|';
@@ -91,11 +88,8 @@ showSubcommandHelp( std::ostream & fd, nix::MultiCommand & command )
       switch ( commandFun()->category() )
         {
           case nix::Command::catDefault: break;
-          case flox::catLocal: break;
-          case flox::catSharing: break;
           /* Skip everyting else. */
           case nix::catHelp: continue; break;
-          case flox::catAdditional: continue; break;
           default: continue; break;
         }
       if ( width < name.size() ) { width = name.size(); }
@@ -106,49 +100,19 @@ showSubcommandHelp( std::ostream & fd, nix::MultiCommand & command )
       if ( category == nix::catHelp ) { continue; }
 
       fd << "  " << desc;
-      if ( category == flox::catAdditional )
+
+      fd << std::endl;
+      for ( auto & [name, commandFun] : command.commands )
         {
-          fd << ". Use `flox COMMAND --help` for more info" << std::endl;
-          bool   first = true;
-          size_t count = 0;
-          for ( auto & [name, commandFun] : command.commands )
-            {
-              if ( commandFun()->category() == flox::catAdditional )
-                {
-                  count += 2 + name.size();
-                  if ( first )
-                    {
-                      first = false;
-                      count = 4 + name.size();
-                      fd << "    ";
-                      assert( count <= 80 );
-                    }
-                  else if ( 80 < count )
-                    {
-                      fd << ',' << std::endl << "    ";
-                      count = 4 + name.size();
-                    }
-                  else { fd << ", "; }
-                  fd << name;
-                }
-            }
-          fd << std::endl;
+          auto command = commandFun();
+          /* Only print "popular" commands in usage. */
+          if ( command->category() != category ) { continue; }
+          std::ostringstream oss;
+          oss << std::left << std::setfill( ' ' ) << std::setw( width ) << name;
+          fd << "    " << oss.str() << "  " << command->description()
+             << std::endl;
         }
-      else
-        {
-          fd << std::endl;
-          for ( auto & [name, commandFun] : command.commands )
-            {
-              auto command = commandFun();
-              /* Only print "popular" commands in usage. */
-              if ( command->category() != category ) { continue; }
-              std::ostringstream oss;
-              oss << std::left << std::setfill( ' ' ) << std::setw( width )
-                  << name;
-              fd << "    " << oss.str() << "  " << command->description()
-                 << std::endl;
-            }
-        }
+
       fd << std::endl;
     }
 }
@@ -169,11 +133,8 @@ showSubcommandUsage( std::ostream &      fd,
       switch ( command->category() )
         {
           case nix::Command::catDefault: break;
-          case flox::catLocal: break;
-          case flox::catSharing: break;
           /* Skip everyting else. */
           case nix::catHelp: continue; break;
-          case flox::catAdditional: continue; break;
           default: continue; break;
         }
       fd << name << '|';
@@ -235,7 +196,7 @@ struct CmdHelp : nix::Command
   nix::Command::Category
   category() override
   {
-    return flox::catAdditional;
+    return nix::catHelp;
   }
 
   void

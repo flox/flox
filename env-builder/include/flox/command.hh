@@ -29,16 +29,6 @@ namespace flox {
  *  static constexpr Category catDefault = 0;
  */
 
-/** Local Development Commands */
-static constexpr nix::Command::Category catLocal = 201;
-
-/** Sharing Commands */
-static constexpr nix::Command::Category catSharing = 202;
-
-/** Additional Commands */
-static constexpr nix::Command::Category catAdditional = 203;
-
-
 /* -------------------------------------------------------------------------- */
 
 struct FloxArgs
