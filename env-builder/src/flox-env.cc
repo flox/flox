@@ -1,5 +1,7 @@
 #include "flox/flox-env.hh"
+#include <filesystem>
 #include <flox/resolver/lockfile.hh>
+#include <fstream>
 #include <nix/builtins/buildenv.hh>
 #include <nix/command.hh>
 #include <nix/derivations.hh>
@@ -106,16 +108,6 @@ createFloxEnv( EvalState &          state,
   std::vector<StorePathWithOutputs> drvsToBuild;
   Packages                          pkgs;
 
-  auto activation_script_path
-    = state.store->parseStorePath( ACTIVATION_SCRIPT_BIN );
-
-  state.store->ensurePath( activation_script_path );
-  references.insert( activation_script_path );
-  pkgs.emplace_back( state.store->printStorePath( activation_script_path ),
-                     true,
-                     0 );
-
-
   for ( auto const & package : locked_packages )
     {
 
@@ -186,6 +178,52 @@ createFloxEnv( EvalState &          state,
   // todo check if this builds `outputsToInstall` only
   state.store->buildPaths( toDerivedPaths( drvsToBuild ),
                            state.repair ? bmRepair : bmNormal );
+
+  // todo: is it script _xor_ file?
+  if ( auto hook = lockfile.getManifest().getManifestRaw().hook )
+    {
+      nix::Path script_path;
+
+      if ( auto script = hook->script )
+        {
+          script_path = createTempFile().second;
+          std::ofstream file( script_path );
+          file << script.value();
+          file.close();
+        }
+
+
+      if ( auto file = hook->file ) { script_path = file.value(); }
+
+      if ( ! script_path.empty() )
+        {
+
+          auto tempDir = createTempDir();
+          std::filesystem::copy_file( script_path,
+                                      std::filesystem::path( tempDir )
+                                        / "activation-hook.sh" );
+
+          auto script_store_path
+            = state.store->addToStore( "activation-hook.sh", tempDir );
+
+          references.insert( script_store_path );
+          pkgs.emplace_back( state.store->printStorePath( script_store_path ),
+                             true,
+                             0 );
+        }
+    }
+
+  /**
+   * insert activation script
+   */
+  auto activation_script_path
+    = state.store->parseStorePath( ACTIVATION_SCRIPT_BIN );
+
+  state.store->ensurePath( activation_script_path );
+  references.insert( activation_script_path );
+  pkgs.emplace_back( state.store->printStorePath( activation_script_path ),
+                     true,
+                     0 );
 
   return createEnvironmentStorePath( state, pkgs, references );
 }
