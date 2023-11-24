@@ -58,8 +58,9 @@
   };
 in
   stdenv.mkDerivation {
-    pname = "flox-cpp";
+    pname = "flox-env-builder";
     version = builtins.replaceStrings ["\n"] [""] (builtins.readFile "${src}/version");
+    src = src;
 
     propagatedBuildInputs = [semver nix.dev boost];
     nativeBuildInputs = [pkg-config];
@@ -71,15 +72,14 @@ in
       sqlite3pp
       # sql-builder
     ];
-    nix_INCDIR = nix.dev.outPath + "/include";
+    # nix_INCDIR = nix.dev.outPath + "/include";
     boost_CFLAGS = "-I" + boost.outPath + "/include";
-    pkgdb_CLFAGS = "-I" + flox-pkgdb.outPath + "/include";
+    # pkgdb_CLFAGS = "-I" + flox-pkgdb.outPath + "/include";
 
     ACTIVATION_SCRIPT_BIN = activationScript;
 
     libExt = stdenv.hostPlatform.extensions.sharedLibrary;
-    # sql_builder_CFLAGS = "-I" + sql-builder.outPath + "/include";
-    # SEMVER_PATH = semver.outPath + "/bin/semver";
+
     configurePhase = ''
       runHook preConfigure;
       export PREFIX="$out";

@@ -22,6 +22,7 @@ $(ALL_OBJS): %.o: %.cc
 	$(COMPILE.cc) $< -o $@
 
 $(BIN_TARGETS) $(LIB_TARGETS) $(TEST_TARGETS):
+	$(shell mkdir -p $(dir $@))
 	$(LINK.cc) $(filter %.o,$^) $(LDLIBS) -o $@
 
 

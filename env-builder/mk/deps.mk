@@ -19,24 +19,6 @@ endif  # ifndef MK_DIR
 # ---------------------------------------------------------------------------- #
 
 PKG_CONFIG ?= pkg-config
-NIX        ?= nix
-JQ         ?= jq
-
-FLAKE_LOCK ?= $(ROOT_DIR)/../flake.lock
-
-
-# ---------------------------------------------------------------------------- #
-
-getLockedRev = $(shell $(JQ) -r '.nodes["$1"].locked.rev' $(FLAKE_LOCK))
-
-# DO NOT perform eager expansion here.
-NIXPKGS_REF ?= github:NixOS/nixpkgs/$(call getLockedRev,nixpkgs)
-
-
-# ---------------------------------------------------------------------------- #
-
-getNixOutpath = $(shell $(NIX) build --no-link --print-out-paths $1)
-
 
 # ---------------------------------------------------------------------------- #
 
@@ -46,18 +28,15 @@ nljson_CFLAGS := $(nljson_CFLAGS)
 
 # ---------------------------------------------------------------------------- #
 
-argparse_CFLAGS ?= $(shell $(PKG_CONFIG) --cflags argparse)
-argparse_CFLAGS := $(argparse_CFLAGS)
+pkgdb_CFLAGS ?= $(shell $(PKG_CONFIG) --cflags pkgdb)
+pkgdb_CFLAGS := $(pkgdb_CFLAGS)
 
 
 # ---------------------------------------------------------------------------- #
 
-boost_CPPFLAGS ?=                                                    \
-  -isystem $(call getNixOutpath,'$(NIXPKGS_REF)#boost.dev')/include
-boost_CPPFLAGS := $(boost_CPPFLAGS)
-
-boost_CFLAGS ?= $(boost_CPPFLAGS)
+boost_CFLAGS ?=
 boost_CFLAGS := $(boost_CFLAGS)
+
 
 # ---------------------------------------------------------------------------- #
 
