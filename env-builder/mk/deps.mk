@@ -28,7 +28,8 @@ nljson_CFLAGS := $(nljson_CFLAGS)
 
 # ---------------------------------------------------------------------------- #
 
-pkgdb_CFLAGS ?= $(shell $(PKG_CONFIG) --cflags pkgdb)
+pkgdb_CFLAGS ?=
+# $(shell $(PKG_CONFIG) --cflags pkgdb)
 pkgdb_CFLAGS := $(pkgdb_CFLAGS)
 
 

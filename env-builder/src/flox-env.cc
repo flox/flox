@@ -23,6 +23,10 @@
 #  define ACTIVATION_SCRIPT_BIN "invalid_activation_script_path"
 #endif
 
+#ifndef PROFILE_D_SCRIPT_DIR
+#  define PROFILE_D_SCRIPT_DIR "invalid_profile.d_script_path"
+#endif
+
 /* -------------------------------------------------------------------------- */
 
 namespace flox {
@@ -228,6 +232,14 @@ createFloxEnv( EvalState &          state,
   state.store->ensurePath( activation_script_path );
   references.insert( activation_script_path );
   pkgs.emplace_back( state.store->printStorePath( activation_script_path ),
+                     true,
+                     0 );
+
+  auto profile_d_scripts_path
+    = state.store->parseStorePath( PROFILE_D_SCRIPT_DIR );
+  state.store->ensurePath( profile_d_scripts_path );
+  references.insert( profile_d_scripts_path );
+  pkgs.emplace_back( state.store->printStorePath( profile_d_scripts_path ),
                      true,
                      0 );
 

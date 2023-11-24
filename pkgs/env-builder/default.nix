@@ -16,6 +16,7 @@
   flox-pkgdb,
   sqlite3pp,
   writeTextFile,
+  lib,
   # sql-builder,
 }: let
   activationScript = writeTextFile {
@@ -74,9 +75,17 @@ in
     ];
     # nix_INCDIR = nix.dev.outPath + "/include";
     boost_CFLAGS = "-I" + boost.outPath + "/include";
-    # pkgdb_CLFAGS = "-I" + flox-pkgdb.outPath + "/include";
+    pkgdb_CLFAGS = "-I" + flox-pkgdb.outPath + "/include";
 
     ACTIVATION_SCRIPT_BIN = activationScript;
+    PROFILE_D_SCRIPT_DIR = builtins.path {
+      name = "profile-d-scripts";
+      path = "${self}/assets/mkEnv";
+      filter = path: type: let
+        relativePath = lib.removePrefix "${self}/assets/mkEnv/" path;
+      in
+        builtins.head (lib.splitString "/" relativePath) == "profile.d";
+    };
 
     libExt = stdenv.hostPlatform.extensions.sharedLibrary;
 
