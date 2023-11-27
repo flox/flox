@@ -218,6 +218,13 @@ impl<S> Environment for PathEnvironment<S>
 where
     S: TransactionState,
 {
+    /// Check if the environment needs to be rebuilt.
+    ///
+    /// returns true if a built manifest exists and is identical to the current lockfile
+    async fn needs_rebuild() -> bool {
+        todo!()
+    }
+
     /// Build the environment with side effects:
     ///
     /// - Create a result link as gc-root.
