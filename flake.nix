@@ -119,7 +119,6 @@
         flox-bash
         flox-gh
         flox-tests
-        nix-editor
         ;
       default = pkgsFor.flox;
       flox-tests-end2end = pkgsFor.flox-tests.override {testsDir = "/tests/end2end";};
