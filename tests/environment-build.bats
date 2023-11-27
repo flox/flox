@@ -55,20 +55,3 @@ teardown() {
   project_teardown;
   common_test_teardown;
 }
-
-
-# ---------------------------------------------------------------------------- #
-
-@test "'build-env' builds fresh environment" {
-  skip "FIXME: needs 'url' field"
-  run "$FLOX_CLI" init;
-  assert_success;
-  run "$BUILD_ENV_BIN" "$NIX_BIN" \
-    "$NIX_SYSTEM" \
-    "$PROJECT_DIR/.flox/env/manifest.lock" \
-    "$PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME" \
-    "$ENV_FROM_LOCKFILE_PATH";
-  assert_success;
-  run [ -d "$PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME" ];
-  assert_success;
-}
