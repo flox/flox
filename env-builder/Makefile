@@ -48,7 +48,7 @@ CXXFLAGS += $(nix_CFLAGS) $(sqlite3pp_CFLAGS)
 
 LDFLAGS ?=
 # TODO: -Wl is not available on gh runners?
-LDFLAGS += -rpath,$$ORIGIN/../lib
+LDFLAGS += -W,-rpath,$$ORIGIN/../lib
 # LDFLAGS += -Wl,--enable-new-dtags '-Wl,-rpath,$$ORIGIN/../lib'
 LDFLAGS += $(nix_LDFLAGS)
 
