@@ -1,0 +1,86 @@
+# Activate a project environment with node and check few things
+# Assume throughout that the project is named project-\d+
+
+set flox $env(FLOX_CLI)
+
+spawn $flox activate
+expect {
+    "Building environment..." {}
+    timeout {
+      puts stderr "Reached timeout running '$cmd'"
+      exit 1
+    }
+}
+set timeout 300
+expect {
+    -re "project.*\$" {}
+    timeout {
+      puts stderr "Reached timeout running '$cmd'"
+      exit 1
+    }
+}
+
+# activation is the only thing that should take very long so set a low timeout
+set timeout 1
+
+# check for npm
+send "{ command -v npm||which npm||type -P npm; } 2>&1\n"
+expect {
+    -re "\.flox/run/.*\.project-\\d+/bin/npm" {}
+    timeout {
+      puts stderr "Reached timeout locating 'npm'"
+      exit 1
+    }
+}
+
+# check for node
+send "{ command -v node||which node||type -P node; } 2>&1\n"
+expect {
+    -re "\.flox/run/.*\.project-\\d+/bin/node" {}
+    timeout {
+      puts stderr "Reached timeout locating 'node'"
+      exit 1
+    }
+}
+
+# check for pkg-config
+send "{ command -v pkg-config||which pkg-config||type -P pkg-config; } 2>&1\n"
+expect {
+    -re "\.flox/run/.*\.project-\\d+/bin/pkg-config" {}
+    timeout {
+      puts stderr "Reached timeout locating 'pkg-config'"
+      exit 1
+    }
+}
+
+
+# check that pkg-config can see krb5 lib
+send "pkg-config --list-all\n"
+expect {
+    -re "krb5 - An implementation of Kerberos network authentication" {}
+    timeout {
+      puts stderr "Reached timeout locating 'krb5' lib"
+      exit 1
+    }
+}
+
+# Install `krb5' module with `npm'.
+# This fails without `pkg-config' working properly.
+send "npm install krb5\n"
+set timeout 300
+expect {
+    -re "added \d* packages in \d*s" {}
+    timeout {
+      puts stderr "Reached timeout running 'npm install krb5'"
+      exit 1
+    }
+}
+set timeout 1
+#if [[ -x "$PWD/node_modules/krb5/build/Release/krb5.node" ]]; then
+#  echo "PASS: npm" >&2;
+#else
+#  echo "FAIL: npm" >&2;
+#  exit 1;
+#fi
+
+exit 0
