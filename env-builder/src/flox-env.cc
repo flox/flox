@@ -1,4 +1,5 @@
 #include "flox/flox-env.hh"
+#include <boost/algorithm/string/join.hpp>
 #include <filesystem>
 #include <flox/resolver/lockfile.hh>
 #include <fstream>
@@ -17,7 +18,6 @@
 #include <nix/store-api.hh>
 #include <nix/util.hh>
 #include <nlohmann/json.hpp>
-
 
 #ifndef ACTIVATION_SCRIPT_BIN
 #  define ACTIVATION_SCRIPT_BIN "invalid_activation_script_path"
@@ -68,13 +68,40 @@ addDirToStore( EvalState &         state,
 }
 
 const nix::StorePath
-createEnvironmentStorePath( nix::EvalState &    state,
-                            nix::Packages &     pkgs,
-                            nix::StorePathSet & references )
+createEnvironmentStorePath(
+  nix::EvalState &    state,
+  nix::Packages &     pkgs,
+  nix::StorePathSet & references,
+  std::map<StorePath, std::pair<std::string, resolver::LockedPackageRaw>> &
+    originalPackage )
 {
   /* build the profile into a tempdir */
   auto tempDir = createTempDir();
-  buildProfile( tempDir, std::move( pkgs ) );
+  try
+    {
+      buildProfile( tempDir, std::move( pkgs ) );
+    }
+  catch ( BuildEnvFileConflictError & e )
+    {
+
+      auto [storePathA, filePath] = state.store->toStorePath( e.fileA );
+      auto [storePathB, _]        = state.store->toStorePath( e.fileB );
+
+      auto [nameA, packageA] = originalPackage.at( storePathA );
+      auto [nameB, packageB] = originalPackage.at( storePathB );
+
+
+      throw FloxException(
+        "environment error",
+        "failed to build environment",
+        fmt( "file conflict between packages '%s' and '%s' at '%s'"
+             "\n\n\tresolve by setting the priority of the preferred package "
+             "to a value lower than '%d'",
+             nameA,
+             nameB,
+             filePath,
+             e.priority ) );
+    }
   return addDirToStore( state, tempDir, references );
 }
 
@@ -96,13 +123,14 @@ createFloxEnv( EvalState &          state,
 
   /* extract all packages */
 
-  std::vector<resolver::LockedPackageRaw> locked_packages;
+  std::vector<std::pair<std::string, resolver::LockedPackageRaw>>
+    locked_packages;
 
   for ( auto const & package : packages->second )
     {
       if ( ! package.second.has_value() ) { continue; }
       auto const & locked_package = package.second.value();
-      locked_packages.push_back( locked_package );
+      locked_packages.push_back( { package.first, locked_package } );
     }
 
   /**
@@ -111,8 +139,10 @@ createFloxEnv( EvalState &          state,
   StorePathSet                      references;
   std::vector<StorePathWithOutputs> drvsToBuild;
   Packages                          pkgs;
+  std::map<StorePath, std::pair<std::string, resolver::LockedPackageRaw>>
+    originalPackage;
 
-  for ( auto const & package : locked_packages )
+  for ( auto const & [name, package] : locked_packages )
     {
 
       auto package_input_ref = FlakeRef( package.input );
@@ -169,6 +199,8 @@ createFloxEnv( EvalState &          state,
             true,
             package.priority );
           references.insert( output.second.value() );
+          originalPackage.insert(
+            { output.second.value(), { name, package } } );
         }
 
       /* Collect drvs that may yet need to be built */
@@ -243,7 +275,7 @@ createFloxEnv( EvalState &          state,
                      true,
                      0 );
 
-  return createEnvironmentStorePath( state, pkgs, references );
+  return createEnvironmentStorePath( state, pkgs, references, originalPackage );
 }
 
 
@@ -283,7 +315,7 @@ struct CmdBuildEnv : nix::EvalCommand
   void
   run( ref<Store> store ) override
   {
-    fprintf(stderr, "lockfile: %s\n", lockfile_content.c_str() );
+    fprintf( stderr, "lockfile: %s\n", lockfile_content.c_str() );
 
     LockfileRaw lockfile_raw = nlohmann::json::parse( lockfile_content );
     auto        lockfile     = Lockfile( lockfile_raw );
@@ -297,7 +329,6 @@ struct CmdBuildEnv : nix::EvalCommand
 
     // throw Error( "store_path: asdasdasdsadasdsada\n"
     //            );
-
 
 
     std::cout << fmt( "%s\n", store->printStorePath( store_path ).c_str() );
