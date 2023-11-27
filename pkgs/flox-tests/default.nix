@@ -17,7 +17,6 @@
   gnused,
   gnutar,
   jq,
-  nix-editor,
   nix-serve,
   openssh,
   parallel,
@@ -48,7 +47,6 @@
     gnused
     gnutar
     jq
-    nix-editor
     nix-serve
     openssh
     parallel

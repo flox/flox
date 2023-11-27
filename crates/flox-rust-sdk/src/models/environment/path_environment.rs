@@ -32,18 +32,16 @@ use super::{
     PathPointer,
     DOT_FLOX,
     ENVIRONMENT_POINTER_FILENAME,
+    ENV_BUILDER_BIN,
     LOCKFILE_FILENAME,
     PATH_ENV_GCROOTS_DIR_NAME,
 };
-use crate::environment::NIX_BIN;
 use crate::flox::Flox;
 use crate::models::environment::{
     global_manifest_path,
-    lock_manifest,
-    BUILD_ENV_BIN,
+    LockedManifest,
     CATALOG_JSON,
     ENV_DIR_NAME,
-    ENV_FROM_LOCKFILE_PATH,
     MANIFEST_FILENAME,
 };
 use crate::models::environment_ref::EnvironmentName;
@@ -233,14 +231,14 @@ where
             debug!("no existing lockfile found");
             None
         };
-        let lockfile_json = lock_manifest(
-            Path::new(&PKGDB_BIN.as_str()),
+        let lockfile = LockedManifest::lock_manifest(
+            Path::new(&*PKGDB_BIN),
             &manifest_path,
             maybe_lockfile,
             &global_manifest_path(flox),
         )?;
         debug!("generated lockfile, writing to {}", lockfile_path.display());
-        std::fs::write(&lockfile_path, lockfile_json.to_string())
+        std::fs::write(&lockfile_path, lockfile.to_string())
             .map_err(EnvironmentError2::WriteLockfile)?;
 
         debug!(
@@ -249,21 +247,18 @@ where
             lockfile_path.display()
         );
 
-        let build_output = std::process::Command::new(BUILD_ENV_BIN)
-            .arg(NIX_BIN)
-            .arg(&flox.system)
-            .arg(lockfile_path)
-            .arg(self.out_link(&flox.system)?)
-            .arg(ENV_FROM_LOCKFILE_PATH)
-            .output()
-            .map_err(EnvironmentError2::BuildEnvCall)?;
+        let store_path = lockfile.build(
+            Path::new(&*ENV_BUILDER_BIN),
+            Some(&self.out_link(&flox.system)?),
+        )?;
 
-        if !build_output.status.success() {
-            let stderr = String::from_utf8_lossy(&build_output.stderr);
-            return Err(EnvironmentError2::BuildEnv(stderr.to_string()));
-        }
+        debug!(
+            "built locked environment, store path={}",
+            store_path.display()
+        );
 
-        // TODO: check the contents of the gc root to see if it's empty
+        // TODO: check the contents of the gc root or store path to see if it's empty
+        // TODO: separate building and linking
 
         Ok(())
     }

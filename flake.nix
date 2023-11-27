@@ -115,11 +115,10 @@
       inherit
         (pkgsFor)
         flox
-        builtfilter-rs
+        flox-env-builder
         flox-bash
         flox-gh
         flox-tests
-        nix-editor
         ;
       default = pkgsFor.flox;
       flox-tests-end2end = pkgsFor.flox-tests.override {testsDir = "/tests/end2end";};

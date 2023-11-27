@@ -51,8 +51,8 @@ pub fn insert_packages(
     };
 
     for pkg in pkgs {
-        if !install_table.contains_key(&pkg) {
-            install_table.insert(&pkg, Item::Value(Value::InlineTable(InlineTable::new())));
+        if !install_table.contains_key(pkg) {
+            install_table.insert(pkg, Item::Value(Value::InlineTable(InlineTable::new())));
             already_installed.insert(pkg.clone(), false);
             debug!("package '{pkg}' newly installed");
         } else {
@@ -95,11 +95,11 @@ pub fn remove_packages(
 
     for pkg in pkgs {
         debug!("checking for presence of package '{pkg}'");
-        if !installs_table.contains_key(&pkg) {
+        if !installs_table.contains_key(pkg) {
             debug!("package '{pkg}' wasn't found");
             return Err(TomlEditError::PackageNotFound(pkg.clone()));
         } else {
-            installs_table.remove(&pkg);
+            installs_table.remove(pkg);
             debug!("package '{pkg}' was removed");
         }
     }
