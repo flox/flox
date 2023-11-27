@@ -9,5 +9,5 @@
 # relative path to a file using the `file` field.
 # [hook]
 # script = """
-#   echo "@rossturk to add something floxxy here";
+#   echo "it's gettin flox in here";
 # """
