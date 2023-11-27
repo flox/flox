@@ -315,7 +315,9 @@ struct CmdBuildEnv : nix::EvalCommand
   void
   run( ref<Store> store ) override
   {
-    fprintf( stderr, "lockfile: %s\n", lockfile_content.c_str() );
+
+    logger->log( nix::Verbosity::lvlDebug,
+                 fmt( "lockfile: %s\n", lockfile_content.c_str() ) );
 
     LockfileRaw lockfile_raw = nlohmann::json::parse( lockfile_content );
     auto        lockfile     = Lockfile( lockfile_raw );
@@ -341,7 +343,8 @@ struct CmdBuildEnv : nix::EvalCommand
       {
         auto out_link_path
           = store2->addPermRoot( store_path, absPath( out_link.value() ) );
-        fprintf( stderr, "out_link_path: %s\n", out_link_path.c_str() );
+        logger->log( nix::Verbosity::lvlDebug,
+                     fmt( "out_link_path: %s\n", out_link_path.c_str() ) );
       }
   }
 };
