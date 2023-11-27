@@ -21,34 +21,31 @@
   fd,
   gnused,
   gitMinimal,
-  flox-gh,
-  gh,
   pkgsFor,
   floxVersion,
   flox-pkgdb,
+  flox-env-builder,
 }: let
   # crane (<https://crane.dev/>) library for building rust packages
   craneLib = inputs.crane.mkLib pkgsFor;
 
   # build time environment variables
   envs = let
-    mkEnv = ../../assets/mkEnv;
-
     auth0BaseUrl = "https://dev-j4tiszdm1f0b70xf.us.auth0.com";
   in
     {
       # 3rd party CLIs
       # we want to use our own binaries by absolute path
       # rather than relying on or modifying the user's `PATH` variable
-      NIX_BIN = "${flox-bash}/libexec/flox/nix";
       GIT_BIN = "${gitMinimal}/bin/git";
+      NIX_BIN = "${flox-bash}/libexec/flox/nix";
       PARSER_UTIL_BIN = "${parser-util}/bin/parser-util";
       PKGDB_BIN = "${flox-pkgdb}/bin/pkgdb";
-      FLOX_GH_BIN = "${flox-gh}/bin/flox-gh";
-      GH_BIN = "${gh}/bin/gh";
+      ENV_BUILDER_BIN = "${flox-env-builder}/bin/flox-env-builder";
+      # still referred to in crates/flox/src/config/mod.rs
+      # to include the ./flox-bash/etc/flox.toml default config
+      # TODO: remove
       FLOX_SH_PATH = flox-bash.outPath;
-      ENV_FROM_LOCKFILE_PATH = "${mkEnv}/env-from-lockfile.nix";
-      BUILD_ENV_BIN = ../../assets/build-env.sh;
 
       # Modified nix completion scripts
       # used to pass through nix completion ability for `flox nix *`

@@ -140,7 +140,8 @@ $$($(1)_TARGET) $$($(1)_DEPS_TARGET): CXXFLAGS += $$($(1)_CXXFLAGS)
 $$($(1)_TARGET): LDFLAGS  += $$(bin_LDFLAGS)  $$($(1)_LDFLAGS)
 $$($(1)_TARGET): LDLIBS   += $$(bin_LDLIBS)   $$($(1)_LDLIBS)
 $$($(1)_TARGET): LDLIBS   += $$($(1)_LIBS:lib%=-l%)
-$$($(1)_TARGET): LDFLAGS  += -Wl,-rpath,$(ROOT_DIR)/lib
+# TODO: -Wl is not available on gh runners?
+$$($(1)_TARGET): LDFLAGS  += -rpath,$(ROOT_DIR)/lib
 $$($(1)_TARGET): $$($(1)_OBJS) $$($(1)_LIBS:%=lib/%$$(libExt))
 ALL_SRCS       += $$($(1)_SRCS)
 ALL_OBJS       += $$($(1)_OBJS)

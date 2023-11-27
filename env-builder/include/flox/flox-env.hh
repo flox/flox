@@ -22,13 +22,18 @@ namespace flox {
  * @return `StorePath` to the environment.
  */
 nix::StorePath
-createFloxEnv( nix::EvalState &          state,
+createFloxEnv( nix::EvalState &     state,
                resolver::Lockfile & lockfile,
                System &             system );
 
 const nix::StorePath &
-createEnvironmentStorePath( nix::Packages &     pkgs,
-                            nix::EvalState &    state,
-                            nix::StorePathSet & references );
+createEnvironmentStorePath(
+  nix::Packages &     pkgs,
+  nix::EvalState &    state,
+  nix::StorePathSet & references,
+  std::map<nix::StorePath, std::pair<std::string, resolver::LockedPackageRaw>> &
+    originalPackage );
+
+/* -------------------------------------------------------------------------- */
 
 }  // namespace flox

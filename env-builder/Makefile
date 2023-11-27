@@ -47,7 +47,8 @@ CXXFLAGS += -Iinclude
 CXXFLAGS += $(nix_CFLAGS) $(sqlite3pp_CFLAGS)
 
 LDFLAGS ?=
-LDFLAGS += -Wl,-rpath,$$ORIGIN/../lib
+# TODO: -Wl is not available on gh runners?
+# LDFLAGS += -Wl,-rpath,$$ORIGIN/../lib
 # LDFLAGS += -Wl,--enable-new-dtags '-Wl,-rpath,$$ORIGIN/../lib'
 LDFLAGS += $(nix_LDFLAGS)
 
@@ -60,7 +61,9 @@ bin_LDLIBS   ?=
 
 lib_CPPFLAGS ?=
 lib_CXXFLAGS ?= -shared -fPIC
-lib_LDFLAGS  ?= -shared -fPIC -Wl
+# TODO: -Wl is not available on gh runners?
+
+lib_LDFLAGS  ?= -shared -fPIC
 # lib_LDFLAGS  ?= -shared -fPIC -Wl,--no-undefined
 lib_LDLIBS   ?=
 
