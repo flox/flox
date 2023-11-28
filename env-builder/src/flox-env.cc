@@ -109,6 +109,41 @@ createEnvironmentStorePath(
 /* -------------------------------------------------------------------------- */
 
 
+nix::Attr
+extractAttrPath( nix::EvalState & state,
+                 nix::Value &     vFlake,
+                 flox::AttrPath   attrPath )
+{
+
+  state.forceAttrs( vFlake, noPos, "while parsing flake" );
+
+
+  auto output = vFlake.attrs->get( state.symbols.create( "outputs" ) );
+
+  for ( auto path_segment : attrPath )
+    {
+      state.forceAttrs( *output->value,
+                        output->pos,
+                        "while parsing cached flake data" );
+
+      auto next
+        = output->value->attrs->get( state.symbols.create( path_segment ) );
+
+      if ( ! next )
+        {
+          std::ostringstream str;
+          output->value->print( state.symbols, str );
+          throw Error( "Attribute '%s' not found in set '%s'",
+                       path_segment,
+                       str.str() );
+        }
+      output = next;
+    }
+
+  return *output;
+}
+/* -------------------------------------------------------------------------- */
+
 StorePath
 createFloxEnv( EvalState &          state,
                resolver::Lockfile & lockfile,
@@ -144,7 +179,7 @@ createFloxEnv( EvalState &          state,
   std::map<StorePath, std::pair<std::string, resolver::LockedPackageRaw>>
     originalPackage;
 
-  for ( auto const & [name, package] : locked_packages )
+  for ( auto const & [pId, package] : locked_packages )
     {
 
       auto package_input_ref = FlakeRef( package.input );
@@ -153,35 +188,12 @@ createFloxEnv( EvalState &          state,
 
       auto vFlake = state.allocValue();
       flake::callFlake( state, package_flake, *vFlake );
-      state.forceAttrs( *vFlake, noPos, "while parsing flake" );
 
+      // get referenced output
+      auto output = extractAttrPath( state, *vFlake, package.attrPath );
 
-      auto output = vFlake->attrs->get( state.symbols.create( "outputs" ) );
-
-
-      /* evaluate the package */
-      for ( auto path_segment : package.attrPath )
-        {
-          state.forceAttrs( *output->value,
-                            output->pos,
-                            "while parsing cached flake data" );
-
-          auto next
-            = output->value->attrs->get( state.symbols.create( path_segment ) );
-
-          if ( ! next )
-            {
-              std::ostringstream str;
-              output->value->print( state.symbols, str );
-              throw Error( "Attribute '%s' not found in set '%s'",
-                           path_segment,
-                           str.str() );
-            }
-          output = next;
-        }
-
-
-      auto package_drv = getDerivation( state, *output->value, false );
+      // interpret ooutput as derivation
+      auto package_drv = getDerivation( state, *output.value, false );
 
       if ( ! package_drv.has_value() )
         {
@@ -201,8 +213,7 @@ createFloxEnv( EvalState &          state,
             true,
             package.priority );
           references.insert( output.second.value() );
-          originalPackage.insert(
-            { output.second.value(), { name, package } } );
+          originalPackage.insert( { output.second.value(), { pId, package } } );
         }
 
       /* Collect drvs that may yet need to be built */

@@ -30,9 +30,9 @@ createFloxEnv( nix::EvalState &     state,
 
 const nix::StorePath &
 createEnvironmentStorePath(
-  flox::buildenv::Packages &     pkgs,
-  nix::EvalState &    state,
-  nix::StorePathSet & references,
+  flox::buildenv::Packages & pkgs,
+  nix::EvalState &           state,
+  nix::StorePathSet &        references,
   std::map<nix::StorePath, std::pair<std::string, resolver::LockedPackageRaw>> &
     originalPackage );
 
