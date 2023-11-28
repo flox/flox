@@ -19,12 +19,12 @@
 #include <nix/util.hh>
 #include <nlohmann/json.hpp>
 
-#ifndef ACTIVATION_SCRIPT_BIN
-#  define ACTIVATION_SCRIPT_BIN "invalid_activation_script_path"
-#endif
-
 #ifndef PROFILE_D_SCRIPT_DIR
 #  define PROFILE_D_SCRIPT_DIR "invalid_profile.d_script_path"
+#endif
+
+#ifndef SET_PROMPT_BASH_SH
+#  define SET_PROMPT_BASH_SH "invalid_set-prompt-bash.sh_path"
 #endif
 
 /* -------------------------------------------------------------------------- */
@@ -215,6 +215,12 @@ createFloxEnv( EvalState &          state,
   // todo: do we need to honor repair flag? state.repair ? bmRepair : bmNormal
   state.store->buildPaths( toDerivedPaths( drvsToBuild ) );
 
+  std::stringstream commonActivate;
+
+  auto tempDir = std::filesystem::path( createTempDir() );
+  std::filesystem::create_directories( tempDir / "activate" );
+
+  /* Add hook */
   // todo: is it script _xor_ file?
   //       currently it is assumed that `hook.script` and `hook.file` are
   //       mutually exclusive
@@ -237,36 +243,78 @@ createFloxEnv( EvalState &          state,
       if ( ! script_path.empty() )
         {
 
-          auto tempDir = std::filesystem::path( createTempDir() );
-          std::filesystem::create_directories( tempDir / "bin" );
           std::filesystem::copy_file( script_path,
-                                      tempDir / "bin" / "activation-hook.sh" );
-          std::filesystem::permissions( tempDir / "bin" / "activation-hook.sh",
+                                      tempDir / "activate" / "hook.sh" );
+          std::filesystem::permissions( tempDir / "activate" / "hook.sh",
                                         std::filesystem::perms::owner_exec,
                                         std::filesystem::perm_options::add );
 
-          auto script_store_path
-            = state.store->addToStore( "activation-hook-script", tempDir );
-
-          references.insert( script_store_path );
-          pkgs.emplace_back( state.store->printStorePath( script_store_path ),
-                             true,
-                             0 );
+          commonActivate << "\nsource \"$FLOX_ENV/activate/hook.sh\"\n";
         }
     }
 
-  /**
-   * insert activation script
-   */
-  auto activation_script_path
-    = state.store->parseStorePath( ACTIVATION_SCRIPT_BIN );
+  /* Add environment variables */
+  if ( auto vars = lockfile.getManifest().getManifestRaw().vars )
+    {
 
-  state.store->ensurePath( activation_script_path );
-  references.insert( activation_script_path );
-  pkgs.emplace_back( state.store->printStorePath( activation_script_path ),
+      for ( auto [name, value] : vars.value() )
+        {
+          /* Double quote value and replace " with \".
+           * Note that we could instead do something similar to what
+           * nixpkgs.lib.escapeShellArg does to disable these variables
+           * dynamically expanding at runtime. */
+          size_t i = 0;
+          while ( ( i = value.find( "\"", i ) ) != std::string::npos )
+            {
+              value.replace( i, 1, "\\\"" );
+              i += 2;
+            }
+
+          commonActivate << fmt( "export %s=\"%s\"\n", name, value );
+        }
+    }
+
+  /* Add bash activation script. */
+  std::ofstream bashActivate( tempDir / "activate" / "bash" );
+  /* If this gets bigger, we could factor this out into a file that gets
+   * sourced, like we do for zsh. */
+  bashActivate << R"(
+# We use --rcfile to activate using bash which skips sourcing ~/.bashrc,
+# so source that here.
+if [ -f ~/.bashrc ]
+then
+    source ~/.bashrc
+fi
+
+if [ -d "$FLOX_ENV/etc/profile.d" ]; then
+  declare -a _prof_scripts;
+  _prof_scripts=( $(
+    shopt -s nullglob;
+    echo "$FLOX_ENV/etc/profile.d"/*.sh;
+  ) );
+  for p in "${_prof_scripts[@]}"; do . "$p"; done
+  unset _prof_scripts;
+fi
+)";
+  bashActivate << "\nsource " << SET_PROMPT_BASH_SH << "\n";
+  bashActivate << commonActivate.str();
+  bashActivate.close();
+
+  /* Add zsh activation script. Functionality shared between all environments is
+   * in flox.zdotdir/.zshrc. */
+  std::ofstream zshActivate( tempDir / "activate" / "zsh" );
+  zshActivate << commonActivate.str();
+  zshActivate.close();
+
+  auto activation_store_path
+    = state.store->addToStore( "activation-scripts", tempDir );
+  references.insert( activation_store_path );
+  pkgs.emplace_back( state.store->printStorePath( activation_store_path ),
                      true,
                      0 );
 
+
+  /* Add profile.d scripts */
   auto profile_d_scripts_path
     = state.store->parseStorePath( PROFILE_D_SCRIPT_DIR );
   state.store->ensurePath( profile_d_scripts_path );
