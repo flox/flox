@@ -283,6 +283,7 @@ struct CmdBuildEnv : nix::EvalCommand
 {
   std::string              lockfile_content;
   std::optional<nix::Path> out_link;
+  std::optional<flox::System> system;
 
   CmdBuildEnv()
   {
@@ -297,6 +298,12 @@ struct CmdBuildEnv : nix::EvalCommand
                .description = "output link",
                .labels      = { "out-link" },
                .handler     = { &out_link } } );
+
+    addFlag( { .longName    = "system",
+                 .shortName   = 's',
+                 .description = "system",
+                 .labels      = { "system" },
+                 .handler     = { &system } } );
   }
 
   std::string
@@ -324,14 +331,13 @@ struct CmdBuildEnv : nix::EvalCommand
 
     auto state = getEvalState();
 
-    // todo: allow to specify system?
-    auto system = nix::nativeSystem;
+    if ( system.has_value() )
+      {
+        nix::settings.thisSystem.set( system.value() );
+      }
+    auto system = nix::settings.thisSystem.get();
 
     auto store_path = flox::createFloxEnv( *state, lockfile, system );
-
-    // throw Error( "store_path: asdasdasdsadasdsada\n"
-    //            );
-
 
     std::cout << fmt( "%s\n", store->printStorePath( store_path ).c_str() );
 
