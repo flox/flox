@@ -203,12 +203,25 @@ buildEnvironment( const Path & out, Packages && pkgs )
              pkgs.end(),
              []( const Package & a, const Package & b )
              {
-               return a.priority < b.priority
-                      || ( a.priority == b.priority && a.path < b.path );
+               if ( a.priority < b.priority ) { return true; }
+               if ( a.priority > b.priority ) { return false; }
+
+               // same priority, same parent -> sort by internal priority
+               if ( a.parentPath && a.parentPath == b.parentPath )
+                 {
+                   return a.internalPriority < b.internalPriority;
+                 }
+
+               // same priority, but different parent -> sort by path
+               return a.path < b.path;
              } );
+
   for ( const auto & pkg : pkgs )
     {
-      if ( pkg.active ) { addPkg( pkg.path, pkg.priority ); }
+      if ( pkg.active )
+        {
+          addPkg( pkg.path, pkg.priority + pkg.internalPriority );
+        }
     }
 
   /* Symlink to the packages that have been "propagated" by packages

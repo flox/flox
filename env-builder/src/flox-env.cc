@@ -201,8 +201,11 @@ createFloxEnv( EvalState &          state,
                        nlohmann::json( package ).dump().c_str() );
         }
 
+      auto packagePath
+        = state.store->printStorePath( package_drv->queryOutPath() );
+
       /* Collect all outputs to include in the environment */
-      for ( auto output : package_drv->queryOutputs() )
+      for ( auto [idx, output] : enumerate( package_drv->queryOutputs() ) )
         {
           if ( ! output.second.has_value() )
             {
@@ -210,8 +213,10 @@ createFloxEnv( EvalState &          state,
             }  // skip outputs without path
           pkgs.emplace_back(
             state.store->printStorePath( output.second.value() ),
+            packagePath,
             true,
-            package.priority );
+            package.priority,
+            idx );
           references.insert( output.second.value() );
           originalPackage.insert( { output.second.value(), { pId, package } } );
         }

@@ -9,11 +9,25 @@ using namespace nix;
 
 struct Package
 {
-  Path path;
-  bool active;
-  int  priority;
+  Path                path;
+  std::optional<Path> parentPath;
+  bool                active;
+  int                 priority;
+  int                 internalPriority;
   Package( const Path & path, bool active, int priority )
     : path { path }, active { active }, priority { priority }
+  {}
+
+  Package( const Path & path,
+           const Path & parentPath,
+           bool         active,
+           int          priority,
+           int          internalPriority )
+    : path { path }
+    , parentPath { parentPath }
+    , active { active }
+    , priority { priority }
+    , internalPriority { internalPriority }
   {}
 };
 
@@ -43,7 +57,8 @@ typedef std::vector<Package> Packages;
 
 /// @brief Modified version of `nix/builtins/buildenv::buildProfile` that has
 /// special handling for flox packages.
-/// @param out the path to a build directory. (This directory will be loaded into the store by the caller)
+/// @param out the path to a build directory. (This directory will be loaded
+/// into the store by the caller)
 /// @param pkgs a list of packages to include in the build environment.
 void
 buildEnvironment( const Path & out, Packages && pkgs );
