@@ -3,7 +3,6 @@
 #include <filesystem>
 #include <flox/resolver/lockfile.hh>
 #include <fstream>
-#include <nix/builtins/buildenv.hh>
 #include <nix/command.hh>
 #include <nix/derivations.hh>
 #include <nix/eval-inline.hh>
@@ -69,9 +68,9 @@ addDirToStore( EvalState &         state,
 
 const nix::StorePath
 createEnvironmentStorePath(
-  nix::EvalState &    state,
-  nix::Packages &     pkgs,
-  nix::StorePathSet & references,
+  nix::EvalState &           state,
+  flox::buildenv::Packages & pkgs,
+  nix::StorePathSet &        references,
   std::map<StorePath, std::pair<std::string, resolver::LockedPackageRaw>> &
     originalPackage )
 {
@@ -79,10 +78,12 @@ createEnvironmentStorePath(
   auto tempDir = createTempDir();
   try
     {
-      buildProfile( tempDir, std::move( pkgs ) );
+      buildenv::buildEnvironment( tempDir, std::move( pkgs ) );
     }
   catch ( BuildEnvFileConflictError & e )
     {
+
+      logger->log( nix::Verbosity::lvlError, e.what() );
 
       auto [storePathA, filePath] = state.store->toStorePath( e.fileA );
       auto [storePathB, _]        = state.store->toStorePath( e.fileB );
@@ -118,6 +119,7 @@ createFloxEnv( EvalState &          state,
   auto packages = lockfile.getLockfileRaw().packages.find( system );
   if ( packages == lockfile.getLockfileRaw().packages.end() )
     {
+      // todo: throw structured exception
       throw Error( "No packages found for system '%s'", system );
     }
 
@@ -138,7 +140,7 @@ createFloxEnv( EvalState &          state,
    */
   StorePathSet                      references;
   std::vector<StorePathWithOutputs> drvsToBuild;
-  Packages                          pkgs;
+  flox::buildenv::Packages          pkgs;
   std::map<StorePath, std::pair<std::string, resolver::LockedPackageRaw>>
     originalPackage;
 
@@ -281,8 +283,8 @@ createFloxEnv( EvalState &          state,
 
 struct CmdBuildEnv : nix::EvalCommand
 {
-  std::string              lockfile_content;
-  std::optional<nix::Path> out_link;
+  std::string                 lockfile_content;
+  std::optional<nix::Path>    out_link;
   std::optional<flox::System> system;
 
   CmdBuildEnv()
@@ -300,10 +302,10 @@ struct CmdBuildEnv : nix::EvalCommand
                .handler     = { &out_link } } );
 
     addFlag( { .longName    = "system",
-                 .shortName   = 's',
-                 .description = "system",
-                 .labels      = { "system" },
-                 .handler     = { &system } } );
+               .shortName   = 's',
+               .description = "system",
+               .labels      = { "system" },
+               .handler     = { &system } } );
   }
 
   std::string
