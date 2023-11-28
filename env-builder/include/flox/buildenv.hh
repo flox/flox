@@ -7,27 +7,32 @@
 namespace flox::buildenv {
 using namespace nix;
 
+struct Priority
+{
+  unsigned int        priority;
+  std::optional<Path> parentPath;
+  unsigned int        internalPriority;
+
+  Priority() : Priority( 0 ) {}
+
+  Priority( unsigned int priority ) : Priority( priority, {}, 0 ) {}
+
+  Priority( unsigned int        priority,
+            std::optional<Path> parentPath,
+            unsigned int        internalPriority )
+    : priority { priority }
+    , parentPath { parentPath }
+    , internalPriority { internalPriority }
+  {}
+};
+
 struct Package
 {
-  Path                path;
-  std::optional<Path> parentPath;
-  bool                active;
-  int                 priority;
-  int                 internalPriority;
-  Package( const Path & path, bool active, int priority )
+  Path     path;
+  bool     active;
+  Priority priority;
+  Package( const Path & path, bool active, Priority priority )
     : path { path }, active { active }, priority { priority }
-  {}
-
-  Package( const Path & path,
-           const Path & parentPath,
-           bool         active,
-           int          priority,
-           int          internalPriority )
-    : path { path }
-    , parentPath { parentPath }
-    , active { active }
-    , priority { priority }
-    , internalPriority { internalPriority }
   {}
 };
 

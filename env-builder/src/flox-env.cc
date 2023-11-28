@@ -217,10 +217,14 @@ createFloxEnv( EvalState &          state,
           if ( ! output.second.has_value() ) { continue; }
           pkgs.emplace_back(
             state.store->printStorePath( output.second.value() ),
-            packagePath,
             true,
-            package.priority,
-            idx );
+            buildenv::Priority {
+              package.priority,
+              packagePath,
+              // idx should always fit in uint its unlikely a package has more
+              // than 4 billion outputs
+              static_cast<unsigned int>( idx ),
+            } );
           references.insert( output.second.value() );
           originalPackage.insert( { output.second.value(), { pId, package } } );
         }
@@ -275,7 +279,7 @@ createFloxEnv( EvalState &          state,
           references.insert( script_store_path );
           pkgs.emplace_back( state.store->printStorePath( script_store_path ),
                              true,
-                             0 );
+                             buildenv::Priority { 0 } );
         }
     }
 
@@ -291,7 +295,7 @@ createFloxEnv( EvalState &          state,
   references.insert( activation_script_path );
   pkgs.emplace_back( state.store->printStorePath( activation_script_path ),
                      true,
-                     0 );
+                     buildenv::Priority { 0 } );
 
   /* insert profile.d scripts
     The store path is provided at compile time
@@ -303,7 +307,7 @@ createFloxEnv( EvalState &          state,
   references.insert( profile_d_scripts_path );
   pkgs.emplace_back( state.store->printStorePath( profile_d_scripts_path ),
                      true,
-                     0 );
+                     buildenv::Priority { 0 } );
 
   return createEnvironmentStorePath( state, pkgs, references, originalPackage );
 }

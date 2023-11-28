@@ -8,18 +8,19 @@
 namespace flox::buildenv {
 using namespace nix;
 
+
 struct State
 {
-  std::map<Path, int> priorities;
-  unsigned long       symlinks = 0;
+  std::map<Path, Priority> priorities;
+  unsigned long            symlinks = 0;
 };
 
 /* For each activated package, create symlinks */
 static void
-createLinks( State &      state,
-             const Path & srcDir,
-             const Path & dstDir,
-             int          priority )
+createLinks( State &          state,
+             const Path &     srcDir,
+             const Path &     dstDir,
+             const Priority & priority )
 {
   DirEntries srcFiles;
 
@@ -139,13 +140,33 @@ createLinks( State &      state,
               if ( S_ISLNK( dstSt.st_mode ) )
                 {
                   auto prevPriority = state.priorities[dstFile];
-                  if ( prevPriority == priority )
+
+                  // if the existing dest has a higher (numerically lower)
+                  // priority -> skip
+                  if ( prevPriority.priority < priority.priority ) { continue; }
+
+                  // if src and dst have the same priority
+                  if ( prevPriority.priority == priority.priority )
                     {
-                      throw BuildEnvFileConflictError( readLink( dstFile ),
-                                                       srcFile,
-                                                       priority );
+
+                      // ... and have different parents -> conflict
+                      if ( prevPriority.parentPath != priority.parentPath )
+                        {
+                          throw BuildEnvFileConflictError( readLink( dstFile ),
+                                                           srcFile,
+                                                           priority.priority );
+                        }
+
+                      // ... and dest has a higher (numerically lower)
+                      // internal priority -> skip
+                      if ( prevPriority.internalPriority
+                           < priority.internalPriority )
+                        {
+                          continue;
+                        }
                     }
-                  if ( prevPriority < priority ) { continue; }
+
+
                   if ( unlink( dstFile.c_str() ) == -1 )
                     {
                       throw SysError( "unlinking '%1%'", dstFile );
@@ -178,7 +199,7 @@ buildEnvironment( const Path & out, Packages && pkgs )
 
   std::set<Path> done, postponed;
 
-  auto addPkg = [&]( const Path & pkgDir, int priority )
+  auto addPkg = [&]( const Path & pkgDir, const Priority & priority )
   {
     if ( ! done.insert( pkgDir ).second ) { return; }
     createLinks( state, pkgDir, out, priority );
@@ -210,16 +231,21 @@ buildEnvironment( const Path & out, Packages && pkgs )
              pkgs.end(),
              []( const Package & a, const Package & b )
              {
-               if ( a.priority < b.priority ) { return true; }
-               if ( a.priority > b.priority ) { return false; }
+               auto aP = a.priority;
+               auto bP = b.priority;
 
-               // same priority, same parent -> sort by internal priority
-               if ( a.parentPath && a.parentPath == b.parentPath )
+               // order by priority
+               if ( aP.priority < bP.priority ) { return true; }
+               if ( aP.priority > bP.priority ) { return false; }
+
+               // ... then internal priority
+               if ( aP.internalPriority < bP.internalPriority ) { return true; }
+               if ( aP.internalPriority > bP.internalPriority )
                  {
-                   return a.internalPriority < b.internalPriority;
+                   return false;
                  }
 
-               // same priority, but different parent -> sort by path
+               // ... then (arbitrarily) by path
                return a.path < b.path;
              } );
 
@@ -230,10 +256,7 @@ buildEnvironment( const Path & out, Packages && pkgs )
    */
   for ( const auto & pkg : pkgs )
     {
-      if ( pkg.active )
-        {
-          addPkg( pkg.path, pkg.priority + pkg.internalPriority );
-        }
+      if ( pkg.active ) { addPkg( pkg.path, pkg.priority ); }
     }
 
   /* Symlink the packages that have been "propagated" by packages
@@ -243,14 +266,14 @@ buildEnvironment( const Path & out, Packages && pkgs )
    */
   // todo: consider making this optional?
   // todo: include paths recursively?
-  auto priorityCounter = 1000;
+  auto priorityCounter = 1000u;
   while ( ! postponed.empty() )
     {
       std::set<Path> pkgDirs;
       postponed.swap( pkgDirs );
       for ( const auto & pkgDir : pkgDirs )
         {
-          addPkg( pkgDir, priorityCounter++ );
+          addPkg( pkgDir, Priority { priorityCounter++ } );
         }
     }
 
