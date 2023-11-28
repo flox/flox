@@ -18,13 +18,32 @@
 #include <nix/util.hh>
 #include <nlohmann/json.hpp>
 
-#ifndef ACTIVATION_SCRIPT_BIN
-#  define ACTIVATION_SCRIPT_BIN "invalid_activation_script_path"
-#endif
-
 #ifndef PROFILE_D_SCRIPT_DIR
 #  define PROFILE_D_SCRIPT_DIR "invalid_profile.d_script_path"
 #endif
+
+#ifndef SET_PROMPT_BASH_SH
+#  define SET_PROMPT_BASH_SH "invalid_set-prompt-bash.sh_path"
+#endif
+
+const std::string BASH_ACTIVATE_SCRIPT = R"(
+# We use --rcfile to activate using bash which skips sourcing ~/.bashrc,
+# so source that here.
+if [ -f ~/.bashrc ]
+then
+    source ~/.bashrc
+fi
+
+if [ -d "$FLOX_ENV/etc/profile.d" ]; then
+  declare -a _prof_scripts;
+  _prof_scripts=( $(
+    shopt -s nullglob;
+    echo "$FLOX_ENV/etc/profile.d"/*.sh;
+  ) );
+  for p in "${_prof_scripts[@]}"; do . "$p"; done
+  unset _prof_scripts;
+fi
+)";
 
 /* -------------------------------------------------------------------------- */
 
@@ -241,6 +260,18 @@ createFloxEnv( EvalState &          state,
   // todo: do we need to honor repair flag? state.repair ? bmRepair : bmNormal
   state.store->buildPaths( toDerivedPaths( drvsToBuild ) );
 
+  /* verbatim content of the activate script common to all shells */
+  std::stringstream commonActivate;
+
+  auto tempDir = std::filesystem::path( createTempDir() );
+  std::filesystem::create_directories( tempDir / "activate" );
+
+  /* Add hook script
+  *
+  * Write hook script to a temporary file and copy it to the environment.
+  * Add source command to the activate script.
+
+   */
   // todo: is it script _xor_ file?
   //
   // Currently it is assumed that `hook.script` and `hook.file` are
@@ -265,35 +296,60 @@ createFloxEnv( EvalState &          state,
       if ( ! script_path.empty() )
         {
 
-          auto tempDir = std::filesystem::path( createTempDir() );
-          std::filesystem::create_directories( tempDir / "bin" );
           std::filesystem::copy_file( script_path,
-                                      tempDir / "bin" / "activation-hook.sh" );
-          std::filesystem::permissions( tempDir / "bin" / "activation-hook.sh",
+                                      tempDir / "activate" / "hook.sh" );
+          std::filesystem::permissions( tempDir / "activate" / "hook.sh",
                                         std::filesystem::perms::owner_exec,
                                         std::filesystem::perm_options::add );
-
-          auto script_store_path
-            = state.store->addToStore( "activation-hook-script", tempDir );
-
-          references.insert( script_store_path );
-          pkgs.emplace_back( state.store->printStorePath( script_store_path ),
-                             true,
-                             buildenv::Priority { 0 } );
+          commonActivate << "source \"$FLOX_ENV/activate/hook.sh\""
+                         << "\n";
         }
     }
 
-  /* insert activation script
-     The store path is provided at compile time
-     via the `ACTIVATION_SCRIPT_BIN` environment variable.
-     See also: `./pkgs/flox-env-builder/default.nix`
+  /* Add environment variables
+   *
+   * Read environment variables from the manifest
+   * and add them as exports to the activate script.
    */
-  auto activation_script_path
-    = state.store->parseStorePath( ACTIVATION_SCRIPT_BIN );
+  if ( auto vars = lockfile.getManifest().getManifestRaw().vars )
+    {
 
-  state.store->ensurePath( activation_script_path );
-  references.insert( activation_script_path );
-  pkgs.emplace_back( state.store->printStorePath( activation_script_path ),
+      for ( auto [name, value] : vars.value() )
+        {
+          /* Double quote value and replace " with \".
+           * Note that we could instead do something similar to what
+           * nixpkgs.lib.escapeShellArg does to disable these variables
+           * dynamically expanding at runtime. */
+          size_t i = 0;
+          while ( ( i = value.find( "\"", i ) ) != std::string::npos )
+            {
+              value.replace( i, 1, "\\\"" );
+              i += 2;
+            }
+
+          commonActivate << fmt( "export %s=\"%s\"", name, value ) << "\n";
+        }
+    }
+
+  /* Add bash activation script. */
+  std::ofstream bashActivate( tempDir / "activate" / "bash" );
+  /* If this gets bigger, we could factor this out into a file that gets
+   * sourced, like we do for zsh. */
+  bashActivate << BASH_ACTIVATE_SCRIPT << "\n";
+  bashActivate << "source " << SET_PROMPT_BASH_SH << "\n";
+  bashActivate << commonActivate.str();
+  bashActivate.close();
+
+  /* Add zsh activation script. Functionality shared between all environments is
+   * in flox.zdotdir/.zshrc. */
+  std::ofstream zshActivate( tempDir / "activate" / "zsh" );
+  zshActivate << commonActivate.str();
+  zshActivate.close();
+
+  auto activation_store_path
+    = state.store->addToStore( "activation-scripts", tempDir );
+  references.insert( activation_store_path );
+  pkgs.emplace_back( state.store->printStorePath( activation_store_path ),
                      true,
                      buildenv::Priority { 0 } );
 

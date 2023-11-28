@@ -1,10 +1,5 @@
 # Tweak the (already customized) prompt: add a flox indicator.
 
-LIGHTBLUE256=61 # SlateBlue3
-DARKPEACH256=216 # LightSalmon1
-FLOX_PROMPT_COLOR_1=${FLOX_PROMPT_COLOR_1:-$LIGHTBLUE256}
-FLOX_PROMPT_COLOR_2=${FLOX_PROMPT_COLOR_2:-$DARKPEACH256}
-
 _esc="\x1b["
 colorReset="\[${_esc}0m\]"
 colorBold="\[${_esc}1m\]"

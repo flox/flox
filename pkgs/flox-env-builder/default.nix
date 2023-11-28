@@ -19,24 +19,6 @@
   runCommand,
   # sql-builder,
 }: let
-  activationScript = writeTextFile {
-    name = "flox-activate";
-    executable = true;
-    destination = "/activate";
-    text = ''
-      # We use --rcfile to activate using bash which skips sourcing ~/.bashrc,
-      # so source that here.
-      if [ -f ~/.bashrc ]
-      then
-          source ~/.bashrc
-      fi
-
-      . ${../../assets/mkEnv/set-prompt.sh}
-      . ${../../assets/mkEnv/source-profiles.sh}
-      . ${../../assets/mkEnv/run-activation-hook.sh}
-    '';
-  };
-
   profile_d_scripts = runCommand "profile-d-scripts" {} ''
     mkdir -p $out/etc/profile.d
     cp -r ${../../assets/mkEnv/profile.d}/* $out/etc/profile.d/
@@ -81,8 +63,8 @@ in
     boost_CPPFLAGS = "-I" + boost.dev.outPath + "/include";
     pkgdb_CLFAGS = "-I" + flox-pkgdb.outPath + "/include";
 
-    ACTIVATION_SCRIPT_BIN = activationScript;
     PROFILE_D_SCRIPT_DIR = profile_d_scripts;
+    SET_PROMPT_BASH_SH = "${../../assets/mkEnv/set-prompt-bash.sh}";
 
     libExt = stdenv.hostPlatform.extensions.sharedLibrary;
 
