@@ -1,5 +1,7 @@
 #pragma once
 
+#include "flox/buildenv.hh"
+
 #include <nix/store-api.hh>
 
 #include <flox/resolver/lockfile.hh>
@@ -28,9 +30,9 @@ createFloxEnv( nix::EvalState &     state,
 
 const nix::StorePath &
 createEnvironmentStorePath(
-  nix::Packages &     pkgs,
-  nix::EvalState &    state,
-  nix::StorePathSet & references,
+  flox::buildenv::Packages & pkgs,
+  nix::EvalState &           state,
+  nix::StorePathSet &        references,
   std::map<nix::StorePath, std::pair<std::string, resolver::LockedPackageRaw>> &
     originalPackage );
 
