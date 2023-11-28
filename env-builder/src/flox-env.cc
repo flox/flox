@@ -99,11 +99,8 @@ createEnvironmentStorePath(
     {
       buildenv::buildEnvironment( tempDir, std::move( pkgs ) );
     }
-  catch ( BuildEnvFileConflictError & e )
+  catch ( buildenv::BuildEnvFileConflictError & e )
     {
-
-      logger->log( nix::Verbosity::lvlError, e.what() );
-
       auto [storePathA, filePath] = state.store->toStorePath( e.fileA );
       auto [storePathB, _]        = state.store->toStorePath( e.fileB );
 
