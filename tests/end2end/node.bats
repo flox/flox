@@ -49,7 +49,11 @@ teardown() { project_teardown; common_test_teardown; }
 # ---------------------------------------------------------------------------- #
 #
 @test "install krb5 with node" {
-  run $FLOX_CLI install nodejs krb5 pkg-config gnumake clang python3;
+  run $FLOX_CLI install nodejs krb5 pkg-config python3 gnumake clang libtool cctools;
+
+  sed -i \
+    -e 's|clang = {}|clang = { path = "clang" }|' \
+      "$PROJECT_DIR/.flox/env/manifest.toml";
 
   assert_success;
   assert_output --partial "✅ 'nodejs' installed to environment";
