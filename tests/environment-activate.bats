@@ -128,6 +128,12 @@ EOF
 # ---------------------------------------------------------------------------- #
 
 @test "zsh: activate runs hook" {
+  cat << "EOF" >> "$PROJECT_DIR/.flox/env/manifest.toml"
+[hook]
+script = """
+  echo "Welcome to your flox environment!";
+"""
+EOF
   # TODO: flox will set HOME if it doesn't match the home of the user with
   # current euid. I'm not sure if we should change that, but for now just set
   # USER to REAL_USER.
