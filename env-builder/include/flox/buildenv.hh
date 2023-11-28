@@ -55,11 +55,12 @@ public:
 
 typedef std::vector<Package> Packages;
 
-/// @brief Modified version of `nix/builtins/buildenv::buildProfile` that has
-/// special handling for flox packages.
-/// @param out the path to a build directory. (This directory will be loaded
-/// into the store by the caller)
-/// @param pkgs a list of packages to include in the build environment.
+/** @brief Modified version of `nix/builtins/buildenv::buildProfile` that has
+ * special handling for flox packages.
+ * @param out the path to a build directory. (This directory will be loaded
+ * into the store by the caller)
+ * @param pkgs a list of packages to include in the build environment.
+ */
 void
 buildEnvironment( const Path & out, Packages && pkgs );
 

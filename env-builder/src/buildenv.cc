@@ -67,10 +67,10 @@ createLinks( State &      state,
           throw;
         }
 
-      /* The files below are special-cased to that they don't show
-       * up in user profiles, either because they are useless, or
-       * because they would cause pointless collisions (e.g., each
-       * Python package brings its own
+      /* The files below are special-cased so that they don't show
+       * up in user profiles, either because they are useless,
+       * or because they would cause pointless collisions
+       * (e.g., each Python package brings its own
        * `$out/lib/pythonX.Y/site-packages/easy-install.pth'.)
        */
       if ( hasSuffix( srcFile, "/propagated-build-inputs" )
@@ -82,7 +82,12 @@ createLinks( State &      state,
         {
           continue;
         }
-
+      // todo: understand and document these branches
+      // the short description is:
+      // link directories in the source directory to the target directory
+      // if the directory already exists, create a directory
+      // and recursively link the contents.
+      // Handle file type mismatches and conflicts with priority.
       else if ( S_ISDIR( srcSt.st_mode ) )
         {
           struct stat dstSt;
@@ -125,7 +130,6 @@ createLinks( State &      state,
               throw SysError( "getting status of '%1%'", dstFile );
             }
         }
-
       else
         {
           struct stat dstSt;
@@ -195,9 +199,12 @@ buildEnvironment( const Path & out, Packages && pkgs )
       }
   };
 
-  /* Symlink to the packages that have been installed explicitly by the
-   * user. Process in priority order to reduce unnecessary
-   * symlink/unlink steps.
+  /* Symlink to the packages that have been installed explicitly by the user.
+   * Process in priority order to reduce unnecessary symlink/unlink steps.
+   *
+   * Cluster packages by parent directory,
+   * so that outputs of the same derivation can be internally prioritized
+   * by their internal priority, i.e. the order they are defined in the recipe.
    */
   std::sort( pkgs.begin(),
              pkgs.end(),
@@ -216,6 +223,11 @@ buildEnvironment( const Path & out, Packages && pkgs )
                return a.path < b.path;
              } );
 
+  /* Artificially decrease the priority of internally prioritized packages.
+   * `internalPriority` is expected to be 0 for all packages without a parent
+   * For packages that represent a derivation output, the internal priority
+   * is increasing in the order in which the outputs are defined in the recipe.
+   */
   for ( const auto & pkg : pkgs )
     {
       if ( pkg.active )
@@ -224,11 +236,13 @@ buildEnvironment( const Path & out, Packages && pkgs )
         }
     }
 
-  /* Symlink to the packages that have been "propagated" by packages
-   * installed by the user (i.e., package X declares that it wants Y
-   * installed as well). We do these later because they have a lower
-   * priority in case of collisions.
+  /* Symlink the packages that have been "propagated" by packages
+   * installed by the user
+   * (i.e., package X declares that it wants Y installed as well).
+   * We do these later because they have a lower priority in case of collisions.
    */
+  // todo: consider making this optional?
+  // todo: include paths recursively?
   auto priorityCounter = 1000;
   while ( ! postponed.empty() )
     {

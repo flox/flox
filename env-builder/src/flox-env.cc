@@ -170,9 +170,8 @@ createFloxEnv( EvalState &          state,
       locked_packages.push_back( { package.first, locked_package } );
     }
 
-  /**
-   * extract derivations
-   */
+  /* extract derivations */
+
   StorePathSet                      references;
   std::vector<StorePathWithOutputs> drvsToBuild;
   flox::buildenv::Packages          pkgs;
@@ -204,13 +203,18 @@ createFloxEnv( EvalState &          state,
       auto packagePath
         = state.store->printStorePath( package_drv->queryOutPath() );
 
-      /* Collect all outputs to include in the environment */
+      /*
+        Collect all outputs to include in the environment.
+
+        Set the priority of the outputs to the priority of the package
+        and the internal priority to the index of the output.
+        This way `buildenv::buildEnvironment` can resolve conflicts between
+        outputs of the same derivation.
+        */
       for ( auto [idx, output] : enumerate( package_drv->queryOutputs() ) )
         {
-          if ( ! output.second.has_value() )
-            {
-              continue;
-            }  // skip outputs without path
+          // skip outputs without path
+          if ( ! output.second.has_value() ) { continue; }
           pkgs.emplace_back(
             state.store->printStorePath( output.second.value() ),
             packagePath,
@@ -234,8 +238,10 @@ createFloxEnv( EvalState &          state,
   state.store->buildPaths( toDerivedPaths( drvsToBuild ) );
 
   // todo: is it script _xor_ file?
-  //       currently it is assumed that `hook.script` and `hook.file` are
-  //       mutually exclusive
+  //
+  // Currently it is assumed that `hook.script` and `hook.file` are
+  // mutually exclusive.
+  // If both are set, `hook.file` takes precedence.
   if ( auto hook = lockfile.getManifest().getManifestRaw().hook )
     {
       nix::Path script_path;
@@ -273,8 +279,10 @@ createFloxEnv( EvalState &          state,
         }
     }
 
-  /**
-   * insert activation script
+  /* insert activation script
+     The store path is provided at compile time
+     via the `ACTIVATION_SCRIPT_BIN` environment variable.
+     See also: `./pkgs/flox-env-builder/default.nix`
    */
   auto activation_script_path
     = state.store->parseStorePath( ACTIVATION_SCRIPT_BIN );
@@ -285,6 +293,10 @@ createFloxEnv( EvalState &          state,
                      true,
                      0 );
 
+  /* insert profile.d scripts
+    The store path is provided at compile time
+     via the `PROFILE_D_SCRIPT_DIR` environment variable.
+     See also: `./pkgs/flox-env-builder/default.nix` */
   auto profile_d_scripts_path
     = state.store->parseStorePath( PROFILE_D_SCRIPT_DIR );
   state.store->ensurePath( profile_d_scripts_path );
