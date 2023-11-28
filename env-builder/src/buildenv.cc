@@ -223,9 +223,12 @@ buildEnvironment( const Path & out, Packages && pkgs )
   /* Symlink to the packages that have been installed explicitly by the user.
    * Process in priority order to reduce unnecessary symlink/unlink steps.
    *
-   * Cluster packages by parent directory,
-   * so that outputs of the same derivation can be internally prioritized
-   * by their internal priority, i.e. the order they are defined in the recipe.
+   * Note that we sort by priority, then by internal priority, then by path.
+   * Internal priority is used to avoid conflicts
+   * between outputs of the same derivation.
+   *
+   * The handling of internal priorities for outputs of the same derivation
+   * is performed in `buildenv::createLinks`.
    */
   std::sort( pkgs.begin(),
              pkgs.end(),
@@ -249,11 +252,6 @@ buildEnvironment( const Path & out, Packages && pkgs )
                return a.path < b.path;
              } );
 
-  /* Artificially decrease the priority of internally prioritized packages.
-   * `internalPriority` is expected to be 0 for all packages without a parent
-   * For packages that represent a derivation output, the internal priority
-   * is increasing in the order in which the outputs are defined in the recipe.
-   */
   for ( const auto & pkg : pkgs )
     {
       if ( pkg.active ) { addPkg( pkg.path, pkg.priority ); }
