@@ -28,13 +28,6 @@ jobs:
       - name: "Checkout"
         uses: actions/checkout@v3
 
-      - name: "Setup Tailscale"
-        uses: "tailscale/github-action@v2"
-        with:
-          args: "--timeout 30s --login-server ${{ vars.TAILSCALE_URL }}"
-          tags: tag:ci
-          authkey: "${{ secrets.TAILSCALE_AUTH_KEY }}"
-
       - name: "Install flox"
         uses: flox/install-flox-action@main
         with:
@@ -44,7 +37,6 @@ jobs:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           ssh-key:                "${{ secrets.FLOXBOT_SSH_KEY }}"
-          remote-builders:        "${{ vars.FLOX_BUILDERS }}"
 
       - name: "Cache cargo"
         uses: actions/cache@v3
