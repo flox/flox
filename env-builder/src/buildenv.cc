@@ -285,7 +285,6 @@ buildEnvironment( const Path & out, Packages && pkgs )
       postponed.swap( pkgDirs );
       for ( const auto & pkgDir : pkgDirs )
         {
-          printf( "postponed: %s\n", pkgDir.c_str() );
           addPkg( pkgDir, Priority { priorityCounter++ } );
         }
     }
