@@ -176,7 +176,9 @@ jobs:
               --no-update-lock-file \
               --print-out-paths \
               '.#packages.${{ matrix.system }}.flox-tests'
-          nix copy --to "$FLOX_SUBSTITUTER" ./result
+          nix copy \
+            --extra-experimental-features "nix-command flakes" \
+            --to "$FLOX_SUBSTITUTER" ./result
 
       - name: "Run Bats Tests (./#flox-tests)"
         run: |
@@ -193,7 +195,9 @@ jobs:
               --no-update-lock-file \
               --print-out-paths \
               '.#packages.${{ matrix.system }}.flox-tests-end2end'
-          nix copy --to "$FLOX_SUBSTITUTER" ./result
+          nix copy \
+            --extra-experimental-features "nix-command flakes" \
+            --to "$FLOX_SUBSTITUTER" ./result
 
       - name: "Run Bats end2end Tests (./#flox-tests-end2end)"
         run: |
