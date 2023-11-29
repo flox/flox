@@ -4,6 +4,13 @@
 #
 # ---------------------------------------------------------------------------- #
 {
+  description = "flox - Harness the power of Nix";
+
+  nixConfig.extra-substituters = [
+    "https://cache.floxdev.com"
+    "s3://flox-cache"
+  ];
+
   # Do not override `nixpkgs` input
   inputs.pkgdb.url = "github:flox/pkgdb";
 

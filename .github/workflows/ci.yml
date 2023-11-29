@@ -36,6 +36,8 @@ jobs:
           substituter-key: ${{ secrets.FLOX_STORE_PUBLIC_NIX_SECRET_KEY }}
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          ssh-key:                "${{ secrets.FLOXBOT_SSH_KEY }}"
+          remote-builders:        "${{ vars.FLOX_BUILDERS }}"
 
       - name: "Cache cargo"
         uses: actions/cache@v3
@@ -59,14 +61,16 @@ jobs:
 
   env-builder-tests:
     name: "Build and Run Env Builder Bats Tests"
-    runs-on: ${{ matrix.os }}
+    runs-on: "ubuntu-latest"
 
     strategy:
       fail-fast: false
       matrix:
-        os:
-          - "ubuntu-22.04-8core"
-          - "macos-latest"
+        system:
+          - "x86_64-linux"
+          - "x86_64-darwin"
+          - "aarch64-linux"
+          - "aarch64-darwin"
 
     steps:
       - name: "Checkout"
@@ -80,6 +84,8 @@ jobs:
           substituter-key: ${{ secrets.FLOX_STORE_PUBLIC_NIX_SECRET_KEY }}
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          ssh-key:                "${{ secrets.FLOXBOT_SSH_KEY }}"
+          remote-builders:        "${{ vars.FLOX_BUILDERS }}"
 
       - name: "Build flox-env-builder"
         run: |
@@ -102,14 +108,16 @@ jobs:
 
   nix-build:
     name: "Build and Run Bats Tests"
-    runs-on: ${{ matrix.os }}
+    runs-on: "ubuntu-latest"
 
     strategy:
       fail-fast: false
       matrix:
-        os:
-          - "ubuntu-22.04-8core"
-          - "macos-latest"
+        system:
+          - "x86_64-linux"
+          - "x86_64-darwin"
+          - "aarch64-linux"
+          - "aarch64-darwin"
 
     steps:
       - name: "Checkout"
@@ -123,6 +131,8 @@ jobs:
           substituter-key: ${{ secrets.FLOX_STORE_PUBLIC_NIX_SECRET_KEY }}
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          ssh-key:                "${{ secrets.FLOXBOT_SSH_KEY }}"
+          remote-builders:        "${{ vars.FLOX_BUILDERS }}"
 
       - name: "Build flox"
         run: |
@@ -130,7 +140,7 @@ jobs:
               --extra-experimental-features "nix-command flakes" \
               --no-update-lock-file \
               --print-out-paths \
-              '.#flox'
+              '.#packages.${{ matrix.system }}.flox'
           # We run bats tests later on against the `FLOX_CLI' env
           echo "FLOX_CLI=$(readlink -f ./result; )/bin/flox" >> "$GITHUB_ENV"
           rm ./result
@@ -142,7 +152,7 @@ jobs:
               --no-update-lock-file \
               --print-out-paths \
               --no-link \
-              '.#flox-tests'
+              '.#packages.${{ matrix.system }}.flox-tests'
 
       - name: "Run Bats Tests (./#flox-tests)"
         run: |
@@ -150,7 +160,7 @@ jobs:
           nix run \
               --extra-experimental-features "nix-command flakes" \
               --no-update-lock-file \
-              '.#flox-tests'
+              '.#packages.${{ matrix.system }}.flox-tests'
 
       - name: "Build end2end Bats Tests (.#flox-tests-end2end)"
         run: |
@@ -159,7 +169,7 @@ jobs:
               --no-update-lock-file \
               --print-out-paths \
               --no-link \
-              '.#flox-tests-end2end'
+              '.#packages.${{ matrix.system }}.flox-tests-end2end'
 
       - name: "Run Bats end2end Tests (./#flox-tests-end2end)"
         run: |
@@ -167,4 +177,4 @@ jobs:
           nix run \
               --extra-experimental-features "nix-command flakes" \
               --no-update-lock-file \
-              '.#flox-tests-end2end'
+              '.#packages.${{ matrix.system }}.flox-tests-end2end'
