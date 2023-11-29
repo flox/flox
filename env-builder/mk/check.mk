@@ -39,8 +39,21 @@ check: $(check_TARGETS) FORCE
 	  fi;                                        \
 	done
 
-
 # ---------------------------------------------------------------------------- #
+
+
+TEST_MANIFESTS := $(wildcard $(ROOT_DIR)/tests/fixtures/lockfiles/*/manifest.toml)
+TEST_MANIFEST_LOCKS := $(TEST_MANIFESTS:%.toml=%.lock)
+
+$(TEST_MANIFEST_LOCKS):
+	@echo "Locking manifest '$(@:%.lock=%){.toml -> .lock}'"
+	pkgdb manifest lock --ga-registry "$(@:%.lock=%.toml)" | jq > "$(@)"
+
+test: $(BIN_flox-env-builder) $(wildcard $(ROOT_DIR)/tests/**) $(TEST_MANIFEST_LOCKS) FORCE
+	PKGDB="$(ROOT_DIR)/bin/flox-env-builder"                        \
+	  bats --print-output-on-failure --verbose-run --timing  \
+	       "$(ROOT_DIR)/tests";
+
 
 endif  # ifndef _MK_CHECK
 

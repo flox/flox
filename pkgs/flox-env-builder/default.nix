@@ -9,13 +9,10 @@
   sqlite,
   pkg-config,
   nlohmann_json,
-  nix,
   boost,
   argparse,
-  semver,
   flox-pkgdb,
   sqlite3pp,
-  writeTextFile,
   runCommand,
   # sql-builder,
 }: let
@@ -44,21 +41,8 @@
     in
       notIgnored && notResult;
   };
-in
-  stdenv.mkDerivation {
-    pname = "flox-env-builder";
-    version = builtins.replaceStrings ["\n"] [""] (builtins.readFile "${src}/version");
-    src = src;
 
-    nativeBuildInputs = [pkg-config];
-    buildInputs = [
-      sqlite.dev
-      nlohmann_json
-      argparse
-      flox-pkgdb
-      sqlite3pp
-      # sql-builder
-    ];
+  envs = {
     # nix_INCDIR = nix.dev.outPath + "/include";
     boost_CPPFLAGS = "-I" + boost.dev.outPath + "/include";
     pkgdb_CLFAGS = "-I" + flox-pkgdb.outPath + "/include";
@@ -67,19 +51,38 @@ in
     SET_PROMPT_BASH_SH = "${../../assets/mkEnv/set-prompt-bash.sh}";
 
     libExt = stdenv.hostPlatform.extensions.sharedLibrary;
+  };
+in
+  stdenv.mkDerivation ({
+      pname = "flox-env-builder";
+      version = builtins.replaceStrings ["\n"] [""] (builtins.readFile "${src}/version");
+      src = src;
 
-    configurePhase = ''
-      runHook preConfigure;
-      export PREFIX="$out";
-      if [[ "''${enableParallelBuilding:-1}" = 1 ]]; then
-        makeFlagsArray+=( '-j4' );
-      fi
-      runHook postConfigure;
-    '';
-    # Checks require internet
-    doCheck = false;
-    doInstallCheck = false;
-  }
+      nativeBuildInputs = [pkg-config];
+      buildInputs = [
+        sqlite.dev
+        nlohmann_json
+        argparse
+        flox-pkgdb
+        sqlite3pp
+        boost.dev
+      ];
+
+      configurePhase = ''
+        runHook preConfigure;
+        export PREFIX="$out";
+        if [[ "''${enableParallelBuilding:-1}" = 1 ]]; then
+          makeFlagsArray+=( '-j4' );
+        fi
+        runHook postConfigure;
+      '';
+      # Checks require internet
+      doCheck = false;
+      doInstallCheck = false;
+
+      passthru.envs = envs;
+    }
+    // envs)
 # ---------------------------------------------------------------------------- #
 #
 #
