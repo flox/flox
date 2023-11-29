@@ -116,3 +116,22 @@ load setup_suite.bash
 
     assert_success
 }
+
+# --------------------------------------------------------------------------- #
+
+# bats test_tags=propagated
+@test "Environment includes propagated packages" {
+
+    cat $LOCKFILES/propagated/manifest.toml >&3
+
+    run "$ENV_BUILDER" build-env \
+        --lockfile "$(cat $LOCKFILES/propagated/manifest.lock)" \
+        --out-link "$BATS_TEST_TMPDIR/env"
+    assert_success
+
+    # environment contains anki
+    # -> which propagates beautifulsoup4
+    assert [ -f "$BATS_TEST_TMPDIR/env/lib/python3.10/site-packages/bs4/__init__.py" ]
+    # -> which propagates chardet
+    assert [ -f "$BATS_TEST_TMPDIR/env/lib/python3.10/site-packages/chardet/__init__.py" ]
+}
