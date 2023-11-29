@@ -44,4 +44,5 @@ in
       ];
       inherit (pre-commit-check) shellHook;
     }
-    // flox.envs)
+    // flox.envs
+    // flox-env-builder.envs)
