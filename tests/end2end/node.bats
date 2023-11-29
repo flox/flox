@@ -30,7 +30,7 @@ project_setup() {
   pushd "$PROJECT_DIR" >/dev/null||return;
   $FLOX_CLI init
   sed -i \
-    's/from = { type = "github", owner = "NixOS", repo = "nixpkgs" }/from = { type = "github", owner = "NixOS", repo = "nixpkgs", rev = "e8039594435c68eb4f780f3e9bf3972a7399c4b1" }/' \
+    's/from = { type = "github", owner = "NixOS", repo = "nixpkgs" }/from = { type = "github", owner = "NixOS", repo = "nixpkgs", rev = "d226c63a6d839e358c71f757a7baf73e76c2340b" }/' \
     "$PROJECT_DIR/.flox/env/manifest.toml";
 }
 
@@ -49,10 +49,10 @@ teardown() { project_teardown; common_test_teardown; }
 # ---------------------------------------------------------------------------- #
 #
 @test "install krb5 with node" {
-  run $FLOX_CLI install nodejs krb5 pkg-config python3 gnumake clang libtool cctools;
+  run $FLOX_CLI install nodejs krb5 pkg-config python3 gnumake;
 
   sed -i \
-    -e 's|clang = {}|clang = { path = "clang" }|' \
+    -e 's|krb5 = {}|krb5 = {}\nclang = { priority = 4, path = "clang" }\ncctools = { path = "darwin.cctools" }|' \
       "$PROJECT_DIR/.flox/env/manifest.toml";
 
   assert_success;
