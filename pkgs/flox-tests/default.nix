@@ -56,11 +56,11 @@
 in
   writeShellScriptBin "flox-tests" ''
 
-        export PATH="${lib.makeBinPath paths}"
-        export PKGDB_BIN="${flox.PKGDB_BIN}"
+    export PATH="${lib.makeBinPath paths}"
+    export PKGDB_BIN="${flox.PKGDB_BIN}"
 
-        usage() {
-              cat << EOF
+    usage() {
+          cat << EOF
     Usage: $0 [--flox <FLOX BINARY>| -F <FLOX BINARY>] \
               [--tests <TESTS_DIR>| -T <TESTS_DIR>] \
               [--watch | -W] \
@@ -72,77 +72,77 @@ in
         -W, --watch         Run tests in a continuous watch mode
         -h, --help          Prints help information
     EOF
-        }
+    }
 
-        WATCH=
-        declare -a _TESTS;
-        _TESTS=();
-        while [[ "$#" -gt 0 ]]; do
-          case "$1" in
-            -[fF]|--flox)         export FLOX_CLI="''${2?}"; shift; ;;
-            -[tT]|--tests)        export TESTS_DIR="''${2?}"; shift; ;;
-            -[wW]|--watch)        WATCH=:; ;;
-            -h|--help|-u|--usage) usage; exit 0; ;;
-            --)                   shift; break; ;;
-            *)
-              if [[ -e "$1" ]]; then
-                _TESTS+=( "$1" );
-              else
-                echo "''${0##*/} ERROR: Unrecognized arg(s) '$*'" >&2;
-                usage;
-                exit 1;
-              fi
-            ;;
-          esac
-          shift;
-        done
-
-        if [[ -z "''${FLOX_CLI:-}" ]]; then
-          if [[ -x "$PWD/target/debug/flox" ]]; then
-            FLOX_CLI="$PWD/target/debug/flox";
-          elif [[ -x "$PWD/target/release/flox" ]]; then
-            FLOX_CLI="$PWD/target/release/flox";
-          elif [[ -x "$PWD/result/bin/flox" ]]; then
-            FLOX_CLI="$( readlink -f $PWD/result; )/bin/flox";
-          elif command -v flox &> /dev/null; then
-            echo "''${0##*/} WARNING: using flox executable from PATH" >&2;
-            FLOX_CLI="$( command -v flox; )";
+    WATCH=
+    declare -a _TESTS;
+    _TESTS=();
+    while [[ "$#" -gt 0 ]]; do
+      case "$1" in
+        -[fF]|--flox)         export FLOX_CLI="''${2?}"; shift; ;;
+        -[tT]|--tests)        export TESTS_DIR="''${2?}"; shift; ;;
+        -[wW]|--watch)        WATCH=:; ;;
+        -h|--help|-u|--usage) usage; exit 0; ;;
+        --)                   shift; break; ;;
+        *)
+          if [[ -e "$1" ]]; then
+            _TESTS+=( "$1" );
+          else
+            echo "''${0##*/} ERROR: Unrecognized arg(s) '$*'" >&2;
+            usage;
+            exit 1;
           fi
-          export FLOX_CLI;
-        fi
+        ;;
+      esac
+      shift;
+    done
 
-        export NIX_BIN="${flox-bash}/libexec/flox/nix";
+    if [[ -z "''${FLOX_CLI:-}" ]]; then
+      if [[ -x "$PWD/target/debug/flox" ]]; then
+        FLOX_CLI="$PWD/target/debug/flox";
+      elif [[ -x "$PWD/target/release/flox" ]]; then
+        FLOX_CLI="$PWD/target/release/flox";
+      elif [[ -x "$PWD/result/bin/flox" ]]; then
+        FLOX_CLI="$( readlink -f $PWD/result; )/bin/flox";
+      elif command -v flox &> /dev/null; then
+        echo "''${0##*/} WARNING: using flox executable from PATH" >&2;
+        FLOX_CLI="$( command -v flox; )";
+      fi
+      export FLOX_CLI;
+    fi
 
-        # Default flag values
-        : "''${TESTS_DIR:=$PWD${testsDir}}";
-        export TESTS_DIR FLOX_CLI;
+    export NIX_BIN="${flox-bash}/libexec/flox/nix";
 
-        if [[ "''${#_TESTS[@]}" -lt 1 ]]; then
-          _TESTS=( "$TESTS_DIR" );
-        fi
+    # Default flag values
+    : "''${TESTS_DIR:=$PWD${testsDir}}";
+    export TESTS_DIR FLOX_CLI;
 
-        # Collect args/options and log them
-        declare -a _BATS_ARGS;
-        _BATS_ARGS=(
-          '--print-output-on-failure'
-          '--verbose-run'
-          '--timing'
-          "''${@:-}"
-        );
-        {
-          echo "''${0##*/}: Running test suite with:";
-          echo "  FLOX_CLI:     $FLOX_CLI";
-          echo "  TESTS_DIR:    $TESTS_DIR";
-          echo "  tests:        ''${_TESTS[*]}";
-          echo "  bats options: ''${_BATS_ARGS[*]}";
-          echo "  bats command: bats ''${_BATS_ARGS[*]} ''${_TESTS[*]}";
-        } >&2;
+    if [[ "''${#_TESTS[@]}" -lt 1 ]]; then
+      _TESTS=( "$TESTS_DIR" );
+    fi
 
-        # run basts either via entr or just a single run
-        if [[ -n "''${WATCH:-}" ]]; then
-          find "$TESTS_DIR" "$FLOX_CLI"  \
-            |entr -s "bats ''${_BATS_ARGS[*]} ''${_TESTS[*]}";
-        else
-          exec -a "$0" bats "''${_BATS_ARGS[@]}" "''${_TESTS[@]}";
-        fi
+    # Collect args/options and log them
+    declare -a _BATS_ARGS;
+    _BATS_ARGS=(
+      '--print-output-on-failure'
+      '--verbose-run'
+      '--timing'
+      "''${@:-}"
+    );
+    {
+      echo "''${0##*/}: Running test suite with:";
+      echo "  FLOX_CLI:     $FLOX_CLI";
+      echo "  TESTS_DIR:    $TESTS_DIR";
+      echo "  tests:        ''${_TESTS[*]}";
+      echo "  bats options: ''${_BATS_ARGS[*]}";
+      echo "  bats command: bats ''${_BATS_ARGS[*]} ''${_TESTS[*]}";
+    } >&2;
+
+    # run basts either via entr or just a single run
+    if [[ -n "''${WATCH:-}" ]]; then
+      find "$TESTS_DIR" "$FLOX_CLI"  \
+        |entr -s "bats ''${_BATS_ARGS[*]} ''${_TESTS[*]}";
+    else
+      exec -a "$0" bats "''${_BATS_ARGS[@]}" "''${_TESTS[@]}";
+    fi
   ''
