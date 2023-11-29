@@ -67,20 +67,19 @@ expect {
 # Install `krb5' module with `npm'.
 # This fails without `pkg-config' working properly.
 send "npm install krb5\n"
-set timeout 300
+set timeout 30
 expect {
-    -re "added \d* packages in \d*s" {}
+    -re "added .\d* packages in" {}
     timeout {
       puts stderr "Reached timeout running 'npm install krb5'"
       exit 1
     }
 }
 set timeout 1
-#if [[ -x "$PWD/node_modules/krb5/build/Release/krb5.node" ]]; then
-#  echo "PASS: npm" >&2;
-#else
-#  echo "FAIL: npm" >&2;
-#  exit 1;
-#fi
+
+if { ![file exists ./node_modules/krb5/build/Release/krb5.node] } {
+    puts stderr "krb5.node file does not exists"
+    exit 1
+}
 
 exit 0
