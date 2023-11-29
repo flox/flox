@@ -13,7 +13,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-
   cargo-test:
     name: "Run Cargo Tests"
     runs-on: ${{ matrix.os }}
@@ -22,41 +21,84 @@ jobs:
       fail-fast: false
       matrix:
         os:
-        - "ubuntu-22.04-8core"
-        - "macos-latest"
+          - "ubuntu-22.04-8core"
+          - "macos-latest"
 
     steps:
-    - name: "Checkout"
-      uses: actions/checkout@v3
+      - name: "Checkout"
+        uses: actions/checkout@v3
 
-    - name: "Install flox"
-      uses: flox/install-flox-action@main
-      with:
-        github-access-token: ${{ secrets.NIX_GIT_TOKEN }}
-        substituter: s3://flox-store
-        substituter-key: ${{ secrets.FLOX_STORE_PUBLIC_NIX_SECRET_KEY }}
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      - name: "Install flox"
+        uses: flox/install-flox-action@main
+        with:
+          github-access-token: ${{ secrets.NIX_GIT_TOKEN }}
+          substituter: s3://flox-store
+          substituter-key: ${{ secrets.FLOX_STORE_PUBLIC_NIX_SECRET_KEY }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
-    - name: "Cache cargo"
-      uses: actions/cache@v3
-      with:
-        path: |
-          ~/.cargo/bin/
-          ~/.cargo/registry/index/
-          ~/.cargo/registry/cache/
-          ~/.cargo/git/db/
-          target/
-        key: cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
-        restore-keys: cargo-${{ runner.os }}-
+      - name: "Cache cargo"
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: cargo-${{ runner.os }}-
 
-    - name: "Cargo Test"
-      run: |
-        nix develop -L \
-          --extra-experimental-features "nix-command flakes" \
-          --no-update-lock-file \
-          '.#flox' \
-            --command cargo test --locked --workspace -F extra-tests;
+      - name: "Cargo Test"
+        run: |
+          nix develop -L \
+            --extra-experimental-features "nix-command flakes" \
+            --no-update-lock-file \
+            '.#flox' \
+              --command cargo test --locked --workspace -F extra-tests;
+
+  env-builder-tests:
+    name: "Build and Run Env Builder Bats Tests"
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - "ubuntu-22.04-8core"
+          - "macos-latest"
+
+    steps:
+      - name: "Checkout"
+        uses: actions/checkout@v3
+
+      - name: "Install flox"
+        uses: flox/install-flox-action@main
+        with:
+          github-access-token: ${{ secrets.NIX_GIT_TOKEN }}
+          substituter: s3://flox-store
+          substituter-key: ${{ secrets.FLOX_STORE_PUBLIC_NIX_SECRET_KEY }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+      - name: "Build flox-env-builder"
+        run: |
+          nix build -L \
+              --extra-experimental-features "nix-command flakes" \
+              --no-update-lock-file \
+              --print-out-paths \
+              '.#flox'
+          # We run bats tests later on against the `FLOX_CLI' env
+          echo "FLOX_CLI=$(readlink -f ./result; )/bin/flox" >> "$GITHUB_ENV"
+          rm ./result
+
+      - name: "Run tests"
+        run: |
+          cd ./env-builder
+          nix develop -L \
+              --extra-experimental-features "nix-command flakes" \
+              --no-update-lock-file \
+              --command make tests
 
   nix-build:
     name: "Build and Run Bats Tests"
@@ -66,63 +108,63 @@ jobs:
       fail-fast: false
       matrix:
         os:
-        - "ubuntu-22.04-8core"
-        - "macos-latest"
+          - "ubuntu-22.04-8core"
+          - "macos-latest"
 
     steps:
-    - name: "Checkout"
-      uses: actions/checkout@v3
+      - name: "Checkout"
+        uses: actions/checkout@v3
 
-    - name: "Install flox"
-      uses: flox/install-flox-action@main
-      with:
-        github-access-token: ${{ secrets.NIX_GIT_TOKEN }}
-        substituter: s3://flox-store
-        substituter-key: ${{ secrets.FLOX_STORE_PUBLIC_NIX_SECRET_KEY }}
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      - name: "Install flox"
+        uses: flox/install-flox-action@main
+        with:
+          github-access-token: ${{ secrets.NIX_GIT_TOKEN }}
+          substituter: s3://flox-store
+          substituter-key: ${{ secrets.FLOX_STORE_PUBLIC_NIX_SECRET_KEY }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
-    - name: "Build flox"
-      run: |
-        nix build -L \
-            --extra-experimental-features "nix-command flakes" \
-            --no-update-lock-file \
-            --print-out-paths \
-            '.#flox'
-        # We run bats tests later on against the `FLOX_CLI' env
-        echo "FLOX_CLI=$(readlink -f ./result; )/bin/flox" >> "$GITHUB_ENV"
-        rm ./result
+      - name: "Build flox"
+        run: |
+          nix build -L \
+              --extra-experimental-features "nix-command flakes" \
+              --no-update-lock-file \
+              --print-out-paths \
+              '.#flox'
+          # We run bats tests later on against the `FLOX_CLI' env
+          echo "FLOX_CLI=$(readlink -f ./result; )/bin/flox" >> "$GITHUB_ENV"
+          rm ./result
 
-    - name: "Build Bats Tests (./#flox-tests)"
-      run: |
-        nix build -L \
-            --extra-experimental-features "nix-command flakes" \
-            --no-update-lock-file \
-            --print-out-paths \
-            --no-link \
-            '.#flox-tests'
+      - name: "Build Bats Tests (./#flox-tests)"
+        run: |
+          nix build -L \
+              --extra-experimental-features "nix-command flakes" \
+              --no-update-lock-file \
+              --print-out-paths \
+              --no-link \
+              '.#flox-tests'
 
-    - name: "Run Bats Tests (./#flox-tests)"
-      run: |
-        git clean -xfd
-        nix run \
-            --extra-experimental-features "nix-command flakes" \
-            --no-update-lock-file \
-            '.#flox-tests'
+      - name: "Run Bats Tests (./#flox-tests)"
+        run: |
+          git clean -xfd
+          nix run \
+              --extra-experimental-features "nix-command flakes" \
+              --no-update-lock-file \
+              '.#flox-tests'
 
-    - name: "Build end2end Bats Tests (.#flox-tests-end2end)"
-      run: |
-        nix build -L \
-            --extra-experimental-features "nix-command flakes" \
-            --no-update-lock-file \
-            --print-out-paths \
-            --no-link \
-            '.#flox-tests-end2end'
+      - name: "Build end2end Bats Tests (.#flox-tests-end2end)"
+        run: |
+          nix build -L \
+              --extra-experimental-features "nix-command flakes" \
+              --no-update-lock-file \
+              --print-out-paths \
+              --no-link \
+              '.#flox-tests-end2end'
 
-    - name: "Run Bats end2end Tests (./#flox-tests-end2end)"
-      run: |
-        git clean -xfd
-        nix run \
-            --extra-experimental-features "nix-command flakes" \
-            --no-update-lock-file \
-            '.#flox-tests-end2end'
+      - name: "Run Bats end2end Tests (./#flox-tests-end2end)"
+        run: |
+          git clean -xfd
+          nix run \
+              --extra-experimental-features "nix-command flakes" \
+              --no-update-lock-file \
+              '.#flox-tests-end2end'
