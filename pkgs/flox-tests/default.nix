@@ -74,7 +74,7 @@ in
     EOF
     }
 
-    WATCH=
+    WATCH=;
     declare -a _TESTS;
     _TESTS=();
     while [[ "$#" -gt 0 ]]; do
