@@ -7,6 +7,7 @@ use log::debug;
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use serde_with::skip_serializing_none;
 
 use super::pkgdb_errors::PkgDbError;
 
@@ -50,6 +51,7 @@ pub enum ShowError {
 ///
 /// Note that `pkgdb` uses inheritance/mixins to construct the search parameters, so some fields
 /// are on `PkgQueryArgs` and some are on `PkgDescriptorBase`.
+#[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct SearchParams {
@@ -130,6 +132,7 @@ impl std::fmt::Display for PathOrJson {
 /// C++ docs: https://flox.github.io/pkgdb/structflox_1_1search_1_1SearchQuery.html
 /// Note that the `match` field here becomes the `partialMatch` field on the
 /// C++ struct.
+#[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "kebab-case")]
 pub struct Query {
@@ -263,17 +266,18 @@ impl SearchResults {
 /// Calls `pkgdb` to get search results
 pub fn do_search(search_params: &SearchParams) -> Result<(SearchResults, ExitStatus), SearchError> {
     let json = serde_json::to_string(search_params).map_err(SearchError::Serialize)?;
-    debug!("search params json: {}", json);
 
-    let mut pkgdb_process = Command::new(PKGDB_BIN.as_str())
+    let mut pkgdb_command = Command::new(PKGDB_BIN.as_str());
+    pkgdb_command
         .arg("search")
         .arg("--quiet")
         .arg("--ga-registry")
         .arg(json)
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(SearchError::PkgDbCall)?;
+        .stderr(Stdio::piped());
+
+    debug!("running search command {:?}", pkgdb_command);
+    let mut pkgdb_process = pkgdb_command.spawn().map_err(SearchError::PkgDbCall)?;
 
     // SAFETY: Could panic if somehow we aren't capturing `stdout`, but
     //         we _need_ to capture `stdout` to read the search results
@@ -335,14 +339,9 @@ mod test {
     const EXAMPLE_PARAMS: &'_ str = r#"{
         "manifest": "/path/to/manifest",
         "global-manifest": "/path/to/manifest",
-        "lockfile": null,
         "query": {
-            "name": null,
-            "pname": null,
-            "version": null,
             "semver": "2.12.1",
-            "match": "hello",
-            "match-name": null
+            "match": "hello"
         }
     }"#;
 
