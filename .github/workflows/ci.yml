@@ -153,8 +153,15 @@ jobs:
       - name: "Find remote server to run tests on"
         run: |
           export REMOTE_SERVER=$(cat /etc/nix/machines | grep ${{ matrix.system }} | cut -f1 -d' ' | cut -f3 -d'/' | head -1)
-          echo "REMOTE SERVER: $REMOTE_SERVER"
+          export REMOTE_SERVER_USER_KNOWN_HOSTS_FILE=$(mktemp)
+          cat /etc/nix/machines | grep ${{ matrix.system }} | cut -f11 -d' ' > $REMOTE_SERVER_USER_KNOWN_HOSTS_FILE
+
+          echo "REMOTE_SERVER: $REMOTE_SERVER"
+          echo "REMOTE_SERVER_USER_KNOWN_HOSTS_FILE: $REMOTE_SERVER_USER_KNOWN_HOSTS_FILE"
+
           echo "REMOTE_SERVER=$REMOTE_SERVER" >> $GITHUB_ENV
+          echo "REMOTE_SERVER_USER_KNOWN_HOSTS_FILE=$REMOTE_SERVER_USER_KNOWN_HOSTS_FILE" >> $GITHUB_ENV
+
 
       - name: "Build flox"
         run: |
@@ -182,7 +189,7 @@ jobs:
 
       - name: "Run Bats Tests (./#flox-tests)"
         run: |
-          ssh $REMOTE_SERVER \
+          ssh $REMOTE_SERVER -oUserKnownHostsFile=$REMOTE_SERVER_USER_KNOWN_HOSTS_FILE \
             nix run \
                 --extra-experimental-features "nix-command flakes" \
                 'github:flox/flox/${{ github.sha }}#packages.${{ matrix.system }}.flox-tests-ci'
@@ -202,7 +209,7 @@ jobs:
       - name: "Run Bats end2end Tests (./#flox-tests-end2end)"
         run: |
           git clean -xfd
-          ssh $REMOTE_SERVER \
+          ssh $REMOTE_SERVER -oUserKnownHostsFile=$REMOTE_SERVER_USER_KNOWN_HOSTS_FILE \
             nix run \
                 --extra-experimental-features "nix-command flakes" \
                 'github:flox/flox/${{ github.sha }}#packages.${{ matrix.system }}.flox-tests-end2end-ci'
