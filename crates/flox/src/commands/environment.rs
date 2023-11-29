@@ -224,8 +224,6 @@ impl Activate {
             .context("couldn't restore cursor position")?;
         stderr.flush().context("could't flush stderr")?;
 
-        let activation_script = activation_path.join("activate").into_os_string();
-
         // We don't have access to the current PS1 (it's not exported), so we
         // can't modify it. Instead set FLOX_PROMPT_ENVIRONMENTS and let the
         // activation script set PS1 based on that.
@@ -235,14 +233,58 @@ impl Activate {
             });
 
         // TODO more sophisticated detection?
-        let shell = env::var("SHELL").unwrap();
+        let shell = if let Ok(shell) = env::var("SHELL") {
+            shell
+        } else {
+            bail!("SHELL must be set");
+        };
         let mut command = Command::new(&shell);
         command
             .env("FLOX_PROMPT_ENVIRONMENTS", flox_prompt_environments)
-            .env("FLOX_ENV", activation_path);
+            .env("FLOX_ENV", &activation_path)
+            .env(
+                "FLOX_PROMPT_COLOR_1",
+                // default to SlateBlue3
+                env::var("FLOX_PROMPT_COLOR_1").unwrap_or("61".to_string()),
+            )
+            .env(
+                "FLOX_PROMPT_COLOR_2",
+                // default to LightSalmon1
+                env::var("FLOX_PROMPT_COLOR_2").unwrap_or("216".to_string()),
+            );
 
         if shell.ends_with("bash") {
-            command.arg("--rcfile").arg(activation_script)
+            command
+                .arg("--rcfile")
+                .arg(activation_path.join("activate").join("bash"));
+        } else if shell.ends_with("zsh") {
+            // From man zsh:
+            // Commands are then read from $ZDOTDIR/.zshenv.  If the shell is a
+            // login shell, commands are read from /etc/zprofile and then
+            // $ZDOTDIR/.zprofile.  Then, if the shell is interactive, commands
+            // are read from /etc/zshrc and then $ZDOTDIR/.zshrc.  Finally, if
+            // the shell is a login shell, /etc/zlogin and $ZDOTDIR/.zlogin are
+            // read.
+            //
+            // We want to add our customizations as late as possible in the
+            // initialization process - if, e.g. the user has prompt
+            // customizations, we want ours to go last. So we put our
+            // customizations at the end of .zshrc, passing our customizations
+            // using FLOX_ZSH_INIT_SCRIPT.
+            // Otherwise, we want initialization to proceed as normal, so the
+            // files in our ZDOTDIR source global rcs and user rcs.
+            // We disable global rc files and instead source them manually so we
+            // can control the ZDOTDIR they are run with.
+            if let Ok(zdotdir) = env::var("ZDOTDIR") {
+                command.env("FLOX_ORIG_ZDOTDIR", zdotdir);
+            }
+            command
+                .env("ZDOTDIR", env!("FLOX_ZDOTDIR"))
+                .env(
+                    "FLOX_ZSH_INIT_SCRIPT",
+                    activation_path.join("activate").join("zsh"),
+                )
+                .arg("--no-globalrcs");
         } else {
             bail!("Unsupported SHELL '{shell}'");
         };

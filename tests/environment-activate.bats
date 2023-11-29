@@ -88,7 +88,7 @@ env_is_activated() {
 
 # ---------------------------------------------------------------------------- #
 
-@test "activate modifies prompt and puts package in path" {
+@test "bash: activate modifies prompt and puts package in path" {
   run $FLOX_CLI install -d "$PROJECT_DIR" hello;
   assert_success
   assert_output --partial "✅ 'hello' installed to environment"
@@ -99,7 +99,27 @@ env_is_activated() {
 
 # ---------------------------------------------------------------------------- #
 
-@test "activate runs hook" {
+@test "zsh: activate modifies prompt and puts package in path" {
+  run $FLOX_CLI install -d "$PROJECT_DIR" hello;
+  assert_success
+  assert_output --partial "✅ 'hello' installed to environment"
+  # TODO: flox will set HOME if it doesn't match the home of the user with
+  # current euid. I'm not sure if we should change that, but for now just set
+  # USER to REAL_USER.
+  SHELL=zsh USER="$REAL_USER" run expect -d "$TESTS_DIR/activate/hello.exp" "$PROJECT_DIR";
+  assert_success;
+}
+
+
+# ---------------------------------------------------------------------------- #
+
+@test "bash: activate runs hook" {
+  cat << "EOF" >> "$PROJECT_DIR/.flox/env/manifest.toml"
+[hook]
+script = """
+  echo "Welcome to your flox environment!";
+"""
+EOF
   SHELL=bash run expect -d "$TESTS_DIR/activate/hook.exp" "$PROJECT_DIR";
   assert_success;
 }
@@ -107,12 +127,68 @@ env_is_activated() {
 
 # ---------------------------------------------------------------------------- #
 
-@test "activate respects ~/.bashrc" {
+@test "zsh: activate runs hook" {
+  cat << "EOF" >> "$PROJECT_DIR/.flox/env/manifest.toml"
+[hook]
+script = """
+  echo "Welcome to your flox environment!";
+"""
+EOF
+  # TODO: flox will set HOME if it doesn't match the home of the user with
+  # current euid. I'm not sure if we should change that, but for now just set
+  # USER to REAL_USER.
+  SHELL=zsh USER="$REAL_USER" run expect -d "$TESTS_DIR/activate/hook.exp" "$PROJECT_DIR";
+  assert_success;
+}
+
+
+# ---------------------------------------------------------------------------- #
+
+@test "bash: activate respects ~/.bashrc" {
   echo "alias test_alias='echo testing'" > "$HOME/.bashrc";
   # TODO: flox will set HOME if it doesn't match the home of the user with
   # current euid. I'm not sure if we should change that, but for now just set
   # USER to REAL_USER.
-  SHELL=bash USER="$REAL_USER" run expect -d "$TESTS_DIR/activate/bashrc.exp" "$PROJECT_DIR";
+  SHELL=bash USER="$REAL_USER" run expect -d "$TESTS_DIR/activate/rc.exp" "$PROJECT_DIR" "test_alias is aliased to \`echo testing'";
+  assert_success;
+}
+
+
+# ---------------------------------------------------------------------------- #
+
+@test "zsh: activate respects ~/.zshrc" {
+  echo "alias test_alias='echo testing'" > "$HOME/.zshrc";
+  # TODO: flox will set HOME if it doesn't match the home of the user with
+  # current euid. I'm not sure if we should change that, but for now just set
+  # USER to REAL_USER.
+  SHELL=zsh USER="$REAL_USER" run expect -d "$TESTS_DIR/activate/rc.exp" "$PROJECT_DIR" "test_alias is an alias for echo testing";
+  assert_success;
+}
+
+
+# ---------------------------------------------------------------------------- #
+
+@test "bash: activate sets env var" {
+  cat << "EOF" >> "$PROJECT_DIR/.flox/env/manifest.toml"
+[vars]
+foo = "$bar"
+EOF
+  SHELL=bash bar=baz run expect -d "$TESTS_DIR/activate/envVar.exp" "$PROJECT_DIR";
+  assert_success;
+}
+
+
+# ---------------------------------------------------------------------------- #
+
+@test "zsh: activate sets env var" {
+  cat << "EOF" >> "$PROJECT_DIR/.flox/env/manifest.toml"
+[vars]
+foo = "$bar"
+EOF
+  # TODO: flox will set HOME if it doesn't match the home of the user with
+  # current euid. I'm not sure if we should change that, but for now just set
+  # USER to REAL_USER.
+  SHELL=zsh bar=baz USER="$REAL_USER" run expect -d "$TESTS_DIR/activate/envVar.exp" "$PROJECT_DIR";
   assert_success;
 }
 

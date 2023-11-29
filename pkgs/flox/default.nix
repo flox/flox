@@ -46,6 +46,7 @@
       # to include the ./flox-bash/etc/flox.toml default config
       # TODO: remove
       FLOX_SH_PATH = flox-bash.outPath;
+      FLOX_ZDOTDIR = ../../assets/flox.zdotdir;
 
       # Modified nix completion scripts
       # used to pass through nix completion ability for `flox nix *`

@@ -2,9 +2,8 @@
 # ~/.bashrc
 
 set dir [lindex $argv 0]
+set expected_output [lindex $argv 1]
 set flox $env(FLOX_CLI)
-puts puts
-puts $env(HOME)
 
 set cmd "$flox activate --dir $dir"
 spawn $flox activate --dir $dir
@@ -30,7 +29,7 @@ set timeout 1
 # check for alias
 send "type test_alias\n"
 expect {
-    "test_alias is aliased to `echo testing'" {}
+    "$expected_output" {}
     timeout {
       puts stderr "Reached timeout checking for test_alias"
       exit 1
