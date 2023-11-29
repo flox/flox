@@ -218,6 +218,20 @@ buildEnvironment( const Path & out, Packages && pkgs )
       {
         if ( e.errNo != ENOENT && e.errNo != ENOTDIR ) { throw; }
       }
+
+    try
+      {
+        for ( const auto & p : tokenizeString<std::vector<std::string>>(
+                readFile( pkgDir + "/nix-support/propagated-build-inputs" ),
+                " \n" ) )
+          {
+            if ( ! done.count( p ) ) { postponed.insert( p ); }
+          }
+      }
+    catch ( SysError & e )
+      {
+        if ( e.errNo != ENOENT && e.errNo != ENOTDIR ) { throw; }
+      }
   };
 
   /* Symlink to the packages that have been installed explicitly by the user.
@@ -271,6 +285,7 @@ buildEnvironment( const Path & out, Packages && pkgs )
       postponed.swap( pkgDirs );
       for ( const auto & pkgDir : pkgDirs )
         {
+          printf( "postponed: %s\n", pkgDir.c_str() );
           addPkg( pkgDir, Priority { priorityCounter++ } );
         }
     }
