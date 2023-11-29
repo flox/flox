@@ -9,12 +9,12 @@ on:
   merge_group:
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: "${{ github.workflow }}-${{ github.ref }}"
   cancel-in-progress: true
 
 jobs:
   cargo-test:
-    name: "Run Cargo Tests"
+    name: "Flox Cargo Tests"
     runs-on: ${{ matrix.os }}
 
     strategy:
@@ -26,20 +26,20 @@ jobs:
 
     steps:
       - name: "Checkout"
-        uses: actions/checkout@v3
+        uses: "actions/checkout@v3"
 
       - name: "Install flox"
-        uses: flox/install-flox-action@main
+        uses: "flox/install-flox-action@main"
         with:
-          github-access-token: ${{ secrets.NIX_GIT_TOKEN }}
-          substituter: s3://flox-store
-          substituter-key: ${{ secrets.FLOX_STORE_PUBLIC_NIX_SECRET_KEY }}
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          github-access-token:    "${{ secrets.NIX_GIT_TOKEN }}"
+          substituter:            "s3://flox-store"
+          substituter-key:        "${{ secrets.FLOX_STORE_PUBLIC_NIX_SECRET_KEY }}"
+          aws-access-key-id:      "${{ secrets.AWS_ACCESS_KEY_ID }}"
+          aws-secret-access-key:  "${{ secrets.AWS_SECRET_ACCESS_KEY }}"
           ssh-key:                "${{ secrets.FLOXBOT_SSH_KEY }}"
 
       - name: "Cache cargo"
-        uses: actions/cache@v3
+        uses: "actions/cache@v3"
         with:
           path: |
             ~/.cargo/bin/
@@ -47,8 +47,8 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: cargo-${{ runner.os }}-
+          key: "cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}"
+          restore-keys: "cargo-${{ runner.os }}-"
 
       - name: "Cargo Test"
         run: |
@@ -60,7 +60,7 @@ jobs:
               --command cargo test --locked --workspace -F extra-tests;
 
   env-builder-tests:
-    name: "Build and Run Env Builder Bats Tests"
+    name: "EnvBuilder Bats Tests"
     runs-on: "ubuntu-latest"
 
     strategy:
@@ -74,23 +74,23 @@ jobs:
 
     steps:
       - name: "Checkout"
-        uses: actions/checkout@v3
+        uses: "actions/checkout@v3"
 
       - name: "Setup Tailscale"
         uses: "tailscale/github-action@v2"
         with:
           args: "--timeout 30s --login-server ${{ vars.TAILSCALE_URL }}"
-          tags: tag:ci
+          tags: "tag:ci"
           authkey: "${{ secrets.TAILSCALE_AUTH_KEY }}"
 
       - name: "Install flox"
         uses: "flox/install-flox-action@main"
         with:
-          github-access-token: ${{ secrets.NIX_GIT_TOKEN }}
-          substituter: s3://flox-store
-          substituter-key: ${{ secrets.FLOX_STORE_PUBLIC_NIX_SECRET_KEY }}
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          github-access-token:    "${{ secrets.NIX_GIT_TOKEN }}"
+          substituter:            "s3://flox-store"
+          substituter-key:        "${{ secrets.FLOX_STORE_PUBLIC_NIX_SECRET_KEY }}"
+          aws-access-key-id:      "${{ secrets.AWS_ACCESS_KEY_ID }}"
+          aws-secret-access-key:  "${{ secrets.AWS_SECRET_ACCESS_KEY }}"
           ssh-key:                "${{ secrets.FLOXBOT_SSH_KEY }}"
           remote-builders:        "${{ vars.FLOX_BUILDERS }}"
 
@@ -116,7 +116,7 @@ jobs:
               --command make tests
 
   nix-build:
-    name: "Build and Run Bats Tests"
+    name: "Flox Bats Tests"
     runs-on: "ubuntu-latest"
 
     strategy:
@@ -130,23 +130,23 @@ jobs:
 
     steps:
       - name: "Checkout"
-        uses: actions/checkout@v3
+        uses: "actions/checkout@v3"
 
       - name: "Setup Tailscale"
         uses: "tailscale/github-action@v2"
         with:
           args: "--timeout 30s --login-server ${{ vars.TAILSCALE_URL }}"
-          tags: tag:ci
+          tags: "tag:ci"
           authkey: "${{ secrets.TAILSCALE_AUTH_KEY }}"
 
       - name: "Install flox"
-        uses: flox/install-flox-action@main
+        uses: "flox/install-flox-action@main"
         with:
-          github-access-token: ${{ secrets.NIX_GIT_TOKEN }}
-          substituter: s3://flox-store
-          substituter-key: ${{ secrets.FLOX_STORE_PUBLIC_NIX_SECRET_KEY }}
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          github-access-token:    "${{ secrets.NIX_GIT_TOKEN }}"
+          substituter:            "s3://flox-store"
+          substituter-key:        "${{ secrets.FLOX_STORE_PUBLIC_NIX_SECRET_KEY }}"
+          aws-access-key-id:      "${{ secrets.AWS_ACCESS_KEY_ID }}"
+          aws-secret-access-key:  "${{ secrets.AWS_SECRET_ACCESS_KEY }}"
           ssh-key:                "${{ secrets.FLOXBOT_SSH_KEY }}"
           remote-builders:        "${{ vars.FLOX_BUILDERS }}"
 
