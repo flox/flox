@@ -85,18 +85,11 @@ reals_setup() {
 
 # Lookup system pair recognized by `nix' for this system.
 nix_system_setup() {
-  # if [[ -z "${NIX_SYSTEM:-}" ]]; then
-  #  NIX_SYSTEM="$(nix eval --impure --expr builtins.currentSystem --raw)"
-  # fi
+  if [[ -z "${NIX_SYSTEM:-}" ]]; then
+   NIX_SYSTEM="$(nix eval --impure --expr builtins.currentSystem --raw)"
+  fi
 
-  # Lockfiles generated on one system don't contain locks for other systems.
-  # The lockfiles in the fixtures directory are generated on darwin
-  # so we need to set the NIX_SYSTEM to darwin for compatibility
-  # with linux systems.
-
-  NIX_SYSTEM="aarch64-darwin"
   export NIX_SYSTEM; print_var NIX_SYSTEM
-
 }
 
 # ---------------------------------------------------------------------------- #
