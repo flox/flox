@@ -1,4 +1,5 @@
 {
+  self,
   lib,
   bash,
   zsh,
@@ -24,6 +25,7 @@
   which,
   writeShellScriptBin,
   testsDir ? "/tests",
+  FLOX_CLI ? null,
 }: let
   batsWith = bats.withLibraries (p: [
     p.bats-assert
@@ -59,6 +61,11 @@ in
     export PATH="${lib.makeBinPath paths}"
     export PKGDB_BIN="${flox.PKGDB_BIN}"
 
+    # copy checkout to temporary directory
+    WORKDIR=$(mktemp -d -t flox-tests-XXXXXX)
+    cp -R ${self}/* $WORKDIR
+    cd $WORKDIR
+
     usage() {
           cat << EOF
     Usage: $0 [--flox <FLOX BINARY>| -F <FLOX BINARY>] \
@@ -74,6 +81,11 @@ in
     EOF
     }
 
+    ${
+      if FLOX_CLI == null
+      then ""
+      else "export FLOX_CLI='${FLOX_CLI}';"
+    }
     WATCH=;
     declare -a _TESTS;
     _TESTS=();

@@ -128,7 +128,16 @@
         flox-tests
         ;
       default = pkgsFor.flox;
-      flox-tests-end2end = pkgsFor.flox-tests.override {testsDir = "/tests/end2end";};
+      flox-tests-ci = pkgsFor.flox-tests.override {
+        FLOX_CLI = "${pkgsFor.flox}/bin/flox";
+      };
+      flox-tests-end2end = pkgsFor.flox-tests.override {
+        testsDir = "/tests/end2end";
+      };
+      flox-tests-end2end-ci = pkgsFor.flox-tests.override {
+        testsDir = "/tests/end2end";
+        FLOX_CLI = "${pkgsFor.flox}/bin/flox";
+      };
     });
     # ------------------------------------------------------------------------ #
   in {

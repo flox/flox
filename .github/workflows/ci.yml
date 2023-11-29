@@ -150,6 +150,12 @@ jobs:
           ssh-key:                "${{ secrets.FLOXBOT_SSH_KEY }}"
           remote-builders:        "${{ vars.FLOX_BUILDERS }}"
 
+      - name: "Find remote server to run tests on"
+        run: |
+          export REMOTE_SERVER=$(cat /etc/nix/machines | grep ${{ matrix.system }} | cut -f1 -d' ' | cut -f3 -d'/' | head -1)
+          echo "REMOTE SERVER: $REMOTE_SERVER"
+          echo "REMOTE_SERVER=$REMOTE_SERVER" >> $GITHUB_ENV
+
       - name: "Build flox"
         run: |
           nix build -L \
@@ -169,17 +175,15 @@ jobs:
               --extra-experimental-features "nix-command flakes" \
               --no-update-lock-file \
               --print-out-paths \
-              --no-link \
               '.#packages.${{ matrix.system }}.flox-tests'
+          nix copy --to "$FLOX_SUBSTITUTER" ./result
 
       - name: "Run Bats Tests (./#flox-tests)"
         run: |
-          git clean -xfd
-          nix run \
-              --accept-flake-config \
-              --extra-experimental-features "nix-command flakes" \
-              --no-update-lock-file \
-              '.#packages.${{ matrix.system }}.flox-tests'
+          ssh $REMOTE_SERVER \
+            nix run \
+                --extra-experimental-features "nix-command flakes" \
+                'github:flox/flox/${{ github.sha }}#packages.${{ matrix.system }}.flox-tests-ci'
 
       - name: "Build end2end Bats Tests (.#flox-tests-end2end)"
         run: |
@@ -188,14 +192,13 @@ jobs:
               --extra-experimental-features "nix-command flakes" \
               --no-update-lock-file \
               --print-out-paths \
-              --no-link \
               '.#packages.${{ matrix.system }}.flox-tests-end2end'
+          nix copy --to "$FLOX_SUBSTITUTER" ./result
 
       - name: "Run Bats end2end Tests (./#flox-tests-end2end)"
         run: |
           git clean -xfd
-          nix run \
-              --accept-flake-config \
-              --extra-experimental-features "nix-command flakes" \
-              --no-update-lock-file \
-              '.#packages.${{ matrix.system }}.flox-tests-end2end'
+          ssh $REMOTE_SERVER \
+            nix run \
+                --extra-experimental-features "nix-command flakes" \
+                'github:flox/flox/${{ github.sha }}#packages.${{ matrix.system }}.flox-tests-end2end-ci'
