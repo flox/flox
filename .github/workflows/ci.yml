@@ -154,7 +154,7 @@ jobs:
         run: |
           export REMOTE_SERVER=$(cat /etc/nix/machines | grep ${{ matrix.system }} | cut -f1 -d' ' | cut -f3 -d'/' | head -1)
           export REMOTE_SERVER_USER_KNOWN_HOSTS_FILE=$(mktemp)
-          cat /etc/nix/machines | grep ${{ matrix.system }} | cut -f11 -d' ' > $REMOTE_SERVER_USER_KNOWN_HOSTS_FILE
+          cat /etc/nix/machines | grep ${{ matrix.system }} | tr -s ' ' | cut -f8 -d' ' > $REMOTE_SERVER_USER_KNOWN_HOSTS_FILE
 
           echo "REMOTE_SERVER: $REMOTE_SERVER"
           echo "REMOTE_SERVER_USER_KNOWN_HOSTS_FILE: $REMOTE_SERVER_USER_KNOWN_HOSTS_FILE"
