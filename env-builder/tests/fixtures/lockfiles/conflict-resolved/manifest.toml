@@ -1,0 +1,3 @@
+[install]
+vim = {}
+vim-full = { priority = 3 }

@@ -17,6 +17,7 @@ clean: FORCE
 	-$(RM) $(ALL_OBJS)
 	-$(RM) $(BUILT_SRCS)
 	-$(RM) -r $(PREFIX)
+	-$(RM) -r $(TEST_MANIFEST_LOCKS)
 	-$(RM) result *.db gmon.out *.log *.gcda *.gcno coverage.info
 
 
