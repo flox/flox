@@ -1,6 +1,2 @@
 [hook]
 script = "script"
-
-# included due to bug with pkgdb (#189)
-[install]
-hello = {}

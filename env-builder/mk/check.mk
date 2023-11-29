@@ -47,7 +47,7 @@ TEST_MANIFEST_LOCKS := $(TEST_MANIFESTS:%.toml=%.lock)
 
 $(TEST_MANIFEST_LOCKS):
 	@echo "Locking manifest '$(@:%.lock=%){.toml -> .lock}'"
-	pkgdb manifest lock "$(@:%.lock=%.toml)" --ga-registry | jq > "$(@)"
+	pkgdb manifest lock --ga-registry "$(@:%.lock=%.toml)" | jq > "$(@)"
 
 test: $(BIN_flox-env-builder) $(wildcard $(ROOT_DIR)/tests/**) $(TEST_MANIFEST_LOCKS) FORCE
 	PKGDB="$(ROOT_DIR)/bin/flox-env-builder"                        \

@@ -1,6 +1,2 @@
 [hook]
 file = "./script-file.sh"
-
-# included due to bug with pkgdb (#189)
-[install]
-hello = {}
