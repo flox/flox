@@ -339,14 +339,9 @@ mod test {
     const EXAMPLE_PARAMS: &'_ str = r#"{
         "manifest": "/path/to/manifest",
         "global-manifest": "/path/to/manifest",
-        "lockfile": null,
         "query": {
-            "name": null,
-            "pname": null,
-            "version": null,
             "semver": "2.12.1",
-            "match": "hello",
-            "match-name": null
+            "match": "hello"
         }
     }"#;
 
