@@ -140,7 +140,65 @@
         "type": "github"
       }
     },
-    "pre-commit-hooks": {
+    "parser-util": {
+      "inputs": {
+        "nix-patches": "nix-patches",
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1699380608,
+        "narHash": "sha256-HNB25DfG28ntlabEpqvXkY48LBYjceKRXQyOIBbwy7I=",
+        "owner": "flox",
+        "repo": "parser-util",
+        "rev": "ff2c910d7644ccf50c7d0042016ab81a143c9369",
+        "type": "github"
+      },
+      "original": {
+        "owner": "flox",
+        "repo": "parser-util",
+        "type": "github"
+      }
+    },
+    "pkgdb": {
+      "inputs": {
+        "argparse": "argparse",
+        "floco": "floco",
+        "nixpkgs": "nixpkgs",
+        "sqlite3pp": "sqlite3pp"
+      },
+      "locked": {
+        "lastModified": 1701245282,
+        "narHash": "sha256-iYowkHYH89yu0DelKh6hp37zRHVWa8JzXm0tbaQDUkg=",
+        "owner": "flox",
+        "repo": "pkgdb",
+        "rev": "00b57be08a90531b606c5ea1247fc6fb2b05c85a",
+        "type": "github"
+      },
+      "original": {
+        "owner": "flox",
+        "repo": "pkgdb",
+        "type": "github"
+      }
+    },
+    "root": {
+      "inputs": {
+        "crane": "crane",
+        "floco": [
+          "pkgdb",
+          "floco"
+        ],
+        "nixpkgs": [
+          "pkgdb",
+          "nixpkgs"
+        ],
+        "parser-util": "parser-util",
+        "pkgdb": "pkgdb",
+        "shellHooks": "shellHooks"
+      }
+    },
+    "shellHooks": {
       "inputs": {
         "flake-compat": "flake-compat",
         "flake-utils": "flake-utils",
