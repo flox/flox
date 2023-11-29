@@ -9,13 +9,10 @@
   sqlite,
   pkg-config,
   nlohmann_json,
-  nix,
   boost,
   argparse,
-  semver,
   flox-pkgdb,
   sqlite3pp,
-  writeTextFile,
   runCommand,
   # sql-builder,
 }: let
@@ -57,7 +54,7 @@ in
       argparse
       flox-pkgdb
       sqlite3pp
-      # sql-builder
+      boost.dev
     ];
     # nix_INCDIR = nix.dev.outPath + "/include";
     boost_CPPFLAGS = "-I" + boost.dev.outPath + "/include";
