@@ -4,7 +4,7 @@ mod general;
 mod search;
 
 use std::collections::BTreeMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::{env, fs};
 
 use anyhow::{Context, Result};
@@ -463,7 +463,7 @@ impl EnvironmentSelect {
                     },
                     (Some(activated), Err(_)) => Self::open_path(flox, &activated),
                     (None, Ok(current_dir_pointer)) => {
-                        Self::open_pointer(flox, &current_dir, current_dir_pointer)
+                        Self::open_env_pointer(flox, &current_dir, current_dir_pointer)
                     },
                     (None, Err(e)) => {
                         Err(e).context(format!("No environment found in {current_dir:?}"))?
@@ -478,7 +478,7 @@ impl EnvironmentSelect {
         let pointer = EnvironmentPointer::open(path)
             .with_context(|| format!("No environment found in {path:?}"))?;
 
-        Self::open_pointer(flox, path, pointer)
+        Self::open_env_pointer(flox, path, pointer)
     }
 
     fn open_env_pointer(
