@@ -16,6 +16,7 @@
 , bear
 , clang-tools_16
 , llvm  # for `llvm-symbolizer'
+, include-what-you-use
 , gdb        ? throw "`gdb' is required for debugging with `g++'"
 , lldb       ? throw "`lldb' is required for debugging with `clang++'"
 , valgrind   ? throw "`valgrind' is required for memory sanitization on Linux"
@@ -84,7 +85,7 @@ in mkShell {
 
     # Find the project root and add the `bin' directory to `PATH'.
     if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-      PATH="$PATH:$( git rev-parse --show-toplevel; )/bin";
+      PATH="$PATH:$( git rev-parse --show-toplevel; )/pkgdb/bin";
     fi
 
     if [ -z "''${NO_WELCOME:-}" ]; then
