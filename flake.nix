@@ -1,16 +1,17 @@
 # ============================================================================ #
 #
-#
+# A cross-platform environment manager with sharing as a service.
 #
 # ---------------------------------------------------------------------------- #
+
 {
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/release-23.05";
 
-  inputs.floco.url                        = "github:aakropotkin/floco";
-  inputs.floco.inputs.nixpkgs.follows     = "/nixpkgs";
+  inputs.floco.url = "github:aakropotkin/floco";
+  inputs.floco.inputs.nixpkgs.follows = "nixpkgs";
 
-  inputs.sqlite3pp.url                    = "github:aakropotkin/sqlite3pp";
-  inputs.sqlite3pp.inputs.nixpkgs.follows = "/nixpkgs";
+  inputs.sqlite3pp.url = "github:aakropotkin/sqlite3pp";
+  inputs.sqlite3pp.inputs.nixpkgs.follows = "nixpkgs";
 
   inputs.parser-util.url = "github:flox/parser-util";
   inputs.parser-util.inputs.nixpkgs.follows = "nixpkgs";
