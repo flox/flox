@@ -1,0 +1,191 @@
+# ============================================================================ #
+#
+# Run `clang-tidy' over the codebase and report warnings as annotations.
+#
+# ---------------------------------------------------------------------------- #
+
+name: Lint
+on:
+  # No need to run on `main` since we have `merge_group' and `pull_request'.
+  workflow_dispatch:
+    inputs:
+      all:
+        description: 'Check all files even if they are unchanged'
+        required: false
+        type: boolean
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  lint-clang-tidy:
+    name: Clang Tidy
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      # Create a list of target files.
+      # If the workflow was triggered by a PR, only check changed files.
+      # If the workflow was triggered explicitly then we _might_ be
+      # explicitly asked to check all files using an input param.
+      - name: Create Target List ( PR )
+        if: ${{ github.event.pull_request }}
+        run: |
+          git fetch origin main;
+          echo "Checking changed sources" >&2;
+          ./build-aux/changed-sources > targets;
+
+      - name: Create Target List ( Dispatch )
+        if: ${{ !github.event.pull_request }}
+        run: |
+          echo "all: ${{ inputs.all }}" >&2;
+          if [[ '${{ inputs.all }}' = true ]]; then
+            echo "Checking all sources" >&2;
+            # Keep this list aligned with `build-aux/changed-sources'
+            find include src test   \
+                 -name '*.cpp' -o   \
+                 -name '*.hpp' -o   \
+                 -name '*.hxx' -o   \
+                 -name '*.cxx' -o   \
+                 -name '*.cc'  -o   \
+                 -name '*.hh'  -o   \
+                 -name '*.c'   -o   \
+                 -name '*.h'   -o   \
+                 -name '*.ipp'      \
+                 -print > targets;
+          else
+            git fetch origin main;
+            echo "Checking changed sources" >&2;
+            ./build-aux/changed-sources > targets;
+          fi
+
+      # TODO: If target list is empty, terminate workflow here
+      - uses: cachix/install-nix-action@v22
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+            access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
+            substituters = https://cache.nixos.org https://cache.floxdev.com
+            trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= flox-store-public-0:8c/B+kjIaQ+BloCmNkRUKwaVPFWkriSAd0JJvuDu4F0=
+            max-jobs = auto
+            cores = 0
+            substitute = true
+            builders-use-substitutes = true
+            fallback = true
+            connect-timeout = 5
+            stalled-download-timeout = 90
+            timeout = 0
+
+      - name: Setup AWS Cache Keys
+        run: |
+          echo '${{ secrets.FLOX_STORE_PUBLIC_NIX_SECRET_KEY }}'  \
+               > /tmp/secret-key
+          {
+            printf 'extra-substituters = s3://flox-store';
+            printf '?secret-key=/tmp/secret-key&write-nar-listing=1';
+            echo '&ls-compression=br';
+
+            printf 'extra-trusted-public-keys = ';
+            echo "${{ secrets.FLOX_STORE_PUBLIC_NIX_SECRET_KEY }}"  \
+              |nix key convert-secret-to-public;
+          }|sudo tee -a /etc/nix/nix.conf >/dev/null
+
+      - name: Nix AWS Setup
+        run: |
+          SERVICE_D='/etc/systemd/system/nix-daemon.service.d';
+          sudo mkdir -p "$SERVICE_D";
+          {
+            echo '[Service]';
+            printf 'Environment=AWS_ACCESS_KEY_ID=';
+            echo '${{ secrets.AWS_ACCESS_KEY_ID }}';
+            printf 'Environment=AWS_SECRET_ACCESS_KEY=';
+            echo '${{ secrets.AWS_SECRET_ACCESS_KEY }}';
+          }|sudo tee -a "$SERVICE_D/aws-credentials.conf" >/dev/null;
+
+      - name: Restart Nix Daemon
+        run: |
+          sudo systemctl daemon-reload;
+          sudo systemctl restart nix-daemon.service;
+
+      - name: Restore Nix Caches
+        id: nix-cache-restore
+        uses: actions/cache/restore@v3
+        with:
+          path: |
+            ~/.cache/nix
+          key: ubuntu-latest-nix-cache
+
+      - name: Setup
+        run: |
+          {
+            echo 'Runner Version';
+            printf '    bash   version: '; bash --version|head -n1;
+            printf '    nix    version: '; nix  --version;
+          } >&2;
+
+          NO_WELCOME=: nix develop --no-update-lock-file --command sh -c '
+            echo "";
+            echo "Development Environment Versions";
+            printf "    bash   version: "; bash --version|head -n1;
+            printf "    nix    version: "; nix  --version;
+            printf "    CXX    version: "; $CXX --version|head -n1;
+          ' >&2;
+
+      - name: Create compile_commands.json
+        run: |
+          nix develop --no-update-lock-file                      \
+                      --command make -j4 compile_commands.json;
+
+      - name: Create Tidy Log
+        run: |
+          cat <<'EOF' > script.bash
+            status=0;
+
+            # Convert some characters to hex to escape them for annotations.
+            ghEscape() {
+              sed -e 's/%/%25/g' -e 's/:/%0A/g' -e 's/,/%2C/g' "${1:--}";
+            }
+
+            formatLint() {
+              local _file _kind _line _col _title _body;
+              _file="$( jq -r '.file' "$1"; )";
+              _kind="$( jq -r '.kind' "$1"; )";
+              _line="$( jq -r '.line' "$1"; )";
+              _col="$( jq -r '.column' "$1"; )";
+              _title="$( jq -r '.title' "$1"|ghEscape; )";
+              _body="$( jq -r '.body|join( "%0A" )' "$1"|ghEscape; )";
+              printf '::%s file=%s,line=%s,col=%s,title=%s::%s\n'     \
+                     "$_kind" "$_file" "$_line" "$_column" "$_title"  \
+                     "$_body";
+            }
+
+            while IFS='' read -r src; do
+              echo "clang-tidy is checking file \`$src'" >&2;
+              sh -c 'clang-tidy "$src"||printf ERROR;' > tidy.log;
+              if [[ "$( < tidy.log )" = ERROR ]]; then
+                status=1;
+                printf '::error file=%s,title=clang-tidy Error::%s\n'  \
+                       "$src" "Failed to process file \`$src'";
+              elif [[ "$( wc -l ./tidy.log|cut -d' ' -f1; )" -gt 0 ]]; then
+                while IFS='' read -r line; do
+                  formatLint "$line";
+                done < tidy.log
+              else
+                echo "clang-tidy generated no suggestions for file \`$src'" >&2;
+              fi
+              rm -f ./tidy.log;
+            done < ./targets
+            exit "$status";
+          EOF
+          nix develop --no-update-lock-file --command bash ./script.bash;
+          echo "TIDY_STATUS=$?" >> "$GITHUB_ENV";
+          rm script.bash;
+
+
+# ---------------------------------------------------------------------------- #
+#
+#
+#
+# ============================================================================ #
