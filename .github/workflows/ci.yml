@@ -152,9 +152,10 @@ jobs:
 
       - name: "Find remote server to run tests on"
         run: |
-          export REMOTE_SERVER=$(cat /etc/nix/machines | grep ${{ matrix.system }} | cut -f1 -d' ' | cut -f3 -d'/' | head -1)
+          export REMOTE_SERVER=$(cat /etc/nix/machines | grep ${{ matrix.system }} | cut -f1 -d' ' | cut -f3 -d'/' | head -1 | sed 's/nixbld/github' ; )
           export REMOTE_SERVER_USER_KNOWN_HOSTS_FILE=$(mktemp)
-          cat /etc/nix/machines | grep ${{ matrix.system }} | tr -s ' ' | cut -f8 -d' ' | base64 -d > $REMOTE_SERVER_USER_KNOWN_HOSTS_FILE
+          export REMOTE_PUBLIC_HOST_KEY=$(cat /etc/nix/machines | grep ${{ matrix.system }} | tr -s ' ' | cut -f8 -d' ' | base64 -d)
+          printf "%s %s\n" "$REMOTE_SERVER" "$REMOTE_PUBLIC_HOST_KEY" > "$REMOTE_SERVER_USER_KNOWN_HOSTS_FILE"
 
           echo "REMOTE_SERVER: $REMOTE_SERVER"
           echo "REMOTE_SERVER_USER_KNOWN_HOSTS_FILE: $REMOTE_SERVER_USER_KNOWN_HOSTS_FILE"
@@ -190,6 +191,10 @@ jobs:
 
       - name: "Run Bats Tests (./#flox-tests)"
         run: |
+          ssh $REMOTE_SERVER \
+            -oUserKnownHostsFile=$REMOTE_SERVER_USER_KNOWN_HOSTS_FILE \
+            true -vv
+
           ssh $REMOTE_SERVER \
             -oUserKnownHostsFile=$REMOTE_SERVER_USER_KNOWN_HOSTS_FILE \
             nix run \
