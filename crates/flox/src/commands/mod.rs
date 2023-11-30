@@ -481,9 +481,9 @@ impl EnvironmentSelect {
         Self::open_pointer(flox, path, pointer)
     }
 
-    fn open_pointer(
+    fn open_env_pointer(
         flox: &Flox,
-        path: &PathBuf,
+        path: &Path,
         pointer: EnvironmentPointer,
     ) -> Result<ConcreteEnvironment> {
         let dot_flox_path = path.join(DOT_FLOX);

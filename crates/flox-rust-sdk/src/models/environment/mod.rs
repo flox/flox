@@ -504,7 +504,7 @@ pub fn last_activated_environment() -> Option<PathBuf> {
         Ok(active_environments) => {
             Some(PathBuf::from(
                 active_environments
-                    .split_once(":")
+                    .split_once(':')
                     .map(|(last, _)| last)
                     // If there's no colon, only one environment is active.
                     .unwrap_or(&active_environments),

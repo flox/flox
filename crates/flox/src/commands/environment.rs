@@ -236,7 +236,7 @@ impl Activate {
 
         // Add to FLOX_ACTIVE_ENVIRONMENTS so we can detect what environments are active.
         let parent_path = environment.parent_path()?;
-        if parent_path.contains(":") {
+        if parent_path.contains(':') {
             bail!("Cannot activate environment that contains ':' in its path: {parent_path}");
         }
         let flox_active_environments = env::var(FLOX_ACTIVE_ENVIRONMENTS_VAR)
