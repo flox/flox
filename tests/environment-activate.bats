@@ -74,17 +74,6 @@ env_is_activated() {
   echo "$is_activated";
 }
 
-# ---------------------------------------------------------------------------- #
-
-# `pkgdb lock` with no packages installed fetches a nixpkgs. With a package
-# installed, it also has to evaluate the package set.
-@test "warm up pkgdb" {
-  run $FLOX_CLI install -d "$PROJECT_DIR" hello;
-  assert_success;
-  assert_output --partial "✅ 'hello' installed to environment";
-  NIX_CONFIG="extra-experimental-features = flakes" "$PKGDB_BIN" manifest lock --ga-registry "$PROJECT_DIR/.flox/env/manifest.toml"
-  # "$BUILD_ENV_BIN" "$NIX_BIN" "$NIX_SYSTEM" "$PROJECT_DIR/.flox/env/manifest.lock" "$PROJECT_DIR/.flox/run/$PROJECT_NAME.$NIX_SYSTEM" "$ENV_FROM_LOCKFILE_PATH";
-}
 
 # ---------------------------------------------------------------------------- #
 
