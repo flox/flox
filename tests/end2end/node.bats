@@ -52,7 +52,7 @@ teardown() { project_teardown; common_test_teardown; }
   run $FLOX_CLI install nodejs krb5 pkg-config python3 gnumake;
 
   sed -i \
-    -e 's|krb5 = {}|krb5 = {}\nclang = { priority = 4, path = "clang" }\ncctools = { path = "darwin.cctools" }|' \
+    -e 's|krb5 = {}|krb5 = {}\nclang = { priority = 4, path = "clang" }\ncctools = { path = "darwin.cctools", systems = [ "x86_64-darwin", "aarch64-darwin" ] }|' \
       "$PROJECT_DIR/.flox/env/manifest.toml";
 
   assert_success;
