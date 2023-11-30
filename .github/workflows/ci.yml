@@ -191,9 +191,7 @@ jobs:
       - name: "Run Bats Tests (./#flox-tests)"
         run: |
           ssh $REMOTE_SERVER \
-            -o StrictHostKeyChecking=no \
-            -o UserKnownHostsFile=/dev/null \
-            -o GlobalKnownHostsFile=/dev/null \
+            -oUserKnownHostsFile=$REMOTE_SERVER_USER_KNOWN_HOSTS_FILE
             nix run \
                 --extra-experimental-features "nix-command flakes" \
                 'github:flox/flox/${{ github.sha }}#packages.${{ matrix.system }}.flox-tests-ci'
@@ -214,9 +212,7 @@ jobs:
         run: |
           git clean -xfd
           ssh $REMOTE_SERVER \
-            -o StrictHostKeyChecking=no \
-            -o UserKnownHostsFile=/dev/null \
-            -o GlobalKnownHostsFile=/dev/null \
+            -oUserKnownHostsFile=$REMOTE_SERVER_USER_KNOWN_HOSTS_FILE
             nix run \
                 --extra-experimental-features "nix-command flakes" \
                 'github:flox/flox/${{ github.sha }}#packages.${{ matrix.system }}.flox-tests-end2end-ci'
