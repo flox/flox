@@ -199,6 +199,7 @@ function update_dummy_env() {
 # bats test_tags=pull:floxhub
 # try pulling from floxhub authenticated with a test token
 @test "l?: pull environment from floxhub" {
+  skip "floxtest/default is not available for all systems"
   unset __FLOX_FLOXHUB_URL;
   run "$FLOX_CLI" pull --remote floxtest/default
   assert_success
