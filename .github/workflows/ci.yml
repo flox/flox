@@ -195,7 +195,7 @@ jobs:
           ssh github@$REMOTE_SERVER \
             -oUserKnownHostsFile=$REMOTE_SERVER_USER_KNOWN_HOSTS_FILE \
             nix run \
-                --extra-experimental-features "nix-command flakes" \
+                --extra-experimental-features '"nix-command flakes"' \
                 'github:flox/flox/${{ github.sha }}#packages.${{ matrix.system }}.flox-tests-ci'
 
       - name: "Build end2end Bats Tests (.#flox-tests-end2end)"
@@ -216,5 +216,5 @@ jobs:
           ssh github@$REMOTE_SERVER \
             -oUserKnownHostsFile=$REMOTE_SERVER_USER_KNOWN_HOSTS_FILE \
             nix run \
-                --extra-experimental-features "nix-command flakes" \
+                --extra-experimental-features '"nix-command flakes"' \
                 'github:flox/flox/${{ github.sha }}#packages.${{ matrix.system }}.flox-tests-end2end-ci'
