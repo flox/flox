@@ -33,8 +33,8 @@ use super::{
     DOT_FLOX,
     ENVIRONMENT_POINTER_FILENAME,
     ENV_BUILDER_BIN,
+    GCROOTS_DIR_NAME,
     LOCKFILE_FILENAME,
-    PATH_ENV_GCROOTS_DIR_NAME,
 };
 use crate::flox::Flox;
 use crate::models::environment::{
@@ -186,7 +186,7 @@ impl<S: TransactionState> PathEnvironment<S> {
     /// this path doesn't guarantee that the current environment can be built,
     /// just that it built at some point in the past.
     fn out_link(&self, system: &System) -> Result<PathBuf, EnvironmentError2> {
-        let run_dir = self.path.join(PATH_ENV_GCROOTS_DIR_NAME);
+        let run_dir = self.path.join(GCROOTS_DIR_NAME);
         if !run_dir.exists() {
             std::fs::create_dir_all(&run_dir).map_err(EnvironmentError2::CreateGcRootDir)?;
         }
@@ -368,6 +368,18 @@ where
     async fn activation_path(&mut self, flox: &Flox) -> Result<PathBuf, EnvironmentError2> {
         self.build(flox).await?;
         Ok(self.out_link(&flox.system)?)
+    }
+
+    fn parent_path(&self) -> Result<String, EnvironmentError2> {
+        let mut path = self.path.clone();
+        if path.pop() {
+            let path = path
+                .to_str()
+                .ok_or(EnvironmentError2::PathNotString(path.clone()))?;
+            Ok(path.to_string())
+        } else {
+            Err(EnvironmentError2::InvalidPath(path))
+        }
     }
 }
 

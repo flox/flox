@@ -1,0 +1,54 @@
+# Test 'flox install' uses last activated environment
+
+set flox $env(FLOX_CLI)
+
+# activate environment 1
+set timeout 5
+set cmd "$flox activate --dir 1"
+spawn $flox activate --dir 1
+expect {
+    "Building environment..." {}
+    timeout {
+      puts stderr "Reached timeout running '$cmd'"
+      exit 1
+    }
+}
+expect {
+    -re "\[1\].*\$" {}
+    timeout {
+      puts stderr "Reached timeout running '$cmd'"
+      exit 1
+    }
+}
+
+# activate environment 2
+set timeout 5
+set cmd "$flox activate --dir 2"
+send "$cmd\n"
+expect {
+    "Building environment..." {}
+    timeout {
+      puts stderr "Reached timeout running '$cmd'"
+      exit 1
+    }
+}
+expect {
+    -re "\[2 1\].*\$" {}
+    timeout {
+      puts stderr "Reached timeout running '$cmd'"
+      exit 1
+    }
+}
+
+# install hello and check it's installed to environment 2
+set cmd "$flox install hello"
+send "$cmd\n"
+expect {
+  -re "✅ 'hello' installed to environment 2 at .*2" {}
+  timeout {
+    puts stderr "Reached timeout running '$cmd'"
+    exit 1
+  }
+}
+
+exit 0

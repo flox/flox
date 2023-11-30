@@ -45,8 +45,10 @@ pub const GLOBAL_MANIFEST_TEMPLATE: &str = env!("GLOBAL_MANIFEST_TEMPLATE");
 pub const GLOBAL_MANIFEST_FILENAME: &str = "global-manifest.toml";
 pub const MANIFEST_FILENAME: &str = "manifest.toml";
 pub const LOCKFILE_FILENAME: &str = "manifest.lock";
-pub const PATH_ENV_GCROOTS_DIR_NAME: &str = "run";
+pub const GCROOTS_DIR_NAME: &str = "run";
 pub const ENV_DIR_NAME: &str = "env";
+pub const FLOX_ENV_VAR: &str = "FLOX_ENV";
+pub const FLOX_ACTIVE_ENVIRONMENTS_VAR: &str = "FLOX_ACTIVE_ENVIRONMENTS";
 
 pub enum InstalledPackage {
     Catalog(FloxTriple, CatalogEntry),
@@ -99,6 +101,13 @@ pub trait Environment {
     /// dynamically, i.e. so that install/edit can modify the environment
     /// without requiring reactivation.
     async fn activation_path(&mut self, flox: &Flox) -> Result<PathBuf, EnvironmentError2>;
+
+    /// Directory containing .flox
+    ///
+    /// This should not be used for anything internal, but it is stored in
+    /// FLOX_ACTIVE_ENVIRONMENTS and printed to users so that users don't have
+    /// to see the trailing .flox
+    fn parent_path(&self) -> Result<String, EnvironmentError2>;
 
     /// Returns the environment name
     fn name(&self) -> EnvironmentName;
@@ -387,6 +396,10 @@ pub enum EnvironmentError2 {
         #[source]
         source: std::io::Error,
     },
+    #[error("invalid internal state; couldn't remove last element from path: {0}")]
+    InvalidPath(PathBuf),
+    #[error("couldn't convert path to string: {0}")]
+    PathNotString(PathBuf),
 }
 
 /// Copy a whole directory recursively ignoring the original permissions
@@ -482,6 +495,22 @@ pub fn find_dot_flox(initial_dir: &Path) -> Result<Option<PathBuf>, EnvironmentE
         }
     }
     Ok(None)
+}
+
+pub fn last_activated_environment() -> Option<PathBuf> {
+    match env::var(FLOX_ACTIVE_ENVIRONMENTS_VAR) {
+        Err(_) => None,
+        Ok(active_environments) if active_environments.is_empty() => None,
+        Ok(active_environments) => {
+            Some(PathBuf::from(
+                active_environments
+                    .split_once(":")
+                    .map(|(last, _)| last)
+                    // If there's no colon, only one environment is active.
+                    .unwrap_or(&active_environments),
+            ))
+        },
+    }
 }
 
 /// Returns the path to the manifest for the given environment and optionally the path to the lockfile

@@ -22,6 +22,8 @@ use flox_rust_sdk::models::environment::{
     PathPointer,
     DOT_FLOX,
     ENVIRONMENT_POINTER_FILENAME,
+    FLOX_ACTIVE_ENVIRONMENTS_VAR,
+    FLOX_ENV_VAR,
 };
 use flox_rust_sdk::models::floxmetav2::FloxmetaV2Error;
 use flox_rust_sdk::models::manifest::list_packages;
@@ -229,7 +231,17 @@ impl Activate {
         // activation script set PS1 based on that.
         let flox_prompt_environments = env::var("FLOX_PROMPT_ENVIRONMENTS")
             .map_or(prompt_name.clone(), |prompt_environments| {
-                format!("{prompt_environments} {prompt_name}")
+                format!("{prompt_name} {prompt_environments}")
+            });
+
+        // Add to FLOX_ACTIVE_ENVIRONMENTS so we can detect what environments are active.
+        let parent_path = environment.parent_path()?;
+        if parent_path.contains(":") {
+            bail!("Cannot activate environment that contains ':' in its path: {parent_path}");
+        }
+        let flox_active_environments = env::var(FLOX_ACTIVE_ENVIRONMENTS_VAR)
+            .map_or(parent_path.clone(), |active_environments| {
+                format!("{parent_path}:{active_environments}")
             });
 
         // TODO more sophisticated detection?
@@ -241,7 +253,8 @@ impl Activate {
         let mut command = Command::new(&shell);
         command
             .env("FLOX_PROMPT_ENVIRONMENTS", flox_prompt_environments)
-            .env("FLOX_ENV", &activation_path)
+            .env(FLOX_ENV_VAR, &activation_path)
+            .env(FLOX_ACTIVE_ENVIRONMENTS_VAR, flox_active_environments)
             .env(
                 "FLOX_PROMPT_COLOR_1",
                 // default to SlateBlue3
@@ -274,7 +287,10 @@ impl Activate {
             // Otherwise, we want initialization to proceed as normal, so the
             // files in our ZDOTDIR source global rcs and user rcs.
             // We disable global rc files and instead source them manually so we
-            // can control the ZDOTDIR they are run with.
+            // can control the ZDOTDIR they are run with - this is important
+            // since macOS sets
+            // HISTFILE=${ZDOTDIR:-$HOME}/.zsh_history
+            // in /etc/zshrc.
             if let Ok(zdotdir) = env::var("ZDOTDIR") {
                 command.env("FLOX_ORIG_ZDOTDIR", zdotdir);
             }
@@ -379,8 +395,8 @@ impl List {
     }
 }
 
-fn environment_description(environment: &ConcreteEnvironment) -> String {
-    match environment {
+fn environment_description(environment: &ConcreteEnvironment) -> Result<String, EnvironmentError2> {
+    Ok(match environment {
         ConcreteEnvironment::Managed(environment) => {
             format!(
                 "{}/{} at {}",
@@ -390,13 +406,11 @@ fn environment_description(environment: &ConcreteEnvironment) -> String {
                 environment.path.to_string_lossy()
             )
         },
-        ConcreteEnvironment::Path(environment) => format!(
-            "{} at {}",
-            environment.name(),
-            environment.path.to_string_lossy()
-        ),
+        ConcreteEnvironment::Path(environment) => {
+            format!("{} at {}", environment.name(), environment.parent_path()?)
+        },
         _ => todo!(),
-    }
+    })
 }
 
 /// Install a package into an environment
@@ -423,7 +437,7 @@ impl Install {
             self.environment
         );
         let concrete_environment = self.environment.to_concrete_environment(&flox)?;
-        let description = environment_description(&concrete_environment);
+        let description = environment_description(&concrete_environment)?;
         let mut environment = concrete_environment.into_dyn_environment();
         let installation = environment.install(self.packages.clone(), &flox).await?;
         if installation.new_manifest.is_some() {
@@ -462,7 +476,7 @@ impl Uninstall {
             self.environment
         );
         let concrete_environment = self.environment.to_concrete_environment(&flox)?;
-        let description = environment_description(&concrete_environment);
+        let description = environment_description(&concrete_environment)?;
         let mut environment = concrete_environment.into_dyn_environment();
         let _ = environment.uninstall(self.packages.clone(), &flox).await?;
 

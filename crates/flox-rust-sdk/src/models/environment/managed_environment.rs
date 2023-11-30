@@ -12,7 +12,13 @@ use serde_json::{json, Value};
 use thiserror::Error;
 
 use super::path_environment::{Original, PathEnvironment};
-use super::{Environment, EnvironmentError2, InstallationAttempt, ManagedPointer};
+use super::{
+    Environment,
+    EnvironmentError2,
+    InstallationAttempt,
+    ManagedPointer,
+    GCROOTS_DIR_NAME,
+};
 use crate::flox::Flox;
 use crate::models::environment::copy_dir_recursive;
 use crate::models::environment_ref::{EnvironmentName, EnvironmentOwner};
@@ -150,6 +156,18 @@ impl Environment for ManagedEnvironment {
     async fn activation_path(&mut self, flox: &Flox) -> Result<PathBuf, EnvironmentError2> {
         self.build(flox).await?;
         Ok(self.out_link(flox))
+    }
+
+    fn parent_path(&self) -> Result<String, EnvironmentError2> {
+        let mut path = self.path.clone();
+        if path.pop() {
+            let path = path
+                .to_str()
+                .ok_or(EnvironmentError2::PathNotString(path.clone()))?;
+            Ok(path.to_string())
+        } else {
+            Err(EnvironmentError2::InvalidPath(path))
+        }
     }
 
     /// Returns the environment name
@@ -536,7 +554,7 @@ fn reverse_links_dir(flox: &Flox) -> PathBuf {
 
 /// Directory containing nix gc roots for (previous) builds of environments of a given owner
 fn gcroots_dir(flox: &Flox, owner: &EnvironmentOwner) -> PathBuf {
-    flox.cache_dir.join("run").join(owner.as_str())
+    flox.cache_dir.join(GCROOTS_DIR_NAME).join(owner.as_str())
 }
 
 impl ManagedEnvironment {

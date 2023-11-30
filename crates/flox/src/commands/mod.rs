@@ -13,7 +13,12 @@ use flox_rust_sdk::flox::{Flox, FLOX_VERSION};
 use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironment;
 use flox_rust_sdk::models::environment::path_environment::{Original, PathEnvironment};
 use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironment;
-use flox_rust_sdk::models::environment::{Environment, EnvironmentPointer, DOT_FLOX};
+use flox_rust_sdk::models::environment::{
+    last_activated_environment,
+    Environment,
+    EnvironmentPointer,
+    DOT_FLOX,
+};
 use flox_rust_sdk::models::environment_ref;
 use flox_rust_sdk::nix::command_line::NixCommandLine;
 use indoc::{formatdoc, indoc};
@@ -424,7 +429,7 @@ pub fn not_help(s: String) -> Option<String> {
     }
 }
 
-#[derive(Debug, Bpaf, Clone)]
+#[derive(Debug, Default, Bpaf, Clone)]
 pub enum EnvironmentSelect {
     Dir(
         /// Path containing a .flox/ directory
@@ -436,41 +441,67 @@ pub enum EnvironmentSelect {
         #[bpaf(long("remote"), short('r'), argument("owner/name"))]
         environment_ref::EnvironmentRef,
     ),
-}
-
-impl Default for EnvironmentSelect {
-    fn default() -> Self {
-        EnvironmentSelect::Dir(PathBuf::from("./"))
-    }
+    #[default]
+    Unspecified,
 }
 
 impl EnvironmentSelect {
     pub fn to_concrete_environment(&self, flox: &Flox) -> Result<ConcreteEnvironment> {
-        let env = match self {
-            EnvironmentSelect::Dir(path) => {
-                let pointer = EnvironmentPointer::open(path)
-                    .with_context(|| format!("No environment found in {path:?}"))?;
-
-                match pointer {
-                    EnvironmentPointer::Path(path_pointer) => {
-                        debug!("detected concrete environment type: path");
-                        let dot_flox_path = path.join(DOT_FLOX);
-                        ConcreteEnvironment::Path(PathEnvironment::open(
-                            path_pointer,
-                            dot_flox_path,
-                            &flox.temp_dir,
-                        )?)
+        match self {
+            EnvironmentSelect::Dir(path) => Self::open_path(flox, path),
+            // If the user doesn't specify an environment, check if there's an
+            // already activated environment or an environment in the current
+            // directory.
+            // TODO: needs design - do we want to search up?
+            EnvironmentSelect::Unspecified => {
+                let maybe_activated = last_activated_environment();
+                let current_dir = env::current_dir().context("could not get current directory")?;
+                let maybe_current_pointer = EnvironmentPointer::open(&current_dir);
+                match (maybe_activated, maybe_current_pointer) {
+                    (Some(_activated), Ok(_current_dir_pointer)) => {
+                        todo!("needs design");
                     },
-                    EnvironmentPointer::Managed(managed_pointer) => {
-                        debug!("detected concrete environment type: managed");
-                        let env = ManagedEnvironment::open(flox, managed_pointer, path)?;
-                        ConcreteEnvironment::Managed(env)
+                    (Some(activated), Err(_)) => Self::open_path(flox, &activated),
+                    (None, Ok(current_dir_pointer)) => {
+                        Self::open_pointer(flox, &current_dir, current_dir_pointer)
+                    },
+                    (None, Err(e)) => {
+                        Err(e).context(format!("No environment found in {current_dir:?}"))?
                     },
                 }
             },
             EnvironmentSelect::Remote(_) => todo!(),
-        };
+        }
+    }
 
+    fn open_path(flox: &Flox, path: &PathBuf) -> Result<ConcreteEnvironment> {
+        let pointer = EnvironmentPointer::open(path)
+            .with_context(|| format!("No environment found in {path:?}"))?;
+
+        Self::open_pointer(flox, path, pointer)
+    }
+
+    fn open_pointer(
+        flox: &Flox,
+        path: &PathBuf,
+        pointer: EnvironmentPointer,
+    ) -> Result<ConcreteEnvironment> {
+        let dot_flox_path = path.join(DOT_FLOX);
+        let env = match pointer {
+            EnvironmentPointer::Path(path_pointer) => {
+                debug!("detected concrete environment type: path");
+                ConcreteEnvironment::Path(PathEnvironment::open(
+                    path_pointer,
+                    dot_flox_path,
+                    &flox.temp_dir,
+                )?)
+            },
+            EnvironmentPointer::Managed(managed_pointer) => {
+                debug!("detected concrete environment type: managed");
+                let env = ManagedEnvironment::open(flox, managed_pointer, dot_flox_path)?;
+                ConcreteEnvironment::Managed(env)
+            },
+        };
         Ok(env)
     }
 }
