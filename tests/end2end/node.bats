@@ -30,7 +30,7 @@ project_setup() {
   pushd "$PROJECT_DIR" >/dev/null||return;
   $FLOX_CLI init
   sed -i \
-    's/from = { type = "github", owner = "NixOS", repo = "nixpkgs" }/from = { type = "github", owner = "NixOS", repo = "nixpkgs", rev = "d226c63a6d839e358c71f757a7baf73e76c2340b" }/' \
+    's/from = { type = "github", owner = "NixOS", repo = "nixpkgs" }/from = { type = "github", owner = "NixOS", repo = "nixpkgs", rev = "e8039594435c68eb4f780f3e9bf3972a7399c4b1" }/' \
     "$PROJECT_DIR/.flox/env/manifest.toml";
 }
 
