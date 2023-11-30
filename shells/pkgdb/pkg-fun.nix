@@ -90,6 +90,7 @@ in mkShell {
 
     if [ -z "''${NO_WELCOME:-}" ]; then
       {
+        echo "First enter the \`pkgdb' subdirectory with \`cd pkgdb;'";
         echo "";
         echo "Build with \`make' ( or \`make -j' to go fast )";
         echo "";
