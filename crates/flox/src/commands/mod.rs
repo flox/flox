@@ -474,6 +474,7 @@ impl EnvironmentSelect {
         }
     }
 
+    /// Open an environment defined in `{path}/.flox`
     fn open_path(flox: &Flox, path: &PathBuf) -> Result<ConcreteEnvironment> {
         let pointer = EnvironmentPointer::open(path)
             .with_context(|| format!("No environment found in {path:?}"))?;
@@ -481,6 +482,9 @@ impl EnvironmentSelect {
         Self::open_env_pointer(flox, path, pointer)
     }
 
+    /// Open an environment defined in `{path}/.flox` with an already parsed pointer
+    ///
+    /// This is used directly when the env pointer was read previously during detection.
     fn open_env_pointer(
         flox: &Flox,
         path: &Path,
