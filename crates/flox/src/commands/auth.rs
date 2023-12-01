@@ -64,6 +64,7 @@ pub async fn authorize(client: BasicClient) -> Result<Credential> {
         .unwrap()
         .add_scope(Scope::new("openid".to_string()))
         .add_scope(Scope::new("profile".to_string()))
+        .add_extra_param("audience".to_string(), "https://hub.flox.dev/api".to_string())
         .request_async(oauth2::reqwest::async_http_client)
         .await
         .context("Could not request device code")?;
