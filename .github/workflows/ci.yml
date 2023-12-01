@@ -52,7 +52,7 @@ jobs:
           nix develop -L \
             --accept-flake-config \
             --no-update-lock-file \
-            '.#env-builder-ci' \
+            '.#flox' \
               --command make -j4
           popd
 
@@ -62,7 +62,7 @@ jobs:
           nix develop -L \
             --accept-flake-config \
             --no-update-lock-file \
-            '.#env-builder-ci' \
+            '.#flox' \
               --command make test -j4
           popd
 
