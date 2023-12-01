@@ -1,5 +1,7 @@
 {
   self,
+  stdenv,
+  darwin,
   lib,
   bash,
   zsh,
@@ -33,28 +35,30 @@
     p.bats-support
   ]);
 
-  paths = [
-    bash
-    zsh
-    dash
-    batsWith
-    coreutils
-    entr
-    expect
-    findutils
-    gawk
-    git
-    gnugrep
-    gnupg
-    gnused
-    gnutar
-    jq
-    nix-serve
-    openssh
-    parallel
-    unixtools.util-linux
-    which
-  ];
+  paths =
+    [
+      bash
+      zsh
+      dash
+      batsWith
+      coreutils
+      entr
+      expect
+      findutils
+      gawk
+      git
+      gnugrep
+      gnupg
+      gnused
+      gnutar
+      jq
+      nix-serve
+      openssh
+      parallel
+      unixtools.util-linux
+      which
+    ]
+    ++ lib.optional stdenv.isDarwin darwin.locale;
 in
   writeShellScriptBin "flox-tests" ''
 

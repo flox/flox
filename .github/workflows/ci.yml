@@ -94,7 +94,7 @@ jobs:
           ssh-key:                "${{ secrets.FLOXBOT_SSH_KEY }}"
           remote-builders:        "${{ vars.FLOX_BUILDERS }}"
 
-      - name: "Build flox-env-builder"
+      - name: "Build flox"
         run: |
           nix build -L \
               --accept-flake-config \
