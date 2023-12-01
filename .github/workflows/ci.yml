@@ -27,6 +27,12 @@ jobs:
           - "aarch64-linux"
           - "aarch64-darwin"
 
+    # Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+
     steps:
       - name: "Checkout"
         uses: "actions/checkout@v3"
@@ -71,6 +77,28 @@ jobs:
             --no-update-lock-file \
             '.#pkgdb-ci' \
               --command make check
+
+      - name: "Build Docs"
+        run: |
+          nix develop -L \
+            --accept-flake-config \
+            --extra-experimental-features "nix-command flakes" \
+            --no-update-lock-file \
+            '.#pkgdb-ci' \
+              --command make docs
+          chmod -c -R +rX "docs/" | while read line; do
+            echo "::warning title=Invalid file permissions fixed::$line"
+          done
+
+      # TODO: only upload when on main branch
+      #- name: "Upload artifact"
+      #  uses: "actions/upload-pages-artifact@v2"
+      #  with:
+      #    path: "pkgdb/docs"
+
+      #- name: "Deploy to GitHub Pages"
+      #  id: "deployment"
+      #  uses: "actions/deploy-pages@v2"
 
   flox-cargo-test:
     name: "Flox Cargo Tests"
