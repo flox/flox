@@ -194,9 +194,7 @@ jobs:
         run: |
           ssh github@$REMOTE_SERVER \
             -oUserKnownHostsFile=$REMOTE_SERVER_USER_KNOWN_HOSTS_FILE \
-            nix shell nixpkgs#gitMinimal \
-                --extra-experimental-features '"nix-command flakes"' \
-                --command nix run \
+            nix run \
                 --accept-flake-config \
                 --extra-experimental-features '"nix-command flakes"' \
                 'github:flox/flox/${{ github.sha }}#packages.${{ matrix.system }}.flox-tests-ci'
@@ -218,9 +216,7 @@ jobs:
           git clean -xfd
           ssh github@$REMOTE_SERVER \
             -oUserKnownHostsFile=$REMOTE_SERVER_USER_KNOWN_HOSTS_FILE \
-            nix shell nixpkgs#gitMinimal \
-                --extra-experimental-features '"nix-command flakes"' \
-                --command nix run \
+            nix run \
                 --accept-flake-config \
                 --extra-experimental-features '"nix-command flakes"' \
                 'github:flox/flox/${{ github.sha }}#packages.${{ matrix.system }}.flox-tests-end2end-ci'
