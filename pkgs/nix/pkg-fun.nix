@@ -10,14 +10,15 @@
 #
 #
 # ---------------------------------------------------------------------------- #
-
-{ nixVersions }: nixVersions.nix_2_17.overrideAttrs ( prev: {
-
+{nixVersions}:
+nixVersions.nix_2_17.overrideAttrs (prev: {
   # Apply patch files.
-  patches = prev.patches ++ [
-    ( builtins.path { path = ./patches/nix-9147.patch; } )
-    ( builtins.path { path = ./patches/multiple-github-tokens.2.13.2.patch; } )
-  ];
+  patches =
+    prev.patches
+    ++ [
+      (builtins.path {path = ./patches/nix-9147.patch;})
+      (builtins.path {path = ./patches/multiple-github-tokens.2.13.2.patch;})
+    ];
 
   postFixup = ''
     # Generate a `sed' pattern to fix up public header `#includes'.
@@ -38,12 +39,10 @@
       |xargs sed -i -e 's,\(-I\''${includedir}\)/nix,\1,'  \
                     -e 's,-I,-isystem ,';
   '';
-
-} )
-
-
+})
 # ---------------------------------------------------------------------------- #
 #
 #
 #
 # ============================================================================ #
+
