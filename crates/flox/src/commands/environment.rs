@@ -23,7 +23,7 @@ use flox_rust_sdk::models::environment::{
     DOT_FLOX,
     ENVIRONMENT_POINTER_FILENAME,
     FLOX_ACTIVE_ENVIRONMENTS_VAR,
-    FLOX_ENV_VAR,
+    FLOX_ENV_VAR, FLOX_PROMPT_ENVIRONMENTS_VAR,
 };
 use flox_rust_sdk::models::floxmetav2::FloxmetaV2Error;
 use flox_rust_sdk::models::manifest::list_packages;
@@ -229,7 +229,7 @@ impl Activate {
         // We don't have access to the current PS1 (it's not exported), so we
         // can't modify it. Instead set FLOX_PROMPT_ENVIRONMENTS and let the
         // activation script set PS1 based on that.
-        let flox_prompt_environments = env::var("FLOX_PROMPT_ENVIRONMENTS")
+        let flox_prompt_environments = env::var(FLOX_PROMPT_ENVIRONMENTS_VAR)
             .map_or(prompt_name.clone(), |prompt_environments| {
                 format!("{prompt_name} {prompt_environments}")
             });
@@ -252,7 +252,7 @@ impl Activate {
         };
         let mut command = Command::new(&shell);
         command
-            .env("FLOX_PROMPT_ENVIRONMENTS", flox_prompt_environments)
+            .env(FLOX_PROMPT_ENVIRONMENTS_VAR, flox_prompt_environments)
             .env(FLOX_ENV_VAR, &activation_path)
             .env(FLOX_ACTIVE_ENVIRONMENTS_VAR, flox_active_environments)
             .env(
