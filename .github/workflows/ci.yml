@@ -23,7 +23,7 @@ jobs:
       matrix:
         os:
           - "ubuntu-22.04-8core"
-          - "macos-latest"
+          - "macos-latest-xl"
 
     # Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
     permissions:
