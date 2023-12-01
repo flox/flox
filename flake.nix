@@ -83,7 +83,7 @@
 
     # Use nix@2.17
     overlays.nix = final: prev: {
-      nix = final.callPackage ./pkgs/nix/pkg-fun.nix {};
+      nix = final.callPackage ./pkgs/nix {};
     };
 
     # Cherry pick `semver' recipe from `floco'.
@@ -125,7 +125,7 @@
       flox-gh = callPackage ./pkgs/flox-gh {};
       flox-src = callPackage ./pkgs/flox-src {};
       flox-tests = callPackage ./pkgs/flox-tests {};
-      flox-pkgdb = callPackage ./pkgdb/pkg-fun.nix {};
+      flox-pkgdb = callPackage ./pkgs/flox-pkgdb {};
     };
 
     overlays.default =
@@ -195,8 +195,8 @@
       inherit flox;
       default = flox;
       ci = pkgs.callPackage ./shells/ci {};
-      pkgdb = pkgs.callPackage ./shells/pkgdb/pkg-fun.nix {ci = false;};
-      pkgdb-ci = pkgs.callPackage ./shells/pkgdb/pkg-fun.nix {ci = true;};
+      pkgdb = pkgs.callPackage ./shells/pkgdb {ci = false;};
+      pkgdb-ci = pkgs.callPackage ./shells/pkgdb {ci = true;};
     });
   }; # End `outputs'
 
