@@ -9,7 +9,7 @@ on:
   merge_group:
 
 concurrency:
-  group: "${{ github.workflow }}-${{ github.ref }}"
+  group: "ci-${{ github.event.pull_request.event.number || github.sha }}"
   cancel-in-progress: true
 
 jobs:
