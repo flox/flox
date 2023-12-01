@@ -13,7 +13,62 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  cargo-test:
+
+  pkgdb-tests:
+    name: "Pkgdb Tests"
+    runs-on: "ubuntu-latest"
+
+    strategy:
+      fail-fast: false
+      matrix:
+        system:
+          - "x86_64-linux"
+          - "x86_64-darwin"
+          - "aarch64-linux"
+          - "aarch64-darwin"
+
+    steps:
+      - name: "Checkout"
+        uses: "actions/checkout@v3"
+
+      - name: "Install flox"
+        uses: "flox/install-flox-action@main"
+        with:
+          github-access-token:    "${{ secrets.NIX_GIT_TOKEN }}"
+          substituter:            "s3://flox-store"
+          substituter-key:        "${{ secrets.FLOX_STORE_PUBLIC_NIX_SECRET_KEY }}"
+          aws-access-key-id:      "${{ secrets.AWS_ACCESS_KEY_ID }}"
+          aws-secret-access-key:  "${{ secrets.AWS_SECRET_ACCESS_KEY }}"
+          ssh-key:                "${{ secrets.FLOXBOT_SSH_KEY }}"
+
+      - name: "Run Build"
+        run: |
+          nix develop -L \
+            --accept-flake-config \
+            --extra-experimental-features "nix-command flakes" \
+            --no-update-lock-file \
+            '.#pkgdb-ci' \
+              --command make -j4
+
+      - name: "Build Tests"
+        run: |
+          nix develop -L \
+            --accept-flake-config \
+            --extra-experimental-features "nix-command flakes" \
+            --no-update-lock-file \
+            '.#pkgdb-ci' \
+              --command make tests -j4
+
+      - name: "Run Tests"
+        run: |
+          nix develop -L \
+            --accept-flake-config \
+            --extra-experimental-features "nix-command flakes" \
+            --no-update-lock-file \
+            '.#pkgdb-ci' \
+              --command make check
+
+  flox-cargo-test:
     name: "Flox Cargo Tests"
     runs-on: ${{ matrix.os }}
 
@@ -113,7 +168,8 @@ jobs:
               --accept-flake-config \
               --extra-experimental-features "nix-command flakes" \
               --no-update-lock-file \
-              --command make tests
+              '.#flox' \
+                --command make tests
 
   nix-build:
     name: "Flox Bats Tests"
