@@ -121,6 +121,7 @@ load setup_suite.bash
 
 # bats test_tags=propagated
 @test "Environment includes propagated packages" {
+    skip "ansi does not work on all systems"
 
     cat $LOCKFILES/propagated/manifest.toml >&3
 
