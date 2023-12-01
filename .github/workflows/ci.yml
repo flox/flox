@@ -53,11 +53,8 @@ jobs:
             --accept-flake-config \
             --no-update-lock-file \
             '.#flox' \
-              --command make -j4
+              --command make
           popd
-
-      - name: "DEBUG"
-        uses: "mxschmitt/action-tmate@v3"
 
       - name: "Run Tests"
         run: |
@@ -66,7 +63,7 @@ jobs:
             --accept-flake-config \
             --no-update-lock-file \
             '.#flox' \
-              --command make test -j4
+              --command make test
           popd
 
 #  pkgdb-tests:
