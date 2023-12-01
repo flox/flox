@@ -4,6 +4,13 @@
 #
 # ---------------------------------------------------------------------------- #
 {
+  description = "flox - Harness the power of Nix";
+
+  nixConfig.extra-substituters = [
+    "https://cache.floxdev.com"
+    "s3://flox-store"
+  ];
+
   # Do not override `nixpkgs` input
   inputs.pkgdb.url = "github:flox/pkgdb";
 
@@ -121,7 +128,16 @@
         flox-tests
         ;
       default = pkgsFor.flox;
-      flox-tests-end2end = pkgsFor.flox-tests.override {testsDir = "/tests/end2end";};
+      flox-tests-ci = pkgsFor.flox-tests.override {
+        FLOX_CLI = "${pkgsFor.flox}/bin/flox";
+      };
+      flox-tests-end2end = pkgsFor.flox-tests.override {
+        testsDir = "/tests/end2end";
+      };
+      flox-tests-end2end-ci = pkgsFor.flox-tests.override {
+        testsDir = "/tests/end2end";
+        FLOX_CLI = "${pkgsFor.flox}/bin/flox";
+      };
     });
     # ------------------------------------------------------------------------ #
   in {
