@@ -127,7 +127,7 @@ impl Edit {
     /// If $EDITOR or $VISUAL is set, use that. Otherwise, try to find a known editor in $PATH.
     /// The known editor selected is the first one found in $PATH from the following list:
     ///
-    ///   helix, vim, vi, nano, emacs.
+    ///   vim, vi, nano, emacs.
     fn determine_editor() -> Result<PathBuf> {
         let editor = std::env::var("EDITOR").or(std::env::var("VISUAL")).ok();
 
@@ -138,7 +138,7 @@ impl Edit {
         let path_var = env::var("PATH").context("$PATH not set")?;
 
         let (path, editor) = env::split_paths(&path_var)
-            .cartesian_product(["helix", "vim", "vi", "nano", "emacs"])
+            .cartesian_product(["vim", "vi", "nano", "emacs"])
             .find(|(path, editor)| path.join(editor).exists())
             .context("no known editor found in $PATH")?;
 
