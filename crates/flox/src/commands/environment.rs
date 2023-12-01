@@ -29,6 +29,7 @@ use flox_rust_sdk::nix::command::StoreGc;
 use flox_rust_sdk::nix::command_line::NixCommandLine;
 use flox_rust_sdk::nix::Run;
 use indoc::indoc;
+use itertools::Itertools;
 use log::{debug, error, info};
 use tempfile::NamedTempFile;
 
@@ -76,43 +77,74 @@ impl Edit {
             },
             // If not provided with new manifest contents, let the user edit the file directly
             // via $EDITOR or $VISUAL (as long as `flox edit` was invoked interactively).
-            None => {
-                let editor = std::env::var("EDITOR")
-                    .or(std::env::var("VISUAL"))
-                    .context("no editor found; neither EDITOR nor VISUAL are set")?;
-                // TODO: check for interactivity before allowing the editor to be opened
-                // Make a copy of the manifest for the user to edit so failed edits aren't left in
-                // the original manifest. You can't put creation/cleanup inside the `edited_manifest_contents`
-                // method because the temporary manifest needs to stick around in case the user wants
-                // or needs to make successive edits without starting over each time.
-                let tmp_manifest = NamedTempFile::new_in(&flox.temp_dir)?;
-                std::fs::write(&tmp_manifest, environment.manifest_content()?)?;
-                let should_continue = Dialog {
-                    message: "Continue editing?",
-                    help_message: Default::default(),
-                    typed: Confirm {
-                        default: Some(true),
-                    },
-                };
-                // Let the user keep editing the file until the build succeeds or the user
-                // decides to stop.
-                loop {
-                    let new_manifest = Edit::edited_manifest_contents(&tmp_manifest, &editor)?;
-                    if let Err(e) = environment.edit(&flox, new_manifest).await {
-                        error!("Environment invalid; building resulted in an error: {e}");
-                        if !Dialog::can_prompt() {
-                            bail!("Can't prompt to continue editing in non-interactive context");
-                        }
-                        if !should_continue.clone().prompt().await? {
-                            bail!("Environment editing cancelled");
-                        }
-                    } else {
-                        break;
-                    }
-                }
-                Ok(())
-            },
+            None => self.interactive_edit(flox, environment.as_mut()).await,
         }
+    }
+
+    /// Interactively edit the manifest file
+    async fn interactive_edit(&self, flox: Flox, environment: &mut dyn Environment) -> Result<()> {
+        if !Dialog::can_prompt() {
+            bail!("Can't edit interactively in non-interactive context")
+        }
+
+        let editor = Self::determine_editor()?;
+
+        // Make a copy of the manifest for the user to edit so failed edits aren't left in
+        // the original manifest. You can't put creation/cleanup inside the `edited_manifest_contents`
+        // method because the temporary manifest needs to stick around in case the user wants
+        // or needs to make successive edits without starting over each time.
+        let tmp_manifest = NamedTempFile::new_in(&flox.temp_dir)?;
+        std::fs::write(&tmp_manifest, environment.manifest_content()?)?;
+        let should_continue = Dialog {
+            message: "Continue editing?",
+            help_message: Default::default(),
+            typed: Confirm {
+                default: Some(true),
+            },
+        };
+
+        // Let the user keep editing the file until the build succeeds or the user
+        // decides to stop.
+        loop {
+            let new_manifest = Edit::edited_manifest_contents(&tmp_manifest, &editor)?;
+            if let Err(e) = environment.edit(&flox, new_manifest).await {
+                error!("Environment invalid; building resulted in an error: {e}");
+                if !Dialog::can_prompt() {
+                    bail!("Can't prompt to continue editing in non-interactive context");
+                }
+                if !should_continue.clone().prompt().await? {
+                    bail!("Environment editing cancelled");
+                }
+            } else {
+                break;
+            }
+        }
+        Ok(())
+    }
+
+    /// Determines the editor to use for interactive editing
+    ///
+    /// If $EDITOR or $VISUAL is set, use that. Otherwise, try to find a known editor in $PATH.
+    /// The known editor selected is the first one found in $PATH from the following list:
+    ///
+    ///   helix, vim, vi, nano, emacs.
+    fn determine_editor() -> Result<PathBuf> {
+        let editor = std::env::var("EDITOR").or(std::env::var("VISUAL")).ok();
+
+        if let Some(editor) = editor {
+            return Ok(PathBuf::from(editor));
+        }
+
+        let path_var = env::var("PATH").context("$PATH not set")?;
+
+        let (path, editor) = env::split_paths(&path_var)
+            .cartesian_product(["helix", "vim", "vi", "nano", "emacs"])
+            .find(|(path, editor)| path.join(editor).exists())
+            .context("no known editor found in $PATH")?;
+
+        debug!("Using editor {:?} from {:?}", editor, path);
+
+        Ok(path.join(editor))
     }
 
     /// Retrieves the new manifest file contents if a new manifest file was provided
@@ -133,7 +165,10 @@ impl Edit {
     }
 
     /// Gets a new set of manifest contents after a user edits the file
-    fn edited_manifest_contents(path: impl AsRef<Path>, editor: impl AsRef<str>) -> Result<String> {
+    fn edited_manifest_contents(
+        path: impl AsRef<Path>,
+        editor: impl AsRef<Path>,
+    ) -> Result<String> {
         let mut command = Command::new(editor.as_ref());
         command.arg(path.as_ref());
 
