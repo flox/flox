@@ -1,5 +1,9 @@
 {
   self,
+  gcc,
+  runCommandCC,
+  stdenv,
+  darwin,
   lib,
   bash,
   zsh,
@@ -33,28 +37,44 @@
     p.bats-support
   ]);
 
-  paths = [
-    bash
-    zsh
-    dash
-    batsWith
-    coreutils
-    entr
-    expect
-    findutils
-    gawk
-    git
-    gnugrep
-    gnupg
-    gnused
-    gnutar
-    jq
-    nix-serve
-    openssh
-    parallel
-    unixtools.util-linux
-    which
-  ];
+  paths =
+    [
+      bash
+      zsh
+      dash
+      batsWith
+      coreutils
+      entr
+      expect
+      findutils
+      gawk
+      git
+      gnugrep
+      gnupg
+      gnused
+      gnutar
+      jq
+      nix-serve
+      openssh
+      parallel
+      unixtools.util-linux
+      which
+    ]
+    ++ lib.optional stdenv.isDarwin (
+      runCommandCC "locale" {
+        source = ''
+          #include <stdio.h>
+          int main(){
+            printf("UTF-8");
+            return 0;
+          }
+        '';
+        buildInputs = [gcc];
+      } ''
+        mkdir -p "$out/bin"
+        echo "$source" | gcc -Wall -o "$out/bin/$name" -xc -
+      ''
+    );
 in
   writeShellScriptBin "flox-tests" ''
 

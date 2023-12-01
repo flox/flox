@@ -9,7 +9,7 @@ on:
   merge_group:
 
 concurrency:
-  group: "${{ github.workflow }}-${{ github.ref }}"
+  group: "ci-${{ github.event.pull_request.event.number || github.sha }}"
   cancel-in-progress: true
 
 jobs:
@@ -114,7 +114,7 @@ jobs:
       matrix:
         os:
           - "ubuntu-22.04-8core"
-          - "macos-latest"
+          - "macos-latest-xl"
 
     steps:
       - name: "Checkout"
@@ -205,19 +205,17 @@ jobs:
               --accept-flake-config \
               --no-update-lock-file \
               --print-out-paths \
-              '.#flox'
-          # We run bats tests later on against the `FLOX_CLI' env
-          echo "FLOX_CLI=$(readlink -f ./result; )/bin/flox" >> "$GITHUB_ENV"
-          rm ./result
+              '.#flox-env-builder'
 
-      - name: "Run tests"
-        run: |
-          cd ./env-builder
-          nix develop -L \
-              --accept-flake-config \
-              --no-update-lock-file \
-              '.#flox' \
-                --command make tests
+      # TODO: we need to run tests on builders
+      #- name: "Run tests"
+      #  run: |
+      #    cd ./env-builder
+      #    nix develop -L \
+      #        --accept-flake-config \
+      #        --no-update-lock-file \
+      #        '.#flox' \
+      #          --command make tests
 
   pkgdb-nix-build:
     name: "Pkgdb Bats Tests"
@@ -387,9 +385,7 @@ jobs:
         run: |
           ssh github@$REMOTE_SERVER \
             -oUserKnownHostsFile=$REMOTE_SERVER_USER_KNOWN_HOSTS_FILE \
-            nix shell nixpkgs#gitMinimal \
-                --extra-experimental-features '"nix-command flakes"' \
-                --command nix run \
+            nix run \
                 --accept-flake-config \
                 --extra-experimental-features '"nix-command flakes"' \
                 'github:flox/flox/${{ github.sha }}#packages.${{ matrix.system }}.flox-tests-ci'
@@ -408,9 +404,7 @@ jobs:
           git clean -xfd
           ssh github@$REMOTE_SERVER \
             -oUserKnownHostsFile=$REMOTE_SERVER_USER_KNOWN_HOSTS_FILE \
-            nix shell nixpkgs#gitMinimal \
-                --extra-experimental-features '"nix-command flakes"' \
-                --command nix run \
+            nix run \
                 --accept-flake-config \
                 --extra-experimental-features '"nix-command flakes"' \
                 'github:flox/flox/${{ github.sha }}#packages.${{ matrix.system }}.flox-tests-end2end-ci'
