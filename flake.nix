@@ -8,7 +8,7 @@
 
   nixConfig.extra-substituters = [
     "https://cache.floxdev.com"
-    "s3://flox-cache"
+    "s3://flox-store"
   ];
 
   # Do not override `nixpkgs` input
