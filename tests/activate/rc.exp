@@ -5,6 +5,7 @@ set dir [lindex $argv 0]
 set expected_output [lindex $argv 1]
 set flox $env(FLOX_CLI)
 
+set timeout 300
 set cmd "$flox activate --dir $dir"
 spawn $flox activate --dir $dir
 expect {
@@ -14,7 +15,6 @@ expect {
       exit 1
     }
 }
-set timeout 300
 expect {
     -re "project.*\$" {}
     timeout {
