@@ -87,10 +87,23 @@ in
     set +x
     export ENV_BUILDER;
     export PKGDB=${flox-pkgdb}/bin/pkgdb;
+    echo "========================================="
+    echo "========================================="
+    echo "========================================="
     chmod -R +w tests/fixtures/lockfiles
     for i in $(find tests/ -name "*.toml"); do
+      echo $i
+      echo "$(dirname $i)/$(basename $i toml)lock"
       $PKGDB manifest lock --ga-registry "$i" | jq > "$(dirname $i)/$(basename $i toml)lock"
+      cat "$(dirname $i)/$(basename $i toml)lock"
     done
+
+    echo "========================================="
+    echo "========================================="
+    echo "========================================="
+    tree $WORKDIR/tests
+    exit 1
+
 
     # Default flag values
     : "''${TESTS_DIR:=$PWD${testsDir}}";
