@@ -56,16 +56,6 @@ jobs:
               --command make -j4
           popd
 
-      - name: "Build Tests"
-        run: |
-          pushd ./env-builder
-          nix develop -L \
-            --accept-flake-config \
-            --no-update-lock-file \
-            '.#env-builder-ci' \
-              --command make tests -j4
-          popd
-
       - name: "Run Tests"
         run: |
           pushd ./env-builder
@@ -73,7 +63,7 @@ jobs:
             --accept-flake-config \
             --no-update-lock-file \
             '.#env-builder-ci' \
-              --command make check
+              --command make test -j4
           popd
 
   pkgdb-tests:
