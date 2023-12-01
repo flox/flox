@@ -1,5 +1,7 @@
 {
   self,
+  gcc,
+  runCommandCC,
   stdenv,
   darwin,
   lib,
@@ -58,7 +60,21 @@
       unixtools.util-linux
       which
     ]
-    ++ lib.optional stdenv.isDarwin darwin.locale;
+    ++ lib.optional stdenv.isDarwin (
+      runCommandCC "locale" {
+        source = ''
+          #include <stdio.h>
+          int main(){
+            printf("UTF-8");
+            return 0;
+          }
+        '';
+        buildInputs = [gcc];
+      } ''
+        mkdir -p "$out/bin"
+        echo "$source" | gcc -Wall -o "$out/bin/$name" -xc -
+      ''
+    );
 in
   writeShellScriptBin "flox-tests" ''
 
