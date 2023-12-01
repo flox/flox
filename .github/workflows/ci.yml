@@ -41,6 +41,10 @@ jobs:
           aws-secret-access-key:  "${{ secrets.AWS_SECRET_ACCESS_KEY }}"
           ssh-key:                "${{ secrets.FLOXBOT_SSH_KEY }}"
 
+      - name: "Change directory to ./pkgdb"
+        run: |
+          cd ./pkgdb
+
       - name: "Run Build"
         run: |
           nix develop -L \
