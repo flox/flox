@@ -47,39 +47,42 @@ jobs:
           aws-secret-access-key:  "${{ secrets.AWS_SECRET_ACCESS_KEY }}"
           ssh-key:                "${{ secrets.FLOXBOT_SSH_KEY }}"
 
-      - name: "Change directory to ./pkgdb"
-        run: |
-          cd ./pkgdb
-
       - name: "Run Build"
         run: |
+          pushd ./pkgdb
           nix develop -L \
             --accept-flake-config \
             --extra-experimental-features "nix-command flakes" \
             --no-update-lock-file \
             '.#pkgdb-ci' \
               --command make -j4
+          popd
 
       - name: "Build Tests"
         run: |
+          pushd ./pkgdb
           nix develop -L \
             --accept-flake-config \
             --extra-experimental-features "nix-command flakes" \
             --no-update-lock-file \
             '.#pkgdb-ci' \
               --command make tests -j4
+          popd
 
       - name: "Run Tests"
         run: |
+          pushd ./pkgdb
           nix develop -L \
             --accept-flake-config \
             --extra-experimental-features "nix-command flakes" \
             --no-update-lock-file \
             '.#pkgdb-ci' \
               --command make check
+          popd
 
       - name: "Build Docs"
         run: |
+          pushd ./pkgdb
           nix develop -L \
             --accept-flake-config \
             --extra-experimental-features "nix-command flakes" \
@@ -89,6 +92,7 @@ jobs:
           chmod -c -R +rX "docs/" | while read line; do
             echo "::warning title=Invalid file permissions fixed::$line"
           done
+          popd
 
       # TODO: only upload when on main branch
       #- name: "Upload artifact"
