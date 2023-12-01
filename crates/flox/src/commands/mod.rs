@@ -458,8 +458,12 @@ impl EnvironmentSelect {
                 let current_dir = env::current_dir().context("could not get current directory")?;
                 let maybe_current_pointer = EnvironmentPointer::open(&current_dir);
                 match (maybe_activated, maybe_current_pointer) {
-                    (Some(_activated), Ok(_current_dir_pointer)) => {
-                        todo!("needs design");
+                    (Some(activated), Ok(current_dir_pointer)) => {
+                        if activated == current_dir {
+                            Self::open_env_pointer(flox, &current_dir, current_dir_pointer)
+                        } else {
+                            todo!("needs design");
+                        }
                     },
                     (Some(activated), Err(_)) => Self::open_path(flox, &activated),
                     (None, Ok(current_dir_pointer)) => {
