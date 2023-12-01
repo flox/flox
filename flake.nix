@@ -117,16 +117,20 @@
           pkgsFor = final;
         });
     in {
-      flox = callPackage ./pkgs/flox {};
       flox-bash = callPackage ./pkgs/flox-bash {};
       flox-bash-dev = callPackage ./pkgs/flox-bash-dev {};
       flox-dev = callPackage ./pkgs/flox-dev {};
-      flox-env-builder = callPackage ./pkgs/flox-env-builder {};
       flox-gh = callPackage ./pkgs/flox-gh {};
       flox-src = callPackage ./pkgs/flox-src {};
+
+      flox = callPackage ./pkgs/flox {};
       flox-tests = callPackage ./pkgs/flox-tests {};
+
       flox-pkgdb = callPackage ./pkgs/flox-pkgdb {};
       flox-pkgdb-tests = callPackage ./pkgs/flox-pkgdb-tests {};
+
+      flox-env-builder = callPackage ./pkgs/flox-env-builder {};
+      flox-env-builder-tests = callPackage ./pkgs/flox-env-builder-tests {};
     };
 
     overlays.default =
@@ -164,9 +168,10 @@
         (pkgs)
         flox
         flox-tests
-        flox-env-builder
         flox-pkgdb
         flox-pkgdb-tests
+        flox-env-builder
+        flox-env-builder-tests
         flox-bash
         flox-gh
         ;
