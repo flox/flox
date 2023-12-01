@@ -16,16 +16,14 @@ jobs:
 
   pkgdb-tests:
     name: "Pkgdb Tests"
-    runs-on: "ubuntu-latest"
+    runs-on: ${{ matrix.os }}
 
     strategy:
       fail-fast: false
       matrix:
-        system:
-          - "x86_64-linux"
-          - "x86_64-darwin"
-          - "aarch64-linux"
-          - "aarch64-darwin"
+        os:
+          - "ubuntu-22.04-8core"
+          - "macos-latest"
 
     # Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
     permissions:
