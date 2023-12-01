@@ -47,12 +47,18 @@ jobs:
           aws-secret-access-key:  "${{ secrets.AWS_SECRET_ACCESS_KEY }}"
           ssh-key:                "${{ secrets.FLOXBOT_SSH_KEY }}"
 
+      - name: "Configure Nix"
+        run: |
+          sudo echo 
+          {
+            echo "experimental-features = nix-command flakes";
+          } | sudo tee -a /etc/nix/nix.conf >/dev/null
+
       - name: "Run Build"
         run: |
           pushd ./pkgdb
           nix develop -L \
             --accept-flake-config \
-            --extra-experimental-features "nix-command flakes" \
             --no-update-lock-file \
             '.#pkgdb-ci' \
               --command make -j4
@@ -63,7 +69,6 @@ jobs:
           pushd ./pkgdb
           nix develop -L \
             --accept-flake-config \
-            --extra-experimental-features "nix-command flakes" \
             --no-update-lock-file \
             '.#pkgdb-ci' \
               --command make tests -j4
@@ -74,7 +79,6 @@ jobs:
           pushd ./pkgdb
           nix develop -L \
             --accept-flake-config \
-            --extra-experimental-features "nix-command flakes" \
             --no-update-lock-file \
             '.#pkgdb-ci' \
               --command make check
@@ -85,7 +89,6 @@ jobs:
           pushd ./pkgdb
           nix develop -L \
             --accept-flake-config \
-            --extra-experimental-features "nix-command flakes" \
             --no-update-lock-file \
             '.#pkgdb-ci' \
               --command make docs
@@ -129,6 +132,13 @@ jobs:
           aws-secret-access-key:  "${{ secrets.AWS_SECRET_ACCESS_KEY }}"
           ssh-key:                "${{ secrets.FLOXBOT_SSH_KEY }}"
 
+      - name: "Configure Nix"
+        run: |
+          sudo echo 
+          {
+            echo "experimental-features = nix-command flakes";
+          } | sudo tee -a /etc/nix/nix.conf >/dev/null
+
       - name: "Cache cargo"
         uses: "actions/cache@v3"
         with:
@@ -145,7 +155,6 @@ jobs:
         run: |
           nix develop -L \
             --accept-flake-config \
-            --extra-experimental-features "nix-command flakes" \
             --no-update-lock-file \
             '.#flox' \
               --command cargo test --locked --workspace -F extra-tests;
@@ -185,11 +194,17 @@ jobs:
           ssh-key:                "${{ secrets.FLOXBOT_SSH_KEY }}"
           remote-builders:        "${{ vars.FLOX_BUILDERS }}"
 
+      - name: "Configure Nix"
+        run: |
+          sudo echo 
+          {
+            echo "experimental-features = nix-command flakes";
+          } | sudo tee -a /etc/nix/nix.conf >/dev/null
+
       - name: "Build flox-env-builder"
         run: |
           nix build -L \
               --accept-flake-config \
-              --extra-experimental-features "nix-command flakes" \
               --no-update-lock-file \
               --print-out-paths \
               '.#flox'
@@ -202,7 +217,6 @@ jobs:
           cd ./env-builder
           nix develop -L \
               --accept-flake-config \
-              --extra-experimental-features "nix-command flakes" \
               --no-update-lock-file \
               '.#flox' \
                 --command make tests
@@ -242,6 +256,13 @@ jobs:
           ssh-key:                "${{ secrets.FLOXBOT_SSH_KEY }}"
           remote-builders:        "${{ vars.FLOX_BUILDERS }}"
 
+      - name: "Configure Nix"
+        run: |
+          sudo echo 
+          {
+            echo "experimental-features = nix-command flakes";
+          } | sudo tee -a /etc/nix/nix.conf >/dev/null
+
       - name: "Find remote server to run tests on"
         run: |
           set -eo pipefail
@@ -262,7 +283,6 @@ jobs:
         run: |
           nix build -L \
               --accept-flake-config \
-              --extra-experimental-features "nix-command flakes" \
               --no-update-lock-file \
               --print-out-paths \
               '.#packages.${{ matrix.system }}.flox'
@@ -274,13 +294,10 @@ jobs:
         run: |
           nix build -L \
               --accept-flake-config \
-              --extra-experimental-features "nix-command flakes" \
               --no-update-lock-file \
               --print-out-paths \
               '.#packages.${{ matrix.system }}.flox-tests'
-          nix copy \
-            --extra-experimental-features "nix-command flakes" \
-            --to "$FLOX_SUBSTITUTER" ./result
+          nix copy --to "$FLOX_SUBSTITUTER" ./result
 
       - name: "Run Bats Tests (./#flox-tests)"
         run: |
@@ -297,13 +314,10 @@ jobs:
         run: |
           nix build -L \
               --accept-flake-config \
-              --extra-experimental-features "nix-command flakes" \
               --no-update-lock-file \
               --print-out-paths \
               '.#packages.${{ matrix.system }}.flox-tests-end2end'
-          nix copy \
-            --extra-experimental-features "nix-command flakes" \
-            --to "$FLOX_SUBSTITUTER" ./result
+          nix copy --to "$FLOX_SUBSTITUTER" ./result
 
       - name: "Run Bats end2end Tests (./#flox-tests-end2end)"
         run: |
