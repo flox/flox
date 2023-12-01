@@ -220,7 +220,7 @@ jobs:
                 --command make tests
 
   pkgdb-nix-build:
-    name: "Flox Bats Tests"
+    name: "Pkgdb Bats Tests"
     runs-on: "ubuntu-latest"
 
     strategy:

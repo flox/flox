@@ -88,7 +88,8 @@ in
     done
 
     export PKGDB;
-    export IS_SQLITE3="${flox-pkgdb.dev}/bin/is_sqlite3"
+    export IS_SQLITE3="${flox-pkgdb.test}/bin/is_sqlite3"
+    export SEARCH_PARAMS="${flox-pkgdb.test}/bin/search-params";
 
     # Default flag values
     : "''${TESTS_DIR:=$PWD${testsDir}}";

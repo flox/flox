@@ -87,12 +87,22 @@ stdenv.mkDerivation {
   # Checks require internet
   doCheck = false;
   doInstallCheck = false;
-  outputs = ["out" "dev"];
+  outputs = ["out" "dev" "test"];
   meta.mainProgram = "pkgdb";
   postInstall = ''
+    mkdir -p "$test/bin" "$test/lib"
+
     make tests
-    mkdir -p $dev/bin
-    cp tests/is_sqlite3 $dev/bin/is_sqlite3
+
+    for i in tests/*; do
+      if (! [[ -d "$i" ]]) && [[ -x "$i" ]]; then
+        cp "$i" "$test/bin/"
+      fi
+    done
+
+    for i in "$out/lib/"*; do
+      ln -s "$i" "$test/lib/"
+    done
   '';
 }
 # ---------------------------------------------------------------------------- #

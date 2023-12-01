@@ -13,9 +13,6 @@ load setup_suite.bash;
 setup_file() {
   export TDATA="$TESTS_DIR/data/search";
 
-  # Path to `search-params' utility.
-  export SEARCH_PARAMS="$TESTS_DIR/search-params";
-
   export PKGDB_CACHEDIR="$BATS_FILE_TMPDIR/pkgdbs";
   echo "PKGDB_CACHEDIR: $PKGDB_CACHEDIR" >&3;
   # We don't parallelize these to avoid DB sync headaches and to recycle the
