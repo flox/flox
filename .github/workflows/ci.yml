@@ -56,6 +56,9 @@ jobs:
               --command make -j4
           popd
 
+      - name: "DEBUG"
+        uses: "mxschmitt/action-tmate@v3"
+
       - name: "Run Tests"
         run: |
           pushd ./env-builder
