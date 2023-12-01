@@ -149,10 +149,12 @@ jobs:
 
       - name: "Upload artifact"
         uses: "actions/upload-pages-artifact@v2"
+        if: ${{ matrix.os == 'ubuntu-22.04-8core' }}
         with:
           path: "pkgdb/docs"
 
       - name: "Deploy to GitHub Pages"
+        if: ${{ matrix.os == 'ubuntu-22.04-8core' }}
         id: "deployment"
         uses: "actions/deploy-pages@v2"
 
