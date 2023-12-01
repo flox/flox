@@ -67,7 +67,7 @@ impl Edit {
 
         let mut environment = self
             .environment
-            .to_concrete_environment(&flox)?
+            .to_concrete_environment(&flox, true)?
             .into_dyn_environment();
 
         match self.provided_manifest_contents()? {
@@ -170,7 +170,7 @@ pub struct Delete {
 impl Delete {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("delete");
-        match self.environment.to_concrete_environment(&flox)? {
+        match self.environment.to_concrete_environment(&flox, true)? {
             ConcreteEnvironment::Path(environment) => environment.delete()?,
             ConcreteEnvironment::Managed(environment) => environment.delete()?,
             ConcreteEnvironment::Remote(environment) => environment.delete()?,
@@ -196,7 +196,7 @@ impl Activate {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("activate");
 
-        let concrete_environment = self.environment.to_concrete_environment(&flox)?;
+        let concrete_environment = self.environment.to_concrete_environment(&flox, false)?;
 
         // TODO could move this to a pretty print method on the Environment trait?
         let prompt_name = match concrete_environment {
@@ -384,7 +384,7 @@ impl List {
 
         let env = self
             .environment
-            .to_concrete_environment(&flox)?
+            .to_concrete_environment(&flox, true)?
             .into_dyn_environment();
 
         let manifest_contents = env.manifest_content()?;
@@ -440,7 +440,7 @@ impl Install {
             self.packages.as_slice().join(", "),
             self.environment
         );
-        let concrete_environment = self.environment.to_concrete_environment(&flox)?;
+        let concrete_environment = self.environment.to_concrete_environment(&flox, true)?;
         let description = environment_description(&concrete_environment)?;
         let mut environment = concrete_environment.into_dyn_environment();
         let installation = environment.install(self.packages.clone(), &flox).await?;
@@ -479,7 +479,7 @@ impl Uninstall {
             self.packages.as_slice().join(", "),
             self.environment
         );
-        let concrete_environment = self.environment.to_concrete_environment(&flox)?;
+        let concrete_environment = self.environment.to_concrete_environment(&flox, true)?;
         let description = environment_description(&concrete_environment)?;
         let mut environment = concrete_environment.into_dyn_environment();
         let _ = environment.uninstall(self.packages.clone(), &flox).await?;
@@ -510,7 +510,7 @@ impl WipeHistory {
 
         let env = self
             .environment
-            .to_concrete_environment(&flox)?
+            .to_concrete_environment(&flox, true)?
             .into_dyn_environment();
 
         if env.delete_symlinks()? {

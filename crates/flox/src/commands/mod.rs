@@ -446,7 +446,13 @@ pub enum EnvironmentSelect {
 }
 
 impl EnvironmentSelect {
-    pub fn to_concrete_environment(&self, flox: &Flox) -> Result<ConcreteEnvironment> {
+    /// Open a concrete environment, optionally detecting the currently active
+    /// environment.
+    pub fn to_concrete_environment(
+        &self,
+        flox: &Flox,
+        use_activated: bool,
+    ) -> Result<ConcreteEnvironment> {
         match self {
             EnvironmentSelect::Dir(path) => Self::open_path(flox, path),
             // If the user doesn't specify an environment, check if there's an
@@ -454,24 +460,30 @@ impl EnvironmentSelect {
             // directory.
             // TODO: needs design - do we want to search up?
             EnvironmentSelect::Unspecified => {
-                let maybe_activated = Self::last_activated_environment();
                 let current_dir = env::current_dir().context("could not get current directory")?;
                 let maybe_current_pointer = EnvironmentPointer::open(&current_dir);
-                match (maybe_activated, maybe_current_pointer) {
-                    (Some(activated), Ok(current_dir_pointer)) => {
-                        if activated == current_dir {
+                if use_activated {
+                    let maybe_activated = Self::last_activated_environment();
+                    match (maybe_activated, maybe_current_pointer) {
+                        (Some(activated), Ok(current_dir_pointer)) => {
+                            if activated == current_dir {
+                                Self::open_env_pointer(flox, &current_dir, current_dir_pointer)
+                            } else {
+                                todo!("needs design");
+                            }
+                        },
+                        (Some(activated), Err(_)) => Self::open_path(flox, &activated),
+                        (None, Ok(current_dir_pointer)) => {
                             Self::open_env_pointer(flox, &current_dir, current_dir_pointer)
-                        } else {
-                            todo!("needs design");
-                        }
-                    },
-                    (Some(activated), Err(_)) => Self::open_path(flox, &activated),
-                    (None, Ok(current_dir_pointer)) => {
-                        Self::open_env_pointer(flox, &current_dir, current_dir_pointer)
-                    },
-                    (None, Err(e)) => {
-                        Err(e).context(format!("No environment found in {current_dir:?}"))?
-                    },
+                        },
+                        (None, Err(e)) => {
+                            Err(e).context(format!("No environment found in {current_dir:?}"))?
+                        },
+                    }
+                } else {
+                    maybe_current_pointer
+                        .map(|current_dir_pointer| Self::open_env_pointer(flox, &current_dir, current_dir_pointer))
+                        .context(format!("No environment found in {current_dir:?}"))?
                 }
             },
             EnvironmentSelect::Remote(_) => todo!(),
