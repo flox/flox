@@ -14,6 +14,68 @@ concurrency:
 
 jobs:
 
+  env-builder-tests:
+    name: "EnvBuilder Tests"
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - "ubuntu-22.04-8core"
+          - "macos-latest-xl"
+
+    steps:
+      - name: "Checkout"
+        uses: "actions/checkout@v3"
+
+      - name: "Install flox"
+        uses: "flox/install-flox-action@main"
+        with:
+          github-access-token:    "${{ secrets.NIX_GIT_TOKEN }}"
+          substituter:            "s3://flox-store"
+          substituter-key:        "${{ secrets.FLOX_STORE_PUBLIC_NIX_SECRET_KEY }}"
+          aws-access-key-id:      "${{ secrets.AWS_ACCESS_KEY_ID }}"
+          aws-secret-access-key:  "${{ secrets.AWS_SECRET_ACCESS_KEY }}"
+          ssh-key:                "${{ secrets.FLOXBOT_SSH_KEY }}"
+
+      - name: "Configure Nix"
+        run: |
+          sudo echo 
+          {
+            echo "experimental-features = nix-command flakes";
+          } | sudo tee -a /etc/nix/nix.conf >/dev/null
+
+      - name: "Run Build"
+        run: |
+          pushd ./env-builder
+          nix develop -L \
+            --accept-flake-config \
+            --no-update-lock-file \
+            '.#env-builder-ci' \
+              --command make -j4
+          popd
+
+      - name: "Build Tests"
+        run: |
+          pushd ./env-builder
+          nix develop -L \
+            --accept-flake-config \
+            --no-update-lock-file \
+            '.#env-builder-ci' \
+              --command make tests -j4
+          popd
+
+      - name: "Run Tests"
+        run: |
+          pushd ./env-builder
+          nix develop -L \
+            --accept-flake-config \
+            --no-update-lock-file \
+            '.#env-builder-ci' \
+              --command make check
+          popd
+
   pkgdb-tests:
     name: "Pkgdb Tests"
     runs-on: ${{ matrix.os }}
@@ -95,15 +157,14 @@ jobs:
           done
           popd
 
-      # TODO: only upload when on main branch
-      #- name: "Upload artifact"
-      #  uses: "actions/upload-pages-artifact@v2"
-      #  with:
-      #    path: "pkgdb/docs"
+      - name: "Upload artifact"
+        uses: "actions/upload-pages-artifact@v2"
+        with:
+          path: "pkgdb/docs"
 
-      #- name: "Deploy to GitHub Pages"
-      #  id: "deployment"
-      #  uses: "actions/deploy-pages@v2"
+      - name: "Deploy to GitHub Pages"
+        id: "deployment"
+        uses: "actions/deploy-pages@v2"
 
   flox-cargo-test:
     name: "Flox Cargo Tests"
@@ -157,7 +218,7 @@ jobs:
             '.#flox' \
               --command cargo test --locked --workspace -F extra-tests;
 
-  env-builder-tests:
+  env-builder-nix-build:
     name: "EnvBuilder Bats Tests"
     runs-on: "ubuntu-latest"
 
@@ -207,15 +268,23 @@ jobs:
               --print-out-paths \
               '.#flox-env-builder'
 
-      # TODO: we need to run tests on builders
-      #- name: "Run tests"
-      #  run: |
-      #    cd ./env-builder
-      #    nix develop -L \
-      #        --accept-flake-config \
-      #        --no-update-lock-file \
-      #        '.#flox' \
-      #          --command make tests
+      - name: "Build Bats Tests (./#flox-env-builder-tests)"
+        run: |
+          nix build -L \
+              --accept-flake-config \
+              --no-update-lock-file \
+              --print-out-paths \
+              '.#packages.${{ matrix.system }}.flox-env-builder-tests'
+          nix copy --to "$FLOX_SUBSTITUTER" ./result
+
+      - name: "Run Bats Tests (./#flox-env-builder-tests)"
+        run: |
+          ssh github@$REMOTE_SERVER \
+            -oUserKnownHostsFile=$REMOTE_SERVER_USER_KNOWN_HOSTS_FILE \
+            nix run \
+              --accept-flake-config \
+              --extra-experimental-features '"nix-command flakes"' \
+              'github:flox/flox/${{ github.sha }}#packages.${{ matrix.system }}.flox-env-builder-tests'
 
   pkgdb-nix-build:
     name: "Pkgdb Bats Tests"
@@ -296,12 +365,10 @@ jobs:
         run: |
           ssh github@$REMOTE_SERVER \
             -oUserKnownHostsFile=$REMOTE_SERVER_USER_KNOWN_HOSTS_FILE \
-            nix shell nixpkgs#gitMinimal \
-                --extra-experimental-features '"nix-command flakes"' \
-                --command nix run \
-                --accept-flake-config \
-                --extra-experimental-features '"nix-command flakes"' \
-                'github:flox/flox/${{ github.sha }}#packages.${{ matrix.system }}.flox-pkgdb-tests'
+            nix run \
+              --accept-flake-config \
+              --extra-experimental-features '"nix-command flakes"' \
+              'github:flox/flox/${{ github.sha }}#packages.${{ matrix.system }}.flox-pkgdb-tests'
 
   flox-nix-build:
     name: "Flox Bats Tests"
