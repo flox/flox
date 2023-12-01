@@ -3,6 +3,8 @@
   lib,
   bats,
   tree,
+  findutils,
+  jq,
   coreutils,
   nix,
   git,
@@ -22,6 +24,8 @@
     batsWith
     coreutils
     nix
+    jq
+    findutils
     git
     tree
   ];
@@ -35,8 +39,6 @@ in
     WORKDIR=$(mktemp -d -t flox-env-builder-tests-XXXXXX)
     cp -R ${./../..}/env-builder/* $WORKDIR
     cd $WORKDIR
-
-    tree $WORKDIR/tests
 
     usage() {
           cat << EOF
@@ -82,8 +84,13 @@ in
       shift;
     done
 
+    set +x
     export ENV_BUILDER;
     export PKGDB=${flox-pkgdb}/bin/pkgdb;
+    chmod -R +w tests/fixtures/lockfiles
+    for i in $(find tests/ -name "*.toml"); do
+      $PKGDB manifest lock --ga-registry "$i" | jq > "$(dirname $i)/$(basename $i toml)lock"
+    done
 
     # Default flag values
     : "''${TESTS_DIR:=$PWD${testsDir}}";
