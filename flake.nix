@@ -126,6 +126,7 @@
       flox-src = callPackage ./pkgs/flox-src {};
       flox-tests = callPackage ./pkgs/flox-tests {};
       flox-pkgdb = callPackage ./pkgs/flox-pkgdb {};
+      flox-pkgdb-tests = callPackage ./pkgs/flox-pkgdb-tests {};
     };
 
     overlays.default =
@@ -162,11 +163,12 @@
       inherit
         (pkgs)
         flox
-        flox-pkgdb
+        flox-tests
         flox-env-builder
+        flox-pkgdb
+        flox-pkgdb-tests
         flox-bash
         flox-gh
-        flox-tests
         ;
       default = pkgs.flox;
       flox-tests-ci = pkgs.flox-tests.override {

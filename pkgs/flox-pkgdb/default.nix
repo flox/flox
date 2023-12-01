@@ -43,7 +43,6 @@ stdenv.mkDerivation {
         ".envrc"
         ".github"
         "LICENSE"
-        "tests" # Tests require internet so there's no point in including them
       ];
       ext = let
         m = builtins.match ".*\\.([^.]+)" name;
@@ -90,6 +89,11 @@ stdenv.mkDerivation {
   doInstallCheck = false;
   outputs = ["out" "dev"];
   meta.mainProgram = "pkgdb";
+  postInstall = ''
+    make tests
+    mkdir -p $dev/bin
+    cp tests/is_sqlite3 $dev/bin/is_sqlite3
+  '';
 }
 # ---------------------------------------------------------------------------- #
 #

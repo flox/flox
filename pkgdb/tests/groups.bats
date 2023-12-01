@@ -73,7 +73,7 @@ jq_edit() {
 @test "'pkgdb manifest lock' singleton groups with no previous lock" {
   setup_project;
 
-  run sh -c 'pkgdb manifest lock manifest.json > manifest.lock;';
+  run sh -c '$PKGDB manifest lock manifest.json > manifest.lock;';
   assert_success;
 
   run jq -r '.packages["x86_64-linux"].nodejsOld.input.attrs.rev' manifest.lock;
@@ -102,7 +102,7 @@ jq_edit() {
   jq_edit manifest.json '.install.nodejsOld|=del( .["package-group"] )
                          |.install.nodejsNew|=del( .["package-group"] )';
 
-  run sh -c 'pkgdb manifest lock manifest.json > manifest.lock;';
+  run sh -c '$PKGDB manifest lock manifest.json > manifest.lock;';
   assert_failure;
 }
 
@@ -117,7 +117,7 @@ jq_edit() {
 
   jq_edit manifest.json '.install.nodejsNew|=del( .["package-group"] )';
 
-  run sh -c 'pkgdb manifest lock manifest.json > manifest.lock;';
+  run sh -c '$PKGDB manifest lock manifest.json > manifest.lock;';
   assert_success;
 
   run jq -r '.packages["x86_64-linux"].nodejsOld.input.attrs.rev' manifest.lock;
@@ -150,7 +150,7 @@ jq_edit() {
 
   jq_edit manifest.json '.install|=del( .nodejsNew )';
 
-  run sh -c 'pkgdb manifest lock manifest.json|tee manifest.lock;';
+  run sh -c '$PKGDB manifest lock manifest.json|tee manifest.lock;';
   assert_success;
 
   run jq -r '.packages["x86_64-linux"].nodejsOld.input.attrs.rev' manifest.lock;
@@ -167,7 +167,7 @@ jq_edit() {
 
   # This doesn't have `pipefail' so we will always get a `manifest.lock2'
   # even if resolution fails.
-  run sh -c 'pkgdb manifest lock --lockfile manifest.lock manifest.json  \
+  run sh -c '$PKGDB manifest lock --lockfile manifest.lock manifest.json  \
                |tee manifest.lock2;';
   assert_success;
 
@@ -176,7 +176,7 @@ jq_edit() {
 
   # Making the package optional fixes makes it possible to resolve.
   jq_edit manifest.json '.install.nodejsNew.optional=true';
-  run sh -c 'pkgdb manifest lock --lockfile manifest.lock manifest.json  \
+  run sh -c '$PKGDB manifest lock --lockfile manifest.lock manifest.json  \
                |tee manifest.lock3;';
   assert_success;
 
@@ -197,7 +197,7 @@ jq_edit() {
   jq_edit manifest.json '.install|=del( .nodejs )
                          |.install.nodejsNew|=del( .["package-group"] )';
 
-  run sh -c 'pkgdb manifest lock manifest.json|tee manifest.lock;';
+  run sh -c '$PKGDB manifest lock manifest.json|tee manifest.lock;';
   assert_success;
 
   run jq -r '.packages["x86_64-linux"].nodejsOld.input.attrs.rev' manifest.lock;
@@ -214,7 +214,7 @@ jq_edit() {
 
   # This doesn't have `pipefail' so we will always get a `manifest.lock2'
   # even if resolution fails.
-  run sh -c 'pkgdb manifest lock --lockfile manifest.lock manifest.json  \
+  run sh -c '$PKGDB manifest lock --lockfile manifest.lock manifest.json  \
                |tee manifest.lock2;';
   assert_success;
 
