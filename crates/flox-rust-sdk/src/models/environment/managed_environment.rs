@@ -158,13 +158,10 @@ impl Environment for ManagedEnvironment {
         Ok(self.out_link(flox))
     }
 
-    fn parent_path(&self) -> Result<String, EnvironmentError2> {
+    fn parent_path(&self) -> Result<PathBuf, EnvironmentError2> {
         let mut path = self.path.clone();
         if path.pop() {
-            let path = path
-                .to_str()
-                .ok_or(EnvironmentError2::PathNotString(path.clone()))?;
-            Ok(path.to_string())
+            Ok(path)
         } else {
             Err(EnvironmentError2::InvalidPath(path))
         }

@@ -23,7 +23,8 @@ use flox_rust_sdk::models::environment::{
     DOT_FLOX,
     ENVIRONMENT_POINTER_FILENAME,
     FLOX_ACTIVE_ENVIRONMENTS_VAR,
-    FLOX_ENV_VAR, FLOX_PROMPT_ENVIRONMENTS_VAR,
+    FLOX_ENV_VAR,
+    FLOX_PROMPT_ENVIRONMENTS_VAR,
 };
 use flox_rust_sdk::models::floxmetav2::FloxmetaV2Error;
 use flox_rust_sdk::models::manifest::list_packages;
@@ -236,13 +237,12 @@ impl Activate {
 
         // Add to FLOX_ACTIVE_ENVIRONMENTS so we can detect what environments are active.
         let parent_path = environment.parent_path()?;
-        if parent_path.contains(':') {
-            bail!("Cannot activate environment that contains ':' in its path: {parent_path}");
-        }
-        let flox_active_environments = env::var(FLOX_ACTIVE_ENVIRONMENTS_VAR)
-            .map_or(parent_path.clone(), |active_environments| {
-                format!("{parent_path}:{active_environments}")
-            });
+        let mut active_environments = vec![parent_path];
+        if let Ok(existing_environments) = env::var(FLOX_ACTIVE_ENVIRONMENTS_VAR) {
+            active_environments.extend(env::split_paths(&existing_environments));
+        };
+        let flox_active_environments = env::join_paths(active_environments)
+            .context("Cannot activate environment because its path contains an invalid character")?;
 
         // TODO more sophisticated detection?
         let shell = if let Ok(shell) = env::var("SHELL") {
@@ -407,7 +407,11 @@ fn environment_description(environment: &ConcreteEnvironment) -> Result<String, 
             )
         },
         ConcreteEnvironment::Path(environment) => {
-            format!("{} at {}", environment.name(), environment.parent_path()?)
+            format!(
+                "{} at {}",
+                environment.name(),
+                environment.parent_path()?.to_string_lossy()
+            )
         },
         _ => todo!(),
     })

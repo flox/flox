@@ -65,7 +65,7 @@ impl Environment for RemoteEnvironment {
     }
 
     #[allow(unused)]
-    fn parent_path(&self) -> Result<String, EnvironmentError2> {
+    fn parent_path(&self) -> Result<PathBuf, EnvironmentError2> {
         todo!()
     }
 

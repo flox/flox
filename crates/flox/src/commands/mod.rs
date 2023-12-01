@@ -14,10 +14,10 @@ use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironment;
 use flox_rust_sdk::models::environment::path_environment::{Original, PathEnvironment};
 use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironment;
 use flox_rust_sdk::models::environment::{
-    last_activated_environment,
     Environment,
     EnvironmentPointer,
     DOT_FLOX,
+    FLOX_ACTIVE_ENVIRONMENTS_VAR,
 };
 use flox_rust_sdk::models::environment_ref;
 use flox_rust_sdk::nix::command_line::NixCommandLine;
@@ -454,7 +454,7 @@ impl EnvironmentSelect {
             // directory.
             // TODO: needs design - do we want to search up?
             EnvironmentSelect::Unspecified => {
-                let maybe_activated = last_activated_environment();
+                let maybe_activated = Self::last_activated_environment();
                 let current_dir = env::current_dir().context("could not get current directory")?;
                 let maybe_current_pointer = EnvironmentPointer::open(&current_dir);
                 match (maybe_activated, maybe_current_pointer) {
@@ -511,6 +511,19 @@ impl EnvironmentSelect {
             },
         };
         Ok(env)
+    }
+
+    /// Determine the path to most recently activated environment.
+    ///
+    /// When inside a `flox activate` shell, flox stores the path to the
+    /// activated environment in `$FLOX_ACTIVE_ENVIRONMENTS`. Environments which
+    /// are activated while in a `flox activate` shell, are prepended - the most
+    /// recently activated environment is the _first in the list of environments.
+    /// TODO: how will we handle remote environments?
+    fn last_activated_environment() -> Option<PathBuf> {
+        env::var(FLOX_ACTIVE_ENVIRONMENTS_VAR)
+            .ok()
+            .and_then(|active| env::split_paths(&active).next())
     }
 }
 

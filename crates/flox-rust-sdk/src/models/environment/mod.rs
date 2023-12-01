@@ -105,10 +105,11 @@ pub trait Environment {
 
     /// Directory containing .flox
     ///
-    /// This should not be used for anything internal, but it is stored in
-    /// FLOX_ACTIVE_ENVIRONMENTS and printed to users so that users don't have
-    /// to see the trailing .flox
-    fn parent_path(&self) -> Result<String, EnvironmentError2>;
+    /// For anything internal, path should be used instead. `parent_path` is
+    /// stored in FLOX_ACTIVE_ENVIRONMENTS and printed to users so that users
+    /// don't have to see the trailing .flox
+    /// TODO: figure out what to store for remote environments
+    fn parent_path(&self) -> Result<PathBuf, EnvironmentError2>;
 
     /// Returns the environment name
     fn name(&self) -> EnvironmentName;
@@ -399,8 +400,6 @@ pub enum EnvironmentError2 {
     },
     #[error("invalid internal state; couldn't remove last element from path: {0}")]
     InvalidPath(PathBuf),
-    #[error("couldn't convert path to string: {0}")]
-    PathNotString(PathBuf),
 }
 
 /// Copy a whole directory recursively ignoring the original permissions
@@ -496,22 +495,6 @@ pub fn find_dot_flox(initial_dir: &Path) -> Result<Option<PathBuf>, EnvironmentE
         }
     }
     Ok(None)
-}
-
-pub fn last_activated_environment() -> Option<PathBuf> {
-    match env::var(FLOX_ACTIVE_ENVIRONMENTS_VAR) {
-        Err(_) => None,
-        Ok(active_environments) if active_environments.is_empty() => None,
-        Ok(active_environments) => {
-            Some(PathBuf::from(
-                active_environments
-                    .split_once(':')
-                    .map(|(last, _)| last)
-                    // If there's no colon, only one environment is active.
-                    .unwrap_or(&active_environments),
-            ))
-        },
-    }
 }
 
 /// Returns the path to the manifest for the given environment and optionally the path to the lockfile
