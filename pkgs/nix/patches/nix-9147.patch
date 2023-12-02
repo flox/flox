@@ -1,0 +1,52 @@
+diff --git a/src/libutil/json-utils.hh b/src/libutil/json-utils.hh
+index 77c63595c..740168f8f 100644
+--- a/src/libutil/json-utils.hh
++++ b/src/libutil/json-utils.hh
+@@ -77,24 +77,30 @@ namespace nlohmann {
+  * round trip. We do that with a static assert.
+  */
+ template<typename T>
+-struct adl_serializer<std::optional<T>> {
+-    static std::optional<T> from_json(const json & json) {
+-        static_assert(
+-            nix::json_avoids_null<T>::value,
+-            "null is already in use for underlying type's JSON");
+-        return json.is_null()
+-            ? std::nullopt
+-            : std::optional { adl_serializer<T>::from_json(json) };
++      /** @brief Optional types to/from JSON. */
++  struct adl_serializer<std::optional<T>> {
++
++    /**
++     *  @brief Convert an optional type to a JSON type  treating `std::nullopt`
++     *         as `null`.
++     */
++      static void
++    to_json( json & jto, const std::optional<T> & opt )
++    {
++      if ( opt.has_value() ) { jto = * opt; }
++      else                   { jto = nullptr; }
+     }
+-    static void to_json(json & json, std::optional<T> t) {
+-        static_assert(
+-            nix::json_avoids_null<T>::value,
+-            "null is already in use for underlying type's JSON");
+-        if (t)
+-            adl_serializer<T>::to_json(json, *t);
+-        else
+-            json = nullptr;
++
++    /**
++     * @brief Convert a JSON type to an `optional<T>` treating
++     *        `null` as `std::nullopt`.
++     */
++      static void
++    from_json( const json & jfrom, std::optional<T> & opt )
++    {
++      if ( jfrom.is_null() ) { opt = std::nullopt; }
++      else { opt = std::make_optional( jfrom.template get<T>() ); }
+     }
+-};
+ 
++  };  /* End struct `adl_serializer<std::optional<T>>' */
+ }

@@ -45,8 +45,11 @@ pub const GLOBAL_MANIFEST_TEMPLATE: &str = env!("GLOBAL_MANIFEST_TEMPLATE");
 pub const GLOBAL_MANIFEST_FILENAME: &str = "global-manifest.toml";
 pub const MANIFEST_FILENAME: &str = "manifest.toml";
 pub const LOCKFILE_FILENAME: &str = "manifest.lock";
-pub const PATH_ENV_GCROOTS_DIR_NAME: &str = "run";
+pub const GCROOTS_DIR_NAME: &str = "run";
 pub const ENV_DIR_NAME: &str = "env";
+pub const FLOX_ENV_VAR: &str = "FLOX_ENV";
+pub const FLOX_ACTIVE_ENVIRONMENTS_VAR: &str = "FLOX_ACTIVE_ENVIRONMENTS";
+pub const FLOX_PROMPT_ENVIRONMENTS_VAR: &str = "FLOX_PROMPT_ENVIRONMENTS";
 
 pub enum InstalledPackage {
     Catalog(FloxTriple, CatalogEntry),
@@ -99,6 +102,14 @@ pub trait Environment {
     /// dynamically, i.e. so that install/edit can modify the environment
     /// without requiring reactivation.
     async fn activation_path(&mut self, flox: &Flox) -> Result<PathBuf, EnvironmentError2>;
+
+    /// Directory containing .flox
+    ///
+    /// For anything internal, path should be used instead. `parent_path` is
+    /// stored in FLOX_ACTIVE_ENVIRONMENTS and printed to users so that users
+    /// don't have to see the trailing .flox
+    /// TODO: figure out what to store for remote environments
+    fn parent_path(&self) -> Result<PathBuf, EnvironmentError2>;
 
     /// Returns the environment name
     fn name(&self) -> EnvironmentName;
@@ -387,6 +398,8 @@ pub enum EnvironmentError2 {
         #[source]
         source: std::io::Error,
     },
+    #[error("invalid internal state; couldn't remove last element from path: {0}")]
+    InvalidPath(PathBuf),
 }
 
 /// Copy a whole directory recursively ignoring the original permissions

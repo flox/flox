@@ -1,0 +1,32 @@
+#! /usr/bin/env bash
+# ============================================================================ #
+#
+# Convert `iwyu' output to JSON.
+#
+# ---------------------------------------------------------------------------- #
+
+_as_me='iwyu-to-json';
+
+SCRIPT_DIR="${BASH_SOURCE[0]}";
+SCRIPT_DIR="${SCRIPT_DIR%/*}";
+
+_TARGET="${1:-$PWD/iwyu.log}";
+
+if ! [[ -f "$_TARGET" ]]; then
+  echo "$_as_me: You must provide a path to a \`iwyu.log' file" >&2;
+  exit 1;
+fi
+
+if ! [[ -r "$_TARGET" ]]; then
+  echo "$_as_me: Cannot read provided file: $_TARGET" >&2;
+  exit 1;
+fi
+
+awk -f "$SCRIPT_DIR/iwyu-to-json.awk" "$_TARGET";
+
+
+# ---------------------------------------------------------------------------- #
+#
+#
+#
+# ============================================================================ #
