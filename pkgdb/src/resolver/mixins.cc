@@ -47,78 +47,194 @@ namespace flox::resolver {
     }
 
 
-/* -------------------------------------------------------------------------- */
+/* -------------------------- non virtual set/get --------------------------- */
 
 void
-EnvironmentMixin::initGlobalManifest( GlobalManifestRaw manifestRaw )
+EnvironmentMixin::setGlobalManifestRaw(
+  std::optional<std::filesystem::path> maybePath )
 {
-  ENV_MIXIN_THROW_IF_SET( globalManifest )
-  this->globalManifest = GlobalManifest( std::move( manifestRaw ) );
-}
 
-void
-EnvironmentMixin::initGlobalManifestPath( std::filesystem::path path )
-{
-  ENV_MIXIN_THROW_IF_SET( globalManifestPath )
-  this->globalManifestPath = std::move( path );
-  this->initGlobalManifest(
-    readManifestFromPath<GlobalManifestRaw>( *this->globalManifestPath ) );
-}
-
-
-/* -------------------------------------------------------------------------- */
-
-void
-EnvironmentMixin::initManifest( ManifestRaw manifestRaw )
-{
-  ENV_MIXIN_THROW_IF_SET( manifest )
-  this->manifest = EnvironmentManifest( std::move( manifestRaw ) );
-}
-
-void
-EnvironmentMixin::initManifestPath( std::filesystem::path path )
-{
-  ENV_MIXIN_THROW_IF_SET( manifestPath )
-  this->manifestPath = std::move( path );
-  this->initManifest(
-    readManifestFromPath<ManifestRaw>( *this->manifestPath ) );
-}
-
-
-/* -------------------------------------------------------------------------- */
-
-void
-EnvironmentMixin::initLockfile( LockfileRaw lockfileRaw )
-{
-  ENV_MIXIN_THROW_IF_SET( lockfile );
-  this->lockfile = Lockfile( std::move( lockfileRaw ) );
-}
-
-void
-EnvironmentMixin::initLockfilePath( std::filesystem::path path )
-{
-  if ( ! std::filesystem::exists( path ) )
+  if ( ! maybePath.has_value() )
     {
-      throw InvalidLockfileException( "no such path: " + path.string() );
+      this->globalManifestRaw = std::nullopt;
+      return;
     }
-  ENV_MIXIN_THROW_IF_SET( lockfilePath )
-  this->lockfilePath = std::move( path );
-  this->initLockfile( readAndCoerceJSON( *this->lockfilePath ) );
+
+  if ( this->globalManifest.has_value() )
+    {
+      throw EnvironmentMixinException(
+        "global manifest path cannot be set after global manifest was "
+        "initialized" );
+    }
+
+  this->globalManifestRaw
+    = readManifestFromPath<GlobalManifestRaw>( *maybePath );
+}
+
+void
+EnvironmentMixin::setGlobalManifestRaw(
+  std::optional<GlobalManifestRaw> maybeRaw )
+{
+
+  if ( ! maybeRaw.has_value() )
+    {
+      this->globalManifestRaw = std::nullopt;
+      return;
+    }
+
+  if ( this->globalManifest.has_value() )
+    {
+      throw EnvironmentMixinException(
+        "global manifest path cannot be set after global manifest was "
+        "initialized" );
+    }
+
+  this->globalManifestRaw = std::move( maybeRaw );
+}
+
+
+const std::optional<GlobalManifest>
+EnvironmentMixin::getGlobalManifest()
+{
+  if ( ! this->globalManifest.has_value() )
+    {
+      auto manifestRaw = this->getGlobalManifestRaw();
+      if ( ! manifestRaw.has_value() ) { return std::nullopt; }
+      this->globalManifest = this->initGlobalManifest( *manifestRaw );
+    }
+
+  return this->globalManifest;
 }
 
 
 /* -------------------------------------------------------------------------- */
+
+void
+EnvironmentMixin::setManifestRaw(
+  std::optional<std::filesystem::path> maybePath )
+{
+
+  if ( ! maybePath.has_value() )
+    {
+      this->manifestRaw = std::nullopt;
+      return;
+    }
+
+  if ( this->manifest.has_value() )
+    {
+      throw EnvironmentMixinException(
+        " manifest path cannot be set after  manifest was "
+        "initialized" );
+    }
+
+  this->manifestRaw = readManifestFromPath<ManifestRaw>( *maybePath );
+}
+
+void
+EnvironmentMixin::setManifestRaw( std::optional<ManifestRaw> maybeRaw )
+{
+
+  if ( ! maybeRaw.has_value() )
+    {
+      this->manifestRaw = std::nullopt;
+      return;
+    }
+
+  if ( this->manifest.has_value() )
+    {
+      throw EnvironmentMixinException(
+        " manifest path cannot be set after  manifest was "
+        "initialized" );
+    }
+
+  this->manifestRaw = std::move( maybeRaw );
+}
 
 const EnvironmentManifest &
 EnvironmentMixin::getManifest()
 {
   if ( ! this->manifest.has_value() )
     {
-      throw EnvironmentMixinException(
-        "you must provide an inline manifest or the path to a "
-        "manifest file" );
+      if ( auto manifestRaw = this->getManifestRaw(); manifestRaw.has_value() )
+        {
+          this->manifest = this->initManifest( *manifestRaw );
+        }
+      else
+        {
+          throw EnvironmentMixinException(
+            "raw manifest or manifest path must be set before manifest can be "
+            "initialized" );
+        }
     }
+
   return *this->manifest;
+}
+
+
+/* -------------------------------------------------------------------------- */
+
+void
+EnvironmentMixin::setLockfileRaw( std::filesystem::path path )
+{
+  if ( ! std::filesystem::exists( path ) )
+    {
+      throw InvalidLockfileException( "no such path: " + path.string() );
+    }
+
+  LockfileRaw lockfileRaw = readAndCoerceJSON( path );
+  this->setLockfileRaw( lockfileRaw );
+}
+
+void
+EnvironmentMixin::setLockfileRaw( LockfileRaw lockfileRaw )
+{
+  if ( this->lockfile.has_value() )
+    {
+      throw EnvironmentMixinException(
+        "lockfile path cannot be set after lockfile was "
+        "initialized" );
+    }
+  this->lockfileRaw = std::move( lockfileRaw );
+}
+
+const std::optional<Lockfile> &
+EnvironmentMixin::getLockfile()
+{
+  if ( ! this->lockfile.has_value() )
+    {
+      if ( auto lockfileRaw = this->getLockfileRaw(); lockfileRaw.has_value() )
+        {
+          this->lockfile = this->initLockfile( *lockfileRaw );
+        }
+    }
+
+  return this->lockfile;
+}
+
+/* -------------------------------------------------------------------------- */
+
+Lockfile
+EnvironmentMixin::initLockfile( LockfileRaw lockfileRaw )
+{
+  return Lockfile( std::move( lockfileRaw ) );
+}
+
+
+/* ------------------------ virtual specific impls -------------------------- */
+
+GlobalManifest
+EnvironmentMixin::initGlobalManifest( GlobalManifestRaw manifestRaw )
+{
+  return GlobalManifest( std::move( manifestRaw ) );
+}
+
+
+/* -------------------------------------------------------------------------- */
+
+EnvironmentManifest
+EnvironmentMixin::initManifest( ManifestRaw manifestRaw )
+{
+  return EnvironmentManifest( std::move( manifestRaw ) );
 }
 
 
@@ -148,7 +264,7 @@ EnvironmentMixin::addGlobalManifestFileOption(
     .help( "the path to the user's global `manifest.{toml,yaml,json}' file." )
     .metavar( "PATH" )
     .action( [&]( const std::string & strPath )
-             { this->initGlobalManifestPath( nix::absPath( strPath ) ); } );
+             { this->setGlobalManifestRaw( nix::absPath( strPath ) ); } );
 }
 
 
@@ -161,7 +277,7 @@ EnvironmentMixin::addManifestFileOption( argparse::ArgumentParser & parser )
     .help( "the path to the `manifest.{toml,yaml,json}' file." )
     .metavar( "PATH" )
     .action( [&]( const std::string & strPath )
-             { this->initManifestPath( nix::absPath( strPath ) ); } );
+             { this->setManifestRaw( nix::absPath( strPath ) ); } );
 }
 
 
@@ -176,12 +292,12 @@ EnvironmentMixin::addManifestFileArg( argparse::ArgumentParser & parser,
         .help( "the path to the project's `manifest.{toml,yaml,json}' file." )
         .metavar( "MANIFEST-PATH" )
         .action( [&]( const std::string & strPath )
-                 { this->initManifestPath( nix::absPath( strPath ) ); } );
+                 { this->setManifestRaw( nix::absPath( strPath ) ); } );
   return required ? arg.required() : arg;
 }
 
 
-/* -------------------------------------------------------------------------- */
+/* ---------------------- EnvironmentMixin arguments ------------------------ */
 
 argparse::Argument &
 EnvironmentMixin::addLockfileOption( argparse::ArgumentParser & parser )
@@ -190,9 +306,8 @@ EnvironmentMixin::addLockfileOption( argparse::ArgumentParser & parser )
     .help( "the path to the projects existing `manifest.lock' file." )
     .metavar( "PATH" )
     .action( [&]( const std::string & strPath )
-             { this->initLockfilePath( nix::absPath( strPath ) ); } );
+             { this->setLockfileRaw( nix::absPath( strPath ) ); } );
 }
-
 
 /* -------------------------------------------------------------------------- */
 
@@ -210,26 +325,23 @@ EnvironmentMixin::addFloxDirectoryOption( argparse::ArgumentParser & parser )
         std::filesystem::path dir( nix::absPath( strPath ) );
         /* Try to locate lockfile. */
         auto path = dir / "manifest.lock";
-        if ( std::filesystem::exists( path ) )
-          {
-            this->initLockfilePath( path );
-          }
+        if ( std::filesystem::exists( path ) ) { this->setLockfileRaw( path ); }
 
         /* Locate manifest. */
         // NOLINTBEGIN(bugprone-branch-clone)
         if ( path = dir / "manifest.json"; std::filesystem::exists( path ) )
           {
-            this->initManifestPath( path );
+            this->setManifestRaw( path );
           }
         else if ( path = dir / "manifest.toml";
                   std::filesystem::exists( path ) )
           {
-            this->initManifestPath( path );
+            this->setManifestRaw( path );
           }
         else if ( path = dir / "manifest.yaml";
                   std::filesystem::exists( path ) )
           {
-            this->initManifestPath( path );
+            this->setManifestRaw( path );
           }
         else
           {
@@ -242,88 +354,42 @@ EnvironmentMixin::addFloxDirectoryOption( argparse::ArgumentParser & parser )
       } );
 }
 
+/* ---------------- EnvironmentMixin init overrides ------------------------- */
 
-/* -------------------------------------------------------------------------- */
-
-void
+GlobalManifest
 GAEnvironmentMixin::initGlobalManifest( GlobalManifestRaw manifestRaw )
 {
   if ( this->gaRegistry )
     {
       (void) static_cast<GlobalManifestRawGA>( manifestRaw );
+
       if ( ! manifestRaw.registry.has_value() )
         {
           manifestRaw.registry = getGARegistry();
         }
     }
-  this->EnvironmentMixin::initGlobalManifest( std::move( manifestRaw ) );
+  return this->EnvironmentMixin::initGlobalManifest( manifestRaw );
 }
-
 
 /* -------------------------------------------------------------------------- */
 
-void
-GAEnvironmentMixin::initGlobalManifestPath( std::filesystem::path path )
-{
-  if ( this->gaRegistry )
-    {
-      auto manifestRawGA = readManifestFromPath<GlobalManifestRawGA>( path );
-      auto manifestRaw   = static_cast<GlobalManifestRaw>( manifestRawGA );
-      this->setGlobalManifestPath( std::move( path ) );
-      this->EnvironmentMixin::initGlobalManifest( std::move( manifestRaw ) );
-    }
-  else { this->EnvironmentMixin::initGlobalManifestPath( std::move( path ) ); }
-}
-
-
-/* -------------------------------------------------------------------------- */
-
-void
+EnvironmentManifest
 GAEnvironmentMixin::initManifest( ManifestRaw manifestRaw )
 {
   if ( this->gaRegistry )
     {
       (void) static_cast<ManifestRawGA>( manifestRaw );
+
       if ( ! manifestRaw.registry.has_value() )
         {
           manifestRaw.registry = getGARegistry();
         }
     }
-  this->EnvironmentMixin::initManifest( std::move( manifestRaw ) );
+  return this->EnvironmentMixin::initManifest( manifestRaw );
 }
 
 
-/* -------------------------------------------------------------------------- */
-
-void
-GAEnvironmentMixin::initManifestPath( std::filesystem::path path )
-{
-  if ( this->gaRegistry )
-    {
-      auto manifestRawGA = readManifestFromPath<ManifestRawGA>( path );
-      auto manifestRaw   = static_cast<ManifestRaw>( manifestRawGA );
-      this->setManifestPath( std::move( path ) );
-      this->EnvironmentMixin::initManifest( std::move( manifestRaw ) );
-    }
-  else { this->EnvironmentMixin::initManifestPath( std::move( path ) ); }
-}
-
-
-/* -------------------------------------------------------------------------- */
-
-const std::optional<GlobalManifest> &
-GAEnvironmentMixin::getGlobalManifest()
-{
-  if ( ( ! this->EnvironmentMixin::getGlobalManifest().has_value() )
-       && this->gaRegistry )
-    {
-      this->initGlobalManifest( GlobalManifestRaw() );
-    }
-  return this->EnvironmentMixin::getGlobalManifest();
-}
-
-
-/* -------------------------------------------------------------------------- */
+/* --------------------- GAEnvironmentMixin arguments ----------------------- */
 
 argparse::Argument &
 GAEnvironmentMixin::addGARegistryOption( argparse::ArgumentParser & parser )

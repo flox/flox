@@ -135,6 +135,22 @@ setup_file() {
 
 # ---------------------------------------------------------------------------- #
 
+# bats test_tags=manifest:empty, lock:empty
+
+@test "An empty manifest should lock successfully with --ga-registry and without" {
+  run $PKGDB manifest lock "$TDATA/ga1.toml";
+  assert_success;
+
+  run $PKGDB manifest lock --ga-registry "$TDATA/ga1.toml";
+  assert_success;
+
+  run $PKGDB manifest lock  "$TDATA/ga1.toml" --ga-registry;
+  assert_success;
+}
+
+
+# ---------------------------------------------------------------------------- #
+
 # bats test_tags=manifest:ga-registry, lock:ga-registry
 
 @test "'pkgdb manifest lock --ga-registry' provides registry" {
