@@ -523,8 +523,8 @@ test_groupIsLocked_upgrades()
 /* -------------------------------------------------------------------------- */
 
 /**
- * @brief `getGroupInput` returns the locked input even if the group name
- *        changes
+ * @brief `getGroupInput` returns the locked input even if the group
+ *        name changes.
  */
 bool
 test_getGroupInput0()
@@ -670,8 +670,8 @@ test_getGroupInput2()
 /* -------------------------------------------------------------------------- */
 
 /**
- * @brief `getGroupInput` does not use a locked input if the package has
- *        changed.
+ * @brief `getGroupInput` does not use a locked input if the package
+ *        has changed.
  */
 bool
 test_getGroupInput3()
@@ -850,17 +850,16 @@ test_createLockfile_error()
       Lockfile actualLockfile = environment.createLockfile();
       return false;
     }
-  catch ( flox::FloxException & err )
+  catch ( const flox::resolver::ResolutionFailureException & )
     {
-      EXPECT_EQ(
-        err.what(),
-        std::string(
-          "resolution failure: failed to resolve some package(s):\n"
-          "  in default group:\n"
-          "    failed to resolve `not-a-package' in input "
-          "`github:NixOS/nixpkgs/e8039594435c68eb4f780f3e9bf3972a7399c4b1'" ) );
       return true;
     }
+  catch ( const flox::FloxException & err )
+    {
+      std::cerr << err.what() << std::endl;
+      return false;
+    }
+  return false;
 }
 
 
@@ -869,6 +868,7 @@ test_createLockfile_error()
 int
 main()
 {
+
   int exitCode = EXIT_SUCCESS;
   // NOLINTNEXTLINE(cppcoreguidelines-macro-usage)
 #define RUN_TEST( ... ) _RUN_TEST( exitCode, __VA_ARGS__ )

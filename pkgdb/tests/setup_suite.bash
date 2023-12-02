@@ -17,13 +17,13 @@ bats_require_minimum_version '1.5.0';
 # Locate repository root.
 repo_root_setup() {
   if [[ -z "${REPO_ROOT:-}" ]]; then
-    if [[ -d "$PWD/.git" ]] && [[ -d "$PWD/tests" ]]; then
-      REPO_ROOT="$PWD";
+    if [[ -d "$PWD/../.git" ]]; then
+      REPO_ROOT="${PWD%/*}";
     else
       REPO_ROOT="$( git rev-parse --show-toplevel||:; )";
     fi
-    if [[ -z "$REPO_ROOT" ]] && [[ -d "$PWD/tests" ]]; then
-      REPO_ROOT="$PWD";
+    if [[ -z "$REPO_ROOT" ]] && [[ -d "$PWD/src/pkgdb/read.cc" ]]; then
+      REPO_ROOT="${PWD%/*}";
     fi
   fi
   export REPO_ROOT;
@@ -39,7 +39,7 @@ tests_dir_setup() {
   if [[ -z "${TEST_DIR:-}" ]]; then
     case "${BATS_TEST_DIRNAME:-}" in
       */tests) TESTS_DIR="$( readlink -f "$BATS_TEST_DIRNAME"; )"; ;;
-      *)       TESTS_DIR="$REPO_ROOT/tests";                       ;;
+      *)       TESTS_DIR="$REPO_ROOT/pkgdb/tests"; ;;
     esac
     if ! [[ -d "$TESTS_DIR" ]]; then
       echo "tests_dir_setup: \`TESTS_DIR' must be a directory" >&2;
@@ -58,16 +58,16 @@ pkgdb_bin_setup() {
   if [[ -n "${__PD_RAN_PKGDB_BIN_SETUP:-}" ]]; then return 0; fi
   if [[ -z "${PKGDB:-}" ]]; then
     repo_root_setup;
-    if [[ -x "$REPO_ROOT/bin/pkgdb" ]]; then
-      PKGDB="$REPO_ROOT/bin/pkgdb";
-    elif [[ -x "$REPO_ROOT/result/bin/pkgdb" ]]; then
-      PKGDB="$REPO_ROOT/result/bin/pkgdb";
+    if [[ -x "$REPO_ROOT/pkgdb/bin/pkgdb" ]]; then
+      PKGDB="$REPO_ROOT/pkgdb/bin/pkgdb";
+    elif [[ -x "$REPO_ROOT/pkgdb/result/bin/pkgdb" ]]; then
+      PKGDB="$REPO_ROOT/pkgdb/result/bin/pkgdb";
     else  # Build
       (
         cd "$REPO_ROOT" >/dev/null 2>&1||return 1;
-        nix develop -c make -j8;
+        nix develop '.#pkgdb' -c make -j;
       );
-      PKGDB="$REPO_ROOT/bin/pkgdb";
+      PKGDB="$REPO_ROOT/pkgdb/bin/pkgdb";
     fi
   fi
   export PKGDB;

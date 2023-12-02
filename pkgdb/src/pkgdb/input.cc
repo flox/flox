@@ -10,16 +10,17 @@
 #include <assert.h>
 #include <list>
 #include <map>
+#include <optional>
+#include <ostream>
+#include <tuple>
+
 #include <nix/error.hh>
 #include <nix/eval.hh>
 #include <nix/fmt.hh>
 #include <nix/logging.hh>
 #include <nix/nixexpr.hh>
 #include <nlohmann/json.hpp>
-#include <optional>
-#include <ostream>
 #include <sqlite3pp.hh>
-#include <tuple>
 
 #include "flox/core/exceptions.hh"
 #include "flox/pkgdb/input.hh"
