@@ -1,0 +1,88 @@
+{
+  "lockfile-version": 0,
+  "manifest": {
+    "install": {
+      "nodejs": null
+    },
+    "options": {
+      "systems": [
+        "x86_64-linux"
+      ]
+    },
+    "registry": {
+      "defaults": {
+        "subtrees": null
+      },
+      "inputs": {
+        "nixpkgs": {
+          "from": {
+            "owner": "NixOS",
+            "repo": "nixpkgs",
+            "rev": "e8039594435c68eb4f780f3e9bf3972a7399c4b1",
+            "type": "github"
+          },
+          "subtrees": [
+            "legacyPackages"
+          ]
+        }
+      },
+      "priority": [
+        "nixpkgs"
+      ]
+    }
+  },
+  "packages": {
+    "x86_64-linux": {
+      "nodejs": {
+        "attr-path": [
+          "legacyPackages",
+          "x86_64-linux",
+          "nodejs"
+        ],
+        "info": {
+          "broken": false,
+          "license": "MIT",
+          "pname": "nodejs",
+          "unfree": false,
+          "version": "18.16.0"
+        },
+        "input": {
+          "attrs": {
+            "lastModified": 1685979279,
+            "narHash": "sha256-1UGacsv5coICyvAzwuq89v9NsS00Lo8sz22cDHwhnn8=",
+            "owner": "NixOS",
+            "repo": "nixpkgs",
+            "rev": "e8039594435c68eb4f780f3e9bf3972a7399c4b1",
+            "type": "github"
+          },
+          "fingerprint": "5fde12e3424840cc2752dae09751b09b03f5a33c3ec4de672fc89d236720bdc7",
+          "url": "github:NixOS/nixpkgs/e8039594435c68eb4f780f3e9bf3972a7399c4b1"
+        },
+        "priority": 5
+      }
+    }
+  },
+  "registry": {
+    "defaults": {
+      "subtrees": null
+    },
+    "inputs": {
+      "nixpkgs": {
+        "from": {
+          "lastModified": 1685979279,
+          "narHash": "sha256-1UGacsv5coICyvAzwuq89v9NsS00Lo8sz22cDHwhnn8=",
+          "owner": "NixOS",
+          "repo": "nixpkgs",
+          "rev": "e8039594435c68eb4f780f3e9bf3972a7399c4b1",
+          "type": "github"
+        },
+        "subtrees": [
+          "legacyPackages"
+        ]
+      }
+    },
+    "priority": [
+      "nixpkgs"
+    ]
+  }
+}
