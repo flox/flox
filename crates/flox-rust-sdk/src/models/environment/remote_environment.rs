@@ -64,6 +64,11 @@ impl Environment for RemoteEnvironment {
         todo!()
     }
 
+    #[allow(unused)]
+    fn parent_path(&self) -> Result<PathBuf, EnvironmentError2> {
+        todo!()
+    }
+
     /// Returns the environment name
     #[allow(unused)]
     fn name(&self) -> EnvironmentName {

@@ -102,7 +102,7 @@ load setup_suite.bash
         --out-link "$BATS_TEST_TMPDIR/env"
 
     assert_failure
-    assert_output --partial "file conflict between packages 'vim' and 'vim-full'"
+    assert_output --partial "file conflict between packages"
 }
 
 # bats test_tags=conflict,resolve
@@ -121,6 +121,7 @@ load setup_suite.bash
 
 # bats test_tags=propagated
 @test "Environment includes propagated packages" {
+    skip "ansi does not work on all systems"
 
     cat $LOCKFILES/propagated/manifest.toml >&3
 

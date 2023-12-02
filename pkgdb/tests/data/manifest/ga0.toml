@@ -1,0 +1,21 @@
+# A manifest that doesn't have a registry so you can use it with --ga-registry
+[options]
+systems = ["x86_64-linux", "aarch64-darwin"]
+
+[install.charasay]
+version = "^2"
+[install.pip]
+path = "python310Packages.pip"
+# Expect failure
+[install.bad]
+optional = true
+
+[vars]
+message = "Howdy"
+message2 = "partner"
+
+[hook]
+script = """
+hello >&2;
+cowsay "$message $message2" >&2;
+"""

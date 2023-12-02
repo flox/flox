@@ -1,0 +1,3 @@
+# A manifest that doesn't have a registry so you can use it with --ga-registry
+[options]
+systems = ["x86_64-linux", "aarch64-darwin"]

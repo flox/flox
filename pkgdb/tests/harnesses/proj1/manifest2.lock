@@ -1,0 +1,88 @@
+{
+  "lockfile-version": 0,
+  "manifest": {
+    "install": {
+      "nodejs": null
+    },
+    "options": {
+      "systems": [
+        "x86_64-linux"
+      ]
+    },
+    "registry": {
+      "defaults": {
+        "subtrees": null
+      },
+      "inputs": {
+        "nixpkgs": {
+          "from": {
+            "owner": "NixOS",
+            "ref": "release-23.05",
+            "repo": "nixpkgs",
+            "type": "github"
+          },
+          "subtrees": [
+            "legacyPackages"
+          ]
+        }
+      },
+      "priority": [
+        "nixpkgs"
+      ]
+    }
+  },
+  "packages": {
+    "x86_64-linux": {
+      "nodejs": {
+        "attr-path": [
+          "legacyPackages",
+          "x86_64-linux",
+          "nodejs"
+        ],
+        "info": {
+          "broken": false,
+          "license": "MIT",
+          "pname": "nodejs",
+          "unfree": false,
+          "version": "18.17.1"
+        },
+        "input": {
+          "attrs": {
+            "lastModified": 1700478853,
+            "narHash": "sha256-5uA6jKckTf+DCbVBNKsmT5pUT/7Apt5tNdpcbLnPzFI=",
+            "owner": "NixOS",
+            "repo": "nixpkgs",
+            "rev": "9faf91e6d0b7743d41cce3b63a8e5c733dc696a3",
+            "type": "github"
+          },
+          "fingerprint": "9ea15e83111e20cb13cf98e8592e09d1356df773b6e87492710d006b9d031486",
+          "url": "github:NixOS/nixpkgs/9faf91e6d0b7743d41cce3b63a8e5c733dc696a3"
+        },
+        "priority": 5
+      }
+    }
+  },
+  "registry": {
+    "defaults": {
+      "subtrees": null
+    },
+    "inputs": {
+      "nixpkgs": {
+        "from": {
+          "lastModified": 1700478853,
+          "narHash": "sha256-5uA6jKckTf+DCbVBNKsmT5pUT/7Apt5tNdpcbLnPzFI=",
+          "owner": "NixOS",
+          "repo": "nixpkgs",
+          "rev": "9faf91e6d0b7743d41cce3b63a8e5c733dc696a3",
+          "type": "github"
+        },
+        "subtrees": [
+          "legacyPackages"
+        ]
+      }
+    },
+    "priority": [
+      "nixpkgs"
+    ]
+  }
+}

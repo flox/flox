@@ -127,6 +127,17 @@ teardown() {
   assert_output --partial "couldn't uninstall 'hello', wasn't previously installed";
 }
 
+@test "'flox install' uses last activated environment" {
+  mkdir 1
+  "$FLOX_CLI" init --dir 1
+  
+  mkdir 2
+  "$FLOX_CLI" init --dir 2
+  
+  SHELL=bash run expect -d "$TESTS_DIR/install/last-activated.exp"
+  assert_success
+}
+
 @test "i5: download package when install command runs" {
   skip "Don't know how to test, check out-link created?"
 }
