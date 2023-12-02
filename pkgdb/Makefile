@@ -166,6 +166,7 @@ bin_SRCS       =  src/main.cc src/repl.cc
 bin_SRCS       += $(addprefix src/pkgdb/,scrape.cc get.cc command.cc)
 bin_SRCS       += $(addprefix src/search/,command.cc)
 bin_SRCS       += $(addprefix src/resolver/,command.cc)
+bin_SRCS       += $(addprefix src/parse/,command.cc)
 lib_SRCS       =  $(filter-out $(bin_SRCS),$(SRCS))
 test_SRCS      =  $(sort $(wildcard tests/*.cc))
 ALL_SRCS       = $(SRCS) $(test_SRCS)
@@ -436,7 +437,7 @@ install: install-dirs install-bin install-lib install-include
 install-dirs: FORCE
 	$(MKDIR_P) $(BINDIR) $(LIBDIR) $(LIBDIR)/pkgconfig;
 	$(MKDIR_P) $(INCLUDEDIR)/flox $(INCLUDEDIR)/flox/core;
-	$(MKDIR_P) $(INCLUDEDIR)/flox/pkgdb $(INCLUDEDIR)/flox/search;
+	$(MKDIR_P) $(INCLUDEDIR)/flox/pkgdb $(INCLUDEDIR)/flox/search $(INCLUDEDIR)/flox/parse;
 	$(MKDIR_P) $(INCLUDEDIR)/flox/resolver $(INCLUDEDIR)/compat;
 
 $(INCLUDEDIR)/%: include/% | install-dirs
@@ -636,7 +637,6 @@ BATS_FILE ?= $(MAKEFILE_DIR)/tests
 bats-check: bin $(TEST_UTILS)
 	PKGDB="$(MAKEFILE_DIR)/bin/pkgdb"                        \
 	IS_SQLITE3="$(MAKEFILE_DIR)/tests/is_sqlite3"            \
-	SEARCH_PARAMS="$(MAKEFILE_DIR)/tests/search-params"      \
 	  bats --print-output-on-failure --verbose-run --timing  \
 	       "$(BATS_FILE)";
 

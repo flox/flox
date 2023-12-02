@@ -126,13 +126,18 @@ struct Subtree
   }
 
   /** @brief Implicitly convert a @a flox::Subtree to a string. */
-  constexpr explicit operator std::string_view() const
+  constexpr explicit
+  operator std::string_view() const
   {
     return to_string( *this );
   }
 
   // NOLINTNEXTLINE
-  constexpr operator subtree_type() const { return this->subtree; }
+  constexpr
+  operator subtree_type() const
+  {
+    return this->subtree;
+  }
 
   /** @brief Compare two @a flox::Subtree for equality. */
   [[nodiscard]] constexpr bool

@@ -23,6 +23,7 @@
 #include "flox/core/command.hh"
 #include "flox/core/exceptions.hh"
 #include "flox/eval.hh"
+#include "flox/parse/command.hh"
 #include "flox/pkgdb/command.hh"
 #include "flox/repl.hh"
 #include "flox/resolver/command.hh"
@@ -54,6 +55,9 @@ run( int argc, char * argv[] )
   flox::resolver::ManifestCommand cmdManifest;
   prog.add_subparser( cmdManifest.getParser() );
 
+  flox::parse::ParseCommand cmdParse;
+  prog.add_subparser( cmdParse.getParser() );
+
   flox::ReplCommand cmdRepl;
   prog.add_subparser( cmdRepl.getParser() );
 
@@ -79,6 +83,7 @@ run( int argc, char * argv[] )
   if ( prog.is_subcommand_used( "list" ) ) { return cmdList.run(); }
   if ( prog.is_subcommand_used( "search" ) ) { return cmdSearch.run(); }
   if ( prog.is_subcommand_used( "manifest" ) ) { return cmdManifest.run(); }
+  if ( prog.is_subcommand_used( "parse" ) ) { return cmdParse.run(); }
   if ( prog.is_subcommand_used( "repl" ) ) { return cmdRepl.run(); }
   if ( prog.is_subcommand_used( "eval" ) ) { return cmdEval.run(); }
 

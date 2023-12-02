@@ -144,6 +144,15 @@ struct PkgQueryArgs
 
 }; /* End struct `PkgQueryArgs' */
 
+/* -------------------------------------------------------------------------- */
+
+/**
+ * @brief Convert an @a flox::pkgdb::PkgQueryArgs to a
+ *              JSON object.
+ */
+void
+to_json( nlohmann::json & jto, const PkgQueryArgs & descriptor );
+
 
 /* -------------------------------------------------------------------------- */
 

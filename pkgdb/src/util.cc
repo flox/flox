@@ -21,6 +21,7 @@
 #include <nlohmann/json.hpp>
 
 #include "flox/core/exceptions.hh"
+#include "flox/core/types.hh"
 #include "flox/core/util.hh"
 
 
@@ -302,6 +303,26 @@ extract_json_errmsg( nlohmann::json::exception & err )
   return userFriendly;
 }
 
+/* -------------------------------------------------------------------------- */
+
+std::string
+displayableGlobbedPath( const flox::AttrPathGlob & attrs )
+{
+  std::vector<std::string> globbed;
+  for ( const std::optional<std::string> & attr : attrs )
+    {
+      if ( attr.has_value() ) { globbed.emplace_back( *attr ); }
+      else { globbed.emplace_back( "*" ); }
+    }
+  auto fold
+    = []( std::string a, std::string b ) { return std::move( a ) + '.' + b; };
+
+  std::string s = std::accumulate( std::next( globbed.begin() ),
+                                   globbed.end(),
+                                   globbed[0],
+                                   fold );
+  return s;
+}
 
 /* -------------------------------------------------------------------------- */
 

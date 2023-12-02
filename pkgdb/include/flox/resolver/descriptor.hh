@@ -44,6 +44,17 @@ struct ManifestDescriptorRaw
 
 public:
 
+  /** The delimiter for providing an input when the descriptor is a string */
+  static const auto inputSigil = ':';
+
+  /** The delimiter for specifying a version when the descriptor is a string */
+  static const auto versionSigil = '@';
+
+  /** The signifier that the version should be treated exactly
+   *  i.e. not a semver range
+   */
+  static const auto exactVersionSigil = '=';
+
   /**
    * Match `name`, `pname`, or `attrName`.
    * Maps to `flox::pkgdb::PkgQueryArgs::pnameOrAttrName`.
@@ -117,6 +128,9 @@ public:
   void
   clear();
 
+  ManifestDescriptorRaw() = default;
+
+  explicit ManifestDescriptorRaw( const std::string_view & descriptor );
 
 }; /* End struct `ManifestDescriptorRaw' */
 
@@ -154,7 +168,54 @@ FLOX_DEFINE_EXCEPTION( ParseManifestDescriptorRawException,
 /* -------------------------------------------------------------------------- */
 
 /**
+ * @brief Validates a single attribute name, `pname`, etc from a globbed
+ * @a flox::AttrPathGlob, returning the attribute name if it is suitable for
+ * appearing as a single attribute in a descriptor.
+ */
+std::optional<std::string>
+validatedSingleAttr( const AttrPathGlob & attrs );
+
+/**
+ * @brief Returns true if any component in the attribute path contains a glob
+ * but is not itself entirely a glob. For example, this would return `true` for
+ * `foo.b*ar.baz`, but not for `foo.*.baz` since `b*ar` contains a glob, but is
+ * not itself entirely a glob.
+ */
+bool
+globInAttrName( const AttrPathGlob & attrs );
+
+/**
+ * @brief Validates a relative attribute path from a globbed
+ * @a flox::AttrPathGlob, returning the string form of the relative path for
+ * use in the @a flox::resolver::ManifestDescriptorRaw.
+ */
+std::vector<std::string>
+validatedRelativePath( const AttrPathGlob &             attrs,
+                       const std::vector<std::string> & strings );
+
+/**
+ * @brief Validates an absolute path from a globbed
+ * @a flox::AttrPathGlob, returning the attribute path if it is suitable for
+ * an absolute path appearing in a descriptor.
+ */
+AttrPathGlob
+validatedAbsolutePath( const AttrPathGlob & attrs );
+
+/**
+ * @brief Returns `true` if the attribute path has enough path components and
+ * begins with one of the allowed prefixes (`legacyPackages` or `packages`).
+ */
+bool
+isAbsolutePath( const AttrPathGlob & attrs );
+
+/* -------------------------------------------------------------------------- */
+
+/**
  * @brief A set of user defined requirements describing a package/dependency.
+ *
+ * May either be defined as a set of attributes or with a string matching
+ * this syntax:
+ * `[<input>:]((<attr>.)+<attrName>)|(<pname>|<attrName>|<name>)[@(<semver>|=<version>)]`
  */
 struct ManifestDescriptor
 {
@@ -200,6 +261,9 @@ public:
 
   ManifestDescriptor() = default;
 
+  explicit ManifestDescriptor( const std::string_view & descriptor )
+    : ManifestDescriptor( ManifestDescriptorRaw( descriptor ) ) {};
+
   explicit ManifestDescriptor( const ManifestDescriptorRaw & raw );
 
   explicit ManifestDescriptor( std::string_view              installID,
@@ -236,6 +300,15 @@ public:
 
 }; /* End struct `ManifestDescriptor' */
 
+
+/* -------------------------------------------------------------------------- */
+
+/**
+ * @brief Convert an @a flox::resolver::ManifestDescriptor to a
+ *              JSON object.
+ */
+void
+to_json( nlohmann::json & jto, const ManifestDescriptor & descriptor );
 
 /* -------------------------------------------------------------------------- */
 

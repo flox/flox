@@ -457,6 +457,165 @@ to_json( nlohmann::json & jto, const ManifestDescriptorRaw & descriptor )
     }
 }
 
+/* -------------------------------------------------------------------------- */
+
+ManifestDescriptorRaw::ManifestDescriptorRaw(
+  const std::string_view & descriptor )
+{
+  size_t cursor = 0;
+  // Grab the input if it exists
+  if ( auto inputSepIdx
+       = descriptor.find_first_of( ManifestDescriptorRaw::inputSigil );
+       inputSepIdx != std::string_view::npos )
+    {
+      this->packageRepository
+        = std::string( descriptor.substr( cursor, inputSepIdx - cursor ) );
+      cursor = inputSepIdx + 1;
+    }
+  // Grab the attribute path or package name
+  size_t attrsEndIdx;
+  bool   hasVersion = false;
+  if ( auto versionSepIdx
+       = descriptor.find( ManifestDescriptorRaw::versionSigil );
+       versionSepIdx != std::string_view::npos )
+    {
+      attrsEndIdx = versionSepIdx;
+      hasVersion  = true;
+    }
+  else { attrsEndIdx = descriptor.size(); }
+  // Guard against `input:` e.g. an empty attrpath
+  if ( attrsEndIdx == cursor )
+    {
+      throw InvalidManifestDescriptorException(
+        "descriptor was missing a package name" );
+    }
+  auto attrsSubstr = descriptor.substr( cursor, attrsEndIdx - cursor );
+  auto attrsWithHandledGlobs
+    = maybeSplitAttrPathGlob( std::string( attrsSubstr ) );
+  auto attrsMaybeContainingGlobs = splitAttrPath( attrsSubstr );
+  // Guard against `input:.` e.g. attrpaths with empty components
+  for ( auto & attr : attrsWithHandledGlobs )
+    {
+      if ( attr.has_value() && attr.value().empty() )
+        {
+          throw InvalidManifestDescriptorException(
+            "descriptor attribute name was malformed: `"
+            + std::string( attrsSubstr ) + "'" );
+        }
+    }
+  // Handle the attribute path provided by the user
+  switch ( attrsWithHandledGlobs.size() )
+    {
+      case 1:
+        // Match against `name`, `pname`, or `attrName`
+        this->name = validatedSingleAttr( attrsWithHandledGlobs );
+        break;
+      case 2:
+        // We were definitely given a relative path
+        this->path = validatedRelativePath( attrsWithHandledGlobs,
+                                            attrsMaybeContainingGlobs );
+        break;
+      default:
+        // Could be a relative or absolute path depending on the prefix
+        if ( isAbsolutePath( attrsWithHandledGlobs ) )
+          {
+            this->absPath = validatedAbsolutePath( attrsWithHandledGlobs );
+          }
+        else
+          {
+            this->path = validatedRelativePath( attrsWithHandledGlobs,
+                                                attrsMaybeContainingGlobs );
+          }
+        break;
+    }
+  if ( hasVersion )
+    {
+      cursor        = attrsEndIdx + 1;
+      this->version = std::string( descriptor.substr( cursor ) );
+    }
+}
+
+/* -------------------------------------------------------------------------- */
+
+std::optional<std::string>
+validatedSingleAttr( const AttrPathGlob & attrs )
+{
+  if ( attrs[0].has_value() ) { return attrs[0]; }
+  throw InvalidManifestDescriptorException(
+    "globs are only allowed to replace entire system names: `"
+    + displayableGlobbedPath( attrs ) + "'" );
+}
+
+bool
+globInAttrName( const AttrPathGlob & attrs )
+{
+  for ( const std::optional<std::string> & attr : attrs )
+    {
+      if ( attr.has_value()
+           && ( std::find( attr.value().begin(), attr.value().end(), '*' )
+                != attr.value().end() ) )
+        {
+          return true;
+        }
+    }
+  return false;
+}
+
+std::vector<std::string>
+validatedRelativePath( const AttrPathGlob &             attrs,
+                       const std::vector<std::string> & strings )
+{
+  // Don't allow globs in relative paths. Relative paths don't contain
+  // the system name, so there's no reason for a glob to be here at all.
+  bool containsGlobbedAttr
+    = std::find( attrs.begin(), attrs.end(), std::nullopt ) != attrs.end();
+  if ( containsGlobbedAttr )
+    {
+      throw InvalidManifestDescriptorException(
+        "globs are only allowed to replace entire system names: `"
+        + displayableGlobbedPath( attrs ) + "'" );
+    }
+  else if ( globInAttrName( attrs ) )
+    {
+      throw InvalidManifestDescriptorException(
+        "globs are only allowed to replace entire system names: `"
+        + displayableGlobbedPath( attrs ) + "'" );
+    }
+  else if ( attrs.size() < 2 )
+    {
+      throw InvalidManifestDescriptorException(
+        "relative paths must contain at least 2 attributes" );
+    }
+  return strings;
+}
+
+AttrPathGlob
+validatedAbsolutePath( const AttrPathGlob & attrs )
+{
+  // We've already checked that the path is absolute, don't need to check the
+  // prefix
+  auto nGlobs       = std::count( attrs.begin(), attrs.end(), std::nullopt );
+  bool tooManyGlobs = nGlobs > 1;
+  bool systemNotGlobbed = attrs[1] != std::nullopt;
+  if ( tooManyGlobs || globInAttrName( attrs )
+       || ( ( nGlobs == 1 ) && systemNotGlobbed ) )
+    {
+      throw InvalidManifestDescriptorException(
+        "globs are only allowed to replace entire system names: `"
+        + displayableGlobbedPath( attrs ) + "'" );
+    }
+  return attrs;
+}
+
+bool
+isAbsolutePath( const AttrPathGlob & attrs )
+{
+  if ( attrs.size() < 3 ) { return false; }
+  auto                  maybePrefix      = attrs[0];
+  std::set<std::string> absolutePrefixes = { "legacyPackages", "packages" };
+  return ( maybePrefix.has_value()
+           && absolutePrefixes.contains( maybePrefix.value() ) );
+}
 
 /* -------------------------------------------------------------------------- */
 
@@ -467,8 +626,8 @@ ManifestDescriptor::ManifestDescriptor( const ManifestDescriptorRaw & raw )
 {
   /* Determine if `version' was a range or not.
    * NOTE: The string "4.2.0" is not a range, but "4.2" is!
-   *       If you want to explicitly match the `version` field with "4.2" then
-   *       you need to use "=4.2". */
+   *       If you want to explicitly match the `version` field with
+   *       "4.2" then you need to use "=4.2". */
   if ( raw.version.has_value() )
     {
       initManifestDescriptorVersion( *this, *raw.version );
@@ -525,7 +684,7 @@ ManifestDescriptor::ManifestDescriptor( const ManifestDescriptorRaw & raw )
 }
 
 
-/* -------------------------------------------------------------------------- */
+/* --------------------------------------------------------------------------*/
 
 void
 ManifestDescriptor::clear()
@@ -543,7 +702,8 @@ ManifestDescriptor::clear()
 }
 
 
-/* -------------------------------------------------------------------------- */
+/* --------------------------------------------------------------------------
+ */
 
 pkgdb::PkgQueryArgs &
 ManifestDescriptor::fillPkgQueryArgs( pkgdb::PkgQueryArgs & pqa ) const
@@ -578,6 +738,18 @@ ManifestDescriptor::fillPkgQueryArgs( pkgdb::PkgQueryArgs & pqa ) const
 
 
 /* -------------------------------------------------------------------------- */
+
+void
+to_json( nlohmann::json & jto, const ManifestDescriptor & descriptor )
+{
+  jto = {
+    { "name", descriptor.name },       { "optional", descriptor.optional },
+    { "group", descriptor.group },     { "version", descriptor.version },
+    { "semver", descriptor.semver },   { "subtree", descriptor.subtree },
+    { "systems", descriptor.systems }, { "path", descriptor.path },
+    { "input", descriptor.input },     { "priority", descriptor.priority }
+  };
+}
 
 }  // namespace flox::resolver
 

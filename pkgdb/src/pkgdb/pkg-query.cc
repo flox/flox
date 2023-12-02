@@ -91,6 +91,28 @@ PkgQueryArgs::check() const
     }
 }
 
+/* -------------------------------------------------------------------------- */
+
+void
+to_json( nlohmann::json & jto, const PkgQueryArgs & args )
+{
+  jto = {
+    { "name", args.name },
+    { "pname", args.pname },
+    { "version", args.version },
+    { "semver", args.semver },
+    { "partialMatch", args.partialMatch },
+    { "partialNameMatch", args.partialNameMatch },
+    { "pnameOrAttrName", args.pnameOrAttrName },
+    { "licenses", args.licenses },
+    { "allowBroken", args.allowBroken },
+    { "allowUnfree", args.allowUnfree },
+    { "preferPreReleases", args.preferPreReleases },
+    { "subtrees", args.subtrees },
+    { "systems", args.systems },
+    { "relPath", args.relPath },
+  };
+}
 
 /* -------------------------------------------------------------------------- */
 

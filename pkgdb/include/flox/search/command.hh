@@ -74,7 +74,7 @@ public:
   run();
 
 
-}; /* End class `ScrapeCommand' */
+}; /* End class `SearchCommand' */
 
 
 /* -------------------------------------------------------------------------- */
