@@ -463,7 +463,7 @@ jobs:
             nix run \
                 --accept-flake-config \
                 --extra-experimental-features '"nix-command flakes"' \
-                'github:flox/flox/${{ github.sha }}#packages.${{ matrix.system }}.flox-tests-ci'
+                'github:flox/flox/${{ github.sha }}#packages.${{ matrix.system }}.flox-tests'
 
       - name: "Build end2end Bats Tests (.#flox-tests-end2end)"
         run: |
@@ -482,4 +482,4 @@ jobs:
             nix run \
                 --accept-flake-config \
                 --extra-experimental-features '"nix-command flakes"' \
-                'github:flox/flox/${{ github.sha }}#packages.${{ matrix.system }}.flox-tests-end2end-ci'
+                'github:flox/flox/${{ github.sha }}#packages.${{ matrix.system }}.flox-tests-end2end'
