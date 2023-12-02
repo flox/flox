@@ -65,5 +65,5 @@ dot_flox_exists() {
   assert_failure;
   run "$FLOX_CLI" delete;
   assert_failure;
-  assert_output --partial 'No environment found in "./"';
+  assert_output --partial "No environment found in \"$(pwd -P)\"";
 }
