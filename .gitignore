@@ -9,3 +9,8 @@ result-*
 /.direnv/
 compile_commands.json
 autom4te.cache/
+*~
+Makefile
+config.log
+config.status
+config.mk

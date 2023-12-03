@@ -3,15 +3,12 @@
 #
 # Process this file with autoconf to produce a configure script.
 #
-#
 # ---------------------------------------------------------------------------- #
 
 AC_PREREQ( [2.71] )
 
 # TODO: use different email address
-AC_INIT([flox],
-        m4_syscmd([grep version .cz.toml|cut -d'"' -f2]),
-        [alex.ameen@floxdev.com])
+AC_INIT([flox], [0.3.7], [alex.ameen@floxdev.com])
 
 AC_CONFIG_MACRO_DIRS([m4])
 AC_CONFIG_AUX_DIR([build-aux])
@@ -29,7 +26,7 @@ AC_CONFIG_SRCDIR([pkgdb/src/main.cc])
 AC_PROG_CXX
 AC_PROG_CC
 AC_PROG_INSTALL
-AC_LN_S
+AC_PROG_LN_S
 
 
 # ---------------------------------------------------------------------------- #
@@ -83,6 +80,51 @@ AC_CHECK_FUNCS([memset strtoul mkdir])
 
 # ---------------------------------------------------------------------------- #
 
+# Sub-Systems/Modules
+
+AC_ARG_WITH([flox-bash],
+  [AS_HELP_STRING(
+    [--with-flox-bash={local,nix,PREFIX}],
+    [use flox-bash from local tree, nix build, or path to its install prefix])],
+  [WITH_FLOX_BASH=$withval],
+  [WITH_FLOX_BASH=local]
+)
+AC_SUBST([WITH_FLOX_BASH], ["local"])
+
+AC_ARG_WITH([pkgdb],
+  [AS_HELP_STRING(
+    [--with-pkgdb={local,nix,PREFIX}],
+    [use pkgdb from local tree, nix build, or path to its install prefix])],
+  [WITH_PKGDB=$withval],
+  [WITH_PKGDB=local]
+)
+AC_SUBST([WITH_PKGDB], ["local"])
+
+AC_ARG_WITH([env-builder],
+  [AS_HELP_STRING(
+    [--with-env-builder={local,nix,PREFIX}],
+    [use env-builder from local tree, nix build, or path to its ]dnl
+[install prefix])],
+  [WITH_ENV_BUILDER=$withval],
+  [WITH_ENV_BUILDER=local]
+)
+AC_SUBST([WITH_ENV_BUILDER], ["local"])
+
+AC_ARG_WITH([flox-cli],
+  [AS_HELP_STRING(
+    [--with-flox-cli={local,nix,PREFIX}],
+    [use flox-cli from local tree, nix build, or path to its ]dnl
+[install prefix])],
+  [WITH_FLOX_CLI=$withval],
+  [WITH_FLOX_CLI=local]
+)
+AC_SUBST([WITH_FLOX_CLI], ["local"])
+
+
+# ---------------------------------------------------------------------------- #
+
+# External Dependencies
+
 PKG_CHECK_MODULES([NLJSON], [nlohmann_json])
 PKG_CHECK_MODULES([ARGPARSE], [argparse])
 PKG_CHECK_MODULES([SQLITE3], [sqlite3])
@@ -93,7 +135,7 @@ PKG_CHECK_MODULES([NIX], [nix-store nix-main nix-cmd nix-expr])
 
 # ---------------------------------------------------------------------------- #
 
-AC_CONFIG_FILES([config.mk])
+AC_CONFIG_FILES([Makefile config.mk])
 AC_OUTPUT
 
 
