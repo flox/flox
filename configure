@@ -6152,52 +6152,108 @@ fi
 # Check whether --with-flox-bash was given.
 if test ${with_flox_bash+y}
 then :
-  withval=$with_flox_bash; WITH_FLOX_BASH=$withval
+  withval=$with_flox_bash; WITH_FLOX_BASH="$withval"
 else $as_nop
   WITH_FLOX_BASH=local
 
 fi
 
-WITH_FLOX_BASH="local"
+case "$WITH_FLOX_BASH" in #(
+  local) :
+    : ;; #(
+  nix) :
+    : ;; #(
+  *) :
+    if test -d "$WITH_FLOX_BASH"
+then :
+  :
+else $as_nop
+  as_fn_error $? "Invalid WITH_FLOX_BASH setting: '$WITH_FLOX_BASH'.
+You must specify either local, nix, or a path to a directory" "$LINENO" 5
+fi
+ ;;
+esac
 
 
 
 # Check whether --with-pkgdb was given.
 if test ${with_pkgdb+y}
 then :
-  withval=$with_pkgdb; WITH_PKGDB=$withval
+  withval=$with_pkgdb; WITH_PKGDB="$withval"
 else $as_nop
   WITH_PKGDB=local
 
 fi
 
-WITH_PKGDB="local"
+case "$WITH_PKGDB" in #(
+  local) :
+    : ;; #(
+  nix) :
+    : ;; #(
+  *) :
+    if test -d "$WITH_PKGDB"
+then :
+  :
+else $as_nop
+  as_fn_error $? "Invalid '--with-pkgdb' setting: '$WITH_PKGDB'.
+You must specify either local, nix, or a path to a directory" "$LINENO" 5
+fi
+ ;;
+esac
 
 
 
 # Check whether --with-env-builder was given.
 if test ${with_env_builder+y}
 then :
-  withval=$with_env_builder; WITH_ENV_BUILDER=$withval
+  withval=$with_env_builder; WITH_ENV_BUILDER="$withval"
 else $as_nop
   WITH_ENV_BUILDER=local
 
 fi
 
-WITH_ENV_BUILDER="local"
+case "$WITH_ENV_BUILDER" in #(
+  local) :
+    : ;; #(
+  nix) :
+    : ;; #(
+  *) :
+    if test -d "$WITH_ENV_BUILDER"
+then :
+  :
+else $as_nop
+  as_fn_error $? "Invalid '--with-env-builder' setting: '$WITH_ENV_BUILDER'.
+You must specify either local, nix, or a path to a directory" "$LINENO" 5
+fi
+ ;;
+esac
 
 
 
 # Check whether --with-flox-cli was given.
 if test ${with_flox_cli+y}
 then :
-  withval=$with_flox_cli; WITH_FLOX_CLI=$withval
+  withval=$with_flox_cli; WITH_FLOX_CLI="$withval"
 else $as_nop
   WITH_FLOX_CLI=local
 
 fi
 
-WITH_FLOX_CLI="local"
+case "$WITH_FLOX_CLI" in #(
+  local) :
+    : ;; #(
+  nix) :
+    : ;; #(
+  *) :
+    if test -d "$WITH_FLOX_CLI"
+then :
+  :
+else $as_nop
+  as_fn_error $? "Invalid '--with-flox-cli' setting: '$WITH_FLOX_CLI'.
+You must specify either local, nix, or a path to a directory" "$LINENO" 5
+fi
+ ;;
+esac
 
 
 

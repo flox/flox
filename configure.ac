@@ -86,39 +86,67 @@ AC_ARG_WITH([flox-bash],
   [AS_HELP_STRING(
     [--with-flox-bash={local,nix,PREFIX}],
     [use flox-bash from local tree, nix build, or path to its install prefix])],
-  [WITH_FLOX_BASH=$withval],
+  [WITH_FLOX_BASH="$withval"],
   [WITH_FLOX_BASH=local]
 )
-AC_SUBST([WITH_FLOX_BASH], ["local"])
+AS_CASE(["$WITH_FLOX_BASH"],
+  [local], [:],
+  [nix],   [:],
+  [AS_IF([test -d "$WITH_FLOX_BASH"], [:],
+    [AC_MSG_ERROR([Invalid WITH_FLOX_BASH setting: '$WITH_FLOX_BASH'.
+You must specify either 'local', 'nix', or a path to a directory])])
+])
+AC_SUBST([WITH_FLOX_BASH])
 
 AC_ARG_WITH([pkgdb],
   [AS_HELP_STRING(
     [--with-pkgdb={local,nix,PREFIX}],
     [use pkgdb from local tree, nix build, or path to its install prefix])],
-  [WITH_PKGDB=$withval],
+  [WITH_PKGDB="$withval"],
   [WITH_PKGDB=local]
 )
-AC_SUBST([WITH_PKGDB], ["local"])
+AS_CASE(["$WITH_PKGDB"],
+  [local], [:],
+  [nix],   [:],
+  [AS_IF([test -d "$WITH_PKGDB"], [:],
+    [AC_MSG_ERROR([Invalid '--with-pkgdb' setting: '$WITH_PKGDB'.
+You must specify either 'local', 'nix', or a path to a directory])])
+])
+AC_SUBST([WITH_PKGDB])
 
 AC_ARG_WITH([env-builder],
   [AS_HELP_STRING(
     [--with-env-builder={local,nix,PREFIX}],
     [use env-builder from local tree, nix build, or path to its ]dnl
 [install prefix])],
-  [WITH_ENV_BUILDER=$withval],
+  [WITH_ENV_BUILDER="$withval"],
   [WITH_ENV_BUILDER=local]
 )
-AC_SUBST([WITH_ENV_BUILDER], ["local"])
+AS_CASE(["$WITH_ENV_BUILDER"],
+  [local], [:],
+  [nix],   [:],
+  [AS_IF([test -d "$WITH_ENV_BUILDER"], [:],
+    [AC_MSG_ERROR([Invalid '--with-env-builder' setting: '$WITH_ENV_BUILDER'.
+You must specify either 'local', 'nix', or a path to a directory])])
+])
+AC_SUBST([WITH_ENV_BUILDER])
 
 AC_ARG_WITH([flox-cli],
   [AS_HELP_STRING(
     [--with-flox-cli={local,nix,PREFIX}],
     [use flox-cli from local tree, nix build, or path to its ]dnl
 [install prefix])],
-  [WITH_FLOX_CLI=$withval],
+  [WITH_FLOX_CLI="$withval"],
   [WITH_FLOX_CLI=local]
 )
-AC_SUBST([WITH_FLOX_CLI], ["local"])
+AS_CASE(["$WITH_FLOX_CLI"],
+  [local], [:],
+  [nix],   [:],
+  [AS_IF([test -d "$WITH_FLOX_CLI"], [:],
+    [AC_MSG_ERROR([Invalid '--with-flox-cli' setting: '$WITH_FLOX_CLI'.
+You must specify either 'local', 'nix', or a path to a directory])])
+])
+AC_SUBST([WITH_FLOX_CLI])
 
 
 # ---------------------------------------------------------------------------- #
