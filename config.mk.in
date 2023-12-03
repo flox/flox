@@ -1,0 +1,136 @@
+# ============================================================================ #
+#
+# File filled by `configure' for use in Makefiles.
+#
+# This sets various paths for resources, and controls options which effect
+# how sub-systems are built.
+#
+# ---------------------------------------------------------------------------- #
+
+# Project Directories
+# -------------------
+REPO_ROOT             = @REPO_ROOT@
+FLOX_BASH_ROOT        = @FLOX_BASH_ROOT@
+PKGDB_ROOT            = @PKGDB_ROOT@
+PKGDB_TESTS_DIR       = @PKGDB_TESTS_DIR@
+ENV_BUILDER_ROOT      = @ENV_BUILDER_ROOT@
+ENV_BUILDER_TESTS_DIR = @ENV_BUILDER_TESTS_DIR@
+FLOX_CLI_ROOT         = @FLOX_CLI_ROOT@
+FLOX_CLI_TESTS_DIR    = @FLOX_CLI_TESTS_DIR@
+CRATES_DIR			  = @CRATES_DIR@
+FLAKE_NIX             = @FLAKE_NIX@
+FLAKE_LOCK 	          = @FLAKE_LOCK@
+
+
+# Installation Directories
+# ------------------------
+PREFIX            = @PREFIX@
+BINDIR            = @BINDIR@
+LIBDIR            = @LIBDIR@
+INCLUDEDIR        = @INCLUDEDIR@
+DATADIR           = @DATADIR@
+MANDIR            = @MANDIR@
+PKGCONFIGDIR      = @PKGCONFIGDIR@
+DOCDIR            = @DOCDIR@
+LIBEXECDIR        = @LIBEXECDIR@
+SYSCONFDIR        = @SYSCONFDIR@
+INSTALL_TESTS_DIR = @INSTALL_TESTS_DIR@
+
+
+# Sub-Systems/Modules
+# -------------------
+WITH_FLOX_BASH   = @WITH_FLOX_BASH@
+WITH_PKGDB       = @WITH_PKGDB@
+WITH_ENV_BUILDER = @WITH_ENV_BUILDER@
+WITH_FLOX_CLI    = @WITH_FLOX_CLI@
+
+
+# Utilities
+# ---------
+
+# Things
+CAT        = @CAT@
+COMMITIZEN = @COMMITIZEN@
+CP         = @CP@
+FIND       = @FIND@
+GIT        = @GIT@
+GREP       = @GREP@
+HIVEMIND   = @HIVEMIND@
+LN         = @LN@ -f
+MKDIR      = @MKDIR@
+MKDIR_P    = $(MKDIR) -p
+RM         = @RM@ -f
+SED        = @SED@
+SORT       = @SORT@
+SQLITE     = @SQLITE@
+TEE        = @TEE@
+TEST       = @TEST@
+TOUCH      = @TOUCH@
+TR         = @TR@
+UNAME      = @UNAME@
+XARGS 	   = @XARGS@
+BATS       = @BATS@
+M4		   = @M4@
+
+# Nix things
+NIX     = @NIX@
+NIX_FMT = @NIX_FMT@
+
+# Crab things
+CARGO     = @CARGO@
+RUST_FMT  = @RUST_FMT@
+RUST_LINT = @RUST_LINT@
+
+# CNile things
+BEAR       = @BEAR@
+CXX        = @CXX@
+CXX_FMT    = @CXX_FMT@
+CXX_LINT   = @CXX_LINT@
+DOXYGEN    = @DOXYGEN@
+PKG_CONFIG = @PKG_CONFIG@
+
+
+# ---------------------------------------------------------------------------- #
+
+# Platform and Toolchain Configuration
+# ------------------------------------
+
+OS            = @OS@
+ARCH          = @ARCH@
+CXX_TOOLCHAIN = @CXX_TOOLCHAIN@
+
+
+# ---------------------------------------------------------------------------- #
+
+# Audit Configuration Validitiy
+# -----------------------------
+
+ifeq (,$(filter darwin linux,$(OS)))
+$(error Unsupported OS: '$(OS)'. Must be one of: darwin, linux)
+endif # Audit OS
+
+ifeq (,$(filter x86_64 aarch64,$(ARCH)))
+$(error Unsupported ARCH: '$(ARCH)'. Must be one of: x86_64, aarch64)
+endif # Audit ARCH
+
+ifeq (,$(filter clang gcc,$(CXX_TOOLCHAIN)))
+$(error Unsupported CXX_TOOLCHAIN: '$(CXX_TOOLCHAIN)'. \
+Must be one of: clang, gcc)
+endif # Audit CXX_TOOLCHAIN
+
+
+# ---------------------------------------------------------------------------- #
+
+# TODO
+.PHONY: show-config
+show-config:
+	@echo "OS: $(OS)";
+	@echo "ARCH: $(ARCH)";
+	@echo "CXX_TOOLCHAIN: $(CXX_TOOLCHAIN)";
+
+
+# ---------------------------------------------------------------------------- #
+#
+#
+#
+# ============================================================================ #
