@@ -9,6 +9,7 @@
 
 # Project Directories
 # -------------------
+
 REPO_ROOT             = @REPO_ROOT@
 FLOX_BASH_ROOT        = @FLOX_BASH_ROOT@
 PKGDB_ROOT            = @PKGDB_ROOT@
@@ -22,8 +23,11 @@ FLAKE_NIX             = @FLAKE_NIX@
 FLAKE_LOCK 	          = @FLAKE_LOCK@
 
 
+# ---------------------------------------------------------------------------- #
+
 # Installation Directories
 # ------------------------
+
 PREFIX            = @PREFIX@
 BINDIR            = @BINDIR@
 LIBDIR            = @LIBDIR@
@@ -37,13 +41,52 @@ SYSCONFDIR        = @SYSCONFDIR@
 INSTALL_TESTS_DIR = @INSTALL_TESTS_DIR@
 
 
+# ---------------------------------------------------------------------------- #
+
 # Sub-Systems/Modules
 # -------------------
+
 WITH_FLOX_BASH   = @WITH_FLOX_BASH@
 WITH_PKGDB       = @WITH_PKGDB@
 WITH_ENV_BUILDER = @WITH_ENV_BUILDER@
 WITH_FLOX_CLI    = @WITH_FLOX_CLI@
 
+
+# ---------------------------------------------------------------------------- #
+
+# Audit Sub-Systems/Modules Validity
+# ----------------------------------
+
+ifeq (,$(filter local nix,$(WITH_FLOX_BASH)))
+ifeq "$(wildcard $(WITH_FLOX_BASH))" ""
+$(error Invalid WITH_FLOX_BASH setting: '$(WITH_FLOX_BASH)'.   \
+You must specify either local, nix, or a path to a directory)
+endif # WITH_FLOX_BASH is not a path to a directory
+endif # Audit WITH_FLOX_BASH
+
+ifeq (,$(filter local nix,$(WITH_PKGDB)))
+ifeq "$(wildcard $(WITH_PKGDB))" ""
+$(error Invalid WITH_PKGDB setting: '$(WITH_PKGDB)'.   \
+You must specify either local, nix, or a path to a directory)
+endif # WITH_PKGDB is not a path to a directory
+endif # Audit WITH_PKGDB
+
+ifeq (,$(filter local nix,$(WITH_ENV_BUILDER)))
+ifeq "$(wildcard $(WITH_ENV_BUILDER))" ""
+$(error Invalid WITH_ENV_BUILDER setting: '$(WITH_ENV_BUILDER)'.   \
+You must specify either local, nix, or a path to a directory)
+endif # WITH_ENV_BUILDER is not a path to a directory
+endif # Audit WITH_ENV_BUILDER
+
+ifeq (,$(filter local nix,$(WITH_FLOX_CLI)))
+ifeq "$(wildcard $(WITH_FLOX_CLI))" ""
+$(error Invalid WITH_FLOX_CLI setting: '$(WITH_FLOX_CLI)'.   \
+You must specify either local, nix, or a path to a directory)
+endif # WITH_FLOX_CLI is not a path to a directory
+endif # Audit WITH_FLOX_CLI
+
+
+# ---------------------------------------------------------------------------- #
 
 # Utilities
 # ---------
@@ -102,8 +145,8 @@ CXX_TOOLCHAIN = @CXX_TOOLCHAIN@
 
 # ---------------------------------------------------------------------------- #
 
-# Audit Configuration Validitiy
-# -----------------------------
+# Audit Platform and Toolchain Configuration Validity
+# ---------------------------------------------------
 
 ifeq (,$(filter darwin linux,$(OS)))
 $(error Unsupported OS: '$(OS)'. Must be one of: darwin, linux)
@@ -124,6 +167,65 @@ endif # Audit CXX_TOOLCHAIN
 # TODO
 .PHONY: show-config
 show-config:
+	@echo "REPO_ROOT: $(REPO_ROOT)";
+	@echo "FLOX_BASH_ROOT: $(FLOX_BASH_ROOT)";
+	@echo "PKGDB_ROOT: $(PKGDB_ROOT)";
+	@echo "PKGDB_TESTS_DIR: $(PKGDB_TESTS_DIR)";
+	@echo "ENV_BUILDER_ROOT: $(ENV_BUILDER_ROOT)";
+	@echo "ENV_BUILDER_TESTS_DIR: $(ENV_BUILDER_TESTS_DIR)";
+	@echo "FLOX_CLI_ROOT: $(FLOX_CLI_ROOT)";
+	@echo "FLOX_CLI_TESTS_DIR: $(FLOX_CLI_TESTS_DIR)";
+	@echo "CRATES_DIR: $(CRATES_DIR)";
+	@echo "FLAKE_NIX: $(FLAKE_NIX)";
+	@echo "FLAKE_LOCK: $(FLAKE_LOCK)";
+	@echo "PREFIX: $(PREFIX)";
+	@echo "BINDIR: $(BINDIR)";
+	@echo "LIBDIR: $(LIBDIR)";
+	@echo "INCLUDEDIR: $(INCLUDEDIR)";
+	@echo "DATADIR: $(DATADIR)";
+	@echo "MANDIR: $(MANDIR)";
+	@echo "PKGCONFIGDIR: $(PKGCONFIGDIR)";
+	@echo "DOCDIR: $(DOCDIR)";
+	@echo "LIBEXECDIR: $(LIBEXECDIR)";
+	@echo "SYSCONFDIR: $(SYSCONFDIR)";
+	@echo "INSTALL_TESTS_DIR: $(INSTALL_TESTS_DIR)";
+	@echo "WITH_FLOX_BASH: $(WITH_FLOX_BASH)";
+	@echo "WITH_PKGDB: $(WITH_PKGDB)";
+	@echo "WITH_ENV_BUILDER: $(WITH_ENV_BUILDER)";
+	@echo "WITH_FLOX_CLI: $(WITH_FLOX_CLI)";
+	@echo "CAT: $(CAT)";
+	@echo "COMMITIZEN: $(COMMITIZEN)";
+	@echo "CP: $(CP)";
+	@echo "FIND: $(FIND)";
+	@echo "GIT: $(GIT)";
+	@echo "GREP: $(GREP)";
+	@echo "HIVEMIND: $(HIVEMIND)";
+	@echo "LN: $(LN)";
+	@echo "MKDIR: $(MKDIR)";
+	@echo "MKDIR_P: $(MKDIR_P)";
+	@echo "RM: $(RM)";
+	@echo "SED: $(SED)";
+	@echo "SORT: $(SORT)";
+	@echo "SQLITE: $(SQLITE)";
+	@echo "TEE: $(TEE)";
+	@echo "TEST: $(TEST)";
+	@echo "TOUCH: $(TOUCH)";
+	@echo "TR: $(TR)";
+	@echo "UNAME: $(UNAME)";
+	@echo "XARGS: $(XARGS)";
+	@echo "BATS: $(BATS)";
+	@echo "M4: $(M4)";
+	@echo "NIX: $(NIX)";
+	@echo "NIX_FMT: $(NIX_FMT)";
+	@echo "CARGO: $(CARGO)";
+	@echo "RUST_FMT: $(RUST_FMT)";
+	@echo "RUST_LINT: $(RUST_LINT)";
+	@echo "BEAR: $(BEAR)";
+	@echo "CXX: $(CXX)";
+	@echo "CXX_FMT: $(CXX_FMT)";
+	@echo "CXX_LINT: $(CXX_LINT)";
+	@echo "DOXYGEN: $(DOXYGEN)";
+	@echo "PKG_CONFIG: $(PKG_CONFIG)";
 	@echo "OS: $(OS)";
 	@echo "ARCH: $(ARCH)";
 	@echo "CXX_TOOLCHAIN: $(CXX_TOOLCHAIN)";
