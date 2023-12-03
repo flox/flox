@@ -139,9 +139,8 @@ jq_edit() {
 # bats test_tags=resolver:lockfile, resolver:groups, resolver:optional, resolver:upgrade
 
 # XXX: This test case in particular is worth reading closely because it shows
-#      a handful of important edge case handling behaviors that aren't
-#      explicitly documented or specified elsewhere.
-# TODO: Document and specify these behaviors in a visible document.
+#      a handful of important edge case handling behaviors that are worth
+#      reviewing closely.
 
 # Like the test above but adds `nodejsNew' after the lock is created.
 # This changes the resolution of `nodejs' to use _staging_ instead of
