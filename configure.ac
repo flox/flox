@@ -82,6 +82,7 @@ AC_CHECK_FUNCS([memset strtoul mkdir])
 
 # Sub-Systems/Modules
 
+# --with-flox-bash
 AC_ARG_WITH([flox-bash],
   [AS_HELP_STRING(
     [--with-flox-bash={local,nix,PREFIX}],
@@ -98,6 +99,7 @@ You must specify either 'local', 'nix', or a path to a directory])])
 ])
 AC_SUBST([WITH_FLOX_BASH])
 
+# --with-pkgdb
 AC_ARG_WITH([pkgdb],
   [AS_HELP_STRING(
     [--with-pkgdb={local,nix,PREFIX}],
@@ -114,6 +116,7 @@ You must specify either 'local', 'nix', or a path to a directory])])
 ])
 AC_SUBST([WITH_PKGDB])
 
+# --with-env-builder
 AC_ARG_WITH([env-builder],
   [AS_HELP_STRING(
     [--with-env-builder={local,nix,PREFIX}],
@@ -131,6 +134,7 @@ You must specify either 'local', 'nix', or a path to a directory])])
 ])
 AC_SUBST([WITH_ENV_BUILDER])
 
+# --with-flox-cli
 AC_ARG_WITH([flox-cli],
   [AS_HELP_STRING(
     [--with-flox-cli={local,nix,PREFIX}],
