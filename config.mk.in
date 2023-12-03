@@ -88,10 +88,27 @@ endif # Audit WITH_FLOX_CLI
 
 # ---------------------------------------------------------------------------- #
 
+# External Dependencies
+# ---------------------
+
+nljson_CFLAGS    = @NLJSON_CFLAGS@
+argparse_CFLAGS  = @ARGPARSE_CFLAGS@
+sqlite3_CFLAGS   = @SQLITE3_CFLAGS@
+sqlite3_LDFLAGS  = @SQLITE3_LIBS@
+sqlite3pp_CFLAGS = @SQLITE3PP_CFLAGS@
+yaml_CFLAGS      = @YAML_CFLAGS@
+yaml_LDFLAGS     = @YAML_LIBS@
+nix_CFLAGS       = @NIX_CFLAGS@
+nix_LDFLAGS      = @NIX_LIBS@ -lnixfetchers
+# TODO: boost_CFLAGS
+# TODO: toml_CFLAGS
+
+
+# ---------------------------------------------------------------------------- #
+
 # Utilities
 # ---------
 
-# Things
 CAT        = @CAT@
 COMMITIZEN = @COMMITIZEN@
 CP         = @CP@
@@ -178,6 +195,7 @@ show-config:
 	@echo "CRATES_DIR: $(CRATES_DIR)";
 	@echo "FLAKE_NIX: $(FLAKE_NIX)";
 	@echo "FLAKE_LOCK: $(FLAKE_LOCK)";
+
 	@echo "PREFIX: $(PREFIX)";
 	@echo "BINDIR: $(BINDIR)";
 	@echo "LIBDIR: $(LIBDIR)";
@@ -189,10 +207,22 @@ show-config:
 	@echo "LIBEXECDIR: $(LIBEXECDIR)";
 	@echo "SYSCONFDIR: $(SYSCONFDIR)";
 	@echo "INSTALL_TESTS_DIR: $(INSTALL_TESTS_DIR)";
+
 	@echo "WITH_FLOX_BASH: $(WITH_FLOX_BASH)";
 	@echo "WITH_PKGDB: $(WITH_PKGDB)";
 	@echo "WITH_ENV_BUILDER: $(WITH_ENV_BUILDER)";
 	@echo "WITH_FLOX_CLI: $(WITH_FLOX_CLI)";
+
+	@echo "nljson_CFLAGS: $(nljson_CFLAGS)";
+	@echo "argparse_CFLAGS: $(argparse_CFLAGS)";
+	@echo "sqlite3_CFLAGS: $(sqlite3_CFLAGS)";
+	@echo "sqlite3_LDFLAGS: $(sqlite3_LDFLAGS)";
+	@echo "sqlite3pp_CFLAGS: $(sqlite3pp_CFLAGS)";
+	@echo "yaml_CFLAGS: $(yaml_CFLAGS)";
+	@echo "yaml_LDFLAGS: $(yaml_LDFLAGS)";
+	@echo "nix_CFLAGS: $(nix_CFLAGS)";
+	@echo "nix_LDFLAGS: $(nix_LDFLAGS)";
+
 	@echo "CAT: $(CAT)";
 	@echo "COMMITIZEN: $(COMMITIZEN)";
 	@echo "CP: $(CP)";
@@ -226,6 +256,7 @@ show-config:
 	@echo "CXX_LINT: $(CXX_LINT)";
 	@echo "DOXYGEN: $(DOXYGEN)";
 	@echo "PKG_CONFIG: $(PKG_CONFIG)";
+
 	@echo "OS: $(OS)";
 	@echo "ARCH: $(ARCH)";
 	@echo "CXX_TOOLCHAIN: $(CXX_TOOLCHAIN)";
