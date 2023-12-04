@@ -15,6 +15,7 @@ use flox_rust_sdk::models::environment::managed_environment::{
 };
 use flox_rust_sdk::models::environment::path_environment::{self, Original, PathEnvironment};
 use flox_rust_sdk::models::environment::{
+    EditResult,
     Environment,
     EnvironmentError2,
     EnvironmentPointer,
@@ -36,7 +37,7 @@ use log::{debug, error, info};
 use tempfile::NamedTempFile;
 
 use super::{environment_select, EnvironmentSelect};
-use crate::commands::ConcreteEnvironment;
+use crate::commands::{activated_environments, ConcreteEnvironment};
 use crate::subcommand_metric;
 use crate::utils::dialog::{Confirm, Dialog};
 
@@ -70,13 +71,10 @@ impl Edit {
             .to_concrete_environment(&flox, true)?
             .into_dyn_environment();
 
-        match self.provided_manifest_contents()? {
+        let result = match self.provided_manifest_contents()? {
             // If provided with the contents of a manifest file, either via a path to a file or via
             // contents piped to stdin, use those contents to try building the environment.
-            Some(new_manifest) => {
-                environment.edit(&flox, new_manifest).await?;
-                Ok(())
-            },
+            Some(new_manifest) => environment.edit(&flox, new_manifest).await?,
             // If not provided with new manifest contents, let the user edit the file directly
             // via $EDITOR or $VISUAL (as long as `flox edit` was invoked interactively).
             None => {
@@ -101,21 +99,44 @@ impl Edit {
                 // decides to stop.
                 loop {
                     let new_manifest = Edit::edited_manifest_contents(&tmp_manifest, &editor)?;
-                    if let Err(e) = environment.edit(&flox, new_manifest).await {
-                        error!("Environment invalid; building resulted in an error: {e}");
-                        if !Dialog::can_prompt() {
-                            bail!("Can't prompt to continue editing in non-interactive context");
-                        }
-                        if !should_continue.clone().prompt().await? {
-                            bail!("Environment editing cancelled");
-                        }
-                    } else {
-                        break;
+                    match environment.edit(&flox, new_manifest).await {
+                        Err(e) => {
+                            error!("Environment invalid; building resulted in an error: {e}");
+                            if !Dialog::can_prompt() {
+                                bail!(
+                                    "Can't prompt to continue editing in non-interactive context"
+                                );
+                            }
+                            if !should_continue.clone().prompt().await? {
+                                bail!("Environment editing cancelled");
+                            }
+                        },
+                        Ok(result) => {
+                            break result;
+                        },
                     }
                 }
-                Ok(())
+            },
+        };
+        match result {
+            EditResult::Unchanged => {
+                println!("⚠️  no changes made to environment");
+            },
+            EditResult::ReActivateRequired => {
+                if activated_environments().contains(&environment.parent_path()?) {
+                    println!(indoc::indoc! {"
+                            Your manifest has changes that cannot be automatically applied to your current environment.
+
+                            Please `exit` the environment and run `flox activate` to see these changes."});
+                } else {
+                    println!("✅ environment successfully edited");
+                }
+            },
+            EditResult::Success => {
+                println!("✅ environment successfully edited");
             },
         }
+        Ok(())
     }
 
     /// Retrieves the new manifest file contents if a new manifest file was provided
@@ -451,11 +472,11 @@ impl Install {
                 if let Some(false) = installation.already_installed.get(pkg) {
                     info!("✅ '{pkg}' installed to environment {description}");
                 } else {
-                    info!("🛑 '{pkg}' already installed to environment {description}");
+                    info!("⚠️ '{pkg}' already installed to environment {description}");
                 }
             }
         } else {
-            info!("🛑 package(s) already installed to environment {description}");
+            info!("⚠️ package(s) already installed to environment {description}");
         }
         Ok(())
     }
