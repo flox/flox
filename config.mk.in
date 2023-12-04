@@ -18,9 +18,9 @@ ENV_BUILDER_ROOT      = @ENV_BUILDER_ROOT@
 ENV_BUILDER_TESTS_DIR = @ENV_BUILDER_TESTS_DIR@
 FLOX_CLI_ROOT         = @FLOX_CLI_ROOT@
 FLOX_CLI_TESTS_DIR    = @FLOX_CLI_TESTS_DIR@
-CRATES_DIR			  = @CRATES_DIR@
+CRATES_DIR            = @CRATES_DIR@
 FLAKE_NIX             = @FLAKE_NIX@
-FLAKE_LOCK 	          = @FLAKE_LOCK@
+FLAKE_LOCK            = @FLAKE_LOCK@
 
 
 # ---------------------------------------------------------------------------- #
@@ -96,7 +96,7 @@ TR         = @TR@
 UNAME      = @UNAME@
 XARGS 	   = @XARGS@
 BATS       = @BATS@
-M4		   = @M4@
+M4         = @M4@
 
 # Nix things
 NIX     = @NIX@
