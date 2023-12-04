@@ -497,7 +497,7 @@ jobs:
 
   trigger-flox-installers-workflow:
     name: "Trigger flox installers workflow"
-    if: github.ref == 'refs/heads/garbas.trigger-installers-build' && github.event_name == 'pull_request'
+    # if: github.ref == 'refs/heads/garbas.trigger-installers-build' && github.event_name == 'pull_request'
     runs-on: "ubuntu-22.04-8core"
 
     needs:
