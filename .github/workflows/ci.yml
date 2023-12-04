@@ -519,7 +519,7 @@ jobs:
           workflow_file_name: "ci.yml"
           ref:                "master"
           wait_interval:      10
-          client_payload:     '{"TARGET":"git+ssh://git@github.com/flox/flox/${{ github.sha }}"}'
+          client_payload:     '{"TARGET":"git+ssh://git@github.com/flox/flox?rev=${{ github.sha }}"}'
           propagate_failure:  false
           trigger_workflow:   true
           wait_workflow:      true
