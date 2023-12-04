@@ -22,6 +22,7 @@
 
 namespace flox::pkgdb {
 
+/* -------------------------------------------------------------------------- */
 
 std::vector<std::filesystem::path>
 findStaleDatabases( const std::filesystem::path & cacheDir, int minAgeDays )
@@ -30,7 +31,7 @@ findStaleDatabases( const std::filesystem::path & cacheDir, int minAgeDays )
   nix::logger->log( nix::Verbosity::lvlDebug,
                     nix::fmt( "cacheDir: %s\n", cacheDir.c_str() ) );
 
-  std::vector<std::filesystem::path> to_delete;
+  std::vector<std::filesystem::path> toDelete;
   for ( const auto & entry : std::filesystem::directory_iterator( cacheDir ) )
     {
 
@@ -38,13 +39,13 @@ findStaleDatabases( const std::filesystem::path & cacheDir, int minAgeDays )
 
       if ( stat( entry.path().c_str(), &result ) == 0 )
         {
-          auto access_time
+          auto accessTime
             = std::chrono::system_clock::from_time_t( result.st_atime );
 
           auto now = std::chrono::system_clock::now();
 
-          auto age_in_days
-            = std::chrono::duration_cast<std::chrono::days>( now - access_time )
+          auto ageInDays
+            = std::chrono::duration_cast<std::chrono::days>( now - accessTime )
                 .count();
 
           nix::logger->log(
@@ -53,27 +54,23 @@ findStaleDatabases( const std::filesystem::path & cacheDir, int minAgeDays )
                       entry.path().c_str(),
                       result.st_atime,
                       std::chrono::system_clock::to_time_t( now ),
-                      age_in_days ) );
+                      ageInDays ) );
 
 
-          if ( age_in_days >= minAgeDays && isSQLiteDb( entry.path() ) )
+          if ( ( minAgeDays <= ageInDays ) && isSQLiteDb( entry.path() ) )
             {
-              to_delete.push_back( entry.path() );
+              toDelete.push_back( entry.path() );
             }
 
-          struct utimbuf new_times;
-          new_times.actime
-            = std::chrono::system_clock::to_time_t( access_time );
-          utime( entry.path().c_str(), &new_times );
-        }
-      else
-        {
-          // ignore?
+          struct utimbuf newTimes;
+          newTimes.actime = std::chrono::system_clock::to_time_t( accessTime );
+          utime( entry.path().c_str(), &newTimes );
         }
     }
-  return to_delete;
+  return toDelete;
 }
 
+/* -------------------------------------------------------------------------- */
 
 GCCommand::GCCommand() : parser( "gc" )
 {
@@ -104,6 +101,7 @@ GCCommand::GCCommand() : parser( "gc" )
 
 
 /* -------------------------------------------------------------------------- */
+
 int
 GCCommand::run()
 {
@@ -116,17 +114,18 @@ GCCommand::run()
       /* If the user explicitly gave a directory, throw an error. */
       if ( this->cacheDir.has_value() )
         {
-          std::cerr << "No such cachedir: " << cacheDir << std::endl;
+          throw FloxException( "no such cachedir: `" + cacheDir.string()
+                               + "'" );
           return EXIT_FAILURE;
         }
       /* Otherwise "they just don't have any databases", so don't error out." */
       return EXIT_SUCCESS;
     }
 
-  auto to_delete = findStaleDatabases( cacheDir, this->gcStaleAgeDays );
+  auto toDelete = findStaleDatabases( cacheDir, this->gcStaleAgeDays );
 
-  printf( "Found %lu stale databases.\n", to_delete.size() );
-  for ( const auto & path : to_delete )
+  std::cout << "Found " << toDelete.size() << " stale databases." << std::endl;
+  for ( const auto & path : toDelete )
     {
       std::cout << "deleting " << path;
       if ( this->dryRun ) { std::cout << " (dry run)" << std::endl; }
