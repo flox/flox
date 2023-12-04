@@ -89,8 +89,7 @@ build_triplet = @build@
 host_triplet = @host@
 subdir = .
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
-am__aclocal_m4_deps = $(top_srcdir)/m4/m4sh-util.m4 \
-	$(top_srcdir)/configure.ac
+am__aclocal_m4_deps = $(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 DIST_COMMON = $(srcdir)/Makefile.am $(top_srcdir)/configure \
@@ -195,11 +194,11 @@ INSTALL_STRIP_PROGRAM = @INSTALL_STRIP_PROGRAM@
 LDFLAGS = @LDFLAGS@
 LIBOBJS = @LIBOBJS@
 LIBS = @LIBS@
-LN = @LN@
 LN_S = @LN_S@
 LTLIBOBJS = @LTLIBOBJS@
 M4 = @M4@
 MAKEINFO = @MAKEINFO@
+MISSING = @MISSING@
 MKDIR = @MKDIR@
 MKDIR_P = @MKDIR_P@
 NIX = @NIX@

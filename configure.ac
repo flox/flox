@@ -21,6 +21,9 @@ AM_INIT_AUTOMAKE([-Wall -Werror foreign subdir-objects])
 AC_CONFIG_SRCDIR([pkgdb/src/main.cc])
 #AC_CONFIG_HEADERS([pkgdb/config.h])
 
+# Absolute path to the directory containing `configure' script.
+AC_SUBST([abs_srcdir], [$( cd "$srcdir"; echo "$PWD"; )])
+
 
 # ---------------------------------------------------------------------------- #
 
@@ -30,45 +33,48 @@ AC_PROG_CXX
 AC_PROG_CC
 AC_PROG_INSTALL
 AC_PROG_LN_S
+AC_PROG_GREP
+AC_PROG_SED
+AC_PROG_LN_S
 
-AC_DEF_PROG([CAT], [cat])
-AC_DEF_PROG([CP], [cp])
-AC_DEF_PROG([LN], [ln])
-AC_DEF_PROG([MKDIR], [mkdir])
-AC_DEF_PROG([RM], [rm])
-AC_DEF_PROG([SORT], [sort])
-AC_DEF_PROG([TEE], [tee])
-AC_DEF_PROG([TEST], [test])
-AC_DEF_PROG([TOUCH], [touch])
-AC_DEF_PROG([TR], [tr])
-AC_DEF_PROG([UNAME], [uname])
+AC_PATH_PROG([MISSING], [missing], [AC_MSG_ERROR([missing not found])],
+             [$PATH:$abs_srcdir/build-aux])
 
-AC_DEF_PROG([FIND], [find])
-AC_DEF_PROG([XARGS], [xargs])
+AC_PATH_PROG([CAT], [cat], [$MISSING cat])
+AC_PATH_PROG([CP], [cp], [$MISSING cp])
+AC_PATH_PROG([MKDIR], [mkdir], [$MISSING mkdir])
+AC_PATH_PROG([RM], [rm], [$MISSING rm])
+AC_PATH_PROG([SORT], [sort], [$MISSING sort])
+AC_PATH_PROG([TEE], [tee], [$MISSING tee])
+AC_PATH_PROG([TEST], [test], [$MISSING test])
+AC_PATH_PROG([TOUCH], [touch], [$MISSING touch])
+AC_PATH_PROG([TR], [tr], [$MISSING tr])
+AC_PATH_PROG([UNAME], [uname], [$MISSING uname])
 
-AC_DEF_PROG([GREP], [grep])
-AC_DEF_PROG([SED], [sed])
-AC_DEF_PROG([M4], [m4])
+AC_PATH_PROG([FIND], [find], [$MISSING find])
+AC_PATH_PROG([XARGS], [xargs], [$MISSING xargs])
 
-AC_DEF_PROG([GIT], [git])
+AC_PATH_PROG([M4], [m4], [$MISSING m4])
 
-AC_DEF_PROG([COMMITIZEN], [commitizen])
-AC_DEF_PROG([HIVEMIND], [hivemind])
-AC_DEF_PROG([SQLITE], [sqlite3])
-AC_DEF_PROG([BATS], [bats])
+AC_PATH_PROG([GIT], [git], [$MISSING git])
+
+AC_PATH_PROG([COMMITIZEN], [commitizen], [$MISSING commitizen])
+AC_PATH_PROG([HIVEMIND], [hivemind], [$MISSING hivemind])
+AC_PATH_PROG([SQLITE], [sqlite3], [$MISSING sqlite3])
+AC_PATH_PROG([BATS], [bats], [$MISSING bats])
 
 # TODO: move to `m4/nix.m4'
-AC_DEF_PROG([NIX], [nix])
-AC_DEF_PROG([NIX_FMT], [alejandra])
+AC_PATH_PROG([NIX], [nix], [$MISSING nix])
+AC_PATH_PROG([NIX_FMT], [alejandra], [$MISSING alejandra])
 
-AC_DEF_PROG([CARGO], [cargo])
-AC_DEF_PROG([RUST_FMT], [rustfmt])
-AC_DEF_PROG([RUST_LINT], [clippy])
+AC_PATH_PROG([CARGO], [cargo], [$MISSING cargo])
+AC_PATH_PROG([RUST_FMT], [rustfmt], [$MISSING rustfmt])
+AC_PATH_PROG([RUST_LINT], [clippy], [$MISSING clippy])
 
-AC_DEF_PROG([BEAR], [bear])
-AC_DEF_PROG([CXX_FMT], [clang-format])
-AC_DEF_PROG([CXX_LINT], [clang-tidy])
-AC_DEF_PROG([DOXYGEN], [doxygen])
+AC_PATH_PROG([BEAR], [bear], [$MISSING bear])
+AC_PATH_PROG([CXX_FMT], [clang-format], [$MISSING clang-format])
+AC_PATH_PROG([CXX_LINT], [clang-tidy], [$MISSING clang-tidy])
+AC_PATH_PROG([DOXYGEN], [doxygen], [$MISSING doxygen])
 
 
 # ---------------------------------------------------------------------------- #

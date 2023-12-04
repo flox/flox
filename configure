@@ -182,7 +182,8 @@ test -x / || exit 1"
   as_suggested="  as_lineno_1=";as_suggested=$as_suggested$LINENO;as_suggested=$as_suggested" as_lineno_1a=\$LINENO
   as_lineno_2=";as_suggested=$as_suggested$LINENO;as_suggested=$as_suggested" as_lineno_2a=\$LINENO
   eval 'test \"x\$as_lineno_1'\$as_run'\" != \"x\$as_lineno_2'\$as_run'\" &&
-  test \"x\`expr \$as_lineno_1'\$as_run' + 1\`\" = \"x\$as_lineno_2'\$as_run'\"' || exit 1"
+  test \"x\`expr \$as_lineno_1'\$as_run' + 1\`\" = \"x\$as_lineno_2'\$as_run'\"' || exit 1
+test \$(( 1 + 1 )) = 2 || exit 1"
   if (eval "$as_required") 2>/dev/null
 then :
   as_have_required=yes
@@ -587,34 +588,259 @@ as_tr_cpp="eval sed 'y%*$as_cr_letters%P$as_cr_LETTERS%;s%[^_$as_cr_alnum]%_%g'"
 as_tr_sh="eval sed 'y%*+%pp%;s%[^_$as_cr_alnum]%_%g'"
 
 
+test -n "$DJDIR" || exec 7<&0 </dev/null
+exec 6>&1
 
+# Name of the host.
+# hostname on some systems (SVR3.2, old GNU/Linux) returns a bogus exit status,
+# so uname gets run too.
+ac_hostname=`(hostname || uname -n) 2>/dev/null | sed 1q`
 
+#
+# Initializations.
+#
+ac_default_prefix=/usr/local
+ac_clean_files=
+ac_config_libobj_dir=.
+LIBOBJS=
+cross_compiling=no
+subdirs=
+MFLAGS=
+MAKEFLAGS=
 
+# Identity of this package.
+PACKAGE_NAME='flox'
+PACKAGE_TARNAME='flox'
+PACKAGE_VERSION='0.3.7'
+PACKAGE_STRING='flox 0.3.7'
+PACKAGE_BUGREPORT='alex.ameen@floxdev.com'
+PACKAGE_URL=''
 
+ac_unique_file="pkgdb/src/main.cc"
+# Factoring default headers for most tests.
+ac_includes_default="\
+#include <stddef.h>
+#ifdef HAVE_STDIO_H
+# include <stdio.h>
+#endif
+#ifdef HAVE_STDLIB_H
+# include <stdlib.h>
+#endif
+#ifdef HAVE_STRING_H
+# include <string.h>
+#endif
+#ifdef HAVE_INTTYPES_H
+# include <inttypes.h>
+#endif
+#ifdef HAVE_STDINT_H
+# include <stdint.h>
+#endif
+#ifdef HAVE_STRINGS_H
+# include <strings.h>
+#endif
+#ifdef HAVE_SYS_TYPES_H
+# include <sys/types.h>
+#endif
+#ifdef HAVE_SYS_STAT_H
+# include <sys/stat.h>
+#endif
+#ifdef HAVE_UNISTD_H
+# include <unistd.h>
+#endif"
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+ac_header_c_list=
+ac_subst_vars='am__EXEEXT_FALSE
+am__EXEEXT_TRUE
+LTLIBOBJS
+NIX_LIBS
+NIX_CFLAGS
+YAML_LIBS
+YAML_CFLAGS
+SQLITE3PP_LIBS
+SQLITE3PP_CFLAGS
+SQLITE3_LIBS
+SQLITE3_CFLAGS
+ARGPARSE_LIBS
+ARGPARSE_CFLAGS
+NLJSON_LIBS
+NLJSON_CFLAGS
+PKG_CONFIG_LIBDIR
+PKG_CONFIG_PATH
+PKG_CONFIG
+WITH_FLOX_CLI
+WITH_ENV_BUILDER
+WITH_PKGDB
+WITH_FLOX_BASH
+host_os
+host_vendor
+host_cpu
+host
+build_os
+build_vendor
+build_cpu
+build
+LIBOBJS
+ALLOCA
+DOXYGEN
+CXX_LINT
+CXX_FMT
+BEAR
+RUST_LINT
+RUST_FMT
+CARGO
+NIX_FMT
+NIX
+BATS
+SQLITE
+HIVEMIND
+COMMITIZEN
+GIT
+M4
+XARGS
+FIND
+UNAME
+TR
+TOUCH
+TEST
+TEE
+SORT
+RM
+MKDIR
+CP
+CAT
+MISSING
+abs_srcdir
+SED
+GREP
+LN_S
+am__fastdepCC_FALSE
+am__fastdepCC_TRUE
+CCDEPMODE
+ac_ct_CC
+CFLAGS
+CC
+am__fastdepCXX_FALSE
+am__fastdepCXX_TRUE
+CXXDEPMODE
+am__nodep
+AMDEPBACKSLASH
+AMDEP_FALSE
+AMDEP_TRUE
+am__include
+DEPDIR
+OBJEXT
+EXEEXT
+ac_ct_CXX
+CPPFLAGS
+LDFLAGS
+CXXFLAGS
+CXX
+AM_BACKSLASH
+AM_DEFAULT_VERBOSITY
+AM_DEFAULT_V
+AM_V
+CSCOPE
+ETAGS
+CTAGS
+am__untar
+am__tar
+AMTAR
+am__leading_dot
+SET_MAKE
+AWK
+mkdir_p
+MKDIR_P
+INSTALL_STRIP_PROGRAM
+STRIP
+install_sh
+MAKEINFO
+AUTOHEADER
+AUTOMAKE
+AUTOCONF
+ACLOCAL
+VERSION
+PACKAGE
+CYGPATH_W
+am__isrc
+INSTALL_DATA
+INSTALL_SCRIPT
+INSTALL_PROGRAM
+target_alias
+host_alias
+build_alias
+LIBS
+ECHO_T
+ECHO_N
+ECHO_C
+DEFS
+mandir
+localedir
+libdir
+psdir
+pdfdir
+dvidir
+htmldir
+infodir
+docdir
+oldincludedir
+includedir
+runstatedir
+localstatedir
+sharedstatedir
+sysconfdir
+datadir
+datarootdir
+libexecdir
+sbindir
+bindir
+program_transform_name
+prefix
+exec_prefix
+PACKAGE_URL
+PACKAGE_BUGREPORT
+PACKAGE_STRING
+PACKAGE_VERSION
+PACKAGE_TARNAME
+PACKAGE_NAME
+PATH_SEPARATOR
+SHELL
+am__quote'
+ac_subst_files=''
+ac_user_opts='
+enable_option_checking
+enable_silent_rules
+enable_dependency_tracking
+with_flox_bash
+with_pkgdb
+with_env_builder
+with_flox_cli
+'
+      ac_precious_vars='build_alias
+host_alias
+target_alias
+CXX
+CXXFLAGS
+LDFLAGS
+LIBS
+CPPFLAGS
+CCC
+CC
+CFLAGS
+PKG_CONFIG
+PKG_CONFIG_PATH
+PKG_CONFIG_LIBDIR
+NLJSON_CFLAGS
+NLJSON_LIBS
+ARGPARSE_CFLAGS
+ARGPARSE_LIBS
+SQLITE3_CFLAGS
+SQLITE3_LIBS
+SQLITE3PP_CFLAGS
+SQLITE3PP_LIBS
+YAML_CFLAGS
+YAML_LIBS
+NIX_CFLAGS
+NIX_LIBS'
 
 
 # Initialize some variables set by options.
@@ -2821,290 +3047,6 @@ printf "%s\n" "$as_me: error: changes in the environment can compromise the buil
   as_fn_error $? "run \`${MAKE-make} distclean' and/or \`rm $cache_file'
 	    and start over" "$LINENO" 5
 fi
-
-test -n "$DJDIR" || exec 7<&0 </dev/null
-exec 6>&1
-
-# Name of the host.
-# hostname on some systems (SVR3.2, old GNU/Linux) returns a bogus exit status,
-# so uname gets run too.
-ac_hostname=`(hostname || uname -n) 2>/dev/null | sed 1q`
-
-#
-# Initializations.
-#
-ac_default_prefix=/usr/local
-ac_clean_files=
-ac_config_libobj_dir=.
-LIBOBJS=
-cross_compiling=no
-subdirs=
-MFLAGS=
-MAKEFLAGS=
-
-# Identity of this package.
-PACKAGE_NAME='flox'
-PACKAGE_TARNAME='flox'
-PACKAGE_VERSION='0.3.7'
-PACKAGE_STRING='flox 0.3.7'
-PACKAGE_BUGREPORT='alex.ameen@floxdev.com'
-PACKAGE_URL=''
-
-ac_unique_file="pkgdb/src/main.cc"
-: "${CAT:=cat}"; export CAT
-: "${CP:=cp}"; export CP
-: "${LN:=ln}"; export LN
-: "${MKDIR:=mkdir}"; export MKDIR
-: "${RM:=rm}"; export RM
-: "${SORT:=sort}"; export SORT
-: "${TEE:=tee}"; export TEE
-: "${TEST:=test}"; export TEST
-: "${TOUCH:=touch}"; export TOUCH
-: "${TR:=tr}"; export TR
-: "${UNAME:=uname}"; export UNAME
-: "${FIND:=find}"; export FIND
-: "${XARGS:=xargs}"; export XARGS
-: "${GREP:=grep}"; export GREP
-: "${SED:=sed}"; export SED
-: "${M4:=m4}"; export M4
-: "${GIT:=git}"; export GIT
-: "${COMMITIZEN:=commitizen}"; export COMMITIZEN
-: "${HIVEMIND:=hivemind}"; export HIVEMIND
-: "${SQLITE:=sqlite3}"; export SQLITE
-: "${BATS:=bats}"; export BATS
-: "${NIX:=nix}"; export NIX
-: "${NIX_FMT:=alejandra}"; export NIX_FMT
-: "${CARGO:=cargo}"; export CARGO
-: "${RUST_FMT:=rustfmt}"; export RUST_FMT
-: "${RUST_LINT:=clippy}"; export RUST_LINT
-: "${BEAR:=bear}"; export BEAR
-: "${CXX_FMT:=clang-format}"; export CXX_FMT
-: "${CXX_LINT:=clang-tidy}"; export CXX_LINT
-: "${DOXYGEN:=doxygen}"; export DOXYGEN
-# Factoring default headers for most tests.
-ac_includes_default="\
-#include <stddef.h>
-#ifdef HAVE_STDIO_H
-# include <stdio.h>
-#endif
-#ifdef HAVE_STDLIB_H
-# include <stdlib.h>
-#endif
-#ifdef HAVE_STRING_H
-# include <string.h>
-#endif
-#ifdef HAVE_INTTYPES_H
-# include <inttypes.h>
-#endif
-#ifdef HAVE_STDINT_H
-# include <stdint.h>
-#endif
-#ifdef HAVE_STRINGS_H
-# include <strings.h>
-#endif
-#ifdef HAVE_SYS_TYPES_H
-# include <sys/types.h>
-#endif
-#ifdef HAVE_SYS_STAT_H
-# include <sys/stat.h>
-#endif
-#ifdef HAVE_UNISTD_H
-# include <unistd.h>
-#endif"
-
-ac_header_c_list=
-ac_subst_vars='am__EXEEXT_FALSE
-am__EXEEXT_TRUE
-LTLIBOBJS
-NIX_LIBS
-NIX_CFLAGS
-YAML_LIBS
-YAML_CFLAGS
-SQLITE3PP_LIBS
-SQLITE3PP_CFLAGS
-SQLITE3_LIBS
-SQLITE3_CFLAGS
-ARGPARSE_LIBS
-ARGPARSE_CFLAGS
-NLJSON_LIBS
-NLJSON_CFLAGS
-PKG_CONFIG_LIBDIR
-PKG_CONFIG_PATH
-PKG_CONFIG
-WITH_FLOX_CLI
-WITH_ENV_BUILDER
-WITH_PKGDB
-WITH_FLOX_BASH
-host_os
-host_vendor
-host_cpu
-host
-build_os
-build_vendor
-build_cpu
-build
-LIBOBJS
-ALLOCA
-DOXYGEN
-CXX_LINT
-CXX_FMT
-BEAR
-RUST_LINT
-RUST_FMT
-CARGO
-NIX_FMT
-NIX
-BATS
-SQLITE
-HIVEMIND
-COMMITIZEN
-GIT
-M4
-SED
-GREP
-XARGS
-FIND
-UNAME
-TR
-TOUCH
-TEST
-TEE
-SORT
-RM
-MKDIR
-LN
-CP
-CAT
-LN_S
-am__fastdepCC_FALSE
-am__fastdepCC_TRUE
-CCDEPMODE
-ac_ct_CC
-CFLAGS
-CC
-am__fastdepCXX_FALSE
-am__fastdepCXX_TRUE
-CXXDEPMODE
-am__nodep
-AMDEPBACKSLASH
-AMDEP_FALSE
-AMDEP_TRUE
-am__include
-DEPDIR
-OBJEXT
-EXEEXT
-ac_ct_CXX
-CPPFLAGS
-LDFLAGS
-CXXFLAGS
-CXX
-AM_BACKSLASH
-AM_DEFAULT_VERBOSITY
-AM_DEFAULT_V
-AM_V
-CSCOPE
-ETAGS
-CTAGS
-am__untar
-am__tar
-AMTAR
-am__leading_dot
-SET_MAKE
-AWK
-mkdir_p
-MKDIR_P
-INSTALL_STRIP_PROGRAM
-STRIP
-install_sh
-MAKEINFO
-AUTOHEADER
-AUTOMAKE
-AUTOCONF
-ACLOCAL
-VERSION
-PACKAGE
-CYGPATH_W
-am__isrc
-INSTALL_DATA
-INSTALL_SCRIPT
-INSTALL_PROGRAM
-target_alias
-host_alias
-build_alias
-LIBS
-ECHO_T
-ECHO_N
-ECHO_C
-DEFS
-mandir
-localedir
-libdir
-psdir
-pdfdir
-dvidir
-htmldir
-infodir
-docdir
-oldincludedir
-includedir
-runstatedir
-localstatedir
-sharedstatedir
-sysconfdir
-datadir
-datarootdir
-libexecdir
-sbindir
-bindir
-program_transform_name
-prefix
-exec_prefix
-PACKAGE_URL
-PACKAGE_BUGREPORT
-PACKAGE_STRING
-PACKAGE_VERSION
-PACKAGE_TARNAME
-PACKAGE_NAME
-PATH_SEPARATOR
-SHELL
-am__quote'
-ac_subst_files=''
-ac_user_opts='
-enable_option_checking
-enable_silent_rules
-enable_dependency_tracking
-with_flox_bash
-with_pkgdb
-with_env_builder
-with_flox_cli
-'
-      ac_precious_vars='build_alias
-host_alias
-target_alias
-CXX
-CXXFLAGS
-LDFLAGS
-LIBS
-CPPFLAGS
-CCC
-CC
-CFLAGS
-PKG_CONFIG
-PKG_CONFIG_PATH
-PKG_CONFIG_LIBDIR
-NLJSON_CFLAGS
-NLJSON_LIBS
-ARGPARSE_CFLAGS
-ARGPARSE_LIBS
-SQLITE3_CFLAGS
-SQLITE3_LIBS
-SQLITE3PP_CFLAGS
-SQLITE3PP_LIBS
-YAML_CFLAGS
-YAML_LIBS
-NIX_CFLAGS
-NIX_LIBS'
-
 ## -------------------- ##
 ## Main body of script. ##
 ## -------------------- ##
@@ -5511,43 +5453,1461 @@ else
 printf "%s\n" "no, using $LN_S" >&6; }
 fi
 
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for grep that handles long lines and -e" >&5
+printf %s "checking for grep that handles long lines and -e... " >&6; }
+if test ${ac_cv_path_GREP+y}
+then :
+  printf %s "(cached) " >&6
+else $as_nop
+  if test -z "$GREP"; then
+  ac_path_GREP_found=false
+  # Loop through the user's path and test for each of PROGNAME-LIST
+  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
+for as_dir in $PATH$PATH_SEPARATOR/usr/xpg4/bin
+do
+  IFS=$as_save_IFS
+  case $as_dir in #(((
+    '') as_dir=./ ;;
+    */) ;;
+    *) as_dir=$as_dir/ ;;
+  esac
+    for ac_prog in grep ggrep
+   do
+    for ac_exec_ext in '' $ac_executable_extensions; do
+      ac_path_GREP="$as_dir$ac_prog$ac_exec_ext"
+      as_fn_executable_p "$ac_path_GREP" || continue
+# Check for GNU ac_path_GREP and select it if it is found.
+  # Check for GNU $ac_path_GREP
+case `"$ac_path_GREP" --version 2>&1` in
+*GNU*)
+  ac_cv_path_GREP="$ac_path_GREP" ac_path_GREP_found=:;;
+*)
+  ac_count=0
+  printf %s 0123456789 >"conftest.in"
+  while :
+  do
+    cat "conftest.in" "conftest.in" >"conftest.tmp"
+    mv "conftest.tmp" "conftest.in"
+    cp "conftest.in" "conftest.nl"
+    printf "%s\n" 'GREP' >> "conftest.nl"
+    "$ac_path_GREP" -e 'GREP$' -e '-(cannot match)-' < "conftest.nl" >"conftest.out" 2>/dev/null || break
+    diff "conftest.out" "conftest.nl" >/dev/null 2>&1 || break
+    as_fn_arith $ac_count + 1 && ac_count=$as_val
+    if test $ac_count -gt ${ac_path_GREP_max-0}; then
+      # Best one so far, save it but keep looking for a better one
+      ac_cv_path_GREP="$ac_path_GREP"
+      ac_path_GREP_max=$ac_count
+    fi
+    # 10*(2^10) chars as input seems more than enough
+    test $ac_count -gt 10 && break
+  done
+  rm -f conftest.in conftest.tmp conftest.nl conftest.out;;
+esac
+
+      $ac_path_GREP_found && break 3
+    done
+  done
+  done
+IFS=$as_save_IFS
+  if test -z "$ac_cv_path_GREP"; then
+    as_fn_error $? "no acceptable grep could be found in $PATH$PATH_SEPARATOR/usr/xpg4/bin" "$LINENO" 5
+  fi
+else
+  ac_cv_path_GREP=$GREP
+fi
+
+fi
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $ac_cv_path_GREP" >&5
+printf "%s\n" "$ac_cv_path_GREP" >&6; }
+ GREP="$ac_cv_path_GREP"
+
+
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for a sed that does not truncate output" >&5
+printf %s "checking for a sed that does not truncate output... " >&6; }
+if test ${ac_cv_path_SED+y}
+then :
+  printf %s "(cached) " >&6
+else $as_nop
+            ac_script=s/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb/
+     for ac_i in 1 2 3 4 5 6 7; do
+       ac_script="$ac_script$as_nl$ac_script"
+     done
+     echo "$ac_script" 2>/dev/null | sed 99q >conftest.sed
+     { ac_script=; unset ac_script;}
+     if test -z "$SED"; then
+  ac_path_SED_found=false
+  # Loop through the user's path and test for each of PROGNAME-LIST
+  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
+for as_dir in $PATH
+do
+  IFS=$as_save_IFS
+  case $as_dir in #(((
+    '') as_dir=./ ;;
+    */) ;;
+    *) as_dir=$as_dir/ ;;
+  esac
+    for ac_prog in sed gsed
+   do
+    for ac_exec_ext in '' $ac_executable_extensions; do
+      ac_path_SED="$as_dir$ac_prog$ac_exec_ext"
+      as_fn_executable_p "$ac_path_SED" || continue
+# Check for GNU ac_path_SED and select it if it is found.
+  # Check for GNU $ac_path_SED
+case `"$ac_path_SED" --version 2>&1` in
+*GNU*)
+  ac_cv_path_SED="$ac_path_SED" ac_path_SED_found=:;;
+*)
+  ac_count=0
+  printf %s 0123456789 >"conftest.in"
+  while :
+  do
+    cat "conftest.in" "conftest.in" >"conftest.tmp"
+    mv "conftest.tmp" "conftest.in"
+    cp "conftest.in" "conftest.nl"
+    printf "%s\n" '' >> "conftest.nl"
+    "$ac_path_SED" -f conftest.sed < "conftest.nl" >"conftest.out" 2>/dev/null || break
+    diff "conftest.out" "conftest.nl" >/dev/null 2>&1 || break
+    as_fn_arith $ac_count + 1 && ac_count=$as_val
+    if test $ac_count -gt ${ac_path_SED_max-0}; then
+      # Best one so far, save it but keep looking for a better one
+      ac_cv_path_SED="$ac_path_SED"
+      ac_path_SED_max=$ac_count
+    fi
+    # 10*(2^10) chars as input seems more than enough
+    test $ac_count -gt 10 && break
+  done
+  rm -f conftest.in conftest.tmp conftest.nl conftest.out;;
+esac
+
+      $ac_path_SED_found && break 3
+    done
+  done
+  done
+IFS=$as_save_IFS
+  if test -z "$ac_cv_path_SED"; then
+    as_fn_error $? "no acceptable sed could be found in \$PATH" "$LINENO" 5
+  fi
+else
+  ac_cv_path_SED=$SED
+fi
+
+fi
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $ac_cv_path_SED" >&5
+printf "%s\n" "$ac_cv_path_SED" >&6; }
+ SED="$ac_cv_path_SED"
+  rm -f conftest.sed
+
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking whether ln -s works" >&5
+printf %s "checking whether ln -s works... " >&6; }
+LN_S=$as_ln_s
+if test "$LN_S" = "ln -s"; then
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: yes" >&5
+printf "%s\n" "yes" >&6; }
+else
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no, using $LN_S" >&5
+printf "%s\n" "no, using $LN_S" >&6; }
+fi
+
+
+abs_srcdir=$( cd "$srcdir"; echo "$PWD"; )
+
+
+# Extract the first word of "missing", so it can be a program name with args.
+set dummy missing; ac_word=$2
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
+printf %s "checking for $ac_word... " >&6; }
+if test ${ac_cv_path_MISSING+y}
+then :
+  printf %s "(cached) " >&6
+else $as_nop
+  case $MISSING in
+  [\\/]* | ?:[\\/]*)
+  ac_cv_path_MISSING="$MISSING" # Let the user override the test with a path.
+  ;;
+  *)
+  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
+as_dummy="$PATH:$abs_srcdir/build-aux"
+for as_dir in $as_dummy
+do
+  IFS=$as_save_IFS
+  case $as_dir in #(((
+    '') as_dir=./ ;;
+    */) ;;
+    *) as_dir=$as_dir/ ;;
+  esac
+    for ac_exec_ext in '' $ac_executable_extensions; do
+  if as_fn_executable_p "$as_dir$ac_word$ac_exec_ext"; then
+    ac_cv_path_MISSING="$as_dir$ac_word$ac_exec_ext"
+    printf "%s\n" "$as_me:${as_lineno-$LINENO}: found $as_dir$ac_word$ac_exec_ext" >&5
+    break 2
+  fi
+done
+  done
+IFS=$as_save_IFS
+
+  test -z "$ac_cv_path_MISSING" && ac_cv_path_MISSING="as_fn_error $? "missing not found" "$LINENO" 5"
+  ;;
+esac
+fi
+MISSING=$ac_cv_path_MISSING
+if test -n "$MISSING"; then
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $MISSING" >&5
+printf "%s\n" "$MISSING" >&6; }
+else
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
+printf "%s\n" "no" >&6; }
+fi
 
 
 
+# Extract the first word of "cat", so it can be a program name with args.
+set dummy cat; ac_word=$2
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
+printf %s "checking for $ac_word... " >&6; }
+if test ${ac_cv_path_CAT+y}
+then :
+  printf %s "(cached) " >&6
+else $as_nop
+  case $CAT in
+  [\\/]* | ?:[\\/]*)
+  ac_cv_path_CAT="$CAT" # Let the user override the test with a path.
+  ;;
+  *)
+  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
+for as_dir in $PATH
+do
+  IFS=$as_save_IFS
+  case $as_dir in #(((
+    '') as_dir=./ ;;
+    */) ;;
+    *) as_dir=$as_dir/ ;;
+  esac
+    for ac_exec_ext in '' $ac_executable_extensions; do
+  if as_fn_executable_p "$as_dir$ac_word$ac_exec_ext"; then
+    ac_cv_path_CAT="$as_dir$ac_word$ac_exec_ext"
+    printf "%s\n" "$as_me:${as_lineno-$LINENO}: found $as_dir$ac_word$ac_exec_ext" >&5
+    break 2
+  fi
+done
+  done
+IFS=$as_save_IFS
+
+  test -z "$ac_cv_path_CAT" && ac_cv_path_CAT="$MISSING cat"
+  ;;
+esac
+fi
+CAT=$ac_cv_path_CAT
+if test -n "$CAT"; then
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $CAT" >&5
+printf "%s\n" "$CAT" >&6; }
+else
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
+printf "%s\n" "no" >&6; }
+fi
+
+
+# Extract the first word of "cp", so it can be a program name with args.
+set dummy cp; ac_word=$2
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
+printf %s "checking for $ac_word... " >&6; }
+if test ${ac_cv_path_CP+y}
+then :
+  printf %s "(cached) " >&6
+else $as_nop
+  case $CP in
+  [\\/]* | ?:[\\/]*)
+  ac_cv_path_CP="$CP" # Let the user override the test with a path.
+  ;;
+  *)
+  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
+for as_dir in $PATH
+do
+  IFS=$as_save_IFS
+  case $as_dir in #(((
+    '') as_dir=./ ;;
+    */) ;;
+    *) as_dir=$as_dir/ ;;
+  esac
+    for ac_exec_ext in '' $ac_executable_extensions; do
+  if as_fn_executable_p "$as_dir$ac_word$ac_exec_ext"; then
+    ac_cv_path_CP="$as_dir$ac_word$ac_exec_ext"
+    printf "%s\n" "$as_me:${as_lineno-$LINENO}: found $as_dir$ac_word$ac_exec_ext" >&5
+    break 2
+  fi
+done
+  done
+IFS=$as_save_IFS
+
+  test -z "$ac_cv_path_CP" && ac_cv_path_CP="$MISSING cp"
+  ;;
+esac
+fi
+CP=$ac_cv_path_CP
+if test -n "$CP"; then
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $CP" >&5
+printf "%s\n" "$CP" >&6; }
+else
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
+printf "%s\n" "no" >&6; }
+fi
+
+
+# Extract the first word of "mkdir", so it can be a program name with args.
+set dummy mkdir; ac_word=$2
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
+printf %s "checking for $ac_word... " >&6; }
+if test ${ac_cv_path_MKDIR+y}
+then :
+  printf %s "(cached) " >&6
+else $as_nop
+  case $MKDIR in
+  [\\/]* | ?:[\\/]*)
+  ac_cv_path_MKDIR="$MKDIR" # Let the user override the test with a path.
+  ;;
+  *)
+  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
+for as_dir in $PATH
+do
+  IFS=$as_save_IFS
+  case $as_dir in #(((
+    '') as_dir=./ ;;
+    */) ;;
+    *) as_dir=$as_dir/ ;;
+  esac
+    for ac_exec_ext in '' $ac_executable_extensions; do
+  if as_fn_executable_p "$as_dir$ac_word$ac_exec_ext"; then
+    ac_cv_path_MKDIR="$as_dir$ac_word$ac_exec_ext"
+    printf "%s\n" "$as_me:${as_lineno-$LINENO}: found $as_dir$ac_word$ac_exec_ext" >&5
+    break 2
+  fi
+done
+  done
+IFS=$as_save_IFS
+
+  test -z "$ac_cv_path_MKDIR" && ac_cv_path_MKDIR="$MISSING mkdir"
+  ;;
+esac
+fi
+MKDIR=$ac_cv_path_MKDIR
+if test -n "$MKDIR"; then
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $MKDIR" >&5
+printf "%s\n" "$MKDIR" >&6; }
+else
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
+printf "%s\n" "no" >&6; }
+fi
+
+
+# Extract the first word of "rm", so it can be a program name with args.
+set dummy rm; ac_word=$2
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
+printf %s "checking for $ac_word... " >&6; }
+if test ${ac_cv_path_RM+y}
+then :
+  printf %s "(cached) " >&6
+else $as_nop
+  case $RM in
+  [\\/]* | ?:[\\/]*)
+  ac_cv_path_RM="$RM" # Let the user override the test with a path.
+  ;;
+  *)
+  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
+for as_dir in $PATH
+do
+  IFS=$as_save_IFS
+  case $as_dir in #(((
+    '') as_dir=./ ;;
+    */) ;;
+    *) as_dir=$as_dir/ ;;
+  esac
+    for ac_exec_ext in '' $ac_executable_extensions; do
+  if as_fn_executable_p "$as_dir$ac_word$ac_exec_ext"; then
+    ac_cv_path_RM="$as_dir$ac_word$ac_exec_ext"
+    printf "%s\n" "$as_me:${as_lineno-$LINENO}: found $as_dir$ac_word$ac_exec_ext" >&5
+    break 2
+  fi
+done
+  done
+IFS=$as_save_IFS
+
+  test -z "$ac_cv_path_RM" && ac_cv_path_RM="$MISSING rm"
+  ;;
+esac
+fi
+RM=$ac_cv_path_RM
+if test -n "$RM"; then
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $RM" >&5
+printf "%s\n" "$RM" >&6; }
+else
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
+printf "%s\n" "no" >&6; }
+fi
+
+
+# Extract the first word of "sort", so it can be a program name with args.
+set dummy sort; ac_word=$2
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
+printf %s "checking for $ac_word... " >&6; }
+if test ${ac_cv_path_SORT+y}
+then :
+  printf %s "(cached) " >&6
+else $as_nop
+  case $SORT in
+  [\\/]* | ?:[\\/]*)
+  ac_cv_path_SORT="$SORT" # Let the user override the test with a path.
+  ;;
+  *)
+  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
+for as_dir in $PATH
+do
+  IFS=$as_save_IFS
+  case $as_dir in #(((
+    '') as_dir=./ ;;
+    */) ;;
+    *) as_dir=$as_dir/ ;;
+  esac
+    for ac_exec_ext in '' $ac_executable_extensions; do
+  if as_fn_executable_p "$as_dir$ac_word$ac_exec_ext"; then
+    ac_cv_path_SORT="$as_dir$ac_word$ac_exec_ext"
+    printf "%s\n" "$as_me:${as_lineno-$LINENO}: found $as_dir$ac_word$ac_exec_ext" >&5
+    break 2
+  fi
+done
+  done
+IFS=$as_save_IFS
+
+  test -z "$ac_cv_path_SORT" && ac_cv_path_SORT="$MISSING sort"
+  ;;
+esac
+fi
+SORT=$ac_cv_path_SORT
+if test -n "$SORT"; then
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $SORT" >&5
+printf "%s\n" "$SORT" >&6; }
+else
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
+printf "%s\n" "no" >&6; }
+fi
+
+
+# Extract the first word of "tee", so it can be a program name with args.
+set dummy tee; ac_word=$2
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
+printf %s "checking for $ac_word... " >&6; }
+if test ${ac_cv_path_TEE+y}
+then :
+  printf %s "(cached) " >&6
+else $as_nop
+  case $TEE in
+  [\\/]* | ?:[\\/]*)
+  ac_cv_path_TEE="$TEE" # Let the user override the test with a path.
+  ;;
+  *)
+  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
+for as_dir in $PATH
+do
+  IFS=$as_save_IFS
+  case $as_dir in #(((
+    '') as_dir=./ ;;
+    */) ;;
+    *) as_dir=$as_dir/ ;;
+  esac
+    for ac_exec_ext in '' $ac_executable_extensions; do
+  if as_fn_executable_p "$as_dir$ac_word$ac_exec_ext"; then
+    ac_cv_path_TEE="$as_dir$ac_word$ac_exec_ext"
+    printf "%s\n" "$as_me:${as_lineno-$LINENO}: found $as_dir$ac_word$ac_exec_ext" >&5
+    break 2
+  fi
+done
+  done
+IFS=$as_save_IFS
+
+  test -z "$ac_cv_path_TEE" && ac_cv_path_TEE="$MISSING tee"
+  ;;
+esac
+fi
+TEE=$ac_cv_path_TEE
+if test -n "$TEE"; then
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $TEE" >&5
+printf "%s\n" "$TEE" >&6; }
+else
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
+printf "%s\n" "no" >&6; }
+fi
+
+
+# Extract the first word of "test", so it can be a program name with args.
+set dummy test; ac_word=$2
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
+printf %s "checking for $ac_word... " >&6; }
+if test ${ac_cv_path_TEST+y}
+then :
+  printf %s "(cached) " >&6
+else $as_nop
+  case $TEST in
+  [\\/]* | ?:[\\/]*)
+  ac_cv_path_TEST="$TEST" # Let the user override the test with a path.
+  ;;
+  *)
+  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
+for as_dir in $PATH
+do
+  IFS=$as_save_IFS
+  case $as_dir in #(((
+    '') as_dir=./ ;;
+    */) ;;
+    *) as_dir=$as_dir/ ;;
+  esac
+    for ac_exec_ext in '' $ac_executable_extensions; do
+  if as_fn_executable_p "$as_dir$ac_word$ac_exec_ext"; then
+    ac_cv_path_TEST="$as_dir$ac_word$ac_exec_ext"
+    printf "%s\n" "$as_me:${as_lineno-$LINENO}: found $as_dir$ac_word$ac_exec_ext" >&5
+    break 2
+  fi
+done
+  done
+IFS=$as_save_IFS
+
+  test -z "$ac_cv_path_TEST" && ac_cv_path_TEST="$MISSING test"
+  ;;
+esac
+fi
+TEST=$ac_cv_path_TEST
+if test -n "$TEST"; then
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $TEST" >&5
+printf "%s\n" "$TEST" >&6; }
+else
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
+printf "%s\n" "no" >&6; }
+fi
+
+
+# Extract the first word of "touch", so it can be a program name with args.
+set dummy touch; ac_word=$2
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
+printf %s "checking for $ac_word... " >&6; }
+if test ${ac_cv_path_TOUCH+y}
+then :
+  printf %s "(cached) " >&6
+else $as_nop
+  case $TOUCH in
+  [\\/]* | ?:[\\/]*)
+  ac_cv_path_TOUCH="$TOUCH" # Let the user override the test with a path.
+  ;;
+  *)
+  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
+for as_dir in $PATH
+do
+  IFS=$as_save_IFS
+  case $as_dir in #(((
+    '') as_dir=./ ;;
+    */) ;;
+    *) as_dir=$as_dir/ ;;
+  esac
+    for ac_exec_ext in '' $ac_executable_extensions; do
+  if as_fn_executable_p "$as_dir$ac_word$ac_exec_ext"; then
+    ac_cv_path_TOUCH="$as_dir$ac_word$ac_exec_ext"
+    printf "%s\n" "$as_me:${as_lineno-$LINENO}: found $as_dir$ac_word$ac_exec_ext" >&5
+    break 2
+  fi
+done
+  done
+IFS=$as_save_IFS
+
+  test -z "$ac_cv_path_TOUCH" && ac_cv_path_TOUCH="$MISSING touch"
+  ;;
+esac
+fi
+TOUCH=$ac_cv_path_TOUCH
+if test -n "$TOUCH"; then
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $TOUCH" >&5
+printf "%s\n" "$TOUCH" >&6; }
+else
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
+printf "%s\n" "no" >&6; }
+fi
+
+
+# Extract the first word of "tr", so it can be a program name with args.
+set dummy tr; ac_word=$2
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
+printf %s "checking for $ac_word... " >&6; }
+if test ${ac_cv_path_TR+y}
+then :
+  printf %s "(cached) " >&6
+else $as_nop
+  case $TR in
+  [\\/]* | ?:[\\/]*)
+  ac_cv_path_TR="$TR" # Let the user override the test with a path.
+  ;;
+  *)
+  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
+for as_dir in $PATH
+do
+  IFS=$as_save_IFS
+  case $as_dir in #(((
+    '') as_dir=./ ;;
+    */) ;;
+    *) as_dir=$as_dir/ ;;
+  esac
+    for ac_exec_ext in '' $ac_executable_extensions; do
+  if as_fn_executable_p "$as_dir$ac_word$ac_exec_ext"; then
+    ac_cv_path_TR="$as_dir$ac_word$ac_exec_ext"
+    printf "%s\n" "$as_me:${as_lineno-$LINENO}: found $as_dir$ac_word$ac_exec_ext" >&5
+    break 2
+  fi
+done
+  done
+IFS=$as_save_IFS
+
+  test -z "$ac_cv_path_TR" && ac_cv_path_TR="$MISSING tr"
+  ;;
+esac
+fi
+TR=$ac_cv_path_TR
+if test -n "$TR"; then
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $TR" >&5
+printf "%s\n" "$TR" >&6; }
+else
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
+printf "%s\n" "no" >&6; }
+fi
+
+
+# Extract the first word of "uname", so it can be a program name with args.
+set dummy uname; ac_word=$2
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
+printf %s "checking for $ac_word... " >&6; }
+if test ${ac_cv_path_UNAME+y}
+then :
+  printf %s "(cached) " >&6
+else $as_nop
+  case $UNAME in
+  [\\/]* | ?:[\\/]*)
+  ac_cv_path_UNAME="$UNAME" # Let the user override the test with a path.
+  ;;
+  *)
+  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
+for as_dir in $PATH
+do
+  IFS=$as_save_IFS
+  case $as_dir in #(((
+    '') as_dir=./ ;;
+    */) ;;
+    *) as_dir=$as_dir/ ;;
+  esac
+    for ac_exec_ext in '' $ac_executable_extensions; do
+  if as_fn_executable_p "$as_dir$ac_word$ac_exec_ext"; then
+    ac_cv_path_UNAME="$as_dir$ac_word$ac_exec_ext"
+    printf "%s\n" "$as_me:${as_lineno-$LINENO}: found $as_dir$ac_word$ac_exec_ext" >&5
+    break 2
+  fi
+done
+  done
+IFS=$as_save_IFS
+
+  test -z "$ac_cv_path_UNAME" && ac_cv_path_UNAME="$MISSING uname"
+  ;;
+esac
+fi
+UNAME=$ac_cv_path_UNAME
+if test -n "$UNAME"; then
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $UNAME" >&5
+printf "%s\n" "$UNAME" >&6; }
+else
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
+printf "%s\n" "no" >&6; }
+fi
 
 
 
+# Extract the first word of "find", so it can be a program name with args.
+set dummy find; ac_word=$2
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
+printf %s "checking for $ac_word... " >&6; }
+if test ${ac_cv_path_FIND+y}
+then :
+  printf %s "(cached) " >&6
+else $as_nop
+  case $FIND in
+  [\\/]* | ?:[\\/]*)
+  ac_cv_path_FIND="$FIND" # Let the user override the test with a path.
+  ;;
+  *)
+  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
+for as_dir in $PATH
+do
+  IFS=$as_save_IFS
+  case $as_dir in #(((
+    '') as_dir=./ ;;
+    */) ;;
+    *) as_dir=$as_dir/ ;;
+  esac
+    for ac_exec_ext in '' $ac_executable_extensions; do
+  if as_fn_executable_p "$as_dir$ac_word$ac_exec_ext"; then
+    ac_cv_path_FIND="$as_dir$ac_word$ac_exec_ext"
+    printf "%s\n" "$as_me:${as_lineno-$LINENO}: found $as_dir$ac_word$ac_exec_ext" >&5
+    break 2
+  fi
+done
+  done
+IFS=$as_save_IFS
+
+  test -z "$ac_cv_path_FIND" && ac_cv_path_FIND="$MISSING find"
+  ;;
+esac
+fi
+FIND=$ac_cv_path_FIND
+if test -n "$FIND"; then
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $FIND" >&5
+printf "%s\n" "$FIND" >&6; }
+else
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
+printf "%s\n" "no" >&6; }
+fi
+
+
+# Extract the first word of "xargs", so it can be a program name with args.
+set dummy xargs; ac_word=$2
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
+printf %s "checking for $ac_word... " >&6; }
+if test ${ac_cv_path_XARGS+y}
+then :
+  printf %s "(cached) " >&6
+else $as_nop
+  case $XARGS in
+  [\\/]* | ?:[\\/]*)
+  ac_cv_path_XARGS="$XARGS" # Let the user override the test with a path.
+  ;;
+  *)
+  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
+for as_dir in $PATH
+do
+  IFS=$as_save_IFS
+  case $as_dir in #(((
+    '') as_dir=./ ;;
+    */) ;;
+    *) as_dir=$as_dir/ ;;
+  esac
+    for ac_exec_ext in '' $ac_executable_extensions; do
+  if as_fn_executable_p "$as_dir$ac_word$ac_exec_ext"; then
+    ac_cv_path_XARGS="$as_dir$ac_word$ac_exec_ext"
+    printf "%s\n" "$as_me:${as_lineno-$LINENO}: found $as_dir$ac_word$ac_exec_ext" >&5
+    break 2
+  fi
+done
+  done
+IFS=$as_save_IFS
+
+  test -z "$ac_cv_path_XARGS" && ac_cv_path_XARGS="$MISSING xargs"
+  ;;
+esac
+fi
+XARGS=$ac_cv_path_XARGS
+if test -n "$XARGS"; then
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $XARGS" >&5
+printf "%s\n" "$XARGS" >&6; }
+else
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
+printf "%s\n" "no" >&6; }
+fi
 
 
 
+# Extract the first word of "m4", so it can be a program name with args.
+set dummy m4; ac_word=$2
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
+printf %s "checking for $ac_word... " >&6; }
+if test ${ac_cv_path_M4+y}
+then :
+  printf %s "(cached) " >&6
+else $as_nop
+  case $M4 in
+  [\\/]* | ?:[\\/]*)
+  ac_cv_path_M4="$M4" # Let the user override the test with a path.
+  ;;
+  *)
+  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
+for as_dir in $PATH
+do
+  IFS=$as_save_IFS
+  case $as_dir in #(((
+    '') as_dir=./ ;;
+    */) ;;
+    *) as_dir=$as_dir/ ;;
+  esac
+    for ac_exec_ext in '' $ac_executable_extensions; do
+  if as_fn_executable_p "$as_dir$ac_word$ac_exec_ext"; then
+    ac_cv_path_M4="$as_dir$ac_word$ac_exec_ext"
+    printf "%s\n" "$as_me:${as_lineno-$LINENO}: found $as_dir$ac_word$ac_exec_ext" >&5
+    break 2
+  fi
+done
+  done
+IFS=$as_save_IFS
+
+  test -z "$ac_cv_path_M4" && ac_cv_path_M4="$MISSING m4"
+  ;;
+esac
+fi
+M4=$ac_cv_path_M4
+if test -n "$M4"; then
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $M4" >&5
+printf "%s\n" "$M4" >&6; }
+else
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
+printf "%s\n" "no" >&6; }
+fi
 
 
 
+# Extract the first word of "git", so it can be a program name with args.
+set dummy git; ac_word=$2
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
+printf %s "checking for $ac_word... " >&6; }
+if test ${ac_cv_path_GIT+y}
+then :
+  printf %s "(cached) " >&6
+else $as_nop
+  case $GIT in
+  [\\/]* | ?:[\\/]*)
+  ac_cv_path_GIT="$GIT" # Let the user override the test with a path.
+  ;;
+  *)
+  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
+for as_dir in $PATH
+do
+  IFS=$as_save_IFS
+  case $as_dir in #(((
+    '') as_dir=./ ;;
+    */) ;;
+    *) as_dir=$as_dir/ ;;
+  esac
+    for ac_exec_ext in '' $ac_executable_extensions; do
+  if as_fn_executable_p "$as_dir$ac_word$ac_exec_ext"; then
+    ac_cv_path_GIT="$as_dir$ac_word$ac_exec_ext"
+    printf "%s\n" "$as_me:${as_lineno-$LINENO}: found $as_dir$ac_word$ac_exec_ext" >&5
+    break 2
+  fi
+done
+  done
+IFS=$as_save_IFS
+
+  test -z "$ac_cv_path_GIT" && ac_cv_path_GIT="$MISSING git"
+  ;;
+esac
+fi
+GIT=$ac_cv_path_GIT
+if test -n "$GIT"; then
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $GIT" >&5
+printf "%s\n" "$GIT" >&6; }
+else
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
+printf "%s\n" "no" >&6; }
+fi
 
 
 
+# Extract the first word of "commitizen", so it can be a program name with args.
+set dummy commitizen; ac_word=$2
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
+printf %s "checking for $ac_word... " >&6; }
+if test ${ac_cv_path_COMMITIZEN+y}
+then :
+  printf %s "(cached) " >&6
+else $as_nop
+  case $COMMITIZEN in
+  [\\/]* | ?:[\\/]*)
+  ac_cv_path_COMMITIZEN="$COMMITIZEN" # Let the user override the test with a path.
+  ;;
+  *)
+  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
+for as_dir in $PATH
+do
+  IFS=$as_save_IFS
+  case $as_dir in #(((
+    '') as_dir=./ ;;
+    */) ;;
+    *) as_dir=$as_dir/ ;;
+  esac
+    for ac_exec_ext in '' $ac_executable_extensions; do
+  if as_fn_executable_p "$as_dir$ac_word$ac_exec_ext"; then
+    ac_cv_path_COMMITIZEN="$as_dir$ac_word$ac_exec_ext"
+    printf "%s\n" "$as_me:${as_lineno-$LINENO}: found $as_dir$ac_word$ac_exec_ext" >&5
+    break 2
+  fi
+done
+  done
+IFS=$as_save_IFS
+
+  test -z "$ac_cv_path_COMMITIZEN" && ac_cv_path_COMMITIZEN="$MISSING commitizen"
+  ;;
+esac
+fi
+COMMITIZEN=$ac_cv_path_COMMITIZEN
+if test -n "$COMMITIZEN"; then
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $COMMITIZEN" >&5
+printf "%s\n" "$COMMITIZEN" >&6; }
+else
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
+printf "%s\n" "no" >&6; }
+fi
 
 
+# Extract the first word of "hivemind", so it can be a program name with args.
+set dummy hivemind; ac_word=$2
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
+printf %s "checking for $ac_word... " >&6; }
+if test ${ac_cv_path_HIVEMIND+y}
+then :
+  printf %s "(cached) " >&6
+else $as_nop
+  case $HIVEMIND in
+  [\\/]* | ?:[\\/]*)
+  ac_cv_path_HIVEMIND="$HIVEMIND" # Let the user override the test with a path.
+  ;;
+  *)
+  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
+for as_dir in $PATH
+do
+  IFS=$as_save_IFS
+  case $as_dir in #(((
+    '') as_dir=./ ;;
+    */) ;;
+    *) as_dir=$as_dir/ ;;
+  esac
+    for ac_exec_ext in '' $ac_executable_extensions; do
+  if as_fn_executable_p "$as_dir$ac_word$ac_exec_ext"; then
+    ac_cv_path_HIVEMIND="$as_dir$ac_word$ac_exec_ext"
+    printf "%s\n" "$as_me:${as_lineno-$LINENO}: found $as_dir$ac_word$ac_exec_ext" >&5
+    break 2
+  fi
+done
+  done
+IFS=$as_save_IFS
+
+  test -z "$ac_cv_path_HIVEMIND" && ac_cv_path_HIVEMIND="$MISSING hivemind"
+  ;;
+esac
+fi
+HIVEMIND=$ac_cv_path_HIVEMIND
+if test -n "$HIVEMIND"; then
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $HIVEMIND" >&5
+printf "%s\n" "$HIVEMIND" >&6; }
+else
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
+printf "%s\n" "no" >&6; }
+fi
 
 
+# Extract the first word of "sqlite3", so it can be a program name with args.
+set dummy sqlite3; ac_word=$2
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
+printf %s "checking for $ac_word... " >&6; }
+if test ${ac_cv_path_SQLITE+y}
+then :
+  printf %s "(cached) " >&6
+else $as_nop
+  case $SQLITE in
+  [\\/]* | ?:[\\/]*)
+  ac_cv_path_SQLITE="$SQLITE" # Let the user override the test with a path.
+  ;;
+  *)
+  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
+for as_dir in $PATH
+do
+  IFS=$as_save_IFS
+  case $as_dir in #(((
+    '') as_dir=./ ;;
+    */) ;;
+    *) as_dir=$as_dir/ ;;
+  esac
+    for ac_exec_ext in '' $ac_executable_extensions; do
+  if as_fn_executable_p "$as_dir$ac_word$ac_exec_ext"; then
+    ac_cv_path_SQLITE="$as_dir$ac_word$ac_exec_ext"
+    printf "%s\n" "$as_me:${as_lineno-$LINENO}: found $as_dir$ac_word$ac_exec_ext" >&5
+    break 2
+  fi
+done
+  done
+IFS=$as_save_IFS
+
+  test -z "$ac_cv_path_SQLITE" && ac_cv_path_SQLITE="$MISSING sqlite3"
+  ;;
+esac
+fi
+SQLITE=$ac_cv_path_SQLITE
+if test -n "$SQLITE"; then
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $SQLITE" >&5
+printf "%s\n" "$SQLITE" >&6; }
+else
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
+printf "%s\n" "no" >&6; }
+fi
 
 
+# Extract the first word of "bats", so it can be a program name with args.
+set dummy bats; ac_word=$2
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
+printf %s "checking for $ac_word... " >&6; }
+if test ${ac_cv_path_BATS+y}
+then :
+  printf %s "(cached) " >&6
+else $as_nop
+  case $BATS in
+  [\\/]* | ?:[\\/]*)
+  ac_cv_path_BATS="$BATS" # Let the user override the test with a path.
+  ;;
+  *)
+  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
+for as_dir in $PATH
+do
+  IFS=$as_save_IFS
+  case $as_dir in #(((
+    '') as_dir=./ ;;
+    */) ;;
+    *) as_dir=$as_dir/ ;;
+  esac
+    for ac_exec_ext in '' $ac_executable_extensions; do
+  if as_fn_executable_p "$as_dir$ac_word$ac_exec_ext"; then
+    ac_cv_path_BATS="$as_dir$ac_word$ac_exec_ext"
+    printf "%s\n" "$as_me:${as_lineno-$LINENO}: found $as_dir$ac_word$ac_exec_ext" >&5
+    break 2
+  fi
+done
+  done
+IFS=$as_save_IFS
 
-
-
+  test -z "$ac_cv_path_BATS" && ac_cv_path_BATS="$MISSING bats"
+  ;;
+esac
+fi
+BATS=$ac_cv_path_BATS
+if test -n "$BATS"; then
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $BATS" >&5
+printf "%s\n" "$BATS" >&6; }
+else
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
+printf "%s\n" "no" >&6; }
+fi
 
 
 
 # TODO: move to `m4/nix.m4'
+# Extract the first word of "nix", so it can be a program name with args.
+set dummy nix; ac_word=$2
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
+printf %s "checking for $ac_word... " >&6; }
+if test ${ac_cv_path_NIX+y}
+then :
+  printf %s "(cached) " >&6
+else $as_nop
+  case $NIX in
+  [\\/]* | ?:[\\/]*)
+  ac_cv_path_NIX="$NIX" # Let the user override the test with a path.
+  ;;
+  *)
+  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
+for as_dir in $PATH
+do
+  IFS=$as_save_IFS
+  case $as_dir in #(((
+    '') as_dir=./ ;;
+    */) ;;
+    *) as_dir=$as_dir/ ;;
+  esac
+    for ac_exec_ext in '' $ac_executable_extensions; do
+  if as_fn_executable_p "$as_dir$ac_word$ac_exec_ext"; then
+    ac_cv_path_NIX="$as_dir$ac_word$ac_exec_ext"
+    printf "%s\n" "$as_me:${as_lineno-$LINENO}: found $as_dir$ac_word$ac_exec_ext" >&5
+    break 2
+  fi
+done
+  done
+IFS=$as_save_IFS
+
+  test -z "$ac_cv_path_NIX" && ac_cv_path_NIX="$MISSING nix"
+  ;;
+esac
+fi
+NIX=$ac_cv_path_NIX
+if test -n "$NIX"; then
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $NIX" >&5
+printf "%s\n" "$NIX" >&6; }
+else
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
+printf "%s\n" "no" >&6; }
+fi
+
+
+# Extract the first word of "alejandra", so it can be a program name with args.
+set dummy alejandra; ac_word=$2
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
+printf %s "checking for $ac_word... " >&6; }
+if test ${ac_cv_path_NIX_FMT+y}
+then :
+  printf %s "(cached) " >&6
+else $as_nop
+  case $NIX_FMT in
+  [\\/]* | ?:[\\/]*)
+  ac_cv_path_NIX_FMT="$NIX_FMT" # Let the user override the test with a path.
+  ;;
+  *)
+  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
+for as_dir in $PATH
+do
+  IFS=$as_save_IFS
+  case $as_dir in #(((
+    '') as_dir=./ ;;
+    */) ;;
+    *) as_dir=$as_dir/ ;;
+  esac
+    for ac_exec_ext in '' $ac_executable_extensions; do
+  if as_fn_executable_p "$as_dir$ac_word$ac_exec_ext"; then
+    ac_cv_path_NIX_FMT="$as_dir$ac_word$ac_exec_ext"
+    printf "%s\n" "$as_me:${as_lineno-$LINENO}: found $as_dir$ac_word$ac_exec_ext" >&5
+    break 2
+  fi
+done
+  done
+IFS=$as_save_IFS
+
+  test -z "$ac_cv_path_NIX_FMT" && ac_cv_path_NIX_FMT="$MISSING alejandra"
+  ;;
+esac
+fi
+NIX_FMT=$ac_cv_path_NIX_FMT
+if test -n "$NIX_FMT"; then
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $NIX_FMT" >&5
+printf "%s\n" "$NIX_FMT" >&6; }
+else
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
+printf "%s\n" "no" >&6; }
+fi
 
 
 
+# Extract the first word of "cargo", so it can be a program name with args.
+set dummy cargo; ac_word=$2
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
+printf %s "checking for $ac_word... " >&6; }
+if test ${ac_cv_path_CARGO+y}
+then :
+  printf %s "(cached) " >&6
+else $as_nop
+  case $CARGO in
+  [\\/]* | ?:[\\/]*)
+  ac_cv_path_CARGO="$CARGO" # Let the user override the test with a path.
+  ;;
+  *)
+  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
+for as_dir in $PATH
+do
+  IFS=$as_save_IFS
+  case $as_dir in #(((
+    '') as_dir=./ ;;
+    */) ;;
+    *) as_dir=$as_dir/ ;;
+  esac
+    for ac_exec_ext in '' $ac_executable_extensions; do
+  if as_fn_executable_p "$as_dir$ac_word$ac_exec_ext"; then
+    ac_cv_path_CARGO="$as_dir$ac_word$ac_exec_ext"
+    printf "%s\n" "$as_me:${as_lineno-$LINENO}: found $as_dir$ac_word$ac_exec_ext" >&5
+    break 2
+  fi
+done
+  done
+IFS=$as_save_IFS
+
+  test -z "$ac_cv_path_CARGO" && ac_cv_path_CARGO="$MISSING cargo"
+  ;;
+esac
+fi
+CARGO=$ac_cv_path_CARGO
+if test -n "$CARGO"; then
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $CARGO" >&5
+printf "%s\n" "$CARGO" >&6; }
+else
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
+printf "%s\n" "no" >&6; }
+fi
+
+
+# Extract the first word of "rustfmt", so it can be a program name with args.
+set dummy rustfmt; ac_word=$2
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
+printf %s "checking for $ac_word... " >&6; }
+if test ${ac_cv_path_RUST_FMT+y}
+then :
+  printf %s "(cached) " >&6
+else $as_nop
+  case $RUST_FMT in
+  [\\/]* | ?:[\\/]*)
+  ac_cv_path_RUST_FMT="$RUST_FMT" # Let the user override the test with a path.
+  ;;
+  *)
+  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
+for as_dir in $PATH
+do
+  IFS=$as_save_IFS
+  case $as_dir in #(((
+    '') as_dir=./ ;;
+    */) ;;
+    *) as_dir=$as_dir/ ;;
+  esac
+    for ac_exec_ext in '' $ac_executable_extensions; do
+  if as_fn_executable_p "$as_dir$ac_word$ac_exec_ext"; then
+    ac_cv_path_RUST_FMT="$as_dir$ac_word$ac_exec_ext"
+    printf "%s\n" "$as_me:${as_lineno-$LINENO}: found $as_dir$ac_word$ac_exec_ext" >&5
+    break 2
+  fi
+done
+  done
+IFS=$as_save_IFS
+
+  test -z "$ac_cv_path_RUST_FMT" && ac_cv_path_RUST_FMT="$MISSING rustfmt"
+  ;;
+esac
+fi
+RUST_FMT=$ac_cv_path_RUST_FMT
+if test -n "$RUST_FMT"; then
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $RUST_FMT" >&5
+printf "%s\n" "$RUST_FMT" >&6; }
+else
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
+printf "%s\n" "no" >&6; }
+fi
+
+
+# Extract the first word of "clippy", so it can be a program name with args.
+set dummy clippy; ac_word=$2
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
+printf %s "checking for $ac_word... " >&6; }
+if test ${ac_cv_path_RUST_LINT+y}
+then :
+  printf %s "(cached) " >&6
+else $as_nop
+  case $RUST_LINT in
+  [\\/]* | ?:[\\/]*)
+  ac_cv_path_RUST_LINT="$RUST_LINT" # Let the user override the test with a path.
+  ;;
+  *)
+  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
+for as_dir in $PATH
+do
+  IFS=$as_save_IFS
+  case $as_dir in #(((
+    '') as_dir=./ ;;
+    */) ;;
+    *) as_dir=$as_dir/ ;;
+  esac
+    for ac_exec_ext in '' $ac_executable_extensions; do
+  if as_fn_executable_p "$as_dir$ac_word$ac_exec_ext"; then
+    ac_cv_path_RUST_LINT="$as_dir$ac_word$ac_exec_ext"
+    printf "%s\n" "$as_me:${as_lineno-$LINENO}: found $as_dir$ac_word$ac_exec_ext" >&5
+    break 2
+  fi
+done
+  done
+IFS=$as_save_IFS
+
+  test -z "$ac_cv_path_RUST_LINT" && ac_cv_path_RUST_LINT="$MISSING clippy"
+  ;;
+esac
+fi
+RUST_LINT=$ac_cv_path_RUST_LINT
+if test -n "$RUST_LINT"; then
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $RUST_LINT" >&5
+printf "%s\n" "$RUST_LINT" >&6; }
+else
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
+printf "%s\n" "no" >&6; }
+fi
 
 
 
+# Extract the first word of "bear", so it can be a program name with args.
+set dummy bear; ac_word=$2
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
+printf %s "checking for $ac_word... " >&6; }
+if test ${ac_cv_path_BEAR+y}
+then :
+  printf %s "(cached) " >&6
+else $as_nop
+  case $BEAR in
+  [\\/]* | ?:[\\/]*)
+  ac_cv_path_BEAR="$BEAR" # Let the user override the test with a path.
+  ;;
+  *)
+  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
+for as_dir in $PATH
+do
+  IFS=$as_save_IFS
+  case $as_dir in #(((
+    '') as_dir=./ ;;
+    */) ;;
+    *) as_dir=$as_dir/ ;;
+  esac
+    for ac_exec_ext in '' $ac_executable_extensions; do
+  if as_fn_executable_p "$as_dir$ac_word$ac_exec_ext"; then
+    ac_cv_path_BEAR="$as_dir$ac_word$ac_exec_ext"
+    printf "%s\n" "$as_me:${as_lineno-$LINENO}: found $as_dir$ac_word$ac_exec_ext" >&5
+    break 2
+  fi
+done
+  done
+IFS=$as_save_IFS
+
+  test -z "$ac_cv_path_BEAR" && ac_cv_path_BEAR="$MISSING bear"
+  ;;
+esac
+fi
+BEAR=$ac_cv_path_BEAR
+if test -n "$BEAR"; then
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $BEAR" >&5
+printf "%s\n" "$BEAR" >&6; }
+else
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
+printf "%s\n" "no" >&6; }
+fi
 
 
+# Extract the first word of "clang-format", so it can be a program name with args.
+set dummy clang-format; ac_word=$2
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
+printf %s "checking for $ac_word... " >&6; }
+if test ${ac_cv_path_CXX_FMT+y}
+then :
+  printf %s "(cached) " >&6
+else $as_nop
+  case $CXX_FMT in
+  [\\/]* | ?:[\\/]*)
+  ac_cv_path_CXX_FMT="$CXX_FMT" # Let the user override the test with a path.
+  ;;
+  *)
+  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
+for as_dir in $PATH
+do
+  IFS=$as_save_IFS
+  case $as_dir in #(((
+    '') as_dir=./ ;;
+    */) ;;
+    *) as_dir=$as_dir/ ;;
+  esac
+    for ac_exec_ext in '' $ac_executable_extensions; do
+  if as_fn_executable_p "$as_dir$ac_word$ac_exec_ext"; then
+    ac_cv_path_CXX_FMT="$as_dir$ac_word$ac_exec_ext"
+    printf "%s\n" "$as_me:${as_lineno-$LINENO}: found $as_dir$ac_word$ac_exec_ext" >&5
+    break 2
+  fi
+done
+  done
+IFS=$as_save_IFS
 
+  test -z "$ac_cv_path_CXX_FMT" && ac_cv_path_CXX_FMT="$MISSING clang-format"
+  ;;
+esac
+fi
+CXX_FMT=$ac_cv_path_CXX_FMT
+if test -n "$CXX_FMT"; then
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $CXX_FMT" >&5
+printf "%s\n" "$CXX_FMT" >&6; }
+else
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
+printf "%s\n" "no" >&6; }
+fi
+
+
+# Extract the first word of "clang-tidy", so it can be a program name with args.
+set dummy clang-tidy; ac_word=$2
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
+printf %s "checking for $ac_word... " >&6; }
+if test ${ac_cv_path_CXX_LINT+y}
+then :
+  printf %s "(cached) " >&6
+else $as_nop
+  case $CXX_LINT in
+  [\\/]* | ?:[\\/]*)
+  ac_cv_path_CXX_LINT="$CXX_LINT" # Let the user override the test with a path.
+  ;;
+  *)
+  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
+for as_dir in $PATH
+do
+  IFS=$as_save_IFS
+  case $as_dir in #(((
+    '') as_dir=./ ;;
+    */) ;;
+    *) as_dir=$as_dir/ ;;
+  esac
+    for ac_exec_ext in '' $ac_executable_extensions; do
+  if as_fn_executable_p "$as_dir$ac_word$ac_exec_ext"; then
+    ac_cv_path_CXX_LINT="$as_dir$ac_word$ac_exec_ext"
+    printf "%s\n" "$as_me:${as_lineno-$LINENO}: found $as_dir$ac_word$ac_exec_ext" >&5
+    break 2
+  fi
+done
+  done
+IFS=$as_save_IFS
+
+  test -z "$ac_cv_path_CXX_LINT" && ac_cv_path_CXX_LINT="$MISSING clang-tidy"
+  ;;
+esac
+fi
+CXX_LINT=$ac_cv_path_CXX_LINT
+if test -n "$CXX_LINT"; then
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $CXX_LINT" >&5
+printf "%s\n" "$CXX_LINT" >&6; }
+else
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
+printf "%s\n" "no" >&6; }
+fi
+
+
+# Extract the first word of "doxygen", so it can be a program name with args.
+set dummy doxygen; ac_word=$2
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
+printf %s "checking for $ac_word... " >&6; }
+if test ${ac_cv_path_DOXYGEN+y}
+then :
+  printf %s "(cached) " >&6
+else $as_nop
+  case $DOXYGEN in
+  [\\/]* | ?:[\\/]*)
+  ac_cv_path_DOXYGEN="$DOXYGEN" # Let the user override the test with a path.
+  ;;
+  *)
+  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
+for as_dir in $PATH
+do
+  IFS=$as_save_IFS
+  case $as_dir in #(((
+    '') as_dir=./ ;;
+    */) ;;
+    *) as_dir=$as_dir/ ;;
+  esac
+    for ac_exec_ext in '' $ac_executable_extensions; do
+  if as_fn_executable_p "$as_dir$ac_word$ac_exec_ext"; then
+    ac_cv_path_DOXYGEN="$as_dir$ac_word$ac_exec_ext"
+    printf "%s\n" "$as_me:${as_lineno-$LINENO}: found $as_dir$ac_word$ac_exec_ext" >&5
+    break 2
+  fi
+done
+  done
+IFS=$as_save_IFS
+
+  test -z "$ac_cv_path_DOXYGEN" && ac_cv_path_DOXYGEN="$MISSING doxygen"
+  ;;
+esac
+fi
+DOXYGEN=$ac_cv_path_DOXYGEN
+if test -n "$DOXYGEN"; then
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $DOXYGEN" >&5
+printf "%s\n" "$DOXYGEN" >&6; }
+else
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
+printf "%s\n" "no" >&6; }
+fi
 
 
 
