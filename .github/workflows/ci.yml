@@ -1,4 +1,4 @@
-name: CI
+name: "CI"
 
 on:
   workflow_dispatch:
@@ -289,6 +289,7 @@ jobs:
 
       - name: "Run Bats Tests (./#flox-env-builder-tests)"
         run: |
+          git clean -xfd
           ssh github@$REMOTE_SERVER \
             -oUserKnownHostsFile=$REMOTE_SERVER_USER_KNOWN_HOSTS_FILE \
             nix run \
@@ -375,6 +376,7 @@ jobs:
 
       - name: "Run Bats Tests (./#flox-pkgdb-tests)"
         run: |
+          git clean -xfd
           ssh github@$REMOTE_SERVER \
             -oUserKnownHostsFile=$REMOTE_SERVER_USER_KNOWN_HOSTS_FILE \
             nix run \
