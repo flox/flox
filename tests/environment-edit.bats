@@ -13,57 +13,22 @@ load test_support.bash
 # Helpers for project based tests.
 
 project_setup() {
-  # Test manifests
-  export ORIGINAL_MANIFEST_CONTENTS=$(cat << EOF
-{
-  context,
-  system,
-  ...
-}:
-{
-  packages.nixpkgs-flox.bat = { version = "0.22.1"; };
-  environmentVariables.FOO = "bar";
-}
-EOF
-  );
-  export NEW_MANIFEST_CONTENTS=$(cat << EOF
-{
-  context,
-  system,
-  ...
-}:
-{
-  packages.nixpkgs-flox.bat = { version = "0.22.1"; };
-  packages.nixpkgs-flox.hello = {};
-  environmentVariables.FOO = "bar";
-}
-EOF
-  );
-
-  # These tests are not run interactively, so we should't allow the CLI to try
-  # opening a text editor in the first place.
-  unset EDITOR;
-  unset VISUAL;
-
-  export PROJECT_DIR="${BATS_TEST_TMPDIR?}/test";
-  rm -rf "$PROJECT_DIR";
-  mkdir -p "$PROJECT_DIR";
-  pushd "$PROJECT_DIR" >/dev/null || return;
-
-  "$FLOX_CLI" init
-  export MANIFEST_PATH="$PROJECT_DIR/.flox/env/pkgs/default/flox.nix";
-  echo "$ORIGINAL_MANIFEST_CONTENTS" > "$MANIFEST_PATH";
-  export EXTERNAL_MANIFEST_PATH="$PROJECT_DIR/input.nix";
-  echo "$NEW_MANIFEST_CONTENTS" > "$EXTERNAL_MANIFEST_PATH";
+  export PROJECT_NAME="test";
+  export PROJECT_DIR="${BATS_TEST_TMPDIR?}/$PROJECT_NAME"
+  export MANIFEST_PATH="$PROJECT_DIR/.flox/env/manifest.toml"
+  export TMP_MANIFEST_PATH="${BATS_TEST_TMPDIR}/manifest.toml"
+  rm -rf "$PROJECT_DIR"
+  mkdir -p "$PROJECT_DIR"
+  pushd "$PROJECT_DIR" >/dev/null || return
 }
 
 project_teardown() {
-  popd >/dev/null || return;
-  rm -rf "${PROJECT_DIR?}";
-  unset PROJECT_DIR;
-  unset ORIGINAL_MANIFEST_CONTENTS;
-  unset NEW_MANIFEST_CONTENTS;
-  unset MANIFEST_PATH;
+  popd >/dev/null || return
+  rm -rf "${PROJECT_DIR?}"
+  rm -f "${TMP_MANIFEST_PATH?}"
+  unset PROJECT_DIR
+  unset MANIFEST_PATH
+  unset TMP_MANIFEST_PATH
 }
 
 # ---------------------------------------------------------------------------- #
@@ -87,6 +52,69 @@ check_manifest_unchanged() {
 check_manifest_updated() {
   current_contents=$(cat "$MANIFEST_PATH")
   [[ "$current_contents" = "$NEW_MANIFEST_CONTENTS" ]]
+}
+
+
+# ---------------------------------------------------------------------------- #
+
+@test "'flox edit' confirms successful edit" {
+  $FLOX_CLI init
+  cp "$MANIFEST_PATH" "$TMP_MANIFEST_PATH"
+  cat << "EOF" >> "$TMP_MANIFEST_PATH"
+[install]
+hello = {}
+EOF
+
+  run $FLOX_CLI edit -f "$TMP_MANIFEST_PATH"
+  assert_success
+  assert_output --partial "✅ environment successfully edited"
+}
+
+
+# ---------------------------------------------------------------------------- #
+
+@test "'flox edit' says no changes made" {
+  $FLOX_CLI init
+  cp "$MANIFEST_PATH" "$TMP_MANIFEST_PATH"
+
+  run $FLOX_CLI edit -f "$TMP_MANIFEST_PATH"
+  assert_success
+  assert_output --partial "⚠️  no changes made to environment"
+}
+
+
+# ---------------------------------------------------------------------------- #
+
+@test "'flox edit' does not say to re-activate when hook is modified and environment is not active" {
+  $FLOX_CLI init
+  cp "$MANIFEST_PATH" "$TMP_MANIFEST_PATH"
+  cat << "EOF" >> "$TMP_MANIFEST_PATH"
+[hook]
+script = """
+  echo "Welcome to your flox environment!";
+"""
+EOF
+
+  run $FLOX_CLI edit -f "$TMP_MANIFEST_PATH"
+  assert_success
+  assert_output --partial "✅ environment successfully edited"
+}
+
+
+# ---------------------------------------------------------------------------- #
+
+@test "'flox edit' says to re-activate when hook is modified and environment is active" {
+  $FLOX_CLI init
+  cp "$MANIFEST_PATH" "$TMP_MANIFEST_PATH"
+  cat << "EOF" >> "$TMP_MANIFEST_PATH"
+[hook]
+script = """
+  echo "Welcome to your flox environment!";
+"""
+EOF
+
+  SHELL=bash run expect -d "$TESTS_DIR/edit/re-activate.exp" "$TMP_MANIFEST_PATH"
+  assert_success
 }
 
 
@@ -141,10 +169,8 @@ check_manifest_updated() {
 # ---------------------------------------------------------------------------- #
 
 @test "'flox edit' fails when provided filename doesn't exist" {
-  run "$FLOX_CLI" edit -f "does_not_exist.nix";
+  run "$FLOX_CLI" edit -f "does_not_exist.toml";
   assert_failure;
-  run check_manifest_unchanged;
-  assert_success;
 }
 
 
@@ -153,8 +179,6 @@ check_manifest_updated() {
 @test "'flox edit' fails when EDITOR is not set" {
   run "$FLOX_CLI" edit;
   assert_failure;
-  run check_manifest_unchanged;
-  assert_success;
 }
 
 
