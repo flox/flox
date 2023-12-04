@@ -513,7 +513,7 @@ jobs:
         uses: "convictional/trigger-workflow-and-wait@v1.6.1"
         with:
           owner: "flox"
-          repo: ""
+          repo: "nix-installers"
           github_token:       "${{ secrets.NIX_GIT_TOKEN }}"
           github_user:        "floxbot"
           workflow_file_name: "ci.yml"
