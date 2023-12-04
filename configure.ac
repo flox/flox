@@ -1,7 +1,10 @@
-# -*- Autoconf -*-
+# -*- mode: autoconf -*-
 # ============================================================================ #
 #
-# Process this file with autoconf to produce a configure script.
+# @file configure.ac
+#
+# @brief Process this file with autoconf to produce a configure script.
+#
 #
 # ---------------------------------------------------------------------------- #
 
@@ -27,6 +30,45 @@ AC_PROG_CXX
 AC_PROG_CC
 AC_PROG_INSTALL
 AC_PROG_LN_S
+
+AC_DEF_PROG([CAT], [cat])
+AC_DEF_PROG([CP], [cp])
+AC_DEF_PROG([LN], [ln])
+AC_DEF_PROG([MKDIR], [mkdir])
+AC_DEF_PROG([RM], [rm])
+AC_DEF_PROG([SORT], [sort])
+AC_DEF_PROG([TEE], [tee])
+AC_DEF_PROG([TEST], [test])
+AC_DEF_PROG([TOUCH], [touch])
+AC_DEF_PROG([TR], [tr])
+AC_DEF_PROG([UNAME], [uname])
+
+AC_DEF_PROG([FIND], [find])
+AC_DEF_PROG([XARGS], [xargs])
+
+AC_DEF_PROG([GREP], [grep])
+AC_DEF_PROG([SED], [sed])
+AC_DEF_PROG([M4], [m4])
+
+AC_DEF_PROG([GIT], [git])
+
+AC_DEF_PROG([COMMITIZEN], [commitizen])
+AC_DEF_PROG([HIVEMIND], [hivemind])
+AC_DEF_PROG([SQLITE], [sqlite3])
+AC_DEF_PROG([BATS], [bats])
+
+# TODO: move to `m4/nix.m4'
+AC_DEF_PROG([NIX], [nix])
+AC_DEF_PROG([NIX_FMT], [alejandra])
+
+AC_DEF_PROG([CARGO], [cargo])
+AC_DEF_PROG([RUST_FMT], [rustfmt])
+AC_DEF_PROG([RUST_LINT], [clippy])
+
+AC_DEF_PROG([BEAR], [bear])
+AC_DEF_PROG([CXX_FMT], [clang-format])
+AC_DEF_PROG([CXX_LINT], [clang-tidy])
+AC_DEF_PROG([DOXYGEN], [doxygen])
 
 
 # ---------------------------------------------------------------------------- #

@@ -587,228 +587,34 @@ as_tr_cpp="eval sed 'y%*$as_cr_letters%P$as_cr_LETTERS%;s%[^_$as_cr_alnum]%_%g'"
 as_tr_sh="eval sed 'y%*+%pp%;s%[^_$as_cr_alnum]%_%g'"
 
 
-test -n "$DJDIR" || exec 7<&0 </dev/null
-exec 6>&1
 
-# Name of the host.
-# hostname on some systems (SVR3.2, old GNU/Linux) returns a bogus exit status,
-# so uname gets run too.
-ac_hostname=`(hostname || uname -n) 2>/dev/null | sed 1q`
 
-#
-# Initializations.
-#
-ac_default_prefix=/usr/local
-ac_clean_files=
-ac_config_libobj_dir=.
-LIBOBJS=
-cross_compiling=no
-subdirs=
-MFLAGS=
-MAKEFLAGS=
 
-# Identity of this package.
-PACKAGE_NAME='flox'
-PACKAGE_TARNAME='flox'
-PACKAGE_VERSION='0.3.7'
-PACKAGE_STRING='flox 0.3.7'
-PACKAGE_BUGREPORT='alex.ameen@floxdev.com'
-PACKAGE_URL=''
 
-ac_unique_file="pkgdb/src/main.cc"
-# Factoring default headers for most tests.
-ac_includes_default="\
-#include <stddef.h>
-#ifdef HAVE_STDIO_H
-# include <stdio.h>
-#endif
-#ifdef HAVE_STDLIB_H
-# include <stdlib.h>
-#endif
-#ifdef HAVE_STRING_H
-# include <string.h>
-#endif
-#ifdef HAVE_INTTYPES_H
-# include <inttypes.h>
-#endif
-#ifdef HAVE_STDINT_H
-# include <stdint.h>
-#endif
-#ifdef HAVE_STRINGS_H
-# include <strings.h>
-#endif
-#ifdef HAVE_SYS_TYPES_H
-# include <sys/types.h>
-#endif
-#ifdef HAVE_SYS_STAT_H
-# include <sys/stat.h>
-#endif
-#ifdef HAVE_UNISTD_H
-# include <unistd.h>
-#endif"
 
-ac_header_c_list=
-ac_subst_vars='am__EXEEXT_FALSE
-am__EXEEXT_TRUE
-LTLIBOBJS
-NIX_LIBS
-NIX_CFLAGS
-YAML_LIBS
-YAML_CFLAGS
-SQLITE3PP_LIBS
-SQLITE3PP_CFLAGS
-SQLITE3_LIBS
-SQLITE3_CFLAGS
-ARGPARSE_LIBS
-ARGPARSE_CFLAGS
-NLJSON_LIBS
-NLJSON_CFLAGS
-PKG_CONFIG_LIBDIR
-PKG_CONFIG_PATH
-PKG_CONFIG
-WITH_FLOX_CLI
-WITH_ENV_BUILDER
-WITH_PKGDB
-WITH_FLOX_BASH
-host_os
-host_vendor
-host_cpu
-host
-build_os
-build_vendor
-build_cpu
-build
-LIBOBJS
-ALLOCA
-LN_S
-am__fastdepCC_FALSE
-am__fastdepCC_TRUE
-CCDEPMODE
-ac_ct_CC
-CFLAGS
-CC
-am__fastdepCXX_FALSE
-am__fastdepCXX_TRUE
-CXXDEPMODE
-am__nodep
-AMDEPBACKSLASH
-AMDEP_FALSE
-AMDEP_TRUE
-am__include
-DEPDIR
-OBJEXT
-EXEEXT
-ac_ct_CXX
-CPPFLAGS
-LDFLAGS
-CXXFLAGS
-CXX
-AM_BACKSLASH
-AM_DEFAULT_VERBOSITY
-AM_DEFAULT_V
-AM_V
-CSCOPE
-ETAGS
-CTAGS
-am__untar
-am__tar
-AMTAR
-am__leading_dot
-SET_MAKE
-AWK
-mkdir_p
-MKDIR_P
-INSTALL_STRIP_PROGRAM
-STRIP
-install_sh
-MAKEINFO
-AUTOHEADER
-AUTOMAKE
-AUTOCONF
-ACLOCAL
-VERSION
-PACKAGE
-CYGPATH_W
-am__isrc
-INSTALL_DATA
-INSTALL_SCRIPT
-INSTALL_PROGRAM
-target_alias
-host_alias
-build_alias
-LIBS
-ECHO_T
-ECHO_N
-ECHO_C
-DEFS
-mandir
-localedir
-libdir
-psdir
-pdfdir
-dvidir
-htmldir
-infodir
-docdir
-oldincludedir
-includedir
-runstatedir
-localstatedir
-sharedstatedir
-sysconfdir
-datadir
-datarootdir
-libexecdir
-sbindir
-bindir
-program_transform_name
-prefix
-exec_prefix
-PACKAGE_URL
-PACKAGE_BUGREPORT
-PACKAGE_STRING
-PACKAGE_VERSION
-PACKAGE_TARNAME
-PACKAGE_NAME
-PATH_SEPARATOR
-SHELL
-am__quote'
-ac_subst_files=''
-ac_user_opts='
-enable_option_checking
-enable_silent_rules
-enable_dependency_tracking
-with_flox_bash
-with_pkgdb
-with_env_builder
-with_flox_cli
-'
-      ac_precious_vars='build_alias
-host_alias
-target_alias
-CXX
-CXXFLAGS
-LDFLAGS
-LIBS
-CPPFLAGS
-CCC
-CC
-CFLAGS
-PKG_CONFIG
-PKG_CONFIG_PATH
-PKG_CONFIG_LIBDIR
-NLJSON_CFLAGS
-NLJSON_LIBS
-ARGPARSE_CFLAGS
-ARGPARSE_LIBS
-SQLITE3_CFLAGS
-SQLITE3_LIBS
-SQLITE3PP_CFLAGS
-SQLITE3PP_LIBS
-YAML_CFLAGS
-YAML_LIBS
-NIX_CFLAGS
-NIX_LIBS'
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 # Initialize some variables set by options.
@@ -3015,6 +2821,290 @@ printf "%s\n" "$as_me: error: changes in the environment can compromise the buil
   as_fn_error $? "run \`${MAKE-make} distclean' and/or \`rm $cache_file'
 	    and start over" "$LINENO" 5
 fi
+
+test -n "$DJDIR" || exec 7<&0 </dev/null
+exec 6>&1
+
+# Name of the host.
+# hostname on some systems (SVR3.2, old GNU/Linux) returns a bogus exit status,
+# so uname gets run too.
+ac_hostname=`(hostname || uname -n) 2>/dev/null | sed 1q`
+
+#
+# Initializations.
+#
+ac_default_prefix=/usr/local
+ac_clean_files=
+ac_config_libobj_dir=.
+LIBOBJS=
+cross_compiling=no
+subdirs=
+MFLAGS=
+MAKEFLAGS=
+
+# Identity of this package.
+PACKAGE_NAME='flox'
+PACKAGE_TARNAME='flox'
+PACKAGE_VERSION='0.3.7'
+PACKAGE_STRING='flox 0.3.7'
+PACKAGE_BUGREPORT='alex.ameen@floxdev.com'
+PACKAGE_URL=''
+
+ac_unique_file="pkgdb/src/main.cc"
+: "${CAT:=cat}"; export CAT
+: "${CP:=cp}"; export CP
+: "${LN:=ln}"; export LN
+: "${MKDIR:=mkdir}"; export MKDIR
+: "${RM:=rm}"; export RM
+: "${SORT:=sort}"; export SORT
+: "${TEE:=tee}"; export TEE
+: "${TEST:=test}"; export TEST
+: "${TOUCH:=touch}"; export TOUCH
+: "${TR:=tr}"; export TR
+: "${UNAME:=uname}"; export UNAME
+: "${FIND:=find}"; export FIND
+: "${XARGS:=xargs}"; export XARGS
+: "${GREP:=grep}"; export GREP
+: "${SED:=sed}"; export SED
+: "${M4:=m4}"; export M4
+: "${GIT:=git}"; export GIT
+: "${COMMITIZEN:=commitizen}"; export COMMITIZEN
+: "${HIVEMIND:=hivemind}"; export HIVEMIND
+: "${SQLITE:=sqlite3}"; export SQLITE
+: "${BATS:=bats}"; export BATS
+: "${NIX:=nix}"; export NIX
+: "${NIX_FMT:=alejandra}"; export NIX_FMT
+: "${CARGO:=cargo}"; export CARGO
+: "${RUST_FMT:=rustfmt}"; export RUST_FMT
+: "${RUST_LINT:=clippy}"; export RUST_LINT
+: "${BEAR:=bear}"; export BEAR
+: "${CXX_FMT:=clang-format}"; export CXX_FMT
+: "${CXX_LINT:=clang-tidy}"; export CXX_LINT
+: "${DOXYGEN:=doxygen}"; export DOXYGEN
+# Factoring default headers for most tests.
+ac_includes_default="\
+#include <stddef.h>
+#ifdef HAVE_STDIO_H
+# include <stdio.h>
+#endif
+#ifdef HAVE_STDLIB_H
+# include <stdlib.h>
+#endif
+#ifdef HAVE_STRING_H
+# include <string.h>
+#endif
+#ifdef HAVE_INTTYPES_H
+# include <inttypes.h>
+#endif
+#ifdef HAVE_STDINT_H
+# include <stdint.h>
+#endif
+#ifdef HAVE_STRINGS_H
+# include <strings.h>
+#endif
+#ifdef HAVE_SYS_TYPES_H
+# include <sys/types.h>
+#endif
+#ifdef HAVE_SYS_STAT_H
+# include <sys/stat.h>
+#endif
+#ifdef HAVE_UNISTD_H
+# include <unistd.h>
+#endif"
+
+ac_header_c_list=
+ac_subst_vars='am__EXEEXT_FALSE
+am__EXEEXT_TRUE
+LTLIBOBJS
+NIX_LIBS
+NIX_CFLAGS
+YAML_LIBS
+YAML_CFLAGS
+SQLITE3PP_LIBS
+SQLITE3PP_CFLAGS
+SQLITE3_LIBS
+SQLITE3_CFLAGS
+ARGPARSE_LIBS
+ARGPARSE_CFLAGS
+NLJSON_LIBS
+NLJSON_CFLAGS
+PKG_CONFIG_LIBDIR
+PKG_CONFIG_PATH
+PKG_CONFIG
+WITH_FLOX_CLI
+WITH_ENV_BUILDER
+WITH_PKGDB
+WITH_FLOX_BASH
+host_os
+host_vendor
+host_cpu
+host
+build_os
+build_vendor
+build_cpu
+build
+LIBOBJS
+ALLOCA
+DOXYGEN
+CXX_LINT
+CXX_FMT
+BEAR
+RUST_LINT
+RUST_FMT
+CARGO
+NIX_FMT
+NIX
+BATS
+SQLITE
+HIVEMIND
+COMMITIZEN
+GIT
+M4
+SED
+GREP
+XARGS
+FIND
+UNAME
+TR
+TOUCH
+TEST
+TEE
+SORT
+RM
+MKDIR
+LN
+CP
+CAT
+LN_S
+am__fastdepCC_FALSE
+am__fastdepCC_TRUE
+CCDEPMODE
+ac_ct_CC
+CFLAGS
+CC
+am__fastdepCXX_FALSE
+am__fastdepCXX_TRUE
+CXXDEPMODE
+am__nodep
+AMDEPBACKSLASH
+AMDEP_FALSE
+AMDEP_TRUE
+am__include
+DEPDIR
+OBJEXT
+EXEEXT
+ac_ct_CXX
+CPPFLAGS
+LDFLAGS
+CXXFLAGS
+CXX
+AM_BACKSLASH
+AM_DEFAULT_VERBOSITY
+AM_DEFAULT_V
+AM_V
+CSCOPE
+ETAGS
+CTAGS
+am__untar
+am__tar
+AMTAR
+am__leading_dot
+SET_MAKE
+AWK
+mkdir_p
+MKDIR_P
+INSTALL_STRIP_PROGRAM
+STRIP
+install_sh
+MAKEINFO
+AUTOHEADER
+AUTOMAKE
+AUTOCONF
+ACLOCAL
+VERSION
+PACKAGE
+CYGPATH_W
+am__isrc
+INSTALL_DATA
+INSTALL_SCRIPT
+INSTALL_PROGRAM
+target_alias
+host_alias
+build_alias
+LIBS
+ECHO_T
+ECHO_N
+ECHO_C
+DEFS
+mandir
+localedir
+libdir
+psdir
+pdfdir
+dvidir
+htmldir
+infodir
+docdir
+oldincludedir
+includedir
+runstatedir
+localstatedir
+sharedstatedir
+sysconfdir
+datadir
+datarootdir
+libexecdir
+sbindir
+bindir
+program_transform_name
+prefix
+exec_prefix
+PACKAGE_URL
+PACKAGE_BUGREPORT
+PACKAGE_STRING
+PACKAGE_VERSION
+PACKAGE_TARNAME
+PACKAGE_NAME
+PATH_SEPARATOR
+SHELL
+am__quote'
+ac_subst_files=''
+ac_user_opts='
+enable_option_checking
+enable_silent_rules
+enable_dependency_tracking
+with_flox_bash
+with_pkgdb
+with_env_builder
+with_flox_cli
+'
+      ac_precious_vars='build_alias
+host_alias
+target_alias
+CXX
+CXXFLAGS
+LDFLAGS
+LIBS
+CPPFLAGS
+CCC
+CC
+CFLAGS
+PKG_CONFIG
+PKG_CONFIG_PATH
+PKG_CONFIG_LIBDIR
+NLJSON_CFLAGS
+NLJSON_LIBS
+ARGPARSE_CFLAGS
+ARGPARSE_LIBS
+SQLITE3_CFLAGS
+SQLITE3_LIBS
+SQLITE3PP_CFLAGS
+SQLITE3PP_LIBS
+YAML_CFLAGS
+YAML_LIBS
+NIX_CFLAGS
+NIX_LIBS'
+
 ## -------------------- ##
 ## Main body of script. ##
 ## -------------------- ##
@@ -5423,6 +5513,45 @@ fi
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# TODO: move to `m4/nix.m4'
+
+
+
+
+
+
+
+
+
+
+
+
+
 # ---------------------------------------------------------------------------- #
 
 # Checks for libraries.
@@ -6148,6 +6277,7 @@ fi
 
 # Sub-Systems/Modules
 
+# --with-flox-bash
 
 # Check whether --with-flox-bash was given.
 if test ${with_flox_bash+y}
@@ -6169,12 +6299,13 @@ then :
   :
 else $as_nop
   as_fn_error $? "Invalid WITH_FLOX_BASH setting: '$WITH_FLOX_BASH'.
-You must specify either local, nix, or a path to a directory" "$LINENO" 5
+You must specify either 'local', 'nix', or a path to a directory" "$LINENO" 5
 fi
  ;;
 esac
 
 
+# --with-pkgdb
 
 # Check whether --with-pkgdb was given.
 if test ${with_pkgdb+y}
@@ -6196,12 +6327,13 @@ then :
   :
 else $as_nop
   as_fn_error $? "Invalid '--with-pkgdb' setting: '$WITH_PKGDB'.
-You must specify either local, nix, or a path to a directory" "$LINENO" 5
+You must specify either 'local', 'nix', or a path to a directory" "$LINENO" 5
 fi
  ;;
 esac
 
 
+# --with-env-builder
 
 # Check whether --with-env-builder was given.
 if test ${with_env_builder+y}
@@ -6223,12 +6355,13 @@ then :
   :
 else $as_nop
   as_fn_error $? "Invalid '--with-env-builder' setting: '$WITH_ENV_BUILDER'.
-You must specify either local, nix, or a path to a directory" "$LINENO" 5
+You must specify either 'local', 'nix', or a path to a directory" "$LINENO" 5
 fi
  ;;
 esac
 
 
+# --with-flox-cli
 
 # Check whether --with-flox-cli was given.
 if test ${with_flox_cli+y}
@@ -6250,7 +6383,7 @@ then :
   :
 else $as_nop
   as_fn_error $? "Invalid '--with-flox-cli' setting: '$WITH_FLOX_CLI'.
-You must specify either local, nix, or a path to a directory" "$LINENO" 5
+You must specify either 'local', 'nix', or a path to a directory" "$LINENO" 5
 fi
  ;;
 esac
