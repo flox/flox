@@ -81,10 +81,17 @@ in
     export PATH="${lib.makeBinPath paths}"
     export PKGDB_BIN="${flox.PKGDB_BIN}"
 
-    # copy checkout to temporary directory
-    WORKDIR=$(mktemp -d -t ${name}-XXXXXX)
-    cp -R ${self}/* $WORKDIR
-    cd $WORKDIR
+    ${
+      if FLOX_CLI == null
+      then ""
+      else ''
+        # copy checkout to temporary directory
+        WORKDIR=$(mktemp -d -t ${name}-XXXXXX)
+        cp -R ${self}/* $WORKDIR
+        cd $WORKDIR
+      ''
+    }
+
 
     usage() {
           cat << EOF
