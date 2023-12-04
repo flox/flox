@@ -47,4 +47,4 @@ Other than that we do not have any integration _today_.
 ### Future Work: CLI
 
 - Implicitly trigger `pkgdb gc` for operations described in
-  [Future Work: Triggers](#Future-Work:-Triggers).
+  [Future Work: Triggers](#future-work--triggers).
