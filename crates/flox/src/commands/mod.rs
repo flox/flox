@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::{env, fs};
 
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use bpaf::{Args, Bpaf, Parser};
 use flox_rust_sdk::flox::{Flox, FLOX_VERSION};
 use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironment;
@@ -27,7 +27,9 @@ use once_cell::sync::Lazy;
 use tempfile::TempDir;
 use toml_edit::Key;
 
+use self::environment::hacky_environment_description;
 use crate::config::{Config, FLOX_CONFIG_FILE};
+use crate::utils::dialog::{Dialog, Select};
 use crate::utils::init::{
     init_access_tokens,
     init_channels,
@@ -469,7 +471,46 @@ impl EnvironmentSelect {
                             if activated == current_dir {
                                 Self::open_env_pointer(flox, &current_dir, current_dir_pointer)
                             } else {
-                                todo!("needs design");
+                                let activated_pointer = EnvironmentPointer::open(&activated)?;
+                                let message = "Do you want to install to the current directory's flox environment or the current active flox environment?";
+                                let current_description = hacky_environment_description(
+                                    &current_dir,
+                                    &current_dir_pointer,
+                                )?;
+                                let activated_description =
+                                    hacky_environment_description(&activated, &activated_pointer)?;
+                                if Dialog::can_prompt() {
+                                    let dialog = Dialog {
+                                        message,
+                                        help_message: None,
+                                        typed: Select {
+                                            options: vec![
+                                                format!(
+                                                    "current directory's flox environment [{current_description}]",
+                                                ),
+                                                format!(
+                                                    "current active flox environment [{activated_description}]",
+                                                ),
+                                            ],
+                                        },
+                                    };
+                                    let (index, _) = dialog.raw_prompt()?;
+                                    match index {
+                                        0 => Self::open_env_pointer(
+                                            flox,
+                                            &current_dir,
+                                            current_dir_pointer,
+                                        ),
+                                        1 => Self::open_env_pointer(
+                                            flox,
+                                            &activated,
+                                            activated_pointer,
+                                        ),
+                                        _ => unreachable!(),
+                                    }
+                                } else {
+                                    Err(anyhow!("can't determine whether to use {current_description} or {activated_description}; specify an environment using --dir or --remote"))?
+                                }
                             }
                         },
                         (Some(activated), Err(_)) => Self::open_path(flox, &activated),
