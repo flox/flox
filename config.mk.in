@@ -54,40 +54,6 @@ WITH_FLOX_CLI    = @WITH_FLOX_CLI@
 
 # ---------------------------------------------------------------------------- #
 
-# Audit Sub-Systems/Modules Validity
-# ----------------------------------
-
-ifeq (,$(filter local nix,$(WITH_FLOX_BASH)))
-ifeq "$(wildcard $(WITH_FLOX_BASH))" ""
-$(error Invalid WITH_FLOX_BASH setting: '$(WITH_FLOX_BASH)'.   \
-You must specify either local, nix, or a path to a directory)
-endif # WITH_FLOX_BASH is not a path to a directory
-endif # Audit WITH_FLOX_BASH
-
-ifeq (,$(filter local nix,$(WITH_PKGDB)))
-ifeq "$(wildcard $(WITH_PKGDB))" ""
-$(error Invalid WITH_PKGDB setting: '$(WITH_PKGDB)'.   \
-You must specify either local, nix, or a path to a directory)
-endif # WITH_PKGDB is not a path to a directory
-endif # Audit WITH_PKGDB
-
-ifeq (,$(filter local nix,$(WITH_ENV_BUILDER)))
-ifeq "$(wildcard $(WITH_ENV_BUILDER))" ""
-$(error Invalid WITH_ENV_BUILDER setting: '$(WITH_ENV_BUILDER)'.   \
-You must specify either local, nix, or a path to a directory)
-endif # WITH_ENV_BUILDER is not a path to a directory
-endif # Audit WITH_ENV_BUILDER
-
-ifeq (,$(filter local nix,$(WITH_FLOX_CLI)))
-ifeq "$(wildcard $(WITH_FLOX_CLI))" ""
-$(error Invalid WITH_FLOX_CLI setting: '$(WITH_FLOX_CLI)'.   \
-You must specify either local, nix, or a path to a directory)
-endif # WITH_FLOX_CLI is not a path to a directory
-endif # Audit WITH_FLOX_CLI
-
-
-# ---------------------------------------------------------------------------- #
-
 # External Dependencies
 # ---------------------
 
