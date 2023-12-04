@@ -11,7 +11,7 @@ and `pkgdb resolve`.
 Links to additional documentation may be found at the bottom of this file.
 
 
-### Purpose
+## Purpose
 
 Evaluating nix expressions for an entire flake is expensive but necessary for 
 features like package search. 
@@ -25,7 +25,7 @@ decisions about how and when to generate and update the database are left up to
 the consumer.
 
 
-### Compilation
+## Compilation
 
 ```bash
 $ nix develop;
@@ -35,9 +35,9 @@ $ make -j;
 See [CONTRIBUTING.md](./CONTRIBUTING.md) for more information.
 
 
-### Usage
+## Usage
 
-#### pkgdb scrape
+### pkgdb scrape
 
 Build the database with the `scrape` subcommand:
 
@@ -76,7 +76,7 @@ $ sqlite3 flakedb.sqlite '.mode json' 'SELECT name, version FROM Packages LIMIT 
 ```
 
 
-##### Expected Client Usage
+#### Expected Client Usage
 
 This utility is expected to be run multiple times if a client wishes to
 "fully scrape all the things" in a flake.
@@ -122,7 +122,7 @@ $ pkgdb scrape "$lockedRef" packages aarch64-linux;
 ```
 
 
-#### pkdb get
+### pkdb get
 
 The `pkgdb get {db,done,flake,id,path}` subcommands expose a handful of special
 queries for package databases that may be useful for simple scripts.
@@ -137,14 +137,14 @@ Subcommands:
 - `pkgdb get path`  Lookup an (AttrSets|Packages).id attribute path
 
 
-#### pkgdb list
+### pkgdb list
 
 List all known databases and their associated flake information.
 Accepts the options `--cachedir PATH` and `--json`.
 See `pkgdb list --help` for more info.
 
 
-### Schema
+## Schema
 
 The data is represented in a tree format matching the `attrPath` structure.
 The two entities are `AttrSets` (branches) and Packages (leaves).
@@ -160,7 +160,7 @@ architectures) by a `Descriptions` table.
 `pkgdb` that generated the database and the flake which was scraped.
 
 
-#### Details
+### Details
 
 If they are defined explicitly, `pname` and `version` will be read from the
 corresponding attributes.
@@ -214,7 +214,7 @@ erDiagram
 ```
 
 
-### Databases
+## Databases
 
 Each locked flake has its own database keyed using a unique _fingerprint_.
 The separation between these databases simplifies change detection and handling
@@ -223,7 +223,7 @@ These fingerprints are identical to those used by `nix` to create its own
 _eval caches_.
 
 
-#### Cache Directory
+### Cache Directory
 
 Some commands allow database paths to be explicitly set with `--database`,
 while those which act on multiple databases will place databases under
@@ -231,7 +231,7 @@ the environment variable `PKGDB_CACHEDIR` if it is set, otherwise the directory
 `${XDG_CACHE_HOME:-$HOME/.cache}/flox/pkgdb-v<SCHEMA-MAJOR>` is used.
 
 
-#### Garbage Collection
+### Garbage Collection
 
 Because each unique locked flake has its own database, over time these databases
 will accumulate and require garbage collection.
@@ -240,9 +240,9 @@ At this time there is no automated garbage collection mechanism, but simply
 deleting you cache directory will suffice.
 
 
-### Options and Settings
+## Options and Settings
 
-#### `--ga-registry`
+### `--ga-registry`
 
 Several commands such as `pkgdb search` and `pkgdb manifest` take an option
 `--ga-registry` which changes the behavior of _registry_ constructs to contain
@@ -261,6 +261,7 @@ This is used in our test suite.
 
 
 ## More Documentation
+- [Search parameters -> SQL](./docs/params-to-sql.md)
 - [Registry Schema](./docs/registry.md)
 - [Search Parameters](./docs/search.md)
 - [Manifests](./docs/manifests.md)
