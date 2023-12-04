@@ -497,7 +497,7 @@ jobs:
 
   trigger-flox-installers-workflow:
     name: "Trigger flox installers workflow"
-    # if: github.ref == 'refs/heads/garbas.trigger-installers-build' && github.event_name == 'pull_request'
+    # if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: "ubuntu-22.04-8core"
 
     needs:
@@ -519,7 +519,7 @@ jobs:
           workflow_file_name: "ci.yml"
           ref:                "master"
           wait_interval:      10
-          client_payload:     '{"TARGET":"git+ssh://git@github.com/flox/flox?rev=${{ github.sha }}"}'
+          client_payload:     '{"TARGET":"git+ssh://git@github.com/flox/flox?ref=${{ github.head_ref || github.ref }}&rev=${{ github.sha }}"}'
           propagate_failure:  false
           trigger_workflow:   true
           wait_workflow:      true
