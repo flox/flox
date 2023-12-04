@@ -197,5 +197,6 @@ in
       passthru.rustPlatform = rustPlatform;
       passthru.cargoDeps = cargoDepsArtifacts;
       passthru.pkgsFor = pkgsFor;
+      passthru.nix = nix;
     }
     // envs)
