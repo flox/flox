@@ -192,11 +192,17 @@ in
         env -i USER="$USER" HOME="$PWD" "$out/bin/flox" nix help > /dev/null;
       '';
 
-      passthru.envs = envs;
-      passthru.manpages = manpages;
-      passthru.rustPlatform = rustPlatform;
-      passthru.cargoDeps = cargoDepsArtifacts;
-      passthru.pkgsFor = pkgsFor;
-      passthru.nix = nix;
+      passthru = {
+        inherit
+          envs
+          manpages
+          rustPlatform
+          cargoDepsArtifacts
+          pkgsFor
+          nix
+          flox-pkgdb
+          flox-env-builder
+          ;
+      };
     }
     // envs)
