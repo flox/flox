@@ -9,13 +9,31 @@
  *
  * -------------------------------------------------------------------------- */
 
-#include <ctime>
-#include <iostream>
+#include <bits/chrono.h>
+#include <stdlib.h>
 #include <sys/stat.h>
 #include <utime.h>
+#include <algorithm>
+#include <filesystem>
+#include <iostream>
+#include <optional>
+#include <string>
+#include <variant>
+#include <vector>
 
+#include <argparse/argparse.hpp>
+#include <nix/error.hh>
+#include <nix/fmt.hh>
+#include <nix/logging.hh>
+#include <nix/types.hh>
+#include <nix/util.hh>
+
+#include "flox/core/command.hh"
+#include "flox/core/exceptions.hh"
+#include "flox/core/util.hh"
 #include "flox/pkgdb/command.hh"
 #include "flox/pkgdb/gc.hh"
+#include "flox/pkgdb/read.hh"
 
 
 /* -------------------------------------------------------------------------- */
