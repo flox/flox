@@ -241,8 +241,9 @@ impl Activate {
         if let Ok(existing_environments) = env::var(FLOX_ACTIVE_ENVIRONMENTS_VAR) {
             active_environments.extend(env::split_paths(&existing_environments));
         };
-        let flox_active_environments = env::join_paths(active_environments)
-            .context("Cannot activate environment because its path contains an invalid character")?;
+        let flox_active_environments = env::join_paths(active_environments).context(
+            "Cannot activate environment because its path contains an invalid character",
+        )?;
 
         // TODO more sophisticated detection?
         let shell = if let Ok(shell) = env::var("SHELL") {

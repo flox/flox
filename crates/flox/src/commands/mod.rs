@@ -482,7 +482,9 @@ impl EnvironmentSelect {
                     }
                 } else {
                     maybe_current_pointer
-                        .map(|current_dir_pointer| Self::open_env_pointer(flox, &current_dir, current_dir_pointer))
+                        .map(|current_dir_pointer| {
+                            Self::open_env_pointer(flox, &current_dir, current_dir_pointer)
+                        })
                         .context(format!("No environment found in {current_dir:?}"))?
                 }
             },
