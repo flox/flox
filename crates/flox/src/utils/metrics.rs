@@ -60,7 +60,7 @@ impl PosthogLayer {
             handle.block_on(async {
                 while let Ok(event) = rx.recv() {
                     if let Err(err) = add_metric(event.subcommand).await {
-                        error!("Error adding metric: {err}");
+                        debug!("Error adding metric: {err}");
                     }
                 }
             })

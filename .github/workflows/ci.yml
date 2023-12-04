@@ -110,7 +110,7 @@ jobs:
           nix develop -L \
             --accept-flake-config \
             --no-update-lock-file \
-            '.#pkgdb-ci' \
+            '.#flox-pkgdb-ci' \
               --command make -j4
           popd
 
@@ -120,7 +120,7 @@ jobs:
           nix develop -L \
             --accept-flake-config \
             --no-update-lock-file \
-            '.#pkgdb-ci' \
+            '.#flox-pkgdb-ci' \
               --command make tests -j4
           popd
 
@@ -130,7 +130,7 @@ jobs:
           nix develop -L \
             --accept-flake-config \
             --no-update-lock-file \
-            '.#pkgdb-ci' \
+            '.#flox-pkgdb-ci' \
               --command make check
           popd
 
@@ -140,7 +140,7 @@ jobs:
           nix develop -L \
             --accept-flake-config \
             --no-update-lock-file \
-            '.#pkgdb-ci' \
+            '.#flox-pkgdb-ci' \
               --command make docs
           chmod -c -R +rX "docs/" | while read line; do
             echo "::warning title=Invalid file permissions fixed::$line"
@@ -463,7 +463,7 @@ jobs:
             nix run \
                 --accept-flake-config \
                 --extra-experimental-features '"nix-command flakes"' \
-                'github:flox/flox/${{ github.sha }}#packages.${{ matrix.system }}.flox-tests-ci'
+                'github:flox/flox/${{ github.sha }}#packages.${{ matrix.system }}.flox-tests'
 
       - name: "Build end2end Bats Tests (.#flox-tests-end2end)"
         run: |
@@ -482,4 +482,4 @@ jobs:
             nix run \
                 --accept-flake-config \
                 --extra-experimental-features '"nix-command flakes"' \
-                'github:flox/flox/${{ github.sha }}#packages.${{ matrix.system }}.flox-tests-end2end-ci'
+                'github:flox/flox/${{ github.sha }}#packages.${{ matrix.system }}.flox-tests-end2end'

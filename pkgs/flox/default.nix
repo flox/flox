@@ -11,7 +11,6 @@
   zlib,
   pkg-config,
   darwin,
-  flox-bash,
   parser-util,
   pandoc,
   cacert,
@@ -21,6 +20,7 @@
   fd,
   gnused,
   gitMinimal,
+  nix,
   pkgsFor,
   floxVersion,
   flox-pkgdb,
@@ -38,14 +38,11 @@
       # we want to use our own binaries by absolute path
       # rather than relying on or modifying the user's `PATH` variable
       GIT_BIN = "${gitMinimal}/bin/git";
-      NIX_BIN = "${flox-bash}/libexec/flox/nix";
+      NIX_BIN = "${nix}/bin/nix";
       PARSER_UTIL_BIN = "${parser-util}/bin/parser-util";
       PKGDB_BIN = "${flox-pkgdb}/bin/pkgdb";
       ENV_BUILDER_BIN = "${flox-env-builder}/bin/flox-env-builder";
-      # still referred to in crates/flox/src/config/mod.rs
-      # to include the ./flox-bash/etc/flox.toml default config
-      # TODO: remove
-      FLOX_SH_PATH = flox-bash.outPath;
+      FLOX_ETC_DIR = ../../assets/etc;
       FLOX_ZDOTDIR = ../../assets/flox.zdotdir;
 
       # Modified nix completion scripts
@@ -177,6 +174,7 @@ in
 
       # bundle manpages and completion scripts
       postInstall = ''
+        ln -s "${envs.FLOX_ETC_DIR}" "$out/etc"
         installManPage ${manpages}/*;
         installShellCompletion --cmd flox                         \
           --bash <( "$out/bin/flox" --bpaf-complete-style-bash; ) \
@@ -194,12 +192,17 @@ in
         env -i USER="$USER" HOME="$PWD" "$out/bin/flox" nix help > /dev/null;
       '';
 
-      passthru.envs = envs;
-      passthru.manpages = manpages;
-      passthru.rustPlatform = rustPlatform;
-      passthru.flox-bash = flox-bash;
-      passthru.cargoDeps = cargoDepsArtifacts;
-      passthru.nixPatched = flox-bash.passthru.nixPatched;
-      passthru.pkgsFor = pkgsFor;
+      passthru = {
+        inherit
+          envs
+          manpages
+          rustPlatform
+          cargoDepsArtifacts
+          pkgsFor
+          nix
+          flox-pkgdb
+          flox-env-builder
+          ;
+      };
     }
     // envs)
