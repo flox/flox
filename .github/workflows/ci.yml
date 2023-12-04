@@ -33,7 +33,7 @@ jobs:
         uses: "flox/install-flox-action@main"
         with:
           github-access-token:    "${{ secrets.NIX_GIT_TOKEN }}"
-          substituter:            "s3://flox-store"
+          substituter:            "s3://flox-store-public"
           substituter-key:        "${{ secrets.FLOX_STORE_PUBLIC_NIX_SECRET_KEY }}"
           aws-access-key-id:      "${{ secrets.AWS_ACCESS_KEY_ID }}"
           aws-secret-access-key:  "${{ secrets.AWS_SECRET_ACCESS_KEY }}"
@@ -91,7 +91,7 @@ jobs:
         uses: "flox/install-flox-action@main"
         with:
           github-access-token:    "${{ secrets.NIX_GIT_TOKEN }}"
-          substituter:            "s3://flox-store"
+          substituter:            "s3://flox-store-public"
           substituter-key:        "${{ secrets.FLOX_STORE_PUBLIC_NIX_SECRET_KEY }}"
           aws-access-key-id:      "${{ secrets.AWS_ACCESS_KEY_ID }}"
           aws-secret-access-key:  "${{ secrets.AWS_SECRET_ACCESS_KEY }}"
@@ -177,7 +177,7 @@ jobs:
         uses: "flox/install-flox-action@main"
         with:
           github-access-token:    "${{ secrets.NIX_GIT_TOKEN }}"
-          substituter:            "s3://flox-store"
+          substituter:            "s3://flox-store-public"
           substituter-key:        "${{ secrets.FLOX_STORE_PUBLIC_NIX_SECRET_KEY }}"
           aws-access-key-id:      "${{ secrets.AWS_ACCESS_KEY_ID }}"
           aws-secret-access-key:  "${{ secrets.AWS_SECRET_ACCESS_KEY }}"
@@ -238,7 +238,7 @@ jobs:
         uses: "flox/install-flox-action@main"
         with:
           github-access-token:    "${{ secrets.NIX_GIT_TOKEN }}"
-          substituter:            "s3://flox-store"
+          substituter:            "s3://flox-store-public"
           substituter-key:        "${{ secrets.FLOX_STORE_PUBLIC_NIX_SECRET_KEY }}"
           aws-access-key-id:      "${{ secrets.AWS_ACCESS_KEY_ID }}"
           aws-secret-access-key:  "${{ secrets.AWS_SECRET_ACCESS_KEY }}"
@@ -322,7 +322,7 @@ jobs:
         uses: "flox/install-flox-action@main"
         with:
           github-access-token:    "${{ secrets.NIX_GIT_TOKEN }}"
-          substituter:            "s3://flox-store"
+          substituter:            "s3://flox-store-public"
           substituter-key:        "${{ secrets.FLOX_STORE_PUBLIC_NIX_SECRET_KEY }}"
           aws-access-key-id:      "${{ secrets.AWS_ACCESS_KEY_ID }}"
           aws-secret-access-key:  "${{ secrets.AWS_SECRET_ACCESS_KEY }}"
@@ -406,7 +406,7 @@ jobs:
         uses: "flox/install-flox-action@main"
         with:
           github-access-token:    "${{ secrets.NIX_GIT_TOKEN }}"
-          substituter:            "s3://flox-store"
+          substituter:            "s3://flox-store-public"
           substituter-key:        "${{ secrets.FLOX_STORE_PUBLIC_NIX_SECRET_KEY }}"
           aws-access-key-id:      "${{ secrets.AWS_ACCESS_KEY_ID }}"
           aws-secret-access-key:  "${{ secrets.AWS_SECRET_ACCESS_KEY }}"
