@@ -181,6 +181,7 @@
         (pkgs)
         flox
         flox-tests
+        flox-tests-end2end
         flox-pkgdb
         flox-pkgdb-tests
         flox-env-builder
