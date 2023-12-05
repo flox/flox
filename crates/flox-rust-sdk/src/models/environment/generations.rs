@@ -16,10 +16,25 @@ use crate::providers::git::{GitCommandProvider, GitProvider};
 const GENERATIONS_METADATA_FILE: &str = "metadata.json";
 
 /// A representation of the generations of an environment
+///
+/// Example File layout:
+///
+/// ./
+/// ├── 1
+/// │  └── env
+/// │     ├── manifest.toml
+/// │     └── manifest.lock
+/// ├── 2
+/// │  └── env
+/// │    └── manifest.toml (lockfile is optional)
+/// ├── ... N
+/// │  └── env
+/// │     └── manifest.toml
+/// └── metadata.json
 pub struct Generations {
     /// A floxmeta repository/branch that contains the generations of an environment
-    environment_repr: GitCommandProvider,
-    ref_name: String,
+    repo: GitCommandProvider,
+    branch: String,
 
     /// A path pointer for the environment that will
     /// be associated with a realized generation
@@ -38,8 +53,8 @@ impl Generations {
         tempdir_base: PathBuf,
     ) -> Self {
         Self {
-            environment_repr,
-            ref_name,
+            repo: environment_repr,
+            branch: ref_name,
             pointer,
             tempdir_base,
         }
@@ -47,12 +62,12 @@ impl Generations {
 
     /// Read the generations metadata for an environment
     pub fn metadata(&self) -> Result<Metadata, GenerationsError> {
-        read_metadata(&self.environment_repr, &self.ref_name)
+        read_metadata(&self.repo, &self.branch)
     }
 
     /// Realize the generations branch into a temporary directory
     fn realize(&self) -> Result<GitCommandProvider, GenerationsError> {
-        let git_options = self.environment_repr.get_options().clone();
+        let git_options = self.repo.get_options().clone();
 
         let realized_path = tempfile::tempdir_in(&self.tempdir_base)
             .unwrap()
@@ -60,9 +75,9 @@ impl Generations {
 
         let repo = GitCommandProvider::clone_branch_with(
             git_options,
-            self.environment_repr.path(),
+            self.repo.path(),
             realized_path,
-            &self.ref_name,
+            &self.branch,
             false,
         )
         .unwrap();
@@ -179,6 +194,8 @@ impl Generations {
 
     /// Create a new generation from an existing environment
     ///
+    /// Assumes the invariant that the [PathEnvironment] instance is valid.
+    ///
     /// This will copy the manifest and lockfile from the source environment
     /// into a generation folder.
     /// Any other assets such as hook scripts are ignored.
@@ -265,8 +282,8 @@ fn write_metadata_file(metadata: Metadata, realized_path: &Path) -> Result<(), G
 /// flox environment metadata for managed environments
 ///
 /// Managed environments support rolling back to previous generations.
-/// Generations are defined immutable copy-on-write folders.
-/// Rollbacks and asssociated [GenerationMetadata] is tracked per environemnt
+/// Generations are defined as immutable copy-on-write folders.
+/// Rollbacks and associated [GenerationMetadata] are tracked per environment
 /// in a metadata file at the root of the environment branch.
 #[derive(Serialize, Deserialize, Debug, Default)]
 #[serde(rename_all = "camelCase")]
