@@ -148,19 +148,21 @@ impl Generations<ReadWrite> {
         &mut self,
         environment: PathEnvironment<Original>,
         generation: usize,
-        generation_metadata: GenerationMetadata,
+        description: String,
         set_current: bool,
     ) -> Result<(), GenerationsError> {
-        let description = generation_metadata.description.clone();
+        let mut generation_metadata = GenerationMetadata::new(description.clone());
 
         let mut metadata = self.metadata()?;
-        let _existing = metadata
-            .generations
-            .insert(generation.into(), generation_metadata);
 
         if set_current {
             metadata.current_gen = Some(generation.into());
+            generation_metadata.last_active = Some(Utc::now());
         }
+
+        let _existing = metadata
+            .generations
+            .insert(generation.into(), generation_metadata);
 
         write_metadata_file(metadata, self.repo.path())?;
 
@@ -197,7 +199,7 @@ impl Generations<ReadWrite> {
     pub fn add_generation(
         &mut self,
         environment: PathEnvironment<Original>,
-        generation_metadata: GenerationMetadata,
+        description: String,
     ) -> Result<(), GenerationsError> {
         // keys should all be numbers (but)
         let max = self
@@ -208,7 +210,7 @@ impl Generations<ReadWrite> {
             .max()
             .unwrap_or_default();
 
-        self.register_generation(environment, *max + 1, generation_metadata, true)
+        self.register_generation(environment, *max + 1, description, true)
     }
 
     /// Switch to a provided generation.
@@ -311,9 +313,14 @@ pub struct Metadata {
 #[derive(Clone, Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct GenerationMetadata {
-    /// unix timestamp of the creation time if this generation
+    /// unix timestamp of the creation time of this generation
     #[serde(with = "chrono::serde::ts_seconds")]
     created: DateTime<Utc>,
+
+    /// unix timestamp of the time when this generation was last set as active
+    /// `None` if this generation has never been set as active
+    #[serde(with = "chrono::serde::ts_seconds_option")]
+    last_active: Option<DateTime<Utc>>,
 
     /// log message(s) describing the change from the previous generation
     description: String,
@@ -328,6 +335,7 @@ impl GenerationMetadata {
     pub fn new(description: String) -> Self {
         Self {
             created: Utc::now(),
+            last_active: None,
             description,
         }
     }
