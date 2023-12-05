@@ -10,7 +10,7 @@ use serde_with::{DeserializeFromStr, SerializeDisplay};
 use thiserror::Error;
 
 use super::path_environment::{Original, PathEnvironment};
-use super::{PathPointer, ENV_DIR_NAME, LOCKFILE_FILENAME, MANIFEST_FILENAME};
+use super::{copy_dir_recursive, PathPointer, ENV_DIR_NAME, LOCKFILE_FILENAME, MANIFEST_FILENAME};
 use crate::providers::git::{GitCommandProvider, GitProvider};
 
 const GENERATIONS_METADATA_FILE: &str = "metadata.json";
@@ -161,24 +161,9 @@ impl Generations {
         let env_path = generation_path.join(ENV_DIR_NAME);
         fs::create_dir_all(&env_path).unwrap();
 
-        // todo: we need to figure out what comes with a path env.
-        //       i.e. which files other than the manifest and lockfile do we need to copy?
-        //       what about assets such hook scripts?
-
-        // copy manifest and lockfile (if it exists)
-        // silently overrides existing files (but does not remove them if they are not in the source)
-        fs::copy(
-            environment.manifest_path(),
-            env_path.join(MANIFEST_FILENAME),
-        )
-        .unwrap();
-        if environment.lockfile_path().exists() {
-            fs::copy(
-                environment.lockfile_path(),
-                env_path.join(LOCKFILE_FILENAME),
-            )
-            .unwrap();
-        }
+        // copy `env/`, i.e. manifest and lockfile (if it exists) and possibly other assets
+        // copy into `<generation>/env/` to make creating `PathEnvironment` easier
+        copy_dir_recursive(&environment.path.join(ENV_DIR_NAME), &env_path, true).unwrap();
 
         realized.add(&[Path::new(".")]).unwrap();
         realized
