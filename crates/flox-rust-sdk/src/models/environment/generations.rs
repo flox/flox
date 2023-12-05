@@ -15,9 +15,9 @@ use crate::providers::git::{GitCommandProvider, GitProvider};
 
 const GENERATIONS_METADATA_FILE: &str = "metadata.json";
 
-struct ReadOnly {}
+pub struct ReadOnly {}
 
-struct ReadWrite {
+pub struct ReadWrite {
     /// A base directory that contains the tempdir
     /// of the checked out generations branch
     /// as well as tempdirs created by [PathEnvironment] transactions.
