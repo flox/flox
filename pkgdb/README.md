@@ -265,3 +265,4 @@ This is used in our test suite.
 - [Search Parameters](./docs/search.md)
 - [Manifests](./docs/manifests.md)
 - [Lockfiles](./docs/lockfile.md)
+- [Garbage Collection](./docs/garbage-collection.md)
