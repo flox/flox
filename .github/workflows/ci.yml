@@ -525,4 +525,4 @@ jobs:
           client_payload:     '{"TARGET":"git+ssh://git@github.com/flox/flox?ref=garbas.trigger-installers-build&rev=${{ github.event.pull_request.head.sha }}"}'
           propagate_failure:  false
           trigger_workflow:   true
-          wait_workflow:      true
+          wait_workflow:      false
