@@ -594,7 +594,7 @@ impl WipeHistory {
 
         let env = self
             .environment
-            .detect_concrete_environment(&flox, "wipe-history of")?
+            .detect_concrete_environment(&flox, "wipe history of")?
             .into_dyn_environment();
 
         if env.delete_symlinks()? {
