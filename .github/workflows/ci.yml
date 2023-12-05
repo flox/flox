@@ -508,13 +508,13 @@ jobs:
       - name: "Trigger flox installers workflow"
         uses: "convictional/trigger-workflow-and-wait@v1.6.1"
         with:
-          owner: "flox"
-          repo: "nix-installers"
+          owner:              "flox"
+          repo:               "nix-installers"
           github_token:       "${{ secrets.NIX_GIT_TOKEN }}"
           github_user:        "floxbot"
           workflow_file_name: "ci.yml"
           #XXX: ref:                "master"
-          ref:                "garbas.triggered-from-flox-flox"
+          ref:                ""
           wait_interval:      10
           #XXX: client_payload:     '{"TARGET":"git+ssh://git@github.com/flox/flox?ref=main&rev=${{ github.event.pull_request.head.sha }}"}'
           client_payload:     '{"TARGET":"git+ssh://git@github.com/flox/flox?ref=garbas.trigger-installers-build&rev=${{ github.event.pull_request.head.sha }}"}'
