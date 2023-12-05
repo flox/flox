@@ -14,7 +14,7 @@ _default_/fallback settings to be used if/when _inputs_ do not explicitly
 declare some settings.
 
 
-## Schemas
+## Schema
 
 Before diving into the details of individual parts of the schema, lets start
 with an example of a registry with three _inputs_.
@@ -40,6 +40,7 @@ Here we use JSON, but any trivial format could be used.
       }
     , "subtrees": ["packages"]
     }
+  }
 , "defaults": {
     "subtrees": null
   }
