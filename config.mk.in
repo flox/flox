@@ -11,7 +11,6 @@
 # -------------------
 
 REPO_ROOT             = @REPO_ROOT@
-FLOX_BASH_ROOT        = @FLOX_BASH_ROOT@
 PKGDB_ROOT            = @PKGDB_ROOT@
 PKGDB_TESTS_DIR       = @PKGDB_TESTS_DIR@
 ENV_BUILDER_ROOT      = @ENV_BUILDER_ROOT@
@@ -27,6 +26,10 @@ FLAKE_LOCK            = @FLAKE_LOCK@
 
 # Installation Directories
 # ------------------------
+
+# Works around a bug in `automake' where `datadir' is set before a variable
+# it references.
+datarootdir ?= ${prefix}/share
 
 PREFIX            = @PREFIX@
 BINDIR            = @BINDIR@
@@ -46,7 +49,6 @@ INSTALL_TESTS_DIR = @INSTALL_TESTS_DIR@
 # Sub-Systems/Modules
 # -------------------
 
-WITH_FLOX_BASH   = @WITH_FLOX_BASH@
 WITH_PKGDB       = @WITH_PKGDB@
 WITH_ENV_BUILDER = @WITH_ENV_BUILDER@
 WITH_FLOX_CLI    = @WITH_FLOX_CLI@
@@ -82,7 +84,8 @@ FIND       = @FIND@
 GIT        = @GIT@
 GREP       = @GREP@
 HIVEMIND   = @HIVEMIND@
-LN_S       = @LN_S@
+LN         = @LN@
+LN_S       = $(LN) -s
 MKDIR      = @MKDIR@
 MKDIR_P    = $(MKDIR) -p
 RM         = @RM@ -f
@@ -128,30 +131,10 @@ CXX_TOOLCHAIN = @CXX_TOOLCHAIN@
 
 # ---------------------------------------------------------------------------- #
 
-# Audit Platform and Toolchain Configuration Validity
-# ---------------------------------------------------
-
-ifeq (,$(filter darwin linux,$(OS)))
-$(error Unsupported OS: '$(OS)'. Must be one of: darwin, linux)
-endif # Audit OS
-
-ifeq (,$(filter x86_64 aarch64,$(ARCH)))
-$(error Unsupported ARCH: '$(ARCH)'. Must be one of: x86_64, aarch64)
-endif # Audit ARCH
-
-ifeq (,$(filter clang gcc,$(CXX_TOOLCHAIN)))
-$(error Unsupported CXX_TOOLCHAIN: '$(CXX_TOOLCHAIN)'. \
-Must be one of: clang, gcc)
-endif # Audit CXX_TOOLCHAIN
-
-
-# ---------------------------------------------------------------------------- #
-
 # TODO
 .PHONY: show-config
 show-config:
 	@echo "REPO_ROOT: $(REPO_ROOT)";
-	@echo "FLOX_BASH_ROOT: $(FLOX_BASH_ROOT)";
 	@echo "PKGDB_ROOT: $(PKGDB_ROOT)";
 	@echo "PKGDB_TESTS_DIR: $(PKGDB_TESTS_DIR)";
 	@echo "ENV_BUILDER_ROOT: $(ENV_BUILDER_ROOT)";
@@ -174,7 +157,6 @@ show-config:
 	@echo "SYSCONFDIR: $(SYSCONFDIR)";
 	@echo "INSTALL_TESTS_DIR: $(INSTALL_TESTS_DIR)";
 
-	@echo "WITH_FLOX_BASH: $(WITH_FLOX_BASH)";
 	@echo "WITH_PKGDB: $(WITH_PKGDB)";
 	@echo "WITH_ENV_BUILDER: $(WITH_ENV_BUILDER)";
 	@echo "WITH_FLOX_CLI: $(WITH_FLOX_CLI)";

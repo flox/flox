@@ -11,7 +11,9 @@ set -o pipefail;
 
 # ---------------------------------------------------------------------------- #
 
-_as_me="bootstrap.sh";
+_as_script="${BASH_SOURCE[0]}";
+_as_me="${_as_script##*/}";
+_as_dir="${_as_script%/*}";
 
 _version="0.1.0";
 
@@ -33,6 +35,7 @@ OPTIONS
 ENVIRONMENT
   ACLOCAL           Command used as \`aclocal' executable.
   AUTORECONF        Command used as \`autoreconf' executable.
+  SED               Command used as \`sed' executable.
 ";
 
 
@@ -52,6 +55,7 @@ usage() {
 # @BEGIN_INJECT_UTILS@
 : "${ACLOCAL:=aclocal}";
 : "${AUTORECONF:=autoreconf}";
+: "${SED:=sed}";
 
 
 # ---------------------------------------------------------------------------- #
@@ -97,6 +101,12 @@ while [[ "$#" -gt 0 ]]; do
   esac
   shift;
 done
+
+
+# ---------------------------------------------------------------------------- #
+
+# Change directory to project root.
+pushd "$_as_dir" >/dev/null||exit;
 
 
 # ---------------------------------------------------------------------------- #

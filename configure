@@ -667,10 +667,24 @@ NLJSON_CFLAGS
 PKG_CONFIG_LIBDIR
 PKG_CONFIG_PATH
 PKG_CONFIG
+FLAKE_LOCK
+FLAKE_NIX
+CRATES_DIR
+FLOX_CLI_TESTS_DIR
+FLOX_CLI_ROOT
+ENV_BUILDER_TESTS_DIR
+ENV_BUILDER_ROOT
+PKGDB_TESTS_DIR
+PKGDB_ROOT
+REPO_ROOT
 WITH_FLOX_CLI
 WITH_ENV_BUILDER
 WITH_PKGDB
-WITH_FLOX_BASH
+LIBOBJS
+ALLOCA
+CXX_TOOLCHAIN
+ARCH
+OS
 host_os
 host_vendor
 host_cpu
@@ -679,8 +693,6 @@ build_os
 build_vendor
 build_cpu
 build
-LIBOBJS
-ALLOCA
 DOXYGEN
 CXX_LINT
 CXX_FMT
@@ -698,6 +710,7 @@ GIT
 M4
 XARGS
 FIND
+LN
 UNAME
 TR
 TOUCH
@@ -709,10 +722,8 @@ MKDIR
 CP
 CAT
 MISSING
-abs_srcdir
 SED
 GREP
-LN_S
 am__fastdepCC_FALSE
 am__fastdepCC_TRUE
 CCDEPMODE
@@ -735,6 +746,18 @@ CPPFLAGS
 LDFLAGS
 CXXFLAGS
 CXX
+abs_srcdir
+INSTALL_TESTS_DIR
+SYSCONFDIR
+LIBEXECDIR
+DOCDIR
+PKGCONFIGDIR
+MANDIR
+DATADIR
+INCLUDEDIR
+LIBDIR
+BINDIR
+PREFIX
 AM_BACKSLASH
 AM_DEFAULT_VERBOSITY
 AM_DEFAULT_V
@@ -810,7 +833,6 @@ ac_user_opts='
 enable_option_checking
 enable_silent_rules
 enable_dependency_tracking
-with_flox_bash
 with_pkgdb
 with_env_builder
 with_flox_cli
@@ -1478,9 +1500,6 @@ Optional Features:
 Optional Packages:
   --with-PACKAGE[=ARG]    use PACKAGE [ARG=yes]
   --without-PACKAGE       do not use PACKAGE (same as --with-PACKAGE=no)
-  --with-flox-bash={local,nix,PREFIX}
-                          use flox-bash from local tree, nix build, or path to
-                          its install prefix
   --with-pkgdb={local,nix,PREFIX}
                           use pkgdb from local tree, nix build, or path to its
                           install prefix
@@ -3683,10 +3702,40 @@ fi
 
 #AC_CONFIG_HEADERS([pkgdb/config.h])
 
+PREFIX="$prefix"
+
+BINDIR="$bindir"
+
+LIBDIR="$libdir"
+
+INCLUDEDIR="$includedir"
+
+DATADIR="$datadir"
+
+MANDIR="$mandir"
+
+PKGCONFIGDIR="$LIBDIR/pkgconfig"
+
+DOCDIR="$docdir"
+
+LIBEXECDIR="$libexecdir"
+
+SYSCONFDIR="$sysconfdir"
+
+# TODO: this needs to be setup so the relative `RPATH' works correctly.
+INSTALL_TESTS_DIR="$DATADIR/flox/tests/bin"
+
+
+abs_srcdir="$( cd "$srcdir"; echo "$PWD"; )"
+
+
+
 
 # ---------------------------------------------------------------------------- #
 
 # Checks for programs.
+# We use builtin `AC_PROG_<NAME>' macros to run checks; but follow up with
+# `AC_PATH_PROG' to get absolute paths to the programs.
 
 
 
@@ -4509,6 +4558,53 @@ else
   am__fastdepCXX_TRUE='#'
   am__fastdepCXX_FALSE=
 fi
+
+
+# Extract the first word of "$CXX", so it can be a program name with args.
+set dummy $CXX; ac_word=$2
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
+printf %s "checking for $ac_word... " >&6; }
+if test ${ac_cv_path_CXX+y}
+then :
+  printf %s "(cached) " >&6
+else $as_nop
+  case $CXX in
+  [\\/]* | ?:[\\/]*)
+  ac_cv_path_CXX="$CXX" # Let the user override the test with a path.
+  ;;
+  *)
+  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
+for as_dir in $PATH
+do
+  IFS=$as_save_IFS
+  case $as_dir in #(((
+    '') as_dir=./ ;;
+    */) ;;
+    *) as_dir=$as_dir/ ;;
+  esac
+    for ac_exec_ext in '' $ac_executable_extensions; do
+  if as_fn_executable_p "$as_dir$ac_word$ac_exec_ext"; then
+    ac_cv_path_CXX="$as_dir$ac_word$ac_exec_ext"
+    printf "%s\n" "$as_me:${as_lineno-$LINENO}: found $as_dir$ac_word$ac_exec_ext" >&5
+    break 2
+  fi
+done
+  done
+IFS=$as_save_IFS
+
+  test -z "$ac_cv_path_CXX" && ac_cv_path_CXX="$MISSING c++"
+  ;;
+esac
+fi
+CXX=$ac_cv_path_CXX
+if test -n "$CXX"; then
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $CXX" >&5
+printf "%s\n" "$CXX" >&6; }
+else
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
+printf "%s\n" "no" >&6; }
+fi
+
 
 
 
@@ -5441,17 +5537,100 @@ else
 fi
 
 
+# Extract the first word of "$CC", so it can be a program name with args.
+set dummy $CC; ac_word=$2
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
+printf %s "checking for $ac_word... " >&6; }
+if test ${ac_cv_path_CC+y}
+then :
+  printf %s "(cached) " >&6
+else $as_nop
+  case $CC in
+  [\\/]* | ?:[\\/]*)
+  ac_cv_path_CC="$CC" # Let the user override the test with a path.
+  ;;
+  *)
+  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
+for as_dir in $PATH
+do
+  IFS=$as_save_IFS
+  case $as_dir in #(((
+    '') as_dir=./ ;;
+    */) ;;
+    *) as_dir=$as_dir/ ;;
+  esac
+    for ac_exec_ext in '' $ac_executable_extensions; do
+  if as_fn_executable_p "$as_dir$ac_word$ac_exec_ext"; then
+    ac_cv_path_CC="$as_dir$ac_word$ac_exec_ext"
+    printf "%s\n" "$as_me:${as_lineno-$LINENO}: found $as_dir$ac_word$ac_exec_ext" >&5
+    break 2
+  fi
+done
+  done
+IFS=$as_save_IFS
 
-{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking whether ln -s works" >&5
-printf %s "checking whether ln -s works... " >&6; }
-LN_S=$as_ln_s
-if test "$LN_S" = "ln -s"; then
-  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: yes" >&5
-printf "%s\n" "yes" >&6; }
-else
-  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no, using $LN_S" >&5
-printf "%s\n" "no, using $LN_S" >&6; }
+  test -z "$ac_cv_path_CC" && ac_cv_path_CC="$MISSING cc"
+  ;;
+esac
 fi
+CC=$ac_cv_path_CC
+if test -n "$CC"; then
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $CC" >&5
+printf "%s\n" "$CC" >&6; }
+else
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
+printf "%s\n" "no" >&6; }
+fi
+
+
+
+
+# Extract the first word of "$CC", so it can be a program name with args.
+set dummy $CC; ac_word=$2
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
+printf %s "checking for $ac_word... " >&6; }
+if test ${ac_cv_path_CC+y}
+then :
+  printf %s "(cached) " >&6
+else $as_nop
+  case $CC in
+  [\\/]* | ?:[\\/]*)
+  ac_cv_path_CC="$CC" # Let the user override the test with a path.
+  ;;
+  *)
+  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
+for as_dir in $PATH
+do
+  IFS=$as_save_IFS
+  case $as_dir in #(((
+    '') as_dir=./ ;;
+    */) ;;
+    *) as_dir=$as_dir/ ;;
+  esac
+    for ac_exec_ext in '' $ac_executable_extensions; do
+  if as_fn_executable_p "$as_dir$ac_word$ac_exec_ext"; then
+    ac_cv_path_CC="$as_dir$ac_word$ac_exec_ext"
+    printf "%s\n" "$as_me:${as_lineno-$LINENO}: found $as_dir$ac_word$ac_exec_ext" >&5
+    break 2
+  fi
+done
+  done
+IFS=$as_save_IFS
+
+  test -z "$ac_cv_path_CC" && ac_cv_path_CC="$MISSING install"
+  ;;
+esac
+fi
+CC=$ac_cv_path_CC
+if test -n "$CC"; then
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $CC" >&5
+printf "%s\n" "$CC" >&6; }
+else
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
+printf "%s\n" "no" >&6; }
+fi
+
+
 
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for grep that handles long lines and -e" >&5
 printf %s "checking for grep that handles long lines and -e... " >&6; }
@@ -5520,6 +5699,53 @@ fi
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $ac_cv_path_GREP" >&5
 printf "%s\n" "$ac_cv_path_GREP" >&6; }
  GREP="$ac_cv_path_GREP"
+
+
+# Extract the first word of "$GREP", so it can be a program name with args.
+set dummy $GREP; ac_word=$2
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
+printf %s "checking for $ac_word... " >&6; }
+if test ${ac_cv_path_GREP+y}
+then :
+  printf %s "(cached) " >&6
+else $as_nop
+  case $GREP in
+  [\\/]* | ?:[\\/]*)
+  ac_cv_path_GREP="$GREP" # Let the user override the test with a path.
+  ;;
+  *)
+  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
+for as_dir in $PATH
+do
+  IFS=$as_save_IFS
+  case $as_dir in #(((
+    '') as_dir=./ ;;
+    */) ;;
+    *) as_dir=$as_dir/ ;;
+  esac
+    for ac_exec_ext in '' $ac_executable_extensions; do
+  if as_fn_executable_p "$as_dir$ac_word$ac_exec_ext"; then
+    ac_cv_path_GREP="$as_dir$ac_word$ac_exec_ext"
+    printf "%s\n" "$as_me:${as_lineno-$LINENO}: found $as_dir$ac_word$ac_exec_ext" >&5
+    break 2
+  fi
+done
+  done
+IFS=$as_save_IFS
+
+  test -z "$ac_cv_path_GREP" && ac_cv_path_GREP="$MISSING grep"
+  ;;
+esac
+fi
+GREP=$ac_cv_path_GREP
+if test -n "$GREP"; then
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $GREP" >&5
+printf "%s\n" "$GREP" >&6; }
+else
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
+printf "%s\n" "no" >&6; }
+fi
+
 
 
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for a sed that does not truncate output" >&5
@@ -5597,19 +5823,53 @@ printf "%s\n" "$ac_cv_path_SED" >&6; }
  SED="$ac_cv_path_SED"
   rm -f conftest.sed
 
-{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking whether ln -s works" >&5
-printf %s "checking whether ln -s works... " >&6; }
-LN_S=$as_ln_s
-if test "$LN_S" = "ln -s"; then
-  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: yes" >&5
-printf "%s\n" "yes" >&6; }
+# Extract the first word of "$SED", so it can be a program name with args.
+set dummy $SED; ac_word=$2
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
+printf %s "checking for $ac_word... " >&6; }
+if test ${ac_cv_path_SED+y}
+then :
+  printf %s "(cached) " >&6
+else $as_nop
+  case $SED in
+  [\\/]* | ?:[\\/]*)
+  ac_cv_path_SED="$SED" # Let the user override the test with a path.
+  ;;
+  *)
+  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
+for as_dir in $PATH
+do
+  IFS=$as_save_IFS
+  case $as_dir in #(((
+    '') as_dir=./ ;;
+    */) ;;
+    *) as_dir=$as_dir/ ;;
+  esac
+    for ac_exec_ext in '' $ac_executable_extensions; do
+  if as_fn_executable_p "$as_dir$ac_word$ac_exec_ext"; then
+    ac_cv_path_SED="$as_dir$ac_word$ac_exec_ext"
+    printf "%s\n" "$as_me:${as_lineno-$LINENO}: found $as_dir$ac_word$ac_exec_ext" >&5
+    break 2
+  fi
+done
+  done
+IFS=$as_save_IFS
+
+  test -z "$ac_cv_path_SED" && ac_cv_path_SED="$MISSING sed"
+  ;;
+esac
+fi
+SED=$ac_cv_path_SED
+if test -n "$SED"; then
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $SED" >&5
+printf "%s\n" "$SED" >&6; }
 else
-  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no, using $LN_S" >&5
-printf "%s\n" "no, using $LN_S" >&6; }
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
+printf "%s\n" "no" >&6; }
 fi
 
 
-abs_srcdir=$( cd "$srcdir"; echo "$PWD"; )
+
 
 
 # Extract the first word of "missing", so it can be a program name with args.
@@ -5657,6 +5917,7 @@ else
   { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
 printf "%s\n" "no" >&6; }
 fi
+
 
 
 
@@ -6114,6 +6375,52 @@ UNAME=$ac_cv_path_UNAME
 if test -n "$UNAME"; then
   { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $UNAME" >&5
 printf "%s\n" "$UNAME" >&6; }
+else
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
+printf "%s\n" "no" >&6; }
+fi
+
+
+# Extract the first word of "ln", so it can be a program name with args.
+set dummy ln; ac_word=$2
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
+printf %s "checking for $ac_word... " >&6; }
+if test ${ac_cv_path_LN+y}
+then :
+  printf %s "(cached) " >&6
+else $as_nop
+  case $LN in
+  [\\/]* | ?:[\\/]*)
+  ac_cv_path_LN="$LN" # Let the user override the test with a path.
+  ;;
+  *)
+  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
+for as_dir in $PATH
+do
+  IFS=$as_save_IFS
+  case $as_dir in #(((
+    '') as_dir=./ ;;
+    */) ;;
+    *) as_dir=$as_dir/ ;;
+  esac
+    for ac_exec_ext in '' $ac_executable_extensions; do
+  if as_fn_executable_p "$as_dir$ac_word$ac_exec_ext"; then
+    ac_cv_path_LN="$as_dir$ac_word$ac_exec_ext"
+    printf "%s\n" "$as_me:${as_lineno-$LINENO}: found $as_dir$ac_word$ac_exec_ext" >&5
+    break 2
+  fi
+done
+  done
+IFS=$as_save_IFS
+
+  test -z "$ac_cv_path_LN" && ac_cv_path_LN="$MISSING ln"
+  ;;
+esac
+fi
+LN=$ac_cv_path_LN
+if test -n "$LN"; then
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $LN" >&5
+printf "%s\n" "$LN" >&6; }
 else
   { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
 printf "%s\n" "no" >&6; }
@@ -6914,6 +7221,122 @@ fi
 
 # ---------------------------------------------------------------------------- #
 
+# Platform and Toolchain Checks
+
+
+
+  # Make sure we can run config.sub.
+$SHELL "${ac_aux_dir}config.sub" sun4 >/dev/null 2>&1 ||
+  as_fn_error $? "cannot run $SHELL ${ac_aux_dir}config.sub" "$LINENO" 5
+
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking build system type" >&5
+printf %s "checking build system type... " >&6; }
+if test ${ac_cv_build+y}
+then :
+  printf %s "(cached) " >&6
+else $as_nop
+  ac_build_alias=$build_alias
+test "x$ac_build_alias" = x &&
+  ac_build_alias=`$SHELL "${ac_aux_dir}config.guess"`
+test "x$ac_build_alias" = x &&
+  as_fn_error $? "cannot guess build type; you must specify one" "$LINENO" 5
+ac_cv_build=`$SHELL "${ac_aux_dir}config.sub" $ac_build_alias` ||
+  as_fn_error $? "$SHELL ${ac_aux_dir}config.sub $ac_build_alias failed" "$LINENO" 5
+
+fi
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $ac_cv_build" >&5
+printf "%s\n" "$ac_cv_build" >&6; }
+case $ac_cv_build in
+*-*-*) ;;
+*) as_fn_error $? "invalid value of canonical build" "$LINENO" 5;;
+esac
+build=$ac_cv_build
+ac_save_IFS=$IFS; IFS='-'
+set x $ac_cv_build
+shift
+build_cpu=$1
+build_vendor=$2
+shift; shift
+# Remember, the first character of IFS is used to create $*,
+# except with old shells:
+build_os=$*
+IFS=$ac_save_IFS
+case $build_os in *\ *) build_os=`echo "$build_os" | sed 's/ /-/g'`;; esac
+
+
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking host system type" >&5
+printf %s "checking host system type... " >&6; }
+if test ${ac_cv_host+y}
+then :
+  printf %s "(cached) " >&6
+else $as_nop
+  if test "x$host_alias" = x; then
+  ac_cv_host=$ac_cv_build
+else
+  ac_cv_host=`$SHELL "${ac_aux_dir}config.sub" $host_alias` ||
+    as_fn_error $? "$SHELL ${ac_aux_dir}config.sub $host_alias failed" "$LINENO" 5
+fi
+
+fi
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $ac_cv_host" >&5
+printf "%s\n" "$ac_cv_host" >&6; }
+case $ac_cv_host in
+*-*-*) ;;
+*) as_fn_error $? "invalid value of canonical host" "$LINENO" 5;;
+esac
+host=$ac_cv_host
+ac_save_IFS=$IFS; IFS='-'
+set x $ac_cv_host
+shift
+host_cpu=$1
+host_vendor=$2
+shift; shift
+# Remember, the first character of IFS is used to create $*,
+# except with old shells:
+host_os=$*
+IFS=$ac_save_IFS
+case $host_os in *\ *) host_os=`echo "$host_os" | sed 's/ /-/g'`;; esac
+
+
+
+case "$host_os" in #(
+  linux*) :
+    OS=linux ;; #(
+  darwin*) :
+    OS=darwin ;; #(
+  *) :
+    as_fn_error $? "Unsupported host OS: $host_os" "$LINENO" 5
+ ;;
+esac
+
+
+case "$host_cpu" in #(
+  x86_64) :
+    ARCH=x86_64 ;; #(
+  aarch64*) :
+    ARCH=aarch64 ;; #(
+  arm*) :
+    ARCH=aarch64 ;; #(
+  *) :
+    as_fn_error $? "Unsupported host ARCH: $host_cpu" "$LINENO" 5
+ ;;
+esac
+
+
+case "$( $CXX --version; )" in #(
+  g++\ *) :
+    CXX_TOOLCHAIN=gcc ;; #(
+  clang\ version\ *) :
+    CXX_TOOLCHAIN=clang ;; #(
+  *) :
+    as_fn_error $? "Unsupported C++ compiler: $CXX" "$LINENO" 5
+ ;;
+esac
+
+
+
+# ---------------------------------------------------------------------------- #
+
 # Checks for libraries.
 
 
@@ -7449,81 +7872,6 @@ esac
 
 fi
 
-
-
-  # Make sure we can run config.sub.
-$SHELL "${ac_aux_dir}config.sub" sun4 >/dev/null 2>&1 ||
-  as_fn_error $? "cannot run $SHELL ${ac_aux_dir}config.sub" "$LINENO" 5
-
-{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking build system type" >&5
-printf %s "checking build system type... " >&6; }
-if test ${ac_cv_build+y}
-then :
-  printf %s "(cached) " >&6
-else $as_nop
-  ac_build_alias=$build_alias
-test "x$ac_build_alias" = x &&
-  ac_build_alias=`$SHELL "${ac_aux_dir}config.guess"`
-test "x$ac_build_alias" = x &&
-  as_fn_error $? "cannot guess build type; you must specify one" "$LINENO" 5
-ac_cv_build=`$SHELL "${ac_aux_dir}config.sub" $ac_build_alias` ||
-  as_fn_error $? "$SHELL ${ac_aux_dir}config.sub $ac_build_alias failed" "$LINENO" 5
-
-fi
-{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $ac_cv_build" >&5
-printf "%s\n" "$ac_cv_build" >&6; }
-case $ac_cv_build in
-*-*-*) ;;
-*) as_fn_error $? "invalid value of canonical build" "$LINENO" 5;;
-esac
-build=$ac_cv_build
-ac_save_IFS=$IFS; IFS='-'
-set x $ac_cv_build
-shift
-build_cpu=$1
-build_vendor=$2
-shift; shift
-# Remember, the first character of IFS is used to create $*,
-# except with old shells:
-build_os=$*
-IFS=$ac_save_IFS
-case $build_os in *\ *) build_os=`echo "$build_os" | sed 's/ /-/g'`;; esac
-
-
-{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking host system type" >&5
-printf %s "checking host system type... " >&6; }
-if test ${ac_cv_host+y}
-then :
-  printf %s "(cached) " >&6
-else $as_nop
-  if test "x$host_alias" = x; then
-  ac_cv_host=$ac_cv_build
-else
-  ac_cv_host=`$SHELL "${ac_aux_dir}config.sub" $host_alias` ||
-    as_fn_error $? "$SHELL ${ac_aux_dir}config.sub $host_alias failed" "$LINENO" 5
-fi
-
-fi
-{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $ac_cv_host" >&5
-printf "%s\n" "$ac_cv_host" >&6; }
-case $ac_cv_host in
-*-*-*) ;;
-*) as_fn_error $? "invalid value of canonical host" "$LINENO" 5;;
-esac
-host=$ac_cv_host
-ac_save_IFS=$IFS; IFS='-'
-set x $ac_cv_host
-shift
-host_cpu=$1
-host_vendor=$2
-shift; shift
-# Remember, the first character of IFS is used to create $*,
-# except with old shells:
-host_os=$*
-IFS=$ac_save_IFS
-case $host_os in *\ *) host_os=`echo "$host_os" | sed 's/ /-/g'`;; esac
-
-
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking whether lstat correctly handles trailing slash" >&5
 printf %s "checking whether lstat correctly handles trailing slash... " >&6; }
 if test ${ac_cv_func_lstat_dereferences_slashed_symlink+y}
@@ -7637,34 +7985,6 @@ fi
 
 # Sub-Systems/Modules
 
-# --with-flox-bash
-
-# Check whether --with-flox-bash was given.
-if test ${with_flox_bash+y}
-then :
-  withval=$with_flox_bash; WITH_FLOX_BASH="$withval"
-else $as_nop
-  WITH_FLOX_BASH=local
-
-fi
-
-case "$WITH_FLOX_BASH" in #(
-  local) :
-    : ;; #(
-  nix) :
-    : ;; #(
-  *) :
-    if test -d "$WITH_FLOX_BASH"
-then :
-  :
-else $as_nop
-  as_fn_error $? "Invalid WITH_FLOX_BASH setting: '$WITH_FLOX_BASH'.
-You must specify either 'local', 'nix', or a path to a directory" "$LINENO" 5
-fi
- ;;
-esac
-
-
 # --with-pkgdb
 
 # Check whether --with-pkgdb was given.
@@ -7747,6 +8067,32 @@ You must specify either 'local', 'nix', or a path to a directory" "$LINENO" 5
 fi
  ;;
 esac
+
+
+
+# ---------------------------------------------------------------------------- #
+
+# Directories
+
+REPO_ROOT="$abs_srcdir"
+
+PKGDB_ROOT="$REPO_ROOT/pkgdb"
+
+PKGDB_TESTS_DIR="$PKGDB_ROOT/tests"
+
+ENV_BUILDER_ROOT="$REPO_ROOT/env-builder"
+
+ENV_BUILDER_TESTS_DIR="$ENV_BUILDER_ROOT/tests"
+
+FLOX_CLI_ROOT="$REPO_ROOT"
+
+FLOX_CLI_TESTS_DIR="$FLOX_CLI_ROOT/tests"
+
+CRATES_DIR="$FLOX_CLI_ROOT/crates"
+
+FLAKE_NIX="$REPO_ROOT/flake.nix"
+
+FLAKE_LOCK="$REPO_ROOT/flake.lock"
 
 
 

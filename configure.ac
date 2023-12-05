@@ -21,24 +21,32 @@ AM_INIT_AUTOMAKE([-Wall -Werror foreign subdir-objects])
 AC_CONFIG_SRCDIR([pkgdb/src/main.cc])
 #AC_CONFIG_HEADERS([pkgdb/config.h])
 
-# Absolute path to the directory containing `configure' script.
-AC_SUBST([abs_srcdir], [$( cd "$srcdir"; echo "$PWD"; )])
+FLOX_INIT_DIRS
 
 
 # ---------------------------------------------------------------------------- #
 
 # Checks for programs.
+# We use builtin `AC_PROG_<NAME>' macros to run checks; but follow up with
+# `AC_PATH_PROG' to get absolute paths to the programs.
 
 AC_PROG_CXX
-AC_PROG_CC
-AC_PROG_INSTALL
-AC_PROG_LN_S
-AC_PROG_GREP
-AC_PROG_SED
-AC_PROG_LN_S
+AC_PATH_PROG([CXX], [$CXX], [$MISSING c++])
 
-AC_PATH_PROG([MISSING], [missing], [AC_MSG_ERROR([missing not found])],
-             [$PATH:$abs_srcdir/build-aux])
+AC_PROG_CC
+AC_PATH_PROG([CC], [$CC], [$MISSING cc])
+
+AC_PROG_INSTALL
+AC_PATH_PROG([CC], [$CC], [$MISSING install])
+
+AC_PROG_GREP
+AC_PATH_PROG([GREP], [$GREP], [$MISSING grep])
+
+AC_PROG_SED
+AC_PATH_PROG([SED], [$SED], [$MISSING sed])
+
+
+FLOX_PROG_MISSING
 
 AC_PATH_PROG([CAT], [cat], [$MISSING cat])
 AC_PATH_PROG([CP], [cp], [$MISSING cp])
@@ -50,6 +58,7 @@ AC_PATH_PROG([TEST], [test], [$MISSING test])
 AC_PATH_PROG([TOUCH], [touch], [$MISSING touch])
 AC_PATH_PROG([TR], [tr], [$MISSING tr])
 AC_PATH_PROG([UNAME], [uname], [$MISSING uname])
+AC_PATH_PROG([LN], [ln], [$MISSING ln])
 
 AC_PATH_PROG([FIND], [find], [$MISSING find])
 AC_PATH_PROG([XARGS], [xargs], [$MISSING xargs])
@@ -79,11 +88,39 @@ AC_PATH_PROG([DOXYGEN], [doxygen], [$MISSING doxygen])
 
 # ---------------------------------------------------------------------------- #
 
+# Platform and Toolchain Checks
+
+AC_CANONICAL_HOST
+
+AS_CASE(["$host_os"],
+  [linux*],  [OS=linux],
+  [darwin*], [OS=darwin],
+  [AC_MSG_ERROR([Unsupported host OS: $host_os])]
+)
+AC_SUBST([OS])
+
+AS_CASE(["$host_cpu"],
+  [x86_64],   [ARCH=x86_64],
+  [aarch64*], [ARCH=aarch64],
+  [arm*],     [ARCH=aarch64],
+  [AC_MSG_ERROR([Unsupported host ARCH: $host_cpu])]
+)
+AC_SUBST([ARCH])
+
+AS_CASE(["$( $CXX --version; )"],
+ [g++\ *],            [CXX_TOOLCHAIN=gcc],
+ [clang\ version\ *], [CXX_TOOLCHAIN=clang],
+ [AC_MSG_ERROR([Unsupported C++ compiler: $CXX])]
+)
+AC_SUBST([CXX_TOOLCHAIN])
+
+
+# ---------------------------------------------------------------------------- #
+
 # Checks for libraries.
 
-AC_CHECK_LIB(
-  [nixfetchers]dnl
-, translit( [_ZN3nix8fetchers11attrsToJSONERKSt3mapINSt7]
+AC_CHECK_LIB([nixfetchers],
+  translit( [_ZN3nix8fetchers11attrsToJSONERKSt3mapINSt7]
             [__cxx1112basic_stringIcSt11char_traitsIcESaIcEEESt7variantIJS7]
             [_mNS_8ExplicitIbEEEESt4lessIS7_ESaISt4pairIKS7_SB_EEE]
           , ' '
@@ -129,23 +166,6 @@ AC_CHECK_FUNCS([memset strtoul mkdir])
 # ---------------------------------------------------------------------------- #
 
 # Sub-Systems/Modules
-
-# --with-flox-bash
-AC_ARG_WITH([flox-bash],
-  [AS_HELP_STRING(
-    [--with-flox-bash={local,nix,PREFIX}],
-    [use flox-bash from local tree, nix build, or path to its install prefix])],
-  [WITH_FLOX_BASH="$withval"],
-  [WITH_FLOX_BASH=local]
-)
-AS_CASE(["$WITH_FLOX_BASH"],
-  [local], [:],
-  [nix],   [:],
-  [AS_IF([test -d "$WITH_FLOX_BASH"], [:],
-    [AC_MSG_ERROR([Invalid WITH_FLOX_BASH setting: '$WITH_FLOX_BASH'.
-You must specify either 'local', 'nix', or a path to a directory])])
-])
-AC_SUBST([WITH_FLOX_BASH])
 
 # --with-pkgdb
 AC_ARG_WITH([pkgdb],
@@ -199,6 +219,22 @@ AS_CASE(["$WITH_FLOX_CLI"],
 You must specify either 'local', 'nix', or a path to a directory])])
 ])
 AC_SUBST([WITH_FLOX_CLI])
+
+
+# ---------------------------------------------------------------------------- #
+
+# Directories
+
+AC_SUBST([REPO_ROOT], ["$abs_srcdir"])
+AC_SUBST([PKGDB_ROOT], ["$REPO_ROOT/pkgdb"])
+AC_SUBST([PKGDB_TESTS_DIR], ["$PKGDB_ROOT/tests"])
+AC_SUBST([ENV_BUILDER_ROOT], ["$REPO_ROOT/env-builder"])
+AC_SUBST([ENV_BUILDER_TESTS_DIR], ["$ENV_BUILDER_ROOT/tests"])
+AC_SUBST([FLOX_CLI_ROOT], ["$REPO_ROOT"])
+AC_SUBST([FLOX_CLI_TESTS_DIR], ["$FLOX_CLI_ROOT/tests"])
+AC_SUBST([CRATES_DIR], ["$FLOX_CLI_ROOT/crates"])
+AC_SUBST([FLAKE_NIX], ["$REPO_ROOT/flake.nix"])
+AC_SUBST([FLAKE_LOCK], ["$REPO_ROOT/flake.lock"])
 
 
 # ---------------------------------------------------------------------------- #
