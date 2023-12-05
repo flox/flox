@@ -37,6 +37,11 @@ pub struct CoreEnvironment<State = ReadOnly> {
 }
 
 impl<State> CoreEnvironment<State> {
+    /// Get the underlying path to the environment directory
+    pub fn path(&self) -> &Path {
+        &self.env_dir
+    }
+
     /// Get the manifest file
     fn manifest_path(&self) -> PathBuf {
         self.env_dir.join(MANIFEST_FILENAME)
