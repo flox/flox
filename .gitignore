@@ -14,3 +14,5 @@ Makefile
 config.log
 config.status
 config.mk
+.deps/
+.dirstamp

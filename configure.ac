@@ -45,6 +45,12 @@ AC_PATH_PROG([GREP], [$GREP], [$MISSING grep])
 AC_PROG_SED
 AC_PATH_PROG([SED], [$SED], [$MISSING sed])
 
+AC_PROG_RANLIB
+AC_PATH_PROG([RANLIB], [$RANLIB], [$MISSING ranlib])
+
+AM_PROG_AR
+AC_PATH_PROG([AR], [$AR], [$MISSING ar])
+
 
 FLOX_PROG_MISSING
 
@@ -93,11 +99,14 @@ AC_PATH_PROG([DOXYGEN], [doxygen], [$MISSING doxygen])
 AC_CANONICAL_HOST
 
 AS_CASE(["$host_os"],
-  [linux*],  [OS=linux],
-  [darwin*], [OS=darwin],
+  [linux*],  [OS=linux; sharedLibExt=.so;],
+  [darwin*], [OS=darwin; sharedLibExt=.dylib;],
   [AC_MSG_ERROR([Unsupported host OS: $host_os])]
 )
 AC_SUBST([OS])
+AC_SUBST([sharedLibExt])
+AM_CONDITIONAL([IS_LINUX],   [test "$OS" = 'linux'])
+AM_CONDITIONAL([IS_DARWIN],  [test "$OS" = 'darwin'])
 
 AS_CASE(["$host_cpu"],
   [x86_64],   [ARCH=x86_64],
@@ -106,6 +115,8 @@ AS_CASE(["$host_cpu"],
   [AC_MSG_ERROR([Unsupported host ARCH: $host_cpu])]
 )
 AC_SUBST([ARCH])
+AM_CONDITIONAL([IS_X86_64],  [test "$ARCH" = 'x86_64'])
+AM_CONDITIONAL([IS_AARCH64], [test "$ARCH" = 'aarch64'])
 
 AS_CASE(["$( $CXX --version; )"],
  [g++\ *],            [CXX_TOOLCHAIN=gcc],
@@ -113,6 +124,8 @@ AS_CASE(["$( $CXX --version; )"],
  [AC_MSG_ERROR([Unsupported C++ compiler: $CXX])]
 )
 AC_SUBST([CXX_TOOLCHAIN])
+AM_CONDITIONAL([IS_GCC],   [test "$CXX_TOOLCHAIN" = 'gcc'])
+AM_CONDITIONAL([IS_CLANG], [test "$CXX_TOOLCHAIN" = 'clang'])
 
 
 # ---------------------------------------------------------------------------- #
@@ -251,7 +264,19 @@ PKG_CHECK_MODULES([NIX], [nix-store nix-main nix-cmd nix-expr])
 
 # ---------------------------------------------------------------------------- #
 
-AC_CONFIG_FILES([Makefile config.mk])
+# Add some necessary macro definitions for `nix' which normally appear
+# in `<nix>/include/nix/config.h'.
+NIX_CFLAGS="$NIX_CFLAGS -DSYSTEM='\"$ARCH-$OS\"'";
+
+
+# ---------------------------------------------------------------------------- #
+
+AC_CONFIG_FILES([
+  Makefile
+  config.mk
+  pkgdb/Makefile
+  pkgdb/tests/Makefile
+])
 AC_OUTPUT
 
 
