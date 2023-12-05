@@ -14,7 +14,6 @@
   expect,
   findutils,
   flox,
-  flox-bash,
   gawk,
   git,
   gnugrep,
@@ -28,8 +27,9 @@
   unixtools,
   which,
   writeShellScriptBin,
+  name ? "flox-tests",
   testsDir ? "/tests",
-  FLOX_CLI ? null,
+  FLOX_CLI ? "${flox}/bin/flox",
 }: let
   batsWith = bats.withLibraries (p: [
     p.bats-assert
@@ -76,15 +76,22 @@
       ''
     );
 in
-  writeShellScriptBin "flox-tests" ''
+  writeShellScriptBin name ''
 
     export PATH="${lib.makeBinPath paths}"
     export PKGDB_BIN="${flox.PKGDB_BIN}"
 
-    # copy checkout to temporary directory
-    WORKDIR=$(mktemp -d -t flox-tests-XXXXXX)
-    cp -R ${self}/* $WORKDIR
-    cd $WORKDIR
+    ${
+      if FLOX_CLI == null
+      then ""
+      else ''
+        # copy checkout to temporary directory
+        WORKDIR=$(mktemp -d -t ${name}-XXXXXX)
+        cp -R ${self}/* $WORKDIR
+        cd $WORKDIR
+      ''
+    }
+
 
     usage() {
           cat << EOF
@@ -143,7 +150,7 @@ in
       export FLOX_CLI;
     fi
 
-    export NIX_BIN="${flox-bash}/libexec/flox/nix";
+    export NIX_BIN="${flox.NIX_BIN}";
 
     # Default flag values
     : "''${TESTS_DIR:=$PWD${testsDir}}";

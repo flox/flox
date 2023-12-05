@@ -19,7 +19,7 @@ use self::features::Features;
 
 /// Name of flox managed directories (config, data, cache)
 const FLOX_DIR_NAME: &'_ str = "flox";
-const FLOX_SH_PATH: &'_ str = env!("FLOX_SH_PATH");
+const FLOX_ETC_DIR: &'_ str = env!("FLOX_ETC_DIR");
 pub const FLOX_CONFIG_FILE: &'_ str = "flox.toml";
 
 #[derive(Clone, Debug, Deserialize, Default, Serialize)]
@@ -150,21 +150,17 @@ impl Config {
                 // config dir is added to the config for completeness, the config file cannot chenge the config dir
                 .set_default("config_dir", config_dir.to_str().unwrap())?;
 
-            // read from (flox-bash) installation
+            // read from installation
             builder = builder.add_source(
                 config::File::from(PathBuf::from("/etc").join(FLOX_CONFIG_FILE))
                     .format(config::FileFormat::Toml)
                     .required(false),
             );
 
-            // read from (flox-bash) installation
+            // read from installation
             builder = builder.add_source(
-                config::File::from(
-                    PathBuf::from(FLOX_SH_PATH)
-                        .join("etc")
-                        .join(FLOX_CONFIG_FILE),
-                )
-                .format(config::FileFormat::Toml),
+                config::File::from(PathBuf::from(FLOX_ETC_DIR).join(FLOX_CONFIG_FILE))
+                    .format(config::FileFormat::Toml),
             );
 
             // look for files in XDG_CONFIG_DIRS locations

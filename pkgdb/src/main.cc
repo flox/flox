@@ -49,6 +49,9 @@ run( int argc, char * argv[] )
   flox::pkgdb::ListCommand cmdList;
   prog.add_subparser( cmdList.getParser() );
 
+  flox::pkgdb::GCCommand cmdGC;
+  prog.add_subparser( cmdGC.getParser() );
+
   flox::search::SearchCommand cmdSearch;
   prog.add_subparser( cmdSearch.getParser() );
 
@@ -81,6 +84,7 @@ run( int argc, char * argv[] )
   if ( prog.is_subcommand_used( "scrape" ) ) { return cmdScrape.run(); }
   if ( prog.is_subcommand_used( "get" ) ) { return cmdGet.run(); }
   if ( prog.is_subcommand_used( "list" ) ) { return cmdList.run(); }
+  if ( prog.is_subcommand_used( "gc" ) ) { return cmdGC.run(); }
   if ( prog.is_subcommand_used( "search" ) ) { return cmdSearch.run(); }
   if ( prog.is_subcommand_used( "manifest" ) ) { return cmdManifest.run(); }
   if ( prog.is_subcommand_used( "parse" ) ) { return cmdParse.run(); }

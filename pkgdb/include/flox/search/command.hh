@@ -36,6 +36,7 @@ private:
 
   command::VerboseParser parser; /**< Query arguments and inputs parser */
   SearchParams           params; /**< Query arguments processor. */
+  bool dumpQuery = false;        /**< Whether to print the SQL query. */
 
   /**
    * @brief Add options to allow flags such as `--pname PNAME` and

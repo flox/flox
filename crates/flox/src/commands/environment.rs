@@ -15,6 +15,7 @@ use flox_rust_sdk::models::environment::managed_environment::{
 };
 use flox_rust_sdk::models::environment::path_environment::{self, Original, PathEnvironment};
 use flox_rust_sdk::models::environment::{
+    EditResult,
     Environment,
     EnvironmentError2,
     EnvironmentPointer,
@@ -32,11 +33,12 @@ use flox_rust_sdk::nix::command::StoreGc;
 use flox_rust_sdk::nix::command_line::NixCommandLine;
 use flox_rust_sdk::nix::Run;
 use indoc::indoc;
+use itertools::Itertools;
 use log::{debug, error, info};
 use tempfile::NamedTempFile;
 
 use super::{environment_select, EnvironmentSelect};
-use crate::commands::ConcreteEnvironment;
+use crate::commands::{activated_environments, ConcreteEnvironment};
 use crate::subcommand_metric;
 use crate::utils::dialog::{Confirm, Dialog};
 
@@ -70,52 +72,105 @@ impl Edit {
             .to_concrete_environment(&flox, true)?
             .into_dyn_environment();
 
-        match self.provided_manifest_contents()? {
+        let result = match self.provided_manifest_contents()? {
             // If provided with the contents of a manifest file, either via a path to a file or via
             // contents piped to stdin, use those contents to try building the environment.
-            Some(new_manifest) => {
-                environment.edit(&flox, new_manifest).await?;
-                Ok(())
-            },
+            Some(new_manifest) => environment.edit(&flox, new_manifest).await?,
             // If not provided with new manifest contents, let the user edit the file directly
             // via $EDITOR or $VISUAL (as long as `flox edit` was invoked interactively).
-            None => {
-                let editor = std::env::var("EDITOR")
-                    .or(std::env::var("VISUAL"))
-                    .context("no editor found; neither EDITOR nor VISUAL are set")?;
-                // TODO: check for interactivity before allowing the editor to be opened
-                // Make a copy of the manifest for the user to edit so failed edits aren't left in
-                // the original manifest. You can't put creation/cleanup inside the `edited_manifest_contents`
-                // method because the temporary manifest needs to stick around in case the user wants
-                // or needs to make successive edits without starting over each time.
-                let tmp_manifest = NamedTempFile::new_in(&flox.temp_dir)?;
-                std::fs::write(&tmp_manifest, environment.manifest_content()?)?;
-                let should_continue = Dialog {
-                    message: "Continue editing?",
-                    help_message: Default::default(),
-                    typed: Confirm {
-                        default: Some(true),
-                    },
-                };
-                // Let the user keep editing the file until the build succeeds or the user
-                // decides to stop.
-                loop {
-                    let new_manifest = Edit::edited_manifest_contents(&tmp_manifest, &editor)?;
-                    if let Err(e) = environment.edit(&flox, new_manifest).await {
-                        error!("Environment invalid; building resulted in an error: {e}");
-                        if !Dialog::can_prompt() {
-                            bail!("Can't prompt to continue editing in non-interactive context");
-                        }
-                        if !should_continue.clone().prompt().await? {
-                            bail!("Environment editing cancelled");
-                        }
-                    } else {
-                        break;
-                    }
+            None => self.interactive_edit(flox, environment.as_mut()).await?,
+        };
+        match result {
+            EditResult::Unchanged => {
+                println!("⚠️  no changes made to environment");
+            },
+            EditResult::ReActivateRequired => {
+                if activated_environments().contains(&environment.parent_path()?) {
+                    println!(indoc::indoc! {"
+                            Your manifest has changes that cannot be automatically applied to your current environment.
+
+                            Please `exit` the environment and run `flox activate` to see these changes."});
+                } else {
+                    println!("✅ environment successfully edited");
                 }
-                Ok(())
+            },
+            EditResult::Success => {
+                println!("✅ environment successfully edited");
             },
         }
+        Ok(())
+    }
+
+    /// Interactively edit the manifest file
+    async fn interactive_edit(
+        &self,
+        flox: Flox,
+        environment: &mut dyn Environment,
+    ) -> Result<EditResult> {
+        if !Dialog::can_prompt() {
+            bail!("Can't edit interactively in non-interactive context")
+        }
+
+        let editor = Self::determine_editor()?;
+
+        // Make a copy of the manifest for the user to edit so failed edits aren't left in
+        // the original manifest. You can't put creation/cleanup inside the `edited_manifest_contents`
+        // method because the temporary manifest needs to stick around in case the user wants
+        // or needs to make successive edits without starting over each time.
+        let tmp_manifest = NamedTempFile::new_in(&flox.temp_dir)?;
+        std::fs::write(&tmp_manifest, environment.manifest_content()?)?;
+        let should_continue = Dialog {
+            message: "Continue editing?",
+            help_message: Default::default(),
+            typed: Confirm {
+                default: Some(true),
+            },
+        };
+
+        // Let the user keep editing the file until the build succeeds or the user
+        // decides to stop.
+        loop {
+            let new_manifest = Edit::edited_manifest_contents(&tmp_manifest, &editor)?;
+            match environment.edit(&flox, new_manifest).await {
+                Err(e) => {
+                    error!("Environment invalid; building resulted in an error: {e}");
+                    if !Dialog::can_prompt() {
+                        bail!("Can't prompt to continue editing in non-interactive context");
+                    }
+                    if !should_continue.clone().prompt().await? {
+                        bail!("Environment editing cancelled");
+                    }
+                },
+                Ok(result) => {
+                    return Ok(result);
+                },
+            }
+        }
+    }
+
+    /// Determines the editor to use for interactive editing
+    ///
+    /// If $EDITOR or $VISUAL is set, use that. Otherwise, try to find a known editor in $PATH.
+    /// The known editor selected is the first one found in $PATH from the following list:
+    ///
+    ///   vim, vi, nano, emacs.
+    fn determine_editor() -> Result<PathBuf> {
+        let editor = std::env::var("EDITOR").or(std::env::var("VISUAL")).ok();
+
+        if let Some(editor) = editor {
+            return Ok(PathBuf::from(editor));
+        }
+
+        let path_var = env::var("PATH").context("$PATH not set")?;
+
+        let (path, editor) = env::split_paths(&path_var)
+            .cartesian_product(["vim", "vi", "nano", "emacs"])
+            .find(|(path, editor)| path.join(editor).exists())
+            .context("no known editor found in $PATH")?;
+
+        debug!("Using editor {:?} from {:?}", editor, path);
+
+        Ok(path.join(editor))
     }
 
     /// Retrieves the new manifest file contents if a new manifest file was provided
@@ -136,7 +191,10 @@ impl Edit {
     }
 
     /// Gets a new set of manifest contents after a user edits the file
-    fn edited_manifest_contents(path: impl AsRef<Path>, editor: impl AsRef<str>) -> Result<String> {
+    fn edited_manifest_contents(
+        path: impl AsRef<Path>,
+        editor: impl AsRef<Path>,
+    ) -> Result<String> {
         let mut command = Command::new(editor.as_ref());
         command.arg(path.as_ref());
 
@@ -241,8 +299,9 @@ impl Activate {
         if let Ok(existing_environments) = env::var(FLOX_ACTIVE_ENVIRONMENTS_VAR) {
             active_environments.extend(env::split_paths(&existing_environments));
         };
-        let flox_active_environments = env::join_paths(active_environments)
-            .context("Cannot activate environment because its path contains an invalid character")?;
+        let flox_active_environments = env::join_paths(active_environments).context(
+            "Cannot activate environment because its path contains an invalid character",
+        )?;
 
         // TODO more sophisticated detection?
         let shell = if let Ok(shell) = env::var("SHELL") {
@@ -450,11 +509,11 @@ impl Install {
                 if let Some(false) = installation.already_installed.get(pkg) {
                     info!("✅ '{pkg}' installed to environment {description}");
                 } else {
-                    info!("🛑 '{pkg}' already installed to environment {description}");
+                    info!("⚠️ '{pkg}' already installed to environment {description}");
                 }
             }
         } else {
-            info!("🛑 package(s) already installed to environment {description}");
+            info!("⚠️ package(s) already installed to environment {description}");
         }
         Ok(())
     }

@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use flox_types::catalog::{EnvCatalog, System};
 use runix::command_line::NixCommandLine;
 
-use super::{Environment, EnvironmentError2, InstallationAttempt};
+use super::{EditResult, Environment, EnvironmentError2, InstallationAttempt};
 use crate::flox::Flox;
 use crate::models::environment_ref::EnvironmentName;
 
@@ -41,7 +41,11 @@ impl Environment for RemoteEnvironment {
 
     /// Atomically edit this environment, ensuring that it still builds
     #[allow(unused)]
-    async fn edit(&mut self, flox: &Flox, contents: String) -> Result<(), EnvironmentError2> {
+    async fn edit(
+        &mut self,
+        flox: &Flox,
+        contents: String,
+    ) -> Result<EditResult, EnvironmentError2> {
         todo!()
     }
 

@@ -25,6 +25,7 @@ use runix::RunJson;
 
 use super::{
     copy_dir_recursive,
+    EditResult,
     Environment,
     EnvironmentError2,
     EnvironmentPointer,
@@ -307,9 +308,17 @@ where
     }
 
     /// Atomically edit this environment, ensuring that it still builds
-    async fn edit(&mut self, flox: &Flox, contents: String) -> Result<(), EnvironmentError2> {
-        self.transact_with_manifest_contents(contents, flox).await?;
-        Ok(())
+    async fn edit(
+        &mut self,
+        flox: &Flox,
+        contents: String,
+    ) -> Result<EditResult, EnvironmentError2> {
+        let old_contents = self.manifest_content()?;
+        // TODO we should probably skip this if the manifest hasn't changed
+        self.transact_with_manifest_contents(&contents, flox)
+            .await?;
+
+        EditResult::new(&old_contents, &contents)
     }
 
     /// Get a catalog of installed packages from this environment
