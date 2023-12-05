@@ -39,6 +39,13 @@ use crate::utils::init::{
 };
 use crate::utils::metrics::METRICS_UUID_FILE_NAME;
 
+static FLOX_DESCRIPTION: &'_ str = indoc! {"
+    flox is a virtual environment and package manager all in one.\n\n
+
+    With flox you create development environments that layer and replace dependencies just where it matters,
+    making them portable across the full software lifecycle."
+};
+
 static FLOX_WELCOME_MESSAGE: Lazy<String> = Lazy::new(|| {
     formatdoc! {r#"
     flox version {FLOX_VERSION}
@@ -51,7 +58,7 @@ static FLOX_WELCOME_MESSAGE: Lazy<String> = Lazy::new(|| {
 "#}
 });
 
-static ADDITIONAL_COMMANDS: &str = indoc! {"
+const ADDITIONAL_COMMANDS: &str = indoc! {"
     upgrade, config, wipe-history, history
 "};
 
@@ -84,6 +91,17 @@ impl Default for Verbosity {
 }
 
 #[derive(Bpaf)]
+#[bpaf(options, descr(FLOX_DESCRIPTION))]
+pub struct FloxCli(#[bpaf(external(flox_args))] pub FloxArgs);
+
+/// Main flox args parser
+///
+/// This struct is used to parse the command line arguments
+/// and allows to be composed with other parsers.
+///
+/// To parse the flox CLI, use [`FloxCli`] instead using [`flox_cli()`].
+#[derive(Bpaf)]
+#[bpaf(ignore_rustdoc)] // we don't want this struct to be interpreted as a group
 pub struct FloxArgs {
     /// Verbose mode.
     ///
@@ -227,7 +245,6 @@ enum Commands {
     Additional(#[bpaf(external(additional_commands))] AdditionalCommands),
     Internal(#[bpaf(external(internal_commands))] InternalCommands),
 }
-/// flox is a virtual environment and package manager all in one. With flox you create development environments that layer and replace dependencies just where it matters, making them portable across the full software lifecycle.
 
 /// Local Development Commands
 #[derive(Bpaf, Clone)]
