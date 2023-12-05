@@ -180,6 +180,7 @@
         (pkgs)
         flox
         flox-tests
+        flox-tests-dev
         flox-tests-end2end
         flox-pkgdb
         flox-pkgdb-tests
