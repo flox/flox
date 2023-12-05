@@ -10,10 +10,19 @@ use serde_with::{DeserializeFromStr, SerializeDisplay};
 use thiserror::Error;
 
 use super::path_environment::{Original, PathEnvironment};
-use super::{copy_dir_recursive, PathPointer, ENV_DIR_NAME, LOCKFILE_FILENAME, MANIFEST_FILENAME};
+use super::{copy_dir_recursive, PathPointer, ENV_DIR_NAME};
 use crate::providers::git::{GitCommandProvider, GitProvider};
 
 const GENERATIONS_METADATA_FILE: &str = "metadata.json";
+
+struct ReadOnly {}
+
+struct ReadWrite {
+    /// A base directory that contains the tempdir
+    /// of the checked out generations branch
+    /// as well as tempdirs created by [PathEnvironment] transactions.
+    tempdir_base: PathBuf,
+}
 
 /// A representation of the generations of an environment
 ///
@@ -31,60 +40,65 @@ const GENERATIONS_METADATA_FILE: &str = "metadata.json";
 /// │  └── env
 /// │     └── manifest.toml
 /// └── metadata.json
-pub struct Generations {
+pub struct Generations<State> {
     /// A floxmeta repository/branch that contains the generations of an environment
+    ///
+    /// - When [ReadOnly], this is assumend to be bare, but it is not enforced.
+    /// - When [ReadWrite], this is required to not be bare.
+    ///   This is enforced when created using [Self::writable].
     repo: GitCommandProvider,
-    branch: String,
 
     /// A path pointer for the environment that will
     /// be associated with a realized generation
     pointer: PathPointer,
 
-    /// A temporary directory that will be used to realize generations into
-    tempdir_base: PathBuf,
+    branch: String,
+
+    state: State,
 }
 
-impl Generations {
+impl<S> Generations<S> {
+    /// Read the generations metadata for an environment
+    pub fn metadata(&self) -> Result<Metadata, GenerationsError> {
+        read_metadata(&self.repo, &self.branch)
+    }
+}
+
+impl Generations<ReadOnly> {
     /// Create a new generations instance
     pub fn new(
         environment_repr: GitCommandProvider,
         ref_name: String,
         pointer: PathPointer,
-        tempdir_base: PathBuf,
     ) -> Self {
         Self {
             repo: environment_repr,
             branch: ref_name,
             pointer,
-            tempdir_base,
+            state: ReadOnly {},
         }
     }
 
-    /// Read the generations metadata for an environment
-    pub fn metadata(&self) -> Result<Metadata, GenerationsError> {
-        read_metadata(&self.repo, &self.branch)
-    }
-
-    /// Realize the generations branch into a temporary directory
-    fn realize(&self) -> Result<GitCommandProvider, GenerationsError> {
-        let git_options = self.repo.get_options().clone();
-
-        let realized_path = tempfile::tempdir_in(&self.tempdir_base)
-            .unwrap()
-            .into_path();
-
-        let repo = GitCommandProvider::clone_branch_with(
-            git_options,
-            self.repo.path(),
-            realized_path,
+    pub fn writable(
+        self,
+        tempdir_base: PathBuf,
+    ) -> Result<Generations<ReadWrite>, GenerationsError> {
+        let repo = checkout_to_tempdir(
+            &self.repo,
             &self.branch,
-            false,
-        )
-        .unwrap();
+            tempfile::tempdir_in(&tempdir_base).unwrap().into_path(),
+        )?;
 
-        Ok(repo)
+        Ok(Generations {
+            repo,
+            branch: self.branch,
+            pointer: self.pointer,
+            state: ReadWrite { tempdir_base },
+        })
     }
+}
 
+impl Generations<ReadWrite> {
     /// Realize a generation as a [PathEnvironment]
     ///
     /// The generation can then be safely modified
@@ -93,15 +107,10 @@ impl Generations {
         &self,
         generation: usize,
     ) -> Result<PathEnvironment<Original>, GenerationsError> {
-        let realized_gens = self.realize()?;
-
-        let tempdir = tempfile::tempdir_in(&self.tempdir_base)
-            .unwrap()
-            .into_path();
         let environment = PathEnvironment::new(
-            realized_gens.path().join(generation.to_string()),
+            self.repo.path().join(generation.to_string()),
             self.pointer.clone(),
-            tempdir,
+            &self.state.tempdir_base,
             Original,
         )
         .unwrap();
@@ -142,8 +151,6 @@ impl Generations {
         generation_metadata: GenerationMetadata,
         set_current: bool,
     ) -> Result<(), GenerationsError> {
-        let realized = self.realize()?;
-
         let description = generation_metadata.description.clone();
 
         let mut metadata = self.metadata()?;
@@ -155,9 +162,9 @@ impl Generations {
             metadata.current_gen = Some(generation.into());
         }
 
-        write_metadata_file(metadata, realized.path())?;
+        write_metadata_file(metadata, self.repo.path())?;
 
-        let generation_path = realized.path().join(generation.to_string());
+        let generation_path = self.repo.path().join(generation.to_string());
         let env_path = generation_path.join(ENV_DIR_NAME);
         fs::create_dir_all(&env_path).unwrap();
 
@@ -165,14 +172,14 @@ impl Generations {
         // copy into `<generation>/env/` to make creating `PathEnvironment` easier
         copy_dir_recursive(&environment.path.join(ENV_DIR_NAME), &env_path, true).unwrap();
 
-        realized.add(&[Path::new(".")]).unwrap();
-        realized
+        self.repo.add(&[&generation_path]).unwrap();
+        self.repo
             .commit(&format!(
                 "Register generation {}\n\n{}",
                 generation, description
             ))
             .unwrap();
-        realized.push("origin", false).unwrap();
+        self.repo.push("origin", false).unwrap();
 
         Ok(())
     }
@@ -213,7 +220,6 @@ impl Generations {
     /// it should first be realized using [Self::realize_generation].
     fn set_current_generation(&mut self, generation: usize) -> Result<(), GenerationsError> {
         let mut metadata = self.metadata()?;
-        let realized = self.realize()?;
 
         let generation_metadata = metadata.generations.contains_key(&generation.into());
         if !generation_metadata {
@@ -222,13 +228,15 @@ impl Generations {
 
         metadata.current_gen = Some(generation.into());
 
-        write_metadata_file(metadata, realized.path())?;
+        write_metadata_file(metadata, self.repo.path())?;
 
-        realized.add(&[Path::new(".")]).unwrap();
-        realized
+        self.repo
+            .add(&[Path::new(GENERATIONS_METADATA_FILE)])
+            .unwrap();
+        self.repo
             .commit(&format!("Set current generation to {}", generation))
             .unwrap();
-        realized.push("origin", false).unwrap();
+        self.repo.push("origin", false).unwrap();
 
         Ok(())
     }
@@ -241,6 +249,20 @@ pub enum GenerationsError {
 
     #[error("No generations found in environment")]
     NoGenerations,
+}
+
+/// Realize the generations branch into a temporary directory
+fn checkout_to_tempdir(
+    repo: &GitCommandProvider,
+    branch: &str,
+    tempdir: PathBuf,
+) -> Result<GitCommandProvider, GenerationsError> {
+    let git_options = repo.get_options().clone();
+    let repo =
+        GitCommandProvider::clone_branch_with(git_options, repo.path(), tempdir, branch, false)
+            .unwrap();
+
+    Ok(repo)
 }
 
 /// Reads the generations metadata file directly from the repository
