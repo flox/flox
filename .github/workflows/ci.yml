@@ -500,17 +500,11 @@ jobs:
     runs-on: "ubuntu-22.04-8core"
 
     needs:
-      - env-builder-tests
-      - pkgdb-tests
-      - flox-cargo-test
-      - env-builder-nix-build
-      - pkgdb-nix-build
-      - flox-nix-build
+      - "env-builder-nix-build"
+      - "pkgdb-nix-build"
+      - "flox-nix-build"
 
     steps:
-      - name: "Debug"
-        run: |
-          env
       - name: "Trigger flox installers workflow"
         uses: "convictional/trigger-workflow-and-wait@v1.6.1"
         with:
@@ -519,10 +513,37 @@ jobs:
           github_token:       "${{ secrets.NIX_GIT_TOKEN }}"
           github_user:        "floxbot"
           workflow_file_name: "ci.yml"
-          ref:                "master"
+          #XXX: ref:                "master"
+          ref:                "garbas.triggered-from-flox-flox"
           wait_interval:      10
           #XXX: client_payload:     '{"TARGET":"git+ssh://git@github.com/flox/flox?ref=main&rev=${{ github.event.pull_request.head.sha }}"}'
           client_payload:     '{"TARGET":"git+ssh://git@github.com/flox/flox?ref=garbas.trigger-installers-build&rev=${{ github.event.pull_request.head.sha }}"}'
           propagate_failure:  false
           trigger_workflow:   true
-          wait_workflow:      false
+          wait_workflow:      true
+
+  report-failure:
+    name: "Report Failure"
+    runs-on: "ubuntu-latest"
+
+    if: ${{ failure() && github.ref == 'refs/heads/main' && github.event_name == 'push' }}
+
+    needs:
+      - "env-builder-tests"
+      - "pkgdb-tests"
+      - "flox-cargo-test"
+      - "env-builder-nix-build"
+      - "pkgdb-nix-build"
+      - "flox-nix-build"
+
+    steps:
+      - name: "Slack Notification"
+        uses: "rtCamp/action-slack-notify@v2"
+        env:
+          SLACK_TITLE:      "Something broke CI for flox/flox on main"
+          SLACK_FOOTER:     "Thank you for caring"
+          SLACK_WEBHOOK:    "${{ secrets.SLACK_WEBHOOK_FOR_TEAM_ENGINEERING}}"
+          SLACK_USERNAME:   "GitHub"
+          SLACK_ICON_EMOJI: ":poop:"
+          SLACK_COLOR:      "#ff2800"  # ferrari red -> https://encycolorpedia.com/ff2800
+          SLACK_LINK_NAMES: true
