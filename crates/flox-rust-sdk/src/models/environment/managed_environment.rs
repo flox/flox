@@ -13,6 +13,7 @@ use thiserror::Error;
 
 use super::path_environment::{Original, PathEnvironment};
 use super::{
+    EditResult,
     Environment,
     EnvironmentError2,
     InstallationAttempt,
@@ -113,7 +114,11 @@ impl Environment for ManagedEnvironment {
 
     /// Atomically edit this environment, ensuring that it still builds
     #[allow(unused)]
-    async fn edit(&mut self, flox: &Flox, contents: String) -> Result<(), EnvironmentError2> {
+    async fn edit(
+        &mut self,
+        flox: &Flox,
+        contents: String,
+    ) -> Result<EditResult, EnvironmentError2> {
         todo!()
     }
 

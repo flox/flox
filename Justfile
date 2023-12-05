@@ -1,6 +1,6 @@
 nix_options := "--extra-experimental-features nix-command --extra-experimental-features flakes"
 cargo_test_invocation := "cargo test --workspace"
-bats_invocation := "nix --extra-experimental-features nix-command --extra-experimental-features flakes run '.#flox-tests' -- --flox target/debug/flox"
+bats_invocation := "nix --extra-experimental-features nix-command --extra-experimental-features flakes run '.#flox-tests-dev' -- --flox ${PWD}/target/debug/flox"
 
 _default:
     @just --list --unsorted
