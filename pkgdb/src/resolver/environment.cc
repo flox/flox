@@ -17,8 +17,8 @@
 #include <utility>
 #include <vector>
 
-#include <nix/logging.hh>
 #include <nix/flake/flakeref.hh>
+#include <nix/logging.hh>
 #include <nix/ref.hh>
 #include <nlohmann/json.hpp>
 
@@ -516,6 +516,25 @@ Environment::tryResolveGroupIn( const InstallDescriptors & group,
 
 /* -------------------------------------------------------------------------- */
 
+/**
+ * @brief Extract the name of a group from a set of descriptors, or "default"
+ *        if no descriptors declare a `packageGroup`.
+ */
+[[nodiscard]] static inline const std::string &
+getGroupName( const InstallDescriptors & group )
+{
+  if ( const auto & descriptor = group.begin();
+       ( descriptor != group.end() ) && descriptor->second.group.has_value() )
+    {
+      return *descriptor->second.group;
+    }
+  static const std::string defaultName = "default";
+  return defaultName;
+}
+
+
+/* -------------------------------------------------------------------------- */
+
 ResolutionResult
 Environment::tryResolveGroup( const InstallDescriptors & group,
                               const System &             system,
@@ -580,13 +599,17 @@ Environment::tryResolveGroup( const InstallDescriptors & group,
        * If we fail collect a list of failed descriptors we will return a list
        * of failed descriptors if `ignoreOld' is `false`, otherwise we'll
        * resolve the group _from scratch_. */
-      if ( ( ! oldGroupInput.has_value() ) ||
-           ( ( *input ) == ( *oldGroupInput ) ) )
+      if ( ! ( oldGroupInput.has_value() && *input == *oldGroupInput ) )
         {
           auto maybeResolved = this->tryResolveGroupIn( group, *input, system );
           if ( const SystemPackages * resolved
                = std::get_if<SystemPackages>( &maybeResolved ) )
             {
+              nix::logger->log( nix::lvlInfo,
+                                nix::fmt( "upgrading group `%s' to avoid "
+                                          "resolution failure",
+                                          getGroupName( group ) ) );
+
               return *resolved;
             }
           else if ( const InstallID * iid
@@ -609,39 +632,18 @@ Environment::tryResolveGroup( const InstallDescriptors & group,
 
 /* -------------------------------------------------------------------------- */
 
-/**
- * @brief Extract the name of a group from a set of descriptors, or "default"
- *        if no descriptors declare a `packageGroup`.
- */
-[[nodiscard]] static inline const std::string &
-getGroupName( const InstallDescriptors & group )
-{
-  if ( const auto & descriptor = group.begin(); ( descriptor != group.end() ) &&
-       descriptor->second.group.has_value() )
-    {
-      return *descriptor->second.group;
-    }
-  static const std::string defaultName = "default";
-  return defaultName;
-}
-
-
-/* -------------------------------------------------------------------------- */
-
 /** @brief Add a decription of a resolution failure to an exception message. */
 static inline std::stringstream &
-describeResolutionFailure( std::stringstream & msg,
-  const InstallDescriptors & group,
-  const ResolutionFailure & failure
-)
+describeResolutionFailure( std::stringstream &        msg,
+                           const InstallDescriptors & group,
+                           const ResolutionFailure &  failure )
 {
   msg << "  in `" << getGroupName( group ) << "': '" << std::endl;
- for ( const auto & [iid, url] : failure )
-   {
-     msg << "    failed to resolve `" << iid << "' in input `" << url
-         << '\'';
-   }
- return msg;
+  for ( const auto & [iid, url] : failure )
+    {
+      msg << "    failed to resolve `" << iid << "' in input `" << url << '\'';
+    }
+  return msg;
 }
 
 
@@ -666,72 +668,33 @@ Environment::lockSystem( const System & system )
     {
       /* Push existing exception message. */
       std::stringstream groupMsg;
-      try
-        {
-          ResolutionResult maybeResolved =
-            this->tryResolveGroup( *group, system );
-          std::visit(
-            overloaded {
-              /* Add to pkgs if the group was successfully resolved. */
-              [&]( SystemPackages & resolved )
-              {
-                pkgs.merge( resolved );
-                group = groups.erase( group );
-              },
+      ResolutionResult  maybeResolved = this->tryResolveGroup( *group, system );
+      std::visit(
+        overloaded {
+          /* Add to pkgs if the group was successfully resolved. */
+          [&]( SystemPackages & resolved )
+          {
+            pkgs.merge( resolved );
+            group = groups.erase( group );
+          },
 
-              /* Otherwise add a description of the resolution failure to msg. */
-              [&]( const ResolutionFailure & failure )
+          /* Otherwise add a description of the resolution failure to msg. */
+          [&]( const ResolutionFailure & failure )
+          {
+            // TODO: Throw sooner rather than trying to resolve every group?
+            /* We should only hit this on the first iteration. */
+            if ( failure.empty() )
               {
-                // TODO: Throw sooner rather than trying to resolve every group?
-                /* We should only hit this on the first iteration. */
-                if ( failure.empty() )
-                  {
-                    throw ResolutionFailureException(
-                      "no inputs found to search for packages" );
-                  }
-
-                /* Describe the failure. */
-                describeResolutionFailure( groupMsg, *group, failure );
                 throw ResolutionFailureException(
-                  "failed to resolve with old lockfile input"
-                );
-              } },
-            maybeResolved );
-        }
-      catch( const ResolutionFailureException & )
-        {
-          /* Try resolving _from scratch_ */
-          auto maybeResolved = this->tryResolveGroup( *group, system, true );
-          std::visit(
-            overloaded {
-              /* Add to pkgs if the group was successfully resolved. */
-              [&]( SystemPackages & resolved )
-              {
-                pkgs.merge( resolved );
-                group = groups.erase( group );
-                nix::logger->log( nix::lvlInfo,
-                                  nix::fmt( "upgrading group `%s' to avoid "
-                                            "resolution failure",
-                                            getGroupName( *group ) )
-                                );
-              },
+                  "no inputs found to search for packages" );
+              }
 
-              /* Otherwise add a description of the resolution failure to msg. */
-              [&]( const ResolutionFailure & failure )
-              {
-                // TODO: Throw sooner rather than trying to resolve every group?
-                /* We should only hit this on the first iteration. */
-                if ( failure.empty() )
-                  {
-                    throw ResolutionFailureException(
-                      "no inputs found to search for packages" );
-                  }
-                /* Add description of failure. */
-                msg << groupMsg.str();
-                ++group;
-              } },
-            maybeResolved );
-        }
+            /* Describe the failure. */
+            describeResolutionFailure( groupMsg, *group, failure );
+            throw ResolutionFailureException(
+              "failed to resolve with old lockfile input" );
+          } },
+        maybeResolved );
     }
 
   if ( ! groups.empty() ) { throw ResolutionFailureException( msg.str() ); }
