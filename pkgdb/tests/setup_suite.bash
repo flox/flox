@@ -16,17 +16,6 @@ bats_require_minimum_version '1.5.0';
 
 # Locate repository root.
 repo_root_setup() {
-  # if [[ -z "${REPO_ROOT:-}" ]]; then
-  #   if [[ -d "$PWD/.git" ]] && [[ -d "$PWD/tests" ]]; then
-  #     REPO_ROOT="$PWD";
-  #   else
-  #     REPO_ROOT="$( git rev-parse --show-toplevel||:; )";
-  #   fi
-  #   if [[ -z "$REPO_ROOT" ]] && [[ -d "$PWD/tests" ]]; then
-  #     REPO_ROOT="$PWD";
-  #   fi
-  # fi
-  # export REPO_ROOT;
   export REPO_ROOT="$(realpath "$BATS_TEST_DIRNAME/..")"
 }
 
