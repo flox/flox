@@ -161,13 +161,16 @@ else
 no_undefined_LDFLAG = -Wl,-undefined,error
 endif
 
+
+# ---------------------------------------------------------------------------- #
+
 libpkgdb_sa_LIBS =
 if IS_LINUX
-relative_rpath_LDFLAG  =  -Wl,--enable-new-dtags,--rpath,'$$ORIGIN/../lib'
-libpkgdb_sa_LIBS += '-Wl,-soname,libpkgdb$(sharedLibExt)'
+relative_rpath_LDFLAG =  -Wl,--enable-new-dtags,--rpath,'$$ORIGIN/../lib'
+libpkgdb_sa_LIBS      += '-Wl,-soname,libpkgdb$(sharedLibExt)'
 else
-relative_rpath_LDFLAG  =  -rpath @executable_path/../lib
-libpkgdb_sa_LIBS += -install_name '@rpath/libpkgdb$(sharedLibExt)'
+relative_rpath_LDFLAG =  -rpath @executable_path/../lib
+libpkgdb_sa_LIBS      += -install_name '@rpath/libpkgdb$(sharedLibExt)'
 endif
 libpkgdb_sa_LIBS += $(relative_rpath_LDFLAG)
 
