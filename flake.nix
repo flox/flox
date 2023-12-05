@@ -117,20 +117,33 @@
           pkgsFor = final;
         });
     in {
-      flox-bash = callPackage ./pkgs/flox-bash {};
-      flox-bash-dev = callPackage ./pkgs/flox-bash-dev {};
       flox-dev = callPackage ./pkgs/flox-dev {};
       flox-gh = callPackage ./pkgs/flox-gh {};
       flox-src = callPackage ./pkgs/flox-src {};
 
-      flox = callPackage ./pkgs/flox {};
-      flox-tests = callPackage ./pkgs/flox-tests {};
-
       flox-pkgdb = callPackage ./pkgs/flox-pkgdb {};
       flox-pkgdb-tests = callPackage ./pkgs/flox-pkgdb-tests {};
+      flox-pkgdb-tests-dev = final.flox-pkgdb-tests.override {
+        testsDir = "/pkgdb/tests";
+      };
 
       flox-env-builder = callPackage ./pkgs/flox-env-builder {};
       flox-env-builder-tests = callPackage ./pkgs/flox-env-builder-tests {};
+
+      flox = callPackage ./pkgs/flox {};
+      flox-tests = callPackage ./pkgs/flox-tests {};
+      flox-tests-dev = final.flox-tests.override {
+        FLOX_CLI = null;
+      };
+      flox-tests-end2end = final.flox-tests.override {
+        name = "flox-tests-end2end";
+        testsDir = "/tests/end2end";
+      };
+      flox-tests-end2end-dev = final.flox-tests.override {
+        name = "flox-tests-end2end";
+        testsDir = "/tests/end2end";
+        FLOX_CLI = null;
+      };
     };
 
     overlays.default =
@@ -168,24 +181,15 @@
         (pkgs)
         flox
         flox-tests
+        flox-tests-dev
+        flox-tests-end2end
         flox-pkgdb
         flox-pkgdb-tests
         flox-env-builder
         flox-env-builder-tests
-        flox-bash
         flox-gh
         ;
       default = pkgs.flox;
-      flox-tests-ci = pkgs.flox-tests.override {
-        FLOX_CLI = "${pkgs.flox}/bin/flox";
-      };
-      flox-tests-end2end = pkgs.flox-tests.override {
-        testsDir = "/tests/end2end";
-      };
-      flox-tests-end2end-ci = pkgs.flox-tests.override {
-        testsDir = "/tests/end2end";
-        FLOX_CLI = "${pkgs.flox}/bin/flox";
-      };
     });
     # ---------------------------------------------------------------------------- #
   in {
@@ -201,9 +205,8 @@
     in {
       inherit flox;
       default = flox;
-      ci = pkgs.callPackage ./shells/ci {};
-      pkgdb = pkgs.callPackage ./shells/pkgdb {ci = false;};
-      pkgdb-ci = pkgs.callPackage ./shells/pkgdb {ci = true;};
+      flox-pkgdb = pkgs.callPackage ./shells/flox-pkgdb {ci = false;};
+      flox-pkgdb-ci = pkgs.callPackage ./shells/flox-pkgdb {ci = true;};
     });
   }; # End `outputs'
 

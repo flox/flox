@@ -1,345 +1,217 @@
 # Query Arguments -> SQL Query Pipeline
 
-`pkgdb` exposes a number of interfaces for running complex queries against its
-underlying collection of package databases, making them easy for callers to use.
-These interfaces also help ensure consistent behavior and ranking between
-_search_ and _resolution_ queries.
+## Overview
+`pkgdb` provides interfaces for running complex queries against its underlying collection of package databases, making them easy for callers to use.
+These interfaces also help ensure consistent behavior and ranking between _search_ and _resolution_ queries.
 
-In order the ensure the behaviors of these two categories of queries are
-consistent they share a common underlying _query builder_ called a
-[PkgQuery](../include/flox/pkgdb/pkg-query.hh).
-This class takes a set of filter rules provided by the caller, called
-`PkgQueryArgs`, and can either emit a SQL `SELECT` statement as a string or
-run that query on databases using `PkgQuery::bind( flox::pkgdb::database & )` or
-`PkgQuery::execute( flox::pkgdb::database & )`.
+These two categories of queries share a common underlying _query builder_ called a [PkgQuery](../include/flox/pkgdb/pkg-query.hh).
+The caller provides filters to the query builder in the form of `PkgQueryArgs`.
+`PkgQuery` can either emit a SQL `SELECT` statement as a string or run that query on databases using `PkgQuery::bind( flox::pkgdb::database & )` or `PkgQuery::execute( flox::pkgdb::database & )`.
+The difference between `bind` and `execute` will be explain later.
 
-Throughout this codebase you will find various `struct` and `class` definitions
-which essentially exist to parse user input from JSON, TOML, or YAML and convert
-them into `PkgQueryArgs` and `Registry<PkgDbInput>` _registries_; just remember
-that past the tangled boilerplate of those routines - we're just moving fields
-from the user's input, into these `PkgQueryArgs` or a set of `PkgDbInput`s.
-This document will help you navigate these various structures and help you
-identify common patterns among them.
+Throughout this codebase you will find various `struct` and `class` definitions which essentially exist to hold the parsed user input and convert it into `PkgQueryArgs` and `Registry<PkgDbInput>` _registries_.
+This document will help you navigate these structures and the flow of data in a query.
 
 
 ## Terminology
 
-- Registry : A collection of _flake ref inputs_ assigned _short names_
-             or _aliases_ which comprise the pool of package sets to be queried.
-             Not the same as Nix registry, but fucking close. We added
-             additional fields (See [registry](./registry.md)).
-- Descriptor : An abstract description of a dependency by indicating
-               _requirements_ to be satisfied.
-               These are simply put a collection of user defined filters.
-               The most common descriptor is
-               _"give me a package with the name X"_, or maybe 
-               _"give me a package with the name X with version between 3-4"_.
-- Preferences : Settings or filters which apply to _all_ descriptors or 
-                registry inputs.
-                These may overlap with some _descriptor_ filters, but may be
-                defined _globally_ for convenience.
-                These are things like
-                _"limit search results to those with the following licenses: 
-                X, Y, Z_, or
-                _"treat prefer pre-release versions of sofware over the previous 
-                major release"_.
+- **Registry**: A collection of flake ref inputs with aliases.
+  - Defines the pool of package sets to be queried.
+  - Not the same as a Nix registry, but essentially a superset (we added fields).
+  - See the [registry schema](./registry.md#schema).
+- **Descriptor** : An abstract description of a package, including various requirements to be satisfied.
+  - The requirements put constraints on the name, version, origin, etc.
+  - See [Descriptor](./manifests.md#manifest).
+- **Preferences** : Settings or filters which may apply to all descriptors or registry inputs.
+  - These may overlap with some descriptor fields, but may be defined globally for convenience.
+  - Global filters include things like disallowing non-free licenses, etc.
 
+## Search query data flow
 
-## Query Argument and Registry Data
+### `flox` constructs a `SearchParams` and calls `pkgdb`
+A search query from `flox` fills out a `SearchParams` struct (in the Rust codebase), which is serialized to JSON, leaving out any fields which were not provided (most fields are optional).
+Fields that aren't provided by `flox` are assumed to be handled with default values by `pkgdb`.
+The `SearchParams` struct in `flox` is meant to model the `flox::search::SearchParams` struct in `pkgdb` with the `Query` struct in `flox` mapping to the `flox::search::SearchQuery` struct in `pkgdb`.
 
-The pipeline from user input into `PkgQueryArgs` and `RegistryRaw` structures
-is split across a few base classes in an attempt to avoid repeating common
-processes in multiple places - this comes at the expense of making it slightly
-harder for readers to trace; the aim of this section is to aggregate all of
-classes related to this transformation in one place, and describe their
-relationships to one another.
+### `pkgdb` parses the provided search parameters
 
-### flox::RegistryRaw
+The `SearchCommand::addSearchParamsArgs` function creates a positional argument to `pkgdb search` that when parsed fills out a `flox::search::SearchParams` and stores it on the `SearchCommand` struct.
 
-Declared in [<pkgdb>/include/flox/registry.hh](../include/flox/registry.hh).
+`flox::search::SearchParams` contains these components:
+- A `flox::resolver::GlobalManifestRaw`, a path to a global manifest file, or nothing.
+- A `flox::resolver::ManfiestRaw`, a path to a manifest file, or nothing.
+- A `flox::resolver::LockfileRaw`, a path to a lockfile, or nothing.
+- A `flox::search::SearchQuery`.
 
-This structure holds information about _flake inputs_ whose package databases
-should be scraped, some settings associated with each to indicate which
-_subtrees_ should be searched, and the _priority_ order results
-should be _ranked_ by.
+### An abstract environment is created
 
-A more detailed look at _registries_ and their fields can be
-found [here](./registry.md).
+`pkgdb` performs a search in the context of an environment, where the context is comprised of a global manifest, the environment's manifest, and a lockfile if one exists.
+The presence of the lockfile enables searches to be done against inputs that have already been locked.
+I say that this environment is abstract to contrast with how `flox` and `flox-env-builder` actually build environments that the user can activate.
 
+`SearchCommand` inherits from the `GAEnvironmentMixin` base class, which defines the functionality for initializing this abstract environment.
+The environment is initialized in `SearchCommand::run` via the call to `GAEnvironmentMixin::initEnvironment`.
+For each of the global manifest, manifest, and lockfile, the corresponding `*Raw` struct is initialized in the following steps:
+- If a path was provided, it's stored on the corresponding field from the `GAEnvironmentMixin` base class.
+- The file at the provided path is read and converted to JSON (manifests may be written as TOML, JSON, or YAML at the moment).
+- If no path was provided, we attempt to grab the inline JSON from the query parameters.
+- If we have a JSON blob (either from a file or from the query parameters) we attempt to construct the corresponding `*Raw` struct via the `from_json` functions that are defined for each of the structs.
+- Once the raw structs are filled out, the non-raw structs are constructed from the raw input, validating the input in the process.
 
-### flox::pkgdb::PkgQueryArgs
+The `*Raw` structs are meant to faithfully represent the raw input provided by a consumer of `pkgdb`, meaning they are intentionally permissive in the data that they're allowed to contain (e.g. the code will compile even if two conflicting options are provided).
 
-Declared in
-[<pkgdb>/include/flox/pkgdb/pkg-query.hh](../include/flox/pkgdb/pkg-query.hh).
+Finally, a `flox::resolver::Environment` (not the same thing as a `GAEnvironmentMixin`) is constructed from the global manifest, manifest, and lockfile if they exist.
 
-This is the _finalized_ set of arguments used to actually query a database.
-It has the following fields which are translated into SQL query filters,
-and in the case of the `semver` field additional filtering using `node-semver`
-will be performed.
+### Options are merged
+As mentioned above, the `PkgQueryArgs` struct holds filters for the query.
+A base `PkgQueryArgs` is assembled by merging the options found in the global manifest, manifest, and lockfile.
+Note that the lockfile contains a record of the manifest that was locked to create it, so it therefore contains a set of options itself.
+After this the options from the `SearchQuery` are applied to construct the final `PkgQueryArgs`.
 
-```c++
-// NOTE: This document may be out of sync with `pkg-query.hh'.
-//       The header itself is the _source of truth_.
+Thus, the order of precedence for options (listed with lowest priority first) is:
+- global manifest
+- lockfile's manifest record
+- manifest
+- query parameters
 
-struct PkgQueryArgs
-{
+At this point we're ready to construct the database query.
 
-   std::optional<std::string> name;    //< Filter results by exact `name`.
-   std::optional<std::string> pname;   //< Filter results by exact `pname`.
-   std::optional<std::string> version; //< Filter results by exact version.
-   std::optional<std::string> semver;  //< Filter results by version range.
-   
-  /** Filter results by partial match on pname, attrName, or description. */
-  std::optional<std::string> partialMatch;
+### The database query is constructed
 
-  /** Filter results by partial match on pname or attrName. */
-  std::optional<std::string> partialNameMatch;
+The query is constructed when the `PkgQuery` is initialized from the `PkgQueryArgs`.
+`PkgQuery` stores an internal list of `SELECT`, `WHERE`, etc clauses that get built up as the query arguments are processed.
+The details of query building is covered in a separate section.
 
-  /** Filter results by an exact match on either `pname` or `attrName`. */
-  std::optional<std::string> pnameOrAttrName;
+### The query is executed
 
-  /** 
-   * Filter results to those explicitly marked with the given licenses.
-   *
-   * NOTE: License strings should be SPDX Ids ( short names ).
-   */
-  std::optional<std::vector<std::string>> licenses;
+`PkgQuery` has two main methods for executing queries, `execute` and `bind`, with `bind` being the lower level of the two.
+For searches the query is executed via `PkgQuery::execute` once for each database i.e. once for each registry input.
+Note that this means you can't simply add a `LIMIT N` clause to the query because you would get `N` results _from each database_.
 
-  /** Whether to include packages which are explicitly marked `broken`. */
-  bool allowBroken = false;
+Calling `PkgQuery::bind` turns the internal clauses into one query, binds any query variables, and produces a `sqlite3pp::query`.
+The `sqlite3pp::query` produces an iterator of exported columns, where the columns to export are the row-id and the `semver` version by default.
+Exported columns can be set through one of the `PkgQuery` constructors.
+At this point you have an iterator of rows that match the query _aside from any semver considerations_.
+Semantic version filtering is handled by `PkgQuery::execute`.
 
-  /** Whether to include packages which are explicitly marked `unfree`. */
-  bool allowUnfree = true;
+Calling `PkgQuery::execute` internally calls `PkgQuery::bind` and then performs semver filtering if necessary, returning a `std::vector` of the row-ids that satisfy the semver requirement.
+Once the list of row-ids is constructed, the database is queried for each row and JSON output is constructed for each result.
+Search results are printed to `stdout` in JSONLines format (one JSON object per line).
 
-  /** Whether pre-release versions should be ordered before releases. */
-  bool preferPreReleases = false;
+## Table structure
 
-  /** 
-   * Subtrees to search.
-   * 
-   * NOTE: `Subtree` is an enum of top level flake outputs, being one of
-   * `"packages"` or `"legacyPackages"`.
-   */
-  std::optional<std::vector<Subtree>> subtrees;
+### Main table schemas
+Table schemas are stored in `src/pkgdb/schemas.hh`.
+The main entities are `AttrSets` and `Packages`.
+`AttrSets` form a tree structure via `AttrSet.parent` references and `Packages` refer to their containing attribute set via `Packages.parentId`.
+As an example, the installable `packages.aarch64-darwin.foo` would be represented like so:
+- a `Package` where `Package.attrName = 'foo'`
+- an `AttrSets` where `AttrSets.attrName = 'aarch64-darwin'`
+- an `AttrSets` where `AttrSets.attrName = 'packages'`
+- `foo.parentId = aarch64-darwin.id`
+- `aarch64-darwin.parent = packages.id`
+- `packages.id = NULL`
 
-  /** Systems to search. Defaults to the current system. */
-  std::vector<std::string> systems = { nix::settings.thisSystem.get() };
+An `AttrSets.parent` where `parent = NULL` indicates that the attrset is a root of a tree.
+There is also an `AttrSets.done` field which indicates that an `AttrSets` and all of its children have been fully scraped i.e. it is a progress indicator during scraping and doesn't have any meaning after the database has been constructed.
 
-  /**
-   * Relative attribute path to package from its prefix.
-   * For regular flakes it is the part following `system`.
-   *
-   * NOTE: @a flox::AttrPath is an alias of `std::vector<std::string>`.
-   */
-  std::optional<flox::AttrPath> relPath;
-  
-  // ...<SNIP>...
-  
-};
+The `Packages` table defines the data that is known about a particular package.
+If a package explicitly defines a `pname` and `version` they will be used directly, otherwise they will be parsed from `name`.
+If a `version` can be interpreted as a semantic version it will be stored as such.
+
+There is also a table for `Descriptions` so that descriptions can be deduplicated across different systems.
+
+### Views
+Many of the query fields are computed rather than being stored directly in the database.
+For instance, the `v_AttrPaths` view is a recursive query that collects the entire attribute path for a single `Packages`.
+The `v_PackagesSearch` view collects just about all the information you could want to search about a package into a single place that can be keyed into via a `Packages.id`.
+The final query is done against this `v_PackageSearch` view and the columns exported from the search query are chosen from the columns of `v_PackageSearch`.
+
+## Query building
+Query building happens in `src/pkgdb/pkg-query.cc`, starting with `PkgQuery::init`.
+The final query is converted to a string in `PkgQuery::str`.
+
+While reading the query building functions it's important to remember that `PkgQuery: PkgQueryArgs` so it inherits all of the fields from the query.
+Another thing to point out is that the parameters names in the JSON query are not the same as those in `PkgQueryArgs` or `SearchQuery`.
+You can see the mapping of names in `src/search/params.cc` in the `from_json( const nlohmann::json & jfrom, SearchQuery & qry )` function.
+Most notably, the `match` JSON parameter becomes `partialMatch` and `match-name` becomes `partialNameMatch`.
+
+`PkgQuery::initMatch` handles creating boolean fields that represent whether the `match` or `match-name` query parameters are fuzzy matches for the `pname`, `name`, or `attrName` of a package.
+Strict matching against `name`, `pname`, `version`, `licenses`, `broken`, `unfree`, and `relPath` is done in `PkgQuery::init`.
+The subtrees and systems are filtered in `PkgQuery::initSubtrees` and `PkgQuery::initSystems` respectively.
+
+The actual order of search results is determined by the `ORDER BY` clause generated in `PkgQuery::initOrderBy`.
+This ranks search results based on how the query provides the attribute name (`pname`, `name`, `match`, `match-name`, or `path`), whether the match is exact vs. partial, the depth of the attribute (is it `foo` or `some.packageset.foo`), and whether it matches the description instead of the package name.
+Incorrect search results can probably be attributed to tweaks required to the ordering of the fields that appear in this `ORDER BY` clause.
+
+### Example query
+For the search query
 ```
-
-
-### flox::search::SearchQuery
-
-Declared in
-[<pkgdb>/include/flox/search/params.hh](../include/flox/search/params.hh).
-
-This set of parameters is used by `pkgdb search` in order to support
-`flox search` and `flox show` sub-commands.
-It has the following declaration:
-
-```c++
-// NOTE: This document may be out of sync with `params.hh'.
-//       The header itself is the _source of truth_.
-/**
- * @brief A set of query parameters.
- *
- * This is essentially a reorganized form of @a flox::pkgdb::PkgQueryArgs
- * that is suited for JSON input.
- */
-struct SearchQuery
-{
-
-  std::optional<std::string> name;
-  std::optional<std::string> pname;
-  std::optional<std::string> version;
-  std::optional<std::string> semver;
-
-  /** Filter results by partial match on pname, attrName, or description */
-  std::optional<std::string> partialMatch;
-
-  /** Filter results by partial match on pname or attrName. */
-  std::optional<std::string> partialNameMatch;
-  
-  // ...<SNIP>...
-
-};
+$ pkgdb search --ga-registry --match-name hello --dump-query
 ```
-
-Contained by:
-- `flox::search::SearchParams`
-
-For a detailed look at `SearchParams` see 
-[pkgdb search](./search.md) documentation.
-
-
-### flox::resolver::ManifestDescriptorRaw
-
-Declared in
-[<pkgdb>/include/flox/resolver/descriptor.hh](../include/flox/resolver/descriptor.hh).
-
-This form of descriptor is found in `manifest.{toml,yaml,json}` files.
-
-It currently uses an intermediate struct `ManifestDescriptor` as an intermediate
-step in its conversion to `flox::pkgdb::PkgQueryArgs`; but these two structures
-may be merged in the future.
-
-It has the following declaration:
-```c++
-struct ManifestDescriptorRaw
-{
-
-public:
-
-  /** 
-   * Match `name`, `pname`, or `attrName`.
-   * Maps to `flox::pkgdb::PkgQueryArgs::pnameOrAttrName`.
-   */
-  std::optional<std::string> name;
-
-  /** 
-   * Match `version` or `semver` if a modifier is present. 
-   *
-   * Strings beginning with an `=` will filter by exact match on `version`.
-   * Any string which may be interpreted as a semantic version range will
-   * filter on the `semver` field.
-   * All other strings will filter by exact match on `version`.
-   */
-  std::optional<std::string> version;
-
-  /** @brief A dot separated attribut path, or list representation. */
-  using Path = std::variant<std::string, flox::AttrPath>;
-  /** Match a relative path. */
-  std::optional<Path> path;
-
-  /**
-   * @brief A dot separated attribut path, or list representation.
-   *        May contain `null` members to represent _globs_.
-   *
-   * NOTE: `AttrPathGlob` is a `std::vector<std::optional<std::string>>`
-   *       which represnts an absolute attribute path which may have
-           `std::nullopt` as its second element to avoid indicating a
-           particular system.
-   */
-  using AbsPath = std::variant<std::string, AttrPathGlob>;
-  /** Match an absolute path, allowing globs for `system`. */
-  std::optional<AbsPath> absPath;
-
-  /** Only resolve for a given set of systems. */
-  std::optional<std::vector<std::string>> systems;
-
-  /** Whether resoution is allowed to fail without producing errors. */
-  std::optional<bool> optional;
-
-  /** Named _group_ that the package is a member of. */
-  std::optional<std::string> packageGroup;
-
-  /** Force resolution is a given input or _flake reference_. */
-  std::optional<std::variant<std::string, nix::fetchers::Attrs>>
-    packageRepository;
-
-  /** Relative path to a `nix` expression file to be evaluated. */
-  std::optional<std::string> input;
-
-};
+performed on an `aarch64-darwin` system the generated query is
+```sql
+SELECT
+    id,
+    semver
+FROM
+    (
+        SELECT
+            *,
+            NULL AS exactPname,
+            NULL AS exactAttrName,
+            (
+                ('%' || LOWER(pname) || '%') = LOWER(:partialMatch)
+            ) AS matchExactPname,
+            (
+                ('%' || LOWER(attrName) || '%') = LOWER(:partialMatch)
+            ) AS matchExactAttrName,
+            (pname LIKE :partialMatch) AS matchPartialPname,
+            (attrName LIKE :partialMatch) AS matchPartialAttrName,
+            NULL AS matchPartialDescription,
+            0 AS subtreesRank,
+            0 AS systemsRank
+        FROM
+            v_PackagesSearch
+        WHERE
+            (
+                (
+                    matchExactPname
+                    OR matchExactAttrName
+                    OR matchPartialPname
+                    OR matchPartialAttrName
+                )
+            )
+            AND (
+                (broken IS NULL)
+                OR (broken = FALSE)
+            )
+            AND (system IN ('aarch64-darwin'))
+        ORDER BY
+            exactPname DESC,
+            matchExactPname DESC,
+            exactAttrName DESC,
+            matchExactAttrName DESC,
+            depth ASC,
+            matchPartialPname DESC,
+            matchPartialAttrName DESC,
+            matchPartialDescription DESC,
+            subtreesRank ASC,
+            systemsRank ASC,
+            pname ASC,
+            versionType ASC,
+            preTag DESC NULLS FIRST,
+            major DESC NULLS LAST,
+            minor DESC NULLS LAST,
+            patch DESC NULLS LAST,
+            versionDate DESC NULLS LAST -- Lexicographic as fallback for misc. versions
+,
+            v_PackagesSearch.version ASC NULLS LAST,
+            brokenRank ASC,
+            unfreeRank ASC,
+            attrName ASC
+    )
 ```
-
-Contained by:
-- `flox::resolver::ManifestRaw`
-
-
-### flox::resolver::ManifestRaw
-
-NOTE: Today this file is not used to support `flox search` but in the future
-      it will.
-
-Declared in
-[<pkgdb>/include/flox/resolver/manifest.hh](../include/flox/resolver/manifest.hh).
-
-This is our internal representation of a parsed `manifest.{toml,yaml,json}` file
-which describes an environment.
-
-The `flox::resolver::ManifestRaw` struct intends to exactly match the format
-of the file so that it can be used to validate its syntax, and be converted
-without any loss of detail into JSON ( to become a part of a lockfile ).
-With that in mind, no default fields are handled in this struct; instead
-handling of fallbacks is done in a related class
-`flox::resolver::Manifest`.
-
-While some fields in this file are not relevant to resolution/search all of them
-will be shown here.
-Here is its declaration:
-
-```c++
-/**
- * @brief A _raw_ description of an environment to be read from a file.
- *
- * This _raw_ struct is defined to generate parsers, and its declarations simply
- * represent what is considered _valid_.
- * On its own, it performs no real work, other than to validate the input.
- */
-struct ManifestRaw
-{
-
-  // NOTE: Unrelated to queries
-  struct EnvBase
-  {
-    std::optional<std::string> floxhub;
-    std::optional<std::string> dir;
-  };
-  std::optional<EnvBase> envBase;
-
-  struct Options
-  {
-    std::optional<std::vector<std::string>> systems;
-
-    struct Allows
-    {
-      std::optional<bool>                     unfree;
-      std::optional<bool>                     broken;
-      std::optional<std::vector<std::string>> licenses;
-    };
-    std::optional<Allows> allow;
-
-    struct Semver { std::optional<bool> preferPreReleases; };
-    std::optional<Semver> semver;
-
-    std::optional<std::string> packageGroupingStrategy;
-    std::optional<std::string> activationStrategy;
-    // TODO: Other options
-  };
-  Options options;
-
-  // Contains descriptors to be resolved.
-  // FIXME: This should be `ManifestDescriptorRaw`! ( to be fixed soon )
-  std::unordered_map<std::string, ManifestDescriptor> install;
-
-  RegistryRaw registry;
-
-  // NOTE: Unrelated to queries
-  std::unordered_map<std::string, std::string> vars;
-
-  // NOTE: Unrelated to queries
-  struct Hook
-  {
-    std::optional<std::string> script;
-    std::optional<std::string> file;
-  };
-  std::optional<Hook> hook;
-
-};
-```
-
 
 ## Common Routines
 

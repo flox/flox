@@ -11,7 +11,7 @@ flox configuration files in TOML format - BETA
 flox provides the user some ability to control the flox configuration via files in TOML format.
 There are 3 configuration files available which are read in the following order:
 
-1. package defaults from `$PREFIX/etc/flox.toml` (PREFIX=${flox-bash})
+1. package defaults from `$PREFIX/etc/flox.toml` (PREFIX=${flox})
 2. installation defaults from `/etc/flox.toml`
 3. user customizations from `$HOME/.config/flox/flox.toml`
 
