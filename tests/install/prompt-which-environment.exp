@@ -21,8 +21,6 @@ expect {
     }
 }
 
-set timeout 1
-
 # cd to directory 2
 set cmd "cd 2"
 send "$cmd\n"
@@ -61,7 +59,6 @@ expect {
 
 # choose the first option and expect the corresponding installation
 send "\r"
-set timeout 5
 # install hello and check it's installed to environment 2
 expect {
   -re "✅ 'hello' installed to environment 2 at .*2" {}
