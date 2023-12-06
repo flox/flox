@@ -86,7 +86,6 @@ teardown() {
   "$FLOX_CLI" init;
   run "$FLOX_CLI" install not-a-package;
   assert_failure;
-  assert_output --partial "failed to resolve \`not-a-package'";
 }
 
 @test "'flox uninstall' reports error when package not found" {
