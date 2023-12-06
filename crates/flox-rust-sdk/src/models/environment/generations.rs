@@ -99,11 +99,19 @@ impl Generations<ReadOnly> {
 }
 
 impl Generations<ReadWrite> {
-    /// Realize a generation as a [PathEnvironment]
+    /// Return a mutable [PathEnvironment] instance for a given generation
+    /// contained in the generations branch.
     ///
-    /// The generation can then be safely modified
-    /// and registered as a new generation using [Self::add_generation].
-    pub fn realize_generation(
+    /// Note:
+    ///   Only the generations branch is isolated in a tempdir.
+    ///   Taking a mutable reference to a generation will not isolate it further,
+    ///   so changes to the generation will remain in the tempdir.
+    ///   If [Generations::add_generation] is given a [PathEnvironment] instance
+    ///   returned by this method, it will copy the environment into the new generation.
+    ///
+    ///   When a generation needs to be used again after being modified,
+    ///   it is recommended to create a new [Generations<ReadWrite>] instance first.
+    pub fn get_generation(
         &self,
         generation: usize,
     ) -> Result<PathEnvironment<Original>, GenerationsError> {
@@ -118,19 +126,17 @@ impl Generations<ReadWrite> {
         Ok(environment)
     }
 
-    /// Realize the current generation as set in the metadata file
+    /// Return the current generation as set in the metadata file
     /// as a [PathEnvironment].
     ///
     /// The generation can then be safely modified
     /// and registered as a new generation using [Self::add_generation].
-    pub fn realize_current_generation(
-        &self,
-    ) -> Result<PathEnvironment<Original>, GenerationsError> {
+    pub fn get_current_generation(&self) -> Result<PathEnvironment<Original>, GenerationsError> {
         let metadata = self.metadata()?;
         let current_gen = metadata
             .current_gen
             .ok_or(GenerationsError::NoGenerations)?;
-        self.realize_generation(*current_gen)
+        self.get_generation(*current_gen)
     }
 
     /// Import an existing environment into a generation
@@ -177,7 +183,7 @@ impl Generations<ReadWrite> {
         self.repo.add(&[&generation_path]).unwrap();
         self.repo
             .commit(&format!(
-                "Register generation {}\n\n{}",
+                "Create generation {}\n\n{}",
                 generation, description
             ))
             .unwrap();
