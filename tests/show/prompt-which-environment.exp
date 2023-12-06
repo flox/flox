@@ -1,0 +1,71 @@
+# Test 'flox show' prompts when an environment is activated and there is an environment in the current directory
+
+set flox $env(FLOX_CLI)
+
+# activate environment 1
+set timeout 2
+set cmd "$flox activate --dir 1"
+spawn $flox activate --dir 1
+expect {
+    "Building environment..." {}
+    timeout {
+      puts stderr "Reached timeout running '$cmd'"
+      exit 1
+    }
+}
+expect {
+    -re "\[1\].*\$" {}
+    timeout {
+      puts stderr "Reached timeout running '$cmd'"
+      exit 1
+    }
+}
+
+# cd to directory 2
+set cmd "cd 2"
+send "$cmd\n"
+expect {
+    -re "\[1\].*\$" {}
+    timeout {
+      puts stderr "Reached timeout running '$cmd'"
+      exit 1
+    }
+}
+
+# search for hello and expect an interactive prompt
+set cmd "$flox show nodejs"
+send "$cmd\n"
+expect {
+    "Do you want to show packages using the current directory's flox environment or the current active flox environment?" {}
+    timeout {
+      puts stderr "Reached timeout running '$cmd'"
+      exit 1
+    }
+}
+expect {
+    -re {current directory's flox environment \[2 at .*2\]} {}
+    timeout {
+      puts stderr "Reached timeout running '$cmd'"
+      exit 1
+    }
+}
+expect {
+    -re {current active flox environment \[1 at .*1\]} {}
+    timeout {
+      puts stderr "Reached timeout running '$cmd'"
+      exit 1
+    }
+}
+
+# choose the first option and expect the corresponding installation
+send "\r"
+# install hello and check it's installed to environment 2
+expect {
+  "nodejs - nodejs@18.17.1" {}
+  timeout {
+    puts stderr "Reached timeout running '$cmd'"
+    exit 1
+  }
+}
+
+exit 0

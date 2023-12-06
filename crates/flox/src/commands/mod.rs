@@ -4,7 +4,7 @@ mod general;
 mod search;
 
 use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::{env, fs};
 
 use anyhow::{anyhow, Context, Result};
@@ -14,8 +14,10 @@ use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironment;
 use flox_rust_sdk::models::environment::path_environment::{Original, PathEnvironment};
 use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironment;
 use flox_rust_sdk::models::environment::{
+    find_dot_flox,
     Environment,
     EnvironmentPointer,
+    UninitializedEnvironment,
     DOT_FLOX,
     FLOX_ACTIVE_ENVIRONMENTS_VAR,
 };
@@ -479,12 +481,11 @@ impl EnvironmentSelect {
             // TODO: needs design - do we want to search up?
             EnvironmentSelect::Unspecified => {
                 let current_dir = env::current_dir().context("could not get current directory")?;
-                let maybe_current_pointer = EnvironmentPointer::open(&current_dir);
-                maybe_current_pointer
-                    .map(|current_dir_pointer| {
-                        open_env_pointer(flox, &current_dir, current_dir_pointer)
-                    })
-                    .context(format!("No environment found in {current_dir:?}"))?
+                let maybe_found_environment = find_dot_flox(&current_dir)?;
+                match maybe_found_environment {
+                    Some(found) => open_environment(flox, found),
+                    None => Err(anyhow!(format!("No environment found in {current_dir:?}"))),
+                }
             },
             EnvironmentSelect::Remote(_) => todo!(),
         }
@@ -507,27 +508,40 @@ impl EnvironmentSelect {
             // already activated environment or an environment in the current
             // directory.
             // TODO: needs design - do we want to search up?
-            EnvironmentSelect::Unspecified => detect_environment(flox, message),
+            EnvironmentSelect::Unspecified => match detect_environment(message)? {
+                Some(found) => open_environment(flox, found),
+                None => {
+                    let current_dir =
+                        env::current_dir().context("could not get current directory")?;
+                    Err(anyhow!(format!("No environment found in {current_dir:?}")))
+                },
+            },
             EnvironmentSelect::Remote(_) => todo!(),
         }
     }
 }
 
-pub fn detect_environment(flox: &Flox, message: &str) -> Result<ConcreteEnvironment> {
+/// Determine what environment a flox command should use.
+///
+/// - Search upwards from the current directory for a `.flox` directory.
+/// - Check if there's an already activated environment.
+/// - Prompt if both are true.
+pub fn detect_environment(message: &str) -> Result<Option<UninitializedEnvironment>> {
     let current_dir = env::current_dir().context("could not get current directory")?;
-    let maybe_current_pointer = EnvironmentPointer::open(&current_dir);
+    let maybe_found_environment = find_dot_flox(&current_dir)?;
     let maybe_activated = last_activated_environment();
-    match (maybe_activated, maybe_current_pointer) {
-        (Some(activated), Ok(current_dir_pointer)) => {
-            if activated == current_dir {
-                open_env_pointer(flox, &current_dir, current_dir_pointer)
+
+    Ok(match (maybe_activated, maybe_found_environment) {
+        // If there's both an activated environment and an environment in the current directory (TODO: or git repo), prompt for which to use.
+        (Some(activated_path), Some(found)) => {
+            if activated_path == found.path {
+                Some(found)
             } else {
-                let activated_pointer = EnvironmentPointer::open(&activated)?;
+                let activated = UninitializedEnvironment::open(&activated_path)?;
+                // TODO fix this when we search up for git repo
                 let message = format!("Do you want to {message} the current directory's flox environment or the current active flox environment?");
-                let current_description =
-                    hacky_environment_description(&current_dir, &current_dir_pointer)?;
-                let activated_description =
-                    hacky_environment_description(&activated, &activated_pointer)?;
+                let found_description = hacky_environment_description(&found)?;
+                let activated_description = hacky_environment_description(&activated)?;
                 if Dialog::can_prompt() {
                     let dialog = Dialog {
                         message: &message,
@@ -535,7 +549,7 @@ pub fn detect_environment(flox: &Flox, message: &str) -> Result<ConcreteEnvironm
                         typed: Select {
                             options: vec![
                                 format!(
-                                    "current directory's flox environment [{current_description}]",
+                                    "current directory's flox environment [{found_description}]",
                                 ),
                                 format!(
                                     "current active flox environment [{activated_description}]",
@@ -545,41 +559,39 @@ pub fn detect_environment(flox: &Flox, message: &str) -> Result<ConcreteEnvironm
                     };
                     let (index, _) = dialog.raw_prompt()?;
                     match index {
-                        0 => open_env_pointer(flox, &current_dir, current_dir_pointer),
-                        1 => open_env_pointer(flox, &activated, activated_pointer),
+                        0 => Some(found),
+                        1 => Some(activated),
                         _ => unreachable!(),
                     }
                 } else {
-                    Err(anyhow!("can't determine whether to use {current_description} or {activated_description}; specify an environment using --dir or --remote"))?
+                    Err(anyhow!("can't determine whether to use {found_description} or {activated_description}"))?
                 }
             }
         },
-        (Some(activated), Err(_)) => open_path(flox, &activated),
-        (None, Ok(current_dir_pointer)) => {
-            open_env_pointer(flox, &current_dir, current_dir_pointer)
-        },
-        (None, Err(e)) => Err(e).context(format!("No environment found in {current_dir:?}"))?,
-    }
+        (Some(activated_path), None) => Some(UninitializedEnvironment::open(activated_path)?),
+        (None, Some(found)) => Some(found),
+        (None, None) => None,
+    })
 }
 
 /// Open an environment defined in `{path}/.flox`
 fn open_path(flox: &Flox, path: &PathBuf) -> Result<ConcreteEnvironment> {
-    let pointer = EnvironmentPointer::open(path)
-        .with_context(|| format!("No environment found in {path:?}"))?;
-
-    open_env_pointer(flox, path, pointer)
+    open_environment(
+        flox,
+        UninitializedEnvironment::open(path)
+            .with_context(|| format!("No environment found in {path:?}"))?,
+    )
 }
 
 /// Open an environment defined in `{path}/.flox` with an already parsed pointer
 ///
 /// This is used directly when the env pointer was read previously during detection.
-fn open_env_pointer(
+fn open_environment(
     flox: &Flox,
-    path: &Path,
-    pointer: EnvironmentPointer,
+    uninitialized: UninitializedEnvironment,
 ) -> Result<ConcreteEnvironment> {
-    let dot_flox_path = path.join(DOT_FLOX);
-    let env = match pointer {
+    let dot_flox_path = uninitialized.path.join(DOT_FLOX);
+    let env = match uninitialized.pointer {
         EnvironmentPointer::Path(path_pointer) => {
             debug!("detected concrete environment type: path");
             ConcreteEnvironment::Path(PathEnvironment::open(

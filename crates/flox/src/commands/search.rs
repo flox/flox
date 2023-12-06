@@ -1,10 +1,11 @@
 use std::collections::{HashMap, HashSet};
 use std::io::{BufWriter, Write};
+use std::path::PathBuf;
 
 use anyhow::{bail, Context, Result};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::models::environment::{global_manifest_path, manifest_and_lockfile};
+use flox_rust_sdk::models::environment::global_manifest_path;
 use flox_rust_sdk::models::search::{
     do_search,
     PathOrJson,
@@ -17,6 +18,8 @@ use flox_rust_sdk::models::search::{
 };
 use log::debug;
 
+use crate::commands::environment::hacky_environment_description;
+use crate::commands::{detect_environment, open_environment};
 use crate::config::features::{Features, SearchStrategy};
 use crate::subcommand_metric;
 
@@ -64,16 +67,15 @@ impl Search {
         subcommand_metric!("search");
         debug!("performing search for term: {}", self.search_term);
 
-        let (manifest, lockfile) = manifest_and_lockfile(
-            &std::env::current_dir()
-                .context("failed while getting the path of the current directory")?,
-        )
-        .context("failed while looking for manifest and lockfile")?;
+        let (manifest, lockfile) = manifest_and_lockfile(&flox, "search for packages using")
+            .context("failed while looking for manifest and lockfile")?;
+
         let limit = if self.all {
             None
         } else {
             Some(DEFAULT_NUM_RESULTS)
         };
+
         let search_params = construct_search_params(
             &self.search_term,
             limit,
@@ -274,11 +276,8 @@ impl Show {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("show");
 
-        let (manifest, lockfile) = manifest_and_lockfile(
-            &std::env::current_dir()
-                .context("failed while getting the path of the current directory")?,
-        )
-        .context("failed while looking for manifest and lockfile")?;
+        let (manifest, lockfile) = manifest_and_lockfile(&flox, "show packages using")
+            .context("failed while looking for manifest and lockfile")?;
         let search_params = construct_show_params(
             &self.search_term,
             manifest.map(|p| p.try_into()).transpose()?,
@@ -397,4 +396,40 @@ fn render_show(search_results: &[SearchResult], all: bool) -> Result<()> {
     println!("{pkg_name} - {description}");
     println!("    {pkg_name} - {versions}");
     Ok(())
+}
+
+/// Searches for an environment to use, and if one is found, returns the path to
+/// its manifest and optionally the path to its lockfile.
+///
+/// Note that this may perform network operations to pull a ManagedEnvironment,
+/// since a freshly cloned user repo with a ManagedEnvironment may not have a
+/// manifest or lockfile in floxmeta unless the environment is initialized.
+pub fn manifest_and_lockfile(
+    flox: &Flox,
+    message: &str,
+) -> Result<(Option<PathBuf>, Option<PathBuf>)> {
+    let res = match detect_environment(message)? {
+        None => {
+            debug!("no environment found");
+            (None, None)
+        },
+        Some(uninitialized) => {
+            debug!(
+                "using environment {}",
+                hacky_environment_description(&uninitialized)?
+            );
+            let environment = open_environment(flox, uninitialized)?.into_dyn_environment();
+            let lockfile_path = environment.lockfile_path();
+            debug!("checking lockfile: path={}", lockfile_path.display());
+            let lockfile = if lockfile_path.exists() {
+                debug!("lockfile exists");
+                Some(lockfile_path)
+            } else {
+                debug!("lockfile doesn't exist");
+                None
+            };
+            (Some(environment.manifest_path()), lockfile)
+        },
+    };
+    Ok(res)
 }

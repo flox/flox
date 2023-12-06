@@ -21,6 +21,7 @@ use flox_rust_sdk::models::environment::{
     EnvironmentPointer,
     ManagedPointer,
     PathPointer,
+    UninitializedEnvironment,
     DOT_FLOX,
     ENVIRONMENT_POINTER_FILENAME,
     FLOX_ACTIVE_ENVIRONMENTS_VAR,
@@ -482,24 +483,25 @@ fn environment_description(environment: &ConcreteEnvironment) -> Result<String, 
 /// Generate a description for an environment that has not yet been opened.
 ///
 /// TODO: we should share this implementation with environment_description().
-/// We probably need an UnopenedEnvironment or LightweightEnvironment or
-/// EnvironmentDescriptor that represents a partially opened environment.
 pub fn hacky_environment_description(
-    path: &Path,
-    pointer: &EnvironmentPointer,
+    uninitialized: &UninitializedEnvironment,
 ) -> Result<String, EnvironmentError2> {
-    Ok(match pointer {
+    Ok(match &uninitialized.pointer {
         EnvironmentPointer::Managed(managed_pointer) => {
             format!(
                 "{}/{} at {}",
                 managed_pointer.owner,
                 "<TODO: name>",
                 // environment.name(),
-                path.to_string_lossy(),
+                uninitialized.path.to_string_lossy(),
             )
         },
         EnvironmentPointer::Path(path_pointer) => {
-            format!("{} at {}", path_pointer.name, path.to_string_lossy())
+            format!(
+                "{} at {}",
+                path_pointer.name,
+                uninitialized.path.to_string_lossy()
+            )
         },
     })
 }
