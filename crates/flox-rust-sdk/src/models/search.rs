@@ -148,11 +148,17 @@ pub struct Query {
     pub r#match: Option<String>,
     /// Match against the package name
     pub match_name: Option<String>,
+    /// Limit search results to a specified number
+    pub limit: Option<u8>,
 }
 
 impl Query {
-    // This can't actually error, but the trait requires an error type
-    pub fn from_str(search_term: &str, prefer_match_name: bool) -> Result<Self, SearchError> {
+    /// Construct a query from a search term and an optional search result limit.
+    pub fn from_term_and_limit(
+        search_term: &str,
+        prefer_match_name: bool,
+        limit: Option<u8>,
+    ) -> Result<Self, SearchError> {
         // If there's an '@' in the query, it means the user is trying to use the semver
         // search capability. This means we need to split the query into package name and
         // semver specifier parts. Note that the 'semver' field is distinct from the 'version'
@@ -167,6 +173,7 @@ impl Query {
                 }
                 let mut q = Query {
                     semver: Some(semver.to_string()),
+                    limit,
                     ..Query::default()
                 };
                 if prefer_match_name {
@@ -177,7 +184,10 @@ impl Query {
                 q
             },
             None => {
-                let mut q = Query::default();
+                let mut q = Query {
+                    limit,
+                    ..Default::default()
+                };
                 if prefer_match_name {
                     q.match_name = Some(search_term.to_string());
                 } else {
@@ -341,7 +351,8 @@ mod test {
         "global-manifest": "/path/to/manifest",
         "query": {
             "semver": "2.12.1",
-            "match": "hello"
+            "match": "hello",
+            "limit": 10
         }
     }"#;
 
@@ -376,7 +387,7 @@ mod test {
             manifest: Some(PathOrJson::Path("/path/to/manifest".into())),
             global_manifest: PathOrJson::Path("/path/to/manifest".into()),
             lockfile: None,
-            query: Query::from_str(EXAMPLE_SEARCH_TERM, false).unwrap(),
+            query: Query::from_term_and_limit(EXAMPLE_SEARCH_TERM, false, Some(10)).unwrap(),
         };
         let json = serde_json::to_string(&params).unwrap();
         // Convert both to `serde_json::Value` to test equality without worrying about whitespace
