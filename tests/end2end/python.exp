@@ -4,6 +4,7 @@
 # Assume throughout that the project is named project-\d+
 
 set flox $env(FLOX_CLI)
+set prompt "flox .* \$.*"          ;# default prompt
 
 spawn $flox activate
 expect {
@@ -22,10 +23,9 @@ expect {
     }
 }
 
-# activation is the only thing that should take very long so set a low timeout
-set timeout 1
-
 # check for python3
+expect -re $prompt
+set timeout 1
 send "{ command -v python3||which python3||type -P python3; } 2>&1\n"
 expect {
     -re "\.flox/run/.*\.project-\\d+/bin/python3" {}
@@ -36,6 +36,13 @@ expect {
 }
 
 # check for pip
+expect {
+    -re $prompt {}
+    timeout {
+      puts stderr "Reached timeout checking prompt before checking pip"
+      exit 1
+    }
+}
 send "{ command -v pip||which pip||type -P pip; } 2>&1\n"
 expect {
     -re "\.flox/run/.*\.project-\\d+/bin/pip" {}
@@ -46,6 +53,13 @@ expect {
 }
 
 # check that pip is properly configured
+expect {
+    -re $prompt {}
+    timeout {
+      puts stderr "Reached timeout checking prompt before cat"
+      exit 1
+    }
+}
 send "cat \$PIP_CONFIG_FILE\n"
 expect {
     -re "require-virtualenv = true" {}
@@ -56,6 +70,14 @@ expect {
 }
 
 # check pip install return correct error
+expect {
+    -re $prompt {}
+    timeout {
+      puts stderr "Reached timeout checking prompt before pip install test"
+      exit 1
+    }
+}
+set timeout 30
 send "pip install requests\n"
 expect {
     -re "ERROR: Could not find an activated virtualenv" {}
@@ -66,6 +88,14 @@ expect {
 }
 
 # create python virtualenv
+expect {
+    -re $prompt {}
+    timeout {
+      puts stderr "Reached timeout checking prompt before virtual env setup"
+      exit 1
+    }
+}
+set timeout 10
 send "python3 -m venv env\n"
 expect {
     -re "flox .*\\\[project-\\d+\\\]" {}
@@ -92,9 +122,8 @@ expect {
       exit 1
     }
 }
-set timeout 1
-
 # test requests library in python 
+set timeout 1
 send "./env/bin/python -c 'import requests; print(requests.__path__)'\n"
 expect {
     -re "\\\['.*/project-\\d+/env/lib/python\\d+.\\d+/site-packages/requests'\\\]" {}
