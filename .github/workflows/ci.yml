@@ -283,7 +283,7 @@ jobs:
       - name: "Build Bats Tests (./#flox-env-builder-tests)"
         run: |
           git clean -xfd
-          nix build -L \
+          nix build -vvv -L \
               --accept-flake-config \
               --no-update-lock-file \
               --print-out-paths \
@@ -370,7 +370,7 @@ jobs:
       - name: "Build Bats Tests (./#flox-pkgdb-tests)"
         run: |
           git clean -xfd
-          nix build -L \
+          nix build -vvv -L \
               --accept-flake-config \
               --no-update-lock-file \
               --print-out-paths \
