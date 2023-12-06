@@ -136,16 +136,19 @@ jq_edit() {
 
 # ---------------------------------------------------------------------------- #
 
-# bats test_tags=resolver:lockfile, resolver:groups, resolver:optional
+# bats test_tags=resolver:lockfile, resolver:groups, resolver:optional, resolver:upgrade
 
-# XXX: This test case shows an undesirable behavior.
-# Use it as a case study for making improvements and later, remove it or modify
-# it to reflect the new behavior.
+# XXX: This test case in particular is worth reading closely because it shows
+#      a handful of important edge case handling behaviors that are worth
+#      reviewing closely.
 
 # Like the test above but adds `nodejsNew' after the lock is created.
 # This changes the resolution of `nodejs' to use _staging_ instead of
-# _unstable_, making it impossible to resolve `nodejsNew' later.
-@test "'pkgdb manifest lock' impossible group with previous lock" {
+# _unstable_, making it impossible to resolve `nodejsNew' later with the
+# same rev.
+# We expect this to succeed by upgrading the entire group and emitting a warning
+# for the user.
+@test "'pkgdb manifest lock' upgraded group with previous lock" {
   setup_project;
 
   jq_edit manifest.json '.install|=del( .nodejsNew )';
@@ -165,24 +168,27 @@ jq_edit() {
     "name": "nodejs", "version": "^18.17"
   }';
 
-  # This doesn't have `pipefail' so we will always get a `manifest.lock2'
-  # even if resolution fails.
+  # Making the package optional fixes makes it possible to resolve without
+  # an upgrade.
+  jq_edit manifest.json '.install.nodejsNew.optional=true';
   run sh -c '$PKGDB manifest lock --lockfile manifest.lock manifest.json  \
                |tee manifest.lock2;';
   assert_success;
+  # Because the package was marked optional, we DO NOT perform an upgrade here!
+  run jq -r '.packages["x86_64-linux"].nodejsNew' manifest.lock2;
+  assert_success;
+  assert_output 'null';
 
-  run jq -r '.category_message' manifest.lock2;
-  assert_output "resolution failure";
-
-  # Making the package optional fixes makes it possible to resolve.
-  jq_edit manifest.json '.install.nodejsNew.optional=true';
+  # This doesn't have `pipefail' so we will always get a `manifest.lock2'
+  # even if resolution fails.
+  jq_edit manifest.json '.install.nodejsNew|=del( .optional )';
   run sh -c '$PKGDB manifest lock --lockfile manifest.lock manifest.json  \
                |tee manifest.lock3;';
   assert_success;
-
-  run jq -r '.packages["x86_64-linux"].nodejsNew' manifest.lock3;
-  assert_success;
-  assert_output 'null';
+  assert_output --partial "upgrading group \`default'";
+  # Ensure we didn't produce an error.
+  run jq -r '.category_message' manifest.lock3;
+  assert_output "null";
 }
 
 

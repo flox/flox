@@ -18,6 +18,7 @@
 #include <vector>
 
 #include <nix/flake/flakeref.hh>
+#include <nix/logging.hh>
 #include <nix/ref.hh>
 #include <nlohmann/json.hpp>
 
@@ -459,6 +460,81 @@ Environment::getGroupInput( const InstallDescriptors & group,
 
 /* -------------------------------------------------------------------------- */
 
+std::variant<InstallID, SystemPackages>
+Environment::tryResolveGroupIn( const InstallDescriptors & group,
+                                const pkgdb::PkgDbInput &  input,
+                                const System &             system )
+{
+  std::unordered_map<InstallID, std::optional<pkgdb::row_id>> pkgRows;
+
+  /* Loop over each descriptor. */
+  for ( const auto & [iid, descriptor] : group )
+    {
+      /* Skip unrequested systems. */
+      if ( descriptor.systems.has_value()
+           && ( std::find( descriptor.systems->begin(),
+                           descriptor.systems->end(),
+                           system )
+                == descriptor.systems->end() ) )
+        {
+          pkgRows.emplace( iid, std::nullopt );
+          continue;
+        }
+
+      /* Try resolving.
+       * If resolution fails, return the _iid_ of the **first**
+       * failed descriptor. */
+      std::optional<pkgdb::row_id> maybeRow
+        = this->tryResolveDescriptorIn( descriptor, input, system );
+      if ( maybeRow.has_value() || descriptor.optional )
+        {
+          pkgRows.emplace( iid, maybeRow );
+        }
+      else { return iid; }
+    }
+
+  /* Convert to `LockedPackageRaw's */
+  SystemPackages pkgs;
+  LockedInputRaw lockedInput( input );
+  auto           dbRO = input.getDbReadOnly();
+  for ( const auto & [iid, maybeRow] : pkgRows )
+    {
+      if ( maybeRow.has_value() )
+        {
+          pkgs.emplace( iid,
+                        Environment::lockPackage( lockedInput,
+                                                  *dbRO,
+                                                  *maybeRow,
+                                                  group.at( iid ).priority ) );
+        }
+      else { pkgs.emplace( iid, std::nullopt ); }
+    }
+
+  return pkgs;
+}
+
+
+/* -------------------------------------------------------------------------- */
+
+/**
+ * @brief Extract the name of a group from a set of descriptors, or "default"
+ *        if no descriptors declare a `packageGroup`.
+ */
+[[nodiscard]] static inline const std::string &
+getGroupName( const InstallDescriptors & group )
+{
+  if ( const auto & descriptor = group.begin();
+       ( descriptor != group.end() ) && descriptor->second.group.has_value() )
+    {
+      return *descriptor->second.group;
+    }
+  static const std::string defaultName = "default";
+  return defaultName;
+}
+
+
+/* -------------------------------------------------------------------------- */
+
 ResolutionResult
 Environment::tryResolveGroup( const InstallDescriptors & group,
                               const System &             system )
@@ -467,8 +543,8 @@ Environment::tryResolveGroup( const InstallDescriptors & group,
    * failed to resolve in. */
   ResolutionFailure failure;
 
-  /* If there is an existing lock and it has this group pinned to an existing
-   * input+rev try to use it to resolve the group.
+  /* When there is an existing lock with this group pinned to an existing
+  input+rev try to use it to resolve the group.
    * If we fail collect a list of failed descriptors; presumably these are
    * new group members. */
   std::optional<pkgdb::PkgDbInput> oldGroupInput;
@@ -512,32 +588,39 @@ Environment::tryResolveGroup( const InstallDescriptors & group,
         }
     }
 
+  /* If we've made it to this point, we know there are some unlocked descriptors
+   * in this group that need to be resolved. */
   for ( const auto & [_, input] : *this->getPkgDbRegistry() )
     {
-      /* If we already tried to resolve in this input - skip it. */
-      if ( ! oldGroupInput.has_value() || ( ( *input ) == ( *oldGroupInput ) ) )
+      /* If there is an existing lock we'll try to use the same input+rev as the
+       * old lockfile's pin.
+       * If we fail collect a list of failed descriptors we will return a list
+       * of failed descriptors. */
+      if ( ! ( oldGroupInput.has_value() && *input == *oldGroupInput ) )
         {
-          {
-            auto maybeResolved
-              = this->tryResolveGroupIn( group, *input, system );
-            if ( const SystemPackages * resolved
-                 = std::get_if<SystemPackages>( &maybeResolved ) )
-              {
-                return *resolved;
-              }
-            else if ( const InstallID * iid
-                      = std::get_if<InstallID>( &maybeResolved ) )
-              {
-                failure.push_back( std::pair<InstallID, std::string> {
-                  *iid,
-                  input->getDbReadOnly()->lockedRef.string } );
-              }
-            else
-              {
-                throw ResolutionFailureException(
-                  "we thought this was an unreachable error" );
-              }
-          }
+          auto maybeResolved = this->tryResolveGroupIn( group, *input, system );
+          if ( const SystemPackages * resolved
+               = std::get_if<SystemPackages>( &maybeResolved ) )
+            {
+              nix::logger->log( nix::lvlInfo,
+                                nix::fmt( "upgrading group `%s' to avoid "
+                                          "resolution failure",
+                                          getGroupName( group ) ) );
+
+              return *resolved;
+            }
+          else if ( const InstallID * iid
+                    = std::get_if<InstallID>( &maybeResolved ) )
+            {
+              failure.push_back( std::pair<InstallID, std::string> {
+                *iid,
+                input->getDbReadOnly()->lockedRef.string } );
+            }
+          else
+            {
+              throw ResolutionFailureException(
+                "we thought this was an unreachable error" );
+            }
         }
     }
   return failure;
@@ -546,54 +629,18 @@ Environment::tryResolveGroup( const InstallDescriptors & group,
 
 /* -------------------------------------------------------------------------- */
 
-std::variant<InstallID, SystemPackages>
-Environment::tryResolveGroupIn( const InstallDescriptors & group,
-                                const pkgdb::PkgDbInput &  input,
-                                const System &             system )
+/** @brief Add a decription of a resolution failure to an exception message. */
+static inline std::stringstream &
+describeResolutionFailure( std::stringstream &        msg,
+                           const InstallDescriptors & group,
+                           const ResolutionFailure &  failure )
 {
-  std::unordered_map<InstallID, std::optional<pkgdb::row_id>> pkgRows;
-
-  for ( const auto & [iid, descriptor] : group )
+  msg << "  in `" << getGroupName( group ) << "': '" << std::endl;
+  for ( const auto & [iid, url] : failure )
     {
-      /* Skip unrequested systems. */
-      if ( descriptor.systems.has_value()
-           && ( std::find( descriptor.systems->begin(),
-                           descriptor.systems->end(),
-                           system )
-                == descriptor.systems->end() ) )
-        {
-          pkgRows.emplace( iid, std::nullopt );
-          continue;
-        }
-
-      /* Try resolving. */
-      std::optional<pkgdb::row_id> maybeRow
-        = this->tryResolveDescriptorIn( descriptor, input, system );
-      if ( maybeRow.has_value() || descriptor.optional )
-        {
-          pkgRows.emplace( iid, maybeRow );
-        }
-      else { return iid; }
+      msg << "    failed to resolve `" << iid << "' in input `" << url << '\'';
     }
-
-  /* Convert to `LockedPackageRaw's */
-  SystemPackages pkgs;
-  LockedInputRaw lockedInput( input );
-  auto           dbRO = input.getDbReadOnly();
-  for ( const auto & [iid, maybeRow] : pkgRows )
-    {
-      if ( maybeRow.has_value() )
-        {
-          pkgs.emplace( iid,
-                        Environment::lockPackage( lockedInput,
-                                                  *dbRO,
-                                                  *maybeRow,
-                                                  group.at( iid ).priority ) );
-        }
-      else { pkgs.emplace( iid, std::nullopt ); }
-    }
-
-  return pkgs;
+  return msg;
 }
 
 
@@ -613,8 +660,10 @@ Environment::lockSystem( const System & system )
   std::vector<ResolutionFailure> failures;
   std::stringstream              msg;
   msg << "failed to resolve some package(s):" << std::endl;
+
   for ( auto group = groups.begin(); group != groups.end(); )
     {
+      /* Push existing exception message. */
       ResolutionResult maybeResolved = this->tryResolveGroup( *group, system );
       std::visit(
         overloaded {
@@ -635,22 +684,9 @@ Environment::lockSystem( const System & system )
                 throw ResolutionFailureException(
                   "no inputs found to search for packages" );
               }
-            /* Print group name if this isn't the default group. */
-            if ( auto descriptor = group->begin();
-                 descriptor != group->end()
-                 && descriptor->second.group.has_value() )
-              {
 
-                msg << "  in group `" << *descriptor->second.group << "': ";
-              }
-            else { msg << "  in default group:"; }
-            msg << std::endl;
-            for ( const auto & [iid, url] : failure )
-              {
-                msg << "    failed to resolve `" << iid << "' in input `" << url
-                    << '\'';
-              }
-
+            /* Describe the failure. */
+            describeResolutionFailure( msg, *group, failure );
             ++group;
           } },
         maybeResolved );
@@ -696,6 +732,7 @@ Environment::createLockfile()
       this->lockfileRaw           = LockfileRaw {};
       this->lockfileRaw->manifest = this->getManifestRaw();
       this->lockfileRaw->registry = this->getCombinedRegistryRaw();
+      /* Lock each system. */
       for ( const auto & system : this->getSystems() )
         {
           this->lockSystem( system );

@@ -107,7 +107,7 @@ SearchCommand::addSearchQueryOptions( argparse::ArgumentParser & parser )
     .help( "print the generated SQL query and exit." )
     .nargs( 0 )
     .implicit_value( true )
-    .action( [&]( const auto & arg ) { this->dumpQuery = true; } );
+    .action( [&]( const auto & ) { this->dumpQuery = true; } );
 }
 
 
