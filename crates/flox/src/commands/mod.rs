@@ -11,7 +11,7 @@ use anyhow::{anyhow, bail, Context, Result};
 use bpaf::{Args, Bpaf, Parser};
 use flox_rust_sdk::flox::{Flox, FLOX_VERSION};
 use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironment;
-use flox_rust_sdk::models::environment::path_environment::{Original, PathEnvironment};
+use flox_rust_sdk::models::environment::path_environment::PathEnvironment;
 use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironment;
 use flox_rust_sdk::models::environment::{
     find_dot_flox,
@@ -601,7 +601,7 @@ fn open_environment(
 /// The various ways in which an environment can be referred to
 pub enum ConcreteEnvironment {
     /// Container for [PathEnvironment]
-    Path(PathEnvironment<Original>),
+    Path(PathEnvironment),
     /// Container for [ManagedEnvironment]
     #[allow(unused)] // pending implementation of ManagedEnvironment
     Managed(ManagedEnvironment),

@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use serde_with::{DeserializeFromStr, SerializeDisplay};
 use thiserror::Error;
 
-use super::path_environment::{Original, PathEnvironment};
+use super::path_environment::PathEnvironment;
 use super::{copy_dir_recursive, PathPointer, ENV_DIR_NAME};
 use crate::providers::git::{GitCommandProvider, GitProvider};
 
@@ -111,15 +111,11 @@ impl Generations<ReadWrite> {
     ///
     ///   When a generation needs to be used again after being modified,
     ///   it is recommended to create a new [Generations<ReadWrite>] instance first.
-    pub fn get_generation(
-        &self,
-        generation: usize,
-    ) -> Result<PathEnvironment<Original>, GenerationsError> {
+    pub fn get_generation(&self, generation: usize) -> Result<PathEnvironment, GenerationsError> {
         let environment = PathEnvironment::new(
             self.repo.path().join(generation.to_string()),
             self.pointer.clone(),
             &self.state.tempdir_base,
-            Original,
         )
         .unwrap();
 
@@ -131,7 +127,7 @@ impl Generations<ReadWrite> {
     ///
     /// The generation can then be safely modified
     /// and registered as a new generation using [Self::add_generation].
-    pub fn get_current_generation(&self) -> Result<PathEnvironment<Original>, GenerationsError> {
+    pub fn get_current_generation(&self) -> Result<PathEnvironment, GenerationsError> {
         let metadata = self.metadata()?;
         let current_gen = metadata
             .current_gen
@@ -152,7 +148,7 @@ impl Generations<ReadWrite> {
     /// If `set_current` is true, the generation will also be set as the current generation.
     fn register_generation(
         &mut self,
-        environment: PathEnvironment<Original>,
+        environment: PathEnvironment,
         generation: usize,
         description: String,
         set_current: bool,
@@ -204,7 +200,7 @@ impl Generations<ReadWrite> {
     /// and sets it as the current generation.
     pub fn add_generation(
         &mut self,
-        environment: PathEnvironment<Original>,
+        environment: PathEnvironment,
         description: String,
     ) -> Result<(), GenerationsError> {
         // keys should all be numbers (but)

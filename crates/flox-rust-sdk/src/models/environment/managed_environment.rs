@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use thiserror::Error;
 
-use super::path_environment::{Original, PathEnvironment};
+use super::path_environment::PathEnvironment;
 use super::{
     EditResult,
     Environment,
@@ -572,7 +572,7 @@ fn gcroots_dir(flox: &Flox, owner: &EnvironmentOwner) -> PathBuf {
 impl ManagedEnvironment {
     pub fn push_new(
         flox: &Flox,
-        path_environment: PathEnvironment<Original>,
+        path_environment: PathEnvironment,
         owner: EnvironmentOwner,
         temp_path: &Path,
         force: bool,

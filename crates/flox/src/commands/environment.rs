@@ -13,7 +13,7 @@ use flox_rust_sdk::models::environment::managed_environment::{
     ManagedEnvironment,
     ManagedEnvironmentError,
 };
-use flox_rust_sdk::models::environment::path_environment::{self, Original, PathEnvironment};
+use flox_rust_sdk::models::environment::path_environment::{self, PathEnvironment};
 use flox_rust_sdk::models::environment::{
     EditResult,
     Environment,
@@ -414,11 +414,7 @@ impl Init {
                 .parse()?
         };
 
-        let env = PathEnvironment::<Original>::init(
-            PathPointer::new(env_name),
-            &dir,
-            flox.temp_dir.clone(),
-        )?;
+        let env = PathEnvironment::init(PathPointer::new(env_name), &dir, flox.temp_dir.clone())?;
 
         println!(
             indoc::indoc! {"
