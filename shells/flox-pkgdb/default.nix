@@ -21,7 +21,6 @@
   lldb ? throw "`lldb' is required for debugging with `clang++'",
   valgrind ? throw "`valgrind' is required for memory sanitization on Linux",
   flox-pkgdb,
-  flox-pkgdb-tests-dev,
   # Limit packages to only those required for building and testing `pkgdb' in CI.
   # This includes Doxygen for generating docs, but excludes linting tools like
   # `clang-tidy' and `include-what-you-use' which are only provided in the _full_
@@ -64,8 +63,6 @@
         then gdb
         else lldb
       )
-      # script to run tests
-      flox-pkgdb-tests-dev
     ]
     ++ (
       if stdenv.isLinux or false

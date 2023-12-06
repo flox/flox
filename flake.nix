@@ -3,6 +3,7 @@
 # A cross-platform environment manager with sharing as a service.
 #
 # ---------------------------------------------------------------------------- #
+
 {
   description = "flox - Harness the power of Nix";
 
@@ -21,13 +22,11 @@
   inputs.parser-util.url = "github:flox/parser-util";
   inputs.parser-util.inputs.nixpkgs.follows = "nixpkgs";
 
-  inputs.shellHooks.url = "github:cachix/pre-commit-hooks.nix";
-  inputs.shellHooks.inputs.nixpkgs.follows = "nixpkgs";
 
   inputs.crane.url = "github:ipetkov/crane";
   inputs.crane.inputs.nixpkgs.follows = "nixpkgs";
 
-  # ---------------------------------------------------------------------------- #
+# ---------------------------------------------------------------------------- #
 
   outputs = {
     self,
@@ -35,14 +34,15 @@
     floco,
     sqlite3pp,
     parser-util,
-    shellHooks,
     crane,
     ...
   } @ inputs: let
-    # ---------------------------------------------------------------------------- #
+
+# ---------------------------------------------------------------------------- #
+
     floxVersion = let
       cargoToml = let
-        contents = builtins.readFile ./crates/flox/Cargo.toml;
+        contents = builtins.readFile ./cli/crates/flox/Cargo.toml;
       in
         builtins.fromTOML contents;
       prefix =
@@ -53,7 +53,8 @@
     in
       cargoToml.package.version + "-" + prefix + (toString rev);
 
-    # ---------------------------------------------------------------------------- #
+
+# ---------------------------------------------------------------------------- #
 
     eachDefaultSystemMap = let
       defaultSystems = [
@@ -71,7 +72,8 @@
       in
         builtins.listToAttrs (map proc defaultSystems);
 
-    # ---------------------------------------------------------------------------- #
+
+# ---------------------------------------------------------------------------- #
 
     # Add IWYU pragmas
     overlays.nlohmann = final: prev: {
@@ -120,7 +122,9 @@
       flox-gh = callPackage ./pkgs/flox-gh {};
       flox-src = callPackage ./pkgs/flox-src {};
 
-      flox-pkgdb = callPackage ./pkgs/flox-pkgdb {};
+      flox-pkgdb = callPackage ./pkgs/flox-pkgdb {
+        inherit floxVersion;
+      };
       flox-pkgdb-tests = callPackage ./pkgs/flox-pkgdb-tests {};
       flox-pkgdb-tests-dev = final.flox-pkgdb-tests.override {
         testsDir = "/pkgdb/tests";
@@ -136,11 +140,11 @@
       };
       flox-tests-end2end = final.flox-tests.override {
         name = "flox-tests-end2end";
-        testsDir = "/tests/end2end";
+        testsDir = "/cli/tests/end2end";
       };
       flox-tests-end2end-dev = final.flox-tests.override {
         name = "flox-tests-end2end";
-        testsDir = "/tests/end2end";
+        testsDir = "/cli/tests/end2end";
         FLOX_CLI = null;
       };
     };
@@ -149,7 +153,7 @@
       nixpkgs.lib.composeExtensions overlays.deps
       overlays.flox;
 
-    # ---------------------------------------------------------------------------- #
+# ---------------------------------------------------------------------------- #
 
     # Apply overlays to the `nixpkgs` _base_ set.
     # This is exposed as an output later; but we don't use the name
@@ -160,18 +164,7 @@
     in
       base.extend overlays.default);
 
-    # ---------------------------------------------------------------------------- #
-
-    checks = eachDefaultSystemMap (system: let
-      pkgs = builtins.getAttr system pkgsFor;
-    in {
-      pre-commit-check = pkgs.callPackage ./checks/pre-commit-check {
-        inherit shellHooks;
-        rustfmt = pkgs.rustfmt.override {asNightly = true;};
-      };
-    });
-
-    # ---------------------------------------------------------------------------- #
+# ---------------------------------------------------------------------------- #
 
     packages = eachDefaultSystemMap (system: let
       pkgs = builtins.getAttr system pkgsFor;
@@ -190,15 +183,16 @@
         ;
       default = pkgs.flox;
     });
-    # ---------------------------------------------------------------------------- #
+
+
+# ---------------------------------------------------------------------------- #
+
   in {
-    inherit overlays packages pkgsFor checks;
+    inherit overlays packages pkgsFor;
 
     devShells = eachDefaultSystemMap (system: let
       pkgs = builtins.getAttr system pkgsFor;
-      checksFor = builtins.getAttr system checks;
       flox = pkgs.callPackage ./shells/flox {
-        inherit (checksFor) pre-commit-check;
         rustfmt = pkgs.rustfmt.override {asNightly = true;};
       };
     in {
@@ -209,11 +203,14 @@
     });
   }; # End `outputs'
 
-  # ---------------------------------------------------------------------------- #
+
+# ---------------------------------------------------------------------------- #
+
 }
+
+
 # ---------------------------------------------------------------------------- #
 #
 #
 #
 # ============================================================================ #
-

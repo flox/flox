@@ -15,12 +15,13 @@
   sqlite3pp,
   toml11,
   yaml-cpp,
+  floxVersion,
 }:
 stdenv.mkDerivation {
   pname = "flox-pkgdb";
-  version = builtins.replaceStrings ["\n"] [""] (builtins.readFile ./../../pkgdb/version);
+  version = floxVersion;
   src = builtins.path {
-    path = ./../../pkgdb;
+    path = ./../..;
     filter = name: type: let
       bname = baseNameOf name;
       ignores = [
@@ -43,6 +44,7 @@ stdenv.mkDerivation {
         ".envrc"
         ".github"
         "LICENSE"
+        ".deps"
       ];
       ext = let
         m = builtins.match ".*\\.([^.]+)" name;
@@ -50,7 +52,7 @@ stdenv.mkDerivation {
         if m == null
         then ""
         else builtins.head m;
-      ignoredExts = ["o" "so" "dylib" "log"];
+      ignoredExts = ["o" "a" "so" "dylib" "log"];
       notResult = (builtins.match "result(-*)?" bname) == null;
       notIgnored =
         (! (builtins.elem bname ignores))
@@ -78,11 +80,14 @@ stdenv.mkDerivation {
   SEMVER_PATH = semver.outPath + "/bin/semver";
   configurePhase = ''
     runHook preConfigure;
-    export PREFIX="$out";
+    ./configure --prefix="$out" --includedir="$dev/include";
     if [[ "''${enableParallelBuilding:-1}" = 1 ]]; then
       makeFlagsArray+=( "-j''${NIX_BUILD_CORES:?}" );
     fi
     runHook postConfigure;
+  '';
+  preBuild = ''
+    pushd pkgdb||exit;
   '';
   # Checks require internet
   doCheck = false;

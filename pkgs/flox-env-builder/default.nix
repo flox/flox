@@ -44,8 +44,8 @@
 
   envs = {
     # nix_INCDIR = nix.dev.outPath + "/include";
-    boost_CPPFLAGS = "-I" + boost.dev.outPath + "/include";
-    pkgdb_CLFAGS = "-I" + flox-pkgdb.outPath + "/include";
+    boost_CPPFLAGS = "-isystem " + boost.dev.outPath + "/include";
+    pkgdb_CLFAGS = "-isystem " + flox-pkgdb.outPath + "/include";
 
     PROFILE_D_SCRIPT_DIR = profile_d_scripts;
     SET_PROMPT_BASH_SH = "${../../assets/mkEnv/set-prompt-bash.sh}";

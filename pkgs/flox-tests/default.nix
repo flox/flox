@@ -28,7 +28,7 @@
   which,
   writeShellScriptBin,
   name ? "flox-tests",
-  testsDir ? "/tests",
+  testsDir ? "/cli/tests",
   FLOX_CLI ? "${flox}/bin/flox",
 }: let
   batsWith = bats.withLibraries (p: [

@@ -48,12 +48,9 @@
       # Modified nix completion scripts
       # used to pass through nix completion ability for `flox nix *`
       NIX_BASH_COMPLETION_SCRIPT =
-        ../../crates/flox/src/static/nix_bash_completion.sh;
+        ../../cli/crates/flox/src/static/nix_bash_completion.sh;
       NIX_ZSH_COMPLETION_SCRIPT =
-        ../../crates/flox/src/static/nix_zsh_completion.sh;
-
-      # bundling of internally used nix scripts
-      FLOX_RESOLVER_SRC = builtins.path {path = ../../resolver;};
+        ../../cli/crates/flox/src/static/nix_zsh_completion.sh;
 
       # Metrics subsystem configuration
       METRICS_EVENTS_URL = "https://events.flox.dev/capture";
@@ -100,7 +97,7 @@
   # compiled manpages
   manpages =
     runCommand "flox-manpages" {
-      src = flox-src + "/crates/flox/doc";
+      src = flox-src + "/cli/crates/flox/doc";
       buildInputs = [pandoc fd];
     } ''
 
@@ -115,13 +112,13 @@
           {}
     '';
 
-  cargoToml = lib.importTOML (flox-src + "/crates/flox/Cargo.toml");
+  cargoToml = lib.importTOML (flox-src + "/cli/crates/flox/Cargo.toml");
 
   # incremental build of thrid party crates
   cargoDepsArtifacts = craneLib.buildDepsOnly {
     pname = cargoToml.package.name;
     version = cargoToml.package.version;
-    src = craneLib.cleanCargoSource (craneLib.path flox-src);
+    src = craneLib.cleanCargoSource (craneLib.path (flox-src + "/cli"));
 
     # runtime dependencies of the dependent crates
     buildInputs =
@@ -146,7 +143,7 @@ in
   craneLib.buildPackage ({
       pname = cargoToml.package.name;
       version = envs.FLOX_VERSION;
-      src = flox-src;
+      src = flox-src + "/cli";
 
       cargoArtifacts = cargoDepsArtifacts;
 

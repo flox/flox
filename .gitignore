@@ -16,3 +16,4 @@ config.status
 config.mk
 .deps/
 .dirstamp
+out/

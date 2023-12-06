@@ -6,7 +6,7 @@
 
 ACLOCAL_AMFLAGS = -I ../m4
 
-SUBDIRS = tests
+SUBDIRS = include tests
 
 
 # ---------------------------------------------------------------------------- #
@@ -28,53 +28,6 @@ lib_sharedLIBRARIES = lib/libpkgdb$(sharedLibExt)
 
 bin_PROGRAMS =
 bin_PROGRAMS += bin/pkgdb
-
-
-# ---------------------------------------------------------------------------- #
-
-nobase_include_HEADERS =
-
-nobase_include_HEADERS += include/versions.hh
-
-nobase_include_HEADERS += include/compat/concepts.hh
-
-nobase_include_HEADERS += include/flox/flake-package.hh
-nobase_include_HEADERS += include/flox/raw-package.hh
-nobase_include_HEADERS += include/flox/package.hh
-nobase_include_HEADERS += include/flox/flox-flake.hh
-nobase_include_HEADERS += include/flox/registry.hh
-nobase_include_HEADERS += include/flox/eval.hh
-nobase_include_HEADERS += include/flox/repl.hh
-
-nobase_include_HEADERS += include/flox/core/expr.hh
-nobase_include_HEADERS += include/flox/core/nix-state.hh
-nobase_include_HEADERS += include/flox/core/types.hh
-nobase_include_HEADERS += include/flox/core/exceptions.hh
-nobase_include_HEADERS += include/flox/core/util.hh
-nobase_include_HEADERS += include/flox/core/command.hh
-
-nobase_include_HEADERS += include/flox/search/params.hh
-nobase_include_HEADERS += include/flox/search/command.hh
-
-nobase_include_HEADERS += include/flox/parse/command.hh
-
-nobase_include_HEADERS += include/flox/resolver/environment.hh
-nobase_include_HEADERS += include/flox/resolver/mixins.hh
-nobase_include_HEADERS += include/flox/resolver/lockfile.hh
-nobase_include_HEADERS += include/flox/resolver/manifest-raw.hh
-nobase_include_HEADERS += include/flox/resolver/manifest.hh
-nobase_include_HEADERS += include/flox/resolver/descriptor.hh
-nobase_include_HEADERS += include/flox/resolver/command.hh
-nobase_include_HEADERS += include/flox/resolver/primops.hh
-
-nobase_include_HEADERS += include/flox/pkgdb/read.hh
-nobase_include_HEADERS += include/flox/pkgdb/gc.hh
-nobase_include_HEADERS += include/flox/pkgdb/input.hh
-nobase_include_HEADERS += include/flox/pkgdb/pkg-query.hh
-nobase_include_HEADERS += include/flox/pkgdb/db-package.hh
-nobase_include_HEADERS += include/flox/pkgdb/command.hh
-nobase_include_HEADERS += include/flox/pkgdb/primops.hh
-nobase_include_HEADERS += include/flox/pkgdb/write.hh
 
 
 # ---------------------------------------------------------------------------- #
@@ -184,6 +137,21 @@ lib/libpkgdb$(sharedLibExt): CXXFLAGS += -fPIC
 lib/libpkgdb$(sharedLibExt): LDFLAGS  += -fPIC -shared $(no_undefined_LDFLAG)
 lib/libpkgdb$(sharedLibExt): lib/libpkgdb.a
 	$(CXXLINK) $(libpkgdb_sa_LIBS) -o $@ $^
+
+
+# ---------------------------------------------------------------------------- #
+
+# Extend normal installation to add shared library
+install-exec-local-shared-lib: lib/libpkgdb$(sharedLibExt)
+	@$(NORMAL_INSTALL)
+	$(MKDIR_P) $(DESTDIR)$(libdir)
+	$(INSTALL_PROGRAM_ENV)                                      \
+	  $(INSTALL_PROGRAM) lib/libpkgdb$(sharedLibExt)            \
+                         "$(DESTDIR)$(libdir)"||exit $$?;
+
+# TODO: Install `lib/pkgconfig/libpkgdb.pc' file.l
+
+install-exec-local: install-exec-local-shared-lib
 
 
 # ---------------------------------------------------------------------------- #

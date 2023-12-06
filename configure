@@ -9232,7 +9232,7 @@ NIX_CFLAGS="$NIX_CFLAGS -DSYSTEM='\"$ARCH-$OS\"'";
 
 # ---------------------------------------------------------------------------- #
 
-ac_config_files="$ac_config_files Makefile config.mk pkgdb/Makefile pkgdb/tests/Makefile"
+ac_config_files="$ac_config_files Makefile config.mk pkgdb/Makefile pkgdb/include/Makefile pkgdb/tests/Makefile"
 
 cat >confcache <<\_ACEOF
 # This file is a shell script that caches the results of configure
@@ -10002,6 +10002,7 @@ do
     "Makefile") CONFIG_FILES="$CONFIG_FILES Makefile" ;;
     "config.mk") CONFIG_FILES="$CONFIG_FILES config.mk" ;;
     "pkgdb/Makefile") CONFIG_FILES="$CONFIG_FILES pkgdb/Makefile" ;;
+    "pkgdb/include/Makefile") CONFIG_FILES="$CONFIG_FILES pkgdb/include/Makefile" ;;
     "pkgdb/tests/Makefile") CONFIG_FILES="$CONFIG_FILES pkgdb/tests/Makefile" ;;
 
   *) as_fn_error $? "invalid argument: \`$ac_config_target'" "$LINENO" 5;;

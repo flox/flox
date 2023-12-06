@@ -275,6 +275,7 @@ AC_CONFIG_FILES([
   Makefile
   config.mk
   pkgdb/Makefile
+  pkgdb/include/Makefile
   pkgdb/tests/Makefile
 ])
 AC_OUTPUT

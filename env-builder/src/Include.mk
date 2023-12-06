@@ -13,11 +13,11 @@ SRC_DIR := $(call getMakefileDir)
 # _BUILT      := $(patsubst %,$(SRC_DIR)/%.gen.hh,$(_BUILT_SRCS))
 # _BUILT_SRCS =
 
-BUILT_SRCS       +=
-envbuilder_SRCS +=
-flox-env-builder_SRCS += $(wildcard $(SRC_DIR)/*.cc)
-flox-env-builder_LDLIBS += -lflox-pkgdb
-libenvbuilder_LDLIBS += -lsqlite3
+BUILT_SRCS              +=
+envbuilder_SRCS         +=
+flox-env-builder_SRCS   += $(wildcard $(SRC_DIR)/*.cc)
+flox-env-builder_LDLIBS += -lpkgdb
+libenvbuilder_LDLIBS    += -lsqlite3
 
 
 # ---------------------------------------------------------------------------- #

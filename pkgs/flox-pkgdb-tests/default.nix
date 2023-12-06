@@ -34,7 +34,9 @@
   ];
 in
   writeShellScriptBin "flox-pkgdb-tests" ''
-    set -x -euo pipefail
+    set -x;
+    set -eu;
+    set -o pipefail;
 
     export PATH="${lib.makeBinPath paths}"
 

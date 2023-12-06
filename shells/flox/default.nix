@@ -8,7 +8,6 @@
   hivemind,
   just,
   mkShell,
-  pre-commit-check,
   rust,
   rust-analyzer,
   rustPlatform,
@@ -65,8 +64,7 @@ in
             PATH="$PATH:$( git rev-parse --show-toplevel; )/pkgdb/bin";
           fi
 
-        ''
-        + pre-commit-check.shellHook;
+        '';
     }
     // flox.envs
     // flox-env-builder.envs)
