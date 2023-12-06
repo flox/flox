@@ -22,6 +22,7 @@ use crate::subcommand_metric;
 
 const SEARCH_INPUT_SEPARATOR: &'_ str = ":";
 const DEFAULT_DESCRIPTION: &'_ str = "<no description provided>";
+const DEFAULT_NUM_RESULTS: u8 = 10;
 
 #[derive(Bpaf, Clone)]
 pub struct ChannelArgs {}
@@ -66,6 +67,7 @@ impl Search {
         .context("failed while looking for manifest and lockfile")?;
         let search_params = construct_search_params(
             &self.search_term,
+            Some(DEFAULT_NUM_RESULTS),
             manifest.map(|p| p.try_into()).transpose()?,
             global_manifest_path(&flox).try_into()?,
             lockfile.map(|p| p.try_into()).transpose()?,
@@ -98,11 +100,12 @@ impl Search {
 
 fn construct_search_params(
     search_term: &str,
+    results_limit: Option<u8>,
     manifest: Option<PathOrJson>,
     global_manifest: PathOrJson,
     lockfile: Option<PathOrJson>,
 ) -> Result<SearchParams> {
-    let query = Query::from_str(
+    let query = Query::from_term_and_limit(
         search_term,
         Features::parse()?.search_strategy == SearchStrategy::MatchName,
     )?;
@@ -310,7 +313,7 @@ fn construct_show_params(
         _ => Err(ShowError::InvalidSearchTerm(search_term.to_owned()))?,
     };
 
-    let query = Query::from_str(
+    let query = Query::from_term_and_limit(
         package_name.as_ref().unwrap(), // We already know it's Some(_)
         Features::parse()?.search_strategy == SearchStrategy::MatchName,
     )?;
