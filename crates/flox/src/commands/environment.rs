@@ -228,7 +228,10 @@ pub struct Delete {
 impl Delete {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("delete");
-        match self.environment.detect_concrete_environment(&flox, "delete")? {
+        match self
+            .environment
+            .detect_concrete_environment(&flox, "delete")?
+        {
             ConcreteEnvironment::Path(environment) => environment.delete()?,
             ConcreteEnvironment::Managed(environment) => environment.delete()?,
             ConcreteEnvironment::Remote(environment) => environment.delete()?,
@@ -524,7 +527,9 @@ impl Install {
             self.packages.as_slice().join(", "),
             self.environment
         );
-        let concrete_environment = self.environment.detect_concrete_environment(&flox, "install to")?;
+        let concrete_environment = self
+            .environment
+            .detect_concrete_environment(&flox, "install to")?;
         let description = environment_description(&concrete_environment)?;
         let mut environment = concrete_environment.into_dyn_environment();
         let installation = environment.install(self.packages.clone(), &flox).await?;
@@ -563,7 +568,9 @@ impl Uninstall {
             self.packages.as_slice().join(", "),
             self.environment
         );
-        let concrete_environment = self.environment.detect_concrete_environment(&flox, "uninstall from")?;
+        let concrete_environment = self
+            .environment
+            .detect_concrete_environment(&flox, "uninstall from")?;
         let description = environment_description(&concrete_environment)?;
         let mut environment = concrete_environment.into_dyn_environment();
         let _ = environment.uninstall(self.packages.clone(), &flox).await?;
