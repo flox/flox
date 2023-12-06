@@ -29,6 +29,7 @@ use thiserror::Error;
 
 use super::core_environment::CoreEnvironment;
 use super::{copy_dir_recursive, ENV_DIR_NAME};
+use crate::models::environment::MANIFEST_FILENAME;
 use crate::providers::git::{GitCommandProvider, GitProvider};
 
 const GENERATIONS_METADATA_FILE: &str = "metadata.json";
@@ -84,6 +85,33 @@ impl<S> Generations<S> {
     /// Read the generations metadata for an environment
     pub fn metadata(&self) -> Result<AllGenerationsMetadata, GenerationsError> {
         read_metadata(&self.repo, &self.branch)
+    }
+
+    /// Read the manifest of a given generation and return its contents as a string
+    pub fn manifest(&self, generation: usize) -> Result<String, GenerationsError> {
+        let metadata = self.metadata()?;
+        if !metadata.generations.contains_key(&generation.into()) {
+            return Err(GenerationsError::GenerationNotFound(generation));
+        }
+        let manifest_osstr = self
+            .repo
+            .show(&format!(
+                "{}:{}/{}/{}",
+                self.branch, generation, ENV_DIR_NAME, MANIFEST_FILENAME
+            ))
+            .unwrap();
+
+        return Ok(manifest_osstr.to_string_lossy().to_string());
+    }
+
+    /// Read the manifest of the current generation and return its contents as a string
+    pub fn current_gen_manifest(&self) -> Result<String, GenerationsError> {
+        let metadata = self.metadata()?;
+        let current_gen = metadata
+            .current_gen
+            .ok_or(GenerationsError::NoGenerations)?;
+
+        self.manifest(*current_gen)
     }
 }
 
@@ -325,11 +353,11 @@ fn write_metadata_file(
 pub struct AllGenerationsMetadata {
     /// None means the environment has been created but does not yet have any
     /// generations
-    current_gen: Option<GenerationId>,
+    pub current_gen: Option<GenerationId>,
     /// Metadata for all generations of the environment.
     /// Entries in this map must match up 1-to-1 with the generation folders
     /// in the environment branch.
-    generations: BTreeMap<GenerationId, SingleGenerationMetadata>,
+    pub generations: BTreeMap<GenerationId, SingleGenerationMetadata>,
     /// Schema version of the metadata file, not yet utilized
     #[serde(default)]
     version: Version<1>,
@@ -341,15 +369,15 @@ pub struct AllGenerationsMetadata {
 pub struct SingleGenerationMetadata {
     /// unix timestamp of the creation time of this generation
     #[serde(with = "chrono::serde::ts_seconds")]
-    created: DateTime<Utc>,
+    pub created: DateTime<Utc>,
 
     /// unix timestamp of the time when this generation was last set as active
     /// `None` if this generation has never been set as active
     #[serde(with = "chrono::serde::ts_seconds_option")]
-    last_active: Option<DateTime<Utc>>,
+    pub last_active: Option<DateTime<Utc>>,
 
     /// log message(s) describing the change from the previous generation
-    description: String,
+    pub description: String,
     // todo: do we still need to track this?
     //       do we now?
     // /// store path of the built generation
