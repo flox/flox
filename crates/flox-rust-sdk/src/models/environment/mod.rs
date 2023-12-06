@@ -31,6 +31,7 @@ use crate::providers::git::{
 use crate::utils::copy_file_without_permissions;
 use crate::utils::errors::IoError;
 
+mod core_environment;
 pub mod generations;
 pub mod managed_environment;
 pub mod path_environment;
