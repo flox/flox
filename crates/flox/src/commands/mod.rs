@@ -450,15 +450,12 @@ pub enum EnvironmentSelect {
 impl EnvironmentSelect {
     /// Open a concrete environment, not detecting the currently active
     /// environment.
-    /// 
+    ///
     /// Use this method for commands like `activate` that shouldn't change
     /// behavior based on whether an environment is already active. For example,
     /// `flox activate` should never re-activate the last activated environment;
     /// it should default to an environment in the current directory.
-    pub fn to_concrete_environment(
-        &self,
-        flox: &Flox,
-    ) -> Result<ConcreteEnvironment> {
+    pub fn to_concrete_environment(&self, flox: &Flox) -> Result<ConcreteEnvironment> {
         match self {
             EnvironmentSelect::Dir(path) => open_path(flox, path),
             // TODO: needs design - do we want to search up?
@@ -476,7 +473,7 @@ impl EnvironmentSelect {
     }
 
     /// Open a concrete environment, detecting the currently active environment.
-    /// 
+    ///
     /// Use this method for commands like `install` that should use the
     /// currently activated environment. For example, `flox install` should
     /// install to the last activated environment if there isn't an environment

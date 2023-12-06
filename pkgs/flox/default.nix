@@ -56,8 +56,8 @@
       FLOX_RESOLVER_SRC = builtins.path {path = ../../resolver;};
 
       # Metrics subsystem configuration
-      METRICS_EVENTS_URL = "https://events.flox.dev/capture";
-      METRICS_EVENTS_API_KEY = "phc_z4dOADAPvpU9VNzCjDD3pIJuSuGTyagKdFWfjak838Y";
+      METRICS_EVENTS_URL = "https://z7qixlmjr3.execute-api.eu-north-1.amazonaws.com/prod/capture";
+      METRICS_EVENTS_API_KEY = "5pAQnBqz5Q7dpqVD9BEXQ4Kdc3D2fGTd3ZgP0XXK";
 
       # oauth client id
       OAUTH_CLIENT_ID = "s4BF6zGVcYh3gZUHwp6C4cGf3ey5Bwio";
