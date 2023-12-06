@@ -1,7 +1,21 @@
 use std::collections::HashMap;
 
 use log::debug;
+use serde::Deserialize;
 use toml_edit::{self, Document, InlineTable, Item, Table, Value};
+
+/// A subset of the manifest used to check what type of edits users make. We
+/// don't use this struct for making our own edits.
+///
+/// The authoritative form of the manifest is in
+/// https://github.com/flox/pkgdb/blob/main/include/flox/resolver/manifest-raw.hh#L263
+#[derive(Debug, Deserialize)]
+pub struct Manifest {
+    pub vars: Option<toml::Table>,
+    pub hook: Option<toml::Table>,
+    #[serde(flatten)]
+    _toml: toml::Table,
+}
 
 /// An error encountered while installing packages.
 #[derive(Debug, thiserror::Error)]

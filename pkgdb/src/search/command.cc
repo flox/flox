@@ -102,6 +102,12 @@ SearchCommand::addSearchQueryOptions( argparse::ArgumentParser & parser )
     .nargs( 1 )
     .action( [&]( const std::string & arg )
              { this->params.query.partialNameMatch = arg; } );
+
+  parser.add_argument( "--dump-query" )
+    .help( "print the generated SQL query and exit." )
+    .nargs( 0 )
+    .implicit_value( true )
+    .action( [&]( const auto & arg ) { this->dumpQuery = true; } );
 }
 
 
@@ -168,12 +174,17 @@ SearchCommand::run()
   this->initEnvironment();
 
   pkgdb::PkgQueryArgs args = this->getEnvironment().getCombinedBaseQueryArgs();
+  this->params.query.fillPkgQueryArgs( args );
+  auto query = pkgdb::PkgQuery( args );
+  if ( this->dumpQuery )
+    {
+      std::cout << query.str() << std::endl;
+      return EXIT_SUCCESS;
+    }
   for ( const auto & [name, input] :
         *this->getEnvironment().getPkgDbRegistry() )
     {
-      this->params.query.fillPkgQueryArgs( args );
-      auto query = pkgdb::PkgQuery( args );
-      auto dbRO  = input->getDbReadOnly();
+      auto dbRO = input->getDbReadOnly();
       for ( const auto & row : query.execute( dbRO->db ) )
         {
           std::cout << input->getRowJSON( row ).dump() << std::endl;

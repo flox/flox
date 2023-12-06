@@ -19,7 +19,7 @@ use walkdir::WalkDir;
 use self::managed_environment::ManagedEnvironmentError;
 use super::environment_ref::{EnvironmentName, EnvironmentOwner, EnvironmentRefError};
 use super::flox_package::FloxTriple;
-use super::manifest::TomlEditError;
+use super::manifest::{Manifest, TomlEditError};
 use super::pkgdb_errors::PkgDbError;
 use crate::flox::{EnvironmentRef, Flox};
 use crate::utils::copy_file_without_permissions;
@@ -85,7 +85,11 @@ pub trait Environment {
     ) -> Result<String, EnvironmentError2>;
 
     /// Atomically edit this environment, ensuring that it still builds
-    async fn edit(&mut self, flox: &Flox, contents: String) -> Result<(), EnvironmentError2>;
+    async fn edit(
+        &mut self,
+        flox: &Flox,
+        contents: String,
+    ) -> Result<EditResult, EnvironmentError2>;
 
     async fn catalog(
         &self,
@@ -296,6 +300,35 @@ impl ToString for LockedManifest {
     }
 }
 
+#[derive(Debug)]
+pub enum EditResult {
+    /// The manifest was not modified.
+    Unchanged,
+    /// The manifest was modified, and the user needs to re-activate it.
+    ReActivateRequired,
+    /// The manifest was modified, but the user does not need to re-activate it.
+    Success,
+}
+
+impl EditResult {
+    pub fn new(old_manifest: &str, new_manifest: &str) -> Result<Self, EnvironmentError2> {
+        if old_manifest == new_manifest {
+            Ok(Self::Unchanged)
+        } else {
+            let old_manifest: Manifest =
+                toml::from_str(old_manifest).map_err(EnvironmentError2::DeserializeManifest)?;
+            let new_manifest: Manifest =
+                toml::from_str(new_manifest).map_err(EnvironmentError2::DeserializeManifest)?;
+            // TODO: some modifications to `install` currently require re-activation
+            if old_manifest.hook != new_manifest.hook || old_manifest.vars != new_manifest.vars {
+                Ok(Self::ReActivateRequired)
+            } else {
+                Ok(Self::Success)
+            }
+        }
+    }
+}
+
 #[derive(Debug, Error)]
 pub enum EnvironmentError2 {
     #[error("ParseEnvRef")]
@@ -400,6 +433,8 @@ pub enum EnvironmentError2 {
     },
     #[error("invalid internal state; couldn't remove last element from path: {0}")]
     InvalidPath(PathBuf),
+    #[error("couldn't parse manifest: {0}")]
+    DeserializeManifest(toml::de::Error),
 }
 
 /// Copy a whole directory recursively ignoring the original permissions

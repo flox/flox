@@ -244,6 +244,49 @@ public:
 
 }; /* End class `ListCommand' */
 
+/* -------------------------------------------------------------------------- */
+
+/**
+ * @brief Scrape a flake prefix producing a SQLite3 database with
+ *        package metadata.
+ */
+class GCCommand
+{
+
+private:
+
+
+  command::VerboseParser parser;
+
+
+  /** Whether to force re-evaluation. */
+  bool dryRun = false;
+
+  /** minimum age of files not being accessed. */
+  int gcStaleAgeDays = 30;
+
+  /** Cache dir to collect garbage in */
+  std::optional<std::filesystem::path> cacheDir;
+
+public:
+
+  GCCommand();
+
+  [[nodiscard]] command::VerboseParser &
+  getParser()
+  {
+    return this->parser;
+  }
+
+  /**
+   * @brief Execute the `gc` routine.
+   * @return `EXIT_SUCCESS` or `EXIT_FAILURE`.
+   */
+  int
+  run();
+
+
+}; /* End class `GCCommand' */
 
 /* -------------------------------------------------------------------------- */
 

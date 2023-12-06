@@ -1,4 +1,4 @@
-name: CI
+name: "CI"
 
 on:
   workflow_dispatch:
@@ -29,11 +29,14 @@ jobs:
       - name: "Checkout"
         uses: "actions/checkout@v3"
 
+      - name: "Install newer Nix"
+        uses: "cachix/install-nix-action@v24"
+
       - name: "Install flox"
         uses: "flox/install-flox-action@main"
         with:
           github-access-token:    "${{ secrets.NIX_GIT_TOKEN }}"
-          substituter:            "s3://flox-store"
+          substituter:            "s3://flox-store-public"
           substituter-key:        "${{ secrets.FLOX_STORE_PUBLIC_NIX_SECRET_KEY }}"
           aws-access-key-id:      "${{ secrets.AWS_ACCESS_KEY_ID }}"
           aws-secret-access-key:  "${{ secrets.AWS_SECRET_ACCESS_KEY }}"
@@ -91,7 +94,7 @@ jobs:
         uses: "flox/install-flox-action@main"
         with:
           github-access-token:    "${{ secrets.NIX_GIT_TOKEN }}"
-          substituter:            "s3://flox-store"
+          substituter:            "s3://flox-store-public"
           substituter-key:        "${{ secrets.FLOX_STORE_PUBLIC_NIX_SECRET_KEY }}"
           aws-access-key-id:      "${{ secrets.AWS_ACCESS_KEY_ID }}"
           aws-secret-access-key:  "${{ secrets.AWS_SECRET_ACCESS_KEY }}"
@@ -177,7 +180,7 @@ jobs:
         uses: "flox/install-flox-action@main"
         with:
           github-access-token:    "${{ secrets.NIX_GIT_TOKEN }}"
-          substituter:            "s3://flox-store"
+          substituter:            "s3://flox-store-public"
           substituter-key:        "${{ secrets.FLOX_STORE_PUBLIC_NIX_SECRET_KEY }}"
           aws-access-key-id:      "${{ secrets.AWS_ACCESS_KEY_ID }}"
           aws-secret-access-key:  "${{ secrets.AWS_SECRET_ACCESS_KEY }}"
@@ -238,7 +241,7 @@ jobs:
         uses: "flox/install-flox-action@main"
         with:
           github-access-token:    "${{ secrets.NIX_GIT_TOKEN }}"
-          substituter:            "s3://flox-store"
+          substituter:            "s3://flox-store-public"
           substituter-key:        "${{ secrets.FLOX_STORE_PUBLIC_NIX_SECRET_KEY }}"
           aws-access-key-id:      "${{ secrets.AWS_ACCESS_KEY_ID }}"
           aws-secret-access-key:  "${{ secrets.AWS_SECRET_ACCESS_KEY }}"
@@ -270,6 +273,7 @@ jobs:
 
       - name: "Build flox-env-builder"
         run: |
+          git clean -xfd
           nix build -L \
               --accept-flake-config \
               --no-update-lock-file \
@@ -278,6 +282,7 @@ jobs:
 
       - name: "Build Bats Tests (./#flox-env-builder-tests)"
         run: |
+          git clean -xfd
           nix build -L \
               --accept-flake-config \
               --no-update-lock-file \
@@ -287,6 +292,7 @@ jobs:
 
       - name: "Run Bats Tests (./#flox-env-builder-tests)"
         run: |
+          git clean -xfd
           ssh github@$REMOTE_SERVER \
             -oUserKnownHostsFile=$REMOTE_SERVER_USER_KNOWN_HOSTS_FILE \
             nix run \
@@ -322,7 +328,7 @@ jobs:
         uses: "flox/install-flox-action@main"
         with:
           github-access-token:    "${{ secrets.NIX_GIT_TOKEN }}"
-          substituter:            "s3://flox-store"
+          substituter:            "s3://flox-store-public"
           substituter-key:        "${{ secrets.FLOX_STORE_PUBLIC_NIX_SECRET_KEY }}"
           aws-access-key-id:      "${{ secrets.AWS_ACCESS_KEY_ID }}"
           aws-secret-access-key:  "${{ secrets.AWS_SECRET_ACCESS_KEY }}"
@@ -354,6 +360,7 @@ jobs:
 
       - name: "Build pkgdb"
         run: |
+          git clean -xfd
           nix build -L \
               --accept-flake-config \
               --no-update-lock-file \
@@ -362,6 +369,7 @@ jobs:
 
       - name: "Build Bats Tests (./#flox-pkgdb-tests)"
         run: |
+          git clean -xfd
           nix build -L \
               --accept-flake-config \
               --no-update-lock-file \
@@ -371,6 +379,7 @@ jobs:
 
       - name: "Run Bats Tests (./#flox-pkgdb-tests)"
         run: |
+          git clean -xfd
           ssh github@$REMOTE_SERVER \
             -oUserKnownHostsFile=$REMOTE_SERVER_USER_KNOWN_HOSTS_FILE \
             nix run \
@@ -406,7 +415,7 @@ jobs:
         uses: "flox/install-flox-action@main"
         with:
           github-access-token:    "${{ secrets.NIX_GIT_TOKEN }}"
-          substituter:            "s3://flox-store"
+          substituter:            "s3://flox-store-public"
           substituter-key:        "${{ secrets.FLOX_STORE_PUBLIC_NIX_SECRET_KEY }}"
           aws-access-key-id:      "${{ secrets.AWS_ACCESS_KEY_ID }}"
           aws-secret-access-key:  "${{ secrets.AWS_SECRET_ACCESS_KEY }}"
@@ -438,6 +447,7 @@ jobs:
 
       - name: "Build flox"
         run: |
+          git clean -xfd
           nix build -L \
               --accept-flake-config \
               --no-update-lock-file \
@@ -449,6 +459,7 @@ jobs:
 
       - name: "Build Bats Tests (./#flox-tests)"
         run: |
+          git clean -xfd
           nix build -L \
               --accept-flake-config \
               --no-update-lock-file \
@@ -458,6 +469,7 @@ jobs:
 
       - name: "Run Bats Tests (./#flox-tests)"
         run: |
+          git clean -xfd
           ssh github@$REMOTE_SERVER \
             -oUserKnownHostsFile=$REMOTE_SERVER_USER_KNOWN_HOSTS_FILE \
             nix run \
@@ -467,6 +479,7 @@ jobs:
 
       - name: "Build end2end Bats Tests (.#flox-tests-end2end)"
         run: |
+          git clean -xfd
           nix build -L \
               --accept-flake-config \
               --no-update-lock-file \
@@ -483,3 +496,55 @@ jobs:
                 --accept-flake-config \
                 --extra-experimental-features '"nix-command flakes"' \
                 'github:flox/flox/${{ github.sha }}#packages.${{ matrix.system }}.flox-tests-end2end'
+
+  trigger-flox-installers-workflow:
+    name: "Build installers"
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: "ubuntu-22.04-8core"
+
+    needs:
+      - "env-builder-nix-build"
+      - "pkgdb-nix-build"
+      - "flox-nix-build"
+
+    steps:
+      - name: "Trigger flox-installers workflow"
+        uses: "convictional/trigger-workflow-and-wait@v1.6.1"
+        with:
+          owner:              "flox"
+          repo:               "nix-installers"
+          github_token:       "${{ secrets.NIX_GIT_TOKEN }}"
+          github_user:        "floxbot"
+          workflow_file_name: "ci.yml"
+          ref:                "master"
+          wait_interval:      10
+          client_payload:     '{"TARGET":"git+ssh://git@github.com/flox/flox?ref=main&rev=${{ github.event.pull_request.head.sha || github.sha }}"}'
+          propagate_failure:  false
+          trigger_workflow:   true
+          wait_workflow:      true
+
+  report-failure:
+    name: "Report Failure"
+    runs-on: "ubuntu-latest"
+
+    if: ${{ failure() && github.ref == 'refs/heads/main' && github.event_name == 'push' }}
+
+    needs:
+      - "env-builder-tests"
+      - "pkgdb-tests"
+      - "flox-cargo-test"
+      - "env-builder-nix-build"
+      - "pkgdb-nix-build"
+      - "flox-nix-build"
+
+    steps:
+      - name: "Slack Notification"
+        uses: "rtCamp/action-slack-notify@v2"
+        env:
+          SLACK_TITLE:      "Something broke CI for flox/flox on main"
+          SLACK_FOOTER:     "Thank you for caring"
+          SLACK_WEBHOOK:    "${{ secrets.SLACK_WEBHOOK_FOR_TEAM_ENGINEERING}}"
+          SLACK_USERNAME:   "GitHub"
+          SLACK_ICON_EMOJI: ":poop:"
+          SLACK_COLOR:      "#ff2800"  # ferrari red -> https://encycolorpedia.com/ff2800
+          SLACK_LINK_NAMES: true

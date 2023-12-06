@@ -8,7 +8,6 @@
 
   nixConfig.extra-substituters = [
     "https://cache.floxdev.com"
-    "s3://flox-store"
   ];
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/release-23.05";
@@ -181,6 +180,7 @@
         (pkgs)
         flox
         flox-tests
+        flox-tests-dev
         flox-tests-end2end
         flox-pkgdb
         flox-pkgdb-tests
