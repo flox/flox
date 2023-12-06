@@ -93,14 +93,23 @@ impl<S> PartialEq for PathEnvironment<S> {
 
 impl<S: TransactionState> PathEnvironment<S> {
     pub fn new(
-        path: impl AsRef<Path>,
+        dot_flox: impl AsRef<Path>,
         pointer: PathPointer,
         temp_dir: impl AsRef<Path>,
         state: S,
     ) -> Result<Self, EnvironmentError2> {
+        let env_path = dot_flox.as_ref().join(ENV_DIR_NAME);
+        if !env_path.exists() {
+            Err(EnvironmentError2::EnvNotFound)?;
+        }
+
+        if !env_path.join(MANIFEST_FILENAME).exists() {
+            Err(EnvironmentError2::DirectoryNotAnEnv)?
+        }
+
         Ok(Self {
             // path must be absolute as it is used to set FLOX_ENV
-            path: path
+            path: dot_flox
                 .as_ref()
                 .canonicalize()
                 .map_err(EnvironmentError2::EnvCanonicalize)?,
@@ -457,15 +466,6 @@ impl PathEnvironment<Original> {
         log::debug!("attempting to open .flox directory: {}", dot_flox.display());
         if !dot_flox.exists() {
             Err(EnvironmentError2::DotFloxNotFound)?;
-        }
-
-        let env_path = dot_flox.join(ENV_DIR_NAME);
-        if !env_path.exists() {
-            Err(EnvironmentError2::EnvNotFound)?;
-        }
-
-        if !env_path.join(MANIFEST_FILENAME).exists() {
-            Err(EnvironmentError2::DirectoryNotAnEnv)?
         }
 
         PathEnvironment::new(dot_flox, pointer, temp_dir, Original)
