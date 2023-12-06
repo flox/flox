@@ -69,7 +69,7 @@ impl Edit {
 
         let mut environment = self
             .environment
-            .to_concrete_environment(&flox, true)?
+            .detect_concrete_environment(&flox, "edit")?
             .into_dyn_environment();
 
         let result = match self.provided_manifest_contents()? {
@@ -228,7 +228,7 @@ pub struct Delete {
 impl Delete {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("delete");
-        match self.environment.to_concrete_environment(&flox, true)? {
+        match self.environment.detect_concrete_environment(&flox, "delete")? {
             ConcreteEnvironment::Path(environment) => environment.delete()?,
             ConcreteEnvironment::Managed(environment) => environment.delete()?,
             ConcreteEnvironment::Remote(environment) => environment.delete()?,
@@ -254,7 +254,7 @@ impl Activate {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("activate");
 
-        let concrete_environment = self.environment.to_concrete_environment(&flox, false)?;
+        let concrete_environment = self.environment.to_concrete_environment(&flox)?;
 
         // TODO could move this to a pretty print method on the Environment trait?
         let prompt_name = match concrete_environment {
@@ -443,7 +443,7 @@ impl List {
 
         let env = self
             .environment
-            .to_concrete_environment(&flox, true)?
+            .detect_concrete_environment(&flox, "list using")?
             .into_dyn_environment();
 
         let manifest_contents = env.manifest_content()?;
@@ -476,6 +476,31 @@ fn environment_description(environment: &ConcreteEnvironment) -> Result<String, 
     })
 }
 
+/// Generate a description for an environment that has not yet been opened.
+///
+/// TODO: we should share this implementation with environment_description().
+/// We probably need an UnopenedEnvironment or LightweightEnvironment or
+/// EnvironmentDescriptor that represents a partially opened environment.
+pub fn hacky_environment_description(
+    path: &Path,
+    pointer: &EnvironmentPointer,
+) -> Result<String, EnvironmentError2> {
+    Ok(match pointer {
+        EnvironmentPointer::Managed(managed_pointer) => {
+            format!(
+                "{}/{} at {}",
+                managed_pointer.owner,
+                "<TODO: name>",
+                // environment.name(),
+                path.to_string_lossy(),
+            )
+        },
+        EnvironmentPointer::Path(path_pointer) => {
+            format!("{} at {}", path_pointer.name, path.to_string_lossy())
+        },
+    })
+}
+
 /// Install a package into an environment
 #[derive(Bpaf, Clone)]
 pub struct Install {
@@ -499,7 +524,7 @@ impl Install {
             self.packages.as_slice().join(", "),
             self.environment
         );
-        let concrete_environment = self.environment.to_concrete_environment(&flox, true)?;
+        let concrete_environment = self.environment.detect_concrete_environment(&flox, "install to")?;
         let description = environment_description(&concrete_environment)?;
         let mut environment = concrete_environment.into_dyn_environment();
         let installation = environment.install(self.packages.clone(), &flox).await?;
@@ -538,7 +563,7 @@ impl Uninstall {
             self.packages.as_slice().join(", "),
             self.environment
         );
-        let concrete_environment = self.environment.to_concrete_environment(&flox, true)?;
+        let concrete_environment = self.environment.detect_concrete_environment(&flox, "uninstall from")?;
         let description = environment_description(&concrete_environment)?;
         let mut environment = concrete_environment.into_dyn_environment();
         let _ = environment.uninstall(self.packages.clone(), &flox).await?;
@@ -569,7 +594,7 @@ impl WipeHistory {
 
         let env = self
             .environment
-            .to_concrete_environment(&flox, true)?
+            .detect_concrete_environment(&flox, "wipe history of")?
             .into_dyn_environment();
 
         if env.delete_symlinks()? {

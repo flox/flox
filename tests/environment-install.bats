@@ -130,11 +130,22 @@ teardown() {
 @test "'flox install' uses last activated environment" {
   mkdir 1
   "$FLOX_CLI" init --dir 1
-  
+
   mkdir 2
   "$FLOX_CLI" init --dir 2
-  
+
   SHELL=bash run expect -d "$TESTS_DIR/install/last-activated.exp"
+  assert_success
+}
+
+@test "'flox install' prompts when an environment is activated and there is an environment in the current directory" {
+  mkdir 1
+  "$FLOX_CLI" init --dir 1
+
+  mkdir 2
+  "$FLOX_CLI" init --dir 2
+
+  SHELL=bash run expect -d "$TESTS_DIR/install/prompt-which-environment.exp"
   assert_success
 }
 

@@ -41,30 +41,26 @@ EOF
 }
 
 
-@test "f2: command grouping changes 1: Add 'Local Development Commands' and list in order" {
-    run "$FLOX_CLI" --help
-    assert_output --partial - << EOF
-Local Development Commands
-    init           Create an environment in the current directory
-    activate       Activate environment
-    search         Search for packages to install
-    show           Show detailed information about a single package
-    install        Install a package into an environment
-    uninstall      Uninstall installed packages from an environment
-    edit           Edit declarative environment configuration
-    list           List packages installed in an environment
-    delete         Delete an environment
-EOF
+@test "f2: command grouping changes 1: 'Local Development Commands' listed in order" {
+    run --separate-stderr "$FLOX_CLI" --help;
+    assert_line -n 1 --regexp '^Local Development Commands';
+    assert_line -n 2 --regexp '^    init[ ]+[\w .,]+';
+    assert_line -n 3 --regexp '^    activate[ ]+[\w .,]+';
+    assert_line -n 4 --regexp '^    search[ ]+[\w .,]+';
+    assert_line -n 5 --regexp '^    show[ ]+[\w .,]+';
+    assert_line -n 6 --regexp '^    install[ ]+[\w .,]+';
+    assert_line -n 7 --regexp '^    uninstall[ ]+[\w .,]+';
+    assert_line -n 8 --regexp '^    edit[ ]+[\w .,]+';
+    assert_line -n 9 --regexp '^    list[ ]+[\w .,]+';
+    assert_line -n 10 --regexp '^    delete[ ]+[\w .,]+';
 }
 
-@test "f3: command grouping changes 2: introduce "Sharing Commands" and include 1/ push 2/ pull 3/ containerize" {
+@test "f3: command grouping changes 2: 'Sharing Commands' listed in order" {
     run "$FLOX_CLI" --help
-    assert_output --partial - << EOF
-Sharing Commands
-    push           Send environment to flox hub
-    pull           Pull environment from flox hub
-    containerize   Containerize an environment
-EOF
+    assert_line -n 11 --regexp '^Sharing Commands';
+    assert_line -n 12 --regexp '^    push[ ]+[\w .,]+';
+    assert_line -n 13 --regexp '^    pull[ ]+[\w .,]+';
+    assert_line -n 14 --regexp '^    containerize[ ]+[\w .,]+';
 }
 
 @test "f5: command grouping changes 3: move lesser used or not polished commands to 'Additional Commands' section with help tip." {
