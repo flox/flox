@@ -25,6 +25,7 @@ use crate::flox::{EnvironmentRef, Flox};
 use crate::utils::copy_file_without_permissions;
 use crate::utils::errors::IoError;
 
+pub mod generations;
 pub mod managed_environment;
 pub mod path_environment;
 pub mod remote_environment;
