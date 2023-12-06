@@ -182,24 +182,3 @@ pub(super) fn update_config<V: Serialize>(
             }
     Ok(())
 }
-
-/// floxHub authentication commands
-#[derive(Clone, Debug, Bpaf)]
-pub enum Auth {
-    /// Login to floxhub (requires an existing github account)
-    #[bpaf(command)]
-    Login(#[bpaf(any("gh option", not_help), help("gh auth login options"))] Vec<String>),
-    /// Logout of floxhub
-    #[bpaf(command)]
-    Logout(#[bpaf(any("gh option", not_help), help("gh auth logout options"))] Vec<String>),
-    /// Print login information
-    #[bpaf(command)]
-    Status(#[bpaf(any("gh option", not_help), help("gh auth status options"))] Vec<String>),
-}
-
-impl Auth {
-    pub async fn handle(self, _config: Config, _flox: Flox) -> Result<()> {
-        subcommand_metric!("auth");
-        todo!("this command is planned for a future release")
-    }
-}

@@ -359,10 +359,7 @@ enum InternalCommands {
     #[bpaf(command)]
     Rollback(#[bpaf(external(environment::rollback))] environment::Rollback),
     #[bpaf(command)]
-    Auth(#[bpaf(external(general::auth))] general::Auth),
-    ///Auth2
-    #[bpaf(command)]
-    Auth2(#[bpaf(external(auth::auth2))] auth::Auth2),
+    Auth(#[bpaf(external(auth::auth2))] auth::Auth2),
 }
 
 impl InternalCommands {
@@ -373,7 +370,6 @@ impl InternalCommands {
             InternalCommands::SwitchGeneration(args) => args.handle(flox).await?,
             InternalCommands::Rollback(args) => args.handle(flox).await?,
             InternalCommands::Auth(args) => args.handle(config, flox).await?,
-            InternalCommands::Auth2(args) => args.handle(config, flox).await?,
         }
         Ok(())
     }
@@ -450,15 +446,12 @@ pub enum EnvironmentSelect {
 impl EnvironmentSelect {
     /// Open a concrete environment, not detecting the currently active
     /// environment.
-    /// 
+    ///
     /// Use this method for commands like `activate` that shouldn't change
     /// behavior based on whether an environment is already active. For example,
     /// `flox activate` should never re-activate the last activated environment;
     /// it should default to an environment in the current directory.
-    pub fn to_concrete_environment(
-        &self,
-        flox: &Flox,
-    ) -> Result<ConcreteEnvironment> {
+    pub fn to_concrete_environment(&self, flox: &Flox) -> Result<ConcreteEnvironment> {
         match self {
             EnvironmentSelect::Dir(path) => open_path(flox, path),
             // TODO: needs design - do we want to search up?
@@ -476,7 +469,7 @@ impl EnvironmentSelect {
     }
 
     /// Open a concrete environment, detecting the currently active environment.
-    /// 
+    ///
     /// Use this method for commands like `install` that should use the
     /// currently activated environment. For example, `flox install` should
     /// install to the last activated environment if there isn't an environment
