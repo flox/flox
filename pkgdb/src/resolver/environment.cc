@@ -687,8 +687,7 @@ Environment::lockSystem( const System & system )
 
             /* Describe the failure. */
             describeResolutionFailure( msg, *group, failure );
-            throw ResolutionFailureException(
-              "failed to resolve with old lockfile input" );
+            ++group;
           } },
         maybeResolved );
     }
