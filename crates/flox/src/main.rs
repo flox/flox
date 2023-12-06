@@ -2,7 +2,7 @@ use std::env;
 use std::fmt::{Debug, Display};
 use std::process::ExitCode;
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result};
 use bpaf::{Args, Parser};
 use commands::{FloxArgs, Prefix, Version};
 use flox_rust_sdk::models::environment::init_global_manifest;
@@ -95,7 +95,12 @@ async fn main() -> ExitCode {
                 return e.downcast_ref::<FloxShellErrorCode>().unwrap().0;
             }
 
-            error!("{:?}", anyhow!(e));
+            let err_str = e
+                .chain()
+                .skip(1)
+                .fold(e.to_string(), |acc, cause| format!("{}: {}", acc, cause));
+
+            error!("{err_str}");
 
             ExitCode::from(1)
         },
