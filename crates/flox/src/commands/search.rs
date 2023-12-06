@@ -38,6 +38,10 @@ pub struct Search {
     #[bpaf(long)]
     pub refresh: bool,
 
+    /// Print all search results
+    #[bpaf(short, long)]
+    pub all: bool,
+
     /// query string of the form `<REGEX>[@<SEMVER-RANGE>]` used to filter
     /// match against package names/descriptions, and semantic version.
     /// Regex pattern is `PCRE` style, and semver ranges use the
@@ -65,9 +69,14 @@ impl Search {
                 .context("failed while getting the path of the current directory")?,
         )
         .context("failed while looking for manifest and lockfile")?;
+        let limit = if self.all {
+            None
+        } else {
+            Some(DEFAULT_NUM_RESULTS)
+        };
         let search_params = construct_search_params(
             &self.search_term,
-            Some(DEFAULT_NUM_RESULTS),
+            limit,
             manifest.map(|p| p.try_into()).transpose()?,
             global_manifest_path(&flox).try_into()?,
             lockfile.map(|p| p.try_into()).transpose()?,
@@ -108,6 +117,7 @@ fn construct_search_params(
     let query = Query::from_term_and_limit(
         search_term,
         Features::parse()?.search_strategy == SearchStrategy::MatchName,
+        results_limit,
     )?;
     let params = SearchParams {
         manifest,
@@ -316,6 +326,7 @@ fn construct_show_params(
     let query = Query::from_term_and_limit(
         package_name.as_ref().unwrap(), // We already know it's Some(_)
         Features::parse()?.search_strategy == SearchStrategy::MatchName,
+        None,
     )?;
     let search_params = SearchParams {
         manifest,
