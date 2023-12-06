@@ -202,8 +202,9 @@ dependencies = [
 
 [[package]]
 name = "bpaf"
-version = "0.9.7"
-source = "git+https://github.com/pacak/bpaf?branch=rc-0.9.7#cb73893d8dd8ed1effcba7b7c7b4fea007dbe5bd"
+version = "0.9.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "19232d7d855392d993f6dabd8dea40a457a6d24ef679fe98f5edca811bb11e21"
 dependencies = [
  "bpaf_derive",
 ]
@@ -211,7 +212,8 @@ dependencies = [
 [[package]]
 name = "bpaf_derive"
 version = "0.5.7"
-source = "git+https://github.com/pacak/bpaf?branch=rc-0.9.7#cb73893d8dd8ed1effcba7b7c7b4fea007dbe5bd"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "efeab2975f8102de445dcf898856a638332403c50216144653a89aec22fd79e0"
 dependencies = [
  "proc-macro2",
  "quote",

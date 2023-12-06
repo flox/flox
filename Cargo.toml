@@ -8,7 +8,7 @@ resolver = "2"
 anyhow = "1"
 async-trait = "0.1.52"
 blake3 = "1.5.0"
-bpaf = {git = "https://github.com/pacak/bpaf", branch = "rc-0.9.7", features = ["derive", "autocomplete"] }
+bpaf = { version = "0.9.7", features = ["derive", "autocomplete"] }
 chrono = "0.4.24"
 config = "0.13.1"
 crossterm = "0.26"
