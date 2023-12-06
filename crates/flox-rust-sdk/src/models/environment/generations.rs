@@ -59,7 +59,7 @@ pub struct Generations<State> {
 
 impl<S> Generations<S> {
     /// Read the generations metadata for an environment
-    pub fn metadata(&self) -> Result<Metadata, GenerationsError> {
+    pub fn metadata(&self) -> Result<AllGenerationsMetadata, GenerationsError> {
         read_metadata(&self.repo, &self.branch)
     }
 }
@@ -157,7 +157,7 @@ impl Generations<ReadWrite> {
         description: String,
         set_current: bool,
     ) -> Result<(), GenerationsError> {
-        let mut generation_metadata = GenerationMetadata::new(description.clone());
+        let mut generation_metadata = SingleGenerationMetadata::new(description.clone());
 
         let mut metadata = self.metadata()?;
 
@@ -274,7 +274,10 @@ fn checkout_to_tempdir(
 }
 
 /// Reads the generations metadata file directly from the repository
-fn read_metadata(repo: &GitCommandProvider, ref_name: &str) -> Result<Metadata, GenerationsError> {
+fn read_metadata(
+    repo: &GitCommandProvider,
+    ref_name: &str,
+) -> Result<AllGenerationsMetadata, GenerationsError> {
     let metadata = {
         let metadata_content = repo
             .show(&format!("{}:{}", ref_name, GENERATIONS_METADATA_FILE))
@@ -287,7 +290,10 @@ fn read_metadata(repo: &GitCommandProvider, ref_name: &str) -> Result<Metadata, 
 /// Serializes the generations metadata file to a path
 ///
 /// The path is expected to be a realized generations repository.
-fn write_metadata_file(metadata: Metadata, realized_path: &Path) -> Result<(), GenerationsError> {
+fn write_metadata_file(
+    metadata: AllGenerationsMetadata,
+    realized_path: &Path,
+) -> Result<(), GenerationsError> {
     let metadata_content = serde_json::to_string(&metadata).unwrap();
     let metadata_path = realized_path.join(GENERATIONS_METADATA_FILE);
     fs::write(metadata_path, metadata_content).unwrap();
@@ -298,18 +304,18 @@ fn write_metadata_file(metadata: Metadata, realized_path: &Path) -> Result<(), G
 ///
 /// Managed environments support rolling back to previous generations.
 /// Generations are defined as immutable copy-on-write folders.
-/// Rollbacks and associated [GenerationMetadata] are tracked per environment
+/// Rollbacks and associated [SingleGenerationMetadata] are tracked per environment
 /// in a metadata file at the root of the environment branch.
 #[derive(Serialize, Deserialize, Debug, Default)]
 #[serde(rename_all = "camelCase")]
-pub struct Metadata {
+pub struct AllGenerationsMetadata {
     /// None means the environment has been created but does not yet have any
     /// generations
     current_gen: Option<GenerationId>,
     /// Metadata for all generations of the environment.
     /// Entries in this map must match up 1-to-1 with the generation folders
     /// in the environment branch.
-    generations: BTreeMap<GenerationId, GenerationMetadata>,
+    generations: BTreeMap<GenerationId, SingleGenerationMetadata>,
     /// Schema version of the metadata file, not yet utilized
     #[serde(default)]
     version: Version<1>,
@@ -318,7 +324,7 @@ pub struct Metadata {
 /// Metadata for a single generation of an environment
 #[derive(Clone, Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
-pub struct GenerationMetadata {
+pub struct SingleGenerationMetadata {
     /// unix timestamp of the creation time of this generation
     #[serde(with = "chrono::serde::ts_seconds")]
     created: DateTime<Utc>,
@@ -336,7 +342,7 @@ pub struct GenerationMetadata {
     // path: PathBuf,
 }
 
-impl GenerationMetadata {
+impl SingleGenerationMetadata {
     /// Create a new generation metadata instance
     pub fn new(description: String) -> Self {
         Self {
