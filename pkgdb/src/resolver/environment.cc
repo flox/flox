@@ -537,20 +537,18 @@ getGroupName( const InstallDescriptors & group )
 
 ResolutionResult
 Environment::tryResolveGroup( const InstallDescriptors & group,
-                              const System &             system,
-                              bool                       ignoreOld )
+                              const System &             system )
 {
   /* List of resolution failures to group descriptors with the inputs they
    * failed to resolve in. */
   ResolutionFailure failure;
 
-  /* When `ignoreOld = false` and there is an existing lock with this group
-   * pinned to an existing input+rev try to use it to resolve the group.
+  /* When there is an existing lock with this group pinned to an existing
+  input+rev try to use it to resolve the group.
    * If we fail collect a list of failed descriptors; presumably these are
    * new group members. */
   std::optional<pkgdb::PkgDbInput> oldGroupInput;
-  if ( auto oldLockfile = this->getOldLockfile();
-       ( ! ignoreOld ) && oldLockfile.has_value() )
+  if ( auto oldLockfile = this->getOldLockfile(); oldLockfile.has_value() )
     {
       auto lockedInput
         = getGroupInput( group, *this->getOldLockfile(), system );
@@ -597,8 +595,7 @@ Environment::tryResolveGroup( const InstallDescriptors & group,
       /* If there is an existing lock we'll try to use the same input+rev as the
        * old lockfile's pin.
        * If we fail collect a list of failed descriptors we will return a list
-       * of failed descriptors if `ignoreOld' is `false`, otherwise we'll
-       * resolve the group _from scratch_. */
+       * of failed descriptors. */
       if ( ! ( oldGroupInput.has_value() && *input == *oldGroupInput ) )
         {
           auto maybeResolved = this->tryResolveGroupIn( group, *input, system );
@@ -667,8 +664,7 @@ Environment::lockSystem( const System & system )
   for ( auto group = groups.begin(); group != groups.end(); )
     {
       /* Push existing exception message. */
-      std::stringstream groupMsg;
-      ResolutionResult  maybeResolved = this->tryResolveGroup( *group, system );
+      ResolutionResult maybeResolved = this->tryResolveGroup( *group, system );
       std::visit(
         overloaded {
           /* Add to pkgs if the group was successfully resolved. */
@@ -690,7 +686,7 @@ Environment::lockSystem( const System & system )
               }
 
             /* Describe the failure. */
-            describeResolutionFailure( groupMsg, *group, failure );
+            describeResolutionFailure( msg, *group, failure );
             throw ResolutionFailureException(
               "failed to resolve with old lockfile input" );
           } },

@@ -850,8 +850,9 @@ test_createLockfile_error()
       Lockfile actualLockfile = environment.createLockfile();
       return false;
     }
-  catch ( const flox::resolver::ResolutionFailureException & )
+  catch ( const flox::resolver::ResolutionFailureException & err )
     {
+      EXPECT_EQ( err.getErrorCode(), flox::EC_RESOLUTION_FAILURE );
       return true;
     }
   catch ( const flox::FloxException & err )

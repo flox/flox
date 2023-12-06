@@ -204,20 +204,12 @@ private:
    *
    * @param group The group of descriptors to resolve.
    * @param system The system to resolve for.
-   * @param ignoreOld If `true`, ignore locked inputs from the old lockfile
-   *                  and resolve using inputs from the combined registry.
-   *                  Otherwise, try to use locked inputs from the old lockfile
-   *                  and return a list of failed descriptors if resolution
-   *                  of any descriptor fails.
-   *
    *
    * @return `std::nullopt` if resolution fails, otherwise a set of
    *          resolved packages.
    */
   [[nodiscard]] ResolutionResult
-  tryResolveGroup( const InstallDescriptors & group,
-                   const System &             system,
-                   bool                       ignoreOld = false );
+  tryResolveGroup( const InstallDescriptors & group, const System & system );
 
   /**
    * @brief Lock all descriptors for a given system.
