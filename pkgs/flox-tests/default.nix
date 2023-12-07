@@ -31,8 +31,8 @@
   writeShellScriptBin,
   PROJECT_NAME ? "flox-tests",
   PROJECT_TESTS_DIR ? ./../../tests,
-  PKGDB_BIN ? "${flox-pkgdb}/bin/pkdb",
-  ENV_BUILDER_BIN ? "${flox-env-builder}/bin/pkdb",
+  PKGDB_BIN ? "${flox-pkgdb}/bin/pkgdb",
+  ENV_BUILDER_BIN ? "${flox-env-builder}/bin/flox-env-builder",
   FLOX_BIN ? "${flox}/bin/flox",
 }: let
   batsWith = bats.withLibraries (p: [

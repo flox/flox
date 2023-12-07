@@ -122,7 +122,7 @@ $ pkgdb scrape "$lockedRef" packages aarch64-linux;
 ```
 
 
-### pkdb get
+### pkgdb get
 
 The `pkgdb get {db,done,flake,id,path}` subcommands expose a handful of special
 queries for package databases that may be useful for simple scripts.
