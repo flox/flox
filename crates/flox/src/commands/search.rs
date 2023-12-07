@@ -25,7 +25,7 @@ use crate::subcommand_metric;
 
 const SEARCH_INPUT_SEPARATOR: &'_ str = ":";
 const DEFAULT_DESCRIPTION: &'_ str = "<no description provided>";
-const DEFAULT_NUM_RESULTS: u8 = 10;
+const SEARCH_LIMIT: u8 = 10;
 
 #[derive(Bpaf, Clone)]
 pub struct ChannelArgs {}
@@ -70,11 +70,7 @@ impl Search {
         let (manifest, lockfile) = manifest_and_lockfile(&flox, "search for packages using")
             .context("failed while looking for manifest and lockfile")?;
 
-        let limit = if self.all {
-            None
-        } else {
-            Some(DEFAULT_NUM_RESULTS)
-        };
+        let limit = if self.all { None } else { Some(SEARCH_LIMIT) };
 
         let search_params = construct_search_params(
             &self.search_term,
@@ -148,8 +144,9 @@ fn render_search_results_user_facing(
     search_term: &str,
     search_results: SearchResults,
 ) -> Result<()> {
+    let n_results = search_results.results.len();
     // Nothing to display
-    if search_results.results.is_empty() {
+    if n_results == 0 {
         bail!("No packages matched this search term: {}", search_term);
     }
     // Search results contain a lot of information, but all we need for rendering are
@@ -198,10 +195,14 @@ fn render_search_results_user_facing(
     }
     writer.flush().context("couldn't flush search results")?;
     if let Some(count) = search_results.count {
-        eprint!(
+        // Don't show the message if we have exactly the number of results as the limit,
+        // otherwise we would get messages like `Showing 10 of 10...`
+        if count != n_results as u64 {
+            eprint!(
             "\nShowing {} of {} results. Use `flox search {{query}} --all` to see the full list.",
-            DEFAULT_NUM_RESULTS, count
+            SEARCH_LIMIT, count
         );
+        }
     }
     eprintln!("\nUse `flox show {{package}}` to see available versions");
     Ok(())

@@ -199,17 +199,29 @@ SearchCommand::run()
       // Emit the number of results as the first line
       nlohmann::json resultCountRecord = { { "result-count", *resultCount } };
       std::cout << resultCountRecord << std::endl;
-    }
-  for ( const auto & [name, input] :
-        *this->getEnvironment().getPkgDbRegistry() )
-    {
-      if ( query.limit.has_value() && ( *query.limit == 0 ) ) { break; }
-      auto dbRO = input->getDbReadOnly();
-      for ( const auto & row : query.execute( dbRO->db ) )
+      for ( const auto & [name, input] :
+            *this->getEnvironment().getPkgDbRegistry() )
         {
-          if ( query.limit.has_value() && ( *query.limit == 0 ) ) { break; }
-          std::cout << input->getRowJSON( row ).dump() << std::endl;
-          if ( query.limit.has_value() ) { *query.limit -= 1; }
+          if ( *query.limit == 0 ) { break; }
+          auto dbRO = input->getDbReadOnly();
+          for ( const auto & row : query.execute( dbRO->db ) )
+            {
+              if ( *query.limit == 0 ) { break; }
+              std::cout << input->getRowJSON( row ).dump() << std::endl;
+              *query.limit -= 1;
+            }
+        }
+    }
+  else
+    {
+      for ( const auto & [name, input] :
+            *this->getEnvironment().getPkgDbRegistry() )
+        {
+          auto dbRO = input->getDbReadOnly();
+          for ( const auto & row : query.execute( dbRO->db ) )
+            {
+              std::cout << input->getRowJSON( row ).dump() << std::endl;
+            }
         }
     }
   return EXIT_SUCCESS;
