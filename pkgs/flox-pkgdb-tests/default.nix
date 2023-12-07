@@ -1,6 +1,7 @@
 {
   self,
   lib,
+  entr,
   bats,
   nix,
   gnugrep,
@@ -12,8 +13,11 @@
   coreutils,
   flox-pkgdb,
   writeShellScriptBin,
-  testsDir ? "/tests",
-  PKGDB ? "${flox-pkgdb}/bin/pkgdb",
+  PROJECT_NAME ? "flox-pkgdb-tests",
+  PROJECT_TESTS_DIR ? ./../../pkgdb/tests,
+  PKGDB_BIN ? "${flox-pkgdb}/bin/pkgdb",
+  PKGDB_IS_SQLITE3_BIN ? "${flox-pkgdb.test}/bin/is_sqlite3",
+  PKGDB_SEARCH_PARAMS_BIN ? "${flox-pkgdb.test}/bin/search-params",
 }: let
   batsWith = bats.withLibraries (p: [
     p.bats-assert
@@ -33,15 +37,53 @@
     sqlite
   ];
 in
-  writeShellScriptBin "flox-pkgdb-tests" ''
-    set -x -euo pipefail
+  # TODO: we should run tests against different shells
+  writeShellScriptBin PROJECT_NAME ''
+    set -euo pipefail
 
-    export PATH="${lib.makeBinPath paths}"
+    # Find top level of the project
+    if ${git}/bin/git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+      export PROJECT_ROOT_DIR="$( ${git}/bin/git rev-parse --show-toplevel; )"
+    else
+      echo "ERROR: Could not find root of the project."
+      exit 1
+    fi
 
-    # copy checkout to temporary directory
-    WORKDIR=$(mktemp -d -t flox-pkgdb-tests-XXXXXX)
-    cp -R ${self}/pkgdb/* $WORKDIR
+    # Find root of the subproject if not specified
+    PROJECT_TESTS_DIR=${PROJECT_TESTS_DIR}
+    PROJECT_PATH=""
+    if [[ $PROJECT_TESTS_DIR != "/nix/store/"* ]]; then
+      PROJECT_TESTS_DIR="$PROJECT_ROOT_DIR$PROJECT_TESTS_DIR"
+      PROJECT_PATH="$PROJECT_ROOT_DIR/target/debug:$PROJECT_ROOT_DIR/pkgdb/bin:$PROJECT_ROOT_DIR/env-builder/bin:"
+    fi
+    export PROJECT_TESTS_DIR
+
+    # TODO: we shouldn't do this but rather use absolute paths
+    # Look if we can use https://github.com/abathur/resholve
+    export PATH="$PROJECT_PATH${lib.makeBinPath paths}"
+
+    # Copy PROJECT_TESTS_DIR to temporary directory
+    WORKDIR=$(mktemp -d -t ${PROJECT_NAME}-XXXXXX)
+    cp -R $PROJECT_TESTS_DIR/* $WORKDIR
     cd $WORKDIR
+
+    # Declare project specific dependencies
+    ${
+      if PKGDB_BIN == null
+      then "export PKGDB_BIN='pkgdb';"
+      else "export PKGDB_BIN='${PKGDB_BIN}';"
+    }
+    ${
+      if PKGDB_IS_SQLITE3_BIN == null
+      then "export PKGDB_IS_SQLITE3_BIN=\"$PROJECT_TESTS_DIR/is_sqlite3\";"
+      else "export PKGDB_IS_SQLITE3_BIN='${PKGDB_IS_SQLITE3_BIN}';"
+    }
+    ${
+      if PKGDB_SEARCH_PARAMS_BIN == null
+      then "export PKGDB_SEARCH_PARAMS_BIN=\"$PROJECT_TESTS_DIR/search-params\";"
+      else "export PKGDB_SEARCH_PARAMS_BIN='${PKGDB_SEARCH_PARAMS_BIN}';"
+    }
+
 
     usage() {
           cat << EOF
@@ -51,32 +93,26 @@ in
               [--help | -h] -- [BATS ARGUMENTS]
 
     Available options:
-        -P, --pkgdb         Path to pkgdb binary (Default: pkgdb)
-        -T, --tests         Path to folder of tests (Default: $PWD/pkgdb/${testsDir})
+        -P, --pkgdb         Path to pkgdb binary (Default: $PKGDB_BIN)
+        -T, --tests         Path to folder of tests (Default: $PROJECT_TESTS_DIR)
         -W, --watch         Run tests in a continuous watch mode
         -h, --help          Prints help information
     EOF
     }
 
-    ${
-      if PKGDB == null
-      then ""
-      else "export PKGDB='${PKGDB}';"
-    }
-
     WATCH=;
-    declare -a _TESTS;
-    _TESTS=();
+    declare -a _FLOX_TESTS;
+    _FLOX_TESTS=();
     while [[ "$#" -gt 0 ]]; do
       case "$1" in
-        -[pP]|--pkgdb)        export PKGDB="''${2?}"; shift; ;;
+        -[pP]|--pkgdb)        export PKGDB_BIN="''${2?}"; shift; ;;
         -[tT]|--tests)        export TESTS_DIR="''${2?}"; shift; ;;
         -[wW]|--watch)        WATCH=:; ;;
         -h|--help|-u|--usage) usage; exit 0; ;;
         --)                   shift; break; ;;
         *)
           if [[ -e "$1" ]]; then
-            _TESTS+=( "$1" );
+            _FLOX_TESTS+=( "$1" );
           else
             echo "''${0##*/} ERROR: Unrecognized arg(s) '$*'" >&2;
             usage;
@@ -87,16 +123,12 @@ in
       shift;
     done
 
-    export PKGDB;
-    export IS_SQLITE3="${flox-pkgdb.test}/bin/is_sqlite3"
-    export SEARCH_PARAMS="${flox-pkgdb.test}/bin/search-params";
-
     # Default flag values
-    : "''${TESTS_DIR:=$PWD${testsDir}}";
-    export TESTS_DIR PKGDB;
+    : "''${TESTS_DIR:=$PROJECT_TESTS_DIR}";
+    export TESTS_DIR;
 
-    if [[ "''${#_TESTS[@]}" -lt 1 ]]; then
-      _TESTS=( "$TESTS_DIR" );
+    if [[ "''${#_FLOX_TESTS[@]}" -lt 1 ]]; then
+      _FLOX_TESTS=( "$TESTS_DIR" );
     fi
 
     # Collect args/options and log them
@@ -109,18 +141,21 @@ in
     );
     {
       echo "''${0##*/}: Running test suite with:";
-      echo "  PKGDB:        $PKGDB";
-      echo "  TESTS_DIR:    $TESTS_DIR";
-      echo "  tests:        ''${_TESTS[*]}";
-      echo "  bats options: ''${_BATS_ARGS[*]}";
-      echo "  bats command: bats ''${_BATS_ARGS[*]} ''${_TESTS[*]}";
+      echo "  PKGDB_BIN:                $PKGDB_BIN";
+      echo "  PKGDB_ISSQLITE3_BIN:      $PKGDB_IS_SQLITE3_BIN";
+      echo "  PKGDB_SEARCH_PARAMS_BIN:  $PKGDB_SEARCH_PARAMS_BIN";
+      echo "  PROJECT_TESTS_DIR:        $PROJECT_TESTS_DIR";
+      echo "  tests:                    ''${_FLOX_TESTS[*]}";
+      echo "  bats                      ${batsWith}/bin/bats";
+      echo "  bats options              ''${_BATS_ARGS[*]}";
+      echo "  bats tests                ''${_FLOX_TESTS[*]}";
     } >&2;
 
-    # run basts either via entr or just a single run
+    # Run basts either via entr or just a single run
     if [[ -n "''${WATCH:-}" ]]; then
       find "$TESTS_DIR" "$PKGDB"  \
-        |entr -s "bats ''${_BATS_ARGS[*]} ''${_TESTS[*]}";
+        |${entr}/bin/entr -s "bats ''${_BATS_ARGS[*]} ''${_FLOX_TESTS[*]}";
     else
-      exec -a "$0" bats "''${_BATS_ARGS[@]}" "''${_TESTS[@]}";
+      exec -a "$0" ${batsWith}/bin/bats "''${_BATS_ARGS[@]}" "''${_FLOX_TESTS[@]}";
     fi
   ''

@@ -9,22 +9,43 @@
   flox,
   flox-pkgdb,
   flox-env-builder,
-  flox-tests-dev,
-  flox-tests-end2end-dev,
-  flox-pkgdb-tests-dev,
+  flox-tests,
+  flox-tests-end2end,
+  flox-env-builder-tests,
+  flox-pkgdb-tests,
   ci ? false,
 }: let
   # For use in GitHub Actions and local development.
   ciPackages = [
-    flox-tests-dev
-    flox-tests-end2end-dev
-    flox-pkgdb-tests-dev
+    (flox-pkgdb-tests.override {
+      PROJECT_TESTS_DIR = "/pkgdb/tests";
+      PKGDB_BIN = null;
+      PKGDB_IS_SQLITE3_BIN = null;
+      PKGDB_SEARCH_PARAMS_BIN = null;
+    })
+    (flox-env-builder-tests.override {
+      PROJECT_TESTS_DIR = "/env-builder/tests";
+      #PKGDB_BIN = null;
+      #ENV_BUILDER_BIN = null;
+    })
+    #(flox-tests.override {
+    #  PKGDB_BIN = null;
+    #  ENV_BUILDER_BIN = null;
+    #  FLOX_BIN = null;
+    #})
+    #(flox-tests.override {
+    #  name = "flox-tests-end2end";
+    #  testsDir = "/tests/end2end";
+    #  PKGDB_BIN = null;
+    #  ENV_BUILDER_BIN = null;
+    #  FLOX_BIN = null;
+    #})
   ];
 
   devPackages =
     flox-pkgdb.devPackages
     ++ flox-env-builder.devPackages
-    ++ flox-pkgdb.devPackages
+    ++ flox.devPackages
     ++ [
       just
       hivemind

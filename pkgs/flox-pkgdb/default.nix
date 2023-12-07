@@ -21,7 +21,6 @@
   gdb ? throw "`gdb' is required for debugging with `g++'",
   lldb ? throw "`lldb' is required for debugging with `clang++'",
   valgrind ? throw "`valgrind' is required for memory sanitization on Linux",
-  flox-pkgdb-tests-dev,
   ci ? false,
 }: let
   envs = {
@@ -61,6 +60,7 @@ in
             ".envrc"
             ".github"
             "LICENSE"
+            "tests"
           ];
           ext = let
             m = builtins.match ".*\\.([^.]+)" name;
@@ -110,7 +110,10 @@ in
       postInstall = ''
         mkdir -p "$test/bin" "$test/lib"
 
-        make tests
+        cp ${../../pkgdb/tests/is_sqlite3.cc} ./tests/is_sqlite3.cc
+        cp ${../../pkgdb/tests/search-params.cc} ./tests/search-params.cc
+        make tests/is_sqlite3
+        make tests/search-params
 
         for i in tests/*; do
           if (! [[ -d "$i" ]]) && [[ -x "$i" ]]; then
@@ -150,18 +153,18 @@ in
               then gdb
               else lldb
             )
-            # script to run tests
-            flox-pkgdb-tests-dev
           ]
           ++ (lib.optionals stdenv.isLinux [
             valgrind
           ]);
 
-        devEnvs = {
-          # For running `pkgdb' interactively with inputs from the test suite.
-          NIXPKGS_TEST_REV = "e8039594435c68eb4f780f3e9bf3972a7399c4b1";
-          NIXPKGS_TEST_REF = "github:NixOS/nixpkgs/$NIXPKGS_TEST_REV";
-        };
+        devEnvs =
+          envs
+          // {
+            # For running `pkgdb' interactively with inputs from the test suite.
+            NIXPKGS_TEST_REV = "e8039594435c68eb4f780f3e9bf3972a7399c4b1";
+            NIXPKGS_TEST_REF = "github:NixOS/nixpkgs/$NIXPKGS_TEST_REV";
+          };
 
         devShellHook = ''
           #  # Find the project root and add the `bin' directory to `PATH'.

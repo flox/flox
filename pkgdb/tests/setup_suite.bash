@@ -53,30 +53,6 @@ tests_dir_setup() {
 
 # ---------------------------------------------------------------------------- #
 
-# Locate the `pkgdb' bin to test against.
-pkgdb_bin_setup() {
-  if [[ -n "${__PD_RAN_PKGDB_BIN_SETUP:-}" ]]; then return 0; fi
-  if [[ -z "${PKGDB:-}" ]]; then
-    repo_root_setup;
-    if [[ -x "$REPO_ROOT/pkgdb/bin/pkgdb" ]]; then
-      PKGDB="$REPO_ROOT/pkgdb/bin/pkgdb";
-    elif [[ -x "$REPO_ROOT/pkgdb/result/bin/pkgdb" ]]; then
-      PKGDB="$REPO_ROOT/pkgdb/result/bin/pkgdb";
-    else  # Build
-      (
-        cd "$REPO_ROOT" >/dev/null 2>&1||return 1;
-        nix develop '.#pkgdb' -c make -j;
-      );
-      PKGDB="$REPO_ROOT/pkgdb/bin/pkgdb";
-    fi
-  fi
-  export PKGDB;
-  export __PD_RAN_PKGDB_BIN_SETUP=:;
-}
-
-
-# ---------------------------------------------------------------------------- #
-
 
 print_var() { eval echo "  $1: \$$1"; }
 
@@ -86,11 +62,10 @@ print_var() { eval echo "  $1: \$$1"; }
 reals_setup() {
   repo_root_setup;
   tests_dir_setup;
-  pkgdb_bin_setup;
   {
     print_var REPO_ROOT;
     print_var TESTS_DIR;
-    print_var PKGDB;
+    print_var PKGDB_BIN;
   } >&3;
 }
 

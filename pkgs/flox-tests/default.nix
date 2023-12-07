@@ -27,9 +27,11 @@
   unixtools,
   which,
   writeShellScriptBin,
-  name ? "flox-tests",
+  PKGDB_BIN ? "${flox-pkgdb}/bin/pkdb",
+  ENV_BUILDER_BIN ? "${flox-env-builder}/bin/pkdb",
+  FLOX_BIN ? "${flox}/bin/flox",
   testsDir ? "/tests",
-  FLOX_CLI ? "${flox}/bin/flox",
+  name ? "flox-tests",
 }: let
   batsWith = bats.withLibraries (p: [
     p.bats-assert

@@ -38,7 +38,7 @@ setup_file() {
 # bats test_tags=search:ga-registry
 
 @test "'pkgdb search --help' has '--ga-registry'" {
-  run $PKGDB search --help;
+  run $PKGDB_BIN search --help;
   assert_success;
   assert_output --partial "--ga-registry";
 }
@@ -49,7 +49,7 @@ setup_file() {
 # bats test_tags=manifest:ga-registry, lock:ga-registry
 
 @test "'pkgdb manifest lock --help' has '--ga-registry'" {
-  run $PKGDB manifest lock --help;
+  run $PKGDB_BIN manifest lock --help;
   assert_success;
   assert_output --partial "--ga-registry";
 }
@@ -62,7 +62,7 @@ setup_file() {
 # Ensure that the search command succeeds with the `--ga-registry' option and
 # no other registry.
 @test "'pkgdb search --ga-registry' provides 'global-manifest'" {
-  run --separate-stderr sh -c "$PKGDB search --ga-registry --pname hello|wc -l";
+  run --separate-stderr sh -c "$PKGDB_BIN search --ga-registry --pname hello|wc -l";
   assert_success;
   assert_output 1;
 }
@@ -75,7 +75,7 @@ setup_file() {
 # Ensure that the search command with `--ga-registry' option uses
 # `_PKGDB_GA_REGISTRY_REF_OR_REV' as the `nixpkgs' revision.
 @test "'pkgdb search --ga-registry' uses '_PKGDB_GA_REGISTRY_REF_OR_REV'" {
-  run sh -c "$PKGDB search --ga-registry --pname hello -vv 2>&1 >/dev/null";
+  run sh -c "$PKGDB_BIN search --ga-registry --pname hello -vv 2>&1 >/dev/null";
   assert_success;
   assert_output --partial "$NIXPKGS_REF";
 }
@@ -86,7 +86,7 @@ setup_file() {
 # bats test_tags=search:ga-registry, manifest:ga-registry
 
 @test "'pkgdb search --ga-registry' disallows 'registry' in manifests" {
-  run $PKGDB search --ga-registry "{
+  run $PKGDB_BIN search --ga-registry "{
     \"manifest\": { \"registry\": {} },
     \"query\": { \"pname\": \"hello\" }
   }";
@@ -99,7 +99,7 @@ setup_file() {
 # bats test_tags=search:ga-registry, manifest:ga-registry
 
 @test "'pkgdb search --ga-registry' disallows 'registry' in global manifests" {
-  run $PKGDB search --ga-registry "{
+  run $PKGDB_BIN search --ga-registry "{
     \"global-manifest\": { \"registry\": {} },
     \"query\": { \"pname\": \"hello\" }
   }";
@@ -112,7 +112,7 @@ setup_file() {
 # bats test_tags=search:ga-registry, manifest:ga-registry
 
 @test "'pkgdb search --ga-registry' allows 'options' in manifests" {
-  run $PKGDB search --ga-registry "{
+  run $PKGDB_BIN search --ga-registry "{
     \"manifest\": { \"options\": { \"allow\": { \"unfree\": true } } },
     \"query\": { \"pname\": \"hello\" }
   }";
@@ -125,7 +125,7 @@ setup_file() {
 # bats test_tags=search:ga-registry, manifest:ga-registry
 
 @test "'pkgdb search --ga-registry' allows 'options' in global manifests" {
-  run $PKGDB search --ga-registry "{
+  run $PKGDB_BIN search --ga-registry "{
     \"global-manifest\": { \"options\": { \"allow\": { \"unfree\": true } } },
     \"query\": { \"pname\": \"hello\" }
   }";
@@ -138,13 +138,13 @@ setup_file() {
 # bats test_tags=manifest:empty, lock:empty
 
 @test "An empty manifest should lock successfully with --ga-registry and without" {
-  run $PKGDB manifest lock "$TDATA/ga1.toml";
+  run $PKGDB_BIN manifest lock "$TDATA/ga1.toml";
   assert_success;
 
-  run $PKGDB manifest lock --ga-registry "$TDATA/ga1.toml";
+  run $PKGDB_BIN manifest lock --ga-registry "$TDATA/ga1.toml";
   assert_success;
 
-  run $PKGDB manifest lock  "$TDATA/ga1.toml" --ga-registry;
+  run $PKGDB_BIN manifest lock  "$TDATA/ga1.toml" --ga-registry;
   assert_success;
 }
 
@@ -154,7 +154,7 @@ setup_file() {
 # bats test_tags=manifest:ga-registry, lock:ga-registry
 
 @test "'pkgdb manifest lock --ga-registry' provides registry" {
-  run $PKGDB manifest lock --ga-registry "$TDATA/ga0.toml";
+  run $PKGDB_BIN manifest lock --ga-registry "$TDATA/ga0.toml";
   assert_success;
 }
 
@@ -164,7 +164,7 @@ setup_file() {
 # bats test_tags=manifest:ga-registry, lock:ga-registry, manifest:global
 
 @test "'pkgdb manifest lock --ga-registry' merges global manifest options" {
-  run $PKGDB manifest lock --ga-registry                               \
+  run $PKGDB_BIN manifest lock --ga-registry                               \
                            --global-manifest "$TDATA/global-ga0.toml"  \
                            "$TDATA/ga0.toml";
   assert_success;
@@ -176,7 +176,7 @@ setup_file() {
 # bats test_tags=manifest:ga-registry, lock:ga-registry, manifest:global
 
 @test "'pkgdb manifest lock --ga-registry' rejects global manifest registry" {
-  run $PKGDB manifest lock --ga-registry                                     \
+  run $PKGDB_BIN manifest lock --ga-registry                                     \
                            --global-manifest "$TDATA/global-manifest0.toml"  \
                            "$TDATA/ga0.toml";
   assert_failure;
@@ -188,7 +188,7 @@ setup_file() {
 # bats test_tags=manifest:ga-registry, lock:ga-registry
 
 @test "'pkgdb manifest lock --ga-registry' rejects env manifest registry" {
-  run $PKGDB manifest lock --ga-registry                               \
+  run $PKGDB_BIN manifest lock --ga-registry                               \
                            --global-manifest "$TDATA/global-ga0.toml"  \
                            "$TDATA/post-ga0.toml";
   assert_failure;
@@ -204,7 +204,7 @@ setup_file() {
 # This should detect whether the lockfile's `rev` is preserved in `combined`.
 @test "Combined registry prefers lockfile inputs" {
   run --separate-stderr                                                \
-    sh -c "$PKGDB manifest registry --ga-registry                      \
+    sh -c "$PKGDB_BIN manifest registry --ga-registry                      \
                                    --lockfile '$PROJ1/manifest2.lock'  \
                                    '$PROJ1/manifest.toml'              \
             |jq -r '.combined.inputs.nixpkgs.from.rev';";
@@ -222,7 +222,7 @@ setup_file() {
 # This should cause the `rev` to be updated.
 @test "'pkgdb manifest update --ga-registry' updates lockfile rev" {
   run --separate-stderr                                               \
-    sh -c "$PKGDB manifest update --ga-registry                       \
+    sh -c "$PKGDB_BIN manifest update --ga-registry                       \
                                   --lockfile '$PROJ1/manifest2.lock'  \
                                   '$PROJ1/manifest.toml'              \
             |jq -r '.registry.inputs.nixpkgs.from.rev';";
@@ -237,7 +237,7 @@ setup_file() {
 
 @test "'pkgdb search --ga-registry' uses lockfile rev" {
   # `$NIXPKGS_REV'
-  run --separate-stderr sh -c "$PKGDB search --ga-registry '{
+  run --separate-stderr sh -c "$PKGDB_BIN search --ga-registry '{
       \"manifest\": \"$PROJ1/manifest.toml\",
       \"lockfile\": \"$PROJ1/manifest.lock\",
       \"query\": { \"match-name\": \"nodejs\" }
@@ -246,7 +246,7 @@ setup_file() {
   assert_output '18.16.0';
 
   # `$OTHER_REV'
-  run --separate-stderr sh -c "$PKGDB search --ga-registry '{
+  run --separate-stderr sh -c "$PKGDB_BIN search --ga-registry '{
       \"manifest\": \"$PROJ1/manifest.toml\",
       \"lockfile\": \"$PROJ1/manifest2.lock\",
       \"query\": { \"match-name\": \"nodejs\" }
@@ -262,7 +262,7 @@ setup_file() {
 
 @test "'pkgdb manifest update --ga-registry' creates missing lockfile" {
   run --separate-stderr                                             \
-    "$PKGDB" manifest update --ga-registry "$PROJ1/manifest.toml";
+    "$PKGDB_BIN" manifest update --ga-registry "$PROJ1/manifest.toml";
   assert_success;
   assert_output < "$PROJ1/manifest.lock";
 }
