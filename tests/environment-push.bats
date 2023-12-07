@@ -108,9 +108,9 @@ function update_dummy_env() {
   mkdir -p "machine_b"
 
   pushd "machine_a" >/dev/null || return
-  run "$FLOX_BIN" init --name "test"
-  run "$FLOX_BIN" install hello
-  run "$FLOX_BIN" push --owner owner
+  "$FLOX_BIN" init --name "test"
+  "$FLOX_BIN" install hello
+  "$FLOX_BIN" push --owner owner
   popd >/dev/null || return
 
 
