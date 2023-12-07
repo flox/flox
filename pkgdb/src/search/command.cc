@@ -177,37 +177,47 @@ SearchCommand::run()
   this->params.query.fillPkgQueryArgs( args );
   auto query         = pkgdb::PkgQuery( args );
   auto countPkgQuery = pkgdb::PkgQuery( args, { "COUNT(*)" } );
+  std::cerr << "made the queries" << std::endl;
   if ( this->dumpQuery )
     {
       std::cout << query.str() << std::endl;
       return EXIT_SUCCESS;
     }
-  std::optional<size_t> resultCount = std::nullopt;
+  std::cerr << "about to check whether there's a limit" << std::endl;
   if ( query.limit.has_value() )
     {
-      resultCount = 0;
+      auto                       resultCount = 0;
       std::vector<pkgdb::row_id> rowIds;
       for ( const auto & [name, input] :
             *this->getEnvironment().getPkgDbRegistry() )
         {
+          std::cerr << "start of a count query" << std::endl;
           // Execute the query counting the number of results
-          auto dbRO       = input->getDbReadOnly();
-          auto counts     = countPkgQuery.execute( dbRO->db );
+          auto dbRO = input->getDbReadOnly();
+          std::cerr << "got the ro-db" << std::endl;
+          auto counts = countPkgQuery.execute( dbRO->db );
+          std::cerr << "executed the query" << std::endl;
           auto numResults = counts[0];
-          *resultCount += numResults;
+          std::cerr << "got the result count" << std::endl;
+          resultCount += numResults;
+          std::cerr << "finished a count query" << std::endl;
         }
       // Emit the number of results as the first line
-      nlohmann::json resultCountRecord = { { "result-count", *resultCount } };
+      nlohmann::json resultCountRecord = { { "result-count", resultCount } };
       std::cout << resultCountRecord << std::endl;
+      std::cerr << "sent the count record" << std::endl;
       for ( const auto & [name, input] :
             *this->getEnvironment().getPkgDbRegistry() )
         {
+          std::cerr << "about to check limit at top" << std::endl;
           if ( *query.limit == 0 ) { break; }
           auto dbRO = input->getDbReadOnly();
           for ( const auto & row : query.execute( dbRO->db ) )
             {
+              std::cerr << "about to check limit in the loop" << std::endl;
               if ( *query.limit == 0 ) { break; }
               std::cout << input->getRowJSON( row ).dump() << std::endl;
+              std::cerr << "decrementing the limit" << std::endl;
               *query.limit -= 1;
             }
         }

@@ -85,7 +85,7 @@ setup_file() {
 # ---------------------------------------------------------------------------- #
 
 @test "'FLOX_FEATURES_SEARCH_STRATEGY=match flox search' expected number of results: 'hello'" {
-  FLOX_FEATURES_SEARCH_STRATEGY=match run --separate-stderr "$FLOX_CLI" search hello;
+  FLOX_FEATURES_SEARCH_STRATEGY=match run --separate-stderr "$FLOX_CLI" search hello --all;
   n_lines="${#lines[@]}";
   case "$NIX_SYSTEM" in
     *-darwin)
