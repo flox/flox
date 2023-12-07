@@ -149,7 +149,7 @@ install-exec-local-shared-lib: lib/libpkgdb$(sharedLibExt)
 	  $(INSTALL_PROGRAM) lib/libpkgdb$(sharedLibExt)            \
                          "$(DESTDIR)$(libdir)"||exit $$?;
 
-# TODO: Install `lib/pkgconfig/libpkgdb.pc' file.l
+# TODO: Install `lib/pkgconfig/libpkgdb.pc' file.
 
 install-exec-local: install-exec-local-shared-lib
 

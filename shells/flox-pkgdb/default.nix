@@ -27,7 +27,7 @@
   # interactive shell ( `ci = false' produces the _full_ interactive shell ).
   ci ? false,
 }: let
-  # ---------------------------------------------------------------------------- #
+  # -------------------------------------------------------------------------- #
   # For use in GitHub Actions and local development.
   ciPkgs = let
     batsWith = bats.withLibraries (libs: [
