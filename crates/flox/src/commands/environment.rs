@@ -426,7 +426,6 @@ impl Init {
 
             Search and install packages with `flox search <packagename>` and `flox install <packagename>`
             Enter the environment with `flox activate`
-
             "},
             name = env.name(),
             system = flox.system
