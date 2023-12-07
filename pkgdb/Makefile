@@ -187,8 +187,11 @@ TEST_DATA_DIR = $(MAKEFILE_DIR)/tests/data
 # ---------------------------------------------------------------------------- #
 
 # Files which effect dependencies, external inputs, and `*FLAGS' values.
-DEPFILES =  flake.nix flake.lock pkg-fun.nix pkgs/nlohmann_json.nix
-DEPFILES += pkgs/nix/pkg-fun.nix
+DEPFILES =  ../flake.nix ../flake.lock
+DEPFILES += ../pkgs/nlohmann_json.nix
+DEPFILES += ../pkgs/nix/default.nix
+DEPFILES += ../pkgs/flox-pkgdb/default.nix
+DEPFILES += ../shells/flox-pkgdb/default.nix
 
 
 # ---------------------------------------------------------------------------- #

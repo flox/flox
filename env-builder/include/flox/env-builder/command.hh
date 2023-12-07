@@ -9,6 +9,11 @@
 
 #pragma once
 
+#include <map>
+#include <string>
+#include <vector>
+
+#include <nlohmann/json.hpp>
 #include <nix/command.hh>
 
 
@@ -16,9 +21,8 @@
 
 namespace flox {
 
-/* -------------------------------------------------------------------------- */
-
-/*
+/* -------------------------------------------------------------------------- *
+ *
  * Existing Nix categories from `nix/command.hh':
  *   static constexpr Command::Category catHelp = -1;
  *   static constexpr Command::Category catSecondary = 100;
@@ -27,9 +31,9 @@ namespace flox {
  *
  * Default is defined in `Command::catDefault':
  *  static constexpr Category catDefault = 0;
- */
-
-/* -------------------------------------------------------------------------- */
+ *
+ *
+ * -------------------------------------------------------------------------- */
 
 struct FloxArgs
   : virtual public nix::MultiCommand
@@ -74,6 +78,7 @@ struct FloxArgs
   nlohmann::json
   dumpCli();
 
+
 }; /* End struct `FloxArgs' */
 
 
@@ -81,6 +86,9 @@ struct FloxArgs
 
 void
 showSubcommandHelp( FloxArgs & toplevel, nix::MultiCommand & command );
+
+
+/* -------------------------------------------------------------------------- */
 
 void
 showHelp( std::vector<std::string> subcommand, FloxArgs & toplevel );

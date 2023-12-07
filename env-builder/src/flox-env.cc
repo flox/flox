@@ -1,8 +1,16 @@
-#include "flox/flox-env.hh"
-#include <boost/algorithm/string/join.hpp>
+/* ========================================================================== *
+ *
+ * @file flox-env.cc
+ *
+ * @brief Modified version of `nix/builtins/buildenv::buildProfile` customized
+ *        for use with `flox`.
+ *
+ *
+ * -------------------------------------------------------------------------- */
+
 #include <filesystem>
-#include <flox/resolver/lockfile.hh>
 #include <fstream>
+
 #include <nix/command.hh>
 #include <nix/derivations.hh>
 #include <nix/eval-inline.hh>
@@ -18,6 +26,12 @@
 #include <nix/util.hh>
 #include <nlohmann/json.hpp>
 
+#include <flox/resolver/lockfile.hh>
+#include "flox/flox-env.hh"
+
+
+/* -------------------------------------------------------------------------- */
+
 #ifndef PROFILE_D_SCRIPT_DIR
 #  define PROFILE_D_SCRIPT_DIR "invalid_profile.d_script_path"
 #endif
@@ -25,6 +39,9 @@
 #ifndef SET_PROMPT_BASH_SH
 #  define SET_PROMPT_BASH_SH "invalid_set-prompt-bash.sh_path"
 #endif
+
+
+/* -------------------------------------------------------------------------- */
 
 const std::string BASH_ACTIVATE_SCRIPT = R"(
 # We use --rcfile to activate using bash which skips sourcing ~/.bashrc,
@@ -45,29 +62,32 @@ if [ -d "$FLOX_ENV/etc/profile.d" ]; then
 fi
 )";
 
+
 /* -------------------------------------------------------------------------- */
 
 namespace flox {
+
 using namespace nix;
 using namespace flox::resolver;
+
 
 /* -------------------------------------------------------------------------- */
 
 const nix::StorePath
-addDirToStore( EvalState &         state,
-               Path const &        dir,
+addDirToStore( nix::EvalState &         state,
+               std::string const &        dir,
                nix::StorePathSet & references )
 {
 
   /* Add the symlink tree to the store. */
-  StringSink sink;
+  nix::StringSink sink;
   dumpPath( dir, sink );
 
-  auto narHash = hashString( htSHA256, sink.s );
-  ValidPathInfo info {
+  auto narHash = hashString( nix::htSHA256, sink.s );
+  nix::ValidPathInfo info {
             *state.store,
             "environment",
-            FixedOutputInfo {
+            nix::FixedOutputInfo {
                 .method = FileIngestionMethod::Recursive,
                 .hash = narHash,
                 .references = {
@@ -80,10 +100,13 @@ addDirToStore( EvalState &         state,
         };
   info.narSize = sink.s.size();
 
-  StringSource source( sink.s );
+  nix::StringSource source( sink.s );
   state.store->addToStore( info, source );
   return std::move( info.path );
 }
+
+
+/* -------------------------------------------------------------------------- */
 
 const nix::StorePath
 createEnvironmentStorePath(
@@ -122,8 +145,8 @@ createEnvironmentStorePath(
   return addDirToStore( state, tempDir, references );
 }
 
-/* -------------------------------------------------------------------------- */
 
+/* -------------------------------------------------------------------------- */
 
 nix::Attr
 extractAttrPath( nix::EvalState & state,
@@ -158,6 +181,8 @@ extractAttrPath( nix::EvalState & state,
 
   return *output;
 }
+
+
 /* -------------------------------------------------------------------------- */
 
 StorePath
@@ -365,6 +390,8 @@ createFloxEnv( EvalState &          state,
   return createEnvironmentStorePath( state, pkgs, references, originalPackage );
 }
 
+
+/* -------------------------------------------------------------------------- */
 
 struct CmdBuildEnv : nix::EvalCommand
 {

@@ -1,34 +1,51 @@
-#include "flox/buildenv.hh"
+/* ========================================================================== *
+ *
+ * @file buildenv.cc
+ *
+ * @brief Modified version of `nix/builtins/buildenv::buildProfile` customized
+ *        for use with `flox`.
+ *
+ *
+ * -------------------------------------------------------------------------- */
 
 #include <algorithm>
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <map>
+
+#include "flox/buildenv.hh"
+
+
+/* -------------------------------------------------------------------------- */
 
 namespace flox::buildenv {
-using namespace nix;
 
+/* -------------------------------------------------------------------------- */
 
 struct State
 {
-  std::map<Path, Priority> priorities;
+  std::map<std::string, Priority> priorities;
   unsigned long            symlinks = 0;
 };
+
+
+/* -------------------------------------------------------------------------- */
 
 /* For each activated package, create symlinks */
 static void
 createLinks( State &          state,
-             const Path &     srcDir,
-             const Path &     dstDir,
+             const std::string &     srcDir,
+             const std::string &     dstDir,
              const Priority & priority )
 {
-  DirEntries srcFiles;
+  nix::DirEntries srcFiles;
 
   try
     {
       srcFiles = readDirectory( srcDir );
     }
-  catch ( SysError & e )
+  catch ( nix::SysError & e )
     {
       if ( e.errNo == ENOTDIR )
         {
@@ -58,7 +75,7 @@ createLinks( State &          state,
               throw SysError( "getting status of '%1%'", srcFile );
             }
         }
-      catch ( SysError & e )
+      catch ( nix::SysError & e )
         {
           if ( e.errNo == ENOENT || e.errNo == ENOTDIR )
             {
@@ -192,14 +209,17 @@ createLinks( State &          state,
     }
 }
 
+
+/* -------------------------------------------------------------------------- */
+
 void
-buildEnvironment( const Path & out, Packages && pkgs )
+buildEnvironment( const std::string & out, Packages && pkgs )
 {
   State state;
 
   std::set<Path> done, postponed;
 
-  auto addPkg = [&]( const Path & pkgDir, const Priority & priority )
+  auto addPkg = [&]( const std::string & pkgDir, const Priority & priority )
   {
     if ( ! done.insert( pkgDir ).second ) { return; }
     createLinks( state, pkgDir, out, priority );
@@ -276,8 +296,8 @@ buildEnvironment( const Path & out, Packages && pkgs )
    * (i.e., package X declares that it wants Y installed as well).
    * We do these later because they have a lower priority in case of collisions.
    */
-  // todo: consider making this optional?
-  // todo: include paths recursively?
+  // TODO: consider making this optional?
+  // TODO: include paths recursively?
   auto priorityCounter = 1000u;
   while ( ! postponed.empty() )
     {
@@ -292,4 +312,14 @@ buildEnvironment( const Path & out, Packages && pkgs )
   debug( "created %d symlinks in user environment", state.symlinks );
 }
 
+
+/* -------------------------------------------------------------------------- */
+
 }  // namespace flox::buildenv
+
+
+/* -------------------------------------------------------------------------- *
+ *
+ *
+ *
+ * ========================================================================== */

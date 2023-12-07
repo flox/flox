@@ -8,31 +8,26 @@
  * -------------------------------------------------------------------------- */
 
 #include <algorithm>
+#include <ifaddrs.h>
+#include <netdb.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <sys/types.h>
 
 #include <nix/command.hh>
 #include <nix/common-args.hh>
 #include <nix/eval.hh>
-#include <nix/globals.hh>
-#include <nix/legacy.hh>
-#include <nix/shared.hh>
-#include <nix/store-api.hh>
 #include <nix/filetransfer.hh>
 #include <nix/finally.hh>
+#include <nix/globals.hh>
+#include <nix/legacy.hh>
 #include <nix/loggers.hh>
 #include <nix/markdown.hh>
-
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <ifaddrs.h>
-#include <netdb.h>
-#include <netinet/in.h>
-
+#include <nix/shared.hh>
+#include <nix/store-api.hh>
 #include <nlohmann/json.hpp>
 
-#include "flox/command.hh"
-
-
-/* -------------------------------------------------------------------------- */
+#include "flox/env-builder/command.hh"
 
 
 /* -------------------------------------------------------------------------- */
@@ -379,7 +374,7 @@ FloxArgs::dumpCli()
 }  /* End namespace `flox' */
 
 
-/* ========================================================================== */
+/* -------------------------------------------------------------------------- */
 
   int
 main( int argc, char * argv[] )
