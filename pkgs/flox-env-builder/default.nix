@@ -84,14 +84,21 @@ in
         devPackages = [
         ];
 
-        devEnvs = {
-        };
+        devEnvs =
+          envs
+          // {
+          };
 
         devShellHook = ''
           #  # Find the project root and add the `bin' directory to `PATH'.
           if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-            PATH="$( git rev-parse --show-toplevel; )/env-builder/bin":$PATH;
+            PROJECT_ROOT_PATH=$( git rev-parse --show-toplevel; );
+            PATH="$PROJECT_ROOT_PATH/env-builder/bin:$PATH";
+            # TODO: if not in nix store we need to add this to the nix store in flox-env-builder
+            #export PROFILE_D_SCRIPT_DIR="$PROJECT_ROOT_PATH/assets/mkEnv/profile.d";
+            #export SET_PROMPT_BASH_SH="$PROJECT_ROOT_PATH/assets/mkEnv/set-prompt-bash.sh";
           fi
+
         '';
       };
     }

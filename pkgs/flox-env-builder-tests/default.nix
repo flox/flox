@@ -69,7 +69,7 @@ in
     }
     ${
       if ENV_BUILDER_BIN == null
-      then "export ENV_BUILDER_BIN='env-builder';"
+      then "export ENV_BUILDER_BIN='flox-env-builder';"
       else "export ENV_BUILDER_BIN='${ENV_BUILDER_BIN}';"
     }
 

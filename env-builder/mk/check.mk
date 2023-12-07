@@ -50,9 +50,7 @@ $(TEST_MANIFEST_LOCKS):
 	pkgdb manifest lock --ga-registry "$(@:%.lock=%.toml)" | jq > "$(@)"
 
 test: $(BIN_flox-env-builder) $(wildcard $(ROOT_DIR)/tests/**) $(TEST_MANIFEST_LOCKS) FORCE
-	PKGDB="$(ROOT_DIR)/bin/flox-env-builder"                        \
-	  bats --print-output-on-failure --verbose-run --timing  \
-	       "$(ROOT_DIR)/tests";
+	flox-env-builder-tests
 
 
 endif  # ifndef _MK_CHECK

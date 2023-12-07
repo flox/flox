@@ -25,8 +25,8 @@
     })
     (flox-env-builder-tests.override {
       PROJECT_TESTS_DIR = "/env-builder/tests";
-      #PKGDB_BIN = null;
-      #ENV_BUILDER_BIN = null;
+      PKGDB_BIN = null;
+      ENV_BUILDER_BIN = null;
     })
     #(flox-tests.override {
     #  PKGDB_BIN = null;
