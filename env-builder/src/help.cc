@@ -178,7 +178,8 @@ struct CmdHelp : nix::Command
 
   CmdHelp()
   {
-    expectArgs( { .label = "subcommand", .handler = { &subcommand }, .completer = {} } );
+    expectArgs(
+      { .label = "subcommand", .handler = { &subcommand }, .completer = {} } );
   }
 
   std::string
