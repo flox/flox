@@ -781,6 +781,21 @@ impl ManagedEnvironment {
             )
             .unwrap();
 
+        // try fast forward merge local env branch into project branch
+        self.floxmeta
+            .git
+            .push_ref(
+                ".",
+                format!(
+                    "FETCH_HEAD:refs/heads/{sync_branch}",
+                    sync_branch = branch_name(&self.system, &self.pointer, &self.path).unwrap()
+                ),
+                force, // Set the force parameter to false or true based on your requirement
+            )
+            .unwrap();
+
+        // update the pointer lockfile
+        // we don't need to set a specific local_rev, because we just pushed
         write_pointer_lockfile(
             &self.system,
             &self.pointer,
