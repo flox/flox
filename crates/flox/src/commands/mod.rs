@@ -359,7 +359,7 @@ enum InternalCommands {
     #[bpaf(command)]
     Rollback(#[bpaf(external(environment::rollback))] environment::Rollback),
     #[bpaf(command)]
-    Auth(#[bpaf(external(auth::auth2))] auth::Auth2),
+    Auth(#[bpaf(external(auth::auth))] auth::Auth),
 }
 
 impl InternalCommands {
