@@ -371,11 +371,11 @@ setup_file() {
   
   mkdir 1
   pushd 1
-  "$FLOX_CLI" init
+  "$FLOX_BIN" init
   _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLD?}" \
-    "$FLOX_CLI" --debug install nodejs
+    "$FLOX_BIN" --debug install nodejs
 
-  run --separate-stderr sh -c "$FLOX_CLI show nodejs|tail -n1";
+  run --separate-stderr sh -c "$FLOX_BIN show nodejs|tail -n1";
   assert_success;
   assert_output '    nodejs - nodejs@18.16.0';
   popd
@@ -383,11 +383,11 @@ setup_file() {
 
   mkdir 2
   pushd 2
-  "$FLOX_CLI" init
+  "$FLOX_BIN" init
   _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_NEW?}" \
-    "$FLOX_CLI" install nodejs
+    "$FLOX_BIN" install nodejs
   
-  run --separate-stderr sh -c "$FLOX_CLI show nodejs|tail -n1";
+  run --separate-stderr sh -c "$FLOX_BIN show nodejs|tail -n1";
   assert_success;
   assert_output '    nodejs - nodejs@18.17.1';
   popd
