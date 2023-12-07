@@ -396,6 +396,16 @@ where
             Err(EnvironmentError2::InvalidPath(path))
         }
     }
+
+    /// Path to the environment definition file
+    fn manifest_path(&self) -> PathBuf {
+        self.path.join(ENV_DIR_NAME).join(MANIFEST_FILENAME)
+    }
+
+    /// Path to the lockfile. The path may not exist.
+    fn lockfile_path(&self) -> PathBuf {
+        self.path.join(ENV_DIR_NAME).join(LOCKFILE_FILENAME)
+    }
 }
 
 impl<S: TransactionState> PathEnvironment<S> {
@@ -417,16 +427,6 @@ impl<S: TransactionState> PathEnvironment<S> {
             attr_path,
             outputs: Default::default(),
         }
-    }
-
-    /// Path to the environment definition file
-    pub fn manifest_path(&self) -> PathBuf {
-        self.path.join(ENV_DIR_NAME).join(MANIFEST_FILENAME)
-    }
-
-    /// Path to the lockfile. The path may not exist.
-    pub fn lockfile_path(&self) -> PathBuf {
-        self.path.join(ENV_DIR_NAME).join(LOCKFILE_FILENAME)
     }
 
     /// Path to the environment's catalog

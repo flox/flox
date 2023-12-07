@@ -172,6 +172,16 @@ impl Environment for ManagedEnvironment {
         }
     }
 
+    /// Path to the environment definition file
+    fn manifest_path(&self) -> PathBuf {
+        todo!()
+    }
+
+    /// Path to the lockfile. The path may not exist.
+    fn lockfile_path(&self) -> PathBuf {
+        todo!()
+    }
+
     /// Returns the environment name
     #[allow(unused)]
     fn name(&self) -> EnvironmentName {
