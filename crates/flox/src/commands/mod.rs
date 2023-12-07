@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::{env, fs};
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use bpaf::{Args, Bpaf, Parser};
 use flox_rust_sdk::flox::{Flox, FLOX_VERSION};
 use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironment;
@@ -531,47 +531,44 @@ pub fn detect_environment(message: &str) -> Result<Option<UninitializedEnvironme
     let maybe_found_environment = find_dot_flox(&current_dir)?;
     let maybe_activated = last_activated_environment();
 
-    Ok(match (maybe_activated, maybe_found_environment) {
+    let found = match (maybe_activated, maybe_found_environment) {
         // If there's both an activated environment and an environment in the current directory (TODO: or git repo), prompt for which to use.
+        (Some(activated_path), Some(found)) if activated_path == found.path => Some(found),
         (Some(activated_path), Some(found)) => {
-            if activated_path == found.path {
-                Some(found)
-            } else {
-                let activated = UninitializedEnvironment::open(&activated_path)?;
-                // TODO fix this when we search up for git repo
-                let message = format!("Do you want to {message} the current directory's flox environment or the current active flox environment?");
-                let found_description = hacky_environment_description(&found)?;
-                let activated_description = hacky_environment_description(&activated)?;
-                if Dialog::can_prompt() {
-                    let dialog = Dialog {
-                        message: &message,
-                        help_message: None,
-                        typed: Select {
-                            options: vec![
-                                format!(
-                                    "current directory's flox environment [{found_description}]",
-                                ),
-                                format!(
-                                    "current active flox environment [{activated_description}]",
-                                ),
-                            ],
-                        },
-                    };
-                    let (index, _) = dialog.raw_prompt()?;
-                    match index {
-                        0 => Some(found),
-                        1 => Some(activated),
-                        _ => unreachable!(),
-                    }
-                } else {
-                    Err(anyhow!("can't determine whether to use {found_description} or {activated_description}"))?
-                }
+            let activated = UninitializedEnvironment::open(&activated_path)?;
+            // TODO fix this when we search up for git repo
+            let message = format!("Do you want to {message} the current directory's flox environment or the current active flox environment?");
+            let found_description = hacky_environment_description(&found)?;
+            let activated_description = hacky_environment_description(&activated)?;
+
+            if !Dialog::can_prompt() {
+                bail!(
+                    "can't determine whether to use {found_description} or {activated_description}"
+                );
+            }
+
+            let dialog = Dialog {
+                message: &message,
+                help_message: None,
+                typed: Select {
+                    options: vec![
+                        format!("current directory's flox environment [{found_description}]",),
+                        format!("current active flox environment [{activated_description}]",),
+                    ],
+                },
+            };
+            let (index, _) = dialog.raw_prompt()?;
+            match index {
+                0 => Some(found),
+                1 => Some(activated),
+                _ => unreachable!(),
             }
         },
         (Some(activated_path), None) => Some(UninitializedEnvironment::open(activated_path)?),
         (None, Some(found)) => Some(found),
         (None, None) => None,
-    })
+    };
+    Ok(found)
 }
 
 /// Open an environment defined in `{path}/.flox`
