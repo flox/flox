@@ -185,19 +185,6 @@ private:
                           const System &             system );
 
   /**
-   * @brief Try to resolve a group of descriptors
-   *
-   * Attempts to resolve using a locked input from the old lockfile if it exists
-   * for the group. If not, inputs from the combined environment registry
-   * are used.
-   *
-   * @return `std::nullopt` if resolution fails, otherwise a set of
-   *          resolved packages.
-   */
-  [[nodiscard]] ResolutionResult
-  tryResolveGroup( const InstallDescriptors & group, const System & system );
-
-  /**
    * @brief Try to resolve a group of descriptors in a given package database.
    *
    * @return InstallID of the package that can't be resolved if resolution
@@ -207,6 +194,22 @@ private:
   tryResolveGroupIn( const InstallDescriptors & group,
                      const pkgdb::PkgDbInput &  input,
                      const System &             system );
+
+  /**
+   * @brief Try to resolve a group of descriptors
+   *
+   * Attempts to resolve using a locked input from the old lockfile if it exists
+   * for the group. If not, inputs from the combined environment registry
+   * are used.
+   *
+   * @param group The group of descriptors to resolve.
+   * @param system The system to resolve for.
+   *
+   * @return `std::nullopt` if resolution fails, otherwise a set of
+   *          resolved packages.
+   */
+  [[nodiscard]] ResolutionResult
+  tryResolveGroup( const InstallDescriptors & group, const System & system );
 
   /**
    * @brief Lock all descriptors for a given system.
@@ -253,7 +256,7 @@ protected:
                  const System &             system ) const;
 
   /**
-   * @brief Check if lock from @ oldLockfile can be reused for a group.
+   * @brief Check if resolutions from @ oldLockfile can be reused for a group.
    *
    * Checks if:
    * - All descriptors are present in the old manifest.

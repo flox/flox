@@ -39,6 +39,13 @@ use crate::utils::init::{
 };
 use crate::utils::metrics::METRICS_UUID_FILE_NAME;
 
+static FLOX_DESCRIPTION: &'_ str = indoc! {"
+    flox is a virtual environment and package manager all in one.\n\n
+
+    With flox you create development environments that layer and replace dependencies just where it matters,
+    making them portable across the full software lifecycle."
+};
+
 static FLOX_WELCOME_MESSAGE: Lazy<String> = Lazy::new(|| {
     formatdoc! {r#"
     flox version {FLOX_VERSION}
@@ -51,7 +58,7 @@ static FLOX_WELCOME_MESSAGE: Lazy<String> = Lazy::new(|| {
 "#}
 });
 
-static ADDITIONAL_COMMANDS: &str = indoc! {"
+const ADDITIONAL_COMMANDS: &str = indoc! {"
     upgrade, config, wipe-history, history, auth
 "};
 
@@ -84,6 +91,17 @@ impl Default for Verbosity {
 }
 
 #[derive(Bpaf)]
+#[bpaf(options, descr(FLOX_DESCRIPTION))]
+pub struct FloxCli(#[bpaf(external(flox_args))] pub FloxArgs);
+
+/// Main flox args parser
+///
+/// This struct is used to parse the command line arguments
+/// and allows to be composed with other parsers.
+///
+/// To parse the flox CLI, use [`FloxCli`] instead using [`flox_cli()`].
+#[derive(Bpaf)]
+#[bpaf(ignore_rustdoc)] // we don't want this struct to be interpreted as a group
 pub struct FloxArgs {
     /// Verbose mode.
     ///
@@ -234,13 +252,13 @@ enum LocalDevelopmentCommands {
     /// Create an environment in the current directory
     #[bpaf(command, long("create"))]
     Init(#[bpaf(external(environment::init))] environment::Init),
-    /// Activate environment
+    /// Enter the environment
     #[bpaf(command, long("develop"))]
     Activate(#[bpaf(external(environment::activate))] environment::Activate),
-    /// Search for packages to install
+    /// Search for system or library packages to install
     #[bpaf(command)]
     Search(#[bpaf(external(search::search))] search::Search),
-    /// Show detailed information about a single package
+    /// Show details about a single package
     #[bpaf(command, long("show"))]
     Show(#[bpaf(external(search::show))] search::Show),
     /// Install a package into an environment
@@ -249,7 +267,7 @@ enum LocalDevelopmentCommands {
     /// Uninstall installed packages from an environment
     #[bpaf(command, long("remove"), long("rm"))]
     Uninstall(#[bpaf(external(environment::uninstall))] environment::Uninstall),
-    /// Edit declarative environment configuration
+    /// Edit declarative environment configuration file
     #[bpaf(command)]
     Edit(#[bpaf(external(environment::edit))] environment::Edit),
     /// List packages installed in an environment

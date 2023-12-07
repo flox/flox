@@ -93,6 +93,7 @@ from_json( const nlohmann::json & jfrom, SearchQuery & qry )
       if ( key == "name" ) { getOrFail( key, value, qry.name ); }
       else if ( key == "pname" ) { getOrFail( key, value, qry.pname ); }
       else if ( key == "version" ) { getOrFail( key, value, qry.version ); }
+      else if ( key == "limit" ) { getOrFail( key, value, qry.limit ); }
       else if ( key == "semver" ) { getOrFail( key, value, qry.semver ); }
       else if ( key == "match" ) { getOrFail( key, value, qry.partialMatch ); }
       else if ( key == "match-name" )
@@ -123,6 +124,7 @@ to_json( nlohmann::json & jto, const SearchQuery & qry )
   jto["semver"]     = qry.semver;
   jto["match"]      = qry.partialMatch;
   jto["match-name"] = qry.partialNameMatch;
+  jto["limit"]      = qry.limit;
 }
 
 

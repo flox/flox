@@ -44,6 +44,18 @@ in
       ];
       shellHook =
         ''
+          # Extra interactive shell settings, requires `DANK_MODE' to be set.
+          if [[ "''${DANK_MODE:-0}" != 0 ]]; then
+            echo "You are in 〖ｄａｎｋ ｍｏｄｅ〗" >&2;
+            shopt -s autocd;
+
+            alias gs='git status';
+            alias ga='git add';
+            alias gc='git commit -am';
+            alias gl='git pull';
+            alias gp='git push';
+          fi
+
           # For running `pkgdb' interactively with inputs from the test suite.
           NIXPKGS_TEST_REV="e8039594435c68eb4f780f3e9bf3972a7399c4b1";
           NIXPKGS_TEST_REF="github:NixOS/nixpkgs/$NIXPKGS_TEST_REV";

@@ -68,6 +68,47 @@ using InstallID = std::string;
 
 /* -------------------------------------------------------------------------- */
 
+// TODO: Use this as `groupingStrategy` field, and implement these
+//       strategies in `Environment::createLockfile()`.
+#if 0
+struct GroupingOptions {
+
+  /**
+   * How to treat descriptors that do not set `packageGroup` explicitly.
+   *
+   * - `singletons`: Each descriptor is its own group by default.
+   * - `common`: Descriptors are added to a single _default_ group.
+   */
+  std::optional<std::string> fallbackGroup;
+
+  /**
+   * Policy for auto-upgrading groups to allow resolution to succeed when new
+   * descriptors are added to an existing group.
+   *
+   * - `explicit`: Do not allow auto-upgrading groups, just emit a warning to
+   *               indicate that an upgrade would allow resolution to succeed.
+   * - `skip-optionals`: Allow auto-upgrading, but if a descriptor is
+   *                     _optional_, skip it instead of auto-upgrading
+   *                     the group.
+   * - `eager`: Allow auto-upgrading and allow _optional_ descriptors to trigger
+   *            auto-upgrades.
+   */
+  std::optional<std::string> upgradePolicy;
+
+
+};  /* End struct `GroupingOptions' */
+
+
+/** @brief Convert a JSON object to a @a flox::resolver::GroupingOptions. */
+void from_json( const nlohmann::json & jfrom, GroupingOptions & opts );
+
+/** @brief Convert a @a flox::resolver::GroupingOptions to a JSON object. */
+void to_json( nlohmann::json & jto, const GroupingOptions & opts );
+#endif
+
+
+/* -------------------------------------------------------------------------- */
+
 /** @brief A set of options that apply to an entire environment. */
 struct Options
 {
