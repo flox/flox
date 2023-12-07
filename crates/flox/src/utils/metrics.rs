@@ -201,7 +201,7 @@ async fn push_metrics(metrics: Vec<MetricEntry>, uuid: Uuid) -> Result<()> {
         .collect::<Result<Vec<serde_json::Value>>>()?;
 
     let client = reqwest::Client::new();
-    let res = client
+    let _res = client
         .put(METRICS_EVENTS_URL)
         .header("content-type", "application/json")
         .header("x-api-key", METRICS_EVENTS_API_KEY)

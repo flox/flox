@@ -55,7 +55,7 @@ jobs:
           nix develop -L \
             --accept-flake-config \
             --no-update-lock-file \
-            '.#flox' \
+            '.#default' \
               --command make
           popd
 
@@ -65,7 +65,7 @@ jobs:
           nix develop -L \
             --accept-flake-config \
             --no-update-lock-file \
-            '.#flox' \
+            '.#default' \
               --command make test
           popd
 
@@ -113,7 +113,7 @@ jobs:
           nix develop -L \
             --accept-flake-config \
             --no-update-lock-file \
-            '.#flox-pkgdb-ci' \
+            '.#default' \
               --command make -j4
           popd
 
@@ -123,7 +123,7 @@ jobs:
           nix develop -L \
             --accept-flake-config \
             --no-update-lock-file \
-            '.#flox-pkgdb-ci' \
+            '.#default' \
               --command make tests -j4
           popd
 
@@ -133,7 +133,7 @@ jobs:
           nix develop -L \
             --accept-flake-config \
             --no-update-lock-file \
-            '.#flox-pkgdb-ci' \
+            '.#default' \
               --command make check
           popd
 
@@ -143,7 +143,7 @@ jobs:
           nix develop -L \
             --accept-flake-config \
             --no-update-lock-file \
-            '.#flox-pkgdb-ci' \
+            '.#default' \
               --command make docs
           chmod -c -R +rX "docs/" | while read line; do
             echo "::warning title=Invalid file permissions fixed::$line"
@@ -210,7 +210,7 @@ jobs:
           nix develop -L \
             --accept-flake-config \
             --no-update-lock-file \
-            '.#flox' \
+            '.#default' \
               --command cargo test --locked --workspace -F extra-tests;
 
   env-builder-nix-build:

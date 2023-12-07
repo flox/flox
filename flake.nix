@@ -143,6 +143,11 @@
         testsDir = "/tests/end2end";
         FLOX_CLI = null;
       };
+
+      rustfmt = prev.rustfmt.override {asNightly = true;};
+      pre-commit-check = final.callPackage ./checks/pre-commit-check {
+        inherit shellHooks;
+      };
     };
 
     overlays.default =
@@ -165,10 +170,7 @@
     checks = eachDefaultSystemMap (system: let
       pkgs = builtins.getAttr system pkgsFor;
     in {
-      pre-commit-check = pkgs.callPackage ./checks/pre-commit-check {
-        inherit shellHooks;
-        rustfmt = pkgs.rustfmt.override {asNightly = true;};
-      };
+      inherit (pkgs) pre-commit-check;
     });
 
     # ---------------------------------------------------------------------------- #
@@ -186,6 +188,7 @@
         flox-pkgdb-tests
         flox-env-builder
         flox-env-builder-tests
+        pre-commit-check
         flox-gh
         ;
       default = pkgs.flox;
@@ -197,15 +200,10 @@
     devShells = eachDefaultSystemMap (system: let
       pkgs = builtins.getAttr system pkgsFor;
       checksFor = builtins.getAttr system checks;
-      flox = pkgs.callPackage ./shells/flox {
-        inherit (checksFor) pre-commit-check;
-        rustfmt = pkgs.rustfmt.override {asNightly = true;};
-      };
     in {
-      inherit flox;
-      default = flox;
-      flox-pkgdb = pkgs.callPackage ./shells/flox-pkgdb {ci = false;};
-      flox-pkgdb-ci = pkgs.callPackage ./shells/flox-pkgdb {ci = true;};
+      default = pkgs.callPackage ./shells/default {
+        inherit (checksFor) pre-commit-check;
+      };
     });
   }; # End `outputs'
 
