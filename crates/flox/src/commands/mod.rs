@@ -52,7 +52,7 @@ static FLOX_WELCOME_MESSAGE: Lazy<String> = Lazy::new(|| {
 });
 
 static ADDITIONAL_COMMANDS: &str = indoc! {"
-    upgrade, config, wipe-history, history
+    upgrade, config, wipe-history, history, auth
 "};
 
 fn vec_len<T>(x: Vec<T>) -> usize {
