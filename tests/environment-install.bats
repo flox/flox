@@ -149,6 +149,19 @@ teardown() {
   assert_success
 }
 
+@test "'flox install' prompts when an environment is activated and there is an environment in the containing git repo" {
+  mkdir 1
+  "$FLOX_CLI" init --dir 1
+
+  mkdir 2
+  "$FLOX_CLI" init --dir 2
+  git -C 2 init
+  mkdir 2/subdirectory
+
+  SHELL=bash run expect -d "$TESTS_DIR/install/prompt-which-environment-git.exp"
+  assert_success
+}
+
 @test "i5: download package when install command runs" {
   skip "Don't know how to test, check out-link created?"
 }

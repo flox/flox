@@ -22,6 +22,7 @@ use super::flox_package::FloxTriple;
 use super::manifest::{Manifest, TomlEditError};
 use super::pkgdb_errors::PkgDbError;
 use crate::flox::{EnvironmentRef, Flox};
+use crate::providers::git::{GitCommandOpenError, GitCommandProvider};
 use crate::utils::copy_file_without_permissions;
 use crate::utils::errors::IoError;
 
@@ -140,7 +141,7 @@ pub trait Environment {
 /// A pointer to an environment, either managed or path.
 /// This is used to determine the type of an environment at a given path.
 /// See [EnvironmentPointer::open].
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(untagged)]
 pub enum EnvironmentPointer {
     /// Identifies an environment whose source of truth lies outside of the project itself
@@ -234,6 +235,7 @@ impl From<EnvironmentRef> for ManagedPointer {
 /// However, this type does not perform any validation of the referenced environment.
 /// Opening the environment with [ManagedEnvironment::open] or
 /// [PathEnvironment::open], could still fail.
+#[derive(Debug, PartialEq)]
 pub struct UninitializedEnvironment {
     pub path: PathBuf,
     pub pointer: EnvironmentPointer,
@@ -475,6 +477,8 @@ pub enum EnvironmentError2 {
         #[source]
         source: Box<EnvironmentError2>,
     },
+    #[error("error checking if in a git repo")]
+    DetectGitDirectory(#[source] GitCommandOpenError),
 }
 
 /// Copy a whole directory recursively ignoring the original permissions
@@ -553,7 +557,7 @@ pub fn find_dot_flox(
             path: initial_dir.to_path_buf(),
             source: e,
         })?;
-    let mut tentative_dot_flox = path.join(DOT_FLOX);
+    let tentative_dot_flox = path.join(DOT_FLOX);
     debug!(
         "looking for .flox: starting_path={}",
         tentative_dot_flox.display()
@@ -569,14 +573,33 @@ pub fn find_dot_flox(
         debug!(".flox found: path={}", tentative_dot_flox.display());
         return Ok(Some(pointer));
     }
-    // Search upwards for a .flox
-    while let Some(grandparent) = tentative_dot_flox.parent().and_then(|p| p.parent()) {
-        let grandparent_clone = grandparent.to_path_buf();
-        tentative_dot_flox = grandparent.join(DOT_FLOX);
+
+    // Check if we're in a git repo.
+    let toplevel =
+        match GitCommandProvider::toplevel(&path).map_err(EnvironmentError2::DetectGitDirectory)? {
+            None => return Ok(None),
+            Some(toplevel) => toplevel,
+        };
+
+    // We already checked the immediate child.
+    let parent = match path.parent() {
+        None => return Ok(None),
+        Some(parent) => parent,
+    };
+
+    for ancestor in parent.ancestors() {
+        // If we're above the git repo, return None.
+        // ancestor and toplevel have both been canonicalized.
+        if !ancestor.starts_with(&toplevel) {
+            return Ok(None);
+        }
+        let tentative_dot_flox = ancestor.join(DOT_FLOX);
+        debug!("looking for .flox: path={}", tentative_dot_flox.display());
+
         if tentative_dot_flox.exists() {
-            let pointer = UninitializedEnvironment::open(grandparent_clone).map_err(|err| {
+            let pointer = UninitializedEnvironment::open(ancestor).map_err(|err| {
                 EnvironmentError2::InvalidDotFlox {
-                    path: tentative_dot_flox.clone(),
+                    path: ancestor.to_path_buf(),
                     source: Box::new(err),
                 }
             })?;
@@ -591,7 +614,10 @@ pub fn find_dot_flox(
 mod test {
     use std::str::FromStr;
 
+    use pretty_assertions::assert_eq;
+
     use super::*;
+    use crate::providers::git::GitProvider;
 
     const MANAGED_ENV_JSON: &'_ str = r#"{
         "name": "name",
@@ -603,6 +629,14 @@ mod test {
         "name": "name",
         "version": 1
     }"#;
+
+    const MANAGED_ENV_POINTER: Lazy<EnvironmentPointer> = Lazy::new(|| {
+        EnvironmentPointer::Managed(ManagedPointer {
+            name: EnvironmentName::from_str("name").unwrap(),
+            owner: EnvironmentOwner::from_str("owner").unwrap(),
+            version: Version::<1> {},
+        })
+    });
 
     #[test]
     fn serializes_managed_environment_pointer() {
@@ -622,14 +656,7 @@ mod test {
     #[test]
     fn deserializes_managed_environment_pointer() {
         let managed_pointer: EnvironmentPointer = serde_json::from_str(MANAGED_ENV_JSON).unwrap();
-        assert_eq!(
-            managed_pointer,
-            EnvironmentPointer::Managed(ManagedPointer {
-                name: EnvironmentName::from_str("name").unwrap(),
-                owner: EnvironmentOwner::from_str("owner").unwrap(),
-                version: Version::<1> {},
-            })
-        );
+        assert_eq!(managed_pointer, *MANAGED_ENV_POINTER);
     }
 
     #[test]
@@ -658,54 +685,181 @@ mod test {
         );
     }
 
-    // #[test]
-    // fn discovers_immediate_child_dot_flox() {
-    //     let temp_dir = tempfile::tempdir().unwrap();
-    //     let actual_dot_flox = temp_dir.path().join(DOT_FLOX);
-    //     std::fs::create_dir_all(&actual_dot_flox).unwrap();
-    //     let found_dot_flox = find_dot_flox(temp_dir.path())
-    //         .unwrap()
-    //         .expect("expected to find dot flox");
-    //     assert_eq!(found_dot_flox, actual_dot_flox.canonicalize().unwrap());
-    // }
+    #[test]
+    fn errors_immediate_child_invalid() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let actual_dot_flox = temp_dir.path().join(DOT_FLOX);
+        std::fs::create_dir_all(&actual_dot_flox).unwrap();
+        assert!(matches!(
+            find_dot_flox(temp_dir.path()),
+            Err(EnvironmentError2::InvalidDotFlox { .. })
+        ))
+    }
 
-    // #[test]
-    // fn discovers_existing_upwards_dot_flox() {
-    //     let temp_dir = tempfile::tempdir().unwrap();
-    //     let actual_dot_flox = temp_dir.path().join(DOT_FLOX);
-    //     let start_path = actual_dot_flox.join("foo").join("bar");
-    //     std::fs::create_dir_all(&start_path).unwrap();
-    //     let found_dot_flox = find_dot_flox(&start_path)
-    //         .unwrap()
-    //         .expect("expected to find dot flox");
-    //     assert_eq!(found_dot_flox, actual_dot_flox.canonicalize().unwrap());
-    // }
+    #[test]
+    fn discovers_immediate_child_dot_flox() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let actual_dot_flox = temp_dir.path().join(DOT_FLOX);
+        std::fs::create_dir_all(&actual_dot_flox).unwrap();
 
-    // #[test]
-    // fn discovers_adjacent_dot_flox() {
-    //     let temp_dir = tempfile::tempdir().unwrap();
-    //     let actual_dot_flox = temp_dir.path().join(DOT_FLOX);
-    //     std::fs::create_dir_all(&actual_dot_flox).unwrap();
-    //     let found_dot_flox = find_dot_flox(&actual_dot_flox)
-    //         .unwrap()
-    //         .expect("expected to find dot flox");
-    //     assert_eq!(found_dot_flox, actual_dot_flox.canonicalize().unwrap());
-    // }
+        fs::write(
+            actual_dot_flox.join(ENVIRONMENT_POINTER_FILENAME),
+            serde_json::to_string_pretty(&*MANAGED_ENV_POINTER).unwrap(),
+        )
+        .unwrap();
 
-    // #[test]
-    // fn no_error_on_discovering_nonexistent_dot_flox() {
-    //     let temp_dir = tempfile::tempdir().unwrap();
-    //     let start_path = temp_dir.path().join("foo").join("bar");
-    //     std::fs::create_dir_all(&start_path).unwrap();
-    //     let found_dot_flox = find_dot_flox(&start_path).unwrap();
-    //     assert_eq!(found_dot_flox, None);
-    // }
+        let found_environment = find_dot_flox(temp_dir.path())
+            .unwrap()
+            .expect("expected to find dot flox");
+        assert_eq!(found_environment, UninitializedEnvironment {
+            path: temp_dir.path().canonicalize().unwrap(),
+            pointer: (*MANAGED_ENV_POINTER).clone()
+        });
+    }
+
+    /// An environment is found upwards, but only if it is within a git repo.
+    #[test]
+    fn discovers_existing_upwards_dot_flox() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let actual_dot_flox = temp_dir.path().join(DOT_FLOX);
+        let start_path = actual_dot_flox.join("foo").join("bar");
+        std::fs::create_dir_all(&start_path).unwrap();
+        fs::write(
+            actual_dot_flox.join(ENVIRONMENT_POINTER_FILENAME),
+            serde_json::to_string_pretty(&*MANAGED_ENV_POINTER).unwrap(),
+        )
+        .unwrap();
+
+        let found_environment = find_dot_flox(&start_path).unwrap();
+        assert_eq!(found_environment, None);
+
+        GitCommandProvider::init(temp_dir.path(), false).unwrap();
+
+        let found_environment = find_dot_flox(temp_dir.path())
+            .unwrap()
+            .expect("expected to find dot flox");
+        assert_eq!(found_environment, UninitializedEnvironment {
+            path: temp_dir.path().canonicalize().unwrap(),
+            pointer: (*MANAGED_ENV_POINTER).clone()
+        });
+    }
+
+    /// An environment is found upwards and adjacent, but only if it is within
+    /// a git repo.
+    ///
+    /// .
+    /// ├── .flox
+    /// │   └── env.json
+    /// └── foo
+    ///     └── bar
+    #[test]
+    fn discovers_upwards_adjacent_dot_flox() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let actual_dot_flox = temp_dir.path().join(DOT_FLOX);
+        std::fs::create_dir_all(&actual_dot_flox).unwrap();
+        let start_path = temp_dir.path().join("foo").join("bar");
+        std::fs::create_dir_all(&start_path).unwrap();
+        fs::write(
+            actual_dot_flox.join(ENVIRONMENT_POINTER_FILENAME),
+            serde_json::to_string_pretty(&*MANAGED_ENV_POINTER).unwrap(),
+        )
+        .unwrap();
+
+        let found_environment = find_dot_flox(&start_path).unwrap();
+        assert_eq!(found_environment, None);
+
+        GitCommandProvider::init(temp_dir.path(), false).unwrap();
+
+        let found_environment = find_dot_flox(&start_path)
+            .unwrap()
+            .expect("expected to find dot flox");
+        assert_eq!(found_environment, UninitializedEnvironment {
+            path: temp_dir.path().canonicalize().unwrap(),
+            pointer: (*MANAGED_ENV_POINTER).clone()
+        });
+    }
+
+    /// An environment is found upwards and adjacent when it is a subdirectory
+    /// of a git repo.
+    ///
+    /// .
+    /// ├── .git
+    /// └── foo
+    ///     ├── .flox
+    ///     │   └── env.json
+    ///     └── bar
+    #[test]
+    fn discovers_upwards_git_subdirectory() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let path = temp_dir.path();
+        let foo = path.join("foo");
+        let actual_dot_flox = foo.join(DOT_FLOX);
+        std::fs::create_dir_all(&actual_dot_flox).unwrap();
+        let start_path = foo.join("bar");
+        std::fs::create_dir_all(&start_path).unwrap();
+        fs::write(
+            actual_dot_flox.join(ENVIRONMENT_POINTER_FILENAME),
+            serde_json::to_string_pretty(&*MANAGED_ENV_POINTER).unwrap(),
+        )
+        .unwrap();
+
+        let found_environment = find_dot_flox(&start_path).unwrap();
+        assert_eq!(found_environment, None);
+
+        GitCommandProvider::init(path, false).unwrap();
+
+        let found_environment = find_dot_flox(&start_path)
+            .unwrap()
+            .expect("expected to find dot flox");
+        assert_eq!(found_environment, UninitializedEnvironment {
+            path: foo.canonicalize().unwrap(),
+            pointer: (*MANAGED_ENV_POINTER).clone()
+        });
+    }
+
+    /// An environment above a git repo is not found.
+    ///
+    /// .
+    /// ├── .flox
+    /// │   └── env.json
+    /// └── foo
+    ///     ├── .git
+    ///     └── bar
+    #[test]
+    fn does_not_discover_above_git_repo() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let path = temp_dir.path();
+        let foo = path.join("foo");
+        let actual_dot_flox = path.join(DOT_FLOX);
+        std::fs::create_dir_all(&actual_dot_flox).unwrap();
+        let start_path = foo.join("bar");
+        std::fs::create_dir_all(&start_path).unwrap();
+        fs::write(
+            actual_dot_flox.join(ENVIRONMENT_POINTER_FILENAME),
+            serde_json::to_string_pretty(&*MANAGED_ENV_POINTER).unwrap(),
+        )
+        .unwrap();
+
+        GitCommandProvider::init(foo, false).unwrap();
+
+        let found_environment = find_dot_flox(&start_path).unwrap();
+        assert_eq!(found_environment, None);
+    }
+
+    #[test]
+    fn no_error_on_discovering_nonexistent_dot_flox() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let start_path = temp_dir.path().join("foo").join("bar");
+        std::fs::create_dir_all(&start_path).unwrap();
+        let found_environment = find_dot_flox(&start_path).unwrap();
+        assert_eq!(found_environment, None);
+    }
 
     #[test]
     fn error_when_discovering_dot_flox_in_nonexistent_directory() {
         let temp_dir = tempfile::tempdir().unwrap();
         let start_path = temp_dir.path().join("foo").join("bar");
-        let found_dot_flox = find_dot_flox(&start_path);
-        assert!(found_dot_flox.is_err());
+        let found_environment = find_dot_flox(&start_path);
+        assert!(found_environment.is_err());
     }
 }

@@ -466,7 +466,6 @@ impl EnvironmentSelect {
     pub fn to_concrete_environment(&self, flox: &Flox) -> Result<ConcreteEnvironment> {
         match self {
             EnvironmentSelect::Dir(path) => open_path(flox, path),
-            // TODO: needs design - do we want to search up?
             EnvironmentSelect::Unspecified => {
                 let current_dir = env::current_dir().context("could not get current directory")?;
                 let maybe_found_environment = find_dot_flox(&current_dir)?;
@@ -495,7 +494,6 @@ impl EnvironmentSelect {
             // If the user doesn't specify an environment, check if there's an
             // already activated environment or an environment in the current
             // directory.
-            // TODO: needs design - do we want to search up?
             EnvironmentSelect::Unspecified => match detect_environment(message)? {
                 Some(found) => open_environment(flox, found),
                 None => {
@@ -511,7 +509,8 @@ impl EnvironmentSelect {
 
 /// Determine what environment a flox command should use.
 ///
-/// - Search upwards from the current directory for a `.flox` directory.
+/// - Look in current directory and search upwards from the current directory if
+///   inside a git repo.
 /// - Check if there's an already activated environment.
 /// - Prompt if both are true.
 pub fn detect_environment(message: &str) -> Result<Option<UninitializedEnvironment>> {
@@ -520,12 +519,17 @@ pub fn detect_environment(message: &str) -> Result<Option<UninitializedEnvironme
     let maybe_activated = last_activated_environment();
 
     let found = match (maybe_activated, maybe_found_environment) {
-        // If there's both an activated environment and an environment in the current directory (TODO: or git repo), prompt for which to use.
         (Some(activated_path), Some(found)) if activated_path == found.path => Some(found),
+        // If there's both an activated environment and an environment in the
+        // current directory or git repo, prompt for which to use.
         (Some(activated_path), Some(found)) => {
             let activated = UninitializedEnvironment::open(&activated_path)?;
-            // TODO fix this when we search up for git repo
-            let message = format!("Do you want to {message} the current directory's flox environment or the current active flox environment?");
+            let type_of_directory = if found.path == current_dir {
+                "current directory's flox environment"
+            } else {
+                "flox environment detected in git repo"
+            };
+            let message = format!("Do you want to {message} the {type_of_directory} or the current active flox environment?");
             let found_description = hacky_environment_description(&found)?;
             let activated_description = hacky_environment_description(&activated)?;
 
@@ -540,7 +544,7 @@ pub fn detect_environment(message: &str) -> Result<Option<UninitializedEnvironme
                 help_message: None,
                 typed: Select {
                     options: vec![
-                        format!("current directory's flox environment [{found_description}]",),
+                        format!("{type_of_directory} [{found_description}]",),
                         format!("current active flox environment [{activated_description}]",),
                     ],
                 },

@@ -225,28 +225,77 @@ impl GitCommandProvider {
         })
     }
 
+    /// Check if repo is bare. This will error if not in a git repo.
+    fn is_bare(
+        options: &GitCommandOptions,
+        path: impl AsRef<Path>,
+    ) -> Result<bool, GitCommandOpenError> {
+        let mut command = options.new_command();
+        command
+            .args(["-C", path.as_ref().to_str().unwrap()])
+            .arg("rev-parse")
+            .arg("--is-bare-repository");
+
+        let out_str = GitCommandProvider::run_command(&mut command)?
+            .to_str()
+            .ok_or(GitCommandDiscoverError::GitDirEncoding)?
+            .to_string();
+
+        let bare = out_str
+            .trim()
+            .parse::<bool>()
+            .map_err(|_| GitCommandDiscoverError::UnexpectedOutput(out_str))?;
+        Ok(bare)
+    }
+
+    /// Return canonicalized path to toplevel of a containing git repo, or None
+    /// if in a bare repo or not in a git repo.
+    pub fn toplevel(path: impl AsRef<Path>) -> Result<Option<PathBuf>, GitCommandOpenError> {
+        let options = GitCommandOptions::new();
+
+        // Check if path is even a git repo.
+        let mut command = options.new_command();
+        command
+            .args(["-C", path.as_ref().to_str().unwrap()])
+            .arg("rev-parse");
+
+        let out_str = GitCommandProvider::run_command(&mut command);
+        match out_str {
+            // Not a git repo
+            Err(GitCommandError::BadExit(128, _, _)) => return Ok(None),
+            // Error checking whether path is a git repo
+            Err(e) => Err(e)?,
+            Ok(_) => (),
+        }
+
+        if Self::is_bare(&options, &path)? {
+            Ok(None)
+        } else {
+            let mut command = options.new_command();
+            command
+                .args(["-C", path.as_ref().to_str().unwrap()])
+                .arg("rev-parse")
+                .arg("--show-toplevel");
+            let toplevel = GitCommandProvider::run_command(&mut command)?;
+            let toplevel = toplevel
+                .to_str()
+                .ok_or(GitCommandDiscoverError::GitDirEncoding)?
+                .trim();
+
+            Ok(Some(
+                PathBuf::from(toplevel)
+                    .canonicalize()
+                    .map_err(GitCommandOpenError::Canonicalize)?,
+            ))
+        }
+    }
+
     /// Open a repo, erroring if `path` is not a repo or is a subdirectory of a repo
     pub fn open_with<P: AsRef<Path>>(
         options: GitCommandOptions,
         path: P,
     ) -> Result<Self, GitCommandOpenError> {
-        let bare = {
-            let mut command = options.new_command();
-            command
-                .args(["-C", path.as_ref().to_str().unwrap()])
-                .arg("rev-parse")
-                .arg("--is-bare-repository");
-
-            let out_str = GitCommandProvider::run_command(&mut command)?
-                .to_str()
-                .ok_or(GitCommandDiscoverError::GitDirEncoding)?
-                .to_string();
-
-            out_str
-                .trim()
-                .parse::<bool>()
-                .map_err(|_| GitCommandDiscoverError::UnexpectedOutput(out_str))?
-        };
+        let bare = Self::is_bare(&options, &path)?;
 
         // resolved and canonicalized path to the git repo
         let resolved_path = {
@@ -933,6 +982,42 @@ pub mod tests {
         fs::write(&file, filename).unwrap();
         repo.add(&[&file]).unwrap();
         repo.commit(filename).unwrap();
+    }
+
+    #[test]
+    fn toplevel() {
+        let (_, tempdir_handle) = init_temp_repo(false);
+        let path = tempdir_handle.path().to_path_buf();
+        assert_eq!(
+            GitCommandProvider::toplevel(&path).unwrap(),
+            Some(path.canonicalize().unwrap())
+        );
+    }
+
+    #[test]
+    fn toplevel_subdirectory() {
+        let (_, tempdir_handle) = init_temp_repo(false);
+        let path = tempdir_handle.path().to_path_buf();
+        let subdirectory = path.join("subdirectory");
+        std::fs::create_dir(&subdirectory).unwrap();
+        assert_eq!(
+            GitCommandProvider::toplevel(&subdirectory).unwrap(),
+            Some(path.canonicalize().unwrap())
+        );
+    }
+
+    #[test]
+    fn toplevel_bare() {
+        let (_, tempdir_handle) = init_temp_repo(true);
+        let path = tempdir_handle.path().to_path_buf();
+        assert_eq!(GitCommandProvider::toplevel(&path).unwrap(), None);
+    }
+
+    #[test]
+    fn toplevel_not_git_repo() {
+        let tempdir_handle = tempfile::tempdir_in(std::env::temp_dir()).unwrap();
+        let path = tempdir_handle.path().to_path_buf();
+        assert_eq!(GitCommandProvider::toplevel(&path).unwrap(), None);
     }
 
     #[test]
