@@ -31,7 +31,7 @@ setup_file() {
     if ! [[ -x "$PKGDB_IS_SQLITE3_BIN" ]]; then
       (
         cd "${REPO_ROOT?}" >/dev/null 2>&1||exit 1;
-        make -j8 tests/is_sqlite3;
+        make -j tests/is_sqlite3;
       );
     fi
   fi

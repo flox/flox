@@ -36,7 +36,7 @@ in
     set -euo pipefail
 
     # Find root of the subproject if not specified
-    PROJECT_TESTS_DIR=${PROJECT_TESTS_DIR}
+    PROJECT_TESTS_DIR="${PROJECT_TESTS_DIR}";
     PROJECT_PATH=""
     if [[ $PROJECT_TESTS_DIR != "/nix/store/"* ]]; then
 
@@ -58,9 +58,9 @@ in
     export PATH="$PROJECT_PATH${lib.makeBinPath paths}"
 
     # Copy PROJECT_TESTS_DIR to temporary directory
-    WORKDIR=$(mktemp -d -t ${PROJECT_NAME}-XXXXXX)
-    cp -R $PROJECT_TESTS_DIR/* $WORKDIR
-    cd $WORKDIR
+    WORKDIR="$( mktemp -d -t ${PROJECT_NAME}-XXXXXX; )";
+    cp -R "$PROJECT_TESTS_DIR/"* "$WORKDIR";
+    cd "$WORKDIR";
 
     # Declare project specific dependencies
     ${

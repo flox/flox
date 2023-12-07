@@ -176,7 +176,7 @@ setup_file() {
 # bats test_tags=manifest:ga-registry, lock:ga-registry, manifest:global
 
 @test "'pkgdb manifest lock --ga-registry' rejects global manifest registry" {
-  run $PKGDB_BIN manifest lock --ga-registry                                     \
+  run $PKGDB_BIN manifest lock --ga-registry                                 \
                            --global-manifest "$TDATA/global-manifest0.toml"  \
                            "$TDATA/ga0.toml";
   assert_failure;

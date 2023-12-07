@@ -13,8 +13,8 @@ load setup_suite.bash;
 setup_file() {
   export TDATA="$TESTS_DIR/data/search";
 
-  export PKGDB_BIN_CACHEDIR="$BATS_FILE_TMPDIR/pkgdbs";
-  echo "PKGDB_BIN_CACHEDIR: $PKGDB_BIN_CACHEDIR" >&3;
+  export PKGDB_CACHEDIR="$BATS_FILE_TMPDIR/pkgdbs";
+  echo "PKGDB_CACHEDIR: $PKGDB_CACHEDIR" >&3;
   # We don't parallelize these to avoid DB sync headaches and to recycle the
   # cache between tests.
   # Nonetheless this file makes an effort to avoid depending on past state in
