@@ -7,7 +7,7 @@ _default:
 # Run the 'bats' test suite
 bats-tests +bats_args="":
     @cargo build -q
-    @flox-tests
+    @flox-tests {{bats_args}}
 
 # Run a specific 'bats' test file
 bats-file file:
