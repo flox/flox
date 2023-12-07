@@ -176,7 +176,7 @@ in
 
 
     # Default flag values
-    : "''${TESTS_DIR:=$WORKDIR}
+    : "''${TESTS_DIR:=$WORKDIR}";
     export TESTS_DIR;
 
     if [[ "''${#_FLOX_TESTS[@]}" -lt 1 ]]; then
