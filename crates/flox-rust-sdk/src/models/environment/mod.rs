@@ -226,10 +226,10 @@ impl From<EnvironmentRef> for ManagedPointer {
 
 /// Represents a `.flox` directory that contains an `env.json`.
 ///
-/// An [UninitializedEnvironment] represents a fully qualified reference to
-/// open either a [PathEnvironment] or [ManagedEnvironment].
-/// It is additionally used to provide more precise targets
-/// for the interactive selection of environments
+/// An [UninitializedEnvironment] represents a fully qualified reference to open
+/// either a [PathEnvironment] or [ManagedEnvironment].
+/// It is additionally used to provide more precise targets for the interactive
+/// selection of environments.
 ///
 /// However, this type does not perform any validation of the referenced environment.
 /// Opening the environment with [ManagedEnvironment::open] or

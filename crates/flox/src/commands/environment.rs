@@ -464,8 +464,7 @@ fn environment_description(environment: &ConcreteEnvironment) -> Result<String, 
             format!(
                 "{}/{} at {}",
                 environment.owner(),
-                "<TODO: name>",
-                // environment.name(),
+                environment.name(),
                 environment.path.to_string_lossy()
             )
         },
@@ -491,7 +490,6 @@ pub fn hacky_environment_description(
             format!(
                 "{}/{} at {}",
                 managed_pointer.owner,
-                "<TODO: name>",
                 managed_pointer.name,
                 uninitialized.path.to_string_lossy(),
             )
