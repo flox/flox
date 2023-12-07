@@ -85,18 +85,19 @@ in
   writeShellScriptBin PROJECT_NAME ''
     set -euo pipefail
 
-    # Find top level of the project
-    if ${git}/bin/git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-      export PROJECT_ROOT_DIR="$( ${git}/bin/git rev-parse --show-toplevel; )"
-    else
-      echo "ERROR: Could not find root of the project."
-      exit 1
-    fi
-
     # Find root of the subproject if not specified
     PROJECT_TESTS_DIR=${PROJECT_TESTS_DIR}
     PROJECT_PATH=""
     if [[ $PROJECT_TESTS_DIR != "/nix/store/"* ]]; then
+
+      # Find top level of the project
+      if ${git}/bin/git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        export PROJECT_ROOT_DIR="$( ${git}/bin/git rev-parse --show-toplevel; )"
+      else
+        echo "ERROR: Could not find root of the project."
+        exit 1
+      fi
+
       PROJECT_TESTS_DIR="$PROJECT_ROOT_DIR$PROJECT_TESTS_DIR"
       PROJECT_PATH="$PROJECT_ROOT_DIR/target/debug:$PROJECT_ROOT_DIR/pkgdb/bin:$PROJECT_ROOT_DIR/env-builder/bin:"
     fi
@@ -175,11 +176,7 @@ in
 
 
     # Default flag values
-    : "''${TESTS_DIR:=$PROJECT_TESTS_DIR}";
-    export TESTS_DIR;
-
-    # Default flag values
-    : "''${TESTS_DIR:=$PROJECT_TESTS_DIR}";
+    : "''${TESTS_DIR:=$WORKDIR}
     export TESTS_DIR;
 
     if [[ "''${#_FLOX_TESTS[@]}" -lt 1 ]]; then
@@ -207,8 +204,12 @@ in
 
     # Run basts either via entr or just a single run
     if [[ -n "''${WATCH:-}" ]]; then
-      find "$TESTS_DIR" "$PKGDB"  \
-        |${entr}/bin/entr -s "bats ''${_BATS_ARGS[*]} ''${_FLOX_TESTS[*]}";
+      find \
+        "$TESTS_DIR" \
+        "$PKGDB_BIN"  \
+        "$ENV_BUILDER_BIN"  \
+        "$FLOX_BIN"  \
+          | ${entr}/bin/entr -s "bats ''${_BATS_ARGS[*]} ''${_FLOX_TESTS[*]}";
     else
       exec -a "$0" ${batsWith}/bin/bats "''${_BATS_ARGS[@]}" "''${_FLOX_TESTS[@]}";
     fi
