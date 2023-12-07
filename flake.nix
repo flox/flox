@@ -21,8 +21,8 @@
   inputs.parser-util.url = "github:flox/parser-util";
   inputs.parser-util.inputs.nixpkgs.follows = "nixpkgs";
 
-  inputs.shellHooks.url = "github:cachix/pre-commit-hooks.nix";
-  inputs.shellHooks.inputs.nixpkgs.follows = "nixpkgs";
+  inputs.pre-commit-hooks.url = "github:cachix/pre-commit-hooks.nix";
+  inputs.pre-commit-hooks.inputs.nixpkgs.follows = "nixpkgs";
 
   inputs.crane.url = "github:ipetkov/crane";
   inputs.crane.inputs.nixpkgs.follows = "nixpkgs";
@@ -35,7 +35,7 @@
     floco,
     sqlite3pp,
     parser-util,
-    shellHooks,
+    pre-commit-hooks,
     crane,
     ...
   } @ inputs: let
@@ -133,8 +133,13 @@
       };
 
       rustfmt = prev.rustfmt.override {asNightly = true;};
-      pre-commit-check = final.callPackage ./checks/pre-commit-check {
-        inherit shellHooks;
+      pre-commit-check = pre-commit-hooks.lib.${final.system}.run {
+        src = builtins.path {path = ./.;};
+        hooks = {
+          alejandra.enable = true;
+          rustfmt.enable = true;
+          commitizen.enable = true;
+        };
       };
     };
 
