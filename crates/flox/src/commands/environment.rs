@@ -424,8 +424,8 @@ impl Init {
             indoc::indoc! {"
             ✨ created environment {name} ({system})
 
-            Enter the environment with \"flox activate\"
-            Search and install packages with \"flox search {{packagename}}\" and \"flox install {{packagename}}\"
+            Enter the environment with `flox activate`
+            Search and install packages with `flox search <packagename>` and `flox install <packagename>`
             "},
             name = env.name(),
             system = flox.system
