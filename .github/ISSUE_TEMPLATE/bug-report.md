@@ -18,3 +18,5 @@ Expected:
 
 
 **Screenshots/terminal output (if relevant):**
+
+** flox Version (run `flox --version` if possible): **
