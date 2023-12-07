@@ -523,7 +523,7 @@ pub fn detect_environment(message: &str) -> Result<Option<UninitializedEnvironme
         // If there's both an activated environment and an environment in the
         // current directory or git repo, prompt for which to use.
         (Some(activated_path), Some(found)) => {
-            let activated = UninitializedEnvironment::open(&activated_path)?;
+            let activated = UninitializedEnvironment::open(activated_path)?;
             let type_of_directory = if found.path == current_dir {
                 "current directory's flox environment"
             } else {

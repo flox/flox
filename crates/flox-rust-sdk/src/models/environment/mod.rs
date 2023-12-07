@@ -22,7 +22,12 @@ use super::flox_package::FloxTriple;
 use super::manifest::{Manifest, TomlEditError};
 use super::pkgdb_errors::PkgDbError;
 use crate::flox::{EnvironmentRef, Flox};
-use crate::providers::git::{GitCommandOpenError, GitCommandProvider};
+use crate::providers::git::{
+    GitCommandDiscoverError,
+    GitCommandProvider,
+    GitDiscoverError,
+    GitProvider,
+};
 use crate::utils::copy_file_without_permissions;
 use crate::utils::errors::IoError;
 
@@ -478,7 +483,7 @@ pub enum EnvironmentError2 {
         source: Box<EnvironmentError2>,
     },
     #[error("error checking if in a git repo")]
-    DetectGitDirectory(#[source] GitCommandOpenError),
+    DiscoverGitDirectory(#[source] GitCommandDiscoverError),
 }
 
 /// Copy a whole directory recursively ignoring the original permissions
@@ -575,14 +580,17 @@ pub fn find_dot_flox(
     }
 
     // Check if we're in a git repo.
-    let toplevel =
-        match GitCommandProvider::toplevel(&path).map_err(EnvironmentError2::DetectGitDirectory)? {
-            None => return Ok(None),
-            Some(toplevel) => toplevel,
-        };
+    let toplevel = match GitCommandProvider::discover(&path) {
+        Ok(repo) if repo.workdir().is_some() => repo.workdir().unwrap().to_owned(),
+        Ok(_) => return Ok(None),
+        // Assume we're not in a git repo.
+        // TODO: could not_found() correspond to some other error?
+        Err(e) if e.not_found() => return Ok(None),
+        Err(e) => Err(EnvironmentError2::DiscoverGitDirectory(e))?,
+    };
 
     // We already checked the immediate child.
-    for ancestor in parent.ancestors().skip(1) {
+    for ancestor in path.ancestors().skip(1) {
         // If we're above the git repo, return None.
         // ancestor and toplevel have both been canonicalized.
         if !ancestor.starts_with(&toplevel) {
@@ -626,7 +634,7 @@ mod test {
         "version": 1
     }"#;
 
-    const MANAGED_ENV_POINTER: Lazy<EnvironmentPointer> = Lazy::new(|| {
+    static MANAGED_ENV_POINTER: Lazy<EnvironmentPointer> = Lazy::new(|| {
         EnvironmentPointer::Managed(ManagedPointer {
             name: EnvironmentName::from_str("name").unwrap(),
             owner: EnvironmentOwner::from_str("owner").unwrap(),
@@ -685,7 +693,7 @@ mod test {
     fn errors_immediate_child_invalid() {
         let temp_dir = tempfile::tempdir().unwrap();
         let actual_dot_flox = temp_dir.path().join(DOT_FLOX);
-        std::fs::create_dir_all(&actual_dot_flox).unwrap();
+        std::fs::create_dir_all(actual_dot_flox).unwrap();
         assert!(matches!(
             find_dot_flox(temp_dir.path()),
             Err(EnvironmentError2::InvalidDotFlox { .. })
