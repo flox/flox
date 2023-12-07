@@ -1,9 +1,7 @@
 ---
 name: Feature request
 about: flox doesn't do everything yet but maybe it can do your thing
-title: ''
-labels: ''
-assignees: ''
+labels: feature
 
 ---
 
@@ -15,3 +13,4 @@ assignees: ''
 1.
 2.
 3.
+
