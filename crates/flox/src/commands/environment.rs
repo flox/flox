@@ -492,7 +492,7 @@ pub fn hacky_environment_description(
                 "{}/{} at {}",
                 managed_pointer.owner,
                 "<TODO: name>",
-                // environment.name(),
+                managed_pointer.name,
                 uninitialized.path.to_string_lossy(),
             )
         },
