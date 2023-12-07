@@ -3,8 +3,7 @@
   commitizen,
   flox,
   flox-env-builder,
-  flox-tests-dev,
-  flox-tests-end2end-dev,
+  flox-pkgdb,
   hivemind,
   just,
   mkShell,
@@ -21,27 +20,44 @@
     p.bats-file
     p.bats-support
   ]);
+
+  getInputs = {
+    buildInputs ? [],
+    nativeBuildInputs ? [],
+    propagatedBuildInputs ? [],
+    ...
+  }: let
+    filterExt = let
+      filt = {
+        name,
+        pname ? name,
+        ...
+      }:
+        ! (builtins.elem pname ["flox-pkgdb" "flox-env-builder"]);
+    in
+      builtins.filter filt;
+    allInputs = buildInputs ++ nativeBuildInputs ++ propagatedBuildInputs;
+  in
+    filterExt allInputs;
 in
   mkShell ({
-      inputsFrom = [
-        flox
-        flox-env-builder
-      ];
       RUST_SRC_PATH = rustPlatform.rustLibSrc.outPath;
       RUSTFMT = "${rustfmt}/bin/rustfmt";
-      packages = [
-        commitizen
-        rustfmt
-        hivemind
-        clippy
-        rust-analyzer
-        rust.packages.stable.rustPlatform.rustLibSrc
-        rustc
-        just
-        flox-tests-dev
-        flox-tests-end2end-dev
-        batsWith
-      ];
+      packages =
+        [
+          commitizen
+          rustfmt
+          hivemind
+          clippy
+          rust-analyzer
+          rust.packages.stable.rustPlatform.rustLibSrc
+          rustc
+          just
+          batsWith
+        ]
+        ++ (getInputs flox)
+        ++ (getInputs flox-env-builder)
+        ++ (getInputs flox-pkgdb);
       shellHook =
         ''
           # Extra interactive shell settings, requires `DANK_MODE' to be set.
@@ -62,9 +78,9 @@ in
 
           # Find the project root and add the `bin' directory to `PATH'.
           if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+            PATH="$PATH:$( git rev-parse --show-toplevel; )/env-builder/bin";
             PATH="$PATH:$( git rev-parse --show-toplevel; )/pkgdb/bin";
           fi
-
         ''
         + pre-commit-check.shellHook;
     }
