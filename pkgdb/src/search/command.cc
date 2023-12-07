@@ -175,62 +175,57 @@ SearchCommand::run()
 
   pkgdb::PkgQueryArgs args = this->getEnvironment().getCombinedBaseQueryArgs();
   this->params.query.fillPkgQueryArgs( args );
-  auto query         = pkgdb::PkgQuery( args );
-  auto countPkgQuery = pkgdb::PkgQuery( args, { "COUNT(*)" } );
-  std::cerr << "made the queries" << std::endl;
+  auto query = pkgdb::PkgQuery( args );
   if ( this->dumpQuery )
     {
       std::cout << query.str() << std::endl;
       return EXIT_SUCCESS;
     }
-  std::cerr << "about to check whether there's a limit" << std::endl;
+  auto                                            resultCount = 0;
+  std::vector<std::vector<pkgdb::row_id>>         ids;
+  std::vector<std::shared_ptr<pkgdb::PkgDbInput>> inputs;
+  for ( const auto & [name, input] :
+        *this->getEnvironment().getPkgDbRegistry() )
+    {
+      auto                       dbRO = input->getDbReadOnly();
+      std::vector<pkgdb::row_id> inputIds;
+      for ( const auto & id : query.execute( dbRO->db ) )
+        {
+          inputIds.emplace_back( id );
+          resultCount += 1;
+        }
+      inputs.emplace_back( input );
+      ids.emplace_back( std::move( inputIds ) );
+    }
   if ( query.limit.has_value() )
     {
-      auto                       resultCount = 0;
-      std::vector<pkgdb::row_id> rowIds;
-      for ( const auto & [name, input] :
-            *this->getEnvironment().getPkgDbRegistry() )
-        {
-          std::cerr << "start of a count query" << std::endl;
-          // Execute the query counting the number of results
-          auto dbRO = input->getDbReadOnly();
-          std::cerr << "got the ro-db" << std::endl;
-          auto counts = countPkgQuery.execute( dbRO->db );
-          std::cerr << "executed the query" << std::endl;
-          auto numResults = counts[0];
-          std::cerr << "got the result count" << std::endl;
-          resultCount += numResults;
-          std::cerr << "finished a count query" << std::endl;
-        }
       // Emit the number of results as the first line
       nlohmann::json resultCountRecord = { { "result-count", resultCount } };
       std::cout << resultCountRecord << std::endl;
-      std::cerr << "sent the count record" << std::endl;
-      for ( const auto & [name, input] :
-            *this->getEnvironment().getPkgDbRegistry() )
+      // Only print the first `limit` results
+      for ( size_t i = 0; i < inputs.size(); i++ )
         {
-          std::cerr << "about to check limit at top" << std::endl;
           if ( *query.limit == 0 ) { break; }
-          auto dbRO = input->getDbReadOnly();
-          for ( const auto & row : query.execute( dbRO->db ) )
+          auto input    = inputs[i];
+          auto inputIds = ids[i];
+          for ( auto & id : inputIds )
             {
-              std::cerr << "about to check limit in the loop" << std::endl;
               if ( *query.limit == 0 ) { break; }
-              std::cout << input->getRowJSON( row ).dump() << std::endl;
-              std::cerr << "decrementing the limit" << std::endl;
+              std::cout << input->getRowJSON( id ).dump() << std::endl;
               *query.limit -= 1;
             }
         }
     }
   else
     {
-      for ( const auto & [name, input] :
-            *this->getEnvironment().getPkgDbRegistry() )
+      // Print all of the results
+      for ( size_t i = 0; i < inputs.size(); i++ )
         {
-          auto dbRO = input->getDbReadOnly();
-          for ( const auto & row : query.execute( dbRO->db ) )
+          auto input    = inputs[i];
+          auto inputIds = ids[i];
+          for ( auto & id : inputIds )
             {
-              std::cout << input->getRowJSON( row ).dump() << std::endl;
+              std::cout << input->getRowJSON( id ).dump() << std::endl;
             }
         }
     }
