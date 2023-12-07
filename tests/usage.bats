@@ -69,7 +69,7 @@ EOF
     run "$FLOX_CLI" --help
     assert_output --partial - << EOF
 Additional Commands. Use "flox COMMAND --help" for more info
-    upgrade, config, wipe-history, history
+    upgrade, config, wipe-history, history, auth
 EOF
 }
 

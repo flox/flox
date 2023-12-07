@@ -59,7 +59,7 @@ static FLOX_WELCOME_MESSAGE: Lazy<String> = Lazy::new(|| {
 });
 
 const ADDITIONAL_COMMANDS: &str = indoc! {"
-    upgrade, config, wipe-history, history
+    upgrade, config, wipe-history, history, auth
 "};
 
 fn vec_len<T>(x: Vec<T>) -> usize {
@@ -377,10 +377,7 @@ enum InternalCommands {
     #[bpaf(command)]
     Rollback(#[bpaf(external(environment::rollback))] environment::Rollback),
     #[bpaf(command)]
-    Auth(#[bpaf(external(general::auth))] general::Auth),
-    ///Auth2
-    #[bpaf(command)]
-    Auth2(#[bpaf(external(auth::auth2))] auth::Auth2),
+    Auth(#[bpaf(external(auth::auth))] auth::Auth),
 }
 
 impl InternalCommands {
@@ -391,7 +388,6 @@ impl InternalCommands {
             InternalCommands::SwitchGeneration(args) => args.handle(flox).await?,
             InternalCommands::Rollback(args) => args.handle(flox).await?,
             InternalCommands::Auth(args) => args.handle(config, flox).await?,
-            InternalCommands::Auth2(args) => args.handle(config, flox).await?,
         }
         Ok(())
     }
@@ -438,14 +434,6 @@ impl Version {
             .map(|(v, _)| v)
             .unwrap_or_default()
             .0
-    }
-}
-
-pub fn not_help(s: String) -> Option<String> {
-    if s == "--help" || s == "-h" {
-        None
-    } else {
-        Some(s)
     }
 }
 
