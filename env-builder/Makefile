@@ -6,6 +6,18 @@
 
 MAKEFILE_DIR ?= $(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
 
+ENV_BUILDER_DIR := $(MAKEFILE_DIR)
+
+REPO_ROOT     ?= $(patsubst %/,%,$(dir $(ENV_BUILDER_DIR)))
+BUILD_AUX_DIR ?= $(REPO_ROOT)/build-aux
+MK_DIR        ?= $(BUILD_AUX_DIR)/mk
+
+ifneq (,$(wildcard $(REPO_ROOT)/pkgdb/))
+PKGDB_DIR ?= $(REPO_ROOT)/pkgdb
+else
+$(error "Unable to locate repository root")
+endif
+
 # ---------------------------------------------------------------------------- #
 
 .PHONY: all clean fullclean FORCE ignores most
