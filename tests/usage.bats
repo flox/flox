@@ -20,7 +20,7 @@ teardown() {
 }
 
 @test "f1: simplify flox 'no command' info" {
-    run "$FLOX_CLI"
+    run "$FLOX_BIN"
     assert_success
     # FLOX_VERSION is set by the `flox run` command
     # and thus deviates from the expected version.
@@ -36,13 +36,13 @@ EOF
 }
 
 @test "f?: 'flox --help' has 0 exit code" {
-    run "$FLOX_CLI"
+    run "$FLOX_BIN"
     assert_success
 }
 
 
 @test "f2: command grouping changes 1: 'Local Development Commands' listed in order" {
-    run --separate-stderr "$FLOX_CLI" --help;
+    run --separate-stderr "$FLOX_BIN" --help;
     line=4;
     assert_line -n "$line" --regexp '^Local Development Commands'; line=$((line+1));
     assert_line -n "$line" --regexp '^    init[ ]+[\w .,]+'; line=$((line+1));
@@ -57,7 +57,7 @@ EOF
 }
 
 @test "f3: command grouping changes 2: 'Sharing Commands' listed in order" {
-    run "$FLOX_CLI" --help
+    run "$FLOX_BIN" --help
     line=14;
     assert_line -n "$line" --regexp '^Sharing Commands'; line=$((line+1));
     assert_line -n "$line" --regexp '^    push[ ]+[\w .,]+'; line=$((line+1));
@@ -66,7 +66,7 @@ EOF
 }
 
 @test "f5: command grouping changes 3: move lesser used or not polished commands to 'Additional Commands' section with help tip." {
-    run "$FLOX_CLI" --help
+    run "$FLOX_BIN" --help
     assert_output --partial - << EOF
 Additional Commands. Use "flox COMMAND --help" for more info
     upgrade, config, wipe-history, history
@@ -74,7 +74,7 @@ EOF
 }
 
 @test "f6: remove stability from flox --help command: Only show stability for commands that support it" {
-    run "$FLOX_CLI" --help
+    run "$FLOX_BIN" --help
     refute_output --partial "--stability"
 }
 

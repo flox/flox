@@ -21,7 +21,7 @@ load test_support.bash;
 ##   #
 ##   # This test will work until channels will be implemented in rust.
 ##   # At which point the messaging may change as well.
-##   run "$FLOX_CLI" channels
+##   run "$FLOX_BIN" channels
 ##   assert_success
 ##   assert_output --partial "Updating \"$FLOX_CONFIG_HOME/gitconfig\""
 ##   skip "remaining portion of test depends on rust or bash execution"
@@ -32,7 +32,7 @@ load test_support.bash;
 # ---------------------------------------------------------------------------- #
 
 ## @test "flox --prefix" {
-##   run "$FLOX_CLI" --prefix
+##   run "$FLOX_BIN" --prefix
 ##   assert_success
 ##   assert_output "$FLOX_PACKAGE"
 ## }
@@ -41,7 +41,7 @@ load test_support.bash;
 # ---------------------------------------------------------------------------- #
 
 ## @test "flox --help" {
-##   run $FLOX_CLI --help
+##   run $FLOX_BIN --help
 ##   assert_success
 ##   # the rust implementation generates its USAGE/help internally
 ##   if [ "$FLOX_IMPLEMENTATION" != "rust" ]; then
@@ -53,7 +53,7 @@ load test_support.bash;
 # ---------------------------------------------------------------------------- #
 
 ## @test "flox git remote -v" {
-##   run $FLOX_CLI git remote -v
+##   run $FLOX_BIN git remote -v
 ##   assert_success
 ##   assert_output - < /dev/null
 ## }
@@ -66,13 +66,13 @@ load test_support.bash;
 ## # - while `nix` requires XDG_CONFIG_HOME
 ## #   - ... and because `nix` invokes `gh`, just provide them both
 ## @test "assert can log into github GH_CONFIG_DIR=$REAL_GH_CONFIG_DIR" {
-##   run sh -c "XDG_CONFIG_HOME=$REAL_XDG_CONFIG_HOME GH_CONFIG_DIR=$REAL_GH_CONFIG_DIR $FLOX_CLI gh auth status"
+##   run sh -c "XDG_CONFIG_HOME=$REAL_XDG_CONFIG_HOME GH_CONFIG_DIR=$REAL_GH_CONFIG_DIR $FLOX_BIN gh auth status"
 ##   assert_success
 ##   assert_output --partial "✓ Logged in to github.com as"
 ## }
 ##
 ## @test "flox subscribe private with creds GH_CONFIG_DIR=$REAL_GH_CONFIG_DIR" {
-##   run sh -c "XDG_CONFIG_HOME=$REAL_XDG_CONFIG_HOME GH_CONFIG_DIR=$REAL_GH_CONFIG_DIR $FLOX_CLI subscribe flox-examples-private github:flox-examples/floxpkgs-private"
+##   run sh -c "XDG_CONFIG_HOME=$REAL_XDG_CONFIG_HOME GH_CONFIG_DIR=$REAL_GH_CONFIG_DIR $FLOX_BIN subscribe flox-examples-private github:flox-examples/floxpkgs-private"
 ##   assert_success
 ##   assert_output --partial "subscribed channel 'flox-examples-private'"
 ## }
@@ -82,7 +82,7 @@ load test_support.bash;
 
 ## # Keep environment in next test to prevent nix.conf rewrite warning.
 ## @test "flox unsubscribe private" {
-##   run sh -c "XDG_CONFIG_HOME=$REAL_XDG_CONFIG_HOME GH_CONFIG_DIR=$REAL_GH_CONFIG_DIR $FLOX_CLI unsubscribe flox-examples-private"
+##   run sh -c "XDG_CONFIG_HOME=$REAL_XDG_CONFIG_HOME GH_CONFIG_DIR=$REAL_GH_CONFIG_DIR $FLOX_BIN unsubscribe flox-examples-private"
 ##   assert_success
 ##   assert_output --partial "unsubscribed from channel 'flox-examples-private'"
 ## }
@@ -92,7 +92,7 @@ load test_support.bash;
 
 ## # Again we need github connectivity for this.
 ## @test "flox push" {
-##   run sh -c "XDG_CONFIG_HOME=$REAL_XDG_CONFIG_HOME GH_CONFIG_DIR=$REAL_GH_CONFIG_DIR $FLOX_CLI --debug push -e $TEST_ENVIRONMENT"
+##   run sh -c "XDG_CONFIG_HOME=$REAL_XDG_CONFIG_HOME GH_CONFIG_DIR=$REAL_GH_CONFIG_DIR $FLOX_BIN --debug push -e $TEST_ENVIRONMENT"
 ##   assert_success
 ##   assert_output --partial "To "
 ##   assert_output --regexp "\* \[new branch\] +origin/.*.$TEST_ENVIRONMENT -> .*.$TEST_ENVIRONMENT"
@@ -100,7 +100,7 @@ load test_support.bash;
 
 ## # ... and this.
 ## @test "flox pull" {
-##   run sh -c "XDG_CONFIG_HOME=$REAL_XDG_CONFIG_HOME GH_CONFIG_DIR=$REAL_GH_CONFIG_DIR $FLOX_CLI pull -e $TEST_ENVIRONMENT"
+##   run sh -c "XDG_CONFIG_HOME=$REAL_XDG_CONFIG_HOME GH_CONFIG_DIR=$REAL_GH_CONFIG_DIR $FLOX_BIN pull -e $TEST_ENVIRONMENT"
 ##   assert_success
 ##   assert_output --partial "To "
 ##   assert_output --regexp "\* \[new branch\] +.*\.$TEST_ENVIRONMENT -> .*\.$TEST_ENVIRONMENT"
@@ -109,7 +109,7 @@ load test_support.bash;
 # ---------------------------------------------------------------------------- #
 
 ## @test "flox list after flox pull should be exactly as before" {
-##   run $FLOX_CLI list -e $TEST_ENVIRONMENT
+##   run $FLOX_BIN list -e $TEST_ENVIRONMENT
 ##   assert_success
 ##   assert_output --partial "Curr Gen  2"
 ##   assert_output --regexp "0  stable.nixpkgs-flox.hello +"$VERSION_REGEX
@@ -122,7 +122,7 @@ load test_support.bash;
 # ---------------------------------------------------------------------------- #
 
 ## @test "flox list after installing by store path should contain package" {
-##   run $FLOX_CLI list -e $TEST_ENVIRONMENT
+##   run $FLOX_BIN list -e $TEST_ENVIRONMENT
 ##   assert_success
 ##   assert_output --partial "Curr Gen  7"
 ##   assert_output --regexp "0  stable.nixpkgs-flox.hello +"$VERSION_REGEX
@@ -133,7 +133,7 @@ load test_support.bash;
 # ---------------------------------------------------------------------------- #
 
 ## @test "flox remove hello again" {
-##   run $FLOX_CLI remove -e $TEST_ENVIRONMENT hello
+##   run $FLOX_BIN remove -e $TEST_ENVIRONMENT hello
 ##   assert_success
 ##   assert_output --partial "Removed 'hello' package(s) from '$TEST_ENVIRONMENT' environment."
 ## }
@@ -142,7 +142,7 @@ load test_support.bash;
 # ---------------------------------------------------------------------------- #
 
 ## @test "flox list after installing by nixpkgs flake should contain package" {
-##   run $FLOX_CLI list -e $TEST_ENVIRONMENT
+##   run $FLOX_BIN list -e $TEST_ENVIRONMENT
 ##   assert_success
 ##   assert_output --partial "Curr Gen  9"
 ##   assert_output --regexp "0  nixpkgs#hello +hello-"$VERSION_REGEX
@@ -154,7 +154,7 @@ load test_support.bash;
 # ---------------------------------------------------------------------------- #
 
 ## @test "flox list after remove by nixpkgs flake 1 should not contain package" {
-##   run $FLOX_CLI list -e $TEST_ENVIRONMENT
+##   run $FLOX_BIN list -e $TEST_ENVIRONMENT
 ##   assert_success
 ##   assert_output --partial "Curr Gen  10"
 ##   assert_output --partial "0  $HELLO_PACKAGE  $HELLO_PACKAGE_FIRST8"
@@ -163,7 +163,7 @@ load test_support.bash;
 ## }
 
 ## @test "flox rollback after flake removal 1" {
-##   run $FLOX_CLI rollback -e $TEST_ENVIRONMENT
+##   run $FLOX_BIN rollback -e $TEST_ENVIRONMENT
 ##   assert_success
 ##   assert_output --partial "Rolled back environment '$TEST_ENVIRONMENT' from generation 10 to 9."
 ## }
@@ -172,7 +172,7 @@ load test_support.bash;
 # ---------------------------------------------------------------------------- #
 
 ## @test "flox remove by nixpkgs flake 2" {
-##   run $FLOX_CLI remove -e $TEST_ENVIRONMENT "flake:nixpkgs#legacyPackages.$NIX_SYSTEM.hello"
+##   run $FLOX_BIN remove -e $TEST_ENVIRONMENT "flake:nixpkgs#legacyPackages.$NIX_SYSTEM.hello"
 ##   assert_success
 ##   assert_output --partial "Removed 'flake:nixpkgs#legacyPackages.$NIX_SYSTEM.hello' package(s) from '$TEST_ENVIRONMENT' environment."
 ## }
@@ -181,7 +181,7 @@ load test_support.bash;
 # ---------------------------------------------------------------------------- #
 
 ## @test "flox list to verify contents of generation 9 at generation 12" {
-##   run $FLOX_CLI list -e $TEST_ENVIRONMENT
+##   run $FLOX_BIN list -e $TEST_ENVIRONMENT
 ##   assert_success
 ##   assert_output --partial "Curr Gen  12"
 ##   assert_output --regexp "0  nixpkgs#hello +hello-"$VERSION_REGEX
@@ -193,7 +193,7 @@ load test_support.bash;
 # ---------------------------------------------------------------------------- #
 
 ## @test "flox list after install should contain hello" {
-##   run $FLOX_CLI list -e $TEST_ENVIRONMENT
+##   run $FLOX_BIN list -e $TEST_ENVIRONMENT
 ##   assert_success
 ##   assert_output --partial "Curr Gen  2"
 ##   assert_output --regexp "0  stable.nixpkgs-flox.hello +"$VERSION_REGEX
@@ -203,10 +203,10 @@ load test_support.bash;
 # ---------------------------------------------------------------------------- #
 
 ## @test "flox rollback to 1" {
-##   run $FLOX_CLI rollback -e $TEST_ENVIRONMENT
+##   run $FLOX_BIN rollback -e $TEST_ENVIRONMENT
 ##   assert_success
 ##   assert_output --partial "Rolled back environment '$TEST_ENVIRONMENT' from generation 2 to 1."
-##   run $FLOX_CLI list -e $TEST_ENVIRONMENT
+##   run $FLOX_BIN list -e $TEST_ENVIRONMENT
 ##   # generation 1 has no packages
 ##   assert_output --regexp ".*Packages"
 ## }
@@ -215,7 +215,7 @@ load test_support.bash;
 # ---------------------------------------------------------------------------- #
 
 ## @test "flox generations" {
-##   run $FLOX_CLI generations -e $TEST_ENVIRONMENT
+##   run $FLOX_BIN generations -e $TEST_ENVIRONMENT
 ##   assert_success
 ##   assert_output --partial "Generation 2:"
 ##   assert_output --partial "Path:"
@@ -237,7 +237,7 @@ load test_support.bash;
 # ---------------------------------------------------------------------------- #
 
 ## @test "flox rollback to 0" {
-##   run $FLOX_CLI rollback -e $TEST_ENVIRONMENT
+##   run $FLOX_BIN rollback -e $TEST_ENVIRONMENT
 ##   assert_failure
 ##   assert_output --partial "ERROR: invalid generation '0'"
 ## }
@@ -246,10 +246,10 @@ load test_support.bash;
 # ---------------------------------------------------------------------------- #
 
 ## @test "flox rollback --to 2" {
-##   run $FLOX_CLI switch-generation 2 -e $TEST_ENVIRONMENT
+##   run $FLOX_BIN switch-generation 2 -e $TEST_ENVIRONMENT
 ##   assert_success
 ##   assert_output --regexp "Switched environment '$TEST_ENVIRONMENT' from generation [0-9]+ to 2."
-##   run $FLOX_CLI rollback --to 2 -e $TEST_ENVIRONMENT
+##   run $FLOX_BIN rollback --to 2 -e $TEST_ENVIRONMENT
 ##   assert_success
 ##   assert_output --partial "start and target generations are the same"
 ## }
@@ -273,10 +273,10 @@ load test_support.bash;
 ##  assert_success
 ##  run git -C "$CHANNEL" add flake.nix
 ##  assert_success
-##  run $FLOX_CLI flake update "$CHANNEL"
+##  run $FLOX_BIN flake update "$CHANNEL"
 ##  assert_success
 ##
-##  run $FLOX_CLI --debug publish "github:flox/flox#flox-bash" \
+##  run $FLOX_BIN --debug publish "github:flox/flox#flox-bash" \
 ##    --build-repo "git@github.com:flox/flox" \
 ##    --channel-repo "$CHANNEL" \
 ##    --upload-to 's3://flox-store-public?write-nar-listing=1&ls-compression=br'\
@@ -287,14 +287,14 @@ load test_support.bash;
 ##
 ##  CHANNEL_NAME=publish-test
 ##
-##  run $FLOX_CLI subscribe "$CHANNEL_NAME" "$CHANNEL"
+##  run $FLOX_BIN subscribe "$CHANNEL_NAME" "$CHANNEL"
 ##  assert_success
 ##
-##  run $FLOX_CLI search -c "$CHANNEL_NAME" flox
+##  run $FLOX_BIN search -c "$CHANNEL_NAME" flox
 ##  assert_success
 ##  assert_output "$CHANNEL_NAME.flox-bash"
 ##
-##  run $FLOX_CLI unsubscribe "$CHANNEL_NAME"
+##  run $FLOX_BIN unsubscribe "$CHANNEL_NAME"
 ##}
 
 
@@ -304,14 +304,14 @@ load test_support.bash;
 ##  # otherwise a cached version of the private repo may be used
 ##  run unlink $XDG_CACHE_HOME/nix
 ##  assert_success
-##  run $FLOX_CLI flake metadata github:flox-examples/floxpkgs-private --no-eval-cache --no-write-lock-file --json
+##  run $FLOX_BIN flake metadata github:flox-examples/floxpkgs-private --no-eval-cache --no-write-lock-file --json
 ##  assert_failure
 ##  run ln -s ~/.cache/nix $XDG_CACHE_HOME/nix
 ##  assert_success
 ##}
 
 ##@test "flox subscribe private without creds" {
-##  run $FLOX_CLI subscribe flox-examples-private github:flox-examples/floxpkgs-private
+##  run $FLOX_BIN subscribe flox-examples-private github:flox-examples/floxpkgs-private
 ##  assert_failure
 ##  assert_output --partial 'ERROR: could not verify channel URL: "github:flox-examples/floxpkgs-private"'
 ##}

@@ -1,5 +1,5 @@
 set attr [lindex $argv 0]
-set flox $env(FLOX_CLI)
+set flox $env(FLOX_BIN)
 if {$attr eq ""} {
     set cmd "$flox --bash-passthru -v develop"
     spawn $flox --bash-passthru -v develop

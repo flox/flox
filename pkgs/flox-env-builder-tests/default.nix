@@ -81,8 +81,6 @@ in
       done
     popd
 
-
-
     usage() {
           cat << EOF
     Usage: $0 [--env-builder <ENV_BUILDER BINARY>| -E <ENV_BUILDER BINARY>] \

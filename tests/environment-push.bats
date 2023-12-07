@@ -89,11 +89,11 @@ function update_dummy_env() {
 
   unset FLOX_FLOXHUB_TOKEN; # logout, effectively
 
-  "$FLOX_CLI" config
+  run "$FLOX_BIN" config
 
-  run "$FLOX_CLI" init
+  run "$FLOX_BIN" init
 
-  run "$FLOX_CLI" push --owner owner # dummy owner
+  run "$FLOX_BIN" push --owner owner # dummy owner
   assert_failure
   assert_output --partial 'Please login to floxhub with `flox auth login`'
 }
@@ -108,17 +108,17 @@ function update_dummy_env() {
   mkdir -p "machine_b"
 
   pushd "machine_a" >/dev/null || return
-  "$FLOX_CLI" init --name "test"
-  "$FLOX_CLI" install hello
-  "$FLOX_CLI" push --owner owner
+  run "$FLOX_BIN" init --name "test"
+  run "$FLOX_BIN" install hello
+  run "$FLOX_BIN" push --owner owner
   popd >/dev/null || return
 
 
   pushd "machine_b" >/dev/null || return
-  run "$FLOX_CLI" pull --remote owner/test
+  run "$FLOX_BIN" pull --remote owner/test
   assert_success
 
-  run "$FLOX_CLI" list
+  run "$FLOX_BIN" list
   assert_success
   assert_line "hello"
 
@@ -135,18 +135,18 @@ function update_dummy_env() {
 
   # Create an environment owner/test on machine_a and push it to floxhub
   pushd "machine_a" >/dev/null || return
-  "$FLOX_CLI" init --name "test"
-  "$FLOX_CLI" install vim
-  "$FLOX_CLI" push --owner owner
+  "$FLOX_BIN" init --name "test"
+  "$FLOX_BIN" install vim
+  "$FLOX_BIN" push --owner owner
   popd >/dev/null || return
 
   # Create an environment owner/test on machine_b and try to push it to floxhub
   # this should fail as an envrioment with the same name but different provenance already exists on floxhub
   pushd "machine_b" >/dev/null || return
-  "$FLOX_CLI" init --name "test"
-  "$FLOX_CLI" install emacs
+  "$FLOX_BIN" init --name "test"
+  "$FLOX_BIN" install emacs
 
-  run "$FLOX_CLI" push --owner owner
+  run "$FLOX_BIN" push --owner owner
   assert_failure
   assert_output --partial "upstream floxmeta branch diverged from local branch"
   popd >/dev/null || return
@@ -161,23 +161,23 @@ function update_dummy_env() {
 
   # Create an environment owner/test on machine_a and push it to floxhub
   pushd "machine_a" >/dev/null || return
-  "$FLOX_CLI" init --name "test"
-  "$FLOX_CLI" install vim
-  "$FLOX_CLI" push --owner owner
+  "$FLOX_BIN" init --name "test"
+  "$FLOX_BIN" install vim
+  "$FLOX_BIN" push --owner owner
   popd >/dev/null || return
 
   # Create an environment owner/test on machine_b and force-push it to floxhub
   pushd "machine_b" >/dev/null || return
-  "$FLOX_CLI" init --name "test"
-  "$FLOX_CLI" install emacs
-  run "$FLOX_CLI" push --owner owner --force
+  "$FLOX_BIN" init --name "test"
+  "$FLOX_BIN" install emacs
+  run "$FLOX_BIN" push --owner owner --force
   assert_success
   popd >/dev/null || return
 
   # Pull the environment owner/test on machine_c and check that it has the emacs package
   pushd "machine_c" >/dev/null || return
-  "$FLOX_CLI" pull --remote owner/test
-  run "$FLOX_CLI" list
+  "$FLOX_BIN" pull --remote owner/test
+  run "$FLOX_BIN" list
   assert_success
   assert_line "emacs"
   popd >/dev/null || return

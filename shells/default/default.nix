@@ -28,18 +28,19 @@
       PKGDB_BIN = null;
       ENV_BUILDER_BIN = null;
     })
-    #(flox-tests.override {
-    #  PKGDB_BIN = null;
-    #  ENV_BUILDER_BIN = null;
-    #  FLOX_BIN = null;
-    #})
-    #(flox-tests.override {
-    #  name = "flox-tests-end2end";
-    #  testsDir = "/tests/end2end";
-    #  PKGDB_BIN = null;
-    #  ENV_BUILDER_BIN = null;
-    #  FLOX_BIN = null;
-    #})
+    (flox-tests.override {
+      PROJECT_TESTS_DIR = "/tests";
+      PKGDB_BIN = null;
+      ENV_BUILDER_BIN = null;
+      FLOX_BIN = null;
+    })
+    (flox-tests.override {
+      PROJECT_NAME = "flox-tests-end2end";
+      PROJECT_TESTS_DIR = "/tests";
+      PKGDB_BIN = null;
+      ENV_BUILDER_BIN = null;
+      FLOX_BIN = null;
+    })
   ];
 
   devPackages =

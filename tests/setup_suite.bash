@@ -113,33 +113,6 @@ git_reals_setup() {
 
 # ---------------------------------------------------------------------------- #
 
-# Locate the `flox' executable to be tested against and the `nix' executable to
-# use.
-flox_location_setup() {
-  if [[ -n "${__FT_RAN_FLOX_LOCATION_SETUP:-}" ]]; then return 0; fi
-  repo_root_setup;
-  if [[ -z "${FLOX_CLI:-}" ]]; then
-    if [[ -x "${REPO_ROOT:?}/target/debug/flox" ]]; then
-      FLOX_CLI="$REPO_ROOT/target/debug/flox";
-    elif [[ -x "$REPO_ROOT/target/release/flox" ]]; then
-      FLOX_CLI="$REPO_ROOT/target/release/flox";
-    elif [[ -x "$REPO_ROOT/result/bin/flox" ]]; then
-      FLOX_CLI="$REPO_ROOT/result/bin/flox";
-    elif command -v flox &> /dev/null; then
-      echo "WARNING: using flox executable from PATH" >&2;
-      FLOX_CLI="$( command -v flox; )";
-    fi
-  fi
-
-  # Force absolute paths for FLOX_CLI
-  FLOX_CLI="$( readlink -f "$FLOX_CLI"; )";
-  export FLOX_CLI;
-  export __FT_RAN_FLOX_LOCATION_SETUP=:;
-}
-
-
-# ---------------------------------------------------------------------------- #
-
 # Prime the flox-gh authentication to use the test credential.
 floxtest_gitforge_setup() {
   if [[ -n "${__FT_RAN_FLOXTEST_GITFORGE_SETUP:-}" ]]; then return 0; fi
@@ -174,7 +147,6 @@ reals_setup() {
   nix_store_dir_setup;
   xdg_reals_setup;
   git_reals_setup;
-  flox_location_setup;
   {
     print_var REAL_USER;
     print_var REAL_HOME;
@@ -187,7 +159,7 @@ reals_setup() {
     print_var REAL_XDG_STATE_HOME;
     print_var REAL_GIT_CONFIG_SYSTEM;
     print_var REAL_GIT_CONFIG_GLOBAL;
-    print_var FLOX_CLI;
+    print_var FLOX_BIN;
     print_var NIX_BIN;
     print_var BUILD_ENV_BIN;
   } >&3;
@@ -335,9 +307,8 @@ gitconfig_setup() {
 # ------------------------
 # Force the destruction of an env including any remote metdata.
 deleteEnvForce() {
-  flox_location_setup;
   # TODO delete using Rust
-  # { $FLOX_CLI --bash-passthru delete -e "${1?}" --origin -f||:; } >/dev/null 2>&1;
+  # { $FLOX_BIN --bash-passthru delete -e "${1?}" --origin -f||:; } >/dev/null 2>&1;
   return 0;
 }
 
