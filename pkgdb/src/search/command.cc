@@ -175,19 +175,41 @@ SearchCommand::run()
 
   pkgdb::PkgQueryArgs args = this->getEnvironment().getCombinedBaseQueryArgs();
   this->params.query.fillPkgQueryArgs( args );
-  auto query = pkgdb::PkgQuery( args );
+  auto query         = pkgdb::PkgQuery( args );
+  auto countPkgQuery = pkgdb::PkgQuery( args, { "COUNT(*)" } );
   if ( this->dumpQuery )
     {
       std::cout << query.str() << std::endl;
       return EXIT_SUCCESS;
     }
+  std::optional<size_t> resultCount = std::nullopt;
+  if ( query.limit.has_value() )
+    {
+      resultCount = 0;
+      std::vector<pkgdb::row_id> rowIds;
+      for ( const auto & [name, input] :
+            *this->getEnvironment().getPkgDbRegistry() )
+        {
+          // Execute the query counting the number of results
+          auto dbRO       = input->getDbReadOnly();
+          auto counts     = countPkgQuery.execute( dbRO->db );
+          auto numResults = counts[0];
+          *resultCount += numResults;
+        }
+      // Emit the number of results as the first line
+      nlohmann::json resultCountRecord = { { "result-count", *resultCount } };
+      std::cout << resultCountRecord << std::endl;
+    }
   for ( const auto & [name, input] :
         *this->getEnvironment().getPkgDbRegistry() )
     {
+      if ( query.limit.has_value() && ( *query.limit == 0 ) ) { break; }
       auto dbRO = input->getDbReadOnly();
       for ( const auto & row : query.execute( dbRO->db ) )
         {
+          if ( query.limit.has_value() && ( *query.limit == 0 ) ) { break; }
           std::cout << input->getRowJSON( row ).dump() << std::endl;
+          if ( query.limit.has_value() ) { *query.limit -= 1; }
         }
     }
   return EXIT_SUCCESS;

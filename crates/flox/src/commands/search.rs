@@ -197,6 +197,12 @@ fn render_search_results_user_facing(
         writeln!(&mut writer, "{package:<column_width$}  {desc}")?;
     }
     writer.flush().context("couldn't flush search results")?;
+    if let Some(count) = search_results.count {
+        eprint!(
+            "\nShowing {} of {} results. Use `flox search {{query}} --all` to see the full list.",
+            DEFAULT_NUM_RESULTS, count
+        );
+    }
     eprintln!("\nUse `flox show {{package}}` to see available versions");
     Ok(())
 }
