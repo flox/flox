@@ -219,6 +219,16 @@ sqlite3pp_CFLAGS ?=                                                     \
 	$(patsubst -I%,-isystem %,$(shell $(PKG_CONFIG) --cflags sqlite3pp))
 sqlite3pp_CFLAGS := $(sqlite3pp_CFLAGS)
 
+nix_INCDIR ?= $(shell $(PKG_CONFIG) --variable=includedir nix-cmd)
+nix_INCDIR := $(nix_INCDIR)
+ifndef nix_CFLAGS
+_nix_PC_CFLAGS =  $(shell $(PKG_CONFIG) --cflags nix-main nix-cmd nix-expr)
+nix_CFLAGS     =  $(boost_CFLAGS) $(patsubst -I%,-isystem %,$(_nix_PC_CFLAGS))
+nix_CFLAGS     += -include $(nix_INCDIR)/nix/config.h
+endif # ifndef nix_CFLAGS
+nix_CFLAGS := $(nix_CFLAGS)
+undefine _nix_PC_CFLAGS
+
 ifndef nix_LDFLAGS
 nix_LDFLAGS =                                                        \
 	$(shell $(PKG_CONFIG) --libs nix-main nix-cmd nix-expr nix-store)
@@ -345,11 +355,11 @@ endif
 
 ifneq (Linux,$(OS))
 LINK_INAME_FLAG = -install_name '@rpath/$(LIBFLOXENVBUILDER)'
-lib/$(LIBFLOXPKGDB): LDFLAGS += $(LINK_INAME_FLAG)
+lib/$(LIBFLOXENVBUILDER): LDFLAGS += $(LINK_INAME_FLAG)
 endif # ifneq (Linux,$(OS))
-lib/$(LIBFLOXPKGDB): LDFLAGS  += $(lib_LDFLAGS)
-lib/$(LIBFLOXPKGDB): CXXFLAGS += $(lib_CXXFLAGS)
-lib/$(LIBFLOXPKGDB): $(lib_SRCS:.cc=.o)
+lib/$(LIBFLOXENVBUILDER): LDFLAGS  += $(lib_LDFLAGS)
+lib/$(LIBFLOXENVBUILDER): CXXFLAGS += $(lib_CXXFLAGS)
+lib/$(LIBFLOXENVBUILDER): $(lib_SRCS:.cc=.o)
 	$(MKDIR_P) $(@D);
 	$(CXX) $(filter %.o,$^) $(LDFLAGS) $(SONAME_FLAG) -o $@;
 

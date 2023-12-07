@@ -13,8 +13,8 @@
 #include <string>
 #include <vector>
 
-#include <nlohmann/json.hpp>
 #include <nix/command.hh>
+#include <nlohmann/json.hpp>
 
 
 /* -------------------------------------------------------------------------- */

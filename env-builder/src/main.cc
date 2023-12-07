@@ -37,12 +37,12 @@ namespace nix {
 /* -------------------------------------------------------------------------- */
 
 /** Check if we have a non-loopback/link-local network interface. */
-  static bool
+static bool
 haveInternet()
 {
   struct ifaddrs * addrs;
 
-  if ( getifaddrs( & addrs ) ) { return true; }
+  if ( getifaddrs( &addrs ) ) { return true; }
 
   Finally free( [&]() { freeifaddrs( addrs ); } );
 
@@ -52,8 +52,7 @@ haveInternet()
       if ( i->ifa_addr->sa_family == AF_INET )
         {
           if ( ntohl( ( (sockaddr_in *) i->ifa_addr )->sin_addr.s_addr )
-               != INADDR_LOOPBACK
-             )
+               != INADDR_LOOPBACK )
             {
               return true;
             }
@@ -61,17 +60,13 @@ haveInternet()
       else if ( i->ifa_addr->sa_family == AF_INET6 )
         {
           if ( ! ( IN6_IS_ADDR_LOOPBACK(
-                     & ( (sockaddr_in6 *) i->ifa_addr )->sin6_addr
-                   ) ||
-                   IN6_IS_ADDR_LINKLOCAL(
-                     & ( (sockaddr_in6 *) i->ifa_addr )->sin6_addr
-                   )
-                 )
-             )
-          {
-            return true;
-          }
-      }
+                     &( (sockaddr_in6 *) i->ifa_addr )->sin6_addr )
+                   || IN6_IS_ADDR_LINKLOCAL(
+                     &( (sockaddr_in6 *) i->ifa_addr )->sin6_addr ) ) )
+            {
+              return true;
+            }
+        }
     }
 
   return false;
@@ -82,7 +77,7 @@ std::string programPath;
 
 /* -------------------------------------------------------------------------- */
 
-  void
+void
 mainWrapped( int argc, char * argv[] )
 {
   savedArgv = argv;
@@ -100,7 +95,9 @@ mainWrapped( int argc, char * argv[] )
             {
               throw SysError( "setting up a private mount namespace" );
             }
-        } catch ( Error & e ) {}
+        }
+      catch ( Error & e )
+        {}
     }
 #endif
 
@@ -113,14 +110,8 @@ mainWrapped( int argc, char * argv[] )
 
   setLogFormat( "bar" );
   settings.verboseBuild = false;
-  if ( isatty( STDERR_FILENO ) )
-    {
-      verbosity = lvlNotice;
-    }
-  else
-    {
-      verbosity = lvlInfo;
-    }
+  if ( isatty( STDERR_FILENO ) ) { verbosity = lvlNotice; }
+  else { verbosity = lvlInfo; }
 
   flox::FloxArgs args;
 
@@ -130,30 +121,30 @@ mainWrapped( int argc, char * argv[] )
       return;
     }
 
-  if ( ( argc == 2 ) &&
-       ( std::string_view( argv[1] ) == "__dump-xp-features" )
-     )
+  if ( ( argc == 2 )
+       && ( std::string_view( argv[1] ) == "__dump-xp-features" ) )
     {
       logger->cout( documentExperimentalFeatures().dump() );
       return;
     }
 
-  Finally printCompletions( [&]()
-  {
-    if ( completions )
-      {
-        switch ( completionType )
-          {
-            case ctNormal:    logger->cout( "normal" );    break;
-            case ctFilenames: logger->cout( "filenames" ); break;
-            case ctAttrs:     logger->cout( "attrs" );     break;
-          }
-          for ( auto & s : * completions )
+  Finally printCompletions(
+    [&]()
+    {
+      if ( completions )
+        {
+          switch ( completionType )
+            {
+              case ctNormal: logger->cout( "normal" ); break;
+              case ctFilenames: logger->cout( "filenames" ); break;
+              case ctAttrs: logger->cout( "attrs" ); break;
+            }
+          for ( auto & s : *completions )
             {
               logger->cout( s.completion + "\t" + trim( s.description ) );
             }
-      }
-  } );
+        }
+    } );
 
   try
     {
@@ -161,26 +152,22 @@ mainWrapped( int argc, char * argv[] )
     }
   catch ( UsageError & )
     {
-      if ( ! ( args.helpRequested || completions ) ) throw;
+      if ( ! ( args.helpRequested || completions ) ) { throw; }
     }
 
   if ( args.helpRequested )
     {
       std::vector<std::string> subcommand;
-      MultiCommand * command = &args;
+      MultiCommand *           command = &args;
       while ( command )
         {
           if ( command && command->command )
             {
               subcommand.push_back( command->command->first );
               command = dynamic_cast<MultiCommand *>(
-                & ( * command->command->second )
-              );
+                &( *command->command->second ) );
             }
-          else
-            {
-              break;
-            }
+          else { break; }
         }
       showHelp( subcommand, args );
       return;
@@ -201,14 +188,12 @@ mainWrapped( int argc, char * argv[] )
   if ( ! args.command ) { throw UsageError( "no subcommand specified" ); }
 
   experimentalFeatureSettings.require(
-    args.command->second->experimentalFeature()
-  );
+    args.command->second->experimentalFeature() );
 
   if ( args.useNet && ( ! haveInternet() ) )
     {
       warn( "you don't have Internet access; disabling some "
-            "network-dependent features"
-          );
+            "network-dependent features" );
       args.useNet = false;
     }
 
@@ -238,14 +223,13 @@ mainWrapped( int argc, char * argv[] )
 
   if ( args.refresh )
     {
-      settings.tarballTtl = 0;
+      settings.tarballTtl              = 0;
       settings.ttlNegativeNarInfoCache = 0;
       settings.ttlPositiveNarInfoCache = 0;
     }
 
-  if ( args.command->second->forceImpureByDefault() &&
-       ( ! evalSettings.pureEval.overridden )
-     )
+  if ( args.command->second->forceImpureByDefault()
+       && ( ! evalSettings.pureEval.overridden ) )
     {
       evalSettings.pureEval = false;
     }
@@ -255,7 +239,7 @@ mainWrapped( int argc, char * argv[] )
 
 /* -------------------------------------------------------------------------- */
 
-}  /* End namespace `nix' */
+}  // namespace nix
 
 
 /* ========================================================================== */
@@ -270,19 +254,27 @@ FloxArgs::FloxArgs()
 {
   this->categories.clear();
 
-  this->addFlag( {
-    .longName    = "help"
-  , .description = "Show usage information."
-  , .category    = nix::miscCategory
-  , .handler     = { [this]() { this->helpRequested = true; } }
+  this->addFlag( { .longName    = "help",
+                   .aliases     = {},
+                   .shortName   = 0,
+                   .description = "Show usage information.",
+                   .category    = nix::miscCategory,
+                   .labels      = {},
+                   .handler     = { [this]() { this->helpRequested = true; } },
+                   .completer   = {},
+                   .experimentalFeature = {}
+
   } );
 
-  this->addFlag( {
-    .longName    = "version"
-  , .description = "Show version information."
-  , .category    = nix::miscCategory
-  , .handler     = { [this]() { this->showVersion = true; } }
-  } );
+  this->addFlag( { .longName    = "version",
+                   .aliases     = {},
+                   .shortName   = 0,
+                   .description = "Show version information.",
+                   .category    = nix::miscCategory,
+                   .labels      = {},
+                   .handler     = { [this]() { this->showVersion = true; } },
+                   .completer   = {},
+                   .experimentalFeature = {} } );
 
   /* Added by `MixCommonArgs' */
   this->removeFlag( "option" );
@@ -319,26 +311,23 @@ FloxArgs::FloxArgs()
 /* -------------------------------------------------------------------------- */
 
 
-  nix::Strings::iterator
-FloxArgs::rewriteArgs( nix::Strings           & args
-                     , nix::Strings::iterator   pos
-                     )
+nix::Strings::iterator
+FloxArgs::rewriteArgs( nix::Strings & args, nix::Strings::iterator pos )
 {
   if ( this->aliasUsed || this->command || ( pos == args.end() ) )
     {
       return pos;
     }
-  auto arg = * pos;
+  auto arg = *pos;
   auto i   = this->aliases.find( arg );
   if ( i == this->aliases.end() ) { return pos; }
-  nix::warn( "'%s' is a deprecated alias for '%s'"
-           , arg
-           , nix::concatStringsSep( " ", i->second )
-           );
+  nix::warn( "'%s' is a deprecated alias for '%s'",
+             arg,
+             nix::concatStringsSep( " ", i->second ) );
   pos = args.erase( pos );
   for ( auto j = i->second.rbegin(); j != i->second.rend(); ++j )
     {
-      pos = args.insert( pos, * j );
+      pos = args.insert( pos, *j );
     }
   this->aliasUsed = true;
   return pos;
@@ -347,7 +336,7 @@ FloxArgs::rewriteArgs( nix::Strings           & args
 
 /* -------------------------------------------------------------------------- */
 
-  nlohmann::json
+nlohmann::json
 FloxArgs::dumpCli()
 {
   auto res = nlohmann::json::object();
@@ -355,13 +344,13 @@ FloxArgs::dumpCli()
   res["args"] = this->toJSON();
 
   auto stores = nlohmann::json::object();
-  for ( auto & implem : * nix::Implementations::registered )
+  for ( auto & implem : *nix::Implementations::registered )
     {
-      auto storeConfig = implem.getConfig();
-      auto storeName   = storeConfig->name();
-      auto & j         = stores[storeName];
-      j["doc"]         = storeConfig->doc();
-      j["settings"]    = storeConfig->toJSON();
+      auto   storeConfig = implem.getConfig();
+      auto   storeName   = storeConfig->name();
+      auto & j           = stores[storeName];
+      j["doc"]           = storeConfig->doc();
+      j["settings"]      = storeConfig->toJSON();
     }
   res["stores"] = std::move( stores );
 
@@ -371,21 +360,20 @@ FloxArgs::dumpCli()
 
 /* -------------------------------------------------------------------------- */
 
-}  /* End namespace `flox' */
+}  // namespace flox
 
 
 /* -------------------------------------------------------------------------- */
 
-  int
+int
 main( int argc, char * argv[] )
 {
   /* Increase the default stack size for the evaluator and for
    * libstdc++'s `std::regex'. */
   nix::setStackSize( 64 * 1024 * 1024 );
 
-  return nix::handleExceptions( argv[0], [&]() {
-      nix::mainWrapped( argc, argv );
-  } );
+  return nix::handleExceptions( argv[0],
+                                [&]() { nix::mainWrapped( argc, argv ); } );
 }
 
 

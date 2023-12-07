@@ -10,7 +10,7 @@
 
 #include <nix/command.hh>
 
-#include "flox/command.hh"
+#include "flox/env-builder/command.hh"
 
 
 /* -------------------------------------------------------------------------- */
@@ -120,7 +120,7 @@ showSubcommandHelp( std::ostream & fd, nix::MultiCommand & command )
 
 /* -------------------------------------------------------------------------- */
 
-static void
+[[maybe_unused]] static void
 showSubcommandUsage( std::ostream &      fd,
                      std::string_view    name,
                      nix::MultiCommand & command )
@@ -150,7 +150,7 @@ showSubcommandUsage( std::ostream &      fd,
  * lowdown.
  */
 void
-showHelp( std::vector<std::string> subcommand, FloxArgs & toplevel )
+showHelp( std::vector<std::string> /* subcommand */, FloxArgs & toplevel )
 {
   showSubcommandHelp( std::cout, toplevel );
   // TODO
@@ -178,7 +178,7 @@ struct CmdHelp : nix::Command
 
   CmdHelp()
   {
-    expectArgs( { .label = "subcommand", .handler = { &subcommand } } );
+    expectArgs( { .label = "subcommand", .handler = { &subcommand }, .completer = {} } );
   }
 
   std::string

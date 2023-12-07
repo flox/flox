@@ -10,9 +10,9 @@
 
 #pragma once
 
-#include <vector>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include <nix/derivations.hh>
 #include <nix/store-api.hh>
@@ -54,7 +54,7 @@ struct Package
   Package( const std::string & path, bool active, Priority priority )
     : path { path }, active { active }, priority { priority }
   {}
-};  /* End struct `Package' */
+}; /* End struct `Package' */
 
 
 /* -------------------------------------------------------------------------- */
@@ -65,9 +65,11 @@ public:
 
   const std::string fileA;
   const std::string fileB;
-  int        priority;
+  int               priority;
 
-  BuildEnvFileConflictError( const std::string fileA, const std::string fileB, int priority )
+  BuildEnvFileConflictError( const std::string fileA,
+                             const std::string fileB,
+                             int               priority )
     : nix::Error(
       "Unable to build profile. There is a conflict for the following files:\n"
       "\n"
@@ -79,7 +81,7 @@ public:
     , fileB( fileB )
     , priority( priority )
   {}
-};  /* End class `BuildEnvFileConflictError' */
+}; /* End class `BuildEnvFileConflictError' */
 
 
 /* -------------------------------------------------------------------------- */

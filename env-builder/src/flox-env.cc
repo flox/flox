@@ -26,8 +26,8 @@
 #include <nix/util.hh>
 #include <nlohmann/json.hpp>
 
+#include "flox/env-builder/flox-env.hh"
 #include <flox/resolver/lockfile.hh>
-#include "flox/flox-env.hh"
 
 
 /* -------------------------------------------------------------------------- */
@@ -74,8 +74,8 @@ using namespace flox::resolver;
 /* -------------------------------------------------------------------------- */
 
 const nix::StorePath
-addDirToStore( nix::EvalState &         state,
-               std::string const &        dir,
+addDirToStore( nix::EvalState &    state,
+               std::string const & dir,
                nix::StorePathSet & references )
 {
 
@@ -110,9 +110,9 @@ addDirToStore( nix::EvalState &         state,
 
 const nix::StorePath
 createEnvironmentStorePath(
-  nix::EvalState &           state,
-  flox::buildenv::Packages & pkgs,
-  nix::StorePathSet &        references,
+  nix::EvalState &                       state,
+  std::vector<flox::buildenv::Package> & pkgs,
+  nix::StorePathSet &                    references,
   std::map<StorePath, std::pair<std::string, resolver::LockedPackageRaw>> &
     originalPackage )
 {
@@ -213,9 +213,9 @@ createFloxEnv( EvalState &          state,
 
   /* extract derivations */
 
-  StorePathSet                      references;
-  std::vector<StorePathWithOutputs> drvsToBuild;
-  flox::buildenv::Packages          pkgs;
+  StorePathSet                         references;
+  std::vector<StorePathWithOutputs>    drvsToBuild;
+  std::vector<flox::buildenv::Package> pkgs;
   std::map<StorePath, std::pair<std::string, resolver::LockedPackageRaw>>
     originalPackage;
 

@@ -7,16 +7,16 @@
 
 #pragma once
 
+#include <functional>
 #include <map>
 #include <string>
-#include <functional>
 
-#include <nix/store-api.hh>
 #include <nix/builtins/buildenv.hh>
 #include <nix/eval.hh>
+#include <nix/store-api.hh>
 
+#include "flox/env-builder/buildenv.hh"
 #include <flox/resolver/lockfile.hh>
-#include "flox/buildenv.hh"
 
 
 /* -------------------------------------------------------------------------- */
@@ -43,9 +43,9 @@ createFloxEnv( nix::EvalState &     state,
 
 const nix::StorePath &
 createEnvironmentStorePath(
-  flox::buildenv::Packages & pkgs,
-  nix::EvalState &           state,
-  nix::StorePathSet &        references,
+  std::vector<flox::buildenv::Package> & pkgs,
+  nix::EvalState &                       state,
+  nix::StorePathSet &                    references,
   std::map<nix::StorePath, std::pair<std::string, resolver::LockedPackageRaw>> &
     originalPackage );
 
