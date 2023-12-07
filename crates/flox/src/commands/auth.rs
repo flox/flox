@@ -105,7 +105,7 @@ fn calculate_expiry(expires_in: i64) -> String {
 
 /// floxHub authentication commands
 #[derive(Clone, Debug, Bpaf)]
-pub enum Auth2 {
+pub enum Auth {
     /// Login to floxhub (requires an existing github account)
     #[bpaf(command)]
     Login,
@@ -119,14 +119,14 @@ pub enum Auth2 {
     User,
 }
 
-impl Auth2 {
+impl Auth {
     pub async fn handle(self, config: Config, flox: Flox) -> Result<()> {
         subcommand_metric!("auth2");
 
         let client = create_oauth_client()?;
 
         match self {
-            Auth2::Login => {
+            Auth::Login => {
                 let cred = authorize(client)
                     .await
                     .context("Could not authorize via oauth")?;
@@ -146,7 +146,7 @@ impl Auth2 {
 
                 Ok(())
             },
-            Auth2::Logout => {
+            Auth::Logout => {
                 if config.flox.floxhub_token.is_none() {
                     info!("You are not logged in");
                     return Ok(());
@@ -159,7 +159,7 @@ impl Auth2 {
 
                 Ok(())
             },
-            Auth2::User => {
+            Auth::User => {
                 let token = config.flox.floxhub_token.context("You are not logged in")?;
 
                 let user = Auth0Client::new(env!("OAUTH_BASE_URL").to_string(), token)
