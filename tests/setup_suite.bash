@@ -36,7 +36,7 @@ repo_root_setup() {
 tests_dir_setup() {
   if [[ -n "${__FT_RAN_TESTS_DIR_SETUP:-}" ]]; then return 0; fi
   repo_root_setup;
-  if [[ -z "${TEST_DIR:-}" ]]; then
+  if [[ -z "${TESTS_DIR:-}" ]]; then
     case "${BATS_TEST_DIRNAME:-}" in
       */tests) TESTS_DIR="$( readlink -f "$BATS_TEST_DIRNAME"; )"; ;;
       *)       TESTS_DIR="$REPO_ROOT/tests";                       ;;
