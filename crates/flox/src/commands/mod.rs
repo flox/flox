@@ -419,14 +419,6 @@ impl Version {
     }
 }
 
-pub fn not_help(s: String) -> Option<String> {
-    if s == "--help" || s == "-h" {
-        None
-    } else {
-        Some(s)
-    }
-}
-
 #[derive(Debug, Default, Bpaf, Clone)]
 pub enum EnvironmentSelect {
     Dir(

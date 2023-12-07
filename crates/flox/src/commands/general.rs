@@ -11,7 +11,6 @@ use serde::Serialize;
 use tokio::fs;
 use toml_edit::Key;
 
-use crate::commands::not_help;
 use crate::config::{Config, ReadWriteError, FLOX_CONFIG_FILE};
 use crate::subcommand_metric;
 use crate::utils::metrics::{
