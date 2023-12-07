@@ -101,7 +101,7 @@ teardown() {
 ✨ created environment test ($NIX_SYSTEM)
 
 Search and install packages with \`flox search <packagename>\` and \`flox install <packagename>\`
-Enter the environment with `flox activate`
+Enter the environment with \`flox activate\`
 EOF
 
 }
