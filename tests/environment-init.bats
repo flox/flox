@@ -100,7 +100,7 @@ teardown() {
   assert_output - <<EOF
 ✨ created environment test ($NIX_SYSTEM)
 
-Search and install packages with `flox search <packagename>` and `flox install <packagename>`
+Search and install packages with \`flox search <packagename>\` and \`flox install <packagename>\`
 Enter the environment with `flox activate`
 EOF
 
