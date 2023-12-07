@@ -95,7 +95,7 @@ expect {
       exit 1
     }
 }
-set timeout 10
+set timeout 30
 send "python3 -m venv env\n"
 expect {
     -re "flox .*\\\[project-\\d+\\\]" {}
@@ -106,7 +106,6 @@ expect {
 }
 
 # create python virtualenv
-set timeout 30
 send "./env/bin/pip install requests\n"
 expect {
     -re "Collecting requests" {}
