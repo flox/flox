@@ -226,11 +226,10 @@ impl GitCommandProvider {
     }
 
     /// Check if repo is bare. This will error if not in a git repo.
-    fn is_bare(
-        options: &GitCommandOptions,
+    fn is_bare_repo(
         path: impl AsRef<Path>,
     ) -> Result<bool, GitCommandOpenError> {
-        let mut command = options.new_command();
+        let mut command = GitCommandOptions::default().new_command();
         command
             .args(["-C", path.as_ref().to_str().unwrap()])
             .arg("rev-parse")

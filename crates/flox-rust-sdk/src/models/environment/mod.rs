@@ -582,15 +582,11 @@ pub fn find_dot_flox(
         };
 
     // We already checked the immediate child.
-    let parent = match path.parent() {
-        None => return Ok(None),
-        Some(parent) => parent,
-    };
-
-    for ancestor in parent.ancestors() {
+    for ancestor in parent.ancestors().skip(1) {
         // If we're above the git repo, return None.
         // ancestor and toplevel have both been canonicalized.
         if !ancestor.starts_with(&toplevel) {
+            debug!("git boundary reached: path={}", ancestor.display());
             return Ok(None);
         }
         let tentative_dot_flox = ancestor.join(DOT_FLOX);
