@@ -49,7 +49,17 @@ jobs:
             echo "experimental-features = nix-command flakes";
           } | sudo tee -a /etc/nix/nix.conf >/dev/null
 
-      - name: "Run Build"
+      - name: "Run Build pkgdb"
+        run: |
+          pushd ./pkgdb
+          nix develop -L \
+            --accept-flake-config \
+            --no-update-lock-file \
+            '.#default' \
+              --command make
+          popd
+
+      - name: "Run Build env-builder"
         run: |
           pushd ./env-builder
           nix develop -L \
@@ -114,7 +124,7 @@ jobs:
             --accept-flake-config \
             --no-update-lock-file \
             '.#default' \
-              --command make -j4
+              --command make
           popd
 
       - name: "Build Tests"

@@ -2,6 +2,7 @@
   stdenv,
   lib,
   argparse,
+  doxygen,
   bear,
   boost,
   ccls,
@@ -134,6 +135,11 @@ in
           nix
           semver
           ;
+
+        ciPackages = [
+          # For docs
+          doxygen
+        ];
 
         devPackages =
           [

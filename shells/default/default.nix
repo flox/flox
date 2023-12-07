@@ -16,32 +16,36 @@
   ci ? false,
 }: let
   # For use in GitHub Actions and local development.
-  ciPackages = [
-    (flox-pkgdb-tests.override {
-      PROJECT_TESTS_DIR = "/pkgdb/tests";
-      PKGDB_BIN = null;
-      PKGDB_IS_SQLITE3_BIN = null;
-      PKGDB_SEARCH_PARAMS_BIN = null;
-    })
-    (flox-env-builder-tests.override {
-      PROJECT_TESTS_DIR = "/env-builder/tests";
-      PKGDB_BIN = null;
-      ENV_BUILDER_BIN = null;
-    })
-    (flox-tests.override {
-      PROJECT_TESTS_DIR = "/tests";
-      PKGDB_BIN = null;
-      ENV_BUILDER_BIN = null;
-      FLOX_BIN = null;
-    })
-    (flox-tests.override {
-      PROJECT_NAME = "flox-tests-end2end";
-      PROJECT_TESTS_DIR = "/tests";
-      PKGDB_BIN = null;
-      ENV_BUILDER_BIN = null;
-      FLOX_BIN = null;
-    })
-  ];
+  ciPackages =
+    flox-pkgdb.ciPackages
+    ++ flox-env-builder.ciPackages
+    ++ flox.ciPackages
+    ++ [
+      (flox-pkgdb-tests.override {
+        PROJECT_TESTS_DIR = "/pkgdb/tests";
+        PKGDB_BIN = null;
+        PKGDB_IS_SQLITE3_BIN = null;
+        PKGDB_SEARCH_PARAMS_BIN = null;
+      })
+      (flox-env-builder-tests.override {
+        PROJECT_TESTS_DIR = "/env-builder/tests";
+        PKGDB_BIN = null;
+        ENV_BUILDER_BIN = null;
+      })
+      (flox-tests.override {
+        PROJECT_TESTS_DIR = "/tests";
+        PKGDB_BIN = null;
+        ENV_BUILDER_BIN = null;
+        FLOX_BIN = null;
+      })
+      (flox-tests.override {
+        PROJECT_NAME = "flox-tests-end2end";
+        PROJECT_TESTS_DIR = "/tests";
+        PKGDB_BIN = null;
+        ENV_BUILDER_BIN = null;
+        FLOX_BIN = null;
+      })
+    ];
 
   devPackages =
     flox-pkgdb.devPackages
@@ -64,7 +68,7 @@ in
         flox
       ];
 
-      packages = ciPackages ++ lib.optionals ci devPackages;
+      packages = ciPackages ++ lib.optionals (!ci) devPackages;
 
       shellHook =
         flox-pkgdb.devShellHook

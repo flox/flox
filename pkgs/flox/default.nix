@@ -211,6 +211,9 @@ in
           flox-env-builder
           ;
 
+        ciPackages = [
+        ];
+
         devPackages = [
           rustfmt
           clippy

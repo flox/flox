@@ -2,6 +2,7 @@
   self,
   stdenv,
   sqlite,
+  doxygen,
   pkg-config,
   nlohmann_json,
   boost,
@@ -80,6 +81,11 @@ in
           envs
           flox-pkgdb
           ;
+
+        ciPackages = [
+          # For docs
+          doxygen
+        ];
 
         devPackages = [
         ];
