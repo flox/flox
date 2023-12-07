@@ -1,7 +1,10 @@
 ---
 name: Bug report
-about: Sometimes things aren't working. Help us identify those things so we can fix them!
+about: Sometimes things aren't working. Help us identify those things so we can fix
+  them!
+title: ''
 labels: bug
+assignees: ''
 
 ---
 
@@ -18,3 +21,5 @@ Expected:
 
 
 **Screenshots/terminal output (if relevant):**
+
+** Flox Version: (run `flox --version` if able) **
