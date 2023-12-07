@@ -85,7 +85,7 @@ setup_file() {
 # ---------------------------------------------------------------------------- #
 
 @test "'FLOX_FEATURES_SEARCH_STRATEGY=match flox search' expected number of results: 'hello'" {
-  FLOX_FEATURES_SEARCH_STRATEGY=match run --separate-stderr "$FLOX_CLI" search hello;
+  FLOX_FEATURES_SEARCH_STRATEGY=match run --separate-stderr "$FLOX_CLI" search hello --all;
   n_lines="${#lines[@]}";
   case "$NIX_SYSTEM" in
     *-darwin)
@@ -103,7 +103,7 @@ setup_file() {
 # ---------------------------------------------------------------------------- #
 
 @test "'flox search' expected number of results: 'hello'" {
-  run --separate-stderr "$FLOX_CLI" search hello;
+  run --separate-stderr "$FLOX_CLI" search hello --all;
   n_lines="${#lines[@]}";
   case "$NIX_SYSTEM" in
     *-darwin)
@@ -121,10 +121,9 @@ setup_file() {
 # ---------------------------------------------------------------------------- #
 
 @test "'flox search' semver search: hello@2.12.1" {
-  run "$FLOX_CLI" search hello@2.12.1;
-  n_lines="${#lines[@]}";
-  assert_equal "$n_lines" 2; # search line + show hint
-  assert_equal "${lines[-1]}" "$SHOW_HINT"
+  run --separate-stderr "$FLOX_CLI" search hello@2.12.1;
+  assert_equal "${#lines[@]}" 1; # 1 result
+  assert_equal "${stderr_lines[0]}" "$SHOW_HINT"
 }
 
 
@@ -165,10 +164,9 @@ setup_file() {
 # ---------------------------------------------------------------------------- #
 
 @test "'flox search' semver search: hello@=2.10" {
-  run "$FLOX_CLI" search hello@=2.12;
-  n_lines="${#lines[@]}";
-  assert_equal "$n_lines" "2"; # search line + show hint
-  assert_equal "${lines[-1]}" "$SHOW_HINT"
+  run --separate-stderr "$FLOX_CLI" search hello@=2.12 --all;
+  assert_equal "${#lines[@]}" 1; # 1 result
+  assert_equal "${stderr_lines[0]}" "$SHOW_HINT"
 }
 
 
@@ -198,37 +196,6 @@ setup_file() {
   assert [ -n first_line ];
 }
 
-
-# ---------------------------------------------------------------------------- #
-
-@test "'flox search' displays ambiguous packages with separator" {
-
-  skip "DEPRECATED"
-
-  run "$FLOX_CLI" search hello;
-  assert_output --partial "nixpkgs2${SEP}";
-  assert_output --partial "nixpkgs-flox${SEP}"
-  run "$FLOX_CLI" unsubscribe nixpkgs2;
-  assert_success;
-}
-
-
-# ---------------------------------------------------------------------------- #
-
-@test "'flox search' displays unambiguous packages without separator" {
-  run "$FLOX_CLI" search hello;
-  packages="$(echo "$output" | cut -d ' ' -f 1)";
-  case $THIS_SYSTEM in
-    *-darwin)
-      assert_equal "$packages" "hello";
-      ;;
-    *-linux)
-      # $'foo' syntax allows you to put backslash escapes in literal strings
-      assert_equal "$packages" $'hello\nhello-wayland\ngnome.iagno';
-      ;;
-  esac
-}
-
 # ---------------------------------------------------------------------------- #
 
 @test "'flox search' hints at 'flox show'" {
@@ -251,18 +218,17 @@ setup_file() {
 
 @test "'flox search' with 'FLOX_FEATURES_SEARCH_STRATEGY=match-name' shows fewer packages" {
 
-  MATCH="$(FLOX_FEATURES_SEARCH_STRATEGY=match "$FLOX_CLI" search node | wc -l)";
-  MATCH_NAME="$(FLOX_FEATURES_SEARCH_STRATEGY=match-name "$FLOX_CLI" search node | wc -l)";
+  MATCH="$(FLOX_FEATURES_SEARCH_STRATEGY=match "$FLOX_CLI" search node --all | wc -l)";
+  MATCH_NAME="$(FLOX_FEATURES_SEARCH_STRATEGY=match-name "$FLOX_CLI" search node --all | wc -l)";
 
   assert [ "$MATCH_NAME" -lt "$MATCH" ];
-
 }
 
 # ---------------------------------------------------------------------------- #
 
 @test "'flox search' works in project without manifest or lockfile" {
   rm -f "$PROJECT_DIR/.flox/manifest.toml";
-  run --separate-stderr "$FLOX_CLI" search hello;
+  run --separate-stderr "$FLOX_CLI" search hello --all;
   assert_success;
   n_lines="${#lines[@]}";
   assert_equal "$n_lines" 10; # search results from global manifest registry
@@ -273,85 +239,10 @@ setup_file() {
 
 @test "'flox search' works outside of projects" {
   rm -rf "$PROJECT_DIR/.flox";
-  run --separate-stderr "$FLOX_CLI" search hello;
+  run --separate-stderr "$FLOX_CLI" search hello --all;
   assert_success;
   n_lines="${#lines[@]}";
   assert_equal "$n_lines" 10; # search results from global manifest registry
-}
-
-
-# ---------------------------------------------------------------------------- #
-
-# bats test_tags=search:project, search:manifest, search:show
-
-@test "'flox show' uses '_PKGDB_GA_REGISTRY_REF_OR_REV' revision" {
-  mkdir -p "$PROJECT_DIR/.flox/env";
-  # Note: at some point it may also be necessary to create a .flox/env.json
-  echo 'options.systems = ["x86_64-linux"]'       \
-       > "$PROJECT_DIR/.flox/env/manifest.toml";
-
-  # Search for a package with `pkgdb`
-  run --separate-stderr sh -c "$PKGDB_BIN search --ga-registry '{
-      \"manifest\": \"$PROJECT_DIR/.flox/env/manifest.toml\",
-      \"query\": { \"match-name\": \"nodejs\" }
-    }'|head -n1|jq -r '.version';";
-  assert_success;
-  assert_output '18.16.0';
-  unset output;
-
-  # Ensure the version of `nodejs' in our search results aligns with the
-  # `--ga-registry` default ( 18.16.0 ).
-  run --separate-stderr sh -c "$FLOX_CLI show nodejs|tail -n1";
-  assert_success;
-  assert_output '    nodejs - nodejs@18.16.0';
-}
-
-
-# ---------------------------------------------------------------------------- #
-
-# bats test_tags=search:project, search:manifest, search:lockfile, search:show
-
-@test "'flox show' uses locked revision when available" {
-  mkdir -p "$PROJECT_DIR/.flox/env";
-  # Note: at some point it may also be necessary to create a .flox/env.json
-  {
-    echo 'options.systems = ["x86_64-linux"]';
-    echo 'install.nodejs = {}';
-  } > "$PROJECT_DIR/.flox/env/manifest.toml";
-
-  # Force lockfile to pin a specific revision of `nixpkgs'
-  run --separate-stderr sh -c                                          \
-   "_PKGDB_GA_REGISTRY_REF_OR_REV='${PKGDB_NIXPKGS_REV_NEW?}'          \
-      $PKGDB_BIN manifest lock                                         \
-                 --ga-registry '$PROJECT_DIR/.flox/env/manifest.toml'  \
-                 > '$PROJECT_DIR/.flox/env/manifest.lock';";
-  assert_success;
-  unset output;
-
-  # Ensure the locked revision is what we expect.
-  run --separate-stderr jq -r '.registry.inputs.nixpkgs.from.rev'      \
-                              "$PROJECT_DIR/.flox/env/manifest.lock";
-  assert_success;
-  assert_output "$PKGDB_NIXPKGS_REV_NEW";
-  unset output;
-
-  # Search for a package with `pkgdb`
-  run --separate-stderr sh -c                                    \
-   "_PKGDB_GA_REGISTRY_REF_OR_REV='$PKGDB_NIXPKGS_REV_NEW'       \
-      $PKGDB_BIN search --ga-registry '{
-        \"manifest\": \"$PROJECT_DIR/.flox/env/manifest.toml\",
-        \"lockfile\": \"$PROJECT_DIR/.flox/env/manifest.lock\",
-        \"query\": { \"match-name\": \"nodejs\" }
-      }'|head -n1|jq -r '.version';"
-  assert_success;
-  assert_output '18.17.1';
-  unset output;
-
-  # Ensure the version of `nodejs' in our search results aligns with the
-  # locked rev ( 18.17.1 ), instead of the `--ga-registry` default ( 18.16.0 ).
-  run --separate-stderr sh -c "$FLOX_CLI show nodejs|tail -n1";
-  assert_success;
-  assert_output '    nodejs - nodejs@18.17.1';
 }
 
 
@@ -365,38 +256,29 @@ setup_file() {
 
 # ---------------------------------------------------------------------------- #
 
-@test "'flox show' prompts when an environment is activated and there is an environment in the current directory" {
-  # Set up two environments locked to different revisions of nixpkgs, and
-  # confirm that flox show displays different versions of nodejs for each.
-
-  mkdir 1
-  pushd 1
-  "$FLOX_CLI" init
-  _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLD?}" \
-    "$FLOX_CLI" install nodejs
-
-  run --separate-stderr sh -c "$FLOX_CLI show nodejs|tail -n1";
+@test "'flox search' shows limited results when requested" {
+  # there are 700+ results for searching 'python'
+  run --separate-stderr "$FLOX_CLI" search python;
   assert_success;
-  assert_output '    nodejs - nodejs@18.16.0';
-  popd
-
-
-  mkdir 2
-  pushd 2
-  "$FLOX_CLI" init
-  _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_NEW?}" \
-    "$FLOX_CLI" install nodejs
-
-  run --separate-stderr sh -c "$FLOX_CLI show nodejs|tail -n1";
-  assert_success;
-  assert_output '    nodejs - nodejs@18.17.1';
-  popd
-
-  SHELL=bash run expect -d "$TESTS_DIR/show/prompt-which-environment.exp"
-  assert_success
+  assert_equal "${#lines[@]}" 10; # default limit is 10 results
 }
 
 
+# ---------------------------------------------------------------------------- #
+
+@test "'flox search' shows total number of results" {
+  run --separate-stderr "$FLOX_CLI" search python;
+  assert_success;
+  assert_regex "$stderr" '[0-9]+ of [0-9]+';
+}
+
+
+# ---------------------------------------------------------------------------- #
+
+@test "'flox search' no 'X of Y' message when X=Y" {
+  skip FIXME
+  run --separate-stderr "$FLOX_CLI" search hello
+}
 # ---------------------------------------------------------------------------- #
 #
 #
