@@ -2,9 +2,9 @@ use std::env;
 use std::fmt::{Debug, Display};
 use std::process::ExitCode;
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result};
 use bpaf::{Args, Parser};
-use commands::{FloxArgs, Prefix, Version};
+use commands::{FloxArgs, FloxCli, Prefix, Version};
 use flox_rust_sdk::models::environment::init_global_manifest;
 use log::{error, warn};
 use utils::init::init_logger;
@@ -62,9 +62,7 @@ async fn main() -> ExitCode {
     // to work with the shell completion frontends
     //
     // Pass through Stdout failure; This represents `--help`
-    let args = commands::flox_args()
-        .to_options()
-        .run_inner(Args::current_args());
+    let args = commands::flox_cli().run_inner(Args::current_args());
 
     if let Some(parse_err) = args.as_ref().err() {
         match parse_err {
@@ -84,7 +82,7 @@ async fn main() -> ExitCode {
     }
 
     // Errors handled above
-    let args = args.unwrap();
+    let FloxCli(args) = args.unwrap();
 
     // Run flox. Print errors and exit with status 1 on failure
     let exit_code = match run(args).await {
@@ -95,7 +93,12 @@ async fn main() -> ExitCode {
                 return e.downcast_ref::<FloxShellErrorCode>().unwrap().0;
             }
 
-            error!("{:?}", anyhow!(e));
+            let err_str = e
+                .chain()
+                .skip(1)
+                .fold(e.to_string(), |acc, cause| format!("{}: {}", acc, cause));
+
+            error!("{err_str}");
 
             ExitCode::from(1)
         },

@@ -21,6 +21,7 @@ use flox_rust_sdk::models::environment::{
     EnvironmentPointer,
     ManagedPointer,
     PathPointer,
+    UninitializedEnvironment,
     DOT_FLOX,
     ENVIRONMENT_POINTER_FILENAME,
     FLOX_ACTIVE_ENVIRONMENTS_VAR,
@@ -228,7 +229,10 @@ pub struct Delete {
 impl Delete {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("delete");
-        match self.environment.detect_concrete_environment(&flox, "delete")? {
+        match self
+            .environment
+            .detect_concrete_environment(&flox, "delete")?
+        {
             ConcreteEnvironment::Path(environment) => environment.delete()?,
             ConcreteEnvironment::Managed(environment) => environment.delete()?,
             ConcreteEnvironment::Remote(environment) => environment.delete()?,
@@ -460,8 +464,7 @@ fn environment_description(environment: &ConcreteEnvironment) -> Result<String, 
             format!(
                 "{}/{} at {}",
                 environment.owner(),
-                "<TODO: name>",
-                // environment.name(),
+                environment.name(),
                 environment.path.to_string_lossy()
             )
         },
@@ -479,24 +482,24 @@ fn environment_description(environment: &ConcreteEnvironment) -> Result<String, 
 /// Generate a description for an environment that has not yet been opened.
 ///
 /// TODO: we should share this implementation with environment_description().
-/// We probably need an UnopenedEnvironment or LightweightEnvironment or
-/// EnvironmentDescriptor that represents a partially opened environment.
 pub fn hacky_environment_description(
-    path: &Path,
-    pointer: &EnvironmentPointer,
+    uninitialized: &UninitializedEnvironment,
 ) -> Result<String, EnvironmentError2> {
-    Ok(match pointer {
+    Ok(match &uninitialized.pointer {
         EnvironmentPointer::Managed(managed_pointer) => {
             format!(
                 "{}/{} at {}",
                 managed_pointer.owner,
-                "<TODO: name>",
-                // environment.name(),
-                path.to_string_lossy(),
+                managed_pointer.name,
+                uninitialized.path.to_string_lossy(),
             )
         },
         EnvironmentPointer::Path(path_pointer) => {
-            format!("{} at {}", path_pointer.name, path.to_string_lossy())
+            format!(
+                "{} at {}",
+                path_pointer.name,
+                uninitialized.path.to_string_lossy()
+            )
         },
     })
 }
@@ -524,7 +527,9 @@ impl Install {
             self.packages.as_slice().join(", "),
             self.environment
         );
-        let concrete_environment = self.environment.detect_concrete_environment(&flox, "install to")?;
+        let concrete_environment = self
+            .environment
+            .detect_concrete_environment(&flox, "install to")?;
         let description = environment_description(&concrete_environment)?;
         let mut environment = concrete_environment.into_dyn_environment();
         let installation = environment.install(self.packages.clone(), &flox).await?;
@@ -563,7 +568,9 @@ impl Uninstall {
             self.packages.as_slice().join(", "),
             self.environment
         );
-        let concrete_environment = self.environment.detect_concrete_environment(&flox, "uninstall from")?;
+        let concrete_environment = self
+            .environment
+            .detect_concrete_environment(&flox, "uninstall from")?;
         let description = environment_description(&concrete_environment)?;
         let mut environment = concrete_environment.into_dyn_environment();
         let _ = environment.uninstall(self.packages.clone(), &flox).await?;

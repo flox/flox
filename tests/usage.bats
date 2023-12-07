@@ -43,31 +43,33 @@ EOF
 
 @test "f2: command grouping changes 1: 'Local Development Commands' listed in order" {
     run --separate-stderr "$FLOX_CLI" --help;
-    assert_line -n 1 --regexp '^Local Development Commands';
-    assert_line -n 2 --regexp '^    init[ ]+[\w .,]+';
-    assert_line -n 3 --regexp '^    activate[ ]+[\w .,]+';
-    assert_line -n 4 --regexp '^    search[ ]+[\w .,]+';
-    assert_line -n 5 --regexp '^    show[ ]+[\w .,]+';
-    assert_line -n 6 --regexp '^    install[ ]+[\w .,]+';
-    assert_line -n 7 --regexp '^    uninstall[ ]+[\w .,]+';
-    assert_line -n 8 --regexp '^    edit[ ]+[\w .,]+';
-    assert_line -n 9 --regexp '^    list[ ]+[\w .,]+';
-    assert_line -n 10 --regexp '^    delete[ ]+[\w .,]+';
+    line=4;
+    assert_line -n "$line" --regexp '^Local Development Commands'; line=$((line+1));
+    assert_line -n "$line" --regexp '^    init[ ]+[\w .,]+'; line=$((line+1));
+    assert_line -n "$line" --regexp '^    activate[ ]+[\w .,]+'; line=$((line+1));
+    assert_line -n "$line" --regexp '^    search[ ]+[\w .,]+'; line=$((line+1));
+    assert_line -n "$line" --regexp '^    show[ ]+[\w .,]+'; line=$((line+1));
+    assert_line -n "$line" --regexp '^    install[ ]+[\w .,]+'; line=$((line+1));
+    assert_line -n "$line" --regexp '^    uninstall[ ]+[\w .,]+'; line=$((line+1));
+    assert_line -n "$line" --regexp '^    edit[ ]+[\w .,]+'; line=$((line+1));
+    assert_line -n "$line" --regexp '^    list[ ]+[\w .,]+'; line=$((line+1));
+    assert_line -n "$line" --regexp '^    delete[ ]+[\w .,]+';
 }
 
 @test "f3: command grouping changes 2: 'Sharing Commands' listed in order" {
     run "$FLOX_CLI" --help
-    assert_line -n 11 --regexp '^Sharing Commands';
-    assert_line -n 12 --regexp '^    push[ ]+[\w .,]+';
-    assert_line -n 13 --regexp '^    pull[ ]+[\w .,]+';
-    assert_line -n 14 --regexp '^    containerize[ ]+[\w .,]+';
+    line=14;
+    assert_line -n "$line" --regexp '^Sharing Commands'; line=$((line+1));
+    assert_line -n "$line" --regexp '^    push[ ]+[\w .,]+'; line=$((line+1));
+    assert_line -n "$line" --regexp '^    pull[ ]+[\w .,]+'; line=$((line+1));
+    assert_line -n "$line" --regexp '^    containerize[ ]+[\w .,]+';
 }
 
 @test "f5: command grouping changes 3: move lesser used or not polished commands to 'Additional Commands' section with help tip." {
     run "$FLOX_CLI" --help
     assert_output --partial - << EOF
 Additional Commands. Use "flox COMMAND --help" for more info
-    upgrade, config, wipe-history, history
+    upgrade, config, wipe-history, history, auth
 EOF
 }
 

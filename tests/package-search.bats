@@ -356,6 +356,48 @@ setup_file() {
 
 
 # ---------------------------------------------------------------------------- #
+
+@test "'flox search' accepts '--all' flag" {
+  run "$FLOX_CLI" search --all hello;
+  assert_success;
+}
+
+
+# ---------------------------------------------------------------------------- #
+
+@test "'flox search' prompts when an environment is activated and there is an environment in the current directory" {
+  # Set up two environments locked to different revisions of nixpkgs, and
+  # confirm that flox show displays different versions of nodejs for each.
+  
+  mkdir 1
+  pushd 1
+  "$FLOX_CLI" init
+  _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLD?}" \
+    "$FLOX_CLI" --debug install nodejs
+
+  run --separate-stderr sh -c "$FLOX_CLI show nodejs|tail -n1";
+  assert_success;
+  assert_output '    nodejs - nodejs@18.16.0';
+  popd
+  
+
+  mkdir 2
+  pushd 2
+  "$FLOX_CLI" init
+  _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_NEW?}" \
+    "$FLOX_CLI" install nodejs
+  
+  run --separate-stderr sh -c "$FLOX_CLI show nodejs|tail -n1";
+  assert_success;
+  assert_output '    nodejs - nodejs@18.17.1';
+  popd
+
+  SHELL=bash run expect -d "$TESTS_DIR/show/prompt-which-environment.exp"
+  assert_success
+}
+
+
+# ---------------------------------------------------------------------------- #
 #
 #
 #

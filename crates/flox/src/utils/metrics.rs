@@ -201,11 +201,11 @@ async fn push_metrics(metrics: Vec<MetricEntry>, uuid: Uuid) -> Result<()> {
         .collect::<Result<Vec<serde_json::Value>>>()?;
 
     reqwest::Client::new()
-        .post(METRICS_EVENTS_URL)
-        .json(&json!({
-            "api_key": METRICS_EVENTS_API_KEY,
-            "batch": events,
-        }))
+        .put(METRICS_EVENTS_URL)
+        .header("content-type", "application/json")
+        .header("x-api-key", METRICS_EVENTS_API_KEY)
+        .header("user-agent", format!("flox-cli/{}", FLOX_VERSION))
+        .json(&events)
         .send()
         .await?;
 
