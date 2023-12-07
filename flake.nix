@@ -128,8 +128,7 @@
       flox-env-builder-tests = callPackage ./pkgs/flox-env-builder-tests {};
       flox-tests = callPackage ./pkgs/flox-tests {};
       flox-tests-end2end = final.flox-tests.override {
-        name = "flox-tests-end2end";
-        testsDir = "/tests/end2end";
+        PROJECT_NAME = "flox-tests-end2end";
       };
 
       rustfmt = prev.rustfmt.override {asNightly = true;};

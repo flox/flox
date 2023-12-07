@@ -223,6 +223,22 @@ jobs:
             '.#default' \
               --command cargo test --locked --workspace -F extra-tests;
 
+      - name: "Bats Test (flox-tests)"
+        run: |
+          nix develop -L \
+            --accept-flake-config \
+            --no-update-lock-file \
+            '.#default' \
+              --command flox-tests
+
+      - name: "Bats Test (flox-tests-end2end)"
+        run: |
+          nix develop -L \
+            --accept-flake-config \
+            --no-update-lock-file \
+            '.#default' \
+              --command flox-tests-end2end
+
   env-builder-nix-build:
     name: "EnvBuilder Bats Tests"
     runs-on: "ubuntu-latest"
