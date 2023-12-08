@@ -98,10 +98,12 @@ teardown() {
   assert_success
 
   assert_output - <<EOF
-✨ created environment test ($NIX_SYSTEM)
+✨ Created environment test ($NIX_SYSTEM)
 
-Search and install packages with \`flox search <packagename>\` and \`flox install <packagename>\`
-Enter the environment with \`flox activate\`
+Next:
+  $ flox search <package>    <- Search for a package
+  $ flox install <package>   <- Install a package into environment
+  $ flox activate            <- Enter the environment
 EOF
 
 }

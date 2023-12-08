@@ -428,7 +428,6 @@ impl Init {
               $ flox search <package>    <- Search for a package
               $ flox install <package>   <- Install a package into environment
               $ flox activate            <- Enter the environment
-            
             "},
             name = env.name(),
             system = flox.system
