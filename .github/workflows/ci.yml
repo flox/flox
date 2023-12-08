@@ -14,72 +14,7 @@ concurrency:
 
 jobs:
 
-  env-builder-tests:
-    name: "EnvBuilder Tests"
-    runs-on: ${{ matrix.os }}
-
-    strategy:
-      fail-fast: false
-      matrix:
-        os:
-          - "ubuntu-22.04-8core"
-          - "macos-latest-xl"
-
-    steps:
-      - name: "Checkout"
-        uses: "actions/checkout@v3"
-
-      - name: "Install newer Nix"
-        uses: "cachix/install-nix-action@v24"
-
-      - name: "Install flox"
-        uses: "flox/install-flox-action@main"
-        with:
-          github-access-token:    "${{ secrets.NIX_GIT_TOKEN }}"
-          substituter:            "s3://flox-store-public"
-          substituter-key:        "${{ secrets.FLOX_STORE_PUBLIC_NIX_SECRET_KEY }}"
-          aws-access-key-id:      "${{ secrets.AWS_ACCESS_KEY_ID }}"
-          aws-secret-access-key:  "${{ secrets.AWS_SECRET_ACCESS_KEY }}"
-          ssh-key:                "${{ secrets.FLOXBOT_SSH_KEY }}"
-
-      - name: "Configure Nix"
-        run: |
-          sudo echo 
-          {
-            echo "experimental-features = nix-command flakes";
-          } | sudo tee -a /etc/nix/nix.conf >/dev/null
-
-      - name: "Build (pkgdb)"
-        run: |
-          pushd ./pkgdb
-          nix develop -L \
-            --accept-flake-config \
-            --no-update-lock-file \
-            '.#default' \
-              --command make
-          popd
-
-      - name: "Build (env-builder)"
-        run: |
-          pushd ./env-builder
-          nix develop -L \
-            --accept-flake-config \
-            --no-update-lock-file \
-            '.#default' \
-              --command make
-          popd
-
-      - name: "Test (env-builder)"
-        run: |
-          pushd ./env-builder
-          nix develop -L \
-            --accept-flake-config \
-            --no-update-lock-file \
-            '.#default' \
-              --command make test
-          popd
-
-  pkgdb-tests:
+  pkgdb-dev:
     name: "Pkgdb Tests"
     runs-on: ${{ matrix.os }}
 
@@ -169,7 +104,72 @@ jobs:
         id: "deployment"
         uses: "actions/deploy-pages@v2"
 
-  flox-cargo-test:
+  env-builder-dev:
+    name: "EnvBuilder Tests"
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - "ubuntu-22.04-8core"
+          - "macos-latest-xl"
+
+    steps:
+      - name: "Checkout"
+        uses: "actions/checkout@v3"
+
+      - name: "Install newer Nix"
+        uses: "cachix/install-nix-action@v24"
+
+      - name: "Install flox"
+        uses: "flox/install-flox-action@main"
+        with:
+          github-access-token:    "${{ secrets.NIX_GIT_TOKEN }}"
+          substituter:            "s3://flox-store-public"
+          substituter-key:        "${{ secrets.FLOX_STORE_PUBLIC_NIX_SECRET_KEY }}"
+          aws-access-key-id:      "${{ secrets.AWS_ACCESS_KEY_ID }}"
+          aws-secret-access-key:  "${{ secrets.AWS_SECRET_ACCESS_KEY }}"
+          ssh-key:                "${{ secrets.FLOXBOT_SSH_KEY }}"
+
+      - name: "Configure Nix"
+        run: |
+          sudo echo 
+          {
+            echo "experimental-features = nix-command flakes";
+          } | sudo tee -a /etc/nix/nix.conf >/dev/null
+
+      - name: "Build (pkgdb)"
+        run: |
+          pushd ./pkgdb
+          nix develop -L \
+            --accept-flake-config \
+            --no-update-lock-file \
+            '.#default' \
+              --command make
+          popd
+
+      - name: "Build (env-builder)"
+        run: |
+          pushd ./env-builder
+          nix develop -L \
+            --accept-flake-config \
+            --no-update-lock-file \
+            '.#default' \
+              --command make
+          popd
+
+      - name: "Test (env-builder)"
+        run: |
+          pushd ./env-builder
+          nix develop -L \
+            --accept-flake-config \
+            --no-update-lock-file \
+            '.#default' \
+              --command make test
+          popd
+
+  flox-cargo-dev:
     name: "Flox Cargo Tests"
     runs-on: ${{ matrix.os }}
 
@@ -236,16 +236,19 @@ jobs:
               --command make
           popd
 
-      - name: "Build (flox)"
+      - name: "Build (cli)"
         run: |
+          pushd ./cli
           nix develop -L \
             --accept-flake-config \
             --no-update-lock-file \
             '.#default' \
               --command cargo build
+          popd
 
       - name: "Test (flox)"
         run: |
+          pushd ./cli
           nix develop -L \
             --accept-flake-config \
             --no-update-lock-file \
@@ -261,6 +264,7 @@ jobs:
             --no-update-lock-file \
             '.#default' \
               --command flox-tests-end2end
+          popd
 
   env-builder-nix-build:
     name: "EnvBuilder Bats Tests"

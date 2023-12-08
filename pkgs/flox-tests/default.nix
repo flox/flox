@@ -15,7 +15,7 @@
   findutils,
   flox-pkgdb,
   flox-env-builder,
-  flox,
+  flox-cli,
   gawk,
   git,
   gnugrep,
@@ -32,11 +32,10 @@
   writeShellScriptBin,
   PROJECT_NAME ? "flox-tests",
   PROJECT_TESTS_DIR ? ./../../tests,
-  PROJECT_TESTS_SUBDIR ? "",
   NIX_BIN ? "${nix}/bin/nix",
   PKGDB_BIN ? "${flox-pkgdb}/bin/pkgdb",
   ENV_BUILDER_BIN ? "${flox-env-builder}/bin/flox-env-builder",
-  FLOX_BIN ? "${flox}/bin/flox",
+  FLOX_BIN ? "${flox-cli}/bin/flox",
 }: let
   batsWith = bats.withLibraries (p: [
     p.bats-assert
@@ -102,7 +101,7 @@ in
       fi
 
       PROJECT_TESTS_DIR="$PROJECT_ROOT_DIR$PROJECT_TESTS_DIR"
-      PROJECT_PATH="$PROJECT_ROOT_DIR/target/debug:$PROJECT_ROOT_DIR/pkgdb/bin:$PROJECT_ROOT_DIR/env-builder/bin:"
+      PROJECT_PATH="$PROJECT_ROOT_DIR/cli/target/debug:$PROJECT_ROOT_DIR/pkgdb/bin:$PROJECT_ROOT_DIR/env-builder/bin:"
     fi
     export PROJECT_TESTS_DIR
 
@@ -113,7 +112,7 @@ in
     # Copy PROJECT_TESTS_DIR to temporary directory
     WORKDIR=$(mktemp -d -t ${PROJECT_NAME}-XXXXXX)
     cp -RL $PROJECT_TESTS_DIR/* $WORKDIR
-    cd $WORKDIR${PROJECT_TESTS_SUBDIR}
+    cd $WORKDIR
 
     # Declare project specific dependencies
     ${
@@ -187,7 +186,7 @@ in
 
 
     # Default flag values
-    : "''${TESTS_DIR:=$WORKDIR${PROJECT_TESTS_SUBDIR}}";
+    : "''${TESTS_DIR:=$WORKDIR}";
     export TESTS_DIR;
 
     if [[ "''${#_FLOX_TESTS[@]}" -lt 1 ]]; then

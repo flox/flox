@@ -1,25 +1,25 @@
 {
+  alejandra,
+  commitizen,
+  hivemind,
+  just,
   lib,
   mkShell,
-  just,
-  hivemind,
-  commitizen,
-  alejandra,
   pre-commit-check,
-  flox,
-  flox-pkgdb,
+  flox-cli,
+  flox-cli-tests,
   flox-env-builder,
-  flox-tests,
-  flox-tests-end2end,
   flox-env-builder-tests,
+  flox-pkgdb,
   flox-pkgdb-tests,
+  flox-tests,
   ci ? false,
 }: let
   # For use in GitHub Actions and local development.
   ciPackages =
     flox-pkgdb.ciPackages
     ++ flox-env-builder.ciPackages
-    ++ flox.ciPackages
+    ++ flox-cli.ciPackages
     ++ [
       (flox-pkgdb-tests.override {
         PROJECT_TESTS_DIR = "/pkgdb/tests";
@@ -32,16 +32,14 @@
         PKGDB_BIN = null;
         ENV_BUILDER_BIN = null;
       })
-      (flox-tests.override {
-        PROJECT_TESTS_DIR = "/tests";
+      (flox-cli-tests.override {
+        PROJECT_TESTS_DIR = "/cli/tests";
         PKGDB_BIN = null;
         ENV_BUILDER_BIN = null;
         FLOX_BIN = null;
       })
-      (flox-tests-end2end.override {
-        PROJECT_NAME = "flox-tests-end2end";
-        PROJECT_TESTS_SUBDIR = "";
-        PROJECT_TESTS_DIR = "/tests/end2end";
+      (flox-tests.override {
+        PROJECT_TESTS_DIR = "/tests";
         PKGDB_BIN = null;
         ENV_BUILDER_BIN = null;
         FLOX_BIN = null;
@@ -51,7 +49,7 @@
   devPackages =
     flox-pkgdb.devPackages
     ++ flox-env-builder.devPackages
-    ++ flox.devPackages
+    ++ flox-cli.devPackages
     ++ [
       just
       hivemind
@@ -66,7 +64,7 @@ in
       inputsFrom = [
         flox-pkgdb
         flox-env-builder
-        flox
+        flox-cli
       ];
 
       packages = ciPackages ++ lib.optionals (!ci) devPackages;
@@ -74,10 +72,10 @@ in
       shellHook =
         flox-pkgdb.devShellHook
         + flox-env-builder.devShellHook
-        + flox.devShellHook
+        + flox-cli.devShellHook
         + pre-commit-check.shellHook;
     }
     // flox-pkgdb.devEnvs
     // flox-env-builder.devEnvs
-    // flox.devEnvs
+    // flox-cli.devEnvs
   )
