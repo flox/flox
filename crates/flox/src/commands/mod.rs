@@ -54,9 +54,9 @@ static FLOX_WELCOME_MESSAGE: Lazy<String> = Lazy::new(|| {
 
     Usage: flox OPTIONS (init|activate|search|install|...) [--help]
 
-    Use "flox --help" for full list of commands and more information
+    Use `flox --help` for full list of commands and more information
 
-    First time? Create an environment with "flox init"
+    First time? Create an environment with `flox init`
 "#}
 });
 
