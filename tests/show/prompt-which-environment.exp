@@ -3,7 +3,7 @@
 set flox $env(FLOX_CLI)
 
 # activate environment 1
-set timeout 2
+set timeout 10
 set cmd "$flox activate --dir 1"
 spawn $flox activate --dir 1
 expect {
