@@ -324,6 +324,8 @@ impl CoreEnvironment<ReadWrite> {
 
 #[cfg(test)]
 mod tests {
+    use std::os::unix::fs::PermissionsExt;
+
     use super::*;
     use crate::flox::tests::flox_instance;
     #[cfg(feature = "impure-unit-tests")]
@@ -383,14 +385,15 @@ mod tests {
         env_path_permissions.set_readonly(true);
 
         // force fail by setting dir readonly
-        fs::set_permissions(&env_path, env_path_permissions).unwrap();
+        fs::set_permissions(&env_path, env_path_permissions.clone()).unwrap();
 
         let mut env_view = CoreEnvironment::new(&env_path);
         let temp_env = env_view.writable(&sandbox_path).unwrap();
 
-        let err = env_view
-            .replace_with(temp_env)
-            .expect_err("Should fail to create backup");
+        let err = env_view.replace_with(temp_env).expect_err(&format!(
+            "Should fail to create backup: dir is readonly: {:o}",
+            env_path_permissions.mode()
+        ));
 
         assert!(
             matches!(err, EnvironmentError2::BackupTransaction(err) if err.kind() == std::io::ErrorKind::PermissionDenied)
