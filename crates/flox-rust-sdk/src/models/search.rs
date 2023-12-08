@@ -234,14 +234,11 @@ pub struct SearchResults {
 pub enum Record {
     /// A record containing the total number of search results regardless
     /// of how many are displayed to the user
-    #[serde(untagged)]
     #[serde(rename_all = "kebab-case")]
     ResultCount { result_count: u64 },
     /// A single search result
-    #[serde(untagged)]
     SearchResult(SearchResult),
     /// An error
-    #[serde(untagged)]
     Error(PkgDbError),
 }
 
@@ -288,6 +285,7 @@ pub fn do_search(search_params: &SearchParams) -> Result<(SearchResults, ExitSta
     let mut pkgdb_process = pkgdb_command.spawn().map_err(SearchError::PkgDbCall)?;
     let stdout = pkgdb_process.stdout.take();
     if stdout.is_none() {
+        pkgdb_process.kill().map_err(SearchError::PkgDbCall)?;
         return Err(SearchError::PkgDbStdout);
     }
     let deserializer = serde_json::Deserializer::from_reader(stdout.unwrap());
@@ -297,7 +295,10 @@ pub fn do_search(search_params: &SearchParams) -> Result<(SearchResults, ExitSta
         let record = maybe_record.map_err(SearchError::Deserialize)?;
         debug!("record = {:?}", record);
         match record {
-            Record::Error(err) => return Err(SearchError::PkgDb(err)),
+            Record::Error(err) => {
+                pkgdb_process.kill().map_err(SearchError::PkgDbCall)?;
+                return Err(SearchError::PkgDb(err));
+            },
             Record::ResultCount { result_count } => count = Some(result_count),
             Record::SearchResult(result) => results.push(result),
         }

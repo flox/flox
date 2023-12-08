@@ -16,8 +16,7 @@ use flox_rust_sdk::models::search::{
     ShowError,
     Subtree,
 };
-use log::debug;
-use once_cell::sync::Lazy;
+use log::{debug, info};
 
 use crate::commands::environment::hacky_environment_description;
 use crate::commands::{detect_environment, open_environment};
@@ -200,16 +199,17 @@ fn render_search_results_user_facing(
         writeln!(&mut writer, "{package:<column_width$}  {desc}")?;
     }
     writer.flush().context("couldn't flush search results")?;
+    info!(""); // We need a blank line between search results and hints
     if let Some(count) = search_results.count {
         // Don't show the message if we have exactly the number of results as the limit,
         // otherwise we would get messages like `Showing 10 of 10...`
         if count != n_results as u64 {
-            eprint!(
-            "\nShowing {n_results} of {count} results. Use `flox search {{query}} --all` to see the full list.",
+            info!(
+            "Showing {n_results} of {count} results. Use `flox search {search_term} --all` to see the full list.",
         );
         }
     }
-    eprintln!("\nUse `flox show <package>` to see available versions");
+    info!("Use `flox show <package>` to see available versions");
     Ok(())
 }
 

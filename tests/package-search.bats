@@ -86,17 +86,8 @@ setup_file() {
 
 @test "'FLOX_FEATURES_SEARCH_STRATEGY=match flox search' expected number of results: 'hello'" {
   FLOX_FEATURES_SEARCH_STRATEGY=match run --separate-stderr "$FLOX_CLI" search hello --all;
-  n_lines="${#lines[@]}";
-  case "$NIX_SYSTEM" in
-    *-darwin)
-      assert_equal "$n_lines" 11;
-      assert_equal "$stderr" "$SHOW_HINT"
-      ;;
-    *-linux)
-      assert_equal "$n_lines" 11;
-      assert_equal "$stderr" "$SHOW_HINT"
-      ;;
-  esac
+  assert_equal "${#lines[@]}" 11;
+  assert_equal "$stderr" "$SHOW_HINT"
 }
 
 
@@ -104,17 +95,8 @@ setup_file() {
 
 @test "'flox search' expected number of results: 'hello'" {
   run --separate-stderr "$FLOX_CLI" search hello --all;
-  n_lines="${#lines[@]}";
-  case "$NIX_SYSTEM" in
-    *-darwin)
-      assert_equal "$n_lines" 10;
-      assert_equal "$stderr" "$SHOW_HINT"
-      ;;
-    *-linux)
-      assert_equal "$n_lines" 10;
-      assert_equal "$stderr" "$SHOW_HINT"
-      ;;
-  esac
+  assert_equal "${#lines[@]}" 10;
+  assert_equal "$stderr" "$SHOW_HINT"
 }
 
 
@@ -276,9 +258,21 @@ setup_file() {
 # ---------------------------------------------------------------------------- #
 
 @test "'flox search' no 'X of Y' message when X=Y" {
-  skip FIXME
-  run --separate-stderr "$FLOX_CLI" search hello
+  # There are exactly 10 results for 'hello' on our current nixpkgs rev
+  # when search with `match-name`
+  run --separate-stderr "$FLOX_CLI" search hello;
+  assert_equal "$stderr" "$SHOW_HINT";
 }
+
+
+# ---------------------------------------------------------------------------- #
+
+@test "'flox search' includes search term in hint" {
+  run --separate-stderr "$FLOX_CLI" search python;
+  assert_regex "$stderr" "flox search python --all";
+}
+
+
 # ---------------------------------------------------------------------------- #
 #
 #
