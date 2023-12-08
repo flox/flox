@@ -748,13 +748,12 @@ impl ManagedEnvironment {
     }
 
     pub fn pull(&mut self, force: bool) -> Result<(), ManagedEnvironmentError> {
+        let sync_branch = remote_branch_name(&self.system, &self.pointer);
+
         // Fetch the remote branch into FETCH_HEAD
         self.floxmeta
             .git
-            .fetch_ref(
-                "origin",
-                &format!("{}:", remote_branch_name(&self.system, &self.pointer)),
-            )
+            .fetch_ref("origin", &format!("+{sync_branch}:{sync_branch}"))
             .unwrap();
 
         // Check whether we can fast-forward merge the remote branch into the local branch,
@@ -765,8 +764,8 @@ impl ManagedEnvironment {
                 .floxmeta
                 .git
                 .branch_contains_commit(
-                    &remote_branch_name(&self.system, &self.pointer),
-                    "FETCH_HEAD",
+                    &branch_name(&self.system, &self.pointer, &self.path).unwrap(),
+                    &sync_branch,
                 )
                 .map_err(ManagedEnvironmentError::Git)?;
             if !consistent_history {
@@ -780,21 +779,8 @@ impl ManagedEnvironment {
             .push_ref(
                 ".",
                 format!(
-                    "FETCH_HEAD:refs/heads/{sync_branch}",
-                    sync_branch = remote_branch_name(&self.system, &self.pointer)
-                ),
-                force, // Set the force parameter to false or true based on your requirement
-            )
-            .unwrap();
-
-        // try fast forward merge local env branch into project branch
-        self.floxmeta
-            .git
-            .push_ref(
-                ".",
-                format!(
-                    "FETCH_HEAD:refs/heads/{sync_branch}",
-                    sync_branch = branch_name(&self.system, &self.pointer, &self.path).unwrap()
+                    "refs/heads/{sync_branch}:refs/heads/{project_branch}",
+                    project_branch = branch_name(&self.system, &self.pointer, &self.path).unwrap(),
                 ),
                 force, // Set the force parameter to false or true based on your requirement
             )
