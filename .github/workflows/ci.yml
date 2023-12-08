@@ -169,7 +169,7 @@ jobs:
               --command make test
           popd
 
-  flox-cargo-dev:
+  cli-dev:
     name: "Flox Cargo Tests"
     runs-on: ${{ matrix.os }}
 
@@ -592,12 +592,13 @@ jobs:
     if: ${{ failure() && github.ref == 'refs/heads/main' && github.event_name == 'push' }}
 
     needs:
-      - "env-builder-tests"
-      - "pkgdb-tests"
-      - "flox-cargo-test"
-      - "env-builder-nix-build"
-      - "pkgdb-nix-build"
-      - "flox-nix-build"
+      - "env-builder-dev"
+      - "pkgdb-dev"
+      - "cli-dev"
+        # XXX: silence the errors for now
+        #- "env-builder-nix-build"
+        #- "pkgdb-nix-build"
+        #- "flox-nix-build"
 
     steps:
       - name: "Slack Notification"
