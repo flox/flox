@@ -1,0 +1,56 @@
+set attr [lindex $argv 0]
+set flox $env(FLOX_BIN)
+if {$attr eq ""} {
+    set cmd "$flox --bash-passthru -v develop"
+    spawn $flox -v develop
+} else {
+    set cmd "$flox --bash-passthru -v develop $attr"
+    spawn $flox --bash-passthru -v develop $attr
+}
+set timeout 30
+expect {
+    -re "(fetching|downloading)" {
+        # fetching needs a higher timeout
+        set timeout 90
+        expect {
+            "developing package" {}
+            timeout {
+              puts stderr "Reached timeout running '$cmd'"
+              exit 1
+            }
+        }
+        set timeout 30
+    }
+    "developing package" {}
+    timeout {
+      puts stderr "Reached timeout running '$cmd'"
+      exit 1
+    }
+}
+expect {
+    -re "\$" {
+        send "{ command -v rg||which rg||type -P rg; } 2>&1\n"
+        expect {
+            -re "/nix/store/.*-ripgrep-13.0.0/bin/rg" {}
+            timeout {
+              puts stderr "Reached timeout locating 'rg'"
+              exit 1
+            }
+        }
+    }
+    timeout {
+      puts stderr "Reached timeout running '$cmd'"
+      exit 1
+    }
+}
+expect {
+    -re "\$" {
+        send "exit\r"
+        expect eof
+    }
+    timeout {
+      puts stderr "Reached timeout locating 'rg'"
+      exit 1
+    }
+}
+exit 0

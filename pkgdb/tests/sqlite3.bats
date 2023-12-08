@@ -25,24 +25,24 @@ setup_file() {
   # Make a test DB
   sqlite3 "$DBPATH" 'CREATE TABLE People ( name TEXT PRIMARY KEY )';
 
-  if [[ -z "${IS_SQLITE3:-}" ]]; then
+  if [[ -z "${PKGDB_IS_SQLITE3_BIN:-}" ]]; then
     repo_root_setup;
-    IS_SQLITE3="$TESTS_DIR/is_sqlite3";
-    if ! [[ -x "$IS_SQLITE3" ]]; then
+    PKGDB_IS_SQLITE3_BIN="$TESTS_DIR/is_sqlite3";
+    if ! [[ -x "$PKGDB_IS_SQLITE3_BIN" ]]; then
       (
         cd "${REPO_ROOT?}" >/dev/null 2>&1||exit 1;
-        nix develop -c make -j8 tests/is_sqlite3;
+        make -j tests/is_sqlite3;
       );
     fi
   fi
-  export IS_SQLITE3;
+  export PKGDB_IS_SQLITE3_BIN;
 }
 
 
 # ---------------------------------------------------------------------------- #
 
 @test "is_sqlite3 detects DB" {
-  run $IS_SQLITE3 "$DBPATH";
+  run $PKGDB_IS_SQLITE3_BIN "$DBPATH";
   assert_success;
 }
 
@@ -50,7 +50,7 @@ setup_file() {
 # ---------------------------------------------------------------------------- #
 
 @test "is_sqlite3 rejects text file ( short )" {
-  run $IS_SQLITE3 "$BATS_FILE_TMPDIR/short";
+  run $PKGDB_IS_SQLITE3_BIN "$BATS_FILE_TMPDIR/short";
   assert_failure;
 }
 
@@ -58,7 +58,7 @@ setup_file() {
 # ---------------------------------------------------------------------------- #
 
 @test "is_sqlite3 rejects text file ( long )" {
-  run $IS_SQLITE3 "$BATS_FILE_TMPDIR/long";
+  run $PKGDB_IS_SQLITE3_BIN "$BATS_FILE_TMPDIR/long";
   assert_failure;
 }
 
@@ -66,7 +66,7 @@ setup_file() {
 # ---------------------------------------------------------------------------- #
 
 @test "is_sqlite3 rejects directory" {
-  run $IS_SQLITE3 "$BATS_FILE_TMPDIR/dir";
+  run $PKGDB_IS_SQLITE3_BIN "$BATS_FILE_TMPDIR/dir";
   assert_failure;
 }
 

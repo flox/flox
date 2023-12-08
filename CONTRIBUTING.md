@@ -240,7 +240,7 @@ You add tags to a test with a special comment:
 ```
 # bats test_tags=foo,bar,baz
 @test "this is the name of my test" {
-   run "$FLOX_CLI" --help;
+   run "$FLOX_BIN" --help;
    assert_success;
 }
 ```
@@ -250,13 +250,13 @@ You can apply a tag to tests in a file with another special comment, which appli
 # bats file_tags=foo
 
 @test "this is the name of my test" {
-   run "$FLOX_CLI" --help;
+   run "$FLOX_BIN" --help;
    assert_success;
 }
 
 
 @test "this is the name of my test" {
-   run "$FLOX_CLI" --help;
+   run "$FLOX_BIN" --help;
    assert_success;
 }
 ```

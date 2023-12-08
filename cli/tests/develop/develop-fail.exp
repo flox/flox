@@ -1,0 +1,17 @@
+set attr [lindex $argv 0]
+set flox $env(FLOX_BIN)
+if {$attr eq ""} {
+    set cmd "$flox --bash-passthru -v develop"
+    spawn $flox --bash-passthru -v develop
+} else {
+    set cmd "$flox --bash-passthru -v develop $attr"
+    spawn $flox --bash-passthru -v develop $attr
+}
+expect {
+    "ERROR: could not determine toplevel directory" {}
+    timeout {
+      puts stderr "Reached timeout running '$cmd'"
+      exit 1
+    }
+}
+exit 0

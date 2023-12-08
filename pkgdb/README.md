@@ -122,7 +122,7 @@ $ pkgdb scrape "$lockedRef" packages aarch64-linux;
 ```
 
 
-### pkdb get
+### pkgdb get
 
 The `pkgdb get {db,done,flake,id,path}` subcommands expose a handful of special
 queries for package databases that may be useful for simple scripts.
@@ -258,6 +258,21 @@ For the purposes of testing we have provided an environment variable
 `_PKGDB_GA_REGISTRY_REF_OR_REV` where you can provide an alternative `git` ref
 ( tag or branch name ) or a long revision hash.
 This is used in our test suite.
+
+
+## Scraping Logic
+
+`pkgdb` processes flakes' `legacyPackages` and `packages` outputs with the
+following logic:
+- If an attribute set is a derivation, and we can evaluate `meta`, `name`,
+  `pname`, and `version` fields without encountering an evaluation error, then
+  add it to the DB.
+- If we are processing the `packages.**` sub-tree, and an attribute set is not a
+  derivation, skip it.
+- If we are processing the `legacyPackages.**` sub-tree, recurse into attributes
+  which have a field `recurseForDerivations = true;`, otherwise skip it.
+
+This is implemented on [flox::pkgdb::PkgDb::scrape()](./src/pkgdb/write.cc).
 
 
 ## More Documentation

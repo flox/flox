@@ -1,0 +1,36 @@
+# Test 'flox edit' prompts user to re-activate
+
+set manifest [lindex $argv 0]
+set flox $env(FLOX_BIN)
+
+# activate environment 1
+set timeout 5
+set cmd "$flox activate"
+spawn $flox activate
+expect {
+    "Building environment..." {}
+    timeout {
+      puts stderr "Reached timeout running '$cmd'"
+      exit 1
+    }
+}
+expect {
+    -re "\[test\].*\$" {}
+    timeout {
+      puts stderr "Reached timeout running '$cmd'"
+      exit 1
+    }
+}
+
+# edit environment and check for message prompting to re-activate 
+set cmd "$flox edit -f $manifest"
+send "$cmd\n"
+expect {
+    "Your manifest has changes that cannot be automatically applied to your current environment.\r\n\r\nPlease `exit` the environment and run `flox activate` to see these changes." {}
+    timeout {
+      puts stderr "Reached timeout running '$cmd'"
+      exit 1
+    }
+}
+
+exit 0

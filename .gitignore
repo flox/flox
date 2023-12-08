@@ -1,4 +1,4 @@
-/target
+/cli/target
 .env
 .pre-commit-config.yaml
 .ccls

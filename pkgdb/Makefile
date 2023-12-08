@@ -647,13 +647,8 @@ cc-check: $(TESTS:.cc=)
 	exit "$$_ec";
 
 #: Run all bats tests
-BATS_FILE ?= $(MAKEFILE_DIR)/tests
 bats-check: bin $(TEST_UTILS)
-	PKGDB="$(MAKEFILE_DIR)/bin/pkgdb"                        \
-	IS_SQLITE3="$(MAKEFILE_DIR)/tests/is_sqlite3"            \
-	SEARCH_PARAMS="$(MAKEFILE_DIR)/tests/search-params"      \
-	  bats --print-output-on-failure --verbose-run --timing  \
-	       "$(BATS_FILE)";
+	flox-pkgdb-tests
 
 
 # ---------------------------------------------------------------------------- #
