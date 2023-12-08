@@ -151,10 +151,10 @@ teardown() {
 
 @test "'flox install' prompts when an environment is activated and there is an environment in the containing git repo" {
   mkdir 1
-  "$FLOX_CLI" init --dir 1
+  "$FLOX_BIN" init --dir 1
 
   mkdir 2
-  "$FLOX_CLI" init --dir 2
+  "$FLOX_BIN" init --dir 2
   git -C 2 init
   mkdir 2/subdirectory
 

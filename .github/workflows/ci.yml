@@ -59,7 +59,7 @@ jobs:
               --command make
           popd
 
-      - name: "Build (env-builder"
+      - name: "Build (env-builder)"
         run: |
           pushd ./env-builder
           nix develop -L \
