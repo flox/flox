@@ -4,29 +4,33 @@ cargo_test_invocation := "cargo test --workspace"
 _default:
     @just --list --unsorted
 
-# Run the 'bats' test suite
-bats-tests +bats_args="":
+# Build the binaries
+build:
     @cargo build -q
+    @pushd pkgdb; make -j -s; popd
+    @pushd env-builder; make -j -s; popd
+
+# Run the 'bats' test suite
+bats-tests +bats_args="": build
     @flox-tests {{bats_args}}
 
 # Run a specific 'bats' test file
-bats-file file:
-    @cargo build -q
+bats-file file: build
     @flox-tests --tests "{{file}}"
 
 # Run the Rust unit tests
-unit-tests regex="":
+unit-tests regex="": build
     @{{cargo_test_invocation}} {{regex}}
 
 # Run the test suite, including impure tests
-impure-tests regex="":
+impure-tests regex="": build
     @{{cargo_test_invocation}} {{regex}} --features "extra-tests"
 
 # Run the entire test suite, not including impure tests
-test: unit-tests bats-tests
+test: build unit-tests bats-tests
 
 # Run the entire test suite, including impure tests
-test-all: impure-tests bats-tests
+test-all: build impure-tests bats-tests
 
 # Enters the Rust development environment
 work:
