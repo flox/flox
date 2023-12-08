@@ -108,8 +108,8 @@ impl Environment for ManagedEnvironment {
         let mut generations = self.generations().writable(flox.temp_dir.clone()).unwrap();
         let mut temporary = generations.get_current_generation().unwrap();
 
+        let metadata = format!("installed packages: {:?}", &packages);
         let result = temporary.install(packages, flox)?;
-        let metadata = "description".to_string();
 
         generations.add_generation(temporary, metadata).unwrap();
 
@@ -133,8 +133,8 @@ impl Environment for ManagedEnvironment {
         let mut generations = self.generations().writable(flox.temp_dir.clone()).unwrap();
         let mut temporary = generations.get_current_generation().unwrap();
 
+        let metadata = format!("uninstalled packages: {:?}", &packages);
         let result = temporary.uninstall(packages, flox)?;
-        let metadata = "description".to_string();
 
         generations.add_generation(temporary, metadata).unwrap();
 
