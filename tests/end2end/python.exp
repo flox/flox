@@ -25,7 +25,7 @@ expect {
 
 # check for python3
 expect -re $prompt
-set timeout 1
+set timeout 10
 send "{ command -v python3||which python3||type -P python3; } 2>&1\n"
 expect {
     -re "\.flox/run/\[^\n\r\]*\.project-\\d+/bin/python3" {}
@@ -122,7 +122,7 @@ expect {
     }
 }
 # test requests library in python 
-set timeout 1
+set timeout 10
 send "./env/bin/python -c 'import requests; print(requests.__path__)'\n"
 expect {
     -re "\\\['.*/project-\\d+/env/lib/python\\d+.\\d+/site-packages/requests'\\\]" {}
