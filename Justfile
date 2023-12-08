@@ -42,3 +42,7 @@ bump-all:
 # Bump a specific flake input and commit with a descriptive message
 bump input:
     @nix {{nix_options}} flake lock --update-input {{input}} --commit-lock-file --commit-lockfile-summary "chore: bump '{{input}}' flake input"
+
+# Output licenses of all dependency crates
+license:
+    @cargo metadata --format-version 1 | jq -r '.packages[] | [.name, .license] | @csv'
