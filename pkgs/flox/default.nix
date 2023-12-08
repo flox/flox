@@ -2,6 +2,11 @@
   flox-src,
   inputs,
   lib,
+  clippy,
+  rust-analyzer,
+  rust,
+  rustc,
+  rustfmt,
   rustPlatform,
   hostPlatform,
   targetPlatform,
@@ -23,8 +28,10 @@
   nix,
   pkgsFor,
   floxVersion,
+  pre-commit-check,
   flox-pkgdb,
   flox-env-builder,
+  ci ? false,
 }: let
   # crane (<https://crane.dev/>) library for building rust packages
   craneLib = inputs.crane.mkLib pkgsFor;
@@ -203,6 +210,32 @@ in
           flox-pkgdb
           flox-env-builder
           ;
+
+        ciPackages = [
+        ];
+
+        devPackages = [
+          rustfmt
+          clippy
+          rust-analyzer
+          rust.packages.stable.rustPlatform.rustLibSrc
+          rustc
+        ];
+
+        devEnvs =
+          envs
+          // {
+            RUST_SRC_PATH = rustPlatform.rustLibSrc.outPath;
+            RUSTFMT = "${rustfmt}/bin/rustfmt";
+          };
+
+        devShellHook = ''
+          #  # Find the project root and add the `bin' directory to `PATH'.
+          if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+            PATH="$( git rev-parse --show-toplevel; )/target/debug":$PATH;
+          fi
+
+        '';
       };
     }
     // envs)

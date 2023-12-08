@@ -13,6 +13,8 @@
   entr,
   expect,
   findutils,
+  flox-pkgdb,
+  flox-env-builder,
   flox,
   gawk,
   git,
@@ -21,15 +23,20 @@
   gnused,
   gnutar,
   jq,
+  nix,
   nix-serve,
   openssh,
   parallel,
   unixtools,
   which,
   writeShellScriptBin,
-  name ? "flox-tests",
-  testsDir ? "/tests",
-  FLOX_CLI ? "${flox}/bin/flox",
+  PROJECT_NAME ? "flox-tests",
+  PROJECT_TESTS_DIR ? ./../../tests,
+  PROJECT_TESTS_SUBDIR ? "",
+  NIX_BIN ? "${nix}/bin/nix",
+  PKGDB_BIN ? "${flox-pkgdb}/bin/pkgdb",
+  ENV_BUILDER_BIN ? "${flox-env-builder}/bin/flox-env-builder",
+  FLOX_BIN ? "${flox}/bin/flox",
 }: let
   batsWith = bats.withLibraries (p: [
     p.bats-assert
@@ -60,6 +67,7 @@
       unixtools.util-linux
       which
     ]
+    # TODO: this hack is not going to be needed once we test against sutff on system
     ++ lib.optional stdenv.isDarwin (
       runCommandCC "locale" {
         source = ''
@@ -76,56 +84,97 @@
       ''
     );
 in
-  writeShellScriptBin name ''
+  # TODO: we should run tests against different shells
+  writeShellScriptBin PROJECT_NAME ''
+    set -euo pipefail
 
-    export PATH="${lib.makeBinPath paths}"
-    export PKGDB_BIN="${flox.PKGDB_BIN}"
+    # Find root of the subproject if not specified
+    PROJECT_TESTS_DIR=${PROJECT_TESTS_DIR}
+    PROJECT_PATH=""
+    if [[ $PROJECT_TESTS_DIR != "/nix/store/"* ]]; then
 
+      # Find top level of the project
+      if ${git}/bin/git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        export PROJECT_ROOT_DIR="$( ${git}/bin/git rev-parse --show-toplevel; )"
+      else
+        echo "ERROR: Could not find root of the project."
+        exit 1
+      fi
+
+      PROJECT_TESTS_DIR="$PROJECT_ROOT_DIR$PROJECT_TESTS_DIR"
+      PROJECT_PATH="$PROJECT_ROOT_DIR/target/debug:$PROJECT_ROOT_DIR/pkgdb/bin:$PROJECT_ROOT_DIR/env-builder/bin:"
+    fi
+    export PROJECT_TESTS_DIR
+
+    # TODO: we shouldn't do this but rather use absolute paths
+    # Look if we can use https://github.com/abathur/resholve
+    export PATH="$PROJECT_PATH${lib.makeBinPath paths}"
+
+    # Copy PROJECT_TESTS_DIR to temporary directory
+    WORKDIR=$(mktemp -d -t ${PROJECT_NAME}-XXXXXX)
+    cp -RL $PROJECT_TESTS_DIR/* $WORKDIR
+    cd $WORKDIR${PROJECT_TESTS_SUBDIR}
+
+    # Declare project specific dependencies
     ${
-      if FLOX_CLI == null
-      then ""
-      else ''
-        # copy checkout to temporary directory
-        WORKDIR=$(mktemp -d -t ${name}-XXXXXX)
-        cp -R ${self}/* $WORKDIR
-        cd $WORKDIR
-      ''
+      if NIX_BIN == null
+      then "export NIX_BIN='nix';"
+      else "export NIX_BIN='${NIX_BIN}';"
     }
-
+    ${
+      if PKGDB_BIN == null
+      then "export PKGDB_BIN='pkgdb';"
+      else "export PKGDB_BIN='${PKGDB_BIN}';"
+    }
+    ${
+      if ENV_BUILDER_BIN == null
+      then "export ENV_BUILDER_BIN='flox-env-builder';"
+      else "export ENV_BUILDER_BIN='${ENV_BUILDER_BIN}';"
+    }
+    ${
+      if FLOX_BIN == null
+      then "export FLOX_BIN='flox';"
+      else "export FLOX_BIN='${FLOX_BIN}';"
+    }
 
     usage() {
           cat << EOF
     Usage: $0 [--flox <FLOX BINARY>| -F <FLOX BINARY>] \
+              [--env-builder <ENV_BUILDER BINARY>| -E <ENV_BUILDER BINARY>] \
+              [--pkgdb <PKGDB BINARY>| -P <PKGDB BINARY>] \
+              [--nix <NIX BINARY>| -N <NIX BINARY>] \
               [--tests <TESTS_DIR>| -T <TESTS_DIR>] \
               [--watch | -W] \
               [--help | -h] -- [BATS ARGUMENTS]
 
     Available options:
-        -F, --flox          Path to flox binary (Default: flox)
-        -T, --tests         Path to folder of tests (Default: $PWD${testsDir})
+        -F, --flox          Path to flox binary (Default: $FLOX_BIN)
+        -E, --env-builder   Path to env-builder binary (Default: $ENV_BUILDER_BIN)
+        -P, --pkgdb         Path to pkgdb binary (Default: $PKGDB_BIN)
+        -N, --nix           Path to nix binary (Default: $NIX_BIN)
+        -T, --tests         Path to folder of tests (Default: $PROJECT_TESTS_DIR)
         -W, --watch         Run tests in a continuous watch mode
         -h, --help          Prints help information
     EOF
     }
 
-    ${
-      if FLOX_CLI == null
-      then ""
-      else "export FLOX_CLI='${FLOX_CLI}';"
-    }
+
     WATCH=;
-    declare -a _TESTS;
-    _TESTS=();
+    declare -a _FLOX_TESTS;
+    _FLOX_TESTS=();
     while [[ "$#" -gt 0 ]]; do
       case "$1" in
-        -[fF]|--flox)         export FLOX_CLI="''${2?}"; shift; ;;
+        -[fF]|--flox)         export FLOX_BIN="''${2?}"; shift; ;;
+        -[eE]|--env-builder)  export ENV_BUILDER_BIN="''${2?}"; shift; ;;
+        -[pP]|--pkgdb)        export PKGDB_BIN="''${2?}"; shift; ;;
+        -[nN]|--nix)          export NIX_BIN="''${2?}"; shift; ;;
         -[tT]|--tests)        export TESTS_DIR="''${2?}"; shift; ;;
         -[wW]|--watch)        WATCH=:; ;;
         -h|--help|-u|--usage) usage; exit 0; ;;
         --)                   shift; break; ;;
         *)
           if [[ -e "$1" ]]; then
-            _TESTS+=( "$1" );
+            _FLOX_TESTS+=( "$1" );
           else
             echo "''${0##*/} ERROR: Unrecognized arg(s) '$*'" >&2;
             usage;
@@ -136,28 +185,13 @@ in
       shift;
     done
 
-    if [[ -z "''${FLOX_CLI:-}" ]]; then
-      if [[ -x "$PWD/target/debug/flox" ]]; then
-        FLOX_CLI="$PWD/target/debug/flox";
-      elif [[ -x "$PWD/target/release/flox" ]]; then
-        FLOX_CLI="$PWD/target/release/flox";
-      elif [[ -x "$PWD/result/bin/flox" ]]; then
-        FLOX_CLI="$( readlink -f $PWD/result; )/bin/flox";
-      elif command -v flox &> /dev/null; then
-        echo "''${0##*/} WARNING: using flox executable from PATH" >&2;
-        FLOX_CLI="$( command -v flox; )";
-      fi
-      export FLOX_CLI;
-    fi
-
-    export NIX_BIN="${flox.NIX_BIN}";
 
     # Default flag values
-    : "''${TESTS_DIR:=$PWD${testsDir}}";
-    export TESTS_DIR FLOX_CLI;
+    : "''${TESTS_DIR:=$WORKDIR${PROJECT_TESTS_SUBDIR}}";
+    export TESTS_DIR;
 
-    if [[ "''${#_TESTS[@]}" -lt 1 ]]; then
-      _TESTS=( "$TESTS_DIR" );
+    if [[ "''${#_FLOX_TESTS[@]}" -lt 1 ]]; then
+      _FLOX_TESTS=( "$TESTS_DIR" );
     fi
 
     # Collect args/options and log them
@@ -170,18 +204,26 @@ in
     );
     {
       echo "''${0##*/}: Running test suite with:";
-      echo "  FLOX_CLI:     $FLOX_CLI";
-      echo "  TESTS_DIR:    $TESTS_DIR";
-      echo "  tests:        ''${_TESTS[*]}";
-      echo "  bats options: ''${_BATS_ARGS[*]}";
-      echo "  bats command: bats ''${_BATS_ARGS[*]} ''${_TESTS[*]}";
+      echo "  FLOX_BIN:                 $FLOX_BIN";
+      echo "  ENV_BUILDER_BIN:          $ENV_BUILDER_BIN";
+      echo "  PKGDB_BIN:                $PKGDB_BIN";
+      echo "  NIX_BIN:                  $NIX_BIN";
+      echo "  PROJECT_TESTS_DIR:        $PROJECT_TESTS_DIR";
+      echo "  bats                      ${batsWith}/bin/bats";
+      echo "  bats options              ''${_BATS_ARGS[*]}";
+      echo "  bats tests                ''${_FLOX_TESTS[*]}";
     } >&2;
 
-    # run basts either via entr or just a single run
+    # Run basts either via entr or just a single run
     if [[ -n "''${WATCH:-}" ]]; then
-      find "$TESTS_DIR" "$FLOX_CLI"  \
-        |entr -s "bats ''${_BATS_ARGS[*]} ''${_TESTS[*]}";
+      find \
+        "$TESTS_DIR" \
+        "$NIX_BIN"  \
+        "$PKGDB_BIN"  \
+        "$ENV_BUILDER_BIN"  \
+        "$FLOX_BIN"  \
+          | ${entr}/bin/entr -s "bats ''${_BATS_ARGS[*]} ''${_FLOX_TESTS[*]}";
     else
-      exec -a "$0" bats "''${_BATS_ARGS[@]}" "''${_TESTS[@]}";
+      exec -a "$0" ${batsWith}/bin/bats "''${_BATS_ARGS[@]}" "''${_FLOX_TESTS[@]}";
     fi
   ''

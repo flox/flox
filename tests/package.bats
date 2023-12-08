@@ -11,20 +11,20 @@ setup_file() {
 }
 
 @test "flox install by /nix/store path" {
-  run "$FLOX_CLI" --bash-passthru  install -e "$TEST_ENVIRONMENT" "$HELLO_PACKAGE"
+  run "$FLOX_BIN" --bash-passthru  install -e "$TEST_ENVIRONMENT" "$HELLO_PACKAGE"
   assert_success
   assert_output --partial "Installed '$HELLO_PACKAGE' package(s) into '$TEST_ENVIRONMENT' environment."
 }
 
 @test "flox list after installing by store path should contain package" {
-  run "$FLOX_CLI" --bash-passthru  list -e "$TEST_ENVIRONMENT"
+  run "$FLOX_BIN" --bash-passthru  list -e "$TEST_ENVIRONMENT"
   assert_success
   assert_output --partial "Curr Gen  1"
   assert_output --partial "0  $HELLO_PACKAGE  $HELLO_PACKAGE_FIRST8"
 }
 
 @test "tear down install test state" {
-  run $FLOX_CLI  --bash-passthru delete -e "$TEST_ENVIRONMENT" --origin -f||:
+  run $FLOX_BIN  --bash-passthru delete -e "$TEST_ENVIRONMENT" --origin -f||:
   assert_output --partial "WARNING: you are about to delete the following"
   assert_output --partial "Deleted branch"
   assert_output --partial "removed"

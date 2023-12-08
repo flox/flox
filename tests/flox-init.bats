@@ -88,7 +88,7 @@ assertTemplateApplied() {
 
 # bats test_tags=uri:github
 @test "'flox init -t github:flox/floxpkgs#project'" {
-  run "$FLOX_CLI" init-package -n "$( getProjName; )" -t 'github:flox/floxpkgs#project';
+  run "$FLOX_BIN" init-package -n "$( getProjName; )" -t 'github:flox/floxpkgs#project';
   assert_success;
   assertTemplateApplied;
 }
@@ -96,7 +96,7 @@ assertTemplateApplied() {
 
 # bats test_tags=uri:github
 @test "'flox init -t github:flox/floxpkgs/master#project'" {
-  run "$FLOX_CLI" init-package -n "$( getProjName; )"                     \
+  run "$FLOX_BIN" init-package -n "$( getProjName; )"                     \
                        -t 'github:flox/floxpkgs/master#project';
   assert_success;
   assertTemplateApplied;
@@ -104,7 +104,7 @@ assertTemplateApplied() {
 
 # bats test_tags=uri:github
 @test "'flox init -t github:flox/floxpkgs?ref=master#project'" {
-  run "$FLOX_CLI" init-package -n "$( getProjName; )"                         \
+  run "$FLOX_BIN" init-package -n "$( getProjName; )"                         \
                        -t 'github:flox/floxpkgs?ref=master#project';
   assert_success;
   assertTemplateApplied;
@@ -113,7 +113,7 @@ assertTemplateApplied() {
 
 # bats test_tags=uri:github
 @test "'flox init -t github:flox/floxpkgs/refs/heads/master#project'" {
-  run "$FLOX_CLI" init-package -n "$( getProjName; )"                                \
+  run "$FLOX_BIN" init-package -n "$( getProjName; )"                                \
                        -t 'github:flox/floxpkgs/refs/heads/master#project';
   assert_success;
   assertTemplateApplied;
@@ -122,7 +122,7 @@ assertTemplateApplied() {
 
 # bats test_tags=uri:github
 @test "'flox init -t github:flox/floxpkgs?ref=refs/heads/master#project'" {
-  run "$FLOX_CLI" init-package                                                      \
+  run "$FLOX_BIN" init-package                                                      \
                   -n "$( getProjName; )"                                    \
                   -t 'github:flox/floxpkgs?ref=refs/heads/master#project';
   assert_success;
@@ -132,7 +132,7 @@ assertTemplateApplied() {
 
 # bats test_tags=uri:github
 @test "'flox init -t github:flox/floxpkgs/<REV>#project'" {
-  run "$FLOX_CLI" init-package -n "$( getProjName; )"                             \
+  run "$FLOX_BIN" init-package -n "$( getProjName; )"                             \
                        -t "github:flox/floxpkgs/$_floxpkgs_rev#project";
   assert_success;
   assertTemplateApplied;
@@ -141,7 +141,7 @@ assertTemplateApplied() {
 
 # bats test_tags=uri:github
 @test "'flox init -t github:flox/floxpkgs?rev=<REV>#project'" {
-  run "$FLOX_CLI" init-package -n "$( getProjName; )"                                 \
+  run "$FLOX_BIN" init-package -n "$( getProjName; )"                                 \
                        -t "github:flox/floxpkgs?rev=$_floxpkgs_rev#project";
   assert_success;
   assertTemplateApplied;
@@ -154,7 +154,7 @@ assertTemplateApplied() {
 @test "'flox init -t <ABS-PATH>#project'" {
   git clone --depth 1 https://github.com/flox/floxpkgs.git  \
                       "$BATS_TEST_TMPDIR/floxpkgs";
-  run "$FLOX_CLI" init-package -n "$( getProjName; )"                    \
+  run "$FLOX_BIN" init-package -n "$( getProjName; )"                    \
                        -t "$BATS_TEST_TMPDIR/floxpkgs#project";
   assert_success;
   assertTemplateApplied;
@@ -164,7 +164,7 @@ assertTemplateApplied() {
 @test "'flox init -t <REL-PATH>#project'" {
   git clone --depth 1 https://github.com/flox/floxpkgs.git  \
                       "$BATS_TEST_TMPDIR/floxpkgs";
-  run "$FLOX_CLI" init-package -n "$( getProjName; )" -t "../floxpkgs#project";
+  run "$FLOX_BIN" init-package -n "$( getProjName; )" -t "../floxpkgs#project";
   assert_success;
   assertTemplateApplied;
 }
@@ -174,7 +174,7 @@ assertTemplateApplied() {
 
 #bats test_tags=uri:indirect, uri:indirect:github
 @test "'flox init -t floxpkgs-alias#project'" {
-  run "$FLOX_CLI" init-package -n "$( getProjName; )" -t "floxpkgs-alias#project";
+  run "$FLOX_BIN" init-package -n "$( getProjName; )" -t "floxpkgs-alias#project";
   assert_success;
   assertTemplateApplied;
 }
@@ -182,7 +182,7 @@ assertTemplateApplied() {
 
 #bats test_tags=uri:indirect, uri:indirect:github
 @test "'flox init -t flake:floxpkgs-alias#project'" {
-  run "$FLOX_CLI" init-package -n "$( getProjName; )" -t "flake:floxpkgs-alias#project";
+  run "$FLOX_BIN" init-package -n "$( getProjName; )" -t "flake:floxpkgs-alias#project";
   assert_success;
   assertTemplateApplied;
 }
@@ -190,7 +190,7 @@ assertTemplateApplied() {
 
 #bats test_tags=uri:indirect, uri:indirect:github
 @test "'flox init -t floxpkgs-alias/master#project'" {
-  run "$FLOX_CLI" init-package -n "$( getProjName; )"               \
+  run "$FLOX_BIN" init-package -n "$( getProjName; )"               \
                        -t "floxpkgs-alias/master#project";
   assert_success;
   assertTemplateApplied;
@@ -199,7 +199,7 @@ assertTemplateApplied() {
 
 #bats test_tags=uri:indirect, uri:indirect:github
 @test "'flox init -t flake:floxpkgs-alias/master#project'" {
-  run "$FLOX_CLI" init-package -n "$( getProjName; )"                     \
+  run "$FLOX_BIN" init-package -n "$( getProjName; )"                     \
                        -t "flake:floxpkgs-alias/master#project";
   assert_success;
   assertTemplateApplied;
@@ -208,7 +208,7 @@ assertTemplateApplied() {
 
 #bats test_tags=uri:indirect, uri:indirect:github
 @test "'flox init -t flake:floxpkgs-alias?ref=master#project'" {
-  run "$FLOX_CLI" init-package -n "$( getProjName; )"                         \
+  run "$FLOX_BIN" init-package -n "$( getProjName; )"                         \
                        -t "flake:floxpkgs-alias?ref=master#project";
   assert_success;
   assertTemplateApplied;
@@ -218,7 +218,7 @@ assertTemplateApplied() {
 #bats test_tags=uri:indirect, uri:indirect:github
 @test "'flox init -t floxpkgs-alias?ref=master#project' (expect fail)" {
   skip "FIXME: indirect flake-refs require scheme prefix to use parameters.";
-  run "$FLOX_CLI" init-package -n "$( getProjName; )"                   \
+  run "$FLOX_BIN" init-package -n "$( getProjName; )"                   \
                        -t "floxpkgs-alias?ref=master#project";
   assert_failure;
   refute test -f "./shells/$( getProjName; )/default.nix";
@@ -228,7 +228,7 @@ assertTemplateApplied() {
 #bats test_tags=uri:indirect, uri:indirect:github
 @test "'flox init -t floxpkgs-alias/refs/heads/master#project' (expect fail)" {
   skip "FIXME: indirect flake-refs require scheme prefix to use parameters.";
-  run "$FLOX_CLI" init-package -n "$( getProjName; )"                          \
+  run "$FLOX_BIN" init-package -n "$( getProjName; )"                          \
                        -t "floxpkgs-alias/refs/heads/master#project";
   assert_failure;
   refute test -f "./shells/$( getProjName; )/default.nix";
@@ -237,7 +237,7 @@ assertTemplateApplied() {
 
 #bats test_tags=uri:indirect, uri:indirect:github
 @test "'flox init -t flake:floxpkgs-alias?ref=refs/heads/master#project'" {
-  run "$FLOX_CLI" init-package                                                      \
+  run "$FLOX_BIN" init-package                                                      \
                   -n "$( getProjName; )"                                    \
                   -t "flake:floxpkgs-alias?ref=refs/heads/master#project";
   assert_success;

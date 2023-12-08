@@ -1,7 +1,7 @@
 # Test 'flox edit' prompts user to re-activate
 
 set manifest [lindex $argv 0]
-set flox $env(FLOX_CLI)
+set flox $env(FLOX_BIN)
 
 # activate environment 1
 set timeout 5

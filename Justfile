@@ -1,6 +1,5 @@
 nix_options := "--extra-experimental-features nix-command --extra-experimental-features flakes"
 cargo_test_invocation := "cargo test --workspace"
-bats_invocation := "nix --extra-experimental-features nix-command --extra-experimental-features flakes run '.#flox-tests-dev' -- --flox ${PWD}/target/debug/flox"
 
 _default:
     @just --list --unsorted
@@ -8,12 +7,12 @@ _default:
 # Run the 'bats' test suite
 bats-tests +bats_args="":
     @cargo build -q
-    @{{bats_invocation}} -- {{bats_args}}
+    @flox-tests {{bats_args}}
 
 # Run a specific 'bats' test file
 bats-file file:
     @cargo build -q
-    @{{bats_invocation}} "{{file}}"
+    @flox-tests --tests "{{file}}"
 
 # Run the Rust unit tests
 unit-tests regex="":

@@ -1,1 +1,1 @@
-../../../flox-bash/lib/templateFloxEnv/flake.nix
+../../../assets/templateFloxEnv/flake.nix

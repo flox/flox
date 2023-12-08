@@ -90,14 +90,14 @@ function update_dummy_env() {
 
   unset FLOX_FLOXHUB_TOKEN; # logout, effectively
 
-  run "$FLOX_CLI" pull --remote owner/name # dummy remote as we are not actually pulling anything
+  run "$FLOX_BIN" pull --remote owner/name # dummy remote as we are not actually pulling anything
   assert_failure
   assert_output --partial 'Please login to floxhub with `flox auth login`'
 }
 
 # bats test_tags=pull:l2,pull:l2:a,pull:l4
 @test "l2.a/l4: flox pull accepts a flox hub namespace/environment, creates .flox if it does not exist" {
-  run "$FLOX_CLI" pull --remote owner/name # dummy remote as we are not actually pulling anything
+  run "$FLOX_BIN" pull --remote owner/name # dummy remote as we are not actually pulling anything
   assert_success
   assert [ -e ".flox/env.json" ];
   assert [ -e ".flox/env.lock" ];
@@ -108,9 +108,9 @@ function update_dummy_env() {
 # bats test_tags=pull:l2,pull:l2:b
 @test "l2.b: flox pull with --remote fails if an env is already present" {
 
-  "$FLOX_CLI" pull --remote owner/name # dummy remote as we are not actually pulling anything
+  "$FLOX_BIN" pull --remote owner/name # dummy remote as we are not actually pulling anything
 
-  run "$FLOX_CLI" pull --remote owner/name # dummy remote as we are not actually pulling anything
+  run "$FLOX_BIN" pull --remote owner/name # dummy remote as we are not actually pulling anything
   assert_failure
 
   # todo: error message
@@ -120,7 +120,7 @@ function update_dummy_env() {
 # bats test_tags=pull:l2,pull:l2:c
 @test "l2.c: flox pull with --remote and --dir pulls into the specified directory" {
 
-  run "$FLOX_CLI" pull --remote owner/name --dir ./inner
+  run "$FLOX_BIN" pull --remote owner/name --dir ./inner
   assert_success
   assert [ -e "inner/.flox/env.json" ];
   assert [ -e "inner/.flox/env.lock" ];
@@ -132,12 +132,12 @@ function update_dummy_env() {
 # bats test_tags=pull:l3,pull:l3:a
 @test "l3.a: pulling without namespace/environment" {
 
-  "$FLOX_CLI" pull --remote owner/name # dummy remote as we are not actually pulling anything
+  "$FLOX_BIN" pull --remote owner/name # dummy remote as we are not actually pulling anything
   LOCKED_BEFORE=$(cat .flox/env.lock | jq -r '.rev')
 
   update_dummy_env "owner" "name"
 
-  run "$FLOX_CLI" pull
+  run "$FLOX_BIN" pull
   assert_success
 
   LOCKED_AFTER=$(cat .flox/env.lock | jq -r '.rev')
@@ -148,12 +148,12 @@ function update_dummy_env() {
 # bats test_tags=pull:l3,pull:l3:b
 @test "l3.b: pulling without namespace/environment respects --dir" {
 
-  "$FLOX_CLI" pull --remote owner/name --dir ./inner # dummy remote as we are not actually pulling anything
+  "$FLOX_BIN" pull --remote owner/name --dir ./inner # dummy remote as we are not actually pulling anything
   LOCKED_BEFORE=$(cat ./inner/.flox/env.lock | jq -r '.rev')
 
   update_dummy_env "owner" "name"
 
-  run "$FLOX_CLI" pull --dir ./inner
+  run "$FLOX_BIN" pull --dir ./inner
   assert_success
 
   LOCKED_AFTER=$(cat ./inner/.flox/env.lock | jq -r '.rev')
@@ -170,20 +170,20 @@ function update_dummy_env() {
 
   mkdir first second
 
-  "$FLOX_CLI" pull --remote owner/name --dir first  # dummy remote as we are not actually pulling anything
+  "$FLOX_BIN" pull --remote owner/name --dir first  # dummy remote as we are not actually pulling anything
   LOCKED_FIRST_BEFORE=$(cat ./first/.flox/env.lock | jq -r '.rev')
 
   update_dummy_env "owner" "name"
   LOCKED_FIRST_AFTER=$(cat ./first/.flox/env.lock | jq -r '.rev')
 
-  "$FLOX_CLI" pull --remote owner/name --dir second  # dummy remote as we are not actually pulling anything
+  "$FLOX_BIN" pull --remote owner/name --dir second  # dummy remote as we are not actually pulling anything
   LOCKED_SECOND=$(cat ./second/.flox/env.lock | jq -r '.rev')
 
   assert [ "$LOCKED_FIRST_BEFORE" == "$LOCKED_FIRST_AFTER" ]
   assert [ "$LOCKED_FIRST_BEFORE" != "$LOCKED_SECOND" ]
 
   # after pulling first env, its at the rame rev as the second that was pulled after the update
-  "$FLOX_CLI" pull --dir first  # dummy remote as we are not actually pulling anything
+  "$FLOX_BIN" pull --dir first  # dummy remote as we are not actually pulling anything
 
   LOCKED_FIRST_AFTER_PULL=$(cat ./first/.flox/env.lock | jq -r '.rev')
 
@@ -201,6 +201,6 @@ function update_dummy_env() {
 @test "l?: pull environment from floxhub" {
   skip "floxtest/default is not available for all systems"
   unset __FLOX_FLOXHUB_URL;
-  run "$FLOX_CLI" pull --remote floxtest/default
+  run "$FLOX_BIN" pull --remote floxtest/default
   assert_success
 }

@@ -227,45 +227,47 @@ mod tests {
             .expect("Opening a floxmeta repo should succeed");
     }
 
-    /// Test whether a floxmeta repository can be successfully cloned from floxhub
-    /// and other branches are fetched lazily when opened.
-    ///
-    /// Finally, verify that non-existent environments correctly fail to be opened.
-    ///
-    /// Uses the environments `floxtest/default` and `floxtest/nondefault`
-    /// which are prepared on the host `https://git.hub.flox.dev`.
-    /// Tries to authenticate with a test token that grants access to floxtest.
-    #[test]
-    fn clone_from_floxhub() {
-        let _ = env_logger::try_init();
+    ///// Test whether a floxmeta repository can be successfully cloned from floxhub
+    ///// and other branches are fetched lazily when opened.
+    /////
+    ///// Finally, verify that non-existent environments correctly fail to be opened.
+    /////
+    ///// Uses the environments `floxtest/default` and `floxtest/nondefault`
+    ///// which are prepared on the host `https://git.hub.flox.dev`.
+    ///// Tries to authenticate with a test token that grants access to floxtest.
+    //
+    // XXX: skip this test since its flaky (floxhub is up and down)
+    //#[test]
+    //fn clone_from_floxhub() {
+    //    let _ = env_logger::try_init();
 
-        let (mut flox, _) = flox_instance();
+    //    let (mut flox, _) = flox_instance();
 
-        let pointer = ManagedPointer::new(
-            EnvironmentOwner::from_str("floxtest").unwrap(),
-            EnvironmentName::from_str("default").unwrap(),
-        );
+    //    let pointer = ManagedPointer::new(
+    //        EnvironmentOwner::from_str("floxtest").unwrap(),
+    //        EnvironmentName::from_str("default").unwrap(),
+    //    );
 
-        flox.floxhub_token = Some("flox_testOAuthToken".to_string());
-        flox.floxhub_host = "https://git.hub.flox.dev".to_string();
+    //    flox.floxhub_token = Some("flox_testOAuthToken".to_string());
+    //    flox.floxhub_host = "https://git.hub.flox.dev".to_string();
 
-        FloxmetaV2::clone(&flox, &pointer)
-            .expect("Cloning a floxmeta repo from floxhub should succeed");
+    //    FloxmetaV2::clone(&flox, &pointer)
+    //        .expect("Cloning a floxmeta repo from floxhub should succeed");
 
-        let pointer_other_success = ManagedPointer::new(
-            EnvironmentOwner::from_str("floxtest").unwrap(),
-            EnvironmentName::from_str("nondefault").unwrap(),
-        );
+    //    let pointer_other_success = ManagedPointer::new(
+    //        EnvironmentOwner::from_str("floxtest").unwrap(),
+    //        EnvironmentName::from_str("nondefault").unwrap(),
+    //    );
 
-        FloxmetaV2::open(&flox, &pointer_other_success)
-            .expect("Should pull other branch 'nondefault' from floxhub");
+    //    FloxmetaV2::open(&flox, &pointer_other_success)
+    //        .expect("Should pull other branch 'nondefault' from floxhub");
 
-        let pointer_other_failure = ManagedPointer::new(
-            EnvironmentOwner::from_str("floxtest").unwrap(),
-            EnvironmentName::from_str("nonexistent").unwrap(),
-        );
+    //    let pointer_other_failure = ManagedPointer::new(
+    //        EnvironmentOwner::from_str("floxtest").unwrap(),
+    //        EnvironmentName::from_str("nonexistent").unwrap(),
+    //    );
 
-        FloxmetaV2::open(&flox, &pointer_other_failure)
-            .expect_err("Should fail pulling branch 'nonexistent' from floxhub");
-    }
+    //    FloxmetaV2::open(&flox, &pointer_other_failure)
+    //        .expect_err("Should fail pulling branch 'nonexistent' from floxhub");
+    //}
 }

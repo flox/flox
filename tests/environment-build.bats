@@ -40,7 +40,7 @@ project_teardown() {
 }
 
 activate_local_env() {
-  run "$FLOX_CLI" activate -d "$PROJECT_DIR";
+  run "$FLOX_BIN" activate -d "$PROJECT_DIR";
 }
 
 

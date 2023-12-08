@@ -47,58 +47,58 @@ teardown() {
 }
 
 @test "'flox install' displays confirmation message" {
-  "$FLOX_CLI" init;
-  run "$FLOX_CLI" install hello;
+  "$FLOX_BIN" init;
+  run "$FLOX_BIN" install hello;
   assert_success;
   assert_output --partial "✅ 'hello' installed to environment";
 }
 
 @test "'flox install' edits manifest" {
-  "$FLOX_CLI" init;
-  run "$FLOX_CLI" install hello;
+  "$FLOX_BIN" init;
+  run "$FLOX_BIN" install hello;
   assert_success;
   run grep "hello = {}" "$PROJECT_DIR/.flox/env/manifest.toml";
   assert_success;
 }
 
 @test "uninstall confirmation message" {
-  "$FLOX_CLI" init
-  run "$FLOX_CLI" install hello
+  "$FLOX_BIN" init
+  run "$FLOX_BIN" install hello
   assert_success
   assert_output --partial "✅ 'hello' installed to environment"
 
-  run "$FLOX_CLI" uninstall hello
+  run "$FLOX_BIN" uninstall hello
   assert_success
   # Note that there's TWO spaces between the emoji and the package name
   assert_output --partial "🗑️  'hello' uninstalled from environment"
 }
 
 @test "'flox uninstall' edits manifest" {
-  "$FLOX_CLI" init;
-  run "$FLOX_CLI" install hello;
+  "$FLOX_BIN" init;
+  run "$FLOX_BIN" install hello;
   assert_success;
-  run "$FLOX_CLI" uninstall hello;
+  run "$FLOX_BIN" uninstall hello;
   run grep "^hello = {}" "$PROJECT_DIR/.flox/env/manifest.toml";
   assert_failure;
 }
 
 @test "'flox install' reports error when package not found" {
-  "$FLOX_CLI" init;
-  run "$FLOX_CLI" install not-a-package;
+  "$FLOX_BIN" init;
+  run "$FLOX_BIN" install not-a-package;
   assert_failure;
   assert_output --partial "failed to resolve \`not-a-package'";
 }
 
 @test "'flox uninstall' reports error when package not found" {
-  "$FLOX_CLI" init;
-  run "$FLOX_CLI" uninstall not-a-package;
+  "$FLOX_BIN" init;
+  run "$FLOX_BIN" uninstall not-a-package;
   assert_failure;
   assert_output --partial "couldn't uninstall 'not-a-package', wasn't previously installed";
 }
 
 @test "'flox install' creates link to installed binary" {
-  "$FLOX_CLI" init;
-  run "$FLOX_CLI" install hello;
+  "$FLOX_BIN" init;
+  run "$FLOX_BIN" install hello;
   assert_success;
   assert_output --partial "✅ 'hello' installed to environment";
   run [ -e "$PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/bin/hello" ];
@@ -106,13 +106,13 @@ teardown() {
 }
 
 @test "'flox uninstall' removes link to installed binary" {
-  "$FLOX_CLI" init;
-  run "$FLOX_CLI" install hello;
+  "$FLOX_BIN" init;
+  run "$FLOX_BIN" install hello;
   assert_success;
   assert_output --partial "✅ 'hello' installed to environment";
   run [ -e "$PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/bin/hello" ];
   assert_success;
-  run "$FLOX_CLI" uninstall hello;
+  run "$FLOX_BIN" uninstall hello;
   assert_success;
   run [ ! -e "$PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/bin/hello" ];
   assert_success;
@@ -121,18 +121,18 @@ teardown() {
 @test "'flox uninstall' has helpful error message with no packages installed" {
   # If the [install] table is missing entirely we don't want to report a TOML
   # parse error, we want to report that there's nothing to uninstall.
-  "$FLOX_CLI" init;
-  run "$FLOX_CLI" uninstall hello;
+  "$FLOX_BIN" init;
+  run "$FLOX_BIN" uninstall hello;
   assert_failure;
   assert_output --partial "couldn't uninstall 'hello', wasn't previously installed";
 }
 
 @test "'flox install' uses last activated environment" {
   mkdir 1
-  "$FLOX_CLI" init --dir 1
+  "$FLOX_BIN" init --dir 1
 
   mkdir 2
-  "$FLOX_CLI" init --dir 2
+  "$FLOX_BIN" init --dir 2
 
   SHELL=bash run expect -d "$TESTS_DIR/install/last-activated.exp"
   assert_success
@@ -140,10 +140,10 @@ teardown() {
 
 @test "'flox install' prompts when an environment is activated and there is an environment in the current directory" {
   mkdir 1
-  "$FLOX_CLI" init --dir 1
+  "$FLOX_BIN" init --dir 1
 
   mkdir 2
-  "$FLOX_CLI" init --dir 2
+  "$FLOX_BIN" init --dir 2
 
   SHELL=bash run expect -d "$TESTS_DIR/install/prompt-which-environment.exp"
   assert_success
@@ -151,10 +151,10 @@ teardown() {
 
 @test "'flox install' prompts when an environment is activated and there is an environment in the containing git repo" {
   mkdir 1
-  "$FLOX_CLI" init --dir 1
+  "$FLOX_BIN" init --dir 1
 
   mkdir 2
-  "$FLOX_CLI" init --dir 2
+  "$FLOX_BIN" init --dir 2
   git -C 2 init
   mkdir 2/subdirectory
 

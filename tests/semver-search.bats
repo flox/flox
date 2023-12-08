@@ -29,7 +29,7 @@ load test_support.bash;
 setup_file() {
   skip "Skipping --bash-passthru tests";
   common_file_setup file;
-  "$FLOX_CLI" subscribe netlify_test_ github:flox-examples/nixpkgs-netlify/main;
+  "$FLOX_BIN" subscribe netlify_test_ github:flox-examples/nixpkgs-netlify/main;
 }
 
 
@@ -37,7 +37,7 @@ setup_file() {
 
 # Make sure we haven't broken regular search
 @test "flox search hello" {
-  run "$FLOX_CLI" search hello;
+  run "$FLOX_BIN" search hello;
   assert_success;
 }
 
@@ -50,7 +50,7 @@ setup_file() {
 
 # Make sure we haven't broken regular search
 @test "flox search -v hello" {
-  run "$FLOX_CLI" search -v hello;
+  run "$FLOX_BIN" search -v hello;
   assert_success;
 }
 
@@ -59,7 +59,7 @@ setup_file() {
 
 # Make sure we haven't broken regular search
 @test "flox search --json hello" {
-  run bash -c "{ $FLOX_CLI search --json hello||:; }|jq;";
+  run bash -c "{ $FLOX_BIN search --json hello||:; }|jq;";
   assert_success;
 }
 
@@ -67,7 +67,7 @@ setup_file() {
 # ---------------------------------------------------------------------------- #
 
 @test "flox search node@18" {
-  run "$FLOX_CLI" search node@18;
+  run "$FLOX_BIN" search node@18;
   assert_success;
   assert_output --partial 'netlify_test_.nodejs@18.10.0';
   assert_output --partial 'netlify_test_.nodejs@18.12.1';
@@ -81,7 +81,7 @@ setup_file() {
 # ---------------------------------------------------------------------------- #
 
 @test "flox search 'node@^16.14'" {
-  run "$FLOX_CLI" search 'node@^16.14';
+  run "$FLOX_BIN" search 'node@^16.14';
   assert_success;
   refute_output --regexp 'netlify_test_\.nodejs@1[^6]\.';
   # This is not compatible with 16.14
@@ -96,7 +96,7 @@ setup_file() {
 # ---------------------------------------------------------------------------- #
 
 @test "flox search 'node@^16.14 || 18.16.0'" {
-  run "$FLOX_CLI" search 'node@^16.14 || 18.16.0';
+  run "$FLOX_BIN" search 'node@^16.14 || 18.16.0';
   assert_success;
   # This is not compatible with 16.14
   refute_output --partial 'netlify_test_.nodejs@16.13.2';
@@ -119,7 +119,7 @@ setup_file() {
 
 # Make sure we emit valid JSON
 @test "flox search 'node@^16.14' --json" {
-  run bash -c "{ $FLOX_CLI search 'node@^16.14' --json||:; }|jq;";
+  run bash -c "{ $FLOX_BIN search 'node@^16.14' --json||:; }|jq;";
   assert_success;
 }
 
