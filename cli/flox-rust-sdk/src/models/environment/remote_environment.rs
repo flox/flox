@@ -20,6 +20,7 @@ use super::{
 use crate::flox::{EnvironmentOwner, EnvironmentRef, Flox};
 use crate::models::environment_ref::EnvironmentName;
 use crate::models::floxmetav2::{FloxmetaV2, FloxmetaV2Error};
+use crate::models::manifest::PackageToInstall;
 
 #[derive(Debug, Error)]
 pub enum RemoteEnvironmentError {
@@ -101,7 +102,7 @@ impl Environment for RemoteEnvironment {
     /// Install packages to the environment atomically
     async fn install(
         &mut self,
-        packages: Vec<String>,
+        packages: &[PackageToInstall],
         flox: &Flox,
     ) -> Result<InstallationAttempt, EnvironmentError2> {
         let result = self.inner.install(packages, flox).await?;

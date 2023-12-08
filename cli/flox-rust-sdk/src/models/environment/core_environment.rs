@@ -11,7 +11,13 @@ use thiserror::Error;
 use super::{copy_dir_recursive, InstallationAttempt, LOCKFILE_FILENAME, MANIFEST_FILENAME};
 use crate::flox::Flox;
 use crate::models::environment::{call_pkgdb, global_manifest_path};
-use crate::models::manifest::{insert_packages, remove_packages, Manifest, TomlEditError};
+use crate::models::manifest::{
+    insert_packages,
+    remove_packages,
+    Manifest,
+    PackageToInstall,
+    TomlEditError,
+};
 use crate::models::pkgdb::{CallPkgDbError, UpdateResult, PKGDB_BIN};
 
 pub struct ReadOnly {}
@@ -169,11 +175,11 @@ impl CoreEnvironment<ReadOnly> {
     /// manifest.
     pub fn install(
         &mut self,
-        packages: Vec<String>,
+        packages: &[PackageToInstall],
         flox: &Flox,
     ) -> Result<InstallationAttempt, CoreEnvironmentError> {
         let current_manifest_contents = self.manifest_content()?;
-        let installation = insert_packages(&current_manifest_contents, &packages)
+        let installation = insert_packages(&current_manifest_contents, packages)
             .map(|insertion| InstallationAttempt {
                 new_manifest: insertion.new_toml.map(|toml| toml.to_string()),
                 already_installed: insertion.already_installed,

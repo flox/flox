@@ -336,6 +336,15 @@ Environment::tryResolveDescriptorIn( const ManifestDescriptor & descriptor,
                                      const pkgdb::PkgDbInput &  input,
                                      const System &             system )
 {
+  std::string dPath;
+  if ( descriptor.path.has_value() )
+    {
+      dPath = joinWithDelim( *descriptor.path, "." );
+    }
+  std::string dName;
+  if ( descriptor.name.has_value() ) { dName = *descriptor.name; }
+  debugLog( "resolving descriptor: path='" + dPath + "', name='" + dName
+            + "'" );
   /* Skip unrequested systems. */
   if ( descriptor.systems.has_value()
        && ( std::find( descriptor.systems->begin(),
@@ -353,7 +362,11 @@ Environment::tryResolveDescriptorIn( const ManifestDescriptor & descriptor,
   args.systems = std::vector<System> { system };
   pkgdb::PkgQuery query( args );
   auto            rows = query.execute( input.getDbReadOnly()->db );
-  if ( rows.empty() ) { return std::nullopt; }
+  if ( rows.empty() )
+    {
+      debugLog( "package not found in input" );
+      return std::nullopt;
+    }
   return rows.front();
 }
 
@@ -467,9 +480,14 @@ Environment::tryResolveGroupIn( const InstallDescriptors & group,
 {
   std::unordered_map<InstallID, std::optional<pkgdb::row_id>> pkgRows;
 
+  std::string inputName;
+  if ( auto name = input.getName(); name.has_value() ) { inputName = *name; }
+  else { inputName = "<none>"; }
+  debugLog( "resolving group in input: " + inputName );
   /* Loop over each descriptor. */
   for ( const auto & [iid, descriptor] : group )
     {
+      debugLog( "resolving install ID '" + iid + "'" );
       /* Skip unrequested systems. */
       if ( descriptor.systems.has_value()
            && ( std::find( descriptor.systems->begin(),
@@ -488,6 +506,7 @@ Environment::tryResolveGroupIn( const InstallDescriptors & group,
         = this->tryResolveDescriptorIn( descriptor, input, system );
       if ( maybeRow.has_value() || descriptor.optional )
         {
+          debugLog( "found match for install ID '" + iid + "'" );
           pkgRows.emplace( iid, maybeRow );
         }
       else { return iid; }
@@ -543,6 +562,11 @@ Environment::tryResolveGroup( const InstallDescriptors & group,
    * failed to resolve in. */
   ResolutionFailure failure;
 
+  std::vector<std::string> ids;
+  for ( const auto & [id, _] : group ) { ids.emplace_back( id ); }
+  std::string groupStr = joinWithDelim( ids, " " );
+  debugLog( "starting resolution for group: " + groupStr );
+
   /* When there is an existing lock with this group pinned to an existing
   input+rev try to use it to resolve the group.
    * If we fail collect a list of failed descriptors; presumably these are
@@ -550,11 +574,14 @@ Environment::tryResolveGroup( const InstallDescriptors & group,
   std::optional<pkgdb::PkgDbInput> oldGroupInput;
   if ( auto oldLockfile = this->getOldLockfile(); oldLockfile.has_value() )
     {
+      debugLog( "using old lockfile" );
       auto lockedInput
         = getGroupInput( group, *this->getOldLockfile(), system );
       if ( lockedInput.has_value() )
         {
-          RegistryInput        registryInput( *lockedInput );
+          RegistryInput registryInput( *lockedInput );
+          debugLog( "group previously had input: "
+                    + registryInput.from->to_string() );
           nix::ref<nix::Store> store = this->getStore();
           oldGroupInput = pkgdb::PkgDbInput( store, registryInput );
 

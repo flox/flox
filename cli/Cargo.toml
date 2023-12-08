@@ -8,7 +8,7 @@ resolver = "2"
 anyhow = "1"
 async-trait = "0.1.52"
 blake3 = "1.5.0"
-bpaf = { version = "0.9.7", features = ["derive", "autocomplete"] }
+bpaf = { version = "0.9.8", features = ["derive", "autocomplete"] }
 chrono = "0.4.24"
 config = "0.13.1"
 crossterm = "0.26"
@@ -33,7 +33,7 @@ openssl = "0.10.57"
 pathdiff = "0.2"
 pretty_assertions = "1.3"
 regex = "1"
-reqwest = { version = "0.11", features = ["json","blocking"] }
+reqwest = { version = "0.11", features = ["json", "blocking"] }
 rnix = "0.11"
 rowan = "0.15"
 runix = { git = "https://github.com/flox/runix" }

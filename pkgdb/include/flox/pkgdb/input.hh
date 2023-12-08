@@ -227,7 +227,9 @@ public:
   [[nodiscard]] nlohmann::json
   getRowJSON( row_id row );
 
-
+  /** @brief Return the name if it was provided. */
+  [[nodiscard]] std::optional<std::string>
+  getName() const;
 }; /* End struct `PkgDbInput' */
 
 

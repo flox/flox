@@ -183,6 +183,12 @@ PkgDbInput::getRowJSON( row_id row )
   return rsl;
 }
 
+std::optional<std::string>
+PkgDbInput::getName() const
+{
+  return this->name;
+}
+
 
 /* -------------------------------------------------------------------------- */
 

@@ -17,6 +17,7 @@ use self::managed_environment::ManagedEnvironmentError;
 use self::remote_environment::RemoteEnvironmentError;
 use super::environment_ref::{EnvironmentName, EnvironmentOwner};
 use super::flox_package::FloxTriple;
+use super::manifest::PackageToInstall;
 use crate::flox::{EnvironmentRef, Flox};
 use crate::models::pkgdb::call_pkgdb;
 use crate::providers::git::{
@@ -111,7 +112,7 @@ pub trait Environment {
     /// Install packages to the environment atomically
     async fn install(
         &mut self,
-        packages: Vec<String>,
+        packages: &[PackageToInstall],
         flox: &Flox,
     ) -> Result<InstallationAttempt, EnvironmentError2>;
 

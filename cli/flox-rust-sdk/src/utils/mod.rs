@@ -24,7 +24,7 @@ pub enum FindAndReplaceError {
     WriteTemplateFile(std::io::Error),
 }
 
-/// Replace all occurrences of find with replace in a directory or file
+/// Replace all occurrences of `find` with `replace` in a directory or file
 pub async fn find_and_replace(
     path: &Path,
     find: &str,
@@ -95,4 +95,27 @@ pub fn copy_file_without_permissions(
         err: io_err,
     })?;
     Ok(())
+}
+
+/// Returns the last component of a dot-separated attribute path or the
+/// attribute provided if there is only one path component.
+pub fn attr_name(path: &str) -> String {
+    path.split('.')
+        .rev()
+        .next()
+        .map(|s| s.to_string())
+        .unwrap_or(path.to_string())
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn splits_multipart_attr_path() {
+        assert_eq!("foo".to_string(), attr_name("foo"));
+        assert_eq!("bar".to_string(), attr_name("foo.bar"));
+        assert_eq!("baz".to_string(), attr_name("foo.bar.baz"));
+        assert_eq!("".to_string(), attr_name(""));
+    }
 }
