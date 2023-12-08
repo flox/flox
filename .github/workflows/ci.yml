@@ -100,6 +100,9 @@ jobs:
       - name: "Checkout"
         uses: "actions/checkout@v3"
 
+      - name: "Install newer Nix"
+        uses: "cachix/install-nix-action@v24"
+
       - name: "Install flox"
         uses: "flox/install-flox-action@main"
         with:
@@ -180,6 +183,9 @@ jobs:
     steps:
       - name: "Checkout"
         uses: "actions/checkout@v3"
+
+      - name: "Install newer Nix"
+        uses: "cachix/install-nix-action@v24"
 
       - name: "Install flox"
         uses: "flox/install-flox-action@main"
@@ -280,6 +286,9 @@ jobs:
           tags: "tag:ci"
           authkey: "${{ secrets.TAILSCALE_AUTH_KEY }}"
 
+      - name: "Install newer Nix"
+        uses: "cachix/install-nix-action@v24"
+
       - name: "Install flox"
         uses: "flox/install-flox-action@main"
         with:
@@ -367,6 +376,9 @@ jobs:
           tags: "tag:ci"
           authkey: "${{ secrets.TAILSCALE_AUTH_KEY }}"
 
+      - name: "Install newer Nix"
+        uses: "cachix/install-nix-action@v24"
+
       - name: "Install flox"
         uses: "flox/install-flox-action@main"
         with:
@@ -453,6 +465,9 @@ jobs:
           args: "--timeout 30s --login-server ${{ vars.TAILSCALE_URL }}"
           tags: "tag:ci"
           authkey: "${{ secrets.TAILSCALE_AUTH_KEY }}"
+
+      - name: "Install newer Nix"
+        uses: "cachix/install-nix-action@v24"
 
       - name: "Install flox"
         uses: "flox/install-flox-action@main"
