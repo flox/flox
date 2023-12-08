@@ -197,7 +197,7 @@ fn render_search_results_user_facing(
         writeln!(&mut writer, "{package:<column_width$}  {desc}")?;
     }
     writer.flush().context("couldn't flush search results")?;
-    eprintln!("\nUse `flox show {{package}}` to see available versions");
+    eprintln!("\nUse `flox show <package>` to see available versions");
     Ok(())
 }
 
