@@ -123,7 +123,7 @@ setup_file() {
 @test "'flox search' semver search: 'hello@>=1'" {
   run "$FLOX_BIN" search 'hello@>=1' --json;
   versions="$(echo "$output" | jq -c 'map(.version)')";
-  case $THIS_SYSTEM in
+  case "$THIS_SYSTEM" in
     *-darwin)
       assert_equal "$versions" '["2.12.1","2.12","2.10"]';
       ;;
