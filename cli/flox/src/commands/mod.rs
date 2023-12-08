@@ -452,6 +452,7 @@ pub enum EnvironmentSelect {
         environment_ref::EnvironmentRef,
     ),
     #[default]
+    #[bpaf(hide)]
     Unspecified,
 }
 
