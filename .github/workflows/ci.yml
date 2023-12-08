@@ -246,7 +246,7 @@ jobs:
               --command cargo build
           popd
 
-      - name: "Test (flox)"
+      - name: "Test (./cli: cargo test)"
         run: |
           pushd ./cli
           nix develop -L \
@@ -254,17 +254,25 @@ jobs:
             --no-update-lock-file \
             '.#default' \
               --command cargo test --locked --workspace -F extra-tests;
+          popd
+
+      - name: "Test (./cli/tests)"
+        run: |
+          pushd ./cli
           nix develop -L \
             --accept-flake-config \
             --no-update-lock-file \
             '.#default' \
               --command flox-cli-tests
+          popd
+
+      - name: "Test (./tests)"
+        run: |
           nix develop -L \
             --accept-flake-config \
             --no-update-lock-file \
             '.#default' \
               --command flox-tests
-          popd
 
   env-builder-nix-build:
     name: "EnvBuilder Bats Tests"
