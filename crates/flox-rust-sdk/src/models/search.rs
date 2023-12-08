@@ -1,5 +1,5 @@
 use std::env;
-use std::io::{BufRead, BufReader};
+use std::io::BufRead;
 use std::path::PathBuf;
 use std::process::{Command, ExitStatus, Stdio};
 
@@ -35,6 +35,8 @@ pub enum SearchError {
     CanonicalManifestPath(std::io::Error),
     #[error("inline manifest was malformed: {0}")]
     InlineManifestMalformed(String),
+    #[error("couldn't acquire stdout for search process")]
+    PkgDbStdout,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -223,6 +225,21 @@ pub enum Subtree {
 #[derive(Debug, Clone, Serialize)]
 pub struct SearchResults {
     pub results: Vec<SearchResult>,
+    pub count: Option<u64>,
+}
+
+/// The types of JSON records that `pkgdb` can emit during a search
+#[derive(Debug, PartialEq, Deserialize)]
+#[serde(untagged)]
+pub enum Record {
+    /// A record containing the total number of search results regardless
+    /// of how many are displayed to the user
+    #[serde(rename_all = "kebab-case")]
+    ResultCount { result_count: u64 },
+    /// A single search result
+    SearchResult(SearchResult),
+    /// An error
+    Error(PkgDbError),
 }
 
 impl TryFrom<&[u8]> for SearchResults {
@@ -244,36 +261,14 @@ impl TryFrom<&[u8]> for SearchResults {
                 },
             };
         }
-        Ok(SearchResults { results })
+        Ok(SearchResults {
+            results,
+            count: None,
+        })
     }
 }
 
-impl SearchResults {
-    /// Read search results from a buffered input source.
-    ///
-    /// Fails fast on reading the first error.
-    pub fn collect_results(
-        result_reader: impl BufRead,
-        _err_reader: impl BufRead,
-    ) -> Result<Self, SearchError> {
-        let mut results = Vec::new();
-        for maybe_line in result_reader.lines() {
-            let text = maybe_line.map_err(SearchError::ParseStdout)?;
-            match serde_json::from_str(&text) {
-                Ok(search_result) => results.push(search_result),
-                Err(_) => {
-                    let mut deserializer = serde_json::Deserializer::from_str(&text);
-                    let err = PkgDbError::deserialize(&mut deserializer)
-                        .map_err(SearchError::Deserialize)?;
-                    return Err(SearchError::PkgDb(err));
-                },
-            };
-        }
-        Ok(SearchResults { results })
-    }
-}
-
-/// Calls `pkgdb` to get search results
+/// Calls `pkgdb` and reads a stream of search records.
 pub fn do_search(search_params: &SearchParams) -> Result<(SearchResults, ExitStatus), SearchError> {
     let json = serde_json::to_string(search_params).map_err(SearchError::Serialize)?;
 
@@ -288,23 +283,32 @@ pub fn do_search(search_params: &SearchParams) -> Result<(SearchResults, ExitSta
 
     debug!("running search command {:?}", pkgdb_command);
     let mut pkgdb_process = pkgdb_command.spawn().map_err(SearchError::PkgDbCall)?;
-
-    // SAFETY: Could panic if somehow we aren't capturing `stdout`, but
-    //         we _need_ to capture `stdout` to read the search results
-    //         anyway. This is an error you would absolutely encounter
-    //         during integration tests, so it's safe to unwrap here.
-    let output_reader = BufReader::new(pkgdb_process.stdout.take().unwrap());
-    let err_reader = BufReader::new(pkgdb_process.stderr.take().unwrap());
-
-    let results = SearchResults::collect_results(output_reader, err_reader)?;
-
+    let stdout = pkgdb_process.stdout.take();
+    if stdout.is_none() {
+        pkgdb_process.kill().map_err(SearchError::PkgDbCall)?;
+        return Err(SearchError::PkgDbStdout);
+    }
+    let deserializer = serde_json::Deserializer::from_reader(stdout.unwrap());
+    let mut count = None;
+    let mut results = Vec::new();
+    for maybe_record in deserializer.into_iter() {
+        let record = maybe_record.map_err(SearchError::Deserialize)?;
+        debug!("record = {:?}", record);
+        match record {
+            Record::Error(err) => {
+                pkgdb_process.kill().map_err(SearchError::PkgDbCall)?;
+                return Err(SearchError::PkgDb(err));
+            },
+            Record::ResultCount { result_count } => count = Some(result_count),
+            Record::SearchResult(result) => results.push(result),
+        }
+    }
     let exit_status = pkgdb_process.wait().map_err(SearchError::PkgDbCall)?;
-
-    Ok((results, exit_status))
+    Ok((SearchResults { results, count }, exit_status))
 }
 
 /// A package search result
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SearchResult {
     /// Which input the package came from
@@ -344,9 +348,9 @@ pub struct SearchResult {
 mod test {
     use super::*;
 
-    const EXAMPLE_SEARCH_TERM: &'_ str = "hello@2.12.1";
+    const EXAMPLE_SEARCH_TERM: &str = "hello@2.12.1";
 
-    const EXAMPLE_PARAMS: &'_ str = r#"{
+    const EXAMPLE_PARAMS: &str = r#"{
         "manifest": "/path/to/manifest",
         "global-manifest": "/path/to/manifest",
         "query": {
@@ -356,10 +360,12 @@ mod test {
         }
     }"#;
 
+    const EXAMPLE_RESULT_COUNT: &str = r#"{"result-count": 15}"#;
+
     // This is illegible when put on a single line, but the deserializer will fail due to
     // the newlines. You'll need to `EXAMPLE_SEARCH_RESULTS.replace('\n', "").as_bytes()`
     // to deserialize it.
-    const EXAMPLE_SEARCH_RESULTS: &'_ str = r#"{
+    const EXAMPLE_SEARCH_RESULTS: &str = r#"{
         "broken": false,
         "description": "A program that produces a familiar, friendly greeting",
         "input": "nixpkgs",
@@ -401,5 +407,11 @@ mod test {
         let search_results =
             SearchResults::try_from(EXAMPLE_SEARCH_RESULTS.replace('\n', "").as_bytes()).unwrap();
         assert!(search_results.results.len() == 1);
+    }
+
+    #[test]
+    fn deserializes_result_count() {
+        let count: Record = serde_json::from_str(EXAMPLE_RESULT_COUNT).unwrap();
+        assert_eq!(Record::ResultCount { result_count: 15 }, count);
     }
 }

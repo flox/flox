@@ -140,6 +140,7 @@ SearchQuery::fillPkgQueryArgs( pkgdb::PkgQueryArgs & pqa ) const
   pqa.semver           = this->semver;
   pqa.partialMatch     = this->partialMatch;
   pqa.partialNameMatch = this->partialNameMatch;
+  pqa.limit            = this->limit;
   return pqa;
 }
 

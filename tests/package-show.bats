@@ -137,3 +137,112 @@ teardown() {
   run --separate-stderr "$FLOX_BIN" show hello;
   assert_success;
 }
+
+
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=search:project, search:manifest, search:show
+
+@test "'flox show' uses '_PKGDB_GA_REGISTRY_REF_OR_REV' revision" {
+  mkdir -p "$PROJECT_DIR/.flox/env";
+  # Note: at some point it may also be necessary to create a .flox/env.json
+  echo 'options.systems = ["x86_64-linux"]'       \
+       > "$PROJECT_DIR/.flox/env/manifest.toml";
+
+  # Search for a package with `pkgdb`
+  run --separate-stderr sh -c "$PKGDB_BIN search --ga-registry '{
+      \"manifest\": \"$PROJECT_DIR/.flox/env/manifest.toml\",
+      \"query\": { \"match-name\": \"nodejs\" }
+    }'|head -n1|jq -r '.version';";
+  assert_success;
+  assert_output '18.16.0';
+  unset output;
+
+  # Ensure the version of `nodejs' in our search results aligns with the
+  # `--ga-registry` default ( 18.16.0 ).
+  run --separate-stderr sh -c "$FLOX_BIN show nodejs|tail -n1";
+  assert_success;
+  assert_output '    nodejs - nodejs@18.16.0';
+}
+
+
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=search:project, search:manifest, search:lockfile, search:show
+
+@test "'flox show' uses locked revision when available" {
+  mkdir -p "$PROJECT_DIR/.flox/env";
+  # Note: at some point it may also be necessary to create a .flox/env.json
+  {
+    echo 'options.systems = ["x86_64-linux"]';
+    echo 'install.nodejs = {}';
+  } > "$PROJECT_DIR/.flox/env/manifest.toml";
+
+  # Force lockfile to pin a specific revision of `nixpkgs'
+  run --separate-stderr sh -c                                          \
+   "_PKGDB_GA_REGISTRY_REF_OR_REV='${PKGDB_NIXPKGS_REV_NEW?}'          \
+      $PKGDB_BIN manifest lock                                         \
+                 --ga-registry '$PROJECT_DIR/.flox/env/manifest.toml'  \
+                 > '$PROJECT_DIR/.flox/env/manifest.lock';";
+  assert_success;
+  unset output;
+
+  # Ensure the locked revision is what we expect.
+  run --separate-stderr jq -r '.registry.inputs.nixpkgs.from.rev'      \
+                              "$PROJECT_DIR/.flox/env/manifest.lock";
+  assert_success;
+  assert_output "$PKGDB_NIXPKGS_REV_NEW";
+  unset output;
+
+  # Search for a package with `pkgdb`
+  run --separate-stderr sh -c                                    \
+   "_PKGDB_GA_REGISTRY_REF_OR_REV='$PKGDB_NIXPKGS_REV_NEW'       \
+      $PKGDB_BIN search --ga-registry '{
+        \"manifest\": \"$PROJECT_DIR/.flox/env/manifest.toml\",
+        \"lockfile\": \"$PROJECT_DIR/.flox/env/manifest.lock\",
+        \"query\": { \"match-name\": \"nodejs\" }
+      }'|head -n1|jq -r '.version';"
+  assert_success;
+  assert_output '18.17.1';
+  unset output;
+
+  # Ensure the version of `nodejs' in our search results aligns with the
+  # locked rev ( 18.17.1 ), instead of the `--ga-registry` default ( 18.16.0 ).
+  run --separate-stderr sh -c "$FLOX_BIN show nodejs|tail -n1";
+  assert_success;
+  assert_output '    nodejs - nodejs@18.17.1';
+}
+
+
+# ---------------------------------------------------------------------------- #
+
+@test "'flox show' prompts when an environment is activated and there is an environment in the current directory" {
+  # Set up two environments locked to different revisions of nixpkgs, and
+  # confirm that flox show displays different versions of nodejs for each.
+  
+  mkdir 1
+  pushd 1
+  "$FLOX_BIN" init
+  _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLD?}" \
+    "$FLOX_BIN" --debug install nodejs
+
+  run --separate-stderr sh -c "$FLOX_BIN show nodejs|tail -n1";
+  assert_success;
+  assert_output '    nodejs - nodejs@18.16.0';
+  popd
+  
+
+  mkdir 2
+  pushd 2
+  "$FLOX_BIN" init
+  _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_NEW?}" \
+    "$FLOX_BIN" install nodejs
+  
+  run --separate-stderr sh -c "$FLOX_BIN show nodejs|tail -n1";
+  assert_success;
+  assert_output '    nodejs - nodejs@18.17.1';
+  popd
+
+  SHELL=bash run expect -d "$TESTS_DIR/show/prompt-which-environment.exp"
+  assert_success
+}

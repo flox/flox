@@ -181,13 +181,52 @@ SearchCommand::run()
       std::cout << query.str() << std::endl;
       return EXIT_SUCCESS;
     }
+  auto                                            resultCount = 0;
+  std::vector<std::vector<pkgdb::row_id>>         ids;
+  std::vector<std::shared_ptr<pkgdb::PkgDbInput>> inputs;
   for ( const auto & [name, input] :
         *this->getEnvironment().getPkgDbRegistry() )
     {
-      auto dbRO = input->getDbReadOnly();
-      for ( const auto & row : query.execute( dbRO->db ) )
+      auto                       dbRO = input->getDbReadOnly();
+      std::vector<pkgdb::row_id> inputIds;
+      for ( const auto & id : query.execute( dbRO->db ) )
         {
-          std::cout << input->getRowJSON( row ).dump() << std::endl;
+          inputIds.emplace_back( id );
+          resultCount += 1;
+        }
+      inputs.emplace_back( input );
+      ids.emplace_back( std::move( inputIds ) );
+    }
+  if ( query.limit.has_value() )
+    {
+      // Emit the number of results as the first line
+      nlohmann::json resultCountRecord = { { "result-count", resultCount } };
+      std::cout << resultCountRecord << std::endl;
+      // Only print the first `limit` results
+      for ( size_t i = 0; i < inputs.size(); i++ )
+        {
+          if ( *query.limit == 0 ) { break; }
+          auto input    = inputs[i];
+          auto inputIds = ids[i];
+          for ( auto & id : inputIds )
+            {
+              if ( *query.limit == 0 ) { break; }
+              std::cout << input->getRowJSON( id ).dump() << std::endl;
+              *query.limit -= 1;
+            }
+        }
+    }
+  else
+    {
+      // Print all of the results
+      for ( size_t i = 0; i < inputs.size(); i++ )
+        {
+          auto input    = inputs[i];
+          auto inputIds = ids[i];
+          for ( auto & id : inputIds )
+            {
+              std::cout << input->getRowJSON( id ).dump() << std::endl;
+            }
         }
     }
   return EXIT_SUCCESS;

@@ -16,16 +16,17 @@ use flox_rust_sdk::models::search::{
     ShowError,
     Subtree,
 };
-use log::debug;
+use log::{debug, info};
 
 use crate::commands::environment::hacky_environment_description;
 use crate::commands::{detect_environment, open_environment};
 use crate::config::features::{Features, SearchStrategy};
+use crate::config::Config;
 use crate::subcommand_metric;
 
 const SEARCH_INPUT_SEPARATOR: &'_ str = ":";
 const DEFAULT_DESCRIPTION: &'_ str = "<no description provided>";
-const DEFAULT_NUM_RESULTS: u8 = 10;
+const DEFAULT_SEARCH_LIMIT: Option<u8> = Some(10);
 
 #[derive(Bpaf, Clone)]
 pub struct ChannelArgs {}
@@ -63,7 +64,7 @@ pub struct Search {
 // which is TODO.
 // Luckily most flakes don't.
 impl Search {
-    pub async fn handle(self, flox: Flox) -> Result<()> {
+    pub async fn handle(self, config: Config, flox: Flox) -> Result<()> {
         subcommand_metric!("search");
         debug!("performing search for term: {}", self.search_term);
 
@@ -73,7 +74,7 @@ impl Search {
         let limit = if self.all {
             None
         } else {
-            Some(DEFAULT_NUM_RESULTS)
+            config.flox.search_limit.or(DEFAULT_SEARCH_LIMIT)
         };
 
         let search_params = construct_search_params(
@@ -148,8 +149,9 @@ fn render_search_results_user_facing(
     search_term: &str,
     search_results: SearchResults,
 ) -> Result<()> {
+    let n_results = search_results.results.len();
     // Nothing to display
-    if search_results.results.is_empty() {
+    if n_results == 0 {
         bail!("No packages matched this search term: {}", search_term);
     }
     // Search results contain a lot of information, but all we need for rendering are
@@ -197,7 +199,17 @@ fn render_search_results_user_facing(
         writeln!(&mut writer, "{package:<column_width$}  {desc}")?;
     }
     writer.flush().context("couldn't flush search results")?;
-    eprintln!("\nUse `flox show <package>` to see available versions");
+    info!(""); // We need a blank line between search results and hints
+    if let Some(count) = search_results.count {
+        // Don't show the message if we have exactly the number of results as the limit,
+        // otherwise we would get messages like `Showing 10 of 10...`
+        if count != n_results as u64 {
+            info!(
+            "Showing {n_results} of {count} results. Use `flox search {search_term} --all` to see the full list.",
+        );
+        }
+    }
+    info!("Use `flox show <package>` to see available versions");
     Ok(())
 }
 
