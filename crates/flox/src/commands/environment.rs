@@ -426,7 +426,7 @@ impl Init {
 
             Next:
               $ flox search <package>    <- Search for a package
-              $ flox install <package>   <- Install a package into environment
+              $ flox install <package>   <- Install a package into an environment
               $ flox activate            <- Enter the environment
             "},
             name = env.name(),
