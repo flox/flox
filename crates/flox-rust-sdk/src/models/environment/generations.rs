@@ -33,20 +33,50 @@ use crate::providers::git::{GitCommandProvider, GitProvider};
 
 const GENERATIONS_METADATA_FILE: &str = "metadata.json";
 
+/// Generations as a branch in a (bare) git repository.
+/// In this state files are read only using `git show`.
+/// Making commits to bare repositories is tricky and non-idiomatic,
+/// thus writing commands are implemented on checked out branches.
+///
+/// Todo: rename to `Opaque`, `Bare`, ...?
+///
+/// See also: [ReadWrite]
 pub struct ReadOnly {}
 
+/// Generations as a checked out branch of a git clone of a [ReadOnly] repo.
+/// In this state files are read and writeable using the filesystem.
+///
+/// Mutating commands are commited and pushed to the [ReadOnly] branch.
+///
+/// Instances of this type are created using [Generations::writable].
+///
+/// Todo: rename to `CheckedOut`, `Filesystem`, ...?
+///
+/// /// See also: [ReadOnly]
 pub struct ReadWrite {}
 
+/// A representation of the generations of an environment
+///
+/// Essentially the branches in a Floxmeta repository.
+///
+/// Todo: merge with or integrate Floxmeta?
 pub struct Generations<State = ReadOnly> {
     /// A floxmeta repository/branch that contains the generations of an environment
     ///
     /// - When [ReadOnly], this is assumend to be bare, but it is not enforced.
+    ///   If not bare, updating it using `git push` may fail to update checked out branches.
     /// - When [ReadWrite], this is required to not be bare.
     ///   This is enforced when created using [Self::writable].
     repo: GitCommandProvider,
 
+    /// The name of the branch containing the generations
+    /// Used to pick the correct branch when showing files, cloning, and pushing.
     branch: String,
 
+    /// The state of the generations view
+    ///
+    /// Should remain private to enforce the invariant that [ReadWrite]
+    /// always refers to a cloned branch of a [ReadOnly] instance.
     _state: State,
 }
 
@@ -354,3 +384,9 @@ impl SingleGenerationMetadata {
     SerializeDisplay,
 )]
 pub struct GenerationId(usize);
+
+#[cfg(test)]
+mod tests {
+    // todo: tests for this will be easier with the `init` method implemented
+    // in https://github.com/flox/flox/pull/563
+}
