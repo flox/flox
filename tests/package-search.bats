@@ -365,7 +365,7 @@ setup_file() {
 
 # ---------------------------------------------------------------------------- #
 
-@test "'flox search' prompts when an environment is activated and there is an environment in the current directory" {
+@test "'flox show' prompts when an environment is activated and there is an environment in the current directory" {
   # Set up two environments locked to different revisions of nixpkgs, and
   # confirm that flox show displays different versions of nodejs for each.
 
@@ -373,7 +373,7 @@ setup_file() {
   pushd 1
   "$FLOX_BIN" init
   _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLD?}" \
-    "$FLOX_BIN" --debug install nodejs
+    "$FLOX_BIN" install nodejs
 
   run --separate-stderr sh -c "$FLOX_BIN show nodejs|tail -n1";
   assert_success;
