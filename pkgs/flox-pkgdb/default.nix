@@ -78,6 +78,8 @@ in
           notIgnored && notResult;
       };
 
+      BUILD_AUX_DIR = ./../../build-aux;
+
       propagatedBuildInputs = [semver nix];
 
       nativeBuildInputs = [pkg-config];

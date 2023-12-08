@@ -52,6 +52,8 @@ in
           notIgnored && notResult;
       };
 
+      BUILD_AUX_DIR = ./../../build-aux;
+
       nativeBuildInputs = [pkg-config];
 
       buildInputs = [
