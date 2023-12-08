@@ -28,8 +28,8 @@ use serde_with::{DeserializeFromStr, SerializeDisplay};
 use thiserror::Error;
 
 use super::core_environment::CoreEnvironment;
-use super::{copy_dir_recursive, PathPointer, ENV_DIR_NAME};
-use crate::providers::git::{GitCommandOptions, GitCommandProvider, GitProvider};
+use super::{copy_dir_recursive, ENV_DIR_NAME};
+use crate::providers::git::{GitCommandProvider, GitProvider};
 
 const GENERATIONS_METADATA_FILE: &str = "metadata.json";
 
