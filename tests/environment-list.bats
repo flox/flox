@@ -39,21 +39,21 @@ teardown() {
 }
 
 @test "'flox list' lists packages of environment in the current dir; fails if no env found" {
-  run "$FLOX_CLI" list;
+  run "$FLOX_BIN" list;
   assert_failure;
 }
 
 @test "'flox list' lists packages of environment in the current dir; No package" {
-  "$FLOX_CLI" init
-  run "$FLOX_CLI" list
+  "$FLOX_BIN" init
+  run "$FLOX_BIN" list
   assert_success
 }
 
 @test "'flox list' lists packages of environment in the current dir; One package from nixpkgs" {
-  "$FLOX_CLI" init
-  "$FLOX_CLI" install hello
+  "$FLOX_BIN" init
+  "$FLOX_BIN" install hello
 
-  run "$FLOX_CLI" list
+  run "$FLOX_BIN" list
   assert_success
   assert_output --regexp - <<EOF
 hello

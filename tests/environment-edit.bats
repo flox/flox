@@ -58,14 +58,14 @@ check_manifest_updated() {
 # ---------------------------------------------------------------------------- #
 
 @test "'flox edit' confirms successful edit" {
-  $FLOX_CLI init
+  $FLOX_BIN init
   cp "$MANIFEST_PATH" "$TMP_MANIFEST_PATH"
   cat << "EOF" >> "$TMP_MANIFEST_PATH"
 [install]
 hello = {}
 EOF
 
-  run $FLOX_CLI edit -f "$TMP_MANIFEST_PATH"
+  run $FLOX_BIN edit -f "$TMP_MANIFEST_PATH"
   assert_success
   assert_output --partial "✅ environment successfully edited"
 }
@@ -74,10 +74,10 @@ EOF
 # ---------------------------------------------------------------------------- #
 
 @test "'flox edit' says no changes made" {
-  $FLOX_CLI init
+  $FLOX_BIN init
   cp "$MANIFEST_PATH" "$TMP_MANIFEST_PATH"
 
-  run $FLOX_CLI edit -f "$TMP_MANIFEST_PATH"
+  run $FLOX_BIN edit -f "$TMP_MANIFEST_PATH"
   assert_success
   assert_output --partial "⚠️  no changes made to environment"
 }
@@ -86,7 +86,7 @@ EOF
 # ---------------------------------------------------------------------------- #
 
 @test "'flox edit' does not say to re-activate when hook is modified and environment is not active" {
-  $FLOX_CLI init
+  $FLOX_BIN init
   cp "$MANIFEST_PATH" "$TMP_MANIFEST_PATH"
   cat << "EOF" >> "$TMP_MANIFEST_PATH"
 [hook]
@@ -95,7 +95,7 @@ script = """
 """
 EOF
 
-  run $FLOX_CLI edit -f "$TMP_MANIFEST_PATH"
+  run $FLOX_BIN edit -f "$TMP_MANIFEST_PATH"
   assert_success
   assert_output --partial "✅ environment successfully edited"
 }
@@ -104,7 +104,7 @@ EOF
 # ---------------------------------------------------------------------------- #
 
 @test "'flox edit' says to re-activate when hook is modified and environment is active" {
-  $FLOX_CLI init
+  $FLOX_BIN init
   cp "$MANIFEST_PATH" "$TMP_MANIFEST_PATH"
   cat << "EOF" >> "$TMP_MANIFEST_PATH"
 [hook]
@@ -123,7 +123,7 @@ EOF
 @test "'flox edit' accepts contents via filename" {
   skip "FIXME: broken migrating to manifest.toml";
   run cat "$EXTERNAL_MANIFEST_PATH"
-  run "$FLOX_CLI" edit -f "$EXTERNAL_MANIFEST_PATH";
+  run "$FLOX_BIN" edit -f "$EXTERNAL_MANIFEST_PATH";
   assert_success;
   WRITTEN=$(cat "$MANIFEST_PATH");
   assert_equal "$WRITTEN" "$NEW_MANIFEST_CONTENTS";
@@ -134,7 +134,7 @@ EOF
 
 @test "'flox edit' accepts contents via pipe to stdin" {
   skip "FIXME: broken migrating to manifest.toml";
-  run sh -c "cat ${EXTERNAL_MANIFEST_PATH} | ${FLOX_CLI} edit -f -";
+  run sh -c "cat ${EXTERNAL_MANIFEST_PATH} | ${FLOX_BIN} edit -f -";
   assert_success;
   # Get the contents as they appear in the actual manifest after the operation
   WRITTEN=$(cat "$MANIFEST_PATH");
@@ -148,7 +148,7 @@ EOF
 @test "'flox edit' fails with invalid contents supplied via filename" {
   skip "FIXME: broken migrating to manifest.toml";
   echo "foo = " > "$EXTERNAL_MANIFEST_PATH";
-  run "$FLOX_CLI" edit -f "$EXTERNAL_MANIFEST_PATH";
+  run "$FLOX_BIN" edit -f "$EXTERNAL_MANIFEST_PATH";
   assert_failure;
   run check_manifest_unchanged;
   assert_success;
@@ -159,7 +159,7 @@ EOF
 
 @test "'flox edit' fails with invalid contents supplied via stdin" {
   skip "FIXME: broken migrating to manifest.toml";
-  run sh -c "echo 'foo = ;' | ${FLOX_CLI} edit -f -";
+  run sh -c "echo 'foo = ;' | ${FLOX_BIN} edit -f -";
   assert_failure;
   run check_manifest_unchanged;
   assert_success;
@@ -169,7 +169,7 @@ EOF
 # ---------------------------------------------------------------------------- #
 
 @test "'flox edit' fails when provided filename doesn't exist" {
-  run "$FLOX_CLI" edit -f "does_not_exist.toml";
+  run "$FLOX_BIN" edit -f "does_not_exist.toml";
   assert_failure;
 }
 
@@ -177,7 +177,7 @@ EOF
 # ---------------------------------------------------------------------------- #
 
 @test "'flox edit' fails when EDITOR is not set" {
-  run "$FLOX_CLI" edit;
+  run "$FLOX_BIN" edit;
   assert_failure;
 }
 
@@ -186,7 +186,7 @@ EOF
 
 @test "'flox edit' adds package with EDITOR" {
   skip "FIXME: broken migrating to manifest.toml";
-  EDITOR="$TESTS_DIR/add-hello" run "$FLOX_CLI" edit;
+  EDITOR="$TESTS_DIR/add-hello" run "$FLOX_BIN" edit;
   assert_success;
   run check_manifest_updated;
   assert_success;
@@ -197,7 +197,7 @@ EOF
 
 @test "'flox edit' fails when EDITOR makes invalid edit" {
   skip "FIXME: broken migrating to manifest.toml";
-  EDITOR="$TESTS_DIR/add-invalid-edit" run "$FLOX_CLI" edit;
+  EDITOR="$TESTS_DIR/add-invalid-edit" run "$FLOX_BIN" edit;
   assert_failure;
   run check_manifest_unchanged;
   assert_success;

@@ -47,11 +47,11 @@ dot_flox_exists() {
 # ---------------------------------------------------------------------------- #
 
 @test "deletes existing environment" {
-  run "$FLOX_CLI" init;
+  run "$FLOX_BIN" init;
   assert_success;
   run dot_flox_exists;
   assert_success;
-  run "$FLOX_CLI" delete;
+  run "$FLOX_BIN" delete;
   assert_success;
   run dot_flox_exists;
   assert_failure;
@@ -63,7 +63,7 @@ dot_flox_exists() {
 @test "error message when called without .flox directory" {
   run dot_flox_exists;
   assert_failure;
-  run "$FLOX_CLI" delete;
+  run "$FLOX_BIN" delete;
   assert_failure;
   assert_output --partial "No environment found in \"$(pwd -P)\"";
 }

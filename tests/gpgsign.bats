@@ -35,13 +35,13 @@ teardown() { cd "$BATS_RUN_TMPDIR"||return; }
   run git config --global commit.gpgsign true;
   assert_success;
 
-  run $FLOX_CLI --bash-passthru create -e "${TEST_ENVIRONMENT}1";
+  run $FLOX_BIN --bash-passthru create -e "${TEST_ENVIRONMENT}1";
   assert_success;
 
-  run $FLOX_CLI --bash-passthru install -e "${TEST_ENVIRONMENT}1" cowsay;
+  run $FLOX_BIN --bash-passthru install -e "${TEST_ENVIRONMENT}1" cowsay;
   assert_success;
 
-  run $FLOX_CLI --bash-passthru activate -e "${TEST_ENVIRONMENT}1" --     \
+  run $FLOX_BIN --bash-passthru activate -e "${TEST_ENVIRONMENT}1" --     \
     sh -c 'cowsay "Signature set in Global Config" >&2';
   assert_success;
 
@@ -62,13 +62,13 @@ teardown() { cd "$BATS_RUN_TMPDIR"||return; }
   run git config commit.gpgsign true;
   assert_success;
 
-  run $FLOX_CLI --bash-passthru create -e "${TEST_ENVIRONMENT}2";
+  run $FLOX_BIN --bash-passthru create -e "${TEST_ENVIRONMENT}2";
   assert_success;
 
-  run $FLOX_CLI --bash-passthru install -e "${TEST_ENVIRONMENT}2" cowsay;
+  run $FLOX_BIN --bash-passthru install -e "${TEST_ENVIRONMENT}2" cowsay;
   assert_success;
 
-  run $FLOX_CLI --bash-passthru activate -e "${TEST_ENVIRONMENT}2" --   \
+  run $FLOX_BIN --bash-passthru activate -e "${TEST_ENVIRONMENT}2" --   \
     sh -c 'cowsay "Signature set in User Config" >&2';
   assert_success;
 

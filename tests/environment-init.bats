@@ -44,7 +44,7 @@ teardown() {
 
 @test "c2: flox init without a name should create an environment named the same as the directory the user is in" {
 
-  run "$FLOX_CLI" init
+  run "$FLOX_BIN" init
   assert_success
 
   run cat .flox/env.json
@@ -58,7 +58,7 @@ teardown() {
 
   export HOME="$PROJECT_DIR"
 
-  run "$FLOX_CLI" init
+  run "$FLOX_BIN" init
   assert_success
 
   run cat .flox/env.json
@@ -68,7 +68,7 @@ teardown() {
 }
 
 @test "c4: custom name option 1: flox init accepts -n for a user defined name" {
-  run "$FLOX_CLI" init -n "other-test"
+  run "$FLOX_BIN" init -n "other-test"
   assert_success
 
   run cat .flox/env.json
@@ -77,7 +77,7 @@ teardown() {
 }
 
 @test "c4: custom name option 1: flox init accepts --name for a user defined name" {
-  run "$FLOX_CLI" init --name "other-test"
+  run "$FLOX_BIN" init --name "other-test"
   assert_success
 
   run cat .flox/env.json
@@ -86,7 +86,7 @@ teardown() {
 }
 
 @test "c6: a single directory for state" {
-  run "$FLOX_CLI" init
+  run "$FLOX_BIN" init
   assert_success
 
   run ls -A
@@ -94,25 +94,27 @@ teardown() {
 }
 
 @test "c7: confirmation with tips" {
-  run "$FLOX_CLI" init
+  run "$FLOX_BIN" init
   assert_success
 
   assert_output - <<EOF
-✨ created environment test ($NIX_SYSTEM)
+✨ Created environment test ($NIX_SYSTEM)
 
-Enter the environment with "flox activate"
-Search and install packages with "flox search {packagename}" and "flox install {packagename}"
+Next:
+  $ flox search <package>    <- Search for a package
+  $ flox install <package>   <- Install a package into an environment
+  $ flox activate            <- Enter the environment
 EOF
 
 }
 
 @test "c8: names don't conflict with flox hub: when naming with flox init -e do not allow '/'" {
-  run "$FLOX_CLI" init -n "owner/name"
+  run "$FLOX_BIN" init -n "owner/name"
   assert_failure
 }
 
 @test "c8: names don't conflict with flox hub: when naming with flox init -e do not allow ' ' (space)" {
-  run "$FLOX_CLI" init -n "na me"
+  run "$FLOX_BIN" init -n "na me"
   assert_failure
 }
 
@@ -127,7 +129,7 @@ function check_with_dir() {
 @test "c2.1: \`flox init\` with \`--dir <path>\` will create an environment in \`<path>\`. (relative)" {
   mkdir -p "$PROJECT_DIR/other"
 
-  run "$FLOX_CLI" init -d ./other
+  run "$FLOX_BIN" init -d ./other
   assert_success
   check_with_dir
 }
@@ -136,13 +138,13 @@ function check_with_dir() {
 @test "c2.1: \`flox init\` with \`--dir <path>\` will create an environment in \`<path>\`. (absolute)" {
   mkdir -p "$PROJECT_DIR/other"
 
-  run "$FLOX_CLI" init -d "$PROJECT_DIR/other"
+  run "$FLOX_BIN" init -d "$PROJECT_DIR/other"
   assert_success
   check_with_dir
 }
 
 @test "c2.1: \`flox init\` with \`--dir <path>\` will create an environment in \`<path>\`. (create dir)" {
-  run "$FLOX_CLI" init -d "$PROJECT_DIR/other"
+  run "$FLOX_BIN" init -d "$PROJECT_DIR/other"
   assert_success
   check_with_dir
 }

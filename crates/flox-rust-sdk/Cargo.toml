@@ -46,6 +46,7 @@ dotenv = "0.15.0"
 env_logger = "0.10"
 pretty_assertions.workspace = true
 mockito.workspace = true
+serial_test = "2.0.0"
 
 [features]
 extra-tests = ["impure-unit-tests"]

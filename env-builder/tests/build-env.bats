@@ -23,7 +23,7 @@ load setup_suite.bash
 @test "Simple environment builds successfully" {
     cat $LOCKFILES/single-package/manifest.toml >&3
 
-    run "$ENV_BUILDER" build-env \
+    run "$ENV_BUILDER_BIN" build-env \
         --lockfile "$(cat $LOCKFILES/single-package/manifest.lock)"
 
     assert_success
@@ -33,7 +33,7 @@ load setup_suite.bash
 @test "Built environment contains binaries" {
     cat $LOCKFILES/single-package/manifest.toml >&3
 
-    run "$ENV_BUILDER" build-env \
+    run "$ENV_BUILDER_BIN" build-env \
         --lockfile "$(cat $LOCKFILES/single-package/manifest.lock)" \
         --out-link "$BATS_TEST_TMPDIR/env"
 
@@ -45,7 +45,7 @@ load setup_suite.bash
 @test "Built environment contains activate files" {
     cat $LOCKFILES/single-package/manifest.toml >&3
 
-    run "$ENV_BUILDER" build-env \
+    run "$ENV_BUILDER_BIN" build-env \
         --lockfile "$(cat $LOCKFILES/single-package/manifest.lock)" \
         --out-link "$BATS_TEST_TMPDIR/env"
 
@@ -61,7 +61,7 @@ load setup_suite.bash
 @test "Built environment includes hook script" {
     cat $LOCKFILES/hook-script/manifest.toml >&3
 
-    run "$ENV_BUILDER" build-env \
+    run "$ENV_BUILDER_BIN" build-env \
         --lockfile "$(cat $LOCKFILES/hook-script/manifest.lock)" \
         --out-link "$BATS_TEST_TMPDIR/env"
 
@@ -79,7 +79,7 @@ load setup_suite.bash
 
     cat $LOCKFILES/hook-file/manifest.toml >&3
 
-    run "$ENV_BUILDER" build-env \
+    run "$ENV_BUILDER_BIN" build-env \
         --lockfile "$(cat $LOCKFILES/hook-file/manifest.lock)" \
         --out-link "$BATS_TEST_TMPDIR/env"
 
@@ -97,7 +97,7 @@ load setup_suite.bash
 
     cat $LOCKFILES/conflict/manifest.toml >&3
 
-    run "$ENV_BUILDER" build-env \
+    run "$ENV_BUILDER_BIN" build-env \
         --lockfile "$(cat $LOCKFILES/conflict/manifest.lock)" \
         --out-link "$BATS_TEST_TMPDIR/env"
 
@@ -110,7 +110,7 @@ load setup_suite.bash
 
     cat $LOCKFILES/conflict-resolved/manifest.toml >&3
 
-    run "$ENV_BUILDER" build-env \
+    run "$ENV_BUILDER_BIN" build-env \
         --lockfile "$(cat $LOCKFILES/conflict-resolved/manifest.lock)" \
         --out-link "$BATS_TEST_TMPDIR/env"
 
@@ -125,7 +125,7 @@ load setup_suite.bash
 
     cat $LOCKFILES/propagated/manifest.toml >&3
 
-    run "$ENV_BUILDER" build-env \
+    run "$ENV_BUILDER_BIN" build-env \
         --lockfile "$(cat $LOCKFILES/propagated/manifest.lock)" \
         --out-link "$BATS_TEST_TMPDIR/env"
     assert_success

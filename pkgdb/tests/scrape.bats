@@ -32,7 +32,7 @@ setup_file() {
 
 # This attrset only contains a single package so it's a quick run.
 @test "pkgdb scrape <NIXPKGS> legacyPackages $NIX_SYSTEM akkoma-emoji" {
-  run $PKGDB scrape --database "$DBPATH" "$NIXPKGS_REF"           \
+  run $PKGDB_BIN scrape --database "$DBPATH" "$NIXPKGS_REF"           \
                     legacyPackages "$NIX_SYSTEM" 'akkoma-emoji';
   assert_success;
 }
@@ -42,7 +42,7 @@ setup_file() {
 
 # Check the description of a package.
 @test "akkoma-emoji description" {
-  run $PKGDB scrape --database "$DBPATH" "$NIXPKGS_REF"           \
+  run $PKGDB_BIN scrape --database "$DBPATH" "$NIXPKGS_REF"           \
                     legacyPackages "$NIX_SYSTEM" 'akkoma-emoji';
   assert_success;
   local _dID;
@@ -62,7 +62,7 @@ setup_file() {
 
 # Check the version of a package.
 @test "akkoma-emoji version" {
-  run $PKGDB scrape --database "$DBPATH" "$NIXPKGS_REF"           \
+  run $PKGDB_BIN scrape --database "$DBPATH" "$NIXPKGS_REF"           \
                     legacyPackages "$NIX_SYSTEM" 'akkoma-emoji';
   assert_success;
   run sqlite3 "$DBPATH" "SELECT version FROM Packages      \
@@ -75,7 +75,7 @@ setup_file() {
 
 # Check the semver of a package with a non-semantic version.
 @test "akkoma-emoji semver" {
-  run $PKGDB scrape --database "$DBPATH" "$NIXPKGS_REF"           \
+  run $PKGDB_BIN scrape --database "$DBPATH" "$NIXPKGS_REF"           \
                     legacyPackages "$NIX_SYSTEM" 'akkoma-emoji';
   assert_success;
   run sqlite3 "$DBPATH" "SELECT semver FROM Packages      \
@@ -88,7 +88,7 @@ setup_file() {
 
 # Check the pname of a package.
 @test "akkoma-emoji pname" {
-  run $PKGDB scrape --database "$DBPATH" "$NIXPKGS_REF"           \
+  run $PKGDB_BIN scrape --database "$DBPATH" "$NIXPKGS_REF"           \
                     legacyPackages "$NIX_SYSTEM" 'akkoma-emoji';
   assert_success;
   run sqlite3 "$DBPATH" "SELECT pname FROM Packages      \
@@ -101,7 +101,7 @@ setup_file() {
 
 # Check the attribute name of a package
 @test "akkoma-emoji attrName" {
-  run $PKGDB scrape --database "$DBPATH" "$NIXPKGS_REF"           \
+  run $PKGDB_BIN scrape --database "$DBPATH" "$NIXPKGS_REF"           \
                     legacyPackages "$NIX_SYSTEM" 'akkoma-emoji';
   assert_success;
   run sqlite3 "$DBPATH" "SELECT attrName FROM Packages      \
@@ -114,7 +114,7 @@ setup_file() {
 
 # Check the license of a package
 @test "akkoma-emoji license" {
-  run $PKGDB scrape --database "$DBPATH" "$NIXPKGS_REF"           \
+  run $PKGDB_BIN scrape --database "$DBPATH" "$NIXPKGS_REF"           \
                     legacyPackages "$NIX_SYSTEM" 'akkoma-emoji';
   assert_success;
   run sqlite3 "$DBPATH" "SELECT license FROM Packages      \
@@ -127,7 +127,7 @@ setup_file() {
 
 # Check the outputs of a package
 @test "akkoma-emoji outputs" {
-  run $PKGDB scrape --database "$DBPATH" "$NIXPKGS_REF"           \
+  run $PKGDB_BIN scrape --database "$DBPATH" "$NIXPKGS_REF"           \
                     legacyPackages "$NIX_SYSTEM" 'akkoma-emoji';
   assert_success;
   run sqlite3 "$DBPATH" "SELECT outputs FROM Packages      \
@@ -140,7 +140,7 @@ setup_file() {
 
 # Check the outputs to install from a package
 @test "akkoma-emoji outputsToInstall" {
-  run $PKGDB scrape --database "$DBPATH" "$NIXPKGS_REF"           \
+  run $PKGDB_BIN scrape --database "$DBPATH" "$NIXPKGS_REF"           \
                     legacyPackages "$NIX_SYSTEM" 'akkoma-emoji';
   assert_success;
   run sqlite3 "$DBPATH" "SELECT outputsToInstall FROM Packages      \
@@ -153,7 +153,7 @@ setup_file() {
 
 # Check whether a package is broken
 @test "akkoma-emoji broken" {
-  run $PKGDB scrape --database "$DBPATH" "$NIXPKGS_REF"           \
+  run $PKGDB_BIN scrape --database "$DBPATH" "$NIXPKGS_REF"           \
                     legacyPackages "$NIX_SYSTEM" 'akkoma-emoji';
   assert_success;
   run sqlite3 "$DBPATH" "SELECT broken FROM Packages      \
@@ -166,7 +166,7 @@ setup_file() {
 
 # Check whether a package is unfree
 @test "akkoma-emoji unfree" {
-  run $PKGDB scrape --database "$DBPATH" "$NIXPKGS_REF"           \
+  run $PKGDB_BIN scrape --database "$DBPATH" "$NIXPKGS_REF"           \
                     legacyPackages "$NIX_SYSTEM" 'akkoma-emoji';
   assert_success;
   run sqlite3 "$DBPATH" "SELECT unfree FROM Packages      \

@@ -21,8 +21,8 @@
   inputs.parser-util.url = "github:flox/parser-util";
   inputs.parser-util.inputs.nixpkgs.follows = "nixpkgs";
 
-  inputs.shellHooks.url = "github:cachix/pre-commit-hooks.nix";
-  inputs.shellHooks.inputs.nixpkgs.follows = "nixpkgs";
+  inputs.pre-commit-hooks.url = "github:cachix/pre-commit-hooks.nix";
+  inputs.pre-commit-hooks.inputs.nixpkgs.follows = "nixpkgs";
 
   inputs.crane.url = "github:ipetkov/crane";
   inputs.crane.inputs.nixpkgs.follows = "nixpkgs";
@@ -35,7 +35,7 @@
     floco,
     sqlite3pp,
     parser-util,
-    shellHooks,
+    pre-commit-hooks,
     crane,
     ...
   } @ inputs: let
@@ -121,27 +121,31 @@
       flox-src = callPackage ./pkgs/flox-src {};
 
       flox-pkgdb = callPackage ./pkgs/flox-pkgdb {};
-      flox-pkgdb-tests = callPackage ./pkgs/flox-pkgdb-tests {};
-      flox-pkgdb-tests-dev = final.flox-pkgdb-tests.override {
-        testsDir = "/pkgdb/tests";
-      };
-
       flox-env-builder = callPackage ./pkgs/flox-env-builder {};
-      flox-env-builder-tests = callPackage ./pkgs/flox-env-builder-tests {};
-
       flox = callPackage ./pkgs/flox {};
+
+      flox-pkgdb-tests = callPackage ./pkgs/flox-pkgdb-tests {};
+      flox-env-builder-tests = callPackage ./pkgs/flox-env-builder-tests {};
       flox-tests = callPackage ./pkgs/flox-tests {};
-      flox-tests-dev = final.flox-tests.override {
-        FLOX_CLI = null;
-      };
       flox-tests-end2end = final.flox-tests.override {
-        name = "flox-tests-end2end";
-        testsDir = "/tests/end2end";
+        PROJECT_NAME = "flox-tests-end2end";
+        PROJECT_TESTS_SUBDIR = "/end2end";
+        PROJECT_TESTS_DIR = "${final.runCommand "flox-tests-end2end-src" {} ''
+          mkdir -p $out/end2end
+          cp -r ${./tests/end2end}/* $out/end2end/
+          cp -r ${./tests/setup_suite.bash} $out/setup_suite.bash
+          cp -r ${./tests/test_support.bash} $out/test_support.bash
+        ''}";
       };
-      flox-tests-end2end-dev = final.flox-tests.override {
-        name = "flox-tests-end2end";
-        testsDir = "/tests/end2end";
-        FLOX_CLI = null;
+
+      rustfmt = prev.rustfmt.override {asNightly = true;};
+      pre-commit-check = pre-commit-hooks.lib.${final.system}.run {
+        src = builtins.path {path = ./.;};
+        hooks = {
+          alejandra.enable = true;
+          rustfmt.enable = true;
+          commitizen.enable = true;
+        };
       };
     };
 
@@ -165,10 +169,7 @@
     checks = eachDefaultSystemMap (system: let
       pkgs = builtins.getAttr system pkgsFor;
     in {
-      pre-commit-check = pkgs.callPackage ./checks/pre-commit-check {
-        inherit shellHooks;
-        rustfmt = pkgs.rustfmt.override {asNightly = true;};
-      };
+      inherit (pkgs) pre-commit-check;
     });
 
     # ---------------------------------------------------------------------------- #
@@ -178,14 +179,14 @@
     in {
       inherit
         (pkgs)
-        flox
-        flox-tests
-        flox-tests-dev
-        flox-tests-end2end
         flox-pkgdb
-        flox-pkgdb-tests
         flox-env-builder
+        flox
+        flox-pkgdb-tests
         flox-env-builder-tests
+        flox-tests
+        flox-tests-end2end
+        pre-commit-check
         flox-gh
         ;
       default = pkgs.flox;
@@ -197,15 +198,10 @@
     devShells = eachDefaultSystemMap (system: let
       pkgs = builtins.getAttr system pkgsFor;
       checksFor = builtins.getAttr system checks;
-      flox = pkgs.callPackage ./shells/flox {
-        inherit (checksFor) pre-commit-check;
-        rustfmt = pkgs.rustfmt.override {asNightly = true;};
-      };
     in {
-      inherit flox;
-      default = flox;
-      flox-pkgdb = pkgs.callPackage ./shells/flox-pkgdb {ci = false;};
-      flox-pkgdb-ci = pkgs.callPackage ./shells/flox-pkgdb {ci = true;};
+      default = pkgs.callPackage ./shells/default {
+        inherit (checksFor) pre-commit-check;
+      };
     });
   }; # End `outputs'
 

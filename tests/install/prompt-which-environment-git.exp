@@ -1,9 +1,9 @@
-# Test 'flox show' prompts when an environment is activated and there is an environment in the current directory
+# Test 'flox install' prompts when an environment is activated and there is an environment in the containing git repo
 
 set flox $env(FLOX_BIN)
 
 # activate environment 1
-set timeout 20
+set timeout 5
 set cmd "$flox activate --dir 1"
 spawn $flox activate --dir 1
 expect {
@@ -21,8 +21,8 @@ expect {
     }
 }
 
-# cd to directory 2
-set cmd "cd 2"
+# cd to directory 2/subdirectory
+set cmd "cd 2/subdirectory"
 send "$cmd\n"
 expect {
     -re "\[1\].*\$" {}
@@ -32,18 +32,18 @@ expect {
     }
 }
 
-# search for hello and expect an interactive prompt
-set cmd "$flox show nodejs"
+# install hello and expect an interactive prompt
+set cmd "$flox install hello"
 send "$cmd\n"
 expect {
-    "Do you want to show packages using the current directory's flox environment or the current active flox environment?" {}
+    "Do you want to install to the flox environment detected in git repo or the current active flox environment?" {}
     timeout {
       puts stderr "Reached timeout running '$cmd'"
       exit 1
     }
 }
 expect {
-    -re {current directory's flox environment \[2 at .*2\]} {}
+    -re {flox environment detected in git repo \[2 at .*2\]} {}
     timeout {
       puts stderr "Reached timeout running '$cmd'"
       exit 1
@@ -61,7 +61,7 @@ expect {
 send "\r"
 # install hello and check it's installed to environment 2
 expect {
-  "nodejs - nodejs@18.17.1" {}
+  -re "✅ 'hello' installed to environment 2 at .*2" {}
   timeout {
     puts stderr "Reached timeout running '$cmd'"
     exit 1

@@ -11,7 +11,7 @@ use anyhow::{anyhow, bail, Context, Result};
 use bpaf::{Args, Bpaf, Parser};
 use flox_rust_sdk::flox::{Flox, FLOX_VERSION};
 use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironment;
-use flox_rust_sdk::models::environment::path_environment::{Original, PathEnvironment};
+use flox_rust_sdk::models::environment::path_environment::PathEnvironment;
 use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironment;
 use flox_rust_sdk::models::environment::{
     find_dot_flox,
@@ -54,9 +54,9 @@ static FLOX_WELCOME_MESSAGE: Lazy<String> = Lazy::new(|| {
 
     Usage: flox OPTIONS (init|activate|search|install|...) [--help]
 
-    Use "flox --help" for full list of commands and more information
+    Use `flox --help` for full list of commands and more information
 
-    First time? Create an environment with "flox init"
+    First time? Create an environment with `flox init`
 "#}
 });
 
@@ -281,7 +281,7 @@ enum LocalDevelopmentCommands {
 }
 
 impl LocalDevelopmentCommands {
-    async fn handle(self, _config: Config, flox: Flox) -> Result<()> {
+    async fn handle(self, config: Config, flox: Flox) -> Result<()> {
         match self {
             LocalDevelopmentCommands::Init(args) => args.handle(flox).await?,
             LocalDevelopmentCommands::Activate(args) => args.handle(flox).await?,
@@ -289,7 +289,7 @@ impl LocalDevelopmentCommands {
             LocalDevelopmentCommands::Install(args) => args.handle(flox).await?,
             LocalDevelopmentCommands::Uninstall(args) => args.handle(flox).await?,
             LocalDevelopmentCommands::List(args) => args.handle(flox).await?,
-            LocalDevelopmentCommands::Search(args) => args.handle(flox).await?,
+            LocalDevelopmentCommands::Search(args) => args.handle(config, flox).await?,
             LocalDevelopmentCommands::Show(args) => args.handle(flox).await?,
             LocalDevelopmentCommands::Delete(args) => args.handle(flox).await?,
         }
@@ -466,7 +466,6 @@ impl EnvironmentSelect {
     pub fn to_concrete_environment(&self, flox: &Flox) -> Result<ConcreteEnvironment> {
         match self {
             EnvironmentSelect::Dir(path) => open_path(flox, path),
-            // TODO: needs design - do we want to search up?
             EnvironmentSelect::Unspecified => {
                 let current_dir = env::current_dir().context("could not get current directory")?;
                 let maybe_found_environment = find_dot_flox(&current_dir)?;
@@ -495,7 +494,6 @@ impl EnvironmentSelect {
             // If the user doesn't specify an environment, check if there's an
             // already activated environment or an environment in the current
             // directory.
-            // TODO: needs design - do we want to search up?
             EnvironmentSelect::Unspecified => match detect_environment(message)? {
                 Some(found) => open_environment(flox, found),
                 None => {
@@ -511,7 +509,8 @@ impl EnvironmentSelect {
 
 /// Determine what environment a flox command should use.
 ///
-/// - Search upwards from the current directory for a `.flox` directory.
+/// - Look in current directory and search upwards from the current directory if
+///   inside a git repo.
 /// - Check if there's an already activated environment.
 /// - Prompt if both are true.
 pub fn detect_environment(message: &str) -> Result<Option<UninitializedEnvironment>> {
@@ -520,12 +519,17 @@ pub fn detect_environment(message: &str) -> Result<Option<UninitializedEnvironme
     let maybe_activated = last_activated_environment();
 
     let found = match (maybe_activated, maybe_found_environment) {
-        // If there's both an activated environment and an environment in the current directory (TODO: or git repo), prompt for which to use.
         (Some(activated_path), Some(found)) if activated_path == found.path => Some(found),
+        // If there's both an activated environment and an environment in the
+        // current directory or git repo, prompt for which to use.
         (Some(activated_path), Some(found)) => {
-            let activated = UninitializedEnvironment::open(&activated_path)?;
-            // TODO fix this when we search up for git repo
-            let message = format!("Do you want to {message} the current directory's flox environment or the current active flox environment?");
+            let activated = UninitializedEnvironment::open(activated_path)?;
+            let type_of_directory = if found.path == current_dir {
+                "current directory's flox environment"
+            } else {
+                "flox environment detected in git repo"
+            };
+            let message = format!("Do you want to {message} the {type_of_directory} or the current active flox environment?");
             let found_description = hacky_environment_description(&found)?;
             let activated_description = hacky_environment_description(&activated)?;
 
@@ -540,7 +544,7 @@ pub fn detect_environment(message: &str) -> Result<Option<UninitializedEnvironme
                 help_message: None,
                 typed: Select {
                     options: vec![
-                        format!("current directory's flox environment [{found_description}]",),
+                        format!("{type_of_directory} [{found_description}]",),
                         format!("current active flox environment [{activated_description}]",),
                     ],
                 },
@@ -597,7 +601,7 @@ fn open_environment(
 /// The various ways in which an environment can be referred to
 pub enum ConcreteEnvironment {
     /// Container for [PathEnvironment]
-    Path(PathEnvironment<Original>),
+    Path(PathEnvironment),
     /// Container for [ManagedEnvironment]
     #[allow(unused)] // pending implementation of ManagedEnvironment
     Managed(ManagedEnvironment),

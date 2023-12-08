@@ -4,7 +4,7 @@ use serde::Deserialize;
 use serde_json::Value;
 
 /// A struct representing error messages coming from pkgdb
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct PkgDbError {
     /// The exit code of pkgdb, can be used to programmatically determine
     /// the category of error.
@@ -82,7 +82,7 @@ impl std::error::Error for PkgDbError {
 }
 
 /// A struct representing the context message from a pkgdb error
-#[derive(Debug, Deserialize)]
+#[derive(Debug, PartialEq, Deserialize)]
 pub struct ContextMsgError {
     pub message: String,
     pub caught: Option<CaughtMsgError>,
@@ -101,7 +101,7 @@ impl std::error::Error for ContextMsgError {
 }
 
 /// A struct representing the caught message from a pkgdb error
-#[derive(Debug, Deserialize)]
+#[derive(Debug, PartialEq, Deserialize)]
 pub struct CaughtMsgError {
     pub message: String,
 }

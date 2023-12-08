@@ -49,7 +49,7 @@ genParamsNixpkgsFlox() {
 
 # Searches `nixpkgs#legacyPackages.x86_64-linux' for a fuzzy match on "hello"
 @test "'pkgdb search' params0.json" {
-  run $PKGDB search "$TDATA/params0.json";
+  run $PKGDB_BIN search "$TDATA/params0.json";
   assert_success;
 }
 
@@ -59,10 +59,10 @@ genParamsNixpkgsFlox() {
 # bats test_tags=search:opt
 
 @test "'pkgdb search' scrapes only named subtrees" {
-  DBPATH="$( $PKGDB get db "$NIXPKGS_REF"; )";
-  run $PKGDB search "$TDATA/params0.json";
+  DBPATH="$( $PKGDB_BIN get db "$NIXPKGS_REF"; )";
+  run $PKGDB_BIN search "$TDATA/params0.json";
   assert_success;
-  run $PKGDB get id "$DBPATH" x86_64-linux packages;
+  run $PKGDB_BIN get id "$DBPATH" x86_64-linux packages;
   assert_failure;
 }
 
@@ -72,10 +72,10 @@ genParamsNixpkgsFlox() {
 # bats test_tags=search:match
 #
 @test "'pkgdb search' 'match=hello'" {
-  run sh -c "$PKGDB search '$TDATA/params0.json'|wc -l;";
+  run sh -c "$PKGDB_BIN search '$TDATA/params0.json'|wc -l;";
   assert_success;
   assert_output 11;
-  run sh -c "$PKGDB search '$TDATA/params0.json'|grep hello|wc -l;";
+  run sh -c "$PKGDB_BIN search '$TDATA/params0.json'|grep hello|wc -l;";
   assert_success;
   assert_output 11;
 }
@@ -87,7 +87,7 @@ genParamsNixpkgsFlox() {
 
 # Exact `pname' match
 @test "'pkgdb search' 'pname=hello'" {
-  run sh -c "$PKGDB search '$( genParams '.query.pname|="hello"'; )'|wc -l;";
+  run sh -c "$PKGDB_BIN search '$( genParams '.query.pname|="hello"'; )'|wc -l;";
   assert_success;
   assert_output 1;
 }
@@ -99,7 +99,7 @@ genParamsNixpkgsFlox() {
 
 # Exact `version' match
 @test "'pkgdb search' 'pname=nodejs & version=18.16.0'" {
-  run sh -c "$PKGDB search '$(
+  run sh -c "$PKGDB_BIN search '$(
     genParams '.query.pname|="nodejs"|.query.version="18.16.0"';
   )'|wc -l;";
   assert_success;
@@ -113,7 +113,7 @@ genParamsNixpkgsFlox() {
 
 # Test `semver' by filtering to >18.16, leaving only 20.2 and its alias.
 @test "'pkgdb search' 'pname=nodejs & semver=>18.16.0'" {
-  run sh -c "$PKGDB search '$(
+  run sh -c "$PKGDB_BIN search '$(
     genParams '.query.pname|="nodejs"|.query.semver=">18.16.0"';
   )'|wc -l;";
   assert_success;
@@ -127,7 +127,7 @@ genParamsNixpkgsFlox() {
 
 # Test `semver' by filtering to 18.*
 @test "'pkgdb search' 'pname=nodejs & semver=18.*'" {
-  run sh -c "$PKGDB search '$(
+  run sh -c "$PKGDB_BIN search '$(
     genParams '.query.pname|="nodejs"|.query.semver="18.*"';
   )'|wc -l;";
   assert_success;
@@ -141,7 +141,7 @@ genParamsNixpkgsFlox() {
 
 # Exact `name' match.
 @test "'pkgdb search' 'name=nodejs-18.16.0'" {
-  run sh -c "$PKGDB search '$(
+  run sh -c "$PKGDB_BIN search '$(
     genParams '.query.name|="nodejs-18.16.0"';
   )'|wc -l;";
   assert_success;
@@ -155,7 +155,7 @@ genParamsNixpkgsFlox() {
 
 # Licenses filter
 @test "'pkgdb search' 'pname=blobs.gg & licenses=[Apache-2.0]'" {
-  run sh -c "$PKGDB search '$(
+  run sh -c "$PKGDB_BIN search '$(
     genParams '.query.pname|="blobs.gg"
                |.manifest.options.allow.licenses|=["Apache-2.0"]';
   )'|wc -l;";
@@ -170,7 +170,7 @@ genParamsNixpkgsFlox() {
 
 # Check output fields.
 @test "'pkgdb search' emits expected fields" {
-  run sh -c "$PKGDB search '$(
+  run sh -c "$PKGDB_BIN search '$(
     genParams '.manifest.options.systems=["x86_64-linux","x86_64-darwin"]
                |.query.pname="hello"';
   )'|head -n1|jq -r 'to_entries|map( .key + \" \" + ( .value|type ) )[]';";
@@ -196,7 +196,7 @@ genParamsNixpkgsFlox() {
 
 # Unfree filter
 @test "'pkgdb search' 'allow.unfree=false'" {
-  run sh -c "$PKGDB search '$(
+  run sh -c "$PKGDB_BIN search '$(
     genParams '.manifest.options.allow.unfree=false';
   )'|wc -l;";
   assert_success;
@@ -210,7 +210,7 @@ genParamsNixpkgsFlox() {
 
 # Unfree filter
 @test "'pkgdb search' 'allow.broken=true'" {
-  run sh -c "$PKGDB search '$(
+  run sh -c "$PKGDB_BIN search '$(
     genParams '.manifest.options.allow.broken=true';
   )'|wc -l;";
   assert_success;
@@ -224,7 +224,7 @@ genParamsNixpkgsFlox() {
 
 # preferPreReleases ordering
 @test "'pkgdb search' 'manifest.options.semver.prefer-pre-releases=true'" {
-  run sh -c "$PKGDB search '$(
+  run sh -c "$PKGDB_BIN search '$(
     genParams '.manifest.options.semver["prefer-pre-releases"]=true
                |.query.pname="zfs-kernel"';
   )'|head -n1|jq -r .version;";
@@ -239,7 +239,7 @@ genParamsNixpkgsFlox() {
 
 # `systems' ordering
 @test "'pkgdb search' systems order" {
-  run sh -c "$PKGDB search '$(
+  run sh -c "$PKGDB_BIN search '$(
     genParams '.manifest.options.systems=["x86_64-linux","x86_64-darwin"]
                |.query.pname="hello"';
   )'|jq -rs 'to_entries|map(
@@ -256,7 +256,7 @@ genParamsNixpkgsFlox() {
 
 # `systems' ordering, reverse order of previous
 @test "'pkgdb search' systems order ( reversed )" {
-  run sh -c "$PKGDB search '$(
+  run sh -c "$PKGDB_BIN search '$(
     genParams '.manifest.options.systems=["x86_64-darwin","x86_64-linux"]
                |.query.pname="hello"';
   )'|jq -rs 'to_entries|map(
@@ -275,42 +275,42 @@ genParamsNixpkgsFlox() {
 
 # Check fallback behavior.
 @test "search-params with empty object" {
-  run $SEARCH_PARAMS '{}';
+  run $PKGDB_SEARCH_PARAMS_BIN '{}';
   assert_success;
 
-  run sh -c "$SEARCH_PARAMS '{}'|jq -r '.manifest';";
-  assert_success;
-  assert_output 'null';
-
-  run sh -c "$SEARCH_PARAMS '{}'|jq -r '.query.name';";
+  run sh -c "$PKGDB_SEARCH_PARAMS_BIN '{}'|jq -r '.manifest';";
   assert_success;
   assert_output 'null';
 
-  run sh -c "$SEARCH_PARAMS '{}'|jq -r '.query.pname';";
+  run sh -c "$PKGDB_SEARCH_PARAMS_BIN '{}'|jq -r '.query.name';";
   assert_success;
   assert_output 'null';
 
-  run sh -c "$SEARCH_PARAMS '{}'|jq -r '.query.version';";
+  run sh -c "$PKGDB_SEARCH_PARAMS_BIN '{}'|jq -r '.query.pname';";
   assert_success;
   assert_output 'null';
 
-  run sh -c "$SEARCH_PARAMS '{}'|jq -r '.query.semver';";
+  run sh -c "$PKGDB_SEARCH_PARAMS_BIN '{}'|jq -r '.query.version';";
   assert_success;
   assert_output 'null';
 
-  run sh -c "$SEARCH_PARAMS '{}'|jq -r '.query.match';";
+  run sh -c "$PKGDB_SEARCH_PARAMS_BIN '{}'|jq -r '.query.semver';";
   assert_success;
   assert_output 'null';
 
-  run sh -c "$SEARCH_PARAMS '{}'|jq -r '.query[\"match-name\"]';";
+  run sh -c "$PKGDB_SEARCH_PARAMS_BIN '{}'|jq -r '.query.match';";
   assert_success;
   assert_output 'null';
 
-  run sh -c "$SEARCH_PARAMS '{}'|jq -r '.[\"global-manifest\"]';";
+  run sh -c "$PKGDB_SEARCH_PARAMS_BIN '{}'|jq -r '.query[\"match-name\"]';";
   assert_success;
   assert_output 'null';
 
-  run sh -c "$SEARCH_PARAMS '{}'|jq -r '.lockfile';";
+  run sh -c "$PKGDB_SEARCH_PARAMS_BIN '{}'|jq -r '.[\"global-manifest\"]';";
+  assert_success;
+  assert_output 'null';
+
+  run sh -c "$PKGDB_SEARCH_PARAMS_BIN '{}'|jq -r '.lockfile';";
   assert_success;
   assert_output 'null';
 
@@ -324,7 +324,7 @@ genParamsNixpkgsFlox() {
 @test "'pkgdb search' JSON error when no query present" {
   skip "FIXME: empty search should return no results"
   params=$(genGMParams '.query=null');
-  run "$PKGDB" search  --ga-registry "$params";
+  run "$PKGDB_BIN" search  --ga-registry "$params";
   # output depends on resolution of pkgdb#177
 }
 
@@ -335,7 +335,7 @@ genParamsNixpkgsFlox() {
 
 @test "'pkgdb search' JSON error when no manifests are provided" {
   skip "FIXME: search requires a global manifest, but succeeds without one"
-  run "$PKGDB" search --ga-registry '{"query": {"match": "ripgrep"}}';
+  run "$PKGDB_BIN" search --ga-registry '{"query": {"match": "ripgrep"}}';
   assert_failure;
   assert_output --partial "foo";
 }
@@ -347,7 +347,7 @@ genParamsNixpkgsFlox() {
 
 @test "'pkgdb search' JSON error when manifest path does not exist" {
   params=$(genGMParams '.manifest="/does/not/exist"');
-  run "$PKGDB" search --ga-registry "$params";
+  run "$PKGDB_BIN" search --ga-registry "$params";
   assert_failure;
   category_msg=$(echo "$output" | jq '.category_message');
   context_msg=$(echo "$output" | jq '.context_message');
@@ -360,7 +360,7 @@ genParamsNixpkgsFlox() {
 
 @test "'pkgdb search' JSON error when global manifest path does not exist" {
   params=$(genGMParams '.["global-manifest"]="/does/not/exist"');
-  run "$PKGDB" search --ga-registry "$params";
+  run "$PKGDB_BIN" search --ga-registry "$params";
   assert_failure;
   category_msg=$(echo "$output" | jq '.category_message');
   context_msg=$(echo "$output" | jq '.context_message');
@@ -373,7 +373,7 @@ genParamsNixpkgsFlox() {
 
 @test "'pkgdb search' JSON error when lockfile path does not exist" {
   params=$(genGMParams '.lockfile="/does/not/exist"');
-  run "$PKGDB" search --ga-registry "$params";
+  run "$PKGDB_BIN" search --ga-registry "$params";
   assert_failure;
   category_msg=$(echo "$output" | jq '.category_message');
   context_msg=$(echo "$output" | jq '.context_message');
@@ -388,7 +388,7 @@ genParamsNixpkgsFlox() {
 
 @test "'pkgdb search' JSON error with unexpected query field" {
   params=$(genGMParams '.query.foo="bar"');
-  run "$PKGDB" search --ga-registry "$params";
+  run "$PKGDB_BIN" search --ga-registry "$params";
   assert_failure;
   category_msg=$(echo "$output" | jq '.category_message');
   context_msg=$(echo "$output" | jq -r '.context_message');
@@ -403,7 +403,7 @@ genParamsNixpkgsFlox() {
 
 @test "'pkgdb search' JSON error when lockfile has invalid format" {
   params=$(genGMParams '.query.match="ripgrep"|.lockfile={"foo": "bar"}');
-  run "$PKGDB" search --ga-registry "$params";
+  run "$PKGDB_BIN" search --ga-registry "$params";
   assert_failure;
   category_msg=$(echo "$output" | jq '.category_message');
   context_msg=$(echo "$output" | jq -r '.context_message');
@@ -419,7 +419,7 @@ genParamsNixpkgsFlox() {
 @test "'pkgdb search' JSON error when params not valid JSON" {
   skip "FIXME: need better error message when search params not valid JSON";
   params='{';
-  run "$PKGDB" search --ga-registry "$params";
+  run "$PKGDB_BIN" search --ga-registry "$params";
   assert_failure;
   # exact output depends on resolution of pkgdb#184
 }
@@ -432,7 +432,7 @@ genParamsNixpkgsFlox() {
 @test "'pkgdb search' no indirect flake references" {
   skip "FIXME: need better error message when indirect flakeref found";
   params=$(jq -c '.' "$TDATA/params2.json");
-  run "$PKGDB" search "$params";
+  run "$PKGDB_BIN" search "$params";
   assert_failure;
   # exact output depends on resolution of pkgdb#183
 }
@@ -444,7 +444,7 @@ genParamsNixpkgsFlox() {
 
 @test "'pkgdb search' JSON error when input does not exist" {
   params=$(jq -c '.' "$TDATA/params3.json");
-  run "$PKGDB" search -q "$params";
+  run "$PKGDB_BIN" search -q "$params";
   assert_failure;
   category_msg=$(echo "$output" | jq '.category_message');
   context_msg=$(echo "$output" | jq -r '.context_message');
@@ -462,7 +462,7 @@ genParamsNixpkgsFlox() {
 
 @test "'pkgdb search' with '%' in search term" {
   params=$(genGMParams '.query.match="hello%" | .manifest.options.systems=["x86_64-linux"]');
-  run --separate-stderr "$PKGDB" search -q --ga-registry "$params";
+  run --separate-stderr "$PKGDB_BIN" search -q --ga-registry "$params";
   assert_success;
   assert_equal "${#lines[@]}" 11;
 }
@@ -472,7 +472,7 @@ genParamsNixpkgsFlox() {
 @test "'pkgdb search' with ' in search term" {
   skip "FIXME: no results";
   params=$(genGMParams ".query.match=\"hello'\" | .manifest.options.systems=[\"x86_64-linux\"]");
-  run --separate-stderr "$PKGDB" search -q --ga-registry "$params";
+  run --separate-stderr "$PKGDB_BIN" search -q --ga-registry "$params";
   assert_success;
   assert_equal "${#lines[@]}" 11;
 }
@@ -482,7 +482,7 @@ genParamsNixpkgsFlox() {
 @test "'pkgdb search' with '\"' in search term" {
   skip "FIXME: no results";
   params=$(genGMParams '.query.match="hello"" | .manifest.options.systems=["x86_64-linux"]');
-  run --separate-stderr "$PKGDB" search -q --ga-registry "$params";
+  run --separate-stderr "$PKGDB_BIN" search -q --ga-registry "$params";
   assert_success;
   assert_equal "${#lines[@]}" 11;
 }
@@ -492,7 +492,7 @@ genParamsNixpkgsFlox() {
 @test "'pkgdb search' with '[' in search term" {
   skip "FIXME: no results";
   params=$(genGMParams '.query.match="hello[" | .manifest.options.systems=["x86_64-linux"]');
-  run --separate-stderr "$PKGDB" search -q --ga-registry "$params";
+  run --separate-stderr "$PKGDB_BIN" search -q --ga-registry "$params";
   assert_success;
   assert_equal "${#lines[@]}" 11;
 }
@@ -502,7 +502,7 @@ genParamsNixpkgsFlox() {
 @test "'pkgdb search' with ']' in search term" {
   skip "FIXME: no results";
   params=$(genGMParams '.query.match="hello]" | .manifest.options.systems=["x86_64-linux"]');
-  run --separate-stderr "$PKGDB" search -q --ga-registry "$params";
+  run --separate-stderr "$PKGDB_BIN" search -q --ga-registry "$params";
   assert_success;
   assert_equal "${#lines[@]}" 11;
 }
@@ -512,7 +512,7 @@ genParamsNixpkgsFlox() {
 @test "'pkgdb search' with '*' in search term" {
   skip "FIXME: no results";
   params=$(genGMParams '.query.match="hello*" | .manifest.options.systems=["x86_64-linux"]');
-  run --separate-stderr "$PKGDB" search -q --ga-registry "$params";
+  run --separate-stderr "$PKGDB_BIN" search -q --ga-registry "$params";
   assert_success;
   assert_equal "${#lines[@]}" 11;
 }
@@ -521,7 +521,7 @@ genParamsNixpkgsFlox() {
 # ---------------------------------------------------------------------------- #
 
 @test "'pkgdb search' works with IFD" {
-  run sh -c "NIX_CONFIG=\"allow-import-from-derivation = true\" $PKGDB search -q --ga-registry --match hello";
+  run sh -c "NIX_CONFIG=\"allow-import-from-derivation = true\" $PKGDB_BIN search -q --ga-registry --match hello";
   assert_success;
 
   run [ "${#lines[@]}" -gt 0 ];

@@ -31,33 +31,6 @@ const_setup() {
 # ---------------------------------------------------------------------------- #
 
 # Locate the `pkgdb' bin to test against.
-bin_setup() {
-  if [[ -n "${__PD_RAN_ENV_BUILDER_BIN_SETUP:-}" ]]; then return 0; fi
-  if [[ -z "${ENV_BUILDER:-}" ]]; then
-    if [[ -x "$BATS_TEST_DIRNAME/../bin/$ENV_BUILDER_NAME" ]]; then
-      ENV_BUILDER="$BATS_TEST_DIRNAME/../bin/$ENV_BUILDER_NAME"
-    elif [[ -x "$BATS_TEST_DIRNAME/result/bin/$ENV_BUILDER_NAME" ]]; then
-      ENV_BUILDER="$BATS_TEST_DIRNAME/result/bin/$ENV_BUILDER_NAME"
-    else # Build
-      (
-        cd "$BATS_TEST_DIRNAME" >/dev/null 2>&1 || return 1
-        nix build "$ENV_BUILDER_INSTALLABLE"
-      )
-      ENV_BUILDER="$BATS_TEST_DIRNAME/result/bin/$ENV_BUILDER_NAME"
-    fi
-  fi
-
-  export ENV_BUILDER
-  print_var ENV_BUILDER
-
-  export __PD_RAN_ENV_BUILDER_BIN_SETUP=:
-}
-
-# ---------------------------------------------------------------------------- #
-
-# ---------------------------------------------------------------------------- #
-
-# Locate the `pkgdb' bin to test against.
 data_setup() {
   if [[ -n "${__PD_RAN_LOCKFILES_SETUP:-}" ]]; then return 0; fi
 
@@ -77,7 +50,6 @@ print_var() { eval echo "  $1: \$$1" >&3; }
 # our isolated sandboxes.
 reals_setup() {
   const_setup
-  bin_setup
   data_setup
 }
 

@@ -225,28 +225,32 @@ impl GitCommandProvider {
         })
     }
 
+    /// Check if repo is bare. This will error if not in a git repo.
+    fn is_bare_repo(path: impl AsRef<Path>) -> Result<bool, GitCommandDiscoverError> {
+        let mut command = GitCommandOptions::default().new_command();
+        command
+            .args(["-C", path.as_ref().to_str().unwrap()])
+            .arg("rev-parse")
+            .arg("--is-bare-repository");
+
+        let out_str = GitCommandProvider::run_command(&mut command)?
+            .to_str()
+            .ok_or(GitCommandDiscoverError::GitDirEncoding)?
+            .to_string();
+
+        let bare = out_str
+            .trim()
+            .parse::<bool>()
+            .map_err(|_| GitCommandDiscoverError::UnexpectedOutput(out_str))?;
+        Ok(bare)
+    }
+
     /// Open a repo, erroring if `path` is not a repo or is a subdirectory of a repo
     pub fn open_with<P: AsRef<Path>>(
         options: GitCommandOptions,
         path: P,
     ) -> Result<Self, GitCommandOpenError> {
-        let bare = {
-            let mut command = options.new_command();
-            command
-                .args(["-C", path.as_ref().to_str().unwrap()])
-                .arg("rev-parse")
-                .arg("--is-bare-repository");
-
-            let out_str = GitCommandProvider::run_command(&mut command)?
-                .to_str()
-                .ok_or(GitCommandDiscoverError::GitDirEncoding)?
-                .to_string();
-
-            out_str
-                .trim()
-                .parse::<bool>()
-                .map_err(|_| GitCommandDiscoverError::UnexpectedOutput(out_str))?
-        };
+        let bare = Self::is_bare_repo(&path)?;
 
         // resolved and canonicalized path to the git repo
         let resolved_path = {
@@ -573,23 +577,11 @@ impl GitProvider for GitCommandProvider {
     type ShowError = GitCommandError;
 
     /// Discover a git repository at `path` and return a provider with default options
+    ///
+    /// Use DiscoverError::not_found() to check if the path is not a git repo.
     fn discover<P: AsRef<Path>>(path: P) -> Result<Self, Self::DiscoverError> {
         let options = GitCommandOptions::default();
-        let out_str = GitCommandProvider::run_command(
-            options
-                .new_command()
-                .current_dir(&path)
-                .arg("rev-parse")
-                .arg("--is-bare-repository"),
-        )?
-        .to_str()
-        .ok_or(GitCommandDiscoverError::GitDirEncoding)?
-        .to_string();
-
-        let bare = out_str
-            .trim()
-            .parse::<bool>()
-            .map_err(|_| GitCommandDiscoverError::UnexpectedOutput(out_str))?;
+        let bare = Self::is_bare_repo(&path)?;
 
         if bare {
             return Ok(GitCommandProvider {
@@ -910,6 +902,8 @@ pub mod tests {
 
     use std::fs;
 
+    use pretty_assertions::assert_eq;
+
     use super::*;
 
     /// A provider with path set to /does-not-exist for use in tests
@@ -933,6 +927,60 @@ pub mod tests {
         fs::write(&file, filename).unwrap();
         repo.add(&[&file]).unwrap();
         repo.commit(filename).unwrap();
+    }
+
+    #[test]
+    fn discover() {
+        let (_, tempdir_handle) = init_temp_repo(false);
+        let path = tempdir_handle.path().canonicalize().unwrap();
+        assert_eq!(
+            GitCommandProvider::discover(&path).unwrap(),
+            GitCommandProvider {
+                options: GitCommandOptions::default(),
+                workdir: Some(path.clone()),
+                path
+            }
+        );
+    }
+
+    #[test]
+    fn discover_subdirectory() {
+        let (_, tempdir_handle) = init_temp_repo(false);
+        let path = tempdir_handle.path().canonicalize().unwrap();
+        let subdirectory = path.join("subdirectory");
+        std::fs::create_dir(&subdirectory).unwrap();
+        assert_eq!(
+            GitCommandProvider::discover(&subdirectory).unwrap(),
+            GitCommandProvider {
+                options: GitCommandOptions::default(),
+                workdir: Some(path.clone()),
+                path
+            }
+        );
+    }
+
+    #[test]
+    fn discover_bare() {
+        let (_, tempdir_handle) = init_temp_repo(true);
+        let path = tempdir_handle.path().to_path_buf();
+        assert_eq!(
+            GitCommandProvider::discover(&path).unwrap(),
+            GitCommandProvider {
+                options: GitCommandOptions::default(),
+                workdir: None,
+                path
+            }
+        );
+    }
+
+    #[test]
+    fn discover_not_git_repo() {
+        let tempdir_handle = tempfile::tempdir_in(std::env::temp_dir()).unwrap();
+        let path = tempdir_handle.path().to_path_buf();
+        assert!(GitCommandProvider::discover(path)
+            .err()
+            .unwrap()
+            .not_found());
     }
 
     #[test]
@@ -992,13 +1040,13 @@ pub mod tests {
 
     #[test]
     fn test_open_nonexistent() {
+        let a = GitCommandProvider::open(PathBuf::from("/does-not-exist"));
+        println!("{:?}", a);
         assert!(matches!(
             GitCommandProvider::open(PathBuf::from("/does-not-exist")),
-            Err(GitCommandOpenError::Command(GitCommandError::BadExit(
-                128,
-                _,
-                _
-            ))),
+            Err(GitCommandOpenError::Discover(
+                GitCommandDiscoverError::Command(GitCommandError::BadExit(128, _, _))
+            )),
         ));
     }
 

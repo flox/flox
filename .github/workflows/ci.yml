@@ -49,23 +49,33 @@ jobs:
             echo "experimental-features = nix-command flakes";
           } | sudo tee -a /etc/nix/nix.conf >/dev/null
 
-      - name: "Run Build"
+      - name: "Build (pkgdb)"
         run: |
-          pushd ./env-builder
+          pushd ./pkgdb
           nix develop -L \
             --accept-flake-config \
             --no-update-lock-file \
-            '.#flox' \
+            '.#default' \
               --command make
           popd
 
-      - name: "Run Tests"
+      - name: "Build (env-builder)"
         run: |
           pushd ./env-builder
           nix develop -L \
             --accept-flake-config \
             --no-update-lock-file \
-            '.#flox' \
+            '.#default' \
+              --command make
+          popd
+
+      - name: "Test (env-builder)"
+        run: |
+          pushd ./env-builder
+          nix develop -L \
+            --accept-flake-config \
+            --no-update-lock-file \
+            '.#default' \
               --command make test
           popd
 
@@ -90,6 +100,9 @@ jobs:
       - name: "Checkout"
         uses: "actions/checkout@v3"
 
+      - name: "Install newer Nix"
+        uses: "cachix/install-nix-action@v24"
+
       - name: "Install flox"
         uses: "flox/install-flox-action@main"
         with:
@@ -107,33 +120,28 @@ jobs:
             echo "experimental-features = nix-command flakes";
           } | sudo tee -a /etc/nix/nix.conf >/dev/null
 
-      - name: "Run Build"
+      - name: "Build"
         run: |
           pushd ./pkgdb
           nix develop -L \
             --accept-flake-config \
             --no-update-lock-file \
-            '.#flox-pkgdb-ci' \
-              --command make -j4
+            '.#default' \
+              --command make
           popd
 
-      - name: "Build Tests"
+      - name: "Test (pkgdb)"
         run: |
           pushd ./pkgdb
           nix develop -L \
             --accept-flake-config \
             --no-update-lock-file \
-            '.#flox-pkgdb-ci' \
-              --command make tests -j4
-          popd
-
-      - name: "Run Tests"
-        run: |
-          pushd ./pkgdb
+            '.#default' \
+              --command make tests
           nix develop -L \
             --accept-flake-config \
             --no-update-lock-file \
-            '.#flox-pkgdb-ci' \
+            '.#default' \
               --command make check
           popd
 
@@ -143,7 +151,7 @@ jobs:
           nix develop -L \
             --accept-flake-config \
             --no-update-lock-file \
-            '.#flox-pkgdb-ci' \
+            '.#default' \
               --command make docs
           chmod -c -R +rX "docs/" | while read line; do
             echo "::warning title=Invalid file permissions fixed::$line"
@@ -176,6 +184,9 @@ jobs:
       - name: "Checkout"
         uses: "actions/checkout@v3"
 
+      - name: "Install newer Nix"
+        uses: "cachix/install-nix-action@v24"
+
       - name: "Install flox"
         uses: "flox/install-flox-action@main"
         with:
@@ -193,7 +204,7 @@ jobs:
             echo "experimental-features = nix-command flakes";
           } | sudo tee -a /etc/nix/nix.conf >/dev/null
 
-      - name: "Cache cargo"
+      - name: "Cache Cargo"
         uses: "actions/cache@v3"
         with:
           path: |
@@ -205,13 +216,51 @@ jobs:
           key: "cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}"
           restore-keys: "cargo-${{ runner.os }}-"
 
-      - name: "Cargo Test"
+      - name: "Build (pkgdb)"
+        run: |
+          pushd ./pkgdb
+          nix develop -L \
+            --accept-flake-config \
+            --no-update-lock-file \
+            '.#default' \
+              --command make
+          popd
+
+      - name: "Build (env-builder)"
+        run: |
+          pushd ./env-builder
+          nix develop -L \
+            --accept-flake-config \
+            --no-update-lock-file \
+            '.#default' \
+              --command make
+          popd
+
+      - name: "Build (flox)"
         run: |
           nix develop -L \
             --accept-flake-config \
             --no-update-lock-file \
-            '.#flox' \
+            '.#default' \
+              --command cargo build
+
+      - name: "Test (flox)"
+        run: |
+          nix develop -L \
+            --accept-flake-config \
+            --no-update-lock-file \
+            '.#default' \
               --command cargo test --locked --workspace -F extra-tests;
+          nix develop -L \
+            --accept-flake-config \
+            --no-update-lock-file \
+            '.#default' \
+              --command flox-tests
+          nix develop -L \
+            --accept-flake-config \
+            --no-update-lock-file \
+            '.#default' \
+              --command flox-tests-end2end
 
   env-builder-nix-build:
     name: "EnvBuilder Bats Tests"
@@ -236,6 +285,9 @@ jobs:
           args: "--timeout 30s --login-server ${{ vars.TAILSCALE_URL }}"
           tags: "tag:ci"
           authkey: "${{ secrets.TAILSCALE_AUTH_KEY }}"
+
+      - name: "Install newer Nix"
+        uses: "cachix/install-nix-action@v24"
 
       - name: "Install flox"
         uses: "flox/install-flox-action@main"
@@ -324,6 +376,9 @@ jobs:
           tags: "tag:ci"
           authkey: "${{ secrets.TAILSCALE_AUTH_KEY }}"
 
+      - name: "Install newer Nix"
+        uses: "cachix/install-nix-action@v24"
+
       - name: "Install flox"
         uses: "flox/install-flox-action@main"
         with:
@@ -410,6 +465,9 @@ jobs:
           args: "--timeout 30s --login-server ${{ vars.TAILSCALE_URL }}"
           tags: "tag:ci"
           authkey: "${{ secrets.TAILSCALE_AUTH_KEY }}"
+
+      - name: "Install newer Nix"
+        uses: "cachix/install-nix-action@v24"
 
       - name: "Install flox"
         uses: "flox/install-flox-action@main"
