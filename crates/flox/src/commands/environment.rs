@@ -422,7 +422,7 @@ impl Init {
 
         println!(
             indoc::indoc! {"
-            ✨ created environment {name} ({system})
+            ✨ Created environment {name} ({system})
 
             Next:
               $ flox search <package>    <- Search for a package
