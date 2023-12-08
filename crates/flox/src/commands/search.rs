@@ -17,6 +17,7 @@ use flox_rust_sdk::models::search::{
     Subtree,
 };
 use log::debug;
+use once_cell::sync::Lazy;
 
 use crate::commands::environment::hacky_environment_description;
 use crate::commands::{detect_environment, open_environment};
@@ -25,7 +26,14 @@ use crate::subcommand_metric;
 
 const SEARCH_INPUT_SEPARATOR: &'_ str = ":";
 const DEFAULT_DESCRIPTION: &'_ str = "<no description provided>";
-const SEARCH_LIMIT: u8 = 10;
+static SEARCH_LIMIT: Lazy<u8> = Lazy::new(|| {
+    let limit_str = std::env::var("FLOX_SEARCH_LIMIT");
+    if let Ok(Ok(limit)) = limit_str.map(|s| s.parse::<u8>()) {
+        limit
+    } else {
+        10
+    }
+});
 
 #[derive(Bpaf, Clone)]
 pub struct ChannelArgs {}
@@ -70,7 +78,7 @@ impl Search {
         let (manifest, lockfile) = manifest_and_lockfile(&flox, "search for packages using")
             .context("failed while looking for manifest and lockfile")?;
 
-        let limit = if self.all { None } else { Some(SEARCH_LIMIT) };
+        let limit = if self.all { None } else { Some(*SEARCH_LIMIT) };
 
         let search_params = construct_search_params(
             &self.search_term,
@@ -200,7 +208,7 @@ fn render_search_results_user_facing(
         if count != n_results as u64 {
             eprint!(
             "\nShowing {} of {} results. Use `flox search {{query}} --all` to see the full list.",
-            SEARCH_LIMIT, count
+            *SEARCH_LIMIT, count
         );
         }
     }
