@@ -22,18 +22,12 @@ use once_cell::sync::Lazy;
 use crate::commands::environment::hacky_environment_description;
 use crate::commands::{detect_environment, open_environment};
 use crate::config::features::{Features, SearchStrategy};
+use crate::config::Config;
 use crate::subcommand_metric;
 
 const SEARCH_INPUT_SEPARATOR: &'_ str = ":";
 const DEFAULT_DESCRIPTION: &'_ str = "<no description provided>";
-static SEARCH_LIMIT: Lazy<u8> = Lazy::new(|| {
-    let limit_str = std::env::var("FLOX_SEARCH_LIMIT");
-    if let Ok(Ok(limit)) = limit_str.map(|s| s.parse::<u8>()) {
-        limit
-    } else {
-        10
-    }
-});
+const DEFAULT_SEARCH_LIMIT: Option<u8> = Some(10);
 
 #[derive(Bpaf, Clone)]
 pub struct ChannelArgs {}
@@ -71,14 +65,18 @@ pub struct Search {
 // which is TODO.
 // Luckily most flakes don't.
 impl Search {
-    pub async fn handle(self, flox: Flox) -> Result<()> {
+    pub async fn handle(self, config: Config, flox: Flox) -> Result<()> {
         subcommand_metric!("search");
         debug!("performing search for term: {}", self.search_term);
 
         let (manifest, lockfile) = manifest_and_lockfile(&flox, "search for packages using")
             .context("failed while looking for manifest and lockfile")?;
 
-        let limit = if self.all { None } else { Some(*SEARCH_LIMIT) };
+        let limit = if self.all {
+            None
+        } else {
+            config.flox.search_limit.or(DEFAULT_SEARCH_LIMIT)
+        };
 
         let search_params = construct_search_params(
             &self.search_term,
@@ -207,8 +205,7 @@ fn render_search_results_user_facing(
         // otherwise we would get messages like `Showing 10 of 10...`
         if count != n_results as u64 {
             eprint!(
-            "\nShowing {} of {} results. Use `flox search {{query}} --all` to see the full list.",
-            *SEARCH_LIMIT, count
+            "\nShowing {n_results} of {count} results. Use `flox search {{query}} --all` to see the full list.",
         );
         }
     }

@@ -281,7 +281,7 @@ enum LocalDevelopmentCommands {
 }
 
 impl LocalDevelopmentCommands {
-    async fn handle(self, _config: Config, flox: Flox) -> Result<()> {
+    async fn handle(self, config: Config, flox: Flox) -> Result<()> {
         match self {
             LocalDevelopmentCommands::Init(args) => args.handle(flox).await?,
             LocalDevelopmentCommands::Activate(args) => args.handle(flox).await?,
@@ -289,7 +289,7 @@ impl LocalDevelopmentCommands {
             LocalDevelopmentCommands::Install(args) => args.handle(flox).await?,
             LocalDevelopmentCommands::Uninstall(args) => args.handle(flox).await?,
             LocalDevelopmentCommands::List(args) => args.handle(flox).await?,
-            LocalDevelopmentCommands::Search(args) => args.handle(flox).await?,
+            LocalDevelopmentCommands::Search(args) => args.handle(config, flox).await?,
             LocalDevelopmentCommands::Show(args) => args.handle(flox).await?,
             LocalDevelopmentCommands::Delete(args) => args.handle(flox).await?,
         }
