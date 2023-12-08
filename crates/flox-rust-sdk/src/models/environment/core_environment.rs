@@ -235,7 +235,7 @@ impl CoreEnvironment<ReadOnly> {
         &mut self,
         replacement: CoreEnvironment<ReadWrite>,
     ) -> Result<(), EnvironmentError2> {
-        let transaction_backup = self.env_dir.with_extension(".tmp");
+        let transaction_backup = self.env_dir.with_extension("tmp");
 
         if transaction_backup.exists() {
             debug!(
@@ -325,37 +325,108 @@ impl CoreEnvironment<ReadWrite> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::flox::tests::flox_instance;
+    #[cfg(feature = "impure-unit-tests")]
+    use crate::models::environment::init_global_manifest;
 
+    /// Check that `edit` updates the manifest and creates a lockfile
     #[test]
     #[cfg(feature = "impure-unit-tests")]
-    fn edit_env() {
-        use crate::flox::tests::flox_instance;
-        use crate::models::environment::path_environment::PathEnvironment;
-        use crate::models::environment::{PathPointer, ENV_DIR_NAME};
+    fn edit_env_creates_manifest_and_lockfile() {
+        let (flox, tempdir) = flox_instance();
+        init_global_manifest(&global_manifest_path(&flox)).unwrap();
 
-        let (_flox, tempdir) = flox_instance();
-        let pointer = PathPointer::new("test".parse().unwrap());
+        let env_path = tempfile::tempdir_in(&tempdir).unwrap();
+        fs::write(env_path.path().join(MANIFEST_FILENAME), "").unwrap();
 
-        let sandbox_path = tempdir.path().join("sandbox");
-        std::fs::create_dir(&sandbox_path).unwrap();
-
-        let path_env = PathEnvironment::init(pointer, &tempdir, &sandbox_path).unwrap();
-
-        let mut env_view = CoreEnvironment::new(path_env.path.join(ENV_DIR_NAME));
-        let mut temp_env = env_view.writable(&sandbox_path).unwrap();
-
-        assert_eq!(temp_env.env_dir, sandbox_path,);
+        let mut env_view = CoreEnvironment::new(&env_path);
 
         let new_env_str = r#"
-        { }
+        [install]
+        hello = {}
         "#;
 
-        temp_env.update_manifest(&new_env_str).unwrap();
-
-        assert_eq!(temp_env.manifest_content().unwrap(), new_env_str);
-
-        env_view.replace_with(temp_env).unwrap();
+        env_view.edit(&flox, new_env_str.to_string()).unwrap();
 
         assert_eq!(env_view.manifest_content().unwrap(), new_env_str);
+        assert!(env_view.env_dir.join(LOCKFILE_FILENAME).exists());
+    }
+
+    /// replacing an environment should fail if a backup exists
+    #[test]
+    fn detects_existing_backup() {
+        let (_flox, tempdir) = flox_instance();
+
+        let env_path = tempfile::tempdir_in(&tempdir).unwrap();
+        let sandbox_path = tempfile::tempdir_in(&tempdir).unwrap();
+        fs::create_dir(env_path.path().with_extension("tmp")).unwrap();
+
+        let mut env_view = CoreEnvironment::new(&env_path);
+        let temp_env = env_view.writable(&sandbox_path).unwrap();
+
+        let err = env_view
+            .replace_with(temp_env)
+            .expect_err("Should fail if backup exists");
+
+        assert!(matches!(err, EnvironmentError2::PriorTransaction(_)));
+    }
+
+    /// creating backup should fail if env is readonly
+    #[test]
+    fn fails_to_create_backup() {
+        let (_flox, tempdir) = flox_instance();
+
+        let env_path = tempfile::tempdir_in(&tempdir).unwrap();
+        let sandbox_path = tempfile::tempdir_in(&tempdir).unwrap();
+
+        let mut env_path_permissions = fs::metadata(env_path.path()).unwrap().permissions();
+        env_path_permissions.set_readonly(true);
+
+        // force fail by setting dir readonly
+        fs::set_permissions(&env_path, env_path_permissions).unwrap();
+
+        let mut env_view = CoreEnvironment::new(&env_path);
+        let temp_env = env_view.writable(&sandbox_path).unwrap();
+
+        let err = env_view
+            .replace_with(temp_env)
+            .expect_err("Should fail to create backup");
+
+        assert!(
+            matches!(err, EnvironmentError2::BackupTransaction(err) if err.kind() == std::io::ErrorKind::PermissionDenied)
+        );
+    }
+
+    /// linking an environment should set a gc-root
+    #[test]
+    #[cfg(feature = "impure-unit-tests")]
+    fn build_flox_environment_and_links() {
+        let (flox, tempdir) = flox_instance();
+        init_global_manifest(&global_manifest_path(&flox)).unwrap();
+
+        let env_path = tempfile::tempdir_in(&tempdir).unwrap();
+        fs::write(
+            env_path.path().join(MANIFEST_FILENAME),
+            "
+        [install]
+        hello = {}
+        ",
+        )
+        .unwrap();
+
+        let mut env_view = CoreEnvironment::new(&env_path);
+
+        env_view.build(&flox).expect("build should succeed");
+        env_view
+            .link(&flox, env_path.path().with_extension("out-link"))
+            .expect("link should succeed");
+
+        // very rudimentary check that the environment manifest built correctly
+        // and linked to the out-link.
+        assert!(env_path
+            .path()
+            .with_extension("out-link")
+            .join("bin/hello")
+            .exists());
     }
 }
