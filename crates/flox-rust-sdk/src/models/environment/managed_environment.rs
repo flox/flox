@@ -94,9 +94,6 @@ impl Environment for ManagedEnvironment {
         let mut temporary = generations.get_current_generation().unwrap();
 
         let result = temporary.build(flox)?;
-        let metadata = "description".to_string();
-
-        generations.add_generation(temporary, metadata).unwrap();
 
         Ok(())
     }
