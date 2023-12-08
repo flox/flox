@@ -62,6 +62,9 @@ pub struct FloxConfig {
     /// Token to authenticate on floxhub
     pub floxhub_token: Option<String>,
 
+    /// How many items `flox show` should show by default
+    pub search_limit: Option<u8>,
+
     #[serde(flatten)]
     pub instance: InstanceConfig,
 }
