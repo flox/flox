@@ -1,20 +1,41 @@
 {
   self,
+  gcc,
+  runCommandCC,
+  stdenv,
+  darwin,
   lib,
+  bash,
+  zsh,
+  dash,
   bats,
-  entr,
   coreutils,
+  entr,
+  expect,
   findutils,
-  flox-env-builder,
   flox-pkgdb,
+  flox-env-builder,
+  flox-cli,
+  gawk,
   git,
+  gnugrep,
+  gnupg,
+  gnused,
+  gnutar,
   jq,
   nix,
+  nix-serve,
+  openssh,
+  parallel,
+  unixtools,
+  which,
   writeShellScriptBin,
-  PROJECT_NAME ? "flox-env-builder-tests",
-  PROJECT_TESTS_DIR ? ./../../env-builder/tests,
+  PROJECT_NAME ? "flox-cli-tests",
+  PROJECT_TESTS_DIR ? ./../../cli/tests,
+  NIX_BIN ? "${nix}/bin/nix",
   PKGDB_BIN ? "${flox-pkgdb}/bin/pkgdb",
   ENV_BUILDER_BIN ? "${flox-env-builder}/bin/flox-env-builder",
+  FLOX_BIN ? "${flox-cli}/bin/flox",
 }: let
   batsWith = bats.withLibraries (p: [
     p.bats-assert
@@ -22,21 +43,52 @@
     p.bats-support
   ]);
 
-  paths = [
-    batsWith
-    coreutils
-    findutils
-    git
-    jq
-    nix
-  ];
+  paths =
+    [
+      bash
+      zsh
+      dash
+      batsWith
+      coreutils
+      entr
+      expect
+      findutils
+      gawk
+      git
+      gnugrep
+      gnupg
+      gnused
+      gnutar
+      jq
+      nix-serve
+      openssh
+      parallel
+      unixtools.util-linux
+      which
+    ]
+    # TODO: this hack is not going to be needed once we test against sutff on system
+    ++ lib.optional stdenv.isDarwin (
+      runCommandCC "locale" {
+        source = ''
+          #include <stdio.h>
+          int main(){
+            printf("UTF-8");
+            return 0;
+          }
+        '';
+        buildInputs = [gcc];
+      } ''
+        mkdir -p "$out/bin"
+        echo "$source" | gcc -Wall -o "$out/bin/$name" -xc -
+      ''
+    );
 in
   # TODO: we should run tests against different shells
   writeShellScriptBin PROJECT_NAME ''
     set -euo pipefail
 
     # Find root of the subproject if not specified
-    PROJECT_TESTS_DIR="${PROJECT_TESTS_DIR}";
+    PROJECT_TESTS_DIR=${PROJECT_TESTS_DIR}
     PROJECT_PATH=""
     if [[ $PROJECT_TESTS_DIR != "/nix/store/"* ]]; then
 
@@ -58,11 +110,16 @@ in
     export PATH="$PROJECT_PATH${lib.makeBinPath paths}"
 
     # Copy PROJECT_TESTS_DIR to temporary directory
-    WORKDIR="$( mktemp -d -t ${PROJECT_NAME}-XXXXXX; )";
-    cp -R "$PROJECT_TESTS_DIR/"* "$WORKDIR";
-    cd "$WORKDIR";
+    WORKDIR=$(mktemp -d -t ${PROJECT_NAME}-XXXXXX)
+    cp -RL $PROJECT_TESTS_DIR/* $WORKDIR
+    cd $WORKDIR
 
     # Declare project specific dependencies
+    ${
+      if NIX_BIN == null
+      then "export NIX_BIN='nix';"
+      else "export NIX_BIN='${NIX_BIN}';"
+    }
     ${
       if PKGDB_BIN == null
       then "export PKGDB_BIN='pkgdb';"
@@ -73,26 +130,27 @@ in
       then "export ENV_BUILDER_BIN='flox-env-builder';"
       else "export ENV_BUILDER_BIN='${ENV_BUILDER_BIN}';"
     }
-
-    # Generate lockfiles for tests
-    pushd $WORKDIR
-      chmod -R +w ./fixtures/lockfiles
-      for i in $(find ./ -name "*.toml"); do
-        $PKGDB_BIN manifest lock --ga-registry "$i" | jq > "$(dirname $i)/$(basename $i toml)lock"
-      done
-    popd
+    ${
+      if FLOX_BIN == null
+      then "export FLOX_BIN='flox';"
+      else "export FLOX_BIN='${FLOX_BIN}';"
+    }
 
     usage() {
           cat << EOF
-    Usage: $0 [--env-builder <ENV_BUILDER BINARY>| -E <ENV_BUILDER BINARY>] \
+    Usage: $0 [--flox <FLOX BINARY>| -F <FLOX BINARY>] \
+              [--env-builder <ENV_BUILDER BINARY>| -E <ENV_BUILDER BINARY>] \
               [--pkgdb <PKGDB BINARY>| -P <PKGDB BINARY>] \
+              [--nix <NIX BINARY>| -N <NIX BINARY>] \
               [--tests <TESTS_DIR>| -T <TESTS_DIR>] \
               [--watch | -W] \
               [--help | -h] -- [BATS ARGUMENTS]
 
     Available options:
+        -F, --flox          Path to flox binary (Default: $FLOX_BIN)
         -E, --env-builder   Path to env-builder binary (Default: $ENV_BUILDER_BIN)
         -P, --pkgdb         Path to pkgdb binary (Default: $PKGDB_BIN)
+        -N, --nix           Path to nix binary (Default: $NIX_BIN)
         -T, --tests         Path to folder of tests (Default: $PROJECT_TESTS_DIR)
         -W, --watch         Run tests in a continuous watch mode
         -h, --help          Prints help information
@@ -105,8 +163,10 @@ in
     _FLOX_TESTS=();
     while [[ "$#" -gt 0 ]]; do
       case "$1" in
+        -[fF]|--flox)         export FLOX_BIN="''${2?}"; shift; ;;
         -[eE]|--env-builder)  export ENV_BUILDER_BIN="''${2?}"; shift; ;;
         -[pP]|--pkgdb)        export PKGDB_BIN="''${2?}"; shift; ;;
+        -[nN]|--nix)          export NIX_BIN="''${2?}"; shift; ;;
         -[tT]|--tests)        export TESTS_DIR="''${2?}"; shift; ;;
         -[wW]|--watch)        WATCH=:; ;;
         -h|--help|-u|--usage) usage; exit 0; ;;
@@ -143,8 +203,10 @@ in
     );
     {
       echo "''${0##*/}: Running test suite with:";
+      echo "  FLOX_BIN:                 $FLOX_BIN";
       echo "  ENV_BUILDER_BIN:          $ENV_BUILDER_BIN";
       echo "  PKGDB_BIN:                $PKGDB_BIN";
+      echo "  NIX_BIN:                  $NIX_BIN";
       echo "  PROJECT_TESTS_DIR:        $PROJECT_TESTS_DIR";
       echo "  bats                      ${batsWith}/bin/bats";
       echo "  bats options              ''${_BATS_ARGS[*]}";
@@ -155,8 +217,10 @@ in
     if [[ -n "''${WATCH:-}" ]]; then
       find \
         "$TESTS_DIR" \
+        "$NIX_BIN"  \
         "$PKGDB_BIN"  \
         "$ENV_BUILDER_BIN"  \
+        "$FLOX_BIN"  \
           | ${entr}/bin/entr -s "bats ''${_BATS_ARGS[*]} ''${_FLOX_TESTS[*]}";
     else
       exec -a "$0" ${batsWith}/bin/bats "''${_BATS_ARGS[@]}" "''${_FLOX_TESTS[@]}";

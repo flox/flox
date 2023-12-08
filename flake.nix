@@ -42,7 +42,7 @@
     # ---------------------------------------------------------------------------- #
     floxVersion = let
       cargoToml = let
-        contents = builtins.readFile ./crates/flox/Cargo.toml;
+        contents = builtins.readFile ./cli/flox/Cargo.toml;
       in
         builtins.fromTOML contents;
       prefix =
@@ -116,37 +116,46 @@
           pkgsFor = final;
         });
     in {
-      flox-dev = callPackage ./pkgs/flox-dev {};
-      flox-gh = callPackage ./pkgs/flox-gh {};
-      flox-src = callPackage ./pkgs/flox-src {};
-
-      flox-pkgdb = callPackage ./pkgs/flox-pkgdb {};
-      flox-env-builder = callPackage ./pkgs/flox-env-builder {};
-      flox = callPackage ./pkgs/flox {};
-
-      flox-pkgdb-tests = callPackage ./pkgs/flox-pkgdb-tests {};
-      flox-env-builder-tests = callPackage ./pkgs/flox-env-builder-tests {};
-      flox-tests = callPackage ./pkgs/flox-tests {};
-      flox-tests-end2end = final.flox-tests.override {
-        PROJECT_NAME = "flox-tests-end2end";
-        PROJECT_TESTS_SUBDIR = "/end2end";
-        PROJECT_TESTS_DIR = "${final.runCommand "flox-tests-end2end-src" {} ''
-          mkdir -p $out/end2end
-          cp -r ${./tests/end2end}/* $out/end2end/
-          cp -r ${./tests/setup_suite.bash} $out/setup_suite.bash
-          cp -r ${./tests/test_support.bash} $out/test_support.bash
-        ''}";
-      };
-
       rustfmt = prev.rustfmt.override {asNightly = true;};
       pre-commit-check = pre-commit-hooks.lib.${final.system}.run {
         src = builtins.path {path = ./.;};
         hooks = {
           alejandra.enable = true;
-          rustfmt.enable = true;
+          rustfmt2 = let
+            wrapper = final.symlinkJoin {
+              name = "rustfmt-wrapped";
+              paths = [final.rustfmt];
+              nativeBuildInputs = [final.makeWrapper];
+              postBuild = ''
+                wrapProgram $out/bin/cargo-fmt \
+                  --prefix PATH : ${final.lib.makeBinPath [final.cargo final.rustfmt]}
+              '';
+            };
+          in {
+            enable = true;
+            name = "rustfmt";
+            description = "Format Rust code.";
+            entry = "${wrapper}/bin/cargo-fmt fmt --all --manifest-path 'cli/Cargo.toml' -- --color always";
+            files = "\\.rs$";
+            pass_filenames = false;
+          };
           commitizen.enable = true;
         };
       };
+
+      flox-gh = callPackage ./pkgs/flox-gh {};
+
+      flox-pkgdb = callPackage ./pkgs/flox-pkgdb {};
+      flox-env-builder = callPackage ./pkgs/flox-env-builder {};
+      flox-cli = callPackage ./pkgs/flox-cli {};
+
+      flox = callPackage ./pkgs/flox-cli {longVersion = true;};
+
+      flox-pkgdb-tests = callPackage ./pkgs/flox-pkgdb-tests {};
+      flox-env-builder-tests = callPackage ./pkgs/flox-env-builder-tests {};
+      flox-cli-tests = callPackage ./pkgs/flox-cli-tests {};
+
+      flox-tests = callPackage ./pkgs/flox-tests {};
     };
 
     overlays.default =
@@ -179,15 +188,12 @@
     in {
       inherit
         (pkgs)
+        flox-gh
         flox-pkgdb
         flox-env-builder
+        flox-cli
         flox
-        flox-pkgdb-tests
-        flox-env-builder-tests
-        flox-tests
-        flox-tests-end2end
         pre-commit-check
-        flox-gh
         ;
       default = pkgs.flox;
     });

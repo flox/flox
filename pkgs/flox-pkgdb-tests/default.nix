@@ -55,7 +55,7 @@ in
       fi
 
       PROJECT_TESTS_DIR="$PROJECT_ROOT_DIR$PROJECT_TESTS_DIR"
-      PROJECT_PATH="$PROJECT_ROOT_DIR/target/debug:$PROJECT_ROOT_DIR/pkgdb/bin:$PROJECT_ROOT_DIR/env-builder/bin:"
+      PROJECT_PATH="$PROJECT_ROOT_DIR/cli/target/debug:$PROJECT_ROOT_DIR/pkgdb/bin:$PROJECT_ROOT_DIR/env-builder/bin:"
     fi
     export PROJECT_TESTS_DIR
 
