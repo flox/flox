@@ -49,7 +49,7 @@ jobs:
             echo "experimental-features = nix-command flakes";
           } | sudo tee -a /etc/nix/nix.conf >/dev/null
 
-      - name: "Run Build pkgdb"
+      - name: "Build (pkgdb)"
         run: |
           pushd ./pkgdb
           nix develop -L \
@@ -59,7 +59,7 @@ jobs:
               --command make
           popd
 
-      - name: "Run Build env-builder"
+      - name: "Build (env-builder"
         run: |
           pushd ./env-builder
           nix develop -L \
@@ -69,7 +69,7 @@ jobs:
               --command make
           popd
 
-      - name: "Run Tests"
+      - name: "Test (env-builder)"
         run: |
           pushd ./env-builder
           nix develop -L \
@@ -117,7 +117,7 @@ jobs:
             echo "experimental-features = nix-command flakes";
           } | sudo tee -a /etc/nix/nix.conf >/dev/null
 
-      - name: "Run Build"
+      - name: "Build"
         run: |
           pushd ./pkgdb
           nix develop -L \
@@ -127,19 +127,14 @@ jobs:
               --command make
           popd
 
-      - name: "Build Tests"
+      - name: "Test (pkgdb)"
         run: |
           pushd ./pkgdb
           nix develop -L \
             --accept-flake-config \
             --no-update-lock-file \
             '.#default' \
-              --command make tests -j4
-          popd
-
-      - name: "Run Tests"
-        run: |
-          pushd ./pkgdb
+              --command make tests
           nix develop -L \
             --accept-flake-config \
             --no-update-lock-file \
@@ -203,7 +198,7 @@ jobs:
             echo "experimental-features = nix-command flakes";
           } | sudo tee -a /etc/nix/nix.conf >/dev/null
 
-      - name: "Cache cargo"
+      - name: "Cache Cargo"
         uses: "actions/cache@v3"
         with:
           path: |
@@ -215,24 +210,46 @@ jobs:
           key: "cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}"
           restore-keys: "cargo-${{ runner.os }}-"
 
-      - name: "Cargo Test"
+      - name: "Build (pkgdb)"
+        run: |
+          pushd ./pkgdb
+          nix develop -L \
+            --accept-flake-config \
+            --no-update-lock-file \
+            '.#default' \
+              --command make
+          popd
+
+      - name: "Build (env-builder)"
+        run: |
+          pushd ./env-builder
+          nix develop -L \
+            --accept-flake-config \
+            --no-update-lock-file \
+            '.#default' \
+              --command make
+          popd
+
+      - name: "Build (flox)"
+        run: |
+          nix develop -L \
+            --accept-flake-config \
+            --no-update-lock-file \
+            '.#default' \
+              --command cargo build
+
+      - name: "Test (flox)"
         run: |
           nix develop -L \
             --accept-flake-config \
             --no-update-lock-file \
             '.#default' \
               --command cargo test --locked --workspace -F extra-tests;
-
-      - name: "Bats Test (flox-tests)"
-        run: |
           nix develop -L \
             --accept-flake-config \
             --no-update-lock-file \
             '.#default' \
               --command flox-tests
-
-      - name: "Bats Test (flox-tests-end2end)"
-        run: |
           nix develop -L \
             --accept-flake-config \
             --no-update-lock-file \
