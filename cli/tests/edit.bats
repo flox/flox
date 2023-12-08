@@ -26,7 +26,7 @@ setup_file() {
 # If each test shared an env their edits may cause a race condition.
 setup() {
   setup_test_envname;
-  $FLOX_BIN --bash-passthru create -e "$TEST_ENVIRONMENT";
+  "$FLOX_BIN" --bash-passthru create -e "$TEST_ENVIRONMENT";
 }
 
 
@@ -34,7 +34,7 @@ setup() {
 
 # test reading from a file
 @test "'flox edit -f FILE'" {
-  run $FLOX_BIN --bash-passthru edit -e "$TEST_ENVIRONMENT" -f "$TESTS_DIR/test-flox.nix";
+  run "$FLOX_BIN" --bash-passthru edit -e "$TEST_ENVIRONMENT" -f "$TESTS_DIR/test-flox.nix";
   assert_success;
   assert_output --partial "Environment '$TEST_ENVIRONMENT' modified.";
 

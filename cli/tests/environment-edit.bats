@@ -58,14 +58,14 @@ check_manifest_updated() {
 # ---------------------------------------------------------------------------- #
 
 @test "'flox edit' confirms successful edit" {
-  $FLOX_BIN init
+  "$FLOX_BIN" init
   cp "$MANIFEST_PATH" "$TMP_MANIFEST_PATH"
   cat << "EOF" >> "$TMP_MANIFEST_PATH"
 [install]
 hello = {}
 EOF
 
-  run $FLOX_BIN edit -f "$TMP_MANIFEST_PATH"
+  run "$FLOX_BIN" edit -f "$TMP_MANIFEST_PATH"
   assert_success
   assert_output --partial "✅ environment successfully edited"
 }
@@ -74,10 +74,10 @@ EOF
 # ---------------------------------------------------------------------------- #
 
 @test "'flox edit' says no changes made" {
-  $FLOX_BIN init
+  "$FLOX_BIN" init
   cp "$MANIFEST_PATH" "$TMP_MANIFEST_PATH"
 
-  run $FLOX_BIN edit -f "$TMP_MANIFEST_PATH"
+  run "$FLOX_BIN" edit -f "$TMP_MANIFEST_PATH"
   assert_success
   assert_output --partial "⚠️  no changes made to environment"
 }
@@ -86,7 +86,7 @@ EOF
 # ---------------------------------------------------------------------------- #
 
 @test "'flox edit' does not say to re-activate when hook is modified and environment is not active" {
-  $FLOX_BIN init
+  "$FLOX_BIN" init
   cp "$MANIFEST_PATH" "$TMP_MANIFEST_PATH"
   cat << "EOF" >> "$TMP_MANIFEST_PATH"
 [hook]
@@ -95,7 +95,7 @@ script = """
 """
 EOF
 
-  run $FLOX_BIN edit -f "$TMP_MANIFEST_PATH"
+  run "$FLOX_BIN" edit -f "$TMP_MANIFEST_PATH"
   assert_success
   assert_output --partial "✅ environment successfully edited"
 }
@@ -104,7 +104,7 @@ EOF
 # ---------------------------------------------------------------------------- #
 
 @test "'flox edit' says to re-activate when hook is modified and environment is active" {
-  $FLOX_BIN init
+  "$FLOX_BIN" init
   cp "$MANIFEST_PATH" "$TMP_MANIFEST_PATH"
   cat << "EOF" >> "$TMP_MANIFEST_PATH"
 [hook]

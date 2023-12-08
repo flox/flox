@@ -50,7 +50,7 @@ setup() {
     # put channel under version control
     git -C "$CHANNEL" init
     git -C "$CHANNEL" add flake.nix pkgs/hello/default.nix
-    $FLOX_BIN flake update "$CHANNEL"
+    "$FLOX_BIN" flake update "$CHANNEL"
     git -C "$CHANNEL" add flake.lock
     git -C "$CHANNEL" \
         -c user.email="floxuser@example.invalid" \
@@ -74,7 +74,7 @@ setup() {
       skip "failing on macOS; see https://github.com/flox/flox/issues/277"
     fi
 
-    run $FLOX_BIN -v publish "$CHANNEL#hello"
+    run "$FLOX_BIN" -v publish "$CHANNEL#hello"
     assert_success
 
     local EXPECTED_PATH='catalog/hello/$HELLO_VERSION-*'
@@ -91,7 +91,7 @@ setup() {
     
     unset FLOX_SIGNING_KEY
 
-    run $FLOX_BIN -v publish "$CHANNEL#hello"
+    run "$FLOX_BIN" -v publish "$CHANNEL#hello"
     assert_failure
     assert_output --partial "Signing key is required!"
 }
@@ -105,7 +105,7 @@ setup() {
             ;;
         *-linux)
             unset FLOX_CACHE_URL;
-            run $FLOX_BIN -v publish "$CHANNEL#hello";
+            run "$FLOX_BIN" -v publish "$CHANNEL#hello";
             assert_failure;
             assert_output --partial "Cache url is required!";
             ;;
@@ -118,7 +118,7 @@ setup() {
     if [[ "$NIX_SYSTEM" == *-darwin ]]; then
       skip "failing on macOS; see https://github.com/flox/flox/issues/277"
     fi
-    run $FLOX_BIN -v publish "$CHANNEL#hello" --public-cache-url http://url.example
+    run "$FLOX_BIN" -v publish "$CHANNEL#hello" --public-cache-url http://url.example
     assert_failure
     assert_output --regexp - <<EOF
 .*
@@ -134,7 +134,7 @@ EOF
     if [[ "$NIX_SYSTEM" == *-darwin ]]; then
       skip "failing on macOS; see https://github.com/flox/flox/issues/277"
     fi
-    run $FLOX_BIN -v publish "$CHANNEL#hello" --public-cache-url http://url.example --max-retries 2
+    run "$FLOX_BIN" -v publish "$CHANNEL#hello" --public-cache-url http://url.example --max-retries 2
     assert_failure
     assert_output --regexp - <<EOF
 .*
