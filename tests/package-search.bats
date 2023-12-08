@@ -368,7 +368,7 @@ setup_file() {
 @test "'flox search' prompts when an environment is activated and there is an environment in the current directory" {
   # Set up two environments locked to different revisions of nixpkgs, and
   # confirm that flox show displays different versions of nodejs for each.
-  
+
   mkdir 1
   pushd 1
   "$FLOX_BIN" init
@@ -379,7 +379,7 @@ setup_file() {
   assert_success;
   assert_output '    nodejs - nodejs@18.16.0';
   popd
-  
+
 
   mkdir 2
   pushd 2
@@ -388,6 +388,7 @@ setup_file() {
     "$FLOX_BIN" install nodejs
   
   run --separate-stderr sh -c "$FLOX_BIN show nodejs|tail -n1";
+
   assert_success;
   assert_output '    nodejs - nodejs@18.17.1';
   popd
