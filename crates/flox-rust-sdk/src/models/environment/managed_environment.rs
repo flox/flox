@@ -11,7 +11,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use thiserror::Error;
 
-use super::path_environment::{Original, PathEnvironment};
+use super::generations::Generations;
+use super::path_environment::PathEnvironment;
 use super::{
     EditResult,
     Environment,
@@ -89,7 +90,12 @@ pub struct GenerationLock {
 impl Environment for ManagedEnvironment {
     #[allow(unused)]
     async fn build(&mut self, flox: &Flox) -> Result<(), EnvironmentError2> {
-        todo!()
+        let mut generations = self.generations().writable(flox.temp_dir.clone()).unwrap();
+        let mut temporary = generations.get_current_generation().unwrap();
+
+        let result = temporary.build(flox)?;
+
+        Ok(())
     }
 
     /// Install packages to the environment atomically
@@ -99,7 +105,22 @@ impl Environment for ManagedEnvironment {
         packages: Vec<String>,
         flox: &Flox,
     ) -> Result<InstallationAttempt, EnvironmentError2> {
-        todo!()
+        let mut generations = self.generations().writable(flox.temp_dir.clone()).unwrap();
+        let mut temporary = generations.get_current_generation().unwrap();
+
+        let metadata = format!("installed packages: {:?}", &packages);
+        let result = temporary.install(packages, flox)?;
+
+        generations.add_generation(temporary, metadata).unwrap();
+
+        write_pointer_lockfile(
+            &flox.system,
+            &self.pointer,
+            &self.floxmeta,
+            self.path.join(GENERATION_LOCK_FILENAME),
+        )?;
+
+        Ok(result)
     }
 
     /// Uninstall packages from the environment atomically
@@ -109,7 +130,21 @@ impl Environment for ManagedEnvironment {
         packages: Vec<String>,
         flox: &Flox,
     ) -> Result<String, EnvironmentError2> {
-        todo!()
+        let mut generations = self.generations().writable(flox.temp_dir.clone()).unwrap();
+        let mut temporary = generations.get_current_generation().unwrap();
+
+        let metadata = format!("uninstalled packages: {:?}", &packages);
+        let result = temporary.uninstall(packages, flox)?;
+
+        generations.add_generation(temporary, metadata).unwrap();
+
+        write_pointer_lockfile(
+            &flox.system,
+            &self.pointer,
+            &self.floxmeta,
+            self.path.join(GENERATION_LOCK_FILENAME),
+        )?;
+        Ok(result)
     }
 
     /// Atomically edit this environment, ensuring that it still builds
@@ -119,7 +154,25 @@ impl Environment for ManagedEnvironment {
         flox: &Flox,
         contents: String,
     ) -> Result<EditResult, EnvironmentError2> {
-        todo!()
+        let mut generations = self.generations().writable(flox.temp_dir.clone()).unwrap();
+        let mut temporary = generations.get_current_generation().unwrap();
+
+        let result = temporary.edit(flox, contents)?;
+
+        if matches!(result, EditResult::Success | EditResult::ReActivateRequired) {
+            generations
+                .add_generation(temporary, "manually edited".to_string())
+                .unwrap();
+
+            write_pointer_lockfile(
+                &flox.system,
+                &self.pointer,
+                &self.floxmeta,
+                self.path.join(GENERATION_LOCK_FILENAME),
+            )?;
+        }
+
+        Ok(result)
     }
 
     /// Extract the current content of the manifest
@@ -185,7 +238,7 @@ impl Environment for ManagedEnvironment {
     /// Returns the environment name
     #[allow(unused)]
     fn name(&self) -> EnvironmentName {
-        todo!()
+        self.pointer.name.clone()
     }
 
     /// Delete the Environment
@@ -482,6 +535,13 @@ impl ManagedEnvironment {
     pub fn owner(&self) -> EnvironmentOwner {
         self.pointer.owner.clone()
     }
+
+    fn generations(&self) -> Generations {
+        Generations::new(
+            self.floxmeta.git.clone(),
+            branch_name(&self.system, &self.pointer, &self.path).unwrap(),
+        )
+    }
 }
 
 /// Write a pointer lockfile to the specified `lock_path` storing the
@@ -495,14 +555,25 @@ fn write_pointer_lockfile(
     floxmeta: &FloxmetaV2,
     lock_path: PathBuf,
 ) -> Result<GenerationLock, EnvironmentError2> {
+    let local_ref = branch_name(system, pointer, lock_path.parent().unwrap()).unwrap();
     let remote_branch = remote_branch_name(system, pointer);
+
     let rev = floxmeta
         .git
         .branch_hash(&remote_branch)
         .map_err(ManagedEnvironmentError::GitBranchHash)?;
+
+    let local_rev = match floxmeta.git.branch_hash(&local_ref) {
+        Ok(local_rev) if local_rev == rev => None,
+        Ok(local_ref) => Some(local_ref),
+        // todo: think
+        Err(GitCommandBranchHashError::DoesNotExist) => None,
+        Err(err) => Err(ManagedEnvironmentError::GitBranchHash(err))?,
+    };
+
     let lock = GenerationLock {
         rev,
-        local_rev: None,
+        local_rev,
         version: Version::<1> {},
     };
     let lock_contents =
@@ -572,7 +643,7 @@ fn gcroots_dir(flox: &Flox, owner: &EnvironmentOwner) -> PathBuf {
 impl ManagedEnvironment {
     pub fn push_new(
         flox: &Flox,
-        path_environment: PathEnvironment<Original>,
+        path_environment: PathEnvironment,
         owner: EnvironmentOwner,
         temp_path: &Path,
         force: bool,
