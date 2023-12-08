@@ -9,11 +9,7 @@
 </h1>
 
 <h2 align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)"  srcset="img/harness_the_power_of_nix_dark.svg" />
-    <source media="(prefers-color-scheme: light)" srcset="img/harness_the_power_of_nix_light.svg" />
-    <img height="24" src="img/harness_the_power_of_nix_light.svg" alt="Harness the Power of Nix" />
-  </picture>
+  Developer environments you can take with you
 </h2>
 
 <!-- TODO: here comes the graphic
@@ -35,10 +31,10 @@
 </h3>
 
 <p align="center">
-  <a href="https://github.com/flox/flox/blog/main/LICENSE">
+  <a href="https://github.com/flox/flox/blob/main/LICENSE"> 
     <img alt="GitHub" src="https://img.shields.io/github/license/flox/flox?style=flat-square">
   </a>
-  <a href="https://github.com/flox/flox/blog/main/CONTRIBUTING.md">
+  <a href="https://github.com/flox/flox/blob/main/CONTRIBUTING.md">
     <img alt="PRs Welcome" src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square"/>
   </a>
   <a href="https://github.com/flox/flox/releases">
@@ -47,9 +43,9 @@
   </a>
 </p>
 
-[flox][website] is a command line tool that helps you **manage
-your environments**. flox builds on top of the powerful ideas of [Nix][nix] as
-well as making them accessible to everybody.
+[flox][website] is a virtual environment and package manager all in one. With flox you 
+create development environments that layer and replace dependencies just where
+it matters, making them portable across the full software lifecycle
 
 Install packages from [the biggest open source repository
 (nixpkgs)][post-nixpkgs] that contains **more that 80.000 packages**.
@@ -76,16 +72,18 @@ With `flox` you can:<br/>
 ## ⚡️ Quick start
 
 ``` text
-$ flox search hello           # <- Search for a package 🚀.
+$ flox init           # <- Create an environment in current directory ✨ .
 
-$ flox install -e demo hello  # <- Install packages into an environment 🔨.
+$ flox search hello   # <- Search for a package 🚀.
 
-$ flox activate -e demo       # <- Enter the environment shell 🎆.
+$ flox install hello  # <- Install packages into current directory's environment 🔨.
 
-flox [demo default] $ hello   # <- Have fun 🎉.
+$ flox activate       # <- Enter the current directory's environment 🎆.
+
+flox [my-project] $ hello   # <- Have fun 🎉.
 Hello world!
 
-flox [demo default] $ exit    # <- Exit environment 💃.
+flox [my-project] $ exit    # <- Exit environment 💃.
 ```
 
 ## 📫 Have a question? Want to chat? Ran into a problem?
