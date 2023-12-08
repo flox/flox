@@ -20,8 +20,9 @@ use self::managed_environment::ManagedEnvironmentError;
 use super::environment_ref::{EnvironmentName, EnvironmentOwner, EnvironmentRefError};
 use super::flox_package::FloxTriple;
 use super::manifest::{Manifest, TomlEditError};
-use super::pkgdb_errors::PkgDbError;
+use super::pkgdb::CallPkgDbError;
 use crate::flox::{EnvironmentRef, Flox};
+use crate::models::pkgdb::call_pkgdb;
 use crate::providers::git::{
     GitCommandDiscoverError,
     GitCommandProvider,
@@ -51,6 +52,7 @@ pub const DOT_FLOX: &str = ".flox";
 pub const ENVIRONMENT_POINTER_FILENAME: &str = "env.json";
 pub const GLOBAL_MANIFEST_TEMPLATE: &str = env!("GLOBAL_MANIFEST_TEMPLATE");
 pub const GLOBAL_MANIFEST_FILENAME: &str = "global-manifest.toml";
+pub const GLOBAL_MANIFEST_LOCKFILE_FILENAME: &str = "global-manifest.lock";
 pub const MANIFEST_FILENAME: &str = "manifest.toml";
 pub const LOCKFILE_FILENAME: &str = "manifest.lock";
 pub const GCROOTS_DIR_NAME: &str = "run";
@@ -98,6 +100,13 @@ pub trait Environment {
         flox: &Flox,
         contents: String,
     ) -> Result<EditResult, EnvironmentError2>;
+
+    /// Atomically update this environment's inputs
+    async fn update(
+        &mut self,
+        flox: &Flox,
+        inputs: Vec<String>,
+    ) -> Result<String, EnvironmentError2>;
 
     async fn catalog(
         &self,
@@ -275,32 +284,20 @@ impl LockedManifest {
             .args(["manifest", "lock"])
             .arg("--ga-registry")
             .arg("--global-manifest")
-            .arg(global_manifest_path);
+            .arg(global_manifest_path)
+            .arg("--manifest")
+            .arg(canonical_manifest_path);
         if let Some(lf_path) = existing_lockfile_path {
             let canonical_lockfile_path = lf_path
                 .canonicalize()
                 .map_err(EnvironmentError2::BadLockfilePath)?;
             pkgdb_cmd.arg("--lockfile").arg(canonical_lockfile_path);
         }
-        pkgdb_cmd.arg(canonical_manifest_path);
 
         debug!("locking manifest with command: {pkgdb_cmd:?}");
-        let output = pkgdb_cmd.output().map_err(EnvironmentError2::PkgDbCall)?;
-        // If command fails, try to parse stdout as a PkgDbError
-        if !output.status.success() {
-            if let Ok::<PkgDbError, _>(pkgdb_err) = serde_json::from_slice(&output.stdout) {
-                Err(EnvironmentError2::LockManifest(pkgdb_err))
-            } else {
-                Err(EnvironmentError2::ParsePkgDbError(
-                    String::from_utf8_lossy(&output.stdout).to_string(),
-                ))
-            }
-        // If command succeeds, try to parse stdout as JSON value
-        } else {
-            let lockfile_json = serde_json::from_slice(&output.stdout)
-                .map_err(EnvironmentError2::ParseLockfileJSON)?;
-            Ok(lockfile_json)
-        }
+        call_pkgdb(pkgdb_cmd)
+            .map_err(EnvironmentError2::LockManifest)
+            .map(Self)
     }
 
     /// Build a locked manifest
@@ -453,18 +450,12 @@ pub enum EnvironmentError2 {
     BuildEnv(String),
     #[error("provided lockfile path doesn't exist")]
     BadLockfilePath(#[source] std::io::Error),
-    #[error("call to pkgdb failed")]
-    PkgDbCall(#[source] std::io::Error),
-    #[error("couldn't parse pkgdb error as JSON: {0}")]
-    ParsePkgDbError(String),
-    #[error("couldn't parse lockfile as JSON")]
-    ParseLockfileJSON(#[source] serde_json::Error),
     #[error("couldn't parse nixpkgs rev as a string")]
     RevNotString,
     #[error("couldn't write new lockfile contents")]
     WriteLockfile(#[source] std::io::Error),
     #[error("locking manifest failed")]
-    LockManifest(#[source] PkgDbError),
+    LockManifest(#[source] CallPkgDbError),
     #[error("couldn't create the global manifest")]
     InitGlobalManifest(#[source] std::io::Error),
     #[error("couldn't read global manifest template")]
@@ -487,6 +478,10 @@ pub enum EnvironmentError2 {
     },
     #[error("error checking if in a git repo")]
     DiscoverGitDirectory(#[source] GitCommandDiscoverError),
+    #[error("unexpected output from pkgdb update")]
+    ParseUpdateOutput(#[source] serde_json::Error),
+    #[error("failed to update environment")]
+    UpdateFailed(#[source] CallPkgDbError),
 }
 
 /// Copy a whole directory recursively ignoring the original permissions
@@ -549,6 +544,13 @@ pub fn init_global_manifest(global_manifest_path: &Path) -> Result<(), Environme
 pub fn global_manifest_path(flox: &Flox) -> PathBuf {
     let path = flox.config_dir.join(GLOBAL_MANIFEST_FILENAME);
     debug!("global manifest path is {}", path.display());
+    path
+}
+
+/// Returns the path to the global manifest's lockfile
+pub fn global_manifest_lockfile_path(flox: &Flox) -> PathBuf {
+    let path = flox.config_dir.join(GLOBAL_MANIFEST_LOCKFILE_FILENAME);
+    debug!("global manifest lockfile path is {}", path.display());
     path
 }
 

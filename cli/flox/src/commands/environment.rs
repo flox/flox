@@ -15,6 +15,8 @@ use flox_rust_sdk::models::environment::managed_environment::{
 };
 use flox_rust_sdk::models::environment::path_environment::{self, PathEnvironment};
 use flox_rust_sdk::models::environment::{
+    global_manifest_lockfile_path,
+    global_manifest_path,
     EditResult,
     Environment,
     EnvironmentError2,
@@ -30,6 +32,8 @@ use flox_rust_sdk::models::environment::{
 };
 use flox_rust_sdk::models::floxmetav2::FloxmetaV2Error;
 use flox_rust_sdk::models::manifest::list_packages;
+use flox_rust_sdk::models::pkgdb::{call_pkgdb, UpdateResult};
+use flox_rust_sdk::models::search::PKGDB_BIN;
 use flox_rust_sdk::nix::command::StoreGc;
 use flox_rust_sdk::nix::command_line::NixCommandLine;
 use flox_rust_sdk::nix::Run;
@@ -955,6 +959,70 @@ impl SwitchGeneration {
         subcommand_metric!("switch-generation");
 
         todo!("this command is planned for a future release")
+    }
+}
+
+/// update an environment's inputs
+#[derive(Bpaf, Clone)]
+pub struct Update {
+    #[allow(dead_code)] // pending spec for `-e`, `--dir` behaviour
+    #[bpaf(external(environment_args), group_help("Environment Options"))]
+    environment_args: EnvironmentArgs,
+
+    #[bpaf(external(environment_select), fallback(Default::default()))]
+    environment: EnvironmentSelect,
+
+    /// Update inputs used by search and show outside of an environment
+    #[bpaf(long)]
+    global: bool,
+
+    #[bpaf(positional("INPUTS"))]
+    inputs: Vec<String>,
+}
+impl Update {
+    pub async fn handle(self, flox: Flox) -> Result<()> {
+        subcommand_metric!("update");
+
+        let message = if self.global {
+            let lockfile_path = global_manifest_lockfile_path(&flox);
+
+            let mut pkgdb_cmd = Command::new(Path::new(&*PKGDB_BIN));
+            pkgdb_cmd
+                .args(["manifest", "update"])
+                .arg("--ga-registry")
+                .arg("--global-manifest")
+                .arg(global_manifest_path(&flox));
+            if lockfile_path.exists() {
+                let canonical_lockfile_path = lockfile_path
+                    .canonicalize()
+                    .map_err(EnvironmentError2::BadLockfilePath)?;
+                pkgdb_cmd.arg("--lockfile").arg(canonical_lockfile_path);
+            }
+            pkgdb_cmd.args(self.inputs);
+
+            debug!("updating global lockfile with command: {pkgdb_cmd:?}");
+            let result: UpdateResult = serde_json::from_value(call_pkgdb(pkgdb_cmd)?)
+                .map_err(EnvironmentError2::ParseUpdateOutput)?;
+
+            debug!("writing lockfile to {}", lockfile_path.display());
+            std::fs::write(lockfile_path, result.lockfile.to_string())
+                .context("updating global inputs failed")?;
+            result.message
+        } else {
+            let concrete_environment = self
+                .environment
+                .detect_concrete_environment(&flox, "update")?;
+
+            let mut environment = concrete_environment.into_dyn_environment();
+
+            environment
+                .update(&flox, self.inputs)
+                .await
+                .context("updating environment failed")?
+        };
+        info!("{}", message);
+
+        Ok(())
     }
 }
 
