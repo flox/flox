@@ -24,7 +24,7 @@ setup_file() {
 }
 
 @test "tear down install test state" {
-  run $FLOX_BIN  --bash-passthru delete -e "$TEST_ENVIRONMENT" --origin -f||:
+  run "$FLOX_BIN"  --bash-passthru delete -e "$TEST_ENVIRONMENT" --origin -f||:
   assert_output --partial "WARNING: you are about to delete the following"
   assert_output --partial "Deleted branch"
   assert_output --partial "removed"

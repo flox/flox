@@ -31,7 +31,7 @@ setup() {
 # ---------------------------------------------------------------------------- #
 
 @test "flox run using nixpkgs" {
-  run $FLOX_BIN run 'nixpkgs#cowsay' -- 'Hello, world!';
+  run "$FLOX_BIN" run 'nixpkgs#cowsay' -- 'Hello, world!';
   assert_success;
   assert_output --partial - < "$TESTS_DIR/hello-cowsay.out";
 }
@@ -41,7 +41,7 @@ setup() {
 
 # XXX: If you try to run in parallel this crash failing to create `floxmeta'
 @test "flox run package from project env" {
-  run $FLOX_BIN run hello;
+  run "$FLOX_BIN" run hello;
   assert_success;
   assert_output --partial "Hello";
 }

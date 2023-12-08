@@ -24,10 +24,10 @@ setup_file() {
   hello_pkg_setup;
   deleteEnvForce "${TEST_ENVIRONMENT}-1";
   deleteEnvForce "${TEST_ENVIRONMENT}-2";
-  $FLOX_BIN --bash-passthru create  -e "${TEST_ENVIRONMENT}-1";
-  $FLOX_BIN --bash-passthru install -e "${TEST_ENVIRONMENT}-1" "$HELLO_PACKAGE";
-  $FLOX_BIN --bash-passthru create  -e "${TEST_ENVIRONMENT}-2";
-  $FLOX_BIN --bash-passthru install -e "${TEST_ENVIRONMENT}-2" "$HELLO_PACKAGE";
+  "$FLOX_BIN" --bash-passthru create  -e "${TEST_ENVIRONMENT}-1";
+  "$FLOX_BIN" --bash-passthru install -e "${TEST_ENVIRONMENT}-1" "$HELLO_PACKAGE";
+  "$FLOX_BIN" --bash-passthru create  -e "${TEST_ENVIRONMENT}-2";
+  "$FLOX_BIN" --bash-passthru install -e "${TEST_ENVIRONMENT}-2" "$HELLO_PACKAGE";
 }
 
 teardown_file() {
