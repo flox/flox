@@ -258,12 +258,12 @@ jobs:
             --accept-flake-config \
             --no-update-lock-file \
             '.#default' \
-              --command flox-tests
+              --command flox-cli-tests
           nix develop -L \
             --accept-flake-config \
             --no-update-lock-file \
             '.#default' \
-              --command flox-tests-end2end
+              --command flox-tests
           popd
 
   env-builder-nix-build:
