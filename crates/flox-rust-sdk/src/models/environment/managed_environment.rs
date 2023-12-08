@@ -158,16 +158,19 @@ impl Environment for ManagedEnvironment {
         let mut temporary = generations.get_current_generation().unwrap();
 
         let result = temporary.edit(flox, contents)?;
-        let metadata = "description".to_string();
 
-        generations.add_generation(temporary, metadata).unwrap();
+        if matches!(result, EditResult::Success | EditResult::ReActivateRequired) {
+            generations
+                .add_generation(temporary, "manually edited".to_string())
+                .unwrap();
 
-        write_pointer_lockfile(
-            &flox.system,
-            &self.pointer,
-            &self.floxmeta,
-            self.path.join(GENERATION_LOCK_FILENAME),
-        )?;
+            write_pointer_lockfile(
+                &flox.system,
+                &self.pointer,
+                &self.floxmeta,
+                self.path.join(GENERATION_LOCK_FILENAME),
+            )?;
+        }
 
         Ok(result)
     }
