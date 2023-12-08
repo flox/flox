@@ -4,7 +4,7 @@
 # Assume throughout that the project is named project-\d+
 
 set flox $env(FLOX_CLI)
-set prompt "flox .* \$.*"          ;# default prompt
+set prompt "flox \[^\n\r\]* \$"          ;# default prompt
 
 spawn $flox activate
 expect {
@@ -16,7 +16,7 @@ expect {
 }
 set timeout 300
 expect {
-    -re "project.*\$" {}
+    -re "project\[^\n\r\]*\$" {}
     timeout {
       puts stderr "Reached timeout running '$cmd'"
       exit 1
@@ -28,7 +28,7 @@ expect -re $prompt
 set timeout 1
 send "{ command -v python3||which python3||type -P python3; } 2>&1\n"
 expect {
-    -re "\.flox/run/.*\.project-\\d+/bin/python3" {}
+    -re "\.flox/run/\[^\n\r\]*\.project-\\d+/bin/python3" {}
     timeout {
       puts stderr "Reached timeout locating 'python3'"
       exit 1
@@ -45,7 +45,7 @@ expect {
 }
 send "{ command -v pip||which pip||type -P pip; } 2>&1\n"
 expect {
-    -re "\.flox/run/.*\.project-\\d+/bin/pip" {}
+    -re "\.flox/run/\[^\n\r\]*\.project-\\d+/bin/pip" {}
     timeout {
       puts stderr "Reached timeout locating 'pip'"
       exit 1
@@ -98,7 +98,7 @@ expect {
 set timeout 30
 send "python3 -m venv env\n"
 expect {
-    -re "flox .*\\\[project-\\d+\\\]" {}
+    -re "flox \[^\n\r\]*\\\[project-\\d+\\\]" {}
     timeout {
       puts stderr "Reached timeout checking prompt"
       exit 1
@@ -115,7 +115,7 @@ expect {
     }
 }
 expect {
-    -re "flox .*\\\[project-\\d+\\\]" {}
+    -re "flox \[^\n\r\]*\\\[project-\\d+\\\]" {}
     timeout {
       puts stderr "Reached timeout checking prompt"
       exit 1
