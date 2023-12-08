@@ -64,7 +64,7 @@ setup() {
 
     # Set the `sign_key` config value
     export FLOX_SIGNING_KEY="$(mktemp)"
-    $NIX_BIN --experimental-features nix-command key generate-secret --key-name "test" >"$FLOX_SIGNING_KEY"
+    "$NIX_BIN" --experimental-features nix-command key generate-secret --key-name "test" >"$FLOX_SIGNING_KEY"
 }
 
 # Given a valid pacakge, a signing key and a binary cache,

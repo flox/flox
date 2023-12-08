@@ -49,7 +49,7 @@ genParamsNixpkgsFlox() {
 
 # Searches `nixpkgs#legacyPackages.x86_64-linux' for a fuzzy match on "hello"
 @test "'pkgdb search' params0.json" {
-  run $PKGDB_BIN search "$TDATA/params0.json";
+  run "$PKGDB_BIN" search "$TDATA/params0.json";
   assert_success;
 }
 
@@ -60,9 +60,9 @@ genParamsNixpkgsFlox() {
 
 @test "'pkgdb search' scrapes only named subtrees" {
   DBPATH="$( $PKGDB_BIN get db "$NIXPKGS_REF"; )";
-  run $PKGDB_BIN search "$TDATA/params0.json";
+  run "$PKGDB_BIN" search "$TDATA/params0.json";
   assert_success;
-  run $PKGDB_BIN get id "$DBPATH" x86_64-linux packages;
+  run "$PKGDB_BIN" get id "$DBPATH" x86_64-linux packages;
   assert_failure;
 }
 

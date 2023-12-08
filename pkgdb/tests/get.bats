@@ -23,7 +23,7 @@ load setup_suite.bash;
 setup_file() {
   export DBPATH="$BATS_FILE_TMPDIR/test.sqlite";
   mkdir -p "$BATS_FILE_TMPDIR";
-  if $PKGDB_BIN scrape --database "$DBPATH" "$NIXPKGS_REF"           \
+  if "$PKGDB_BIN" scrape --database "$DBPATH" "$NIXPKGS_REF"           \
                    legacyPackages "$NIX_SYSTEM" 'akkoma-emoji';
   then
     echo "Scraped flake $NIXPKGS_REF" >&3;
@@ -52,7 +52,7 @@ require_shared() {
 # The root of a flake always has `row_id' 0.
 @test "pkgdb get id <EMPTY>" {
   require_shared;
-  run $PKGDB_BIN get id "$DBPATH";
+  run "$PKGDB_BIN" get id "$DBPATH";
   assert_success;
   assert_output '0';
 }
@@ -65,7 +65,7 @@ require_shared() {
 # Checking for a non-existent path should exit fail.
 @test "pkgdb get id <NON-EXISTENT>" {
   require_shared;
-  run $PKGDB_BIN get id "$DBPATH" phony;
+  run "$PKGDB_BIN" get id "$DBPATH" phony;
   assert_failure;
 }
 
@@ -77,7 +77,7 @@ require_shared() {
 # Since we only scraped one prefix, we know `legacyPackages` has `row_id` 1.
 @test "pkgdb get id legacyPackages" {
   require_shared;
-  run $PKGDB_BIN get id "$DBPATH" legacyPackages;
+  run "$PKGDB_BIN" get id "$DBPATH" legacyPackages;
   assert_success;
   assert_output 1;
 }
@@ -90,7 +90,7 @@ require_shared() {
 # Another known `row_id'.
 @test "pkgdb get id legacyPackages $NIX_SYSTEM" {
   require_shared;
-  run $PKGDB_BIN get id "$DBPATH" legacyPackages "$NIX_SYSTEM";
+  run "$PKGDB_BIN" get id "$DBPATH" legacyPackages "$NIX_SYSTEM";
   assert_success;
   assert_output 2;
 }
@@ -103,7 +103,7 @@ require_shared() {
 # Another known `row_id'.
 @test "pkgdb get id legacyPackages $NIX_SYSTEM akkoma-emoji" {
   require_shared;
-  run $PKGDB_BIN get id "$DBPATH" legacyPackages "$NIX_SYSTEM" 'akkoma-emoji';
+  run "$PKGDB_BIN" get id "$DBPATH" legacyPackages "$NIX_SYSTEM" 'akkoma-emoji';
   assert_success;
   assert_output 3;
 }
@@ -116,7 +116,7 @@ require_shared() {
 # Expect empty list for "root".
 @test "pkgdb get path 0" {
   require_shared;
-  run $PKGDB_BIN get path "$DBPATH" 0;
+  run "$PKGDB_BIN" get path "$DBPATH" 0;
   assert_success;
   assert_output '[]';
 }
@@ -129,7 +129,7 @@ require_shared() {
 # This path is already known.
 @test "pkgdb get path 1" {
   require_shared;
-  run $PKGDB_BIN get path "$DBPATH" 1;
+  run "$PKGDB_BIN" get path "$DBPATH" 1;
   assert_success;
   assert_output '["legacyPackages"]';
 }
@@ -142,7 +142,7 @@ require_shared() {
 # This path is already known.
 @test "pkgdb get path 2" {
   require_shared;
-  run $PKGDB_BIN get path "$DBPATH" 2;
+  run "$PKGDB_BIN" get path "$DBPATH" 2;
   assert_success;
   assert_output "[\"legacyPackages\",\"$NIX_SYSTEM\"]";
 }
@@ -155,7 +155,7 @@ require_shared() {
 # This path is already known.
 @test "pkgdb get path 3" {
   require_shared;
-  run $PKGDB_BIN get path "$DBPATH" 3;
+  run "$PKGDB_BIN" get path "$DBPATH" 3;
   assert_success;
   assert_output "[\"legacyPackages\",\"$NIX_SYSTEM\",\"akkoma-emoji\"]";
 }
@@ -168,7 +168,7 @@ require_shared() {
 # Expect failure for a non-existent `row_id'.
 @test "pkgdb get path <NON-EXISTENT>" {
   require_shared;
-  run $PKGDB_BIN get path "$DBPATH" 999;
+  run "$PKGDB_BIN" get path "$DBPATH" 999;
   assert_failure;
 }
 
@@ -180,7 +180,7 @@ require_shared() {
 # We only have a single package so we know its path and `row_id'.
 @test "pkgdb get path --pkg 1" {
   require_shared;
-  run $PKGDB_BIN get path --pkg "$DBPATH" 1;
+  run "$PKGDB_BIN" get path --pkg "$DBPATH" 1;
   assert_success;
   assert_output                                                            \
     "[\"legacyPackages\",\"$NIX_SYSTEM\",\"akkoma-emoji\",\"blobs_gg\"]";
@@ -194,7 +194,7 @@ require_shared() {
 # We only have a single package so we know its path and `row_id'.
 @test "pkgdb get id --pkg legacyPackages $NIX_SYSTEM akkoma-emoji blobs_gg" {
   require_shared;
-  run $PKGDB_BIN get id --pkg "$DBPATH"                                      \
+  run "$PKGDB_BIN" get id --pkg "$DBPATH"                                      \
                     legacyPackages "$NIX_SYSTEM" akkoma-emoji blobs_gg;
   assert_success;
   assert_output 1;
@@ -208,7 +208,7 @@ require_shared() {
 # Non-package attribute path should fail.
 @test "pkgdb get id --pkg legacyPackages $NIX_SYSTEM akkoma-emoji" {
   require_shared;
-  run $PKGDB_BIN get id --pkg "$DBPATH"                             \
+  run "$PKGDB_BIN" get id --pkg "$DBPATH"                             \
                     legacyPackages "$NIX_SYSTEM" akkoma-emoji;
   assert_failure;
 }
@@ -245,7 +245,7 @@ require_shared() {
 # of `pkgdb`, since they may rely on this seemingly useless behavior.
 @test "pkgdb get db <DB-PATH>" {
   require_shared;
-  run $PKGDB_BIN get db "$DBPATH";
+  run "$PKGDB_BIN" get db "$DBPATH";
   assert_success;
   assert_output "$DBPATH";
 }
@@ -257,7 +257,7 @@ require_shared() {
 
 @test "pkgdb get db <FLAKE-REF>" {
   require_shared;
-  run $PKGDB_BIN get db "$NIXPKGS_REF";
+  run "$PKGDB_BIN" get db "$NIXPKGS_REF";
   assert_success;
   assert_output --partial "/$NIXPKGS_FINGERPRINT.sqlite";
 }
@@ -269,14 +269,14 @@ require_shared() {
 
 @test "pkgdb get done <DB-PATH> legacyPackages $NIX_SYSTEM akkoma-emoji" {
   require_shared;
-  run $PKGDB_BIN get 'done' "$DBPATH" legacyPackages "$NIX_SYSTEM" akkoma-emoji;
+  run "$PKGDB_BIN" get 'done' "$DBPATH" legacyPackages "$NIX_SYSTEM" akkoma-emoji;
   assert_success;
 }
 
 
 @test "pkgdb get done <DB-PATH> legacyPackages $NIX_SYSTEM" {
   require_shared;
-  run $PKGDB_BIN get 'done' "$DBPATH" legacyPackages "$NIX_SYSTEM";
+  run "$PKGDB_BIN" get 'done' "$DBPATH" legacyPackages "$NIX_SYSTEM";
   assert_failure;
 }
 
