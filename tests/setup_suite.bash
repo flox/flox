@@ -14,45 +14,6 @@ bats_require_minimum_version '1.5.0';
 
 # ---------------------------------------------------------------------------- #
 
-# Locate repository root.
-repo_root_setup() {
-  if [[ -z "${REPO_ROOT:-}" ]]; then
-    if [[ -d "$PWD/.git" ]] && [[ -d "$PWD/tests" ]]; then
-      REPO_ROOT="$PWD";
-    else
-      REPO_ROOT="$( git rev-parse --show-toplevel||:; )";
-    fi
-    if [[ -z "$REPO_ROOT" ]] && [[ -d "$PWD/tests" ]]; then
-      REPO_ROOT="$PWD";
-    fi
-  fi
-  export REPO_ROOT;
-}
-
-
-# ---------------------------------------------------------------------------- #
-
-# Locate the directory containing test resources.
-tests_dir_setup() {
-  if [[ -n "${__FT_RAN_TESTS_DIR_SETUP:-}" ]]; then return 0; fi
-  repo_root_setup;
-  if [[ -z "${TESTS_DIR:-}" ]]; then
-    case "${BATS_TEST_DIRNAME:-}" in
-      */tests) TESTS_DIR="$( readlink -f "$BATS_TEST_DIRNAME"; )"; ;;
-      *)       TESTS_DIR="$REPO_ROOT/tests";                       ;;
-    esac
-    if ! [[ -d "$TESTS_DIR" ]]; then
-      echo "tests_dir_setup: \`TESTS_DIR' must be a directory" >&2;
-      return 1;
-    fi
-  fi
-  export TESTS_DIR;
-  export __FT_RAN_TESTS_DIR_SETUP=:;
-}
-
-
-# ---------------------------------------------------------------------------- #
-
 # Set the vars `REAL_XDG_{CONFIG,CACHE}_HOME' to point to the user's homedir.
 # This allows us to copy some of their existing configs and caches into
 # our test harnesses.
@@ -142,26 +103,23 @@ print_var() { eval echo "  $1: \$$1"; }
 # We sometimes refer to these in order to copy resources from the system into
 # our isolated sandboxes.
 reals_setup() {
-  repo_root_setup;
-  tests_dir_setup;
   nix_store_dir_setup;
   xdg_reals_setup;
   git_reals_setup;
   {
-    print_var REAL_USER;
-    print_var REAL_HOME;
-    print_var REPO_ROOT;
-    print_var TESTS_DIR;
+    print_var BUILD_ENV_BIN;
+    print_var FLOX_BIN;
+    print_var NIX_BIN;
     print_var NIX_STORE;
+    print_var REAL_GIT_CONFIG_GLOBAL;
+    print_var REAL_GIT_CONFIG_SYSTEM;
+    print_var REAL_HOME;
+    print_var REAL_USER;
     print_var REAL_XDG_CACHE_HOME;
     print_var REAL_XDG_CONFIG_HOME;
     print_var REAL_XDG_DATA_HOME;
     print_var REAL_XDG_STATE_HOME;
-    print_var REAL_GIT_CONFIG_SYSTEM;
-    print_var REAL_GIT_CONFIG_GLOBAL;
-    print_var FLOX_BIN;
-    print_var NIX_BIN;
-    print_var BUILD_ENV_BIN;
+    print_var TESTS_DIR;
   } >&3;
 }
 

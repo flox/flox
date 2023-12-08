@@ -23,6 +23,7 @@
   gnused,
   gnutar,
   jq,
+  nix,
   nix-serve,
   openssh,
   parallel,
@@ -31,6 +32,7 @@
   writeShellScriptBin,
   PROJECT_NAME ? "flox-tests",
   PROJECT_TESTS_DIR ? ./../../tests,
+  NIX_BIN ? "${nix}/bin/nix",
   PKGDB_BIN ? "${flox-pkgdb}/bin/pkgdb",
   ENV_BUILDER_BIN ? "${flox-env-builder}/bin/flox-env-builder",
   FLOX_BIN ? "${flox}/bin/flox",
@@ -114,6 +116,11 @@ in
 
     # Declare project specific dependencies
     ${
+      if NIX_BIN == null
+      then "export NIX_BIN='nix';"
+      else "export NIX_BIN='${NIX_BIN}';"
+    }
+    ${
       if PKGDB_BIN == null
       then "export PKGDB_BIN='pkgdb';"
       else "export PKGDB_BIN='${PKGDB_BIN}';"
@@ -134,6 +141,7 @@ in
     Usage: $0 [--flox <FLOX BINARY>| -F <FLOX BINARY>] \
               [--env-builder <ENV_BUILDER BINARY>| -E <ENV_BUILDER BINARY>] \
               [--pkgdb <PKGDB BINARY>| -P <PKGDB BINARY>] \
+              [--nix <NIX BINARY>| -N <NIX BINARY>] \
               [--tests <TESTS_DIR>| -T <TESTS_DIR>] \
               [--watch | -W] \
               [--help | -h] -- [BATS ARGUMENTS]
@@ -142,6 +150,7 @@ in
         -F, --flox          Path to flox binary (Default: $FLOX_BIN)
         -E, --env-builder   Path to env-builder binary (Default: $ENV_BUILDER_BIN)
         -P, --pkgdb         Path to pkgdb binary (Default: $PKGDB_BIN)
+        -N, --nix           Path to nix binary (Default: $NIX_BIN)
         -T, --tests         Path to folder of tests (Default: $PROJECT_TESTS_DIR)
         -W, --watch         Run tests in a continuous watch mode
         -h, --help          Prints help information
@@ -157,6 +166,7 @@ in
         -[fF]|--flox)         export FLOX_BIN="''${2?}"; shift; ;;
         -[eE]|--env-builder)  export ENV_BUILDER_BIN="''${2?}"; shift; ;;
         -[pP]|--pkgdb)        export PKGDB_BIN="''${2?}"; shift; ;;
+        -[nN]|--nix)          export NIX_BIN="''${2?}"; shift; ;;
         -[tT]|--tests)        export TESTS_DIR="''${2?}"; shift; ;;
         -[wW]|--watch)        WATCH=:; ;;
         -h|--help|-u|--usage) usage; exit 0; ;;
@@ -196,6 +206,7 @@ in
       echo "  FLOX_BIN:                 $FLOX_BIN";
       echo "  ENV_BUILDER_BIN:          $ENV_BUILDER_BIN";
       echo "  PKGDB_BIN:                $PKGDB_BIN";
+      echo "  NIX_BIN:                  $NIX_BIN";
       echo "  PROJECT_TESTS_DIR:        $PROJECT_TESTS_DIR";
       echo "  bats                      ${batsWith}/bin/bats";
       echo "  bats options              ''${_BATS_ARGS[*]}";
@@ -206,6 +217,7 @@ in
     if [[ -n "''${WATCH:-}" ]]; then
       find \
         "$TESTS_DIR" \
+        "$NIX_BIN"  \
         "$PKGDB_BIN"  \
         "$ENV_BUILDER_BIN"  \
         "$FLOX_BIN"  \
