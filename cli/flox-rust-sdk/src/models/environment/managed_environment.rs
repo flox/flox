@@ -114,10 +114,10 @@ impl Environment for ManagedEnvironment {
         generations.add_generation(temporary, metadata).unwrap();
 
         write_pointer_lockfile(
-            &flox.system,
-            &self.pointer,
-            &self.floxmeta,
             self.path.join(GENERATION_LOCK_FILENAME),
+            &self.floxmeta,
+            remote_branch_name(&self.system, &self.pointer),
+            branch_name(&self.system, &self.pointer, &self.path)?.into(),
         )?;
 
         Ok(result)
@@ -139,10 +139,10 @@ impl Environment for ManagedEnvironment {
         generations.add_generation(temporary, metadata).unwrap();
 
         write_pointer_lockfile(
-            &flox.system,
-            &self.pointer,
-            &self.floxmeta,
             self.path.join(GENERATION_LOCK_FILENAME),
+            &self.floxmeta,
+            remote_branch_name(&self.system, &self.pointer),
+            branch_name(&self.system, &self.pointer, &self.path)?.into(),
         )?;
         Ok(result)
     }
@@ -165,10 +165,10 @@ impl Environment for ManagedEnvironment {
                 .unwrap();
 
             write_pointer_lockfile(
-                &flox.system,
-                &self.pointer,
-                &self.floxmeta,
                 self.path.join(GENERATION_LOCK_FILENAME),
+                &self.floxmeta,
+                remote_branch_name(&self.system, &self.pointer),
+                branch_name(&flox.system, &self.pointer, &self.path)?.into(),
             )?;
         }
 
@@ -443,6 +443,7 @@ impl ManagedEnvironment {
                             _ => ManagedEnvironmentError::Git(err),
                         })?;
                 }
+                // if it still doesn't exist after fetching, error
                 if !floxmeta
                     .git
                     .branch_contains_commit(&lock.rev, &remote_branch)
@@ -461,7 +462,9 @@ impl ManagedEnvironment {
                     .git
                     .fetch_ref("origin", &format!("+{0}:{0}", remote_branch))
                     .map_err(ManagedEnvironmentError::Fetch)?;
-                write_pointer_lockfile(&flox.system, pointer, floxmeta, lock_path)?
+
+                // Fresh lockfile, so we don't want to set local_rev
+                write_pointer_lockfile(lock_path, floxmeta, remote_branch, None)?
             },
         })
     }
@@ -528,31 +531,39 @@ impl ManagedEnvironment {
     }
 }
 
-/// Write a pointer lockfile to the specified `lock_path` storing the
-/// current git revision of the tracked upstream repository identified by a `pointer`.
+/// Write a pointer lockfile to the specified `lock_path`.
+///
+/// The lockfile stores the current git revision of the tracked upstream repository.
+/// When a local revision is specified,
+/// and the local revision is different from the remote revision,
+/// the local revision is also stored in the lockfile.
 ///
 /// When committed to a project, guarantees
 /// that the same version of the linked environment is used by all clones.
+/// When a local revision is specified,
+/// flox will **try to** check out the local revision
+/// rather than the remote revision **failing if it can't**.
 fn write_pointer_lockfile(
-    system: &str,
-    pointer: &ManagedPointer,
-    floxmeta: &FloxmetaV2,
     lock_path: PathBuf,
+    floxmeta: &FloxmetaV2,
+    remote_ref: String,
+    local_ref: Option<String>,
 ) -> Result<GenerationLock, EnvironmentError2> {
-    let local_ref = branch_name(system, pointer, lock_path.parent().unwrap()).unwrap();
-    let remote_branch = remote_branch_name(system, pointer);
-
     let rev = floxmeta
         .git
-        .branch_hash(&remote_branch)
+        .branch_hash(&remote_ref)
         .map_err(ManagedEnvironmentError::GitBranchHash)?;
 
-    let local_rev = match floxmeta.git.branch_hash(&local_ref) {
-        Ok(local_rev) if local_rev == rev => None,
-        Ok(local_rev) => Some(local_rev),
+    let local_rev = if let Some(ref local_ref) = local_ref {
+        match floxmeta.git.branch_hash(local_ref) {
+            Ok(local_rev) if local_rev == rev => None,
+            Ok(local_rev) => Some(local_rev),
 
-        Err(GitCommandBranchHashError::DoesNotExist) => None,
-        Err(err) => Err(ManagedEnvironmentError::GitBranchHash(err))?,
+            Err(GitCommandBranchHashError::DoesNotExist) => None,
+            Err(err) => Err(ManagedEnvironmentError::GitBranchHash(err))?,
+        }
+    } else {
+        None
     };
 
     if let Some(ref local_rev) = local_rev {
@@ -695,11 +706,13 @@ impl ManagedEnvironment {
         )
         .unwrap();
 
+        // write an initial lockfile, since this is a new branch
+        // we don't need to set a specific local_rev
         write_pointer_lockfile(
-            &flox.system,
-            &pointer,
-            &temp_floxmeta,
             path_environment.path.join(GENERATION_LOCK_FILENAME),
+            &temp_floxmeta,
+            remote_branch_name(&flox.system, &pointer),
+            None,
         )
         .unwrap();
 
@@ -789,10 +802,10 @@ impl ManagedEnvironment {
         // update the pointer lockfile
         // we don't need to set a specific local_rev, because we just pushed
         write_pointer_lockfile(
-            &self.system,
-            &self.pointer,
-            &self.floxmeta,
             self.path.join(GENERATION_LOCK_FILENAME),
+            &self.floxmeta,
+            sync_branch,
+            None,
         )
         .unwrap();
         Ok(())
