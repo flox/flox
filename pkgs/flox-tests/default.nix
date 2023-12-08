@@ -32,6 +32,7 @@
   writeShellScriptBin,
   PROJECT_NAME ? "flox-tests",
   PROJECT_TESTS_DIR ? ./../../tests,
+  PROJECT_TESTS_SUBDIR ? "",
   NIX_BIN ? "${nix}/bin/nix",
   PKGDB_BIN ? "${flox-pkgdb}/bin/pkgdb",
   ENV_BUILDER_BIN ? "${flox-env-builder}/bin/flox-env-builder",
@@ -111,8 +112,8 @@ in
 
     # Copy PROJECT_TESTS_DIR to temporary directory
     WORKDIR=$(mktemp -d -t ${PROJECT_NAME}-XXXXXX)
-    cp -R $PROJECT_TESTS_DIR/* $WORKDIR
-    cd $WORKDIR
+    cp -RL $PROJECT_TESTS_DIR/* $WORKDIR
+    cd $WORKDIR${PROJECT_TESTS_SUBDIR}
 
     # Declare project specific dependencies
     ${
@@ -186,7 +187,7 @@ in
 
 
     # Default flag values
-    : "''${TESTS_DIR:=$WORKDIR}";
+    : "''${TESTS_DIR:=$WORKDIR${PROJECT_TESTS_SUBDIR}}";
     export TESTS_DIR;
 
     if [[ "''${#_FLOX_TESTS[@]}" -lt 1 ]]; then

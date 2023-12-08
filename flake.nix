@@ -129,6 +129,13 @@
       flox-tests = callPackage ./pkgs/flox-tests {};
       flox-tests-end2end = final.flox-tests.override {
         PROJECT_NAME = "flox-tests-end2end";
+        PROJECT_TESTS_SUBDIR = "/end2end";
+        PROJECT_TESTS_DIR = "${final.runCommand "flox-tests-end2end-src" {} ''
+          mkdir -p $out/end2end
+          cp -r ${./tests/end2end}/* $out/end2end/
+          cp -r ${./tests/setup_suite.bash} $out/setup_suite.bash
+          cp -r ${./tests/test_support.bash} $out/test_support.bash
+        ''}";
       };
 
       rustfmt = prev.rustfmt.override {asNightly = true;};

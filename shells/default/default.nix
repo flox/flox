@@ -39,6 +39,8 @@
         FLOX_BIN = null;
       })
       (flox-tests-end2end.override {
+        PROJECT_NAME = "flox-tests-end2end";
+        PROJECT_TESTS_SUBDIR = "";
         PROJECT_TESTS_DIR = "/tests/end2end";
         PKGDB_BIN = null;
         ENV_BUILDER_BIN = null;
