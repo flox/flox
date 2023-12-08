@@ -204,9 +204,6 @@ jobs:
             echo "experimental-features = nix-command flakes";
           } | sudo tee -a /etc/nix/nix.conf >/dev/null
 
-      - name: "Debug"
-        uses: "mxschmitt/action-tmate@v3"
-
       - name: "Cache Cargo"
         uses: "actions/cache@v3"
         with:
