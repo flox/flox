@@ -1,4 +1,22 @@
-#![allow(dead_code)] //
+//! A representation of the generations of an environment
+//!
+//! Example File layout:
+//!
+//! ```ignore
+//! ./
+//! ├── 1
+//! │  └── env
+//! │     ├── manifest.toml
+//! │     └── manifest.lock
+//! ├── 2
+//! │  └── env
+//! │    └── manifest.toml (lockfile is optional)
+//! ├── ... N
+//! │  └── env
+//! │     └── manifest.toml
+//! └── metadata.json
+//! ```
+
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -9,52 +27,57 @@ use serde::{Deserialize, Serialize};
 use serde_with::{DeserializeFromStr, SerializeDisplay};
 use thiserror::Error;
 
-use super::path_environment::{Original, PathEnvironment};
-use super::{copy_dir_recursive, PathPointer, ENV_DIR_NAME};
+use super::core_environment::CoreEnvironment;
+use super::{copy_dir_recursive, ENV_DIR_NAME};
 use crate::providers::git::{GitCommandProvider, GitProvider};
 
 const GENERATIONS_METADATA_FILE: &str = "metadata.json";
 
+/// Generations as a branch in a (bare) git repository.
+/// In this state files are read only using `git show`.
+/// Making commits to bare repositories is tricky and non-idiomatic,
+/// thus writing commands are implemented on checked out branches.
+///
+/// Todo: rename to `Opaque`, `Bare`, ...?
+///
+/// See also: [ReadWrite]
 pub struct ReadOnly {}
 
-pub struct ReadWrite {
-    /// A base directory that contains the tempdir
-    /// of the checked out generations branch
-    /// as well as tempdirs created by [PathEnvironment] transactions.
-    tempdir_base: PathBuf,
-}
+/// Generations as a checked out branch of a git clone of a [ReadOnly] repo.
+/// In this state files are read and writeable using the filesystem.
+///
+/// Mutating commands are commited and pushed to the [ReadOnly] branch.
+///
+/// Instances of this type are created using [Generations::writable].
+///
+/// Todo: rename to `CheckedOut`, `Filesystem`, ...?
+///
+/// /// See also: [ReadOnly]
+pub struct ReadWrite {}
 
 /// A representation of the generations of an environment
 ///
-/// Example File layout:
+/// Essentially the branches in a Floxmeta repository.
 ///
-/// ./
-/// ├── 1
-/// │  └── env
-/// │     ├── manifest.toml
-/// │     └── manifest.lock
-/// ├── 2
-/// │  └── env
-/// │    └── manifest.toml (lockfile is optional)
-/// ├── ... N
-/// │  └── env
-/// │     └── manifest.toml
-/// └── metadata.json
-pub struct Generations<State> {
+/// Todo: merge with or integrate Floxmeta?
+pub struct Generations<State = ReadOnly> {
     /// A floxmeta repository/branch that contains the generations of an environment
     ///
     /// - When [ReadOnly], this is assumend to be bare, but it is not enforced.
+    ///   If not bare, updating it using `git push` may fail to update checked out branches.
     /// - When [ReadWrite], this is required to not be bare.
     ///   This is enforced when created using [Self::writable].
     repo: GitCommandProvider,
 
-    /// A path pointer for the environment that will
-    /// be associated with a realized generation
-    pointer: PathPointer,
-
+    /// The name of the branch containing the generations
+    /// Used to pick the correct branch when showing files, cloning, and pushing.
     branch: String,
 
-    state: State,
+    /// The state of the generations view
+    ///
+    /// Should remain private to enforce the invariant that [ReadWrite]
+    /// always refers to a cloned branch of a [ReadOnly] instance.
+    _state: State,
 }
 
 impl<S> Generations<S> {
@@ -66,72 +89,62 @@ impl<S> Generations<S> {
 
 impl Generations<ReadOnly> {
     /// Create a new generations instance
-    pub fn new(
-        environment_repr: GitCommandProvider,
-        ref_name: String,
-        pointer: PathPointer,
-    ) -> Self {
+    pub fn new(repo: GitCommandProvider, branch: String) -> Self {
         Self {
-            repo: environment_repr,
-            branch: ref_name,
-            pointer,
-            state: ReadOnly {},
+            repo,
+            branch,
+            _state: ReadOnly {},
         }
     }
 
     pub fn writable(
         self,
-        tempdir_base: PathBuf,
+        tempdir: impl AsRef<Path>,
     ) -> Result<Generations<ReadWrite>, GenerationsError> {
         let repo = checkout_to_tempdir(
             &self.repo,
             &self.branch,
-            tempfile::tempdir_in(&tempdir_base).unwrap().into_path(),
+            tempfile::tempdir_in(tempdir).unwrap().into_path(),
         )?;
 
         Ok(Generations {
             repo,
             branch: self.branch,
-            pointer: self.pointer,
-            state: ReadWrite { tempdir_base },
+            _state: ReadWrite {},
         })
     }
 }
 
 impl Generations<ReadWrite> {
-    /// Return a mutable [PathEnvironment] instance for a given generation
+    /// Return a mutable [CoreEnvironment] instance for a given generation
     /// contained in the generations branch.
     ///
     /// Note:
     ///   Only the generations branch is isolated in a tempdir.
     ///   Taking a mutable reference to a generation will not isolate it further,
     ///   so changes to the generation will remain in the tempdir.
-    ///   If [Generations::add_generation] is given a [PathEnvironment] instance
+    ///   If [Generations::add_generation] is given a [CoreEnvironment] instance
     ///   returned by this method, it will copy the environment into the new generation.
     ///
     ///   When a generation needs to be used again after being modified,
     ///   it is recommended to create a new [Generations<ReadWrite>] instance first.
-    pub fn get_generation(
-        &self,
-        generation: usize,
-    ) -> Result<PathEnvironment<Original>, GenerationsError> {
-        let environment = PathEnvironment::new(
-            self.repo.path().join(generation.to_string()),
-            self.pointer.clone(),
-            &self.state.tempdir_base,
-            Original,
-        )
-        .unwrap();
+    pub fn get_generation(&self, generation: usize) -> Result<CoreEnvironment, GenerationsError> {
+        let environment = CoreEnvironment::new(
+            self.repo
+                .path()
+                .join(generation.to_string())
+                .join(ENV_DIR_NAME),
+        );
 
         Ok(environment)
     }
 
     /// Return the current generation as set in the metadata file
-    /// as a [PathEnvironment].
+    /// as a [CoreEnvironment].
     ///
     /// The generation can then be safely modified
     /// and registered as a new generation using [Self::add_generation].
-    pub fn get_current_generation(&self) -> Result<PathEnvironment<Original>, GenerationsError> {
+    pub fn get_current_generation(&self) -> Result<CoreEnvironment, GenerationsError> {
         let metadata = self.metadata()?;
         let current_gen = metadata
             .current_gen
@@ -141,7 +154,7 @@ impl Generations<ReadWrite> {
 
     /// Import an existing environment into a generation
     ///
-    /// Assumes the invariant that the [PathEnvironment] instance is valid.
+    /// Assumes the invariant that the [CoreEnvironment] instance is valid.
     ///
     /// This will copy the manifest and lockfile from the source environment
     /// into a generation folder.
@@ -152,7 +165,7 @@ impl Generations<ReadWrite> {
     /// If `set_current` is true, the generation will also be set as the current generation.
     fn register_generation(
         &mut self,
-        environment: PathEnvironment<Original>,
+        environment: CoreEnvironment,
         generation: usize,
         description: String,
         set_current: bool,
@@ -178,7 +191,7 @@ impl Generations<ReadWrite> {
 
         // copy `env/`, i.e. manifest and lockfile (if it exists) and possibly other assets
         // copy into `<generation>/env/` to make creating `PathEnvironment` easier
-        copy_dir_recursive(&environment.path.join(ENV_DIR_NAME), &env_path, true).unwrap();
+        copy_dir_recursive(&environment.path(), &env_path, true).unwrap();
 
         self.repo.add(&[&generation_path]).unwrap();
         self.repo
@@ -204,7 +217,7 @@ impl Generations<ReadWrite> {
     /// and sets it as the current generation.
     pub fn add_generation(
         &mut self,
-        environment: PathEnvironment<Original>,
+        environment: CoreEnvironment,
         description: String,
     ) -> Result<(), GenerationsError> {
         // keys should all be numbers (but)
@@ -226,6 +239,7 @@ impl Generations<ReadWrite> {
     /// This method will not perform any validation of the generation switched to.
     /// If validation (e.g. proving that the environment builds) is required,
     /// it should first be realized using [Self::realize_generation].
+    #[allow(unused)]
     fn set_current_generation(&mut self, generation: usize) -> Result<(), GenerationsError> {
         let mut metadata = self.metadata()?;
 
@@ -370,3 +384,9 @@ impl SingleGenerationMetadata {
     SerializeDisplay,
 )]
 pub struct GenerationId(usize);
+
+#[cfg(test)]
+mod tests {
+    // todo: tests for this will be easier with the `init` method implemented
+    // in https://github.com/flox/flox/pull/563
+}

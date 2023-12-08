@@ -1,4 +1,6 @@
 //! The directory structure for a path environment looks like this:
+//!
+//! ```ignore
 //! .flox/
 //!     ENVIRONMENT_POINTER_FILENAME
 //!     ENVIRONMENT_DIR_NAME/
@@ -6,10 +8,13 @@
 //!         LOCKFILE_FILENAME
 //!     PATH_ENV_GCROOTS_DIR_NAME/
 //!         $system.$name (out link)
+//! ```
+//!
+//! `ENVIRONMENT_DIR_NAME` contains the environment definition
+//! and is modified using [CoreEnvironment].
 
 use std::ffi::OsStr;
 use std::fs::{self};
-use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use async_trait::async_trait;
@@ -23,6 +28,7 @@ use runix::flake_ref::path::PathRef;
 use runix::installable::FlakeAttribute;
 use runix::RunJson;
 
+use super::core_environment::CoreEnvironment;
 use super::{
     copy_dir_recursive,
     EditResult,
@@ -33,22 +39,12 @@ use super::{
     PathPointer,
     DOT_FLOX,
     ENVIRONMENT_POINTER_FILENAME,
-    ENV_BUILDER_BIN,
     GCROOTS_DIR_NAME,
     LOCKFILE_FILENAME,
 };
 use crate::flox::Flox;
-use crate::models::environment::{
-    global_manifest_path,
-    LockedManifest,
-    CATALOG_JSON,
-    ENV_DIR_NAME,
-    MANIFEST_FILENAME,
-};
+use crate::models::environment::{CATALOG_JSON, ENV_DIR_NAME, MANIFEST_FILENAME};
 use crate::models::environment_ref::EnvironmentName;
-use crate::models::manifest::{insert_packages, remove_packages};
-use crate::models::search::PKGDB_BIN;
-
 /// Struct representing a local environment
 ///
 /// This environment performs transactional edits by first copying the environment
@@ -59,7 +55,7 @@ use crate::models::search::PKGDB_BIN;
 ///
 /// The transaction status is captured via the `state` field.
 #[derive(Debug)]
-pub struct PathEnvironment<S> {
+pub struct PathEnvironment {
     /// Absolute path to the environment, typically `<...>/.flox`
     pub path: PathBuf,
 
@@ -70,33 +66,19 @@ pub struct PathEnvironment<S> {
     ///
     /// Used to identify the environment.
     pub pointer: PathPointer,
-
-    /// The transaction state
-    pub state: S,
 }
 
-#[derive(Debug, PartialEq, Eq, Copy, Clone)]
-pub struct Original;
-#[derive(Debug, PartialEq, Eq, Copy, Clone)]
-pub struct Temporary;
-
-/// A marker trait used to identify types that represent transaction states
-pub trait TransactionState: Send + Sync {}
-impl TransactionState for Original {}
-impl TransactionState for Temporary {}
-
-impl<S> PartialEq for PathEnvironment<S> {
+impl PartialEq for PathEnvironment {
     fn eq(&self, other: &Self) -> bool {
         self.path == other.path
     }
 }
 
-impl<S: TransactionState> PathEnvironment<S> {
+impl PathEnvironment {
     pub fn new(
         dot_flox: impl AsRef<Path>,
         pointer: PathPointer,
         temp_dir: impl AsRef<Path>,
-        state: S,
     ) -> Result<Self, EnvironmentError2> {
         let env_path = dot_flox.as_ref().join(ENV_DIR_NAME);
         if !env_path.exists() {
@@ -115,72 +97,7 @@ impl<S: TransactionState> PathEnvironment<S> {
                 .map_err(EnvironmentError2::EnvCanonicalize)?,
             pointer,
             temp_dir: temp_dir.as_ref().to_path_buf(),
-            state,
         })
-    }
-
-    /// Makes a temporary copy of the environment so edits can be applied without modifying the original environment
-    pub fn make_temporary(&self) -> Result<PathEnvironment<Temporary>, EnvironmentError2> {
-        let transaction_dir =
-            tempfile::tempdir_in(&self.temp_dir).map_err(EnvironmentError2::MakeSandbox)?;
-
-        copy_dir_recursive(&self.path, &transaction_dir, true)
-            .map_err(EnvironmentError2::MakeTemporaryEnv)?;
-
-        PathEnvironment::new(
-            transaction_dir.into_path(),
-            self.pointer.clone(),
-            self.temp_dir.clone(),
-            Temporary,
-        )
-    }
-
-    /// Replace the contents of this environment's `.flox` with that of another environment's `.flox`
-    ///
-    /// This may copy build symlinks, so the assumption is that building self
-    /// will result in the same out link as building the replacement.
-    pub fn replace_with(
-        &mut self,
-        replacement: PathEnvironment<Temporary>,
-    ) -> Result<(), EnvironmentError2> {
-        let transaction_backup = self
-            .path
-            .with_file_name(format!("{}.tmp", self.name().as_ref()));
-        if transaction_backup.exists() {
-            debug!(
-                "transaction backup exists: {}",
-                transaction_backup.display()
-            );
-            return Err(EnvironmentError2::PriorTransaction(transaction_backup));
-        }
-        debug!(
-            "backing up env: from={}, to={}",
-            self.path.display(),
-            transaction_backup.display()
-        );
-        fs::rename(&self.path, &transaction_backup)
-            .map_err(EnvironmentError2::BackupTransaction)?;
-        // try to restore the backup if the move fails
-        debug!(
-            "replacing original env: from={}, to={}",
-            replacement.path.display(),
-            self.path.display()
-        );
-        if let Err(err) = copy_dir_recursive(&replacement.path, &self.path, true) {
-            debug!(
-                "failed to replace env ({}), restoring backup: from={}, to={}",
-                err,
-                transaction_backup.display(),
-                self.path.display(),
-            );
-            fs::remove_dir_all(&self.path).map_err(EnvironmentError2::AbortTransaction)?;
-            fs::rename(transaction_backup, &self.path)
-                .map_err(EnvironmentError2::AbortTransaction)?;
-            return Err(EnvironmentError2::Move(err));
-        }
-        debug!("removing backup: path={}", transaction_backup.display());
-        fs::remove_dir_all(transaction_backup).map_err(EnvironmentError2::RemoveBackup)?;
-        Ok(())
     }
 
     /// Where to link a built environment to. The path may not exist if the environment has
@@ -202,73 +119,28 @@ impl<S: TransactionState> PathEnvironment<S> {
         }
         Ok(run_dir.join([system.clone(), self.name().to_string()].join(".")))
     }
-}
 
-impl PathEnvironment<Temporary> {
-    /// Updates the environment manifest with the provided contents
-    pub fn update_manifest(&mut self, contents: &impl AsRef<str>) -> Result<(), EnvironmentError2> {
-        debug!("writing new manifest to {}", self.manifest_path().display());
-        let mut manifest_file = std::fs::OpenOptions::new()
-            .write(true)
-            .truncate(true)
-            .open(self.manifest_path())
-            .map_err(EnvironmentError2::OpenManifest)?;
-        manifest_file
-            .write_all(contents.as_ref().as_bytes())
-            .map_err(EnvironmentError2::UpdateManifest)?;
-        Ok(())
+    /// Get a view of the environment that can be used to perform operations
+    /// on the environment without side effects.
+    ///
+    /// This method should only be used to create [CoreEnvironment]s for a [PathEnvironment].
+    /// To modify the environment, use the [PathEnvironment] methods instead.
+    pub(super) fn into_core_environment(self) -> CoreEnvironment {
+        CoreEnvironment::new(self.path.join(ENV_DIR_NAME))
     }
 }
 
 #[async_trait]
-impl<S> Environment for PathEnvironment<S>
-where
-    S: TransactionState,
-{
+impl Environment for PathEnvironment {
     /// Build the environment with side effects:
     ///
     /// - Create a result link as gc-root.
     /// - Create a lockfile if one doesn't already exist, updating it with
     ///   any new packages.
     async fn build(&mut self, flox: &Flox) -> Result<(), EnvironmentError2> {
-        debug!("building project environment at {}", self.path.display());
-        let manifest_path = self.manifest_path();
-        let lockfile_path = self.lockfile_path();
-        let maybe_lockfile = if lockfile_path.exists() {
-            debug!("found existing lockfile: {}", lockfile_path.display());
-            Some(lockfile_path.as_ref())
-        } else {
-            debug!("no existing lockfile found");
-            None
-        };
-        let lockfile = LockedManifest::lock_manifest(
-            Path::new(&*PKGDB_BIN),
-            &manifest_path,
-            maybe_lockfile,
-            &global_manifest_path(flox),
-        )?;
-        debug!("generated lockfile, writing to {}", lockfile_path.display());
-        std::fs::write(&lockfile_path, lockfile.to_string())
-            .map_err(EnvironmentError2::WriteLockfile)?;
-
-        debug!(
-            "building environment: system={}, lockfilePath={}",
-            &flox.system,
-            lockfile_path.display()
-        );
-
-        let store_path = lockfile.build(
-            Path::new(&*ENV_BUILDER_BIN),
-            Some(&self.out_link(&flox.system)?),
-        )?;
-
-        debug!(
-            "built locked environment, store path={}",
-            store_path.display()
-        );
-
-        // TODO: check the contents of the gc root or store path to see if it's empty
-        // TODO: separate building and linking
+        let mut env_view = CoreEnvironment::new(self.path.join(ENV_DIR_NAME));
+        env_view.build(flox)?;
+        env_view.link(flox, self.out_link(&flox.system)?)?;
 
         Ok(())
     }
@@ -279,24 +151,18 @@ where
     /// returns a map of the packages that were already installed. The installation
     /// will proceed if at least one of the requested packages were added to the
     /// manifest.
+    ///
+    /// Todo: remove async
     async fn install(
         &mut self,
         packages: Vec<String>,
         flox: &Flox,
     ) -> Result<InstallationAttempt, EnvironmentError2> {
-        let current_manifest_contents = self.manifest_content()?;
-        let installation =
-            insert_packages(&current_manifest_contents, &packages).map(|insertion| {
-                InstallationAttempt {
-                    new_manifest: insertion.new_toml.map(|toml| toml.to_string()),
-                    already_installed: insertion.already_installed,
-                }
-            })?;
-        if let Some(ref new_manifest) = installation.new_manifest {
-            self.transact_with_manifest_contents(new_manifest, flox)
-                .await?;
-        }
-        Ok(installation)
+        let mut env_view = CoreEnvironment::new(self.path.join(ENV_DIR_NAME));
+        let result = env_view.install(packages, flox)?;
+        env_view.link(flox, self.out_link(&flox.system)?)?;
+
+        Ok(result)
     }
 
     /// Uninstall packages from the environment atomically
@@ -309,11 +175,11 @@ where
         packages: Vec<String>,
         flox: &Flox,
     ) -> Result<String, EnvironmentError2> {
-        let current_manifest_contents = self.manifest_content()?;
-        let toml = remove_packages(&current_manifest_contents, &packages)?;
-        self.transact_with_manifest_contents(toml.to_string(), flox)
-            .await?;
-        Ok(toml.to_string())
+        let mut env_view = CoreEnvironment::new(self.path.join(ENV_DIR_NAME));
+        let result = env_view.uninstall(packages, flox)?;
+        env_view.link(flox, self.out_link(&flox.system)?)?;
+
+        Ok(result)
     }
 
     /// Atomically edit this environment, ensuring that it still builds
@@ -322,12 +188,11 @@ where
         flox: &Flox,
         contents: String,
     ) -> Result<EditResult, EnvironmentError2> {
-        let old_contents = self.manifest_content()?;
-        // TODO we should probably skip this if the manifest hasn't changed
-        self.transact_with_manifest_contents(&contents, flox)
-            .await?;
+        let mut env_view = CoreEnvironment::new(self.path.join(ENV_DIR_NAME));
+        let result = env_view.edit(flox, contents)?;
+        env_view.link(flox, self.out_link(&flox.system)?)?;
 
-        EditResult::new(&old_contents, &contents)
+        Ok(result)
     }
 
     /// Get a catalog of installed packages from this environment
@@ -408,7 +273,7 @@ where
     }
 }
 
-impl<S: TransactionState> PathEnvironment<S> {
+impl PathEnvironment {
     /// Turn the environment into a flake attribute,
     /// a precise url to interact with the environment via nix
     fn flake_attribute(&self, system: impl AsRef<str>) -> FlakeAttribute {
@@ -433,27 +298,10 @@ impl<S: TransactionState> PathEnvironment<S> {
     fn catalog_path(&self) -> PathBuf {
         self.path.join("pkgs").join("default").join(CATALOG_JSON)
     }
-
-    /// Attempt to transactionally replace the manifest contents
-    async fn transact_with_manifest_contents(
-        &mut self,
-        manifest_contents: impl AsRef<str>,
-        flox: &Flox,
-    ) -> Result<(), EnvironmentError2> {
-        debug!("transaction: making temporary environment");
-        let mut temp_env = self.make_temporary()?;
-        debug!("transaction: updating manifest");
-        temp_env.update_manifest(&manifest_contents)?;
-        debug!("transaction: building environment");
-        temp_env.build(flox).await?;
-        debug!("transaction: replacing environment");
-        self.replace_with(temp_env)?;
-        Ok(())
-    }
 }
 
 /// Constructors of PathEnvironments
-impl PathEnvironment<Original> {
+impl PathEnvironment {
     /// Open an environment at a given path
     ///
     /// Ensure that the path exists and contains files that "look" like an environment
@@ -468,7 +316,7 @@ impl PathEnvironment<Original> {
             Err(EnvironmentError2::DotFloxNotFound)?;
         }
 
-        PathEnvironment::new(dot_flox, pointer, temp_dir, Original)
+        PathEnvironment::new(dot_flox, pointer, temp_dir)
     }
 
     /// Create a new env in a `.flox` directory within a specific path or open it if it exists.
@@ -515,8 +363,6 @@ impl PathEnvironment<Original> {
 mod tests {
 
     use super::*;
-    #[cfg(feature = "impure-unit-tests")]
-    use crate::flox::tests::flox_instance;
 
     #[test]
     fn create_env() {
@@ -524,7 +370,7 @@ mod tests {
         let environment_temp_dir = tempfile::tempdir().unwrap();
         let pointer = PathPointer::new("test".parse().unwrap());
 
-        let before = PathEnvironment::<Original>::open(
+        let before = PathEnvironment::open(
             pointer.clone(),
             environment_temp_dir.path(),
             temp_dir.path(),
@@ -535,18 +381,13 @@ mod tests {
             "{before:?}"
         );
 
-        let actual = PathEnvironment::<Original>::init(
-            pointer,
-            environment_temp_dir.path(),
-            temp_dir.path(),
-        )
-        .unwrap();
+        let actual =
+            PathEnvironment::init(pointer, environment_temp_dir.path(), temp_dir.path()).unwrap();
 
         let expected = PathEnvironment::new(
             environment_temp_dir.into_path().join(".flox"),
             PathPointer::new("test".parse().unwrap()),
             temp_dir.path(),
-            Original,
         )
         .unwrap();
 
@@ -576,8 +417,7 @@ mod tests {
         let environment_temp_dir = tempfile::tempdir().unwrap();
         let pointer = PathPointer::new("test".parse().unwrap());
 
-        let env =
-            PathEnvironment::<Original>::init(pointer, environment_temp_dir, temp_dir).unwrap();
+        let env = PathEnvironment::init(pointer, environment_temp_dir, temp_dir).unwrap();
 
         assert_eq!(
             env.flake_attribute("aarch64-darwin").to_string(),
@@ -586,36 +426,5 @@ mod tests {
                 env.path.to_string_lossy()
             )
         )
-    }
-
-    #[tokio::test]
-    #[cfg(feature = "impure-unit-tests")]
-    async fn edit_env() {
-        let (_flox, tempdir) = flox_instance();
-        let pointer = PathPointer::new("test".parse().unwrap());
-
-        let sandbox_path = tempdir.path().join("sandbox");
-        std::fs::create_dir(&sandbox_path).unwrap();
-
-        let mut env = PathEnvironment::init(pointer, &tempdir, &sandbox_path).unwrap();
-
-        let mut temp_env = env.make_temporary().unwrap();
-
-        assert_eq!(
-            temp_env.path.parent().unwrap(),
-            sandbox_path.canonicalize().unwrap()
-        );
-
-        let new_env_str = r#"
-        { }
-        "#;
-
-        temp_env.update_manifest(&new_env_str).unwrap();
-
-        assert_eq!(temp_env.manifest_content().unwrap(), new_env_str);
-
-        env.replace_with(temp_env).unwrap();
-
-        assert_eq!(env.manifest_content().unwrap(), new_env_str);
     }
 }

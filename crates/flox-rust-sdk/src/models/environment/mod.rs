@@ -31,6 +31,7 @@ use crate::providers::git::{
 use crate::utils::copy_file_without_permissions;
 use crate::utils::errors::IoError;
 
+mod core_environment;
 pub mod generations;
 pub mod managed_environment;
 pub mod path_environment;
@@ -418,6 +419,8 @@ pub enum EnvironmentError2 {
     OpenManifest(#[source] std::io::Error),
     #[error("Activate")]
     Activate(#[source] NixCommandLineRunError),
+    #[error("Could not create backup for transaction")]
+    MakeBackup(#[source] std::io::Error),
     #[error("Prior transaction in progress. Delete {0} to discard.")]
     PriorTransaction(PathBuf),
     #[error("Failed to create backup for transaction")]
