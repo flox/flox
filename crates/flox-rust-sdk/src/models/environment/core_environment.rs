@@ -326,6 +326,9 @@ impl CoreEnvironment<ReadWrite> {
 mod tests {
     use std::os::unix::fs::PermissionsExt;
 
+    #[cfg(feature = "impure-unit-tests")]
+    use serial_test::serial;
+
     use super::*;
     use crate::flox::tests::flox_instance;
     #[cfg(feature = "impure-unit-tests")]
@@ -333,6 +336,7 @@ mod tests {
 
     /// Check that `edit` updates the manifest and creates a lockfile
     #[test]
+    #[serial]
     #[cfg(feature = "impure-unit-tests")]
     fn edit_env_creates_manifest_and_lockfile() {
         let (flox, tempdir) = flox_instance();
@@ -402,6 +406,7 @@ mod tests {
 
     /// linking an environment should set a gc-root
     #[test]
+    #[serial]
     #[cfg(feature = "impure-unit-tests")]
     fn build_flox_environment_and_links() {
         let (flox, tempdir) = flox_instance();
