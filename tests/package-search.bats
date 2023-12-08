@@ -46,7 +46,7 @@ teardown() {
 setup_file() {
   common_file_setup;
 
-  export SHOW_HINT="Use \`flox show {package}\` to see available versions"
+  export SHOW_HINT="Use \`flox show <package>\` to see available versions"
   # Separator character for ambiguous package sources
   export SEP=":";
 
