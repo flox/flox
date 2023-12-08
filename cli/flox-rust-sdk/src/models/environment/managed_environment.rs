@@ -549,11 +549,17 @@ fn write_pointer_lockfile(
 
     let local_rev = match floxmeta.git.branch_hash(&local_ref) {
         Ok(local_rev) if local_rev == rev => None,
-        Ok(local_ref) => Some(local_ref),
-        // todo: think
+        Ok(local_rev) => Some(local_rev),
+
         Err(GitCommandBranchHashError::DoesNotExist) => None,
         Err(err) => Err(ManagedEnvironmentError::GitBranchHash(err))?,
     };
+
+    if let Some(ref local_rev) = local_rev {
+        debug!("writing pointer lockfile: remote_rev='{rev}', local_rev='{local_rev}', lockfile={lock_path:?}");
+    } else {
+        debug!("writing pointer lockfile: remote_rev='{rev}', local_rev=<unset>, ,lockfile={lock_path:?}");
+    }
 
     let lock = GenerationLock {
         rev,
@@ -562,7 +568,7 @@ fn write_pointer_lockfile(
     };
     let lock_contents =
         serde_json::to_string_pretty(&lock).map_err(ManagedEnvironmentError::SerializeLock)?;
-    debug!("writing rev '{}' to lockfile to {:?}", lock.rev, lock_path);
+
     fs::write(lock_path, lock_contents).map_err(ManagedEnvironmentError::WriteLock)?;
     Ok(lock)
 }
