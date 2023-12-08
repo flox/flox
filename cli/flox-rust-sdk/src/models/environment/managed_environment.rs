@@ -19,12 +19,13 @@ use super::{
     EnvironmentError2,
     InstallationAttempt,
     ManagedPointer,
+    ENVIRONMENT_POINTER_FILENAME,
     GCROOTS_DIR_NAME,
 };
 use crate::flox::Flox;
 use crate::models::environment::copy_dir_recursive;
 use crate::models::environment_ref::{EnvironmentName, EnvironmentOwner};
-use crate::models::floxmetav2::{FloxmetaV2, FloxmetaV2Error};
+use crate::models::floxmetav2::{floxmeta_git_options, FloxmetaV2, FloxmetaV2Error};
 use crate::providers::git::{GitCommandBranchHashError, GitCommandError, GitProvider};
 
 const GENERATION_LOCK_FILENAME: &str = "env.lock";
@@ -646,49 +647,53 @@ impl ManagedEnvironment {
         flox: &Flox,
         path_environment: PathEnvironment,
         owner: EnvironmentOwner,
-        temp_path: &Path,
         force: bool,
     ) -> Result<Self, ManagedEnvironmentError> {
+        // path of the original .flox directory
+        let dot_flox_path = path_environment.path.clone();
+
         let pointer = ManagedPointer::new(owner, path_environment.name());
-        let temp_floxmeta_path = temp_path.join("floxmeta");
 
-        fs::create_dir_all(&temp_floxmeta_path).unwrap();
+        let checkedout_floxmeta_path = tempfile::tempdir_in(&flox.temp_dir).unwrap().into_path();
+        let temp_floxmeta_path = tempfile::tempdir_in(&flox.temp_dir).unwrap().into_path();
 
-        let temp_floxmeta = FloxmetaV2::new_in(&temp_floxmeta_path, flox, &pointer)
-            .map_err(ManagedEnvironmentError::OpenFloxmeta)?;
+        let token = flox
+            .floxhub_token
+            .as_ref()
+            .ok_or(ManagedEnvironmentError::OpenFloxmeta(
+                FloxmetaV2Error::LoggedOut,
+            ))?;
 
-        let generation_dir = temp_floxmeta_path.join("0");
-        fs::create_dir_all(&generation_dir).unwrap();
-        copy_dir_recursive(&path_environment.path, &generation_dir, false).unwrap();
+        let options = floxmeta_git_options(&flox.floxhub_host, token);
 
-        fs::write(
-            temp_floxmeta_path.join("env.json"),
-            serde_json::to_string(&json!({
-                "type": "upstream",
-                "currentGen": "0"
-            }))
-            .unwrap(),
+        let generations = Generations::init(
+            options,
+            checkedout_floxmeta_path,
+            temp_floxmeta_path,
+            remote_branch_name(&flox.system, &pointer),
+            &path_environment.pointer,
         )
         .unwrap();
 
-        temp_floxmeta.git.add(&[Path::new(".")]).unwrap();
-        temp_floxmeta
-            .git
-            .commit(&format!(
-                "initialize environment {}/{} with first generation",
-                &pointer.owner, &pointer.name
-            ))
+        let temp_floxmeta_git = generations.git().clone();
+
+        let mut generations = generations.writable(flox.temp_dir.clone()).unwrap();
+
+        generations
+            .add_generation(
+                path_environment.into_core_environment(),
+                "Add first generation".to_string(),
+            )
             .unwrap();
 
-        temp_floxmeta
-            .git
+        temp_floxmeta_git
             .add_remote(
-                "origin",
+                "upstream",
                 &format!("{}/{}/floxmeta", flox.floxhub_host, &pointer.owner),
             )
             .unwrap();
 
-        match temp_floxmeta.git.push("origin", force) {
+        match temp_floxmeta_git.push("upstream", force) {
             Err(GitCommandError::BadExit(1, details, _))
                 if details
                     .lines()
@@ -701,22 +706,22 @@ impl ManagedEnvironment {
         }
 
         fs::write(
-            path_environment.path.join("env.json"),
+            dot_flox_path.join(ENVIRONMENT_POINTER_FILENAME),
             serde_json::to_string(&pointer).unwrap(),
         )
         .unwrap();
 
-        // write an initial lockfile, since this is a new branch
-        // we don't need to set a specific local_rev
         write_pointer_lockfile(
-            path_environment.path.join(GENERATION_LOCK_FILENAME),
-            &temp_floxmeta,
+            dot_flox_path.join(GENERATION_LOCK_FILENAME),
+            &FloxmetaV2 {
+                git: temp_floxmeta_git,
+            },
             remote_branch_name(&flox.system, &pointer),
             None,
         )
         .unwrap();
 
-        let env = ManagedEnvironment::open(flox, pointer, path_environment.path).unwrap();
+        let env = ManagedEnvironment::open(flox, pointer, dot_flox_path).unwrap();
 
         Ok(env)
     }

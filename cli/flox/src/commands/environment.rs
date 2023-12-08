@@ -748,14 +748,8 @@ impl Push {
         let path_environment =
             path_environment::PathEnvironment::open(path_pointer, dot_flox_path, &flox.temp_dir)?;
 
-        ManagedEnvironment::push_new(
-            flox,
-            path_environment,
-            owner.parse().unwrap(),
-            &flox.temp_dir,
-            force,
-        )
-        .map_err(Self::convert_error)?;
+        ManagedEnvironment::push_new(flox, path_environment, owner.parse().unwrap(), force)
+            .map_err(Self::convert_error)?;
 
         Ok(())
     }

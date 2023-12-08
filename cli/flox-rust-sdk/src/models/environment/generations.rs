@@ -28,9 +28,9 @@ use serde_with::{DeserializeFromStr, SerializeDisplay};
 use thiserror::Error;
 
 use super::core_environment::CoreEnvironment;
-use super::{copy_dir_recursive, ENV_DIR_NAME};
+use super::{copy_dir_recursive, PathPointer, ENV_DIR_NAME};
 use crate::models::environment::MANIFEST_FILENAME;
-use crate::providers::git::{GitCommandProvider, GitProvider};
+use crate::providers::git::{GitCommandOptions, GitCommandProvider, GitProvider};
 
 const GENERATIONS_METADATA_FILE: &str = "metadata.json";
 
@@ -113,6 +113,10 @@ impl<S> Generations<S> {
 
         self.manifest(*current_gen)
     }
+
+    pub(super) fn git(&self) -> &GitCommandProvider {
+        &self.repo
+    }
 }
 
 impl Generations<ReadOnly> {
@@ -125,6 +129,45 @@ impl Generations<ReadOnly> {
         }
     }
 
+    /// Initialize a new generations branch for an environment
+    /// in an assumed empty branch.
+    ///
+    /// This will create a new (initial) commit with an initial metadata file.
+    pub fn init(
+        options: GitCommandOptions,
+        checkedout_tempdir: impl AsRef<Path>,
+        bare_tempdir: impl AsRef<Path>,
+        branch: String,
+        pointer: &PathPointer,
+    ) -> Result<Self, GenerationsError> {
+        let repo =
+            GitCommandProvider::init_with(options.clone(), &checkedout_tempdir, false).unwrap();
+        repo.checkout(&branch, true).unwrap();
+
+        let metadata = AllGenerationsMetadata::default();
+        write_metadata_file(metadata, repo.path()).unwrap();
+
+        repo.add(&[Path::new(GENERATIONS_METADATA_FILE)]).unwrap();
+        repo.commit(&format!(
+            "Initialize generations branch for environment '{}'",
+            pointer.name
+        ))
+        .unwrap();
+
+        let bare = GitCommandProvider::clone_branch_with(
+            options,
+            checkedout_tempdir.as_ref(),
+            bare_tempdir,
+            &branch,
+            true,
+        )
+        .unwrap();
+
+        Ok(Self::new(bare, branch))
+    }
+
+    /// Create a writable copy of this generations instance
+    /// in a temporary directory.
     pub fn writable(
         self,
         tempdir: impl AsRef<Path>,
