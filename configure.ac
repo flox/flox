@@ -329,7 +329,7 @@ AS_CASE(["$TOOLCHAIN"],
   [NO_UNDEFINED_SYMBOLS_FLAG='-Wl,-undefined,error';
   SHARED_LIBRARY_CFLAGS='-fPIC';],
   [AC_MSG_ERROR([Unsupported C++ compiler: $CXX])]
-))
+)
 
 AC_SUBST([NO_UNDEFINED_SYMBOLS_FLAG])
 

@@ -9302,7 +9302,7 @@ case "$TOOLCHAIN" in #(
   *) :
     as_fn_error $? "Unsupported C++ compiler: $CXX" "$LINENO" 5
  ;;
-esac)
+esac
 
 
 
