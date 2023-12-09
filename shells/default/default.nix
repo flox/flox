@@ -63,8 +63,11 @@ in
 
       inputsFrom = [
         flox-pkgdb
-        flox-env-builder
-        flox-cli
+        (flox-env-builder.override {flox-pkgdb = null;})
+        (flox-cli.override {
+          flox-pkgdb = null;
+          flox-env-builder = null;
+        })
       ];
 
       packages = ciPackages ++ lib.optionals (!ci) devPackages;

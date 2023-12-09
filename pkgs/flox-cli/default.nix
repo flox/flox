@@ -61,8 +61,14 @@
       GIT_BIN = "${gitMinimal}/bin/git";
       NIX_BIN = "${nix}/bin/nix";
       PARSER_UTIL_BIN = "${parser-util}/bin/parser-util";
-      PKGDB_BIN = "${flox-pkgdb}/bin/pkgdb";
-      ENV_BUILDER_BIN = "${flox-env-builder}/bin/flox-env-builder";
+      PKGDB_BIN =
+        if flox-pkgdb == null
+        then "pkgdb/bin/pkgdb"
+        else "${flox-pkgdb}/bin/pkgdb";
+      ENV_BUILDER_BIN =
+        if flox-env-builder == null
+        then "env-builder/bin/env-builder"
+        else "${flox-env-builder}/bin/flox-env-builder";
       FLOX_ETC_DIR = ../../assets/etc;
       FLOX_ZDOTDIR = ../../assets/flox.zdotdir;
 
@@ -77,7 +83,9 @@
       FLOX_RESOLVER_SRC = builtins.path {path = ../../resolver;};
 
       # Metrics subsystem configuration
-      METRICS_EVENTS_URL = "https://z7qixlmjr3.execute-api.eu-north-1.amazonaws.com/prod/capture";
+      METRICS_EVENTS_URL =
+        "https://z7qixlmjr3.execute-api.eu-north-1."
+        + "amazonaws.com/prod/capture";
       METRICS_EVENTS_API_KEY = "5pAQnBqz5Q7dpqVD9BEXQ4Kdc3D2fGTd3ZgP0XXK";
 
       # oauth client id
@@ -93,7 +101,8 @@
       LIBSSH2_SYS_USE_PKG_CONFIG = "1";
 
       # used internally to ensure CA certificates are available
-      NIXPKGS_CACERT_BUNDLE_CRT = cacert.outPath + "/etc/ssl/certs/ca-bundle.crt";
+      NIXPKGS_CACERT_BUNDLE_CRT =
+        cacert.outPath + "/etc/ssl/certs/ca-bundle.crt";
 
       # The current version of flox being built
       FLOX_VERSION =
