@@ -38,7 +38,7 @@ in
       version = builtins.replaceStrings ["\n"] [""] (builtins.readFile ./../../pkgdb/version);
 
       src = builtins.path {
-        path = ./../../pkgdb;
+        path = ./../..;
         filter = name: type: let
           bname = baseNameOf name;
           ignores = [
@@ -54,14 +54,25 @@ in
             "out"
             "bin"
             "pkgs"
+            "shells"
             "bear.d"
             ".direnv"
+            ".envrc"
             ".clang-tidy"
             ".clang-format"
             ".envrc"
             ".github"
             "LICENSE"
             "tests"
+            "autom4te.cache"
+            "assets"
+            "cli"
+            "env-builder"
+            "img"
+            "resolver"
+            "target"
+            "Justfile"
+            "Procfile"
           ];
           ext = let
             m = builtins.match ".*\\.([^.]+)" name;
@@ -71,14 +82,13 @@ in
             else builtins.head m;
           ignoredExts = ["o" "so" "dylib" "log"];
           notResult = (builtins.match "result(-*)?" bname) == null;
+          notTmp = (builtins.match ".*~" bname) == null;
           notIgnored =
             (! (builtins.elem bname ignores))
             && (! (builtins.elem ext ignoredExts));
         in
-          notIgnored && notResult;
+          notIgnored && notResult && notTmp;
       };
-
-      BUILD_AUX_DIR = ./../../build-aux;
 
       propagatedBuildInputs = [semver nix];
 
@@ -95,14 +105,7 @@ in
         nix
       ];
 
-      configurePhase = ''
-        runHook preConfigure;
-        export PREFIX="$out";
-        if [[ "''${enableParallelBuilding:-1}" = 1 ]]; then
-          makeFlagsArray+=( "-j''${NIX_BUILD_CORES:?}" );
-        fi
-        runHook postConfigure;
-      '';
+      preBuild = "cd pkgdb;";
 
       # Checks require internet
       doCheck = false;

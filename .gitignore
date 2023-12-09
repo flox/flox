@@ -9,3 +9,6 @@ result-*
 /.direnv/
 compile_commands.json
 target/
+autom4te.cache/
+*~
+*.log

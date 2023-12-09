@@ -28,10 +28,8 @@ endif
 
 # ---------------------------------------------------------------------------- #
 
-include $(MK_DIR)/platform.mk
-include $(MK_DIR)/lib.mk
-include $(MK_DIR)/files.mk
-include $(MK_DIR)/flags.mk
+include $(addprefix $(MK_DIR)/,platform.mk lib.mk files.mk flags.mk)
+sinclude $(REPO_ROOT)/config.mk
 
 # ---------------------------------------------------------------------------- #
 
@@ -122,6 +120,17 @@ ifeq (,$(nix_LIBS))
 $(error You must set 'nix_LIBS')
 endif  # ifeq (,$(nix_LIBS))
 
+ifeq (,$(SEMVER))
+$(error You must set 'SEMVER' to the path of the 'semver' executable)
+endif  # ifeq (,$(SEMVER))
+
+
+# ---------------------------------------------------------------------------- #
+
+# Set `libpkgdb' flags
+# --------------------
+
+# TODO: do this entirely in `autoconf'.
 
 ifeq (,$(libpkgdb_CXXFLAGS))
 libpkgdb_CXXFLAGS =
@@ -147,17 +156,6 @@ endif  # ifeq (,$(libpkgdb_LIBS))
 
 # ---------------------------------------------------------------------------- #
 
-# Locate `semver'
-# ---------------
-
-# TODO: Don't use `nix build'
-SEMVER_PATH ?=                                                        \
-  $(shell $(NIX) build --no-link --print-out-paths                    \
-                       'github:aakropotkin/floco#semver')/bin/semver
-
-
-# ---------------------------------------------------------------------------- #
-
 # Set `pkgdb' flags
 # -----------------
 
@@ -165,7 +163,7 @@ pkgdb_CXXFLAGS = $(CXXFLAGS)
 pkgdb_LDFLAGS  = $(LDFLAGS)
 
 pkgdb_CXXFLAGS += $(libpkgdb_CXXFLAGS) $(toml_CFLAGS) $(yaml_CFLAGS)
-pkgdb_CXXFLAGS += '-DSEMVER_PATH="$(SEMVER_PATH)"'
+pkgdb_CXXFLAGS += '-DSEMVER_PATH="$(SEMVER)"'
 
 pkgdb_LDFLAGS  += $(libpkgdb_LIBS) $(yaml_LIBS)
 
@@ -211,7 +209,7 @@ lib/pkgconfig/pkgdb.pc: $(pkgdb_ROOT)/version
 
 CLEANFILES += lib/pkgconfig/pkgdb.pc
 
-install-lib: $(LIBDIR)/pkgconfig/pkgdb.pc
+install-lib: $(PKGCONFIGDIR)/pkgdb.pc
 
 
 # ---------------------------------------------------------------------------- #
