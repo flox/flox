@@ -6,10 +6,10 @@ $ cd git clone git@github.com/flox/flox.git;
 $ cd flox;
 # Enter Dev Shell
 $ nix develop;
-# Build `flox'
-$ cargo build;
+# Build `pkgdb', `env-builder', and `flox'
+$ just build;
 # Run the build
-$ ./target/debug/flox --help;
+$ ./cli/target/debug/flox --help;
 # Run the test suite ( requires `./tests/debug/flox' )
 $ nix run '.#flox-tests';
 ```
@@ -26,7 +26,7 @@ Currently this repo houses three rust crates:
 ## Development
 
 ```console
-$ nix develop .#flox;
+$ nix develop;
 ```
 
 This sets up an environment with dependencies, rust toolchain, variable
@@ -37,17 +37,20 @@ to build the rust based cli.
 
 - build and run flox
    ```console
-   $ cargo run -- <args>
+   $ pushd cli;
+   $ cargo run -- <args>;
    ```
 - build a debug build of flox
    ```console
-   $ cargo build
-   # builds to ./target/debug/flox
+   $ just build;
+   # builds to ./cli/target/debug/flox
    ```
 - build an optimized release build of flox
    ```console
-   $ cargo build --release
-   # builds to ./target/release/flox
+   $ make -C pkgdb -j;
+   $ make -C env-builder -j;
+   $ ( pushd cli||return; cargo build --release; )
+   # builds to ./cli/target/release/flox
    ```
 
 **Note:**
@@ -57,6 +60,7 @@ Flox must be buildable using `flox` or `nix`.
 
 - format rust code:
   ```console
+  $ pushd cli;
   $ cargo fmt
   $ cargo fmt --check # just check
   ```
@@ -71,6 +75,7 @@ Flox must be buildable using `flox` or `nix`.
   A pre-commit hook is set up to check nix file formatting.
 - lint rust
   ```console
+  $ pushd cli;
   $ cargo clippy --all
   ```
 - lint all files (including for formatting):
@@ -178,7 +183,7 @@ These cover code authored in Rust, but does not explicitly cover code authored
 in `<flox>/flox-bash/`.
 
 ```console
-$ nix develop --command 'cargo test';
+$ nix develop --command 'just test';
 ```
 
 ### Integration tests
@@ -188,8 +193,8 @@ They are located in the `<flox>/tests` folder.
 To run them:
 
 ```console
-$ nix develop --command 'cargo build';
-$ nix run '.#flox-tests' -- --flox ./target/debug/flox;
+$ nix develop --command 'just build';
+$ nix run '.#flox-tests' -- --flox ./cli/target/debug/flox;
 ```
 The second `--` separates the `nix run` arguments from arguments supplied to the `flox-tests` script defined in `pkgs/flox-tests/default.nix`.
 The `--flox` flag specifies which `flox` executable to use as by default `flox` will be picked from the environment.
@@ -203,8 +208,8 @@ When working on the test you would probably want to run them continuously on
 every change. In that case run the following:
 
 ```console
-$ nix develop --command 'cargo build';
-$ nix run '.#flox-tests' -- --flox ./target/debug/flox --watch;
+$ nix develop --command 'just build';
+$ nix run '.#flox-tests' -- --flox ./cli/target/debug/flox --watch;
 ```
 
 #### `bats` arguments
@@ -214,8 +219,8 @@ Failing to wrap will cause `flox` to "consume" the `--` rather than pass it
 through to the inner command:
 
 ```console
-$ nix develop --command 'cargo build';
-$ nix run '.#flox-tests' -- --flox ./target/debug/flox -- -j 4;
+$ nix develop --command 'just build';
+$ nix run '.#flox-tests' -- --flox ./cli/target/debug/flox -- -j 4;
 ```
 This example tells `bats` to run 4 jobs in parallel.
 
@@ -225,7 +230,7 @@ You can specify which tests to run by passing arguments to either `flox-tests` o
 ##### Running a specific file
 In order to run a specific test file, pass the path to the file to `flox-tests`:
 ```console
-$ nix run '.#flox-tests' -- --flox ./target/debug/flox ./tests/run.bats;
+$ nix run '.#flox-tests' -- --flox ./cli/target/debug/flox ./tests/run.bats;
 $ or, using the Justfile
 $ just bats-file ./tests/run.bats
 ```
@@ -284,7 +289,7 @@ Some of these tags will overlap. For example, the `build_env` tag should be used
 
 In order to run tests with a specific tag, you'll pass the `--filter-tags` option to `bats`:
 ```console
-$ nix run '.#flox-tests' -- --flox ./target/debug/flox  \
+$ nix run '.#flox-tests' -- --flox ./cli/target/debug/flox  \
                          -- --filter-tags activate;
 $ # or, using the Justfile
 $ just bats-tests --filter-tags activate
