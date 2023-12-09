@@ -8,3 +8,4 @@ result-*
 /.flox
 /.direnv/
 compile_commands.json
+target/

@@ -153,7 +153,7 @@ endif  # ifeq (,$(libpkgdb_LIBS))
 # TODO: Don't use `nix build'
 SEMVER_PATH ?=                                                        \
   $(shell $(NIX) build --no-link --print-out-paths                    \
-	                     'github:aakropotkin/floco#semver')/bin/semver
+                       'github:aakropotkin/floco#semver')/bin/semver
 pkgdb_CXXFLAGS += '-DSEMVER_PATH="$(SEMVER_PATH)"'
 
 
