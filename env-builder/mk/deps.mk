@@ -28,6 +28,11 @@ nljson_CFLAGS := $(nljson_CFLAGS)
 
 # ---------------------------------------------------------------------------- #
 
+# TODO: This block is an absolute shit-show.
+# There's a draft branch that uses `autoconf' and `automake' which will clean
+# this up; but for now this is going to allow us to make incremental progress
+# on fixing the `devShell'.
+
 pkgdb_CFLAGS ?= $(shell $(PKG_CONFIG) --cflags pkgdb||:)
 pkgdb_CFLAGS := $(pkgdb_CFLAGS)
 ifeq (,$(pkgdb_CFLAGS))
