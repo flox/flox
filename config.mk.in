@@ -1,0 +1,171 @@
+# ============================================================================ #
+#
+# File filled by `configure' for use in Makefiles.
+#
+# This sets various paths for resources, and controls options which effect
+# how sub-systems are built.
+#
+# ---------------------------------------------------------------------------- #
+
+# Project Directories
+# -------------------
+
+REPO_ROOT             = @REPO_ROOT@
+PKGDB_ROOT            = @PKGDB_ROOT@
+PKGDB_TESTS_DIR       = @PKGDB_TESTS_DIR@
+ENV_BUILDER_ROOT      = @ENV_BUILDER_ROOT@
+ENV_BUILDER_TESTS_DIR = @ENV_BUILDER_TESTS_DIR@
+FLOX_CLI_ROOT         = @FLOX_CLI_ROOT@
+FLOX_CLI_TESTS_DIR    = @FLOX_CLI_TESTS_DIR@
+CRATES_DIR            = @CRATES_DIR@
+FLAKE_NIX             = @FLAKE_NIX@
+FLAKE_LOCK            = @FLAKE_LOCK@
+
+
+# ---------------------------------------------------------------------------- #
+
+# Installation Directories
+# ------------------------
+
+# Works around a bug in `automake' where `datadir' is set before a variable
+# it references.
+datarootdir ?= ${prefix}/share
+
+PREFIX            = @PREFIX@
+BINDIR            = @BINDIR@
+LIBDIR            = @LIBDIR@
+INCLUDEDIR        = @INCLUDEDIR@
+DATADIR           = @DATADIR@
+MANDIR            = @MANDIR@
+PKGCONFIGDIR      = @PKGCONFIGDIR@
+DOCDIR            = @DOCDIR@
+LIBEXECDIR        = @LIBEXECDIR@
+SYSCONFDIR        = @SYSCONFDIR@
+INSTALL_TESTS_DIR = @INSTALL_TESTS_DIR@
+
+
+# ---------------------------------------------------------------------------- #
+
+# Sub-Systems/Modules
+# -------------------
+
+WITH_PKGDB       = @WITH_PKGDB@
+WITH_ENV_BUILDER = @WITH_ENV_BUILDER@
+WITH_FLOX_CLI    = @WITH_FLOX_CLI@
+
+
+# ---------------------------------------------------------------------------- #
+
+# External Dependencies
+# ---------------------
+
+nlohmann_json_CFLAGS = @NLOHMANN_JSON_CFLAGS@
+argparse_CFLAGS      = @ARGPARSE_CFLAGS@
+sqlite3_CFLAGS       = @SQLITE3_CFLAGS@
+sqlite3_LDFLAGS      = @SQLITE3_LIBS@
+sqlite3pp_CFLAGS     = @SQLITE3PP_CFLAGS@
+yaml_CFLAGS          = @YAML_CFLAGS@
+yaml_LDFLAGS         = @YAML_LIBS@
+nix_CFLAGS           = @NIX_CFLAGS@
+nix_LDFLAGS          = @NIX_LIBS@ -lnixfetchers
+# TODO: boost_CFLAGS
+# TODO: toml_CFLAGS
+
+
+# ---------------------------------------------------------------------------- #
+
+# Utilities
+# ---------
+
+CAT        = @CAT@
+COMMITIZEN = @COMMITIZEN@
+CP         = @CP@
+FIND       = @FIND@
+GIT        = @GIT@
+GREP       = @GREP@
+HIVEMIND   = @HIVEMIND@
+LN         = @LN@
+LN_S       = $(LN) -s
+MKDIR      = @MKDIR@
+MKDIR_P    = $(MKDIR) -p
+RM         = @RM@ -f
+SED        = @SED@
+SEMVER     = @SEMVER@
+SORT       = @SORT@
+SQLITE     = @SQLITE@
+TEE        = @TEE@
+TEST       = @TEST@
+TOUCH      = @TOUCH@
+TR         = @TR@
+UNAME      = @UNAME@
+XARGS 	   = @XARGS@
+BATS       = @BATS@
+M4         = @M4@
+
+# Nix things
+NIX     = @NIX@
+NIX_FMT = @NIX_FMT@
+
+# Crab things
+CARGO     = @CARGO@
+RUST_FMT  = @RUST_FMT@
+RUST_LINT = @RUST_LINT@
+
+# CNile things
+BEAR       = @BEAR@
+CXX        = @CXX@
+CXX_FMT    = @CXX_FMT@
+CXX_LINT   = @CXX_LINT@
+DOXYGEN    = @DOXYGEN@
+PKG_CONFIG = @PKG_CONFIG@
+
+
+# ---------------------------------------------------------------------------- #
+
+# Platform and Toolchain Configuration
+# ------------------------------------
+
+OS            = @OS@
+ARCH          = @ARCH@
+CXX_TOOLCHAIN = @CXX_TOOLCHAIN@
+
+
+# ---------------------------------------------------------------------------- #
+
+# External Dependencies
+# ---------------------
+
+nlohmann_json_CFLAGS = @NLOHMANN_JSON_CFLAGS@
+
+argparse_CFLAGS = @ARGPARSE_CFLAGS@
+
+boost_CFLAGS = @BOOST_CFLAGS@
+
+toml_CFLAGS = @TOML_CFLAGS@
+
+sqlite3_CFLAGS = @SQLITE3_CFLAGS@
+sqlite3_LIBS   = @SQLITE3_LIBS@
+
+sqlite3pp_CFLAGS = @SQLITE3PP_CFLAGS@
+
+yaml_CFLAGS = @YAML_CFLAGS@
+
+nix_INCDIR = @NIX_INCDIR@
+nix_LIBDIR = @NIX_LIBDIR@
+nix_CFLAGS = @NIX_CFLAGS@
+nix_LIBS   = @NIX_LIBS@
+
+libpkgdb_CXXFLAGS = @LIBPKGDB_CFLAGS@
+libpkgdb_LIBS     = @LIBPKGDB_LIBS@
+
+
+# ---------------------------------------------------------------------------- #
+
+# TODO: libpkgdb `pkg-config` file flags.
+
+
+# ---------------------------------------------------------------------------- #
+#
+#
+#
+# ============================================================================ #
