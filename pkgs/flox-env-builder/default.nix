@@ -21,6 +21,8 @@
     boost_CPPFLAGS = "-I" + boost.dev.outPath + "/include";
     pkgdb_CLFAGS = "-I" + flox-pkgdb.outPath + "/include";
 
+    PKGDB_DIR = ../../pkgdb;
+
     PROFILE_D_SCRIPT_DIR = profile_d_scripts;
     SET_PROMPT_BASH_SH = "${../../assets/mkEnv/set-prompt-bash.sh}";
 
@@ -95,6 +97,7 @@ in
         devEnvs =
           envs
           // {
+            PKGDB_DIR = "";
           };
 
         devShellHook = ''

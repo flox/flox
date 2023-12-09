@@ -245,6 +245,8 @@ in
           // {
             RUST_SRC_PATH = rustPlatform.rustLibSrc.outPath;
             RUSTFMT = "${rustfmt}/bin/rustfmt";
+            PKGDB_BIN = "pkgdb";
+            ENV_BUILDER_BIN = "flox-env-builder";
           };
 
         devShellHook = ''
