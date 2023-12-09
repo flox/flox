@@ -35,6 +35,7 @@ CXX     ?= c++
 MKDIR   ?= mkdir
 MKDIR_P ?= $(MKDIR) -p
 CP      ?= cp
+UNAME   ?= uname
 
 
 # ---------------------------------------------------------------------------- #
@@ -44,13 +45,13 @@ LDLIBS   ?=
 
 CXXFLAGS ?=
 CXXFLAGS += -Iinclude
-CXXFLAGS += $(nix_CFLAGS) $(sqlite3pp_CFLAGS)
+CXXFLAGS += $(nix_CFLAGS) $(sqlite3pp_CFLAGS) $(pkgdb_CFLAGS)
 
 LDFLAGS ?=
 # TODO: -Wl is not available on gh runners?
 # LDFLAGS += -Wl,-rpath,$$ORIGIN/../lib
 # LDFLAGS += -Wl,--enable-new-dtags '-Wl,-rpath,$$ORIGIN/../lib'
-LDFLAGS += $(nix_LDFLAGS)
+LDFLAGS += $(nix_LDFLAGS) $(pkgdb_LIBS)
 
 
 bin_CPPFLAGS ?=
@@ -60,7 +61,11 @@ bin_LDFLAGS  ?= -Llib
 bin_LDLIBS   ?=
 
 lib_CPPFLAGS ?=
+ifeq ($(shell $(UNAME) -s),Linux)
 lib_CXXFLAGS ?= -shared -fPIC
+else # Darwin
+lib_CXXFLAGS ?= -fPIC
+endif
 # TODO: -Wl is not available on gh runners?
 
 lib_LDFLAGS  ?= -shared -fPIC
@@ -78,13 +83,6 @@ endif
 ifneq (,$(COV))
 CXXFLAGS += --coverage -fprofile-arcs -ftest-coverage
 LDFLAGS  += --coverage -fprofile-arcs -ftest-coverage
-endif
-
-
-# ---------------------------------------------------------------------------- #
-
-ifneq (,$(SEMVER))
-CXXFLAGS += -DSEMVER_PATH='$(SEMVER)'
 endif
 
 

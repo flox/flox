@@ -6,10 +6,9 @@
 .pre-commit-config.yaml
 /.direnv/
 /.flox
+/autom4te.cache/
 /cli/target
-/target/
 Makefile
-autom4te.cache/
 compile_commands.json
 result
 result-*
