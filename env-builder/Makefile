@@ -6,17 +6,7 @@
 
 MAKEFILE_DIR ?= $(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
 
-ENV_BUILDER_DIR := $(MAKEFILE_DIR)
-
-REPO_ROOT     ?= $(patsubst %/,%,$(dir $(ENV_BUILDER_DIR)))
-BUILD_AUX_DIR ?= $(REPO_ROOT)/build-aux
-MK_DIR        ?= $(BUILD_AUX_DIR)/mk
-
-ifneq (,$(wildcard $(REPO_ROOT)/pkgdb/))
-PKGDB_DIR ?= $(REPO_ROOT)/pkgdb
-else
-$(error "Unable to locate repository root")
-endif
+include $(MAKEFILE_DIR)/Include.mk
 
 # ---------------------------------------------------------------------------- #
 
@@ -26,72 +16,8 @@ endif
 
 # ---------------------------------------------------------------------------- #
 
-# Utilities
-# ---------
-# We use variables to refer to all tools so that we can easily override them
-# from the command line.
-
-BEAR       ?= bear
-CAT        ?= cat
-CP         ?= cp
-CXX        ?= c++
-DOXYGEN    ?= doxygen
-FMT        ?= clang-format
-GREP       ?= grep
-LN         ?= ln -f
-MKDIR      ?= mkdir
-MKDIR_P    ?= $(MKDIR) -p
-NIX        ?= nix
-PKG_CONFIG ?= pkg-config
-RM         ?= rm -f
-SED        ?= sed
-TEE        ?= tee
-TEST       ?= test
-TIDY       ?= clang-tidy
-TOUCH      ?= touch
-TR         ?= tr
-UNAME      ?= uname
-
-
-# ---------------------------------------------------------------------------- #
-
-# Detect OS and Set Shared Library Extension
-# ------------------------------------------
-
-OS ?= $(shell $(UNAME))
-OS := $(OS)
-ifndef libExt
-ifeq (Linux,$(OS))
-libExt ?= .so
-else
-libExt ?= .dylib
-endif  # ifeq (Linux,$(OS))
-endif  # ifndef libExt
-
-
-# ---------------------------------------------------------------------------- #
-
-# Detect the C++ compiler toolchain
-# ---------------------------------
-
-ifndef TOOLCHAIN
-
-ifneq "" "$(shell $(CXX) --version|$(GREP) -i 'gcc'||:)"
-TOOLCHAIN = gcc
-else ifneq "" "$(shell $(CXX) --version|$(GREP) -i 'clang'||:)"
-TOOLCHAIN = clang
-else
-$(error "Unable to detect C++ compiler toolchain")
-endif  # ifneq "" "$(shell $(CXX) --version|$(GREP) -i 'gcc'||:)"
-
-else  # ifndef TOOLCHAIN
-
-# If the user set TOOLCHAIN, ensure that it is valid.
-ifeq "" "$(filter gcc clang,$(TOOLCHAIN))"
-$(error "Invalid C++ compiler toolchain: $(TOOLCHAIN)")
-endif  # ifeq "" "$(filter gcc clang,$(TOOLCHAIN))"
-
-endif  # ifndef TOOLCHAIN
+include $(MK_DIR)/utils.mk
+include $(MK_DIR)/platform.mk
 
 
 # ---------------------------------------------------------------------------- #
@@ -108,16 +34,6 @@ PREFIX     ?= $(MAKEFILE_DIR)/out
 BINDIR     ?= $(PREFIX)/bin
 LIBDIR     ?= $(PREFIX)/lib
 INCLUDEDIR ?= $(PREFIX)/include
-
-
-# ---------------------------------------------------------------------------- #
-
-# rwildcard DIRS, PATTERNS
-# ------------------------
-# Recursive wildcard.
-#   Ex:  $(call rwildcard,src,*.cc *.hh)
-rwildcard = $(foreach d,$(wildcard $(1:=/*)),$(call rwildcard,$d,$2)        \
-                                             $(filter $(subst *,%,$2),$d))
 
 
 # ---------------------------------------------------------------------------- #
@@ -392,55 +308,6 @@ $(TESTS) $(TEST_UTILS): $(COMMON_HEADERS)
 $(TESTS) $(TEST_UTILS): bin_CXXFLAGS += '-DTEST_DATA_DIR="$(TEST_DATA_DIR)"'
 $(TESTS) $(TEST_UTILS): tests/%: tests/%.cc lib/$(LIBFLOXENVBUILDER)
 	$(CXX) $(CXXFLAGS) $(bin_CXXFLAGS) $< $(LDFLAGS) $(bin_LDFLAGS) -o $@;
-
-
-# ---------------------------------------------------------------------------- #
-
-# Install Targets
-# ---------------
-
-.PHONY: install-dirs install-bin install-lib install-include install
-
-#: Install binaries, libraries, and include files
-install: install-dirs install-bin install-lib install-include
-
-#: Create directories in the install prefix
-install-dirs: FORCE
-	$(MKDIR_P) $(BINDIR) $(LIBDIR) $(LIBDIR)/pkgconfig;
-	$(MKDIR_P) $(INCLUDEDIR)/flox/env-builder;
-
-$(INCLUDEDIR)/%: include/% | install-dirs
-	$(CP) -- "$<" "$@";
-
-$(LIBDIR)/%: lib/% | install-dirs
-	$(CP) -- "$<" "$@";
-
-$(BINDIR)/%: bin/% | install-dirs
-	$(CP) -- "$<" "$@";
-
-# Darwin has to relink
-ifneq (Linux,$(OS))
-LINK_INAME_FLAG = -install_name '@rpath/$(LIBFLOXENVBUILDER)'
-$(LIBDIR)/$(LIBFLOXENVBUILDER): CXXFLAGS += $(lib_CXXFLAGS)
-$(LIBDIR)/$(LIBFLOXENVBUILDER): LDFLAGS  += $(lib_LDFLAGS)
-$(LIBDIR)/$(LIBFLOXENVBUILDER): $(lib_SRCS:.cc=.o)
-	$(MKDIR_P) $(@D);
-	$(CXX) $(filter %.o,$^) $(LDFLAGS) -o $@;
-
-$(BINDIR)/pkgdb: $(bin_SRCS:.cc=.o) $(LIBDIR)/$(LIBFLOXENVBUILDER)
-	$(MKDIR_P) $(@D);
-	$(CXX) $(filter %.o,$^) $(LDFLAGS) $(bin_LDFLAGS) -o $@;
-endif # ifneq (Linux,$(OS))
-
-#: Install binaries
-install-bin: $(addprefix $(BINDIR)/,$(BINS))
-
-#: Install libraries
-install-lib: $(addprefix $(LIBDIR)/,$(LIBS))
-
-#: Install include files
-install-include:                                                       \
-	$(addprefix $(INCLUDEDIR)/,$(subst include/,,$(COMMON_HEADERS)));
 
 
 # ---------------------------------------------------------------------------- #

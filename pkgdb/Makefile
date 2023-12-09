@@ -48,11 +48,9 @@
 #
 # ---------------------------------------------------------------------------- #
 
-MAKEFILE_DIR ?= $(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
-
-PKGDB_DIR := $(MAKEFILE_DIR)
-
-REPO_ROOT     ?= $(patsubst %/,%,$(dir $(PKGDB_DIR)))
+MAKEFILE_DIR  ?= $(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
+REPO_ROOT     ?= $(patsubst %/,%,$(dir $(MAKEFILE_DIR)))
+REPO_ROOT     :=
 BUILD_AUX_DIR ?= $(REPO_ROOT)/build-aux
 MK_DIR        ?= $(BUILD_AUX_DIR)/mk
 
@@ -69,31 +67,7 @@ endif
 
 # ---------------------------------------------------------------------------- #
 
-# Utilities
-# ---------
-# We use variables to refer to all tools so that we can easily override them
-# from the command line.
-
-BEAR       ?= bear
-CAT        ?= cat
-CP         ?= cp
-CXX        ?= c++
-DOXYGEN    ?= doxygen
-FMT        ?= clang-format
-GREP       ?= grep
-LN         ?= ln -f
-MKDIR      ?= mkdir
-MKDIR_P    ?= $(MKDIR) -p
-NIX        ?= nix
-PKG_CONFIG ?= pkg-config
-RM         ?= rm -f
-SED        ?= sed
-TEE        ?= tee
-TEST       ?= test
-TIDY       ?= clang-tidy
-TOUCH      ?= touch
-TR         ?= tr
-UNAME      ?= uname
+include $(MK_DIR)/utils.mk
 
 
 # ---------------------------------------------------------------------------- #
