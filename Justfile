@@ -2,10 +2,10 @@
 #
 # Think of this as a `Makefile' except you run `just <TARGET>' instead
 # of `make <TARGET>'.
+#
 # The difference between `just' and `make' is that `just' does not check
 # timestamps to determine if files are stale; so in that sense you can imagine
-# it as being like `make --new-file=<FILE>... <TARGET>' where `<FILE>...' is all
-# root level prerequisites of `<TARGET>'.
+# it as `make' except "all targets are `.PHONY' targets".
 #
 #
 # ---------------------------------------------------------------------------- #
