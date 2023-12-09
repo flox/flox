@@ -154,14 +154,32 @@ endif  # ifeq (,$(libpkgdb_LIBS))
 SEMVER_PATH ?=                                                        \
   $(shell $(NIX) build --no-link --print-out-paths                    \
                        'github:aakropotkin/floco#semver')/bin/semver
-pkgdb_CXXFLAGS += '-DSEMVER_PATH="$(SEMVER_PATH)"'
 
+
+# ---------------------------------------------------------------------------- #
+
+# Set `pkgdb' flags
+# -----------------
+
+pkgdb_CXXFLAGS = $(CXXFLAGS)
+pkgdb_LDFLAGS  = $(LDFLAGS)
 
 pkgdb_CXXFLAGS += $(libpkgdb_CXXFLAGS) $(toml_CFLAGS) $(yaml_CFLAGS)
+pkgdb_CXXFLAGS += '-DSEMVER_PATH="$(SEMVER_PATH)"'
+
 pkgdb_LDFLAGS  += $(libpkgdb_LIBS) $(yaml_LIBS)
 
 
 # ---------------------------------------------------------------------------- #
+
+# Generate `pkg-config' file.
+# ---------------------------
+# The `PC_CFLAGS' and `PC_LIBS' variables carry flags that are not covered by
+# `nlohmann_json`, `argparse`, `sqlite3pp`, `sqlite`, and `nix{main,cmd,expr}`
+# `Requires' handling.
+# This amounts to handling `boost', `libnixfetchers', forcing
+# the inclusion of the `nix' `config.h' header, and some additional CPP vars.
+# For `nix'
 
 ifeq (,$(pkgdb_PC_CFLAGS))
 pkgdb_PC_CFLAGS =  $(lastword $(filter -std=%,$(pkgdb_CXXFLAGS) $(CXXFLAGS)))
@@ -174,14 +192,6 @@ endif  # ifeq (,$(pkgdb_PC_CFLAGS))
 pkgdb_PC_LIBS ?= -L$(nix_LIBDIR) -lnixfetchers
 
 
-# Generate `pkg-config' file.
-# ---------------------------
-# The `PC_CFLAGS' and `PC_LIBS' variables carry flags that are not covered by
-# `nlohmann_json`, `argparse`, `sqlite3pp`, `sqlite`, and `nix{main,cmd,expr}`
-# `Requires' handling.
-# This amounts to handling `boost', `libnixfetchers', forcing
-# the inclusion of the `nix' `config.h' header, and some additional CPP vars.
-# For `nix'
 lib/pkgconfig/pkgdb.pc: $(lastword $(MAKEFILE_LIST)) $(DEPFILES)
 lib/pkgconfig/pkgdb.pc: $(pkgdb_ROOT)/version
 	$(MKDIR_P) $(@D);
