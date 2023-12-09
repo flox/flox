@@ -6,6 +6,9 @@ $ cd git clone git@github.com/flox/flox.git;
 $ cd flox;
 # Enter Dev Shell
 $ nix develop;
+# Build `pkgdb' and `env-builder'
+$ make -C pkgdb -j;
+$ make -C env-builder -j;
 # Build `flox'
 $ cargo build;
 # Run the build
@@ -26,7 +29,7 @@ Currently this repo houses three rust crates:
 ## Development
 
 ```console
-$ nix develop .#flox;
+$ nix develop;
 ```
 
 This sets up an environment with dependencies, rust toolchain, variable

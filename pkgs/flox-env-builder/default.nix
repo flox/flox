@@ -22,16 +22,13 @@
     # FIXME: There's way more flags than this, reference the `pkgdb.pc'
     #        `pkg-config' file to get the complete list.
     pkgdb_CLFAGS =
-      if flox-pkgdb != null
-      then "-I" + flox-pkgdb.outPath + "/include"
-      else
-        "-I"
-        + (builtins.path {
-          path = ../../pkgdb/include;
-          filter = name: type:
-            (type == "directory")
-            || ((builtins.match ".*\\.hh" name) != null);
-        });
+      if flox-pkgdb == null
+      then ""
+      else "-I" + flox-pkgdb.outPath + "/include";
+    pkgdb_LIBDIR =
+      if flox-pkgdb == null
+      then ""
+      else flox-pkgdb.outPath + "/lib";
 
     PROFILE_D_SCRIPT_DIR = profile_d_scripts;
     SET_PROMPT_BASH_SH = "${../../assets/mkEnv/set-prompt-bash.sh}";
@@ -123,7 +120,6 @@ in
             #export PROFILE_D_SCRIPT_DIR="$PROJECT_ROOT_PATH/assets/mkEnv/profile.d";
             #export SET_PROMPT_BASH_SH="$PROJECT_ROOT_PATH/assets/mkEnv/set-prompt-bash.sh";
           fi
-
         '';
       };
     }

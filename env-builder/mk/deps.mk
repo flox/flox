@@ -28,9 +28,31 @@ nljson_CFLAGS := $(nljson_CFLAGS)
 
 # ---------------------------------------------------------------------------- #
 
-pkgdb_CFLAGS ?=
-# $(shell $(PKG_CONFIG) --cflags pkgdb)
+pkgdb_CFLAGS ?= $(shell $(PKG_CONFIG) --cflags pkgdb||:)
 pkgdb_CFLAGS := $(pkgdb_CFLAGS)
+ifeq (,$(pkgdb_CFLAGS))
+pkgdb_CFLAGS := -I$(MK_DIR)/../../pkgdb/include
+endif  # ifeq (,$(pkgdb_CFLAGS))
+
+pkgdb_LIBS   ?= $(shell $(PKG_CONFIG) --libs pkgdb||:)
+pkgdb_LIBS   := $(pkgdb_LIBS)
+ifeq (,$(pkgdb_LIBS))
+pkgdb_LIBDIR ?= $(abspath $(MK_DIR)/../../pkgdb/lib)
+pkgdb_LIBDIR := $(pkgdb_LIBDIR)
+pkgdb_LIBS   += -L$(pkgdb_LIBDIR)
+ifeq ($(shell $(UNAME) -s),Linux)
+pkgdb_LIBS += -Wl,-rpath,$(pkgdb_LIBDIR)
+libExt := .so
+else # Darwin
+pkgdb_LIBS += -rpath $(pkgdb_LIBDIR)
+libExt := .dylib
+endif  # ifeq ($(shell $(UNAME) -s),Linux)
+pkgdb_LIBS += -lflox-pkgdb
+pkgdb_LIBS := $(pkgdb_LIBS)
+$(MK_DIR)/../bin/flox-env-builder: $(MK_DIR)/../../pkgdb/lib/libflox-pkgdb$(libExt)
+$(MK_DIR)/../../pkgdb/lib/libflox-pkgdb$(libExt):
+	$(MAKE) -C $(MK_DIR)/../../pkgdb lib/libpkgdb$(libExt)
+endif  # ifeq (,$(pkgdb_LIBS))
 
 
 # ---------------------------------------------------------------------------- #
