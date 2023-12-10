@@ -635,7 +635,7 @@ cc-check: $(TESTS:.cc=)
 
 #: Run all bats tests
 bats-check: bin $(TEST_UTILS)
-	pkgdb-tests
+	flox-pkgdb-tests
 
 
 # ---------------------------------------------------------------------------- #
