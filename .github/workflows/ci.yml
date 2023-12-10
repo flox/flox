@@ -249,6 +249,7 @@ jobs:
       - name: "Test (./cli: cargo test)"
         run: |
           pushd ./cli
+          export RUST_BACKTRACE=1;
           nix develop -L \
             --accept-flake-config \
             --no-update-lock-file \
