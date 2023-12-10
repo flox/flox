@@ -243,7 +243,11 @@ jobs:
             --accept-flake-config \
             --no-update-lock-file \
             '.#default' \
-              --command cargo build
+              --command sh -c '
+                ENV_BUILDER_BIN="${PWD%/*}/env-builder/bin/env-builder"  \
+                PKGDB_BIN="${PWD%/*}/pkgdb/bin/pkgdb"                    \
+                cargo build;
+              ';
           popd
 
       - name: "Test (./cli: cargo test)"
@@ -254,7 +258,11 @@ jobs:
             --accept-flake-config \
             --no-update-lock-file \
             '.#default' \
-              --command cargo test --locked --workspace -F extra-tests;
+              --command sh -c '
+                ENV_BUILDER_BIN="${PWD%/*}/env-builder/bin/env-builder"  \
+                PKGDB_BIN="${PWD%/*}/pkgdb/bin/pkgdb"                    \
+                cargo test --locked --workspace -F extra-tests;
+              ';
           popd
 
       - name: "Test (./cli/tests)"
