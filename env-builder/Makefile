@@ -127,7 +127,6 @@ lib_SRCS       =  $(filter-out $(bin_SRCS),$(SRCS))
 CLEANDIRS      =
 CLEANFILES     =  $(ALL_SRCS:.cc=.o)
 CLEANFILES     += $(addprefix bin/,$(BINS)) $(addprefix lib/,$(LIBS))
-CLEANFILES     += $(TESTS) $(TEST_UTILS)
 FULLCLEANDIRS  =
 FULLCLEANFILES =
 
@@ -447,15 +446,14 @@ ccls: .ccls
 
 .ccls: $(lastword $(MAKEFILE_LIST)) $(DEPFILES)
 	@echo '%compile_commands.json' > "$@";
-	{                                                                     \
-	  if $(TEST) -n "$(NIX_CC)"; then                                     \
-	    $(CAT) "$(NIX_CC)/nix-support/libc-cflags";                       \
-	    $(CAT) "$(NIX_CC)/nix-support/libcxx-cxxflags";                   \
-	  fi;                                                                 \
-	  echo $(CXXFLAGS) $(nljson_CFLAGS) $(nix_CFLAGS);                    \
-	  echo $(argparse_CFLAGS) $(sqlite3pp_CFLAGS);                        \
-	  echo '-DTEST_DATA_DIR="$(TEST_DATA_DIR)"';                          \
-	}|$(TR) ' ' '\n'|$(SED) 's/-std=\(.*\)/%cpp -std=\1|%h -std=\1/'      \
+	{                                                                 \
+	  if $(TEST) -n "$(NIX_CC)"; then                                 \
+	    $(CAT) "$(NIX_CC)/nix-support/libc-cflags";                   \
+	    $(CAT) "$(NIX_CC)/nix-support/libcxx-cxxflags";               \
+	  fi;                                                             \
+	  echo $(CXXFLAGS) $(pkgdb_CFLAGS) $(nix_CFLAGS);                 \
+	  echo '-DTEST_DATA_DIR="$(TEST_DATA_DIR)"';                      \
+	}|$(TR) ' ' '\n'|$(SED) 's/-std=\(.*\)/%cpp -std=\1|%h -std=\1/'  \
 	 |$(TR) '|' '\n' >> "$@";
 
 FULLCLEANFILES += .ccls
