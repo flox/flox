@@ -2,7 +2,7 @@
 #
 # --------------------------------------------------------------------------- #
 #
-# `flox-env-builder build-env` tests.
+# `env-builder build-env` tests.
 #
 # Test building environments from lockfiles.
 #

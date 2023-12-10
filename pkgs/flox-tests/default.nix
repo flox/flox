@@ -34,7 +34,7 @@
   PROJECT_TESTS_DIR ? ./../../tests,
   NIX_BIN ? "${nix}/bin/nix",
   PKGDB_BIN ? "${flox-pkgdb}/bin/pkgdb",
-  ENV_BUILDER_BIN ? "${flox-env-builder}/bin/flox-env-builder",
+  ENV_BUILDER_BIN ? "${flox-env-builder}/bin/env-builder",
   FLOX_BIN ? "${flox-cli}/bin/flox",
 }: let
   batsWith = bats.withLibraries (p: [
@@ -127,7 +127,7 @@ in
     }
     ${
       if ENV_BUILDER_BIN == null
-      then "export ENV_BUILDER_BIN='flox-env-builder';"
+      then "export ENV_BUILDER_BIN='env-builder';"
       else "export ENV_BUILDER_BIN='${ENV_BUILDER_BIN}';"
     }
     ${

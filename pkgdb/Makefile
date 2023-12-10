@@ -49,6 +49,8 @@
 # ---------------------------------------------------------------------------- #
 
 MAKEFILE_DIR ?= $(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
+REPO_ROOT    := $(patsubst %/,%,$(dir $(MAKEFILE_DIR)))
+
 
 # ---------------------------------------------------------------------------- #
 
@@ -155,12 +157,12 @@ rwildcard = $(foreach d,$(wildcard $(1:=/*)),$(call rwildcard,$d,$2)        \
 # ---------------------------------------------------------------------------- #
 
 # Our shared library target
-LIBFLOXPKGDB = libflox-pkgdb$(libExt)
+LIBPKGDB = libpkgdb$(libExt)
 
 # Various file and target lists
 
-LIBS           =  $(LIBFLOXPKGDB)
-COMMON_HEADERS =  $(call rwildcard,include,*.hh)
+LIBS           =  $(LIBPKGDB)
+HEADERS =  $(call rwildcard,include,*.hh)
 SRCS           =  $(call rwildcard,src,*.cc)
 bin_SRCS       =  src/main.cc src/repl.cc
 bin_SRCS       += $(addprefix src/pkgdb/,scrape.cc get.cc command.cc)
@@ -187,8 +189,11 @@ TEST_DATA_DIR = $(MAKEFILE_DIR)/tests/data
 # ---------------------------------------------------------------------------- #
 
 # Files which effect dependencies, external inputs, and `*FLAGS' values.
-DEPFILES =  flake.nix flake.lock pkg-fun.nix pkgs/nlohmann_json.nix
-DEPFILES += pkgs/nix/pkg-fun.nix
+DEPFILES =
+DEPFILES += $(addprefix $(REPO_ROOT)/flake.,nix lock)
+DEPFILES += $(REPO_ROOT)/pkgs/flox-pkgdb/default.nix
+DEPFILES += $(REPO_ROOT)/pkgs/nlohmann_json/default.nix
+DEPFILES += $(REPO_ROOT)/shells/default/default.nix
 
 
 # ---------------------------------------------------------------------------- #
@@ -230,8 +235,8 @@ bin_LDFLAGS  ?=
 # Debug Mode
 ifneq ($(DEBUG),)
 ifeq (gcc,$(TOOLCHAIN))
-CXXFLAGS += -ggdb3 -pg
-LDFLAGS  += -ggdb3 -pg
+CXXFLAGS += -ggdb3 -pg -fno-omit-frame-pointer
+LDFLAGS  += -ggdb3 -pg -fno-omit-frame-pointer
 else # Clang
 CXXFLAGS += -g -pg
 LDFLAGS  += -g -pg
@@ -240,8 +245,8 @@ endif # ifneq ($(DEBUG),)
 
 # Coverage Mode
 ifneq ($(COV),)
-CXXFLAGS += -fprofile-arcs -ftest-coverage
-LDFLAGS  += -fprofile-arcs -ftest-coverage
+CXXFLAGS += --coverage -fprofile-arcs -ftest-coverage
+LDFLAGS  += --coverage -fprofile-arcs -ftest-coverage
 endif # ifneq ($(COV),)
 
 
@@ -301,19 +306,19 @@ nix_LDFLAGS += -lnixfetchers
 endif # ifndef nix_LDFLAGS
 nix_LDFLAGS := $(nix_LDFLAGS)
 
-ifndef flox_pkgdb_LDFLAGS
+ifndef libpkgdb_LDFLAGS
 ifeq (Linux,$(OS))
-flox_pkgdb_LDFLAGS = -Wl,--enable-new-dtags '-Wl,-rpath,$$ORIGIN/../lib'
-flox_pkgdb_LDFLAGS += '-L$(MAKEFILE_DIR)/lib' -lflox-pkgdb
+libpkgdb_LDFLAGS = -Wl,--enable-new-dtags '-Wl,-rpath,$$ORIGIN/../lib'
+libpkgdb_LDFLAGS += '-L$(MAKEFILE_DIR)/lib' -lpkgdb
 else  # Darwin
 ifneq "$(findstring install,$(MAKECMDGOALS))" ""
-flox_pkgdb_LDFLAGS = '-L$(LIBDIR)'
+libpkgdb_LDFLAGS = '-L$(LIBDIR)'
 else
-flox_pkgdb_LDFLAGS += '-L$(MAKEFILE_DIR)/lib' -rpath @executable_path/../lib
+libpkgdb_LDFLAGS += '-L$(MAKEFILE_DIR)/lib' -rpath @executable_path/../lib
 endif # ifneq $(,$(findstring install,$(MAKECMDGOALS)))
-flox_pkgdb_LDFLAGS += -lflox-pkgdb
+libpkgdb_LDFLAGS += -lpkgdb
 endif # ifeq (Linux,$(OS))
-endif # ifndef flox_pkgdb_LDFLAGS
+endif # ifndef libpkgdb_LDFLAGS
 
 
 # ---------------------------------------------------------------------------- #
@@ -332,7 +337,7 @@ ifeq (gcc,$(TOOLCHAIN))
 lib_LDFLAGS += -Wl,--no-as-needed
 endif # ifeq (gcc,$(TOOLCHAIN))
 
-bin_LDFLAGS += $(nix_LDFLAGS) $(flox_pkgdb_LDFLAGS) $(sqlite3_LDFLAGS)
+bin_LDFLAGS += $(nix_LDFLAGS) $(libpkgdb_LDFLAGS) $(sqlite3_LDFLAGS)
 LDFLAGS     += $(yaml_LDFLAGS)
 
 
@@ -359,7 +364,7 @@ bin:     lib $(addprefix bin/,$(BINS))
 #: Build libraries
 lib:     $(addprefix lib/,$(LIBS))
 #: Build/generate include files
-include: $(COMMON_HEADERS)
+include: $(HEADERS)
 #: Build test executables and resources
 tests:   $(TESTS) $(TEST_UTILS)
 
@@ -383,22 +388,18 @@ fullclean: clean
 
 # ---------------------------------------------------------------------------- #
 
-%.o: %.cc $(COMMON_HEADERS)
+%.o: %.cc $(HEADERS)
 	$(CXX) $(CXXFLAGS) -c $< -o $@;
 
 ifeq (Linux,$(OS))
-SONAME_FLAG = -Wl,-soname,$(LIBFLOXPKGDB)
+SONAME_FLAG = -Wl,-soname,$(LIBPKGDB)
 else
-SONAME_FLAG =
+SONAME_FLAG = -install_name '@rpath/$(LIBPKGDB)'
 endif
 
-ifneq (Linux,$(OS))
-LINK_INAME_FLAG = -install_name '@rpath/$(LIBFLOXPKGDB)'
-lib/$(LIBFLOXPKGDB): LDFLAGS += $(LINK_INAME_FLAG)
-endif # ifneq (Linux,$(OS))
-lib/$(LIBFLOXPKGDB): LDFLAGS  += $(lib_LDFLAGS)
-lib/$(LIBFLOXPKGDB): CXXFLAGS += $(lib_CXXFLAGS)
-lib/$(LIBFLOXPKGDB): $(lib_SRCS:.cc=.o)
+lib/$(LIBPKGDB): LDFLAGS  += $(lib_LDFLAGS)
+lib/$(LIBPKGDB): CXXFLAGS += $(lib_CXXFLAGS)
+lib/$(LIBPKGDB): $(lib_SRCS:.cc=.o)
 	$(MKDIR_P) $(@D);
 	$(CXX) $(filter %.o,$^) $(LDFLAGS) $(SONAME_FLAG) -o $@;
 
@@ -407,19 +408,19 @@ lib/$(LIBFLOXPKGDB): $(lib_SRCS:.cc=.o)
 
 src/pkgdb/write.o: src/pkgdb/schemas.hh
 
-$(bin_SRCS:.cc=.o): %.o: %.cc $(COMMON_HEADERS)
+$(bin_SRCS:.cc=.o): %.o: %.cc $(HEADERS)
 	$(CXX) $(CXXFLAGS) $(bin_CXXFLAGS) -c $< -o $@;
 
-bin/pkgdb: $(bin_SRCS:.cc=.o) lib/$(LIBFLOXPKGDB)
+bin/pkgdb: $(bin_SRCS:.cc=.o) lib/$(LIBPKGDB)
 	$(MKDIR_P) $(@D);
 	$(CXX) $(filter %.o,$^) $(LDFLAGS) $(bin_LDFLAGS) -o $@;
 
 
 # ---------------------------------------------------------------------------- #
 
-$(TESTS) $(TEST_UTILS): $(COMMON_HEADERS)
+$(TESTS) $(TEST_UTILS): $(HEADERS)
 $(TESTS) $(TEST_UTILS): bin_CXXFLAGS += '-DTEST_DATA_DIR="$(TEST_DATA_DIR)"'
-$(TESTS) $(TEST_UTILS): tests/%: tests/%.cc lib/$(LIBFLOXPKGDB)
+$(TESTS) $(TEST_UTILS): tests/%: tests/%.cc lib/$(LIBPKGDB)
 	$(CXX) $(CXXFLAGS) $(bin_CXXFLAGS) $< $(LDFLAGS) $(bin_LDFLAGS) -o $@;
 
 
@@ -451,14 +452,14 @@ $(BINDIR)/%: bin/% | install-dirs
 
 # Darwin has to relink
 ifneq (Linux,$(OS))
-LINK_INAME_FLAG = -install_name '@rpath/$(LIBFLOXPKGDB)'
-$(LIBDIR)/$(LIBFLOXPKGDB): CXXFLAGS += $(lib_CXXFLAGS)
-$(LIBDIR)/$(LIBFLOXPKGDB): LDFLAGS  += $(lib_LDFLAGS)
-$(LIBDIR)/$(LIBFLOXPKGDB): $(lib_SRCS:.cc=.o)
+LINK_INAME_FLAG = -install_name '@rpath/$(LIBPKGDB)'
+$(LIBDIR)/$(LIBPKGDB): CXXFLAGS += $(lib_CXXFLAGS)
+$(LIBDIR)/$(LIBPKGDB): LDFLAGS  += $(lib_LDFLAGS)
+$(LIBDIR)/$(LIBPKGDB): $(lib_SRCS:.cc=.o)
 	$(MKDIR_P) $(@D);
 	$(CXX) $(filter %.o,$^) $(LDFLAGS) -o $@;
 
-$(BINDIR)/pkgdb: $(bin_SRCS:.cc=.o) $(LIBDIR)/$(LIBFLOXPKGDB)
+$(BINDIR)/pkgdb: $(bin_SRCS:.cc=.o) $(LIBDIR)/$(LIBPKGDB)
 	$(MKDIR_P) $(@D);
 	$(CXX) $(filter %.o,$^) $(LDFLAGS) $(bin_LDFLAGS) -o $@;
 endif # ifneq (Linux,$(OS))
@@ -471,7 +472,7 @@ install-lib: $(addprefix $(LIBDIR)/,$(LIBS))
 
 #: Install include files
 install-include:                                                     \
-	$(addprefix $(INCLUDEDIR)/,$(subst include/,,$(COMMON_HEADERS)));
+	$(addprefix $(INCLUDEDIR)/,$(subst include/,,$(HEADERS)));
 
 
 # ---------------------------------------------------------------------------- #
@@ -490,11 +491,11 @@ $(DEPFILES): %:
 # We don't actually use these in our build.
 .PHONY: pre-compiled-headers clean-pch
 
-PRE_COMPILED_HEADERS = $(patsubst %,%.gch,$(COMMON_HEADERS))
+PRE_COMPILED_HEADERS = $(patsubst %,%.gch,$(HEADERS))
 CLEANFILES += $(PRE_COMPILED_HEADERS)
 
 $(PRE_COMPILED_HEADERS): CXXFLAGS += $(lib_CXXFLAGS) $(bin_CXXFLAGS)
-$(PRE_COMPILED_HEADERS): $(COMMON_HEADERS) $(DEPFILES)
+$(PRE_COMPILED_HEADERS): $(HEADERS) $(DEPFILES)
 $(PRE_COMPILED_HEADERS): $(lastword $(MAKEFILE_LIST))
 $(PRE_COMPILED_HEADERS): %.gch: %
 	$(CXX) $(CXXFLAGS) -x c++-header -c $< -o $@ 2>/dev/null;
@@ -561,7 +562,7 @@ FULLCLEANDIRS += bear.d
 compile_commands.json: EXTRA_CXXFLAGS += $(_CXX_SYSTEM_INCDIRS)
 compile_commands.json: bear.d/c++ $(DEPFILES)
 compile_commands.json: $(lastword $(MAKEFILE_LIST))
-compile_commands.json: $(COMMON_HEADERS) $(ALL_SRCS)
+compile_commands.json: $(HEADERS) $(ALL_SRCS)
 	-$(MAKE) -C $(MAKEFILE_DIR) clean;
 	EXTRA_CXXFLAGS='$(EXTRA_CXXFLAGS)'                  \
 	  PATH="$(MAKEFILE_DIR)/bear.d/:$(PATH)"            \
@@ -593,7 +594,7 @@ cdb: compilation-databases
 #: Generate `include-what-you-use' report
 iwyu: iwyu.log
 
-iwyu.log: compile_commands.json $(COMMON_HEADERS) $(ALL_SRCS) flake.nix
+iwyu.log: compile_commands.json $(HEADERS) $(ALL_SRCS) flake.nix
 iwyu.log: flake.lock pkg-fun.nix pkgs/nlohmann_json.nix pkgs/nix/pkg-fun.nix
 iwyu.log: build-aux/iwyu build-aux/iwyu-mappings.json
 	build-aux/iwyu|$(TEE) "$@";
@@ -605,7 +606,7 @@ FULLCLEANFILES += iwyu.log
 
 .PHONY: lint
 #: Run `clang-tidy' across entire project
-lint: compile_commands.json $(COMMON_HEADERS) $(ALL_SRCS)
+lint: compile_commands.json $(HEADERS) $(ALL_SRCS)
 	$(TIDY) $(filter-out compile_commands.json,$^);
 
 
@@ -634,7 +635,7 @@ cc-check: $(TESTS:.cc=)
 
 #: Run all bats tests
 bats-check: bin $(TEST_UTILS)
-	flox-pkgdb-tests
+	pkgdb-tests
 
 
 # ---------------------------------------------------------------------------- #
@@ -677,17 +678,17 @@ PC_CFLAGS += -isystem $(nix_INCDIR) -include $(nix_INCDIR)/nix/config.h
 PC_CFLAGS += '-DFLOX_PKGDB_VERSION=\\\\\"$(VERSION)\\\\\"'
 PC_CFLAGS += '-DSEMVER_PATH=\\\\\"$(SEMVER_PATH)\\\\\"'
 PC_LIBS   =  $(shell $(PKG_CONFIG) --libs-only-L nix-main) -lnixfetchers
-lib/pkgconfig/flox-pkgdb.pc: $(lastword $(MAKEFILE_LIST)) $(DEPFILES)
-lib/pkgconfig/flox-pkgdb.pc: lib/pkgconfig/flox-pkgdb.pc.in version
+lib/pkgconfig/pkgdb.pc: $(lastword $(MAKEFILE_LIST)) $(DEPFILES)
+lib/pkgconfig/pkgdb.pc: lib/pkgconfig/pkgdb.pc.in version
 	$(SED) -e 's,@PREFIX@,$(PREFIX),g'      \
 	       -e 's,@VERSION@,$(VERSION),g'    \
 	       -e 's,@CFLAGS@,$(PC_CFLAGS),g'   \
 	       -e 's,@LIBS@,$(PC_LIBS),g'       \
 	       $< > $@;
 
-CLEANFILES += lib/pkgconfig/flox-pkgdb.pc
+CLEANFILES += lib/pkgconfig/pkgdb.pc
 
-install-lib: $(LIBDIR)/pkgconfig/flox-pkgdb.pc
+install-lib: $(LIBDIR)/pkgconfig/pkgdb.pc
 
 
 # ---------------------------------------------------------------------------- #
@@ -707,7 +708,7 @@ tests/.gitignore: FORCE
 
 .PHONY: fmt
 #: Run `clang-format' across entire project
-fmt: $(COMMON_HEADERS) $(ALL_SRCS)
+fmt: $(HEADERS) $(ALL_SRCS)
 	$(FMT) -i $^;
 
 
