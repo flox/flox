@@ -187,6 +187,19 @@
       flox-cli-tests = callPackage ./pkgs/flox-cli-tests {};
       # Integration tests
       flox-tests = callPackage ./pkgs/flox-tests {};
+      flox-tests-dev = final.flox-tests.override {
+        FLOX_CLI = null;
+      };
+      flox-tests-end2end = final.flox-tests.override {
+        name = "flox-tests-end2end";
+        testsDir = "/tests/end2end";
+      };
+      flox-tests-end2end-dev = final.flox-tests.override {
+        name = "flox-tests-end2end";
+        testsDir = "/tests/end2end";
+        FLOX_CLI = null;
+      };
+      flox-tests-pure = callPackage ./pkgs/flox-tests-pure {inputs = inputs;};
     };
 
     # Composes dependency overlays and the overlay defined here.
@@ -221,11 +234,16 @@
       inherit
         (pkgs)
         flox-gh
+<<<<<<< HEAD
         flox-pkgdb
         flox-env-builder
         flox-cli
         flox
         pre-commit-check
+=======
+        flox-tests-pure
+        flox-dev
+>>>>>>> 275344e9 (test: remove expect prompt checking)
         ;
       default = pkgs.flox;
     });

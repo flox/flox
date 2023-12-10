@@ -49,7 +49,6 @@ teardown() { project_teardown; common_test_teardown; }
 # ---------------------------------------------------------------------------- #
 #
 @test "install requests with pip" {
-  skip "FIXME: flaky"
   run "$FLOX_BIN" install pip python3;
 
   assert_success;

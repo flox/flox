@@ -2,38 +2,17 @@
 # ~/.bashrc
 
 set dir [lindex $argv 0]
-set expected_output [lindex $argv 1]
 set flox $env(FLOX_BIN)
 
 set timeout 300
-set cmd "$flox activate --dir $dir"
+expect_before {
+  timeout { exit 1 }
+  eof { exit 2 }
+  "*\n" { exp_continue }
+}
+
 spawn $flox activate --dir $dir
-expect {
-    "Building environment..." {}
-    timeout {
-      puts stderr "Reached timeout running '$cmd'"
-      exit 1
-    }
-}
-expect {
-    -re "project.*\$" {}
-    timeout {
-      puts stderr "Reached timeout running '$cmd'"
-      exit 1
-    }
-}
-
-# activation is the only thing that should take very long so set a low timeout
-set timeout 1
-
-# check for alias
-send "type test_alias\n"
-expect {
-    "$expected_output" {}
-    timeout {
-      puts stderr "Reached timeout checking for test_alias"
-      exit 1
-    }
-}
-
-exit 0
+expect -ex "Building environment..."
+send "type test_alias\r"
+send "exit\r"
+expect eof

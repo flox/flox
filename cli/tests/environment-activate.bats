@@ -126,8 +126,10 @@ EOF
   # TODO: flox will set HOME if it doesn't match the home of the user with
   # current euid. I'm not sure if we should change that, but for now just set
   # USER to REAL_USER.
-  SHELL=zsh USER="$REAL_USER" run expect -d "$TESTS_DIR/activate/hook.exp" "$PROJECT_DIR";
-  assert_success;
+  # SHELL=zsh USER="$REAL_USER" run -0 bash -c "echo exit | $FLOX_CLI activate --dir $PROJECT_DIR";
+  SHELL=zsh USER="$REAL_USER" run -0 expect -d "$TESTS_DIR/activate/hook.exp" "$PROJECT_DIR";
+  assert_output --partial "Building environment..."
+  assert_output --partial "Welcome to your flox environment!"
 }
 
 
@@ -138,7 +140,8 @@ EOF
   # TODO: flox will set HOME if it doesn't match the home of the user with
   # current euid. I'm not sure if we should change that, but for now just set
   # USER to REAL_USER.
-  SHELL=bash USER="$REAL_USER" run expect -d "$TESTS_DIR/activate/rc.exp" "$PROJECT_DIR" "test_alias is aliased to \`echo testing'";
+  SHELL=bash USER="$REAL_USER" run expect -d "$TESTS_DIR/activate/rc.exp" "$PROJECT_DIR"
+  assert_output --partial "test_alias is aliased to \`echo testing'";
   assert_success;
 }
 
@@ -150,8 +153,8 @@ EOF
   # TODO: flox will set HOME if it doesn't match the home of the user with
   # current euid. I'm not sure if we should change that, but for now just set
   # USER to REAL_USER.
-  SHELL=zsh USER="$REAL_USER" run expect -d "$TESTS_DIR/activate/rc.exp" "$PROJECT_DIR" "test_alias is an alias for echo testing";
-  assert_success;
+  SHELL=zsh USER="$REAL_USER" run -0 expect -d "$TESTS_DIR/activate/rc.exp" "$PROJECT_DIR"
+  assert_output --partial "test_alias is an alias for echo testing";
 }
 
 

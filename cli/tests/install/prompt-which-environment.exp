@@ -1,71 +1,39 @@
 # Test 'flox install' prompts when an environment is activated and there is an environment in the current directory
 
+<<<<<<< HEAD:cli/tests/install/prompt-which-environment.exp
 set flox $env(FLOX_BIN)
+=======
+set flox $env(FLOX_CLI)
+set timeout 10
+expect_after {
+  timeout { exit 1 }
+  eof { exit 2 }
+  "*\n" { exp_continue }
+}
+>>>>>>> 275344e9 (test: remove expect prompt checking):tests/install/prompt-which-environment.exp
 
 # activate environment 1
-set timeout 5
 set cmd "$flox activate --dir 1"
 spawn $flox activate --dir 1
-expect {
-    "Building environment..." {}
-    timeout {
-      puts stderr "Reached timeout running '$cmd'"
-      exit 1
-    }
-}
-expect {
-    -re "\[1\].*\$" {}
-    timeout {
-      puts stderr "Reached timeout running '$cmd'"
-      exit 1
-    }
-}
+expect -ex "Building environment..." {}
 
 # cd to directory 2
-set cmd "cd 2"
-send "$cmd\n"
-expect {
-    -re "\[1\].*\$" {}
-    timeout {
-      puts stderr "Reached timeout running '$cmd'"
-      exit 1
-    }
-}
+send "cd 2\n"
+expect "*\n"
 
 # install hello and expect an interactive prompt
-set cmd "$flox install hello"
-send "$cmd\n"
-expect {
-    "Do you want to install to the current directory's flox environment or the current active flox environment?" {}
-    timeout {
-      puts stderr "Reached timeout running '$cmd'"
-      exit 1
-    }
-}
-expect {
-    -re {current directory's flox environment \[2 at .*2\]} {}
-    timeout {
-      puts stderr "Reached timeout running '$cmd'"
-      exit 1
-    }
-}
-expect {
-    -re {current active flox environment \[1 at .*1\]} {}
-    timeout {
-      puts stderr "Reached timeout running '$cmd'"
-      exit 1
-    }
-}
+send "$flox install hello\n"
+expect -ex "Do you want to install to the current directory's flox environment or the current active flox environment?" {}
+expect -re {current directory's flox environment \[2 at .*2\]} {}
+expect -re {current active flox environment \[1 at .*1\]} {}
 
 # choose the first option and expect the corresponding installation
 send "\r"
-# install hello and check it's installed to environment 2
-expect {
-  -re "✅ 'hello' installed to environment 2 at .*2" {}
-  timeout {
-    puts stderr "Reached timeout running '$cmd'"
-    exit 1
-  }
-}
+# install hello and check it's installed to environment 2, but not into environment 1
+expect -re "✅ 'hello' installed to environment 2 at .*2" {}
+send "hello\n"
+send "echo error code: $?\n"
+expect -ex "error code: 1" {}
 
-exit 0
+send "exit\n"
+expect eof

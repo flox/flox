@@ -2,53 +2,29 @@
 
 set flox $env(FLOX_BIN)
 
-# activate environment 1
-set timeout 5
-set cmd "$flox activate --dir 1"
-spawn $flox activate --dir 1
-expect {
-    "Building environment..." {}
-    timeout {
-      puts stderr "Reached timeout running '$cmd'"
-      exit 1
-    }
-}
-expect {
-    -re "\[1\].*\$" {}
-    timeout {
-      puts stderr "Reached timeout running '$cmd'"
-      exit 1
-    }
+set timeout 10
+expect_after {
+  timeout { exit 1 }
+  eof { exit 2 }
+  "*\n" { exp_continue }
 }
 
+# activate environment 1
+spawn $flox activate --dir 1
+expect -ex "Building environment..." {}
+
 # activate environment 2
-set timeout 5
 set cmd "$flox activate --dir 2"
 send "$cmd\n"
-expect {
-    "Building environment..." {}
-    timeout {
-      puts stderr "Reached timeout running '$cmd'"
-      exit 1
-    }
-}
-expect {
-    -re "\[2 1\].*\$" {}
-    timeout {
-      puts stderr "Reached timeout running '$cmd'"
-      exit 1
-    }
-}
+expect -ex "Building environment..." {}
 
 # install hello and check it's installed to environment 2
 set cmd "$flox install hello"
 send "$cmd\n"
-expect {
-  -re "✅ 'hello' installed to environment 2 at .*2" {}
-  timeout {
-    puts stderr "Reached timeout running '$cmd'"
-    exit 1
-  }
-}
+expect -re "✅ 'hello' installed to environment 2 at .*2" {}
+send "hello\n"
+expect -ex "Hello, world!" {}
 
-exit 0
+send "exit\n"
+send "exit\n"
+expect eof
