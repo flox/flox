@@ -130,9 +130,6 @@ CLEANFILES     += $(addprefix bin/,$(BINS)) $(addprefix lib/,$(LIBS))
 FULLCLEANDIRS  =
 FULLCLEANFILES =
 
-# Where to find test suite input data files.
-TEST_DATA_DIR = $(MAKEFILE_DIR)/tests/fixtures
-
 
 # ---------------------------------------------------------------------------- #
 
