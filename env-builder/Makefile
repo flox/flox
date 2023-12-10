@@ -362,7 +362,7 @@ install: install-dirs install-bin install-lib install-include
 
 #: Create directories in the install prefix
 install-dirs: FORCE
-	$(MKDIR_P) $(BINDIR) $(LIBDIR) $(LIBDIR)/pkgconfig $(INCLUDEDIR));
+	$(MKDIR_P) $(BINDIR) $(LIBDIR) $(LIBDIR)/pkgconfig $(INCLUDEDIR);
 
 $(INCLUDEDIR)/%: include/% | install-dirs
 	$(MKDIR_P) $(@D);
