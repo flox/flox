@@ -27,7 +27,7 @@
   inputs.crane.url = "github:ipetkov/crane";
   inputs.crane.inputs.nixpkgs.follows = "nixpkgs";
 
-  # ---------------------------------------------------------------------------- #
+  # -------------------------------------------------------------------------- #
 
   outputs = {
     self,
@@ -39,7 +39,9 @@
     crane,
     ...
   } @ inputs: let
-    # ---------------------------------------------------------------------------- #
+    # ------------------------------------------------------------------------ #
+    # Inherit version from Cargo.toml, aligning with the CLI version.
+    # We also inject some indication about the `git' revision of the repository.
     floxVersion = let
       cargoToml = let
         contents = builtins.readFile ./cli/flox/Cargo.toml;
@@ -49,12 +51,18 @@
         if self ? revCount
         then "r"
         else "";
+      # Add `r<REV-COUNT>' if available, otherwise fallback to the short
+      # revision hash or "dirty" to be added as the _tag_ property of
+      # the version.
       rev = self.revCount or self.shortRev or "dirty";
     in
       cargoToml.package.version + "-" + prefix + (toString rev);
 
-    # ---------------------------------------------------------------------------- #
+    # ------------------------------------------------------------------------ #
 
+    # Given a function `fn' which takes system names as an argument, produce an
+    # attribute set whose keys are system names, and values are the result of
+    # applying that system name to `fn'.
     eachDefaultSystemMap = let
       defaultSystems = [
         "x86_64-linux"
@@ -71,11 +79,15 @@
       in
         builtins.listToAttrs (map proc defaultSystems);
 
-    # ---------------------------------------------------------------------------- #
+    # ------------------------------------------------------------------------ #
 
-    # Add IWYU pragmas
+    # Overlays
+    # --------
+
+    # Add IWYU pragmas to `nlohmann_json'
+    # ( _include what you use_ extensions to headers for static analysis )
     overlays.nlohmann = final: prev: {
-      nlohmann_json = final.callPackage ./pkgs/nlohmann_json.nix {
+      nlohmann_json = final.callPackage ./pkgs/nlohmann_json {
         inherit (prev) nlohmann_json;
       };
     };
@@ -101,6 +113,8 @@
         base.overrideAttrs (prevAttrs: {preferLocalBuild = false;});
     };
 
+    # Aggregates all external dependency overlays before adding any of the
+    # packages defined by this flake.
     overlays.deps = nixpkgs.lib.composeManyExtensions [
       parser-util.overlays.default # for `parser-util'
       overlays.nlohmann
@@ -109,6 +123,7 @@
       sqlite3pp.overlays.default
     ];
 
+    # Packages defined in this repository.
     overlays.flox = final: prev: let
       callPackage = final.lib.callPackageWith (final
         // {
@@ -116,7 +131,10 @@
           pkgsFor = final;
         });
     in {
+      # Use bleeding edge `rustfmt'.
       rustfmt = prev.rustfmt.override {asNightly = true;};
+
+      # Generates a `.git/hooks/pre-commit' script.
       pre-commit-check = pre-commit-hooks.lib.${final.system}.run {
         src = builtins.path {path = ./.;};
         hooks = {
@@ -126,16 +144,19 @@
               name = "rustfmt-wrapped";
               paths = [final.rustfmt];
               nativeBuildInputs = [final.makeWrapper];
-              postBuild = ''
-                wrapProgram $out/bin/cargo-fmt \
-                  --prefix PATH : ${final.lib.makeBinPath [final.cargo final.rustfmt]}
+              postBuild = let
+                PATH = final.lib.makeBinPath [final.cargo final.rustfmt];
+              in ''
+                wrapProgram $out/bin/cargo-fmt --prefix PATH : ${PATH};
               '';
             };
           in {
             enable = true;
             name = "rustfmt";
             description = "Format Rust code.";
-            entry = "${wrapper}/bin/cargo-fmt fmt --all --manifest-path 'cli/Cargo.toml' -- --color always";
+            entry =
+              "${wrapper}/bin/cargo-fmt fmt --all "
+              + "--manifest-path 'cli/Cargo.toml' -- --color always";
             files = "\\.rs$";
             pass_filenames = false;
           };
@@ -143,26 +164,35 @@
         };
       };
 
+      # Customized `gh' executable used for auth.
       flox-gh = callPackage ./pkgs/flox-gh {};
 
+      # Package Database Utilities: scrape, search, and resolve.
       flox-pkgdb = callPackage ./pkgs/flox-pkgdb {};
+
+      # Builds/realizes environment from lockfiles.
       flox-env-builder = callPackage ./pkgs/flox-env-builder {};
+
+      # Flox Command Line Interface ( development build ).
       flox-cli = callPackage ./pkgs/flox-cli {};
 
+      # Flox Command Line Interface ( production build ).
       flox = callPackage ./pkgs/flox-cli {longVersion = true;};
 
+      # Wrapper scripts for running test suites.
       flox-pkgdb-tests = callPackage ./pkgs/flox-pkgdb-tests {};
       flox-env-builder-tests = callPackage ./pkgs/flox-env-builder-tests {};
       flox-cli-tests = callPackage ./pkgs/flox-cli-tests {};
-
+      # Integration tests
       flox-tests = callPackage ./pkgs/flox-tests {};
     };
 
+    # Composes dependency overlays and the overlay defined here.
     overlays.default =
       nixpkgs.lib.composeExtensions overlays.deps
       overlays.flox;
 
-    # ---------------------------------------------------------------------------- #
+    # ------------------------------------------------------------------------ #
 
     # Apply overlays to the `nixpkgs` _base_ set.
     # This is exposed as an output later; but we don't use the name
@@ -173,7 +203,7 @@
     in
       base.extend overlays.default);
 
-    # ---------------------------------------------------------------------------- #
+    # ------------------------------------------------------------------------ #
 
     checks = eachDefaultSystemMap (system: let
       pkgs = builtins.getAttr system pkgsFor;
@@ -181,7 +211,7 @@
       inherit (pkgs) pre-commit-check;
     });
 
-    # ---------------------------------------------------------------------------- #
+    # ------------------------------------------------------------------------ #
 
     packages = eachDefaultSystemMap (system: let
       pkgs = builtins.getAttr system pkgsFor;
@@ -197,7 +227,7 @@
         ;
       default = pkgs.flox;
     });
-    # ---------------------------------------------------------------------------- #
+    # ------------------------------------------------------------------------ #
   in {
     inherit overlays packages pkgsFor checks;
 
@@ -243,8 +273,9 @@
     });
   }; # End `outputs'
 
-  # ---------------------------------------------------------------------------- #
+  # -------------------------------------------------------------------------- #
 }
+# End flake
 # ---------------------------------------------------------------------------- #
 #
 #
