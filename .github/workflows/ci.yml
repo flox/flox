@@ -370,9 +370,11 @@ jobs:
     if: ${{ failure() && github.ref == 'refs/heads/main' && github.event_name == 'push' }}
 
     needs:
+      - "nix-build"
       - "env-builder-dev"
       - "pkgdb-dev"
       - "cli-dev"
+      # TODO: enable these when deemed reliable - "nix-build-bats-tests"
 
     steps:
       - name: "Slack Notification"
@@ -386,12 +388,12 @@ jobs:
           SLACK_COLOR:      "#ff2800"  # ferrari red -> https://encycolorpedia.com/ff2800
           SLACK_LINK_NAMES: true
 
-  flox-bats-tests:
+  nix-build-bats-tests:
     name: "Flox Bats Tests"
     runs-on: "ubuntu-latest"
 
     needs:
-      - "build"
+      - "nix-build"
 
     strategy:
       fail-fast: false
