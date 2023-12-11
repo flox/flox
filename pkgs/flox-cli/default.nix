@@ -61,14 +61,6 @@
       GIT_BIN = "${gitMinimal}/bin/git";
       NIX_BIN = "${nix}/bin/nix";
       PARSER_UTIL_BIN = "${parser-util}/bin/parser-util";
-      PKGDB_BIN =
-        if flox-pkgdb == null
-        then ""
-        else "${flox-pkgdb}/bin/pkgdb";
-      ENV_BUILDER_BIN =
-        if flox-env-builder == null
-        then ""
-        else "${flox-env-builder}/bin/env-builder";
       FLOX_ETC_DIR = ../../assets/etc;
       FLOX_ZDOTDIR = ../../assets/flox.zdotdir;
 
@@ -129,6 +121,12 @@
     }
     // lib.optionalAttrs hostPlatform.isLinux {
       LOCALE_ARCHIVE = "${glibcLocalesUtf8}/lib/locale/locale-archive";
+    }
+    // lib.optionalAttrs (flox-pkgdb != null) {
+      PKGDB_BIN = "${flox-pkgdb}/bin/pkgdb";
+    }
+    // lib.optionalAttrs (flox-env-builder != null) {
+      ENV_BUILDER_BIN = "${flox-env-builder}/bin/env-builder";
     };
 
   # compiled manpages
