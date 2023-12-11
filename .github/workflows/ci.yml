@@ -385,3 +385,87 @@ jobs:
           SLACK_ICON_EMOJI: ":poop:"
           SLACK_COLOR:      "#ff2800"  # ferrari red -> https://encycolorpedia.com/ff2800
           SLACK_LINK_NAMES: true
+
+  flox-bats-tests:
+    name: "Flox Bats Tests"
+    runs-on: "ubuntu-latest"
+
+    needs:
+      - "build"
+
+    strategy:
+      fail-fast: false
+      matrix:
+        system:
+          - "x86_64-linux"
+          - "x86_64-darwin"
+          - "aarch64-linux"
+          - "aarch64-darwin"
+    steps:
+      - name: "Checkout"
+        uses: "actions/checkout@v3"
+      - name: "Setup Tailscale"
+        uses: "tailscale/github-action@v2"
+        with:
+          args: "--timeout 30s --login-server ${{ vars.TAILSCALE_URL }}"
+          tags: "tag:ci"
+          authkey: "${{ secrets.TAILSCALE_AUTH_KEY }}"
+      - name: "Install newer Nix"
+        uses: "cachix/install-nix-action@v24"
+      - name: "Install flox"
+        uses: "flox/install-flox-action@main"
+        with:
+          github-access-token:    "${{ secrets.NIX_GIT_TOKEN }}"
+          substituter:            "${{ vars.FLOX_PUBLIC_CACHE }}"
+          substituter-key:        "${{ secrets.FLOX_STORE_PUBLIC_NIX_SECRET_KEY }}"
+          aws-access-key-id:      "${{ secrets.AWS_ACCESS_KEY_ID }}"
+          aws-secret-access-key:  "${{ secrets.AWS_SECRET_ACCESS_KEY }}"
+          ssh-key:                "${{ secrets.FLOXBOT_SSH_KEY }}"
+          remote-builders:        "${{ vars.FLOX_BUILDERS }}"
+      - name: "Configure Nix"
+        run: |
+          sudo echo 
+          {
+            echo "experimental-features = nix-command flakes";
+          } | sudo tee -a /etc/nix/nix.conf >/dev/null
+      - name: "Find remote server to run tests on"
+        run: |
+          set -eo pipefail
+          export REMOTE_SERVER=$(cat /etc/nix/machines | grep ${{ matrix.system }} | cut -f1 -d' ' | cut -f3 -d'/' | head -1 | sed 's/nixbld@//' ; )
+          export REMOTE_SERVER_USER_KNOWN_HOSTS_FILE=$(mktemp)
+          export REMOTE_PUBLIC_HOST_KEY=$(cat /etc/nix/machines | grep ${{ matrix.system }} | tr -s ' ' | cut -f8 -d' ' | base64 -d ; )
+          printf "%s %s\n" "$REMOTE_SERVER" "$REMOTE_PUBLIC_HOST_KEY" > "$REMOTE_SERVER_USER_KNOWN_HOSTS_FILE"
+          echo "REMOTE_SERVER: $REMOTE_SERVER"
+          echo "REMOTE_SERVER_USER_KNOWN_HOSTS_FILE: $REMOTE_SERVER_USER_KNOWN_HOSTS_FILE"
+          cat $REMOTE_SERVER_USER_KNOWN_HOSTS_FILE
+          echo "REMOTE_SERVER=$REMOTE_SERVER" >> $GITHUB_ENV
+          echo "REMOTE_SERVER_USER_KNOWN_HOSTS_FILE=$REMOTE_SERVER_USER_KNOWN_HOSTS_FILE" >> $GITHUB_ENV
+      - name: "Build flox"
+        run: |
+          git clean -xfd
+          nix build -L \
+              --accept-flake-config \
+              --no-update-lock-file \
+              --print-out-paths \
+              '.#packages.${{ matrix.system }}.flox'
+          # We run bats tests later on against the `FLOX_CLI' env
+          echo "FLOX_CLI=$(readlink -f ./result; )/bin/flox" >> "$GITHUB_ENV"
+          rm ./result
+      - name: "Build Bats Tests (./#flox-tests)"
+        run: |
+          git clean -xfd
+          nix build -L \
+              --accept-flake-config \
+              --no-update-lock-file \
+              --print-out-paths \
+              '.#packages.${{ matrix.system }}.flox-cli-tests'
+          nix copy --to "$FLOX_SUBSTITUTER" ./result
+      - name: "Run Bats Tests (./#flox-cli-tests)"
+        run: |
+          git clean -xfd
+          ssh github@$REMOTE_SERVER \
+            -oUserKnownHostsFile=$REMOTE_SERVER_USER_KNOWN_HOSTS_FILE \
+            nix run \
+                --accept-flake-config \
+                --extra-experimental-features '"nix-command flakes"' \
+                'github:flox/flox/${{ github.sha }}#packages.${{ matrix.system }}.flox-cli-tests'

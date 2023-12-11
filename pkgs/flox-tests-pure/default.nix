@@ -180,4 +180,5 @@ in
     command time flox search hello
     command time flox init
     # command time flox --debug install hello
+    echo PASSED > $out
   ''
