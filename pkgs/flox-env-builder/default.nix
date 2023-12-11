@@ -19,7 +19,16 @@
 
   envs = {
     boost_CPPFLAGS = "-I" + boost.dev.outPath + "/include";
-    pkgdb_CLFAGS = "-I" + flox-pkgdb.outPath + "/include";
+    # FIXME: There's way more flags than this, reference the `pkgdb.pc'
+    #        `pkg-config' file to get the complete list.
+    pkgdb_CLFAGS =
+      if flox-pkgdb == null
+      then ""
+      else "-I" + flox-pkgdb.outPath + "/include";
+    pkgdb_LIBDIR =
+      if flox-pkgdb == null
+      then ""
+      else flox-pkgdb.outPath + "/lib";
 
     PKGDB_DIR = ../../pkgdb;
 
@@ -58,14 +67,21 @@ in
 
       nativeBuildInputs = [pkg-config];
 
-      buildInputs = [
-        sqlite.dev
-        nlohmann_json
-        argparse
-        flox-pkgdb
-        sqlite3pp
-        boost.dev
-      ];
+      buildInputs =
+        [
+          sqlite.dev
+          nlohmann_json
+          argparse
+          sqlite3pp
+          boost.dev
+          # We allow `flox-pkgdb' to be null so that we can use the `devShell'
+          # without having to build `flox-pkgdb' first.
+        ]
+        ++ (
+          if flox-pkgdb != null
+          then [flox-pkgdb]
+          else []
+        );
 
       configurePhase = ''
         runHook preConfigure;
@@ -79,6 +95,8 @@ in
       # Checks require internet
       doCheck = false;
       doInstallCheck = false;
+
+      meta.mainProgram = "env-builder";
 
       passthru = {
         inherit
@@ -109,7 +127,6 @@ in
             #export PROFILE_D_SCRIPT_DIR="$PROJECT_ROOT_PATH/assets/mkEnv/profile.d";
             #export SET_PROMPT_BASH_SH="$PROJECT_ROOT_PATH/assets/mkEnv/set-prompt-bash.sh";
           fi
-
         '';
       };
     }

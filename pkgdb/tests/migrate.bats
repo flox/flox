@@ -28,7 +28,7 @@ setup_file() {
   export DBPATH="$BATS_FILE_TMPDIR/test.sqlite";
 
   # Create a new DB.
-  $PKGDB_BIN scrape --database "$DBPATH" "$TEST_HARNESS_FLAKE"  \
+  "$PKGDB_BIN" scrape --database "$DBPATH" "$TEST_HARNESS_FLAKE"  \
                 packages "$NIX_SYSTEM";
 
 }
@@ -62,7 +62,7 @@ get_version() {
   assert_output 0;
 
   # Trigger a scrape which should migrate the views schema.
-  run $PKGDB_BIN scrape --database "$DBPATH" "$TEST_HARNESS_FLAKE"  \
+  run "$PKGDB_BIN" scrape --database "$DBPATH" "$TEST_HARNESS_FLAKE"  \
                     packages "$NIX_SYSTEM";
   assert_success;
 

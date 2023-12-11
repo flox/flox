@@ -28,7 +28,7 @@ project_setup() {
   rm -rf "$PROJECT_DIR";
   mkdir -p "$PROJECT_DIR";
   pushd "$PROJECT_DIR" >/dev/null||return;
-  $FLOX_BIN init
+  "$FLOX_BIN" init
   sed -i \
     's/from = { type = "github", owner = "NixOS", repo = "nixpkgs" }/from = { type = "github", owner = "NixOS", repo = "nixpkgs", rev = "e8039594435c68eb4f780f3e9bf3972a7399c4b1" }/' \
     "$PROJECT_DIR/.flox/env/manifest.toml";
@@ -50,7 +50,7 @@ teardown() { project_teardown; common_test_teardown; }
 #
 @test "install requests with pip" {
   skip "FIXME: flaky"
-  run $FLOX_BIN install pip python3;
+  run "$FLOX_BIN" install pip python3;
 
   assert_success;
   assert_output --partial "✅ 'pip' installed to environment";

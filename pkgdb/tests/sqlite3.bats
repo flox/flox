@@ -42,7 +42,7 @@ setup_file() {
 # ---------------------------------------------------------------------------- #
 
 @test "is_sqlite3 detects DB" {
-  run $PKGDB_IS_SQLITE3_BIN "$DBPATH";
+  run "$PKGDB_IS_SQLITE3_BIN" "$DBPATH";
   assert_success;
 }
 
@@ -50,7 +50,7 @@ setup_file() {
 # ---------------------------------------------------------------------------- #
 
 @test "is_sqlite3 rejects text file ( short )" {
-  run $PKGDB_IS_SQLITE3_BIN "$BATS_FILE_TMPDIR/short";
+  run "$PKGDB_IS_SQLITE3_BIN" "$BATS_FILE_TMPDIR/short";
   assert_failure;
 }
 
@@ -58,7 +58,7 @@ setup_file() {
 # ---------------------------------------------------------------------------- #
 
 @test "is_sqlite3 rejects text file ( long )" {
-  run $PKGDB_IS_SQLITE3_BIN "$BATS_FILE_TMPDIR/long";
+  run "$PKGDB_IS_SQLITE3_BIN" "$BATS_FILE_TMPDIR/long";
   assert_failure;
 }
 
@@ -66,7 +66,7 @@ setup_file() {
 # ---------------------------------------------------------------------------- #
 
 @test "is_sqlite3 rejects directory" {
-  run $PKGDB_IS_SQLITE3_BIN "$BATS_FILE_TMPDIR/dir";
+  run "$PKGDB_IS_SQLITE3_BIN" "$BATS_FILE_TMPDIR/dir";
   assert_failure;
 }
 

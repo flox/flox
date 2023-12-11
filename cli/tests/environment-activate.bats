@@ -32,7 +32,7 @@ project_setup() {
   rm -rf "$PROJECT_DIR";
   mkdir -p "$PROJECT_DIR";
   pushd "$PROJECT_DIR" >/dev/null||return;
-  $FLOX_BIN init -d "$PROJECT_DIR";
+  "$FLOX_BIN" init -d "$PROJECT_DIR";
 }
 
 project_teardown() {
@@ -78,7 +78,7 @@ env_is_activated() {
 # ---------------------------------------------------------------------------- #
 
 @test "bash: activate modifies prompt and puts package in path" {
-  run $FLOX_BIN install -d "$PROJECT_DIR" hello;
+  run "$FLOX_BIN" install -d "$PROJECT_DIR" hello;
   assert_success
   assert_output --partial "✅ 'hello' installed to environment"
   SHELL=bash run expect -d "$TESTS_DIR/activate/hello.exp" "$PROJECT_DIR";
@@ -89,7 +89,7 @@ env_is_activated() {
 # ---------------------------------------------------------------------------- #
 
 @test "zsh: activate modifies prompt and puts package in path" {
-  run $FLOX_BIN install -d "$PROJECT_DIR" hello;
+  run "$FLOX_BIN" install -d "$PROJECT_DIR" hello;
   assert_success
   assert_output --partial "✅ 'hello' installed to environment"
   # TODO: flox will set HOME if it doesn't match the home of the user with

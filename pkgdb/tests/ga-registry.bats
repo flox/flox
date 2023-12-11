@@ -38,7 +38,7 @@ setup_file() {
 # bats test_tags=search:ga-registry
 
 @test "'pkgdb search --help' has '--ga-registry'" {
-  run $PKGDB_BIN search --help;
+  run "$PKGDB_BIN" search --help;
   assert_success;
   assert_output --partial "--ga-registry";
 }
@@ -49,7 +49,7 @@ setup_file() {
 # bats test_tags=manifest:ga-registry, lock:ga-registry
 
 @test "'pkgdb manifest lock --help' has '--ga-registry'" {
-  run $PKGDB_BIN manifest lock --help;
+  run "$PKGDB_BIN" manifest lock --help;
   assert_success;
   assert_output --partial "--ga-registry";
 }
@@ -86,7 +86,7 @@ setup_file() {
 # bats test_tags=search:ga-registry, manifest:ga-registry
 
 @test "'pkgdb search --ga-registry' disallows 'registry' in manifests" {
-  run $PKGDB_BIN search --ga-registry "{
+  run "$PKGDB_BIN" search --ga-registry "{
     \"manifest\": { \"registry\": {} },
     \"query\": { \"pname\": \"hello\" }
   }";
@@ -99,7 +99,7 @@ setup_file() {
 # bats test_tags=search:ga-registry, manifest:ga-registry
 
 @test "'pkgdb search --ga-registry' disallows 'registry' in global manifests" {
-  run $PKGDB_BIN search --ga-registry "{
+  run "$PKGDB_BIN" search --ga-registry "{
     \"global-manifest\": { \"registry\": {} },
     \"query\": { \"pname\": \"hello\" }
   }";
@@ -112,7 +112,7 @@ setup_file() {
 # bats test_tags=search:ga-registry, manifest:ga-registry
 
 @test "'pkgdb search --ga-registry' allows 'options' in manifests" {
-  run $PKGDB_BIN search --ga-registry "{
+  run "$PKGDB_BIN" search --ga-registry "{
     \"manifest\": { \"options\": { \"allow\": { \"unfree\": true } } },
     \"query\": { \"pname\": \"hello\" }
   }";
@@ -125,7 +125,7 @@ setup_file() {
 # bats test_tags=search:ga-registry, manifest:ga-registry
 
 @test "'pkgdb search --ga-registry' allows 'options' in global manifests" {
-  run $PKGDB_BIN search --ga-registry "{
+  run "$PKGDB_BIN" search --ga-registry "{
     \"global-manifest\": { \"options\": { \"allow\": { \"unfree\": true } } },
     \"query\": { \"pname\": \"hello\" }
   }";
@@ -138,13 +138,13 @@ setup_file() {
 # bats test_tags=manifest:empty, lock:empty
 
 @test "An empty manifest should lock successfully with --ga-registry and without" {
-  run $PKGDB_BIN manifest lock "$TDATA/ga1.toml";
+  run "$PKGDB_BIN" manifest lock "$TDATA/ga1.toml";
   assert_success;
 
-  run $PKGDB_BIN manifest lock --ga-registry "$TDATA/ga1.toml";
+  run "$PKGDB_BIN" manifest lock --ga-registry "$TDATA/ga1.toml";
   assert_success;
 
-  run $PKGDB_BIN manifest lock  "$TDATA/ga1.toml" --ga-registry;
+  run "$PKGDB_BIN" manifest lock  "$TDATA/ga1.toml" --ga-registry;
   assert_success;
 }
 
@@ -154,7 +154,7 @@ setup_file() {
 # bats test_tags=manifest:ga-registry, lock:ga-registry
 
 @test "'pkgdb manifest lock --ga-registry' provides registry" {
-  run $PKGDB_BIN manifest lock --ga-registry "$TDATA/ga0.toml";
+  run "$PKGDB_BIN" manifest lock --ga-registry "$TDATA/ga0.toml";
   assert_success;
 }
 
@@ -164,7 +164,7 @@ setup_file() {
 # bats test_tags=manifest:ga-registry, lock:ga-registry, manifest:global
 
 @test "'pkgdb manifest lock --ga-registry' merges global manifest options" {
-  run $PKGDB_BIN manifest lock --ga-registry                               \
+  run "$PKGDB_BIN" manifest lock --ga-registry                               \
                            --global-manifest "$TDATA/global-ga0.toml"  \
                            "$TDATA/ga0.toml";
   assert_success;
@@ -176,7 +176,7 @@ setup_file() {
 # bats test_tags=manifest:ga-registry, lock:ga-registry, manifest:global
 
 @test "'pkgdb manifest lock --ga-registry' rejects global manifest registry" {
-  run $PKGDB_BIN manifest lock --ga-registry                                 \
+  run "$PKGDB_BIN" manifest lock --ga-registry                                 \
                            --global-manifest "$TDATA/global-manifest0.toml"  \
                            "$TDATA/ga0.toml";
   assert_failure;
@@ -188,7 +188,7 @@ setup_file() {
 # bats test_tags=manifest:ga-registry, lock:ga-registry
 
 @test "'pkgdb manifest lock --ga-registry' rejects env manifest registry" {
-  run $PKGDB_BIN manifest lock --ga-registry                               \
+  run "$PKGDB_BIN" manifest lock --ga-registry                               \
                            --global-manifest "$TDATA/global-ga0.toml"  \
                            "$TDATA/post-ga0.toml";
   assert_failure;

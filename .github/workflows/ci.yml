@@ -42,7 +42,7 @@ jobs:
         uses: "flox/install-flox-action@main"
         with:
           github-access-token:    "${{ secrets.NIX_GIT_TOKEN }}"
-          substituter:            "s3://flox-store-public"
+          substituter:            "${{ vars.FLOX_PUBLIC_CACHE }}"
           substituter-key:        "${{ secrets.FLOX_STORE_PUBLIC_NIX_SECRET_KEY }}"
           aws-access-key-id:      "${{ secrets.AWS_ACCESS_KEY_ID }}"
           aws-secret-access-key:  "${{ secrets.AWS_SECRET_ACCESS_KEY }}"
@@ -126,7 +126,7 @@ jobs:
         uses: "flox/install-flox-action@main"
         with:
           github-access-token:    "${{ secrets.NIX_GIT_TOKEN }}"
-          substituter:            "s3://flox-store-public"
+          substituter:            "${{ vars.FLOX_PUBLIC_CACHE }}"
           substituter-key:        "${{ secrets.FLOX_STORE_PUBLIC_NIX_SECRET_KEY }}"
           aws-access-key-id:      "${{ secrets.AWS_ACCESS_KEY_ID }}"
           aws-secret-access-key:  "${{ secrets.AWS_SECRET_ACCESS_KEY }}"
@@ -166,7 +166,7 @@ jobs:
             --accept-flake-config \
             --no-update-lock-file \
             '.#default' \
-              --command make test
+              --command make check
           popd
 
   cli-dev:
@@ -191,7 +191,7 @@ jobs:
         uses: "flox/install-flox-action@main"
         with:
           github-access-token:    "${{ secrets.NIX_GIT_TOKEN }}"
-          substituter:            "s3://flox-store-public"
+          substituter:            "${{ vars.FLOX_PUBLIC_CACHE }}"
           substituter-key:        "${{ secrets.FLOX_STORE_PUBLIC_NIX_SECRET_KEY }}"
           aws-access-key-id:      "${{ secrets.AWS_ACCESS_KEY_ID }}"
           aws-secret-access-key:  "${{ secrets.AWS_SECRET_ACCESS_KEY }}"
@@ -243,17 +243,26 @@ jobs:
             --accept-flake-config \
             --no-update-lock-file \
             '.#default' \
-              --command cargo build
+              --command sh -c '
+                ENV_BUILDER_BIN="${PWD%/*}/env-builder/bin/env-builder"  \
+                PKGDB_BIN="${PWD%/*}/pkgdb/bin/pkgdb"                    \
+                cargo build;
+              ';
           popd
 
       - name: "Test (./cli: cargo test)"
         run: |
           pushd ./cli
+          export RUST_BACKTRACE=1;
           nix develop -L \
             --accept-flake-config \
             --no-update-lock-file \
             '.#default' \
-              --command cargo test --locked --workspace -F extra-tests;
+              --command sh -c '
+                ENV_BUILDER_BIN="${PWD%/*}/env-builder/bin/env-builder"  \
+                PKGDB_BIN="${PWD%/*}/pkgdb/bin/pkgdb"                    \
+                cargo test --locked --workspace -F extra-tests;
+              ';
           popd
 
       - name: "Test (./cli/tests)"
@@ -305,7 +314,7 @@ jobs:
         uses: "flox/install-flox-action@main"
         with:
           github-access-token:    "${{ secrets.NIX_GIT_TOKEN }}"
-          substituter:            "s3://flox-store-public"
+          substituter:            "${{ vars.FLOX_PUBLIC_CACHE }}"
           substituter-key:        "${{ secrets.FLOX_STORE_PUBLIC_NIX_SECRET_KEY }}"
           aws-access-key-id:      "${{ secrets.AWS_ACCESS_KEY_ID }}"
           aws-secret-access-key:  "${{ secrets.AWS_SECRET_ACCESS_KEY }}"
