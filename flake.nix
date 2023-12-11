@@ -142,7 +142,7 @@
         src = builtins.path {path = ./.;};
         hooks = {
           alejandra.enable = true;
-          rustfmt2 = let
+          rustfmt = let
             wrapper = final.symlinkJoin {
               name = "rustfmt-wrapped";
               paths = [final.rustfmt];
@@ -155,15 +155,14 @@
             };
           in {
             enable = true;
-            name = "rustfmt";
-            description = "Format Rust code.";
-            entry =
-              "${wrapper}/bin/cargo-fmt fmt --all "
-              + "--manifest-path 'cli/Cargo.toml' -- --color always";
-            files = "\\.rs$";
-            pass_filenames = false;
+            entry = final.lib.mkForce "${wrapper}/bin/cargo-fmt fmt --all --manifest-path 'cli/Cargo.toml' -- --color always";
           };
+          clippy.enable = true;
           commitizen.enable = true;
+        };
+        settings = {
+          alejandra.verbosity = "quiet";
+          rust.cargoManifestPath = "cli/Cargo.toml";
         };
       };
 
