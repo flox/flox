@@ -330,14 +330,26 @@ jobs:
 
       - name: "Build"
         run: |
-          nix build -L \
+          if nix path-info \
+              --accept-flake-config \
+              --store "$FLOX_SUBSTITUTER" \
+              --eval-store auto \
+              --builders '' \
+              -j0 \
+                '.#flox-pkgdb.outPath' \
+                '.#flox-env-builder.outPath' \
+                '.#flox-cli.outPath' ; then
+             echo paths already exist in substituter
+             exit 0
+          else
+            nix build -L \
               --accept-flake-config \
               --no-update-lock-file \
               --print-out-paths \
                 '.#flox-pkgdb' \
                 '.#flox-env-builder' \
-                '.#flox-cli' \
-                '.#flox'
+                '.#flox-cli'
+          fi
 
   trigger-flox-installers-workflow:
     name: "Build installers"
