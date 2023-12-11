@@ -29,17 +29,20 @@ jobs:
         with:
           filters: |
             pkgdb:
+              - '.github/workflows/ci.yml'
               - 'flake.nix'
               - 'flake.lock'
               - 'build-aux/**'
               - 'pkgdb/**'
             env-builder:
+              - '.github/workflows/ci.yml'
               - 'flake.nix'
               - 'flake.lock'
               - 'build-aux/**'
               - 'pkgdb/**'
               - 'env-builder/**'
             cli:
+              - '.github/workflows/ci.yml'
               - 'flake.nix'
               - 'flake.lock'
               - 'build-aux/**'
