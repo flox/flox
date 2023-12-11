@@ -1,8 +1,15 @@
-#include "flox/flox-env.hh"
-#include <boost/algorithm/string/join.hpp>
-#include <filesystem>
-#include <flox/resolver/lockfile.hh>
+/* ========================================================================== *
+ *
+ * @file buildenv/realise.cc
+ *
+ * @brief Evaluate an environment definition and realise it.
+ *
+ *
+ * -------------------------------------------------------------------------- */
+
 #include <fstream>
+#include <filesystem>
+
 #include <nix/command.hh>
 #include <nix/derivations.hh>
 #include <nix/eval-inline.hh>
@@ -18,6 +25,17 @@
 #include <nix/util.hh>
 #include <nlohmann/json.hpp>
 
+#include "flox/resolver/lockfile.hh"
+#include "flox/buildenv/realise.hh"
+#include "flox/resolver/lockfile.hh"
+
+
+/* -------------------------------------------------------------------------- */
+
+namespace flox::buildenv {
+
+/* -------------------------------------------------------------------------- */
+
 #ifndef PROFILE_D_SCRIPT_DIR
 #  define PROFILE_D_SCRIPT_DIR "invalid_profile.d_script_path"
 #endif
@@ -26,7 +44,10 @@
 #  define SET_PROMPT_BASH_SH "invalid_set-prompt-bash.sh_path"
 #endif
 
-const std::string BASH_ACTIVATE_SCRIPT = R"(
+
+/* -------------------------------------------------------------------------- */
+
+static const std::string BASH_ACTIVATE_SCRIPT = R"(
 # We use --rcfile to activate using bash which skips sourcing ~/.bashrc,
 # so source that here.
 if [ -f ~/.bashrc ]
@@ -45,29 +66,24 @@ if [ -d "$FLOX_ENV/etc/profile.d" ]; then
 fi
 )";
 
-/* -------------------------------------------------------------------------- */
-
-namespace flox {
-using namespace nix;
-using namespace flox::resolver;
 
 /* -------------------------------------------------------------------------- */
 
-const nix::StorePath
-addDirToStore( EvalState &         state,
-               Path const &        dir,
+static const nix::StorePath
+addDirToStore( nix::EvalState &         state,
+               std::string const &        dir,
                nix::StorePathSet & references )
 {
 
   /* Add the symlink tree to the store. */
-  StringSink sink;
+  nix::StringSink sink;
   dumpPath( dir, sink );
 
-  auto narHash = hashString( htSHA256, sink.s );
-  ValidPathInfo info {
+  auto narHash = hashString( nix::htSHA256, sink.s );
+  nix::ValidPathInfo info {
             *state.store,
             "environment",
-            FixedOutputInfo {
+            nix::FixedOutputInfo {
                 .method = FileIngestionMethod::Recursive,
                 .hash = narHash,
                 .references = {
@@ -80,15 +96,18 @@ addDirToStore( EvalState &         state,
         };
   info.narSize = sink.s.size();
 
-  StringSource source( sink.s );
+  nix::StringSource source( sink.s );
   state.store->addToStore( info, source );
   return std::move( info.path );
 }
 
+
+/* -------------------------------------------------------------------------- */
+
 const nix::StorePath
 createEnvironmentStorePath(
   nix::EvalState &           state,
-  flox::buildenv::Packages & pkgs,
+  std::vector<Package> & pkgs,
   nix::StorePathSet &        references,
   std::map<StorePath, std::pair<std::string, resolver::LockedPackageRaw>> &
     originalPackage )
@@ -124,8 +143,7 @@ createEnvironmentStorePath(
 
 /* -------------------------------------------------------------------------- */
 
-
-nix::Attr
+static nix::Attr
 extractAttrPath( nix::EvalState & state,
                  nix::Value &     vFlake,
                  flox::AttrPath   attrPath )
@@ -158,23 +176,23 @@ extractAttrPath( nix::EvalState & state,
 
   return *output;
 }
+
+
 /* -------------------------------------------------------------------------- */
 
-StorePath
-createFloxEnv( EvalState &          state,
+nix::StorePath
+createFloxEnv( nix::EvalState &     state,
                resolver::Lockfile & lockfile,
                System &             system )
 {
-
   auto packages = lockfile.getLockfileRaw().packages.find( system );
   if ( packages == lockfile.getLockfileRaw().packages.end() )
     {
-      // todo: throw structured exception
+      // TODO: throw structured exception
       throw Error( "No packages found for system '%s'", system );
     }
 
-  /* extract all packages */
-
+  /* Extract all packages */
   std::vector<std::pair<std::string, resolver::LockedPackageRaw>>
     locked_packages;
 
@@ -185,11 +203,10 @@ createFloxEnv( EvalState &          state,
       locked_packages.push_back( { package.first, locked_package } );
     }
 
-  /* extract derivations */
-
-  StorePathSet                      references;
+  /* Extract derivations */
+  nix::StorePathSet                 references;
   std::vector<StorePathWithOutputs> drvsToBuild;
-  flox::buildenv::Packages          pkgs;
+  std::vector<Package>              pkgs;
   std::map<StorePath, std::pair<std::string, resolver::LockedPackageRaw>>
     originalPackage;
 
@@ -203,10 +220,10 @@ createFloxEnv( EvalState &          state,
       auto vFlake = state.allocValue();
       flake::callFlake( state, package_flake, *vFlake );
 
-      // get referenced output
+      /* Get referenced output. */
       auto output = extractAttrPath( state, *vFlake, package.attrPath );
 
-      // interpret ooutput as derivation
+      /* Interpret ooutput as derivation. */
       auto package_drv = getDerivation( state, *output.value, false );
 
       if ( ! package_drv.has_value() )
@@ -218,17 +235,15 @@ createFloxEnv( EvalState &          state,
       auto packagePath
         = state.store->printStorePath( package_drv->queryOutPath() );
 
-      /*
-        Collect all outputs to include in the environment.
-
-        Set the priority of the outputs to the priority of the package
-        and the internal priority to the index of the output.
-        This way `buildenv::buildEnvironment` can resolve conflicts between
-        outputs of the same derivation.
-        */
+      /* Collect all outputs to include in the environment.
+       *
+       * Set the priority of the outputs to the priority of the package
+       * and the internal priority to the index of the output.
+       * This way `buildenv::buildEnvironment` can resolve conflicts between
+       * outputs of the same derivation. */
       for ( auto [idx, output] : enumerate( package_drv->queryOutputs() ) )
         {
-          // skip outputs without path
+          /* Skip outputs without path */
           if ( ! output.second.has_value() ) { continue; }
           pkgs.emplace_back(
             state.store->printStorePath( output.second.value() ),
@@ -236,24 +251,24 @@ createFloxEnv( EvalState &          state,
             buildenv::Priority {
               package.priority,
               packagePath,
-              // idx should always fit in uint its unlikely a package has more
-              // than 4 billion outputs
-              static_cast<unsigned int>( idx ),
+              /* idx should always fit in uint its unlikely a package has more
+               * than 4 billion outputs. */
+              static_cast<unsigned>( idx ),
             } );
           references.insert( output.second.value() );
           originalPackage.insert( { output.second.value(), { pId, package } } );
         }
 
-      /* Collect drvs that may yet need to be built */
+      /* Collect drvs that may yet need to be built. */
       if ( auto drvPath = package_drv->queryDrvPath() )
         {
           drvsToBuild.push_back( { *drvPath } );
         }
     }
 
+  // TODO: check if this builds `outputsToInstall` only
+  // TODO: do we need to honor repair flag? state.repair ? bmRepair : bmNormal
   /* Build derivations that make up the environment */
-  // todo: check if this builds `outputsToInstall` only
-  // todo: do we need to honor repair flag? state.repair ? bmRepair : bmNormal
   state.store->buildPaths( toDerivedPaths( drvsToBuild ) );
 
   /* verbatim content of the activate script common to all shells */
@@ -263,13 +278,10 @@ createFloxEnv( EvalState &          state,
   std::filesystem::create_directories( tempDir / "activate" );
 
   /* Add hook script
-  *
-  * Write hook script to a temporary file and copy it to the environment.
-  * Add source command to the activate script.
-
-   */
-  // todo: is it script _xor_ file?
-  //
+   *
+   * Write hook script to a temporary file and copy it to the environment.
+   * Add source command to the activate script. */
+  // TODO: is it script _xor_ file?
   // Currently it is assumed that `hook.script` and `hook.file` are
   // mutually exclusive.
   // If both are set, `hook.file` takes precedence.
@@ -277,7 +289,7 @@ createFloxEnv( EvalState &          state,
     {
       nix::Path script_path;
 
-      // either set script path to a temporary file
+      /* Either set script path to a temporary file. */
       if ( auto script = hook->script )
         {
           script_path = createTempFile().second;
@@ -286,7 +298,7 @@ createFloxEnv( EvalState &          state,
           file.close();
         }
 
-      // ... or to the file specified in the manifest
+      /* ...Or to the file specified in the manifest. */
       if ( auto file = hook->file ) { script_path = file.value(); }
 
       if ( ! script_path.empty() )
@@ -302,11 +314,9 @@ createFloxEnv( EvalState &          state,
         }
     }
 
-  /* Add environment variables
-   *
-   * Read environment variables from the manifest
-   * and add them as exports to the activate script.
-   */
+  /* Add environment variables.
+   * Read environment variables from the manifest and add them as exports to the
+   * activate script. */
   if ( auto vars = lockfile.getManifest().getManifestRaw().vars )
     {
 
@@ -336,8 +346,8 @@ createFloxEnv( EvalState &          state,
   bashActivate << commonActivate.str();
   bashActivate.close();
 
-  /* Add zsh activation script. Functionality shared between all environments is
-   * in flox.zdotdir/.zshrc. */
+  /* Add zsh activation script.
+   * Functionality shared between all environments is in flox.zdotdir/.zshrc. */
   std::ofstream zshActivate( tempDir / "activate" / "zsh" );
   zshActivate << commonActivate.str();
   zshActivate.close();
@@ -349,10 +359,10 @@ createFloxEnv( EvalState &          state,
                      true,
                      buildenv::Priority { 0 } );
 
-  /* insert profile.d scripts
-    The store path is provided at compile time
-     via the `PROFILE_D_SCRIPT_DIR` environment variable.
-     See also: `./pkgs/flox-env-builder/default.nix` */
+  /* Insert profile.d scripts.
+   * The store path is provided at compile time via the `PROFILE_D_SCRIPT_DIR'
+   * environment variable.
+   * See also: `./pkgs/flox-env-builder/default.nix` */
   auto profile_d_scripts_path
     = state.store->parseStorePath( PROFILE_D_SCRIPT_DIR );
   state.store->ensurePath( profile_d_scripts_path );
@@ -365,88 +375,15 @@ createFloxEnv( EvalState &          state,
 }
 
 
-struct CmdBuildEnv : nix::EvalCommand
-{
-  std::string                 lockfile_content;
-  std::optional<nix::Path>    out_link;
-  std::optional<flox::System> system;
+/* -------------------------------------------------------------------------- */
 
-  CmdBuildEnv()
-  {
-    addFlag( { .longName    = "lockfile",
-               .shortName   = 'l',
-               .description = "locked manifest",
-               .labels      = { "lockfile" },
-               .handler     = { &lockfile_content } } );
-
-    addFlag( { .longName    = "out-link",
-               .shortName   = 'o',
-               .description = "output link",
-               .labels      = { "out-link" },
-               .handler     = { &out_link } } );
-
-    addFlag( { .longName    = "system",
-               .shortName   = 's',
-               .description = "system",
-               .labels      = { "system" },
-               .handler     = { &system } } );
-  }
-
-  std::string
-  description() override
-  {
-    return "build flox env";
-  }
-
-  std::string
-  doc() override
-  {
-    return "TODO";
-  }
-
-
-  void
-  run( ref<Store> store ) override
-  {
-
-    logger->log( nix::Verbosity::lvlDebug,
-                 fmt( "lockfile: %s\n", lockfile_content.c_str() ) );
-
-    LockfileRaw lockfile_raw = nlohmann::json::parse( lockfile_content );
-    auto        lockfile     = Lockfile( lockfile_raw );
-
-    auto state = getEvalState();
-
-    if ( system.has_value() )
-      {
-        nix::settings.thisSystem.set( system.value() );
-      }
-    auto system = nix::settings.thisSystem.get();
-
-    auto store_path = flox::createFloxEnv( *state, lockfile, system );
-
-    std::cout << fmt( "%s\n", store->printStorePath( store_path ).c_str() );
-
-    auto store2 = store.dynamic_pointer_cast<LocalFSStore>();
-
-    if ( ! store2 ) { throw Error( "store is not a LocalFSStore" ); }
-
-    if ( out_link.has_value() )
-      {
-        auto out_link_path
-          = store2->addPermRoot( store_path, absPath( out_link.value() ) );
-        logger->log( nix::Verbosity::lvlDebug,
-                     fmt( "out_link_path: %s\n", out_link_path.c_str() ) );
-      }
-  }
-};
-
-static auto rCmdBuildEnv = nix::registerCommand<CmdBuildEnv>( "build-env" );
+void
+buildEnvironment( const std::string & out, std::vector<Package> & pkgs );
 
 
 /* -------------------------------------------------------------------------- */
 
-}  // namespace flox
+}  // namespace flox::buildenv
 
 
 /* -------------------------------------------------------------------------- *
