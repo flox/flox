@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use std::{env, fs, io};
 
 use async_trait::async_trait;
@@ -12,14 +11,13 @@ use runix::command_line::{NixCommandLine, NixCommandLineRunError, NixCommandLine
 use runix::installable::FlakeAttribute;
 use runix::store_path::StorePath;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use thiserror::Error;
 use walkdir::WalkDir;
 
 use self::managed_environment::ManagedEnvironmentError;
 use super::environment_ref::{EnvironmentName, EnvironmentOwner, EnvironmentRefError};
 use super::flox_package::FloxTriple;
-use super::manifest::{Manifest, TomlEditError};
+use super::manifest::TomlEditError;
 use super::pkgdb_errors::PkgDbError;
 use crate::flox::{EnvironmentRef, Flox};
 use crate::providers::git::{
@@ -32,6 +30,8 @@ use crate::utils::copy_file_without_permissions;
 use crate::utils::errors::IoError;
 
 mod core_environment;
+pub use core_environment::{CoreEnvironmentError, EditResult};
+
 pub mod generations;
 pub mod managed_environment;
 pub mod path_environment;
@@ -256,121 +256,6 @@ impl UninitializedEnvironment {
     }
 }
 
-#[derive(Debug, Serialize, Clone, Deserialize, PartialEq)]
-pub struct LockedManifest(Value);
-impl LockedManifest {
-    /// Use pkgdb to lock a manifest
-    pub fn lock_manifest(
-        pkgdb: &Path,
-        manifest_path: &Path,
-        existing_lockfile_path: Option<&Path>,
-        global_manifest_path: &Path,
-    ) -> Result<Self, EnvironmentError2> {
-        let canonical_manifest_path = manifest_path
-            .canonicalize()
-            .map_err(EnvironmentError2::OpenManifest)?;
-
-        let mut pkgdb_cmd = Command::new(pkgdb);
-        pkgdb_cmd
-            .args(["manifest", "lock"])
-            .arg("--ga-registry")
-            .arg("--global-manifest")
-            .arg(global_manifest_path);
-        if let Some(lf_path) = existing_lockfile_path {
-            let canonical_lockfile_path = lf_path
-                .canonicalize()
-                .map_err(EnvironmentError2::BadLockfilePath)?;
-            pkgdb_cmd.arg("--lockfile").arg(canonical_lockfile_path);
-        }
-        pkgdb_cmd.arg(canonical_manifest_path);
-
-        debug!("locking manifest with command: {pkgdb_cmd:?}");
-        let output = pkgdb_cmd.output().map_err(EnvironmentError2::PkgDbCall)?;
-        // If command fails, try to parse stdout as a PkgDbError
-        if !output.status.success() {
-            if let Ok::<PkgDbError, _>(pkgdb_err) = serde_json::from_slice(&output.stdout) {
-                Err(EnvironmentError2::LockManifest(pkgdb_err))
-            } else {
-                Err(EnvironmentError2::ParsePkgDbError(
-                    String::from_utf8_lossy(&output.stdout).to_string(),
-                ))
-            }
-        // If command succeeds, try to parse stdout as JSON value
-        } else {
-            let lockfile_json = serde_json::from_slice(&output.stdout)
-                .map_err(EnvironmentError2::ParseLockfileJSON)?;
-            Ok(lockfile_json)
-        }
-    }
-
-    /// Build a locked manifest
-    ///
-    /// if a gcroot_out_link_path is provided,
-    /// the environment will be linked to that path and a gcroot will be created
-    pub fn build(
-        &self,
-        builder: &Path,
-        gcroot_out_link_path: Option<&Path>,
-    ) -> Result<PathBuf, EnvironmentError2> {
-        let mut env_builder_cmd = Command::new(builder);
-        env_builder_cmd.arg("build-env");
-        env_builder_cmd.args(["--lockfile", &self.0.to_string()]);
-
-        if let Some(gcroot_out_link_path) = gcroot_out_link_path {
-            env_builder_cmd.args(["--out-link", &gcroot_out_link_path.to_string_lossy()]);
-        }
-
-        debug!("building environment with command: {env_builder_cmd:?}");
-
-        let env_builder_output = env_builder_cmd
-            .output()
-            .map_err(EnvironmentError2::BuildEnvCall)?;
-
-        if !env_builder_output.status.success() {
-            let stderr = String::from_utf8_lossy(&env_builder_output.stderr).into_owned();
-            return Err(EnvironmentError2::BuildEnv(stderr));
-        }
-
-        let stdout = String::from_utf8_lossy(&env_builder_output.stdout).into_owned();
-
-        Ok(PathBuf::from(stdout.trim()))
-    }
-}
-impl ToString for LockedManifest {
-    fn to_string(&self) -> String {
-        self.0.to_string()
-    }
-}
-
-#[derive(Debug)]
-pub enum EditResult {
-    /// The manifest was not modified.
-    Unchanged,
-    /// The manifest was modified, and the user needs to re-activate it.
-    ReActivateRequired,
-    /// The manifest was modified, but the user does not need to re-activate it.
-    Success,
-}
-
-impl EditResult {
-    pub fn new(old_manifest: &str, new_manifest: &str) -> Result<Self, EnvironmentError2> {
-        if old_manifest == new_manifest {
-            Ok(Self::Unchanged)
-        } else {
-            let old_manifest: Manifest =
-                toml::from_str(old_manifest).map_err(EnvironmentError2::DeserializeManifest)?;
-            let new_manifest: Manifest =
-                toml::from_str(new_manifest).map_err(EnvironmentError2::DeserializeManifest)?;
-            // TODO: some modifications to `install` currently require re-activation
-            if old_manifest.hook != new_manifest.hook || old_manifest.vars != new_manifest.vars {
-                Ok(Self::ReActivateRequired)
-            } else {
-                Ok(Self::Success)
-            }
-        }
-    }
-}
-
 #[derive(Debug, Error)]
 pub enum EnvironmentError2 {
     #[error("ParseEnvRef")]
@@ -487,6 +372,8 @@ pub enum EnvironmentError2 {
     },
     #[error("error checking if in a git repo")]
     DiscoverGitDirectory(#[source] GitCommandDiscoverError),
+    #[error(transparent)]
+    Core(#[from] CoreEnvironmentError),
 }
 
 /// Copy a whole directory recursively ignoring the original permissions
