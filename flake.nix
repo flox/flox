@@ -157,10 +157,12 @@
             enable = true;
             entry = final.lib.mkForce "${wrapper}/bin/cargo-fmt fmt --all --manifest-path 'cli/Cargo.toml' -- --color always";
           };
+          clippy.enable = true;
           commitizen.enable = true;
         };
         settings = {
           alejandra.verbosity = "quiet";
+          rust.cargoManifestPath = "cli/Cargo.toml";
         };
       };
 
