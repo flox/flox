@@ -245,4 +245,5 @@ teardown() {
 
   SHELL=bash run expect -d "$TESTS_DIR/show/prompt-which-environment.exp"
   assert_success
+  assert_output --partial 'nodejs - nodejs@18.17.1';
 }

@@ -1,6 +1,6 @@
 {
   runCommand,
-  flox-dev,
+  flox-cli,
   nix,
   sqlite,
   flox-pkgdb,
@@ -12,15 +12,14 @@
   parallel,
   diffutils,
   flox-env-builder,
-  strace,
   inputs,
   rsync,
   closureInfo,
 }: let
-  system = flox-dev.system;
+  system = flox-cli.system;
   cached_home =
     runCommand "pure-flox-tests" {
-      nativeBuildInputs = [flox-dev nix sqlite flox-pkgdb gnutar zstd];
+      nativeBuildInputs = [flox-cli nix sqlite flox-pkgdb gnutar zstd];
     } ''
       set -euo pipefail
 
@@ -97,7 +96,7 @@
 
   create_home =
     runCommand "home" {
-      nativeBuildInputs = [flox-dev nix sqlite flox-pkgdb gnutar zstd];
+      nativeBuildInputs = [flox-cli nix sqlite flox-pkgdb gnutar zstd];
     } ''
       mkdir $out
       cd $out
@@ -105,7 +104,7 @@
     '';
   search =
     runCommand "search2" {
-      nativeBuildInputs = [flox-dev nix sqlite flox-pkgdb gnutar zstd time gawk parallel diffutils];
+      nativeBuildInputs = [flox-cli nix sqlite flox-pkgdb gnutar zstd time gawk parallel diffutils];
       passthru = {inherit create_home;};
     } ''
       function setup_nix_isolated(){
@@ -136,7 +135,7 @@
   # TODO: can easily check output via: diff -r ${../../tests/test_output} $out
 in
   runCommand "activate" {
-    nativeBuildInputs = [flox-dev nix sqlite flox-pkgdb gnutar zstd time gawk parallel diffutils strace rsync];
+    nativeBuildInputs = [flox-cli nix sqlite flox-pkgdb gnutar zstd time gawk parallel diffutils rsync];
     passthru = {inherit create_home;};
     # __impure = true;
   } ''

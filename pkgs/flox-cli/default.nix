@@ -34,17 +34,19 @@
 }: let
   flox-src = builtins.path {
     name = "flox-src";
-    path = ./../../cli;
+    path = "${./../../cli}";
     filter = path: type:
-      ! builtins.elem path (map (f: ./../../cli + ("/" + f)) [
-        "flake.nix"
-        "flake.lock"
-        "pkgs"
-        "checks"
-        "tests"
-        "shells"
-        "target"
-      ]);
+      ! builtins.elem path (map (
+          f: "${./../../cli}/${f}"
+        ) [
+          "flake.nix"
+          "flake.lock"
+          "pkgs"
+          "checks"
+          "tests"
+          "shells"
+          "target"
+        ]);
   };
 
   # crane (<https://crane.dev/>) library for building rust packages

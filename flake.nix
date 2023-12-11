@@ -187,18 +187,6 @@
       flox-cli-tests = callPackage ./pkgs/flox-cli-tests {};
       # Integration tests
       flox-tests = callPackage ./pkgs/flox-tests {};
-      flox-tests-dev = final.flox-tests.override {
-        FLOX_CLI = null;
-      };
-      flox-tests-end2end = final.flox-tests.override {
-        name = "flox-tests-end2end";
-        testsDir = "/tests/end2end";
-      };
-      flox-tests-end2end-dev = final.flox-tests.override {
-        name = "flox-tests-end2end";
-        testsDir = "/tests/end2end";
-        FLOX_CLI = null;
-      };
       flox-tests-pure = callPackage ./pkgs/flox-tests-pure {inputs = inputs;};
     };
 
@@ -238,6 +226,7 @@
         flox-pkgdb
         flox-env-builder
         flox-cli
+        flox-cli-tests
         flox
         pre-commit-check
 =======

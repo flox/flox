@@ -5,15 +5,13 @@ set flox $env(FLOX_BIN)
 
 # activate environment 1
 set timeout 10
+# activate environment 1
+spawn $flox activate
 expect_after {
   timeout { exit 1 }
   eof { exit 2 }
   "*\n" { exp_continue }
 }
-
-# activate environment 1
-spawn $flox activate
-expect -ex "Building environment..." {}
 
 # edit environment and check for message prompting to re-activate
 send "$flox edit -f $manifest\n"

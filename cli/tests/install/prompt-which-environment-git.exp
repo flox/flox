@@ -4,12 +4,12 @@ set flox $env(FLOX_BIN)
 
 # activate environment 1
 set timeout 10
+spawn $flox activate --dir 1
 expect_after {
   timeout { exit 1 }
   eof { exit 2 }
   "*\n" { exp_continue }
 }
-spawn $flox activate --dir 1
 expect -ex "Building environment..." {}
 
 # cd to directory 2/subdirectory
@@ -20,6 +20,7 @@ send "$flox install hello\n"
 expect -ex "Do you want to install to the flox environment detected in git repo or the current active flox environment?" {}
 expect -re {flox environment detected in git repo \[2 at .*2\]} {}
 expect -re {current active flox environment \[1 at .*1\]} {}
+expect -re "type to filter.*\n"
 
 # choose the first option and expect the corresponding installation
 send "\r"

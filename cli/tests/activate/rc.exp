@@ -5,14 +5,14 @@ set dir [lindex $argv 0]
 set flox $env(FLOX_BIN)
 
 set timeout 300
-expect_before {
+spawn $flox activate --dir $dir
+expect_after {
   timeout { exit 1 }
   eof { exit 2 }
   "*\n" { exp_continue }
 }
 
-spawn $flox activate --dir $dir
-expect -ex "Building environment..."
+expect -re "flox .*\\\[project-\\d+\\\]" {}
 send "type test_alias\r"
 send "exit\r"
 expect eof

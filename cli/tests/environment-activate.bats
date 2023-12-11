@@ -81,8 +81,7 @@ env_is_activated() {
   run "$FLOX_BIN" install -d "$PROJECT_DIR" hello;
   assert_success
   assert_output --partial "✅ 'hello' installed to environment"
-  SHELL=bash run expect -d "$TESTS_DIR/activate/hello.exp" "$PROJECT_DIR";
-  assert_success;
+  SHELL=bash USER="$REAL_USER" run -0 expect -d "$TESTS_DIR/activate/hello.exp" "$PROJECT_DIR";
 }
 
 
@@ -95,8 +94,7 @@ env_is_activated() {
   # TODO: flox will set HOME if it doesn't match the home of the user with
   # current euid. I'm not sure if we should change that, but for now just set
   # USER to REAL_USER.
-  SHELL=zsh USER="$REAL_USER" run expect -d "$TESTS_DIR/activate/hello.exp" "$PROJECT_DIR";
-  assert_success;
+  SHELL=zsh USER="$REAL_USER" run -0 expect -d "$TESTS_DIR/activate/hello.exp" "$PROJECT_DIR";
 }
 
 
@@ -128,7 +126,6 @@ EOF
   # USER to REAL_USER.
   # SHELL=zsh USER="$REAL_USER" run -0 bash -c "echo exit | $FLOX_CLI activate --dir $PROJECT_DIR";
   SHELL=zsh USER="$REAL_USER" run -0 expect -d "$TESTS_DIR/activate/hook.exp" "$PROJECT_DIR";
-  assert_output --partial "Building environment..."
   assert_output --partial "Welcome to your flox environment!"
 }
 
