@@ -116,3 +116,111 @@ EOF
   assert_output --partial "✅ environment successfully edited"
 }
 
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=managed,pull,managed:pull
+@test "m4: pushed environment can be pulled" {
+
+
+
+  mkdir a a_data;
+  mkdir b b_data;
+
+  # on machine a, create and push the environment
+  export FLOX_DATA_DIR="$(pwd)/a_data"
+  pushd a >/dev/null || return
+  "$FLOX_BIN" init
+  "$FLOX_BIN" install hello
+  "$FLOX_BIN" push --owner "$OWNER"
+  popd >/dev/null || return
+
+
+  # on another b machine, pull the environment
+  export FLOX_DATA_DIR="$(pwd)/b_data"
+  pushd b >/dev/null || return
+  "$FLOX_BIN" pull --remote "$OWNER/a"
+  run --separate-stderr "$FLOX_BIN" list
+
+  # assert that the environment contains the installed package
+  assert_output "hello"
+  popd >/dev/null || return
+}
+
+
+
+# bats test_tags=managed,update,managed:update
+@test "m5: updated environment can be pulled" {
+  mkdir a a_data;
+  mkdir b b_data;
+
+  # on machine a, create and push the (empty) environment
+  export FLOX_DATA_DIR="$(pwd)/a_data"
+  pushd a >/dev/null || return
+  "$FLOX_BIN" init
+  "$FLOX_BIN" push --owner "$OWNER"
+  popd >/dev/null || return
+
+
+  # on another b machine,
+  #  - pull the environment
+  #  - install a package
+  #  - push the environment
+  export FLOX_DATA_DIR="$(pwd)/b_data"
+  pushd b >/dev/null || return
+  "$FLOX_BIN" pull --remote "$OWNER/a"
+  "$FLOX_BIN" install hello
+  "$FLOX_BIN" push --owner "$OWNER"
+  popd >/dev/null || return
+
+  # on machine a, pull the environment
+  # and check that the package is installed
+  export FLOX_DATA_DIR="$(pwd)/a_data"
+  pushd a >/dev/null || return
+  # assert that pulling succeeds
+  run "$FLOX_BIN" pull
+  assert_success
+
+  # assert that the environment contains the installed package
+  run --separate-stderr "$FLOX_BIN" list
+  assert_output "hello"
+  popd >/dev/null || return
+}
+
+
+# bats test_tags=managed,diverged,managed:diverged
+@test "m7: remote can not be pulled into diverged environment" {
+  mkdir a a_data;
+  mkdir b b_data;
+
+  # on machine a, create and push the (empty) environment
+  export FLOX_DATA_DIR="$(pwd)/a_data"
+  pushd a >/dev/null || return
+  "$FLOX_BIN" init
+  "$FLOX_BIN" push --owner "$OWNER"
+  popd >/dev/null || return
+
+
+  # on another b machine,
+  #  - pull the environment
+  #  - install a package
+  #  - push the environment
+  export FLOX_DATA_DIR="$(pwd)/b_data"
+  pushd b >/dev/null || return
+  "$FLOX_BIN" pull --remote "$OWNER/a"
+  "$FLOX_BIN" install vim
+  "$FLOX_BIN" push --owner "$OWNER"
+  popd >/dev/null || return
+
+  # on machine a, pull the environment
+  # and check that the package is installed
+  export FLOX_DATA_DIR="$(pwd)/a_data"
+  pushd a >/dev/null || return
+  run "$FLOX_BIN" install emacs
+  # assert that pulling succeeds
+  run "$FLOX_BIN" pull
+  assert_failure
+
+  # assert that the environment contains the installed package
+  assert_output --partial "diverged"
+  popd >/dev/null || return
+}
