@@ -266,6 +266,9 @@ impl Generations<ReadWrite> {
 
         self.repo.add(&[&generation_path]).unwrap();
         self.repo
+            .add(&[Path::new(GENERATIONS_METADATA_FILE)])
+            .unwrap();
+        self.repo
             .commit(&format!(
                 "Create generation {}\n\n{}",
                 generation, description
