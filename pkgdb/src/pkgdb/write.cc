@@ -14,7 +14,11 @@
 #include "flox/pkgdb/write.hh"
 
 #include "./schemas.hh"
+#include <fstream>
+#include <nlohmann/json.hpp>
+#include <algorithm>
 
+using json = nlohmann::json;
 
 /* -------------------------------------------------------------------------- */
 
@@ -395,6 +399,60 @@ PkgDb::setPrefixDone( const flox::AttrPath & prefix, bool done )
 }
 
 
+bool 
+PkgDb::applyRules(const std::string& rulesPath, const std::vector<std::string>& prefix, const std::string& attr)
+{
+  // Load rules from JSON file
+  json rules;
+  std::ifstream rulesFile(rulesPath);
+  if (!rulesFile.is_open()) {
+    // Handle error when unable to open the rules file
+    return false;
+  }
+  rulesFile >> rules;
+  rulesFile.close();
+
+  // Check allowRecursive rules
+  if (rules.contains("allowRecursive")) {
+    for (const auto& rule : rules["allowRecursive"]) {
+      if (std::equal(prefix.begin(), prefix.end(), rule.begin(), rule.end())) {
+        return true; // Allow recursion for this attribute
+      }
+    }
+  }
+
+  // Check allowPackage rules
+  if (rules.contains("allowPackage")) {
+    for (const auto& rule : rules["allowPackage"]) {
+      if (std::equal(prefix.begin(), prefix.end(), rule.begin(), rule.end()) &&
+          rule.back() == attr) {
+        return false; // Allow this package
+      }
+    }
+  }
+
+  // Check disallowRecursive rules
+  if (rules.contains("disallowRecursive")) {
+    for (const auto& rule : rules["disallowRecursive"]) {
+      if (std::equal(prefix.begin(), prefix.end(), rule.begin(), rule.end())) {
+        return true; // Disallow recursion for this attribute
+      }
+    }
+  }
+
+  // Check disallowPackage rules
+  if (rules.contains("disallowPackage")) {
+    for (const auto& rule : rules["disallowPackage"]) {
+      if (std::equal(prefix.begin(), prefix.end(), rule.begin(), rule.end()) &&
+          rule.back() == attr) {
+        return true; // Disallow this package
+      }
+    }
+  }
+
+  return false; // No rules matched
+}
+
 /* -------------------------------------------------------------------------- */
 
 /* NOTE:
@@ -402,79 +460,90 @@ PkgDb::setPrefixDone( const flox::AttrPath & prefix, bool done )
  * of recursion is faster and consumes less memory.
  * Repeated runs against `nixpkgs-flox` come in at ~2m03s using recursion and
  * ~1m40s using a queue. */
-void
-PkgDb::scrape( nix::SymbolTable & syms, const Target & target, Todos & todo )
+void 
+PkgDb::scrape(nix::SymbolTable& syms, const Target& target, Todos& todo, const std::string& rulesPath)
 {
-  const auto & [prefix, cursor, parentId] = target;
+  const auto& [prefix, cursor, parentId] = target;
 
   /* If it has previously been scraped then bail out. */
-  if ( this->completedAttrSet( parentId ) ) { return; }
+  if (this->completedAttrSet(parentId)) {
+    return;
+  }
 
   bool tryRecur = prefix.front() != "packages";
 
-  nix::Activity act( *nix::logger,
-                     nix::lvlInfo,
-                     nix::actUnknown,
-                     nix::fmt( "evaluating package set '%s'",
-                               nix::concatStringsSep( ".", prefix ) ) );
+  nix::Activity act(*nix::logger,
+                    nix::lvlInfo,
+                    nix::actUnknown,
+                    nix::fmt("evaluating package set '%s'",
+                             nix::concatStringsSep(".", prefix)));
 
   /* Scrape loop over attrs */
-  for ( nix::Symbol & aname : cursor->getAttrs() )
-    {
-      if ( syms[aname] == "recurseForDerivations" ) { continue; }
+  for (nix::Symbol& aname : cursor->getAttrs())
+  {
+    if (syms[aname] == "recurseForDerivations") {
+      continue;
+    }
 
-      /* Used for logging, but can skip it at low verbosity levels. */
-      const std::string pathS
-        = ( nix::lvlTalkative <= nix::verbosity )
-            ? nix::concatStringsSep( ".", prefix ) + "." + syms[aname]
+    /* Used for logging, but can skip it at low verbosity levels. */
+    const std::string pathS =
+        (nix::lvlTalkative <= nix::verbosity)
+            ? nix::concatStringsSep(".", prefix) + "." + syms[aname]
             : "";
 
-      nix::Activity act( *nix::logger,
-                         nix::lvlTalkative,
-                         nix::actUnknown,
-                         "\tevaluating attribute '" + pathS + "'" );
+    nix::Activity act(*nix::logger,
+                      nix::lvlTalkative,
+                      nix::actUnknown,
+                      "\tevaluating attribute '" + pathS + "'");
 
-      try
+    try
+    {
+      flox::Cursor child = cursor->getAttr(aname);
+      if (child->isDerivation())
+      {
+        // Use applyRules to check if the package is allowed
+        if (applyRules(rulesPath, prefix, syms[aname]))
         {
-          flox::Cursor child = cursor->getAttr( aname );
-          if ( child->isDerivation() )
-            {
-              this->addPackage( parentId, syms[aname], child );
-              continue;
-            }
-          if ( ! tryRecur ) { continue; }
-          if ( auto maybe = child->maybeGetAttr( "recurseForDerivations" );
-               ( ( maybe != nullptr ) && maybe->getBool() )
-               /* XXX: We explicitly recurse into `legacyPackages.*.darwin'
-                *      due to a bug in `nixpkgs' which doesn't set
-                *      `recurseForDerivations' attribute correctly. */
-               || ( ( prefix.front() == "legacyPackages" )
-                    && ( syms[aname] == "darwin" ) ) )
-            {
-              flox::AttrPath path = prefix;
-              path.emplace_back( syms[aname] );
-              if ( nix::lvlTalkative <= nix::verbosity )
-                {
-                  nix::logger->log( nix::lvlTalkative,
-                                    "\tpushing target '" + pathS + "'" );
-                }
-              row_id childId = this->addOrGetAttrSetId( syms[aname], parentId );
-              todo.emplace( std::make_tuple( std::move( path ),
-                                             std::move( child ),
-                                             childId ) );
-            }
+          this->addPackage(parentId, syms[aname], child);
         }
-      catch ( const nix::EvalError & err )
+        continue;
+      }
+
+      if (!tryRecur)
+      {
+        continue;
+      }
+
+      if (auto maybe = child->maybeGetAttr("recurseForDerivations");
+          (maybe != nullptr) && maybe->getBool())
+      {
+        flox::AttrPath path = prefix;
+        path.emplace_back(syms[aname]);
+
+        // Use applyRules to check if the set is allowed
+        if (applyRules(rulesPath, path, ""))
         {
-          /* Ignore errors in `legacyPackages' */
-          if ( tryRecur )
-            {
-              /* Only print eval errors in "debug" mode. */
-              nix::ignoreException( nix::lvlDebug );
-            }
-          else { throw; }
+          row_id childId = this->addOrGetAttrSetId(syms[aname], parentId);
+          todo.emplace(std::make_tuple(std::move(path),
+                                       std::move(child),
+                                       childId));
         }
+      }
     }
+    catch (const nix::EvalError& err)
+    {
+      /* Ignore errors in `legacyPackages' */
+      if (tryRecur)
+      {
+        /* Only print eval errors in "debug" mode. */
+        nix::ignoreException(nix::lvlDebug);
+      }
+      else
+      {
+        throw;
+      }
+    }
+  }
 }
 
 
