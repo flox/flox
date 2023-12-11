@@ -8,7 +8,6 @@ use flox_types::version::Version;
 use log::debug;
 use runix::command_line::NixCommandLine;
 use serde::{Deserialize, Serialize};
-use serde_json::json;
 use thiserror::Error;
 
 use super::generations::Generations;
@@ -23,7 +22,6 @@ use super::{
     GCROOTS_DIR_NAME,
 };
 use crate::flox::Flox;
-use crate::models::environment::copy_dir_recursive;
 use crate::models::environment_ref::{EnvironmentName, EnvironmentOwner};
 use crate::models::floxmetav2::{floxmeta_git_options, FloxmetaV2, FloxmetaV2Error};
 use crate::providers::git::{GitCommandBranchHashError, GitCommandError, GitProvider};
@@ -149,7 +147,6 @@ impl Environment for ManagedEnvironment {
     }
 
     /// Atomically edit this environment, ensuring that it still builds
-    #[allow(unused)]
     async fn edit(
         &mut self,
         flox: &Flox,
