@@ -45,9 +45,13 @@ test-env-builder: build-env-builder
     @pushd env-builder; make -j tests; popd
     @pushd env-builder; make check; popd
 
-# Run the 'bats' test suite
-bats-tests +bats_args="": build
+# Run the end-to-end test suite
+functional-tests +bats_args="": build
     @flox-tests {{bats_args}}
+
+# Run the integration test suite
+integ-tests: build
+    @flox-cli-tests --pkgdb "${PWD}/pkgdb/bin/pkgdb" --flox "${PWD}/cli/target/debug/flox" --env-builder "${PWD}/env-builder/bin/env-builder"
 
 # Run a specific 'bats' test file
 bats-file file: build
@@ -62,10 +66,10 @@ impure-tests regex="": build
     @pushd cli; {{cargo_test_invocation}} {{regex}} --features "extra-tests"; popd
 
 # Run the entire test suite, not including impure tests
-test: build unit-tests bats-tests
+test-cli: build unit-tests functional-tests integ-tests
 
 # Run the entire test suite, including impure tests
-test-all: test-pkgdb test-env-builder build impure-tests bats-tests
+test-all: test-pkgdb test-env-builder impure-tests functional-tests integ-tests
 
 
 # ---------------------------------------------------------------------------- #
