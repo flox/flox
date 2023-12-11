@@ -27,6 +27,9 @@ ScrapeCommand::ScrapeCommand() : parser( "scrape" )
     .help( "force re-evaluation of flake" )
     .nargs( 0 )
     .action( [&]( const auto & ) { this->force = true; } );
+  this->parser.add_argument( "-r", "--rules" )
+    .help( "the path to the rules.json file" )
+    .nargs( 1 );
   this->addDatabasePathOption( this->parser );
   this->addFlakeRefArg( this->parser );
   this->addAttrPathArgs( this->parser );
