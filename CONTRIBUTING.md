@@ -35,6 +35,13 @@ and `pre-commit-hooks`.
 In the environment, use [`cargo`](https://doc.rust-lang.org/cargo/)
 to build the rust based cli.
 
+**Note:**
+
+cargo based builds should only be used locally.
+Flox must be buildable using `flox` or `nix`.
+
+### Build and Run `flox`
+
 - build and run flox
    ```console
    $ pushd cli;
@@ -45,6 +52,13 @@ to build the rust based cli.
    $ just build;
    # builds to ./cli/target/debug/flox
    ```
+- run flox unit tests
+   ```console
+   $ pushd cli;
+   $ cargo test [<args>]
+   # or enable impure and other long running tests with
+   $ cargo -F extra-tests [<args>]
+   ```
 - build an optimized release build of flox
    ```console
    $ make -C pkgdb -j;
@@ -53,10 +67,7 @@ to build the rust based cli.
    # builds to ./cli/target/release/flox
    ```
 
-**Note:**
-
-cargo based builds should only be used locally.
-Flox must be buildable using `flox` or `nix`.
+### Lint and Format `flox`
 
 - format rust code:
   ```console
@@ -82,6 +93,26 @@ Flox must be buildable using `flox` or `nix`.
   ```console
   $ pre-commit run -a
   ```
+
+### Setting up rust IDE support
+
+- Install the `rust-analyzer` plugin for your editor
+   - See the [official installation instruction](https://rust-analyzer.github.io/manual.html#installation)
+     (in the `nix develop` subshell the toolchain will aready be provided, you can skip right to your editor of choice)
+- If you prefer to open your editor at the project root, you'll need to help rust-analyzer find the rust workspace by configuing the`linkedProjects` for `rust-analyzer`.
+   In VS Code you can add this: to you `.vscode/settings.json`:
+   ```json
+   "rust-analyzer.linkedProjects": [
+      "${workspaceFolder}/cli/Cargo.toml"
+   ]
+   ```
+- If you want to be able to run and get analytics on impure tests, you need to activate the `extra-tests` feature
+   In VS Code you can add this: to you `.vscode/settings.json`:
+   ```json
+   "rust-analyzer.cargo.features": [
+      "extra-tests"
+   ]
+   ```
 
 ## Git
 
