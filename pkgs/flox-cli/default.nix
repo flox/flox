@@ -68,7 +68,7 @@
       ENV_BUILDER_BIN =
         if flox-env-builder == null
         then ""
-        else "${flox-env-builder}/bin/flox-env-builder";
+        else "${flox-env-builder}/bin/env-builder";
       FLOX_ETC_DIR = ../../assets/etc;
       FLOX_ZDOTDIR = ../../assets/flox.zdotdir;
 

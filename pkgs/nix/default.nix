@@ -38,6 +38,20 @@ nixVersions.nix_2_17.overrideAttrs (prev: {
     find "$dev" -type f -name '*.pc'                       \
       |xargs sed -i -e 's,\(-I\''${includedir}\)/nix,\1,'  \
                     -e 's,-I,-isystem ,';
+
+    # Create `nix-fetchers.pc'.
+    cat <<EOF > "$dev/lib/pkgconfig/nix-fetchers.pc"
+    prefix=$out
+    libdir=$out/lib
+    includedir=$dev/include
+
+    Name: Nix
+    Description: Nix Package Manager
+    Version: 2.17.1
+    Requires: nix-store bdw-gc
+    Libs: -L\''${libdir} -lnixfetchers
+    Cflags: -isystem \''${includedir} -std=c++2a
+    EOF
   '';
 })
 # ---------------------------------------------------------------------------- #

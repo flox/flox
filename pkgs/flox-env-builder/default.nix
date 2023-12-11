@@ -92,6 +92,8 @@ in
       doCheck = false;
       doInstallCheck = false;
 
+      meta.mainProgram = "env-builder";
+
       passthru = {
         inherit
           envs

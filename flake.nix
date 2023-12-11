@@ -232,7 +232,39 @@
     inherit overlays packages pkgsFor checks;
 
     devShells = eachDefaultSystemMap (system: let
-      pkgs = builtins.getAttr system pkgsFor;
+      pkgsBase = builtins.getAttr system pkgsFor;
+      pkgs = pkgsBase.extend (final: prev: {
+        flox-pkgdb-tests = prev.flox-pkgdb-tests.override {
+          PROJECT_TESTS_DIR = "/pkgdb/tests";
+          PKGDB_BIN = null;
+          PKGDB_IS_SQLITE3_BIN = null;
+          PKGDB_SEARCH_PARAMS_BIN = null;
+        };
+        flox-env-builder-tests = prev.flox-env-builder-tests.override {
+          PROJECT_TESTS_DIR = "/env-builder/tests";
+          PKGDB_BIN = null;
+          ENV_BUILDER_BIN = null;
+        };
+        flox-cli-tests = prev.flox-cli-tests.override {
+          PROJECT_TESTS_DIR = "/cli/tests";
+          PKGDB_BIN = null;
+          ENV_BUILDER_BIN = null;
+          FLOX_BIN = null;
+        };
+        flox-tests = prev.flox-tests.override {
+          PROJECT_TESTS_DIR = "/tests";
+          PKGDB_BIN = null;
+          ENV_BUILDER_BIN = null;
+          FLOX_BIN = null;
+        };
+        flox-env-builder = prev.flox-env-builder.override {
+          flox-pkgdb = null;
+        };
+        flox-cli = prev.flox-cli.override {
+          flox-pkgdb = null;
+          flox-env-builder = null;
+        };
+      });
       checksFor = builtins.getAttr system checks;
     in {
       default = pkgs.callPackage ./shells/default {

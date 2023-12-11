@@ -8,4 +8,4 @@ Description: CRUD operations for `nix` package metadata.
 Version: @VERSION@
 Requires: nlohmann_json argparse sqlite3pp sqlite3 nix-main nix-cmd nix-expr
 Cflags: -I${includedir} @CFLAGS@
-Libs: -L${libdir} -lflox-pkgdb @LIBS@
+Libs: -L${libdir} -lpkgdb @LIBS@

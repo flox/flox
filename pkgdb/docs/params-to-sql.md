@@ -47,7 +47,7 @@ The `SearchCommand::addSearchParamsArgs` function creates a positional argument 
 
 `pkgdb` performs a search in the context of an environment, where the context is comprised of a global manifest, the environment's manifest, and a lockfile if one exists.
 The presence of the lockfile enables searches to be done against inputs that have already been locked.
-I say that this environment is abstract to contrast with how `flox` and `flox-env-builder` actually build environments that the user can activate.
+I say that this environment is abstract to contrast with how `flox` and `env-builder` actually build environments that the user can activate.
 
 `SearchCommand` inherits from the `GAEnvironmentMixin` base class, which defines the functionality for initializing this abstract environment.
 The environment is initialized in `SearchCommand::run` via the call to `GAEnvironmentMixin::initEnvironment`.
