@@ -7,7 +7,7 @@ use flox_types::catalog::{CatalogEntry, EnvCatalog, System};
 use flox_types::version::Version;
 use log::debug;
 use once_cell::sync::Lazy;
-use runix::command_line::{NixCommandLine, NixCommandLineRunError, NixCommandLineRunJsonError};
+use runix::command_line::{NixCommandLine, NixCommandLineRunJsonError};
 use runix::installable::FlakeAttribute;
 use runix::store_path::StorePath;
 use serde::{Deserialize, Serialize};
@@ -15,10 +15,8 @@ use thiserror::Error;
 use walkdir::WalkDir;
 
 use self::managed_environment::ManagedEnvironmentError;
-use super::environment_ref::{EnvironmentName, EnvironmentOwner, EnvironmentRefError};
+use super::environment_ref::{EnvironmentName, EnvironmentOwner};
 use super::flox_package::FloxTriple;
-use super::manifest::TomlEditError;
-use super::pkgdb_errors::PkgDbError;
 use crate::flox::{EnvironmentRef, Flox};
 use crate::providers::git::{
     GitCommandDiscoverError,
@@ -27,7 +25,6 @@ use crate::providers::git::{
     GitProvider,
 };
 use crate::utils::copy_file_without_permissions;
-use crate::utils::errors::IoError;
 
 mod core_environment;
 pub use core_environment::{CoreEnvironmentError, EditResult};
@@ -258,122 +255,101 @@ impl UninitializedEnvironment {
 
 #[derive(Debug, Error)]
 pub enum EnvironmentError2 {
-    #[error("ParseEnvRef")]
-    ParseEnvRef(#[from] EnvironmentRefError),
-    #[error("EmptyDotFlox")]
-    EmptyDotFlox,
-    #[error("DotFloxCanonicalize")]
-    EnvCanonicalize(#[source] std::io::Error),
-    #[error("ReadDotFlox")]
-    ReadDotFlox(#[source] std::io::Error),
-    #[error("ReadEnvDir")]
-    ReadEnvDir(#[source] std::io::Error),
-    #[error("MakeSandbox")]
-    MakeSandbox(#[source] std::io::Error),
-    #[error("DeleteEnvironment")]
-    DeleteEnvironment(#[source] std::io::Error),
-    #[error("DotFloxNotFound")]
+    // todo: candidate for impl specific error
+    // * only path and managed env are defined in .Flox
+    // region: path env open
+    #[error(".flox directory not found")]
     DotFloxNotFound,
-    #[error("InitEnv")]
+
+    #[error("could not locate the manifest for this environment")]
+    ManifestNotFound,
+    // endregion
+
+    // todo: candidate for impl specific error
+    // * only path env implements init
+    // region: path env init
+    // todo: split up
+    // * three distinct errors map to this
+    #[error("could not initialize environment")]
     InitEnv(#[source] std::io::Error),
-    #[error("EnvNotFound")]
+    #[error("could not find environment definiton directory")]
     EnvNotFound,
-    #[error("EnvNotADirectory")]
-    EnvNotADirectory,
-    #[error("DirectoryNotAnEnv")]
-    DirectoryNotAnEnv,
-    #[error("EnvironmentExists")]
-    EnvironmentExists,
+    #[error("an environment already exists at {0:?}")]
+    EnvironmentExists(PathBuf),
+    // endregion
+
+    // todo: rmove with "catalog()" method
+    // region: catalog
     #[error("EvalCatalog")]
     EvalCatalog(#[source] NixCommandLineRunJsonError),
     #[error("ParseCatalog")]
     ParseCatalog(#[source] serde_json::Error),
     #[error("WriteCatalog")]
     WriteCatalog(#[source] std::io::Error),
-    #[error("Build")]
-    Build(#[source] NixCommandLineRunError),
-    #[error("ReadManifest")]
-    ReadManifest(#[source] std::io::Error),
-    #[error("ReadEnvironmentMetadata")]
+    // endregion
+
+    // todo: move pointer related errors somewhere else?
+    // * not relevant to environment _instances_
+    // region: pointer
+    #[error("could not read env.json file")]
     ReadEnvironmentMetadata(#[source] std::io::Error),
-    #[error("MakeTemporaryEnv")]
-    MakeTemporaryEnv(#[source] std::io::Error),
-    #[error("UpdateManifest")]
-    UpdateManifest(#[source] std::io::Error),
-    #[error("couldn't open manifest")]
-    OpenManifest(#[source] std::io::Error),
-    #[error("Activate")]
-    Activate(#[source] NixCommandLineRunError),
-    #[error("Could not create backup for transaction")]
-    MakeBackup(#[source] std::io::Error),
-    #[error("Prior transaction in progress. Delete {0} to discard.")]
-    PriorTransaction(PathBuf),
-    #[error("Failed to create backup for transaction")]
-    BackupTransaction(#[source] std::io::Error),
-    #[error("Failed to move modified environment into place")]
-    Move(#[source] std::io::Error),
-    #[error("Failed to abort transaction; backup could not be moved back into place")]
-    AbortTransaction(#[source] std::io::Error),
-    #[error("Failed to remove transaction backup")]
-    RemoveBackup(#[source] std::io::Error),
-    #[error("Failed to copy file")]
-    CopyFile(#[source] IoError),
     #[error("Failed parsing contents of env.json file")]
     ParseEnvJson(#[source] serde_json::Error),
     #[error("Failed serializing contents of env.json file")]
     SerializeEnvJson(#[source] serde_json::Error),
     #[error("Failed write env.json file")]
     WriteEnvJson(#[source] std::io::Error),
-    #[error(transparent)]
-    ManagedEnvironment(#[from] ManagedEnvironmentError),
-    #[error(transparent)]
-    Install(#[from] TomlEditError),
-    #[error("couldn't locate the manifest for this environment")]
-    ManifestNotFound,
-    #[error("failed to create GC roots directory")]
-    CreateGcRootDir(#[source] std::io::Error),
-    #[error("error building environment")]
-    BuildEnvCall(#[source] std::io::Error),
-    #[error("error building environment: {0}")]
-    BuildEnv(String),
-    #[error("provided lockfile path doesn't exist")]
-    BadLockfilePath(#[source] std::io::Error),
-    #[error("call to pkgdb failed")]
-    PkgDbCall(#[source] std::io::Error),
-    #[error("couldn't parse pkgdb error as JSON: {0}")]
-    ParsePkgDbError(String),
-    #[error("couldn't parse lockfile as JSON")]
-    ParseLockfileJSON(#[source] serde_json::Error),
-    #[error("couldn't parse nixpkgs rev as a string")]
-    RevNotString,
-    #[error("couldn't write new lockfile contents")]
-    WriteLockfile(#[source] std::io::Error),
-    #[error("locking manifest failed")]
-    LockManifest(#[source] PkgDbError),
+    // endregion
+
+    // region: global manifest
     #[error("couldn't create the global manifest")]
     InitGlobalManifest(#[source] std::io::Error),
+
     #[error("couldn't read global manifest template")]
     ReadGlobalManifestTemplate(#[source] std::io::Error),
+    // endregion
+
+    // region: find_dot_flox
+    // todo: extract and reuse in other places where we need to canonicalize a path
     #[error("provided path couldn't be canonicalized: {path}")]
     CanonicalPath {
         path: PathBuf,
         #[source]
         source: std::io::Error,
     },
+
+    // todo: reword?
+    // * only occurs if "`.flox`" is `/`
     #[error("invalid internal state; couldn't remove last element from path: {0}")]
     InvalidPath(PathBuf),
-    #[error("couldn't parse manifest: {0}")]
-    DeserializeManifest(toml::de::Error),
+
     #[error("invalid .flox directory at {path}: {source}")]
     InvalidDotFlox {
         path: PathBuf,
         #[source]
         source: Box<EnvironmentError2>,
     },
+
     #[error("error checking if in a git repo")]
     DiscoverGitDirectory(#[source] GitCommandDiscoverError),
+    // endregion
     #[error(transparent)]
     Core(#[from] CoreEnvironmentError),
+
+    #[error(transparent)]
+    ManagedEnvironment(#[from] ManagedEnvironmentError),
+
+    #[error("could not canonicalize path to environment")]
+    EnvCanonicalize(#[source] std::io::Error),
+
+    #[error("could not delete environment")]
+    DeleteEnvironment(#[source] std::io::Error),
+
+    #[error("could not read manifest")]
+    ReadManifest(#[source] std::io::Error),
+
+    #[error("failed to create GC roots directory")]
+    CreateGcRootDir(#[source] std::io::Error),
 }
 
 /// Copy a whole directory recursively ignoring the original permissions
