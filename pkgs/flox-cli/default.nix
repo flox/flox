@@ -66,7 +66,7 @@
         else "${flox-pkgdb}/bin/pkgdb";
       ENV_BUILDER_BIN =
         if flox-env-builder == null
-        then "flox-env-builder"
+        then "env-builder"
         else "${flox-env-builder}/bin/env-builder";
       PARSER_UTIL_BIN = "${parser-util}/bin/parser-util";
       FLOX_ETC_DIR = ../../assets/etc;
