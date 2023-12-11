@@ -49,7 +49,7 @@ env_builder_LIBS = lib/libenv-builder$(libExt)
 env_builder_BINS = bin/env-builder
 
 env_builder_HEADERS = $(call rwildcard,$(ENV_BUILDER_ROOT)include,*.hh)
-env_builder_SRCS    = $(call rwildcard,$(ENV_BUILDER_ROOT)include,*.cc)
+env_builder_SRCS    = $(call rwildcard,$(ENV_BUILDER_ROOT)src,*.cc)
 
 
 # ---------------------------------------------------------------------------- #

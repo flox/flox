@@ -99,7 +99,7 @@ DEPFILES += $(REPO_ROOT)/pkgs/nix/default.nix
 DEPFILES += $(REPO_ROOT)/pkgs/flox-pkgdb/default.nix
 DEPFILES += $(REPO_ROOT)/pkgs/flox-env-builder/default.nix
 DEPFILES += $(REPO_ROOT)/shells/flox/default.nix
-DEPFILES += $(MK_DIR)/deps.mk
+DEPFILES += $(foreach mkf,$(abspath $(mkf)),$(MAKEFILE_LIST))
 # Only include `config.mk' if it exists.
 DEPFILES += $(if $(wildcard $(REPO_ROOT)/config.mk),$(REPO_ROOT)/config.mk)
 

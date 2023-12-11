@@ -28,17 +28,6 @@ VERSION := $(file < $(ENV_BUILDER_ROOT)/version)
 
 # ---------------------------------------------------------------------------- #
 
-# Install Prefixes
-# ----------------
-
-PREFIX     ?= $(ENV_BUILDER_ROOT)/out
-BINDIR     ?= $(PREFIX)/bin
-LIBDIR     ?= $(PREFIX)/lib
-INCLUDEDIR ?= $(PREFIX)/include
-
-
-# ---------------------------------------------------------------------------- #
-
 # Our shared library target
 LIBFLOXENVBUILDER = libenvbuilder$(libExt)
 
@@ -58,17 +47,6 @@ FULLCLEANFILES =
 
 # Where to find test suite input data files.
 TEST_DATA_DIR = $(ENV_BUILDER_ROOT)/tests/fixtures
-
-
-# ---------------------------------------------------------------------------- #
-
-# Files which effect dependencies, external inputs, and `*FLAGS' values.
-DEPFILES =
-DEPFILES += $(addprefix $(REPO_ROOT)/flake.,nix lock)
-DEPFILES += $(REPO_ROOT)/pkgs/flox-pkgdb/default.nix
-DEPFILES += $(REPO_ROOT)/pkgs/flox-env-builder/default.nix
-DEPFILES += $(REPO_ROOT)/pkgs/nlohmann_json/default.nix
-DEPFILES += $(REPO_ROOT)/shells/default/default.nix
 
 
 # ---------------------------------------------------------------------------- #

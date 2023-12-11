@@ -26,16 +26,9 @@ include $(MK_DIR)/utils.mk
 # ----------------
 
 PREFIX     ?= $(REPO_ROOT)/out
-PREFIX     := $(abspath $(PREFIX))
-
 BINDIR     ?= $(PREFIX)/bin
-BINDIR     := $(abspath $(BINDIR))
-
 LIBDIR     ?= $(PREFIX)/lib
-LIBDIR     := $(abspath $(LIBDIR))
-
 INCLUDEDIR ?= $(PREFIX)/include
-INCLUDEDIR := $(abspath $(INCLUDEDIR))
 
 
 # ---------------------------------------------------------------------------- #
