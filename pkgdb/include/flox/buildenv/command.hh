@@ -17,9 +17,9 @@ namespace flox::buildenv {
 
 struct CmdBuildEnv : nix::EvalCommand
 {
-  std::string                 lockfileContent;
-  std::optional<nix::Path>    outLink;
-  std::optional<System>       system;
+  std::string                lockfileContent;
+  std::optional<std::string> outLink;
+  std::optional<System>      system;
 
   CmdBuildEnv();
 
@@ -27,7 +27,7 @@ struct CmdBuildEnv : nix::EvalCommand
   run( ref<nix::Store> store ) override;
 
 
-};  /* End struct `CmdBuildEnv' */
+}; /* End struct `CmdBuildEnv' */
 
 
 /* -------------------------------------------------------------------------- */

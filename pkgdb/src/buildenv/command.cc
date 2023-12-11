@@ -48,12 +48,12 @@ CmdBuildEnv::run( ref<nix::Store> store ) override
   if ( nix::lvlDebug <= nix::verbosity )
     {
       logger->log( nix::Verbosity::lvlDebug,
-                  "lockfile: " + this->lockfileContent );
+                   "lockfile: " + this->lockfileContent );
     }
 
   LockfileRaw lockfileRaw = nlohmann::json::parse( lockfileContent );
-  auto        lockfile     = Lockfile( lockfileRaw );
-  auto        state        = getEvalState();
+  auto        lockfile    = Lockfile( lockfileRaw );
+  auto        state       = getEvalState();
 
   auto system    = this->system.value_or( nix::settings.thisSystem.get() );
   auto storePath = flox::createFloxEnv( *state, lockfile, system );
@@ -74,10 +74,9 @@ CmdBuildEnv::run( ref<nix::Store> store ) override
       auto outLinkPath
         = localStore->addPermRoot( storePath, absPath( outLink.value() ) );
       if ( nix::lvlDebug <= nix::verbosity )
-          {
-            logger->log( nix::Verbosity::lvlDebug,
-                         "outLinkPath: " + outLinkPath )
-          }
+        {
+          logger->log( nix::Verbosity::lvlDebug, "outLinkPath: " + outLinkPath )
+        }
     }
 }
 
