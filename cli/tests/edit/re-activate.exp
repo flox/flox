@@ -13,6 +13,8 @@ expect_after {
   "*\n" { exp_continue }
 }
 
+expect -ex "Building environment..."
+
 # edit environment and check for message prompting to re-activate
 send "$flox edit -f $manifest\n"
 expect -ex "Your manifest has changes that cannot be automatically applied to your current environment.\r\n\r\nPlease `exit` the environment and run `flox activate` to see these changes." {}
