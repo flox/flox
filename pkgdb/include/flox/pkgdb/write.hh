@@ -295,6 +295,10 @@ public:
   /* --------------------------------------------------------------------------
    */
 
+
+  bool 
+  applyRules(const std::string& rulesPath, const std::vector<std::string>& prefix, const std::string& attr);
+
   /**
    * @brief Scrape package definitions from an attribute set.
    *
@@ -307,7 +311,7 @@ public:
    *             they may be scraped by later invocations.
    */
   void
-  scrape( nix::SymbolTable & syms, const Target & target, Todos & todo );
+  scrape( nix::SymbolTable & syms, const Target & target, Todos & todo, const std::string& rulesPath);
 
 
   /* --------------------------------------------------------------------------
