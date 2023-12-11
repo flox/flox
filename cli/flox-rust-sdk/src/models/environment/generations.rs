@@ -30,7 +30,7 @@ use thiserror::Error;
 use super::core_environment::CoreEnvironment;
 use super::{copy_dir_recursive, PathPointer, ENV_DIR_NAME};
 use crate::models::environment::MANIFEST_FILENAME;
-use crate::providers::git::{GitCommandOptions, GitCommandProvider, GitProvider};
+use crate::providers::git::{GitCommandError, GitCommandOptions, GitCommandProvider, GitProvider};
 
 const GENERATIONS_METADATA_FILE: &str = "metadata.json";
 
@@ -99,7 +99,7 @@ impl<S> Generations<S> {
                 "{}:{}/{}/{}",
                 self.branch, generation, ENV_DIR_NAME, MANIFEST_FILENAME
             ))
-            .unwrap();
+            .map_err(GenerationsError::ShowManifest)?;
 
         return Ok(manifest_osstr.to_string_lossy().to_string());
     }
@@ -140,19 +140,21 @@ impl Generations<ReadOnly> {
         branch: String,
         pointer: &PathPointer,
     ) -> Result<Self, GenerationsError> {
-        let repo =
-            GitCommandProvider::init_with(options.clone(), &checkedout_tempdir, false).unwrap();
-        repo.checkout(&branch, true).unwrap();
+        let repo = GitCommandProvider::init_with(options.clone(), &checkedout_tempdir, false)
+            .map_err(GenerationsError::InitRepo)?;
+        repo.checkout(&branch, true)
+            .map_err(GenerationsError::CreateBranch)?;
 
         let metadata = AllGenerationsMetadata::default();
-        write_metadata_file(metadata, repo.path()).unwrap();
+        write_metadata_file(metadata, repo.path())?;
 
-        repo.add(&[Path::new(GENERATIONS_METADATA_FILE)]).unwrap();
+        repo.add(&[Path::new(GENERATIONS_METADATA_FILE)])
+            .map_err(GenerationsError::StageChanges)?;
         repo.commit(&format!(
             "Initialize generations branch for environment '{}'",
             pointer.name
         ))
-        .unwrap();
+        .map_err(GenerationsError::CommitChanges)?;
 
         let bare = GitCommandProvider::clone_branch_with(
             options,
@@ -161,7 +163,7 @@ impl Generations<ReadOnly> {
             &branch,
             true,
         )
-        .unwrap();
+        .map_err(GenerationsError::MakeBareClone)?;
 
         Ok(Self::new(bare, branch))
     }
@@ -264,17 +266,22 @@ impl Generations<ReadWrite> {
         // copy into `<generation>/env/` to make creating `PathEnvironment` easier
         copy_dir_recursive(&environment.path(), &env_path, true).unwrap();
 
-        self.repo.add(&[&generation_path]).unwrap();
+        self.repo
+            .add(&[&generation_path])
+            .map_err(GenerationsError::StageChanges)?;
         self.repo
             .add(&[Path::new(GENERATIONS_METADATA_FILE)])
-            .unwrap();
+            .map_err(GenerationsError::StageChanges)?;
+
         self.repo
             .commit(&format!(
                 "Create generation {}\n\n{}",
                 generation, description
             ))
-            .unwrap();
-        self.repo.push("origin", false).unwrap();
+            .map_err(GenerationsError::CommitChanges)?;
+        self.repo
+            .push("origin", false)
+            .map_err(GenerationsError::CompleteTransaction)?;
 
         Ok(())
     }
@@ -340,11 +347,52 @@ impl Generations<ReadWrite> {
 
 #[derive(Debug, Error)]
 pub enum GenerationsError {
-    #[error("Generation {0} not found")]
-    GenerationNotFound(usize),
+    // region: initialization errors
+    #[error("could not initialize generations repo")]
+    InitRepo(#[source] GitCommandError),
+    #[error("could not create generations branch")]
+    CreateBranch(#[source] GitCommandError),
+    #[error("could not make bare clone of generations branch")]
+    MakeBareClone(#[source] GitCommandError),
 
-    #[error("No generations found in environment")]
+    // endregion
+
+    // region: metadata errors
+    #[error("could not serialize generations metadata")]
+    SerializeMetadata(#[source] serde_json::Error),
+    #[error("could not write generations metadata file")]
+    WriteMetadata(#[source] std::io::Error),
+
+    #[error("could not show generations metadata file")]
+    ShowMetadata(#[source] GitCommandError),
+    #[error("could not parse generations metadata")]
+    DeserializeMetadata(#[source] serde_json::Error),
+    // endregion
+
+    // region: generation errors
+    #[error("generation {0} not found")]
+    GenerationNotFound(usize),
+    #[error("no generations found in environment")]
     NoGenerations,
+    // endregion
+
+    // region: repo/transaction
+    #[error("could not clone generations branch")]
+    CloneToFS(#[source] GitCommandError),
+    #[error("could not stage changes")]
+    StageChanges(#[source] GitCommandError),
+    #[error("could not commit changes")]
+    CommitChanges(#[source] GitCommandError),
+    #[error("could not complete transaction")]
+    CompleteTransaction(#[source] GitCommandError),
+    // endregion
+
+    // region: manifest errors
+    #[error("could not write manifest file")]
+    WriteManifest(#[source] std::io::Error),
+    #[error("could not show manifest file")]
+    ShowManifest(#[source] GitCommandError),
+    // endregion
 }
 
 /// Realize the generations branch into a temporary directory
@@ -356,7 +404,7 @@ fn checkout_to_tempdir(
     let git_options = repo.get_options().clone();
     let repo =
         GitCommandProvider::clone_branch_with(git_options, repo.path(), tempdir, branch, false)
-            .unwrap();
+            .map_err(GenerationsError::CloneToFS)?;
 
     Ok(repo)
 }
@@ -369,8 +417,9 @@ fn read_metadata(
     let metadata = {
         let metadata_content = repo
             .show(&format!("{}:{}", ref_name, GENERATIONS_METADATA_FILE))
-            .unwrap();
-        serde_json::from_str(&metadata_content.to_string_lossy()).unwrap()
+            .map_err(GenerationsError::ShowMetadata)?;
+        serde_json::from_str(&metadata_content.to_string_lossy())
+            .map_err(GenerationsError::DeserializeMetadata)?
     };
     Ok(metadata)
 }
@@ -382,9 +431,10 @@ fn write_metadata_file(
     metadata: AllGenerationsMetadata,
     realized_path: &Path,
 ) -> Result<(), GenerationsError> {
-    let metadata_content = serde_json::to_string(&metadata).unwrap();
+    let metadata_content =
+        serde_json::to_string(&metadata).map_err(GenerationsError::SerializeMetadata)?;
     let metadata_path = realized_path.join(GENERATIONS_METADATA_FILE);
-    fs::write(metadata_path, metadata_content).unwrap();
+    fs::write(metadata_path, metadata_content).map_err(GenerationsError::WriteMetadata)?;
     Ok(())
 }
 
