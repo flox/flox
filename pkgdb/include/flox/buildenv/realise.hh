@@ -14,9 +14,9 @@
 #include <string>
 #include <vector>
 
-#include <nix/store-api.hh>
 #include <nix/builtins/buildenv.hh>
 #include <nix/eval.hh>
+#include <nix/store-api.hh>
 #include <nix/util.hh>
 
 #include "flox/core/exceptions.hh"
@@ -34,7 +34,7 @@ struct Priority
   unsigned                   priority;
   std::optional<std::string> parentPath;
   unsigned                   internalPriority;
-};  /* End struct `Priority' */
+}; /* End struct `Priority' */
 
 
 /* -------------------------------------------------------------------------- */
@@ -44,7 +44,7 @@ struct Package
   std::string path;
   bool        active;
   Priority    priority;
-};  /* End struct `Package' */
+}; /* End struct `Package' */
 
 
 /* -------------------------------------------------------------------------- */
@@ -57,17 +57,15 @@ public:
 
   BuildEnvFileConflictError( const std::string fileA,
                              const std::string fileB,
-                             int priority )
+                             int               priority )
     : FloxException(
-        "buildenv file conflict",
-        nix::fmt(
-          "there is a conflict for the files with priority %zu: `%s' and `%s'"
-        ),
-        priority,
-        fileA,
-        fileB
-      )
-    {}
+      "buildenv file conflict",
+      nix::fmt(
+        "there is a conflict for the files with priority %zu: `%s' and `%s'" ),
+      priority,
+      fileA,
+      fileB )
+  {}
 
   [[nodiscard]] error_category
   getErrorCode() const noexcept override
@@ -82,7 +80,7 @@ public:
   }
 
 
-};  /* End class `BuildEnvFileConflictError' */
+}; /* End class `BuildEnvFileConflictError' */
 
 
 /* -------------------------------------------------------------------------- */
@@ -126,8 +124,8 @@ createFloxEnv( nix::EvalState &     state,
 const nix::StorePath &
 createEnvironmentStorePath(
   flox::buildenv::std::vector<Package> & pkgs,
-  nix::EvalState &           state,
-  nix::StorePathSet &        references,
+  nix::EvalState &                       state,
+  nix::StorePathSet &                    references,
   std::map<nix::StorePath, std::pair<std::string, resolver::LockedPackageRaw>> &
     originalPackage );
 

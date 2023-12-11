@@ -7,8 +7,8 @@
  *
  * -------------------------------------------------------------------------- */
 
-#include <fstream>
 #include <filesystem>
+#include <fstream>
 
 #include <nix/command.hh>
 #include <nix/derivations.hh>
@@ -25,7 +25,6 @@
 #include <nix/util.hh>
 #include <nlohmann/json.hpp>
 
-#include "flox/resolver/lockfile.hh"
 #include "flox/buildenv/realise.hh"
 #include "flox/resolver/lockfile.hh"
 
@@ -70,8 +69,8 @@ fi
 /* -------------------------------------------------------------------------- */
 
 static const nix::StorePath
-addDirToStore( nix::EvalState &         state,
-               std::string const &        dir,
+addDirToStore( nix::EvalState &    state,
+               std::string const & dir,
                nix::StorePathSet & references )
 {
 
@@ -106,9 +105,9 @@ addDirToStore( nix::EvalState &         state,
 
 const nix::StorePath
 createEnvironmentStorePath(
-  nix::EvalState &           state,
+  nix::EvalState &       state,
   std::vector<Package> & pkgs,
-  nix::StorePathSet &        references,
+  nix::StorePathSet &    references,
   std::map<StorePath, std::pair<std::string, resolver::LockedPackageRaw>> &
     originalPackage )
 {
