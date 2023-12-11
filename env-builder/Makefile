@@ -18,11 +18,12 @@ include $(MAKEFILE_DIR)/Include.mk
 
 include $(MK_DIR)/utils.mk
 include $(MK_DIR)/platform.mk
+include $(MK_DIR)/nix.mk
 
 
 # ---------------------------------------------------------------------------- #
 
-VERSION := $(file < $(MAKEFILE_DIR)/version)
+VERSION := $(file < $(ENV_BUILDER_ROOT)/version)
 
 
 # ---------------------------------------------------------------------------- #
@@ -30,7 +31,7 @@ VERSION := $(file < $(MAKEFILE_DIR)/version)
 # Install Prefixes
 # ----------------
 
-PREFIX     ?= $(MAKEFILE_DIR)/out
+PREFIX     ?= $(ENV_BUILDER_ROOT)/out
 BINDIR     ?= $(PREFIX)/bin
 LIBDIR     ?= $(PREFIX)/lib
 INCLUDEDIR ?= $(PREFIX)/include
@@ -39,40 +40,35 @@ INCLUDEDIR ?= $(PREFIX)/include
 # ---------------------------------------------------------------------------- #
 
 # Our shared library target
-LIBFLOXENVBUILDER = libflox-env-builder$(libExt)
+LIBFLOXENVBUILDER = libenvbuilder$(libExt)
 
 # Various file and target lists
 
 LIBS           = $(LIBFLOXENVBUILDER)
-COMMON_HEADERS = $(call rwildcard,include,*.hh)
+HEADERS = $(call rwildcard,include,*.hh)
 SRCS           = $(call rwildcard,src,*.cc)
 bin_SRCS       = src/main.cc src/help.cc
 lib_SRCS       = $(filter-out $(bin_SRCS),$(SRCS))
-test_SRCS      = $(call rwildcard,test,*.cc)
-ALL_SRCS       = $(SRCS) $(test_SRCS)
-BINS           = flox-env-builder
-TEST_UTILS     =
-TESTS          = $(patsubst test/%.cc,%,$(test_SRCS))
-CLEANDIRS	   =
-CLEANFILES	   = $(ALL_SRCS:.cc=.o)
+BINS           = env-builder
+CLEANDIRS	     =
+CLEANFILES	   = $(SRCS:.cc=.o)
 CLEANFILES     += $(addprefix bin/,$(BINS)) $(addprefix lib/,$(LIBS))
-CLEANFILES     += $(TESTS) $(TEST_UTILS)
 FULLCLEANDIRS  =
 FULLCLEANFILES =
 
 # Where to find test suite input data files.
-TEST_DATA_DIR = $(MAKEFILE_DIR)/tests/fixtures
+TEST_DATA_DIR = $(ENV_BUILDER_ROOT)/tests/fixtures
 
 
 # ---------------------------------------------------------------------------- #
 
 # Files which effect dependencies, external inputs, and `*FLAGS' values.
-DEPFILES =  ../flake.nix ../flake.lock
-DEPFILES += ../pkgs/nlohmann_json.nix
-DEPFILES += ../pkgs/nix/default.nix
-DEPFILES += ../pkgs/flox-pkgdb/default.nix
-DEPFILES += ../pkgs/flox-env-builder/default.nix
-DEPFILES += ../shells/flox/default.nix
+DEPFILES =
+DEPFILES += $(addprefix $(REPO_ROOT)/flake.,nix lock)
+DEPFILES += $(REPO_ROOT)/pkgs/flox-pkgdb/default.nix
+DEPFILES += $(REPO_ROOT)/pkgs/flox-env-builder/default.nix
+DEPFILES += $(REPO_ROOT)/pkgs/nlohmann_json/default.nix
+DEPFILES += $(REPO_ROOT)/shells/default/default.nix
 
 
 # ---------------------------------------------------------------------------- #
@@ -94,8 +90,10 @@ endif	# ifndef EXTRA_CXXFLAGS
 
 
 CXXFLAGS ?= $(EXTRA_CFLAGS) $(EXTRA_CXXFLAGS)
-CXXFLAGS += '-I$(MAKEFILE_DIR)/include'
+CXXFLAGS += '-I$(ENV_BUILDER_ROOT)/include'
 CXXFLAGS += '-DFLOX_ENV_BUILDER_VERSION="$(VERSION)"'
+CXXFLAGS += -D'PROFILE_D_SCRIPT_DIR="$(PROFILE_D_SCRIPT_DIR)"'
+CXXFLAGS += -D'SET_PROMPT_BASH_SH="$(SET_PROMPT_BASH_SH)"'
 LDFLAGS  ?= $(EXTRA_LDFLAGS)
 
 
@@ -114,8 +112,8 @@ bin_LDFLAGS  ?=
 # Debug Mode
 ifneq ($(DEBUG),)
 ifeq (gcc,$(TOOLCHAIN))
-CXXFLAGS += -ggdb3 -pg
-LDFLAGS  += -ggdb3 -pg
+CXXFLAGS += -ggdb3 -pg -fno-omit-frame-pointer
+LDFLAGS  += -ggdb3 -pg -fno-omit-frame-pointer
 else # Clang
 CXXFLAGS += -g -pg
 LDFLAGS  += -g -pg
@@ -124,8 +122,8 @@ endif # ifneq ($(DEBUG),)
 
 # Coverage Mode
 ifneq ($(COV),)
-CXXFLAGS += -fprofile-arcs -ftest-coverage
-LDFLAGS  += -fprofile-arcs -ftest-coverage
+CXXFLAGS += --coverage -fprofile-arcs -ftest-coverage
+LDFLAGS  += --coverage -fprofile-arcs -ftest-coverage
 endif # ifneq ($(COV),)
 
 
@@ -134,18 +132,10 @@ endif # ifneq ($(COV),)
 # Dependency Flags
 # ----------------
 
-nljson_CFLAGS ?=                                                            \
-	$(patsubst -I%,-isystem %,$(shell $(PKG_CONFIG) --cflags nlohmann_json))
-nljson_CFLAGS := $(nljson_CFLAGS)
-
-# TODO:
-##argparse_CFLAGS ?=                                                     \
-##	$(patsubst -I%,-isystem %,$(shell $(PKG_CONFIG) --cflags argparse))
-##argparse_CFLAGS := $(argparse_CFLAGS)
-
 sqlite3pp_CFLAGS ?=                                                     \
 	$(patsubst -I%,-isystem %,$(shell $(PKG_CONFIG) --cflags sqlite3pp))
 sqlite3pp_CFLAGS := $(sqlite3pp_CFLAGS)
+
 
 nix_INCDIR ?= $(shell $(PKG_CONFIG) --variable=includedir nix-cmd)
 nix_INCDIR := $(nix_INCDIR)
@@ -164,76 +154,65 @@ nix_LDFLAGS += -lnixfetchers
 endif # ifndef nix_LDFLAGS
 nix_LDFLAGS := $(nix_LDFLAGS)
 
-# FIXME
-ifndef pkgdb_LDFLAGS
-ifeq (Linux,$(OS))
-pkgdb_LDFLAGS = -Wl,--enable-new-dtags
-pkgdb_LDFLAGS += '-Wl,-rpath,$$ORIGIN/../../pkgdb/lib'
-pkgdb_LDFLAGS += '-L$(dir $(MAKEFILE_DIR))pkgdb/lib' -lflox-pkgdb
-else  # Darwin
-ifneq "$(findstring install,$(MAKECMDGOALS))" ""
-pkgdb_LDFLAGS = '-L$(LIBDIR)'
-else
-pkgdb_LDFLAGS += '-L$(dir $(MAKEFILE_DIR))pkgdb/lib'
-pkgdb_LDFLAGS += -rpath @executable_path/../../pkgdb/lib
-endif # ifneq $(,$(findstring install,$(MAKECMDGOALS)))
-pkgdb_LDFLAGS += -lflox-pkgdb
-endif # ifeq (Linux,$(OS))
-endif # ifndef pkgdb_LDFLAGS
-
-# FIXME
 ifndef pkgdb_CFLAGS
-pkgdb_CFLAGS = $(shell $(PKG_CONFIG) --cflags flox-pkgdb)
-pkgdb_CFLAGS := $(pkgdb_CFLAGS)
+# Try `pkg-config'
+pkgdb_CFLAGS = $(shell $(PKG_CONFIG) --cflags pkgdb||:)
+# If `pkg-config' fails, try local path with manual includes.
 ifeq (,$(pkgdb_CFLAGS))
-pkgdb_CFLAGS = -isystem $(dir $(MAKEFILE_DIR))pkgdb/include
+pkgdb_CFLAGS =  -isystem $(REPO_ROOT)/pkgdb/include
+pkgdb_CFLAGS += $(sqlite3pp_CFLAGS)
+pkgdb_CFLAGS += -isystem $(nix_INCDIR) -include $(nix_INCDIR)/nix/config.h
 endif # ifeq (,$(pkgdb_CFLAGS))
 endif # ifndef pkgdb_CFLAGS
 
+ifndef pkgdb_LDFLAGS
+# Try `pkg-config'
+pkgdb_LDFLAGS = $(shell $(PKG_CONFIG) --libs pkgdb||:)
+# If `pkg-config' fails, try local path with manual linkage.
+ifeq (,$(pkgdb_LDFLAGS))
+# Add recipe to build libpkgdb
+$(REPO_ROOT)/pkgdb/lib/libpkgdb$(libExt): $(REPO_ROOT)/pkgdb/Makefile
+$(REPO_ROOT)/pkgdb/lib/libpkgdb$(libExt): $(call rwildcard,$(REPO_ROOT)/pkgdb/include,*.hh)
+$(REPO_ROOT)/pkgdb/lib/libpkgdb$(libExt): $(call rwildcard,$(REPO_ROOT)/pkgdb/src,*.cc *.hh)
+	$(MAKE) -C $(REPO_ROOT)/pkgdb lib/libpkgdb$(libExt)
+lib/$(LIBENVBUILDER): $(REPO_ROOT)/pkgdb/lib/libpkgdb$(libExt)
 
-ifndef flox_env_builder_LDFLAGS
+pkgdb_LDFLAGS = '-L$(REPO_ROOT)/pkgdb/lib'
 ifeq (Linux,$(OS))
-flox_env_builder_LDFLAGS = -Wl,--enable-new-dtags '-Wl,-rpath,$$ORIGIN/../lib'
-flox_env_builder_LDFLAGS += '-L$(MAKEFILE_DIR)/lib' -lflox-env-builder
+pkgdb_LDFLAGS += -Wl,--enable-new-dtags '-Wl,-rpath,$$ORIGIN/../../pkgdb/lib'
+else  # Darwin
+ifeq "$(findstring install,$(MAKECMDGOALS))" ""
+pkgdb_LDFLAGS += -rpath @executable_path/../../pkgdb/lib
+endif # ifeq $(,$(findstring install,$(MAKECMDGOALS)))
+endif # ifeq (Linux,$(OS))
+pkgdb_LDFLAGS += -lpkgdb
+pkgdb_LDFLAGS += $(shell $(PKG_CONFIG) --libs-only-L nix-main) -lnixfetchers
+endif # ifeq (,$(pkgdb_LDFLAGS))
+endif # ifndef pkgdb_LDFLAGS
+
+
+ifndef libenvbuilder_LDFLAGS
+libenvbuilder_LDFLAGS = '-L$(ENV_BUILDER_ROOT)/lib'
+ifeq (Linux,$(OS))
+libenvbuilder_LDFLAGS += -Wl,--enable-new-dtags '-Wl,-rpath,$$ORIGIN/../lib'
 else  # Darwin
 ifneq "$(findstring install,$(MAKECMDGOALS))" ""
-flox_env_builder_LDFLAGS = '-L$(LIBDIR)'
+libenvbuilder_LDFLAGS = '-L$(LIBDIR)'
 else
-flox_env_builder_LDFLAGS += '-L$(MAKEFILE_DIR)/lib'
-flox_env_builder_LDFLAGS += -rpath @executable_path/../lib
+libenvbuilder_LDFLAGS += '-L$(ENV_BUILDER_ROOT)/lib'
+libenvbuilder_LDFLAGS += -rpath @executable_path/../lib
 endif # ifneq $(,$(findstring install,$(MAKECMDGOALS)))
-flox_env_builder_LDFLAGS += -lflox-env-builder
 endif # ifeq (Linux,$(OS))
-endif # ifndef flox_env_builder_LDFLAGS
+libenvbuilder_LDFLAGS += -lenvbuilder
+endif # ifndef libenvbuilder_LDFLAGS
 
 
 # ---------------------------------------------------------------------------- #
 
-CXXFLAGS += $(nix_CFLAGS) $(nljson_CFLAGS)
-LDFLAGS  += $(nix_LDFLAGS)
+CXXFLAGS += $(pkgdb_CFLAGS) $(nix_CFLAGS)
+LDFLAGS  += $(pkgdb_LDFLAGS) $(nix_LDFLAGS)
 
-bin_CXXFLAGS += -D'PROFILE_D_SCRIPT_DIR="$(PROFILE_D_SCRIPT_DIR)"'
-bin_CXXFLAGS += -D'SET_PROMPT_BASH_SH="$(SET_PROMPT_BASH_SH)"'
-
-
-# ---------------------------------------------------------------------------- #
-
-lib_CXXFLAGS += $(pkgdb_CFLAGS)
-# TODO:
-##bin_CXXFLAGS += $(argparse_CFLAGS)
-CXXFLAGS += $(nix_CFLAGS) $(nljson_CFLAGS)
-
-ifeq (gcc,$(TOOLCHAIN))
-lib_LDFLAGS += -Wl,--as-needed
-endif # ifeq (gcc,$(TOOLCHAIN))
-
-lib_LDFLAGS += $(pkgdb_LDFLAGS)
-
-ifeq (gcc,$(TOOLCHAIN))
-lib_LDFLAGS += -Wl,--no-as-needed
-endif # ifeq (gcc,$(TOOLCHAIN))
-
-bin_LDFLAGS += $(flox_env_builder_LDFLAGS)
+bin_LDFLAGS += $(libenvbuilder_LDFLAGS)
 
 
 # ---------------------------------------------------------------------------- #
@@ -248,7 +227,7 @@ bin:     lib $(addprefix bin/,$(BINS))
 #: Build libraries
 lib:     $(addprefix lib/,$(LIBS))
 #: Build/generate include files
-include: $(COMMON_HEADERS)
+include: $(HEADERS)
 #: Build test executables and resources
 tests:   $(TESTS) $(TEST_UTILS)
 
@@ -272,42 +251,24 @@ fullclean: clean
 
 # ---------------------------------------------------------------------------- #
 
-%.o: %.cc $(COMMON_HEADERS)
+%.o: %.cc $(HEADERS)
 	$(CXX) $(CXXFLAGS) -c $< -o $@;
 
-ifeq (Linux,$(OS))
-SONAME_FLAG = -Wl,-soname,$(LIBFLOXENVBUILDER)
-else
-SONAME_FLAG =
-endif
-
-ifneq (Linux,$(OS))
-LINK_INAME_FLAG = -install_name '@rpath/$(LIBFLOXENVBUILDER)'
-lib/$(LIBFLOXENVBUILDER): LDFLAGS += $(LINK_INAME_FLAG)
-endif # ifneq (Linux,$(OS))
-lib/$(LIBFLOXENVBUILDER): LDFLAGS  += $(lib_LDFLAGS)
-lib/$(LIBFLOXENVBUILDER): CXXFLAGS += $(lib_CXXFLAGS)
-lib/$(LIBFLOXENVBUILDER): $(lib_SRCS:.cc=.o)
+$(addprefix lib/,$(LIBS)): %: LDFLAGS  += $(lib_LDFLAGS)
+$(addprefix lib/,$(LIBS)): %: CXXFLAGS += $(lib_CXXFLAGS)
+$(addprefix lib/,$(LIBS)): %: $(lib_SRCS:.cc=.o)
 	$(MKDIR_P) $(@D);
-	$(CXX) $(filter %.o,$^) $(LDFLAGS) $(SONAME_FLAG) -o $@;
+	$(CXX) $(filter %.o,$^) $(LDFLAGS) $(call set_binary_name,$(@F)) -o $@;
 
 
 # ---------------------------------------------------------------------------- #
 
-$(bin_SRCS:.cc=.o): %.o: %.cc $(COMMON_HEADERS)
+$(bin_SRCS:.cc=.o): %.o: %.cc $(HEADERS)
 	$(CXX) $(CXXFLAGS) $(bin_CXXFLAGS) -c $< -o $@;
 
-bin/flox-env-builder: $(bin_SRCS:.cc=.o) lib/$(LIBFLOXENVBUILDER)
+$(addprefix bin/,$(BINS)): %: $(bin_SRCS:.cc=.o) lib/$(LIBFLOXENVBUILDER)
 	$(MKDIR_P) $(@D);
 	$(CXX) $(filter %.o,$^) $(LDFLAGS) $(bin_LDFLAGS) -o $@;
-
-
-# ---------------------------------------------------------------------------- #
-
-$(TESTS) $(TEST_UTILS): $(COMMON_HEADERS)
-$(TESTS) $(TEST_UTILS): bin_CXXFLAGS += '-DTEST_DATA_DIR="$(TEST_DATA_DIR)"'
-$(TESTS) $(TEST_UTILS): tests/%: tests/%.cc lib/$(LIBFLOXENVBUILDER)
-	$(CXX) $(CXXFLAGS) $(bin_CXXFLAGS) $< $(LDFLAGS) $(bin_LDFLAGS) -o $@;
 
 
 # ---------------------------------------------------------------------------- #
@@ -326,11 +287,11 @@ $(DEPFILES): %:
 # We don't actually use these in our build.
 .PHONY: pre-compiled-headers clean-pch
 
-PRE_COMPILED_HEADERS = $(patsubst %,%.gch,$(COMMON_HEADERS))
+PRE_COMPILED_HEADERS = $(patsubst %,%.gch,$(HEADERS))
 CLEANFILES += $(PRE_COMPILED_HEADERS)
 
 $(PRE_COMPILED_HEADERS): CXXFLAGS += $(lib_CXXFLAGS) $(bin_CXXFLAGS)
-$(PRE_COMPILED_HEADERS): $(COMMON_HEADERS) $(DEPFILES)
+$(PRE_COMPILED_HEADERS): $(HEADERS) $(DEPFILES)
 $(PRE_COMPILED_HEADERS): $(lastword $(MAKEFILE_LIST))
 $(PRE_COMPILED_HEADERS): %.gch: %
 	$(CXX) $(CXXFLAGS) -x c++-header -c $< -o $@ 2>/dev/null;
@@ -357,16 +318,11 @@ ccls: .ccls
 
 .ccls: $(lastword $(MAKEFILE_LIST)) $(DEPFILES)
 	@echo '%compile_commands.json' > "$@";
-	{                                                                 \
-	  if $(TEST) -n "$(NIX_CC)"; then                                 \
-	    $(CAT) "$(NIX_CC)/nix-support/libc-cflags";                   \
-	    $(CAT) "$(NIX_CC)/nix-support/libcxx-cxxflags";               \
-	  fi;                                                             \
-	  echo $(CXXFLAGS) $(nljson_CFLAGS) $(nix_CFLAGS);                \
-	  echo $(argparse_CFLAGS) $(pkgdb_CFLAGS);                        \
-	  echo '-DTEST_DATA_DIR="$(TEST_DATA_DIR)"';                      \
-	}|$(TR) ' ' '\n'|$(SED) 's/-std=\(.*\)/%cpp -std=\1|%h -std=\1/'  \
-	 |$(TR) '|' '\n' >> "$@";
+	@_std='-std=$(call get_cc_std,$(CXXFLAGS) $(pkgdb_CFLAGS))';  \
+	 echo "%h $$_std" >> $@;                                      \
+	 echo "%cpp $$_std" >> $@;
+	@printf '%s\n' $(CXXFLAGS) $(pkgdb_CFLAGS)                                 \
+	               $(NIX_CC_WRAPPER_CFLAGS) $(NIX_CC_WRAPPER_CXXFLAGS) >> $@;
 
 FULLCLEANFILES += .ccls
 
@@ -374,16 +330,6 @@ FULLCLEANFILES += .ccls
 # ---------------------------------------------------------------------------- #
 
 # Create `compile_commands.json' file used by LSPs.
-
-# Get system include paths from `nix' C++ compiler.
-# Filter out framework directory, e.g.
-# /nix/store/q2d0ya7rc5kmwbwvsqc2djvv88izn1q6-apple-framework-CoreFoundation-11.0.0/Library/Frameworks (framework directory)
-# We might be able to strip '(framework directory)' instead and append
-# CoreFoundation.framework/Headers but I don't think we need to.
-_CXX_SYSTEM_INCDIRS := $(shell                                \
-  $(CXX) -E -Wp,-v -xc++ /dev/null 2>&1 1>/dev/null           \
-  |$(GREP) -v 'framework directory'|$(GREP) '^ /nix/store')
-_CXX_SYSTEM_INCDIRS := $(patsubst %,-isystem %,$(_CXX_SYSTEM_INCDIRS))
 
 BEAR_WRAPPER := $(dir $(shell command -v $(BEAR)))
 BEAR_WRAPPER := $(dir $(patsubst %/,%,$(BEAR_WRAPPER)))lib/bear/wrapper
@@ -397,15 +343,15 @@ FULLCLEANDIRS += bear.d
 compile_commands.json: EXTRA_CXXFLAGS += $(_CXX_SYSTEM_INCDIRS)
 compile_commands.json: bear.d/c++ $(DEPFILES)
 compile_commands.json: $(lastword $(MAKEFILE_LIST))
-compile_commands.json: $(COMMON_HEADERS) $(ALL_SRCS)
-	-$(MAKE) -C $(MAKEFILE_DIR) clean;
-	EXTRA_CXXFLAGS='$(EXTRA_CXXFLAGS)'                  \
-	  PATH="$(MAKEFILE_DIR)/bear.d/:$(PATH)"            \
-	  $(BEAR) -- $(MAKE) -C $(MAKEFILE_DIR) bin tests;
-	EXTRA_CXXFLAGS='$(EXTRA_CXXFLAGS)'                                      \
-	  PATH="$(MAKEFILE_DIR)/bear.d/:$(PATH)"                                \
-	  $(BEAR) --append -- $(MAKE) -C $(MAKEFILE_DIR) pre-compiled-headers;
-	$(MAKE) -C $(MAKEFILE_DIR) clean-pch;
+compile_commands.json: $(HEADERS) $(SRCS)
+	-$(MAKE) -C $(ENV_BUILDER_ROOT) clean;
+	EXTRA_CXXFLAGS='$(EXTRA_CXXFLAGS)'                      \
+	  PATH="$(ENV_BUILDER_ROOT)/bear.d/:$(PATH)"            \
+	  $(BEAR) -- $(MAKE) -C $(ENV_BUILDER_ROOT) bin tests;
+	EXTRA_CXXFLAGS='$(EXTRA_CXXFLAGS)'                                          \
+	  PATH="$(ENV_BUILDER_ROOT)/bear.d/:$(PATH)"                                \
+	  $(BEAR) --append -- $(MAKE) -C $(ENV_BUILDER_ROOT) pre-compiled-headers;
+	$(MAKE) -C $(ENV_BUILDER_ROOT) clean-pch;
 
 FULLCLEANFILES += compile_commands.json
 
@@ -431,7 +377,7 @@ cdb: compilation-databases
 ## #: Generate `include-what-you-use' report
 ## iwyu: iwyu.log
 ##
-## iwyu.log: compile_commands.json $(COMMON_HEADERS) $(ALL_SRCS) flake.nix
+## iwyu.log: compile_commands.json $(HEADERS) $(SRCS) flake.nix
 ## iwyu.log: flake.lock pkg-fun.nix pkgs/nlohmann_json.nix pkgs/nix/pkg-fun.nix
 ## iwyu.log: build-aux/iwyu build-aux/iwyu-mappings.json
 ## 	build-aux/iwyu|$(TEE) "$@";
@@ -443,39 +389,23 @@ cdb: compilation-databases
 
 .PHONY: lint
 #: Run `clang-tidy' across entire project
-lint: compile_commands.json $(COMMON_HEADERS) $(ALL_SRCS)
+lint: compile_commands.json $(HEADERS) $(SRCS)
 	$(TIDY) $(filter-out compile_commands.json,$^);
 
 
 # ---------------------------------------------------------------------------- #
 
-.PHONY: check cc-check bats-check
+.PHONY: check bats-check
 
 #: Run all tests
-check: cc-check bats-check
-
-#: Run all C++ unit tests
-cc-check: $(TESTS:.cc=)
-	@_ec=0;                     \
-	echo '';                    \
-	for t in $(TESTS:.cc=); do  \
-	  echo "Testing: $$t";      \
-	  if "./$$t"; then          \
-	    echo "PASS: $$t";       \
-	  else                      \
-	    _ec=1;                  \
-	    echo "FAIL: $$t";       \
-	  fi;                       \
-	  echo '';                  \
-	done;                       \
-	exit "$$_ec";
+check: bats-check
 
 #: Run all bats tests
-BATS_FILE ?= $(MAKEFILE_DIR)/tests
+BATS_FILE ?= $(ENV_BUILDER_ROOT)/tests
 bats-check: bin $(TEST_UTILS)
-	PKGDB="$(MAKEFILE_DIR)/bin/pkgdb"                        \
-	IS_SQLITE3="$(MAKEFILE_DIR)/tests/is_sqlite3"            \
-	SEARCH_PARAMS="$(MAKEFILE_DIR)/tests/search-params"      \
+	PKGDB="$(ENV_BUILDER_ROOT)/bin/pkgdb"                    \
+	IS_SQLITE3="$(ENV_BUILDER_ROOT)/tests/is_sqlite3"        \
+	SEARCH_PARAMS="$(ENV_BUILDER_ROOT)/tests/search-params"  \
 	  bats --print-output-on-failure --verbose-run --timing  \
 	       "$(BATS_FILE)";
 
@@ -552,7 +482,7 @@ tests/.gitignore: FORCE
 
 .PHONY: fmt
 #: Run `clang-format' across entire project
-fmt: $(COMMON_HEADERS) $(ALL_SRCS)
+fmt: $(HEADERS) $(SRCS)
 	$(FMT) -i $^;
 
 

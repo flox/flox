@@ -17,7 +17,7 @@
 #include <sys/types.h>
 #include <vector>
 
-#include "flox/env-builder/buildenv.hh"
+#include <flox/env-builder/buildenv.hh>
 
 
 /* -------------------------------------------------------------------------- */

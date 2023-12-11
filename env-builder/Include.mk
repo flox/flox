@@ -19,11 +19,16 @@ MAKEFILE_DIR  ?= $(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
 REPO_ROOT     ?= $(patsubst %/,%,$(dir $(MAKEFILE_DIR)))
 REPO_ROOT     := $(REPO_ROOT)
 BUILD_AUX_DIR ?= $(REPO_ROOT)/build-aux
+BUILD_AUX_DIR := $(BUILD_AUX_DIR)
 MK_DIR        ?= $(BUILD_AUX_DIR)/mk
+MK_DIR        := $(MK_DIR)
 
 ifeq (,$(wildcard $(REPO_ROOT)/env-builder/))
 $(error "Unable to locate repository root")
 endif
+
+ENV_BUILDER_ROOT ?= $(REPO_ROOT)/env-builder
+ENV_BUILDER_ROOT := $(ENV_BUILDER_ROOT)
 
 
 # ---------------------------------------------------------------------------- #
@@ -31,7 +36,6 @@ endif
 include $(MK_DIR)/platform.mk
 include $(MK_DIR)/lib.mk
 include $(MK_DIR)/files.mk
-include $(MK_DIR)/flags.mk
 
 # ---------------------------------------------------------------------------- #
 

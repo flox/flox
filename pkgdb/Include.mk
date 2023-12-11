@@ -28,7 +28,7 @@ endif
 
 # ---------------------------------------------------------------------------- #
 
-include $(addprefix $(MK_DIR)/,platform.mk lib.mk files.mk flags.mk)
+include $(addprefix $(MK_DIR)/,platform.mk lib.mk files.mk)
 sinclude $(REPO_ROOT)/config.mk
 
 # ---------------------------------------------------------------------------- #

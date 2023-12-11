@@ -12,11 +12,23 @@ __MK_FILES = 1
 
 # ---------------------------------------------------------------------------- #
 
-ifeq (,$(MK_DIR))
-$(error "$(lastword $(MAKEFILE_LIST)): MK_DIR is not set")
-endif  # ifeq (,$(MK_DIR))
+MK_DIR ?= $(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
+MK_DIR := $(abspath $(MK_DIR))
+
+# ---------------------------------------------------------------------------- #
 
 include $(MK_DIR)/lib.mk
+
+# ---------------------------------------------------------------------------- #
+
+# Repo directories.
+
+BUILD_AUX_DIR ?= $(patsubst %/,%,$(MK_DIR))
+BUILD_AUX_DIR := $(abspath $(BUILD_AUX_DIR))
+
+REPO_ROOT ?= $(patsubst %/,%,$(dir $(BUILD_AUX_DIR)))
+REPO_ROOT := $(abspath $(REPO_ROOT))
+
 
 # ---------------------------------------------------------------------------- #
 

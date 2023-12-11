@@ -12,9 +12,10 @@ __MK_CLEAN = 1
 
 # ---------------------------------------------------------------------------- #
 
-ifeq (,$(MK_DIR))
-$(error "$(lastword $(MAKEFILE_LIST)): MK_DIR is not set")
-endif  # ifeq (,$(MK_DIR))
+MK_DIR ?= $(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
+MK_DIR := $(abspath $(MK_DIR))
+
+# ---------------------------------------------------------------------------- #
 
 include $(MK_DIR)/utils.mk
 include $(MK_DIR)/files.mk

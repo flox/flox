@@ -12,9 +12,10 @@ __MK_PLATFORM = 1
 
 # ---------------------------------------------------------------------------- #
 
-ifeq (,$(MK_DIR))
-$(error "$(lastword $(MAKEFILE_LIST)): MK_DIR is not set")
-endif  # ifeq (,$(MK_DIR))
+MK_DIR ?= $(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
+MK_DIR := $(abspath $(MK_DIR))
+
+# ---------------------------------------------------------------------------- #
 
 include $(MK_DIR)/utils.mk
 
@@ -64,11 +65,18 @@ endif  # ifndef TOOLCHAIN
 ifeq (linux,$(OS))
 RELATIVE_RPATH_FLAG = -Wl,--enable-new-dtags '-Wl,-rpath,$$$$ORIGIN/../lib'
 # Set/append the executable's `RUNPATH' to the given path.
-set_rpath = -Wl,--enable-new-dtags '-Wl,--rpath,$(1)'
+set_rpath = -Wl,--enable-new-dtags '-Wl,--rpath,$$(notdir $(1))'
+# Set/append the executable's `SONAME'.
+set_binary_name = '-Wl,-soname,$(1)'
 else  # Darwin
 RELATIVE_RPATH_FLAG = -rpath @executable_path/../lib
 # Set/append the executable's `RPATH' to the given path.
-set_rpath = -rpath $(1)
+set_rpath  = -rpath $(1)
+# Set/append the executable's _install name_ ( OSX `SONAME' equivalent ).
+set_binary_name =$(strip
+  $$(if $$(filter $(1),$$(notdir $(1))),\
+  $$(error Binary name must be a basename, but got: '$(1)'),\
+  -install_name '@rpath/$(1)'))
 endif  # ifeq (linux,$(OS))
 
 
