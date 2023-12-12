@@ -126,6 +126,27 @@ Environment::getOldManifestRaw() const
 
 /* -------------------------------------------------------------------------- */
 
+bool
+Environment::upgradingGroup( const GroupName & name ) const
+{
+  bool upgrading;
+  std::visit( overloaded { [&]( bool upgradeEverything )
+                           { upgrading = upgradeEverything; },
+
+                           [&]( const std::vector<GroupName> & upgrades )
+                           {
+                             upgrading = std::find( upgrades.begin(),
+                                                    upgrades.end(),
+                                                    name )
+                                         != upgrades.end();
+                           } },
+              this->upgrades );
+  return upgrading;
+}
+
+
+/* -------------------------------------------------------------------------- */
+
 /**
  * @brief Helper function for @a flox::resolver::Environment::groupIsLocked.
  *
@@ -144,10 +165,15 @@ systemSkipped( const System &                             system,
 /* -------------------------------------------------------------------------- */
 
 bool
-Environment::groupIsLocked( const InstallDescriptors & group,
+Environment::groupIsLocked( const GroupName &          name,
+                            const InstallDescriptors & group,
                             const Lockfile &           oldLockfile,
                             const System &             system ) const
 {
+  /* If the group is being upgraded, the group needs to be
+   * locked again. */
+  if ( upgradingGroup( name ) ) { return false; }
+
   auto packages = oldLockfile.getLockfileRaw().packages;
   if ( ! packages.contains( system ) ) { return false; }
 
@@ -158,26 +184,6 @@ Environment::groupIsLocked( const InstallDescriptors & group,
   /* Check for upgrades. */
   for ( auto & [iid, descriptor] : group )
     {
-      /* Check for upgrades. */
-      if ( const bool * upgradeEverything
-           = std::get_if<bool>( &this->upgrades ) )
-        {
-          /* If we are upgrading everything, we treat all groups
-           * as "unlocked". */
-          if ( *upgradeEverything ) { return false; }
-        }
-      else
-        {
-          /* If the current iid is being upgraded, the group needs to be
-           * locked again. */
-          auto upgrades = std::get<std::vector<InstallID>>( this->upgrades );
-          if ( std::find( upgrades.begin(), upgrades.end(), iid )
-               != upgrades.end() )
-            {
-              return false;
-            }
-        }
-
       /* If the descriptor has changed compared to the one in the lockfile
        * manifest, it needs to be locked again. */
       if ( auto oldDescriptorPair = oldDescriptors.find( iid );
@@ -237,21 +243,22 @@ Environment::groupIsLocked( const InstallDescriptors & group,
 
 /* -------------------------------------------------------------------------- */
 
-std::vector<InstallDescriptors>
+Groups
 Environment::getUnlockedGroups( const System & system )
 {
-  auto lockfile           = this->getOldLockfile();
-  auto groupedDescriptors = this->getManifest().getGroupedDescriptors();
+  auto   lockfile           = this->getOldLockfile();
+  Groups groupedDescriptors = this->getManifest().getGroupedDescriptors();
   if ( ! lockfile.has_value() ) { return groupedDescriptors; }
 
-  for ( auto group = groupedDescriptors.begin();
-        group != groupedDescriptors.end(); )
+  for ( auto groupIterator = groupedDescriptors.begin();
+        groupIterator != groupedDescriptors.end(); )
     {
-      if ( groupIsLocked( *group, *lockfile, system ) )
+      const auto & [name, group] = *groupIterator;
+      if ( groupIsLocked( name, group, *lockfile, system ) )
         {
-          group = groupedDescriptors.erase( group );
+          groupIterator = groupedDescriptors.erase( groupIterator );
         }
-      else { ++group; }
+      else { ++groupIterator; }
     }
 
   return groupedDescriptors;
@@ -260,23 +267,24 @@ Environment::getUnlockedGroups( const System & system )
 
 /* -------------------------------------------------------------------------- */
 
-std::vector<InstallDescriptors>
+Groups
 Environment::getLockedGroups( const System & system )
 {
   auto lockfile = this->getOldLockfile();
-  if ( ! lockfile.has_value() ) { return std::vector<InstallDescriptors> {}; }
+  if ( ! lockfile.has_value() ) { return Groups {}; }
 
-  auto groupedDescriptors = this->getManifest().getGroupedDescriptors();
+  Groups groupedDescriptors = this->getManifest().getGroupedDescriptors();
 
   /* Remove all groups that are *not* already locked. */
-  for ( auto group = groupedDescriptors.begin();
-        group != groupedDescriptors.end(); )
+  for ( auto groupIterator = groupedDescriptors.begin();
+        groupIterator != groupedDescriptors.end(); )
     {
-      if ( ! groupIsLocked( *group, *lockfile, system ) )
+      const auto & [name, group] = *groupIterator;
+      if ( ! groupIsLocked( name, group, *lockfile, system ) )
         {
-          group = groupedDescriptors.erase( group );
+          groupIterator = groupedDescriptors.erase( groupIterator );
         }
-      else { ++group; }
+      else { ++groupIterator; }
     }
 
   return groupedDescriptors;
@@ -555,7 +563,8 @@ getGroupName( const InstallDescriptors & group )
 /* -------------------------------------------------------------------------- */
 
 ResolutionResult
-Environment::tryResolveGroup( const InstallDescriptors & group,
+Environment::tryResolveGroup( const GroupName &          name,
+                              const InstallDescriptors & group,
                               const System &             system )
 {
   /* List of resolution failures to group descriptors with the inputs they
@@ -570,47 +579,52 @@ Environment::tryResolveGroup( const InstallDescriptors & group,
   /* When there is an existing lock with this group pinned to an existing
   input+rev try to use it to resolve the group.
    * If we fail collect a list of failed descriptors; presumably these are
-   * new group members. */
+   * new group members.
+   * Skip this step if a group is being upgraded. */
   std::optional<pkgdb::PkgDbInput> oldGroupInput;
-  if ( auto oldLockfile = this->getOldLockfile(); oldLockfile.has_value() )
+  if ( ! upgradingGroup( name ) )
     {
-      debugLog( "using old lockfile" );
-      auto lockedInput
-        = getGroupInput( group, *this->getOldLockfile(), system );
-      if ( lockedInput.has_value() )
+      if ( auto oldLockfile = this->getOldLockfile(); oldLockfile.has_value() )
         {
-          RegistryInput registryInput( *lockedInput );
-          debugLog( "group previously had input: "
-                    + registryInput.from->to_string() );
-          nix::ref<nix::Store> store = this->getStore();
-          oldGroupInput = pkgdb::PkgDbInput( store, registryInput );
-
-          auto maybeResolved
-            = this->tryResolveGroupIn( group, *oldGroupInput, system );
-
-          /* If we're able to resolve the group with the same input+rev as the
-           * old lockfile's pin, then we're done. */
-          // XXX: I tried `std::variant( overloaded { ... } )' pattern here but
-          //      template deduction failed with `gcc'.
-          //      Rather than adding deduction guides and stuff `std::get_if'
-          //      is fine here.
-          if ( const SystemPackages * resolved
-               = std::get_if<SystemPackages>( &maybeResolved ) )
+          debugLog( "using old lockfile" );
+          auto lockedInput
+            = getGroupInput( group, *this->getOldLockfile(), system );
+          if ( lockedInput.has_value() )
             {
-              return *resolved;
-            }
+              RegistryInput registryInput( *lockedInput );
+              debugLog( "group previously had input: "
+                        + registryInput.from->to_string() );
+              nix::ref<nix::Store> store = this->getStore();
+              oldGroupInput = pkgdb::PkgDbInput( store, registryInput );
 
-          if ( const InstallID * iid
-               = std::get_if<InstallID>( &maybeResolved ) )
-            {
-              failure.push_back( std::pair<InstallID, std::string> {
-                *iid,
-                oldGroupInput->getDbReadOnly()->lockedRef.string } );
-            }
-          else
-            {
-              throw ResolutionFailureException(
-                "we thought this was an unreachable error" );
+              auto maybeResolved
+                = this->tryResolveGroupIn( group, *oldGroupInput, system );
+
+              /* If we're able to resolve the group with the same input+rev as
+               * the old lockfile's pin, then we're done. */
+              // XXX: I tried `std::variant( overloaded { ... } )' pattern here
+              // but
+              //      template deduction failed with `gcc'.
+              //      Rather than adding deduction guides and stuff
+              //      `std::get_if' is fine here.
+              if ( const SystemPackages * resolved
+                   = std::get_if<SystemPackages>( &maybeResolved ) )
+                {
+                  return *resolved;
+                }
+
+              if ( const InstallID * iid
+                   = std::get_if<InstallID>( &maybeResolved ) )
+                {
+                  failure.push_back( std::pair<InstallID, std::string> {
+                    *iid,
+                    oldGroupInput->getDbReadOnly()->lockedRef.string } );
+                }
+              else
+                {
+                  throw ResolutionFailureException(
+                    "we thought this was an unreachable error" );
+                }
             }
         }
     }
@@ -658,11 +672,11 @@ Environment::tryResolveGroup( const InstallDescriptors & group,
 
 /** @brief Add a decription of a resolution failure to an exception message. */
 static inline std::stringstream &
-describeResolutionFailure( std::stringstream &        msg,
-                           const InstallDescriptors & group,
-                           const ResolutionFailure &  failure )
+describeResolutionFailure( std::stringstream &       msg,
+                           const GroupName &         name,
+                           const ResolutionFailure & failure )
 {
-  msg << "  in `" << getGroupName( group ) << "': '" << std::endl;
+  msg << "  in `" << name << "': '" << std::endl;
   for ( const auto & [iid, url] : failure )
     {
       msg << "    failed to resolve `" << iid << "' in input `" << url << '\'';
@@ -688,17 +702,21 @@ Environment::lockSystem( const System & system )
   std::stringstream              msg;
   msg << "failed to resolve some package(s):" << std::endl;
 
-  for ( auto group = groups.begin(); group != groups.end(); )
+  for ( auto groupIterator = groups.begin(); groupIterator != groups.end(); )
     {
+      // It seems we do not yet have https://reviews.llvm.org/D122768
+      const auto & name  = groupIterator->first;
+      const auto & group = groupIterator->second;
       /* Push existing exception message. */
-      ResolutionResult maybeResolved = this->tryResolveGroup( *group, system );
+      ResolutionResult maybeResolved
+        = this->tryResolveGroup( name, group, system );
       std::visit(
         overloaded {
           /* Add to pkgs if the group was successfully resolved. */
           [&]( SystemPackages & resolved )
           {
             pkgs.merge( resolved );
-            group = groups.erase( group );
+            groupIterator = groups.erase( groupIterator );
           },
 
           /* Otherwise add a description of the resolution failure to msg. */
@@ -713,8 +731,8 @@ Environment::lockSystem( const System & system )
               }
 
             /* Describe the failure. */
-            describeResolutionFailure( msg, *group, failure );
-            ++group;
+            describeResolutionFailure( msg, name, failure );
+            ++groupIterator;
           } },
         maybeResolved );
     }
@@ -731,7 +749,7 @@ Environment::lockSystem( const System & system )
       SystemPackages systemPackages
         = oldLockfile->getLockfileRaw().packages.at( system );
       auto oldDescriptors = oldLockfile->getDescriptors();
-      for ( const auto & group : this->getLockedGroups( system ) )
+      for ( const auto & [_, group] : this->getLockedGroups( system ) )
         {
           for ( const auto & [iid, descriptor] : group )
             {

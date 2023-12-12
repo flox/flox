@@ -225,7 +225,9 @@ UpdateCommand::run()
         }
       lockfile = lockedRaw;
     }
-  /* If the environment doesn't have a lockfile, create one from scratch. */
+  /* If the environment doesn't have a lockfile, create one from scratch. Note
+   * that even if only some inputs are specified, this will update all inputs.
+   */
   else
     {
       // TODO: `RegistryRaw' should drop empty fields.
@@ -241,6 +243,140 @@ UpdateCommand::run()
   nlohmann::json result
     = { { "lockfile", lockfile },
         { "message", changes ? message.str() : "All inputs are up to date." } };
+  std::cout << result.dump() << std::endl;
+
+  return EXIT_SUCCESS;
+}
+
+
+/* -------------------------------------------------------------------------- */
+
+UpgradeCommand::UpgradeCommand() : parser( "upgrade" )
+{
+  this->parser.add_description(
+    "Upgrade groups or standalone packages in an environment" );
+  this->addGlobalManifestFileOption( this->parser );
+  this->addLockfileOption( this->parser );
+  this->addGARegistryOption( this->parser );
+
+  this->addManifestFileArg( this->parser, false );
+
+  this->parser.add_argument( "groups" )
+    .help( "names of groups or standalone packages to upgrade" )
+    .metavar( "GROUPS..." )
+    .remaining()
+    .action(
+      [&]( const std::string & groupOrPackageName )
+      {
+        if ( ! this->groupsOrIIDS.has_value() )
+          {
+            this->groupsOrIIDS = std::vector<std::string>();
+          }
+        this->groupsOrIIDS->emplace_back( groupOrPackageName );
+      } );
+}
+
+
+/* -------------------------------------------------------------------------- */
+
+int
+UpgradeCommand::run()
+{
+  /* Start by translating groupsOrIIDS to something we can pass to setUpgrades.
+   */
+  if ( ! this->groupsOrIIDS.has_value() ) { this->setUpgrades( true ); }
+  else
+    {
+      auto manifest           = this->getManifest();
+      auto descriptors        = manifest.getDescriptors();
+      auto groupedDescriptors = manifest.getGroupedDescriptors();
+      std::vector<std::string> groupsToUpgrade;
+      for ( const auto & groupOrIID : *this->groupsOrIIDS )
+        {
+          /* If groupOrIID is a group name, treat it as a group. Note this takes
+           * precedence over a package of the same name. */
+          if ( groupedDescriptors.find( groupOrIID )
+               != groupedDescriptors.end() )
+            {
+              groupsToUpgrade.emplace_back( groupOrIID );
+            }
+          /* If groupOrIID is an IID, check if it is the only package in a
+           * group. */
+          else if ( const auto & maybeDescriptor
+                    = descriptors.find( groupOrIID );
+                    maybeDescriptor != descriptors.end() )
+            {
+              const auto & [_, descriptor] = *maybeDescriptor;
+              std::string groupName = descriptor.group.value_or( "toplevel" );
+              if ( groupedDescriptors.at( groupName ).size() == 1 )
+                {
+                  groupsToUpgrade.emplace_back( groupName );
+                }
+              else
+                {
+                  throw FloxException(
+                    "'" + groupOrIID
+                    + "' is a package in a group with multiple packages.\n"
+                      "To upgrade the group, specify the group name:\n"
+                      "     $ flox upgrade "
+                    + groupName
+                    + "\n"
+                      "To upgrade all packages, run:\n"
+                      "     $ flox upgrade" );
+                }
+            }
+          else
+            {
+              throw FloxException( "'" + groupOrIID
+                                   + "' is not a group or key for a package." );
+            }
+        }
+      this->setUpgrades( groupsToUpgrade );
+    }
+
+  /* Generate lockfile. */
+  Environment environment = this->getEnvironment();
+  LockfileRaw newLockfile = environment.createLockfile().getLockfileRaw();
+
+  /* Compare old and new lockfile to generate confirmation message. */
+  std::optional<LockfileRaw> oldLockfile;
+  if ( auto lockfile = environment.getOldLockfile(); lockfile.has_value() )
+    {
+      oldLockfile = lockfile->getLockfileRaw();
+    }
+  std::vector<std::string> upgraded;
+  for ( const auto & [system, systemPackages] : newLockfile.packages )
+    {
+      for ( const auto & [iid, descriptor] : systemPackages )
+        {
+          if ( oldLockfile.has_value() )
+            {
+              /* system is in oldLockfile */
+              if ( const auto & systemPackagesIterator
+                   = oldLockfile->packages.find( system );
+                   systemPackagesIterator != oldLockfile->packages.end() )
+                {
+                  /* iid is in oldLockfile */
+                  if ( const auto & maybeOldDescriptor
+                       = systemPackagesIterator->second.find( iid );
+                       maybeOldDescriptor
+                       != systemPackagesIterator->second.end() )
+                    {
+                      const auto & [_, oldDescriptor] = *maybeOldDescriptor;
+                      if ( descriptor != oldDescriptor )
+                        {
+                          upgraded.emplace_back( iid );
+                        }
+                      /* else package unchanged */
+                    }
+                }
+            }
+        }
+    }  // we don't currently print installs or uninstalls
+
+  /* Print that bad boii */
+  nlohmann::json result
+    = { { "lockfile", newLockfile }, { "result", upgraded } };
   std::cout << result.dump() << std::endl;
 
   return EXIT_SUCCESS;
@@ -311,6 +447,7 @@ ManifestCommand::ManifestCommand() : parser( "manifest" ), cmdLock(), cmdDiff()
   this->parser.add_subparser( this->cmdDiff.getParser() );
   this->parser.add_subparser( this->cmdRegistry.getParser() );
   this->parser.add_subparser( this->cmdUpdate.getParser() );
+  this->parser.add_subparser( this->cmdUpgrade.getParser() );
 }
 
 
@@ -330,6 +467,10 @@ ManifestCommand::run()
   if ( this->parser.is_subcommand_used( "update" ) )
     {
       return this->cmdUpdate.run();
+    }
+  if ( this->parser.is_subcommand_used( "upgrade" ) )
+    {
+      return this->cmdUpgrade.run();
     }
   if ( this->parser.is_subcommand_used( "registry" ) )
     {

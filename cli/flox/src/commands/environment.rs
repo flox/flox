@@ -1016,7 +1016,7 @@ impl SwitchGeneration {
     }
 }
 
-/// update an environment's inputs
+/// Update an environment's inputs
 #[derive(Bpaf, Clone)]
 pub struct Update {
     #[allow(dead_code)] // pending spec for `-e`, `--dir` behaviour
@@ -1091,26 +1091,42 @@ impl Update {
     }
 }
 
-/// upgrade packages using their most recent flake
+/// Upgrade packages in an environment
 #[derive(Bpaf, Clone)]
 pub struct Upgrade {
     #[allow(dead_code)] // pending spec for `-e`, `--dir` behaviour
     #[bpaf(external(environment_args), group_help("Environment Options"))]
     environment_args: EnvironmentArgs,
 
-    #[allow(unused)] // Command currently forwarded
     #[bpaf(external(environment_select), fallback(Default::default()))]
     environment: EnvironmentSelect,
 
-    #[allow(dead_code)] // not yet handled in impl
-    #[bpaf(positional("PACKAGES"))]
-    packages: Vec<String>,
+    /// ID of a package or group name to upgrade
+    #[bpaf(positional("package or group"))]
+    groups_or_iids: Vec<String>,
 }
 impl Upgrade {
-    pub async fn handle(self, _flox: Flox) -> Result<()> {
+    pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("upgrade");
 
-        todo!("this command is planned for a future release")
+        let concrete_environment = self
+            .environment
+            .detect_concrete_environment(&flox, "upgrade")?;
+
+        let description = environment_description(&concrete_environment)?;
+
+        let mut environment = concrete_environment.into_dyn_environment();
+
+        let upgraded = environment
+            .upgrade(&flox, self.groups_or_iids)
+            .context("upgrading environment failed")?
+            .0;
+
+        for package in upgraded {
+            info!("⬆️  upgraded '{package}' in environment {description}");
+        }
+
+        Ok(())
     }
 }
 

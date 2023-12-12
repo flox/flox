@@ -108,6 +108,8 @@ private:
   /** Lazily initialized environment wrapper. */
   std::optional<Environment> environment;
 
+  std::optional<Upgrades> upgrades;
+
 
 protected:
 
@@ -205,6 +207,16 @@ protected:
   setLockfileRaw( LockfileRaw lockfileRaw );
 
   /**
+   * @brief Set the @a upgrades member variable.
+   *
+   * @throws @a EnvironmentMixinException if called after @a environment is
+   * initialized, as the environment has already been calculated without
+   * upgrades.
+   */
+  virtual void
+  setUpgrades( Upgrades upgrades );
+
+  /**
    * @brief Initialize a @a flox::resolver::Lockfile from @a lockfileRaw.
    *
    * If @a lockfilePath is not set return an empty @a std::optional.
@@ -265,6 +277,13 @@ public:
    */
   [[nodiscard]] const std::optional<Lockfile> &
   getLockfile();
+
+
+  [[nodiscard]] const std::optional<Upgrades> &
+  getUpgrades()
+  {
+    return this->upgrades;
+  };
 
   /**
    * @brief Laziliy initialize and return the @a environment.

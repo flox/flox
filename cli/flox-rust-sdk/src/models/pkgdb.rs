@@ -20,6 +20,16 @@ pub struct UpdateResult {
     pub lockfile: Value,
 }
 
+/// The JSON output of a `pkgdb upgrade` call
+#[derive(Deserialize)]
+pub struct UpgradeResultJSON {
+    pub result: UpgradeResult,
+    pub lockfile: Value,
+}
+
+#[derive(Deserialize)]
+pub struct UpgradeResult(pub Vec<String>);
+
 #[derive(Debug, Error)]
 pub enum CallPkgDbError {
     #[error(transparent)]

@@ -29,6 +29,7 @@ use crate::flox::Flox;
 use crate::models::environment_ref::{EnvironmentName, EnvironmentOwner};
 use crate::models::floxmetav2::{floxmeta_git_options, FloxmetaV2, FloxmetaV2Error};
 use crate::models::manifest::PackageToInstall;
+use crate::models::pkgdb::UpgradeResult;
 use crate::providers::git::{GitCommandBranchHashError, GitCommandError, GitProvider};
 
 const GENERATION_LOCK_FILENAME: &str = "env.lock";
@@ -252,6 +253,32 @@ impl Environment for ManagedEnvironment {
         temporary.link(flox, &self.out_link)?;
 
         Ok(message)
+    }
+
+    /// Atomically upgrade packages in this environment
+    fn upgrade(
+        &mut self,
+        flox: &Flox,
+        groups_or_iids: Vec<String>,
+    ) -> Result<UpgradeResult, EnvironmentError2> {
+        let mut generations = self.generations().writable(flox.temp_dir.clone()).unwrap();
+        let mut temporary = generations.get_current_generation().unwrap();
+
+        let result = temporary.upgrade(flox, groups_or_iids)?;
+
+        let metadata = format!("upgraded packages: {}", result.0.join(", "));
+
+        generations
+            .add_generation(&mut temporary, metadata)
+            .unwrap();
+
+        write_pointer_lockfile(
+            self.path.join(GENERATION_LOCK_FILENAME),
+            &self.floxmeta,
+            remote_branch_name(&self.system, &self.pointer),
+            branch_name(&flox.system, &self.pointer, &self.path).into(),
+        )?;
+        Ok(result)
     }
 
     /// Extract the current content of the manifest

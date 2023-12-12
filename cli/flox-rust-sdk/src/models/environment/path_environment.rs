@@ -47,6 +47,7 @@ use crate::flox::Flox;
 use crate::models::environment::{CATALOG_JSON, ENV_DIR_NAME, MANIFEST_FILENAME};
 use crate::models::environment_ref::EnvironmentName;
 use crate::models::manifest::PackageToInstall;
+use crate::models::pkgdb::UpgradeResult;
 
 /// Struct representing a local environment
 ///
@@ -207,6 +208,19 @@ impl Environment for PathEnvironment {
     fn update(&mut self, flox: &Flox, inputs: Vec<String>) -> Result<String, EnvironmentError2> {
         let mut env_view = CoreEnvironment::new(self.path.join(ENV_DIR_NAME));
         let result = env_view.update(flox, inputs)?;
+        env_view.link(flox, self.out_link(&flox.system)?)?;
+
+        Ok(result)
+    }
+
+    /// Atomically upgrade packages in this environment
+    fn upgrade(
+        &mut self,
+        flox: &Flox,
+        groups_or_iids: Vec<String>,
+    ) -> Result<UpgradeResult, EnvironmentError2> {
+        let mut env_view = CoreEnvironment::new(self.path.join(ENV_DIR_NAME));
+        let result = env_view.upgrade(flox, groups_or_iids)?;
         env_view.link(flox, self.out_link(&flox.system)?)?;
 
         Ok(result)
