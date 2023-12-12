@@ -372,10 +372,18 @@ impl ManagedEnvironment {
     }
 
     /// Ensure:
-    /// - a lockfile exists
+    /// - a lockfile exists, creating one if necessary
     /// - the commit in the lockfile (`local_rev` or `rev`) exists in floxmeta
     ///
-    /// This may perform a fetch.
+    /// This may perform a fetch to update the sync branch if
+    /// * the lockfile contains a `rev` that is not in the floxmeta clone on the local machine
+    /// * no lockfile exists
+    ///
+    /// Committing a lockfile with a local revision
+    /// will evoke an error on any but the original machine.
+    ///
+    /// Currently we can only recommend to not commit lockfiles with a local revision.
+    /// This behavior may change in the future.
     fn ensure_locked(
         flox: &Flox,
         pointer: &ManagedPointer,
@@ -536,11 +544,17 @@ impl ManagedEnvironment {
 /// and the local revision is different from the remote revision,
 /// the local revision is also stored in the lockfile.
 ///
-/// When committed to a project, guarantees
-/// that the same version of the linked environment is used by all clones.
+/// When committed to a project,
+/// guarantees that the same version of the linked environment
+/// is used by all instances across different machines.
 /// When a local revision is specified,
-/// flox will **try to** check out the local revision
+/// flox will **try to** use the local revision
 /// rather than the remote revision **failing if it can't**.
+///
+/// Committing a lockfile with a local revision will thus cause flox to fail
+/// if the local revision is not available on the machine,
+/// i.e. any machine other than the one that committed the lockfile.
+/// See [`ManagedEnvironment::ensure_locked`] for more details.
 fn write_pointer_lockfile(
     lock_path: PathBuf,
     floxmeta: &FloxmetaV2,
@@ -556,8 +570,6 @@ fn write_pointer_lockfile(
         match floxmeta.git.branch_hash(local_ref) {
             Ok(local_rev) if local_rev == rev => None,
             Ok(local_rev) => Some(local_rev),
-
-            Err(GitCommandBranchHashError::DoesNotExist) => None,
             Err(err) => Err(ManagedEnvironmentError::GitBranchHash(err))?,
         }
     } else {
@@ -765,13 +777,15 @@ impl ManagedEnvironment {
     pub fn pull(&mut self, force: bool) -> Result<(), ManagedEnvironmentError> {
         let sync_branch = remote_branch_name(&self.system, &self.pointer);
 
-        // Fetch the remote branch into FETCH_HEAD
+        // Fetch the remote branch into the local sync branch.
+        // The sync branch is always a reset to the remote branch
+        // and it's state should not be depended on.
         self.floxmeta
             .git
             .fetch_ref("origin", &format!("+{sync_branch}:{sync_branch}"))
             .unwrap();
 
-        // Check whether we can fast-forward merge the remote branch into the local branch,
+        // Check whether we can fast-forward the remote branch to the local branch,
         // if not the environment has diverged.
         // if `--force` flag is set we skip this check
         if !force {
@@ -788,7 +802,7 @@ impl ManagedEnvironment {
             }
         }
 
-        // try fast forward merge local env branch into project branch
+        // update the project branch to the remote branch, using `force` if specified
         self.floxmeta
             .git
             .push_ref(
