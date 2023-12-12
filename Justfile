@@ -23,12 +23,9 @@ _default:
 # ---------------------------------------------------------------------------- #
 
 build-pkgdb:
-    @pushd pkgdb; make -j; popd
+    @make -C pkgdb -j;
 
-build-env-builder: build-pkgdb
-    @pushd env-builder; make -j; popd
-
-build-cli: build-env-builder
+build-cli: build-pkgdb
     @pushd cli; cargo build; popd
 
 # Build the binaries
@@ -38,12 +35,8 @@ build: build-cli
 # ---------------------------------------------------------------------------- #
 
 test-pkgdb: build-pkgdb
-    @pushd pkgdb; make -j tests; popd
-    @pushd pkgdb; make check; popd
-
-test-env-builder: build-env-builder
-    @pushd env-builder; make -j tests; popd
-    @pushd env-builder; make check; popd
+    @make -C pkgdb -j tests;
+    @make -C pkgdb check;
 
 # Run the 'bats' test suite
 bats-tests +bats_args="": build
@@ -65,7 +58,7 @@ impure-tests regex="": build
 test: build unit-tests bats-tests
 
 # Run the entire test suite, including impure tests
-test-all: test-pkgdb test-env-builder build impure-tests bats-tests
+test-all: test-pkgdb build impure-tests bats-tests
 
 
 # ---------------------------------------------------------------------------- #

@@ -172,9 +172,6 @@
       # Package Database Utilities: scrape, search, and resolve.
       flox-pkgdb = callPackage ./pkgs/flox-pkgdb {};
 
-      # Builds/realizes environment from lockfiles.
-      flox-env-builder = callPackage ./pkgs/flox-env-builder {};
-
       # Flox Command Line Interface ( development build ).
       flox-cli = callPackage ./pkgs/flox-cli {};
 
@@ -183,7 +180,6 @@
 
       # Wrapper scripts for running test suites.
       flox-pkgdb-tests = callPackage ./pkgs/flox-pkgdb-tests {};
-      flox-env-builder-tests = callPackage ./pkgs/flox-env-builder-tests {};
       flox-cli-tests = callPackage ./pkgs/flox-cli-tests {};
       # Integration tests
       flox-tests = callPackage ./pkgs/flox-tests {};
@@ -222,7 +218,6 @@
         (pkgs)
         flox-gh
         flox-pkgdb
-        flox-env-builder
         flox-cli
         flox
         pre-commit-check
@@ -242,30 +237,17 @@
           PKGDB_IS_SQLITE3_BIN = null;
           PKGDB_SEARCH_PARAMS_BIN = null;
         };
-        flox-env-builder-tests = prev.flox-env-builder-tests.override {
-          PROJECT_TESTS_DIR = "/env-builder/tests";
-          PKGDB_BIN = null;
-          ENV_BUILDER_BIN = null;
-        };
         flox-cli-tests = prev.flox-cli-tests.override {
           PROJECT_TESTS_DIR = "/cli/tests";
           PKGDB_BIN = null;
-          ENV_BUILDER_BIN = null;
           FLOX_BIN = null;
         };
         flox-tests = prev.flox-tests.override {
           PROJECT_TESTS_DIR = "/tests";
           PKGDB_BIN = null;
-          ENV_BUILDER_BIN = null;
           FLOX_BIN = null;
         };
-        flox-env-builder = prev.flox-env-builder.override {
-          flox-pkgdb = null;
-        };
-        flox-cli = prev.flox-cli.override {
-          flox-pkgdb = null;
-          flox-env-builder = null;
-        };
+        flox-cli = prev.flox-cli.override {flox-pkgdb = null;};
       });
       checksFor = builtins.getAttr system checks;
     in {

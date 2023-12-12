@@ -55,7 +55,8 @@ in
       fi
 
       PROJECT_TESTS_DIR="$PROJECT_ROOT_DIR$PROJECT_TESTS_DIR"
-      PROJECT_PATH="$PROJECT_ROOT_DIR/cli/target/debug:$PROJECT_ROOT_DIR/pkgdb/bin:$PROJECT_ROOT_DIR/env-builder/bin:"
+      PROJECT_PATH="$PROJECT_ROOT_DIR/cli/target/debug";
+      PROJECT_PATH="$PROJECT_PATH:$PROJECT_ROOT_DIR/pkgdb/bin";
     fi
     export PROJECT_TESTS_DIR
 
@@ -81,7 +82,9 @@ in
     }
     ${
       if PKGDB_SEARCH_PARAMS_BIN == null
-      then "export PKGDB_SEARCH_PARAMS_BIN=\"$PROJECT_TESTS_DIR/search-params\";"
+      then
+        "export PKGDB_SEARCH_PARAMS_BIN="
+        + "\"$PROJECT_TESTS_DIR/search-params\";"
       else "export PKGDB_SEARCH_PARAMS_BIN='${PKGDB_SEARCH_PARAMS_BIN}';"
     }
 
@@ -94,10 +97,10 @@ in
               [--help | -h] -- [BATS ARGUMENTS]
 
     Available options:
-        -P, --pkgdb         Path to pkgdb binary (Default: $PKGDB_BIN)
-        -T, --tests         Path to folder of tests (Default: $PROJECT_TESTS_DIR)
-        -W, --watch         Run tests in a continuous watch mode
-        -h, --help          Prints help information
+        -P, --pkgdb       Path to pkgdb binary (Default: $PKGDB_BIN)
+        -T, --tests       Path to folder of tests (Default: $PROJECT_TESTS_DIR)
+        -W, --watch       Run tests in a continuous watch mode
+        -h, --help        Prints help information
     EOF
     }
 
@@ -154,13 +157,11 @@ in
 
     # Run basts either via entr or just a single run
     if [[ -n "''${WATCH:-}" ]]; then
-      find \
-        "$TESTS_DIR" \
-        "$PKGDB_BIN"  \
-        "$PKGDB_IS_SQLITE3_BIN"  \
-        "$PKGDB_SEARCH_PARAMS_BIN"  \
-          | ${entr}/bin/entr -s "bats ''${_BATS_ARGS[*]} ''${_FLOX_TESTS[*]}";
+      find "$TESTS_DIR" "$PKGDB_BIN"                           \
+           "$PKGDB_IS_SQLITE3_BIN" "$PKGDB_SEARCH_PARAMS_BIN"  \
+        |${entr}/bin/entr -s "bats ''${_BATS_ARGS[*]} ''${_FLOX_TESTS[*]}";
     else
-      exec -a "$0" ${batsWith}/bin/bats "''${_BATS_ARGS[@]}" "''${_FLOX_TESTS[@]}";
+      exec -a "$0" ${batsWith}/bin/bats "''${_BATS_ARGS[@]}"    \
+                                        "''${_FLOX_TESTS[@]}";
     fi
   ''
