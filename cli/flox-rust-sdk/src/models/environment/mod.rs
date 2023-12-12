@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use std::{env, fs, io};
 
 use async_trait::async_trait;
@@ -8,20 +7,18 @@ use flox_types::catalog::{CatalogEntry, EnvCatalog, System};
 use flox_types::version::Version;
 use log::debug;
 use once_cell::sync::Lazy;
-use runix::command_line::{NixCommandLine, NixCommandLineRunError, NixCommandLineRunJsonError};
+use runix::command_line::{NixCommandLine, NixCommandLineRunJsonError};
 use runix::installable::FlakeAttribute;
 use runix::store_path::StorePath;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use thiserror::Error;
 use walkdir::WalkDir;
 
 use self::managed_environment::ManagedEnvironmentError;
-use super::environment_ref::{EnvironmentName, EnvironmentOwner, EnvironmentRefError};
+use super::environment_ref::{EnvironmentName, EnvironmentOwner};
 use super::flox_package::FloxTriple;
-use super::manifest::{Manifest, TomlEditError};
-use super::pkgdb_errors::PkgDbError;
 use crate::flox::{EnvironmentRef, Flox};
+use crate::models::pkgdb::call_pkgdb;
 use crate::providers::git::{
     GitCommandDiscoverError,
     GitCommandProvider,
@@ -29,9 +26,10 @@ use crate::providers::git::{
     GitProvider,
 };
 use crate::utils::copy_file_without_permissions;
-use crate::utils::errors::IoError;
 
 mod core_environment;
+pub use core_environment::{CoreEnvironmentError, EditResult};
+
 pub mod generations;
 pub mod managed_environment;
 pub mod path_environment;
@@ -51,6 +49,7 @@ pub const DOT_FLOX: &str = ".flox";
 pub const ENVIRONMENT_POINTER_FILENAME: &str = "env.json";
 pub const GLOBAL_MANIFEST_TEMPLATE: &str = env!("GLOBAL_MANIFEST_TEMPLATE");
 pub const GLOBAL_MANIFEST_FILENAME: &str = "global-manifest.toml";
+pub const GLOBAL_MANIFEST_LOCKFILE_FILENAME: &str = "global-manifest.lock";
 pub const MANIFEST_FILENAME: &str = "manifest.toml";
 pub const LOCKFILE_FILENAME: &str = "manifest.lock";
 pub const GCROOTS_DIR_NAME: &str = "run";
@@ -99,6 +98,9 @@ pub trait Environment {
         contents: String,
     ) -> Result<EditResult, EnvironmentError2>;
 
+    /// Atomically update this environment's inputs
+    fn update(&mut self, flox: &Flox, inputs: Vec<String>) -> Result<String, EnvironmentError2>;
+
     async fn catalog(
         &self,
         nix: &NixCommandLine,
@@ -106,7 +108,10 @@ pub trait Environment {
     ) -> Result<EnvCatalog, EnvironmentError2>;
 
     /// Extract the current content of the manifest
-    fn manifest_content(&self) -> Result<String, EnvironmentError2>;
+    ///
+    /// Implementations may use process context from [Flox]
+    /// to determine the current content of the manifest.
+    fn manifest_content(&self, flox: &Flox) -> Result<String, EnvironmentError2>;
 
     /// Return a path containing the built environment and its activation script.
     ///
@@ -124,10 +129,22 @@ pub trait Environment {
     fn parent_path(&self) -> Result<PathBuf, EnvironmentError2>;
 
     /// Path to the environment definition file
-    fn manifest_path(&self) -> PathBuf;
+    ///
+    /// Implementations may use process context from [Flox]
+    /// to find or create a path to the environment definition file.
+    ///
+    /// [Environment::manifest_path] and [Environment::lockfile_path]
+    /// may be located in different directories.
+    fn manifest_path(&self, flox: &Flox) -> Result<PathBuf, EnvironmentError2>;
 
     /// Path to the lockfile. The path may not exist.
-    fn lockfile_path(&self) -> PathBuf;
+    ///
+    /// Implementations may use process context from [Flox]
+    /// to find or create a path to the environment definition file.
+    ///
+    /// [Environment::manifest_path] and [Environment::lockfile_path]
+    /// may be located in different directories.
+    fn lockfile_path(&self, flox: &Flox) -> Result<PathBuf, EnvironmentError2>;
 
     /// Returns the environment name
     fn name(&self) -> EnvironmentName;
@@ -256,237 +273,103 @@ impl UninitializedEnvironment {
     }
 }
 
-#[derive(Debug, Serialize, Clone, Deserialize, PartialEq)]
-pub struct LockedManifest(Value);
-impl LockedManifest {
-    /// Use pkgdb to lock a manifest
-    pub fn lock_manifest(
-        pkgdb: &Path,
-        manifest_path: &Path,
-        existing_lockfile_path: Option<&Path>,
-        global_manifest_path: &Path,
-    ) -> Result<Self, EnvironmentError2> {
-        let canonical_manifest_path = manifest_path
-            .canonicalize()
-            .map_err(EnvironmentError2::OpenManifest)?;
-
-        let mut pkgdb_cmd = Command::new(pkgdb);
-        pkgdb_cmd
-            .args(["manifest", "lock"])
-            .arg("--ga-registry")
-            .arg("--global-manifest")
-            .arg(global_manifest_path);
-        if let Some(lf_path) = existing_lockfile_path {
-            let canonical_lockfile_path = lf_path
-                .canonicalize()
-                .map_err(EnvironmentError2::BadLockfilePath)?;
-            pkgdb_cmd.arg("--lockfile").arg(canonical_lockfile_path);
-        }
-        pkgdb_cmd.arg(canonical_manifest_path);
-
-        debug!("locking manifest with command: {pkgdb_cmd:?}");
-        let output = pkgdb_cmd.output().map_err(EnvironmentError2::PkgDbCall)?;
-        // If command fails, try to parse stdout as a PkgDbError
-        if !output.status.success() {
-            if let Ok::<PkgDbError, _>(pkgdb_err) = serde_json::from_slice(&output.stdout) {
-                Err(EnvironmentError2::LockManifest(pkgdb_err))
-            } else {
-                Err(EnvironmentError2::ParsePkgDbError(
-                    String::from_utf8_lossy(&output.stdout).to_string(),
-                ))
-            }
-        // If command succeeds, try to parse stdout as JSON value
-        } else {
-            let lockfile_json = serde_json::from_slice(&output.stdout)
-                .map_err(EnvironmentError2::ParseLockfileJSON)?;
-            Ok(lockfile_json)
-        }
-    }
-
-    /// Build a locked manifest
-    ///
-    /// if a gcroot_out_link_path is provided,
-    /// the environment will be linked to that path and a gcroot will be created
-    pub fn build(
-        &self,
-        builder: &Path,
-        gcroot_out_link_path: Option<&Path>,
-    ) -> Result<PathBuf, EnvironmentError2> {
-        let mut env_builder_cmd = Command::new(builder);
-        env_builder_cmd.arg("build-env");
-        env_builder_cmd.args(["--lockfile", &self.0.to_string()]);
-
-        if let Some(gcroot_out_link_path) = gcroot_out_link_path {
-            env_builder_cmd.args(["--out-link", &gcroot_out_link_path.to_string_lossy()]);
-        }
-
-        debug!("building environment with command: {env_builder_cmd:?}");
-
-        let env_builder_output = env_builder_cmd
-            .output()
-            .map_err(EnvironmentError2::BuildEnvCall)?;
-
-        if !env_builder_output.status.success() {
-            let stderr = String::from_utf8_lossy(&env_builder_output.stderr).into_owned();
-            return Err(EnvironmentError2::BuildEnv(stderr));
-        }
-
-        let stdout = String::from_utf8_lossy(&env_builder_output.stdout).into_owned();
-
-        Ok(PathBuf::from(stdout.trim()))
-    }
-}
-impl ToString for LockedManifest {
-    fn to_string(&self) -> String {
-        self.0.to_string()
-    }
-}
-
-#[derive(Debug)]
-pub enum EditResult {
-    /// The manifest was not modified.
-    Unchanged,
-    /// The manifest was modified, and the user needs to re-activate it.
-    ReActivateRequired,
-    /// The manifest was modified, but the user does not need to re-activate it.
-    Success,
-}
-
-impl EditResult {
-    pub fn new(old_manifest: &str, new_manifest: &str) -> Result<Self, EnvironmentError2> {
-        if old_manifest == new_manifest {
-            Ok(Self::Unchanged)
-        } else {
-            let old_manifest: Manifest =
-                toml::from_str(old_manifest).map_err(EnvironmentError2::DeserializeManifest)?;
-            let new_manifest: Manifest =
-                toml::from_str(new_manifest).map_err(EnvironmentError2::DeserializeManifest)?;
-            // TODO: some modifications to `install` currently require re-activation
-            if old_manifest.hook != new_manifest.hook || old_manifest.vars != new_manifest.vars {
-                Ok(Self::ReActivateRequired)
-            } else {
-                Ok(Self::Success)
-            }
-        }
-    }
-}
-
 #[derive(Debug, Error)]
 pub enum EnvironmentError2 {
-    #[error("ParseEnvRef")]
-    ParseEnvRef(#[from] EnvironmentRefError),
-    #[error("EmptyDotFlox")]
-    EmptyDotFlox,
-    #[error("DotFloxCanonicalize")]
-    EnvCanonicalize(#[source] std::io::Error),
-    #[error("ReadDotFlox")]
-    ReadDotFlox(#[source] std::io::Error),
-    #[error("ReadEnvDir")]
-    ReadEnvDir(#[source] std::io::Error),
-    #[error("MakeSandbox")]
-    MakeSandbox(#[source] std::io::Error),
-    #[error("DeleteEnvironment")]
-    DeleteEnvironment(#[source] std::io::Error),
-    #[error("DotFloxNotFound")]
+    // todo: candidate for impl specific error
+    // * only path and managed env are defined in .Flox
+    // region: path env open
+    #[error(".flox directory not found")]
     DotFloxNotFound,
-    #[error("InitEnv")]
+
+    #[error("could not locate the manifest for this environment")]
+    ManifestNotFound,
+    // endregion
+
+    // todo: candidate for impl specific error
+    // * only path env implements init
+    // region: path env init
+    // todo: split up
+    // * three distinct errors map to this
+    #[error("could not initialize environment")]
     InitEnv(#[source] std::io::Error),
-    #[error("EnvNotFound")]
+    #[error("could not find environment definiton directory")]
     EnvNotFound,
-    #[error("EnvNotADirectory")]
-    EnvNotADirectory,
-    #[error("DirectoryNotAnEnv")]
-    DirectoryNotAnEnv,
-    #[error("EnvironmentExists")]
-    EnvironmentExists,
+    #[error("an environment already exists at {0:?}")]
+    EnvironmentExists(PathBuf),
+    // endregion
+
+    // todo: rmove with "catalog()" method
+    // region: catalog
     #[error("EvalCatalog")]
     EvalCatalog(#[source] NixCommandLineRunJsonError),
     #[error("ParseCatalog")]
     ParseCatalog(#[source] serde_json::Error),
     #[error("WriteCatalog")]
     WriteCatalog(#[source] std::io::Error),
-    #[error("Build")]
-    Build(#[source] NixCommandLineRunError),
-    #[error("ReadManifest")]
-    ReadManifest(#[source] std::io::Error),
-    #[error("ReadEnvironmentMetadata")]
+    // endregion
+
+    // todo: move pointer related errors somewhere else?
+    // * not relevant to environment _instances_
+    // region: pointer
+    #[error("could not read env.json file")]
     ReadEnvironmentMetadata(#[source] std::io::Error),
-    #[error("MakeTemporaryEnv")]
-    MakeTemporaryEnv(#[source] std::io::Error),
-    #[error("UpdateManifest")]
-    UpdateManifest(#[source] std::io::Error),
-    #[error("couldn't open manifest")]
-    OpenManifest(#[source] std::io::Error),
-    #[error("Activate")]
-    Activate(#[source] NixCommandLineRunError),
-    #[error("Could not create backup for transaction")]
-    MakeBackup(#[source] std::io::Error),
-    #[error("Prior transaction in progress. Delete {0} to discard.")]
-    PriorTransaction(PathBuf),
-    #[error("Failed to create backup for transaction")]
-    BackupTransaction(#[source] std::io::Error),
-    #[error("Failed to move modified environment into place")]
-    Move(#[source] std::io::Error),
-    #[error("Failed to abort transaction; backup could not be moved back into place")]
-    AbortTransaction(#[source] std::io::Error),
-    #[error("Failed to remove transaction backup")]
-    RemoveBackup(#[source] std::io::Error),
-    #[error("Failed to copy file")]
-    CopyFile(#[source] IoError),
     #[error("Failed parsing contents of env.json file")]
     ParseEnvJson(#[source] serde_json::Error),
     #[error("Failed serializing contents of env.json file")]
     SerializeEnvJson(#[source] serde_json::Error),
     #[error("Failed write env.json file")]
     WriteEnvJson(#[source] std::io::Error),
-    #[error(transparent)]
-    ManagedEnvironment(#[from] ManagedEnvironmentError),
-    #[error(transparent)]
-    Install(#[from] TomlEditError),
-    #[error("couldn't locate the manifest for this environment")]
-    ManifestNotFound,
-    #[error("failed to create GC roots directory")]
-    CreateGcRootDir(#[source] std::io::Error),
-    #[error("error building environment")]
-    BuildEnvCall(#[source] std::io::Error),
-    #[error("error building environment: {0}")]
-    BuildEnv(String),
-    #[error("provided lockfile path doesn't exist")]
-    BadLockfilePath(#[source] std::io::Error),
-    #[error("call to pkgdb failed")]
-    PkgDbCall(#[source] std::io::Error),
-    #[error("couldn't parse pkgdb error as JSON: {0}")]
-    ParsePkgDbError(String),
-    #[error("couldn't parse lockfile as JSON")]
-    ParseLockfileJSON(#[source] serde_json::Error),
-    #[error("couldn't parse nixpkgs rev as a string")]
-    RevNotString,
-    #[error("couldn't write new lockfile contents")]
-    WriteLockfile(#[source] std::io::Error),
-    #[error("locking manifest failed")]
-    LockManifest(#[source] PkgDbError),
+    // endregion
+
+    // region: global manifest
     #[error("couldn't create the global manifest")]
     InitGlobalManifest(#[source] std::io::Error),
+
     #[error("couldn't read global manifest template")]
     ReadGlobalManifestTemplate(#[source] std::io::Error),
+    // endregion
+
+    // region: find_dot_flox
+    // todo: extract and reuse in other places where we need to canonicalize a path
     #[error("provided path couldn't be canonicalized: {path}")]
     CanonicalPath {
         path: PathBuf,
         #[source]
         source: std::io::Error,
     },
+
+    // todo: reword?
+    // * only occurs if "`.flox`" is `/`
     #[error("invalid internal state; couldn't remove last element from path: {0}")]
     InvalidPath(PathBuf),
-    #[error("couldn't parse manifest: {0}")]
-    DeserializeManifest(toml::de::Error),
+
     #[error("invalid .flox directory at {path}: {source}")]
     InvalidDotFlox {
         path: PathBuf,
         #[source]
         source: Box<EnvironmentError2>,
     },
+
     #[error("error checking if in a git repo")]
     DiscoverGitDirectory(#[source] GitCommandDiscoverError),
+    // endregion
+    #[error(transparent)]
+    Core(#[from] CoreEnvironmentError),
+
+    #[error(transparent)]
+    ManagedEnvironment(#[from] ManagedEnvironmentError),
+
+    #[error("could not canonicalize path to environment")]
+    EnvCanonicalize(#[source] std::io::Error),
+
+    #[error("could not delete environment")]
+    DeleteEnvironment(#[source] std::io::Error),
+
+    #[error("could not read manifest")]
+    ReadManifest(#[source] std::io::Error),
+
+    #[error("failed to create GC roots directory")]
+    CreateGcRootDir(#[source] std::io::Error),
 }
 
 /// Copy a whole directory recursively ignoring the original permissions
@@ -549,6 +432,13 @@ pub fn init_global_manifest(global_manifest_path: &Path) -> Result<(), Environme
 pub fn global_manifest_path(flox: &Flox) -> PathBuf {
     let path = flox.config_dir.join(GLOBAL_MANIFEST_FILENAME);
     debug!("global manifest path is {}", path.display());
+    path
+}
+
+/// Returns the path to the global manifest's lockfile
+pub fn global_manifest_lockfile_path(flox: &Flox) -> PathBuf {
+    let path = flox.config_dir.join(GLOBAL_MANIFEST_LOCKFILE_FILENAME);
+    debug!("global manifest lockfile path is {}", path.display());
     path
 }
 

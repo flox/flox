@@ -49,6 +49,12 @@ impl Environment for RemoteEnvironment {
         todo!()
     }
 
+    /// Atomically update this environment's inputs
+    #[allow(unused)]
+    fn update(&mut self, flox: &Flox, inputs: Vec<String>) -> Result<String, EnvironmentError2> {
+        todo!()
+    }
+
     #[allow(unused)]
     async fn catalog(
         &self,
@@ -59,7 +65,7 @@ impl Environment for RemoteEnvironment {
     }
 
     /// Extract the current content of the manifest
-    fn manifest_content(&self) -> Result<String, EnvironmentError2> {
+    fn manifest_content(&self, _flox: &Flox) -> Result<String, EnvironmentError2> {
         todo!()
     }
 
@@ -74,12 +80,12 @@ impl Environment for RemoteEnvironment {
     }
 
     /// Path to the environment definition file
-    fn manifest_path(&self) -> PathBuf {
+    fn manifest_path(&self, _flox: &Flox) -> Result<PathBuf, EnvironmentError2> {
         todo!()
     }
 
     /// Path to the lockfile. The path may not exist.
-    fn lockfile_path(&self) -> PathBuf {
+    fn lockfile_path(&self, _flox: &Flox) -> Result<PathBuf, EnvironmentError2> {
         todo!()
     }
 

@@ -86,7 +86,7 @@ impl PathEnvironment {
         }
 
         if !env_path.join(MANIFEST_FILENAME).exists() {
-            Err(EnvironmentError2::DirectoryNotAnEnv)?
+            Err(EnvironmentError2::ManifestNotFound)?
         }
 
         Ok(Self {
@@ -195,6 +195,15 @@ impl Environment for PathEnvironment {
         Ok(result)
     }
 
+    /// Atomically update this environment's inputs
+    fn update(&mut self, flox: &Flox, inputs: Vec<String>) -> Result<String, EnvironmentError2> {
+        let mut env_view = CoreEnvironment::new(self.path.join(ENV_DIR_NAME));
+        let result = env_view.update(flox, inputs)?;
+        env_view.link(flox, self.out_link(&flox.system)?)?;
+
+        Ok(result)
+    }
+
     /// Get a catalog of installed packages from this environment
     ///
     /// Evaluated using nix from the environment definition.
@@ -228,8 +237,9 @@ impl Environment for PathEnvironment {
         serde_json::from_value(catalog_value).map_err(EnvironmentError2::ParseCatalog)
     }
 
-    fn manifest_content(&self) -> Result<String, EnvironmentError2> {
-        fs::read_to_string(self.manifest_path()).map_err(EnvironmentError2::ReadManifest)
+    /// Read the environment definition file as a string
+    fn manifest_content(&self, flox: &Flox) -> Result<String, EnvironmentError2> {
+        fs::read_to_string(self.manifest_path(flox)?).map_err(EnvironmentError2::ReadManifest)
     }
 
     /// Returns the environment name
@@ -263,13 +273,13 @@ impl Environment for PathEnvironment {
     }
 
     /// Path to the environment definition file
-    fn manifest_path(&self) -> PathBuf {
-        self.path.join(ENV_DIR_NAME).join(MANIFEST_FILENAME)
+    fn manifest_path(&self, _flox: &Flox) -> Result<PathBuf, EnvironmentError2> {
+        Ok(self.path.join(ENV_DIR_NAME).join(MANIFEST_FILENAME))
     }
 
     /// Path to the lockfile. The path may not exist.
-    fn lockfile_path(&self) -> PathBuf {
-        self.path.join(ENV_DIR_NAME).join(LOCKFILE_FILENAME)
+    fn lockfile_path(&self, _flox: &Flox) -> Result<PathBuf, EnvironmentError2> {
+        Ok(self.path.join(ENV_DIR_NAME).join(LOCKFILE_FILENAME))
     }
 }
 
@@ -330,7 +340,9 @@ impl PathEnvironment {
         match EnvironmentPointer::open(dot_flox_parent_path.as_ref()) {
             Err(EnvironmentError2::EnvNotFound) => {},
             Err(e) => Err(e)?,
-            Ok(_) => Err(EnvironmentError2::EnvironmentExists)?,
+            Ok(_) => Err(EnvironmentError2::EnvironmentExists(
+                dot_flox_parent_path.as_ref().to_path_buf(),
+            ))?,
         }
         let dot_flox_path = dot_flox_parent_path.as_ref().join(DOT_FLOX);
         let env_dir = dot_flox_path.join(ENV_DIR_NAME);
@@ -363,11 +375,12 @@ impl PathEnvironment {
 mod tests {
 
     use super::*;
+    use crate::flox::tests::flox_instance;
 
     #[test]
     fn create_env() {
-        let temp_dir = tempfile::tempdir().unwrap();
-        let environment_temp_dir = tempfile::tempdir().unwrap();
+        let (flox, temp_dir) = flox_instance();
+        let environment_temp_dir = tempfile::tempdir_in(&temp_dir).unwrap();
         let pointer = PathPointer::new("test".parse().unwrap());
 
         let before = PathEnvironment::open(
@@ -393,7 +406,10 @@ mod tests {
 
         assert_eq!(actual, expected);
 
-        assert!(actual.manifest_path().exists(), "manifest exists");
+        assert!(
+            actual.manifest_path(&flox).unwrap().exists(),
+            "manifest exists"
+        );
         assert!(actual.path.is_absolute());
     }
 
