@@ -10,6 +10,7 @@ expect_after {
   eof { exit 2 }
   "*\n" { exp_continue }
 }
+expect "Building environment..."
 
 send "exit\n"
 expect eof

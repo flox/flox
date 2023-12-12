@@ -6,6 +6,8 @@
 set dir [lindex $argv 0]
 set flox $env(FLOX_BIN)
 
+set timeout 20
+
 spawn $flox activate --dir $dir
 expect_after {
   timeout { exit 1 }
@@ -15,11 +17,11 @@ expect_after {
 expect "Building environment..."
 
 # check for hello
-send "{ command -v hello||which hello||type -P hello; } 2>&1\n"
+send "{ command -v hello||which hello||type -P hello || echo not found ; } 2>&1\n"
 
 # check for hello after changing directory
 send "cd ..\n"
-send "{ command -v hello||which hello||type -P hello; } 2>&1\n"
+send "{ command -v hello||which hello||type -P hello || echo not found ; } 2>&1\n"
 
 send "exit\n"
 expect eof

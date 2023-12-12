@@ -222,17 +222,14 @@
       inherit
         (pkgs)
         flox-gh
-<<<<<<< HEAD
         flox-pkgdb
         flox-env-builder
         flox-cli
         flox-cli-tests
         flox
         pre-commit-check
-=======
         flox-tests-pure
         flox-dev
->>>>>>> 275344e9 (test: remove expect prompt checking)
         ;
       default = pkgs.flox;
     });

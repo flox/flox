@@ -83,6 +83,7 @@ env_is_activated() {
   assert_output --partial "✅ 'hello' installed to environment"
   SHELL=bash USER="$REAL_USER" run -0 expect -d "$TESTS_DIR/activate/hello.exp" "$PROJECT_DIR";
   assert_output --regexp "bin/hello"
+  refute_output "not found"
 }
 
 
@@ -97,6 +98,7 @@ env_is_activated() {
   # USER to REAL_USER.
   SHELL=zsh USER="$REAL_USER" run -0 expect -d "$TESTS_DIR/activate/hello.exp" "$PROJECT_DIR";
   assert_output --regexp "bin/hello"
+  refute_output "not found"
 }
 
 
