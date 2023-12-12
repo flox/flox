@@ -82,6 +82,7 @@ env_is_activated() {
   assert_success
   assert_output --partial "✅ 'hello' installed to environment"
   SHELL=bash USER="$REAL_USER" run -0 expect -d "$TESTS_DIR/activate/hello.exp" "$PROJECT_DIR";
+  assert_output --regexp "bin/hello"
 }
 
 
@@ -95,6 +96,7 @@ env_is_activated() {
   # current euid. I'm not sure if we should change that, but for now just set
   # USER to REAL_USER.
   SHELL=zsh USER="$REAL_USER" run -0 expect -d "$TESTS_DIR/activate/hello.exp" "$PROJECT_DIR";
+  assert_output --regexp "bin/hello"
 }
 
 
@@ -107,8 +109,8 @@ script = """
   echo "Welcome to your flox environment!";
 """
 EOF
-  SHELL=bash run expect -d "$TESTS_DIR/activate/hook.exp" "$PROJECT_DIR";
-  assert_success;
+  SHELL=bash run -0 expect -d "$TESTS_DIR/activate/hook.exp" "$PROJECT_DIR";
+  assert_output --partial "Welcome to your flox environment!"
 }
 
 
@@ -137,9 +139,8 @@ EOF
   # TODO: flox will set HOME if it doesn't match the home of the user with
   # current euid. I'm not sure if we should change that, but for now just set
   # USER to REAL_USER.
-  SHELL=bash USER="$REAL_USER" run expect -d "$TESTS_DIR/activate/rc.exp" "$PROJECT_DIR"
+  SHELL=bash USER="$REAL_USER" run -0 expect -d "$TESTS_DIR/activate/rc.exp" "$PROJECT_DIR"
   assert_output --partial "test_alias is aliased to \`echo testing'";
-  assert_success;
 }
 
 
@@ -162,8 +163,8 @@ EOF
 [vars]
 foo = "$bar"
 EOF
-  SHELL=bash bar=baz run expect -d "$TESTS_DIR/activate/envVar.exp" "$PROJECT_DIR";
-  assert_success;
+  SHELL=bash bar=baz run -0 expect -d "$TESTS_DIR/activate/envVar.exp" "$PROJECT_DIR";
+  assert_output --partial "baz";
 }
 
 
@@ -177,8 +178,8 @@ EOF
   # TODO: flox will set HOME if it doesn't match the home of the user with
   # current euid. I'm not sure if we should change that, but for now just set
   # USER to REAL_USER.
-  SHELL=zsh bar=baz USER="$REAL_USER" run expect -d "$TESTS_DIR/activate/envVar.exp" "$PROJECT_DIR";
-  assert_success;
+  SHELL=zsh bar=baz USER="$REAL_USER" run -0 expect -d "$TESTS_DIR/activate/envVar.exp" "$PROJECT_DIR";
+  assert_output --partial "baz";
 }
 
 

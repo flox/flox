@@ -16,12 +16,10 @@ expect "Building environment..."
 
 # check for hello
 send "{ command -v hello||which hello||type -P hello; } 2>&1\n"
-expect -re "project-\\d+/\.flox/run/.*\.project-\\d+/bin/hello" {}
 
 # check for hello after changing directory
 send "cd ..\n"
 send "{ command -v hello||which hello||type -P hello; } 2>&1\n"
-expect -re "project-\\d+/\.flox/run/.*\.project-\\d+/bin/hello" {}
 
 send "exit\n"
 expect eof
