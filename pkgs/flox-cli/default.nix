@@ -63,11 +63,11 @@
       PARSER_UTIL_BIN = "${parser-util}/bin/parser-util";
       PKGDB_BIN =
         if flox-pkgdb == null
-        then ""
+        then "pkgdb"
         else "${flox-pkgdb}/bin/pkgdb";
       ENV_BUILDER_BIN =
         if flox-env-builder == null
-        then ""
+        then "env-builder"
         else "${flox-env-builder}/bin/env-builder";
       FLOX_ETC_DIR = ../../assets/etc;
       FLOX_ZDOTDIR = ../../assets/flox.zdotdir;

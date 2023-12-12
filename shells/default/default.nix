@@ -40,7 +40,6 @@
       commitizen
       hivemind
       just
-      flox-pytests.pyenv
     ];
 in
   mkShell (
