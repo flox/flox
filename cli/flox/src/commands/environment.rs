@@ -17,6 +17,7 @@ use flox_rust_sdk::models::environment::path_environment::{self, PathEnvironment
 use flox_rust_sdk::models::environment::{
     global_manifest_lockfile_path,
     global_manifest_path,
+    CoreEnvironmentError,
     EditResult,
     Environment,
     EnvironmentError2,
@@ -983,16 +984,16 @@ impl Update {
                 .arg("--global-manifest")
                 .arg(global_manifest_path(&flox));
             if lockfile_path.exists() {
-                let canonical_lockfile_path = lockfile_path
-                    .canonicalize()
-                    .map_err(EnvironmentError2::BadLockfilePath)?;
+                let canonical_lockfile_path = lockfile_path.canonicalize().map_err(|e| {
+                    CoreEnvironmentError::BadLockfilePath(e, lockfile_path.to_path_buf())
+                })?;
                 pkgdb_cmd.arg("--lockfile").arg(canonical_lockfile_path);
             }
             pkgdb_cmd.args(self.inputs);
 
             debug!("updating global lockfile with command: {pkgdb_cmd:?}");
             let result: UpdateResult = serde_json::from_value(call_pkgdb(pkgdb_cmd)?)
-                .map_err(EnvironmentError2::ParseUpdateOutput)?;
+                .map_err(CoreEnvironmentError::ParseUpdateOutput)?;
 
             debug!("writing lockfile to {}", lockfile_path.display());
             std::fs::write(lockfile_path, result.lockfile.to_string())
