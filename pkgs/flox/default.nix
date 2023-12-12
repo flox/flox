@@ -18,12 +18,12 @@
   revCountDiff = self.revCount - inputs.flox-latest.revCount;
   suffix =
     if self ? revCount && self ? shortRev
-    then "${revCountDiff}-g${self.shortRev}"
+    then "${builtins.toString revCountDiff}-g${self.shortRev}"
     else "dirty";
   version = "${cargoToml.package.version}-${suffix}";
 in
   symlinkJoin {
-    name = flox-cli.name;
+    name = "${flox-cli.pname}-${version}";
 
     paths = [flox-cli];
     nativeBuildInputs = [makeWrapper];
