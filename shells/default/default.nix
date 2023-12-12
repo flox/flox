@@ -40,8 +40,7 @@
       commitizen
       hivemind
       just
-      poetry
-      python3
+      flox-pytests.pyenv
     ];
 in
   mkShell (
