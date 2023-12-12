@@ -10,7 +10,7 @@
 }: let
   # Inherit version from Cargo.toml, aligning with the CLI version.
   # We also inject some indication about the `git' revision of the repository.
-  cargoToml = lib.importTOML "${inputs.flox-latest}/crates/flox/Cargo.toml";
+  cargoToml = lib.importTOML "${inputs.flox-latest}/cli/flox/Cargo.toml";
   revCountDiff = self.revCount - inputs.flox-latest.revCount;
   revCount =
     if revCountDiff == 0
