@@ -16,13 +16,9 @@
     else "${inputs.flox-latest}/crates/flox/Cargo.toml"
   );
   revCountDiff = self.revCount - inputs.flox-latest.revCount;
-  revCount =
-    if revCountDiff == 0
-    then ""
-    else "${toString revCountDiff}-";
   suffix =
     if self ? revCount && self ? shortRev
-    then "${revCount}g${self.shortRev}"
+    then "${revCountDiff}-g${self.shortRev}"
     else "dirty";
   version = "${cargoToml.package.version}-${suffix}";
 in
