@@ -29,7 +29,7 @@ load setup_suite.bash
 # --------------------------------------------------------------------------- #
 
 setup_file() {
-  export LOCKFILES="$TESTS_DIR/fixtures/lockfiles";
+  export LOCKFILES="${TESTS_DIR?}/data/buildenv/lockfiles";
   : "${CAT:=cat}";
   : "${TEST:=test}";
   export CAT TEST;
@@ -38,16 +38,21 @@ setup_file() {
 
 # ---------------------------------------------------------------------------- #
 
+mk_lock() {
+  $PKGDB_BIN manifest lock --ga-registry "$1";
+}
+
+
+# ---------------------------------------------------------------------------- #
+
 # bats test_tags=single,smoke
 @test "Simple environment builds successfully" {
-  $CAT "$LOCKFILES/single-package/manifest.toml" >&3;
   run "$PKGDB_BIN" buildenv "$( < "$LOCKFILES/single-package/manifest.lock"; )";
   assert_success
 }
 
 # bats test_tags=single,binaries
 @test "Built environment contains binaries" {
-  $CAT "$LOCKFILES/single-package/manifest.toml" >&3;
   run "$PKGDB_BIN" buildenv                                             \
                    "$( < "$LOCKFILES/single-package/manifest.lock"; )"  \
                    --out-link "$BATS_TEST_TMPDIR/env";
@@ -57,7 +62,6 @@ setup_file() {
 
 # bats test_tags=single,activate-files
 @test "Built environment contains activate files" {
-  $CAT "$LOCKFILES/single-package/manifest.toml" >&3;
   run "$PKGDB_BIN" buildenv                                             \
                    "$( < "$LOCKFILES/single-package/manifest.lock"; )"  \
                    --out-link "$BATS_TEST_TMPDIR/env";
@@ -72,7 +76,6 @@ setup_file() {
 
 # bats test_tags=hook,script
 @test "Built environment includes hook script" {
-  $CAT "$LOCKFILES/hook-script/manifest.toml" >&3;
   run "$PKGDB_BIN" buildenv "$( < "$LOCKFILES/hook-script/manifest.lock"; )"  \
                             --out-link "$BATS_TEST_TMPDIR/env";
   assert_success;
@@ -84,7 +87,6 @@ setup_file() {
 # bats test_tags=hook,file
 @test "Built environment includes hook file" {
   skip "Hook files require path";
-  $CAT "$LOCKFILES/hook-file/manifest.toml" >&3;
   run "$PKGDB_BIN" buildenv "$( < "$LOCKFILES/hook-file/manifest.lock"; )"  \
                             --out-link "$BATS_TEST_TMPDIR/env";
   assert_success;
@@ -98,7 +100,6 @@ setup_file() {
 
 # bats test_tags=conflict,detect
 @test "Detects conflicting packages" {
-  $CAT "$LOCKFILES/conflict/manifest.toml" >&3;
   run "$PKGDB_BIN" buildenv "$( < "$LOCKFILES/conflict/manifest.lock"; )"  \
                             --out-link "$BATS_TEST_TMPDIR/env";
   assert_failure;
@@ -107,7 +108,6 @@ setup_file() {
 
 # bats test_tags=conflict,resolve
 @test "Allows to resolve conflicting with priority" {
-  $CAT "$LOCKFILES/conflict-resolved/manifest.toml" >&3;
   run "$PKGDB_BIN" buildenv                                                \
                    "$( < "$LOCKFILES/conflict-resolved/manifest.lock"; )"  \
                    --out-link "$BATS_TEST_TMPDIR/env";
@@ -120,7 +120,6 @@ setup_file() {
 # bats test_tags=propagated
 @test "Environment includes propagated packages" {
     skip "ansi does not work on all systems";
-    $CAT "$LOCKFILES/propagated/manifest.toml" >&3;
     run "$PKGDB_BIN" buildenv "$( < "$LOCKFILES/propagated/manifest.lock"; )"  \
                               --out-link "$BATS_TEST_TMPDIR/env";
     assert_success;
