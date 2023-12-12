@@ -431,7 +431,7 @@ pub fn manifest_and_lockfile(
                 hacky_environment_description(&uninitialized)?
             );
             let environment = open_environment(flox, uninitialized)?.into_dyn_environment();
-            let lockfile_path = environment.lockfile_path();
+            let lockfile_path = environment.lockfile_path(flox)?;
             debug!("checking lockfile: path={}", lockfile_path.display());
             let lockfile = if lockfile_path.exists() {
                 debug!("lockfile exists");
@@ -440,7 +440,7 @@ pub fn manifest_and_lockfile(
                 debug!("lockfile doesn't exist");
                 None
             };
-            (Some(environment.manifest_path()), lockfile)
+            (Some(environment.manifest_path(flox)?), lockfile)
         },
     };
     Ok(res)
