@@ -4,6 +4,7 @@
 .ccls-cache
 .env
 .pre-commit-config.yaml
+__pycache__
 /.direnv/
 /.flox
 /autom4te.cache/
