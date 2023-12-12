@@ -72,7 +72,7 @@ jobs:
             --accept-flake-config \
             --no-update-lock-file \
             '.#default' \
-              --command make tests
+              --command make -j tests
           nix develop -L \
             --accept-flake-config \
             --no-update-lock-file \
@@ -146,7 +146,7 @@ jobs:
             --accept-flake-config \
             --no-update-lock-file \
             '.#default' \
-              --command make
+              --command make -j
           popd
 
       - name: "Build (env-builder)"
@@ -156,7 +156,7 @@ jobs:
             --accept-flake-config \
             --no-update-lock-file \
             '.#default' \
-              --command make
+              --command make -j
           popd
 
       - name: "Test (env-builder)"
@@ -223,7 +223,7 @@ jobs:
             --accept-flake-config \
             --no-update-lock-file \
             '.#default' \
-              --command make
+              --command make -j
           popd
 
       - name: "Build (env-builder)"
@@ -233,7 +233,7 @@ jobs:
             --accept-flake-config \
             --no-update-lock-file \
             '.#default' \
-              --command make
+              --command make -j
           popd
 
       - name: "Build (cli)"
