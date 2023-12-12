@@ -15,7 +15,6 @@
   flox-pkgdb,
   flox-pkgdb-tests,
   flox-tests,
-  flox-pytests,
   ci ? false,
 }: let
   # For use in GitHub Actions and local development.
@@ -27,8 +26,7 @@
       flox-pkgdb-tests
       flox-env-builder-tests
       flox-cli-tests
-      flox-tests
-      flox-pytests
+      (flox-tests.override {inherit ci;})
     ];
 
   devPackages =

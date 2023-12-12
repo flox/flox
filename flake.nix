@@ -187,7 +187,6 @@
       flox-cli-tests = callPackage ./pkgs/flox-cli-tests {};
       # Integration tests
       flox-tests = callPackage ./pkgs/flox-tests {};
-      flox-pytests = callPackage ./pkgs/flox-pytests {};
     };
 
     # Composes dependency overlays and the overlay defined here.
@@ -226,6 +225,7 @@
         flox-env-builder
         flox-cli
         flox
+        flox-tests
         pre-commit-check
         ;
       default = pkgs.flox;
@@ -255,10 +255,7 @@
           FLOX_BIN = null;
         };
         flox-tests = prev.flox-tests.override {
-          PROJECT_TESTS_DIR = "/tests";
-          PKGDB_BIN = null;
-          ENV_BUILDER_BIN = null;
-          FLOX_BIN = null;
+          ci = false;
         };
         flox-env-builder = prev.flox-env-builder.override {
           flox-pkgdb = null;
