@@ -975,45 +975,55 @@ impl Update {
         subcommand_metric!("update");
 
         let message = if self.global {
-            let lockfile_path = global_manifest_lockfile_path(&flox);
-
-            let mut pkgdb_cmd = Command::new(Path::new(&*PKGDB_BIN));
-            pkgdb_cmd
-                .args(["manifest", "update"])
-                .arg("--ga-registry")
-                .arg("--global-manifest")
-                .arg(global_manifest_path(&flox));
-            if lockfile_path.exists() {
-                let canonical_lockfile_path = lockfile_path.canonicalize().map_err(|e| {
-                    CoreEnvironmentError::BadLockfilePath(e, lockfile_path.to_path_buf())
-                })?;
-                pkgdb_cmd.arg("--lockfile").arg(canonical_lockfile_path);
-            }
-            pkgdb_cmd.args(self.inputs);
-
-            debug!("updating global lockfile with command: {pkgdb_cmd:?}");
-            let result: UpdateResult = serde_json::from_value(call_pkgdb(pkgdb_cmd)?)
-                .map_err(CoreEnvironmentError::ParseUpdateOutput)?;
-
-            debug!("writing lockfile to {}", lockfile_path.display());
-            std::fs::write(lockfile_path, result.lockfile.to_string())
-                .context("updating global inputs failed")?;
-            result.message
+        	self.update_global_manifest(flox)?
         } else {
-            let concrete_environment = self
-                .environment
-                .detect_concrete_environment(&flox, "update")?;
-
-            let mut environment = concrete_environment.into_dyn_environment();
-
-            environment
-                .update(&flox, self.inputs)
-                .await
-                .context("updating environment failed")?
-        };
+        	self.update_manifest(flox)?
+        }
+        
         info!("{}", message);
 
         Ok(())
+    }
+     
+    fn update_global_manifest(self, flox: Flox) -> Result<String> {
+        let lockfile_path = global_manifest_lockfile_path(&flox);
+
+        let mut pkgdb_cmd = Command::new(Path::new(&*PKGDB_BIN));
+        pkgdb_cmd
+            .args(["manifest", "update"])
+            .arg("--ga-registry")
+            .arg("--global-manifest")
+            .arg(global_manifest_path(&flox));
+        if lockfile_path.exists() {
+            let canonical_lockfile_path = lockfile_path.canonicalize().map_err(|e| {
+                CoreEnvironmentError::BadLockfilePath(e, lockfile_path.to_path_buf())
+            })?;
+            pkgdb_cmd.arg("--lockfile").arg(canonical_lockfile_path);
+        }
+        pkgdb_cmd.args(self.inputs);
+
+        debug!("updating global lockfile with command: {pkgdb_cmd:?}");
+        let result: UpdateResult = serde_json::from_value(call_pkgdb(pkgdb_cmd)?)
+            .map_err(CoreEnvironmentError::ParseUpdateOutput)?;
+
+        debug!("writing lockfile to {}", lockfile_path.display());
+        std::fs::write(lockfile_path, result.lockfile.to_string())
+            .context("updating global inputs failed")?;
+        result.message
+    }
+    
+    async fn update_manifest(self, flox: Flox) -> Result<String> {
+        let concrete_environment = self
+            .environment
+            .detect_concrete_environment(&flox, "update")?;
+
+        let mut environment = concrete_environment.into_dyn_environment();
+
+        environment
+            .update(&flox, self.inputs)
+            .await
+            .context("updating environment failed")?
+      
     }
 }
 
