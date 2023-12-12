@@ -9,7 +9,7 @@ use std::{env, fs};
 
 use anyhow::{anyhow, bail, Context, Result};
 use bpaf::{Args, Bpaf, Parser};
-use flox_rust_sdk::flox::{get_flox_version, Flox};
+use flox_rust_sdk::flox::{Flox, FLOX_VERSION};
 use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironment;
 use flox_rust_sdk::models::environment::path_environment::PathEnvironment;
 use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironment;
@@ -49,7 +49,7 @@ static FLOX_DESCRIPTION: &'_ str = indoc! {"
 };
 
 static FLOX_WELCOME_MESSAGE: Lazy<String> = Lazy::new(|| {
-    let version = get_flox_version();
+    let version = FLOX_VERSION.to_string();
     formatdoc! {r#"
     flox version {version}
 

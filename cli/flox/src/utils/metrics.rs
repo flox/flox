@@ -1,7 +1,7 @@
 use std::sync::mpsc;
 
 use anyhow::{Context, Result};
-use flox_rust_sdk::flox::get_flox_version;
+use flox_rust_sdk::flox::FLOX_VERSION;
 use fslock::LockFile;
 use futures::TryFutureExt;
 use indoc::indoc;
@@ -115,7 +115,7 @@ impl MetricEntry {
         MetricEntry {
             subcommand,
             timestamp: now,
-            flox_version: get_flox_version(),
+            flox_version: FLOX_VERSION.to_string(),
             os_family: sys_info::os_type()
                 .ok()
                 .map(|x| x.replace("Darwin", "Mac OS")),
@@ -128,7 +128,7 @@ impl MetricEntry {
 }
 
 async fn push_metrics(metrics: Vec<MetricEntry>, uuid: Uuid) -> Result<()> {
-    let version = get_flox_version();
+    let version = FLOX_VERSION.to_string();
     let events = metrics
         .into_iter()
         .map(|entry| {
