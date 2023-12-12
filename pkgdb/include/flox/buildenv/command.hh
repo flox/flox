@@ -12,6 +12,7 @@
 #include <optional>
 #include <string>
 
+#include <nlohmann/json.hpp>
 #include <nix/ref.hh>
 
 #include "flox/core/command.hh"
@@ -33,7 +34,7 @@ class BuildEnvCommand : NixState
 private:
 
   command::VerboseParser     parser;
-  std::string                lockfileContent;
+  nlohmann::json             lockfileContent;
   std::optional<std::string> outLink;
   std::optional<System>      system;
 

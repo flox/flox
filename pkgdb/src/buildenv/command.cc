@@ -28,7 +28,7 @@ BuildEnvCommand::BuildEnvCommand() : parser( "buildenv" )
     .required()
     .metavar( "LOCKFILE" )
     .action( [&]( const std::string & str )
-             { this->lockfileContent = readAndCoerceJSON( str ); } );
+             { this->lockfileContent = parseOrReadJSONObject( str ); } );
 
   this->parser.add_argument( "--out-link", "-o" )
     .help( "path to link resulting environment" )
@@ -52,11 +52,11 @@ BuildEnvCommand::run()
   if ( nix::lvlDebug <= nix::verbosity )
     {
       nix::logger->log( nix::Verbosity::lvlDebug,
-                        "lockfile: " + this->lockfileContent );
+                        "lockfile: " + this->lockfileContent.dump( 2 ) );
     }
 
-  resolver::LockfileRaw lockfileRaw = nlohmann::json::parse( lockfileContent );
-  auto                  lockfile    = resolver::Lockfile( lockfileRaw );
+  resolver::LockfileRaw lockfileRaw = this->lockfileContent;
+  auto                  lockfile    = resolver::Lockfile( std::move( lockfileRaw ) );
   auto                  store       = this->getStore();
   auto                  state       = this->getState();
 
