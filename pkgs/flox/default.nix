@@ -3,7 +3,7 @@
   self,
   lib,
   symlinkJoin,
-  makeWrapper,
+  makeBinaryWrapper,
   flox-pkgdb,
   flox-env-builder,
   flox-cli,
@@ -26,7 +26,7 @@ in
     name = "${flox-cli.pname}-${version}";
 
     paths = [flox-cli];
-    nativeBuildInputs = [makeWrapper];
+    nativeBuildInputs = [makeBinaryWrapper];
 
     postBuild = ''
       wrapProgram $out/bin/flox \
