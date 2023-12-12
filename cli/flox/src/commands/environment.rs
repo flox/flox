@@ -124,7 +124,7 @@ impl Edit {
         // method because the temporary manifest needs to stick around in case the user wants
         // or needs to make successive edits without starting over each time.
         let tmp_manifest = NamedTempFile::new_in(&flox.temp_dir)?;
-        std::fs::write(&tmp_manifest, environment.manifest_content()?)?;
+        std::fs::write(&tmp_manifest, environment.manifest_content(&flox)?)?;
         let should_continue = Dialog {
             message: "Continue editing?",
             help_message: Default::default(),
@@ -453,7 +453,7 @@ impl List {
             .detect_concrete_environment(&flox, "list using")?
             .into_dyn_environment();
 
-        let manifest_contents = env.manifest_content()?;
+        let manifest_contents = env.manifest_content(&flox)?;
         if let Some(pkgs) = list_packages(&manifest_contents)? {
             pkgs.iter().for_each(|pkg| println!("{}", pkg));
         }
