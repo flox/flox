@@ -281,7 +281,7 @@ jobs:
             --accept-flake-config \
             --no-update-lock-file \
             '.#default' \
-              --command flox-tests
+              --command pytest --verbose --emoji
 
   nix-build:
     name: "Nix build"
