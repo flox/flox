@@ -103,7 +103,10 @@ pub trait Environment {
     ) -> Result<EnvCatalog, EnvironmentError2>;
 
     /// Extract the current content of the manifest
-    fn manifest_content(&self) -> Result<String, EnvironmentError2>;
+    ///
+    /// Implementations may use process context from [Flox]
+    /// to determine the current content of the manifest.
+    fn manifest_content(&self, flox: &Flox) -> Result<String, EnvironmentError2>;
 
     /// Return a path containing the built environment and its activation script.
     ///
@@ -121,10 +124,22 @@ pub trait Environment {
     fn parent_path(&self) -> Result<PathBuf, EnvironmentError2>;
 
     /// Path to the environment definition file
-    fn manifest_path(&self) -> PathBuf;
+    ///
+    /// Implementations may use process context from [Flox]
+    /// to find or create a path to the environment definition file.
+    ///
+    /// [Environment::manifest_path] and [Environment::lockfile_path]
+    /// may be located in different directories.
+    fn manifest_path(&self, flox: &Flox) -> Result<PathBuf, EnvironmentError2>;
 
     /// Path to the lockfile. The path may not exist.
-    fn lockfile_path(&self) -> PathBuf;
+    ///
+    /// Implementations may use process context from [Flox]
+    /// to find or create a path to the environment definition file.
+    ///
+    /// [Environment::manifest_path] and [Environment::lockfile_path]
+    /// may be located in different directories.
+    fn lockfile_path(&self, flox: &Flox) -> Result<PathBuf, EnvironmentError2>;
 
     /// Returns the environment name
     fn name(&self) -> EnvironmentName;
