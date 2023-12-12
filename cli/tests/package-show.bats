@@ -182,7 +182,8 @@ teardown() {
   run --separate-stderr sh -c                                          \
    "_PKGDB_GA_REGISTRY_REF_OR_REV='${PKGDB_NIXPKGS_REV_NEW?}'          \
       $PKGDB_BIN manifest lock                                         \
-                 --ga-registry '$PROJECT_DIR/.flox/env/manifest.toml'  \
+                 --ga-registry                                         \
+                 --manifest '$PROJECT_DIR/.flox/env/manifest.toml'     \
                  > '$PROJECT_DIR/.flox/env/manifest.lock';";
   assert_success;
   unset output;
