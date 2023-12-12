@@ -60,10 +60,7 @@ pub fn default_nix_subprocess_env() -> HashMap<String, String> {
         }
     }
 
-    env_map.insert(
-        "FLOX_VERSION".to_string(),
-        crate::flox::FLOX_VERSION.to_string(),
-    );
+    env_map.insert("FLOX_VERSION".to_string(), crate::flox::get_flox_version());
 
     // For now these variables are managed in bash
     // let home = env!("HOME");

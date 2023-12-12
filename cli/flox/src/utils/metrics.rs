@@ -1,6 +1,7 @@
 use std::sync::mpsc;
 
 use anyhow::{Context, Result};
+use flox_rust_sdk::flox::get_flox_version;
 use fslock::LockFile;
 use futures::TryFutureExt;
 use indoc::indoc;
@@ -14,8 +15,6 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use uuid::Uuid;
 
 use crate::config::Config;
-
-pub const FLOX_VERSION: &str = env!("FLOX_VERSION");
 
 pub const METRICS_EVENTS_FILE_NAME: &str = "metrics-events-v2.json";
 pub const METRICS_UUID_FILE_NAME: &str = "metrics-uuid";
@@ -116,7 +115,7 @@ impl MetricEntry {
         MetricEntry {
             subcommand,
             timestamp: now,
-            flox_version: FLOX_VERSION.to_string(),
+            flox_version: get_flox_version(),
             os_family: sys_info::os_type()
                 .ok()
                 .map(|x| x.replace("Darwin", "Mac OS")),
@@ -129,6 +128,7 @@ impl MetricEntry {
 }
 
 async fn push_metrics(metrics: Vec<MetricEntry>, uuid: Uuid) -> Result<()> {
+    let version = get_flox_version();
     let events = metrics
         .into_iter()
         .map(|entry| {
@@ -158,7 +158,7 @@ async fn push_metrics(metrics: Vec<MetricEntry>, uuid: Uuid) -> Result<()> {
                     "kernel_version": entry.os_family_release,
 
                     "$set_once": {
-                        "initial_flox_version": FLOX_VERSION,
+                        "initial_flox_version": version,
 
                         "initial_os": entry.os,
                         "initial_os_version": entry.os_version,
@@ -176,7 +176,7 @@ async fn push_metrics(metrics: Vec<MetricEntry>, uuid: Uuid) -> Result<()> {
                         "used_rust_preview": true,
                         "flox_cli_uuid": uuid,
 
-                        "flox_version": FLOX_VERSION,
+                        "flox_version": version,
 
                         "os": entry.os,
                         "os_version": entry.os_version,
@@ -204,7 +204,7 @@ async fn push_metrics(metrics: Vec<MetricEntry>, uuid: Uuid) -> Result<()> {
         .put(METRICS_EVENTS_URL)
         .header("content-type", "application/json")
         .header("x-api-key", METRICS_EVENTS_API_KEY)
-        .header("user-agent", format!("flox-cli/{}", FLOX_VERSION))
+        .header("user-agent", format!("flox-cli/{}", version))
         .json(&events)
         .send()
         .await?;

@@ -42,27 +42,6 @@
     crane,
     ...
   } @ inputs: let
-    # ------------------------------------------------------------------------ #
-    # Inherit version from Cargo.toml, aligning with the CLI version.
-    # We also inject some indication about the `git' revision of the repository.
-    floxVersion = let
-      cargoToml = let
-        contents = builtins.readFile ./cli/flox/Cargo.toml;
-      in
-        builtins.fromTOML contents;
-      prefix =
-        if self ? revCount
-        then "r"
-        else "";
-      # Add `r<REV-COUNT>' if available, otherwise fallback to the short
-      # revision hash or "dirty" to be added as the _tag_ property of
-      # the version.
-      rev = self.revCount or self.shortRev or "dirty";
-    in
-      cargoToml.package.version + "-" + prefix + (toString rev);
-
-    # ------------------------------------------------------------------------ #
-
     # Given a function `fn' which takes system names as an argument, produce an
     # attribute set whose keys are system names, and values are the result of
     # applying that system name to `fn'.
@@ -130,7 +109,7 @@
     overlays.flox = final: prev: let
       callPackage = final.lib.callPackageWith (final
         // {
-          inherit inputs self floxVersion;
+          inherit inputs self;
           pkgsFor = final;
         });
     in {

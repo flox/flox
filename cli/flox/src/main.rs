@@ -5,6 +5,7 @@ use std::process::ExitCode;
 use anyhow::{Context, Result};
 use bpaf::{Args, Parser};
 use commands::{FloxArgs, FloxCli, Prefix, Version};
+use flox_rust_sdk::flox::get_flox_version;
 use flox_rust_sdk::models::environment::init_global_manifest;
 use log::{error, warn};
 use utils::init::init_logger;
@@ -38,7 +39,7 @@ async fn main() -> ExitCode {
 
     // Quit early if `--version` is present
     if Version::check() {
-        println!("Version: {}", env!("FLOX_VERSION"));
+        println!("Version: {}", get_flox_version());
         return ExitCode::from(0);
     }
 

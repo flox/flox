@@ -26,11 +26,9 @@
   gitMinimal,
   nix,
   pkgsFor,
-  floxVersion,
   pre-commit-check,
   flox-pkgdb,
   flox-env-builder,
-  longVersion ? false,
 }: let
   flox-src = builtins.path {
     name = "flox-src";
@@ -105,10 +103,7 @@
         cacert.outPath + "/etc/ssl/certs/ca-bundle.crt";
 
       # The current version of flox being built
-      FLOX_VERSION =
-        if longVersion
-        then floxVersion
-        else cargoToml.package.version;
+      FLOX_VERSION = cargoToml.package.version;
 
       # Reexport of the platform flox is being built for
       NIX_TARGET_SYSTEM = targetPlatform.system;
