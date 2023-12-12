@@ -244,7 +244,7 @@ impl Environment for ManagedEnvironment {
             self.path.join(GENERATION_LOCK_FILENAME),
             &self.floxmeta,
             remote_branch_name(&self.system, &self.pointer),
-            branch_name(&flox.system, &self.pointer, &self.path)?.into(),
+            branch_name(&flox.system, &self.pointer, &self.path).into(),
         )?;
         Ok(message)
     }
