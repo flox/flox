@@ -196,11 +196,7 @@ impl Environment for PathEnvironment {
     }
 
     /// Atomically update this environment's inputs
-    async fn update(
-        &mut self,
-        flox: &Flox,
-        inputs: Vec<String>,
-    ) -> Result<String, EnvironmentError2> {
+    fn update(&mut self, flox: &Flox, inputs: Vec<String>) -> Result<String, EnvironmentError2> {
         let mut env_view = CoreEnvironment::new(self.path.join(ENV_DIR_NAME));
         let result = env_view.update(flox, inputs)?;
         env_view.link(flox, self.out_link(&flox.system)?)?;

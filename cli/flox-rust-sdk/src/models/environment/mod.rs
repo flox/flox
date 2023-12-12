@@ -99,11 +99,7 @@ pub trait Environment {
     ) -> Result<EditResult, EnvironmentError2>;
 
     /// Atomically update this environment's inputs
-    async fn update(
-        &mut self,
-        flox: &Flox,
-        inputs: Vec<String>,
-    ) -> Result<String, EnvironmentError2>;
+    fn update(&mut self, flox: &Flox, inputs: Vec<String>) -> Result<String, EnvironmentError2>;
 
     async fn catalog(
         &self,

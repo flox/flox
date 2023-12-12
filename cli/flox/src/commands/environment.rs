@@ -975,16 +975,16 @@ impl Update {
         subcommand_metric!("update");
 
         let message = if self.global {
-        	self.update_global_manifest(flox)?
+            self.update_global_manifest(flox)?
         } else {
-        	self.update_manifest(flox)?
-        }
-        
+            self.update_manifest(flox)?
+        };
+
         info!("{}", message);
 
         Ok(())
     }
-     
+
     fn update_global_manifest(self, flox: Flox) -> Result<String> {
         let lockfile_path = global_manifest_lockfile_path(&flox);
 
@@ -1009,10 +1009,10 @@ impl Update {
         debug!("writing lockfile to {}", lockfile_path.display());
         std::fs::write(lockfile_path, result.lockfile.to_string())
             .context("updating global inputs failed")?;
-        result.message
+        Ok(result.message)
     }
-    
-    async fn update_manifest(self, flox: Flox) -> Result<String> {
+
+    fn update_manifest(self, flox: Flox) -> Result<String> {
         let concrete_environment = self
             .environment
             .detect_concrete_environment(&flox, "update")?;
@@ -1021,9 +1021,7 @@ impl Update {
 
         environment
             .update(&flox, self.inputs)
-            .await
-            .context("updating environment failed")?
-      
+            .context("updating environment failed")
     }
 }
 

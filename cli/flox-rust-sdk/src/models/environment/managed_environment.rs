@@ -174,11 +174,7 @@ impl Environment for ManagedEnvironment {
     }
 
     /// Atomically update this environment's inputs
-    async fn update(
-        &mut self,
-        flox: &Flox,
-        inputs: Vec<String>,
-    ) -> Result<String, EnvironmentError2> {
+    fn update(&mut self, flox: &Flox, inputs: Vec<String>) -> Result<String, EnvironmentError2> {
         let mut generations = self.generations().writable(flox.temp_dir.clone()).unwrap();
         let mut temporary = generations.get_current_generation().unwrap();
 
