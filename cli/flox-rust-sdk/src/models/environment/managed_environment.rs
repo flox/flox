@@ -28,11 +28,35 @@ use crate::providers::git::{GitCommandBranchHashError, GitCommandError, GitProvi
 
 const GENERATION_LOCK_FILENAME: &str = "env.lock";
 
+/// A path that is guaranteed to be canonicalized
+///
+/// [`ManagedEnvironment`] uses this to refer to the path of its `.flox` directory.
+/// [`ManagedEnvironment::encode`] is used to uniquely identify the environment
+/// by encoding the canonicalized path.
+/// This encoding is used to create a unique branch name in the floxmeta repository.
+/// Thus, rather than canonicalizing the path every time we need to encode it,
+/// we store the path as a [`CanonicalPath`].
+#[derive(Debug, Clone, derive_more::Deref, derive_more::AsRef)]
+#[deref(forward)]
+#[as_ref(forward)]
+pub struct CanonicalPath(PathBuf);
+
+impl CanonicalPath {
+    pub fn new(path: impl AsRef<Path>) -> Result<Self, ManagedEnvironmentError> {
+        Ok(Self(std::fs::canonicalize(&path).map_err(|e| {
+            ManagedEnvironmentError::Canonicalize {
+                path: path.as_ref().to_path_buf(),
+                err: e,
+            }
+        })?))
+    }
+}
+
 #[derive(Debug)]
 pub struct ManagedEnvironment {
     /// Absolute path to the directory containing `env.json`
     // TODO might be better to keep this private
-    pub path: PathBuf,
+    pub path: CanonicalPath,
     pointer: ManagedPointer,
     system: String,
     floxmeta: FloxmetaV2,
@@ -116,7 +140,7 @@ impl Environment for ManagedEnvironment {
             self.path.join(GENERATION_LOCK_FILENAME),
             &self.floxmeta,
             remote_branch_name(&self.system, &self.pointer),
-            branch_name(&self.system, &self.pointer, &self.path)?.into(),
+            branch_name(&self.system, &self.pointer, &self.path).into(),
         )?;
 
         Ok(result)
@@ -141,7 +165,7 @@ impl Environment for ManagedEnvironment {
             self.path.join(GENERATION_LOCK_FILENAME),
             &self.floxmeta,
             remote_branch_name(&self.system, &self.pointer),
-            branch_name(&self.system, &self.pointer, &self.path)?.into(),
+            branch_name(&self.system, &self.pointer, &self.path).into(),
         )?;
         Ok(result)
     }
@@ -166,7 +190,7 @@ impl Environment for ManagedEnvironment {
                 self.path.join(GENERATION_LOCK_FILENAME),
                 &self.floxmeta,
                 remote_branch_name(&self.system, &self.pointer),
-                branch_name(&flox.system, &self.pointer, &self.path)?.into(),
+                branch_name(&flox.system, &self.pointer, &self.path).into(),
             )?;
         }
 
@@ -199,12 +223,10 @@ impl Environment for ManagedEnvironment {
     }
 
     fn parent_path(&self) -> Result<PathBuf, EnvironmentError2> {
-        let mut path = self.path.clone();
-        if path.pop() {
-            Ok(path)
-        } else {
-            Err(EnvironmentError2::InvalidPath(path))
-        }
+        self.path
+            .parent()
+            .ok_or(EnvironmentError2::InvalidPath(self.path.to_path_buf()))
+            .map(|p| p.to_path_buf())
     }
 
     /// Path to the environment definition file
@@ -230,33 +252,11 @@ impl Environment for ManagedEnvironment {
     }
 }
 
+/// Constructors and related functions
 impl ManagedEnvironment {
-    pub fn new(
-        path: impl AsRef<Path>,
-        pointer: ManagedPointer,
-        system: String,
-        floxmeta: FloxmetaV2,
-    ) -> Result<Self, EnvironmentError2> {
-        Ok(Self {
-            // path must be absolute as it is used to set FLOX_ENV
-            path: path
-                .as_ref()
-                .canonicalize()
-                .map_err(EnvironmentError2::EnvCanonicalize)?,
-            pointer,
-            system,
-            floxmeta,
-        })
-    }
-
     /// Returns a unique identifier for the location of the project.
-    fn encode(path: impl AsRef<Path>) -> Result<String, ManagedEnvironmentError> {
-        let path =
-            std::fs::canonicalize(&path).map_err(|e| ManagedEnvironmentError::Canonicalize {
-                path: path.as_ref().to_path_buf(),
-                err: e,
-            })?;
-        Ok(format!("{}", blake3::hash(path.as_os_str().as_bytes())))
+    fn encode(path: &CanonicalPath) -> String {
+        blake3::hash(path.as_os_str().as_bytes()).to_string()
     }
 
     /// Returns the path to an environment given the branch name in the floxmeta repository.
@@ -287,10 +287,10 @@ impl ManagedEnvironment {
     /// then `reverse_links_dir(_).join(encode(path))` is a link to <path>
     fn ensure_reverse_link(
         flox: &Flox,
-        path: impl AsRef<Path>,
+        path: &CanonicalPath,
     ) -> Result<(), ManagedEnvironmentError> {
         let links_dir = reverse_links_dir(flox);
-        let encoded = ManagedEnvironment::encode(&path)?;
+        let encoded = ManagedEnvironment::encode(path);
         let link = links_dir.join(encoded);
         if !links_dir.exists() {
             std::fs::create_dir_all(&links_dir).map_err(ManagedEnvironmentError::CreateLinksDir)?;
@@ -358,17 +358,24 @@ impl ManagedEnvironment {
         pointer: ManagedPointer,
         dot_flox_path: impl AsRef<Path>,
     ) -> Result<Self, EnvironmentError2> {
+        let dot_flox_path = CanonicalPath::new(dot_flox_path)?;
+
         let lock = Self::ensure_locked(flox, &pointer, &dot_flox_path, &floxmeta)?;
 
         Self::ensure_branch(
-            &branch_name(&flox.system, &pointer, &dot_flox_path)?,
+            &branch_name(&flox.system, &pointer, &dot_flox_path),
             &lock,
             &floxmeta,
         )?;
 
         Self::ensure_reverse_link(flox, &dot_flox_path)?;
 
-        ManagedEnvironment::new(dot_flox_path, pointer, flox.system.clone(), floxmeta)
+        Ok(ManagedEnvironment {
+            path: dot_flox_path,
+            pointer,
+            system: flox.system.clone(),
+            floxmeta,
+        })
     }
 
     /// Ensure:
@@ -387,10 +394,10 @@ impl ManagedEnvironment {
     fn ensure_locked(
         flox: &Flox,
         pointer: &ManagedPointer,
-        dot_flox_path: impl AsRef<Path>,
+        dot_flox_path: &CanonicalPath,
         floxmeta: &FloxmetaV2,
     ) -> Result<GenerationLock, EnvironmentError2> {
-        let lock_path = dot_flox_path.as_ref().join(GENERATION_LOCK_FILENAME);
+        let lock_path = dot_flox_path.join(GENERATION_LOCK_FILENAME);
         let maybe_lock: Option<GenerationLock> = match fs::read(&lock_path) {
             Ok(lock_contents) => Some(
                 serde_json::from_slice(&lock_contents)
@@ -510,7 +517,10 @@ impl ManagedEnvironment {
         }
         Ok(())
     }
+}
 
+/// Utility instance methods
+impl ManagedEnvironment {
     /// Where to link a built environment to. The parent directory may not exist.
     ///
     /// Todo: use `branch_name` as currently all instances of the same environment
@@ -532,7 +542,7 @@ impl ManagedEnvironment {
     fn generations(&self) -> Generations {
         Generations::new(
             self.floxmeta.git.clone(),
-            branch_name(&self.system, &self.pointer, &self.path).unwrap(),
+            branch_name(&self.system, &self.pointer, &self.path),
         )
     }
 }
@@ -609,17 +619,13 @@ fn write_pointer_lockfile(
 /// that link to an environment identified by `pointer`.
 /// `dot_flox_path` does _not_ need to be passed in its canonicalized form;
 /// [`ManagedEnvironment::encode`] will canonicalize the path if necessary.
-fn branch_name(
-    system: &str,
-    pointer: &ManagedPointer,
-    dot_flox_path: impl AsRef<Path>,
-) -> Result<String, ManagedEnvironmentError> {
-    Ok(format!(
+fn branch_name(system: &str, pointer: &ManagedPointer, dot_flox_path: &CanonicalPath) -> String {
+    format!(
         "{}.{}.{}",
         system,
         pointer.name,
-        ManagedEnvironment::encode(dot_flox_path)?
-    ))
+        ManagedEnvironment::encode(dot_flox_path)
+    )
 }
 
 /// The original branch name of an environment that is used to sync an environment with the hub
@@ -736,7 +742,7 @@ impl ManagedEnvironment {
     }
 
     pub fn push(&mut self, force: bool) -> Result<(), ManagedEnvironmentError> {
-        let project_branch = branch_name(&self.system, &self.pointer, &self.path)?;
+        let project_branch = branch_name(&self.system, &self.pointer, &self.path);
         let sync_branch = remote_branch_name(&self.system, &self.pointer);
 
         // Fetch the remote branch into FETCH_HEAD
@@ -793,7 +799,7 @@ impl ManagedEnvironment {
                 .floxmeta
                 .git
                 .branch_contains_commit(
-                    &branch_name(&self.system, &self.pointer, &self.path).unwrap(),
+                    &branch_name(&self.system, &self.pointer, &self.path),
                     &sync_branch,
                 )
                 .map_err(ManagedEnvironmentError::Git)?;
@@ -809,7 +815,7 @@ impl ManagedEnvironment {
                 ".",
                 format!(
                     "refs/heads/{sync_branch}:refs/heads/{project_branch}",
-                    project_branch = branch_name(&self.system, &self.pointer, &self.path).unwrap(),
+                    project_branch = branch_name(&self.system, &self.pointer, &self.path),
                 ),
                 force, // Set the force parameter to false or true based on your requirement
             )
@@ -852,7 +858,7 @@ mod test {
         dot_flox_path: &Path,
         pointer: &ManagedPointer,
         lock: Option<&GenerationLock>,
-    ) {
+    ) -> CanonicalPath {
         fs::create_dir(dot_flox_path).unwrap();
         let pointer_path = dot_flox_path.join(ENVIRONMENT_POINTER_FILENAME);
         fs::write(
@@ -864,6 +870,8 @@ mod test {
             let lock_path = dot_flox_path.join(GENERATION_LOCK_FILENAME);
             fs::write(lock_path, serde_json::to_string_pretty(lock).unwrap()).unwrap();
         }
+
+        CanonicalPath::new(dot_flox_path).unwrap()
     }
 
     fn create_floxmeta(flox: &Flox, remote_path: &Path, branch: &str) -> FloxmetaV2 {
@@ -911,7 +919,7 @@ mod test {
 
         // create a .flox directory
         let dot_flox_path = flox.temp_dir.join(DOT_FLOX);
-        create_dot_flox(&dot_flox_path, &TEST_POINTER, None);
+        let dot_flox_path = create_dot_flox(&dot_flox_path, &TEST_POINTER, None);
 
         ManagedEnvironment::ensure_locked(&flox, &TEST_POINTER, &dot_flox_path, &floxmeta).unwrap();
 
@@ -959,7 +967,7 @@ mod test {
             version: Version::<1> {},
         };
         let dot_flox_path = flox.temp_dir.join(DOT_FLOX);
-        create_dot_flox(&dot_flox_path, &TEST_POINTER, Some(&lock));
+        let dot_flox_path = create_dot_flox(&dot_flox_path, &TEST_POINTER, Some(&lock));
 
         ManagedEnvironment::ensure_locked(&flox, &TEST_POINTER, &dot_flox_path, &floxmeta).unwrap();
 
@@ -1008,13 +1016,13 @@ mod test {
         let hash_3 = remote.branch_hash(&branch).unwrap();
 
         // create a .flox directory
-        let dot_flox_path = flox.temp_dir.join(DOT_FLOX);
         let lock = GenerationLock {
             rev: hash_2.clone(),
             local_rev: None,
             version: Version::<1> {},
         };
-        create_dot_flox(&dot_flox_path, &TEST_POINTER, Some(&lock));
+        let dot_flox_path = flox.temp_dir.join(DOT_FLOX);
+        let dot_flox_path = create_dot_flox(&dot_flox_path, &TEST_POINTER, Some(&lock));
 
         ManagedEnvironment::ensure_locked(&flox, &TEST_POINTER, &dot_flox_path, &floxmeta).unwrap();
 
@@ -1060,13 +1068,13 @@ mod test {
         let hash_2 = remote.branch_hash("branch_2").unwrap();
 
         // create a .flox directory
-        let dot_flox_path = flox.temp_dir.join(DOT_FLOX);
         let lock = GenerationLock {
             rev: hash_2,
             local_rev: None,
             version: Version::<1> {},
         };
-        create_dot_flox(&dot_flox_path, &TEST_POINTER, Some(&lock));
+        let dot_flox_path = flox.temp_dir.join(DOT_FLOX);
+        let dot_flox_path = create_dot_flox(&dot_flox_path, &TEST_POINTER, Some(&lock));
 
         assert!(matches!(
             ManagedEnvironment::ensure_locked(&flox, &TEST_POINTER, &dot_flox_path, &floxmeta),
@@ -1105,13 +1113,13 @@ mod test {
         let hash_2 = remote.branch_hash(&branch).unwrap();
 
         // create a .flox directory
-        let dot_flox_path = flox.temp_dir.join(DOT_FLOX);
         let lock = GenerationLock {
             rev: "does not exist".to_string(),
             local_rev: None,
             version: Version::<1> {},
         };
-        create_dot_flox(&dot_flox_path, &TEST_POINTER, Some(&lock));
+        let dot_flox_path = flox.temp_dir.join(DOT_FLOX);
+        let dot_flox_path = create_dot_flox(&dot_flox_path, &TEST_POINTER, Some(&lock));
 
         assert!(matches!(
             ManagedEnvironment::ensure_locked(&flox, &TEST_POINTER, &dot_flox_path, &floxmeta),
@@ -1149,13 +1157,13 @@ mod test {
         let floxmeta = create_floxmeta(&flox, &remote_path, &branch);
 
         // create a .flox directory
-        let dot_flox_path = flox.temp_dir.join(DOT_FLOX);
         let lock = GenerationLock {
             rev: hash_1.clone(),
             local_rev: Some(hash_1.clone()),
             version: Version::<1> {},
         };
-        create_dot_flox(&dot_flox_path, &TEST_POINTER, Some(&lock));
+        let dot_flox_path = flox.temp_dir.join(DOT_FLOX);
+        let dot_flox_path = create_dot_flox(&dot_flox_path, &TEST_POINTER, Some(&lock));
 
         ManagedEnvironment::ensure_locked(&flox, &TEST_POINTER, &dot_flox_path, &floxmeta).unwrap();
 
@@ -1195,13 +1203,13 @@ mod test {
         let floxmeta = create_floxmeta(&flox, &remote_path, &branch);
 
         // create a .flox directory
-        let dot_flox_path = flox.temp_dir.join(DOT_FLOX);
         let lock = GenerationLock {
             rev: hash_1,
             local_rev: Some("does not exist".to_string()),
             version: Version::<1> {},
         };
-        create_dot_flox(&dot_flox_path, &TEST_POINTER, Some(&lock));
+        let dot_flox_path = flox.temp_dir.join(DOT_FLOX);
+        let dot_flox_path = create_dot_flox(&dot_flox_path, &TEST_POINTER, Some(&lock));
 
         assert!(matches!(
             ManagedEnvironment::ensure_locked(&flox, &TEST_POINTER, &dot_flox_path, &floxmeta),
@@ -1328,37 +1336,12 @@ mod test {
         let (_flox, tmp_dir) = flox_instance();
         let path = tmp_dir.path().join("foo");
         std::fs::File::create(&path).unwrap();
-        let encode1 = ManagedEnvironment::encode(&path).unwrap();
-        std::thread::sleep(Duration::from_millis(1_000));
-        let encode2 = ManagedEnvironment::encode(&path).unwrap();
-        assert_eq!(encode1, encode2);
-    }
+        let path = CanonicalPath::new(path).unwrap();
 
-    #[test]
-    fn canonicalized_paths_encode_the_same() {
-        let (_flox, tmp) = flox_instance();
-        // std::fs::canonicalize requires that the path being checked actually exists,
-        // so we're going to create a directory structure under a temporary directory.
-        let parent_dir = tmp.into_path();
-        let subdir = parent_dir.join("foo/bar/baz");
-        std::fs::create_dir_all(&subdir).unwrap();
-        let path = subdir.join("file.txt");
-        let _file = std::fs::File::create(&path).unwrap();
-        // Make sure the path is canonicalized internally before hashing
-        let canonicalized = std::fs::canonicalize(&path).unwrap();
-        let c_encoded = ManagedEnvironment::encode(canonicalized).unwrap();
-        let encoded = ManagedEnvironment::encode(&path).unwrap();
-        assert_eq!(
-            c_encoded, encoded,
-            "sane path is canonicalized before encoding"
-        );
-        // Now do the same thing with cursed paths
-        let up_down = path.parent().unwrap().join("../../bar/baz/file.txt");
-        let encoded = ManagedEnvironment::encode(up_down).unwrap();
-        assert_eq!(
-            c_encoded, encoded,
-            "cursed path is canonicalized before encoding"
-        );
+        let encode1 = ManagedEnvironment::encode(&path);
+        std::thread::sleep(Duration::from_millis(1_000));
+        let encode2 = ManagedEnvironment::encode(&path);
+        assert_eq!(encode1, encode2);
     }
 
     #[test]
@@ -1366,9 +1349,10 @@ mod test {
         let (flox, tmp_dir) = flox_instance();
         let path = tmp_dir.path().join("foo");
         std::fs::File::create(&path).unwrap();
+        let path = CanonicalPath::new(path).unwrap();
         let links_dir = reverse_links_dir(&flox);
         assert!(!links_dir.exists());
-        ManagedEnvironment::ensure_reverse_link(&flox, path).unwrap();
+        ManagedEnvironment::ensure_reverse_link(&flox, &path).unwrap();
         assert!(links_dir.exists());
     }
 
@@ -1378,6 +1362,7 @@ mod test {
         let links_dir = reverse_links_dir(&flox);
         let path = tmp_dir.path().join("foo");
         std::fs::File::create(&path).unwrap();
+        let path = CanonicalPath::new(path).unwrap();
         // There are no links if the directory hasn't been created
         assert!(!links_dir.exists());
         // Create the reverse link
@@ -1391,7 +1376,7 @@ mod test {
             .unwrap()
             .unwrap()
             .file_name();
-        let expected_link_name = ManagedEnvironment::encode(&path).unwrap();
+        let expected_link_name = ManagedEnvironment::encode(&path);
         assert_eq!(link_name.to_str().unwrap(), &expected_link_name);
     }
 
@@ -1401,6 +1386,7 @@ mod test {
         let links_dir = reverse_links_dir(&flox);
         let path = tmp_dir.path().join("foo");
         std::fs::File::create(&path).unwrap();
+        let path = CanonicalPath::new(path).unwrap();
         // There are no links if the directory hasn't been created
         assert!(!links_dir.exists());
         // Create the reverse link
@@ -1414,7 +1400,7 @@ mod test {
             .unwrap()
             .unwrap()
             .file_name();
-        let expected_link_name = ManagedEnvironment::encode(&path).unwrap();
+        let expected_link_name = ManagedEnvironment::encode(&path);
         assert_eq!(link_name.to_str().unwrap(), &expected_link_name);
         // Ensure that the link exists, checking that another one hasn't been created
         ManagedEnvironment::ensure_reverse_link(&flox, &path).unwrap();
@@ -1435,6 +1421,8 @@ mod test {
         let links_dir = reverse_links_dir(&flox);
         let path = tmp_dir.path().join("foo");
         std::fs::File::create(&path).unwrap();
+        let path = CanonicalPath::new(path).unwrap();
+
         // There are no links if the directory hasn't been created
         assert!(!links_dir.exists());
         // Create the reverse link
@@ -1447,7 +1435,7 @@ mod test {
             name: EnvironmentName::from_str("name").unwrap(),
             version: Version::<1>,
         };
-        let branch_name = branch_name(&flox.system, &pointer, &path).unwrap();
+        let branch_name = branch_name(&flox.system, &pointer, &path);
         let decoded_path = ManagedEnvironment::decode(&flox, &branch_name).unwrap();
         let canonicalized_decoded_path = std::fs::canonicalize(decoded_path).unwrap();
         let canonicalized_path = std::fs::canonicalize(&path).unwrap();
