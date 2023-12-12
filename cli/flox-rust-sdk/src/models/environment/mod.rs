@@ -18,6 +18,7 @@ use self::managed_environment::ManagedEnvironmentError;
 use super::environment_ref::{EnvironmentName, EnvironmentOwner};
 use super::flox_package::FloxTriple;
 use crate::flox::{EnvironmentRef, Flox};
+use crate::models::pkgdb::call_pkgdb;
 use crate::providers::git::{
     GitCommandDiscoverError,
     GitCommandProvider,
@@ -48,6 +49,7 @@ pub const DOT_FLOX: &str = ".flox";
 pub const ENVIRONMENT_POINTER_FILENAME: &str = "env.json";
 pub const GLOBAL_MANIFEST_TEMPLATE: &str = env!("GLOBAL_MANIFEST_TEMPLATE");
 pub const GLOBAL_MANIFEST_FILENAME: &str = "global-manifest.toml";
+pub const GLOBAL_MANIFEST_LOCKFILE_FILENAME: &str = "global-manifest.lock";
 pub const MANIFEST_FILENAME: &str = "manifest.toml";
 pub const LOCKFILE_FILENAME: &str = "manifest.lock";
 pub const GCROOTS_DIR_NAME: &str = "run";
@@ -95,6 +97,9 @@ pub trait Environment {
         flox: &Flox,
         contents: String,
     ) -> Result<EditResult, EnvironmentError2>;
+
+    /// Atomically update this environment's inputs
+    fn update(&mut self, flox: &Flox, inputs: Vec<String>) -> Result<String, EnvironmentError2>;
 
     async fn catalog(
         &self,
@@ -427,6 +432,13 @@ pub fn init_global_manifest(global_manifest_path: &Path) -> Result<(), Environme
 pub fn global_manifest_path(flox: &Flox) -> PathBuf {
     let path = flox.config_dir.join(GLOBAL_MANIFEST_FILENAME);
     debug!("global manifest path is {}", path.display());
+    path
+}
+
+/// Returns the path to the global manifest's lockfile
+pub fn global_manifest_lockfile_path(flox: &Flox) -> PathBuf {
+    let path = flox.config_dir.join(GLOBAL_MANIFEST_LOCKFILE_FILENAME);
+    debug!("global manifest lockfile path is {}", path.display());
     path
 }
 

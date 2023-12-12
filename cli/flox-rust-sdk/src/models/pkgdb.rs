@@ -1,7 +1,57 @@
+use std::env;
 use std::fmt::Display;
+use std::process::Command;
 
+use once_cell::sync::Lazy;
 use serde::Deserialize;
 use serde_json::Value;
+use thiserror::Error;
+
+// This is the `PKGDB` path that we actually use.
+// This is set once and prefers the `PKGDB` env variable, but will use
+// the fallback to the binary available at build time if it is unset.
+pub static PKGDB_BIN: Lazy<String> =
+    Lazy::new(|| env::var("PKGDB_BIN").unwrap_or(env!("PKGDB_BIN").to_string()));
+
+/// The JSON output of a `pkgdb update` call
+#[derive(Deserialize)]
+pub struct UpdateResult {
+    pub message: String,
+    pub lockfile: Value,
+}
+
+#[derive(Debug, Error)]
+pub enum CallPkgDbError {
+    #[error(transparent)]
+    PkgDbError(#[from] PkgDbError),
+    #[error("couldn't parse pkgdb error as JSON: {0}")]
+    ParsePkgDbError(String),
+    #[error("couldn't parse pkgdb output as JSON")]
+    ParseJSON(#[source] serde_json::Error),
+    #[error("call to pkgdb failed")]
+    PkgDbCall(#[source] std::io::Error),
+}
+
+/// Call pkgdb and try to parse JSON or error JSON.
+///
+/// Error JSON is parsed into a [CallPkgDbError::PkgDbError].
+pub fn call_pkgdb(mut pkgdb_cmd: Command) -> Result<Value, CallPkgDbError> {
+    let output = pkgdb_cmd.output().map_err(CallPkgDbError::PkgDbCall)?;
+    // If command fails, try to parse stdout as a PkgDbError
+    if !output.status.success() {
+        if let Ok::<PkgDbError, _>(pkgdb_err) = serde_json::from_slice(&output.stdout) {
+            Err(pkgdb_err)?
+        } else {
+            Err(CallPkgDbError::ParsePkgDbError(
+                String::from_utf8_lossy(&output.stdout).to_string(),
+            ))
+        }
+    // If command succeeds, try to parse stdout as JSON value
+    } else {
+        let json = serde_json::from_slice(&output.stdout).map_err(CallPkgDbError::ParseJSON)?;
+        Ok(json)
+    }
+}
 
 /// A struct representing error messages coming from pkgdb
 #[derive(Debug, PartialEq)]
