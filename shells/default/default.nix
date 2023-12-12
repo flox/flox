@@ -5,6 +5,8 @@
   just,
   lib,
   mkShell,
+  poetry,
+  python3,
   pre-commit-check,
   flox-cli,
   flox-cli-tests,
@@ -13,6 +15,7 @@
   flox-pkgdb,
   flox-pkgdb-tests,
   flox-tests,
+  flox-pytests,
   ci ? false,
 }: let
   # For use in GitHub Actions and local development.
@@ -20,17 +23,25 @@
     flox-pkgdb.ciPackages
     ++ flox-env-builder.ciPackages
     ++ flox-cli.ciPackages
-    ++ [flox-pkgdb-tests flox-env-builder-tests flox-cli-tests flox-tests];
+    ++ [
+      flox-pkgdb-tests
+      flox-env-builder-tests
+      flox-cli-tests
+      flox-tests
+      flox-pytests
+    ];
 
   devPackages =
     flox-pkgdb.devPackages
     ++ flox-env-builder.devPackages
     ++ flox-cli.devPackages
     ++ [
-      just
-      hivemind
-      commitizen
       alejandra
+      commitizen
+      hivemind
+      just
+      poetry
+      python3
     ];
 in
   mkShell (
