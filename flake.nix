@@ -179,7 +179,7 @@
       flox-cli = callPackage ./pkgs/flox-cli {};
 
       # Flox Command Line Interface ( production build ).
-      flox = callPackage ./pkgs/flox-cli {longVersion = true;};
+      flox = callPackage ./pkgs/flox {};
 
       # Wrapper scripts for running test suites.
       flox-pkgdb-tests = callPackage ./pkgs/flox-pkgdb-tests {};
