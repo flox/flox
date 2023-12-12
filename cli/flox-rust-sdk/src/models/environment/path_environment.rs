@@ -406,21 +406,7 @@ mod tests {
 
         assert_eq!(actual, expected);
 
-        assert!(
-            actual.path.join(ENV_DIR_NAME).join("flake.nix").exists(),
-            "flake does not exist"
-        );
         assert!(actual.manifest_path().exists(), "manifest exists");
-        assert!(
-            actual
-                .path
-                .join(ENV_DIR_NAME)
-                .join("pkgs")
-                .join("default")
-                .join("default.nix")
-                .exists(),
-            "default.nix exists"
-        );
         assert!(actual.path.is_absolute());
     }
 

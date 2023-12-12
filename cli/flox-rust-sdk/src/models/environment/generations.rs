@@ -28,8 +28,9 @@ use serde_with::{DeserializeFromStr, SerializeDisplay};
 use thiserror::Error;
 
 use super::core_environment::CoreEnvironment;
-use super::{copy_dir_recursive, ENV_DIR_NAME};
-use crate::providers::git::{GitCommandProvider, GitProvider};
+use super::{copy_dir_recursive, PathPointer, ENV_DIR_NAME};
+use crate::models::environment::MANIFEST_FILENAME;
+use crate::providers::git::{GitCommandError, GitCommandOptions, GitCommandProvider, GitProvider};
 
 const GENERATIONS_METADATA_FILE: &str = "metadata.json";
 
@@ -85,6 +86,37 @@ impl<S> Generations<S> {
     pub fn metadata(&self) -> Result<AllGenerationsMetadata, GenerationsError> {
         read_metadata(&self.repo, &self.branch)
     }
+
+    /// Read the manifest of a given generation and return its contents as a string
+    pub fn manifest(&self, generation: usize) -> Result<String, GenerationsError> {
+        let metadata = self.metadata()?;
+        if !metadata.generations.contains_key(&generation.into()) {
+            return Err(GenerationsError::GenerationNotFound(generation));
+        }
+        let manifest_osstr = self
+            .repo
+            .show(&format!(
+                "{}:{}/{}/{}",
+                self.branch, generation, ENV_DIR_NAME, MANIFEST_FILENAME
+            ))
+            .map_err(GenerationsError::ShowManifest)?;
+
+        return Ok(manifest_osstr.to_string_lossy().to_string());
+    }
+
+    /// Read the manifest of the current generation and return its contents as a string
+    pub fn current_gen_manifest(&self) -> Result<String, GenerationsError> {
+        let metadata = self.metadata()?;
+        let current_gen = metadata
+            .current_gen
+            .ok_or(GenerationsError::NoGenerations)?;
+
+        self.manifest(*current_gen)
+    }
+
+    pub(super) fn git(&self) -> &GitCommandProvider {
+        &self.repo
+    }
 }
 
 impl Generations<ReadOnly> {
@@ -97,6 +129,47 @@ impl Generations<ReadOnly> {
         }
     }
 
+    /// Initialize a new generations branch for an environment
+    /// in an assumed empty branch.
+    ///
+    /// This will create a new (initial) commit with an initial metadata file.
+    pub fn init(
+        options: GitCommandOptions,
+        checkedout_tempdir: impl AsRef<Path>,
+        bare_tempdir: impl AsRef<Path>,
+        branch: String,
+        pointer: &PathPointer,
+    ) -> Result<Self, GenerationsError> {
+        let repo = GitCommandProvider::init_with(options.clone(), &checkedout_tempdir, false)
+            .map_err(GenerationsError::InitRepo)?;
+        repo.checkout(&branch, true)
+            .map_err(GenerationsError::CreateBranch)?;
+
+        let metadata = AllGenerationsMetadata::default();
+        write_metadata_file(metadata, repo.path())?;
+
+        repo.add(&[Path::new(GENERATIONS_METADATA_FILE)])
+            .map_err(GenerationsError::StageChanges)?;
+        repo.commit(&format!(
+            "Initialize generations branch for environment '{}'",
+            pointer.name
+        ))
+        .map_err(GenerationsError::CommitChanges)?;
+
+        let bare = GitCommandProvider::clone_branch_with(
+            options,
+            checkedout_tempdir.as_ref(),
+            bare_tempdir,
+            &branch,
+            true,
+        )
+        .map_err(GenerationsError::MakeBareClone)?;
+
+        Ok(Self::new(bare, branch))
+    }
+
+    /// Create a writable copy of this generations instance
+    /// in a temporary directory.
     pub fn writable(
         self,
         tempdir: impl AsRef<Path>,
@@ -193,14 +266,22 @@ impl Generations<ReadWrite> {
         // copy into `<generation>/env/` to make creating `PathEnvironment` easier
         copy_dir_recursive(&environment.path(), &env_path, true).unwrap();
 
-        self.repo.add(&[&generation_path]).unwrap();
+        self.repo
+            .add(&[&generation_path])
+            .map_err(GenerationsError::StageChanges)?;
+        self.repo
+            .add(&[Path::new(GENERATIONS_METADATA_FILE)])
+            .map_err(GenerationsError::StageChanges)?;
+
         self.repo
             .commit(&format!(
                 "Create generation {}\n\n{}",
                 generation, description
             ))
-            .unwrap();
-        self.repo.push("origin", false).unwrap();
+            .map_err(GenerationsError::CommitChanges)?;
+        self.repo
+            .push("origin", false)
+            .map_err(GenerationsError::CompleteTransaction)?;
 
         Ok(())
     }
@@ -266,11 +347,52 @@ impl Generations<ReadWrite> {
 
 #[derive(Debug, Error)]
 pub enum GenerationsError {
-    #[error("Generation {0} not found")]
-    GenerationNotFound(usize),
+    // region: initialization errors
+    #[error("could not initialize generations repo")]
+    InitRepo(#[source] GitCommandError),
+    #[error("could not create generations branch")]
+    CreateBranch(#[source] GitCommandError),
+    #[error("could not make bare clone of generations branch")]
+    MakeBareClone(#[source] GitCommandError),
 
-    #[error("No generations found in environment")]
+    // endregion
+
+    // region: metadata errors
+    #[error("could not serialize generations metadata")]
+    SerializeMetadata(#[source] serde_json::Error),
+    #[error("could not write generations metadata file")]
+    WriteMetadata(#[source] std::io::Error),
+
+    #[error("could not show generations metadata file")]
+    ShowMetadata(#[source] GitCommandError),
+    #[error("could not parse generations metadata")]
+    DeserializeMetadata(#[source] serde_json::Error),
+    // endregion
+
+    // region: generation errors
+    #[error("generation {0} not found")]
+    GenerationNotFound(usize),
+    #[error("no generations found in environment")]
     NoGenerations,
+    // endregion
+
+    // region: repo/transaction
+    #[error("could not clone generations branch")]
+    CloneToFS(#[source] GitCommandError),
+    #[error("could not stage changes")]
+    StageChanges(#[source] GitCommandError),
+    #[error("could not commit changes")]
+    CommitChanges(#[source] GitCommandError),
+    #[error("could not complete transaction")]
+    CompleteTransaction(#[source] GitCommandError),
+    // endregion
+
+    // region: manifest errors
+    #[error("could not write manifest file")]
+    WriteManifest(#[source] std::io::Error),
+    #[error("could not show manifest file")]
+    ShowManifest(#[source] GitCommandError),
+    // endregion
 }
 
 /// Realize the generations branch into a temporary directory
@@ -282,7 +404,7 @@ fn checkout_to_tempdir(
     let git_options = repo.get_options().clone();
     let repo =
         GitCommandProvider::clone_branch_with(git_options, repo.path(), tempdir, branch, false)
-            .unwrap();
+            .map_err(GenerationsError::CloneToFS)?;
 
     Ok(repo)
 }
@@ -295,8 +417,9 @@ fn read_metadata(
     let metadata = {
         let metadata_content = repo
             .show(&format!("{}:{}", ref_name, GENERATIONS_METADATA_FILE))
-            .unwrap();
-        serde_json::from_str(&metadata_content.to_string_lossy()).unwrap()
+            .map_err(GenerationsError::ShowMetadata)?;
+        serde_json::from_str(&metadata_content.to_string_lossy())
+            .map_err(GenerationsError::DeserializeMetadata)?
     };
     Ok(metadata)
 }
@@ -308,9 +431,10 @@ fn write_metadata_file(
     metadata: AllGenerationsMetadata,
     realized_path: &Path,
 ) -> Result<(), GenerationsError> {
-    let metadata_content = serde_json::to_string(&metadata).unwrap();
+    let metadata_content =
+        serde_json::to_string(&metadata).map_err(GenerationsError::SerializeMetadata)?;
     let metadata_path = realized_path.join(GENERATIONS_METADATA_FILE);
-    fs::write(metadata_path, metadata_content).unwrap();
+    fs::write(metadata_path, metadata_content).map_err(GenerationsError::WriteMetadata)?;
     Ok(())
 }
 
@@ -325,11 +449,11 @@ fn write_metadata_file(
 pub struct AllGenerationsMetadata {
     /// None means the environment has been created but does not yet have any
     /// generations
-    current_gen: Option<GenerationId>,
+    pub current_gen: Option<GenerationId>,
     /// Metadata for all generations of the environment.
     /// Entries in this map must match up 1-to-1 with the generation folders
     /// in the environment branch.
-    generations: BTreeMap<GenerationId, SingleGenerationMetadata>,
+    pub generations: BTreeMap<GenerationId, SingleGenerationMetadata>,
     /// Schema version of the metadata file, not yet utilized
     #[serde(default)]
     version: Version<1>,
@@ -341,15 +465,15 @@ pub struct AllGenerationsMetadata {
 pub struct SingleGenerationMetadata {
     /// unix timestamp of the creation time of this generation
     #[serde(with = "chrono::serde::ts_seconds")]
-    created: DateTime<Utc>,
+    pub created: DateTime<Utc>,
 
     /// unix timestamp of the time when this generation was last set as active
     /// `None` if this generation has never been set as active
     #[serde(with = "chrono::serde::ts_seconds_option")]
-    last_active: Option<DateTime<Utc>>,
+    pub last_active: Option<DateTime<Utc>>,
 
     /// log message(s) describing the change from the previous generation
-    description: String,
+    pub description: String,
     // todo: do we still need to track this?
     //       do we now?
     // /// store path of the built generation
