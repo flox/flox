@@ -119,7 +119,7 @@ impl Edit {
         // method because the temporary manifest needs to stick around in case the user wants
         // or needs to make successive edits without starting over each time.
         let tmp_manifest = NamedTempFile::new_in(&flox.temp_dir)?;
-        std::fs::write(&tmp_manifest, environment.manifest_content()?)?;
+        std::fs::write(&tmp_manifest, environment.manifest_content(&flox)?)?;
         let should_continue = Dialog {
             message: "Continue editing?",
             help_message: Default::default(),
@@ -448,7 +448,7 @@ impl List {
             .detect_concrete_environment(&flox, "list using")?
             .into_dyn_environment();
 
-        let manifest_contents = env.manifest_content()?;
+        let manifest_contents = env.manifest_content(&flox)?;
         if let Some(pkgs) = list_packages(&manifest_contents)? {
             pkgs.iter().for_each(|pkg| println!("{}", pkg));
         }
@@ -695,10 +695,6 @@ impl Push {
 
         match EnvironmentPointer::open(&dir)? {
             EnvironmentPointer::Managed(managed_pointer) => {
-                if self.owner.is_some() {
-                    bail!("Environment already linked to a remote")
-                }
-
                 Self::push_managed_env(&flox, managed_pointer, dir, self.force)
                     .context("Could not push managed environment")?;
             },
@@ -752,14 +748,8 @@ impl Push {
         let path_environment =
             path_environment::PathEnvironment::open(path_pointer, dot_flox_path, &flox.temp_dir)?;
 
-        ManagedEnvironment::push_new(
-            flox,
-            path_environment,
-            owner.parse().unwrap(),
-            &flox.temp_dir,
-            force,
-        )
-        .map_err(Self::convert_error)?;
+        ManagedEnvironment::push_new(flox, path_environment, owner.parse().unwrap(), force)
+            .map_err(Self::convert_error)?;
 
         Ok(())
     }

@@ -147,7 +147,7 @@ impl FloxmetaV2 {
 
 /// Returns the git options for interacting with floxmeta repositories
 // todo: move floxhub host and token to Flox, or integrate config...
-fn floxmeta_git_options(floxhub_host: &str, floxhub_token: &str) -> GitCommandOptions {
+pub fn floxmeta_git_options(floxhub_host: &str, floxhub_token: &str) -> GitCommandOptions {
     let mut options = GitCommandOptions::default();
 
     // set the user config
@@ -180,11 +180,9 @@ pub(super) fn floxmeta_dir(flox: &Flox, owner: &EnvironmentOwner) -> PathBuf {
 #[cfg(feature = "impure-unit-tests")]
 mod tests {
     use std::fs;
-    use std::str::FromStr;
 
     use super::*;
     use crate::flox::tests::flox_instance;
-    use crate::flox::EnvironmentName;
     use crate::providers::git::GitProvider;
 
     /// Create an upstream floxmeta repository with an environment under a given base path

@@ -15,7 +15,7 @@ use super::pkgdb_errors::PkgDbError;
 // This is set once and prefers the `PKGDB` env variable, but will use
 // the fallback to the binary available at build time if it is unset.
 pub static PKGDB_BIN: Lazy<String> =
-    Lazy::new(|| env::var("PKGDB").unwrap_or(env!("PKGDB_BIN").to_string()));
+    Lazy::new(|| env::var("PKGDB_BIN").unwrap_or(env!("PKGDB_BIN").to_string()));
 
 #[derive(Debug, thiserror::Error)]
 pub enum SearchError {

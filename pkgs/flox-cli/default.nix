@@ -59,11 +59,11 @@
       # rather than relying on or modifying the user's `PATH` variable
       GIT_BIN = "${gitMinimal}/bin/git";
       NIX_BIN = "${nix}/bin/nix";
-      PARSER_UTIL_BIN = "${parser-util}/bin/parser-util";
       PKGDB_BIN =
         if flox-pkgdb == null
-        then ""
+        then "pkgdb"
         else "${flox-pkgdb}/bin/pkgdb";
+      PARSER_UTIL_BIN = "${parser-util}/bin/parser-util";
       FLOX_ETC_DIR = ../../assets/etc;
       FLOX_ZDOTDIR = ../../assets/flox.zdotdir;
 
