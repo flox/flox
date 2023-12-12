@@ -521,17 +521,16 @@ impl ManagedEnvironment {
 
 /// Utility instance methods
 impl ManagedEnvironment {
-    /// Where to link a built environment to. The parent directory may not exist.
+    /// Where to link a built environment to.
     ///
-    /// Todo: use `branch_name` as currently all instances of the same environment
-    ///       will resolve to the same outpath violating the specified requirement
-    ///       of unique/independent instances.
-    ///       Consider using `branch_name` with `unwrap()` (as an instance method
-    ///       the existence of a .flox dir is already proven) or change
-    ///       [ManagedEnvironment::encode] to expect canonicalized paths.
+    /// The parent directory may not exist!
+
     fn out_link(&self, flox: &Flox) -> PathBuf {
-        gcroots_dir(flox, &self.pointer.owner)
-            .join(format!("{0}.{1}", flox.system, self.pointer.name))
+        gcroots_dir(flox, &self.pointer.owner).join(branch_name(
+            &self.system,
+            &self.pointer,
+            &self.path,
+        ))
     }
 
     /// Returns the environment owner
