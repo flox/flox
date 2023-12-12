@@ -15,22 +15,25 @@ namespace flox::buildenv {
 
 /* -------------------------------------------------------------------------- */
 
-struct CmdBuildEnv : nix::EvalCommand
+/** @brief Evaluate and build a locked environment. */
+class BuildEnvCommand
 {
-  std::string                lockfileContent;
-  std::optional<std::string> outLink;
-  std::optional<System>      system;
+  {
+    command::VerboseParser     parser;
+    std::string                lockfileContent;
+    std::optional<std::string> outLink;
+    std::optional<System>      system;
 
-  CmdBuildEnv();
+    BuildEnvCommand();
 
-  void
-  run( ref<nix::Store> store ) override;
-
-
-}; /* End struct `CmdBuildEnv' */
+    void run( ref<nix::Store> store ) override;
 
 
-/* -------------------------------------------------------------------------- */
+  }; /* End struct `BuildEnvCommand' */
+
+
+  /* --------------------------------------------------------------------------
+   */
 
 }  // namespace flox::buildenv
 

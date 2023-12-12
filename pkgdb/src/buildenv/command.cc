@@ -15,34 +15,33 @@ namespace flox::buildenv {
 
 /* -------------------------------------------------------------------------- */
 
-CmdBuildEnv::CmdBuildEnv()
+BuildEnvCommand::BuildEnvCommand()
 {
-  /* TODO
-  addFlag( { .longName    = "lockfile",
-             .shortName   = 'l',
-             .description = "locked manifest",
-             .labels      = { "lockfile" },
-             .handler     = { &lockfile_content } } );
+  this->parser.add_description( "Evaluate and build a locked environment" );
+  this->parser.add_argument( "lockfile" )
+    .help( "inline JSON or path to lockfile" )
+    .required()
+    .metavar( "LOCKFILE" )
+    .action( [&]( const std::string & str )
+             { this->lockfileContent = readOrCoerceJSON( str ); } );
 
-  addFlag( { .longName    = "out-link",
-             .shortName   = 'o',
-             .description = "output link",
-             .labels      = { "out-link" },
-             .handler     = { &out_link } } );
+  this->parser.add_argument( "--out-link", "-o" )
+    .help( "path to link resulting environment" )
+    .metavar( "OUT-LINK" )
+    .action( [&]( const std::string & str ) { this->outLink = str; } );
 
-  addFlag( { .longName    = "system",
-             .shortName   = 's',
-             .description = "system",
-             .labels      = { "system" },
-             .handler     = { &system } } );
-  */
+  this->parser.add_argument( "--system", "-s" )
+    .help( "system to build for" )
+    .metavar( "SYSTEM" )
+    .nargs( 1 )
+    .action( [&]( const std::string & str ) { this->system = str; } );
 }
 
 
 /* -------------------------------------------------------------------------- */
 
 void
-CmdBuildEnv::run( ref<nix::Store> store ) override
+BuildEnvCommand::run( ref<nix::Store> store ) override
 {
 
   if ( nix::lvlDebug <= nix::verbosity )
