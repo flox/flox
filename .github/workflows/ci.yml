@@ -62,7 +62,7 @@ jobs:
             --accept-flake-config \
             --no-update-lock-file \
             '.#default' \
-              --command make
+              --command make -j
           popd
 
       - name: "Test (pkgdb)"
