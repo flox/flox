@@ -18,7 +18,7 @@ bats_require_minimum_version '1.5.0'
 const_setup() {
   if [[ -n "${__PD_RAN_CONST_SETUP:-}" ]]; then return 0; fi
 
-  ENV_BUILDER_NAME="${ENV_BUILDER_NAME:-"env-builder"}"
+  ENV_BUILDER_NAME="${ENV_BUILDER_NAME:-env-builder}"
   ENV_BUILDER_INSTALLABLE="${ENV_BUILDER_INSTALLABLE:-".#flox-env-builder"}"
 
   export ENV_BUILDER_NAME

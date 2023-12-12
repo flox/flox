@@ -68,12 +68,11 @@ run( int argc, char * argv[] )
   flox::EvalCommand cmdEval;
   prog.add_subparser( cmdEval.getParser() );
 
-  flox::BuildEnvCommand cmdBuildEnv;
+  flox::buildenv::BuildEnvCommand cmdBuildEnv;
   prog.add_subparser( cmdBuildEnv.getParser() );
 
 
   /* Parse Args */
-
   try
     {
       prog.parse_args( argc, argv );
@@ -84,7 +83,6 @@ run( int argc, char * argv[] )
     }
 
   /* Run subcommand */
-
   if ( prog.is_subcommand_used( "scrape" ) ) { return cmdScrape.run(); }
   if ( prog.is_subcommand_used( "get" ) ) { return cmdGet.run(); }
   if ( prog.is_subcommand_used( "list" ) ) { return cmdList.run(); }

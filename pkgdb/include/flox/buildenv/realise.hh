@@ -17,7 +17,6 @@
 #include <nix/builtins/buildenv.hh>
 #include <nix/eval.hh>
 #include <nix/store-api.hh>
-#include <nix/util.hh>
 
 #include "flox/core/exceptions.hh"
 #include "flox/resolver/lockfile.hh"
@@ -39,7 +38,7 @@ struct Priority
 
 /* -------------------------------------------------------------------------- */
 
-struct Package
+struct RealisedPackage
 {
   std::string path;
   bool        active;
@@ -53,6 +52,13 @@ struct Package
 class BuildEnvFileConflictError : public FloxException
 {
 
+private:
+
+  const std::string fileA;
+  const std::string fileB;
+  const int         priority;
+
+
 public:
 
   BuildEnvFileConflictError( const std::string fileA,
@@ -61,10 +67,13 @@ public:
     : FloxException(
       "buildenv file conflict",
       nix::fmt(
-        "there is a conflict for the files with priority %zu: `%s' and `%s'" ),
-      priority,
-      fileA,
-      fileB )
+        "there is a conflict for the files with priority %zu: `%s' and `%s'",
+        priority,
+        fileA,
+        fileB ) )
+    , fileA( fileA )
+    , fileB( fileB )
+    , priority( priority )
   {}
 
   [[nodiscard]] error_category
@@ -79,6 +88,24 @@ public:
     return "buildenv file conflict";
   }
 
+  const std::string &
+  getFileA() const
+  {
+    return this->fileA;
+  }
+
+  const std::string &
+  getFileB() const
+  {
+    return this->fileB;
+  }
+
+  int
+  getPriority() const
+  {
+    return this->priority;
+  }
+
 
 }; /* End class `BuildEnvFileConflictError' */
 
@@ -86,13 +113,14 @@ public:
 /* -------------------------------------------------------------------------- */
 
 /** @brief Modified version of `nix/builtins/buildenv::buildProfile` that has
- * special handling for flox packages.
- * @param out the path to a build directory. (This directory will be loaded
- * into the store by the caller)
+ *         special handling for flox packages.
+ * @param out the path to a build directory.
+ *            ( This directory will be loaded into the store by the caller )
  * @param pkgs a list of packages to include in the build environment.
  */
 void
-buildEnvironment( const std::string & out, std::vector<Package> & pkgs );
+buildEnvironment( const std::string &             out,
+                  std::vector<RealisedPackage> && pkgs );
 
 
 /* -------------------------------------------------------------------------- */
@@ -107,7 +135,7 @@ buildEnvironment( const std::string & out, std::vector<Package> & pkgs );
 nix::StorePath
 createFloxEnv( nix::EvalState &     state,
                resolver::Lockfile & lockfile,
-               System &             system );
+               const System &       system );
 
 
 /* -------------------------------------------------------------------------- */
@@ -123,9 +151,9 @@ createFloxEnv( nix::EvalState &     state,
  */
 const nix::StorePath &
 createEnvironmentStorePath(
-  flox::buildenv::std::vector<Package> & pkgs,
-  nix::EvalState &                       state,
-  nix::StorePathSet &                    references,
+  std::vector<RealisedPackage> & pkgs,
+  nix::EvalState &               state,
+  nix::StorePathSet &            references,
   std::map<nix::StorePath, std::pair<std::string, resolver::LockedPackageRaw>> &
     originalPackage );
 

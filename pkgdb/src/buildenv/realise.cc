@@ -83,7 +83,7 @@ addDirToStore( nix::EvalState &    state,
             *state.store,
             "environment",
             nix::FixedOutputInfo {
-                .method = FileIngestionMethod::Recursive,
+                .method = nix::FileIngestionMethod::Recursive,
                 .hash = narHash,
                 .references = {
                     .others = std::move(references),
@@ -105,22 +105,22 @@ addDirToStore( nix::EvalState &    state,
 
 const nix::StorePath
 createEnvironmentStorePath(
-  nix::EvalState &       state,
-  std::vector<Package> & pkgs,
-  nix::StorePathSet &    references,
-  std::map<StorePath, std::pair<std::string, resolver::LockedPackageRaw>> &
+  nix::EvalState &               state,
+  std::vector<RealisedPackage> & pkgs,
+  nix::StorePathSet &            references,
+  std::map<nix::StorePath, std::pair<std::string, resolver::LockedPackageRaw>> &
     originalPackage )
 {
   /* build the profile into a tempdir */
-  auto tempDir = createTempDir();
+  auto tempDir = nix::createTempDir();
   try
     {
       buildenv::buildEnvironment( tempDir, std::move( pkgs ) );
     }
-  catch ( buildenv::BuildEnvFileConflictError & e )
+  catch ( buildenv::BuildEnvFileConflictError & err )
     {
-      auto [storePathA, filePath] = state.store->toStorePath( e.fileA );
-      auto [storePathB, _]        = state.store->toStorePath( e.fileB );
+      auto [storePathA, filePath] = state.store->toStorePath( err.getFileA() );
+      auto [storePathB, _]        = state.store->toStorePath( err.getFileB() );
 
       auto [nameA, packageA] = originalPackage.at( storePathA );
       auto [nameB, packageB] = originalPackage.at( storePathB );
@@ -129,13 +129,14 @@ createEnvironmentStorePath(
       throw FloxException(
         "environment error",
         "failed to build environment",
-        fmt( "file conflict between packages '%s' and '%s' at '%s'"
-             "\n\n\tresolve by setting the priority of the preferred package "
-             "to a value lower than '%d'",
-             nameA,
-             nameB,
-             filePath,
-             e.priority ) );
+        nix::fmt(
+          "file conflict between packages '%s' and '%s' at '%s'"
+          "\n\n\tresolve by setting the priority of the preferred package "
+          "to a value lower than '%d'",
+          nameA,
+          nameB,
+          filePath,
+          err.getPriority() ) );
     }
   return addDirToStore( state, tempDir, references );
 }
@@ -147,28 +148,26 @@ extractAttrPath( nix::EvalState & state,
                  nix::Value &     vFlake,
                  flox::AttrPath   attrPath )
 {
-
-  state.forceAttrs( vFlake, noPos, "while parsing flake" );
+  state.forceAttrs( vFlake, nix::noPos, "while parsing flake" );
 
 
   auto output = vFlake.attrs->get( state.symbols.create( "outputs" ) );
 
-  for ( auto path_segment : attrPath )
+  for ( auto attrName : attrPath )
     {
       state.forceAttrs( *output->value,
                         output->pos,
                         "while parsing cached flake data" );
 
-      auto next
-        = output->value->attrs->get( state.symbols.create( path_segment ) );
+      auto next = output->value->attrs->get( state.symbols.create( attrName ) );
 
       if ( ! next )
         {
           std::ostringstream str;
           output->value->print( state.symbols, str );
-          throw Error( "Attribute '%s' not found in set '%s'",
-                       path_segment,
-                       str.str() );
+          throw FloxException( "attribute `%s' not found in set `%s'",
+                               attrName,
+                               str.str() );
         }
       output = next;
     }
@@ -182,13 +181,13 @@ extractAttrPath( nix::EvalState & state,
 nix::StorePath
 createFloxEnv( nix::EvalState &     state,
                resolver::Lockfile & lockfile,
-               System &             system )
+               const System &       system )
 {
   auto packages = lockfile.getLockfileRaw().packages.find( system );
   if ( packages == lockfile.getLockfileRaw().packages.end() )
     {
       // TODO: throw structured exception
-      throw Error( "No packages found for system '%s'", system );
+      throw FloxException( "No packages found for system `" + system + "'" );
     }
 
   /* Extract all packages */
@@ -203,21 +202,22 @@ createFloxEnv( nix::EvalState &     state,
     }
 
   /* Extract derivations */
-  nix::StorePathSet                 references;
-  std::vector<StorePathWithOutputs> drvsToBuild;
-  std::vector<Package>              pkgs;
-  std::map<StorePath, std::pair<std::string, resolver::LockedPackageRaw>>
+  nix::StorePathSet                      references;
+  std::vector<nix::StorePathWithOutputs> drvsToBuild;
+  std::vector<RealisedPackage>           pkgs;
+  std::map<nix::StorePath, std::pair<std::string, resolver::LockedPackageRaw>>
     originalPackage;
 
   for ( auto const & [pId, package] : locked_packages )
     {
-
-      auto package_input_ref = FlakeRef( package.input );
-      auto package_flake
-        = flake::lockFlake( state, package_input_ref, flake::LockFlags {} );
+      // FIXME: use `FloxFlake'
+      auto packageInputRef = nix::FlakeRef( package.input );
+      auto packageFlake    = nix::flake::lockFlake( state,
+                                                 packageInputRef,
+                                                 nix::flake::LockFlags {} );
 
       auto vFlake = state.allocValue();
-      flake::callFlake( state, package_flake, *vFlake );
+      nix::flake::callFlake( state, packageFlake, *vFlake );
 
       /* Get referenced output. */
       auto output = extractAttrPath( state, *vFlake, package.attrPath );
@@ -227,8 +227,8 @@ createFloxEnv( nix::EvalState &     state,
 
       if ( ! package_drv.has_value() )
         {
-          throw Error( "Failed to get derivation for package '%s'",
-                       nlohmann::json( package ).dump().c_str() );
+          throw FloxException( "Failed to get derivation for package `"
+                               + nlohmann::json( package ).dump() + "'" );
         }
 
       auto packagePath
@@ -261,23 +261,22 @@ createFloxEnv( nix::EvalState &     state,
       /* Collect drvs that may yet need to be built. */
       if ( auto drvPath = package_drv->queryDrvPath() )
         {
-          drvsToBuild.push_back( { *drvPath } );
+          drvsToBuild.push_back( nix::StorePathWithOutputs { *drvPath, {} } );
         }
     }
 
   // TODO: check if this builds `outputsToInstall` only
   // TODO: do we need to honor repair flag? state.repair ? bmRepair : bmNormal
   /* Build derivations that make up the environment */
-  state.store->buildPaths( toDerivedPaths( drvsToBuild ) );
+  state.store->buildPaths( nix::toDerivedPaths( drvsToBuild ) );
 
   /* verbatim content of the activate script common to all shells */
   std::stringstream commonActivate;
 
-  auto tempDir = std::filesystem::path( createTempDir() );
+  auto tempDir = std::filesystem::path( nix::createTempDir() );
   std::filesystem::create_directories( tempDir / "activate" );
 
-  /* Add hook script
-   *
+  /* Add hook script.
    * Write hook script to a temporary file and copy it to the environment.
    * Add source command to the activate script. */
   // TODO: is it script _xor_ file?
@@ -291,7 +290,7 @@ createFloxEnv( nix::EvalState &     state,
       /* Either set script path to a temporary file. */
       if ( auto script = hook->script )
         {
-          script_path = createTempFile().second;
+          script_path = nix::createTempFile().second;
           std::ofstream file( script_path );
           file << script.value();
           file.close();
@@ -309,7 +308,7 @@ createFloxEnv( nix::EvalState &     state,
                                         std::filesystem::perms::owner_exec,
                                         std::filesystem::perm_options::add );
           commonActivate << "source \"$FLOX_ENV/activate/hook.sh\""
-                         << "\n";
+                         << std::endl;
         }
     }
 
@@ -332,7 +331,8 @@ createFloxEnv( nix::EvalState &     state,
               i += 2;
             }
 
-          commonActivate << fmt( "export %s=\"%s\"", name, value ) << "\n";
+          commonActivate << nix::fmt( "export %s=\"%s\"", name, value )
+                         << std::endl;
         }
     }
 
@@ -356,7 +356,7 @@ createFloxEnv( nix::EvalState &     state,
   references.insert( activation_store_path );
   pkgs.emplace_back( state.store->printStorePath( activation_store_path ),
                      true,
-                     buildenv::Priority { 0 } );
+                     buildenv::Priority {} );
 
   /* Insert profile.d scripts.
    * The store path is provided at compile time via the `PROFILE_D_SCRIPT_DIR'
@@ -368,7 +368,7 @@ createFloxEnv( nix::EvalState &     state,
   references.insert( profile_d_scripts_path );
   pkgs.emplace_back( state.store->printStorePath( profile_d_scripts_path ),
                      true,
-                     buildenv::Priority { 0 } );
+                     buildenv::Priority {} );
 
   return createEnvironmentStorePath( state, pkgs, references, originalPackage );
 }
@@ -377,7 +377,8 @@ createFloxEnv( nix::EvalState &     state,
 /* -------------------------------------------------------------------------- */
 
 void
-buildEnvironment( const std::string & out, std::vector<Package> & pkgs );
+buildEnvironment( const std::string &                  out,
+                  const std::vector<RealisedPackage> & pkgs );
 
 
 /* -------------------------------------------------------------------------- */

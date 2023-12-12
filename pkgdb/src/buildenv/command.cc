@@ -7,7 +7,12 @@
  *
  * -------------------------------------------------------------------------- */
 
+#include <nix/local-fs-store.hh>
+
 #include "flox/buildenv/command.hh"
+#include "flox/buildenv/realise.hh"
+#include "flox/resolver/lockfile.hh"
+
 
 /* -------------------------------------------------------------------------- */
 
@@ -15,7 +20,7 @@ namespace flox::buildenv {
 
 /* -------------------------------------------------------------------------- */
 
-BuildEnvCommand::BuildEnvCommand()
+BuildEnvCommand::BuildEnvCommand() : parser( "buildenv" )
 {
   this->parser.add_description( "Evaluate and build a locked environment" );
   this->parser.add_argument( "lockfile" )
@@ -23,7 +28,7 @@ BuildEnvCommand::BuildEnvCommand()
     .required()
     .metavar( "LOCKFILE" )
     .action( [&]( const std::string & str )
-             { this->lockfileContent = readOrCoerceJSON( str ); } );
+             { this->lockfileContent = readAndCoerceJSON( str ); } );
 
   this->parser.add_argument( "--out-link", "-o" )
     .help( "path to link resulting environment" )
@@ -40,43 +45,48 @@ BuildEnvCommand::BuildEnvCommand()
 
 /* -------------------------------------------------------------------------- */
 
-void
-BuildEnvCommand::run( ref<nix::Store> store ) override
+int
+BuildEnvCommand::run()
 {
 
   if ( nix::lvlDebug <= nix::verbosity )
     {
-      logger->log( nix::Verbosity::lvlDebug,
-                   "lockfile: " + this->lockfileContent );
+      nix::logger->log( nix::Verbosity::lvlDebug,
+                        "lockfile: " + this->lockfileContent );
     }
 
-  LockfileRaw lockfileRaw = nlohmann::json::parse( lockfileContent );
-  auto        lockfile    = Lockfile( lockfileRaw );
-  auto        state       = getEvalState();
+  resolver::LockfileRaw lockfileRaw = nlohmann::json::parse( lockfileContent );
+  auto                  lockfile    = resolver::Lockfile( lockfileRaw );
+  auto                  store       = this->getStore();
+  auto                  state       = this->getState();
 
   auto system    = this->system.value_or( nix::settings.thisSystem.get() );
-  auto storePath = flox::createFloxEnv( *state, lockfile, system );
+  auto storePath = createFloxEnv( *state, lockfile, system );
 
   /* Print the resulting store path */
   std::cout << store->printStorePath( storePath ) << std::endl;
 
-  auto localStore = store.dynamic_pointer_cast<LocalFSStore>();
+  auto localStore = store.dynamic_pointer_cast<nix::LocalFSStore>();
 
   // TODO: Make a read error
   if ( localStore == nullptr )
     {
       throw FloxException( "store is not a LocalFSStore" );
+      return EXIT_FAILURE;
     }
 
   if ( outLink.has_value() )
     {
       auto outLinkPath
-        = localStore->addPermRoot( storePath, absPath( outLink.value() ) );
+        = localStore->addPermRoot( storePath, nix::absPath( outLink.value() ) );
       if ( nix::lvlDebug <= nix::verbosity )
         {
-          logger->log( nix::Verbosity::lvlDebug, "outLinkPath: " + outLinkPath )
+          nix::logger->log( nix::Verbosity::lvlDebug,
+                            "outLinkPath: " + outLinkPath );
         }
     }
+
+  return EXIT_SUCCESS;
 }
 
 

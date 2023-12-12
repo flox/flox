@@ -12,6 +12,8 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
+#include <nix/util.hh>
+
 #include "flox/buildenv/realise.hh"
 
 
@@ -21,7 +23,7 @@ namespace flox::buildenv {
 
 /* -------------------------------------------------------------------------- */
 
-struct State
+struct BuildEnvState
 {
   std::map<std::string, Priority> priorities;
   unsigned long                   symlinks = 0;
@@ -33,7 +35,7 @@ struct State
 
 /* For each activated package, create symlinks */
 static void
-createLinks( State &             state,
+createLinks( BuildEnvState &     state,
              const std::string & srcDir,
              const std::string & dstDir,
              const Priority &    priority )
@@ -221,9 +223,10 @@ createLinks( State &             state,
 /* -------------------------------------------------------------------------- */
 
 void
-buildEnvironment( const std::string & out, std::vector<Package> && pkgs )
+buildEnvironment( const std::string &             out,
+                  std::vector<RealisedPackage> && pkgs )
 {
-  State state;
+  BuildEnvState state;
 
   std::set<std::string> done, postponed;
 
@@ -271,11 +274,10 @@ buildEnvironment( const std::string & out, std::vector<Package> && pkgs )
    * between outputs of the same derivation.
    *
    * The handling of internal priorities for outputs of the same derivation
-   * is performed in `buildenv::createLinks`.
-   */
+   * is performed in `buildenv::createLinks'. */
   std::sort( pkgs.begin(),
              pkgs.end(),
-             []( const Package & a, const Package & b )
+             []( const RealisedPackage & a, const RealisedPackage & b )
              {
                auto aP = a.priority;
                auto bP = b.priority;
@@ -314,7 +316,7 @@ buildEnvironment( const std::string & out, std::vector<Package> && pkgs )
       postponed.swap( pkgDirs );
       for ( const auto & pkgDir : pkgDirs )
         {
-          addPkg( pkgDir, Priority { priorityCounter++ } );
+          addPkg( pkgDir, Priority { priorityCounter++, std::nullopt, 0 } );
         }
     }
 
