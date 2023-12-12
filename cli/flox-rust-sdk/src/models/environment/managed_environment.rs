@@ -229,6 +229,26 @@ impl Environment for ManagedEnvironment {
         Ok(result)
     }
 
+    /// Atomically update this environment's inputs
+    fn update(&mut self, flox: &Flox, inputs: Vec<String>) -> Result<String, EnvironmentError2> {
+        let mut generations = self.generations().writable(flox.temp_dir.clone()).unwrap();
+        let mut temporary = generations.get_current_generation().unwrap();
+
+        let message = temporary.update(flox, inputs)?;
+
+        let metadata = format!("updated environment: {message}");
+
+        generations.add_generation(temporary, metadata).unwrap();
+
+        write_pointer_lockfile(
+            self.path.join(GENERATION_LOCK_FILENAME),
+            &self.floxmeta,
+            remote_branch_name(&self.system, &self.pointer),
+            branch_name(&flox.system, &self.pointer, &self.path).into(),
+        )?;
+        Ok(message)
+    }
+
     /// Extract the current content of the manifest
     fn manifest_content(&self, _flox: &Flox) -> Result<String, EnvironmentError2> {
         let manifest = self
