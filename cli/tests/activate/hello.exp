@@ -12,8 +12,7 @@ expect_after {
   eof { exit 2 }
   "*\n" { exp_continue }
 }
-expect "Building"
-expect -re "flox .*\\\[project-\\d+\\\]" {}
+expect "Building environment..."
 
 # check for hello
 send "{ command -v hello||which hello||type -P hello; } 2>&1\n"
