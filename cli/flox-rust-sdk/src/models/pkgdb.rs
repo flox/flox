@@ -1,9 +1,17 @@
+use std::env;
 use std::fmt::Display;
 use std::process::Command;
 
+use once_cell::sync::Lazy;
 use serde::Deserialize;
 use serde_json::Value;
 use thiserror::Error;
+
+// This is the `PKGDB` path that we actually use.
+// This is set once and prefers the `PKGDB` env variable, but will use
+// the fallback to the binary available at build time if it is unset.
+pub static PKGDB_BIN: Lazy<String> =
+    Lazy::new(|| env::var("PKGDB_BIN").unwrap_or(env!("PKGDB_BIN").to_string()));
 
 /// The JSON output of a `pkgdb update` call
 #[derive(Deserialize)]

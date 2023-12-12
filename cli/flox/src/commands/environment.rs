@@ -33,8 +33,7 @@ use flox_rust_sdk::models::environment::{
 };
 use flox_rust_sdk::models::floxmetav2::FloxmetaV2Error;
 use flox_rust_sdk::models::manifest::list_packages;
-use flox_rust_sdk::models::pkgdb::{call_pkgdb, UpdateResult};
-use flox_rust_sdk::models::search::PKGDB_BIN;
+use flox_rust_sdk::models::pkgdb::{call_pkgdb, UpdateResult, PKGDB_BIN};
 use flox_rust_sdk::nix::command::StoreGc;
 use flox_rust_sdk::nix::command_line::NixCommandLine;
 use flox_rust_sdk::nix::Run;

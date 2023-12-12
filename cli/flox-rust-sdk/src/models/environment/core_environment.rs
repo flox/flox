@@ -12,8 +12,7 @@ use super::{copy_dir_recursive, InstallationAttempt, LOCKFILE_FILENAME, MANIFEST
 use crate::flox::Flox;
 use crate::models::environment::{call_pkgdb, global_manifest_path, ENV_BUILDER_BIN};
 use crate::models::manifest::{insert_packages, remove_packages, Manifest, TomlEditError};
-use crate::models::pkgdb::{CallPkgDbError, UpdateResult};
-use crate::models::search::PKGDB_BIN;
+use crate::models::pkgdb::{CallPkgDbError, UpdateResult, PKGDB_BIN};
 
 pub struct ReadOnly {}
 struct ReadWrite {}
