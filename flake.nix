@@ -187,6 +187,7 @@
       flox-cli-tests = callPackage ./pkgs/flox-cli-tests {};
       # Integration tests
       flox-tests = callPackage ./pkgs/flox-tests {};
+      flox-pytests = callPackage ./pkgs/flox-pytests {};
     };
 
     # Composes dependency overlays and the overlay defined here.
