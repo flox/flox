@@ -348,7 +348,8 @@ jobs:
               --print-out-paths \
                 '.#flox-pkgdb' \
                 '.#flox-env-builder' \
-                '.#flox-cli'
+                '.#flox-cli' \
+                '.#flox'
           fi
 
   trigger-flox-installers-workflow:

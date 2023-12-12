@@ -31,7 +31,7 @@
   which,
   writeShellScriptBin,
   PROJECT_NAME ? "flox-cli-tests",
-  PROJECT_TESTS_DIR ? "${./../..}/cli/tests",
+  PROJECT_TESTS_DIR ? "./../../cli/tests",
   NIX_BIN ? "${nix}/bin/nix",
   PKGDB_BIN ? "${flox-pkgdb}/bin/pkgdb",
   ENV_BUILDER_BIN ? "${flox-env-builder}/bin/env-builder",
