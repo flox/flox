@@ -224,3 +224,14 @@ EOF
   assert_output --partial "diverged"
   popd >/dev/null || return
 }
+
+# ---------------------------------------------------------------------------- #
+
+# Make sure we haven't broken regular search
+# bats test_tags=managed,search,managed:search
+@test "m8: search works in managed environment" {
+  make_empty_remote_env
+
+  run "$FLOX_BIN" search hello;
+  assert_success;
+}

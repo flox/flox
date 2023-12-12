@@ -10,7 +10,8 @@ use runix::command_line::NixCommandLine;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use super::generations::Generations;
+use super::core_environment::CoreEnvironment;
+use super::generations::{Generations, GenerationsError};
 use super::path_environment::PathEnvironment;
 use super::{
     EditResult,
@@ -100,6 +101,17 @@ pub enum ManagedEnvironmentError {
     Diverged,
     #[error("failed to push environment: {0}")]
     Push(GitCommandError),
+
+    // todo: improve description
+    #[error("could not create floxmeta directory")]
+    CreateFloxmetaDir(#[source] GenerationsError),
+
+    // todo: improve description
+    #[error("could not create files for current generation")]
+    CreateGenerationFiles(#[source] GenerationsError),
+
+    #[error("could not read manifest")]
+    ReadManifest(#[source] GenerationsError),
 }
 
 #[derive(Debug, Deserialize, PartialEq, Serialize)]
@@ -113,8 +125,13 @@ pub struct GenerationLock {
 impl Environment for ManagedEnvironment {
     #[allow(unused)]
     async fn build(&mut self, flox: &Flox) -> Result<(), EnvironmentError2> {
-        let mut generations = self.generations().writable(flox.temp_dir.clone()).unwrap();
-        let mut temporary = generations.get_current_generation().unwrap();
+        let mut generations = self
+            .generations()
+            .writable(flox.temp_dir.clone())
+            .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?;
+        let mut temporary = generations
+            .get_current_generation()
+            .map_err(ManagedEnvironmentError::CreateGenerationFiles)?;
 
         let result = temporary.build(flox)?;
 
@@ -128,8 +145,13 @@ impl Environment for ManagedEnvironment {
         packages: Vec<String>,
         flox: &Flox,
     ) -> Result<InstallationAttempt, EnvironmentError2> {
-        let mut generations = self.generations().writable(flox.temp_dir.clone()).unwrap();
-        let mut temporary = generations.get_current_generation().unwrap();
+        let mut generations = self
+            .generations()
+            .writable(flox.temp_dir.clone())
+            .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?;
+        let mut temporary = generations
+            .get_current_generation()
+            .map_err(ManagedEnvironmentError::CreateGenerationFiles)?;
 
         let metadata = format!("installed packages: {:?}", &packages);
         let result = temporary.install(packages, flox)?;
@@ -153,8 +175,13 @@ impl Environment for ManagedEnvironment {
         packages: Vec<String>,
         flox: &Flox,
     ) -> Result<String, EnvironmentError2> {
-        let mut generations = self.generations().writable(flox.temp_dir.clone()).unwrap();
-        let mut temporary = generations.get_current_generation().unwrap();
+        let mut generations = self
+            .generations()
+            .writable(flox.temp_dir.clone())
+            .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?;
+        let mut temporary = generations
+            .get_current_generation()
+            .map_err(ManagedEnvironmentError::CreateGenerationFiles)?;
 
         let metadata = format!("uninstalled packages: {:?}", &packages);
         let result = temporary.uninstall(packages, flox)?;
@@ -176,8 +203,13 @@ impl Environment for ManagedEnvironment {
         flox: &Flox,
         contents: String,
     ) -> Result<EditResult, EnvironmentError2> {
-        let mut generations = self.generations().writable(flox.temp_dir.clone()).unwrap();
-        let mut temporary = generations.get_current_generation().unwrap();
+        let mut generations = self
+            .generations()
+            .writable(flox.temp_dir.clone())
+            .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?;
+        let mut temporary = generations
+            .get_current_generation()
+            .map_err(ManagedEnvironmentError::CreateGenerationFiles)?;
 
         let result = temporary.edit(flox, contents)?;
 
@@ -198,13 +230,11 @@ impl Environment for ManagedEnvironment {
     }
 
     /// Extract the current content of the manifest
-    ///
-    /// WIP!
-    /// TODO: errors!
-    fn manifest_content(&self) -> Result<String, EnvironmentError2> {
-        let generations = self.generations();
-
-        let manifest = generations.current_gen_manifest().unwrap();
+    fn manifest_content(&self, _flox: &Flox) -> Result<String, EnvironmentError2> {
+        let manifest = self
+            .generations()
+            .current_gen_manifest()
+            .map_err(ManagedEnvironmentError::ReadManifest)?;
         Ok(manifest)
     }
 
@@ -230,13 +260,19 @@ impl Environment for ManagedEnvironment {
     }
 
     /// Path to the environment definition file
-    fn manifest_path(&self) -> PathBuf {
-        todo!()
+    ///
+    /// Path will not share a common prefix with the path returned by [`ManagedEnvironment::lockfile_path`]
+    fn manifest_path(&self, flox: &Flox) -> Result<PathBuf, EnvironmentError2> {
+        let path = self.get_current_generation(flox)?.manifest_path();
+        Ok(path)
     }
 
     /// Path to the lockfile. The path may not exist.
-    fn lockfile_path(&self) -> PathBuf {
-        todo!()
+    ///
+    /// Path will not share a common prefix with the path returned by [`ManagedEnvironment::manifest_path`]
+    fn lockfile_path(&self, flox: &Flox) -> Result<PathBuf, EnvironmentError2> {
+        let path = self.get_current_generation(flox)?.lockfile_path();
+        Ok(path)
     }
 
     /// Returns the environment name
@@ -543,6 +579,19 @@ impl ManagedEnvironment {
             self.floxmeta.git.clone(),
             branch_name(&self.system, &self.pointer, &self.path),
         )
+    }
+
+    fn get_current_generation(
+        &self,
+        flox: &Flox,
+    ) -> Result<CoreEnvironment, ManagedEnvironmentError> {
+        let tempdir = tempfile::tempdir_in(&flox.temp_dir).unwrap();
+
+        self.generations()
+            .writable(tempdir)
+            .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?
+            .get_current_generation()
+            .map_err(ManagedEnvironmentError::CreateGenerationFiles)
     }
 }
 

@@ -40,14 +40,14 @@ impl<State> CoreEnvironment<State> {
     }
 
     /// Get the manifest file
-    fn manifest_path(&self) -> PathBuf {
+    pub fn manifest_path(&self) -> PathBuf {
         self.env_dir.join(MANIFEST_FILENAME)
     }
 
     /// Get the path to the lockfile
     ///
     /// Note: may not exist
-    fn lockfile_path(&self) -> PathBuf {
+    pub fn lockfile_path(&self) -> PathBuf {
         self.env_dir.join(LOCKFILE_FILENAME)
     }
 
