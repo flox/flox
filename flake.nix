@@ -30,6 +30,10 @@
   inputs.crane.url = "github:ipetkov/crane";
   inputs.crane.inputs.nixpkgs.follows = "nixpkgs";
 
+  # This is needed to be able to calculate `git describe` format version of flox
+  # without running `git describe`
+  inputs.flox-latest.url = "git+ssh://git@github.com/flox/flox?ref=latest";
+
   # -------------------------------------------------------------------------- #
 
   outputs = {
@@ -40,6 +44,7 @@
     parser-util,
     pre-commit-hooks,
     crane,
+    flox-latest,
     ...
   } @ inputs: let
     # Given a function `fn' which takes system names as an argument, produce an
