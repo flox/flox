@@ -548,6 +548,11 @@ pub fn find_dot_flox(
     Ok(None)
 }
 
+/// Directory containing nix gc roots for (previous) builds of environments of a given owner
+pub(super) fn gcroots_dir(flox: &Flox, owner: &EnvironmentOwner) -> PathBuf {
+    flox.cache_dir.join(GCROOTS_DIR_NAME).join(owner.as_str())
+}
+
 #[cfg(test)]
 mod test {
     use std::str::FromStr;

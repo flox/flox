@@ -93,6 +93,17 @@ function make_empty_remote_env() {
   assert_output "total 0"
 }
 
+# todo waiting for 620
+# bats test_tags=hermetic,remote,remote:outlink
+@test "r0: building a remote environment creates outlink" {
+  make_empty_remote_env
+
+  run --separate-stderr "$FLOX_BIN" install hello --remote "$OWNER/test"
+  assert_success
+
+  run [ -f "$FLOX_CACHE_HOME/run/$OWNER/$NIX_SYSTEM.test" ]
+  assert_success
+}
 
 # bats test_tags=install,remote,remote:install
 @test "m1: install a package to a remote environment" {

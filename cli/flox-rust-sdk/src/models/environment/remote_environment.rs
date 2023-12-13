@@ -3,13 +3,19 @@ use std::path::{Path, PathBuf};
 use async_trait::async_trait;
 use flox_types::catalog::{EnvCatalog, System};
 use flox_types::version::Version;
+use log::debug;
 use runix::command_line::NixCommandLine;
 use thiserror::Error;
 
-use super::managed_environment::{ManagedEnvironment, ManagedEnvironmentError};
-use super::{EditResult, Environment, EnvironmentError2, InstallationAttempt};
+use super::managed_environment::{
+    remote_branch_name,
+    ManagedEnvironment,
+    ManagedEnvironmentError,
+};
+use super::{gcroots_dir, EditResult, Environment, EnvironmentError2, InstallationAttempt, CanonicalPath, CanonicalizeError};
 use crate::flox::{EnvironmentOwner, EnvironmentRef, Flox};
 use crate::models::environment_ref::EnvironmentName;
+use crate::models::floxmetav2::{FloxmetaV2, FloxmetaV2Error};
 
 #[derive(Debug, Error)]
 pub enum RemoteEnvironmentError {
@@ -17,10 +23,13 @@ pub enum RemoteEnvironmentError {
     OpenManagedEnvironment(#[source] Box<EnvironmentError2>), /* todo: to be changed to managed eroor... */
 
     #[error("could not get latest version of environment")]
-    GetLatestVersion(#[source] ManagedEnvironmentError),
+    GetLatestVersion(#[source] FloxmetaV2Error),
 
     #[error("could not update upstream environment")]
     UpdateUpstream(#[source] ManagedEnvironmentError),
+
+    #[error("invalid temporary path for new environment")]
+    InvalidTempPath(#[source] CanonicalizeError),
 }
 
 #[derive(Debug)]
@@ -40,12 +49,25 @@ impl RemoteEnvironment {
             name: env_ref.name().clone(),
             version: Version::<1>,
         };
-        let mut inner = ManagedEnvironment::open(flox, pointer, path)
-            .map_err(|e| RemoteEnvironmentError::OpenManagedEnvironment(Box::new(e)))?;
 
-        inner
-            .pull(true)
-            .map_err(RemoteEnvironmentError::GetLatestVersion)?;
+        let floxmeta = match FloxmetaV2::open(flox, &pointer) {
+            Ok(floxmeta) => floxmeta,
+            Err(FloxmetaV2Error::NotFound(_)) => {
+                debug!("cloning floxmeta for {}", pointer.owner);
+                FloxmetaV2::clone(flox, &pointer)
+                    .map_err(RemoteEnvironmentError::GetLatestVersion)?
+            },
+            Err(e) => Err(RemoteEnvironmentError::GetLatestVersion(e))?,
+        };
+
+        let dot_flox_path =
+            CanonicalPath::new(path).map_err(RemoteEnvironmentError::InvalidTempPath)?;
+
+        let out_link =
+            gcroots_dir(flox, &pointer.owner).join(remote_branch_name(&flox.system, &pointer));
+
+        let inner = ManagedEnvironment::open_with(floxmeta, flox, pointer, dot_flox_path, out_link)
+            .map_err(|e| RemoteEnvironmentError::OpenManagedEnvironment(Box::new(e)))?;
 
         Ok(Self { inner })
     }
@@ -68,13 +90,11 @@ impl RemoteEnvironment {
 #[async_trait]
 impl Environment for RemoteEnvironment {
     /// Build the environment and create a result link as gc-root
-
     async fn build(&mut self, flox: &Flox) -> Result<(), EnvironmentError2> {
         self.inner.build(flox).await
     }
 
     /// Install packages to the environment atomically
-
     async fn install(
         &mut self,
         packages: Vec<String>,
@@ -84,12 +104,11 @@ impl Environment for RemoteEnvironment {
         self.inner
             .push(false)
             .map_err(RemoteEnvironmentError::UpdateUpstream)?;
-            // TODO: clean up git branch for temporary environment
+        // TODO: clean up git branch for temporary environment
         Ok(result)
     }
 
     /// Uninstall packages from the environment atomically
-
     async fn uninstall(
         &mut self,
         packages: Vec<String>,
@@ -103,7 +122,6 @@ impl Environment for RemoteEnvironment {
     }
 
     /// Atomically edit this environment, ensuring that it still builds
-
     async fn edit(
         &mut self,
         flox: &Flox,
@@ -117,7 +135,6 @@ impl Environment for RemoteEnvironment {
     }
 
     /// Atomically update this environment's inputs
-
     fn update(&mut self, flox: &Flox, inputs: Vec<String>) -> Result<String, EnvironmentError2> {
         let result = self.inner.update(flox, inputs)?;
         self.inner
@@ -144,7 +161,6 @@ impl Environment for RemoteEnvironment {
         self.inner.activation_path(flox).await
     }
 
-
     fn parent_path(&self) -> Result<PathBuf, EnvironmentError2> {
         self.inner.parent_path()
     }
@@ -160,7 +176,6 @@ impl Environment for RemoteEnvironment {
     }
 
     /// Returns the environment name
-
     fn name(&self) -> EnvironmentName {
         self.inner.name()
     }
@@ -170,7 +185,6 @@ impl Environment for RemoteEnvironment {
     /// The local version of this is rather ... useless.
     /// It just deletes the temporary directory.
     /// When extended to delete upstream environments, this will be more useful.
-    #[allow(unused)]
     fn delete(self, flox: &Flox) -> Result<(), EnvironmentError2> {
         self.inner.delete(flox)
     }
