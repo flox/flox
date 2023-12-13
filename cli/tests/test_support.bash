@@ -82,6 +82,28 @@ hello_pkg_setup() {
   export __FT_RAN_HELLO_PKG_SETUP=:;
 }
 
+# ---------------------------------------------------------------------------- #
+
+# floxhub_setup <owner>
+#
+# * sets up a local "floxhub" repo for the given owner.
+#   can be called multiple times with different owners.
+# * sets `FLOX_FLOXHUB_TOKEN` to a dummy value so flox _thinks_ its logged in.
+#
+# This is used by tests that need to push/pull to/from floxhub.
+# In the future we may want to use a local floxhub server instead.
+floxhub_setup() {
+  OWNER="$1"; shift;
+  export FLOX_FLOXHUB_TOKEN=flox_testOAuthToken
+  export FLOX_FLOXHUB_PATH="$BATS_TEST_TMPDIR/floxhub"
+  export FLOXHUB_FLOXMETA_DIR="$FLOX_FLOXHUB_PATH/$OWNER/floxmeta"
+
+  mkdir -p "$FLOX_FLOXHUB_PATH"
+  mkdir -p "$FLOXHUB_FLOXMETA_DIR"
+  git -C "$FLOXHUB_FLOXMETA_DIR" init --bare
+
+  export __FLOX_FLOXHUB_URL="file://$FLOX_FLOXHUB_PATH"
+}
 
 # ---------------------------------------------------------------------------- #
 

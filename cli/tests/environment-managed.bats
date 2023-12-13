@@ -15,24 +15,11 @@ load test_support.bash
 project_setup() {
   export PROJECT_NAME="test";
   export PROJECT_DIR="${BATS_TEST_TMPDIR?}/$PROJECT_NAME"
+  export OWNER="owner";
 
   rm -rf "$PROJECT_DIR"
   mkdir -p "$PROJECT_DIR"
   pushd "$PROJECT_DIR" >/dev/null || return
-
-}
-
-floxhub_setup() {
-  export FLOX_FLOXHUB_TOKEN=flox_testOAuthToken
-  export FLOX_FLOXHUB_PATH="$BATS_TEST_TMPDIR/floxhub"
-  export OWNER="owner"
-  export FLOXHUB_FLOXMETA_DIR="$FLOX_FLOXHUB_PATH/$OWNER/floxmeta"
-
-  mkdir -p "$FLOX_FLOXHUB_PATH"
-  mkdir -p "$FLOXHUB_FLOXMETA_DIR"
-  git -C "$FLOXHUB_FLOXMETA_DIR" init --bare
-
-  export __FLOX_FLOXHUB_URL="file://$FLOX_FLOXHUB_PATH"
 
 }
 
@@ -50,8 +37,8 @@ project_teardown() {
 setup() {
   common_test_setup
   project_setup
-  floxhub_setup
   home_setup test;
+  floxhub_setup "$OWNER";
 }
 
 teardown() {
