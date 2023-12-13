@@ -259,6 +259,9 @@ EOF
 
   run dot_flox_exists
   assert_failure
+
+  run ls -lA "$FLOX_DATA_HOME/links"
+  assert_output "total 0"
 }
 
 # test that non-pushed environments can be deleted
