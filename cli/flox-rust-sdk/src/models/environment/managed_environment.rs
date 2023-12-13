@@ -141,12 +141,7 @@ impl Environment for ManagedEnvironment {
 
         generations.add_generation(temporary, metadata).unwrap();
 
-        write_pointer_lockfile(
-            self.path.join(GENERATION_LOCK_FILENAME),
-            &self.floxmeta,
-            remote_branch_name(&self.system, &self.pointer),
-            branch_name(&self.system, &self.pointer, &self.path).into(),
-        )?;
+        self.lock_pointer()?;
 
         Ok(result)
     }
@@ -170,13 +165,8 @@ impl Environment for ManagedEnvironment {
         let result = temporary.uninstall(packages, flox)?;
 
         generations.add_generation(temporary, metadata).unwrap();
+        self.lock_pointer()?;
 
-        write_pointer_lockfile(
-            self.path.join(GENERATION_LOCK_FILENAME),
-            &self.floxmeta,
-            remote_branch_name(&self.system, &self.pointer),
-            branch_name(&self.system, &self.pointer, &self.path).into(),
-        )?;
         Ok(result)
     }
 
@@ -201,12 +191,7 @@ impl Environment for ManagedEnvironment {
                 .add_generation(temporary, "manually edited".to_string())
                 .unwrap();
 
-            write_pointer_lockfile(
-                self.path.join(GENERATION_LOCK_FILENAME),
-                &self.floxmeta,
-                remote_branch_name(&self.system, &self.pointer),
-                branch_name(&flox.system, &self.pointer, &self.path).into(),
-            )?;
+            self.lock_pointer()?;
         }
 
         Ok(result)
@@ -222,13 +207,8 @@ impl Environment for ManagedEnvironment {
         let metadata = format!("updated environment: {message}");
 
         generations.add_generation(temporary, metadata).unwrap();
+        self.lock_pointer()?;
 
-        write_pointer_lockfile(
-            self.path.join(GENERATION_LOCK_FILENAME),
-            &self.floxmeta,
-            remote_branch_name(&self.system, &self.pointer),
-            branch_name(&flox.system, &self.pointer, &self.path).into(),
-        )?;
         Ok(message)
     }
 
@@ -586,6 +566,17 @@ impl ManagedEnvironment {
 
 /// Utility instance methods
 impl ManagedEnvironment {
+    /// Lock the environment to the current revision
+    fn lock_pointer(&self) -> Result<(), ManagedEnvironmentError> {
+        write_pointer_lockfile(
+            self.path.join(GENERATION_LOCK_FILENAME),
+            &self.floxmeta,
+            remote_branch_name(&self.system, &self.pointer),
+            branch_name(&self.system, &self.pointer, &self.path).into(),
+        )?;
+        Ok(())
+    }
+
     /// Where to link a built environment to.
     ///
     /// The parent directory may not exist!
@@ -647,7 +638,7 @@ fn write_pointer_lockfile(
     floxmeta: &FloxmetaV2,
     remote_ref: String,
     local_ref: Option<String>,
-) -> Result<GenerationLock, EnvironmentError2> {
+) -> Result<GenerationLock, ManagedEnvironmentError> {
     let rev = floxmeta
         .git
         .branch_hash(&remote_ref)
@@ -899,14 +890,8 @@ impl ManagedEnvironment {
             .unwrap();
 
         // update the pointer lockfile
-        // we don't need to set a specific local_rev, because we just pushed
-        write_pointer_lockfile(
-            self.path.join(GENERATION_LOCK_FILENAME),
-            &self.floxmeta,
-            sync_branch,
-            None,
-        )
-        .unwrap();
+        self.lock_pointer()?;
+
         Ok(())
     }
 }
