@@ -101,6 +101,10 @@ pub enum ManagedEnvironmentError {
     Diverged,
     #[error("failed to push environment: {0}")]
     Push(GitCommandError),
+    #[error("failed to delete local environment branch")]
+    DeleteBranch(#[source] GitCommandError),
+    #[error("failed to delete environment directory {0:?}")]
+    DeleteEnvironment(PathBuf, #[source] std::io::Error),
 
     // todo: improve description
     #[error("could not create floxmeta directory")]
@@ -302,9 +306,16 @@ impl Environment for ManagedEnvironment {
     }
 
     /// Delete the Environment
-    #[allow(unused)]
     fn delete(self) -> Result<(), EnvironmentError2> {
-        todo!()
+        fs::remove_dir_all(&self.path)
+            .map_err(|e| ManagedEnvironmentError::DeleteEnvironment(self.path.to_path_buf(), e))?;
+
+        self.floxmeta
+            .git
+            .delete_branch(&branch_name(&self.system, &self.pointer, &self.path), true)
+            .map_err(ManagedEnvironmentError::DeleteBranch)?;
+
+        Ok(())
     }
 }
 

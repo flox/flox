@@ -69,6 +69,15 @@ function make_empty_remote_env() {
 
 # ---------------------------------------------------------------------------- #
 
+dot_flox_exists() {
+  # Since the return value is based on the exit code of `test`:
+  # 0 = true
+  # 1 = false
+  [[ -d "$PROJECT_DIR/.flox" ]]
+}
+
+# ---------------------------------------------------------------------------- #
+
 # bats test_tags=install,managed
 @test "m1: install a package to a managed environment" {
   make_empty_remote_env
@@ -235,3 +244,44 @@ EOF
   run "$FLOX_BIN" search hello;
   assert_success;
 }
+
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=managed,delete,managed:delete
+@test "m10: deletes existing environment" {
+  make_empty_remote_env
+
+  run dot_flox_exists
+  assert_success
+
+  run "$FLOX_BIN" delete
+  assert_success
+
+  run dot_flox_exists
+  assert_failure
+}
+
+# test that non-pushed environments can be deleted
+# and are recreated at the current pushed state.
+# bats test_tags=managed,delete,managed:fresh-deleted
+@test "m11: uses fresh branch after delete" {
+  make_empty_remote_env
+  "$FLOX_BIN" install vim
+
+  run "$FLOX_BIN" delete
+  assert_success
+
+  run dot_flox_exists
+  assert_failure
+
+  # when recreating an environment, a new branch should be used
+  run "$FLOX_BIN" pull --remote "$OWNER/test"
+  assert_success
+
+  "$FLOX_BIN" install emacs
+  run "$FLOX_BIN" list
+  assert_output --partial "emacs"
+  refute_output "vim"
+}
+
+# ---------------------------------------------------------------------------- #
