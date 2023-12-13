@@ -102,29 +102,19 @@ in
         runHook postConfigure;
       '';
 
+      postBuild = ''
+        make "''${makeFlagsArray[@]}" tests;
+      '';
+
       # Checks require internet
       doCheck = false;
       doInstallCheck = false;
 
-      outputs = ["out" "dev" "test"];
+      outputs = ["out" "test"];
 
       postInstall = ''
-        mkdir -p "$test/bin" "$test/lib"
-
-        cp ${../../pkgdb/tests/is_sqlite3.cc} ./tests/is_sqlite3.cc
-        cp ${../../pkgdb/tests/search-params.cc} ./tests/search-params.cc
-        make tests/is_sqlite3
-        make tests/search-params
-
-        for i in tests/*; do
-          if (! [[ -d "$i" ]]) && [[ -x "$i" ]]; then
-            cp "$i" "$test/bin/"
-          fi
-        done
-
-        for i in "$out/lib/"*; do
-          ln -s "$i" "$test/lib/"
-        done
+        mkdir -p "$test/bin";
+        find tests/ -maxdepth 1 -type f -executable -exec mv {} "$test/bin/" \+;
       '';
 
       meta.mainProgram = "pkgdb";

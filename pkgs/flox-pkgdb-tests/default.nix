@@ -39,35 +39,38 @@
 in
   # TODO: we should run tests against different shells
   writeShellScriptBin PROJECT_NAME ''
-    set -euo pipefail
+    set -eu;
+    set -o pipefail;
 
     # Find root of the subproject if not specified
-    PROJECT_TESTS_DIR=${PROJECT_TESTS_DIR}
-    PROJECT_PATH=""
-    if [[ $PROJECT_TESTS_DIR != "/nix/store/"* ]]; then
-
-      # Find top level of the project
-      if ${git}/bin/git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-        export PROJECT_ROOT_DIR="$( ${git}/bin/git rev-parse --show-toplevel; )"
-      else
-        echo "ERROR: Could not find root of the project."
-        exit 1
-      fi
-
-      PROJECT_TESTS_DIR="$PROJECT_ROOT_DIR$PROJECT_TESTS_DIR"
-      PROJECT_PATH="$PROJECT_ROOT_DIR/cli/target/debug";
-      PROJECT_PATH="$PROJECT_PATH:$PROJECT_ROOT_DIR/pkgdb/bin";
-    fi
-    export PROJECT_TESTS_DIR
+    PROJECT_TESTS_DIR='${PROJECT_TESTS_DIR}';
+    # Find top level of the project
+    PROJECT_PATH="";
+    case "$PROJECT_TESTS_DIR" in
+      /nix/store/*) :; ;;
+      *)
+        if ${git}/bin/git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+          PROJECT_ROOT_DIR="$( ${git}/bin/git rev-parse --show-toplevel; )";
+          export PROJECT_ROOT_DIR;
+        else
+          echo "ERROR: Could not find root of the project.";
+          exit 1;
+        fi
+        PROJECT_TESTS_DIR="$PROJECT_ROOT_DIR$PROJECT_TESTS_DIR";
+        PROJECT_PATH="$PROJECT_ROOT_DIR/cli/target/debug";
+        PROJECT_PATH="$PROJECT_PATH:$PROJECT_ROOT_DIR/pkgdb/bin";
+      ;;
+    esac
+    export PROJECT_TESTS_DIR;
 
     # TODO: we shouldn't do this but rather use absolute paths
     # Look if we can use https://github.com/abathur/resholve
-    export PATH="$PROJECT_PATH${lib.makeBinPath paths}"
+    export PATH="$PROJECT_PATH:${lib.makeBinPath paths}";
 
     # Copy PROJECT_TESTS_DIR to temporary directory
-    WORKDIR=$(mktemp -d -t ${PROJECT_NAME}-XXXXXX)
-    cp -R $PROJECT_TESTS_DIR/* $WORKDIR
-    cd $WORKDIR
+    WORKDIR="$( mktemp -d -t ${PROJECT_NAME}-XXXXXX; )";
+    cp -R "$PROJECT_TESTS_DIR/"* "$WORKDIR";
+    cd "$WORKDIR"||exit;
 
     # Declare project specific dependencies
     ${
