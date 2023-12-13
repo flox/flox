@@ -13,9 +13,9 @@ load test_support.bash
 # Helpers for project based tests.
 
 project_setup() {
-  export PROJECT_NAME="test";
+  export PROJECT_NAME="test"
   export PROJECT_DIR="${BATS_TEST_TMPDIR?}/$PROJECT_NAME"
-  export OWNER="owner";
+  export OWNER="owner"
 
   rm -rf "$PROJECT_DIR"
   mkdir -p "$PROJECT_DIR"
@@ -37,8 +37,8 @@ project_teardown() {
 setup() {
   common_test_setup
   project_setup
-  home_setup test;
-  floxhub_setup "$OWNER";
+  home_setup test
+  floxhub_setup "$OWNER"
 }
 
 teardown() {
@@ -71,7 +71,7 @@ dot_flox_exists() {
 
   run --separate-stderr "$FLOX_BIN" list
   assert_success
-  assert_output  ""
+  assert_output ""
 
   run "$FLOX_BIN" install hello
   assert_success
@@ -81,7 +81,6 @@ dot_flox_exists() {
   assert_success
   assert_output "hello"
 }
-
 
 # bats test_tags=uninstall,managed
 @test "m2: uninstall a package from a managed environment" {
@@ -102,7 +101,7 @@ dot_flox_exists() {
 
   TMP_MANIFEST_PATH="$BATS_TEST_TMPDIR/manifest.toml"
 
-  cat << "EOF" >> "$TMP_MANIFEST_PATH"
+  cat <<"EOF" >>"$TMP_MANIFEST_PATH"
 [install]
 hello = {}
 EOF
@@ -117,10 +116,8 @@ EOF
 # bats test_tags=managed,pull,managed:pull
 @test "m4: pushed environment can be pulled" {
 
-
-
-  mkdir a a_data;
-  mkdir b b_data;
+  mkdir a a_data
+  mkdir b b_data
 
   # on machine a, create and push the environment
   export FLOX_DATA_DIR="$(pwd)/a_data"
@@ -129,7 +126,6 @@ EOF
   "$FLOX_BIN" install hello
   "$FLOX_BIN" push --owner "$OWNER"
   popd >/dev/null || return
-
 
   # on another b machine, pull the environment
   export FLOX_DATA_DIR="$(pwd)/b_data"
@@ -142,12 +138,10 @@ EOF
   popd >/dev/null || return
 }
 
-
-
 # bats test_tags=managed,update,managed:update
 @test "m5: updated environment can be pulled" {
-  mkdir a a_data;
-  mkdir b b_data;
+  mkdir a a_data
+  mkdir b b_data
 
   # on machine a, create and push the (empty) environment
   export FLOX_DATA_DIR="$(pwd)/a_data"
@@ -155,7 +149,6 @@ EOF
   "$FLOX_BIN" init
   "$FLOX_BIN" push --owner "$OWNER"
   popd >/dev/null || return
-
 
   # on another b machine,
   #  - pull the environment
@@ -182,11 +175,10 @@ EOF
   popd >/dev/null || return
 }
 
-
 # bats test_tags=managed,diverged,managed:diverged
 @test "m7: remote can not be pulled into diverged environment" {
-  mkdir a a_data;
-  mkdir b b_data;
+  mkdir a a_data
+  mkdir b b_data
 
   # on machine a, create and push the (empty) environment
   export FLOX_DATA_DIR="$(pwd)/a_data"
@@ -194,7 +186,6 @@ EOF
   "$FLOX_BIN" init
   "$FLOX_BIN" push --owner "$OWNER"
   popd >/dev/null || return
-
 
   # on another b machine,
   #  - pull the environment
@@ -228,8 +219,8 @@ EOF
 @test "m8: search works in managed environment" {
   make_empty_remote_env
 
-  run "$FLOX_BIN" search hello;
-  assert_success;
+  run "$FLOX_BIN" search hello
+  assert_success
 }
 
 # ---------------------------------------------------------------------------- #
