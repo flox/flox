@@ -18,7 +18,6 @@
 #
 #   - install               Install binaries, sysconf, and include files
 #   - install-bin           Install binaries
-#   - install-dirs          Create directories in the install prefix
 #   - install-sysconf       Install `etc/` files
 #   - install-libexec       Install `libexec/` executables
 #
@@ -204,6 +203,7 @@ SYSCONFS       =  $(patsubst etc/%,%,$(call rwildcard,etc,*))
 TEST_UTILS     =  $(addprefix tests/,is_sqlite3 search-params)
 TESTS          =  $(filter-out $(TEST_UTILS),$(test_SRCS:.cc=))
 TEST_DATA      =
+ALL_BINS       = $(TESTS) $(TEST_UTILS) $(addprefix bin/,$(BINS))
 CLEANDIRS      =
 CLEANFILES     =  $(ALL_SRCS:.cc=.o)
 CLEANFILES     += $(addprefix bin/,$(BINS)) $(addprefix lib/,$(LIBS))
@@ -411,24 +411,20 @@ fullclean: clean
 # Install Targets
 # ---------------
 
-.PHONY: install-dirs install-bin install-libexec install-sysconf install
+.PHONY: install-bin install-libexec install-sysconf install
 
 #: Install binaries, libraries, and include files
-install: install-dirs install-bin install-libexec install-sysconf
+install: install-bin install-libexec install-sysconf
 
-#: Create directories in the install prefix
-install-dirs: FORCE
-	$(MKDIR_P) $(BINDIR) $(SYSCONFDIR) $(LIBEXECDIR);
-
-$(BINDIR)/%: bin/% | install-dirs
+$(BINDIR)/%: bin/%
 	$(MKDIR_P) $(@D);
 	$(CP) -- "$<" "$@";
 
-$(LIBEXECDIR)/%: libexec/% | install-dirs
+$(LIBEXECDIR)/%: libexec/%
 	$(MKDIR_P) $(@D);
 	$(CP) -- "$<" "$@";
 
-$(SYSCONFDIR)/%: etc/% | install-dirs
+$(SYSCONFDIR)/%: etc/%
 	$(MKDIR_P) $(@D);
 	$(CP) -- "$<" "$@";
 
@@ -637,7 +633,7 @@ bats-check: bin $(TEST_UTILS) test-data
 
 src/pkgdb/write.o: src/pkgdb/schemas.hh
 
-$(ALL_SRCS:.cc=.o): %.o: %.cc $(HEADERS) install-sysconf install-libexec
+$(ALL_SRCS:.cc=.o): %.o: %.cc $(HEADERS)
 
 $(addprefix bin/,$(BINS)): %: $(SRCS:.cc=.o)
 	$(MKDIR_P) $(@D);
@@ -650,6 +646,11 @@ $(test_SRCS:.cc=.o): CXXFLAGS += '-DTEST_DATA_DIR="$(TEST_DATA_DIR)"'
 $(TESTS) $(TEST_UTILS): tests/%: $(filter-out src/main.o,$(SRCS:.cc=.o))
 $(TESTS) $(TEST_UTILS): tests/%: tests/%.o
 	$(CXX) $^ $(LDFLAGS) -o $@;
+
+# ---------------------------------------------------------------------------- #
+
+# Required for exectubles to run properly
+$(ALL_BINS): | install-sysconf install-libexec
 
 
 # ---------------------------------------------------------------------------- #
