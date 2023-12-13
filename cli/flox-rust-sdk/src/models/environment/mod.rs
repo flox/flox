@@ -58,6 +58,41 @@ pub const FLOX_ENV_VAR: &str = "FLOX_ENV";
 pub const FLOX_ACTIVE_ENVIRONMENTS_VAR: &str = "FLOX_ACTIVE_ENVIRONMENTS";
 pub const FLOX_PROMPT_ENVIRONMENTS_VAR: &str = "FLOX_PROMPT_ENVIRONMENTS";
 
+/// A path that is guaranteed to be canonicalized
+///
+/// [`ManagedEnvironment`] uses this to refer to the path of its `.flox` directory.
+/// [`ManagedEnvironment::encode`] is used to uniquely identify the environment
+/// by encoding the canonicalized path.
+/// This encoding is used to create a unique branch name in the floxmeta repository.
+/// Thus, rather than canonicalizing the path every time we need to encode it,
+/// we store the path as a [`CanonicalPath`].
+#[derive(Debug, Clone, derive_more::Deref, derive_more::AsRef)]
+#[deref(forward)]
+#[as_ref(forward)]
+pub struct CanonicalPath(PathBuf);
+
+#[derive(Debug, Error)]
+#[error("couldn't canonicalize path {path:?}: {err}")]
+pub struct CanonicalizeError {
+    path: PathBuf,
+    #[source]
+    err: std::io::Error,
+}
+
+impl CanonicalPath {
+    pub fn new(path: impl AsRef<Path>) -> Result<Self, CanonicalizeError> {
+        let canonicalized = std::fs::canonicalize(&path).map_err(|e| CanonicalizeError {
+            path: path.as_ref().to_path_buf(),
+            err: e,
+        })?;
+        Ok(Self(canonicalized))
+    }
+
+    pub fn into_path_buf(self) -> PathBuf {
+        self.0
+    }
+}
+
 pub enum InstalledPackage {
     Catalog(FloxTriple, CatalogEntry),
     FlakeAttribute(FlakeAttribute, CatalogEntry),
@@ -283,6 +318,9 @@ pub enum EnvironmentError2 {
 
     #[error("could not locate the manifest for this environment")]
     ManifestNotFound,
+
+    #[error(transparent)]
+    Canonicalize(#[from] CanonicalizeError),
     // endregion
 
     // todo: candidate for impl specific error

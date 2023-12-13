@@ -14,6 +14,7 @@ use super::core_environment::CoreEnvironment;
 use super::generations::{Generations, GenerationsError};
 use super::path_environment::PathEnvironment;
 use super::{
+    CanonicalPath,
     EditResult,
     Environment,
     EnvironmentError2,
@@ -28,30 +29,6 @@ use crate::models::floxmetav2::{floxmeta_git_options, FloxmetaV2, FloxmetaV2Erro
 use crate::providers::git::{GitCommandBranchHashError, GitCommandError, GitProvider};
 
 const GENERATION_LOCK_FILENAME: &str = "env.lock";
-
-/// A path that is guaranteed to be canonicalized
-///
-/// [`ManagedEnvironment`] uses this to refer to the path of its `.flox` directory.
-/// [`ManagedEnvironment::encode`] is used to uniquely identify the environment
-/// by encoding the canonicalized path.
-/// This encoding is used to create a unique branch name in the floxmeta repository.
-/// Thus, rather than canonicalizing the path every time we need to encode it,
-/// we store the path as a [`CanonicalPath`].
-#[derive(Debug, Clone, derive_more::Deref, derive_more::AsRef)]
-#[deref(forward)]
-#[as_ref(forward)]
-pub struct CanonicalPath(PathBuf);
-
-impl CanonicalPath {
-    pub fn new(path: impl AsRef<Path>) -> Result<Self, ManagedEnvironmentError> {
-        Ok(Self(std::fs::canonicalize(&path).map_err(|e| {
-            ManagedEnvironmentError::Canonicalize {
-                path: path.as_ref().to_path_buf(),
-                err: e,
-            }
-        })?))
-    }
-}
 
 #[derive(Debug)]
 pub struct ManagedEnvironment {
@@ -89,8 +66,6 @@ pub enum ManagedEnvironmentError {
     ReverseLink(std::io::Error),
     #[error("couldn't create links directory: {0}")]
     CreateLinksDir(std::io::Error),
-    #[error("couldn't canonicalize path '{path}': {err}")]
-    Canonicalize { path: PathBuf, err: std::io::Error },
     #[error("attempted to open the empty path ''")]
     EmptyPath,
     #[error("floxmeta branch name was malformed: {0}")]
