@@ -33,7 +33,7 @@ jobs:
 
     steps:
       - name: "Checkout"
-        uses: "actions/checkout@v3"
+        uses: "actions/checkout@v4"
 
       - name: "Install newer Nix"
         uses: "cachix/install-nix-action@v24"
@@ -102,7 +102,7 @@ jobs:
       - name: "Deploy to GitHub Pages"
         if: ${{ matrix.os == 'ubuntu-22.04-8core' }}
         id: "deployment"
-        uses: "actions/deploy-pages@v2"
+        uses: "actions/deploy-pages@v3"
 
   env-builder-dev:
     name: "EnvBuilder Tests"
@@ -117,7 +117,7 @@ jobs:
 
     steps:
       - name: "Checkout"
-        uses: "actions/checkout@v3"
+        uses: "actions/checkout@v4"
 
       - name: "Install newer Nix"
         uses: "cachix/install-nix-action@v24"
@@ -182,7 +182,7 @@ jobs:
 
     steps:
       - name: "Checkout"
-        uses: "actions/checkout@v3"
+        uses: "actions/checkout@v4"
 
       - name: "Install newer Nix"
         uses: "cachix/install-nix-action@v24"
@@ -298,7 +298,7 @@ jobs:
 
     steps:
       - name: "Checkout"
-        uses: "actions/checkout@v3"
+        uses: "actions/checkout@v4"
 
       - name: "Setup Tailscale"
         uses: "tailscale/github-action@v2"
@@ -362,7 +362,7 @@ jobs:
 
     steps:
       - name: "Trigger flox-installers workflow"
-        uses: "convictional/trigger-workflow-and-wait@v1.6.1"
+        uses: "convictional/trigger-workflow-and-wait@v1.6.5"
         with:
           owner:              "flox"
           repo:               "nix-installers"
@@ -419,7 +419,7 @@ jobs:
 
     steps:
       - name: "Checkout"
-        uses: "actions/checkout@v3"
+        uses: "actions/checkout@v4"
 
       - name: "Setup Tailscale"
         uses: "tailscale/github-action@v2"
