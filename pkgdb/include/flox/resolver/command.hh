@@ -106,7 +106,7 @@ class UpdateCommand : public GAEnvironmentMixin
 
 private:
 
-  std::optional<std::string> inputName;
+  std::optional<std::vector<std::string>> inputNames;
 
   command::VerboseParser parser;
 

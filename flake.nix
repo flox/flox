@@ -30,6 +30,10 @@
   inputs.crane.url = "github:ipetkov/crane";
   inputs.crane.inputs.nixpkgs.follows = "nixpkgs";
 
+  # This is needed to be able to calculate `git describe` format version of flox
+  # without running `git describe`
+  inputs.flox-latest.url = "git+ssh://git@github.com/flox/flox?ref=latest";
+
   # -------------------------------------------------------------------------- #
 
   outputs = {
@@ -40,29 +44,9 @@
     parser-util,
     pre-commit-hooks,
     crane,
+    flox-latest,
     ...
   } @ inputs: let
-    # ------------------------------------------------------------------------ #
-    # Inherit version from Cargo.toml, aligning with the CLI version.
-    # We also inject some indication about the `git' revision of the repository.
-    floxVersion = let
-      cargoToml = let
-        contents = builtins.readFile ./cli/flox/Cargo.toml;
-      in
-        builtins.fromTOML contents;
-      prefix =
-        if self ? revCount
-        then "r"
-        else "";
-      # Add `r<REV-COUNT>' if available, otherwise fallback to the short
-      # revision hash or "dirty" to be added as the _tag_ property of
-      # the version.
-      rev = self.revCount or self.shortRev or "dirty";
-    in
-      cargoToml.package.version + "-" + prefix + (toString rev);
-
-    # ------------------------------------------------------------------------ #
-
     # Given a function `fn' which takes system names as an argument, produce an
     # attribute set whose keys are system names, and values are the result of
     # applying that system name to `fn'.
@@ -130,7 +114,7 @@
     overlays.flox = final: prev: let
       callPackage = final.lib.callPackageWith (final
         // {
-          inherit inputs self floxVersion;
+          inherit inputs self;
           pkgsFor = final;
         });
     in {
@@ -179,7 +163,7 @@
       flox-cli = callPackage ./pkgs/flox-cli {};
 
       # Flox Command Line Interface ( production build ).
-      flox = callPackage ./pkgs/flox-cli {longVersion = true;};
+      flox = callPackage ./pkgs/flox {};
 
       # Wrapper scripts for running test suites.
       flox-pkgdb-tests = callPackage ./pkgs/flox-pkgdb-tests {};
@@ -187,6 +171,7 @@
       flox-cli-tests = callPackage ./pkgs/flox-cli-tests {};
       # Integration tests
       flox-tests = callPackage ./pkgs/flox-tests {};
+      flox-tests-pure = callPackage ./pkgs/flox-tests-pure {inputs = inputs;};
     };
 
     # Composes dependency overlays and the overlay defined here.
@@ -224,9 +209,12 @@
         flox-pkgdb
         flox-env-builder
         flox-cli
+        flox-cli-tests
         flox
         flox-tests
         pre-commit-check
+        flox-tests-pure
+        flox-dev
         ;
       default = pkgs.flox;
     });

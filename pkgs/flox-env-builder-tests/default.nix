@@ -78,7 +78,7 @@ in
     pushd $WORKDIR
       chmod -R +w ./fixtures/lockfiles
       for i in $(find ./ -name "*.toml"); do
-        $PKGDB_BIN manifest lock --ga-registry "$i" | jq > "$(dirname $i)/$(basename $i toml)lock"
+        $PKGDB_BIN manifest lock --ga-registry --manifest "$i" | jq > "$(dirname $i)/$(basename $i toml)lock"
       done
     popd
 

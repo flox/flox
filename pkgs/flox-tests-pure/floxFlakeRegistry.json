@@ -1,0 +1,77 @@
+{
+  "flakes": [
+    {
+      "from": {
+        "id": "flox",
+        "type": "indirect"
+      },
+      "to": {
+        "owner": "flox",
+        "ref": "master",
+        "repo": "floxpkgs",
+        "type": "github"
+      }
+    },
+    {
+      "from": {
+        "id": "nixpkgs-flox",
+        "type": "indirect"
+      },
+      "to": {
+        "owner": "flox",
+        "ref": "master",
+        "repo": "nixpkgs-flox",
+        "type": "github"
+      }
+    },
+    {
+      "from": {
+        "id": "nixpkgs",
+        "type": "indirect"
+      },
+      "to": {
+        "owner": "flox",
+        "ref": "stable",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
+    {
+      "from": {
+        "id": "nixpkgs-stable",
+        "type": "indirect"
+      },
+      "to": {
+        "owner": "flox",
+        "ref": "stable",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
+    {
+      "from": {
+        "id": "nixpkgs-staging",
+        "type": "indirect"
+      },
+      "to": {
+        "owner": "flox",
+        "ref": "staging",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
+    {
+      "from": {
+        "id": "nixpkgs-unstable",
+        "type": "indirect"
+      },
+      "to": {
+        "owner": "flox",
+        "ref": "unstable",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    }
+  ],
+  "version": 2
+}

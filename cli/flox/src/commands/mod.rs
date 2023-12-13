@@ -49,8 +49,9 @@ static FLOX_DESCRIPTION: &'_ str = indoc! {"
 };
 
 static FLOX_WELCOME_MESSAGE: Lazy<String> = Lazy::new(|| {
+    let version = FLOX_VERSION.to_string();
     formatdoc! {r#"
-    flox version {FLOX_VERSION}
+    flox version {version}
 
     Usage: flox OPTIONS (init|activate|search|install|...) [--help]
 
@@ -61,7 +62,7 @@ static FLOX_WELCOME_MESSAGE: Lazy<String> = Lazy::new(|| {
 });
 
 const ADDITIONAL_COMMANDS: &str = indoc! {"
-    upgrade, config, wipe-history, history, auth
+    update, upgrade, config, wipe-history, history, auth
 "};
 
 fn vec_len<T>(x: Vec<T>) -> usize {
@@ -328,6 +329,8 @@ enum AdditionalCommands {
         #[bpaf(external(AdditionalCommands::documentation))] AdditionalCommandsDocumentation,
     ),
     #[bpaf(command, hide)]
+    Update(#[bpaf(external(environment::update))] environment::Update),
+    #[bpaf(command, hide)]
     Upgrade(#[bpaf(external(environment::upgrade))] environment::Upgrade),
     #[bpaf(command, hide)]
     Config(#[bpaf(external(general::config_args))] general::ConfigArgs),
@@ -347,6 +350,7 @@ impl AdditionalCommands {
     async fn handle(self, config: Config, flox: Flox) -> Result<()> {
         match self {
             AdditionalCommands::Documentation(args) => args.handle(),
+            AdditionalCommands::Update(args) => args.handle(flox).await?,
             AdditionalCommands::Upgrade(args) => args.handle(flox).await?,
             AdditionalCommands::Config(args) => args.handle(config, flox).await?,
             AdditionalCommands::WipeHistory(args) => args.handle(flox).await?,

@@ -49,6 +49,12 @@ impl Environment for RemoteEnvironment {
         todo!()
     }
 
+    /// Atomically update this environment's inputs
+    #[allow(unused)]
+    fn update(&mut self, flox: &Flox, inputs: Vec<String>) -> Result<String, EnvironmentError2> {
+        todo!()
+    }
+
     #[allow(unused)]
     async fn catalog(
         &self,
