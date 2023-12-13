@@ -3,7 +3,6 @@
   lib,
   argparse,
   doxygen,
-  bats,
   bear,
   boost,
   ccls,
@@ -19,8 +18,14 @@
   sqlite3pp,
   toml11,
   yaml-cpp,
+  # For testing
+  bash,
   yj,
   jq,
+  gnugrep,
+  bats,
+  git,
+  coreutils,
   llvm, # for `llvm-symbolizer'
   gdb ? throw "`gdb' is required for debugging with `g++'",
   lldb ? throw "`lldb' is required for debugging with `clang++'",
@@ -80,9 +85,9 @@ in
           notIgnored && notResult;
       };
 
-      propagatedBuildInputs = [semver nix];
+      propagatedBuildInputs = [semver];
 
-      nativeBuildInputs = [pkg-config];
+      nativeBuildInputs = [pkg-config coreutils gnugrep];
 
       buildInputs = [
         sqlite.dev
@@ -122,6 +127,9 @@ in
           batsWith
           yj
           jq
+          bash
+          git
+          sqlite
           # For docs
           doxygen
         ];
