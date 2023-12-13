@@ -107,7 +107,6 @@ reals_setup() {
   xdg_reals_setup;
   git_reals_setup;
   {
-    print_var BUILD_ENV_BIN;
     print_var FLOX_BIN;
     print_var NIX_BIN;
     print_var NIX_STORE;

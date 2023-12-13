@@ -567,7 +567,7 @@ CLEANFILES               += $(_TEST_LOCKFILES)
 test-lockfiles: $(_TEST_LOCKFILES)
 $(_TEST_LOCKFILES): %/manifest.lock: %/manifest.toml bin/pkgdb
 	$(MKDIR_P) $(@D);
-	bin/pkgdb manifest lock --ga-registry "$<" > "$@";
+	bin/pkgdb manifest lock --ga-registry --manifest $< > $@;
 
 
 # ---------------------------------------------------------------------------- #

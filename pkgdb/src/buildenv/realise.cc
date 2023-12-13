@@ -360,7 +360,7 @@ createFloxEnv( nix::EvalState &     state,
 
   /* Insert profile.d scripts.
    * The store path is provided at compile time via the `PROFILE_D_SCRIPT_DIR'
-   * environment variable.
+   * environment variable. */
   auto profile_d_scripts_path
     = state.store->parseStorePath( PROFILE_D_SCRIPT_DIR );
   state.store->ensurePath( profile_d_scripts_path );
