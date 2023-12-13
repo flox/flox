@@ -64,7 +64,26 @@ struct RealisedPackage
   std::string path;
   bool        active;
   Priority    priority;
-}; /* End struct `Package' */
+
+  ~RealisedPackage()                         = default;
+  RealisedPackage()                          = default;
+  RealisedPackage( const RealisedPackage & ) = default;
+  RealisedPackage( RealisedPackage && )      = default;
+
+  explicit RealisedPackage( std::string path,
+                            bool        active   = false,
+                            Priority    priority = {} )
+    : path( path ), active( active ), priority( priority )
+  {}
+
+  RealisedPackage &
+  operator=( const RealisedPackage & )
+    = default;
+  RealisedPackage &
+  operator=( RealisedPackage && )
+    = default;
+
+}; /* End struct `RealisedPackage' */
 
 
 /* -------------------------------------------------------------------------- */

@@ -247,13 +247,11 @@ createFloxEnv( nix::EvalState &     state,
           pkgs.emplace_back(
             state.store->printStorePath( output.second.value() ),
             true,
-            buildenv::Priority(
-              package.priority,
-              packagePath,
-              /* idx should always fit in uint its unlikely a package has more
-               * than 4 billion outputs. */
-              static_cast<unsigned>( idx )
-            ) );
+            buildenv::Priority( package.priority,
+                                packagePath,
+                                /* idx should always fit in uint its unlikely a
+                                 * package has more than 4 billion outputs. */
+                                static_cast<unsigned>( idx ) ) );
           references.insert( output.second.value() );
           originalPackage.insert( { output.second.value(), { pId, package } } );
         }
