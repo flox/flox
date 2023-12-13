@@ -46,6 +46,10 @@
 #
 # ---------------------------------------------------------------------------- #
 
+# Warn if undefined variables are referenced.
+MAKEFLAGS += --warn-undefined-variables
+
+# Locate filesystem paths relative to this Makefile.
 MAKEFILE_DIR ?= $(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
 PKGDB_ROOT   := $(MAKEFILE_DIR)
 REPO_ROOT    := $(patsubst %/,%,$(dir $(MAKEFILE_DIR)))
@@ -55,6 +59,17 @@ REPO_ROOT    := $(patsubst %/,%,$(dir $(MAKEFILE_DIR)))
 
 .PHONY: all clean fullclean FORCE ignores most
 .DEFAULT_GOAL = most
+
+
+# ---------------------------------------------------------------------------- #
+
+# Install Prefixes
+# ----------------
+
+PREFIX     ?= $(PKGDB_ROOT)/build
+BINDIR     ?= $(PREFIX)/bin
+LIBEXECDIR ?= $(PREFIX)/libexec
+SYSCONFDIR ?= $(PREFIX)/etc
 
 
 # ---------------------------------------------------------------------------- #
@@ -86,6 +101,37 @@ TR         ?= tr
 UNAME      ?= uname
 
 
+# Locally built `pkgdb' executables
+# ---------------------------------
+# These may be overridden by the user to invoke the test suite against an
+# installed form of `pkgdb'.
+# We use absolute paths because the test suite may modify `PATH'.
+
+PKGDB_BIN               ?=
+PKGDB_IS_SQLITE3_BIN    ?=
+PKGDB_SEARCH_PARAMS_BIN ?=
+ifeq (,$(filter $(PKGDB_BIN),$(abspath $(PKGDB_BIN))))
+_PKGDB_BIN := $(if $(PKGDB_BIN),$(PKGDB_BIN),pkgdb)
+PKGDB_BIN	= $(shell \
+  PATH="$$PATH:$(BINDIR):$(PKGDB_ROOT)/bin" command -v $(_PKGDB_BIN)||\
+  echo '$(PKGDB_ROOT)/bin/pkgdb')
+endif # `pkgdb' path is relative
+
+ifeq (,$(filter $(PKGDB_IS_SQLITE3_BIN),$(abspath $(PKGDB_IS_SQLITE3_BIN))))
+PKGDB_IS_SQLITE3_BIN = $(PKGDB_ROOT)/tests/is_sqlite3
+endif # `is-sqlite3' path is relative
+
+ifeq (,$(filter $(PKGDB_SEARCH_PARAMS_BIN),\
+$(abspath $(PKGDB_SEARCH_PARAMS_BIN))))
+PKGDB_SEARCH_PARAMS_BIN = $(PKGDB_ROOT)/tests/search-params
+endif # `search-params' path is relative
+
+# Useful for debugging:
+#$(info PKGDB_BIN: $(PKGDB_BIN))
+#$(info PKGDB_IS_SQLITE3_BIN: $(PKGDB_IS_SQLITE3_BIN))
+#$(info PKGDB_SEARCH_PARAMS_BIN: $(PKGDB_SEARCH_PARAMS_BIN))
+
+
 # ---------------------------------------------------------------------------- #
 
 # Detect OS and Set Shared Library Extension
@@ -100,6 +146,8 @@ else
 libExt ?= .dylib
 endif  # ifeq (Linux,$(OS))
 endif  # ifndef libExt
+
+TARGET_ARCH ?=
 
 
 # ---------------------------------------------------------------------------- #
@@ -130,18 +178,6 @@ endif  # ifndef TOOLCHAIN
 # ---------------------------------------------------------------------------- #
 
 VERSION := $(file < $(PKGDB_ROOT)/version)
-
-
-# ---------------------------------------------------------------------------- #
-
-# Install Prefixes
-# ----------------
-
-PREFIX     ?= $(PKGDB_ROOT)/build
-BINDIR     ?= $(PREFIX)/bin
-LIBDIR     ?= $(PREFIX)/lib
-LIBEXECDIR ?= $(PREFIX)/libexec
-SYSCONFDIR ?= $(PREFIX)/etc
 
 
 # ---------------------------------------------------------------------------- #
@@ -203,6 +239,10 @@ SET_PROMPT_BASH_SH   ?= $(LIBEXECDIR)/set-prompt.bash.sh
 # Compiler Flags
 # --------------
 
+EXTRA_LDFLAGS ?=
+EXTRA_CFLAGS  ?=
+CPPFLAGS  	  ?=
+
 # You can disable these optional gripes with `make EXTRA_CXXFLAGS='' ...;'
 ifndef EXTRA_CXXFLAGS
 EXTRA_CXXFLAGS = -Wall -Wextra -Wpedantic
@@ -220,13 +260,16 @@ CXXFLAGS += '-DSET_PROMPT_BASH_SH="$(SET_PROMPT_BASH_SH)"'
 LDFLAGS  ?= $(EXTRA_LDFLAGS)
 
 # Release Mode
-ifneq ($(RELEASE),)
+RELEASE ?=
+ifneq (,$(RELEASE))
 CXXFLAGS += -O3 -DNDEBUG
 LDFLAGS  += -O3
 endif # ifneq ($(RELEASE),)
 
 # Debug Mode
-ifneq ($(DEBUG),)
+DEBUG ?=
+ifneq (,$(DEBUG))
+DEBUG ?=
 ifeq (gcc,$(TOOLCHAIN))
 CXXFLAGS += -ggdb3 -pg -fno-omit-frame-pointer
 LDFLAGS  += -ggdb3 -pg -fno-omit-frame-pointer
@@ -237,7 +280,8 @@ endif # ifeq (gcc,$(TOOLCHAIN))
 endif # ifneq ($(DEBUG),)
 
 # Coverage Mode
-ifneq ($(COV),)
+COV ?=
+ifneq (,$(COV))
 CXXFLAGS += --coverage -fprofile-arcs -ftest-coverage
 LDFLAGS  += --coverage -fprofile-arcs -ftest-coverage
 endif # ifneq ($(COV),)
@@ -270,7 +314,7 @@ sqlite3_CFLAGS ?=                                                     \
 	$(patsubst -I%,-isystem %,$(shell $(PKG_CONFIG) --cflags sqlite3))
 sqlite3_CFLAGS  := $(sqlite3_CFLAGS)
 sqlite3_LDFLAGS ?= $(shell $(PKG_CONFIG) --libs sqlite3)
-sqlite3_LDLAGS  := $(sqlite3_LDLAGS)
+sqlite3_LDFLAGS := $(sqlite3_LDFLAGS)
 
 sqlite3pp_CFLAGS ?=                                                     \
 	$(patsubst -I%,-isystem %,$(shell $(PKG_CONFIG) --cflags sqlite3pp))
@@ -302,10 +346,19 @@ nix_LDFLAGS := $(nix_LDFLAGS)
 
 # ---------------------------------------------------------------------------- #
 
-CXXFLAGS += $(sqlite3pp_CFLAGS) $(argparse_CFLAGS)
-CXXFLAGS += $(nix_CFLAGS) $(nljson_CFLAGS) $(toml_CFLAGS) $(yaml_CFLAGS)
+# Add Dependency Flags
+# --------------------
 
-LDFLAGS += $(nix_LDFLAGS) $(libpkgdb_LDFLAGS) $(sqlite3_LDFLAGS) $(yaml_LDFLAGS)
+CXXFLAGS += $(sqlite3pp_CFLAGS)
+CXXFLAGS += $(argparse_CFLAGS)
+CXXFLAGS += $(nix_CFLAGS)
+CXXFLAGS += $(nljson_CFLAGS)
+CXXFLAGS += $(toml_CFLAGS)
+CXXFLAGS += $(yaml_CFLAGS)
+
+LDFLAGS += $(nix_LDFLAGS)
+LDFLAGS += $(sqlite3_LDFLAGS)
+LDFLAGS += $(yaml_LDFLAGS)
 
 
 # ---------------------------------------------------------------------------- #
@@ -386,7 +439,7 @@ install-bin: $(addprefix $(BINDIR)/,$(BINS))
 install-libexec: $(addprefix $(LIBEXECDIR)/,$(LIBEXECS))
 
 #: Install config files
-install-libexec: $(addprefix $(SYSCONFDIR)/,$(SYSCONFS))
+install-sysconf: $(addprefix $(SYSCONFDIR)/,$(SYSCONFS))
 
 
 # ---------------------------------------------------------------------------- #
@@ -491,8 +544,6 @@ FULLCLEANFILES += ../compile_commands.json
 
 # ---------------------------------------------------------------------------- #
 
-# FIXME: these need to be in the project root
-
 # LSP Metadata
 # ------------
 
@@ -570,24 +621,23 @@ cc-check: $(TESTS:.cc=) test-data
 
 #: Run all bats tests
 bats-check: bin $(TEST_UTILS) test-data
-	PKGDB_BIN="$(PKGDB_ROOT)/bin/pkgdb"                      \
-	IS_SQLITE3_BIN="$(PKGDB_ROOT)/tests/is_sqlite3"          \
-	SEARCH_PARAMS_BIN="$(PKGDB_ROOT)/tests/search-params"    \
+	PKGDB_BIN="$(PKGDB_BIN)"                                 \
+	PKGDB_IS_SQLITE3_BIN="$(PKGDB_IS_SQLITE3_BIN)"           \
+	PKGDB_SEARCH_PARAMS_BIN="$(PKGDB_SEARCH_PARAMS_BIN)"     \
 	  bats --print-output-on-failure --verbose-run --timing  \
 	       "$(PKGDB_ROOT)/tests";
 
 
 # ---------------------------------------------------------------------------- #
 
-%.o: %.cc $(HEADERS) $(PROLE_D_SCRIPT_DIR) $(SET_PROMPT_BASH_SH)
-	$(CXX) $(CXXFLAGS) -c $< -o $@;
+#%.o: %.cc
+#	$(CXX) $(CXXFLAGS) -c $< -o $@;
 
 # ---------------------------------------------------------------------------- #
 
 src/pkgdb/write.o: src/pkgdb/schemas.hh
 
-$(ALL_SRCS:.cc=.o): %.o: %.cc $(HEADERS)
-	$(CXX) $(CXXFLAGS) -c $< -o $@;
+$(ALL_SRCS:.cc=.o): %.o: %.cc $(HEADERS) install-sysconf install-libexec
 
 $(addprefix bin/,$(BINS)): %: $(SRCS:.cc=.o)
 	$(MKDIR_P) $(@D);

@@ -362,8 +362,14 @@ createFloxEnv( nix::EvalState &     state,
   /* Insert profile.d scripts.
    * The store path is provided at compile time via the `PROFILE_D_SCRIPT_DIR'
    * environment variable. */
+  tempDir = std::filesystem::path( nix::createTempDir() );
+  std::filesystem::create_directories( tempDir / "etc" );
+  std::filesystem::copy( PROFILE_D_SCRIPT_DIR,
+                         tempDir / "etc" / "profile.d",
+                         std::filesystem::copy_options::recursive );
+
   auto profileScriptsPath
-    = state.store->addToStore( "profile.d", PROFILE_D_SCRIPT_DIR );
+    = state.store->addToStore( "flox-etc-profiles", tempDir );
   state.store->ensurePath( profileScriptsPath );
   references.insert( profileScriptsPath );
   pkgs.emplace_back( state.store->printStorePath( profileScriptsPath ),
