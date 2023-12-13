@@ -316,7 +316,7 @@ buildEnvironment( const std::string &             out,
       postponed.swap( pkgDirs );
       for ( const auto & pkgDir : pkgDirs )
         {
-          addPkg( pkgDir, Priority { priorityCounter++, std::nullopt, 0 } );
+          addPkg( pkgDir, Priority( priorityCounter++ ) );
         }
     }
 

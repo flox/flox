@@ -33,6 +33,27 @@ struct Priority
   unsigned                   priority;
   std::optional<std::string> parentPath;
   unsigned                   internalPriority;
+
+  ~Priority()                  = default;
+  Priority()                   = default;
+  Priority( const Priority & ) = default;
+  Priority( Priority && )      = default;
+
+  explicit Priority( unsigned                   priority,
+                     std::optional<std::string> parentPath       = std::nullopt,
+                     unsigned                   internalPriority = 0 )
+    : priority( priority )
+    , parentPath( parentPath )
+    , internalPriority( internalPriority )
+  {}
+
+  Priority &
+  operator=( const Priority & )
+    = default;
+  Priority &
+  operator=( Priority && )
+    = default;
+
 }; /* End struct `Priority' */
 
 

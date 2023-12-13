@@ -12,8 +12,8 @@
 #include <optional>
 #include <string>
 
-#include <nlohmann/json.hpp>
 #include <nix/ref.hh>
+#include <nlohmann/json.hpp>
 
 #include "flox/core/command.hh"
 #include "flox/core/nix-state.hh"

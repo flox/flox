@@ -242,19 +242,18 @@ createFloxEnv( nix::EvalState &     state,
        * outputs of the same derivation. */
       for ( auto [idx, output] : enumerate( package_drv->queryOutputs() ) )
         {
-          buildenv::Priority prio {
-            package.priority,
-            packagePath,
-            /* idx should always fit in uint its unlikely a package has more
-             * than 4 billion outputs. */
-            static_cast<unsigned>( idx ),
-          };
           /* Skip outputs without path */
           if ( ! output.second.has_value() ) { continue; }
           pkgs.emplace_back(
             state.store->printStorePath( output.second.value() ),
             true,
-            std::move( prio ) );
+            buildenv::Priority(
+              package.priority,
+              packagePath,
+              /* idx should always fit in uint its unlikely a package has more
+               * than 4 billion outputs. */
+              static_cast<unsigned>( idx )
+            ) );
           references.insert( output.second.value() );
           originalPackage.insert( { output.second.value(), { pId, package } } );
         }
@@ -358,7 +357,7 @@ createFloxEnv( nix::EvalState &     state,
   references.insert( activationStorePath );
   pkgs.emplace_back( state.store->printStorePath( activationStorePath ),
                      true,
-                     buildenv::Priority {} );
+                     buildenv::Priority() );
 
   /* Insert profile.d scripts.
    * The store path is provided at compile time via the `PROFILE_D_SCRIPT_DIR'
@@ -375,7 +374,7 @@ createFloxEnv( nix::EvalState &     state,
   references.insert( profileScriptsPath );
   pkgs.emplace_back( state.store->printStorePath( profileScriptsPath ),
                      true,
-                     buildenv::Priority {} );
+                     buildenv::Priority() );
 
   return createEnvironmentStorePath( state, pkgs, references, originalPackage );
 }

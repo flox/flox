@@ -56,9 +56,9 @@ BuildEnvCommand::run()
     }
 
   resolver::LockfileRaw lockfileRaw = this->lockfileContent;
-  auto                  lockfile    = resolver::Lockfile( std::move( lockfileRaw ) );
-  auto                  store       = this->getStore();
-  auto                  state       = this->getState();
+  auto lockfile = resolver::Lockfile( std::move( lockfileRaw ) );
+  auto store    = this->getStore();
+  auto state    = this->getState();
 
   auto system    = this->system.value_or( nix::settings.thisSystem.get() );
   auto storePath = createFloxEnv( *state, lockfile, system );
