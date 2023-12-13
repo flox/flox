@@ -33,7 +33,7 @@ impl RemoteEnvironment {
     pub fn new_in(
         flox: &Flox,
         path: impl AsRef<Path>,
-        env_ref: EnvironmentRef,
+        env_ref: &EnvironmentRef,
     ) -> Result<Self, RemoteEnvironmentError> {
         let pointer = super::ManagedPointer {
             owner: env_ref.owner().clone(),
@@ -54,7 +54,7 @@ impl RemoteEnvironment {
     ///
     /// Contrary to [`RemoteEnvironment::new_in`], this function will create a temporary directory
     /// in the flox temp directory which is cleared when the process ends.
-    pub fn new(flox: &Flox, env_ref: EnvironmentRef) -> Result<Self, RemoteEnvironmentError> {
+    pub fn new(flox: &Flox, env_ref: &EnvironmentRef) -> Result<Self, RemoteEnvironmentError> {
         let path = tempfile::tempdir_in(&flox.temp_dir).unwrap().into_path();
 
         Self::new_in(flox, path, env_ref)

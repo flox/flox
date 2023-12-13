@@ -507,7 +507,10 @@ impl EnvironmentSelect {
                     Err(anyhow!(format!("No environment found in {current_dir:?}")))
                 },
             },
-            EnvironmentSelect::Remote(_) => todo!(),
+            EnvironmentSelect::Remote(env_ref) => {
+                let env = RemoteEnvironment::new(flox, env_ref)?;
+                Ok(ConcreteEnvironment::Remote(env))
+            },
         }
     }
 }
