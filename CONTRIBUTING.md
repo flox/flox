@@ -10,8 +10,8 @@ $ nix develop;
 $ just build;
 # Run the build
 $ ./cli/target/debug/flox --help;
-# Run the test suite ( requires `./tests/debug/flox' )
-$ nix run '.#flox-tests';
+# Run the test suite
+$ just test-all;
 ```
 
 ## Contents of the Repo
@@ -61,7 +61,7 @@ Flox must be buildable using `flox` or `nix`.
    ```
 - build an optimized release build of flox
    ```console
-   $ make -C pkgdb -j;
+   $ make -C pkgdb -j RELEASE=1;
    $ ( pushd cli||return; cargo build --release; )
    # builds to ./cli/target/release/flox
    ```
@@ -223,7 +223,7 @@ These cover code authored in Rust, but does not explicitly cover code authored
 in `<flox>/flox-bash/`.
 
 ```console
-$ nix develop --command 'just test';
+$ nix develop --command 'just test-all';
 ```
 
 ### Integration tests
@@ -234,13 +234,8 @@ To run them:
 
 ```console
 $ nix develop --command 'just build';
-$ nix run '.#flox-tests' -- --flox ./cli/target/debug/flox;
+$ nix develop --command 'just integ-tests';
 ```
-The second `--` separates the `nix run` arguments from arguments supplied to
-the `flox-tests` script defined in `pkgs/flox-tests/default.nix`.
-The `--flox` flag specifies which `flox` executable to use as by default `flox`
-will be picked from the the environment.
-A third `--` can be used to pass arguments to `bats`.
 
 **Important** the `flox-tests` option `--tests` must point to the
 `<flox>/tests/` directory root which is used to locate various resources within
@@ -252,19 +247,20 @@ every change. In that case run the following:
 
 ```console
 $ nix develop --command 'just build';
-$ nix run '.#flox-tests' -- --flox ./cli/target/debug/flox --watch;
+$ nix develop --command '
+    flox-tests --env-builder "$PWD/env-builder/bin/env-builder"  \
+               --pkgdb "$PWD/pkgdb/bin/pkgdb"                    \
+               --flox "$PWD/cli/target/debug/flox"               \
+               --watch;
+  ';
 ```
 
 #### `bats` arguments
-You can pass arbitrary flags through to `bats` using the third `--` separator -
-however bugs in the `flox` CLI parser require you to use `sh -c` to wrap
-the command.
-Failing to wrap will cause `flox` to "consume" the `--` rather than pass it
-through to the inner command:
+You can pass arbitrary flags through to `bats` using a `--` separator.
 
 ```console
 $ nix develop --command 'just build';
-$ nix run '.#flox-tests' -- --flox ./cli/target/debug/flox -- -j 4;
+$ nix develop --command 'flox-tests --flox "$PWD/cli/target/debug/flox" -- -j 4';
 ```
 This example tells `bats` to run 4 jobs in parallel.
 
@@ -275,7 +271,7 @@ or by directly passing arguments to `bats`.
 ##### Running a specific file
 In order to run a specific test file, pass the path to the file to `flox-tests`:
 ```console
-$ nix run '.#flox-tests' -- --flox ./cli/target/debug/flox ./tests/run.bats;
+$ flox-tests --flox ./cli/target/debug/flox ./tests/run.bats;
 $ or, using the Justfile
 $ just bats-file ./tests/run.bats
 ```
@@ -340,8 +336,8 @@ any time an environment is built, so there is overlap with `install`,
 In order to run tests with a specific tag, you'll pass the `--filter-tags`
 option to `bats`:
 ```console
-$ nix run '.#flox-tests' -- --flox ./cli/target/debug/flox  \
-                         -- --filter-tags activate;
+$ flox-tests --flox ./cli/target/debug/flox  \
+             -- --filter-tags activate;
 $ # or, using the Justfile
 $ just bats-tests --filter-tags activate
 ```
