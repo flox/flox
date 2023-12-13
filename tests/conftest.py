@@ -163,7 +163,6 @@ def flox_project(
 
     os.environ["FLOX_DISABLE_METRICS"] = "true"
     os.environ["_PKGDB_GA_REGISTRY_REF_OR_REV"] = nixpkgs_rev
-    os.environ["USER"] = os.getlogin()
     os.environ["HOME"] = str(tmp_path)
     os.environ["XDG_CONFIG_HOME"] = str(tmp_path / ".config")
     os.environ["XDG_CACHE_HOME"] = str(tmp_path / ".cache")
