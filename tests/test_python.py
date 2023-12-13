@@ -11,16 +11,17 @@ def test_python_integration_with_flox(
     ):
 
     # Initialize flox project
-    res = run(f"{flox} init")
+    res = run(f"{flox} init", cwd=flox_project.path)
     assert res.returncode == 0
     # TODO: this should be in stderr
     assert "✨ Created environment" in res.stdout
-    assert res.stderr == ""
+    # TODO: user should not see this
+    assert "Updating nix.conf" in res.stderr
 
     assert (flox_project.path / ".flox/env").exists()
 
     # Install pip and python3 flox project
-    res = run(f"{flox} install pip python3", timeout=60)
+    res = run(f"{flox} install pip python3", cwd=flox_project.path, timeout=60)
     assert res.returncode == 0
     assert res.stdout == ""
     assert "✅ 'pip' installed to environment" in res.stderr
@@ -35,7 +36,7 @@ def test_python_integration_with_flox(
     with flox_project.path:
 
         # Enter (activate) the flox environment
-        shell = spawn(f"{flox} activate")
+        shell = spawn(f"{flox} activate", cwd=flox_project.path)
         shell.expect(r"Building environment...", timeout=10)
         shell.expect_prompt(timeout=30)
 

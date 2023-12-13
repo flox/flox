@@ -4,6 +4,7 @@ import pathlib
 import re
 import shlex
 import subprocess
+import tempfile
 
 import pytest
 import pexpect
@@ -40,7 +41,7 @@ def flox():
     return os.environ.get("FLOX_BIN", "flox")
 
 @pytest.fixture
-def run(tmp_path):
+def run():
     """Run a command"""
 
     def _run(args, **kwargs):
@@ -54,7 +55,6 @@ def run(tmp_path):
         kwargs.setdefault("capture_output", True)       # stdout and stderr will be captured
         kwargs.setdefault("timeout", DEFAULT_TIMEOUT)   # timeout in seconds
         kwargs.setdefault("check", False)               # don't raise any expection
-        kwargs.setdefault("cwd", tmp_path)          # changes directory before running the command
         kwargs.setdefault("text", True)
         kwargs.setdefault("shell", False)
 
@@ -63,7 +63,7 @@ def run(tmp_path):
 
 
 @pytest.fixture
-def spawn(tmp_path):
+def spawn():
     """Spawn a command"""
 
     def _run(command, **kwargs):
@@ -88,7 +88,6 @@ def spawn(tmp_path):
 
         kwargs.setdefault("encoding", "utf-8")
         kwargs.setdefault("env", env)
-        kwargs.setdefault("cwd", tmp_path)          # changes directory before running the command
         kwargs.setdefault("timeout", DEFAULT_TIMEOUT)   # timeout in seconds
         # The (height, width) of the TTY commands run in. 24 is the default.
         # The width needs to be larger than the longest command, as
@@ -124,6 +123,7 @@ def spawn(tmp_path):
         return shell
     return _run
 
+
 @pytest.fixture
 def nix_system(run, nix):
     """Current nix system"""
@@ -147,19 +147,32 @@ class FloxProject:
 
 
 @pytest.fixture
-def flox_project(tmp_path, nix_system):
+def flox_project(
+        tmp_path,
+        nix_system,
+    ):
     """Path to flox project"""
 
-    name = os.path.basename(tmp_path)
+    project_path = pathlib.Path(tempfile.mkdtemp(
+        prefix="flox-tests-envs-",
+        dir=tmp_path,
+    ))
+
+    project_name = os.path.basename(project_path)
     nixpkgs_rev = "e8039594435c68eb4f780f3e9bf3972a7399c4b1"
 
+    os.environ["FLOX_DISABLE_METRICS"] = "true"
     os.environ["_PKGDB_GA_REGISTRY_REF_OR_REV"] = nixpkgs_rev
-    # TODO: we should probably set home
-    #os.environ.set("HOME", "")
+    os.environ["USER"] = os.getlogin()
+    os.environ["HOME"] = str(tmp_path)
+    os.environ["XDG_CONFIG_HOME"] = str(tmp_path / ".config")
+    os.environ["XDG_CACHE_HOME"] = str(tmp_path / ".cache")
+    os.environ["XDG_DATA_HOME"] = str(tmp_path / ".local/share")
+    os.environ["XDG_STATE_HOME"] = str(tmp_path / ".local/state")
 
     return FloxProject(
-        name = name,
-        path = tmp_path,
-        run_path = tmp_path / f".flox/run/{nix_system}.{name}",
+        name = project_name,
+        path = project_path,
+        run_path = project_path / f".flox/run/{nix_system}.{project_name}",
         nixpkgs_rev = nixpkgs_rev,
     )
