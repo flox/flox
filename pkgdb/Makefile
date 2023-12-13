@@ -418,15 +418,15 @@ install: install-bin install-libexec install-sysconf
 
 $(BINDIR)/%: bin/%
 	$(MKDIR_P) $(@D);
-	$(CP) -- "$<" "$@";
+	if $(TEST) -f $<; then $(CP) -- "$<" "$@"; fi
 
 $(LIBEXECDIR)/%: libexec/%
 	$(MKDIR_P) $(@D);
-	$(CP) -- "$<" "$@";
+	if $(TEST) -f $<; then $(CP) -- "$<" "$@"; fi
 
 $(SYSCONFDIR)/%: etc/%
 	$(MKDIR_P) $(@D);
-	$(CP) -- "$<" "$@";
+	if $(TEST) -f $<; then $(CP) -- "$<" "$@"; fi
 
 #: Install binaries
 install-bin: $(addprefix $(BINDIR)/,$(BINS))
