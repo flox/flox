@@ -599,8 +599,8 @@ impl ManagedEnvironment {
     }
 
     /// Returns the environment owner
-    pub fn owner(&self) -> EnvironmentOwner {
-        self.pointer.owner.clone()
+    pub fn owner(&self) -> &EnvironmentOwner {
+        &self.pointer.owner
     }
 
     fn generations(&self) -> Generations {
