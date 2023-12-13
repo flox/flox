@@ -648,6 +648,15 @@ impl ManagedEnvironment {
 /// if the local revision is not available on the machine,
 /// i.e. any machine other than the one that committed the lockfile.
 /// See [`ManagedEnvironment::ensure_locked`] for more details.
+///
+/// todo: allow updating only the local revision
+/// avoid race conditions where the remote revision is unintentionally updated.
+/// If I pull an environment at rev A,
+/// -> somebody pushes rev B,
+/// -> I do an operation with -r that fetches the environment,
+/// -> and then I make a change that takes me from rev A to rev C,
+/// my lock will set rev to B.
+/// That's undesirable, and rev should always be in local_rev's history.
 fn write_pointer_lockfile(
     lock_path: PathBuf,
     floxmeta: &FloxmetaV2,
