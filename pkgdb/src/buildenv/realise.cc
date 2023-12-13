@@ -361,7 +361,7 @@ createFloxEnv( nix::EvalState &     state,
    * The store path is provided at compile time via the `PROFILE_D_SCRIPT_DIR'
    * environment variable. */
   tempDir = std::filesystem::path( nix::createTempDir() );
-  std::filesystem::create_directories( tempDir / "etc" );
+  std::filesystem::create_directories( tempDir / "etc" / "profile.d" );
   std::filesystem::copy( PROFILE_D_SCRIPT_DIR,
                          tempDir / "etc" / "profile.d",
                          std::filesystem::copy_options::recursive );
