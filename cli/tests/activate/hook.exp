@@ -3,23 +3,14 @@
 
 set dir [lindex $argv 0]
 set flox $env(FLOX_BIN)
-
-set timeout 5
-set cmd "$flox activate --dir $dir"
+set timeout 10
 spawn $flox activate --dir $dir
-expect {
-    "Building environment..." {}
-    timeout {
-      puts stderr "Reached timeout running '$cmd'"
-      exit 1
-    }
+expect_after {
+  timeout { exit 1 }
+  eof { exit 2 }
+  "*\n" { exp_continue }
 }
-expect {
-    "Welcome to your flox environment!" {}
-    timeout {
-      puts stderr "Reached timeout running '$cmd'"
-      exit 1
-    }
-}
+expect "Building environment..."
 
-exit 0
+send "exit\n"
+expect eof

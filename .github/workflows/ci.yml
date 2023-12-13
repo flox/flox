@@ -33,7 +33,7 @@ jobs:
 
     steps:
       - name: "Checkout"
-        uses: "actions/checkout@v3"
+        uses: "actions/checkout@v4"
 
       - name: "Install newer Nix"
         uses: "cachix/install-nix-action@v24"
@@ -62,7 +62,7 @@ jobs:
             --accept-flake-config \
             --no-update-lock-file \
             '.#default' \
-              --command make
+              --command make -j
           popd
 
       - name: "Test (pkgdb)"
@@ -72,7 +72,7 @@ jobs:
             --accept-flake-config \
             --no-update-lock-file \
             '.#default' \
-              --command make tests
+              --command make -j tests
           nix develop -L \
             --accept-flake-config \
             --no-update-lock-file \
@@ -102,7 +102,7 @@ jobs:
       - name: "Deploy to GitHub Pages"
         if: ${{ matrix.os == 'ubuntu-22.04-8core' }}
         id: "deployment"
-        uses: "actions/deploy-pages@v2"
+        uses: "actions/deploy-pages@v3"
 
   cli-dev:
     name: "Flox Cargo Tests"
@@ -117,7 +117,7 @@ jobs:
 
     steps:
       - name: "Checkout"
-        uses: "actions/checkout@v3"
+        uses: "actions/checkout@v4"
 
       - name: "Install newer Nix"
         uses: "cachix/install-nix-action@v24"
@@ -158,7 +158,7 @@ jobs:
             --accept-flake-config \
             --no-update-lock-file \
             '.#default' \
-              --command make
+              --command make -j
           popd
 
       - name: "Build (cli)"
@@ -221,7 +221,7 @@ jobs:
 
     steps:
       - name: "Checkout"
-        uses: "actions/checkout@v3"
+        uses: "actions/checkout@v4"
 
       - name: "Setup Tailscale"
         uses: "tailscale/github-action@v2"
@@ -253,13 +253,26 @@ jobs:
 
       - name: "Build"
         run: |
-          nix build -L \
+          if nix path-info \
+              --accept-flake-config \
+              --store "$FLOX_SUBSTITUTER" \
+              --eval-store auto \
+              --builders '' \
+              -j0 \
+                '.#flox-pkgdb.outPath' \
+                '.#flox-env-builder.outPath' \
+                '.#flox-cli.outPath' ; then
+             echo paths already exist in substituter
+             exit 0
+          else
+            nix build -L \
               --accept-flake-config \
               --no-update-lock-file \
               --print-out-paths \
                 '.#flox-pkgdb' \
                 '.#flox-cli' \
                 '.#flox'
+          fi
 
   trigger-flox-installers-workflow:
     name: "Build installers"
@@ -271,7 +284,7 @@ jobs:
 
     steps:
       - name: "Trigger flox-installers workflow"
-        uses: "convictional/trigger-workflow-and-wait@v1.6.1"
+        uses: "convictional/trigger-workflow-and-wait@v1.6.5"
         with:
           owner:              "flox"
           repo:               "nix-installers"
@@ -292,8 +305,10 @@ jobs:
     if: ${{ failure() && github.ref == 'refs/heads/main' && github.event_name == 'push' }}
 
     needs:
+      - "nix-build"
       - "pkgdb-dev"
       - "cli-dev"
+      # TODO: enable these when deemed reliable - "nix-build-bats-tests"
 
     steps:
       - name: "Slack Notification"
@@ -306,3 +321,87 @@ jobs:
           SLACK_ICON_EMOJI: ":poop:"
           SLACK_COLOR:      "#ff2800"  # ferrari red -> https://encycolorpedia.com/ff2800
           SLACK_LINK_NAMES: true
+
+  nix-build-bats-tests:
+    name: "Flox Bats Tests"
+    runs-on: "ubuntu-latest"
+
+    needs:
+      - "nix-build"
+
+    strategy:
+      fail-fast: false
+      matrix:
+        system:
+          - "x86_64-linux"
+          - "x86_64-darwin"
+          - "aarch64-linux"
+          - "aarch64-darwin"
+    steps:
+      - name: "Checkout"
+        uses: "actions/checkout@v4"
+      - name: "Setup Tailscale"
+        uses: "tailscale/github-action@v2"
+        with:
+          args: "--timeout 30s --login-server ${{ vars.TAILSCALE_URL }}"
+          tags: "tag:ci"
+          authkey: "${{ secrets.TAILSCALE_AUTH_KEY }}"
+      - name: "Install newer Nix"
+        uses: "cachix/install-nix-action@v24"
+      - name: "Install flox"
+        uses: "flox/install-flox-action@main"
+        with:
+          github-access-token:    "${{ secrets.NIX_GIT_TOKEN }}"
+          substituter:            "${{ vars.FLOX_PUBLIC_CACHE }}"
+          substituter-key:        "${{ secrets.FLOX_STORE_PUBLIC_NIX_SECRET_KEY }}"
+          aws-access-key-id:      "${{ secrets.AWS_ACCESS_KEY_ID }}"
+          aws-secret-access-key:  "${{ secrets.AWS_SECRET_ACCESS_KEY }}"
+          ssh-key:                "${{ secrets.FLOXBOT_SSH_KEY }}"
+          remote-builders:        "${{ vars.FLOX_BUILDERS }}"
+      - name: "Configure Nix"
+        run: |
+          sudo echo 
+          {
+            echo "experimental-features = nix-command flakes";
+          } | sudo tee -a /etc/nix/nix.conf >/dev/null
+      - name: "Find remote server to run tests on"
+        run: |
+          set -eo pipefail
+          export REMOTE_SERVER=$(cat /etc/nix/machines | grep ${{ matrix.system }} | cut -f1 -d' ' | cut -f3 -d'/' | head -1 | sed 's/nixbld@//' ; )
+          export REMOTE_SERVER_USER_KNOWN_HOSTS_FILE=$(mktemp)
+          export REMOTE_PUBLIC_HOST_KEY=$(cat /etc/nix/machines | grep ${{ matrix.system }} | tr -s ' ' | cut -f8 -d' ' | base64 -d ; )
+          printf "%s %s\n" "$REMOTE_SERVER" "$REMOTE_PUBLIC_HOST_KEY" > "$REMOTE_SERVER_USER_KNOWN_HOSTS_FILE"
+          echo "REMOTE_SERVER: $REMOTE_SERVER"
+          echo "REMOTE_SERVER_USER_KNOWN_HOSTS_FILE: $REMOTE_SERVER_USER_KNOWN_HOSTS_FILE"
+          cat $REMOTE_SERVER_USER_KNOWN_HOSTS_FILE
+          echo "REMOTE_SERVER=$REMOTE_SERVER" >> $GITHUB_ENV
+          echo "REMOTE_SERVER_USER_KNOWN_HOSTS_FILE=$REMOTE_SERVER_USER_KNOWN_HOSTS_FILE" >> $GITHUB_ENV
+      - name: "Build flox"
+        run: |
+          git clean -xfd
+          nix build -L \
+              --accept-flake-config \
+              --no-update-lock-file \
+              --print-out-paths \
+              '.#packages.${{ matrix.system }}.flox'
+          # We run bats tests later on against the `FLOX_CLI' env
+          echo "FLOX_CLI=$(readlink -f ./result; )/bin/flox" >> "$GITHUB_ENV"
+          rm ./result
+      - name: "Build Bats Tests (./#flox-tests)"
+        run: |
+          git clean -xfd
+          nix build -L \
+              --accept-flake-config \
+              --no-update-lock-file \
+              --print-out-paths \
+              '.#packages.${{ matrix.system }}.flox-cli-tests'
+          nix copy --to "$FLOX_SUBSTITUTER" ./result
+      - name: "Run Bats Tests (./#flox-cli-tests)"
+        run: |
+          git clean -xfd
+          ssh github@$REMOTE_SERVER \
+            -oUserKnownHostsFile=$REMOTE_SERVER_USER_KNOWN_HOSTS_FILE \
+            nix run \
+                --accept-flake-config \
+                --extra-experimental-features '"nix-command flakes"' \
+                'github:flox/flox/${{ github.sha }}#packages.${{ matrix.system }}.flox-cli-tests'

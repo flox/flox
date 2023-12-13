@@ -28,7 +28,7 @@ jobs:
 
     steps:
       # checkout develop branch
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
           token: ${{ secrets.NIX_GIT_TOKEN }}
@@ -40,7 +40,7 @@ jobs:
 
       # TODO: eventually replace with install flox action
       - name: Install Nix
-        uses: cachix/install-nix-action@v18
+        uses: cachix/install-nix-action@v24
         with:
           extra_nix_config: extra-access-tokens = github.com=${{ secrets.NIX_GIT_TOKEN }}
 

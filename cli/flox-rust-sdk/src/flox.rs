@@ -33,7 +33,8 @@ use crate::providers::git::GitProvider;
 
 static INPUT_CHARS: Lazy<Vec<char>> = Lazy::new(|| ('a'..='t').collect());
 
-pub const FLOX_VERSION: &str = env!("FLOX_VERSION");
+pub static FLOX_VERSION: Lazy<String> =
+    Lazy::new(|| std::env::var("FLOX_VERSION").unwrap_or(env!("FLOX_VERSION").to_string()));
 
 /// The main API struct for our flox implementation
 ///

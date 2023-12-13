@@ -49,8 +49,9 @@ static FLOX_DESCRIPTION: &'_ str = indoc! {"
 };
 
 static FLOX_WELCOME_MESSAGE: Lazy<String> = Lazy::new(|| {
+    let version = FLOX_VERSION.to_string();
     formatdoc! {r#"
-    flox version {FLOX_VERSION}
+    flox version {version}
 
     Usage: flox OPTIONS (init|activate|search|install|...) [--help]
 

@@ -26,24 +26,25 @@
   gitMinimal,
   nix,
   pkgsFor,
-  floxVersion,
   pre-commit-check,
   flox-pkgdb,
   longVersion ? false,
 }: let
   flox-src = builtins.path {
     name = "flox-src";
-    path = ./../../cli;
+    path = "${./../../cli}";
     filter = path: type:
-      ! builtins.elem path (map (f: ./../../cli + ("/" + f)) [
-        "flake.nix"
-        "flake.lock"
-        "pkgs"
-        "checks"
-        "tests"
-        "shells"
-        "target"
-      ]);
+      ! builtins.elem path (map (
+          f: "${./../../cli}/${f}"
+        ) [
+          "flake.nix"
+          "flake.lock"
+          "pkgs"
+          "checks"
+          "tests"
+          "shells"
+          "target"
+        ]);
   };
 
   # crane (<https://crane.dev/>) library for building rust packages
@@ -100,10 +101,7 @@
         cacert.outPath + "/etc/ssl/certs/ca-bundle.crt";
 
       # The current version of flox being built
-      FLOX_VERSION =
-        if longVersion
-        then floxVersion
-        else cargoToml.package.version;
+      FLOX_VERSION = cargoToml.package.version;
 
       # Reexport of the platform flox is being built for
       NIX_TARGET_SYSTEM = targetPlatform.system;

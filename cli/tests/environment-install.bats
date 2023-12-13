@@ -145,8 +145,7 @@ teardown() {
   mkdir 2
   "$FLOX_BIN" init --dir 2
 
-  SHELL=bash run expect -d "$TESTS_DIR/install/prompt-which-environment.exp"
-  assert_success
+  SHELL=bash run -0 expect -d "$TESTS_DIR/install/prompt-which-environment.exp"
 }
 
 @test "'flox install' prompts when an environment is activated and there is an environment in the containing git repo" {
@@ -158,8 +157,7 @@ teardown() {
   git -C 2 init
   mkdir 2/subdirectory
 
-  SHELL=bash run expect -d "$TESTS_DIR/install/prompt-which-environment-git.exp"
-  assert_success
+  SHELL=bash run -0 expect -d "$TESTS_DIR/install/prompt-which-environment-git.exp"
 }
 
 @test "i5: download package when install command runs" {
