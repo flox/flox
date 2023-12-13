@@ -242,18 +242,19 @@ createFloxEnv( nix::EvalState &     state,
        * outputs of the same derivation. */
       for ( auto [idx, output] : enumerate( package_drv->queryOutputs() ) )
         {
+          buildenv::Priority prio {
+            package.priority,
+            packagePath,
+            /* idx should always fit in uint its unlikely a package has more
+             * than 4 billion outputs. */
+            static_cast<unsigned>( idx ),
+          };
           /* Skip outputs without path */
           if ( ! output.second.has_value() ) { continue; }
           pkgs.emplace_back(
             state.store->printStorePath( output.second.value() ),
             true,
-            buildenv::Priority {
-              package.priority,
-              packagePath,
-              /* idx should always fit in uint its unlikely a package has more
-               * than 4 billion outputs. */
-              static_cast<unsigned>( idx ),
-            } );
+            std::move( prio ) );
           references.insert( output.second.value() );
           originalPackage.insert( { output.second.value(), { pId, package } } );
         }
