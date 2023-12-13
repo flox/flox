@@ -289,11 +289,13 @@ impl Activate {
         let prompt_name = match concrete_environment {
             // Note that the same environment could show up twice without any
             // indication of which comes from which path
+            ConcreteEnvironment::Path(ref path) => path.name().to_string(),
             ConcreteEnvironment::Managed(ref managed) => {
                 format!("{}/{}", managed.owner(), managed.name())
             },
-            ConcreteEnvironment::Path(ref path) => path.name().to_string(),
-            _ => todo!(),
+            ConcreteEnvironment::Remote(ref remote) => {
+                format!("{}/{}", remote.owner(), remote.name())
+            },
         };
 
         let mut environment = concrete_environment.into_dyn_environment();
@@ -483,6 +485,9 @@ impl List {
 
 fn environment_description(environment: &ConcreteEnvironment) -> Result<String, EnvironmentError2> {
     Ok(match environment {
+        ConcreteEnvironment::Remote(environment) => {
+            format!("{}/{} (remote)", environment.owner(), environment.name(),)
+        },
         ConcreteEnvironment::Managed(environment) => {
             format!(
                 "{}/{} at {}",
@@ -498,7 +503,6 @@ fn environment_description(environment: &ConcreteEnvironment) -> Result<String, 
                 environment.parent_path()?.to_string_lossy()
             )
         },
-        _ => todo!(),
     })
 }
 
