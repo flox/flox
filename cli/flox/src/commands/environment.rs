@@ -239,6 +239,18 @@ impl Delete {
 
         let description = environment_description(&environment)?;
 
+        let comfirm = Dialog {
+            message: &format!("You are about to delete your environment {description}"),
+            help_message: Some("Use `-f` to force deletion"),
+            typed: Confirm {
+                default: Some(false),
+            },
+        };
+
+        if !self.force && Dialog::can_prompt() && !comfirm.prompt().await? {
+            bail!("Ok everything stays as it is, nothing deleted");
+        }
+
         let result = match environment {
             ConcreteEnvironment::Path(environment) => environment.delete(),
             ConcreteEnvironment::Managed(environment) => environment.delete(),
