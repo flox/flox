@@ -3,6 +3,7 @@
   lib,
   argparse,
   doxygen,
+  bats,
   bear,
   boost,
   ccls,
@@ -18,12 +19,19 @@
   sqlite3pp,
   toml11,
   yaml-cpp,
+  yj,
+  jq,
   llvm, # for `llvm-symbolizer'
   gdb ? throw "`gdb' is required for debugging with `g++'",
   lldb ? throw "`lldb' is required for debugging with `clang++'",
   valgrind ? throw "`valgrind' is required for memory sanitization on Linux",
   ci ? false,
 }: let
+  batsWith = bats.withLibraries (p: [
+    p.bats-assert
+    p.bats-file
+    p.bats-support
+  ]);
   envs = {
     nix_INCDIR = nix.dev.outPath + "/include";
     boost_CFLAGS = "-isystem " + boost.dev.outPath + "/include";
@@ -110,6 +118,10 @@ in
           ;
 
         ciPackages = [
+          # For tests
+          batsWith
+          yj
+          jq
           # For docs
           doxygen
         ];
