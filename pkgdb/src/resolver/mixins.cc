@@ -303,7 +303,8 @@ argparse::Argument &
 EnvironmentMixin::addLockfileOption( argparse::ArgumentParser & parser )
 {
   return parser.add_argument( "--lockfile" )
-    .help( "the path to a lockfile, either the project's `manifest.lock` or the global lock" )
+    .help( "the path to a lockfile, either the project's `manifest.lock` or "
+           "the global lock" )
     .metavar( "PATH" )
     .action( [&]( const std::string & strPath )
              { this->setLockfileRaw( nix::absPath( strPath ) ); } );

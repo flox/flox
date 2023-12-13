@@ -11,7 +11,6 @@
   gawk,
   parallel,
   diffutils,
-  flox-env-builder,
   inputs,
   rsync,
   closureInfo,
@@ -170,7 +169,6 @@ in
       rootPaths = [
         inputs.nixpkgs.sourceInfo.outPath
         inputs.nixpkgs.legacyPackages.${system}.hello
-        flox-env-builder.PROFILE_D_SCRIPT_DIR
       ];
     }}
     mkdir -p $HOME/temp/nix/store

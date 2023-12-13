@@ -41,10 +41,6 @@ pub const DEFAULT_KEEP_GENERATIONS: usize = 10;
 // don't forget to update the man page
 pub const DEFAULT_MAX_AGE_DAYS: u32 = 90;
 
-// Path to the executable that builds environments
-pub static ENV_BUILDER_BIN: Lazy<String> =
-    Lazy::new(|| env::var("ENV_BUILDER_BIN").unwrap_or(env!("ENV_BUILDER_BIN").to_string()));
-
 pub const DOT_FLOX: &str = ".flox";
 pub const ENVIRONMENT_POINTER_FILENAME: &str = "env.json";
 pub const GLOBAL_MANIFEST_TEMPLATE: &str = env!("GLOBAL_MANIFEST_TEMPLATE");

@@ -6,8 +6,6 @@
 #
 #   - bin                   Build binaries
 #   - tests                 Build test executables and resources
-#   - lib                   Build libraries
-#   - include               Build/generate include files
 #   - docs                  Generate documentation
 #
 #   - check                 Run all tests
@@ -18,13 +16,12 @@
 #   - clean-pch             Remove all `pre-compiled-headers'.
 #   - fullclean             Remove build artifacts and metadata files
 #
-#   - install               Install binaries, libraries, and include files
+#   - install               Install binaries, sysconf, and include files
 #   - install-bin           Install binaries
-#   - install-dirs          Create directories in the install prefix
-#   - install-include       Install include files
+#   - install-sysconf       Install `etc/` files
+#   - install-libexec       Install `libexec/` executables
 #
 #   - ccls                  Create `.ccls' file used by CCLS LSP
-#   - compile_commands.json Create `compile_commands.json' file used for LSPs
 #   - compilation-databases Create `compile_commands.json' and `.ccls'
 #   - cdb                   Create `compile_commands.json' and `.ccls'
 #
@@ -48,7 +45,12 @@
 #
 # ---------------------------------------------------------------------------- #
 
+# Warn if undefined variables are referenced.
+MAKEFLAGS += --warn-undefined-variables
+
+# Locate filesystem paths relative to this Makefile.
 MAKEFILE_DIR ?= $(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
+PKGDB_ROOT   := $(MAKEFILE_DIR)
 REPO_ROOT    := $(patsubst %/,%,$(dir $(MAKEFILE_DIR)))
 
 
@@ -60,11 +62,23 @@ REPO_ROOT    := $(patsubst %/,%,$(dir $(MAKEFILE_DIR)))
 
 # ---------------------------------------------------------------------------- #
 
+# Install Prefixes
+# ----------------
+
+PREFIX     ?= $(PKGDB_ROOT)/build
+BINDIR     ?= $(PREFIX)/bin
+LIBEXECDIR ?= $(PREFIX)/libexec
+SYSCONFDIR ?= $(PREFIX)/etc
+
+
+# ---------------------------------------------------------------------------- #
+
 # Utilities
 # ---------
 # We use variables to refer to all tools so that we can easily override them
 # from the command line.
 
+BATS       ?= bats
 BEAR       ?= bear
 CAT        ?= cat
 CP         ?= cp
@@ -102,6 +116,8 @@ libExt ?= .dylib
 endif  # ifeq (Linux,$(OS))
 endif  # ifndef libExt
 
+TARGET_ARCH ?=
+
 
 # ---------------------------------------------------------------------------- #
 
@@ -130,18 +146,7 @@ endif  # ifndef TOOLCHAIN
 
 # ---------------------------------------------------------------------------- #
 
-VERSION := $(file < $(MAKEFILE_DIR)/version)
-
-
-# ---------------------------------------------------------------------------- #
-
-# Install Prefixes
-# ----------------
-
-PREFIX     ?= $(MAKEFILE_DIR)/out
-BINDIR     ?= $(PREFIX)/bin
-LIBDIR     ?= $(PREFIX)/lib
-INCLUDEDIR ?= $(PREFIX)/include
+VERSION := $(file < $(PKGDB_ROOT)/version)
 
 
 # ---------------------------------------------------------------------------- #
@@ -156,25 +161,19 @@ rwildcard = $(foreach d,$(wildcard $(1:=/*)),$(call rwildcard,$d,$2)        \
 
 # ---------------------------------------------------------------------------- #
 
-# Our shared library target
-LIBPKGDB = libpkgdb$(libExt)
-
 # Various file and target lists
 
-LIBS           =  $(LIBPKGDB)
-HEADERS =  $(call rwildcard,include,*.hh)
+HEADERS        =  $(call rwildcard,include,*.hh)
 SRCS           =  $(call rwildcard,src,*.cc)
-bin_SRCS       =  src/main.cc src/repl.cc
-bin_SRCS       += $(addprefix src/pkgdb/,scrape.cc get.cc command.cc)
-bin_SRCS       += $(addprefix src/search/,command.cc)
-bin_SRCS       += $(addprefix src/resolver/,command.cc)
-bin_SRCS       += $(addprefix src/parse/,command.cc)
-lib_SRCS       =  $(filter-out $(bin_SRCS),$(SRCS))
 test_SRCS      =  $(sort $(wildcard tests/*.cc))
-ALL_SRCS       = $(SRCS) $(test_SRCS)
+ALL_SRCS       =  $(SRCS) $(test_SRCS)
 BINS           =  pkgdb
+LIBEXECS       =  $(patsubst libexec/%,%,$(call rwildcard,libexec,*))
+SYSCONFS       =  $(patsubst etc/%,%,$(call rwildcard,etc,*))
 TEST_UTILS     =  $(addprefix tests/,is_sqlite3 search-params)
 TESTS          =  $(filter-out $(TEST_UTILS),$(test_SRCS:.cc=))
+TEST_DATA      =
+ALL_BINS       = $(TESTS) $(TEST_UTILS) $(addprefix bin/,$(BINS))
 CLEANDIRS      =
 CLEANFILES     =  $(ALL_SRCS:.cc=.o)
 CLEANFILES     += $(addprefix bin/,$(BINS)) $(addprefix lib/,$(LIBS))
@@ -183,7 +182,7 @@ FULLCLEANDIRS  =
 FULLCLEANFILES =
 
 # Where to find test suite input data files.
-TEST_DATA_DIR = $(MAKEFILE_DIR)/tests/data
+TEST_DATA_DIR = $(PKGDB_ROOT)/tests/data
 
 
 # ---------------------------------------------------------------------------- #
@@ -198,42 +197,49 @@ DEPFILES += $(REPO_ROOT)/shells/default/default.nix
 
 # ---------------------------------------------------------------------------- #
 
+# Misc Install Targets
+# --------------------
+
+PROFILE_D_SCRIPT_DIR ?= $(SYSCONFDIR)/profile.d
+SET_PROMPT_BASH_SH   ?= $(LIBEXECDIR)/set-prompt-bash.sh
+
+
+# ---------------------------------------------------------------------------- #
+
 # Compiler Flags
 # --------------
 
+EXTRA_LDFLAGS ?=
+EXTRA_CFLAGS  ?=
+CPPFLAGS  	  ?=
+
 # You can disable these optional gripes with `make EXTRA_CXXFLAGS='' ...;'
 ifndef EXTRA_CXXFLAGS
-
 EXTRA_CXXFLAGS = -Wall -Wextra -Wpedantic
-
 # Clang only
 ifeq (clang,$(TOOLCHAIN))
 EXTRA_CXXFLAGS += -Wno-gnu-zero-variadic-macro-arguments
 endif  # ifneq (clang,$(TOOLCHAIN))
-
 endif	# ifndef EXTRA_CXXFLAGS
 
-
 CXXFLAGS ?= $(EXTRA_CFLAGS) $(EXTRA_CXXFLAGS)
-CXXFLAGS += '-I$(MAKEFILE_DIR)/include'
+CXXFLAGS += '-I$(PKGDB_ROOT)/include'
 CXXFLAGS += '-DFLOX_PKGDB_VERSION="$(VERSION)"'
+CXXFLAGS += '-DPROFILE_D_SCRIPT_DIR="$(PROFILE_D_SCRIPT_DIR)"'
+CXXFLAGS += '-DSET_PROMPT_BASH_SH="$(SET_PROMPT_BASH_SH)"'
 LDFLAGS  ?= $(EXTRA_LDFLAGS)
 
-
-ifeq (gcc,$(TOOLCHAIN))
-lib_CXXFLAGS ?= -shared -fPIC
-lib_LDFLAGS  ?= -shared -fPIC -Wl,--no-undefined
-else # Clang
-lib_CXXFLAGS ?= -fPIC
-lib_LDFLAGS  ?= -shared -fPIC -Wl,-undefined,error
-endif # ifeq (gcc,$(TOOLCHAIN))
-
-
-bin_CXXFLAGS ?=
-bin_LDFLAGS  ?=
+# Release Mode
+RELEASE ?=
+ifneq (,$(RELEASE))
+CXXFLAGS += -O3 -DNDEBUG
+LDFLAGS  += -O3
+endif # ifneq ($(RELEASE),)
 
 # Debug Mode
-ifneq ($(DEBUG),)
+DEBUG ?=
+ifneq (,$(DEBUG))
+DEBUG ?=
 ifeq (gcc,$(TOOLCHAIN))
 CXXFLAGS += -ggdb3 -pg -fno-omit-frame-pointer
 LDFLAGS  += -ggdb3 -pg -fno-omit-frame-pointer
@@ -244,7 +250,8 @@ endif # ifeq (gcc,$(TOOLCHAIN))
 endif # ifneq ($(DEBUG),)
 
 # Coverage Mode
-ifneq ($(COV),)
+COV ?=
+ifneq (,$(COV))
 CXXFLAGS += --coverage -fprofile-arcs -ftest-coverage
 LDFLAGS  += --coverage -fprofile-arcs -ftest-coverage
 endif # ifneq ($(COV),)
@@ -277,7 +284,7 @@ sqlite3_CFLAGS ?=                                                     \
 	$(patsubst -I%,-isystem %,$(shell $(PKG_CONFIG) --cflags sqlite3))
 sqlite3_CFLAGS  := $(sqlite3_CFLAGS)
 sqlite3_LDFLAGS ?= $(shell $(PKG_CONFIG) --libs sqlite3)
-sqlite3_LDLAGS  := $(sqlite3_LDLAGS)
+sqlite3_LDFLAGS := $(sqlite3_LDFLAGS)
 
 sqlite3pp_CFLAGS ?=                                                     \
 	$(patsubst -I%,-isystem %,$(shell $(PKG_CONFIG) --cflags sqlite3pp))
@@ -306,39 +313,22 @@ nix_LDFLAGS += -lnixfetchers
 endif # ifndef nix_LDFLAGS
 nix_LDFLAGS := $(nix_LDFLAGS)
 
-ifndef libpkgdb_LDFLAGS
-ifeq (Linux,$(OS))
-libpkgdb_LDFLAGS = -Wl,--enable-new-dtags '-Wl,-rpath,$$ORIGIN/../lib'
-libpkgdb_LDFLAGS += '-L$(MAKEFILE_DIR)/lib' -lpkgdb
-else  # Darwin
-ifneq "$(findstring install,$(MAKECMDGOALS))" ""
-libpkgdb_LDFLAGS = '-L$(LIBDIR)'
-else
-libpkgdb_LDFLAGS += '-L$(MAKEFILE_DIR)/lib' -rpath @executable_path/../lib
-endif # ifneq $(,$(findstring install,$(MAKECMDGOALS)))
-libpkgdb_LDFLAGS += -lpkgdb
-endif # ifeq (Linux,$(OS))
-endif # ifndef libpkgdb_LDFLAGS
-
 
 # ---------------------------------------------------------------------------- #
 
-lib_CXXFLAGS += $(sqlite3pp_CFLAGS)
-bin_CXXFLAGS += $(argparse_CFLAGS)
-CXXFLAGS     += $(nix_CFLAGS) $(nljson_CFLAGS) $(toml_CFLAGS) $(yaml_CFLAGS)
+# Add Dependency Flags
+# --------------------
 
-ifeq (gcc,$(TOOLCHAIN))
-lib_LDFLAGS += -Wl,--as-needed
-endif # ifeq (gcc,$(TOOLCHAIN))
+CXXFLAGS += $(sqlite3pp_CFLAGS)
+CXXFLAGS += $(argparse_CFLAGS)
+CXXFLAGS += $(nix_CFLAGS)
+CXXFLAGS += $(nljson_CFLAGS)
+CXXFLAGS += $(toml_CFLAGS)
+CXXFLAGS += $(yaml_CFLAGS)
 
-lib_LDFLAGS += $(nix_LDFLAGS) $(sqlite3_LDFLAGS)
-
-ifeq (gcc,$(TOOLCHAIN))
-lib_LDFLAGS += -Wl,--no-as-needed
-endif # ifeq (gcc,$(TOOLCHAIN))
-
-bin_LDFLAGS += $(nix_LDFLAGS) $(libpkgdb_LDFLAGS) $(sqlite3_LDFLAGS)
-LDFLAGS     += $(yaml_LDFLAGS)
+LDFLAGS += $(nix_LDFLAGS)
+LDFLAGS += $(sqlite3_LDFLAGS)
+LDFLAGS += $(yaml_LDFLAGS)
 
 
 # ---------------------------------------------------------------------------- #
@@ -354,31 +344,18 @@ CXXFLAGS += '-DSEMVER_PATH="$(SEMVER_PATH)"'
 
 # ---------------------------------------------------------------------------- #
 
-# Standard Targets
-# ----------------
-
-.PHONY: bin lib include tests
-
-#: Build binaries
-bin:     lib $(addprefix bin/,$(BINS))
-#: Build libraries
-lib:     $(addprefix lib/,$(LIBS))
-#: Build/generate include files
-include: $(HEADERS)
-#: Build test executables and resources
-tests:   $(TESTS) $(TEST_UTILS)
-
-
-# ---------------------------------------------------------------------------- #
-
 #: Remove build artifacts
+CLEANFILES += $(call rwildcard,,gmon.out *.log *.gcno *.gcda *.gcov)
+CLEANFILES += $(call rwildcard,,result)
 clean: FORCE
 	-$(RM) $(CLEANFILES);
 	-$(RM) -r $(CLEANDIRS);
-	-$(RM) result;
-	-$(RM) **/gmon.out gmon.out **/*.log *.log;
-	-$(RM) **/*.gcno *.gcno **/*.gcda *.gcda **/*.gcov *.gcov;
 
+
+# For local installs clean install dir.
+ifeq ($(PREFIX),$(PKGDB_ROOT)/build)
+FULLCLEANDIRS += $(PREFIX)
+endif # ifeq ($(PREFIX),$(PKGDB_ROOT)/build)
 
 #: Remove build artifacts and metadata files
 fullclean: clean
@@ -388,91 +365,34 @@ fullclean: clean
 
 # ---------------------------------------------------------------------------- #
 
-%.o: %.cc $(HEADERS)
-	$(CXX) $(CXXFLAGS) -c $< -o $@;
-
-ifeq (Linux,$(OS))
-SONAME_FLAG = -Wl,-soname,$(LIBPKGDB)
-else
-SONAME_FLAG = -install_name '@rpath/$(LIBPKGDB)'
-endif
-
-lib/$(LIBPKGDB): LDFLAGS  += $(lib_LDFLAGS)
-lib/$(LIBPKGDB): CXXFLAGS += $(lib_CXXFLAGS)
-lib/$(LIBPKGDB): $(lib_SRCS:.cc=.o)
-	$(MKDIR_P) $(@D);
-	$(CXX) $(filter %.o,$^) $(LDFLAGS) $(SONAME_FLAG) -o $@;
-
-
-# ---------------------------------------------------------------------------- #
-
-src/pkgdb/write.o: src/pkgdb/schemas.hh
-
-$(bin_SRCS:.cc=.o): %.o: %.cc $(HEADERS)
-	$(CXX) $(CXXFLAGS) $(bin_CXXFLAGS) -c $< -o $@;
-
-bin/pkgdb: $(bin_SRCS:.cc=.o) lib/$(LIBPKGDB)
-	$(MKDIR_P) $(@D);
-	$(CXX) $(filter %.o,$^) $(LDFLAGS) $(bin_LDFLAGS) -o $@;
-
-
-# ---------------------------------------------------------------------------- #
-
-$(TESTS) $(TEST_UTILS): $(HEADERS)
-$(TESTS) $(TEST_UTILS): bin_CXXFLAGS += '-DTEST_DATA_DIR="$(TEST_DATA_DIR)"'
-$(TESTS) $(TEST_UTILS): tests/%: tests/%.cc lib/$(LIBPKGDB)
-	$(CXX) $(CXXFLAGS) $(bin_CXXFLAGS) $< $(LDFLAGS) $(bin_LDFLAGS) -o $@;
-
-
-# ---------------------------------------------------------------------------- #
-
 # Install Targets
 # ---------------
 
-.PHONY: install-dirs install-bin install-lib install-include install
+.PHONY: install-bin install-libexec install-sysconf install
 
 #: Install binaries, libraries, and include files
-install: install-dirs install-bin install-lib install-include
+install: install-bin install-libexec install-sysconf
 
-#: Create directories in the install prefix
-install-dirs: FORCE
-	$(MKDIR_P) $(BINDIR) $(LIBDIR) $(LIBDIR)/pkgconfig;
-	$(MKDIR_P) $(INCLUDEDIR)/flox $(INCLUDEDIR)/flox/core;
-	$(MKDIR_P) $(INCLUDEDIR)/flox/pkgdb $(INCLUDEDIR)/flox/search $(INCLUDEDIR)/flox/parse;
-	$(MKDIR_P) $(INCLUDEDIR)/flox/resolver $(INCLUDEDIR)/compat;
-
-$(INCLUDEDIR)/%: include/% | install-dirs
-	$(CP) -- "$<" "$@";
-
-$(LIBDIR)/%: lib/% | install-dirs
-	$(CP) -- "$<" "$@";
-
-$(BINDIR)/%: bin/% | install-dirs
-	$(CP) -- "$<" "$@";
-
-# Darwin has to relink
-ifneq (Linux,$(OS))
-LINK_INAME_FLAG = -install_name '@rpath/$(LIBPKGDB)'
-$(LIBDIR)/$(LIBPKGDB): CXXFLAGS += $(lib_CXXFLAGS)
-$(LIBDIR)/$(LIBPKGDB): LDFLAGS  += $(lib_LDFLAGS)
-$(LIBDIR)/$(LIBPKGDB): $(lib_SRCS:.cc=.o)
+$(BINDIR)/%: bin/%
 	$(MKDIR_P) $(@D);
-	$(CXX) $(filter %.o,$^) $(LDFLAGS) -o $@;
+	if $(TEST) -f $<; then $(CP) -- "$<" "$@"; fi
 
-$(BINDIR)/pkgdb: $(bin_SRCS:.cc=.o) $(LIBDIR)/$(LIBPKGDB)
+$(LIBEXECDIR)/%: libexec/%
 	$(MKDIR_P) $(@D);
-	$(CXX) $(filter %.o,$^) $(LDFLAGS) $(bin_LDFLAGS) -o $@;
-endif # ifneq (Linux,$(OS))
+	if $(TEST) -f $<; then $(CP) -- "$<" "$@"; fi
+
+$(SYSCONFDIR)/%: etc/%
+	$(MKDIR_P) $(@D);
+	if $(TEST) -f $<; then $(CP) -- "$<" "$@"; fi
 
 #: Install binaries
 install-bin: $(addprefix $(BINDIR)/,$(BINS))
 
-#: Install libraries
-install-lib: $(addprefix $(LIBDIR)/,$(LIBS))
+#: Install internal executables
+install-libexec: $(addprefix $(LIBEXECDIR)/,$(LIBEXECS))
 
-#: Install include files
-install-include:                                                     \
-	$(addprefix $(INCLUDEDIR)/,$(subst include/,,$(HEADERS)));
+#: Install config files
+install-sysconf: $(addprefix $(SYSCONFDIR)/,$(SYSCONFS))
 
 
 # ---------------------------------------------------------------------------- #
@@ -494,7 +414,6 @@ $(DEPFILES): %:
 PRE_COMPILED_HEADERS = $(patsubst %,%.gch,$(HEADERS))
 CLEANFILES += $(PRE_COMPILED_HEADERS)
 
-$(PRE_COMPILED_HEADERS): CXXFLAGS += $(lib_CXXFLAGS) $(bin_CXXFLAGS)
 $(PRE_COMPILED_HEADERS): $(HEADERS) $(DEPFILES)
 $(PRE_COMPILED_HEADERS): $(lastword $(MAKEFILE_LIST))
 $(PRE_COMPILED_HEADERS): %.gch: %
@@ -518,9 +437,9 @@ clean-pch: FORCE
 
 .PHONY: ccls
 #: Create `.ccls' file used by CCLS LSP
-ccls: .ccls
+ccls: ../ccls
 
-.ccls: $(lastword $(MAKEFILE_LIST)) $(DEPFILES)
+../.ccls: $(lastword $(MAKEFILE_LIST)) $(DEPFILES)
 	@echo '%compile_commands.json' > "$@";
 	{                                                                     \
 	  if $(TEST) -n "$(NIX_CC)"; then                                     \
@@ -533,7 +452,7 @@ ccls: .ccls
 	}|$(TR) ' ' '\n'|$(SED) 's/-std=\(.*\)/%cpp -std=\1|%h -std=\1/'      \
 	 |$(TR) '|' '\n' >> "$@";
 
-FULLCLEANFILES += .ccls
+FULLCLEANFILES += ../.ccls
 
 
 # ---------------------------------------------------------------------------- #
@@ -559,20 +478,21 @@ bear.d/c++:
 
 FULLCLEANDIRS += bear.d
 
-compile_commands.json: EXTRA_CXXFLAGS += $(_CXX_SYSTEM_INCDIRS)
-compile_commands.json: bear.d/c++ $(DEPFILES)
-compile_commands.json: $(lastword $(MAKEFILE_LIST))
-compile_commands.json: $(HEADERS) $(ALL_SRCS)
+../compile_commands.json: EXTRA_CXXFLAGS += $(_CXX_SYSTEM_INCDIRS)
+../compile_commands.json: bear.d/c++ $(DEPFILES)
+../compile_commands.json: $(lastword $(MAKEFILE_LIST))
+../compile_commands.json: $(HEADERS) $(ALL_SRCS)
 	-$(MAKE) -C $(MAKEFILE_DIR) clean;
-	EXTRA_CXXFLAGS='$(EXTRA_CXXFLAGS)'                  \
-	  PATH="$(MAKEFILE_DIR)/bear.d/:$(PATH)"            \
-	  $(BEAR) -- $(MAKE) -C $(MAKEFILE_DIR) bin tests;
-	EXTRA_CXXFLAGS='$(EXTRA_CXXFLAGS)'                                      \
-	  PATH="$(MAKEFILE_DIR)/bear.d/:$(PATH)"                                \
-	  $(BEAR) --append -- $(MAKE) -C $(MAKEFILE_DIR) pre-compiled-headers;
+	EXTRA_CXXFLAGS='$(EXTRA_CXXFLAGS)'                              \
+	  PATH="$(MAKEFILE_DIR)/bear.d/:$(PATH)"                        \
+	  $(BEAR) --output $@ -- $(MAKE) -C $(MAKEFILE_DIR) bin tests;
+	EXTRA_CXXFLAGS='$(EXTRA_CXXFLAGS)'                    \
+	  PATH="$(MAKEFILE_DIR)/bear.d/:$(PATH)"              \
+	  $(BEAR) --output $@ --append --                     \
+	    $(MAKE) -C $(MAKEFILE_DIR) pre-compiled-headers;
 	$(MAKE) -C $(MAKEFILE_DIR) clean-pch;
 
-FULLCLEANFILES += compile_commands.json
+FULLCLEANFILES += ../compile_commands.json
 
 
 # ---------------------------------------------------------------------------- #
@@ -582,7 +502,7 @@ FULLCLEANFILES += compile_commands.json
 
 .PHONY: compilation-databases cdb
 #: Create `compile_commands.json' and `ccls' file used for LSPs
-compilation-databases: compile_commands.json ccls
+compilation-databases: ../compile_commands.json ccls
 #: Create `compile_commands.json' and `ccls' file used for LSPs
 cdb: compilation-databases
 
@@ -612,13 +532,33 @@ lint: compile_commands.json $(HEADERS) $(ALL_SRCS)
 
 # ---------------------------------------------------------------------------- #
 
+# Generated Test Data
+# -------------------
+
+# Generate test data files
+.PHONY: test-data test-lockfiles
+test-data: test-lockfiles
+
+_TEST_LOCKFILE_DIRS      := $(wildcard $(TEST_DATA_DIR)/buildenv/lockfiles/*)
+_TEST_LOCKFILE_MANIFESTS := $(addsuffix /manifest.toml,$(_TEST_LOCKFILE_DIRS))
+_TEST_LOCKFILES          := $(addsuffix /manifest.lock,$(_TEST_LOCKFILE_DIRS))
+CLEANFILES               += $(_TEST_LOCKFILES)
+test-lockfiles: $(_TEST_LOCKFILES)
+$(_TEST_LOCKFILES): %/manifest.lock: %/manifest.toml bin/pkgdb
+	$(MKDIR_P) $(@D);
+	_PKGDB_GA_REGISTRY_REF_OR_REV="e8039594435c68eb4f780f3e9bf3972a7399c4b1"  \
+	  bin/pkgdb manifest lock --ga-registry --manifest $< > $@;
+
+
+# ---------------------------------------------------------------------------- #
+
 .PHONY: check cc-check bats-check
 
 #: Run all tests
 check: cc-check bats-check
 
 #: Run all C++ unit tests
-cc-check: $(TESTS:.cc=)
+cc-check: $(TESTS:.cc=) test-data
 	@_ec=0;                     \
 	echo '';                    \
 	for t in $(TESTS:.cc=); do  \
@@ -634,17 +574,61 @@ cc-check: $(TESTS:.cc=)
 	exit "$$_ec";
 
 #: Run all bats tests
-bats-check: bin $(TEST_UTILS)
-	flox-pkgdb-tests
+bats-check: bin $(TEST_UTILS) test-data
+	PKGDB_BIN="$(PKGDB_ROOT)/bin/pkgdb"                          \
+	PKGDB_IS_SQLITE3_BIN="$(PKGDB_ROOT)/tests/is_sqlite3"        \
+	PKGDB_SEARCH_PARAMS_BIN="$(PKGDB_ROOT)/tests/search-params"  \
+	  $(BATS) --print-output-on-failure --verbose-run --timing   \
+	          "$(PKGDB_ROOT)/tests";
 
 
 # ---------------------------------------------------------------------------- #
 
-#: Build binaries, libraries, tests, and generated `.gitignore' files
-all: bin lib tests ignores
+#%.o: %.cc
+#	$(CXX) $(CXXFLAGS) -c $< -o $@;
 
-#: Build binaries, libraries, and generated `.gitignore' files
-most: bin lib ignores
+# ---------------------------------------------------------------------------- #
+
+src/pkgdb/write.o: src/pkgdb/schemas.hh
+
+$(ALL_SRCS:.cc=.o): %.o: %.cc $(HEADERS)
+
+$(addprefix bin/,$(BINS)): %: $(SRCS:.cc=.o)
+	$(MKDIR_P) $(@D);
+	$(CXX) $(filter %.o,$^) $(LDFLAGS) -o $@;
+
+
+# ---------------------------------------------------------------------------- #
+
+$(test_SRCS:.cc=.o): CXXFLAGS += '-DTEST_DATA_DIR="$(TEST_DATA_DIR)"'
+$(TESTS) $(TEST_UTILS): tests/%: $(filter-out src/main.o,$(SRCS:.cc=.o))
+$(TESTS) $(TEST_UTILS): tests/%: tests/%.o
+	$(CXX) $^ $(LDFLAGS) -o $@;
+
+# ---------------------------------------------------------------------------- #
+
+# Required for exectubles to run properly
+$(ALL_BINS): | install-sysconf install-libexec
+
+
+# ---------------------------------------------------------------------------- #
+
+# Standard Targets
+# ----------------
+
+.PHONY: bin tests
+
+#: Build binaries
+bin: $(addprefix bin/,$(BINS))
+
+#: Build test executables and resources
+tests: $(TESTS) $(TEST_UTILS) test-data
+
+#: Build binaries, tests, and generated `.gitignore' files
+all: bin tests ignores
+
+#: Build binaries and generated `.gitignore' files
+most: bin ignores
 
 
 # ---------------------------------------------------------------------------- #
@@ -659,36 +643,6 @@ docs/index.html: FORCE
 
 CLEANFILES += $(addprefix docs/,*.png *.html *.svg *.css *.js)
 CLEANDIRS  += docs/search
-
-
-# ---------------------------------------------------------------------------- #
-
-# Generate `pkg-config' file.
-# ---------------------------
-# The `PC_CFLAGS' and `PC_LIBS' variables carry flags that are not covered by
-# `nlohmann_json`, `argparse`, `sqlite3pp`, `sqlite`, and `nix{main,cmd,expr}`
-# `Requires' handling.
-# This amounts to handling `boost', `libnixfetchers', forcing
-# the inclusion of the `nix' `config.h' header, and some additional CPP vars.
-
-PC_CFLAGS =  $(filter -std=%,$(CXXFLAGS))
-PC_CFLAGS += $(boost_CFLAGS)
-PC_CFLAGS += $(sqlite3pp_CFLAGS)
-PC_CFLAGS += -isystem $(nix_INCDIR) -include $(nix_INCDIR)/nix/config.h
-PC_CFLAGS += '-DFLOX_PKGDB_VERSION=\\\\\"$(VERSION)\\\\\"'
-PC_CFLAGS += '-DSEMVER_PATH=\\\\\"$(SEMVER_PATH)\\\\\"'
-PC_LIBS   =  $(shell $(PKG_CONFIG) --libs-only-L nix-main) -lnixfetchers
-lib/pkgconfig/pkgdb.pc: $(lastword $(MAKEFILE_LIST)) $(DEPFILES)
-lib/pkgconfig/pkgdb.pc: lib/pkgconfig/pkgdb.pc.in version
-	$(SED) -e 's,@PREFIX@,$(PREFIX),g'      \
-	       -e 's,@VERSION@,$(VERSION),g'    \
-	       -e 's,@CFLAGS@,$(PC_CFLAGS),g'   \
-	       -e 's,@LIBS@,$(PC_LIBS),g'       \
-	       $< > $@;
-
-CLEANFILES += lib/pkgconfig/pkgdb.pc
-
-install-lib: $(LIBDIR)/pkgconfig/pkgdb.pc
 
 
 # ---------------------------------------------------------------------------- #
