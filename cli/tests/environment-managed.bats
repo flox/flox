@@ -225,6 +225,22 @@ EOF
 
 # ---------------------------------------------------------------------------- #
 
+# Make sure we haven't activate
+# bats test_tags=managed,activate,managed:activate
+@test "m9: activate works in managed environment" {
+  make_empty_remote_env
+  "$FLOX_BIN" install hello
+
+  # TODO: flox will set HOME if it doesn't match the home of the user with
+  # current euid. I'm not sure if we should change that, but for now just set
+  # USER to REAL_USER.
+  SHELL=bash USER="$REAL_USER" run -0 expect -d "$TESTS_DIR/activate/hello.exp" "$PROJECT_DIR";
+  assert_output --regexp "bin/hello"
+  refute_output "not found"
+}
+
+# ---------------------------------------------------------------------------- #
+
 # bats test_tags=managed,delete,managed:delete
 @test "m10: deletes existing environment" {
   make_empty_remote_env
