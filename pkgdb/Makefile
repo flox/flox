@@ -603,6 +603,7 @@ cc-check: $(TESTS:.cc=) test-data
 	exit "$$_ec";
 
 #: Run all bats tests
+CI ?=
 ifeq (,$(CI))
 # For local development
 bats-check: bin $(TEST_UTILS) test-data
