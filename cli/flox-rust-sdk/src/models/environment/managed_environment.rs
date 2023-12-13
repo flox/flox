@@ -78,6 +78,8 @@ pub enum ManagedEnvironmentError {
     RevDoesNotExist,
     #[error("invalid {} file: {0}", GENERATION_LOCK_FILENAME)]
     InvalidLock(serde_json::Error),
+    #[error("failed to read pointer lockfile")]
+    ReadPointerLock(#[source] io::Error),
     #[error("internal error: {0}")]
     Git(GitCommandError),
     #[error("internal error: {0}")]
@@ -102,6 +104,18 @@ pub enum ManagedEnvironmentError {
     Diverged,
     #[error("failed to push environment: {0}")]
     Push(GitCommandError),
+
+    #[error("could not sync environment from upstream")]
+    FetchUpdates(#[source] GitCommandError),
+    #[error("could not apply updates from upstream")]
+    ApplyUpdates(#[source] GitCommandError),
+
+    #[error("couldn't initialize floxmeta")]
+    InitializeFloxmeta(#[source] GenerationsError),
+    #[error("couldn't serialize environment pointer")]
+    SerializePointer(#[source] serde_json::Error),
+    #[error("couldn't write environment pointer")]
+    WritePointer(#[source] std::io::Error),
 
     // todo: improve description
     #[error("could not create floxmeta directory")]
@@ -229,8 +243,14 @@ impl Environment for ManagedEnvironment {
 
     /// Atomically update this environment's inputs
     fn update(&mut self, flox: &Flox, inputs: Vec<String>) -> Result<String, EnvironmentError2> {
-        let mut generations = self.generations().writable(flox.temp_dir.clone()).unwrap();
-        let mut temporary = generations.get_current_generation().unwrap();
+        let mut generations = self
+            .generations()
+            .writable(flox.temp_dir.clone())
+            .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?;
+
+        let mut temporary = generations
+            .get_current_generation()
+            .map_err(ManagedEnvironmentError::CreateGenerationFiles)?;
 
         let message = temporary.update(flox, inputs)?;
 
@@ -382,11 +402,12 @@ impl ManagedEnvironment {
     /// At some point, it may be useful to create a ManagedEnvironment without
     /// fetching or cloning. This would be more correct for commands like delete
     /// that don't need to fetch the environment.
+
     pub fn open(
         flox: &Flox,
         pointer: ManagedPointer,
         dot_flox_path: impl AsRef<Path>,
-    ) -> Result<Self, EnvironmentError2> {
+    ) -> Result<Self, ManagedEnvironmentError> {
         let floxmeta = match FloxmetaV2::open(flox, &pointer) {
             Ok(floxmeta) => floxmeta,
             Err(FloxmetaV2Error::NotFound(_)) => {
@@ -409,7 +430,7 @@ impl ManagedEnvironment {
         flox: &Flox,
         pointer: ManagedPointer,
         dot_flox_path: impl AsRef<Path>,
-    ) -> Result<Self, EnvironmentError2> {
+    ) -> Result<Self, ManagedEnvironmentError> {
         let dot_flox_path = CanonicalPath::new(dot_flox_path)?;
 
         let lock = Self::ensure_locked(flox, &pointer, &dot_flox_path, &floxmeta)?;
@@ -448,7 +469,7 @@ impl ManagedEnvironment {
         pointer: &ManagedPointer,
         dot_flox_path: &CanonicalPath,
         floxmeta: &FloxmetaV2,
-    ) -> Result<GenerationLock, EnvironmentError2> {
+    ) -> Result<GenerationLock, ManagedEnvironmentError> {
         let lock_path = dot_flox_path.join(GENERATION_LOCK_FILENAME);
         let maybe_lock: Option<GenerationLock> = match fs::read(&lock_path) {
             Ok(lock_contents) => Some(
@@ -457,7 +478,7 @@ impl ManagedEnvironment {
             ),
             Err(err) => match err.kind() {
                 io::ErrorKind::NotFound => None,
-                _ => Err(EnvironmentError2::ReadManifest(err))?,
+                _ => Err(ManagedEnvironmentError::ReadPointerLock(err))?,
             },
         };
 
@@ -762,18 +783,20 @@ impl ManagedEnvironment {
             remote_branch_name(&flox.system, &pointer),
             &path_environment.pointer,
         )
-        .unwrap();
+        .map_err(ManagedEnvironmentError::InitializeFloxmeta)?;
 
         let temp_floxmeta_git = generations.git().clone();
 
-        let mut generations = generations.writable(flox.temp_dir.clone()).unwrap();
+        let mut generations = generations
+            .writable(flox.temp_dir.clone())
+            .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?;
 
         generations
             .add_generation(
                 &mut path_environment.into_core_environment(),
                 "Add first generation".to_string(),
             )
-            .unwrap();
+            .map_err(ManagedEnvironmentError::CommitGeneration)?;
 
         temp_floxmeta_git
             .add_remote(
@@ -796,9 +819,9 @@ impl ManagedEnvironment {
 
         fs::write(
             dot_flox_path.join(ENVIRONMENT_POINTER_FILENAME),
-            serde_json::to_string(&pointer).unwrap(),
+            serde_json::to_string(&pointer).map_err(ManagedEnvironmentError::SerializePointer)?,
         )
-        .unwrap();
+        .map_err(ManagedEnvironmentError::WritePointer)?;
 
         write_pointer_lockfile(
             dot_flox_path.join(GENERATION_LOCK_FILENAME),
@@ -807,10 +830,9 @@ impl ManagedEnvironment {
             },
             remote_branch_name(&flox.system, &pointer),
             None,
-        )
-        .unwrap();
+        )?;
 
-        let env = ManagedEnvironment::open(flox, pointer, dot_flox_path).unwrap();
+        let env = ManagedEnvironment::open(flox, pointer, dot_flox_path)?;
 
         Ok(env)
     }
@@ -822,8 +844,8 @@ impl ManagedEnvironment {
         // Fetch the remote branch into FETCH_HEAD
         self.floxmeta
             .git
-            .fetch_ref("origin", &format!("{sync_branch}:",))
-            .unwrap();
+            .fetch_ref("origin", &format!("+{sync_branch}:{sync_branch}",))
+            .map_err(ManagedEnvironmentError::FetchUpdates)?;
 
         // Check whether we can fast-forward merge the remote branch into the local branch
         // If "not" the environment has diverged.
@@ -832,7 +854,7 @@ impl ManagedEnvironment {
             let consistent_history = self
                 .floxmeta
                 .git
-                .branch_contains_commit("FETCH_HEAD", &project_branch)
+                .branch_contains_commit(&sync_branch, &project_branch)
                 .map_err(ManagedEnvironmentError::Git)?;
 
             if !consistent_history {
@@ -863,7 +885,7 @@ impl ManagedEnvironment {
         self.floxmeta
             .git
             .fetch_ref("origin", &format!("+{sync_branch}:{sync_branch}"))
-            .unwrap();
+            .map_err(ManagedEnvironmentError::FetchUpdates)?;
 
         // Check whether we can fast-forward the remote branch to the local branch,
         // if not the environment has diverged.
@@ -893,7 +915,7 @@ impl ManagedEnvironment {
                 ),
                 force, // Set the force parameter to false or true based on your requirement
             )
-            .unwrap();
+            .map_err(ManagedEnvironmentError::ApplyUpdates)?;
 
         // update the pointer lockfile
         self.lock_pointer()?;
@@ -1146,9 +1168,7 @@ mod test {
 
         assert!(matches!(
             ManagedEnvironment::ensure_locked(&flox, &TEST_POINTER, &dot_flox_path, &floxmeta),
-            Err(EnvironmentError2::ManagedEnvironment(
-                ManagedEnvironmentError::RevDoesNotExist
-            ))
+            Err(ManagedEnvironmentError::RevDoesNotExist)
         ));
     }
 
@@ -1191,9 +1211,7 @@ mod test {
 
         assert!(matches!(
             ManagedEnvironment::ensure_locked(&flox, &TEST_POINTER, &dot_flox_path, &floxmeta),
-            Err(EnvironmentError2::ManagedEnvironment(
-                ManagedEnvironmentError::RevDoesNotExist
-            ))
+            Err(ManagedEnvironmentError::RevDoesNotExist)
         ));
 
         assert_eq!(floxmeta.git.branch_hash(&branch).unwrap(), hash_2);
@@ -1281,9 +1299,7 @@ mod test {
 
         assert!(matches!(
             ManagedEnvironment::ensure_locked(&flox, &TEST_POINTER, &dot_flox_path, &floxmeta),
-            Err(EnvironmentError2::ManagedEnvironment(
-                ManagedEnvironmentError::LocalRevDoesNotExist
-            ))
+            Err(ManagedEnvironmentError::LocalRevDoesNotExist)
         ));
     }
 
