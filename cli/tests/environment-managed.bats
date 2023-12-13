@@ -235,7 +235,7 @@ EOF
   # current euid. I'm not sure if we should change that, but for now just set
   # USER to REAL_USER.
   SHELL=bash USER="$REAL_USER" run -0 expect -d "$TESTS_DIR/activate/hello.exp" "$PROJECT_DIR";
-  assert_output --regexp "bin/hello"
+  assert_output --regexp "$FLOX_CACHE_HOME/run/owner/.+\..+\..+/bin/hello"
   refute_output "not found"
 }
 
