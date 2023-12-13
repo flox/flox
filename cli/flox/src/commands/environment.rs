@@ -248,7 +248,7 @@ impl Delete {
         };
 
         if !self.force && Dialog::can_prompt() && !comfirm.prompt().await? {
-            bail!("Ok everything stays as it is, nothing deleted");
+            bail!("Environment deletion cancelled");
         }
 
         let result = match environment {
