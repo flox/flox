@@ -215,11 +215,11 @@ impl Edit {
 #[derive(Bpaf, Clone)]
 pub struct Delete {
     #[allow(dead_code)] // not yet handled in impl
-    #[bpaf(short, long)]
+    #[bpaf(short, long, hide)]
     force: bool,
 
     #[allow(dead_code)] // not yet handled in impl
-    #[bpaf(short, long)]
+    #[bpaf(short, long, hide)]
     origin: bool,
 
     #[allow(dead_code)] // pending spec for `-e`, `--dir` behaviour
@@ -233,13 +233,22 @@ pub struct Delete {
 impl Delete {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("delete");
-        match self
+        let environment = self
             .environment
-            .detect_concrete_environment(&flox, "delete")?
-        {
-            ConcreteEnvironment::Path(environment) => environment.delete()?,
-            ConcreteEnvironment::Managed(environment) => environment.delete()?,
-            ConcreteEnvironment::Remote(environment) => environment.delete()?,
+            .detect_concrete_environment(&flox, "delete")?;
+
+        let description = environment_description(&environment)?;
+
+        let result = match environment {
+            ConcreteEnvironment::Path(environment) => environment.delete(),
+            ConcreteEnvironment::Managed(environment) => environment.delete(),
+            ConcreteEnvironment::Remote(environment) => environment.delete(),
+        };
+
+        match result {
+            Ok(_) => info!("✅ environment {description} deleted"),
+            Err(err) => Err(err)
+                .with_context(|| format!("⚠️  could not delete environment {description}"))?,
         }
 
         Ok(())
