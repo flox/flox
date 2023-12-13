@@ -14,6 +14,7 @@ use super::core_environment::CoreEnvironment;
 use super::generations::{Generations, GenerationsError};
 use super::path_environment::PathEnvironment;
 use super::{
+    CoreEnvironmentError,
     EditResult,
     Environment,
     EnvironmentError2,
@@ -110,6 +111,12 @@ pub enum ManagedEnvironmentError {
     #[error("could not create files for current generation")]
     CreateGenerationFiles(#[source] GenerationsError),
 
+    #[error("could not commit generation")]
+    CommitGeneration(#[source] GenerationsError),
+
+    #[error("could not link environment")]
+    Link(#[source] CoreEnvironmentError),
+
     #[error("could not read manifest")]
     ReadManifest(#[source] GenerationsError),
 }
@@ -133,7 +140,8 @@ impl Environment for ManagedEnvironment {
             .get_current_generation()
             .map_err(ManagedEnvironmentError::CreateGenerationFiles)?;
 
-        let result = temporary.build(flox)?;
+        temporary.build(flox)?;
+        temporary.link(flox, self.out_link(flox))?;
 
         Ok(())
     }
@@ -156,9 +164,11 @@ impl Environment for ManagedEnvironment {
         let metadata = format!("installed packages: {:?}", &packages);
         let result = temporary.install(packages, flox)?;
 
-        generations.add_generation(temporary, metadata).unwrap();
-
+        generations
+            .add_generation(&mut temporary, metadata)
+            .map_err(ManagedEnvironmentError::CommitGeneration)?;
         self.lock_pointer()?;
+        temporary.link(flox, &self.out_link(flox))?;
 
         Ok(result)
     }
@@ -181,8 +191,11 @@ impl Environment for ManagedEnvironment {
         let metadata = format!("uninstalled packages: {:?}", &packages);
         let result = temporary.uninstall(packages, flox)?;
 
-        generations.add_generation(temporary, metadata).unwrap();
+        generations
+            .add_generation(&mut temporary, metadata)
+            .map_err(ManagedEnvironmentError::CommitGeneration)?;
         self.lock_pointer()?;
+        temporary.link(flox, &self.out_link(flox))?;
 
         Ok(result)
     }
@@ -205,10 +218,10 @@ impl Environment for ManagedEnvironment {
 
         if matches!(result, EditResult::Success | EditResult::ReActivateRequired) {
             generations
-                .add_generation(temporary, "manually edited".to_string())
-                .unwrap();
-
+                .add_generation(&mut temporary, "manually edited".to_string())
+                .map_err(ManagedEnvironmentError::CommitGeneration)?;
             self.lock_pointer()?;
+            temporary.link(flox, &self.out_link(flox))?;
         }
 
         Ok(result)
@@ -223,8 +236,11 @@ impl Environment for ManagedEnvironment {
 
         let metadata = format!("updated environment: {message}");
 
-        generations.add_generation(temporary, metadata).unwrap();
+        generations
+            .add_generation(&mut temporary, metadata)
+            .map_err(ManagedEnvironmentError::CommitGeneration)?;
         self.lock_pointer()?;
+        temporary.link(flox, &self.out_link(flox))?;
 
         Ok(message)
     }
@@ -571,7 +587,6 @@ impl ManagedEnvironment {
     /// Where to link a built environment to.
     ///
     /// The parent directory may not exist!
-
     fn out_link(&self, flox: &Flox) -> PathBuf {
         gcroots_dir(flox, &self.pointer.owner).join(branch_name(
             &self.system,
@@ -755,7 +770,7 @@ impl ManagedEnvironment {
 
         generations
             .add_generation(
-                path_environment.into_core_environment(),
+                &mut path_environment.into_core_environment(),
                 "Add first generation".to_string(),
             )
             .unwrap();
