@@ -28,7 +28,6 @@
   pkgsFor,
   pre-commit-check,
   flox-pkgdb,
-  longVersion ? false,
 }: let
   flox-src = builtins.path {
     name = "flox-src";
