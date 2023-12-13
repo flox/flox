@@ -57,41 +57,35 @@ jobs:
 
       - name: "Build"
         run: |
-          pushd ./pkgdb
-          nix develop -L \
-            --accept-flake-config \
-            --no-update-lock-file \
-            '.#default' \
-              --command make -j
-          popd
+          nix develop -L                   \
+            --accept-flake-config          \
+            --no-update-lock-file          \
+            '.#default'                    \
+              --command make -C pkgdb -j;
 
       - name: "Test (pkgdb)"
         run: |
-          pushd ./pkgdb
-          nix develop -L \
-            --accept-flake-config \
-            --no-update-lock-file \
-            '.#default' \
-              --command make -j tests
-          nix develop -L \
-            --accept-flake-config \
-            --no-update-lock-file \
-            '.#default' \
-              --command make check
-          popd
+          nix develop -L                      \
+            --accept-flake-config             \
+            --no-update-lock-file             \
+            '.#default'                       \
+              --command make -C pkgdb tests;
+          nix develop -L                      \
+            --accept-flake-config             \
+            --no-update-lock-file             \
+            '.#default'                       \
+              --command make -C pkgdb check;
 
       - name: "Build Docs"
         run: |
-          pushd ./pkgdb
-          nix develop -L \
-            --accept-flake-config \
-            --no-update-lock-file \
-            '.#default' \
-              --command make docs
-          chmod -c -R +rX "docs/" | while read line; do
-            echo "::warning title=Invalid file permissions fixed::$line"
+          nix develop -L                     \
+            --accept-flake-config            \
+            --no-update-lock-file            \
+            '.#default'                      \
+              --command make -C pkgdb docs;
+          chmod -c -R +rX "pkgdb/docs/"|while read line; do
+            echo "::warning title=Invalid file permissions fixed::$line";
           done
-          popd
 
       - name: "Upload artifact"
         uses: "actions/upload-pages-artifact@v2"
@@ -153,58 +147,50 @@ jobs:
 
       - name: "Build (pkgdb)"
         run: |
-          pushd ./pkgdb
-          nix develop -L \
-            --accept-flake-config \
-            --no-update-lock-file \
-            '.#default' \
-              --command make -j
-          popd
+          nix develop -L                   \
+            --accept-flake-config          \
+            --no-update-lock-file          \
+            '.#default'                    \
+              --command make -C pkgdb -j;
 
       - name: "Build (cli)"
         run: |
-          pushd ./cli
-          nix develop -L \
-            --accept-flake-config \
-            --no-update-lock-file \
-            '.#default' \
-              --command sh -c '
-                PKGDB_BIN="${PWD%/*}/pkgdb/bin/pkgdb"                    \
-                cargo build;
-              ';
-          popd
+          pushd ./cli;
+          nix develop -L                                               \
+            --accept-flake-config                                      \
+            --no-update-lock-file                                      \
+              --command sh -c                                          \
+                'PKGDB_BIN="${PWD%/*}/pkgdb/bin/pkgdb" cargo build;';
+          popd;
 
       - name: "Test (./cli: cargo test)"
         run: |
-          pushd ./cli
+          pushd ./cli;
           export RUST_BACKTRACE=1;
-          nix develop -L \
-            --accept-flake-config \
-            --no-update-lock-file \
-            '.#default' \
+          nix develop -L                                         \
+            --accept-flake-config                                \
+            --no-update-lock-file                                \
               --command sh -c '
-                PKGDB_BIN="${PWD%/*}/pkgdb/bin/pkgdb"                    \
+                PKGDB_BIN="${PWD%/*}/pkgdb/bin/pkgdb"            \
                 cargo test --locked --workspace -F extra-tests;
               ';
-          popd
+          popd;
 
       - name: "Test (./cli/tests)"
         run: |
-          pushd ./cli
-          nix develop -L \
-            --accept-flake-config \
-            --no-update-lock-file \
-            '.#default' \
-              --command flox-cli-tests
-          popd
+          pushd ./cli;
+          nix develop -L                 \
+            --accept-flake-config        \
+            --no-update-lock-file        \
+              --command flox-cli-tests;
+          popd;
 
       - name: "Test (./tests)"
         run: |
-          nix develop -L \
-            --accept-flake-config \
-            --no-update-lock-file \
-            '.#default' \
-              --command flox-tests
+          nix develop -L             \
+            --accept-flake-config    \
+            --no-update-lock-file    \
+              --command flox-tests;
 
   nix-build:
     name: "Nix build"
@@ -253,24 +239,24 @@ jobs:
 
       - name: "Build"
         run: |
-          if nix path-info \
-              --accept-flake-config \
-              --store "$FLOX_SUBSTITUTER" \
-              --eval-store auto \
-              --builders '' \
-              -j0 \
-                '.#flox-pkgdb.outPath' \
-                '.#flox-cli.outPath' ; then
-             echo paths already exist in substituter
-             exit 0
+          if nix path-info                 \
+              --accept-flake-config        \
+              --store "$FLOX_SUBSTITUTER"  \
+              --eval-store auto            \
+              --builders ''                \
+              -j0                          \
+                '.#flox-pkgdb.outPath'     \
+                '.#flox-cli.outPath'; then
+             echo paths already exist in substituter;
+             exit 0;
           else
-            nix build -L \
-              --accept-flake-config \
-              --no-update-lock-file \
-              --print-out-paths \
-                '.#flox-pkgdb' \
-                '.#flox-cli' \
-                '.#flox'
+            nix build -L             \
+              --accept-flake-config  \
+              --no-update-lock-file  \
+              --print-out-paths      \
+                '.#flox-pkgdb'       \
+                '.#flox-cli'         \
+                '.#flox';
           fi
 
   trigger-flox-installers-workflow:
