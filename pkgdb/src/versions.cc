@@ -22,7 +22,10 @@
 #include <nix/types.hh>
 #include <nix/util.hh>
 
+#include <cpp-semver.hpp>
+
 #include "versions.hh"
+
 
 
 /* -------------------------------------------------------------------------- */
@@ -169,32 +172,6 @@ isSemverRange( const std::string & range )
 
 /* -------------------------------------------------------------------------- */
 
-#ifndef SEMVER_PATH
-#  define SEMVER_PATH "semver"
-#endif
-
-std::pair<int, std::string>
-runSemver( const std::list<std::string> & args )
-{
-  static const std::string semverProg
-    = nix::getEnv( "SEMVER" ).value_or( SEMVER_PATH );
-  static const std::map<std::string, std::string> env = nix::getEnv();
-  return nix::runProgram( nix::RunOptions { .program             = semverProg,
-                                            .searchPath          = true,
-                                            .args                = args,
-                                            .uid                 = std::nullopt,
-                                            .gid                 = std::nullopt,
-                                            .chdir               = std::nullopt,
-                                            .environment         = env,
-                                            .input               = std::nullopt,
-                                            .standardIn          = nullptr,
-                                            .standardOut         = nullptr,
-                                            .mergeStderrToStdout = false } );
-}
-
-
-/* -------------------------------------------------------------------------- */
-
 /** @brief Strip any '*', 'x', or 'X' characters from the range. */
 [[nodiscard]] static std::string
 cleanRange( const std::string & range )
@@ -232,19 +209,16 @@ cleanRange( const std::string & range )
 std::list<std::string>
 semverSat( const std::string & range, const std::list<std::string> & versions )
 {
-  std::list<std::string> args
-    = { "--include-prerelease", "--loose", "--range", cleanRange( range ) };
-  for ( const auto & version : versions ) { args.push_back( version ); }
-  auto [ec, lines] = runSemver( args );
-  /* TODO: determine parse error vs. empty list result. */
-  if ( ! nix::statusOk( ec ) ) { return {}; }
   std::list<std::string> rsl;
-  std::stringstream      oss( lines );
-  std::string            line;
-  while ( std::getline( oss, line, '\n' ) )
-    {
-      if ( ! line.empty() ) { rsl.push_back( std::move( line ) ); }
+  auto r = cleanRange( range );
+  for ( const auto & version : versions ) {
+    if ( semver::valid(version) && semver::satisfies( version, r ) ) {
+      rsl.push_back( version );
     }
+  }
+  rsl.sort([&](const auto & a, const auto & b) {
+    return semver::lt(a, b);
+  });
   return rsl;
 }
 

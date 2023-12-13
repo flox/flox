@@ -86,18 +86,7 @@
 
     # Cherry pick `semver' recipe from `floco'.
     overlays.semver = final: prev: {
-      semver = let
-        base = final.callPackage "${floco}/fpkgs/semver" {
-          nixpkgs = throw (
-            "`nixpkgs' should not be references when `pkgsFor' "
-            + "is provided"
-          );
-          inherit (final) lib;
-          pkgsFor = final;
-          nodePackage = final.nodejs;
-        };
-      in
-        base.overrideAttrs (prevAttrs: {preferLocalBuild = false;});
+      cpp-semver = final.callPackage ./pkgs/cpp-semver {};
     };
 
     # bear is broken in release 23.11 on darwin
