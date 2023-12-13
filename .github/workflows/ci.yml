@@ -501,11 +501,11 @@ jobs:
               '.#packages.${{ matrix.system }}.flox-tests'
           nix copy --to "$FLOX_SUBSTITUTER" ./result
 
-      - name: "Run Bats Tests (./#flox-cli-tests)"
+      - name: "Run Bats Tests (./#flox-tests)"
         run: |
           ssh github@$REMOTE_SERVER \
             -oUserKnownHostsFile=$REMOTE_SERVER_USER_KNOWN_HOSTS_FILE \
             nix run \
                 --accept-flake-config \
                 --extra-experimental-features '"nix-command flakes"' \
-                'github:flox/flox/${{ github.sha }}#packages.${{ matrix.system }}.flox-cli-tests'
+                'github:flox/flox/${{ github.sha }}#packages.${{ matrix.system }}.flox-tests'
