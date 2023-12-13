@@ -841,7 +841,7 @@ impl ManagedEnvironment {
         let project_branch = branch_name(&self.system, &self.pointer, &self.path);
         let sync_branch = remote_branch_name(&self.system, &self.pointer);
 
-        // Fetch the remote branch into FETCH_HEAD
+        // Fetch the remote branch into sync branch
         self.floxmeta
             .git
             .fetch_ref("origin", &format!("+{sync_branch}:{sync_branch}",))
