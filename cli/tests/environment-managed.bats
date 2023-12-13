@@ -13,7 +13,7 @@ load test_support.bash
 # Helpers for project based tests.
 
 project_setup() {
-  export PROJECT_NAME="test"
+  export PROJECT_NAME="test";
   export PROJECT_DIR="${BATS_TEST_TMPDIR?}/$PROJECT_NAME"
   export OWNER="owner"
 
@@ -116,8 +116,8 @@ EOF
 # bats test_tags=managed,pull,managed:pull
 @test "m4: pushed environment can be pulled" {
 
-  mkdir a a_data
-  mkdir b b_data
+  mkdir a a_data;
+  mkdir b b_data;
 
   # on machine a, create and push the environment
   export FLOX_DATA_DIR="$(pwd)/a_data"
@@ -140,8 +140,8 @@ EOF
 
 # bats test_tags=managed,update,managed:update
 @test "m5: updated environment can be pulled" {
-  mkdir a a_data
-  mkdir b b_data
+  mkdir a a_data;
+  mkdir b b_data;
 
   # on machine a, create and push the (empty) environment
   export FLOX_DATA_DIR="$(pwd)/a_data"
@@ -177,8 +177,8 @@ EOF
 
 # bats test_tags=managed,diverged,managed:diverged
 @test "m7: remote can not be pulled into diverged environment" {
-  mkdir a a_data
-  mkdir b b_data
+  mkdir a a_data;
+  mkdir b b_data;
 
   # on machine a, create and push the (empty) environment
   export FLOX_DATA_DIR="$(pwd)/a_data"
@@ -219,8 +219,8 @@ EOF
 @test "m8: search works in managed environment" {
   make_empty_remote_env
 
-  run "$FLOX_BIN" search hello
-  assert_success
+  run "$FLOX_BIN" search hello;
+  assert_success;
 }
 
 # ---------------------------------------------------------------------------- #
