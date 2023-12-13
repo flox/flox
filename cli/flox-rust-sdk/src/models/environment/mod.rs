@@ -321,6 +321,10 @@ pub enum EnvironmentError2 {
 
     #[error(transparent)]
     Canonicalize(#[from] CanonicalizeError),
+
+    #[error("environment directory cannot be {0:?}")]
+    InvalidEnvironmentDirectory(PathBuf),
+
     // endregion
 
     // todo: candidate for impl specific error
