@@ -163,7 +163,6 @@
       flox = callPackage ./pkgs/flox {};
 
       # Wrapper scripts for running test suites.
-      flox-pkgdb-tests = callPackage ./pkgs/flox-pkgdb-tests {};
       flox-cli-tests = callPackage ./pkgs/flox-cli-tests {};
       # Integration tests
       flox-tests = callPackage ./pkgs/flox-tests {};
@@ -219,12 +218,6 @@
     devShells = eachDefaultSystemMap (system: let
       pkgsBase = builtins.getAttr system pkgsFor;
       pkgs = pkgsBase.extend (final: prev: {
-        flox-pkgdb-tests = prev.flox-pkgdb-tests.override {
-          PROJECT_TESTS_DIR = "/pkgdb/tests";
-          PKGDB_BIN = null;
-          PKGDB_IS_SQLITE3_BIN = null;
-          PKGDB_SEARCH_PARAMS_BIN = null;
-        };
         flox-cli-tests = prev.flox-cli-tests.override {
           PROJECT_TESTS_DIR = "/cli/tests";
           PKGDB_BIN = null;

@@ -9,7 +9,6 @@
   flox-cli,
   flox-cli-tests,
   flox-pkgdb,
-  flox-pkgdb-tests,
   flox-tests,
   ci ? false,
 }: let
@@ -17,7 +16,7 @@
   ciPackages =
     flox-pkgdb.ciPackages
     ++ flox-cli.ciPackages
-    ++ [flox-pkgdb-tests flox-cli-tests flox-tests];
+    ++ [flox-cli-tests flox-tests];
 
   devPackages =
     flox-pkgdb.devPackages

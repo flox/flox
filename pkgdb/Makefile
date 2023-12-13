@@ -603,19 +603,12 @@ cc-check: $(TESTS:.cc=) test-data
 	exit "$$_ec";
 
 #: Run all bats tests
-CI ?=
-ifeq (,$(CI))
-# For local development
 bats-check: bin $(TEST_UTILS) test-data
 	PKGDB_BIN="$(PKGDB_BIN)"                                 \
 	PKGDB_IS_SQLITE3_BIN="$(PKGDB_IS_SQLITE3_BIN)"           \
 	PKGDB_SEARCH_PARAMS_BIN="$(PKGDB_SEARCH_PARAMS_BIN)"     \
 	  bats --print-output-on-failure --verbose-run --timing  \
 	       "$(PKGDB_ROOT)/tests";
-else # For CI
-bats-check:
-	flox-pkgdb-tests
-endif # ifeq (,$(CI))
 
 
 # ---------------------------------------------------------------------------- #

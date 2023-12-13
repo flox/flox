@@ -96,23 +96,9 @@ in
         runHook postConfigure;
       '';
 
-      postBuild = ''
-        make "''${makeFlagsArray[@]}" tests;
-      '';
-
       # Checks require internet
       doCheck = false;
       doInstallCheck = false;
-
-      outputs = ["out" "test"];
-
-      postInstall = ''
-        # Copy test executables.
-        mkdir -p "$test/bin";
-        find tests/ -maxdepth 1 -type f -executable -exec mv {} "$test/bin/" \+;
-        # Some test data is built and needs to be saved.
-        mv tests/data "$tests/";
-      '';
 
       meta.mainProgram = "pkgdb";
 
