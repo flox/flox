@@ -96,7 +96,7 @@ bump input:
 
 # Output licenses of all dependency crates
 license:
-    @cargo metadata --format-version 1 | jq -r '.packages[] | [.name, .license] | @csv'
+    @pushd cli; cargo metadata --format-version 1 | jq -r '.packages[] | [.name, .license] | @csv'
 
 
 # ---------------------------------------------------------------------------- #
