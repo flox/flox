@@ -374,19 +374,6 @@ CXXFLAGS += '-DSEMVER_PATH="$(SEMVER_PATH)"'
 
 # ---------------------------------------------------------------------------- #
 
-# Standard Targets
-# ----------------
-
-.PHONY: bin tests
-
-#: Build binaries
-bin: $(addprefix bin/,$(BINS))
-#: Build test executables and resources
-tests: $(TESTS) $(TEST_UTILS)
-
-
-# ---------------------------------------------------------------------------- #
-
 #: Remove build artifacts
 CLEANFILES += $(call rwildcard,,gmon.out *.log *.gcno *.gcda *.gcov)
 CLEANFILES += $(call rwildcard,,result)
@@ -587,9 +574,9 @@ _TEST_LOCKFILE_MANIFESTS := $(addsuffix /manifest.toml,$(_TEST_LOCKFILE_DIRS))
 _TEST_LOCKFILES          := $(addsuffix /manifest.lock,$(_TEST_LOCKFILE_DIRS))
 CLEANFILES               += $(_TEST_LOCKFILES)
 test-lockfiles: $(_TEST_LOCKFILES)
-$(_TEST_LOCKFILES): %/manifest.lock: %/manifest.toml bin/pkgdb
+$(_TEST_LOCKFILES): %/manifest.lock: %/manifest.toml $(PKGDB_BIN)
 	$(MKDIR_P) $(@D);
-	bin/pkgdb manifest lock --ga-registry --manifest $< > $@;
+	$(PKGDB_BIN) manifest lock --ga-registry --manifest $< > $@;
 
 
 # ---------------------------------------------------------------------------- #
@@ -616,12 +603,18 @@ cc-check: $(TESTS:.cc=) test-data
 	exit "$$_ec";
 
 #: Run all bats tests
+ifeq (,$(CI))
+# For local development
 bats-check: bin $(TEST_UTILS) test-data
 	PKGDB_BIN="$(PKGDB_BIN)"                                 \
 	PKGDB_IS_SQLITE3_BIN="$(PKGDB_IS_SQLITE3_BIN)"           \
 	PKGDB_SEARCH_PARAMS_BIN="$(PKGDB_SEARCH_PARAMS_BIN)"     \
 	  bats --print-output-on-failure --verbose-run --timing  \
 	       "$(PKGDB_ROOT)/tests";
+else # For CI
+bats-check:
+	flox-pkgdb-tests
+endif # ifeq (,$(CI))
 
 
 # ---------------------------------------------------------------------------- #
@@ -654,6 +647,17 @@ $(ALL_BINS): | install-sysconf install-libexec
 
 
 # ---------------------------------------------------------------------------- #
+
+# Standard Targets
+# ----------------
+
+.PHONY: bin tests
+
+#: Build binaries
+bin: $(addprefix bin/,$(BINS))
+
+#: Build test executables and resources
+tests: $(TESTS) $(TEST_UTILS) test-data
 
 #: Build binaries, tests, and generated `.gitignore' files
 all: bin tests ignores
