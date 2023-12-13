@@ -68,13 +68,13 @@ impl RemoteEnvironment {
 #[async_trait]
 impl Environment for RemoteEnvironment {
     /// Build the environment and create a result link as gc-root
-    #[allow(unused)]
+
     async fn build(&mut self, flox: &Flox) -> Result<(), EnvironmentError2> {
         self.inner.build(flox).await
     }
 
     /// Install packages to the environment atomically
-    #[allow(unused)]
+
     async fn install(
         &mut self,
         packages: Vec<String>,
@@ -89,7 +89,7 @@ impl Environment for RemoteEnvironment {
     }
 
     /// Uninstall packages from the environment atomically
-    #[allow(unused)]
+
     async fn uninstall(
         &mut self,
         packages: Vec<String>,
@@ -103,7 +103,7 @@ impl Environment for RemoteEnvironment {
     }
 
     /// Atomically edit this environment, ensuring that it still builds
-    #[allow(unused)]
+
     async fn edit(
         &mut self,
         flox: &Flox,
@@ -117,7 +117,7 @@ impl Environment for RemoteEnvironment {
     }
 
     /// Atomically update this environment's inputs
-    #[allow(unused)]
+
     fn update(&mut self, flox: &Flox, inputs: Vec<String>) -> Result<String, EnvironmentError2> {
         let result = self.inner.update(flox, inputs)?;
         self.inner
@@ -140,12 +140,11 @@ impl Environment for RemoteEnvironment {
         self.inner.manifest_content(flox)
     }
 
-    #[allow(unused)]
     async fn activation_path(&mut self, flox: &Flox) -> Result<PathBuf, EnvironmentError2> {
         self.inner.activation_path(flox).await
     }
 
-    #[allow(unused)]
+
     fn parent_path(&self) -> Result<PathBuf, EnvironmentError2> {
         self.inner.parent_path()
     }
@@ -161,7 +160,7 @@ impl Environment for RemoteEnvironment {
     }
 
     /// Returns the environment name
-    #[allow(unused)]
+
     fn name(&self) -> EnvironmentName {
         self.inner.name()
     }
