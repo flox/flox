@@ -248,9 +248,8 @@ every change. In that case run the following:
 ```console
 $ nix develop --command 'just build';
 $ nix develop --command '
-    flox-tests --env-builder "$PWD/env-builder/bin/env-builder"  \
-               --pkgdb "$PWD/pkgdb/bin/pkgdb"                    \
-               --flox "$PWD/cli/target/debug/flox"               \
+    flox-tests --pkgdb "$PWD/pkgdb/bin/pkgdb"       \
+               --flox "$PWD/cli/target/debug/flox"  \
                --watch;
   ';
 ```

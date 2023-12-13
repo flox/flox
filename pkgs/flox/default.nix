@@ -5,7 +5,6 @@
   symlinkJoin,
   makeBinaryWrapper,
   flox-pkgdb,
-  flox-env-builder,
   flox-cli,
 }: let
   # Inherit version from Cargo.toml, aligning with the CLI version.
@@ -31,7 +30,6 @@ in
     postBuild = ''
       wrapProgram $out/bin/flox \
         --set PKGDB_BIN       "${flox-pkgdb}/bin/pkgdb" \
-        --set ENV_BUILDER_BIN "${flox-env-builder}/bin/env-builder" \
         --set FLOX_BIN        "${flox-cli}/bin/flox" \
         --set FLOX_VERSION    "${version}"
     '';
