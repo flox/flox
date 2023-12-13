@@ -50,8 +50,8 @@ functional-tests +bats_args="": build
     @flox-tests {{bats_args}}
 
 # Run the integration test suite
-integ-tests: build
-    @flox-cli-tests --pkgdb "${PWD}/pkgdb/bin/pkgdb" --flox "${PWD}/cli/target/debug/flox" --env-builder "${PWD}/env-builder/bin/env-builder"
+integ-tests *FLAGS: build
+    @flox-cli-tests --pkgdb "${PWD}/pkgdb/bin/pkgdb" --flox "${PWD}/cli/target/debug/flox" --env-builder "${PWD}/env-builder/bin/env-builder" {{FLAGS}}
 
 # Run a specific 'bats' test file
 bats-file file: build
