@@ -578,7 +578,7 @@ pub enum CoreEnvironmentError {
     #[error("failed to update environment")]
     UpdateFailed(#[source] CallPkgDbError),
     // endregion
-    #[error("call to `pkgdb buildenv' failed")]
+    #[error("call to `pkgdb buildenv` failed")]
     BuildEnvCall(#[source] std::io::Error),
 
     #[error("error building environment: {0}")]
