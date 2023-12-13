@@ -306,7 +306,8 @@ impl Environment for ManagedEnvironment {
 
             links_dir.join(encoded)
         };
-        if reverse_link.exists() {
+        // if symlink exists, delete it
+        if fs::symlink_metadata(&reverse_link).is_ok() {
             std::fs::remove_file(&reverse_link).map_err(|e| {
                 ManagedEnvironmentError::DeleteEnvironmentReverseLink(reverse_link, e)
             })?;
