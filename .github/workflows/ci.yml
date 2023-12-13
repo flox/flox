@@ -60,29 +60,25 @@ jobs:
           nix develop -L                   \
             --accept-flake-config          \
             --no-update-lock-file          \
-            '.#default'                    \
-              --command make -C pkgdb -j;
+            --command 'make -C pkgdb -j';
 
       - name: "Test (pkgdb)"
         run: |
           nix develop -L                      \
             --accept-flake-config             \
             --no-update-lock-file             \
-            '.#default'                       \
-              --command make -C pkgdb tests;
+            --command 'make -C pkgdb tests';
           nix develop -L                      \
             --accept-flake-config             \
             --no-update-lock-file             \
-            '.#default'                       \
-              --command make -C pkgdb check;
+            --command 'make -C pkgdb check';
 
       - name: "Build Docs"
         run: |
           nix develop -L                     \
             --accept-flake-config            \
             --no-update-lock-file            \
-            '.#default'                      \
-              --command make -C pkgdb docs;
+            --command 'make -C pkgdb docs';
           chmod -c -R +rX "pkgdb/docs/"|while read line; do
             echo "::warning title=Invalid file permissions fixed::$line";
           done

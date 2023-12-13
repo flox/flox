@@ -15,6 +15,7 @@
   # For use in GitHub Actions and local development.
   ciPackages =
     flox-pkgdb.ciPackages
+    ++ flox-pkgdb.ciPackages
     ++ flox-cli.ciPackages
     ++ [flox-cli-tests flox-tests];
 

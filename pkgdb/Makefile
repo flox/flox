@@ -78,6 +78,7 @@ SYSCONFDIR ?= $(PREFIX)/etc
 # We use variables to refer to all tools so that we can easily override them
 # from the command line.
 
+BATS       ?= bats
 BEAR       ?= bear
 CAT        ?= cat
 CP         ?= cp
@@ -98,37 +99,6 @@ TIDY       ?= clang-tidy
 TOUCH      ?= touch
 TR         ?= tr
 UNAME      ?= uname
-
-
-# Locally built `pkgdb' executables
-# ---------------------------------
-# These may be overridden by the user to invoke the test suite against an
-# installed form of `pkgdb'.
-# We use absolute paths because the test suite may modify `PATH'.
-
-PKGDB_BIN               ?=
-PKGDB_IS_SQLITE3_BIN    ?=
-PKGDB_SEARCH_PARAMS_BIN ?=
-ifeq (,$(filter $(PKGDB_BIN),$(abspath $(PKGDB_BIN))))
-_PKGDB_BIN := $(if $(PKGDB_BIN),$(PKGDB_BIN),pkgdb)
-PKGDB_BIN	= $(shell \
-  PATH="$$PATH:$(BINDIR):$(PKGDB_ROOT)/bin" command -v $(_PKGDB_BIN)||\
-  echo '$(PKGDB_ROOT)/bin/pkgdb')
-endif # `pkgdb' path is relative
-
-ifeq (,$(filter $(PKGDB_IS_SQLITE3_BIN),$(abspath $(PKGDB_IS_SQLITE3_BIN))))
-PKGDB_IS_SQLITE3_BIN = $(PKGDB_ROOT)/tests/is_sqlite3
-endif # `is-sqlite3' path is relative
-
-ifeq (,$(filter $(PKGDB_SEARCH_PARAMS_BIN),\
-$(abspath $(PKGDB_SEARCH_PARAMS_BIN))))
-PKGDB_SEARCH_PARAMS_BIN = $(PKGDB_ROOT)/tests/search-params
-endif # `search-params' path is relative
-
-# Useful for debugging:
-#$(info PKGDB_BIN: $(PKGDB_BIN))
-#$(info PKGDB_IS_SQLITE3_BIN: $(PKGDB_IS_SQLITE3_BIN))
-#$(info PKGDB_SEARCH_PARAMS_BIN: $(PKGDB_SEARCH_PARAMS_BIN))
 
 
 # ---------------------------------------------------------------------------- #
@@ -574,9 +544,10 @@ _TEST_LOCKFILE_MANIFESTS := $(addsuffix /manifest.toml,$(_TEST_LOCKFILE_DIRS))
 _TEST_LOCKFILES          := $(addsuffix /manifest.lock,$(_TEST_LOCKFILE_DIRS))
 CLEANFILES               += $(_TEST_LOCKFILES)
 test-lockfiles: $(_TEST_LOCKFILES)
-$(_TEST_LOCKFILES): %/manifest.lock: %/manifest.toml $(PKGDB_BIN)
+$(_TEST_LOCKFILES): %/manifest.lock: %/manifest.toml bin/pkgdb
 	$(MKDIR_P) $(@D);
-	$(PKGDB_BIN) manifest lock --ga-registry --manifest $< > $@;
+	_PKGDB_GA_REGISTRY_REF_OR_REV="e8039594435c68eb4f780f3e9bf3972a7399c4b1"  \
+	  bin/pkgdb manifest lock --ga-registry --manifest $< > $@;
 
 
 # ---------------------------------------------------------------------------- #
@@ -604,11 +575,11 @@ cc-check: $(TESTS:.cc=) test-data
 
 #: Run all bats tests
 bats-check: bin $(TEST_UTILS) test-data
-	PKGDB_BIN="$(PKGDB_BIN)"                                 \
-	PKGDB_IS_SQLITE3_BIN="$(PKGDB_IS_SQLITE3_BIN)"           \
-	PKGDB_SEARCH_PARAMS_BIN="$(PKGDB_SEARCH_PARAMS_BIN)"     \
-	  bats --print-output-on-failure --verbose-run --timing  \
-	       "$(PKGDB_ROOT)/tests";
+	PKGDB_BIN="$(PKGDB_ROOT)/bin/pkgdb"                          \
+	PKGDB_IS_SQLITE3_BIN="$(PKGDB_ROOT)/tests/is_sqlite3"        \
+	PKGDB_SEARCH_PARAMS_BIN="$(PKGDB_ROOT)/tests/search-params"  \
+	  $(BATS) --print-output-on-failure --verbose-run --timing   \
+	          "$(PKGDB_ROOT)/tests";
 
 
 # ---------------------------------------------------------------------------- #
