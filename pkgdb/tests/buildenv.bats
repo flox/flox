@@ -29,10 +29,10 @@ load setup_suite.bash
 # --------------------------------------------------------------------------- #
 
 setup_file() {
-  export LOCKFILES="${TESTS_DIR?}/data/buildenv/lockfiles";
+  : "${LOCKFILES:=${TESTS_DIR?}/data/buildenv/lockfiles}";
   : "${CAT:=cat}";
   : "${TEST:=test}";
-  export CAT TEST;
+  export LOCKFILES CAT TEST;
 }
 
 

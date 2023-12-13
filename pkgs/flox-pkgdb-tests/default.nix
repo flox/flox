@@ -90,6 +90,11 @@ in
         + "\"$PROJECT_TESTS_DIR/search-params\";"
       else "export PKGDB_SEARCH_PARAMS_BIN='${PKGDB_SEARCH_PARAMS_BIN}';"
     }
+    ${
+      if PKGDB_BIN == null
+      then ""
+      else "export LOCKFILES='${flox-pkgdb.test}/data/buildenv/lockfiles';"
+    }
 
 
     usage() {

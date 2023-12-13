@@ -42,26 +42,20 @@ in
         filter = name: type: let
           bname = baseNameOf name;
           ignores = [
-            "default.nix"
-            "pkg-fun.nix"
-            "flake.nix"
-            "flake.lock"
             ".ccls"
             ".ccls-cache"
             "compile_commands.json"
             ".git"
             ".gitignore"
-            "out"
             "bin"
+            "build"
             "pkgs"
             "bear.d"
             ".direnv"
             ".clang-tidy"
             ".clang-format"
             ".envrc"
-            ".github"
             "LICENSE"
-            "tests"
           ];
           ext = let
             m = builtins.match ".*\\.([^.]+)" name;
@@ -113,8 +107,11 @@ in
       outputs = ["out" "test"];
 
       postInstall = ''
+        # Copy test executables.
         mkdir -p "$test/bin";
         find tests/ -maxdepth 1 -type f -executable -exec mv {} "$test/bin/" \+;
+        # Some test data is built and needs to be saved.
+        mv tests/data "$tests/";
       '';
 
       meta.mainProgram = "pkgdb";
