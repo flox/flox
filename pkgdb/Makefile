@@ -355,31 +355,6 @@ fullclean: clean
 
 # ---------------------------------------------------------------------------- #
 
-%.o: %.cc $(HEADERS) install-libexec install-sysconf
-	$(CXX) $(CXXFLAGS) -c $< -o $@;
-
-# ---------------------------------------------------------------------------- #
-
-src/pkgdb/write.o: src/pkgdb/schemas.hh
-
-$(ALL_SRCS:.cc=.o): %.o: %.cc $(HEADERS)
-	$(CXX) $(CXXFLAGS) -c $< -o $@;
-
-$(addprefix bin/,$(BINS)): %: $(SRCS:.cc=.o)
-	$(MKDIR_P) $(@D);
-	$(CXX) $(filter %.o,$^) $(LDFLAGS) -o $@;
-
-
-# ---------------------------------------------------------------------------- #
-
-$(test_SRCS:.cc=.o): CXXFLAGS += '-DTEST_DATA_DIR="$(TEST_DATA_DIR)"'
-$(TESTS) $(TEST_UTILS): tests/%: $(filter-out src/main.o,$(SRCS:.cc=.o))
-$(TESTS) $(TEST_UTILS): tests/%: tests/%.o
-	$(CXX) $^ $(LDFLAGS) -o $@;
-
-
-# ---------------------------------------------------------------------------- #
-
 # Install Targets
 # ---------------
 
@@ -595,7 +570,36 @@ cc-check: $(TESTS:.cc=) test-data
 
 #: Run all bats tests
 bats-check: bin $(TEST_UTILS) test-data
-	flox-pkgdb-tests
+	PKGDB_BIN="$(PKGDB_ROOT)/bin/pkgdb"                      \
+	IS_SQLITE3_BIN="$(PKGDB_ROOT)/tests/is_sqlite3"          \
+	SEARCH_PARAMS_BIN="$(PKGDB_ROOT)/tests/search-params"    \
+	  bats --print-output-on-failure --verbose-run --timing  \
+	       "$(PKGDB_ROOT)/tests";
+
+
+# ---------------------------------------------------------------------------- #
+
+%.o: %.cc $(HEADERS) $(PROLE_D_SCRIPT_DIR) $(SET_PROMPT_BASH_SH)
+	$(CXX) $(CXXFLAGS) -c $< -o $@;
+
+# ---------------------------------------------------------------------------- #
+
+src/pkgdb/write.o: src/pkgdb/schemas.hh
+
+$(ALL_SRCS:.cc=.o): %.o: %.cc $(HEADERS)
+	$(CXX) $(CXXFLAGS) -c $< -o $@;
+
+$(addprefix bin/,$(BINS)): %: $(SRCS:.cc=.o)
+	$(MKDIR_P) $(@D);
+	$(CXX) $(filter %.o,$^) $(LDFLAGS) -o $@;
+
+
+# ---------------------------------------------------------------------------- #
+
+$(test_SRCS:.cc=.o): CXXFLAGS += '-DTEST_DATA_DIR="$(TEST_DATA_DIR)"'
+$(TESTS) $(TEST_UTILS): tests/%: $(filter-out src/main.o,$(SRCS:.cc=.o))
+$(TESTS) $(TEST_UTILS): tests/%: tests/%.o
+	$(CXX) $^ $(LDFLAGS) -o $@;
 
 
 # ---------------------------------------------------------------------------- #

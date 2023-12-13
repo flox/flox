@@ -346,26 +346,27 @@ createFloxEnv( nix::EvalState &     state,
   bashActivate.close();
 
   /* Add zsh activation script.
-   * Functionality shared between all environments is in flox.zdotdir/.zshrc. */
+   * Functionality shared between all environments is
+   * in `flox.zdotdir/.zshrc'. */
   std::ofstream zshActivate( tempDir / "activate" / "zsh" );
   zshActivate << commonActivate.str();
   zshActivate.close();
 
-  auto activation_store_path
+  auto activationStorePath
     = state.store->addToStore( "activation-scripts", tempDir );
-  references.insert( activation_store_path );
-  pkgs.emplace_back( state.store->printStorePath( activation_store_path ),
+  references.insert( activationStorePath );
+  pkgs.emplace_back( state.store->printStorePath( activationStorePath ),
                      true,
                      buildenv::Priority {} );
 
   /* Insert profile.d scripts.
    * The store path is provided at compile time via the `PROFILE_D_SCRIPT_DIR'
    * environment variable. */
-  auto profile_d_scripts_path
-    = state.store->parseStorePath( PROFILE_D_SCRIPT_DIR );
-  state.store->ensurePath( profile_d_scripts_path );
-  references.insert( profile_d_scripts_path );
-  pkgs.emplace_back( state.store->printStorePath( profile_d_scripts_path ),
+  auto profileScriptsPath
+    = state.store->addToStore( "profile.d", PROFILE_D_SCRIPT_DIR );
+  state.store->ensurePath( profileScriptsPath );
+  references.insert( profileScriptsPath );
+  pkgs.emplace_back( state.store->printStorePath( profileScriptsPath ),
                      true,
                      buildenv::Priority {} );
 
