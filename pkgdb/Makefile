@@ -231,7 +231,7 @@ DEPFILES += $(REPO_ROOT)/shells/default/default.nix
 # --------------------
 
 PROFILE_D_SCRIPT_DIR ?= $(SYSCONFDIR)/profile.d
-SET_PROMPT_BASH_SH   ?= $(LIBEXECDIR)/set-prompt.bash.sh
+SET_PROMPT_BASH_SH   ?= $(LIBEXECDIR)/set-prompt-bash.sh
 
 
 # ---------------------------------------------------------------------------- #
