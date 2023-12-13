@@ -252,9 +252,9 @@ impl Delete {
         }
 
         let result = match environment {
-            ConcreteEnvironment::Path(environment) => environment.delete(),
-            ConcreteEnvironment::Managed(environment) => environment.delete(),
-            ConcreteEnvironment::Remote(environment) => environment.delete(),
+            ConcreteEnvironment::Path(environment) => environment.delete(&flox),
+            ConcreteEnvironment::Managed(environment) => environment.delete(&flox),
+            ConcreteEnvironment::Remote(environment) => environment.delete(&flox),
         };
 
         match result {

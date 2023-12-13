@@ -80,6 +80,10 @@ pub enum ManagedEnvironmentError {
     DeleteBranch(#[source] GitCommandError),
     #[error("failed to delete environment directory {0:?}")]
     DeleteEnvironment(PathBuf, #[source] std::io::Error),
+    #[error("failed to delete environment link {0:?}")]
+    DeleteEnvironmentLink(PathBuf, #[source] std::io::Error),
+    #[error("failed to delete environment reverse link {0:?}")]
+    DeleteEnvironmentReverseLink(PathBuf, #[source] std::io::Error),
 
     // todo: improve description
     #[error("could not create floxmeta directory")]
@@ -281,7 +285,7 @@ impl Environment for ManagedEnvironment {
     }
 
     /// Delete the Environment
-    fn delete(self) -> Result<(), EnvironmentError2> {
+    fn delete(self, flox: &Flox) -> Result<(), EnvironmentError2> {
         fs::remove_dir_all(&self.path)
             .map_err(|e| ManagedEnvironmentError::DeleteEnvironment(self.path.to_path_buf(), e))?;
 
@@ -289,6 +293,24 @@ impl Environment for ManagedEnvironment {
             .git
             .delete_branch(&branch_name(&self.system, &self.pointer, &self.path), true)
             .map_err(ManagedEnvironmentError::DeleteBranch)?;
+
+        let out_link_path = self.out_link(flox);
+        if out_link_path.exists() {
+            std::fs::remove_file(&out_link_path)
+                .map_err(|e| ManagedEnvironmentError::DeleteEnvironmentLink(out_link_path, e))?;
+        }
+
+        let reverse_link = {
+            let links_dir = reverse_links_dir(flox);
+            let encoded = ManagedEnvironment::encode(&self.path);
+
+            links_dir.join(encoded)
+        };
+        if reverse_link.exists() {
+            std::fs::remove_file(&reverse_link).map_err(|e| {
+                ManagedEnvironmentError::DeleteEnvironmentReverseLink(reverse_link, e)
+            })?;
+        }
 
         Ok(())
     }

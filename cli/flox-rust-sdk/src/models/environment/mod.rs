@@ -185,7 +185,7 @@ pub trait Environment {
     fn name(&self) -> EnvironmentName;
 
     /// Delete the Environment
-    fn delete(self) -> Result<(), EnvironmentError2>
+    fn delete(self, flox: &Flox) -> Result<(), EnvironmentError2>
     where
         Self: Sized;
 

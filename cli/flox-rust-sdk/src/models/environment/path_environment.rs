@@ -254,7 +254,7 @@ impl Environment for PathEnvironment {
     }
 
     /// Delete the Environment
-    fn delete(self) -> Result<(), EnvironmentError2> {
+    fn delete(self, _flox: &Flox) -> Result<(), EnvironmentError2> {
         let dot_flox = &self.path;
         if Some(OsStr::new(".flox")) == dot_flox.file_name() {
             std::fs::remove_dir_all(dot_flox).map_err(EnvironmentError2::DeleteEnvironment)?;
