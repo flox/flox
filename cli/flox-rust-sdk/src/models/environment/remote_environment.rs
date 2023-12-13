@@ -84,6 +84,7 @@ impl Environment for RemoteEnvironment {
         self.inner
             .push(false)
             .map_err(RemoteEnvironmentError::UpdateUpstream)?;
+            // TODO: clean up git branch for temporary environment
         Ok(result)
     }
 
