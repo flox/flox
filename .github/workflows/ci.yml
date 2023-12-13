@@ -260,7 +260,6 @@ jobs:
               --builders '' \
               -j0 \
                 '.#flox-pkgdb.outPath' \
-                '.#flox-env-builder.outPath' \
                 '.#flox-cli.outPath' ; then
              echo paths already exist in substituter
              exit 0
