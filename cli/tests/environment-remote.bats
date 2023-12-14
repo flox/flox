@@ -139,3 +139,19 @@ EOF
 }
 
 # ---------------------------------------------------------------------------- #
+
+# Make sure we haven't activate
+# bats test_tags=remote,activate,remote:activate
+@test "m9: activate works in remote environment" {
+  make_empty_remote_env
+  "$FLOX_BIN" install hello --remote "$OWNER/test"
+
+  # TODO: flox will set HOME if it doesn't match the home of the user with
+  # current euid. I'm not sure if we should change that, but for now just set
+  # USER to REAL_USER.
+  SHELL=bash USER="$REAL_USER" run -0 expect -d "$TESTS_DIR/activate/remote-hello.exp" "$OWNER/test";
+  assert_output --regexp "$FLOX_CACHE_HOME/run/owner/.+\..+\..+/bin/hello"
+  refute_output "not found"
+}
+
+# ---------------------------------------------------------------------------- #
