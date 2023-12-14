@@ -396,7 +396,7 @@ jobs:
             nix run \
                 --accept-flake-config \
                 --extra-experimental-features '"nix-command flakes"' \
-                'github:flox/flox/${{ github.sha }}#packages.${{ matrix.system }}.flox-tests'
+                'github:flox/flox/${{ github.sha }}#packages.${{ matrix.system }}.flox-tests' -- --root-dir "$PWD"
 
   report-failure:
     name: "Report Failure"
