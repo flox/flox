@@ -209,15 +209,15 @@ def flox_env(
 
     (home_path / ".cache").mkdir(parents=True)
 
-    # restore flox cache
-    flox_cache = request.config.cache.get("flox-cache", None)
-    if flox_cache and os.path.exists(flox_cache):
-        shutil.copytree(flox_cache, str(home_path / ".cache/flox"), symlinks=True)
-
-    # restore nix cache
-    flox_cache = request.config.cache.get("nix-cache", None)
-    if flox_cache and os.path.exists(flox_cache):
-        shutil.copytree(flox_cache, str(home_path / ".cache/nix"), symlinks=True)
+    if hasattr(pytest.config, "cache"):
+        # restore flox cache
+        flox_cache = request.config.cache.get("flox-cache", None)
+        if flox_cache and os.path.exists(flox_cache):
+            shutil.copytree(flox_cache, str(home_path / ".cache/flox"), symlinks=True)
+        # restore nix cache
+        flox_cache = request.config.cache.get("nix-cache", None)
+        if flox_cache and os.path.exists(flox_cache):
+            shutil.copytree(flox_cache, str(home_path / ".cache/nix"), symlinks=True)
 
     yield FloxEnv(
         name = project_name,
@@ -226,8 +226,8 @@ def flox_env(
         nixpkgs_rev = nixpkgs_rev,
     )
 
-    # save flox cache
-    request.config.cache.set("flox-cache", str(home_path / ".cache/flox"))
-
-    # save nix cache
-    request.config.cache.set("nix-cache", str(home_path / ".cache/nix"))
+    if hasattr(pytest.config, "cache"):
+        # save flox cache
+        request.config.cache.set("flox-cache", str(home_path / ".cache/flox"))
+        # save nix cache
+        request.config.cache.set("nix-cache", str(home_path / ".cache/nix"))
