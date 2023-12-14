@@ -16,7 +16,7 @@ import pexpect
 
 DEFAULT_TIMEOUT = 3  # in seconds
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="function")
 def home_path(tmp_path_factory):
     """Path to home directory"""
     return tmp_path_factory.mktemp("home")
