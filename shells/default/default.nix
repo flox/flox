@@ -11,7 +11,7 @@
   flox-cli,
   flox-cli-tests,
   flox-pkgdb,
-  flox-tests,
+  flox-end2end,
   ci ? false,
 }: let
   # For use in GitHub Actions and local development.
@@ -21,7 +21,7 @@
     ++ flox-cli.ciPackages
     ++ [
       flox-cli-tests
-      flox-tests
+      flox-end2end
       just
     ];
 

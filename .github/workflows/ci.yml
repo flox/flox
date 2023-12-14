@@ -366,22 +366,22 @@ jobs:
           echo "REMOTE_SERVER=$REMOTE_SERVER" >> $GITHUB_ENV
           echo "REMOTE_SERVER_USER_KNOWN_HOSTS_FILE=$REMOTE_SERVER_USER_KNOWN_HOSTS_FILE" >> $GITHUB_ENV
 
-      - name: "Build Bats Tests (./#flox-tests)"
+      - name: "Build Bats Tests (./#flox-end2end)"
         run: |
           nix build -L \
               --no-update-lock-file \
               --print-out-paths \
-              'github:flox/flox/${{ github.sha }}#packages.${{ matrix.system }}.flox-tests'
+              'github:flox/flox/${{ github.sha }}#packages.${{ matrix.system }}.flox-end2end'
           nix copy --to "$FLOX_SUBSTITUTER" ./result
 
-      - name: "Run Bats Tests (./#flox-tests)"
+      - name: "Run Bats Tests (./#flox-end2end)"
         run: |
           ssh github@$REMOTE_SERVER \
             -oUserKnownHostsFile=$REMOTE_SERVER_USER_KNOWN_HOSTS_FILE \
             nix run \
                 --accept-flake-config \
                 --extra-experimental-features '"nix-command flakes"' \
-                'github:flox/flox/${{ github.sha }}#packages.${{ matrix.system }}.flox-tests'
+                'github:flox/flox/${{ github.sha }}#packages.${{ matrix.system }}.flox-end2end'
 
   report-failure:
     name: "Report Failure"

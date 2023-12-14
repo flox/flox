@@ -166,7 +166,7 @@
       # Wrapper scripts for running test suites.
       flox-cli-tests = callPackage ./pkgs/flox-cli-tests {};
       # Integration tests
-      flox-tests = callPackage ./pkgs/flox-tests {};
+      flox-end2end = callPackage ./pkgs/flox-end2end {};
       flox-tests-pure = callPackage ./pkgs/flox-tests-pure {inputs = inputs;};
     };
 
@@ -206,7 +206,7 @@
         flox-cli
         flox-cli-tests
         flox
-        flox-tests
+        flox-end2end
         pre-commit-check
         flox-tests-pure
         flox-dev
@@ -225,7 +225,7 @@
           PKGDB_BIN = null;
           FLOX_BIN = null;
         };
-        flox-tests = prev.flox-tests.override {ci = false;};
+        flox-end2end = prev.flox-end2end.override {ci = false;};
         flox-cli = prev.flox-cli.override {flox-pkgdb = null;};
       });
       checksFor = builtins.getAttr system checks;

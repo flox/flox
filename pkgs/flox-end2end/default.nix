@@ -17,7 +17,7 @@
       ipdb
     ]);
 
-  runner = writeShellScriptBin "flox-tests" ''
+  runner = writeShellScriptBin "flox-end2end" ''
     set -euo pipefail
 
     export NIX_BIN='${nix}/bin/nix';
@@ -26,8 +26,8 @@
 
     export PYTHONDONTWRITEBYTECODE=1
 
-    exec -a "$0" ${pyenv}/bin/pytest ${../../tests} \
-      -p no:cacheprovider \
+    exec -a "$0" "${pyenv}/bin/pytest" "${../../end2end}" \
+      -p "no:cacheprovider" \
       --durations=0 \
       --emoji \
       -vv \
@@ -35,12 +35,12 @@
   '';
 in
   symlinkJoin {
-    name = "flox-tests-env";
+    name = "flox-end2end-env";
     paths =
       [
         pyenv
       ]
       ++ lib.optional ci runner;
 
-    meta.mainProgram = "flox-tests";
+    meta.mainProgram = "flox-end2end";
   }
