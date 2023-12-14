@@ -32,7 +32,7 @@ build-cli: build-pkgdb
 build-docs:
   @echo "TODO";
 
-build-all: build-pkgd build-cli build-docs
+build-all: build-pkgdb build-cli build-docs
 
 
 # ---------------------------------------------------------------------------- #
@@ -42,27 +42,27 @@ test-pkgdb: build-pkgdb
     @make -C pkgdb check;
 
 # Run the CLI unit tests
-test-cli-unit regex="": build
+test-cli-unit regex="": build-cli
     @pushd cli;                            \
      {{cargo_test_invocation}} {{regex}};  \
      popd;
 
 # Run the test suite, including impure tests
-test-cli-impure regex="": build
+test-cli-impure regex="": build-cli
     @pushd cli;                                                     \
      {{cargo_test_invocation}} {{regex}} --features "extra-tests";  \
      popd;
 
 # Run the integration test suite
-test-cli-integration: build
+test-cli-integration: build-cli
     @flox-cli-tests --pkgdb "${PWD}/pkgdb/bin/pkgdb"        \
                     --flox "${PWD}/cli/target/debug/flox";
 
 # Run all of the cli tests
-test-cli: build test-cli-unit test-cli-impure test-cli-integration
+test-cli: build-cli test-cli-unit test-cli-impure test-cli-integration
 
 # Run end2end tests
-test-end2end +args="": build
+test-end2end +args="": build-cli
     @pytest \
       --emoji \
       --durations=0 \
@@ -71,7 +71,7 @@ test-end2end +args="": build
       {{args}};
 
 # Run all tests
-test-all: test-pkgdb functional-tests integ-tests
+test-all: test-pkgdb test-cli test-end2end
 
 
 # ---------------------------------------------------------------------------- #
@@ -113,10 +113,10 @@ clean-pkgdb:
 clean-cli:
     @pushd cli; cargo clean; popd;
 
-clean-end2end
+clean-end2end:
     @rm "${PWD}/.pytest_cache" -rf;
 
-claen-docs:
+clean-docs:
   @echo "TODO";
 
 clean-all: clean-pkgdb clean-cli clean-end2end clean-docs
