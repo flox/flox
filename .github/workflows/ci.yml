@@ -133,7 +133,7 @@ jobs:
             echo "experimental-features = nix-command flakes";
           } | sudo tee -a /etc/nix/nix.conf >/dev/null
 
-      - name: "Cache Cargo"
+      - name: "Cache Cargo Cache"
         uses: "actions/cache@v3"
         with:
           path: |

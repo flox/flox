@@ -209,7 +209,7 @@ def flox_env(
 
     (home_path / ".cache").mkdir(parents=True)
 
-    if hasattr(pytest.config, "cache"):
+    if hasattr(request.config, "cache"):
         # restore flox cache
         flox_cache = request.config.cache.get("flox-cache", None)
         if flox_cache and os.path.exists(flox_cache):
@@ -226,7 +226,7 @@ def flox_env(
         nixpkgs_rev = nixpkgs_rev,
     )
 
-    if hasattr(pytest.config, "cache"):
+    if hasattr(request.config, "cache"):
         # save flox cache
         request.config.cache.set("flox-cache", str(home_path / ".cache/flox"))
         # save nix cache
