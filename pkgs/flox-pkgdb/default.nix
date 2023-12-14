@@ -44,6 +44,7 @@
     yaml_PREFIX = yaml-cpp.outPath;
     libExt = stdenv.hostPlatform.extensions.sharedLibrary;
     SEMVER_PATH = semver.outPath + "/bin/semver";
+    REALPATH = "${coreutils}/bin/realpath";
   };
 in
   stdenv.mkDerivation ({
@@ -107,6 +108,11 @@ in
           makeFlagsArray+=( "-j''${NIX_BUILD_CORES:?}" );
         fi
         runHook postConfigure;
+      '';
+
+      postInstall = ''
+        substituteInPlace $out/etc/profile.d/0500_python.sh \
+          --replace realpath ${coreutils}/bin/realpath
       '';
 
       # Checks require internet
