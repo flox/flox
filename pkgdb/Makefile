@@ -85,7 +85,7 @@ GREP       ?= grep
 LN         ?= ln -f
 MKDIR      ?= mkdir
 MKDIR_P    ?= $(MKDIR) -p
-NIX        ?= nix
+NIX        ?= nix --extra-experimental-features 'flakes nix-command'
 PKG_CONFIG ?= pkg-config
 RM         ?= rm -f
 SED        ?= sed
@@ -142,7 +142,16 @@ endif  # ifndef TOOLCHAIN
 
 # ---------------------------------------------------------------------------- #
 
+# Read info from files
+# --------------------
+
 VERSION := $(file < $(PKGDB_ROOT)/version)
+
+# Files used by `pkgdb buildenv' need to be added to the `nix' store.
+PROFILE_D_SCRIPT_DIR ?= $(shell                         \
+  $(NIX) store add-path -n profile.d src/buildenv/etc)
+SET_PROMPT_BASH_SH ?= $(shell                                                \
+	$(NIX) store add-path -n set-prompt-bash src/buildenv/set-prompt-bash.sh)
 
 
 # ---------------------------------------------------------------------------- #
@@ -208,8 +217,7 @@ endif	# ifndef EXTRA_CXXFLAGS
 CXXFLAGS ?= $(EXTRA_CFLAGS) $(EXTRA_CXXFLAGS)
 CXXFLAGS += '-I$(PKGDB_ROOT)/include'
 CXXFLAGS += '-DFLOX_PKGDB_VERSION="$(VERSION)"'
-CXXFLAGS += '-DPROFILE_D_SCRIPT_DIR="$(PROFILE_D_SCRIPT_DIR)"'
-CXXFLAGS += '-DSET_PROMPT_BASH_SH="$(SET_PROMPT_BASH_SH)"'
+
 LDFLAGS  ?= $(EXTRA_LDFLAGS)
 
 # Release Mode
@@ -323,6 +331,19 @@ SEMVER_PATH ?=                                                        \
   $(shell $(NIX) build --no-link --print-out-paths                    \
 	                     'github:aakropotkin/floco#semver')/bin/semver
 CXXFLAGS += '-DSEMVER_PATH="$(SEMVER_PATH)"'
+
+
+# ---------------------------------------------------------------------------- #
+
+# Flags for Specific Files
+# ------------------------
+
+src/buildenv/realise.o: CXXFLAGS +=                   \
+	'-DPROFILE_D_SCRIPT_DIR="$(PROFILE_D_SCRIPT_DIR)"'
+
+src/buildenv/realise.o: CCXXFLAGS +=              \
+	'-DSET_PROMPT_BASH_SH="$(SET_PROMPT_BASH_SH)"'
+
 
 
 # ---------------------------------------------------------------------------- #
@@ -570,25 +591,6 @@ bats-check: bin $(TEST_UTILS) test-data
 
 # SQL Schemas
 src/pkgdb/write.o: src/pkgdb/schemas.hh
-
-
-# Build Environment Scripts
-SET_PROMPT_BASH_SH = src/buildenv/set-prompt-bash.sh
-PROFILE_D_SCRIPTS  = $(call rwildcard,src/buildenv/profile.d,*.sh)
-
-BUILD_ENV_STATIC_ASSETS =  $(addsuffix .hh, $(PROFILE_D_SCRIPTS))
-BUILD_ENV_STATIC_ASSETS += $(SET_PROMPT_BASH_SH).hh
-
-CLEANFILES += $(BUILD_ENV_STATIC_ASSETS)
-
-$(BUILD_ENV_STATIC_ASSETS): %.hh: %
-	{                                  \
-	  echo 'R"_PKGDB_STATIC_ASSET_(';  \
-	  $(CAT) $<;                       \
-	  echo ')_PKGDB_STATIC_ASSET_"';   \
-	} > $@;
-
-src/buildenv/realise.o: $(BUILD_ENV_STATIC_ASSETS)
 
 
 # ---------------------------------------------------------------------------- #

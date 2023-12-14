@@ -35,16 +35,13 @@ namespace flox::buildenv {
 
 /* -------------------------------------------------------------------------- */
 
-/* Include static scripts. */
-static const std::string setBashPromptScript =
-  #include "./set-prompt-bash.sh.hh"
-;
+#ifndef PROFILE_D_SCRIPT_DIR
+#  define PROFILE_D_SCRIPT_DIR "invalid_profile.d_script_path"
+#endif
 
-static const std::profileDCommonName =
-static const std::string profileDCommon =
-  #include "./profile.d/0100_common.sh.hh"
-;
-
+#ifndef SET_PROMPT_BASH_SH
+#  define SET_PROMPT_BASH_SH "invalid_set-prompt-bash.sh_path"
+#endif
 
 /* -------------------------------------------------------------------------- */
 
@@ -212,7 +209,7 @@ createFloxEnv( nix::EvalState &     state,
 
   for ( auto const & [pId, package] : locked_packages )
     {
-      // FIXME: use `FloxFlake'
+      // TODO: use `FloxFlake'
       auto packageInputRef = nix::FlakeRef( package.input );
       auto packageFlake    = nix::flake::lockFlake( state,
                                                  packageInputRef,
@@ -362,14 +359,8 @@ createFloxEnv( nix::EvalState &     state,
   /* Insert profile.d scripts.
    * The store path is provided at compile time via the `PROFILE_D_SCRIPT_DIR'
    * environment variable. */
-  tempDir = std::filesystem::path( nix::createTempDir() );
-  std::filesystem::create_directories( tempDir / "etc" / "profile.d" );
-  std::filesystem::copy( PROFILE_D_SCRIPT_DIR,
-                         tempDir / "etc" / "profile.d",
-                         std::filesystem::copy_options::recursive );
-
   auto profileScriptsPath
-    = state.store->addToStore( "flox-etc-profiles", tempDir );
+    = state.store->parseStorePath( PROFILE_D_SCRIPT_DIR );
   state.store->ensurePath( profileScriptsPath );
   references.insert( profileScriptsPath );
   pkgs.emplace_back( state.store->printStorePath( profileScriptsPath ),
