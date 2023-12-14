@@ -60,9 +60,9 @@ check_manifest_updated() {
 @test "'flox edit' confirms successful edit" {
   "$FLOX_BIN" init
   cp "$MANIFEST_PATH" "$TMP_MANIFEST_PATH"
-  cat << "EOF" >> "$TMP_MANIFEST_PATH"
+  cat << "EOF" > "$TMP_MANIFEST_PATH"
 [install]
-hello = {}
+hello.path = "hello"
 EOF
 
   run "$FLOX_BIN" edit -f "$TMP_MANIFEST_PATH"
