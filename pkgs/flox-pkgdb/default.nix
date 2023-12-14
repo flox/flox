@@ -18,6 +18,8 @@
   sqlite3pp,
   toml11,
   yaml-cpp,
+  runCommand,
+  coreutils,
   # For testing
   bash,
   yj,
@@ -25,7 +27,6 @@
   gnugrep,
   bats,
   git,
-  coreutils,
   llvm, # for `llvm-symbolizer'
   gdb ? throw "`gdb' is required for debugging with `g++'",
   lldb ? throw "`lldb' is required for debugging with `clang++'",
@@ -45,10 +46,12 @@
     libExt = stdenv.hostPlatform.extensions.sharedLibrary;
     SEMVER_PATH = semver.outPath + "/bin/semver";
     # Used by `buildenv' to provide activation hook extensions.
-    PROFILE_D_SCRIPT_DIR = builtins.path {
-      name = "etc-profile.d";
-      path = ../../pkgdb/src/buildenv/assets;
-    };
+    PROFILE_D_SCRIPT_DIR = runCommand "etc-profile.d" {} ''
+      mkdir -p $out
+      cp -R ${../../pkgdb/src/buildenv/assets}/* $out
+      substituteInPlace $out/etc/profile.d/0500_python.sh \
+        --subst-var-by realpath ${coreutils}/bin/realpath
+    '';
     # Used by `buildenv' to set shell prompts on activation.
     SET_PROMPT_BASH_SH = builtins.path {
       name = "set-prompt-bash.sh";
