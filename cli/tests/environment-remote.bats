@@ -73,7 +73,7 @@ function make_empty_remote_env() {
   # init path environment and push to remote
   "$FLOX_BIN" init --name test
   "$FLOX_BIN" push --owner "$OWNER"
-  # "$FLOX_BIN" delete -f # add after #621 lands
+  "$FLOX_BIN" delete -f
   popd
   rm -rf local
 }
@@ -101,8 +101,7 @@ function make_empty_remote_env() {
   run --separate-stderr "$FLOX_BIN" install hello --remote "$OWNER/test"
   assert_success
 
-  run [ -f "$FLOX_CACHE_HOME/run/$OWNER/$NIX_SYSTEM.test" ]
-  assert_success
+  assert [ -h "$FLOX_CACHE_HOME/run/$OWNER/$NIX_SYSTEM.test" ]
 }
 
 # bats test_tags=install,remote,remote:install
