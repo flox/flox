@@ -6,6 +6,7 @@ use async_trait::async_trait;
 use flox_types::catalog::{CatalogEntry, EnvCatalog, System};
 use flox_types::version::Version;
 use log::debug;
+use once_cell::sync::Lazy;
 use runix::command_line::{NixCommandLine, NixCommandLineRunJsonError};
 use runix::installable::FlakeAttribute;
 use runix::store_path::StorePath;
