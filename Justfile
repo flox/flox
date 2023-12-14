@@ -83,6 +83,7 @@ run-pkgdb +args="": build-pkgdb
 run-cli +args="": build-cli
   @./cli/target/debug/flox {{args}};
 
+run-end2end: test-end2end
 
 # ---------------------------------------------------------------------------- #
 

@@ -31,11 +31,12 @@ $ just test-all;
     - `./cli/flox-rust-sdk`: A library layer implementing capabilities
                              independent of the CLI.
     - `./cli/floxd`: a potential flox daemon (TODO)
-- `./end2end`: A suite of end2end tests.
-- `./docs`: Developer documentation
-- `./pkgs`:
-- `./shells`:
-- `./flake.{nix|lock}`:
+- `./end2end`: A suite of functional tests for our flox CLI.
+- `./docs`: Developer documentation.
+- `./pkgs`: A nix package set for our projects.
+- `./shells`: A development environment.
+- `./flake.{nix|lock}`: Two Nix files that hold everything together.
+
 
 ## Development
 
@@ -63,7 +64,6 @@ $ nix develop
 | Format      | `just fmt-cli`                              |
 | Clean       | `just clean-cli`                            |
 
-
 The `cli` project is formatted using `rustfmt` and applies custom rules through
 `./cli/.rustfmt.toml`. A pre-commit hook is set up as well to check rust file
 formatting.
@@ -78,6 +78,37 @@ formatting.
 | Run         | `just run-pkgdb` or `./pkgdb/build/bin/pkgdb` |
 | Format      | `just fmt-pkgdb`                              |
 | Clean       | `just clean-pkgdb`                            |
+
+
+### Develop `flox-end2end`
+
+| Description | Command                                       |
+| :---------: | --------------------------------------------- |
+| Test        | `just test-pkgdb`                             |
+| Run         | `just run-pkgdb`                              |
+| Format      | `just fmt-end2end`                            |
+| Clean       | `just clean-end2end`                          |
+
+
+- You can run tests also directly with `pytest` script which should be
+  available in the development environment.
+
+- Test to be picked up by the `pytest` framework need to start with `test_`
+  prefix. See example: `end2end/test_python.py`
+
+- [Test fixtures](https://docs.pytest.org/en/stable/explanation/fixtures.html)
+  are defned in `end2end/conftest.py`.
+
+- When you increase verbosity, by providing `-v`, `pexpect`'s buffer is going
+  to be printed to `stdout`, eg. `just test-end2end -v`
+
+- If you wish to be dropped into a debugger when test fails run it with
+  `--pdb`, eg: `just test-end2end --pdb`.
+
+- To set a breakpoint manually drop `__import__('pdb').set_trace()` onto the
+  line you wish to break.
+
+- To run tests as CI would do it, run: `nix run .#flox-end2end`.
 
 
 ## Editors
