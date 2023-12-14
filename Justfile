@@ -38,7 +38,7 @@ build-all: build-pkgdb build-cli build-docs
 # ---------------------------------------------------------------------------- #
 
 test-pkgdb: build-pkgdb
-    @make -C pkgdb -j tests;
+    @make -C pkgdb tests;
     @make -C pkgdb check;
 
 # Run the CLI unit tests
