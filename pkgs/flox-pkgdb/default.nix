@@ -113,6 +113,8 @@ in
       configurePhase = ''
         runHook preConfigure;
         export PREFIX="$out";
+        echo "PROFILE_D_SCRIPT_DIR: $PROFILE_D_SCRIPT_DIR" >&2;
+        echo "SET_PROMPT_BASH_SH: $SET_PROMPT_BASH_SH" >&2;
         if [[ "''${enableParallelBuilding:-1}" = 1 ]]; then
           makeFlagsArray+=( "-j''${NIX_BUILD_CORES:?}" );
         fi

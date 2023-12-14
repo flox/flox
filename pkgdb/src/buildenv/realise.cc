@@ -36,11 +36,11 @@ namespace flox::buildenv {
 /* -------------------------------------------------------------------------- */
 
 #ifndef PROFILE_D_SCRIPT_DIR
-#  define PROFILE_D_SCRIPT_DIR "invalid_profile.d_script_path"
+#  error "PROFILE_D_SCRIPT_DIR must be set to the path of `etc/profile.d/'"
 #endif
 
 #ifndef SET_PROMPT_BASH_SH
-#  define SET_PROMPT_BASH_SH "invalid_set-prompt-bash.sh_path"
+#  error "SET_PROMPT_BASH_SH must be set to the path of `set-prompt.bash.sh'"
 #endif
 
 /* -------------------------------------------------------------------------- */

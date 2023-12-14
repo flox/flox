@@ -341,7 +341,7 @@ CXXFLAGS += '-DSEMVER_PATH="$(SEMVER_PATH)"'
 src/buildenv/realise.o: CXXFLAGS +=                   \
 	'-DPROFILE_D_SCRIPT_DIR="$(PROFILE_D_SCRIPT_DIR)"'
 
-src/buildenv/realise.o: CCXXFLAGS +=              \
+src/buildenv/realise.o: CXXFLAGS +=               \
 	'-DSET_PROMPT_BASH_SH="$(SET_PROMPT_BASH_SH)"'
 
 
