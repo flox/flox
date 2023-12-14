@@ -558,13 +558,7 @@ test_getGroupInput0()
   TestEnvironment environment( std::nullopt, manifest, lockfile );
   for ( const InstallDescriptors & group : manifest.getGroupedDescriptors() )
     {
-      std::cerr << "getting group input" << std::endl;
       auto input = environment.getGroupInput( group, lockfile, _system );
-      if ( input.has_value() )
-        {
-
-          std::cerr << "got input" << *input << std::endl;
-        }
       EXPECT( input.has_value() );
       EXPECT_EQ( *input, mockHelloLocked.input );
     }

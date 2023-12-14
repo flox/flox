@@ -10,11 +10,11 @@
 #
 # ---------------------------------------------------------------------------- #
 
-nix_options := "--extra-experimental-features nix-command --extra-experimental-features flakes"
+nix_options := "--extra-experimental-features nix-command \
+ --extra-experimental-features flakes"
 PKGDB_BIN := "${PWD}/pkgdb/bin/pkgdb"
-ENV_BUILDER_BIN := "${PWD}/env-builder/bin/env-builder"
 FLOX_BIN := "${PWD}/cli/target/debug/flox"
-cargo_test_invocation := "PKGDB_BIN=${PKGDB_BIN} ENV_BUILDER_BIN=${ENV_BUILDER_BIN} cargo test --workspace"
+cargo_test_invocation := "PKGDB_BIN=${PKGDB_BIN} cargo test --workspace"
 vscode_cpp_config := "./.vscode/c_cpp_properties.json"
 
 
@@ -29,14 +29,15 @@ _default:
 # Print the paths of all of the binaries
 bins:
     @echo "{{PKGDB_BIN}}"
-    @echo "{{ENV_BUILDER_BIN}}"
     @echo "{{FLOX_BIN}}"
 
 # ---------------------------------------------------------------------------- #
 
+# Build only pkgdb
 build-pkgdb:
     @make -C pkgdb -j;
 
+# Build only flox
 build-cli: build-pkgdb
     @pushd cli; cargo build -q; popd
 
@@ -46,42 +47,41 @@ build: build-cli
 
 # ---------------------------------------------------------------------------- #
 
+# Run the pkgdb tests
 test-pkgdb: build-pkgdb
     @make -C pkgdb -j tests;
     @make -C pkgdb check;
 
 # Run the end-to-end test suite
 functional-tests +bats_args="": build
-    @flox-tests --pkgdb "{{PKGDB_BIN}}" --flox "{{FLOX_BIN}}" \
-        --env-builder "{{ENV_BUILDER_BIN}}" {{bats_args}}
+    @flox-tests --pkgdb "{{PKGDB_BIN}}" --flox "{{FLOX_BIN}}" {{bats_args}}
 
 # Run the CLI integration test suite
 integ-tests +bats_args="": build
-    @flox-cli-tests --pkgdb "{{PKGDB_BIN}}" --flox "{{FLOX_BIN}}" \
-        --env-builder "{{ENV_BUILDER_BIN}}" {{bats_args}}
+    @flox-cli-tests --pkgdb "{{PKGDB_BIN}}" --flox "{{FLOX_BIN}}" {{bats_args}}
 
-# Run a specific 'flox' integration test file by name (not path)
-integ-file file: build
+# Run a specific CLI integration test file by name (not path)
+integ-file file +bats_args="": build
     @flox-cli-tests --tests "{{file}}" --pkgdb "{{PKGDB_BIN}}" \
-        --flox "{{FLOX_BIN}}" --env-builder "{{ENV_BUILDER_BIN}}"
+     --flox "{{FLOX_BIN}}" {{bats_args}}
 
-# Run the Rust unit tests
+# Run the CLI unit tests
 unit-tests regex="": build
     @pushd cli;                            \
      {{cargo_test_invocation}} {{regex}};  \
      popd;
 
-# Run the test suite, including impure tests
+# Run the CLI unit tests, including impure tests
 impure-tests regex="": build
     @pushd cli;                                                     \
      {{cargo_test_invocation}} {{regex}} --features "extra-tests";  \
      popd;
 
-# Run the CLI test suite
-test-cli: unit-tests impure-tests integ-tests functional-tests
+# Run the entire CLI test suite
+test-cli: impure-tests integ-tests functional-tests
 
-# Run the entire test suite, including impure tests
-test-all: test-pkgdb impure-tests functional-tests integ-tests
+# Run the entire test suite, including impure unit tests
+test-all: test-pkgdb impure-tests integ-tests functional-tests 
 
 
 # ---------------------------------------------------------------------------- #
