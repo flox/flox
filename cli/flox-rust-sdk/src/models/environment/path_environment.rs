@@ -31,6 +31,7 @@ use runix::RunJson;
 use super::core_environment::CoreEnvironment;
 use super::{
     copy_dir_recursive,
+    CanonicalPath,
     EditResult,
     Environment,
     EnvironmentError2,
@@ -57,7 +58,7 @@ use crate::models::environment_ref::EnvironmentName;
 #[derive(Debug)]
 pub struct PathEnvironment {
     /// Absolute path to the environment, typically `<...>/.flox`
-    pub path: PathBuf,
+    pub path: CanonicalPath,
 
     /// The temporary directory that this environment will use during transactions
     pub temp_dir: PathBuf,
@@ -70,17 +71,25 @@ pub struct PathEnvironment {
 
 impl PartialEq for PathEnvironment {
     fn eq(&self, other: &Self) -> bool {
-        self.path == other.path
+        *self.path == *other.path
     }
 }
 
 impl PathEnvironment {
     pub fn new(
-        dot_flox: impl AsRef<Path>,
+        dot_flox_path: impl AsRef<Path>,
         pointer: PathPointer,
         temp_dir: impl AsRef<Path>,
     ) -> Result<Self, EnvironmentError2> {
-        let env_path = dot_flox.as_ref().join(ENV_DIR_NAME);
+        let dot_flox_path = CanonicalPath::new(dot_flox_path)?;
+
+        if &*dot_flox_path == Path::new("/") {
+            return Err(EnvironmentError2::InvalidPath(
+                dot_flox_path.into_path_buf(),
+            ));
+        }
+
+        let env_path = dot_flox_path.join(ENV_DIR_NAME);
         if !env_path.exists() {
             Err(EnvironmentError2::EnvNotFound)?;
         }
@@ -91,10 +100,7 @@ impl PathEnvironment {
 
         Ok(Self {
             // path must be absolute as it is used to set FLOX_ENV
-            path: dot_flox
-                .as_ref()
-                .canonicalize()
-                .map_err(EnvironmentError2::EnvCanonicalize)?,
+            path: dot_flox_path,
             pointer,
             temp_dir: temp_dir.as_ref().to_path_buf(),
         })
@@ -248,7 +254,7 @@ impl Environment for PathEnvironment {
     }
 
     /// Delete the Environment
-    fn delete(self) -> Result<(), EnvironmentError2> {
+    fn delete(self, _flox: &Flox) -> Result<(), EnvironmentError2> {
         let dot_flox = &self.path;
         if Some(OsStr::new(".flox")) == dot_flox.file_name() {
             std::fs::remove_dir_all(dot_flox).map_err(EnvironmentError2::DeleteEnvironment)?;
@@ -263,8 +269,9 @@ impl Environment for PathEnvironment {
         Ok(self.out_link(&flox.system)?)
     }
 
+    /// Path to the environment's parent directory
     fn parent_path(&self) -> Result<PathBuf, EnvironmentError2> {
-        let mut path = self.path.clone();
+        let mut path = self.path.to_path_buf();
         if path.pop() {
             Ok(path)
         } else {
@@ -288,7 +295,7 @@ impl PathEnvironment {
     /// a precise url to interact with the environment via nix
     fn flake_attribute(&self, system: impl AsRef<str>) -> FlakeAttribute {
         let flakeref = PathRef {
-            path: self.path.clone(),
+            path: self.path.to_path_buf(),
             attributes: Default::default(),
         }
         .into();

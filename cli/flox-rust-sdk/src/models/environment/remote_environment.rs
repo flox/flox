@@ -97,7 +97,7 @@ impl Environment for RemoteEnvironment {
 
     /// Delete the Environment
     #[allow(unused)]
-    fn delete(self) -> Result<(), EnvironmentError2> {
+    fn delete(self, flox: &Flox) -> Result<(), EnvironmentError2> {
         todo!()
     }
 }
