@@ -31,6 +31,7 @@
       commitizen
       hivemind
       just
+      flox-tests
     ];
 in
   mkShell (

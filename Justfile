@@ -41,7 +41,9 @@ test-pkgdb: build-pkgdb
 
 # Run the end-to-end test suite
 functional-tests +pytest_args="": build
-    @pytest {{pytest_args}};
+    @pytest \
+      --capture=no \
+      {{pytest_args}};
 
 # Run the integration test suite
 integ-tests: build

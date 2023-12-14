@@ -27,6 +27,7 @@
 
     exec -a "$0" ${pyenv}/bin/pytest ${../../tests} \
       -p no:cacheprovider \
+      --capture=no \
       --emoji \
       --verbose \
       "$@"

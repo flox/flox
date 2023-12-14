@@ -110,11 +110,6 @@ in
         runHook postConfigure;
       '';
 
-      postInstall = ''
-        substituteInPlace $out/etc/profile.d/0500_python.sh \
-          --replace realpath ${coreutils}/bin/realpath
-      '';
-
       # Checks require internet
       doCheck = false;
       doInstallCheck = false;

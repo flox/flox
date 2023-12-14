@@ -383,7 +383,10 @@ $(LIBEXECDIR)/%: libexec/%
 
 $(SYSCONFDIR)/%: etc/%
 	$(MKDIR_P) $(@D);
-	if $(TEST) -f $<; then $(CP) -- "$<" "$@"; fi
+	if $(TEST) -f $<; then \
+	  $(CP) -- "$<" "$@"; \
+	  $(SED) -i 's|@realpath@|$(REALPATH)|' "$@"; \
+	fi;
 
 #: Install binaries
 install-bin: $(addprefix $(BINDIR)/,$(BINS))

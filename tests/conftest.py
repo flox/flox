@@ -1,16 +1,24 @@
+import contextlib
 import dataclasses
 import os
 import pathlib
 import re
 import shlex
 import subprocess
+import sys
 import tempfile
+import textwrap
 
 import pytest
 import pexpect
 
 
 DEFAULT_TIMEOUT = 3  # in seconds
+
+@pytest.fixture(scope="session")
+def home_path(tmp_path_factory):
+    """Path to home directory"""
+    return tmp_path_factory.mktemp("home")
 
 
 @pytest.fixture
@@ -52,13 +60,15 @@ def run():
         kwargs.setdefault("shell", False)
 
         return subprocess.run(args, **kwargs)
+
     return _run
 
 
 @pytest.fixture
-def spawn():
+def spawn(home_path, flox_env):
     """Spawn a command"""
 
+    @contextlib.contextmanager
     def _run(command, **kwargs):
 
         # Join list of arguments into string
@@ -91,32 +101,52 @@ def spawn():
         # calls fail to match the the pattern's full command against the
         # truncated output.
         kwargs.setdefault("dimensions", (24, 10000))
+        kwargs.setdefault("cwd", home_path)
 
-        shell = pexpect.spawn(
-            shell_command,
-            args=shell_command_args,
-            **kwargs,
-        )
+        with pathlib.Path(kwargs["cwd"]):
 
-        def send_command(cmd):
-            shell.sendline(cmd)
-            shell.expect_exact(cmd + "\r\n")
+            shell = pexpect.spawn(
+                shell_command,
+                args=shell_command_args,
+                **kwargs,
+            )
 
-        def expect_prompt(timeout=DEFAULT_TIMEOUT):
-            shell.expect(r"{prompt}".format(prompt=re.escape(prompt)), timeout=timeout)
+            old_expect = shell.expect
 
-        # helper methods
-        shell.prompt = prompt
-        shell.send_command = send_command
-        shell.expect_prompt = expect_prompt
+            def new_expect(*args, **kwargs):
+                try:
+                    old_expect(*args, **kwargs)
+                except Exception as e:
+                    print("=" * 80)
+                    print("= DEBUG HELP:")
+                    print("=" * 80)
+                    print("EXPECT:")
+                    print(textwrap.indent(str(shell), " " * 2))
+                    print(str(flox_env))
+                    print("=" * 80)
+                    raise e
 
-        # wait for the prompt
-        shell.expect_prompt()
+            def send_command(cmd):
+                shell.sendline(cmd)
+                shell.expect_exact(cmd + "\r\n")
 
-        # send command
-        shell.send_command(command)
+            def expect_prompt(timeout=DEFAULT_TIMEOUT):
+                shell.expect(r"{prompt}".format(prompt=re.escape(prompt)), timeout=timeout)
 
-        return shell
+            # helper methods
+            shell.expect = new_expect
+            shell.logfile = sys.stdout
+            shell.send_command = send_command
+            shell.expect_prompt = expect_prompt
+
+            # wait for the prompt
+            shell.expect_prompt()
+
+            # send command
+            shell.send_command(command)
+
+            yield shell
+
     return _run
 
 
@@ -135,23 +165,31 @@ def nix_system(run, nix):
 
 
 @dataclasses.dataclass
-class FloxProject:
+class FloxEnv:
     name: str
     path: pathlib.Path
     run_path: pathlib.Path
     nixpkgs_rev: str
 
+    def __str__(self):
+        tmp = "FLOX ENVIRONMENT:\n"
+        tmp += (f"  name: {self.name}\n")
+        tmp += (f"  path: {self.path}\n")
+        tmp += (f"  run_path: {self.run_path}\n")
+        tmp += (f"  nixpkgs_rev: {self.nixpkgs_rev}\n")
+        return tmp
+
 
 @pytest.fixture
-def flox_project(
-        tmp_path,
+def flox_env(
+        home_path,
         nix_system,
     ):
-    """Path to flox project"""
+    """Everything needed to create a flox environment."""
 
     project_path = pathlib.Path(tempfile.mkdtemp(
-        prefix="flox-tests-envs-",
-        dir=tmp_path,
+        prefix="flox-tests-environment-",
+        dir=home_path,
     ))
 
     project_name = os.path.basename(project_path)
@@ -159,13 +197,13 @@ def flox_project(
 
     os.environ["FLOX_DISABLE_METRICS"] = "true"
     os.environ["_PKGDB_GA_REGISTRY_REF_OR_REV"] = nixpkgs_rev
-    os.environ["HOME"] = str(tmp_path)
-    os.environ["XDG_CONFIG_HOME"] = str(tmp_path / ".config")
-    os.environ["XDG_CACHE_HOME"] = str(tmp_path / ".cache")
-    os.environ["XDG_DATA_HOME"] = str(tmp_path / ".local/share")
-    os.environ["XDG_STATE_HOME"] = str(tmp_path / ".local/state")
+    os.environ["HOME"] = str(home_path)
+    os.environ["XDG_CONFIG_HOME"] = str(home_path / ".config")
+    os.environ["XDG_CACHE_HOME"] = str(home_path / ".cache")
+    os.environ["XDG_DATA_HOME"] = str(home_path / ".local/share")
+    os.environ["XDG_STATE_HOME"] = str(home_path / ".local/state")
 
-    return FloxProject(
+    return FloxEnv(
         name = project_name,
         path = project_path,
         run_path = project_path / f".flox/run/{nix_system}.{project_name}",
