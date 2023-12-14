@@ -1,6 +1,6 @@
 # List packages you wish to install in your environment under
 # the `[install]` table
-# [install]
+[install]
 # hello.path = "hello"
 # nodejs = { version = "^18.4.2", path = "nodejs_18" }
 

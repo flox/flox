@@ -36,6 +36,7 @@
 result
 result-*
 compile_commands.json
+bin/
 
 # Logs, Debug Info, Etc
 *.gcno

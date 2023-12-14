@@ -133,7 +133,6 @@ impl PathEnvironment {
     ///
     /// This method should only be used to create [CoreEnvironment]s for a [PathEnvironment].
     /// To modify the environment, use the [PathEnvironment] methods instead.
-    #[allow(dead_code)]
     pub(super) fn into_core_environment(self) -> CoreEnvironment {
         CoreEnvironment::new(self.path.join(ENV_DIR_NAME))
     }
