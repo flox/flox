@@ -247,7 +247,6 @@ jobs:
               --builders ''                \
               -j0                          \
                 'github:flox/flox/${{ github.sha }}#packages.${{ matrix.system }}.flox.outPath'; then
-                '.#flox-cli.outPath'; then
              echo paths already exist in substituter;
              exit 0;
           else
