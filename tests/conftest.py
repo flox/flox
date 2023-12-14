@@ -73,14 +73,17 @@ def spawn():
         shell_command_args = ["--norc", "--noprofile"]
 
         # Pass on every environment variable, but set $PS1 and $SHELL
-        env = os.environ.copy()
+        env = {}
         env.update({
             "PS1": prompt,
             "SHELL": shell_command,
+            "PATH": os.environ["PATH"],
+            "USER": os.environ["USER"],
+            "HOME": os.environ["HOME"],
         })
 
         kwargs.setdefault("encoding", "utf-8")
-        kwargs.setdefault("env", env)
+        kwargs["env"]=env
         kwargs.setdefault("timeout", DEFAULT_TIMEOUT)   # timeout in seconds
         # The (height, width) of the TTY commands run in. 24 is the default.
         # The width needs to be larger than the longest command, as
