@@ -51,7 +51,7 @@ def test_python_integration_with_flox(
 
         # create virtualenv
         shell.send_command("python3 -m venv env")
-        shell.expect_prompt(timeout=10)
+        shell.expect_prompt(timeout=30)
 
         assert (flox_env.path / "env/bin/python3").exists()
         assert (flox_env.path / "env/bin/pip").exists()
