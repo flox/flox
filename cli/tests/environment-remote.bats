@@ -22,21 +22,6 @@ project_setup() {
 
 }
 
-# todo: use method pulled out in #620
-floxhub_setup() {
-  export FLOX_FLOXHUB_TOKEN=flox_testOAuthToken
-  export FLOX_FLOXHUB_PATH="$BATS_TEST_TMPDIR/floxhub"
-  export OWNER="owner"
-  export FLOXHUB_FLOXMETA_DIR="$FLOX_FLOXHUB_PATH/$OWNER/floxmeta"
-
-  mkdir -p "$FLOX_FLOXHUB_PATH"
-  mkdir -p "$FLOXHUB_FLOXMETA_DIR"
-  git -C "$FLOXHUB_FLOXMETA_DIR" init --bare
-
-  export __FLOX_FLOXHUB_URL="file://$FLOX_FLOXHUB_PATH"
-
-}
-
 
 # tests should not share the same floxmeta repo.
 # we also want to simulate different machines.
@@ -56,7 +41,7 @@ project_teardown() {
 setup() {
   common_test_setup
   project_setup
-  floxhub_setup
+  floxhub_setup owner;
   home_setup test;
 }
 
