@@ -5,7 +5,6 @@
   python3,
   nix,
   flox-pkgdb,
-  flox-env-builder,
   flox-cli,
   ci ? true,
 }: let
@@ -22,7 +21,6 @@
 
     export NIX_BIN='${nix}/bin/nix';
     export PKGDB_BIN='${flox-pkgdb}/bin/pkgdb';
-    export ENV_BUILDER_BIN='${flox-env-builder}/bin/env-builder';
     export FLOX_BIN='${flox-cli}/bin/flox';
 
     export PYTHONDONTWRITEBYTECODE=1

@@ -28,13 +28,6 @@ def pkgdb():
 
 
 @pytest.fixture
-def env_builder():
-    """Path to env-builder binary
-    """
-    return os.environ.get("ENV_BUILDER_BIN", "env-builder")
-
-
-@pytest.fixture
 def flox():
     """Path to flox binary
     """

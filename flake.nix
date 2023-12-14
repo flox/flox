@@ -156,9 +156,6 @@
       # Package Database Utilities: scrape, search, and resolve.
       flox-pkgdb = callPackage ./pkgs/flox-pkgdb {};
 
-      # Builds/realizes environment from lockfiles.
-      flox-env-builder = callPackage ./pkgs/flox-env-builder {};
-
       # Flox Command Line Interface ( development build ).
       flox-cli = callPackage ./pkgs/flox-cli {};
 
@@ -166,8 +163,6 @@
       flox = callPackage ./pkgs/flox {};
 
       # Wrapper scripts for running test suites.
-      flox-pkgdb-tests = callPackage ./pkgs/flox-pkgdb-tests {};
-      flox-env-builder-tests = callPackage ./pkgs/flox-env-builder-tests {};
       flox-cli-tests = callPackage ./pkgs/flox-cli-tests {};
       # Integration tests
       flox-tests = callPackage ./pkgs/flox-tests {};
@@ -207,7 +202,6 @@
         (pkgs)
         flox-gh
         flox-pkgdb
-        flox-env-builder
         flox-cli
         flox-cli-tests
         flox
@@ -225,39 +219,20 @@
     devShells = eachDefaultSystemMap (system: let
       pkgsBase = builtins.getAttr system pkgsFor;
       pkgs = pkgsBase.extend (final: prev: {
-        flox-pkgdb-tests = prev.flox-pkgdb-tests.override {
-          PROJECT_TESTS_DIR = "/pkgdb/tests";
-          PKGDB_BIN = null;
-          PKGDB_IS_SQLITE3_BIN = null;
-          PKGDB_SEARCH_PARAMS_BIN = null;
-        };
-        flox-env-builder-tests = prev.flox-env-builder-tests.override {
-          PROJECT_TESTS_DIR = "/env-builder/tests";
-          PKGDB_BIN = null;
-          ENV_BUILDER_BIN = null;
-        };
         flox-cli-tests = prev.flox-cli-tests.override {
           PROJECT_TESTS_DIR = "/cli/tests";
           PKGDB_BIN = null;
-          ENV_BUILDER_BIN = null;
           FLOX_BIN = null;
         };
-        flox-tests = prev.flox-tests.override {
-          ci = false;
-        };
-        flox-env-builder = prev.flox-env-builder.override {
-          flox-pkgdb = null;
-        };
-        flox-cli = prev.flox-cli.override {
-          flox-pkgdb = null;
-          flox-env-builder = null;
-        };
+        flox-tests = prev.flox-tests.override {ci = false;};
+        flox-cli = prev.flox-cli.override {flox-pkgdb = null;};
       });
       checksFor = builtins.getAttr system checks;
-    in {
+    in rec {
       default = pkgs.callPackage ./shells/default {
         inherit (checksFor) pre-commit-check;
       };
+      ci = default.override {ci = true;};
     });
   }; # End `outputs'
 

@@ -14,6 +14,7 @@ use super::core_environment::CoreEnvironment;
 use super::generations::{Generations, GenerationsError};
 use super::path_environment::PathEnvironment;
 use super::{
+    CanonicalPath,
     EditResult,
     Environment,
     EnvironmentError2,
@@ -28,30 +29,6 @@ use crate::models::floxmetav2::{floxmeta_git_options, FloxmetaV2, FloxmetaV2Erro
 use crate::providers::git::{GitCommandBranchHashError, GitCommandError, GitProvider};
 
 const GENERATION_LOCK_FILENAME: &str = "env.lock";
-
-/// A path that is guaranteed to be canonicalized
-///
-/// [`ManagedEnvironment`] uses this to refer to the path of its `.flox` directory.
-/// [`ManagedEnvironment::encode`] is used to uniquely identify the environment
-/// by encoding the canonicalized path.
-/// This encoding is used to create a unique branch name in the floxmeta repository.
-/// Thus, rather than canonicalizing the path every time we need to encode it,
-/// we store the path as a [`CanonicalPath`].
-#[derive(Debug, Clone, derive_more::Deref, derive_more::AsRef)]
-#[deref(forward)]
-#[as_ref(forward)]
-pub struct CanonicalPath(PathBuf);
-
-impl CanonicalPath {
-    pub fn new(path: impl AsRef<Path>) -> Result<Self, ManagedEnvironmentError> {
-        Ok(Self(std::fs::canonicalize(&path).map_err(|e| {
-            ManagedEnvironmentError::Canonicalize {
-                path: path.as_ref().to_path_buf(),
-                err: e,
-            }
-        })?))
-    }
-}
 
 #[derive(Debug)]
 pub struct ManagedEnvironment {
@@ -89,8 +66,6 @@ pub enum ManagedEnvironmentError {
     ReverseLink(std::io::Error),
     #[error("couldn't create links directory: {0}")]
     CreateLinksDir(std::io::Error),
-    #[error("couldn't canonicalize path '{path}': {err}")]
-    Canonicalize { path: PathBuf, err: std::io::Error },
     #[error("attempted to open the empty path ''")]
     EmptyPath,
     #[error("floxmeta branch name was malformed: {0}")]
@@ -101,6 +76,14 @@ pub enum ManagedEnvironmentError {
     Diverged,
     #[error("failed to push environment: {0}")]
     Push(GitCommandError),
+    #[error("failed to delete local environment branch")]
+    DeleteBranch(#[source] GitCommandError),
+    #[error("failed to delete environment directory {0:?}")]
+    DeleteEnvironment(PathBuf, #[source] std::io::Error),
+    #[error("failed to delete environment link {0:?}")]
+    DeleteEnvironmentLink(PathBuf, #[source] std::io::Error),
+    #[error("failed to delete environment reverse link {0:?}")]
+    DeleteEnvironmentReverseLink(PathBuf, #[source] std::io::Error),
 
     // todo: improve description
     #[error("could not create floxmeta directory")]
@@ -302,9 +285,35 @@ impl Environment for ManagedEnvironment {
     }
 
     /// Delete the Environment
-    #[allow(unused)]
-    fn delete(self) -> Result<(), EnvironmentError2> {
-        todo!()
+    fn delete(self, flox: &Flox) -> Result<(), EnvironmentError2> {
+        fs::remove_dir_all(&self.path)
+            .map_err(|e| ManagedEnvironmentError::DeleteEnvironment(self.path.to_path_buf(), e))?;
+
+        self.floxmeta
+            .git
+            .delete_branch(&branch_name(&self.system, &self.pointer, &self.path), true)
+            .map_err(ManagedEnvironmentError::DeleteBranch)?;
+
+        let out_link_path = self.out_link(flox);
+        if out_link_path.exists() {
+            std::fs::remove_file(&out_link_path)
+                .map_err(|e| ManagedEnvironmentError::DeleteEnvironmentLink(out_link_path, e))?;
+        }
+
+        let reverse_link = {
+            let links_dir = reverse_links_dir(flox);
+            let encoded = ManagedEnvironment::encode(&self.path);
+
+            links_dir.join(encoded)
+        };
+        // if symlink exists, delete it
+        if fs::symlink_metadata(&reverse_link).is_ok() {
+            std::fs::remove_file(&reverse_link).map_err(|e| {
+                ManagedEnvironmentError::DeleteEnvironmentReverseLink(reverse_link, e)
+            })?;
+        }
+
+        Ok(())
     }
 }
 

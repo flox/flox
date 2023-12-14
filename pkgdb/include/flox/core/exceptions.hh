@@ -76,7 +76,9 @@ enum error_category {
   /** Resolution failure. */
   EC_RESOLUTION_FAILURE,
   /** EnvirontMixin exception/misuse. */
-  EC_ENVIRONMENT_MIXIN
+  EC_ENVIRONMENT_MIXIN,
+  /** EnvirontMixin exception/misuse. */
+  EC_BUILDENV_CONFLICT
 
 }; /* End enum `error_category' */
 

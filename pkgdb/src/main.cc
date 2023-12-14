@@ -20,6 +20,7 @@
 #include <nix/util.hh>
 #include <nlohmann/json.hpp>
 
+#include "flox/buildenv/command.hh"
 #include "flox/core/command.hh"
 #include "flox/core/exceptions.hh"
 #include "flox/eval.hh"
@@ -67,9 +68,11 @@ run( int argc, char * argv[] )
   flox::EvalCommand cmdEval;
   prog.add_subparser( cmdEval.getParser() );
 
+  flox::buildenv::BuildEnvCommand cmdBuildEnv;
+  prog.add_subparser( cmdBuildEnv.getParser() );
+
 
   /* Parse Args */
-
   try
     {
       prog.parse_args( argc, argv );
@@ -80,7 +83,6 @@ run( int argc, char * argv[] )
     }
 
   /* Run subcommand */
-
   if ( prog.is_subcommand_used( "scrape" ) ) { return cmdScrape.run(); }
   if ( prog.is_subcommand_used( "get" ) ) { return cmdGet.run(); }
   if ( prog.is_subcommand_used( "list" ) ) { return cmdList.run(); }
@@ -90,6 +92,7 @@ run( int argc, char * argv[] )
   if ( prog.is_subcommand_used( "parse" ) ) { return cmdParse.run(); }
   if ( prog.is_subcommand_used( "repl" ) ) { return cmdRepl.run(); }
   if ( prog.is_subcommand_used( "eval" ) ) { return cmdEval.run(); }
+  if ( prog.is_subcommand_used( "buildenv" ) ) { return cmdBuildEnv.run(); }
 
   // TODO: better error for this,
   // likely only occurs if we add a new command without handling it (?)

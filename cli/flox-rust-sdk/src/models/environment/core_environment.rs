@@ -10,7 +10,7 @@ use thiserror::Error;
 
 use super::{copy_dir_recursive, InstallationAttempt, LOCKFILE_FILENAME, MANIFEST_FILENAME};
 use crate::flox::Flox;
-use crate::models::environment::{call_pkgdb, global_manifest_path, ENV_BUILDER_BIN};
+use crate::models::environment::{call_pkgdb, global_manifest_path};
 use crate::models::manifest::{insert_packages, remove_packages, Manifest, TomlEditError};
 use crate::models::pkgdb::{CallPkgDbError, UpdateResult, PKGDB_BIN};
 
@@ -109,7 +109,7 @@ impl<State> CoreEnvironment<State> {
             self.lockfile_path().display()
         );
 
-        let store_path = lockfile.build(Path::new(&*ENV_BUILDER_BIN), None)?;
+        let store_path = lockfile.build(Path::new(&*PKGDB_BIN), None)?;
 
         debug!(
             "built locked environment, store path={}",
@@ -135,7 +135,7 @@ impl<State> CoreEnvironment<State> {
             self.lockfile_path().display(),
             out_link_path.as_ref().display()
         );
-        lockfile.build(Path::new(&*ENV_BUILDER_BIN), Some(out_link_path.as_ref()))?;
+        lockfile.build(Path::new(&*PKGDB_BIN), Some(out_link_path.as_ref()))?;
 
         Ok(())
     }
@@ -449,29 +449,28 @@ impl LockedManifest {
     /// the environment will be linked to that path and a gcroot will be created
     pub fn build(
         &self,
-        builder: &Path,
+        pkgdb: &Path,
         gcroot_out_link_path: Option<&Path>,
     ) -> Result<PathBuf, CoreEnvironmentError> {
-        let mut env_builder_cmd = Command::new(builder);
-        env_builder_cmd.arg("build-env");
-        env_builder_cmd.args(["--lockfile", &self.0.to_string()]);
+        let mut pkgdb_cmd = Command::new(pkgdb);
+        pkgdb_cmd.arg("buildenv").arg(&self.0.to_string());
 
         if let Some(gcroot_out_link_path) = gcroot_out_link_path {
-            env_builder_cmd.args(["--out-link", &gcroot_out_link_path.to_string_lossy()]);
+            pkgdb_cmd.args(["--out-link", &gcroot_out_link_path.to_string_lossy()]);
         }
 
-        debug!("building environment with command: {env_builder_cmd:?}");
+        debug!("building environment with command: {pkgdb_cmd:?}");
 
-        let env_builder_output = env_builder_cmd
+        let pkgdb_output = pkgdb_cmd
             .output()
             .map_err(CoreEnvironmentError::BuildEnvCall)?;
 
-        if !env_builder_output.status.success() {
-            let stderr = String::from_utf8_lossy(&env_builder_output.stderr).into_owned();
+        if !pkgdb_output.status.success() {
+            let stderr = String::from_utf8_lossy(&pkgdb_output.stderr).into_owned();
             return Err(CoreEnvironmentError::BuildEnv(stderr));
         }
 
-        let stdout = String::from_utf8_lossy(&env_builder_output.stdout).into_owned();
+        let stdout = String::from_utf8_lossy(&pkgdb_output.stdout).into_owned();
 
         Ok(PathBuf::from(stdout.trim()))
     }
@@ -579,9 +578,7 @@ pub enum CoreEnvironmentError {
     #[error("failed to update environment")]
     UpdateFailed(#[source] CallPkgDbError),
     // endregion
-
-    // might be merged with pkgdb soon
-    #[error("call to env-builder failed")]
+    #[error("call to `pkgdb buildenv` failed")]
     BuildEnvCall(#[source] std::io::Error),
 
     #[error("error building environment: {0}")]

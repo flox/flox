@@ -28,7 +28,6 @@
   pkgsFor,
   pre-commit-check,
   flox-pkgdb,
-  flox-env-builder,
 }: let
   flox-src = builtins.path {
     name = "flox-src";
@@ -64,10 +63,6 @@
         if flox-pkgdb == null
         then "pkgdb"
         else "${flox-pkgdb}/bin/pkgdb";
-      ENV_BUILDER_BIN =
-        if flox-env-builder == null
-        then "env-builder"
-        else "${flox-env-builder}/bin/env-builder";
       PARSER_UTIL_BIN = "${parser-util}/bin/parser-util";
       FLOX_ETC_DIR = ../../assets/etc;
       FLOX_ZDOTDIR = ../../assets/flox.zdotdir;
@@ -232,7 +227,6 @@ in
           pkgsFor
           nix
           flox-pkgdb
-          flox-env-builder
           ;
 
         ciPackages = [

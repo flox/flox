@@ -18,12 +18,25 @@
   sqlite3pp,
   toml11,
   yaml-cpp,
+  # For testing
+  bash,
+  yj,
+  jq,
+  gnugrep,
+  bats,
+  git,
+  coreutils,
   llvm, # for `llvm-symbolizer'
   gdb ? throw "`gdb' is required for debugging with `g++'",
   lldb ? throw "`lldb' is required for debugging with `clang++'",
   valgrind ? throw "`valgrind' is required for memory sanitization on Linux",
   ci ? false,
 }: let
+  batsWith = bats.withLibraries (p: [
+    p.bats-assert
+    p.bats-file
+    p.bats-support
+  ]);
   envs = {
     nix_INCDIR = nix.dev.outPath + "/include";
     boost_CFLAGS = "-isystem " + boost.dev.outPath + "/include";
@@ -42,26 +55,20 @@ in
         filter = name: type: let
           bname = baseNameOf name;
           ignores = [
-            "default.nix"
-            "pkg-fun.nix"
-            "flake.nix"
-            "flake.lock"
             ".ccls"
             ".ccls-cache"
             "compile_commands.json"
             ".git"
             ".gitignore"
-            "out"
             "bin"
+            "build"
             "pkgs"
             "bear.d"
             ".direnv"
             ".clang-tidy"
             ".clang-format"
             ".envrc"
-            ".github"
             "LICENSE"
-            "tests"
           ];
           ext = let
             m = builtins.match ".*\\.([^.]+)" name;
@@ -78,9 +85,9 @@ in
           notIgnored && notResult;
       };
 
-      propagatedBuildInputs = [semver nix];
+      propagatedBuildInputs = [semver];
 
-      nativeBuildInputs = [pkg-config];
+      nativeBuildInputs = [pkg-config coreutils gnugrep];
 
       buildInputs = [
         sqlite.dev
@@ -106,27 +113,6 @@ in
       doCheck = false;
       doInstallCheck = false;
 
-      outputs = ["out" "dev" "test"];
-
-      postInstall = ''
-        mkdir -p "$test/bin" "$test/lib"
-
-        cp ${../../pkgdb/tests/is_sqlite3.cc} ./tests/is_sqlite3.cc
-        cp ${../../pkgdb/tests/search-params.cc} ./tests/search-params.cc
-        make tests/is_sqlite3
-        make tests/search-params
-
-        for i in tests/*; do
-          if (! [[ -d "$i" ]]) && [[ -x "$i" ]]; then
-            cp "$i" "$test/bin/"
-          fi
-        done
-
-        for i in "$out/lib/"*; do
-          ln -s "$i" "$test/lib/"
-        done
-      '';
-
       meta.mainProgram = "pkgdb";
 
       passthru = {
@@ -137,6 +123,13 @@ in
           ;
 
         ciPackages = [
+          # For tests
+          batsWith
+          yj
+          jq
+          bash
+          git
+          sqlite
           # For docs
           doxygen
         ];

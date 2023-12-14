@@ -41,10 +41,6 @@ pub const DEFAULT_KEEP_GENERATIONS: usize = 10;
 // don't forget to update the man page
 pub const DEFAULT_MAX_AGE_DAYS: u32 = 90;
 
-// Path to the executable that builds environments
-pub static ENV_BUILDER_BIN: Lazy<String> =
-    Lazy::new(|| env::var("ENV_BUILDER_BIN").unwrap_or(env!("ENV_BUILDER_BIN").to_string()));
-
 pub const DOT_FLOX: &str = ".flox";
 pub const ENVIRONMENT_POINTER_FILENAME: &str = "env.json";
 pub const GLOBAL_MANIFEST_TEMPLATE: &str = env!("GLOBAL_MANIFEST_TEMPLATE");
@@ -57,6 +53,41 @@ pub const ENV_DIR_NAME: &str = "env";
 pub const FLOX_ENV_VAR: &str = "FLOX_ENV";
 pub const FLOX_ACTIVE_ENVIRONMENTS_VAR: &str = "FLOX_ACTIVE_ENVIRONMENTS";
 pub const FLOX_PROMPT_ENVIRONMENTS_VAR: &str = "FLOX_PROMPT_ENVIRONMENTS";
+
+/// A path that is guaranteed to be canonicalized
+///
+/// [`ManagedEnvironment`] uses this to refer to the path of its `.flox` directory.
+/// [`ManagedEnvironment::encode`] is used to uniquely identify the environment
+/// by encoding the canonicalized path.
+/// This encoding is used to create a unique branch name in the floxmeta repository.
+/// Thus, rather than canonicalizing the path every time we need to encode it,
+/// we store the path as a [`CanonicalPath`].
+#[derive(Debug, Clone, derive_more::Deref, derive_more::AsRef)]
+#[deref(forward)]
+#[as_ref(forward)]
+pub struct CanonicalPath(PathBuf);
+
+#[derive(Debug, Error)]
+#[error("couldn't canonicalize path {path:?}: {err}")]
+pub struct CanonicalizeError {
+    path: PathBuf,
+    #[source]
+    err: std::io::Error,
+}
+
+impl CanonicalPath {
+    pub fn new(path: impl AsRef<Path>) -> Result<Self, CanonicalizeError> {
+        let canonicalized = std::fs::canonicalize(&path).map_err(|e| CanonicalizeError {
+            path: path.as_ref().to_path_buf(),
+            err: e,
+        })?;
+        Ok(Self(canonicalized))
+    }
+
+    pub fn into_path_buf(self) -> PathBuf {
+        self.0
+    }
+}
 
 pub enum InstalledPackage {
     Catalog(FloxTriple, CatalogEntry),
@@ -150,7 +181,7 @@ pub trait Environment {
     fn name(&self) -> EnvironmentName;
 
     /// Delete the Environment
-    fn delete(self) -> Result<(), EnvironmentError2>
+    fn delete(self, flox: &Flox) -> Result<(), EnvironmentError2>
     where
         Self: Sized;
 
@@ -283,6 +314,13 @@ pub enum EnvironmentError2 {
 
     #[error("could not locate the manifest for this environment")]
     ManifestNotFound,
+
+    #[error(transparent)]
+    Canonicalize(#[from] CanonicalizeError),
+
+    #[error("environment directory cannot be {0:?}")]
+    InvalidEnvironmentDirectory(PathBuf),
+
     // endregion
 
     // todo: candidate for impl specific error

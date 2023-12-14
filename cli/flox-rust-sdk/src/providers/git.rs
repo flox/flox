@@ -481,6 +481,22 @@ impl GitCommandProvider {
         Ok(())
     }
 
+    /// Deletes the specified branch
+    pub fn delete_branch(&self, branch: &str, force: bool) -> Result<(), GitCommandError> {
+        let mut command = {
+            let mut command = self.new_command();
+            command.arg("branch");
+            command.arg("--delete");
+            if force {
+                command.arg("--force");
+            }
+            command.arg(branch);
+            command
+        };
+        GitCommandProvider::run_command(&mut command)?;
+        Ok(())
+    }
+
     /// Update the options used by this provider.
     ///
     /// It is preferable to set the options when creating the provider
