@@ -57,7 +57,7 @@ teardown() {
   "$FLOX_BIN" init;
   run "$FLOX_BIN" install hello;
   assert_success;
-  run grep "hello = {}" "$PROJECT_DIR/.flox/env/manifest.toml";
+  run grep 'hello.path = "hello"' "$PROJECT_DIR/.flox/env/manifest.toml";
   assert_success;
 }
 
@@ -78,7 +78,7 @@ teardown() {
   run "$FLOX_BIN" install hello;
   assert_success;
   run "$FLOX_BIN" uninstall hello;
-  run grep "^hello = {}" "$PROJECT_DIR/.flox/env/manifest.toml";
+  run grep '^hello.path = "hello"' "$PROJECT_DIR/.flox/env/manifest.toml";
   assert_failure;
 }
 
