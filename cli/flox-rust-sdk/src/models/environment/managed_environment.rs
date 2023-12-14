@@ -14,6 +14,7 @@ use super::core_environment::CoreEnvironment;
 use super::generations::{Generations, GenerationsError};
 use super::path_environment::PathEnvironment;
 use super::{
+    gcroots_dir,
     CanonicalPath,
     CanonicalizeError,
     CoreEnvironmentError,
@@ -23,7 +24,6 @@ use super::{
     InstallationAttempt,
     ManagedPointer,
     ENVIRONMENT_POINTER_FILENAME,
-    GCROOTS_DIR_NAME,
 };
 use crate::flox::Flox;
 use crate::models::environment_ref::{EnvironmentName, EnvironmentOwner};
@@ -37,6 +37,7 @@ pub struct ManagedEnvironment {
     /// Absolute path to the directory containing `env.json`
     // TODO might be better to keep this private
     pub path: CanonicalPath,
+    out_link: PathBuf,
     pointer: ManagedPointer,
     system: String,
     floxmeta: FloxmetaV2,
@@ -142,7 +143,7 @@ impl Environment for ManagedEnvironment {
             .map_err(ManagedEnvironmentError::CreateGenerationFiles)?;
 
         temporary.build(flox)?;
-        temporary.link(flox, self.out_link(flox))?;
+        temporary.link(flox, &self.out_link)?;
 
         Ok(())
     }
@@ -169,7 +170,7 @@ impl Environment for ManagedEnvironment {
             .add_generation(&mut temporary, metadata)
             .map_err(ManagedEnvironmentError::CommitGeneration)?;
         self.lock_pointer()?;
-        temporary.link(flox, &self.out_link(flox))?;
+        temporary.link(flox, &self.out_link)?;
 
         Ok(result)
     }
@@ -196,7 +197,7 @@ impl Environment for ManagedEnvironment {
             .add_generation(&mut temporary, metadata)
             .map_err(ManagedEnvironmentError::CommitGeneration)?;
         self.lock_pointer()?;
-        temporary.link(flox, &self.out_link(flox))?;
+        temporary.link(flox, &self.out_link)?;
 
         Ok(result)
     }
@@ -222,7 +223,7 @@ impl Environment for ManagedEnvironment {
                 .add_generation(&mut temporary, "manually edited".to_string())
                 .map_err(ManagedEnvironmentError::CommitGeneration)?;
             self.lock_pointer()?;
-            temporary.link(flox, &self.out_link(flox))?;
+            temporary.link(flox, &self.out_link)?;
         }
 
         Ok(result)
@@ -247,7 +248,7 @@ impl Environment for ManagedEnvironment {
             .add_generation(&mut temporary, metadata)
             .map_err(ManagedEnvironmentError::CommitGeneration)?;
         self.lock_pointer()?;
-        temporary.link(flox, &self.out_link(flox))?;
+        temporary.link(flox, &self.out_link)?;
 
         Ok(message)
     }
@@ -272,7 +273,7 @@ impl Environment for ManagedEnvironment {
 
     async fn activation_path(&mut self, flox: &Flox) -> Result<PathBuf, EnvironmentError2> {
         self.build(flox).await?;
-        Ok(self.out_link(flox))
+        Ok(self.out_link.to_path_buf())
     }
 
     fn parent_path(&self) -> Result<PathBuf, EnvironmentError2> {
@@ -314,7 +315,7 @@ impl Environment for ManagedEnvironment {
             .delete_branch(&branch_name(&self.system, &self.pointer, &self.path), true)
             .map_err(ManagedEnvironmentError::DeleteBranch)?;
 
-        let out_link_path = self.out_link(flox);
+        let out_link_path = self.out_link;
         if out_link_path.exists() {
             std::fs::remove_file(&out_link_path)
                 .map_err(|e| ManagedEnvironmentError::DeleteEnvironmentLink(out_link_path, e))?;
@@ -429,7 +430,17 @@ impl ManagedEnvironment {
             },
             Err(e) => Err(ManagedEnvironmentError::OpenFloxmeta(e))?,
         };
-        Self::open_with(floxmeta, flox, pointer, dot_flox_path)
+
+        let dot_flox_path =
+            CanonicalPath::new(dot_flox_path).map_err(ManagedEnvironmentError::CanonicalizePath)?;
+
+        let out_link = gcroots_dir(flox, &pointer.owner).join(branch_name(
+            &flox.system,
+            &pointer,
+            &dot_flox_path,
+        ));
+
+        Self::open_with(floxmeta, flox, pointer, dot_flox_path, out_link)
     }
 
     /// Open a managed environment backed by a provided floxmeta clone.
@@ -438,15 +449,13 @@ impl ManagedEnvironment {
     ///
     /// This method is primarily useful for testing.
     /// In most cases, you want to use [`ManagedEnvironment::open`] instead which provides the flox defaults.
-    fn open_with(
+    pub fn open_with(
         floxmeta: FloxmetaV2,
         flox: &Flox,
         pointer: ManagedPointer,
-        dot_flox_path: impl AsRef<Path>,
+        dot_flox_path: CanonicalPath,
+        out_link: PathBuf,
     ) -> Result<Self, ManagedEnvironmentError> {
-        let dot_flox_path =
-            CanonicalPath::new(dot_flox_path).map_err(ManagedEnvironmentError::CanonicalizePath)?;
-
         let lock = Self::ensure_locked(flox, &pointer, &dot_flox_path, &floxmeta)?;
 
         Self::ensure_branch(
@@ -459,6 +468,7 @@ impl ManagedEnvironment {
 
         Ok(ManagedEnvironment {
             path: dot_flox_path,
+            out_link,
             pointer,
             system: flox.system.clone(),
             floxmeta,
@@ -619,20 +629,10 @@ impl ManagedEnvironment {
         Ok(())
     }
 
-    /// Where to link a built environment to.
-    ///
-    /// The parent directory may not exist!
-    fn out_link(&self, flox: &Flox) -> PathBuf {
-        gcroots_dir(flox, &self.pointer.owner).join(branch_name(
-            &self.system,
-            &self.pointer,
-            &self.path,
-        ))
-    }
-
     /// Returns the environment owner
-    pub fn owner(&self) -> EnvironmentOwner {
-        self.pointer.owner.clone()
+    /// The path may not exist.
+    pub fn owner(&self) -> &EnvironmentOwner {
+        &self.pointer.owner
     }
 
     fn generations(&self) -> Generations {
@@ -768,11 +768,6 @@ pub fn remote_branch_name(system: &str, pointer: &ManagedPointer) -> String {
 ///           [branch_name]
 fn reverse_links_dir(flox: &Flox) -> PathBuf {
     flox.data_dir.join("links")
-}
-
-/// Directory containing nix gc roots for (previous) builds of environments of a given owner
-fn gcroots_dir(flox: &Flox, owner: &EnvironmentOwner) -> PathBuf {
-    flox.cache_dir.join(GCROOTS_DIR_NAME).join(owner.as_str())
 }
 
 impl ManagedEnvironment {
