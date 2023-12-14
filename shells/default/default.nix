@@ -22,6 +22,7 @@
     ++ [
       flox-cli-tests
       flox-tests
+      just
     ];
 
   devPackages =
@@ -31,7 +32,6 @@
       alejandra
       commitizen
       hivemind
-      just
     ];
 in
   mkShell (

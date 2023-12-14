@@ -88,7 +88,7 @@ clean-cli:
     @pushd cli; cargo clean; popd
 
 clean-tests:
-    @pytest --cache-clear;
+    rm $(PWD)/tests/.pytest_cache -rf;
 
 clean-all: clean-pkgdb clean-cli clean-tests
 
