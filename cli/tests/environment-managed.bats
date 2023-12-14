@@ -15,24 +15,11 @@ load test_support.bash
 project_setup() {
   export PROJECT_NAME="test";
   export PROJECT_DIR="${BATS_TEST_TMPDIR?}/$PROJECT_NAME"
+  export OWNER="owner"
 
   rm -rf "$PROJECT_DIR"
   mkdir -p "$PROJECT_DIR"
   pushd "$PROJECT_DIR" >/dev/null || return
-
-}
-
-floxhub_setup() {
-  export FLOX_FLOXHUB_TOKEN=flox_testOAuthToken
-  export FLOX_FLOXHUB_PATH="$BATS_TEST_TMPDIR/floxhub"
-  export OWNER="owner"
-  export FLOXHUB_FLOXMETA_DIR="$FLOX_FLOXHUB_PATH/$OWNER/floxmeta"
-
-  mkdir -p "$FLOX_FLOXHUB_PATH"
-  mkdir -p "$FLOXHUB_FLOXMETA_DIR"
-  git -C "$FLOXHUB_FLOXMETA_DIR" init --bare
-
-  export __FLOX_FLOXHUB_URL="file://$FLOX_FLOXHUB_PATH"
 
 }
 
@@ -50,8 +37,8 @@ project_teardown() {
 setup() {
   common_test_setup
   project_setup
-  floxhub_setup
-  home_setup test;
+  home_setup test
+  floxhub_setup "$OWNER"
 }
 
 teardown() {
@@ -84,7 +71,7 @@ dot_flox_exists() {
 
   run --separate-stderr "$FLOX_BIN" list
   assert_success
-  assert_output  ""
+  assert_output ""
 
   run "$FLOX_BIN" install hello
   assert_success
@@ -94,7 +81,6 @@ dot_flox_exists() {
   assert_success
   assert_output "hello"
 }
-
 
 # bats test_tags=uninstall,managed
 @test "m2: uninstall a package from a managed environment" {
@@ -115,7 +101,7 @@ dot_flox_exists() {
 
   TMP_MANIFEST_PATH="$BATS_TEST_TMPDIR/manifest.toml"
 
-  cat << "EOF" >> "$TMP_MANIFEST_PATH"
+  cat <<"EOF" >>"$TMP_MANIFEST_PATH"
 [install]
 hello = {}
 EOF
@@ -130,8 +116,6 @@ EOF
 # bats test_tags=managed,pull,managed:pull
 @test "m4: pushed environment can be pulled" {
 
-
-
   mkdir a a_data;
   mkdir b b_data;
 
@@ -142,7 +126,6 @@ EOF
   "$FLOX_BIN" install hello
   "$FLOX_BIN" push --owner "$OWNER"
   popd >/dev/null || return
-
 
   # on another b machine, pull the environment
   export FLOX_DATA_DIR="$(pwd)/b_data"
@@ -155,8 +138,6 @@ EOF
   popd >/dev/null || return
 }
 
-
-
 # bats test_tags=managed,update,managed:update
 @test "m5: updated environment can be pulled" {
   mkdir a a_data;
@@ -168,7 +149,6 @@ EOF
   "$FLOX_BIN" init
   "$FLOX_BIN" push --owner "$OWNER"
   popd >/dev/null || return
-
 
   # on another b machine,
   #  - pull the environment
@@ -195,7 +175,6 @@ EOF
   popd >/dev/null || return
 }
 
-
 # bats test_tags=managed,diverged,managed:diverged
 @test "m7: remote can not be pulled into diverged environment" {
   mkdir a a_data;
@@ -207,7 +186,6 @@ EOF
   "$FLOX_BIN" init
   "$FLOX_BIN" push --owner "$OWNER"
   popd >/dev/null || return
-
 
   # on another b machine,
   #  - pull the environment
@@ -243,6 +221,22 @@ EOF
 
   run "$FLOX_BIN" search hello;
   assert_success;
+}
+
+# ---------------------------------------------------------------------------- #
+
+# Make sure we haven't activate
+# bats test_tags=managed,activate,managed:activate
+@test "m9: activate works in managed environment" {
+  make_empty_remote_env
+  "$FLOX_BIN" install hello
+
+  # TODO: flox will set HOME if it doesn't match the home of the user with
+  # current euid. I'm not sure if we should change that, but for now just set
+  # USER to REAL_USER.
+  SHELL=bash USER="$REAL_USER" run -0 expect -d "$TESTS_DIR/activate/hello.exp" "$PROJECT_DIR";
+  assert_output --regexp "$FLOX_CACHE_HOME/run/owner/.+\..+\..+/bin/hello"
+  refute_output "not found"
 }
 
 # ---------------------------------------------------------------------------- #
