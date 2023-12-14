@@ -21,6 +21,7 @@
     ++ flox-cli.ciPackages
     ++ [
       flox-cli-tests
+      flox-tests
     ];
 
   devPackages =
@@ -31,7 +32,6 @@
       commitizen
       hivemind
       just
-      flox-tests
     ];
 in
   mkShell (
