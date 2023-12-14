@@ -12,6 +12,7 @@
     with ps; [
       pytest
       pytest-emoji
+      pytest-xdist
       pexpect
       ipdb
     ]);
@@ -27,9 +28,9 @@
 
     exec -a "$0" ${pyenv}/bin/pytest ${../../tests} \
       -p no:cacheprovider \
-      --capture=no \
+      --durations=0 \
       --emoji \
-      --verbose \
+      -vv \
       "$@"
   '';
 in

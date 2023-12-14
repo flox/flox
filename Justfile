@@ -42,7 +42,10 @@ test-pkgdb: build-pkgdb
 # Run the end-to-end test suite
 functional-tests +pytest_args="": build
     @pytest \
+      --emoji \
+      --durations=0 \
       --capture=no \
+      -v \
       {{pytest_args}};
 
 # Run the integration test suite

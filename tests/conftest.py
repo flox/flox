@@ -65,7 +65,7 @@ def run():
 
 
 @pytest.fixture
-def spawn(home_path, flox_env):
+def spawn(request, home_path, flox_env):
     """Spawn a command"""
 
     @contextlib.contextmanager
@@ -135,9 +135,11 @@ def spawn(home_path, flox_env):
 
             # helper methods
             shell.expect = new_expect
-            shell.logfile = sys.stdout
             shell.send_command = send_command
             shell.expect_prompt = expect_prompt
+
+            if request.config.getoption('verbose') >= 2:
+                shell.logfile = sys.stdout
 
             # wait for the prompt
             shell.expect_prompt()
@@ -209,3 +211,4 @@ def flox_env(
         run_path = project_path / f".flox/run/{nix_system}.{project_name}",
         nixpkgs_rev = nixpkgs_rev,
     )
+
