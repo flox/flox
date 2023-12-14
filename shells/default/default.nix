@@ -21,7 +21,6 @@
     ++ flox-cli.ciPackages
     ++ [
       flox-cli-tests
-      (flox-tests.override {inherit ci;})
     ];
 
   devPackages =

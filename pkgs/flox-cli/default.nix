@@ -230,14 +230,14 @@ in
           ;
 
         ciPackages = [
-        ];
-
-        devPackages = [
           rustfmt
           clippy
           rust-analyzer
           rust.packages.stable.rustPlatform.rustLibSrc
           rustc
+        ];
+
+        devPackages = [
         ];
 
         devEnvs =
