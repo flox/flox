@@ -26,6 +26,14 @@ _default:
 
 # ---------------------------------------------------------------------------- #
 
+# Print the paths of all of the binaries
+bins:
+    @echo "{{PKGDB_BIN}}"
+    @echo "{{ENV_BUILDER_BIN}}"
+    @echo "{{FLOX_BIN}}"
+
+# ---------------------------------------------------------------------------- #
+
 build-pkgdb:
     @make -C pkgdb -j;
 
@@ -44,18 +52,18 @@ test-pkgdb: build-pkgdb
 
 # Run the end-to-end test suite
 functional-tests +bats_args="": build
-    @flox-tests --pkgdb "${PKGDB_BIN}" --flox "${FLOX_BIN}" \
-        --env-builder "${ENV_BUILDER_BIN}" {{bats_args}}
+    @flox-tests --pkgdb "{{PKGDB_BIN}}" --flox "{{FLOX_BIN}}" \
+        --env-builder "{{ENV_BUILDER_BIN}}" {{bats_args}}
 
 # Run the CLI integration test suite
 integ-tests +bats_args="": build
-    @flox-cli-tests --pkgdb "${PKGDB_BIN}" --flox "${FLOX_BIN}" \
-        --env-builder "${ENV_BUILDER_BIN}" {{bats_args}}
+    @flox-cli-tests --pkgdb "{{PKGDB_BIN}}" --flox "{{FLOX_BIN}}" \
+        --env-builder "{{ENV_BUILDER_BIN}}" {{bats_args}}
 
 # Run a specific 'flox' integration test file by name (not path)
 integ-file file: build
-    @flox-cli-tests --tests "{{file}}" --pkgdb "${PKGDB_BIN}" \
-        --flox "${FLOX_BIN}" --env-builder "${ENV_BUILDER_BIN}"
+    @flox-cli-tests --tests "{{file}}" --pkgdb "{{PKGDB_BIN}}" \
+        --flox "{{FLOX_BIN}}" --env-builder "{{ENV_BUILDER_BIN}}"
 
 # Run the Rust unit tests
 unit-tests regex="": build
@@ -118,7 +126,8 @@ config-vscode:
     @echo $(jq '.configurations.cppStandard = "c++20"' {{vscode_cpp_config}}) \
         > {{vscode_cpp_config}};
     @echo $(jq \
-        '.configurations.compileCommands = "${workspaceFolder}/pkgdb/compile_commands.json"' \
+        '.configurations.compileCommands = \
+        "${workspaceFolder}/pkgdb/compile_commands.json"' \
         {{vscode_cpp_config}}) > {{vscode_cpp_config}}
 
 
