@@ -200,30 +200,6 @@ jobs:
                 'github:flox/flox/${{ github.sha }}#packages.${{ matrix.system }}.flox'
           fi
 
-  trigger-flox-installers-workflow:
-    name: "Build installers"
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    runs-on: "ubuntu-22.04-8core"
-
-    needs:
-      - "nix-build"
-
-    steps:
-      - name: "Trigger flox-installers workflow"
-        uses: "convictional/trigger-workflow-and-wait@v1.6.5"
-        with:
-          owner:              "flox"
-          repo:               "nix-installers"
-          github_token:       "${{ secrets.NIX_GIT_TOKEN }}"
-          github_user:        "floxbot"
-          workflow_file_name: "ci.yml"
-          ref:                "master"
-          wait_interval:      10
-          client_payload:     '{"TARGET":"git+ssh://git@github.com/flox/flox?ref=main&rev=${{ github.event.pull_request.head.sha || github.sha }}"}'
-          propagate_failure:  false
-          trigger_workflow:   true
-          wait_workflow:      true
-
   nix-build-cli-tests:
     name: "Flox Functional CLI Tests"
     runs-on: "ubuntu-latest"
@@ -317,13 +293,6 @@ jobs:
           - "aarch64-darwin"
 
     steps:
-      - name: "Cache PyTest Cache"
-        uses: "actions/cache@v3"
-        with:
-          path: |
-            .pytest-cache/
-          key: "pytest-${{ matrix.system }}"
-
       - name: "Setup Tailscale"
         uses: "tailscale/github-action@v2"
         with:
@@ -381,7 +350,7 @@ jobs:
             nix run \
                 --accept-flake-config \
                 --extra-experimental-features '"nix-command flakes"' \
-                'github:flox/flox/${{ github.sha }}#packages.${{ matrix.system }}.flox-tests' -- --rootdir "$PWD"
+                'github:flox/flox/${{ github.sha }}#packages.${{ matrix.system }}.flox-tests'
 
   report-failure:
     name: "Report Failure"
@@ -408,3 +377,28 @@ jobs:
           SLACK_ICON_EMOJI: ":poop:"
           SLACK_COLOR:      "#ff2800"  # ferrari red -> https://encycolorpedia.com/ff2800
           SLACK_LINK_NAMES: true
+
+  trigger-flox-installers-workflow:
+    name: "Build installers"
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: "ubuntu-22.04-8core"
+
+    needs:
+      - "nix-build"
+
+    steps:
+      - name: "Trigger flox-installers workflow"
+        uses: "convictional/trigger-workflow-and-wait@v1.6.5"
+        with:
+          owner:              "flox"
+          repo:               "nix-installers"
+          github_token:       "${{ secrets.NIX_GIT_TOKEN }}"
+          github_user:        "floxbot"
+          workflow_file_name: "ci.yml"
+          ref:                "master"
+          wait_interval:      10
+          client_payload:     '{"TARGET":"git+ssh://git@github.com/flox/flox?ref=main&rev=${{ github.event.pull_request.head.sha || github.sha }}"}'
+          propagate_failure:  false
+          trigger_workflow:   true
+          wait_workflow:      true
+

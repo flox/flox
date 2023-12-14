@@ -27,6 +27,7 @@
     export PYTHONDONTWRITEBYTECODE=1
 
     exec -a "$0" ${pyenv}/bin/pytest ${../../tests} \
+      -p no:cacheprovider \
       --durations=0 \
       --emoji \
       -vv \
