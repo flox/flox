@@ -440,7 +440,7 @@ clean-pch: FORCE
 
 .PHONY: ccls
 #: Create `.ccls' file used by CCLS LSP
-ccls: ../ccls
+ccls: ../.ccls
 
 ../.ccls: $(lastword $(MAKEFILE_LIST)) $(DEPFILES)
 	@echo '%compile_commands.json' > "$@";
