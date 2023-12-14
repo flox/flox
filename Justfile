@@ -32,6 +32,8 @@ build-cli: build-pkgdb
 # Build the binaries
 build: build-cli
 
+build-all: build
+
 
 # ---------------------------------------------------------------------------- #
 
@@ -74,6 +76,21 @@ test-cli: build unit-tests functional-tests integ-tests
 
 # Run the entire test suite, including impure tests
 test-all: test-pkgdb impure-tests functional-tests integ-tests
+
+
+
+# Keept things Clean
+
+clean-pkgdb:
+    @make -C pkgdb clean;
+
+clean-cli:
+    @pushd cli; cargo clean; popd
+
+clean-tests:
+    @pytest --cache-clear;
+
+clean-all: clean-pkgdb clean-cli clean-tests
 
 
 # ---------------------------------------------------------------------------- #

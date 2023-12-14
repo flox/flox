@@ -53,33 +53,26 @@ jobs:
           sudo echo 
           {
             echo "experimental-features = nix-command flakes";
+            echo "accept-flake-config = true";
           } | sudo tee -a /etc/nix/nix.conf >/dev/null
 
-      - name: "Build"
+      - name: "Build (pkgdb)"
         run: |
           nix develop -L                    \
-            --accept-flake-config           \
             --no-update-lock-file           \
             '.#ci'                          \
-            --command make -C pkgdb -j;
+            --command just build-pkgdb
 
       - name: "Test (pkgdb)"
         run: |
           nix develop -L                    \
-            --accept-flake-config           \
             --no-update-lock-file           \
             '.#ci'                          \
-            --command make -C pkgdb tests;
-          nix develop -L                    \
-            --accept-flake-config           \
-            --no-update-lock-file           \
-            '.#ci'                          \
-            --command make -C pkgdb check;
+            --command just test-pkgdb;
 
       - name: "Build Docs"
         run: |
           nix develop -L                    \
-            --accept-flake-config           \
             --no-update-lock-file           \
             '.#ci'                          \
             --command make -C pkgdb docs;
@@ -131,6 +124,7 @@ jobs:
           sudo echo 
           {
             echo "experimental-features = nix-command flakes";
+            echo "accept-flake-config = true";
           } | sudo tee -a /etc/nix/nix.conf >/dev/null
 
       - name: "Cache Cargo Cache"
@@ -145,56 +139,21 @@ jobs:
           key: "cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}"
           restore-keys: "cargo-${{ runner.os }}-"
 
-      - name: "Build (pkgdb)"
-        run: |
-          nix develop -L                   \
-            --accept-flake-config          \
-            --no-update-lock-file          \
-            '.#ci'                         \
-            --command make -C pkgdb -j;
-
       - name: "Build (cli)"
         run: |
-          pushd ./cli;
-          nix develop -L                                               \
-            --accept-flake-config                                      \
-            --no-update-lock-file                                      \
-            '.#ci'                                                     \
-            --command sh -c                                            \
-                'PKGDB_BIN="${PWD%/*}/pkgdb/bin/pkgdb" cargo build;';
+          nix develop -L                    \
+            --no-update-lock-file           \
+            '.#ci'                          \
+            --command just build-cli
           popd;
 
-      - name: "Test (./cli: cargo test)"
+      - name: "Test (cli)"
         run: |
-          pushd ./cli;
           export RUST_BACKTRACE=1;
-          nix develop -L                                         \
-            --accept-flake-config                                \
-            --no-update-lock-file                                \
-            '.#ci'                                               \
-            --command sh -c '
-                PKGDB_BIN="${PWD%/*}/pkgdb/bin/pkgdb"            \
-                cargo test --locked --workspace -F extra-tests;
-              ';
-          popd;
-
-      - name: "Test (./cli/tests)"
-        run: |
-          pushd ./cli;
-          nix develop -L               \
-            --accept-flake-config      \
-            --no-update-lock-file      \
-            '.#ci'                     \
-            --command flox-cli-tests;
-          popd;
-
-      - name: "Test (./tests)"
-        run: |
-          nix develop -L                        \
-            --accept-flake-config               \
-            --no-update-lock-file               \
-            '.#ci'                              \
-            --command pytest --verbose --emoji
+          nix develop -L                    \
+            --no-update-lock-file           \
+            '.#ci'                          \
+            --command just test-cli
 
   nix-build:
     name: "Nix build"
@@ -236,12 +195,12 @@ jobs:
           sudo echo 
           {
             echo "experimental-features = nix-command flakes";
+            echo "accept-flake-config = true";
           } | sudo tee -a /etc/nix/nix.conf >/dev/null
 
       - name: "Build"
         run: |
           if nix path-info                 \
-              --accept-flake-config        \
               --store "$FLOX_SUBSTITUTER"  \
               --eval-store auto            \
               --builders ''                \
@@ -251,7 +210,6 @@ jobs:
              exit 0;
           else
             nix build -L             \
-              --accept-flake-config  \
               --no-update-lock-file  \
               --print-out-paths      \
                 'github:flox/flox/${{ github.sha }}#packages.${{ matrix.system }}.flox'
@@ -324,6 +282,7 @@ jobs:
           sudo echo 
           {
             echo "experimental-features = nix-command flakes";
+            echo "accept-flake-config = true";
           } | sudo tee -a /etc/nix/nix.conf >/dev/null
 
       - name: "Find remote server to run tests on"
@@ -342,7 +301,6 @@ jobs:
       - name: "Build Bats Tests (./#flox-cli-tests)"
         run: |
           nix build -L \
-              --accept-flake-config \
               --no-update-lock-file \
               --print-out-paths \
               'github:flox/flox/${{ github.sha }}#packages.${{ matrix.system }}.flox-cli-tests'
@@ -407,6 +365,7 @@ jobs:
           sudo echo 
           {
             echo "experimental-features = nix-command flakes";
+            echo "accept-flake-config = true";
           } | sudo tee -a /etc/nix/nix.conf >/dev/null
 
       - name: "Find remote server to run tests on"
@@ -425,7 +384,6 @@ jobs:
       - name: "Build Bats Tests (./#flox-tests)"
         run: |
           nix build -L \
-              --accept-flake-config \
               --no-update-lock-file \
               --print-out-paths \
               'github:flox/flox/${{ github.sha }}#packages.${{ matrix.system }}.flox-tests'
