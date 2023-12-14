@@ -1,121 +1,113 @@
 # Flox CLI and Library
 
 ## Quick Start
+
 ```console
-$ cd git clone git@github.com/flox/flox.git;
-$ cd flox;
-# Enter Dev Shell
-$ nix develop;
+# Clone the repository
+$ cd git clone git@github.com/flox/flox.git
+$ cd flox
+
+# Enter development environment
+$ nix develop
+
 # Build `pkgdb' and `flox'
-$ just build;
-# Run the build
-$ ./cli/target/debug/flox --help;
-# Run the test suite
+$ just build-pkg
+
+# Run pkgdb
+$ ./pkgdb/build/bin/pkgdb --help
+
+# Run flox
+$ ./cli/target/debug/flox --help
+
+# Run the all tests
 $ just test-all;
 ```
 
 ## Contents of the Repo
 
-Currently this repo houses three rust crates:
-
-- `flox`: the flox binary and reimplementation of the `bash` based flox.
-- `flox-rust-sdk`: A library layer implementing flox's capabilities independent
-  of the frontend.
-- `floxd`: a potential flox daemon
+- `./pkgdb`: CRUD operations on `nix` package metadata.
+- `./cli`: A flox CLI.
+    - `./cli/flox`: the flox binary.
+    - `./cli/flox-rust-sdk`: A library layer implementing capabilities
+                             independent of the CLI.
+    - `./cli/floxd`: a potential flox daemon (TODO)
+- `./end2end`: A suite of end2end tests.
+- `./docs`: Developer documentation
+- `./pkgs`:
+- `./shells`:
+- `./flake.{nix|lock}`:
 
 ## Development
 
-```console
-$ nix develop;
+1. [Install Nix](https://nixos.org/download.html).
+
+2. Enable flakes by adding the following to `/etc/nix/nix.conf`:
+
+```nix
+experimental-features = nix-command flakes
 ```
 
-This sets up an environment with dependencies, rust toolchain, variable
-and `pre-commit-hooks`.
+3. Enter development environment:
 
-In the environment, use [`cargo`](https://doc.rust-lang.org/cargo/)
-to build the rust based cli.
+```console
+$ nix develop
+```
 
-**Note:**
+### Develop `flox-cli`
 
-cargo based builds should only be used locally.
-Flox must be buildable using `flox` or `nix`.
+| Description | Command                                     |
+| :---------: | ------------------------------------------- |
+| Build       | `just build-cli`                            |
+| Test        | `just test-cli`                             |
+| Run         | `just run-cli` or `./cli/target/debug/flox` |
+| Format      | `just fmt-cli`                              |
+| Clean       | `just clean-cli`                            |
 
-### Build and Run `flox`
 
-- build and run flox
-   ```console
-   $ pushd cli;
-   $ cargo run -- <args>;
+The `cli` project is formatted using `rustfmt` and applies custom rules through
+`./cli/.rustfmt.toml`. A pre-commit hook is set up as well to check rust file
+formatting.
+
+
+### Develop `flox-pkgdb`
+
+| Description | Command                                       |
+| :---------: | --------------------------------------------- |
+| Build       | `just build-pkgdb`                            |
+| Test        | `just test-pkgdb`                             |
+| Run         | `just run-pkgdb` or `./pkgdb/build/bin/pkgdb` |
+| Format      | `just fmt-pkgdb`                              |
+| Clean       | `just clean-pkgdb`                            |
+
+
+## Editors
+
+### Setup VSCode for Rust development
+
+1. `rust-analyzer` will be already installed in the development environment
+   once you run `nix develop`.
+
+2. If you prefer to open your editor at the project root, you'll need to help
+   `rust-analyzer` find the rust workspace by configuing the`linkedProjects`
+   for `rust-analyzer`.
+
+   In VSCode you can add this: to you `.vscode/settings.json`:
+
+   ```json
+   "rust-analyzer.linkedProjects": [
+      "${workspaceFolder}/cli/Cargo.toml"
+   ]
    ```
-- build a debug build of flox
-   ```console
-   $ just build;
-   # builds to ./cli/target/debug/flox
+
+3. If you want to be able to run and get analytics on impure tests, you need to
+   activate the `extra-tests` feature.
+
+   In VSCode you can add this: to you `.vscode/settings.json`:
+   ```json
+   "rust-analyzer.cargo.features": [
+      "extra-tests"
+   ]
    ```
-- run flox unit tests
-   ```console
-   $ pushd cli;
-   $ cargo test [<args>]
-   # or enable impure and other long running tests with
-   $ cargo -F extra-tests [<args>]
-   ```
-- build an optimized release build of flox
-   ```console
-   $ make -C pkgdb -j RELEASE=1;
-   $ ( pushd cli||return; cargo build --release; )
-   # builds to ./cli/target/release/flox
-   ```
-
-### Lint and Format `flox`
-
-- format rust code:
-  ```console
-  $ pushd cli;
-  $ cargo fmt
-  $ cargo fmt --check # just check
-  ```
-  The project is formatted using rustfmt and applies custom rules through
-  `.rustfmt.toml`.
-  A pre-commit hook is set up to check rust file formatting.
-- format nix code
-  ```console
-  $ alejandra .
-  $ alejandra . --check # just check
-  ```
-  A pre-commit hook is set up to check nix file formatting.
-- lint rust
-  ```console
-  $ pushd cli;
-  $ cargo clippy --all
-  ```
-- lint all files (including for formatting):
-  ```console
-  $ pre-commit run -a
-  ```
-
-### Setting up rust IDE support
-
-- Install the `rust-analyzer` plugin for your editor
-   - See the [official installation instruction](https://rust-analyzer.github.io/manual.html#installation)
-     (in the `nix develop` subshell the toolchain will aready be provided, you 
-      can skip right to your editor of choice)
-- If you prefer to open your editor at the project root, you'll need to help
-  `rust-analyzer` find the rust workspace by configuing the`linkedProjects`
-  for `rust-analyzer`.
-  In VS Code you can add this: to you `.vscode/settings.json`:
-  ```json
-  "rust-analyzer.linkedProjects": [
-     "${workspaceFolder}/cli/Cargo.toml"
-  ]
-  ```
-- If you want to be able to run and get analytics on impure tests, you need to
-  activate the `extra-tests` feature
-  In VS Code you can add this: to you `.vscode/settings.json`:
-  ```json
-  "rust-analyzer.cargo.features": [
-     "extra-tests"
-  ]
-  ```
 
 ## Git
 

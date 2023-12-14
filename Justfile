@@ -29,10 +29,10 @@ build-pkgdb:
 build-cli: build-pkgdb
     @pushd cli; cargo build; popd
 
-# Build the binaries
-build: build-cli
+build-docs:
+  @echo "TODO";
 
-build-all: build
+build-all: build-pkgd build-cli build-docs
 
 
 # ---------------------------------------------------------------------------- #
@@ -41,61 +41,90 @@ test-pkgdb: build-pkgdb
     @make -C pkgdb -j tests;
     @make -C pkgdb check;
 
-# Run the end-to-end test suite
-functional-tests +pytest_args="": build
-    @pytest \
-      --emoji \
-      --durations=0 \
-      --capture=no \
-      -v \
-      {{pytest_args}};
-
-# Run the integration test suite
-integ-tests: build
-    @flox-cli-tests --pkgdb "${PWD}/pkgdb/bin/pkgdb"        \
-                    --flox "${PWD}/cli/target/debug/flox";
-
-# Run a specific 'bats' test file
-bats-file file: build
-    @flox-tests --tests "{{file}}";
-
-# Run the Rust unit tests
-unit-tests regex="": build
+# Run the CLI unit tests
+test-cli-unit regex="": build
     @pushd cli;                            \
      {{cargo_test_invocation}} {{regex}};  \
      popd;
 
 # Run the test suite, including impure tests
-impure-tests regex="": build
+test-cli-impure regex="": build
     @pushd cli;                                                     \
      {{cargo_test_invocation}} {{regex}} --features "extra-tests";  \
      popd;
 
-# Run the entire test suite, not including impure tests
-test-cli: build unit-tests functional-tests integ-tests
+# Run the integration test suite
+test-cli-integration: build
+    @flox-cli-tests --pkgdb "${PWD}/pkgdb/bin/pkgdb"        \
+                    --flox "${PWD}/cli/target/debug/flox";
 
-# Run the entire test suite, including impure tests
-test-all: test-pkgdb impure-tests functional-tests integ-tests
+# Run all of the cli tests
+test-cli: build test-cli-unit test-cli-impure test-cli-integration
+
+# Run end2end tests
+test-end2end +args="": build
+    @pytest \
+      --emoji \
+      --durations=0 \
+      --capture=no \
+      -v \
+      {{args}};
+
+# Run all tests
+test-all: test-pkgdb functional-tests integ-tests
 
 
+# ---------------------------------------------------------------------------- #
 
-# Keept things Clean
+
+run-pkgdb +args="": build-pkgdb
+  @./pkgdb/bin/pkgdb {{args}};
+
+run-cli +args="": build-cli
+  @./cli/target/debug/flox {{args}};
+
+
+# ---------------------------------------------------------------------------- #
+
+fmt-pkgdb:
+    @make -C pkgdb fmt;
+
+fmt-cli:
+    @pre-commit run rustfmt "${PWD}/cli";
+    @pre-commit run clippy "${PWD}/cli";
+
+fmt-nix:
+    @pre-commit run alejandra "${PWD}/flake.nix" "${PWD}/pkgs";
+
+fmt-end2end:
+    @pre-commit run ruff --files "${PWD}/end2end";
+
+fmt-docs:
+  @echo "TODO";
+
+fmt-all: fmt-pkgdb fmt-cli fmt-nix fmt-end2end fmt-docs
+
+# ---------------------------------------------------------------------------- #
+
 
 clean-pkgdb:
     @make -C pkgdb clean;
 
 clean-cli:
-    @pushd cli; cargo clean; popd
+    @pushd cli; cargo clean; popd;
 
-clean-tests:
+clean-end2end
     @rm "${PWD}/.pytest_cache" -rf;
 
-clean-all: clean-pkgdb clean-cli clean-tests
+claen-docs:
+  @echo "TODO";
+
+clean-all: clean-pkgdb clean-cli clean-end2end clean-docs
 
 
 # ---------------------------------------------------------------------------- #
 
-# Enters the Rust development environment
+# Enters the development environment
 work:
     @# Note that this command is only really useful if you have
     @# `just` installed outside of the `flox` environment already
