@@ -143,6 +143,7 @@
           };
           clippy.enable = true;
           commitizen.enable = true;
+          ruff.enable = true;
         };
         settings = {
           alejandra.verbosity = "quiet";

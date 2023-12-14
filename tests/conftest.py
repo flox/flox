@@ -54,9 +54,9 @@ def run():
 
         # Our default subprocess.run arguments, see docs for more:
         #   -> https://docs.python.org/3/library/subprocess.html
-        kwargs.setdefault("capture_output", True)       # stdout and stderr will be captured
-        kwargs.setdefault("timeout", DEFAULT_TIMEOUT)   # timeout in seconds
-        kwargs.setdefault("check", False)               # don't raise any expection
+        kwargs.setdefault("capture_output", True)
+        kwargs.setdefault("timeout", DEFAULT_TIMEOUT)
+        kwargs.setdefault("check", False)
         kwargs.setdefault("text", True)
         kwargs.setdefault("shell", False)
 
@@ -132,7 +132,10 @@ def spawn(request, home_path, flox_env):
                 shell.expect_exact(cmd + "\r\n")
 
             def expect_prompt(timeout=DEFAULT_TIMEOUT):
-                shell.expect(r"{prompt}".format(prompt=re.escape(prompt)), timeout=timeout)
+                shell.expect(
+                    r"{prompt}".format(prompt=re.escape(prompt)),
+                    timeout=timeout,
+                )
 
             # helper methods
             shell.expect = new_expect

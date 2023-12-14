@@ -1,6 +1,4 @@
-import os
 
-import pytest
 
 
 def test_python_integration_with_flox(
@@ -61,8 +59,10 @@ def test_python_integration_with_flox(
         shell.expect_prompt(timeout=30)
 
         # check that we can import requests library
-        shell.send_command("./env/bin/python -c 'import requests; print(requests.__path__)'")
-        shell.expect(r"{path}/env/lib/python\d+.\d+/site-packages/requests".format(
-            path = flox_env.path,
-        ))
+        shell.send_command(
+            "./env/bin/python -c 'import requests; print(requests.__path__)'")
+        shell.expect(
+            r"{path}/env/lib/python\d+.\d+/site-packages/requests".format(
+                path = flox_env.path
+            ))
         shell.expect_prompt()
