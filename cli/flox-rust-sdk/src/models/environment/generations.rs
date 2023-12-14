@@ -238,7 +238,7 @@ impl Generations<ReadWrite> {
     /// If `set_current` is true, the generation will also be set as the current generation.
     fn register_generation(
         &mut self,
-        environment: CoreEnvironment,
+        environment: &mut CoreEnvironment,
         generation: usize,
         description: String,
         set_current: bool,
@@ -298,7 +298,7 @@ impl Generations<ReadWrite> {
     /// and sets it as the current generation.
     pub fn add_generation(
         &mut self,
-        environment: CoreEnvironment,
+        environment: &mut CoreEnvironment,
         description: String,
     ) -> Result<(), GenerationsError> {
         // keys should all be numbers (but)

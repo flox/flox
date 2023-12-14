@@ -39,7 +39,7 @@ async fn main() -> ExitCode {
 
     // Quit early if `--version` is present
     if Version::check() {
-        println!("Version: {}", FLOX_VERSION.to_string());
+        println!("Version: {}", &*FLOX_VERSION);
         return ExitCode::from(0);
     }
 
