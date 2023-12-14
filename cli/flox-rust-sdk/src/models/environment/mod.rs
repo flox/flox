@@ -6,7 +6,6 @@ use async_trait::async_trait;
 use flox_types::catalog::{CatalogEntry, EnvCatalog, System};
 use flox_types::version::Version;
 use log::debug;
-use once_cell::sync::Lazy;
 use runix::command_line::{NixCommandLine, NixCommandLineRunJsonError};
 use runix::installable::FlakeAttribute;
 use runix::store_path::StorePath;
@@ -15,6 +14,7 @@ use thiserror::Error;
 use walkdir::WalkDir;
 
 use self::managed_environment::ManagedEnvironmentError;
+use self::remote_environment::RemoteEnvironmentError;
 use super::environment_ref::{EnvironmentName, EnvironmentOwner};
 use super::flox_package::FloxTriple;
 use crate::flox::{EnvironmentRef, Flox};
@@ -397,6 +397,9 @@ pub enum EnvironmentError2 {
     #[error(transparent)]
     ManagedEnvironment(#[from] ManagedEnvironmentError),
 
+    #[error(transparent)]
+    RemoteEnvironment(#[from] RemoteEnvironmentError),
+
     #[error("could not canonicalize path to environment")]
     EnvCanonicalize(#[source] std::io::Error),
 
@@ -545,10 +548,16 @@ pub fn find_dot_flox(
     Ok(None)
 }
 
+/// Directory containing nix gc roots for (previous) builds of environments of a given owner
+pub(super) fn gcroots_dir(flox: &Flox, owner: &EnvironmentOwner) -> PathBuf {
+    flox.cache_dir.join(GCROOTS_DIR_NAME).join(owner.as_str())
+}
+
 #[cfg(test)]
 mod test {
     use std::str::FromStr;
 
+    use once_cell::sync::Lazy;
     use pretty_assertions::assert_eq;
 
     use super::*;
