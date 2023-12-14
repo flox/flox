@@ -47,7 +47,7 @@
     # Used by `buildenv' to provide activation hook extensions.
     PROFILE_D_SCRIPT_DIR = builtins.path {
       name = "etc-profile.d";
-      path = ../../pkgdb/src/buildenv/etc;
+      path = ../../pkgdb/src/buildenv/assets;
     };
     # Used by `buildenv' to set shell prompts on activation.
     SET_PROMPT_BASH_SH = builtins.path {

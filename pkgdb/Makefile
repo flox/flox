@@ -148,10 +148,10 @@ endif  # ifndef TOOLCHAIN
 VERSION := $(file < $(PKGDB_ROOT)/version)
 
 # Files used by `pkgdb buildenv' need to be added to the `nix' store.
-PROFILE_D_SCRIPT_DIR ?= $(shell                         \
-  $(NIX) store add-path -n profile.d src/buildenv/etc)
-SET_PROMPT_BASH_SH ?= $(shell                                                \
-	$(NIX) store add-path -n set-prompt-bash src/buildenv/set-prompt-bash.sh)
+PROFILE_D_SCRIPT_DIR ?= $(shell                            \
+  $(NIX) store add-path -n profile.d src/buildenv/assets)
+SET_PROMPT_BASH_SH ?= $(shell                                                  \
+  $(NIX) store add-path -n set-prompt-bash.sh src/buildenv/set-prompt-bash.sh)
 
 
 # ---------------------------------------------------------------------------- #
