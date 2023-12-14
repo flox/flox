@@ -590,6 +590,9 @@ impl Install {
             version: None,
             input: None,
         }));
+        if packages.is_empty() {
+            bail!("Must specify at least one package");
+        }
         let installation = environment.install(&packages, &flox).await?;
         if installation.new_manifest.is_some() {
             // Print which new packages were installed
