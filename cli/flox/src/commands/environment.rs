@@ -1006,8 +1006,11 @@ impl Update {
             .map_err(CoreEnvironmentError::ParseUpdateOutput)?;
 
         debug!("writing lockfile to {}", lockfile_path.display());
-        std::fs::write(lockfile_path, result.lockfile.to_string())
-            .context("updating global inputs failed")?;
+        std::fs::write(
+            lockfile_path,
+            serde_json::to_string_pretty(&result.lockfile).unwrap(),
+        )
+        .context("updating global inputs failed")?;
         Ok(result.message)
     }
 

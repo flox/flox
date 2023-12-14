@@ -84,8 +84,11 @@ impl<State> CoreEnvironment<State> {
         // Write the lockfile to disk
         // todo: do we always want to do this?
         debug!("generated lockfile, writing to {}", lockfile_path.display());
-        std::fs::write(&lockfile_path, lockfile.to_string())
-            .map_err(CoreEnvironmentError::WriteLockfile)?;
+        std::fs::write(
+            &lockfile_path,
+            serde_json::to_string_pretty(&lockfile).unwrap(),
+        )
+        .map_err(CoreEnvironmentError::WriteLockfile)?;
 
         Ok(lockfile)
     }
@@ -250,7 +253,10 @@ impl CoreEnvironment<ReadOnly> {
         )
         .map_err(CoreEnvironmentError::ParseUpdateOutput)?;
 
-        self.transact_with_lockfile_contents(result.lockfile.to_string(), flox)?;
+        self.transact_with_lockfile_contents(
+            serde_json::to_string_pretty(&result.lockfile).unwrap(),
+            flox,
+        )?;
 
         Ok(result.message)
     }
