@@ -56,13 +56,6 @@ jobs:
             echo "accept-flake-config = true";
           } | sudo tee -a /etc/nix/nix.conf >/dev/null
 
-      - name: "Build (pkgdb)"
-        run: |
-          nix develop -L                    \
-            --no-update-lock-file           \
-            '.#ci'                          \
-            --command just build-pkgdb
-
       - name: "Test (pkgdb)"
         run: |
           nix develop -L                    \
@@ -138,14 +131,6 @@ jobs:
             target/
           key: "cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}"
           restore-keys: "cargo-${{ runner.os }}-"
-
-      - name: "Build (cli)"
-        run: |
-          nix develop -L                    \
-            --no-update-lock-file           \
-            '.#ci'                          \
-            --command just build-cli
-          popd;
 
       - name: "Test (cli)"
         run: |
