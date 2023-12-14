@@ -258,9 +258,7 @@ jobs:
               --accept-flake-config  \
               --no-update-lock-file  \
               --print-out-paths      \
-                '.#flox-pkgdb'       \
-                '.#flox-cli'         \
-                '.#flox';
+                'github:flox/flox/${{ github.sha }}#packages.${{ matrix.system }}.flox'
           fi
 
   trigger-flox-installers-workflow:
@@ -371,18 +369,6 @@ jobs:
           cat $REMOTE_SERVER_USER_KNOWN_HOSTS_FILE
           echo "REMOTE_SERVER=$REMOTE_SERVER" >> $GITHUB_ENV
           echo "REMOTE_SERVER_USER_KNOWN_HOSTS_FILE=$REMOTE_SERVER_USER_KNOWN_HOSTS_FILE" >> $GITHUB_ENV
-
-      - name: "Build flox"
-        run: |
-          git clean -xfd
-          nix build -L \
-              --accept-flake-config \
-              --no-update-lock-file \
-              --print-out-paths \
-              '.#packages.${{ matrix.system }}.flox'
-          # We run bats tests later on against the `FLOX_CLI' env
-          echo "FLOX_CLI=$(readlink -f ./result; )/bin/flox" >> "$GITHUB_ENV"
-          rm ./result
 
       - name: "Build Bats Tests (./#flox-cli-tests)"
         run: |
