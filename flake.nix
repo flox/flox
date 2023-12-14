@@ -144,6 +144,8 @@
           clippy.enable = true;
           commitizen.enable = true;
           ruff.enable = true;
+          shfmt.enable = true;
+          # shellcheck.enable = true; # disabled until we have time to fix all the warnings
         };
         settings = {
           alejandra.verbosity = "quiet";
@@ -245,4 +247,3 @@
 #
 #
 # ============================================================================ #
-

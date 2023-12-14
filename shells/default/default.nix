@@ -2,12 +2,14 @@
   alejandra,
   commitizen,
   hivemind,
+  ruff,
   just,
   lib,
   mkShell,
   poetry,
   python3,
   pre-commit-check,
+  shfmt,
   flox-cli,
   flox-cli-tests,
   flox-pkgdb,
@@ -32,6 +34,8 @@
       alejandra
       commitizen
       hivemind
+      ruff
+      shfmt
     ];
 in
   mkShell (
