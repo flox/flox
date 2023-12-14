@@ -574,11 +574,6 @@ bats-check: bin $(TEST_UTILS) test-data
 
 # ---------------------------------------------------------------------------- #
 
-#%.o: %.cc
-#	$(CXX) $(CXXFLAGS) -c $< -o $@;
-
-# ---------------------------------------------------------------------------- #
-
 # Static Asset Headers
 # --------------------
 # We include scripts for SQL, Bash, and some text files as static strings in
