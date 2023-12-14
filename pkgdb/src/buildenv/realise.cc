@@ -35,13 +35,15 @@ namespace flox::buildenv {
 
 /* -------------------------------------------------------------------------- */
 
-#ifndef PROFILE_D_SCRIPT_DIR
-#  define PROFILE_D_SCRIPT_DIR "invalid_profile.d_script_path"
-#endif
+/* Include static scripts. */
+static const std::string setBashPromptScript =
+  #include "./set-prompt-bash.sh.hh"
+;
 
-#ifndef SET_PROMPT_BASH_SH
-#  define SET_PROMPT_BASH_SH "invalid_set-prompt-bash.sh_path"
-#endif
+static const std::profileDCommonName =
+static const std::string profileDCommon =
+  #include "./profile.d/0100_common.sh.hh"
+;
 
 
 /* -------------------------------------------------------------------------- */
@@ -376,13 +378,6 @@ createFloxEnv( nix::EvalState &     state,
 
   return createEnvironmentStorePath( state, pkgs, references, originalPackage );
 }
-
-
-/* -------------------------------------------------------------------------- */
-
-void
-buildEnvironment( const std::string &                  out,
-                  const std::vector<RealisedPackage> & pkgs );
 
 
 /* -------------------------------------------------------------------------- */
