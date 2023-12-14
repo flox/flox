@@ -911,11 +911,8 @@ impl Pull {
         Ok(())
     }
 
-    fn convert_error(err: EnvironmentError2) -> anyhow::Error {
-        if let EnvironmentError2::ManagedEnvironment(ManagedEnvironmentError::OpenFloxmeta(
-            FloxmetaV2Error::LoggedOut,
-        )) = err
-        {
+    fn convert_error(err: ManagedEnvironmentError) -> anyhow::Error {
+        if let ManagedEnvironmentError::OpenFloxmeta(FloxmetaV2Error::LoggedOut) = err {
             anyhow!(indoc! {"
                 Could not pull environment: not logged in to floxhub.
 

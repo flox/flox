@@ -7,12 +7,16 @@ use log::debug;
 use runix::command_line::NixCommandLine;
 use thiserror::Error;
 
-use super::managed_environment::{
-    remote_branch_name,
-    ManagedEnvironment,
-    ManagedEnvironmentError,
+use super::managed_environment::{remote_branch_name, ManagedEnvironment, ManagedEnvironmentError};
+use super::{
+    gcroots_dir,
+    CanonicalPath,
+    CanonicalizeError,
+    EditResult,
+    Environment,
+    EnvironmentError2,
+    InstallationAttempt,
 };
-use super::{gcroots_dir, EditResult, Environment, EnvironmentError2, InstallationAttempt, CanonicalPath, CanonicalizeError};
 use crate::flox::{EnvironmentOwner, EnvironmentRef, Flox};
 use crate::models::environment_ref::EnvironmentName;
 use crate::models::floxmetav2::{FloxmetaV2, FloxmetaV2Error};
@@ -20,7 +24,7 @@ use crate::models::floxmetav2::{FloxmetaV2, FloxmetaV2Error};
 #[derive(Debug, Error)]
 pub enum RemoteEnvironmentError {
     #[error("open managed environment")]
-    OpenManagedEnvironment(#[source] Box<EnvironmentError2>), /* todo: to be changed to managed eroor... */
+    OpenManagedEnvironment(#[source] ManagedEnvironmentError),
 
     #[error("could not get latest version of environment")]
     GetLatestVersion(#[source] FloxmetaV2Error),
@@ -67,7 +71,7 @@ impl RemoteEnvironment {
             gcroots_dir(flox, &pointer.owner).join(remote_branch_name(&flox.system, &pointer));
 
         let inner = ManagedEnvironment::open_with(floxmeta, flox, pointer, dot_flox_path, out_link)
-            .map_err(|e| RemoteEnvironmentError::OpenManagedEnvironment(Box::new(e)))?;
+            .map_err(RemoteEnvironmentError::OpenManagedEnvironment)?;
 
         Ok(Self { inner })
     }
