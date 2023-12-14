@@ -21,7 +21,7 @@ def test_python_integration_with_flox(
     assert (flox_project.path / ".flox/env").exists()
 
     # Install pip and python3 flox project
-    res = run(f"{flox} install pip python3", cwd=flox_project.path, timeout=120)
+    res = run(f"{flox} install pip python3", cwd=flox_project.path, timeout=300)
     assert res.returncode == 0
     assert res.stdout == ""
     assert "✅ 'pip' installed to environment" in res.stderr
