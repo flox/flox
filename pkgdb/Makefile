@@ -16,10 +16,8 @@
 #   - clean-pch             Remove all `pre-compiled-headers'.
 #   - fullclean             Remove build artifacts and metadata files
 #
-#   - install               Install binaries, sysconf, and include files
+#   - install               Install binaries, shared data, and include files
 #   - install-bin           Install binaries
-#   - install-sysconf       Install `etc/` files
-#   - install-libexec       Install `libexec/` executables
 #
 #   - ccls                  Create `.ccls' file used by CCLS LSP
 #   - compilation-databases Create `compile_commands.json' and `.ccls'
@@ -65,10 +63,8 @@ REPO_ROOT    := $(patsubst %/,%,$(dir $(MAKEFILE_DIR)))
 # Install Prefixes
 # ----------------
 
-PREFIX     ?= $(PKGDB_ROOT)/build
-BINDIR     ?= $(PREFIX)/bin
-LIBEXECDIR ?= $(PREFIX)/libexec
-SYSCONFDIR ?= $(PREFIX)/etc
+PREFIX ?= $(PKGDB_ROOT)/build
+BINDIR ?= $(PREFIX)/bin
 
 
 # ---------------------------------------------------------------------------- #
@@ -89,7 +85,7 @@ GREP       ?= grep
 LN         ?= ln -f
 MKDIR      ?= mkdir
 MKDIR_P    ?= $(MKDIR) -p
-NIX        ?= nix
+NIX        ?= nix --extra-experimental-features 'flakes nix-command'
 PKG_CONFIG ?= pkg-config
 RM         ?= rm -f
 SED        ?= sed
@@ -146,7 +142,16 @@ endif  # ifndef TOOLCHAIN
 
 # ---------------------------------------------------------------------------- #
 
+# Read info from files
+# --------------------
+
 VERSION := $(file < $(PKGDB_ROOT)/version)
+
+# Files used by `pkgdb buildenv' need to be added to the `nix' store.
+PROFILE_D_SCRIPT_DIR ?= $(shell                            \
+  $(NIX) store add-path -n profile.d src/buildenv/assets)
+SET_PROMPT_BASH_SH ?= $(shell                                                  \
+  $(NIX) store add-path -n set-prompt-bash.sh src/buildenv/set-prompt-bash.sh)
 
 
 # ---------------------------------------------------------------------------- #
@@ -167,17 +172,13 @@ HEADERS        =  $(call rwildcard,include,*.hh)
 SRCS           =  $(call rwildcard,src,*.cc)
 test_SRCS      =  $(sort $(wildcard tests/*.cc))
 ALL_SRCS       =  $(SRCS) $(test_SRCS)
-BINS           =  pkgdb
-LIBEXECS       =  $(patsubst libexec/%,%,$(call rwildcard,libexec,*))
-SYSCONFS       =  $(patsubst etc/%,%,$(call rwildcard,etc,*))
+BINS           =  bin/pkgdb
 TEST_UTILS     =  $(addprefix tests/,is_sqlite3 search-params)
 TESTS          =  $(filter-out $(TEST_UTILS),$(test_SRCS:.cc=))
 TEST_DATA      =
-ALL_BINS       = $(TESTS) $(TEST_UTILS) $(addprefix bin/,$(BINS))
+ALL_BINS       = $(TESTS) $(TEST_UTILS) $(BINS)
 CLEANDIRS      =
-CLEANFILES     =  $(ALL_SRCS:.cc=.o)
-CLEANFILES     += $(addprefix bin/,$(BINS)) $(addprefix lib/,$(LIBS))
-CLEANFILES     += $(TESTS) $(TEST_UTILS)
+CLEANFILES     =  $(ALL_SRCS:.cc=.o) $(ALL_BINS)
 FULLCLEANDIRS  =
 FULLCLEANFILES =
 
@@ -193,15 +194,6 @@ DEPFILES += $(addprefix $(REPO_ROOT)/flake.,nix lock)
 DEPFILES += $(REPO_ROOT)/pkgs/flox-pkgdb/default.nix
 DEPFILES += $(REPO_ROOT)/pkgs/nlohmann_json/default.nix
 DEPFILES += $(REPO_ROOT)/shells/default/default.nix
-
-
-# ---------------------------------------------------------------------------- #
-
-# Misc Install Targets
-# --------------------
-
-PROFILE_D_SCRIPT_DIR ?= $(SYSCONFDIR)/profile.d
-SET_PROMPT_BASH_SH   ?= $(LIBEXECDIR)/set-prompt-bash.sh
 
 
 # ---------------------------------------------------------------------------- #
@@ -225,8 +217,7 @@ endif	# ifndef EXTRA_CXXFLAGS
 CXXFLAGS ?= $(EXTRA_CFLAGS) $(EXTRA_CXXFLAGS)
 CXXFLAGS += '-I$(PKGDB_ROOT)/include'
 CXXFLAGS += '-DFLOX_PKGDB_VERSION="$(VERSION)"'
-CXXFLAGS += '-DPROFILE_D_SCRIPT_DIR="$(PROFILE_D_SCRIPT_DIR)"'
-CXXFLAGS += '-DSET_PROMPT_BASH_SH="$(SET_PROMPT_BASH_SH)"'
+
 LDFLAGS  ?= $(EXTRA_LDFLAGS)
 
 # Release Mode
@@ -344,6 +335,19 @@ CXXFLAGS += '-DSEMVER_PATH="$(SEMVER_PATH)"'
 
 # ---------------------------------------------------------------------------- #
 
+# Flags for Specific Files
+# ------------------------
+
+src/buildenv/realise.o: CXXFLAGS +=                   \
+	'-DPROFILE_D_SCRIPT_DIR="$(PROFILE_D_SCRIPT_DIR)"'
+
+src/buildenv/realise.o: CXXFLAGS +=               \
+	'-DSET_PROMPT_BASH_SH="$(SET_PROMPT_BASH_SH)"'
+
+
+
+# ---------------------------------------------------------------------------- #
+
 #: Remove build artifacts
 CLEANFILES += $(call rwildcard,,gmon.out *.log *.gcno *.gcda *.gcov)
 CLEANFILES += $(call rwildcard,,result)
@@ -368,31 +372,17 @@ fullclean: clean
 # Install Targets
 # ---------------
 
-.PHONY: install-bin install-libexec install-sysconf install
+.PHONY: install install-bin
 
 #: Install binaries, libraries, and include files
-install: install-bin install-libexec install-sysconf
+install: install-bin
 
 $(BINDIR)/%: bin/%
 	$(MKDIR_P) $(@D);
 	if $(TEST) -f $<; then $(CP) -- "$<" "$@"; fi
 
-$(LIBEXECDIR)/%: libexec/%
-	$(MKDIR_P) $(@D);
-	if $(TEST) -f $<; then $(CP) -- "$<" "$@"; fi
-
-$(SYSCONFDIR)/%: etc/%
-	$(MKDIR_P) $(@D);
-	if $(TEST) -f $<; then $(CP) -- "$<" "$@"; fi
-
 #: Install binaries
-install-bin: $(addprefix $(BINDIR)/,$(BINS))
-
-#: Install internal executables
-install-libexec: $(addprefix $(LIBEXECDIR)/,$(LIBEXECS))
-
-#: Install config files
-install-sysconf: $(addprefix $(SYSCONFDIR)/,$(SYSCONFS))
+install-bin: $(addprefix $(BINDIR)/,$(patsubst bin/%,%,$(BINS)))
 
 
 # ---------------------------------------------------------------------------- #
@@ -584,16 +574,31 @@ bats-check: bin $(TEST_UTILS) test-data
 
 # ---------------------------------------------------------------------------- #
 
-#%.o: %.cc
-#	$(CXX) $(CXXFLAGS) -c $< -o $@;
+# Static Asset Headers
+# --------------------
+# We include scripts for SQL, Bash, and some text files as static strings in
+# our binary.
+# The following targets/recipes generate the `.hh' files ( if needed ), and
+# declare prerequisite rules explicitly for files that use them.
+#
+# NOTE: These are not included in `HEADERS' because they are not interface
+#       declarations of "headers" in the conventional sense.
+
+# SQL Schemas
+src/pkgdb/write.o: src/pkgdb/schemas.hh
+
 
 # ---------------------------------------------------------------------------- #
 
-src/pkgdb/write.o: src/pkgdb/schemas.hh
-
+# Make all `.o' files depend on all `include/**/*.hh' files.
 $(ALL_SRCS:.cc=.o): %.o: %.cc $(HEADERS)
 
-$(addprefix bin/,$(BINS)): %: $(SRCS:.cc=.o)
+
+# ---------------------------------------------------------------------------- #
+
+# Build Targets
+
+$(BINS): %: $(SRCS:.cc=.o)
 	$(MKDIR_P) $(@D);
 	$(CXX) $(filter %.o,$^) $(LDFLAGS) -o $@;
 
@@ -607,19 +612,13 @@ $(TESTS) $(TEST_UTILS): tests/%: tests/%.o
 
 # ---------------------------------------------------------------------------- #
 
-# Required for exectubles to run properly
-$(ALL_BINS): | install-sysconf install-libexec
-
-
-# ---------------------------------------------------------------------------- #
-
 # Standard Targets
 # ----------------
 
 .PHONY: bin tests
 
 #: Build binaries
-bin: $(addprefix bin/,$(BINS))
+bin: $(BINS)
 
 #: Build test executables and resources
 tests: $(TESTS) $(TEST_UTILS) test-data

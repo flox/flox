@@ -44,6 +44,16 @@
     yaml_PREFIX = yaml-cpp.outPath;
     libExt = stdenv.hostPlatform.extensions.sharedLibrary;
     SEMVER_PATH = semver.outPath + "/bin/semver";
+    # Used by `buildenv' to provide activation hook extensions.
+    PROFILE_D_SCRIPT_DIR = builtins.path {
+      name = "etc-profile.d";
+      path = ../../pkgdb/src/buildenv/assets;
+    };
+    # Used by `buildenv' to set shell prompts on activation.
+    SET_PROMPT_BASH_SH = builtins.path {
+      name = "set-prompt-bash.sh";
+      path = ../../pkgdb/src/buildenv/set-prompt-bash.sh;
+    };
   };
 in
   stdenv.mkDerivation ({
@@ -103,6 +113,8 @@ in
       configurePhase = ''
         runHook preConfigure;
         export PREFIX="$out";
+        echo "PROFILE_D_SCRIPT_DIR: $PROFILE_D_SCRIPT_DIR" >&2;
+        echo "SET_PROMPT_BASH_SH: $SET_PROMPT_BASH_SH" >&2;
         if [[ "''${enableParallelBuilding:-1}" = 1 ]]; then
           makeFlagsArray+=( "-j''${NIX_BUILD_CORES:?}" );
         fi

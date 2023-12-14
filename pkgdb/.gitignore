@@ -46,5 +46,4 @@ gmon.out
 
 /.direnv/
 *.tmp
-lib/pkgconfig/
 /build/
