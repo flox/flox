@@ -4,6 +4,7 @@ import os
 import pathlib
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -184,6 +185,7 @@ class FloxEnv:
 
 @pytest.fixture
 def flox_env(
+        request,
         home_path,
         nix_system,
     ):
@@ -205,10 +207,27 @@ def flox_env(
     os.environ["XDG_DATA_HOME"] = str(home_path / ".local/share")
     os.environ["XDG_STATE_HOME"] = str(home_path / ".local/state")
 
-    return FloxEnv(
+    (home_path / ".cache").mkdir(parents=True)
+
+    # restore flox cache
+    flox_cache = request.config.cache.get("flox-cache", None)
+    if flox_cache and os.path.exists(flox_cache):
+        shutil.copytree(flox_cache, str(home_path / ".cache/flox"), symlinks=True)
+
+    # restore nix cache
+    flox_cache = request.config.cache.get("nix-cache", None)
+    if flox_cache and os.path.exists(flox_cache):
+        shutil.copytree(flox_cache, str(home_path / ".cache/nix"), symlinks=True)
+
+    yield FloxEnv(
         name = project_name,
         path = project_path,
         run_path = project_path / f".flox/run/{nix_system}.{project_name}",
         nixpkgs_rev = nixpkgs_rev,
     )
 
+    # save flox cache
+    request.config.cache.set("flox-cache", str(home_path / ".cache/flox"))
+
+    # save nix cache
+    request.config.cache.set("nix-cache", str(home_path / ".cache/nix"))
