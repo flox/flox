@@ -6,6 +6,7 @@
   lib,
   mkShell,
   pre-commit-check,
+  shfmt,
   flox-cli,
   flox-cli-tests,
   flox-pkgdb,
@@ -27,6 +28,7 @@
       hivemind
       commitizen
       alejandra
+      shfmt
     ];
 in
   mkShell (
