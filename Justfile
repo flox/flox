@@ -40,8 +40,8 @@ test-pkgdb: build-pkgdb
     @make -C pkgdb check;
 
 # Run the end-to-end test suite
-functional-tests +bats_args="": build
-    @flox-tests {{bats_args}};
+functional-tests +pytest_args="": build
+    @pytest {{pytest_args}};
 
 # Run the integration test suite
 integ-tests: build
