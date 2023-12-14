@@ -298,9 +298,6 @@ jobs:
           - "aarch64-darwin"
 
     steps:
-      - name: "Checkout"
-        uses: "actions/checkout@v4"
-
       - name: "Setup Tailscale"
         uses: "tailscale/github-action@v2"
         with:
@@ -377,8 +374,12 @@ jobs:
           - "aarch64-darwin"
 
     steps:
-      - name: "Checkout"
-        uses: "actions/checkout@v4"
+      - name: "Cache PyTest Cache"
+        uses: "actions/cache@v3"
+        with:
+          path: |
+            .pytest-cache/
+          key: "pytest-${{ matrix.system }}"
 
       - name: "Setup Tailscale"
         uses: "tailscale/github-action@v2"
