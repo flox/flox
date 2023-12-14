@@ -175,7 +175,7 @@ teardown() {
   assert_success;
   manifest=$(cat "$PROJECT_DIR/.flox/env/manifest.toml");
   # This also checks that it correctly infers the install ID
-  assert_regex "$manifest" 'hello.path = "hello"';
+  assert_regex "$manifest" 'hello\.path = "hello"';
 }
 
 @test "'flox install' infers install ID" {
@@ -185,7 +185,7 @@ teardown() {
   assert_success;
   manifest=$(cat "$PROJECT_DIR/.flox/env/manifest.toml");
   # This also checks that it correctly infers the install ID
-  assert_regex "$manifest" 'rails.path = "rubyPackages_3_2\.rails"';
+  assert_regex "$manifest" 'rails\.path = "rubyPackages_3_2\.rails"';
 }
 
 @test "'flox install' overrides install ID with '-i'" {
@@ -194,7 +194,7 @@ teardown() {
   run "$FLOX_BIN" install -i foo hello;
   assert_success;
   manifest=$(cat "$PROJECT_DIR/.flox/env/manifest.toml");
-  assert_regex "$manifest" 'foo.path = "hello"';
+  assert_regex "$manifest" 'foo\.path = "hello"';
 }
 
 @test "'flox install' overrides install ID with '--id'" {
@@ -203,7 +203,7 @@ teardown() {
   run "$FLOX_BIN" install --id foo hello;
   assert_success;
   manifest=$(cat "$PROJECT_DIR/.flox/env/manifest.toml");
-  assert_regex "$manifest" 'foo.path = "hello"';
+  assert_regex "$manifest" 'foo\.path = "hello"';
 }
 
 @test "'flox install' accepts mix of inferred and supplied install IDs" {
@@ -212,7 +212,7 @@ teardown() {
   run "$FLOX_BIN" install -i foo rubyPackages_3_2.webmention ripgrep -i bar rubyPackages_3_2.rails;
   assert_success;
   manifest=$(cat "$PROJECT_DIR/.flox/env/manifest.toml");
-  assert_regex "$manifest" 'foo.path = "rubyPackages_3_2\.webmention"';
-  assert_regex "$manifest" 'ripgrep.path = "ripgrep"';
-  assert_regex "$manifest" 'bar.path = "rubyPackages_3_2\.rails"';
+  assert_regex "$manifest" 'foo\.path = "rubyPackages_3_2\.webmention"';
+  assert_regex "$manifest" 'ripgrep\.path = "ripgrep"';
+  assert_regex "$manifest" 'bar\.path = "rubyPackages_3_2\.rails"';
 }
