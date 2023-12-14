@@ -28,7 +28,8 @@
     exec -a "$0" ${pyenv}/bin/pytest ${../../tests} \
       -p no:cacheprovider \
       --emoji \
-      --verbose
+      --verbose \
+      "$@"
   '';
 in
   symlinkJoin {
