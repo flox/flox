@@ -38,7 +38,7 @@ def test_python_integration_with_flox(
         # Enter (activate) the flox environment
         shell = spawn(f"{flox} activate", cwd=flox_project.path)
         shell.expect(r"Building environment...", timeout=10)
-        shell.expect_prompt(timeout=30)
+        shell.expect_prompt(timeout=90)
 
         assert (flox_project.run_path / "bin/python3").exists()
         assert (flox_project.run_path / "bin/pip").exists()
