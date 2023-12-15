@@ -68,7 +68,7 @@ test-cli-impure regex="": build-cli
      popd;
 
 # Run the integration test suite
-test-cli-integration: build-cli
+test-cli-integration +bats_args="": build-cli
     @flox-cli-tests                     \
         --pkgdb "{{PKGDB_BIN}}"         \
         --flox "{{FLOX_BIN}}"           \
@@ -88,9 +88,6 @@ test-end2end +args="": build-cli
 
 # Run all tests
 test-all: test-pkgdb test-cli test-end2end
-
-# Run the all of the tests
-test-cli: impure-tests integ-tests functional-tests
 
 
 # ---------------------------------------------------------------------------- #
