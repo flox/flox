@@ -50,7 +50,7 @@
       mkdir -p $out
       cp -R ${../../pkgdb/src/buildenv/assets}/* $out
       substituteInPlace $out/etc/profile.d/0500_python.sh \
-        --subst-var-by realpath ${coreutils}/bin/realpath
+        --subst-var-by REALPATH ${coreutils}/bin/realpath
     '';
     # Used by `buildenv' to set shell prompts on activation.
     SET_PROMPT_BASH_SH = builtins.path {

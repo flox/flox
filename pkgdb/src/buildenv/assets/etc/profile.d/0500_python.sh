@@ -21,7 +21,7 @@ fi
 
 # Only run if `pip' is in `PATH'
 if pip --version >/dev/null 2>/dev/null; then
-  export PIP_CONFIG_FILE="$(@realpath --no-symlinks $FLOX_ENV/../../pip.ini)";
+  export PIP_CONFIG_FILE="$(@REALPATH@ --no-symlinks $FLOX_ENV/../../pip.ini)";
   cat >$PIP_CONFIG_FILE <<EOF
 [global]
 require-virtualenv = true
