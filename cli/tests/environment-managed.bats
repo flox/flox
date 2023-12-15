@@ -203,14 +203,53 @@ EOF
   export FLOX_DATA_DIR="$(pwd)/a_data"
   pushd a >/dev/null || return
   run "$FLOX_BIN" install emacs
-  # assert that pulling succeeds
+  # assert that pulling fails
   run "$FLOX_BIN" pull
   assert_failure
-
   # assert that the environment contains the installed package
   assert_output --partial "diverged"
+
+  # assert that pulling with `--force` succeeds
+  run "$FLOX_BIN" pull --force
+  assert_success
+
   popd >/dev/null || return
 }
+
+# bats test_tags=managed,diverged,managed:diverged-upstream
+@test "m8: remote can be force pulled into diverged environment" {
+  mkdir a;
+  mkdir b;
+
+  # on machine a, create and push the (empty) environment
+  pushd a >/dev/null || return
+  "$FLOX_BIN" init
+  FLOX_DATA_DIR="$(pwd)/a_data" "$FLOX_BIN" push --owner "$OWNER"
+  popd >/dev/null || return
+
+
+  pushd b >/dev/null || return
+  FLOX_DATA_DIR="$(pwd)/b_data" "$FLOX_BIN" pull --remote "$OWNER/a"
+  FLOX_DATA_DIR="$(pwd)/b_data" "$FLOX_BIN" install vim
+  popd >/dev/null || return
+
+  pushd a >/dev/null || return
+  FLOX_DATA_DIR="$(pwd)/a_data" "$FLOX_BIN" install emacs
+  FLOX_DATA_DIR="$(pwd)/a_data" "$FLOX_BIN" push
+  popd >/dev/null || return
+
+  pushd b >/dev/null || return
+  FLOX_DATA_DIR="$(pwd)/b_data" "$FLOX_BIN" push --force
+  popd >/dev/null || return
+
+  pushd a >/dev/null || return
+  FLOX_DATA_DIR="$(pwd)/a_data" run "$FLOX_BIN" pull
+  assert_failure
+  FLOX_DATA_DIR="$(pwd)/a_data" run "$FLOX_BIN" pull --force
+  assert_success
+  popd >/dev/null || return
+}
+
 
 # ---------------------------------------------------------------------------- #
 
