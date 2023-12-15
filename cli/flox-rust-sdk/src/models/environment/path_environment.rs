@@ -376,6 +376,10 @@ impl PathEnvironment {
             Err(EnvironmentError2::WriteEnvJson(e))?;
         }
 
+        // write "run" >> .flox/.gitignore
+        fs::write(dot_flox_path.join(".gitignore"), "run/\n")
+            .map_err(EnvironmentError2::WriteGitignore)?;
+
         Self::open(pointer, dot_flox_path, temp_dir)
     }
 }

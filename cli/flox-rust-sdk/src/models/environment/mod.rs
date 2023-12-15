@@ -335,6 +335,8 @@ pub enum EnvironmentError2 {
     EnvNotFound,
     #[error("an environment already exists at {0:?}")]
     EnvironmentExists(PathBuf),
+    #[error("could not write .gitignore file")]
+    WriteGitignore(#[source] std::io::Error),
     // endregion
 
     // todo: rmove with "catalog()" method

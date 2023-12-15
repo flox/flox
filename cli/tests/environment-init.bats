@@ -149,6 +149,13 @@ function check_with_dir() {
   check_with_dir
 }
 
+# bats test_tags=init,init:gitignore
+@test "c9: flox init adds .gitingore that ignores run/ directory" {
+  "$FLOX_BIN" init
+  run cat .flox/.gitignore
+  assert_success
+  assert_line "run/"
+}
 
 # ---------------------------------------------------------------------------- #
 #
