@@ -101,7 +101,7 @@ run-pkgdb +args="": build-pkgdb
   @{{PKGDB_BIN}} {{args}};
 
 run-cli +args="": build-cli
-  @${{FLOX_BIN}} {{args}};
+  @{{FLOX_BIN}} {{args}};
 
 run-end2end: test-end2end
 
