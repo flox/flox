@@ -8,7 +8,7 @@ use std::path::PathBuf;
 use std::{env, fs};
 
 use anyhow::{anyhow, bail, Context, Result};
-use bpaf::{Args, Bpaf, Parser};
+use bpaf::{Args, Bpaf, ParseFailure, Parser};
 use flox_rust_sdk::flox::{Flox, FLOX_VERSION};
 use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironment;
 use flox_rust_sdk::models::environment::path_environment::PathEnvironment;
@@ -24,7 +24,7 @@ use flox_rust_sdk::models::environment::{
 use flox_rust_sdk::models::environment_ref;
 use flox_rust_sdk::nix::command_line::NixCommandLine;
 use indoc::{formatdoc, indoc};
-use log::{debug, info, warn};
+use log::{debug, error, info, warn};
 use once_cell::sync::Lazy;
 use tempfile::TempDir;
 use toml_edit::Key;
@@ -231,6 +231,7 @@ impl FloxArgs {
 
         // command handled above
         match self.command.unwrap() {
+            Commands::Help(group) => group.handle(),
             Commands::Development(group) => group.handle(config, flox).await?,
             Commands::Sharing(group) => group.handle(config, flox).await?,
             Commands::Additional(group) => group.handle(config, flox).await?,
@@ -243,10 +244,33 @@ impl FloxArgs {
 #[allow(clippy::large_enum_variant)] // there's only a single instance of this enum
 #[derive(Bpaf, Clone)]
 enum Commands {
+    /// Prints help information
+    #[bpaf(command, hide)]
+    Help(#[bpaf(external(help))] Help),
     Development(#[bpaf(external(local_development_commands))] LocalDevelopmentCommands),
     Sharing(#[bpaf(external(sharing_commands))] SharingCommands),
     Additional(#[bpaf(external(additional_commands))] AdditionalCommands),
     Internal(#[bpaf(external(internal_commands))] InternalCommands),
+}
+
+#[derive(Debug, Bpaf, Clone)]
+struct Help {
+    /// Command to show help for
+    #[bpaf(positional("cmd"))]
+    cmd: Option<String>,
+}
+impl Help {
+    fn handle(self) {
+        let mut args = Vec::from_iter(self.cmd.as_deref());
+        args.push("--help");
+
+        match flox_cli().run_inner(&*args) {
+            Ok(_) => unreachable!(),
+            Err(ParseFailure::Completion(comp)) => print!("{comp}"),
+            Err(ParseFailure::Stdout(doc, _)) => info!("{doc}"),
+            Err(ParseFailure::Stderr(err)) => error!("{err}"),
+        }
+    }
 }
 
 /// Local Development Commands
