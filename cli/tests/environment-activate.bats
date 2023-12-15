@@ -153,7 +153,7 @@ EOF
   # TODO: flox will set HOME if it doesn't match the home of the user with
   # current euid. I'm not sure if we should change that, but for now just set
   # USER to REAL_USER.
-  SHELL=zsh USER="$REAL_USER" NO_COLOR=1 run -0 expect -d "$TESTS_DIR/activate/rc.exp" "$PROJECT_DIR"
+  SHELL="zsh" USER="$REAL_USER" NO_COLOR=1 run -0 expect -d "$TESTS_DIR/activate/rc.exp" "$PROJECT_DIR"
   assert_output --partial "test_alias is an alias for echo testing";
 }
 
@@ -233,15 +233,17 @@ EOF
 
 # ---------------------------------------------------------------------------- #
 
-@test "a4: 'flox activate' modifies shell prompt with 'zsh'" {
-  skip FIXME;
-  prompt_before="${(%%)PS1}";
-  zsh -c '"$FLOX_BIN" activate -d "$PROJECT_DIR"';
-  assert_success;
-  prompt_after="${(%%)PS1}";
-  assert_not_equal prompt_before prompt_after;
-  assert_regex prompt_after "\[.*$PROJECT_NAME.*\]"
-}
+# Commented out until someone decides to make this test pass,
+# otherwise shellcheck complains.
+# @test "a4: 'flox activate' modifies shell prompt with 'zsh'" {
+#   skip FIXME;
+#   prompt_before="${(%%)PS1}";
+#   zsh -c '"$FLOX_BIN" activate -d "$PROJECT_DIR"';
+#   assert_success;
+#   prompt_after="${(%%)PS1}";
+#   assert_not_equal prompt_before prompt_after;
+#   assert_regex prompt_after "\[.*$PROJECT_NAME.*\]"
+# }
 
 
 # ---------------------------------------------------------------------------- #

@@ -58,12 +58,13 @@ functional-tests +bats_args="": build
 
 # Run the CLI integration test suite
 integ-tests +bats_args="": build
-    @flox-cli-tests --pkgdb "{{PKGDB_BIN}}" --flox "{{FLOX_BIN}}" {{bats_args}}
+    @flox-cli-tests --pkgdb "{{PKGDB_BIN}}" \
+     --flox "{{FLOX_BIN}}" -- {{bats_args}}
 
 # Run a specific CLI integration test file by name (not path)
-integ-file file +bats_args="": build
-    @flox-cli-tests --tests "{{file}}" --pkgdb "{{PKGDB_BIN}}" \
-     --flox "{{FLOX_BIN}}" {{bats_args}}
+integ-file +bats_args="": build
+    @flox-cli-tests --pkgdb "{{PKGDB_BIN}}" \
+     --flox "{{FLOX_BIN}}" -- {{bats_args}}
 
 # Run the CLI unit tests
 unit-tests regex="": build
