@@ -886,6 +886,14 @@ enum PullSelect {
         /// Directory to create the environment in (default: current directory)
         dir: Option<PathBuf>,
         /// ID of the environment to pull
+        #[bpaf(long, short, argument("owner/name"))]
+        remote: EnvironmentRef,
+    },
+    NewAbbreviated {
+        /// Directory to create the environment in (default: current directory)
+        dir: Option<PathBuf>,
+        /// ID of the environment to pull
+        #[bpaf(positional("owner/name"))]
         remote: EnvironmentRef,
     },
     Existing {
@@ -918,7 +926,7 @@ impl Pull {
         subcommand_metric!("pull");
 
         match self.pull_select {
-            PullSelect::New { dir, remote } => {
+            PullSelect::New { dir, remote } | PullSelect::NewAbbreviated { dir, remote } => {
                 let (start, complete) = Self::pull_new_messages(dir.as_deref(), &remote);
                 info!("{start}");
 
