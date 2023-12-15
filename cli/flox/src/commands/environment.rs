@@ -975,7 +975,7 @@ impl Pull {
                     }
                 };
 
-                let (start, complete) = Self::pull_existing_messages(&dir, &pointer, force);
+                let (start, complete) = Self::pull_existing_messages(&pointer, force);
                 info!("{start}");
 
                 Self::pull_existing_environment(&flox, dir.join(DOT_FLOX), pointer, force)?;
@@ -1058,7 +1058,7 @@ impl Pull {
     /// todo: add floxhub base url when it's available
     fn pull_new_messages(dir: Option<&Path>, env_ref: &EnvironmentRef) -> (String, String) {
         let mut start_message =
-            format!("⬇️ remote: pulling and preparing {env_ref} from https://hub.flox.dev");
+            format!("⬇️ remote: pulling and building {env_ref} from https://hub.flox.dev");
         if let Some(dir) = dir {
             start_message += &format!(" into {dir}", dir = dir.display());
         } else {
@@ -1068,7 +1068,7 @@ impl Pull {
         let complete_message = formatdoc! {"
             ✨ pulled {env_ref} from https://hub.flox.dev
 
-            You can activate this environment with `flox activate`
+            You can activate this environment with 'flox activate'
         "};
 
         (start_message, complete_message)
@@ -1077,25 +1077,19 @@ impl Pull {
     /// construct a message for pulling an existing environment
     ///
     /// todo: add floxhub base url when it's available
-    fn pull_existing_messages(
-        dir: &Path,
-        pointer: &ManagedPointer,
-        force: bool,
-    ) -> (String, String) {
+    fn pull_existing_messages(pointer: &ManagedPointer, force: bool) -> (String, String) {
         let owner = &pointer.owner;
         let name = &pointer.name;
 
-        let start_message = format!(
-            "⬇️ remote: pulling and preparing {owner}/{name} found in {dir} from https://hub.flox.dev",
-            dir = dir.display()
-        );
+        let start_message =
+            format!("⬇️ remote: pulling and building {owner}/{name} from https://hub.flox.dev",);
 
         let suffix: &str = if force { " (forced)" } else { "" };
 
         let complete_message = formatdoc! {"
             ✨ pulled {owner}/{name} from https://hub.flox.dev{suffix}
 
-            You can activate this environment with `flox activate`
+            You can activate this environment with 'flox activate'
         "};
 
         (start_message, complete_message)
