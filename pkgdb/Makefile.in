@@ -21,6 +21,7 @@
 # ---------------------------------------------------------------------------- #
 
 
+
 VPATH = @srcdir@
 am__is_gnu_make = { \
   if test -z '$(MAKELEVEL)'; then \
@@ -99,6 +100,11 @@ bin_PROGRAMS = bin/pkgdb$(EXEEXT)
 subdir = pkgdb
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/build-aux/m4/dirs.m4 \
+	$(top_srcdir)/build-aux/m4/libtool.m4 \
+	$(top_srcdir)/build-aux/m4/ltoptions.m4 \
+	$(top_srcdir)/build-aux/m4/ltsugar.m4 \
+	$(top_srcdir)/build-aux/m4/ltversion.m4 \
+	$(top_srcdir)/build-aux/m4/lt~obsolete.m4 \
 	$(top_srcdir)/build-aux/m4/progs.m4 $(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
@@ -106,9 +112,37 @@ DIST_COMMON = $(srcdir)/Makefile.am $(am__DIST_COMMON)
 mkinstalldirs = $(install_sh) -d
 CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
-am__installdirs = "$(DESTDIR)$(bindir)"
+am__installdirs = "$(DESTDIR)$(bindir)" "$(DESTDIR)$(libdir)"
 PROGRAMS = $(bin_PROGRAMS)
 LIBRARIES = $(noinst_LIBRARIES)
+am__vpath_adj_setup = srcdirstrip=`echo "$(srcdir)" | sed 's|.|.|g'`;
+am__vpath_adj = case $$p in \
+    $(srcdir)/*) f=`echo "$$p" | sed "s|^$$srcdirstrip/||"`;; \
+    *) f=$$p;; \
+  esac;
+am__strip_dir = f=`echo $$p | sed -e 's|^.*/||'`;
+am__install_max = 40
+am__nobase_strip_setup = \
+  srcdirstrip=`echo "$(srcdir)" | sed 's/[].[^$$\\*|]/\\\\&/g'`
+am__nobase_strip = \
+  for p in $$list; do echo "$$p"; done | sed -e "s|$$srcdirstrip/||"
+am__nobase_list = $(am__nobase_strip_setup); \
+  for p in $$list; do echo "$$p $$p"; done | \
+  sed "s| $$srcdirstrip/| |;"' / .*\//!s/ .*/ ./; s,\( .*\)/[^/]*$$,\1,' | \
+  $(AWK) 'BEGIN { files["."] = "" } { files[$$2] = files[$$2] " " $$1; \
+    if (++n[$$2] == $(am__install_max)) \
+      { print $$2, files[$$2]; n[$$2] = 0; files[$$2] = "" } } \
+    END { for (dir in files) print dir, files[dir] }'
+am__base_list = \
+  sed '$$!N;$$!N;$$!N;$$!N;$$!N;$$!N;$$!N;s/\n/ /g' | \
+  sed '$$!N;$$!N;$$!N;$$!N;s/\n/ /g'
+am__uninstall_files_from_dir = { \
+  test -z "$$files" \
+    || { test ! -d "$$dir" && test ! -f "$$dir" && test ! -r "$$dir"; } \
+    || { echo " ( cd '$$dir' && rm -f" $$files ")"; \
+         $(am__cd) "$$dir" && rm -f $$files; }; \
+  }
+LTLIBRARIES = $(lib_LTLIBRARIES)
 ARFLAGS = cru
 AM_V_AR = $(am__v_AR_@AM_V@)
 am__v_AR_ = $(am__v_AR_@AM_DEFAULT_V@)
@@ -149,6 +183,17 @@ am_lib_libpkgdb_a_OBJECTS = src/lib_libpkgdb_a-command.$(OBJEXT) \
 	src/pkgdb/lib_libpkgdb_a-read.$(OBJEXT) \
 	src/pkgdb/lib_libpkgdb_a-write.$(OBJEXT)
 lib_libpkgdb_a_OBJECTS = $(am_lib_libpkgdb_a_OBJECTS)
+lib_libpkgdb_la_LIBADD =
+lib_libpkgdb_la_SOURCES = lib/libpkgdb.cc
+lib_libpkgdb_la_OBJECTS = lib/libpkgdb_la-libpkgdb.lo
+AM_V_lt = $(am__v_lt_@AM_V@)
+am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
+am__v_lt_0 = --silent
+am__v_lt_1 = 
+lib_libpkgdb_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CXX \
+	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CXXLD) \
+	$(lib_libpkgdb_la_CXXFLAGS) $(CXXFLAGS) \
+	$(lib_libpkgdb_la_LDFLAGS) $(LDFLAGS) -o $@
 am_bin_pkgdb_OBJECTS = src/bin_pkgdb-main.$(OBJEXT) \
 	src/bin_pkgdb-repl.$(OBJEXT) \
 	src/parse/bin_pkgdb-command.$(OBJEXT) \
@@ -159,11 +204,12 @@ am_bin_pkgdb_OBJECTS = src/bin_pkgdb-main.$(OBJEXT) \
 	src/search/bin_pkgdb-command.$(OBJEXT)
 bin_pkgdb_OBJECTS = $(am_bin_pkgdb_OBJECTS)
 am__DEPENDENCIES_1 =
-bin_pkgdb_DEPENDENCIES = lib/libpkgdb.a $(am__DEPENDENCIES_1) \
+bin_pkgdb_DEPENDENCIES = lib/libpkgdb.la $(am__DEPENDENCIES_1) \
 	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
 	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1)
-bin_pkgdb_LINK = $(CXXLD) $(bin_pkgdb_CXXFLAGS) $(CXXFLAGS) \
-	$(AM_LDFLAGS) $(LDFLAGS) -o $@
+bin_pkgdb_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) \
+	$(LIBTOOLFLAGS) --mode=link $(CXXLD) $(bin_pkgdb_CXXFLAGS) \
+	$(CXXFLAGS) $(AM_LDFLAGS) $(LDFLAGS) -o $@
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
 am__v_P_0 = false
@@ -179,7 +225,8 @@ am__v_at_1 =
 DEFAULT_INCLUDES = -I.@am__isrc@
 depcomp = $(SHELL) $(top_srcdir)/build-aux/depcomp
 am__maybe_remake_depfiles = depfiles
-am__depfiles_remade = src/$(DEPDIR)/bin_pkgdb-main.Po \
+am__depfiles_remade = lib/$(DEPDIR)/libpkgdb_la-libpkgdb.Plo \
+	src/$(DEPDIR)/bin_pkgdb-main.Po \
 	src/$(DEPDIR)/bin_pkgdb-repl.Po \
 	src/$(DEPDIR)/lib_libpkgdb_a-command.Po \
 	src/$(DEPDIR)/lib_libpkgdb_a-eval.Po \
@@ -219,25 +266,28 @@ am__depfiles_remade = src/$(DEPDIR)/bin_pkgdb-main.Po \
 	src/search/$(DEPDIR)/bin_pkgdb-command.Po \
 	src/search/$(DEPDIR)/lib_libpkgdb_a-params.Po
 am__mv = mv -f
-AM_V_lt = $(am__v_lt_@AM_V@)
-am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
-am__v_lt_0 = --silent
-am__v_lt_1 = 
 CXXCOMPILE = $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) \
 	$(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS)
+LTCXXCOMPILE = $(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) \
+	$(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) \
+	$(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) \
+	$(AM_CXXFLAGS) $(CXXFLAGS)
 AM_V_CXX = $(am__v_CXX_@AM_V@)
 am__v_CXX_ = $(am__v_CXX_@AM_DEFAULT_V@)
 am__v_CXX_0 = @echo "  CXX     " $@;
 am__v_CXX_1 = 
 CXXLD = $(CXX)
-CXXLINK = $(CXXLD) $(AM_CXXFLAGS) $(CXXFLAGS) $(AM_LDFLAGS) $(LDFLAGS) \
-	-o $@
+CXXLINK = $(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) \
+	$(LIBTOOLFLAGS) --mode=link $(CXXLD) $(AM_CXXFLAGS) \
+	$(CXXFLAGS) $(AM_LDFLAGS) $(LDFLAGS) -o $@
 AM_V_CXXLD = $(am__v_CXXLD_@AM_V@)
 am__v_CXXLD_ = $(am__v_CXXLD_@AM_DEFAULT_V@)
 am__v_CXXLD_0 = @echo "  CXXLD   " $@;
 am__v_CXXLD_1 = 
-SOURCES = $(lib_libpkgdb_a_SOURCES) $(bin_pkgdb_SOURCES)
-DIST_SOURCES = $(lib_libpkgdb_a_SOURCES) $(bin_pkgdb_SOURCES)
+SOURCES = $(lib_libpkgdb_a_SOURCES) lib/libpkgdb.cc \
+	$(bin_pkgdb_SOURCES)
+DIST_SOURCES = $(lib_libpkgdb_a_SOURCES) lib/libpkgdb.cc \
+	$(bin_pkgdb_SOURCES)
 RECURSIVE_TARGETS = all-recursive check-recursive cscopelist-recursive \
 	ctags-recursive dvi-recursive html-recursive info-recursive \
 	install-data-recursive install-dvi-recursive \
@@ -332,6 +382,7 @@ CRATES_DIR = @CRATES_DIR@
 CSCOPE = @CSCOPE@
 CTAGS = @CTAGS@
 CXX = @CXX@
+CXXCPP = @CXXCPP@
 CXXDEPMODE = @CXXDEPMODE@
 CXXFLAGS = @CXXFLAGS@
 CXX_FMT = @CXX_FMT@
@@ -342,16 +393,20 @@ DATADIR = @DATADIR@
 DEFS = @DEFS@
 DEPDIR = @DEPDIR@
 DEPFILES = @DEPFILES@
+DLLTOOL = @DLLTOOL@
 DOCDIR = @DOCDIR@
 DOXYGEN = @DOXYGEN@
+DSYMUTIL = @DSYMUTIL@
+DUMPBIN = @DUMPBIN@
 ECHO_C = @ECHO_C@
 ECHO_N = @ECHO_N@
 ECHO_T = @ECHO_T@
-ENV_BUILDER_ROOT = @ENV_BUILDER_ROOT@
+EGREP = @EGREP@
 ENV_BUILDER_TESTS_DIR = @ENV_BUILDER_TESTS_DIR@
-ENV_BUILDER_VERSION = @ENV_BUILDER_VERSION@
 ETAGS = @ETAGS@
 EXEEXT = @EXEEXT@
+FGREP = @FGREP@
+FILECMD = @FILECMD@
 FIND = @FIND@
 FLOX_CLI_ROOT = @FLOX_CLI_ROOT@
 FLOX_CLI_TESTS_DIR = @FLOX_CLI_TESTS_DIR@
@@ -365,16 +420,22 @@ INSTALL_PROGRAM = @INSTALL_PROGRAM@
 INSTALL_SCRIPT = @INSTALL_SCRIPT@
 INSTALL_STRIP_PROGRAM = @INSTALL_STRIP_PROGRAM@
 INSTALL_TESTS_DIR = @INSTALL_TESTS_DIR@
+LD = @LD@
 LDFLAGS = @LDFLAGS@
 LIBDIR = @LIBDIR@
 LIBEXECDIR = @LIBEXECDIR@
 LIBOBJS = @LIBOBJS@
 LIBS = @LIBS@
+LIBTOOL = @LIBTOOL@
+LIPO = @LIPO@
 LN = @LN@
+LN_S = @LN_S@
 LTLIBOBJS = @LTLIBOBJS@
+LT_SYS_LIBRARY_PATH = @LT_SYS_LIBRARY_PATH@
 M4 = @M4@
 MAKEINFO = @MAKEINFO@
 MANDIR = @MANDIR@
+MANIFEST_TOOL = @MANIFEST_TOOL@
 MISSING = @MISSING@
 MKDIR = @MKDIR@
 MKDIR_P = @MKDIR_P@
@@ -384,9 +445,14 @@ NIX_FMT = @NIX_FMT@
 NIX_LIBS = @NIX_LIBS@
 NLJSON_CFLAGS = @NLJSON_CFLAGS@
 NLJSON_LIBS = @NLJSON_LIBS@
+NM = @NM@
+NMEDIT = @NMEDIT@
 NO_UNDEFINED_SYMBOLS_FLAG = @NO_UNDEFINED_SYMBOLS_FLAG@
+OBJDUMP = @OBJDUMP@
 OBJEXT = @OBJEXT@
 OS = @OS@
+OTOOL = @OTOOL@
+OTOOL64 = @OTOOL64@
 PACKAGE = @PACKAGE@
 PACKAGE_BUGREPORT = @PACKAGE_BUGREPORT@
 PACKAGE_NAME = @PACKAGE_NAME@
@@ -430,7 +496,6 @@ TOUCH = @TOUCH@
 TR = @TR@
 UNAME = @UNAME@
 VERSION = @VERSION@
-WITH_ENV_BUILDER = @WITH_ENV_BUILDER@
 WITH_FLOX_CLI = @WITH_FLOX_CLI@
 WITH_PKGDB = @WITH_PKGDB@
 XARGS = @XARGS@
@@ -443,6 +508,7 @@ abs_top_srcdir = @abs_top_srcdir@
 ac_ct_AR = @ac_ct_AR@
 ac_ct_CC = @ac_ct_CC@
 ac_ct_CXX = @ac_ct_CXX@
+ac_ct_DUMPBIN = @ac_ct_DUMPBIN@
 am__include = @am__include@
 am__leading_dot = @am__leading_dot@
 am__quote = @am__quote@
@@ -496,7 +562,7 @@ ACLOCAL_AMFLAGS = -I ../build-aux/m4
 SUBDIRS = include tests
 
 # ---------------------------------------------------------------------------- #
-AM_CXXFLAGS = -Iinclude
+AM_CXXFLAGS = $(EXTRA_CXXFLAGS) -I$(PKGDB_ROOT)/include
 
 # ---------------------------------------------------------------------------- #
 
@@ -504,12 +570,13 @@ AM_CXXFLAGS = -Iinclude
 # This is only used for `tests/*.cc' files.
 AM_DEFAULT_SOURCE_EXT = .cc
 noinst_LIBRARIES = lib/libpkgdb.a
-lib_sharedLIBRARIES = lib/libpkgdb$(sharedLibExt)
+lib_LTLIBRARIES = lib/libpkgdb.la
 
 # ---------------------------------------------------------------------------- #
-lib_libpkgdb_a_CXXFLAGS = $(AM_CXXFLAGS) $(SHARED_LIBRARY_CXXFLAGS) \
-	$(NLJSON_CFLAGS) $(NIX_CFLAGS) $(YAML_CFLAGS) $(TOML_CFLAGS) \
-	$(SQLITE3PP_CFLAGS)
+lib_libpkgdb_a_CXXFLAGS = $(AM_CXXFLAGS) $(NLJSON_CFLAGS) \
+	$(NIX_CFLAGS) $(YAML_CFLAGS) $(TOML_CFLAGS) \
+	$(SQLITE3PP_CFLAGS) $(NLJSON_CFLAGS) $(NIX_CFLAGS) \
+	$(YAML_CFLAGS) $(TOML_CFLAGS) $(SQLITE3PP_CFLAGS)
 lib_libpkgdb_a_SOURCES = src/command.cc src/eval.cc src/exceptions.cc \
 	src/expr.cc src/flake-package.cc src/flox-flake.cc \
 	src/logger.cc src/nix-state.cc src/package.cc \
@@ -527,7 +594,7 @@ lib_libpkgdb_a_SOURCES = src/command.cc src/eval.cc src/exceptions.cc \
 bin_pkgdb_CXXFLAGS = $(AM_CXXFLAGS) $(NLJSON_CFLAGS) $(NIX_CFLAGS) \
 	$(ARGPARSE_CFLAGS)
 # For `libpkgdb.a'
-bin_pkgdb_LDADD = lib/libpkgdb.a $(NLJSON_LIBS) $(NIX_LIBS) \
+bin_pkgdb_LDADD = lib/libpkgdb.la $(NLJSON_LIBS) $(NIX_LIBS) \
 	$(ARGPARSE_LIBS) $(YAML_LIBS) $(TOML_LIBS) $(SQLITE3PP_LIBS)
 bin_pkgdb_SOURCES = src/main.cc src/repl.cc src/parse/command.cc \
 	src/pkgdb/command.cc src/pkgdb/get.cc src/pkgdb/scrape.cc \
@@ -536,13 +603,14 @@ bin_pkgdb_SOURCES = src/main.cc src/repl.cc src/parse/command.cc \
 # ---------------------------------------------------------------------------- #
 
 # NOTE: There is no `libpkgs_sa_CXXFLAGS', use `libpkgdb_a_CXXFLAGS' instead.
-libpkgdb_sa_LIBS = $(AM_CXXLIBS) $(SHARED_LIBRARY_LDFLAGS) \
+lib_libpkgdb_la_CXXFLAGS = $(AM_CXXFLAGS) $(SHARED_LIBRARY_CXXFLAGS)
+lib_libpkgdb_la_LDFLAGS = $(AM_CXXLIBS) \
 	'$(set_soname_option)libpkgdb$(sharedLibExt)' $(NLJSON_LIBS) \
 	$(NIX_LIBS) $(YAML_LIBS) $(TOML_LIBS) $(SQLITE3PP_LIBS)
 all: all-recursive
 
 .SUFFIXES:
-.SUFFIXES: .cc .o .obj
+.SUFFIXES: .cc .lo .o .obj
 $(srcdir)/Makefile.in:  $(srcdir)/Makefile.am  $(am__configure_deps)
 	@for dep in $?; do \
 	  case '$(am__configure_deps)' in \
@@ -582,6 +650,7 @@ install-binPROGRAMS: $(bin_PROGRAMS)
 	for p in $$list; do echo "$$p $$p"; done | \
 	sed 's/$(EXEEXT)$$//' | \
 	while read p p1; do if test -f $$p \
+	 || test -f $$p1 \
 	  ; then echo "$$p"; echo "$$p"; else :; fi; \
 	done | \
 	sed -e 'p;s,.*/,,;n;h' \
@@ -596,8 +665,8 @@ install-binPROGRAMS: $(bin_PROGRAMS)
 	while read type dir files; do \
 	    if test "$$dir" = .; then dir=; else dir=/$$dir; fi; \
 	    test -z "$$files" || { \
-	      echo " $(INSTALL_PROGRAM_ENV) $(INSTALL_PROGRAM) $$files '$(DESTDIR)$(bindir)$$dir'"; \
-	      $(INSTALL_PROGRAM_ENV) $(INSTALL_PROGRAM) $$files "$(DESTDIR)$(bindir)$$dir" || exit $$?; \
+	    echo " $(INSTALL_PROGRAM_ENV) $(LIBTOOL) $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=install $(INSTALL_PROGRAM) $$files '$(DESTDIR)$(bindir)$$dir'"; \
+	    $(INSTALL_PROGRAM_ENV) $(LIBTOOL) $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=install $(INSTALL_PROGRAM) $$files "$(DESTDIR)$(bindir)$$dir" || exit $$?; \
 	    } \
 	; done
 
@@ -613,10 +682,51 @@ uninstall-binPROGRAMS:
 	cd "$(DESTDIR)$(bindir)" && rm -f $$files
 
 clean-binPROGRAMS:
-	-test -z "$(bin_PROGRAMS)" || rm -f $(bin_PROGRAMS)
+	@list='$(bin_PROGRAMS)'; test -n "$$list" || exit 0; \
+	echo " rm -f" $$list; \
+	rm -f $$list || exit $$?; \
+	test -n "$(EXEEXT)" || exit 0; \
+	list=`for p in $$list; do echo "$$p"; done | sed 's/$(EXEEXT)$$//'`; \
+	echo " rm -f" $$list; \
+	rm -f $$list
 
 clean-noinstLIBRARIES:
 	-test -z "$(noinst_LIBRARIES)" || rm -f $(noinst_LIBRARIES)
+
+install-libLTLIBRARIES: $(lib_LTLIBRARIES)
+	@$(NORMAL_INSTALL)
+	@list='$(lib_LTLIBRARIES)'; test -n "$(libdir)" || list=; \
+	list2=; for p in $$list; do \
+	  if test -f $$p; then \
+	    list2="$$list2 $$p"; \
+	  else :; fi; \
+	done; \
+	test -z "$$list2" || { \
+	  echo " $(MKDIR_P) '$(DESTDIR)$(libdir)'"; \
+	  $(MKDIR_P) "$(DESTDIR)$(libdir)" || exit 1; \
+	  echo " $(LIBTOOL) $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=install $(INSTALL) $(INSTALL_STRIP_FLAG) $$list2 '$(DESTDIR)$(libdir)'"; \
+	  $(LIBTOOL) $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=install $(INSTALL) $(INSTALL_STRIP_FLAG) $$list2 "$(DESTDIR)$(libdir)"; \
+	}
+
+uninstall-libLTLIBRARIES:
+	@$(NORMAL_UNINSTALL)
+	@list='$(lib_LTLIBRARIES)'; test -n "$(libdir)" || list=; \
+	for p in $$list; do \
+	  $(am__strip_dir) \
+	  echo " $(LIBTOOL) $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=uninstall rm -f '$(DESTDIR)$(libdir)/$$f'"; \
+	  $(LIBTOOL) $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=uninstall rm -f "$(DESTDIR)$(libdir)/$$f"; \
+	done
+
+clean-libLTLIBRARIES:
+	-test -z "$(lib_LTLIBRARIES)" || rm -f $(lib_LTLIBRARIES)
+	@list='$(lib_LTLIBRARIES)'; \
+	locs=`for p in $$list; do echo $$p; done | \
+	      sed 's|^[^/]*$$|.|; s|/[^/]*$$||; s|$$|/so_locations|' | \
+	      sort -u`; \
+	test -z "$$locs" || { \
+	  echo rm -f $${locs}; \
+	  rm -f $${locs}; \
+	}
 src/$(am__dirstamp):
 	@$(MKDIR_P) src
 	@: > src/$(am__dirstamp)
@@ -719,6 +829,14 @@ lib/libpkgdb.a: $(lib_libpkgdb_a_OBJECTS) $(lib_libpkgdb_a_DEPENDENCIES) $(EXTRA
 	$(AM_V_at)-rm -f lib/libpkgdb.a
 	$(AM_V_AR)$(lib_libpkgdb_a_AR) lib/libpkgdb.a $(lib_libpkgdb_a_OBJECTS) $(lib_libpkgdb_a_LIBADD)
 	$(AM_V_at)$(RANLIB) lib/libpkgdb.a
+lib/$(DEPDIR)/$(am__dirstamp):
+	@$(MKDIR_P) lib/$(DEPDIR)
+	@: > lib/$(DEPDIR)/$(am__dirstamp)
+lib/libpkgdb_la-libpkgdb.lo: lib/$(am__dirstamp) \
+	lib/$(DEPDIR)/$(am__dirstamp)
+
+lib/libpkgdb.la: $(lib_libpkgdb_la_OBJECTS) $(lib_libpkgdb_la_DEPENDENCIES) $(EXTRA_lib_libpkgdb_la_DEPENDENCIES) lib/$(am__dirstamp)
+	$(AM_V_CXXLD)$(lib_libpkgdb_la_LINK) -rpath $(libdir) $(lib_libpkgdb_la_OBJECTS) $(lib_libpkgdb_la_LIBADD) $(LIBS)
 src/bin_pkgdb-main.$(OBJEXT): src/$(am__dirstamp) \
 	src/$(DEPDIR)/$(am__dirstamp)
 src/bin_pkgdb-repl.$(OBJEXT): src/$(am__dirstamp) \
@@ -752,6 +870,8 @@ bin/pkgdb$(EXEEXT): $(bin_pkgdb_OBJECTS) $(bin_pkgdb_DEPENDENCIES) $(EXTRA_bin_p
 
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
+	-rm -f lib/*.$(OBJEXT)
+	-rm -f lib/*.lo
 	-rm -f src/*.$(OBJEXT)
 	-rm -f src/parse/*.$(OBJEXT)
 	-rm -f src/pkgdb/*.$(OBJEXT)
@@ -761,6 +881,7 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
+@AMDEP_TRUE@@am__include@ @am__quote@lib/$(DEPDIR)/libpkgdb_la-libpkgdb.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/bin_pkgdb-main.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/bin_pkgdb-repl.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/lib_libpkgdb_a-command.Po@am__quote@ # am--include-marker
@@ -822,6 +943,14 @@ am--depfiles: $(am__depfiles_remade)
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='$<' object='$@' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXXCOMPILE) -c -o $@ `$(CYGPATH_W) '$<'`
+
+.cc.lo:
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.lo$$||'`;\
+@am__fastdepCXX_TRUE@	$(LTCXXCOMPILE) -MT $@ -MD -MP -MF $$depbase.Tpo -c -o $@ $< &&\
+@am__fastdepCXX_TRUE@	$(am__mv) $$depbase.Tpo $$depbase.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='$<' object='$@' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LTCXXCOMPILE) -c -o $@ $<
 
 src/lib_libpkgdb_a-command.o: src/command.cc
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -MT src/lib_libpkgdb_a-command.o -MD -MP -MF src/$(DEPDIR)/lib_libpkgdb_a-command.Tpo -c -o src/lib_libpkgdb_a-command.o `test -f 'src/command.cc' || echo '$(srcdir)/'`src/command.cc
@@ -1257,6 +1386,13 @@ src/pkgdb/lib_libpkgdb_a-write.obj: src/pkgdb/write.cc
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -c -o src/pkgdb/lib_libpkgdb_a-write.obj `if test -f 'src/pkgdb/write.cc'; then $(CYGPATH_W) 'src/pkgdb/write.cc'; else $(CYGPATH_W) '$(srcdir)/src/pkgdb/write.cc'; fi`
 
+lib/libpkgdb_la-libpkgdb.lo: lib/libpkgdb.cc
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_la_CXXFLAGS) $(CXXFLAGS) -MT lib/libpkgdb_la-libpkgdb.lo -MD -MP -MF lib/$(DEPDIR)/libpkgdb_la-libpkgdb.Tpo -c -o lib/libpkgdb_la-libpkgdb.lo `test -f 'lib/libpkgdb.cc' || echo '$(srcdir)/'`lib/libpkgdb.cc
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) lib/$(DEPDIR)/libpkgdb_la-libpkgdb.Tpo lib/$(DEPDIR)/libpkgdb_la-libpkgdb.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='lib/libpkgdb.cc' object='lib/libpkgdb_la-libpkgdb.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_la_CXXFLAGS) $(CXXFLAGS) -c -o lib/libpkgdb_la-libpkgdb.lo `test -f 'lib/libpkgdb.cc' || echo '$(srcdir)/'`lib/libpkgdb.cc
+
 src/bin_pkgdb-main.o: src/main.cc
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(bin_pkgdb_CXXFLAGS) $(CXXFLAGS) -MT src/bin_pkgdb-main.o -MD -MP -MF src/$(DEPDIR)/bin_pkgdb-main.Tpo -c -o src/bin_pkgdb-main.o `test -f 'src/main.cc' || echo '$(srcdir)/'`src/main.cc
 @am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) src/$(DEPDIR)/bin_pkgdb-main.Tpo src/$(DEPDIR)/bin_pkgdb-main.Po
@@ -1368,6 +1504,14 @@ src/search/bin_pkgdb-command.obj: src/search/command.cc
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='src/search/command.cc' object='src/search/bin_pkgdb-command.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(bin_pkgdb_CXXFLAGS) $(CXXFLAGS) -c -o src/search/bin_pkgdb-command.obj `if test -f 'src/search/command.cc'; then $(CYGPATH_W) 'src/search/command.cc'; else $(CYGPATH_W) '$(srcdir)/src/search/command.cc'; fi`
+
+mostlyclean-libtool:
+	-rm -f *.lo
+
+clean-libtool:
+	-rm -rf .libs _libs
+	-rm -rf bin/.libs bin/_libs
+	-rm -rf lib/.libs lib/_libs
 
 # This directory's subdirectories are mostly independent; you can cd
 # into them and run 'make' without going through this Makefile.
@@ -1527,10 +1671,12 @@ distdir-am: $(DISTFILES)
 	done
 check-am: all-am
 check: check-recursive
-all-am: Makefile $(PROGRAMS) $(LIBRARIES)
+all-am: Makefile $(PROGRAMS) $(LIBRARIES) $(LTLIBRARIES)
+install-binPROGRAMS: install-libLTLIBRARIES
+
 installdirs: installdirs-recursive
 installdirs-am:
-	for dir in "$(DESTDIR)$(bindir)"; do \
+	for dir in "$(DESTDIR)$(bindir)" "$(DESTDIR)$(libdir)"; do \
 	  test -z "$$dir" || $(MKDIR_P) "$$dir"; \
 	done
 install: install-recursive
@@ -1560,6 +1706,7 @@ distclean-generic:
 	-test -z "$(CONFIG_CLEAN_FILES)" || rm -f $(CONFIG_CLEAN_FILES)
 	-test . = "$(srcdir)" || test -z "$(CONFIG_CLEAN_VPATH_FILES)" || rm -f $(CONFIG_CLEAN_VPATH_FILES)
 	-rm -f bin/$(am__dirstamp)
+	-rm -f lib/$(DEPDIR)/$(am__dirstamp)
 	-rm -f lib/$(am__dirstamp)
 	-rm -f src/$(DEPDIR)/$(am__dirstamp)
 	-rm -f src/$(am__dirstamp)
@@ -1577,11 +1724,12 @@ maintainer-clean-generic:
 	@echo "it deletes files that may require special tools to rebuild."
 clean: clean-recursive
 
-clean-am: clean-binPROGRAMS clean-generic clean-noinstLIBRARIES \
-	mostlyclean-am
+clean-am: clean-binPROGRAMS clean-generic clean-libLTLIBRARIES \
+	clean-libtool clean-noinstLIBRARIES mostlyclean-am
 
 distclean: distclean-recursive
-		-rm -f src/$(DEPDIR)/bin_pkgdb-main.Po
+		-rm -f lib/$(DEPDIR)/libpkgdb_la-libpkgdb.Plo
+	-rm -f src/$(DEPDIR)/bin_pkgdb-main.Po
 	-rm -f src/$(DEPDIR)/bin_pkgdb-repl.Po
 	-rm -f src/$(DEPDIR)/lib_libpkgdb_a-command.Po
 	-rm -f src/$(DEPDIR)/lib_libpkgdb_a-eval.Po
@@ -1642,7 +1790,7 @@ install-dvi: install-dvi-recursive
 
 install-dvi-am:
 
-install-exec-am: install-binPROGRAMS install-exec-local
+install-exec-am: install-binPROGRAMS install-libLTLIBRARIES
 
 install-html: install-html-recursive
 
@@ -1665,7 +1813,8 @@ install-ps-am:
 installcheck-am:
 
 maintainer-clean: maintainer-clean-recursive
-		-rm -f src/$(DEPDIR)/bin_pkgdb-main.Po
+		-rm -f lib/$(DEPDIR)/libpkgdb_la-libpkgdb.Plo
+	-rm -f src/$(DEPDIR)/bin_pkgdb-main.Po
 	-rm -f src/$(DEPDIR)/bin_pkgdb-repl.Po
 	-rm -f src/$(DEPDIR)/lib_libpkgdb_a-command.Po
 	-rm -f src/$(DEPDIR)/lib_libpkgdb_a-eval.Po
@@ -1709,7 +1858,8 @@ maintainer-clean-am: distclean-am maintainer-clean-generic
 
 mostlyclean: mostlyclean-recursive
 
-mostlyclean-am: mostlyclean-compile mostlyclean-generic
+mostlyclean-am: mostlyclean-compile mostlyclean-generic \
+	mostlyclean-libtool
 
 pdf: pdf-recursive
 
@@ -1719,45 +1869,37 @@ ps: ps-recursive
 
 ps-am:
 
-uninstall-am: uninstall-binPROGRAMS
+uninstall-am: uninstall-binPROGRAMS uninstall-libLTLIBRARIES
 
 .MAKE: $(am__recursive_targets) install-am install-strip
 
 .PHONY: $(am__recursive_targets) CTAGS GTAGS TAGS all all-am \
 	am--depfiles check check-am clean clean-binPROGRAMS \
-	clean-generic clean-noinstLIBRARIES cscopelist-am ctags \
-	ctags-am distclean distclean-compile distclean-generic \
+	clean-generic clean-libLTLIBRARIES clean-libtool \
+	clean-noinstLIBRARIES cscopelist-am ctags ctags-am distclean \
+	distclean-compile distclean-generic distclean-libtool \
 	distclean-tags distdir dvi dvi-am html html-am info info-am \
 	install install-am install-binPROGRAMS install-data \
 	install-data-am install-dvi install-dvi-am install-exec \
-	install-exec-am install-exec-local install-html \
-	install-html-am install-info install-info-am install-man \
-	install-pdf install-pdf-am install-ps install-ps-am \
-	install-strip installcheck installcheck-am installdirs \
-	installdirs-am maintainer-clean maintainer-clean-generic \
-	mostlyclean mostlyclean-compile mostlyclean-generic pdf pdf-am \
-	ps ps-am tags tags-am uninstall uninstall-am \
-	uninstall-binPROGRAMS
+	install-exec-am install-html install-html-am install-info \
+	install-info-am install-libLTLIBRARIES install-man install-pdf \
+	install-pdf-am install-ps install-ps-am install-strip \
+	installcheck installcheck-am installdirs installdirs-am \
+	maintainer-clean maintainer-clean-generic mostlyclean \
+	mostlyclean-compile mostlyclean-generic mostlyclean-libtool \
+	pdf pdf-am ps ps-am tags tags-am uninstall uninstall-am \
+	uninstall-binPROGRAMS uninstall-libLTLIBRARIES
 
 .PRECIOUS: Makefile
 
 
-lib/libpkgdb$(sharedLibExt): lib/libpkgdb.a
-	$(CXXLINK) $(libpkgdb_sa_LIBS) -o $@ $^
-
 # ---------------------------------------------------------------------------- #
 
-# Extend normal installation to add shared library
-install-exec-local-shared-lib: lib/libpkgdb$(sharedLibExt)
-	@$(NORMAL_INSTALL)
-	$(MKDIR_P) $(DESTDIR)$(libdir)
-	$(INSTALL_PROGRAM_ENV)                                      \
-	  $(INSTALL_PROGRAM) lib/libpkgdb$(sharedLibExt)            \
-                         "$(DESTDIR)$(libdir)"||exit $$?;
+@IS_CLANG_TRUE@EXTRA_CXXFLAGS ?= -Wall -Wextra -Werror -pedantic         \
+@IS_CLANG_TRUE@                  -Wno-gnu-zero-variadic-macro-arguments
+@IS_CLANG_FALSE@EXTRA_CXXFLAGS ?= -Wall -Wextra -Werror -pedantic
 
-# TODO: Install `lib/pkgconfig/libpkgdb.pc' file.
-
-install-exec-local: install-exec-local-shared-lib
+EXTRA_LDFLAGS ?=
 
 # ---------------------------------------------------------------------------- #
 #

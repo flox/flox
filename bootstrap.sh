@@ -113,6 +113,9 @@ pushd "$_as_dir" >/dev/null||exit;
 
 $ACLOCAL;
 $AUTORECONF -ifv;
+$SED -i -e 's/\$RM \(\\"\$cfgfile\\";\)/$RM -f \1/'  \
+        -e 's/\$RM \("\$cfgfile"\)/$RM -f \1/'      \
+        ./configure;
 
 
 # ---------------------------------------------------------------------------- #

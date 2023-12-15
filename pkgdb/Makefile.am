@@ -11,8 +11,21 @@ SUBDIRS = include tests
 
 # ---------------------------------------------------------------------------- #
 
+if IS_CLANG
+EXTRA_CXXFLAGS ?= -Wall -Wextra -Werror -pedantic         \
+                  -Wno-gnu-zero-variadic-macro-arguments
+else  # GCC
+EXTRA_CXXFLAGS ?= -Wall -Wextra -Werror -pedantic
+endif # if IS_CLANG
+
+EXTRA_LDFLAGS ?=
+
+
+# ---------------------------------------------------------------------------- #
+
 AM_CXXFLAGS =
-AM_CXXFLAGS += -Iinclude
+AM_CXXFLAGS += $(EXTRA_CXXFLAGS)
+AM_CXXFLAGS += -I$(PKGDB_ROOT)/include
 
 
 # ---------------------------------------------------------------------------- #
@@ -24,7 +37,7 @@ AM_DEFAULT_SOURCE_EXT = .cc
 noinst_LIBRARIES =
 noinst_LIBRARIES += lib/libpkgdb.a
 
-lib_sharedLIBRARIES = lib/libpkgdb$(sharedLibExt)
+lib_LTLIBRARIES = lib/libpkgdb.la
 
 bin_PROGRAMS =
 bin_PROGRAMS += bin/pkgdb
@@ -34,7 +47,6 @@ bin_PROGRAMS += bin/pkgdb
 
 lib_libpkgdb_a_CXXFLAGS =
 lib_libpkgdb_a_CXXFLAGS += $(AM_CXXFLAGS)
-lib_libpkgdb_a_CXXFLAGS += $(SHARED_LIBRARY_CXXFLAGS)
 lib_libpkgdb_a_CXXFLAGS += $(NLJSON_CFLAGS)
 lib_libpkgdb_a_CXXFLAGS += $(NIX_CFLAGS)
 lib_libpkgdb_a_CXXFLAGS += $(YAML_CFLAGS)
@@ -87,7 +99,7 @@ bin_pkgdb_CXXFLAGS += $(NIX_CFLAGS)
 bin_pkgdb_CXXFLAGS += $(ARGPARSE_CFLAGS)
 
 bin_pkgdb_LDADD =
-bin_pkgdb_LDADD += lib/libpkgdb.a
+bin_pkgdb_LDADD += lib/libpkgdb.la
 bin_pkgdb_LDADD += $(NLJSON_LIBS)
 bin_pkgdb_LDADD += $(NIX_LIBS)
 bin_pkgdb_LDADD += $(ARGPARSE_LIBS)
@@ -111,33 +123,23 @@ bin_pkgdb_SOURCES += src/search/command.cc
 
 # NOTE: There is no `libpkgs_sa_CXXFLAGS', use `libpkgdb_a_CXXFLAGS' instead.
 
-libpkgdb_sa_LIBS =
-libpkgdb_sa_LIBS += $(AM_CXXLIBS)
-libpkgdb_sa_LIBS += $(SHARED_LIBRARY_LDFLAGS)
-libpkgdb_sa_LIBS += '$(set_soname_option)libpkgdb$(sharedLibExt)'
-libpkgdb_sa_LIBS += $(NLJSON_LIBS)
-libpkgdb_sa_LIBS += $(NIX_LIBS)
-libpkgdb_sa_LIBS += $(YAML_LIBS)
-libpkgdb_sa_LIBS += $(TOML_LIBS)
-libpkgdb_sa_LIBS += $(SQLITE3PP_LIBS)
+lib_libpkgdb_la_CXXFLAGS =
+lib_libpkgdb_la_CXXFLAGS += $(AM_CXXFLAGS)
+lib_libpkgdb_la_CXXFLAGS += $(SHARED_LIBRARY_CXXFLAGS)
+lib_libpkgdb_a_CXXFLAGS += $(NLJSON_CFLAGS)
+lib_libpkgdb_a_CXXFLAGS += $(NIX_CFLAGS)
+lib_libpkgdb_a_CXXFLAGS += $(YAML_CFLAGS)
+lib_libpkgdb_a_CXXFLAGS += $(TOML_CFLAGS)
+lib_libpkgdb_a_CXXFLAGS += $(SQLITE3PP_CFLAGS)
 
-lib/libpkgdb$(sharedLibExt): lib/libpkgdb.a
-	$(CXXLINK) $(libpkgdb_sa_LIBS) -o $@ $^
-
-
-# ---------------------------------------------------------------------------- #
-
-# Extend normal installation to add shared library
-install-exec-local-shared-lib: lib/libpkgdb$(sharedLibExt)
-	@$(NORMAL_INSTALL)
-	$(MKDIR_P) $(DESTDIR)$(libdir)
-	$(INSTALL_PROGRAM_ENV)                                      \
-	  $(INSTALL_PROGRAM) lib/libpkgdb$(sharedLibExt)            \
-                         "$(DESTDIR)$(libdir)"||exit $$?;
-
-# TODO: Install `lib/pkgconfig/libpkgdb.pc' file.
-
-install-exec-local: install-exec-local-shared-lib
+lib_libpkgdb_la_LDFLAGS =
+lib_libpkgdb_la_LDFLAGS += $(AM_CXXLIBS)
+lib_libpkgdb_la_LDFLAGS += '$(set_soname_option)libpkgdb$(sharedLibExt)'
+lib_libpkgdb_la_LDFLAGS += $(NLJSON_LIBS)
+lib_libpkgdb_la_LDFLAGS += $(NIX_LIBS)
+lib_libpkgdb_la_LDFLAGS += $(YAML_LIBS)
+lib_libpkgdb_la_LDFLAGS += $(TOML_LIBS)
+lib_libpkgdb_la_LDFLAGS += $(SQLITE3PP_LIBS)
 
 
 # ---------------------------------------------------------------------------- #

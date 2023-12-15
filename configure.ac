@@ -22,6 +22,11 @@ AM_INIT_AUTOMAKE([-Wall -Werror foreign subdir-objects])
 AC_CONFIG_SRCDIR([pkgdb/src/main.cc])
 #AC_CONFIG_HEADERS([pkgdb/config.h])
 
+# This has to go before `LT_INIT'
+RM="${RM:-rm} -f";
+LT_PREREQ([2.4.7])
+LT_INIT
+
 FLOX_INIT_DIRS
 
 
@@ -58,7 +63,7 @@ FLOX_PROG_MISSING
 AC_PATH_PROG([CAT], [cat], [$MISSING cat])
 AC_PATH_PROG([CP], [cp], [$MISSING cp])
 AC_PATH_PROG([MKDIR], [mkdir], [$MISSING mkdir])
-AC_PATH_PROG([RM], [rm], [$MISSING rm])
+AC_PATH_PROG([RM], [rm -f], [$MISSING rm])
 AC_PATH_PROG([SORT], [sort], [$MISSING sort])
 AC_PATH_PROG([TEE], [tee], [$MISSING tee])
 AC_PATH_PROG([TEST], [test], [$MISSING test])
@@ -198,24 +203,6 @@ You must specify either 'local', 'nix', or a path to a directory])])
 ])
 AC_SUBST([WITH_PKGDB])
 
-# --with-env-builder
-AC_ARG_WITH([env-builder],
-  [AS_HELP_STRING(
-    [--with-env-builder={local,nix,PREFIX}],
-    [use env-builder from local tree, nix build, or path to its ]dnl
-[install prefix])],
-  [WITH_ENV_BUILDER="$withval"],
-  [WITH_ENV_BUILDER=local]
-)
-AS_CASE(["$WITH_ENV_BUILDER"],
-  [local], [:],
-  [nix],   [:],
-  [AS_IF([test -d "$WITH_ENV_BUILDER"], [:],
-    [AC_MSG_ERROR([Invalid '--with-env-builder' setting: '$WITH_ENV_BUILDER'.
-You must specify either 'local', 'nix', or a path to a directory])])
-])
-AC_SUBST([WITH_ENV_BUILDER])
-
 # --with-flox-cli
 AC_ARG_WITH([flox-cli],
   [AS_HELP_STRING(
@@ -242,7 +229,6 @@ AC_SUBST([WITH_FLOX_CLI])
 AC_SUBST([REPO_ROOT], ["$abs_srcdir"])
 AC_SUBST([PKGDB_ROOT], ["$REPO_ROOT/pkgdb"])
 AC_SUBST([PKGDB_TESTS_DIR], ["$PKGDB_ROOT/tests"])
-AC_SUBST([ENV_BUILDER_ROOT], ["$REPO_ROOT/env-builder"])
 AC_SUBST([ENV_BUILDER_TESTS_DIR], ["$ENV_BUILDER_ROOT/tests"])
 AC_SUBST([FLOX_CLI_ROOT], ["$REPO_ROOT"])
 AC_SUBST([FLOX_CLI_TESTS_DIR], ["$FLOX_CLI_ROOT/tests"])
@@ -254,7 +240,6 @@ AC_SUBST([SHELLS_DIR], ["$REPO_ROOT/shells"])
 DEPFILES="$REPO_ROOT/flake.nix $REPO_ROOT/flake.lock"
 DEPFILES="$DEPFILES $PKGS_DIR/flox/default.nix";
 DEPFILES="$DEPFILES $PKGS_DIR/flox-pkgdb/default.nix";
-DEPFILES="$DEPFILES $PKGS_DIR/flox-env-builder/default.nix";
 DEPFILES="$DEPFILES $SHELLS_DIR/flox/default.nix";
 AC_SUBST([DEPFILES])
 
@@ -321,7 +306,7 @@ AC_SUBST([set_soname_option])
 # - `SHARED_LIBRARY_CFLAGS' is used to compile shared libraries.
 # - `NO_UNDEFINED_SYMBOLS_FLAG' disallows undefined symbols in shared libraries.
 
-AS_CASE(["$TOOLCHAIN"],
+AS_CASE(["$CXX_TOOLCHAIN"],
   [gcc],
   [NO_UNDEFINED_SYMBOLS_FLAG='-Wl,--no-undefined';
   SHARED_LIBRARY_CFLAGS='-fPIC -shared';],
@@ -339,20 +324,18 @@ AC_SUBST([SHARED_LIBRARY_LDFLAGS])
 
 AC_SUBST([SHARED_LIBRARY_CFLAGS])
 
+AM_CONDITIONAL([BUILD_SHARED_LIBS], [test "$enable_shared" = 'yes'])
+
 
 # ---------------------------------------------------------------------------- #
 
-AC_SUBST([PKGDB_VERSION], ["$(< pkgdb/version)"]);
-AC_SUBST([ENV_BUILDER_VERSION], ["$(< env-builder/version)"]);
+AC_SUBST([PKGDB_VERSION], ["$(< pkgdb/version)"])
 
 
 # ---------------------------------------------------------------------------- #
 
 AC_CONFIG_FILES([
-  Makefile
   pkgdb/Makefile
-  pkgdb/include/Makefile
-  pkgdb/tests/Makefile
 ])
 AC_OUTPUT
 

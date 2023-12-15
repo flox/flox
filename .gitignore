@@ -12,3 +12,6 @@
 compile_commands.json
 result
 result-*
+libtool
+config.status
+.deps/
