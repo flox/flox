@@ -326,6 +326,58 @@ displayableGlobbedPath( const flox::AttrPathGlob & attrs )
 
 /* -------------------------------------------------------------------------- */
 
+
+std::string
+joinWithDelim( const std::vector<std::string> & strings,
+               const std::string &              delim )
+{
+  auto fold
+    = [&]( std::string acc, std::string elem ) { return acc + delim + elem; };
+  std::string joined = std::accumulate( std::next( strings.begin() ),
+                                        strings.end(),
+                                        strings[0],
+                                        fold );
+  return joined;
+}
+
+/* -------------------------------------------------------------------------- */
+
+void
+printLog( const nix::Verbosity & lvl, const std::string & msg )
+{
+  if ( lvl <= nix::verbosity ) { nix::logger->log( lvl, msg ); }
+}
+
+void
+traceLog( const std::string & msg )
+{
+  printLog( nix::Verbosity::lvlVomit, msg );
+}
+
+void
+debugLog( const std::string & msg )
+{
+  printLog( nix::Verbosity::lvlDebug, msg );
+}
+
+void
+infoLog( const std::string & msg )
+{
+  printLog( nix::Verbosity::lvlInfo, msg );
+}
+
+void
+warningLog( const std::string & msg )
+{
+  printLog( nix::Verbosity::lvlWarn, msg );
+}
+
+void
+errorLog( const std::string & msg )
+{
+  printLog( nix::Verbosity::lvlError, msg );
+}
+
 }  // namespace flox
 
 

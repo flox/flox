@@ -28,6 +28,7 @@ use super::{
 use crate::flox::Flox;
 use crate::models::environment_ref::{EnvironmentName, EnvironmentOwner};
 use crate::models::floxmetav2::{floxmeta_git_options, FloxmetaV2, FloxmetaV2Error};
+use crate::models::manifest::PackageToInstall;
 use crate::providers::git::{GitCommandBranchHashError, GitCommandError, GitProvider};
 
 const GENERATION_LOCK_FILENAME: &str = "env.lock";
@@ -152,7 +153,7 @@ impl Environment for ManagedEnvironment {
     #[allow(unused)]
     async fn install(
         &mut self,
-        packages: Vec<String>,
+        packages: &[PackageToInstall],
         flox: &Flox,
     ) -> Result<InstallationAttempt, EnvironmentError2> {
         let mut generations = self

@@ -11,8 +11,11 @@
 # ---------------------------------------------------------------------------- #
 
 nix_options := "--extra-experimental-features nix-command \
---extra-experimental-features flakes"
-cargo_test_invocation := "cargo test --workspace"
+ --extra-experimental-features flakes"
+PKGDB_BIN := "${PWD}/pkgdb/bin/pkgdb"
+FLOX_BIN := "${PWD}/cli/target/debug/flox"
+cargo_test_invocation := "PKGDB_BIN=${PKGDB_BIN} cargo test --workspace"
+vscode_cpp_config := "./.vscode/c_cpp_properties.json"
 
 
 # ---------------------------------------------------------------------------- #
@@ -23,11 +26,20 @@ _default:
 
 # ---------------------------------------------------------------------------- #
 
+# Print the paths of all of the binaries
+bins:
+    @echo "{{PKGDB_BIN}}"
+    @echo "{{FLOX_BIN}}"
+
+# ---------------------------------------------------------------------------- #
+
+# Build only pkgdb
 build-pkgdb:
     @make -C pkgdb -j;
 
+# Build only flox
 build-cli: build-pkgdb
-    @pushd cli; cargo build; popd
+    @pushd cli; cargo build -q; popd
 
 # Build the binaries
 build: build-cli
@@ -35,40 +47,42 @@ build: build-cli
 
 # ---------------------------------------------------------------------------- #
 
+# Run the pkgdb tests
 test-pkgdb: build-pkgdb
     @make -C pkgdb -j tests;
     @make -C pkgdb check;
 
 # Run the end-to-end test suite
 functional-tests +bats_args="": build
-    @flox-tests {{bats_args}};
+    @flox-tests --pkgdb "{{PKGDB_BIN}}" --flox "{{FLOX_BIN}}" {{bats_args}}
 
-# Run the integration test suite
-integ-tests: build
-    @flox-cli-tests --pkgdb "${PWD}/pkgdb/bin/pkgdb"        \
-                    --flox "${PWD}/cli/target/debug/flox";
+# Run the CLI integration test suite
+integ-tests +bats_args="": build
+    @flox-cli-tests --pkgdb "{{PKGDB_BIN}}" \
+     --flox "{{FLOX_BIN}}" -- {{bats_args}}
 
-# Run a specific 'bats' test file
-bats-file file: build
-    @flox-tests --tests "{{file}}";
+# Run a specific CLI integration test file by name (not path)
+integ-file +bats_args="": build
+    @flox-cli-tests --pkgdb "{{PKGDB_BIN}}" \
+     --flox "{{FLOX_BIN}}" -- {{bats_args}}
 
-# Run the Rust unit tests
+# Run the CLI unit tests
 unit-tests regex="": build
     @pushd cli;                            \
      {{cargo_test_invocation}} {{regex}};  \
      popd;
 
-# Run the test suite, including impure tests
+# Run the CLI unit tests, including impure tests
 impure-tests regex="": build
     @pushd cli;                                                     \
      {{cargo_test_invocation}} {{regex}} --features "extra-tests";  \
      popd;
 
-# Run the entire test suite, not including impure tests
-test-cli: build unit-tests functional-tests integ-tests
+# Run the entire CLI test suite
+test-cli: impure-tests integ-tests functional-tests
 
-# Run the entire test suite, including impure tests
-test-all: test-pkgdb impure-tests functional-tests integ-tests
+# Run the entire test suite, including impure unit tests
+test-all: test-pkgdb impure-tests integ-tests functional-tests 
 
 
 # ---------------------------------------------------------------------------- #
@@ -101,6 +115,21 @@ license:
     @pushd cli;                                     \
      cargo metadata --format-version 1              \
        |jq -r '.packages[]|[.name,.license]|@csv';
+
+# ---------------------------------------------------------------------------- #
+
+# Configure VS Code's C++ environment
+config-vscode:
+    @pushd pkgdb; make -j -s cdb; popd
+    @if [ ! -f {{vscode_cpp_config}} ]; \
+        then echo "{}" > {{vscode_cpp_config}}; \
+        fi
+    @echo $(jq '.configurations.cppStandard = "c++20"' {{vscode_cpp_config}}) \
+        > {{vscode_cpp_config}};
+    @echo $(jq \
+        '.configurations.compileCommands = \
+        "${workspaceFolder}/pkgdb/compile_commands.json"' \
+        {{vscode_cpp_config}}) > {{vscode_cpp_config}}
 
 
 # ---------------------------------------------------------------------------- #

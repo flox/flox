@@ -270,7 +270,10 @@ public:
                                const ManifestDescriptorRaw & raw )
     : ManifestDescriptor( raw )
   {
-    if ( ! this->name.has_value() ) { this->name = installID; }
+    if ( ( ! this->name.has_value() ) && ( ! this->path.has_value() ) )
+      {
+        this->path = AttrPath { std::string( installID ) };
+      }
   }
 
   /**

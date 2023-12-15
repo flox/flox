@@ -24,7 +24,7 @@ pub enum FindAndReplaceError {
     WriteTemplateFile(std::io::Error),
 }
 
-/// Replace all occurrences of find with replace in a directory or file
+/// Replace all occurrences of `find` with `replace` in a directory or file
 pub async fn find_and_replace(
     path: &Path,
     find: &str,

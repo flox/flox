@@ -18,6 +18,7 @@
 #include <vector>
 
 #include <nix/attrs.hh>
+#include <nix/error.hh>
 #include <nix/flake/flakeref.hh>
 #include <nlohmann/json.hpp>
 
@@ -427,6 +428,52 @@ vectorMapOptional( const std::vector<T> & orig )
  */
 std::string
 displayableGlobbedPath( const AttrPathGlob & attrs );
+
+/* -------------------------------------------------------------------------- */
+
+/**
+ * @brief Join a vector of strings with a delimiter between elements.
+ */
+std::string
+joinWithDelim( const std::vector<std::string> & strings,
+               const std::string &              delim );
+
+/* -------------------------------------------------------------------------- */
+
+/** @brief Print a log message with the provided log level. */
+void
+printLog( const nix::Verbosity & lvl, const std::string & msg );
+
+/**
+ * @brief Prints a log message to `stderr` when called with `-vvvv`.
+ */
+void
+traceLog( const std::string & msg );
+
+/**
+ * @brief Prints a log message to `stderr` when called with `--debug` or `-vvv`.
+ */
+void
+debugLog( const std::string & msg );
+
+/**
+ * @brief Prints a log message to `stderr` at default verbosity.
+ */
+void
+infoLog( const std::string & msg );
+
+/**
+ * @brief Prints a log message to `stderr` when verbosity is at least `-q`.
+ */
+void
+warningLog( const std::string & msg );
+
+/**
+ * @brief Prints a log message to `stderr` when verbosity is at least `-qq`.
+ */
+void
+errorLog( const std::string & msg );
+
 
 /* -------------------------------------------------------------------------- */
 

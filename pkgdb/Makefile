@@ -235,8 +235,8 @@ ifeq (gcc,$(TOOLCHAIN))
 CXXFLAGS += -ggdb3 -pg -fno-omit-frame-pointer
 LDFLAGS  += -ggdb3 -pg -fno-omit-frame-pointer
 else # Clang
-CXXFLAGS += -g -pg
-LDFLAGS  += -g -pg
+CXXFLAGS += -g -glldb -fno-omit-frame-pointer -mno-omit-leaf-frame-pointer
+LDFLAGS  += -g -glldb -fno-omit-frame-pointer -mno-omit-leaf-frame-pointer
 endif # ifeq (gcc,$(TOOLCHAIN))
 endif # ifneq ($(DEBUG),)
 
