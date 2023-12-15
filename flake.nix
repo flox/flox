@@ -144,7 +144,7 @@
           clippy.enable = true;
           commitizen.enable = true;
           ruff.enable = true;
-          shfmt.enable = true;
+          # shfmt.enable = false; # disabled until someone makes a formatting PR
           # shellcheck.enable = true; # disabled until we have time to fix all the warnings
         };
         settings = {
