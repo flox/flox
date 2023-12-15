@@ -241,7 +241,9 @@ impl Delete {
         let description = environment_description(&environment)?;
 
         let comfirm = Dialog {
-            message: &format!("You are about to delete your environment {description}"),
+            message: &format!(
+                "You are about to delete your environment {description}. Are you sure?"
+            ),
             help_message: Some("Use `-f` to force deletion"),
             typed: Confirm {
                 default: Some(false),
@@ -259,7 +261,7 @@ impl Delete {
         };
 
         match result {
-            Ok(_) => info!("✅ environment {description} deleted"),
+            Ok(_) => info!("🗑️  environment {description} deleted"),
             Err(err) => Err(err)
                 .with_context(|| format!("⚠️  could not delete environment {description}"))?,
         }
