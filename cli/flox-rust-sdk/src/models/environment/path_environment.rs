@@ -145,7 +145,7 @@ impl Environment for PathEnvironment {
     /// - Create a result link as gc-root.
     /// - Create a lockfile if one doesn't already exist, updating it with
     ///   any new packages.
-    async fn build(&mut self, flox: &Flox) -> Result<(), EnvironmentError2> {
+    fn build(&mut self, flox: &Flox) -> Result<(), EnvironmentError2> {
         let mut env_view = CoreEnvironment::new(self.path.join(ENV_DIR_NAME));
         env_view.build(flox)?;
         env_view.link(flox, self.out_link(&flox.system)?)?;
@@ -161,7 +161,7 @@ impl Environment for PathEnvironment {
     /// manifest.
     ///
     /// Todo: remove async
-    async fn install(
+    fn install(
         &mut self,
         packages: &[PackageToInstall],
         flox: &Flox,
@@ -178,7 +178,7 @@ impl Environment for PathEnvironment {
     /// Returns true if the environment was modified and false otherwise.
     /// TODO: this should return a list of packages that were actually
     /// uninstalled rather than a bool.
-    async fn uninstall(
+    fn uninstall(
         &mut self,
         packages: Vec<String>,
         flox: &Flox,
@@ -191,11 +191,7 @@ impl Environment for PathEnvironment {
     }
 
     /// Atomically edit this environment, ensuring that it still builds
-    async fn edit(
-        &mut self,
-        flox: &Flox,
-        contents: String,
-    ) -> Result<EditResult, EnvironmentError2> {
+    fn edit(&mut self, flox: &Flox, contents: String) -> Result<EditResult, EnvironmentError2> {
         let mut env_view = CoreEnvironment::new(self.path.join(ENV_DIR_NAME));
         let result = env_view.edit(flox, contents)?;
         env_view.link(flox, self.out_link(&flox.system)?)?;
@@ -266,9 +262,9 @@ impl Environment for PathEnvironment {
         Ok(())
     }
 
-    async fn activation_path(&mut self, flox: &Flox) -> Result<PathBuf, EnvironmentError2> {
-        self.build(flox).await?;
-        Ok(self.out_link(&flox.system)?)
+    fn activation_path(&mut self, flox: &Flox) -> Result<PathBuf, EnvironmentError2> {
+        self.build(flox)?;
+        self.out_link(&flox.system)
     }
 
     /// Path to the environment's parent directory

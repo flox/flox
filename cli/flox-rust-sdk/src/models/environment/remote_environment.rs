@@ -95,17 +95,17 @@ impl RemoteEnvironment {
 #[async_trait]
 impl Environment for RemoteEnvironment {
     /// Build the environment and create a result link as gc-root
-    async fn build(&mut self, flox: &Flox) -> Result<(), EnvironmentError2> {
-        self.inner.build(flox).await
+    fn build(&mut self, flox: &Flox) -> Result<(), EnvironmentError2> {
+        self.inner.build(flox)
     }
 
     /// Install packages to the environment atomically
-    async fn install(
+    fn install(
         &mut self,
         packages: &[PackageToInstall],
         flox: &Flox,
     ) -> Result<InstallationAttempt, EnvironmentError2> {
-        let result = self.inner.install(packages, flox).await?;
+        let result = self.inner.install(packages, flox)?;
         self.inner
             .push(false)
             .map_err(RemoteEnvironmentError::UpdateUpstream)?;
@@ -114,12 +114,12 @@ impl Environment for RemoteEnvironment {
     }
 
     /// Uninstall packages from the environment atomically
-    async fn uninstall(
+    fn uninstall(
         &mut self,
         packages: Vec<String>,
         flox: &Flox,
     ) -> Result<String, EnvironmentError2> {
-        let result = self.inner.uninstall(packages, flox).await?;
+        let result = self.inner.uninstall(packages, flox)?;
         self.inner
             .push(false)
             .map_err(RemoteEnvironmentError::UpdateUpstream)?;
@@ -127,12 +127,8 @@ impl Environment for RemoteEnvironment {
     }
 
     /// Atomically edit this environment, ensuring that it still builds
-    async fn edit(
-        &mut self,
-        flox: &Flox,
-        contents: String,
-    ) -> Result<EditResult, EnvironmentError2> {
-        let result = self.inner.edit(flox, contents).await?;
+    fn edit(&mut self, flox: &Flox, contents: String) -> Result<EditResult, EnvironmentError2> {
+        let result = self.inner.edit(flox, contents)?;
         self.inner
             .push(false)
             .map_err(RemoteEnvironmentError::UpdateUpstream)?;
@@ -162,8 +158,8 @@ impl Environment for RemoteEnvironment {
         self.inner.manifest_content(flox)
     }
 
-    async fn activation_path(&mut self, flox: &Flox) -> Result<PathBuf, EnvironmentError2> {
-        self.inner.activation_path(flox).await
+    fn activation_path(&mut self, flox: &Flox) -> Result<PathBuf, EnvironmentError2> {
+        self.inner.activation_path(flox)
     }
 
     fn parent_path(&self) -> Result<PathBuf, EnvironmentError2> {

@@ -81,7 +81,7 @@ impl Edit {
         let result = match self.provided_manifest_contents()? {
             // If provided with the contents of a manifest file, either via a path to a file or via
             // contents piped to stdin, use those contents to try building the environment.
-            Some(new_manifest) => environment.edit(&flox, new_manifest).await?,
+            Some(new_manifest) => environment.edit(&flox, new_manifest)?,
             // If not provided with new manifest contents, let the user edit the file directly
             // via $EDITOR or $VISUAL (as long as `flox edit` was invoked interactively).
             None => self.interactive_edit(flox, environment.as_mut()).await?,
@@ -137,7 +137,7 @@ impl Edit {
         // decides to stop.
         loop {
             let new_manifest = Edit::edited_manifest_contents(&tmp_manifest, &editor)?;
-            match environment.edit(&flox, new_manifest).await {
+            match environment.edit(&flox, new_manifest) {
                 Err(e) => {
                     error!("Environment invalid; building resulted in an error: {e}");
                     if !Dialog::can_prompt() {
@@ -312,7 +312,7 @@ impl Activate {
             .context("could't write progress message")?;
         stderr.flush().context("could't flush stderr")?;
 
-        let activation_path = environment.activation_path(&flox).await?;
+        let activation_path = environment.activation_path(&flox)?;
 
         stderr
             .queue(cursor::RestorePosition)
@@ -595,7 +595,7 @@ impl Install {
         if packages.is_empty() {
             bail!("Must specify at least one package");
         }
-        let installation = environment.install(&packages, &flox).await?;
+        let installation = environment.install(&packages, &flox)?;
         if installation.new_manifest.is_some() {
             // Print which new packages were installed
             for pkg in packages.iter() {
@@ -644,7 +644,7 @@ impl Uninstall {
             .detect_concrete_environment(&flox, "uninstall from")?;
         let description = environment_description(&concrete_environment)?;
         let mut environment = concrete_environment.into_dyn_environment();
-        let _ = environment.uninstall(self.packages.clone(), &flox).await?;
+        let _ = environment.uninstall(self.packages.clone(), &flox)?;
 
         // Note, you need two spaces between this emoji and the package name
         // otherwise they appear right next to each other.
