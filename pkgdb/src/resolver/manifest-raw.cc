@@ -545,7 +545,6 @@ installFromJSON( const nlohmann::json & install )
   std::unordered_map<std::string, std::optional<ManifestDescriptorRaw>> result;
   for ( const auto & [name, desc] : install.items() )
     {
-      /* An empty/null descriptor uses `name' of the attribute. */
       if ( desc.is_null() ) { result.emplace( name, std::nullopt ); }
       else  // TODO: parse CLI strings
         {

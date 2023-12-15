@@ -46,6 +46,8 @@ use super::{
 use crate::flox::Flox;
 use crate::models::environment::{CATALOG_JSON, ENV_DIR_NAME, MANIFEST_FILENAME};
 use crate::models::environment_ref::EnvironmentName;
+use crate::models::manifest::PackageToInstall;
+
 /// Struct representing a local environment
 ///
 /// This environment performs transactional edits by first copying the environment
@@ -161,7 +163,7 @@ impl Environment for PathEnvironment {
     /// Todo: remove async
     async fn install(
         &mut self,
-        packages: Vec<String>,
+        packages: &[PackageToInstall],
         flox: &Flox,
     ) -> Result<InstallationAttempt, EnvironmentError2> {
         let mut env_view = CoreEnvironment::new(self.path.join(ENV_DIR_NAME));

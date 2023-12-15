@@ -1,8 +1,21 @@
 use std::collections::HashMap;
+use std::process::Command;
+use std::str::FromStr;
 
 use log::debug;
 use serde::Deserialize;
-use toml_edit::{self, Document, InlineTable, Item, Table, Value};
+use toml_edit::{self, Document, Formatted, InlineTable, Item, Table, Value};
+
+use crate::models::pkgdb::PKGDB_BIN;
+
+#[derive(Debug, thiserror::Error)]
+pub enum ManifestError {
+    #[error("couldn't parse descriptor '{}': {}", desc, msg)]
+    MalformedStringDescriptor { msg: String, desc: String },
+    /// FIXME: This is a temporary error variant until `flox` parses descriptors on its own
+    #[error("failed while calling pkgdb")]
+    PkgDbCall(#[source] std::io::Error),
+}
 
 /// A subset of the manifest used to check what type of edits users make. We
 /// don't use this struct for making our own edits.
@@ -42,10 +55,37 @@ pub struct PackageInsertion {
     pub already_installed: HashMap<String, bool>,
 }
 
+/// A package to install.
+///
+/// Users may specify a different install ID than the package name,
+/// especially when the package is nested. This struct is the common
+/// denominator for packages with specified IDs and packages with
+/// default IDs.
+#[derive(Debug, PartialEq)]
+pub struct PackageToInstall {
+    pub id: String,
+    pub path: String,
+    pub version: Option<String>,
+    pub input: Option<String>,
+}
+
+impl FromStr for PackageToInstall {
+    type Err = ManifestError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        temporary_parse_descriptor(s)
+    }
+}
+
 /// Insert package names into the `[install]` table of a manifest.
+///
+/// Note that the packages may be provided as dot-separated attribute paths
+/// that should be interpreted as relative paths under whatever input they're
+/// coming from. For this reason we put them under the `<descriptor>.path` key
+/// rather than `<descriptor>.name`.
 pub fn insert_packages(
     manifest_contents: &str,
-    pkgs: &[String],
+    pkgs: &[PackageToInstall],
 ) -> Result<PackageInsertion, TomlEditError> {
     debug!("attempting to insert packages into manifest");
     let mut already_installed: HashMap<String, bool> = HashMap::new();
@@ -65,13 +105,22 @@ pub fn insert_packages(
     };
 
     for pkg in pkgs {
-        if !install_table.contains_key(pkg) {
-            install_table.insert(pkg, Item::Value(Value::InlineTable(InlineTable::new())));
-            already_installed.insert(pkg.clone(), false);
-            debug!("package '{pkg}' newly installed");
+        if !install_table.contains_key(&pkg.id) {
+            let mut descriptor_table = InlineTable::new();
+            descriptor_table.insert("path", Value::String(Formatted::new(pkg.path.clone())));
+            if let Some(ref version) = pkg.version {
+                descriptor_table.insert("version", Value::String(Formatted::new(version.clone())));
+            }
+            if let Some(ref input) = pkg.input {
+                descriptor_table.insert("input", Value::String(Formatted::new(input.clone())));
+            }
+            descriptor_table.set_dotted(true);
+            install_table.insert(&pkg.id, Item::Value(Value::InlineTable(descriptor_table)));
+            already_installed.insert(pkg.id.clone(), false);
+            debug!("package newly installed: id={}, path={}", pkg.id, pkg.path);
         } else {
-            already_installed.insert(pkg.clone(), true);
-            debug!("package '{pkg}' already installed");
+            already_installed.insert(pkg.id.clone(), true);
+            debug!("package already installed: id={}", pkg.id);
         }
     }
 
@@ -157,6 +206,89 @@ pub fn list_packages(manifest_contents: &str) -> Result<Option<Vec<String>>, Tom
     }
 }
 
+/// A parsed descriptor from `pkgdb parse descriptor --manifest`
+///
+/// FIXME: this is currently a hack using a tool in `pkgdb` only meant for debugging.
+#[derive(Debug, Deserialize)]
+pub struct ParsedDescriptor {
+    pub name: Option<String>,
+    pub path: Option<Vec<String>>,
+    pub input: Option<Input>,
+    pub version: Option<String>,
+    pub semver: Option<String>,
+}
+
+/// A parsed input
+///
+/// FIXME: this is currently a hack using a tool in `pkgdb` only meant for debugging.
+#[derive(Debug, Deserialize, PartialEq)]
+pub struct Input {
+    pub id: String,
+}
+
+/// Parse a shorthand descriptor into structured data
+///
+/// FIXME: this is currently a hack using a tool in `pkgdb` only meant for debugging.
+pub fn temporary_parse_descriptor(descriptor: &str) -> Result<PackageToInstall, ManifestError> {
+    let output = Command::new(&*PKGDB_BIN)
+        .arg("parse")
+        .arg("descriptor")
+        .arg("--to")
+        .arg("manifest")
+        .arg(descriptor)
+        .output()
+        .map_err(ManifestError::PkgDbCall)?;
+    let parsed: Result<ParsedDescriptor, _> = serde_json::from_slice(&output.stdout);
+    if let Ok(parsed) = parsed {
+        let (id, path) = if let Some(mut path) = parsed.path {
+            // Quote any path components that need quoting
+            path.iter_mut().for_each(|attr| {
+                if attr.contains('.') || attr.contains('"') {
+                    *attr = format!("\"{}\"", attr);
+                }
+            });
+            let id_part = path.last().cloned().map(Ok).unwrap_or_else(|| {
+                Err(ManifestError::MalformedStringDescriptor {
+                    msg: "descriptor had an empty path".to_string(),
+                    desc: descriptor.to_string(),
+                })
+            })?;
+            (id_part, path.join("."))
+        } else if let Some(name) = parsed.name {
+            (name.clone(), name)
+        } else {
+            // This should have been caught by `pkgdb parse descriptor`,
+            // it's more likely that if we hit this we got unexpected output
+            // that we didn't know how to parse. It's possible, but unlikely,
+            // and something ignored for the sake of time when we can write
+            // a parser in `flox` instead of leaning on `pkgdb` debugging tools.
+            return Err(ManifestError::MalformedStringDescriptor {
+                msg: "descriptor had no name or path".to_string(),
+                desc: descriptor.to_string(),
+            });
+        };
+        let version = if let Some(version) = parsed.version {
+            let mut v = "=".to_string();
+            v.push_str(&version);
+            Some(v)
+        } else {
+            parsed.semver
+        };
+        let input = parsed.input.map(|input| input.id);
+        Ok(PackageToInstall {
+            id,
+            path,
+            version,
+            input,
+        })
+    } else {
+        Err(ManifestError::MalformedStringDescriptor {
+            msg: String::from_utf8_lossy(&output.stdout).to_string(),
+            desc: descriptor.to_string(),
+        })
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -180,23 +312,23 @@ ripgrep = {}
 
     #[test]
     fn insert_adds_new_package() {
-        let test_packages = vec!["python".to_owned()];
+        let test_packages = vec![PackageToInstall::from_str("python").unwrap()];
         let pre_addition_toml = DUMMY_MANIFEST.parse::<Document>().unwrap();
-        assert!(!contains_package(&pre_addition_toml, &test_packages[0]).unwrap());
+        assert!(!contains_package(&pre_addition_toml, &test_packages[0].id).unwrap());
         let insertion =
             insert_packages(DUMMY_MANIFEST, &test_packages).expect("couldn't add package");
         assert!(
             insertion.new_toml.is_some(),
             "manifest was changed by install"
         );
-        assert!(contains_package(&insertion.new_toml.unwrap(), &test_packages[0]).unwrap());
+        assert!(contains_package(&insertion.new_toml.unwrap(), &test_packages[0].id).unwrap());
     }
 
     #[test]
     fn no_change_adding_existing_package() {
-        let test_packages = vec!["hello".to_owned()];
+        let test_packages = vec![PackageToInstall::from_str("hello").unwrap()];
         let pre_addition_toml = DUMMY_MANIFEST.parse::<Document>().unwrap();
-        assert!(contains_package(&pre_addition_toml, &test_packages[0]).unwrap());
+        assert!(contains_package(&pre_addition_toml, &test_packages[0].id).unwrap());
         let insertion = insert_packages(DUMMY_MANIFEST, &test_packages).unwrap();
         assert!(
             insertion.new_toml.is_none(),
@@ -210,9 +342,11 @@ ripgrep = {}
 
     #[test]
     fn insert_adds_install_table_when_missing() {
-        let test_packages = vec!["foo".to_owned()];
+        let test_packages = vec![PackageToInstall::from_str("foo").unwrap()];
         let insertion = insert_packages("", &test_packages).unwrap();
-        assert!(contains_package(&insertion.new_toml.clone().unwrap(), &test_packages[0]).unwrap());
+        assert!(
+            contains_package(&insertion.new_toml.clone().unwrap(), &test_packages[0].id).unwrap()
+        );
         assert!(
             insertion.new_toml.is_some(),
             "manifest was changed by install"
@@ -225,7 +359,7 @@ ripgrep = {}
 
     #[test]
     fn insert_error_when_manifest_malformed() {
-        let test_packages = vec!["foo".to_owned()];
+        let test_packages = vec![PackageToInstall::from_str("foo").unwrap()];
         let attempted_insertion = insert_packages(BAD_MANIFEST, &test_packages);
         assert!(matches!(
             attempted_insertion,
@@ -263,5 +397,61 @@ ripgrep = {}
         let test_packages = vec!["hello".to_owned(), "DOES_NOT_EXIST".to_owned()];
         let removal = remove_packages(DUMMY_MANIFEST, &test_packages);
         assert!(matches!(removal, Err(TomlEditError::PackageNotFound(_))));
+    }
+
+    #[test]
+    fn inserts_package_needing_quotes() {
+        let attrs = r#"foo."bar.baz".qux"#;
+        let test_packages = vec![PackageToInstall::from_str(attrs).unwrap()];
+        let pre_addition_toml = DUMMY_MANIFEST.parse::<Document>().unwrap();
+        assert!(!contains_package(&pre_addition_toml, &test_packages[0].id).unwrap());
+        let insertion =
+            insert_packages(DUMMY_MANIFEST, &test_packages).expect("couldn't add package");
+        assert!(
+            insertion.new_toml.is_some(),
+            "manifest was changed by install"
+        );
+        let new_toml = insertion.new_toml.unwrap();
+        assert!(contains_package(&new_toml, &test_packages[0].id).unwrap());
+        let inserted_path = new_toml
+            .get("install")
+            .and_then(|t| t.get("qux"))
+            .and_then(|d| d.get("path"))
+            .and_then(|p| p.as_str())
+            .unwrap();
+        assert_eq!(inserted_path, r#"foo."bar.baz".qux"#);
+    }
+
+    #[test]
+    fn parses_string_descriptor() {
+        // FIXME: remove or update this test when `flox` can parse descriptors on its own
+        let parsed = temporary_parse_descriptor("hello").unwrap();
+        assert_eq!(parsed, PackageToInstall {
+            id: "hello".to_string(),
+            path: "hello".to_string(),
+            version: None,
+            input: None,
+        });
+        let parsed = temporary_parse_descriptor("nixpkgs:foo.bar@=1.2.3").unwrap();
+        assert_eq!(parsed, PackageToInstall {
+            id: "bar".to_string(),
+            path: "foo.bar".to_string(),
+            version: Some("=1.2.3".to_string()),
+            input: Some("nixpkgs".to_string())
+        });
+        let parsed = temporary_parse_descriptor("nixpkgs:foo.bar@23.11").unwrap();
+        assert_eq!(parsed, PackageToInstall {
+            id: "bar".to_string(),
+            path: "foo.bar".to_string(),
+            version: Some("23.11".to_string()),
+            input: Some("nixpkgs".to_string())
+        });
+        let parsed = temporary_parse_descriptor("nixpkgs:rubyPackages.\"http_parser.rb\"").unwrap();
+        assert_eq!(parsed, PackageToInstall {
+            id: "\"http_parser.rb\"".to_string(),
+            path: "rubyPackages.\"http_parser.rb\"".to_string(),
+            version: None,
+            input: Some("nixpkgs".to_string())
+        });
     }
 }

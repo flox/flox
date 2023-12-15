@@ -4,6 +4,7 @@ use std::io::{stdin, Write};
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::str::FromStr;
 
 use anyhow::{anyhow, bail, Context, Result};
 use bpaf::Bpaf;
@@ -32,7 +33,7 @@ use flox_rust_sdk::models::environment::{
     FLOX_PROMPT_ENVIRONMENTS_VAR,
 };
 use flox_rust_sdk::models::floxmetav2::FloxmetaV2Error;
-use flox_rust_sdk::models::manifest::list_packages;
+use flox_rust_sdk::models::manifest::{list_packages, PackageToInstall};
 use flox_rust_sdk::models::pkgdb::{call_pkgdb, UpdateResult, PKGDB_BIN};
 use flox_rust_sdk::nix::command::StoreGc;
 use flox_rust_sdk::nix::command_line::NixCommandLine;
@@ -541,8 +542,27 @@ pub struct Install {
     #[bpaf(external(environment_select), fallback(Default::default()))]
     environment: EnvironmentSelect,
 
-    #[bpaf(positional("PACKAGES"), some("Must specify at least one package"))]
+    /// Option to specify a package ID
+    #[bpaf(external(pkg_with_id_option), many)]
+    id: Vec<PkgWithIdOption>,
+
+    #[bpaf(positional("packages"))]
     packages: Vec<String>,
+}
+
+#[derive(Debug, Bpaf, Clone)]
+#[bpaf(adjacent)]
+#[allow(clippy::manual_non_exhaustive)]
+pub struct PkgWithIdOption {
+    /// Install a package and assign an explicit ID
+    #[bpaf(long("id"), short('i'))]
+    _option: (),
+    /// ID of the package to install
+    #[bpaf(positional("id"))]
+    pub id: String,
+    /// Path to the package to install as shown by `flox search`
+    #[bpaf(positional("package"))]
+    pub path: String,
 }
 
 impl Install {
@@ -559,18 +579,40 @@ impl Install {
             .detect_concrete_environment(&flox, "install to")?;
         let description = environment_description(&concrete_environment)?;
         let mut environment = concrete_environment.into_dyn_environment();
-        let installation = environment.install(self.packages.clone(), &flox).await?;
+        let mut packages = self
+            .packages
+            .iter()
+            .map(|p| PackageToInstall::from_str(p))
+            .collect::<Result<Vec<_>, _>>()?;
+        packages.extend(self.id.iter().map(|p| PackageToInstall {
+            id: p.id.clone(),
+            path: p.path.clone(),
+            version: None,
+            input: None,
+        }));
+        if packages.is_empty() {
+            bail!("Must specify at least one package");
+        }
+        let installation = environment.install(&packages, &flox).await?;
         if installation.new_manifest.is_some() {
             // Print which new packages were installed
-            for pkg in self.packages.iter() {
-                if let Some(false) = installation.already_installed.get(pkg) {
-                    info!("✅ '{pkg}' installed to environment {description}");
+            for pkg in packages.iter() {
+                if let Some(false) = installation.already_installed.get(&pkg.id) {
+                    info!("✅ '{}' installed to environment {description}", pkg.id);
                 } else {
-                    info!("⚠️ '{pkg}' already installed to environment {description}");
+                    info!(
+                        "⚠️  package with id '{}' already installed to environment {description}",
+                        pkg.id
+                    );
                 }
             }
         } else {
-            info!("⚠️ package(s) already installed to environment {description}");
+            for pkg in packages.iter() {
+                info!(
+                    "⚠️  package with id '{}' already installed to environment {description}",
+                    pkg.id
+                );
+            }
         }
         Ok(())
     }

@@ -242,7 +242,9 @@ test_groupIsLocked1()
 {
   /* Create manifest with hello */
   ManifestRaw manifestRaw;
-  manifestRaw.install          = { { "hello", std::nullopt } };
+  manifestRaw.install          = { { "hello",
+                                     ManifestDescriptorRaw(
+                              nlohmann::json( { { "path", "hello" } } ) ) } };
   manifestRaw.options          = Options {};
   manifestRaw.options->systems = { _system };
   manifestRaw.registry         = registryWithNixpkgs;
@@ -531,7 +533,9 @@ test_getGroupInput0()
 {
   /* Create manifest with hello */
   ManifestRaw manifestRaw;
-  manifestRaw.install          = { { "hello", std::nullopt } };
+  manifestRaw.install          = { { "hello",
+                                     ManifestDescriptorRaw(
+                              nlohmann::json( { { "path", "hello" } } ) ) } };
   manifestRaw.options          = Options {};
   manifestRaw.options->systems = { _system };
   manifestRaw.registry         = registryWithNixpkgs;
