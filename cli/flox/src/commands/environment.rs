@@ -1000,6 +1000,7 @@ impl Pull {
         let mut env = ManagedEnvironment::open(flox, pointer, dot_flox_path)
             .context("Could not open environment")?;
         env.pull(force).context("Could not pull environment")?;
+        env.build(flox).context("Could not build environment")?;
 
         Ok(())
     }
@@ -1030,9 +1031,12 @@ impl Pull {
 
         let result =
             ManagedEnvironment::open(flox, pointer, &dot_flox_path).map_err(Self::convert_error);
-        if let Err(err) = result {
-            fs::remove_dir_all(dot_flox_path).context("Could not clean up .flox/ directory")?;
-            Err(err)?;
+        match result {
+            Err(err) => {
+                fs::remove_dir_all(dot_flox_path).context("Could not clean up .flox/ directory")?;
+                Err(err)?;
+            },
+            Ok(mut env) => env.build(flox).context("Could not build environment")?,
         }
         Ok(())
     }
