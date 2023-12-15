@@ -474,6 +474,7 @@ warningLog( const std::string & msg );
 void
 errorLog( const std::string & msg );
 
+
 /* -------------------------------------------------------------------------- */
 
 }  // namespace flox

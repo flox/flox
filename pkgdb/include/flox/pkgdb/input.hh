@@ -229,7 +229,10 @@ public:
 
   /** @brief Return the name if it was provided. */
   [[nodiscard]] std::optional<std::string>
-  getName() const;
+  getName() const
+  {
+    return this->name;
+  }
 }; /* End struct `PkgDbInput' */
 
 
