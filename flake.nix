@@ -15,9 +15,6 @@
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/release-23.05";
 
-  inputs.floco.url = "github:aakropotkin/floco";
-  inputs.floco.inputs.nixpkgs.follows = "nixpkgs";
-
   inputs.sqlite3pp.url = "github:aakropotkin/sqlite3pp";
   inputs.sqlite3pp.inputs.nixpkgs.follows = "nixpkgs";
 
@@ -39,7 +36,6 @@
   outputs = {
     self,
     nixpkgs,
-    floco,
     sqlite3pp,
     parser-util,
     pre-commit-hooks,
@@ -84,7 +80,7 @@
       nix = final.callPackage ./pkgs/nix {};
     };
 
-    # Cherry pick `semver' recipe from `floco'.
+    # Use cpp-semver
     overlays.semver = final: prev: {
       cpp-semver = final.callPackage ./pkgs/cpp-semver {};
     };

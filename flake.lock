@@ -145,26 +145,6 @@
     "floco": {
       "inputs": {
         "nixpkgs": [
-          "nixpkgs"
-        ]
-      },
-      "locked": {
-        "lastModified": 1694873346,
-        "narHash": "sha256-Uvh03bg0a6ZnNWiX1Gb8g+m343wSJ/wb8ryUASt0loc=",
-        "owner": "aakropotkin",
-        "repo": "floco",
-        "rev": "d16bd444ab9d29a6640f52ee4e43a66528e07515",
-        "type": "github"
-      },
-      "original": {
-        "owner": "aakropotkin",
-        "repo": "floco",
-        "type": "github"
-      }
-    },
-    "floco_2": {
-      "inputs": {
-        "nixpkgs": [
           "flox-latest",
           "pkgdb",
           "nixpkgs"
@@ -385,7 +365,7 @@
     "pkgdb": {
       "inputs": {
         "argparse": "argparse",
-        "floco": "floco_2",
+        "floco": "floco",
         "nixpkgs": "nixpkgs",
         "sqlite3pp": "sqlite3pp"
       },
@@ -430,7 +410,6 @@
     "root": {
       "inputs": {
         "crane": "crane",
-        "floco": "floco",
         "flox-latest": "flox-latest",
         "nixpkgs": "nixpkgs_2",
         "parser-util": "parser-util_2",
