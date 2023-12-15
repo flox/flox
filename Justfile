@@ -98,10 +98,10 @@ test-all: test-pkgdb test-cli test-end2end
 
 
 run-pkgdb +args="": build-pkgdb
-  @./pkgdb/bin/pkgdb {{args}};
+  @{{PKGDB_BIN}} {{args}};
 
 run-cli +args="": build-cli
-  @./cli/target/debug/flox {{args}};
+  @${{FLOX_BIN}} {{args}};
 
 run-end2end: test-end2end
 
