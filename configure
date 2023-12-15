@@ -3862,8 +3862,6 @@ fi
 
 #AC_CONFIG_HEADERS([pkgdb/config.h])
 
-# This has to go before `LT_INIT'
-RM="${RM:-rm} -f";
 
 case `pwd` in
   *\ * | *\	*)
