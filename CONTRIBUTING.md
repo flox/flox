@@ -90,6 +90,8 @@ formatting.
 | Clean       | `just clean-end2end`                          |
 
 
+How to use pytest at its best:
+
 - You can run tests also directly with `pytest` script which should be
   available in the development environment.
 

@@ -10,6 +10,7 @@
 #
 # ---------------------------------------------------------------------------- #
 
+
 nix_options := "--extra-experimental-features nix-command \
  --extra-experimental-features flakes"
 PKGDB_BIN := "${PWD}/pkgdb/bin/pkgdb"
@@ -26,12 +27,15 @@ _default:
 
 # ---------------------------------------------------------------------------- #
 
+
 # Print the paths of all of the binaries
 bins:
     @echo "{{PKGDB_BIN}}"
     @echo "{{FLOX_BIN}}"
 
+
 # ---------------------------------------------------------------------------- #
+
 
 # Build only pkgdb
 build-pkgdb:
@@ -101,7 +105,9 @@ run-cli +args="": build-cli
 
 run-end2end: test-end2end
 
+
 # ---------------------------------------------------------------------------- #
+
 
 fmt-pkgdb:
     @make -C pkgdb fmt;
@@ -117,9 +123,10 @@ fmt-end2end:
     @pre-commit run ruff --files "${PWD}/end2end";
 
 fmt-docs:
-  @echo "TODO";
+    @echo "TODO";
 
 fmt-all: fmt-pkgdb fmt-cli fmt-nix fmt-end2end fmt-docs
+
 
 # ---------------------------------------------------------------------------- #
 
@@ -134,12 +141,13 @@ clean-end2end:
     @rm "${PWD}/.pytest_cache" -rf;
 
 clean-docs:
-  @echo "TODO";
+    @echo "TODO";
 
 clean-all: clean-pkgdb clean-cli clean-end2end clean-docs
 
 
 # ---------------------------------------------------------------------------- #
+
 
 # Enters the development environment
 work:
@@ -149,6 +157,7 @@ work:
 
 
 # ---------------------------------------------------------------------------- #
+
 
 # Bump all flake dependencies and commit with a descriptive message
 bump-all:
@@ -184,6 +193,35 @@ config-vscode:
         '.configurations.compileCommands = \
         "${workspaceFolder}/pkgdb/compile_commands.json"' \
         {{vscode_cpp_config}}) > {{vscode_cpp_config}}
+
+
+# ---------------------------------------------------------------------------- #
+# Deprecated recipes
+
+
+build:
+  @echo "Deprecated: Please use \`just build-all\` recipe!";
+  @just build-all;
+
+functional-tests +args="":
+  @echo "Deprecated: Please use \`just build-all\` recipe!";
+  @just build-all {{args}};
+
+integ-tests +args="":
+  @echo "Deprecated: Please use \`just test-cli-integration\` recipe!";
+  @just test-cli-integration {{args}};
+
+integ-file +args="":
+  @echo "Deprecated: Please use \`just test-cli-integration\` recipe!";
+  @just test-cli-integration {{args}};
+
+unit-tests args="":
+  @echo "Deprecated: Please use \`just test-cli-unit\` recipe!";
+  @just test-cli-unit {{args}};
+
+impure-tests args="": build
+  @echo "Deprecated: Please use \`just test-cli-impure\` recipe!";
+  @just test-cli-impure {{args}};
 
 
 # ---------------------------------------------------------------------------- #
