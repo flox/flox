@@ -23,6 +23,7 @@ git-url-parse = "0.4.4"
 indexmap = { version = "1.9", features = ["serde"] }
 indoc = "2.0.1"
 inquire = "0.6.0"
+indicatif = "0.17"
 itertools = "0.10.5"
 log = "0.4.17"
 mockito = "1.2.0"

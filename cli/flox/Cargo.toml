@@ -29,6 +29,7 @@ regex.workspace = true
 toml_edit.workspace = true
 supports-color.workspace = true
 inquire.workspace = true
+indicatif.workspace = true
 crossterm.workspace = true
 shell-escape.workspace = true
 xdg.workspace = true
