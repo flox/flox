@@ -18,11 +18,11 @@ project_setup() {
   export PROJECT_DIR="${BATS_TEST_TMPDIR?}/test"
   rm -rf "$PROJECT_DIR"
   mkdir -p "$PROJECT_DIR"
-  pushd "$PROJECT_DIR" >/dev/null || return
+  pushd "$PROJECT_DIR" > /dev/null || return
 }
 
 project_teardown() {
-  popd >/dev/null || return
+  popd > /dev/null || return
   rm -rf "${PROJECT_DIR?}"
   unset PROJECT_DIR
 }
@@ -38,7 +38,6 @@ teardown() {
   project_teardown
   common_test_teardown
 }
-
 
 # ---------------------------------------------------------------------------- #
 
@@ -97,7 +96,7 @@ teardown() {
   run "$FLOX_BIN" init
   assert_success
 
-  assert_output - <<EOF
+  assert_output - << EOF
 ✨ Created environment test ($NIX_SYSTEM)
 
 Next:
@@ -118,7 +117,6 @@ EOF
   assert_failure
 }
 
-
 function check_with_dir() {
   run ls -A "$PROJECT_DIR"
   assert_output "other"
@@ -133,7 +131,6 @@ function check_with_dir() {
   assert_success
   check_with_dir
 }
-
 
 @test "c2.1: \`flox init\` with \`--dir <path>\` will create an environment in \`<path>\`. (absolute)" {
   mkdir -p "$PROJECT_DIR/other"
