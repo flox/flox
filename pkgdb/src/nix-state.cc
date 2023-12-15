@@ -49,7 +49,7 @@ initNix()
   nix::experimentalFeatureSettings.experimentalFeatures.assign(
     std::set( { nix::Xp::Flakes } ) );
 
-  // Only refresh the global registry once per 24 hours
+  /* Only refresh the global registry once per 24 hours. */
   nix::settings.tarballTtl = 60 * 60 * 24;
 
   /* Use custom logger */
