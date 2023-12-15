@@ -134,13 +134,26 @@ pkgdb::PkgQueryArgs &
 SearchQuery::fillPkgQueryArgs( pkgdb::PkgQueryArgs & pqa ) const
 {
   /* XXX: DOES NOT CLEAR FIRST! We are called after global preferences. */
-  pqa.name             = this->name;
-  pqa.pname            = this->pname;
-  pqa.version          = this->version;
-  pqa.semver           = this->semver;
-  pqa.partialMatch     = this->partialMatch;
-  pqa.partialNameMatch = this->partialNameMatch;
-  pqa.limit            = this->limit;
+  pqa.name    = this->name;
+  pqa.pname   = this->pname;
+  pqa.version = this->version;
+  pqa.semver  = this->semver;
+  // These will both write to `path`, so only one of them can be present,
+  // which is the same invariant that we already put in place on the `flox`
+  // side.
+  if ( this->partialMatch.has_value() )
+    {
+      AttrPath path = splitAttrPath( *this->partialMatch );
+      if ( path.size() > 1 ) { pqa.relPath = path; }
+      else { pqa.partialMatch = this->partialMatch; }
+    }
+  if ( this->partialNameMatch.has_value() )
+    {
+      AttrPath path = splitAttrPath( *this->partialNameMatch );
+      if ( path.size() > 1 ) { pqa.relPath = path; }
+      else { pqa.partialNameMatch = this->partialNameMatch; }
+    }
+  pqa.limit = this->limit;
   return pqa;
 }
 

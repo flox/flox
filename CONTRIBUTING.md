@@ -327,6 +327,7 @@ The list of tags to use for integration tests is as follows:
 - `project_env`
 - `managed_env`
 - `remote_env`
+- `python`, `node`, `go`, `ruby`, etc (anything language specific)
 
 Some of these tags will overlap. For example, the `build_env` tag should be used
 any time an environment is built, so there is overlap with `install`,
