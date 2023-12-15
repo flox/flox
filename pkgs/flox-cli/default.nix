@@ -26,25 +26,24 @@
   gitMinimal,
   nix,
   pkgsFor,
-  floxVersion,
   pre-commit-check,
   flox-pkgdb,
-  flox-env-builder,
-  longVersion ? false,
 }: let
   flox-src = builtins.path {
     name = "flox-src";
-    path = ./../../cli;
+    path = "${./../../cli}";
     filter = path: type:
-      ! builtins.elem path (map (f: ./../../cli + ("/" + f)) [
-        "flake.nix"
-        "flake.lock"
-        "pkgs"
-        "checks"
-        "tests"
-        "shells"
-        "target"
-      ]);
+      ! builtins.elem path (map (
+          f: "${./../../cli}/${f}"
+        ) [
+          "flake.nix"
+          "flake.lock"
+          "pkgs"
+          "checks"
+          "tests"
+          "shells"
+          "target"
+        ]);
   };
 
   # crane (<https://crane.dev/>) library for building rust packages
@@ -60,15 +59,11 @@
       # rather than relying on or modifying the user's `PATH` variable
       GIT_BIN = "${gitMinimal}/bin/git";
       NIX_BIN = "${nix}/bin/nix";
-      PARSER_UTIL_BIN = "${parser-util}/bin/parser-util";
       PKGDB_BIN =
         if flox-pkgdb == null
-        then ""
+        then "pkgdb"
         else "${flox-pkgdb}/bin/pkgdb";
-      ENV_BUILDER_BIN =
-        if flox-env-builder == null
-        then ""
-        else "${flox-env-builder}/bin/flox-env-builder";
+      PARSER_UTIL_BIN = "${parser-util}/bin/parser-util";
       FLOX_ETC_DIR = ../../assets/etc;
       FLOX_ZDOTDIR = ../../assets/flox.zdotdir;
 
@@ -105,10 +100,7 @@
         cacert.outPath + "/etc/ssl/certs/ca-bundle.crt";
 
       # The current version of flox being built
-      FLOX_VERSION =
-        if longVersion
-        then floxVersion
-        else cargoToml.package.version;
+      FLOX_VERSION = cargoToml.package.version;
 
       # Reexport of the platform flox is being built for
       NIX_TARGET_SYSTEM = targetPlatform.system;
@@ -235,7 +227,6 @@ in
           pkgsFor
           nix
           flox-pkgdb
-          flox-env-builder
           ;
 
         ciPackages = [

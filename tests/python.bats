@@ -49,8 +49,7 @@ teardown() { project_teardown; common_test_teardown; }
 # ---------------------------------------------------------------------------- #
 #
 @test "install requests with pip" {
-  skip "FIXME: flaky"
-  run "$FLOX_BIN" install pip python3;
+  run "$FLOX_BIN" install -i pip python310Packages.pip python3;
 
   assert_success;
   assert_output --partial "✅ 'pip' installed to environment";

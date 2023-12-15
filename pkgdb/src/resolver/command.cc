@@ -26,7 +26,8 @@ LockCommand::LockCommand() : parser( "lock" )
   this->addGlobalManifestFileOption( this->parser );
   this->addLockfileOption( this->parser );
   this->addGARegistryOption( this->parser );
-  this->addManifestFileArg( this->parser );
+  /* TODO: make manifest file optional and support locking global manifest. */
+  this->addManifestFileArg( this->parser, true );
 }
 
 
@@ -132,14 +133,21 @@ UpdateCommand::UpdateCommand() : parser( "update" )
   this->addLockfileOption( this->parser );
   this->addGARegistryOption( this->parser );
 
-  this->parser.add_argument( "-i", "--input" )
-    .help( "name of input to update" )
-    .nargs( 1 )
-    .metavar( "NAME" )
-    .action( [&]( const std::string & inputName )
-             { this->inputName = inputName; } );
+  this->addManifestFileArg( this->parser, false );
 
-  this->addManifestFileArg( this->parser );
+  this->parser.add_argument( "inputs" )
+    .help( "names of inputs to update" )
+    .metavar( "INPUTS..." )
+    .remaining()
+    .action(
+      [&]( const std::string & inputName )
+      {
+        if ( ! this->inputNames.has_value() )
+          {
+            this->inputNames = std::vector<std::string>();
+          }
+        this->inputNames->emplace_back( inputName );
+      } );
 }
 
 
@@ -148,38 +156,93 @@ UpdateCommand::UpdateCommand() : parser( "update" )
 int
 UpdateCommand::run()
 {
+  /* If the manifest doesn't have a value, assume we're updating the global
+   * manifest, and set a dummy empty manifest.
+   * TODO: be less hacky. */
+  bool global = false;
+  if ( ! this->getManifestRaw().has_value() )
+    {
+      this->setManifestRaw( ManifestRaw {} );
+      global = true;
+    }
+  nlohmann::json    lockfile;
+  std::stringstream message;
+  bool              changes = false;
   if ( auto maybeLockfile = this->getLockfile(); maybeLockfile.has_value() )
     {
-      auto lockedRaw = maybeLockfile->getLockfileRaw();
+      auto lockedRaw         = maybeLockfile->getLockfileRaw();
+      auto oldLockedRegistry = lockedRaw.registry;
+      /* Lock the manifest, disregarding an existing lockfile. TODO: skip inputs
+       * we aren't updating. */
       auto manifestRegistry
         = this->getEnvironment().getManifest().getLockedRegistry();
-      if ( this->inputName.has_value() )
+      /* If no inputs were specified, update everything. */
+      if ( ! this->inputNames.has_value() )
         {
-          if ( const auto & maybeInput
-               = manifestRegistry.inputs.find( *this->inputName );
-               maybeInput != manifestRegistry.inputs.end() )
+          lockedRaw.registry = std::move( manifestRegistry );
+        }
+      /* If inputs were specified, update each input specified. */
+      else
+        {
+          for ( auto & inputName : *this->inputNames )
             {
-              lockedRaw.registry.inputs[*this->inputName] = maybeInput->second;
-              lockedRaw.registry.defaults = manifestRegistry.defaults;
-              lockedRaw.registry.priority = manifestRegistry.priority;
+              {
+                if ( const auto & maybeInput
+                     = manifestRegistry.inputs.find( inputName );
+                     maybeInput != manifestRegistry.inputs.end() )
+                  {
+                    lockedRaw.registry.inputs[inputName] = maybeInput->second;
+                  }
+                else
+                  {
+                    throw FloxException( "input `" + inputName
+                                         + "' does not exist in manifest." );
+                  }
+              }
             }
-          else
+          lockedRaw.registry.defaults = manifestRegistry.defaults;
+          lockedRaw.registry.priority = manifestRegistry.priority;
+        }
+      /* Generate message with updated inputs. */
+      if ( global ) { message << "Updated global input(s):"; }
+      else { message << "Updated:"; }
+      for ( const auto & [inputName, input] : oldLockedRegistry.inputs )
+        {
+          if ( const auto & maybeUpdatedInput
+               = lockedRaw.registry.inputs.find( inputName );
+               maybeUpdatedInput != lockedRaw.registry.inputs.end() )
             {
-              throw FloxException( "input `" + *this->inputName
-                                   + "' does not exist in manifest." );
+              auto & [_, updatedInput] = *maybeUpdatedInput;
+              if ( input != updatedInput )
+                {
+                  changes = true;
+                  message << std::endl
+                          << "'" << inputName << "'"
+                          << " from '" << *input.from << "' to '"
+                          << *updatedInput.from << "'";
+                }
             }
         }
-      else { lockedRaw.registry = std::move( manifestRegistry ); }
-      std::cout << nlohmann::json( lockedRaw ).dump() << std::endl;
+      lockfile = lockedRaw;
     }
+  /* If the environment doesn't have a lockfile, create one from scratch. */
   else
     {
       // TODO: `RegistryRaw' should drop empty fields.
-      nlohmann::json lockfile
-        = this->getEnvironment().createLockfile().getLockfileRaw();
-      /* Print that bad boii */
-      std::cout << lockfile.dump() << std::endl;
+      lockfile = this->getEnvironment().createLockfile().getLockfileRaw();
+      changes  = true;
+      if ( global ) { message << "Locked all global inputs."; }
+      else
+        {
+          message << "Locked all inputs for previously unlocked environment.";
+        }
     }
+  /* Print that bad boii */
+  nlohmann::json result
+    = { { "lockfile", lockfile },
+        { "message", changes ? message.str() : "All inputs are up to date." } };
+  std::cout << result.dump() << std::endl;
+
   return EXIT_SUCCESS;
 }
 
@@ -192,7 +255,9 @@ RegistryCommand::RegistryCommand() : parser( "registry" )
   this->addGlobalManifestFileOption( this->parser );
   this->addLockfileOption( this->parser );
   this->addGARegistryOption( this->parser );
-  this->addManifestFileArg( this->parser );
+  /* TODO: make manifest file optional and support showing global manifest
+   * registry. */
+  this->addManifestFileArg( this->parser, true );
 }
 
 

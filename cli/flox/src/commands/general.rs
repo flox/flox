@@ -113,9 +113,9 @@ impl ConfigArgs {
 
 #[derive(Debug, Clone, Bpaf)]
 #[bpaf(adjacent)]
-#[allow(unused)]
 pub struct ConfigSet {
     /// set <key> to <value>
+    #[allow(unused)]
     set: (),
     /// Configuration key
     #[bpaf(positional("key"))]

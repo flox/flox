@@ -10,8 +10,12 @@
 #
 # ---------------------------------------------------------------------------- #
 
-nix_options := "--extra-experimental-features nix-command --extra-experimental-features flakes"
-cargo_test_invocation := "cargo test --workspace"
+nix_options := "--extra-experimental-features nix-command \
+ --extra-experimental-features flakes"
+PKGDB_BIN := "${PWD}/pkgdb/bin/pkgdb"
+FLOX_BIN := "${PWD}/cli/target/debug/flox"
+cargo_test_invocation := "PKGDB_BIN=${PKGDB_BIN} cargo test --workspace"
+vscode_cpp_config := "./.vscode/c_cpp_properties.json"
 
 
 # ---------------------------------------------------------------------------- #
@@ -22,14 +26,20 @@ _default:
 
 # ---------------------------------------------------------------------------- #
 
+# Print the paths of all of the binaries
+bins:
+    @echo "{{PKGDB_BIN}}"
+    @echo "{{FLOX_BIN}}"
+
+# ---------------------------------------------------------------------------- #
+
+# Build only pkgdb
 build-pkgdb:
-    @pushd pkgdb; make -j; popd
+    @make -C pkgdb -j;
 
-build-env-builder: build-pkgdb
-    @pushd env-builder; make -j; popd
-
-build-cli: build-env-builder
-    @pushd cli; cargo build; popd
+# Build only flox
+build-cli: build-pkgdb
+    @pushd cli; cargo build -q; popd
 
 # Build the binaries
 build: build-cli
@@ -37,35 +47,42 @@ build: build-cli
 
 # ---------------------------------------------------------------------------- #
 
+# Run the pkgdb tests
 test-pkgdb: build-pkgdb
-    @pushd pkgdb; make -j tests; popd
-    @pushd pkgdb; make check; popd
+    @make -C pkgdb -j tests;
+    @make -C pkgdb check;
 
-test-env-builder: build-env-builder
-    @pushd env-builder; make -j tests; popd
-    @pushd env-builder; make check; popd
+# Run the end-to-end test suite
+functional-tests +bats_args="": build
+    @flox-tests --pkgdb "{{PKGDB_BIN}}" --flox "{{FLOX_BIN}}" {{bats_args}}
 
-# Run the 'bats' test suite
-bats-tests +bats_args="": build
-    @flox-tests {{bats_args}}
+# Run the CLI integration test suite
+integ-tests +bats_args="": build
+    @flox-cli-tests --pkgdb "{{PKGDB_BIN}}" \
+     --flox "{{FLOX_BIN}}" -- {{bats_args}}
 
-# Run a specific 'bats' test file
-bats-file file: build
-    @flox-tests --tests "{{file}}"
+# Run a specific CLI integration test file by name (not path)
+integ-file +bats_args="": build
+    @flox-cli-tests --pkgdb "{{PKGDB_BIN}}" \
+     --flox "{{FLOX_BIN}}" -- {{bats_args}}
 
-# Run the Rust unit tests
+# Run the CLI unit tests
 unit-tests regex="": build
-    @pushd cli; {{cargo_test_invocation}} {{regex}}; popd
+    @pushd cli;                            \
+     {{cargo_test_invocation}} {{regex}};  \
+     popd;
 
-# Run the test suite, including impure tests
+# Run the CLI unit tests, including impure tests
 impure-tests regex="": build
-    @pushd cli; {{cargo_test_invocation}} {{regex}} --features "extra-tests"; popd
+    @pushd cli;                                                     \
+     {{cargo_test_invocation}} {{regex}} --features "extra-tests";  \
+     popd;
 
-# Run the entire test suite, not including impure tests
-test: build unit-tests bats-tests
+# Run the entire CLI test suite
+test-cli: impure-tests integ-tests functional-tests
 
-# Run the entire test suite, including impure tests
-test-all: test-pkgdb test-env-builder build impure-tests bats-tests
+# Run the entire test suite, including impure unit tests
+test-all: test-pkgdb impure-tests integ-tests functional-tests 
 
 
 # ---------------------------------------------------------------------------- #
@@ -81,18 +98,38 @@ work:
 
 # Bump all flake dependencies and commit with a descriptive message
 bump-all:
-    @nix {{nix_options}} flake update --commit-lock-file --commit-lockfile-summary "chore: flake bump"
+    @nix {{nix_options}} flake update --commit-lock-file  \
+         --commit-lockfile-summary "chore: flake bump";
 
 # Bump a specific flake input and commit with a descriptive message
 bump input:
-    @nix {{nix_options}} flake lock --update-input {{input}} --commit-lock-file --commit-lockfile-summary "chore: bump '{{input}}' flake input"
+    @nix {{nix_options}} flake lock --update-input {{input}}  \
+         --commit-lock-file --commit-lockfile-summary         \
+         "chore: bump '{{input}}' flake input";
 
 
 # ---------------------------------------------------------------------------- #
 
 # Output licenses of all dependency crates
 license:
-    @cargo metadata --format-version 1 | jq -r '.packages[] | [.name, .license] | @csv'
+    @pushd cli;                                     \
+     cargo metadata --format-version 1              \
+       |jq -r '.packages[]|[.name,.license]|@csv';
+
+# ---------------------------------------------------------------------------- #
+
+# Configure VS Code's C++ environment
+config-vscode:
+    @pushd pkgdb; make -j -s cdb; popd
+    @if [ ! -f {{vscode_cpp_config}} ]; \
+        then echo "{}" > {{vscode_cpp_config}}; \
+        fi
+    @echo $(jq '.configurations.cppStandard = "c++20"' {{vscode_cpp_config}}) \
+        > {{vscode_cpp_config}};
+    @echo $(jq \
+        '.configurations.compileCommands = \
+        "${workspaceFolder}/pkgdb/compile_commands.json"' \
+        {{vscode_cpp_config}}) > {{vscode_cpp_config}}
 
 
 # ---------------------------------------------------------------------------- #

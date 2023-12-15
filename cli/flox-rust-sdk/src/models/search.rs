@@ -1,21 +1,14 @@
-use std::env;
 use std::io::BufRead;
 use std::path::PathBuf;
 use std::process::{Command, ExitStatus, Stdio};
 
 use log::debug;
-use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use serde_with::skip_serializing_none;
 
-use super::pkgdb_errors::PkgDbError;
-
-// This is the `PKGDB` path that we actually use.
-// This is set once and prefers the `PKGDB` env variable, but will use
-// the fallback to the binary available at build time if it is unset.
-pub static PKGDB_BIN: Lazy<String> =
-    Lazy::new(|| env::var("PKGDB").unwrap_or(env!("PKGDB_BIN").to_string()));
+use super::pkgdb::PkgDbError;
+use crate::models::pkgdb::PKGDB_BIN;
 
 #[derive(Debug, thiserror::Error)]
 pub enum SearchError {

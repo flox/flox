@@ -9,6 +9,9 @@
   nixConfig.extra-substituters = [
     "https://cache.floxdev.com"
   ];
+  nixConfig.extra-trusted-public-keys = [
+    "flox-store-public-0:8c/B+kjIaQ+BloCmNkRUKwaVPFWkriSAd0JJvuDu4F0="
+  ];
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/release-23.05";
 
@@ -27,7 +30,11 @@
   inputs.crane.url = "github:ipetkov/crane";
   inputs.crane.inputs.nixpkgs.follows = "nixpkgs";
 
-  # ---------------------------------------------------------------------------- #
+  # This is needed to be able to calculate `git describe` format version of flox
+  # without running `git describe`
+  inputs.flox-latest.url = "git+ssh://git@github.com/flox/flox?ref=latest";
+
+  # -------------------------------------------------------------------------- #
 
   outputs = {
     self,
@@ -37,24 +44,12 @@
     parser-util,
     pre-commit-hooks,
     crane,
+    flox-latest,
     ...
   } @ inputs: let
-    # ---------------------------------------------------------------------------- #
-    floxVersion = let
-      cargoToml = let
-        contents = builtins.readFile ./cli/flox/Cargo.toml;
-      in
-        builtins.fromTOML contents;
-      prefix =
-        if self ? revCount
-        then "r"
-        else "";
-      rev = self.revCount or self.shortRev or "dirty";
-    in
-      cargoToml.package.version + "-" + prefix + (toString rev);
-
-    # ---------------------------------------------------------------------------- #
-
+    # Given a function `fn' which takes system names as an argument, produce an
+    # attribute set whose keys are system names, and values are the result of
+    # applying that system name to `fn'.
     eachDefaultSystemMap = let
       defaultSystems = [
         "x86_64-linux"
@@ -71,11 +66,15 @@
       in
         builtins.listToAttrs (map proc defaultSystems);
 
-    # ---------------------------------------------------------------------------- #
+    # ------------------------------------------------------------------------ #
 
-    # Add IWYU pragmas
+    # Overlays
+    # --------
+
+    # Add IWYU pragmas to `nlohmann_json'
+    # ( _include what you use_ extensions to headers for static analysis )
     overlays.nlohmann = final: prev: {
-      nlohmann_json = final.callPackage ./pkgs/nlohmann_json.nix {
+      nlohmann_json = final.callPackage ./pkgs/nlohmann_json {
         inherit (prev) nlohmann_json;
       };
     };
@@ -101,6 +100,8 @@
         base.overrideAttrs (prevAttrs: {preferLocalBuild = false;});
     };
 
+    # Aggregates all external dependency overlays before adding any of the
+    # packages defined by this flake.
     overlays.deps = nixpkgs.lib.composeManyExtensions [
       parser-util.overlays.default # for `parser-util'
       overlays.nlohmann
@@ -109,60 +110,74 @@
       sqlite3pp.overlays.default
     ];
 
+    # Packages defined in this repository.
     overlays.flox = final: prev: let
       callPackage = final.lib.callPackageWith (final
         // {
-          inherit inputs self floxVersion;
+          inherit inputs self;
           pkgsFor = final;
         });
     in {
+      # Use bleeding edge `rustfmt'.
       rustfmt = prev.rustfmt.override {asNightly = true;};
+
+      # Generates a `.git/hooks/pre-commit' script.
       pre-commit-check = pre-commit-hooks.lib.${final.system}.run {
         src = builtins.path {path = ./.;};
         hooks = {
           alejandra.enable = true;
-          rustfmt2 = let
+          rustfmt = let
             wrapper = final.symlinkJoin {
               name = "rustfmt-wrapped";
               paths = [final.rustfmt];
               nativeBuildInputs = [final.makeWrapper];
-              postBuild = ''
-                wrapProgram $out/bin/cargo-fmt \
-                  --prefix PATH : ${final.lib.makeBinPath [final.cargo final.rustfmt]}
+              postBuild = let
+                PATH = final.lib.makeBinPath [final.cargo final.rustfmt];
+              in ''
+                wrapProgram $out/bin/cargo-fmt --prefix PATH : ${PATH};
               '';
             };
           in {
             enable = true;
-            name = "rustfmt";
-            description = "Format Rust code.";
-            entry = "${wrapper}/bin/cargo-fmt fmt --all --manifest-path 'cli/Cargo.toml' -- --color always";
-            files = "\\.rs$";
-            pass_filenames = false;
+            entry = final.lib.mkForce "${wrapper}/bin/cargo-fmt fmt --all --manifest-path 'cli/Cargo.toml' -- --color always";
           };
+          clippy.enable = true;
           commitizen.enable = true;
+          # shfmt.enable = false; # disabled until someone makes a formatting PR
+          # shellcheck.enable = true; # disabled until we have time to fix all
+          # the warnings
+        };
+        settings = {
+          alejandra.verbosity = "quiet";
+          rust.cargoManifestPath = "cli/Cargo.toml";
         };
       };
 
+      # Customized `gh' executable used for auth.
       flox-gh = callPackage ./pkgs/flox-gh {};
 
+      # Package Database Utilities: scrape, search, and resolve.
       flox-pkgdb = callPackage ./pkgs/flox-pkgdb {};
-      flox-env-builder = callPackage ./pkgs/flox-env-builder {};
+
+      # Flox Command Line Interface ( development build ).
       flox-cli = callPackage ./pkgs/flox-cli {};
 
-      flox = callPackage ./pkgs/flox-cli {longVersion = true;};
+      # Flox Command Line Interface ( production build ).
+      flox = callPackage ./pkgs/flox {};
 
-      flox-pkgdb-tests = callPackage ./pkgs/flox-pkgdb-tests {};
-      flox-env-builder-tests = callPackage ./pkgs/flox-env-builder-tests {};
+      # Wrapper scripts for running test suites.
       flox-cli-tests = callPackage ./pkgs/flox-cli-tests {};
-
+      # Integration tests
       flox-tests = callPackage ./pkgs/flox-tests {};
+      flox-tests-pure = callPackage ./pkgs/flox-tests-pure {inputs = inputs;};
     };
 
+    # Composes dependency overlays and the overlay defined here.
     overlays.default =
       nixpkgs.lib.composeExtensions overlays.deps
       overlays.flox;
 
-    # ---------------------------------------------------------------------------- #
+    # ------------------------------------------------------------------------ #
 
     # Apply overlays to the `nixpkgs` _base_ set.
     # This is exposed as an output later; but we don't use the name
@@ -173,7 +188,7 @@
     in
       base.extend overlays.default);
 
-    # ---------------------------------------------------------------------------- #
+    # ------------------------------------------------------------------------ #
 
     checks = eachDefaultSystemMap (system: let
       pkgs = builtins.getAttr system pkgsFor;
@@ -181,7 +196,7 @@
       inherit (pkgs) pre-commit-check;
     });
 
-    # ---------------------------------------------------------------------------- #
+    # ------------------------------------------------------------------------ #
 
     packages = eachDefaultSystemMap (system: let
       pkgs = builtins.getAttr system pkgsFor;
@@ -190,50 +205,33 @@
         (pkgs)
         flox-gh
         flox-pkgdb
-        flox-env-builder
         flox-cli
+        flox-cli-tests
         flox
         pre-commit-check
+        flox-tests-pure
+        flox-dev
         ;
       default = pkgs.flox;
     });
-    # ---------------------------------------------------------------------------- #
+    # ------------------------------------------------------------------------ #
   in {
     inherit overlays packages pkgsFor checks;
 
     devShells = eachDefaultSystemMap (system: let
       pkgsBase = builtins.getAttr system pkgsFor;
       pkgs = pkgsBase.extend (final: prev: {
-        flox-pkgdb-tests = prev.flox-pkgdb-tests.override {
-          PROJECT_TESTS_DIR = "/pkgdb/tests";
-          PKGDB_BIN = null;
-          PKGDB_IS_SQLITE3_BIN = null;
-          PKGDB_SEARCH_PARAMS_BIN = null;
-        };
-        flox-env-builder-tests = prev.flox-env-builder-tests.override {
-          PROJECT_TESTS_DIR = "/env-builder/tests";
-          PKGDB_BIN = null;
-          ENV_BUILDER_BIN = null;
-        };
         flox-cli-tests = prev.flox-cli-tests.override {
           PROJECT_TESTS_DIR = "/cli/tests";
           PKGDB_BIN = null;
-          ENV_BUILDER_BIN = null;
           FLOX_BIN = null;
         };
         flox-tests = prev.flox-tests.override {
           PROJECT_TESTS_DIR = "/tests";
           PKGDB_BIN = null;
-          ENV_BUILDER_BIN = null;
           FLOX_BIN = null;
         };
-        flox-env-builder = prev.flox-env-builder.override {
-          flox-pkgdb = null;
-        };
-        flox-cli = prev.flox-cli.override {
-          flox-pkgdb = null;
-          flox-env-builder = null;
-        };
+        flox-cli = prev.flox-cli.override {flox-pkgdb = null;};
       });
       checksFor = builtins.getAttr system checks;
     in {
@@ -243,8 +241,9 @@
     });
   }; # End `outputs'
 
-  # ---------------------------------------------------------------------------- #
+  # -------------------------------------------------------------------------- #
 }
+# End flake
 # ---------------------------------------------------------------------------- #
 #
 #

@@ -224,6 +224,9 @@ SearchParams::getManifestPath()
 resolver::ManifestRaw
 SearchParams::getManifestRaw()
 {
+  /* Set a dummy empty manifest if one doesn't exist for searching outside
+   * environments.
+   * TODO: be less hacky. */
   if ( ! this->manifest.has_value() ) { return {}; }
   if ( std::holds_alternative<resolver::ManifestRaw>( *this->manifest ) )
     {

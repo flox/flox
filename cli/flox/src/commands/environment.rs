@@ -4,6 +4,7 @@ use std::io::{stdin, Write};
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::str::FromStr;
 
 use anyhow::{anyhow, bail, Context, Result};
 use bpaf::Bpaf;
@@ -15,6 +16,9 @@ use flox_rust_sdk::models::environment::managed_environment::{
 };
 use flox_rust_sdk::models::environment::path_environment::{self, PathEnvironment};
 use flox_rust_sdk::models::environment::{
+    global_manifest_lockfile_path,
+    global_manifest_path,
+    CoreEnvironmentError,
     EditResult,
     Environment,
     EnvironmentError2,
@@ -29,7 +33,8 @@ use flox_rust_sdk::models::environment::{
     FLOX_PROMPT_ENVIRONMENTS_VAR,
 };
 use flox_rust_sdk::models::floxmetav2::FloxmetaV2Error;
-use flox_rust_sdk::models::manifest::list_packages;
+use flox_rust_sdk::models::manifest::{list_packages, PackageToInstall};
+use flox_rust_sdk::models::pkgdb::{call_pkgdb, UpdateResult, PKGDB_BIN};
 use flox_rust_sdk::nix::command::StoreGc;
 use flox_rust_sdk::nix::command_line::NixCommandLine;
 use flox_rust_sdk::nix::Run;
@@ -119,7 +124,7 @@ impl Edit {
         // method because the temporary manifest needs to stick around in case the user wants
         // or needs to make successive edits without starting over each time.
         let tmp_manifest = NamedTempFile::new_in(&flox.temp_dir)?;
-        std::fs::write(&tmp_manifest, environment.manifest_content()?)?;
+        std::fs::write(&tmp_manifest, environment.manifest_content(&flox)?)?;
         let should_continue = Dialog {
             message: "Continue editing?",
             help_message: Default::default(),
@@ -211,11 +216,11 @@ impl Edit {
 #[derive(Bpaf, Clone)]
 pub struct Delete {
     #[allow(dead_code)] // not yet handled in impl
-    #[bpaf(short, long)]
+    #[bpaf(short, long, hide)]
     force: bool,
 
     #[allow(dead_code)] // not yet handled in impl
-    #[bpaf(short, long)]
+    #[bpaf(short, long, hide)]
     origin: bool,
 
     #[allow(dead_code)] // pending spec for `-e`, `--dir` behaviour
@@ -229,13 +234,34 @@ pub struct Delete {
 impl Delete {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("delete");
-        match self
+        let environment = self
             .environment
-            .detect_concrete_environment(&flox, "delete")?
-        {
-            ConcreteEnvironment::Path(environment) => environment.delete()?,
-            ConcreteEnvironment::Managed(environment) => environment.delete()?,
-            ConcreteEnvironment::Remote(environment) => environment.delete()?,
+            .detect_concrete_environment(&flox, "delete")?;
+
+        let description = environment_description(&environment)?;
+
+        let comfirm = Dialog {
+            message: &format!("You are about to delete your environment {description}"),
+            help_message: Some("Use `-f` to force deletion"),
+            typed: Confirm {
+                default: Some(false),
+            },
+        };
+
+        if !self.force && Dialog::can_prompt() && !comfirm.prompt().await? {
+            bail!("Environment deletion cancelled");
+        }
+
+        let result = match environment {
+            ConcreteEnvironment::Path(environment) => environment.delete(&flox),
+            ConcreteEnvironment::Managed(environment) => environment.delete(&flox),
+            ConcreteEnvironment::Remote(environment) => environment.delete(&flox),
+        };
+
+        match result {
+            Ok(_) => info!("✅ environment {description} deleted"),
+            Err(err) => Err(err)
+                .with_context(|| format!("⚠️  could not delete environment {description}"))?,
         }
 
         Ok(())
@@ -264,11 +290,13 @@ impl Activate {
         let prompt_name = match concrete_environment {
             // Note that the same environment could show up twice without any
             // indication of which comes from which path
+            ConcreteEnvironment::Path(ref path) => path.name().to_string(),
             ConcreteEnvironment::Managed(ref managed) => {
                 format!("{}/{}", managed.owner(), managed.name())
             },
-            ConcreteEnvironment::Path(ref path) => path.name().to_string(),
-            _ => todo!(),
+            ConcreteEnvironment::Remote(ref remote) => {
+                format!("{}/{}", remote.owner(), remote.name())
+            },
         };
 
         let mut environment = concrete_environment.into_dyn_environment();
@@ -448,7 +476,7 @@ impl List {
             .detect_concrete_environment(&flox, "list using")?
             .into_dyn_environment();
 
-        let manifest_contents = env.manifest_content()?;
+        let manifest_contents = env.manifest_content(&flox)?;
         if let Some(pkgs) = list_packages(&manifest_contents)? {
             pkgs.iter().for_each(|pkg| println!("{}", pkg));
         }
@@ -458,6 +486,9 @@ impl List {
 
 fn environment_description(environment: &ConcreteEnvironment) -> Result<String, EnvironmentError2> {
     Ok(match environment {
+        ConcreteEnvironment::Remote(environment) => {
+            format!("{}/{} (remote)", environment.owner(), environment.name(),)
+        },
         ConcreteEnvironment::Managed(environment) => {
             format!(
                 "{}/{} at {}",
@@ -473,7 +504,6 @@ fn environment_description(environment: &ConcreteEnvironment) -> Result<String, 
                 environment.parent_path()?.to_string_lossy()
             )
         },
-        _ => todo!(),
     })
 }
 
@@ -512,8 +542,27 @@ pub struct Install {
     #[bpaf(external(environment_select), fallback(Default::default()))]
     environment: EnvironmentSelect,
 
-    #[bpaf(positional("PACKAGES"), some("Must specify at least one package"))]
+    /// Option to specify a package ID
+    #[bpaf(external(pkg_with_id_option), many)]
+    id: Vec<PkgWithIdOption>,
+
+    #[bpaf(positional("packages"))]
     packages: Vec<String>,
+}
+
+#[derive(Debug, Bpaf, Clone)]
+#[bpaf(adjacent)]
+#[allow(clippy::manual_non_exhaustive)]
+pub struct PkgWithIdOption {
+    /// Install a package and assign an explicit ID
+    #[bpaf(long("id"), short('i'))]
+    _option: (),
+    /// ID of the package to install
+    #[bpaf(positional("id"))]
+    pub id: String,
+    /// Path to the package to install as shown by `flox search`
+    #[bpaf(positional("package"))]
+    pub path: String,
 }
 
 impl Install {
@@ -530,18 +579,40 @@ impl Install {
             .detect_concrete_environment(&flox, "install to")?;
         let description = environment_description(&concrete_environment)?;
         let mut environment = concrete_environment.into_dyn_environment();
-        let installation = environment.install(self.packages.clone(), &flox).await?;
+        let mut packages = self
+            .packages
+            .iter()
+            .map(|p| PackageToInstall::from_str(p))
+            .collect::<Result<Vec<_>, _>>()?;
+        packages.extend(self.id.iter().map(|p| PackageToInstall {
+            id: p.id.clone(),
+            path: p.path.clone(),
+            version: None,
+            input: None,
+        }));
+        if packages.is_empty() {
+            bail!("Must specify at least one package");
+        }
+        let installation = environment.install(&packages, &flox).await?;
         if installation.new_manifest.is_some() {
             // Print which new packages were installed
-            for pkg in self.packages.iter() {
-                if let Some(false) = installation.already_installed.get(pkg) {
-                    info!("✅ '{pkg}' installed to environment {description}");
+            for pkg in packages.iter() {
+                if let Some(false) = installation.already_installed.get(&pkg.id) {
+                    info!("✅ '{}' installed to environment {description}", pkg.id);
                 } else {
-                    info!("⚠️ '{pkg}' already installed to environment {description}");
+                    info!(
+                        "⚠️  package with id '{}' already installed to environment {description}",
+                        pkg.id
+                    );
                 }
             }
         } else {
-            info!("⚠️ package(s) already installed to environment {description}");
+            for pkg in packages.iter() {
+                info!(
+                    "⚠️  package with id '{}' already installed to environment {description}",
+                    pkg.id
+                );
+            }
         }
         Ok(())
     }
@@ -695,10 +766,6 @@ impl Push {
 
         match EnvironmentPointer::open(&dir)? {
             EnvironmentPointer::Managed(managed_pointer) => {
-                if self.owner.is_some() {
-                    bail!("Environment already linked to a remote")
-                }
-
                 Self::push_managed_env(&flox, managed_pointer, dir, self.force)
                     .context("Could not push managed environment")?;
             },
@@ -752,14 +819,8 @@ impl Push {
         let path_environment =
             path_environment::PathEnvironment::open(path_pointer, dot_flox_path, &flox.temp_dir)?;
 
-        ManagedEnvironment::push_new(
-            flox,
-            path_environment,
-            owner.parse().unwrap(),
-            &flox.temp_dir,
-            force,
-        )
-        .map_err(Self::convert_error)?;
+        ManagedEnvironment::push_new(flox, path_environment, owner.parse().unwrap(), force)
+            .map_err(Self::convert_error)?;
 
         Ok(())
     }
@@ -892,11 +953,8 @@ impl Pull {
         Ok(())
     }
 
-    fn convert_error(err: EnvironmentError2) -> anyhow::Error {
-        if let EnvironmentError2::ManagedEnvironment(ManagedEnvironmentError::OpenFloxmeta(
-            FloxmetaV2Error::LoggedOut,
-        )) = err
-        {
+    fn convert_error(err: ManagedEnvironmentError) -> anyhow::Error {
+        if let ManagedEnvironmentError::OpenFloxmeta(FloxmetaV2Error::LoggedOut) = err {
             anyhow!(indoc! {"
                 Could not pull environment: not logged in to floxhub.
 
@@ -955,6 +1013,81 @@ impl SwitchGeneration {
         subcommand_metric!("switch-generation");
 
         todo!("this command is planned for a future release")
+    }
+}
+
+/// update an environment's inputs
+#[derive(Bpaf, Clone)]
+pub struct Update {
+    #[allow(dead_code)] // pending spec for `-e`, `--dir` behaviour
+    #[bpaf(external(environment_args), group_help("Environment Options"))]
+    environment_args: EnvironmentArgs,
+
+    #[bpaf(external(environment_select), fallback(Default::default()))]
+    environment: EnvironmentSelect,
+
+    /// Update inputs used by search and show outside of an environment
+    #[bpaf(long)]
+    global: bool,
+
+    #[bpaf(positional("INPUTS"))]
+    inputs: Vec<String>,
+}
+impl Update {
+    pub async fn handle(self, flox: Flox) -> Result<()> {
+        subcommand_metric!("update");
+
+        let message = if self.global {
+            self.update_global_manifest(flox)?
+        } else {
+            self.update_manifest(flox)?
+        };
+
+        info!("{}", message);
+
+        Ok(())
+    }
+
+    fn update_global_manifest(self, flox: Flox) -> Result<String> {
+        let lockfile_path = global_manifest_lockfile_path(&flox);
+
+        let mut pkgdb_cmd = Command::new(Path::new(&*PKGDB_BIN));
+        pkgdb_cmd
+            .args(["manifest", "update"])
+            .arg("--ga-registry")
+            .arg("--global-manifest")
+            .arg(global_manifest_path(&flox));
+        if lockfile_path.exists() {
+            let canonical_lockfile_path = lockfile_path.canonicalize().map_err(|e| {
+                CoreEnvironmentError::BadLockfilePath(e, lockfile_path.to_path_buf())
+            })?;
+            pkgdb_cmd.arg("--lockfile").arg(canonical_lockfile_path);
+        }
+        pkgdb_cmd.args(self.inputs);
+
+        debug!("updating global lockfile with command: {pkgdb_cmd:?}");
+        let result: UpdateResult = serde_json::from_value(call_pkgdb(pkgdb_cmd)?)
+            .map_err(CoreEnvironmentError::ParseUpdateOutput)?;
+
+        debug!("writing lockfile to {}", lockfile_path.display());
+        std::fs::write(
+            lockfile_path,
+            serde_json::to_string_pretty(&result.lockfile).unwrap(),
+        )
+        .context("updating global inputs failed")?;
+        Ok(result.message)
+    }
+
+    fn update_manifest(self, flox: Flox) -> Result<String> {
+        let concrete_environment = self
+            .environment
+            .detect_concrete_environment(&flox, "update")?;
+
+        let mut environment = concrete_environment.into_dyn_environment();
+
+        environment
+            .update(&flox, self.inputs)
+            .context("updating environment failed")
     }
 }
 

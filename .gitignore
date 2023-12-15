@@ -1,4 +1,5 @@
 *.log
+*.swp
 *~
 .ccls
 .ccls-cache
@@ -8,7 +9,6 @@
 /.flox
 /autom4te.cache/
 /cli/target
-Makefile
 compile_commands.json
 result
 result-*

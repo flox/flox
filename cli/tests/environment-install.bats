@@ -57,7 +57,7 @@ teardown() {
   "$FLOX_BIN" init;
   run "$FLOX_BIN" install hello;
   assert_success;
-  run grep "hello = {}" "$PROJECT_DIR/.flox/env/manifest.toml";
+  run grep 'hello.path = "hello"' "$PROJECT_DIR/.flox/env/manifest.toml";
   assert_success;
 }
 
@@ -78,7 +78,7 @@ teardown() {
   run "$FLOX_BIN" install hello;
   assert_success;
   run "$FLOX_BIN" uninstall hello;
-  run grep "^hello = {}" "$PROJECT_DIR/.flox/env/manifest.toml";
+  run grep '^hello.path = "hello"' "$PROJECT_DIR/.flox/env/manifest.toml";
   assert_failure;
 }
 
@@ -134,7 +134,7 @@ teardown() {
   mkdir 2
   "$FLOX_BIN" init --dir 2
 
-  SHELL=bash run expect -d "$TESTS_DIR/install/last-activated.exp"
+  SHELL=bash NO_COLOR=1 run expect -d "$TESTS_DIR/install/last-activated.exp"
   assert_success
 }
 
@@ -145,8 +145,7 @@ teardown() {
   mkdir 2
   "$FLOX_BIN" init --dir 2
 
-  SHELL=bash run expect -d "$TESTS_DIR/install/prompt-which-environment.exp"
-  assert_success
+  SHELL=bash NO_COLOR=1 run -0 expect -d "$TESTS_DIR/install/prompt-which-environment.exp"
 }
 
 @test "'flox install' prompts when an environment is activated and there is an environment in the containing git repo" {
@@ -158,8 +157,7 @@ teardown() {
   git -C 2 init
   mkdir 2/subdirectory
 
-  SHELL=bash run expect -d "$TESTS_DIR/install/prompt-which-environment-git.exp"
-  assert_success
+  SHELL=bash NO_COLOR=1 run -0 expect -d "$TESTS_DIR/install/prompt-which-environment-git.exp"
 }
 
 @test "i5: download package when install command runs" {
@@ -168,4 +166,53 @@ teardown() {
 
 @test "i6: install on a pushed environment stages locally" {
   skip "remote environments handled in another phase"
+}
+
+@test "'flox install' installs by path" {
+  run "$FLOX_BIN" init;
+  assert_success;
+  run "$FLOX_BIN" install hello;
+  assert_success;
+  manifest=$(cat "$PROJECT_DIR/.flox/env/manifest.toml");
+  # This also checks that it correctly infers the install ID
+  assert_regex "$manifest" 'hello\.path = "hello"';
+}
+
+@test "'flox install' infers install ID" {
+  run "$FLOX_BIN" init;
+  assert_success;
+  run "$FLOX_BIN" install rubyPackages_3_2.rails;
+  assert_success;
+  manifest=$(cat "$PROJECT_DIR/.flox/env/manifest.toml");
+  # This also checks that it correctly infers the install ID
+  assert_regex "$manifest" 'rails\.path = "rubyPackages_3_2\.rails"';
+}
+
+@test "'flox install' overrides install ID with '-i'" {
+  run "$FLOX_BIN" init;
+  assert_success;
+  run "$FLOX_BIN" install -i foo hello;
+  assert_success;
+  manifest=$(cat "$PROJECT_DIR/.flox/env/manifest.toml");
+  assert_regex "$manifest" 'foo\.path = "hello"';
+}
+
+@test "'flox install' overrides install ID with '--id'" {
+  run "$FLOX_BIN" init;
+  assert_success;
+  run "$FLOX_BIN" install --id foo hello;
+  assert_success;
+  manifest=$(cat "$PROJECT_DIR/.flox/env/manifest.toml");
+  assert_regex "$manifest" 'foo\.path = "hello"';
+}
+
+@test "'flox install' accepts mix of inferred and supplied install IDs" {
+  run "$FLOX_BIN" init;
+  assert_success;
+  run "$FLOX_BIN" install -i foo rubyPackages_3_2.webmention ripgrep -i bar rubyPackages_3_2.rails;
+  assert_success;
+  manifest=$(cat "$PROJECT_DIR/.flox/env/manifest.toml");
+  assert_regex "$manifest" 'foo\.path = "rubyPackages_3_2\.webmention"';
+  assert_regex "$manifest" 'ripgrep\.path = "ripgrep"';
+  assert_regex "$manifest" 'bar\.path = "rubyPackages_3_2\.rails"';
 }
