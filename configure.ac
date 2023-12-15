@@ -22,8 +22,6 @@ AM_INIT_AUTOMAKE([-Wall -Werror foreign subdir-objects])
 AC_CONFIG_SRCDIR([pkgdb/src/main.cc])
 #AC_CONFIG_HEADERS([pkgdb/config.h])
 
-# This has to go before `LT_INIT'
-RM="${RM:-rm} -f";
 LT_PREREQ([2.4.7])
 LT_INIT
 
