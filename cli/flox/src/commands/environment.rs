@@ -38,7 +38,7 @@ use flox_rust_sdk::models::pkgdb::{call_pkgdb, UpdateResult, PKGDB_BIN};
 use flox_rust_sdk::nix::command::StoreGc;
 use flox_rust_sdk::nix::command_line::NixCommandLine;
 use flox_rust_sdk::nix::Run;
-use indoc::indoc;
+use indoc::{formatdoc, indoc};
 use itertools::Itertools;
 use log::{debug, error, info};
 use tempfile::NamedTempFile;
@@ -766,9 +766,14 @@ impl Push {
 
         match EnvironmentPointer::open(&dir)? {
             EnvironmentPointer::Managed(managed_pointer) => {
+                let message = Self::push_existing_message(&managed_pointer, self.force);
+
                 Self::push_managed_env(&flox, managed_pointer, dir, self.force)
                     .context("Could not push managed environment")?;
+
+                info!("{message}");
             },
+
             EnvironmentPointer::Path(path_pointer) => {
                 let owner = if let Some(owner) = self.owner {
                     owner
@@ -787,8 +792,10 @@ impl Push {
                         .parse::<EnvironmentOwner>()
                         .context("Invalid owner name")?
                 };
-                Self::push_make_managed(&flox, path_pointer, &dir, owner, self.force)
+                let env = Self::push_make_managed(&flox, path_pointer, &dir, owner, self.force)
                     .context("Could not push new environment")?;
+
+                info!("{}", Self::push_new_message(&env, self.force));
             },
         }
         Ok(())
@@ -814,15 +821,16 @@ impl Push {
         dir: &Path,
         owner: EnvironmentOwner,
         force: bool,
-    ) -> Result<()> {
+    ) -> Result<ManagedEnvironment> {
         let dot_flox_path = dir.join(DOT_FLOX);
         let path_environment =
             path_environment::PathEnvironment::open(path_pointer, dot_flox_path, &flox.temp_dir)?;
 
-        ManagedEnvironment::push_new(flox, path_environment, owner.parse().unwrap(), force)
-            .map_err(Self::convert_error)?;
+        let env =
+            ManagedEnvironment::push_new(flox, path_environment, owner.parse().unwrap(), force)
+                .map_err(Self::convert_error)?;
 
-        Ok(())
+        Ok(env)
     }
 
     fn convert_error(err: ManagedEnvironmentError) -> anyhow::Error {
@@ -835,6 +843,40 @@ impl Push {
         } else {
             anyhow!(err)
         }
+    }
+
+    /// construct a message for an updated environment
+    ///
+    /// todo: add floxhub base url when it's available
+    fn push_existing_message(env: &ManagedPointer, force: bool) -> String {
+        let owner = &env.owner;
+        let name = &env.name;
+
+        let suffix = if force { " (forced)" } else { "" };
+
+        formatdoc! {"
+            🚀 updated -> {owner}/{name}{suffix}
+
+            pull this environment with 'flox pull {owner}/{name}'
+            you can see this environment at https://hub.flox.dev/{owner}/{name}
+        "}
+    }
+
+    /// construct a message for a newly created environment
+    ///
+    /// todo: add floxhub base url when it's available
+    fn push_new_message(env: &ManagedEnvironment, force: bool) -> String {
+        let owner = env.owner();
+        let name = env.name();
+
+        let suffix = if force { " (forced)" } else { "" };
+
+        formatdoc! {"
+            🚀 created -> {owner}/{name}{suffix}
+
+            pull this environment with 'flox pull {owner}/{name}'
+            you can see this environment at https://hub.flox.dev/{owner}/{name}
+        "}
     }
 }
 
@@ -874,13 +916,19 @@ pub struct Pull {
 impl Pull {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("pull");
+
         match self.pull_select {
             PullSelect::New { dir, remote } => {
+                let (start, complete) = Self::pull_new_messages(dir.as_deref(), &remote);
+                info!("{start}");
+
                 let dir = dir.unwrap_or_else(|| std::env::current_dir().unwrap());
 
                 debug!("Resolved user intent: pull {remote:?} into {dir:?}");
 
                 Self::pull_new_environment(&flox, dir.join(DOT_FLOX), remote)?;
+
+                info!("{complete}");
             },
             PullSelect::Existing { dir, force } => {
                 let dir = dir.unwrap_or_else(|| std::env::current_dir().unwrap());
@@ -896,7 +944,12 @@ impl Pull {
                     }
                 };
 
+                let (start, complete) = Self::pull_existing_messages(&dir, &pointer, force);
+                info!("{start}");
+
                 Self::pull_existing_environment(&flox, dir.join(DOT_FLOX), pointer, force)?;
+
+                info!("{complete}");
             },
         }
 
@@ -963,6 +1016,54 @@ impl Pull {
         } else {
             anyhow!(err)
         }
+    }
+
+    /// construct a message for pulling a new environment
+    ///
+    /// todo: add floxhub base url when it's available
+    fn pull_new_messages(dir: Option<&Path>, env_ref: &EnvironmentRef) -> (String, String) {
+        let mut start_message =
+            format!("⬇️ remote: pulling and preparing {env_ref} from https://hub.flox.dev");
+        if let Some(dir) = dir {
+            start_message += &format!(" into {dir}", dir = dir.display());
+        } else {
+            start_message += " into the current directory";
+        };
+
+        let complete_message = formatdoc! {"
+            ✨ pulled {env_ref} from https://hub.flox.dev
+
+            You can activate this environment with `flox activate`
+        "};
+
+        (start_message, complete_message)
+    }
+
+    /// construct a message for pulling an existing environment
+    ///
+    /// todo: add floxhub base url when it's available
+    fn pull_existing_messages(
+        dir: &Path,
+        pointer: &ManagedPointer,
+        force: bool,
+    ) -> (String, String) {
+        let owner = &pointer.owner;
+        let name = &pointer.name;
+
+        let start_message = format!(
+            "⬇️ remote: pulling and preparing {owner}/{name} found in {dir} from https://hub.flox.dev",
+            dir = dir.display()
+        );
+
+        let suffix: &str = if force { " (forced)" } else { "" };
+
+        let complete_message = formatdoc! {"
+            ✨ pulled {owner}/{name} from https://hub.flox.dev{suffix}
+
+            You can activate this environment with `flox activate`
+        "};
+
+        (start_message, complete_message)
     }
 }
 
