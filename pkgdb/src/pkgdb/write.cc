@@ -18,11 +18,14 @@
 #include <nlohmann/json.hpp>
 #include <algorithm>
 
-using json = nlohmann::json;
 
 /* -------------------------------------------------------------------------- */
 
 namespace flox::pkgdb {
+
+/* -------------------------------------------------------------------------- */
+
+extern std::optional <std::string> rulesPath;
 
 /* -------------------------------------------------------------------------- */
 
@@ -398,59 +401,64 @@ PkgDb::setPrefixDone( const flox::AttrPath & prefix, bool done )
   this->setPrefixDone( this->addOrGetAttrSetId( prefix ), done );
 }
 
+static bool
+attrPathsEqual( const AttrPath & left, const AtttrPath & right )
+{
+  if ( left.size() != right.size() ) { return false; }
+  for ( auto lchar = left.begin(), rchar = right.begin();
+        lchar != left.end();
+        ++lchar, ++ rchar )
+    {
+      if ( lchar != rchar ) { return false; }
+    }
+  return true;
+}
+
+std::vector<AttrPath> allowRecursive;
+std::vector<AttrPath> allowPackage;
+std::vector<AttrPath> disallowRecursive;
+std::vector<AttrPath> disallowPackage;
 
 bool 
-PkgDb::applyRules(const std::string& rulesPath, const std::vector<std::string>& prefix, const std::string& attr)
+PkgDb::applyRules(const std::vector<std::string>& prefix, const std::string& attr)
 {
   // Load rules from JSON file
-  json rules;
-  std::ifstream rulesFile(rulesPath);
-  if (!rulesFile.is_open()) {
-    // Handle error when unable to open the rules file
-    return false;
-  }
-  rulesFile >> rules;
-  rulesFile.close();
-
+  nlohmann::json rules = readAndCoerceJSON(rulesPath);
+  //TODO loop over rules and check if any match else return false
   // Check allowRecursive rules
-  if (rules.contains("allowRecursive")) {
-    for (const auto& rule : rules["allowRecursive"]) {
-      if (std::equal(prefix.begin(), prefix.end(), rule.begin(), rule.end())) {
-        return true; // Allow recursion for this attribute
-      }
-    }
-  }
+try
+ {
+   allowRecursive = rules.at( "allowRecursive" );
+ }
+catch( std::out_of_range & ) {}
 
-  // Check allowPackage rules
-  if (rules.contains("allowPackage")) {
-    for (const auto& rule : rules["allowPackage"]) {
-      if (std::equal(prefix.begin(), prefix.end(), rule.begin(), rule.end()) &&
-          rule.back() == attr) {
-        return false; // Allow this package
-      }
-    }
-  }
+try
+ {
+   allowPackage = rules.at( "allowPackage" );
+ }
+catch( std::out_of_range & ) {}
 
-  // Check disallowRecursive rules
-  if (rules.contains("disallowRecursive")) {
-    for (const auto& rule : rules["disallowRecursive"]) {
-      if (std::equal(prefix.begin(), prefix.end(), rule.begin(), rule.end())) {
-        return true; // Disallow recursion for this attribute
-      }
-    }
-  }
+try
+ {
+   disallowRecursive = rules.at( "disallowRecursive" );
+ }
+catch( std::out_of_range & ) {}
 
-  // Check disallowPackage rules
-  if (rules.contains("disallowPackage")) {
-    for (const auto& rule : rules["disallowPackage"]) {
-      if (std::equal(prefix.begin(), prefix.end(), rule.begin(), rule.end()) &&
-          rule.back() == attr) {
-        return true; // Disallow this package
-      }
-    }
-  }
+try
+ {
+   disallowPackage = rules.at( "disallowPackage" );
+ }
+catch( std::out_of_range & ) {}
 
-  return false; // No rules matched
+AttrPath path = prefix;
+path.emplace_back( attr );
+
+if ( std::find( allowPackage.begin(),
+                allowPackage.end(),
+                path ) != allowPackage.end() )
+  {
+    return true;
+  }
 }
 
 /* -------------------------------------------------------------------------- */
@@ -461,7 +469,7 @@ PkgDb::applyRules(const std::string& rulesPath, const std::vector<std::string>& 
  * Repeated runs against `nixpkgs-flox` come in at ~2m03s using recursion and
  * ~1m40s using a queue. */
 void 
-PkgDb::scrape(nix::SymbolTable& syms, const Target& target, Todos& todo, const std::string& rulesPath)
+PkgDb::scrape(nix::SymbolTable& syms, const Target& target, Todos& todo)
 {
   const auto& [prefix, cursor, parentId] = target;
 
@@ -502,7 +510,7 @@ PkgDb::scrape(nix::SymbolTable& syms, const Target& target, Todos& todo, const s
       if (child->isDerivation())
       {
         // Use applyRules to check if the package is allowed
-        if (applyRules(rulesPath, prefix, syms[aname]))
+        if (applyRules(prefix, syms[aname]))
         {
           this->addPackage(parentId, syms[aname], child);
         }

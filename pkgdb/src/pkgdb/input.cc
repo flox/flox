@@ -129,7 +129,7 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
     {
       while ( ! todo.empty() )
         {
-          dbRW->scrape( this->getFlake()->state->symbols, todo.front(), todo, {});
+          dbRW->scrape( this->getFlake()->state->symbols, todo.front(), todo);
           todo.pop();
         }
 
