@@ -108,6 +108,8 @@ private:
   /** Lazily initialized environment wrapper. */
   std::optional<Environment> environment;
 
+  /** Packages to attempt to upgrade. These are passed to the Environment
+   * constructor. */
   std::optional<Upgrades> upgrades;
 
 
@@ -277,13 +279,6 @@ public:
    */
   [[nodiscard]] const std::optional<Lockfile> &
   getLockfile();
-
-
-  [[nodiscard]] const std::optional<Upgrades> &
-  getUpgrades()
-  {
-    return this->upgrades;
-  };
 
   /**
    * @brief Laziliy initialize and return the @a environment.
