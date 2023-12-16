@@ -18,7 +18,7 @@ namespace flox::pkgdb {
 
 /* -------------------------------------------------------------------------- */
 
-std::optional <std::string> rulesPath;
+std::optional<std::string> rulesPath;
 
 /* -------------------------------------------------------------------------- */
 
@@ -35,7 +35,7 @@ ScrapeCommand::ScrapeCommand() : parser( "scrape" )
   this->parser.add_argument( "-r", "--rules" )
     .help( "the path to the rules.json file" )
     .nargs( 1 )
-    .action( [&]( const std::string &str ) { rulesPath = str; } );
+    .action( [&]( const std::string & str ) { rulesPath = str; } );
   this->addDatabasePathOption( this->parser );
   this->addFlakeRefArg( this->parser );
   this->addAttrPathArgs( this->parser );

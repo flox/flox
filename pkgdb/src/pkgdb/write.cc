@@ -16,7 +16,8 @@
 #include "./schemas.hh"
 #include <fstream>
 #include <nlohmann/json.hpp>
-#include <algorithm>
+#include <optional>
+#include <string>
 
 
 /* -------------------------------------------------------------------------- */
@@ -25,7 +26,7 @@ namespace flox::pkgdb {
 
 /* -------------------------------------------------------------------------- */
 
-extern std::optional <std::string> rulesPath;
+extern std::optional<std::string> rulesPath;
 
 /* -------------------------------------------------------------------------- */
 
@@ -402,12 +403,11 @@ PkgDb::setPrefixDone( const flox::AttrPath & prefix, bool done )
 }
 
 static bool
-attrPathsEqual( const AttrPath & left, const AtttrPath & right )
+attrPathsEqual( const AttrPath & left, const AttrPath & right )
 {
   if ( left.size() != right.size() ) { return false; }
-  for ( auto lchar = left.begin(), rchar = right.begin();
-        lchar != left.end();
-        ++lchar, ++ rchar )
+  for ( auto lchar = left.begin(), rchar = right.begin(); lchar != left.end();
+        ++lchar, ++rchar )
     {
       if ( lchar != rchar ) { return false; }
     }
@@ -419,46 +419,56 @@ std::vector<AttrPath> allowPackage;
 std::vector<AttrPath> disallowRecursive;
 std::vector<AttrPath> disallowPackage;
 
-bool 
-PkgDb::applyRules(const std::vector<std::string>& prefix, const std::string& attr)
+bool
+PkgDb::applyRules( const std::vector<std::string> & prefix,
+                   const std::string &              attr )
 {
   // Load rules from JSON file
-  nlohmann::json rules = readAndCoerceJSON(rulesPath);
-  //TODO loop over rules and check if any match else return false
-  // Check allowRecursive rules
-try
- {
-   allowRecursive = rules.at( "allowRecursive" );
- }
-catch( std::out_of_range & ) {}
+  nlohmann::json rules;
+  if ( rulesPath.has_value() )
+    {
+      const std::filesystem::path & myPath = rulesPath.value();
+      nlohmann::json                rules  = readAndCoerceJSON( myPath );
+    }
+  else { rules = nlohmann::json::object(); }
 
-try
- {
-   allowPackage = rules.at( "allowPackage" );
- }
-catch( std::out_of_range & ) {}
+  //  Check allowRecursive rules
+  try
+    {
+      allowRecursive = rules.at( "allowRecursive" );
+    }
+  catch ( std::out_of_range & )
+    {}
 
-try
- {
-   disallowRecursive = rules.at( "disallowRecursive" );
- }
-catch( std::out_of_range & ) {}
+  try
+    {
+      allowPackage = rules.at( "allowPackage" );
+    }
+  catch ( std::out_of_range & )
+    {}
 
-try
- {
-   disallowPackage = rules.at( "disallowPackage" );
- }
-catch( std::out_of_range & ) {}
+  try
+    {
+      disallowRecursive = rules.at( "disallowRecursive" );
+    }
+  catch ( std::out_of_range & )
+    {}
 
-AttrPath path = prefix;
-path.emplace_back( attr );
+  try
+    {
+      disallowPackage = rules.at( "disallowPackage" );
+    }
+  catch ( std::out_of_range & )
+    {}
 
-if ( std::find( allowPackage.begin(),
-                allowPackage.end(),
-                path ) != allowPackage.end() )
-  {
-    return true;
-  }
+  AttrPath path = prefix;
+  path.emplace_back( attr );
+
+  if ( std::find( allowPackage.begin(), allowPackage.end(), path )
+       != allowPackage.end() )
+    {
+      return true;
+    }
 }
 
 /* -------------------------------------------------------------------------- */
@@ -468,90 +478,81 @@ if ( std::find( allowPackage.begin(),
  * of recursion is faster and consumes less memory.
  * Repeated runs against `nixpkgs-flox` come in at ~2m03s using recursion and
  * ~1m40s using a queue. */
-void 
-PkgDb::scrape(nix::SymbolTable& syms, const Target& target, Todos& todo)
+void
+PkgDb::scrape( nix::SymbolTable & syms, const Target & target, Todos & todo )
 {
-  const auto& [prefix, cursor, parentId] = target;
+  const auto & [prefix, cursor, parentId] = target;
 
   /* If it has previously been scraped then bail out. */
-  if (this->completedAttrSet(parentId)) {
-    return;
-  }
+  if ( this->completedAttrSet( parentId ) ) { return; }
 
   bool tryRecur = prefix.front() != "packages";
 
-  nix::Activity act(*nix::logger,
-                    nix::lvlInfo,
-                    nix::actUnknown,
-                    nix::fmt("evaluating package set '%s'",
-                             nix::concatStringsSep(".", prefix)));
+  nix::Activity act( *nix::logger,
+                     nix::lvlInfo,
+                     nix::actUnknown,
+                     nix::fmt( "evaluating package set '%s'",
+                               nix::concatStringsSep( ".", prefix ) ) );
 
   /* Scrape loop over attrs */
-  for (nix::Symbol& aname : cursor->getAttrs())
-  {
-    if (syms[aname] == "recurseForDerivations") {
-      continue;
-    }
+  for ( nix::Symbol & aname : cursor->getAttrs() )
+    {
+      if ( syms[aname] == "recurseForDerivations" ) { continue; }
 
-    /* Used for logging, but can skip it at low verbosity levels. */
-    const std::string pathS =
-        (nix::lvlTalkative <= nix::verbosity)
-            ? nix::concatStringsSep(".", prefix) + "." + syms[aname]
+      /* Used for logging, but can skip it at low verbosity levels. */
+      const std::string pathS
+        = ( nix::lvlTalkative <= nix::verbosity )
+            ? nix::concatStringsSep( ".", prefix ) + "." + syms[aname]
             : "";
 
-    nix::Activity act(*nix::logger,
-                      nix::lvlTalkative,
-                      nix::actUnknown,
-                      "\tevaluating attribute '" + pathS + "'");
+      nix::Activity act( *nix::logger,
+                         nix::lvlTalkative,
+                         nix::actUnknown,
+                         "\tevaluating attribute '" + pathS + "'" );
 
-    try
-    {
-      flox::Cursor child = cursor->getAttr(aname);
-      if (child->isDerivation())
-      {
-        // Use applyRules to check if the package is allowed
-        if (applyRules(prefix, syms[aname]))
+      try
         {
-          this->addPackage(parentId, syms[aname], child);
+          flox::Cursor child = cursor->getAttr( aname );
+          if ( child->isDerivation() )
+            {
+              // Use applyRules to check if the package is allowed
+              if ( applyRules( prefix, syms[aname] ) )
+                {
+                  this->addPackage( parentId, syms[aname], child );
+                }
+              continue;
+            }
+
+          if ( ! tryRecur ) { continue; }
+
+          if ( auto maybe = child->maybeGetAttr( "recurseForDerivations" );
+               ( maybe != nullptr ) && maybe->getBool() )
+            {
+              flox::AttrPath path = prefix;
+              path.emplace_back( syms[aname] );
+
+              // Use applyRules to check if the set is allowed
+              if ( applyRules( path, syms[aname]) )
+                {
+                  row_id childId
+                    = this->addOrGetAttrSetId( syms[aname], parentId );
+                  todo.emplace( std::make_tuple( std::move( path ),
+                                                 std::move( child ),
+                                                 childId ) );
+                }
+            }
         }
-        continue;
-      }
-
-      if (!tryRecur)
-      {
-        continue;
-      }
-
-      if (auto maybe = child->maybeGetAttr("recurseForDerivations");
-          (maybe != nullptr) && maybe->getBool())
-      {
-        flox::AttrPath path = prefix;
-        path.emplace_back(syms[aname]);
-
-        // Use applyRules to check if the set is allowed
-        if (applyRules(rulesPath, path, ""))
+      catch ( const nix::EvalError & err )
         {
-          row_id childId = this->addOrGetAttrSetId(syms[aname], parentId);
-          todo.emplace(std::make_tuple(std::move(path),
-                                       std::move(child),
-                                       childId));
+          /* Ignore errors in `legacyPackages' */
+          if ( tryRecur )
+            {
+              /* Only print eval errors in "debug" mode. */
+              nix::ignoreException( nix::lvlDebug );
+            }
+          else { throw; }
         }
-      }
     }
-    catch (const nix::EvalError& err)
-    {
-      /* Ignore errors in `legacyPackages' */
-      if (tryRecur)
-      {
-        /* Only print eval errors in "debug" mode. */
-        nix::ignoreException(nix::lvlDebug);
-      }
-      else
-      {
-        throw;
-      }
-    }
-  }
 }
 
 
