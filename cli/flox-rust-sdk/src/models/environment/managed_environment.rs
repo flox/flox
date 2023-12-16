@@ -261,8 +261,14 @@ impl Environment for ManagedEnvironment {
         flox: &Flox,
         groups_or_iids: Vec<String>,
     ) -> Result<UpgradeResult, EnvironmentError2> {
-        let mut generations = self.generations().writable(flox.temp_dir.clone()).unwrap();
-        let mut temporary = generations.get_current_generation().unwrap();
+        let mut generations = self
+            .generations()
+            .writable(flox.temp_dir.clone())
+            .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?;
+
+        let mut temporary = generations
+            .get_current_generation()
+            .map_err(ManagedEnvironmentError::CreateGenerationFiles)?;
 
         let result = temporary.upgrade(flox, groups_or_iids)?;
 
@@ -270,7 +276,7 @@ impl Environment for ManagedEnvironment {
 
         generations
             .add_generation(&mut temporary, metadata)
-            .unwrap();
+            .map_err(ManagedEnvironmentError::CommitGeneration)?;
 
         write_pointer_lockfile(
             self.path.join(GENERATION_LOCK_FILENAME),
