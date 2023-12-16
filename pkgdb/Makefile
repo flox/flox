@@ -22,7 +22,6 @@
 
 
 
-
 am__is_gnu_make = { \
   if test -z '$(MAKELEVEL)'; then \
     false; \
@@ -114,7 +113,6 @@ CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
 am__installdirs = "$(DESTDIR)$(bindir)" "$(DESTDIR)$(libdir)"
 PROGRAMS = $(bin_PROGRAMS)
-LIBRARIES = $(noinst_LIBRARIES)
 am__vpath_adj_setup = srcdirstrip=`echo "$(srcdir)" | sed 's|.|.|g'`;
 am__vpath_adj = case $$p in \
     $(srcdir)/*) f=`echo "$$p" | sed "s|^$$srcdirstrip/||"`;; \
@@ -143,49 +141,37 @@ am__uninstall_files_from_dir = { \
          $(am__cd) "$$dir" && rm -f $$files; }; \
   }
 LTLIBRARIES = $(lib_LTLIBRARIES)
-ARFLAGS = cru
-AM_V_AR = $(am__v_AR_$(V))
-am__v_AR_ = $(am__v_AR_$(AM_DEFAULT_VERBOSITY))
-am__v_AR_0 = @echo "  AR      " $@;
-am__v_AR_1 = 
-lib_libpkgdb_a_AR = $(AR) $(ARFLAGS)
-lib_libpkgdb_a_LIBADD =
-am__dirstamp = $(am__leading_dot)dirstamp
-am_lib_libpkgdb_a_OBJECTS = src/lib_libpkgdb_a-command.$(OBJEXT) \
-	src/lib_libpkgdb_a-eval.$(OBJEXT) \
-	src/lib_libpkgdb_a-exceptions.$(OBJEXT) \
-	src/lib_libpkgdb_a-expr.$(OBJEXT) \
-	src/lib_libpkgdb_a-flake-package.$(OBJEXT) \
-	src/lib_libpkgdb_a-flox-flake.$(OBJEXT) \
-	src/lib_libpkgdb_a-logger.$(OBJEXT) \
-	src/lib_libpkgdb_a-nix-state.$(OBJEXT) \
-	src/lib_libpkgdb_a-package.$(OBJEXT) \
-	src/lib_libpkgdb_a-raw-package.$(OBJEXT) \
-	src/lib_libpkgdb_a-registry.$(OBJEXT) \
-	src/lib_libpkgdb_a-tomlToJSON.$(OBJEXT) \
-	src/lib_libpkgdb_a-util.$(OBJEXT) \
-	src/lib_libpkgdb_a-versions.$(OBJEXT) \
-	src/lib_libpkgdb_a-yamlToJSON.$(OBJEXT) \
-	src/search/lib_libpkgdb_a-params.$(OBJEXT) \
-	src/resolver/lib_libpkgdb_a-descriptor.$(OBJEXT) \
-	src/resolver/lib_libpkgdb_a-environment.$(OBJEXT) \
-	src/resolver/lib_libpkgdb_a-lockfile.$(OBJEXT) \
-	src/resolver/lib_libpkgdb_a-manifest-raw.$(OBJEXT) \
-	src/resolver/lib_libpkgdb_a-manifest.$(OBJEXT) \
-	src/resolver/lib_libpkgdb_a-mixins.$(OBJEXT) \
-	src/resolver/lib_libpkgdb_a-primops.$(OBJEXT) \
-	src/pkgdb/lib_libpkgdb_a-db-package.$(OBJEXT) \
-	src/pkgdb/lib_libpkgdb_a-gc.$(OBJEXT) \
-	src/pkgdb/lib_libpkgdb_a-input.$(OBJEXT) \
-	src/pkgdb/lib_libpkgdb_a-list.$(OBJEXT) \
-	src/pkgdb/lib_libpkgdb_a-pkg-query.$(OBJEXT) \
-	src/pkgdb/lib_libpkgdb_a-primops.$(OBJEXT) \
-	src/pkgdb/lib_libpkgdb_a-read.$(OBJEXT) \
-	src/pkgdb/lib_libpkgdb_a-write.$(OBJEXT)
-lib_libpkgdb_a_OBJECTS = $(am_lib_libpkgdb_a_OBJECTS)
 lib_libpkgdb_la_LIBADD =
-lib_libpkgdb_la_SOURCES = lib/libpkgdb.cc
-lib_libpkgdb_la_OBJECTS = lib/libpkgdb_la-libpkgdb.lo
+am__dirstamp = $(am__leading_dot)dirstamp
+am_lib_libpkgdb_la_OBJECTS = src/lib_libpkgdb_la-command.lo \
+	src/lib_libpkgdb_la-eval.lo src/lib_libpkgdb_la-exceptions.lo \
+	src/lib_libpkgdb_la-expr.lo \
+	src/lib_libpkgdb_la-flake-package.lo \
+	src/lib_libpkgdb_la-flox-flake.lo \
+	src/lib_libpkgdb_la-logger.lo src/lib_libpkgdb_la-nix-state.lo \
+	src/lib_libpkgdb_la-package.lo \
+	src/lib_libpkgdb_la-raw-package.lo \
+	src/lib_libpkgdb_la-registry.lo \
+	src/lib_libpkgdb_la-tomlToJSON.lo src/lib_libpkgdb_la-util.lo \
+	src/lib_libpkgdb_la-versions.lo \
+	src/lib_libpkgdb_la-yamlToJSON.lo \
+	src/search/lib_libpkgdb_la-params.lo \
+	src/resolver/lib_libpkgdb_la-descriptor.lo \
+	src/resolver/lib_libpkgdb_la-environment.lo \
+	src/resolver/lib_libpkgdb_la-lockfile.lo \
+	src/resolver/lib_libpkgdb_la-manifest-raw.lo \
+	src/resolver/lib_libpkgdb_la-manifest.lo \
+	src/resolver/lib_libpkgdb_la-mixins.lo \
+	src/resolver/lib_libpkgdb_la-primops.lo \
+	src/pkgdb/lib_libpkgdb_la-db-package.lo \
+	src/pkgdb/lib_libpkgdb_la-gc.lo \
+	src/pkgdb/lib_libpkgdb_la-input.lo \
+	src/pkgdb/lib_libpkgdb_la-list.lo \
+	src/pkgdb/lib_libpkgdb_la-pkg-query.lo \
+	src/pkgdb/lib_libpkgdb_la-primops.lo \
+	src/pkgdb/lib_libpkgdb_la-read.lo \
+	src/pkgdb/lib_libpkgdb_la-write.lo
+lib_libpkgdb_la_OBJECTS = $(am_lib_libpkgdb_la_OBJECTS)
 AM_V_lt = $(am__v_lt_$(V))
 am__v_lt_ = $(am__v_lt_$(AM_DEFAULT_VERBOSITY))
 am__v_lt_0 = --silent
@@ -225,46 +211,45 @@ am__v_at_1 =
 DEFAULT_INCLUDES = -I.
 depcomp = $(SHELL) $(top_srcdir)/build-aux/depcomp
 am__maybe_remake_depfiles = depfiles
-am__depfiles_remade = lib/$(DEPDIR)/libpkgdb_la-libpkgdb.Plo \
-	src/$(DEPDIR)/bin_pkgdb-main.Po \
+am__depfiles_remade = src/$(DEPDIR)/bin_pkgdb-main.Po \
 	src/$(DEPDIR)/bin_pkgdb-repl.Po \
-	src/$(DEPDIR)/lib_libpkgdb_a-command.Po \
-	src/$(DEPDIR)/lib_libpkgdb_a-eval.Po \
-	src/$(DEPDIR)/lib_libpkgdb_a-exceptions.Po \
-	src/$(DEPDIR)/lib_libpkgdb_a-expr.Po \
-	src/$(DEPDIR)/lib_libpkgdb_a-flake-package.Po \
-	src/$(DEPDIR)/lib_libpkgdb_a-flox-flake.Po \
-	src/$(DEPDIR)/lib_libpkgdb_a-logger.Po \
-	src/$(DEPDIR)/lib_libpkgdb_a-nix-state.Po \
-	src/$(DEPDIR)/lib_libpkgdb_a-package.Po \
-	src/$(DEPDIR)/lib_libpkgdb_a-raw-package.Po \
-	src/$(DEPDIR)/lib_libpkgdb_a-registry.Po \
-	src/$(DEPDIR)/lib_libpkgdb_a-tomlToJSON.Po \
-	src/$(DEPDIR)/lib_libpkgdb_a-util.Po \
-	src/$(DEPDIR)/lib_libpkgdb_a-versions.Po \
-	src/$(DEPDIR)/lib_libpkgdb_a-yamlToJSON.Po \
+	src/$(DEPDIR)/lib_libpkgdb_la-command.Plo \
+	src/$(DEPDIR)/lib_libpkgdb_la-eval.Plo \
+	src/$(DEPDIR)/lib_libpkgdb_la-exceptions.Plo \
+	src/$(DEPDIR)/lib_libpkgdb_la-expr.Plo \
+	src/$(DEPDIR)/lib_libpkgdb_la-flake-package.Plo \
+	src/$(DEPDIR)/lib_libpkgdb_la-flox-flake.Plo \
+	src/$(DEPDIR)/lib_libpkgdb_la-logger.Plo \
+	src/$(DEPDIR)/lib_libpkgdb_la-nix-state.Plo \
+	src/$(DEPDIR)/lib_libpkgdb_la-package.Plo \
+	src/$(DEPDIR)/lib_libpkgdb_la-raw-package.Plo \
+	src/$(DEPDIR)/lib_libpkgdb_la-registry.Plo \
+	src/$(DEPDIR)/lib_libpkgdb_la-tomlToJSON.Plo \
+	src/$(DEPDIR)/lib_libpkgdb_la-util.Plo \
+	src/$(DEPDIR)/lib_libpkgdb_la-versions.Plo \
+	src/$(DEPDIR)/lib_libpkgdb_la-yamlToJSON.Plo \
 	src/parse/$(DEPDIR)/bin_pkgdb-command.Po \
 	src/pkgdb/$(DEPDIR)/bin_pkgdb-command.Po \
 	src/pkgdb/$(DEPDIR)/bin_pkgdb-get.Po \
 	src/pkgdb/$(DEPDIR)/bin_pkgdb-scrape.Po \
-	src/pkgdb/$(DEPDIR)/lib_libpkgdb_a-db-package.Po \
-	src/pkgdb/$(DEPDIR)/lib_libpkgdb_a-gc.Po \
-	src/pkgdb/$(DEPDIR)/lib_libpkgdb_a-input.Po \
-	src/pkgdb/$(DEPDIR)/lib_libpkgdb_a-list.Po \
-	src/pkgdb/$(DEPDIR)/lib_libpkgdb_a-pkg-query.Po \
-	src/pkgdb/$(DEPDIR)/lib_libpkgdb_a-primops.Po \
-	src/pkgdb/$(DEPDIR)/lib_libpkgdb_a-read.Po \
-	src/pkgdb/$(DEPDIR)/lib_libpkgdb_a-write.Po \
+	src/pkgdb/$(DEPDIR)/lib_libpkgdb_la-db-package.Plo \
+	src/pkgdb/$(DEPDIR)/lib_libpkgdb_la-gc.Plo \
+	src/pkgdb/$(DEPDIR)/lib_libpkgdb_la-input.Plo \
+	src/pkgdb/$(DEPDIR)/lib_libpkgdb_la-list.Plo \
+	src/pkgdb/$(DEPDIR)/lib_libpkgdb_la-pkg-query.Plo \
+	src/pkgdb/$(DEPDIR)/lib_libpkgdb_la-primops.Plo \
+	src/pkgdb/$(DEPDIR)/lib_libpkgdb_la-read.Plo \
+	src/pkgdb/$(DEPDIR)/lib_libpkgdb_la-write.Plo \
 	src/resolver/$(DEPDIR)/bin_pkgdb-command.Po \
-	src/resolver/$(DEPDIR)/lib_libpkgdb_a-descriptor.Po \
-	src/resolver/$(DEPDIR)/lib_libpkgdb_a-environment.Po \
-	src/resolver/$(DEPDIR)/lib_libpkgdb_a-lockfile.Po \
-	src/resolver/$(DEPDIR)/lib_libpkgdb_a-manifest-raw.Po \
-	src/resolver/$(DEPDIR)/lib_libpkgdb_a-manifest.Po \
-	src/resolver/$(DEPDIR)/lib_libpkgdb_a-mixins.Po \
-	src/resolver/$(DEPDIR)/lib_libpkgdb_a-primops.Po \
+	src/resolver/$(DEPDIR)/lib_libpkgdb_la-descriptor.Plo \
+	src/resolver/$(DEPDIR)/lib_libpkgdb_la-environment.Plo \
+	src/resolver/$(DEPDIR)/lib_libpkgdb_la-lockfile.Plo \
+	src/resolver/$(DEPDIR)/lib_libpkgdb_la-manifest-raw.Plo \
+	src/resolver/$(DEPDIR)/lib_libpkgdb_la-manifest.Plo \
+	src/resolver/$(DEPDIR)/lib_libpkgdb_la-mixins.Plo \
+	src/resolver/$(DEPDIR)/lib_libpkgdb_la-primops.Plo \
 	src/search/$(DEPDIR)/bin_pkgdb-command.Po \
-	src/search/$(DEPDIR)/lib_libpkgdb_a-params.Po
+	src/search/$(DEPDIR)/lib_libpkgdb_la-params.Plo
 am__mv = mv -f
 CXXCOMPILE = $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) \
 	$(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS)
@@ -284,31 +269,13 @@ AM_V_CXXLD = $(am__v_CXXLD_$(V))
 am__v_CXXLD_ = $(am__v_CXXLD_$(AM_DEFAULT_VERBOSITY))
 am__v_CXXLD_0 = @echo "  CXXLD   " $@;
 am__v_CXXLD_1 = 
-SOURCES = $(lib_libpkgdb_a_SOURCES) lib/libpkgdb.cc \
-	$(bin_pkgdb_SOURCES)
-DIST_SOURCES = $(lib_libpkgdb_a_SOURCES) lib/libpkgdb.cc \
-	$(bin_pkgdb_SOURCES)
-RECURSIVE_TARGETS = all-recursive check-recursive cscopelist-recursive \
-	ctags-recursive dvi-recursive html-recursive info-recursive \
-	install-data-recursive install-dvi-recursive \
-	install-exec-recursive install-html-recursive \
-	install-info-recursive install-pdf-recursive \
-	install-ps-recursive install-recursive installcheck-recursive \
-	installdirs-recursive pdf-recursive ps-recursive \
-	tags-recursive uninstall-recursive
+SOURCES = $(lib_libpkgdb_la_SOURCES) $(bin_pkgdb_SOURCES)
+DIST_SOURCES = $(lib_libpkgdb_la_SOURCES) $(bin_pkgdb_SOURCES)
 am__can_run_installinfo = \
   case $$AM_UPDATE_INFO_DIR in \
     n|no|NO) false;; \
     *) (install-info --version) >/dev/null 2>&1;; \
   esac
-RECURSIVE_CLEAN_TARGETS = mostlyclean-recursive clean-recursive	\
-  distclean-recursive maintainer-clean-recursive
-am__recursive_targets = \
-  $(RECURSIVE_TARGETS) \
-  $(RECURSIVE_CLEAN_TARGETS) \
-  $(am__extra_recursive_targets)
-AM_RECURSIVE_TARGETS = $(am__recursive_targets:-recursive=) TAGS CTAGS \
-	distdir distdir-am
 am__tagged_files = $(HEADERS) $(SOURCES) $(TAGS_FILES) $(LISP)
 # Read a list of newline-separated strings from the standard input,
 # and print each of them once, without duplicates.  Input order is
@@ -326,35 +293,9 @@ am__define_uniq_tagged_files = \
   unique=`for i in $$list; do \
     if test -f "$$i"; then echo $$i; else echo $(srcdir)/$$i; fi; \
   done | $(am__uniquify_input)`
-DIST_SUBDIRS = $(SUBDIRS)
 am__DIST_COMMON = $(srcdir)/Makefile.in \
 	$(top_srcdir)/build-aux/depcomp README.md
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
-am__relativize = \
-  dir0=`pwd`; \
-  sed_first='s,^\([^/]*\)/.*$$,\1,'; \
-  sed_rest='s,^[^/]*/*,,'; \
-  sed_last='s,^.*/\([^/]*\)$$,\1,'; \
-  sed_butlast='s,/*[^/]*$$,,'; \
-  while test -n "$$dir1"; do \
-    first=`echo "$$dir1" | sed -e "$$sed_first"`; \
-    if test "$$first" != "."; then \
-      if test "$$first" = ".."; then \
-        dir2=`echo "$$dir0" | sed -e "$$sed_last"`/"$$dir2"; \
-        dir0=`echo "$$dir0" | sed -e "$$sed_butlast"`; \
-      else \
-        first2=`echo "$$dir2" | sed -e "$$sed_first"`; \
-        if test "$$first2" = "$$first"; then \
-          dir2=`echo "$$dir2" | sed -e "$$sed_rest"`; \
-        else \
-          dir2="../$$dir2"; \
-        fi; \
-        dir0="$$dir0"/"$$first"; \
-      fi; \
-    fi; \
-    dir1=`echo "$$dir1" | sed -e "$$sed_rest"`; \
-  done; \
-  reldir="$$dir2"
 ACLOCAL = ${SHELL} '/home/camus/src/flox/build-aux/missing' aclocal-1.16
 ALLOCA = 
 AMTAR = $${TAR-tar}
@@ -440,8 +381,9 @@ MISSING = /home/camus/src/flox/build-aux/missing
 MKDIR = /nix/store/w8vm09hri2zz7yacryzzzxvsapik4ps4-coreutils-9.1/bin/mkdir
 MKDIR_P = /nix/store/w8vm09hri2zz7yacryzzzxvsapik4ps4-coreutils-9.1/bin/mkdir -p
 NIX = /nix/store/hz8jb954fmhzhh7a1gw2zsw8bcssspb1-nix-2.17.1/bin/nix
-NIX_CFLAGS = -std=c++2a -isystem /nix/store/8sik089b1nanpjm3s4rfb0cifb2idam8-nix-2.17.1-dev/include -I/nix/store/v9nrp3rd303arhzdjz7zgpfyi9xpfq3c-boehm-gc-8.2.2-dev/include -DSYSTEM='"x86_64-linux"'
+NIX_CFLAGS = -std=c++2a -isystem /nix/store/8sik089b1nanpjm3s4rfb0cifb2idam8-nix-2.17.1-dev/include -I/nix/store/v9nrp3rd303arhzdjz7zgpfyi9xpfq3c-boehm-gc-8.2.2-dev/include -DSYSTEM='"x86_64-linux"' -include '/nix/store/8sik089b1nanpjm3s4rfb0cifb2idam8-nix-2.17.1-dev/include/nix/config.h'
 NIX_FMT = /nix/store/8ipq97lmfbx4mij1bm1my7b4lphqb30f-alejandra-3.0.0/bin/alejandra
+NIX_INCDIR = /nix/store/8sik089b1nanpjm3s4rfb0cifb2idam8-nix-2.17.1-dev/include
 NIX_LIBS = -L/nix/store/hz8jb954fmhzhh7a1gw2zsw8bcssspb1-nix-2.17.1/lib -L/nix/store/a90rj311zj2fhlj8a2j4cgjw9xz8jn3p-boehm-gc-8.2.2/lib -lnixmain -lnixcmd -lnixexpr -lnixstore -lnixutil -lgc -lpthread -ldl
 NLJSON_CFLAGS = -I/nix/store/nazmhpca2rn9s8582i3wlabpfv3lnx13-nlohmann_json-3.11.2/include
 NLJSON_LIBS = 
@@ -466,7 +408,7 @@ PKGDB_ROOT = /home/camus/src/flox/pkgdb
 PKGDB_TESTS_DIR = /home/camus/src/flox/pkgdb/tests
 PKGDB_VERSION = 0.1.0
 PKGS_DIR = /home/camus/src/flox/pkgs
-PKG_CONFIG = pkg-config
+PKG_CONFIG = /nix/store/7l5gbdz3rcab57r24arg61i4vavpf2cz-pkg-config-wrapper-0.29.2/bin/pkg-config
 PKG_CONFIG_LIBDIR = 
 PKG_CONFIG_PATH = /nix/store/2i83qvxdxps1s91335icgkd2mp6v6b91-bash-5.2-p15-dev/lib/pkgconfig:/nix/store/kdlr78ihdkr69l9nd1yrc48rvnsf9j8w-sqlite-3.41.2-dev/lib/pkgconfig:/nix/store/pzis69n8rva6rxkkp5vp4c4mklxgp5yf-ncurses-6.4-dev/lib/pkgconfig:/nix/store/j0zwp9zygvadcly9dxpm0f4ga7h0n8c9-zlib-1.2.13-dev/lib/pkgconfig:/nix/store/f9i84g18qpq60hxz590l6lvr2k71sznz-valgrind-3.20.0-dev/lib/pkgconfig:/nix/store/n5fr2ppq4i3hdjbbf4636gk54s07022v-python3-3.10.13/lib/pkgconfig:/nix/store/4pifi04nz9l2i0l692ny148q94klml0r-zstd-1.5.5-dev/lib/pkgconfig:/nix/store/nazmhpca2rn9s8582i3wlabpfv3lnx13-nlohmann_json-3.11.2/share/pkgconfig:/nix/store/f1nn0gnkwfkp6hjngwb4p1y73l97b1rj-argparse-2.9/lib/pkgconfig:/nix/store/r84cm2q5y05x25ri4sh8bvi3mc5j1y2r-sqlite3pp-1.0.8/lib/pkgconfig:/nix/store/hz517ls4pkfkxiw1lkcydbzq3a1k53xz-yaml-cpp-0.7.0/share/pkgconfig:/nix/store/8sik089b1nanpjm3s4rfb0cifb2idam8-nix-2.17.1-dev/lib/pkgconfig:/nix/store/v9nrp3rd303arhzdjz7zgpfyi9xpfq3c-boehm-gc-8.2.2-dev/lib/pkgconfig:/nix/store/h55j9wkhjnqizhxa5g1jacg855lm3fj2-openssl-3.0.12-dev/lib/pkgconfig:/nix/store/wjgfhvbl3llgrrsrkcwx5wl9n0m80f6f-libssh2-1.11.0-dev/lib/pkgconfig:/nix/store/2014lw90b5vmv6fdf60r65qrawy6iwyx-libgit2-1.6.4/lib/pkgconfig
 PREFIX = /home/camus/src/flox/out
@@ -559,25 +501,22 @@ top_build_prefix = ../
 top_builddir = ..
 top_srcdir = ..
 ACLOCAL_AMFLAGS = -I ../build-aux/m4
-SUBDIRS = include tests
 
 # ---------------------------------------------------------------------------- #
 AM_CXXFLAGS = $(EXTRA_CXXFLAGS) -I$(PKGDB_ROOT)/include
 
 # ---------------------------------------------------------------------------- #
-
-# Used to guess the source filename for an executable.
-# This is only used for `tests/*.cc' files.
-AM_DEFAULT_SOURCE_EXT = .cc
-noinst_LIBRARIES = lib/libpkgdb.a
 lib_LTLIBRARIES = lib/libpkgdb.la
 
 # ---------------------------------------------------------------------------- #
-lib_libpkgdb_a_CXXFLAGS = $(AM_CXXFLAGS) $(NLJSON_CFLAGS) \
+# FIXME: This should only apply to shared libraries.
+lib_libpkgdb_la_CXXFLAGS = $(AM_CXXFLAGS) $(NLJSON_CFLAGS) \
 	$(NIX_CFLAGS) $(YAML_CFLAGS) $(TOML_CFLAGS) \
-	$(SQLITE3PP_CFLAGS) $(NLJSON_CFLAGS) $(NIX_CFLAGS) \
-	$(YAML_CFLAGS) $(TOML_CFLAGS) $(SQLITE3PP_CFLAGS)
-lib_libpkgdb_a_SOURCES = src/command.cc src/eval.cc src/exceptions.cc \
+	$(SQLITE3PP_CFLAGS) $(SHARED_LIBRARY_CXXFLAGS)
+lib_libpkgdb_la_LDFLAGS = $(AM_CXXLIBS) \
+	'$(set_soname_option)libpkgdb$(sharedLibExt)' $(NLJSON_LIBS) \
+	$(NIX_LIBS) $(YAML_LIBS) $(TOML_LIBS) $(SQLITE3PP_LIBS)
+lib_libpkgdb_la_SOURCES = src/command.cc src/eval.cc src/exceptions.cc \
 	src/expr.cc src/flake-package.cc src/flox-flake.cc \
 	src/logger.cc src/nix-state.cc src/package.cc \
 	src/raw-package.cc src/registry.cc src/tomlToJSON.cc \
@@ -599,15 +538,7 @@ bin_pkgdb_LDADD = lib/libpkgdb.la $(NLJSON_LIBS) $(NIX_LIBS) \
 bin_pkgdb_SOURCES = src/main.cc src/repl.cc src/parse/command.cc \
 	src/pkgdb/command.cc src/pkgdb/get.cc src/pkgdb/scrape.cc \
 	src/resolver/command.cc src/search/command.cc
-
-# ---------------------------------------------------------------------------- #
-
-# NOTE: There is no `libpkgs_sa_CXXFLAGS', use `libpkgdb_a_CXXFLAGS' instead.
-lib_libpkgdb_la_CXXFLAGS = $(AM_CXXFLAGS) $(SHARED_LIBRARY_CXXFLAGS)
-lib_libpkgdb_la_LDFLAGS = $(AM_CXXLIBS) \
-	'$(set_soname_option)libpkgdb$(sharedLibExt)' $(NLJSON_LIBS) \
-	$(NIX_LIBS) $(YAML_LIBS) $(TOML_LIBS) $(SQLITE3PP_LIBS)
-all: all-recursive
+all: all-am
 
 .SUFFIXES:
 .SUFFIXES: .cc .lo .o .obj
@@ -690,9 +621,6 @@ clean-binPROGRAMS:
 	echo " rm -f" $$list; \
 	rm -f $$list
 
-clean-noinstLIBRARIES:
-	-test -z "$(noinst_LIBRARIES)" || rm -f $(noinst_LIBRARIES)
-
 install-libLTLIBRARIES: $(lib_LTLIBRARIES)
 	@$(NORMAL_INSTALL)
 	@list='$(lib_LTLIBRARIES)'; test -n "$(libdir)" || list=; \
@@ -733,35 +661,35 @@ src/$(am__dirstamp):
 src/$(DEPDIR)/$(am__dirstamp):
 	@$(MKDIR_P) src/$(DEPDIR)
 	@: > src/$(DEPDIR)/$(am__dirstamp)
-src/lib_libpkgdb_a-command.$(OBJEXT): src/$(am__dirstamp) \
+src/lib_libpkgdb_la-command.lo: src/$(am__dirstamp) \
 	src/$(DEPDIR)/$(am__dirstamp)
-src/lib_libpkgdb_a-eval.$(OBJEXT): src/$(am__dirstamp) \
+src/lib_libpkgdb_la-eval.lo: src/$(am__dirstamp) \
 	src/$(DEPDIR)/$(am__dirstamp)
-src/lib_libpkgdb_a-exceptions.$(OBJEXT): src/$(am__dirstamp) \
+src/lib_libpkgdb_la-exceptions.lo: src/$(am__dirstamp) \
 	src/$(DEPDIR)/$(am__dirstamp)
-src/lib_libpkgdb_a-expr.$(OBJEXT): src/$(am__dirstamp) \
+src/lib_libpkgdb_la-expr.lo: src/$(am__dirstamp) \
 	src/$(DEPDIR)/$(am__dirstamp)
-src/lib_libpkgdb_a-flake-package.$(OBJEXT): src/$(am__dirstamp) \
+src/lib_libpkgdb_la-flake-package.lo: src/$(am__dirstamp) \
 	src/$(DEPDIR)/$(am__dirstamp)
-src/lib_libpkgdb_a-flox-flake.$(OBJEXT): src/$(am__dirstamp) \
+src/lib_libpkgdb_la-flox-flake.lo: src/$(am__dirstamp) \
 	src/$(DEPDIR)/$(am__dirstamp)
-src/lib_libpkgdb_a-logger.$(OBJEXT): src/$(am__dirstamp) \
+src/lib_libpkgdb_la-logger.lo: src/$(am__dirstamp) \
 	src/$(DEPDIR)/$(am__dirstamp)
-src/lib_libpkgdb_a-nix-state.$(OBJEXT): src/$(am__dirstamp) \
+src/lib_libpkgdb_la-nix-state.lo: src/$(am__dirstamp) \
 	src/$(DEPDIR)/$(am__dirstamp)
-src/lib_libpkgdb_a-package.$(OBJEXT): src/$(am__dirstamp) \
+src/lib_libpkgdb_la-package.lo: src/$(am__dirstamp) \
 	src/$(DEPDIR)/$(am__dirstamp)
-src/lib_libpkgdb_a-raw-package.$(OBJEXT): src/$(am__dirstamp) \
+src/lib_libpkgdb_la-raw-package.lo: src/$(am__dirstamp) \
 	src/$(DEPDIR)/$(am__dirstamp)
-src/lib_libpkgdb_a-registry.$(OBJEXT): src/$(am__dirstamp) \
+src/lib_libpkgdb_la-registry.lo: src/$(am__dirstamp) \
 	src/$(DEPDIR)/$(am__dirstamp)
-src/lib_libpkgdb_a-tomlToJSON.$(OBJEXT): src/$(am__dirstamp) \
+src/lib_libpkgdb_la-tomlToJSON.lo: src/$(am__dirstamp) \
 	src/$(DEPDIR)/$(am__dirstamp)
-src/lib_libpkgdb_a-util.$(OBJEXT): src/$(am__dirstamp) \
+src/lib_libpkgdb_la-util.lo: src/$(am__dirstamp) \
 	src/$(DEPDIR)/$(am__dirstamp)
-src/lib_libpkgdb_a-versions.$(OBJEXT): src/$(am__dirstamp) \
+src/lib_libpkgdb_la-versions.lo: src/$(am__dirstamp) \
 	src/$(DEPDIR)/$(am__dirstamp)
-src/lib_libpkgdb_a-yamlToJSON.$(OBJEXT): src/$(am__dirstamp) \
+src/lib_libpkgdb_la-yamlToJSON.lo: src/$(am__dirstamp) \
 	src/$(DEPDIR)/$(am__dirstamp)
 src/search/$(am__dirstamp):
 	@$(MKDIR_P) src/search
@@ -769,8 +697,7 @@ src/search/$(am__dirstamp):
 src/search/$(DEPDIR)/$(am__dirstamp):
 	@$(MKDIR_P) src/search/$(DEPDIR)
 	@: > src/search/$(DEPDIR)/$(am__dirstamp)
-src/search/lib_libpkgdb_a-params.$(OBJEXT):  \
-	src/search/$(am__dirstamp) \
+src/search/lib_libpkgdb_la-params.lo: src/search/$(am__dirstamp) \
 	src/search/$(DEPDIR)/$(am__dirstamp)
 src/resolver/$(am__dirstamp):
 	@$(MKDIR_P) src/resolver
@@ -778,26 +705,24 @@ src/resolver/$(am__dirstamp):
 src/resolver/$(DEPDIR)/$(am__dirstamp):
 	@$(MKDIR_P) src/resolver/$(DEPDIR)
 	@: > src/resolver/$(DEPDIR)/$(am__dirstamp)
-src/resolver/lib_libpkgdb_a-descriptor.$(OBJEXT):  \
+src/resolver/lib_libpkgdb_la-descriptor.lo:  \
 	src/resolver/$(am__dirstamp) \
 	src/resolver/$(DEPDIR)/$(am__dirstamp)
-src/resolver/lib_libpkgdb_a-environment.$(OBJEXT):  \
+src/resolver/lib_libpkgdb_la-environment.lo:  \
 	src/resolver/$(am__dirstamp) \
 	src/resolver/$(DEPDIR)/$(am__dirstamp)
-src/resolver/lib_libpkgdb_a-lockfile.$(OBJEXT):  \
+src/resolver/lib_libpkgdb_la-lockfile.lo:  \
 	src/resolver/$(am__dirstamp) \
 	src/resolver/$(DEPDIR)/$(am__dirstamp)
-src/resolver/lib_libpkgdb_a-manifest-raw.$(OBJEXT):  \
+src/resolver/lib_libpkgdb_la-manifest-raw.lo:  \
 	src/resolver/$(am__dirstamp) \
 	src/resolver/$(DEPDIR)/$(am__dirstamp)
-src/resolver/lib_libpkgdb_a-manifest.$(OBJEXT):  \
+src/resolver/lib_libpkgdb_la-manifest.lo:  \
 	src/resolver/$(am__dirstamp) \
 	src/resolver/$(DEPDIR)/$(am__dirstamp)
-src/resolver/lib_libpkgdb_a-mixins.$(OBJEXT):  \
-	src/resolver/$(am__dirstamp) \
+src/resolver/lib_libpkgdb_la-mixins.lo: src/resolver/$(am__dirstamp) \
 	src/resolver/$(DEPDIR)/$(am__dirstamp)
-src/resolver/lib_libpkgdb_a-primops.$(OBJEXT):  \
-	src/resolver/$(am__dirstamp) \
+src/resolver/lib_libpkgdb_la-primops.lo: src/resolver/$(am__dirstamp) \
 	src/resolver/$(DEPDIR)/$(am__dirstamp)
 src/pkgdb/$(am__dirstamp):
 	@$(MKDIR_P) src/pkgdb
@@ -805,35 +730,25 @@ src/pkgdb/$(am__dirstamp):
 src/pkgdb/$(DEPDIR)/$(am__dirstamp):
 	@$(MKDIR_P) src/pkgdb/$(DEPDIR)
 	@: > src/pkgdb/$(DEPDIR)/$(am__dirstamp)
-src/pkgdb/lib_libpkgdb_a-db-package.$(OBJEXT):  \
-	src/pkgdb/$(am__dirstamp) src/pkgdb/$(DEPDIR)/$(am__dirstamp)
-src/pkgdb/lib_libpkgdb_a-gc.$(OBJEXT): src/pkgdb/$(am__dirstamp) \
+src/pkgdb/lib_libpkgdb_la-db-package.lo: src/pkgdb/$(am__dirstamp) \
 	src/pkgdb/$(DEPDIR)/$(am__dirstamp)
-src/pkgdb/lib_libpkgdb_a-input.$(OBJEXT): src/pkgdb/$(am__dirstamp) \
+src/pkgdb/lib_libpkgdb_la-gc.lo: src/pkgdb/$(am__dirstamp) \
 	src/pkgdb/$(DEPDIR)/$(am__dirstamp)
-src/pkgdb/lib_libpkgdb_a-list.$(OBJEXT): src/pkgdb/$(am__dirstamp) \
+src/pkgdb/lib_libpkgdb_la-input.lo: src/pkgdb/$(am__dirstamp) \
 	src/pkgdb/$(DEPDIR)/$(am__dirstamp)
-src/pkgdb/lib_libpkgdb_a-pkg-query.$(OBJEXT):  \
-	src/pkgdb/$(am__dirstamp) src/pkgdb/$(DEPDIR)/$(am__dirstamp)
-src/pkgdb/lib_libpkgdb_a-primops.$(OBJEXT): src/pkgdb/$(am__dirstamp) \
+src/pkgdb/lib_libpkgdb_la-list.lo: src/pkgdb/$(am__dirstamp) \
 	src/pkgdb/$(DEPDIR)/$(am__dirstamp)
-src/pkgdb/lib_libpkgdb_a-read.$(OBJEXT): src/pkgdb/$(am__dirstamp) \
+src/pkgdb/lib_libpkgdb_la-pkg-query.lo: src/pkgdb/$(am__dirstamp) \
 	src/pkgdb/$(DEPDIR)/$(am__dirstamp)
-src/pkgdb/lib_libpkgdb_a-write.$(OBJEXT): src/pkgdb/$(am__dirstamp) \
+src/pkgdb/lib_libpkgdb_la-primops.lo: src/pkgdb/$(am__dirstamp) \
+	src/pkgdb/$(DEPDIR)/$(am__dirstamp)
+src/pkgdb/lib_libpkgdb_la-read.lo: src/pkgdb/$(am__dirstamp) \
+	src/pkgdb/$(DEPDIR)/$(am__dirstamp)
+src/pkgdb/lib_libpkgdb_la-write.lo: src/pkgdb/$(am__dirstamp) \
 	src/pkgdb/$(DEPDIR)/$(am__dirstamp)
 lib/$(am__dirstamp):
 	@$(MKDIR_P) lib
 	@: > lib/$(am__dirstamp)
-
-lib/libpkgdb.a: $(lib_libpkgdb_a_OBJECTS) $(lib_libpkgdb_a_DEPENDENCIES) $(EXTRA_lib_libpkgdb_a_DEPENDENCIES) lib/$(am__dirstamp)
-	$(AM_V_at)-rm -f lib/libpkgdb.a
-	$(AM_V_AR)$(lib_libpkgdb_a_AR) lib/libpkgdb.a $(lib_libpkgdb_a_OBJECTS) $(lib_libpkgdb_a_LIBADD)
-	$(AM_V_at)$(RANLIB) lib/libpkgdb.a
-lib/$(DEPDIR)/$(am__dirstamp):
-	@$(MKDIR_P) lib/$(DEPDIR)
-	@: > lib/$(DEPDIR)/$(am__dirstamp)
-lib/libpkgdb_la-libpkgdb.lo: lib/$(am__dirstamp) \
-	lib/$(DEPDIR)/$(am__dirstamp)
 
 lib/libpkgdb.la: $(lib_libpkgdb_la_OBJECTS) $(lib_libpkgdb_la_DEPENDENCIES) $(EXTRA_lib_libpkgdb_la_DEPENDENCIES) lib/$(am__dirstamp)
 	$(AM_V_CXXLD)$(lib_libpkgdb_la_LINK) -rpath $(libdir) $(lib_libpkgdb_la_OBJECTS) $(lib_libpkgdb_la_LIBADD) $(LIBS)
@@ -870,57 +785,58 @@ bin/pkgdb$(EXEEXT): $(bin_pkgdb_OBJECTS) $(bin_pkgdb_DEPENDENCIES) $(EXTRA_bin_p
 
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
-	-rm -f lib/*.$(OBJEXT)
-	-rm -f lib/*.lo
 	-rm -f src/*.$(OBJEXT)
+	-rm -f src/*.lo
 	-rm -f src/parse/*.$(OBJEXT)
 	-rm -f src/pkgdb/*.$(OBJEXT)
+	-rm -f src/pkgdb/*.lo
 	-rm -f src/resolver/*.$(OBJEXT)
+	-rm -f src/resolver/*.lo
 	-rm -f src/search/*.$(OBJEXT)
+	-rm -f src/search/*.lo
 
 distclean-compile:
 	-rm -f *.tab.c
 
-include lib/$(DEPDIR)/libpkgdb_la-libpkgdb.Plo # am--include-marker
 include src/$(DEPDIR)/bin_pkgdb-main.Po # am--include-marker
 include src/$(DEPDIR)/bin_pkgdb-repl.Po # am--include-marker
-include src/$(DEPDIR)/lib_libpkgdb_a-command.Po # am--include-marker
-include src/$(DEPDIR)/lib_libpkgdb_a-eval.Po # am--include-marker
-include src/$(DEPDIR)/lib_libpkgdb_a-exceptions.Po # am--include-marker
-include src/$(DEPDIR)/lib_libpkgdb_a-expr.Po # am--include-marker
-include src/$(DEPDIR)/lib_libpkgdb_a-flake-package.Po # am--include-marker
-include src/$(DEPDIR)/lib_libpkgdb_a-flox-flake.Po # am--include-marker
-include src/$(DEPDIR)/lib_libpkgdb_a-logger.Po # am--include-marker
-include src/$(DEPDIR)/lib_libpkgdb_a-nix-state.Po # am--include-marker
-include src/$(DEPDIR)/lib_libpkgdb_a-package.Po # am--include-marker
-include src/$(DEPDIR)/lib_libpkgdb_a-raw-package.Po # am--include-marker
-include src/$(DEPDIR)/lib_libpkgdb_a-registry.Po # am--include-marker
-include src/$(DEPDIR)/lib_libpkgdb_a-tomlToJSON.Po # am--include-marker
-include src/$(DEPDIR)/lib_libpkgdb_a-util.Po # am--include-marker
-include src/$(DEPDIR)/lib_libpkgdb_a-versions.Po # am--include-marker
-include src/$(DEPDIR)/lib_libpkgdb_a-yamlToJSON.Po # am--include-marker
+include src/$(DEPDIR)/lib_libpkgdb_la-command.Plo # am--include-marker
+include src/$(DEPDIR)/lib_libpkgdb_la-eval.Plo # am--include-marker
+include src/$(DEPDIR)/lib_libpkgdb_la-exceptions.Plo # am--include-marker
+include src/$(DEPDIR)/lib_libpkgdb_la-expr.Plo # am--include-marker
+include src/$(DEPDIR)/lib_libpkgdb_la-flake-package.Plo # am--include-marker
+include src/$(DEPDIR)/lib_libpkgdb_la-flox-flake.Plo # am--include-marker
+include src/$(DEPDIR)/lib_libpkgdb_la-logger.Plo # am--include-marker
+include src/$(DEPDIR)/lib_libpkgdb_la-nix-state.Plo # am--include-marker
+include src/$(DEPDIR)/lib_libpkgdb_la-package.Plo # am--include-marker
+include src/$(DEPDIR)/lib_libpkgdb_la-raw-package.Plo # am--include-marker
+include src/$(DEPDIR)/lib_libpkgdb_la-registry.Plo # am--include-marker
+include src/$(DEPDIR)/lib_libpkgdb_la-tomlToJSON.Plo # am--include-marker
+include src/$(DEPDIR)/lib_libpkgdb_la-util.Plo # am--include-marker
+include src/$(DEPDIR)/lib_libpkgdb_la-versions.Plo # am--include-marker
+include src/$(DEPDIR)/lib_libpkgdb_la-yamlToJSON.Plo # am--include-marker
 include src/parse/$(DEPDIR)/bin_pkgdb-command.Po # am--include-marker
 include src/pkgdb/$(DEPDIR)/bin_pkgdb-command.Po # am--include-marker
 include src/pkgdb/$(DEPDIR)/bin_pkgdb-get.Po # am--include-marker
 include src/pkgdb/$(DEPDIR)/bin_pkgdb-scrape.Po # am--include-marker
-include src/pkgdb/$(DEPDIR)/lib_libpkgdb_a-db-package.Po # am--include-marker
-include src/pkgdb/$(DEPDIR)/lib_libpkgdb_a-gc.Po # am--include-marker
-include src/pkgdb/$(DEPDIR)/lib_libpkgdb_a-input.Po # am--include-marker
-include src/pkgdb/$(DEPDIR)/lib_libpkgdb_a-list.Po # am--include-marker
-include src/pkgdb/$(DEPDIR)/lib_libpkgdb_a-pkg-query.Po # am--include-marker
-include src/pkgdb/$(DEPDIR)/lib_libpkgdb_a-primops.Po # am--include-marker
-include src/pkgdb/$(DEPDIR)/lib_libpkgdb_a-read.Po # am--include-marker
-include src/pkgdb/$(DEPDIR)/lib_libpkgdb_a-write.Po # am--include-marker
+include src/pkgdb/$(DEPDIR)/lib_libpkgdb_la-db-package.Plo # am--include-marker
+include src/pkgdb/$(DEPDIR)/lib_libpkgdb_la-gc.Plo # am--include-marker
+include src/pkgdb/$(DEPDIR)/lib_libpkgdb_la-input.Plo # am--include-marker
+include src/pkgdb/$(DEPDIR)/lib_libpkgdb_la-list.Plo # am--include-marker
+include src/pkgdb/$(DEPDIR)/lib_libpkgdb_la-pkg-query.Plo # am--include-marker
+include src/pkgdb/$(DEPDIR)/lib_libpkgdb_la-primops.Plo # am--include-marker
+include src/pkgdb/$(DEPDIR)/lib_libpkgdb_la-read.Plo # am--include-marker
+include src/pkgdb/$(DEPDIR)/lib_libpkgdb_la-write.Plo # am--include-marker
 include src/resolver/$(DEPDIR)/bin_pkgdb-command.Po # am--include-marker
-include src/resolver/$(DEPDIR)/lib_libpkgdb_a-descriptor.Po # am--include-marker
-include src/resolver/$(DEPDIR)/lib_libpkgdb_a-environment.Po # am--include-marker
-include src/resolver/$(DEPDIR)/lib_libpkgdb_a-lockfile.Po # am--include-marker
-include src/resolver/$(DEPDIR)/lib_libpkgdb_a-manifest-raw.Po # am--include-marker
-include src/resolver/$(DEPDIR)/lib_libpkgdb_a-manifest.Po # am--include-marker
-include src/resolver/$(DEPDIR)/lib_libpkgdb_a-mixins.Po # am--include-marker
-include src/resolver/$(DEPDIR)/lib_libpkgdb_a-primops.Po # am--include-marker
+include src/resolver/$(DEPDIR)/lib_libpkgdb_la-descriptor.Plo # am--include-marker
+include src/resolver/$(DEPDIR)/lib_libpkgdb_la-environment.Plo # am--include-marker
+include src/resolver/$(DEPDIR)/lib_libpkgdb_la-lockfile.Plo # am--include-marker
+include src/resolver/$(DEPDIR)/lib_libpkgdb_la-manifest-raw.Plo # am--include-marker
+include src/resolver/$(DEPDIR)/lib_libpkgdb_la-manifest.Plo # am--include-marker
+include src/resolver/$(DEPDIR)/lib_libpkgdb_la-mixins.Plo # am--include-marker
+include src/resolver/$(DEPDIR)/lib_libpkgdb_la-primops.Plo # am--include-marker
 include src/search/$(DEPDIR)/bin_pkgdb-command.Po # am--include-marker
-include src/search/$(DEPDIR)/lib_libpkgdb_a-params.Po # am--include-marker
+include src/search/$(DEPDIR)/lib_libpkgdb_la-params.Plo # am--include-marker
 
 $(am__depfiles_remade):
 	@$(MKDIR_P) $(@D)
@@ -952,446 +868,222 @@ am--depfiles: $(am__depfiles_remade)
 #	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
 #	$(AM_V_CXX_no)$(LTCXXCOMPILE) -c -o $@ $<
 
-src/lib_libpkgdb_a-command.o: src/command.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -MT src/lib_libpkgdb_a-command.o -MD -MP -MF src/$(DEPDIR)/lib_libpkgdb_a-command.Tpo -c -o src/lib_libpkgdb_a-command.o `test -f 'src/command.cc' || echo '$(srcdir)/'`src/command.cc
-	$(AM_V_at)$(am__mv) src/$(DEPDIR)/lib_libpkgdb_a-command.Tpo src/$(DEPDIR)/lib_libpkgdb_a-command.Po
-#	$(AM_V_CXX)source='src/command.cc' object='src/lib_libpkgdb_a-command.o' libtool=no \
+src/lib_libpkgdb_la-command.lo: src/command.cc
+	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_la_CXXFLAGS) $(CXXFLAGS) -MT src/lib_libpkgdb_la-command.lo -MD -MP -MF src/$(DEPDIR)/lib_libpkgdb_la-command.Tpo -c -o src/lib_libpkgdb_la-command.lo `test -f 'src/command.cc' || echo '$(srcdir)/'`src/command.cc
+	$(AM_V_at)$(am__mv) src/$(DEPDIR)/lib_libpkgdb_la-command.Tpo src/$(DEPDIR)/lib_libpkgdb_la-command.Plo
+#	$(AM_V_CXX)source='src/command.cc' object='src/lib_libpkgdb_la-command.lo' libtool=yes \
 #	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(AM_V_CXX_no)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -c -o src/lib_libpkgdb_a-command.o `test -f 'src/command.cc' || echo '$(srcdir)/'`src/command.cc
+#	$(AM_V_CXX_no)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_la_CXXFLAGS) $(CXXFLAGS) -c -o src/lib_libpkgdb_la-command.lo `test -f 'src/command.cc' || echo '$(srcdir)/'`src/command.cc
 
-src/lib_libpkgdb_a-command.obj: src/command.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -MT src/lib_libpkgdb_a-command.obj -MD -MP -MF src/$(DEPDIR)/lib_libpkgdb_a-command.Tpo -c -o src/lib_libpkgdb_a-command.obj `if test -f 'src/command.cc'; then $(CYGPATH_W) 'src/command.cc'; else $(CYGPATH_W) '$(srcdir)/src/command.cc'; fi`
-	$(AM_V_at)$(am__mv) src/$(DEPDIR)/lib_libpkgdb_a-command.Tpo src/$(DEPDIR)/lib_libpkgdb_a-command.Po
-#	$(AM_V_CXX)source='src/command.cc' object='src/lib_libpkgdb_a-command.obj' libtool=no \
+src/lib_libpkgdb_la-eval.lo: src/eval.cc
+	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_la_CXXFLAGS) $(CXXFLAGS) -MT src/lib_libpkgdb_la-eval.lo -MD -MP -MF src/$(DEPDIR)/lib_libpkgdb_la-eval.Tpo -c -o src/lib_libpkgdb_la-eval.lo `test -f 'src/eval.cc' || echo '$(srcdir)/'`src/eval.cc
+	$(AM_V_at)$(am__mv) src/$(DEPDIR)/lib_libpkgdb_la-eval.Tpo src/$(DEPDIR)/lib_libpkgdb_la-eval.Plo
+#	$(AM_V_CXX)source='src/eval.cc' object='src/lib_libpkgdb_la-eval.lo' libtool=yes \
 #	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(AM_V_CXX_no)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -c -o src/lib_libpkgdb_a-command.obj `if test -f 'src/command.cc'; then $(CYGPATH_W) 'src/command.cc'; else $(CYGPATH_W) '$(srcdir)/src/command.cc'; fi`
+#	$(AM_V_CXX_no)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_la_CXXFLAGS) $(CXXFLAGS) -c -o src/lib_libpkgdb_la-eval.lo `test -f 'src/eval.cc' || echo '$(srcdir)/'`src/eval.cc
 
-src/lib_libpkgdb_a-eval.o: src/eval.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -MT src/lib_libpkgdb_a-eval.o -MD -MP -MF src/$(DEPDIR)/lib_libpkgdb_a-eval.Tpo -c -o src/lib_libpkgdb_a-eval.o `test -f 'src/eval.cc' || echo '$(srcdir)/'`src/eval.cc
-	$(AM_V_at)$(am__mv) src/$(DEPDIR)/lib_libpkgdb_a-eval.Tpo src/$(DEPDIR)/lib_libpkgdb_a-eval.Po
-#	$(AM_V_CXX)source='src/eval.cc' object='src/lib_libpkgdb_a-eval.o' libtool=no \
+src/lib_libpkgdb_la-exceptions.lo: src/exceptions.cc
+	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_la_CXXFLAGS) $(CXXFLAGS) -MT src/lib_libpkgdb_la-exceptions.lo -MD -MP -MF src/$(DEPDIR)/lib_libpkgdb_la-exceptions.Tpo -c -o src/lib_libpkgdb_la-exceptions.lo `test -f 'src/exceptions.cc' || echo '$(srcdir)/'`src/exceptions.cc
+	$(AM_V_at)$(am__mv) src/$(DEPDIR)/lib_libpkgdb_la-exceptions.Tpo src/$(DEPDIR)/lib_libpkgdb_la-exceptions.Plo
+#	$(AM_V_CXX)source='src/exceptions.cc' object='src/lib_libpkgdb_la-exceptions.lo' libtool=yes \
 #	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(AM_V_CXX_no)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -c -o src/lib_libpkgdb_a-eval.o `test -f 'src/eval.cc' || echo '$(srcdir)/'`src/eval.cc
+#	$(AM_V_CXX_no)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_la_CXXFLAGS) $(CXXFLAGS) -c -o src/lib_libpkgdb_la-exceptions.lo `test -f 'src/exceptions.cc' || echo '$(srcdir)/'`src/exceptions.cc
 
-src/lib_libpkgdb_a-eval.obj: src/eval.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -MT src/lib_libpkgdb_a-eval.obj -MD -MP -MF src/$(DEPDIR)/lib_libpkgdb_a-eval.Tpo -c -o src/lib_libpkgdb_a-eval.obj `if test -f 'src/eval.cc'; then $(CYGPATH_W) 'src/eval.cc'; else $(CYGPATH_W) '$(srcdir)/src/eval.cc'; fi`
-	$(AM_V_at)$(am__mv) src/$(DEPDIR)/lib_libpkgdb_a-eval.Tpo src/$(DEPDIR)/lib_libpkgdb_a-eval.Po
-#	$(AM_V_CXX)source='src/eval.cc' object='src/lib_libpkgdb_a-eval.obj' libtool=no \
+src/lib_libpkgdb_la-expr.lo: src/expr.cc
+	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_la_CXXFLAGS) $(CXXFLAGS) -MT src/lib_libpkgdb_la-expr.lo -MD -MP -MF src/$(DEPDIR)/lib_libpkgdb_la-expr.Tpo -c -o src/lib_libpkgdb_la-expr.lo `test -f 'src/expr.cc' || echo '$(srcdir)/'`src/expr.cc
+	$(AM_V_at)$(am__mv) src/$(DEPDIR)/lib_libpkgdb_la-expr.Tpo src/$(DEPDIR)/lib_libpkgdb_la-expr.Plo
+#	$(AM_V_CXX)source='src/expr.cc' object='src/lib_libpkgdb_la-expr.lo' libtool=yes \
 #	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(AM_V_CXX_no)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -c -o src/lib_libpkgdb_a-eval.obj `if test -f 'src/eval.cc'; then $(CYGPATH_W) 'src/eval.cc'; else $(CYGPATH_W) '$(srcdir)/src/eval.cc'; fi`
+#	$(AM_V_CXX_no)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_la_CXXFLAGS) $(CXXFLAGS) -c -o src/lib_libpkgdb_la-expr.lo `test -f 'src/expr.cc' || echo '$(srcdir)/'`src/expr.cc
 
-src/lib_libpkgdb_a-exceptions.o: src/exceptions.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -MT src/lib_libpkgdb_a-exceptions.o -MD -MP -MF src/$(DEPDIR)/lib_libpkgdb_a-exceptions.Tpo -c -o src/lib_libpkgdb_a-exceptions.o `test -f 'src/exceptions.cc' || echo '$(srcdir)/'`src/exceptions.cc
-	$(AM_V_at)$(am__mv) src/$(DEPDIR)/lib_libpkgdb_a-exceptions.Tpo src/$(DEPDIR)/lib_libpkgdb_a-exceptions.Po
-#	$(AM_V_CXX)source='src/exceptions.cc' object='src/lib_libpkgdb_a-exceptions.o' libtool=no \
+src/lib_libpkgdb_la-flake-package.lo: src/flake-package.cc
+	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_la_CXXFLAGS) $(CXXFLAGS) -MT src/lib_libpkgdb_la-flake-package.lo -MD -MP -MF src/$(DEPDIR)/lib_libpkgdb_la-flake-package.Tpo -c -o src/lib_libpkgdb_la-flake-package.lo `test -f 'src/flake-package.cc' || echo '$(srcdir)/'`src/flake-package.cc
+	$(AM_V_at)$(am__mv) src/$(DEPDIR)/lib_libpkgdb_la-flake-package.Tpo src/$(DEPDIR)/lib_libpkgdb_la-flake-package.Plo
+#	$(AM_V_CXX)source='src/flake-package.cc' object='src/lib_libpkgdb_la-flake-package.lo' libtool=yes \
 #	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(AM_V_CXX_no)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -c -o src/lib_libpkgdb_a-exceptions.o `test -f 'src/exceptions.cc' || echo '$(srcdir)/'`src/exceptions.cc
+#	$(AM_V_CXX_no)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_la_CXXFLAGS) $(CXXFLAGS) -c -o src/lib_libpkgdb_la-flake-package.lo `test -f 'src/flake-package.cc' || echo '$(srcdir)/'`src/flake-package.cc
 
-src/lib_libpkgdb_a-exceptions.obj: src/exceptions.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -MT src/lib_libpkgdb_a-exceptions.obj -MD -MP -MF src/$(DEPDIR)/lib_libpkgdb_a-exceptions.Tpo -c -o src/lib_libpkgdb_a-exceptions.obj `if test -f 'src/exceptions.cc'; then $(CYGPATH_W) 'src/exceptions.cc'; else $(CYGPATH_W) '$(srcdir)/src/exceptions.cc'; fi`
-	$(AM_V_at)$(am__mv) src/$(DEPDIR)/lib_libpkgdb_a-exceptions.Tpo src/$(DEPDIR)/lib_libpkgdb_a-exceptions.Po
-#	$(AM_V_CXX)source='src/exceptions.cc' object='src/lib_libpkgdb_a-exceptions.obj' libtool=no \
+src/lib_libpkgdb_la-flox-flake.lo: src/flox-flake.cc
+	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_la_CXXFLAGS) $(CXXFLAGS) -MT src/lib_libpkgdb_la-flox-flake.lo -MD -MP -MF src/$(DEPDIR)/lib_libpkgdb_la-flox-flake.Tpo -c -o src/lib_libpkgdb_la-flox-flake.lo `test -f 'src/flox-flake.cc' || echo '$(srcdir)/'`src/flox-flake.cc
+	$(AM_V_at)$(am__mv) src/$(DEPDIR)/lib_libpkgdb_la-flox-flake.Tpo src/$(DEPDIR)/lib_libpkgdb_la-flox-flake.Plo
+#	$(AM_V_CXX)source='src/flox-flake.cc' object='src/lib_libpkgdb_la-flox-flake.lo' libtool=yes \
 #	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(AM_V_CXX_no)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -c -o src/lib_libpkgdb_a-exceptions.obj `if test -f 'src/exceptions.cc'; then $(CYGPATH_W) 'src/exceptions.cc'; else $(CYGPATH_W) '$(srcdir)/src/exceptions.cc'; fi`
+#	$(AM_V_CXX_no)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_la_CXXFLAGS) $(CXXFLAGS) -c -o src/lib_libpkgdb_la-flox-flake.lo `test -f 'src/flox-flake.cc' || echo '$(srcdir)/'`src/flox-flake.cc
 
-src/lib_libpkgdb_a-expr.o: src/expr.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -MT src/lib_libpkgdb_a-expr.o -MD -MP -MF src/$(DEPDIR)/lib_libpkgdb_a-expr.Tpo -c -o src/lib_libpkgdb_a-expr.o `test -f 'src/expr.cc' || echo '$(srcdir)/'`src/expr.cc
-	$(AM_V_at)$(am__mv) src/$(DEPDIR)/lib_libpkgdb_a-expr.Tpo src/$(DEPDIR)/lib_libpkgdb_a-expr.Po
-#	$(AM_V_CXX)source='src/expr.cc' object='src/lib_libpkgdb_a-expr.o' libtool=no \
+src/lib_libpkgdb_la-logger.lo: src/logger.cc
+	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_la_CXXFLAGS) $(CXXFLAGS) -MT src/lib_libpkgdb_la-logger.lo -MD -MP -MF src/$(DEPDIR)/lib_libpkgdb_la-logger.Tpo -c -o src/lib_libpkgdb_la-logger.lo `test -f 'src/logger.cc' || echo '$(srcdir)/'`src/logger.cc
+	$(AM_V_at)$(am__mv) src/$(DEPDIR)/lib_libpkgdb_la-logger.Tpo src/$(DEPDIR)/lib_libpkgdb_la-logger.Plo
+#	$(AM_V_CXX)source='src/logger.cc' object='src/lib_libpkgdb_la-logger.lo' libtool=yes \
 #	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(AM_V_CXX_no)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -c -o src/lib_libpkgdb_a-expr.o `test -f 'src/expr.cc' || echo '$(srcdir)/'`src/expr.cc
+#	$(AM_V_CXX_no)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_la_CXXFLAGS) $(CXXFLAGS) -c -o src/lib_libpkgdb_la-logger.lo `test -f 'src/logger.cc' || echo '$(srcdir)/'`src/logger.cc
 
-src/lib_libpkgdb_a-expr.obj: src/expr.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -MT src/lib_libpkgdb_a-expr.obj -MD -MP -MF src/$(DEPDIR)/lib_libpkgdb_a-expr.Tpo -c -o src/lib_libpkgdb_a-expr.obj `if test -f 'src/expr.cc'; then $(CYGPATH_W) 'src/expr.cc'; else $(CYGPATH_W) '$(srcdir)/src/expr.cc'; fi`
-	$(AM_V_at)$(am__mv) src/$(DEPDIR)/lib_libpkgdb_a-expr.Tpo src/$(DEPDIR)/lib_libpkgdb_a-expr.Po
-#	$(AM_V_CXX)source='src/expr.cc' object='src/lib_libpkgdb_a-expr.obj' libtool=no \
+src/lib_libpkgdb_la-nix-state.lo: src/nix-state.cc
+	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_la_CXXFLAGS) $(CXXFLAGS) -MT src/lib_libpkgdb_la-nix-state.lo -MD -MP -MF src/$(DEPDIR)/lib_libpkgdb_la-nix-state.Tpo -c -o src/lib_libpkgdb_la-nix-state.lo `test -f 'src/nix-state.cc' || echo '$(srcdir)/'`src/nix-state.cc
+	$(AM_V_at)$(am__mv) src/$(DEPDIR)/lib_libpkgdb_la-nix-state.Tpo src/$(DEPDIR)/lib_libpkgdb_la-nix-state.Plo
+#	$(AM_V_CXX)source='src/nix-state.cc' object='src/lib_libpkgdb_la-nix-state.lo' libtool=yes \
 #	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(AM_V_CXX_no)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -c -o src/lib_libpkgdb_a-expr.obj `if test -f 'src/expr.cc'; then $(CYGPATH_W) 'src/expr.cc'; else $(CYGPATH_W) '$(srcdir)/src/expr.cc'; fi`
+#	$(AM_V_CXX_no)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_la_CXXFLAGS) $(CXXFLAGS) -c -o src/lib_libpkgdb_la-nix-state.lo `test -f 'src/nix-state.cc' || echo '$(srcdir)/'`src/nix-state.cc
 
-src/lib_libpkgdb_a-flake-package.o: src/flake-package.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -MT src/lib_libpkgdb_a-flake-package.o -MD -MP -MF src/$(DEPDIR)/lib_libpkgdb_a-flake-package.Tpo -c -o src/lib_libpkgdb_a-flake-package.o `test -f 'src/flake-package.cc' || echo '$(srcdir)/'`src/flake-package.cc
-	$(AM_V_at)$(am__mv) src/$(DEPDIR)/lib_libpkgdb_a-flake-package.Tpo src/$(DEPDIR)/lib_libpkgdb_a-flake-package.Po
-#	$(AM_V_CXX)source='src/flake-package.cc' object='src/lib_libpkgdb_a-flake-package.o' libtool=no \
+src/lib_libpkgdb_la-package.lo: src/package.cc
+	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_la_CXXFLAGS) $(CXXFLAGS) -MT src/lib_libpkgdb_la-package.lo -MD -MP -MF src/$(DEPDIR)/lib_libpkgdb_la-package.Tpo -c -o src/lib_libpkgdb_la-package.lo `test -f 'src/package.cc' || echo '$(srcdir)/'`src/package.cc
+	$(AM_V_at)$(am__mv) src/$(DEPDIR)/lib_libpkgdb_la-package.Tpo src/$(DEPDIR)/lib_libpkgdb_la-package.Plo
+#	$(AM_V_CXX)source='src/package.cc' object='src/lib_libpkgdb_la-package.lo' libtool=yes \
 #	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(AM_V_CXX_no)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -c -o src/lib_libpkgdb_a-flake-package.o `test -f 'src/flake-package.cc' || echo '$(srcdir)/'`src/flake-package.cc
+#	$(AM_V_CXX_no)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_la_CXXFLAGS) $(CXXFLAGS) -c -o src/lib_libpkgdb_la-package.lo `test -f 'src/package.cc' || echo '$(srcdir)/'`src/package.cc
 
-src/lib_libpkgdb_a-flake-package.obj: src/flake-package.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -MT src/lib_libpkgdb_a-flake-package.obj -MD -MP -MF src/$(DEPDIR)/lib_libpkgdb_a-flake-package.Tpo -c -o src/lib_libpkgdb_a-flake-package.obj `if test -f 'src/flake-package.cc'; then $(CYGPATH_W) 'src/flake-package.cc'; else $(CYGPATH_W) '$(srcdir)/src/flake-package.cc'; fi`
-	$(AM_V_at)$(am__mv) src/$(DEPDIR)/lib_libpkgdb_a-flake-package.Tpo src/$(DEPDIR)/lib_libpkgdb_a-flake-package.Po
-#	$(AM_V_CXX)source='src/flake-package.cc' object='src/lib_libpkgdb_a-flake-package.obj' libtool=no \
+src/lib_libpkgdb_la-raw-package.lo: src/raw-package.cc
+	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_la_CXXFLAGS) $(CXXFLAGS) -MT src/lib_libpkgdb_la-raw-package.lo -MD -MP -MF src/$(DEPDIR)/lib_libpkgdb_la-raw-package.Tpo -c -o src/lib_libpkgdb_la-raw-package.lo `test -f 'src/raw-package.cc' || echo '$(srcdir)/'`src/raw-package.cc
+	$(AM_V_at)$(am__mv) src/$(DEPDIR)/lib_libpkgdb_la-raw-package.Tpo src/$(DEPDIR)/lib_libpkgdb_la-raw-package.Plo
+#	$(AM_V_CXX)source='src/raw-package.cc' object='src/lib_libpkgdb_la-raw-package.lo' libtool=yes \
 #	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(AM_V_CXX_no)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -c -o src/lib_libpkgdb_a-flake-package.obj `if test -f 'src/flake-package.cc'; then $(CYGPATH_W) 'src/flake-package.cc'; else $(CYGPATH_W) '$(srcdir)/src/flake-package.cc'; fi`
+#	$(AM_V_CXX_no)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_la_CXXFLAGS) $(CXXFLAGS) -c -o src/lib_libpkgdb_la-raw-package.lo `test -f 'src/raw-package.cc' || echo '$(srcdir)/'`src/raw-package.cc
 
-src/lib_libpkgdb_a-flox-flake.o: src/flox-flake.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -MT src/lib_libpkgdb_a-flox-flake.o -MD -MP -MF src/$(DEPDIR)/lib_libpkgdb_a-flox-flake.Tpo -c -o src/lib_libpkgdb_a-flox-flake.o `test -f 'src/flox-flake.cc' || echo '$(srcdir)/'`src/flox-flake.cc
-	$(AM_V_at)$(am__mv) src/$(DEPDIR)/lib_libpkgdb_a-flox-flake.Tpo src/$(DEPDIR)/lib_libpkgdb_a-flox-flake.Po
-#	$(AM_V_CXX)source='src/flox-flake.cc' object='src/lib_libpkgdb_a-flox-flake.o' libtool=no \
+src/lib_libpkgdb_la-registry.lo: src/registry.cc
+	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_la_CXXFLAGS) $(CXXFLAGS) -MT src/lib_libpkgdb_la-registry.lo -MD -MP -MF src/$(DEPDIR)/lib_libpkgdb_la-registry.Tpo -c -o src/lib_libpkgdb_la-registry.lo `test -f 'src/registry.cc' || echo '$(srcdir)/'`src/registry.cc
+	$(AM_V_at)$(am__mv) src/$(DEPDIR)/lib_libpkgdb_la-registry.Tpo src/$(DEPDIR)/lib_libpkgdb_la-registry.Plo
+#	$(AM_V_CXX)source='src/registry.cc' object='src/lib_libpkgdb_la-registry.lo' libtool=yes \
 #	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(AM_V_CXX_no)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -c -o src/lib_libpkgdb_a-flox-flake.o `test -f 'src/flox-flake.cc' || echo '$(srcdir)/'`src/flox-flake.cc
+#	$(AM_V_CXX_no)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_la_CXXFLAGS) $(CXXFLAGS) -c -o src/lib_libpkgdb_la-registry.lo `test -f 'src/registry.cc' || echo '$(srcdir)/'`src/registry.cc
 
-src/lib_libpkgdb_a-flox-flake.obj: src/flox-flake.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -MT src/lib_libpkgdb_a-flox-flake.obj -MD -MP -MF src/$(DEPDIR)/lib_libpkgdb_a-flox-flake.Tpo -c -o src/lib_libpkgdb_a-flox-flake.obj `if test -f 'src/flox-flake.cc'; then $(CYGPATH_W) 'src/flox-flake.cc'; else $(CYGPATH_W) '$(srcdir)/src/flox-flake.cc'; fi`
-	$(AM_V_at)$(am__mv) src/$(DEPDIR)/lib_libpkgdb_a-flox-flake.Tpo src/$(DEPDIR)/lib_libpkgdb_a-flox-flake.Po
-#	$(AM_V_CXX)source='src/flox-flake.cc' object='src/lib_libpkgdb_a-flox-flake.obj' libtool=no \
+src/lib_libpkgdb_la-tomlToJSON.lo: src/tomlToJSON.cc
+	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_la_CXXFLAGS) $(CXXFLAGS) -MT src/lib_libpkgdb_la-tomlToJSON.lo -MD -MP -MF src/$(DEPDIR)/lib_libpkgdb_la-tomlToJSON.Tpo -c -o src/lib_libpkgdb_la-tomlToJSON.lo `test -f 'src/tomlToJSON.cc' || echo '$(srcdir)/'`src/tomlToJSON.cc
+	$(AM_V_at)$(am__mv) src/$(DEPDIR)/lib_libpkgdb_la-tomlToJSON.Tpo src/$(DEPDIR)/lib_libpkgdb_la-tomlToJSON.Plo
+#	$(AM_V_CXX)source='src/tomlToJSON.cc' object='src/lib_libpkgdb_la-tomlToJSON.lo' libtool=yes \
 #	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(AM_V_CXX_no)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -c -o src/lib_libpkgdb_a-flox-flake.obj `if test -f 'src/flox-flake.cc'; then $(CYGPATH_W) 'src/flox-flake.cc'; else $(CYGPATH_W) '$(srcdir)/src/flox-flake.cc'; fi`
+#	$(AM_V_CXX_no)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_la_CXXFLAGS) $(CXXFLAGS) -c -o src/lib_libpkgdb_la-tomlToJSON.lo `test -f 'src/tomlToJSON.cc' || echo '$(srcdir)/'`src/tomlToJSON.cc
 
-src/lib_libpkgdb_a-logger.o: src/logger.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -MT src/lib_libpkgdb_a-logger.o -MD -MP -MF src/$(DEPDIR)/lib_libpkgdb_a-logger.Tpo -c -o src/lib_libpkgdb_a-logger.o `test -f 'src/logger.cc' || echo '$(srcdir)/'`src/logger.cc
-	$(AM_V_at)$(am__mv) src/$(DEPDIR)/lib_libpkgdb_a-logger.Tpo src/$(DEPDIR)/lib_libpkgdb_a-logger.Po
-#	$(AM_V_CXX)source='src/logger.cc' object='src/lib_libpkgdb_a-logger.o' libtool=no \
+src/lib_libpkgdb_la-util.lo: src/util.cc
+	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_la_CXXFLAGS) $(CXXFLAGS) -MT src/lib_libpkgdb_la-util.lo -MD -MP -MF src/$(DEPDIR)/lib_libpkgdb_la-util.Tpo -c -o src/lib_libpkgdb_la-util.lo `test -f 'src/util.cc' || echo '$(srcdir)/'`src/util.cc
+	$(AM_V_at)$(am__mv) src/$(DEPDIR)/lib_libpkgdb_la-util.Tpo src/$(DEPDIR)/lib_libpkgdb_la-util.Plo
+#	$(AM_V_CXX)source='src/util.cc' object='src/lib_libpkgdb_la-util.lo' libtool=yes \
 #	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(AM_V_CXX_no)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -c -o src/lib_libpkgdb_a-logger.o `test -f 'src/logger.cc' || echo '$(srcdir)/'`src/logger.cc
+#	$(AM_V_CXX_no)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_la_CXXFLAGS) $(CXXFLAGS) -c -o src/lib_libpkgdb_la-util.lo `test -f 'src/util.cc' || echo '$(srcdir)/'`src/util.cc
 
-src/lib_libpkgdb_a-logger.obj: src/logger.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -MT src/lib_libpkgdb_a-logger.obj -MD -MP -MF src/$(DEPDIR)/lib_libpkgdb_a-logger.Tpo -c -o src/lib_libpkgdb_a-logger.obj `if test -f 'src/logger.cc'; then $(CYGPATH_W) 'src/logger.cc'; else $(CYGPATH_W) '$(srcdir)/src/logger.cc'; fi`
-	$(AM_V_at)$(am__mv) src/$(DEPDIR)/lib_libpkgdb_a-logger.Tpo src/$(DEPDIR)/lib_libpkgdb_a-logger.Po
-#	$(AM_V_CXX)source='src/logger.cc' object='src/lib_libpkgdb_a-logger.obj' libtool=no \
+src/lib_libpkgdb_la-versions.lo: src/versions.cc
+	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_la_CXXFLAGS) $(CXXFLAGS) -MT src/lib_libpkgdb_la-versions.lo -MD -MP -MF src/$(DEPDIR)/lib_libpkgdb_la-versions.Tpo -c -o src/lib_libpkgdb_la-versions.lo `test -f 'src/versions.cc' || echo '$(srcdir)/'`src/versions.cc
+	$(AM_V_at)$(am__mv) src/$(DEPDIR)/lib_libpkgdb_la-versions.Tpo src/$(DEPDIR)/lib_libpkgdb_la-versions.Plo
+#	$(AM_V_CXX)source='src/versions.cc' object='src/lib_libpkgdb_la-versions.lo' libtool=yes \
 #	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(AM_V_CXX_no)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -c -o src/lib_libpkgdb_a-logger.obj `if test -f 'src/logger.cc'; then $(CYGPATH_W) 'src/logger.cc'; else $(CYGPATH_W) '$(srcdir)/src/logger.cc'; fi`
+#	$(AM_V_CXX_no)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_la_CXXFLAGS) $(CXXFLAGS) -c -o src/lib_libpkgdb_la-versions.lo `test -f 'src/versions.cc' || echo '$(srcdir)/'`src/versions.cc
 
-src/lib_libpkgdb_a-nix-state.o: src/nix-state.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -MT src/lib_libpkgdb_a-nix-state.o -MD -MP -MF src/$(DEPDIR)/lib_libpkgdb_a-nix-state.Tpo -c -o src/lib_libpkgdb_a-nix-state.o `test -f 'src/nix-state.cc' || echo '$(srcdir)/'`src/nix-state.cc
-	$(AM_V_at)$(am__mv) src/$(DEPDIR)/lib_libpkgdb_a-nix-state.Tpo src/$(DEPDIR)/lib_libpkgdb_a-nix-state.Po
-#	$(AM_V_CXX)source='src/nix-state.cc' object='src/lib_libpkgdb_a-nix-state.o' libtool=no \
+src/lib_libpkgdb_la-yamlToJSON.lo: src/yamlToJSON.cc
+	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_la_CXXFLAGS) $(CXXFLAGS) -MT src/lib_libpkgdb_la-yamlToJSON.lo -MD -MP -MF src/$(DEPDIR)/lib_libpkgdb_la-yamlToJSON.Tpo -c -o src/lib_libpkgdb_la-yamlToJSON.lo `test -f 'src/yamlToJSON.cc' || echo '$(srcdir)/'`src/yamlToJSON.cc
+	$(AM_V_at)$(am__mv) src/$(DEPDIR)/lib_libpkgdb_la-yamlToJSON.Tpo src/$(DEPDIR)/lib_libpkgdb_la-yamlToJSON.Plo
+#	$(AM_V_CXX)source='src/yamlToJSON.cc' object='src/lib_libpkgdb_la-yamlToJSON.lo' libtool=yes \
 #	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(AM_V_CXX_no)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -c -o src/lib_libpkgdb_a-nix-state.o `test -f 'src/nix-state.cc' || echo '$(srcdir)/'`src/nix-state.cc
+#	$(AM_V_CXX_no)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_la_CXXFLAGS) $(CXXFLAGS) -c -o src/lib_libpkgdb_la-yamlToJSON.lo `test -f 'src/yamlToJSON.cc' || echo '$(srcdir)/'`src/yamlToJSON.cc
 
-src/lib_libpkgdb_a-nix-state.obj: src/nix-state.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -MT src/lib_libpkgdb_a-nix-state.obj -MD -MP -MF src/$(DEPDIR)/lib_libpkgdb_a-nix-state.Tpo -c -o src/lib_libpkgdb_a-nix-state.obj `if test -f 'src/nix-state.cc'; then $(CYGPATH_W) 'src/nix-state.cc'; else $(CYGPATH_W) '$(srcdir)/src/nix-state.cc'; fi`
-	$(AM_V_at)$(am__mv) src/$(DEPDIR)/lib_libpkgdb_a-nix-state.Tpo src/$(DEPDIR)/lib_libpkgdb_a-nix-state.Po
-#	$(AM_V_CXX)source='src/nix-state.cc' object='src/lib_libpkgdb_a-nix-state.obj' libtool=no \
+src/search/lib_libpkgdb_la-params.lo: src/search/params.cc
+	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_la_CXXFLAGS) $(CXXFLAGS) -MT src/search/lib_libpkgdb_la-params.lo -MD -MP -MF src/search/$(DEPDIR)/lib_libpkgdb_la-params.Tpo -c -o src/search/lib_libpkgdb_la-params.lo `test -f 'src/search/params.cc' || echo '$(srcdir)/'`src/search/params.cc
+	$(AM_V_at)$(am__mv) src/search/$(DEPDIR)/lib_libpkgdb_la-params.Tpo src/search/$(DEPDIR)/lib_libpkgdb_la-params.Plo
+#	$(AM_V_CXX)source='src/search/params.cc' object='src/search/lib_libpkgdb_la-params.lo' libtool=yes \
 #	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(AM_V_CXX_no)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -c -o src/lib_libpkgdb_a-nix-state.obj `if test -f 'src/nix-state.cc'; then $(CYGPATH_W) 'src/nix-state.cc'; else $(CYGPATH_W) '$(srcdir)/src/nix-state.cc'; fi`
+#	$(AM_V_CXX_no)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_la_CXXFLAGS) $(CXXFLAGS) -c -o src/search/lib_libpkgdb_la-params.lo `test -f 'src/search/params.cc' || echo '$(srcdir)/'`src/search/params.cc
 
-src/lib_libpkgdb_a-package.o: src/package.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -MT src/lib_libpkgdb_a-package.o -MD -MP -MF src/$(DEPDIR)/lib_libpkgdb_a-package.Tpo -c -o src/lib_libpkgdb_a-package.o `test -f 'src/package.cc' || echo '$(srcdir)/'`src/package.cc
-	$(AM_V_at)$(am__mv) src/$(DEPDIR)/lib_libpkgdb_a-package.Tpo src/$(DEPDIR)/lib_libpkgdb_a-package.Po
-#	$(AM_V_CXX)source='src/package.cc' object='src/lib_libpkgdb_a-package.o' libtool=no \
+src/resolver/lib_libpkgdb_la-descriptor.lo: src/resolver/descriptor.cc
+	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_la_CXXFLAGS) $(CXXFLAGS) -MT src/resolver/lib_libpkgdb_la-descriptor.lo -MD -MP -MF src/resolver/$(DEPDIR)/lib_libpkgdb_la-descriptor.Tpo -c -o src/resolver/lib_libpkgdb_la-descriptor.lo `test -f 'src/resolver/descriptor.cc' || echo '$(srcdir)/'`src/resolver/descriptor.cc
+	$(AM_V_at)$(am__mv) src/resolver/$(DEPDIR)/lib_libpkgdb_la-descriptor.Tpo src/resolver/$(DEPDIR)/lib_libpkgdb_la-descriptor.Plo
+#	$(AM_V_CXX)source='src/resolver/descriptor.cc' object='src/resolver/lib_libpkgdb_la-descriptor.lo' libtool=yes \
 #	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(AM_V_CXX_no)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -c -o src/lib_libpkgdb_a-package.o `test -f 'src/package.cc' || echo '$(srcdir)/'`src/package.cc
+#	$(AM_V_CXX_no)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_la_CXXFLAGS) $(CXXFLAGS) -c -o src/resolver/lib_libpkgdb_la-descriptor.lo `test -f 'src/resolver/descriptor.cc' || echo '$(srcdir)/'`src/resolver/descriptor.cc
 
-src/lib_libpkgdb_a-package.obj: src/package.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -MT src/lib_libpkgdb_a-package.obj -MD -MP -MF src/$(DEPDIR)/lib_libpkgdb_a-package.Tpo -c -o src/lib_libpkgdb_a-package.obj `if test -f 'src/package.cc'; then $(CYGPATH_W) 'src/package.cc'; else $(CYGPATH_W) '$(srcdir)/src/package.cc'; fi`
-	$(AM_V_at)$(am__mv) src/$(DEPDIR)/lib_libpkgdb_a-package.Tpo src/$(DEPDIR)/lib_libpkgdb_a-package.Po
-#	$(AM_V_CXX)source='src/package.cc' object='src/lib_libpkgdb_a-package.obj' libtool=no \
+src/resolver/lib_libpkgdb_la-environment.lo: src/resolver/environment.cc
+	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_la_CXXFLAGS) $(CXXFLAGS) -MT src/resolver/lib_libpkgdb_la-environment.lo -MD -MP -MF src/resolver/$(DEPDIR)/lib_libpkgdb_la-environment.Tpo -c -o src/resolver/lib_libpkgdb_la-environment.lo `test -f 'src/resolver/environment.cc' || echo '$(srcdir)/'`src/resolver/environment.cc
+	$(AM_V_at)$(am__mv) src/resolver/$(DEPDIR)/lib_libpkgdb_la-environment.Tpo src/resolver/$(DEPDIR)/lib_libpkgdb_la-environment.Plo
+#	$(AM_V_CXX)source='src/resolver/environment.cc' object='src/resolver/lib_libpkgdb_la-environment.lo' libtool=yes \
 #	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(AM_V_CXX_no)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -c -o src/lib_libpkgdb_a-package.obj `if test -f 'src/package.cc'; then $(CYGPATH_W) 'src/package.cc'; else $(CYGPATH_W) '$(srcdir)/src/package.cc'; fi`
+#	$(AM_V_CXX_no)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_la_CXXFLAGS) $(CXXFLAGS) -c -o src/resolver/lib_libpkgdb_la-environment.lo `test -f 'src/resolver/environment.cc' || echo '$(srcdir)/'`src/resolver/environment.cc
 
-src/lib_libpkgdb_a-raw-package.o: src/raw-package.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -MT src/lib_libpkgdb_a-raw-package.o -MD -MP -MF src/$(DEPDIR)/lib_libpkgdb_a-raw-package.Tpo -c -o src/lib_libpkgdb_a-raw-package.o `test -f 'src/raw-package.cc' || echo '$(srcdir)/'`src/raw-package.cc
-	$(AM_V_at)$(am__mv) src/$(DEPDIR)/lib_libpkgdb_a-raw-package.Tpo src/$(DEPDIR)/lib_libpkgdb_a-raw-package.Po
-#	$(AM_V_CXX)source='src/raw-package.cc' object='src/lib_libpkgdb_a-raw-package.o' libtool=no \
+src/resolver/lib_libpkgdb_la-lockfile.lo: src/resolver/lockfile.cc
+	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_la_CXXFLAGS) $(CXXFLAGS) -MT src/resolver/lib_libpkgdb_la-lockfile.lo -MD -MP -MF src/resolver/$(DEPDIR)/lib_libpkgdb_la-lockfile.Tpo -c -o src/resolver/lib_libpkgdb_la-lockfile.lo `test -f 'src/resolver/lockfile.cc' || echo '$(srcdir)/'`src/resolver/lockfile.cc
+	$(AM_V_at)$(am__mv) src/resolver/$(DEPDIR)/lib_libpkgdb_la-lockfile.Tpo src/resolver/$(DEPDIR)/lib_libpkgdb_la-lockfile.Plo
+#	$(AM_V_CXX)source='src/resolver/lockfile.cc' object='src/resolver/lib_libpkgdb_la-lockfile.lo' libtool=yes \
 #	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(AM_V_CXX_no)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -c -o src/lib_libpkgdb_a-raw-package.o `test -f 'src/raw-package.cc' || echo '$(srcdir)/'`src/raw-package.cc
+#	$(AM_V_CXX_no)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_la_CXXFLAGS) $(CXXFLAGS) -c -o src/resolver/lib_libpkgdb_la-lockfile.lo `test -f 'src/resolver/lockfile.cc' || echo '$(srcdir)/'`src/resolver/lockfile.cc
 
-src/lib_libpkgdb_a-raw-package.obj: src/raw-package.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -MT src/lib_libpkgdb_a-raw-package.obj -MD -MP -MF src/$(DEPDIR)/lib_libpkgdb_a-raw-package.Tpo -c -o src/lib_libpkgdb_a-raw-package.obj `if test -f 'src/raw-package.cc'; then $(CYGPATH_W) 'src/raw-package.cc'; else $(CYGPATH_W) '$(srcdir)/src/raw-package.cc'; fi`
-	$(AM_V_at)$(am__mv) src/$(DEPDIR)/lib_libpkgdb_a-raw-package.Tpo src/$(DEPDIR)/lib_libpkgdb_a-raw-package.Po
-#	$(AM_V_CXX)source='src/raw-package.cc' object='src/lib_libpkgdb_a-raw-package.obj' libtool=no \
+src/resolver/lib_libpkgdb_la-manifest-raw.lo: src/resolver/manifest-raw.cc
+	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_la_CXXFLAGS) $(CXXFLAGS) -MT src/resolver/lib_libpkgdb_la-manifest-raw.lo -MD -MP -MF src/resolver/$(DEPDIR)/lib_libpkgdb_la-manifest-raw.Tpo -c -o src/resolver/lib_libpkgdb_la-manifest-raw.lo `test -f 'src/resolver/manifest-raw.cc' || echo '$(srcdir)/'`src/resolver/manifest-raw.cc
+	$(AM_V_at)$(am__mv) src/resolver/$(DEPDIR)/lib_libpkgdb_la-manifest-raw.Tpo src/resolver/$(DEPDIR)/lib_libpkgdb_la-manifest-raw.Plo
+#	$(AM_V_CXX)source='src/resolver/manifest-raw.cc' object='src/resolver/lib_libpkgdb_la-manifest-raw.lo' libtool=yes \
 #	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(AM_V_CXX_no)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -c -o src/lib_libpkgdb_a-raw-package.obj `if test -f 'src/raw-package.cc'; then $(CYGPATH_W) 'src/raw-package.cc'; else $(CYGPATH_W) '$(srcdir)/src/raw-package.cc'; fi`
+#	$(AM_V_CXX_no)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_la_CXXFLAGS) $(CXXFLAGS) -c -o src/resolver/lib_libpkgdb_la-manifest-raw.lo `test -f 'src/resolver/manifest-raw.cc' || echo '$(srcdir)/'`src/resolver/manifest-raw.cc
 
-src/lib_libpkgdb_a-registry.o: src/registry.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -MT src/lib_libpkgdb_a-registry.o -MD -MP -MF src/$(DEPDIR)/lib_libpkgdb_a-registry.Tpo -c -o src/lib_libpkgdb_a-registry.o `test -f 'src/registry.cc' || echo '$(srcdir)/'`src/registry.cc
-	$(AM_V_at)$(am__mv) src/$(DEPDIR)/lib_libpkgdb_a-registry.Tpo src/$(DEPDIR)/lib_libpkgdb_a-registry.Po
-#	$(AM_V_CXX)source='src/registry.cc' object='src/lib_libpkgdb_a-registry.o' libtool=no \
+src/resolver/lib_libpkgdb_la-manifest.lo: src/resolver/manifest.cc
+	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_la_CXXFLAGS) $(CXXFLAGS) -MT src/resolver/lib_libpkgdb_la-manifest.lo -MD -MP -MF src/resolver/$(DEPDIR)/lib_libpkgdb_la-manifest.Tpo -c -o src/resolver/lib_libpkgdb_la-manifest.lo `test -f 'src/resolver/manifest.cc' || echo '$(srcdir)/'`src/resolver/manifest.cc
+	$(AM_V_at)$(am__mv) src/resolver/$(DEPDIR)/lib_libpkgdb_la-manifest.Tpo src/resolver/$(DEPDIR)/lib_libpkgdb_la-manifest.Plo
+#	$(AM_V_CXX)source='src/resolver/manifest.cc' object='src/resolver/lib_libpkgdb_la-manifest.lo' libtool=yes \
 #	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(AM_V_CXX_no)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -c -o src/lib_libpkgdb_a-registry.o `test -f 'src/registry.cc' || echo '$(srcdir)/'`src/registry.cc
+#	$(AM_V_CXX_no)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_la_CXXFLAGS) $(CXXFLAGS) -c -o src/resolver/lib_libpkgdb_la-manifest.lo `test -f 'src/resolver/manifest.cc' || echo '$(srcdir)/'`src/resolver/manifest.cc
 
-src/lib_libpkgdb_a-registry.obj: src/registry.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -MT src/lib_libpkgdb_a-registry.obj -MD -MP -MF src/$(DEPDIR)/lib_libpkgdb_a-registry.Tpo -c -o src/lib_libpkgdb_a-registry.obj `if test -f 'src/registry.cc'; then $(CYGPATH_W) 'src/registry.cc'; else $(CYGPATH_W) '$(srcdir)/src/registry.cc'; fi`
-	$(AM_V_at)$(am__mv) src/$(DEPDIR)/lib_libpkgdb_a-registry.Tpo src/$(DEPDIR)/lib_libpkgdb_a-registry.Po
-#	$(AM_V_CXX)source='src/registry.cc' object='src/lib_libpkgdb_a-registry.obj' libtool=no \
+src/resolver/lib_libpkgdb_la-mixins.lo: src/resolver/mixins.cc
+	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_la_CXXFLAGS) $(CXXFLAGS) -MT src/resolver/lib_libpkgdb_la-mixins.lo -MD -MP -MF src/resolver/$(DEPDIR)/lib_libpkgdb_la-mixins.Tpo -c -o src/resolver/lib_libpkgdb_la-mixins.lo `test -f 'src/resolver/mixins.cc' || echo '$(srcdir)/'`src/resolver/mixins.cc
+	$(AM_V_at)$(am__mv) src/resolver/$(DEPDIR)/lib_libpkgdb_la-mixins.Tpo src/resolver/$(DEPDIR)/lib_libpkgdb_la-mixins.Plo
+#	$(AM_V_CXX)source='src/resolver/mixins.cc' object='src/resolver/lib_libpkgdb_la-mixins.lo' libtool=yes \
 #	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(AM_V_CXX_no)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -c -o src/lib_libpkgdb_a-registry.obj `if test -f 'src/registry.cc'; then $(CYGPATH_W) 'src/registry.cc'; else $(CYGPATH_W) '$(srcdir)/src/registry.cc'; fi`
+#	$(AM_V_CXX_no)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_la_CXXFLAGS) $(CXXFLAGS) -c -o src/resolver/lib_libpkgdb_la-mixins.lo `test -f 'src/resolver/mixins.cc' || echo '$(srcdir)/'`src/resolver/mixins.cc
 
-src/lib_libpkgdb_a-tomlToJSON.o: src/tomlToJSON.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -MT src/lib_libpkgdb_a-tomlToJSON.o -MD -MP -MF src/$(DEPDIR)/lib_libpkgdb_a-tomlToJSON.Tpo -c -o src/lib_libpkgdb_a-tomlToJSON.o `test -f 'src/tomlToJSON.cc' || echo '$(srcdir)/'`src/tomlToJSON.cc
-	$(AM_V_at)$(am__mv) src/$(DEPDIR)/lib_libpkgdb_a-tomlToJSON.Tpo src/$(DEPDIR)/lib_libpkgdb_a-tomlToJSON.Po
-#	$(AM_V_CXX)source='src/tomlToJSON.cc' object='src/lib_libpkgdb_a-tomlToJSON.o' libtool=no \
+src/resolver/lib_libpkgdb_la-primops.lo: src/resolver/primops.cc
+	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_la_CXXFLAGS) $(CXXFLAGS) -MT src/resolver/lib_libpkgdb_la-primops.lo -MD -MP -MF src/resolver/$(DEPDIR)/lib_libpkgdb_la-primops.Tpo -c -o src/resolver/lib_libpkgdb_la-primops.lo `test -f 'src/resolver/primops.cc' || echo '$(srcdir)/'`src/resolver/primops.cc
+	$(AM_V_at)$(am__mv) src/resolver/$(DEPDIR)/lib_libpkgdb_la-primops.Tpo src/resolver/$(DEPDIR)/lib_libpkgdb_la-primops.Plo
+#	$(AM_V_CXX)source='src/resolver/primops.cc' object='src/resolver/lib_libpkgdb_la-primops.lo' libtool=yes \
 #	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(AM_V_CXX_no)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -c -o src/lib_libpkgdb_a-tomlToJSON.o `test -f 'src/tomlToJSON.cc' || echo '$(srcdir)/'`src/tomlToJSON.cc
+#	$(AM_V_CXX_no)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_la_CXXFLAGS) $(CXXFLAGS) -c -o src/resolver/lib_libpkgdb_la-primops.lo `test -f 'src/resolver/primops.cc' || echo '$(srcdir)/'`src/resolver/primops.cc
 
-src/lib_libpkgdb_a-tomlToJSON.obj: src/tomlToJSON.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -MT src/lib_libpkgdb_a-tomlToJSON.obj -MD -MP -MF src/$(DEPDIR)/lib_libpkgdb_a-tomlToJSON.Tpo -c -o src/lib_libpkgdb_a-tomlToJSON.obj `if test -f 'src/tomlToJSON.cc'; then $(CYGPATH_W) 'src/tomlToJSON.cc'; else $(CYGPATH_W) '$(srcdir)/src/tomlToJSON.cc'; fi`
-	$(AM_V_at)$(am__mv) src/$(DEPDIR)/lib_libpkgdb_a-tomlToJSON.Tpo src/$(DEPDIR)/lib_libpkgdb_a-tomlToJSON.Po
-#	$(AM_V_CXX)source='src/tomlToJSON.cc' object='src/lib_libpkgdb_a-tomlToJSON.obj' libtool=no \
+src/pkgdb/lib_libpkgdb_la-db-package.lo: src/pkgdb/db-package.cc
+	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_la_CXXFLAGS) $(CXXFLAGS) -MT src/pkgdb/lib_libpkgdb_la-db-package.lo -MD -MP -MF src/pkgdb/$(DEPDIR)/lib_libpkgdb_la-db-package.Tpo -c -o src/pkgdb/lib_libpkgdb_la-db-package.lo `test -f 'src/pkgdb/db-package.cc' || echo '$(srcdir)/'`src/pkgdb/db-package.cc
+	$(AM_V_at)$(am__mv) src/pkgdb/$(DEPDIR)/lib_libpkgdb_la-db-package.Tpo src/pkgdb/$(DEPDIR)/lib_libpkgdb_la-db-package.Plo
+#	$(AM_V_CXX)source='src/pkgdb/db-package.cc' object='src/pkgdb/lib_libpkgdb_la-db-package.lo' libtool=yes \
 #	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(AM_V_CXX_no)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -c -o src/lib_libpkgdb_a-tomlToJSON.obj `if test -f 'src/tomlToJSON.cc'; then $(CYGPATH_W) 'src/tomlToJSON.cc'; else $(CYGPATH_W) '$(srcdir)/src/tomlToJSON.cc'; fi`
+#	$(AM_V_CXX_no)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_la_CXXFLAGS) $(CXXFLAGS) -c -o src/pkgdb/lib_libpkgdb_la-db-package.lo `test -f 'src/pkgdb/db-package.cc' || echo '$(srcdir)/'`src/pkgdb/db-package.cc
 
-src/lib_libpkgdb_a-util.o: src/util.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -MT src/lib_libpkgdb_a-util.o -MD -MP -MF src/$(DEPDIR)/lib_libpkgdb_a-util.Tpo -c -o src/lib_libpkgdb_a-util.o `test -f 'src/util.cc' || echo '$(srcdir)/'`src/util.cc
-	$(AM_V_at)$(am__mv) src/$(DEPDIR)/lib_libpkgdb_a-util.Tpo src/$(DEPDIR)/lib_libpkgdb_a-util.Po
-#	$(AM_V_CXX)source='src/util.cc' object='src/lib_libpkgdb_a-util.o' libtool=no \
+src/pkgdb/lib_libpkgdb_la-gc.lo: src/pkgdb/gc.cc
+	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_la_CXXFLAGS) $(CXXFLAGS) -MT src/pkgdb/lib_libpkgdb_la-gc.lo -MD -MP -MF src/pkgdb/$(DEPDIR)/lib_libpkgdb_la-gc.Tpo -c -o src/pkgdb/lib_libpkgdb_la-gc.lo `test -f 'src/pkgdb/gc.cc' || echo '$(srcdir)/'`src/pkgdb/gc.cc
+	$(AM_V_at)$(am__mv) src/pkgdb/$(DEPDIR)/lib_libpkgdb_la-gc.Tpo src/pkgdb/$(DEPDIR)/lib_libpkgdb_la-gc.Plo
+#	$(AM_V_CXX)source='src/pkgdb/gc.cc' object='src/pkgdb/lib_libpkgdb_la-gc.lo' libtool=yes \
 #	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(AM_V_CXX_no)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -c -o src/lib_libpkgdb_a-util.o `test -f 'src/util.cc' || echo '$(srcdir)/'`src/util.cc
+#	$(AM_V_CXX_no)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_la_CXXFLAGS) $(CXXFLAGS) -c -o src/pkgdb/lib_libpkgdb_la-gc.lo `test -f 'src/pkgdb/gc.cc' || echo '$(srcdir)/'`src/pkgdb/gc.cc
 
-src/lib_libpkgdb_a-util.obj: src/util.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -MT src/lib_libpkgdb_a-util.obj -MD -MP -MF src/$(DEPDIR)/lib_libpkgdb_a-util.Tpo -c -o src/lib_libpkgdb_a-util.obj `if test -f 'src/util.cc'; then $(CYGPATH_W) 'src/util.cc'; else $(CYGPATH_W) '$(srcdir)/src/util.cc'; fi`
-	$(AM_V_at)$(am__mv) src/$(DEPDIR)/lib_libpkgdb_a-util.Tpo src/$(DEPDIR)/lib_libpkgdb_a-util.Po
-#	$(AM_V_CXX)source='src/util.cc' object='src/lib_libpkgdb_a-util.obj' libtool=no \
+src/pkgdb/lib_libpkgdb_la-input.lo: src/pkgdb/input.cc
+	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_la_CXXFLAGS) $(CXXFLAGS) -MT src/pkgdb/lib_libpkgdb_la-input.lo -MD -MP -MF src/pkgdb/$(DEPDIR)/lib_libpkgdb_la-input.Tpo -c -o src/pkgdb/lib_libpkgdb_la-input.lo `test -f 'src/pkgdb/input.cc' || echo '$(srcdir)/'`src/pkgdb/input.cc
+	$(AM_V_at)$(am__mv) src/pkgdb/$(DEPDIR)/lib_libpkgdb_la-input.Tpo src/pkgdb/$(DEPDIR)/lib_libpkgdb_la-input.Plo
+#	$(AM_V_CXX)source='src/pkgdb/input.cc' object='src/pkgdb/lib_libpkgdb_la-input.lo' libtool=yes \
 #	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(AM_V_CXX_no)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -c -o src/lib_libpkgdb_a-util.obj `if test -f 'src/util.cc'; then $(CYGPATH_W) 'src/util.cc'; else $(CYGPATH_W) '$(srcdir)/src/util.cc'; fi`
+#	$(AM_V_CXX_no)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_la_CXXFLAGS) $(CXXFLAGS) -c -o src/pkgdb/lib_libpkgdb_la-input.lo `test -f 'src/pkgdb/input.cc' || echo '$(srcdir)/'`src/pkgdb/input.cc
 
-src/lib_libpkgdb_a-versions.o: src/versions.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -MT src/lib_libpkgdb_a-versions.o -MD -MP -MF src/$(DEPDIR)/lib_libpkgdb_a-versions.Tpo -c -o src/lib_libpkgdb_a-versions.o `test -f 'src/versions.cc' || echo '$(srcdir)/'`src/versions.cc
-	$(AM_V_at)$(am__mv) src/$(DEPDIR)/lib_libpkgdb_a-versions.Tpo src/$(DEPDIR)/lib_libpkgdb_a-versions.Po
-#	$(AM_V_CXX)source='src/versions.cc' object='src/lib_libpkgdb_a-versions.o' libtool=no \
+src/pkgdb/lib_libpkgdb_la-list.lo: src/pkgdb/list.cc
+	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_la_CXXFLAGS) $(CXXFLAGS) -MT src/pkgdb/lib_libpkgdb_la-list.lo -MD -MP -MF src/pkgdb/$(DEPDIR)/lib_libpkgdb_la-list.Tpo -c -o src/pkgdb/lib_libpkgdb_la-list.lo `test -f 'src/pkgdb/list.cc' || echo '$(srcdir)/'`src/pkgdb/list.cc
+	$(AM_V_at)$(am__mv) src/pkgdb/$(DEPDIR)/lib_libpkgdb_la-list.Tpo src/pkgdb/$(DEPDIR)/lib_libpkgdb_la-list.Plo
+#	$(AM_V_CXX)source='src/pkgdb/list.cc' object='src/pkgdb/lib_libpkgdb_la-list.lo' libtool=yes \
 #	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(AM_V_CXX_no)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -c -o src/lib_libpkgdb_a-versions.o `test -f 'src/versions.cc' || echo '$(srcdir)/'`src/versions.cc
+#	$(AM_V_CXX_no)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_la_CXXFLAGS) $(CXXFLAGS) -c -o src/pkgdb/lib_libpkgdb_la-list.lo `test -f 'src/pkgdb/list.cc' || echo '$(srcdir)/'`src/pkgdb/list.cc
 
-src/lib_libpkgdb_a-versions.obj: src/versions.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -MT src/lib_libpkgdb_a-versions.obj -MD -MP -MF src/$(DEPDIR)/lib_libpkgdb_a-versions.Tpo -c -o src/lib_libpkgdb_a-versions.obj `if test -f 'src/versions.cc'; then $(CYGPATH_W) 'src/versions.cc'; else $(CYGPATH_W) '$(srcdir)/src/versions.cc'; fi`
-	$(AM_V_at)$(am__mv) src/$(DEPDIR)/lib_libpkgdb_a-versions.Tpo src/$(DEPDIR)/lib_libpkgdb_a-versions.Po
-#	$(AM_V_CXX)source='src/versions.cc' object='src/lib_libpkgdb_a-versions.obj' libtool=no \
+src/pkgdb/lib_libpkgdb_la-pkg-query.lo: src/pkgdb/pkg-query.cc
+	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_la_CXXFLAGS) $(CXXFLAGS) -MT src/pkgdb/lib_libpkgdb_la-pkg-query.lo -MD -MP -MF src/pkgdb/$(DEPDIR)/lib_libpkgdb_la-pkg-query.Tpo -c -o src/pkgdb/lib_libpkgdb_la-pkg-query.lo `test -f 'src/pkgdb/pkg-query.cc' || echo '$(srcdir)/'`src/pkgdb/pkg-query.cc
+	$(AM_V_at)$(am__mv) src/pkgdb/$(DEPDIR)/lib_libpkgdb_la-pkg-query.Tpo src/pkgdb/$(DEPDIR)/lib_libpkgdb_la-pkg-query.Plo
+#	$(AM_V_CXX)source='src/pkgdb/pkg-query.cc' object='src/pkgdb/lib_libpkgdb_la-pkg-query.lo' libtool=yes \
 #	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(AM_V_CXX_no)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -c -o src/lib_libpkgdb_a-versions.obj `if test -f 'src/versions.cc'; then $(CYGPATH_W) 'src/versions.cc'; else $(CYGPATH_W) '$(srcdir)/src/versions.cc'; fi`
+#	$(AM_V_CXX_no)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_la_CXXFLAGS) $(CXXFLAGS) -c -o src/pkgdb/lib_libpkgdb_la-pkg-query.lo `test -f 'src/pkgdb/pkg-query.cc' || echo '$(srcdir)/'`src/pkgdb/pkg-query.cc
 
-src/lib_libpkgdb_a-yamlToJSON.o: src/yamlToJSON.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -MT src/lib_libpkgdb_a-yamlToJSON.o -MD -MP -MF src/$(DEPDIR)/lib_libpkgdb_a-yamlToJSON.Tpo -c -o src/lib_libpkgdb_a-yamlToJSON.o `test -f 'src/yamlToJSON.cc' || echo '$(srcdir)/'`src/yamlToJSON.cc
-	$(AM_V_at)$(am__mv) src/$(DEPDIR)/lib_libpkgdb_a-yamlToJSON.Tpo src/$(DEPDIR)/lib_libpkgdb_a-yamlToJSON.Po
-#	$(AM_V_CXX)source='src/yamlToJSON.cc' object='src/lib_libpkgdb_a-yamlToJSON.o' libtool=no \
+src/pkgdb/lib_libpkgdb_la-primops.lo: src/pkgdb/primops.cc
+	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_la_CXXFLAGS) $(CXXFLAGS) -MT src/pkgdb/lib_libpkgdb_la-primops.lo -MD -MP -MF src/pkgdb/$(DEPDIR)/lib_libpkgdb_la-primops.Tpo -c -o src/pkgdb/lib_libpkgdb_la-primops.lo `test -f 'src/pkgdb/primops.cc' || echo '$(srcdir)/'`src/pkgdb/primops.cc
+	$(AM_V_at)$(am__mv) src/pkgdb/$(DEPDIR)/lib_libpkgdb_la-primops.Tpo src/pkgdb/$(DEPDIR)/lib_libpkgdb_la-primops.Plo
+#	$(AM_V_CXX)source='src/pkgdb/primops.cc' object='src/pkgdb/lib_libpkgdb_la-primops.lo' libtool=yes \
 #	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(AM_V_CXX_no)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -c -o src/lib_libpkgdb_a-yamlToJSON.o `test -f 'src/yamlToJSON.cc' || echo '$(srcdir)/'`src/yamlToJSON.cc
+#	$(AM_V_CXX_no)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_la_CXXFLAGS) $(CXXFLAGS) -c -o src/pkgdb/lib_libpkgdb_la-primops.lo `test -f 'src/pkgdb/primops.cc' || echo '$(srcdir)/'`src/pkgdb/primops.cc
 
-src/lib_libpkgdb_a-yamlToJSON.obj: src/yamlToJSON.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -MT src/lib_libpkgdb_a-yamlToJSON.obj -MD -MP -MF src/$(DEPDIR)/lib_libpkgdb_a-yamlToJSON.Tpo -c -o src/lib_libpkgdb_a-yamlToJSON.obj `if test -f 'src/yamlToJSON.cc'; then $(CYGPATH_W) 'src/yamlToJSON.cc'; else $(CYGPATH_W) '$(srcdir)/src/yamlToJSON.cc'; fi`
-	$(AM_V_at)$(am__mv) src/$(DEPDIR)/lib_libpkgdb_a-yamlToJSON.Tpo src/$(DEPDIR)/lib_libpkgdb_a-yamlToJSON.Po
-#	$(AM_V_CXX)source='src/yamlToJSON.cc' object='src/lib_libpkgdb_a-yamlToJSON.obj' libtool=no \
+src/pkgdb/lib_libpkgdb_la-read.lo: src/pkgdb/read.cc
+	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_la_CXXFLAGS) $(CXXFLAGS) -MT src/pkgdb/lib_libpkgdb_la-read.lo -MD -MP -MF src/pkgdb/$(DEPDIR)/lib_libpkgdb_la-read.Tpo -c -o src/pkgdb/lib_libpkgdb_la-read.lo `test -f 'src/pkgdb/read.cc' || echo '$(srcdir)/'`src/pkgdb/read.cc
+	$(AM_V_at)$(am__mv) src/pkgdb/$(DEPDIR)/lib_libpkgdb_la-read.Tpo src/pkgdb/$(DEPDIR)/lib_libpkgdb_la-read.Plo
+#	$(AM_V_CXX)source='src/pkgdb/read.cc' object='src/pkgdb/lib_libpkgdb_la-read.lo' libtool=yes \
 #	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(AM_V_CXX_no)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -c -o src/lib_libpkgdb_a-yamlToJSON.obj `if test -f 'src/yamlToJSON.cc'; then $(CYGPATH_W) 'src/yamlToJSON.cc'; else $(CYGPATH_W) '$(srcdir)/src/yamlToJSON.cc'; fi`
+#	$(AM_V_CXX_no)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_la_CXXFLAGS) $(CXXFLAGS) -c -o src/pkgdb/lib_libpkgdb_la-read.lo `test -f 'src/pkgdb/read.cc' || echo '$(srcdir)/'`src/pkgdb/read.cc
 
-src/search/lib_libpkgdb_a-params.o: src/search/params.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -MT src/search/lib_libpkgdb_a-params.o -MD -MP -MF src/search/$(DEPDIR)/lib_libpkgdb_a-params.Tpo -c -o src/search/lib_libpkgdb_a-params.o `test -f 'src/search/params.cc' || echo '$(srcdir)/'`src/search/params.cc
-	$(AM_V_at)$(am__mv) src/search/$(DEPDIR)/lib_libpkgdb_a-params.Tpo src/search/$(DEPDIR)/lib_libpkgdb_a-params.Po
-#	$(AM_V_CXX)source='src/search/params.cc' object='src/search/lib_libpkgdb_a-params.o' libtool=no \
+src/pkgdb/lib_libpkgdb_la-write.lo: src/pkgdb/write.cc
+	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_la_CXXFLAGS) $(CXXFLAGS) -MT src/pkgdb/lib_libpkgdb_la-write.lo -MD -MP -MF src/pkgdb/$(DEPDIR)/lib_libpkgdb_la-write.Tpo -c -o src/pkgdb/lib_libpkgdb_la-write.lo `test -f 'src/pkgdb/write.cc' || echo '$(srcdir)/'`src/pkgdb/write.cc
+	$(AM_V_at)$(am__mv) src/pkgdb/$(DEPDIR)/lib_libpkgdb_la-write.Tpo src/pkgdb/$(DEPDIR)/lib_libpkgdb_la-write.Plo
+#	$(AM_V_CXX)source='src/pkgdb/write.cc' object='src/pkgdb/lib_libpkgdb_la-write.lo' libtool=yes \
 #	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(AM_V_CXX_no)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -c -o src/search/lib_libpkgdb_a-params.o `test -f 'src/search/params.cc' || echo '$(srcdir)/'`src/search/params.cc
-
-src/search/lib_libpkgdb_a-params.obj: src/search/params.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -MT src/search/lib_libpkgdb_a-params.obj -MD -MP -MF src/search/$(DEPDIR)/lib_libpkgdb_a-params.Tpo -c -o src/search/lib_libpkgdb_a-params.obj `if test -f 'src/search/params.cc'; then $(CYGPATH_W) 'src/search/params.cc'; else $(CYGPATH_W) '$(srcdir)/src/search/params.cc'; fi`
-	$(AM_V_at)$(am__mv) src/search/$(DEPDIR)/lib_libpkgdb_a-params.Tpo src/search/$(DEPDIR)/lib_libpkgdb_a-params.Po
-#	$(AM_V_CXX)source='src/search/params.cc' object='src/search/lib_libpkgdb_a-params.obj' libtool=no \
-#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(AM_V_CXX_no)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -c -o src/search/lib_libpkgdb_a-params.obj `if test -f 'src/search/params.cc'; then $(CYGPATH_W) 'src/search/params.cc'; else $(CYGPATH_W) '$(srcdir)/src/search/params.cc'; fi`
-
-src/resolver/lib_libpkgdb_a-descriptor.o: src/resolver/descriptor.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -MT src/resolver/lib_libpkgdb_a-descriptor.o -MD -MP -MF src/resolver/$(DEPDIR)/lib_libpkgdb_a-descriptor.Tpo -c -o src/resolver/lib_libpkgdb_a-descriptor.o `test -f 'src/resolver/descriptor.cc' || echo '$(srcdir)/'`src/resolver/descriptor.cc
-	$(AM_V_at)$(am__mv) src/resolver/$(DEPDIR)/lib_libpkgdb_a-descriptor.Tpo src/resolver/$(DEPDIR)/lib_libpkgdb_a-descriptor.Po
-#	$(AM_V_CXX)source='src/resolver/descriptor.cc' object='src/resolver/lib_libpkgdb_a-descriptor.o' libtool=no \
-#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(AM_V_CXX_no)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -c -o src/resolver/lib_libpkgdb_a-descriptor.o `test -f 'src/resolver/descriptor.cc' || echo '$(srcdir)/'`src/resolver/descriptor.cc
-
-src/resolver/lib_libpkgdb_a-descriptor.obj: src/resolver/descriptor.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -MT src/resolver/lib_libpkgdb_a-descriptor.obj -MD -MP -MF src/resolver/$(DEPDIR)/lib_libpkgdb_a-descriptor.Tpo -c -o src/resolver/lib_libpkgdb_a-descriptor.obj `if test -f 'src/resolver/descriptor.cc'; then $(CYGPATH_W) 'src/resolver/descriptor.cc'; else $(CYGPATH_W) '$(srcdir)/src/resolver/descriptor.cc'; fi`
-	$(AM_V_at)$(am__mv) src/resolver/$(DEPDIR)/lib_libpkgdb_a-descriptor.Tpo src/resolver/$(DEPDIR)/lib_libpkgdb_a-descriptor.Po
-#	$(AM_V_CXX)source='src/resolver/descriptor.cc' object='src/resolver/lib_libpkgdb_a-descriptor.obj' libtool=no \
-#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(AM_V_CXX_no)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -c -o src/resolver/lib_libpkgdb_a-descriptor.obj `if test -f 'src/resolver/descriptor.cc'; then $(CYGPATH_W) 'src/resolver/descriptor.cc'; else $(CYGPATH_W) '$(srcdir)/src/resolver/descriptor.cc'; fi`
-
-src/resolver/lib_libpkgdb_a-environment.o: src/resolver/environment.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -MT src/resolver/lib_libpkgdb_a-environment.o -MD -MP -MF src/resolver/$(DEPDIR)/lib_libpkgdb_a-environment.Tpo -c -o src/resolver/lib_libpkgdb_a-environment.o `test -f 'src/resolver/environment.cc' || echo '$(srcdir)/'`src/resolver/environment.cc
-	$(AM_V_at)$(am__mv) src/resolver/$(DEPDIR)/lib_libpkgdb_a-environment.Tpo src/resolver/$(DEPDIR)/lib_libpkgdb_a-environment.Po
-#	$(AM_V_CXX)source='src/resolver/environment.cc' object='src/resolver/lib_libpkgdb_a-environment.o' libtool=no \
-#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(AM_V_CXX_no)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -c -o src/resolver/lib_libpkgdb_a-environment.o `test -f 'src/resolver/environment.cc' || echo '$(srcdir)/'`src/resolver/environment.cc
-
-src/resolver/lib_libpkgdb_a-environment.obj: src/resolver/environment.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -MT src/resolver/lib_libpkgdb_a-environment.obj -MD -MP -MF src/resolver/$(DEPDIR)/lib_libpkgdb_a-environment.Tpo -c -o src/resolver/lib_libpkgdb_a-environment.obj `if test -f 'src/resolver/environment.cc'; then $(CYGPATH_W) 'src/resolver/environment.cc'; else $(CYGPATH_W) '$(srcdir)/src/resolver/environment.cc'; fi`
-	$(AM_V_at)$(am__mv) src/resolver/$(DEPDIR)/lib_libpkgdb_a-environment.Tpo src/resolver/$(DEPDIR)/lib_libpkgdb_a-environment.Po
-#	$(AM_V_CXX)source='src/resolver/environment.cc' object='src/resolver/lib_libpkgdb_a-environment.obj' libtool=no \
-#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(AM_V_CXX_no)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -c -o src/resolver/lib_libpkgdb_a-environment.obj `if test -f 'src/resolver/environment.cc'; then $(CYGPATH_W) 'src/resolver/environment.cc'; else $(CYGPATH_W) '$(srcdir)/src/resolver/environment.cc'; fi`
-
-src/resolver/lib_libpkgdb_a-lockfile.o: src/resolver/lockfile.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -MT src/resolver/lib_libpkgdb_a-lockfile.o -MD -MP -MF src/resolver/$(DEPDIR)/lib_libpkgdb_a-lockfile.Tpo -c -o src/resolver/lib_libpkgdb_a-lockfile.o `test -f 'src/resolver/lockfile.cc' || echo '$(srcdir)/'`src/resolver/lockfile.cc
-	$(AM_V_at)$(am__mv) src/resolver/$(DEPDIR)/lib_libpkgdb_a-lockfile.Tpo src/resolver/$(DEPDIR)/lib_libpkgdb_a-lockfile.Po
-#	$(AM_V_CXX)source='src/resolver/lockfile.cc' object='src/resolver/lib_libpkgdb_a-lockfile.o' libtool=no \
-#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(AM_V_CXX_no)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -c -o src/resolver/lib_libpkgdb_a-lockfile.o `test -f 'src/resolver/lockfile.cc' || echo '$(srcdir)/'`src/resolver/lockfile.cc
-
-src/resolver/lib_libpkgdb_a-lockfile.obj: src/resolver/lockfile.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -MT src/resolver/lib_libpkgdb_a-lockfile.obj -MD -MP -MF src/resolver/$(DEPDIR)/lib_libpkgdb_a-lockfile.Tpo -c -o src/resolver/lib_libpkgdb_a-lockfile.obj `if test -f 'src/resolver/lockfile.cc'; then $(CYGPATH_W) 'src/resolver/lockfile.cc'; else $(CYGPATH_W) '$(srcdir)/src/resolver/lockfile.cc'; fi`
-	$(AM_V_at)$(am__mv) src/resolver/$(DEPDIR)/lib_libpkgdb_a-lockfile.Tpo src/resolver/$(DEPDIR)/lib_libpkgdb_a-lockfile.Po
-#	$(AM_V_CXX)source='src/resolver/lockfile.cc' object='src/resolver/lib_libpkgdb_a-lockfile.obj' libtool=no \
-#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(AM_V_CXX_no)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -c -o src/resolver/lib_libpkgdb_a-lockfile.obj `if test -f 'src/resolver/lockfile.cc'; then $(CYGPATH_W) 'src/resolver/lockfile.cc'; else $(CYGPATH_W) '$(srcdir)/src/resolver/lockfile.cc'; fi`
-
-src/resolver/lib_libpkgdb_a-manifest-raw.o: src/resolver/manifest-raw.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -MT src/resolver/lib_libpkgdb_a-manifest-raw.o -MD -MP -MF src/resolver/$(DEPDIR)/lib_libpkgdb_a-manifest-raw.Tpo -c -o src/resolver/lib_libpkgdb_a-manifest-raw.o `test -f 'src/resolver/manifest-raw.cc' || echo '$(srcdir)/'`src/resolver/manifest-raw.cc
-	$(AM_V_at)$(am__mv) src/resolver/$(DEPDIR)/lib_libpkgdb_a-manifest-raw.Tpo src/resolver/$(DEPDIR)/lib_libpkgdb_a-manifest-raw.Po
-#	$(AM_V_CXX)source='src/resolver/manifest-raw.cc' object='src/resolver/lib_libpkgdb_a-manifest-raw.o' libtool=no \
-#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(AM_V_CXX_no)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -c -o src/resolver/lib_libpkgdb_a-manifest-raw.o `test -f 'src/resolver/manifest-raw.cc' || echo '$(srcdir)/'`src/resolver/manifest-raw.cc
-
-src/resolver/lib_libpkgdb_a-manifest-raw.obj: src/resolver/manifest-raw.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -MT src/resolver/lib_libpkgdb_a-manifest-raw.obj -MD -MP -MF src/resolver/$(DEPDIR)/lib_libpkgdb_a-manifest-raw.Tpo -c -o src/resolver/lib_libpkgdb_a-manifest-raw.obj `if test -f 'src/resolver/manifest-raw.cc'; then $(CYGPATH_W) 'src/resolver/manifest-raw.cc'; else $(CYGPATH_W) '$(srcdir)/src/resolver/manifest-raw.cc'; fi`
-	$(AM_V_at)$(am__mv) src/resolver/$(DEPDIR)/lib_libpkgdb_a-manifest-raw.Tpo src/resolver/$(DEPDIR)/lib_libpkgdb_a-manifest-raw.Po
-#	$(AM_V_CXX)source='src/resolver/manifest-raw.cc' object='src/resolver/lib_libpkgdb_a-manifest-raw.obj' libtool=no \
-#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(AM_V_CXX_no)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -c -o src/resolver/lib_libpkgdb_a-manifest-raw.obj `if test -f 'src/resolver/manifest-raw.cc'; then $(CYGPATH_W) 'src/resolver/manifest-raw.cc'; else $(CYGPATH_W) '$(srcdir)/src/resolver/manifest-raw.cc'; fi`
-
-src/resolver/lib_libpkgdb_a-manifest.o: src/resolver/manifest.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -MT src/resolver/lib_libpkgdb_a-manifest.o -MD -MP -MF src/resolver/$(DEPDIR)/lib_libpkgdb_a-manifest.Tpo -c -o src/resolver/lib_libpkgdb_a-manifest.o `test -f 'src/resolver/manifest.cc' || echo '$(srcdir)/'`src/resolver/manifest.cc
-	$(AM_V_at)$(am__mv) src/resolver/$(DEPDIR)/lib_libpkgdb_a-manifest.Tpo src/resolver/$(DEPDIR)/lib_libpkgdb_a-manifest.Po
-#	$(AM_V_CXX)source='src/resolver/manifest.cc' object='src/resolver/lib_libpkgdb_a-manifest.o' libtool=no \
-#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(AM_V_CXX_no)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -c -o src/resolver/lib_libpkgdb_a-manifest.o `test -f 'src/resolver/manifest.cc' || echo '$(srcdir)/'`src/resolver/manifest.cc
-
-src/resolver/lib_libpkgdb_a-manifest.obj: src/resolver/manifest.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -MT src/resolver/lib_libpkgdb_a-manifest.obj -MD -MP -MF src/resolver/$(DEPDIR)/lib_libpkgdb_a-manifest.Tpo -c -o src/resolver/lib_libpkgdb_a-manifest.obj `if test -f 'src/resolver/manifest.cc'; then $(CYGPATH_W) 'src/resolver/manifest.cc'; else $(CYGPATH_W) '$(srcdir)/src/resolver/manifest.cc'; fi`
-	$(AM_V_at)$(am__mv) src/resolver/$(DEPDIR)/lib_libpkgdb_a-manifest.Tpo src/resolver/$(DEPDIR)/lib_libpkgdb_a-manifest.Po
-#	$(AM_V_CXX)source='src/resolver/manifest.cc' object='src/resolver/lib_libpkgdb_a-manifest.obj' libtool=no \
-#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(AM_V_CXX_no)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -c -o src/resolver/lib_libpkgdb_a-manifest.obj `if test -f 'src/resolver/manifest.cc'; then $(CYGPATH_W) 'src/resolver/manifest.cc'; else $(CYGPATH_W) '$(srcdir)/src/resolver/manifest.cc'; fi`
-
-src/resolver/lib_libpkgdb_a-mixins.o: src/resolver/mixins.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -MT src/resolver/lib_libpkgdb_a-mixins.o -MD -MP -MF src/resolver/$(DEPDIR)/lib_libpkgdb_a-mixins.Tpo -c -o src/resolver/lib_libpkgdb_a-mixins.o `test -f 'src/resolver/mixins.cc' || echo '$(srcdir)/'`src/resolver/mixins.cc
-	$(AM_V_at)$(am__mv) src/resolver/$(DEPDIR)/lib_libpkgdb_a-mixins.Tpo src/resolver/$(DEPDIR)/lib_libpkgdb_a-mixins.Po
-#	$(AM_V_CXX)source='src/resolver/mixins.cc' object='src/resolver/lib_libpkgdb_a-mixins.o' libtool=no \
-#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(AM_V_CXX_no)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -c -o src/resolver/lib_libpkgdb_a-mixins.o `test -f 'src/resolver/mixins.cc' || echo '$(srcdir)/'`src/resolver/mixins.cc
-
-src/resolver/lib_libpkgdb_a-mixins.obj: src/resolver/mixins.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -MT src/resolver/lib_libpkgdb_a-mixins.obj -MD -MP -MF src/resolver/$(DEPDIR)/lib_libpkgdb_a-mixins.Tpo -c -o src/resolver/lib_libpkgdb_a-mixins.obj `if test -f 'src/resolver/mixins.cc'; then $(CYGPATH_W) 'src/resolver/mixins.cc'; else $(CYGPATH_W) '$(srcdir)/src/resolver/mixins.cc'; fi`
-	$(AM_V_at)$(am__mv) src/resolver/$(DEPDIR)/lib_libpkgdb_a-mixins.Tpo src/resolver/$(DEPDIR)/lib_libpkgdb_a-mixins.Po
-#	$(AM_V_CXX)source='src/resolver/mixins.cc' object='src/resolver/lib_libpkgdb_a-mixins.obj' libtool=no \
-#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(AM_V_CXX_no)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -c -o src/resolver/lib_libpkgdb_a-mixins.obj `if test -f 'src/resolver/mixins.cc'; then $(CYGPATH_W) 'src/resolver/mixins.cc'; else $(CYGPATH_W) '$(srcdir)/src/resolver/mixins.cc'; fi`
-
-src/resolver/lib_libpkgdb_a-primops.o: src/resolver/primops.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -MT src/resolver/lib_libpkgdb_a-primops.o -MD -MP -MF src/resolver/$(DEPDIR)/lib_libpkgdb_a-primops.Tpo -c -o src/resolver/lib_libpkgdb_a-primops.o `test -f 'src/resolver/primops.cc' || echo '$(srcdir)/'`src/resolver/primops.cc
-	$(AM_V_at)$(am__mv) src/resolver/$(DEPDIR)/lib_libpkgdb_a-primops.Tpo src/resolver/$(DEPDIR)/lib_libpkgdb_a-primops.Po
-#	$(AM_V_CXX)source='src/resolver/primops.cc' object='src/resolver/lib_libpkgdb_a-primops.o' libtool=no \
-#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(AM_V_CXX_no)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -c -o src/resolver/lib_libpkgdb_a-primops.o `test -f 'src/resolver/primops.cc' || echo '$(srcdir)/'`src/resolver/primops.cc
-
-src/resolver/lib_libpkgdb_a-primops.obj: src/resolver/primops.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -MT src/resolver/lib_libpkgdb_a-primops.obj -MD -MP -MF src/resolver/$(DEPDIR)/lib_libpkgdb_a-primops.Tpo -c -o src/resolver/lib_libpkgdb_a-primops.obj `if test -f 'src/resolver/primops.cc'; then $(CYGPATH_W) 'src/resolver/primops.cc'; else $(CYGPATH_W) '$(srcdir)/src/resolver/primops.cc'; fi`
-	$(AM_V_at)$(am__mv) src/resolver/$(DEPDIR)/lib_libpkgdb_a-primops.Tpo src/resolver/$(DEPDIR)/lib_libpkgdb_a-primops.Po
-#	$(AM_V_CXX)source='src/resolver/primops.cc' object='src/resolver/lib_libpkgdb_a-primops.obj' libtool=no \
-#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(AM_V_CXX_no)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -c -o src/resolver/lib_libpkgdb_a-primops.obj `if test -f 'src/resolver/primops.cc'; then $(CYGPATH_W) 'src/resolver/primops.cc'; else $(CYGPATH_W) '$(srcdir)/src/resolver/primops.cc'; fi`
-
-src/pkgdb/lib_libpkgdb_a-db-package.o: src/pkgdb/db-package.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -MT src/pkgdb/lib_libpkgdb_a-db-package.o -MD -MP -MF src/pkgdb/$(DEPDIR)/lib_libpkgdb_a-db-package.Tpo -c -o src/pkgdb/lib_libpkgdb_a-db-package.o `test -f 'src/pkgdb/db-package.cc' || echo '$(srcdir)/'`src/pkgdb/db-package.cc
-	$(AM_V_at)$(am__mv) src/pkgdb/$(DEPDIR)/lib_libpkgdb_a-db-package.Tpo src/pkgdb/$(DEPDIR)/lib_libpkgdb_a-db-package.Po
-#	$(AM_V_CXX)source='src/pkgdb/db-package.cc' object='src/pkgdb/lib_libpkgdb_a-db-package.o' libtool=no \
-#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(AM_V_CXX_no)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -c -o src/pkgdb/lib_libpkgdb_a-db-package.o `test -f 'src/pkgdb/db-package.cc' || echo '$(srcdir)/'`src/pkgdb/db-package.cc
-
-src/pkgdb/lib_libpkgdb_a-db-package.obj: src/pkgdb/db-package.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -MT src/pkgdb/lib_libpkgdb_a-db-package.obj -MD -MP -MF src/pkgdb/$(DEPDIR)/lib_libpkgdb_a-db-package.Tpo -c -o src/pkgdb/lib_libpkgdb_a-db-package.obj `if test -f 'src/pkgdb/db-package.cc'; then $(CYGPATH_W) 'src/pkgdb/db-package.cc'; else $(CYGPATH_W) '$(srcdir)/src/pkgdb/db-package.cc'; fi`
-	$(AM_V_at)$(am__mv) src/pkgdb/$(DEPDIR)/lib_libpkgdb_a-db-package.Tpo src/pkgdb/$(DEPDIR)/lib_libpkgdb_a-db-package.Po
-#	$(AM_V_CXX)source='src/pkgdb/db-package.cc' object='src/pkgdb/lib_libpkgdb_a-db-package.obj' libtool=no \
-#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(AM_V_CXX_no)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -c -o src/pkgdb/lib_libpkgdb_a-db-package.obj `if test -f 'src/pkgdb/db-package.cc'; then $(CYGPATH_W) 'src/pkgdb/db-package.cc'; else $(CYGPATH_W) '$(srcdir)/src/pkgdb/db-package.cc'; fi`
-
-src/pkgdb/lib_libpkgdb_a-gc.o: src/pkgdb/gc.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -MT src/pkgdb/lib_libpkgdb_a-gc.o -MD -MP -MF src/pkgdb/$(DEPDIR)/lib_libpkgdb_a-gc.Tpo -c -o src/pkgdb/lib_libpkgdb_a-gc.o `test -f 'src/pkgdb/gc.cc' || echo '$(srcdir)/'`src/pkgdb/gc.cc
-	$(AM_V_at)$(am__mv) src/pkgdb/$(DEPDIR)/lib_libpkgdb_a-gc.Tpo src/pkgdb/$(DEPDIR)/lib_libpkgdb_a-gc.Po
-#	$(AM_V_CXX)source='src/pkgdb/gc.cc' object='src/pkgdb/lib_libpkgdb_a-gc.o' libtool=no \
-#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(AM_V_CXX_no)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -c -o src/pkgdb/lib_libpkgdb_a-gc.o `test -f 'src/pkgdb/gc.cc' || echo '$(srcdir)/'`src/pkgdb/gc.cc
-
-src/pkgdb/lib_libpkgdb_a-gc.obj: src/pkgdb/gc.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -MT src/pkgdb/lib_libpkgdb_a-gc.obj -MD -MP -MF src/pkgdb/$(DEPDIR)/lib_libpkgdb_a-gc.Tpo -c -o src/pkgdb/lib_libpkgdb_a-gc.obj `if test -f 'src/pkgdb/gc.cc'; then $(CYGPATH_W) 'src/pkgdb/gc.cc'; else $(CYGPATH_W) '$(srcdir)/src/pkgdb/gc.cc'; fi`
-	$(AM_V_at)$(am__mv) src/pkgdb/$(DEPDIR)/lib_libpkgdb_a-gc.Tpo src/pkgdb/$(DEPDIR)/lib_libpkgdb_a-gc.Po
-#	$(AM_V_CXX)source='src/pkgdb/gc.cc' object='src/pkgdb/lib_libpkgdb_a-gc.obj' libtool=no \
-#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(AM_V_CXX_no)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -c -o src/pkgdb/lib_libpkgdb_a-gc.obj `if test -f 'src/pkgdb/gc.cc'; then $(CYGPATH_W) 'src/pkgdb/gc.cc'; else $(CYGPATH_W) '$(srcdir)/src/pkgdb/gc.cc'; fi`
-
-src/pkgdb/lib_libpkgdb_a-input.o: src/pkgdb/input.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -MT src/pkgdb/lib_libpkgdb_a-input.o -MD -MP -MF src/pkgdb/$(DEPDIR)/lib_libpkgdb_a-input.Tpo -c -o src/pkgdb/lib_libpkgdb_a-input.o `test -f 'src/pkgdb/input.cc' || echo '$(srcdir)/'`src/pkgdb/input.cc
-	$(AM_V_at)$(am__mv) src/pkgdb/$(DEPDIR)/lib_libpkgdb_a-input.Tpo src/pkgdb/$(DEPDIR)/lib_libpkgdb_a-input.Po
-#	$(AM_V_CXX)source='src/pkgdb/input.cc' object='src/pkgdb/lib_libpkgdb_a-input.o' libtool=no \
-#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(AM_V_CXX_no)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -c -o src/pkgdb/lib_libpkgdb_a-input.o `test -f 'src/pkgdb/input.cc' || echo '$(srcdir)/'`src/pkgdb/input.cc
-
-src/pkgdb/lib_libpkgdb_a-input.obj: src/pkgdb/input.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -MT src/pkgdb/lib_libpkgdb_a-input.obj -MD -MP -MF src/pkgdb/$(DEPDIR)/lib_libpkgdb_a-input.Tpo -c -o src/pkgdb/lib_libpkgdb_a-input.obj `if test -f 'src/pkgdb/input.cc'; then $(CYGPATH_W) 'src/pkgdb/input.cc'; else $(CYGPATH_W) '$(srcdir)/src/pkgdb/input.cc'; fi`
-	$(AM_V_at)$(am__mv) src/pkgdb/$(DEPDIR)/lib_libpkgdb_a-input.Tpo src/pkgdb/$(DEPDIR)/lib_libpkgdb_a-input.Po
-#	$(AM_V_CXX)source='src/pkgdb/input.cc' object='src/pkgdb/lib_libpkgdb_a-input.obj' libtool=no \
-#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(AM_V_CXX_no)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -c -o src/pkgdb/lib_libpkgdb_a-input.obj `if test -f 'src/pkgdb/input.cc'; then $(CYGPATH_W) 'src/pkgdb/input.cc'; else $(CYGPATH_W) '$(srcdir)/src/pkgdb/input.cc'; fi`
-
-src/pkgdb/lib_libpkgdb_a-list.o: src/pkgdb/list.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -MT src/pkgdb/lib_libpkgdb_a-list.o -MD -MP -MF src/pkgdb/$(DEPDIR)/lib_libpkgdb_a-list.Tpo -c -o src/pkgdb/lib_libpkgdb_a-list.o `test -f 'src/pkgdb/list.cc' || echo '$(srcdir)/'`src/pkgdb/list.cc
-	$(AM_V_at)$(am__mv) src/pkgdb/$(DEPDIR)/lib_libpkgdb_a-list.Tpo src/pkgdb/$(DEPDIR)/lib_libpkgdb_a-list.Po
-#	$(AM_V_CXX)source='src/pkgdb/list.cc' object='src/pkgdb/lib_libpkgdb_a-list.o' libtool=no \
-#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(AM_V_CXX_no)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -c -o src/pkgdb/lib_libpkgdb_a-list.o `test -f 'src/pkgdb/list.cc' || echo '$(srcdir)/'`src/pkgdb/list.cc
-
-src/pkgdb/lib_libpkgdb_a-list.obj: src/pkgdb/list.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -MT src/pkgdb/lib_libpkgdb_a-list.obj -MD -MP -MF src/pkgdb/$(DEPDIR)/lib_libpkgdb_a-list.Tpo -c -o src/pkgdb/lib_libpkgdb_a-list.obj `if test -f 'src/pkgdb/list.cc'; then $(CYGPATH_W) 'src/pkgdb/list.cc'; else $(CYGPATH_W) '$(srcdir)/src/pkgdb/list.cc'; fi`
-	$(AM_V_at)$(am__mv) src/pkgdb/$(DEPDIR)/lib_libpkgdb_a-list.Tpo src/pkgdb/$(DEPDIR)/lib_libpkgdb_a-list.Po
-#	$(AM_V_CXX)source='src/pkgdb/list.cc' object='src/pkgdb/lib_libpkgdb_a-list.obj' libtool=no \
-#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(AM_V_CXX_no)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -c -o src/pkgdb/lib_libpkgdb_a-list.obj `if test -f 'src/pkgdb/list.cc'; then $(CYGPATH_W) 'src/pkgdb/list.cc'; else $(CYGPATH_W) '$(srcdir)/src/pkgdb/list.cc'; fi`
-
-src/pkgdb/lib_libpkgdb_a-pkg-query.o: src/pkgdb/pkg-query.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -MT src/pkgdb/lib_libpkgdb_a-pkg-query.o -MD -MP -MF src/pkgdb/$(DEPDIR)/lib_libpkgdb_a-pkg-query.Tpo -c -o src/pkgdb/lib_libpkgdb_a-pkg-query.o `test -f 'src/pkgdb/pkg-query.cc' || echo '$(srcdir)/'`src/pkgdb/pkg-query.cc
-	$(AM_V_at)$(am__mv) src/pkgdb/$(DEPDIR)/lib_libpkgdb_a-pkg-query.Tpo src/pkgdb/$(DEPDIR)/lib_libpkgdb_a-pkg-query.Po
-#	$(AM_V_CXX)source='src/pkgdb/pkg-query.cc' object='src/pkgdb/lib_libpkgdb_a-pkg-query.o' libtool=no \
-#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(AM_V_CXX_no)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -c -o src/pkgdb/lib_libpkgdb_a-pkg-query.o `test -f 'src/pkgdb/pkg-query.cc' || echo '$(srcdir)/'`src/pkgdb/pkg-query.cc
-
-src/pkgdb/lib_libpkgdb_a-pkg-query.obj: src/pkgdb/pkg-query.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -MT src/pkgdb/lib_libpkgdb_a-pkg-query.obj -MD -MP -MF src/pkgdb/$(DEPDIR)/lib_libpkgdb_a-pkg-query.Tpo -c -o src/pkgdb/lib_libpkgdb_a-pkg-query.obj `if test -f 'src/pkgdb/pkg-query.cc'; then $(CYGPATH_W) 'src/pkgdb/pkg-query.cc'; else $(CYGPATH_W) '$(srcdir)/src/pkgdb/pkg-query.cc'; fi`
-	$(AM_V_at)$(am__mv) src/pkgdb/$(DEPDIR)/lib_libpkgdb_a-pkg-query.Tpo src/pkgdb/$(DEPDIR)/lib_libpkgdb_a-pkg-query.Po
-#	$(AM_V_CXX)source='src/pkgdb/pkg-query.cc' object='src/pkgdb/lib_libpkgdb_a-pkg-query.obj' libtool=no \
-#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(AM_V_CXX_no)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -c -o src/pkgdb/lib_libpkgdb_a-pkg-query.obj `if test -f 'src/pkgdb/pkg-query.cc'; then $(CYGPATH_W) 'src/pkgdb/pkg-query.cc'; else $(CYGPATH_W) '$(srcdir)/src/pkgdb/pkg-query.cc'; fi`
-
-src/pkgdb/lib_libpkgdb_a-primops.o: src/pkgdb/primops.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -MT src/pkgdb/lib_libpkgdb_a-primops.o -MD -MP -MF src/pkgdb/$(DEPDIR)/lib_libpkgdb_a-primops.Tpo -c -o src/pkgdb/lib_libpkgdb_a-primops.o `test -f 'src/pkgdb/primops.cc' || echo '$(srcdir)/'`src/pkgdb/primops.cc
-	$(AM_V_at)$(am__mv) src/pkgdb/$(DEPDIR)/lib_libpkgdb_a-primops.Tpo src/pkgdb/$(DEPDIR)/lib_libpkgdb_a-primops.Po
-#	$(AM_V_CXX)source='src/pkgdb/primops.cc' object='src/pkgdb/lib_libpkgdb_a-primops.o' libtool=no \
-#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(AM_V_CXX_no)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -c -o src/pkgdb/lib_libpkgdb_a-primops.o `test -f 'src/pkgdb/primops.cc' || echo '$(srcdir)/'`src/pkgdb/primops.cc
-
-src/pkgdb/lib_libpkgdb_a-primops.obj: src/pkgdb/primops.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -MT src/pkgdb/lib_libpkgdb_a-primops.obj -MD -MP -MF src/pkgdb/$(DEPDIR)/lib_libpkgdb_a-primops.Tpo -c -o src/pkgdb/lib_libpkgdb_a-primops.obj `if test -f 'src/pkgdb/primops.cc'; then $(CYGPATH_W) 'src/pkgdb/primops.cc'; else $(CYGPATH_W) '$(srcdir)/src/pkgdb/primops.cc'; fi`
-	$(AM_V_at)$(am__mv) src/pkgdb/$(DEPDIR)/lib_libpkgdb_a-primops.Tpo src/pkgdb/$(DEPDIR)/lib_libpkgdb_a-primops.Po
-#	$(AM_V_CXX)source='src/pkgdb/primops.cc' object='src/pkgdb/lib_libpkgdb_a-primops.obj' libtool=no \
-#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(AM_V_CXX_no)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -c -o src/pkgdb/lib_libpkgdb_a-primops.obj `if test -f 'src/pkgdb/primops.cc'; then $(CYGPATH_W) 'src/pkgdb/primops.cc'; else $(CYGPATH_W) '$(srcdir)/src/pkgdb/primops.cc'; fi`
-
-src/pkgdb/lib_libpkgdb_a-read.o: src/pkgdb/read.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -MT src/pkgdb/lib_libpkgdb_a-read.o -MD -MP -MF src/pkgdb/$(DEPDIR)/lib_libpkgdb_a-read.Tpo -c -o src/pkgdb/lib_libpkgdb_a-read.o `test -f 'src/pkgdb/read.cc' || echo '$(srcdir)/'`src/pkgdb/read.cc
-	$(AM_V_at)$(am__mv) src/pkgdb/$(DEPDIR)/lib_libpkgdb_a-read.Tpo src/pkgdb/$(DEPDIR)/lib_libpkgdb_a-read.Po
-#	$(AM_V_CXX)source='src/pkgdb/read.cc' object='src/pkgdb/lib_libpkgdb_a-read.o' libtool=no \
-#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(AM_V_CXX_no)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -c -o src/pkgdb/lib_libpkgdb_a-read.o `test -f 'src/pkgdb/read.cc' || echo '$(srcdir)/'`src/pkgdb/read.cc
-
-src/pkgdb/lib_libpkgdb_a-read.obj: src/pkgdb/read.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -MT src/pkgdb/lib_libpkgdb_a-read.obj -MD -MP -MF src/pkgdb/$(DEPDIR)/lib_libpkgdb_a-read.Tpo -c -o src/pkgdb/lib_libpkgdb_a-read.obj `if test -f 'src/pkgdb/read.cc'; then $(CYGPATH_W) 'src/pkgdb/read.cc'; else $(CYGPATH_W) '$(srcdir)/src/pkgdb/read.cc'; fi`
-	$(AM_V_at)$(am__mv) src/pkgdb/$(DEPDIR)/lib_libpkgdb_a-read.Tpo src/pkgdb/$(DEPDIR)/lib_libpkgdb_a-read.Po
-#	$(AM_V_CXX)source='src/pkgdb/read.cc' object='src/pkgdb/lib_libpkgdb_a-read.obj' libtool=no \
-#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(AM_V_CXX_no)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -c -o src/pkgdb/lib_libpkgdb_a-read.obj `if test -f 'src/pkgdb/read.cc'; then $(CYGPATH_W) 'src/pkgdb/read.cc'; else $(CYGPATH_W) '$(srcdir)/src/pkgdb/read.cc'; fi`
-
-src/pkgdb/lib_libpkgdb_a-write.o: src/pkgdb/write.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -MT src/pkgdb/lib_libpkgdb_a-write.o -MD -MP -MF src/pkgdb/$(DEPDIR)/lib_libpkgdb_a-write.Tpo -c -o src/pkgdb/lib_libpkgdb_a-write.o `test -f 'src/pkgdb/write.cc' || echo '$(srcdir)/'`src/pkgdb/write.cc
-	$(AM_V_at)$(am__mv) src/pkgdb/$(DEPDIR)/lib_libpkgdb_a-write.Tpo src/pkgdb/$(DEPDIR)/lib_libpkgdb_a-write.Po
-#	$(AM_V_CXX)source='src/pkgdb/write.cc' object='src/pkgdb/lib_libpkgdb_a-write.o' libtool=no \
-#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(AM_V_CXX_no)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -c -o src/pkgdb/lib_libpkgdb_a-write.o `test -f 'src/pkgdb/write.cc' || echo '$(srcdir)/'`src/pkgdb/write.cc
-
-src/pkgdb/lib_libpkgdb_a-write.obj: src/pkgdb/write.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -MT src/pkgdb/lib_libpkgdb_a-write.obj -MD -MP -MF src/pkgdb/$(DEPDIR)/lib_libpkgdb_a-write.Tpo -c -o src/pkgdb/lib_libpkgdb_a-write.obj `if test -f 'src/pkgdb/write.cc'; then $(CYGPATH_W) 'src/pkgdb/write.cc'; else $(CYGPATH_W) '$(srcdir)/src/pkgdb/write.cc'; fi`
-	$(AM_V_at)$(am__mv) src/pkgdb/$(DEPDIR)/lib_libpkgdb_a-write.Tpo src/pkgdb/$(DEPDIR)/lib_libpkgdb_a-write.Po
-#	$(AM_V_CXX)source='src/pkgdb/write.cc' object='src/pkgdb/lib_libpkgdb_a-write.obj' libtool=no \
-#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(AM_V_CXX_no)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_a_CXXFLAGS) $(CXXFLAGS) -c -o src/pkgdb/lib_libpkgdb_a-write.obj `if test -f 'src/pkgdb/write.cc'; then $(CYGPATH_W) 'src/pkgdb/write.cc'; else $(CYGPATH_W) '$(srcdir)/src/pkgdb/write.cc'; fi`
-
-lib/libpkgdb_la-libpkgdb.lo: lib/libpkgdb.cc
-	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_la_CXXFLAGS) $(CXXFLAGS) -MT lib/libpkgdb_la-libpkgdb.lo -MD -MP -MF lib/$(DEPDIR)/libpkgdb_la-libpkgdb.Tpo -c -o lib/libpkgdb_la-libpkgdb.lo `test -f 'lib/libpkgdb.cc' || echo '$(srcdir)/'`lib/libpkgdb.cc
-	$(AM_V_at)$(am__mv) lib/$(DEPDIR)/libpkgdb_la-libpkgdb.Tpo lib/$(DEPDIR)/libpkgdb_la-libpkgdb.Plo
-#	$(AM_V_CXX)source='lib/libpkgdb.cc' object='lib/libpkgdb_la-libpkgdb.lo' libtool=yes \
-#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(AM_V_CXX_no)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_la_CXXFLAGS) $(CXXFLAGS) -c -o lib/libpkgdb_la-libpkgdb.lo `test -f 'lib/libpkgdb.cc' || echo '$(srcdir)/'`lib/libpkgdb.cc
+#	$(AM_V_CXX_no)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_la_CXXFLAGS) $(CXXFLAGS) -c -o src/pkgdb/lib_libpkgdb_la-write.lo `test -f 'src/pkgdb/write.cc' || echo '$(srcdir)/'`src/pkgdb/write.cc
 
 src/bin_pkgdb-main.o: src/main.cc
 	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(bin_pkgdb_CXXFLAGS) $(CXXFLAGS) -MT src/bin_pkgdb-main.o -MD -MP -MF src/$(DEPDIR)/bin_pkgdb-main.Tpo -c -o src/bin_pkgdb-main.o `test -f 'src/main.cc' || echo '$(srcdir)/'`src/main.cc
@@ -1512,62 +1204,19 @@ clean-libtool:
 	-rm -rf .libs _libs
 	-rm -rf bin/.libs bin/_libs
 	-rm -rf lib/.libs lib/_libs
-
-# This directory's subdirectories are mostly independent; you can cd
-# into them and run 'make' without going through this Makefile.
-# To change the values of 'make' variables: instead of editing Makefiles,
-# (1) if the variable is set in 'config.status', edit 'config.status'
-#     (which will cause the Makefiles to be regenerated when you run 'make');
-# (2) otherwise, pass the desired values on the 'make' command line.
-$(am__recursive_targets):
-	@fail=; \
-	if $(am__make_keepgoing); then \
-	  failcom='fail=yes'; \
-	else \
-	  failcom='exit 1'; \
-	fi; \
-	dot_seen=no; \
-	target=`echo $@ | sed s/-recursive//`; \
-	case "$@" in \
-	  distclean-* | maintainer-clean-*) list='$(DIST_SUBDIRS)' ;; \
-	  *) list='$(SUBDIRS)' ;; \
-	esac; \
-	for subdir in $$list; do \
-	  echo "Making $$target in $$subdir"; \
-	  if test "$$subdir" = "."; then \
-	    dot_seen=yes; \
-	    local_target="$$target-am"; \
-	  else \
-	    local_target="$$target"; \
-	  fi; \
-	  ($(am__cd) $$subdir && $(MAKE) $(AM_MAKEFLAGS) $$local_target) \
-	  || eval $$failcom; \
-	done; \
-	if test "$$dot_seen" = "no"; then \
-	  $(MAKE) $(AM_MAKEFLAGS) "$$target-am" || exit 1; \
-	fi; test -z "$$fail"
+	-rm -rf src/.libs src/_libs
+	-rm -rf src/pkgdb/.libs src/pkgdb/_libs
+	-rm -rf src/resolver/.libs src/resolver/_libs
+	-rm -rf src/search/.libs src/search/_libs
 
 ID: $(am__tagged_files)
 	$(am__define_uniq_tagged_files); mkid -fID $$unique
-tags: tags-recursive
+tags: tags-am
 TAGS: tags
 
 tags-am: $(TAGS_DEPENDENCIES) $(am__tagged_files)
 	set x; \
 	here=`pwd`; \
-	if ($(ETAGS) --etags-include --version) >/dev/null 2>&1; then \
-	  include_option=--etags-include; \
-	  empty_fix=.; \
-	else \
-	  include_option=--include; \
-	  empty_fix=; \
-	fi; \
-	list='$(SUBDIRS)'; for subdir in $$list; do \
-	  if test "$$subdir" = .; then :; else \
-	    test ! -f $$subdir/TAGS || \
-	      set "$$@" "$$include_option=$$here/$$subdir/TAGS"; \
-	  fi; \
-	done; \
 	$(am__define_uniq_tagged_files); \
 	shift; \
 	if test -z "$(ETAGS_ARGS)$$*$$unique"; then :; else \
@@ -1580,7 +1229,7 @@ tags-am: $(TAGS_DEPENDENCIES) $(am__tagged_files)
 	      $$unique; \
 	  fi; \
 	fi
-ctags: ctags-recursive
+ctags: ctags-am
 
 CTAGS: ctags
 ctags-am: $(TAGS_DEPENDENCIES) $(am__tagged_files)
@@ -1593,7 +1242,7 @@ GTAGS:
 	here=`$(am__cd) $(top_builddir) && pwd` \
 	  && $(am__cd) $(top_srcdir) \
 	  && gtags -i $(GTAGS_ARGS) "$$here"
-cscopelist: cscopelist-recursive
+cscopelist: cscopelist-am
 
 cscopelist-am: $(am__tagged_files)
 	list='$(am__tagged_files)'; \
@@ -1644,50 +1293,24 @@ distdir-am: $(DISTFILES)
 	    || exit 1; \
 	  fi; \
 	done
-	@list='$(DIST_SUBDIRS)'; for subdir in $$list; do \
-	  if test "$$subdir" = .; then :; else \
-	    $(am__make_dryrun) \
-	      || test -d "$(distdir)/$$subdir" \
-	      || $(MKDIR_P) "$(distdir)/$$subdir" \
-	      || exit 1; \
-	    dir1=$$subdir; dir2="$(distdir)/$$subdir"; \
-	    $(am__relativize); \
-	    new_distdir=$$reldir; \
-	    dir1=$$subdir; dir2="$(top_distdir)"; \
-	    $(am__relativize); \
-	    new_top_distdir=$$reldir; \
-	    echo " (cd $$subdir && $(MAKE) $(AM_MAKEFLAGS) top_distdir="$$new_top_distdir" distdir="$$new_distdir" \\"; \
-	    echo "     am__remove_distdir=: am__skip_length_check=: am__skip_mode_fix=: distdir)"; \
-	    ($(am__cd) $$subdir && \
-	      $(MAKE) $(AM_MAKEFLAGS) \
-	        top_distdir="$$new_top_distdir" \
-	        distdir="$$new_distdir" \
-		am__remove_distdir=: \
-		am__skip_length_check=: \
-		am__skip_mode_fix=: \
-	        distdir) \
-	      || exit 1; \
-	  fi; \
-	done
 check-am: all-am
-check: check-recursive
-all-am: Makefile $(PROGRAMS) $(LIBRARIES) $(LTLIBRARIES)
+check: check-am
+all-am: Makefile $(PROGRAMS) $(LTLIBRARIES)
 install-binPROGRAMS: install-libLTLIBRARIES
 
-installdirs: installdirs-recursive
-installdirs-am:
+installdirs:
 	for dir in "$(DESTDIR)$(bindir)" "$(DESTDIR)$(libdir)"; do \
 	  test -z "$$dir" || $(MKDIR_P) "$$dir"; \
 	done
-install: install-recursive
-install-exec: install-exec-recursive
-install-data: install-data-recursive
-uninstall: uninstall-recursive
+install: install-am
+install-exec: install-exec-am
+install-data: install-data-am
+uninstall: uninstall-am
 
 install-am: all-am
 	@$(MAKE) $(AM_MAKEFLAGS) install-exec-am install-data-am
 
-installcheck: installcheck-recursive
+installcheck: installcheck-am
 install-strip:
 	if test -z '$(STRIP)'; then \
 	  $(MAKE) $(AM_MAKEFLAGS) INSTALL_PROGRAM="$(INSTALL_STRIP_PROGRAM)" \
@@ -1706,7 +1329,6 @@ distclean-generic:
 	-test -z "$(CONFIG_CLEAN_FILES)" || rm -f $(CONFIG_CLEAN_FILES)
 	-test . = "$(srcdir)" || test -z "$(CONFIG_CLEAN_VPATH_FILES)" || rm -f $(CONFIG_CLEAN_VPATH_FILES)
 	-rm -f bin/$(am__dirstamp)
-	-rm -f lib/$(DEPDIR)/$(am__dirstamp)
 	-rm -f lib/$(am__dirstamp)
 	-rm -f src/$(DEPDIR)/$(am__dirstamp)
 	-rm -f src/$(am__dirstamp)
@@ -1722,161 +1344,158 @@ distclean-generic:
 maintainer-clean-generic:
 	@echo "This command is intended for maintainers to use"
 	@echo "it deletes files that may require special tools to rebuild."
-clean: clean-recursive
+clean: clean-am
 
 clean-am: clean-binPROGRAMS clean-generic clean-libLTLIBRARIES \
-	clean-libtool clean-noinstLIBRARIES mostlyclean-am
+	clean-libtool mostlyclean-am
 
-distclean: distclean-recursive
-		-rm -f lib/$(DEPDIR)/libpkgdb_la-libpkgdb.Plo
-	-rm -f src/$(DEPDIR)/bin_pkgdb-main.Po
+distclean: distclean-am
+		-rm -f src/$(DEPDIR)/bin_pkgdb-main.Po
 	-rm -f src/$(DEPDIR)/bin_pkgdb-repl.Po
-	-rm -f src/$(DEPDIR)/lib_libpkgdb_a-command.Po
-	-rm -f src/$(DEPDIR)/lib_libpkgdb_a-eval.Po
-	-rm -f src/$(DEPDIR)/lib_libpkgdb_a-exceptions.Po
-	-rm -f src/$(DEPDIR)/lib_libpkgdb_a-expr.Po
-	-rm -f src/$(DEPDIR)/lib_libpkgdb_a-flake-package.Po
-	-rm -f src/$(DEPDIR)/lib_libpkgdb_a-flox-flake.Po
-	-rm -f src/$(DEPDIR)/lib_libpkgdb_a-logger.Po
-	-rm -f src/$(DEPDIR)/lib_libpkgdb_a-nix-state.Po
-	-rm -f src/$(DEPDIR)/lib_libpkgdb_a-package.Po
-	-rm -f src/$(DEPDIR)/lib_libpkgdb_a-raw-package.Po
-	-rm -f src/$(DEPDIR)/lib_libpkgdb_a-registry.Po
-	-rm -f src/$(DEPDIR)/lib_libpkgdb_a-tomlToJSON.Po
-	-rm -f src/$(DEPDIR)/lib_libpkgdb_a-util.Po
-	-rm -f src/$(DEPDIR)/lib_libpkgdb_a-versions.Po
-	-rm -f src/$(DEPDIR)/lib_libpkgdb_a-yamlToJSON.Po
+	-rm -f src/$(DEPDIR)/lib_libpkgdb_la-command.Plo
+	-rm -f src/$(DEPDIR)/lib_libpkgdb_la-eval.Plo
+	-rm -f src/$(DEPDIR)/lib_libpkgdb_la-exceptions.Plo
+	-rm -f src/$(DEPDIR)/lib_libpkgdb_la-expr.Plo
+	-rm -f src/$(DEPDIR)/lib_libpkgdb_la-flake-package.Plo
+	-rm -f src/$(DEPDIR)/lib_libpkgdb_la-flox-flake.Plo
+	-rm -f src/$(DEPDIR)/lib_libpkgdb_la-logger.Plo
+	-rm -f src/$(DEPDIR)/lib_libpkgdb_la-nix-state.Plo
+	-rm -f src/$(DEPDIR)/lib_libpkgdb_la-package.Plo
+	-rm -f src/$(DEPDIR)/lib_libpkgdb_la-raw-package.Plo
+	-rm -f src/$(DEPDIR)/lib_libpkgdb_la-registry.Plo
+	-rm -f src/$(DEPDIR)/lib_libpkgdb_la-tomlToJSON.Plo
+	-rm -f src/$(DEPDIR)/lib_libpkgdb_la-util.Plo
+	-rm -f src/$(DEPDIR)/lib_libpkgdb_la-versions.Plo
+	-rm -f src/$(DEPDIR)/lib_libpkgdb_la-yamlToJSON.Plo
 	-rm -f src/parse/$(DEPDIR)/bin_pkgdb-command.Po
 	-rm -f src/pkgdb/$(DEPDIR)/bin_pkgdb-command.Po
 	-rm -f src/pkgdb/$(DEPDIR)/bin_pkgdb-get.Po
 	-rm -f src/pkgdb/$(DEPDIR)/bin_pkgdb-scrape.Po
-	-rm -f src/pkgdb/$(DEPDIR)/lib_libpkgdb_a-db-package.Po
-	-rm -f src/pkgdb/$(DEPDIR)/lib_libpkgdb_a-gc.Po
-	-rm -f src/pkgdb/$(DEPDIR)/lib_libpkgdb_a-input.Po
-	-rm -f src/pkgdb/$(DEPDIR)/lib_libpkgdb_a-list.Po
-	-rm -f src/pkgdb/$(DEPDIR)/lib_libpkgdb_a-pkg-query.Po
-	-rm -f src/pkgdb/$(DEPDIR)/lib_libpkgdb_a-primops.Po
-	-rm -f src/pkgdb/$(DEPDIR)/lib_libpkgdb_a-read.Po
-	-rm -f src/pkgdb/$(DEPDIR)/lib_libpkgdb_a-write.Po
+	-rm -f src/pkgdb/$(DEPDIR)/lib_libpkgdb_la-db-package.Plo
+	-rm -f src/pkgdb/$(DEPDIR)/lib_libpkgdb_la-gc.Plo
+	-rm -f src/pkgdb/$(DEPDIR)/lib_libpkgdb_la-input.Plo
+	-rm -f src/pkgdb/$(DEPDIR)/lib_libpkgdb_la-list.Plo
+	-rm -f src/pkgdb/$(DEPDIR)/lib_libpkgdb_la-pkg-query.Plo
+	-rm -f src/pkgdb/$(DEPDIR)/lib_libpkgdb_la-primops.Plo
+	-rm -f src/pkgdb/$(DEPDIR)/lib_libpkgdb_la-read.Plo
+	-rm -f src/pkgdb/$(DEPDIR)/lib_libpkgdb_la-write.Plo
 	-rm -f src/resolver/$(DEPDIR)/bin_pkgdb-command.Po
-	-rm -f src/resolver/$(DEPDIR)/lib_libpkgdb_a-descriptor.Po
-	-rm -f src/resolver/$(DEPDIR)/lib_libpkgdb_a-environment.Po
-	-rm -f src/resolver/$(DEPDIR)/lib_libpkgdb_a-lockfile.Po
-	-rm -f src/resolver/$(DEPDIR)/lib_libpkgdb_a-manifest-raw.Po
-	-rm -f src/resolver/$(DEPDIR)/lib_libpkgdb_a-manifest.Po
-	-rm -f src/resolver/$(DEPDIR)/lib_libpkgdb_a-mixins.Po
-	-rm -f src/resolver/$(DEPDIR)/lib_libpkgdb_a-primops.Po
+	-rm -f src/resolver/$(DEPDIR)/lib_libpkgdb_la-descriptor.Plo
+	-rm -f src/resolver/$(DEPDIR)/lib_libpkgdb_la-environment.Plo
+	-rm -f src/resolver/$(DEPDIR)/lib_libpkgdb_la-lockfile.Plo
+	-rm -f src/resolver/$(DEPDIR)/lib_libpkgdb_la-manifest-raw.Plo
+	-rm -f src/resolver/$(DEPDIR)/lib_libpkgdb_la-manifest.Plo
+	-rm -f src/resolver/$(DEPDIR)/lib_libpkgdb_la-mixins.Plo
+	-rm -f src/resolver/$(DEPDIR)/lib_libpkgdb_la-primops.Plo
 	-rm -f src/search/$(DEPDIR)/bin_pkgdb-command.Po
-	-rm -f src/search/$(DEPDIR)/lib_libpkgdb_a-params.Po
+	-rm -f src/search/$(DEPDIR)/lib_libpkgdb_la-params.Plo
 	-rm -f Makefile
 distclean-am: clean-am distclean-compile distclean-generic \
 	distclean-tags
 
-dvi: dvi-recursive
+dvi: dvi-am
 
 dvi-am:
 
-html: html-recursive
+html: html-am
 
 html-am:
 
-info: info-recursive
+info: info-am
 
 info-am:
 
 install-data-am:
 
-install-dvi: install-dvi-recursive
+install-dvi: install-dvi-am
 
 install-dvi-am:
 
 install-exec-am: install-binPROGRAMS install-libLTLIBRARIES
 
-install-html: install-html-recursive
+install-html: install-html-am
 
 install-html-am:
 
-install-info: install-info-recursive
+install-info: install-info-am
 
 install-info-am:
 
 install-man:
 
-install-pdf: install-pdf-recursive
+install-pdf: install-pdf-am
 
 install-pdf-am:
 
-install-ps: install-ps-recursive
+install-ps: install-ps-am
 
 install-ps-am:
 
 installcheck-am:
 
-maintainer-clean: maintainer-clean-recursive
-		-rm -f lib/$(DEPDIR)/libpkgdb_la-libpkgdb.Plo
-	-rm -f src/$(DEPDIR)/bin_pkgdb-main.Po
+maintainer-clean: maintainer-clean-am
+		-rm -f src/$(DEPDIR)/bin_pkgdb-main.Po
 	-rm -f src/$(DEPDIR)/bin_pkgdb-repl.Po
-	-rm -f src/$(DEPDIR)/lib_libpkgdb_a-command.Po
-	-rm -f src/$(DEPDIR)/lib_libpkgdb_a-eval.Po
-	-rm -f src/$(DEPDIR)/lib_libpkgdb_a-exceptions.Po
-	-rm -f src/$(DEPDIR)/lib_libpkgdb_a-expr.Po
-	-rm -f src/$(DEPDIR)/lib_libpkgdb_a-flake-package.Po
-	-rm -f src/$(DEPDIR)/lib_libpkgdb_a-flox-flake.Po
-	-rm -f src/$(DEPDIR)/lib_libpkgdb_a-logger.Po
-	-rm -f src/$(DEPDIR)/lib_libpkgdb_a-nix-state.Po
-	-rm -f src/$(DEPDIR)/lib_libpkgdb_a-package.Po
-	-rm -f src/$(DEPDIR)/lib_libpkgdb_a-raw-package.Po
-	-rm -f src/$(DEPDIR)/lib_libpkgdb_a-registry.Po
-	-rm -f src/$(DEPDIR)/lib_libpkgdb_a-tomlToJSON.Po
-	-rm -f src/$(DEPDIR)/lib_libpkgdb_a-util.Po
-	-rm -f src/$(DEPDIR)/lib_libpkgdb_a-versions.Po
-	-rm -f src/$(DEPDIR)/lib_libpkgdb_a-yamlToJSON.Po
+	-rm -f src/$(DEPDIR)/lib_libpkgdb_la-command.Plo
+	-rm -f src/$(DEPDIR)/lib_libpkgdb_la-eval.Plo
+	-rm -f src/$(DEPDIR)/lib_libpkgdb_la-exceptions.Plo
+	-rm -f src/$(DEPDIR)/lib_libpkgdb_la-expr.Plo
+	-rm -f src/$(DEPDIR)/lib_libpkgdb_la-flake-package.Plo
+	-rm -f src/$(DEPDIR)/lib_libpkgdb_la-flox-flake.Plo
+	-rm -f src/$(DEPDIR)/lib_libpkgdb_la-logger.Plo
+	-rm -f src/$(DEPDIR)/lib_libpkgdb_la-nix-state.Plo
+	-rm -f src/$(DEPDIR)/lib_libpkgdb_la-package.Plo
+	-rm -f src/$(DEPDIR)/lib_libpkgdb_la-raw-package.Plo
+	-rm -f src/$(DEPDIR)/lib_libpkgdb_la-registry.Plo
+	-rm -f src/$(DEPDIR)/lib_libpkgdb_la-tomlToJSON.Plo
+	-rm -f src/$(DEPDIR)/lib_libpkgdb_la-util.Plo
+	-rm -f src/$(DEPDIR)/lib_libpkgdb_la-versions.Plo
+	-rm -f src/$(DEPDIR)/lib_libpkgdb_la-yamlToJSON.Plo
 	-rm -f src/parse/$(DEPDIR)/bin_pkgdb-command.Po
 	-rm -f src/pkgdb/$(DEPDIR)/bin_pkgdb-command.Po
 	-rm -f src/pkgdb/$(DEPDIR)/bin_pkgdb-get.Po
 	-rm -f src/pkgdb/$(DEPDIR)/bin_pkgdb-scrape.Po
-	-rm -f src/pkgdb/$(DEPDIR)/lib_libpkgdb_a-db-package.Po
-	-rm -f src/pkgdb/$(DEPDIR)/lib_libpkgdb_a-gc.Po
-	-rm -f src/pkgdb/$(DEPDIR)/lib_libpkgdb_a-input.Po
-	-rm -f src/pkgdb/$(DEPDIR)/lib_libpkgdb_a-list.Po
-	-rm -f src/pkgdb/$(DEPDIR)/lib_libpkgdb_a-pkg-query.Po
-	-rm -f src/pkgdb/$(DEPDIR)/lib_libpkgdb_a-primops.Po
-	-rm -f src/pkgdb/$(DEPDIR)/lib_libpkgdb_a-read.Po
-	-rm -f src/pkgdb/$(DEPDIR)/lib_libpkgdb_a-write.Po
+	-rm -f src/pkgdb/$(DEPDIR)/lib_libpkgdb_la-db-package.Plo
+	-rm -f src/pkgdb/$(DEPDIR)/lib_libpkgdb_la-gc.Plo
+	-rm -f src/pkgdb/$(DEPDIR)/lib_libpkgdb_la-input.Plo
+	-rm -f src/pkgdb/$(DEPDIR)/lib_libpkgdb_la-list.Plo
+	-rm -f src/pkgdb/$(DEPDIR)/lib_libpkgdb_la-pkg-query.Plo
+	-rm -f src/pkgdb/$(DEPDIR)/lib_libpkgdb_la-primops.Plo
+	-rm -f src/pkgdb/$(DEPDIR)/lib_libpkgdb_la-read.Plo
+	-rm -f src/pkgdb/$(DEPDIR)/lib_libpkgdb_la-write.Plo
 	-rm -f src/resolver/$(DEPDIR)/bin_pkgdb-command.Po
-	-rm -f src/resolver/$(DEPDIR)/lib_libpkgdb_a-descriptor.Po
-	-rm -f src/resolver/$(DEPDIR)/lib_libpkgdb_a-environment.Po
-	-rm -f src/resolver/$(DEPDIR)/lib_libpkgdb_a-lockfile.Po
-	-rm -f src/resolver/$(DEPDIR)/lib_libpkgdb_a-manifest-raw.Po
-	-rm -f src/resolver/$(DEPDIR)/lib_libpkgdb_a-manifest.Po
-	-rm -f src/resolver/$(DEPDIR)/lib_libpkgdb_a-mixins.Po
-	-rm -f src/resolver/$(DEPDIR)/lib_libpkgdb_a-primops.Po
+	-rm -f src/resolver/$(DEPDIR)/lib_libpkgdb_la-descriptor.Plo
+	-rm -f src/resolver/$(DEPDIR)/lib_libpkgdb_la-environment.Plo
+	-rm -f src/resolver/$(DEPDIR)/lib_libpkgdb_la-lockfile.Plo
+	-rm -f src/resolver/$(DEPDIR)/lib_libpkgdb_la-manifest-raw.Plo
+	-rm -f src/resolver/$(DEPDIR)/lib_libpkgdb_la-manifest.Plo
+	-rm -f src/resolver/$(DEPDIR)/lib_libpkgdb_la-mixins.Plo
+	-rm -f src/resolver/$(DEPDIR)/lib_libpkgdb_la-primops.Plo
 	-rm -f src/search/$(DEPDIR)/bin_pkgdb-command.Po
-	-rm -f src/search/$(DEPDIR)/lib_libpkgdb_a-params.Po
+	-rm -f src/search/$(DEPDIR)/lib_libpkgdb_la-params.Plo
 	-rm -f Makefile
 maintainer-clean-am: distclean-am maintainer-clean-generic
 
-mostlyclean: mostlyclean-recursive
+mostlyclean: mostlyclean-am
 
 mostlyclean-am: mostlyclean-compile mostlyclean-generic \
 	mostlyclean-libtool
 
-pdf: pdf-recursive
+pdf: pdf-am
 
 pdf-am:
 
-ps: ps-recursive
+ps: ps-am
 
 ps-am:
 
 uninstall-am: uninstall-binPROGRAMS uninstall-libLTLIBRARIES
 
-.MAKE: $(am__recursive_targets) install-am install-strip
+.MAKE: install-am install-strip
 
-.PHONY: $(am__recursive_targets) CTAGS GTAGS TAGS all all-am \
-	am--depfiles check check-am clean clean-binPROGRAMS \
-	clean-generic clean-libLTLIBRARIES clean-libtool \
-	clean-noinstLIBRARIES cscopelist-am ctags ctags-am distclean \
+.PHONY: CTAGS GTAGS TAGS all all-am am--depfiles check check-am clean \
+	clean-binPROGRAMS clean-generic clean-libLTLIBRARIES \
+	clean-libtool cscopelist-am ctags ctags-am distclean \
 	distclean-compile distclean-generic distclean-libtool \
 	distclean-tags distdir dvi dvi-am html html-am info info-am \
 	install install-am install-binPROGRAMS install-data \
@@ -1884,14 +1503,16 @@ uninstall-am: uninstall-binPROGRAMS uninstall-libLTLIBRARIES
 	install-exec-am install-html install-html-am install-info \
 	install-info-am install-libLTLIBRARIES install-man install-pdf \
 	install-pdf-am install-ps install-ps-am install-strip \
-	installcheck installcheck-am installdirs installdirs-am \
-	maintainer-clean maintainer-clean-generic mostlyclean \
-	mostlyclean-compile mostlyclean-generic mostlyclean-libtool \
-	pdf pdf-am ps ps-am tags tags-am uninstall uninstall-am \
-	uninstall-binPROGRAMS uninstall-libLTLIBRARIES
+	installcheck installcheck-am installdirs maintainer-clean \
+	maintainer-clean-generic mostlyclean mostlyclean-compile \
+	mostlyclean-generic mostlyclean-libtool pdf pdf-am ps ps-am \
+	tags tags-am uninstall uninstall-am uninstall-binPROGRAMS \
+	uninstall-libLTLIBRARIES
 
 .PRECIOUS: Makefile
 
+
+#SUBDIRS = include tests
 
 # ---------------------------------------------------------------------------- #
 

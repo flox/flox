@@ -55,44 +55,93 @@ AC_PATH_PROG([RANLIB], [$RANLIB], [$MISSING ranlib])
 AM_PROG_AR
 AC_PATH_PROG([AR], [$AR], [$MISSING ar])
 
+PKG_PROG_PKG_CONFIG
+AC_PATH_PROG([PKG_CONFIG], [$PKG_CONFIG], [$MISSING pkg-config])
+
 
 FLOX_PROG_MISSING
 
+AC_ARG_VAR([CAT], [Concatenate FILE(s) to standard output])
 AC_PATH_PROG([CAT], [cat], [$MISSING cat])
+
+AC_ARG_VAR([CP], [Copy files])
 AC_PATH_PROG([CP], [cp], [$MISSING cp])
+
+AC_ARG_VAR([MKDIR], [Create directories])
 AC_PATH_PROG([MKDIR], [mkdir], [$MISSING mkdir])
+
+AC_ARG_VAR([RM], [Remove files])
 AC_PATH_PROG([RM], [rm -f], [$MISSING rm])
+
+AC_ARG_VAR([SORT], [Sort lines of text])
 AC_PATH_PROG([SORT], [sort], [$MISSING sort])
+
+AC_ARG_VAR([TEE], [Redirect output to multiple files])
 AC_PATH_PROG([TEE], [tee], [$MISSING tee])
+
+AC_ARG_VAR([TEST], [Evaluate conditional expression])
 AC_PATH_PROG([TEST], [test], [$MISSING test])
+
+AC_ARG_VAR([TOUCH], [Change file timestamps, or create empty files])
 AC_PATH_PROG([TOUCH], [touch], [$MISSING touch])
+
+AC_ARG_VAR([TR],
+  [Translate, squeeze, and/or delete characters from standard input])
 AC_PATH_PROG([TR], [tr], [$MISSING tr])
+
+AC_ARG_VAR([UNAME], [Print system information])
 AC_PATH_PROG([UNAME], [uname], [$MISSING uname])
+
+AC_ARG_VAR([LN], [Create symbolic links])
 AC_PATH_PROG([LN], [ln], [$MISSING ln])
 
+AC_ARG_VAR([FIND], [Search for files in a directory hierarchy])
 AC_PATH_PROG([FIND], [find], [$MISSING find])
+
+AC_ARG_VAR([XARGS], [Build and execute command lines from standard input])
 AC_PATH_PROG([XARGS], [xargs], [$MISSING xargs])
 
+AC_ARG_VAR([M4], [Macro processor])
 AC_PATH_PROG([M4], [m4], [$MISSING m4])
 
+AC_ARG_VAR([GIT], [Distributed version control system])
 AC_PATH_PROG([GIT], [git], [$MISSING git])
 
+AC_ARG_VAR([COMMITIZEN], [Conventional commit helper])
 AC_PATH_PROG([COMMITIZEN], [commitizen], [$MISSING commitizen])
+
+AC_ARG_VAR([HIVEMIND], [Process manager])
 AC_PATH_PROG([HIVEMIND], [hivemind], [$MISSING hivemind])
+
+AC_ARG_VAR([SQLITE], [Command line interface for SQLite])
 AC_PATH_PROG([SQLITE], [sqlite3], [$MISSING sqlite3])
+
+AC_ARG_VAR([BATS], [Bash Automated Testing System])
 AC_PATH_PROG([BATS], [bats], [$MISSING bats])
 
 # TODO: move to `m4/nix.m4'
+AC_ARG_VAR([NIX], [Purely functional package manager])
 AC_PATH_PROG([NIX], [nix], [$MISSING nix])
+AC_ARG_VAR([NIX_FMT], [Nix code formatter])
 AC_PATH_PROG([NIX_FMT], [alejandra], [$MISSING alejandra])
 
+AC_ARG_VAR([CARGO], [Rust package manager])
 AC_PATH_PROG([CARGO], [cargo], [$MISSING cargo])
+AC_ARG_VAR([RUST_FMT], [Rust code formatter])
 AC_PATH_PROG([RUST_FMT], [rustfmt], [$MISSING rustfmt])
+AC_ARG_VAR([RUST_LINT], [Rust code linter])
 AC_PATH_PROG([RUST_LINT], [clippy], [$MISSING clippy])
 
+AC_ARG_VAR([BEAR], [Build EAR])
 AC_PATH_PROG([BEAR], [bear], [$MISSING bear])
+
+AC_ARG_VAR([CXX_FMT], [C++ code formatter])
 AC_PATH_PROG([CXX_FMT], [clang-format], [$MISSING clang-format])
+
+AC_ARG_VAR([CXX_LINT], [C++ code linter])
 AC_PATH_PROG([CXX_LINT], [clang-tidy], [$MISSING clang-tidy])
+
+AC_ARG_VAR([DOXYGEN], [Generate documentation])
 AC_PATH_PROG([DOXYGEN], [doxygen], [$MISSING doxygen])
 
 
@@ -246,19 +295,35 @@ AC_SUBST([DEPFILES])
 
 # External Dependencies
 
-PKG_CHECK_MODULES([NLJSON], [nlohmann_json])
-PKG_CHECK_MODULES([ARGPARSE], [argparse])
-PKG_CHECK_MODULES([SQLITE3], [sqlite3])
-PKG_CHECK_MODULES([SQLITE3PP], [sqlite3pp])
-PKG_CHECK_MODULES([YAML], [yaml-cpp])
-PKG_CHECK_MODULES([NIX], [nix-store nix-main nix-cmd nix-expr])
+PKG_CHECK_MODULES([NLJSON], [nlohmann_json], [:],
+  [AC_MSG_ERROR([Cannot find 'nlohmann_json.pc'])])
+
+PKG_CHECK_MODULES([ARGPARSE], [argparse], [:],
+  [AC_MSG_ERROR([Cannot find 'argparse.pc'])])
+
+PKG_CHECK_MODULES([SQLITE3], [sqlite3], [:],
+  [AC_MSG_ERROR([Cannot find 'sqlite3.pc'])])
+
+PKG_CHECK_MODULES([SQLITE3PP], [sqlite3pp], [:],
+  [AC_MSG_ERROR([Cannot find 'sqlite3pp.pc'])])
+
+PKG_CHECK_MODULES([YAML], [yaml-cpp], [:],
+  [AC_MSG_ERROR([Cannot find 'yaml-cpp.pc'])])
+
+PKG_CHECK_MODULES([NIX], [nix-store nix-main nix-cmd nix-expr], [:],
+  [AC_MSG_ERROR([Cannot find 'nix-store.pc'])])
 
 
 # ---------------------------------------------------------------------------- #
 
+# FIXME: you have to undef `PACKAGE_*' macros added by `autotools'.
+
 # Add some necessary macro definitions for `nix' which normally appear
 # in `<nix>/include/nix/config.h'.
-NIX_CFLAGS="$NIX_CFLAGS -DSYSTEM='\"$ARCH-$OS\"'";
+PKG_CHECK_VAR([NIX_INCDIR], [nix-main], [includedir], [:],
+  [AC_MSG_ERROR([Cannot find nix-main include directory for 'nix/config.h'])])
+NIX_CFLAGS="$NIX_CFLAGS -DSYSTEM='\"$ARCH-$OS\"'"
+NIX_CFLAGS="$NIX_CFLAGS -include '$NIX_INCDIR/nix/config.h'";
 
 
 # ---------------------------------------------------------------------------- #

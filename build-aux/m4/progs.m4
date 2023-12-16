@@ -19,6 +19,7 @@
 # This should be located in the repo root's `build-aux` directory.
 AC_DEFUN([FLOX_PROG_MISSING],
 [AC_REQUIRE([FLOX_ABS_SRCDIR])
+AC_ARG_VAR([MISSING], [how to invoke a missing program])
 AC_PATH_PROG([MISSING], [missing], [AC_MSG_ERROR([missing not found])],
              [$PATH:$abs_srcdir/build-aux])
 ]) # FLOX_PROG_MISSING

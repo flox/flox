@@ -671,6 +671,7 @@ NO_UNDEFINED_SYMBOLS_FLAG
 set_soname_option
 set_rpath_option
 RELATIVE_RPATH_FLAG
+NIX_INCDIR
 NIX_LIBS
 NIX_CFLAGS
 YAML_LIBS
@@ -683,9 +684,6 @@ ARGPARSE_LIBS
 ARGPARSE_CFLAGS
 NLJSON_LIBS
 NLJSON_CFLAGS
-PKG_CONFIG_LIBDIR
-PKG_CONFIG_PATH
-PKG_CONFIG
 DEPFILES
 SHELLS_DIR
 PKGS_DIR
@@ -745,6 +743,9 @@ MKDIR
 CP
 CAT
 MISSING
+PKG_CONFIG_LIBDIR
+PKG_CONFIG_PATH
+PKG_CONFIG
 CXXCPP
 am__fastdepCXX_FALSE
 am__fastdepCXX_TRUE
@@ -913,6 +914,35 @@ CXXCPP
 PKG_CONFIG
 PKG_CONFIG_PATH
 PKG_CONFIG_LIBDIR
+MISSING
+CAT
+CP
+MKDIR
+RM
+SORT
+TEE
+TEST
+TOUCH
+TR
+UNAME
+LN
+FIND
+XARGS
+M4
+GIT
+COMMITIZEN
+HIVEMIND
+SQLITE
+BATS
+NIX
+NIX_FMT
+CARGO
+RUST_FMT
+RUST_LINT
+BEAR
+CXX_FMT
+CXX_LINT
+DOXYGEN
 NLJSON_CFLAGS
 NLJSON_LIBS
 ARGPARSE_CFLAGS
@@ -924,7 +954,8 @@ SQLITE3PP_LIBS
 YAML_CFLAGS
 YAML_LIBS
 NIX_CFLAGS
-NIX_LIBS'
+NIX_LIBS
+NIX_INCDIR'
 
 
 # Initialize some variables set by options.
@@ -1600,6 +1631,35 @@ Some influential environment variables:
               directories to add to pkg-config's search path
   PKG_CONFIG_LIBDIR
               path overriding pkg-config's built-in search path
+  MISSING     how to invoke a missing program
+  CAT         Concatenate FILE(s) to standard output
+  CP          Copy files
+  MKDIR       Create directories
+  RM          Remove files
+  SORT        Sort lines of text
+  TEE         Redirect output to multiple files
+  TEST        Evaluate conditional expression
+  TOUCH       Change file timestamps, or create empty files
+  TR          Translate, squeeze, and/or delete characters from standard input
+  UNAME       Print system information
+  LN          Create symbolic links
+  FIND        Search for files in a directory hierarchy
+  XARGS       Build and execute command lines from standard input
+  M4          Macro processor
+  GIT         Distributed version control system
+  COMMITIZEN  Conventional commit helper
+  HIVEMIND    Process manager
+  SQLITE      Command line interface for SQLite
+  BATS        Bash Automated Testing System
+  NIX         Purely functional package manager
+  NIX_FMT     Nix code formatter
+  CARGO       Rust package manager
+  RUST_FMT    Rust code formatter
+  RUST_LINT   Rust code linter
+  BEAR        Build EAR
+  CXX_FMT     C++ code formatter
+  CXX_LINT    C++ code linter
+  DOXYGEN     Generate documentation
   NLJSON_CFLAGS
               C compiler flags for NLJSON, overriding pkg-config
   NLJSON_LIBS linker flags for NLJSON, overriding pkg-config
@@ -1619,6 +1679,7 @@ Some influential environment variables:
   YAML_LIBS   linker flags for YAML, overriding pkg-config
   NIX_CFLAGS  C compiler flags for NIX, overriding pkg-config
   NIX_LIBS    linker flags for NIX, overriding pkg-config
+  NIX_INCDIR  value of includedir for nix-main, overriding pkg-config
 
 Use these variables to override the choices made by `configure' or to help
 it to find libraries and programs with nonstandard names/locations.
@@ -18827,6 +18888,184 @@ fi
 
 
 
+
+
+
+
+
+if test "x$ac_cv_env_PKG_CONFIG_set" != "xset"; then
+	if test -n "$ac_tool_prefix"; then
+  # Extract the first word of "${ac_tool_prefix}pkg-config", so it can be a program name with args.
+set dummy ${ac_tool_prefix}pkg-config; ac_word=$2
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
+printf %s "checking for $ac_word... " >&6; }
+if test ${ac_cv_path_PKG_CONFIG+y}
+then :
+  printf %s "(cached) " >&6
+else $as_nop
+  case $PKG_CONFIG in
+  [\\/]* | ?:[\\/]*)
+  ac_cv_path_PKG_CONFIG="$PKG_CONFIG" # Let the user override the test with a path.
+  ;;
+  *)
+  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
+for as_dir in $PATH
+do
+  IFS=$as_save_IFS
+  case $as_dir in #(((
+    '') as_dir=./ ;;
+    */) ;;
+    *) as_dir=$as_dir/ ;;
+  esac
+    for ac_exec_ext in '' $ac_executable_extensions; do
+  if as_fn_executable_p "$as_dir$ac_word$ac_exec_ext"; then
+    ac_cv_path_PKG_CONFIG="$as_dir$ac_word$ac_exec_ext"
+    printf "%s\n" "$as_me:${as_lineno-$LINENO}: found $as_dir$ac_word$ac_exec_ext" >&5
+    break 2
+  fi
+done
+  done
+IFS=$as_save_IFS
+
+  ;;
+esac
+fi
+PKG_CONFIG=$ac_cv_path_PKG_CONFIG
+if test -n "$PKG_CONFIG"; then
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $PKG_CONFIG" >&5
+printf "%s\n" "$PKG_CONFIG" >&6; }
+else
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
+printf "%s\n" "no" >&6; }
+fi
+
+
+fi
+if test -z "$ac_cv_path_PKG_CONFIG"; then
+  ac_pt_PKG_CONFIG=$PKG_CONFIG
+  # Extract the first word of "pkg-config", so it can be a program name with args.
+set dummy pkg-config; ac_word=$2
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
+printf %s "checking for $ac_word... " >&6; }
+if test ${ac_cv_path_ac_pt_PKG_CONFIG+y}
+then :
+  printf %s "(cached) " >&6
+else $as_nop
+  case $ac_pt_PKG_CONFIG in
+  [\\/]* | ?:[\\/]*)
+  ac_cv_path_ac_pt_PKG_CONFIG="$ac_pt_PKG_CONFIG" # Let the user override the test with a path.
+  ;;
+  *)
+  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
+for as_dir in $PATH
+do
+  IFS=$as_save_IFS
+  case $as_dir in #(((
+    '') as_dir=./ ;;
+    */) ;;
+    *) as_dir=$as_dir/ ;;
+  esac
+    for ac_exec_ext in '' $ac_executable_extensions; do
+  if as_fn_executable_p "$as_dir$ac_word$ac_exec_ext"; then
+    ac_cv_path_ac_pt_PKG_CONFIG="$as_dir$ac_word$ac_exec_ext"
+    printf "%s\n" "$as_me:${as_lineno-$LINENO}: found $as_dir$ac_word$ac_exec_ext" >&5
+    break 2
+  fi
+done
+  done
+IFS=$as_save_IFS
+
+  ;;
+esac
+fi
+ac_pt_PKG_CONFIG=$ac_cv_path_ac_pt_PKG_CONFIG
+if test -n "$ac_pt_PKG_CONFIG"; then
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $ac_pt_PKG_CONFIG" >&5
+printf "%s\n" "$ac_pt_PKG_CONFIG" >&6; }
+else
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
+printf "%s\n" "no" >&6; }
+fi
+
+  if test "x$ac_pt_PKG_CONFIG" = x; then
+    PKG_CONFIG=""
+  else
+    case $cross_compiling:$ac_tool_warned in
+yes:)
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: WARNING: using cross tools not prefixed with host triplet" >&5
+printf "%s\n" "$as_me: WARNING: using cross tools not prefixed with host triplet" >&2;}
+ac_tool_warned=yes ;;
+esac
+    PKG_CONFIG=$ac_pt_PKG_CONFIG
+  fi
+else
+  PKG_CONFIG="$ac_cv_path_PKG_CONFIG"
+fi
+
+fi
+if test -n "$PKG_CONFIG"; then
+	_pkg_min_version=0.9.0
+	{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking pkg-config is at least version $_pkg_min_version" >&5
+printf %s "checking pkg-config is at least version $_pkg_min_version... " >&6; }
+	if $PKG_CONFIG --atleast-pkgconfig-version $_pkg_min_version; then
+		{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: yes" >&5
+printf "%s\n" "yes" >&6; }
+	else
+		{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
+printf "%s\n" "no" >&6; }
+		PKG_CONFIG=""
+	fi
+fi
+# Extract the first word of "$PKG_CONFIG", so it can be a program name with args.
+set dummy $PKG_CONFIG; ac_word=$2
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
+printf %s "checking for $ac_word... " >&6; }
+if test ${ac_cv_path_PKG_CONFIG+y}
+then :
+  printf %s "(cached) " >&6
+else $as_nop
+  case $PKG_CONFIG in
+  [\\/]* | ?:[\\/]*)
+  ac_cv_path_PKG_CONFIG="$PKG_CONFIG" # Let the user override the test with a path.
+  ;;
+  *)
+  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
+for as_dir in $PATH
+do
+  IFS=$as_save_IFS
+  case $as_dir in #(((
+    '') as_dir=./ ;;
+    */) ;;
+    *) as_dir=$as_dir/ ;;
+  esac
+    for ac_exec_ext in '' $ac_executable_extensions; do
+  if as_fn_executable_p "$as_dir$ac_word$ac_exec_ext"; then
+    ac_cv_path_PKG_CONFIG="$as_dir$ac_word$ac_exec_ext"
+    printf "%s\n" "$as_me:${as_lineno-$LINENO}: found $as_dir$ac_word$ac_exec_ext" >&5
+    break 2
+  fi
+done
+  done
+IFS=$as_save_IFS
+
+  test -z "$ac_cv_path_PKG_CONFIG" && ac_cv_path_PKG_CONFIG="$MISSING pkg-config"
+  ;;
+esac
+fi
+PKG_CONFIG=$ac_cv_path_PKG_CONFIG
+if test -n "$PKG_CONFIG"; then
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $PKG_CONFIG" >&5
+printf "%s\n" "$PKG_CONFIG" >&6; }
+else
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
+printf "%s\n" "no" >&6; }
+fi
+
+
+
+
+
+
 # Extract the first word of "missing", so it can be a program name with args.
 set dummy missing; ac_word=$2
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
@@ -18872,6 +19111,7 @@ else
   { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
 printf "%s\n" "no" >&6; }
 fi
+
 
 
 
@@ -18922,6 +19162,8 @@ printf "%s\n" "no" >&6; }
 fi
 
 
+
+
 # Extract the first word of "cp", so it can be a program name with args.
 set dummy cp; ac_word=$2
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
@@ -18966,6 +19208,8 @@ else
   { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
 printf "%s\n" "no" >&6; }
 fi
+
+
 
 
 # Extract the first word of "mkdir", so it can be a program name with args.
@@ -19014,6 +19258,8 @@ printf "%s\n" "no" >&6; }
 fi
 
 
+
+
 # Extract the first word of "rm -f", so it can be a program name with args.
 set dummy rm -f; ac_word=$2
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
@@ -19058,6 +19304,8 @@ else
   { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
 printf "%s\n" "no" >&6; }
 fi
+
+
 
 
 # Extract the first word of "sort", so it can be a program name with args.
@@ -19106,6 +19354,8 @@ printf "%s\n" "no" >&6; }
 fi
 
 
+
+
 # Extract the first word of "tee", so it can be a program name with args.
 set dummy tee; ac_word=$2
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
@@ -19150,6 +19400,8 @@ else
   { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
 printf "%s\n" "no" >&6; }
 fi
+
+
 
 
 # Extract the first word of "test", so it can be a program name with args.
@@ -19198,6 +19450,8 @@ printf "%s\n" "no" >&6; }
 fi
 
 
+
+
 # Extract the first word of "touch", so it can be a program name with args.
 set dummy touch; ac_word=$2
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
@@ -19242,6 +19496,8 @@ else
   { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
 printf "%s\n" "no" >&6; }
 fi
+
+
 
 
 # Extract the first word of "tr", so it can be a program name with args.
@@ -19290,6 +19546,8 @@ printf "%s\n" "no" >&6; }
 fi
 
 
+
+
 # Extract the first word of "uname", so it can be a program name with args.
 set dummy uname; ac_word=$2
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
@@ -19334,6 +19592,8 @@ else
   { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
 printf "%s\n" "no" >&6; }
 fi
+
+
 
 
 # Extract the first word of "ln", so it can be a program name with args.
@@ -19383,6 +19643,7 @@ fi
 
 
 
+
 # Extract the first word of "find", so it can be a program name with args.
 set dummy find; ac_word=$2
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
@@ -19429,6 +19690,8 @@ printf "%s\n" "no" >&6; }
 fi
 
 
+
+
 # Extract the first word of "xargs", so it can be a program name with args.
 set dummy xargs; ac_word=$2
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
@@ -19473,6 +19736,7 @@ else
   { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
 printf "%s\n" "no" >&6; }
 fi
+
 
 
 
@@ -19523,6 +19787,7 @@ fi
 
 
 
+
 # Extract the first word of "git", so it can be a program name with args.
 set dummy git; ac_word=$2
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
@@ -19567,6 +19832,7 @@ else
   { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
 printf "%s\n" "no" >&6; }
 fi
+
 
 
 
@@ -19616,6 +19882,8 @@ printf "%s\n" "no" >&6; }
 fi
 
 
+
+
 # Extract the first word of "hivemind", so it can be a program name with args.
 set dummy hivemind; ac_word=$2
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
@@ -19662,6 +19930,8 @@ printf "%s\n" "no" >&6; }
 fi
 
 
+
+
 # Extract the first word of "sqlite3", so it can be a program name with args.
 set dummy sqlite3; ac_word=$2
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
@@ -19706,6 +19976,8 @@ else
   { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
 printf "%s\n" "no" >&6; }
 fi
+
+
 
 
 # Extract the first word of "bats", so it can be a program name with args.
@@ -19756,6 +20028,7 @@ fi
 
 
 # TODO: move to `m4/nix.m4'
+
 # Extract the first word of "nix", so it can be a program name with args.
 set dummy nix; ac_word=$2
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
@@ -19800,6 +20073,7 @@ else
   { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
 printf "%s\n" "no" >&6; }
 fi
+
 
 
 # Extract the first word of "alejandra", so it can be a program name with args.
@@ -19849,6 +20123,7 @@ fi
 
 
 
+
 # Extract the first word of "cargo", so it can be a program name with args.
 set dummy cargo; ac_word=$2
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
@@ -19895,6 +20170,7 @@ printf "%s\n" "no" >&6; }
 fi
 
 
+
 # Extract the first word of "rustfmt", so it can be a program name with args.
 set dummy rustfmt; ac_word=$2
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
@@ -19939,6 +20215,7 @@ else
   { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
 printf "%s\n" "no" >&6; }
 fi
+
 
 
 # Extract the first word of "clippy", so it can be a program name with args.
@@ -19988,6 +20265,7 @@ fi
 
 
 
+
 # Extract the first word of "bear", so it can be a program name with args.
 set dummy bear; ac_word=$2
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
@@ -20032,6 +20310,8 @@ else
   { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
 printf "%s\n" "no" >&6; }
 fi
+
+
 
 
 # Extract the first word of "clang-format", so it can be a program name with args.
@@ -20080,6 +20360,8 @@ printf "%s\n" "no" >&6; }
 fi
 
 
+
+
 # Extract the first word of "clang-tidy", so it can be a program name with args.
 set dummy clang-tidy; ac_word=$2
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
@@ -20124,6 +20406,8 @@ else
   { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
 printf "%s\n" "no" >&6; }
 fi
+
+
 
 
 # Extract the first word of "doxygen", so it can be a program name with args.
@@ -20978,136 +21262,6 @@ DEPFILES="$DEPFILES $SHELLS_DIR/flox/default.nix";
 # External Dependencies
 
 
-
-
-
-
-
-
-if test "x$ac_cv_env_PKG_CONFIG_set" != "xset"; then
-	if test -n "$ac_tool_prefix"; then
-  # Extract the first word of "${ac_tool_prefix}pkg-config", so it can be a program name with args.
-set dummy ${ac_tool_prefix}pkg-config; ac_word=$2
-{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
-printf %s "checking for $ac_word... " >&6; }
-if test ${ac_cv_path_PKG_CONFIG+y}
-then :
-  printf %s "(cached) " >&6
-else $as_nop
-  case $PKG_CONFIG in
-  [\\/]* | ?:[\\/]*)
-  ac_cv_path_PKG_CONFIG="$PKG_CONFIG" # Let the user override the test with a path.
-  ;;
-  *)
-  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
-for as_dir in $PATH
-do
-  IFS=$as_save_IFS
-  case $as_dir in #(((
-    '') as_dir=./ ;;
-    */) ;;
-    *) as_dir=$as_dir/ ;;
-  esac
-    for ac_exec_ext in '' $ac_executable_extensions; do
-  if as_fn_executable_p "$as_dir$ac_word$ac_exec_ext"; then
-    ac_cv_path_PKG_CONFIG="$as_dir$ac_word$ac_exec_ext"
-    printf "%s\n" "$as_me:${as_lineno-$LINENO}: found $as_dir$ac_word$ac_exec_ext" >&5
-    break 2
-  fi
-done
-  done
-IFS=$as_save_IFS
-
-  ;;
-esac
-fi
-PKG_CONFIG=$ac_cv_path_PKG_CONFIG
-if test -n "$PKG_CONFIG"; then
-  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $PKG_CONFIG" >&5
-printf "%s\n" "$PKG_CONFIG" >&6; }
-else
-  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
-printf "%s\n" "no" >&6; }
-fi
-
-
-fi
-if test -z "$ac_cv_path_PKG_CONFIG"; then
-  ac_pt_PKG_CONFIG=$PKG_CONFIG
-  # Extract the first word of "pkg-config", so it can be a program name with args.
-set dummy pkg-config; ac_word=$2
-{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
-printf %s "checking for $ac_word... " >&6; }
-if test ${ac_cv_path_ac_pt_PKG_CONFIG+y}
-then :
-  printf %s "(cached) " >&6
-else $as_nop
-  case $ac_pt_PKG_CONFIG in
-  [\\/]* | ?:[\\/]*)
-  ac_cv_path_ac_pt_PKG_CONFIG="$ac_pt_PKG_CONFIG" # Let the user override the test with a path.
-  ;;
-  *)
-  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
-for as_dir in $PATH
-do
-  IFS=$as_save_IFS
-  case $as_dir in #(((
-    '') as_dir=./ ;;
-    */) ;;
-    *) as_dir=$as_dir/ ;;
-  esac
-    for ac_exec_ext in '' $ac_executable_extensions; do
-  if as_fn_executable_p "$as_dir$ac_word$ac_exec_ext"; then
-    ac_cv_path_ac_pt_PKG_CONFIG="$as_dir$ac_word$ac_exec_ext"
-    printf "%s\n" "$as_me:${as_lineno-$LINENO}: found $as_dir$ac_word$ac_exec_ext" >&5
-    break 2
-  fi
-done
-  done
-IFS=$as_save_IFS
-
-  ;;
-esac
-fi
-ac_pt_PKG_CONFIG=$ac_cv_path_ac_pt_PKG_CONFIG
-if test -n "$ac_pt_PKG_CONFIG"; then
-  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $ac_pt_PKG_CONFIG" >&5
-printf "%s\n" "$ac_pt_PKG_CONFIG" >&6; }
-else
-  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
-printf "%s\n" "no" >&6; }
-fi
-
-  if test "x$ac_pt_PKG_CONFIG" = x; then
-    PKG_CONFIG=""
-  else
-    case $cross_compiling:$ac_tool_warned in
-yes:)
-{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: WARNING: using cross tools not prefixed with host triplet" >&5
-printf "%s\n" "$as_me: WARNING: using cross tools not prefixed with host triplet" >&2;}
-ac_tool_warned=yes ;;
-esac
-    PKG_CONFIG=$ac_pt_PKG_CONFIG
-  fi
-else
-  PKG_CONFIG="$ac_cv_path_PKG_CONFIG"
-fi
-
-fi
-if test -n "$PKG_CONFIG"; then
-	_pkg_min_version=0.9.0
-	{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking pkg-config is at least version $_pkg_min_version" >&5
-printf %s "checking pkg-config is at least version $_pkg_min_version... " >&6; }
-	if $PKG_CONFIG --atleast-pkgconfig-version $_pkg_min_version; then
-		{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: yes" >&5
-printf "%s\n" "yes" >&6; }
-	else
-		{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
-printf "%s\n" "no" >&6; }
-		PKG_CONFIG=""
-	fi
-fi
-
 pkg_failed=no
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for nlohmann_json" >&5
 printf %s "checking for nlohmann_json... " >&6; }
@@ -21166,38 +21320,19 @@ fi
 	# Put the nasty error message in config.log where it belongs
 	echo "$NLJSON_PKG_ERRORS" >&5
 
-	as_fn_error $? "Package requirements (nlohmann_json) were not met:
-
-$NLJSON_PKG_ERRORS
-
-Consider adjusting the PKG_CONFIG_PATH environment variable if you
-installed software in a non-standard prefix.
-
-Alternatively, you may set the environment variables NLJSON_CFLAGS
-and NLJSON_LIBS to avoid the need to call pkg-config.
-See the pkg-config man page for more details." "$LINENO" 5
+	as_fn_error $? "Cannot find 'nlohmann_json.pc'" "$LINENO" 5
 elif test $pkg_failed = untried; then
         { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
 printf "%s\n" "no" >&6; }
-	{ { printf "%s\n" "$as_me:${as_lineno-$LINENO}: error: in \`$ac_pwd':" >&5
-printf "%s\n" "$as_me: error: in \`$ac_pwd':" >&2;}
-as_fn_error $? "The pkg-config script could not be found or is too old.  Make sure it
-is in your PATH or set the PKG_CONFIG environment variable to the full
-path to pkg-config.
-
-Alternatively, you may set the environment variables NLJSON_CFLAGS
-and NLJSON_LIBS to avoid the need to call pkg-config.
-See the pkg-config man page for more details.
-
-To get pkg-config, see <http://pkg-config.freedesktop.org/>.
-See \`config.log' for more details" "$LINENO" 5; }
+	as_fn_error $? "Cannot find 'nlohmann_json.pc'" "$LINENO" 5
 else
 	NLJSON_CFLAGS=$pkg_cv_NLJSON_CFLAGS
 	NLJSON_LIBS=$pkg_cv_NLJSON_LIBS
         { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: yes" >&5
 printf "%s\n" "yes" >&6; }
-
+	:
 fi
+
 
 pkg_failed=no
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for argparse" >&5
@@ -21257,38 +21392,19 @@ fi
 	# Put the nasty error message in config.log where it belongs
 	echo "$ARGPARSE_PKG_ERRORS" >&5
 
-	as_fn_error $? "Package requirements (argparse) were not met:
-
-$ARGPARSE_PKG_ERRORS
-
-Consider adjusting the PKG_CONFIG_PATH environment variable if you
-installed software in a non-standard prefix.
-
-Alternatively, you may set the environment variables ARGPARSE_CFLAGS
-and ARGPARSE_LIBS to avoid the need to call pkg-config.
-See the pkg-config man page for more details." "$LINENO" 5
+	as_fn_error $? "Cannot find 'argparse.pc'" "$LINENO" 5
 elif test $pkg_failed = untried; then
         { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
 printf "%s\n" "no" >&6; }
-	{ { printf "%s\n" "$as_me:${as_lineno-$LINENO}: error: in \`$ac_pwd':" >&5
-printf "%s\n" "$as_me: error: in \`$ac_pwd':" >&2;}
-as_fn_error $? "The pkg-config script could not be found or is too old.  Make sure it
-is in your PATH or set the PKG_CONFIG environment variable to the full
-path to pkg-config.
-
-Alternatively, you may set the environment variables ARGPARSE_CFLAGS
-and ARGPARSE_LIBS to avoid the need to call pkg-config.
-See the pkg-config man page for more details.
-
-To get pkg-config, see <http://pkg-config.freedesktop.org/>.
-See \`config.log' for more details" "$LINENO" 5; }
+	as_fn_error $? "Cannot find 'argparse.pc'" "$LINENO" 5
 else
 	ARGPARSE_CFLAGS=$pkg_cv_ARGPARSE_CFLAGS
 	ARGPARSE_LIBS=$pkg_cv_ARGPARSE_LIBS
         { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: yes" >&5
 printf "%s\n" "yes" >&6; }
-
+	:
 fi
+
 
 pkg_failed=no
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for sqlite3" >&5
@@ -21348,38 +21464,19 @@ fi
 	# Put the nasty error message in config.log where it belongs
 	echo "$SQLITE3_PKG_ERRORS" >&5
 
-	as_fn_error $? "Package requirements (sqlite3) were not met:
-
-$SQLITE3_PKG_ERRORS
-
-Consider adjusting the PKG_CONFIG_PATH environment variable if you
-installed software in a non-standard prefix.
-
-Alternatively, you may set the environment variables SQLITE3_CFLAGS
-and SQLITE3_LIBS to avoid the need to call pkg-config.
-See the pkg-config man page for more details." "$LINENO" 5
+	as_fn_error $? "Cannot find 'sqlite3.pc'" "$LINENO" 5
 elif test $pkg_failed = untried; then
         { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
 printf "%s\n" "no" >&6; }
-	{ { printf "%s\n" "$as_me:${as_lineno-$LINENO}: error: in \`$ac_pwd':" >&5
-printf "%s\n" "$as_me: error: in \`$ac_pwd':" >&2;}
-as_fn_error $? "The pkg-config script could not be found or is too old.  Make sure it
-is in your PATH or set the PKG_CONFIG environment variable to the full
-path to pkg-config.
-
-Alternatively, you may set the environment variables SQLITE3_CFLAGS
-and SQLITE3_LIBS to avoid the need to call pkg-config.
-See the pkg-config man page for more details.
-
-To get pkg-config, see <http://pkg-config.freedesktop.org/>.
-See \`config.log' for more details" "$LINENO" 5; }
+	as_fn_error $? "Cannot find 'sqlite3.pc'" "$LINENO" 5
 else
 	SQLITE3_CFLAGS=$pkg_cv_SQLITE3_CFLAGS
 	SQLITE3_LIBS=$pkg_cv_SQLITE3_LIBS
         { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: yes" >&5
 printf "%s\n" "yes" >&6; }
-
+	:
 fi
+
 
 pkg_failed=no
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for sqlite3pp" >&5
@@ -21439,38 +21536,19 @@ fi
 	# Put the nasty error message in config.log where it belongs
 	echo "$SQLITE3PP_PKG_ERRORS" >&5
 
-	as_fn_error $? "Package requirements (sqlite3pp) were not met:
-
-$SQLITE3PP_PKG_ERRORS
-
-Consider adjusting the PKG_CONFIG_PATH environment variable if you
-installed software in a non-standard prefix.
-
-Alternatively, you may set the environment variables SQLITE3PP_CFLAGS
-and SQLITE3PP_LIBS to avoid the need to call pkg-config.
-See the pkg-config man page for more details." "$LINENO" 5
+	as_fn_error $? "Cannot find 'sqlite3pp.pc'" "$LINENO" 5
 elif test $pkg_failed = untried; then
         { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
 printf "%s\n" "no" >&6; }
-	{ { printf "%s\n" "$as_me:${as_lineno-$LINENO}: error: in \`$ac_pwd':" >&5
-printf "%s\n" "$as_me: error: in \`$ac_pwd':" >&2;}
-as_fn_error $? "The pkg-config script could not be found or is too old.  Make sure it
-is in your PATH or set the PKG_CONFIG environment variable to the full
-path to pkg-config.
-
-Alternatively, you may set the environment variables SQLITE3PP_CFLAGS
-and SQLITE3PP_LIBS to avoid the need to call pkg-config.
-See the pkg-config man page for more details.
-
-To get pkg-config, see <http://pkg-config.freedesktop.org/>.
-See \`config.log' for more details" "$LINENO" 5; }
+	as_fn_error $? "Cannot find 'sqlite3pp.pc'" "$LINENO" 5
 else
 	SQLITE3PP_CFLAGS=$pkg_cv_SQLITE3PP_CFLAGS
 	SQLITE3PP_LIBS=$pkg_cv_SQLITE3PP_LIBS
         { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: yes" >&5
 printf "%s\n" "yes" >&6; }
-
+	:
 fi
+
 
 pkg_failed=no
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for yaml-cpp" >&5
@@ -21530,38 +21608,19 @@ fi
 	# Put the nasty error message in config.log where it belongs
 	echo "$YAML_PKG_ERRORS" >&5
 
-	as_fn_error $? "Package requirements (yaml-cpp) were not met:
-
-$YAML_PKG_ERRORS
-
-Consider adjusting the PKG_CONFIG_PATH environment variable if you
-installed software in a non-standard prefix.
-
-Alternatively, you may set the environment variables YAML_CFLAGS
-and YAML_LIBS to avoid the need to call pkg-config.
-See the pkg-config man page for more details." "$LINENO" 5
+	as_fn_error $? "Cannot find 'yaml-cpp.pc'" "$LINENO" 5
 elif test $pkg_failed = untried; then
         { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
 printf "%s\n" "no" >&6; }
-	{ { printf "%s\n" "$as_me:${as_lineno-$LINENO}: error: in \`$ac_pwd':" >&5
-printf "%s\n" "$as_me: error: in \`$ac_pwd':" >&2;}
-as_fn_error $? "The pkg-config script could not be found or is too old.  Make sure it
-is in your PATH or set the PKG_CONFIG environment variable to the full
-path to pkg-config.
-
-Alternatively, you may set the environment variables YAML_CFLAGS
-and YAML_LIBS to avoid the need to call pkg-config.
-See the pkg-config man page for more details.
-
-To get pkg-config, see <http://pkg-config.freedesktop.org/>.
-See \`config.log' for more details" "$LINENO" 5; }
+	as_fn_error $? "Cannot find 'yaml-cpp.pc'" "$LINENO" 5
 else
 	YAML_CFLAGS=$pkg_cv_YAML_CFLAGS
 	YAML_LIBS=$pkg_cv_YAML_LIBS
         { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: yes" >&5
 printf "%s\n" "yes" >&6; }
-
+	:
 fi
+
 
 pkg_failed=no
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for nix-store nix-main nix-cmd nix-expr" >&5
@@ -21621,37 +21680,17 @@ fi
 	# Put the nasty error message in config.log where it belongs
 	echo "$NIX_PKG_ERRORS" >&5
 
-	as_fn_error $? "Package requirements (nix-store nix-main nix-cmd nix-expr) were not met:
-
-$NIX_PKG_ERRORS
-
-Consider adjusting the PKG_CONFIG_PATH environment variable if you
-installed software in a non-standard prefix.
-
-Alternatively, you may set the environment variables NIX_CFLAGS
-and NIX_LIBS to avoid the need to call pkg-config.
-See the pkg-config man page for more details." "$LINENO" 5
+	as_fn_error $? "Cannot find 'nix-store.pc'" "$LINENO" 5
 elif test $pkg_failed = untried; then
         { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
 printf "%s\n" "no" >&6; }
-	{ { printf "%s\n" "$as_me:${as_lineno-$LINENO}: error: in \`$ac_pwd':" >&5
-printf "%s\n" "$as_me: error: in \`$ac_pwd':" >&2;}
-as_fn_error $? "The pkg-config script could not be found or is too old.  Make sure it
-is in your PATH or set the PKG_CONFIG environment variable to the full
-path to pkg-config.
-
-Alternatively, you may set the environment variables NIX_CFLAGS
-and NIX_LIBS to avoid the need to call pkg-config.
-See the pkg-config man page for more details.
-
-To get pkg-config, see <http://pkg-config.freedesktop.org/>.
-See \`config.log' for more details" "$LINENO" 5; }
+	as_fn_error $? "Cannot find 'nix-store.pc'" "$LINENO" 5
 else
 	NIX_CFLAGS=$pkg_cv_NIX_CFLAGS
 	NIX_LIBS=$pkg_cv_NIX_LIBS
         { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: yes" >&5
 printf "%s\n" "yes" >&6; }
-
+	:
 fi
 
 
@@ -21659,7 +21698,34 @@ fi
 
 # Add some necessary macro definitions for `nix' which normally appear
 # in `<nix>/include/nix/config.h'.
-NIX_CFLAGS="$NIX_CFLAGS -DSYSTEM='\"$ARCH-$OS\"'";
+
+if test -n "$NIX_INCDIR"; then
+    pkg_cv_NIX_INCDIR="$NIX_INCDIR"
+ elif test -n "$PKG_CONFIG"; then
+    if test -n "$PKG_CONFIG" && \
+    { { printf "%s\n" "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"nix-main\""; } >&5
+  ($PKG_CONFIG --exists --print-errors "nix-main") 2>&5
+  ac_status=$?
+  printf "%s\n" "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
+  test $ac_status = 0; }; then
+  pkg_cv_NIX_INCDIR=`$PKG_CONFIG --variable="includedir" "nix-main" 2>/dev/null`
+		      test "x$?" != "x0" && pkg_failed=yes
+else
+  pkg_failed=yes
+fi
+ else
+    pkg_failed=untried
+fi
+NIX_INCDIR=$pkg_cv_NIX_INCDIR
+
+if test "x$NIX_INCDIR" = x""
+then :
+  as_fn_error $? "Cannot find nix-main include directory for 'nix/config.h'" "$LINENO" 5
+else $as_nop
+  :
+fi
+NIX_CFLAGS="$NIX_CFLAGS -DSYSTEM='\"$ARCH-$OS\"'"
+NIX_CFLAGS="$NIX_CFLAGS -include '$NIX_INCDIR/nix/config.h'";
 
 
 # ---------------------------------------------------------------------------- #
