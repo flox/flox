@@ -34,7 +34,7 @@
 # Initialize Autoconf
 # -------------------
 
-AC_PREREQ( [2.71] )
+AC_PREREQ([2.71])
 
 # TODO: read version from `.cz.toml'
 AC_INIT([flox], [0.3.7])
