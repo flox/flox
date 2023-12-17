@@ -112,14 +112,15 @@ pushd "$_as_dir" >/dev/null||exit;
 # ---------------------------------------------------------------------------- #
 
 $ACLOCAL;
-$AUTORECONF -iv;
+$AUTORECONF -ivf;
 
-# XXX: We patch `build-aux/m4/libtool.m4' instead of patching `configure' here,
-#      but if you upgrade `libtool' you'll need to re-patch it with the
-#      effect of:
-$SED -i -e 's/\$RM \(\\"\$cfgfile\\";\)/$RM -f \1/'  \
-        -e 's/\$RM \("\$cfgfile"\)/$RM -f \1/'      \
-        ./configure;
+abs_top_srcdir="$PWD";
+
+# TODO: Move to `autoreconf' wrapper.
+#shellcheck disable=SC2016
+$SED -i -e 's/\$RM \(\\"\$cfgfile\\";\)/$RM -f \1/'                            \
+        -e 's/\$RM \("\$cfgfile"\)/$RM -f \1/'                                 \
+        "$abs_top_srcdir/build-aux/m4/libtool.m4" "$abs_top_srcdir/configure";
 
 
 # ---------------------------------------------------------------------------- #

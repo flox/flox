@@ -556,14 +556,17 @@ copy-srcs:
 # ---------------------------------------------------------------------------- #
 
 build: copy-srcs
-	$(CARGO) build
+	$(MAKE) $(AM_MAKEFLAGS) -C $(abs_top_builddir)/pkgdb bin/pkgdb$(EXEEXT)
+	$(CARGO) build;
 
-$(FLOX_CLI_ROOT)/target/debug/flox-cli: build
+$(FLOX_CLI_ROOT)/target/debug/flox: build
 
 build-release: copy-srcs
-	$(CARGO) build --release
+	$(MAKE) $(AM_MAKEFLAGS) -C $(abs_top_builddir)/pkgdb install;
+	PKGDB_BIN="$(DESTDIR)$(bindir)/pkgdb$(EXEEXT)"  \
+	$(CARGO) build --release;
 
-$(FLOX_CLI_ROOT)/target/release/flox-cli: build-release
+$(FLOX_CLI_ROOT)/target/release/flox: build-release
 
 # ---------------------------------------------------------------------------- #
 
@@ -580,8 +583,7 @@ clean-local:
 
 install-exec-local: build-release
 	$(MKDIR_P) $(DESTDIR)$(bindir);
-	$(INSTALL_PROGRAM) $(FLOX_CLI_ROOT)/target/release/flox-cli  \
-	                   $(DESTDIR)$(bindir);
+	$(INSTALL_PROGRAM) target/release/flox $(DESTDIR)$(bindir);
 
 # ---------------------------------------------------------------------------- #
 #
