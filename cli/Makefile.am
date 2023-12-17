@@ -16,8 +16,8 @@ TARDIR = $(distdir)
 
 copy-srcs:
 	$(MKDIR_P) $(abs_builddir);
-	$(RSYNC) -r --exclude dist/ --exclude target/            \
-                --exclude Makefile.am --exclude Makefile.in  \
+	$(RSYNC) -r --exclude dist/ --exclude target/ --exclude Makefile  \
+                --exclude Makefile.am --exclude Makefile.in           \
 	            $(FLOX_CLI_ROOT)/ $(abs_builddir);
 
 

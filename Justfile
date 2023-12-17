@@ -35,7 +35,7 @@ bootstrap:
 # ---------------------------------------------------------------------------- #
 
 # Prepare the build area and lock configuration options.
-configure *args=''':
+configure *args='':
     @mkdir -p build;
     @pushd build;
     @../configure --prefix="$PWD/out" "$@"
