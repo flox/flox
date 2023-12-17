@@ -39,6 +39,17 @@ FLOX_INIT_DIRS
 AC_PROG_CXX
 AC_PATH_PROG([CXX], [$CXX], [$MISSING c++])
 
+# We use a modified `autoreconf' script that patches `configure' after
+# creating it, and `build-aux/m4/libtool.m4' after `libtoolize' is run.
+# We need to know the path to the original `autoreconf' script so that we can
+# run it from inside that script.
+AC_ARG_VAR([REAL_AURORECONF], [Path to the original `autoreconf' script])
+AC_PATH_PROG([REAL_AUTORECONF], [autoreconf], [$MISSING autoreconf])
+AC_ARG_VAR([AURORECONF],
+  [Path to the script to use as `autoreconf' inside of Makefiles])
+AC_PATH_PROG([AUTORECONF], [autoreconf], [$MISSING build-aux/autoreconf],
+  [$abs_srcdir/build-aux/:$PATH])
+
 AC_PROG_CC
 AC_PATH_PROG([CC], [$CC], [$MISSING cc])
 
@@ -197,6 +208,9 @@ AM_CONDITIONAL([IS_CLANG], [test "$CXX_TOOLCHAIN" = 'clang'])
 
 # Checks for libraries.
 
+# Nix does not carry a `nix-fetchers.pc' file, so we need to manually check
+# that it exists.
+# NOTE: `translit' is used to join the strings together and avoid 80 char limit.
 AC_CHECK_LIB([nixfetchers],
   translit( [_ZN3nix8fetchers11attrsToJSONERKSt3mapINSt7]
             [__cxx1112basic_stringIcSt11char_traitsIcESaIcEEESt7variantIJS7]
@@ -208,7 +222,7 @@ AC_CHECK_LIB([nixfetchers],
 
 # Checks for header files.
 
-AC_FUNC_ALLOCA
+AC_HEADER_MAJOR
 AC_CHECK_HEADERS([
   fcntl.h
   netdb.h
@@ -235,9 +249,9 @@ AC_TYPE_UINT64_T
 
 # Checks for library functions.
 
+AC_FUNC_ALLOCA
 AC_FUNC_ERROR_AT_LINE
 AC_FUNC_LSTAT_FOLLOWS_SLASHED_SYMLINK
-AC_HEADER_MAJOR
 AC_CHECK_FUNCS([memset strtoul mkdir utime])
 
 

@@ -112,15 +112,9 @@ pushd "$_as_dir" >/dev/null||exit;
 # ---------------------------------------------------------------------------- #
 
 $ACLOCAL;
-$AUTORECONF -ivf;
 
-abs_top_srcdir="$PWD";
-
-# TODO: Move to `autoreconf' wrapper.
-#shellcheck disable=SC2016
-$SED -i -e 's/\$RM \(\\"\$cfgfile\\";\)/$RM -f \1/'                            \
-        -e 's/\$RM \("\$cfgfile"\)/$RM -f \1/'                                 \
-        "$abs_top_srcdir/build-aux/m4/libtool.m4" "$abs_top_srcdir/configure";
+# Invoke `autoreconf' wrapper.
+./build-aux/autoreconf -ivf;
 
 
 # ---------------------------------------------------------------------------- #

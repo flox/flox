@@ -753,6 +753,10 @@ PKG_CONFIG_LIBDIR
 PKG_CONFIG_PATH
 PKG_CONFIG
 CPP
+AUTORECONF
+AURORECONF
+REAL_AUTORECONF
+REAL_AURORECONF
 CXXCPP
 am__fastdepCXX_FALSE
 am__fastdepCXX_TRUE
@@ -920,6 +924,8 @@ CXX
 CXXFLAGS
 CCC
 CXXCPP
+REAL_AURORECONF
+AURORECONF
 CPP
 PKG_CONFIG
 PKG_CONFIG_PATH
@@ -1649,6 +1655,9 @@ Some influential environment variables:
   CXX         C++ compiler command
   CXXFLAGS    C++ compiler flags
   CXXCPP      C++ preprocessor
+  REAL_AURORECONF
+              Path to the original `autoreconf' script
+  AURORECONF  Path to the script to use as `autoreconf' inside of Makefiles
   CPP         C preprocessor
   PKG_CONFIG  path to pkg-config utility
   PKG_CONFIG_PATH
@@ -2196,49 +2205,6 @@ printf "%s\n" "$ac_res" >&6; }
 
 } # ac_fn_c_check_type
 
-# ac_fn_c_try_run LINENO
-# ----------------------
-# Try to run conftest.$ac_ext, and return whether this succeeded. Assumes that
-# executables *can* be run.
-ac_fn_c_try_run ()
-{
-  as_lineno=${as_lineno-"$1"} as_lineno_stack=as_lineno_stack=$as_lineno_stack
-  if { { ac_try="$ac_link"
-case "(($ac_try" in
-  *\"* | *\`* | *\\*) ac_try_echo=\$ac_try;;
-  *) ac_try_echo=$ac_try;;
-esac
-eval ac_try_echo="\"\$as_me:${as_lineno-$LINENO}: $ac_try_echo\""
-printf "%s\n" "$ac_try_echo"; } >&5
-  (eval "$ac_link") 2>&5
-  ac_status=$?
-  printf "%s\n" "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
-  test $ac_status = 0; } && { ac_try='./conftest$ac_exeext'
-  { { case "(($ac_try" in
-  *\"* | *\`* | *\\*) ac_try_echo=\$ac_try;;
-  *) ac_try_echo=$ac_try;;
-esac
-eval ac_try_echo="\"\$as_me:${as_lineno-$LINENO}: $ac_try_echo\""
-printf "%s\n" "$ac_try_echo"; } >&5
-  (eval "$ac_try") 2>&5
-  ac_status=$?
-  printf "%s\n" "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
-  test $ac_status = 0; }; }
-then :
-  ac_retval=0
-else $as_nop
-  printf "%s\n" "$as_me: program exited with status $ac_status" >&5
-       printf "%s\n" "$as_me: failed program was:" >&5
-sed 's/^/| /' conftest.$ac_ext >&5
-
-       ac_retval=$ac_status
-fi
-  rm -rf conftest.dSYM conftest_ipa8_conftest.oo
-  eval $as_lineno_stack; ${as_lineno_stack:+:} unset as_lineno
-  as_fn_set_status $ac_retval
-
-} # ac_fn_c_try_run
-
 # ac_fn_c_find_uintX_t LINENO BITS VAR
 # ------------------------------------
 # Finds an unsigned integer type with width BITS, setting cache variable VAR
@@ -2375,6 +2341,49 @@ printf "%s\n" "$ac_res" >&6; }
   eval $as_lineno_stack; ${as_lineno_stack:+:} unset as_lineno
 
 } # ac_fn_c_find_intX_t
+
+# ac_fn_c_try_run LINENO
+# ----------------------
+# Try to run conftest.$ac_ext, and return whether this succeeded. Assumes that
+# executables *can* be run.
+ac_fn_c_try_run ()
+{
+  as_lineno=${as_lineno-"$1"} as_lineno_stack=as_lineno_stack=$as_lineno_stack
+  if { { ac_try="$ac_link"
+case "(($ac_try" in
+  *\"* | *\`* | *\\*) ac_try_echo=\$ac_try;;
+  *) ac_try_echo=$ac_try;;
+esac
+eval ac_try_echo="\"\$as_me:${as_lineno-$LINENO}: $ac_try_echo\""
+printf "%s\n" "$ac_try_echo"; } >&5
+  (eval "$ac_link") 2>&5
+  ac_status=$?
+  printf "%s\n" "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
+  test $ac_status = 0; } && { ac_try='./conftest$ac_exeext'
+  { { case "(($ac_try" in
+  *\"* | *\`* | *\\*) ac_try_echo=\$ac_try;;
+  *) ac_try_echo=$ac_try;;
+esac
+eval ac_try_echo="\"\$as_me:${as_lineno-$LINENO}: $ac_try_echo\""
+printf "%s\n" "$ac_try_echo"; } >&5
+  (eval "$ac_try") 2>&5
+  ac_status=$?
+  printf "%s\n" "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
+  test $ac_status = 0; }; }
+then :
+  ac_retval=0
+else $as_nop
+  printf "%s\n" "$as_me: program exited with status $ac_status" >&5
+       printf "%s\n" "$as_me: failed program was:" >&5
+sed 's/^/| /' conftest.$ac_ext >&5
+
+       ac_retval=$ac_status
+fi
+  rm -rf conftest.dSYM conftest_ipa8_conftest.oo
+  eval $as_lineno_stack; ${as_lineno_stack:+:} unset as_lineno
+  as_fn_set_status $ac_retval
+
+} # ac_fn_c_try_run
 ac_configure_args_raw=
 for ac_arg
 do
@@ -17326,6 +17335,106 @@ fi
 
 
 
+# We use a modified `autoreconf' script that patches `configure' after
+# creating it, and `build-aux/m4/libtool.m4' after `libtoolize' is run.
+# We need to know the path to the original `autoreconf' script so that we can
+# run it from inside that script.
+
+# Extract the first word of "autoreconf", so it can be a program name with args.
+set dummy autoreconf; ac_word=$2
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
+printf %s "checking for $ac_word... " >&6; }
+if test ${ac_cv_path_REAL_AUTORECONF+y}
+then :
+  printf %s "(cached) " >&6
+else $as_nop
+  case $REAL_AUTORECONF in
+  [\\/]* | ?:[\\/]*)
+  ac_cv_path_REAL_AUTORECONF="$REAL_AUTORECONF" # Let the user override the test with a path.
+  ;;
+  *)
+  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
+for as_dir in $PATH
+do
+  IFS=$as_save_IFS
+  case $as_dir in #(((
+    '') as_dir=./ ;;
+    */) ;;
+    *) as_dir=$as_dir/ ;;
+  esac
+    for ac_exec_ext in '' $ac_executable_extensions; do
+  if as_fn_executable_p "$as_dir$ac_word$ac_exec_ext"; then
+    ac_cv_path_REAL_AUTORECONF="$as_dir$ac_word$ac_exec_ext"
+    printf "%s\n" "$as_me:${as_lineno-$LINENO}: found $as_dir$ac_word$ac_exec_ext" >&5
+    break 2
+  fi
+done
+  done
+IFS=$as_save_IFS
+
+  test -z "$ac_cv_path_REAL_AUTORECONF" && ac_cv_path_REAL_AUTORECONF="$MISSING autoreconf"
+  ;;
+esac
+fi
+REAL_AUTORECONF=$ac_cv_path_REAL_AUTORECONF
+if test -n "$REAL_AUTORECONF"; then
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $REAL_AUTORECONF" >&5
+printf "%s\n" "$REAL_AUTORECONF" >&6; }
+else
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
+printf "%s\n" "no" >&6; }
+fi
+
+
+
+# Extract the first word of "autoreconf", so it can be a program name with args.
+set dummy autoreconf; ac_word=$2
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
+printf %s "checking for $ac_word... " >&6; }
+if test ${ac_cv_path_AUTORECONF+y}
+then :
+  printf %s "(cached) " >&6
+else $as_nop
+  case $AUTORECONF in
+  [\\/]* | ?:[\\/]*)
+  ac_cv_path_AUTORECONF="$AUTORECONF" # Let the user override the test with a path.
+  ;;
+  *)
+  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
+as_dummy="$abs_srcdir/build-aux/:$PATH"
+for as_dir in $as_dummy
+do
+  IFS=$as_save_IFS
+  case $as_dir in #(((
+    '') as_dir=./ ;;
+    */) ;;
+    *) as_dir=$as_dir/ ;;
+  esac
+    for ac_exec_ext in '' $ac_executable_extensions; do
+  if as_fn_executable_p "$as_dir$ac_word$ac_exec_ext"; then
+    ac_cv_path_AUTORECONF="$as_dir$ac_word$ac_exec_ext"
+    printf "%s\n" "$as_me:${as_lineno-$LINENO}: found $as_dir$ac_word$ac_exec_ext" >&5
+    break 2
+  fi
+done
+  done
+IFS=$as_save_IFS
+
+  test -z "$ac_cv_path_AUTORECONF" && ac_cv_path_AUTORECONF="$MISSING build-aux/autoreconf"
+  ;;
+esac
+fi
+AUTORECONF=$ac_cv_path_AUTORECONF
+if test -n "$AUTORECONF"; then
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $AUTORECONF" >&5
+printf "%s\n" "$AUTORECONF" >&6; }
+else
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
+printf "%s\n" "no" >&6; }
+fi
+
+
+
 ac_ext=c
 ac_cpp='$CPP $CPPFLAGS'
 ac_compile='$CC -c $CFLAGS $CPPFLAGS conftest.$ac_ext >&5'
@@ -20847,6 +20956,9 @@ fi
 
 # Checks for libraries.
 
+# Nix does not carry a `nix-fetchers.pc' file, so we need to manually check
+# that it exists.
+# NOTE: `translit' is used to join the strings together and avoid 80 char limit.
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for _ZN3nix8fetchers11attrsToJSONERKSt3mapINSt7
 __cxx1112basic_stringIcSt11char_traitsIcESaIcEEESt7variantIJS7
 _mNS_8ExplicitIbEEEESt4lessIS7_ESaISt4pairIKS7_SB_EEE
@@ -20908,162 +21020,23 @@ fi
 
 # Checks for header files.
 
-ac_fn_c_check_type "$LINENO" "size_t" "ac_cv_type_size_t" "$ac_includes_default"
-if test "x$ac_cv_type_size_t" = xyes
+
+ac_fn_c_check_header_compile "$LINENO" "sys/mkdev.h" "ac_cv_header_sys_mkdev_h" "$ac_includes_default"
+if test "x$ac_cv_header_sys_mkdev_h" = xyes
 then :
 
-else $as_nop
-
-printf "%s\n" "#define size_t unsigned int" >>confdefs.h
+printf "%s\n" "#define MAJOR_IN_MKDEV 1" >>confdefs.h
 
 fi
 
-# The Ultrix 4.2 mips builtin alloca declared by alloca.h only works
-# for constant arguments.  Useless!
-{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for working alloca.h" >&5
-printf %s "checking for working alloca.h... " >&6; }
-if test ${ac_cv_working_alloca_h+y}
+if test $ac_cv_header_sys_mkdev_h = no; then
+  ac_fn_c_check_header_compile "$LINENO" "sys/sysmacros.h" "ac_cv_header_sys_sysmacros_h" "$ac_includes_default"
+if test "x$ac_cv_header_sys_sysmacros_h" = xyes
 then :
-  printf %s "(cached) " >&6
-else $as_nop
-  cat confdefs.h - <<_ACEOF >conftest.$ac_ext
-/* end confdefs.h.  */
-#include <alloca.h>
-int
-main (void)
-{
-char *p = (char *) alloca (2 * sizeof (int));
-			  if (p) return 0;
-  ;
-  return 0;
-}
-_ACEOF
-if ac_fn_c_try_link "$LINENO"
-then :
-  ac_cv_working_alloca_h=yes
-else $as_nop
-  ac_cv_working_alloca_h=no
-fi
-rm -f core conftest.err conftest.$ac_objext conftest.beam \
-    conftest$ac_exeext conftest.$ac_ext
-fi
-{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $ac_cv_working_alloca_h" >&5
-printf "%s\n" "$ac_cv_working_alloca_h" >&6; }
-if test $ac_cv_working_alloca_h = yes; then
 
-printf "%s\n" "#define HAVE_ALLOCA_H 1" >>confdefs.h
+printf "%s\n" "#define MAJOR_IN_SYSMACROS 1" >>confdefs.h
 
 fi
-
-{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for alloca" >&5
-printf %s "checking for alloca... " >&6; }
-if test ${ac_cv_func_alloca_works+y}
-then :
-  printf %s "(cached) " >&6
-else $as_nop
-  if test $ac_cv_working_alloca_h = yes; then
-  ac_cv_func_alloca_works=yes
-else
-  cat confdefs.h - <<_ACEOF >conftest.$ac_ext
-/* end confdefs.h.  */
-#include <stdlib.h>
-#include <stddef.h>
-#ifndef alloca
-# ifdef __GNUC__
-#  define alloca __builtin_alloca
-# elif defined _MSC_VER
-#  include <malloc.h>
-#  define alloca _alloca
-# else
-#  ifdef  __cplusplus
-extern "C"
-#  endif
-void *alloca (size_t);
-# endif
-#endif
-
-int
-main (void)
-{
-char *p = (char *) alloca (1);
-				    if (p) return 0;
-  ;
-  return 0;
-}
-_ACEOF
-if ac_fn_c_try_link "$LINENO"
-then :
-  ac_cv_func_alloca_works=yes
-else $as_nop
-  ac_cv_func_alloca_works=no
-fi
-rm -f core conftest.err conftest.$ac_objext conftest.beam \
-    conftest$ac_exeext conftest.$ac_ext
-fi
-{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $ac_cv_func_alloca_works" >&5
-printf "%s\n" "$ac_cv_func_alloca_works" >&6; }
-fi
-
-if test $ac_cv_func_alloca_works = yes; then
-
-printf "%s\n" "#define HAVE_ALLOCA 1" >>confdefs.h
-
-else
-  # The SVR3 libPW and SVR4 libucb both contain incompatible functions
-# that cause trouble.  Some versions do not even contain alloca or
-# contain a buggy version.  If you still want to use their alloca,
-# use ar to extract alloca.o from them instead of compiling alloca.c.
-
-ALLOCA=\${LIBOBJDIR}alloca.$ac_objext
-
-printf "%s\n" "#define C_ALLOCA 1" >>confdefs.h
-
-
-{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking stack direction for C alloca" >&5
-printf %s "checking stack direction for C alloca... " >&6; }
-if test ${ac_cv_c_stack_direction+y}
-then :
-  printf %s "(cached) " >&6
-else $as_nop
-  if test "$cross_compiling" = yes
-then :
-  ac_cv_c_stack_direction=0
-else $as_nop
-  cat confdefs.h - <<_ACEOF >conftest.$ac_ext
-/* end confdefs.h.  */
-$ac_includes_default
-int
-find_stack_direction (int *addr, int depth)
-{
-  int dir, dummy = 0;
-  if (! addr)
-    addr = &dummy;
-  *addr = addr < &dummy ? 1 : addr == &dummy ? 0 : -1;
-  dir = depth ? find_stack_direction (addr, depth - 1) : 0;
-  return dir + dummy;
-}
-
-int
-main (int argc, char **argv)
-{
-  return find_stack_direction (0, argc + !argv + 20) < 0;
-}
-_ACEOF
-if ac_fn_c_try_run "$LINENO"
-then :
-  ac_cv_c_stack_direction=1
-else $as_nop
-  ac_cv_c_stack_direction=-1
-fi
-rm -f core *.core core.conftest.* gmon.out bb.out conftest$ac_exeext \
-  conftest.$ac_objext conftest.beam conftest.$ac_ext
-fi
-
-fi
-{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $ac_cv_c_stack_direction" >&5
-printf "%s\n" "$ac_cv_c_stack_direction" >&6; }
-printf "%s\n" "#define STACK_DIRECTION $ac_cv_c_stack_direction" >>confdefs.h
-
 
 fi
 
@@ -21339,6 +21312,155 @@ printf "%s\n" "#define uint64_t $ac_cv_c_uint64_t" >>confdefs.h
 
 # Checks for library functions.
 
+# The Ultrix 4.2 mips builtin alloca declared by alloca.h only works
+# for constant arguments.  Useless!
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for working alloca.h" >&5
+printf %s "checking for working alloca.h... " >&6; }
+if test ${ac_cv_working_alloca_h+y}
+then :
+  printf %s "(cached) " >&6
+else $as_nop
+  cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+#include <alloca.h>
+int
+main (void)
+{
+char *p = (char *) alloca (2 * sizeof (int));
+			  if (p) return 0;
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_link "$LINENO"
+then :
+  ac_cv_working_alloca_h=yes
+else $as_nop
+  ac_cv_working_alloca_h=no
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.beam \
+    conftest$ac_exeext conftest.$ac_ext
+fi
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $ac_cv_working_alloca_h" >&5
+printf "%s\n" "$ac_cv_working_alloca_h" >&6; }
+if test $ac_cv_working_alloca_h = yes; then
+
+printf "%s\n" "#define HAVE_ALLOCA_H 1" >>confdefs.h
+
+fi
+
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for alloca" >&5
+printf %s "checking for alloca... " >&6; }
+if test ${ac_cv_func_alloca_works+y}
+then :
+  printf %s "(cached) " >&6
+else $as_nop
+  if test $ac_cv_working_alloca_h = yes; then
+  ac_cv_func_alloca_works=yes
+else
+  cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+#include <stdlib.h>
+#include <stddef.h>
+#ifndef alloca
+# ifdef __GNUC__
+#  define alloca __builtin_alloca
+# elif defined _MSC_VER
+#  include <malloc.h>
+#  define alloca _alloca
+# else
+#  ifdef  __cplusplus
+extern "C"
+#  endif
+void *alloca (size_t);
+# endif
+#endif
+
+int
+main (void)
+{
+char *p = (char *) alloca (1);
+				    if (p) return 0;
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_link "$LINENO"
+then :
+  ac_cv_func_alloca_works=yes
+else $as_nop
+  ac_cv_func_alloca_works=no
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.beam \
+    conftest$ac_exeext conftest.$ac_ext
+fi
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $ac_cv_func_alloca_works" >&5
+printf "%s\n" "$ac_cv_func_alloca_works" >&6; }
+fi
+
+if test $ac_cv_func_alloca_works = yes; then
+
+printf "%s\n" "#define HAVE_ALLOCA 1" >>confdefs.h
+
+else
+  # The SVR3 libPW and SVR4 libucb both contain incompatible functions
+# that cause trouble.  Some versions do not even contain alloca or
+# contain a buggy version.  If you still want to use their alloca,
+# use ar to extract alloca.o from them instead of compiling alloca.c.
+
+ALLOCA=\${LIBOBJDIR}alloca.$ac_objext
+
+printf "%s\n" "#define C_ALLOCA 1" >>confdefs.h
+
+
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking stack direction for C alloca" >&5
+printf %s "checking stack direction for C alloca... " >&6; }
+if test ${ac_cv_c_stack_direction+y}
+then :
+  printf %s "(cached) " >&6
+else $as_nop
+  if test "$cross_compiling" = yes
+then :
+  ac_cv_c_stack_direction=0
+else $as_nop
+  cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+$ac_includes_default
+int
+find_stack_direction (int *addr, int depth)
+{
+  int dir, dummy = 0;
+  if (! addr)
+    addr = &dummy;
+  *addr = addr < &dummy ? 1 : addr == &dummy ? 0 : -1;
+  dir = depth ? find_stack_direction (addr, depth - 1) : 0;
+  return dir + dummy;
+}
+
+int
+main (int argc, char **argv)
+{
+  return find_stack_direction (0, argc + !argv + 20) < 0;
+}
+_ACEOF
+if ac_fn_c_try_run "$LINENO"
+then :
+  ac_cv_c_stack_direction=1
+else $as_nop
+  ac_cv_c_stack_direction=-1
+fi
+rm -f core *.core core.conftest.* gmon.out bb.out conftest$ac_exeext \
+  conftest.$ac_objext conftest.beam conftest.$ac_ext
+fi
+
+fi
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $ac_cv_c_stack_direction" >&5
+printf "%s\n" "$ac_cv_c_stack_direction" >&6; }
+printf "%s\n" "#define STACK_DIRECTION $ac_cv_c_stack_direction" >>confdefs.h
+
+
+fi
+
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for error_at_line" >&5
 printf %s "checking for error_at_line... " >&6; }
 if test ${ac_cv_lib_error_at_line+y}
@@ -21441,26 +21563,6 @@ if test "x$ac_cv_func_lstat_dereferences_slashed_symlink" = xno; then
   *) LIBOBJS="$LIBOBJS lstat.$ac_objext"
  ;;
 esac
-
-fi
-
-
-ac_fn_c_check_header_compile "$LINENO" "sys/mkdev.h" "ac_cv_header_sys_mkdev_h" "$ac_includes_default"
-if test "x$ac_cv_header_sys_mkdev_h" = xyes
-then :
-
-printf "%s\n" "#define MAJOR_IN_MKDEV 1" >>confdefs.h
-
-fi
-
-if test $ac_cv_header_sys_mkdev_h = no; then
-  ac_fn_c_check_header_compile "$LINENO" "sys/sysmacros.h" "ac_cv_header_sys_sysmacros_h" "$ac_includes_default"
-if test "x$ac_cv_header_sys_sysmacros_h" = xyes
-then :
-
-printf "%s\n" "#define MAJOR_IN_SYSMACROS 1" >>confdefs.h
-
-fi
 
 fi
 
