@@ -5,19 +5,48 @@
 #
 # @brief Process this file with autoconf to produce a configure script.
 #
+# Macros rule.
+#
+# See the `autoconf' manual for nice documentation about various functions.
+# You can read macro definitions in `./aclocal', `./build-aux/m4/', and
+# `$( nix eval --raw nixpkgs#autoconf )/share/autoconf/"{autoconf/m4sugar}/*.m4'
+#
+# `configure' might look _scary_ at first; but always remember that it's just
+# a glorified `sed' processor replaces `@FOO@' in `FILE.in' with the environment
+# variable `FOO' ( derived while running `configure' or set by the caller ).
+#
+# `autoconf' is actually scary, but there's plenty of good docs, and it
+# contains decades worth of platform specific handlers, portability checks,
+# and robust recipes for common tasks that make it _well worth using_.
+#
+# ALL build systems are _bad_, especially at platform dependent tasks - they
+# either throw their hands in the air and statically link everything, or they
+# fail to translate various flags to the compiler/linker correctly and fail to
+# account for the variety of platforms and toolchains' unique headers
+# and configurations.
+# `autotools' isn't great, but it's the best tool we have for portability,
+# and its widespread use in open source projects provides a large body of
+# existing knowledge, Stack Overflow threads, and examples to draw from.
+#
 #
 # ---------------------------------------------------------------------------- #
 
 AC_PREREQ( [2.71] )
 
-# TODO: use different email address
 # TODO: read version from `.cz.toml'
 AC_INIT([flox], [0.3.7])
 
 AC_CONFIG_MACRO_DIRS([build-aux/m4])
 AC_CONFIG_AUX_DIR([build-aux])
 
-AM_INIT_AUTOMAKE([-Wall -Wno-portability -Werror foreign subdir-objects])
+# - Enalbe all warnings, but allow GNU Make extensions.
+# - Treat all warnings as errors.
+# - Use `subdir-objects' so that build artifacts are placed in sub-directories.
+# - Enable `foreign' mode so that warnings about strict adherence to
+#   GNU Standards is suppressed ( ex: must set contact email, must
+#   have up-to-date GPL LICENSE, must define certain targets, must support
+#   `DESTDIR', etc ).
+AM_INIT_AUTOMAKE([-Wall -Wno-portability -Werror subdir-objects foreign])
 
 AC_CONFIG_SRCDIR([pkgdb/src/main.cc])
 
@@ -27,6 +56,11 @@ LT_PREREQ([2.4.7])
 #       The warnings are benign!
 LT_INIT
 
+# Defines `PREFIX', and similar ALL_CAPS standard directory variables.
+# These are aliases of lower-case forms.
+# Also defined `INSTALL_TESTS_DIR' and `PKGCONFIGDIR'.
+# Sets `abs_srcdir' early so it can be used to define `REPO_ROOT' and other
+# variables relative to the project root.
 FLOX_INIT_DIRS
 
 
@@ -462,14 +496,14 @@ CPPFLAGS="$_flox_v_pushed_CPPFLAGS";
 AS_CASE(["$host_os"],
   [linux*],dnl
     [RELATIVE_RPATH_FLAG="-Wl,--enable-new-dtags";
-    RELATIVE_RPATH_FLAG="$RELATIVE_RPATH_FLAG []dnl
+     RELATIVE_RPATH_FLAG="$RELATIVE_RPATH_FLAG []dnl
 '-Wl,-rpath=\$\$ORIGIN/../lib'";
     set_rpath_option='-Wl,--enable-new-dtags,-rpath,';
     set_soname_option='-Wl,-soname,';],
   [darwin*],dnl
     [RELATIVE_RPATH_FLAG="-rpath @executable_path/../lib";
-    set_rpath_option='-rpath ';
-    set_soname_option='-install_name @rpath/';],
+     set_rpath_option='-rpath ';
+     set_soname_option='-install_name @rpath/';],
   [AC_MSG_ERROR([Unsupported host OS: $host_os])])
 
 AC_SUBST([RELATIVE_RPATH_FLAG])
@@ -487,11 +521,11 @@ AC_SUBST([set_soname_option])
 
 AS_CASE(["$CXX_TOOLCHAIN"],
   [gcc],
-  [NO_UNDEFINED_SYMBOLS_FLAG='-Wl,--no-undefined';
-  SHARED_LIBRARY_CFLAGS='-fPIC -shared';],
+    [NO_UNDEFINED_SYMBOLS_FLAG='-Wl,--no-undefined';
+     SHARED_LIBRARY_CFLAGS='-fPIC -shared';],
   [clang],
-  [NO_UNDEFINED_SYMBOLS_FLAG='-Wl,-undefined,error';
-  SHARED_LIBRARY_CFLAGS='-fPIC';],
+    [NO_UNDEFINED_SYMBOLS_FLAG='-Wl,-undefined,error';
+     SHARED_LIBRARY_CFLAGS='-fPIC';],
   [AC_MSG_ERROR([Unsupported C++ compiler: $CXX])])
 
 AC_SUBST([NO_UNDEFINED_SYMBOLS_FLAG])
@@ -531,15 +565,16 @@ AC_ARG_WITH([set-prompt-bash-sh],
 AS_IF([test -z "${SET_PROMPT_BASH_SH:-}"], [
   AS_CASE(["$WITH_SET_PROMPT_BASH_SH"],
     [/nix/store/*], [SET_PROMPT_BASH_SH="$WITH_SET_PROMPT_BASH_SH"],
-    [local],        [SET_PROMPT_BASH_SH="$(
-      $NIX --extra-experimental-features='nix-command flakes'  \
-           store add-path -n set-prompt-bash.sh                \
-           "$PKGDB_ROOT/src/buildenv/set-prompt-bash.sh";
-      )"],
+    [local],
+      [SET_PROMPT_BASH_SH="$(
+       $NIX --extra-experimental-features='nix-command flakes'  \
+            store add-path -n set-prompt-bash.sh                \
+            "$PKGDB_ROOT/src/buildenv/set-prompt-bash.sh";
+       )"],
     [AS_IF([test -d "$WITH_SET_PROMPT_BASH_SH"], [:],
       [AC_MSG_ERROR(
-        [Invalid '--with-set-prompt-bash-sh': '$WITH_SET_PROMPT_BASH_SH'.
-You must specify either 'local', or a '/nix/store' path])])])])
+        [Invalid '--with-set-prompt-bash-sh': '$WITH_SET_PROMPT_BASH_SH'.]
+        [You must specify either 'local', or a '/nix/store' path])])])])
 AC_SUBST([WITH_SET_PROMPT_BASH_SH])
 AC_DEFINE_UNQUOTED([SET_PROMPT_BASH_SH], ["$SET_PROMPT_BASH_SH"],
   [Path to 'set-prompt.bash.sh' script in '/nix/store/'])
@@ -559,15 +594,16 @@ AC_ARG_WITH([profile-d-script-dir],
 AS_IF([test -z "${PROFILE_D_SCRIPT_DIR:-}"], [
   AS_CASE(["$WITH_PROFILE_D_SCRIPT_DIR"],
     [/nix/store/*], [PROFILE_D_SCRIPT_DIR="$WITH_PROFILE_D_SCRIPT_DIR"],
-    [local],        [PROFILE_D_SCRIPT_DIR="$(
-      $NIX --extra-experimental-features='nix-command flakes'  \
-           store add-file -n set-prompt-bash.sh                \
-           "$PKGDB_ROOT/src/buildenv/assets";
-      )"],
+    [local],
+      [PROFILE_D_SCRIPT_DIR="$(
+        $NIX --extra-experimental-features='nix-command flakes'  \
+             store add-file -n set-prompt-bash.sh                \
+             "$PKGDB_ROOT/src/buildenv/assets";
+        )"],
     [AS_IF([test -d "$WITH_PROFILE_D_SCRIPT_DIR"], [:],
       [AC_MSG_ERROR(
-        [Invalid '--with-profile-d-script-dir': '$WITH_PROFILE_D_SCRIPT_DIR'.
-You must specify either 'local', or a '/nix/store' path])])])])
+        [Invalid '--with-profile-d-script-dir': '$WITH_PROFILE_D_SCRIPT_DIR'. ]
+        [You must specify either 'local', or a '/nix/store' path])])])])
 AC_SUBST([WITH_PROFILE_D_SCRIPT_DIR])
 AC_DEFINE_UNQUOTED([PROFILE_D_SCRIPT_DIR], ["$PROFILE_D_SCRIPT_DIR"],
   [Path to directory containing 'etc/profile.d' directory in '/nix/store/'])
