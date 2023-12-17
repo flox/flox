@@ -31,6 +31,9 @@
 #
 # ---------------------------------------------------------------------------- #
 
+# Initialize Autoconf
+# -------------------
+
 AC_PREREQ( [2.71] )
 
 # TODO: read version from `.cz.toml'
@@ -66,7 +69,9 @@ FLOX_INIT_DIRS
 
 # ---------------------------------------------------------------------------- #
 
-# Checks for programs.
+# Checks for Programs
+# -------------------
+
 # We use builtin `AC_PROG_<NAME>' macros to run checks; but follow up with
 # `AC_PATH_PROG' to get absolute paths to the programs.
 
@@ -208,6 +213,7 @@ AC_PATH_PROG([RSYNC], [rsync], [$MISSING rsync])
 # ---------------------------------------------------------------------------- #
 
 # Platform and Toolchain Checks
+# -----------------------------
 
 AC_CANONICAL_HOST
 
@@ -240,7 +246,8 @@ AM_CONDITIONAL([IS_CLANG], [test "$CXX_TOOLCHAIN" = 'clang'])
 
 # ---------------------------------------------------------------------------- #
 
-# Checks for libraries.
+# Checks for Libraries
+# --------------------
 
 # Nix does not carry a `nix-fetchers.pc' file, so we need to manually check
 # that it exists.
@@ -254,7 +261,8 @@ AC_CHECK_LIB([nixfetchers],
 
 # ---------------------------------------------------------------------------- #
 
-# Checks for header files.
+# Checks for Header Files
+# -----------------------
 
 AC_HEADER_MAJOR
 AC_CHECK_HEADERS([
@@ -269,7 +277,8 @@ AC_CHECK_HEADERS([
 
 # ---------------------------------------------------------------------------- #
 
-# Checks for typedefs, structures, and compiler characteristics.
+# Checks for typedefs, structures, and compiler characteristics
+# -------------------------------------------------------------
 
 AC_CHECK_HEADER_STDBOOL
 AC_C_INLINE
@@ -281,7 +290,8 @@ AC_TYPE_UINT64_T
 
 # ---------------------------------------------------------------------------- #
 
-# Checks for library functions.
+# Checks for Library Functions
+# ----------------------------
 
 AC_FUNC_ALLOCA
 AC_FUNC_ERROR_AT_LINE
@@ -291,7 +301,8 @@ AC_CHECK_FUNCS([memset strtoul mkdir utime])
 
 # ---------------------------------------------------------------------------- #
 
-# Sub-Systems/Modules
+# Sub-Systems/Modules Options
+# ---------------------------
 
 # --with-pkgdb
 AC_ARG_WITH([pkgdb],
@@ -328,7 +339,8 @@ AC_SUBST([WITH_FLOX_CLI])
 
 # ---------------------------------------------------------------------------- #
 
-# Directories
+# Project Directories
+# -------------------
 
 AC_SUBST([REPO_ROOT], ["$abs_srcdir"])
 AC_SUBST([PKGDB_ROOT], ["$REPO_ROOT/pkgdb"])
@@ -351,6 +363,7 @@ AC_SUBST([DEPFILES])
 # ---------------------------------------------------------------------------- #
 
 # External Dependencies
+# ---------------------
 
 PKG_CHECK_MODULES([NLJSON], [nlohmann_json], [:],
   [AC_MSG_ERROR([Cannot find 'nlohmann_json.pc'])])
@@ -373,6 +386,9 @@ NIX_LIBS="-lnixfetchers $NIX_LIBS"
 
 
 # ---------------------------------------------------------------------------- #
+
+# Nix CPP Flags
+# -------------
 
 # Compiler Flags for pre-processing with `nix' headers
 
@@ -478,7 +494,7 @@ CPPFLAGS="$_flox_v_pushed_CPPFLAGS";
 
 # ---------------------------------------------------------------------------- #
 
-# `RPATH', `RUNPATH', and `SONAME' flags
+# `RPATH', `RUNPATH', and `SONAME' Flags
 # --------------------------------------
 # - `RELATIVE_RPATH_FLAG' is used to provide a relative `R[UN]PATH' for
 #   an executable.
@@ -541,6 +557,9 @@ AM_CONDITIONAL([BUILD_SHARED_LIBS], [test "$enable_shared" = 'yes'])
 
 # ---------------------------------------------------------------------------- #
 
+# Sub-System Versions
+# -------------------
+
 # Get `pkgdb' version
 
 AC_SUBST([PKGDB_VERSION], ["$(< $PKGDB_ROOT/.version)"])
@@ -548,6 +567,9 @@ AC_DEFINE_UNQUOTED([PKGDB_VERSION], ["$PKGDB_VERSION"], [Version of pkgdb])
 
 
 # ---------------------------------------------------------------------------- #
+
+# Extra Files/Assets
+# ------------------
 
 # Get paths to static assets
 
@@ -611,6 +633,9 @@ AC_DEFINE_UNQUOTED([PROFILE_D_SCRIPT_DIR], ["$PROFILE_D_SCRIPT_DIR"],
 
 # ---------------------------------------------------------------------------- #
 
+# Node Semver
+# -----------
+
 # Get path to `semver' in `/nix/store'
 
 AC_ARG_VAR([SEMVER_PATH], [Path to 'semver' executable in '/nix/store/'])
@@ -630,7 +655,8 @@ AC_DEFINE_UNQUOTED([SEMVER_PATH], ["$SEMVER_PATH"],
 
 # ---------------------------------------------------------------------------- #
 
-# Cargo flags
+# Cargo Flags
+# -----------
 
 AC_ARG_VAR([CARGOFLAGS], [Additional flags to pass to 'cargo build'])
 AC_SUBST([CARGOFLAGS])
