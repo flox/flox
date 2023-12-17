@@ -662,6 +662,10 @@ ac_header_c_list=
 ac_subst_vars='am__EXEEXT_FALSE
 am__EXEEXT_TRUE
 LTLIBOBJS
+WITH_PROFILE_D_SCRIPT_DIR
+PROFILE_D_SCRIPT_DIR
+WITH_SET_PROMPT_BASH_SH
+SET_PROMPT_BASH_SH
 PKGDB_VERSION
 BUILD_SHARED_LIBS_FALSE
 BUILD_SHARED_LIBS_TRUE
@@ -902,6 +906,8 @@ with_sysroot
 enable_libtool_lock
 with_pkgdb
 with_flox_cli
+with_set_prompt_bash_sh
+with_profile_d_script_dir
 '
       ac_precious_vars='build_alias
 host_alias
@@ -965,7 +971,9 @@ NIX_CFLAGS
 NIX_LIBS
 NIX_CPPFLAGS
 NIX_INCDIR
-SYSTEM'
+SYSTEM
+SET_PROMPT_BASH_SH
+PROFILE_D_SCRIPT_DIR'
 
 
 # Initialize some variables set by options.
@@ -1622,6 +1630,12 @@ Optional Packages:
   --with-flox-cli={local,nix,PREFIX}
                           use flox-cli from local tree, nix build, or path to
                           its install prefix
+  --with-set-prompt-bash-sh={local,PATH}
+                          use set-prompt-bash.sh from local tree, or a
+                          '/nix/store' path
+  --with-profile-d-script-dir={local,PATH}
+                          use 'etc/profile.d' from local tree, or a
+                          '/nix/store' path
 
 Some influential environment variables:
   CC          C compiler command
@@ -1698,6 +1712,11 @@ Some influential environment variables:
               Flags for the C++ preprocessor when compiling wth 'nix' headers
   NIX_INCDIR  value of includedir for nix-main, overriding pkg-config
   SYSTEM      Nix system pair
+  SET_PROMPT_BASH_SH
+              Path to 'set-prompt.bash.sh' script in '/nix/store/'
+  PROFILE_D_SCRIPT_DIR
+              Path to directory containing 'etc/profile.d' directory in
+              '/nix/store/'
 
 Use these variables to override the choices made by `configure' or to help
 it to find libraries and programs with nonstandard names/locations.
@@ -21448,7 +21467,7 @@ case "$WITH_PKGDB" in #(
 then :
   :
 else $as_nop
-  as_fn_error $? "Invalid '--with-pkgdb' setting: '$WITH_PKGDB'.
+  as_fn_error $? "Invalid '--with-pkgdb': '$WITH_PKGDB'.
 You must specify either 'local', 'nix', or a path to a directory" "$LINENO" 5
 fi
  ;;
@@ -21476,7 +21495,7 @@ case "$WITH_FLOX_CLI" in #(
 then :
   :
 else $as_nop
-  as_fn_error $? "Invalid '--with-flox-cli' setting: '$WITH_FLOX_CLI'.
+  as_fn_error $? "Invalid '--with-flox-cli': '$WITH_FLOX_CLI'.
 You must specify either 'local', 'nix', or a path to a directory" "$LINENO" 5
 fi
  ;;
@@ -22222,11 +22241,110 @@ fi
 
 # ---------------------------------------------------------------------------- #
 
+# Get `pkgdb' version
+
 PKGDB_VERSION="$(< pkgdb/.version)"
 
 
 printf "%s\n" "#define PKGDB_VERSION \"$PKGDB_VERSION\"" >>confdefs.h
 
+
+
+# ---------------------------------------------------------------------------- #
+
+# Get paths to static assets
+
+
+
+# --with-set-prompt-bash-sh
+
+# Check whether --with-set-prompt-bash-sh was given.
+if test ${with_set_prompt_bash_sh+y}
+then :
+  withval=$with_set_prompt_bash_sh; WITH_SET_PROMPT_BASH_SH="$withval"
+else $as_nop
+  WITH_SET_PROMPT_BASH_SH=local
+
+fi
+
+if test -z "${SET_PROMPT_BASH_SH:-}"
+then :
+
+  case "$WITH_SET_PROMPT_BASH_SH" in #(
+  /nix/store/) :
+    SET_PROMPT_BASH_SH="$WITH_SET_PROMPT_BASH_SH" ;; #(
+  local) :
+    SET_PROMPT_BASH_SH="$(
+        $NIX --extra-experimental-features='nix-command flakes'  \
+             store add-path -n set-prompt-bash.sh                \
+             "$PKGDB_ROOT/src/buildenv/set-prompt-bash.sh";
+      )";
+     ;; #(
+  *) :
+    if test -d "$WITH_SET_PROMPT_BASH_SH"
+then :
+  :
+else $as_nop
+  as_fn_error $? "Invalid '--with-set-prompt-bash-sh': '$WITH_SET_PROMPT_BASH_SH'.
+You must specify either 'local', or a '/nix/store' path" "$LINENO" 5
+fi
+   ;;
+esac
+
+fi
+
+
+printf "%s\n" "#define SET_PROMPT_BASH_SH \"$SET_PROMPT_BASH_SH\"" >>confdefs.h
+
+
+
+
+
+# --with-profile-d-script-dir
+
+# Check whether --with-profile-d-script-dir was given.
+if test ${with_profile_d_script_dir+y}
+then :
+  withval=$with_profile_d_script_dir; WITH_PROFILE_D_SCRIPT_DIR="$withval"
+else $as_nop
+  WITH_PROFILE_D_SCRIPT_DIR=local
+
+fi
+
+if test -z "${PROFILE_D_SCRIPT_DIR:-}"
+then :
+
+  case "$WITH_PROFILE_D_SCRIPT_DIR" in #(
+  /nix/store/) :
+    PROFILE_D_SCRIPT_DIR="$WITH_PROFILE_D_SCRIPT_DIR" ;; #(
+  local) :
+    PROFILE_D_SCRIPT_DIR="$(
+        $NIX --extra-experimental-features='nix-command flakes'  \
+             store add-file -n set-prompt-bash.sh                \
+             "$PKGDB_ROOT/src/buildenv/assets";
+      )";
+     ;; #(
+  *) :
+    if test -d "$WITH_PROFILE_D_SCRIPT_DIR"
+then :
+  :
+else $as_nop
+  as_fn_error $? "Invalid '--with-profile-d-script-dir': '$WITH_PROFILE_D_SCRIPT_DIR'.
+You must specify either 'local', or a '/nix/store' path" "$LINENO" 5
+fi
+   ;;
+esac
+
+fi
+
+
+printf "%s\n" "#define PROFILE_D_SCRIPT_DIR \"$PROFILE_D_SCRIPT_DIR\"" >>confdefs.h
+
+
+
+# ---------------------------------------------------------------------------- #
+
+# TODO: SEMVER
 
 
 # ---------------------------------------------------------------------------- #

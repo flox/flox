@@ -151,7 +151,7 @@ VERSION := $(file < $(PKGDB_ROOT)/.version)
 PROFILE_D_SCRIPT_DIR ?= $(shell                            \
   $(NIX) store add-path -n profile.d src/buildenv/assets)
 SET_PROMPT_BASH_SH ?= $(shell                                                  \
-  $(NIX) store add-path -n set-prompt-bash.sh src/buildenv/set-prompt-bash.sh)
+  $(NIX) store add-file -n set-prompt-bash.sh src/buildenv/set-prompt-bash.sh)
 
 
 # ---------------------------------------------------------------------------- #

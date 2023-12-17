@@ -249,7 +249,7 @@ AS_CASE(["$WITH_PKGDB"],
   [local], [:],
   [nix],   [:],
   [AS_IF([test -d "$WITH_PKGDB"], [:],
-    [AC_MSG_ERROR([Invalid '--with-pkgdb' setting: '$WITH_PKGDB'.
+    [AC_MSG_ERROR([Invalid '--with-pkgdb': '$WITH_PKGDB'.
 You must specify either 'local', 'nix', or a path to a directory])])
 ])
 AC_SUBST([WITH_PKGDB])
@@ -267,7 +267,7 @@ AS_CASE(["$WITH_FLOX_CLI"],
   [local], [:],
   [nix],   [:],
   [AS_IF([test -d "$WITH_FLOX_CLI"], [:],
-    [AC_MSG_ERROR([Invalid '--with-flox-cli' setting: '$WITH_FLOX_CLI'.
+    [AC_MSG_ERROR([Invalid '--with-flox-cli': '$WITH_FLOX_CLI'.
 You must specify either 'local', 'nix', or a path to a directory])])
 ])
 AC_SUBST([WITH_FLOX_CLI])
@@ -508,21 +508,75 @@ AC_DEFINE_UNQUOTED([PKGDB_VERSION], ["$PKGDB_VERSION"], [Version of pkgdb])
 # Get paths to static assets
 
 AC_ARG_VAR([SET_PROMPT_BASH_SH],
-  [Path to `set-prompt.bash.sh' script in `/nix/store/'])
+  [Path to 'set-prompt.bash.sh' script in '/nix/store/'])
 
-# TODO: `--with-set-prompt-bash-sh'
-# TODO: add to `/nix/store' using snippet from old Makefile.
+# --with-set-prompt-bash-sh
+AC_ARG_WITH([set-prompt-bash-sh],
+  [AS_HELP_STRING(
+    [--with-set-prompt-bash-sh={local,PATH}],
+    [use set-prompt-bash.sh from local tree, or a '/nix/store' path])],
+  [WITH_SET_PROMPT_BASH_SH="$withval"],
+  [WITH_SET_PROMPT_BASH_SH=local]
+)
+AS_IF([test -z "${SET_PROMPT_BASH_SH:-}"], [
+  AS_CASE(["$WITH_SET_PROMPT_BASH_SH"],
+    [/nix/store/], [SET_PROMPT_BASH_SH="$WITH_SET_PROMPT_BASH_SH"],
+    [local],       [SET_PROMPT_BASH_SH="$(
+        $NIX --extra-experimental-features='nix-command flakes'  \
+             store add-path -n set-prompt-bash.sh                \
+             "$PKGDB_ROOT/src/buildenv/set-prompt-bash.sh";
+      )";
+    ],
+    [AS_IF([test -d "$WITH_SET_PROMPT_BASH_SH"], [:],
+      [AC_MSG_ERROR(
+        [Invalid '--with-set-prompt-bash-sh': '$WITH_SET_PROMPT_BASH_SH'.
+You must specify either 'local', or a '/nix/store' path])])
+  ])
+])
+AC_SUBST([WITH_SET_PROMPT_BASH_SH])
+AC_DEFINE_UNQUOTED([SET_PROMPT_BASH_SH], ["$SET_PROMPT_BASH_SH"],
+  [Path to 'set-prompt.bash.sh' script in '/nix/store/'])
 
 
 AC_ARG_VAR([PROFILE_D_SCRIPT_DIR],
-  [Path to directory containing `etc/profile.d' directory in `/nix/store/'])
+  [Path to directory containing 'etc/profile.d' directory in '/nix/store/'])
+
+# --with-profile-d-script-dir
+AC_ARG_WITH([profile-d-script-dir],
+  [AS_HELP_STRING(
+    [--with-profile-d-script-dir={local,PATH}],
+    [use 'etc/profile.d' from local tree, or a '/nix/store' path])],
+  [WITH_PROFILE_D_SCRIPT_DIR="$withval"],
+  [WITH_PROFILE_D_SCRIPT_DIR=local]
+)
+AS_IF([test -z "${PROFILE_D_SCRIPT_DIR:-}"], [
+  AS_CASE(["$WITH_PROFILE_D_SCRIPT_DIR"],
+    [/nix/store/], [PROFILE_D_SCRIPT_DIR="$WITH_PROFILE_D_SCRIPT_DIR"],
+    [local],       [PROFILE_D_SCRIPT_DIR="$(
+        $NIX --extra-experimental-features='nix-command flakes'  \
+             store add-file -n set-prompt-bash.sh                \
+             "$PKGDB_ROOT/src/buildenv/assets";
+      )";
+    ],
+    [AS_IF([test -d "$WITH_PROFILE_D_SCRIPT_DIR"], [:],
+      [AC_MSG_ERROR(
+        [Invalid '--with-profile-d-script-dir': '$WITH_PROFILE_D_SCRIPT_DIR'.
+You must specify either 'local', or a '/nix/store' path])])
+  ])
+])
+AC_SUBST([WITH_PROFILE_D_SCRIPT_DIR])
+AC_DEFINE_UNQUOTED([PROFILE_D_SCRIPT_DIR], ["$PROFILE_D_SCRIPT_DIR"],
+  [Path to directory containing '/etc/profile.d' scripts in the '/nix/store/'])
 
 
 # ---------------------------------------------------------------------------- #
 
-AC_CONFIG_FILES([
-  pkgdb/Makefile
-])
+# TODO: SEMVER
+
+
+# ---------------------------------------------------------------------------- #
+
+AC_CONFIG_FILES([pkgdb/Makefile])
 AC_OUTPUT
 
 
