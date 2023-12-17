@@ -170,31 +170,41 @@ _cppflags=( '-E' '-x' 'c++-header' '-isystem' "$nix_INCDIR" "${_cppflags[@]}" );
 
 # configMatters FILE
 # ------------------
-# Returns 0 if the file is affected by `nix/config.h', 1 otherwise.
+# Prints "YES" if the file is affected by `nix/config.h', "NO" otherwise.
 configMatters() {
   local _noConfig _withConfig;
   #shellcheck disable=SC2119
   _noConfig="$( mktmp_auto; )";
   #shellcheck disable=SC2119
   _withConfig="$( mktmp_auto; )";
-  $CPP "${_cppflags[@]}" "${1?}" -o "$_noConfig";
+  $CPP "${_cppflags[@]}" "${1?}" -o "$_noConfig"||return;
   $CPP "${_cppflags[@]}" -include "$nix_INCDIR/nix/config.h" "$1"  \
-       -o "$_withConfig";
-  $DIFF -q "$_noConfig" "$_withConfig" > /dev/null 2>&1 && return 1;
+       -o "$_withConfig"||return;
+  if $DIFF -q "$_noConfig" "$_withConfig" > /dev/null 2>&1; then
+    echo YES;
+  else
+    echo NO;
+  fi
 }
 
 
 # ---------------------------------------------------------------------------- #
 
+_exit_status=0;
+
 for _f in "${_files[@]}"; do
-  if configMatters "$_f"; then
-    echo "$_f T";
+  if _matters="$( configMatters "$_f"; )"; then
+    echo "$_f $_matters";
   else
-    echo "$_f F";
+    echo "$_f FAILED";
+    _exit_status=1;
   fi
 done
 
-exit 0;
+if [[ "$_exit_status" -ne 0 ]]; then
+  echo "$_as_me: Some files failed" >&2;
+fi
+exit "$_exit_status";
 
 
 # ---------------------------------------------------------------------------- #
