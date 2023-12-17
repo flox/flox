@@ -249,7 +249,8 @@ AC_CHECK_FUNCS([memset strtoul mkdir utime])
 AC_ARG_WITH([pkgdb],
   [AS_HELP_STRING(
     [--with-pkgdb={local,nix,PREFIX}],
-    [use pkgdb from local tree, nix build, or path to its install prefix])],
+    [use pkgdb from local tree, nix build, or path to its install prefix. []dnl
+( default: local )])],
   [WITH_PKGDB="$withval"],
   [WITH_PKGDB=local])
 AS_CASE(["$WITH_PKGDB"],
@@ -265,7 +266,7 @@ AC_ARG_WITH([flox-cli],
   [AS_HELP_STRING(
     [--with-flox-cli={local,nix,PREFIX}],
     [use flox-cli from local tree, nix build, or path to its ]dnl
-  [install prefix])],
+  [install prefix. ( default: local )])],
     [WITH_FLOX_CLI="$withval"],
     [WITH_FLOX_CLI=local])
 AS_CASE(["$WITH_FLOX_CLI"],
@@ -509,7 +510,8 @@ AC_ARG_VAR([SET_PROMPT_BASH_SH],
 AC_ARG_WITH([set-prompt-bash-sh],
   [AS_HELP_STRING(
     [--with-set-prompt-bash-sh={local,PATH}],
-    [use set-prompt-bash.sh from local tree, or a '/nix/store' path])],
+    [use set-prompt-bash.sh from local tree, or a '/nix/store' path. []dnl
+( default: local )])],
   [WITH_SET_PROMPT_BASH_SH="$withval"],
   [WITH_SET_PROMPT_BASH_SH=local])
 AS_IF([test -z "${SET_PROMPT_BASH_SH:-}"], [
@@ -536,7 +538,8 @@ AC_ARG_VAR([PROFILE_D_SCRIPT_DIR],
 AC_ARG_WITH([profile-d-script-dir],
   [AS_HELP_STRING(
     [--with-profile-d-script-dir={local,PATH}],
-    [use 'etc/profile.d' from local tree, or a '/nix/store' path])],
+    [use 'etc/profile.d' from local tree, or a '/nix/store' path. []dnl
+( default: local )])],
   [WITH_PROFILE_D_SCRIPT_DIR="$withval"],
   [WITH_PROFILE_D_SCRIPT_DIR=local])
 AS_IF([test -z "${PROFILE_D_SCRIPT_DIR:-}"], [
