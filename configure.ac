@@ -664,11 +664,19 @@ AC_SUBST([CARGOFLAGS])
 
 # ---------------------------------------------------------------------------- #
 
+# Perform Substitution
+# --------------------
+# Creates `FILE' from `FILE.in' by substituting `@VAR@' for `$VAR'.
+# Only _substituted_ variables ( those marked by `AC_SUBST' ) are subtituted.
+
+# Locate files to be processed ( `.in' suffix is implied ).
 AC_CONFIG_FILES([
   Makefile
   pkgdb/Makefile
   cli/Makefile
 ])
+
+# Substitute and write.
 AC_OUTPUT
 
 
