@@ -40,10 +40,10 @@
     p.bats-support
   ]);
   envs = {
-    nix_INCDIR = nix.dev.outPath + "/include";
-    boost_CFLAGS = "-isystem " + boost.dev.outPath + "/include";
-    toml_CFLAGS = "-isystem " + toml11.outPath + "/include";
-    yaml_PREFIX = yaml-cpp.outPath;
+    NIX_INCDIR = nix.dev.outPath + "/include";
+    BOOST_CFLAGS = "-isystem " + boost.dev.outPath + "/include";
+    TOML_CFLAGS = "-isystem " + toml11.outPath + "/include";
+    YAML_PREFIX = yaml-cpp.outPath;
     libExt = stdenv.hostPlatform.extensions.sharedLibrary;
     SEMVER_PATH = semver.outPath + "/bin/semver";
     # Used by `buildenv' to provide activation hook extensions.

@@ -12,7 +12,7 @@ AC_PREREQ( [2.71] )
 
 # TODO: use different email address
 # TODO: read version from `.cz.toml'
-AC_INIT([flox], [0.3.7], [alex.ameen@floxdev.com])
+AC_INIT([flox], [0.3.7])
 
 AC_CONFIG_MACRO_DIRS([build-aux/m4])
 AC_CONFIG_AUX_DIR([build-aux])
@@ -146,6 +146,9 @@ AC_PATH_PROG([CXX_LINT], [clang-tidy], [$MISSING clang-tidy])
 AC_ARG_VAR([DOXYGEN], [Generate documentation])
 AC_PATH_PROG([DOXYGEN], [doxygen], [$MISSING doxygen])
 
+AC_ARG_VAR([SEMVER], [Semantic versioning helper])
+AC_PATH_PROG([SEMVER], [semver], [$MISSING semver])
+
 
 # ---------------------------------------------------------------------------- #
 
@@ -156,8 +159,7 @@ AC_CANONICAL_HOST
 AS_CASE(["$host_os"],
   [linux*],  [OS=linux; sharedLibExt=.so;],
   [darwin*], [OS=darwin; sharedLibExt=.dylib;],
-  [AC_MSG_ERROR([Unsupported host OS: $host_os])]
-)
+  [AC_MSG_ERROR([Unsupported host OS: $host_os])])
 AC_SUBST([OS])
 AC_SUBST([sharedLibExt])
 AM_CONDITIONAL([IS_LINUX],   [test "$OS" = 'linux'])
@@ -167,8 +169,7 @@ AS_CASE(["$host_cpu"],
   [x86_64],   [ARCH=x86_64],
   [aarch64*], [ARCH=aarch64],
   [arm*],     [ARCH=aarch64],
-  [AC_MSG_ERROR([Unsupported host ARCH: $host_cpu])]
-)
+  [AC_MSG_ERROR([Unsupported host ARCH: $host_cpu])])
 AC_SUBST([ARCH])
 AM_CONDITIONAL([IS_X86_64],  [test "$ARCH" = 'x86_64'])
 AM_CONDITIONAL([IS_AARCH64], [test "$ARCH" = 'aarch64'])
@@ -176,8 +177,7 @@ AM_CONDITIONAL([IS_AARCH64], [test "$ARCH" = 'aarch64'])
 AS_CASE(["$( $CXX --version; )"],
  [g++\ *],            [CXX_TOOLCHAIN=gcc],
  [clang\ version\ *], [CXX_TOOLCHAIN=clang],
- [AC_MSG_ERROR([Unsupported C++ compiler: $CXX])]
-)
+ [AC_MSG_ERROR([Unsupported C++ compiler: $CXX])])
 AC_SUBST([CXX_TOOLCHAIN])
 AM_CONDITIONAL([IS_GCC],   [test "$CXX_TOOLCHAIN" = 'gcc'])
 AM_CONDITIONAL([IS_CLANG], [test "$CXX_TOOLCHAIN" = 'clang'])
@@ -191,9 +191,7 @@ AC_CHECK_LIB([nixfetchers],
   translit( [_ZN3nix8fetchers11attrsToJSONERKSt3mapINSt7]
             [__cxx1112basic_stringIcSt11char_traitsIcESaIcEEESt7variantIJS7]
             [_mNS_8ExplicitIbEEEESt4lessIS7_ESaISt4pairIKS7_SB_EEE]
-          , ' '
-          )
-)
+          , ' '))
 
 
 # ---------------------------------------------------------------------------- #
@@ -243,15 +241,13 @@ AC_ARG_WITH([pkgdb],
     [--with-pkgdb={local,nix,PREFIX}],
     [use pkgdb from local tree, nix build, or path to its install prefix])],
   [WITH_PKGDB="$withval"],
-  [WITH_PKGDB=local]
-)
+  [WITH_PKGDB=local])
 AS_CASE(["$WITH_PKGDB"],
   [local], [:],
   [nix],   [:],
   [AS_IF([test -d "$WITH_PKGDB"], [:],
     [AC_MSG_ERROR([Invalid '--with-pkgdb': '$WITH_PKGDB'.
-You must specify either 'local', 'nix', or a path to a directory])])
-])
+You must specify either 'local', 'nix', or a path to a directory])])])
 AC_SUBST([WITH_PKGDB])
 
 # --with-flox-cli
@@ -259,17 +255,15 @@ AC_ARG_WITH([flox-cli],
   [AS_HELP_STRING(
     [--with-flox-cli={local,nix,PREFIX}],
     [use flox-cli from local tree, nix build, or path to its ]dnl
-[install prefix])],
-  [WITH_FLOX_CLI="$withval"],
-  [WITH_FLOX_CLI=local]
-)
+  [install prefix])],
+    [WITH_FLOX_CLI="$withval"],
+    [WITH_FLOX_CLI=local])
 AS_CASE(["$WITH_FLOX_CLI"],
   [local], [:],
   [nix],   [:],
   [AS_IF([test -d "$WITH_FLOX_CLI"], [:],
     [AC_MSG_ERROR([Invalid '--with-flox-cli': '$WITH_FLOX_CLI'.
-You must specify either 'local', 'nix', or a path to a directory])])
-])
+You must specify either 'local', 'nix', or a path to a directory])])])
 AC_SUBST([WITH_FLOX_CLI])
 
 
@@ -314,26 +308,14 @@ PKG_CHECK_MODULES([SQLITE3PP], [sqlite3pp], [:],
 PKG_CHECK_MODULES([YAML], [yaml-cpp], [:],
   [AC_MSG_ERROR([Cannot find 'yaml-cpp.pc'])])
 
-PKG_CHECK_MODULES([NIX_PKG_CONFIG], [nix-store nix-main nix-cmd nix-expr], [:],
-  [AC_MSG_ERROR([Cannot find 'nix-store.pc'])])
-
-AC_ARG_VAR([NIX_CFLAGS], [Flags for the C++ compiler when compiling wth 'nix'])
-AC_ARG_VAR([NIX_LIBS],
-  [Flags for the C++ compiler when linking wth 'nix' libraries])
+PKG_CHECK_MODULES([NIX], [nix-store nix-main nix-cmd nix-expr], [:],
+  [AC_MSG_ERROR([Cannot find 'nix-{store,main,cmd,expr}.pc'])])
+NIX_LIBS="-lnixfetchers $NIX_LIBS"
 
 
 # ---------------------------------------------------------------------------- #
 
 # Compiler Flags for pre-processing with `nix' headers
-
-AC_ARG_VAR([NIX_CPPFLAGS],
-  [Flags for the C++ preprocessor when compiling wth 'nix' headers])
-
-# Add some necessary macro definitions for `nix' which normally appear
-# in `<nix>/include/nix/config.h'.
-PKG_CHECK_VAR([NIX_INCDIR], [nix-main], [includedir],
-  [NIX_CPPFLAGS="-isystem $NIX_INCDIR"],
-  [AC_MSG_ERROR([Cannot find nix-main include directory for 'nix/config.h'])])
 
 AC_MSG_CHECKING([Nix system pair])
 AC_ARG_VAR([SYSTEM], [Nix system pair])
@@ -341,13 +323,12 @@ SYSTEM="$OS-$ARCH";
 AC_MSG_RESULT([$SYSTEM])
 AC_SUBST([SYSTEM])
 
-# Add `-DSYSTEM="..."' to `NIX_CPPFLAGS'.
-NIX_CPPFLAGS="${NIX_CPPFLAGS:+$NIX_CPPFLAGS }-DSYSTEM='\"$SYSTEM\"'"
+AC_DEFINE_UNQUOTED([SYSTEM], ["$SYSTEM"], [Nix system pair])
 
 
 # Check configuration used to compile `nix' and add it to `NIX_CPPFLAGS`.
 
-_pushed_CPPFLAGS="$CPPFLAGS";
+_flox_v_pushed_CPPFLAGS="$CPPFLAGS";
 CPPFLAGS="$NIX_CPPFLAGS";
 AC_LANG_PUSH([C++])
 
@@ -362,12 +343,9 @@ AC_PREPROC_IFELSE([AC_LANG_SOURCE(
    @%:@if HAVE_BOEHMGC != 1
      @%:@error "Boehm GC is not supported"
    @%:@endif])],
-  [HAVE_BOEHMGC=1
-   NIX_CPPFLAGS="${NIX_CPPFLAGS:+$NIX_CPPFLAGS }-DHAVE_BOEHMGC"
+  [AC_DEFINE_UNQUOTED([HAVE_BOEHMGC], [1])
    AC_MSG_RESULT([yes])],
-  [HAVE_BOEHMGC=0
-   AC_MSG_RESULT([no])])
-AC_DEFINE_UNQUOTED([HAVE_BOEHMGC], [$HAVE_BOEHMGC])
+  [AC_MSG_RESULT([no])])
 
 AC_MSG_CHECKING([Nix configuration setting ENABLE_S3])
 AC_PREPROC_IFELSE([AC_LANG_SOURCE(
@@ -378,12 +356,9 @@ AC_PREPROC_IFELSE([AC_LANG_SOURCE(
    @%:@if ENABLE_S3 != 1
      @%:@error "S3 is not supported"
    @%:@endif])],
-  [ENABLE_S3=1
-   NIX_CPPFLAGS="${NIX_CPPFLAGS:+$NIX_CPPFLAGS }-DENABLE_S3"
+  [AC_DEFINE_UNQUOTED([ENABLE_S3], [1])
    AC_MSG_RESULT([yes])],
-  [ENABLE_S3=0
-   AC_MSG_RESULT([no])])
-AC_DEFINE_UNQUOTED([ENABLE_S3], [$ENABLE_S3])
+  [AC_MSG_RESULT([no])])
 
 AC_MSG_CHECKING([Nix configuration setting HAVE_STRUCT_DIRENT_D_TYPE])
 AC_PREPROC_IFELSE([AC_LANG_SOURCE(
@@ -394,12 +369,9 @@ AC_PREPROC_IFELSE([AC_LANG_SOURCE(
    @%:@if HAVE_STRUCT_DIRENT_D_TYPE != 1
      @%:@error "HAVE_STRUCT_DIRENT_D_TYPE is false"
    @%:@endif])],
-  [HAVE_STRUCT_DIRENT_D_TYPE=1
-   NIX_CPPFLAGS="${NIX_CPPFLAGS:+$NIX_CPPFLAGS }-DHAVE_STRUCT_DIRENT_D_TYPE"
+  [AC_DEFINE_UNQUOTED([HAVE_STRUCT_DIRENT_D_TYPE], [1])
    AC_MSG_RESULT([yes])],
-  [HAVE_STRUCT_DIRENT_D_TYPE=0
-   AC_MSG_RESULT([no])])
-AC_DEFINE_UNQUOTED([HAVE_STRUCT_DIRENT_D_TYPE], [$HAVE_STRUCT_DIRENT_D_TYPE])
+  [AC_MSG_RESULT([no])])
 
 AC_MSG_CHECKING([Nix configuration setting EXCEPTION_NEEDS_THROW_SPEC])
 AC_PREPROC_IFELSE([AC_LANG_SOURCE(
@@ -410,25 +382,38 @@ AC_PREPROC_IFELSE([AC_LANG_SOURCE(
    @%:@if EXCEPTION_NEEDS_THROW_SPEC != 1
      @%:@error "EXCEPTION_NEEDS_THROW_SPEC is false"
    @%:@endif])],
-  [EXCEPTION_NEEDS_THROW_SPEC=1
-   NIX_CPPFLAGS="${NIX_CPPFLAGS:+$NIX_CPPFLAGS }-DEXCEPTION_NEEDS_THROW_SPEC"
+  [AC_DEFINE_UNQUOTED([EXCEPTION_NEEDS_THROW_SPEC], [1])
    AC_MSG_RESULT([yes])],
-  [EXCEPTION_NEEDS_THROW_SPEC=0
-   AC_MSG_RESULT([no])])
-AC_DEFINE_UNQUOTED([EXCEPTION_NEEDS_THROW_SPEC], [$EXCEPTION_NEEDS_THROW_SPEC])
+  [AC_MSG_RESULT([no])])
+
+# `HAVE_BOOST' does NOT use an integer value.
+# It is either defined or not.
+AC_MSG_CHECKING([Nix configuration setting HAVE_BOOST])
+AC_PREPROC_IFELSE([AC_LANG_SOURCE(
+  [@%:@include <nix/config.h>
+   @%:@ifndef HAVE_BOOST
+     @%:@error "HAVE_BOOST is not defined"
+   @%:@endif])],
+  [AC_DEFINE_UNQUOTED([HAVE_BOOST], [/**/])
+   AC_MSG_RESULT([yes])],
+  [AC_MSG_RESULT([no])])
 
 AC_LANG_POP
-CPPFLAGS="$_pushed_CPPFLAGS";
+CPPFLAGS="$_flox_v_pushed_CPPFLAGS";
 
-AC_MSG_CHECKING([Nix pre-processor flags NIX_CPPFLAGS])
-AC_SUBST([NIX_CPPFLAGS])
-AC_MSG_RESULT([$NIX_CPPFLAGS])
-
-#NIX_CFLAGS="$NIX_CPPFLAGS $NIX_PKG_CONFIG_CFLAGS"
-NIX_CFLAGS="$NIX_PKG_CONFIG_CFLAGS -include $NIX_INCDIR/nix/config.h"
-NIX_LIBS="$NIX_PKG_CONFIG_LIBS"
-AC_SUBST([NIX_CFLAGS])
-AC_SUBST([NIX_LIBS])
+# NOTE: About `<nix/config.h>' and our configuration macros:
+# When upgrading `nix' it's possible that new macros will be added or files
+# sensitivity to certain macros may change.
+# If you encounter issues, you can uncomment the following lines to try using
+# the _upstream_ `<nix/config.h>' instead of our own subset.
+# This is expected to emit warnings about redefined macros; but it will at least
+# help you isolate the problem.
+#NIX_INCDIR
+#PKG_CHECK_VAR([NIX_INCDIR], [nix-main], [includedir],
+#  [NIX_CFLAGS="-isystem $NIX_INCDIR"],
+#  [AC_MSG_ERROR([Cannot find nix-main include directory for 'nix/config.h'])])
+#NIX_CFLAGS="$NIX_CFLAGS -include $NIX_INCDIR/nix/config.h"
+#AC_SUBST([NIX_CFLAGS])
 
 
 # ---------------------------------------------------------------------------- #
@@ -450,16 +435,16 @@ AC_SUBST([NIX_LIBS])
 
 AS_CASE(["$host_os"],
   [linux*],dnl
-  [RELATIVE_RPATH_FLAG="-Wl,--enable-new-dtags";
-  RELATIVE_RPATH_FLAG="$RELATIVE_RPATH_FLAG '-Wl,-rpath=\$\$\$\$ORIGIN/../lib'";
-  set_rpath_option='-Wl,--enable-new-dtags,-rpath,';
-  set_soname_option='-Wl,-soname,';],
+    [RELATIVE_RPATH_FLAG="-Wl,--enable-new-dtags";
+    RELATIVE_RPATH_FLAG="$RELATIVE_RPATH_FLAG []dnl
+'-Wl,-rpath=\$\$\$\$ORIGIN/../lib'";
+    set_rpath_option='-Wl,--enable-new-dtags,-rpath,';
+    set_soname_option='-Wl,-soname,';],
   [darwin*],dnl
-  [RELATIVE_RPATH_FLAG="-rpath @executable_path/../lib";
-  set_rpath_option='-rpath ';
-  set_soname_option='-install_name @rpath/';],
-  [AC_MSG_ERROR([Unsupported host OS: $host_os])]
-)
+    [RELATIVE_RPATH_FLAG="-rpath @executable_path/../lib";
+    set_rpath_option='-rpath ';
+    set_soname_option='-install_name @rpath/';],
+  [AC_MSG_ERROR([Unsupported host OS: $host_os])])
 
 AC_SUBST([RELATIVE_RPATH_FLAG])
 AC_SUBST([set_rpath_option])
@@ -481,8 +466,7 @@ AS_CASE(["$CXX_TOOLCHAIN"],
   [clang],
   [NO_UNDEFINED_SYMBOLS_FLAG='-Wl,-undefined,error';
   SHARED_LIBRARY_CFLAGS='-fPIC';],
-  [AC_MSG_ERROR([Unsupported C++ compiler: $CXX])]
-)
+  [AC_MSG_ERROR([Unsupported C++ compiler: $CXX])])
 
 AC_SUBST([NO_UNDEFINED_SYMBOLS_FLAG])
 
@@ -516,23 +500,19 @@ AC_ARG_WITH([set-prompt-bash-sh],
     [--with-set-prompt-bash-sh={local,PATH}],
     [use set-prompt-bash.sh from local tree, or a '/nix/store' path])],
   [WITH_SET_PROMPT_BASH_SH="$withval"],
-  [WITH_SET_PROMPT_BASH_SH=local]
-)
+  [WITH_SET_PROMPT_BASH_SH=local])
 AS_IF([test -z "${SET_PROMPT_BASH_SH:-}"], [
   AS_CASE(["$WITH_SET_PROMPT_BASH_SH"],
-    [/nix/store/], [SET_PROMPT_BASH_SH="$WITH_SET_PROMPT_BASH_SH"],
-    [local],       [SET_PROMPT_BASH_SH="$(
-        $NIX --extra-experimental-features='nix-command flakes'  \
-             store add-path -n set-prompt-bash.sh                \
-             "$PKGDB_ROOT/src/buildenv/set-prompt-bash.sh";
-      )";
-    ],
+    [/nix/store/*], [SET_PROMPT_BASH_SH="$WITH_SET_PROMPT_BASH_SH"],
+    [local],        [SET_PROMPT_BASH_SH="$(
+      $NIX --extra-experimental-features='nix-command flakes'  \
+           store add-path -n set-prompt-bash.sh                \
+           "$PKGDB_ROOT/src/buildenv/set-prompt-bash.sh";
+      )"],
     [AS_IF([test -d "$WITH_SET_PROMPT_BASH_SH"], [:],
       [AC_MSG_ERROR(
         [Invalid '--with-set-prompt-bash-sh': '$WITH_SET_PROMPT_BASH_SH'.
-You must specify either 'local', or a '/nix/store' path])])
-  ])
-])
+You must specify either 'local', or a '/nix/store' path])])])])
 AC_SUBST([WITH_SET_PROMPT_BASH_SH])
 AC_DEFINE_UNQUOTED([SET_PROMPT_BASH_SH], ["$SET_PROMPT_BASH_SH"],
   [Path to 'set-prompt.bash.sh' script in '/nix/store/'])
@@ -547,31 +527,41 @@ AC_ARG_WITH([profile-d-script-dir],
     [--with-profile-d-script-dir={local,PATH}],
     [use 'etc/profile.d' from local tree, or a '/nix/store' path])],
   [WITH_PROFILE_D_SCRIPT_DIR="$withval"],
-  [WITH_PROFILE_D_SCRIPT_DIR=local]
-)
+  [WITH_PROFILE_D_SCRIPT_DIR=local])
 AS_IF([test -z "${PROFILE_D_SCRIPT_DIR:-}"], [
   AS_CASE(["$WITH_PROFILE_D_SCRIPT_DIR"],
-    [/nix/store/], [PROFILE_D_SCRIPT_DIR="$WITH_PROFILE_D_SCRIPT_DIR"],
-    [local],       [PROFILE_D_SCRIPT_DIR="$(
-        $NIX --extra-experimental-features='nix-command flakes'  \
-             store add-file -n set-prompt-bash.sh                \
-             "$PKGDB_ROOT/src/buildenv/assets";
-      )";
-    ],
+    [/nix/store/*], [PROFILE_D_SCRIPT_DIR="$WITH_PROFILE_D_SCRIPT_DIR"],
+    [local],        [PROFILE_D_SCRIPT_DIR="$(
+      $NIX --extra-experimental-features='nix-command flakes'  \
+           store add-file -n set-prompt-bash.sh                \
+           "$PKGDB_ROOT/src/buildenv/assets";
+      )"],
     [AS_IF([test -d "$WITH_PROFILE_D_SCRIPT_DIR"], [:],
       [AC_MSG_ERROR(
         [Invalid '--with-profile-d-script-dir': '$WITH_PROFILE_D_SCRIPT_DIR'.
-You must specify either 'local', or a '/nix/store' path])])
-  ])
-])
+You must specify either 'local', or a '/nix/store' path])])])])
 AC_SUBST([WITH_PROFILE_D_SCRIPT_DIR])
 AC_DEFINE_UNQUOTED([PROFILE_D_SCRIPT_DIR], ["$PROFILE_D_SCRIPT_DIR"],
-  [Path to directory containing '/etc/profile.d' scripts in the '/nix/store/'])
+  [Path to directory containing 'etc/profile.d' directory in '/nix/store/'])
 
 
 # ---------------------------------------------------------------------------- #
 
-# TODO: SEMVER
+# Get path to `semver' in `/nix/store'
+
+AC_ARG_VAR([SEMVER_PATH], [Path to 'semver' executable in '/nix/store/'])
+# NOTE: `@%:@' is replaced with `#' by `autoconf' so that it is not treated as
+#       a comment.
+AS_CASE(["$SEMVER"],
+  [/nix/store/*], [SEMVER_PATH="$SEMVER"],
+  [SEMVER_PATH="$(
+     $NIX --extra-experimental-features='nix-command flakes'  \
+          build --no-link --print-out-paths                   \
+          'github:aakropotkin/floco@%:@semver'
+   )/bin/semver"])
+AC_SUBST([SEMVER_PATH])
+AC_DEFINE_UNQUOTED([SEMVER_PATH], ["$SEMVER_PATH"],
+  [Path to 'semver' executable in '/nix/store'])
 
 
 # ---------------------------------------------------------------------------- #

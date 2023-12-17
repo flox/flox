@@ -338,7 +338,7 @@ CXX_LINT = /nix/store/sgx6lr68km0h3k2gc3nnayjc1h1rmhl0-clang-tools-16.0.6/bin/cl
 CXX_TOOLCHAIN = gcc
 CYGPATH_W = echo
 DATADIR = ${datarootdir}
-DEFS = -DPACKAGE_NAME=\"flox\" -DPACKAGE_TARNAME=\"flox\" -DPACKAGE_VERSION=\"0.3.7\" -DPACKAGE_STRING=\"flox\ 0.3.7\" -DPACKAGE_BUGREPORT=\"alex.ameen@floxdev.com\" -DPACKAGE_URL=\"\" -DPACKAGE=\"flox\" -DVERSION=\"0.3.7\" -DHAVE_STDIO_H=1 -DHAVE_STDLIB_H=1 -DHAVE_STRING_H=1 -DHAVE_INTTYPES_H=1 -DHAVE_STDINT_H=1 -DHAVE_STRINGS_H=1 -DHAVE_SYS_STAT_H=1 -DHAVE_SYS_TYPES_H=1 -DHAVE_UNISTD_H=1 -DSTDC_HEADERS=1 -DHAVE_DLFCN_H=1 -DLT_OBJDIR=\".libs/\" -DHAVE_LIBNIXFETCHERS=1 -DHAVE_ALLOCA_H=1 -DHAVE_ALLOCA=1 -DHAVE_FCNTL_H=1 -DHAVE_NETDB_H=1 -DHAVE_NETINET_IN_H=1 -DHAVE_SYS_SOCKET_H=1 -DHAVE_UNISTD_H=1 -DHAVE_UTIME_H=1 -DHAVE__BOOL=1 -DLSTAT_FOLLOWS_SLASHED_SYMLINK=1 -DMAJOR_IN_SYSMACROS=1 -DHAVE_MEMSET=1 -DHAVE_STRTOUL=1 -DHAVE_MKDIR=1 -DHAVE_UTIME=1 -DHAVE_BOEHMGC=1 -DENABLE_S3=1 -DHAVE_STRUCT_DIRENT_D_TYPE=1 -DEXCEPTION_NEEDS_THROW_SPEC=0 -DPKGDB_VERSION=\"0.2.0\" -DSET_PROMPT_BASH_SH=\"/nix/store/53pxc5k8vr9rwds21c2g676lzxh7sfpl-set-prompt-bash.sh\" -DPROFILE_D_SCRIPT_DIR=\"/nix/store/kh1la64vy94h1i0z0vp3328p92gdzhzf-etc-profile.d\"
+DEFS = -DPACKAGE_NAME=\"flox\" -DPACKAGE_TARNAME=\"flox\" -DPACKAGE_VERSION=\"0.3.7\" -DPACKAGE_STRING=\"flox\ 0.3.7\" -DPACKAGE_BUGREPORT=\"\" -DPACKAGE_URL=\"\" -DPACKAGE=\"flox\" -DVERSION=\"0.3.7\" -DHAVE_STDIO_H=1 -DHAVE_STDLIB_H=1 -DHAVE_STRING_H=1 -DHAVE_INTTYPES_H=1 -DHAVE_STDINT_H=1 -DHAVE_STRINGS_H=1 -DHAVE_SYS_STAT_H=1 -DHAVE_SYS_TYPES_H=1 -DHAVE_UNISTD_H=1 -DSTDC_HEADERS=1 -DHAVE_DLFCN_H=1 -DLT_OBJDIR=\".libs/\" -DHAVE_ALLOCA_H=1 -DHAVE_ALLOCA=1 -DHAVE_FCNTL_H=1 -DHAVE_NETDB_H=1 -DHAVE_NETINET_IN_H=1 -DHAVE_SYS_SOCKET_H=1 -DHAVE_UNISTD_H=1 -DHAVE_UTIME_H=1 -DHAVE__BOOL=1 -DLSTAT_FOLLOWS_SLASHED_SYMLINK=1 -DMAJOR_IN_SYSMACROS=1 -DHAVE_MEMSET=1 -DHAVE_STRTOUL=1 -DHAVE_MKDIR=1 -DHAVE_UTIME=1 -DSYSTEM=\"linux-x86_64\" -DHAVE_BOEHMGC=1 -DENABLE_S3=1 -DHAVE_STRUCT_DIRENT_D_TYPE=1 -DHAVE_BOOST=/\*\*/ -DPKGDB_VERSION=\"0.2.0\" -DSET_PROMPT_BASH_SH=\"/nix/store/53pxc5k8vr9rwds21c2g676lzxh7sfpl-set-prompt-bash.sh\" -DPROFILE_D_SCRIPT_DIR=\"/nix/store/kh1la64vy94h1i0z0vp3328p92gdzhzf-etc-profile.d\" -DSEMVER_PATH=\"/nix/store/s79j7chwwp1i910p3pjgbs9v4avvy89q-semver-7.3.8/bin/semver\"
 DEPDIR = .deps
 DEPFILES = /home/camus/src/flox/flake.nix /home/camus/src/flox/flake.lock /home/camus/src/flox/pkgs/flox/default.nix /home/camus/src/flox/pkgs/flox-pkgdb/default.nix /home/camus/src/flox/shells/flox/default.nix
 DLLTOOL = false
@@ -373,7 +373,7 @@ LDFLAGS =
 LIBDIR = ${exec_prefix}/lib
 LIBEXECDIR = ${exec_prefix}/libexec
 LIBOBJS = 
-LIBS = -lnixfetchers 
+LIBS = 
 LIBTOOL = $(SHELL) $(top_builddir)/libtool
 LIPO = 
 LN = /nix/store/w8vm09hri2zz7yacryzzzxvsapik4ps4-coreutils-9.1/bin/ln
@@ -388,13 +388,9 @@ MISSING = /home/camus/src/flox/build-aux/missing
 MKDIR = /nix/store/w8vm09hri2zz7yacryzzzxvsapik4ps4-coreutils-9.1/bin/mkdir
 MKDIR_P = /nix/store/w8vm09hri2zz7yacryzzzxvsapik4ps4-coreutils-9.1/bin/mkdir -p
 NIX = /nix/store/ynvy8q46rjvb67zpg79r0j3qsnlj7mzq-nix-2.17.1/bin/nix
-NIX_CFLAGS = -std=c++2a -isystem /nix/store/j7zxjmb56qvkx8iamqhz35ppmzqc6h8f-nix-2.17.1-dev/include -I/nix/store/v9nrp3rd303arhzdjz7zgpfyi9xpfq3c-boehm-gc-8.2.2-dev/include -include /nix/store/j7zxjmb56qvkx8iamqhz35ppmzqc6h8f-nix-2.17.1-dev/include/nix/config.h
-NIX_CPPFLAGS = -isystem /nix/store/j7zxjmb56qvkx8iamqhz35ppmzqc6h8f-nix-2.17.1-dev/include -DSYSTEM='"linux-x86_64"' -DHAVE_BOEHMGC -DENABLE_S3 -DHAVE_STRUCT_DIRENT_D_TYPE
+NIX_CFLAGS = -std=c++2a -isystem /nix/store/j7zxjmb56qvkx8iamqhz35ppmzqc6h8f-nix-2.17.1-dev/include -I/nix/store/v9nrp3rd303arhzdjz7zgpfyi9xpfq3c-boehm-gc-8.2.2-dev/include
 NIX_FMT = /nix/store/8ipq97lmfbx4mij1bm1my7b4lphqb30f-alejandra-3.0.0/bin/alejandra
-NIX_INCDIR = /nix/store/j7zxjmb56qvkx8iamqhz35ppmzqc6h8f-nix-2.17.1-dev/include
-NIX_LIBS = -L/nix/store/ynvy8q46rjvb67zpg79r0j3qsnlj7mzq-nix-2.17.1/lib -L/nix/store/a90rj311zj2fhlj8a2j4cgjw9xz8jn3p-boehm-gc-8.2.2/lib -lnixmain -lnixcmd -lnixexpr -lnixstore -lnixutil -lgc -lpthread -ldl
-NIX_PKG_CONFIG_CFLAGS = -std=c++2a -isystem /nix/store/j7zxjmb56qvkx8iamqhz35ppmzqc6h8f-nix-2.17.1-dev/include -I/nix/store/v9nrp3rd303arhzdjz7zgpfyi9xpfq3c-boehm-gc-8.2.2-dev/include
-NIX_PKG_CONFIG_LIBS = -L/nix/store/ynvy8q46rjvb67zpg79r0j3qsnlj7mzq-nix-2.17.1/lib -L/nix/store/a90rj311zj2fhlj8a2j4cgjw9xz8jn3p-boehm-gc-8.2.2/lib -lnixmain -lnixcmd -lnixexpr -lnixstore -lnixutil -lgc -lpthread -ldl
+NIX_LIBS = -lnixfetchers -L/nix/store/ynvy8q46rjvb67zpg79r0j3qsnlj7mzq-nix-2.17.1/lib -L/nix/store/a90rj311zj2fhlj8a2j4cgjw9xz8jn3p-boehm-gc-8.2.2/lib -lnixmain -lnixcmd -lnixexpr -lnixstore -lnixutil -lgc -lpthread -ldl
 NLJSON_CFLAGS = -I/nix/store/nazmhpca2rn9s8582i3wlabpfv3lnx13-nlohmann_json-3.11.2/include
 NLJSON_LIBS = 
 NM = nm
@@ -406,7 +402,7 @@ OS = linux
 OTOOL = 
 OTOOL64 = 
 PACKAGE = flox
-PACKAGE_BUGREPORT = alex.ameen@floxdev.com
+PACKAGE_BUGREPORT = 
 PACKAGE_NAME = flox
 PACKAGE_STRING = flox 0.3.7
 PACKAGE_TARNAME = flox
@@ -430,6 +426,8 @@ RM = /nix/store/w8vm09hri2zz7yacryzzzxvsapik4ps4-coreutils-9.1/bin/rm
 RUST_FMT = /nix/store/m9mpclsgwydh3jw0dwrq7jfzsz83ddqr-rustfmt-nightly-1.69.0/bin/rustfmt
 RUST_LINT = /home/camus/src/flox/build-aux/missing clippy
 SED = /nix/store/4mca20b13q88s6llkr8mc468rh9l9bmr-gnused-4.9/bin/sed
+SEMVER = /nix/store/s79j7chwwp1i910p3pjgbs9v4avvy89q-semver-7.3.8/bin/semver
+SEMVER_PATH = /nix/store/s79j7chwwp1i910p3pjgbs9v4avvy89q-semver-7.3.8/bin/semver
 SET_MAKE = 
 SET_PROMPT_BASH_SH = /nix/store/53pxc5k8vr9rwds21c2g676lzxh7sfpl-set-prompt-bash.sh
 SHARED_LIBRARY_CFLAGS = -fPIC -shared
