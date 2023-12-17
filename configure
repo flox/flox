@@ -659,6 +659,7 @@ ac_header_c_list=
 ac_subst_vars='am__EXEEXT_FALSE
 am__EXEEXT_TRUE
 LTLIBOBJS
+CARGOFLAGS
 SEMVER_PATH
 WITH_PROFILE_D_SCRIPT_DIR
 PROFILE_D_SCRIPT_DIR
@@ -970,7 +971,8 @@ NIX_LIBS
 SYSTEM
 SET_PROMPT_BASH_SH
 PROFILE_D_SCRIPT_DIR
-SEMVER_PATH'
+SEMVER_PATH
+CARGOFLAGS'
 
 
 # Initialize some variables set by options.
@@ -1711,6 +1713,7 @@ Some influential environment variables:
               Path to directory containing 'etc/profile.d' directory in
               '/nix/store/'
   SEMVER_PATH Path to 'semver' executable in '/nix/store/'
+  CARGOFLAGS  Additional flags to pass to 'cargo build'
 
 Use these variables to override the choices made by `configure' or to help
 it to find libraries and programs with nonstandard names/locations.
@@ -22141,8 +22144,9 @@ printf "%s\n" "no" >&6; }
 fi
 rm -f conftest.err conftest.i conftest.$ac_ext
 
-# `HAVE_BOOST' does NOT use an integer value.
-# It is either defined or not.
+# `HAVE_BOOST' does NOT use an integer value in `<nix/config.h>'.
+# It is either defined or not ( they use `/**/' on the right hand side ).
+# We use a `1' - I don't think this is a problem but wanted to note it.
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking Nix configuration setting HAVE_BOOST" >&5
 printf %s "checking Nix configuration setting HAVE_BOOST... " >&6; }
 cat confdefs.h - <<_ACEOF >conftest.$ac_ext
@@ -22154,7 +22158,7 @@ cat confdefs.h - <<_ACEOF >conftest.$ac_ext
 _ACEOF
 if ac_fn_cxx_try_cpp "$LINENO"
 then :
-  printf "%s\n" "#define HAVE_BOOST /**/" >>confdefs.h
+  printf "%s\n" "#define HAVE_BOOST 1" >>confdefs.h
 
    { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: yes" >&5
 printf "%s\n" "yes" >&6; }
@@ -22375,6 +22379,14 @@ esac
 
 
 printf "%s\n" "#define SEMVER_PATH \"$SEMVER_PATH\"" >>confdefs.h
+
+
+
+# ---------------------------------------------------------------------------- #
+
+# Cargo flags
+
+
 
 
 

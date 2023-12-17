@@ -24,17 +24,17 @@ copy-srcs:
 
 build: copy-srcs
 	$(MAKE) $(AM_MAKEFLAGS) -C $(abs_top_builddir)/pkgdb bin/pkgdb$(EXEEXT)
-	$(CARGO) build;
+	$(CARGO) build $(CARGOFLAGS);
 
-$(FLOX_CLI_ROOT)/target/debug/flox: build
+$(abs_builddir)/target/debug/flox: build
 
 
 build-release: copy-srcs
 	$(MAKE) $(AM_MAKEFLAGS) -C $(abs_top_builddir)/pkgdb install;
 	PKGDB_BIN="$(DESTDIR)$(bindir)/pkgdb$(EXEEXT)"  \
-	$(CARGO) build --release;
+	$(CARGO) build $(CARGOFLAGS) --release;
 
-$(FLOX_CLI_ROOT)/target/release/flox: build-release
+$(abs_builddir)/target/release/flox: build-release
 
 
 # ---------------------------------------------------------------------------- #
@@ -50,6 +50,10 @@ $(FLOX_CLI_ROOT)/target/release/flox: build-release
 
 # ---------------------------------------------------------------------------- #
 
+# Default target builds the release version of the binary - otherwise
+# `make install' builds twice!
+
+all-local: CARGOFLAGS += --release
 all-local: build
 
 
@@ -61,9 +65,9 @@ clean-local:
 
 # ---------------------------------------------------------------------------- #
 
-install-exec-local: build-release
+install-exec-local: $(abs_builddir)/target/release/flox
 	$(MKDIR_P) $(DESTDIR)$(bindir);
-	$(INSTALL_PROGRAM) target/release/flox $(DESTDIR)$(bindir);
+	$(INSTALL_PROGRAM) $(abs_builddir)/target/release/flox $(DESTDIR)$(bindir);
 
 
 # ---------------------------------------------------------------------------- #

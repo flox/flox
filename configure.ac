@@ -353,7 +353,7 @@ AC_PREPROC_IFELSE([AC_LANG_SOURCE(
    @%:@if HAVE_BOEHMGC != 1
      @%:@error "Boehm GC is not supported"
    @%:@endif])],
-  [AC_DEFINE_UNQUOTED([HAVE_BOEHMGC], [1])
+  [AC_DEFINE_UNQUOTED([HAVE_BOEHMGC])
    AC_MSG_RESULT([yes])],
   [AC_MSG_RESULT([no])])
 
@@ -366,7 +366,7 @@ AC_PREPROC_IFELSE([AC_LANG_SOURCE(
    @%:@if ENABLE_S3 != 1
      @%:@error "S3 is not supported"
    @%:@endif])],
-  [AC_DEFINE_UNQUOTED([ENABLE_S3], [1])
+  [AC_DEFINE_UNQUOTED([ENABLE_S3])
    AC_MSG_RESULT([yes])],
   [AC_MSG_RESULT([no])])
 
@@ -379,7 +379,7 @@ AC_PREPROC_IFELSE([AC_LANG_SOURCE(
    @%:@if HAVE_STRUCT_DIRENT_D_TYPE != 1
      @%:@error "HAVE_STRUCT_DIRENT_D_TYPE is false"
    @%:@endif])],
-  [AC_DEFINE_UNQUOTED([HAVE_STRUCT_DIRENT_D_TYPE], [1])
+  [AC_DEFINE([HAVE_STRUCT_DIRENT_D_TYPE])
    AC_MSG_RESULT([yes])],
   [AC_MSG_RESULT([no])])
 
@@ -392,19 +392,20 @@ AC_PREPROC_IFELSE([AC_LANG_SOURCE(
    @%:@if EXCEPTION_NEEDS_THROW_SPEC != 1
      @%:@error "EXCEPTION_NEEDS_THROW_SPEC is false"
    @%:@endif])],
-  [AC_DEFINE_UNQUOTED([EXCEPTION_NEEDS_THROW_SPEC], [1])
+  [AC_DEFINE([EXCEPTION_NEEDS_THROW_SPEC])
    AC_MSG_RESULT([yes])],
   [AC_MSG_RESULT([no])])
 
-# `HAVE_BOOST' does NOT use an integer value.
-# It is either defined or not.
+# `HAVE_BOOST' does NOT use an integer value in `<nix/config.h>'.
+# It is either defined or not ( they use `/**/' on the right hand side ).
+# We use a `1' - I don't think this is a problem but wanted to note it.
 AC_MSG_CHECKING([Nix configuration setting HAVE_BOOST])
 AC_PREPROC_IFELSE([AC_LANG_SOURCE(
   [@%:@include <nix/config.h>
    @%:@ifndef HAVE_BOOST
      @%:@error "HAVE_BOOST is not defined"
    @%:@endif])],
-  [AC_DEFINE_UNQUOTED([HAVE_BOOST], [/**/])
+  [AC_DEFINE([HAVE_BOOST])
    AC_MSG_RESULT([yes])],
   [AC_MSG_RESULT([no])])
 
@@ -572,6 +573,14 @@ AS_CASE(["$SEMVER"],
 AC_SUBST([SEMVER_PATH])
 AC_DEFINE_UNQUOTED([SEMVER_PATH], ["$SEMVER_PATH"],
   [Path to 'semver' executable in '/nix/store'])
+
+
+# ---------------------------------------------------------------------------- #
+
+# Cargo flags
+
+AC_ARG_VAR([CARGOFLAGS], [Additional flags to pass to 'cargo build'])
+AC_SUBST([CARGOFLAGS])
 
 
 # ---------------------------------------------------------------------------- #
