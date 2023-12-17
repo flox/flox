@@ -29,10 +29,13 @@ nixVersions.nix_2_17.overrideAttrs (prev: {
     _patt="''${_patt#\\|}";
     _patt="s,#include \+\"\($_patt\)\",#include <nix/\1>,";
     # Perform the substitution.
+    # Handles `#include <nix/...>' and adds `NIX_' prefix to some macros.
     find "$dev/include/nix" -type f -name '*.h*' -print                        \
       |xargs sed -i                                                            \
                  -e "$_patt"                                                   \
-                 -e 's,#include \+"\(nlohmann/json_fwd\.hpp\)",#include <\1>,';
+                 -e 's,#include \+"\(nlohmann/json_fwd\.hpp\)",#include <\1>,' \
+                 -e 's/PACKAGE_/NIX_PACKAGE_/g'                                \
+       ;
 
     # Fixup `pkg-config' files.
     find "$dev" -type f -name '*.pc'                       \

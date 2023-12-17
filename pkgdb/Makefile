@@ -331,7 +331,7 @@ CXX_LINT = /nix/store/sgx6lr68km0h3k2gc3nnayjc1h1rmhl0-clang-tools-16.0.6/bin/cl
 CXX_TOOLCHAIN = gcc
 CYGPATH_W = echo
 DATADIR = ${datarootdir}
-DEFS = -DPACKAGE_NAME=\"flox\" -DPACKAGE_TARNAME=\"flox\" -DPACKAGE_VERSION=\"0.3.7\" -DPACKAGE_STRING=\"flox\ 0.3.7\" -DPACKAGE_BUGREPORT=\"alex.ameen@floxdev.com\" -DPACKAGE_URL=\"\" -DPACKAGE=\"flox\" -DVERSION=\"0.3.7\" -DHAVE_STDIO_H=1 -DHAVE_STDLIB_H=1 -DHAVE_STRING_H=1 -DHAVE_INTTYPES_H=1 -DHAVE_STDINT_H=1 -DHAVE_STRINGS_H=1 -DHAVE_SYS_STAT_H=1 -DHAVE_SYS_TYPES_H=1 -DHAVE_UNISTD_H=1 -DSTDC_HEADERS=1 -DHAVE_DLFCN_H=1 -DLT_OBJDIR=\".libs/\" -DHAVE_LIBNIXFETCHERS=1 -DHAVE_ALLOCA_H=1 -DHAVE_ALLOCA=1 -DHAVE_FCNTL_H=1 -DHAVE_NETDB_H=1 -DHAVE_NETINET_IN_H=1 -DHAVE_SYS_SOCKET_H=1 -DHAVE_UNISTD_H=1 -DHAVE__BOOL=1 -DLSTAT_FOLLOWS_SLASHED_SYMLINK=1 -DMAJOR_IN_SYSMACROS=1 -DHAVE_MEMSET=1 -DHAVE_STRTOUL=1 -DHAVE_MKDIR=1
+DEFS = -DPACKAGE_NAME=\"flox\" -DPACKAGE_TARNAME=\"flox\" -DPACKAGE_VERSION=\"0.3.7\" -DPACKAGE_STRING=\"flox\ 0.3.7\" -DPACKAGE_BUGREPORT=\"alex.ameen@floxdev.com\" -DPACKAGE_URL=\"\" -DPACKAGE=\"flox\" -DVERSION=\"0.3.7\" -DHAVE_STDIO_H=1 -DHAVE_STDLIB_H=1 -DHAVE_STRING_H=1 -DHAVE_INTTYPES_H=1 -DHAVE_STDINT_H=1 -DHAVE_STRINGS_H=1 -DHAVE_SYS_STAT_H=1 -DHAVE_SYS_TYPES_H=1 -DHAVE_UNISTD_H=1 -DSTDC_HEADERS=1 -DHAVE_DLFCN_H=1 -DLT_OBJDIR=\".libs/\" -DHAVE_LIBNIXFETCHERS=1 -DHAVE_ALLOCA_H=1 -DHAVE_ALLOCA=1 -DHAVE_FCNTL_H=1 -DHAVE_NETDB_H=1 -DHAVE_NETINET_IN_H=1 -DHAVE_SYS_SOCKET_H=1 -DHAVE_UNISTD_H=1 -DHAVE__BOOL=1 -DLSTAT_FOLLOWS_SLASHED_SYMLINK=1 -DMAJOR_IN_SYSMACROS=1 -DHAVE_MEMSET=1 -DHAVE_STRTOUL=1 -DHAVE_MKDIR=1 -DHAVE_BOEHMGC=1 -DENABLE_S3=1 -DHAVE_STRUCT_DIRENT_D_TYPE=1
 DEPDIR = .deps
 DEPFILES = /home/camus/src/flox/flake.nix /home/camus/src/flox/flake.lock /home/camus/src/flox/pkgs/flox/default.nix /home/camus/src/flox/pkgs/flox-pkgdb/default.nix /home/camus/src/flox/shells/flox/default.nix
 DLLTOOL = false
@@ -380,11 +380,14 @@ MANIFEST_TOOL = :
 MISSING = /home/camus/src/flox/build-aux/missing
 MKDIR = /nix/store/w8vm09hri2zz7yacryzzzxvsapik4ps4-coreutils-9.1/bin/mkdir
 MKDIR_P = /nix/store/w8vm09hri2zz7yacryzzzxvsapik4ps4-coreutils-9.1/bin/mkdir -p
-NIX = /nix/store/hz8jb954fmhzhh7a1gw2zsw8bcssspb1-nix-2.17.1/bin/nix
-NIX_CFLAGS = -std=c++2a -isystem /nix/store/8sik089b1nanpjm3s4rfb0cifb2idam8-nix-2.17.1-dev/include -I/nix/store/v9nrp3rd303arhzdjz7zgpfyi9xpfq3c-boehm-gc-8.2.2-dev/include -DSYSTEM='"x86_64-linux"' -include '/nix/store/8sik089b1nanpjm3s4rfb0cifb2idam8-nix-2.17.1-dev/include/nix/config.h'
+NIX = /nix/store/ynvy8q46rjvb67zpg79r0j3qsnlj7mzq-nix-2.17.1/bin/nix
+NIX_CFLAGS = -std=c++2a -isystem /nix/store/j7zxjmb56qvkx8iamqhz35ppmzqc6h8f-nix-2.17.1-dev/include -I/nix/store/v9nrp3rd303arhzdjz7zgpfyi9xpfq3c-boehm-gc-8.2.2-dev/include -include /nix/store/j7zxjmb56qvkx8iamqhz35ppmzqc6h8f-nix-2.17.1-dev/include/nix/config.h
+NIX_CPPFLAGS = -isystem /nix/store/j7zxjmb56qvkx8iamqhz35ppmzqc6h8f-nix-2.17.1-dev/include -DSYSTEM='"linux-x86_64"' -DHAVE_BOEHMGC -DENABLE_S3 -DHAVE_STRUCT_DIRENT_D_TYPE
 NIX_FMT = /nix/store/8ipq97lmfbx4mij1bm1my7b4lphqb30f-alejandra-3.0.0/bin/alejandra
-NIX_INCDIR = /nix/store/8sik089b1nanpjm3s4rfb0cifb2idam8-nix-2.17.1-dev/include
-NIX_LIBS = -L/nix/store/hz8jb954fmhzhh7a1gw2zsw8bcssspb1-nix-2.17.1/lib -L/nix/store/a90rj311zj2fhlj8a2j4cgjw9xz8jn3p-boehm-gc-8.2.2/lib -lnixmain -lnixcmd -lnixexpr -lnixstore -lnixutil -lgc -lpthread -ldl
+NIX_INCDIR = /nix/store/j7zxjmb56qvkx8iamqhz35ppmzqc6h8f-nix-2.17.1-dev/include
+NIX_LIBS = -L/nix/store/ynvy8q46rjvb67zpg79r0j3qsnlj7mzq-nix-2.17.1/lib -L/nix/store/a90rj311zj2fhlj8a2j4cgjw9xz8jn3p-boehm-gc-8.2.2/lib -lnixmain -lnixcmd -lnixexpr -lnixstore -lnixutil -lgc -lpthread -ldl
+NIX_PKG_CONFIG_CFLAGS = -std=c++2a -isystem /nix/store/j7zxjmb56qvkx8iamqhz35ppmzqc6h8f-nix-2.17.1-dev/include -I/nix/store/v9nrp3rd303arhzdjz7zgpfyi9xpfq3c-boehm-gc-8.2.2-dev/include
+NIX_PKG_CONFIG_LIBS = -L/nix/store/ynvy8q46rjvb67zpg79r0j3qsnlj7mzq-nix-2.17.1/lib -L/nix/store/a90rj311zj2fhlj8a2j4cgjw9xz8jn3p-boehm-gc-8.2.2/lib -lnixmain -lnixcmd -lnixexpr -lnixstore -lnixutil -lgc -lpthread -ldl
 NLJSON_CFLAGS = -I/nix/store/nazmhpca2rn9s8582i3wlabpfv3lnx13-nlohmann_json-3.11.2/include
 NLJSON_LIBS = 
 NM = nm
@@ -410,7 +413,7 @@ PKGDB_VERSION = 0.1.0
 PKGS_DIR = /home/camus/src/flox/pkgs
 PKG_CONFIG = /nix/store/7l5gbdz3rcab57r24arg61i4vavpf2cz-pkg-config-wrapper-0.29.2/bin/pkg-config
 PKG_CONFIG_LIBDIR = 
-PKG_CONFIG_PATH = /nix/store/2i83qvxdxps1s91335icgkd2mp6v6b91-bash-5.2-p15-dev/lib/pkgconfig:/nix/store/kdlr78ihdkr69l9nd1yrc48rvnsf9j8w-sqlite-3.41.2-dev/lib/pkgconfig:/nix/store/pzis69n8rva6rxkkp5vp4c4mklxgp5yf-ncurses-6.4-dev/lib/pkgconfig:/nix/store/j0zwp9zygvadcly9dxpm0f4ga7h0n8c9-zlib-1.2.13-dev/lib/pkgconfig:/nix/store/f9i84g18qpq60hxz590l6lvr2k71sznz-valgrind-3.20.0-dev/lib/pkgconfig:/nix/store/n5fr2ppq4i3hdjbbf4636gk54s07022v-python3-3.10.13/lib/pkgconfig:/nix/store/4pifi04nz9l2i0l692ny148q94klml0r-zstd-1.5.5-dev/lib/pkgconfig:/nix/store/nazmhpca2rn9s8582i3wlabpfv3lnx13-nlohmann_json-3.11.2/share/pkgconfig:/nix/store/f1nn0gnkwfkp6hjngwb4p1y73l97b1rj-argparse-2.9/lib/pkgconfig:/nix/store/r84cm2q5y05x25ri4sh8bvi3mc5j1y2r-sqlite3pp-1.0.8/lib/pkgconfig:/nix/store/hz517ls4pkfkxiw1lkcydbzq3a1k53xz-yaml-cpp-0.7.0/share/pkgconfig:/nix/store/8sik089b1nanpjm3s4rfb0cifb2idam8-nix-2.17.1-dev/lib/pkgconfig:/nix/store/v9nrp3rd303arhzdjz7zgpfyi9xpfq3c-boehm-gc-8.2.2-dev/lib/pkgconfig:/nix/store/h55j9wkhjnqizhxa5g1jacg855lm3fj2-openssl-3.0.12-dev/lib/pkgconfig:/nix/store/wjgfhvbl3llgrrsrkcwx5wl9n0m80f6f-libssh2-1.11.0-dev/lib/pkgconfig:/nix/store/2014lw90b5vmv6fdf60r65qrawy6iwyx-libgit2-1.6.4/lib/pkgconfig
+PKG_CONFIG_PATH = /nix/store/2i83qvxdxps1s91335icgkd2mp6v6b91-bash-5.2-p15-dev/lib/pkgconfig:/nix/store/kdlr78ihdkr69l9nd1yrc48rvnsf9j8w-sqlite-3.41.2-dev/lib/pkgconfig:/nix/store/pzis69n8rva6rxkkp5vp4c4mklxgp5yf-ncurses-6.4-dev/lib/pkgconfig:/nix/store/j0zwp9zygvadcly9dxpm0f4ga7h0n8c9-zlib-1.2.13-dev/lib/pkgconfig:/nix/store/f9i84g18qpq60hxz590l6lvr2k71sznz-valgrind-3.20.0-dev/lib/pkgconfig:/nix/store/n5fr2ppq4i3hdjbbf4636gk54s07022v-python3-3.10.13/lib/pkgconfig:/nix/store/4pifi04nz9l2i0l692ny148q94klml0r-zstd-1.5.5-dev/lib/pkgconfig:/nix/store/nazmhpca2rn9s8582i3wlabpfv3lnx13-nlohmann_json-3.11.2/share/pkgconfig:/nix/store/f1nn0gnkwfkp6hjngwb4p1y73l97b1rj-argparse-2.9/lib/pkgconfig:/nix/store/r84cm2q5y05x25ri4sh8bvi3mc5j1y2r-sqlite3pp-1.0.8/lib/pkgconfig:/nix/store/hz517ls4pkfkxiw1lkcydbzq3a1k53xz-yaml-cpp-0.7.0/share/pkgconfig:/nix/store/j7zxjmb56qvkx8iamqhz35ppmzqc6h8f-nix-2.17.1-dev/lib/pkgconfig:/nix/store/v9nrp3rd303arhzdjz7zgpfyi9xpfq3c-boehm-gc-8.2.2-dev/lib/pkgconfig:/nix/store/h55j9wkhjnqizhxa5g1jacg855lm3fj2-openssl-3.0.12-dev/lib/pkgconfig:/nix/store/wjgfhvbl3llgrrsrkcwx5wl9n0m80f6f-libssh2-1.11.0-dev/lib/pkgconfig:/nix/store/2014lw90b5vmv6fdf60r65qrawy6iwyx-libgit2-1.6.4/lib/pkgconfig
 PREFIX = /home/camus/src/flox/out
 RANLIB = /nix/store/3hbxw05vfs6m1155xa6pvribs3bv777n-gcc-wrapper-12.2.0/bin/ranlib
 RELATIVE_RPATH_FLAG = -Wl,--enable-new-dtags '-Wl,-rpath=$$$$ORIGIN/../lib'
@@ -432,6 +435,7 @@ SQLITE3_CFLAGS = -I/nix/store/kdlr78ihdkr69l9nd1yrc48rvnsf9j8w-sqlite-3.41.2-dev
 SQLITE3_LIBS = -L/nix/store/7xx6irwzdpj5fwbdbgxm8bb7r179ddmv-sqlite-3.41.2/lib -lsqlite3
 STRIP = strip
 SYSCONFDIR = ${prefix}/etc
+SYSTEM = linux-x86_64
 TEE = /nix/store/w8vm09hri2zz7yacryzzzxvsapik4ps4-coreutils-9.1/bin/tee
 TEST = /nix/store/w8vm09hri2zz7yacryzzzxvsapik4ps4-coreutils-9.1/bin/test
 TOUCH = /nix/store/w8vm09hri2zz7yacryzzzxvsapik4ps4-coreutils-9.1/bin/touch

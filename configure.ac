@@ -20,7 +20,6 @@ AC_CONFIG_AUX_DIR([build-aux])
 AM_INIT_AUTOMAKE([-Wall -Werror foreign subdir-objects])
 
 AC_CONFIG_SRCDIR([pkgdb/src/main.cc])
-#AC_CONFIG_HEADERS([pkgdb/config.h])
 
 LT_PREREQ([2.4.7])
 LT_INIT
@@ -39,6 +38,9 @@ AC_PATH_PROG([CXX], [$CXX], [$MISSING c++])
 
 AC_PROG_CC
 AC_PATH_PROG([CC], [$CC], [$MISSING cc])
+
+AC_PROG_CPP
+AC_PATH_PROG([CPP], [$CPP], [$MISSING cpp])
 
 AC_PROG_INSTALL
 AC_PATH_PROG([CC], [$CC], [$MISSING install])
@@ -205,6 +207,7 @@ AC_CHECK_HEADERS([
   netinet/in.h
   sys/socket.h
   unistd.h
+  utime.h
 ])
 
 
@@ -214,8 +217,9 @@ AC_CHECK_HEADERS([
 
 AC_CHECK_HEADER_STDBOOL
 AC_C_INLINE
-AC_TYPE_INT64_T
 AC_TYPE_SIZE_T
+AC_TYPE_UINT8_T
+AC_TYPE_INT64_T
 AC_TYPE_UINT64_T
 
 
@@ -226,7 +230,7 @@ AC_TYPE_UINT64_T
 AC_FUNC_ERROR_AT_LINE
 AC_FUNC_LSTAT_FOLLOWS_SLASHED_SYMLINK
 AC_HEADER_MAJOR
-AC_CHECK_FUNCS([memset strtoul mkdir])
+AC_CHECK_FUNCS([memset strtoul mkdir utime])
 
 
 # ---------------------------------------------------------------------------- #
@@ -310,20 +314,121 @@ PKG_CHECK_MODULES([SQLITE3PP], [sqlite3pp], [:],
 PKG_CHECK_MODULES([YAML], [yaml-cpp], [:],
   [AC_MSG_ERROR([Cannot find 'yaml-cpp.pc'])])
 
-PKG_CHECK_MODULES([NIX], [nix-store nix-main nix-cmd nix-expr], [:],
+PKG_CHECK_MODULES([NIX_PKG_CONFIG], [nix-store nix-main nix-cmd nix-expr], [:],
   [AC_MSG_ERROR([Cannot find 'nix-store.pc'])])
+
+AC_ARG_VAR([NIX_CFLAGS], [Flags for the C++ compiler when compiling wth 'nix'])
+AC_ARG_VAR([NIX_LIBS],
+  [Flags for the C++ compiler when linking wth 'nix' libraries])
 
 
 # ---------------------------------------------------------------------------- #
 
-# FIXME: you have to undef `PACKAGE_*' macros added by `autotools'.
+# Compiler Flags for pre-processing with `nix' headers
+
+AC_ARG_VAR([NIX_CPPFLAGS],
+  [Flags for the C++ preprocessor when compiling wth 'nix' headers])
 
 # Add some necessary macro definitions for `nix' which normally appear
 # in `<nix>/include/nix/config.h'.
-PKG_CHECK_VAR([NIX_INCDIR], [nix-main], [includedir], [:],
+PKG_CHECK_VAR([NIX_INCDIR], [nix-main], [includedir],
+  [NIX_CPPFLAGS="-isystem $NIX_INCDIR"],
   [AC_MSG_ERROR([Cannot find nix-main include directory for 'nix/config.h'])])
-NIX_CFLAGS="$NIX_CFLAGS -DSYSTEM='\"$ARCH-$OS\"'"
-NIX_CFLAGS="$NIX_CFLAGS -include '$NIX_INCDIR/nix/config.h'";
+
+AC_MSG_CHECKING([Nix system pair])
+AC_ARG_VAR([SYSTEM], [Nix system pair])
+SYSTEM="$OS-$ARCH";
+AC_MSG_RESULT([$SYSTEM])
+AC_SUBST([SYSTEM])
+
+# Add `-DSYSTEM="..."' to `NIX_CPPFLAGS'.
+NIX_CPPFLAGS="${NIX_CPPFLAGS:+$NIX_CPPFLAGS }-DSYSTEM='\"$SYSTEM\"'"
+
+
+# Check configuration used to compile `nix' and add it to `NIX_CPPFLAGS`.
+
+_pushed_CPPFLAGS="$CPPFLAGS";
+CPPFLAGS="$NIX_CPPFLAGS";
+AC_LANG_PUSH([C++])
+
+# NOTE: "@%:@" is replaced with "#" by `autoconf' to prevent `m4sh' from
+#       treating it as a comment.
+AC_MSG_CHECKING([Nix configuration setting HAVE_BOEHMGC])
+AC_PREPROC_IFELSE([AC_LANG_SOURCE(
+  [@%:@include <nix/config.h>
+   @%:@ifndef HAVE_BOEHMGC
+     @%:@error "Boehm GC support is not indicated"
+   @%:@endif
+   @%:@if HAVE_BOEHMGC != 1
+     @%:@error "Boehm GC is not supported"
+   @%:@endif])],
+  [HAVE_BOEHMGC=1
+   NIX_CPPFLAGS="${NIX_CPPFLAGS:+$NIX_CPPFLAGS }-DHAVE_BOEHMGC"
+   AC_MSG_RESULT([yes])],
+  [HAVE_BOEHMGC=0
+   AC_MSG_RESULT([no])])
+AC_DEFINE_UNQUOTED([HAVE_BOEHMGC], [$HAVE_BOEHMGC])
+
+AC_MSG_CHECKING([Nix configuration setting ENABLE_S3])
+AC_PREPROC_IFELSE([AC_LANG_SOURCE(
+  [@%:@include <nix/config.h>
+   @%:@ifndef ENABLE_S3
+     @%:@error "S3 is not indicated"
+   @%:@endif
+   @%:@if ENABLE_S3 != 1
+     @%:@error "S3 is not supported"
+   @%:@endif])],
+  [ENABLE_S3=1
+   NIX_CPPFLAGS="${NIX_CPPFLAGS:+$NIX_CPPFLAGS }-DENABLE_S3"
+   AC_MSG_RESULT([yes])],
+  [ENABLE_S3=0
+   AC_MSG_RESULT([no])])
+AC_DEFINE_UNQUOTED([ENABLE_S3], [$ENABLE_S3])
+
+AC_MSG_CHECKING([Nix configuration setting HAVE_STRUCT_DIRENT_D_TYPE])
+AC_PREPROC_IFELSE([AC_LANG_SOURCE(
+  [@%:@include <nix/config.h>
+   @%:@ifndef HAVE_STRUCT_DIRENT_D_TYPE
+     @%:@error "HAVE_STRUCT_DIRENT_D_TYPE is not defined"
+   @%:@endif
+   @%:@if HAVE_STRUCT_DIRENT_D_TYPE != 1
+     @%:@error "HAVE_STRUCT_DIRENT_D_TYPE is false"
+   @%:@endif])],
+  [HAVE_STRUCT_DIRENT_D_TYPE=1
+   NIX_CPPFLAGS="${NIX_CPPFLAGS:+$NIX_CPPFLAGS }-DHAVE_STRUCT_DIRENT_D_TYPE"
+   AC_MSG_RESULT([yes])],
+  [HAVE_STRUCT_DIRENT_D_TYPE=0
+   AC_MSG_RESULT([no])])
+AC_DEFINE_UNQUOTED([HAVE_STRUCT_DIRENT_D_TYPE], [$HAVE_STRUCT_DIRENT_D_TYPE])
+
+AC_MSG_CHECKING([Nix configuration setting EXCEPTION_NEEDS_THROW_SPEC])
+AC_PREPROC_IFELSE([AC_LANG_SOURCE(
+  [@%:@include <nix/config.h>
+   @%:@ifndef EXCEPTION_NEEDS_THROW_SPEC
+     @%:@error "EXCEPTION_NEEDS_THROW_SPEC is not defined"
+   @%:@endif
+   @%:@if EXCEPTION_NEEDS_THROW_SPEC != 1
+     @%:@error "EXCEPTION_NEEDS_THROW_SPEC is false"
+   @%:@endif])],
+  [EXCEPTION_NEEDS_THROW_SPEC=1
+   NIX_CPPFLAGS="${NIX_CPPFLAGS:+$NIX_CPPFLAGS }-DEXCEPTION_NEEDS_THROW_SPEC"
+   AC_MSG_RESULT([yes])],
+  [EXCEPTION_NEEDS_THROW_SPEC=0
+   AC_MSG_RESULT([no])])
+AC_DEFINE_UNQUOTED([EXCEPTION_NEEDS_THROW_SPEC], [$EXCEPTION_NEEDS_THROW_SPEC])
+
+AC_LANG_POP
+CPPFLAGS="$_pushed_CPPFLAGS";
+
+AC_MSG_CHECKING([Nix pre-processor flags NIX_CPPFLAGS])
+AC_SUBST([NIX_CPPFLAGS])
+AC_MSG_RESULT([$NIX_CPPFLAGS])
+
+#NIX_CFLAGS="$NIX_CPPFLAGS $NIX_PKG_CONFIG_CFLAGS"
+NIX_CFLAGS="$NIX_PKG_CONFIG_CFLAGS -include $NIX_INCDIR/nix/config.h"
+NIX_LIBS="$NIX_PKG_CONFIG_LIBS"
+AC_SUBST([NIX_CFLAGS])
+AC_SUBST([NIX_LIBS])
 
 
 # ---------------------------------------------------------------------------- #
@@ -397,6 +502,7 @@ AC_SUBST([PKGDB_VERSION], ["$(< pkgdb/version)"])
 
 # ---------------------------------------------------------------------------- #
 
+AC_CONFIG_HEADERS([pkgdb/config.h])
 AC_CONFIG_FILES([
   pkgdb/Makefile
 ])

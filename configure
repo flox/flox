@@ -671,9 +671,13 @@ NO_UNDEFINED_SYMBOLS_FLAG
 set_soname_option
 set_rpath_option
 RELATIVE_RPATH_FLAG
+SYSTEM
 NIX_INCDIR
+NIX_CPPFLAGS
 NIX_LIBS
 NIX_CFLAGS
+NIX_PKG_CONFIG_LIBS
+NIX_PKG_CONFIG_CFLAGS
 YAML_LIBS
 YAML_CFLAGS
 SQLITE3PP_LIBS
@@ -953,9 +957,13 @@ SQLITE3PP_CFLAGS
 SQLITE3PP_LIBS
 YAML_CFLAGS
 YAML_LIBS
+NIX_PKG_CONFIG_CFLAGS
+NIX_PKG_CONFIG_LIBS
 NIX_CFLAGS
 NIX_LIBS
-NIX_INCDIR'
+NIX_CPPFLAGS
+NIX_INCDIR
+SYSTEM'
 
 
 # Initialize some variables set by options.
@@ -1677,9 +1685,16 @@ Some influential environment variables:
               linker flags for SQLITE3PP, overriding pkg-config
   YAML_CFLAGS C compiler flags for YAML, overriding pkg-config
   YAML_LIBS   linker flags for YAML, overriding pkg-config
-  NIX_CFLAGS  C compiler flags for NIX, overriding pkg-config
-  NIX_LIBS    linker flags for NIX, overriding pkg-config
+  NIX_PKG_CONFIG_CFLAGS
+              C compiler flags for NIX_PKG_CONFIG, overriding pkg-config
+  NIX_PKG_CONFIG_LIBS
+              linker flags for NIX_PKG_CONFIG, overriding pkg-config
+  NIX_CFLAGS  Flags for the C++ compiler when compiling wth 'nix'
+  NIX_LIBS    Flags for the C++ compiler when linking wth 'nix' libraries
+  NIX_CPPFLAGS
+              Flags for the C++ preprocessor when compiling wth 'nix' headers
   NIX_INCDIR  value of includedir for nix-main, overriding pkg-config
+  SYSTEM      Nix system pair
 
 Use these variables to override the choices made by `configure' or to help
 it to find libraries and programs with nonstandard names/locations.
@@ -21626,8 +21641,8 @@ pkg_failed=no
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for nix-store nix-main nix-cmd nix-expr" >&5
 printf %s "checking for nix-store nix-main nix-cmd nix-expr... " >&6; }
 
-if test -n "$NIX_CFLAGS"; then
-    pkg_cv_NIX_CFLAGS="$NIX_CFLAGS"
+if test -n "$NIX_PKG_CONFIG_CFLAGS"; then
+    pkg_cv_NIX_PKG_CONFIG_CFLAGS="$NIX_PKG_CONFIG_CFLAGS"
  elif test -n "$PKG_CONFIG"; then
     if test -n "$PKG_CONFIG" && \
     { { printf "%s\n" "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"nix-store nix-main nix-cmd nix-expr\""; } >&5
@@ -21635,7 +21650,7 @@ if test -n "$NIX_CFLAGS"; then
   ac_status=$?
   printf "%s\n" "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
   test $ac_status = 0; }; then
-  pkg_cv_NIX_CFLAGS=`$PKG_CONFIG --cflags "nix-store nix-main nix-cmd nix-expr" 2>/dev/null`
+  pkg_cv_NIX_PKG_CONFIG_CFLAGS=`$PKG_CONFIG --cflags "nix-store nix-main nix-cmd nix-expr" 2>/dev/null`
 		      test "x$?" != "x0" && pkg_failed=yes
 else
   pkg_failed=yes
@@ -21643,8 +21658,8 @@ fi
  else
     pkg_failed=untried
 fi
-if test -n "$NIX_LIBS"; then
-    pkg_cv_NIX_LIBS="$NIX_LIBS"
+if test -n "$NIX_PKG_CONFIG_LIBS"; then
+    pkg_cv_NIX_PKG_CONFIG_LIBS="$NIX_PKG_CONFIG_LIBS"
  elif test -n "$PKG_CONFIG"; then
     if test -n "$PKG_CONFIG" && \
     { { printf "%s\n" "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"nix-store nix-main nix-cmd nix-expr\""; } >&5
@@ -21652,7 +21667,7 @@ if test -n "$NIX_LIBS"; then
   ac_status=$?
   printf "%s\n" "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
   test $ac_status = 0; }; then
-  pkg_cv_NIX_LIBS=`$PKG_CONFIG --libs "nix-store nix-main nix-cmd nix-expr" 2>/dev/null`
+  pkg_cv_NIX_PKG_CONFIG_LIBS=`$PKG_CONFIG --libs "nix-store nix-main nix-cmd nix-expr" 2>/dev/null`
 		      test "x$?" != "x0" && pkg_failed=yes
 else
   pkg_failed=yes
@@ -21673,12 +21688,12 @@ else
         _pkg_short_errors_supported=no
 fi
         if test $_pkg_short_errors_supported = yes; then
-	        NIX_PKG_ERRORS=`$PKG_CONFIG --short-errors --print-errors --cflags --libs "nix-store nix-main nix-cmd nix-expr" 2>&1`
+	        NIX_PKG_CONFIG_PKG_ERRORS=`$PKG_CONFIG --short-errors --print-errors --cflags --libs "nix-store nix-main nix-cmd nix-expr" 2>&1`
         else
-	        NIX_PKG_ERRORS=`$PKG_CONFIG --print-errors --cflags --libs "nix-store nix-main nix-cmd nix-expr" 2>&1`
+	        NIX_PKG_CONFIG_PKG_ERRORS=`$PKG_CONFIG --print-errors --cflags --libs "nix-store nix-main nix-cmd nix-expr" 2>&1`
         fi
 	# Put the nasty error message in config.log where it belongs
-	echo "$NIX_PKG_ERRORS" >&5
+	echo "$NIX_PKG_CONFIG_PKG_ERRORS" >&5
 
 	as_fn_error $? "Cannot find 'nix-store.pc'" "$LINENO" 5
 elif test $pkg_failed = untried; then
@@ -21686,15 +21701,22 @@ elif test $pkg_failed = untried; then
 printf "%s\n" "no" >&6; }
 	as_fn_error $? "Cannot find 'nix-store.pc'" "$LINENO" 5
 else
-	NIX_CFLAGS=$pkg_cv_NIX_CFLAGS
-	NIX_LIBS=$pkg_cv_NIX_LIBS
+	NIX_PKG_CONFIG_CFLAGS=$pkg_cv_NIX_PKG_CONFIG_CFLAGS
+	NIX_PKG_CONFIG_LIBS=$pkg_cv_NIX_PKG_CONFIG_LIBS
         { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: yes" >&5
 printf "%s\n" "yes" >&6; }
 	:
 fi
 
 
+
+
+
 # ---------------------------------------------------------------------------- #
+
+# Compiler Flags for pre-processing with `nix' headers
+
+
 
 # Add some necessary macro definitions for `nix' which normally appear
 # in `<nix>/include/nix/config.h'.
@@ -21722,10 +21744,154 @@ if test "x$NIX_INCDIR" = x""
 then :
   as_fn_error $? "Cannot find nix-main include directory for 'nix/config.h'" "$LINENO" 5
 else $as_nop
-  :
+  NIX_CPPFLAGS="-isystem $NIX_INCDIR"
 fi
-NIX_CFLAGS="$NIX_CFLAGS -DSYSTEM='\"$ARCH-$OS\"'"
-NIX_CFLAGS="$NIX_CFLAGS -include '$NIX_INCDIR/nix/config.h'";
+
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking Nix system pair" >&5
+printf %s "checking Nix system pair... " >&6; }
+
+SYSTEM="$OS-$ARCH";
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $SYSTEM" >&5
+printf "%s\n" "$SYSTEM" >&6; }
+
+
+# Add `-DSYSTEM="..."' to `NIX_CPPFLAGS'.
+NIX_CPPFLAGS="${NIX_CPPFLAGS:+$NIX_CPPFLAGS }-DSYSTEM='\"$SYSTEM\"'"
+
+
+# Check configuration used to compile `nix' and add it to `NIX_CPPFLAGS`.
+
+_pushed_CPPFLAGS="$CPPFLAGS";
+CPPFLAGS="$NIX_CPPFLAGS";
+ac_ext=cpp
+ac_cpp='$CXXCPP $CPPFLAGS'
+ac_compile='$CXX -c $CXXFLAGS $CPPFLAGS conftest.$ac_ext >&5'
+ac_link='$CXX -o conftest$ac_exeext $CXXFLAGS $CPPFLAGS $LDFLAGS conftest.$ac_ext $LIBS >&5'
+ac_compiler_gnu=$ac_cv_cxx_compiler_gnu
+
+
+# NOTE: "#" is replaced with "#" by `autoconf' to prevent `m4sh' from
+#       treating it as a comment.
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking Nix configuration setting HAVE_BOEHMGC" >&5
+printf %s "checking Nix configuration setting HAVE_BOEHMGC... " >&6; }
+
+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+#include <nix/config.h>
+   #ifndef HAVE_BOEHMGC
+     #error "Boehm GC support is not indicated"
+   #endif
+   #if HAVE_BOEHMGC != 1
+     #error "Boehm GC is not supported"
+   #endif
+_ACEOF
+if ac_fn_cxx_try_cpp "$LINENO"
+then :
+  printf "%s\n" "#define HAVE_BOEHMGC 1" >>confdefs.h
+
+   NIX_CPPFLAGS="${NIX_CPPFLAGS:+$NIX_CPPFLAGS }-DHAVE_BOEHMGC"
+   { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: yes" >&5
+printf "%s\n" "yes" >&6; }
+else $as_nop
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
+printf "%s\n" "no" >&6; }
+fi
+rm -f conftest.err conftest.i conftest.$ac_ext
+
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking Nix configuration setting ENABLE_S3" >&5
+printf %s "checking Nix configuration setting ENABLE_S3... " >&6; }
+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+#include <nix/config.h>
+   #ifndef ENABLE_S3
+     #error "S3 is not indicated"
+   #endif
+   #if ENABLE_S3 != 1
+     #error "S3 is not supported"
+   #endif
+_ACEOF
+if ac_fn_cxx_try_cpp "$LINENO"
+then :
+  printf "%s\n" "#define ENABLE_S3 1" >>confdefs.h
+
+   NIX_CPPFLAGS="${NIX_CPPFLAGS:+$NIX_CPPFLAGS }-DENABLE_S3"
+   { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: yes" >&5
+printf "%s\n" "yes" >&6; }
+else $as_nop
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
+printf "%s\n" "no" >&6; }
+fi
+rm -f conftest.err conftest.i conftest.$ac_ext
+
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking Nix configuration setting HAVE_STRUCT_DIRENT_D_TYPE" >&5
+printf %s "checking Nix configuration setting HAVE_STRUCT_DIRENT_D_TYPE... " >&6; }
+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+#include <nix/config.h>
+   #ifndef HAVE_STRUCT_DIRENT_D_TYPE
+     #error "HAVE_STRUCT_DIRENT_D_TYPE is not defined"
+   #endif
+   #if HAVE_STRUCT_DIRENT_D_TYPE != 1
+     #error "HAVE_STRUCT_DIRENT_D_TYPE is false"
+   #endif
+_ACEOF
+if ac_fn_cxx_try_cpp "$LINENO"
+then :
+  printf "%s\n" "#define HAVE_STRUCT_DIRENT_D_TYPE 1" >>confdefs.h
+
+   NIX_CPPFLAGS="${NIX_CPPFLAGS:+$NIX_CPPFLAGS }-DHAVE_STRUCT_DIRENT_D_TYPE"
+   { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: yes" >&5
+printf "%s\n" "yes" >&6; }
+else $as_nop
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
+printf "%s\n" "no" >&6; }
+fi
+rm -f conftest.err conftest.i conftest.$ac_ext
+
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking Nix configuration setting EXCEPTION_NEEDS_THROW_SPEC" >&5
+printf %s "checking Nix configuration setting EXCEPTION_NEEDS_THROW_SPEC... " >&6; }
+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+#include <nix/config.h>
+   #ifndef EXCEPTION_NEEDS_THROW_SPEC
+     #error "EXCEPTION_NEEDS_THROW_SPEC is not defined"
+   #endif
+   #if EXCEPTION_NEEDS_THROW_SPEC != 1
+     #error "EXCEPTION_NEEDS_THROW_SPEC is false"
+   #endif
+_ACEOF
+if ac_fn_cxx_try_cpp "$LINENO"
+then :
+  printf "%s\n" "#define EXCEPTION_NEEDS_THROW_SPEC 1" >>confdefs.h
+
+   NIX_CPPFLAGS="${NIX_CPPFLAGS:+$NIX_CPPFLAGS }-DEXCEPTION_NEEDS_THROW_SPEC"
+   { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: yes" >&5
+printf "%s\n" "yes" >&6; }
+else $as_nop
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
+printf "%s\n" "no" >&6; }
+fi
+rm -f conftest.err conftest.i conftest.$ac_ext
+
+ac_ext=c
+ac_cpp='$CPP $CPPFLAGS'
+ac_compile='$CC -c $CFLAGS $CPPFLAGS conftest.$ac_ext >&5'
+ac_link='$CC -o conftest$ac_exeext $CFLAGS $CPPFLAGS $LDFLAGS conftest.$ac_ext $LIBS >&5'
+ac_compiler_gnu=$ac_cv_c_compiler_gnu
+
+CPPFLAGS="$_pushed_CPPFLAGS";
+
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking Nix pre-processor flags NIX_CPPFLAGS" >&5
+printf %s "checking Nix pre-processor flags NIX_CPPFLAGS... " >&6; }
+
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $NIX_CPPFLAGS" >&5
+printf "%s\n" "$NIX_CPPFLAGS" >&6; }
+
+#NIX_CFLAGS="$NIX_CPPFLAGS $NIX_PKG_CONFIG_CFLAGS"
+NIX_CFLAGS="$NIX_PKG_CONFIG_CFLAGS -include $NIX_INCDIR/nix/config.h"
+NIX_LIBS="$NIX_PKG_CONFIG_LIBS"
+
+
 
 
 # ---------------------------------------------------------------------------- #
