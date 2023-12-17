@@ -93,6 +93,9 @@ lib_libpkgdb_la_SOURCES += src/pkgdb/primops.cc
 lib_libpkgdb_la_SOURCES += src/pkgdb/read.cc
 lib_libpkgdb_la_SOURCES += src/pkgdb/write.cc
 
+lib_libpkgdb_la_SOURCES += src/buildenv/buildenv.cc
+lib_libpkgdb_la_SOURCES += src/buildenv/realise.cc
+
 
 # ---------------------------------------------------------------------------- #
 
@@ -121,6 +124,7 @@ bin_pkgdb_SOURCES += src/pkgdb/get.cc
 bin_pkgdb_SOURCES += src/pkgdb/scrape.cc
 bin_pkgdb_SOURCES += src/resolver/command.cc
 bin_pkgdb_SOURCES += src/search/command.cc
+bin_pkgdb_SOURCES += src/buildenv/command.cc
 
 
 # ---------------------------------------------------------------------------- #

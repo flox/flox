@@ -170,7 +170,9 @@ am_lib_libpkgdb_la_OBJECTS = src/lib_libpkgdb_la-command.lo \
 	src/pkgdb/lib_libpkgdb_la-pkg-query.lo \
 	src/pkgdb/lib_libpkgdb_la-primops.lo \
 	src/pkgdb/lib_libpkgdb_la-read.lo \
-	src/pkgdb/lib_libpkgdb_la-write.lo
+	src/pkgdb/lib_libpkgdb_la-write.lo \
+	src/buildenv/lib_libpkgdb_la-buildenv.lo \
+	src/buildenv/lib_libpkgdb_la-realise.lo
 lib_libpkgdb_la_OBJECTS = $(am_lib_libpkgdb_la_OBJECTS)
 AM_V_lt = $(am__v_lt_$(V))
 am__v_lt_ = $(am__v_lt_$(AM_DEFAULT_VERBOSITY))
@@ -187,7 +189,8 @@ am_bin_pkgdb_OBJECTS = src/bin_pkgdb-main.$(OBJEXT) \
 	src/pkgdb/bin_pkgdb-get.$(OBJEXT) \
 	src/pkgdb/bin_pkgdb-scrape.$(OBJEXT) \
 	src/resolver/bin_pkgdb-command.$(OBJEXT) \
-	src/search/bin_pkgdb-command.$(OBJEXT)
+	src/search/bin_pkgdb-command.$(OBJEXT) \
+	src/buildenv/bin_pkgdb-command.$(OBJEXT)
 bin_pkgdb_OBJECTS = $(am_bin_pkgdb_OBJECTS)
 am__DEPENDENCIES_1 =
 bin_pkgdb_DEPENDENCIES = lib/libpkgdb.la $(am__DEPENDENCIES_1) \
@@ -228,6 +231,9 @@ am__depfiles_remade = src/$(DEPDIR)/bin_pkgdb-main.Po \
 	src/$(DEPDIR)/lib_libpkgdb_la-util.Plo \
 	src/$(DEPDIR)/lib_libpkgdb_la-versions.Plo \
 	src/$(DEPDIR)/lib_libpkgdb_la-yamlToJSON.Plo \
+	src/buildenv/$(DEPDIR)/bin_pkgdb-command.Po \
+	src/buildenv/$(DEPDIR)/lib_libpkgdb_la-buildenv.Plo \
+	src/buildenv/$(DEPDIR)/lib_libpkgdb_la-realise.Plo \
 	src/parse/$(DEPDIR)/bin_pkgdb-command.Po \
 	src/pkgdb/$(DEPDIR)/bin_pkgdb-command.Po \
 	src/pkgdb/$(DEPDIR)/bin_pkgdb-get.Po \
@@ -318,6 +324,7 @@ CCDEPMODE = depmode=gcc3
 CFLAGS = -g -O2
 COMMITIZEN = /home/camus/src/flox/build-aux/missing commitizen
 CP = /nix/store/w8vm09hri2zz7yacryzzzxvsapik4ps4-coreutils-9.1/bin/cp
+CPP = /nix/store/3hbxw05vfs6m1155xa6pvribs3bv777n-gcc-wrapper-12.2.0/bin/gcc -E
 CPPFLAGS = 
 CRATES_DIR = /home/camus/src/flox/crates
 CSCOPE = cscope
@@ -331,7 +338,7 @@ CXX_LINT = /nix/store/sgx6lr68km0h3k2gc3nnayjc1h1rmhl0-clang-tools-16.0.6/bin/cl
 CXX_TOOLCHAIN = gcc
 CYGPATH_W = echo
 DATADIR = ${datarootdir}
-DEFS = -DPACKAGE_NAME=\"flox\" -DPACKAGE_TARNAME=\"flox\" -DPACKAGE_VERSION=\"0.3.7\" -DPACKAGE_STRING=\"flox\ 0.3.7\" -DPACKAGE_BUGREPORT=\"alex.ameen@floxdev.com\" -DPACKAGE_URL=\"\" -DPACKAGE=\"flox\" -DVERSION=\"0.3.7\" -DHAVE_STDIO_H=1 -DHAVE_STDLIB_H=1 -DHAVE_STRING_H=1 -DHAVE_INTTYPES_H=1 -DHAVE_STDINT_H=1 -DHAVE_STRINGS_H=1 -DHAVE_SYS_STAT_H=1 -DHAVE_SYS_TYPES_H=1 -DHAVE_UNISTD_H=1 -DSTDC_HEADERS=1 -DHAVE_DLFCN_H=1 -DLT_OBJDIR=\".libs/\" -DHAVE_LIBNIXFETCHERS=1 -DHAVE_ALLOCA_H=1 -DHAVE_ALLOCA=1 -DHAVE_FCNTL_H=1 -DHAVE_NETDB_H=1 -DHAVE_NETINET_IN_H=1 -DHAVE_SYS_SOCKET_H=1 -DHAVE_UNISTD_H=1 -DHAVE__BOOL=1 -DLSTAT_FOLLOWS_SLASHED_SYMLINK=1 -DMAJOR_IN_SYSMACROS=1 -DHAVE_MEMSET=1 -DHAVE_STRTOUL=1 -DHAVE_MKDIR=1 -DHAVE_BOEHMGC=1 -DENABLE_S3=1 -DHAVE_STRUCT_DIRENT_D_TYPE=1
+DEFS = -DPACKAGE_NAME=\"flox\" -DPACKAGE_TARNAME=\"flox\" -DPACKAGE_VERSION=\"0.3.7\" -DPACKAGE_STRING=\"flox\ 0.3.7\" -DPACKAGE_BUGREPORT=\"alex.ameen@floxdev.com\" -DPACKAGE_URL=\"\" -DPACKAGE=\"flox\" -DVERSION=\"0.3.7\" -DHAVE_STDIO_H=1 -DHAVE_STDLIB_H=1 -DHAVE_STRING_H=1 -DHAVE_INTTYPES_H=1 -DHAVE_STDINT_H=1 -DHAVE_STRINGS_H=1 -DHAVE_SYS_STAT_H=1 -DHAVE_SYS_TYPES_H=1 -DHAVE_UNISTD_H=1 -DSTDC_HEADERS=1 -DHAVE_DLFCN_H=1 -DLT_OBJDIR=\".libs/\" -DHAVE_LIBNIXFETCHERS=1 -DHAVE_ALLOCA_H=1 -DHAVE_ALLOCA=1 -DHAVE_FCNTL_H=1 -DHAVE_NETDB_H=1 -DHAVE_NETINET_IN_H=1 -DHAVE_SYS_SOCKET_H=1 -DHAVE_UNISTD_H=1 -DHAVE_UTIME_H=1 -DHAVE__BOOL=1 -DLSTAT_FOLLOWS_SLASHED_SYMLINK=1 -DMAJOR_IN_SYSMACROS=1 -DHAVE_MEMSET=1 -DHAVE_STRTOUL=1 -DHAVE_MKDIR=1 -DHAVE_UTIME=1 -DHAVE_BOEHMGC=1 -DENABLE_S3=1 -DHAVE_STRUCT_DIRENT_D_TYPE=1 -DEXCEPTION_NEEDS_THROW_SPEC=0 -DPKGDB_VERSION=\"0.2.0\"
 DEPDIR = .deps
 DEPFILES = /home/camus/src/flox/flake.nix /home/camus/src/flox/flake.lock /home/camus/src/flox/pkgs/flox/default.nix /home/camus/src/flox/pkgs/flox-pkgdb/default.nix /home/camus/src/flox/shells/flox/default.nix
 DLLTOOL = false
@@ -409,7 +416,7 @@ PATH_SEPARATOR = :
 PKGCONFIGDIR = ${exec_prefix}/lib/pkgconfig
 PKGDB_ROOT = /home/camus/src/flox/pkgdb
 PKGDB_TESTS_DIR = /home/camus/src/flox/pkgdb/tests
-PKGDB_VERSION = 0.1.0
+PKGDB_VERSION = 0.2.0
 PKGS_DIR = /home/camus/src/flox/pkgs
 PKG_CONFIG = /nix/store/7l5gbdz3rcab57r24arg61i4vavpf2cz-pkg-config-wrapper-0.29.2/bin/pkg-config
 PKG_CONFIG_LIBDIR = 
@@ -531,7 +538,8 @@ lib_libpkgdb_la_SOURCES = src/command.cc src/eval.cc src/exceptions.cc \
 	src/resolver/mixins.cc src/resolver/primops.cc \
 	src/pkgdb/db-package.cc src/pkgdb/gc.cc src/pkgdb/input.cc \
 	src/pkgdb/list.cc src/pkgdb/pkg-query.cc src/pkgdb/primops.cc \
-	src/pkgdb/read.cc src/pkgdb/write.cc
+	src/pkgdb/read.cc src/pkgdb/write.cc src/buildenv/buildenv.cc \
+	src/buildenv/realise.cc
 
 # ---------------------------------------------------------------------------- #
 bin_pkgdb_CXXFLAGS = $(AM_CXXFLAGS) $(NLJSON_CFLAGS) $(NIX_CFLAGS) \
@@ -541,7 +549,8 @@ bin_pkgdb_LDADD = lib/libpkgdb.la $(NLJSON_LIBS) $(NIX_LIBS) \
 	$(ARGPARSE_LIBS) $(YAML_LIBS) $(TOML_LIBS) $(SQLITE3PP_LIBS)
 bin_pkgdb_SOURCES = src/main.cc src/repl.cc src/parse/command.cc \
 	src/pkgdb/command.cc src/pkgdb/get.cc src/pkgdb/scrape.cc \
-	src/resolver/command.cc src/search/command.cc
+	src/resolver/command.cc src/search/command.cc \
+	src/buildenv/command.cc
 all: all-am
 
 .SUFFIXES:
@@ -750,6 +759,17 @@ src/pkgdb/lib_libpkgdb_la-read.lo: src/pkgdb/$(am__dirstamp) \
 	src/pkgdb/$(DEPDIR)/$(am__dirstamp)
 src/pkgdb/lib_libpkgdb_la-write.lo: src/pkgdb/$(am__dirstamp) \
 	src/pkgdb/$(DEPDIR)/$(am__dirstamp)
+src/buildenv/$(am__dirstamp):
+	@$(MKDIR_P) src/buildenv
+	@: > src/buildenv/$(am__dirstamp)
+src/buildenv/$(DEPDIR)/$(am__dirstamp):
+	@$(MKDIR_P) src/buildenv/$(DEPDIR)
+	@: > src/buildenv/$(DEPDIR)/$(am__dirstamp)
+src/buildenv/lib_libpkgdb_la-buildenv.lo:  \
+	src/buildenv/$(am__dirstamp) \
+	src/buildenv/$(DEPDIR)/$(am__dirstamp)
+src/buildenv/lib_libpkgdb_la-realise.lo: src/buildenv/$(am__dirstamp) \
+	src/buildenv/$(DEPDIR)/$(am__dirstamp)
 lib/$(am__dirstamp):
 	@$(MKDIR_P) lib
 	@: > lib/$(am__dirstamp)
@@ -779,6 +799,9 @@ src/resolver/bin_pkgdb-command.$(OBJEXT):  \
 	src/resolver/$(DEPDIR)/$(am__dirstamp)
 src/search/bin_pkgdb-command.$(OBJEXT): src/search/$(am__dirstamp) \
 	src/search/$(DEPDIR)/$(am__dirstamp)
+src/buildenv/bin_pkgdb-command.$(OBJEXT):  \
+	src/buildenv/$(am__dirstamp) \
+	src/buildenv/$(DEPDIR)/$(am__dirstamp)
 bin/$(am__dirstamp):
 	@$(MKDIR_P) bin
 	@: > bin/$(am__dirstamp)
@@ -791,6 +814,8 @@ mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
 	-rm -f src/*.$(OBJEXT)
 	-rm -f src/*.lo
+	-rm -f src/buildenv/*.$(OBJEXT)
+	-rm -f src/buildenv/*.lo
 	-rm -f src/parse/*.$(OBJEXT)
 	-rm -f src/pkgdb/*.$(OBJEXT)
 	-rm -f src/pkgdb/*.lo
@@ -819,6 +844,9 @@ include src/$(DEPDIR)/lib_libpkgdb_la-tomlToJSON.Plo # am--include-marker
 include src/$(DEPDIR)/lib_libpkgdb_la-util.Plo # am--include-marker
 include src/$(DEPDIR)/lib_libpkgdb_la-versions.Plo # am--include-marker
 include src/$(DEPDIR)/lib_libpkgdb_la-yamlToJSON.Plo # am--include-marker
+include src/buildenv/$(DEPDIR)/bin_pkgdb-command.Po # am--include-marker
+include src/buildenv/$(DEPDIR)/lib_libpkgdb_la-buildenv.Plo # am--include-marker
+include src/buildenv/$(DEPDIR)/lib_libpkgdb_la-realise.Plo # am--include-marker
 include src/parse/$(DEPDIR)/bin_pkgdb-command.Po # am--include-marker
 include src/pkgdb/$(DEPDIR)/bin_pkgdb-command.Po # am--include-marker
 include src/pkgdb/$(DEPDIR)/bin_pkgdb-get.Po # am--include-marker
@@ -1089,6 +1117,20 @@ src/pkgdb/lib_libpkgdb_la-write.lo: src/pkgdb/write.cc
 #	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
 #	$(AM_V_CXX_no)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_la_CXXFLAGS) $(CXXFLAGS) -c -o src/pkgdb/lib_libpkgdb_la-write.lo `test -f 'src/pkgdb/write.cc' || echo '$(srcdir)/'`src/pkgdb/write.cc
 
+src/buildenv/lib_libpkgdb_la-buildenv.lo: src/buildenv/buildenv.cc
+	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_la_CXXFLAGS) $(CXXFLAGS) -MT src/buildenv/lib_libpkgdb_la-buildenv.lo -MD -MP -MF src/buildenv/$(DEPDIR)/lib_libpkgdb_la-buildenv.Tpo -c -o src/buildenv/lib_libpkgdb_la-buildenv.lo `test -f 'src/buildenv/buildenv.cc' || echo '$(srcdir)/'`src/buildenv/buildenv.cc
+	$(AM_V_at)$(am__mv) src/buildenv/$(DEPDIR)/lib_libpkgdb_la-buildenv.Tpo src/buildenv/$(DEPDIR)/lib_libpkgdb_la-buildenv.Plo
+#	$(AM_V_CXX)source='src/buildenv/buildenv.cc' object='src/buildenv/lib_libpkgdb_la-buildenv.lo' libtool=yes \
+#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
+#	$(AM_V_CXX_no)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_la_CXXFLAGS) $(CXXFLAGS) -c -o src/buildenv/lib_libpkgdb_la-buildenv.lo `test -f 'src/buildenv/buildenv.cc' || echo '$(srcdir)/'`src/buildenv/buildenv.cc
+
+src/buildenv/lib_libpkgdb_la-realise.lo: src/buildenv/realise.cc
+	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_la_CXXFLAGS) $(CXXFLAGS) -MT src/buildenv/lib_libpkgdb_la-realise.lo -MD -MP -MF src/buildenv/$(DEPDIR)/lib_libpkgdb_la-realise.Tpo -c -o src/buildenv/lib_libpkgdb_la-realise.lo `test -f 'src/buildenv/realise.cc' || echo '$(srcdir)/'`src/buildenv/realise.cc
+	$(AM_V_at)$(am__mv) src/buildenv/$(DEPDIR)/lib_libpkgdb_la-realise.Tpo src/buildenv/$(DEPDIR)/lib_libpkgdb_la-realise.Plo
+#	$(AM_V_CXX)source='src/buildenv/realise.cc' object='src/buildenv/lib_libpkgdb_la-realise.lo' libtool=yes \
+#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
+#	$(AM_V_CXX_no)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_la_CXXFLAGS) $(CXXFLAGS) -c -o src/buildenv/lib_libpkgdb_la-realise.lo `test -f 'src/buildenv/realise.cc' || echo '$(srcdir)/'`src/buildenv/realise.cc
+
 src/bin_pkgdb-main.o: src/main.cc
 	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(bin_pkgdb_CXXFLAGS) $(CXXFLAGS) -MT src/bin_pkgdb-main.o -MD -MP -MF src/$(DEPDIR)/bin_pkgdb-main.Tpo -c -o src/bin_pkgdb-main.o `test -f 'src/main.cc' || echo '$(srcdir)/'`src/main.cc
 	$(AM_V_at)$(am__mv) src/$(DEPDIR)/bin_pkgdb-main.Tpo src/$(DEPDIR)/bin_pkgdb-main.Po
@@ -1201,6 +1243,20 @@ src/search/bin_pkgdb-command.obj: src/search/command.cc
 #	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
 #	$(AM_V_CXX_no)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(bin_pkgdb_CXXFLAGS) $(CXXFLAGS) -c -o src/search/bin_pkgdb-command.obj `if test -f 'src/search/command.cc'; then $(CYGPATH_W) 'src/search/command.cc'; else $(CYGPATH_W) '$(srcdir)/src/search/command.cc'; fi`
 
+src/buildenv/bin_pkgdb-command.o: src/buildenv/command.cc
+	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(bin_pkgdb_CXXFLAGS) $(CXXFLAGS) -MT src/buildenv/bin_pkgdb-command.o -MD -MP -MF src/buildenv/$(DEPDIR)/bin_pkgdb-command.Tpo -c -o src/buildenv/bin_pkgdb-command.o `test -f 'src/buildenv/command.cc' || echo '$(srcdir)/'`src/buildenv/command.cc
+	$(AM_V_at)$(am__mv) src/buildenv/$(DEPDIR)/bin_pkgdb-command.Tpo src/buildenv/$(DEPDIR)/bin_pkgdb-command.Po
+#	$(AM_V_CXX)source='src/buildenv/command.cc' object='src/buildenv/bin_pkgdb-command.o' libtool=no \
+#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
+#	$(AM_V_CXX_no)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(bin_pkgdb_CXXFLAGS) $(CXXFLAGS) -c -o src/buildenv/bin_pkgdb-command.o `test -f 'src/buildenv/command.cc' || echo '$(srcdir)/'`src/buildenv/command.cc
+
+src/buildenv/bin_pkgdb-command.obj: src/buildenv/command.cc
+	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(bin_pkgdb_CXXFLAGS) $(CXXFLAGS) -MT src/buildenv/bin_pkgdb-command.obj -MD -MP -MF src/buildenv/$(DEPDIR)/bin_pkgdb-command.Tpo -c -o src/buildenv/bin_pkgdb-command.obj `if test -f 'src/buildenv/command.cc'; then $(CYGPATH_W) 'src/buildenv/command.cc'; else $(CYGPATH_W) '$(srcdir)/src/buildenv/command.cc'; fi`
+	$(AM_V_at)$(am__mv) src/buildenv/$(DEPDIR)/bin_pkgdb-command.Tpo src/buildenv/$(DEPDIR)/bin_pkgdb-command.Po
+#	$(AM_V_CXX)source='src/buildenv/command.cc' object='src/buildenv/bin_pkgdb-command.obj' libtool=no \
+#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
+#	$(AM_V_CXX_no)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(bin_pkgdb_CXXFLAGS) $(CXXFLAGS) -c -o src/buildenv/bin_pkgdb-command.obj `if test -f 'src/buildenv/command.cc'; then $(CYGPATH_W) 'src/buildenv/command.cc'; else $(CYGPATH_W) '$(srcdir)/src/buildenv/command.cc'; fi`
+
 mostlyclean-libtool:
 	-rm -f *.lo
 
@@ -1209,6 +1265,7 @@ clean-libtool:
 	-rm -rf bin/.libs bin/_libs
 	-rm -rf lib/.libs lib/_libs
 	-rm -rf src/.libs src/_libs
+	-rm -rf src/buildenv/.libs src/buildenv/_libs
 	-rm -rf src/pkgdb/.libs src/pkgdb/_libs
 	-rm -rf src/resolver/.libs src/resolver/_libs
 	-rm -rf src/search/.libs src/search/_libs
@@ -1336,6 +1393,8 @@ distclean-generic:
 	-rm -f lib/$(am__dirstamp)
 	-rm -f src/$(DEPDIR)/$(am__dirstamp)
 	-rm -f src/$(am__dirstamp)
+	-rm -f src/buildenv/$(DEPDIR)/$(am__dirstamp)
+	-rm -f src/buildenv/$(am__dirstamp)
 	-rm -f src/parse/$(DEPDIR)/$(am__dirstamp)
 	-rm -f src/parse/$(am__dirstamp)
 	-rm -f src/pkgdb/$(DEPDIR)/$(am__dirstamp)
@@ -1371,6 +1430,9 @@ distclean: distclean-am
 	-rm -f src/$(DEPDIR)/lib_libpkgdb_la-util.Plo
 	-rm -f src/$(DEPDIR)/lib_libpkgdb_la-versions.Plo
 	-rm -f src/$(DEPDIR)/lib_libpkgdb_la-yamlToJSON.Plo
+	-rm -f src/buildenv/$(DEPDIR)/bin_pkgdb-command.Po
+	-rm -f src/buildenv/$(DEPDIR)/lib_libpkgdb_la-buildenv.Plo
+	-rm -f src/buildenv/$(DEPDIR)/lib_libpkgdb_la-realise.Plo
 	-rm -f src/parse/$(DEPDIR)/bin_pkgdb-command.Po
 	-rm -f src/pkgdb/$(DEPDIR)/bin_pkgdb-command.Po
 	-rm -f src/pkgdb/$(DEPDIR)/bin_pkgdb-get.Po
@@ -1455,6 +1517,9 @@ maintainer-clean: maintainer-clean-am
 	-rm -f src/$(DEPDIR)/lib_libpkgdb_la-util.Plo
 	-rm -f src/$(DEPDIR)/lib_libpkgdb_la-versions.Plo
 	-rm -f src/$(DEPDIR)/lib_libpkgdb_la-yamlToJSON.Plo
+	-rm -f src/buildenv/$(DEPDIR)/bin_pkgdb-command.Po
+	-rm -f src/buildenv/$(DEPDIR)/lib_libpkgdb_la-buildenv.Plo
+	-rm -f src/buildenv/$(DEPDIR)/lib_libpkgdb_la-realise.Plo
 	-rm -f src/parse/$(DEPDIR)/bin_pkgdb-command.Po
 	-rm -f src/pkgdb/$(DEPDIR)/bin_pkgdb-command.Po
 	-rm -f src/pkgdb/$(DEPDIR)/bin_pkgdb-get.Po

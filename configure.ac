@@ -497,12 +497,29 @@ AM_CONDITIONAL([BUILD_SHARED_LIBS], [test "$enable_shared" = 'yes'])
 
 # ---------------------------------------------------------------------------- #
 
-AC_SUBST([PKGDB_VERSION], ["$(< pkgdb/version)"])
+# Get `pkgdb' version
+
+AC_SUBST([PKGDB_VERSION], ["$(< pkgdb/.version)"])
+AC_DEFINE_UNQUOTED([PKGDB_VERSION], ["$PKGDB_VERSION"], [Version of pkgdb])
 
 
 # ---------------------------------------------------------------------------- #
 
-AC_CONFIG_HEADERS([pkgdb/config.h])
+# Get paths to static assets
+
+AC_ARG_VAR([SET_PROMPT_BASH_SH],
+  [Path to `set-prompt.bash.sh' script in `/nix/store/'])
+
+# TODO: `--with-set-prompt-bash-sh'
+# TODO: add to `/nix/store' using snippet from old Makefile.
+
+
+AC_ARG_VAR([PROFILE_D_SCRIPT_DIR],
+  [Path to directory containing `etc/profile.d' directory in `/nix/store/'])
+
+
+# ---------------------------------------------------------------------------- #
+
 AC_CONFIG_FILES([
   pkgdb/Makefile
 ])

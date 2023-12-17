@@ -60,7 +60,10 @@
 in
   stdenv.mkDerivation ({
       pname = "flox-pkgdb";
-      version = builtins.replaceStrings ["\n"] [""] (builtins.readFile ./../../pkgdb/version);
+      version = let
+        contents = builtins.readFile ./../../pkgdb/.version;
+      in
+        builtins.replaceStrings ["\n"] [""] contents;
 
       src = builtins.path {
         path = ../..;

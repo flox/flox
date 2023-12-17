@@ -16,3 +16,4 @@ libtool
 config.status
 .deps/
 .dirstamp
+.libs/
