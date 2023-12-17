@@ -112,7 +112,11 @@ pushd "$_as_dir" >/dev/null||exit;
 # ---------------------------------------------------------------------------- #
 
 $ACLOCAL;
-$AUTORECONF -ifv;
+$AUTORECONF -iv;
+
+# XXX: We patch `build-aux/m4/libtool.m4' instead of patching `configure' here,
+#      but if you upgrade `libtool' you'll need to re-patch it with the
+#      effect of:
 $SED -i -e 's/\$RM \(\\"\$cfgfile\\";\)/$RM -f \1/'  \
         -e 's/\$RM \("\$cfgfile"\)/$RM -f \1/'      \
         ./configure;

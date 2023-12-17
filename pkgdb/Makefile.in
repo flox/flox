@@ -193,9 +193,10 @@ am_bin_pkgdb_OBJECTS = src/bin_pkgdb-main.$(OBJEXT) \
 	src/buildenv/bin_pkgdb-command.$(OBJEXT)
 bin_pkgdb_OBJECTS = $(am_bin_pkgdb_OBJECTS)
 am__DEPENDENCIES_1 =
-bin_pkgdb_DEPENDENCIES = lib/libpkgdb.la $(am__DEPENDENCIES_1) \
+bin_pkgdb_DEPENDENCIES = $(am__DEPENDENCIES_1) lib/libpkgdb.la \
 	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
-	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1)
+	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
+	$(am__DEPENDENCIES_1)
 bin_pkgdb_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) \
 	$(LIBTOOLFLAGS) --mode=link $(CXXLD) $(bin_pkgdb_CXXFLAGS) \
 	$(CXXFLAGS) $(AM_LDFLAGS) $(LDFLAGS) -o $@
@@ -350,12 +351,12 @@ ECHO_C = @ECHO_C@
 ECHO_N = @ECHO_N@
 ECHO_T = @ECHO_T@
 EGREP = @EGREP@
-ENV_BUILDER_TESTS_DIR = @ENV_BUILDER_TESTS_DIR@
 ETAGS = @ETAGS@
 EXEEXT = @EXEEXT@
 FGREP = @FGREP@
 FILECMD = @FILECMD@
 FIND = @FIND@
+FLOX_CLI_DISTDIR = @FLOX_CLI_DISTDIR@
 FLOX_CLI_ROOT = @FLOX_CLI_ROOT@
 FLOX_CLI_TESTS_DIR = @FLOX_CLI_TESTS_DIR@
 GIT = @GIT@
@@ -423,6 +424,7 @@ RANLIB = @RANLIB@
 RELATIVE_RPATH_FLAG = @RELATIVE_RPATH_FLAG@
 REPO_ROOT = @REPO_ROOT@
 RM = @RM@
+RSYNC = @RSYNC@
 RUST_FMT = @RUST_FMT@
 RUST_LINT = @RUST_LINT@
 SED = @SED@
@@ -443,6 +445,7 @@ SQLITE3_LIBS = @SQLITE3_LIBS@
 STRIP = @STRIP@
 SYSCONFDIR = @SYSCONFDIR@
 SYSTEM = @SYSTEM@
+TAR = @TAR@
 TEE = @TEE@
 TEST = @TEST@
 TOUCH = @TOUCH@
@@ -526,7 +529,7 @@ lib_LTLIBRARIES = lib/libpkgdb.la
 lib_libpkgdb_la_CXXFLAGS = $(AM_CXXFLAGS) $(NLJSON_CFLAGS) \
 	$(NIX_CFLAGS) $(YAML_CFLAGS) $(TOML_CFLAGS) \
 	$(SQLITE3PP_CFLAGS) $(SHARED_LIBRARY_CXXFLAGS)
-lib_libpkgdb_la_LDFLAGS = $(AM_CXXLIBS) \
+lib_libpkgdb_la_LDFLAGS = $(AM_LDFLAGS) \
 	'$(set_soname_option)libpkgdb$(sharedLibExt)' $(NLJSON_LIBS) \
 	$(NIX_LIBS) $(YAML_LIBS) $(TOML_LIBS) $(SQLITE3PP_LIBS)
 lib_libpkgdb_la_SOURCES = src/command.cc src/eval.cc src/exceptions.cc \
@@ -544,11 +547,14 @@ lib_libpkgdb_la_SOURCES = src/command.cc src/eval.cc src/exceptions.cc \
 	src/buildenv/realise.cc
 
 # ---------------------------------------------------------------------------- #
+
+# FIXME: `RPATH'
 bin_pkgdb_CXXFLAGS = $(AM_CXXFLAGS) $(NLJSON_CFLAGS) $(NIX_CFLAGS) \
 	$(ARGPARSE_CFLAGS)
 # For `libpkgdb.a'
-bin_pkgdb_LDADD = lib/libpkgdb.la $(NLJSON_LIBS) $(NIX_LIBS) \
-	$(ARGPARSE_LIBS) $(YAML_LIBS) $(TOML_LIBS) $(SQLITE3PP_LIBS)
+bin_pkgdb_LDADD = $(AM_LDFLAGS) $(RELATIVE_RPATH_FLAG) lib/libpkgdb.la \
+	$(NLJSON_LIBS) $(NIX_LIBS) $(ARGPARSE_LIBS) $(YAML_LIBS) \
+	$(TOML_LIBS) $(SQLITE3PP_LIBS)
 bin_pkgdb_SOURCES = src/main.cc src/repl.cc src/parse/command.cc \
 	src/pkgdb/command.cc src/pkgdb/get.cc src/pkgdb/scrape.cc \
 	src/resolver/command.cc src/search/command.cc \

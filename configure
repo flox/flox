@@ -690,9 +690,9 @@ DEPFILES
 SHELLS_DIR
 PKGS_DIR
 CRATES_DIR
+FLOX_CLI_DISTDIR
 FLOX_CLI_TESTS_DIR
 FLOX_CLI_ROOT
-ENV_BUILDER_TESTS_DIR
 PKGDB_TESTS_DIR
 PKGDB_ROOT
 REPO_ROOT
@@ -716,6 +716,8 @@ IS_LINUX_FALSE
 IS_LINUX_TRUE
 sharedLibExt
 OS
+RSYNC
+TAR
 SEMVER
 DOXYGEN
 CXX_LINT
@@ -951,6 +953,8 @@ CXX_FMT
 CXX_LINT
 DOXYGEN
 SEMVER
+TAR
+RSYNC
 NLJSON_CFLAGS
 NLJSON_LIBS
 ARGPARSE_CFLAGS
@@ -1679,6 +1683,8 @@ Some influential environment variables:
   CXX_LINT    C++ code linter
   DOXYGEN     Generate documentation
   SEMVER      Semantic versioning helper
+  TAR         Manipulate tape archives
+  RSYNC       Remote file copy
   NLJSON_CFLAGS
               C compiler flags for NLJSON, overriding pkg-config
   NLJSON_LIBS linker flags for NLJSON, overriding pkg-config
@@ -3986,6 +3992,9 @@ fi
 
 
 
+# NOTE: There's a bug in `libtool' that causes incorrect warnings to gripe
+#       about `AM_PROG_AR' being called before `LT_INIT'.
+#       The warnings are benign!
 case `pwd` in
   *\ * | *\	*)
     { printf "%s\n" "$as_me:${as_lineno-$LINENO}: WARNING: Libtool does not cope well with whitespace in \`pwd\`" >&5
@@ -18747,108 +18756,8 @@ fi
 
 
 
-if test -n "$ac_tool_prefix"; then
-  # Extract the first word of "${ac_tool_prefix}ranlib", so it can be a program name with args.
-set dummy ${ac_tool_prefix}ranlib; ac_word=$2
-{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
-printf %s "checking for $ac_word... " >&6; }
-if test ${ac_cv_prog_RANLIB+y}
-then :
-  printf %s "(cached) " >&6
-else $as_nop
-  if test -n "$RANLIB"; then
-  ac_cv_prog_RANLIB="$RANLIB" # Let the user override the test.
-else
-as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
-for as_dir in $PATH
-do
-  IFS=$as_save_IFS
-  case $as_dir in #(((
-    '') as_dir=./ ;;
-    */) ;;
-    *) as_dir=$as_dir/ ;;
-  esac
-    for ac_exec_ext in '' $ac_executable_extensions; do
-  if as_fn_executable_p "$as_dir$ac_word$ac_exec_ext"; then
-    ac_cv_prog_RANLIB="${ac_tool_prefix}ranlib"
-    printf "%s\n" "$as_me:${as_lineno-$LINENO}: found $as_dir$ac_word$ac_exec_ext" >&5
-    break 2
-  fi
-done
-  done
-IFS=$as_save_IFS
-
-fi
-fi
-RANLIB=$ac_cv_prog_RANLIB
-if test -n "$RANLIB"; then
-  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $RANLIB" >&5
-printf "%s\n" "$RANLIB" >&6; }
-else
-  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
-printf "%s\n" "no" >&6; }
-fi
-
-
-fi
-if test -z "$ac_cv_prog_RANLIB"; then
-  ac_ct_RANLIB=$RANLIB
-  # Extract the first word of "ranlib", so it can be a program name with args.
-set dummy ranlib; ac_word=$2
-{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
-printf %s "checking for $ac_word... " >&6; }
-if test ${ac_cv_prog_ac_ct_RANLIB+y}
-then :
-  printf %s "(cached) " >&6
-else $as_nop
-  if test -n "$ac_ct_RANLIB"; then
-  ac_cv_prog_ac_ct_RANLIB="$ac_ct_RANLIB" # Let the user override the test.
-else
-as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
-for as_dir in $PATH
-do
-  IFS=$as_save_IFS
-  case $as_dir in #(((
-    '') as_dir=./ ;;
-    */) ;;
-    *) as_dir=$as_dir/ ;;
-  esac
-    for ac_exec_ext in '' $ac_executable_extensions; do
-  if as_fn_executable_p "$as_dir$ac_word$ac_exec_ext"; then
-    ac_cv_prog_ac_ct_RANLIB="ranlib"
-    printf "%s\n" "$as_me:${as_lineno-$LINENO}: found $as_dir$ac_word$ac_exec_ext" >&5
-    break 2
-  fi
-done
-  done
-IFS=$as_save_IFS
-
-fi
-fi
-ac_ct_RANLIB=$ac_cv_prog_ac_ct_RANLIB
-if test -n "$ac_ct_RANLIB"; then
-  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $ac_ct_RANLIB" >&5
-printf "%s\n" "$ac_ct_RANLIB" >&6; }
-else
-  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
-printf "%s\n" "no" >&6; }
-fi
-
-  if test "x$ac_ct_RANLIB" = x; then
-    RANLIB=":"
-  else
-    case $cross_compiling:$ac_tool_warned in
-yes:)
-{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: WARNING: using cross tools not prefixed with host triplet" >&5
-printf "%s\n" "$as_me: WARNING: using cross tools not prefixed with host triplet" >&2;}
-ac_tool_warned=yes ;;
-esac
-    RANLIB=$ac_ct_RANLIB
-  fi
-else
-  RANLIB="$ac_cv_prog_RANLIB"
-fi
-
+# NOTE: `AC_PROG_RANLIB' is run by `LT_INIT'
+#AC_PROG_RANLIB
 # Extract the first word of "$RANLIB", so it can be a program name with args.
 set dummy $RANLIB; ac_word=$2
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
@@ -20747,6 +20656,102 @@ fi
 
 
 
+# Extract the first word of "tar", so it can be a program name with args.
+set dummy tar; ac_word=$2
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
+printf %s "checking for $ac_word... " >&6; }
+if test ${ac_cv_path_TAR+y}
+then :
+  printf %s "(cached) " >&6
+else $as_nop
+  case $TAR in
+  [\\/]* | ?:[\\/]*)
+  ac_cv_path_TAR="$TAR" # Let the user override the test with a path.
+  ;;
+  *)
+  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
+for as_dir in $PATH
+do
+  IFS=$as_save_IFS
+  case $as_dir in #(((
+    '') as_dir=./ ;;
+    */) ;;
+    *) as_dir=$as_dir/ ;;
+  esac
+    for ac_exec_ext in '' $ac_executable_extensions; do
+  if as_fn_executable_p "$as_dir$ac_word$ac_exec_ext"; then
+    ac_cv_path_TAR="$as_dir$ac_word$ac_exec_ext"
+    printf "%s\n" "$as_me:${as_lineno-$LINENO}: found $as_dir$ac_word$ac_exec_ext" >&5
+    break 2
+  fi
+done
+  done
+IFS=$as_save_IFS
+
+  test -z "$ac_cv_path_TAR" && ac_cv_path_TAR="$MISSING tar"
+  ;;
+esac
+fi
+TAR=$ac_cv_path_TAR
+if test -n "$TAR"; then
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $TAR" >&5
+printf "%s\n" "$TAR" >&6; }
+else
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
+printf "%s\n" "no" >&6; }
+fi
+
+
+
+
+# Extract the first word of "rsync", so it can be a program name with args.
+set dummy rsync; ac_word=$2
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
+printf %s "checking for $ac_word... " >&6; }
+if test ${ac_cv_path_RSYNC+y}
+then :
+  printf %s "(cached) " >&6
+else $as_nop
+  case $RSYNC in
+  [\\/]* | ?:[\\/]*)
+  ac_cv_path_RSYNC="$RSYNC" # Let the user override the test with a path.
+  ;;
+  *)
+  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
+for as_dir in $PATH
+do
+  IFS=$as_save_IFS
+  case $as_dir in #(((
+    '') as_dir=./ ;;
+    */) ;;
+    *) as_dir=$as_dir/ ;;
+  esac
+    for ac_exec_ext in '' $ac_executable_extensions; do
+  if as_fn_executable_p "$as_dir$ac_word$ac_exec_ext"; then
+    ac_cv_path_RSYNC="$as_dir$ac_word$ac_exec_ext"
+    printf "%s\n" "$as_me:${as_lineno-$LINENO}: found $as_dir$ac_word$ac_exec_ext" >&5
+    break 2
+  fi
+done
+  done
+IFS=$as_save_IFS
+
+  test -z "$ac_cv_path_RSYNC" && ac_cv_path_RSYNC="$MISSING rsync"
+  ;;
+esac
+fi
+RSYNC=$ac_cv_path_RSYNC
+if test -n "$RSYNC"; then
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $RSYNC" >&5
+printf "%s\n" "$RSYNC" >&6; }
+else
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
+printf "%s\n" "no" >&6; }
+fi
+
+
+
+
 # ---------------------------------------------------------------------------- #
 
 # Platform and Toolchain Checks
@@ -21550,11 +21555,11 @@ PKGDB_ROOT="$REPO_ROOT/pkgdb"
 
 PKGDB_TESTS_DIR="$PKGDB_ROOT/tests"
 
-ENV_BUILDER_TESTS_DIR="$ENV_BUILDER_ROOT/tests"
-
-FLOX_CLI_ROOT="$REPO_ROOT"
+FLOX_CLI_ROOT="$REPO_ROOT/cli"
 
 FLOX_CLI_TESTS_DIR="$FLOX_CLI_ROOT/tests"
+
+FLOX_CLI_DISTDIR="$FLOX_CLI_ROOT/dist"
 
 CRATES_DIR="$FLOX_CLI_ROOT/crates"
 
@@ -22202,7 +22207,7 @@ CPPFLAGS="$_flox_v_pushed_CPPFLAGS";
 case "$host_os" in #(
   linux*) :
         RELATIVE_RPATH_FLAG="-Wl,--enable-new-dtags";
-    RELATIVE_RPATH_FLAG="$RELATIVE_RPATH_FLAG '-Wl,-rpath=\$\$\$\$ORIGIN/../lib'";
+    RELATIVE_RPATH_FLAG="$RELATIVE_RPATH_FLAG '-Wl,-rpath=\$\$ORIGIN/../lib'";
     set_rpath_option='-Wl,--enable-new-dtags,-rpath,';
     set_soname_option='-Wl,-soname,'; ;; #(
   darwin*) :
@@ -22259,7 +22264,7 @@ fi
 
 # Get `pkgdb' version
 
-PKGDB_VERSION="$(< pkgdb/.version)"
+PKGDB_VERSION="$(< $PKGDB_ROOT/.version)"
 
 
 printf "%s\n" "#define PKGDB_VERSION \"$PKGDB_VERSION\"" >>confdefs.h
@@ -22375,7 +22380,7 @@ printf "%s\n" "#define SEMVER_PATH \"$SEMVER_PATH\"" >>confdefs.h
 
 # ---------------------------------------------------------------------------- #
 
-ac_config_files="$ac_config_files pkgdb/Makefile"
+ac_config_files="$ac_config_files Makefile pkgdb/Makefile cli/Makefile"
 
 cat >confcache <<\_ACEOF
 # This file is a shell script that caches the results of configure
@@ -23534,7 +23539,9 @@ do
   case $ac_config_target in
     "depfiles") CONFIG_COMMANDS="$CONFIG_COMMANDS depfiles" ;;
     "libtool") CONFIG_COMMANDS="$CONFIG_COMMANDS libtool" ;;
+    "Makefile") CONFIG_FILES="$CONFIG_FILES Makefile" ;;
     "pkgdb/Makefile") CONFIG_FILES="$CONFIG_FILES pkgdb/Makefile" ;;
+    "cli/Makefile") CONFIG_FILES="$CONFIG_FILES cli/Makefile" ;;
 
   *) as_fn_error $? "invalid argument: \`$ac_config_target'" "$LINENO" 5;;
   esac
@@ -24070,7 +24077,7 @@ See \`config.log' for more details" "$LINENO" 5; }
 
     cfgfile=${ofile}T
     trap "$RM -f \"$cfgfile\"; exit 1" 1 2 15
-    $RM -f "$cfgfile"
+    $RM "$cfgfile"
 
     cat <<_LT_EOF >> "$cfgfile"
 #! $SHELL

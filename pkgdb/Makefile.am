@@ -49,7 +49,7 @@ lib_libpkgdb_la_CXXFLAGS += $(SQLITE3PP_CFLAGS)
 lib_libpkgdb_la_CXXFLAGS += $(SHARED_LIBRARY_CXXFLAGS)
 
 lib_libpkgdb_la_LDFLAGS =
-lib_libpkgdb_la_LDFLAGS += $(AM_CXXLIBS)
+lib_libpkgdb_la_LDFLAGS += $(AM_LDFLAGS)
 lib_libpkgdb_la_LDFLAGS += '$(set_soname_option)libpkgdb$(sharedLibExt)'
 lib_libpkgdb_la_LDFLAGS += $(NLJSON_LIBS)
 lib_libpkgdb_la_LDFLAGS += $(NIX_LIBS)
@@ -99,6 +99,7 @@ lib_libpkgdb_la_SOURCES += src/buildenv/realise.cc
 
 # ---------------------------------------------------------------------------- #
 
+# FIXME: `RPATH'
 bin_pkgdb_CXXFLAGS =
 bin_pkgdb_CXXFLAGS += $(AM_CXXFLAGS)
 bin_pkgdb_CXXFLAGS += $(NLJSON_CFLAGS)
@@ -106,6 +107,8 @@ bin_pkgdb_CXXFLAGS += $(NIX_CFLAGS)
 bin_pkgdb_CXXFLAGS += $(ARGPARSE_CFLAGS)
 
 bin_pkgdb_LDADD =
+bin_pkgdb_LDADD += $(AM_LDFLAGS)
+bin_pkgdb_LDADD += $(RELATIVE_RPATH_FLAG)
 bin_pkgdb_LDADD += lib/libpkgdb.la
 bin_pkgdb_LDADD += $(NLJSON_LIBS)
 bin_pkgdb_LDADD += $(NIX_LIBS)

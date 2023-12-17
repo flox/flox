@@ -17,11 +17,14 @@ AC_INIT([flox], [0.3.7])
 AC_CONFIG_MACRO_DIRS([build-aux/m4])
 AC_CONFIG_AUX_DIR([build-aux])
 
-AM_INIT_AUTOMAKE([-Wall -Werror foreign subdir-objects])
+AM_INIT_AUTOMAKE([-Wall -Wno-portability -Werror foreign subdir-objects])
 
 AC_CONFIG_SRCDIR([pkgdb/src/main.cc])
 
 LT_PREREQ([2.4.7])
+# NOTE: There's a bug in `libtool' that causes incorrect warnings to gripe
+#       about `AM_PROG_AR' being called before `LT_INIT'.
+#       The warnings are benign!
 LT_INIT
 
 FLOX_INIT_DIRS
@@ -51,7 +54,8 @@ AC_PATH_PROG([GREP], [$GREP], [$MISSING grep])
 AC_PROG_SED
 AC_PATH_PROG([SED], [$SED], [$MISSING sed])
 
-AC_PROG_RANLIB
+# NOTE: `AC_PROG_RANLIB' is run by `LT_INIT'
+#AC_PROG_RANLIB
 AC_PATH_PROG([RANLIB], [$RANLIB], [$MISSING ranlib])
 
 AM_PROG_AR
@@ -148,6 +152,12 @@ AC_PATH_PROG([DOXYGEN], [doxygen], [$MISSING doxygen])
 
 AC_ARG_VAR([SEMVER], [Semantic versioning helper])
 AC_PATH_PROG([SEMVER], [semver], [$MISSING semver])
+
+AC_ARG_VAR([TAR], [Manipulate tape archives])
+AC_PATH_PROG([TAR], [tar], [$MISSING tar])
+
+AC_ARG_VAR([RSYNC], [Remote file copy])
+AC_PATH_PROG([RSYNC], [rsync], [$MISSING rsync])
 
 
 # ---------------------------------------------------------------------------- #
@@ -274,9 +284,9 @@ AC_SUBST([WITH_FLOX_CLI])
 AC_SUBST([REPO_ROOT], ["$abs_srcdir"])
 AC_SUBST([PKGDB_ROOT], ["$REPO_ROOT/pkgdb"])
 AC_SUBST([PKGDB_TESTS_DIR], ["$PKGDB_ROOT/tests"])
-AC_SUBST([ENV_BUILDER_TESTS_DIR], ["$ENV_BUILDER_ROOT/tests"])
-AC_SUBST([FLOX_CLI_ROOT], ["$REPO_ROOT"])
+AC_SUBST([FLOX_CLI_ROOT], ["$REPO_ROOT/cli"])
 AC_SUBST([FLOX_CLI_TESTS_DIR], ["$FLOX_CLI_ROOT/tests"])
+AC_SUBST([FLOX_CLI_DISTDIR], ["$FLOX_CLI_ROOT/dist"])
 AC_SUBST([CRATES_DIR], ["$FLOX_CLI_ROOT/crates"])
 AC_SUBST([PKGS_DIR], ["$REPO_ROOT/pkgs"])
 AC_SUBST([SHELLS_DIR], ["$REPO_ROOT/shells"])
@@ -437,7 +447,7 @@ AS_CASE(["$host_os"],
   [linux*],dnl
     [RELATIVE_RPATH_FLAG="-Wl,--enable-new-dtags";
     RELATIVE_RPATH_FLAG="$RELATIVE_RPATH_FLAG []dnl
-'-Wl,-rpath=\$\$\$\$ORIGIN/../lib'";
+'-Wl,-rpath=\$\$ORIGIN/../lib'";
     set_rpath_option='-Wl,--enable-new-dtags,-rpath,';
     set_soname_option='-Wl,-soname,';],
   [darwin*],dnl
@@ -483,7 +493,7 @@ AM_CONDITIONAL([BUILD_SHARED_LIBS], [test "$enable_shared" = 'yes'])
 
 # Get `pkgdb' version
 
-AC_SUBST([PKGDB_VERSION], ["$(< pkgdb/.version)"])
+AC_SUBST([PKGDB_VERSION], ["$(< $PKGDB_ROOT/.version)"])
 AC_DEFINE_UNQUOTED([PKGDB_VERSION], ["$PKGDB_VERSION"], [Version of pkgdb])
 
 
@@ -566,7 +576,11 @@ AC_DEFINE_UNQUOTED([SEMVER_PATH], ["$SEMVER_PATH"],
 
 # ---------------------------------------------------------------------------- #
 
-AC_CONFIG_FILES([pkgdb/Makefile])
+AC_CONFIG_FILES([
+  Makefile
+  pkgdb/Makefile
+  cli/Makefile
+])
 AC_OUTPUT
 
 
