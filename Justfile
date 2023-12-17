@@ -12,8 +12,8 @@
 
 nix_options := "--extra-experimental-features nix-command \
  --extra-experimental-features flakes"
-PKGDB_BIN := "${PWD}/pkgdb/bin/pkgdb"
-FLOX_BIN := "${PWD}/cli/target/debug/flox"
+PKGDB_BIN := "${PWD}/build/pkgdb/bin/pkgdb"
+FLOX_BIN := "${PWD}/build/cli/target/debug/flox"
 cargo_test_invocation := "PKGDB_BIN=${PKGDB_BIN} cargo test --workspace"
 vscode_cpp_config := "./.vscode/c_cpp_properties.json"
 
@@ -26,6 +26,23 @@ _default:
 
 # ---------------------------------------------------------------------------- #
 
+# (Re)initialize Makefile.in templates.
+# This is necessary if you change a `Makefile.am' or `configure.ac' file.
+bootstrap:
+    @./bootstrap.sh
+
+
+# ---------------------------------------------------------------------------- #
+
+# Prepare the build area and lock configuration options.
+configure *args=''':
+    @mkdir -p build;
+    @pushd build;
+    @../configure --prefix="$PWD/out" "$@"
+
+
+# ---------------------------------------------------------------------------- #
+
 # Print the paths of all of the binaries
 bins:
     @echo "{{PKGDB_BIN}}"
@@ -34,23 +51,24 @@ bins:
 # ---------------------------------------------------------------------------- #
 
 # Build only pkgdb
-build-pkgdb:
-    @make -C pkgdb -j;
+build-pkgdb *args='':
+    @make -C build -j pkgdb "$@"
 
 # Build only flox
-build-cli: build-pkgdb
-    @pushd cli; cargo build -q; popd
+build-cli *args='':
+    @make -C build -j cli "$@"
 
 # Build the binaries
-build: build-cli
+build *args='':
+    @make -C build -j "$@"
 
 
 # ---------------------------------------------------------------------------- #
 
 # Run the pkgdb tests
 test-pkgdb: build-pkgdb
-    @make -C pkgdb -j tests;
-    @make -C pkgdb check;
+    @make -C build/pkgdb -f Makefile.bak -j tests;
+    @make -C build/pkgdb -f Makefile.bak check;
 
 # Run the end-to-end test suite
 functional-tests +bats_args="": build
@@ -115,6 +133,7 @@ license:
     @pushd cli;                                     \
      cargo metadata --format-version 1              \
        |jq -r '.packages[]|[.name,.license]|@csv';
+
 
 # ---------------------------------------------------------------------------- #
 

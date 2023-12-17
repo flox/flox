@@ -193,8 +193,8 @@ am_bin_pkgdb_OBJECTS = src/bin_pkgdb-main.$(OBJEXT) \
 	src/buildenv/bin_pkgdb-command.$(OBJEXT)
 bin_pkgdb_OBJECTS = $(am_bin_pkgdb_OBJECTS)
 am__DEPENDENCIES_1 =
-bin_pkgdb_DEPENDENCIES = $(am__DEPENDENCIES_1) lib/libpkgdb.la \
-	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
+bin_pkgdb_DEPENDENCIES = $(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
+	lib/libpkgdb.la $(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
 	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
 	$(am__DEPENDENCIES_1)
 bin_pkgdb_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) \
@@ -521,6 +521,7 @@ ACLOCAL_AMFLAGS = -I ../build-aux/m4
 
 # ---------------------------------------------------------------------------- #
 AM_CXXFLAGS = $(EXTRA_CXXFLAGS) -I$(PKGDB_ROOT)/include
+AM_LDFLAGS = $(EXTRA_LDFLAGS)
 
 # ---------------------------------------------------------------------------- #
 lib_LTLIBRARIES = lib/libpkgdb.la
@@ -1590,9 +1591,13 @@ uninstall-am: uninstall-binPROGRAMS uninstall-libLTLIBRARIES
 .PRECIOUS: Makefile
 
 
+# TODO:
 #SUBDIRS = include tests
 
 # ---------------------------------------------------------------------------- #
+
+# TODO: Set this in `configure.ac'.
+#       It improves visiblity of the defaults from `--help'.
 
 @IS_CLANG_TRUE@EXTRA_CXXFLAGS ?= -Wall -Wextra -Werror -pedantic         \
 @IS_CLANG_TRUE@                  -Wno-gnu-zero-variadic-macro-arguments

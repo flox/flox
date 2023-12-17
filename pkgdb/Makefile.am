@@ -6,10 +6,14 @@
 
 ACLOCAL_AMFLAGS = -I ../build-aux/m4
 
+# TODO:
 #SUBDIRS = include tests
 
 
 # ---------------------------------------------------------------------------- #
+
+# TODO: Set this in `configure.ac'.
+#       It improves visiblity of the defaults from `--help'.
 
 if IS_CLANG
 EXTRA_CXXFLAGS ?= -Wall -Wextra -Werror -pedantic         \
@@ -26,6 +30,9 @@ EXTRA_LDFLAGS ?=
 AM_CXXFLAGS =
 AM_CXXFLAGS += $(EXTRA_CXXFLAGS)
 AM_CXXFLAGS += -I$(PKGDB_ROOT)/include
+
+AM_LDFLAGS =
+AM_LDFLAGS += $(EXTRA_LDFLAGS)
 
 
 # ---------------------------------------------------------------------------- #

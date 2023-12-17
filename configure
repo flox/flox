@@ -1625,16 +1625,16 @@ Optional Packages:
                           compiler's sysroot if not specified).
   --with-pkgdb={local,nix,PREFIX}
                           use pkgdb from local tree, nix build, or path to its
-                          install prefix
+                          install prefix. ( default: local )
   --with-flox-cli={local,nix,PREFIX}
                           use flox-cli from local tree, nix build, or path to
-                          its install prefix
+                          its install prefix. ( default: local )
   --with-set-prompt-bash-sh={local,PATH}
                           use set-prompt-bash.sh from local tree, or a
-                          '/nix/store' path
+                          '/nix/store' path. ( default: local )
   --with-profile-d-script-dir={local,PATH}
                           use 'etc/profile.d' from local tree, or a
-                          '/nix/store' path
+                          '/nix/store' path. ( default: local )
 
 Some influential environment variables:
   CC          C compiler command
