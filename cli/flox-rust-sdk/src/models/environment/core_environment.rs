@@ -277,7 +277,7 @@ impl CoreEnvironment<ReadOnly> {
     pub fn upgrade(
         &mut self,
         flox: &Flox,
-        groups_or_iids: Vec<String>,
+        groups_or_iids: &[String],
     ) -> Result<UpgradeResult, CoreEnvironmentError> {
         // TODO double check canonicalization
         let manifest_path = self.manifest_path();

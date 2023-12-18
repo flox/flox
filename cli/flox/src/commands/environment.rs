@@ -1238,12 +1238,22 @@ impl Upgrade {
         let mut environment = concrete_environment.into_dyn_environment();
 
         let upgraded = environment
-            .upgrade(&flox, self.groups_or_iids)
+            .upgrade(&flox, &self.groups_or_iids)
             .context("upgrading environment failed")?
             .0;
 
-        for package in upgraded {
-            info!("⬆️  upgraded '{package}' in environment {description}");
+        if upgraded.is_empty() {
+            if self.groups_or_iids.is_empty() {
+                info!("ℹ️  All packages are already upgraded in environment {description}.");
+            } else {
+                info!(
+                    "ℹ️  The specified packages are already upgraded in environment {description}."
+                );
+            }
+        } else {
+            for package in upgraded {
+                info!("⬆️  Upgraded '{package}' in environment {description}.");
+            }
         }
 
         Ok(())

@@ -145,7 +145,7 @@ impl Environment for RemoteEnvironment {
     fn upgrade(
         &mut self,
         flox: &Flox,
-        groups_or_iids: Vec<String>,
+        groups_or_iids: &[String],
     ) -> Result<UpgradeResult, EnvironmentError2> {
         let result = self.inner.upgrade(flox, groups_or_iids)?;
         self.inner

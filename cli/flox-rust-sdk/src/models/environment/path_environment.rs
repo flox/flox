@@ -204,7 +204,7 @@ impl Environment for PathEnvironment {
     fn upgrade(
         &mut self,
         flox: &Flox,
-        groups_or_iids: Vec<String>,
+        groups_or_iids: &[String],
     ) -> Result<UpgradeResult, EnvironmentError2> {
         let mut env_view = CoreEnvironment::new(self.path.join(ENV_DIR_NAME));
         let result = env_view.upgrade(flox, groups_or_iids)?;
