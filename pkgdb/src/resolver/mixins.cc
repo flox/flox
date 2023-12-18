@@ -197,6 +197,17 @@ EnvironmentMixin::setLockfileRaw( LockfileRaw lockfileRaw )
   this->lockfileRaw = std::move( lockfileRaw );
 }
 
+void
+EnvironmentMixin::setUpgrades( Upgrades upgrades )
+{
+  if ( this->environment.has_value() )
+    {
+      throw EnvironmentMixinException(
+        "upgrades cannot be set after environment is initialized" );
+    }
+  this->upgrades = std::move( upgrades );
+}
+
 const std::optional<Lockfile> &
 EnvironmentMixin::getLockfile()
 {
@@ -245,10 +256,11 @@ EnvironmentMixin::getEnvironment()
 {
   if ( ! this->environment.has_value() )
     {
-      this->environment
-        = std::make_optional<Environment>( this->getGlobalManifest(),
-                                           this->getManifest(),
-                                           this->getLockfile() );
+      this->environment = std::make_optional<Environment>(
+        this->getGlobalManifest(),
+        this->getManifest(),
+        this->getLockfile(),
+        this->upgrades.has_value() ? *this->upgrades : false );
     }
   return *this->environment;
 }

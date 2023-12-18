@@ -30,7 +30,6 @@ namespace flox::resolver {
 /** @brief A named group which a descriptor/package can be a member of. */
 using GroupName = std::string;
 
-
 /* -------------------------------------------------------------------------- */
 
 /**

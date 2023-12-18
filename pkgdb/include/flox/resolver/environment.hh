@@ -80,6 +80,15 @@ using ResolutionFailure = std::vector<std::pair<InstallID, std::string>>;
  */
 using ResolutionResult = std::variant<ResolutionFailure, SystemPackages>;
 
+/**
+ * @brief Indicator for lockfile upgrade operations.
+ *
+ * `true` means upgrade everything.
+ * `false` or an empty vector mean upgrade nothing.
+ * A list of `InstallID`s indicates a subset of packages to be upgraded.
+ */
+using Upgrades = std::variant<bool, std::vector<GroupName>>;
+
 
 /* -------------------------------------------------------------------------- */
 
@@ -112,15 +121,8 @@ private:
   std::optional<Lockfile> oldLockfile;
 
 
-  /**
-   * @brief Indicator for lockfile upgrade operations.
-   *
-   * `true` means upgrade everything.
-   * `false` or an empty vector mean upgrade nothing.
-   * A list of `InstallID`s indicates a subset of packages to be upgraded.
-   */
-  using Upgrades = std::variant<bool, std::vector<InstallID>>;
-  /** Packages to force an upgrade for, even if they are already locked. */
+  /** Groups to force an upgrade for, even if they are already locked. Note that
+   * no error is thrown if a non-existent group is specified here. */
   Upgrades upgrades;
 
   /** New/modified lockfile being edited. */
@@ -156,14 +158,20 @@ private:
   }
 
   /**
+   * @brief Return whether a group is being upgraded.
+   */
+  [[nodiscard]] bool
+  upgradingGroup( const GroupName & name ) const;
+
+  /**
    * @brief Get groups that need to be locked as opposed to reusing locks from
    *        @a oldLockfile.
    */
-  [[nodiscard]] std::vector<InstallDescriptors>
+  [[nodiscard]] Groups
   getUnlockedGroups( const System & system );
 
   /** @brief Get groups with locks that can be reused from @a oldLockfile. */
-  [[nodiscard]] std::vector<InstallDescriptors>
+  [[nodiscard]] Groups
   getLockedGroups( const System & system );
 
   /**
@@ -209,7 +217,9 @@ private:
    *          resolved packages.
    */
   [[nodiscard]] ResolutionResult
-  tryResolveGroup( const InstallDescriptors & group, const System & system );
+  tryResolveGroup( const GroupName &          name,
+                   const InstallDescriptors & group,
+                   const System &             system );
 
   /**
    * @brief Lock all descriptors for a given system.
@@ -265,7 +275,8 @@ protected:
    * - All descriptors are present in the old lock
    */
   [[nodiscard]] bool
-  groupIsLocked( const InstallDescriptors & group,
+  groupIsLocked( const GroupName &          name,
+                 const InstallDescriptors & group,
                  const Lockfile &           oldLockfile,
                  const System &             system ) const;
 

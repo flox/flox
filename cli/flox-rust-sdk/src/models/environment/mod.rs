@@ -17,6 +17,7 @@ use self::remote_environment::RemoteEnvironmentError;
 use super::environment_ref::{EnvironmentName, EnvironmentOwner};
 use super::flox_package::FloxTriple;
 use super::manifest::PackageToInstall;
+use super::pkgdb::UpgradeResult;
 use crate::flox::{EnvironmentRef, Flox};
 use crate::models::pkgdb::call_pkgdb;
 use crate::providers::git::{
@@ -126,6 +127,13 @@ pub trait Environment {
 
     /// Atomically update this environment's inputs
     fn update(&mut self, flox: &Flox, inputs: Vec<String>) -> Result<String, EnvironmentError2>;
+
+    /// Atomically upgrade packages in this environment
+    fn upgrade(
+        &mut self,
+        flox: &Flox,
+        groups_or_iids: Vec<String>,
+    ) -> Result<UpgradeResult, EnvironmentError2>;
 
     /// Extract the current content of the manifest
     ///

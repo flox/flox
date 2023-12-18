@@ -18,6 +18,7 @@ use crate::flox::{EnvironmentOwner, EnvironmentRef, Flox};
 use crate::models::environment_ref::EnvironmentName;
 use crate::models::floxmetav2::{FloxmetaV2, FloxmetaV2Error};
 use crate::models::manifest::PackageToInstall;
+use crate::models::pkgdb::UpgradeResult;
 
 #[derive(Debug, Error)]
 pub enum RemoteEnvironmentError {
@@ -134,6 +135,19 @@ impl Environment for RemoteEnvironment {
     /// Atomically update this environment's inputs
     fn update(&mut self, flox: &Flox, inputs: Vec<String>) -> Result<String, EnvironmentError2> {
         let result = self.inner.update(flox, inputs)?;
+        self.inner
+            .push(false)
+            .map_err(RemoteEnvironmentError::UpdateUpstream)?;
+        Ok(result)
+    }
+
+    /// Atomically upgrade packages in this environment
+    fn upgrade(
+        &mut self,
+        flox: &Flox,
+        groups_or_iids: Vec<String>,
+    ) -> Result<UpgradeResult, EnvironmentError2> {
+        let result = self.inner.upgrade(flox, groups_or_iids)?;
         self.inner
             .push(false)
             .map_err(RemoteEnvironmentError::UpdateUpstream)?;

@@ -222,9 +222,9 @@ test_groupIsLocked0()
 
   /* All groups should be locked. */
   TestEnvironment environment( std::nullopt, manifest, lockfile );
-  for ( const InstallDescriptors & group : manifest.getGroupedDescriptors() )
+  for ( const auto & [name, group] : manifest.getGroupedDescriptors() )
     {
-      EXPECT( environment.groupIsLocked( group, lockfile, _system ) );
+      EXPECT( environment.groupIsLocked( name, group, lockfile, _system ) );
     }
 
   return true;
@@ -265,9 +265,9 @@ test_groupIsLocked1()
 
   /* All groups should be locked. */
   TestEnvironment environment( std::nullopt, manifest, lockfile );
-  for ( const InstallDescriptors & group : manifest.getGroupedDescriptors() )
+  for ( const auto & [name, group] : manifest.getGroupedDescriptors() )
     {
-      EXPECT( environment.groupIsLocked( group, lockfile, _system ) );
+      EXPECT( environment.groupIsLocked( name, group, lockfile, _system ) );
     }
   return true;
 }
@@ -302,9 +302,9 @@ test_groupIsLocked2()
 
   /* All groups should be unlocked. */
   TestEnvironment environment( std::nullopt, manifest, lockfile );
-  for ( const InstallDescriptors & group : manifest.getGroupedDescriptors() )
+  for ( const auto & [name, group] : manifest.getGroupedDescriptors() )
     {
-      EXPECT( ! environment.groupIsLocked( group, lockfile, _system ) );
+      EXPECT( ! environment.groupIsLocked( name, group, lockfile, _system ) );
     }
   return true;
 }
@@ -339,9 +339,9 @@ test_groupIsLocked3()
 
   /* All groups should be unlocked. */
   TestEnvironment environment( std::nullopt, manifest, lockfile );
-  for ( const InstallDescriptors & group : manifest.getGroupedDescriptors() )
+  for ( const auto & [name, group] : manifest.getGroupedDescriptors() )
     {
-      EXPECT( ! environment.groupIsLocked( group, lockfile, _system ) );
+      EXPECT( ! environment.groupIsLocked( name, group, lockfile, _system ) );
     }
   return true;
 }
@@ -374,9 +374,9 @@ test_groupIsLocked4()
 
   /* All groups should be unlocked. */
   TestEnvironment environment( std::nullopt, manifest, lockfile );
-  for ( const InstallDescriptors & group : manifest.getGroupedDescriptors() )
+  for ( const auto & [name, group] : manifest.getGroupedDescriptors() )
     {
-      EXPECT( ! environment.groupIsLocked( group, lockfile, _system ) );
+      EXPECT( ! environment.groupIsLocked( name, group, lockfile, _system ) );
     }
   return true;
 }
@@ -414,15 +414,16 @@ test_groupIsLocked5()
   /* The group with hello should stay locked, but curl should be unlocked. */
   TestEnvironment environment( std::nullopt, manifest, lockfile );
   auto            groups = manifest.getGroupedDescriptors();
-  for ( const InstallDescriptors & group : groups )
+  for ( const auto & [name, group] : groups )
     {
       if ( group.contains( "hello" ) )
         {
-          EXPECT( environment.groupIsLocked( group, lockfile, _system ) );
+          EXPECT( environment.groupIsLocked( name, group, lockfile, _system ) );
         }
       else
         {
-          EXPECT( ! environment.groupIsLocked( group, lockfile, _system ) );
+          EXPECT(
+            ! environment.groupIsLocked( name, group, lockfile, _system ) );
         }
     }
   return true;
@@ -454,9 +455,9 @@ test_groupIsLocked6()
 
   /* All groups should be locked. */
   TestEnvironment environment( std::nullopt, manifest, lockfile );
-  for ( const InstallDescriptors & group : manifest.getGroupedDescriptors() )
+  for ( const auto & [name, group] : manifest.getGroupedDescriptors() )
     {
-      EXPECT( environment.groupIsLocked( group, lockfile, _system ) );
+      EXPECT( environment.groupIsLocked( name, group, lockfile, _system ) );
     }
 
   return true;
@@ -487,36 +488,46 @@ test_groupIsLocked_upgrades()
 
   /* Reuse lock when upgrades = false. */
   TestEnvironment environment( std::nullopt, manifest, lockfile, false );
-  for ( const InstallDescriptors & group : manifest.getGroupedDescriptors() )
+  for ( const auto & [name, group] : manifest.getGroupedDescriptors() )
     {
-      EXPECT( environment.groupIsLocked( group, lockfile, _system ) );
+      EXPECT( environment.groupIsLocked( name, group, lockfile, _system ) );
     }
 
   /* Re-lock when upgrades = true. */
   environment = TestEnvironment( std::nullopt, manifest, lockfile, true );
-  for ( const InstallDescriptors & group : manifest.getGroupedDescriptors() )
+  for ( const auto & [name, group] : manifest.getGroupedDescriptors() )
     {
-      EXPECT( ! environment.groupIsLocked( group, lockfile, _system ) );
+      EXPECT( ! environment.groupIsLocked( name, group, lockfile, _system ) );
     }
 
-  /* Reuse lock when `hello' not in upgrades list. */
+  /* Reuse lock when TOPLEVEL_GROUP_NAME not in upgrades list. */
   environment = TestEnvironment( std::nullopt,
                                  manifest,
                                  lockfile,
-                                 std::vector<InstallID> {} );
-  for ( const InstallDescriptors & group : manifest.getGroupedDescriptors() )
+                                 std::vector<GroupName> {} );
+  for ( const auto & [name, group] : manifest.getGroupedDescriptors() )
     {
-      EXPECT( environment.groupIsLocked( group, lockfile, _system ) );
+      EXPECT( environment.groupIsLocked( name, group, lockfile, _system ) );
     }
 
-  /* Re-lock when `hello' is in upgrades list. */
+  /* Reuse lock when `hello' in upgrades list. */
   environment = TestEnvironment( std::nullopt,
                                  manifest,
                                  lockfile,
-                                 std::vector<InstallID> { "hello" } );
-  for ( const InstallDescriptors & group : manifest.getGroupedDescriptors() )
+                                 std::vector<GroupName> { "hello" } );
+  for ( const auto & [name, group] : manifest.getGroupedDescriptors() )
     {
-      EXPECT( ! environment.groupIsLocked( group, lockfile, _system ) );
+      EXPECT( environment.groupIsLocked( name, group, lockfile, _system ) );
+    }
+
+  /* Re-lock when TOPLEVEL_GROUP_NAME is in upgrades list. */
+  environment = TestEnvironment( std::nullopt,
+                                 manifest,
+                                 lockfile,
+                                 std::vector<GroupName> { TOPLEVEL_GROUP_NAME } );
+  for ( const auto & [name, group] : manifest.getGroupedDescriptors() )
+    {
+      EXPECT( ! environment.groupIsLocked( name, group, lockfile, _system ) );
     }
   return true;
 }
@@ -556,7 +567,7 @@ test_getGroupInput0()
 
   /* The locked input is returned by `getGroupInput`. */
   TestEnvironment environment( std::nullopt, manifest, lockfile );
-  for ( const InstallDescriptors & group : manifest.getGroupedDescriptors() )
+  for ( const auto & [name, group] : manifest.getGroupedDescriptors() )
     {
       auto input = environment.getGroupInput( group, lockfile, _system );
       EXPECT( input.has_value() );
@@ -605,7 +616,7 @@ test_getGroupInput1()
 
   /* The locked input is returned by `getGroupInput`. */
   TestEnvironment environment( std::nullopt, manifest, lockfile );
-  for ( const InstallDescriptors & group : manifest.getGroupedDescriptors() )
+  for ( const auto & [name, group] : manifest.getGroupedDescriptors() )
     {
       auto input = environment.getGroupInput( group, lockfile, _system );
       EXPECT( input.has_value() );
@@ -660,7 +671,7 @@ test_getGroupInput2()
   /* The locked input of one of the packages is returned. At this point, we
    * don't care which. */
   TestEnvironment environment( std::nullopt, manifest, lockfile );
-  for ( const InstallDescriptors & group : manifest.getGroupedDescriptors() )
+  for ( const auto & [name, group] : manifest.getGroupedDescriptors() )
     {
       auto input = environment.getGroupInput( group, lockfile, _system );
       EXPECT( input.has_value() );
@@ -703,7 +714,7 @@ test_getGroupInput3()
 
   /* The old locked input is *not* used. */
   TestEnvironment environment( std::nullopt, manifest, lockfile );
-  for ( const InstallDescriptors & group : manifest.getGroupedDescriptors() )
+  for ( const auto & [name, group] : manifest.getGroupedDescriptors() )
     {
       auto input = environment.getGroupInput( group, lockfile, _system );
       EXPECT( ! input.has_value() );
