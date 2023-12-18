@@ -3383,6 +3383,13 @@ ac_compiler_gnu=$ac_cv_c_compiler_gnu
 
 
 
+# - Enable all warnings, but allow GNU Make extensions.
+# - Treat all warnings as errors.
+# - Use `subdir-objects' so that build artifacts are placed in sub-directories.
+# - Enable `foreign' mode so that warnings about strict adherence to
+#   GNU Standards is suppressed ( ex: must set contact email, must
+#   have up-to-date GPL LICENSE, must define certain targets, must support
+#   `DESTDIR', etc ).
 am__api_version='1.16'
 
 
@@ -13422,6 +13429,11 @@ CC=$lt_save_CC
 
 
 
+# Defines `PREFIX', and similar ALL_CAPS standard directory variables.
+# These are aliases of lower-case forms.
+# Also defined `INSTALL_TESTS_DIR' and `PKGCONFIGDIR'.
+# Sets `abs_srcdir' early so it can be used to define `REPO_ROOT' and other
+# variables relative to the project root.
 PREFIX="$prefix"
 
 BINDIR="$bindir"
@@ -13453,7 +13465,9 @@ abs_srcdir="$( cd "$srcdir"; echo "$PWD"; )"
 
 # ---------------------------------------------------------------------------- #
 
-# Checks for programs.
+# Checks for Programs
+# -------------------
+
 # We use builtin `AC_PROG_<NAME>' macros to run checks; but follow up with
 # `AC_PATH_PROG' to get absolute paths to the programs.
 
@@ -20867,6 +20881,7 @@ fi
 # ---------------------------------------------------------------------------- #
 
 # Platform and Toolchain Checks
+# -----------------------------
 
 
 
@@ -20954,7 +20969,8 @@ fi
 
 # ---------------------------------------------------------------------------- #
 
-# Checks for libraries.
+# Checks for Libraries
+# --------------------
 
 # Nix does not carry a `nix-fetchers.pc' file, so we need to manually check
 # that it exists.
@@ -21018,7 +21034,8 @@ fi
 
 # ---------------------------------------------------------------------------- #
 
-# Checks for header files.
+# Checks for Header Files
+# -----------------------
 
 
 ac_fn_c_check_header_compile "$LINENO" "sys/mkdev.h" "ac_cv_header_sys_mkdev_h" "$ac_includes_default"
@@ -21081,7 +21098,8 @@ fi
 
 # ---------------------------------------------------------------------------- #
 
-# Checks for typedefs, structures, and compiler characteristics.
+# Checks for typedefs, structures, and compiler characteristics
+# -------------------------------------------------------------
 
 ac_fn_c_check_type "$LINENO" "_Bool" "ac_cv_type__Bool" "$ac_includes_default"
 if test "x$ac_cv_type__Bool" = xyes
@@ -21310,7 +21328,8 @@ printf "%s\n" "#define uint64_t $ac_cv_c_uint64_t" >>confdefs.h
 
 # ---------------------------------------------------------------------------- #
 
-# Checks for library functions.
+# Checks for Library Functions
+# ----------------------------
 
 # The Ultrix 4.2 mips builtin alloca declared by alloca.h only works
 # for constant arguments.  Useless!
@@ -21595,7 +21614,8 @@ fi
 
 # ---------------------------------------------------------------------------- #
 
-# Sub-Systems/Modules
+# Sub-Systems/Modules Options
+# ---------------------------
 
 # --with-pkgdb
 
@@ -21652,7 +21672,8 @@ esac
 
 # ---------------------------------------------------------------------------- #
 
-# Directories
+# Project Directories
+# -------------------
 
 REPO_ROOT="$abs_srcdir"
 
@@ -21684,6 +21705,7 @@ DEPFILES="$DEPFILES $SHELLS_DIR/flox/default.nix";
 # ---------------------------------------------------------------------------- #
 
 # External Dependencies
+# ---------------------
 
 
 pkg_failed=no
@@ -22121,6 +22143,9 @@ NIX_LIBS="-lnixfetchers $NIX_LIBS"
 
 # ---------------------------------------------------------------------------- #
 
+# Nix CPP Flags
+# -------------
+
 # Compiler Flags for pre-processing with `nix' headers
 
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking Nix system pair" >&5
@@ -22295,7 +22320,7 @@ CPPFLAGS="$_flox_v_pushed_CPPFLAGS";
 
 # ---------------------------------------------------------------------------- #
 
-# `RPATH', `RUNPATH', and `SONAME' flags
+# `RPATH', `RUNPATH', and `SONAME' Flags
 # --------------------------------------
 # - `RELATIVE_RPATH_FLAG' is used to provide a relative `R[UN]PATH' for
 #   an executable.
@@ -22313,13 +22338,13 @@ CPPFLAGS="$_flox_v_pushed_CPPFLAGS";
 case "$host_os" in #(
   linux*) :
         RELATIVE_RPATH_FLAG="-Wl,--enable-new-dtags";
-    RELATIVE_RPATH_FLAG="$RELATIVE_RPATH_FLAG '-Wl,-rpath=\$\$ORIGIN/../lib'";
+     RELATIVE_RPATH_FLAG="$RELATIVE_RPATH_FLAG '-Wl,-rpath=\$\$ORIGIN/../lib'";
     set_rpath_option='-Wl,--enable-new-dtags,-rpath,';
     set_soname_option='-Wl,-soname,'; ;; #(
   darwin*) :
         RELATIVE_RPATH_FLAG="-rpath @executable_path/../lib";
-    set_rpath_option='-rpath ';
-    set_soname_option='-install_name @rpath/'; ;; #(
+     set_rpath_option='-rpath ';
+     set_soname_option='-install_name @rpath/'; ;; #(
   *) :
     as_fn_error $? "Unsupported host OS: $host_os" "$LINENO" 5 ;;
 esac
@@ -22340,10 +22365,10 @@ esac
 case "$CXX_TOOLCHAIN" in #(
   gcc) :
     NO_UNDEFINED_SYMBOLS_FLAG='-Wl,--no-undefined';
-  SHARED_LIBRARY_CFLAGS='-fPIC -shared'; ;; #(
+     SHARED_LIBRARY_CFLAGS='-fPIC -shared'; ;; #(
   clang) :
     NO_UNDEFINED_SYMBOLS_FLAG='-Wl,-undefined,error';
-  SHARED_LIBRARY_CFLAGS='-fPIC'; ;; #(
+     SHARED_LIBRARY_CFLAGS='-fPIC'; ;; #(
   *) :
     as_fn_error $? "Unsupported C++ compiler: $CXX" "$LINENO" 5 ;;
 esac
@@ -22368,6 +22393,9 @@ fi
 
 # ---------------------------------------------------------------------------- #
 
+# Sub-System Versions
+# -------------------
+
 # Get `pkgdb' version
 
 PKGDB_VERSION="$(< $PKGDB_ROOT/.version)"
@@ -22378,6 +22406,9 @@ printf "%s\n" "#define PKGDB_VERSION \"$PKGDB_VERSION\"" >>confdefs.h
 
 
 # ---------------------------------------------------------------------------- #
+
+# Extra Files/Assets
+# ------------------
 
 # Get paths to static assets
 
@@ -22401,17 +22432,17 @@ then :
     SET_PROMPT_BASH_SH="$WITH_SET_PROMPT_BASH_SH" ;; #(
   local) :
     SET_PROMPT_BASH_SH="$(
-      $NIX --extra-experimental-features='nix-command flakes'  \
-           store add-path -n set-prompt-bash.sh                \
-           "$PKGDB_ROOT/src/buildenv/set-prompt-bash.sh";
-      )" ;; #(
+       $NIX --extra-experimental-features='nix-command flakes'  \
+            store add-path -n set-prompt-bash.sh                \
+            "$PKGDB_ROOT/src/buildenv/set-prompt-bash.sh";
+       )" ;; #(
   *) :
     if test -d "$WITH_SET_PROMPT_BASH_SH"
 then :
   :
 else $as_nop
   as_fn_error $? "Invalid '--with-set-prompt-bash-sh': '$WITH_SET_PROMPT_BASH_SH'.
-You must specify either 'local', or a '/nix/store' path" "$LINENO" 5
+        You must specify either 'local', or a '/nix/store' path" "$LINENO" 5
 fi ;;
 esac
 fi
@@ -22441,17 +22472,17 @@ then :
     PROFILE_D_SCRIPT_DIR="$WITH_PROFILE_D_SCRIPT_DIR" ;; #(
   local) :
     PROFILE_D_SCRIPT_DIR="$(
-      $NIX --extra-experimental-features='nix-command flakes'  \
-           store add-file -n set-prompt-bash.sh                \
-           "$PKGDB_ROOT/src/buildenv/assets";
-      )" ;; #(
+        $NIX --extra-experimental-features='nix-command flakes'  \
+             store add-file -n set-prompt-bash.sh                \
+             "$PKGDB_ROOT/src/buildenv/assets";
+        )" ;; #(
   *) :
     if test -d "$WITH_PROFILE_D_SCRIPT_DIR"
 then :
   :
 else $as_nop
   as_fn_error $? "Invalid '--with-profile-d-script-dir': '$WITH_PROFILE_D_SCRIPT_DIR'.
-You must specify either 'local', or a '/nix/store' path" "$LINENO" 5
+        You must specify either 'local', or a '/nix/store' path" "$LINENO" 5
 fi ;;
 esac
 fi
@@ -22462,6 +22493,9 @@ printf "%s\n" "#define PROFILE_D_SCRIPT_DIR \"$PROFILE_D_SCRIPT_DIR\"" >>confdef
 
 
 # ---------------------------------------------------------------------------- #
+
+# Node Semver
+# -----------
 
 # Get path to `semver' in `/nix/store'
 
@@ -22486,7 +22520,8 @@ printf "%s\n" "#define SEMVER_PATH \"$SEMVER_PATH\"" >>confdefs.h
 
 # ---------------------------------------------------------------------------- #
 
-# Cargo flags
+# Cargo Flags
+# -----------
 
 
 
@@ -22494,8 +22529,16 @@ printf "%s\n" "#define SEMVER_PATH \"$SEMVER_PATH\"" >>confdefs.h
 
 # ---------------------------------------------------------------------------- #
 
+# Perform Substitution
+# --------------------
+# Creates `FILE' from `FILE.in' by substituting `@VAR@' for `$VAR'.
+# Only _substituted_ variables ( those marked by `AC_SUBST' ) are subtituted.
+
+# Locate files to be processed ( `.in' suffix is implied ).
 ac_config_files="$ac_config_files Makefile pkgdb/Makefile cli/Makefile"
 
+
+# Substitute and write.
 cat >confcache <<\_ACEOF
 # This file is a shell script that caches the results of configure
 # tests run on this system so they can be shared between configure

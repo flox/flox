@@ -42,7 +42,7 @@ AC_INIT([flox], [0.3.7])
 AC_CONFIG_MACRO_DIRS([build-aux/m4])
 AC_CONFIG_AUX_DIR([build-aux])
 
-# - Enalbe all warnings, but allow GNU Make extensions.
+# - Enable all warnings, but allow GNU Make extensions.
 # - Treat all warnings as errors.
 # - Use `subdir-objects' so that build artifacts are placed in sub-directories.
 # - Enable `foreign' mode so that warnings about strict adherence to
