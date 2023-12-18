@@ -10,7 +10,7 @@ expect_after {
   eof { exit 2 }
   "*\n" { exp_continue }
 }
-expect "Building environment..."
+expect "Building environment"
 
 # check for alias
 send "echo \$foo\n"

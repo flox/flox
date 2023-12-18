@@ -11,7 +11,7 @@ expect_after {
   "*\n" { exp_continue }
 }
 
-expect -ex "Building environment..." {}
+expect -ex "Building environment" {}
 
 # cd to directory 2
 send "cd 2\n"

@@ -14,7 +14,7 @@ expect_after {
   eof { exit 2 }
   "*\n" { exp_continue }
 }
-expect "Building environment..."
+expect "Building environment"
 
 # check for hello
 send "{ command -v hello||which hello||type -P hello || echo not found ; } 2>&1\n"
