@@ -63,9 +63,6 @@ BuildEnvCommand::run()
   auto system    = this->system.value_or( nix::settings.thisSystem.get() );
   auto storePath = createFloxEnv( *state, lockfile, system );
 
-  /* Print the resulting store path */
-  std::cout << store->printStorePath( storePath ) << std::endl;
-
   auto localStore = store.dynamic_pointer_cast<nix::LocalFSStore>();
 
   // TODO: Make a read error
@@ -85,6 +82,11 @@ BuildEnvCommand::run()
                             "outLinkPath: " + outLinkPath );
         }
     }
+
+  /* Print the resulting store path */
+  nlohmann::json result
+    = { { "store_path", store->printStorePath( storePath ) } };
+  std::cout << result.dump() << std::endl;
 
   return EXIT_SUCCESS;
 }

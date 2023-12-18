@@ -33,6 +33,40 @@
 
 /* -------------------------------------------------------------------------- */
 
+namespace flox {
+
+/* -------------------------------------------------------------------------- */
+
+/**
+ * @class CaughtException
+ * @brief An exception thrown when an otherwise unhandled exception is caught.
+ *        This ensures proper JSON formatting.
+ * @{
+ */
+FLOX_DEFINE_EXCEPTION( CaughtException,
+                       EC_FAILURE,
+                       "caught an unhandled exception" )
+/** @} */
+
+
+/* -------------------------------------------------------------------------- */
+
+/**
+ * @class NixException
+ * @brief An exception thrown when an otherwise unhandled Nix exception is
+ *        caught. This ensures proper JSON formatting.
+ * @{
+ */
+FLOX_DEFINE_EXCEPTION( NixException, EC_NIX, "caught a nix exception" )
+/** @} */
+
+
+/* -------------------------------------------------------------------------- */
+
+}  // namespace flox
+
+/* -------------------------------------------------------------------------- */
+
 int
 run( int argc, char * argv[] )
 {
@@ -106,51 +140,36 @@ int
 main( int argc, char * argv[] )
 {
 
+  std::optional<flox::FloxException> caughtException;
+
   try
     {
       return run( argc, argv );
     }
   catch ( const flox::FloxException & err )
     {
-      if ( ! isatty( STDOUT_FILENO ) )
-        {
-          std::cout << nlohmann::json( err ).dump() << std::endl;
-        }
-      else { std::cerr << err.what() << std::endl; }
-
-      return err.getErrorCode();
+      caughtException = std::move( err );
     }
   // TODO: we may want to catch these closer to where they are
   //       originally thrown.
   // TODO: handle IFD build errors.
   catch ( const nix::Error & err )
     {
-      if ( ! isatty( STDOUT_FILENO ) )
-        {
-          nlohmann::json error = {
-            { "exit_code", flox::EC_NIX },
-            { "message", nix::filterANSIEscapes( err.what(), true ) },
-          };
-          std::cout << error << std::endl;
-        }
-      else { std::cerr << err.what() << std::endl; }
-
-      return flox::EC_NIX;
+      caughtException
+        = flox::NixException( nix::filterANSIEscapes( err.what(), true ) );
     }
   catch ( const std::exception & err )
     {
-      if ( ! isatty( STDOUT_FILENO ) )
-        {
-          nlohmann::json error = {
-            { "exit_code", EXIT_FAILURE },
-            { "message", err.what() },
-          };
-          std::cout << error << std::endl;
-        }
-      else { std::cerr << err.what() << std::endl; }
-
-      return flox::EC_FAILURE;
+      caughtException = flox::CaughtException( err.what() );
     }
+
+  if ( ! isatty( STDOUT_FILENO ) )
+    {
+      std::cout << nlohmann::json( *caughtException ).dump() << std::endl;
+    }
+  else { std::cerr << caughtException->what() << std::endl; }
+
+  return caughtException->getErrorCode();
 }
 
 
