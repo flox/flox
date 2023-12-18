@@ -104,7 +104,7 @@ pub struct InstallationAttempt {
     pub already_installed: HashMap<String, bool>,
 }
 
-pub trait Environment {
+pub trait Environment: Send {
     /// Build the environment and create a result link as gc-root
     fn build(&mut self, flox: &Flox) -> Result<(), EnvironmentError2>;
 
