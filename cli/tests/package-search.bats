@@ -273,6 +273,20 @@ setup_file() {
 }
 
 # ---------------------------------------------------------------------------- #
+
+# bats test_tags=special
+
+@test "'flox search' doesn't error when database is locked" {
+  "$PKGDB_BIN" gc -a 0 # clear out any existing databases
+  # This command launches three instances of `flox search` simultaneously
+  # ::: {1..3} -> launch one search command for each of these arguments
+  # -N0 -> don't pass the expanded arguments (1, 2, and 3) to the command
+  run --separate-stderr sh -c 'parallel -N0 "$FLOX_BIN" search hello ::: {1..3}'
+  assert_success
+  assert_equal "${#lines[@]}" 30 # 10 lines per search command instance
+}
+
+# ---------------------------------------------------------------------------- #
 #
 #
 #

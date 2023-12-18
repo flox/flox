@@ -191,7 +191,8 @@ SearchCommand::run()
         *this->getEnvironment().getPkgDbRegistry() )
     {
       debugLog( "querying input: " + name );
-      auto                       dbRO = input->getDbReadOnly();
+      auto dbRO = input->getDbReadOnly();
+      debugLog( "got read-only database " );
       std::vector<pkgdb::row_id> inputIds;
       for ( const auto & id : query.execute( dbRO->db ) )
         {

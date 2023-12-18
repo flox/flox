@@ -191,7 +191,7 @@ public:
   execute( const char * stmt )
   {
     sqlite3pp::command cmd( this->db, stmt );
-    return cmd.execute();
+    return retryWhileBusy( cmd );
   }
 
   /**
@@ -203,7 +203,7 @@ public:
   execute_all( const char * stmt )
   {
     sqlite3pp::command cmd( this->db, stmt );
-    return cmd.execute_all();
+    return retryAllWhileBusy( cmd );
   }
 
 

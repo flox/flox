@@ -477,6 +477,12 @@ errorLog( const std::string & msg );
 
 /* -------------------------------------------------------------------------- */
 
+/**
+ * @brief Returns a path to a temporary file that has not yet been opened.
+ */
+std::filesystem::path
+tempfilePath();
+
 }  // namespace flox
 
 

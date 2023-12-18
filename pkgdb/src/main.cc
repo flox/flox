@@ -105,6 +105,9 @@ run( int argc, char * argv[] )
   flox::buildenv::BuildEnvCommand cmdBuildEnv;
   prog.add_subparser( cmdBuildEnv.getParser() );
 
+  flox::pkgdb::FingerprintCommand cmdFingerprint;
+  prog.add_subparser( cmdFingerprint.getParser() );
+
 
   /* Parse Args */
   try
@@ -127,6 +130,10 @@ run( int argc, char * argv[] )
   if ( prog.is_subcommand_used( "repl" ) ) { return cmdRepl.run(); }
   if ( prog.is_subcommand_used( "eval" ) ) { return cmdEval.run(); }
   if ( prog.is_subcommand_used( "buildenv" ) ) { return cmdBuildEnv.run(); }
+  if ( prog.is_subcommand_used( "fingerprint" ) )
+    {
+      return cmdFingerprint.run();
+    }
 
   // TODO: better error for this,
   // likely only occurs if we add a new command without handling it (?)

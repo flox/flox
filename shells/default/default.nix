@@ -7,6 +7,7 @@
   mkShell,
   pre-commit-check,
   shfmt,
+  parallel,
   flox-cli,
   flox-cli-tests,
   flox-pkgdb,
@@ -29,6 +30,7 @@
       commitizen
       alejandra
       shfmt
+      parallel
     ];
 in
   mkShell (

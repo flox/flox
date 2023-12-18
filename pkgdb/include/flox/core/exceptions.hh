@@ -78,7 +78,9 @@ enum error_category {
   /** EnvirontMixin exception/misuse. */
   EC_ENVIRONMENT_MIXIN,
   /** EnvirontMixin exception/misuse. */
-  EC_BUILDENV_CONFLICT
+  EC_BUILDENV_CONFLICT,
+  /** Database locking exception */
+  EC_DB_LOCKING
 
 }; /* End enum `error_category' */
 

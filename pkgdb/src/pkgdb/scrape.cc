@@ -64,16 +64,31 @@ ScrapeCommand::run()
   this->initInput();
   assert( this->input.has_value() );
 
-  /* If `--force' was given, clear the `done' fields for the prefix and its
-   * descendants to force them to re-evaluate. */
-  if ( this->force )
+  auto   fingerprint = this->input->getFingerprint();
+  auto   dbPath      = this->input->getDbPath();
+  DbLock lock( fingerprint, dbPath );
+  /* This command allows you to specify where the database goes, so we need to
+   * do the same for the db lock. */
+  auto result = lock.acquire();
+  if ( result == pkgdb::DB_LOCK_ACTION_NEEDED )
     {
-      this->input->getDbReadWrite()->setPrefixDone( this->attrPath, false );
-      this->input->closeDbReadWrite();
+      /* Clean up someone else's attempt at creating the database. */
+      std::remove( input->getDbPath().c_str() );
     }
+  if ( ( result == pkgdb::DB_LOCK_ACTION_NEEDED )
+       || ( result == pkgdb::DB_LOCK_FREE ) )
+    {
+      /* If `--force' was given, clear the `done' fields for the prefix and its
+       * descendants to force them to re-evaluate. */
+      if ( this->force )
+        {
+          this->input->getDbReadWrite()->setPrefixDone( this->attrPath, false );
+          this->input->closeDbReadWrite();
+        }
 
-  /* scrape it up! */
-  this->input->scrapePrefix( this->attrPath );
+      /* scrape it up! */
+      this->input->scrapePrefix( this->attrPath );
+    }
 
   /* Print path to database. */
   std::cout << ( static_cast<std::string>( *this->dbPath ) ) << std::endl;

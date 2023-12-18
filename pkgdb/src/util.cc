@@ -378,6 +378,25 @@ errorLog( const std::string & msg )
   printLog( nix::Verbosity::lvlError, msg );
 }
 
+
+/* -------------------------------------------------------------------------- */
+
+std::filesystem::path
+tempfilePath()
+{
+  auto tmpdir = std::filesystem::temp_directory_path();
+  /* mkstemp will turn the X's into a random file path */
+  std::string pathTemplate = tmpdir.string() + "/XXXXXX";
+  auto        file         = ::mkstemp( (char *) pathTemplate.c_str() );
+  debugLog( "generated temp file path " + pathTemplate );
+  ::close( file );
+  /* mkstemp creates the file, so copying to this tempfile will always fail
+   * unless we delete it.*/
+  std::filesystem::path tempPath( pathTemplate );
+  std::filesystem::remove( tempPath );
+  return tempPath;
+}
+
 }  // namespace flox
 
 

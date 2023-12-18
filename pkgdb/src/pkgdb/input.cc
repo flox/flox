@@ -44,6 +44,9 @@ namespace flox::pkgdb {
 void
 PkgDbInput::init()
 {
+
+  if ( this->hasBeenInitialized ) { return; }
+
   /* Initialize DB if missing. */
   if ( ! std::filesystem::exists( this->dbPath ) )
     {
@@ -86,6 +89,8 @@ PkgDbInput::init()
                   dbVersions.tables,
                   dbVersions.views ) );
     }
+
+  this->hasBeenInitialized = true;
 }
 
 
@@ -181,6 +186,15 @@ PkgDbInput::getRowJSON( row_id row )
   auto rsl  = dbRO->getPackage( row );
   rsl.emplace( "input", this->getNameOrURL() );
   return rsl;
+}
+
+
+/* -------------------------------------------------------------------------- */
+
+Fingerprint
+PkgDbInput::getFingerprint()
+{
+  return this->getFlake()->lockedFlake.getFingerprint();
 }
 
 

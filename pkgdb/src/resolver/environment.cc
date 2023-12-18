@@ -104,7 +104,22 @@ Environment::getPkgDbRegistry()
       /* Scrape if needed. */
       for ( auto & [name, input] : *this->dbs )
         {
-          input->scrapeSystems( this->getSystems() );
+          pkgdb::Fingerprint    fingerprint = input->getFingerprint();
+          std::filesystem::path dbPath      = input->getDbPath();
+          pkgdb::DbLock         lock(
+            fingerprint,
+            dbPath );  // the lock is released by the destructor
+          auto result = lock.acquire();
+          if ( result == pkgdb::DB_LOCK_ACTION_NEEDED )
+            {
+              /* Clean up someone else's attempt at creating the database. */
+              std::remove( input->getDbPath().c_str() );
+            }
+          if ( ( result == pkgdb::DB_LOCK_ACTION_NEEDED )
+               || ( result == pkgdb::DB_LOCK_FREE ) )
+            {
+              input->scrapeSystems( this->getSystems() );
+            }
         }
     }
   return static_cast<nix::ref<Registry<pkgdb::PkgDbInputFactory>>>( this->dbs );

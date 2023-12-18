@@ -49,7 +49,7 @@ PkgDb::updateViews()
         auto               name = row.get<std::string>( 0 );
         std::string        cmd  = "DROP VIEW IF EXISTS '" + name + '\'';
         sqlite3pp::command dropView( this->db, cmd.c_str() );
-        if ( sql_rc rcode = dropView.execute(); isSQLError( rcode ) )
+        if ( sql_rc rcode = retryWhileBusy( dropView ); isSQLError( rcode ) )
           {
             throw PkgDbException( nix::fmt( "failed to drop view '%s':(%d) %s",
                                             name,
@@ -65,7 +65,7 @@ PkgDb::updateViews()
     "UPDATE DbVersions SET version = ? WHERE name = 'pkgdb_views_schema'" );
   updateVersion.bind( 1, static_cast<int>( sqlVersions.views ) );
 
-  if ( sql_rc rcode = updateVersion.execute_all(); isSQLError( rcode ) )
+  if ( sql_rc rcode = retryAllWhileBusy( updateVersion ); isSQLError( rcode ) )
     {
       throw PkgDbException( nix::fmt( "failed to update PkgDb Views:(%d) %s",
                                       rcode,
@@ -129,7 +129,7 @@ PkgDb::initVersions()
     ", ( 'pkgdb_views_schema', ? )" );
   defineVersions.bind( 1, static_cast<int>( sqlVersions.tables ) );
   defineVersions.bind( 2, static_cast<int>( sqlVersions.views ) );
-  if ( sql_rc rcode = defineVersions.execute(); isSQLError( rcode ) )
+  if ( sql_rc rcode = retryWhileBusy( defineVersions ); isSQLError( rcode ) )
     {
       throw PkgDbException( nix::fmt( "failed to write DbVersions info:(%d) %s",
                                       rcode,
@@ -166,7 +166,7 @@ PkgDb::writeInput()
   cmd.bind( 1, fpStr, sqlite3pp::copy );
   cmd.bind( 2, this->lockedRef.string, sqlite3pp::nocopy );
   cmd.bind( 3, this->lockedRef.attrs.dump(), sqlite3pp::copy );
-  if ( sql_rc rcode = cmd.execute(); isSQLError( rcode ) )
+  if ( sql_rc rcode = retryWhileBusy( cmd ); isSQLError( rcode ) )
     {
       throw PkgDbException(
         nix::fmt( "failed to write LockedFlaked info:(%d) %s",
@@ -186,7 +186,7 @@ PkgDb::addOrGetAttrSetId( const std::string & attrName, row_id parent )
     "INSERT INTO AttrSets ( attrName, parent ) VALUES ( ?, ? )" );
   cmd.bind( 1, attrName, sqlite3pp::copy );
   cmd.bind( 2, static_cast<long long>( parent ) );
-  if ( sql_rc rcode = cmd.execute(); isSQLError( rcode ) )
+  if ( sql_rc rcode = retryWhileBusy( cmd ); isSQLError( rcode ) )
     {
       sqlite3pp::query qryId(
         this->db,
@@ -250,7 +250,7 @@ PkgDb::addOrGetDescriptionId( const std::string & description )
     nix::lvlDebug,
     nix::actUnknown,
     nix::fmt( "Adding new description to database: %s.", description ) );
-  if ( sql_rc rcode = cmd.execute(); isSQLError( rcode ) )
+  if ( sql_rc rcode = retryWhileBusy( cmd ); isSQLError( rcode ) )
     {
       throw PkgDbException( nix::fmt( "failed to add Description '%s':(%d) %s",
                                       description,
@@ -348,7 +348,7 @@ PkgDb::addPackage( row_id               parentId,
       cmd.bind( ":unfree" );
       cmd.bind( ":descriptionId" );
     }
-  if ( sql_rc rcode = cmd.execute(); isSQLError( rcode ) )
+  if ( sql_rc rcode = retryWhileBusy( cmd ); isSQLError( rcode ) )
     {
       throw PkgDbException( nix::fmt( "failed to write Package '%s':(%d) %s",
                                       pkg._fullName,
@@ -378,7 +378,7 @@ PkgDb::setPrefixDone( row_id prefixId, bool done )
   )SQL" );
   cmd.bind( 1, static_cast<int>( done ) );
   cmd.bind( 2, static_cast<long long>( prefixId ) );
-  if ( sql_rc rcode = cmd.execute(); isSQLError( rcode ) )
+  if ( sql_rc rcode = retryWhileBusy( cmd ); isSQLError( rcode ) )
     {
       throw PkgDbException( nix::fmt(
         "failed to set AttrSets.done for subtree '%s':(%d) %s",
@@ -412,11 +412,8 @@ PkgDb::scrape( nix::SymbolTable & syms, const Target & target, Todos & todo )
 
   bool tryRecur = prefix.front() != "packages";
 
-  nix::Activity act( *nix::logger,
-                     nix::lvlInfo,
-                     nix::actUnknown,
-                     nix::fmt( "evaluating package set '%s'",
-                               nix::concatStringsSep( ".", prefix ) ) );
+  debugLog( nix::fmt( "evaluating package set '%s'",
+                      nix::concatStringsSep( ".", prefix ) ) );
 
   /* Scrape loop over attrs */
   for ( nix::Symbol & aname : cursor->getAttrs() )

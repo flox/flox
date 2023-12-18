@@ -62,6 +62,7 @@ private:
    *   std::shared_ptr<FloxFlake>          flake
    *   std::optional<std::vector<Subtree>> enabledSubtrees
    */
+  bool hasBeenInitialized = false;
 
   /** Path to the flake's pkgdb SQLite3 file. */
   std::filesystem::path dbPath;
@@ -80,23 +81,6 @@ private:
 
   /** The name of the input, used to emit output with shortnames. */
   std::optional<std::string> name;
-
-
-  /**
-   * @brief Prepare database handles for use.
-   *
-   * Upon exiting a compatible read-only database connection will be open
-   * with the `LockedFlake` and `DbVersions` tables created.
-   *
-   * If the database does not exist it will be created.
-   *
-   * If the database `VIEW`s schemas are out of date they will be updated.
-   *
-   * If the database `TABLE`s schemas are out of date the database will be
-   * deleted and recreated.
-   */
-  void
-  init();
 
 
 public:
@@ -129,7 +113,20 @@ public:
     , dbPath( std::move( dbPath ) )
     , name( name.empty() ? std::nullopt : std::make_optional( name ) )
   {
-    this->init();
+    auto   fingerprint = this->getFingerprint();
+    DbLock lock( fingerprint );
+    lock.inSameDirAs( this->dbPath );
+    auto result = lock.acquire();
+    if ( result == pkgdb::DB_LOCK_ACTION_NEEDED )
+      {
+        /* Clean up someone else's attempt at creating the database. */
+        std::remove( this->getDbPath().c_str() );
+      }
+    if ( ( result == pkgdb::DB_LOCK_ACTION_NEEDED )
+         || ( result == pkgdb::DB_LOCK_FREE ) )
+      {
+        this->init();
+      }
   }
 
   /**
@@ -150,8 +147,37 @@ public:
                             cacheDir ) )
     , name( name.empty() ? std::nullopt : std::make_optional( name ) )
   {
-    this->init();
+    auto   fingerprint = this->getFingerprint();
+    DbLock lock( fingerprint );
+    lock.inSameDirAs( this->dbPath );
+    auto result = lock.acquire();
+    if ( result == pkgdb::DB_LOCK_ACTION_NEEDED )
+      {
+        /* Clean up someone else's attempt at creating the database. */
+        std::remove( this->getDbPath().c_str() );
+      }
+    if ( ( result == pkgdb::DB_LOCK_ACTION_NEEDED )
+         || ( result == pkgdb::DB_LOCK_FREE ) )
+      {
+        this->init();
+      }
   }
+
+  /**
+   * @brief Prepare database handles for use.
+   *
+   * Upon exiting a compatible read-only database connection will be open
+   * with the `LockedFlake` and `DbVersions` tables created.
+   *
+   * If the database does not exist it will be created.
+   *
+   * If the database `VIEW`s schemas are out of date they will be updated.
+   *
+   * If the database `TABLE`s schemas are out of date the database will be
+   * deleted and recreated.
+   */
+  void
+  init();
 
   /**
    * @return The read-only database connection handle.
@@ -233,6 +259,10 @@ public:
   {
     return this->name;
   }
+
+  /** @brief Returns the fingerprint for the flake the database contains. */
+  Fingerprint
+  getFingerprint();
 }; /* End struct `PkgDbInput' */
 
 

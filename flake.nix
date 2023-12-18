@@ -82,6 +82,12 @@
     # Use nix@2.17
     overlays.nix = final: prev: {
       nix = final.callPackage ./pkgs/nix {};
+      nix-debug = final.enableDebugging final.nix;
+    };
+
+    # Enable debug symbols
+    overlays.sqlite = final: prev: {
+      sqlite-debug = final.enableDebugging final.sqlite;
     };
 
     # Cherry pick `semver' recipe from `floco'.
@@ -107,6 +113,7 @@
       overlays.nlohmann
       overlays.semver
       overlays.nix
+      overlays.sqlite
       sqlite3pp.overlays.default
     ];
 
@@ -118,6 +125,9 @@
           pkgsFor = final;
         });
     in {
+      flox-pkgdb-debug = final.enableDebugging final.flox-pkgdb;
+      flox-debug = final.flox.override {flox-pkgdb = final.flox-pkgdb-debug;};
+
       # Use bleeding edge `rustfmt'.
       rustfmt = prev.rustfmt.override {asNightly = true;};
 

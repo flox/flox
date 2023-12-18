@@ -10,6 +10,7 @@
 #pragma once
 
 #include "flox/core/command.hh"
+#include "flox/core/nix-state.hh"
 #include "flox/pkgdb/input.hh"
 #include "flox/pkgdb/write.hh"
 
@@ -289,6 +290,44 @@ public:
 }; /* End class `GCCommand' */
 
 /* -------------------------------------------------------------------------- */
+
+/* -------------------------------------------------------------------------- */
+
+/**
+ * @brief Returns the fingerprint for a flake reference
+ */
+class FingerprintCommand
+{
+
+private:
+
+
+  command::VerboseParser parser;
+  NixState               state;
+  std::string            flakeref;
+
+public:
+
+  FingerprintCommand();
+
+  [[nodiscard]] command::VerboseParser &
+  getParser()
+  {
+    return this->parser;
+  }
+
+  /**
+   * @brief Execute the `fingerprint` routine.
+   * @return `EXIT_SUCCESS` or `EXIT_FAILURE`.
+   */
+  int
+  run();
+
+
+}; /* End class `FingerprintCommand' */
+
+/* -------------------------------------------------------------------------- */
+
 
 }  // namespace flox::pkgdb
 

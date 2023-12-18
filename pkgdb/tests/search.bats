@@ -48,7 +48,7 @@ genParamsNixpkgsFlox() {
 
 # Searches `nixpkgs#legacyPackages.x86_64-linux' for a fuzzy match on "hello"
 @test "'pkgdb search' params0.json" {
-  run "$PKGDB_BIN" search "$TDATA/params0.json"
+  run "$PKGDB_BIN" search "$TDATA/params0.json" -vvv
   assert_success
 }
 
@@ -67,7 +67,7 @@ genParamsNixpkgsFlox() {
 # ---------------------------------------------------------------------------- #
 
 # bats test_tags=search:match
-#
+
 @test "'pkgdb search' 'match=hello'" {
   run sh -c "$PKGDB_BIN search '$TDATA/params0.json'|wc -l;"
   assert_success
@@ -499,6 +499,46 @@ genParamsNixpkgsFlox() {
   run [ "${#lines[@]}" -gt 0 ]
   assert_success
 }
+
+# ---------------------------------------------------------------------------- #
+
+@test "'pkgdb search' doesn't crash when run in parallel" {
+  # We don't want other tests polluting parallel test runs so we do this test
+  # with a unique cache directory.
+  run sh -c 'PKGDB_CACHEDIR="$(mktemp -d)" parallel -N0 "$PKGDB_BIN" search \
+   --ga-registry --match-name hello ::: $(seq 10)'
+  assert_success
+  n_lines="${#lines[@]}"
+  assert_equal "$n_lines" 100 # 10x number of results from hello
+}
+
+
+# ---------------------------------------------------------------------------- #
+
+@test "'pkgdb search' resumes if contended db writer crashes" {
+  # Use a specific rev so that we can fingerprint consistently
+  nixpkgs_rev='9faf91e6d0b7743d41cce3b63a8e5c733dc696a3'
+  nixpkgs_ref="github:NixOS/nixpkgs/$nixpkgs_rev"
+  _PKGDB_GA_REGISTRY_REF_OR_REV="$nixpkgs_rev"
+  export _PKGDB_GA_REGISTRY_REF_OR_REV
+
+  cachedir="$(mktemp -d)"
+  export cachedir # make this directory available in the spawned subshell
+  fingerprint=$("$PKGDB_BIN" fingerprint "$nixpkgs_ref")
+  # Create an empty database and db lock then sleep to simulate a
+  # writer crashing
+  touch "$cachedir/$fingerprint.sqlite"
+  touch "$cachedir/$fingerprint.lock"
+  sleep 1 # longer than default stale lock time, see DB_LOCK_MAX_UPDATE_AGE
+  # Spawn a handful of searches and ensure that one of them picks up creating
+  # the database
+  run sh -c 'PKGDB_CACHEDIR="$cachedir" parallel -N0 "$PKGDB_BIN" search \
+   --ga-registry --match-name hello ::: $(seq 10)'
+  assert_success
+  n_lines="${#lines[@]}"
+  assert_equal "$n_lines" 100 # 10x number of results from hello
+}
+
 
 # ---------------------------------------------------------------------------- #
 #

@@ -193,6 +193,32 @@ template struct PkgDbMixin<PkgDb>;
 
 /* -------------------------------------------------------------------------- */
 
+FingerprintCommand::FingerprintCommand() : parser( "fingerprint" )
+{
+  this->parser.add_description( "Get the fingerprint for a flake reference." );
+  this->parser.add_argument( "flakeref" )
+    .help( "The flake reference to fingerprint" )
+    .action( [&]( const std::string & flakeref )
+             { this->flakeref = flakeref; } );
+}
+
+/* -------------------------------------------------------------------------- */
+
+int
+FingerprintCommand::run()
+{
+  auto flakeref = nix::parseFlakeRef( this->flakeref );
+  auto state    = this->state;
+  auto locked
+    = nix::flake::lockFlake( *state.getState(), flakeref, defaultLockFlags );
+  std::string fingerprint
+    = locked.getFingerprint().to_string( nix::Base16, false );
+  std::cout << fingerprint << std::endl;
+  return EXIT_SUCCESS;
+}
+
+/* -------------------------------------------------------------------------- */
+
 }  // namespace flox::pkgdb
 
 
