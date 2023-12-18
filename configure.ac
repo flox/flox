@@ -673,6 +673,7 @@ AC_SUBST([CARGOFLAGS])
 AC_CONFIG_FILES([
   Makefile
   pkgdb/Makefile
+  pkgdb/src/resolver/Makefile
   cli/Makefile
 ])
 

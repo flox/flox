@@ -754,9 +754,7 @@ PKG_CONFIG_PATH
 PKG_CONFIG
 CPP
 AUTORECONF
-AURORECONF
 REAL_AUTORECONF
-REAL_AURORECONF
 CXXCPP
 am__fastdepCXX_FALSE
 am__fastdepCXX_TRUE
@@ -924,8 +922,8 @@ CXX
 CXXFLAGS
 CCC
 CXXCPP
-REAL_AURORECONF
-AURORECONF
+REAL_AUTORECONF
+AUTORECONF
 CPP
 PKG_CONFIG
 PKG_CONFIG_PATH
@@ -1655,9 +1653,9 @@ Some influential environment variables:
   CXX         C++ compiler command
   CXXFLAGS    C++ compiler flags
   CXXCPP      C++ preprocessor
-  REAL_AURORECONF
+  REAL_AUTORECONF
               Path to the original `autoreconf' script
-  AURORECONF  Path to the script to use as `autoreconf' inside of Makefiles
+  AUTORECONF  Path to the script to use as `autoreconf' inside of Makefiles
   CPP         C preprocessor
   PKG_CONFIG  path to pkg-config utility
   PKG_CONFIG_PATH
@@ -22535,7 +22533,7 @@ printf "%s\n" "#define SEMVER_PATH \"$SEMVER_PATH\"" >>confdefs.h
 # Only _substituted_ variables ( those marked by `AC_SUBST' ) are subtituted.
 
 # Locate files to be processed ( `.in' suffix is implied ).
-ac_config_files="$ac_config_files Makefile pkgdb/Makefile cli/Makefile"
+ac_config_files="$ac_config_files Makefile pkgdb/Makefile pkgdb/src/resolver/Makefile cli/Makefile"
 
 
 # Substitute and write.
@@ -23698,6 +23696,7 @@ do
     "libtool") CONFIG_COMMANDS="$CONFIG_COMMANDS libtool" ;;
     "Makefile") CONFIG_FILES="$CONFIG_FILES Makefile" ;;
     "pkgdb/Makefile") CONFIG_FILES="$CONFIG_FILES pkgdb/Makefile" ;;
+    "pkgdb/src/resolver/Makefile") CONFIG_FILES="$CONFIG_FILES pkgdb/src/resolver/Makefile" ;;
     "cli/Makefile") CONFIG_FILES="$CONFIG_FILES cli/Makefile" ;;
 
   *) as_fn_error $? "invalid argument: \`$ac_config_target'" "$LINENO" 5;;
