@@ -82,9 +82,9 @@ AC_PATH_PROG([CXX], [$CXX], [$MISSING c++])
 # creating it, and `build-aux/m4/libtool.m4' after `libtoolize' is run.
 # We need to know the path to the original `autoreconf' script so that we can
 # run it from inside that script.
-AC_ARG_VAR([REAL_AURORECONF], [Path to the original `autoreconf' script])
+AC_ARG_VAR([REAL_AUTORECONF], [Path to the original `autoreconf' script])
 AC_PATH_PROG([REAL_AUTORECONF], [autoreconf], [$MISSING autoreconf])
-AC_ARG_VAR([AURORECONF],
+AC_ARG_VAR([AUTORECONF],
   [Path to the script to use as `autoreconf' inside of Makefiles])
 AC_PATH_PROG([AUTORECONF], [autoreconf], [$MISSING build-aux/autoreconf],
   [$abs_srcdir/build-aux/:$PATH])
