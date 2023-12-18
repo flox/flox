@@ -280,6 +280,10 @@ impl Delete {
 pub struct Activate {
     #[bpaf(external(environment_select), fallback(Default::default()))]
     environment: EnvironmentSelect,
+
+    /// Command to run interactively in the context of the environment
+    #[bpaf(positional("cmd"), strict, many)]
+    run_args: Vec<String>,
 }
 
 impl Activate {
@@ -397,6 +401,12 @@ impl Activate {
         } else {
             bail!("Unsupported SHELL '{shell}'");
         };
+
+        if !self.run_args.is_empty() {
+            command.arg("-i");
+            command.arg("-c");
+            command.arg(self.run_args.join(" "));
+        }
 
         debug!("running activation command: {:?}", command);
         let error = command.exec();
