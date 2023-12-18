@@ -12,31 +12,105 @@
 
 # ---------------------------------------------------------------------------- #
 
-# AK_CHECK_NIX
-# ------------
+# FLOX_CHECK_NIX_CC_WRAPPER
+# -------------------------
 # Detect whether `CC` is an executable or a shell script wrapper created
 # by `nix`.
-AC_DEFUN([AK_CHECK_NIX],
-[AC_CACHE_CHECK([whether CC is a nix wrapper], [ak_cv_nix_cc_wrapper],
+AC_DEFUN([FLOX_CHECK_NIX_WRAPPER],
+[AC_CACHE_CHECK([whether CC is a nix wrapper], [flox_cv_nix_cc_wrapper],
   [AC_REQUIRE([AC_PROG_CC])
   AS_IF(
     [file -Lb `which $CC` 2>/dev/null[]dnl
      |$GREP -q "^a /nix/store/[[^ ]]*/bash script, ASCII text executable\$"],
-    [ak_cv_nix_cc_wrapper=yes], [ak_cv_nix_cc_wrapper=no])
+    [flox_cv_nix_cc_wrapper=yes], [flox_cv_nix_cc_wrapper=no])
   ])
-AM_CONDITIONAL([NIX_CC_WRAPPER], [test "$ak_cv_nix_cc_wrapper" = 'yes'])
-]) # AK_CHECK_NIX
+AM_CONDITIONAL([NIX_CC_WRAPPER], [test "$flox_cv_nix_cc_wrapper" = 'yes'])
+]) # FLOX_CHECK_NIX_CC_WRAPPER
 
 
 # ---------------------------------------------------------------------------- #
 
-# AK_PROG_NIX
-# -----------
+# FLOX_PROG_NIX
+# -------------
 # Set `NIX` to the path of the `nix` executable, if any.
 # Set various `NIX_*` variables.
-AC_DEFUN([AK_PROG_NIX],
-[AC_PATH_PROG([NIX], [nix], [$MISSING nix])
-]) # AK_PROG_NIX
+AC_DEFUN([FLOX_PROG_NIX], [AC_PATH_PROG([NIX], [nix], [$MISSING nix])])
+
+
+# ---------------------------------------------------------------------------- #
+
+# TODO: `AC_CACHE_CHECK' like `FLOX_CHECK_NIX' above.
+
+# FLOX_LIB_NIXFETCHERS([ACTION-IF-FOUND], [ACTION-IF-NOT-FOUND])
+# --------------------------------------------------------------
+# Check that `libnixfetchers' is available.
+# Nix does not carry a `nix-fetchers.pc' file, so we need to manually check
+# that it exists.
+# NOTE: `translit' is used to join the strings together and avoid 80 char limit.
+AC_DEFUN([FLOX_LIB_NIXFETCHERS], [dnl
+AC_CHECK_LIB([nixfetchers],
+  [_ZN3nix8fetchers11attrsToJSONERKSt3mapINSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEESt7variantIJS7_mNS_8ExplicitIbEEEESt4lessIS7_ESaISt4pairIKS7_SB_EEE],
+  [m4_default([$1], [:])],
+  [m4_default([$2],
+              [AC_MSG_ERROR([Cannot find libnixfetchers])])])
+]) # FLOX_LIB_NIXFETCHERS
+
+
+# ---------------------------------------------------------------------------- #
+
+# FLOX_CHECK_NIX_MODULES([ACTION-IF-FOUND], [ACTION-IF-NOT-FOUND])
+# ----------------------
+# Check whether the `nix` `pkg-config' modules are available, and set
+# `NIX_CFLAGS' and `NIX_LIBS' accordingly.
+# `-lnixfetchers' is added to `NIX_LIBS' if `nix-fetchers' is available.
+# Checks for `nix-store nix-main nix-cmd nix-expr'.
+AC_DEFUN([FLOX_CHECK_NIX_MODULES], [dnl
+PKG_CHECK_MODULES(
+  [NIX],
+  [nix-store nix-main nix-cmd nix-expr],
+  m4_default([$1], [:]),
+  m4_default([$2],
+             [AC_MSG_ERROR([Cannot find 'nix-{store|main|cmd|expr}.pc'])]))
+FLOX_LIB_NIXFETCHERS([NIX_LIBS="-lnixfetchers $NIX_LIBS"])
+]) # FLOX_CHECK_NIX_MODULES
+
+
+
+# ---------------------------------------------------------------------------- #
+
+# FLOX_INHERIT_NIX_CONFIG_DEF(VAR, [EXPECT_VALUE])
+# ------------------------------------------------
+# Check whether `VAR` is defined in the `nix` configuration, and ( optionally )
+# if it has the expected value.
+# If `EXPECT_VALUE` is empty only check whether `VAR` is defined.
+# If the check succeeds, invoke `AC_DEFINE(VAR, EXPECT_VALUE)'.
+# XXX: We do NOT inherit the value of `VAR` from the `nix` configuration!
+AC_DEFUN([FLOX_INHERIT_NIX_CONFIG_DEF], [
+AC_REQUIRE([FLOX_CHECK_NIX_MODULES])
+AC_MSG_CHECKING([Nix configuration setting $1])
+# Push current `CPPFLAGS' and language
+_flox_v_inherit_nix_config_def_pushed_CPPFLAGS="$CPPFLAGS";
+CPPFLAGS="$NIX_CPPFLAGS";
+AC_LANG_PUSH([C++])
+# Try to compile a program that includes `nix/config.h' and checks for `VAR'.
+# NOTE: "@%:@" is replaced with "#" by `autoconf' to prevent `m4sh' from
+#       treating it as a comment.
+AC_PREPROC_IFELSE([AC_LANG_SOURCE(
+  [@%:@include <nix/config.h>
+   @%:@ifndef $1
+     @%:@error "$1 is not defined"
+   @%:@endif]m4_if(m4_default([$2], []), [], [], [
+   @%:@if $1 != $2
+     @%:@error "$1 is not set to $2"
+   @%:@endif]))],
+  [m4_if(m4_default([$2], []), [], [AC_DEFINE([$1])],
+                                   [AC_DEFINE([$1], [$2])])
+   AC_MSG_RESULT([yes])],
+  [AC_MSG_RESULT([no])])
+# Pop old `CPPFLAGS' and language
+AC_LANG_POP
+CPPFLAGS="$_flox_v_inherit_nix_config_def_pushed_CPPFLAGS";
+]) # FLOX_INHERIT_NIX_CONFIG_DEF
 
 
 # ---------------------------------------------------------------------------- #

@@ -16,6 +16,9 @@
 
 # ============================================================================ #
 #
+# @file pkgdb/src/resolver/Makefile.am
+#
+# @brief Provides `libpkgdb.la` module and `pkgdb` executable.
 #
 #
 # ---------------------------------------------------------------------------- #
@@ -104,6 +107,7 @@ am__aclocal_m4_deps = $(top_srcdir)/build-aux/m4/dirs.m4 \
 	$(top_srcdir)/build-aux/m4/ltsugar.m4 \
 	$(top_srcdir)/build-aux/m4/ltversion.m4 \
 	$(top_srcdir)/build-aux/m4/lt~obsolete.m4 \
+	$(top_srcdir)/build-aux/m4/nix.m4 \
 	$(top_srcdir)/build-aux/m4/progs.m4 $(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
@@ -175,24 +179,15 @@ lib_libpkgdb_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CXX \
 	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CXXLD) \
 	$(lib_libpkgdb_la_CXXFLAGS) $(CXXFLAGS) \
 	$(lib_libpkgdb_la_LDFLAGS) $(LDFLAGS) -o $@
-am_bin_pkgdb_OBJECTS = src/bin_pkgdb-main.$(OBJEXT) \
-	src/bin_pkgdb-repl.$(OBJEXT) \
-	src/parse/bin_pkgdb-command.$(OBJEXT) \
-	src/pkgdb/bin_pkgdb-command.$(OBJEXT) \
-	src/pkgdb/bin_pkgdb-get.$(OBJEXT) \
-	src/pkgdb/bin_pkgdb-scrape.$(OBJEXT) \
-	src/resolver/bin_pkgdb-command.$(OBJEXT) \
-	src/search/bin_pkgdb-command.$(OBJEXT) \
-	src/buildenv/bin_pkgdb-command.$(OBJEXT)
+am_bin_pkgdb_OBJECTS = src/main.$(OBJEXT) src/repl.$(OBJEXT) \
+	src/parse/command.$(OBJEXT) src/pkgdb/command.$(OBJEXT) \
+	src/pkgdb/get.$(OBJEXT) src/pkgdb/scrape.$(OBJEXT) \
+	src/resolver/command.$(OBJEXT) src/search/command.$(OBJEXT) \
+	src/buildenv/command.$(OBJEXT)
 bin_pkgdb_OBJECTS = $(am_bin_pkgdb_OBJECTS)
 am__DEPENDENCIES_1 =
-am__DEPENDENCIES_2 = $(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1)
-bin_pkgdb_DEPENDENCIES = $(am__DEPENDENCIES_2) $(am__DEPENDENCIES_1) \
-	lib/libpkgdb.la $(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
-	$(am__DEPENDENCIES_1)
-bin_pkgdb_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) \
-	$(LIBTOOLFLAGS) --mode=link $(CXXLD) $(bin_pkgdb_CXXFLAGS) \
-	$(CXXFLAGS) $(AM_LDFLAGS) $(LDFLAGS) -o $@
+bin_pkgdb_DEPENDENCIES = $(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
+	lib/libpkgdb.la
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
 am__v_P_0 = false
@@ -208,9 +203,7 @@ am__v_at_1 =
 DEFAULT_INCLUDES = -I.@am__isrc@
 depcomp = $(SHELL) $(top_srcdir)/build-aux/depcomp
 am__maybe_remake_depfiles = depfiles
-am__depfiles_remade = src/$(DEPDIR)/bin_pkgdb-main.Po \
-	src/$(DEPDIR)/bin_pkgdb-repl.Po \
-	src/$(DEPDIR)/lib_libpkgdb_la-command.Plo \
+am__depfiles_remade = src/$(DEPDIR)/lib_libpkgdb_la-command.Plo \
 	src/$(DEPDIR)/lib_libpkgdb_la-eval.Plo \
 	src/$(DEPDIR)/lib_libpkgdb_la-exceptions.Plo \
 	src/$(DEPDIR)/lib_libpkgdb_la-expr.Plo \
@@ -225,13 +218,12 @@ am__depfiles_remade = src/$(DEPDIR)/bin_pkgdb-main.Po \
 	src/$(DEPDIR)/lib_libpkgdb_la-util.Plo \
 	src/$(DEPDIR)/lib_libpkgdb_la-versions.Plo \
 	src/$(DEPDIR)/lib_libpkgdb_la-yamlToJSON.Plo \
-	src/buildenv/$(DEPDIR)/bin_pkgdb-command.Po \
+	src/$(DEPDIR)/main.Po src/$(DEPDIR)/repl.Po \
+	src/buildenv/$(DEPDIR)/command.Po \
 	src/buildenv/$(DEPDIR)/lib_libpkgdb_la-buildenv.Plo \
 	src/buildenv/$(DEPDIR)/lib_libpkgdb_la-realise.Plo \
-	src/parse/$(DEPDIR)/bin_pkgdb-command.Po \
-	src/pkgdb/$(DEPDIR)/bin_pkgdb-command.Po \
-	src/pkgdb/$(DEPDIR)/bin_pkgdb-get.Po \
-	src/pkgdb/$(DEPDIR)/bin_pkgdb-scrape.Po \
+	src/parse/$(DEPDIR)/command.Po src/pkgdb/$(DEPDIR)/command.Po \
+	src/pkgdb/$(DEPDIR)/get.Po \
 	src/pkgdb/$(DEPDIR)/lib_libpkgdb_la-db-package.Plo \
 	src/pkgdb/$(DEPDIR)/lib_libpkgdb_la-gc.Plo \
 	src/pkgdb/$(DEPDIR)/lib_libpkgdb_la-input.Plo \
@@ -240,8 +232,9 @@ am__depfiles_remade = src/$(DEPDIR)/bin_pkgdb-main.Po \
 	src/pkgdb/$(DEPDIR)/lib_libpkgdb_la-primops.Plo \
 	src/pkgdb/$(DEPDIR)/lib_libpkgdb_la-read.Plo \
 	src/pkgdb/$(DEPDIR)/lib_libpkgdb_la-write.Plo \
-	src/resolver/$(DEPDIR)/bin_pkgdb-command.Po \
-	src/search/$(DEPDIR)/bin_pkgdb-command.Po \
+	src/pkgdb/$(DEPDIR)/scrape.Po \
+	src/resolver/$(DEPDIR)/command.Po \
+	src/search/$(DEPDIR)/command.Po \
 	src/search/$(DEPDIR)/lib_libpkgdb_la-params.Plo
 am__mv = mv -f
 CXXCOMPILE = $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) \
@@ -334,7 +327,9 @@ am__relativize = \
 ACLOCAL = @ACLOCAL@
 ALLOCA = @ALLOCA@
 AMTAR = @AMTAR@
+AM_CXXFLAGS = @AM_CXXFLAGS@
 AM_DEFAULT_VERBOSITY = @AM_DEFAULT_VERBOSITY@
+AM_LDFLAGS = @AM_LDFLAGS@
 AR = @AR@
 ARCH = @ARCH@
 ARGPARSE_CFLAGS = @ARGPARSE_CFLAGS@
@@ -463,8 +458,6 @@ SEMVER = @SEMVER@
 SEMVER_PATH = @SEMVER_PATH@
 SET_MAKE = @SET_MAKE@
 SET_PROMPT_BASH_SH = @SET_PROMPT_BASH_SH@
-SHARED_LIBRARY_CFLAGS = @SHARED_LIBRARY_CFLAGS@
-SHARED_LIBRARY_LDFLAGS = @SHARED_LIBRARY_LDFLAGS@
 SHELL = @SHELL@
 SHELLS_DIR = @SHELLS_DIR@
 SORT = @SORT@
@@ -553,21 +546,13 @@ ACLOCAL_AMFLAGS = -I ../build-aux/m4
 SUBDIRS = src/resolver #include tests
 
 # ---------------------------------------------------------------------------- #
-AM_CXXFLAGS = $(EXTRA_CXXFLAGS) -I$(PKGDB_ROOT)/include \
-	$(NLJSON_CFLAGS) $(NIX_CFLAGS)
-AM_LDFLAGS = $(EXTRA_LDFLAGS) $(NLJSON_LIBS) $(NIX_LIBS)
-
-# ---------------------------------------------------------------------------- #
 lib_LTLIBRARIES = lib/libpkgdb.la
-
-# ---------------------------------------------------------------------------- #
-# FIXME: This should only apply to shared libraries.
 lib_libpkgdb_la_CXXFLAGS = $(AM_CXXFLAGS) $(YAML_CFLAGS) \
-	$(TOML_CFLAGS) $(SQLITE3PP_CFLAGS) $(SHARED_LIBRARY_CXXFLAGS)
+	$(TOML_CFLAGS)
 lib_libpkgdb_la_LDFLAGS = $(AM_LDFLAGS) \
 	'$(set_soname_option)libpkgdb$(sharedLibExt)' \
-	$(RELATIVE_RPATH_FLAG) $(YAML_LIBS) $(TOML_LIBS) \
-	$(SQLITE3PP_LIBS)
+	$(RELATIVE_RPATH_FLAG) $(NO_UNDEFINED_SYMBOLS_FLAG) \
+	$(YAML_LIBS) $(TOML_LIBS)
 lib_libpkgdb_la_LIBADD = src/resolver/libresolver.la
 lib_libpkgdb_la_SOURCES = src/command.cc src/eval.cc src/exceptions.cc \
 	src/expr.cc src/flake-package.cc src/flox-flake.cc \
@@ -578,11 +563,7 @@ lib_libpkgdb_la_SOURCES = src/command.cc src/eval.cc src/exceptions.cc \
 	src/pkgdb/input.cc src/pkgdb/list.cc src/pkgdb/pkg-query.cc \
 	src/pkgdb/primops.cc src/pkgdb/read.cc src/pkgdb/write.cc \
 	src/buildenv/buildenv.cc src/buildenv/realise.cc
-
-# ---------------------------------------------------------------------------- #
-bin_pkgdb_CXXFLAGS = $(AM_CXXFLAGS) $(ARGPARSE_CFLAGS)
-bin_pkgdb_LDADD = $(AM_LDFLAGS) $(RELATIVE_RPATH_FLAG) lib/libpkgdb.la \
-	$(ARGPARSE_LIBS) $(YAML_LIBS) $(TOML_LIBS) $(SQLITE3PP_LIBS)
+bin_pkgdb_LDADD = $(AM_LDFLAGS) $(RELATIVE_RPATH_FLAG) lib/libpkgdb.la
 bin_pkgdb_SOURCES = src/main.cc src/repl.cc src/parse/command.cc \
 	src/pkgdb/command.cc src/pkgdb/get.cc src/pkgdb/scrape.cc \
 	src/resolver/command.cc src/search/command.cc \
@@ -787,23 +768,21 @@ lib/$(am__dirstamp):
 
 lib/libpkgdb.la: $(lib_libpkgdb_la_OBJECTS) $(lib_libpkgdb_la_DEPENDENCIES) $(EXTRA_lib_libpkgdb_la_DEPENDENCIES) lib/$(am__dirstamp)
 	$(AM_V_CXXLD)$(lib_libpkgdb_la_LINK) -rpath $(libdir) $(lib_libpkgdb_la_OBJECTS) $(lib_libpkgdb_la_LIBADD) $(LIBS)
-src/bin_pkgdb-main.$(OBJEXT): src/$(am__dirstamp) \
-	src/$(DEPDIR)/$(am__dirstamp)
-src/bin_pkgdb-repl.$(OBJEXT): src/$(am__dirstamp) \
-	src/$(DEPDIR)/$(am__dirstamp)
+src/main.$(OBJEXT): src/$(am__dirstamp) src/$(DEPDIR)/$(am__dirstamp)
+src/repl.$(OBJEXT): src/$(am__dirstamp) src/$(DEPDIR)/$(am__dirstamp)
 src/parse/$(am__dirstamp):
 	@$(MKDIR_P) src/parse
 	@: > src/parse/$(am__dirstamp)
 src/parse/$(DEPDIR)/$(am__dirstamp):
 	@$(MKDIR_P) src/parse/$(DEPDIR)
 	@: > src/parse/$(DEPDIR)/$(am__dirstamp)
-src/parse/bin_pkgdb-command.$(OBJEXT): src/parse/$(am__dirstamp) \
+src/parse/command.$(OBJEXT): src/parse/$(am__dirstamp) \
 	src/parse/$(DEPDIR)/$(am__dirstamp)
-src/pkgdb/bin_pkgdb-command.$(OBJEXT): src/pkgdb/$(am__dirstamp) \
+src/pkgdb/command.$(OBJEXT): src/pkgdb/$(am__dirstamp) \
 	src/pkgdb/$(DEPDIR)/$(am__dirstamp)
-src/pkgdb/bin_pkgdb-get.$(OBJEXT): src/pkgdb/$(am__dirstamp) \
+src/pkgdb/get.$(OBJEXT): src/pkgdb/$(am__dirstamp) \
 	src/pkgdb/$(DEPDIR)/$(am__dirstamp)
-src/pkgdb/bin_pkgdb-scrape.$(OBJEXT): src/pkgdb/$(am__dirstamp) \
+src/pkgdb/scrape.$(OBJEXT): src/pkgdb/$(am__dirstamp) \
 	src/pkgdb/$(DEPDIR)/$(am__dirstamp)
 src/resolver/$(am__dirstamp):
 	@$(MKDIR_P) src/resolver
@@ -811,13 +790,11 @@ src/resolver/$(am__dirstamp):
 src/resolver/$(DEPDIR)/$(am__dirstamp):
 	@$(MKDIR_P) src/resolver/$(DEPDIR)
 	@: > src/resolver/$(DEPDIR)/$(am__dirstamp)
-src/resolver/bin_pkgdb-command.$(OBJEXT):  \
-	src/resolver/$(am__dirstamp) \
+src/resolver/command.$(OBJEXT): src/resolver/$(am__dirstamp) \
 	src/resolver/$(DEPDIR)/$(am__dirstamp)
-src/search/bin_pkgdb-command.$(OBJEXT): src/search/$(am__dirstamp) \
+src/search/command.$(OBJEXT): src/search/$(am__dirstamp) \
 	src/search/$(DEPDIR)/$(am__dirstamp)
-src/buildenv/bin_pkgdb-command.$(OBJEXT):  \
-	src/buildenv/$(am__dirstamp) \
+src/buildenv/command.$(OBJEXT): src/buildenv/$(am__dirstamp) \
 	src/buildenv/$(DEPDIR)/$(am__dirstamp)
 bin/$(am__dirstamp):
 	@$(MKDIR_P) bin
@@ -825,7 +802,7 @@ bin/$(am__dirstamp):
 
 bin/pkgdb$(EXEEXT): $(bin_pkgdb_OBJECTS) $(bin_pkgdb_DEPENDENCIES) $(EXTRA_bin_pkgdb_DEPENDENCIES) bin/$(am__dirstamp)
 	@rm -f bin/pkgdb$(EXEEXT)
-	$(AM_V_CXXLD)$(bin_pkgdb_LINK) $(bin_pkgdb_OBJECTS) $(bin_pkgdb_LDADD) $(LIBS)
+	$(AM_V_CXXLD)$(CXXLINK) $(bin_pkgdb_OBJECTS) $(bin_pkgdb_LDADD) $(LIBS)
 
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
@@ -843,8 +820,6 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
-@AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/bin_pkgdb-main.Po@am__quote@ # am--include-marker
-@AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/bin_pkgdb-repl.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/lib_libpkgdb_la-command.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/lib_libpkgdb_la-eval.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/lib_libpkgdb_la-exceptions.Plo@am__quote@ # am--include-marker
@@ -860,13 +835,14 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/lib_libpkgdb_la-util.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/lib_libpkgdb_la-versions.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/lib_libpkgdb_la-yamlToJSON.Plo@am__quote@ # am--include-marker
-@AMDEP_TRUE@@am__include@ @am__quote@src/buildenv/$(DEPDIR)/bin_pkgdb-command.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/main.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/repl.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@src/buildenv/$(DEPDIR)/command.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@src/buildenv/$(DEPDIR)/lib_libpkgdb_la-buildenv.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@src/buildenv/$(DEPDIR)/lib_libpkgdb_la-realise.Plo@am__quote@ # am--include-marker
-@AMDEP_TRUE@@am__include@ @am__quote@src/parse/$(DEPDIR)/bin_pkgdb-command.Po@am__quote@ # am--include-marker
-@AMDEP_TRUE@@am__include@ @am__quote@src/pkgdb/$(DEPDIR)/bin_pkgdb-command.Po@am__quote@ # am--include-marker
-@AMDEP_TRUE@@am__include@ @am__quote@src/pkgdb/$(DEPDIR)/bin_pkgdb-get.Po@am__quote@ # am--include-marker
-@AMDEP_TRUE@@am__include@ @am__quote@src/pkgdb/$(DEPDIR)/bin_pkgdb-scrape.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@src/parse/$(DEPDIR)/command.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@src/pkgdb/$(DEPDIR)/command.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@src/pkgdb/$(DEPDIR)/get.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@src/pkgdb/$(DEPDIR)/lib_libpkgdb_la-db-package.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@src/pkgdb/$(DEPDIR)/lib_libpkgdb_la-gc.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@src/pkgdb/$(DEPDIR)/lib_libpkgdb_la-input.Plo@am__quote@ # am--include-marker
@@ -875,8 +851,9 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@src/pkgdb/$(DEPDIR)/lib_libpkgdb_la-primops.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@src/pkgdb/$(DEPDIR)/lib_libpkgdb_la-read.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@src/pkgdb/$(DEPDIR)/lib_libpkgdb_la-write.Plo@am__quote@ # am--include-marker
-@AMDEP_TRUE@@am__include@ @am__quote@src/resolver/$(DEPDIR)/bin_pkgdb-command.Po@am__quote@ # am--include-marker
-@AMDEP_TRUE@@am__include@ @am__quote@src/search/$(DEPDIR)/bin_pkgdb-command.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@src/pkgdb/$(DEPDIR)/scrape.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@src/resolver/$(DEPDIR)/command.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@src/search/$(DEPDIR)/command.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@src/search/$(DEPDIR)/lib_libpkgdb_la-params.Plo@am__quote@ # am--include-marker
 
 $(am__depfiles_remade):
@@ -1090,132 +1067,6 @@ src/buildenv/lib_libpkgdb_la-realise.lo: src/buildenv/realise.cc
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='src/buildenv/realise.cc' object='src/buildenv/lib_libpkgdb_la-realise.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib_libpkgdb_la_CXXFLAGS) $(CXXFLAGS) -c -o src/buildenv/lib_libpkgdb_la-realise.lo `test -f 'src/buildenv/realise.cc' || echo '$(srcdir)/'`src/buildenv/realise.cc
-
-src/bin_pkgdb-main.o: src/main.cc
-@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(bin_pkgdb_CXXFLAGS) $(CXXFLAGS) -MT src/bin_pkgdb-main.o -MD -MP -MF src/$(DEPDIR)/bin_pkgdb-main.Tpo -c -o src/bin_pkgdb-main.o `test -f 'src/main.cc' || echo '$(srcdir)/'`src/main.cc
-@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) src/$(DEPDIR)/bin_pkgdb-main.Tpo src/$(DEPDIR)/bin_pkgdb-main.Po
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='src/main.cc' object='src/bin_pkgdb-main.o' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(bin_pkgdb_CXXFLAGS) $(CXXFLAGS) -c -o src/bin_pkgdb-main.o `test -f 'src/main.cc' || echo '$(srcdir)/'`src/main.cc
-
-src/bin_pkgdb-main.obj: src/main.cc
-@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(bin_pkgdb_CXXFLAGS) $(CXXFLAGS) -MT src/bin_pkgdb-main.obj -MD -MP -MF src/$(DEPDIR)/bin_pkgdb-main.Tpo -c -o src/bin_pkgdb-main.obj `if test -f 'src/main.cc'; then $(CYGPATH_W) 'src/main.cc'; else $(CYGPATH_W) '$(srcdir)/src/main.cc'; fi`
-@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) src/$(DEPDIR)/bin_pkgdb-main.Tpo src/$(DEPDIR)/bin_pkgdb-main.Po
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='src/main.cc' object='src/bin_pkgdb-main.obj' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(bin_pkgdb_CXXFLAGS) $(CXXFLAGS) -c -o src/bin_pkgdb-main.obj `if test -f 'src/main.cc'; then $(CYGPATH_W) 'src/main.cc'; else $(CYGPATH_W) '$(srcdir)/src/main.cc'; fi`
-
-src/bin_pkgdb-repl.o: src/repl.cc
-@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(bin_pkgdb_CXXFLAGS) $(CXXFLAGS) -MT src/bin_pkgdb-repl.o -MD -MP -MF src/$(DEPDIR)/bin_pkgdb-repl.Tpo -c -o src/bin_pkgdb-repl.o `test -f 'src/repl.cc' || echo '$(srcdir)/'`src/repl.cc
-@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) src/$(DEPDIR)/bin_pkgdb-repl.Tpo src/$(DEPDIR)/bin_pkgdb-repl.Po
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='src/repl.cc' object='src/bin_pkgdb-repl.o' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(bin_pkgdb_CXXFLAGS) $(CXXFLAGS) -c -o src/bin_pkgdb-repl.o `test -f 'src/repl.cc' || echo '$(srcdir)/'`src/repl.cc
-
-src/bin_pkgdb-repl.obj: src/repl.cc
-@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(bin_pkgdb_CXXFLAGS) $(CXXFLAGS) -MT src/bin_pkgdb-repl.obj -MD -MP -MF src/$(DEPDIR)/bin_pkgdb-repl.Tpo -c -o src/bin_pkgdb-repl.obj `if test -f 'src/repl.cc'; then $(CYGPATH_W) 'src/repl.cc'; else $(CYGPATH_W) '$(srcdir)/src/repl.cc'; fi`
-@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) src/$(DEPDIR)/bin_pkgdb-repl.Tpo src/$(DEPDIR)/bin_pkgdb-repl.Po
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='src/repl.cc' object='src/bin_pkgdb-repl.obj' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(bin_pkgdb_CXXFLAGS) $(CXXFLAGS) -c -o src/bin_pkgdb-repl.obj `if test -f 'src/repl.cc'; then $(CYGPATH_W) 'src/repl.cc'; else $(CYGPATH_W) '$(srcdir)/src/repl.cc'; fi`
-
-src/parse/bin_pkgdb-command.o: src/parse/command.cc
-@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(bin_pkgdb_CXXFLAGS) $(CXXFLAGS) -MT src/parse/bin_pkgdb-command.o -MD -MP -MF src/parse/$(DEPDIR)/bin_pkgdb-command.Tpo -c -o src/parse/bin_pkgdb-command.o `test -f 'src/parse/command.cc' || echo '$(srcdir)/'`src/parse/command.cc
-@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) src/parse/$(DEPDIR)/bin_pkgdb-command.Tpo src/parse/$(DEPDIR)/bin_pkgdb-command.Po
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='src/parse/command.cc' object='src/parse/bin_pkgdb-command.o' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(bin_pkgdb_CXXFLAGS) $(CXXFLAGS) -c -o src/parse/bin_pkgdb-command.o `test -f 'src/parse/command.cc' || echo '$(srcdir)/'`src/parse/command.cc
-
-src/parse/bin_pkgdb-command.obj: src/parse/command.cc
-@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(bin_pkgdb_CXXFLAGS) $(CXXFLAGS) -MT src/parse/bin_pkgdb-command.obj -MD -MP -MF src/parse/$(DEPDIR)/bin_pkgdb-command.Tpo -c -o src/parse/bin_pkgdb-command.obj `if test -f 'src/parse/command.cc'; then $(CYGPATH_W) 'src/parse/command.cc'; else $(CYGPATH_W) '$(srcdir)/src/parse/command.cc'; fi`
-@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) src/parse/$(DEPDIR)/bin_pkgdb-command.Tpo src/parse/$(DEPDIR)/bin_pkgdb-command.Po
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='src/parse/command.cc' object='src/parse/bin_pkgdb-command.obj' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(bin_pkgdb_CXXFLAGS) $(CXXFLAGS) -c -o src/parse/bin_pkgdb-command.obj `if test -f 'src/parse/command.cc'; then $(CYGPATH_W) 'src/parse/command.cc'; else $(CYGPATH_W) '$(srcdir)/src/parse/command.cc'; fi`
-
-src/pkgdb/bin_pkgdb-command.o: src/pkgdb/command.cc
-@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(bin_pkgdb_CXXFLAGS) $(CXXFLAGS) -MT src/pkgdb/bin_pkgdb-command.o -MD -MP -MF src/pkgdb/$(DEPDIR)/bin_pkgdb-command.Tpo -c -o src/pkgdb/bin_pkgdb-command.o `test -f 'src/pkgdb/command.cc' || echo '$(srcdir)/'`src/pkgdb/command.cc
-@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) src/pkgdb/$(DEPDIR)/bin_pkgdb-command.Tpo src/pkgdb/$(DEPDIR)/bin_pkgdb-command.Po
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='src/pkgdb/command.cc' object='src/pkgdb/bin_pkgdb-command.o' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(bin_pkgdb_CXXFLAGS) $(CXXFLAGS) -c -o src/pkgdb/bin_pkgdb-command.o `test -f 'src/pkgdb/command.cc' || echo '$(srcdir)/'`src/pkgdb/command.cc
-
-src/pkgdb/bin_pkgdb-command.obj: src/pkgdb/command.cc
-@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(bin_pkgdb_CXXFLAGS) $(CXXFLAGS) -MT src/pkgdb/bin_pkgdb-command.obj -MD -MP -MF src/pkgdb/$(DEPDIR)/bin_pkgdb-command.Tpo -c -o src/pkgdb/bin_pkgdb-command.obj `if test -f 'src/pkgdb/command.cc'; then $(CYGPATH_W) 'src/pkgdb/command.cc'; else $(CYGPATH_W) '$(srcdir)/src/pkgdb/command.cc'; fi`
-@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) src/pkgdb/$(DEPDIR)/bin_pkgdb-command.Tpo src/pkgdb/$(DEPDIR)/bin_pkgdb-command.Po
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='src/pkgdb/command.cc' object='src/pkgdb/bin_pkgdb-command.obj' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(bin_pkgdb_CXXFLAGS) $(CXXFLAGS) -c -o src/pkgdb/bin_pkgdb-command.obj `if test -f 'src/pkgdb/command.cc'; then $(CYGPATH_W) 'src/pkgdb/command.cc'; else $(CYGPATH_W) '$(srcdir)/src/pkgdb/command.cc'; fi`
-
-src/pkgdb/bin_pkgdb-get.o: src/pkgdb/get.cc
-@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(bin_pkgdb_CXXFLAGS) $(CXXFLAGS) -MT src/pkgdb/bin_pkgdb-get.o -MD -MP -MF src/pkgdb/$(DEPDIR)/bin_pkgdb-get.Tpo -c -o src/pkgdb/bin_pkgdb-get.o `test -f 'src/pkgdb/get.cc' || echo '$(srcdir)/'`src/pkgdb/get.cc
-@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) src/pkgdb/$(DEPDIR)/bin_pkgdb-get.Tpo src/pkgdb/$(DEPDIR)/bin_pkgdb-get.Po
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='src/pkgdb/get.cc' object='src/pkgdb/bin_pkgdb-get.o' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(bin_pkgdb_CXXFLAGS) $(CXXFLAGS) -c -o src/pkgdb/bin_pkgdb-get.o `test -f 'src/pkgdb/get.cc' || echo '$(srcdir)/'`src/pkgdb/get.cc
-
-src/pkgdb/bin_pkgdb-get.obj: src/pkgdb/get.cc
-@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(bin_pkgdb_CXXFLAGS) $(CXXFLAGS) -MT src/pkgdb/bin_pkgdb-get.obj -MD -MP -MF src/pkgdb/$(DEPDIR)/bin_pkgdb-get.Tpo -c -o src/pkgdb/bin_pkgdb-get.obj `if test -f 'src/pkgdb/get.cc'; then $(CYGPATH_W) 'src/pkgdb/get.cc'; else $(CYGPATH_W) '$(srcdir)/src/pkgdb/get.cc'; fi`
-@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) src/pkgdb/$(DEPDIR)/bin_pkgdb-get.Tpo src/pkgdb/$(DEPDIR)/bin_pkgdb-get.Po
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='src/pkgdb/get.cc' object='src/pkgdb/bin_pkgdb-get.obj' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(bin_pkgdb_CXXFLAGS) $(CXXFLAGS) -c -o src/pkgdb/bin_pkgdb-get.obj `if test -f 'src/pkgdb/get.cc'; then $(CYGPATH_W) 'src/pkgdb/get.cc'; else $(CYGPATH_W) '$(srcdir)/src/pkgdb/get.cc'; fi`
-
-src/pkgdb/bin_pkgdb-scrape.o: src/pkgdb/scrape.cc
-@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(bin_pkgdb_CXXFLAGS) $(CXXFLAGS) -MT src/pkgdb/bin_pkgdb-scrape.o -MD -MP -MF src/pkgdb/$(DEPDIR)/bin_pkgdb-scrape.Tpo -c -o src/pkgdb/bin_pkgdb-scrape.o `test -f 'src/pkgdb/scrape.cc' || echo '$(srcdir)/'`src/pkgdb/scrape.cc
-@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) src/pkgdb/$(DEPDIR)/bin_pkgdb-scrape.Tpo src/pkgdb/$(DEPDIR)/bin_pkgdb-scrape.Po
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='src/pkgdb/scrape.cc' object='src/pkgdb/bin_pkgdb-scrape.o' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(bin_pkgdb_CXXFLAGS) $(CXXFLAGS) -c -o src/pkgdb/bin_pkgdb-scrape.o `test -f 'src/pkgdb/scrape.cc' || echo '$(srcdir)/'`src/pkgdb/scrape.cc
-
-src/pkgdb/bin_pkgdb-scrape.obj: src/pkgdb/scrape.cc
-@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(bin_pkgdb_CXXFLAGS) $(CXXFLAGS) -MT src/pkgdb/bin_pkgdb-scrape.obj -MD -MP -MF src/pkgdb/$(DEPDIR)/bin_pkgdb-scrape.Tpo -c -o src/pkgdb/bin_pkgdb-scrape.obj `if test -f 'src/pkgdb/scrape.cc'; then $(CYGPATH_W) 'src/pkgdb/scrape.cc'; else $(CYGPATH_W) '$(srcdir)/src/pkgdb/scrape.cc'; fi`
-@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) src/pkgdb/$(DEPDIR)/bin_pkgdb-scrape.Tpo src/pkgdb/$(DEPDIR)/bin_pkgdb-scrape.Po
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='src/pkgdb/scrape.cc' object='src/pkgdb/bin_pkgdb-scrape.obj' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(bin_pkgdb_CXXFLAGS) $(CXXFLAGS) -c -o src/pkgdb/bin_pkgdb-scrape.obj `if test -f 'src/pkgdb/scrape.cc'; then $(CYGPATH_W) 'src/pkgdb/scrape.cc'; else $(CYGPATH_W) '$(srcdir)/src/pkgdb/scrape.cc'; fi`
-
-src/resolver/bin_pkgdb-command.o: src/resolver/command.cc
-@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(bin_pkgdb_CXXFLAGS) $(CXXFLAGS) -MT src/resolver/bin_pkgdb-command.o -MD -MP -MF src/resolver/$(DEPDIR)/bin_pkgdb-command.Tpo -c -o src/resolver/bin_pkgdb-command.o `test -f 'src/resolver/command.cc' || echo '$(srcdir)/'`src/resolver/command.cc
-@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) src/resolver/$(DEPDIR)/bin_pkgdb-command.Tpo src/resolver/$(DEPDIR)/bin_pkgdb-command.Po
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='src/resolver/command.cc' object='src/resolver/bin_pkgdb-command.o' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(bin_pkgdb_CXXFLAGS) $(CXXFLAGS) -c -o src/resolver/bin_pkgdb-command.o `test -f 'src/resolver/command.cc' || echo '$(srcdir)/'`src/resolver/command.cc
-
-src/resolver/bin_pkgdb-command.obj: src/resolver/command.cc
-@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(bin_pkgdb_CXXFLAGS) $(CXXFLAGS) -MT src/resolver/bin_pkgdb-command.obj -MD -MP -MF src/resolver/$(DEPDIR)/bin_pkgdb-command.Tpo -c -o src/resolver/bin_pkgdb-command.obj `if test -f 'src/resolver/command.cc'; then $(CYGPATH_W) 'src/resolver/command.cc'; else $(CYGPATH_W) '$(srcdir)/src/resolver/command.cc'; fi`
-@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) src/resolver/$(DEPDIR)/bin_pkgdb-command.Tpo src/resolver/$(DEPDIR)/bin_pkgdb-command.Po
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='src/resolver/command.cc' object='src/resolver/bin_pkgdb-command.obj' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(bin_pkgdb_CXXFLAGS) $(CXXFLAGS) -c -o src/resolver/bin_pkgdb-command.obj `if test -f 'src/resolver/command.cc'; then $(CYGPATH_W) 'src/resolver/command.cc'; else $(CYGPATH_W) '$(srcdir)/src/resolver/command.cc'; fi`
-
-src/search/bin_pkgdb-command.o: src/search/command.cc
-@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(bin_pkgdb_CXXFLAGS) $(CXXFLAGS) -MT src/search/bin_pkgdb-command.o -MD -MP -MF src/search/$(DEPDIR)/bin_pkgdb-command.Tpo -c -o src/search/bin_pkgdb-command.o `test -f 'src/search/command.cc' || echo '$(srcdir)/'`src/search/command.cc
-@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) src/search/$(DEPDIR)/bin_pkgdb-command.Tpo src/search/$(DEPDIR)/bin_pkgdb-command.Po
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='src/search/command.cc' object='src/search/bin_pkgdb-command.o' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(bin_pkgdb_CXXFLAGS) $(CXXFLAGS) -c -o src/search/bin_pkgdb-command.o `test -f 'src/search/command.cc' || echo '$(srcdir)/'`src/search/command.cc
-
-src/search/bin_pkgdb-command.obj: src/search/command.cc
-@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(bin_pkgdb_CXXFLAGS) $(CXXFLAGS) -MT src/search/bin_pkgdb-command.obj -MD -MP -MF src/search/$(DEPDIR)/bin_pkgdb-command.Tpo -c -o src/search/bin_pkgdb-command.obj `if test -f 'src/search/command.cc'; then $(CYGPATH_W) 'src/search/command.cc'; else $(CYGPATH_W) '$(srcdir)/src/search/command.cc'; fi`
-@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) src/search/$(DEPDIR)/bin_pkgdb-command.Tpo src/search/$(DEPDIR)/bin_pkgdb-command.Po
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='src/search/command.cc' object='src/search/bin_pkgdb-command.obj' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(bin_pkgdb_CXXFLAGS) $(CXXFLAGS) -c -o src/search/bin_pkgdb-command.obj `if test -f 'src/search/command.cc'; then $(CYGPATH_W) 'src/search/command.cc'; else $(CYGPATH_W) '$(srcdir)/src/search/command.cc'; fi`
-
-src/buildenv/bin_pkgdb-command.o: src/buildenv/command.cc
-@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(bin_pkgdb_CXXFLAGS) $(CXXFLAGS) -MT src/buildenv/bin_pkgdb-command.o -MD -MP -MF src/buildenv/$(DEPDIR)/bin_pkgdb-command.Tpo -c -o src/buildenv/bin_pkgdb-command.o `test -f 'src/buildenv/command.cc' || echo '$(srcdir)/'`src/buildenv/command.cc
-@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) src/buildenv/$(DEPDIR)/bin_pkgdb-command.Tpo src/buildenv/$(DEPDIR)/bin_pkgdb-command.Po
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='src/buildenv/command.cc' object='src/buildenv/bin_pkgdb-command.o' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(bin_pkgdb_CXXFLAGS) $(CXXFLAGS) -c -o src/buildenv/bin_pkgdb-command.o `test -f 'src/buildenv/command.cc' || echo '$(srcdir)/'`src/buildenv/command.cc
-
-src/buildenv/bin_pkgdb-command.obj: src/buildenv/command.cc
-@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(bin_pkgdb_CXXFLAGS) $(CXXFLAGS) -MT src/buildenv/bin_pkgdb-command.obj -MD -MP -MF src/buildenv/$(DEPDIR)/bin_pkgdb-command.Tpo -c -o src/buildenv/bin_pkgdb-command.obj `if test -f 'src/buildenv/command.cc'; then $(CYGPATH_W) 'src/buildenv/command.cc'; else $(CYGPATH_W) '$(srcdir)/src/buildenv/command.cc'; fi`
-@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) src/buildenv/$(DEPDIR)/bin_pkgdb-command.Tpo src/buildenv/$(DEPDIR)/bin_pkgdb-command.Po
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='src/buildenv/command.cc' object='src/buildenv/bin_pkgdb-command.obj' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(bin_pkgdb_CXXFLAGS) $(CXXFLAGS) -c -o src/buildenv/bin_pkgdb-command.obj `if test -f 'src/buildenv/command.cc'; then $(CYGPATH_W) 'src/buildenv/command.cc'; else $(CYGPATH_W) '$(srcdir)/src/buildenv/command.cc'; fi`
 
 mostlyclean-libtool:
 	-rm -f *.lo
@@ -1445,9 +1296,7 @@ clean-am: clean-binPROGRAMS clean-generic clean-libLTLIBRARIES \
 	clean-libtool mostlyclean-am
 
 distclean: distclean-recursive
-		-rm -f src/$(DEPDIR)/bin_pkgdb-main.Po
-	-rm -f src/$(DEPDIR)/bin_pkgdb-repl.Po
-	-rm -f src/$(DEPDIR)/lib_libpkgdb_la-command.Plo
+		-rm -f src/$(DEPDIR)/lib_libpkgdb_la-command.Plo
 	-rm -f src/$(DEPDIR)/lib_libpkgdb_la-eval.Plo
 	-rm -f src/$(DEPDIR)/lib_libpkgdb_la-exceptions.Plo
 	-rm -f src/$(DEPDIR)/lib_libpkgdb_la-expr.Plo
@@ -1462,13 +1311,14 @@ distclean: distclean-recursive
 	-rm -f src/$(DEPDIR)/lib_libpkgdb_la-util.Plo
 	-rm -f src/$(DEPDIR)/lib_libpkgdb_la-versions.Plo
 	-rm -f src/$(DEPDIR)/lib_libpkgdb_la-yamlToJSON.Plo
-	-rm -f src/buildenv/$(DEPDIR)/bin_pkgdb-command.Po
+	-rm -f src/$(DEPDIR)/main.Po
+	-rm -f src/$(DEPDIR)/repl.Po
+	-rm -f src/buildenv/$(DEPDIR)/command.Po
 	-rm -f src/buildenv/$(DEPDIR)/lib_libpkgdb_la-buildenv.Plo
 	-rm -f src/buildenv/$(DEPDIR)/lib_libpkgdb_la-realise.Plo
-	-rm -f src/parse/$(DEPDIR)/bin_pkgdb-command.Po
-	-rm -f src/pkgdb/$(DEPDIR)/bin_pkgdb-command.Po
-	-rm -f src/pkgdb/$(DEPDIR)/bin_pkgdb-get.Po
-	-rm -f src/pkgdb/$(DEPDIR)/bin_pkgdb-scrape.Po
+	-rm -f src/parse/$(DEPDIR)/command.Po
+	-rm -f src/pkgdb/$(DEPDIR)/command.Po
+	-rm -f src/pkgdb/$(DEPDIR)/get.Po
 	-rm -f src/pkgdb/$(DEPDIR)/lib_libpkgdb_la-db-package.Plo
 	-rm -f src/pkgdb/$(DEPDIR)/lib_libpkgdb_la-gc.Plo
 	-rm -f src/pkgdb/$(DEPDIR)/lib_libpkgdb_la-input.Plo
@@ -1477,8 +1327,9 @@ distclean: distclean-recursive
 	-rm -f src/pkgdb/$(DEPDIR)/lib_libpkgdb_la-primops.Plo
 	-rm -f src/pkgdb/$(DEPDIR)/lib_libpkgdb_la-read.Plo
 	-rm -f src/pkgdb/$(DEPDIR)/lib_libpkgdb_la-write.Plo
-	-rm -f src/resolver/$(DEPDIR)/bin_pkgdb-command.Po
-	-rm -f src/search/$(DEPDIR)/bin_pkgdb-command.Po
+	-rm -f src/pkgdb/$(DEPDIR)/scrape.Po
+	-rm -f src/resolver/$(DEPDIR)/command.Po
+	-rm -f src/search/$(DEPDIR)/command.Po
 	-rm -f src/search/$(DEPDIR)/lib_libpkgdb_la-params.Plo
 	-rm -f Makefile
 distclean-am: clean-am distclean-compile distclean-generic \
@@ -1525,9 +1376,7 @@ install-ps-am:
 installcheck-am:
 
 maintainer-clean: maintainer-clean-recursive
-		-rm -f src/$(DEPDIR)/bin_pkgdb-main.Po
-	-rm -f src/$(DEPDIR)/bin_pkgdb-repl.Po
-	-rm -f src/$(DEPDIR)/lib_libpkgdb_la-command.Plo
+		-rm -f src/$(DEPDIR)/lib_libpkgdb_la-command.Plo
 	-rm -f src/$(DEPDIR)/lib_libpkgdb_la-eval.Plo
 	-rm -f src/$(DEPDIR)/lib_libpkgdb_la-exceptions.Plo
 	-rm -f src/$(DEPDIR)/lib_libpkgdb_la-expr.Plo
@@ -1542,13 +1391,14 @@ maintainer-clean: maintainer-clean-recursive
 	-rm -f src/$(DEPDIR)/lib_libpkgdb_la-util.Plo
 	-rm -f src/$(DEPDIR)/lib_libpkgdb_la-versions.Plo
 	-rm -f src/$(DEPDIR)/lib_libpkgdb_la-yamlToJSON.Plo
-	-rm -f src/buildenv/$(DEPDIR)/bin_pkgdb-command.Po
+	-rm -f src/$(DEPDIR)/main.Po
+	-rm -f src/$(DEPDIR)/repl.Po
+	-rm -f src/buildenv/$(DEPDIR)/command.Po
 	-rm -f src/buildenv/$(DEPDIR)/lib_libpkgdb_la-buildenv.Plo
 	-rm -f src/buildenv/$(DEPDIR)/lib_libpkgdb_la-realise.Plo
-	-rm -f src/parse/$(DEPDIR)/bin_pkgdb-command.Po
-	-rm -f src/pkgdb/$(DEPDIR)/bin_pkgdb-command.Po
-	-rm -f src/pkgdb/$(DEPDIR)/bin_pkgdb-get.Po
-	-rm -f src/pkgdb/$(DEPDIR)/bin_pkgdb-scrape.Po
+	-rm -f src/parse/$(DEPDIR)/command.Po
+	-rm -f src/pkgdb/$(DEPDIR)/command.Po
+	-rm -f src/pkgdb/$(DEPDIR)/get.Po
 	-rm -f src/pkgdb/$(DEPDIR)/lib_libpkgdb_la-db-package.Plo
 	-rm -f src/pkgdb/$(DEPDIR)/lib_libpkgdb_la-gc.Plo
 	-rm -f src/pkgdb/$(DEPDIR)/lib_libpkgdb_la-input.Plo
@@ -1557,8 +1407,9 @@ maintainer-clean: maintainer-clean-recursive
 	-rm -f src/pkgdb/$(DEPDIR)/lib_libpkgdb_la-primops.Plo
 	-rm -f src/pkgdb/$(DEPDIR)/lib_libpkgdb_la-read.Plo
 	-rm -f src/pkgdb/$(DEPDIR)/lib_libpkgdb_la-write.Plo
-	-rm -f src/resolver/$(DEPDIR)/bin_pkgdb-command.Po
-	-rm -f src/search/$(DEPDIR)/bin_pkgdb-command.Po
+	-rm -f src/pkgdb/$(DEPDIR)/scrape.Po
+	-rm -f src/resolver/$(DEPDIR)/command.Po
+	-rm -f src/search/$(DEPDIR)/command.Po
 	-rm -f src/search/$(DEPDIR)/lib_libpkgdb_la-params.Plo
 	-rm -f Makefile
 maintainer-clean-am: distclean-am maintainer-clean-generic
@@ -1599,17 +1450,6 @@ uninstall-am: uninstall-binPROGRAMS uninstall-libLTLIBRARIES
 
 .PRECIOUS: Makefile
 
-
-# ---------------------------------------------------------------------------- #
-
-# TODO: Set this in `configure.ac'.
-#       It improves visiblity of the defaults from `--help'.
-
-@IS_CLANG_TRUE@EXTRA_CXXFLAGS ?= -Wall -Wextra -Werror -pedantic         \
-@IS_CLANG_TRUE@                  -Wno-gnu-zero-variadic-macro-arguments
-@IS_CLANG_FALSE@EXTRA_CXXFLAGS ?= -Wall -Wextra -Werror -pedantic
-
-EXTRA_LDFLAGS ?=
 
 # ---------------------------------------------------------------------------- #
 #

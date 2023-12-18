@@ -248,15 +248,7 @@ AM_CONDITIONAL([IS_CLANG], [test "$CXX_TOOLCHAIN" = 'clang'])
 
 # Checks for Libraries
 # --------------------
-
-# Nix does not carry a `nix-fetchers.pc' file, so we need to manually check
-# that it exists.
-# NOTE: `translit' is used to join the strings together and avoid 80 char limit.
-AC_CHECK_LIB([nixfetchers],
-  translit( [_ZN3nix8fetchers11attrsToJSONERKSt3mapINSt7]
-            [__cxx1112basic_stringIcSt11char_traitsIcESaIcEEESt7variantIJS7]
-            [_mNS_8ExplicitIbEEEESt4lessIS7_ESaISt4pairIKS7_SB_EEE]
-          , ' '))
+FLOX_LIB_NIXFETCHERS
 
 
 # ---------------------------------------------------------------------------- #
@@ -364,6 +356,8 @@ AC_SUBST([DEPFILES])
 
 # External Dependencies
 # ---------------------
+# Each `PKG_CHECK_MODULES([PKG], [PC-NAME])' invocation sets `<PKG>_CFLAGS' and
+# `<PKG>_LIBS' for the given `<PC-NAME>.pc' file.
 
 PKG_CHECK_MODULES([NLJSON], [nlohmann_json], [:],
   [AC_MSG_ERROR([Cannot find 'nlohmann_json.pc'])])
@@ -380,9 +374,8 @@ PKG_CHECK_MODULES([SQLITE3PP], [sqlite3pp], [:],
 PKG_CHECK_MODULES([YAML], [yaml-cpp], [:],
   [AC_MSG_ERROR([Cannot find 'yaml-cpp.pc'])])
 
-PKG_CHECK_MODULES([NIX], [nix-store nix-main nix-cmd nix-expr], [:],
-  [AC_MSG_ERROR([Cannot find 'nix-{store,main,cmd,expr}.pc'])])
-NIX_LIBS="-lnixfetchers $NIX_LIBS"
+# Sets `NIX_CFLAGS' and `NIX_LIBS'
+FLOX_CHECK_NIX_MODULES
 
 
 # ---------------------------------------------------------------------------- #
@@ -401,81 +394,12 @@ AC_SUBST([SYSTEM])
 AC_DEFINE_UNQUOTED([SYSTEM], ["$SYSTEM"], [Nix system pair])
 
 
-# Check configuration used to compile `nix' and add it to `NIX_CPPFLAGS`.
-
-_flox_v_pushed_CPPFLAGS="$CPPFLAGS";
-CPPFLAGS="$NIX_CPPFLAGS";
-AC_LANG_PUSH([C++])
-
-# NOTE: "@%:@" is replaced with "#" by `autoconf' to prevent `m4sh' from
-#       treating it as a comment.
-AC_MSG_CHECKING([Nix configuration setting HAVE_BOEHMGC])
-AC_PREPROC_IFELSE([AC_LANG_SOURCE(
-  [@%:@include <nix/config.h>
-   @%:@ifndef HAVE_BOEHMGC
-     @%:@error "Boehm GC support is not indicated"
-   @%:@endif
-   @%:@if HAVE_BOEHMGC != 1
-     @%:@error "Boehm GC is not supported"
-   @%:@endif])],
-  [AC_DEFINE_UNQUOTED([HAVE_BOEHMGC])
-   AC_MSG_RESULT([yes])],
-  [AC_MSG_RESULT([no])])
-
-AC_MSG_CHECKING([Nix configuration setting ENABLE_S3])
-AC_PREPROC_IFELSE([AC_LANG_SOURCE(
-  [@%:@include <nix/config.h>
-   @%:@ifndef ENABLE_S3
-     @%:@error "S3 is not indicated"
-   @%:@endif
-   @%:@if ENABLE_S3 != 1
-     @%:@error "S3 is not supported"
-   @%:@endif])],
-  [AC_DEFINE_UNQUOTED([ENABLE_S3])
-   AC_MSG_RESULT([yes])],
-  [AC_MSG_RESULT([no])])
-
-AC_MSG_CHECKING([Nix configuration setting HAVE_STRUCT_DIRENT_D_TYPE])
-AC_PREPROC_IFELSE([AC_LANG_SOURCE(
-  [@%:@include <nix/config.h>
-   @%:@ifndef HAVE_STRUCT_DIRENT_D_TYPE
-     @%:@error "HAVE_STRUCT_DIRENT_D_TYPE is not defined"
-   @%:@endif
-   @%:@if HAVE_STRUCT_DIRENT_D_TYPE != 1
-     @%:@error "HAVE_STRUCT_DIRENT_D_TYPE is false"
-   @%:@endif])],
-  [AC_DEFINE([HAVE_STRUCT_DIRENT_D_TYPE])
-   AC_MSG_RESULT([yes])],
-  [AC_MSG_RESULT([no])])
-
-AC_MSG_CHECKING([Nix configuration setting EXCEPTION_NEEDS_THROW_SPEC])
-AC_PREPROC_IFELSE([AC_LANG_SOURCE(
-  [@%:@include <nix/config.h>
-   @%:@ifndef EXCEPTION_NEEDS_THROW_SPEC
-     @%:@error "EXCEPTION_NEEDS_THROW_SPEC is not defined"
-   @%:@endif
-   @%:@if EXCEPTION_NEEDS_THROW_SPEC != 1
-     @%:@error "EXCEPTION_NEEDS_THROW_SPEC is false"
-   @%:@endif])],
-  [AC_DEFINE([EXCEPTION_NEEDS_THROW_SPEC])
-   AC_MSG_RESULT([yes])],
-  [AC_MSG_RESULT([no])])
-
-# `HAVE_BOOST' does NOT use an integer value in `<nix/config.h>'.
-# It is either defined or not ( they use `/**/' on the right hand side ).
-# We use a `1' - I don't think this is a problem but wanted to note it.
-AC_MSG_CHECKING([Nix configuration setting HAVE_BOOST])
-AC_PREPROC_IFELSE([AC_LANG_SOURCE(
-  [@%:@include <nix/config.h>
-   @%:@ifndef HAVE_BOOST
-     @%:@error "HAVE_BOOST is not defined"
-   @%:@endif])],
-  [AC_DEFINE([HAVE_BOOST])
-   AC_MSG_RESULT([yes])],
-  [AC_MSG_RESULT([no])])
-
-AC_LANG_POP
-CPPFLAGS="$_flox_v_pushed_CPPFLAGS";
+# Check configuration used to compile `nix' and add it to `DEFS' ( `CPPFLAGS' ).
+FLOX_INHERIT_NIX_CONFIG_DEF([HAVE_BOEHMGC], [1])
+FLOX_INHERIT_NIX_CONFIG_DEF([ENABLE_S3], [1])
+FLOX_INHERIT_NIX_CONFIG_DEF([HAVE_STRUCT_DIRENT_D_TYPE], [1])
+FLOX_INHERIT_NIX_CONFIG_DEF([EXCEPTION_NEEDS_THROW_SPEC], [1])
+FLOX_INHERIT_NIX_CONFIG_DEF([HAVE_BOOST])
 
 # NOTE: About `<nix/config.h>' and our configuration macros:
 # When upgrading `nix' it's possible that new macros will be added or files
@@ -529,28 +453,16 @@ AC_SUBST([set_soname_option])
 
 # ---------------------------------------------------------------------------- #
 
-# Shared Library Flags
-# --------------------
+# Library Flags
+# -------------
 # - `SHARED_LIBRARY_LDFLAGS' is used to link shared libraries.
-# - `SHARED_LIBRARY_CFLAGS' is used to compile shared libraries.
 # - `NO_UNDEFINED_SYMBOLS_FLAG' disallows undefined symbols in shared libraries.
 
 AS_CASE(["$CXX_TOOLCHAIN"],
-  [gcc],
-    [NO_UNDEFINED_SYMBOLS_FLAG='-Wl,--no-undefined';
-     SHARED_LIBRARY_CFLAGS='-fPIC -shared';],
-  [clang],
-    [NO_UNDEFINED_SYMBOLS_FLAG='-Wl,-undefined,error';
-     SHARED_LIBRARY_CFLAGS='-fPIC';],
+  [gcc],   [NO_UNDEFINED_SYMBOLS_FLAG='-Wl,--no-undefined'],
+  [clang], [NO_UNDEFINED_SYMBOLS_FLAG='-Wl,-undefined,error']
   [AC_MSG_ERROR([Unsupported C++ compiler: $CXX])])
-
 AC_SUBST([NO_UNDEFINED_SYMBOLS_FLAG])
-
-SHARED_LIBRARY_LDFLAGS="$NO_UNDEFINED_SYMBOLS_FLAG $RELATIVE_RPATH_FLAG";
-SHARED_LIBRARY_LDFLAGS="$SHARED_LIBRARY_LDFLAGS -fPIC -shared";
-AC_SUBST([SHARED_LIBRARY_LDFLAGS])
-
-AC_SUBST([SHARED_LIBRARY_CFLAGS])
 
 AM_CONDITIONAL([BUILD_SHARED_LIBS], [test "$enable_shared" = 'yes'])
 
@@ -660,6 +572,38 @@ AC_DEFINE_UNQUOTED([SEMVER_PATH], ["$SEMVER_PATH"],
 
 AC_ARG_VAR([CARGOFLAGS], [Additional flags to pass to 'cargo build'])
 AC_SUBST([CARGOFLAGS])
+
+
+# ---------------------------------------------------------------------------- #
+
+# Finalize C/C++ Flags
+# --------------------
+# We use `AM_CFLAGS' and `AM_CXXFLAGS' for things we don't want users to
+# override, which allows users to add their own flags to `CXXFLAGS'
+# and `LDFLAGS'.
+
+# User Overridable flags.
+# We provide a sane default, but users are encouraged to override these.
+CXXFLAGS="${CXXFLAGS:+$CXXFLAGS }-Wall -Wextra -Werror -pedantic";
+if test "$CXX_TOOLCHAIN" = 'clang'; then
+  CXXFLAGS="$CXXFLAGS -Wno-gnu-zero-variadic-macro-arguments";
+fi
+
+#NOTE: `YAML_*' and `TOML_*' are only used by some targets, so are excluded here
+
+# Set `CXXFLAGS' used for all sub-systems.
+# FIXME: You need to be copying headers
+AM_CXXFLAGS="${AM_CXXFLAGS:+$AM_CXXFLAGS }-I$REPO_ROOT/pkgdb/include";
+#AM_CXXFLAGS="${AM_CXXFLAGS:+$AM_CXXFLAGS }";
+#AM_CXXFLAGS="${AM_CXXFLAGS}-I\$(abs_top_builddir)/pkgdb/include";
+AM_CXXFLAGS="$AM_CXXFLAGS $NIX_CFLAGS $NLJSON_CFLAGS $ARGPARSE_CFLAGS";
+AM_CXXFLAGS="$AM_CXXFLAGS $SQLITE3PP_CFLAGS $SQLITE3_CFLAGS $YAML_CFLAGS";
+AC_SUBST([AM_CXXFLAGS])
+
+# Set `LDFLAGS' used for all sub-systems.
+AM_LDFLAGS="${AM_LDFLAGS:+$AM_LDFLAGS }$NIX_LIBS $NLJSON_LIBS $ARGPARSE_LIBS";
+AM_LDFLAGS="$AM_LDFLAGS $SQLITE3PP_LIBS $SQLITE3_LIBS";
+AC_SUBST([AM_LDFLAGS])
 
 
 # ---------------------------------------------------------------------------- #

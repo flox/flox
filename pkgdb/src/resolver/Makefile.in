@@ -18,7 +18,7 @@
 #
 # @file pkgdb/src/resolver/Makefile.am
 #
-# @brief Provides `libresolver.la' module.
+# @brief Provides `libresolver.la` module.
 #
 #
 # ---------------------------------------------------------------------------- #
@@ -105,6 +105,7 @@ am__aclocal_m4_deps = $(top_srcdir)/build-aux/m4/dirs.m4 \
 	$(top_srcdir)/build-aux/m4/ltsugar.m4 \
 	$(top_srcdir)/build-aux/m4/ltversion.m4 \
 	$(top_srcdir)/build-aux/m4/lt~obsolete.m4 \
+	$(top_srcdir)/build-aux/m4/nix.m4 \
 	$(top_srcdir)/build-aux/m4/progs.m4 $(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
@@ -114,19 +115,13 @@ CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
 LTLIBRARIES = $(noinst_LTLIBRARIES)
 libresolver_la_LIBADD =
-am_libresolver_la_OBJECTS = libresolver_la-descriptor.lo \
-	libresolver_la-environment.lo libresolver_la-lockfile.lo \
-	libresolver_la-manifest-raw.lo libresolver_la-manifest.lo \
-	libresolver_la-mixins.lo libresolver_la-primops.lo
+am_libresolver_la_OBJECTS = descriptor.lo environment.lo lockfile.lo \
+	manifest-raw.lo manifest.lo mixins.lo primops.lo
 libresolver_la_OBJECTS = $(am_libresolver_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
 am__v_lt_0 = --silent
 am__v_lt_1 = 
-libresolver_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CXX \
-	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CXXLD) \
-	$(libresolver_la_CXXFLAGS) $(CXXFLAGS) \
-	$(libresolver_la_LDFLAGS) $(LDFLAGS) -o $@
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
 am__v_P_0 = false
@@ -142,13 +137,10 @@ am__v_at_1 =
 DEFAULT_INCLUDES = -I.@am__isrc@
 depcomp = $(SHELL) $(top_srcdir)/build-aux/depcomp
 am__maybe_remake_depfiles = depfiles
-am__depfiles_remade = ./$(DEPDIR)/libresolver_la-descriptor.Plo \
-	./$(DEPDIR)/libresolver_la-environment.Plo \
-	./$(DEPDIR)/libresolver_la-lockfile.Plo \
-	./$(DEPDIR)/libresolver_la-manifest-raw.Plo \
-	./$(DEPDIR)/libresolver_la-manifest.Plo \
-	./$(DEPDIR)/libresolver_la-mixins.Plo \
-	./$(DEPDIR)/libresolver_la-primops.Plo
+am__depfiles_remade = ./$(DEPDIR)/descriptor.Plo \
+	./$(DEPDIR)/environment.Plo ./$(DEPDIR)/lockfile.Plo \
+	./$(DEPDIR)/manifest-raw.Plo ./$(DEPDIR)/manifest.Plo \
+	./$(DEPDIR)/mixins.Plo ./$(DEPDIR)/primops.Plo
 am__mv = mv -f
 CXXCOMPILE = $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) \
 	$(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS)
@@ -198,7 +190,9 @@ DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
 ACLOCAL = @ACLOCAL@
 ALLOCA = @ALLOCA@
 AMTAR = @AMTAR@
+AM_CXXFLAGS = @AM_CXXFLAGS@
 AM_DEFAULT_VERBOSITY = @AM_DEFAULT_VERBOSITY@
+AM_LDFLAGS = @AM_LDFLAGS@
 AR = @AR@
 ARCH = @ARCH@
 ARGPARSE_CFLAGS = @ARGPARSE_CFLAGS@
@@ -327,8 +321,6 @@ SEMVER = @SEMVER@
 SEMVER_PATH = @SEMVER_PATH@
 SET_MAKE = @SET_MAKE@
 SET_PROMPT_BASH_SH = @SET_PROMPT_BASH_SH@
-SHARED_LIBRARY_CFLAGS = @SHARED_LIBRARY_CFLAGS@
-SHARED_LIBRARY_LDFLAGS = @SHARED_LIBRARY_LDFLAGS@
 SHELL = @SHELL@
 SHELLS_DIR = @SHELLS_DIR@
 SORT = @SORT@
@@ -415,9 +407,6 @@ ACLOCAL_AMFLAGS = -I ../../../build-aux/m4
 
 # ---------------------------------------------------------------------------- #
 noinst_LTLIBRARIES = libresolver.la
-libresolver_la_CXXFLAGS = $(AM_CXXFLAGS) -I$(PKGDB_ROOT)/include \
-	$(SQLITE3PP_CFLAGS) $(NIX_CFLAGS)
-libresolver_la_LDFLAGS = $(AM_LDFLAGS) $(SQLITE3PP_LIBS) $(NIX_LIBS)
 libresolver_la_SOURCES = descriptor.cc environment.cc lockfile.cc \
 	manifest-raw.cc manifest.cc mixins.cc primops.cc
 all: all-am
@@ -466,7 +455,7 @@ clean-noinstLTLIBRARIES:
 	}
 
 libresolver.la: $(libresolver_la_OBJECTS) $(libresolver_la_DEPENDENCIES) $(EXTRA_libresolver_la_DEPENDENCIES) 
-	$(AM_V_CXXLD)$(libresolver_la_LINK)  $(libresolver_la_OBJECTS) $(libresolver_la_LIBADD) $(LIBS)
+	$(AM_V_CXXLD)$(CXXLINK)  $(libresolver_la_OBJECTS) $(libresolver_la_LIBADD) $(LIBS)
 
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
@@ -474,13 +463,13 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libresolver_la-descriptor.Plo@am__quote@ # am--include-marker
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libresolver_la-environment.Plo@am__quote@ # am--include-marker
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libresolver_la-lockfile.Plo@am__quote@ # am--include-marker
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libresolver_la-manifest-raw.Plo@am__quote@ # am--include-marker
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libresolver_la-manifest.Plo@am__quote@ # am--include-marker
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libresolver_la-mixins.Plo@am__quote@ # am--include-marker
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libresolver_la-primops.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/descriptor.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/environment.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/lockfile.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/manifest-raw.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/manifest.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mixins.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/primops.Plo@am__quote@ # am--include-marker
 
 $(am__depfiles_remade):
 	@$(MKDIR_P) $(@D)
@@ -511,55 +500,6 @@ am--depfiles: $(am__depfiles_remade)
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='$<' object='$@' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LTCXXCOMPILE) -c -o $@ $<
-
-libresolver_la-descriptor.lo: descriptor.cc
-@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libresolver_la_CXXFLAGS) $(CXXFLAGS) -MT libresolver_la-descriptor.lo -MD -MP -MF $(DEPDIR)/libresolver_la-descriptor.Tpo -c -o libresolver_la-descriptor.lo `test -f 'descriptor.cc' || echo '$(srcdir)/'`descriptor.cc
-@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libresolver_la-descriptor.Tpo $(DEPDIR)/libresolver_la-descriptor.Plo
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='descriptor.cc' object='libresolver_la-descriptor.lo' libtool=yes @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libresolver_la_CXXFLAGS) $(CXXFLAGS) -c -o libresolver_la-descriptor.lo `test -f 'descriptor.cc' || echo '$(srcdir)/'`descriptor.cc
-
-libresolver_la-environment.lo: environment.cc
-@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libresolver_la_CXXFLAGS) $(CXXFLAGS) -MT libresolver_la-environment.lo -MD -MP -MF $(DEPDIR)/libresolver_la-environment.Tpo -c -o libresolver_la-environment.lo `test -f 'environment.cc' || echo '$(srcdir)/'`environment.cc
-@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libresolver_la-environment.Tpo $(DEPDIR)/libresolver_la-environment.Plo
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='environment.cc' object='libresolver_la-environment.lo' libtool=yes @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libresolver_la_CXXFLAGS) $(CXXFLAGS) -c -o libresolver_la-environment.lo `test -f 'environment.cc' || echo '$(srcdir)/'`environment.cc
-
-libresolver_la-lockfile.lo: lockfile.cc
-@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libresolver_la_CXXFLAGS) $(CXXFLAGS) -MT libresolver_la-lockfile.lo -MD -MP -MF $(DEPDIR)/libresolver_la-lockfile.Tpo -c -o libresolver_la-lockfile.lo `test -f 'lockfile.cc' || echo '$(srcdir)/'`lockfile.cc
-@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libresolver_la-lockfile.Tpo $(DEPDIR)/libresolver_la-lockfile.Plo
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='lockfile.cc' object='libresolver_la-lockfile.lo' libtool=yes @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libresolver_la_CXXFLAGS) $(CXXFLAGS) -c -o libresolver_la-lockfile.lo `test -f 'lockfile.cc' || echo '$(srcdir)/'`lockfile.cc
-
-libresolver_la-manifest-raw.lo: manifest-raw.cc
-@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libresolver_la_CXXFLAGS) $(CXXFLAGS) -MT libresolver_la-manifest-raw.lo -MD -MP -MF $(DEPDIR)/libresolver_la-manifest-raw.Tpo -c -o libresolver_la-manifest-raw.lo `test -f 'manifest-raw.cc' || echo '$(srcdir)/'`manifest-raw.cc
-@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libresolver_la-manifest-raw.Tpo $(DEPDIR)/libresolver_la-manifest-raw.Plo
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='manifest-raw.cc' object='libresolver_la-manifest-raw.lo' libtool=yes @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libresolver_la_CXXFLAGS) $(CXXFLAGS) -c -o libresolver_la-manifest-raw.lo `test -f 'manifest-raw.cc' || echo '$(srcdir)/'`manifest-raw.cc
-
-libresolver_la-manifest.lo: manifest.cc
-@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libresolver_la_CXXFLAGS) $(CXXFLAGS) -MT libresolver_la-manifest.lo -MD -MP -MF $(DEPDIR)/libresolver_la-manifest.Tpo -c -o libresolver_la-manifest.lo `test -f 'manifest.cc' || echo '$(srcdir)/'`manifest.cc
-@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libresolver_la-manifest.Tpo $(DEPDIR)/libresolver_la-manifest.Plo
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='manifest.cc' object='libresolver_la-manifest.lo' libtool=yes @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libresolver_la_CXXFLAGS) $(CXXFLAGS) -c -o libresolver_la-manifest.lo `test -f 'manifest.cc' || echo '$(srcdir)/'`manifest.cc
-
-libresolver_la-mixins.lo: mixins.cc
-@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libresolver_la_CXXFLAGS) $(CXXFLAGS) -MT libresolver_la-mixins.lo -MD -MP -MF $(DEPDIR)/libresolver_la-mixins.Tpo -c -o libresolver_la-mixins.lo `test -f 'mixins.cc' || echo '$(srcdir)/'`mixins.cc
-@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libresolver_la-mixins.Tpo $(DEPDIR)/libresolver_la-mixins.Plo
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='mixins.cc' object='libresolver_la-mixins.lo' libtool=yes @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libresolver_la_CXXFLAGS) $(CXXFLAGS) -c -o libresolver_la-mixins.lo `test -f 'mixins.cc' || echo '$(srcdir)/'`mixins.cc
-
-libresolver_la-primops.lo: primops.cc
-@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libresolver_la_CXXFLAGS) $(CXXFLAGS) -MT libresolver_la-primops.lo -MD -MP -MF $(DEPDIR)/libresolver_la-primops.Tpo -c -o libresolver_la-primops.lo `test -f 'primops.cc' || echo '$(srcdir)/'`primops.cc
-@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libresolver_la-primops.Tpo $(DEPDIR)/libresolver_la-primops.Plo
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='primops.cc' object='libresolver_la-primops.lo' libtool=yes @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libresolver_la_CXXFLAGS) $(CXXFLAGS) -c -o libresolver_la-primops.lo `test -f 'primops.cc' || echo '$(srcdir)/'`primops.cc
 
 mostlyclean-libtool:
 	-rm -f *.lo
@@ -691,13 +631,13 @@ clean-am: clean-generic clean-libtool clean-noinstLTLIBRARIES \
 	mostlyclean-am
 
 distclean: distclean-am
-		-rm -f ./$(DEPDIR)/libresolver_la-descriptor.Plo
-	-rm -f ./$(DEPDIR)/libresolver_la-environment.Plo
-	-rm -f ./$(DEPDIR)/libresolver_la-lockfile.Plo
-	-rm -f ./$(DEPDIR)/libresolver_la-manifest-raw.Plo
-	-rm -f ./$(DEPDIR)/libresolver_la-manifest.Plo
-	-rm -f ./$(DEPDIR)/libresolver_la-mixins.Plo
-	-rm -f ./$(DEPDIR)/libresolver_la-primops.Plo
+		-rm -f ./$(DEPDIR)/descriptor.Plo
+	-rm -f ./$(DEPDIR)/environment.Plo
+	-rm -f ./$(DEPDIR)/lockfile.Plo
+	-rm -f ./$(DEPDIR)/manifest-raw.Plo
+	-rm -f ./$(DEPDIR)/manifest.Plo
+	-rm -f ./$(DEPDIR)/mixins.Plo
+	-rm -f ./$(DEPDIR)/primops.Plo
 	-rm -f Makefile
 distclean-am: clean-am distclean-compile distclean-generic \
 	distclean-tags
@@ -743,13 +683,13 @@ install-ps-am:
 installcheck-am:
 
 maintainer-clean: maintainer-clean-am
-		-rm -f ./$(DEPDIR)/libresolver_la-descriptor.Plo
-	-rm -f ./$(DEPDIR)/libresolver_la-environment.Plo
-	-rm -f ./$(DEPDIR)/libresolver_la-lockfile.Plo
-	-rm -f ./$(DEPDIR)/libresolver_la-manifest-raw.Plo
-	-rm -f ./$(DEPDIR)/libresolver_la-manifest.Plo
-	-rm -f ./$(DEPDIR)/libresolver_la-mixins.Plo
-	-rm -f ./$(DEPDIR)/libresolver_la-primops.Plo
+		-rm -f ./$(DEPDIR)/descriptor.Plo
+	-rm -f ./$(DEPDIR)/environment.Plo
+	-rm -f ./$(DEPDIR)/lockfile.Plo
+	-rm -f ./$(DEPDIR)/manifest-raw.Plo
+	-rm -f ./$(DEPDIR)/manifest.Plo
+	-rm -f ./$(DEPDIR)/mixins.Plo
+	-rm -f ./$(DEPDIR)/primops.Plo
 	-rm -f Makefile
 maintainer-clean-am: distclean-am maintainer-clean-generic
 

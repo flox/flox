@@ -659,6 +659,8 @@ ac_header_c_list=
 ac_subst_vars='am__EXEEXT_FALSE
 am__EXEEXT_TRUE
 LTLIBOBJS
+AM_LDFLAGS
+AM_CXXFLAGS
 CARGOFLAGS
 SEMVER_PATH
 WITH_PROFILE_D_SCRIPT_DIR
@@ -668,8 +670,6 @@ SET_PROMPT_BASH_SH
 PKGDB_VERSION
 BUILD_SHARED_LIBS_FALSE
 BUILD_SHARED_LIBS_TRUE
-SHARED_LIBRARY_CFLAGS
-SHARED_LIBRARY_LDFLAGS
 NO_UNDEFINED_SYMBOLS_FLAG
 set_soname_option
 set_rpath_option
@@ -20969,19 +20969,9 @@ fi
 
 # Checks for Libraries
 # --------------------
-
-# Nix does not carry a `nix-fetchers.pc' file, so we need to manually check
-# that it exists.
-# NOTE: `translit' is used to join the strings together and avoid 80 char limit.
-{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for _ZN3nix8fetchers11attrsToJSONERKSt3mapINSt7
-__cxx1112basic_stringIcSt11char_traitsIcESaIcEEESt7variantIJS7
-_mNS_8ExplicitIbEEEESt4lessIS7_ESaISt4pairIKS7_SB_EEE
- in -lnixfetchers" >&5
-printf %s "checking for _ZN3nix8fetchers11attrsToJSONERKSt3mapINSt7
-__cxx1112basic_stringIcSt11char_traitsIcESaIcEEESt7variantIJS7
-_mNS_8ExplicitIbEEEESt4lessIS7_ESaISt4pairIKS7_SB_EEE
- in -lnixfetchers... " >&6; }
-if test ${ac_cv_lib_nixfetchers__ZN3nix8fetchers11attrsToJSONERKSt3mapINSt7___cxx1112basic_stringIcSt11char_traitsIcESaIcEEESt7variantIJS7__mNS_8ExplicitIbEEEESt4lessIS7_ESaISt4pairIKS7_SB_EEE_+y}
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for _ZN3nix8fetchers11attrsToJSONERKSt3mapINSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEESt7variantIJS7_mNS_8ExplicitIbEEEESt4lessIS7_ESaISt4pairIKS7_SB_EEE in -lnixfetchers" >&5
+printf %s "checking for _ZN3nix8fetchers11attrsToJSONERKSt3mapINSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEESt7variantIJS7_mNS_8ExplicitIbEEEESt4lessIS7_ESaISt4pairIKS7_SB_EEE in -lnixfetchers... " >&6; }
+if test ${ac_cv_lib_nixfetchers__ZN3nix8fetchers11attrsToJSONERKSt3mapINSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEESt7variantIJS7_mNS_8ExplicitIbEEEESt4lessIS7_ESaISt4pairIKS7_SB_EEE+y}
 then :
   printf %s "(cached) " >&6
 else $as_nop
@@ -20993,40 +20983,34 @@ cat confdefs.h - <<_ACEOF >conftest.$ac_ext
 /* Override any GCC internal prototype to avoid an error.
    Use char because int might match the return type of a GCC
    builtin and then its argument prototype would still apply.  */
-char _ZN3nix8fetchers11attrsToJSONERKSt3mapINSt7
-__cxx1112basic_stringIcSt11char_traitsIcESaIcEEESt7variantIJS7
-_mNS_8ExplicitIbEEEESt4lessIS7_ESaISt4pairIKS7_SB_EEE
- ();
+char _ZN3nix8fetchers11attrsToJSONERKSt3mapINSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEESt7variantIJS7_mNS_8ExplicitIbEEEESt4lessIS7_ESaISt4pairIKS7_SB_EEE ();
 int
 main (void)
 {
-return _ZN3nix8fetchers11attrsToJSONERKSt3mapINSt7
-__cxx1112basic_stringIcSt11char_traitsIcESaIcEEESt7variantIJS7
-_mNS_8ExplicitIbEEEESt4lessIS7_ESaISt4pairIKS7_SB_EEE
- ();
+return _ZN3nix8fetchers11attrsToJSONERKSt3mapINSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEESt7variantIJS7_mNS_8ExplicitIbEEEESt4lessIS7_ESaISt4pairIKS7_SB_EEE ();
   ;
   return 0;
 }
 _ACEOF
 if ac_fn_c_try_link "$LINENO"
 then :
-  ac_cv_lib_nixfetchers__ZN3nix8fetchers11attrsToJSONERKSt3mapINSt7___cxx1112basic_stringIcSt11char_traitsIcESaIcEEESt7variantIJS7__mNS_8ExplicitIbEEEESt4lessIS7_ESaISt4pairIKS7_SB_EEE_=yes
+  ac_cv_lib_nixfetchers__ZN3nix8fetchers11attrsToJSONERKSt3mapINSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEESt7variantIJS7_mNS_8ExplicitIbEEEESt4lessIS7_ESaISt4pairIKS7_SB_EEE=yes
 else $as_nop
-  ac_cv_lib_nixfetchers__ZN3nix8fetchers11attrsToJSONERKSt3mapINSt7___cxx1112basic_stringIcSt11char_traitsIcESaIcEEESt7variantIJS7__mNS_8ExplicitIbEEEESt4lessIS7_ESaISt4pairIKS7_SB_EEE_=no
+  ac_cv_lib_nixfetchers__ZN3nix8fetchers11attrsToJSONERKSt3mapINSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEESt7variantIJS7_mNS_8ExplicitIbEEEESt4lessIS7_ESaISt4pairIKS7_SB_EEE=no
 fi
 rm -f core conftest.err conftest.$ac_objext conftest.beam \
     conftest$ac_exeext conftest.$ac_ext
 LIBS=$ac_check_lib_save_LIBS
 fi
-{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_nixfetchers__ZN3nix8fetchers11attrsToJSONERKSt3mapINSt7___cxx1112basic_stringIcSt11char_traitsIcESaIcEEESt7variantIJS7__mNS_8ExplicitIbEEEESt4lessIS7_ESaISt4pairIKS7_SB_EEE_" >&5
-printf "%s\n" "$ac_cv_lib_nixfetchers__ZN3nix8fetchers11attrsToJSONERKSt3mapINSt7___cxx1112basic_stringIcSt11char_traitsIcESaIcEEESt7variantIJS7__mNS_8ExplicitIbEEEESt4lessIS7_ESaISt4pairIKS7_SB_EEE_" >&6; }
-if test "x$ac_cv_lib_nixfetchers__ZN3nix8fetchers11attrsToJSONERKSt3mapINSt7___cxx1112basic_stringIcSt11char_traitsIcESaIcEEESt7variantIJS7__mNS_8ExplicitIbEEEESt4lessIS7_ESaISt4pairIKS7_SB_EEE_" = xyes
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_nixfetchers__ZN3nix8fetchers11attrsToJSONERKSt3mapINSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEESt7variantIJS7_mNS_8ExplicitIbEEEESt4lessIS7_ESaISt4pairIKS7_SB_EEE" >&5
+printf "%s\n" "$ac_cv_lib_nixfetchers__ZN3nix8fetchers11attrsToJSONERKSt3mapINSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEESt7variantIJS7_mNS_8ExplicitIbEEEESt4lessIS7_ESaISt4pairIKS7_SB_EEE" >&6; }
+if test "x$ac_cv_lib_nixfetchers__ZN3nix8fetchers11attrsToJSONERKSt3mapINSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEESt7variantIJS7_mNS_8ExplicitIbEEEESt4lessIS7_ESaISt4pairIKS7_SB_EEE" = xyes
 then :
-  printf "%s\n" "#define HAVE_LIBNIXFETCHERS 1" >>confdefs.h
-
-  LIBS="-lnixfetchers $LIBS"
-
+  :
+else $as_nop
+  as_fn_error $? "Cannot find libnixfetchers" "$LINENO" 5
 fi
+
 
 
 
@@ -21704,6 +21688,8 @@ DEPFILES="$DEPFILES $SHELLS_DIR/flox/default.nix";
 
 # External Dependencies
 # ---------------------
+# Each `PKG_CHECK_MODULES([PKG], [PC-NAME])' invocation sets `<PKG>_CFLAGS' and
+# `<PKG>_LIBS' for the given `<PC-NAME>.pc' file.
 
 
 pkg_failed=no
@@ -22065,6 +22051,7 @@ printf "%s\n" "yes" >&6; }
 	:
 fi
 
+# Sets `NIX_CFLAGS' and `NIX_LIBS'
 
 pkg_failed=no
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for nix-store nix-main nix-cmd nix-expr" >&5
@@ -22124,11 +22111,11 @@ fi
 	# Put the nasty error message in config.log where it belongs
 	echo "$NIX_PKG_ERRORS" >&5
 
-	as_fn_error $? "Cannot find 'nix-{store,main,cmd,expr}.pc'" "$LINENO" 5
+	as_fn_error $? "Cannot find 'nix-{store|main|cmd|expr}.pc'" "$LINENO" 5
 elif test $pkg_failed = untried; then
         { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
 printf "%s\n" "no" >&6; }
-	as_fn_error $? "Cannot find 'nix-{store,main,cmd,expr}.pc'" "$LINENO" 5
+	as_fn_error $? "Cannot find 'nix-{store|main|cmd|expr}.pc'" "$LINENO" 5
 else
 	NIX_CFLAGS=$pkg_cv_NIX_CFLAGS
 	NIX_LIBS=$pkg_cv_NIX_LIBS
@@ -22136,7 +22123,50 @@ else
 printf "%s\n" "yes" >&6; }
 	:
 fi
-NIX_LIBS="-lnixfetchers $NIX_LIBS"
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for _ZN3nix8fetchers11attrsToJSONERKSt3mapINSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEESt7variantIJS7_mNS_8ExplicitIbEEEESt4lessIS7_ESaISt4pairIKS7_SB_EEE in -lnixfetchers" >&5
+printf %s "checking for _ZN3nix8fetchers11attrsToJSONERKSt3mapINSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEESt7variantIJS7_mNS_8ExplicitIbEEEESt4lessIS7_ESaISt4pairIKS7_SB_EEE in -lnixfetchers... " >&6; }
+if test ${ac_cv_lib_nixfetchers__ZN3nix8fetchers11attrsToJSONERKSt3mapINSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEESt7variantIJS7_mNS_8ExplicitIbEEEESt4lessIS7_ESaISt4pairIKS7_SB_EEE+y}
+then :
+  printf %s "(cached) " >&6
+else $as_nop
+  ac_check_lib_save_LIBS=$LIBS
+LIBS="-lnixfetchers  $LIBS"
+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+/* Override any GCC internal prototype to avoid an error.
+   Use char because int might match the return type of a GCC
+   builtin and then its argument prototype would still apply.  */
+char _ZN3nix8fetchers11attrsToJSONERKSt3mapINSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEESt7variantIJS7_mNS_8ExplicitIbEEEESt4lessIS7_ESaISt4pairIKS7_SB_EEE ();
+int
+main (void)
+{
+return _ZN3nix8fetchers11attrsToJSONERKSt3mapINSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEESt7variantIJS7_mNS_8ExplicitIbEEEESt4lessIS7_ESaISt4pairIKS7_SB_EEE ();
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_link "$LINENO"
+then :
+  ac_cv_lib_nixfetchers__ZN3nix8fetchers11attrsToJSONERKSt3mapINSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEESt7variantIJS7_mNS_8ExplicitIbEEEESt4lessIS7_ESaISt4pairIKS7_SB_EEE=yes
+else $as_nop
+  ac_cv_lib_nixfetchers__ZN3nix8fetchers11attrsToJSONERKSt3mapINSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEESt7variantIJS7_mNS_8ExplicitIbEEEESt4lessIS7_ESaISt4pairIKS7_SB_EEE=no
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.beam \
+    conftest$ac_exeext conftest.$ac_ext
+LIBS=$ac_check_lib_save_LIBS
+fi
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_nixfetchers__ZN3nix8fetchers11attrsToJSONERKSt3mapINSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEESt7variantIJS7_mNS_8ExplicitIbEEEESt4lessIS7_ESaISt4pairIKS7_SB_EEE" >&5
+printf "%s\n" "$ac_cv_lib_nixfetchers__ZN3nix8fetchers11attrsToJSONERKSt3mapINSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEESt7variantIJS7_mNS_8ExplicitIbEEEESt4lessIS7_ESaISt4pairIKS7_SB_EEE" >&6; }
+if test "x$ac_cv_lib_nixfetchers__ZN3nix8fetchers11attrsToJSONERKSt3mapINSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEESt7variantIJS7_mNS_8ExplicitIbEEEESt4lessIS7_ESaISt4pairIKS7_SB_EEE" = xyes
+then :
+  NIX_LIBS="-lnixfetchers $NIX_LIBS"
+else $as_nop
+  as_fn_error $? "Cannot find libnixfetchers" "$LINENO" 5
+fi
+
+
+
 
 
 # ---------------------------------------------------------------------------- #
@@ -22159,9 +22189,14 @@ printf "%s\n" "#define SYSTEM \"$SYSTEM\"" >>confdefs.h
 
 
 
-# Check configuration used to compile `nix' and add it to `NIX_CPPFLAGS`.
+# Check configuration used to compile `nix' and add it to `DEFS' ( `CPPFLAGS' ).
 
-_flox_v_pushed_CPPFLAGS="$CPPFLAGS";
+
+
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking Nix configuration setting HAVE_BOEHMGC" >&5
+printf %s "checking Nix configuration setting HAVE_BOEHMGC... " >&6; }
+# Push current `CPPFLAGS' and language
+_flox_v_inherit_nix_config_def_pushed_CPPFLAGS="$CPPFLAGS";
 CPPFLAGS="$NIX_CPPFLAGS";
 ac_ext=cpp
 ac_cpp='$CXXCPP $CPPFLAGS'
@@ -22169,20 +22204,17 @@ ac_compile='$CXX -c $CXXFLAGS $CPPFLAGS conftest.$ac_ext >&5'
 ac_link='$CXX -o conftest$ac_exeext $CXXFLAGS $CPPFLAGS $LDFLAGS conftest.$ac_ext $LIBS >&5'
 ac_compiler_gnu=$ac_cv_cxx_compiler_gnu
 
-
+# Try to compile a program that includes `nix/config.h' and checks for `VAR'.
 # NOTE: "#" is replaced with "#" by `autoconf' to prevent `m4sh' from
 #       treating it as a comment.
-{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking Nix configuration setting HAVE_BOEHMGC" >&5
-printf %s "checking Nix configuration setting HAVE_BOEHMGC... " >&6; }
-
 cat confdefs.h - <<_ACEOF >conftest.$ac_ext
 /* end confdefs.h.  */
 #include <nix/config.h>
    #ifndef HAVE_BOEHMGC
-     #error "Boehm GC support is not indicated"
+     #error "HAVE_BOEHMGC is not defined"
    #endif
    #if HAVE_BOEHMGC != 1
-     #error "Boehm GC is not supported"
+     #error "HAVE_BOEHMGC is not set to 1"
    #endif
 _ACEOF
 if ac_fn_cxx_try_cpp "$LINENO"
@@ -22196,17 +22228,39 @@ else $as_nop
 printf "%s\n" "no" >&6; }
 fi
 rm -f conftest.err conftest.i conftest.$ac_ext
+# Pop old `CPPFLAGS' and language
+ac_ext=c
+ac_cpp='$CPP $CPPFLAGS'
+ac_compile='$CC -c $CFLAGS $CPPFLAGS conftest.$ac_ext >&5'
+ac_link='$CC -o conftest$ac_exeext $CFLAGS $CPPFLAGS $LDFLAGS conftest.$ac_ext $LIBS >&5'
+ac_compiler_gnu=$ac_cv_c_compiler_gnu
+
+CPPFLAGS="$_flox_v_inherit_nix_config_def_pushed_CPPFLAGS";
+
+
 
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking Nix configuration setting ENABLE_S3" >&5
 printf %s "checking Nix configuration setting ENABLE_S3... " >&6; }
+# Push current `CPPFLAGS' and language
+_flox_v_inherit_nix_config_def_pushed_CPPFLAGS="$CPPFLAGS";
+CPPFLAGS="$NIX_CPPFLAGS";
+ac_ext=cpp
+ac_cpp='$CXXCPP $CPPFLAGS'
+ac_compile='$CXX -c $CXXFLAGS $CPPFLAGS conftest.$ac_ext >&5'
+ac_link='$CXX -o conftest$ac_exeext $CXXFLAGS $CPPFLAGS $LDFLAGS conftest.$ac_ext $LIBS >&5'
+ac_compiler_gnu=$ac_cv_cxx_compiler_gnu
+
+# Try to compile a program that includes `nix/config.h' and checks for `VAR'.
+# NOTE: "#" is replaced with "#" by `autoconf' to prevent `m4sh' from
+#       treating it as a comment.
 cat confdefs.h - <<_ACEOF >conftest.$ac_ext
 /* end confdefs.h.  */
 #include <nix/config.h>
    #ifndef ENABLE_S3
-     #error "S3 is not indicated"
+     #error "ENABLE_S3 is not defined"
    #endif
    #if ENABLE_S3 != 1
-     #error "S3 is not supported"
+     #error "ENABLE_S3 is not set to 1"
    #endif
 _ACEOF
 if ac_fn_cxx_try_cpp "$LINENO"
@@ -22220,9 +22274,31 @@ else $as_nop
 printf "%s\n" "no" >&6; }
 fi
 rm -f conftest.err conftest.i conftest.$ac_ext
+# Pop old `CPPFLAGS' and language
+ac_ext=c
+ac_cpp='$CPP $CPPFLAGS'
+ac_compile='$CC -c $CFLAGS $CPPFLAGS conftest.$ac_ext >&5'
+ac_link='$CC -o conftest$ac_exeext $CFLAGS $CPPFLAGS $LDFLAGS conftest.$ac_ext $LIBS >&5'
+ac_compiler_gnu=$ac_cv_c_compiler_gnu
+
+CPPFLAGS="$_flox_v_inherit_nix_config_def_pushed_CPPFLAGS";
+
+
 
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking Nix configuration setting HAVE_STRUCT_DIRENT_D_TYPE" >&5
 printf %s "checking Nix configuration setting HAVE_STRUCT_DIRENT_D_TYPE... " >&6; }
+# Push current `CPPFLAGS' and language
+_flox_v_inherit_nix_config_def_pushed_CPPFLAGS="$CPPFLAGS";
+CPPFLAGS="$NIX_CPPFLAGS";
+ac_ext=cpp
+ac_cpp='$CXXCPP $CPPFLAGS'
+ac_compile='$CXX -c $CXXFLAGS $CPPFLAGS conftest.$ac_ext >&5'
+ac_link='$CXX -o conftest$ac_exeext $CXXFLAGS $CPPFLAGS $LDFLAGS conftest.$ac_ext $LIBS >&5'
+ac_compiler_gnu=$ac_cv_cxx_compiler_gnu
+
+# Try to compile a program that includes `nix/config.h' and checks for `VAR'.
+# NOTE: "#" is replaced with "#" by `autoconf' to prevent `m4sh' from
+#       treating it as a comment.
 cat confdefs.h - <<_ACEOF >conftest.$ac_ext
 /* end confdefs.h.  */
 #include <nix/config.h>
@@ -22230,7 +22306,7 @@ cat confdefs.h - <<_ACEOF >conftest.$ac_ext
      #error "HAVE_STRUCT_DIRENT_D_TYPE is not defined"
    #endif
    #if HAVE_STRUCT_DIRENT_D_TYPE != 1
-     #error "HAVE_STRUCT_DIRENT_D_TYPE is false"
+     #error "HAVE_STRUCT_DIRENT_D_TYPE is not set to 1"
    #endif
 _ACEOF
 if ac_fn_cxx_try_cpp "$LINENO"
@@ -22244,9 +22320,31 @@ else $as_nop
 printf "%s\n" "no" >&6; }
 fi
 rm -f conftest.err conftest.i conftest.$ac_ext
+# Pop old `CPPFLAGS' and language
+ac_ext=c
+ac_cpp='$CPP $CPPFLAGS'
+ac_compile='$CC -c $CFLAGS $CPPFLAGS conftest.$ac_ext >&5'
+ac_link='$CC -o conftest$ac_exeext $CFLAGS $CPPFLAGS $LDFLAGS conftest.$ac_ext $LIBS >&5'
+ac_compiler_gnu=$ac_cv_c_compiler_gnu
+
+CPPFLAGS="$_flox_v_inherit_nix_config_def_pushed_CPPFLAGS";
+
+
 
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking Nix configuration setting EXCEPTION_NEEDS_THROW_SPEC" >&5
 printf %s "checking Nix configuration setting EXCEPTION_NEEDS_THROW_SPEC... " >&6; }
+# Push current `CPPFLAGS' and language
+_flox_v_inherit_nix_config_def_pushed_CPPFLAGS="$CPPFLAGS";
+CPPFLAGS="$NIX_CPPFLAGS";
+ac_ext=cpp
+ac_cpp='$CXXCPP $CPPFLAGS'
+ac_compile='$CXX -c $CXXFLAGS $CPPFLAGS conftest.$ac_ext >&5'
+ac_link='$CXX -o conftest$ac_exeext $CXXFLAGS $CPPFLAGS $LDFLAGS conftest.$ac_ext $LIBS >&5'
+ac_compiler_gnu=$ac_cv_cxx_compiler_gnu
+
+# Try to compile a program that includes `nix/config.h' and checks for `VAR'.
+# NOTE: "#" is replaced with "#" by `autoconf' to prevent `m4sh' from
+#       treating it as a comment.
 cat confdefs.h - <<_ACEOF >conftest.$ac_ext
 /* end confdefs.h.  */
 #include <nix/config.h>
@@ -22254,7 +22352,7 @@ cat confdefs.h - <<_ACEOF >conftest.$ac_ext
      #error "EXCEPTION_NEEDS_THROW_SPEC is not defined"
    #endif
    #if EXCEPTION_NEEDS_THROW_SPEC != 1
-     #error "EXCEPTION_NEEDS_THROW_SPEC is false"
+     #error "EXCEPTION_NEEDS_THROW_SPEC is not set to 1"
    #endif
 _ACEOF
 if ac_fn_cxx_try_cpp "$LINENO"
@@ -22268,12 +22366,31 @@ else $as_nop
 printf "%s\n" "no" >&6; }
 fi
 rm -f conftest.err conftest.i conftest.$ac_ext
+# Pop old `CPPFLAGS' and language
+ac_ext=c
+ac_cpp='$CPP $CPPFLAGS'
+ac_compile='$CC -c $CFLAGS $CPPFLAGS conftest.$ac_ext >&5'
+ac_link='$CC -o conftest$ac_exeext $CFLAGS $CPPFLAGS $LDFLAGS conftest.$ac_ext $LIBS >&5'
+ac_compiler_gnu=$ac_cv_c_compiler_gnu
 
-# `HAVE_BOOST' does NOT use an integer value in `<nix/config.h>'.
-# It is either defined or not ( they use `/**/' on the right hand side ).
-# We use a `1' - I don't think this is a problem but wanted to note it.
+CPPFLAGS="$_flox_v_inherit_nix_config_def_pushed_CPPFLAGS";
+
+
+
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking Nix configuration setting HAVE_BOOST" >&5
 printf %s "checking Nix configuration setting HAVE_BOOST... " >&6; }
+# Push current `CPPFLAGS' and language
+_flox_v_inherit_nix_config_def_pushed_CPPFLAGS="$CPPFLAGS";
+CPPFLAGS="$NIX_CPPFLAGS";
+ac_ext=cpp
+ac_cpp='$CXXCPP $CPPFLAGS'
+ac_compile='$CXX -c $CXXFLAGS $CPPFLAGS conftest.$ac_ext >&5'
+ac_link='$CXX -o conftest$ac_exeext $CXXFLAGS $CPPFLAGS $LDFLAGS conftest.$ac_ext $LIBS >&5'
+ac_compiler_gnu=$ac_cv_cxx_compiler_gnu
+
+# Try to compile a program that includes `nix/config.h' and checks for `VAR'.
+# NOTE: "#" is replaced with "#" by `autoconf' to prevent `m4sh' from
+#       treating it as a comment.
 cat confdefs.h - <<_ACEOF >conftest.$ac_ext
 /* end confdefs.h.  */
 #include <nix/config.h>
@@ -22292,14 +22409,15 @@ else $as_nop
 printf "%s\n" "no" >&6; }
 fi
 rm -f conftest.err conftest.i conftest.$ac_ext
-
+# Pop old `CPPFLAGS' and language
 ac_ext=c
 ac_cpp='$CPP $CPPFLAGS'
 ac_compile='$CC -c $CFLAGS $CPPFLAGS conftest.$ac_ext >&5'
 ac_link='$CC -o conftest$ac_exeext $CFLAGS $CPPFLAGS $LDFLAGS conftest.$ac_ext $LIBS >&5'
 ac_compiler_gnu=$ac_cv_c_compiler_gnu
 
-CPPFLAGS="$_flox_v_pushed_CPPFLAGS";
+CPPFLAGS="$_flox_v_inherit_nix_config_def_pushed_CPPFLAGS";
+
 
 # NOTE: About `<nix/config.h>' and our configuration macros:
 # When upgrading `nix' it's possible that new macros will be added or files
@@ -22354,29 +22472,20 @@ esac
 
 # ---------------------------------------------------------------------------- #
 
-# Shared Library Flags
-# --------------------
+# Library Flags
+# -------------
 # - `SHARED_LIBRARY_LDFLAGS' is used to link shared libraries.
-# - `SHARED_LIBRARY_CFLAGS' is used to compile shared libraries.
 # - `NO_UNDEFINED_SYMBOLS_FLAG' disallows undefined symbols in shared libraries.
 
 case "$CXX_TOOLCHAIN" in #(
   gcc) :
-    NO_UNDEFINED_SYMBOLS_FLAG='-Wl,--no-undefined';
-     SHARED_LIBRARY_CFLAGS='-fPIC -shared'; ;; #(
+    NO_UNDEFINED_SYMBOLS_FLAG='-Wl,--no-undefined' ;; #(
   clang) :
-    NO_UNDEFINED_SYMBOLS_FLAG='-Wl,-undefined,error';
-     SHARED_LIBRARY_CFLAGS='-fPIC'; ;; #(
+    NO_UNDEFINED_SYMBOLS_FLAG='-Wl,-undefined,error'
+  as_fn_error $? "Unsupported C++ compiler: $CXX" "$LINENO" 5 ;; #(
   *) :
-    as_fn_error $? "Unsupported C++ compiler: $CXX" "$LINENO" 5 ;;
+     ;;
 esac
-
-
-
-SHARED_LIBRARY_LDFLAGS="$NO_UNDEFINED_SYMBOLS_FLAG $RELATIVE_RPATH_FLAG";
-SHARED_LIBRARY_LDFLAGS="$SHARED_LIBRARY_LDFLAGS -fPIC -shared";
-
-
 
 
  if test "$enable_shared" = 'yes'; then
@@ -22522,6 +22631,38 @@ printf "%s\n" "#define SEMVER_PATH \"$SEMVER_PATH\"" >>confdefs.h
 # -----------
 
 
+
+
+
+# ---------------------------------------------------------------------------- #
+
+# Finalize C/C++ Flags
+# --------------------
+# We use `AM_CFLAGS' and `AM_CXXFLAGS' for things we don't want users to
+# override, which allows users to add their own flags to `CXXFLAGS'
+# and `LDFLAGS'.
+
+# User Overridable flags.
+# We provide a sane default, but users are encouraged to override these.
+CXXFLAGS="${CXXFLAGS:+$CXXFLAGS }-Wall -Wextra -Werror -pedantic";
+if test "$CXX_TOOLCHAIN" = 'clang'; then
+  CXXFLAGS="$CXXFLAGS -Wno-gnu-zero-variadic-macro-arguments";
+fi
+
+#NOTE: `YAML_*' and `TOML_*' are only used by some targets, so are excluded here
+
+# Set `CXXFLAGS' used for all sub-systems.
+# FIXME: You need to be copying headers
+AM_CXXFLAGS="${AM_CXXFLAGS:+$AM_CXXFLAGS }-I$REPO_ROOT/pkgdb/include";
+#AM_CXXFLAGS="${AM_CXXFLAGS:+$AM_CXXFLAGS }";
+#AM_CXXFLAGS="${AM_CXXFLAGS}-I\$(abs_top_builddir)/pkgdb/include";
+AM_CXXFLAGS="$AM_CXXFLAGS $NIX_CFLAGS $NLJSON_CFLAGS $ARGPARSE_CFLAGS";
+AM_CXXFLAGS="$AM_CXXFLAGS $SQLITE3PP_CFLAGS $SQLITE3_CFLAGS $YAML_CFLAGS";
+
+
+# Set `LDFLAGS' used for all sub-systems.
+AM_LDFLAGS="${AM_LDFLAGS:+$AM_LDFLAGS }$NIX_LIBS $NLJSON_LIBS $ARGPARSE_LIBS";
+AM_LDFLAGS="$AM_LDFLAGS $SQLITE3PP_LIBS $SQLITE3_LIBS";
 
 
 
