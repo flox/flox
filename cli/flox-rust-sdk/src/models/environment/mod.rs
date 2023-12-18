@@ -2,11 +2,10 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::{env, fs, io};
 
-use async_trait::async_trait;
-use flox_types::catalog::{CatalogEntry, EnvCatalog, System};
+use flox_types::catalog::CatalogEntry;
 use flox_types::version::Version;
 use log::debug;
-use runix::command_line::{NixCommandLine, NixCommandLineRunJsonError};
+use runix::command_line::NixCommandLineRunJsonError;
 use runix::installable::FlakeAttribute;
 use runix::store_path::StorePath;
 use serde::{Deserialize, Serialize};
@@ -104,7 +103,6 @@ pub struct InstallationAttempt {
     pub already_installed: HashMap<String, bool>,
 }
 
-#[async_trait]
 pub trait Environment {
     /// Build the environment and create a result link as gc-root
     fn build(&mut self, flox: &Flox) -> Result<(), EnvironmentError2>;
@@ -128,12 +126,6 @@ pub trait Environment {
 
     /// Atomically update this environment's inputs
     fn update(&mut self, flox: &Flox, inputs: Vec<String>) -> Result<String, EnvironmentError2>;
-
-    async fn catalog(
-        &self,
-        nix: &NixCommandLine,
-        system: System,
-    ) -> Result<EnvCatalog, EnvironmentError2>;
 
     /// Extract the current content of the manifest
     ///

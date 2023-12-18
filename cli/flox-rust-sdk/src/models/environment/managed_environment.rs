@@ -2,11 +2,8 @@ use std::os::unix::prelude::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::{fs, io};
 
-use async_trait::async_trait;
-use flox_types::catalog::{EnvCatalog, System};
 use flox_types::version::Version;
 use log::debug;
-use runix::command_line::NixCommandLine;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -131,7 +128,6 @@ pub struct GenerationLock {
     version: Version<1>,
 }
 
-#[async_trait]
 impl Environment for ManagedEnvironment {
     fn build(&mut self, flox: &Flox) -> Result<(), EnvironmentError2> {
         let generations = self
@@ -254,15 +250,6 @@ impl Environment for ManagedEnvironment {
             .current_gen_manifest()
             .map_err(ManagedEnvironmentError::ReadManifest)?;
         Ok(manifest)
-    }
-
-    #[allow(unused)]
-    async fn catalog(
-        &self,
-        nix: &NixCommandLine,
-        system: System,
-    ) -> Result<EnvCatalog, EnvironmentError2> {
-        todo!()
     }
 
     fn activation_path(&mut self, flox: &Flox) -> Result<PathBuf, EnvironmentError2> {

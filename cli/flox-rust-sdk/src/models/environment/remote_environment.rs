@@ -1,10 +1,7 @@
 use std::path::{Path, PathBuf};
 
-use async_trait::async_trait;
-use flox_types::catalog::{EnvCatalog, System};
 use flox_types::version::Version;
 use log::debug;
-use runix::command_line::NixCommandLine;
 use thiserror::Error;
 
 use super::managed_environment::{remote_branch_name, ManagedEnvironment, ManagedEnvironmentError};
@@ -92,7 +89,6 @@ impl RemoteEnvironment {
     }
 }
 
-#[async_trait]
 impl Environment for RemoteEnvironment {
     /// Build the environment and create a result link as gc-root
     fn build(&mut self, flox: &Flox) -> Result<(), EnvironmentError2> {
@@ -142,15 +138,6 @@ impl Environment for RemoteEnvironment {
             .push(false)
             .map_err(RemoteEnvironmentError::UpdateUpstream)?;
         Ok(result)
-    }
-
-    #[allow(unused)]
-    async fn catalog(
-        &self,
-        nix: &NixCommandLine,
-        system: System,
-    ) -> Result<EnvCatalog, EnvironmentError2> {
-        todo!()
     }
 
     /// Extract the current content of the manifest
