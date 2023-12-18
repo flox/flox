@@ -355,17 +355,13 @@ enum AdditionalCommands {
     #[bpaf(command, hide)]
     Update(#[bpaf(external(environment::update))] environment::Update),
     #[bpaf(command, hide, header(indoc! {"
-        When no arguments are specified, all packages in the environment are upgraded.
-        
-        
-        
+        When no arguments are specified, all packages in the environment are upgraded.\n\n
+
         Packages to upgrade can be specified by either group name or, if a package is
         not in a group with any other packages, it may be specified by ID. If the
         specified argument is both a group name and a package ID, only the group is
-        upgraded.
-        
-        
-        
+        upgraded.\n\n
+
         Packages without a specified group in the manifest can be upgraded by passing
         'toplevel' as the group name.
     "}))]
