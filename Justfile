@@ -32,6 +32,10 @@ cargo_test_invocation := "PKGDB_BIN=${PKGDB_BIN} cargo test --workspace"
 
 # ---------------------------------------------------------------------------- #
 
+# Build the compilation database
+build-cdb:
+    @make -C pkgdb -j -s cdb
+
 # Build only pkgdb
 @build-pkgdb:
     make -C pkgdb -j;
@@ -114,6 +118,12 @@ test-all: test-pkgdb impure-tests integ-tests functional-tests
     pushd cli;                                     \
      cargo metadata --format-version 1              \
        |jq -r '.packages[]|[.name,.license]|@csv';
+
+# ---------------------------------------------------------------------------- #
+
+# Run a `flox` command
+@flox +args="": build
+    cli/target/debug/flox {{args}}
 
 
 # ---------------------------------------------------------------------------- #

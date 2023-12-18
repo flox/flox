@@ -175,6 +175,9 @@ SearchCommand::run()
 
   pkgdb::PkgQueryArgs args = this->getEnvironment().getCombinedBaseQueryArgs();
   this->params.query.fillPkgQueryArgs( args );
+  nlohmann::json queryJson;
+  to_json( queryJson, args );
+  debugLog( "performing search with query: " + queryJson.dump() );
   auto query = pkgdb::PkgQuery( args );
   if ( this->dumpQuery )
     {
@@ -187,6 +190,7 @@ SearchCommand::run()
   for ( const auto & [name, input] :
         *this->getEnvironment().getPkgDbRegistry() )
     {
+      debugLog( "querying input: " + name );
       auto                       dbRO = input->getDbReadOnly();
       std::vector<pkgdb::row_id> inputIds;
       for ( const auto & id : query.execute( dbRO->db ) )
@@ -195,10 +199,14 @@ SearchCommand::run()
           resultCount += 1;
         }
       inputs.emplace_back( input );
+      debugLog( "found " + std::to_string( inputIds.size() ) + " results" );
       ids.emplace_back( std::move( inputIds ) );
     }
+  debugLog( "found " + std::to_string( ids.size() ) + " total results" );
   if ( query.limit.has_value() )
     {
+      debugLog( "returning the first " + std::to_string( *query.limit )
+                + " results" );
       // Emit the number of results as the first line
       nlohmann::json resultCountRecord = { { "result-count", resultCount } };
       std::cout << resultCountRecord << std::endl;
@@ -218,6 +226,7 @@ SearchCommand::run()
     }
   else
     {
+      debugLog( "returning all results" );
       // Print all of the results
       for ( size_t i = 0; i < inputs.size(); i++ )
         {
