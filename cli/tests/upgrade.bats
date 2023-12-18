@@ -82,7 +82,7 @@ teardown() {
   assert_old_hello
 
   run "$FLOX_BIN" upgrade
-  assert_output --partial "upgraded 'hello'"
+  assert_output --partial "Upgraded 'hello'"
   assert_new_hello
 }
 
@@ -102,7 +102,7 @@ EOF
   assert_old_hello
 
   run "$FLOX_BIN" upgrade blue
-  assert_output --partial "upgraded 'hello'"
+  assert_output --partial "Upgraded 'hello'"
   assert_new_hello
 }
 
@@ -115,7 +115,7 @@ EOF
   assert_old_hello
 
   run "$FLOX_BIN" upgrade toplevel
-  assert_output --partial "upgraded 'hello'"
+  assert_output --partial "Upgraded 'hello'"
   assert_new_hello
 }
 
@@ -128,7 +128,7 @@ EOF
   assert_old_hello
 
   run "$FLOX_BIN" upgrade hello
-  assert_output --partial "upgraded 'hello'"
+  assert_output --partial "Upgraded 'hello'"
   assert_new_hello
 }
 
