@@ -2,11 +2,8 @@ use std::os::unix::prelude::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::{fs, io};
 
-use async_trait::async_trait;
-use flox_types::catalog::{EnvCatalog, System};
 use flox_types::version::Version;
 use log::debug;
-use runix::command_line::NixCommandLine;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -131,11 +128,9 @@ pub struct GenerationLock {
     version: Version<1>,
 }
 
-#[async_trait]
 impl Environment for ManagedEnvironment {
-    #[allow(unused)]
-    async fn build(&mut self, flox: &Flox) -> Result<(), EnvironmentError2> {
-        let mut generations = self
+    fn build(&mut self, flox: &Flox) -> Result<(), EnvironmentError2> {
+        let generations = self
             .generations()
             .writable(flox.temp_dir.clone())
             .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?;
@@ -150,8 +145,7 @@ impl Environment for ManagedEnvironment {
     }
 
     /// Install packages to the environment atomically
-    #[allow(unused)]
-    async fn install(
+    fn install(
         &mut self,
         packages: &[PackageToInstall],
         flox: &Flox,
@@ -177,8 +171,7 @@ impl Environment for ManagedEnvironment {
     }
 
     /// Uninstall packages from the environment atomically
-    #[allow(unused)]
-    async fn uninstall(
+    fn uninstall(
         &mut self,
         packages: Vec<String>,
         flox: &Flox,
@@ -204,11 +197,7 @@ impl Environment for ManagedEnvironment {
     }
 
     /// Atomically edit this environment, ensuring that it still builds
-    async fn edit(
-        &mut self,
-        flox: &Flox,
-        contents: String,
-    ) -> Result<EditResult, EnvironmentError2> {
+    fn edit(&mut self, flox: &Flox, contents: String) -> Result<EditResult, EnvironmentError2> {
         let mut generations = self
             .generations()
             .writable(flox.temp_dir.clone())
@@ -263,17 +252,8 @@ impl Environment for ManagedEnvironment {
         Ok(manifest)
     }
 
-    #[allow(unused)]
-    async fn catalog(
-        &self,
-        nix: &NixCommandLine,
-        system: System,
-    ) -> Result<EnvCatalog, EnvironmentError2> {
-        todo!()
-    }
-
-    async fn activation_path(&mut self, flox: &Flox) -> Result<PathBuf, EnvironmentError2> {
-        self.build(flox).await?;
+    fn activation_path(&mut self, flox: &Flox) -> Result<PathBuf, EnvironmentError2> {
+        self.build(flox)?;
         Ok(self.out_link.to_path_buf())
     }
 
@@ -301,7 +281,6 @@ impl Environment for ManagedEnvironment {
     }
 
     /// Returns the environment name
-    #[allow(unused)]
     fn name(&self) -> EnvironmentName {
         self.pointer.name.clone()
     }

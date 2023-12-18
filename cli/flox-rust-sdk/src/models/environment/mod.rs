@@ -2,11 +2,10 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::{env, fs, io};
 
-use async_trait::async_trait;
-use flox_types::catalog::{CatalogEntry, EnvCatalog, System};
+use flox_types::catalog::CatalogEntry;
 use flox_types::version::Version;
 use log::debug;
-use runix::command_line::{NixCommandLine, NixCommandLineRunJsonError};
+use runix::command_line::NixCommandLineRunJsonError;
 use runix::installable::FlakeAttribute;
 use runix::store_path::StorePath;
 use serde::{Deserialize, Serialize};
@@ -104,40 +103,29 @@ pub struct InstallationAttempt {
     pub already_installed: HashMap<String, bool>,
 }
 
-#[async_trait]
 pub trait Environment {
     /// Build the environment and create a result link as gc-root
-    async fn build(&mut self, flox: &Flox) -> Result<(), EnvironmentError2>;
+    fn build(&mut self, flox: &Flox) -> Result<(), EnvironmentError2>;
 
     /// Install packages to the environment atomically
-    async fn install(
+    fn install(
         &mut self,
         packages: &[PackageToInstall],
         flox: &Flox,
     ) -> Result<InstallationAttempt, EnvironmentError2>;
 
     /// Uninstall packages from the environment atomically
-    async fn uninstall(
+    fn uninstall(
         &mut self,
         packages: Vec<String>,
         flox: &Flox,
     ) -> Result<String, EnvironmentError2>;
 
     /// Atomically edit this environment, ensuring that it still builds
-    async fn edit(
-        &mut self,
-        flox: &Flox,
-        contents: String,
-    ) -> Result<EditResult, EnvironmentError2>;
+    fn edit(&mut self, flox: &Flox, contents: String) -> Result<EditResult, EnvironmentError2>;
 
     /// Atomically update this environment's inputs
     fn update(&mut self, flox: &Flox, inputs: Vec<String>) -> Result<String, EnvironmentError2>;
-
-    async fn catalog(
-        &self,
-        nix: &NixCommandLine,
-        system: System,
-    ) -> Result<EnvCatalog, EnvironmentError2>;
 
     /// Extract the current content of the manifest
     ///
@@ -150,7 +138,7 @@ pub trait Environment {
     /// This should be a link to a store path so that it can be swapped
     /// dynamically, i.e. so that install/edit can modify the environment
     /// without requiring reactivation.
-    async fn activation_path(&mut self, flox: &Flox) -> Result<PathBuf, EnvironmentError2>;
+    fn activation_path(&mut self, flox: &Flox) -> Result<PathBuf, EnvironmentError2>;
 
     /// Directory containing .flox
     ///

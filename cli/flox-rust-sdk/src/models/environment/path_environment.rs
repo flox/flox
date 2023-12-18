@@ -17,16 +17,8 @@ use std::ffi::OsStr;
 use std::fs::{self};
 use std::path::{Path, PathBuf};
 
-use async_trait::async_trait;
-use flox_types::catalog::{EnvCatalog, System};
+use flox_types::catalog::System;
 use log::debug;
-use runix::arguments::eval::EvaluationArgs;
-use runix::arguments::EvalArgs;
-use runix::command::Eval;
-use runix::command_line::NixCommandLine;
-use runix::flake_ref::path::PathRef;
-use runix::installable::FlakeAttribute;
-use runix::RunJson;
 
 use super::core_environment::CoreEnvironment;
 use super::{
@@ -44,7 +36,7 @@ use super::{
     LOCKFILE_FILENAME,
 };
 use crate::flox::Flox;
-use crate::models::environment::{CATALOG_JSON, ENV_DIR_NAME, MANIFEST_FILENAME};
+use crate::models::environment::{ENV_DIR_NAME, MANIFEST_FILENAME};
 use crate::models::environment_ref::EnvironmentName;
 use crate::models::manifest::PackageToInstall;
 
@@ -138,14 +130,13 @@ impl PathEnvironment {
     }
 }
 
-#[async_trait]
 impl Environment for PathEnvironment {
     /// Build the environment with side effects:
     ///
     /// - Create a result link as gc-root.
     /// - Create a lockfile if one doesn't already exist, updating it with
     ///   any new packages.
-    async fn build(&mut self, flox: &Flox) -> Result<(), EnvironmentError2> {
+    fn build(&mut self, flox: &Flox) -> Result<(), EnvironmentError2> {
         let mut env_view = CoreEnvironment::new(self.path.join(ENV_DIR_NAME));
         env_view.build(flox)?;
         env_view.link(flox, self.out_link(&flox.system)?)?;
@@ -161,7 +152,7 @@ impl Environment for PathEnvironment {
     /// manifest.
     ///
     /// Todo: remove async
-    async fn install(
+    fn install(
         &mut self,
         packages: &[PackageToInstall],
         flox: &Flox,
@@ -178,7 +169,7 @@ impl Environment for PathEnvironment {
     /// Returns true if the environment was modified and false otherwise.
     /// TODO: this should return a list of packages that were actually
     /// uninstalled rather than a bool.
-    async fn uninstall(
+    fn uninstall(
         &mut self,
         packages: Vec<String>,
         flox: &Flox,
@@ -191,11 +182,7 @@ impl Environment for PathEnvironment {
     }
 
     /// Atomically edit this environment, ensuring that it still builds
-    async fn edit(
-        &mut self,
-        flox: &Flox,
-        contents: String,
-    ) -> Result<EditResult, EnvironmentError2> {
+    fn edit(&mut self, flox: &Flox, contents: String) -> Result<EditResult, EnvironmentError2> {
         let mut env_view = CoreEnvironment::new(self.path.join(ENV_DIR_NAME));
         let result = env_view.edit(flox, contents)?;
         env_view.link(flox, self.out_link(&flox.system)?)?;
@@ -210,39 +197,6 @@ impl Environment for PathEnvironment {
         env_view.link(flox, self.out_link(&flox.system)?)?;
 
         Ok(result)
-    }
-
-    /// Get a catalog of installed packages from this environment
-    ///
-    /// Evaluated using nix from the environment definition.
-    async fn catalog(
-        &self,
-        nix: &NixCommandLine,
-        system: System,
-    ) -> Result<EnvCatalog, EnvironmentError2> {
-        let mut flake_attribute = self.flake_attribute(system);
-        flake_attribute.attr_path.push_attr("catalog").unwrap(); // valid attribute name, should not fail
-
-        let eval = Eval {
-            eval: EvaluationArgs {
-                impure: true.into(),
-                ..Default::default()
-            },
-            eval_args: EvalArgs {
-                installable: Some(flake_attribute.into()),
-                apply: None,
-            },
-            ..Eval::default()
-        };
-
-        let catalog_value: serde_json::Value = eval
-            .run_json(nix, &Default::default())
-            .await
-            .map_err(EnvironmentError2::EvalCatalog)?;
-
-        std::fs::write(self.catalog_path(), catalog_value.to_string())
-            .map_err(EnvironmentError2::WriteCatalog)?;
-        serde_json::from_value(catalog_value).map_err(EnvironmentError2::ParseCatalog)
     }
 
     /// Read the environment definition file as a string
@@ -266,9 +220,9 @@ impl Environment for PathEnvironment {
         Ok(())
     }
 
-    async fn activation_path(&mut self, flox: &Flox) -> Result<PathBuf, EnvironmentError2> {
-        self.build(flox).await?;
-        Ok(self.out_link(&flox.system)?)
+    fn activation_path(&mut self, flox: &Flox) -> Result<PathBuf, EnvironmentError2> {
+        self.build(flox)?;
+        self.out_link(&flox.system)
     }
 
     /// Path to the environment's parent directory
@@ -289,33 +243,6 @@ impl Environment for PathEnvironment {
     /// Path to the lockfile. The path may not exist.
     fn lockfile_path(&self, _flox: &Flox) -> Result<PathBuf, EnvironmentError2> {
         Ok(self.path.join(ENV_DIR_NAME).join(LOCKFILE_FILENAME))
-    }
-}
-
-impl PathEnvironment {
-    /// Turn the environment into a flake attribute,
-    /// a precise url to interact with the environment via nix
-    fn flake_attribute(&self, system: impl AsRef<str>) -> FlakeAttribute {
-        let flakeref = PathRef {
-            path: self.path.to_path_buf(),
-            attributes: Default::default(),
-        }
-        .into();
-
-        let attr_path = ["", "floxEnvs", system.as_ref(), "default"]
-            .try_into()
-            .unwrap(); // validated attributes
-
-        FlakeAttribute {
-            flakeref,
-            attr_path,
-            outputs: Default::default(),
-        }
-    }
-
-    /// Path to the environment's catalog
-    fn catalog_path(&self) -> PathBuf {
-        self.path.join("pkgs").join("default").join(CATALOG_JSON)
     }
 }
 
@@ -424,22 +351,5 @@ mod tests {
             "manifest exists"
         );
         assert!(actual.path.is_absolute());
-    }
-
-    #[test]
-    fn flake_attribute() {
-        let temp_dir = tempfile::tempdir().unwrap();
-        let environment_temp_dir = tempfile::tempdir().unwrap();
-        let pointer = PathPointer::new("test".parse().unwrap());
-
-        let env = PathEnvironment::init(pointer, environment_temp_dir, temp_dir).unwrap();
-
-        assert_eq!(
-            env.flake_attribute("aarch64-darwin").to_string(),
-            format!(
-                "path:{}#.floxEnvs.aarch64-darwin.default",
-                env.path.to_string_lossy()
-            )
-        )
     }
 }
