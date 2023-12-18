@@ -16,15 +16,17 @@
 # -------------------------
 # Detect whether `CC` is an executable or a shell script wrapper created
 # by `nix`.
+# Sets `CC_IS_NIX_WRAPPER` to `yes' if `CC` is a wrapper, `no' otherwise.
 AC_DEFUN([FLOX_CHECK_NIX_WRAPPER],
 [AC_CACHE_CHECK([whether CC is a nix wrapper], [flox_cv_nix_cc_wrapper],
-  [AC_REQUIRE([AC_PROG_CC])
-  AS_IF(
-    [file -Lb `which $CC` 2>/dev/null[]dnl
-     |$GREP -q "^a /nix/store/[[^ ]]*/bash script, ASCII text executable\$"],
-    [flox_cv_nix_cc_wrapper=yes], [flox_cv_nix_cc_wrapper=no])
-  ])
-AM_CONDITIONAL([NIX_CC_WRAPPER], [test "$flox_cv_nix_cc_wrapper" = 'yes'])
+  [AC_REQUIRE([FLOX_PROG_FILE])
+   AC_REQUIRE([FLOX_PROG_CC])
+   AC_REQUIRE([FLOX_PROG_GREP])
+   AS_IF(
+     [$FILE -Lb "$CC" 2>/dev/null[]dnl
+        |$GREP -q "^a /nix/store/[[^ ]]*/bash script, ASCII text executable\$"],
+     [flox_cv_nix_cc_wrapper=yes], [flox_cv_nix_cc_wrapper=no])])
+AM_CONDITIONAL([CC_IS_NIX_WRAPPER], [test "$flox_cv_nix_cc_wrapper" = 'yes'])
 ]) # FLOX_CHECK_NIX_CC_WRAPPER
 
 
@@ -34,7 +36,10 @@ AM_CONDITIONAL([NIX_CC_WRAPPER], [test "$flox_cv_nix_cc_wrapper" = 'yes'])
 # -------------
 # Set `NIX` to the path of the `nix` executable, if any.
 # Set various `NIX_*` variables.
-AC_DEFUN([FLOX_PROG_NIX], [AC_PATH_PROG([NIX], [nix], [$MISSING nix])])
+AC_DEFUN([FLOX_PROG_NIX], [
+AC_ARG_VAR([NIX], [Purely functional package manager])
+AC_PATH_PROG([NIX], [nix], [$MISSING nix])
+]) # FLOX_PROG_NIX
 
 
 # ---------------------------------------------------------------------------- #
@@ -73,7 +78,6 @@ PKG_CHECK_MODULES(
              [AC_MSG_ERROR([Cannot find 'nix-{store|main|cmd|expr}.pc'])]))
 FLOX_LIB_NIXFETCHERS([NIX_LIBS="-lnixfetchers $NIX_LIBS"])
 ]) # FLOX_CHECK_NIX_MODULES
-
 
 
 # ---------------------------------------------------------------------------- #

@@ -72,6 +72,8 @@ FLOX_INIT_DIRS
 # Checks for Programs
 # -------------------
 
+FLOX_PROG_MISSING
+
 # We use builtin `AC_PROG_<NAME>' macros to run checks; but follow up with
 # `AC_PATH_PROG' to get absolute paths to the programs.
 
@@ -89,8 +91,7 @@ AC_ARG_VAR([AUTORECONF],
 AC_PATH_PROG([AUTORECONF], [autoreconf], [$MISSING build-aux/autoreconf],
   [$abs_srcdir/build-aux/:$PATH])
 
-AC_PROG_CC
-AC_PATH_PROG([CC], [$CC], [$MISSING cc])
+FLOX_PROG_CC
 
 AC_PROG_CPP
 AC_PATH_PROG([CPP], [$CPP], [$MISSING cpp])
@@ -98,8 +99,7 @@ AC_PATH_PROG([CPP], [$CPP], [$MISSING cpp])
 AC_PROG_INSTALL
 AC_PATH_PROG([CC], [$CC], [$MISSING install])
 
-AC_PROG_GREP
-AC_PATH_PROG([GREP], [$GREP], [$MISSING grep])
+FLOX_PROG_GREP
 
 AC_PROG_SED
 AC_PATH_PROG([SED], [$SED], [$MISSING sed])
@@ -113,9 +113,6 @@ AC_PATH_PROG([AR], [$AR], [$MISSING ar])
 
 PKG_PROG_PKG_CONFIG
 AC_PATH_PROG([PKG_CONFIG], [$PKG_CONFIG], [$MISSING pkg-config])
-
-
-FLOX_PROG_MISSING
 
 AC_ARG_VAR([CAT], [Concatenate FILE(s) to standard output])
 AC_PATH_PROG([CAT], [cat], [$MISSING cat])
@@ -175,9 +172,8 @@ AC_PATH_PROG([SQLITE], [sqlite3], [$MISSING sqlite3])
 AC_ARG_VAR([BATS], [Bash Automated Testing System])
 AC_PATH_PROG([BATS], [bats], [$MISSING bats])
 
-# TODO: move to `m4/nix.m4'
-AC_ARG_VAR([NIX], [Purely functional package manager])
-AC_PATH_PROG([NIX], [nix], [$MISSING nix])
+FLOX_PROG_NIX
+
 AC_ARG_VAR([NIX_FMT], [Nix code formatter])
 AC_PATH_PROG([NIX_FMT], [alejandra], [$MISSING alejandra])
 
