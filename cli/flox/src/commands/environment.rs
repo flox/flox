@@ -1,6 +1,6 @@
 use std::env;
 use std::fs::{self, File};
-use std::io::{stdin, Write};
+use std::io::stdin;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -8,7 +8,6 @@ use std::str::FromStr;
 
 use anyhow::{anyhow, bail, Context, Result};
 use bpaf::Bpaf;
-use crossterm::{cursor, QueueableCommand};
 use flox_rust_sdk::flox::{Auth0Client, EnvironmentName, EnvironmentOwner, EnvironmentRef, Flox};
 use flox_rust_sdk::models::environment::managed_environment::{
     ManagedEnvironment,
@@ -46,7 +45,7 @@ use tempfile::NamedTempFile;
 use super::{environment_select, EnvironmentSelect};
 use crate::commands::{activated_environments, ConcreteEnvironment};
 use crate::subcommand_metric;
-use crate::utils::dialog::{Confirm, Dialog};
+use crate::utils::dialog::{Confirm, Dialog, Spinner};
 
 #[derive(Bpaf, Clone)]
 pub struct EnvironmentArgs {
@@ -137,7 +136,15 @@ impl Edit {
         // decides to stop.
         loop {
             let new_manifest = Edit::edited_manifest_contents(&tmp_manifest, &editor)?;
-            match environment.edit(&flox, new_manifest) {
+
+            let result = Dialog {
+                message: "Building environment to validate edit...",
+                help_message: None,
+                typed: Spinner::new(|| environment.edit(&flox, new_manifest.clone())),
+            }
+            .spin();
+
+            match result {
                 Err(e) => {
                     error!("Environment invalid; building resulted in an error: {e}");
                     if !Dialog::can_prompt() {
@@ -307,21 +314,12 @@ impl Activate {
 
         let mut environment = concrete_environment.into_dyn_environment();
 
-        let mut stderr = std::io::stdout();
-        stderr
-            .queue(cursor::SavePosition)
-            .context("couldn't set cursor positon")?;
-        stderr
-            .write_all("Building environment...\n".as_bytes())
-            .context("could't write progress message")?;
-        stderr.flush().context("could't flush stderr")?;
-
-        let activation_path = environment.activation_path(&flox)?;
-
-        stderr
-            .queue(cursor::RestorePosition)
-            .context("couldn't restore cursor position")?;
-        stderr.flush().context("could't flush stderr")?;
+        let activation_path = Dialog {
+            message: &format!("Building environment '{prompt_name}'..."),
+            help_message: None,
+            typed: Spinner::new(|| environment.activation_path(&flox)),
+        }
+        .spin()?;
 
         // We don't have access to the current PS1 (it's not exported), so we
         // can't modify it. Instead set FLOX_PROMPT_ENVIRONMENTS and let the
@@ -605,7 +603,14 @@ impl Install {
         if packages.is_empty() {
             bail!("Must specify at least one package");
         }
-        let installation = environment.install(&packages, &flox)?;
+
+        let installation = Dialog {
+            message: &format!("Installing packages to environment {description}..."),
+            help_message: None,
+            typed: Spinner::new(|| environment.install(&packages, &flox)),
+        }
+        .spin()?;
+
         if installation.new_manifest.is_some() {
             // Print which new packages were installed
             for pkg in packages.iter() {
@@ -654,7 +659,13 @@ impl Uninstall {
             .detect_concrete_environment(&flox, "uninstall from")?;
         let description = environment_description(&concrete_environment)?;
         let mut environment = concrete_environment.into_dyn_environment();
-        let _ = environment.uninstall(self.packages.clone(), &flox)?;
+
+        let _ = Dialog {
+            message: &format!("Uninstalling packages from environment {description}..."),
+            help_message: None,
+            typed: Spinner::new(|| environment.uninstall(self.packages.clone(), &flox)),
+        }
+        .spin()?;
 
         // Note, you need two spaces between this emoji and the package name
         // otherwise they appear right next to each other.

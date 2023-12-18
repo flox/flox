@@ -13,7 +13,7 @@ expect_after {
   "*\n" { exp_continue }
 }
 
-expect -ex "Building environment..."
+expect -ex "Building environment"
 
 # edit environment and check for message prompting to re-activate
 send "$flox edit -f $manifest\n"
