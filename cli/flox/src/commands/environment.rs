@@ -137,7 +137,15 @@ impl Edit {
         // decides to stop.
         loop {
             let new_manifest = Edit::edited_manifest_contents(&tmp_manifest, &editor)?;
-            match environment.edit(&flox, new_manifest) {
+
+            let result = Dialog {
+                message: "Building environment to validate edit...",
+                help_message: None,
+                typed: Spinner::new(|| environment.edit(&flox, new_manifest.clone())),
+            }
+            .spin();
+
+            match result {
                 Err(e) => {
                     error!("Environment invalid; building resulted in an error: {e}");
                     if !Dialog::can_prompt() {
