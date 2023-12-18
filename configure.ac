@@ -289,6 +289,99 @@ AC_CHECK_FUNCS([memset strtoul mkdir utime])
 
 # ---------------------------------------------------------------------------- #
 
+# Cargo Flags
+# -----------
+
+AC_ARG_VAR([CARGOFLAGS], [Additional flags to pass to 'cargo build'])
+AC_SUBST([CARGOFLAGS])
+
+
+# ---------------------------------------------------------------------------- #
+
+# Debug Mode
+# ----------
+
+AC_ARG_VAR([DEBUG], [Enable debug mode when non-empty and non-0])
+
+AS_IF([test "$CXX_TOOLCHAIN" = 'gcc'],
+  [DEBUG_CXXFLAGS='-ggdb3 -pg';
+   DEBUG_LDFLAGS='-ggdb3 -pg';],
+  [DEBUG_CXXFLAGS='-g -glldb -mno-omit-leaf-frame-pointer';
+   DEBUG_LDFLAGS='-g -glldb -mno-omit-leaf-frame-pointer';])
+DEBUG_CXXFLAGS="$DEBUG_CXXFLAGS -fno-omit-frame-pointer -DDEBUG";
+DEBUG_LDFLAGS="$DEBUG_CXXFLAGS -fno-omit-frame-pointer -DDEBUG";
+
+AC_ARG_ENABLE([debug],
+  [AS_HELP_STRING([--enable-debug], [enable debug mode ( default: no )])],
+  [ENABLE_DEBUG="$enableval"],
+  [ENABLE_DEBUG="${DEBUG:-no}"])
+AM_CONDITIONAL([ENABLE_DEBUG], [test "$ENABLE_DEBUG" = 'yes'])
+
+# Translate `0' -> `no' in case the environment variable is was used.
+AS_IF([test "$ENABLE_DEBUG" = 0], [ENABLE_DEBUG=no])
+
+AS_IF([test "$ENABLE_DEBUG" != 'no'],
+  [AC_DEFINE([DEBUG], [1], [Enable debug mode])
+   CXXFLAGS="$CXXFLAGS $DEBUG_CXXFLAGS";
+   LDFLAGS="$LDFLAGS $DEBUG_LDFLAGS";
+   CARGOFLAGS="${CARGOFLAGS:+$CARGOFLAGS }--debug";
+   AC_MSG_NOTICE([Enabled debug mode])])
+
+
+# ---------------------------------------------------------------------------- #
+
+# Coverage Mode
+# -------------
+
+AC_ARG_VAR([COV], [Enable coverage mode when non-empty and non-0])
+
+COV_CXXFLAGS='--coverage -fprofile-arcs -ftest-coverage';
+COV_LDFLAGS='--coverage -fprofile-arcs -ftest-coverage';
+
+AC_ARG_ENABLE([coverage],
+  [AS_HELP_STRING([--enable-coverage], [enable coverage mode ( default: no )])],
+  [ENABLE_COV="$enableval"],
+  [ENABLE_COV="${COV:-no}"])
+AM_CONDITIONAL([ENABLE_COV], [test "$ENABLE_COV" = 'yes'])
+
+# Translate `0' -> `no' in case the environment variable is was used.
+AS_IF([test "$ENABLE_COV" = 0], [ENABLE_COV=no])
+
+AS_IF([test "$ENABLE_COV" != 'no'],
+  [CXXFLAGS="$CXXFLAGS $COV_CXXFLAGS";
+   LDFLAGS="$LDFLAGS $COV_LDFLAGS";
+   AC_MSG_NOTICE([Enabled coverage mode])])
+
+
+# ---------------------------------------------------------------------------- #
+
+# Release Mode
+# ------------
+
+AC_ARG_VAR([RELEASE], [Enable release mode when non-empty and non-0])
+
+RELEASE_CXXFLAGS='-O3 -DNDEBUG';
+RELEASE_LDFLAGS='-O3';
+
+AC_ARG_ENABLE([release],
+  [AS_HELP_STRING([--enable-release], [enable release mode ( default: no )])],
+  [ENABLE_RELEASE="$enableval"],
+  [ENABLE_RELEASE="${RELEASE:-no}"])
+AM_CONDITIONAL([ENABLE_RELEASE], [test "$ENABLE_RELEASE" = 'yes'])
+
+# Translate `0' -> `no' in case the environment variable is was used.
+AS_IF([test "$ENABLE_RELEASE" = 0], [ENABLE_RELEASE=no])
+
+AS_IF([test "$ENABLE_RELEASE" != 'no'],
+  [AS_IF([test "$ENABLE_RELEASE" != 'no'],
+         [AC_MSG_ERROR([Release mode and debug mode may not be used together])])
+   CXXFLAGS="$CXXFLAGS $RELEASE_CXXFLAGS";
+   LDFLAGS="$LDFLAGS $RELEASE_LDFLAGS";
+   AC_MSG_NOTICE([Enabled release mode])])
+
+
+# ---------------------------------------------------------------------------- #
+
 # Sub-Systems/Modules Options
 # ---------------------------
 
@@ -503,7 +596,7 @@ AS_IF([test -z "${SET_PROMPT_BASH_SH:-}"], [
        )"],
     [AS_IF([test -d "$WITH_SET_PROMPT_BASH_SH"], [:],
       [AC_MSG_ERROR(
-        [Invalid '--with-set-prompt-bash-sh': '$WITH_SET_PROMPT_BASH_SH'.]
+        [Invalid '--with-set-prompt-bash-sh': '$WITH_SET_PROMPT_BASH_SH'. ]
         [You must specify either 'local', or a '/nix/store' path])])])])
 AC_SUBST([WITH_SET_PROMPT_BASH_SH])
 AC_DEFINE_UNQUOTED([SET_PROMPT_BASH_SH], ["$SET_PROMPT_BASH_SH"],
@@ -559,15 +652,6 @@ AS_CASE(["$SEMVER"],
 AC_SUBST([SEMVER_PATH])
 AC_DEFINE_UNQUOTED([SEMVER_PATH], ["$SEMVER_PATH"],
   [Path to 'semver' executable in '/nix/store'])
-
-
-# ---------------------------------------------------------------------------- #
-
-# Cargo Flags
-# -----------
-
-AC_ARG_VAR([CARGOFLAGS], [Additional flags to pass to 'cargo build'])
-AC_SUBST([CARGOFLAGS])
 
 
 # ---------------------------------------------------------------------------- #

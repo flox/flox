@@ -661,7 +661,6 @@ am__EXEEXT_TRUE
 LTLIBOBJS
 AM_LDFLAGS
 AM_CXXFLAGS
-CARGOFLAGS
 SEMVER_PATH
 WITH_PROFILE_D_SCRIPT_DIR
 PROFILE_D_SCRIPT_DIR
@@ -699,6 +698,16 @@ PKGDB_ROOT
 REPO_ROOT
 WITH_FLOX_CLI
 WITH_PKGDB
+ENABLE_RELEASE_FALSE
+ENABLE_RELEASE_TRUE
+RELEASE
+ENABLE_COV_FALSE
+ENABLE_COV_TRUE
+COV
+ENABLE_DEBUG_FALSE
+ENABLE_DEBUG_TRUE
+DEBUG
+CARGOFLAGS
 LIBOBJS
 ALLOCA
 IS_CLANG_FALSE
@@ -904,6 +913,9 @@ enable_dependency_tracking
 with_gnu_ld
 with_sysroot
 enable_libtool_lock
+enable_debug
+enable_coverage
+enable_release
 with_pkgdb
 with_flox_cli
 with_set_prompt_bash_sh
@@ -960,6 +972,10 @@ DOXYGEN
 SEMVER
 TAR
 RSYNC
+CARGOFLAGS
+DEBUG
+COV
+RELEASE
 NLJSON_CFLAGS
 NLJSON_LIBS
 ARGPARSE_CFLAGS
@@ -975,8 +991,7 @@ NIX_LIBS
 SYSTEM
 SET_PROMPT_BASH_SH
 PROFILE_D_SCRIPT_DIR
-SEMVER_PATH
-CARGOFLAGS'
+SEMVER_PATH'
 
 
 # Initialize some variables set by options.
@@ -1615,6 +1630,9 @@ Optional Features:
   --disable-dependency-tracking
                           speeds up one-time build
   --disable-libtool-lock  avoid locking (might break parallel builds)
+  --enable-debug          enable debug mode ( default: no )
+  --enable-coverage       enable coverage mode ( default: no )
+  --enable-release        enable release mode ( default: no )
 
 Optional Packages:
   --with-PACKAGE[=ARG]    use PACKAGE [ARG=yes]
@@ -1694,6 +1712,10 @@ Some influential environment variables:
   SEMVER      Semantic versioning helper
   TAR         Manipulate tape archives
   RSYNC       Remote file copy
+  CARGOFLAGS  Additional flags to pass to 'cargo build'
+  DEBUG       Enable debug mode when non-empty and non-0
+  COV         Enable coverage mode when non-empty and non-0
+  RELEASE     Enable release mode when non-empty and non-0
   NLJSON_CFLAGS
               C compiler flags for NLJSON, overriding pkg-config
   NLJSON_LIBS linker flags for NLJSON, overriding pkg-config
@@ -1720,7 +1742,6 @@ Some influential environment variables:
               Path to directory containing 'etc/profile.d' directory in
               '/nix/store/'
   SEMVER_PATH Path to 'semver' executable in '/nix/store/'
-  CARGOFLAGS  Additional flags to pass to 'cargo build'
 
 Use these variables to override the choices made by `configure' or to help
 it to find libraries and programs with nonstandard names/locations.
@@ -19368,6 +19389,7 @@ fi
 
 
 
+
 # Extract the first word of "alejandra", so it can be a program name with args.
 set dummy alejandra; ac_word=$2
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
@@ -20614,6 +20636,157 @@ fi
 
 # ---------------------------------------------------------------------------- #
 
+# Cargo Flags
+# -----------
+
+
+
+
+
+# ---------------------------------------------------------------------------- #
+
+# Debug Mode
+# ----------
+
+
+
+if test "$CXX_TOOLCHAIN" = 'gcc'
+then :
+  DEBUG_CXXFLAGS='-ggdb3 -pg';
+   DEBUG_LDFLAGS='-ggdb3 -pg';
+else $as_nop
+  DEBUG_CXXFLAGS='-g -glldb -mno-omit-leaf-frame-pointer';
+   DEBUG_LDFLAGS='-g -glldb -mno-omit-leaf-frame-pointer';
+fi
+DEBUG_CXXFLAGS="$DEBUG_CXXFLAGS -fno-omit-frame-pointer -DDEBUG";
+DEBUG_LDFLAGS="$DEBUG_CXXFLAGS -fno-omit-frame-pointer -DDEBUG";
+
+# Check whether --enable-debug was given.
+if test ${enable_debug+y}
+then :
+  enableval=$enable_debug; ENABLE_DEBUG="$enableval"
+else $as_nop
+  ENABLE_DEBUG="${DEBUG:-no}"
+fi
+
+ if test "$ENABLE_DEBUG" = 'yes'; then
+  ENABLE_DEBUG_TRUE=
+  ENABLE_DEBUG_FALSE='#'
+else
+  ENABLE_DEBUG_TRUE='#'
+  ENABLE_DEBUG_FALSE=
+fi
+
+
+# Translate `0' -> `no' in case the environment variable is was used.
+if test "$ENABLE_DEBUG" = 0
+then :
+  ENABLE_DEBUG=no
+fi
+
+if test "$ENABLE_DEBUG" != 'no'
+then :
+
+printf "%s\n" "#define DEBUG 1" >>confdefs.h
+
+   CXXFLAGS="$CXXFLAGS $DEBUG_CXXFLAGS";
+   LDFLAGS="$LDFLAGS $DEBUG_LDFLAGS";
+   CARGOFLAGS="${CARGOFLAGS:+$CARGOFLAGS }--debug";
+   { printf "%s\n" "$as_me:${as_lineno-$LINENO}: Enabled debug mode" >&5
+printf "%s\n" "$as_me: Enabled debug mode" >&6;}
+fi
+
+
+# ---------------------------------------------------------------------------- #
+
+# Coverage Mode
+# -------------
+
+
+
+COV_CXXFLAGS='--coverage -fprofile-arcs -ftest-coverage';
+COV_LDFLAGS='--coverage -fprofile-arcs -ftest-coverage';
+
+# Check whether --enable-coverage was given.
+if test ${enable_coverage+y}
+then :
+  enableval=$enable_coverage; ENABLE_COV="$enableval"
+else $as_nop
+  ENABLE_COV="${COV:-no}"
+fi
+
+ if test "$ENABLE_COV" = 'yes'; then
+  ENABLE_COV_TRUE=
+  ENABLE_COV_FALSE='#'
+else
+  ENABLE_COV_TRUE='#'
+  ENABLE_COV_FALSE=
+fi
+
+
+# Translate `0' -> `no' in case the environment variable is was used.
+if test "$ENABLE_COV" = 0
+then :
+  ENABLE_COV=no
+fi
+
+if test "$ENABLE_COV" != 'no'
+then :
+  CXXFLAGS="$CXXFLAGS $COV_CXXFLAGS";
+   LDFLAGS="$LDFLAGS $COV_LDFLAGS";
+   { printf "%s\n" "$as_me:${as_lineno-$LINENO}: Enabled coverage mode" >&5
+printf "%s\n" "$as_me: Enabled coverage mode" >&6;}
+fi
+
+
+# ---------------------------------------------------------------------------- #
+
+# Release Mode
+# ------------
+
+
+
+RELEASE_CXXFLAGS='-O3 -DNDEBUG';
+RELEASE_LDFLAGS='-O3';
+
+# Check whether --enable-release was given.
+if test ${enable_release+y}
+then :
+  enableval=$enable_release; ENABLE_RELEASE="$enableval"
+else $as_nop
+  ENABLE_RELEASE="${RELEASE:-no}"
+fi
+
+ if test "$ENABLE_RELEASE" = 'yes'; then
+  ENABLE_RELEASE_TRUE=
+  ENABLE_RELEASE_FALSE='#'
+else
+  ENABLE_RELEASE_TRUE='#'
+  ENABLE_RELEASE_FALSE=
+fi
+
+
+# Translate `0' -> `no' in case the environment variable is was used.
+if test "$ENABLE_RELEASE" = 0
+then :
+  ENABLE_RELEASE=no
+fi
+
+if test "$ENABLE_RELEASE" != 'no'
+then :
+  if test "$ENABLE_RELEASE" != 'no'
+then :
+  as_fn_error $? "Release mode and debug mode may not be used together" "$LINENO" 5
+fi
+   CXXFLAGS="$CXXFLAGS $RELEASE_CXXFLAGS";
+   LDFLAGS="$LDFLAGS $RELEASE_LDFLAGS";
+   { printf "%s\n" "$as_me:${as_lineno-$LINENO}: Enabled release mode" >&5
+printf "%s\n" "$as_me: Enabled release mode" >&6;}
+fi
+
+
+# ---------------------------------------------------------------------------- #
+
 # Sub-Systems/Modules Options
 # ---------------------------
 
@@ -21645,15 +21818,6 @@ printf "%s\n" "#define SEMVER_PATH \"$SEMVER_PATH\"" >>confdefs.h
 
 # ---------------------------------------------------------------------------- #
 
-# Cargo Flags
-# -----------
-
-
-
-
-
-# ---------------------------------------------------------------------------- #
-
 # Finalize C/C++ Flags
 # --------------------
 # We use `AM_CFLAGS' and `AM_CXXFLAGS' for things we don't want users to
@@ -21891,6 +22055,18 @@ Usually this means the macro was only invoked conditionally." "$LINENO" 5
 fi
 if test -z "${IS_CLANG_TRUE}" && test -z "${IS_CLANG_FALSE}"; then
   as_fn_error $? "conditional \"IS_CLANG\" was never defined.
+Usually this means the macro was only invoked conditionally." "$LINENO" 5
+fi
+if test -z "${ENABLE_DEBUG_TRUE}" && test -z "${ENABLE_DEBUG_FALSE}"; then
+  as_fn_error $? "conditional \"ENABLE_DEBUG\" was never defined.
+Usually this means the macro was only invoked conditionally." "$LINENO" 5
+fi
+if test -z "${ENABLE_COV_TRUE}" && test -z "${ENABLE_COV_FALSE}"; then
+  as_fn_error $? "conditional \"ENABLE_COV\" was never defined.
+Usually this means the macro was only invoked conditionally." "$LINENO" 5
+fi
+if test -z "${ENABLE_RELEASE_TRUE}" && test -z "${ENABLE_RELEASE_FALSE}"; then
+  as_fn_error $? "conditional \"ENABLE_RELEASE\" was never defined.
 Usually this means the macro was only invoked conditionally." "$LINENO" 5
 fi
 if test -z "${BUILD_SHARED_LIBS_TRUE}" && test -z "${BUILD_SHARED_LIBS_FALSE}"; then
