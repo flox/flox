@@ -1202,19 +1202,6 @@ impl Update {
     }
 }
 
-/// Upgrade packages in an environment
-///
-/// When no arguments are specified, all packages in the environment are
-/// upgraded.
-///
-/// Packages to upgrade can be specified by either group name or, if a package
-/// is not in a group with any other packages, it may be specified by ID.
-///
-/// If the specified argument is both a group name and a package ID, only the
-/// group is upgraded.
-///
-/// Packages without a specified group in the manifest can be upgraded by
-/// passing 'toplevel' as the group name.
 #[derive(Bpaf, Clone)]
 pub struct Upgrade {
     #[allow(dead_code)] // pending spec for `-e`, `--dir` behaviour
