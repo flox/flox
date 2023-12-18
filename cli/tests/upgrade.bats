@@ -144,3 +144,23 @@ EOF
   assert_failure
   assert_output --partial "package in a group with multiple packages"
 }
+
+@test "check confirmation when all packages are up to date" {
+  "$FLOX_BIN" init
+  _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLD?}" \
+    "$FLOX_BIN" install curl hello
+  
+  run "$FLOX_BIN" upgrade
+  assert_success
+  assert_output --partial "No packages need to be upgraded"
+}
+
+@test "check confirmation when package is up to date" {
+  "$FLOX_BIN" init
+  _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLD?}" \
+    "$FLOX_BIN" install curl hello
+  
+  run "$FLOX_BIN" upgrade
+  assert_success
+  assert_output --partial "No packages need to be upgraded"
+}
