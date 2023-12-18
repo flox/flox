@@ -652,7 +652,13 @@ impl Uninstall {
             .detect_concrete_environment(&flox, "uninstall from")?;
         let description = environment_description(&concrete_environment)?;
         let mut environment = concrete_environment.into_dyn_environment();
-        let _ = environment.uninstall(self.packages.clone(), &flox)?;
+
+        let _ = Dialog {
+            message: &format!("Uninstalling packages from environment {description}..."),
+            help_message: None,
+            typed: Spinner::new(|| environment.uninstall(self.packages.clone(), &flox)),
+        }
+        .spin()?;
 
         // Note, you need two spaces between this emoji and the package name
         // otherwise they appear right next to each other.
