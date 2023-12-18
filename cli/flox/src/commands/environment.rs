@@ -596,7 +596,14 @@ impl Install {
         if packages.is_empty() {
             bail!("Must specify at least one package");
         }
-        let installation = environment.install(&packages, &flox)?;
+
+        let installation = Dialog {
+            message: &format!("Installing packages to environment {description}..."),
+            help_message: None,
+            typed: Spinner::new(|| environment.install(&packages, &flox)),
+        }
+        .spin()?;
+
         if installation.new_manifest.is_some() {
             // Print which new packages were installed
             for pkg in packages.iter() {
