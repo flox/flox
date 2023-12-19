@@ -124,6 +124,7 @@
       # Generates a `.git/hooks/pre-commit' script.
       pre-commit-check = pre-commit-hooks.lib.${final.system}.run {
         src = builtins.path {path = ./.;};
+        default_stages = ["manual" "push"];
         hooks = {
           alejandra.enable = true;
           clang-format = {
