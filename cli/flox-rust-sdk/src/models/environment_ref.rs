@@ -8,7 +8,9 @@ use thiserror::Error;
 pub static DEFAULT_NAME: &str = "default";
 pub static DEFAULT_OWNER: &str = "local";
 
-#[derive(Debug, Clone, PartialEq, AsRef, Deref, Display, DeserializeFromStr, SerializeDisplay)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, Hash, AsRef, Deref, Display, DeserializeFromStr, SerializeDisplay,
+)]
 pub struct EnvironmentOwner(String);
 
 impl FromStr for EnvironmentOwner {
@@ -23,7 +25,9 @@ impl FromStr for EnvironmentOwner {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, AsRef, Display, DeserializeFromStr, SerializeDisplay)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, Hash, AsRef, Display, DeserializeFromStr, SerializeDisplay,
+)]
 pub struct EnvironmentName(String);
 
 impl FromStr for EnvironmentName {
@@ -38,7 +42,7 @@ impl FromStr for EnvironmentName {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, SerializeDisplay, DeserializeFromStr)]
 pub struct EnvironmentRef {
     owner: EnvironmentOwner,
     name: EnvironmentName,
