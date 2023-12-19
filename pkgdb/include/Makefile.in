@@ -16,6 +16,9 @@
 
 # ============================================================================ #
 #
+# @file pkgdb/include/Makefile.am
+#
+# @brief Provides `pkgdb' include files.
 #
 #
 # ---------------------------------------------------------------------------- #
@@ -102,6 +105,7 @@ am__aclocal_m4_deps = $(top_srcdir)/build-aux/m4/dirs.m4 \
 	$(top_srcdir)/build-aux/m4/ltsugar.m4 \
 	$(top_srcdir)/build-aux/m4/ltversion.m4 \
 	$(top_srcdir)/build-aux/m4/lt~obsolete.m4 \
+	$(top_srcdir)/build-aux/m4/nix.m4 \
 	$(top_srcdir)/build-aux/m4/progs.m4 $(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
@@ -180,7 +184,9 @@ DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
 ACLOCAL = @ACLOCAL@
 ALLOCA = @ALLOCA@
 AMTAR = @AMTAR@
+AM_CXXFLAGS = @AM_CXXFLAGS@
 AM_DEFAULT_VERBOSITY = @AM_DEFAULT_VERBOSITY@
+AM_LDFLAGS = @AM_LDFLAGS@
 AR = @AR@
 ARCH = @ARCH@
 ARGPARSE_CFLAGS = @ARGPARSE_CFLAGS@
@@ -188,17 +194,21 @@ ARGPARSE_LIBS = @ARGPARSE_LIBS@
 AUTOCONF = @AUTOCONF@
 AUTOHEADER = @AUTOHEADER@
 AUTOMAKE = @AUTOMAKE@
+AUTORECONF = @AUTORECONF@
 AWK = @AWK@
 BATS = @BATS@
 BEAR = @BEAR@
 BINDIR = @BINDIR@
 CARGO = @CARGO@
+CARGOFLAGS = @CARGOFLAGS@
 CAT = @CAT@
 CC = @CC@
 CCDEPMODE = @CCDEPMODE@
 CFLAGS = @CFLAGS@
 COMMITIZEN = @COMMITIZEN@
+COV_CXXFLAGS = @COV_CXXFLAGS@
 CP = @CP@
+CPP = @CPP@
 CPPFLAGS = @CPPFLAGS@
 CRATES_DIR = @CRATES_DIR@
 CSCOPE = @CSCOPE@
@@ -212,6 +222,7 @@ CXX_LINT = @CXX_LINT@
 CXX_TOOLCHAIN = @CXX_TOOLCHAIN@
 CYGPATH_W = @CYGPATH_W@
 DATADIR = @DATADIR@
+DEBUG_CXXFLAGS = @DEBUG_CXXFLAGS@
 DEFS = @DEFS@
 DEPDIR = @DEPDIR@
 DEPFILES = @DEPFILES@
@@ -224,14 +235,12 @@ ECHO_C = @ECHO_C@
 ECHO_N = @ECHO_N@
 ECHO_T = @ECHO_T@
 EGREP = @EGREP@
-ENV_BUILDER_ROOT = @ENV_BUILDER_ROOT@
-ENV_BUILDER_TESTS_DIR = @ENV_BUILDER_TESTS_DIR@
-ENV_BUILDER_VERSION = @ENV_BUILDER_VERSION@
 ETAGS = @ETAGS@
 EXEEXT = @EXEEXT@
 FGREP = @FGREP@
 FILECMD = @FILECMD@
 FIND = @FIND@
+FLOX_CLI_DISTDIR = @FLOX_CLI_DISTDIR@
 FLOX_CLI_ROOT = @FLOX_CLI_ROOT@
 FLOX_CLI_TESTS_DIR = @FLOX_CLI_TESTS_DIR@
 GIT = @GIT@
@@ -294,16 +303,21 @@ PKG_CONFIG = @PKG_CONFIG@
 PKG_CONFIG_LIBDIR = @PKG_CONFIG_LIBDIR@
 PKG_CONFIG_PATH = @PKG_CONFIG_PATH@
 PREFIX = @PREFIX@
+PROFILE_D_SCRIPT_DIR = @PROFILE_D_SCRIPT_DIR@
 RANLIB = @RANLIB@
+REAL_AUTORECONF = @REAL_AUTORECONF@
 RELATIVE_RPATH_FLAG = @RELATIVE_RPATH_FLAG@
+RELEASE_CXXFLAGS = @RELEASE_CXXFLAGS@
 REPO_ROOT = @REPO_ROOT@
 RM = @RM@
+RSYNC = @RSYNC@
 RUST_FMT = @RUST_FMT@
 RUST_LINT = @RUST_LINT@
 SED = @SED@
+SEMVER = @SEMVER@
+SEMVER_PATH = @SEMVER_PATH@
 SET_MAKE = @SET_MAKE@
-SHARED_LIBRARY_CFLAGS = @SHARED_LIBRARY_CFLAGS@
-SHARED_LIBRARY_LDFLAGS = @SHARED_LIBRARY_LDFLAGS@
+SET_PROMPT_BASH_SH = @SET_PROMPT_BASH_SH@
 SHELL = @SHELL@
 SHELLS_DIR = @SHELLS_DIR@
 SORT = @SORT@
@@ -314,15 +328,18 @@ SQLITE3_CFLAGS = @SQLITE3_CFLAGS@
 SQLITE3_LIBS = @SQLITE3_LIBS@
 STRIP = @STRIP@
 SYSCONFDIR = @SYSCONFDIR@
+SYSTEM = @SYSTEM@
+TAR = @TAR@
 TEE = @TEE@
 TEST = @TEST@
 TOUCH = @TOUCH@
 TR = @TR@
 UNAME = @UNAME@
 VERSION = @VERSION@
-WITH_ENV_BUILDER = @WITH_ENV_BUILDER@
 WITH_FLOX_CLI = @WITH_FLOX_CLI@
 WITH_PKGDB = @WITH_PKGDB@
+WITH_PROFILE_D_SCRIPT_DIR = @WITH_PROFILE_D_SCRIPT_DIR@
+WITH_SET_PROMPT_BASH_SH = @WITH_SET_PROMPT_BASH_SH@
 XARGS = @XARGS@
 YAML_CFLAGS = @YAML_CFLAGS@
 YAML_LIBS = @YAML_LIBS@
@@ -375,7 +392,6 @@ runstatedir = @runstatedir@
 sbindir = @sbindir@
 set_rpath_option = @set_rpath_option@
 set_soname_option = @set_soname_option@
-sharedLibExt = @sharedLibExt@
 sharedstatedir = @sharedstatedir@
 srcdir = @srcdir@
 sysconfdir = @sysconfdir@
@@ -383,23 +399,24 @@ target_alias = @target_alias@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
-ACLOCAL_AMFLAGS = -I ../../m4
+ACLOCAL_AMFLAGS = -I ../../built-aux/m4
 
 # ---------------------------------------------------------------------------- #
-nobase_include_HEADERS = versions.hh compat/concepts.hh \
-	flox/flake-package.hh flox/raw-package.hh flox/package.hh \
-	flox/flox-flake.hh flox/registry.hh flox/eval.hh flox/repl.hh \
-	flox/core/expr.hh flox/core/nix-state.hh flox/core/types.hh \
-	flox/core/exceptions.hh flox/core/util.hh flox/core/command.hh \
-	flox/search/params.hh flox/search/command.hh \
-	flox/parse/command.hh flox/resolver/environment.hh \
-	flox/resolver/mixins.hh flox/resolver/lockfile.hh \
-	flox/resolver/manifest-raw.hh flox/resolver/manifest.hh \
-	flox/resolver/descriptor.hh flox/resolver/command.hh \
-	flox/resolver/primops.hh flox/pkgdb/read.hh flox/pkgdb/gc.hh \
-	flox/pkgdb/input.hh flox/pkgdb/pkg-query.hh \
-	flox/pkgdb/db-package.hh flox/pkgdb/command.hh \
-	flox/pkgdb/primops.hh flox/pkgdb/write.hh
+nobase_include_HEADERS = versions.hh compat/concepts.hh flox/eval.hh \
+	flox/flake-package.hh flox/flox-flake.hh flox/package.hh \
+	flox/raw-package.hh flox/registry.hh flox/repl.hh \
+	flox/buildenv/command.hh flox/buildenv/realise.hh \
+	flox/core/command.hh flox/core/exceptions.hh flox/core/expr.hh \
+	flox/core/nix-state.hh flox/core/types.hh flox/core/util.hh \
+	flox/search/command.hh flox/search/params.hh \
+	flox/parse/command.hh flox/resolver/command.hh \
+	flox/resolver/descriptor.hh flox/resolver/environment.hh \
+	flox/resolver/lockfile.hh flox/resolver/manifest-raw.hh \
+	flox/resolver/manifest.hh flox/resolver/mixins.hh \
+	flox/resolver/primops.hh flox/pkgdb/command.hh \
+	flox/pkgdb/db-package.hh flox/pkgdb/gc.hh flox/pkgdb/input.hh \
+	flox/pkgdb/pkg-query.hh flox/pkgdb/primops.hh \
+	flox/pkgdb/read.hh flox/pkgdb/write.hh
 all: all-am
 
 .SUFFIXES:

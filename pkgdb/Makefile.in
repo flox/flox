@@ -255,6 +255,24 @@ AM_V_CXXLD = $(am__v_CXXLD_@AM_V@)
 am__v_CXXLD_ = $(am__v_CXXLD_@AM_DEFAULT_V@)
 am__v_CXXLD_0 = @echo "  CXXLD   " $@;
 am__v_CXXLD_1 = 
+COMPILE = $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) \
+	$(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS)
+LTCOMPILE = $(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) \
+	$(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) \
+	$(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) \
+	$(AM_CFLAGS) $(CFLAGS)
+AM_V_CC = $(am__v_CC_@AM_V@)
+am__v_CC_ = $(am__v_CC_@AM_DEFAULT_V@)
+am__v_CC_0 = @echo "  CC      " $@;
+am__v_CC_1 = 
+CCLD = $(CC)
+LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) \
+	$(LIBTOOLFLAGS) --mode=link $(CCLD) $(AM_CFLAGS) $(CFLAGS) \
+	$(AM_LDFLAGS) $(LDFLAGS) -o $@
+AM_V_CCLD = $(am__v_CCLD_@AM_V@)
+am__v_CCLD_ = $(am__v_CCLD_@AM_DEFAULT_V@)
+am__v_CCLD_0 = @echo "  CCLD    " $@;
+am__v_CCLD_1 = 
 SOURCES = $(lib_libpkgdb_la_SOURCES) $(bin_pkgdb_SOURCES)
 DIST_SOURCES = $(lib_libpkgdb_la_SOURCES) $(bin_pkgdb_SOURCES)
 RECURSIVE_TARGETS = all-recursive check-recursive cscopelist-recursive \
@@ -349,6 +367,7 @@ CC = @CC@
 CCDEPMODE = @CCDEPMODE@
 CFLAGS = @CFLAGS@
 COMMITIZEN = @COMMITIZEN@
+COV_CXXFLAGS = @COV_CXXFLAGS@
 CP = @CP@
 CPP = @CPP@
 CPPFLAGS = @CPPFLAGS@
@@ -364,6 +383,7 @@ CXX_LINT = @CXX_LINT@
 CXX_TOOLCHAIN = @CXX_TOOLCHAIN@
 CYGPATH_W = @CYGPATH_W@
 DATADIR = @DATADIR@
+DEBUG_CXXFLAGS = @DEBUG_CXXFLAGS@
 DEFS = @DEFS@
 DEPDIR = @DEPDIR@
 DEPFILES = @DEPFILES@
@@ -448,6 +468,7 @@ PROFILE_D_SCRIPT_DIR = @PROFILE_D_SCRIPT_DIR@
 RANLIB = @RANLIB@
 REAL_AUTORECONF = @REAL_AUTORECONF@
 RELATIVE_RPATH_FLAG = @RELATIVE_RPATH_FLAG@
+RELEASE_CXXFLAGS = @RELEASE_CXXFLAGS@
 REPO_ROOT = @REPO_ROOT@
 RM = @RM@
 RSYNC = @RSYNC@
@@ -532,7 +553,6 @@ runstatedir = @runstatedir@
 sbindir = @sbindir@
 set_rpath_option = @set_rpath_option@
 set_soname_option = @set_soname_option@
-sharedLibExt = @sharedLibExt@
 sharedstatedir = @sharedstatedir@
 srcdir = @srcdir@
 sysconfdir = @sysconfdir@
@@ -543,7 +563,7 @@ top_srcdir = @top_srcdir@
 ACLOCAL_AMFLAGS = -I ../build-aux/m4
 
 # TODO:
-SUBDIRS = src/resolver #include tests
+SUBDIRS = src/resolver include #tests
 
 # ---------------------------------------------------------------------------- #
 lib_LTLIBRARIES = lib/libpkgdb.la
@@ -562,7 +582,8 @@ lib_libpkgdb_la_SOURCES = src/command.cc src/eval.cc src/exceptions.cc \
 	src/search/params.cc src/pkgdb/db-package.cc src/pkgdb/gc.cc \
 	src/pkgdb/input.cc src/pkgdb/list.cc src/pkgdb/pkg-query.cc \
 	src/pkgdb/primops.cc src/pkgdb/read.cc src/pkgdb/write.cc \
-	src/buildenv/buildenv.cc src/buildenv/realise.cc
+	src/pkgdb/schemas.hh src/buildenv/buildenv.cc \
+	src/buildenv/realise.cc
 bin_pkgdb_LDADD = $(AM_LDFLAGS) $(RELATIVE_RPATH_FLAG) lib/libpkgdb.la
 bin_pkgdb_SOURCES = src/main.cc src/repl.cc src/parse/command.cc \
 	src/pkgdb/command.cc src/pkgdb/get.cc src/pkgdb/scrape.cc \

@@ -700,10 +700,13 @@ WITH_FLOX_CLI
 WITH_PKGDB
 ENABLE_RELEASE_FALSE
 ENABLE_RELEASE_TRUE
+RELEASE_CXXFLAGS
 ENABLE_COV_FALSE
 ENABLE_COV_TRUE
+COV_CXXFLAGS
 ENABLE_DEBUG_FALSE
 ENABLE_DEBUG_TRUE
+DEBUG_CXXFLAGS
 CARGOFLAGS
 LIBOBJS
 ALLOCA
@@ -721,7 +724,6 @@ IS_DARWIN_FALSE
 IS_DARWIN_TRUE
 IS_LINUX_FALSE
 IS_LINUX_TRUE
-sharedLibExt
 OS
 RSYNC
 TAR
@@ -19916,13 +19918,12 @@ fi
 
 case "$host_os" in #(
   linux*) :
-    OS=linux; sharedLibExt=.so; ;; #(
+    OS=linux ;; #(
   darwin*) :
-    OS=darwin; sharedLibExt=.dylib; ;; #(
+    OS=darwin ;; #(
   *) :
     as_fn_error $? "Unsupported host OS: $host_os" "$LINENO" 5 ;;
 esac
-
 
  if test "$OS" = 'linux'; then
   IS_LINUX_TRUE=
@@ -20650,6 +20651,7 @@ fi
 DEBUG_CXXFLAGS="$DEBUG_CXXFLAGS -fno-omit-frame-pointer -DDEBUG";
 DEBUG_LDFLAGS="$DEBUG_CXXFLAGS -fno-omit-frame-pointer -DDEBUG";
 
+
 # Check whether --enable-debug was given.
 if test ${enable_debug+y}
 then :
@@ -20694,6 +20696,7 @@ fi
 COV_CXXFLAGS='--coverage -fprofile-arcs -ftest-coverage';
 COV_LDFLAGS='--coverage -fprofile-arcs -ftest-coverage';
 
+
 # Check whether --enable-coverage was given.
 if test ${enable_coverage+y}
 then :
@@ -20733,6 +20736,7 @@ fi
 
 RELEASE_CXXFLAGS='-O3 -DNDEBUG';
 RELEASE_LDFLAGS='-O3';
+
 
 # Check whether --enable-release was given.
 if test ${enable_release+y}
@@ -21821,10 +21825,7 @@ fi
 #NOTE: `YAML_*' and `TOML_*' are only used by some targets, so are excluded here
 
 # Set `CXXFLAGS' used for all sub-systems.
-# FIXME: You need to be copying headers
 AM_CXXFLAGS="${AM_CXXFLAGS:+$AM_CXXFLAGS }-I$REPO_ROOT/pkgdb/include";
-#AM_CXXFLAGS="${AM_CXXFLAGS:+$AM_CXXFLAGS }";
-#AM_CXXFLAGS="${AM_CXXFLAGS}-I\$(abs_top_builddir)/pkgdb/include";
 AM_CXXFLAGS="$AM_CXXFLAGS $NIX_CFLAGS $NLJSON_CFLAGS $ARGPARSE_CFLAGS";
 AM_CXXFLAGS="$AM_CXXFLAGS $SQLITE3PP_CFLAGS $SQLITE3_CFLAGS $YAML_CFLAGS";
 
@@ -21843,7 +21844,7 @@ AM_LDFLAGS="$AM_LDFLAGS $SQLITE3PP_LIBS $SQLITE3_LIBS";
 # Only _substituted_ variables ( those marked by `AC_SUBST' ) are subtituted.
 
 # Locate files to be processed ( `.in' suffix is implied ).
-ac_config_files="$ac_config_files Makefile pkgdb/Makefile pkgdb/src/resolver/Makefile cli/Makefile"
+ac_config_files="$ac_config_files Makefile pkgdb/Makefile pkgdb/src/resolver/Makefile pkgdb/include/Makefile cli/Makefile"
 
 
 # Substitute and write.
@@ -23015,6 +23016,7 @@ do
     "Makefile") CONFIG_FILES="$CONFIG_FILES Makefile" ;;
     "pkgdb/Makefile") CONFIG_FILES="$CONFIG_FILES pkgdb/Makefile" ;;
     "pkgdb/src/resolver/Makefile") CONFIG_FILES="$CONFIG_FILES pkgdb/src/resolver/Makefile" ;;
+    "pkgdb/include/Makefile") CONFIG_FILES="$CONFIG_FILES pkgdb/include/Makefile" ;;
     "cli/Makefile") CONFIG_FILES="$CONFIG_FILES cli/Makefile" ;;
 
   *) as_fn_error $? "invalid argument: \`$ac_config_target'" "$LINENO" 5;;

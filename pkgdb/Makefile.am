@@ -10,7 +10,7 @@
 ACLOCAL_AMFLAGS = -I ../build-aux/m4
 
 # TODO:
-SUBDIRS = src/resolver #include tests
+SUBDIRS = src/resolver include #tests
 
 # ---------------------------------------------------------------------------- #
 
@@ -56,6 +56,7 @@ lib_libpkgdb_la_SOURCES += src/pkgdb/pkg-query.cc
 lib_libpkgdb_la_SOURCES += src/pkgdb/primops.cc
 lib_libpkgdb_la_SOURCES += src/pkgdb/read.cc
 lib_libpkgdb_la_SOURCES += src/pkgdb/write.cc
+lib_libpkgdb_la_SOURCES += src/pkgdb/schemas.hh
 
 lib_libpkgdb_la_SOURCES += src/buildenv/buildenv.cc
 lib_libpkgdb_la_SOURCES += src/buildenv/realise.cc

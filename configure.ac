@@ -214,11 +214,10 @@ AC_PATH_PROG([RSYNC], [rsync], [$MISSING rsync])
 AC_CANONICAL_HOST
 
 AS_CASE(["$host_os"],
-  [linux*],  [OS=linux; sharedLibExt=.so;],
-  [darwin*], [OS=darwin; sharedLibExt=.dylib;],
+  [linux*],  [OS=linux],
+  [darwin*], [OS=darwin],
   [AC_MSG_ERROR([Unsupported host OS: $host_os])])
 AC_SUBST([OS])
-AC_SUBST([sharedLibExt])
 AM_CONDITIONAL([IS_LINUX],   [test "$OS" = 'linux'])
 AM_CONDITIONAL([IS_DARWIN],  [test "$OS" = 'darwin'])
 
@@ -308,6 +307,7 @@ AS_IF([test "$CXX_TOOLCHAIN" = 'gcc'],
    DEBUG_LDFLAGS='-g -glldb -mno-omit-leaf-frame-pointer';])
 DEBUG_CXXFLAGS="$DEBUG_CXXFLAGS -fno-omit-frame-pointer -DDEBUG";
 DEBUG_LDFLAGS="$DEBUG_CXXFLAGS -fno-omit-frame-pointer -DDEBUG";
+AC_SUBST([DEBUG_CXXFLAGS])
 
 AC_ARG_ENABLE([debug],
   [AS_HELP_STRING([--enable-debug], [enable debug mode @<:@default=no@:>@])],
@@ -333,6 +333,7 @@ AS_IF([test "$ENABLE_DEBUG" != 'no'],
 
 COV_CXXFLAGS='--coverage -fprofile-arcs -ftest-coverage';
 COV_LDFLAGS='--coverage -fprofile-arcs -ftest-coverage';
+AC_SUBST([COV_CXXFLAGS])
 
 AC_ARG_ENABLE([coverage],
   [AS_HELP_STRING([--enable-coverage],
@@ -357,6 +358,7 @@ AS_IF([test "$ENABLE_COV" != 'no'],
 
 RELEASE_CXXFLAGS='-O3 -DNDEBUG';
 RELEASE_LDFLAGS='-O3';
+AC_SUBST([RELEASE_CXXFLAGS])
 
 AC_ARG_ENABLE([release],
   [AS_HELP_STRING([--enable-release],
@@ -669,10 +671,7 @@ fi
 #NOTE: `YAML_*' and `TOML_*' are only used by some targets, so are excluded here
 
 # Set `CXXFLAGS' used for all sub-systems.
-# FIXME: You need to be copying headers
 AM_CXXFLAGS="${AM_CXXFLAGS:+$AM_CXXFLAGS }-I$REPO_ROOT/pkgdb/include";
-#AM_CXXFLAGS="${AM_CXXFLAGS:+$AM_CXXFLAGS }";
-#AM_CXXFLAGS="${AM_CXXFLAGS}-I\$(abs_top_builddir)/pkgdb/include";
 AM_CXXFLAGS="$AM_CXXFLAGS $NIX_CFLAGS $NLJSON_CFLAGS $ARGPARSE_CFLAGS";
 AM_CXXFLAGS="$AM_CXXFLAGS $SQLITE3PP_CFLAGS $SQLITE3_CFLAGS $YAML_CFLAGS";
 AC_SUBST([AM_CXXFLAGS])
@@ -695,6 +694,7 @@ AC_CONFIG_FILES([
   Makefile
   pkgdb/Makefile
   pkgdb/src/resolver/Makefile
+  pkgdb/include/Makefile
   cli/Makefile
 ])
 
