@@ -687,14 +687,15 @@ ARGPARSE_CFLAGS
 NLJSON_LIBS
 NLJSON_CFLAGS
 DEPFILES
-SHELLS_DIR
-PKGS_DIR
-CRATES_DIR
-FLOX_CLI_DISTDIR
+FLOX_CLI_tardir
+FLOX_CLI_targetdir
+FLOX_CLI_distdir
 FLOX_CLI_TESTS_DIR
 FLOX_CLI_ROOT
 PKGDB_TESTS_DIR
 PKGDB_ROOT
+SHELLS_DIR
+PKGS_DIR
 REPO_ROOT
 WITH_FLOX_CLI
 WITH_PKGDB
@@ -20682,7 +20683,6 @@ printf "%s\n" "#define DEBUG 1" >>confdefs.h
 
    CXXFLAGS="$CXXFLAGS $DEBUG_CXXFLAGS";
    LDFLAGS="$LDFLAGS $DEBUG_LDFLAGS";
-   CARGOFLAGS="${CARGOFLAGS:+$CARGOFLAGS }--debug";
    { printf "%s\n" "$as_me:${as_lineno-$LINENO}: Enabled debug mode" >&5
 printf "%s\n" "$as_me: Enabled debug mode" >&6;}
 fi
@@ -20767,10 +20767,13 @@ then :
 then :
   as_fn_error $? "Release mode and debug mode may not be used together" "$LINENO" 5
 fi
-   printf "%s\n" "#define RELEASE Enable release mode" >>confdefs.h
+
+printf "%s\n" "#define RELEASE 1" >>confdefs.h
 
    CXXFLAGS="$CXXFLAGS $RELEASE_CXXFLAGS";
    LDFLAGS="$LDFLAGS $RELEASE_LDFLAGS";
+   CARGOFLAGS="${CARGOFLAGS:+$CARGOFLAGS }--release";
+   FLOX_CLI_targetdir='target/release';
    { printf "%s\n" "$as_me:${as_lineno-$LINENO}: Enabled release mode" >&5
 printf "%s\n" "$as_me: Enabled release mode" >&6;}
 fi
@@ -20841,6 +20844,10 @@ esac
 
 REPO_ROOT="$abs_srcdir"
 
+PKGS_DIR="$REPO_ROOT/pkgs"
+
+SHELLS_DIR="$REPO_ROOT/shells"
+
 PKGDB_ROOT="$REPO_ROOT/pkgdb"
 
 PKGDB_TESTS_DIR="$PKGDB_ROOT/tests"
@@ -20849,13 +20856,13 @@ FLOX_CLI_ROOT="$REPO_ROOT/cli"
 
 FLOX_CLI_TESTS_DIR="$FLOX_CLI_ROOT/tests"
 
-FLOX_CLI_DISTDIR="$FLOX_CLI_ROOT/dist"
 
-CRATES_DIR="$FLOX_CLI_ROOT/crates"
+# Defined relative to `$(abs_top_builddir)/cli/'
+FLOX_CLI_distdir=dist
 
-PKGS_DIR="$REPO_ROOT/pkgs"
+FLOX_CLI_targetdir=target/debug
 
-SHELLS_DIR="$REPO_ROOT/shells"
+FLOX_CLI_tardir="$distdir"
 
 
 # Used to determine if a dependency has changed.

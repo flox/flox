@@ -9,7 +9,9 @@ ACLOCAL_AMFLAGS = -I ../build-aux/m4
 
 # ---------------------------------------------------------------------------- #
 
-TARDIR = $(distdir)
+DISTDIR   = $(abs_builddir)/$(FLOX_CLI_distdir)
+TARDIR    = $(FLOX_CLI_distdir)/$(FLOX_CLI_tardir)
+TARGETDIR = $(abs_builddir)/$(FLOX_CLI_targetdir)
 
 
 # ---------------------------------------------------------------------------- #
@@ -23,30 +25,38 @@ copy-srcs:
 
 # ---------------------------------------------------------------------------- #
 
+# Define build targets for release and debug builds
+
+# TODO: Use `--target-dir' and `--out-dir'.
+#       You need to check other existing usage of `target/{debug,release}'
+
+if ENABLE_RELEASE
+
+# TODO: Use environment variable to set the pkgdb binary path
 build: copy-srcs
-	$(MAKE) $(AM_MAKEFLAGS) -C $(abs_top_builddir)/pkgdb bin/pkgdb$(EXEEXT)
+	$(MAKE) $(AM_MAKEFLAGS) -C $(top_builddir)/pkgdb install;
+	PKGDB_BIN="$(DESTDIR)$(bindir)/pkgdb$(EXEEXT)"  \
 	$(CARGO) build $(CARGOFLAGS);
 
-$(abs_builddir)/target/debug/flox: build
+else !ENABLE_RELEASE
 
+build: copy-srcs
+	$(MAKE) $(AM_MAKEFLAGS) -C $(top_builddir)/pkgdb bin/pkgdb$(EXEEXT)
+	$(CARGO) build $(CARGOFLAGS);
 
-build-release: copy-srcs
-	$(MAKE) $(AM_MAKEFLAGS) -C $(abs_top_builddir)/pkgdb install;
-	PKGDB_BIN="$(DESTDIR)$(bindir)/pkgdb$(EXEEXT)"  \
-	$(CARGO) build $(CARGOFLAGS) --release;
+endif !ENABLE_RELEASE
 
-$(abs_builddir)/target/release/flox: build-release
+$(TARGETDIR)/flox: build
 
 
 # ---------------------------------------------------------------------------- #
 
 ##dist-local:
-##	$(RM) -r $(FLOX_CLI_DISTDIR);
-##	$(MKDIR_P) $(FLOX_CLI_DISTDIR)/$(TARDIR);
-##	$(RSYNC) -r --exclude dist/ --exclude target/                 \
-##	         $(FLOX_CLI_ROOT)/ $(FLOX_CLI_DISTDIR)/$(TARDIR);
-##	cd $(FLOX_CLI_DISTDIR)/$(TARDIR);
-##	$(TAR) -czf $(FLOX_CLI_DISTDIR)/$(TARDIR).tar.gz $(TARDIR);
+##	$(RM) -r $(DISTDIR);
+##	$(MKDIR_P) $(TARDIR);
+##	$(RSYNC) -r --exclude dist/ --exclude target/ $(FLOX_CLI_ROOT)/ $(TARDIR);
+##	cd $(DISTDIR);
+##	$(TAR) -czf $(TARDIR).tar.gz $(TARDIR);
 
 
 # ---------------------------------------------------------------------------- #
@@ -54,7 +64,6 @@ $(abs_builddir)/target/release/flox: build-release
 # Default target builds the release version of the binary - otherwise
 # `make install' builds twice!
 
-all-local: CARGOFLAGS += --release
 all-local: build
 
 
@@ -66,9 +75,9 @@ clean-local:
 
 # ---------------------------------------------------------------------------- #
 
-install-exec-local: $(abs_builddir)/target/release/flox
+install-exec-local: $(TARGETDIR)/flox
 	$(MKDIR_P) $(DESTDIR)$(bindir);
-	$(INSTALL_PROGRAM) $(abs_builddir)/target/release/flox $(DESTDIR)$(bindir);
+	$(INSTALL_PROGRAM) $(TARGETDIR)/flox $(DESTDIR)$(bindir);
 
 
 # ---------------------------------------------------------------------------- #

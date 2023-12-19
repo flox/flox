@@ -319,10 +319,9 @@ AM_CONDITIONAL([ENABLE_DEBUG], [test "$ENABLE_DEBUG" = 'yes'])
 AS_IF([test "$ENABLE_DEBUG" = 0], [ENABLE_DEBUG=no])
 
 AS_IF([test "$ENABLE_DEBUG" != 'no'],
-  [AC_DEFINE([DEBUG], [1], [Enable debug mode])
+  [AC_DEFINE_UNQUOTED([DEBUG], [1], [Enable debug mode])
    CXXFLAGS="$CXXFLAGS $DEBUG_CXXFLAGS";
    LDFLAGS="$LDFLAGS $DEBUG_LDFLAGS";
-   CARGOFLAGS="${CARGOFLAGS:+$CARGOFLAGS }--debug";
    AC_MSG_NOTICE([Enabled debug mode])])
 
 
@@ -373,9 +372,11 @@ AS_IF([test "$ENABLE_RELEASE" = 0], [ENABLE_RELEASE=no])
 AS_IF([test "$ENABLE_RELEASE" != 'no'],
   [AS_IF([test "$ENABLE_RELEASE" != 'no'],
          [AC_MSG_ERROR([Release mode and debug mode may not be used together])])
-   AC_DEFINE([RELEASE], [Enable release mode])
+   AC_DEFINE_UNQUOTED([RELEASE], [1], [Enable release mode])
    CXXFLAGS="$CXXFLAGS $RELEASE_CXXFLAGS";
    LDFLAGS="$LDFLAGS $RELEASE_LDFLAGS";
+   CARGOFLAGS="${CARGOFLAGS:+$CARGOFLAGS }--release";
+   FLOX_CLI_targetdir='target/release';
    AC_MSG_NOTICE([Enabled release mode])])
 
 
@@ -423,14 +424,17 @@ AC_SUBST([WITH_FLOX_CLI])
 # -------------------
 
 AC_SUBST([REPO_ROOT], ["$abs_srcdir"])
+AC_SUBST([PKGS_DIR], ["$REPO_ROOT/pkgs"])
+AC_SUBST([SHELLS_DIR], ["$REPO_ROOT/shells"])
 AC_SUBST([PKGDB_ROOT], ["$REPO_ROOT/pkgdb"])
 AC_SUBST([PKGDB_TESTS_DIR], ["$PKGDB_ROOT/tests"])
 AC_SUBST([FLOX_CLI_ROOT], ["$REPO_ROOT/cli"])
 AC_SUBST([FLOX_CLI_TESTS_DIR], ["$FLOX_CLI_ROOT/tests"])
-AC_SUBST([FLOX_CLI_DISTDIR], ["$FLOX_CLI_ROOT/dist"])
-AC_SUBST([CRATES_DIR], ["$FLOX_CLI_ROOT/crates"])
-AC_SUBST([PKGS_DIR], ["$REPO_ROOT/pkgs"])
-AC_SUBST([SHELLS_DIR], ["$REPO_ROOT/shells"])
+
+# Defined relative to `$(abs_top_builddir)/cli/'
+AC_SUBST([FLOX_CLI_distdir],   [dist])
+AC_SUBST([FLOX_CLI_targetdir], [target/debug])
+AC_SUBST([FLOX_CLI_tardir],    ["$distdir"])
 
 # Used to determine if a dependency has changed.
 DEPFILES="$REPO_ROOT/flake.nix $REPO_ROOT/flake.lock"

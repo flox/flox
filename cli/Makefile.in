@@ -160,7 +160,6 @@ COV_CXXFLAGS = @COV_CXXFLAGS@
 CP = @CP@
 CPP = @CPP@
 CPPFLAGS = @CPPFLAGS@
-CRATES_DIR = @CRATES_DIR@
 CSCOPE = @CSCOPE@
 CTAGS = @CTAGS@
 CXX = @CXX@
@@ -190,9 +189,11 @@ EXEEXT = @EXEEXT@
 FGREP = @FGREP@
 FILECMD = @FILECMD@
 FIND = @FIND@
-FLOX_CLI_DISTDIR = @FLOX_CLI_DISTDIR@
 FLOX_CLI_ROOT = @FLOX_CLI_ROOT@
 FLOX_CLI_TESTS_DIR = @FLOX_CLI_TESTS_DIR@
+FLOX_CLI_distdir = @FLOX_CLI_distdir@
+FLOX_CLI_tardir = @FLOX_CLI_tardir@
+FLOX_CLI_targetdir = @FLOX_CLI_targetdir@
 GIT = @GIT@
 GREP = @GREP@
 HIVEMIND = @HIVEMIND@
@@ -352,7 +353,9 @@ top_srcdir = @top_srcdir@
 ACLOCAL_AMFLAGS = -I ../build-aux/m4
 
 # ---------------------------------------------------------------------------- #
-TARDIR = $(distdir)
+DISTDIR = $(abs_builddir)/$(FLOX_CLI_distdir)
+TARDIR = $(FLOX_CLI_distdir)/$(FLOX_CLI_tardir)
+TARGETDIR = $(abs_builddir)/$(FLOX_CLI_targetdir)
 
 # ---------------------------------------------------------------------------- #
 EXTRA_DIST = README.md Cargo.toml Cargo.lock flox floxd flox-rust-sdk \
@@ -562,18 +565,22 @@ copy-srcs:
 
 # ---------------------------------------------------------------------------- #
 
-build: copy-srcs
-	$(MAKE) $(AM_MAKEFLAGS) -C $(abs_top_builddir)/pkgdb bin/pkgdb$(EXEEXT)
-	$(CARGO) build $(CARGOFLAGS);
+# Define build targets for release and debug builds
 
-$(abs_builddir)/target/debug/flox: build
+# TODO: Use `--target-dir' and `--out-dir'.
+#       You need to check other existing usage of `target/{debug,release}'
 
-build-release: copy-srcs
-	$(MAKE) $(AM_MAKEFLAGS) -C $(abs_top_builddir)/pkgdb install;
-	PKGDB_BIN="$(DESTDIR)$(bindir)/pkgdb$(EXEEXT)"  \
-	$(CARGO) build $(CARGOFLAGS) --release;
+# TODO: Use environment variable to set the pkgdb binary path
+@ENABLE_RELEASE_TRUE@build: copy-srcs
+@ENABLE_RELEASE_TRUE@	$(MAKE) $(AM_MAKEFLAGS) -C $(top_builddir)/pkgdb install;
+@ENABLE_RELEASE_TRUE@	PKGDB_BIN="$(DESTDIR)$(bindir)/pkgdb$(EXEEXT)"  \
+@ENABLE_RELEASE_TRUE@	$(CARGO) build $(CARGOFLAGS);
 
-$(abs_builddir)/target/release/flox: build-release
+@ENABLE_RELEASE_FALSE@build: copy-srcs
+@ENABLE_RELEASE_FALSE@	$(MAKE) $(AM_MAKEFLAGS) -C $(top_builddir)/pkgdb bin/pkgdb$(EXEEXT)
+@ENABLE_RELEASE_FALSE@	$(CARGO) build $(CARGOFLAGS);
+
+$(TARGETDIR)/flox: build
 
 # ---------------------------------------------------------------------------- #
 
@@ -582,7 +589,6 @@ $(abs_builddir)/target/release/flox: build-release
 # Default target builds the release version of the binary - otherwise
 # `make install' builds twice!
 
-all-local: CARGOFLAGS += --release
 all-local: build
 
 # ---------------------------------------------------------------------------- #
@@ -592,9 +598,9 @@ clean-local:
 
 # ---------------------------------------------------------------------------- #
 
-install-exec-local: $(abs_builddir)/target/release/flox
+install-exec-local: $(TARGETDIR)/flox
 	$(MKDIR_P) $(DESTDIR)$(bindir);
-	$(INSTALL_PROGRAM) $(abs_builddir)/target/release/flox $(DESTDIR)$(bindir);
+	$(INSTALL_PROGRAM) $(TARGETDIR)/flox $(DESTDIR)$(bindir);
 
 # ---------------------------------------------------------------------------- #
 #
