@@ -40,7 +40,7 @@ pub struct UpgradeResult(pub Vec<String>);
 pub enum CallPkgDbError {
     #[error(transparent)]
     PkgDbError(#[from] PkgDbError),
-    #[error("couldn't parse pkgdb error in expected JSON format: {0}")]
+    #[error("couldn't parse pkgdb error in expected JSON format")]
     ParsePkgDbError(#[source] serde_json::Error),
     #[error("couldn't parse pkgdb output as JSON")]
     ParseJSON(#[source] serde_json::Error),
