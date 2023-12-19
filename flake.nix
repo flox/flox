@@ -158,6 +158,9 @@
           alejandra.verbosity = "quiet";
           rust.cargoManifestPath = "cli/Cargo.toml";
         };
+        tools = {
+          clang-tools = final.clang-tools_16;
+        };
       };
 
       # Customized `gh' executable used for auth.
