@@ -174,23 +174,23 @@ AC_PATH_PROG([BATS], [bats], [$MISSING bats])
 
 FLOX_PROG_NIX
 
-AC_ARG_VAR([NIX_FMT], [Nix code formatter])
+AC_ARG_VAR([NIX_FMT], [Nix code formatter @<:@default=alejandra@:>@])
 AC_PATH_PROG([NIX_FMT], [alejandra], [$MISSING alejandra])
 
 AC_ARG_VAR([CARGO], [Rust package manager])
 AC_PATH_PROG([CARGO], [cargo], [$MISSING cargo])
-AC_ARG_VAR([RUST_FMT], [Rust code formatter])
+AC_ARG_VAR([RUST_FMT], [Rust code formatter @<:@default=rustfmt@:>@])
 AC_PATH_PROG([RUST_FMT], [rustfmt], [$MISSING rustfmt])
-AC_ARG_VAR([RUST_LINT], [Rust code linter])
+AC_ARG_VAR([RUST_LINT], [Rust code linter @<:@default=clippy@:>@])
 AC_PATH_PROG([RUST_LINT], [clippy], [$MISSING clippy])
 
 AC_ARG_VAR([BEAR], [Build EAR])
 AC_PATH_PROG([BEAR], [bear], [$MISSING bear])
 
-AC_ARG_VAR([CXX_FMT], [C++ code formatter])
+AC_ARG_VAR([CXX_FMT], [C++ code formatter @<:@default=clang-format@:>@])
 AC_PATH_PROG([CXX_FMT], [clang-format], [$MISSING clang-format])
 
-AC_ARG_VAR([CXX_LINT], [C++ code linter])
+AC_ARG_VAR([CXX_LINT], [C++ code linter @<:@default=clang-tidy@:>@])
 AC_PATH_PROG([CXX_LINT], [clang-tidy], [$MISSING clang-tidy])
 
 AC_ARG_VAR([DOXYGEN], [Generate documentation])

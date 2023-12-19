@@ -1695,13 +1695,13 @@ Some influential environment variables:
   SQLITE      Command line interface for SQLite
   BATS        Bash Automated Testing System
   NIX         Purely functional package manager
-  NIX_FMT     Nix code formatter
+  NIX_FMT     Nix code formatter [default=alejandra]
   CARGO       Rust package manager
-  RUST_FMT    Rust code formatter
-  RUST_LINT   Rust code linter
+  RUST_FMT    Rust code formatter [default=rustfmt]
+  RUST_LINT   Rust code linter [default=clippy]
   BEAR        Build EAR
-  CXX_FMT     C++ code formatter
-  CXX_LINT    C++ code linter
+  CXX_FMT     C++ code formatter [default=clang-format]
+  CXX_LINT    C++ code linter [default=clang-tidy]
   DOXYGEN     Generate documentation
   SEMVER      Semantic versioning helper
   TAR         Manipulate tape archives
