@@ -50,8 +50,8 @@ configure *args='': bootstrap
 # ---------------------------------------------------------------------------- #
 
 # Build the compilation database
-build-cdb:
-    @bear -- make -C build/pkgdb -j -s bin/pkgdb tests;
+build-cdb *args='':
+    @make -C build -j cdb "$@";
 
 # Build only pkgdb
 build-pkgdb *args='':

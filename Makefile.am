@@ -21,6 +21,14 @@ cli:
 
 
 # ---------------------------------------------------------------------------- #
+
+.PHONY: cdb
+cdb:
+	$(MAKE) $(AM_MAKEFLAGS) -C $(builddir)/pkgdb clean;
+	$(BEAR) -- $(MAKE) $(AM_MAKEFLAGS) -C $(builddir)/pkgdb bin/pkgdb tests;
+
+
+# ---------------------------------------------------------------------------- #
 #
 #
 #
