@@ -133,43 +133,46 @@ run( int argc, char * argv[] )
   throw flox::FloxException( "unrecognized command" );
 }
 
+/* -------------------------------------------------------------------------- */
+int
+printAndReturnException( const flox::FloxException & err )
+{
+  if ( ! isatty( STDOUT_FILENO ) )
+    {
+      std::cout << nlohmann::json( err ).dump() << std::endl;
+    }
+  else { std::cerr << err.what() << std::endl; }
+
+  return err.getErrorCode();
+}
 
 /* -------------------------------------------------------------------------- */
 
 int
 main( int argc, char * argv[] )
 {
-
-  std::optional<flox::FloxException> caughtException;
-
   try
     {
       return run( argc, argv );
     }
   catch ( const flox::FloxException & err )
     {
-      caughtException = std::move( err );
+      return printAndReturnException( err );
     }
   // TODO: we may want to catch these closer to where they are
   //       originally thrown.
   // TODO: handle IFD build errors.
   catch ( const nix::Error & err )
     {
-      caughtException
-        = flox::NixException( nix::filterANSIEscapes( err.what(), true ) );
+      return printAndReturnException(
+        flox::NixException( "running pkgdb subcommand",
+                            nix::filterANSIEscapes( err.what(), true ) ) );
     }
   catch ( const std::exception & err )
     {
-      caughtException = flox::CaughtException( err.what() );
+      return printAndReturnException(
+        flox::CaughtException( "running pkgdb subcommand", err.what() ) );
     }
-
-  if ( ! isatty( STDOUT_FILENO ) )
-    {
-      std::cout << nlohmann::json( *caughtException ).dump() << std::endl;
-    }
-  else { std::cerr << caughtException->what() << std::endl; }
-
-  return caughtException->getErrorCode();
 }
 
 

@@ -642,7 +642,7 @@ pub enum CoreEnvironmentError {
     #[error("error building environment")]
     BuildEnv(#[source] CallPkgDbError),
 
-    #[error("unexpected output from pkgdb buildenv")]
+    #[error("unexpected output from environment builder command")]
     ParseBuildEnvOutput(#[source] serde_json::Error),
     // endregion
 }

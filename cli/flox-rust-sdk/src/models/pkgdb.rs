@@ -79,6 +79,8 @@ pub struct PkgDbError {
 }
 
 impl<'de> Deserialize<'de> for PkgDbError {
+    // Custom deserializer was likely added to control error messages. If we
+    // stop propagating them to the user, we could drop the custom deserializer.
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
@@ -117,9 +119,10 @@ impl<'de> Deserialize<'de> for PkgDbError {
             caught: caught_message_contents.map(|m| CaughtMsgError { message: m }),
         });
 
-        if let Some(k) = map.keys().next() {
-            Err(serde::de::Error::unknown_field(k, &[]))?
-        }
+        debug_assert!(
+            map.keys().next().is_none(),
+            "unknown field in pkgdb error JSON"
+        );
 
         Ok(PkgDbError {
             exit_code,
