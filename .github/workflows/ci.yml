@@ -64,21 +64,17 @@ jobs:
 
       - name: "Test (pkgdb)"
         run: |
-          nix develop -L                    \
-            --accept-flake-config           \
-            --no-update-lock-file           \
-            --command make -C pkgdb tests;
-          nix develop -L                    \
-            --accept-flake-config           \
-            --no-update-lock-file           \
-            --command make -C pkgdb check;
+          nix develop -L                \
+            --accept-flake-config       \
+            --no-update-lock-file       \
+            --command just test-pkgdb;
 
       - name: "Build Docs"
         run: |
-          nix develop -L                   \
-            --accept-flake-config          \
-            --no-update-lock-file          \
-            --command make -C pkgdb docs;
+          nix develop -L                         \
+            --accept-flake-config                \
+            --no-update-lock-file                \
+            --command doxygen ./pkgdb/Doxyfile;
           chmod -c -R +rX "pkgdb/docs/"|while read line; do
             echo "::warning title=Invalid file permissions fixed::$line";
           done
@@ -143,20 +139,18 @@ jobs:
 
       - name: "Build (pkgdb)"
         run: |
-          nix develop -L                   \
-            --accept-flake-config          \
-            --no-update-lock-file          \
-            '.#default'                    \
-              --command make -C pkgdb -j;
+          nix develop -L                \
+            --accept-flake-config       \
+            --no-update-lock-file       \
+            --command just build-pkgdb
 
       - name: "Build (cli)"
         run: |
           pushd ./cli;
-          nix develop -L                                               \
-            --accept-flake-config                                      \
-            --no-update-lock-file                                      \
-              --command sh -c                                          \
-                'PKGDB_BIN="${PWD%/*}/pkgdb/bin/pkgdb" cargo build;';
+          nix develop -L              \
+            --accept-flake-config     \
+            --no-update-lock-file     \
+            --command just build-cli
           popd;
 
       - name: "Test (./cli: cargo test)"
@@ -166,27 +160,27 @@ jobs:
           nix develop -L                                         \
             --accept-flake-config                                \
             --no-update-lock-file                                \
-              --command sh -c '
-                PKGDB_BIN="${PWD%/*}/pkgdb/bin/pkgdb"            \
-                cargo test --locked --workspace -F extra-tests;
-              ';
+            --command sh -c '
+              PKGDB_BIN="${PWD%/*}/build/pkgdb/bin/pkgdb"      \
+              cargo test --locked --workspace -F extra-tests;
+            ';
           popd;
 
       - name: "Test (./cli/tests)"
         run: |
           pushd ./cli;
-          nix develop -L                 \
-            --accept-flake-config        \
-            --no-update-lock-file        \
-              --command flox-cli-tests;
+          nix develop -L               \
+            --accept-flake-config      \
+            --no-update-lock-file      \
+            --command flox-cli-tests;
           popd;
 
       - name: "Test (./tests)"
         run: |
-          nix develop -L             \
-            --accept-flake-config    \
-            --no-update-lock-file    \
-              --command flox-tests;
+          nix develop -L           \
+            --accept-flake-config  \
+            --no-update-lock-file  \
+            --command flox-tests;
 
   nix-build:
     name: "Nix build"
