@@ -67,13 +67,6 @@
       FLOX_ETC_DIR = ../../assets/etc;
       FLOX_ZDOTDIR = ../../assets/flox.zdotdir;
 
-      # Modified nix completion scripts
-      # used to pass through nix completion ability for `flox nix *`
-      NIX_BASH_COMPLETION_SCRIPT =
-        ../../cli/flox/src/static/nix_bash_completion.sh;
-      NIX_ZSH_COMPLETION_SCRIPT =
-        ../../cli/flox/src/static/nix_zsh_completion.sh;
-
       # bundling of internally used nix scripts
       FLOX_RESOLVER_SRC = builtins.path {path = ../../resolver;};
 

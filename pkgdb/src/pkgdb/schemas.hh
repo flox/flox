@@ -230,7 +230,7 @@ LEFT OUTER JOIN v_Semvers    ON ( Packages.semver = v_Semvers.semver )
 
 /* -------------------------------------------------------------------------- */
 
-}  /* End namespace `flox::pkgdb' */
+}  // namespace flox::pkgdb
 
 /* -------------------------------------------------------------------------- *
  *

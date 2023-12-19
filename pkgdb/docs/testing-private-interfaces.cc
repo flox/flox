@@ -19,17 +19,25 @@
  * This requires that you modify the visibility of methods that you want
  * to test. */
 
-class RealClass0 {
+class RealClass0
+{
 protected:
-  int times2( int x ) { return 2 * x; }
-};  /* End class `RealClass' */
+
+  int
+  times2( int x )
+  {
+    return 2 * x;
+  }
+}; /* End class `RealClass' */
 
 
 /* In practice this would be defined with your tests. */
-class TestClass0 : public RealClass0 {
+class TestClass0 : public RealClass0
+{
 public:
+
   using RealClass0::times2;
-};  /* End class `TestClass' */
+}; /* End class `TestClass' */
 
 
 /* -------------------------------------------------------------------------- */
@@ -40,19 +48,27 @@ public:
 
 class TestClass1;
 
-class RealClass1 {
+class RealClass1
+{
 private:
-    int times2( int x ) { return 2 * x; }
+
+  int
+  times2( int x )
+  {
+    return 2 * x;
+  }
 
   friend class TestClass1;
-};  /* End class `RealClass' */
+}; /* End class `RealClass' */
 
 
 /* In practice this would be defined with your tests. */
-class TestClass1 : RealClass1 {
-  public:
-    using RealClass1::times2;
-};  /* End class `TestClass' */
+class TestClass1 : RealClass1
+{
+public:
+
+  using RealClass1::times2;
+}; /* End class `TestClass' */
 
 
 /* -------------------------------------------------------------------------- */

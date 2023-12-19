@@ -68,6 +68,9 @@ pub struct Flox {
 
     pub uuid: uuid::Uuid,
 
+    /// Token to authenticate with floxhub.
+    /// It's populated from config during [Flox] initialization.
+    /// Checking for [None] can be used to check if the use is logged in.
     pub floxhub_token: Option<String>,
     pub floxhub_host: String,
 }
