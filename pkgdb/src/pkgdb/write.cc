@@ -413,13 +413,13 @@ attrPathsEqual( const AttrPath & left, const AttrPath & right )
     }
   return true;
 }
+//TODO move to a better place
+static std::vector<AttrPath> allowRecursive;
+static std::vector<AttrPath> allowPackage;
+static std::vector<AttrPath> disallowRecursive;
+static std::vector<AttrPath> disallowPackage;
 
-std::vector<AttrPath> allowRecursive;
-std::vector<AttrPath> allowPackage;
-std::vector<AttrPath> disallowRecursive;
-std::vector<AttrPath> disallowPackage;
-
-bool
+std::optional<bool>
 PkgDb::applyRules( const std::vector<std::string> & prefix,
                    const std::string &              attr )
 {
@@ -470,14 +470,40 @@ PkgDb::applyRules( const std::vector<std::string> & prefix,
   auto isPathPrefix = [&]( const AttrPath & prefix )
   {
     if ( prefix.size() > path.size() ) { return false; }
-    for ( auto lchar = prefix.begin(), rchar = path.begin();
-          lchar != prefix.end();
-          ++lchar, ++rchar )
+    auto lchar = prefix.begin();
+    auto rchar = path.begin();
+    for ( ; lchar != prefix.end(); ++lchar, ++rchar )
       {
         if ( lchar != rchar ) { return false; }
       }
     return true;
   };
+  if ( ( std::find_if( allowPackage.begin(), allowPackage.end(), eqPath )
+         != allowPackage.end() ) )
+    {
+      return true;
+    }
+  if ( ( std::find_if( disallowPackage.begin(), disallowPackage.end(), eqPath )
+         != disallowPackage.end() ) )
+    {
+      return false;
+    }
+  if ( ( std::find_if( disallowRecursive.begin(),
+                       disallowRecursive.end(),
+                       isPathPrefix )
+         != disallowRecursive.end() ) )
+    {
+      return false;
+    }
+  if ( ( std::find_if( allowRecursive.begin(),
+                       allowRecursive.end(),
+                       isPathPrefix )
+         != allowRecursive.end() ) )
+    {
+      return true;
+    }
+
+  return std::nullopt;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -518,37 +544,30 @@ PkgDb::scrape( nix::SymbolTable & syms, const Target & target, Todos & todo )
                          nix::lvlTalkative,
                          nix::actUnknown,
                          "\tevaluating attribute '" + pathS + "'" );
-
+      auto rulesAllowed = applyRules( prefix, syms[aname] );
+      if ( rulesAllowed.has_value() && (! (* rulesAllowed) )) { continue; }
       try
         {
           flox::Cursor child = cursor->getAttr( aname );
           if ( child->isDerivation() )
             {
-              // Use applyRules to check if the package is allowed
-              if ( applyRules( prefix, syms[aname] ) )
-                {
-                  this->addPackage( parentId, syms[aname], child );
-                }
+              this->addPackage( parentId, syms[aname], child );
               continue;
             }
 
           if ( ! tryRecur ) { continue; }
 
           if ( auto maybe = child->maybeGetAttr( "recurseForDerivations" );
-               ( maybe != nullptr ) && maybe->getBool() )
+               (* rulesAllowed) || (( maybe != nullptr ) && maybe->getBool() ))
             {
               flox::AttrPath path = prefix;
               path.emplace_back( syms[aname] );
 
-              // Use applyRules to check if the set is allowed
-              if ( applyRules( path, syms[aname] ) )
-                {
-                  row_id childId
-                    = this->addOrGetAttrSetId( syms[aname], parentId );
-                  todo.emplace( std::make_tuple( std::move( path ),
-                                                 std::move( child ),
-                                                 childId ) );
-                }
+              row_id childId
+                = this->addOrGetAttrSetId( syms[aname], parentId );
+              todo.emplace( std::make_tuple( std::move( path ),
+                                              std::move( child ),
+                                              childId ) );
             }
         }
       catch ( const nix::EvalError & err )
