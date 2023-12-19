@@ -97,7 +97,7 @@ Flox must be buildable using `flox` or `nix`.
 
 - Install the `rust-analyzer` plugin for your editor
    - See the [official installation instruction](https://rust-analyzer.github.io/manual.html#installation)
-     (in the `nix develop` subshell the toolchain will aready be provided, you 
+     (in the `nix develop` subshell the toolchain will aready be provided, you
       can skip right to your editor of choice)
 - If you prefer to open your editor at the project root, you'll need to help
   `rust-analyzer` find the rust workspace by configuing the`linkedProjects`
@@ -116,6 +116,10 @@ Flox must be buildable using `flox` or `nix`.
      "extra-tests"
   ]
   ```
+- If you use `foxundermoon.shell-format` on VS Code make sure to configure editor config support for it:
+  ```
+   "shellformat.useEditorConfig": true,
+  ```
 
 ## Git
 
@@ -124,10 +128,10 @@ Flox must be buildable using `flox` or `nix`.
 - [ ] All commits in a Pull Request are
       [signed](https://docs.github.com/en/authentication/managing-commit-signature-verification/signing-commits)
       and Verified by Github or via GPG.
-- [ ] As an outside contributor you need to accept the flox 
-      [Contributor License Agreement](.github/CLA.md) by adding your Git/Github 
-      details in a row at the end of the 
-      [`CONTRIBUTORS.csv`](.github/CONTRIBUTORS.csv) file by way of the same 
+- [ ] As an outside contributor you need to accept the flox
+      [Contributor License Agreement](.github/CLA.md) by adding your Git/Github
+      details in a row at the end of the
+      [`CONTRIBUTORS.csv`](.github/CONTRIBUTORS.csv) file by way of the same
       pull request or one done previously.
 
 ### Commits
@@ -291,7 +295,7 @@ You add tags to a test with a special comment:
 }
 ```
 
-You can apply a tag to tests in a file with another special comment, which 
+You can apply a tag to tests in a file with another special comment, which
 applies the tags to all of the tests that come after the comment:
 ```
 # bats file_tags=foo

@@ -7,10 +7,9 @@
 #
 # ---------------------------------------------------------------------------- #
 
-bats_load_library bats-support;
-bats_load_library bats-assert;
-bats_require_minimum_version '1.5.0';
-
+bats_load_library bats-support
+bats_load_library bats-assert
+bats_require_minimum_version '1.5.0'
 
 # ---------------------------------------------------------------------------- #
 
@@ -18,41 +17,38 @@ bats_require_minimum_version '1.5.0';
 repo_root_setup() {
   if [[ -z "${REPO_ROOT:-}" ]]; then
     if [[ -d "$PWD/../.git" ]]; then
-      REPO_ROOT="${PWD%/*}";
+      REPO_ROOT="${PWD%/*}"
     else
-      REPO_ROOT="$( git rev-parse --show-toplevel||:; )";
+      REPO_ROOT="$(git rev-parse --show-toplevel || :)"
     fi
     if [[ -z "$REPO_ROOT" ]] && [[ -d "$PWD/src/pkgdb/read.cc" ]]; then
-      REPO_ROOT="${PWD%/*}";
+      REPO_ROOT="${PWD%/*}"
     fi
   fi
-  export REPO_ROOT;
+  export REPO_ROOT
 }
-
 
 # ---------------------------------------------------------------------------- #
 
 # Locate the directory containing test resources.
 tests_dir_setup() {
   if [[ -n "${__PD_RAN_TESTS_DIR_SETUP:-}" ]]; then return 0; fi
-  repo_root_setup;
+  repo_root_setup
   if [[ -z "${TESTS_DIR:-}" ]]; then
     case "${BATS_TEST_DIRNAME:-}" in
-      */tests) TESTS_DIR="$( readlink -f "$BATS_TEST_DIRNAME"; )"; ;;
-      *)       TESTS_DIR="$REPO_ROOT/pkgdb/tests"; ;;
+      */tests) TESTS_DIR="$(readlink -f "$BATS_TEST_DIRNAME")" ;;
+      *) TESTS_DIR="$REPO_ROOT/pkgdb/tests" ;;
     esac
     if ! [[ -d "$TESTS_DIR" ]]; then
-      echo "tests_dir_setup: \`TESTS_DIR' must be a directory" >&2;
-      return 1;
+      echo "tests_dir_setup: \`TESTS_DIR' must be a directory" >&2
+      return 1
     fi
   fi
-  export TESTS_DIR;
-  export __PD_RAN_TESTS_DIR_SETUP=:;
+  export TESTS_DIR
+  export __PD_RAN_TESTS_DIR_SETUP=:
 }
 
-
 # ---------------------------------------------------------------------------- #
-
 
 print_var() { eval echo "  $1: \$$1"; }
 
@@ -60,26 +56,24 @@ print_var() { eval echo "  $1: \$$1"; }
 # We sometimes refer to these in order to copy resources from the system into
 # our isolated sandboxes.
 reals_setup() {
-  repo_root_setup;
-  tests_dir_setup;
+  repo_root_setup
+  tests_dir_setup
   {
-    print_var REPO_ROOT;
-    print_var TESTS_DIR;
-    print_var PKGDB_BIN;
-  } >&3;
+    print_var REPO_ROOT
+    print_var TESTS_DIR
+    print_var PKGDB_BIN
+  } >&3
 }
-
 
 # ---------------------------------------------------------------------------- #
 
 # Lookup system pair recognized by `nix' for this system.
 nix_system_setup() {
   if [[ -z "${NIX_SYSTEM:-}" ]]; then
-    NIX_SYSTEM="$( nix eval --impure --expr builtins.currentSystem --raw; )";
+    NIX_SYSTEM="$(nix eval --impure --expr builtins.currentSystem --raw)"
   fi
-  export NIX_SYSTEM;
+  export NIX_SYSTEM
 }
-
 
 # ---------------------------------------------------------------------------- #
 
@@ -87,45 +81,41 @@ nix_system_setup() {
 misc_vars_setup() {
   if [[ -n "${__PD_RAN_MISC_VARS_SETUP:-}" ]]; then return 0; fi
 
-  export _PKGDB_TEST_SUITE_MODE=:;
+  export _PKGDB_TEST_SUITE_MODE=:
 
-  NIXPKGS_REV="e8039594435c68eb4f780f3e9bf3972a7399c4b1";
-  NIXPKGS_REF="github:NixOS/nixpkgs/$NIXPKGS_REV";
+  NIXPKGS_REV="e8039594435c68eb4f780f3e9bf3972a7399c4b1"
+  NIXPKGS_REF="github:NixOS/nixpkgs/$NIXPKGS_REV"
 
   NIXPKGS_FINGERPRINT="5fde12e3424840cc2752dae09751b09b03f5a33"
-  NIXPKGS_FINGERPRINT="${NIXPKGS_FINGERPRINT}c3ec4de672fc89d236720bdc7";
+  NIXPKGS_FINGERPRINT="${NIXPKGS_FINGERPRINT}c3ec4de672fc89d236720bdc7"
 
-  export NIXPKGS_REV NIXPKGS_REF NIXPKGS_FINGERPRINT;
+  export NIXPKGS_REV NIXPKGS_REF NIXPKGS_FINGERPRINT
 
-  export __PD_RAN_MISC_VARS_SETUP=:;
+  export __PD_RAN_MISC_VARS_SETUP=:
 }
-
 
 # ---------------------------------------------------------------------------- #
 
 # Set variables related to locating test resources and misc. bats settings.
 env_setup() {
-  nix_system_setup;
-  misc_vars_setup;
+  nix_system_setup
+  misc_vars_setup
   {
-    print_var NIX_SYSTEM;
-    print_var NIXPKGS_REV;
-    print_var NIXPKGS_REF;
-  } >&3;
+    print_var NIX_SYSTEM
+    print_var NIXPKGS_REV
+    print_var NIXPKGS_REF
+  } >&3
 }
-
 
 # ---------------------------------------------------------------------------- #
 
 common_suite_setup() {
-  reals_setup;
-  env_setup;
+  reals_setup
+  env_setup
 }
-
 
 # Recognized by `bats'.
 setup_suite() { common_suite_setup; }
-
 
 # ---------------------------------------------------------------------------- #
 #
