@@ -17,11 +17,11 @@ project_setup() {
   export PROJECT_DIR="${BATS_TEST_TMPDIR?}/test"
   rm -rf "$PROJECT_DIR"
   mkdir -p "$PROJECT_DIR"
-  pushd "$PROJECT_DIR" >/dev/null || return
+  pushd "$PROJECT_DIR" > /dev/null || return
 }
 
 project_teardown() {
-  popd >/dev/null || return
+  popd > /dev/null || return
   rm -rf "${PROJECT_DIR?}"
   unset PROJECT_DIR
 }
@@ -29,7 +29,7 @@ project_teardown() {
 # ---------------------------------------------------------------------------- #
 
 setup() {
-  home_setup test;
+  home_setup test
   common_test_setup
   project_setup
   floxhub_setup "owner"
@@ -42,20 +42,24 @@ teardown() {
 }
 
 function make_dummy_env() {
-  OWNER="$1"; shift;
-  ENV_NAME="$1"; shift;
+  OWNER="$1"
+  shift
+  ENV_NAME="$1"
+  shift
 
-  pushd "$(mktemp -d)" >/dev/null || return
+  pushd "$(mktemp -d)" > /dev/null || return
   "$FLOX_BIN" init --name "$ENV_NAME"
   "$FLOX_BIN" push --owner "$OWNER"
   "$FLOX_BIN" delete --force
-  popd >/dev/null || return
+  popd > /dev/null || return
 }
 
 # push an update to floxhub from another peer
 function update_dummy_env() {
-  OWNER="$1"; shift;
-  ENV_NAME="$1"; shift;
+  OWNER="$1"
+  shift
+  ENV_NAME="$1"
+  shift
 
   "$FLOX_BIN" install gzip --remote "$OWNER/$ENV_NAME"
 }
@@ -63,7 +67,7 @@ function update_dummy_env() {
 # ---------------------------------------------------------------------------- #
 # bats test_tags=pull,pull:logged-out
 @test "l1: pull login: running flox pull without login succeeds" {
-  unset FLOX_FLOXHUB_TOKEN; # logout, effectively
+  unset FLOX_FLOXHUB_TOKEN # logout, effectively
 
   run "$FLOX_BIN" pull --remote owner/name # dummy remote as we are not actually pulling anything
   assert_success
@@ -73,16 +77,16 @@ function update_dummy_env() {
 @test "l2.a/l4: flox pull accepts a flox hub namespace/environment, creates .flox if it does not exist" {
   run "$FLOX_BIN" pull --remote owner/name # dummy remote as we are not actually pulling anything
   assert_success
-  assert [ -e ".flox/env.json" ];
-  assert [ -e ".flox/env.lock" ];
-  assert [ $(cat .flox/env.json | jq -r '.name') == "name" ];
-  assert [ $(cat .flox/env.json | jq -r '.owner') == "owner" ];
+  assert [ -e ".flox/env.json" ]
+  assert [ -e ".flox/env.lock" ]
+  assert [ $(cat .flox/env.json | jq -r '.name') == "name" ]
+  assert [ $(cat .flox/env.json | jq -r '.owner') == "owner" ]
 }
 
 # bats test_tags=pull:l2,pull:l2:b
 @test "l2.b: flox pull with --remote fails if an env is already present" {
 
-    "$FLOX_BIN" pull --remote owner/name # dummy remote as we are not actually pulling anything
+  "$FLOX_BIN" pull --remote owner/name # dummy remote as we are not actually pulling anything
 
   run "$FLOX_BIN" pull --remote owner/name # dummy remote as we are not actually pulling anything
   assert_failure
@@ -96,12 +100,11 @@ function update_dummy_env() {
 
   run "$FLOX_BIN" pull --remote owner/name --dir ./inner
   assert_success
-  assert [ -e "inner/.flox/env.json" ];
-  assert [ -e "inner/.flox/env.lock" ];
-  assert [ $(cat inner/.flox/env.json | jq -r '.name') == "name" ];
-  assert [ $(cat inner/.flox/env.json | jq -r '.owner') == "owner" ];
+  assert [ -e "inner/.flox/env.json" ]
+  assert [ -e "inner/.flox/env.lock" ]
+  assert [ $(cat inner/.flox/env.json | jq -r '.name') == "name" ]
+  assert [ $(cat inner/.flox/env.json | jq -r '.owner') == "owner" ]
 }
-
 
 # bats test_tags=pull:l3,pull:l3:a
 @test "l3.a: pulling without namespace/environment" {
@@ -174,7 +177,7 @@ function update_dummy_env() {
 # try pulling from floxhub authenticated with a test token
 @test "l?: pull environment from floxhub" {
   skip "floxtest/default is not available for all systems"
-  unset __FLOX_FLOXHUB_URL;
+  unset __FLOX_FLOXHUB_URL
   run "$FLOX_BIN" pull --remote floxtest/default
   assert_success
 }
