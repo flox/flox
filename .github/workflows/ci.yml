@@ -57,10 +57,11 @@ jobs:
 
       - name: "Build"
         run: |
-          nix develop -L                 \
-            --accept-flake-config        \
-            --no-update-lock-file        \
-            --command just build-pkgdb;
+          nix develop -L                    \
+            --accept-flake-config           \
+            --no-update-lock-file           \
+            --command just build-pkgdb      \
+            --disable-dependency-tracking;
 
       - name: "Test (pkgdb)"
         run: |
