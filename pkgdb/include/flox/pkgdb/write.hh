@@ -296,7 +296,7 @@ public:
    */
 
 
-  bool
+  std::optional<bool>
   applyRules( const std::vector<std::string> & prefix,
               const std::string &              attr );
 
