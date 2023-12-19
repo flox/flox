@@ -40,8 +40,7 @@ LockfileRaw::check() const
 void
 Lockfile::checkGroups() const
 {
-  for ( const auto & [_, group] :
-        this->getManifest().getGroupedDescriptors() )
+  for ( const auto & [_, group] : this->getManifest().getGroupedDescriptors() )
     {
       for ( const auto & system : this->manifest.getSystems() )
         {
