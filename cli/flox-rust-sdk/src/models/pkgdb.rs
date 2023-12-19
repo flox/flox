@@ -27,6 +27,12 @@ pub struct UpgradeResultJSON {
     pub lockfile: Value,
 }
 
+/// The JSON output of a `pkgdb buildenv` call
+#[derive(Deserialize)]
+pub struct BuildEnvResult {
+    pub store_path: String,
+}
+
 #[derive(Deserialize)]
 pub struct UpgradeResult(pub Vec<String>);
 
@@ -34,8 +40,8 @@ pub struct UpgradeResult(pub Vec<String>);
 pub enum CallPkgDbError {
     #[error(transparent)]
     PkgDbError(#[from] PkgDbError),
-    #[error("couldn't parse pkgdb error as JSON: {0}")]
-    ParsePkgDbError(String),
+    #[error("couldn't parse pkgdb error in expected JSON format")]
+    ParsePkgDbError(#[source] serde_json::Error),
     #[error("couldn't parse pkgdb output as JSON")]
     ParseJSON(#[source] serde_json::Error),
     #[error("call to pkgdb failed")]
@@ -49,12 +55,9 @@ pub fn call_pkgdb(mut pkgdb_cmd: Command) -> Result<Value, CallPkgDbError> {
     let output = pkgdb_cmd.output().map_err(CallPkgDbError::PkgDbCall)?;
     // If command fails, try to parse stdout as a PkgDbError
     if !output.status.success() {
-        if let Ok::<PkgDbError, _>(pkgdb_err) = serde_json::from_slice(&output.stdout) {
-            Err(pkgdb_err)?
-        } else {
-            Err(CallPkgDbError::ParsePkgDbError(
-                String::from_utf8_lossy(&output.stdout).to_string(),
-            ))
+        match serde_json::from_slice::<PkgDbError>(&output.stdout) {
+            Ok(pkgdb_err) => Err(pkgdb_err)?,
+            Err(e) => Err(CallPkgDbError::ParsePkgDbError(e))?,
         }
     // If command succeeds, try to parse stdout as JSON value
     } else {
@@ -70,32 +73,33 @@ pub struct PkgDbError {
     /// the category of error.
     pub exit_code: u64,
     /// The generic message for this category of error.
-    pub category_message: Option<String>,
+    pub category_message: String,
     /// The more contextual message for the specific error that occurred.
     pub context_message: Option<ContextMsgError>,
 }
 
 impl<'de> Deserialize<'de> for PkgDbError {
+    // Custom deserializer was likely added to control error messages. If we
+    // stop propagating them to the user, we could drop the custom deserializer.
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
     {
-        let map = serde_json::Map::<String, Value>::deserialize(deserializer)?;
+        let mut map = serde_json::Map::<String, Value>::deserialize(deserializer)?;
         let exit_code = map
-            .get("exit_code")
+            .remove("exit_code")
             .ok_or_else(|| serde::de::Error::missing_field("exit_code"))?
             .as_u64()
             .ok_or_else(|| serde::de::Error::custom("exit code is not an unsigned integer"))?;
-        let category_message = map
-            .get("category_message")
-            .map(|m| {
-                m.as_str()
-                    .ok_or_else(|| serde::de::Error::custom("category message was not a string"))
-                    .map(|m| m.to_owned())
-            })
-            .transpose()?;
+        let category_message = match map.remove("category_message") {
+            Some(m) => m
+                .as_str()
+                .ok_or_else(|| serde::de::Error::custom("category message was not a string"))
+                .map(|m| m.to_owned()),
+            None => Err(serde::de::Error::missing_field("category_message")),
+        }?;
         let context_message_contents = map
-            .get("context_message")
+            .remove("context_message")
             .map(|m| {
                 m.as_str()
                     .ok_or_else(|| serde::de::Error::custom("context message was not a string"))
@@ -103,7 +107,7 @@ impl<'de> Deserialize<'de> for PkgDbError {
             })
             .transpose()?;
         let caught_message_contents = map
-            .get("caught_message")
+            .remove("caught_message")
             .map(|m| {
                 m.as_str()
                     .ok_or_else(|| serde::de::Error::custom("caught message was not a string"))
@@ -114,6 +118,12 @@ impl<'de> Deserialize<'de> for PkgDbError {
             message: m,
             caught: caught_message_contents.map(|m| CaughtMsgError { message: m }),
         });
+
+        debug_assert!(
+            map.keys().next().is_none(),
+            "unknown field in pkgdb error JSON"
+        );
+
         Ok(PkgDbError {
             exit_code,
             category_message,
@@ -124,11 +134,7 @@ impl<'de> Deserialize<'de> for PkgDbError {
 
 impl Display for PkgDbError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if let Some(category_message) = &self.category_message {
-            write!(f, "{}", category_message)?;
-        } else {
-            write!(f, "error calling pkgdb")?;
-        }
+        write!(f, "{}", self.category_message)?;
         Ok(())
     }
 }

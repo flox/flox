@@ -19,6 +19,7 @@ use crate::models::manifest::{
     TomlEditError,
 };
 use crate::models::pkgdb::{
+    BuildEnvResult,
     CallPkgDbError,
     UpdateResult,
     UpgradeResult,
@@ -522,18 +523,11 @@ impl LockedManifest {
 
         debug!("building environment with command: {pkgdb_cmd:?}");
 
-        let pkgdb_output = pkgdb_cmd
-            .output()
-            .map_err(CoreEnvironmentError::BuildEnvCall)?;
+        let result: BuildEnvResult =
+            serde_json::from_value(call_pkgdb(pkgdb_cmd).map_err(CoreEnvironmentError::BuildEnv)?)
+                .map_err(CoreEnvironmentError::ParseBuildEnvOutput)?;
 
-        if !pkgdb_output.status.success() {
-            let stderr = String::from_utf8_lossy(&pkgdb_output.stderr).into_owned();
-            return Err(CoreEnvironmentError::BuildEnv(stderr));
-        }
-
-        let stdout = String::from_utf8_lossy(&pkgdb_output.stdout).into_owned();
-
-        Ok(PathBuf::from(stdout.trim()))
+        Ok(PathBuf::from(result.store_path))
     }
 }
 impl ToString for LockedManifest {
@@ -645,11 +639,11 @@ pub enum CoreEnvironmentError {
     #[error("failed to upgrade environment")]
     UpgradeFailed(#[source] CallPkgDbError),
     // endregion
-    #[error("call to `pkgdb buildenv` failed")]
-    BuildEnvCall(#[source] std::io::Error),
+    #[error("error building environment")]
+    BuildEnv(#[source] CallPkgDbError),
 
-    #[error("error building environment: {0}")]
-    BuildEnv(String),
+    #[error("unexpected output from environment builder command")]
+    ParseBuildEnvOutput(#[source] serde_json::Error),
     // endregion
 }
 
