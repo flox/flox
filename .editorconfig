@@ -1,0 +1,71 @@
+# ============================================================================ #
+#
+# @file .editorconfig
+#
+# @brief Sets `shfmt' rules.
+#
+# See all properties at
+# [EditorConfig Properties](https://github.com/editorconfig/editorconfig/wiki/EditorConfig-Properties).
+#
+# They only allow a single newline separator.
+# [Fork or PR upstream](https://github.com/patrickvane/shfmt/blob/master/syntax/printer.go#L464)
+#
+#
+# ---------------------------------------------------------------------------- #
+
+# All files
+# ---------
+
+[*]
+# use "line feed" with no "carriage return" as EOL
+end_of_line              = lf
+trim_trailing_whitespace = true;
+
+# ---------------------------------------------------------------------------- #
+
+# Shell files
+# -----------
+
+[*.{sh,bash,bats,zsh}]
+indent_style       = space  # Use spaces not tabs
+indent_size        = 2      # 2 space width
+binary_next_line   = true   # Pipes go at beginning of newline, not end.
+switch_case_indent = true   # Indent cases and bodies
+space_redirects    = true   # Spaces between `>& FILE'
+keep_padding       = false   # avoids realigning tokens by column
+function_next_line = false  # `foo() {' brace is on same line
+never_split        = true  # Use `;'
+
+[*.sh]
+shell_variant = bash
+
+[*.bats]
+shell_variant = bats
+
+[*.bash]
+shell_variant = bash
+
+[*.zsh]
+shell_variant = zsh
+
+# ---------------------------------------------------------------------------- #
+
+# C/C++
+# -----
+[*.{c,cc,cxx,cpp,ipp,h,hh,hxx,hpp}]
+indent_style = space
+indent_size  = 2
+
+# ---------------------------------------------------------------------------- #
+
+# [Auto]Makefiles
+# ---------------
+[{Makefile,*.mk,*.am}{,.in}]
+indent_style = tab
+indent_size  = 2
+
+# ---------------------------------------------------------------------------- #
+#
+#
+#
+# ============================================================================ #

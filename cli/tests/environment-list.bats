@@ -18,11 +18,11 @@ project_setup() {
   export PROJECT_DIR="${BATS_TEST_TMPDIR?}/test"
   rm -rf "$PROJECT_DIR"
   mkdir -p "$PROJECT_DIR"
-  pushd "$PROJECT_DIR" >/dev/null || return
+  pushd "$PROJECT_DIR" > /dev/null || return
 }
 
 project_teardown() {
-  popd >/dev/null || return
+  popd > /dev/null || return
   rm -rf "${PROJECT_DIR?}"
   unset PROJECT_DIR
 }
@@ -39,8 +39,8 @@ teardown() {
 }
 
 @test "'flox list' lists packages of environment in the current dir; fails if no env found" {
-  run "$FLOX_BIN" list;
-  assert_failure;
+  run "$FLOX_BIN" list
+  assert_failure
 }
 
 @test "'flox list' lists packages of environment in the current dir; No package" {
@@ -55,7 +55,7 @@ teardown() {
 
   run "$FLOX_BIN" list
   assert_success
-  assert_output --regexp - <<EOF
+  assert_output --regexp - << EOF
 hello
 EOF
 }
