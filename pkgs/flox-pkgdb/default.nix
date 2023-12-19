@@ -15,6 +15,7 @@
   autoconf,
   automake,
   libtool,
+  updateAutotoolsGnuConfigScriptsHook,
   pkg-config,
   remake,
   semver,
@@ -118,6 +119,7 @@ in
         libtool
         pkg-config
         coreutils
+        updateAutotoolsGnuConfigScriptsHook
         gnugrep
         gnumake
         gnused
