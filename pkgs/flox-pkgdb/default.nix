@@ -12,6 +12,9 @@
   lcov,
   nix,
   nlohmann_json,
+  autoconf,
+  automake,
+  libtool,
   pkg-config,
   remake,
   semver,
@@ -109,7 +112,9 @@ in
 
       propagatedBuildInputs = [semver];
 
-      nativeBuildInputs = [pkg-config coreutils gnugrep gnumake gnused];
+      nativeBuildInputs = [
+        autoconf automake libtool pkg-config coreutils gnugrep gnumake gnused
+      ];
 
       buildInputs = [
         sqlite.dev
