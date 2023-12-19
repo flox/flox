@@ -311,7 +311,7 @@ impl LocalDevelopmentCommands {
     async fn handle(self, config: Config, flox: Flox) -> Result<()> {
         match self {
             LocalDevelopmentCommands::Init(args) => args.handle(flox).await?,
-            LocalDevelopmentCommands::Activate(args) => args.handle(flox).await?,
+            LocalDevelopmentCommands::Activate(args) => args.handle(config, flox).await?,
             LocalDevelopmentCommands::Edit(args) => args.handle(flox).await?,
             LocalDevelopmentCommands::Install(args) => args.handle(flox).await?,
             LocalDevelopmentCommands::Uninstall(args) => args.handle(flox).await?,

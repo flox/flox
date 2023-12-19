@@ -43,7 +43,13 @@ use log::{debug, error, info};
 use tempfile::NamedTempFile;
 
 use super::{environment_select, EnvironmentSelect};
-use crate::commands::{activated_environments, auth, ConcreteEnvironment};
+use crate::commands::{
+    activated_environments,
+    auth,
+    ensure_environment_trust,
+    ConcreteEnvironment,
+};
+use crate::config::Config;
 use crate::subcommand_metric;
 use crate::utils::dialog::{Confirm, Dialog, Spinner};
 
@@ -294,7 +300,7 @@ pub struct Activate {
 }
 
 impl Activate {
-    pub async fn handle(self, flox: Flox) -> Result<()> {
+    pub async fn handle(self, mut config: Config, flox: Flox) -> Result<()> {
         subcommand_metric!("activate");
 
         let concrete_environment = self.environment.to_concrete_environment(&flox)?;
@@ -311,6 +317,10 @@ impl Activate {
                 format!("{}/{}", remote.owner(), remote.name())
             },
         };
+
+        if let ConcreteEnvironment::Remote(ref env) = concrete_environment {
+            ensure_environment_trust(&mut config, &flox, env).await?;
+        }
 
         let mut environment = concrete_environment.into_dyn_environment();
 
