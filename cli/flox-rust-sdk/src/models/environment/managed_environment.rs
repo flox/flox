@@ -568,11 +568,21 @@ impl ManagedEnvironment {
                             _ => ManagedEnvironmentError::Git(err),
                         })?;
                 }
-                // if it still doesn't exist after fetching, error
+                // If it still doesn't exist after fetching,
+                // the upstream branch has diverged from the local branch.
                 let in_remote = floxmeta
                     .git
                     .branch_contains_commit(&lock.rev, &remote_branch)
                     .map_err(ManagedEnvironmentError::Git)?;
+
+                if in_remote {
+                    return Ok(lock);
+                }
+
+                // locked reference not found in remote/sync branch
+                // check if it's in the project's branch.
+                // If the project's branch doesn't exist, or the project was moved,
+                // this will still fail to resolve.
 
                 let local_branch = branch_name(&flox.system, pointer, dot_flox_path);
 
