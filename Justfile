@@ -28,16 +28,17 @@ cargo_test_invocation := "PKGDB_BIN=${PKGDB_BIN} cargo test --workspace"
 # (Re)initialize Makefile.in templates.
 # This is necessary if you change a `Makefile.am' or `configure.ac' file.
 bootstrap:
-    @./bootstrap.sh
+    ./bootstrap.sh
 
 
 # ---------------------------------------------------------------------------- #
 
 # Prepare the build area and lock configuration options.
 configure *args='': bootstrap
-    @mkdir -p build;
-    @pushd build;
-    @../configure --prefix="$PWD/out" "$@"
+    mkdir -p build;
+    pushd build;
+    ../configure --prefix="$PWD/out" "$@";
+    popd;
 
 
 # ---------------------------------------------------------------------------- #
@@ -51,27 +52,27 @@ configure *args='': bootstrap
 
 # Build the compilation database
 build-cdb *args='': configure
-    @make -C build -j cdb "$@";
+    make -C build -j cdb "$@";
 
 # Build only pkgdb
 build-pkgdb *args='': configure
-    @make -C build -j pkgdb "$@"
+    make -C build -j pkgdb "$@"
 
 # Build only flox
 build-cli *args='': configure
-    @make -C build -j cli "$@"
+    make -C build -j cli "$@"
 
 # Build the binaries
 build *args='': configure
-    @make -C build -j "$@"
+    make -C build -j "$@"
 
 
 # ---------------------------------------------------------------------------- #
 
 # Run the pkgdb tests
 test-pkgdb: build-pkgdb
-    @make -C build/pkgdb -j tests;
-    @make -C build/pkgdb check;
+    make -C build/pkgdb -j tests;
+    make -C build/pkgdb check;
 
 # Run the end-to-end test suite
 @functional-tests +bats_args="": build
