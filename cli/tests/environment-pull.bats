@@ -61,6 +61,13 @@ function update_dummy_env() {
 }
 
 # ---------------------------------------------------------------------------- #
+# bats test_tags=pull,pull:logged-out
+@test "l1: pull login: running flox pull without login succeeds" {
+  unset FLOX_FLOXHUB_TOKEN; # logout, effectively
+
+  run "$FLOX_BIN" pull --remote owner/name # dummy remote as we are not actually pulling anything
+  assert_success
+}
 
 # bats test_tags=pull:l2,pull:l2:a,pull:l4
 @test "l2.a/l4: flox pull accepts a flox hub namespace/environment, creates .flox if it does not exist" {
