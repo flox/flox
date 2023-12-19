@@ -248,7 +248,7 @@ impl Environment for ManagedEnvironment {
     fn upgrade(
         &mut self,
         flox: &Flox,
-        groups_or_iids: Vec<String>,
+        groups_or_iids: &[String],
     ) -> Result<UpgradeResult, EnvironmentError2> {
         let mut generations = self
             .generations()

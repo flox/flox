@@ -166,7 +166,7 @@ EOF
     "$FLOX_BIN" update --remote "$OWNER/test"
 
   run "$FLOX_BIN" upgrade --remote "$OWNER/test"
-  assert_output --partial "upgraded 'hello'"
+  assert_output --partial "Upgraded 'hello'"
 }
 
 # ---------------------------------------------------------------------------- #

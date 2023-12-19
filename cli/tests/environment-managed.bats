@@ -293,7 +293,7 @@ EOF
     "$FLOX_BIN" update
 
   run "$FLOX_BIN" upgrade
-  assert_output --partial "upgraded 'hello'"
+  assert_output --partial "Upgraded 'hello'"
 }
 
 # ---------------------------------------------------------------------------- #
