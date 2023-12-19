@@ -466,10 +466,11 @@ impl GitCommandProvider {
         repository: impl AsRef<str>,
         push_spec: impl AsRef<str>,
         force: bool,
-    ) -> Result<(), GitCommandError> {
+    ) -> Result<(), GitRemoteCommandError> {
         let mut command = self.new_command();
         command
             .arg("push")
+            .arg("--porcelain")
             .arg(repository.as_ref())
             .arg(push_spec.as_ref());
 
@@ -477,7 +478,22 @@ impl GitCommandProvider {
             command.arg("--force");
         }
 
-        GitCommandProvider::run_command(&mut command)?;
+        match GitCommandProvider::run_command(&mut command) {
+            Ok(_) => Ok(()),
+            Err(ref err @ GitCommandError::BadExit(_, _, ref stderr))
+                if stderr.contains("DENIED") =>
+            {
+                debug!("Access denied: {err}");
+                Err(GitRemoteCommandError::AccessDenied)
+            },
+            Err(ref err @ GitCommandError::BadExit(_, ref stdout, _))
+                if stdout.contains("[rejected] (fetch first)") =>
+            {
+                debug!("Branches diverged: {err}");
+                Err(GitRemoteCommandError::Diverged)
+            },
+            Err(e) => Err(e.into()),
+        }?;
         Ok(())
     }
 
@@ -570,6 +586,16 @@ impl GitDiscoverError for GitCommandDiscoverError {
             _ => false,
         }
     }
+}
+
+#[derive(Error, Debug)]
+pub enum GitRemoteCommandError {
+    #[error(transparent)]
+    Command(#[from] GitCommandError),
+    #[error("access denied")]
+    AccessDenied,
+    #[error("branches diverged")]
+    Diverged,
 }
 
 /// A simple Git Provider that uses the git
