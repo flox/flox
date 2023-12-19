@@ -277,7 +277,8 @@ AM_CONDITIONAL([IS_CLANG], [test "$CXX_TOOLCHAIN" = 'clang'])
 
 # Checks for Libraries
 # --------------------
-FLOX_LIB_NIXFETCHERS
+
+# N/A
 
 
 # ---------------------------------------------------------------------------- #
