@@ -44,25 +44,6 @@ AC_PATH_PROG([NIX], [nix], [$MISSING nix])
 
 # ---------------------------------------------------------------------------- #
 
-# TODO: `AC_CACHE_CHECK' like `FLOX_CHECK_NIX' above.
-
-# FLOX_LIB_NIXFETCHERS([ACTION-IF-FOUND], [ACTION-IF-NOT-FOUND])
-# --------------------------------------------------------------
-# Check that `libnixfetchers' is available.
-# Nix does not carry a `nix-fetchers.pc' file, so we need to manually check
-# that it exists.
-# NOTE: `translit' is used to join the strings together and avoid 80 char limit.
-AC_DEFUN([FLOX_LIB_NIXFETCHERS], [dnl
-AC_CHECK_LIB([nixfetchers],
-  [_ZN3nix8fetchers11attrsToJSONERKSt3mapINSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEESt7variantIJS7_mNS_8ExplicitIbEEEESt4lessIS7_ESaISt4pairIKS7_SB_EEE],
-  [m4_default([$1], [:])],
-  [m4_default([$2],
-              [AC_MSG_ERROR([Cannot find libnixfetchers])])])
-]) # FLOX_LIB_NIXFETCHERS
-
-
-# ---------------------------------------------------------------------------- #
-
 # FLOX_CHECK_NIX_MODULES([ACTION-IF-FOUND], [ACTION-IF-NOT-FOUND])
 # ----------------------
 # Check whether the `nix` `pkg-config' modules are available, and set
@@ -76,7 +57,7 @@ PKG_CHECK_MODULES(
   m4_default([$1], [:]),
   m4_default([$2],
              [AC_MSG_ERROR([Cannot find 'nix-{store|main|cmd|expr}.pc'])]))
-FLOX_LIB_NIXFETCHERS([NIX_LIBS="-lnixfetchers $NIX_LIBS"])
+  NIX_LIBS="-lnixfetchers $NIX_LIBS";
 ]) # FLOX_CHECK_NIX_MODULES
 
 
