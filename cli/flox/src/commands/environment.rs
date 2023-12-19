@@ -475,6 +475,18 @@ impl Init {
 pub struct List {
     #[bpaf(external(environment_select), fallback(Default::default()))]
     environment: EnvironmentSelect,
+    #[bpaf(external(list_mode), fallback(ListMode::NameOnly))]
+    list_mode: ListMode,
+}
+
+#[derive(Bpaf, Clone)]
+pub enum ListMode {
+    /// Show the raw contents of the manifest
+    #[bpaf(long, short)]
+    Config,
+    /// Show only the names of the packages installed in the environment
+    #[bpaf(long, short)]
+    NameOnly,
 }
 
 impl List {
@@ -487,9 +499,15 @@ impl List {
             .into_dyn_environment();
 
         let manifest_contents = env.manifest_content(&flox)?;
-        if let Some(pkgs) = list_packages(&manifest_contents)? {
-            pkgs.iter().for_each(|pkg| println!("{}", pkg));
+        match self.list_mode {
+            ListMode::Config => println!("{}", manifest_contents),
+            ListMode::NameOnly => {
+                if let Some(pkgs) = list_packages(&manifest_contents)? {
+                    pkgs.iter().for_each(|pkg| println!("{}", pkg));
+                }
+            },
         }
+
         Ok(())
     }
 }
