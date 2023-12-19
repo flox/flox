@@ -32,10 +32,7 @@ setup() {
   home_setup test;
   common_test_setup
   project_setup
-
-  export FLOX_FLOXHUB_TOKEN=flox_testOAuthToken
-  export __FLOX_FLOXHUB_URL="file://$BATS_TEST_TMPDIR/floxhub"
-
+  floxhub_setup "owner"
   make_dummy_env "owner" "name"
 }
 teardown() {
@@ -48,38 +45,19 @@ function make_dummy_env() {
   OWNER="$1"; shift;
   ENV_NAME="$1"; shift;
 
-  FLOXHUB_FLOXMETA_DIR="$BATS_TEST_TMPDIR/floxhub/$OWNER/floxmeta"
-
-  mkdir -p "$FLOXHUB_FLOXMETA_DIR"
-  pushd "$FLOXHUB_FLOXMETA_DIR"
-
-  # todo: fake a real upstream env
-  git init --initial-branch="$NIX_SYSTEM.$ENV_NAME"
-
-  git config user.name "test"
-  git config user.email "test@email.address"
-
-  touch "env.json"
-  git add .
-  git commit -m "initial commit"
-
+  pushd "$(mktemp -d)" >/dev/null || return
+  "$FLOX_BIN" init --name "$ENV_NAME"
+  "$FLOX_BIN" push --owner "$OWNER"
+  "$FLOX_BIN" delete --force
   popd >/dev/null || return
 }
 
-# simulate a dummy env update pushed to floxhub
+# push an update to floxhub from another peer
 function update_dummy_env() {
   OWNER="$1"; shift;
   ENV_NAME="$1"; shift;
 
-  FLOXHUB_FLOXMETA_DIR="$BATS_TEST_TMPDIR/floxhub/$OWNER/floxmeta"
-
-  pushd "$FLOXHUB_FLOXMETA_DIR" >/dev/null || return
-
-  touch new_file
-  git add .
-  git commit -m "update"
-
-  popd >/dev/null || return
+  "$FLOX_BIN" install gzip --remote "$OWNER/$ENV_NAME"
 }
 
 # ---------------------------------------------------------------------------- #
@@ -108,7 +86,7 @@ function update_dummy_env() {
 # bats test_tags=pull:l2,pull:l2:b
 @test "l2.b: flox pull with --remote fails if an env is already present" {
 
-  "$FLOX_BIN" pull --remote owner/name # dummy remote as we are not actually pulling anything
+    "$FLOX_BIN" pull --remote owner/name # dummy remote as we are not actually pulling anything
 
   run "$FLOX_BIN" pull --remote owner/name # dummy remote as we are not actually pulling anything
   assert_failure
@@ -170,20 +148,20 @@ function update_dummy_env() {
 
   mkdir first second
 
-  "$FLOX_BIN" pull --remote owner/name --dir first  # dummy remote as we are not actually pulling anything
+  "$FLOX_BIN" pull --remote owner/name --dir first
   LOCKED_FIRST_BEFORE=$(cat ./first/.flox/env.lock | jq -r '.rev')
 
   update_dummy_env "owner" "name"
   LOCKED_FIRST_AFTER=$(cat ./first/.flox/env.lock | jq -r '.rev')
 
-  "$FLOX_BIN" pull --remote owner/name --dir second  # dummy remote as we are not actually pulling anything
+  "$FLOX_BIN" pull --remote owner/name --dir second
   LOCKED_SECOND=$(cat ./second/.flox/env.lock | jq -r '.rev')
 
   assert [ "$LOCKED_FIRST_BEFORE" == "$LOCKED_FIRST_AFTER" ]
   assert [ "$LOCKED_FIRST_BEFORE" != "$LOCKED_SECOND" ]
 
   # after pulling first env, its at the rame rev as the second that was pulled after the update
-  "$FLOX_BIN" pull --dir first  # dummy remote as we are not actually pulling anything
+  "$FLOX_BIN" pull --dir first
 
   LOCKED_FIRST_AFTER_PULL=$(cat ./first/.flox/env.lock | jq -r '.rev')
 
