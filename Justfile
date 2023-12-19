@@ -50,19 +50,19 @@ configure *args='': bootstrap
 # ---------------------------------------------------------------------------- #
 
 # Build the compilation database
-build-cdb *args='':
+build-cdb *args='': configure
     @make -C build -j cdb "$@";
 
 # Build only pkgdb
-build-pkgdb *args='':
+build-pkgdb *args='': configure
     @make -C build -j pkgdb "$@"
 
 # Build only flox
-build-cli *args='':
+build-cli *args='': configure
     @make -C build -j cli "$@"
 
 # Build the binaries
-build *args='':
+build *args='': configure
     @make -C build -j "$@"
 
 
