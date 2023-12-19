@@ -819,6 +819,9 @@ fn reverse_links_dir(flox: &Flox) -> PathBuf {
 }
 
 impl ManagedEnvironment {
+    /// If access to a remote repository requires authentication,
+    /// the floxhub token must be set in the flox instance.
+    /// The caller is responsible for ensuring that the token is present and valid.
     pub fn push_new(
         flox: &Flox,
         path_environment: PathEnvironment,
