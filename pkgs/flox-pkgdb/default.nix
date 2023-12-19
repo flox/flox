@@ -122,9 +122,16 @@ in
         nix
       ];
 
-      preBuild = ''
-        pushd pkgdb||exit;
-      '';
+      outputs = ["out" "dev"];
+
+      configureFlags = [
+        "--without-flox-cli"
+        "--disable-static"
+        "--disable-dependency-tracking"
+        "--libdir=${builtins.placeholder "dev"}/lib"
+        "--includedir=${builtins.placeholder "dev"}/include"
+      ];
+
 
       # Checks require internet
       doCheck = false;
