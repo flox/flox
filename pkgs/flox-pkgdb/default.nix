@@ -122,14 +122,12 @@ in
         nix
       ];
 
-      outputs = ["out" "dev"];
+      outputs = ["out"];
 
       configureFlags = [
         "--without-flox-cli"
-        "--disable-static"
+        "--disable-shared"
         "--disable-dependency-tracking"
-        "--libdir=${builtins.placeholder "dev"}/lib"
-        "--includedir=${builtins.placeholder "dev"}/include"
       ];
 
       # Checks require internet
