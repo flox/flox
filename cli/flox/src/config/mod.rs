@@ -67,6 +67,7 @@ pub struct FloxConfig {
     pub search_limit: Option<u8>,
 
     /// Environments trusted to run remotely
+    #[serde(default)]
     pub trusted_environments: HashMap<EnvironmentRef, EnvironmentTrust>,
 
     #[serde(flatten)]
