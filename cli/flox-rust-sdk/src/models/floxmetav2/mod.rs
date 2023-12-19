@@ -43,6 +43,10 @@ pub enum FloxmetaV2Error {
 impl FloxmetaV2 {
     /// Clone the floxmeta repository for the given user to the given path
     ///
+    /// If access to a remote repository requires authentication,
+    /// the floxhub token must be set in the flox instance.
+    /// The caller is responsible for ensuring that the token is present and valid.
+    ///
     /// Most of the time, you want to use [`FloxmetaV2::clone`] instead.
     /// This is useful for testing and isolated remote operations.
     pub fn clone_to(
@@ -51,10 +55,7 @@ impl FloxmetaV2 {
         pointer: &ManagedPointer,
     ) -> Result<Self, FloxmetaV2Error> {
         let host = flox.floxhub_host.as_str();
-        let token = flox
-            .floxhub_token
-            .as_ref()
-            .ok_or(FloxmetaV2Error::LoggedOut)?;
+        let token = flox.floxhub_token.as_deref();
 
         let git_options = floxmeta_git_options(&flox.floxhub_host, token);
         let branch = remote_branch_name(&flox.system, pointer);
@@ -73,6 +74,10 @@ impl FloxmetaV2 {
 
     /// Clone the floxmeta repository for the given user to the default path
     ///
+    /// If access to a remote repository requires authentication,
+    /// the floxhub token must be set in the flox instance.
+    /// The caller is responsible for ensuring that the token is present and valid.
+    ///
     /// Like [`FloxmetaV2::clone_to`], but uses the system path for floxmeta repositories in XDG_DATA_HOME
     pub fn clone(flox: &Flox, pointer: &ManagedPointer) -> Result<Self, FloxmetaV2Error> {
         Self::clone_to(floxmeta_dir(flox, &pointer.owner), flox, pointer)
@@ -86,16 +91,17 @@ impl FloxmetaV2 {
     /// and metadata provided by the flox reference.
     /// Ideally, these could be passed as parameters.
     ///
+    /// If access to a remote repository requires authentication,
+    /// the floxhub token must be set in the flox instance.
+    /// The caller is responsible for ensuring that the token is present and valid.
+    ///
     /// In most cases, you want to use [`FloxmetaV2::open`] instead which provides the flox defaults.
     pub fn open_at(
         user_floxmeta_dir: impl AsRef<Path>,
         flox: &Flox,
         pointer: &ManagedPointer,
     ) -> Result<Self, FloxmetaV2Error> {
-        let token = flox
-            .floxhub_token
-            .as_ref()
-            .ok_or(FloxmetaV2Error::LoggedOut)?;
+        let token = flox.floxhub_token.as_deref();
 
         let git_options = floxmeta_git_options(&flox.floxhub_host, token);
 
@@ -130,10 +136,7 @@ impl FloxmetaV2 {
         flox: &Flox,
         pointer: &ManagedPointer,
     ) -> Result<Self, FloxmetaV2Error> {
-        let token = flox
-            .floxhub_token
-            .as_ref()
-            .ok_or(FloxmetaV2Error::LoggedOut)?;
+        let token = flox.floxhub_token.as_deref();
 
         let git_options = floxmeta_git_options(&flox.floxhub_host, token);
 
@@ -147,7 +150,7 @@ impl FloxmetaV2 {
 
 /// Returns the git options for interacting with floxmeta repositories
 // todo: move floxhub host and token to Flox, or integrate config...
-pub fn floxmeta_git_options(floxhub_host: &str, floxhub_token: &str) -> GitCommandOptions {
+pub fn floxmeta_git_options(floxhub_host: &str, floxhub_token: Option<&str>) -> GitCommandOptions {
     let mut options = GitCommandOptions::default();
 
     // set the user config
@@ -159,13 +162,15 @@ pub fn floxmeta_git_options(floxhub_host: &str, floxhub_token: &str) -> GitComma
     options.add_env_var("GIT_CONFIG_GLOBAL", "/dev/null");
     options.add_env_var("GIT_CONFIG_SYSTEM", "/dev/null");
 
-    // Set authentication with the floxhub token using an inline credential helper.
-    // The credential helper should help avoinding a leak of the token in the process list.
-    options.add_env_var("FLOX_FLOXHUB_TOKEN", floxhub_token);
-    options.add_config_flag(
-        &format!("credential.{floxhub_host}.helper"),
-        r#"!f(){ echo "username=oauth"; echo "password=$FLOX_FLOXHUB_TOKEN"; }; f"#,
-    );
+    if let Some(token) = floxhub_token {
+        // Set authentication with the floxhub token using an inline credential helper.
+        // The credential helper should help avoinding a leak of the token in the process list.
+        options.add_env_var("FLOX_FLOXHUB_TOKEN", token);
+        options.add_config_flag(
+            &format!("credential.{floxhub_host}.helper"),
+            r#"!f(){ echo "username=oauth"; echo "password=$FLOX_FLOXHUB_TOKEN"; }; f"#,
+        );
+    }
 
     options
 }

@@ -43,7 +43,7 @@ use log::{debug, error, info};
 use tempfile::NamedTempFile;
 
 use super::{environment_select, EnvironmentSelect};
-use crate::commands::{activated_environments, ConcreteEnvironment};
+use crate::commands::{activated_environments, auth, ConcreteEnvironment};
 use crate::subcommand_metric;
 use crate::utils::dialog::{Confirm, Dialog, Spinner};
 
@@ -783,8 +783,29 @@ pub struct Push {
 }
 
 impl Push {
-    pub async fn handle(self, flox: Flox) -> Result<()> {
+    pub async fn handle(self, mut flox: Flox) -> Result<()> {
         subcommand_metric!("push");
+
+        if flox.floxhub_token.is_none() {
+            if !Dialog::can_prompt() {
+                let message = formatdoc! {"
+                    You are not logged in to floxhub.
+
+                    Can not automatically login to floxhub in non-interactive context.
+
+                    To login you can either
+                    * login to floxhub with 'flox auth login',
+                    * set the 'floxhub_token' field to '<your token>' in your config
+                    * set the '$FLOX_FLOXHUB_TOKEN=<your_token>' environment variable."
+                };
+                bail!(message);
+            }
+
+            info!("You are not logged in to floxhub. Logging in...");
+
+            auth::login_flox(&mut flox).await?;
+        }
+
         let dir = self.dir.unwrap_or_else(|| std::env::current_dir().unwrap());
 
         match EnvironmentPointer::open(&dir)? {

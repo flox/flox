@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use std::{fs, io};
 
 use flox_types::version::Version;
+use itertools::Diff;
 use log::debug;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -27,7 +28,12 @@ use crate::models::environment_ref::{EnvironmentName, EnvironmentOwner};
 use crate::models::floxmetav2::{floxmeta_git_options, FloxmetaV2, FloxmetaV2Error};
 use crate::models::manifest::PackageToInstall;
 use crate::models::pkgdb::UpgradeResult;
-use crate::providers::git::{GitCommandBranchHashError, GitCommandError, GitProvider};
+use crate::providers::git::{
+    GitCommandBranchHashError,
+    GitCommandError,
+    GitProvider,
+    GitRemoteCommandError,
+};
 
 const GENERATION_LOCK_FILENAME: &str = "env.lock";
 
@@ -80,8 +86,10 @@ pub enum ManagedEnvironmentError {
     ProjectNotFound { path: PathBuf, err: std::io::Error },
     #[error("upstream floxmeta branch diverged from local branch")]
     Diverged,
+    #[error("access to floxmeta repository was denied")]
+    AccessDenied,
     #[error("failed to push environment: {0}")]
-    Push(GitCommandError),
+    Push(#[source] GitRemoteCommandError),
     #[error("failed to delete local environment branch")]
     DeleteBranch(#[source] GitCommandError),
     #[error("failed to delete environment directory {0:?}")]
@@ -94,7 +102,7 @@ pub enum ManagedEnvironmentError {
     #[error("could not sync environment from upstream")]
     FetchUpdates(#[source] GitCommandError),
     #[error("could not apply updates from upstream")]
-    ApplyUpdates(#[source] GitCommandError),
+    ApplyUpdates(#[source] GitRemoteCommandError),
 
     #[error("couldn't initialize floxmeta")]
     InitializeFloxmeta(#[source] GenerationsError),
@@ -811,6 +819,9 @@ fn reverse_links_dir(flox: &Flox) -> PathBuf {
 }
 
 impl ManagedEnvironment {
+    /// If access to a remote repository requires authentication,
+    /// the floxhub token must be set in the flox instance.
+    /// The caller is responsible for ensuring that the token is present and valid.
     pub fn push_new(
         flox: &Flox,
         path_environment: PathEnvironment,
@@ -825,12 +836,8 @@ impl ManagedEnvironment {
         let checkedout_floxmeta_path = tempfile::tempdir_in(&flox.temp_dir).unwrap().into_path();
         let temp_floxmeta_path = tempfile::tempdir_in(&flox.temp_dir).unwrap().into_path();
 
-        let token = flox
-            .floxhub_token
-            .as_ref()
-            .ok_or(ManagedEnvironmentError::OpenFloxmeta(
-                FloxmetaV2Error::LoggedOut,
-            ))?;
+        // Caller decides whether to set token
+        let token = flox.floxhub_token.as_deref();
 
         let options = floxmeta_git_options(&flox.floxhub_host, token);
 
@@ -863,14 +870,9 @@ impl ManagedEnvironment {
             )
             .unwrap();
 
-        match temp_floxmeta_git.push("upstream", force) {
-            Err(GitCommandError::BadExit(1, details, _))
-                if details
-                    .lines()
-                    .any(|s| s.split('\t').last() == Some("[rejected] (fetch first)")) =>
-            {
-                Err(ManagedEnvironmentError::Diverged)?
-            },
+        match temp_floxmeta_git.push_ref("upstream", "HEAD", force) {
+            Err(GitRemoteCommandError::AccessDenied) => Err(ManagedEnvironmentError::AccessDenied)?,
+            Err(GitRemoteCommandError::Diverged) => Err(ManagedEnvironmentError::Diverged)?,
             Err(e) => Err(ManagedEnvironmentError::Push(e))?,
             _ => {},
         }

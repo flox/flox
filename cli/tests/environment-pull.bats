@@ -65,15 +65,12 @@ function update_dummy_env() {
 }
 
 # ---------------------------------------------------------------------------- #
-
-# bats test_tags=pull:l1
-@test "l1: pull login: running flox pull before user has login metadata prompts the user to login" {
-
+# bats test_tags=pull,pull:logged-out
+@test "l1: pull login: running flox pull without login succeeds" {
   unset FLOX_FLOXHUB_TOKEN # logout, effectively
 
   run "$FLOX_BIN" pull --remote owner/name # dummy remote as we are not actually pulling anything
-  assert_failure
-  assert_output --partial 'Please login to floxhub with `flox auth login`'
+  assert_success
 }
 
 # bats test_tags=pull:l2,pull:l2:a,pull:l4
