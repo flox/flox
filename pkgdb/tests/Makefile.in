@@ -514,6 +514,7 @@ EXEEXT = @EXEEXT@
 FGREP = @FGREP@
 FILECMD = @FILECMD@
 FIND = @FIND@
+FLOX_CLI = @FLOX_CLI@
 FLOX_CLI_ROOT = @FLOX_CLI_ROOT@
 FLOX_CLI_TESTS_DIR = @FLOX_CLI_TESTS_DIR@
 FLOX_CLI_distdir = @FLOX_CLI_distdir@
@@ -573,6 +574,7 @@ PACKAGE_URL = @PACKAGE_URL@
 PACKAGE_VERSION = @PACKAGE_VERSION@
 PATH_SEPARATOR = @PATH_SEPARATOR@
 PKGCONFIGDIR = @PKGCONFIGDIR@
+PKGDB_BIN = $(abs_top_builddir)/pkgdb/bin/pkgdb
 PKGDB_ROOT = @PKGDB_ROOT@
 PKGDB_TEST_DIR = @PKGDB_TEST_DIR@
 PKGDB_VERSION = @PKGDB_VERSION@
@@ -682,7 +684,6 @@ ACLOCAL_AMFLAGS = -I ../../build-aux/m4
 # ---------------------------------------------------------------------------- #
 TEST_DATA_DIR = $(PKGDB_TEST_DIR)/data
 AM_CPPFLAGS = -DTEST_DATA_DIR=\"$(TEST_DATA_DIR)\"
-PKGDB_BIN = $(abs_top_builddir)/pkgdb/bin/pkgdb
 PKGDB_IS_SQLITE3_BIN = $(abs_builddir)/is_sqlite3
 PKGDB_SEARCH_PARAMS_BIN = $(abs_builddir)/search-params
 AM_TESTS_ENVIRONMENT = export TEST_DATA_DIR="$(TEST_DATA_DIR)"; export \

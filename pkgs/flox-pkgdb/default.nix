@@ -67,7 +67,7 @@ in
         builtins.replaceStrings ["\n"] [""] contents;
 
       src = builtins.path {
-        path = ../../..;
+        path = ../..;
         filter = name: type: let
           bname = baseNameOf name;
           ignores = [

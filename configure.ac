@@ -69,6 +69,32 @@ FLOX_INIT_DIRS
 
 # ---------------------------------------------------------------------------- #
 
+# Project Directories
+# -------------------
+
+AC_SUBST([REPO_ROOT], ["$abs_srcdir"])
+AC_SUBST([PKGS_DIR], ["$REPO_ROOT/pkgs"])
+AC_SUBST([SHELLS_DIR], ["$REPO_ROOT/shells"])
+AC_SUBST([PKGDB_ROOT], ["$REPO_ROOT/pkgdb"])
+AC_SUBST([PKGDB_TEST_DIR], ["$PKGDB_ROOT/tests"])
+AC_SUBST([FLOX_CLI_ROOT], ["$REPO_ROOT/cli"])
+AC_SUBST([FLOX_CLI_TESTS_DIR], ["$FLOX_CLI_ROOT/tests"])
+
+# Defined relative to `$(abs_top_builddir)/cli/'
+AC_SUBST([FLOX_CLI_distdir],   [dist])
+AC_SUBST([FLOX_CLI_targetdir], [target/debug])
+AC_SUBST([FLOX_CLI_tardir],    ["$distdir"])
+
+# Used to determine if a dependency has changed.
+DEPFILES="$REPO_ROOT/flake.nix $REPO_ROOT/flake.lock"
+DEPFILES="$DEPFILES $PKGS_DIR/flox/default.nix";
+DEPFILES="$DEPFILES $PKGS_DIR/flox-pkgdb/default.nix";
+DEPFILES="$DEPFILES $SHELLS_DIR/flox/default.nix";
+AC_SUBST([DEPFILES])
+
+
+# ---------------------------------------------------------------------------- #
+
 # Checks for Programs
 # -------------------
 
@@ -402,16 +428,18 @@ AC_ARG_WITH([pkgdb],
   [WITH_PKGDB="$withval"],
   [WITH_PKGDB=local])
 AS_CASE(["$WITH_PKGDB"],
-  [local], [:],
-  [nix],   [PKGDB_BIN="$( $NIX $NIXFLAGS build "$PKGDB_ROOT@%:@flox-pkgdb"  \
+  [local], [PKGDB_BIN="$PWD/pkgdb/bin/pkgdb"],
+  [nix],   [PKGDB_BIN="$( $NIX $NIXFLAGS build "$REPO_ROOT@%:@flox-pkgdb"  \
                                          --no-link --print-out-paths; )"],
   [no],    [:],
   [AS_IF([test -d "$WITH_PKGDB"], [:],
     [AC_MSG_ERROR([Invalid '--with-pkgdb': '$WITH_PKGDB'. ]
       [You must specify either 'local', 'nix', or a path to a directory])])])
+AC_SUBST([PKGDB_BIN], ["$MISSING pkgdb"])
 AC_SUBST([WITH_PKGDB])
 
 # --with-flox-cli
+# FIXME: target/debug/flox
 AC_ARG_WITH([flox-cli],
   [AS_HELP_STRING(
     [--with-flox-cli=local|nix|no|PREFIX],
@@ -424,46 +452,22 @@ AS_CASE(["$WITH_FLOX_CLI"],
   [nix],
     [AS_IF([test "$WITH_PKGDB" = 'no'],
            [AC_MSG_ERROR([Cannot use local 'flox-cli' without 'pkgdb'])])
-     PKGDB_BIN="$( $NIX $NIXFLAGS build "$PKGDB_ROOT@%:@flox-cli"           \
-                                         --no-link --print-out-paths; )"],
+     FLOX_BIN="$( $NIX $NIXFLAGS build "$REPO_ROOT@%:@flox-cli"           \
+                                       --no-link --print-out-paths; )"],
   [local],
     [AS_IF([test "$WITH_PKGDB" = 'no'],
-           [AC_MSG_ERROR([Cannot use local 'flox-cli' without 'pkgdb'])])],
+           [AC_MSG_ERROR([Cannot use local 'flox-cli' without 'pkgdb'])])
+     FLOX_BIN="$PWD/cli/target/debug/flox"],
   [AS_IF([test -d "$WITH_FLOX_CLI"], [:],
     [AC_MSG_ERROR([Invalid '--with-flox-cli': '$WITH_FLOX_CLI'. ]
       [You must specify either 'local', 'nix', or a path to a directory])])
 
   ])
+AC_SUBST([FLOX_CLI], ["$MISSING flox"])
 AC_SUBST([WITH_FLOX_CLI])
 
 AM_CONDITIONAL([USE_LOCAL_PKGDB],    [test "$WITH_PKGDB" = 'local'])
 AM_CONDITIONAL([USE_LOCAL_FLOX_CLI], [test "$WITH_FLOX_CLI" = 'local'])
-
-
-# ---------------------------------------------------------------------------- #
-
-# Project Directories
-# -------------------
-
-AC_SUBST([REPO_ROOT], ["$abs_srcdir"])
-AC_SUBST([PKGS_DIR], ["$REPO_ROOT/pkgs"])
-AC_SUBST([SHELLS_DIR], ["$REPO_ROOT/shells"])
-AC_SUBST([PKGDB_ROOT], ["$REPO_ROOT/pkgdb"])
-AC_SUBST([PKGDB_TEST_DIR], ["$PKGDB_ROOT/tests"])
-AC_SUBST([FLOX_CLI_ROOT], ["$REPO_ROOT/cli"])
-AC_SUBST([FLOX_CLI_TESTS_DIR], ["$FLOX_CLI_ROOT/tests"])
-
-# Defined relative to `$(abs_top_builddir)/cli/'
-AC_SUBST([FLOX_CLI_distdir],   [dist])
-AC_SUBST([FLOX_CLI_targetdir], [target/debug])
-AC_SUBST([FLOX_CLI_tardir],    ["$distdir"])
-
-# Used to determine if a dependency has changed.
-DEPFILES="$REPO_ROOT/flake.nix $REPO_ROOT/flake.lock"
-DEPFILES="$DEPFILES $PKGS_DIR/flox/default.nix";
-DEPFILES="$DEPFILES $PKGS_DIR/flox-pkgdb/default.nix";
-DEPFILES="$DEPFILES $SHELLS_DIR/flox/default.nix";
-AC_SUBST([DEPFILES])
 
 
 # ---------------------------------------------------------------------------- #

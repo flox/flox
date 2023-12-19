@@ -690,23 +690,14 @@ ARGPARSE_LIBS
 ARGPARSE_CFLAGS
 NLJSON_LIBS
 NLJSON_CFLAGS
-DEPFILES
-FLOX_CLI_tardir
-FLOX_CLI_targetdir
-FLOX_CLI_distdir
-FLOX_CLI_TESTS_DIR
-FLOX_CLI_ROOT
-PKGDB_TEST_DIR
-PKGDB_ROOT
-SHELLS_DIR
-PKGS_DIR
-REPO_ROOT
 USE_LOCAL_FLOX_CLI_FALSE
 USE_LOCAL_FLOX_CLI_TRUE
 USE_LOCAL_PKGDB_FALSE
 USE_LOCAL_PKGDB_TRUE
 WITH_FLOX_CLI
+FLOX_CLI
 WITH_PKGDB
+PKGDB_BIN
 ENABLE_RELEASE_FALSE
 ENABLE_RELEASE_TRUE
 RELEASE_CXXFLAGS
@@ -780,6 +771,17 @@ ac_ct_CXX
 CXXFLAGS
 CXX
 MISSING
+DEPFILES
+FLOX_CLI_tardir
+FLOX_CLI_targetdir
+FLOX_CLI_distdir
+FLOX_CLI_TESTS_DIR
+FLOX_CLI_ROOT
+PKGDB_TEST_DIR
+PKGDB_ROOT
+SHELLS_DIR
+PKGS_DIR
+REPO_ROOT
 abs_srcdir
 INSTALL_TESTS_DIR
 SYSCONFDIR
@@ -13499,6 +13501,42 @@ abs_srcdir="$( cd "$srcdir"; echo "$PWD"; )"
 
 # ---------------------------------------------------------------------------- #
 
+# Project Directories
+# -------------------
+
+REPO_ROOT="$abs_srcdir"
+
+PKGS_DIR="$REPO_ROOT/pkgs"
+
+SHELLS_DIR="$REPO_ROOT/shells"
+
+PKGDB_ROOT="$REPO_ROOT/pkgdb"
+
+PKGDB_TEST_DIR="$PKGDB_ROOT/tests"
+
+FLOX_CLI_ROOT="$REPO_ROOT/cli"
+
+FLOX_CLI_TESTS_DIR="$FLOX_CLI_ROOT/tests"
+
+
+# Defined relative to `$(abs_top_builddir)/cli/'
+FLOX_CLI_distdir=dist
+
+FLOX_CLI_targetdir=target/debug
+
+FLOX_CLI_tardir="$distdir"
+
+
+# Used to determine if a dependency has changed.
+DEPFILES="$REPO_ROOT/flake.nix $REPO_ROOT/flake.lock"
+DEPFILES="$DEPFILES $PKGS_DIR/flox/default.nix";
+DEPFILES="$DEPFILES $PKGS_DIR/flox-pkgdb/default.nix";
+DEPFILES="$DEPFILES $SHELLS_DIR/flox/default.nix";
+
+
+
+# ---------------------------------------------------------------------------- #
+
 # Checks for Programs
 # -------------------
 
@@ -20791,9 +20829,9 @@ fi
 
 case "$WITH_PKGDB" in #(
   local) :
-    : ;; #(
+    PKGDB_BIN="$PWD/pkgdb/bin/pkgdb" ;; #(
   nix) :
-    PKGDB_BIN="$( $NIX $NIXFLAGS build "$PKGDB_ROOT#flox-pkgdb"  \
+    PKGDB_BIN="$( $NIX $NIXFLAGS build "$REPO_ROOT#flox-pkgdb"  \
                                          --no-link --print-out-paths; )" ;; #(
   no) :
     : ;; #(
@@ -20806,9 +20844,12 @@ else $as_nop
       You must specify either 'local', 'nix', or a path to a directory" "$LINENO" 5
 fi ;;
 esac
+PKGDB_BIN="$MISSING pkgdb"
+
 
 
 # --with-flox-cli
+# FIXME: target/debug/flox
 
 # Check whether --with-flox-cli was given.
 if test ${with_flox_cli+y}
@@ -20826,13 +20867,14 @@ case "$WITH_FLOX_CLI" in #(
 then :
   as_fn_error $? "Cannot use local 'flox-cli' without 'pkgdb'" "$LINENO" 5
 fi
-     PKGDB_BIN="$( $NIX $NIXFLAGS build "$PKGDB_ROOT#flox-cli"           \
-                                         --no-link --print-out-paths; )" ;; #(
+     FLOX_BIN="$( $NIX $NIXFLAGS build "$REPO_ROOT#flox-cli"           \
+                                       --no-link --print-out-paths; )" ;; #(
   local) :
     if test "$WITH_PKGDB" = 'no'
 then :
   as_fn_error $? "Cannot use local 'flox-cli' without 'pkgdb'" "$LINENO" 5
-fi ;; #(
+fi
+     FLOX_BIN="$PWD/cli/target/debug/flox" ;; #(
   *) :
     if test -d "$WITH_FLOX_CLI"
 then :
@@ -20844,6 +20886,8 @@ fi
 
    ;;
 esac
+FLOX_CLI="$MISSING flox"
+
 
 
  if test "$WITH_PKGDB" = 'local'; then
@@ -20861,42 +20905,6 @@ else
   USE_LOCAL_FLOX_CLI_TRUE='#'
   USE_LOCAL_FLOX_CLI_FALSE=
 fi
-
-
-
-# ---------------------------------------------------------------------------- #
-
-# Project Directories
-# -------------------
-
-REPO_ROOT="$abs_srcdir"
-
-PKGS_DIR="$REPO_ROOT/pkgs"
-
-SHELLS_DIR="$REPO_ROOT/shells"
-
-PKGDB_ROOT="$REPO_ROOT/pkgdb"
-
-PKGDB_TEST_DIR="$PKGDB_ROOT/tests"
-
-FLOX_CLI_ROOT="$REPO_ROOT/cli"
-
-FLOX_CLI_TESTS_DIR="$FLOX_CLI_ROOT/tests"
-
-
-# Defined relative to `$(abs_top_builddir)/cli/'
-FLOX_CLI_distdir=dist
-
-FLOX_CLI_targetdir=target/debug
-
-FLOX_CLI_tardir="$distdir"
-
-
-# Used to determine if a dependency has changed.
-DEPFILES="$REPO_ROOT/flake.nix $REPO_ROOT/flake.lock"
-DEPFILES="$DEPFILES $PKGS_DIR/flox/default.nix";
-DEPFILES="$DEPFILES $PKGS_DIR/flox-pkgdb/default.nix";
-DEPFILES="$DEPFILES $SHELLS_DIR/flox/default.nix";
 
 
 
