@@ -787,23 +787,6 @@ impl Push {
         subcommand_metric!("push");
 
         if flox.floxhub_token.is_none() {
-            let options = indoc! {"
-                * login to floxhub with 'flox auth login',
-                * set the 'floxhub_token' field to '<your token>' in your config
-                * set the '$FLOX_FLOXHUB_TOKEN=<your_token>' environment variable."};
-
-            let dialog_help = formatdoc! {"
-                Alternatively you can also
-                {options}"};
-
-            let dialog = Dialog {
-                message: "You are not logged in to floxhub. Would you like to login now?",
-                help_message: Some(&dialog_help),
-                typed: Confirm {
-                    default: Some(true),
-                },
-            };
-
             if !Dialog::can_prompt() {
                 let message = formatdoc! {"
                     You are not logged in to floxhub.
@@ -811,15 +794,14 @@ impl Push {
                     Can not automatically login to floxhub in non-interactive context.
 
                     To login you can either
-                    {options}
-                "};
-
+                    * login to floxhub with 'flox auth login',
+                    * set the 'floxhub_token' field to '<your token>' in your config
+                    * set the '$FLOX_FLOXHUB_TOKEN=<your_token>' environment variable."
+                };
                 bail!(message);
             }
 
-            if !dialog.prompt().await? {
-                bail!("Could not push environment: not logged in to floxhub");
-            }
+            info!("You are not logged in to floxhub. Logging in...");
 
             auth::login_flox(&mut flox).await?;
         }
