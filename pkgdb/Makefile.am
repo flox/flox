@@ -13,6 +13,12 @@ SUBDIRS = src/resolver include tests
 
 # ---------------------------------------------------------------------------- #
 
+src/resolver/libresolver.la:
+	$(MAKE) -C src/resolver libresolver.la
+
+
+# ---------------------------------------------------------------------------- #
+
 lib_LTLIBRARIES = lib/libpkgdb.la
 
 lib_libpkgdb_la_CXXFLAGS =  $(AM_CXXFLAGS)

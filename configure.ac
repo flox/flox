@@ -114,6 +114,10 @@ AC_PATH_PROG([AR], ["${AR:-ar}"], [$MISSING ar])
 PKG_PROG_PKG_CONFIG
 AC_PATH_PROG([PKG_CONFIG], ["${PKG_CONFIG:-}"], [$MISSING pkg-config])
 
+#FLOX_PROG_MKDIR
+#FLOX_PROG_MKTEMP
+#FLOX_PROG_LN
+
 AC_ARG_VAR([CAT], [Concatenate FILE(s) to standard output])
 AC_PATH_PROG([CAT], [cat], [$MISSING cat])
 
@@ -122,9 +126,6 @@ AC_PATH_PROG([HEAD], [head], [$MISSING head])
 
 AC_ARG_VAR([CP], [Copy files])
 AC_PATH_PROG([CP], [cp], [$MISSING cp])
-
-AC_ARG_VAR([MKDIR], [Create directories])
-AC_PATH_PROG([MKDIR], [mkdir], [$MISSING mkdir])
 
 AC_ARG_VAR([RM], [Remove files])
 AC_PATH_PROG([RM], [rm -f], [$MISSING rm])
@@ -147,9 +148,6 @@ AC_PATH_PROG([TR], [tr], [$MISSING tr])
 
 AC_ARG_VAR([UNAME], [Print system information])
 AC_PATH_PROG([UNAME], [uname], [$MISSING uname])
-
-AC_ARG_VAR([LN], [Create symbolic links])
-AC_PATH_PROG([LN], [ln], [$MISSING ln])
 
 AC_ARG_VAR([FIND], [Search for files in a directory hierarchy])
 AC_PATH_PROG([FIND], [find], [$MISSING find])
@@ -193,8 +191,7 @@ AC_PATH_PROG([RUST_FMT], [rustfmt], [$MISSING rustfmt])
 AC_ARG_VAR([RUST_LINT], [Rust code linter @<:@default=clippy@:>@])
 AC_PATH_PROG([RUST_LINT], [clippy], [$MISSING clippy])
 
-AC_ARG_VAR([BEAR], [Build EAR])
-AC_PATH_PROG([BEAR], [bear], [$MISSING bear])
+FLOX_PROG_BEAR
 
 AC_ARG_VAR([CXX_FMT], [C++ code formatter @<:@default=clang-format@:>@])
 AC_PATH_PROG([CXX_FMT], [clang-format], [$MISSING clang-format])
@@ -426,7 +423,7 @@ AS_CASE(["$WITH_FLOX_CLI"],
   [no],    [:],
   [nix],
     [AS_IF([test "$WITH_PKGDB" = 'no'],
-           [AC_MSG_ERROR([Cannot use local 'flox-cli' without 'pkgdb'])])],
+           [AC_MSG_ERROR([Cannot use local 'flox-cli' without 'pkgdb'])])
      PKGDB_BIN="$( $NIX $NIXFLAGS build "$PKGDB_ROOT@%:@flox-cli"           \
                                          --no-link --print-out-paths; )"],
   [local],
@@ -713,10 +710,18 @@ AC_SUBST([AM_LDFLAGS])
 # Create Symlinks into Build Area
 # -------------------------------
 
-AC_CONFIG_LINKS([
-  pkgdb/tests/setup_suite.bash:pkgdb/tests/setup_suite.bash
-])
+# Create Bear Wrapper
+FLOX_CONFIG_BEAR_WRAPPER_CXX([bear.d])
 
+# Link Test Data
+AC_CONFIG_LINKS([pkgdb/tests/setup_suite.bash:pkgdb/tests/setup_suite.bash])
+
+AC_CONFIG_COMMANDS([pkgdb/tests/data],
+  [$MKDIR_P pkgdb/tests; $LN_S -f "$PKGDB_ROOT/tests/data" pkgdb/tests/data])
+
+AC_CONFIG_COMMANDS([pkgdb/tests/harnesses],
+  [$MKDIR_P pkgdb/tests;
+   $LN_S -f "$PKGDB_ROOT/tests/harnesses" pkgdb/tests/harnesses])
 
 # ---------------------------------------------------------------------------- #
 
@@ -733,11 +738,8 @@ AC_CONFIG_FILES([
   pkgdb/include/Makefile
   pkgdb/tests/Makefile
   cli/Makefile
-], [
-$MKDIR_P pkgdb/tests;
-$LN_S -f "$PKGDB_ROOT/tests/data"      pkgdb/tests/data;
-$LN_S -f "$PKGDB_ROOT/tests/harnesses" pkgdb/tests/harnesses;
 ])
+
 
 # Substitute and write.
 AC_OUTPUT

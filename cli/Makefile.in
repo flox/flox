@@ -95,7 +95,8 @@ build_triplet = @build@
 host_triplet = @host@
 subdir = cli
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
-am__aclocal_m4_deps = $(top_srcdir)/build-aux/m4/dirs.m4 \
+am__aclocal_m4_deps = $(top_srcdir)/build-aux/m4/bear.m4 \
+	$(top_srcdir)/build-aux/m4/dirs.m4 \
 	$(top_srcdir)/build-aux/m4/libtool.m4 \
 	$(top_srcdir)/build-aux/m4/ltoptions.m4 \
 	$(top_srcdir)/build-aux/m4/ltsugar.m4 \
@@ -148,6 +149,8 @@ AUTORECONF = @AUTORECONF@
 AWK = @AWK@
 BATS = @BATS@
 BEAR = @BEAR@
+BEAR_WRAPPER = @BEAR_WRAPPER@
+BEAR_WRAPPER_CXX = @BEAR_WRAPPER_CXX@
 BINDIR = @BINDIR@
 CARGO = @CARGO@
 CARGOFLAGS = @CARGOFLAGS@

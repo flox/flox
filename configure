@@ -659,6 +659,10 @@ ac_header_c_list=
 ac_subst_vars='am__EXEEXT_FALSE
 am__EXEEXT_TRUE
 LTLIBOBJS
+BEAR_WRAPPER_CXX
+BEAR_WRAPPER
+LN
+MKDIR
 AM_LDFLAGS
 AM_CXXFLAGS
 SEMVER_PATH
@@ -751,7 +755,6 @@ GIT
 M4
 XARGS
 FIND
-LN
 UNAME
 TR
 TOUCH
@@ -759,7 +762,6 @@ TEST
 TEE
 SORT
 RM
-MKDIR
 CP
 HEAD
 CAT
@@ -951,7 +953,6 @@ PKG_CONFIG_LIBDIR
 CAT
 HEAD
 CP
-MKDIR
 RM
 SORT
 TEE
@@ -959,7 +960,6 @@ TEST
 TOUCH
 TR
 UNAME
-LN
 FIND
 XARGS
 M4
@@ -997,7 +997,11 @@ NIX_LIBS
 SYSTEM
 SET_PROMPT_BASH_SH
 PROFILE_D_SCRIPT_DIR
-SEMVER_PATH'
+SEMVER_PATH
+MKDIR
+LN
+BEAR_WRAPPER
+BEAR_WRAPPER_CXX'
 
 
 # Initialize some variables set by options.
@@ -1690,7 +1694,6 @@ Some influential environment variables:
   CAT         Concatenate FILE(s) to standard output
   HEAD        Output the first part of files
   CP          Copy files
-  MKDIR       Create directories
   RM          Remove files
   SORT        Sort lines of text
   TEE         Redirect output to multiple files
@@ -1698,7 +1701,6 @@ Some influential environment variables:
   TOUCH       Change file timestamps, or create empty files
   TR          Translate, squeeze, and/or delete characters from standard input
   UNAME       Print system information
-  LN          Create symbolic links
   FIND        Search for files in a directory hierarchy
   XARGS       Build and execute command lines from standard input
   M4          Macro processor
@@ -1715,7 +1717,7 @@ Some influential environment variables:
   CARGO       Rust package manager
   RUST_FMT    Rust code formatter [default=rustfmt]
   RUST_LINT   Rust code linter [default=clippy]
-  BEAR        Build EAR
+  BEAR        Build EAR ( LLVM build analysis tool )
   CXX_FMT     C++ code formatter [default=clang-format]
   CXX_LINT    C++ code linter [default=clang-tidy]
   DOXYGEN     Generate documentation
@@ -1749,6 +1751,12 @@ Some influential environment variables:
               Path to directory containing 'etc/profile.d' directory in
               '/nix/store/'
   SEMVER_PATH Path to 'semver' executable in '/nix/store/'
+  MKDIR       Create directories
+  LN          Create symbolic links
+  BEAR_WRAPPER
+              Build EAR wrapper utility
+  BEAR_WRAPPER_CXX
+              Build EAR wrapper utility for C++
 
 Use these variables to override the choices made by `configure' or to help
 it to find libraries and programs with nonstandard names/locations.
@@ -18434,6 +18442,10 @@ fi
 
 
 
+#FLOX_PROG_MKDIR
+#FLOX_PROG_MKTEMP
+#FLOX_PROG_LN
+
 
 # Extract the first word of "cat", so it can be a program name with args.
 set dummy cat; ac_word=$2
@@ -18571,54 +18583,6 @@ CP=$ac_cv_path_CP
 if test -n "$CP"; then
   { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $CP" >&5
 printf "%s\n" "$CP" >&6; }
-else
-  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
-printf "%s\n" "no" >&6; }
-fi
-
-
-
-
-# Extract the first word of "mkdir", so it can be a program name with args.
-set dummy mkdir; ac_word=$2
-{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
-printf %s "checking for $ac_word... " >&6; }
-if test ${ac_cv_path_MKDIR+y}
-then :
-  printf %s "(cached) " >&6
-else $as_nop
-  case $MKDIR in
-  [\\/]* | ?:[\\/]*)
-  ac_cv_path_MKDIR="$MKDIR" # Let the user override the test with a path.
-  ;;
-  *)
-  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
-for as_dir in $PATH
-do
-  IFS=$as_save_IFS
-  case $as_dir in #(((
-    '') as_dir=./ ;;
-    */) ;;
-    *) as_dir=$as_dir/ ;;
-  esac
-    for ac_exec_ext in '' $ac_executable_extensions; do
-  if as_fn_executable_p "$as_dir$ac_word$ac_exec_ext"; then
-    ac_cv_path_MKDIR="$as_dir$ac_word$ac_exec_ext"
-    printf "%s\n" "$as_me:${as_lineno-$LINENO}: found $as_dir$ac_word$ac_exec_ext" >&5
-    break 2
-  fi
-done
-  done
-IFS=$as_save_IFS
-
-  test -z "$ac_cv_path_MKDIR" && ac_cv_path_MKDIR="$MISSING mkdir"
-  ;;
-esac
-fi
-MKDIR=$ac_cv_path_MKDIR
-if test -n "$MKDIR"; then
-  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $MKDIR" >&5
-printf "%s\n" "$MKDIR" >&6; }
 else
   { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
 printf "%s\n" "no" >&6; }
@@ -18955,54 +18919,6 @@ UNAME=$ac_cv_path_UNAME
 if test -n "$UNAME"; then
   { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $UNAME" >&5
 printf "%s\n" "$UNAME" >&6; }
-else
-  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
-printf "%s\n" "no" >&6; }
-fi
-
-
-
-
-# Extract the first word of "ln", so it can be a program name with args.
-set dummy ln; ac_word=$2
-{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
-printf %s "checking for $ac_word... " >&6; }
-if test ${ac_cv_path_LN+y}
-then :
-  printf %s "(cached) " >&6
-else $as_nop
-  case $LN in
-  [\\/]* | ?:[\\/]*)
-  ac_cv_path_LN="$LN" # Let the user override the test with a path.
-  ;;
-  *)
-  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
-for as_dir in $PATH
-do
-  IFS=$as_save_IFS
-  case $as_dir in #(((
-    '') as_dir=./ ;;
-    */) ;;
-    *) as_dir=$as_dir/ ;;
-  esac
-    for ac_exec_ext in '' $ac_executable_extensions; do
-  if as_fn_executable_p "$as_dir$ac_word$ac_exec_ext"; then
-    ac_cv_path_LN="$as_dir$ac_word$ac_exec_ext"
-    printf "%s\n" "$as_me:${as_lineno-$LINENO}: found $as_dir$ac_word$ac_exec_ext" >&5
-    break 2
-  fi
-done
-  done
-IFS=$as_save_IFS
-
-  test -z "$ac_cv_path_LN" && ac_cv_path_LN="$MISSING ln"
-  ;;
-esac
-fi
-LN=$ac_cv_path_LN
-if test -n "$LN"; then
-  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $LN" >&5
-printf "%s\n" "$LN" >&6; }
 else
   { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
 printf "%s\n" "no" >&6; }
@@ -19640,6 +19556,7 @@ fi
 
 
 
+
 # Extract the first word of "bear", so it can be a program name with args.
 set dummy bear; ac_word=$2
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
@@ -19684,6 +19601,7 @@ else
   { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
 printf "%s\n" "no" >&6; }
 fi
+
 
 
 
@@ -20875,7 +20793,8 @@ case "$WITH_PKGDB" in #(
   local) :
     : ;; #(
   nix) :
-    : ;; #(
+    PKGDB_BIN="$( $NIX $NIXFLAGS build "$PKGDB_ROOT#flox-pkgdb"  \
+                                         --no-link --print-out-paths; )" ;; #(
   no) :
     : ;; #(
   *) :
@@ -20902,7 +20821,14 @@ fi
 case "$WITH_FLOX_CLI" in #(
   no) :
     : ;; #(
-  local|nix) :
+  nix) :
+    if test "$WITH_PKGDB" = 'no'
+then :
+  as_fn_error $? "Cannot use local 'flox-cli' without 'pkgdb'" "$LINENO" 5
+fi
+     PKGDB_BIN="$( $NIX $NIXFLAGS build "$PKGDB_ROOT#flox-cli"           \
+                                         --no-link --print-out-paths; )" ;; #(
+  local) :
     if test "$WITH_PKGDB" = 'no'
 then :
   as_fn_error $? "Cannot use local 'flox-cli' without 'pkgdb'" "$LINENO" 5
@@ -20914,7 +20840,9 @@ then :
 else $as_nop
   as_fn_error $? "Invalid '--with-flox-cli': '$WITH_FLOX_CLI'.
       You must specify either 'local', 'nix', or a path to a directory" "$LINENO" 5
-fi ;;
+fi
+
+   ;;
 esac
 
 
@@ -21946,8 +21874,141 @@ AM_LDFLAGS="$AM_LDFLAGS $SQLITE3PP_LIBS $SQLITE3_LIBS";
 # Create Symlinks into Build Area
 # -------------------------------
 
+# Create Bear Wrapper
+
+
+
+# Extract the first word of "mkdir", so it can be a program name with args.
+set dummy mkdir; ac_word=$2
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
+printf %s "checking for $ac_word... " >&6; }
+if test ${ac_cv_path_MKDIR+y}
+then :
+  printf %s "(cached) " >&6
+else $as_nop
+  case $MKDIR in
+  [\\/]* | ?:[\\/]*)
+  ac_cv_path_MKDIR="$MKDIR" # Let the user override the test with a path.
+  ;;
+  *)
+  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
+for as_dir in $PATH
+do
+  IFS=$as_save_IFS
+  case $as_dir in #(((
+    '') as_dir=./ ;;
+    */) ;;
+    *) as_dir=$as_dir/ ;;
+  esac
+    for ac_exec_ext in '' $ac_executable_extensions; do
+  if as_fn_executable_p "$as_dir$ac_word$ac_exec_ext"; then
+    ac_cv_path_MKDIR="$as_dir$ac_word$ac_exec_ext"
+    printf "%s\n" "$as_me:${as_lineno-$LINENO}: found $as_dir$ac_word$ac_exec_ext" >&5
+    break 2
+  fi
+done
+  done
+IFS=$as_save_IFS
+
+  test -z "$ac_cv_path_MKDIR" && ac_cv_path_MKDIR="$MISSING mkdir"
+  ;;
+esac
+fi
+MKDIR=$ac_cv_path_MKDIR
+if test -n "$MKDIR"; then
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $MKDIR" >&5
+printf "%s\n" "$MKDIR" >&6; }
+else
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
+printf "%s\n" "no" >&6; }
+fi
+
+
+MKDIR_P="$MKDIR -p"
+
+
+
+
+
+# Extract the first word of "ln", so it can be a program name with args.
+set dummy ln; ac_word=$2
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
+printf %s "checking for $ac_word... " >&6; }
+if test ${ac_cv_path_LN+y}
+then :
+  printf %s "(cached) " >&6
+else $as_nop
+  case $LN in
+  [\\/]* | ?:[\\/]*)
+  ac_cv_path_LN="$LN" # Let the user override the test with a path.
+  ;;
+  *)
+  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
+for as_dir in $PATH
+do
+  IFS=$as_save_IFS
+  case $as_dir in #(((
+    '') as_dir=./ ;;
+    */) ;;
+    *) as_dir=$as_dir/ ;;
+  esac
+    for ac_exec_ext in '' $ac_executable_extensions; do
+  if as_fn_executable_p "$as_dir$ac_word$ac_exec_ext"; then
+    ac_cv_path_LN="$as_dir$ac_word$ac_exec_ext"
+    printf "%s\n" "$as_me:${as_lineno-$LINENO}: found $as_dir$ac_word$ac_exec_ext" >&5
+    break 2
+  fi
+done
+  done
+IFS=$as_save_IFS
+
+  test -z "$ac_cv_path_LN" && ac_cv_path_LN="$MISSING ln"
+  ;;
+esac
+fi
+LN=$ac_cv_path_LN
+if test -n "$LN"; then
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $LN" >&5
+printf "%s\n" "$LN" >&6; }
+else
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
+printf "%s\n" "no" >&6; }
+fi
+
+
+LN_S="$LN -s"
+
+
+
+
+_flox_v_bear_prefix="${BEAR%/bin/*}";
+BEAR_WRAPPER=$_flox_v_bear_prefix/lib/bear/wrapper
+
+
+
+
+
+
+
+case bear.d in #(
+  /*) :
+    BEAR_WRAPPER_CXX="bear.d/c++" ;; #(
+  *) :
+    BEAR_WRAPPER_CXX="$PWD/bear.d/c++" ;;
+esac
+
+ac_config_commands="$ac_config_commands bear.d/c++"
+
+
+
+# Link Test Data
 ac_config_links="$ac_config_links pkgdb/tests/setup_suite.bash:pkgdb/tests/setup_suite.bash"
 
+
+ac_config_commands="$ac_config_commands pkgdb/tests/data"
+
+
+ac_config_commands="$ac_config_commands pkgdb/tests/harnesses"
 
 
 # ---------------------------------------------------------------------------- #
@@ -21959,6 +22020,7 @@ ac_config_links="$ac_config_links pkgdb/tests/setup_suite.bash:pkgdb/tests/setup
 
 # Locate files to be processed ( `.in' suffix is implied ).
 ac_config_files="$ac_config_files Makefile pkgdb/Makefile pkgdb/src/resolver/Makefile pkgdb/include/Makefile pkgdb/tests/Makefile cli/Makefile"
+
 
 
 # Substitute and write.
@@ -23128,6 +23190,8 @@ fi
 
 
 
+BEAR_WRAPPER="$BEAR_WRAPPER";
+   BEAR_WRAPPER_CXX="$BEAR_WRAPPER_CXX"
 
 _ACEOF
 
@@ -23139,7 +23203,10 @@ do
   case $ac_config_target in
     "depfiles") CONFIG_COMMANDS="$CONFIG_COMMANDS depfiles" ;;
     "libtool") CONFIG_COMMANDS="$CONFIG_COMMANDS libtool" ;;
+    "bear.d/c++") CONFIG_COMMANDS="$CONFIG_COMMANDS bear.d/c++" ;;
     "pkgdb/tests/setup_suite.bash") CONFIG_LINKS="$CONFIG_LINKS pkgdb/tests/setup_suite.bash:pkgdb/tests/setup_suite.bash" ;;
+    "pkgdb/tests/data") CONFIG_COMMANDS="$CONFIG_COMMANDS pkgdb/tests/data" ;;
+    "pkgdb/tests/harnesses") CONFIG_COMMANDS="$CONFIG_COMMANDS pkgdb/tests/harnesses" ;;
     "Makefile") CONFIG_FILES="$CONFIG_FILES Makefile" ;;
     "pkgdb/Makefile") CONFIG_FILES="$CONFIG_FILES pkgdb/Makefile" ;;
     "pkgdb/src/resolver/Makefile") CONFIG_FILES="$CONFIG_FILES pkgdb/src/resolver/Makefile" ;;
@@ -24420,36 +24487,11 @@ compiler_lib_search_path=$lt_compiler_lib_search_path_CXX
 _LT_EOF
 
  ;;
-    "Makefile":F)
-$MKDIR_P pkgdb/tests;
-$LN_S -f "$PKGDB_ROOT/tests/data"      pkgdb/tests/data;
-$LN_S -f "$PKGDB_ROOT/tests/harnesses" pkgdb/tests/harnesses;
- ;;
-    "pkgdb/Makefile":F)
-$MKDIR_P pkgdb/tests;
-$LN_S -f "$PKGDB_ROOT/tests/data"      pkgdb/tests/data;
-$LN_S -f "$PKGDB_ROOT/tests/harnesses" pkgdb/tests/harnesses;
- ;;
-    "pkgdb/src/resolver/Makefile":F)
-$MKDIR_P pkgdb/tests;
-$LN_S -f "$PKGDB_ROOT/tests/data"      pkgdb/tests/data;
-$LN_S -f "$PKGDB_ROOT/tests/harnesses" pkgdb/tests/harnesses;
- ;;
-    "pkgdb/include/Makefile":F)
-$MKDIR_P pkgdb/tests;
-$LN_S -f "$PKGDB_ROOT/tests/data"      pkgdb/tests/data;
-$LN_S -f "$PKGDB_ROOT/tests/harnesses" pkgdb/tests/harnesses;
- ;;
-    "pkgdb/tests/Makefile":F)
-$MKDIR_P pkgdb/tests;
-$LN_S -f "$PKGDB_ROOT/tests/data"      pkgdb/tests/data;
-$LN_S -f "$PKGDB_ROOT/tests/harnesses" pkgdb/tests/harnesses;
- ;;
-    "cli/Makefile":F)
-$MKDIR_P pkgdb/tests;
-$LN_S -f "$PKGDB_ROOT/tests/data"      pkgdb/tests/data;
-$LN_S -f "$PKGDB_ROOT/tests/harnesses" pkgdb/tests/harnesses;
- ;;
+    "bear.d/c++":C) $MKDIR_P "bear.d";
+   $LN_S -f "$BEAR_WRAPPER" "$BEAR_WRAPPER_CXX"; ;;
+    "pkgdb/tests/data":C) $MKDIR_P pkgdb/tests; $LN_S -f "$PKGDB_ROOT/tests/data" pkgdb/tests/data ;;
+    "pkgdb/tests/harnesses":C) $MKDIR_P pkgdb/tests;
+   $LN_S -f "$PKGDB_ROOT/tests/harnesses" pkgdb/tests/harnesses ;;
 
   esac
 done # for ac_tag

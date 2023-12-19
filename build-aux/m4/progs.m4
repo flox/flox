@@ -62,6 +62,54 @@ AC_PATH_PROG([FILECMD], [file], [$MISSING file])
 
 
 # ---------------------------------------------------------------------------- #
+
+# FLOX_PROG_MKTEMP
+# ----------------
+AC_DEFUN([FLOX_PROG_MKTEMP], [
+AC_REQUIRE([FLOX_PROG_MISSING])
+AC_ARG_VAR([MKTEMP], [Create temporary files and directories])
+AC_PATH_PROG([MKTEMP], [mktemp], [$MISSING mktemp])
+]) # FLOX_PROG_MKTEMP
+
+
+# ---------------------------------------------------------------------------- #
+
+# FLOX_PROG_REALPATH
+# ----------------
+AC_DEFUN([FLOX_PROG_REALPATH], [
+AC_REQUIRE([FLOX_PROG_MISSING])
+AC_ARG_VAR([REALPATH], [Canonicalize paths])
+AC_PATH_PROG([REALPATH], [realpath], [$MISSING realpath])
+]) # FLOX_PROG_REALPATH
+
+
+# ---------------------------------------------------------------------------- #
+
+# FLOX_PROG_MKDIR
+# ---------------
+# Declares `MKDIR' and `MKDIR_P' variables.
+AC_DEFUN([FLOX_PROG_MKDIR], [
+AC_REQUIRE([FLOX_PROG_MISSING])
+AC_ARG_VAR([MKDIR], [Create directories])
+AC_PATH_PROG([MKDIR], [mkdir], [$MISSING mkdir])
+AC_SUBST([MKDIR_P], ["$MKDIR -p"])
+]) # FLOX_PROG_MKTEMP
+
+
+# ---------------------------------------------------------------------------- #
+
+# FLOX_PROG_LN
+# ------------
+# Declares `LN' and `LN_S' variables.
+AC_DEFUN([FLOX_PROG_LN], [
+AC_REQUIRE([FLOX_PROG_MISSING])
+AC_ARG_VAR([LN], [Create symbolic links])
+AC_PATH_PROG([LN], [ln], [$MISSING ln])
+AC_SUBST([LN_S], ["$LN -s"])
+]) # FLOX_PROG_LN
+
+
+# ---------------------------------------------------------------------------- #
 #
 #
 #

@@ -101,7 +101,8 @@ host_triplet = @host@
 @USE_LOCAL_FLOX_CLI_TRUE@am__append_2 = cli
 subdir = .
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
-am__aclocal_m4_deps = $(top_srcdir)/build-aux/m4/dirs.m4 \
+am__aclocal_m4_deps = $(top_srcdir)/build-aux/m4/bear.m4 \
+	$(top_srcdir)/build-aux/m4/dirs.m4 \
 	$(top_srcdir)/build-aux/m4/libtool.m4 \
 	$(top_srcdir)/build-aux/m4/ltoptions.m4 \
 	$(top_srcdir)/build-aux/m4/ltsugar.m4 \
@@ -179,7 +180,8 @@ am__DIST_COMMON = $(srcdir)/Makefile.in $(top_srcdir)/build-aux/ar-lib \
 	$(top_srcdir)/build-aux/ltmain.sh \
 	$(top_srcdir)/build-aux/missing README.md build-aux/ar-lib \
 	build-aux/compile build-aux/config.guess build-aux/config.sub \
-	build-aux/install-sh build-aux/ltmain.sh build-aux/missing
+	build-aux/depcomp build-aux/install-sh build-aux/ltmain.sh \
+	build-aux/missing
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
 distdir = $(PACKAGE)-$(VERSION)
 top_distdir = $(distdir)
@@ -241,6 +243,8 @@ AUTORECONF = @AUTORECONF@
 AWK = @AWK@
 BATS = @BATS@
 BEAR = @BEAR@
+BEAR_WRAPPER = @BEAR_WRAPPER@
+BEAR_WRAPPER_CXX = @BEAR_WRAPPER_CXX@
 BINDIR = @BINDIR@
 CARGO = @CARGO@
 CARGOFLAGS = @CARGOFLAGS@
@@ -927,10 +931,11 @@ uninstall-am:
 @USE_LOCAL_PKGDB_TRUE@pkgdb:
 @USE_LOCAL_PKGDB_TRUE@	$(MAKE) $(AM_MAKEFLAGS) -C $(builddir)/pkgdb
 
-# FIXME: Move over the OSX compat stuff and kill the old Makefile
-@USE_LOCAL_PKGDB_TRUE@.PHONY: cdb
+@USE_LOCAL_PKGDB_TRUE@PHONY: cdb
 @USE_LOCAL_PKGDB_TRUE@cdb:
-@USE_LOCAL_PKGDB_TRUE@	$(MAKE) $(AM_MAKEFLAGS) -C $(srcdir)/pkgdb --file=Makefile.bak $@;
+@USE_LOCAL_PKGDB_TRUE@	$(MAKE) $(AM_MAKEFLAGS) -C $(builddir)/pkgdb clean;
+@USE_LOCAL_PKGDB_TRUE@	PATH="$(dir $(BEAR_WRAPPER_CXX)):$(PATH)";                                 \
+@USE_LOCAL_PKGDB_TRUE@	  $(BEAR) -- $(MAKE) $(AM_MAKEFLAGS) -C $(builddir)/pkgdb bin/pkgdb tests;
 
 @USE_LOCAL_FLOX_CLI_TRUE@.PHONY: cli
 
