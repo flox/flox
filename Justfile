@@ -34,12 +34,9 @@ bootstrap:
 # ---------------------------------------------------------------------------- #
 
 # Prepare the build area and lock configuration options.
-configure *args='':
-    @if ! test -x configure; then ./bootstrap.sh; fi;
+configure *args='': bootstrap
     mkdir -p build;
-    pushd build;
-    ../configure --prefix="$PWD/out" "$@";
-    popd;
+    pushd build; ../configure --prefix="$PWD/out" "$@"; popd;
 
 
 # ---------------------------------------------------------------------------- #
