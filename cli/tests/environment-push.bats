@@ -95,7 +95,7 @@ function update_dummy_env() {
 
   run "$FLOX_BIN" push --owner owner # dummy owner
   assert_failure
-  assert_output --partial 'Please login to floxhub with `flox auth login`'
+  assert_output --partial 'You are not logged in to floxhub.'
 }
 
 
