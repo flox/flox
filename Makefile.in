@@ -929,10 +929,10 @@ cli:
 
 # ---------------------------------------------------------------------------- #
 
+# FIXME: Move over the OSX compat stuff and kill the old Makefile
 .PHONY: cdb
 cdb:
-	$(MAKE) $(AM_MAKEFLAGS) -C $(builddir)/pkgdb clean;
-	$(BEAR) -- $(MAKE) $(AM_MAKEFLAGS) -C $(builddir)/pkgdb bin/pkgdb tests;
+	$(MAKE) $(AM_MAKEFLAGS) -C $(srcdir)/pkgdb --file=Makefile.bak $@;
 
 # ---------------------------------------------------------------------------- #
 #

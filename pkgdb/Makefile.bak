@@ -145,13 +145,13 @@ endif  # ifndef TOOLCHAIN
 # Read info from files
 # --------------------
 
-VERSION := $(file < $(PKGDB_ROOT)/.version)
+VERSION := $(file < $(PKGDB_ROOT)/version)
 
 # Files used by `pkgdb buildenv' need to be added to the `nix' store.
 PROFILE_D_SCRIPT_DIR ?= $(shell                            \
   $(NIX) store add-path -n profile.d src/buildenv/assets)
 SET_PROMPT_BASH_SH ?= $(shell                                                  \
-  $(NIX) store add-file -n set-prompt-bash.sh src/buildenv/set-prompt-bash.sh)
+  $(NIX) store add-path -n set-prompt-bash.sh src/buildenv/set-prompt-bash.sh)
 
 
 # ---------------------------------------------------------------------------- #
@@ -191,7 +191,6 @@ TEST_DATA_DIR = $(PKGDB_ROOT)/tests/data
 # Files which effect dependencies, external inputs, and `*FLAGS' values.
 DEPFILES =
 DEPFILES += $(addprefix $(REPO_ROOT)/flake.,nix lock)
-DEPFILES += $(REPO_ROOT)/pkgs/nix/default.nix
 DEPFILES += $(REPO_ROOT)/pkgs/flox-pkgdb/default.nix
 DEPFILES += $(REPO_ROOT)/pkgs/nlohmann_json/default.nix
 DEPFILES += $(REPO_ROOT)/shells/default/default.nix
@@ -208,7 +207,7 @@ CPPFLAGS  	  ?=
 
 # You can disable these optional gripes with `make EXTRA_CXXFLAGS='' ...;'
 ifndef EXTRA_CXXFLAGS
-EXTRA_CXXFLAGS = -Wall -Wextra -pedantic
+EXTRA_CXXFLAGS = -Wall -Wextra -Wpedantic
 # Clang only
 ifeq (clang,$(TOOLCHAIN))
 EXTRA_CXXFLAGS += -Wno-gnu-zero-variadic-macro-arguments
@@ -473,15 +472,16 @@ FULLCLEANDIRS += bear.d
 ../compile_commands.json: bear.d/c++ $(DEPFILES)
 ../compile_commands.json: $(lastword $(MAKEFILE_LIST))
 ../compile_commands.json: $(HEADERS) $(ALL_SRCS)
-	-$(MAKE) -C $(MAKEFILE_DIR) clean;
+	-$(MAKE) -C $(MAKEFILE_DIR) -f $(lastword $(MAKEFILE_LIST)) clean;
 	EXTRA_CXXFLAGS='$(EXTRA_CXXFLAGS)'                              \
 	  PATH="$(MAKEFILE_DIR)/bear.d/:$(PATH)"                        \
 	  $(BEAR) --output $@ -- $(MAKE) -C $(MAKEFILE_DIR) bin tests;
-	EXTRA_CXXFLAGS='$(EXTRA_CXXFLAGS)'                    \
-	  PATH="$(MAKEFILE_DIR)/bear.d/:$(PATH)"              \
-	  $(BEAR) --output $@ --append --                     \
-	    $(MAKE) -C $(MAKEFILE_DIR) pre-compiled-headers;
-	$(MAKE) -C $(MAKEFILE_DIR) clean-pch;
+	EXTRA_CXXFLAGS='$(EXTRA_CXXFLAGS)'                              \
+	  PATH="$(MAKEFILE_DIR)/bear.d/:$(PATH)"                        \
+	  $(BEAR) --output $@ --append --                               \
+	    $(MAKE) -C $(MAKEFILE_DIR) -f $(lastword $(MAKEFILE_LIST))  \
+	            pre-compiled-headers;
+	$(MAKE) -C $(MAKEFILE_DIR) -f $(lastword $(MAKEFILE_LIST)) clean-pch;
 
 FULLCLEANFILES += ../compile_commands.json
 
