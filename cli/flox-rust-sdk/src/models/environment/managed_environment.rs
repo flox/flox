@@ -836,8 +836,7 @@ impl ManagedEnvironment {
         let checkedout_floxmeta_path = tempfile::tempdir_in(&flox.temp_dir).unwrap().into_path();
         let temp_floxmeta_path = tempfile::tempdir_in(&flox.temp_dir).unwrap().into_path();
 
-        // caller must ensure that a token is present
-        // or pushing git operations will fail
+        // Caller decides whether to set token
         let token = flox.floxhub_token.as_deref();
 
         let options = floxmeta_git_options(&flox.floxhub_host, token);
