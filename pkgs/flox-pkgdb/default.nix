@@ -113,7 +113,14 @@ in
       propagatedBuildInputs = [semver];
 
       nativeBuildInputs = [
-        autoconf automake libtool pkg-config coreutils gnugrep gnumake gnused
+        autoconf
+        automake
+        libtool
+        pkg-config
+        coreutils
+        gnugrep
+        gnumake
+        gnused
       ];
 
       buildInputs = [
