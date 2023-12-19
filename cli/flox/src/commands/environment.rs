@@ -951,13 +951,19 @@ impl Pull {
         match self.pull_select {
             PullSelect::New { dir, remote } | PullSelect::NewAbbreviated { dir, remote } => {
                 let (start, complete) = Self::pull_new_messages(dir.as_deref(), &remote);
-                info!("{start}");
 
                 let dir = dir.unwrap_or_else(|| std::env::current_dir().unwrap());
 
                 debug!("Resolved user intent: pull {remote:?} into {dir:?}");
 
-                Self::pull_new_environment(&flox, dir.join(DOT_FLOX), remote)?;
+                Dialog {
+                    message: &start,
+                    help_message: None,
+                    typed: Spinner::new(|| {
+                        Self::pull_new_environment(&flox, dir.join(DOT_FLOX), remote)
+                    }),
+                }
+                .spin()?;
 
                 info!("{complete}");
             },
@@ -978,7 +984,14 @@ impl Pull {
                 let (start, complete) = Self::pull_existing_messages(&pointer, force);
                 info!("{start}");
 
-                Self::pull_existing_environment(&flox, dir.join(DOT_FLOX), pointer, force)?;
+                Dialog {
+                    message: &start,
+                    help_message: None,
+                    typed: Spinner::new(|| {
+                        Self::pull_existing_environment(&flox, dir.join(DOT_FLOX), pointer, force)
+                    }),
+                }
+                .spin()?;
 
                 info!("{complete}");
             },
