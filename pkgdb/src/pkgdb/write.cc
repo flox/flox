@@ -413,7 +413,7 @@ attrPathsEqual( const AttrPath & left, const AttrPath & right )
     }
   return true;
 }
-//TODO move to a better place
+// TODO move to a better place
 static std::vector<AttrPath> allowRecursive;
 static std::vector<AttrPath> allowPackage;
 static std::vector<AttrPath> disallowRecursive;
@@ -544,8 +544,8 @@ PkgDb::scrape( nix::SymbolTable & syms, const Target & target, Todos & todo )
                          nix::lvlTalkative,
                          nix::actUnknown,
                          "\tevaluating attribute '" + pathS + "'" );
-      auto rulesAllowed = applyRules( prefix, syms[aname] );
-      if ( rulesAllowed.has_value() && (! (* rulesAllowed) )) { continue; }
+      auto          rulesAllowed = applyRules( prefix, syms[aname] );
+      if ( rulesAllowed.has_value() && ( ! ( *rulesAllowed ) ) ) { continue; }
       try
         {
           flox::Cursor child = cursor->getAttr( aname );
@@ -558,16 +558,16 @@ PkgDb::scrape( nix::SymbolTable & syms, const Target & target, Todos & todo )
           if ( ! tryRecur ) { continue; }
 
           if ( auto maybe = child->maybeGetAttr( "recurseForDerivations" );
-               (* rulesAllowed) || (( maybe != nullptr ) && maybe->getBool() ))
+               ( *rulesAllowed )
+               || ( ( maybe != nullptr ) && maybe->getBool() ) )
             {
               flox::AttrPath path = prefix;
               path.emplace_back( syms[aname] );
 
-              row_id childId
-                = this->addOrGetAttrSetId( syms[aname], parentId );
+              row_id childId = this->addOrGetAttrSetId( syms[aname], parentId );
               todo.emplace( std::make_tuple( std::move( path ),
-                                              std::move( child ),
-                                              childId ) );
+                                             std::move( child ),
+                                             childId ) );
             }
         }
       catch ( const nix::EvalError & err )
