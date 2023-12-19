@@ -639,7 +639,7 @@ pub enum CoreEnvironmentError {
     #[error("failed to upgrade environment")]
     UpgradeFailed(#[source] CallPkgDbError),
     // endregion
-    #[error("error building environment: {0}")]
+    #[error("error building environment")]
     BuildEnv(#[source] CallPkgDbError),
 
     #[error("unexpected output from pkgdb buildenv")]
