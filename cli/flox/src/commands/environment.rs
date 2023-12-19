@@ -878,10 +878,10 @@ impl Push {
         let suffix = if force { " (forced)" } else { "" };
 
         formatdoc! {"
-            🚀 updated -> {owner}/{name}{suffix}
+            🚀  updated -> {owner}/{name}{suffix}
 
-            pull this environment with 'flox pull {owner}/{name}'
-            you can see this environment at https://hub.flox.dev/{owner}/{name}
+            Pull this environment with 'flox pull {owner}/{name}'.
+            You can see this environment at https://hub.flox.dev/{owner}/{name}.
         "}
     }
 
@@ -895,10 +895,10 @@ impl Push {
         let suffix = if force { " (forced)" } else { "" };
 
         formatdoc! {"
-            🚀 created -> {owner}/{name}{suffix}
+            🚀  created -> {owner}/{name}{suffix}
 
-            pull this environment with 'flox pull {owner}/{name}'
-            you can see this environment at https://hub.flox.dev/{owner}/{name}
+            Pull this environment with 'flox pull {owner}/{name}'.
+            You can see this environment at https://hub.flox.dev/{owner}/{name}.
         "}
     }
 }
