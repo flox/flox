@@ -464,11 +464,20 @@ PkgDb::applyRules( const std::vector<std::string> & prefix,
   AttrPath path = prefix;
   path.emplace_back( attr );
 
-  if ( std::find( allowPackage.begin(), allowPackage.end(), path )
-       != allowPackage.end() )
-    {
-      return true;
-    }
+  auto eqPath
+    = [&]( const AttrPath & other ) { return attrPathsEqual( path, other ); };
+
+  auto isPathPrefix = [&]( const AttrPath & prefix )
+  {
+    if ( prefix.size() > path.size() ) { return false; }
+    for ( auto lchar = prefix.begin(), rchar = path.begin();
+          lchar != prefix.end();
+          ++lchar, ++rchar )
+      {
+        if ( lchar != rchar ) { return false; }
+      }
+    return true;
+  };
 }
 
 /* -------------------------------------------------------------------------- */
@@ -532,7 +541,7 @@ PkgDb::scrape( nix::SymbolTable & syms, const Target & target, Todos & todo )
               path.emplace_back( syms[aname] );
 
               // Use applyRules to check if the set is allowed
-              if ( applyRules( path, syms[aname]) )
+              if ( applyRules( path, syms[aname] ) )
                 {
                   row_id childId
                     = this->addOrGetAttrSetId( syms[aname], parentId );
