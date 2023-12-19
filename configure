@@ -697,6 +697,10 @@ PKGDB_ROOT
 SHELLS_DIR
 PKGS_DIR
 REPO_ROOT
+USE_LOCAL_FLOX_CLI_FALSE
+USE_LOCAL_FLOX_CLI_TRUE
+USE_LOCAL_PKGDB_FALSE
+USE_LOCAL_PKGDB_TRUE
 WITH_FLOX_CLI
 WITH_PKGDB
 ENABLE_RELEASE_FALSE
@@ -1647,10 +1651,10 @@ Optional Packages:
   --with-gnu-ld           assume the C compiler uses GNU ld [default=no]
   --with-sysroot[=DIR]    Search for dependent libraries within DIR (or the
                           compiler's sysroot if not specified).
-  --with-pkgdb=local|nix|PREFIX
+  --with-pkgdb=local|nix|no|PREFIX
                           use pkgdb from local tree, nix build, or path to its
                           install prefix [default=local]
-  --with-flox-cli=local|nix|PREFIX
+  --with-flox-cli=local|nix|no|PREFIX
                           use flox-cli from local tree, nix build, or path to
                           its install prefix [default=local]
   --with-set-prompt-bash-sh=local|PATH
@@ -20872,13 +20876,15 @@ case "$WITH_PKGDB" in #(
     : ;; #(
   nix) :
     : ;; #(
+  no) :
+    : ;; #(
   *) :
     if test -d "$WITH_PKGDB"
 then :
   :
 else $as_nop
   as_fn_error $? "Invalid '--with-pkgdb': '$WITH_PKGDB'.
-You must specify either 'local', 'nix', or a path to a directory" "$LINENO" 5
+      You must specify either 'local', 'nix', or a path to a directory" "$LINENO" 5
 fi ;;
 esac
 
@@ -20894,19 +20900,39 @@ else $as_nop
 fi
 
 case "$WITH_FLOX_CLI" in #(
-  local) :
+  no) :
     : ;; #(
-  nix) :
-    : ;; #(
+  local|nix) :
+    if test "$WITH_PKGDB" = 'no'
+then :
+  as_fn_error $? "Cannot use local 'flox-cli' without 'pkgdb'" "$LINENO" 5
+fi ;; #(
   *) :
     if test -d "$WITH_FLOX_CLI"
 then :
   :
 else $as_nop
   as_fn_error $? "Invalid '--with-flox-cli': '$WITH_FLOX_CLI'.
-You must specify either 'local', 'nix', or a path to a directory" "$LINENO" 5
+      You must specify either 'local', 'nix', or a path to a directory" "$LINENO" 5
 fi ;;
 esac
+
+
+ if test "$WITH_PKGDB" = 'local'; then
+  USE_LOCAL_PKGDB_TRUE=
+  USE_LOCAL_PKGDB_FALSE='#'
+else
+  USE_LOCAL_PKGDB_TRUE='#'
+  USE_LOCAL_PKGDB_FALSE=
+fi
+
+ if test "$WITH_FLOX_CLI" = 'local'; then
+  USE_LOCAL_FLOX_CLI_TRUE=
+  USE_LOCAL_FLOX_CLI_FALSE='#'
+else
+  USE_LOCAL_FLOX_CLI_TRUE='#'
+  USE_LOCAL_FLOX_CLI_FALSE=
+fi
 
 
 
@@ -22143,6 +22169,14 @@ Usually this means the macro was only invoked conditionally." "$LINENO" 5
 fi
 if test -z "${ENABLE_RELEASE_TRUE}" && test -z "${ENABLE_RELEASE_FALSE}"; then
   as_fn_error $? "conditional \"ENABLE_RELEASE\" was never defined.
+Usually this means the macro was only invoked conditionally." "$LINENO" 5
+fi
+if test -z "${USE_LOCAL_PKGDB_TRUE}" && test -z "${USE_LOCAL_PKGDB_FALSE}"; then
+  as_fn_error $? "conditional \"USE_LOCAL_PKGDB\" was never defined.
+Usually this means the macro was only invoked conditionally." "$LINENO" 5
+fi
+if test -z "${USE_LOCAL_FLOX_CLI_TRUE}" && test -z "${USE_LOCAL_FLOX_CLI_FALSE}"; then
+  as_fn_error $? "conditional \"USE_LOCAL_FLOX_CLI\" was never defined.
 Usually this means the macro was only invoked conditionally." "$LINENO" 5
 fi
 if test -z "${BUILD_SHARED_LIBS_TRUE}" && test -z "${BUILD_SHARED_LIBS_FALSE}"; then

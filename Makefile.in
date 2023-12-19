@@ -93,6 +93,12 @@ PRE_UNINSTALL = :
 POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
+
+# ---------------------------------------------------------------------------- #
+@USE_LOCAL_PKGDB_TRUE@am__append_1 = pkgdb
+
+# ---------------------------------------------------------------------------- #
+@USE_LOCAL_FLOX_CLI_TRUE@am__append_2 = cli
 subdir = .
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/build-aux/m4/dirs.m4 \
@@ -164,7 +170,7 @@ am__define_uniq_tagged_files = \
   unique=`for i in $$list; do \
     if test -f "$$i"; then echo $$i; else echo $(srcdir)/$$i; fi; \
   done | $(am__uniquify_input)`
-DIST_SUBDIRS = $(SUBDIRS)
+DIST_SUBDIRS = pkgdb cli
 am__DIST_COMMON = $(srcdir)/Makefile.in $(top_srcdir)/build-aux/ar-lib \
 	$(top_srcdir)/build-aux/compile \
 	$(top_srcdir)/build-aux/config.guess \
@@ -173,8 +179,7 @@ am__DIST_COMMON = $(srcdir)/Makefile.in $(top_srcdir)/build-aux/ar-lib \
 	$(top_srcdir)/build-aux/ltmain.sh \
 	$(top_srcdir)/build-aux/missing README.md build-aux/ar-lib \
 	build-aux/compile build-aux/config.guess build-aux/config.sub \
-	build-aux/depcomp build-aux/install-sh build-aux/ltmain.sh \
-	build-aux/missing
+	build-aux/install-sh build-aux/ltmain.sh build-aux/missing
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
 distdir = $(PACKAGE)-$(VERSION)
 top_distdir = $(distdir)
@@ -441,7 +446,7 @@ top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 ACLOCAL_AMFLAGS = -I build-aux/m4
-SUBDIRS = pkgdb cli
+SUBDIRS = $(am__append_1) $(am__append_2)
 all: all-recursive
 
 .SUFFIXES:
@@ -917,22 +922,20 @@ uninstall-am:
 .PRECIOUS: Makefile
 
 
-# ---------------------------------------------------------------------------- #
+@USE_LOCAL_PKGDB_TRUE@.PHONY: pkgdb
 
-.PHONY: pkgdb cli
-
-pkgdb:
-	$(MAKE) $(AM_MAKEFLAGS) -C $(builddir)/pkgdb
-
-cli:
-	$(MAKE) $(AM_MAKEFLAGS) -C $(builddir)/cli
-
-# ---------------------------------------------------------------------------- #
+@USE_LOCAL_PKGDB_TRUE@pkgdb:
+@USE_LOCAL_PKGDB_TRUE@	$(MAKE) $(AM_MAKEFLAGS) -C $(builddir)/pkgdb
 
 # FIXME: Move over the OSX compat stuff and kill the old Makefile
-.PHONY: cdb
-cdb:
-	$(MAKE) $(AM_MAKEFLAGS) -C $(srcdir)/pkgdb --file=Makefile.bak $@;
+@USE_LOCAL_PKGDB_TRUE@.PHONY: cdb
+@USE_LOCAL_PKGDB_TRUE@cdb:
+@USE_LOCAL_PKGDB_TRUE@	$(MAKE) $(AM_MAKEFLAGS) -C $(srcdir)/pkgdb --file=Makefile.bak $@;
+
+@USE_LOCAL_FLOX_CLI_TRUE@.PHONY: cli
+
+@USE_LOCAL_FLOX_CLI_TRUE@cli:
+@USE_LOCAL_FLOX_CLI_TRUE@	$(MAKE) $(AM_MAKEFLAGS) -C $(builddir)/cli
 
 # ---------------------------------------------------------------------------- #
 #

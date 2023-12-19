@@ -399,34 +399,48 @@ AS_IF([test "$ENABLE_RELEASE" != 'no'],
 # --with-pkgdb
 AC_ARG_WITH([pkgdb],
   [AS_HELP_STRING(
-    [--with-pkgdb=local|nix|PREFIX],
+    [--with-pkgdb=local|nix|no|PREFIX],
     [use pkgdb from local tree, nix build, or path to its install prefix ]
     [@<:@default=local@:>@])],
   [WITH_PKGDB="$withval"],
   [WITH_PKGDB=local])
 AS_CASE(["$WITH_PKGDB"],
   [local], [:],
-  [nix],   [:],
+  [nix],   [PKGDB_BIN="$( $NIX $NIXFLAGS build "$PKGDB_ROOT@%:@flox-pkgdb"  \
+                                         --no-link --print-out-paths; )"],
+  [no],    [:],
   [AS_IF([test -d "$WITH_PKGDB"], [:],
-    [AC_MSG_ERROR([Invalid '--with-pkgdb': '$WITH_PKGDB'.
-You must specify either 'local', 'nix', or a path to a directory])])])
+    [AC_MSG_ERROR([Invalid '--with-pkgdb': '$WITH_PKGDB'. ]
+      [You must specify either 'local', 'nix', or a path to a directory])])])
 AC_SUBST([WITH_PKGDB])
 
 # --with-flox-cli
 AC_ARG_WITH([flox-cli],
   [AS_HELP_STRING(
-    [--with-flox-cli=local|nix|PREFIX],
+    [--with-flox-cli=local|nix|no|PREFIX],
     [use flox-cli from local tree, nix build, or path to its ]
-  [install prefix @<:@default=local@:>@])],
+    [install prefix @<:@default=local@:>@])],
     [WITH_FLOX_CLI="$withval"],
     [WITH_FLOX_CLI=local])
 AS_CASE(["$WITH_FLOX_CLI"],
-  [local], [:],
-  [nix],   [:],
+  [no],    [:],
+  [nix],
+    [AS_IF([test "$WITH_PKGDB" = 'no'],
+           [AC_MSG_ERROR([Cannot use local 'flox-cli' without 'pkgdb'])])],
+     PKGDB_BIN="$( $NIX $NIXFLAGS build "$PKGDB_ROOT@%:@flox-cli"           \
+                                         --no-link --print-out-paths; )"],
+  [local],
+    [AS_IF([test "$WITH_PKGDB" = 'no'],
+           [AC_MSG_ERROR([Cannot use local 'flox-cli' without 'pkgdb'])])],
   [AS_IF([test -d "$WITH_FLOX_CLI"], [:],
-    [AC_MSG_ERROR([Invalid '--with-flox-cli': '$WITH_FLOX_CLI'.
-You must specify either 'local', 'nix', or a path to a directory])])])
+    [AC_MSG_ERROR([Invalid '--with-flox-cli': '$WITH_FLOX_CLI'. ]
+      [You must specify either 'local', 'nix', or a path to a directory])])
+
+  ])
 AC_SUBST([WITH_FLOX_CLI])
+
+AM_CONDITIONAL([USE_LOCAL_PKGDB],    [test "$WITH_PKGDB" = 'local'])
+AM_CONDITIONAL([USE_LOCAL_FLOX_CLI], [test "$WITH_FLOX_CLI" = 'local'])
 
 
 # ---------------------------------------------------------------------------- #

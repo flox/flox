@@ -67,7 +67,7 @@ in
         builtins.replaceStrings ["\n"] [""] contents;
 
       src = builtins.path {
-        path = ../..;
+        path = ../../..;
         filter = name: type: let
           bname = baseNameOf name;
           ignores = [
@@ -76,6 +76,7 @@ in
             "compile_commands.json"
             ".git"
             ".gitignore"
+            ".github"
             "bin"
             "build"
             "pkgs"
@@ -86,6 +87,9 @@ in
             ".clang-format"
             ".envrc"
             "LICENSE"
+            "Makefile"
+            ".deps"
+            ".libs"
           ];
           ext = let
             m = builtins.match ".*\\.([^.]+)" name;
@@ -93,7 +97,7 @@ in
             if m == null
             then ""
             else builtins.head m;
-          ignoredExts = ["o" "so" "dylib" "log"];
+          ignoredExts = ["o" "so" "dylib" "log" "la" "a"];
           notResult = (builtins.match "result(-*)?" bname) == null;
           notTmp = (builtins.match ".*~" bname) == null;
           notIgnored =

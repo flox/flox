@@ -6,7 +6,6 @@
 
 ACLOCAL_AMFLAGS = -I ../build-aux/m4
 
-
 # ---------------------------------------------------------------------------- #
 
 DISTDIR   = $(abs_builddir)/$(FLOX_CLI_distdir)
