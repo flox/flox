@@ -438,7 +438,7 @@ AC_SUBST([REPO_ROOT], ["$abs_srcdir"])
 AC_SUBST([PKGS_DIR], ["$REPO_ROOT/pkgs"])
 AC_SUBST([SHELLS_DIR], ["$REPO_ROOT/shells"])
 AC_SUBST([PKGDB_ROOT], ["$REPO_ROOT/pkgdb"])
-AC_SUBST([PKGDB_TESTS_DIR], ["$PKGDB_ROOT/tests"])
+AC_SUBST([PKGDB_TEST_DIR], ["$PKGDB_ROOT/tests"])
 AC_SUBST([FLOX_CLI_ROOT], ["$REPO_ROOT/cli"])
 AC_SUBST([FLOX_CLI_TESTS_DIR], ["$FLOX_CLI_ROOT/tests"])
 
@@ -695,6 +695,17 @@ AC_SUBST([AM_LDFLAGS])
 
 # ---------------------------------------------------------------------------- #
 
+
+# Create Symlinks into Build Area
+# -------------------------------
+
+AC_CONFIG_LINKS([
+  pkgdb/tests/setup_suite.bash:pkgdb/tests/setup_suite.bash
+])
+
+
+# ---------------------------------------------------------------------------- #
+
 # Perform Substitution
 # --------------------
 # Creates `FILE' from `FILE.in' by substituting `@VAR@' for `$VAR'.
@@ -706,7 +717,12 @@ AC_CONFIG_FILES([
   pkgdb/Makefile
   pkgdb/src/resolver/Makefile
   pkgdb/include/Makefile
+  pkgdb/tests/Makefile
   cli/Makefile
+], [
+$MKDIR_P pkgdb/tests;
+$LN_S -f "$PKGDB_ROOT/tests/data"      pkgdb/tests/data;
+$LN_S -f "$PKGDB_ROOT/tests/harnesses" pkgdb/tests/harnesses;
 ])
 
 # Substitute and write.

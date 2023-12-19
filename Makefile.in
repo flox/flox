@@ -337,7 +337,7 @@ PACKAGE_VERSION = @PACKAGE_VERSION@
 PATH_SEPARATOR = @PATH_SEPARATOR@
 PKGCONFIGDIR = @PKGCONFIGDIR@
 PKGDB_ROOT = @PKGDB_ROOT@
-PKGDB_TESTS_DIR = @PKGDB_TESTS_DIR@
+PKGDB_TEST_DIR = @PKGDB_TEST_DIR@
 PKGDB_VERSION = @PKGDB_VERSION@
 PKGS_DIR = @PKGS_DIR@
 PKG_CONFIG = @PKG_CONFIG@
@@ -919,12 +919,13 @@ uninstall-am:
 
 # ---------------------------------------------------------------------------- #
 
-# TODO: Add tests.
+.PHONY: pkgdb cli
+
 pkgdb:
-	$(MAKE) $(AM_MAKEFLAGS) -C $(abs_top_builddir)/pkgdb
+	$(MAKE) $(AM_MAKEFLAGS) -C $(builddir)/pkgdb
 
 cli:
-	$(MAKE) $(AM_MAKEFLAGS) -C $(abs_top_builddir)/cli
+	$(MAKE) $(AM_MAKEFLAGS) -C $(builddir)/cli
 
 # ---------------------------------------------------------------------------- #
 #

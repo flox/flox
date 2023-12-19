@@ -9,8 +9,7 @@
 
 ACLOCAL_AMFLAGS = -I ../build-aux/m4
 
-# TODO:
-SUBDIRS = src/resolver include #tests
+SUBDIRS = src/resolver include tests
 
 # ---------------------------------------------------------------------------- #
 

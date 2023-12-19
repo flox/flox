@@ -34,7 +34,7 @@ bootstrap:
 # ---------------------------------------------------------------------------- #
 
 # Prepare the build area and lock configuration options.
-configure *args='':
+configure *args='': bootstrap
     @mkdir -p build;
     @pushd build;
     @../configure --prefix="$PWD/out" "$@"
@@ -51,7 +51,7 @@ configure *args='':
 
 # Build the compilation database
 build-cdb:
-    @make -C pkgdb -j -s cdb
+    @bear -- make -C build/pkgdb -j -s bin/pkgdb tests;
 
 # Build only pkgdb
 build-pkgdb *args='':
@@ -70,13 +70,8 @@ build *args='':
 
 # Run the pkgdb tests
 test-pkgdb: build-pkgdb
-    @make -C build/pkgdb -f Makefile.bak -j tests;
-    @make -C build/pkgdb -f Makefile.bak check;
-
-# Restore after migrating tests
-##@test-pkgdb: build-pkgdb
-##    make -C pkgdb -j tests;
-##    make -C pkgdb check;
+    @make -C build/pkgdb -j tests;
+    @make -C build/pkgdb check;
 
 # Run the end-to-end test suite
 @functional-tests +bats_args="": build
@@ -145,9 +140,15 @@ test-all: test-pkgdb impure-tests integ-tests functional-tests
 
 # ---------------------------------------------------------------------------- #
 
+clean:
+    @make -C build clean
+
+
+# ---------------------------------------------------------------------------- #
+
 # Run a `flox` command
 @flox +args="": build
-    cli/target/debug/flox {{args}}
+    {{FLOX_BIN}} {{args}}
 
 
 # ---------------------------------------------------------------------------- #

@@ -94,9 +94,15 @@ POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
 check_PROGRAMS = environment$(EXEEXT) exceptions$(EXEEXT) gc$(EXEEXT) \
-	lockfile$(EXEEXT) manifest$(EXEEXT) pkgdbT$(EXEEXT) \
+	lockfile$(EXEEXT) manifest$(EXEEXT) pkgdb$(EXEEXT) \
 	registry$(EXEEXT) util$(EXEEXT) versions$(EXEEXT) \
 	is_sqlite3$(EXEEXT) search-params$(EXEEXT)
+TESTS = environment$(EXEEXT) exceptions$(EXEEXT) gc$(EXEEXT) \
+	lockfile$(EXEEXT) manifest$(EXEEXT) pkgdb$(EXEEXT) \
+	registry$(EXEEXT) util$(EXEEXT) versions$(EXEEXT) \
+	descriptor.bats migrate.bats scrape.bats get.bats cli.bats \
+	ga-registry.bats search.bats pathological.bats groups.bats \
+	buildenv.bats gc.bats sqlite3.bats
 subdir = pkgdb/tests
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/build-aux/m4/dirs.m4 \
@@ -105,50 +111,51 @@ am__aclocal_m4_deps = $(top_srcdir)/build-aux/m4/dirs.m4 \
 	$(top_srcdir)/build-aux/m4/ltsugar.m4 \
 	$(top_srcdir)/build-aux/m4/ltversion.m4 \
 	$(top_srcdir)/build-aux/m4/lt~obsolete.m4 \
+	$(top_srcdir)/build-aux/m4/nix.m4 \
 	$(top_srcdir)/build-aux/m4/progs.m4 $(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 DIST_COMMON = $(srcdir)/Makefile.am $(am__DIST_COMMON)
 mkinstalldirs = $(install_sh) -d
 CONFIG_CLEAN_FILES =
-CONFIG_CLEAN_VPATH_FILES =
-environment_SOURCES = environment.c
-environment_OBJECTS = environment.$(OBJEXT)
-environment_DEPENDENCIES = ../lib/libpkgdb.a
+CONFIG_CLEAN_VPATH_FILES = setup_suite.bash
+am_environment_OBJECTS = environment.$(OBJEXT)
+environment_OBJECTS = $(am_environment_OBJECTS)
+environment_DEPENDENCIES = ../lib/libpkgdb.la
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
 am__v_lt_0 = --silent
 am__v_lt_1 = 
-exceptions_SOURCES = exceptions.c
-exceptions_OBJECTS = exceptions.$(OBJEXT)
-exceptions_DEPENDENCIES = ../lib/libpkgdb.a
-gc_SOURCES = gc.c
-gc_OBJECTS = gc.$(OBJEXT)
-gc_DEPENDENCIES = ../lib/libpkgdb.a
-is_sqlite3_SOURCES = is_sqlite3.c
-is_sqlite3_OBJECTS = is_sqlite3.$(OBJEXT)
-is_sqlite3_DEPENDENCIES = ../lib/libpkgdb.a
-lockfile_SOURCES = lockfile.c
-lockfile_OBJECTS = lockfile.$(OBJEXT)
-lockfile_DEPENDENCIES = ../lib/libpkgdb.a
-manifest_SOURCES = manifest.c
-manifest_OBJECTS = manifest.$(OBJEXT)
-manifest_DEPENDENCIES = ../lib/libpkgdb.a
-pkgdbT_SOURCES = pkgdbT.c
-pkgdbT_OBJECTS = pkgdbT.$(OBJEXT)
-pkgdbT_DEPENDENCIES = ../lib/libpkgdb.a
-registry_SOURCES = registry.c
-registry_OBJECTS = registry.$(OBJEXT)
-registry_DEPENDENCIES = ../lib/libpkgdb.a
-search_params_SOURCES = search-params.c
-search_params_OBJECTS = search-params.$(OBJEXT)
-search_params_DEPENDENCIES = ../lib/libpkgdb.a
-util_SOURCES = util.c
-util_OBJECTS = util.$(OBJEXT)
-util_DEPENDENCIES = ../lib/libpkgdb.a
-versions_SOURCES = versions.c
-versions_OBJECTS = versions.$(OBJEXT)
-versions_DEPENDENCIES = ../lib/libpkgdb.a
+am_exceptions_OBJECTS = exceptions.$(OBJEXT)
+exceptions_OBJECTS = $(am_exceptions_OBJECTS)
+exceptions_DEPENDENCIES = ../lib/libpkgdb.la
+am_gc_OBJECTS = gc.$(OBJEXT)
+gc_OBJECTS = $(am_gc_OBJECTS)
+gc_DEPENDENCIES = ../lib/libpkgdb.la
+am_is_sqlite3_OBJECTS = is_sqlite3.$(OBJEXT)
+is_sqlite3_OBJECTS = $(am_is_sqlite3_OBJECTS)
+is_sqlite3_DEPENDENCIES = ../lib/libpkgdb.la
+am_lockfile_OBJECTS = lockfile.$(OBJEXT)
+lockfile_OBJECTS = $(am_lockfile_OBJECTS)
+lockfile_DEPENDENCIES = ../lib/libpkgdb.la
+am_manifest_OBJECTS = manifest.$(OBJEXT)
+manifest_OBJECTS = $(am_manifest_OBJECTS)
+manifest_DEPENDENCIES = ../lib/libpkgdb.la
+am_pkgdb_OBJECTS = pkgdb.$(OBJEXT)
+pkgdb_OBJECTS = $(am_pkgdb_OBJECTS)
+pkgdb_DEPENDENCIES = ../lib/libpkgdb.la
+am_registry_OBJECTS = registry.$(OBJEXT)
+registry_OBJECTS = $(am_registry_OBJECTS)
+registry_DEPENDENCIES = ../lib/libpkgdb.la
+am_search_params_OBJECTS = search-params.$(OBJEXT)
+search_params_OBJECTS = $(am_search_params_OBJECTS)
+search_params_DEPENDENCIES = ../lib/libpkgdb.la
+am_util_OBJECTS = util.$(OBJEXT)
+util_OBJECTS = $(am_util_OBJECTS)
+util_DEPENDENCIES = ../lib/libpkgdb.la
+am_versions_OBJECTS = versions.$(OBJEXT)
+versions_OBJECTS = $(am_versions_OBJECTS)
+versions_DEPENDENCIES = ../lib/libpkgdb.la
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
 am__v_P_0 = false
@@ -167,10 +174,28 @@ am__maybe_remake_depfiles = depfiles
 am__depfiles_remade = ./$(DEPDIR)/environment.Po \
 	./$(DEPDIR)/exceptions.Po ./$(DEPDIR)/gc.Po \
 	./$(DEPDIR)/is_sqlite3.Po ./$(DEPDIR)/lockfile.Po \
-	./$(DEPDIR)/manifest.Po ./$(DEPDIR)/pkgdbT.Po \
+	./$(DEPDIR)/manifest.Po ./$(DEPDIR)/pkgdb.Po \
 	./$(DEPDIR)/registry.Po ./$(DEPDIR)/search-params.Po \
 	./$(DEPDIR)/util.Po ./$(DEPDIR)/versions.Po
 am__mv = mv -f
+CXXCOMPILE = $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) \
+	$(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS)
+LTCXXCOMPILE = $(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) \
+	$(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) \
+	$(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) \
+	$(AM_CXXFLAGS) $(CXXFLAGS)
+AM_V_CXX = $(am__v_CXX_@AM_V@)
+am__v_CXX_ = $(am__v_CXX_@AM_DEFAULT_V@)
+am__v_CXX_0 = @echo "  CXX     " $@;
+am__v_CXX_1 = 
+CXXLD = $(CXX)
+CXXLINK = $(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) \
+	$(LIBTOOLFLAGS) --mode=link $(CXXLD) $(AM_CXXFLAGS) \
+	$(CXXFLAGS) $(AM_LDFLAGS) $(LDFLAGS) -o $@
+AM_V_CXXLD = $(am__v_CXXLD_@AM_V@)
+am__v_CXXLD_ = $(am__v_CXXLD_@AM_DEFAULT_V@)
+am__v_CXXLD_0 = @echo "  CXXLD   " $@;
+am__v_CXXLD_1 = 
 COMPILE = $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) \
 	$(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS)
 LTCOMPILE = $(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) \
@@ -189,12 +214,14 @@ AM_V_CCLD = $(am__v_CCLD_@AM_V@)
 am__v_CCLD_ = $(am__v_CCLD_@AM_DEFAULT_V@)
 am__v_CCLD_0 = @echo "  CCLD    " $@;
 am__v_CCLD_1 = 
-SOURCES = environment.c exceptions.c gc.c is_sqlite3.c lockfile.c \
-	manifest.c pkgdbT.c registry.c search-params.c util.c \
-	versions.c
-DIST_SOURCES = environment.c exceptions.c gc.c is_sqlite3.c lockfile.c \
-	manifest.c pkgdbT.c registry.c search-params.c util.c \
-	versions.c
+SOURCES = $(environment_SOURCES) $(exceptions_SOURCES) $(gc_SOURCES) \
+	$(is_sqlite3_SOURCES) $(lockfile_SOURCES) $(manifest_SOURCES) \
+	$(pkgdb_SOURCES) $(registry_SOURCES) $(search_params_SOURCES) \
+	$(util_SOURCES) $(versions_SOURCES)
+DIST_SOURCES = $(environment_SOURCES) $(exceptions_SOURCES) \
+	$(gc_SOURCES) $(is_sqlite3_SOURCES) $(lockfile_SOURCES) \
+	$(manifest_SOURCES) $(pkgdb_SOURCES) $(registry_SOURCES) \
+	$(search_params_SOURCES) $(util_SOURCES) $(versions_SOURCES)
 am__can_run_installinfo = \
   case $$AM_UPDATE_INFO_DIR in \
     n|no|NO) false;; \
@@ -217,13 +244,221 @@ am__define_uniq_tagged_files = \
   unique=`for i in $$list; do \
     if test -f "$$i"; then echo $$i; else echo $(srcdir)/$$i; fi; \
   done | $(am__uniquify_input)`
-am__DIST_COMMON = $(srcdir)/Makefile.in \
-	$(top_srcdir)/build-aux/depcomp
+am__tty_colors_dummy = \
+  mgn= red= grn= lgn= blu= brg= std=; \
+  am__color_tests=no
+am__tty_colors = { \
+  $(am__tty_colors_dummy); \
+  if test "X$(AM_COLOR_TESTS)" = Xno; then \
+    am__color_tests=no; \
+  elif test "X$(AM_COLOR_TESTS)" = Xalways; then \
+    am__color_tests=yes; \
+  elif test "X$$TERM" != Xdumb && { test -t 1; } 2>/dev/null; then \
+    am__color_tests=yes; \
+  fi; \
+  if test $$am__color_tests = yes; then \
+    red='[0;31m'; \
+    grn='[0;32m'; \
+    lgn='[1;32m'; \
+    blu='[1;34m'; \
+    mgn='[0;35m'; \
+    brg='[1m'; \
+    std='[m'; \
+  fi; \
+}
+am__vpath_adj_setup = srcdirstrip=`echo "$(srcdir)" | sed 's|.|.|g'`;
+am__vpath_adj = case $$p in \
+    $(srcdir)/*) f=`echo "$$p" | sed "s|^$$srcdirstrip/||"`;; \
+    *) f=$$p;; \
+  esac;
+am__strip_dir = f=`echo $$p | sed -e 's|^.*/||'`;
+am__install_max = 40
+am__nobase_strip_setup = \
+  srcdirstrip=`echo "$(srcdir)" | sed 's/[].[^$$\\*|]/\\\\&/g'`
+am__nobase_strip = \
+  for p in $$list; do echo "$$p"; done | sed -e "s|$$srcdirstrip/||"
+am__nobase_list = $(am__nobase_strip_setup); \
+  for p in $$list; do echo "$$p $$p"; done | \
+  sed "s| $$srcdirstrip/| |;"' / .*\//!s/ .*/ ./; s,\( .*\)/[^/]*$$,\1,' | \
+  $(AWK) 'BEGIN { files["."] = "" } { files[$$2] = files[$$2] " " $$1; \
+    if (++n[$$2] == $(am__install_max)) \
+      { print $$2, files[$$2]; n[$$2] = 0; files[$$2] = "" } } \
+    END { for (dir in files) print dir, files[dir] }'
+am__base_list = \
+  sed '$$!N;$$!N;$$!N;$$!N;$$!N;$$!N;$$!N;s/\n/ /g' | \
+  sed '$$!N;$$!N;$$!N;$$!N;s/\n/ /g'
+am__uninstall_files_from_dir = { \
+  test -z "$$files" \
+    || { test ! -d "$$dir" && test ! -f "$$dir" && test ! -r "$$dir"; } \
+    || { echo " ( cd '$$dir' && rm -f" $$files ")"; \
+         $(am__cd) "$$dir" && rm -f $$files; }; \
+  }
+am__recheck_rx = ^[ 	]*:recheck:[ 	]*
+am__global_test_result_rx = ^[ 	]*:global-test-result:[ 	]*
+am__copy_in_global_log_rx = ^[ 	]*:copy-in-global-log:[ 	]*
+# A command that, given a newline-separated list of test names on the
+# standard input, print the name of the tests that are to be re-run
+# upon "make recheck".
+am__list_recheck_tests = $(AWK) '{ \
+  recheck = 1; \
+  while ((rc = (getline line < ($$0 ".trs"))) != 0) \
+    { \
+      if (rc < 0) \
+        { \
+          if ((getline line2 < ($$0 ".log")) < 0) \
+	    recheck = 0; \
+          break; \
+        } \
+      else if (line ~ /$(am__recheck_rx)[nN][Oo]/) \
+        { \
+          recheck = 0; \
+          break; \
+        } \
+      else if (line ~ /$(am__recheck_rx)[yY][eE][sS]/) \
+        { \
+          break; \
+        } \
+    }; \
+  if (recheck) \
+    print $$0; \
+  close ($$0 ".trs"); \
+  close ($$0 ".log"); \
+}'
+# A command that, given a newline-separated list of test names on the
+# standard input, create the global log from their .trs and .log files.
+am__create_global_log = $(AWK) ' \
+function fatal(msg) \
+{ \
+  print "fatal: making $@: " msg | "cat >&2"; \
+  exit 1; \
+} \
+function rst_section(header) \
+{ \
+  print header; \
+  len = length(header); \
+  for (i = 1; i <= len; i = i + 1) \
+    printf "="; \
+  printf "\n\n"; \
+} \
+{ \
+  copy_in_global_log = 1; \
+  global_test_result = "RUN"; \
+  while ((rc = (getline line < ($$0 ".trs"))) != 0) \
+    { \
+      if (rc < 0) \
+         fatal("failed to read from " $$0 ".trs"); \
+      if (line ~ /$(am__global_test_result_rx)/) \
+        { \
+          sub("$(am__global_test_result_rx)", "", line); \
+          sub("[ 	]*$$", "", line); \
+          global_test_result = line; \
+        } \
+      else if (line ~ /$(am__copy_in_global_log_rx)[nN][oO]/) \
+        copy_in_global_log = 0; \
+    }; \
+  if (copy_in_global_log) \
+    { \
+      rst_section(global_test_result ": " $$0); \
+      while ((rc = (getline line < ($$0 ".log"))) != 0) \
+      { \
+        if (rc < 0) \
+          fatal("failed to read from " $$0 ".log"); \
+        print line; \
+      }; \
+      printf "\n"; \
+    }; \
+  close ($$0 ".trs"); \
+  close ($$0 ".log"); \
+}'
+# Restructured Text title.
+am__rst_title = { sed 's/.*/   &   /;h;s/./=/g;p;x;s/ *$$//;p;g' && echo; }
+# Solaris 10 'make', and several other traditional 'make' implementations,
+# pass "-e" to $(SHELL), and POSIX 2008 even requires this.  Work around it
+# by disabling -e (using the XSI extension "set +e") if it's set.
+am__sh_e_setup = case $$- in *e*) set +e;; esac
+# Default flags passed to test drivers.
+am__common_driver_flags = \
+  --color-tests "$$am__color_tests" \
+  --enable-hard-errors "$$am__enable_hard_errors" \
+  --expect-failure "$$am__expect_failure"
+# To be inserted before the command running the test.  Creates the
+# directory for the log if needed.  Stores in $dir the directory
+# containing $f, in $tst the test, in $log the log.  Executes the
+# developer- defined test setup AM_TESTS_ENVIRONMENT (if any), and
+# passes TESTS_ENVIRONMENT.  Set up options for the wrapper that
+# will run the test scripts (or their associated LOG_COMPILER, if
+# thy have one).
+am__check_pre = \
+$(am__sh_e_setup);					\
+$(am__vpath_adj_setup) $(am__vpath_adj)			\
+$(am__tty_colors);					\
+srcdir=$(srcdir); export srcdir;			\
+case "$@" in						\
+  */*) am__odir=`echo "./$@" | sed 's|/[^/]*$$||'`;;	\
+    *) am__odir=.;; 					\
+esac;							\
+test "x$$am__odir" = x"." || test -d "$$am__odir" 	\
+  || $(MKDIR_P) "$$am__odir" || exit $$?;		\
+if test -f "./$$f"; then dir=./;			\
+elif test -f "$$f"; then dir=;				\
+else dir="$(srcdir)/"; fi;				\
+tst=$$dir$$f; log='$@'; 				\
+if test -n '$(DISABLE_HARD_ERRORS)'; then		\
+  am__enable_hard_errors=no; 				\
+else							\
+  am__enable_hard_errors=yes; 				\
+fi; 							\
+case " $(XFAIL_TESTS) " in				\
+  *[\ \	]$$f[\ \	]* | *[\ \	]$$dir$$f[\ \	]*) \
+    am__expect_failure=yes;;				\
+  *)							\
+    am__expect_failure=no;;				\
+esac; 							\
+$(AM_TESTS_ENVIRONMENT) $(TESTS_ENVIRONMENT)
+# A shell command to get the names of the tests scripts with any registered
+# extension removed (i.e., equivalently, the names of the test logs, with
+# the '.log' extension removed).  The result is saved in the shell variable
+# '$bases'.  This honors runtime overriding of TESTS and TEST_LOGS.  Sadly,
+# we cannot use something simpler, involving e.g., "$(TEST_LOGS:.log=)",
+# since that might cause problem with VPATH rewrites for suffix-less tests.
+# See also 'test-harness-vpath-rewrite.sh' and 'test-trs-basic.sh'.
+am__set_TESTS_bases = \
+  bases='$(TEST_LOGS)'; \
+  bases=`for i in $$bases; do echo $$i; done | sed 's/\.log$$//'`; \
+  bases=`echo $$bases`
+AM_TESTSUITE_SUMMARY_HEADER = ' for $(PACKAGE_STRING)'
+RECHECK_LOGS = $(TEST_LOGS)
+AM_RECURSIVE_TARGETS = check recheck
+TEST_SUITE_LOG = test-suite.log
+TEST_EXTENSIONS = @EXEEXT@ .test
+LOG_DRIVER = $(SHELL) $(top_srcdir)/build-aux/test-driver
+LOG_COMPILE = $(LOG_COMPILER) $(AM_LOG_FLAGS) $(LOG_FLAGS)
+am__set_b = \
+  case '$@' in \
+    */*) \
+      case '$*' in \
+        */*) b='$*';; \
+          *) b=`echo '$@' | sed 's/\.log$$//'`; \
+       esac;; \
+    *) \
+      b='$*';; \
+  esac
+am__test_logs1 = $(TESTS:=.log)
+am__test_logs2 = $(am__test_logs1:@EXEEXT@.log=.log)
+TEST_LOGS = $(am__test_logs2:.test.log=.log)
+TEST_LOG_DRIVER = $(SHELL) $(top_srcdir)/build-aux/test-driver
+TEST_LOG_COMPILE = $(TEST_LOG_COMPILER) $(AM_TEST_LOG_FLAGS) \
+	$(TEST_LOG_FLAGS)
+am__DIST_COMMON = $(srcdir)/Makefile.in $(srcdir)/setup_suite.bash \
+	$(top_srcdir)/build-aux/depcomp \
+	$(top_srcdir)/build-aux/test-driver
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
 ACLOCAL = @ACLOCAL@
 ALLOCA = @ALLOCA@
 AMTAR = @AMTAR@
+AM_CXXFLAGS = @AM_CXXFLAGS@
 AM_DEFAULT_VERBOSITY = @AM_DEFAULT_VERBOSITY@
+AM_LDFLAGS = @AM_LDFLAGS@
 AR = @AR@
 ARCH = @ARCH@
 ARGPARSE_CFLAGS = @ARGPARSE_CFLAGS@
@@ -231,19 +466,22 @@ ARGPARSE_LIBS = @ARGPARSE_LIBS@
 AUTOCONF = @AUTOCONF@
 AUTOHEADER = @AUTOHEADER@
 AUTOMAKE = @AUTOMAKE@
+AUTORECONF = @AUTORECONF@
 AWK = @AWK@
 BATS = @BATS@
 BEAR = @BEAR@
 BINDIR = @BINDIR@
 CARGO = @CARGO@
+CARGOFLAGS = @CARGOFLAGS@
 CAT = @CAT@
 CC = @CC@
 CCDEPMODE = @CCDEPMODE@
 CFLAGS = @CFLAGS@
 COMMITIZEN = @COMMITIZEN@
+COV_CXXFLAGS = @COV_CXXFLAGS@
 CP = @CP@
+CPP = @CPP@
 CPPFLAGS = @CPPFLAGS@
-CRATES_DIR = @CRATES_DIR@
 CSCOPE = @CSCOPE@
 CTAGS = @CTAGS@
 CXX = @CXX@
@@ -255,6 +493,7 @@ CXX_LINT = @CXX_LINT@
 CXX_TOOLCHAIN = @CXX_TOOLCHAIN@
 CYGPATH_W = @CYGPATH_W@
 DATADIR = @DATADIR@
+DEBUG_CXXFLAGS = @DEBUG_CXXFLAGS@
 DEFS = @DEFS@
 DEPDIR = @DEPDIR@
 DEPFILES = @DEPFILES@
@@ -267,9 +506,6 @@ ECHO_C = @ECHO_C@
 ECHO_N = @ECHO_N@
 ECHO_T = @ECHO_T@
 EGREP = @EGREP@
-ENV_BUILDER_ROOT = @ENV_BUILDER_ROOT@
-ENV_BUILDER_TESTS_DIR = @ENV_BUILDER_TESTS_DIR@
-ENV_BUILDER_VERSION = @ENV_BUILDER_VERSION@
 ETAGS = @ETAGS@
 EXEEXT = @EXEEXT@
 FGREP = @FGREP@
@@ -277,8 +513,12 @@ FILECMD = @FILECMD@
 FIND = @FIND@
 FLOX_CLI_ROOT = @FLOX_CLI_ROOT@
 FLOX_CLI_TESTS_DIR = @FLOX_CLI_TESTS_DIR@
+FLOX_CLI_distdir = @FLOX_CLI_distdir@
+FLOX_CLI_tardir = @FLOX_CLI_tardir@
+FLOX_CLI_targetdir = @FLOX_CLI_targetdir@
 GIT = @GIT@
 GREP = @GREP@
+HEAD = @HEAD@
 HIVEMIND = @HIVEMIND@
 INCLUDEDIR = @INCLUDEDIR@
 INSTALL = @INSTALL@
@@ -307,6 +547,7 @@ MISSING = @MISSING@
 MKDIR = @MKDIR@
 MKDIR_P = @MKDIR_P@
 NIX = @NIX@
+NIXFLAGS = @NIXFLAGS@
 NIX_CFLAGS = @NIX_CFLAGS@
 NIX_FMT = @NIX_FMT@
 NIX_LIBS = @NIX_LIBS@
@@ -330,23 +571,28 @@ PACKAGE_VERSION = @PACKAGE_VERSION@
 PATH_SEPARATOR = @PATH_SEPARATOR@
 PKGCONFIGDIR = @PKGCONFIGDIR@
 PKGDB_ROOT = @PKGDB_ROOT@
-PKGDB_TESTS_DIR = @PKGDB_TESTS_DIR@
+PKGDB_TEST_DIR = @PKGDB_TEST_DIR@
 PKGDB_VERSION = @PKGDB_VERSION@
 PKGS_DIR = @PKGS_DIR@
 PKG_CONFIG = @PKG_CONFIG@
 PKG_CONFIG_LIBDIR = @PKG_CONFIG_LIBDIR@
 PKG_CONFIG_PATH = @PKG_CONFIG_PATH@
 PREFIX = @PREFIX@
+PROFILE_D_SCRIPT_DIR = @PROFILE_D_SCRIPT_DIR@
 RANLIB = @RANLIB@
+REAL_AUTORECONF = @REAL_AUTORECONF@
 RELATIVE_RPATH_FLAG = @RELATIVE_RPATH_FLAG@
+RELEASE_CXXFLAGS = @RELEASE_CXXFLAGS@
 REPO_ROOT = @REPO_ROOT@
 RM = @RM@
+RSYNC = @RSYNC@
 RUST_FMT = @RUST_FMT@
 RUST_LINT = @RUST_LINT@
 SED = @SED@
+SEMVER = @SEMVER@
+SEMVER_PATH = @SEMVER_PATH@
 SET_MAKE = @SET_MAKE@
-SHARED_LIBRARY_CFLAGS = @SHARED_LIBRARY_CFLAGS@
-SHARED_LIBRARY_LDFLAGS = @SHARED_LIBRARY_LDFLAGS@
+SET_PROMPT_BASH_SH = @SET_PROMPT_BASH_SH@
 SHELL = @SHELL@
 SHELLS_DIR = @SHELLS_DIR@
 SORT = @SORT@
@@ -357,15 +603,18 @@ SQLITE3_CFLAGS = @SQLITE3_CFLAGS@
 SQLITE3_LIBS = @SQLITE3_LIBS@
 STRIP = @STRIP@
 SYSCONFDIR = @SYSCONFDIR@
+SYSTEM = @SYSTEM@
+TAR = @TAR@
 TEE = @TEE@
 TEST = @TEST@
 TOUCH = @TOUCH@
 TR = @TR@
 UNAME = @UNAME@
 VERSION = @VERSION@
-WITH_ENV_BUILDER = @WITH_ENV_BUILDER@
 WITH_FLOX_CLI = @WITH_FLOX_CLI@
 WITH_PKGDB = @WITH_PKGDB@
+WITH_PROFILE_D_SCRIPT_DIR = @WITH_PROFILE_D_SCRIPT_DIR@
+WITH_SET_PROMPT_BASH_SH = @WITH_SET_PROMPT_BASH_SH@
 XARGS = @XARGS@
 YAML_CFLAGS = @YAML_CFLAGS@
 YAML_LIBS = @YAML_LIBS@
@@ -418,7 +667,6 @@ runstatedir = @runstatedir@
 sbindir = @sbindir@
 set_rpath_option = @set_rpath_option@
 set_soname_option = @set_soname_option@
-sharedLibExt = @sharedLibExt@
 sharedstatedir = @sharedstatedir@
 srcdir = @srcdir@
 sysconfdir = @sysconfdir@
@@ -426,24 +674,49 @@ target_alias = @target_alias@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
-ACLOCAL_AMFLAGS = -I ../../m4
+ACLOCAL_AMFLAGS = -I ../../build-aux/m4
 
 # ---------------------------------------------------------------------------- #
-environment_LDADD = ../lib/libpkgdb.a
-exceptions_LDADD = ../lib/libpkgdb.a
-gc_LDADD = ../lib/libpkgdb.a
-lockfile_LDADD = ../lib/libpkgdb.a
-manifest_LDADD = ../lib/libpkgdb.a
-pkgdbT_LDADD = ../lib/libpkgdb.a
-registry_LDADD = ../lib/libpkgdb.a
-util_LDADD = ../lib/libpkgdb.a
-versions_LDADD = ../lib/libpkgdb.a
-is_sqlite3_LDADD = ../lib/libpkgdb.a
-search_params_LDADD = ../lib/libpkgdb.a
+TEST_DATA_DIR = $(PKGDB_TEST_DIR)/data
+AM_CPPFLAGS = -DTEST_DATA_DIR=\"$(TEST_DATA_DIR)\"
+PKGDB_BIN = $(abs_top_builddir)/pkgdb/bin/pkgdb
+PKGDB_IS_SQLITE3_BIN = $(abs_builddir)/is_sqlite3
+PKGDB_SEARCH_PARAMS_BIN = $(abs_builddir)/search-params
+AM_TESTS_ENVIRONMENT = export TEST_DATA_DIR="$(TEST_DATA_DIR)"; export \
+	PKGDB_BIN="$(PKGDB_BIN)"; export \
+	PKGDB_IS_SQLITE3_BIN="$(PKGDB_IS_SQLITE3_BIN)"; \
+	PKGDB_SEARCH_PARAMS_BIN="$(PKGDB_SEARCH_PARAMS_BIN)"; export \
+	PKGDB_SEARCH_PARAMS_BIN;
+
+# ---------------------------------------------------------------------------- #
+environment_SOURCES = environment.cc test.hh
+exceptions_SOURCES = exceptions.cc test.hh
+gc_SOURCES = gc.cc test.hh
+lockfile_SOURCES = lockfile.cc test.hh
+manifest_SOURCES = manifest.cc test.hh
+pkgdb_SOURCES = pkgdb.cc test.hh
+registry_SOURCES = registry.cc test.hh
+util_SOURCES = util.cc test.hh
+versions_SOURCES = versions.cc test.hh
+is_sqlite3_SOURCES = is_sqlite3.cc
+search_params_SOURCES = search-params.cc
+
+# ---------------------------------------------------------------------------- #
+environment_LDADD = ../lib/libpkgdb.la
+exceptions_LDADD = ../lib/libpkgdb.la
+gc_LDADD = ../lib/libpkgdb.la
+lockfile_LDADD = ../lib/libpkgdb.la
+manifest_LDADD = ../lib/libpkgdb.la
+pkgdb_LDADD = ../lib/libpkgdb.la
+registry_LDADD = ../lib/libpkgdb.la
+util_LDADD = ../lib/libpkgdb.la
+versions_LDADD = ../lib/libpkgdb.la
+is_sqlite3_LDADD = ../lib/libpkgdb.la
+search_params_LDADD = ../lib/libpkgdb.la
 all: all-am
 
 .SUFFIXES:
-.SUFFIXES: .c .lo .o .obj
+.SUFFIXES: .cc .lo .log .o .obj .test .test$(EXEEXT) .trs
 $(srcdir)/Makefile.in:  $(srcdir)/Makefile.am  $(am__configure_deps)
 	@for dep in $?; do \
 	  case '$(am__configure_deps)' in \
@@ -485,47 +758,47 @@ clean-checkPROGRAMS:
 
 environment$(EXEEXT): $(environment_OBJECTS) $(environment_DEPENDENCIES) $(EXTRA_environment_DEPENDENCIES) 
 	@rm -f environment$(EXEEXT)
-	$(AM_V_CCLD)$(LINK) $(environment_OBJECTS) $(environment_LDADD) $(LIBS)
+	$(AM_V_CXXLD)$(CXXLINK) $(environment_OBJECTS) $(environment_LDADD) $(LIBS)
 
 exceptions$(EXEEXT): $(exceptions_OBJECTS) $(exceptions_DEPENDENCIES) $(EXTRA_exceptions_DEPENDENCIES) 
 	@rm -f exceptions$(EXEEXT)
-	$(AM_V_CCLD)$(LINK) $(exceptions_OBJECTS) $(exceptions_LDADD) $(LIBS)
+	$(AM_V_CXXLD)$(CXXLINK) $(exceptions_OBJECTS) $(exceptions_LDADD) $(LIBS)
 
 gc$(EXEEXT): $(gc_OBJECTS) $(gc_DEPENDENCIES) $(EXTRA_gc_DEPENDENCIES) 
 	@rm -f gc$(EXEEXT)
-	$(AM_V_CCLD)$(LINK) $(gc_OBJECTS) $(gc_LDADD) $(LIBS)
+	$(AM_V_CXXLD)$(CXXLINK) $(gc_OBJECTS) $(gc_LDADD) $(LIBS)
 
 is_sqlite3$(EXEEXT): $(is_sqlite3_OBJECTS) $(is_sqlite3_DEPENDENCIES) $(EXTRA_is_sqlite3_DEPENDENCIES) 
 	@rm -f is_sqlite3$(EXEEXT)
-	$(AM_V_CCLD)$(LINK) $(is_sqlite3_OBJECTS) $(is_sqlite3_LDADD) $(LIBS)
+	$(AM_V_CXXLD)$(CXXLINK) $(is_sqlite3_OBJECTS) $(is_sqlite3_LDADD) $(LIBS)
 
 lockfile$(EXEEXT): $(lockfile_OBJECTS) $(lockfile_DEPENDENCIES) $(EXTRA_lockfile_DEPENDENCIES) 
 	@rm -f lockfile$(EXEEXT)
-	$(AM_V_CCLD)$(LINK) $(lockfile_OBJECTS) $(lockfile_LDADD) $(LIBS)
+	$(AM_V_CXXLD)$(CXXLINK) $(lockfile_OBJECTS) $(lockfile_LDADD) $(LIBS)
 
 manifest$(EXEEXT): $(manifest_OBJECTS) $(manifest_DEPENDENCIES) $(EXTRA_manifest_DEPENDENCIES) 
 	@rm -f manifest$(EXEEXT)
-	$(AM_V_CCLD)$(LINK) $(manifest_OBJECTS) $(manifest_LDADD) $(LIBS)
+	$(AM_V_CXXLD)$(CXXLINK) $(manifest_OBJECTS) $(manifest_LDADD) $(LIBS)
 
-pkgdbT$(EXEEXT): $(pkgdbT_OBJECTS) $(pkgdbT_DEPENDENCIES) $(EXTRA_pkgdbT_DEPENDENCIES) 
-	@rm -f pkgdbT$(EXEEXT)
-	$(AM_V_CCLD)$(LINK) $(pkgdbT_OBJECTS) $(pkgdbT_LDADD) $(LIBS)
+pkgdb$(EXEEXT): $(pkgdb_OBJECTS) $(pkgdb_DEPENDENCIES) $(EXTRA_pkgdb_DEPENDENCIES) 
+	@rm -f pkgdb$(EXEEXT)
+	$(AM_V_CXXLD)$(CXXLINK) $(pkgdb_OBJECTS) $(pkgdb_LDADD) $(LIBS)
 
 registry$(EXEEXT): $(registry_OBJECTS) $(registry_DEPENDENCIES) $(EXTRA_registry_DEPENDENCIES) 
 	@rm -f registry$(EXEEXT)
-	$(AM_V_CCLD)$(LINK) $(registry_OBJECTS) $(registry_LDADD) $(LIBS)
+	$(AM_V_CXXLD)$(CXXLINK) $(registry_OBJECTS) $(registry_LDADD) $(LIBS)
 
 search-params$(EXEEXT): $(search_params_OBJECTS) $(search_params_DEPENDENCIES) $(EXTRA_search_params_DEPENDENCIES) 
 	@rm -f search-params$(EXEEXT)
-	$(AM_V_CCLD)$(LINK) $(search_params_OBJECTS) $(search_params_LDADD) $(LIBS)
+	$(AM_V_CXXLD)$(CXXLINK) $(search_params_OBJECTS) $(search_params_LDADD) $(LIBS)
 
 util$(EXEEXT): $(util_OBJECTS) $(util_DEPENDENCIES) $(EXTRA_util_DEPENDENCIES) 
 	@rm -f util$(EXEEXT)
-	$(AM_V_CCLD)$(LINK) $(util_OBJECTS) $(util_LDADD) $(LIBS)
+	$(AM_V_CXXLD)$(CXXLINK) $(util_OBJECTS) $(util_LDADD) $(LIBS)
 
 versions$(EXEEXT): $(versions_OBJECTS) $(versions_DEPENDENCIES) $(EXTRA_versions_DEPENDENCIES) 
 	@rm -f versions$(EXEEXT)
-	$(AM_V_CCLD)$(LINK) $(versions_OBJECTS) $(versions_LDADD) $(LIBS)
+	$(AM_V_CXXLD)$(CXXLINK) $(versions_OBJECTS) $(versions_LDADD) $(LIBS)
 
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
@@ -539,7 +812,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/is_sqlite3.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/lockfile.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/manifest.Po@am__quote@ # am--include-marker
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pkgdbT.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pkgdb.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/registry.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/search-params.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/util.Po@am__quote@ # am--include-marker
@@ -551,29 +824,29 @@ $(am__depfiles_remade):
 
 am--depfiles: $(am__depfiles_remade)
 
-.c.o:
-@am__fastdepCC_TRUE@	$(AM_V_CC)depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.o$$||'`;\
-@am__fastdepCC_TRUE@	$(COMPILE) -MT $@ -MD -MP -MF $$depbase.Tpo -c -o $@ $< &&\
-@am__fastdepCC_TRUE@	$(am__mv) $$depbase.Tpo $$depbase.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$<' object='$@' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(COMPILE) -c -o $@ $<
+.cc.o:
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.o$$||'`;\
+@am__fastdepCXX_TRUE@	$(CXXCOMPILE) -MT $@ -MD -MP -MF $$depbase.Tpo -c -o $@ $< &&\
+@am__fastdepCXX_TRUE@	$(am__mv) $$depbase.Tpo $$depbase.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='$<' object='$@' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXXCOMPILE) -c -o $@ $<
 
-.c.obj:
-@am__fastdepCC_TRUE@	$(AM_V_CC)depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.obj$$||'`;\
-@am__fastdepCC_TRUE@	$(COMPILE) -MT $@ -MD -MP -MF $$depbase.Tpo -c -o $@ `$(CYGPATH_W) '$<'` &&\
-@am__fastdepCC_TRUE@	$(am__mv) $$depbase.Tpo $$depbase.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$<' object='$@' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(COMPILE) -c -o $@ `$(CYGPATH_W) '$<'`
+.cc.obj:
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.obj$$||'`;\
+@am__fastdepCXX_TRUE@	$(CXXCOMPILE) -MT $@ -MD -MP -MF $$depbase.Tpo -c -o $@ `$(CYGPATH_W) '$<'` &&\
+@am__fastdepCXX_TRUE@	$(am__mv) $$depbase.Tpo $$depbase.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='$<' object='$@' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXXCOMPILE) -c -o $@ `$(CYGPATH_W) '$<'`
 
-.c.lo:
-@am__fastdepCC_TRUE@	$(AM_V_CC)depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.lo$$||'`;\
-@am__fastdepCC_TRUE@	$(LTCOMPILE) -MT $@ -MD -MP -MF $$depbase.Tpo -c -o $@ $< &&\
-@am__fastdepCC_TRUE@	$(am__mv) $$depbase.Tpo $$depbase.Plo
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$<' object='$@' libtool=yes @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LTCOMPILE) -c -o $@ $<
+.cc.lo:
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.lo$$||'`;\
+@am__fastdepCXX_TRUE@	$(LTCXXCOMPILE) -MT $@ -MD -MP -MF $$depbase.Tpo -c -o $@ $< &&\
+@am__fastdepCXX_TRUE@	$(am__mv) $$depbase.Tpo $$depbase.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='$<' object='$@' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LTCXXCOMPILE) -c -o $@ $<
 
 mostlyclean-libtool:
 	-rm -f *.lo
@@ -632,6 +905,309 @@ cscopelist-am: $(am__tagged_files)
 
 distclean-tags:
 	-rm -f TAGS ID GTAGS GRTAGS GSYMS GPATH tags
+
+# Recover from deleted '.trs' file; this should ensure that
+# "rm -f foo.log; make foo.trs" re-run 'foo.test', and re-create
+# both 'foo.log' and 'foo.trs'.  Break the recipe in two subshells
+# to avoid problems with "make -n".
+.log.trs:
+	rm -f $< $@
+	$(MAKE) $(AM_MAKEFLAGS) $<
+
+# Leading 'am--fnord' is there to ensure the list of targets does not
+# expand to empty, as could happen e.g. with make check TESTS=''.
+am--fnord $(TEST_LOGS) $(TEST_LOGS:.log=.trs): $(am__force_recheck)
+am--force-recheck:
+	@:
+
+$(TEST_SUITE_LOG): $(TEST_LOGS)
+	@$(am__set_TESTS_bases); \
+	am__f_ok () { test -f "$$1" && test -r "$$1"; }; \
+	redo_bases=`for i in $$bases; do \
+	              am__f_ok $$i.trs && am__f_ok $$i.log || echo $$i; \
+	            done`; \
+	if test -n "$$redo_bases"; then \
+	  redo_logs=`for i in $$redo_bases; do echo $$i.log; done`; \
+	  redo_results=`for i in $$redo_bases; do echo $$i.trs; done`; \
+	  if $(am__make_dryrun); then :; else \
+	    rm -f $$redo_logs && rm -f $$redo_results || exit 1; \
+	  fi; \
+	fi; \
+	if test -n "$$am__remaking_logs"; then \
+	  echo "fatal: making $(TEST_SUITE_LOG): possible infinite" \
+	       "recursion detected" >&2; \
+	elif test -n "$$redo_logs"; then \
+	  am__remaking_logs=yes $(MAKE) $(AM_MAKEFLAGS) $$redo_logs; \
+	fi; \
+	if $(am__make_dryrun); then :; else \
+	  st=0;  \
+	  errmsg="fatal: making $(TEST_SUITE_LOG): failed to create"; \
+	  for i in $$redo_bases; do \
+	    test -f $$i.trs && test -r $$i.trs \
+	      || { echo "$$errmsg $$i.trs" >&2; st=1; }; \
+	    test -f $$i.log && test -r $$i.log \
+	      || { echo "$$errmsg $$i.log" >&2; st=1; }; \
+	  done; \
+	  test $$st -eq 0 || exit 1; \
+	fi
+	@$(am__sh_e_setup); $(am__tty_colors); $(am__set_TESTS_bases); \
+	ws='[ 	]'; \
+	results=`for b in $$bases; do echo $$b.trs; done`; \
+	test -n "$$results" || results=/dev/null; \
+	all=`  grep "^$$ws*:test-result:"           $$results | wc -l`; \
+	pass=` grep "^$$ws*:test-result:$$ws*PASS"  $$results | wc -l`; \
+	fail=` grep "^$$ws*:test-result:$$ws*FAIL"  $$results | wc -l`; \
+	skip=` grep "^$$ws*:test-result:$$ws*SKIP"  $$results | wc -l`; \
+	xfail=`grep "^$$ws*:test-result:$$ws*XFAIL" $$results | wc -l`; \
+	xpass=`grep "^$$ws*:test-result:$$ws*XPASS" $$results | wc -l`; \
+	error=`grep "^$$ws*:test-result:$$ws*ERROR" $$results | wc -l`; \
+	if test `expr $$fail + $$xpass + $$error` -eq 0; then \
+	  success=true; \
+	else \
+	  success=false; \
+	fi; \
+	br='==================='; br=$$br$$br$$br$$br; \
+	result_count () \
+	{ \
+	    if test x"$$1" = x"--maybe-color"; then \
+	      maybe_colorize=yes; \
+	    elif test x"$$1" = x"--no-color"; then \
+	      maybe_colorize=no; \
+	    else \
+	      echo "$@: invalid 'result_count' usage" >&2; exit 4; \
+	    fi; \
+	    shift; \
+	    desc=$$1 count=$$2; \
+	    if test $$maybe_colorize = yes && test $$count -gt 0; then \
+	      color_start=$$3 color_end=$$std; \
+	    else \
+	      color_start= color_end=; \
+	    fi; \
+	    echo "$${color_start}# $$desc $$count$${color_end}"; \
+	}; \
+	create_testsuite_report () \
+	{ \
+	  result_count $$1 "TOTAL:" $$all   "$$brg"; \
+	  result_count $$1 "PASS: " $$pass  "$$grn"; \
+	  result_count $$1 "SKIP: " $$skip  "$$blu"; \
+	  result_count $$1 "XFAIL:" $$xfail "$$lgn"; \
+	  result_count $$1 "FAIL: " $$fail  "$$red"; \
+	  result_count $$1 "XPASS:" $$xpass "$$red"; \
+	  result_count $$1 "ERROR:" $$error "$$mgn"; \
+	}; \
+	{								\
+	  echo "$(PACKAGE_STRING): $(subdir)/$(TEST_SUITE_LOG)" |	\
+	    $(am__rst_title);						\
+	  create_testsuite_report --no-color;				\
+	  echo;								\
+	  echo ".. contents:: :depth: 2";				\
+	  echo;								\
+	  for b in $$bases; do echo $$b; done				\
+	    | $(am__create_global_log);					\
+	} >$(TEST_SUITE_LOG).tmp || exit 1;				\
+	mv $(TEST_SUITE_LOG).tmp $(TEST_SUITE_LOG);			\
+	if $$success; then						\
+	  col="$$grn";							\
+	 else								\
+	  col="$$red";							\
+	  test x"$$VERBOSE" = x || cat $(TEST_SUITE_LOG);		\
+	fi;								\
+	echo "$${col}$$br$${std}"; 					\
+	echo "$${col}Testsuite summary"$(AM_TESTSUITE_SUMMARY_HEADER)"$${std}";	\
+	echo "$${col}$$br$${std}"; 					\
+	create_testsuite_report --maybe-color;				\
+	echo "$$col$$br$$std";						\
+	if $$success; then :; else					\
+	  echo "$${col}See $(subdir)/$(TEST_SUITE_LOG)$${std}";		\
+	  if test -n "$(PACKAGE_BUGREPORT)"; then			\
+	    echo "$${col}Please report to $(PACKAGE_BUGREPORT)$${std}";	\
+	  fi;								\
+	  echo "$$col$$br$$std";					\
+	fi;								\
+	$$success || exit 1
+
+check-TESTS: $(check_PROGRAMS)
+	@list='$(RECHECK_LOGS)';           test -z "$$list" || rm -f $$list
+	@list='$(RECHECK_LOGS:.log=.trs)'; test -z "$$list" || rm -f $$list
+	@test -z "$(TEST_SUITE_LOG)" || rm -f $(TEST_SUITE_LOG)
+	@set +e; $(am__set_TESTS_bases); \
+	log_list=`for i in $$bases; do echo $$i.log; done`; \
+	trs_list=`for i in $$bases; do echo $$i.trs; done`; \
+	log_list=`echo $$log_list`; trs_list=`echo $$trs_list`; \
+	$(MAKE) $(AM_MAKEFLAGS) $(TEST_SUITE_LOG) TEST_LOGS="$$log_list"; \
+	exit $$?;
+recheck: all $(check_PROGRAMS)
+	@test -z "$(TEST_SUITE_LOG)" || rm -f $(TEST_SUITE_LOG)
+	@set +e; $(am__set_TESTS_bases); \
+	bases=`for i in $$bases; do echo $$i; done \
+	         | $(am__list_recheck_tests)` || exit 1; \
+	log_list=`for i in $$bases; do echo $$i.log; done`; \
+	log_list=`echo $$log_list`; \
+	$(MAKE) $(AM_MAKEFLAGS) $(TEST_SUITE_LOG) \
+	        am__force_recheck=am--force-recheck \
+	        TEST_LOGS="$$log_list"; \
+	exit $$?
+environment.log: environment$(EXEEXT)
+	@p='environment$(EXEEXT)'; \
+	b='environment'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
+exceptions.log: exceptions$(EXEEXT)
+	@p='exceptions$(EXEEXT)'; \
+	b='exceptions'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
+gc.log: gc$(EXEEXT)
+	@p='gc$(EXEEXT)'; \
+	b='gc'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
+lockfile.log: lockfile$(EXEEXT)
+	@p='lockfile$(EXEEXT)'; \
+	b='lockfile'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
+manifest.log: manifest$(EXEEXT)
+	@p='manifest$(EXEEXT)'; \
+	b='manifest'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
+pkgdb.log: pkgdb$(EXEEXT)
+	@p='pkgdb$(EXEEXT)'; \
+	b='pkgdb'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
+registry.log: registry$(EXEEXT)
+	@p='registry$(EXEEXT)'; \
+	b='registry'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
+util.log: util$(EXEEXT)
+	@p='util$(EXEEXT)'; \
+	b='util'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
+versions.log: versions$(EXEEXT)
+	@p='versions$(EXEEXT)'; \
+	b='versions'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
+descriptor.bats.log: descriptor.bats
+	@p='descriptor.bats'; \
+	b='descriptor.bats'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
+migrate.bats.log: migrate.bats
+	@p='migrate.bats'; \
+	b='migrate.bats'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
+scrape.bats.log: scrape.bats
+	@p='scrape.bats'; \
+	b='scrape.bats'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
+get.bats.log: get.bats
+	@p='get.bats'; \
+	b='get.bats'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
+cli.bats.log: cli.bats
+	@p='cli.bats'; \
+	b='cli.bats'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
+ga-registry.bats.log: ga-registry.bats
+	@p='ga-registry.bats'; \
+	b='ga-registry.bats'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
+search.bats.log: search.bats
+	@p='search.bats'; \
+	b='search.bats'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
+pathological.bats.log: pathological.bats
+	@p='pathological.bats'; \
+	b='pathological.bats'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
+groups.bats.log: groups.bats
+	@p='groups.bats'; \
+	b='groups.bats'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
+buildenv.bats.log: buildenv.bats
+	@p='buildenv.bats'; \
+	b='buildenv.bats'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
+gc.bats.log: gc.bats
+	@p='gc.bats'; \
+	b='gc.bats'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
+sqlite3.bats.log: sqlite3.bats
+	@p='sqlite3.bats'; \
+	b='sqlite3.bats'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
+.test.log:
+	@p='$<'; \
+	$(am__set_b); \
+	$(am__check_pre) $(TEST_LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_TEST_LOG_DRIVER_FLAGS) $(TEST_LOG_DRIVER_FLAGS) -- $(TEST_LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
+@am__EXEEXT_TRUE@.test$(EXEEXT).log:
+@am__EXEEXT_TRUE@	@p='$<'; \
+@am__EXEEXT_TRUE@	$(am__set_b); \
+@am__EXEEXT_TRUE@	$(am__check_pre) $(TEST_LOG_DRIVER) --test-name "$$f" \
+@am__EXEEXT_TRUE@	--log-file $$b.log --trs-file $$b.trs \
+@am__EXEEXT_TRUE@	$(am__common_driver_flags) $(AM_TEST_LOG_DRIVER_FLAGS) $(TEST_LOG_DRIVER_FLAGS) -- $(TEST_LOG_COMPILE) \
+@am__EXEEXT_TRUE@	"$$tst" $(AM_TESTS_FD_REDIRECT)
 distdir: $(BUILT_SOURCES)
 	$(MAKE) $(AM_MAKEFLAGS) distdir-am
 
@@ -667,6 +1243,7 @@ distdir-am: $(DISTFILES)
 	done
 check-am: all-am
 	$(MAKE) $(AM_MAKEFLAGS) $(check_PROGRAMS)
+	$(MAKE) $(AM_MAKEFLAGS) check-TESTS
 check: check-am
 all-am: Makefile
 installdirs:
@@ -690,6 +1267,9 @@ install-strip:
 	    "INSTALL_PROGRAM_ENV=STRIPPROG='$(STRIP)'" install; \
 	fi
 mostlyclean-generic:
+	-test -z "$(TEST_LOGS)" || rm -f $(TEST_LOGS)
+	-test -z "$(TEST_LOGS:.log=.trs)" || rm -f $(TEST_LOGS:.log=.trs)
+	-test -z "$(TEST_SUITE_LOG)" || rm -f $(TEST_SUITE_LOG)
 
 clean-generic:
 
@@ -712,7 +1292,7 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/is_sqlite3.Po
 	-rm -f ./$(DEPDIR)/lockfile.Po
 	-rm -f ./$(DEPDIR)/manifest.Po
-	-rm -f ./$(DEPDIR)/pkgdbT.Po
+	-rm -f ./$(DEPDIR)/pkgdb.Po
 	-rm -f ./$(DEPDIR)/registry.Po
 	-rm -f ./$(DEPDIR)/search-params.Po
 	-rm -f ./$(DEPDIR)/util.Po
@@ -768,7 +1348,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/is_sqlite3.Po
 	-rm -f ./$(DEPDIR)/lockfile.Po
 	-rm -f ./$(DEPDIR)/manifest.Po
-	-rm -f ./$(DEPDIR)/pkgdbT.Po
+	-rm -f ./$(DEPDIR)/pkgdb.Po
 	-rm -f ./$(DEPDIR)/registry.Po
 	-rm -f ./$(DEPDIR)/search-params.Po
 	-rm -f ./$(DEPDIR)/util.Po
@@ -793,22 +1373,29 @@ uninstall-am:
 
 .MAKE: check-am install-am install-strip
 
-.PHONY: CTAGS GTAGS TAGS all all-am am--depfiles check check-am clean \
-	clean-checkPROGRAMS clean-generic clean-libtool cscopelist-am \
-	ctags ctags-am distclean distclean-compile distclean-generic \
-	distclean-libtool distclean-tags distdir dvi dvi-am html \
-	html-am info info-am install install-am install-data \
-	install-data-am install-dvi install-dvi-am install-exec \
-	install-exec-am install-html install-html-am install-info \
-	install-info-am install-man install-pdf install-pdf-am \
-	install-ps install-ps-am install-strip installcheck \
-	installcheck-am installdirs maintainer-clean \
+.PHONY: CTAGS GTAGS TAGS all all-am am--depfiles check check-TESTS \
+	check-am clean clean-checkPROGRAMS clean-generic clean-libtool \
+	cscopelist-am ctags ctags-am distclean distclean-compile \
+	distclean-generic distclean-libtool distclean-tags distdir dvi \
+	dvi-am html html-am info info-am install install-am \
+	install-data install-data-am install-dvi install-dvi-am \
+	install-exec install-exec-am install-html install-html-am \
+	install-info install-info-am install-man install-pdf \
+	install-pdf-am install-ps install-ps-am install-strip \
+	installcheck installcheck-am installdirs maintainer-clean \
 	maintainer-clean-generic mostlyclean mostlyclean-compile \
 	mostlyclean-generic mostlyclean-libtool pdf pdf-am ps ps-am \
-	tags tags-am uninstall uninstall-am
+	recheck tags tags-am uninstall uninstall-am
 
 .PRECIOUS: Makefile
 
+
+# ---------------------------------------------------------------------------- #
+
+check: $(abs_top_builddir)/pkgdb/bin/pkgdb
+
+.PHONY: tests
+tests: $(check_PROGRAMS)
 
 # ---------------------------------------------------------------------------- #
 #

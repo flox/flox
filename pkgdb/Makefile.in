@@ -460,7 +460,7 @@ PACKAGE_VERSION = @PACKAGE_VERSION@
 PATH_SEPARATOR = @PATH_SEPARATOR@
 PKGCONFIGDIR = @PKGCONFIGDIR@
 PKGDB_ROOT = @PKGDB_ROOT@
-PKGDB_TESTS_DIR = @PKGDB_TESTS_DIR@
+PKGDB_TEST_DIR = @PKGDB_TEST_DIR@
 PKGDB_VERSION = @PKGDB_VERSION@
 PKGS_DIR = @PKGS_DIR@
 PKG_CONFIG = @PKG_CONFIG@
@@ -564,9 +564,7 @@ top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 ACLOCAL_AMFLAGS = -I ../build-aux/m4
-
-# TODO:
-SUBDIRS = src/resolver include #tests
+SUBDIRS = src/resolver include tests
 
 # ---------------------------------------------------------------------------- #
 lib_LTLIBRARIES = lib/libpkgdb.la

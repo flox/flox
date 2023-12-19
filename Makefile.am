@@ -11,12 +11,13 @@ SUBDIRS = pkgdb cli
 
 # ---------------------------------------------------------------------------- #
 
-# TODO: Add tests.
+.PHONY: pkgdb cli
+
 pkgdb:
-	$(MAKE) $(AM_MAKEFLAGS) -C $(abs_top_builddir)/pkgdb
+	$(MAKE) $(AM_MAKEFLAGS) -C $(builddir)/pkgdb
 
 cli:
-	$(MAKE) $(AM_MAKEFLAGS) -C $(abs_top_builddir)/cli
+	$(MAKE) $(AM_MAKEFLAGS) -C $(builddir)/cli
 
 
 # ---------------------------------------------------------------------------- #
