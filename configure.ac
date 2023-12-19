@@ -78,7 +78,7 @@ FLOX_PROG_MISSING
 # `AC_PATH_PROG' to get absolute paths to the programs.
 
 AC_PROG_CXX
-AC_PATH_PROG([CXX], [$CXX], [$MISSING c++])
+AC_PATH_PROG([CXX], ["${CXX:-c++}"], [$MISSING c++])
 
 # We use a modified `autoreconf' script that patches `configure' after
 # creating it, and `build-aux/m4/libtool.m4' after `libtoolize' is run.
@@ -94,28 +94,31 @@ AC_PATH_PROG([AUTORECONF], [autoreconf], [$MISSING build-aux/autoreconf],
 FLOX_PROG_CC
 
 AC_PROG_CPP
-AC_PATH_PROG([CPP], [$CPP], [$MISSING cpp])
+AC_PATH_PROG([CPP], ["${CPP:-cpp}"], [$MISSING cpp])
 
 AC_PROG_INSTALL
-AC_PATH_PROG([CC], [$CC], [$MISSING install])
+AC_PATH_PROG([INSTALL], ["${INSTALL:-install}"], [$MISSING install])
 
 FLOX_PROG_GREP
 
 AC_PROG_SED
-AC_PATH_PROG([SED], [$SED], [$MISSING sed])
+AC_PATH_PROG([SED], ["${SED:-sed}"], [$MISSING sed])
 
 # NOTE: `AC_PROG_RANLIB' is run by `LT_INIT'
 #AC_PROG_RANLIB
-AC_PATH_PROG([RANLIB], [$RANLIB], [$MISSING ranlib])
+AC_PATH_PROG([RANLIB], ["${RANLIB:-ranlib}"], [$MISSING ranlib])
 
 AM_PROG_AR
-AC_PATH_PROG([AR], [$AR], [$MISSING ar])
+AC_PATH_PROG([AR], ["${AR:-ar}"], [$MISSING ar])
 
 PKG_PROG_PKG_CONFIG
-AC_PATH_PROG([PKG_CONFIG], [$PKG_CONFIG], [$MISSING pkg-config])
+AC_PATH_PROG([PKG_CONFIG], ["${PKG_CONFIG:-}"], [$MISSING pkg-config])
 
 AC_ARG_VAR([CAT], [Concatenate FILE(s) to standard output])
 AC_PATH_PROG([CAT], [cat], [$MISSING cat])
+
+AC_ARG_VAR([HEAD], [Output the first part of files])
+AC_PATH_PROG([HEAD], [head], [$MISSING head])
 
 AC_ARG_VAR([CP], [Copy files])
 AC_PATH_PROG([CP], [cp], [$MISSING cp])
@@ -172,7 +175,13 @@ AC_PATH_PROG([SQLITE], [sqlite3], [$MISSING sqlite3])
 AC_ARG_VAR([BATS], [Bash Automated Testing System])
 AC_PATH_PROG([BATS], [bats], [$MISSING bats])
 
+# Sets `NIX'
 FLOX_PROG_NIX
+# Flags passed to `nix' invocations.
+AC_ARG_VAR([NIXFLAGS],
+  [Flags passed as 'nix <NIXFLAGS> <CMD> ...' to all 'nix' invocations ]
+  [@<:@default=--experimental-features='nix-command flakes'@:>@])
+AC_SUBST([NIXFLAGS], ["--experimental-features='nix-command flakes'"])
 
 AC_ARG_VAR([NIX_FMT], [Nix code formatter @<:@default=alejandra@:>@])
 AC_PATH_PROG([NIX_FMT], [alejandra], [$MISSING alejandra])
@@ -230,10 +239,12 @@ AC_SUBST([ARCH])
 AM_CONDITIONAL([IS_X86_64],  [test "$ARCH" = 'x86_64'])
 AM_CONDITIONAL([IS_AARCH64], [test "$ARCH" = 'aarch64'])
 
-AS_CASE(["$( $CXX --version; )"],
- [g++\ *],            [CXX_TOOLCHAIN=gcc],
- [clang\ version\ *], [CXX_TOOLCHAIN=clang],
- [AC_MSG_ERROR([Unsupported C++ compiler: $CXX])])
+AC_CACHE_CHECK([for C++ compiler toolchain], [ac_cv_cxx_toolchain],
+  [AS_CASE(["$( $CXX --version|$HEAD -n1; )"],
+     [g++\ *],            [ac_cv_cxx_toolchain=gcc],
+     [clang\ version\ *], [ac_cv_cxx_toolchain=clang],
+     [AC_MSG_ERROR([Unsupported C++ compiler: $CXX])])
+   AC_MSG_RESULT([$ac_cv_cxx_toolchain])])
 AC_SUBST([CXX_TOOLCHAIN])
 AM_CONDITIONAL([IS_GCC],   [test "$CXX_TOOLCHAIN" = 'gcc'])
 AM_CONDITIONAL([IS_CLANG], [test "$CXX_TOOLCHAIN" = 'clang'])
@@ -593,8 +604,7 @@ AS_IF([test -z "${SET_PROMPT_BASH_SH:-}"], [
     [/nix/store/*], [SET_PROMPT_BASH_SH="$WITH_SET_PROMPT_BASH_SH"],
     [local],
       [SET_PROMPT_BASH_SH="$(
-       $NIX --extra-experimental-features='nix-command flakes'  \
-            store add-path -n set-prompt-bash.sh                \
+       $NIX $NIXFLAGS store add-path -n set-prompt-bash.sh  \
             "$PKGDB_ROOT/src/buildenv/set-prompt-bash.sh";
        )"],
     [AS_IF([test -d "$WITH_SET_PROMPT_BASH_SH"], [:],
@@ -622,8 +632,7 @@ AS_IF([test -z "${PROFILE_D_SCRIPT_DIR:-}"], [
     [/nix/store/*], [PROFILE_D_SCRIPT_DIR="$WITH_PROFILE_D_SCRIPT_DIR"],
     [local],
       [PROFILE_D_SCRIPT_DIR="$(
-        $NIX --extra-experimental-features='nix-command flakes'  \
-             store add-file -n set-prompt-bash.sh                \
+        $NIX $NIXFLAGS store add-file -n set-prompt-bash.sh  \
              "$PKGDB_ROOT/src/buildenv/assets";
         )"],
     [AS_IF([test -d "$WITH_PROFILE_D_SCRIPT_DIR"], [:],
@@ -648,8 +657,7 @@ AC_ARG_VAR([SEMVER_PATH], [Path to 'semver' executable in '/nix/store/'])
 AS_CASE(["$SEMVER"],
   [/nix/store/*], [SEMVER_PATH="$SEMVER"],
   [SEMVER_PATH="$(
-     $NIX --extra-experimental-features='nix-command flakes'  \
-          build --no-link --print-out-paths                   \
+     $NIX $NIXFLAGS build --no-link --print-out-paths  \
           'github:aakropotkin/floco@%:@semver'
    )/bin/semver"])
 AC_SUBST([SEMVER_PATH])
@@ -668,9 +676,8 @@ AC_DEFINE_UNQUOTED([SEMVER_PATH], ["$SEMVER_PATH"],
 # User Overridable flags.
 # We provide a sane default, but users are encouraged to override these.
 CXXFLAGS="${CXXFLAGS:+$CXXFLAGS }-Wall -Wextra -Werror -pedantic";
-if test "$CXX_TOOLCHAIN" = 'clang'; then
-  CXXFLAGS="$CXXFLAGS -Wno-gnu-zero-variadic-macro-arguments";
-fi
+AS_IF([test "$CXX_TOOLCHAIN" = 'clang'],
+      [CXXFLAGS="$CXXFLAGS -Wno-gnu-zero-variadic-macro-arguments"])
 
 #NOTE: `YAML_*' and `TOML_*' are only used by some targets, so are excluded here
 

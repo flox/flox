@@ -33,7 +33,7 @@ AC_PATH_PROG([MISSING], [missing], [AC_MSG_ERROR([missing not found])],
 AC_DEFUN([FLOX_PROG_CC], [
 AC_REQUIRE([FLOX_PROG_MISSING])
 AC_REQUIRE([AC_PROG_CC])
-AC_PATH_PROG([CC], [$CC], [$MISSING cc])
+AC_PATH_PROG([CC], ["${CC:-cc}"], [$MISSING cc])
 ]) # FLOX_PROG_CC
 
 
@@ -45,7 +45,7 @@ AC_PATH_PROG([CC], [$CC], [$MISSING cc])
 AC_DEFUN([FLOX_PROG_GREP], [
 AC_REQUIRE([FLOX_PROG_MISSING])
 AC_REQUIRE([AC_PROG_GREP])
-AC_PATH_PROG([GREP], [$GREP], [$MISSING grep])
+AC_PATH_PROG([GREP], ["${GREP:-grep}"], [$MISSING grep])
 ]) # FLOX_PROG_GREP
 
 
@@ -54,10 +54,10 @@ AC_PATH_PROG([GREP], [$GREP], [$MISSING grep])
 # FLOX_PROG_FILE
 # --------------
 # Set `FILE` to the path of the `file` executable, if any.
-AC_DEFUN([FLOX_PROG_FILE], [
+AC_DEFUN([FLOX_PROG_FILECMD], [
 AC_REQUIRE([FLOX_PROG_MISSING])
-AC_ARG_VAR([FILE], [File type recognizer])
-AC_PATH_PROG([FILE], [$FILE], [$MISSING file])
+AC_ARG_VAR([FILECMD], [File type recognizer])
+AC_PATH_PROG([FILECMD], [file], [$MISSING file])
 ]) # FLOX_PROG_FILE
 
 

@@ -19,11 +19,11 @@
 # Sets `CC_IS_NIX_WRAPPER` to `yes' if `CC` is a wrapper, `no' otherwise.
 AC_DEFUN([FLOX_CHECK_NIX_WRAPPER],
 [AC_CACHE_CHECK([whether CC is a nix wrapper], [flox_cv_nix_cc_wrapper],
-  [AC_REQUIRE([FLOX_PROG_FILE])
+  [AC_REQUIRE([FLOX_PROG_FILECMD])
    AC_REQUIRE([FLOX_PROG_CC])
    AC_REQUIRE([FLOX_PROG_GREP])
    AS_IF(
-     [$FILE -Lb "$CC" 2>/dev/null[]dnl
+     [$FILECMD -Lb "$CC" 2>/dev/null[]dnl
         |$GREP -q "^a /nix/store/[[^ ]]*/bash script, ASCII text executable\$"],
      [flox_cv_nix_cc_wrapper=yes], [flox_cv_nix_cc_wrapper=no])])
 AM_CONDITIONAL([CC_IS_NIX_WRAPPER], [test "$flox_cv_nix_cc_wrapper" = 'yes'])

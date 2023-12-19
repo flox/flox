@@ -737,6 +737,7 @@ RUST_LINT
 RUST_FMT
 CARGO
 NIX_FMT
+NIXFLAGS
 NIX
 BATS
 SQLITE
@@ -756,10 +757,12 @@ SORT
 RM
 MKDIR
 CP
+HEAD
 CAT
 PKG_CONFIG_LIBDIR
 PKG_CONFIG_PATH
 PKG_CONFIG
+INSTALL
 CPP
 AUTORECONF
 REAL_AUTORECONF
@@ -942,6 +945,7 @@ PKG_CONFIG
 PKG_CONFIG_PATH
 PKG_CONFIG_LIBDIR
 CAT
+HEAD
 CP
 MKDIR
 RM
@@ -961,6 +965,7 @@ HIVEMIND
 SQLITE
 BATS
 NIX
+NIXFLAGS
 NIX_FMT
 CARGO
 RUST_FMT
@@ -1679,6 +1684,7 @@ Some influential environment variables:
   PKG_CONFIG_LIBDIR
               path overriding pkg-config's built-in search path
   CAT         Concatenate FILE(s) to standard output
+  HEAD        Output the first part of files
   CP          Copy files
   MKDIR       Create directories
   RM          Remove files
@@ -1698,6 +1704,9 @@ Some influential environment variables:
   SQLITE      Command line interface for SQLite
   BATS        Bash Automated Testing System
   NIX         Purely functional package manager
+  NIXFLAGS    Flags passed as 'nix <NIXFLAGS> <CMD> ...' to all 'nix'
+              invocations [default=--experimental-features='nix-command
+              flakes']
   NIX_FMT     Nix code formatter [default=alejandra]
   CARGO       Rust package manager
   RUST_FMT    Rust code formatter [default=rustfmt]
@@ -17366,8 +17375,8 @@ ac_link='$CC -o conftest$ac_exeext $CFLAGS $CPPFLAGS $LDFLAGS conftest.$ac_ext $
 ac_compiler_gnu=$ac_cv_c_compiler_gnu
 
 
-# Extract the first word of "$CXX", so it can be a program name with args.
-set dummy $CXX; ac_word=$2
+# Extract the first word of ""${CXX:-c++}"", so it can be a program name with args.
+set dummy "${CXX:-c++}"; ac_word=$2
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
 printf %s "checking for $ac_word... " >&6; }
 if test ${ac_cv_path_CXX+y}
@@ -17516,8 +17525,8 @@ fi
 
 
 
-# Extract the first word of "$CC", so it can be a program name with args.
-set dummy $CC; ac_word=$2
+# Extract the first word of ""${CC:-cc}"", so it can be a program name with args.
+set dummy "${CC:-cc}"; ac_word=$2
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
 printf %s "checking for $ac_word... " >&6; }
 if test ${ac_cv_path_CC+y}
@@ -17696,8 +17705,8 @@ ac_compile='$CC -c $CFLAGS $CPPFLAGS conftest.$ac_ext >&5'
 ac_link='$CC -o conftest$ac_exeext $CFLAGS $CPPFLAGS $LDFLAGS conftest.$ac_ext $LIBS >&5'
 ac_compiler_gnu=$ac_cv_c_compiler_gnu
 
-# Extract the first word of "$CPP", so it can be a program name with args.
-set dummy $CPP; ac_word=$2
+# Extract the first word of ""${CPP:-cpp}"", so it can be a program name with args.
+set dummy "${CPP:-cpp}"; ac_word=$2
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
 printf %s "checking for $ac_word... " >&6; }
 if test ${ac_cv_path_CPP+y}
@@ -17744,17 +17753,17 @@ fi
 
 
 
-# Extract the first word of "$CC", so it can be a program name with args.
-set dummy $CC; ac_word=$2
+# Extract the first word of ""${INSTALL:-install}"", so it can be a program name with args.
+set dummy "${INSTALL:-install}"; ac_word=$2
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
 printf %s "checking for $ac_word... " >&6; }
-if test ${ac_cv_path_CC+y}
+if test ${ac_cv_path_INSTALL+y}
 then :
   printf %s "(cached) " >&6
 else $as_nop
-  case $CC in
+  case $INSTALL in
   [\\/]* | ?:[\\/]*)
-  ac_cv_path_CC="$CC" # Let the user override the test with a path.
+  ac_cv_path_INSTALL="$INSTALL" # Let the user override the test with a path.
   ;;
   *)
   as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
@@ -17768,7 +17777,7 @@ do
   esac
     for ac_exec_ext in '' $ac_executable_extensions; do
   if as_fn_executable_p "$as_dir$ac_word$ac_exec_ext"; then
-    ac_cv_path_CC="$as_dir$ac_word$ac_exec_ext"
+    ac_cv_path_INSTALL="$as_dir$ac_word$ac_exec_ext"
     printf "%s\n" "$as_me:${as_lineno-$LINENO}: found $as_dir$ac_word$ac_exec_ext" >&5
     break 2
   fi
@@ -17776,14 +17785,14 @@ done
   done
 IFS=$as_save_IFS
 
-  test -z "$ac_cv_path_CC" && ac_cv_path_CC="$MISSING install"
+  test -z "$ac_cv_path_INSTALL" && ac_cv_path_INSTALL="$MISSING install"
   ;;
 esac
 fi
-CC=$ac_cv_path_CC
-if test -n "$CC"; then
-  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $CC" >&5
-printf "%s\n" "$CC" >&6; }
+INSTALL=$ac_cv_path_INSTALL
+if test -n "$INSTALL"; then
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $INSTALL" >&5
+printf "%s\n" "$INSTALL" >&6; }
 else
   { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
 printf "%s\n" "no" >&6; }
@@ -17794,8 +17803,8 @@ fi
 
 
 
-# Extract the first word of "$GREP", so it can be a program name with args.
-set dummy $GREP; ac_word=$2
+# Extract the first word of ""${GREP:-grep}"", so it can be a program name with args.
+set dummy "${GREP:-grep}"; ac_word=$2
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
 printf %s "checking for $ac_word... " >&6; }
 if test ${ac_cv_path_GREP+y}
@@ -17917,8 +17926,8 @@ printf "%s\n" "$ac_cv_path_SED" >&6; }
  SED="$ac_cv_path_SED"
   rm -f conftest.sed
 
-# Extract the first word of "$SED", so it can be a program name with args.
-set dummy $SED; ac_word=$2
+# Extract the first word of ""${SED:-sed}"", so it can be a program name with args.
+set dummy "${SED:-sed}"; ac_word=$2
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
 printf %s "checking for $ac_word... " >&6; }
 if test ${ac_cv_path_SED+y}
@@ -17966,8 +17975,8 @@ fi
 
 # NOTE: `AC_PROG_RANLIB' is run by `LT_INIT'
 #AC_PROG_RANLIB
-# Extract the first word of "$RANLIB", so it can be a program name with args.
-set dummy $RANLIB; ac_word=$2
+# Extract the first word of ""${RANLIB:-ranlib}"", so it can be a program name with args.
+set dummy "${RANLIB:-ranlib}"; ac_word=$2
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
 printf %s "checking for $ac_word... " >&6; }
 if test ${ac_cv_path_RANLIB+y}
@@ -18197,8 +18206,8 @@ unknown)
   ;;
 esac
 
-# Extract the first word of "$AR", so it can be a program name with args.
-set dummy $AR; ac_word=$2
+# Extract the first word of ""${AR:-ar}"", so it can be a program name with args.
+set dummy "${AR:-ar}"; ac_word=$2
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
 printf %s "checking for $ac_word... " >&6; }
 if test ${ac_cv_path_AR+y}
@@ -18374,8 +18383,8 @@ printf "%s\n" "no" >&6; }
 		PKG_CONFIG=""
 	fi
 fi
-# Extract the first word of "$PKG_CONFIG", so it can be a program name with args.
-set dummy $PKG_CONFIG; ac_word=$2
+# Extract the first word of ""${PKG_CONFIG:-}"", so it can be a program name with args.
+set dummy "${PKG_CONFIG:-}"; ac_word=$2
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
 printf %s "checking for $ac_word... " >&6; }
 if test ${ac_cv_path_PKG_CONFIG+y}
@@ -18462,6 +18471,54 @@ CAT=$ac_cv_path_CAT
 if test -n "$CAT"; then
   { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $CAT" >&5
 printf "%s\n" "$CAT" >&6; }
+else
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
+printf "%s\n" "no" >&6; }
+fi
+
+
+
+
+# Extract the first word of "head", so it can be a program name with args.
+set dummy head; ac_word=$2
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
+printf %s "checking for $ac_word... " >&6; }
+if test ${ac_cv_path_HEAD+y}
+then :
+  printf %s "(cached) " >&6
+else $as_nop
+  case $HEAD in
+  [\\/]* | ?:[\\/]*)
+  ac_cv_path_HEAD="$HEAD" # Let the user override the test with a path.
+  ;;
+  *)
+  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
+for as_dir in $PATH
+do
+  IFS=$as_save_IFS
+  case $as_dir in #(((
+    '') as_dir=./ ;;
+    */) ;;
+    *) as_dir=$as_dir/ ;;
+  esac
+    for ac_exec_ext in '' $ac_executable_extensions; do
+  if as_fn_executable_p "$as_dir$ac_word$ac_exec_ext"; then
+    ac_cv_path_HEAD="$as_dir$ac_word$ac_exec_ext"
+    printf "%s\n" "$as_me:${as_lineno-$LINENO}: found $as_dir$ac_word$ac_exec_ext" >&5
+    break 2
+  fi
+done
+  done
+IFS=$as_save_IFS
+
+  test -z "$ac_cv_path_HEAD" && ac_cv_path_HEAD="$MISSING head"
+  ;;
+esac
+fi
+HEAD=$ac_cv_path_HEAD
+if test -n "$HEAD"; then
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $HEAD" >&5
+printf "%s\n" "$HEAD" >&6; }
 else
   { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
 printf "%s\n" "no" >&6; }
@@ -19333,6 +19390,7 @@ fi
 
 
 
+# Sets `NIX'
 
 
 # Extract the first word of "nix", so it can be a program name with args.
@@ -19381,6 +19439,10 @@ printf "%s\n" "no" >&6; }
 fi
 
 
+
+# Flags passed to `nix' invocations.
+
+NIXFLAGS="--experimental-features='nix-command flakes'"
 
 
 
@@ -19971,14 +20033,25 @@ else
 fi
 
 
-case "$( $CXX --version; )" in #(
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for C++ compiler toolchain" >&5
+printf %s "checking for C++ compiler toolchain... " >&6; }
+if test ${ac_cv_cxx_toolchain+y}
+then :
+  printf %s "(cached) " >&6
+else $as_nop
+  case "$( $CXX --version|$HEAD -n1; )" in #(
   g++\ *) :
-    CXX_TOOLCHAIN=gcc ;; #(
+    ac_cv_cxx_toolchain=gcc ;; #(
   clang\ version\ *) :
-    CXX_TOOLCHAIN=clang ;; #(
+    ac_cv_cxx_toolchain=clang ;; #(
   *) :
     as_fn_error $? "Unsupported C++ compiler: $CXX" "$LINENO" 5 ;;
 esac
+   { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $ac_cv_cxx_toolchain" >&5
+printf "%s\n" "$ac_cv_cxx_toolchain" >&6; }
+fi
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $ac_cv_cxx_toolchain" >&5
+printf "%s\n" "$ac_cv_cxx_toolchain" >&6; }
 
  if test "$CXX_TOOLCHAIN" = 'gcc'; then
   IS_GCC_TRUE=
@@ -21728,8 +21801,7 @@ then :
     SET_PROMPT_BASH_SH="$WITH_SET_PROMPT_BASH_SH" ;; #(
   local) :
     SET_PROMPT_BASH_SH="$(
-       $NIX --extra-experimental-features='nix-command flakes'  \
-            store add-path -n set-prompt-bash.sh                \
+       $NIX $NIXFLAGS store add-path -n set-prompt-bash.sh  \
             "$PKGDB_ROOT/src/buildenv/set-prompt-bash.sh";
        )" ;; #(
   *) :
@@ -21768,8 +21840,7 @@ then :
     PROFILE_D_SCRIPT_DIR="$WITH_PROFILE_D_SCRIPT_DIR" ;; #(
   local) :
     PROFILE_D_SCRIPT_DIR="$(
-        $NIX --extra-experimental-features='nix-command flakes'  \
-             store add-file -n set-prompt-bash.sh                \
+        $NIX $NIXFLAGS store add-file -n set-prompt-bash.sh  \
              "$PKGDB_ROOT/src/buildenv/assets";
         )" ;; #(
   *) :
@@ -21803,8 +21874,7 @@ case "$SEMVER" in #(
     SEMVER_PATH="$SEMVER" ;; #(
   *) :
     SEMVER_PATH="$(
-     $NIX --extra-experimental-features='nix-command flakes'  \
-          build --no-link --print-out-paths                   \
+     $NIX $NIXFLAGS build --no-link --print-out-paths  \
           'github:aakropotkin/floco#semver'
    )/bin/semver" ;;
 esac
@@ -21825,8 +21895,9 @@ printf "%s\n" "#define SEMVER_PATH \"$SEMVER_PATH\"" >>confdefs.h
 # User Overridable flags.
 # We provide a sane default, but users are encouraged to override these.
 CXXFLAGS="${CXXFLAGS:+$CXXFLAGS }-Wall -Wextra -Werror -pedantic";
-if test "$CXX_TOOLCHAIN" = 'clang'; then
-  CXXFLAGS="$CXXFLAGS -Wno-gnu-zero-variadic-macro-arguments";
+if test "$CXX_TOOLCHAIN" = 'clang'
+then :
+  CXXFLAGS="$CXXFLAGS -Wno-gnu-zero-variadic-macro-arguments"
 fi
 
 #NOTE: `YAML_*' and `TOML_*' are only used by some targets, so are excluded here

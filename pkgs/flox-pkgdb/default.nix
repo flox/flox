@@ -5,6 +5,7 @@
   doxygen,
   bear,
   boost,
+  ccache,
   ccls,
   clang-tools_16,
   include-what-you-use,
@@ -148,6 +149,8 @@ in
 
         devPackages =
           [
+            # For caching
+            ccache
             # For profiling
             lcov
             remake
