@@ -120,33 +120,18 @@ pub enum Auth {
 }
 
 impl Auth {
-    pub async fn handle(self, config: Config, flox: Flox) -> Result<()> {
+    pub async fn handle(self, config: Config, mut flox: Flox) -> Result<()> {
         subcommand_metric!("auth2");
-
-        let client = create_oauth_client()?;
 
         match self {
             Auth::Login => {
-                let cred = authorize(client)
-                    .await
-                    .context("Could not authorize via oauth")?;
-
-                debug!("Credentials received: {cred:#?}");
-                debug!("Writing token to config");
-
-                update_config(
-                    &flox.config_dir,
-                    &flox.temp_dir,
-                    "floxhub_token",
-                    Some(cred.token),
-                )
-                .context("Could not write token to config")?;
-
+                login_flox(&mut flox).await?;
                 info!("Login successful");
-
                 Ok(())
             },
             Auth::Logout => {
+                create_oauth_client()?;
+
                 if config.flox.floxhub_token.is_none() {
                     info!("You are not logged in");
                     return Ok(());
@@ -171,4 +156,32 @@ impl Auth {
             },
         }
     }
+}
+
+/// run the login flow
+///
+/// * updates the config file with the received token
+/// * updates the floxhub_token field in the config struct
+pub async fn login_flox(flox: &mut Flox) -> Result<()> {
+    let client = create_oauth_client()?;
+    let cred = authorize(client)
+        .await
+        .context("Could not authorize via oauth")?;
+
+    debug!("Credentials received: {cred:#?}");
+    debug!("Writing token to config");
+
+    // set the token in the runtime config
+    let token = flox.floxhub_token.insert(cred.token);
+
+    // write the token to the config file
+    update_config(
+        &flox.config_dir,
+        &flox.temp_dir,
+        "floxhub_token",
+        Some(token),
+    )
+    .context("Could not write token to config")?;
+
+    Ok(())
 }
