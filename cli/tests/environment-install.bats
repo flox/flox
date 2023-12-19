@@ -13,15 +13,15 @@ load test_support.bash
 # Helpers for project based tests.
 
 project_setup() {
-  export PROJECT_NAME="test";
+  export PROJECT_NAME="test"
   export PROJECT_DIR="${BATS_TEST_TMPDIR?}/$PROJECT_NAME"
   rm -rf "$PROJECT_DIR"
   mkdir -p "$PROJECT_DIR"
-  pushd "$PROJECT_DIR" >/dev/null || return
+  pushd "$PROJECT_DIR" > /dev/null || return
 }
 
 project_teardown() {
-  popd >/dev/null || return
+  popd > /dev/null || return
   rm -rf "${PROJECT_DIR?}"
   unset PROJECT_DIR
 }
@@ -47,18 +47,18 @@ teardown() {
 }
 
 @test "'flox install' displays confirmation message" {
-  "$FLOX_BIN" init;
-  run "$FLOX_BIN" install hello;
-  assert_success;
-  assert_output --partial "✅ 'hello' installed to environment";
+  "$FLOX_BIN" init
+  run "$FLOX_BIN" install hello
+  assert_success
+  assert_output --partial "✅ 'hello' installed to environment"
 }
 
 @test "'flox install' edits manifest" {
-  "$FLOX_BIN" init;
-  run "$FLOX_BIN" install hello;
-  assert_success;
-  run grep 'hello.path = "hello"' "$PROJECT_DIR/.flox/env/manifest.toml";
-  assert_success;
+  "$FLOX_BIN" init
+  run "$FLOX_BIN" install hello
+  assert_success
+  run grep 'hello.path = "hello"' "$PROJECT_DIR/.flox/env/manifest.toml"
+  assert_success
 }
 
 @test "uninstall confirmation message" {
@@ -74,57 +74,57 @@ teardown() {
 }
 
 @test "'flox uninstall' edits manifest" {
-  "$FLOX_BIN" init;
-  run "$FLOX_BIN" install hello;
-  assert_success;
-  run "$FLOX_BIN" uninstall hello;
-  run grep '^hello.path = "hello"' "$PROJECT_DIR/.flox/env/manifest.toml";
-  assert_failure;
+  "$FLOX_BIN" init
+  run "$FLOX_BIN" install hello
+  assert_success
+  run "$FLOX_BIN" uninstall hello
+  run grep '^hello.path = "hello"' "$PROJECT_DIR/.flox/env/manifest.toml"
+  assert_failure
 }
 
 @test "'flox install' reports error when package not found" {
-  "$FLOX_BIN" init;
-  run "$FLOX_BIN" install not-a-package;
-  assert_failure;
-  assert_output --partial "failed to resolve \`not-a-package'";
+  "$FLOX_BIN" init
+  run "$FLOX_BIN" install not-a-package
+  assert_failure
+  assert_output --partial "failed to resolve \`not-a-package'"
 }
 
 @test "'flox uninstall' reports error when package not found" {
-  "$FLOX_BIN" init;
-  run "$FLOX_BIN" uninstall not-a-package;
-  assert_failure;
-  assert_output --partial "couldn't uninstall 'not-a-package', wasn't previously installed";
+  "$FLOX_BIN" init
+  run "$FLOX_BIN" uninstall not-a-package
+  assert_failure
+  assert_output --partial "couldn't uninstall 'not-a-package', wasn't previously installed"
 }
 
 @test "'flox install' creates link to installed binary" {
-  "$FLOX_BIN" init;
-  run "$FLOX_BIN" install hello;
-  assert_success;
-  assert_output --partial "✅ 'hello' installed to environment";
-  run [ -e "$PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/bin/hello" ];
-  assert_success;
+  "$FLOX_BIN" init
+  run "$FLOX_BIN" install hello
+  assert_success
+  assert_output --partial "✅ 'hello' installed to environment"
+  run [ -e "$PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/bin/hello" ]
+  assert_success
 }
 
 @test "'flox uninstall' removes link to installed binary" {
-  "$FLOX_BIN" init;
-  run "$FLOX_BIN" install hello;
-  assert_success;
-  assert_output --partial "✅ 'hello' installed to environment";
-  run [ -e "$PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/bin/hello" ];
-  assert_success;
-  run "$FLOX_BIN" uninstall hello;
-  assert_success;
-  run [ ! -e "$PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/bin/hello" ];
-  assert_success;
+  "$FLOX_BIN" init
+  run "$FLOX_BIN" install hello
+  assert_success
+  assert_output --partial "✅ 'hello' installed to environment"
+  run [ -e "$PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/bin/hello" ]
+  assert_success
+  run "$FLOX_BIN" uninstall hello
+  assert_success
+  run [ ! -e "$PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/bin/hello" ]
+  assert_success
 }
 
 @test "'flox uninstall' has helpful error message with no packages installed" {
   # If the [install] table is missing entirely we don't want to report a TOML
   # parse error, we want to report that there's nothing to uninstall.
-  "$FLOX_BIN" init;
-  run "$FLOX_BIN" uninstall hello;
-  assert_failure;
-  assert_output --partial "couldn't uninstall 'hello', wasn't previously installed";
+  "$FLOX_BIN" init
+  run "$FLOX_BIN" uninstall hello
+  assert_failure
+  assert_output --partial "couldn't uninstall 'hello', wasn't previously installed"
 }
 
 @test "'flox install' uses last activated environment" {
@@ -169,50 +169,50 @@ teardown() {
 }
 
 @test "'flox install' installs by path" {
-  run "$FLOX_BIN" init;
-  assert_success;
-  run "$FLOX_BIN" install hello;
-  assert_success;
-  manifest=$(cat "$PROJECT_DIR/.flox/env/manifest.toml");
+  run "$FLOX_BIN" init
+  assert_success
+  run "$FLOX_BIN" install hello
+  assert_success
+  manifest=$(cat "$PROJECT_DIR/.flox/env/manifest.toml")
   # This also checks that it correctly infers the install ID
-  assert_regex "$manifest" 'hello\.path = "hello"';
+  assert_regex "$manifest" 'hello\.path = "hello"'
 }
 
 @test "'flox install' infers install ID" {
-  run "$FLOX_BIN" init;
-  assert_success;
-  run "$FLOX_BIN" install rubyPackages_3_2.rails;
-  assert_success;
-  manifest=$(cat "$PROJECT_DIR/.flox/env/manifest.toml");
+  run "$FLOX_BIN" init
+  assert_success
+  run "$FLOX_BIN" install rubyPackages_3_2.rails
+  assert_success
+  manifest=$(cat "$PROJECT_DIR/.flox/env/manifest.toml")
   # This also checks that it correctly infers the install ID
-  assert_regex "$manifest" 'rails\.path = "rubyPackages_3_2\.rails"';
+  assert_regex "$manifest" 'rails\.path = "rubyPackages_3_2\.rails"'
 }
 
 @test "'flox install' overrides install ID with '-i'" {
-  run "$FLOX_BIN" init;
-  assert_success;
-  run "$FLOX_BIN" install -i foo hello;
-  assert_success;
-  manifest=$(cat "$PROJECT_DIR/.flox/env/manifest.toml");
-  assert_regex "$manifest" 'foo\.path = "hello"';
+  run "$FLOX_BIN" init
+  assert_success
+  run "$FLOX_BIN" install -i foo hello
+  assert_success
+  manifest=$(cat "$PROJECT_DIR/.flox/env/manifest.toml")
+  assert_regex "$manifest" 'foo\.path = "hello"'
 }
 
 @test "'flox install' overrides install ID with '--id'" {
-  run "$FLOX_BIN" init;
-  assert_success;
-  run "$FLOX_BIN" install --id foo hello;
-  assert_success;
-  manifest=$(cat "$PROJECT_DIR/.flox/env/manifest.toml");
-  assert_regex "$manifest" 'foo\.path = "hello"';
+  run "$FLOX_BIN" init
+  assert_success
+  run "$FLOX_BIN" install --id foo hello
+  assert_success
+  manifest=$(cat "$PROJECT_DIR/.flox/env/manifest.toml")
+  assert_regex "$manifest" 'foo\.path = "hello"'
 }
 
 @test "'flox install' accepts mix of inferred and supplied install IDs" {
-  run "$FLOX_BIN" init;
-  assert_success;
-  run "$FLOX_BIN" install -i foo rubyPackages_3_2.webmention ripgrep -i bar rubyPackages_3_2.rails;
-  assert_success;
-  manifest=$(cat "$PROJECT_DIR/.flox/env/manifest.toml");
-  assert_regex "$manifest" 'foo\.path = "rubyPackages_3_2\.webmention"';
-  assert_regex "$manifest" 'ripgrep\.path = "ripgrep"';
-  assert_regex "$manifest" 'bar\.path = "rubyPackages_3_2\.rails"';
+  run "$FLOX_BIN" init
+  assert_success
+  run "$FLOX_BIN" install -i foo rubyPackages_3_2.webmention ripgrep -i bar rubyPackages_3_2.rails
+  assert_success
+  manifest=$(cat "$PROJECT_DIR/.flox/env/manifest.toml")
+  assert_regex "$manifest" 'foo\.path = "rubyPackages_3_2\.webmention"'
+  assert_regex "$manifest" 'ripgrep\.path = "ripgrep"'
+  assert_regex "$manifest" 'bar\.path = "rubyPackages_3_2\.rails"'
 }

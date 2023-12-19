@@ -43,7 +43,7 @@ use log::{debug, error, info};
 use tempfile::NamedTempFile;
 
 use super::{environment_select, EnvironmentSelect};
-use crate::commands::{activated_environments, ConcreteEnvironment};
+use crate::commands::{activated_environments, auth, ConcreteEnvironment};
 use crate::subcommand_metric;
 use crate::utils::dialog::{Confirm, Dialog, Spinner};
 
@@ -783,8 +783,29 @@ pub struct Push {
 }
 
 impl Push {
-    pub async fn handle(self, flox: Flox) -> Result<()> {
+    pub async fn handle(self, mut flox: Flox) -> Result<()> {
         subcommand_metric!("push");
+
+        if flox.floxhub_token.is_none() {
+            if !Dialog::can_prompt() {
+                let message = formatdoc! {"
+                    You are not logged in to floxhub.
+
+                    Can not automatically login to floxhub in non-interactive context.
+
+                    To login you can either
+                    * login to floxhub with 'flox auth login',
+                    * set the 'floxhub_token' field to '<your token>' in your config
+                    * set the '$FLOX_FLOXHUB_TOKEN=<your_token>' environment variable."
+                };
+                bail!(message);
+            }
+
+            info!("You are not logged in to floxhub. Logging in...");
+
+            auth::login_flox(&mut flox).await?;
+        }
+
         let dir = self.dir.unwrap_or_else(|| std::env::current_dir().unwrap());
 
         match EnvironmentPointer::open(&dir)? {
@@ -878,10 +899,10 @@ impl Push {
         let suffix = if force { " (forced)" } else { "" };
 
         formatdoc! {"
-            🚀 updated -> {owner}/{name}{suffix}
+            🚀  updated -> {owner}/{name}{suffix}
 
-            pull this environment with 'flox pull {owner}/{name}'
-            you can see this environment at https://hub.flox.dev/{owner}/{name}
+            Pull this environment with 'flox pull {owner}/{name}'.
+            You can see this environment at https://hub.flox.dev/{owner}/{name}.
         "}
     }
 
@@ -895,10 +916,10 @@ impl Push {
         let suffix = if force { " (forced)" } else { "" };
 
         formatdoc! {"
-            🚀 created -> {owner}/{name}{suffix}
+            🚀  created -> {owner}/{name}{suffix}
 
-            pull this environment with 'flox pull {owner}/{name}'
-            you can see this environment at https://hub.flox.dev/{owner}/{name}
+            Pull this environment with 'flox pull {owner}/{name}'.
+            You can see this environment at https://hub.flox.dev/{owner}/{name}.
         "}
     }
 }
@@ -951,13 +972,19 @@ impl Pull {
         match self.pull_select {
             PullSelect::New { dir, remote } | PullSelect::NewAbbreviated { dir, remote } => {
                 let (start, complete) = Self::pull_new_messages(dir.as_deref(), &remote);
-                info!("{start}");
 
                 let dir = dir.unwrap_or_else(|| std::env::current_dir().unwrap());
 
                 debug!("Resolved user intent: pull {remote:?} into {dir:?}");
 
-                Self::pull_new_environment(&flox, dir.join(DOT_FLOX), remote)?;
+                Dialog {
+                    message: &start,
+                    help_message: None,
+                    typed: Spinner::new(|| {
+                        Self::pull_new_environment(&flox, dir.join(DOT_FLOX), remote)
+                    }),
+                }
+                .spin()?;
 
                 info!("{complete}");
             },
@@ -975,10 +1002,17 @@ impl Pull {
                     }
                 };
 
-                let (start, complete) = Self::pull_existing_messages(&dir, &pointer, force);
+                let (start, complete) = Self::pull_existing_messages(&pointer, force);
                 info!("{start}");
 
-                Self::pull_existing_environment(&flox, dir.join(DOT_FLOX), pointer, force)?;
+                Dialog {
+                    message: &start,
+                    help_message: None,
+                    typed: Spinner::new(|| {
+                        Self::pull_existing_environment(&flox, dir.join(DOT_FLOX), pointer, force)
+                    }),
+                }
+                .spin()?;
 
                 info!("{complete}");
             },
@@ -1000,6 +1034,7 @@ impl Pull {
         let mut env = ManagedEnvironment::open(flox, pointer, dot_flox_path)
             .context("Could not open environment")?;
         env.pull(force).context("Could not pull environment")?;
+        env.build(flox).context("Could not build environment")?;
 
         Ok(())
     }
@@ -1030,9 +1065,12 @@ impl Pull {
 
         let result =
             ManagedEnvironment::open(flox, pointer, &dot_flox_path).map_err(Self::convert_error);
-        if let Err(err) = result {
-            fs::remove_dir_all(dot_flox_path).context("Could not clean up .flox/ directory")?;
-            Err(err)?;
+        match result {
+            Err(err) => {
+                fs::remove_dir_all(dot_flox_path).context("Could not clean up .flox/ directory")?;
+                Err(err)?;
+            },
+            Ok(mut env) => env.build(flox).context("Could not build environment")?,
         }
         Ok(())
     }
@@ -1054,7 +1092,7 @@ impl Pull {
     /// todo: add floxhub base url when it's available
     fn pull_new_messages(dir: Option<&Path>, env_ref: &EnvironmentRef) -> (String, String) {
         let mut start_message =
-            format!("⬇️ remote: pulling and preparing {env_ref} from https://hub.flox.dev");
+            format!("⬇️ remote: pulling and building {env_ref} from https://hub.flox.dev");
         if let Some(dir) = dir {
             start_message += &format!(" into {dir}", dir = dir.display());
         } else {
@@ -1064,7 +1102,7 @@ impl Pull {
         let complete_message = formatdoc! {"
             ✨ pulled {env_ref} from https://hub.flox.dev
 
-            You can activate this environment with `flox activate`
+            You can activate this environment with 'flox activate'
         "};
 
         (start_message, complete_message)
@@ -1073,25 +1111,19 @@ impl Pull {
     /// construct a message for pulling an existing environment
     ///
     /// todo: add floxhub base url when it's available
-    fn pull_existing_messages(
-        dir: &Path,
-        pointer: &ManagedPointer,
-        force: bool,
-    ) -> (String, String) {
+    fn pull_existing_messages(pointer: &ManagedPointer, force: bool) -> (String, String) {
         let owner = &pointer.owner;
         let name = &pointer.name;
 
-        let start_message = format!(
-            "⬇️ remote: pulling and preparing {owner}/{name} found in {dir} from https://hub.flox.dev",
-            dir = dir.display()
-        );
+        let start_message =
+            format!("⬇️ remote: pulling and building {owner}/{name} from https://hub.flox.dev",);
 
         let suffix: &str = if force { " (forced)" } else { "" };
 
         let complete_message = formatdoc! {"
             ✨ pulled {owner}/{name} from https://hub.flox.dev{suffix}
 
-            You can activate this environment with `flox activate`
+            You can activate this environment with 'flox activate'
         "};
 
         (start_message, complete_message)

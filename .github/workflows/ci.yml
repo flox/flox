@@ -268,11 +268,11 @@ jobs:
         uses: "convictional/trigger-workflow-and-wait@v1.6.5"
         with:
           owner:              "flox"
-          repo:               "nix-installers"
+          repo:               "flox-installers"
           github_token:       "${{ secrets.NIX_GIT_TOKEN }}"
           github_user:        "floxbot"
           workflow_file_name: "ci.yml"
-          ref:                "master"
+          ref:                "main"
           wait_interval:      10
           client_payload:     '{"TARGET":"git+ssh://git@github.com/flox/flox?ref=main&rev=${{ github.event.pull_request.head.sha || github.sha }}"}'
           propagate_failure:  false

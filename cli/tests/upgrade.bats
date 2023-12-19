@@ -13,18 +13,18 @@ load test_support.bash
 # Helpers for project based tests.
 
 project_setup() {
-  export PROJECT_NAME="test";
+  export PROJECT_NAME="test"
   export PROJECT_DIR="${BATS_TEST_TMPDIR?}/$PROJECT_NAME"
   export MANIFEST_PATH="$PROJECT_DIR/.flox/env/manifest.toml"
   export LOCK_PATH="$PROJECT_DIR/.flox/env/manifest.lock"
   export TMP_MANIFEST_PATH="${BATS_TEST_TMPDIR}/manifest.toml"
   rm -rf "$PROJECT_DIR"
   mkdir -p "$PROJECT_DIR"
-  pushd "$PROJECT_DIR" >/dev/null || return
+  pushd "$PROJECT_DIR" > /dev/null || return
 }
 
 project_teardown() {
-  popd >/dev/null || return
+  popd > /dev/null || return
   rm -rf "${PROJECT_DIR?}"
   rm -f "${TMP_MANIFEST_PATH?}"
   unset PROJECT_DIR
@@ -96,7 +96,6 @@ EOF
   _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLD?}" \
     "$FLOX_BIN" edit -f "$TMP_MANIFEST_PATH"
 
-
   _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_NEW?}" \
     "$FLOX_BIN" update
   assert_old_hello
@@ -149,7 +148,7 @@ EOF
   "$FLOX_BIN" init
   _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLD?}" \
     "$FLOX_BIN" install curl hello
-  
+
   run "$FLOX_BIN" upgrade
   assert_success
   assert_output --partial "No packages need to be upgraded"
@@ -159,7 +158,7 @@ EOF
   "$FLOX_BIN" init
   _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLD?}" \
     "$FLOX_BIN" install curl hello
-  
+
   run "$FLOX_BIN" upgrade
   assert_success
   assert_output --partial "No packages need to be upgraded"

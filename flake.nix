@@ -124,8 +124,16 @@
       # Generates a `.git/hooks/pre-commit' script.
       pre-commit-check = pre-commit-hooks.lib.${final.system}.run {
         src = builtins.path {path = ./.;};
+        default_stages = ["manual" "push"];
         hooks = {
           alejandra.enable = true;
+          clang-format = {
+            enable = true;
+            types_or = final.lib.mkForce [
+              "c"
+              "c++"
+            ];
+          };
           rustfmt = let
             wrapper = final.symlinkJoin {
               name = "rustfmt-wrapped";
@@ -143,13 +151,15 @@
           };
           clippy.enable = true;
           commitizen.enable = true;
-          # shfmt.enable = false; # disabled until someone makes a formatting PR
-          # shellcheck.enable = true; # disabled until we have time to fix all
-          # the warnings
+          shfmt.enable = false;
+          # shellcheck.enable = true; # disabled until we have time to fix all the warnings
         };
         settings = {
           alejandra.verbosity = "quiet";
           rust.cargoManifestPath = "cli/Cargo.toml";
+        };
+        tools = {
+          clang-tools = final.clang-tools_16;
         };
       };
 

@@ -13,15 +13,14 @@ load test_support.bash
 # Helpers for project based tests.
 
 project_setup() {
-  export PROJECT_NAME="test";
+  export PROJECT_NAME="test"
   export PROJECT_DIR="${BATS_TEST_TMPDIR?}/$PROJECT_NAME"
 
   rm -rf "$PROJECT_DIR"
   mkdir -p "$PROJECT_DIR"
-  pushd "$PROJECT_DIR" >/dev/null || return
+  pushd "$PROJECT_DIR" > /dev/null || return
 
 }
-
 
 # tests should not share the same floxmeta repo.
 # we also want to simulate different machines.
@@ -33,7 +32,7 @@ floxmeta_setup() {
 }
 
 project_teardown() {
-  popd >/dev/null || return
+  popd > /dev/null || return
   rm -rf "${PROJECT_DIR?}"
   unset PROJECT_DIR
 }
@@ -41,8 +40,8 @@ project_teardown() {
 setup() {
   common_test_setup
   project_setup
-  floxhub_setup owner;
-  home_setup test;
+  floxhub_setup owner
+  home_setup test
 }
 
 teardown() {
@@ -97,12 +96,10 @@ function make_empty_remote_env() {
   assert_success
   assert_output --partial "environment $OWNER/test (remote)" # managed env output
 
-
   run --separate-stderr "$FLOX_BIN" list --remote "$OWNER/test"
   assert_success
   assert_output "hello"
 }
-
 
 # bats test_tags=uninstall,remote,remote:uninstall
 @test "m2: uninstall a package from a managed environment" {
@@ -149,7 +146,7 @@ EOF
   # TODO: flox will set HOME if it doesn't match the home of the user with
   # current euid. I'm not sure if we should change that, but for now just set
   # USER to REAL_USER.
-  SHELL=bash USER="$REAL_USER" run -0 expect -d "$TESTS_DIR/activate/remote-hello.exp" "$OWNER/test";
+  SHELL=bash USER="$REAL_USER" run -0 expect -d "$TESTS_DIR/activate/remote-hello.exp" "$OWNER/test"
   assert_output --regexp "$FLOX_CACHE_HOME/run/owner/.+\..+\..+/bin/hello"
   refute_output "not found"
 }
