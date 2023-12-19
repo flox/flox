@@ -1,10 +1,7 @@
 use std::path::{Path, PathBuf};
 
-use async_trait::async_trait;
-use flox_types::catalog::{EnvCatalog, System};
 use flox_types::version::Version;
 use log::debug;
-use runix::command_line::NixCommandLine;
 use thiserror::Error;
 
 use super::managed_environment::{remote_branch_name, ManagedEnvironment, ManagedEnvironmentError};
@@ -21,6 +18,7 @@ use crate::flox::{EnvironmentOwner, EnvironmentRef, Flox};
 use crate::models::environment_ref::EnvironmentName;
 use crate::models::floxmetav2::{FloxmetaV2, FloxmetaV2Error};
 use crate::models::manifest::PackageToInstall;
+use crate::models::pkgdb::UpgradeResult;
 
 #[derive(Debug, Error)]
 pub enum RemoteEnvironmentError {
@@ -92,20 +90,19 @@ impl RemoteEnvironment {
     }
 }
 
-#[async_trait]
 impl Environment for RemoteEnvironment {
     /// Build the environment and create a result link as gc-root
-    async fn build(&mut self, flox: &Flox) -> Result<(), EnvironmentError2> {
-        self.inner.build(flox).await
+    fn build(&mut self, flox: &Flox) -> Result<(), EnvironmentError2> {
+        self.inner.build(flox)
     }
 
     /// Install packages to the environment atomically
-    async fn install(
+    fn install(
         &mut self,
         packages: &[PackageToInstall],
         flox: &Flox,
     ) -> Result<InstallationAttempt, EnvironmentError2> {
-        let result = self.inner.install(packages, flox).await?;
+        let result = self.inner.install(packages, flox)?;
         self.inner
             .push(false)
             .map_err(RemoteEnvironmentError::UpdateUpstream)?;
@@ -114,12 +111,12 @@ impl Environment for RemoteEnvironment {
     }
 
     /// Uninstall packages from the environment atomically
-    async fn uninstall(
+    fn uninstall(
         &mut self,
         packages: Vec<String>,
         flox: &Flox,
     ) -> Result<String, EnvironmentError2> {
-        let result = self.inner.uninstall(packages, flox).await?;
+        let result = self.inner.uninstall(packages, flox)?;
         self.inner
             .push(false)
             .map_err(RemoteEnvironmentError::UpdateUpstream)?;
@@ -127,12 +124,8 @@ impl Environment for RemoteEnvironment {
     }
 
     /// Atomically edit this environment, ensuring that it still builds
-    async fn edit(
-        &mut self,
-        flox: &Flox,
-        contents: String,
-    ) -> Result<EditResult, EnvironmentError2> {
-        let result = self.inner.edit(flox, contents).await?;
+    fn edit(&mut self, flox: &Flox, contents: String) -> Result<EditResult, EnvironmentError2> {
+        let result = self.inner.edit(flox, contents)?;
         self.inner
             .push(false)
             .map_err(RemoteEnvironmentError::UpdateUpstream)?;
@@ -148,13 +141,17 @@ impl Environment for RemoteEnvironment {
         Ok(result)
     }
 
-    #[allow(unused)]
-    async fn catalog(
-        &self,
-        nix: &NixCommandLine,
-        system: System,
-    ) -> Result<EnvCatalog, EnvironmentError2> {
-        todo!()
+    /// Atomically upgrade packages in this environment
+    fn upgrade(
+        &mut self,
+        flox: &Flox,
+        groups_or_iids: &[String],
+    ) -> Result<UpgradeResult, EnvironmentError2> {
+        let result = self.inner.upgrade(flox, groups_or_iids)?;
+        self.inner
+            .push(false)
+            .map_err(RemoteEnvironmentError::UpdateUpstream)?;
+        Ok(result)
     }
 
     /// Extract the current content of the manifest
@@ -162,8 +159,8 @@ impl Environment for RemoteEnvironment {
         self.inner.manifest_content(flox)
     }
 
-    async fn activation_path(&mut self, flox: &Flox) -> Result<PathBuf, EnvironmentError2> {
-        self.inner.activation_path(flox).await
+    fn activation_path(&mut self, flox: &Flox) -> Result<PathBuf, EnvironmentError2> {
+        self.inner.activation_path(flox)
     }
 
     fn parent_path(&self) -> Result<PathBuf, EnvironmentError2> {

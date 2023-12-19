@@ -134,6 +134,40 @@ public:
 
 /* -------------------------------------------------------------------------- */
 
+/** @brief Upgrade groups or standalone packages in an environment. */
+class UpgradeCommand : public GAEnvironmentMixin
+{
+
+private:
+
+  std::optional<std::vector<std::string>> groupsOrIIDS;
+
+  command::VerboseParser parser;
+
+
+public:
+
+  UpgradeCommand();
+
+  [[nodiscard]] command::VerboseParser &
+  getParser()
+  {
+    return this->parser;
+  }
+
+  /**
+   * @brief Execute the `upgrade` routine.
+   * @return `EXIT_SUCCESS` or `EXIT_FAILURE`.
+   */
+  int
+  run();
+
+
+}; /* End class `UpgradeCommand' */
+
+
+/* -------------------------------------------------------------------------- */
+
 /** @brief Show information about an environment's registries. */
 class RegistryCommand : public GAEnvironmentMixin
 {
@@ -175,6 +209,7 @@ private:
   LockCommand            cmdLock;     /**< `manifest lock`     command */
   DiffCommand            cmdDiff;     /**< `manifest diff`     command */
   UpdateCommand          cmdUpdate;   /**< `manifest update`   command */
+  UpgradeCommand         cmdUpgrade;  /**< `manifest upgrade`  command */
   RegistryCommand        cmdRegistry; /**< `manifest registry` command */
 
 

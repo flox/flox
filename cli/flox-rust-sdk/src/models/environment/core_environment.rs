@@ -18,7 +18,13 @@ use crate::models::manifest::{
     PackageToInstall,
     TomlEditError,
 };
-use crate::models::pkgdb::{CallPkgDbError, UpdateResult, PKGDB_BIN};
+use crate::models::pkgdb::{
+    CallPkgDbError,
+    UpdateResult,
+    UpgradeResult,
+    UpgradeResultJSON,
+    PKGDB_BIN,
+};
 
 pub struct ReadOnly {}
 struct ReadWrite {}
@@ -265,6 +271,49 @@ impl CoreEnvironment<ReadOnly> {
         )?;
 
         Ok(result.message)
+    }
+
+    /// Atomically upgrade packages in this environment
+    pub fn upgrade(
+        &mut self,
+        flox: &Flox,
+        groups_or_iids: &[String],
+    ) -> Result<UpgradeResult, CoreEnvironmentError> {
+        // TODO double check canonicalization
+        let manifest_path = self.manifest_path();
+        let lockfile_path = self.lockfile_path();
+        let maybe_lockfile = if lockfile_path.exists() {
+            debug!("found existing lockfile: {}", lockfile_path.display());
+            Some(lockfile_path)
+        } else {
+            debug!("no existing lockfile found");
+            None
+        };
+        let mut pkgdb_cmd = Command::new(Path::new(&*PKGDB_BIN));
+        pkgdb_cmd
+            .args(["manifest", "upgrade"])
+            .arg("--ga-registry")
+            .arg("--global-manifest")
+            .arg(global_manifest_path(flox))
+            .arg("--manifest")
+            .arg(manifest_path);
+        if let Some(lf_path) = maybe_lockfile {
+            let canonical_lockfile_path = lf_path
+                .canonicalize()
+                .map_err(|e| CoreEnvironmentError::BadLockfilePath(e, lf_path.to_path_buf()))?;
+            pkgdb_cmd.arg("--lockfile").arg(canonical_lockfile_path);
+        }
+        pkgdb_cmd.args(groups_or_iids);
+
+        debug!("upgrading environment with command: {pkgdb_cmd:?}");
+        let json: UpgradeResultJSON = serde_json::from_value(
+            call_pkgdb(pkgdb_cmd).map_err(CoreEnvironmentError::UpgradeFailed)?,
+        )
+        .map_err(CoreEnvironmentError::ParseUpgradeOutput)?;
+
+        self.transact_with_lockfile_contents(json.lockfile.to_string(), flox)?;
+
+        Ok(json.result)
     }
 
     /// Makes a temporary copy of the environment so modifications to the manifest
@@ -587,8 +636,14 @@ pub enum CoreEnvironmentError {
     #[error("unexpected output from pkgdb update")]
     ParseUpdateOutput(#[source] serde_json::Error),
 
+    #[error("unexpected output from pkgdb update")]
+    ParseUpgradeOutput(#[source] serde_json::Error),
+
     #[error("failed to update environment")]
     UpdateFailed(#[source] CallPkgDbError),
+
+    #[error("failed to upgrade environment")]
+    UpgradeFailed(#[source] CallPkgDbError),
     // endregion
     #[error("call to `pkgdb buildenv` failed")]
     BuildEnvCall(#[source] std::io::Error),

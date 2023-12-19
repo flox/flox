@@ -103,6 +103,8 @@ teardown() {
 
 # ---------------------------------------------------------------------------- #
 
+# bats test_tags=python
+
 @test "'flox show' - python27Full" {
   run "$FLOX_BIN" show python27Full;
   assert_success;
@@ -113,11 +115,35 @@ teardown() {
 
 # ---------------------------------------------------------------------------- #
 
+# bats test_tags=python
+
 @test "'flox show' - python27Full --all" {
   run "$FLOX_BIN" show python27Full --all;
   assert_success;
   assert_equal "${lines[0]}" "python27Full - A high-level dynamically-typed programming language";
   assert_equal "${lines[1]}" "    python27Full - python27Full@2.7.18.6";
+}
+
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=python
+
+@test "'flox show' - python310Packages.flask" {
+  run "$FLOX_BIN" show python310Packages.flask;
+  assert_success;
+  # Ensure that the package and part of the description show up
+  assert_output --partial 'python310Packages.flask - The';
+}
+
+
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=ruby
+
+@test "'flox show' - rubyPackages.rails" {
+  run "$FLOX_BIN" show rubyPackages.rails;
+  assert_success;
+  assert_output --partial 'rubyPackages.rails - ';
 }
 
 

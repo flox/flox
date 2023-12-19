@@ -1,6 +1,6 @@
 # Activate a project environment and check
 # - pip and python3 are installed
-# - 
+# -
 # Assume throughout that the project is named project-\d+
 
 set flox $env(FLOX_BIN)
@@ -12,7 +12,7 @@ expect_after {
   "*\n" { exp_continue }
 }
 
-expect -ex "Building environment..." {}
+expect -ex "Building environment" {}
 
 set timeout 300
 send "{ command -v python3||which python3||type -P python3; } 2>&1\n"

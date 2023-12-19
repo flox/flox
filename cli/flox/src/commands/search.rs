@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::io::{BufWriter, Write};
 use std::path::PathBuf;
+use std::time::Duration;
 
 use anyhow::{bail, Context, Result};
 use bpaf::Bpaf;
@@ -23,6 +24,7 @@ use crate::commands::{detect_environment, open_environment};
 use crate::config::features::{Features, SearchStrategy};
 use crate::config::Config;
 use crate::subcommand_metric;
+use crate::utils::dialog::{Dialog, Spinner};
 
 const SEARCH_INPUT_SEPARATOR: &'_ str = ":";
 const DEFAULT_DESCRIPTION: &'_ str = "<no description provided>";
@@ -85,7 +87,13 @@ impl Search {
             lockfile.map(|p| p.try_into()).transpose()?,
         )?;
 
-        let (results, exit_status) = do_search(&search_params)?;
+        let (results, exit_status) = Dialog {
+            message: "Searching for packages...",
+            help_message: Some("This may take a while the first time you run it."),
+            typed: Spinner::new(|| do_search(&search_params)),
+        }
+        .spin_with_delay(Duration::from_secs(1))?;
+
         debug!("search call exit status: {}", exit_status.to_string());
 
         // Render what we have no matter what, then indicate whether we encountered an error.

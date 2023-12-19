@@ -274,6 +274,29 @@ setup_file() {
 
 
 # ---------------------------------------------------------------------------- #
+
+# bats test_tags=python
+
+@test "'flox search' - python310Packages.flask" {
+  run "$FLOX_BIN" search python310Packages.flask;
+  assert_success;
+  # Ensure that the package and part of the description show up
+  assert_output --partial 'python310Packages.flask';
+}
+
+
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=ruby
+
+@test "'flox search' - rubyPackages.rails" {
+  run "$FLOX_BIN" search rubyPackages.rails;
+  assert_success;
+  assert_output --partial 'rubyPackages.rails';
+}
+
+
+# ---------------------------------------------------------------------------- #
 #
 #
 #

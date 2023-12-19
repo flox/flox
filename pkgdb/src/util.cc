@@ -345,7 +345,7 @@ joinWithDelim( const std::vector<std::string> & strings,
 void
 printLog( const nix::Verbosity & lvl, const std::string & msg )
 {
-  if ( lvl <= nix::verbosity ) { nix::logger->log( lvl, msg ); }
+  nix::logger->log( lvl, msg );
 }
 
 void

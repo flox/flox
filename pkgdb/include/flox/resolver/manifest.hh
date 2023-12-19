@@ -47,6 +47,8 @@ namespace flox::resolver {
 
 /* -------------------------------------------------------------------------- */
 
+static const GroupName TOPLEVEL_GROUP_NAME = "toplevel";
+
 /** @brief Read a flox::resolver::ManifestBase from a file. */
 template<manifest_raw_type RawType>
 static inline RawType
@@ -258,12 +260,15 @@ using GlobalManifestGA = GlobalManifestBase<GlobalManifestRawGA>;
 /** @brief A map of _install IDs_ to _manifest descriptors_. */
 using InstallDescriptors = std::unordered_map<InstallID, ManifestDescriptor>;
 
+/** @brief Structure to store groups of descriptors by group name. */
+using Groups = std::unordered_map<GroupName, InstallDescriptors>;
+
 /**
  * @brief Returns all descriptors, grouping those with a _group_ field, and
- *        returning those without a group field as a map with a
- *        single element.
+ *        returning those without a group field in the group named
+ *        TOPLEVEL_GROUP_NAME.
  */
-[[nodiscard]] std::vector<InstallDescriptors>
+[[nodiscard]] Groups
 getGroupedDescriptors( const InstallDescriptors & descriptors );
 
 
@@ -388,10 +393,10 @@ public:
 
   /**
    * @brief Returns all descriptors, grouping those with a _group_ field, and
-   *        returning those without a group field as a map with a
-   *        single element.
+   *        returning those without a group field in the group named
+   *        TOPLEVEL_GROUP_NAME.
    */
-  [[nodiscard]] std::vector<InstallDescriptors>
+  [[nodiscard]] Groups
   getGroupedDescriptors() const
   {
     return flox::resolver::getGroupedDescriptors( this->descriptors );

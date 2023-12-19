@@ -102,7 +102,7 @@ env_is_activated() {
 }
 
 # ---------------------------------------------------------------------------- #
-
+# bats test_tags=activate,activate:hook:bash
 @test "bash: activate runs hook" {
 	cat <<"EOF" >>"$PROJECT_DIR/.flox/env/manifest.toml"
 [hook]
@@ -112,10 +112,14 @@ script = """
 EOF
 	SHELL=bash NO_COLOR=1 run -0 expect -d "$TESTS_DIR/activate/hook.exp" "$PROJECT_DIR"
 	assert_output --partial "Welcome to your flox environment!"
+
+	SHELL=bash USER="$REAL_USER" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -- :;
+	assert_success
+	assert_output --partial "Welcome to your flox environment!"
 }
 
 # ---------------------------------------------------------------------------- #
-
+# bats test_tags=activate,activate:hook:zsh
 @test "zsh: activate runs hook" {
 	cat <<"EOF" >>"$PROJECT_DIR/.flox/env/manifest.toml"
 [hook]
@@ -129,10 +133,15 @@ EOF
 	# SHELL=zsh USER="$REAL_USER" run -0 bash -c "echo exit | $FLOX_CLI activate --dir $PROJECT_DIR";
 	SHELL=zsh USER="$REAL_USER" NO_COLOR=1 run -0 expect -d "$TESTS_DIR/activate/hook.exp" "$PROJECT_DIR"
 	assert_output --partial "Welcome to your flox environment!"
+
+	SHELL=zsh USER="$REAL_USER" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -- :;
+	assert_success
+	assert_output --partial "Welcome to your flox environment!"
 }
 
 # ---------------------------------------------------------------------------- #
 
+# bats test_tags=activate,activate:rc:bash
 @test "bash: activate respects ~/.bashrc" {
 	echo "alias test_alias='echo testing'" >"$HOME/.bashrc"
 	# TODO: flox will set HOME if it doesn't match the home of the user with
@@ -140,10 +149,15 @@ EOF
 	# USER to REAL_USER.
 	SHELL=bash USER="$REAL_USER" NO_COLOR=1 run -0 expect -d "$TESTS_DIR/activate/rc.exp" "$PROJECT_DIR"
 	assert_output --partial "test_alias is aliased to \`echo testing'"
+
+	SHELL=bash USER="$REAL_USER" NO_COLOR=1 run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -- type test_alias
+	assert_success
+	assert_output --partial "test_alias is aliased to \`echo testing'"
+
 }
 
 # ---------------------------------------------------------------------------- #
-
+# bats test_tags=activate,activate:rc:zsh
 @test "zsh: activate respects ~/.zshrc" {
 	echo "alias test_alias='echo testing'" >"$HOME/.zshrc"
 	# TODO: flox will set HOME if it doesn't match the home of the user with
@@ -151,10 +165,15 @@ EOF
 	# USER to REAL_USER.
 	SHELL="zsh" USER="$REAL_USER" NO_COLOR=1 run -0 expect -d "$TESTS_DIR/activate/rc.exp" "$PROJECT_DIR"
 	assert_output --partial "test_alias is an alias for echo testing"
+
+	SHELL=zsh USER="$REAL_USER" NO_COLOR=1 run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -- type test_alias
+	assert_success
+	assert_output --partial "test_alias is an alias for echo testing"
+
 }
 
 # ---------------------------------------------------------------------------- #
-
+# bats test_tags=activate,activate:envVar:bash
 @test "bash: activate sets env var" {
 	cat <<"EOF" >>"$PROJECT_DIR/.flox/env/manifest.toml"
 [vars]
@@ -162,10 +181,14 @@ foo = "$bar"
 EOF
 	SHELL=bash bar=baz NO_COLOR=1 run -0 expect -d "$TESTS_DIR/activate/envVar.exp" "$PROJECT_DIR"
 	assert_output --partial "baz"
+
+	SHELL=bash bar=baz NO_COLOR=1 run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -- echo '$foo'
+	assert_success
+	assert_output --partial "baz"
 }
 
 # ---------------------------------------------------------------------------- #
-
+# bats test_tags=activate,activate:envVar:zsh
 @test "zsh: activate sets env var" {
 	cat <<"EOF" >>"$PROJECT_DIR/.flox/env/manifest.toml"
 [vars]
@@ -175,6 +198,10 @@ EOF
 	# current euid. I'm not sure if we should change that, but for now just set
 	# USER to REAL_USER.
 	SHELL=zsh bar=baz USER="$REAL_USER" NO_COLOR=1 run -0 expect -d "$TESTS_DIR/activate/envVar.exp" "$PROJECT_DIR"
+	assert_output --partial "baz"
+
+	SHELL=bash bar=baz NO_COLOR=1 run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -- echo '$foo'
+	assert_success
 	assert_output --partial "baz"
 }
 
@@ -280,11 +307,20 @@ EOF
 
 # ---------------------------------------------------------------------------- #
 
+# bats test_tags=activate,activate:path
 @test "'flox activate' modifies path" {
-	skip FIXME
 	original_path="$PATH"
-	# Hangs because activate runs `nix shell` interactively right now
-	run "$FLOX_BIN" activate -- echo "$PATH"
+	run "$FLOX_BIN" activate -- echo '$PATH'
 	assert_success
-	assert_equal "$original_path" "$output"
+	assert_not_equal "$original_path" "$output"
+
+	# hello is not on the path
+	run -1 type hello
+
+	run "$FLOX_BIN" install hello
+	assert_success
+
+	run "$FLOX_BIN" activate -- hello
+	assert_success
+	assert_output --partial "Hello, world!"
 }

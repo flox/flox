@@ -11,12 +11,12 @@ expect_after {
   "*\n" { exp_continue }
 }
 
-expect -ex "Building environment..." {}
+expect -ex "Building environment" {}
 
 # activate environment 2
 set cmd "$flox activate --dir 2"
 send "$cmd\n"
-expect -ex "Building environment..." {}
+expect -ex "Building environment" {}
 
 # install hello and check it's installed to environment 2
 set cmd "$flox install hello"

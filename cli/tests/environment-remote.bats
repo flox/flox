@@ -155,3 +155,18 @@ EOF
 }
 
 # ---------------------------------------------------------------------------- #
+
+@test "sanity check upgrade works for remote environments" {
+  make_empty_remote_env
+
+  _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLD?}" \
+    "$FLOX_BIN" install hello --remote "$OWNER/test"
+
+  _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_NEW?}" \
+    "$FLOX_BIN" update --remote "$OWNER/test"
+
+  run "$FLOX_BIN" upgrade --remote "$OWNER/test"
+  assert_output --partial "Upgraded 'hello'"
+}
+
+# ---------------------------------------------------------------------------- #

@@ -31,18 +31,24 @@ namespace flox::resolver {
 
 /* -------------------------------------------------------------------------- */
 
-std::vector<InstallDescriptors>
+Groups
 getGroupedDescriptors( const InstallDescriptors & descriptors )
 {
   /* Group all packages into a map with group name as key. */
-  std::unordered_map<GroupName, InstallDescriptors> grouped;
-  InstallDescriptors                                defaultGroup;
+  Groups grouped;
   for ( const auto & [iid, desc] : descriptors )
     {
       // TODO: Use manifest options to decide how ungrouped descriptors
       //       are grouped.
-      /* For now add all descriptors without a group to `defaultGroup`. */
-      if ( ! desc.group.has_value() ) { defaultGroup.emplace( iid, desc ); }
+      /* For now add all descriptors without a group to TOPLEVEL_GROUP_NAME.
+       * Note that TOPLEVEL_GROUP_NAME is reserved but not forbidden; if a user
+       * puts a package in the "toplevel" group, it will end up in the same
+       * group as any packages without an explicit group. */
+      if ( ! desc.group.has_value() )
+        {
+          grouped.try_emplace( TOPLEVEL_GROUP_NAME, InstallDescriptors {} );
+          grouped.at( TOPLEVEL_GROUP_NAME ).emplace( iid, desc );
+        }
       else
         {
           grouped.try_emplace( *desc.group, InstallDescriptors {} );
@@ -50,16 +56,7 @@ getGroupedDescriptors( const InstallDescriptors & descriptors )
         }
     }
 
-  /* Add all groups to a vector.
-   * Don't use a map with group name because the defaultGroup doesn't have
-   * a name. */
-  std::vector<InstallDescriptors> allDescriptors;
-  if ( ! defaultGroup.empty() ) { allDescriptors.emplace_back( defaultGroup ); }
-  for ( const auto & [_, group] : grouped )
-    {
-      allDescriptors.emplace_back( group );
-    }
-  return allDescriptors;
+  return grouped;
 }
 
 

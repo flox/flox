@@ -108,6 +108,10 @@ private:
   /** Lazily initialized environment wrapper. */
   std::optional<Environment> environment;
 
+  /** Packages to attempt to upgrade. These are passed to the Environment
+   * constructor. */
+  std::optional<Upgrades> upgrades;
+
 
 protected:
 
@@ -203,6 +207,16 @@ protected:
    */
   virtual void
   setLockfileRaw( LockfileRaw lockfileRaw );
+
+  /**
+   * @brief Set the @a upgrades member variable.
+   *
+   * @throws @a EnvironmentMixinException if called after @a environment is
+   * initialized, as the environment has already been calculated without
+   * upgrades.
+   */
+  virtual void
+  setUpgrades( Upgrades upgrades );
 
   /**
    * @brief Initialize a @a flox::resolver::Lockfile from @a lockfileRaw.

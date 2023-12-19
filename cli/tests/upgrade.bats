@@ -1,0 +1,166 @@
+#! /usr/bin/env bats
+# -*- mode: bats; -*-
+# ============================================================================ #
+#
+# Test `flox update`
+#
+# ---------------------------------------------------------------------------- #
+
+load test_support.bash
+
+# ---------------------------------------------------------------------------- #
+
+# Helpers for project based tests.
+
+project_setup() {
+  export PROJECT_NAME="test";
+  export PROJECT_DIR="${BATS_TEST_TMPDIR?}/$PROJECT_NAME"
+  export MANIFEST_PATH="$PROJECT_DIR/.flox/env/manifest.toml"
+  export LOCK_PATH="$PROJECT_DIR/.flox/env/manifest.lock"
+  export TMP_MANIFEST_PATH="${BATS_TEST_TMPDIR}/manifest.toml"
+  rm -rf "$PROJECT_DIR"
+  mkdir -p "$PROJECT_DIR"
+  pushd "$PROJECT_DIR" >/dev/null || return
+}
+
+project_teardown() {
+  popd >/dev/null || return
+  rm -rf "${PROJECT_DIR?}"
+  rm -f "${TMP_MANIFEST_PATH?}"
+  unset PROJECT_DIR
+  unset MANIFEST_PATH
+  unset TMP_MANIFEST_PATH
+}
+
+assert_old_hello() {
+  run jq -r ".packages.\"$NIX_SYSTEM\".hello.input.attrs.narHash" "$LOCK_PATH"
+  assert_success
+  assert_output "$OLD_NAR_HASH"
+}
+
+assert_new_hello() {
+  run jq -r ".packages.\"$NIX_SYSTEM\".hello.input.attrs.narHash" "$LOCK_PATH"
+  assert_success
+  assert_output "$NEW_NAR_HASH"
+}
+
+OLD_NAR_HASH="sha256-1UGacsv5coICyvAzwuq89v9NsS00Lo8sz22cDHwhnn8="
+NEW_NAR_HASH="sha256-5uA6jKckTf+DCbVBNKsmT5pUT/7Apt5tNdpcbLnPzFI="
+GLOBAL_MANIFEST_LOCK="$FLOX_CONFIG_HOME/global-manifest.lock"
+
+# ---------------------------------------------------------------------------- #
+
+setup() {
+  common_test_setup
+  project_setup
+}
+teardown() {
+  project_teardown
+  common_test_teardown
+}
+
+@test "upgrade hello" {
+  "$FLOX_BIN" init
+  _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLD?}" \
+    "$FLOX_BIN" install hello
+
+  # nixpkgs and hello are both locked to the old nixpkgs
+  run jq -r '.registry.inputs.nixpkgs.from.narHash' "$LOCK_PATH"
+  assert_success
+  assert_output "$OLD_NAR_HASH"
+
+  assert_old_hello
+
+  # After an update, nixpkgs is the new nixpkgs, but hello is still from the
+  # old one.
+  _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_NEW?}" \
+    "$FLOX_BIN" update
+  run jq -r '.registry.inputs.nixpkgs.from.narHash' "$LOCK_PATH"
+  assert_success
+  assert_output "$NEW_NAR_HASH"
+
+  assert_old_hello
+
+  run "$FLOX_BIN" upgrade
+  assert_output --partial "Upgraded 'hello'"
+  assert_new_hello
+}
+
+@test "upgrade by group" {
+  "$FLOX_BIN" init
+  cat << "EOF" > "$TMP_MANIFEST_PATH"
+[install]
+hello = { package-group = "blue" }
+EOF
+
+  _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLD?}" \
+    "$FLOX_BIN" edit -f "$TMP_MANIFEST_PATH"
+
+
+  _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_NEW?}" \
+    "$FLOX_BIN" update
+  assert_old_hello
+
+  run "$FLOX_BIN" upgrade blue
+  assert_output --partial "Upgraded 'hello'"
+  assert_new_hello
+}
+
+@test "upgrade toplevel group" {
+  "$FLOX_BIN" init
+  _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLD?}" \
+    "$FLOX_BIN" install hello
+  _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_NEW?}" \
+    "$FLOX_BIN" update
+  assert_old_hello
+
+  run "$FLOX_BIN" upgrade toplevel
+  assert_output --partial "Upgraded 'hello'"
+  assert_new_hello
+}
+
+@test "upgrade by iid" {
+  "$FLOX_BIN" init
+  _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLD?}" \
+    "$FLOX_BIN" install hello
+  _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_NEW?}" \
+    "$FLOX_BIN" update
+  assert_old_hello
+
+  run "$FLOX_BIN" upgrade hello
+  assert_output --partial "Upgraded 'hello'"
+  assert_new_hello
+}
+
+@test "upgrade errors on iid in group with other packages" {
+  "$FLOX_BIN" init
+  _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLD?}" \
+    "$FLOX_BIN" install curl hello
+
+  _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_NEW?}" \
+    "$FLOX_BIN" update
+
+  run "$FLOX_BIN" upgrade hello
+  assert_failure
+  assert_output --partial "package in a group with multiple packages"
+}
+
+@test "check confirmation when all packages are up to date" {
+  "$FLOX_BIN" init
+  _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLD?}" \
+    "$FLOX_BIN" install curl hello
+  
+  run "$FLOX_BIN" upgrade
+  assert_success
+  assert_output --partial "No packages need to be upgraded"
+}
+
+@test "check confirmation when package is up to date" {
+  "$FLOX_BIN" init
+  _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLD?}" \
+    "$FLOX_BIN" install curl hello
+  
+  run "$FLOX_BIN" upgrade
+  assert_success
+  assert_output --partial "No packages need to be upgraded"
+}
