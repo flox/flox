@@ -126,6 +126,13 @@
         src = builtins.path {path = ./.;};
         hooks = {
           alejandra.enable = true;
+          clang-format = {
+            enable = true;
+            types_or = final.lib.mkForce [
+              "c"
+              "c++"
+            ];
+          };
           rustfmt = let
             wrapper = final.symlinkJoin {
               name = "rustfmt-wrapped";
