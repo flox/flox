@@ -132,7 +132,6 @@ in
         "--includedir=${builtins.placeholder "dev"}/include"
       ];
 
-
       # Checks require internet
       doCheck = false;
       doInstallCheck = false;
