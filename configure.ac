@@ -301,8 +301,6 @@ AC_SUBST([CARGOFLAGS])
 # Debug Mode
 # ----------
 
-AC_ARG_VAR([DEBUG], [Enable debug mode when non-empty and non-0])
-
 AS_IF([test "$CXX_TOOLCHAIN" = 'gcc'],
   [DEBUG_CXXFLAGS='-ggdb3 -pg';
    DEBUG_LDFLAGS='-ggdb3 -pg';],
@@ -312,9 +310,9 @@ DEBUG_CXXFLAGS="$DEBUG_CXXFLAGS -fno-omit-frame-pointer -DDEBUG";
 DEBUG_LDFLAGS="$DEBUG_CXXFLAGS -fno-omit-frame-pointer -DDEBUG";
 
 AC_ARG_ENABLE([debug],
-  [AS_HELP_STRING([--enable-debug], [enable debug mode ( default: no )])],
+  [AS_HELP_STRING([--enable-debug], [enable debug mode @<:@default=no@:>@])],
   [ENABLE_DEBUG="$enableval"],
-  [ENABLE_DEBUG="${DEBUG:-no}"])
+  [ENABLE_DEBUG=no])
 AM_CONDITIONAL([ENABLE_DEBUG], [test "$ENABLE_DEBUG" = 'yes'])
 
 # Translate `0' -> `no' in case the environment variable is was used.
@@ -333,15 +331,14 @@ AS_IF([test "$ENABLE_DEBUG" != 'no'],
 # Coverage Mode
 # -------------
 
-AC_ARG_VAR([COV], [Enable coverage mode when non-empty and non-0])
-
 COV_CXXFLAGS='--coverage -fprofile-arcs -ftest-coverage';
 COV_LDFLAGS='--coverage -fprofile-arcs -ftest-coverage';
 
 AC_ARG_ENABLE([coverage],
-  [AS_HELP_STRING([--enable-coverage], [enable coverage mode ( default: no )])],
+  [AS_HELP_STRING([--enable-coverage],
+                  [enable coverage mode @<:@default=no@:>@])],
   [ENABLE_COV="$enableval"],
-  [ENABLE_COV="${COV:-no}"])
+  [ENABLE_COV=no])
 AM_CONDITIONAL([ENABLE_COV], [test "$ENABLE_COV" = 'yes'])
 
 # Translate `0' -> `no' in case the environment variable is was used.
@@ -358,15 +355,14 @@ AS_IF([test "$ENABLE_COV" != 'no'],
 # Release Mode
 # ------------
 
-AC_ARG_VAR([RELEASE], [Enable release mode when non-empty and non-0])
-
 RELEASE_CXXFLAGS='-O3 -DNDEBUG';
 RELEASE_LDFLAGS='-O3';
 
 AC_ARG_ENABLE([release],
-  [AS_HELP_STRING([--enable-release], [enable release mode ( default: no )])],
+  [AS_HELP_STRING([--enable-release],
+                  [enable release mode @<:@default=no@:>@])],
   [ENABLE_RELEASE="$enableval"],
-  [ENABLE_RELEASE="${RELEASE:-no}"])
+  [ENABLE_RELEASE=no])
 AM_CONDITIONAL([ENABLE_RELEASE], [test "$ENABLE_RELEASE" = 'yes'])
 
 # Translate `0' -> `no' in case the environment variable is was used.
@@ -375,6 +371,7 @@ AS_IF([test "$ENABLE_RELEASE" = 0], [ENABLE_RELEASE=no])
 AS_IF([test "$ENABLE_RELEASE" != 'no'],
   [AS_IF([test "$ENABLE_RELEASE" != 'no'],
          [AC_MSG_ERROR([Release mode and debug mode may not be used together])])
+   AC_DEFINE([RELEASE], [Enable release mode])
    CXXFLAGS="$CXXFLAGS $RELEASE_CXXFLAGS";
    LDFLAGS="$LDFLAGS $RELEASE_LDFLAGS";
    AC_MSG_NOTICE([Enabled release mode])])
@@ -388,9 +385,9 @@ AS_IF([test "$ENABLE_RELEASE" != 'no'],
 # --with-pkgdb
 AC_ARG_WITH([pkgdb],
   [AS_HELP_STRING(
-    [--with-pkgdb={local,nix,PREFIX}],
-    [use pkgdb from local tree, nix build, or path to its install prefix. ]
-    [( default: local )])],
+    [--with-pkgdb=local|nix|PREFIX],
+    [use pkgdb from local tree, nix build, or path to its install prefix ]
+    [@<:@default=local@:>@])],
   [WITH_PKGDB="$withval"],
   [WITH_PKGDB=local])
 AS_CASE(["$WITH_PKGDB"],
@@ -404,9 +401,9 @@ AC_SUBST([WITH_PKGDB])
 # --with-flox-cli
 AC_ARG_WITH([flox-cli],
   [AS_HELP_STRING(
-    [--with-flox-cli={local,nix,PREFIX}],
+    [--with-flox-cli=local|nix|PREFIX],
     [use flox-cli from local tree, nix build, or path to its ]
-  [install prefix. ( default: local )])],
+  [install prefix @<:@default=local@:>@])],
     [WITH_FLOX_CLI="$withval"],
     [WITH_FLOX_CLI=local])
 AS_CASE(["$WITH_FLOX_CLI"],
@@ -580,9 +577,9 @@ AC_ARG_VAR([SET_PROMPT_BASH_SH],
 # --with-set-prompt-bash-sh
 AC_ARG_WITH([set-prompt-bash-sh],
   [AS_HELP_STRING(
-    [--with-set-prompt-bash-sh={local,PATH}],
-    [use set-prompt-bash.sh from local tree, or a '/nix/store' path. ]
-    [( default: local )])],
+    [--with-set-prompt-bash-sh=local|PATH],
+    [use set-prompt-bash.sh from local tree, or a '/nix/store' path ]
+    [@<:@default=local@:>@])],
   [WITH_SET_PROMPT_BASH_SH="$withval"],
   [WITH_SET_PROMPT_BASH_SH=local])
 AS_IF([test -z "${SET_PROMPT_BASH_SH:-}"], [
@@ -609,9 +606,9 @@ AC_ARG_VAR([PROFILE_D_SCRIPT_DIR],
 # --with-profile-d-script-dir
 AC_ARG_WITH([profile-d-script-dir],
   [AS_HELP_STRING(
-    [--with-profile-d-script-dir={local,PATH}],
-    [use 'etc/profile.d' from local tree, or a '/nix/store' path. ]
-    [( default: local )])],
+    [--with-profile-d-script-dir=local|PATH],
+    [use 'etc/profile.d' from local tree, or a '/nix/store' path ]
+    [@<:@default=local@:>@])],
   [WITH_PROFILE_D_SCRIPT_DIR="$withval"],
   [WITH_PROFILE_D_SCRIPT_DIR=local])
 AS_IF([test -z "${PROFILE_D_SCRIPT_DIR:-}"], [
