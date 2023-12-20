@@ -160,7 +160,7 @@
           commitizen.enable = true;
           shfmt = {
             enable = false;
-            exclude = ["build-aux/.*" "configure"];
+            excludes = ["build-aux/.*" "configure"];
           };
           # shellcheck.enable = true; # disabled until we have time to fix all the warnings
         };
