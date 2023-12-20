@@ -81,12 +81,18 @@ jobs:
 
       - name: "Upload artifact"
         uses: "actions/upload-pages-artifact@v2"
-        if: ${{ matrix.os == 'ubuntu-22.04-8core' }}
+        if: >
+          ${{ matrix.os == 'ubuntu-22.04-8core' }} &&
+          ${{ github.ref == 'refs/heads/main' }}   &&
+          ${{ github.event_name == 'push' }}
         with:
           path: "pkgdb/docs"
 
       - name: "Deploy to GitHub Pages"
-        if: ${{ matrix.os == 'ubuntu-22.04-8core' }}
+        if: >
+          ${{ matrix.os == 'ubuntu-22.04-8core' }} &&
+          ${{ github.ref == 'refs/heads/main' }}   &&
+          ${{ github.event_name == 'push' }}
         id: "deployment"
         uses: "actions/deploy-pages@v3"
 
