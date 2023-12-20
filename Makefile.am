@@ -44,6 +44,16 @@ endif USE_LOCAL_FLOX_CLI
 
 
 # ---------------------------------------------------------------------------- #
+
+.PHONY: docs docs-recursive
+
+docs: docs-recursive
+
+docs-recursive:
+	$(MAKE) $(AM_MAKEFLAGS) -C $(builddir)/pkgdb $@
+
+
+# ---------------------------------------------------------------------------- #
 #
 #
 #
