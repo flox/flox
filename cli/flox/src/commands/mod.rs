@@ -744,7 +744,12 @@ pub(super) async fn ensure_environment_trust(
         flox environments do not run in a sandbox.
         Activation hooks can run arbitrary code on your machine.
         Thus, environments need to be trusted to be activated."};
-    info! {"{message}"};
+
+    if Dialog::can_prompt() {
+        info!("{message}");
+    } else {
+        bail!("{message}")
+    }
 
     loop {
         let message = format!("Do you trust {env_ref}?", env_ref = env_ref);
