@@ -721,7 +721,9 @@ AC_SUBST([AM_LDFLAGS])
 FLOX_CONFIG_BEAR_WRAPPER_CXX([bear.d])
 
 # Link Test Data
-AC_CONFIG_LINKS([pkgdb/tests/setup_suite.bash:pkgdb/tests/setup_suite.bash])
+AC_CONFIG_LINKS([
+  pkgdb/tests/setup_suite.bash:pkgdb/tests/setup_suite.bash
+])
 
 AC_CONFIG_COMMANDS([pkgdb/tests/data],
   [$MKDIR_P pkgdb/tests; $LN_S -f "$PKGDB_ROOT/tests/data" pkgdb/tests/data])

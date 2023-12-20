@@ -74,7 +74,7 @@ jobs:
           nix develop -L                         \
             --accept-flake-config                \
             --no-update-lock-file                \
-            --command doxygen ./pkgdb/Doxyfile;
+            --command just build-pkgdb-docs;
           chmod -c -R +rX "pkgdb/docs/"|while read line; do
             echo "::warning title=Invalid file permissions fixed::$line";
           done
@@ -86,7 +86,7 @@ jobs:
           ${{ github.ref == 'refs/heads/main' }}   &&
           ${{ github.event_name == 'push' }}
         with:
-          path: "pkgdb/docs"
+          path: "build/pkgdb/docs"
 
       - name: "Deploy to GitHub Pages"
         if: >

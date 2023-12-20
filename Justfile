@@ -63,6 +63,11 @@ build-pkgdb *args='':
     if ! [[ -x build/config.status ]]; then just configure "$@"; fi
     make -C build -j pkgdb "$@"
 
+# Build pkgdb documentation
+build-pkgdb-docs *args='':
+    if ! [[ -x build/config.status ]]; then just configure "$@"; fi
+    make -C build/pkgdb -j docs "$@"
+
 # Build only flox
 build-cli *args='':
     if ! [[ -x build/config.status ]]; then just configure "$@"; fi

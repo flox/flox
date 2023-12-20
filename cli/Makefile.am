@@ -17,9 +17,8 @@ TARGETDIR = $(abs_builddir)/$(FLOX_CLI_targetdir)
 
 copy-srcs:
 	$(MKDIR_P) $(abs_builddir);
-	$(RSYNC) -r --exclude dist/ --exclude target/ --exclude Makefile  \
-                --exclude Makefile.am --exclude Makefile.in           \
-	            $(FLOX_CLI_ROOT)/ $(abs_builddir);
+	$(RSYNC) -r --exclude dist/ --exclude target/ --exclude 'Makefile.*'  \
+	            $(FLOX_CLI_ROOT)/ $(abs_builddir)/;
 
 
 # ---------------------------------------------------------------------------- #
@@ -68,7 +67,7 @@ all-local: build
 
 # ---------------------------------------------------------------------------- #
 
-clean-local:
+clean-local: copy-srcs
 	-$(CARGO) clean
 
 

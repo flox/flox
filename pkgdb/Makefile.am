@@ -13,6 +13,11 @@ SUBDIRS = src/resolver include tests
 
 # ---------------------------------------------------------------------------- #
 
+CLEANFILES =
+
+
+# ---------------------------------------------------------------------------- #
+
 src/resolver/libresolver.la:
 	$(MAKE) -C src/resolver libresolver.la
 
@@ -89,6 +94,78 @@ bin_pkgdb_SOURCES += src/pkgdb/scrape.cc
 bin_pkgdb_SOURCES += src/resolver/command.cc
 bin_pkgdb_SOURCES += src/search/command.cc
 bin_pkgdb_SOURCES += src/buildenv/command.cc
+
+
+# ---------------------------------------------------------------------------- #
+
+# Extra Distributed Files
+
+EXTRA_DIST =
+EXTRA_DIST += LICENSE
+
+# NOTE: Docs are handled below
+
+
+# ---------------------------------------------------------------------------- #
+
+# Documentation Generation
+
+.PHONY: docs clean-docs install-docs uninstall-docs
+
+DOCFILES =
+DOCFILES += Doxyfile
+DOCFILES += README.md
+DOCFILES += CONTRIBUTING.md
+DOCFILES += docs/garbage-collection.md
+DOCFILES += docs/lockfile.md
+DOCFILES += docs/manifests.md
+DOCFILES += docs/params-to-sql.md
+DOCFILES += docs/registry.md
+DOCFILES += docs/search.md
+
+EXTRA_DIST += $(DOCFILES)
+
+
+docs/index.html: $(SOURCES) $(HEADERS) $(DOCFILES)
+	$(RSYNC) -r --exclude bear.d/ --exclude build-aux/                \
+                --exclude bin/ --exclude lib/ --exclude 'Makefile.*'  \
+                $(PKGDB_ROOT)/ $(abs_builddir)/;
+	$(CP) -f $(addprefix $(PKGDB_ROOT)/,README.md CONTRIBUTING.md Doxyfile) ./;
+	$(DOXYGEN) Doxyfile;
+
+docs: docs/index.html
+
+
+clean-docs:
+	$(RM) -f docs/index.html;                                         \
+	$(RM) -f docs/*.png docs/*.html docs/*.svg docs/*.css docs/*.js;  \
+	$(RM) -rf docs/search;
+
+clean-local: clean-docs
+
+
+install-docs: docs
+	$(MKDIR_P) $(DESTDIR)$(docdir);
+	$(INSTALL_DATA) docs/index.html $(DESTDIR)$(docdir)/index.html;
+	$(INSTALL_DATA) docs/search $(DESTDIR)$(docdir)/search;
+	$(INSTALL_DATA) docs/*.png $(DESTDIR)$(docdir)/;
+	$(INSTALL_DATA) docs/*.html $(DESTDIR)$(docdir)/;
+	$(INSTALL_DATA) docs/*.svg $(DESTDIR)$(docdir)/;
+	$(INSTALL_DATA) docs/*.css $(DESTDIR)$(docdir)/;
+	$(INSTALL_DATA) docs/*.js $(DESTDIR)$(docdir)/;
+
+uninstall-docs:
+	$(RM) $(DESTDIR)$(docdir)/index.html;
+	$(RM) $(DESTDIR)$(docdir)/search;
+	$(RM) $(DESTDIR)$(docdir)/*.png;
+	$(RM) $(DESTDIR)$(docdir)/*.html;
+	$(RM) $(DESTDIR)$(docdir)/*.svg;
+	$(RM) $(DESTDIR)$(docdir)/*.css;
+	$(RM) $(DESTDIR)$(docdir)/*.js;
+	$(RMDIR) $(DESTDIR)$(docdir);
+
+install-data-local: install-docs
+uninstall-local: uninstall-docs
 
 
 # ---------------------------------------------------------------------------- #

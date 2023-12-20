@@ -575,6 +575,9 @@ ACLOCAL_AMFLAGS = -I ../build-aux/m4
 SUBDIRS = src/resolver include tests
 
 # ---------------------------------------------------------------------------- #
+CLEANFILES = 
+
+# ---------------------------------------------------------------------------- #
 lib_LTLIBRARIES = lib/libpkgdb.la
 lib_libpkgdb_la_CXXFLAGS = $(AM_CXXFLAGS) $(YAML_CFLAGS) \
 	$(TOML_CFLAGS)
@@ -597,6 +600,14 @@ bin_pkgdb_SOURCES = src/main.cc src/repl.cc src/parse/command.cc \
 	src/pkgdb/command.cc src/pkgdb/get.cc src/pkgdb/scrape.cc \
 	src/resolver/command.cc src/search/command.cc \
 	src/buildenv/command.cc
+
+# ---------------------------------------------------------------------------- #
+
+# Extra Distributed Files
+EXTRA_DIST = LICENSE $(DOCFILES)
+DOCFILES = Doxyfile README.md CONTRIBUTING.md \
+	docs/garbage-collection.md docs/lockfile.md docs/manifests.md \
+	docs/params-to-sql.md docs/registry.md docs/search.md
 all: all-recursive
 
 .SUFFIXES:
@@ -1297,6 +1308,7 @@ install-strip:
 mostlyclean-generic:
 
 clean-generic:
+	-test -z "$(CLEANFILES)" || rm -f $(CLEANFILES)
 
 distclean-generic:
 	-test -z "$(CONFIG_CLEAN_FILES)" || rm -f $(CONFIG_CLEAN_FILES)
@@ -1322,7 +1334,7 @@ maintainer-clean-generic:
 clean: clean-recursive
 
 clean-am: clean-binPROGRAMS clean-generic clean-libLTLIBRARIES \
-	clean-libtool mostlyclean-am
+	clean-libtool clean-local mostlyclean-am
 
 distclean: distclean-recursive
 		-rm -f src/$(DEPDIR)/lib_libpkgdb_la-command.Plo
@@ -1376,7 +1388,7 @@ info: info-recursive
 
 info-am:
 
-install-data-am:
+install-data-am: install-data-local
 
 install-dvi: install-dvi-recursive
 
@@ -1456,26 +1468,27 @@ ps: ps-recursive
 
 ps-am:
 
-uninstall-am: uninstall-binPROGRAMS uninstall-libLTLIBRARIES
+uninstall-am: uninstall-binPROGRAMS uninstall-libLTLIBRARIES \
+	uninstall-local
 
 .MAKE: $(am__recursive_targets) install-am install-strip
 
 .PHONY: $(am__recursive_targets) CTAGS GTAGS TAGS all all-am \
 	am--depfiles check check-am clean clean-binPROGRAMS \
-	clean-generic clean-libLTLIBRARIES clean-libtool cscopelist-am \
-	ctags ctags-am distclean distclean-compile distclean-generic \
-	distclean-libtool distclean-tags distdir dvi dvi-am html \
-	html-am info info-am install install-am install-binPROGRAMS \
-	install-data install-data-am install-dvi install-dvi-am \
-	install-exec install-exec-am install-html install-html-am \
-	install-info install-info-am install-libLTLIBRARIES \
-	install-man install-pdf install-pdf-am install-ps \
-	install-ps-am install-strip installcheck installcheck-am \
-	installdirs installdirs-am maintainer-clean \
-	maintainer-clean-generic mostlyclean mostlyclean-compile \
-	mostlyclean-generic mostlyclean-libtool pdf pdf-am ps ps-am \
-	tags tags-am uninstall uninstall-am uninstall-binPROGRAMS \
-	uninstall-libLTLIBRARIES
+	clean-generic clean-libLTLIBRARIES clean-libtool clean-local \
+	cscopelist-am ctags ctags-am distclean distclean-compile \
+	distclean-generic distclean-libtool distclean-tags distdir dvi \
+	dvi-am html html-am info info-am install install-am \
+	install-binPROGRAMS install-data install-data-am \
+	install-data-local install-dvi install-dvi-am install-exec \
+	install-exec-am install-html install-html-am install-info \
+	install-info-am install-libLTLIBRARIES install-man install-pdf \
+	install-pdf-am install-ps install-ps-am install-strip \
+	installcheck installcheck-am installdirs installdirs-am \
+	maintainer-clean maintainer-clean-generic mostlyclean \
+	mostlyclean-compile mostlyclean-generic mostlyclean-libtool \
+	pdf pdf-am ps ps-am tags tags-am uninstall uninstall-am \
+	uninstall-binPROGRAMS uninstall-libLTLIBRARIES uninstall-local
 
 .PRECIOUS: Makefile
 
@@ -1484,6 +1497,53 @@ uninstall-am: uninstall-binPROGRAMS uninstall-libLTLIBRARIES
 
 src/resolver/libresolver.la:
 	$(MAKE) -C src/resolver libresolver.la
+
+# NOTE: Docs are handled below
+
+# ---------------------------------------------------------------------------- #
+
+# Documentation Generation
+
+.PHONY: docs clean-docs install-docs uninstall-docs
+
+docs/index.html: $(SOURCES) $(HEADERS) $(DOCFILES)
+	$(RSYNC) -r --exclude bear.d/ --exclude build-aux/                \
+                --exclude bin/ --exclude lib/ --exclude 'Makefile.*'  \
+                $(PKGDB_ROOT)/ $(abs_builddir)/;
+	$(CP) -f $(addprefix $(PKGDB_ROOT)/,README.md CONTRIBUTING.md Doxyfile) ./;
+	$(DOXYGEN) Doxyfile;
+
+docs: docs/index.html
+
+clean-docs:
+	$(RM) -f docs/index.html;                                         \
+	$(RM) -f docs/*.png docs/*.html docs/*.svg docs/*.css docs/*.js;  \
+	$(RM) -rf docs/search;
+
+clean-local: clean-docs
+
+install-docs: docs
+	$(MKDIR_P) $(DESTDIR)$(docdir);
+	$(INSTALL_DATA) docs/index.html $(DESTDIR)$(docdir)/index.html;
+	$(INSTALL_DATA) docs/search $(DESTDIR)$(docdir)/search;
+	$(INSTALL_DATA) docs/*.png $(DESTDIR)$(docdir)/;
+	$(INSTALL_DATA) docs/*.html $(DESTDIR)$(docdir)/;
+	$(INSTALL_DATA) docs/*.svg $(DESTDIR)$(docdir)/;
+	$(INSTALL_DATA) docs/*.css $(DESTDIR)$(docdir)/;
+	$(INSTALL_DATA) docs/*.js $(DESTDIR)$(docdir)/;
+
+uninstall-docs:
+	$(RM) $(DESTDIR)$(docdir)/index.html;
+	$(RM) $(DESTDIR)$(docdir)/search;
+	$(RM) $(DESTDIR)$(docdir)/*.png;
+	$(RM) $(DESTDIR)$(docdir)/*.html;
+	$(RM) $(DESTDIR)$(docdir)/*.svg;
+	$(RM) $(DESTDIR)$(docdir)/*.css;
+	$(RM) $(DESTDIR)$(docdir)/*.js;
+	$(RMDIR) $(DESTDIR)$(docdir);
+
+install-data-local: install-docs
+uninstall-local: uninstall-docs
 
 # ---------------------------------------------------------------------------- #
 #
