@@ -126,10 +126,7 @@
         src = builtins.path {path = ./.;};
         default_stages = ["manual" "push"];
         hooks = {
-          alejandra = {
-            enable = true;
-            check = true;
-          };
+          alejandra.enable = true;
           autotools = {
             enable = true;
             name = "autotools bootstrap";
@@ -166,6 +163,7 @@
         };
         settings = {
           alejandra.verbosity = "quiet";
+          alehabdra.check = true;
           rust.cargoManifestPath = "cli/Cargo.toml";
         };
         tools = {
