@@ -186,7 +186,7 @@ EOF
 
 # We can use the `config to trust a specific remote environment.
 # The `trust` flag is not required when activating a trusted environment.
-# bats test_tags=remote,activate,trust,remote:activate:trust-config
+# bats test_tags=remote,activate,trust,remote:activate:deny-config
 @test "m10.3: 'activate --remote' fails if denied by config, --trust overrides" {
   make_empty_remote_env
   "$FLOX_BIN" install hello --remote "$OWNER/test"
