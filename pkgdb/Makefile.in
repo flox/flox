@@ -1510,7 +1510,9 @@ docs/index.html: $(SOURCES) $(HEADERS) $(DOCFILES)
 	$(RSYNC) -r --exclude bear.d/ --exclude build-aux/                \
                 --exclude bin/ --exclude lib/ --exclude 'Makefile.*'  \
                 $(PKGDB_ROOT)/ $(abs_builddir)/;
-	$(CP) -f $(addprefix $(PKGDB_ROOT)/,README.md CONTRIBUTING.md Doxyfile) ./;
+	$(CP) -f $(PKGDB_ROOT)/README.md $(abs_builddir)/;
+	$(CP) -f $(PKGDB_ROOT)/CONTRIBUTING.md $(abs_builddir)/;
+	$(CP) -f $(PKGDB_ROOT)/Doxyfile $(abs_builddir)/;
 	$(DOXYGEN) Doxyfile;
 
 docs: docs/index.html
@@ -1524,13 +1526,13 @@ clean-local: clean-docs
 
 install-docs: docs
 	$(MKDIR_P) $(DESTDIR)$(docdir);
-	$(INSTALL_DATA) docs/index.html $(DESTDIR)$(docdir)/index.html;
-	$(INSTALL_DATA) docs/search $(DESTDIR)$(docdir)/search;
-	$(INSTALL_DATA) docs/*.png $(DESTDIR)$(docdir)/;
-	$(INSTALL_DATA) docs/*.html $(DESTDIR)$(docdir)/;
-	$(INSTALL_DATA) docs/*.svg $(DESTDIR)$(docdir)/;
-	$(INSTALL_DATA) docs/*.css $(DESTDIR)$(docdir)/;
-	$(INSTALL_DATA) docs/*.js $(DESTDIR)$(docdir)/;
+	$(INSTALL_DATA) $(abs_builddir)/docs/index.html $(DESTDIR)$(docdir)/;
+	$(INSTALL_DATA) $(abs_builddir)/docs/search $(DESTDIR)$(docdir)/search;
+	$(INSTALL_DATA) $(abs_builddir)/docs/*.png $(DESTDIR)$(docdir)/;
+	$(INSTALL_DATA) $(abs_builddir)/docs/*.html $(DESTDIR)$(docdir)/;
+	$(INSTALL_DATA) $(abs_builddir)/docs/*.svg $(DESTDIR)$(docdir)/;
+	$(INSTALL_DATA) $(abs_builddir)/docs/*.css $(DESTDIR)$(docdir)/;
+	$(INSTALL_DATA) $(abs_builddir)/docs/*.js $(DESTDIR)$(docdir)/;
 
 uninstall-docs:
 	$(RM) $(DESTDIR)$(docdir)/index.html;
