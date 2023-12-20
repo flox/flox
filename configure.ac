@@ -266,7 +266,7 @@ AC_CACHE_CHECK([for C++ compiler toolchain], [flox_cv_cxx_toolchain],
   [AS_CASE(["$( $CXX --version 2>/dev/null|$HEAD -n1; )"],
     [g++\ *],                  [flox_cv_cxx_toolchain=gcc],
     [clang\ version\ *],       [flox_cv_cxx_toolchain=clang],
-    [Apple clang\ version\ *], [flox_cv_cxx_toolchain=clang],
+    [Apple\ clang\ version\ *], [flox_cv_cxx_toolchain=clang],
     [AC_MSG_ERROR([Unsupported C++ compiler: '$CXX'. ]
       [Version string was: '$( $CXX --version|$HEAD -n1; )'])])
    AC_MSG_RESULT(["$ac_cv_cxx_toolchain"])])
