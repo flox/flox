@@ -266,7 +266,9 @@ AC_CACHE_CHECK([for C++ compiler toolchain], [flox_cv_cxx_toolchain],
   [AS_CASE(["$( $CXX --version|$HEAD -n1; )"],
      [g++\ *],            [flox_cv_cxx_toolchain=gcc],
      [clang\ version\ *], [flox_cv_cxx_toolchain=clang],
-     [AC_MSG_ERROR([Unsupported C++ compiler: $CXX])])
+     [AC_MSG_ERROR(
+        [Unsupported C++ compiler: '$CXX'. ]
+        [Version string was: '$( $CXX --version|$HEAD -n1; )'])])
    AC_MSG_RESULT([$ac_cv_cxx_toolchain])])
 AC_SUBST([CXX_TOOLCHAIN], ["$flox_cv_cxx_toolchain"])
 AM_CONDITIONAL([IS_GCC],   [test "$CXX_TOOLCHAIN" = 'gcc'])
@@ -582,7 +584,7 @@ AC_SUBST([set_soname_option])
 AS_CASE(["$CXX_TOOLCHAIN"],
   [gcc],   [NO_UNDEFINED_SYMBOLS_FLAG='-Wl,--no-undefined'],
   [clang], [NO_UNDEFINED_SYMBOLS_FLAG='-Wl,-undefined,error']
-  [AC_MSG_ERROR([Unsupported C++ compiler: $CXX])])
+  [AC_MSG_ERROR([Unsupported C++ compiler toolchain: $CXX_TOOLCHAIN])])
 AC_SUBST([NO_UNDEFINED_SYMBOLS_FLAG])
 
 AM_CONDITIONAL([BUILD_SHARED_LIBS], [test "$enable_shared" = 'yes'])

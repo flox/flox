@@ -20005,7 +20005,8 @@ else $as_nop
   clang\ version\ *) :
     flox_cv_cxx_toolchain=clang ;; #(
   *) :
-    as_fn_error $? "Unsupported C++ compiler: $CXX" "$LINENO" 5 ;;
+    as_fn_error $? "Unsupported C++ compiler: '$CXX'.
+        Version string was: '$( $CXX --version|$HEAD -n1; )'" "$LINENO" 5 ;;
 esac
    { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $ac_cv_cxx_toolchain" >&5
 printf "%s\n" "$ac_cv_cxx_toolchain" >&6; }
