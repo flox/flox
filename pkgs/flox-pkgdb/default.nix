@@ -205,8 +205,10 @@ in
         devShellHook = ''
           #  # Find the project root and add the `bin' directory to `PATH'.
           if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-            PATH="$( git rev-parse --show-toplevel; )/pkgdb/bin":$PATH;
+            REPO_ROOT="$( git rev-parse --show-toplevel; )";
+            PATH="$REPO_ROOT/pkgdb/bin:$PATH";
           fi
+          export prefix="$REPO_ROOT/build/out";
         '';
       };
     }
