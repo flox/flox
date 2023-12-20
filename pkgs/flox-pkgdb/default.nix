@@ -140,6 +140,7 @@ in
       outputs = ["out"];
 
       configureFlags = [
+        "--enable-release"
         "--without-flox-cli"
         "--disable-shared"
         "--disable-dependency-tracking"

@@ -263,13 +263,12 @@ AM_CONDITIONAL([IS_X86_64],  [test "$ARCH" = 'x86_64'])
 AM_CONDITIONAL([IS_AARCH64], [test "$ARCH" = 'aarch64'])
 
 AC_CACHE_CHECK([for C++ compiler toolchain], [flox_cv_cxx_toolchain],
-  [AS_CASE(["$( $CXX --version|$HEAD -n1; )"],
-     [g++\ *],            [flox_cv_cxx_toolchain=gcc],
-     [clang\ version\ *], [flox_cv_cxx_toolchain=clang],
-     [AC_MSG_ERROR(
-        [Unsupported C++ compiler: '$CXX'. ]
-        [Version string was: '$( $CXX --version|$HEAD -n1; )'])])
-   AC_MSG_RESULT([$ac_cv_cxx_toolchain])])
+  [AS_CASE(["$( $CXX --version 2>/dev/null|$HEAD -n1; )"],
+    [g++\ *],            [flox_cv_cxx_toolchain=gcc],
+    [clang\ version\ *], [flox_cv_cxx_toolchain=clang],
+    [AC_MSG_ERROR([Unsupported C++ compiler: '$CXX'. ]
+      [Version string was: '$( $CXX --version|$HEAD -n1; )'])])
+   AC_MSG_RESULT(["$ac_cv_cxx_toolchain"])])
 AC_SUBST([CXX_TOOLCHAIN], ["$flox_cv_cxx_toolchain"])
 AM_CONDITIONAL([IS_GCC],   [test "$CXX_TOOLCHAIN" = 'gcc'])
 AM_CONDITIONAL([IS_CLANG], [test "$CXX_TOOLCHAIN" = 'clang'])
@@ -352,9 +351,6 @@ AC_ARG_ENABLE([debug],
   [ENABLE_DEBUG=no])
 AM_CONDITIONAL([ENABLE_DEBUG], [test "$ENABLE_DEBUG" = 'yes'])
 
-# Translate `0' -> `no' in case the environment variable is was used.
-AS_IF([test "$ENABLE_DEBUG" = 0], [ENABLE_DEBUG=no])
-
 AS_IF([test "$ENABLE_DEBUG" != 'no'],
   [AC_DEFINE_UNQUOTED([DEBUG], [1], [Enable debug mode])
    CXXFLAGS="$CXXFLAGS $DEBUG_CXXFLAGS";
@@ -378,9 +374,6 @@ AC_ARG_ENABLE([coverage],
   [ENABLE_COV=no])
 AM_CONDITIONAL([ENABLE_COV], [test "$ENABLE_COV" = 'yes'])
 
-# Translate `0' -> `no' in case the environment variable is was used.
-AS_IF([test "$ENABLE_COV" = 0], [ENABLE_COV=no])
-
 AS_IF([test "$ENABLE_COV" != 'no'],
   [CXXFLAGS="$CXXFLAGS $COV_CXXFLAGS";
    LDFLAGS="$LDFLAGS $COV_LDFLAGS";
@@ -403,11 +396,8 @@ AC_ARG_ENABLE([release],
   [ENABLE_RELEASE=no])
 AM_CONDITIONAL([ENABLE_RELEASE], [test "$ENABLE_RELEASE" = 'yes'])
 
-# Translate `0' -> `no' in case the environment variable is was used.
-AS_IF([test "$ENABLE_RELEASE" = 0], [ENABLE_RELEASE=no])
-
-AS_IF([test "$ENABLE_RELEASE" != 'no'],
-  [AS_IF([test "$ENABLE_RELEASE" != 'no'],
+AS_IF([test "$ENABLE_RELEASE" == 'yes'],
+  [AS_IF([test "$ENABLE_DEBUG" == 'yes'],
          [AC_MSG_ERROR([Release mode and debug mode may not be used together])])
    AC_DEFINE_UNQUOTED([RELEASE], [1], [Enable release mode])
    CXXFLAGS="$CXXFLAGS $RELEASE_CXXFLAGS";
@@ -509,7 +499,7 @@ FLOX_CHECK_NIX_MODULES
 AC_MSG_CHECKING([Nix system pair])
 AC_ARG_VAR([SYSTEM], [Nix system pair])
 SYSTEM="$OS-$ARCH";
-AC_MSG_RESULT([$SYSTEM])
+AC_MSG_RESULT(["$SYSTEM"])
 AC_SUBST([SYSTEM])
 
 AC_DEFINE_UNQUOTED([SYSTEM], ["$SYSTEM"], [Nix system pair])

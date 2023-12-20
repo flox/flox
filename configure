@@ -20664,11 +20664,7 @@ else
 fi
 
 
-# Translate `0' -> `no' in case the environment variable is was used.
-if test "$ENABLE_DEBUG" = 0
-then :
-  ENABLE_DEBUG=no
-fi
+echo "ENABLE_DEBUG: $ENABLE_DEBUG" >&2;
 
 if test "$ENABLE_DEBUG" != 'no'
 then :
@@ -20708,12 +20704,6 @@ else
 fi
 
 
-# Translate `0' -> `no' in case the environment variable is was used.
-if test "$ENABLE_COV" = 0
-then :
-  ENABLE_COV=no
-fi
-
 if test "$ENABLE_COV" != 'no'
 then :
   CXXFLAGS="$CXXFLAGS $COV_CXXFLAGS";
@@ -20749,15 +20739,9 @@ else
 fi
 
 
-# Translate `0' -> `no' in case the environment variable is was used.
-if test "$ENABLE_RELEASE" = 0
+if test "$ENABLE_RELEASE" == 'yes'
 then :
-  ENABLE_RELEASE=no
-fi
-
-if test "$ENABLE_RELEASE" != 'no'
-then :
-  if test "$ENABLE_RELEASE" != 'no'
+  if test "$ENABLE_DEBUG" == 'yes'
 then :
   as_fn_error $? "Release mode and debug mode may not be used together" "$LINENO" 5
 fi

@@ -580,11 +580,12 @@ copy-srcs:
 @ENABLE_RELEASE_TRUE@build: copy-srcs
 @ENABLE_RELEASE_TRUE@	$(MAKE) $(AM_MAKEFLAGS) -C $(top_builddir)/pkgdb install;
 @ENABLE_RELEASE_TRUE@	PKGDB_BIN="$(DESTDIR)$(bindir)/pkgdb$(EXEEXT)"  \
-@ENABLE_RELEASE_TRUE@	$(CARGO) build $(CARGOFLAGS);
+@ENABLE_RELEASE_TRUE@	  $(CARGO) build $(CARGOFLAGS);
 
 @ENABLE_RELEASE_FALSE@build: copy-srcs
 @ENABLE_RELEASE_FALSE@	$(MAKE) $(AM_MAKEFLAGS) -C $(top_builddir)/pkgdb bin/pkgdb$(EXEEXT)
-@ENABLE_RELEASE_FALSE@	$(CARGO) build $(CARGOFLAGS);
+@ENABLE_RELEASE_FALSE@	PKGDB_BIN="$(top_builddir)/pkgdb/bin/pkgdb$(EXEEXT)"  \
+@ENABLE_RELEASE_FALSE@	  $(CARGO) build $(CARGOFLAGS);
 
 $(TARGETDIR)/flox: build
 

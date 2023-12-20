@@ -34,13 +34,14 @@ if ENABLE_RELEASE
 build: copy-srcs
 	$(MAKE) $(AM_MAKEFLAGS) -C $(top_builddir)/pkgdb install;
 	PKGDB_BIN="$(DESTDIR)$(bindir)/pkgdb$(EXEEXT)"  \
-	$(CARGO) build $(CARGOFLAGS);
+	  $(CARGO) build $(CARGOFLAGS);
 
 else !ENABLE_RELEASE
 
 build: copy-srcs
 	$(MAKE) $(AM_MAKEFLAGS) -C $(top_builddir)/pkgdb bin/pkgdb$(EXEEXT)
-	$(CARGO) build $(CARGOFLAGS);
+	PKGDB_BIN="$(top_builddir)/pkgdb/bin/pkgdb$(EXEEXT)"  \
+	  $(CARGO) build $(CARGOFLAGS);
 
 endif !ENABLE_RELEASE
 
