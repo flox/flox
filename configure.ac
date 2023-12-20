@@ -583,7 +583,7 @@ AC_SUBST([set_soname_option])
 
 AS_CASE(["$CXX_TOOLCHAIN"],
   [gcc],   [NO_UNDEFINED_SYMBOLS_FLAG='-Wl,--no-undefined'],
-  [clang], [NO_UNDEFINED_SYMBOLS_FLAG='-Wl,-undefined,error']
+  [clang], [NO_UNDEFINED_SYMBOLS_FLAG='-Wl,-undefined,error'],
   [AC_MSG_ERROR([Unsupported C++ compiler toolchain: $CXX_TOOLCHAIN])])
 AC_SUBST([NO_UNDEFINED_SYMBOLS_FLAG])
 
