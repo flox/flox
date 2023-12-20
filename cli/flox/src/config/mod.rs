@@ -4,6 +4,7 @@ use std::{env, fs};
 
 use anyhow::{Context, Result};
 use config::{Config as HierarchicalConfig, Environment};
+use flox_rust_sdk::flox::EnvironmentRef;
 use flox_types::stability::Stability;
 use itertools::{Either, Itertools};
 use log::{debug, trace};
@@ -65,8 +66,19 @@ pub struct FloxConfig {
     /// How many items `flox show` should show by default
     pub search_limit: Option<u8>,
 
+    /// Environments trusted to run remotely
+    #[serde(default)]
+    pub trusted_environments: HashMap<EnvironmentRef, EnvironmentTrust>,
+
     #[serde(flatten)]
     pub instance: InstanceConfig,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum EnvironmentTrust {
+    Trust,
+    Deny,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, Default)]

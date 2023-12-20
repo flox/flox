@@ -59,3 +59,23 @@ teardown() {
 hello
 EOF
 }
+
+# bats test_tags=list,list:config
+@test "'flox list --config' shows manifest content" {
+  "$FLOX_BIN" init
+  MANIFEST_CONTENT="$(
+    cat <<- EOF
+    [install]
+
+    [hook]
+    script = "something suspicious"
+EOF
+
+  )"
+
+  echo "$MANIFEST_CONTENT" | "$FLOX_BIN" edit -f -
+
+  run "$FLOX_BIN" list --config
+  assert_success
+  assert_output "$MANIFEST_CONTENT"
+}

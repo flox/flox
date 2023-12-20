@@ -4,12 +4,13 @@ mod general;
 mod search;
 
 use std::collections::BTreeMap;
+use std::fmt::Display;
 use std::path::PathBuf;
-use std::{env, fs};
+use std::{env, fmt, fs, mem};
 
 use anyhow::{anyhow, bail, Context, Result};
 use bpaf::{Args, Bpaf, ParseFailure, Parser};
-use flox_rust_sdk::flox::{Flox, FLOX_VERSION};
+use flox_rust_sdk::flox::{EnvironmentRef, Flox, FLOX_VERSION};
 use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironment;
 use flox_rust_sdk::models::environment::path_environment::PathEnvironment;
 use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironment;
@@ -30,7 +31,8 @@ use tempfile::TempDir;
 use toml_edit::Key;
 
 use self::environment::hacky_environment_description;
-use crate::config::{Config, FLOX_CONFIG_FILE};
+use crate::commands::general::update_config;
+use crate::config::{Config, EnvironmentTrust, FLOX_CONFIG_FILE};
 use crate::utils::dialog::{Dialog, Select};
 use crate::utils::init::{
     init_access_tokens,
@@ -309,7 +311,7 @@ impl LocalDevelopmentCommands {
     async fn handle(self, config: Config, flox: Flox) -> Result<()> {
         match self {
             LocalDevelopmentCommands::Init(args) => args.handle(flox).await?,
-            LocalDevelopmentCommands::Activate(args) => args.handle(flox).await?,
+            LocalDevelopmentCommands::Activate(args) => args.handle(config, flox).await?,
             LocalDevelopmentCommands::Edit(args) => args.handle(flox).await?,
             LocalDevelopmentCommands::Install(args) => args.handle(flox).await?,
             LocalDevelopmentCommands::Uninstall(args) => args.handle(flox).await?,
@@ -682,4 +684,123 @@ fn activated_environments() -> Vec<PathBuf> {
     env::var(FLOX_ACTIVE_ENVIRONMENTS_VAR)
         .map(|active| env::split_paths(&active).collect())
         .unwrap_or(vec![])
+}
+
+/// Check whether the given [EnvironmentRef] is trusted.
+///
+/// If not, prompt the user to trust or deny abort or ask again.
+///
+/// This function returns [`Ok`] if the environment is trusted
+/// and a formatted error message if not.
+pub(super) async fn ensure_environment_trust(
+    config: &mut Config,
+    flox: &Flox,
+    environment: &RemoteEnvironment,
+) -> Result<()> {
+    let env_ref = EnvironmentRef::new_from_parts(environment.owner().clone(), environment.name());
+
+    let trust = config.flox.trusted_environments.get(&env_ref);
+
+    if matches!(trust, Some(EnvironmentTrust::Trust)) {
+        debug!("environment {env_ref} is trusted by config");
+        return Ok(());
+    }
+
+    if matches!(trust, Some(EnvironmentTrust::Deny)) {
+        debug!("environment {env_ref} is denied by config");
+
+        let message = formatdoc! {"
+            Environment {env_ref} is not trusted.
+
+            Run 'flox config --set trusted_environments.{env_ref} trust' to trust it."};
+        bail!("{message}");
+    }
+
+    #[derive(Debug, PartialEq)]
+    enum Choices {
+        Trust,
+        Deny,
+        TrustTemporarily,
+        Abort,
+        ShowConfig,
+    }
+
+    #[derive(Debug, derive_more::AsRef)]
+    struct Choice<K: fmt::Display, V: PartialEq>(K, #[as_ref] V);
+    impl<K: fmt::Display, V: PartialEq> Display for Choice<K, V> {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            self.0.fmt(f)
+        }
+    }
+    impl<K: fmt::Display, V: PartialEq> PartialEq for Choice<K, V> {
+        fn eq(&self, other: &Self) -> bool {
+            self.1 == other.1
+        }
+    }
+
+    let message = formatdoc! {"
+        Environment {env_ref} is not trusted.
+
+        flox environments do not run in a sandbox.
+        Activation hooks can run arbitrary code on your machine.
+        Thus, environments need to be trusted to be activated."};
+
+    if Dialog::can_prompt() {
+        info!("{message}");
+    } else {
+        bail!("{message}")
+    }
+
+    loop {
+        let message = format!("Do you trust {env_ref}?", env_ref = env_ref);
+        let choice = Dialog {
+            message: &message,
+            help_message: None,
+            typed: Select {
+                options: vec![
+                    Choice("Do not trust, ask again next time", Choices::Abort),
+                    Choice("Do not trust, save choice", Choices::Deny),
+                    Choice("Trust, ask again next time", Choices::TrustTemporarily),
+                    Choice("Trust, save choice", Choices::Trust),
+                    Choice("Show the manifest", Choices::ShowConfig),
+                ],
+            },
+        }
+        .prompt()
+        .await?;
+
+        debug!("user chose: {choice:?}");
+
+        match choice.as_ref() {
+            Choices::Trust => {
+                update_config(
+                    &flox.config_dir,
+                    &flox.temp_dir,
+                    format!("trusted_environments.'{}'", env_ref),
+                    Some(EnvironmentTrust::Trust),
+                )
+                .context("Could not write token to config")?;
+                let _ = mem::replace(config, Config::parse()?);
+                info!("Trusted environment {env_ref} (saved choice)",);
+                return Ok(());
+            },
+            Choices::Deny => {
+                update_config(
+                    &flox.config_dir,
+                    &flox.temp_dir,
+                    format!("trusted_environments.'{}'", env_ref),
+                    Some(EnvironmentTrust::Deny),
+                )
+                .context("Could not write token to config")?;
+                let _ = mem::replace(config, Config::parse()?);
+                bail!("Denied {env_ref} (saved choice).");
+            },
+            Choices::TrustTemporarily => {
+                info!("Trusted environment {env_ref} (temporary)");
+                return Ok(());
+            },
+            Choices::Abort => bail!("Denied {env_ref} (temporary)"),
+            Choices::ShowConfig => eprintln!("{}", environment.manifest_content(flox)?),
+        }
+    }
 }

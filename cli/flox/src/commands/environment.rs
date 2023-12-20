@@ -43,7 +43,13 @@ use log::{debug, error, info};
 use tempfile::NamedTempFile;
 
 use super::{environment_select, EnvironmentSelect};
-use crate::commands::{activated_environments, auth, ConcreteEnvironment};
+use crate::commands::{
+    activated_environments,
+    auth,
+    ensure_environment_trust,
+    ConcreteEnvironment,
+};
+use crate::config::Config;
 use crate::subcommand_metric;
 use crate::utils::dialog::{Confirm, Dialog, Spinner};
 
@@ -288,13 +294,17 @@ pub struct Activate {
     #[bpaf(external(environment_select), fallback(Default::default()))]
     environment: EnvironmentSelect,
 
+    /// Trust the a remote environment temporarily for this activation
+    #[bpaf(long, short)]
+    trust: bool,
+
     /// Command to run interactively in the context of the environment
     #[bpaf(positional("cmd"), strict, many)]
     run_args: Vec<String>,
 }
 
 impl Activate {
-    pub async fn handle(self, flox: Flox) -> Result<()> {
+    pub async fn handle(self, mut config: Config, flox: Flox) -> Result<()> {
         subcommand_metric!("activate");
 
         let concrete_environment = self.environment.to_concrete_environment(&flox)?;
@@ -311,6 +321,12 @@ impl Activate {
                 format!("{}/{}", remote.owner(), remote.name())
             },
         };
+
+        if let ConcreteEnvironment::Remote(ref env) = concrete_environment {
+            if !self.trust {
+                ensure_environment_trust(&mut config, &flox, env).await?;
+            }
+        }
 
         let mut environment = concrete_environment.into_dyn_environment();
 
@@ -475,6 +491,18 @@ impl Init {
 pub struct List {
     #[bpaf(external(environment_select), fallback(Default::default()))]
     environment: EnvironmentSelect,
+    #[bpaf(external(list_mode), fallback(ListMode::NameOnly))]
+    list_mode: ListMode,
+}
+
+#[derive(Bpaf, Clone)]
+pub enum ListMode {
+    /// Show the raw contents of the manifest
+    #[bpaf(long, short)]
+    Config,
+    /// Show only the names of the packages installed in the environment
+    #[bpaf(long, short)]
+    NameOnly,
 }
 
 impl List {
@@ -487,9 +515,15 @@ impl List {
             .into_dyn_environment();
 
         let manifest_contents = env.manifest_content(&flox)?;
-        if let Some(pkgs) = list_packages(&manifest_contents)? {
-            pkgs.iter().for_each(|pkg| println!("{}", pkg));
+        match self.list_mode {
+            ListMode::Config => println!("{}", manifest_contents),
+            ListMode::NameOnly => {
+                if let Some(pkgs) = list_packages(&manifest_contents)? {
+                    pkgs.iter().for_each(|pkg| println!("{}", pkg));
+                }
+            },
         }
+
         Ok(())
     }
 }
