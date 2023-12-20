@@ -66,16 +66,32 @@ pub struct Edit {
     /// Replace environment declaration with that in FILE
     #[bpaf(long, short, argument("FILE"))]
     file: Option<PathBuf>,
+
+    apply: bool,
+    message: Option<String>,
 }
 
 impl Edit {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("edit");
 
-        let mut environment = self
+        let environment = self
             .environment
-            .detect_concrete_environment(&flox, "edit")?
-            .into_dyn_environment();
+            .detect_concrete_environment(&flox, "edit")?;
+
+        if let ConcreteEnvironment::Managed(ref managed) = environment {
+            if self.apply {
+                managed
+                    .apply_local(
+                        &flox,
+                        self.message.as_deref().unwrap_or("applying local edits"),
+                    )
+                    .unwrap();
+                return Ok(());
+            }
+        }
+
+        let mut environment = environment.into_dyn_environment();
 
         let result = match self.provided_manifest_contents()? {
             // If provided with the contents of a manifest file, either via a path to a file or via
