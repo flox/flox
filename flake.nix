@@ -126,7 +126,17 @@
         src = builtins.path {path = ./.;};
         default_stages = ["manual" "push"];
         hooks = {
-          alejandra.enable = true;
+          alejandra = {
+            enable = true;
+            check = true;
+          };
+          autotools = {
+            enable = true;
+            name = "autotools bootstrap";
+            entry = "./bootstrap.sh";
+            files = "\\.(ac|am|m4)";
+            pass_filenames = false;
+          };
           clang-format = {
             enable = true;
             types_or = final.lib.mkForce [
