@@ -927,21 +927,31 @@ uninstall-am:
 .PRECIOUS: Makefile
 
 
-@USE_LOCAL_PKGDB_TRUE@.PHONY: pkgdb
+.PHONY: pkgdb cli cdb docs docs-recursive
 
 @USE_LOCAL_PKGDB_TRUE@pkgdb:
 @USE_LOCAL_PKGDB_TRUE@	$(MAKE) $(AM_MAKEFLAGS) -C $(builddir)/pkgdb
 
-@USE_LOCAL_PKGDB_TRUE@PHONY: cdb
 @USE_LOCAL_PKGDB_TRUE@cdb:
 @USE_LOCAL_PKGDB_TRUE@	$(MAKE) $(AM_MAKEFLAGS) -C $(builddir)/pkgdb clean;
 @USE_LOCAL_PKGDB_TRUE@	PATH="$(dir $(BEAR_WRAPPER_CXX)):$(PATH)";                                 \
 @USE_LOCAL_PKGDB_TRUE@	  $(BEAR) -- $(MAKE) $(AM_MAKEFLAGS) -C $(builddir)/pkgdb bin/pkgdb tests;
 
-@USE_LOCAL_FLOX_CLI_TRUE@.PHONY: cli
+# Empty recipes
+@USE_LOCAL_PKGDB_FALSE@cdb:
+@USE_LOCAL_PKGDB_FALSE@pkgdb:
 
 @USE_LOCAL_FLOX_CLI_TRUE@cli:
 @USE_LOCAL_FLOX_CLI_TRUE@	$(MAKE) $(AM_MAKEFLAGS) -C $(builddir)/cli
+
+@USE_LOCAL_FLOX_CLI_FALSE@cli:
+
+# ---------------------------------------------------------------------------- #
+
+docs: docs-recursive
+
+docs-recursive:
+	$(MAKE) $(AM_MAKEFLAGS) -C $(builddir)/pkgdb $@
 
 # ---------------------------------------------------------------------------- #
 #
