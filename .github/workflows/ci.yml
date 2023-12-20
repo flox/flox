@@ -154,11 +154,12 @@ jobs:
       - name: "Test (./cli: cargo test)"
         run: |
           export RUST_BACKTRACE=1;
-          nix develop -L                                           \
-            --accept-flake-config                                  \
-            --no-update-lock-file                                  \
-            --command just unit-tests --set cargo_test_invocation  \
-              'cargo test --locked --workspace -F' extra-tests;
+          nix develop -L                                               \
+            --accept-flake-config                                      \
+            --no-update-lock-file                                      \
+            --command just --set cargo_test_invocation                 \
+                                 'cargo test --locked --workspace -F'  \
+                      unit-tests extra-tests;
 
       - name: "Test (./cli/tests)"
         run: |
