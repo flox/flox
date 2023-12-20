@@ -20012,6 +20012,8 @@ else $as_nop
     flox_cv_cxx_toolchain=gcc ;; #(
   clang\ version\ *) :
     flox_cv_cxx_toolchain=clang ;; #(
+  Apple clang\ version\ *) :
+    flox_cv_cxx_toolchain=clang ;; #(
   *) :
     as_fn_error $? "Unsupported C++ compiler: '$CXX'.
       Version string was: '$( $CXX --version|$HEAD -n1; )'" "$LINENO" 5 ;;
