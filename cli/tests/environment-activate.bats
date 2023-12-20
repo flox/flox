@@ -200,7 +200,27 @@ EOF
   SHELL=zsh bar=baz USER="$REAL_USER" NO_COLOR=1 run -0 expect -d "$TESTS_DIR/activate/envVar.exp" "$PROJECT_DIR"
   assert_output --partial "baz"
 
-  SHELL=bash bar=baz NO_COLOR=1 run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -- echo '$foo'
+  SHELL=zsh bar=baz NO_COLOR=1 run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -- echo '$foo'
+  assert_success
+  assert_output --partial "baz"
+}
+
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=activate,activate:envVar-before-hook:zsh
+@test "zsh: activate sets env var" {
+  cat << "EOF" >> "$PROJECT_DIR/.flox/env/manifest.toml"
+[vars]
+foo = "$bar"
+[hook]
+script = """
+  echo "$foo";
+"""
+EOF
+  # TODO: flox will set HOME if it doesn't match the home of the user with
+  # current euid. I'm not sure if we should change that, but for now just set
+  # USER to REAL_USER.
+  SHELL=zsh bar=baz NO_COLOR=1 run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -- exit
   assert_success
   assert_output --partial "baz"
 }
