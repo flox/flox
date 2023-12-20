@@ -74,7 +74,9 @@ lib_libpkgdb_la_SOURCES += src/buildenv/realise.cc
 bin_PROGRAMS = bin/pkgdb
 
 bin_pkgdb_LDADD =  $(AM_LDFLAGS)
+if IS_LINUX
 bin_pkgdb_LDADD += $(RELATIVE_RPATH_FLAG)
+endif IS_LINUX
 bin_pkgdb_LDADD += lib/libpkgdb.la
 
 bin_pkgdb_SOURCES =
