@@ -142,6 +142,8 @@ in
       outputs = ["out"];
 
       configureFlags = [
+        "--disable-pkgdb-dev"
+        "--disable-pkgdb-docs"
         "--enable-release"
         "--without-flox-cli"
         "--disable-shared"

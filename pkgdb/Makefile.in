@@ -98,9 +98,11 @@ PRE_UNINSTALL = :
 POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
-@IS_LINUX_TRUE@am__append_1 = $(RELATIVE_RPATH_FLAG)
-bin_PROGRAMS = bin/pkgdb$(EXEEXT)
+@ENABLE_PKGDB_DEV_TRUE@am__append_1 = include
 @IS_LINUX_TRUE@am__append_2 = $(RELATIVE_RPATH_FLAG)
+bin_PROGRAMS = bin/pkgdb$(EXEEXT)
+@IS_LINUX_TRUE@am__append_3 = $(RELATIVE_RPATH_FLAG)
+@ENABLE_PKGDB_DOCS_TRUE@am__append_4 = $(DOCFILES)
 subdir = pkgdb
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/build-aux/m4/bear.m4 \
@@ -317,7 +319,7 @@ am__define_uniq_tagged_files = \
   unique=`for i in $$list; do \
     if test -f "$$i"; then echo $$i; else echo $(srcdir)/$$i; fi; \
   done | $(am__uniquify_input)`
-DIST_SUBDIRS = $(SUBDIRS)
+DIST_SUBDIRS = src/resolver include tests
 am__DIST_COMMON = $(srcdir)/Makefile.in \
 	$(top_srcdir)/build-aux/depcomp README.md
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
@@ -572,7 +574,8 @@ top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 ACLOCAL_AMFLAGS = -I ../build-aux/m4
-SUBDIRS = src/resolver include tests
+MAYBE_include = $(am__append_1)
+SUBDIRS = src/resolver $(MAYBE_include) tests
 
 # ---------------------------------------------------------------------------- #
 CLEANFILES = 
@@ -582,7 +585,7 @@ lib_LTLIBRARIES = lib/libpkgdb.la
 lib_libpkgdb_la_CXXFLAGS = $(AM_CXXFLAGS) $(YAML_CFLAGS) \
 	$(TOML_CFLAGS)
 lib_libpkgdb_la_LDFLAGS = $(AM_LDFLAGS) \
-	'$(set_soname_option)libpkgdb$(sharedLibExt)' $(am__append_1) \
+	'$(set_soname_option)libpkgdb$(sharedLibExt)' $(am__append_2) \
 	$(NO_UNDEFINED_SYMBOLS_FLAG) $(YAML_LIBS) $(TOML_LIBS)
 lib_libpkgdb_la_LIBADD = src/resolver/libresolver.la
 lib_libpkgdb_la_SOURCES = src/command.cc src/eval.cc src/exceptions.cc \
@@ -595,7 +598,7 @@ lib_libpkgdb_la_SOURCES = src/command.cc src/eval.cc src/exceptions.cc \
 	src/pkgdb/primops.cc src/pkgdb/read.cc src/pkgdb/write.cc \
 	src/pkgdb/schemas.hh src/buildenv/buildenv.cc \
 	src/buildenv/realise.cc
-bin_pkgdb_LDADD = $(AM_LDFLAGS) $(am__append_2) lib/libpkgdb.la
+bin_pkgdb_LDADD = $(AM_LDFLAGS) $(am__append_3) lib/libpkgdb.la
 bin_pkgdb_SOURCES = src/main.cc src/repl.cc src/parse/command.cc \
 	src/pkgdb/command.cc src/pkgdb/get.cc src/pkgdb/scrape.cc \
 	src/resolver/command.cc src/search/command.cc \
@@ -604,7 +607,7 @@ bin_pkgdb_SOURCES = src/main.cc src/repl.cc src/parse/command.cc \
 # ---------------------------------------------------------------------------- #
 
 # Extra Distributed Files
-EXTRA_DIST = LICENSE $(DOCFILES)
+EXTRA_DIST = LICENSE $(am__append_4)
 DOCFILES = Doxyfile README.md CONTRIBUTING.md \
 	docs/garbage-collection.md docs/lockfile.md docs/manifests.md \
 	docs/params-to-sql.md docs/registry.md docs/search.md
@@ -1331,6 +1334,9 @@ distclean-generic:
 maintainer-clean-generic:
 	@echo "This command is intended for maintainers to use"
 	@echo "it deletes files that may require special tools to rebuild."
+@ENABLE_PKGDB_DOCS_FALSE@clean-local:
+@ENABLE_PKGDB_DOCS_FALSE@install-data-local:
+@ENABLE_PKGDB_DOCS_FALSE@uninstall-local:
 clean: clean-recursive
 
 clean-am: clean-binPROGRAMS clean-generic clean-libLTLIBRARIES \
@@ -1506,46 +1512,53 @@ src/resolver/libresolver.la:
 
 .PHONY: docs clean-docs install-docs uninstall-docs
 
-docs/index.html: $(SOURCES) $(HEADERS) $(DOCFILES)
-	$(RSYNC) -r --exclude bear.d/ --exclude build-aux/                \
-                --exclude bin/ --exclude lib/ --exclude 'Makefile.*'  \
-                $(PKGDB_ROOT)/ $(abs_builddir)/;
-	$(CP) -f $(PKGDB_ROOT)/README.md $(abs_builddir)/;
-	$(CP) -f $(PKGDB_ROOT)/CONTRIBUTING.md $(abs_builddir)/;
-	$(CP) -f $(PKGDB_ROOT)/Doxyfile $(abs_builddir)/;
-	$(DOXYGEN) Doxyfile;
+@ENABLE_PKGDB_DOCS_TRUE@docs/index.html: $(SOURCES) $(HEADERS) $(DOCFILES)
+@ENABLE_PKGDB_DOCS_TRUE@	$(RSYNC) -r --exclude bear.d/ --exclude build-aux/               \
+@ENABLE_PKGDB_DOCS_TRUE@                --exclude bin/ --exclude lib/ --exclude 'Makefile*'  \
+@ENABLE_PKGDB_DOCS_TRUE@	            --exclude tests/ --exclude '.gitignore'              \
+@ENABLE_PKGDB_DOCS_TRUE@                $(PKGDB_ROOT)/ $(abs_builddir)/;
+@ENABLE_PKGDB_DOCS_TRUE@	$(DOXYGEN) Doxyfile;
 
-docs: docs/index.html
+@ENABLE_PKGDB_DOCS_TRUE@docs: docs/index.html
 
-clean-docs:
-	$(RM) -f docs/index.html;                                         \
-	$(RM) -f docs/*.png docs/*.html docs/*.svg docs/*.css docs/*.js;  \
-	$(RM) -rf docs/search;
+@ENABLE_PKGDB_DOCS_TRUE@clean-docs:
+@ENABLE_PKGDB_DOCS_TRUE@	$(RM) -f docs/index.html;                                         \
+@ENABLE_PKGDB_DOCS_TRUE@	$(RM) -f docs/*.png docs/*.html docs/*.svg docs/*.css docs/*.js;  \
+@ENABLE_PKGDB_DOCS_TRUE@	$(RM) -rf docs/search;
 
-clean-local: clean-docs
+@ENABLE_PKGDB_DOCS_TRUE@clean-local: clean-docs
 
-install-docs: docs
-	$(MKDIR_P) $(DESTDIR)$(docdir);
-	$(INSTALL_DATA) $(abs_builddir)/docs/index.html $(DESTDIR)$(docdir)/;
-	$(INSTALL_DATA) $(abs_builddir)/docs/search $(DESTDIR)$(docdir)/search;
-	$(INSTALL_DATA) $(abs_builddir)/docs/*.png $(DESTDIR)$(docdir)/;
-	$(INSTALL_DATA) $(abs_builddir)/docs/*.html $(DESTDIR)$(docdir)/;
-	$(INSTALL_DATA) $(abs_builddir)/docs/*.svg $(DESTDIR)$(docdir)/;
-	$(INSTALL_DATA) $(abs_builddir)/docs/*.css $(DESTDIR)$(docdir)/;
-	$(INSTALL_DATA) $(abs_builddir)/docs/*.js $(DESTDIR)$(docdir)/;
+@ENABLE_PKGDB_DOCS_TRUE@install-docs: docs
+@ENABLE_PKGDB_DOCS_TRUE@	$(MKDIR_P) $(DESTDIR)$(docdir);
+@ENABLE_PKGDB_DOCS_TRUE@	$(INSTALL_DATA) $(abs_builddir)/docs/index.html $(DESTDIR)$(docdir)/;
+@ENABLE_PKGDB_DOCS_TRUE@	$(INSTALL_DATA) $(abs_builddir)/docs/search $(DESTDIR)$(docdir)/search;
+@ENABLE_PKGDB_DOCS_TRUE@	$(INSTALL_DATA) $(abs_builddir)/docs/*.png $(DESTDIR)$(docdir)/;
+@ENABLE_PKGDB_DOCS_TRUE@	$(INSTALL_DATA) $(abs_builddir)/docs/*.html $(DESTDIR)$(docdir)/;
+@ENABLE_PKGDB_DOCS_TRUE@	$(INSTALL_DATA) $(abs_builddir)/docs/*.svg $(DESTDIR)$(docdir)/;
+@ENABLE_PKGDB_DOCS_TRUE@	$(INSTALL_DATA) $(abs_builddir)/docs/*.css $(DESTDIR)$(docdir)/;
+@ENABLE_PKGDB_DOCS_TRUE@	$(INSTALL_DATA) $(abs_builddir)/docs/*.js $(DESTDIR)$(docdir)/;
 
-uninstall-docs:
-	$(RM) $(DESTDIR)$(docdir)/index.html;
-	$(RM) $(DESTDIR)$(docdir)/search;
-	$(RM) $(DESTDIR)$(docdir)/*.png;
-	$(RM) $(DESTDIR)$(docdir)/*.html;
-	$(RM) $(DESTDIR)$(docdir)/*.svg;
-	$(RM) $(DESTDIR)$(docdir)/*.css;
-	$(RM) $(DESTDIR)$(docdir)/*.js;
-	$(RMDIR) $(DESTDIR)$(docdir);
+@ENABLE_PKGDB_DOCS_TRUE@uninstall-docs:
+@ENABLE_PKGDB_DOCS_TRUE@	$(RM) $(DESTDIR)$(docdir)/index.html;
+@ENABLE_PKGDB_DOCS_TRUE@	$(RM) $(DESTDIR)$(docdir)/search;
+@ENABLE_PKGDB_DOCS_TRUE@	$(RM) $(DESTDIR)$(docdir)/*.png;
+@ENABLE_PKGDB_DOCS_TRUE@	$(RM) $(DESTDIR)$(docdir)/*.html;
+@ENABLE_PKGDB_DOCS_TRUE@	$(RM) $(DESTDIR)$(docdir)/*.svg;
+@ENABLE_PKGDB_DOCS_TRUE@	$(RM) $(DESTDIR)$(docdir)/*.css;
+@ENABLE_PKGDB_DOCS_TRUE@	$(RM) $(DESTDIR)$(docdir)/*.js;
+@ENABLE_PKGDB_DOCS_TRUE@	$(RMDIR) $(DESTDIR)$(docdir);
 
-install-data-local: install-docs
-uninstall-local: uninstall-docs
+@ENABLE_PKGDB_DOCS_TRUE@install-data-local: install-docs
+@ENABLE_PKGDB_DOCS_TRUE@uninstall-local: uninstall-docs
+
+# Add phony targets
+@ENABLE_PKGDB_DOCS_FALSE@docs:
+
+@ENABLE_PKGDB_DOCS_FALSE@clean-docs:
+
+@ENABLE_PKGDB_DOCS_FALSE@install-docs:
+
+@ENABLE_PKGDB_DOCS_FALSE@uninstall-docs:
 
 # ---------------------------------------------------------------------------- #
 #

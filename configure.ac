@@ -409,6 +409,30 @@ AS_IF([test "$ENABLE_RELEASE" == 'yes'],
 
 # ---------------------------------------------------------------------------- #
 
+# Target Control
+# --------------
+# Enable/Disable sub-sets of targets.
+
+# TODO: all docs
+ENABLE_PKGDB_DOCS='';
+AC_ARG_ENABLE([docs],
+  [AS_HELP_STRING([--enable-pkgdb-docs],
+    [build and install 'pkgdb' documentation @<:@default=no@:>@])],
+  [ENABLE_PKGDB_DOCS="$enableval"],
+  [ENABLE_PKGDB_DOCS=no])
+AM_CONDITIONAL([ENABLE_PKGDB_DOCS], [test "$ENABLE_PKGDB_DOCS" = 'yes'])
+
+ENABLE_PKGDB_Dev='';
+AC_ARG_ENABLE([dev],
+  [AS_HELP_STRING([--enable-pkgdb-dev],
+    [build and install 'pkgdb' headers @<:@default=no@:>@])],
+  [ENABLE_PKGDB_DEV="$enableval"],
+  [ENABLE_PKGDB_DEV=no])
+AM_CONDITIONAL([ENABLE_PKGDB_DEV], [test "$ENABLE_PKGDB_DEV" = 'yes'])
+
+
+# ---------------------------------------------------------------------------- #
+
 # Sub-Systems/Modules Options
 # ---------------------------
 
@@ -723,6 +747,7 @@ AC_CONFIG_COMMANDS([pkgdb/tests/data],
 AC_CONFIG_COMMANDS([pkgdb/tests/harnesses],
   [$MKDIR_P pkgdb/tests;
    $LN_S -f "$PKGDB_ROOT/tests/harnesses" pkgdb/tests/harnesses])
+
 
 # ---------------------------------------------------------------------------- #
 

@@ -72,7 +72,7 @@ PKG_CHECK_MODULES(
 # XXX: We do NOT inherit the value of `VAR` from the `nix` configuration!
 AC_DEFUN([FLOX_INHERIT_NIX_CONFIG_DEF], [
 AC_REQUIRE([FLOX_CHECK_NIX_MODULES])
-AC_MSG_CHECKING([Nix configuration setting $1])
+AC_MSG_CHECKING([nix configuration setting $1])
 # Push current `CPPFLAGS' and language
 _flox_v_inherit_nix_config_def_pushed_CPPFLAGS="$CPPFLAGS";
 CPPFLAGS="$NIX_CPPFLAGS";

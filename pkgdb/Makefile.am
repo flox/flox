@@ -9,12 +9,15 @@
 
 ACLOCAL_AMFLAGS = -I ../build-aux/m4
 
-SUBDIRS = src/resolver include tests
+MAYBE_include =
+if ENABLE_PKGDB_DEV
+MAYBE_include += include
+endif
+SUBDIRS = src/resolver $(MAYBE_include) tests
 
 # ---------------------------------------------------------------------------- #
 
 CLEANFILES =
-
 
 # ---------------------------------------------------------------------------- #
 
@@ -123,16 +126,15 @@ DOCFILES += docs/params-to-sql.md
 DOCFILES += docs/registry.md
 DOCFILES += docs/search.md
 
+if ENABLE_PKGDB_DOCS
+
 EXTRA_DIST += $(DOCFILES)
 
-
 docs/index.html: $(SOURCES) $(HEADERS) $(DOCFILES)
-	$(RSYNC) -r --exclude bear.d/ --exclude build-aux/                \
-                --exclude bin/ --exclude lib/ --exclude 'Makefile.*'  \
+	$(RSYNC) -r --exclude bear.d/ --exclude build-aux/               \
+                --exclude bin/ --exclude lib/ --exclude 'Makefile*'  \
+	            --exclude tests/ --exclude '.gitignore'              \
                 $(PKGDB_ROOT)/ $(abs_builddir)/;
-	$(CP) -f $(PKGDB_ROOT)/README.md $(abs_builddir)/;
-	$(CP) -f $(PKGDB_ROOT)/CONTRIBUTING.md $(abs_builddir)/;
-	$(CP) -f $(PKGDB_ROOT)/Doxyfile $(abs_builddir)/;
 	$(DOXYGEN) Doxyfile;
 
 docs: docs/index.html
@@ -168,6 +170,19 @@ uninstall-docs:
 
 install-data-local: install-docs
 uninstall-local: uninstall-docs
+
+else !ENABLE_PKGDB_DOCS
+
+# Add phony targets
+docs:
+
+clean-docs:
+
+install-docs:
+
+uninstall-docs:
+
+endif !ENABLE_PKGDB_DOCS
 
 
 # ---------------------------------------------------------------------------- #

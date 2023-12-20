@@ -698,6 +698,10 @@ WITH_FLOX_CLI
 FLOX_CLI
 WITH_PKGDB
 PKGDB_BIN
+ENABLE_PKGDB_DEV_FALSE
+ENABLE_PKGDB_DEV_TRUE
+ENABLE_PKGDB_DOCS_FALSE
+ENABLE_PKGDB_DOCS_TRUE
 ENABLE_RELEASE_FALSE
 ENABLE_RELEASE_TRUE
 RELEASE_CXXFLAGS
@@ -927,6 +931,8 @@ enable_libtool_lock
 enable_debug
 enable_coverage
 enable_release
+enable_docs
+enable_dev
 with_pkgdb
 with_flox_cli
 with_set_prompt_bash_sh
@@ -1645,6 +1651,8 @@ Optional Features:
   --enable-debug          enable debug mode [default=no]
   --enable-coverage       enable coverage mode [default=no]
   --enable-release        enable release mode [default=no]
+  --enable-pkgdb-docs     build and install 'pkgdb' documentation [default=no]
+  --enable-pkgdb-dev      build and install 'pkgdb' headers [default=no]
 
 Optional Packages:
   --with-PACKAGE[=ARG]    use PACKAGE [ARG=yes]
@@ -20757,6 +20765,50 @@ fi
 
 # ---------------------------------------------------------------------------- #
 
+# Target Control
+# --------------
+# Enable/Disable sub-sets of targets.
+
+# TODO: all docs
+ENABLE_PKGDB_DOCS='';
+# Check whether --enable-docs was given.
+if test ${enable_docs+y}
+then :
+  enableval=$enable_docs; ENABLE_PKGDB_DOCS="$enableval"
+else $as_nop
+  ENABLE_PKGDB_DOCS=no
+fi
+
+ if test "$ENABLE_PKGDB_DOCS" = 'yes'; then
+  ENABLE_PKGDB_DOCS_TRUE=
+  ENABLE_PKGDB_DOCS_FALSE='#'
+else
+  ENABLE_PKGDB_DOCS_TRUE='#'
+  ENABLE_PKGDB_DOCS_FALSE=
+fi
+
+
+ENABLE_PKGDB_Dev='';
+# Check whether --enable-dev was given.
+if test ${enable_dev+y}
+then :
+  enableval=$enable_dev; ENABLE_PKGDB_DEV="$enableval"
+else $as_nop
+  ENABLE_PKGDB_DEV=no
+fi
+
+ if test "$ENABLE_PKGDB_DEV" = 'yes'; then
+  ENABLE_PKGDB_DEV_TRUE=
+  ENABLE_PKGDB_DEV_FALSE='#'
+else
+  ENABLE_PKGDB_DEV_TRUE='#'
+  ENABLE_PKGDB_DEV_FALSE=
+fi
+
+
+
+# ---------------------------------------------------------------------------- #
+
 # Sub-Systems/Modules Options
 # ---------------------------
 
@@ -21318,8 +21370,8 @@ printf "%s\n" "#define SYSTEM \"$SYSTEM\"" >>confdefs.h
 
 
 
-{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking Nix configuration setting HAVE_BOEHMGC" >&5
-printf %s "checking Nix configuration setting HAVE_BOEHMGC... " >&6; }
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking nix configuration setting HAVE_BOEHMGC" >&5
+printf %s "checking nix configuration setting HAVE_BOEHMGC... " >&6; }
 # Push current `CPPFLAGS' and language
 _flox_v_inherit_nix_config_def_pushed_CPPFLAGS="$CPPFLAGS";
 CPPFLAGS="$NIX_CPPFLAGS";
@@ -21364,8 +21416,8 @@ CPPFLAGS="$_flox_v_inherit_nix_config_def_pushed_CPPFLAGS";
 
 
 
-{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking Nix configuration setting ENABLE_S3" >&5
-printf %s "checking Nix configuration setting ENABLE_S3... " >&6; }
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking nix configuration setting ENABLE_S3" >&5
+printf %s "checking nix configuration setting ENABLE_S3... " >&6; }
 # Push current `CPPFLAGS' and language
 _flox_v_inherit_nix_config_def_pushed_CPPFLAGS="$CPPFLAGS";
 CPPFLAGS="$NIX_CPPFLAGS";
@@ -21410,8 +21462,8 @@ CPPFLAGS="$_flox_v_inherit_nix_config_def_pushed_CPPFLAGS";
 
 
 
-{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking Nix configuration setting HAVE_STRUCT_DIRENT_D_TYPE" >&5
-printf %s "checking Nix configuration setting HAVE_STRUCT_DIRENT_D_TYPE... " >&6; }
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking nix configuration setting HAVE_STRUCT_DIRENT_D_TYPE" >&5
+printf %s "checking nix configuration setting HAVE_STRUCT_DIRENT_D_TYPE... " >&6; }
 # Push current `CPPFLAGS' and language
 _flox_v_inherit_nix_config_def_pushed_CPPFLAGS="$CPPFLAGS";
 CPPFLAGS="$NIX_CPPFLAGS";
@@ -21456,8 +21508,8 @@ CPPFLAGS="$_flox_v_inherit_nix_config_def_pushed_CPPFLAGS";
 
 
 
-{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking Nix configuration setting EXCEPTION_NEEDS_THROW_SPEC" >&5
-printf %s "checking Nix configuration setting EXCEPTION_NEEDS_THROW_SPEC... " >&6; }
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking nix configuration setting EXCEPTION_NEEDS_THROW_SPEC" >&5
+printf %s "checking nix configuration setting EXCEPTION_NEEDS_THROW_SPEC... " >&6; }
 # Push current `CPPFLAGS' and language
 _flox_v_inherit_nix_config_def_pushed_CPPFLAGS="$CPPFLAGS";
 CPPFLAGS="$NIX_CPPFLAGS";
@@ -21502,8 +21554,8 @@ CPPFLAGS="$_flox_v_inherit_nix_config_def_pushed_CPPFLAGS";
 
 
 
-{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking Nix configuration setting HAVE_BOOST" >&5
-printf %s "checking Nix configuration setting HAVE_BOOST... " >&6; }
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking nix configuration setting HAVE_BOOST" >&5
+printf %s "checking nix configuration setting HAVE_BOOST... " >&6; }
 # Push current `CPPFLAGS' and language
 _flox_v_inherit_nix_config_def_pushed_CPPFLAGS="$CPPFLAGS";
 CPPFLAGS="$NIX_CPPFLAGS";
@@ -21921,6 +21973,7 @@ ac_config_commands="$ac_config_commands pkgdb/tests/data"
 ac_config_commands="$ac_config_commands pkgdb/tests/harnesses"
 
 
+
 # ---------------------------------------------------------------------------- #
 
 # Perform Substitution
@@ -22141,6 +22194,14 @@ Usually this means the macro was only invoked conditionally." "$LINENO" 5
 fi
 if test -z "${ENABLE_RELEASE_TRUE}" && test -z "${ENABLE_RELEASE_FALSE}"; then
   as_fn_error $? "conditional \"ENABLE_RELEASE\" was never defined.
+Usually this means the macro was only invoked conditionally." "$LINENO" 5
+fi
+if test -z "${ENABLE_PKGDB_DOCS_TRUE}" && test -z "${ENABLE_PKGDB_DOCS_FALSE}"; then
+  as_fn_error $? "conditional \"ENABLE_PKGDB_DOCS\" was never defined.
+Usually this means the macro was only invoked conditionally." "$LINENO" 5
+fi
+if test -z "${ENABLE_PKGDB_DEV_TRUE}" && test -z "${ENABLE_PKGDB_DEV_FALSE}"; then
+  as_fn_error $? "conditional \"ENABLE_PKGDB_DEV\" was never defined.
 Usually this means the macro was only invoked conditionally." "$LINENO" 5
 fi
 if test -z "${USE_LOCAL_PKGDB_TRUE}" && test -z "${USE_LOCAL_PKGDB_FALSE}"; then
