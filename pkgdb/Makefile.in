@@ -98,6 +98,7 @@ PRE_UNINSTALL = :
 POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
+@IS_LINUX_TRUE@am__append_1 = $(RELATIVE_RPATH_FLAG)
 bin_PROGRAMS = bin/pkgdb$(EXEEXT)
 subdir = pkgdb
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
@@ -576,9 +577,8 @@ lib_LTLIBRARIES = lib/libpkgdb.la
 lib_libpkgdb_la_CXXFLAGS = $(AM_CXXFLAGS) $(YAML_CFLAGS) \
 	$(TOML_CFLAGS)
 lib_libpkgdb_la_LDFLAGS = $(AM_LDFLAGS) \
-	'$(set_soname_option)libpkgdb$(sharedLibExt)' \
-	$(RELATIVE_RPATH_FLAG) $(NO_UNDEFINED_SYMBOLS_FLAG) \
-	$(YAML_LIBS) $(TOML_LIBS)
+	'$(set_soname_option)libpkgdb$(sharedLibExt)' $(am__append_1) \
+	$(NO_UNDEFINED_SYMBOLS_FLAG) $(YAML_LIBS) $(TOML_LIBS)
 lib_libpkgdb_la_LIBADD = src/resolver/libresolver.la
 lib_libpkgdb_la_SOURCES = src/command.cc src/eval.cc src/exceptions.cc \
 	src/expr.cc src/flake-package.cc src/flox-flake.cc \
