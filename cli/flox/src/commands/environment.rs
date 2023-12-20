@@ -294,6 +294,10 @@ pub struct Activate {
     #[bpaf(external(environment_select), fallback(Default::default()))]
     environment: EnvironmentSelect,
 
+    /// Trust the a remote environment temporarily for this activation
+    #[bpaf(long, short)]
+    trust: bool,
+
     /// Command to run interactively in the context of the environment
     #[bpaf(positional("cmd"), strict, many)]
     run_args: Vec<String>,
@@ -319,7 +323,9 @@ impl Activate {
         };
 
         if let ConcreteEnvironment::Remote(ref env) = concrete_environment {
-            ensure_environment_trust(&mut config, &flox, env).await?;
+            if !self.trust {
+                ensure_environment_trust(&mut config, &flox, env).await?;
+            }
         }
 
         let mut environment = concrete_environment.into_dyn_environment();
