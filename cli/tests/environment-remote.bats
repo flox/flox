@@ -151,6 +151,55 @@ EOF
   refute_output "not found"
 }
 
+# We need to trust the remote environment before we can activate it.
+# bats test_tags=remote,activate,trust,remote:activate:trust-required
+@test "m10.0: 'activate --remote' fails if remote environment is not trusted" {
+  make_empty_remote_env
+  "$FLOX_BIN" install hello --remote "$OWNER/test"
+
+  run "$FLOX_BIN" activate --remote "$OWNER/test"
+  assert_failure
+  assert_output --partial "Environment $OWNER/test is not trusted."
+}
+
+# We can use the `--trust` flag to trust the environment temporarily.
+# bats test_tags=remote,activate,trust,remote:activate:trust-option
+@test "m10.1: 'activate --remote --trust' succeeds" {
+  make_empty_remote_env
+  "$FLOX_BIN" install hello --remote "$OWNER/test"
+
+  run "$FLOX_BIN" activate --remote "$OWNER/test" --trust -- exit
+  assert_success
+}
+
+# We can use the `config to trust a specific remote environment.
+# The `trust` flag is not required when activating a trusted environment.
+# bats test_tags=remote,activate,trust,remote:activate:trust-config
+@test "m10.2: 'activate --remote' succeeds if trusted by config" {
+  make_empty_remote_env
+  "$FLOX_BIN" install hello --remote "$OWNER/test"
+
+  run "$FLOX_BIN" config --set "trusted_environments.\'$OWNER/test\'" "trust"
+  run "$FLOX_BIN" activate --remote "$OWNER/test" -- exit
+  assert_success
+}
+
+# We can use the `config to trust a specific remote environment.
+# The `trust` flag is not required when activating a trusted environment.
+# bats test_tags=remote,activate,trust,remote:activate:trust-config
+@test "m10.3: 'activate --remote' fails if denied by config, --trust overrides" {
+  make_empty_remote_env
+  "$FLOX_BIN" install hello --remote "$OWNER/test"
+
+  run "$FLOX_BIN" config --set "trusted_environments.\'$OWNER/test\'" "deny"
+
+  run "$FLOX_BIN" activate --remote "$OWNER/test" -- exit
+  assert_failure
+
+  run "$FLOX_BIN" activate --remote "$OWNER/test" --trust -- exit
+  assert_success
+}
+
 # ---------------------------------------------------------------------------- #
 
 @test "sanity check upgrade works for remote environments" {
