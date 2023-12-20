@@ -166,7 +166,7 @@
         };
         settings = {
           alejandra.verbosity = "quiet";
-          alejandra.check = true;  # Only check formatting, don't rewrite
+          alejandra.check = true; # Only check formatting, don't rewrite
           rust.cargoManifestPath = "cli/Cargo.toml";
         };
         tools = {
