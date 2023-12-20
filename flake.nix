@@ -131,7 +131,7 @@
             enable = true;
             name = "autotools bootstrap";
             entry = "./bootstrap.sh";
-            files = "\\.(ac|am|m4)";
+            files = "\\.(ac|am|m4)$";
             pass_filenames = false;
           };
           clang-format = {
@@ -158,12 +158,15 @@
           };
           clippy.enable = true;
           commitizen.enable = true;
-          shfmt.enable = false;
+          shfmt = {
+            enable = false;
+            exclude = ["build-aux/.*" "configure"];
+          };
           # shellcheck.enable = true; # disabled until we have time to fix all the warnings
         };
         settings = {
           alejandra.verbosity = "quiet";
-          alejandra.check = true;
+          alejandra.check = true;  # Only check formatting, don't rewrite
           rust.cargoManifestPath = "cli/Cargo.toml";
         };
         tools = {
