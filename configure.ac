@@ -544,6 +544,8 @@ FLOX_INHERIT_NIX_CONFIG_DEF([HAVE_BOOST])
 #   This is suitable for `bin/', `libexec/', `lib/', and `tests/' directory
 #   members referring to binaries in the same sub-system; but is NOT suitable
 #   for linking against libraries in other sub-systems.
+#   NOTE: On Darwin `libtool' will handle `RPATH' for us, we only use this
+#   variable on Linux.
 # - `set_rpath_option' is used to set an absolute `R[UN]PATH' for a library.
 #   This form is suitable for referring to binaries in other sub-systems.
 #   It is intended to be used as:

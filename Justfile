@@ -34,12 +34,13 @@ bootstrap:
 # ---------------------------------------------------------------------------- #
 
 # Prepare the build area and lock configuration options.
-configure *args='': bootstrap
+configure *args='':
+    if ! [[ -x ./configure ]]; then just boostrap; fi
     mkdir -p build;
-    pushd build;                           \
-    ../configure --prefix="$PWD/out" "$@"  \
-                 --disable-static          \
-                 ;                         \
+    pushd build;                      \
+    ../configure --prefix="$PWD/out"  \
+                 --disable-static     \
+                 "$@";                \
     popd;
 
 
@@ -54,22 +55,22 @@ configure *args='': bootstrap
 
 # Build the compilation database
 build-cdb *args='':
-    if ! -x build/config.status; then just configure "$@"; fi
+    if ! [[ -x build/config.status ]]; then just configure "$@"; fi
     make -C build -j cdb "$@";
 
 # Build only pkgdb
 build-pkgdb *args='':
-    if ! -x build/config.status; then just configure "$@"; fi
+    if ! [[ -x build/config.status ]]; then just configure "$@"; fi
     make -C build -j pkgdb "$@"
 
 # Build only flox
 build-cli *args='':
-    if ! -x build/config.status; then just configure "$@"; fi
+    if ! [[ -x build/config.status ]]; then just configure "$@"; fi
     make -C build -j cli "$@"
 
 # Build the binaries
 build *args='':
-    if ! -x build/config.status; then just configure "$@"; fi
+    if ! [[ -x build/config.status ]]; then just configure "$@"; fi
     make -C build -j "$@"
 
 

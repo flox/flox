@@ -27,7 +27,9 @@ lib_libpkgdb_la_CXXFLAGS += $(TOML_CFLAGS)
 
 lib_libpkgdb_la_LDFLAGS =  $(AM_LDFLAGS)
 lib_libpkgdb_la_LDFLAGS += '$(set_soname_option)libpkgdb$(sharedLibExt)'
+if IS_LINUX
 lib_libpkgdb_la_LDFLAGS += $(RELATIVE_RPATH_FLAG)
+endif IS_LINUX
 lib_libpkgdb_la_LDFLAGS += $(NO_UNDEFINED_SYMBOLS_FLAG)
 lib_libpkgdb_la_LDFLAGS += $(YAML_LIBS)
 lib_libpkgdb_la_LDFLAGS += $(TOML_LIBS)
