@@ -3,7 +3,6 @@ use std::path::{Path, PathBuf};
 use std::{fs, io};
 
 use flox_types::version::Version;
-use itertools::Diff;
 use log::debug;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
