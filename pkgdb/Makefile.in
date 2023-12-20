@@ -100,6 +100,7 @@ build_triplet = @build@
 host_triplet = @host@
 @IS_LINUX_TRUE@am__append_1 = $(RELATIVE_RPATH_FLAG)
 bin_PROGRAMS = bin/pkgdb$(EXEEXT)
+@IS_LINUX_TRUE@am__append_2 = $(RELATIVE_RPATH_FLAG)
 subdir = pkgdb
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/build-aux/m4/bear.m4 \
@@ -188,7 +189,8 @@ am_bin_pkgdb_OBJECTS = src/main.$(OBJEXT) src/repl.$(OBJEXT) \
 	src/buildenv/command.$(OBJEXT)
 bin_pkgdb_OBJECTS = $(am_bin_pkgdb_OBJECTS)
 am__DEPENDENCIES_1 =
-bin_pkgdb_DEPENDENCIES = $(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
+@IS_LINUX_TRUE@am__DEPENDENCIES_2 = $(am__DEPENDENCIES_1)
+bin_pkgdb_DEPENDENCIES = $(am__DEPENDENCIES_1) $(am__DEPENDENCIES_2) \
 	lib/libpkgdb.la
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
@@ -590,7 +592,7 @@ lib_libpkgdb_la_SOURCES = src/command.cc src/eval.cc src/exceptions.cc \
 	src/pkgdb/primops.cc src/pkgdb/read.cc src/pkgdb/write.cc \
 	src/pkgdb/schemas.hh src/buildenv/buildenv.cc \
 	src/buildenv/realise.cc
-bin_pkgdb_LDADD = $(AM_LDFLAGS) $(RELATIVE_RPATH_FLAG) lib/libpkgdb.la
+bin_pkgdb_LDADD = $(AM_LDFLAGS) $(am__append_2) lib/libpkgdb.la
 bin_pkgdb_SOURCES = src/main.cc src/repl.cc src/parse/command.cc \
 	src/pkgdb/command.cc src/pkgdb/get.cc src/pkgdb/scrape.cc \
 	src/resolver/command.cc src/search/command.cc \
