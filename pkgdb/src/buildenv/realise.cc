@@ -273,6 +273,30 @@ createFloxEnv( nix::EvalState &     state,
   auto tempDir = std::filesystem::path( nix::createTempDir() );
   std::filesystem::create_directories( tempDir / "activate" );
 
+  /* Add environment variables.
+   * Read environment variables from the manifest and add them as exports to the
+   * activate script. */
+  if ( auto vars = lockfile.getManifest().getManifestRaw().vars )
+    {
+
+      for ( auto [name, value] : vars.value() )
+        {
+          /* Double quote value and replace " with \".
+           * Note that we could instead do something similar to what
+           * nixpkgs.lib.escapeShellArg does to disable these variables
+           * dynamically expanding at runtime. */
+          size_t i = 0;
+          while ( ( i = value.find( "\"", i ) ) != std::string::npos )
+            {
+              value.replace( i, 1, "\\\"" );
+              i += 2;
+            }
+
+          commonActivate << nix::fmt( "export %s=\"%s\"", name, value )
+                         << std::endl;
+        }
+    }
+
   /* Add hook script.
    * Write hook script to a temporary file and copy it to the environment.
    * Add source command to the activate script. */
@@ -305,30 +329,6 @@ createFloxEnv( nix::EvalState &     state,
                                         std::filesystem::perms::owner_exec,
                                         std::filesystem::perm_options::add );
           commonActivate << "source \"$FLOX_ENV/activate/hook.sh\""
-                         << std::endl;
-        }
-    }
-
-  /* Add environment variables.
-   * Read environment variables from the manifest and add them as exports to the
-   * activate script. */
-  if ( auto vars = lockfile.getManifest().getManifestRaw().vars )
-    {
-
-      for ( auto [name, value] : vars.value() )
-        {
-          /* Double quote value and replace " with \".
-           * Note that we could instead do something similar to what
-           * nixpkgs.lib.escapeShellArg does to disable these variables
-           * dynamically expanding at runtime. */
-          size_t i = 0;
-          while ( ( i = value.find( "\"", i ) ) != std::string::npos )
-            {
-              value.replace( i, 1, "\\\"" );
-              i += 2;
-            }
-
-          commonActivate << nix::fmt( "export %s=\"%s\"", name, value )
                          << std::endl;
         }
     }
