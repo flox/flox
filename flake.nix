@@ -163,7 +163,7 @@
         };
         settings = {
           alejandra.verbosity = "quiet";
-          alehabdra.check = true;
+          alejandra.check = true;
           rust.cargoManifestPath = "cli/Cargo.toml";
         };
         tools = {
