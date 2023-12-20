@@ -208,7 +208,7 @@ EOF
 # ---------------------------------------------------------------------------- #
 
 # bats test_tags=activate,activate:envVar-before-hook:zsh
-@test "zsh: activate sets env var" {
+@test "zsh and bash: activate sets env var before hook" {
   cat << "EOF" >> "$PROJECT_DIR/.flox/env/manifest.toml"
 [vars]
 foo = "$bar"
@@ -221,6 +221,9 @@ EOF
   # current euid. I'm not sure if we should change that, but for now just set
   # USER to REAL_USER.
   SHELL=zsh bar=baz NO_COLOR=1 run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -- exit
+  assert_success
+  assert_output --partial "baz"
+  SHELL=bash bar=baz NO_COLOR=1 run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -- exit
   assert_success
   assert_output --partial "baz"
 }
