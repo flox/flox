@@ -724,8 +724,8 @@ _LT_CONFIG_SAVE_COMMANDS([
     fi
 
     cfgfile=${ofile}T
-    trap "$RM -f \"$cfgfile\"; exit 1" 1 2 15
-    $RM -f "$cfgfile"
+    trap "$RM \"$cfgfile\"; exit 1" 1 2 15
+    $RM "$cfgfile"
 
     cat <<_LT_EOF >> "$cfgfile"
 #! $SHELL
