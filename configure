@@ -19995,23 +19995,24 @@ fi
 
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for C++ compiler toolchain" >&5
 printf %s "checking for C++ compiler toolchain... " >&6; }
-if test ${ac_cv_cxx_toolchain+y}
+if test ${flox_cv_cxx_toolchain+y}
 then :
   printf %s "(cached) " >&6
 else $as_nop
   case "$( $CXX --version|$HEAD -n1; )" in #(
   g++\ *) :
-    ac_cv_cxx_toolchain=gcc ;; #(
+    flox_cv_cxx_toolchain=gcc ;; #(
   clang\ version\ *) :
-    ac_cv_cxx_toolchain=clang ;; #(
+    flox_cv_cxx_toolchain=clang ;; #(
   *) :
     as_fn_error $? "Unsupported C++ compiler: $CXX" "$LINENO" 5 ;;
 esac
    { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $ac_cv_cxx_toolchain" >&5
 printf "%s\n" "$ac_cv_cxx_toolchain" >&6; }
 fi
-{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $ac_cv_cxx_toolchain" >&5
-printf "%s\n" "$ac_cv_cxx_toolchain" >&6; }
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $flox_cv_cxx_toolchain" >&5
+printf "%s\n" "$flox_cv_cxx_toolchain" >&6; }
+CXX_TOOLCHAIN="$flox_cv_cxx_toolchain"
 
  if test "$CXX_TOOLCHAIN" = 'gcc'; then
   IS_GCC_TRUE=

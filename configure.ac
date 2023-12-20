@@ -262,13 +262,13 @@ AC_SUBST([ARCH])
 AM_CONDITIONAL([IS_X86_64],  [test "$ARCH" = 'x86_64'])
 AM_CONDITIONAL([IS_AARCH64], [test "$ARCH" = 'aarch64'])
 
-AC_CACHE_CHECK([for C++ compiler toolchain], [ac_cv_cxx_toolchain],
+AC_CACHE_CHECK([for C++ compiler toolchain], [flox_cv_cxx_toolchain],
   [AS_CASE(["$( $CXX --version|$HEAD -n1; )"],
-     [g++\ *],            [ac_cv_cxx_toolchain=gcc],
-     [clang\ version\ *], [ac_cv_cxx_toolchain=clang],
+     [g++\ *],            [flox_cv_cxx_toolchain=gcc],
+     [clang\ version\ *], [flox_cv_cxx_toolchain=clang],
      [AC_MSG_ERROR([Unsupported C++ compiler: $CXX])])
    AC_MSG_RESULT([$ac_cv_cxx_toolchain])])
-AC_SUBST([CXX_TOOLCHAIN])
+AC_SUBST([CXX_TOOLCHAIN], ["$flox_cv_cxx_toolchain"])
 AM_CONDITIONAL([IS_GCC],   [test "$CXX_TOOLCHAIN" = 'gcc'])
 AM_CONDITIONAL([IS_CLANG], [test "$CXX_TOOLCHAIN" = 'clang'])
 
