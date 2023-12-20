@@ -931,8 +931,8 @@ enable_libtool_lock
 enable_debug
 enable_coverage
 enable_release
-enable_docs
-enable_dev
+enable_pkgdb_docs
+enable_pkgdb_dev
 with_pkgdb
 with_flox_cli
 with_set_prompt_bash_sh
@@ -20771,10 +20771,10 @@ fi
 
 # TODO: all docs
 ENABLE_PKGDB_DOCS='';
-# Check whether --enable-docs was given.
-if test ${enable_docs+y}
+# Check whether --enable-pkgdb-docs was given.
+if test ${enable_pkgdb_docs+y}
 then :
-  enableval=$enable_docs; ENABLE_PKGDB_DOCS="$enableval"
+  enableval=$enable_pkgdb_docs; ENABLE_PKGDB_DOCS="$enableval"
 else $as_nop
   ENABLE_PKGDB_DOCS=no
 fi
@@ -20789,10 +20789,10 @@ fi
 
 
 ENABLE_PKGDB_Dev='';
-# Check whether --enable-dev was given.
-if test ${enable_dev+y}
+# Check whether --enable-pkgdb-dev was given.
+if test ${enable_pkgdb_dev+y}
 then :
-  enableval=$enable_dev; ENABLE_PKGDB_DEV="$enableval"
+  enableval=$enable_pkgdb_dev; ENABLE_PKGDB_DEV="$enableval"
 else $as_nop
   ENABLE_PKGDB_DEV=no
 fi

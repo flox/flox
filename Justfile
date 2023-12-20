@@ -65,7 +65,9 @@ build-pkgdb *args='':
 
 # Build pkgdb documentation
 build-pkgdb-docs *args='':
-    if ! [[ -x build/config.status ]]; then just configure "$@"; fi
+    if ! [[ -x build/config.status ]]; then     \
+      just configure --enable-pkgdb-docs "$@";  \
+    fi
     make -C build/pkgdb -j docs "$@"
 
 # Build only flox

@@ -415,7 +415,7 @@ AS_IF([test "$ENABLE_RELEASE" == 'yes'],
 
 # TODO: all docs
 ENABLE_PKGDB_DOCS='';
-AC_ARG_ENABLE([docs],
+AC_ARG_ENABLE([pkgdb-docs],
   [AS_HELP_STRING([--enable-pkgdb-docs],
     [build and install 'pkgdb' documentation @<:@default=no@:>@])],
   [ENABLE_PKGDB_DOCS="$enableval"],
@@ -423,7 +423,7 @@ AC_ARG_ENABLE([docs],
 AM_CONDITIONAL([ENABLE_PKGDB_DOCS], [test "$ENABLE_PKGDB_DOCS" = 'yes'])
 
 ENABLE_PKGDB_Dev='';
-AC_ARG_ENABLE([dev],
+AC_ARG_ENABLE([pkgdb-dev],
   [AS_HELP_STRING([--enable-pkgdb-dev],
     [build and install 'pkgdb' headers @<:@default=no@:>@])],
   [ENABLE_PKGDB_DEV="$enableval"],
