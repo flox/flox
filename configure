@@ -21626,10 +21626,9 @@ case "$CXX_TOOLCHAIN" in #(
   gcc) :
     NO_UNDEFINED_SYMBOLS_FLAG='-Wl,--no-undefined' ;; #(
   clang) :
-    NO_UNDEFINED_SYMBOLS_FLAG='-Wl,-undefined,error'
-  as_fn_error $? "Unsupported C++ compiler toolchain: $CXX_TOOLCHAIN" "$LINENO" 5 ;; #(
+    NO_UNDEFINED_SYMBOLS_FLAG='-Wl,-undefined,error' ;; #(
   *) :
-     ;;
+    as_fn_error $? "Unsupported C++ compiler toolchain: $CXX_TOOLCHAIN" "$LINENO" 5 ;;
 esac
 
 
