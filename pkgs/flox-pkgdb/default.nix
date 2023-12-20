@@ -18,6 +18,7 @@
   updateAutotoolsGnuConfigScriptsHook,
   pkg-config,
   remake,
+  rsync,
   semver,
   sqlite,
   sqlite3pp,
@@ -124,6 +125,7 @@ in
         gnugrep
         gnumake
         gnused
+        rsync
       ];
 
       buildInputs = [

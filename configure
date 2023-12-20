@@ -19999,17 +19999,17 @@ if test ${flox_cv_cxx_toolchain+y}
 then :
   printf %s "(cached) " >&6
 else $as_nop
-  case "$( $CXX --version|$HEAD -n1; )" in #(
+  case "$( $CXX --version 2>/dev/null|$HEAD -n1; )" in #(
   g++\ *) :
     flox_cv_cxx_toolchain=gcc ;; #(
   clang\ version\ *) :
     flox_cv_cxx_toolchain=clang ;; #(
   *) :
     as_fn_error $? "Unsupported C++ compiler: '$CXX'.
-        Version string was: '$( $CXX --version|$HEAD -n1; )'" "$LINENO" 5 ;;
+      Version string was: '$( $CXX --version|$HEAD -n1; )'" "$LINENO" 5 ;;
 esac
-   { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $ac_cv_cxx_toolchain" >&5
-printf "%s\n" "$ac_cv_cxx_toolchain" >&6; }
+   { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: \"$ac_cv_cxx_toolchain\"" >&5
+printf "%s\n" "\"$ac_cv_cxx_toolchain\"" >&6; }
 fi
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $flox_cv_cxx_toolchain" >&5
 printf "%s\n" "$flox_cv_cxx_toolchain" >&6; }
@@ -20664,8 +20664,6 @@ else
 fi
 
 
-echo "ENABLE_DEBUG: $ENABLE_DEBUG" >&2;
-
 if test "$ENABLE_DEBUG" != 'no'
 then :
 
@@ -21307,8 +21305,8 @@ fi
 printf %s "checking Nix system pair... " >&6; }
 
 SYSTEM="$OS-$ARCH";
-{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $SYSTEM" >&5
-printf "%s\n" "$SYSTEM" >&6; }
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: \"$SYSTEM\"" >&5
+printf "%s\n" "\"$SYSTEM\"" >&6; }
 
 
 
