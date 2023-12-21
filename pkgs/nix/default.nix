@@ -25,8 +25,9 @@ nixVersions.nix_2_17.overrideAttrs (prev: {
 
   # FIXME:
   # We hit a failure on `tests/bash-profile.sh' related to `uname'.
-  # This seems to be a known issue on OUR `aarch64-linux' runner.
-  dontCheck = stdenv.hostPlatform.system == "aarch64-linux";
+  # This seems to be a known issue on OUR Darwin runners.
+  doCheck = stdenv.isLinux;
+  doInstallCheck = stdenv.isLinux;
 
   postFixup = ''
     # Generate a `sed' pattern to fix up public header `#includes'.
