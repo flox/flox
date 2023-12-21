@@ -1088,7 +1088,11 @@ impl Pull {
         if dot_flox_path.exists() {
             bail!("Cannot pull a new environment into an existing one")
         }
-        let pointer = ManagedPointer::from(env_ref);
+        let pointer = ManagedPointer::new(
+            env_ref.owner().clone(),
+            env_ref.name().clone(),
+            &flox.floxhub,
+        );
 
         let pointer_content =
             serde_json::to_string_pretty(&pointer).context("Could not serialize pointer")?;

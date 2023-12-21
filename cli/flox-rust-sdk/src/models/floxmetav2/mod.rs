@@ -215,12 +215,16 @@ mod tests {
         let _ = env_logger::try_init();
 
         let (mut flox, tempdir) = flox_instance();
-
-        let pointer = ManagedPointer::new("floxtest".parse().unwrap(), "test".parse().unwrap());
         let source_path = tempdir.path().join("source");
 
         flox.floxhub_token = Some("no token needed here".to_string());
         flox.floxhub_host = format!("file://{}", source_path.to_string_lossy());
+
+        let pointer = ManagedPointer::new(
+            "floxtest".parse().unwrap(),
+            "test".parse().unwrap(),
+            &floxhub,
+        );
 
         create_fake_floxmeta(&source_path, &flox, &pointer);
 

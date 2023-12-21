@@ -830,7 +830,7 @@ impl ManagedEnvironment {
         // path of the original .flox directory
         let dot_flox_path = path_environment.path.clone();
 
-        let pointer = ManagedPointer::new(owner, path_environment.name());
+        let pointer = ManagedPointer::new(owner, path_environment.name(), &flox.floxhub);
 
         let checkedout_floxmeta_path = tempfile::tempdir_in(&flox.temp_dir).unwrap().into_path();
         let temp_floxmeta_path = tempfile::tempdir_in(&flox.temp_dir).unwrap().into_path();
@@ -988,8 +988,6 @@ mod test {
     use std::str::FromStr;
     use std::time::Duration;
 
-    use once_cell::sync::Lazy;
-
     use super::*;
     use crate::flox::tests::flox_instance;
     use crate::models::environment::{DOT_FLOX, ENVIRONMENT_POINTER_FILENAME};
@@ -997,11 +995,17 @@ mod test {
     use crate::providers::git::tests::commit_file;
     use crate::providers::git::{GitCommandProvider, GitProvider};
 
-    static TEST_POINTER: Lazy<ManagedPointer> = Lazy::new(|| ManagedPointer {
-        owner: EnvironmentOwner::from_str("owner").unwrap(),
-        name: EnvironmentName::from_str("name").unwrap(),
-        version: Version::<1> {},
-    });
+    fn make_test_pointer(remote_path: &Path) -> ManagedPointer {
+        ManagedPointer {
+            owner: EnvironmentOwner::from_str("owner").unwrap(),
+            name: EnvironmentName::from_str("name").unwrap(),
+            floxhub_web_url: Url::from_str(&format!("file://{}", remote_path.to_string_lossy()))
+                .unwrap(),
+            floxhub_git_url: Url::from_str(&format!("file://{}", remote_path.to_string_lossy()))
+                .unwrap(),
+            version: Version::<1> {},
+        }
+    }
 
     fn create_dot_flox(
         dot_flox_path: &Path,
@@ -1026,8 +1030,13 @@ mod test {
         CanonicalPath::new(dot_flox_path).unwrap()
     }
 
-    fn create_floxmeta(flox: &Flox, remote_path: &Path, branch: &str) -> FloxmetaV2 {
-        let user_floxmeta_dir = floxmeta_dir(flox, &TEST_POINTER.owner);
+    fn create_floxmeta(
+        flox: &Flox,
+        remote_path: &Path,
+        test_pointer: &ManagedPointer,
+        branch: &str,
+    ) -> FloxmetaV2 {
+        let user_floxmeta_dir = floxmeta_dir(flox, &test_pointer.owner);
         fs::create_dir_all(&user_floxmeta_dir).unwrap();
         GitCommandProvider::clone_branch(
             format!("file://{}", remote_path.to_string_lossy()),
@@ -1037,7 +1046,7 @@ mod test {
         )
         .unwrap();
 
-        FloxmetaV2::open(flox, &TEST_POINTER).unwrap()
+        FloxmetaV2::open(flox, test_pointer).unwrap()
     }
 
     /// Test that when ensure_locked has input state of:
@@ -1054,16 +1063,20 @@ mod test {
         flox.floxhub_token = Some("DUMMY_TOKEN".to_string());
 
         // create a mock remote
-        let remote_path = flox.temp_dir.join("remote");
-        fs::create_dir(&remote_path).unwrap();
+        let remote_base_path = flox.temp_dir.join("remote");
+        let test_pointer = make_test_pointer(&remote_base_path);
+        let remote_path = remote_base_path
+            .join(test_pointer.owner.as_str())
+            .join("floxmeta");
+        fs::create_dir_all(&remote_path).unwrap();
         let remote = GitCommandProvider::init(&remote_path, false).unwrap();
 
-        let branch = remote_branch_name(&flox.system, &TEST_POINTER);
+        let branch = remote_branch_name(&flox.system, &test_pointer);
         remote.checkout(&branch, true).unwrap();
         commit_file(&remote, "file 1");
 
         // create a mock floxmeta
-        let floxmeta = create_floxmeta(&flox, &remote_path, &branch);
+        let floxmeta = create_floxmeta(&flox, &remote_path, &test_pointer, &branch);
 
         // add a second commit to the remote
         commit_file(&remote, "file 2");
@@ -1071,9 +1084,9 @@ mod test {
 
         // create a .flox directory
         let dot_flox_path = flox.temp_dir.join(DOT_FLOX);
-        let dot_flox_path = create_dot_flox(&dot_flox_path, &TEST_POINTER, None);
+        let dot_flox_path = create_dot_flox(&dot_flox_path, &test_pointer, None);
 
-        ManagedEnvironment::ensure_locked(&flox, &TEST_POINTER, &dot_flox_path, &floxmeta).unwrap();
+        ManagedEnvironment::ensure_locked(&flox, &test_pointer, &dot_flox_path, &floxmeta).unwrap();
 
         let lock_path = dot_flox_path.join(GENERATION_LOCK_FILENAME);
         let lock: GenerationLock = serde_json::from_slice(&fs::read(lock_path).unwrap()).unwrap();
@@ -1100,17 +1113,21 @@ mod test {
         flox.floxhub_token = Some("DUMMY_TOKEN".to_string());
 
         // create a mock remote
-        let remote_path = flox.temp_dir.join("remote");
-        fs::create_dir(&remote_path).unwrap();
+        let remote_base_path = flox.temp_dir.join("remote");
+        let test_pointer = make_test_pointer(&remote_base_path);
+        let remote_path = remote_base_path
+            .join(test_pointer.owner.as_str())
+            .join("floxmeta");
+        fs::create_dir_all(&remote_path).unwrap();
         let remote = GitCommandProvider::init(&remote_path, false).unwrap();
 
-        let branch = remote_branch_name(&flox.system, &TEST_POINTER);
+        let branch = remote_branch_name(&flox.system, &test_pointer);
         remote.checkout(&branch, true).unwrap();
         commit_file(&remote, "file 1");
         let hash_1 = remote.branch_hash(&branch).unwrap();
 
         // create a mock floxmeta
-        let floxmeta = create_floxmeta(&flox, &remote_path, &branch);
+        let floxmeta = create_floxmeta(&flox, &remote_path, &test_pointer, &branch);
 
         // create a .flox directory
         let lock = GenerationLock {
@@ -1119,9 +1136,9 @@ mod test {
             version: Version::<1> {},
         };
         let dot_flox_path = flox.temp_dir.join(DOT_FLOX);
-        let dot_flox_path = create_dot_flox(&dot_flox_path, &TEST_POINTER, Some(&lock));
+        let dot_flox_path = create_dot_flox(&dot_flox_path, &test_pointer, Some(&lock));
 
-        ManagedEnvironment::ensure_locked(&flox, &TEST_POINTER, &dot_flox_path, &floxmeta).unwrap();
+        ManagedEnvironment::ensure_locked(&flox, &test_pointer, &dot_flox_path, &floxmeta).unwrap();
 
         let lock_path = dot_flox_path.join(GENERATION_LOCK_FILENAME);
         let lock: GenerationLock = serde_json::from_slice(&fs::read(lock_path).unwrap()).unwrap();
@@ -1148,16 +1165,20 @@ mod test {
         flox.floxhub_token = Some("DUMMY_TOKEN".to_string());
 
         // create a mock remote
-        let remote_path = flox.temp_dir.join("remote");
-        fs::create_dir(&remote_path).unwrap();
+        let remote_base_path = flox.temp_dir.join("remote");
+        let test_pointer = make_test_pointer(&remote_base_path);
+        let remote_path = remote_base_path
+            .join(test_pointer.owner.as_str())
+            .join("floxmeta");
+        fs::create_dir_all(&remote_path).unwrap();
         let remote = GitCommandProvider::init(&remote_path, false).unwrap();
 
-        let branch = remote_branch_name(&flox.system, &TEST_POINTER);
+        let branch = remote_branch_name(&flox.system, &test_pointer);
         remote.checkout(&branch, true).unwrap();
         commit_file(&remote, "file 1");
 
         // create a mock floxmeta
-        let floxmeta = create_floxmeta(&flox, &remote_path, &branch);
+        let floxmeta = create_floxmeta(&flox, &remote_path, &test_pointer, &branch);
 
         // add a second commit to the remote
         commit_file(&remote, "file 2");
@@ -1174,9 +1195,19 @@ mod test {
             version: Version::<1> {},
         };
         let dot_flox_path = flox.temp_dir.join(DOT_FLOX);
-        let dot_flox_path = create_dot_flox(&dot_flox_path, &TEST_POINTER, Some(&lock));
+        let dot_flox_path = create_dot_flox(
+            &dot_flox_path,
+            &make_test_pointer(&remote_path),
+            Some(&lock),
+        );
 
-        ManagedEnvironment::ensure_locked(&flox, &TEST_POINTER, &dot_flox_path, &floxmeta).unwrap();
+        ManagedEnvironment::ensure_locked(
+            &flox,
+            &make_test_pointer(&remote_path),
+            &dot_flox_path,
+            &floxmeta,
+        )
+        .unwrap();
 
         let lock_path = dot_flox_path.join(GENERATION_LOCK_FILENAME);
         let lock: GenerationLock = serde_json::from_slice(&fs::read(lock_path).unwrap()).unwrap();
@@ -1203,16 +1234,20 @@ mod test {
         flox.floxhub_token = Some("DUMMY_TOKEN".to_string());
 
         // create a mock remote
-        let remote_path = flox.temp_dir.join("remote");
-        fs::create_dir(&remote_path).unwrap();
+        let remote_base_path = flox.temp_dir.join("remote");
+        let test_pointer = make_test_pointer(&remote_base_path);
+        let remote_path = remote_base_path
+            .join(test_pointer.owner.as_str())
+            .join("floxmeta");
+        fs::create_dir_all(&remote_path).unwrap();
         let remote = GitCommandProvider::init(&remote_path, false).unwrap();
 
-        let branch = remote_branch_name(&flox.system, &TEST_POINTER);
+        let branch = remote_branch_name(&flox.system, &test_pointer);
         remote.checkout(&branch, true).unwrap();
         commit_file(&remote, "file 1");
 
         // create a mock floxmeta
-        let floxmeta = create_floxmeta(&flox, &remote_path, &branch);
+        let floxmeta = create_floxmeta(&flox, &remote_path, &test_pointer, &branch);
 
         // add a second branch to the remote
         remote.checkout("branch_2", true).unwrap();
@@ -1226,10 +1261,10 @@ mod test {
             version: Version::<1> {},
         };
         let dot_flox_path = flox.temp_dir.join(DOT_FLOX);
-        let dot_flox_path = create_dot_flox(&dot_flox_path, &TEST_POINTER, Some(&lock));
+        let dot_flox_path = create_dot_flox(&dot_flox_path, &test_pointer, Some(&lock));
 
         assert!(matches!(
-            ManagedEnvironment::ensure_locked(&flox, &TEST_POINTER, &dot_flox_path, &floxmeta),
+            ManagedEnvironment::ensure_locked(&flox, &test_pointer, &dot_flox_path, &floxmeta),
             Err(ManagedEnvironmentError::RevDoesNotExist)
         ));
     }
@@ -1247,16 +1282,20 @@ mod test {
         flox.floxhub_token = Some("DUMMY_TOKEN".to_string());
 
         // create a mock remote
-        let remote_path = flox.temp_dir.join("remote");
-        fs::create_dir(&remote_path).unwrap();
+        let remote_base_path = flox.temp_dir.join("remote");
+        let test_pointer = make_test_pointer(&remote_base_path);
+        let remote_path = remote_base_path
+            .join(test_pointer.owner.as_str())
+            .join("floxmeta");
+        fs::create_dir_all(&remote_path).unwrap();
         let remote = GitCommandProvider::init(&remote_path, false).unwrap();
 
-        let branch = remote_branch_name(&flox.system, &TEST_POINTER);
+        let branch = remote_branch_name(&flox.system, &test_pointer);
         remote.checkout(&branch, true).unwrap();
         commit_file(&remote, "file 1");
 
         // create a mock floxmeta
-        let floxmeta = create_floxmeta(&flox, &remote_path, &branch);
+        let floxmeta = create_floxmeta(&flox, &remote_path, &test_pointer, &branch);
 
         // add a second commit to the remote
         commit_file(&remote, "file 2");
@@ -1269,10 +1308,10 @@ mod test {
             version: Version::<1> {},
         };
         let dot_flox_path = flox.temp_dir.join(DOT_FLOX);
-        let dot_flox_path = create_dot_flox(&dot_flox_path, &TEST_POINTER, Some(&lock));
+        let dot_flox_path = create_dot_flox(&dot_flox_path, &test_pointer, Some(&lock));
 
         assert!(matches!(
-            ManagedEnvironment::ensure_locked(&flox, &TEST_POINTER, &dot_flox_path, &floxmeta),
+            ManagedEnvironment::ensure_locked(&flox, &test_pointer, &dot_flox_path, &floxmeta),
             Err(ManagedEnvironmentError::RevDoesNotExist)
         ));
 
@@ -1292,17 +1331,21 @@ mod test {
         flox.floxhub_token = Some("DUMMY_TOKEN".to_string());
 
         // create a mock remote
-        let remote_path = flox.temp_dir.join("remote");
-        fs::create_dir(&remote_path).unwrap();
+        let remote_base_path = flox.temp_dir.join("remote");
+        let test_pointer = make_test_pointer(&remote_base_path);
+        let remote_path = remote_base_path
+            .join(test_pointer.owner.as_str())
+            .join("floxmeta");
+        fs::create_dir_all(&remote_path).unwrap();
         let remote = GitCommandProvider::init(&remote_path, false).unwrap();
 
-        let branch = remote_branch_name(&flox.system, &TEST_POINTER);
+        let branch = remote_branch_name(&flox.system, &test_pointer);
         remote.checkout(&branch, true).unwrap();
         commit_file(&remote, "file 1");
         let hash_1 = remote.branch_hash(&branch).unwrap();
 
         // create a mock floxmeta
-        let floxmeta = create_floxmeta(&flox, &remote_path, &branch);
+        let floxmeta = create_floxmeta(&flox, &remote_path, &test_pointer, &branch);
 
         // create a .flox directory
         let lock = GenerationLock {
@@ -1311,9 +1354,9 @@ mod test {
             version: Version::<1> {},
         };
         let dot_flox_path = flox.temp_dir.join(DOT_FLOX);
-        let dot_flox_path = create_dot_flox(&dot_flox_path, &TEST_POINTER, Some(&lock));
+        let dot_flox_path = create_dot_flox(&dot_flox_path, &test_pointer, Some(&lock));
 
-        ManagedEnvironment::ensure_locked(&flox, &TEST_POINTER, &dot_flox_path, &floxmeta).unwrap();
+        ManagedEnvironment::ensure_locked(&flox, &test_pointer, &dot_flox_path, &floxmeta).unwrap();
 
         let lock_path = dot_flox_path.join(GENERATION_LOCK_FILENAME);
 
@@ -1338,17 +1381,21 @@ mod test {
         flox.floxhub_token = Some("DUMMY_TOKEN".to_string());
 
         // create a mock remote
-        let remote_path = flox.temp_dir.join("remote");
-        fs::create_dir(&remote_path).unwrap();
+        let remote_base_path = flox.temp_dir.join("remote");
+        let test_pointer = make_test_pointer(&remote_base_path);
+        let remote_path = remote_base_path
+            .join(test_pointer.owner.as_str())
+            .join("floxmeta");
+        fs::create_dir_all(&remote_path).unwrap();
         let remote = GitCommandProvider::init(&remote_path, false).unwrap();
 
-        let branch = remote_branch_name(&flox.system, &TEST_POINTER);
+        let branch = remote_branch_name(&flox.system, &test_pointer);
         remote.checkout(&branch, true).unwrap();
         commit_file(&remote, "file 1");
         let hash_1 = remote.branch_hash(&branch).unwrap();
 
         // create a mock floxmeta
-        let floxmeta = create_floxmeta(&flox, &remote_path, &branch);
+        let floxmeta = create_floxmeta(&flox, &remote_path, &test_pointer, &branch);
 
         // create a .flox directory
         let lock = GenerationLock {
@@ -1357,10 +1404,10 @@ mod test {
             version: Version::<1> {},
         };
         let dot_flox_path = flox.temp_dir.join(DOT_FLOX);
-        let dot_flox_path = create_dot_flox(&dot_flox_path, &TEST_POINTER, Some(&lock));
+        let dot_flox_path = create_dot_flox(&dot_flox_path, &test_pointer, Some(&lock));
 
         assert!(matches!(
-            ManagedEnvironment::ensure_locked(&flox, &TEST_POINTER, &dot_flox_path, &floxmeta),
+            ManagedEnvironment::ensure_locked(&flox, &test_pointer, &dot_flox_path, &floxmeta),
             Err(ManagedEnvironmentError::LocalRevDoesNotExist)
         ));
     }
@@ -1383,21 +1430,25 @@ mod test {
         let dot_flox_path = CanonicalPath::new(flox.temp_dir.join(DOT_FLOX)).unwrap();
 
         // create a mock remote
-        let remote_path = flox.temp_dir.join("remote");
-        fs::create_dir(&remote_path).unwrap();
+        let remote_base_path = flox.temp_dir.join("remote");
+        let test_pointer = make_test_pointer(&remote_base_path);
+        let remote_path = remote_base_path
+            .join(test_pointer.owner.as_str())
+            .join("floxmeta");
+        fs::create_dir_all(&remote_path).unwrap();
         let remote = GitCommandProvider::init(&remote_path, false).unwrap();
 
-        let diverged_remote_branch = remote_branch_name(&flox.system, &TEST_POINTER);
+        let diverged_remote_branch = remote_branch_name(&flox.system, &test_pointer);
         remote.checkout(&diverged_remote_branch, true).unwrap();
         commit_file(&remote, "file 1");
 
-        let locked_branch = branch_name(&flox.system, &TEST_POINTER, &dot_flox_path);
+        let locked_branch = branch_name(&flox.system, &test_pointer, &dot_flox_path);
         remote.checkout(&locked_branch, true).unwrap();
         commit_file(&remote, "file 2");
         let hash_1 = remote.branch_hash(&locked_branch).unwrap();
 
         // create a mock floxmeta
-        let floxmeta = create_floxmeta(&flox, &remote_path, &diverged_remote_branch);
+        let floxmeta = create_floxmeta(&flox, &remote_path, &test_pointer, &diverged_remote_branch);
         floxmeta.git.fetch_branch("origin", &locked_branch).unwrap();
 
         // create a .flox directory
@@ -1406,10 +1457,10 @@ mod test {
             local_rev: None,
             version: Version::<1> {},
         };
-        let dot_flox_path = create_dot_flox(&dot_flox_path, &TEST_POINTER, Some(&lock));
+        let dot_flox_path = create_dot_flox(&dot_flox_path, &test_pointer, Some(&lock));
 
         assert_eq!(
-            ManagedEnvironment::ensure_locked(&flox, &TEST_POINTER, &dot_flox_path, &floxmeta)
+            ManagedEnvironment::ensure_locked(&flox, &test_pointer, &dot_flox_path, &floxmeta)
                 .unwrap(),
             lock
         );
@@ -1425,17 +1476,21 @@ mod test {
         flox.floxhub_token = Some("DUMMY_TOKEN".to_string());
 
         // create a mock remote
-        let remote_path = flox.temp_dir.join("remote");
-        fs::create_dir(&remote_path).unwrap();
+        let remote_base_path = flox.temp_dir.join("remote");
+        let test_pointer = make_test_pointer(&remote_base_path);
+        let remote_path = remote_base_path
+            .join(test_pointer.owner.as_str())
+            .join("floxmeta");
+        fs::create_dir_all(&remote_path).unwrap();
         let remote = GitCommandProvider::init(&remote_path, false).unwrap();
 
-        let branch = remote_branch_name(&flox.system, &TEST_POINTER);
+        let branch = remote_branch_name(&flox.system, &test_pointer);
         remote.checkout(&branch, true).unwrap();
         commit_file(&remote, "file 1");
         let hash_1 = remote.branch_hash(&branch).unwrap();
 
         // create a mock floxmeta
-        let floxmeta = create_floxmeta(&flox, &remote_path, &branch);
+        let floxmeta = create_floxmeta(&flox, &remote_path, &test_pointer, &branch);
 
         let lock = GenerationLock {
             rev: hash_1.clone(),
@@ -1457,11 +1512,15 @@ mod test {
         flox.floxhub_token = Some("DUMMY_TOKEN".to_string());
 
         // create a mock remote
-        let remote_path = flox.temp_dir.join("remote");
-        fs::create_dir(&remote_path).unwrap();
+        let remote_base_path = flox.temp_dir.join("remote");
+        let test_pointer = make_test_pointer(&remote_base_path);
+        let remote_path = remote_base_path
+            .join(test_pointer.owner.as_str())
+            .join("floxmeta");
+        fs::create_dir_all(&remote_path).unwrap();
         let remote = GitCommandProvider::init(&remote_path, false).unwrap();
 
-        let branch = remote_branch_name(&flox.system, &TEST_POINTER);
+        let branch = remote_branch_name(&flox.system, &test_pointer);
         remote.checkout(&branch, true).unwrap();
         commit_file(&remote, "file 1");
         let hash_1 = remote.branch_hash(&branch).unwrap();
@@ -1473,7 +1532,7 @@ mod test {
 
         // Create a mock floxmeta (note clone is used instead of clone_branch,
         // which is used in create_floxmeta, because we need both branches)
-        let user_floxmeta_dir = floxmeta_dir(&flox, &TEST_POINTER.owner);
+        let user_floxmeta_dir = floxmeta_dir(&flox, &test_pointer.owner);
         fs::create_dir_all(&user_floxmeta_dir).unwrap();
         <GitCommandProvider as GitProvider>::clone(
             format!("file://{}", remote_path.to_string_lossy()),
@@ -1482,7 +1541,7 @@ mod test {
         )
         .unwrap();
 
-        let floxmeta = FloxmetaV2::open(&flox, &TEST_POINTER).unwrap();
+        let floxmeta = FloxmetaV2::open(&flox, &test_pointer).unwrap();
 
         let lock = GenerationLock {
             rev: hash_1,
@@ -1504,17 +1563,21 @@ mod test {
         flox.floxhub_token = Some("DUMMY_TOKEN".to_string());
 
         // create a mock remote
-        let remote_path = flox.temp_dir.join("remote");
-        fs::create_dir(&remote_path).unwrap();
+        let remote_base_path = flox.temp_dir.join("remote");
+        let test_pointer = make_test_pointer(&remote_base_path);
+        let remote_path = remote_base_path
+            .join(test_pointer.owner.as_str())
+            .join("floxmeta");
+        fs::create_dir_all(&remote_path).unwrap();
         let remote = GitCommandProvider::init(&remote_path, false).unwrap();
 
-        let branch = remote_branch_name(&flox.system, &TEST_POINTER);
+        let branch = remote_branch_name(&flox.system, &test_pointer);
         remote.checkout(&branch, true).unwrap();
         commit_file(&remote, "file 1");
         let hash_1 = remote.branch_hash(&branch).unwrap();
 
         // create a mock floxmeta
-        let floxmeta = create_floxmeta(&flox, &remote_path, &branch);
+        let floxmeta = create_floxmeta(&flox, &remote_path, &test_pointer, &branch);
 
         let lock = GenerationLock {
             rev: hash_1.clone(),
@@ -1629,6 +1692,8 @@ mod test {
         let pointer = ManagedPointer {
             owner: EnvironmentOwner::from_str("owner").unwrap(),
             name: EnvironmentName::from_str("name").unwrap(),
+            floxhub_web_url: Url::from_str("file:///dev/null").unwrap(),
+            floxhub_git_url: Url::from_str("file:///dev/null").unwrap(),
             version: Version::<1>,
         };
         let branch_name = branch_name(&flox.system, &pointer, &path);

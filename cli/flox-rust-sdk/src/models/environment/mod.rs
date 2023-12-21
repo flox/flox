@@ -10,6 +10,7 @@ use runix::installable::FlakeAttribute;
 use runix::store_path::StorePath;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use url::Url;
 use walkdir::WalkDir;
 
 use self::managed_environment::ManagedEnvironmentError;
@@ -18,7 +19,7 @@ use super::environment_ref::{EnvironmentName, EnvironmentOwner};
 use super::flox_package::FloxTriple;
 use super::manifest::PackageToInstall;
 use super::pkgdb::UpgradeResult;
-use crate::flox::{EnvironmentRef, Flox};
+use crate::flox::{Flox, Floxhub};
 use crate::models::pkgdb::call_pkgdb;
 use crate::providers::git::{
     GitCommandDiscoverError,
@@ -228,15 +229,19 @@ impl PathPointer {
 pub struct ManagedPointer {
     pub owner: EnvironmentOwner,
     pub name: EnvironmentName,
+    pub floxhub_web_url: Url,
+    pub floxhub_git_url: Url,
     version: Version<1>,
 }
 
 impl ManagedPointer {
     /// Create a new [ManagedPointer] with the given owner and name.
-    pub fn new(owner: EnvironmentOwner, name: EnvironmentName) -> Self {
+    pub fn new(owner: EnvironmentOwner, name: EnvironmentName, floxhub: &Floxhub) -> Self {
         Self {
             name,
             owner,
+            floxhub_git_url: floxhub.git_url().clone(),
+            floxhub_web_url: floxhub.web_url().clone(),
             version: Version::<1>,
         }
     }
@@ -270,11 +275,6 @@ impl EnvironmentPointer {
     }
 }
 
-impl From<EnvironmentRef> for ManagedPointer {
-    fn from(value: EnvironmentRef) -> Self {
-        Self::new(value.owner().clone(), value.name().clone())
-    }
-}
 
 /// Represents a `.flox` directory that contains an `env.json`.
 ///
@@ -565,6 +565,8 @@ mod test {
     const MANAGED_ENV_JSON: &'_ str = r#"{
         "name": "name",
         "owner": "owner",
+        "floxhub_web_url": "file:///dev/null",
+        "floxhub_git_url": "file:///dev/null",
         "version": 1
     }"#;
 
@@ -577,6 +579,8 @@ mod test {
         EnvironmentPointer::Managed(ManagedPointer {
             name: EnvironmentName::from_str("name").unwrap(),
             owner: EnvironmentOwner::from_str("owner").unwrap(),
+            floxhub_web_url: Url::parse("file:///dev/null").unwrap(),
+            floxhub_git_url: Url::parse("file:///dev/null").unwrap(),
             version: Version::<1> {},
         })
     });
@@ -586,6 +590,8 @@ mod test {
         let managed_pointer = EnvironmentPointer::Managed(ManagedPointer {
             name: EnvironmentName::from_str("name").unwrap(),
             owner: EnvironmentOwner::from_str("owner").unwrap(),
+            floxhub_web_url: Url::parse("file:///dev/null").unwrap(),
+            floxhub_git_url: Url::parse("file:///dev/null").unwrap(),
             version: Version::<1> {},
         });
 
