@@ -71,7 +71,6 @@ struct RulesTreeNode
    *
    * Parent paths may _pass down_ rules to children unless otherwise defined
    * at lower levels.
-   *
    */
   ScrapeRule
   getRule( const AttrPath & relPath ) const;
