@@ -223,7 +223,7 @@ isUInt( std::string_view str )
 /* -------------------------------------------------------------------------- */
 
 bool
-hasPrefix( std::string_view str, std::string_view prefix )
+hasPrefix( std::string_view prefix, std::string_view str )
 {
   if ( str.size() < prefix.size() ) { return false; }
   return str.find( prefix ) == 0;

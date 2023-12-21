@@ -598,96 +598,6 @@ PkgDb::setPrefixDone( const flox::AttrPath & prefix, bool done )
   this->setPrefixDone( this->addOrGetAttrSetId( prefix ), done );
 }
 
-// TODO move to a better place
-static std::vector<AttrPath> allowRecursive;
-static std::vector<AttrPath> allowPackage;
-static std::vector<AttrPath> disallowRecursive;
-static std::vector<AttrPath> disallowPackage;
-
-std::optional<bool>
-PkgDb::applyRules( const std::vector<std::string> & prefix,
-                   const std::string &              attr )
-{
-  // Load rules from JSON file
-  nlohmann::json rules;
-  if ( rulesPath.has_value() )
-    {
-      const std::filesystem::path & myPath = rulesPath.value();
-      nlohmann::json                rules  = readAndCoerceJSON( myPath );
-    }
-  else { rules = nlohmann::json::object(); }
-
-  //  Check allowRecursive rules
-  try
-    {
-      allowRecursive = rules.at( "allowRecursive" );
-    }
-  catch ( std::out_of_range & )
-    {}
-
-  try
-    {
-      allowPackage = rules.at( "allowPackage" );
-    }
-  catch ( std::out_of_range & )
-    {}
-
-  try
-    {
-      disallowRecursive = rules.at( "disallowRecursive" );
-    }
-  catch ( std::out_of_range & )
-    {}
-
-  try
-    {
-      disallowPackage = rules.at( "disallowPackage" );
-    }
-  catch ( std::out_of_range & )
-    {}
-
-  AttrPath path = prefix;
-  path.emplace_back( attr );
-
-  auto isPathPrefix
-    = [&]( const AttrPath & rulePath ) { return hasPrefix( rulePath, path ); };
-
-  /* Explicitly allowed package. */
-  if ( ( std::find( allowPackage.begin(), allowPackage.end(), path )
-         != allowPackage.end() ) )
-    {
-      return true;
-    }
-
-  /* Force _include_ package. */
-  if ( ( std::find( disallowPackage.begin(), disallowPackage.end(), path )
-         != disallowPackage.end() ) )
-    {
-      return false;
-    }
-
-  /* Disallowed sub-tree. */
-  if ( ( std::find_if( disallowRecursive.begin(),
-                       disallowRecursive.end(),
-                       isPathPrefix )
-         != disallowRecursive.end() ) )
-    {
-      return false;
-    }
-
-  /* Force _include_ sub-tree. */
-  if ( ( std::find_if( allowRecursive.begin(),
-                       allowRecursive.end(),
-                       isPathPrefix )
-         != allowRecursive.end() ) )
-    {
-      return true;
-    }
-
-  /* Fall back to default logic. */
-  return std::nullopt;
-}
-
 
 /* -------------------------------------------------------------------------- */
 
@@ -699,6 +609,30 @@ PkgDb::applyRules( const std::vector<std::string> & prefix,
 void
 PkgDb::scrape( nix::SymbolTable & syms, const Target & target, Todos & todo )
 {
+
+  static std::optional<RulesTreeNode> rules;
+  if ( rulesPath.has_value() && ( ! rules.has_value() ) )
+    {
+      ScrapeRulesRaw raw = readAndCoerceJSON( *rulesPath );
+      rules              = static_cast<RulesTreeNode>( raw );
+    }
+  auto applyRules = [&]( const AttrPath &    prefix,
+                         const std::string & attrName ) -> std::optional<bool>
+  {
+    if ( ! rules.has_value() ) { return std::nullopt; }
+    AttrPath path( prefix );
+    path.emplace_back( attrName );
+    auto rule = rules->getRule( path );
+    switch ( rule )
+      {
+        case RulesTreeNode::ScrapeRule::SR_ALLOW_PACKAGE: return true;
+        case RulesTreeNode::ScrapeRule::SR_DISALLOW_PACKAGE: return false;
+        case RulesTreeNode::ScrapeRule::SR_DEFAULT: return std::nullopt;
+        // TODO: move rule -> string so it's accessible here
+        default: throw PkgDbException( "encountered unexpected rule" );
+      }
+  };
+
   const auto & [prefix, cursor, parentId] = target;
 
   /* If it has previously been scraped then bail out. */
