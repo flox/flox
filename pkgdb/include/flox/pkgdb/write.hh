@@ -94,7 +94,12 @@ struct ScrapeRulesRaw
 
   explicit operator RulesTreeNode() const;
 
+
 }; /* End struct `ScrapeRulesRaw` */
+
+/** @brief Convert a JSON object to a @a flox::pkgdb::ScrapeRulesRaw. */
+void
+from_json( const nlohmann::json & jfrom, ScrapeRulesRaw & rules );
 
 
 /* -------------------------------------------------------------------------- */
