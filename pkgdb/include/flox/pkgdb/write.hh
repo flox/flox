@@ -29,6 +29,72 @@ using Todos = std::queue<Target, std::list<Target>>;
 
 /* -------------------------------------------------------------------------- */
 
+struct RulesTreeNode {
+
+  using Children = std::unordered_map<std::string,
+                                      std::unique_ptr<RulestTreeNode>>;
+
+  enum ScrapeRule {
+    ALLOW_RECURSIVE,
+    ALLOW_PACKAGE,
+    DISALLOW_RECURSIVE,
+    DISALLOW_PACKAGE
+  }; /* End enum `ScrapeRule` */
+
+  std::string                        attrName;
+  std::variant<Children, ScrapeRule> value;
+
+
+  explicit ScrapeRule( std::string attrName, Children children = {} )
+    : attrName( std::move( attrName ) ), value( std::move( children ) )
+  {}
+
+  ScrapeRule( std::string attrName, ScrapeRule rule )
+    : attrName( std::move( attrName ) ), value( rule )
+  {}
+
+  void
+  addRule( AttrPath & relPath, ScrapeRule rule )
+  {
+    assert( ! relPath.empty() );
+    assert( std::holds_alternative<Children>( this->value ) );
+
+    std::string attrName = std::move( relPath.front() );
+    relPath.pop_front();
+
+    if ( relPath.empty() )
+      {
+        std::get<Children &>( this->value ).emplace(
+          std::string( attrName ),
+          RulesTreeNode( std::move( attrName ), rule )
+        );
+      }
+    else
+      {
+        // TODO
+      }
+
+  }
+
+
+}; /* End struct `RulesTreeNode' */
+
+
+/** Scraping rules to modify database creation process. */
+struct ScrapeRules {
+
+  std::vector<AttrPath> allowRecursive;
+  std::vector<AttrPath> allowPackage;
+  std::vector<AttrPath> disallowRecursive;
+  std::vector<AttrPath> disallowPackage;
+
+}; /* End struct `ScrapeRules` */
+
+
+
+
+/* -------------------------------------------------------------------------- */
+
 /**
  * @brief A SQLite3 database used to cache derivation/package information about
  *        a single locked flake.
@@ -36,8 +102,8 @@ using Todos = std::queue<Target, std::list<Target>>;
 class PkgDb : public PkgDbReadOnly
 {
 
-  /* --------------------------------------------------------------------------
-   */
+private:
+
 
   /* Internal Helpers */
 
@@ -84,9 +150,6 @@ protected:
   void
   writeInput();
 
-
-  /* --------------------------------------------------------------------------
-   */
 
   /* Constructors */
 
@@ -175,9 +238,6 @@ public:
   {}
 
 
-  /* --------------------------------------------------------------------------
-   */
-
   /* Basic Operations */
 
   // public:
@@ -206,9 +266,6 @@ public:
     return cmd.execute_all();
   }
 
-
-  /* --------------------------------------------------------------------------
-   */
 
   /* Insert */
 
@@ -268,9 +325,6 @@ public:
               bool                 checkDrv = true );
 
 
-  /* --------------------------------------------------------------------------
-   */
-
   /* Updates */
 
   /**
@@ -291,11 +345,6 @@ public:
   void
   setPrefixDone( const flox::AttrPath & prefix, bool done );
 
-
-  /* --------------------------------------------------------------------------
-   */
-
-
   std::optional<bool>
   applyRules( const std::vector<std::string> & prefix,
               const std::string &              attr );
@@ -314,9 +363,6 @@ public:
   void
   scrape( nix::SymbolTable & syms, const Target & target, Todos & todo );
 
-
-  /* --------------------------------------------------------------------------
-   */
 
 }; /* End class `PkgDb' */
 

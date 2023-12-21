@@ -223,10 +223,27 @@ isUInt( std::string_view str )
 /* -------------------------------------------------------------------------- */
 
 bool
-hasPrefix( std::string_view prefix, std::string_view str )
+hasPrefix( const std::vector<std::string> & prefix,
+           const std::vector<std::string> & lst )
+{
+  if ( lst.size() < prefix.size() ) { return false; }
+  std::size_t
+  return str.find( prefix ) == 0;
+}
+
+
+/* -------------------------------------------------------------------------- */
+
+bool
+hasPrefix( const std::vector<std::string> & prefix,
+           const std::vector<std::string> & lst )
 {
   if ( str.size() < prefix.size() ) { return false; }
-  return str.find( prefix ) == 0;
+  for ( std::size_t idx = 0; idx < prefix.size(); ++idx )
+    {
+      if ( str[idx] != prefix[idx] ) { return false; }
+    }
+  return true;
 }
 
 
@@ -378,7 +395,25 @@ errorLog( const std::string & msg )
   printLog( nix::Verbosity::lvlError, msg );
 }
 
+
+/* -------------------------------------------------------------------------- */
+
 }  // namespace flox
+
+
+/* -------------------------------------------------------------------------- */
+
+bool
+operator==( const std::vector<std::string> & lhs,
+            const std::vector<std::string> & rhs )
+{
+  if ( lhs.size() != rhs.size() ) { return false; }
+  for ( size_t idx = 0; idx < lhs.size(); ++idx )
+    {
+      if ( lhs[idx] != rhs[idx] ) { return false; }
+    }
+  return true;
+}
 
 
 /* -------------------------------------------------------------------------- *
