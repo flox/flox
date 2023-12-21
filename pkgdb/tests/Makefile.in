@@ -1249,7 +1249,7 @@ check-am: all-am
 	$(MAKE) $(AM_MAKEFLAGS) $(check_PROGRAMS)
 	$(MAKE) $(AM_MAKEFLAGS) check-TESTS
 check: check-am
-all-am: Makefile
+all-am: Makefile all-local
 installdirs:
 install: install-am
 install-exec: install-exec-am
@@ -1377,26 +1377,38 @@ uninstall-am:
 
 .MAKE: check-am install-am install-strip
 
-.PHONY: CTAGS GTAGS TAGS all all-am am--depfiles check check-TESTS \
-	check-am clean clean-checkPROGRAMS clean-generic clean-libtool \
-	cscopelist-am ctags ctags-am distclean distclean-compile \
-	distclean-generic distclean-libtool distclean-tags distdir dvi \
-	dvi-am html html-am info info-am install install-am \
-	install-data install-data-am install-dvi install-dvi-am \
-	install-exec install-exec-am install-html install-html-am \
-	install-info install-info-am install-man install-pdf \
-	install-pdf-am install-ps install-ps-am install-strip \
-	installcheck installcheck-am installdirs maintainer-clean \
-	maintainer-clean-generic mostlyclean mostlyclean-compile \
-	mostlyclean-generic mostlyclean-libtool pdf pdf-am ps ps-am \
-	recheck tags tags-am uninstall uninstall-am
+.PHONY: CTAGS GTAGS TAGS all all-am all-local am--depfiles check \
+	check-TESTS check-am clean clean-checkPROGRAMS clean-generic \
+	clean-libtool cscopelist-am ctags ctags-am distclean \
+	distclean-compile distclean-generic distclean-libtool \
+	distclean-tags distdir dvi dvi-am html html-am info info-am \
+	install install-am install-data install-data-am install-dvi \
+	install-dvi-am install-exec install-exec-am install-html \
+	install-html-am install-info install-info-am install-man \
+	install-pdf install-pdf-am install-ps install-ps-am \
+	install-strip installcheck installcheck-am installdirs \
+	maintainer-clean maintainer-clean-generic mostlyclean \
+	mostlyclean-compile mostlyclean-generic mostlyclean-libtool \
+	pdf pdf-am ps ps-am recheck tags tags-am uninstall \
+	uninstall-am
 
 .PRECIOUS: Makefile
 
 
 # ---------------------------------------------------------------------------- #
 
-check: $(abs_top_builddir)/pkgdb/bin/pkgdb
+$(abs_top_builddir)/pkgdb/lib/libpkgdb.la:
+	$(MAKE) -C $(abs_top_builddir)/pkgdb lib/libpkgdb.la
+
+$(abs_top_builddir)/pkgdb/bin/pkgdb$(EXEEXT):
+	$(MAKE) -C $(abs_top_builddir)/pkgdb bin/pkgdb$(EXEEXT)
+
+# Causes `check-am' to depend on `pkgdb' being built.
+# There isn't another clear way to declare this dependency without causing
+# issues with automatic dependency tracking.
+all-local: $(abs_top_builddir)/pkgdb/bin/pkgdb$(EXEEXT)
+
+# ---------------------------------------------------------------------------- #
 
 .PHONY: tests
 tests: $(check_PROGRAMS)

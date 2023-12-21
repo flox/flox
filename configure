@@ -20827,13 +20827,18 @@ else $as_nop
 fi
 
 case "$WITH_PKGDB" in #(
-  local) :
-    PKGDB_BIN="$PWD/pkgdb/bin/pkgdb" ;; #(
   nix) :
     PKGDB_BIN="$( $NIX $NIXFLAGS build "$REPO_ROOT#flox-pkgdb"  \
                                          --no-link --print-out-paths; )" ;; #(
+  local) :
+    if test "ENABLE_RELEASE" = 'yes'
+then :
+  PKGDB_BIN="${BINDIR?}/pkgdb"
+else $as_nop
+  PKGDB_BIN="$PWD/pkgdb/bin/pkgdb"
+fi ;; #(
   no) :
-    : ;; #(
+    PKGDB_BIN="$MISSING pkgdb" ;; #(
   *) :
     if test -d "$WITH_PKGDB"
 then :
@@ -20843,7 +20848,6 @@ else $as_nop
       You must specify either 'local', 'nix', or a path to a directory" "$LINENO" 5
 fi ;;
 esac
-PKGDB_BIN="$MISSING pkgdb"
 
 
 

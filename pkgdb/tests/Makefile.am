@@ -8,6 +8,20 @@ ACLOCAL_AMFLAGS = -I ../../build-aux/m4
 
 # ---------------------------------------------------------------------------- #
 
+$(abs_top_builddir)/pkgdb/lib/libpkgdb.la:
+	$(MAKE) -C $(abs_top_builddir)/pkgdb lib/libpkgdb.la
+
+$(abs_top_builddir)/pkgdb/bin/pkgdb$(EXEEXT):
+	$(MAKE) -C $(abs_top_builddir)/pkgdb bin/pkgdb$(EXEEXT)
+
+# Causes `check-am' to depend on `pkgdb' being built.
+# There isn't another clear way to declare this dependency without causing
+# issues with automatic dependency tracking.
+all-local: $(abs_top_builddir)/pkgdb/bin/pkgdb$(EXEEXT)
+
+
+# ---------------------------------------------------------------------------- #
+
 TEST_DATA_DIR           = $(PKGDB_TEST_DIR)/data
 AM_CPPFLAGS             = -DTEST_DATA_DIR=\"$(TEST_DATA_DIR)\"
 PKGDB_BIN               = $(abs_top_builddir)/pkgdb/bin/pkgdb
@@ -38,10 +52,8 @@ check_PROGRAMS += versions
 check_PROGRAMS += is_sqlite3
 check_PROGRAMS += search-params
 
-
 # ---------------------------------------------------------------------------- #
 
-check: $(abs_top_builddir)/pkgdb/bin/pkgdb
 
 .PHONY: tests
 tests: $(check_PROGRAMS)

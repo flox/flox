@@ -16,6 +16,26 @@ TARGETDIR = $(abs_builddir)/$(FLOX_CLI_targetdir)
 
 # ---------------------------------------------------------------------------- #
 
+# Set path to `PKGDB_BIN' with recipe for _local_ builds.
+if USE_LOCAL_PKGDB
+
+if ENABLE_RELEASE
+$(PKGDB_BIN):
+	$(MAKE) $(AM_MAKEFLAGS) -C $(top_builddir)/pkgdb install-exec
+else !ENABLE_RELEASE
+$(PKGDB_BIN):
+	$(MAKE) $(AM_MAKEFLAGS) -C $(top_builddir)/pkgdb bin/pkgdb$(EXEEXT)
+endif !ENABLE_RELEASE
+
+else !USE_LOCAL_PKGDB
+
+$(PKGDB_BIN):
+
+endif !USE_LOCAL_PKGDB
+
+
+# ---------------------------------------------------------------------------- #
+
 copy-srcs:
 	$(MKDIR_P) $(abs_builddir);
 	$(RSYNC) -r --exclude dist/ --exclude target/ --exclude 'Makefile.*'  \
@@ -29,22 +49,8 @@ copy-srcs:
 # TODO: Use `--target-dir' and `--out-dir'.
 #       You need to check other existing usage of `target/{debug,release}'
 
-if ENABLE_RELEASE
-
-# TODO: Use environment variable to set the pkgdb binary path
-build: copy-srcs
-	$(MAKE) $(AM_MAKEFLAGS) -C $(top_builddir)/pkgdb install;
-	PKGDB_BIN="$(DESTDIR)$(bindir)/pkgdb$(EXEEXT)"  \
-	  $(CARGO) build $(CARGOFLAGS);
-
-else !ENABLE_RELEASE
-
-build: copy-srcs
-	$(MAKE) $(AM_MAKEFLAGS) -C $(top_builddir)/pkgdb bin/pkgdb$(EXEEXT)
-	PKGDB_BIN="$(abs_top_builddir)/pkgdb/bin/pkgdb$(EXEEXT)"  \
-	  $(CARGO) build $(CARGOFLAGS);
-
-endif !ENABLE_RELEASE
+build: copy-srcs $(PKGDB_BIN)
+	PKGDB_BIN="$(PKGDB_BIN)" $(CARGO) build $(CARGOFLAGS);
 
 $(TARGETDIR)/flox: build
 
@@ -93,6 +99,12 @@ EXTRA_DIST += tests
 
 # TODO
 docs:
+
+
+# ---------------------------------------------------------------------------- #
+
+check-local: build
+	PKGDB_BIN="$(PKGDB_BIN)" $(CARGO) test --workspace $(CARGOFLAGS);
 
 
 # ---------------------------------------------------------------------------- #

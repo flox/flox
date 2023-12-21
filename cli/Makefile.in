@@ -445,6 +445,7 @@ distdir-am: $(DISTFILES)
 	  fi; \
 	done
 check-am: all-am
+	$(MAKE) $(AM_MAKEFLAGS) check-local
 check: check-am
 all-am: Makefile all-local
 installdirs:
@@ -544,14 +545,14 @@ ps-am:
 
 uninstall-am:
 
-.MAKE: install-am install-strip
+.MAKE: check-am install-am install-strip
 
-.PHONY: all all-am all-local check check-am clean clean-generic \
-	clean-libtool clean-local cscopelist-am ctags-am distclean \
-	distclean-generic distclean-libtool distdir dvi dvi-am html \
-	html-am info info-am install install-am install-data \
-	install-data-am install-dvi install-dvi-am install-exec \
-	install-exec-am install-exec-local install-html \
+.PHONY: all all-am all-local check check-am check-local clean \
+	clean-generic clean-libtool clean-local cscopelist-am ctags-am \
+	distclean distclean-generic distclean-libtool distdir dvi \
+	dvi-am html html-am info info-am install install-am \
+	install-data install-data-am install-dvi install-dvi-am \
+	install-exec install-exec-am install-exec-local install-html \
 	install-html-am install-info install-info-am install-man \
 	install-pdf install-pdf-am install-ps install-ps-am \
 	install-strip installcheck installcheck-am installdirs \
@@ -563,6 +564,17 @@ uninstall-am:
 
 
 .PHONY: copy-srcs build all-local clean-local install-exec-local docs
+
+# ---------------------------------------------------------------------------- #
+
+# Set path to `PKGDB_BIN' with recipe for _local_ builds.
+
+@ENABLE_RELEASE_TRUE@@USE_LOCAL_PKGDB_TRUE@$(PKGDB_BIN):
+@ENABLE_RELEASE_TRUE@@USE_LOCAL_PKGDB_TRUE@	$(MAKE) $(AM_MAKEFLAGS) -C $(top_builddir)/pkgdb install-exec
+@ENABLE_RELEASE_FALSE@@USE_LOCAL_PKGDB_TRUE@$(PKGDB_BIN):
+@ENABLE_RELEASE_FALSE@@USE_LOCAL_PKGDB_TRUE@	$(MAKE) $(AM_MAKEFLAGS) -C $(top_builddir)/pkgdb bin/pkgdb$(EXEEXT)
+
+@USE_LOCAL_PKGDB_FALSE@$(PKGDB_BIN):
 
 # ---------------------------------------------------------------------------- #
 
@@ -578,16 +590,8 @@ copy-srcs:
 # TODO: Use `--target-dir' and `--out-dir'.
 #       You need to check other existing usage of `target/{debug,release}'
 
-# TODO: Use environment variable to set the pkgdb binary path
-@ENABLE_RELEASE_TRUE@build: copy-srcs
-@ENABLE_RELEASE_TRUE@	$(MAKE) $(AM_MAKEFLAGS) -C $(top_builddir)/pkgdb install;
-@ENABLE_RELEASE_TRUE@	PKGDB_BIN="$(DESTDIR)$(bindir)/pkgdb$(EXEEXT)"  \
-@ENABLE_RELEASE_TRUE@	  $(CARGO) build $(CARGOFLAGS);
-
-@ENABLE_RELEASE_FALSE@build: copy-srcs
-@ENABLE_RELEASE_FALSE@	$(MAKE) $(AM_MAKEFLAGS) -C $(top_builddir)/pkgdb bin/pkgdb$(EXEEXT)
-@ENABLE_RELEASE_FALSE@	PKGDB_BIN="$(abs_top_builddir)/pkgdb/bin/pkgdb$(EXEEXT)"  \
-@ENABLE_RELEASE_FALSE@	  $(CARGO) build $(CARGOFLAGS);
+build: copy-srcs $(PKGDB_BIN)
+	PKGDB_BIN="$(PKGDB_BIN)" $(CARGO) build $(CARGOFLAGS);
 
 $(TARGETDIR)/flox: build
 
@@ -615,6 +619,11 @@ install-exec-local: $(TARGETDIR)/flox
 
 # TODO
 docs:
+
+# ---------------------------------------------------------------------------- #
+
+check-local: build
+	PKGDB_BIN="$(PKGDB_BIN)" $(CARGO) test --workspace $(CARGOFLAGS);
 
 # ---------------------------------------------------------------------------- #
 #

@@ -447,14 +447,16 @@ AC_ARG_WITH([pkgdb],
   [WITH_PKGDB="$withval"],
   [WITH_PKGDB=local])
 AS_CASE(["$WITH_PKGDB"],
-  [local], [PKGDB_BIN="$PWD/pkgdb/bin/pkgdb"],
   [nix],   [PKGDB_BIN="$( $NIX $NIXFLAGS build "$REPO_ROOT@%:@flox-pkgdb"  \
                                          --no-link --print-out-paths; )"],
-  [no],    [:],
+  [local], [AS_IF([test "ENABLE_RELEASE" = 'yes'],
+                  [PKGDB_BIN="${BINDIR?}/pkgdb"],
+                  [PKGDB_BIN="$PWD/pkgdb/bin/pkgdb"])],
+  [no],    [PKGDB_BIN="$MISSING pkgdb"],
   [AS_IF([test -d "$WITH_PKGDB"], [:],
     [AC_MSG_ERROR([Invalid '--with-pkgdb': '$WITH_PKGDB'. ]
       [You must specify either 'local', 'nix', or a path to a directory])])])
-AC_SUBST([PKGDB_BIN], ["$MISSING pkgdb"])
+AC_SUBST([PKGDB_BIN])
 AC_SUBST([WITH_PKGDB])
 
 # --with-flox-cli
