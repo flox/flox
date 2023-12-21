@@ -12,6 +12,7 @@ DISTDIR   = $(abs_builddir)/$(FLOX_CLI_distdir)
 TARDIR    = $(FLOX_CLI_distdir)/$(FLOX_CLI_tardir)
 TARGETDIR = $(abs_builddir)/$(FLOX_CLI_targetdir)
 
+.PHONY: copy-srcs build all-local clean-local install-exec-local docs
 
 # ---------------------------------------------------------------------------- #
 
@@ -86,6 +87,12 @@ EXTRA_DIST += README.md
 EXTRA_DIST += Cargo.toml Cargo.lock
 EXTRA_DIST += flox floxd flox-rust-sdk flox-types
 EXTRA_DIST += tests
+
+
+# ---------------------------------------------------------------------------- #
+
+# TODO
+docs:
 
 
 # ---------------------------------------------------------------------------- #

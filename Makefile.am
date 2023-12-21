@@ -6,15 +6,14 @@
 
 ACLOCAL_AMFLAGS = -I build-aux/m4
 
-SUBDIRS =
-
 .PHONY: pkgdb cli cdb docs docs-recursive
 
 # ---------------------------------------------------------------------------- #
 
 if USE_LOCAL_PKGDB
 
-SUBDIRS += pkgdb
+# Do traverse into sub-directory
+MAYBE_pkgdb = pkgdb
 
 pkgdb:
 	$(MAKE) $(AM_MAKEFLAGS) -C $(builddir)/pkgdb
@@ -25,6 +24,9 @@ cdb:
 	  $(BEAR) -- $(MAKE) $(AM_MAKEFLAGS) -C $(builddir)/pkgdb bin/pkgdb tests;
 
 else !USE_LOCAL_PKGDB
+
+# Don't traverse into sub-directory
+MAYBE_pkgdb =
 
 # Empty recipes
 cdb:
@@ -37,25 +39,36 @@ endif !USE_LOCAL_PKGDB
 
 if USE_LOCAL_FLOX_CLI
 
-SUBDIRS += cli
+# Do traverse into sub-directory
+MAYBE_cli = cli
 
 cli:
 	$(MAKE) $(AM_MAKEFLAGS) -C $(builddir)/cli
 
 else !USE_LOCAL_FLOX_CLI
 
+# Don't traverse into sub-directory
+MAYBE_cli =
+
+# Empty recipes
 cli:
 
 endif !USE_LOCAL_FLOX_CLI
 
 
+# ---------------------------------------------------------------------------- #
+
+SUBDIRS = $(MAYBE_pkgdb) $(MAYBE_cli)
+
 
 # ---------------------------------------------------------------------------- #
 
-docs: docs-recursive
-
 docs-recursive:
-	$(MAKE) $(AM_MAKEFLAGS) -C $(builddir)/pkgdb $@
+	@for dir in $(SUBDIRS); do                              \
+	  $(MAKE) $(AM_MAKEFLAGS) -C "$(builddir)/$$dir" docs;  \
+	done
+
+docs: docs-recursive
 
 
 # ---------------------------------------------------------------------------- #

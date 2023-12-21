@@ -40,8 +40,7 @@ configure *args='':
     pushd build;                      \
     ../configure --prefix="$PWD/out"  \
                  --disable-static     \
-                 "$@";                \
-    popd;
+                 {{args}};
 
 
 # ---------------------------------------------------------------------------- #
@@ -54,29 +53,32 @@ configure *args='':
 # ---------------------------------------------------------------------------- #
 
 # Build the compilation database
-build-cdb *args='':
-    if ! [[ -x build/config.status ]]; then just configure "$@"; fi
-    make -C build -j cdb "$@";
+build-cdb +args='':
+    if ! [[ -x build/config.status ]]; then just configure; fi
+    make -C build -j cdb {{args}};
 
 # Build only pkgdb
-build-pkgdb *args='':
-    if ! [[ -x build/config.status ]]; then just configure "$@"; fi
-    make -C build -j pkgdb "$@"
+build-pkgdb +args='':
+    if ! [[ -x build/config.status ]]; then just configure; fi
+    make -C build -j pkgdb {{args}};
 
 # Build pkgdb documentation
-build-pkgdb-docs *args='':
-    just configure --enable-pkgdb-docs "$@";
-    make -C build/pkgdb -j docs "$@"
+# We have to wipe out any existing configuration if it exists, since it may lack
+#
+build-pkgdb-docs +args='':
+    rm -rf build;
+    just configure --enable-pkgdb-docs;
+    make -C build -j docs {{args}};
 
 # Build only flox
-build-cli *args='':
-    if ! [[ -x build/config.status ]]; then just configure "$@"; fi
-    make -C build -j cli "$@"
+build-cli +args='':
+    if ! [[ -x build/config.status ]]; then just configure; fi
+    make -C build -j cli {{args}};
 
 # Build the binaries
-build *args='':
-    if ! [[ -x build/config.status ]]; then just configure "$@"; fi
-    make -C build -j "$@"
+build +args='':
+    if ! [[ -x build/config.status ]]; then just configure; fi
+    make -C build -j {{args}};
 
 
 # ---------------------------------------------------------------------------- #
@@ -103,14 +105,12 @@ test-pkgdb: build-pkgdb
 # Run the CLI unit tests
 @unit-tests regex="": build
     pushd cli;                            \
-    {{cargo_test_invocation}} {{regex}};  \
-    popd;
+    {{cargo_test_invocation}} {{regex}};
 
 # Run the CLI unit tests, including impure tests
 @impure-tests regex="": build
     pushd cli;                                                     \
-    {{cargo_test_invocation}} {{regex}} --features "extra-tests";  \
-    popd;
+    {{cargo_test_invocation}} {{regex}} --features "extra-tests";
 
 # Run the entire CLI test suite
 test-cli: impure-tests integ-tests functional-tests

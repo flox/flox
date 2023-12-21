@@ -423,7 +423,7 @@ AC_ARG_ENABLE([pkgdb-docs],
   [ENABLE_PKGDB_DOCS=no])
 AM_CONDITIONAL([ENABLE_PKGDB_DOCS], [test "$ENABLE_PKGDB_DOCS" = 'yes'])
 
-ENABLE_PKGDB_Dev='';
+ENABLE_PKGDB_DEV='';
 AC_ARG_ENABLE([pkgdb-dev],
   [AS_HELP_STRING([--enable-pkgdb-dev],
     [build and install 'pkgdb' headers @<:@default=no@:>@])],

@@ -94,6 +94,7 @@ in
             "bear.d"
             "bin"
             "build"
+            "build-docs"
             "compile_commands.json"
             "pkgs"
           ];

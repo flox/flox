@@ -98,11 +98,10 @@ PRE_UNINSTALL = :
 POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
-@ENABLE_PKGDB_DEV_TRUE@am__append_1 = include
-@IS_LINUX_TRUE@am__append_2 = $(RELATIVE_RPATH_FLAG)
+@IS_LINUX_TRUE@am__append_1 = $(RELATIVE_RPATH_FLAG)
 bin_PROGRAMS = bin/pkgdb$(EXEEXT)
-@IS_LINUX_TRUE@am__append_3 = $(RELATIVE_RPATH_FLAG)
-@ENABLE_PKGDB_DOCS_TRUE@am__append_4 = $(DOCFILES)
+@IS_LINUX_TRUE@am__append_2 = $(RELATIVE_RPATH_FLAG)
+@ENABLE_PKGDB_DOCS_TRUE@am__append_3 = $(DOCFILES)
 subdir = pkgdb
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/build-aux/m4/bear.m4 \
@@ -574,7 +573,11 @@ top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 ACLOCAL_AMFLAGS = -I ../build-aux/m4
-MAYBE_include = $(am__append_1)
+# Don't traverse into sub-directory
+@ENABLE_PKGDB_DEV_FALSE@MAYBE_include = 
+
+# Do traverse into sub-directory
+@ENABLE_PKGDB_DEV_TRUE@MAYBE_include = include
 SUBDIRS = src/resolver $(MAYBE_include) tests
 
 # ---------------------------------------------------------------------------- #
@@ -585,7 +588,7 @@ lib_LTLIBRARIES = lib/libpkgdb.la
 lib_libpkgdb_la_CXXFLAGS = $(AM_CXXFLAGS) $(YAML_CFLAGS) \
 	$(TOML_CFLAGS)
 lib_libpkgdb_la_LDFLAGS = $(AM_LDFLAGS) \
-	'$(set_soname_option)libpkgdb$(sharedLibExt)' $(am__append_2) \
+	'$(set_soname_option)libpkgdb$(sharedLibExt)' $(am__append_1) \
 	$(NO_UNDEFINED_SYMBOLS_FLAG) $(YAML_LIBS) $(TOML_LIBS)
 lib_libpkgdb_la_LIBADD = src/resolver/libresolver.la
 lib_libpkgdb_la_SOURCES = src/command.cc src/eval.cc src/exceptions.cc \
@@ -598,7 +601,7 @@ lib_libpkgdb_la_SOURCES = src/command.cc src/eval.cc src/exceptions.cc \
 	src/pkgdb/primops.cc src/pkgdb/read.cc src/pkgdb/write.cc \
 	src/pkgdb/schemas.hh src/buildenv/buildenv.cc \
 	src/buildenv/realise.cc
-bin_pkgdb_LDADD = $(AM_LDFLAGS) $(am__append_3) lib/libpkgdb.la
+bin_pkgdb_LDADD = $(AM_LDFLAGS) $(am__append_2) lib/libpkgdb.la
 bin_pkgdb_SOURCES = src/main.cc src/repl.cc src/parse/command.cc \
 	src/pkgdb/command.cc src/pkgdb/get.cc src/pkgdb/scrape.cc \
 	src/resolver/command.cc src/search/command.cc \
@@ -607,7 +610,13 @@ bin_pkgdb_SOURCES = src/main.cc src/repl.cc src/parse/command.cc \
 # ---------------------------------------------------------------------------- #
 
 # Extra Distributed Files
-EXTRA_DIST = LICENSE $(am__append_4)
+EXTRA_DIST = LICENSE $(am__append_3)
+
+# NOTE: Docs are handled below
+
+# ---------------------------------------------------------------------------- #
+
+# Documentation Generation
 DOCFILES = Doxyfile README.md CONTRIBUTING.md \
 	docs/garbage-collection.md docs/lockfile.md docs/manifests.md \
 	docs/params-to-sql.md docs/registry.md docs/search.md
@@ -1499,18 +1508,12 @@ uninstall-am: uninstall-binPROGRAMS uninstall-libLTLIBRARIES \
 .PRECIOUS: Makefile
 
 
+.PHONY: docs clean-docs install-docs uninstall-docs
+
 # ---------------------------------------------------------------------------- #
 
 src/resolver/libresolver.la:
 	$(MAKE) -C src/resolver libresolver.la
-
-# NOTE: Docs are handled below
-
-# ---------------------------------------------------------------------------- #
-
-# Documentation Generation
-
-.PHONY: docs clean-docs install-docs uninstall-docs
 
 @ENABLE_PKGDB_DOCS_TRUE@docs/index.html: $(SOURCES) $(HEADERS) $(DOCFILES)
 @ENABLE_PKGDB_DOCS_TRUE@	$(RSYNC) -r --exclude bear.d/ --exclude build-aux/               \
@@ -1551,13 +1554,10 @@ src/resolver/libresolver.la:
 @ENABLE_PKGDB_DOCS_TRUE@install-data-local: install-docs
 @ENABLE_PKGDB_DOCS_TRUE@uninstall-local: uninstall-docs
 
-# Add phony targets
+# Empty recipes
 @ENABLE_PKGDB_DOCS_FALSE@docs:
-
 @ENABLE_PKGDB_DOCS_FALSE@clean-docs:
-
 @ENABLE_PKGDB_DOCS_FALSE@install-docs:
-
 @ENABLE_PKGDB_DOCS_FALSE@uninstall-docs:
 
 # ---------------------------------------------------------------------------- #

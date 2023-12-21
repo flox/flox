@@ -20790,7 +20790,7 @@ else
 fi
 
 
-ENABLE_PKGDB_Dev='';
+ENABLE_PKGDB_DEV='';
 # Check whether --enable-pkgdb-dev was given.
 if test ${enable_pkgdb_dev+y}
 then :

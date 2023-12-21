@@ -9,15 +9,21 @@
 
 ACLOCAL_AMFLAGS = -I ../build-aux/m4
 
-MAYBE_include =
 if ENABLE_PKGDB_DEV
-MAYBE_include += include
+# Do traverse into sub-directory
+MAYBE_include = include
+else
+# Don't traverse into sub-directory
+MAYBE_include =
 endif
+
 SUBDIRS = src/resolver $(MAYBE_include) tests
 
 # ---------------------------------------------------------------------------- #
 
 CLEANFILES =
+
+.PHONY: docs clean-docs install-docs uninstall-docs
 
 # ---------------------------------------------------------------------------- #
 
@@ -113,8 +119,6 @@ EXTRA_DIST += LICENSE
 
 # Documentation Generation
 
-.PHONY: docs clean-docs install-docs uninstall-docs
-
 DOCFILES =
 DOCFILES += Doxyfile
 DOCFILES += README.md
@@ -173,13 +177,10 @@ uninstall-local: uninstall-docs
 
 else !ENABLE_PKGDB_DOCS
 
-# Add phony targets
+# Empty recipes
 docs:
-
 clean-docs:
-
 install-docs:
-
 uninstall-docs:
 
 endif !ENABLE_PKGDB_DOCS

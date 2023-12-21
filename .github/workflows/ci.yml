@@ -75,7 +75,7 @@ jobs:
             --accept-flake-config             \
             --no-update-lock-file             \
             --command just build-pkgdb-docs;
-          chmod -c -R +rX "pkgdb/docs/"|while read line; do
+          chmod -c -R +rX "build/pkgdb/docs/"|while read line; do
             echo "::warning title=Invalid file permissions fixed::$line";
           done
 

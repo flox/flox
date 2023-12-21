@@ -562,6 +562,8 @@ uninstall-am:
 .PRECIOUS: Makefile
 
 
+.PHONY: copy-srcs build all-local clean-local install-exec-local docs
+
 # ---------------------------------------------------------------------------- #
 
 copy-srcs:
@@ -608,6 +610,11 @@ clean-local: copy-srcs
 install-exec-local: $(TARGETDIR)/flox
 	$(MKDIR_P) $(DESTDIR)$(bindir);
 	$(INSTALL_PROGRAM) $(TARGETDIR)/flox $(DESTDIR)$(bindir);
+
+# ---------------------------------------------------------------------------- #
+
+# TODO
+docs:
 
 # ---------------------------------------------------------------------------- #
 #
