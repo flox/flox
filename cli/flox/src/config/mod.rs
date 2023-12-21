@@ -70,6 +70,9 @@ pub struct FloxConfig {
     #[serde(default)]
     pub trusted_environments: HashMap<EnvironmentRef, EnvironmentTrust>,
 
+    /// The url of the floxhub instance to use
+    pub floxhub_url: Option<Url>,
+
     #[serde(flatten)]
     pub instance: InstanceConfig,
 }
