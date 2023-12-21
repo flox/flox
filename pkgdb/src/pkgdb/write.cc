@@ -453,10 +453,8 @@ PkgDb::applyRules( const std::vector<std::string> & prefix,
   AttrPath path = prefix;
   path.emplace_back( attr );
 
-  auto isPathPrefix = [&]( const AttrPath & rulePath )
-  {
-    return hasPrefix( rulePath, path );
-  };
+  auto isPathPrefix
+    = [&]( const AttrPath & rulePath ) { return hasPrefix( rulePath, path ); };
 
   /* Explicitly allowed package. */
   if ( ( std::find( allowPackage.begin(), allowPackage.end(), path )
