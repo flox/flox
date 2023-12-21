@@ -154,10 +154,11 @@ jobs:
         run: |
           export PKGDB_BIN="build/pkgdb/bin/";
           ls build/pkgdb/bin/;
-          nix develop -L               \
-            --accept-flake-config      \
-            --no-update-lock-file      \
-            --command just build-cli;
+          nix develop -L                                             \
+            --accept-flake-config                                    \
+            --no-update-lock-file                                    \
+            --command sh -c "PKGDB_BIN='$PWD/build/pkgdb/bin/pkgdb'  \
+                               just build-cli';";
 
       - name: "Test (./cli: cargo test)"
         run: |
