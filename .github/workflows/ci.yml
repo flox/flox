@@ -353,11 +353,12 @@ jobs:
       - name: "Build flox"
         run: |
           git clean -xfd
-          nix build -L \
-              --accept-flake-config \
-              --no-update-lock-file \
-              --print-out-paths \
-              '.#packages.${{ matrix.system }}.flox'
+          nix build -L                                 \
+              --accept-flake-config                    \
+              --no-update-lock-file                    \
+              --print-out-paths                        \
+              -j0                                      \
+              '.#packages.${{ matrix.system }}.flox';
           # We run bats tests later on against the `FLOX_CLI' env
           echo "FLOX_CLI=$(readlink -f ./result; )/bin/flox" >> "$GITHUB_ENV"
           rm ./result
