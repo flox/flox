@@ -574,10 +574,10 @@ top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 ACLOCAL_AMFLAGS = -I ../build-aux/m4
 # Don't traverse into sub-directory
-@ENABLE_PKGDB_DEV_FALSE@MAYBE_include = 
+@ENABLE_PKGDB_DEV_OUTPUTS_FALSE@MAYBE_include = 
 
 # Do traverse into sub-directory
-@ENABLE_PKGDB_DEV_TRUE@MAYBE_include = include
+@ENABLE_PKGDB_DEV_OUTPUTS_TRUE@MAYBE_include = include
 SUBDIRS = src/resolver $(MAYBE_include) tests
 
 # ---------------------------------------------------------------------------- #

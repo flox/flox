@@ -59,15 +59,20 @@ build-cdb +args='':
 
 # Build only pkgdb
 build-pkgdb +args='':
-    if ! [[ -x build/config.status ]]; then just configure; fi
+    if ! [[ -x build/config.status ]]; then            \
+      if [[ -n "${CI:-}" ]]; then                      \
+        just configure --disable-dependency-tracking;  \
+      else                                             \
+        just configure;                                \
+      fi;                                              \
+    fi
     make -C build -j pkgdb {{args}};
 
 # Build pkgdb documentation
 # We have to wipe out any existing configuration if it exists, since it may lack
 #
 build-pkgdb-docs +args='':
-    rm -rf build;
-    just configure --enable-pkgdb-docs;
+    if ! [[ -x build/config.status ]]; then just configure; fi
     make -C build -j docs {{args}};
 
 # Build only flox

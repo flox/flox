@@ -9,13 +9,13 @@
 
 ACLOCAL_AMFLAGS = -I ../build-aux/m4
 
-if ENABLE_PKGDB_DEV
+if ENABLE_PKGDB_DEV_OUTPUTS
 # Do traverse into sub-directory
 MAYBE_include = include
-else
+else !ENABLE_PKGDB_DEV_OUTPUTS
 # Don't traverse into sub-directory
 MAYBE_include =
-endif
+endif !ENABLE_PKGDB_DEV_OUTPUTS
 
 SUBDIRS = src/resolver $(MAYBE_include) tests
 

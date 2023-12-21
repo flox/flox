@@ -698,8 +698,8 @@ WITH_FLOX_CLI
 FLOX_CLI
 WITH_PKGDB
 PKGDB_BIN
-ENABLE_PKGDB_DEV_FALSE
-ENABLE_PKGDB_DEV_TRUE
+ENABLE_PKGDB_DEV_OUTPUTS_FALSE
+ENABLE_PKGDB_DEV_OUTPUTS_TRUE
 ENABLE_PKGDB_DOCS_FALSE
 ENABLE_PKGDB_DOCS_TRUE
 ENABLE_RELEASE_FALSE
@@ -932,7 +932,7 @@ enable_debug
 enable_coverage
 enable_release
 enable_pkgdb_docs
-enable_pkgdb_dev
+enable_pkgdb_dev_outputs
 with_pkgdb
 with_flox_cli
 with_set_prompt_bash_sh
@@ -1651,8 +1651,10 @@ Optional Features:
   --enable-debug          enable debug mode [default=no]
   --enable-coverage       enable coverage mode [default=no]
   --enable-release        enable release mode [default=no]
-  --enable-pkgdb-docs     build and install 'pkgdb' documentation [default=no]
-  --enable-pkgdb-dev      build and install 'pkgdb' headers [default=no]
+  --enable-pkgdb-docs     build and install 'pkgdb' documentation
+                          [default=yes]
+  --enable-pkgdb-dev-outputs
+                          build and install 'pkgdb' headers [default=no]
 
 Optional Packages:
   --with-PACKAGE[=ARG]    use PACKAGE [ARG=yes]
@@ -20778,10 +20780,10 @@ if test ${enable_pkgdb_docs+y}
 then :
   enableval=$enable_pkgdb_docs; ENABLE_PKGDB_DOCS="$enableval"
 else $as_nop
-  ENABLE_PKGDB_DOCS=no
+  ENABLE_PKGDB_DOCS=yes
 fi
 
- if test "$ENABLE_PKGDB_DOCS" = 'yes'; then
+ if test "$ENABLE_PKGDB_DOCS" != 'no'; then
   ENABLE_PKGDB_DOCS_TRUE=
   ENABLE_PKGDB_DOCS_FALSE='#'
 else
@@ -20790,21 +20792,21 @@ else
 fi
 
 
-ENABLE_PKGDB_DEV='';
-# Check whether --enable-pkgdb-dev was given.
-if test ${enable_pkgdb_dev+y}
+ENABLE_PKGDB_DEV_OUTPUTS='';
+# Check whether --enable-pkgdb-dev-outputs was given.
+if test ${enable_pkgdb_dev_outputs+y}
 then :
-  enableval=$enable_pkgdb_dev; ENABLE_PKGDB_DEV="$enableval"
+  enableval=$enable_pkgdb_dev_outputs; ENABLE_PKGDB_DEV_OUTPUTS="$enableval"
 else $as_nop
-  ENABLE_PKGDB_DEV=no
+  ENABLE_PKGDB_DEV_OUTPUTS=no
 fi
 
- if test "$ENABLE_PKGDB_DEV" = 'yes'; then
-  ENABLE_PKGDB_DEV_TRUE=
-  ENABLE_PKGDB_DEV_FALSE='#'
+ if test "$ENABLE_PKGDB_DEV_OUTPUTS" = 'yes'; then
+  ENABLE_PKGDB_DEV_OUTPUTS_TRUE=
+  ENABLE_PKGDB_DEV_OUTPUTS_FALSE='#'
 else
-  ENABLE_PKGDB_DEV_TRUE='#'
-  ENABLE_PKGDB_DEV_FALSE=
+  ENABLE_PKGDB_DEV_OUTPUTS_TRUE='#'
+  ENABLE_PKGDB_DEV_OUTPUTS_FALSE=
 fi
 
 
@@ -22202,8 +22204,8 @@ if test -z "${ENABLE_PKGDB_DOCS_TRUE}" && test -z "${ENABLE_PKGDB_DOCS_FALSE}"; 
   as_fn_error $? "conditional \"ENABLE_PKGDB_DOCS\" was never defined.
 Usually this means the macro was only invoked conditionally." "$LINENO" 5
 fi
-if test -z "${ENABLE_PKGDB_DEV_TRUE}" && test -z "${ENABLE_PKGDB_DEV_FALSE}"; then
-  as_fn_error $? "conditional \"ENABLE_PKGDB_DEV\" was never defined.
+if test -z "${ENABLE_PKGDB_DEV_OUTPUTS_TRUE}" && test -z "${ENABLE_PKGDB_DEV_OUTPUTS_FALSE}"; then
+  as_fn_error $? "conditional \"ENABLE_PKGDB_DEV_OUTPUTS\" was never defined.
 Usually this means the macro was only invoked conditionally." "$LINENO" 5
 fi
 if test -z "${USE_LOCAL_PKGDB_TRUE}" && test -z "${USE_LOCAL_PKGDB_FALSE}"; then

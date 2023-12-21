@@ -418,18 +418,19 @@ AS_IF([test "$ENABLE_RELEASE" == 'yes'],
 ENABLE_PKGDB_DOCS='';
 AC_ARG_ENABLE([pkgdb-docs],
   [AS_HELP_STRING([--enable-pkgdb-docs],
-    [build and install 'pkgdb' documentation @<:@default=no@:>@])],
+    [build and install 'pkgdb' documentation @<:@default=yes@:>@])],
   [ENABLE_PKGDB_DOCS="$enableval"],
-  [ENABLE_PKGDB_DOCS=no])
-AM_CONDITIONAL([ENABLE_PKGDB_DOCS], [test "$ENABLE_PKGDB_DOCS" = 'yes'])
+  [ENABLE_PKGDB_DOCS=yes])
+AM_CONDITIONAL([ENABLE_PKGDB_DOCS], [test "$ENABLE_PKGDB_DOCS" != 'no'])
 
-ENABLE_PKGDB_DEV='';
-AC_ARG_ENABLE([pkgdb-dev],
-  [AS_HELP_STRING([--enable-pkgdb-dev],
+ENABLE_PKGDB_DEV_OUTPUTS='';
+AC_ARG_ENABLE([pkgdb-dev-outputs],
+  [AS_HELP_STRING([--enable-pkgdb-dev-outputs],
     [build and install 'pkgdb' headers @<:@default=no@:>@])],
-  [ENABLE_PKGDB_DEV="$enableval"],
-  [ENABLE_PKGDB_DEV=no])
-AM_CONDITIONAL([ENABLE_PKGDB_DEV], [test "$ENABLE_PKGDB_DEV" = 'yes'])
+  [ENABLE_PKGDB_DEV_OUTPUTS="$enableval"],
+  [ENABLE_PKGDB_DEV_OUTPUTS=no])
+AM_CONDITIONAL([ENABLE_PKGDB_DEV_OUTPUTS],
+               [test "$ENABLE_PKGDB_DEV_OUTPUTS" = 'yes'])
 
 
 # ---------------------------------------------------------------------------- #
