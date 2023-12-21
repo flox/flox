@@ -47,7 +47,7 @@ pub static FLOX_VERSION: Lazy<String> =
 /// [Flox] will provide a preconfigured instance of the Nix API.
 /// By default this nix API uses the nix CLI.
 /// Preconfiguration includes environment variables and flox specific arguments.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Flox {
     /// The directory pointing to the users flox configuration
     ///
@@ -664,7 +664,14 @@ pub mod tests {
             temp_dir,
             config_dir,
             channels,
-            ..Default::default()
+            access_tokens: Default::default(),
+            netrc_file: Default::default(),
+            uuid: Default::default(),
+            floxhub: Floxhub::new_from_parts(
+                Url::from_str("file:///dev/null").unwrap(),
+                Url::from_str("file:///dev/null").unwrap(),
+            ),
+            floxhub_token: None,
         };
 
         (flox, tempdir_handle)
