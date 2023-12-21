@@ -58,6 +58,11 @@ RulesTreeNode::addRule( AttrPathGlob & relPath, ScrapeRule rule )
             + "' with new rule `" + scrapeRuleToString( rule ) + "'" );
         }
       this->rule = rule;
+      /* Pass down rule to children if they're using `SR_DEFAULT'. */
+      for ( auto & [name, child] : this->children )
+        {
+          if ( child.rule == SR_DEFAULT ) { addRule( {}, rule ); }
+        }
       return;
     }
 
@@ -83,9 +88,31 @@ RulesTreeNode::addRule( AttrPathGlob & relPath, ScrapeRule rule )
     {
       /* Create a new child node. */
       RulesTreeNode node( attrName );
-      node.addRule( relPath, rule );
+      /* Inherit default rule. */
+      node.addRule( relPath, this->rule );
       this->children.emplace( std::move( attrName ), std::move( node ) );
     }
+}
+
+
+/* -------------------------------------------------------------------------- */
+
+ScrapeRule
+RulesTreeNode::getRule( const AttrPath & relPath ) const
+{
+  /* We are the leaf! */
+  if ( relPath.empty() ) { return this->rule; }
+
+  /* See if there's a relevant subtree. */
+  auto it = this->children.find( relPath.front() );
+  if ( it == this->children.end() ) { return this->rule; }
+
+  /* Use explicit rule from child or fallback to ours. */
+  AttrPath relPathCopy = relPath;
+  relPathCopy.erase( relPathCopy.begin() );
+  auto fromChild = it->second.getRule( relPathCopy );
+  if ( fromChild != SR_DEFAULT ) { return fromChild; }
+  else { return this->rule; }
 }
 
 

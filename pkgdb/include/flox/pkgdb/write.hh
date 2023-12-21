@@ -65,8 +65,17 @@ struct RulesTreeNode
   void
   addRule( AttrPathGlob & relPath, ScrapeRule rule );
 
+  /**
+   * @brief Get the rule associated with a path.
+   *        This is intended for use on _root_ nodes.
+   *
+   * Parent paths may _pass down_ rules to children unless otherwise defined
+   * at lower levels.
+   *
+   */
   ScrapeRule
-  getRule( const AttrPath & relPath );
+  getRule( const AttrPath & relPath ) const;
+
 
 }; /* End struct `RulesTreeNode' */
 
