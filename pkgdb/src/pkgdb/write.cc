@@ -31,6 +31,96 @@ extern std::optional<std::string> rulesPath;
 /* -------------------------------------------------------------------------- */
 
 void
+RulesTreeNode::addRule( AttrPathGlob & relPath, ScrapeRule rule )
+{
+  auto scrapeRuleToString = []( const ScrapeRule & rule )->std::string
+  {
+    switch ( rule )
+      {
+        case SR_DEFAULT: return "NONE";
+        case SR_ALLOW_PACKAGE: return "allowPackage";
+        case SR_DISALLOW_PACKAGE: return "disallowPackage";
+        case SR_ALLOW_RECURSIVE: return "allowRecursive";
+        case SR_DISALLOW_RECURSIVE: return "disallowRecursive";
+        default: return "UNKNOWN";
+      }
+  };
+
+  /* Modify our rule. */
+  if ( relPath.empty() )
+    {
+      if ( this->rule != SR_DEFAULT )
+        {
+          // TODO: Pass abs-path
+          throw FloxException(
+            "attempted to overwrite existing rule for `" + this->attrName
+            + "' with rule `" + scrapeRuleToString( this->rule )
+            + "' with new rule `" + scrapeRuleToString( rule ) + "'" );
+        }
+      this->rule = rule;
+      return;
+    }
+
+  std::string attrName = std::move( relPath.front() ).value_or( "*" );
+  // TODO: Use a `std::deque' instead of `std::vector' for efficiency.
+  //       This container is only used for `push_back' and `pop_front'.
+  //       Removing from the front is inefficient for `std::vector'.
+  relPath.erase( relPath.begin() );
+
+  if ( relPath.empty() )
+    {
+      /* Add leaf node. */
+      this->children.emplace( std::string( attrName ),
+                              RulesTreeNode( std::move( attrName ), rule ) );
+    }
+  else if ( auto it = this->children.find( attrName );
+            it != this->children.end() )
+    {
+      /* Add to existing child node. */
+      it->second.addRule( relPath, rule );
+    }
+  else
+    {
+      /* Create a new child node. */
+      RulesTreeNode node( attrName );
+      node.addRule( relPath, rule );
+      this->children.emplace( std::move( attrName ), std::move( node ) );
+    }
+}
+
+
+/* -------------------------------------------------------------------------- */
+
+ScrapeRulesRaw::operator RulesTreeNode() const
+{
+  RulesTreeNode root;
+  for ( const auto & path : this->allowPackage )
+    {
+      AttrPathGlob  pathCopy( path );
+      root.addRule( pathCopy, RulesTreeNode::SR_ALLOW_PACKAGE );
+    }
+  for ( const auto & path : this->disallowPackage )
+    {
+      AttrPathGlob  pathCopy( path );
+      root.addRule( pathCopy, RulesTreeNode::SR_DISALLOW_PACKAGE );
+    }
+  for ( const auto & path : this->allowRecursive )
+    {
+      AttrPathGlob  pathCopy( path );
+      root.addRule( pathCopy, RulesTreeNode::SR_ALLOW_RECURSIVE );
+    }
+  for ( const auto & path : this->disallowRecursive )
+    {
+      AttrPathGlob  pathCopy( path );
+      root.addRule( pathCopy, RulesTreeNode::SR_DISALLOW_RECURSIVE );
+    }
+  return root;
+}
+
+
+/* -------------------------------------------------------------------------- */
+
+void
 PkgDb::initViews()
 {
   if ( sql_rc rcode = this->execute_all( sql_views ); isSQLError( rcode ) )

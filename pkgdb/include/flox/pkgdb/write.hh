@@ -32,63 +32,58 @@ using Todos = std::queue<Target, std::list<Target>>;
 struct RulesTreeNode
 {
 
-  using Children
-    = std::unordered_map<std::string, std::unique_ptr<RulestTreeNode>>;
+  using Children = std::unordered_map<std::string, RulesTreeNode>;
 
   enum ScrapeRule {
-    ALLOW_RECURSIVE,
-    ALLOW_PACKAGE,
-    DISALLOW_RECURSIVE,
-    DISALLOW_PACKAGE
+    SR_DEFAULT = 0,      /**< Applies no special rules. */
+    SR_ALLOW_PACKAGE,    /**< Forces an package entry in DB. */
+    SR_ALLOW_RECURSIVE,  /**< Forces a sub-tree to be scraped. */
+    SR_DISALLOW_PACKAGE, /**< Do not add package entry to DB. */
+    /** Ignore sub-tree members unless otherwise specified. */
+    SR_DISALLOW_RECURSIVE
   }; /* End enum `ScrapeRule` */
 
-  std::string                        attrName;
-  std::variant<Children, ScrapeRule> value;
+  std::string attrName;
+  ScrapeRule  rule     = SR_DEFAULT;
+  Children    children = {};
 
 
-  explicit ScrapeRule( std::string attrName, Children children = {} )
-    : attrName( std::move( attrName ) ), value( std::move( children ) )
+  RulesTreeNode() = default;
+
+  explicit RulesTreeNode( std::string attrName,
+                          ScrapeRule  rule     = SR_DEFAULT,
+                          Children    children = {} )
+    : attrName( std::move( attrName ) )
+    , rule( std::move( rule ) )
+    , children( std::move( children ) )
   {}
 
-  ScrapeRule( std::string attrName, ScrapeRule rule )
-    : attrName( std::move( attrName ) ), value( rule )
+  RulesTreeNode( std::string attrName, Children children )
+    : attrName( std::move( attrName ) ), children( std::move( children ) )
   {}
 
   void
-  addRule( AttrPath & relPath, ScrapeRule rule )
-  {
-    assert( ! relPath.empty() );
-    assert( std::holds_alternative<Children>( this->value ) );
-
-    std::string attrName = std::move( relPath.front() );
-    relPath.pop_front();
-
-    if ( relPath.empty() )
-      {
-        std::get<Children &>( this->value )
-          .emplace( std::string( attrName ),
-                    RulesTreeNode( std::move( attrName ), rule ) );
-      }
-    else
-      {
-        // TODO
-      }
-  }
+  addRule( AttrPathGlob & relPath, ScrapeRule rule );
 
 
 }; /* End struct `RulesTreeNode' */
 
 
-/** Scraping rules to modify database creation process. */
-struct ScrapeRules
+/* -------------------------------------------------------------------------- */
+
+
+/** @brief Scraping rules to modify database creation process in _raw_ form. */
+struct ScrapeRulesRaw
 {
+  std::vector<AttrPathGlob> allowPackage;
+  std::vector<AttrPathGlob> disallowPackage;
+  std::vector<AttrPathGlob> allowRecursive;
+  std::vector<AttrPathGlob> disallowRecursive;
+  // TODO: aliases
 
-  std::vector<AttrPath> allowRecursive;
-  std::vector<AttrPath> allowPackage;
-  std::vector<AttrPath> disallowRecursive;
-  std::vector<AttrPath> disallowPackage;
+  explicit operator RulesTreeNode() const;
 
-}; /* End struct `ScrapeRules` */
+}; /* End struct `ScrapeRulesRaw` */
 
 
 /* -------------------------------------------------------------------------- */

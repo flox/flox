@@ -223,11 +223,10 @@ isUInt( std::string_view str )
 /* -------------------------------------------------------------------------- */
 
 bool
-hasPrefix( const std::vector<std::string> & prefix,
-           const std::vector<std::string> & lst )
+hasPrefix( std::string_view str, std::string_view prefix )
 {
-  if ( lst.size() < prefix.size() ) { return false; }
-  std::size_t return str.find( prefix ) == 0;
+  if ( str.size() < prefix.size() ) { return false; }
+  return str.find( prefix ) == 0;
 }
 
 
@@ -237,10 +236,10 @@ bool
 hasPrefix( const std::vector<std::string> & prefix,
            const std::vector<std::string> & lst )
 {
-  if ( str.size() < prefix.size() ) { return false; }
+  if ( lst.size() < prefix.size() ) { return false; }
   for ( std::size_t idx = 0; idx < prefix.size(); ++idx )
     {
-      if ( str[idx] != prefix[idx] ) { return false; }
+      if ( lst[idx] != prefix[idx] ) { return false; }
     }
   return true;
 }
