@@ -188,9 +188,9 @@ impl FloxArgs {
             .clone()
             .unwrap_or("https://hub.flox.dev".parse().unwrap());
 
-        let floxhub_git_url = if let Ok(env_set_host) = std::env::var("_FLOX_FLOXHUB_URL") {
+        let floxhub_git_url = if let Ok(env_set_host) = std::env::var("_FLOX_FLOXHUB_GIT_URL") {
             warn!("Using {env_set_host} as floxhub host");
-            warn!("`$_FLOX_FLOXHUB_URL` is used for testing purposes only, alternative floxhub hosts are not yet supported!");
+            warn!("`$_FLOX_FLOXHUB_GIT_URL` is used for testing purposes only, alternative floxhub hosts are not yet supported!");
             env_set_host.parse()?
         } else {
             // todo: tentative to the floxhub url structure to be settled

@@ -36,7 +36,7 @@ setup() {
   make_dummy_env "owner" "name"
 }
 teardown() {
-  unset __FLOX_FLOXHUB_URL
+  unset _FLOX_FLOXHUB_GIT_URL
   project_teardown
   common_test_teardown
 }
@@ -177,7 +177,7 @@ function update_dummy_env() {
 # try pulling from floxhub authenticated with a test token
 @test "l?: pull environment from floxhub" {
   skip "floxtest/default is not available for all systems"
-  unset __FLOX_FLOXHUB_URL
+  unset _FLOX_FLOXHUB_GIT_URL
   run "$FLOX_BIN" pull --remote floxtest/default
   assert_success
 }

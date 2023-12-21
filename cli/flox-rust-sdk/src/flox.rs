@@ -583,7 +583,7 @@ impl Floxhub {
 
     /// Return the url of the floxhub git interface
     ///
-    /// If the environment variable `_FLOX_FLOXHUB_URL` is set,
+    /// If the environment variable `_FLOX_FLOXHUB_GIT_URL` is set,
     /// it will be used instead of the derived floxhub host.
     /// This is useful for testing floxhub locally.
     pub fn git_url(&self) -> &Url {

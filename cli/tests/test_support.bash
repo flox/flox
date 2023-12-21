@@ -99,7 +99,7 @@ floxhub_setup() {
   mkdir -p "$FLOXHUB_FLOXMETA_DIR"
   git -C "$FLOXHUB_FLOXMETA_DIR" init --bare
 
-  export __FLOX_FLOXHUB_URL="file://$FLOX_FLOXHUB_PATH"
+  export _FLOX_FLOXHUB_GIT_URL="file://$FLOX_FLOXHUB_PATH"
 }
 
 # ---------------------------------------------------------------------------- #
