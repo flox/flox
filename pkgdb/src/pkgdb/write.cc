@@ -33,7 +33,7 @@ extern std::optional<std::string> rulesPath;
 void
 RulesTreeNode::addRule( AttrPathGlob & relPath, ScrapeRule rule )
 {
-  auto scrapeRuleToString = []( const ScrapeRule & rule )->std::string
+  auto scrapeRuleToString = []( const ScrapeRule & rule ) -> std::string
   {
     switch ( rule )
       {
@@ -96,22 +96,22 @@ ScrapeRulesRaw::operator RulesTreeNode() const
   RulesTreeNode root;
   for ( const auto & path : this->allowPackage )
     {
-      AttrPathGlob  pathCopy( path );
+      AttrPathGlob pathCopy( path );
       root.addRule( pathCopy, RulesTreeNode::SR_ALLOW_PACKAGE );
     }
   for ( const auto & path : this->disallowPackage )
     {
-      AttrPathGlob  pathCopy( path );
+      AttrPathGlob pathCopy( path );
       root.addRule( pathCopy, RulesTreeNode::SR_DISALLOW_PACKAGE );
     }
   for ( const auto & path : this->allowRecursive )
     {
-      AttrPathGlob  pathCopy( path );
+      AttrPathGlob pathCopy( path );
       root.addRule( pathCopy, RulesTreeNode::SR_ALLOW_RECURSIVE );
     }
   for ( const auto & path : this->disallowRecursive )
     {
-      AttrPathGlob  pathCopy( path );
+      AttrPathGlob pathCopy( path );
       root.addRule( pathCopy, RulesTreeNode::SR_DISALLOW_RECURSIVE );
     }
   return root;
