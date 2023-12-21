@@ -567,7 +567,7 @@ impl ManagedEnvironment {
                     // from another environment.
                     floxmeta
                         .git
-                        .fetch_ref("origin", &format!("+{0}:{0}", remote_branch))
+                        .fetch_ref("dynamicorigin", &format!("+{0}:{0}", remote_branch))
                         .map_err(|err| match err {
                             GitCommandError::BadExit(_, _, _) => {
                                 ManagedEnvironmentError::Fetch(err)
@@ -617,7 +617,7 @@ impl ManagedEnvironment {
 
                 floxmeta
                     .git
-                    .fetch_ref("origin", &format!("+{0}:{0}", remote_branch))
+                    .fetch_ref("dynamicorigin", &format!("+{0}:{0}", remote_branch))
                     .map_err(ManagedEnvironmentError::Fetch)?;
 
                 // Fresh lockfile, so we don't want to set local_rev
@@ -838,7 +838,7 @@ impl ManagedEnvironment {
         // Caller decides whether to set token
         let token = flox.floxhub_token.as_deref();
 
-        let options = floxmeta_git_options(&flox.floxhub_host, token);
+        let options = floxmeta_git_options(flox.floxhub.git_url(), &pointer.owner, token);
 
         let generations = Generations::init(
             options,
@@ -903,7 +903,7 @@ impl ManagedEnvironment {
         // Fetch the remote branch into sync branch
         self.floxmeta
             .git
-            .fetch_ref("origin", &format!("+{sync_branch}:{sync_branch}",))
+            .fetch_ref("dynamicorigin", &format!("+{sync_branch}:{sync_branch}",))
             .map_err(ManagedEnvironmentError::FetchUpdates)?;
 
         // Check whether we can fast-forward merge the remote branch into the local branch
@@ -923,7 +923,7 @@ impl ManagedEnvironment {
         self.floxmeta
             .git
             .push_ref(
-                "origin",
+                "dynamicorigin",
                 format!("{}:{}", project_branch, sync_branch),
                 force,
             )
@@ -943,7 +943,7 @@ impl ManagedEnvironment {
         // and it's state should not be depended on.
         self.floxmeta
             .git
-            .fetch_ref("origin", &format!("+{sync_branch}:{sync_branch}"))
+            .fetch_ref("dynamicorigin", &format!("+{sync_branch}:{sync_branch}"))
             .map_err(ManagedEnvironmentError::FetchUpdates)?;
 
         // Check whether we can fast-forward the remote branch to the local branch,
