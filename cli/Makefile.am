@@ -41,7 +41,7 @@ else !ENABLE_RELEASE
 
 build: copy-srcs
 	$(MAKE) $(AM_MAKEFLAGS) -C $(top_builddir)/pkgdb bin/pkgdb$(EXEEXT)
-	PKGDB_BIN="$(top_builddir)/pkgdb/bin/pkgdb$(EXEEXT)"  \
+	PKGDB_BIN="$(abs_top_builddir)/pkgdb/bin/pkgdb$(EXEEXT)"  \
 	  $(CARGO) build $(CARGOFLAGS);
 
 endif !ENABLE_RELEASE
