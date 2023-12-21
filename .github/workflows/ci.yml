@@ -158,7 +158,7 @@ jobs:
             --accept-flake-config                                    \
             --no-update-lock-file                                    \
             --command sh -c "PKGDB_BIN='$PWD/build/pkgdb/bin/pkgdb'  \
-                               just build-cli';";
+                               just build-cli;";
 
       - name: "Test (./cli: cargo test)"
         run: |
@@ -176,7 +176,7 @@ jobs:
             --accept-flake-config                                    \
             --no-update-lock-file                                    \
             --command sh -c "PKGDB_BIN='$PWD/build/pkgdb/bin/pkgdb'  \
-                               just test-cli;';";
+                               just test-cli;";
 
       - name: "Test (./tests)"
         run: |
