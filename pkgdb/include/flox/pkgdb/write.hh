@@ -29,10 +29,11 @@ using Todos = std::queue<Target, std::list<Target>>;
 
 /* -------------------------------------------------------------------------- */
 
-struct RulesTreeNode {
+struct RulesTreeNode
+{
 
-  using Children = std::unordered_map<std::string,
-                                      std::unique_ptr<RulestTreeNode>>;
+  using Children
+    = std::unordered_map<std::string, std::unique_ptr<RulestTreeNode>>;
 
   enum ScrapeRule {
     ALLOW_RECURSIVE,
@@ -64,16 +65,14 @@ struct RulesTreeNode {
 
     if ( relPath.empty() )
       {
-        std::get<Children &>( this->value ).emplace(
-          std::string( attrName ),
-          RulesTreeNode( std::move( attrName ), rule )
-        );
+        std::get<Children &>( this->value )
+          .emplace( std::string( attrName ),
+                    RulesTreeNode( std::move( attrName ), rule ) );
       }
     else
       {
         // TODO
       }
-
   }
 
 
@@ -81,7 +80,8 @@ struct RulesTreeNode {
 
 
 /** Scraping rules to modify database creation process. */
-struct ScrapeRules {
+struct ScrapeRules
+{
 
   std::vector<AttrPath> allowRecursive;
   std::vector<AttrPath> allowPackage;
@@ -89,8 +89,6 @@ struct ScrapeRules {
   std::vector<AttrPath> disallowPackage;
 
 }; /* End struct `ScrapeRules` */
-
-
 
 
 /* -------------------------------------------------------------------------- */

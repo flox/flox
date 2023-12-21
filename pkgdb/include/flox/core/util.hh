@@ -206,7 +206,6 @@ operator==( const std::vector<std::string> & lhs,
             const std::vector<std::string> & rhs );
 
 
-
 /* -------------------------------------------------------------------------- */
 
 namespace flox {

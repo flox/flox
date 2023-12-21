@@ -227,8 +227,7 @@ hasPrefix( const std::vector<std::string> & prefix,
            const std::vector<std::string> & lst )
 {
   if ( lst.size() < prefix.size() ) { return false; }
-  std::size_t
-  return str.find( prefix ) == 0;
+  std::size_t return str.find( prefix ) == 0;
 }
 
 
