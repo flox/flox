@@ -11,5 +11,4 @@ pub mod floxmeta;
 pub mod floxmetav2;
 pub mod manifest;
 pub mod pkgdb;
-pub mod project;
 pub mod search;
