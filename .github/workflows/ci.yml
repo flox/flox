@@ -152,6 +152,8 @@ jobs:
 
       - name: "Build (cli)"
         run: |
+          export PKGDB_BIN="build/pkgdb/bin/";
+          ls build/pkgdb/bin/;
           nix develop -L               \
             --accept-flake-config      \
             --no-update-lock-file      \
@@ -160,26 +162,28 @@ jobs:
       - name: "Test (./cli: cargo test)"
         run: |
           export RUST_BACKTRACE=1;
-          nix develop -L                                               \
-            --accept-flake-config                                      \
-            --no-update-lock-file                                      \
-            --command just --set cargo_test_invocation                 \
-                                 'cargo test --locked --workspace -F'  \
-                      unit-tests extra-tests;
+          ls build/pkgdb/bin/;
+          nix develop -L                                                  \
+            --accept-flake-config                                         \
+            --no-update-lock-file                                         \
+            --command sh -c "PKGDB_BIN='$PWD/build/pkgdb/bin/pkgdb'       \
+                               just impure-tests extra-tests --locked;";
 
       - name: "Test (./cli/tests)"
         run: |
-          nix develop -L              \
-            --accept-flake-config     \
-            --no-update-lock-file     \
-            --command just test-cli;
+          nix develop -L                                             \
+            --accept-flake-config                                    \
+            --no-update-lock-file                                    \
+            --command sh -c "PKGDB_BIN='$PWD/build/pkgdb/bin/pkgdb'  \
+                               just test-cli;';";
 
       - name: "Test (./tests)"
         run: |
-          nix develop -L                      \
-            --accept-flake-config             \
-            --no-update-lock-file             \
-            --command just functional-tests;
+          nix develop -L                                             \
+            --accept-flake-config                                    \
+            --no-update-lock-file                                    \
+            --command sh -c "PKGDB_BIN='$PWD/build/pkgdb/bin/pkgdb'  \
+                               just functional-tests;";
 
   nix-build:
     name: "Nix build"
