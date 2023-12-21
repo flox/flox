@@ -69,11 +69,12 @@ pub struct Flox {
 
     pub uuid: uuid::Uuid,
 
+    pub floxhub: Floxhub,
+
     /// Token to authenticate with floxhub.
-    /// It's populated from config during [Flox] initialization.
+    /// It's usually populated from the config during [Flox] initialization.
     /// Checking for [None] can be used to check if the use is logged in.
     pub floxhub_token: Option<String>,
-    pub floxhub_host: String,
 }
 
 pub trait FloxNixApi: NixBackend {

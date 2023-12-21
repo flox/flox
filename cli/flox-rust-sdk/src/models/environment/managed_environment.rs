@@ -865,7 +865,7 @@ impl ManagedEnvironment {
         temp_floxmeta_git
             .add_remote(
                 "upstream",
-                &format!("{}/{}/floxmeta", flox.floxhub_host, &pointer.owner),
+                &format!("{}/{}/floxmeta", flox.floxhub.git_url(), &pointer.owner),
             )
             .unwrap();
 
@@ -988,6 +988,8 @@ mod test {
     use std::str::FromStr;
     use std::time::Duration;
 
+    use url::Url;
+
     use super::*;
     use crate::flox::tests::flox_instance;
     use crate::models::environment::{DOT_FLOX, ENVIRONMENT_POINTER_FILENAME};
@@ -1059,8 +1061,7 @@ mod test {
     /// - floxmeta at commit 2
     #[test]
     fn test_ensure_locked_case_1() {
-        let (mut flox, _temp_dir_handle) = flox_instance();
-        flox.floxhub_token = Some("DUMMY_TOKEN".to_string());
+        let (flox, _temp_dir_handle) = flox_instance();
 
         // create a mock remote
         let remote_base_path = flox.temp_dir.join("remote");
@@ -1109,8 +1110,7 @@ mod test {
     /// - floxmeta at commit 1
     #[test]
     fn test_ensure_locked_case_2() {
-        let (mut flox, _temp_dir_handle) = flox_instance();
-        flox.floxhub_token = Some("DUMMY_TOKEN".to_string());
+        let (flox, _temp_dir_handle) = flox_instance();
 
         // create a mock remote
         let remote_base_path = flox.temp_dir.join("remote");
@@ -1161,8 +1161,7 @@ mod test {
     /// - floxmeta at commit 3
     #[test]
     fn test_ensure_locked_case_3() {
-        let (mut flox, _temp_dir_handle) = flox_instance();
-        flox.floxhub_token = Some("DUMMY_TOKEN".to_string());
+        let (flox, _temp_dir_handle) = flox_instance();
 
         // create a mock remote
         let remote_base_path = flox.temp_dir.join("remote");
@@ -1230,8 +1229,7 @@ mod test {
     /// - error
     #[test]
     fn test_ensure_locked_case_4() {
-        let (mut flox, _temp_dir_handle) = flox_instance();
-        flox.floxhub_token = Some("DUMMY_TOKEN".to_string());
+        let (flox, _temp_dir_handle) = flox_instance();
 
         // create a mock remote
         let remote_base_path = flox.temp_dir.join("remote");
@@ -1278,8 +1276,7 @@ mod test {
     /// - error
     #[test]
     fn test_ensure_locked_case_5() {
-        let (mut flox, _temp_dir_handle) = flox_instance();
-        flox.floxhub_token = Some("DUMMY_TOKEN".to_string());
+        let (flox, _temp_dir_handle) = flox_instance();
 
         // create a mock remote
         let remote_base_path = flox.temp_dir.join("remote");
@@ -1327,8 +1324,7 @@ mod test {
     /// - no change
     #[test]
     fn test_ensure_locked_case_6() {
-        let (mut flox, _temp_dir_handle) = flox_instance();
-        flox.floxhub_token = Some("DUMMY_TOKEN".to_string());
+        let (flox, _temp_dir_handle) = flox_instance();
 
         // create a mock remote
         let remote_base_path = flox.temp_dir.join("remote");
@@ -1377,8 +1373,7 @@ mod test {
     /// - error
     #[test]
     fn test_ensure_locked_case_7() {
-        let (mut flox, _temp_dir_handle) = flox_instance();
-        flox.floxhub_token = Some("DUMMY_TOKEN".to_string());
+        let (flox, _temp_dir_handle) = flox_instance();
 
         // create a mock remote
         let remote_base_path = flox.temp_dir.join("remote");
@@ -1423,8 +1418,7 @@ mod test {
     /// - lock at { rev: commit A1, local_rev: commit A1 }
     #[test]
     fn test_ensure_locked_case_9() {
-        let (mut flox, _temp_dir_handle) = flox_instance();
-        flox.floxhub_token = Some("DUMMY_TOKEN".to_string());
+        let (flox, _temp_dir_handle) = flox_instance();
 
         fs::create_dir(flox.temp_dir.join(DOT_FLOX)).unwrap();
         let dot_flox_path = CanonicalPath::new(flox.temp_dir.join(DOT_FLOX)).unwrap();
@@ -1472,8 +1466,7 @@ mod test {
     /// - local_rev at commit 1
     #[test]
     fn test_ensure_branch_noop() {
-        let (mut flox, _temp_dir_handle) = flox_instance();
-        flox.floxhub_token = Some("DUMMY_TOKEN".to_string());
+        let (flox, _temp_dir_handle) = flox_instance();
 
         // create a mock remote
         let remote_base_path = flox.temp_dir.join("remote");
@@ -1508,8 +1501,7 @@ mod test {
     /// ensure_branch resets the branch to commit 2
     #[test]
     fn test_ensure_branch_resets_branch() {
-        let (mut flox, _temp_dir_handle) = flox_instance();
-        flox.floxhub_token = Some("DUMMY_TOKEN".to_string());
+        let (flox, _temp_dir_handle) = flox_instance();
 
         // create a mock remote
         let remote_base_path = flox.temp_dir.join("remote");
@@ -1559,8 +1551,7 @@ mod test {
     /// ensure_branch creates branch_2 at commit 1
     #[test]
     fn test_ensure_branch_creates_branch() {
-        let (mut flox, _temp_dir_handle) = flox_instance();
-        flox.floxhub_token = Some("DUMMY_TOKEN".to_string());
+        let (flox, _temp_dir_handle) = flox_instance();
 
         // create a mock remote
         let remote_base_path = flox.temp_dir.join("remote");

@@ -275,7 +275,6 @@ impl EnvironmentPointer {
     }
 }
 
-
 /// Represents a `.flox` directory that contains an `env.json`.
 ///
 /// An [UninitializedEnvironment] represents a fully qualified reference to open
