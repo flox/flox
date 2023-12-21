@@ -7,18 +7,19 @@
  *
  * -------------------------------------------------------------------------- */
 
+#include <fstream>
 #include <limits>
 #include <memory>
+#include <optional>
+#include <string>
 
+#include <nlohmann/json.hpp>
+
+#include "flox/core/util.hh"
 #include "flox/flake-package.hh"
 #include "flox/pkgdb/write.hh"
 
 #include "./schemas.hh"
-#include <fstream>
-#include <nlohmann/json.hpp>
-#include <optional>
-#include <string>
-
 
 /* -------------------------------------------------------------------------- */
 
@@ -61,7 +62,8 @@ RulesTreeNode::addRule( AttrPathGlob & relPath, ScrapeRule rule )
       /* Pass down rule to children if they're using `SR_DEFAULT'. */
       for ( auto & [name, child] : this->children )
         {
-          if ( child.rule == SR_DEFAULT ) { addRule( {}, rule ); }
+          AttrPathGlob emptyPath;
+          if ( child.rule == SR_DEFAULT ) { addRule( emptyPath, rule ); }
         }
       return;
     }
@@ -97,7 +99,7 @@ RulesTreeNode::addRule( AttrPathGlob & relPath, ScrapeRule rule )
 
 /* -------------------------------------------------------------------------- */
 
-ScrapeRule
+RulesTreeNode::ScrapeRule
 RulesTreeNode::getRule( const AttrPath & relPath ) const
 {
   /* We are the leaf! */
@@ -142,6 +144,83 @@ ScrapeRulesRaw::operator RulesTreeNode() const
       root.addRule( pathCopy, RulesTreeNode::SR_DISALLOW_RECURSIVE );
     }
   return root;
+}
+
+
+/* -------------------------------------------------------------------------- */
+
+void
+from_json( const nlohmann::json & jfrom, ScrapeRulesRaw & rules )
+{
+  for ( const auto & [key, value] : jfrom.items() )
+    {
+      if ( key == "allowPackage" )
+        {
+          for ( const auto & path : value )
+            {
+              try
+                {
+                  rules.allowPackage.emplace_back( path );
+                }
+              catch ( nlohmann::json::exception & err )
+                {
+                  throw PkgDbException(
+                    "couldn't interpret field `allowPackage." + key + "': ",
+                    flox::extract_json_errmsg( err ) );
+                }
+            }
+        }
+      else if ( key == "disallowPackage" )
+        {
+          for ( const auto & path : value )
+            {
+              try
+                {
+                  rules.disallowPackage.emplace_back( path );
+                }
+              catch ( nlohmann::json::exception & err )
+                {
+                  throw PkgDbException(
+                    "couldn't interpret field `disallowPackage." + key + "': ",
+                    flox::extract_json_errmsg( err ) );
+                }
+            }
+        }
+      else if ( key == "allowRecursive" )
+        {
+          for ( const auto & path : value )
+            {
+              try
+                {
+                  rules.allowRecursive.emplace_back( path );
+                }
+              catch ( nlohmann::json::exception & err )
+                {
+                  throw PkgDbException(
+                    "couldn't interpret field `allowRecursive." + key + "': ",
+                    flox::extract_json_errmsg( err ) );
+                }
+            }
+        }
+      else if ( key == "disallowRecursive" )
+        {
+          for ( const auto & path : value )
+            {
+              try
+                {
+                  rules.disallowRecursive.emplace_back( path );
+                }
+              catch ( nlohmann::json::exception & err )
+                {
+                  throw PkgDbException(
+                    "couldn't interpret field `disallowRecursive." + key
+                      + "': ",
+                    flox::extract_json_errmsg( err ) );
+                }
+            }
+        }
+      else { throw FloxException( "unknown scrape rule: `" + key + "'" ); }
+    }
 }
 
 
@@ -609,6 +688,7 @@ PkgDb::applyRules( const std::vector<std::string> & prefix,
   return std::nullopt;
 }
 
+
 /* -------------------------------------------------------------------------- */
 
 /* NOTE:
@@ -647,7 +727,9 @@ PkgDb::scrape( nix::SymbolTable & syms, const Target & target, Todos & todo )
                          nix::lvlTalkative,
                          nix::actUnknown,
                          "\tevaluating attribute '" + pathS + "'" );
-      auto          rulesAllowed = applyRules( prefix, syms[aname] );
+
+      auto rulesAllowed = applyRules( prefix, syms[aname] );
+
       if ( rulesAllowed.has_value() && ( ! ( *rulesAllowed ) ) ) { continue; }
       try
         {
