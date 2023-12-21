@@ -20,6 +20,7 @@ use runix::installable::{AttrPath, FlakeAttribute};
 use runix::{NixBackend, RunJson};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use url::Url;
 
 use crate::environment::{self, default_nix_subprocess_env};
 use crate::models::channels::ChannelRegistry;
@@ -555,6 +556,40 @@ impl Flox {
 
         Nix::new(self, default_nix_args)
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct Floxhub {
+    /// Floxhub base url from which other urls are derived
+    web: Url,
+
+    /// Url of the floxhub git interface
+    git: Url,
+}
+
+impl Floxhub {
+    pub fn new_from_parts(web_url: Url, git_url: Url) -> Self {
+        Floxhub {
+            web: web_url,
+            git: git_url,
+        }
+    }
+
+    /// Return the base url of the floxhub instance
+    pub fn web_url(&self) -> &Url {
+        &self.web
+    }
+
+    /// Return the url of the floxhub git interface
+    ///
+    /// If the environment variable `_FLOX_FLOXHUB_URL` is set,
+    /// it will be used instead of the derived floxhub host.
+    /// This is useful for testing floxhub locally.
+    pub fn git_url(&self) -> &Url {
+        &self.git
+    }
+
+    // todo: add methods to retrieve user information from floxhub api
 }
 
 /// Requires login with auth0 with "openid" and "profile" scopes
