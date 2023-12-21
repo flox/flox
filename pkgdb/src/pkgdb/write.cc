@@ -402,17 +402,6 @@ PkgDb::setPrefixDone( const flox::AttrPath & prefix, bool done )
   this->setPrefixDone( this->addOrGetAttrSetId( prefix ), done );
 }
 
-static bool
-attrPathsEqual( const AttrPath & left, const AttrPath & right )
-{
-  if ( left.size() != right.size() ) { return false; }
-  for ( auto lchar = left.begin(), rchar = right.begin(); lchar != left.end();
-        ++lchar, ++rchar )
-    {
-      if ( lchar != rchar ) { return false; }
-    }
-  return true;
-}
 // TODO move to a better place
 static std::vector<AttrPath> allowRecursive;
 static std::vector<AttrPath> allowPackage;
@@ -464,30 +453,26 @@ PkgDb::applyRules( const std::vector<std::string> & prefix,
   AttrPath path = prefix;
   path.emplace_back( attr );
 
-  auto eqPath
-    = [&]( const AttrPath & other ) { return attrPathsEqual( path, other ); };
-
-  auto isPathPrefix = [&]( const AttrPath & prefix )
+  auto isPathPrefix = [&]( const AttrPath & rulePath )
   {
-    if ( prefix.size() > path.size() ) { return false; }
-    auto lchar = prefix.begin();
-    auto rchar = path.begin();
-    for ( ; lchar != prefix.end(); ++lchar, ++rchar )
-      {
-        if ( lchar != rchar ) { return false; }
-      }
-    return true;
+    return hasPrefix( rulePath, path );
   };
-  if ( ( std::find_if( allowPackage.begin(), allowPackage.end(), eqPath )
+
+  /* Explicitly allowed package. */
+  if ( ( std::find( allowPackage.begin(), allowPackage.end(), path )
          != allowPackage.end() ) )
     {
       return true;
     }
-  if ( ( std::find_if( disallowPackage.begin(), disallowPackage.end(), eqPath )
+
+  /* Force _include_ package. */
+  if ( ( std::find( disallowPackage.begin(), disallowPackage.end(), path )
          != disallowPackage.end() ) )
     {
       return false;
     }
+
+  /* Disallowed sub-tree. */
   if ( ( std::find_if( disallowRecursive.begin(),
                        disallowRecursive.end(),
                        isPathPrefix )
@@ -495,6 +480,8 @@ PkgDb::applyRules( const std::vector<std::string> & prefix,
     {
       return false;
     }
+
+  /* Force _include_ sub-tree. */
   if ( ( std::find_if( allowRecursive.begin(),
                        allowRecursive.end(),
                        isPathPrefix )
@@ -503,6 +490,7 @@ PkgDb::applyRules( const std::vector<std::string> & prefix,
       return true;
     }
 
+  /* Fall back to default logic. */
   return std::nullopt;
 }
 
