@@ -873,7 +873,7 @@ impl Push {
                 let env = Self::push_make_managed(&flox, path_pointer, &dir, owner, self.force)
                     .context("Could not push new environment")?;
 
-                info!("{}", Self::push_new_message(&env, self.force));
+                info!("{}", Self::push_new_message(env.pointer(), self.force));
             },
         }
         Ok(())
@@ -927,6 +927,7 @@ impl Push {
     ///
     /// todo: add floxhub base url when it's available
     fn push_existing_message(env: &ManagedPointer, force: bool) -> String {
+        let web_url = &env.floxhub_web_url;
         let owner = &env.owner;
         let name = &env.name;
 
@@ -936,16 +937,17 @@ impl Push {
             🚀  updated -> {owner}/{name}{suffix}
 
             Pull this environment with 'flox pull {owner}/{name}'.
-            You can see this environment at https://hub.flox.dev/{owner}/{name}.
+            You can see this environment at {web_url}{owner}/{name}.
         "}
     }
 
     /// construct a message for a newly created environment
     ///
     /// todo: add floxhub base url when it's available
-    fn push_new_message(env: &ManagedEnvironment, force: bool) -> String {
-        let owner = env.owner();
-        let name = env.name();
+    fn push_new_message(env: &ManagedPointer, force: bool) -> String {
+        let web_url = &env.floxhub_web_url;
+        let owner = &env.owner;
+        let name = &env.name;
 
         let suffix = if force { " (forced)" } else { "" };
 
@@ -953,7 +955,7 @@ impl Push {
             🚀  created -> {owner}/{name}{suffix}
 
             Pull this environment with 'flox pull {owner}/{name}'.
-            You can see this environment at https://hub.flox.dev/{owner}/{name}.
+            You can see this environment at {web_url}{owner}/{name}.
         "}
     }
 }

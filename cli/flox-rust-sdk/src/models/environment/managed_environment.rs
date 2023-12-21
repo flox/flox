@@ -682,6 +682,11 @@ impl ManagedEnvironment {
         &self.pointer.owner
     }
 
+    /// Return the managed pointer
+    pub fn pointer(&self) -> &ManagedPointer {
+        &self.pointer
+    }
+
     fn generations(&self) -> Generations {
         Generations::new(
             self.floxmeta.git.clone(),
