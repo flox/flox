@@ -291,7 +291,7 @@ enum LocalDevelopmentCommands {
     #[bpaf(command, long("show"))]
     Show(#[bpaf(external(search::show))] search::Show),
     /// Install a package into an environment
-    #[bpaf(command)]
+    #[bpaf(command, short('i'))]
     Install(#[bpaf(external(environment::install))] environment::Install),
     /// Uninstall installed packages from an environment
     #[bpaf(command, long("remove"), long("rm"))]

@@ -53,7 +53,7 @@ EOF
   line=$((line + 1))
   assert_line -n "$line" --regexp '^    show[ ]+[\w .,]+'
   line=$((line + 1))
-  assert_line -n "$line" --regexp '^    install[ ]+[\w .,]+'
+  assert_line -n "$line" --regexp '^    install, i[ ]+[\w .,]+'
   line=$((line + 1))
   assert_line -n "$line" --regexp '^    uninstall[ ]+[\w .,]+'
   line=$((line + 1))
