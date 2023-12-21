@@ -1,11 +1,12 @@
 use std::path::{Path, PathBuf};
 
 use thiserror::Error;
+use url::Url;
 
 use super::environment::managed_environment::remote_branch_name;
 use super::environment::ManagedPointer;
 use super::environment_ref::EnvironmentOwner;
-use crate::flox::Flox;
+use crate::flox::{Flox, Floxhub};
 use crate::providers::git::{
     GitCommandBranchHashError,
     GitCommandError,
@@ -54,7 +55,6 @@ impl FloxmetaV2 {
         flox: &Flox,
         pointer: &ManagedPointer,
     ) -> Result<Self, FloxmetaV2Error> {
-        let host = flox.floxhub_host.as_str();
         let token = flox.floxhub_token.as_deref();
 
         let git_options = floxmeta_git_options(&pointer.floxhub_git_url, &pointer.owner, token);
@@ -62,7 +62,7 @@ impl FloxmetaV2 {
 
         let git = GitCommandProvider::clone_branch_with(
             git_options,
-            format!("{host}/{}/floxmeta", pointer.owner),
+            format!("{}/{}/floxmeta", pointer.floxhub_git_url, pointer.owner),
             path,
             branch,
             true,
@@ -102,6 +102,10 @@ impl FloxmetaV2 {
         pointer: &ManagedPointer,
     ) -> Result<Self, FloxmetaV2Error> {
         let token = flox.floxhub_token.as_deref();
+        let floxhub = Floxhub::new_from_parts(
+            pointer.floxhub_web_url.clone(),
+            pointer.floxhub_git_url.clone(),
+        );
 
         let git_options = floxmeta_git_options(floxhub.git_url(), &pointer.owner, token);
 
@@ -137,6 +141,10 @@ impl FloxmetaV2 {
         pointer: &ManagedPointer,
     ) -> Result<Self, FloxmetaV2Error> {
         let token = flox.floxhub_token.as_deref();
+        let floxhub = Floxhub::new_from_parts(
+            pointer.floxhub_web_url.clone(),
+            pointer.floxhub_web_url.clone(),
+        );
 
         let git_options = floxmeta_git_options(floxhub.git_url(), &pointer.owner, token);
 
@@ -232,11 +240,17 @@ mod tests {
     fn clone_repo() {
         let _ = env_logger::try_init();
 
-        let (mut flox, tempdir) = flox_instance();
+        let (flox, tempdir) = flox_instance();
         let source_path = tempdir.path().join("source");
 
-        flox.floxhub_token = Some("no token needed here".to_string());
-        flox.floxhub_host = format!("file://{}", source_path.to_string_lossy());
+        let floxhub = Floxhub::new_from_parts(
+            format!("file://{}", source_path.to_string_lossy())
+                .parse()
+                .unwrap(),
+            format!("file://{}", source_path.to_string_lossy())
+                .parse()
+                .unwrap(),
+        );
 
         let pointer = ManagedPointer::new(
             "floxtest".parse().unwrap(),
