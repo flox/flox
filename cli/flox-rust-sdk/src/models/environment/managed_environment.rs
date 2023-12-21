@@ -87,7 +87,7 @@ pub enum ManagedEnvironmentError {
     Diverged,
     #[error("access to floxmeta repository was denied")]
     AccessDenied,
-    #[error("failed to push environment: {0}")]
+    #[error("failed to push environment")]
     Push(#[source] GitRemoteCommandError),
     #[error("failed to delete local environment branch")]
     DeleteBranch(#[source] GitCommandError),

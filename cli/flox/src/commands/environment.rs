@@ -152,7 +152,10 @@ impl Edit {
 
             match result {
                 Err(e) => {
-                    error!("Environment invalid; building resulted in an error: {e}");
+                    error!(
+                        "Environment invalid; building resulted in an error: {}",
+                        anyhow!(e).chain().join(": ")
+                    );
                     if !Dialog::can_prompt() {
                         bail!("Can't prompt to continue editing in non-interactive context");
                     }

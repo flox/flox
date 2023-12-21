@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
 
+use log::debug;
 use thiserror::Error;
 use url::Url;
 
@@ -188,15 +189,26 @@ pub fn floxmeta_git_options(
         format!("{floxhub_git_url}/{floxhub_owner}/floxmeta"),
     );
 
-    if let Some(token) = floxhub_token {
+
+        let token = if let Some(token) = floxhub_token {
+            debug!("using configured floxhub token");
+            token
+        } else {
+            debug!("no floxhub token configured");
+            ""
+        };
+
         // Set authentication with the floxhub token using an inline credential helper.
         // The credential helper should help avoinding a leak of the token in the process list.
+        //
+        // If no token is provided, we still set the credential helper
+        // to enforce authentication failures and avoid fallback to pinentry
         options.add_env_var("FLOX_FLOXHUB_TOKEN", token);
         options.add_config_flag(
             &format!("credential.{floxhub_git_url}.helper"),
             r#"!f(){ echo "username=oauth"; echo "password=$FLOX_FLOXHUB_TOKEN"; }; f"#,
         );
-    }
+
 
     options
 }
