@@ -65,6 +65,8 @@ struct RulesTreeNode
   void
   addRule( AttrPathGlob & relPath, ScrapeRule rule );
 
+  ScrapeRule
+  getRule( const AttrPath & relPath );
 
 }; /* End struct `RulesTreeNode' */
 
