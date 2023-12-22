@@ -68,7 +68,19 @@ RulesTreeNode::addRule( AttrPathGlob & relPath, ScrapeRule rule )
       return;
     }
 
-  std::string attrName = std::move( relPath.front() ).value_or( "*" );
+  /* Handle system glob. */
+  if ( ! relPath.front().has_value() )
+    {
+      for ( const auto & system : getDefaultSystems() )
+        {
+          AttrPathGlob relPathCopy = relPath;
+          relPathCopy.front()      = system;
+          this->addRule( relPathCopy, rule );
+        }
+      return;
+    }
+
+  std::string attrName = std::move( *relPath.front() );
   // TODO: Use a `std::deque' instead of `std::vector' for efficiency.
   //       This container is only used for `push_back' and `pop_front'.
   //       Removing from the front is inefficient for `std::vector'.
@@ -611,10 +623,17 @@ PkgDb::scrape( nix::SymbolTable & syms, const Target & target, Todos & todo )
 {
 
   static std::optional<RulesTreeNode> rules;
-  if ( rulesPath.has_value() && ( ! rules.has_value() ) )
+  if ( ! rules.has_value() )
     {
-      ScrapeRulesRaw raw = readAndCoerceJSON( *rulesPath );
-      rules              = static_cast<RulesTreeNode>( raw );
+      ScrapeRulesRaw raw;
+      if ( rulesPath.has_value() ) { raw = readAndCoerceJSON( *rulesPath ); }
+      else
+        {
+          raw = nlohmann::json::parse(
+#include "./rules.json.hh"
+          );
+        }
+      rules = static_cast<RulesTreeNode>( raw );
     }
   auto applyRules = [&]( const AttrPath &    prefix,
                          const std::string & attrName ) -> std::optional<bool>
@@ -627,6 +646,8 @@ PkgDb::scrape( nix::SymbolTable & syms, const Target & target, Todos & todo )
       {
         case RulesTreeNode::ScrapeRule::SR_ALLOW_PACKAGE: return true;
         case RulesTreeNode::ScrapeRule::SR_DISALLOW_PACKAGE: return false;
+        case RulesTreeNode::ScrapeRule::SR_ALLOW_RECURSIVE: return true;
+        case RulesTreeNode::ScrapeRule::SR_DISALLOW_RECURSIVE: return false;
         case RulesTreeNode::ScrapeRule::SR_DEFAULT: return std::nullopt;
         // TODO: move rule -> string so it's accessible here
         default: throw PkgDbException( "encountered unexpected rule" );
@@ -676,13 +697,22 @@ PkgDb::scrape( nix::SymbolTable & syms, const Target & target, Todos & todo )
 
           if ( ! tryRecur ) { continue; }
 
+
           if ( auto maybe = child->maybeGetAttr( "recurseForDerivations" );
-               ( *rulesAllowed )
+               //( ( child->forceValue().type() == nix::nAttrs )
+               //  && rulesAllowed.value_or( false ) )
+               ( ( prefix.front() == "legacyPackages" )
+                 && ( syms[aname] == "darwin" ) )
                || ( ( maybe != nullptr ) && maybe->getBool() ) )
             {
               flox::AttrPath path = prefix;
               path.emplace_back( syms[aname] );
 
+              if ( nix::lvlTalkative <= nix::verbosity )
+                {
+                  nix::logger->log( nix::lvlTalkative,
+                                    "\tpushing target '" + pathS + "'" );
+                }
               row_id childId = this->addOrGetAttrSetId( syms[aname], parentId );
               todo.emplace( std::make_tuple( std::move( path ),
                                              std::move( child ),
