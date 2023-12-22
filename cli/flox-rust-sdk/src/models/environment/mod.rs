@@ -4,7 +4,6 @@ use std::{env, fs, io};
 
 use flox_types::version::Version;
 use log::debug;
-use runix::command_line::NixCommandLineRunJsonError;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use url::Url;
@@ -342,16 +341,6 @@ pub enum EnvironmentError2 {
     WriteGitignore(#[source] std::io::Error),
     #[error("couldn't update manifest")]
     ManifestEdit(#[source] std::io::Error),
-    // endregion
-
-    // todo: rmove with "catalog()" method
-    // region: catalog
-    #[error("EvalCatalog")]
-    EvalCatalog(#[source] NixCommandLineRunJsonError),
-    #[error("ParseCatalog")]
-    ParseCatalog(#[source] serde_json::Error),
-    #[error("WriteCatalog")]
-    WriteCatalog(#[source] std::io::Error),
     // endregion
 
     // todo: move pointer related errors somewhere else?
