@@ -716,10 +716,9 @@ PkgDb::scrape( nix::SymbolTable & syms, const Target & target, Todos & todo )
 
 
           if ( auto maybe = child->maybeGetAttr( "recurseForDerivations" );
-               //( ( child->forceValue().type() == nix::nAttrs )
-               //  && rulesAllowed.value_or( false ) )
-               ( ( prefix.front() == "legacyPackages" )
-                 && ( syms[aname] == "darwin" ) )
+               rulesAllowed.value_or( false )
+               //( ( prefix.front() == "legacyPackages" )
+               //  && ( syms[aname] == "darwin" ) )
                || ( ( maybe != nullptr ) && maybe->getBool() ) )
             {
               flox::AttrPath path = prefix;
