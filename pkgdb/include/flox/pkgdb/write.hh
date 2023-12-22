@@ -61,7 +61,7 @@ enum ScrapeRule {
   SR_DISALLOW_RECURSIVE
 }; /* End enum `ScrapeRule` */
 
-std::string
+[[nodiscard]] std::string
 scrapeRuleToString( ScrapeRule rule );
 
 
@@ -105,7 +105,7 @@ struct RulesTreeNode
    *
    * @see @a flox::pkgdb::RulesTreeNode::applyRules
    */
-  ScrapeRule
+  [[nodiscard]] ScrapeRule
   getRule( const AttrPath & path = {} ) const;
 
   /**
@@ -116,7 +116,7 @@ struct RulesTreeNode
    * Parent paths may _pass down_ rules to children unless otherwise defined
    * at lower levels.
    */
-  std::optional<bool>
+  [[nodiscard]] std::optional<bool>
   applyRules( const AttrPath & path ) const;
 
 

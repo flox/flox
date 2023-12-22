@@ -202,7 +202,7 @@ struct adl_serializer<nix::FlakeRef>
 /* -------------------------------------------------------------------------- */
 
 /** @brief Detect if two vectors of strings are equal. */
-bool
+[[nodiscard]] bool
 operator==( const std::vector<std::string> & lhs,
             const std::vector<std::string> & rhs );
 
@@ -214,7 +214,7 @@ namespace flox {
 /* -------------------------------------------------------------------------- */
 
 /** @brief Systems to resolve/search in. */
-inline static const std::vector<std::string> &
+[[nodiscard]] inline static const std::vector<std::string> &
 getDefaultSystems()
 {
   static const std::vector<std::string> defaultSystems
@@ -224,7 +224,7 @@ getDefaultSystems()
 
 
 /** @brief `flake' subtrees to resolve/search in. */
-inline static const std::vector<std::string> &
+[[nodiscard]] inline static const std::vector<std::string> &
 getDefaultSubtrees()
 {
   static const std::vector<std::string> defaultSubtrees
@@ -240,7 +240,7 @@ getDefaultSubtrees()
  * @param dbPath Absolute path.
  * @return `true` iff @a path is a SQLite3 database file.
  */
-bool
+[[nodiscard]] bool
 isSQLiteDb( const std::string & dbPath );
 
 
@@ -251,7 +251,7 @@ isSQLiteDb( const std::string & dbPath );
  * @param flakeRef JSON or URI string representing a `nix` flake reference.
  * @return Parsed flake reference object.
  */
-nix::FlakeRef
+[[nodiscard]] nix::FlakeRef
 parseFlakeRef( const std::string & flakeRef );
 
 
@@ -262,21 +262,21 @@ parseFlakeRef( const std::string & flakeRef );
  * @param jsonOrPath A JSON string or a path to a JSON file.
  * @return A parsed JSON object.
  */
-nlohmann::json
+[[nodiscard]] nlohmann::json
 parseOrReadJSONObject( const std::string & jsonOrPath );
 
 
 /* -------------------------------------------------------------------------- */
 
 /** @brief Convert a TOML string to JSON. */
-nlohmann::json
+[[nodiscard]] nlohmann::json
 tomlToJSON( std::string_view toml );
 
 
 /* -------------------------------------------------------------------------- */
 
 /** @brief Convert a YAML string to JSON. */
-nlohmann::json
+[[nodiscard]] nlohmann::json
 yamlToJSON( std::string_view yaml );
 
 
@@ -289,7 +289,7 @@ yamlToJSON( std::string_view yaml );
  * Files with the extension `.yaml` or `.yml` are converted to JSON from YAML.
  * Files with the extension `.toml` are converted to JSON from TOML.
  */
-nlohmann::json
+[[nodiscard]] nlohmann::json
 readAndCoerceJSON( const std::filesystem::path & path );
 
 
@@ -300,7 +300,7 @@ readAndCoerceJSON( const std::filesystem::path & path );
  *
  * Handles quoted strings and escapes.
  */
-std::vector<std::string>
+[[nodiscard]] std::vector<std::string>
 splitAttrPath( std::string_view path );
 
 
@@ -311,7 +311,7 @@ splitAttrPath( std::string_view path );
  * @param str String to test.
  * @return `true` iff @a str is a stringized unsigned integer.
  */
-bool
+[[nodiscard]] bool
 isUInt( std::string_view str );
 
 
@@ -323,7 +323,7 @@ isUInt( std::string_view str );
  * @param str String to test.
  * @return `true` iff @a str has the prefix @a prefix.
  */
-bool
+[[nodiscard]] bool
 hasPrefix( std::string_view prefix, std::string_view str );
 
 
@@ -336,7 +336,7 @@ hasPrefix( std::string_view prefix, std::string_view str );
  * @param lst Vector of strings to test.
  * @return `true` iff @a lst has the prefix @a prefix.
  */
-bool
+[[nodiscard]] bool
 hasPrefix( const std::vector<std::string> & prefix,
            const std::vector<std::string> & lst );
 
@@ -374,7 +374,7 @@ trim_copy( std::string_view str );
 /**
  * @brief Extract the user-friendly portion of a @a nlohmann::json::exception.
  */
-std::string
+[[nodiscard]] std::string
 extract_json_errmsg( nlohmann::json::exception & err );
 
 /* -------------------------------------------------------------------------- */
@@ -411,7 +411,7 @@ assertIsJSONObject( const nlohmann::json & value,
  * @return The merged @a std::vector.
  */
 template<typename T>
-std::vector<T>
+[[nodiscard]] std::vector<T>
 merge_vectors( const std::vector<T> & lower, const std::vector<T> & higher )
 {
   std::vector<T> merged = higher;
@@ -428,27 +428,10 @@ merge_vectors( const std::vector<T> & lower, const std::vector<T> & higher )
 
 /* -------------------------------------------------------------------------- */
 
-/**
- * @brief Constructs a @a std::vector<std::optional<T>> from a
- * @a std::vector<T>.
- */
-template<typename T>
-[[nodiscard]] std::vector<std::optional<T>>
-vectorMapOptional( const std::vector<T> & orig )
-{
-  std::vector<std::optional<T>> rsl;
-  for ( const T & val : orig )
-    {
-      rsl.emplace_back( std::make_optional<T>( val ) );
-    }
-  return rsl;
-}
-
-/* -------------------------------------------------------------------------- */
-
 /** @brief Convert a @a AttrPathGlob to a string for display. */
-std::string
+[[nodiscard]] std::string
 displayableGlobbedPath( const AttrPathGlob & attrs );
+
 
 /* -------------------------------------------------------------------------- */
 
@@ -457,7 +440,7 @@ displayableGlobbedPath( const AttrPathGlob & attrs );
  *        the elements.
  */
 template<class Container>
-std::string
+[[nodiscard]] std::string
 concatStringsSep( const std::string_view sep, const Container & strings )
 {
   size_t size = 0;
