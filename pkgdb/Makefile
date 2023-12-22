@@ -587,8 +587,8 @@ $(BINS): %: $(SRCS:.cc=.o)
 
 $(test_SRCS:.cc=.o): CXXFLAGS += '-DTEST_DATA_DIR="$(TEST_DATA_DIR)"'
 $(TESTS) $(TEST_UTILS): tests/%: $(filter-out src/main.o,$(SRCS:.cc=.o))
-$(TESTS) $(TEST_UTILS): tests/%: tests/%.o
-	$(CXX) $^ $(LDFLAGS) -o $@;
+$(TESTS) $(TEST_UTILS): tests/%: tests/%.o tests/test.hh
+	$(CXX) $(filter %.o,$^) $(LDFLAGS) -o $@;
 
 # ---------------------------------------------------------------------------- #
 
