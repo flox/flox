@@ -57,6 +57,25 @@ static const nlohmann::json pkgDescriptorBaseRaw = R"( {
 
 /* -------------------------------------------------------------------------- */
 
+static const nlohmann::json rulesJSON = R"( {
+  "allowRecursive": [
+    ["legacyPackages", null, "darwin"]
+  ],
+  "disallowRecursive": [
+    ["legacyPackages", null, "emacsPackages"],
+    ["legacyPackages", null, "python310Packages"]
+  ],
+ "allowPackage": [
+   ["legacyPackages", null, "python310Packages", "pip"]
+ ],
+ "disallowPackage": [
+   ["legacyPackages", null, "gcc"]
+ ]
+} )"_json;
+
+
+/* -------------------------------------------------------------------------- */
+
 static row_id
 getRowCount( flox::pkgdb::PkgDb & db, const std::string table )
 {
@@ -967,6 +986,59 @@ test_getPackages_semver0( flox::pkgdb::PkgDb & db )
 
 /* -------------------------------------------------------------------------- */
 
+/**
+ * @brief Ensure parsing @a flox::pkgdb::RulesTreeNode from JSON doesn't throw.
+ */
+bool
+test_RulesTree_parse0()
+{
+  flox::pkgdb::RulesTreeNode rules(
+    rulesJSON.get<flox::pkgdb::ScrapeRulesRaw>()
+  );
+  return true;
+}
+
+
+/* -------------------------------------------------------------------------- */
+
+bool
+test_RulesTree_getRule_fallback0()
+{
+  flox::pkgdb::RulesTreeNode rules(
+    rulesJSON.get<flox::pkgdb::ScrapeRulesRaw>()
+  );
+  flox::pkgdb::ScrapeRule rule = rules.getRule( flox::AttrPath { "phony" } );
+  EXPECT_EQ( rule, flox::pkgdb::SR_DEFAULT );
+  return true;
+}
+
+
+/* -------------------------------------------------------------------------- */
+
+bool
+test_RulesTree_getRule0()
+{
+  flox::pkgdb::RulesTreeNode rules(
+    rulesJSON.get<flox::pkgdb::ScrapeRulesRaw>()
+  );
+  flox::pkgdb::ScrapeRule rule = rules.getRule(
+    flox::AttrPath { "legacyPackages", "x86_64-linux", "hello" } );
+  EXPECT_EQ( rule, flox::pkgdb::SR_DEFAULT );
+  rule = rules.getRule(
+    flox::AttrPath { "legacyPackages", "x86_64-darwin", "hello" } );
+  EXPECT_EQ( rule, flox::pkgdb::SR_DEFAULT );
+  rule = rules.getRule(
+    flox::AttrPath { "legacyPackages", "aarch64-linux", "hello" } );
+  EXPECT_EQ( rule, flox::pkgdb::SR_DEFAULT );
+  rule = rules.getRule(
+    flox::AttrPath { "legacyPackages", "aarch64-darwin", "hello" } );
+  EXPECT_EQ( rule, flox::pkgdb::SR_DEFAULT );
+  return true;
+}
+
+
+/* -------------------------------------------------------------------------- */
+
 int
 main( int argc, char * argv[] )
 {
@@ -1021,6 +1093,10 @@ main( int argc, char * argv[] )
 
     RUN_TEST( getPackages_semver0, db );
   }
+
+  RUN_TEST( RulesTree_parse0 );
+  RUN_TEST( RulesTree_getRule_fallback0 );
+  RUN_TEST( RulesTree_getRule0 );
 
   /* XXX: You may find it useful to preserve the file and print it for some
    *      debugging efforts. */

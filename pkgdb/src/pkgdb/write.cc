@@ -32,17 +32,17 @@ extern std::optional<std::string> rulesPath;
 /* -------------------------------------------------------------------------- */
 
 static std::string
-scrapeRuleToString( RulesTreeNode::ScrapeRule rule )
+scrapeRuleToString( ScrapeRule rule )
 {
   switch ( rule )
     {
-      case RulesTreeNode::ScrapeRule::SR_DEFAULT: return "NONE";
-      case RulesTreeNode::ScrapeRule::SR_ALLOW_PACKAGE: return "allowPackage";
-      case RulesTreeNode::ScrapeRule::SR_DISALLOW_PACKAGE:
+      case SR_DEFAULT: return "NONE";
+      case SR_ALLOW_PACKAGE: return "allowPackage";
+      case SR_DISALLOW_PACKAGE:
         return "disallowPackage";
-      case RulesTreeNode::ScrapeRule::SR_ALLOW_RECURSIVE:
+      case SR_ALLOW_RECURSIVE:
         return "allowRecursive";
-      case RulesTreeNode::ScrapeRule::SR_DISALLOW_RECURSIVE:
+      case SR_DISALLOW_RECURSIVE:
         return "disallowRecursive";
       default: return "UNKNOWN";
     }
@@ -118,7 +118,7 @@ RulesTreeNode::addRule( AttrPathGlob & relPath, ScrapeRule rule )
 
 /* -------------------------------------------------------------------------- */
 
-RulesTreeNode::ScrapeRule
+ScrapeRule
 RulesTreeNode::getRule( const AttrPath & relPath ) const
 {
   /* We are the leaf! */
@@ -139,15 +139,6 @@ RulesTreeNode::getRule( const AttrPath & relPath ) const
 
 /* -------------------------------------------------------------------------- */
 
-RulesTreeNode::RulesTreeNode( RulesTreeNode::use_builtin_tag )
-  : RulesTreeNode( static_cast<ScrapeRulesRaw>( nlohmann::json::parse(
-#include "./rules.json.hh"
-    ) ) )
-{}
-
-
-/* -------------------------------------------------------------------------- */
-
 std::optional<bool>
 RulesTreeNode::applyRules( const AttrPath &    prefix,
                            const std::string & attrName ) const
@@ -157,11 +148,11 @@ RulesTreeNode::applyRules( const AttrPath &    prefix,
   auto rule = this->getRule( path );
   switch ( rule )
     {
-      case RulesTreeNode::ScrapeRule::SR_ALLOW_PACKAGE: return true;
-      case RulesTreeNode::ScrapeRule::SR_DISALLOW_PACKAGE: return false;
-      case RulesTreeNode::ScrapeRule::SR_ALLOW_RECURSIVE: return true;
-      case RulesTreeNode::ScrapeRule::SR_DISALLOW_RECURSIVE: return false;
-      case RulesTreeNode::ScrapeRule::SR_DEFAULT: return std::nullopt;
+      case SR_ALLOW_PACKAGE: return true;
+      case SR_DISALLOW_PACKAGE: return false;
+      case SR_ALLOW_RECURSIVE: return true;
+      case SR_DISALLOW_RECURSIVE: return false;
+      case SR_DEFAULT: return std::nullopt;
       default:
         throw PkgDbException( "encountered unexpected rule `"
                               + scrapeRuleToString( rule ) + '\'' );
@@ -181,30 +172,28 @@ from_json( const nlohmann::json & jfrom, RulesTreeNode & rules )
 
 /* -------------------------------------------------------------------------- */
 
-ScrapeRulesRaw::operator RulesTreeNode() const
+RulesTreeNode::RulesTreeNode( ScrapeRulesRaw raw )
 {
-  RulesTreeNode root;
-  for ( const auto & path : this->allowPackage )
+  for ( const auto & path : raw.allowPackage )
     {
-      AttrPathGlob pathCopy( path );
-      root.addRule( pathCopy, RulesTreeNode::SR_ALLOW_PACKAGE );
+      AttrPathGlob pathCopy( std::move( path ) );
+      this->addRule( pathCopy, SR_ALLOW_PACKAGE );
     }
-  for ( const auto & path : this->disallowPackage )
+  for ( const auto & path : raw.disallowPackage )
     {
-      AttrPathGlob pathCopy( path );
-      root.addRule( pathCopy, RulesTreeNode::SR_DISALLOW_PACKAGE );
+      AttrPathGlob pathCopy( std::move( path ) );
+      this->addRule( pathCopy, SR_DISALLOW_PACKAGE );
     }
-  for ( const auto & path : this->allowRecursive )
+  for ( const auto & path : raw.allowRecursive )
     {
-      AttrPathGlob pathCopy( path );
-      root.addRule( pathCopy, RulesTreeNode::SR_ALLOW_RECURSIVE );
+      AttrPathGlob pathCopy( std::move( path ) );
+      this->addRule( pathCopy, SR_ALLOW_RECURSIVE );
     }
-  for ( const auto & path : this->disallowRecursive )
+  for ( const auto & path : raw.disallowRecursive )
     {
-      AttrPathGlob pathCopy( path );
-      root.addRule( pathCopy, RulesTreeNode::SR_DISALLOW_RECURSIVE );
+      AttrPathGlob pathCopy( std::move( path ) );
+      this->addRule( pathCopy, SR_DISALLOW_RECURSIVE );
     }
-  return root;
 }
 
 
@@ -662,6 +651,23 @@ PkgDb::setPrefixDone( const flox::AttrPath & prefix, bool done )
 
 /* -------------------------------------------------------------------------- */
 
+static const RulesTreeNode &
+getDefaultRules()
+{
+  static std::optional<RulesTreeNode> rules;
+  if ( ! rules.has_value() )
+    {
+      ScrapeRulesRaw raw = nlohmann::json::parse(
+        #include "./rules.json.hh"
+      );
+      rules = RulesTreeNode( std::move( raw ) );
+    }
+  return *rules;
+}
+
+
+/* -------------------------------------------------------------------------- */
+
 /* NOTE:
  * Benchmarks on large catalogs have indicated that using a _todo_ queue instead
  * of recursion is faster and consumes less memory.
@@ -699,8 +705,7 @@ PkgDb::scrape( nix::SymbolTable & syms, const Target & target, Todos & todo )
                          nix::actUnknown,
                          "\tevaluating attribute '" + pathS + "'" );
 
-      static RulesTreeNode rules( RulesTreeNode::use_builtin_tag {} );
-      auto rulesAllowed = rules.applyRules( prefix, syms[aname] );
+      auto rulesAllowed = getDefaultRules().applyRules( prefix, syms[aname] );
 
       if ( rulesAllowed.has_value() && ( ! ( *rulesAllowed ) ) ) { continue; }
       try
