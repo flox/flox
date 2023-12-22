@@ -46,15 +46,6 @@ static const size_t fullPkgCount     = 64040;
 
 /* -------------------------------------------------------------------------- */
 
-static inline void
-printFailure( std::string_view name )
-{
-  std::cerr << "  fail: " << name << std::endl;
-}
-
-
-/* -------------------------------------------------------------------------- */
-
 /** @brief Wrap a test function pretty printing its name on failure. */
 template<typename F, typename... Args>
 static int
