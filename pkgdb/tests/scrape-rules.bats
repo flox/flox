@@ -28,52 +28,52 @@ setup() {
 
   # Define rules.json content
   rules_json='{
-        "allowRecursive": [
-          [
-            "legacyPackages",
-            null,
-            "darwin"
-          ]
-        ],
-        "allowPackage": [
-          [
-            "legacyPackages",
-            null,
-            "python310Packages",
-            "pip"
-          ],
-          [
-            "legacyPackages",
-            null,
-            "python310Packages",
-            "django"
-          ]
-        ],
-        "disallowRecursive": [
-          [
-            "legacyPackages",
-            null,
-            "python310Packages"
-          ],
-          [
-            "legacyPackages",
-            null,
-            "emacsPackages"
-          ],
-          [
-            "legacyPackages",
-            null,
-            "vimPlugins"
-          ]
-        ],
-        "disallowPackage": [
-          [
-            "legacyPackages",
-            null,
-            "sqlite"
-          ]
-        ]
-      }'
+    "allowRecursive": [
+      [
+        "legacyPackages",
+        null,
+        "darwin"
+      ]
+    ],
+    "allowPackage": [
+      [
+        "legacyPackages",
+        null,
+        "python310Packages",
+        "pip"
+      ],
+      [
+        "legacyPackages",
+        null,
+        "python310Packages",
+        "django"
+      ]
+    ],
+    "disallowRecursive": [
+      [
+        "legacyPackages",
+        null,
+        "python310Packages"
+      ],
+      [
+        "legacyPackages",
+        null,
+        "emacsPackages"
+      ],
+      [
+        "legacyPackages",
+        null,
+        "vimPlugins"
+      ]
+    ],
+    "disallowPackage": [
+      [
+        "legacyPackages",
+        null,
+        "sqlite"
+      ]
+    ]
+  }'
 } #end setup
 
 
