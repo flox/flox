@@ -65,7 +65,8 @@ struct RulesTreeNode
    * @brief Phony tag struct used to indicate that the _default_/builtin rules
    *        should be used.
    */
-  struct use_builtin_tag {};
+  struct use_builtin_tag
+  {};
 
   using Children = std::unordered_map<std::string, RulesTreeNode>;
 
