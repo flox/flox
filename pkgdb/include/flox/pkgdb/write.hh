@@ -33,10 +33,6 @@ using Todos = std::queue<Target, std::list<Target>>;
 
 /* -------------------------------------------------------------------------- */
 
-struct RulesTreeNode;
-
-/* -------------------------------------------------------------------------- */
-
 /** @brief Scraping rules to modify database creation process in _raw_ form. */
 struct ScrapeRulesRaw
 {
@@ -45,10 +41,6 @@ struct ScrapeRulesRaw
   std::vector<AttrPathGlob> allowRecursive;
   std::vector<AttrPathGlob> disallowRecursive;
   // TODO: aliases
-
-  explicit operator RulesTreeNode() const;
-
-
 }; /* End struct `ScrapeRulesRaw` */
 
 
@@ -59,25 +51,21 @@ from_json( const nlohmann::json & jfrom, ScrapeRulesRaw & rules );
 
 /* -------------------------------------------------------------------------- */
 
+enum ScrapeRule {
+  SR_DEFAULT = 0,      /**< Applies no special rules. */
+  SR_ALLOW_PACKAGE,    /**< Forces an package entry in DB. */
+  SR_ALLOW_RECURSIVE,  /**< Forces a sub-tree to be scraped. */
+  SR_DISALLOW_PACKAGE, /**< Do not add package entry to DB. */
+  /** Ignore sub-tree members unless otherwise specified. */
+  SR_DISALLOW_RECURSIVE
+}; /* End enum `ScrapeRule` */
+
+
+/* -------------------------------------------------------------------------- */
+
 struct RulesTreeNode
 {
-  /**
-   * @brief Phony tag struct used to indicate that the _default_/builtin rules
-   *        should be used.
-   */
-  struct use_builtin_tag
-  {};
-
   using Children = std::unordered_map<std::string, RulesTreeNode>;
-
-  enum ScrapeRule {
-    SR_DEFAULT = 0,      /**< Applies no special rules. */
-    SR_ALLOW_PACKAGE,    /**< Forces an package entry in DB. */
-    SR_ALLOW_RECURSIVE,  /**< Forces a sub-tree to be scraped. */
-    SR_DISALLOW_PACKAGE, /**< Do not add package entry to DB. */
-    /** Ignore sub-tree members unless otherwise specified. */
-    SR_DISALLOW_RECURSIVE
-  }; /* End enum `ScrapeRule` */
 
   std::string attrName;
   ScrapeRule  rule     = SR_DEFAULT;
@@ -85,9 +73,9 @@ struct RulesTreeNode
 
   RulesTreeNode() = default;
 
-  RulesTreeNode( use_builtin_tag );
+  explicit RulesTreeNode( ScrapeRulesRaw rules );
 
-  RulesTreeNode( const std::filesystem::path & path )
+  explicit RulesTreeNode( const std::filesystem::path & path )
     : RulesTreeNode( static_cast<ScrapeRulesRaw>( readAndCoerceJSON( path ) ) )
   {}
 
