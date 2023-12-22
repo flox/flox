@@ -6,6 +6,7 @@
 #
 # These tests are meant to test the `pkgdb scrape --rules' CLI command.
 #
+#
 # ---------------------------------------------------------------------------- #
 
 load setup_suite.bash
@@ -122,8 +123,10 @@ setup() {
   run sqlite3 "$DBPATH" "SELECT attrName FROM Packages      \
     WHERE name = 'legacyPackages.x86_64-linux.python3Packages.requests' LIMIT 1"
   assert_output ''
-  #pip and django should be found allowPackage takes priority over disallowRecursive.
-  # that lets us "disable all python310Packages except for ____ (pip and django)"
+  # pip and django should be found allowPackage takes priority
+  # over disallowRecursive.
+  # that lets us "disable all python310Packages except for ____
+  # (pip and django)"
   run sqlite3 "$DBPATH" "SELECT attrName FROM Packages      \
     WHERE name = 'legacyPackages.x86_64-linux.python3Packages.pip' LIMIT 1"
   assert_output 'pip'
