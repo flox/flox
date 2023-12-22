@@ -281,10 +281,19 @@ genParamsNixpkgsFlox() {
 
 # Check fallback behavior.
 @test "search-params with empty object" {
+<<<<<<< HEAD
   if [ -z "${PKGDB_SEARCH_PARAMS_BIN:=$( command -v search-params; )}" ]; then
     skip "Unable to locate \`search-params' binary";
   fi
   run "${PKGDB_SEARCH_PARAMS_BIN:?}" '{}'
+||||||| parent of ea78eb21 (fix: applyRules works)
+  run $PKGDB_SEARCH_PARAMS_BIN '{}'
+=======
+  if [[ -z "${PKGDB_SEARCH_PARAMS_BIN:=$( command -v search-params; )}" ]]; then
+    skip "Unable to locate \`search-params' binary";
+  fi
+  run "${PKGDB_SEARCH_PARAMS_BIN:?}" '{}'
+>>>>>>> ea78eb21 (fix: applyRules works)
   assert_success
 
   run sh -c "$PKGDB_SEARCH_PARAMS_BIN '{}'|jq -r '.manifest';"

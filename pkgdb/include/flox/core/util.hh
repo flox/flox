@@ -463,6 +463,41 @@ concatStringsSep( const std::string_view sep, const Container & strings )
 
 /* -------------------------------------------------------------------------- */
 
+/** @brief Convert a @a AttrPathGlob to a string for display. */
+std::string
+displayableGlobbedPath( const AttrPathGlob & attrs );
+
+
+/* -------------------------------------------------------------------------- */
+
+/**
+ * @brief Concatenate the given strings with a separator between
+ *        the elements.
+ */
+template<class Container>
+std::string
+concatStringsSep( const std::string_view sep, const Container & strings )
+{
+  size_t size = 0;
+  /* Needs a cast to string_view since this is also called
+   * with `nix::Symbols'. */
+  for ( const auto & str : strings )
+    {
+      size += sep.size() + std::string_view( str ).size();
+    }
+  std::string rsl;
+  rsl.reserve( size );
+  for ( auto & idx : strings )
+    {
+      if ( rsl.size() != 0 ) { rsl += sep; }
+      rsl += idx;
+    }
+  return rsl;
+}
+
+
+/* -------------------------------------------------------------------------- */
+
 /** @brief Print a log message with the provided log level. */
 void
 printLog( const nix::Verbosity & lvl, const std::string & msg );
