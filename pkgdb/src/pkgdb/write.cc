@@ -63,19 +63,19 @@ RulesTreeNode::addRule( AttrPathGlob & relPath, ScrapeRule rule )
             + "' with rule `" + scrapeRuleToString( this->rule )
             + "' with new rule `" + scrapeRuleToString( rule ) + "'" );
         }
+      traceLog( "assigning rule to `" + scrapeRuleToString( rule ) + "' to `"
+                + this->attrName + '\'' );
       this->rule = rule;
-      /* Pass down rule to children if they're using `SR_DEFAULT'. */
-      for ( auto & [name, child] : this->children )
-        {
-          AttrPathGlob emptyPath;
-          if ( child.rule == SR_DEFAULT ) { child.addRule( emptyPath, rule ); }
-        }
       return;
     }
+  traceLog( "adding rule to `" + this->attrName + "': `"
+            + displayableGlobbedPath( relPath ) + " = "
+            + scrapeRuleToString( rule ) + '\'' );
 
-  /* Handle system glob. */
+  /* Handle system glob by splitting into 4 recursive calls. */
   if ( ! relPath.front().has_value() )
     {
+      traceLog( "splitting system glob into real systems" );
       for ( const auto & system : getDefaultSystems() )
         {
           AttrPathGlob relPathCopy = relPath;
@@ -91,24 +91,25 @@ RulesTreeNode::addRule( AttrPathGlob & relPath, ScrapeRule rule )
   //       Removing from the front is inefficient for `std::vector'.
   relPath.erase( relPath.begin() );
 
-  if ( relPath.empty() )
+  if ( auto it = this->children.find( attrName ); it != this->children.end() )
     {
-      /* Add leaf node. */
-      this->children.emplace( attrName, RulesTreeNode( attrName, rule ) );
-    }
-  else if ( auto it = this->children.find( attrName );
-            it != this->children.end() )
-    {
+      traceLog( "found existing child `" + attrName + '\'' );
       /* Add to existing child node. */
       it->second.addRule( relPath, rule );
     }
+  else if ( relPath.empty() )
+    {
+      /* Add leaf node. */
+      traceLog( "creating leaf `" + attrName + " = "
+                + scrapeRuleToString( rule ) + '\'' );
+      this->children.emplace( attrName, RulesTreeNode( attrName, rule ) );
+    }
   else
     {
+      traceLog( "creating child `" + attrName + '\'' );
       /* Create a new child node. */
-      RulesTreeNode node( attrName );
-      /* Inherit default rule. */
-      node.addRule( relPath, this->rule );
-      this->children.emplace( attrName, std::move( node ) );
+      this->children.emplace( attrName, RulesTreeNode( attrName ) );
+      this->children.at( attrName ).addRule( relPath, rule );
     }
 }
 
@@ -172,13 +173,13 @@ from_json( const nlohmann::json & jfrom, RulesTreeNode & rules )
 void
 to_json( nlohmann::json & jto, const RulesTreeNode & rules )
 {
-  jto = nlohmann::json::object();
+  jto           = nlohmann::json::object();
+  jto["__rule"] = scrapeRuleToString( rules.rule );
   for ( const auto & [name, child] : rules.children )
     {
       nlohmann::json jchild;
       to_json( jchild, child );
-      jto[name]     = jchild;
-      jto["__rule"] = scrapeRuleToString( rules.rule );
+      jto[name] = jchild;
     }
 }
 
