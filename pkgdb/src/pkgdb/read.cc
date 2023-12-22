@@ -273,9 +273,8 @@ PkgDbReadOnly::getAttrSetId( const flox::AttrPath & path )
       /* Handle no such path. */
       if ( itr == qryId.end() )
         {
-          throw PkgDbException(
-            nix::fmt( "No such AttrSet '%s'.",
-                      concatStringsSep( ".", path ) ) );
+          throw PkgDbException( nix::fmt( "No such AttrSet '%s'.",
+                                          concatStringsSep( ".", path ) ) );
         }
       row = ( *itr ).get<long long>( 0 );
     }

@@ -656,11 +656,11 @@ PkgDb::setPrefixDone( row_id prefixId, bool done )
   cmd.bind( 2, static_cast<long long>( prefixId ) );
   if ( sql_rc rcode = cmd.execute(); isSQLError( rcode ) )
     {
-      throw PkgDbException( nix::fmt(
-        "failed to set AttrSets.done for subtree '%s':(%d) %s",
-        concatStringsSep( ".", this->getAttrSetPath( prefixId ) ),
-        rcode,
-        this->db.error_msg() ) );
+      throw PkgDbException(
+        nix::fmt( "failed to set AttrSets.done for subtree '%s':(%d) %s",
+                  concatStringsSep( ".", this->getAttrSetPath( prefixId ) ),
+                  rcode,
+                  this->db.error_msg() ) );
     }
 }
 
