@@ -10,15 +10,7 @@ pkgdb
 $ make check;
 ...<SNIP>...
 ```
-## Integration Tests
 
-```shell
-$ nix develop;
-$ cd ./pkgdb;
-$ make -j all;
-$ make bats-check;
-$ ./flox-pkgdb-tests; #to run the bats tests as an executable
-```
 
 ## Building Docs
 
