@@ -1010,7 +1010,7 @@ test_RulesTree_parse1()
   flox::pkgdb::RulesTreeNode rules(
     rulesJSON.get<flox::pkgdb::ScrapeRulesRaw>() );
   flox::AttrPath path = { "legacyPackages", "x86_64-linux", "darwin" };
-  flox::pkgdb::RulesTreeNode * node = & rules;
+  flox::pkgdb::RulesTreeNode * node = &rules;
   std::cerr << nlohmann::json( rules ).dump( 2 ) << std::endl;
   for ( const std::string & attr : path )
     {
@@ -1018,7 +1018,7 @@ test_RulesTree_parse1()
         {
           EXPECT_FAIL( "RulesTreeNode missing child `" + attr + '\'' );
         }
-      node = & node->children.at( attr );
+      node = &node->children.at( attr );
     }
   return true;
 }

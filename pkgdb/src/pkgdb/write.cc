@@ -177,7 +177,7 @@ to_json( nlohmann::json & jto, const RulesTreeNode & rules )
     {
       nlohmann::json jchild;
       to_json( jchild, child );
-      jto[name] = jchild;
+      jto[name]     = jchild;
       jto["__rule"] = scrapeRuleToString( rules.rule );
     }
 }

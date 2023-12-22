@@ -121,7 +121,8 @@ runTest( std::string_view name, F f, Args &&... args )
  *
  * Assert that and expression is `true', otherwise print it and return `false'.
  */
-#define EXPECT( EXPR )  if ( ! ( EXPR ) ) { EXPECT_FAIL( #EXPR ) }
+#define EXPECT( EXPR ) \
+  if ( ! ( EXPR ) ) { EXPECT_FAIL( #EXPR ) }
 
 
 /**
