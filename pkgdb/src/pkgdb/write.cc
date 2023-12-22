@@ -38,12 +38,9 @@ scrapeRuleToString( ScrapeRule rule )
     {
       case SR_DEFAULT: return "NONE";
       case SR_ALLOW_PACKAGE: return "allowPackage";
-      case SR_DISALLOW_PACKAGE:
-        return "disallowPackage";
-      case SR_ALLOW_RECURSIVE:
-        return "allowRecursive";
-      case SR_DISALLOW_RECURSIVE:
-        return "disallowRecursive";
+      case SR_DISALLOW_PACKAGE: return "disallowPackage";
+      case SR_ALLOW_RECURSIVE: return "allowRecursive";
+      case SR_DISALLOW_RECURSIVE: return "disallowRecursive";
       default: return "UNKNOWN";
     }
 }
@@ -658,7 +655,7 @@ getDefaultRules()
   if ( ! rules.has_value() )
     {
       ScrapeRulesRaw raw = nlohmann::json::parse(
-        #include "./rules.json.hh"
+#include "./rules.json.hh"
       );
       rules = RulesTreeNode( std::move( raw ) );
     }

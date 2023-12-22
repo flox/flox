@@ -993,8 +993,7 @@ bool
 test_RulesTree_parse0()
 {
   flox::pkgdb::RulesTreeNode rules(
-    rulesJSON.get<flox::pkgdb::ScrapeRulesRaw>()
-  );
+    rulesJSON.get<flox::pkgdb::ScrapeRulesRaw>() );
   return true;
 }
 
@@ -1005,8 +1004,7 @@ bool
 test_RulesTree_getRule_fallback0()
 {
   flox::pkgdb::RulesTreeNode rules(
-    rulesJSON.get<flox::pkgdb::ScrapeRulesRaw>()
-  );
+    rulesJSON.get<flox::pkgdb::ScrapeRulesRaw>() );
   flox::pkgdb::ScrapeRule rule = rules.getRule( flox::AttrPath { "phony" } );
   EXPECT_EQ( rule, flox::pkgdb::SR_DEFAULT );
   return true;
@@ -1019,8 +1017,7 @@ bool
 test_RulesTree_getRule0()
 {
   flox::pkgdb::RulesTreeNode rules(
-    rulesJSON.get<flox::pkgdb::ScrapeRulesRaw>()
-  );
+    rulesJSON.get<flox::pkgdb::ScrapeRulesRaw>() );
   flox::pkgdb::ScrapeRule rule = rules.getRule(
     flox::AttrPath { "legacyPackages", "x86_64-linux", "hello" } );
   EXPECT_EQ( rule, flox::pkgdb::SR_DEFAULT );
