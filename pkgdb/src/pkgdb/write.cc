@@ -117,33 +117,41 @@ RulesTreeNode::addRule( AttrPathGlob & relPath, ScrapeRule rule )
 /* -------------------------------------------------------------------------- */
 
 ScrapeRule
-RulesTreeNode::getRule( const AttrPath & relPath ) const
+RulesTreeNode::getRule( const AttrPath & path ) const
 {
-  /* We are the leaf! */
-  if ( relPath.empty() ) { return this->rule; }
-
-  /* See if there's a relevant subtree. */
-  auto it = this->children.find( relPath.front() );
-  if ( it == this->children.end() ) { return this->rule; }
-
-  /* Use explicit rule from child or fallback to ours. */
-  AttrPath relPathCopy = relPath;
-  relPathCopy.erase( relPathCopy.begin() );
-  auto fromChild = it->second.getRule( relPathCopy );
-  if ( fromChild != SR_DEFAULT ) { return fromChild; }
-  else { return this->rule; }
+  const RulesTreeNode * node = this;
+  for ( const auto & attrName : path )
+    {
+      try
+        {
+          node = &node->children.at( attrName );
+        }
+      catch ( const std::out_of_range & err )
+        {
+          return SR_DEFAULT;
+        }
+    }
+  return node->rule;
 }
 
 
 /* -------------------------------------------------------------------------- */
 
 std::optional<bool>
-RulesTreeNode::applyRules( const AttrPath &    prefix,
-                           const std::string & attrName ) const
+RulesTreeNode::applyRules( const AttrPath & path ) const
 {
-  AttrPath path( prefix );
-  path.emplace_back( attrName );
   auto rule = this->getRule( path );
+  /* Perform lookup in parents if necessary. */
+  if ( rule == SR_DEFAULT )
+    {
+      AttrPath pathCopy = path;
+      do {
+          pathCopy.pop_back();
+          rule = this->getRule( pathCopy );
+        }
+      while ( ( rule == SR_DEFAULT ) && ( ! pathCopy.empty() ) );
+    }
+
   switch ( rule )
     {
       case SR_ALLOW_PACKAGE: return true;
@@ -650,7 +658,7 @@ PkgDb::setPrefixDone( row_id prefixId, bool done )
     {
       throw PkgDbException( nix::fmt(
         "failed to set AttrSets.done for subtree '%s':(%d) %s",
-        nix::concatStringsSep( ".", this->getAttrSetPath( prefixId ) ),
+        concatStringsSep( ".", this->getAttrSetPath( prefixId ) ),
         rcode,
         this->db.error_msg() ) );
     }
@@ -695,23 +703,22 @@ PkgDb::scrape( nix::SymbolTable & syms, const Target & target, Todos & todo )
   /* If it has previously been scraped then bail out. */
   if ( this->completedAttrSet( parentId ) ) { return; }
 
-  bool tryRecur = prefix.front() != "packages";
-
   nix::Activity act( *nix::logger,
                      nix::lvlInfo,
                      nix::actUnknown,
                      nix::fmt( "evaluating package set '%s'",
-                               nix::concatStringsSep( ".", prefix ) ) );
+                               concatStringsSep( ".", prefix ) ) );
 
   /* Scrape loop over attrs */
   for ( nix::Symbol & aname : cursor->getAttrs() )
     {
+      /* We know this isn't a package or an attrset, so skip immediately. */
       if ( syms[aname] == "recurseForDerivations" ) { continue; }
 
       /* Used for logging, but can skip it at low verbosity levels. */
       const std::string pathS
         = ( nix::lvlTalkative <= nix::verbosity )
-            ? nix::concatStringsSep( ".", prefix ) + "." + syms[aname]
+            ? concatStringsSep( ".", prefix ) + "." + syms[aname]
             : "";
 
       nix::Activity act( *nix::logger,
@@ -719,35 +726,68 @@ PkgDb::scrape( nix::SymbolTable & syms, const Target & target, Todos & todo )
                          nix::actUnknown,
                          "\tevaluating attribute '" + pathS + "'" );
 
-      auto rulesAllowed = getDefaultRules().applyRules( prefix, syms[aname] );
+      /* Skip anything with a "__" prefix. */
+      if ( hasPrefix( "__", static_cast<std::string>( syms[aname] ) ) )
+        {
+          traceLog( "skipping attribute with \"__\" prefix: " + pathS );
+          continue;
+        }
 
-      if ( rulesAllowed.has_value() && ( ! ( *rulesAllowed ) ) ) { continue; }
+      AttrPath path( prefix );
+      path.emplace_back( syms[aname] );
+
+      std::optional<bool> rulesAllowed = getDefaultRules().applyRules( path );
+
+      // FIXME: This breaks allows under recursiveDisallows!
+      /* If the package or prefix is disallowed, bail. */
+      if ( rulesAllowed.has_value() && ( ! ( *rulesAllowed ) ) )
+        {
+          traceLog( "skipping disallowed attribute: " + pathS );
+          continue;
+        }
       try
         {
           flox::Cursor child = cursor->getAttr( aname );
           if ( child->isDerivation() )
             {
+              traceLog( "adding derivation to DB: " + pathS );
               this->addPackage( parentId, syms[aname], child );
               continue;
             }
 
-          if ( ! tryRecur ) { continue; }
-
-
-          if ( auto maybe = child->maybeGetAttr( "recurseForDerivations" );
-               rulesAllowed.value_or( false )
-               //( ( prefix.front() == "legacyPackages" )
-               //  && ( syms[aname] == "darwin" ) )
-               || ( ( maybe != nullptr ) && maybe->getBool() ) )
+          /* Ensure that it's an attribute set AND that it is not a functor. */
+          try
             {
-              flox::AttrPath path = prefix;
-              path.emplace_back( syms[aname] );
-
-              if ( nix::lvlTalkative <= nix::verbosity )
+              std::vector<nix::Symbol> maybeAttrs = child->getAttrs();
+              if ( maybeAttrs.empty() )
                 {
-                  nix::logger->log( nix::lvlTalkative,
-                                    "\tpushing target '" + pathS + "'" );
+                  traceLog( "skipping empty attribute set: " + pathS );
+                  continue;
                 }
+              for ( const auto & symbol : maybeAttrs )
+                {
+                  if ( ( syms[symbol] == "__functor" )
+                       || ( syms[symbol] == "__functionArgs" ) )
+                    {
+                      traceLog( "skipping functor: " + pathS );
+                      throw nix::EvalError( "attribute set is a functor" );
+                    }
+                }
+            }
+          catch ( const nix::EvalError & err )
+            {
+              /* It wasn't... */
+              traceLog( "skipping attribute set with eval error: " + pathS );
+              continue;
+            }
+
+          auto maybe           = child->maybeGetAttr( "recurseForDerivations" );
+          bool markedRecursive = ( maybe != nullptr ) && maybe->getBool();
+
+          if ( rulesAllowed.value_or( markedRecursive ) )
+            {
+              printLog( nix::lvlTalkative,
+                        "\tpushing target '" + pathS + '\'' );
               row_id childId = this->addOrGetAttrSetId( syms[aname], parentId );
               todo.emplace( std::make_tuple( std::move( path ),
                                              std::move( child ),
@@ -756,9 +796,10 @@ PkgDb::scrape( nix::SymbolTable & syms, const Target & target, Todos & todo )
         }
       catch ( const nix::EvalError & err )
         {
-          /* Ignore errors in `legacyPackages' */
-          if ( tryRecur )
+          /* Only treat errors as fatal in the `packages' sub-tree. */
+          if ( prefix.front() != "packages" )
             {
+              traceLog( "skipping attribute set with eval error: " + pathS );
               /* Only print eval errors in "debug" mode. */
               nix::ignoreException( nix::lvlDebug );
             }

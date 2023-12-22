@@ -71,7 +71,7 @@ struct RulesTreeNode
 {
   using Children = std::unordered_map<std::string, RulesTreeNode>;
 
-  std::string attrName;
+  std::string attrName = "";
   ScrapeRule  rule     = SR_DEFAULT;
   Children    children = {};
 
@@ -99,21 +99,25 @@ struct RulesTreeNode
   addRule( AttrPathGlob & relPath, ScrapeRule rule );
 
   /**
-   * @brief Get the rule associated with a path.
+   * @brief Get the rule at a path, or @a flox::pkgdb::SR_DEFAULT as a fallback.
+   *
+   * This *does NOT* apply parent rules to children.
+   *
+   * @see @a flox::pkgdb::RulesTreeNode::applyRules
+   */
+  ScrapeRule
+  getRule( const AttrPath & path = {} ) const;
+
+  /**
+   * @brief Return true/false for explicit allow/disallow, or `std::nullopt`
+   *        if no rule is defined.
    *        This is intended for use on _root_ nodes.
    *
    * Parent paths may _pass down_ rules to children unless otherwise defined
    * at lower levels.
    */
-  ScrapeRule
-  getRule( const AttrPath & relPath ) const;
-
-  /**
-   * @brief Return true/false for explicit allow/disallow, or `std::nullopt`
-   *        if no rule is defined.
-   */
   std::optional<bool>
-  applyRules( const AttrPath & prefix, const std::string & attrName ) const;
+  applyRules( const AttrPath & path ) const;
 
 
 }; /* End struct `RulesTreeNode' */

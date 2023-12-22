@@ -347,7 +347,7 @@ Environment::tryResolveDescriptorIn( const ManifestDescriptor & descriptor,
   std::string dPath;
   if ( descriptor.path.has_value() )
     {
-      dPath = joinWithDelim( *descriptor.path, "." );
+      dPath = concatStringsSep( ".", *descriptor.path );
     }
   std::string dName;
   if ( descriptor.name.has_value() ) { dName = *descriptor.name; }
@@ -573,7 +573,7 @@ Environment::tryResolveGroup( const GroupName &          name,
 
   std::vector<std::string> ids;
   for ( const auto & [id, _] : group ) { ids.emplace_back( id ); }
-  std::string groupStr = joinWithDelim( ids, " " );
+  std::string groupStr = concatStringsSep( " ", ids );
   debugLog( "starting resolution for group: " + groupStr );
 
   /* When there is an existing lock with this group pinned to an existing
