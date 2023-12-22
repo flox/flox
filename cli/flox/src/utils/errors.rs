@@ -1,0 +1,251 @@
+use anyhow::anyhow;
+use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironmentError;
+use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironmentError;
+use flox_rust_sdk::models::environment::{
+    CanonicalizeError,
+    CoreEnvironmentError,
+    EnvironmentError2,
+};
+use indoc::formatdoc;
+use itertools::Itertools;
+
+pub fn format_error(err: &'static EnvironmentError2) -> String {
+    match err {
+        EnvironmentError2::DotFloxNotFound => display_chain(err),
+
+        // todo: enrich with a path?
+        EnvironmentError2::EnvNotFound => formatdoc! {"
+            Found a '.flox' directory, but were unable to locate an environment directory.
+
+            This is likely due to a corrupt environment.
+
+            Try deleting the '.flox' directory and reinitializing the environment.
+            If you cloned this environment from a remote repository, verify that
+            `.flox/env/maifest.toml` is commited to the version control system.
+        "},
+
+        // todo: enrich with a path?
+        EnvironmentError2::ManifestNotFound => formatdoc! {"
+            Found a '.flox' directory, but were unable to locate a manifest file.
+
+            This is likely due to a corrupt environment.
+
+            Try deleting the '.flox' directory and reinitializing the environment.
+            If you cloned this environment from a remote repository, verify that
+            `.flox/env/maifest.toml` is commited to the version control system.
+        "},
+
+        // todo: enrich with a path?
+        // see also the notes on [EnvironmentError2::InitEnv]
+        EnvironmentError2::InitEnv(err) => formatdoc! {"
+            Failed to initialize environment.
+            Could not prepare a '.flox' directory: {err}
+
+            Please ensure that you have write permissions to the current directory.
+        "},
+
+        // todo: update when we implement `flox init --force`
+        EnvironmentError2::EnvironmentExists(path) => formatdoc! {"
+            Found an existing environment at {path:?}.
+
+            Please initialize a new environment in a different directory.
+
+            If you are trying to reinitialize an existing environment,
+            delete the existing environment using 'flox delete -d {path:?}' and try again.
+        "},
+
+        // This should rarely happen.
+        // At this point we already proved that we can write to the directory.
+        EnvironmentError2::WriteGitignore(_) => display_chain(err),
+
+        // todo: enrich with a path?
+        EnvironmentError2::ReadEnvironmentMetadata(error) => formatdoc! {"
+            Failed to read environment metadata: {error}
+
+            This is likely due to a corrupt environment.
+
+            Try deleting the '.flox' directory and reinitializing the environment.
+            If you cloned this environment from a remote repository, verify that
+            `.flox/env.json` is commited to the version control system.
+        "},
+        // todo: enrich with a path?
+        // todo: when can this happen:
+        //   * user manually edited this
+        //   * user pushed environment but did not commit the changes to env.json
+        //   * new version of the file format and we don't support it yet
+        //     or not anymore with the current version of flox
+        //     (this should be catched earlier but you never know...)
+        EnvironmentError2::ParseEnvJson(error) => formatdoc! {"
+            Failed to parse environment metadata: {error}
+
+            This is likely due to a corrupt environment.
+
+            Try deleting the '.flox' directory and reinitializing the environment.
+            If you cloned this environment from a remote repository, verify that
+            the latest changes to `.flox/env.json` are commited to the version control system.
+        "},
+        // this should always never be a problem and if it is, it's a bug
+        // the user can likely not do anything about it
+        // todo: add a note to user to report this as a bug?
+        // todo: enrich with path
+        EnvironmentError2::SerializeEnvJson(_) => display_chain(err),
+        EnvironmentError2::WriteEnvJson(error) => formatdoc! {"
+            Failed to write environment metadata: {error}
+
+            Please ensure that you have write permissions to write '.flox/env.json'.
+        "},
+
+        // todo: enrich with global manifest path
+        EnvironmentError2::InitGlobalManifest(err) => formatdoc! {"
+            Failed to initialize global manifest: {err}
+
+            Please ensure that you have write permissions
+            to write '~/.config/flox/global-manifest.toml'.
+        "},
+        EnvironmentError2::ReadGlobalManifestTemplate(err) => formatdoc! {"
+            Failed to read global manifest template: {err}
+
+            Please ensure that you have read permissions
+            to read '~/.config/flox/global-manifest.toml'.
+        "},
+        // todo: where in the control flow does this happen?
+        //       do we want a separate error type for this (likely)
+        EnvironmentError2::StartDiscoveryDir(CanonicalizeError { path, err }) => formatdoc! {"
+            Failed to start discovery for flox environments in {path:?}: {err}
+
+            Please ensure that the path exists and that you have read permissions.
+        "},
+        // unreachable when using the cli
+        EnvironmentError2::InvalidPath(_) => display_chain(err),
+
+        // todo: where in the control flow does this happen?
+        //       do we want a separate error type for this (likely)
+        // Its also a somewhat weird to downcast to this error type
+        // better to separate this into a separate error types.
+        EnvironmentError2::InvalidDotFlox { path, source } => {
+            let source = if let Some(source) = source.downcast_ref::<EnvironmentError2>() {
+                format_error(source)
+            } else {
+                display_chain(&**source)
+            };
+
+            formatdoc! {"
+                Found a '.flox' directory at {path:?},
+                but it is not a valid flox environment:
+
+                {source}
+            "}
+        },
+        // todo: how to surface these internal errors?
+        EnvironmentError2::DiscoverGitDirectory(_) => formatdoc! {"
+            Failed to discover git directory.
+
+            See the '--debug' log for more information.
+        "},
+        // todo: enrich with path
+        EnvironmentError2::DeleteEnvironment(err) => formatdoc! {"
+            Failed to delete environment .flox directory: {err}
+
+            Try manually deleting the '.flox' directory.
+        "},
+        // todo: enrich with path
+        EnvironmentError2::ReadManifest(err) => formatdoc! {"
+            Failed to read manifest: {err}
+
+            Please make sure that '.flox/env/manifest.toml' exists
+            and that you have read permissions.
+        "},
+        // todo: enrich with path
+        EnvironmentError2::CreateGcRootDir(err) => format! {"
+            Failed to create '.flox/run' directory: {err}
+
+            Please make sure that you have write permissions to '.flox'.
+        "},
+        EnvironmentError2::Core(core_error) => format_core_error(core_error),
+        EnvironmentError2::ManagedEnvironment(managed_error) => format_managed_error(managed_error),
+        EnvironmentError2::RemoteEnvironment(remote_error) => format_remote_error(remote_error),
+    }
+}
+
+fn format_core_error(err: &'static CoreEnvironmentError) -> String {
+    match err {
+        CoreEnvironmentError::ModifyToml(_) => todo!(),
+        CoreEnvironmentError::DeserializeManifest(_) => todo!(),
+        CoreEnvironmentError::MakeSandbox(_) => todo!(),
+        CoreEnvironmentError::WriteLockfile(_) => todo!(),
+        CoreEnvironmentError::MakeTemporaryEnv(_) => todo!(),
+        CoreEnvironmentError::PriorTransaction(_) => todo!(),
+        CoreEnvironmentError::BackupTransaction(_) => todo!(),
+        CoreEnvironmentError::AbortTransaction(_) => todo!(),
+        CoreEnvironmentError::Move(_) => todo!(),
+        CoreEnvironmentError::RemoveBackup(_) => todo!(),
+        CoreEnvironmentError::OpenManifest(_) => todo!(),
+        CoreEnvironmentError::UpdateManifest(_) => todo!(),
+        CoreEnvironmentError::BadManifestPath(_, _) => todo!(),
+        CoreEnvironmentError::BadLockfilePath(_, _) => todo!(),
+        CoreEnvironmentError::PkgDbCall(_) => todo!(),
+        CoreEnvironmentError::LockManifest(_) => todo!(),
+        CoreEnvironmentError::ParsePkgDbError(_) => todo!(),
+        CoreEnvironmentError::ParseLockfileJSON(_) => todo!(),
+        CoreEnvironmentError::ReadManifest(_) => todo!(),
+        CoreEnvironmentError::ParseUpdateOutput(_) => todo!(),
+        CoreEnvironmentError::ParseUpgradeOutput(_) => todo!(),
+        CoreEnvironmentError::UpdateFailed(_) => todo!(),
+        CoreEnvironmentError::UpgradeFailed(_) => todo!(),
+        CoreEnvironmentError::BuildEnv(_) => todo!(),
+        CoreEnvironmentError::ParseBuildEnvOutput(_) => todo!(),
+    }
+}
+
+fn format_managed_error(err: &'static ManagedEnvironmentError) -> String {
+    match err {
+        ManagedEnvironmentError::OpenFloxmeta(_) => todo!(),
+        ManagedEnvironmentError::Fetch(_) => todo!(),
+        ManagedEnvironmentError::CheckGitRevision(_) => todo!(),
+        ManagedEnvironmentError::CheckBranchExists(_) => todo!(),
+        ManagedEnvironmentError::LocalRevDoesNotExist => todo!(),
+        ManagedEnvironmentError::RevDoesNotExist => todo!(),
+        ManagedEnvironmentError::InvalidLock(_) => todo!(),
+        ManagedEnvironmentError::ReadPointerLock(_) => todo!(),
+        ManagedEnvironmentError::Git(_) => todo!(),
+        ManagedEnvironmentError::GitBranchHash(_) => todo!(),
+        ManagedEnvironmentError::WriteLock(_) => todo!(),
+        ManagedEnvironmentError::SerializeLock(_) => todo!(),
+        ManagedEnvironmentError::ReverseLink(_) => todo!(),
+        ManagedEnvironmentError::CreateLinksDir(_) => todo!(),
+        ManagedEnvironmentError::EmptyPath => todo!(),
+        ManagedEnvironmentError::BadBranchName(_) => todo!(),
+        ManagedEnvironmentError::ProjectNotFound { path, err } => todo!(),
+        ManagedEnvironmentError::Diverged => todo!(),
+        ManagedEnvironmentError::AccessDenied => todo!(),
+        ManagedEnvironmentError::Push(_) => todo!(),
+        ManagedEnvironmentError::DeleteBranch(_) => todo!(),
+        ManagedEnvironmentError::DeleteEnvironment(_, _) => todo!(),
+        ManagedEnvironmentError::DeleteEnvironmentLink(_, _) => todo!(),
+        ManagedEnvironmentError::DeleteEnvironmentReverseLink(_, _) => todo!(),
+        ManagedEnvironmentError::FetchUpdates(_) => todo!(),
+        ManagedEnvironmentError::ApplyUpdates(_) => todo!(),
+        ManagedEnvironmentError::InitializeFloxmeta(_) => todo!(),
+        ManagedEnvironmentError::SerializePointer(_) => todo!(),
+        ManagedEnvironmentError::WritePointer(_) => todo!(),
+        ManagedEnvironmentError::CreateFloxmetaDir(_) => todo!(),
+        ManagedEnvironmentError::CreateGenerationFiles(_) => todo!(),
+        ManagedEnvironmentError::CommitGeneration(_) => todo!(),
+        ManagedEnvironmentError::Link(_) => todo!(),
+        ManagedEnvironmentError::ReadManifest(_) => todo!(),
+        ManagedEnvironmentError::CanonicalizePath(_) => todo!(),
+    }
+}
+
+fn format_remote_error(err: &'static RemoteEnvironmentError) -> String {
+    match err {
+        RemoteEnvironmentError::OpenManagedEnvironment(_) => todo!(),
+        RemoteEnvironmentError::GetLatestVersion(_) => todo!(),
+        RemoteEnvironmentError::UpdateUpstream(_) => todo!(),
+        RemoteEnvironmentError::InvalidTempPath(_) => todo!(),
+    }
+}
+
+fn display_chain(err: impl Into<anyhow::Error>) -> String {
+    anyhow!(err).chain().join(": ")
+}

@@ -7,6 +7,7 @@ pub mod colors;
 mod completion;
 pub mod dialog;
 pub mod didyoumean;
+pub mod errors;
 pub mod init;
 pub mod logger;
 pub mod metrics;
