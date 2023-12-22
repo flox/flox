@@ -41,12 +41,12 @@ jobs:
       - name: "Install flox"
         uses: "flox/install-flox-action@main"
         with:
-          github-access-token:    "${{ secrets.NIX_GIT_TOKEN }}"
-          substituter:            "${{ vars.FLOX_PUBLIC_CACHE }}"
-          substituter-key:        "${{ secrets.FLOX_STORE_PUBLIC_NIX_SECRET_KEY }}"
-          aws-access-key-id:      "${{ secrets.AWS_ACCESS_KEY_ID }}"
-          aws-secret-access-key:  "${{ secrets.AWS_SECRET_ACCESS_KEY }}"
-          ssh-key:                "${{ secrets.FLOXBOT_SSH_KEY }}"
+          github-access-token:      "${{ secrets.NIX_GIT_TOKEN }}"
+          substituter:              "${{ vars.FLOX_CACHE_PUBLIC_BUCKET }}"
+          substituter-key:          "${{ secrets.FLOX_CACHE_PUBLIC_NIX_SECRET_KEY }}"
+          aws-access-key-id:        "${{ secrets.FLOX_CACHE_PUBLIC_AWS_ACCESS_KEY_ID }}"
+          aws-secret-access-key:    "${{ secrets.FLOX_CACHE_PUBLIC_AWS_SECRET_ACCESS_KEY }}"
+          ssh-key:                  "${{ secrets.FLOXBOT_SSH_KEY }}"
 
       - name: "Configure Nix"
         run: |
@@ -115,12 +115,12 @@ jobs:
       - name: "Install flox"
         uses: "flox/install-flox-action@main"
         with:
-          github-access-token:    "${{ secrets.NIX_GIT_TOKEN }}"
-          substituter:            "${{ vars.FLOX_PUBLIC_CACHE }}"
-          substituter-key:        "${{ secrets.FLOX_STORE_PUBLIC_NIX_SECRET_KEY }}"
-          aws-access-key-id:      "${{ secrets.AWS_ACCESS_KEY_ID }}"
-          aws-secret-access-key:  "${{ secrets.AWS_SECRET_ACCESS_KEY }}"
-          ssh-key:                "${{ secrets.FLOXBOT_SSH_KEY }}"
+          github-access-token:      "${{ secrets.NIX_GIT_TOKEN }}"
+          substituter:              "${{ vars.FLOX_CACHE_PUBLIC_BUCKET }}"
+          substituter-key:          "${{ secrets.FLOX_CACHE_PUBLIC_NIX_SECRET_KEY }}"
+          aws-access-key-id:        "${{ secrets.FLOX_CACHE_PUBLIC_AWS_ACCESS_KEY_ID }}"
+          aws-secret-access-key:    "${{ secrets.FLOX_CACHE_PUBLIC_AWS_SECRET_ACCESS_KEY }}"
+          ssh-key:                  "${{ secrets.FLOXBOT_SSH_KEY }}"
 
       - name: "Configure Nix"
         run: |
@@ -218,13 +218,13 @@ jobs:
       - name: "Install flox"
         uses: "flox/install-flox-action@main"
         with:
-          github-access-token:    "${{ secrets.NIX_GIT_TOKEN }}"
-          substituter:            "${{ vars.FLOX_PUBLIC_CACHE }}"
-          substituter-key:        "${{ secrets.FLOX_STORE_PUBLIC_NIX_SECRET_KEY }}"
-          aws-access-key-id:      "${{ secrets.AWS_ACCESS_KEY_ID }}"
-          aws-secret-access-key:  "${{ secrets.AWS_SECRET_ACCESS_KEY }}"
-          ssh-key:                "${{ secrets.FLOXBOT_SSH_KEY }}"
-          remote-builders:        "${{ vars.FLOX_BUILDERS }}"
+          github-access-token:      "${{ secrets.NIX_GIT_TOKEN }}"
+          substituter:              "${{ vars.FLOX_CACHE_PUBLIC_BUCKET }}"
+          substituter-key:          "${{ secrets.FLOX_CACHE_PUBLIC_NIX_SECRET_KEY }}"
+          aws-access-key-id:        "${{ secrets.FLOX_CACHE_PUBLIC_AWS_ACCESS_KEY_ID }}"
+          aws-secret-access-key:    "${{ secrets.FLOX_CACHE_PUBLIC_AWS_SECRET_ACCESS_KEY }}"
+          ssh-key:                  "${{ secrets.FLOXBOT_SSH_KEY }}"
+          remote-builders:          "${{ vars.FLOX_BUILDERS }}"
 
       - name: "Configure Nix"
         run: |
@@ -332,13 +332,13 @@ jobs:
       - name: "Install flox"
         uses: "flox/install-flox-action@main"
         with:
-          github-access-token:    "${{ secrets.NIX_GIT_TOKEN }}"
-          substituter:            "${{ vars.FLOX_PUBLIC_CACHE }}"
-          substituter-key:        "${{ secrets.FLOX_STORE_PUBLIC_NIX_SECRET_KEY }}"
-          aws-access-key-id:      "${{ secrets.AWS_ACCESS_KEY_ID }}"
-          aws-secret-access-key:  "${{ secrets.AWS_SECRET_ACCESS_KEY }}"
-          ssh-key:                "${{ secrets.FLOXBOT_SSH_KEY }}"
-          remote-builders:        "${{ vars.FLOX_BUILDERS }}"
+          github-access-token:      "${{ secrets.NIX_GIT_TOKEN }}"
+          substituter:              "${{ vars.FLOX_CACHE_PUBLIC_BUCKET }}"
+          substituter-key:          "${{ secrets.FLOX_CACHE_PUBLIC_NIX_SECRET_KEY }}"
+          aws-access-key-id:        "${{ secrets.FLOX_CACHE_PUBLIC_AWS_ACCESS_KEY_ID }}"
+          aws-secret-access-key:    "${{ secrets.FLOX_CACHE_PUBLIC_AWS_SECRET_ACCESS_KEY }}"
+          ssh-key:                  "${{ secrets.FLOXBOT_SSH_KEY }}"
+          remote-builders:          "${{ vars.FLOX_BUILDERS }}"
       - name: "Configure Nix"
         run: |
           sudo echo 
