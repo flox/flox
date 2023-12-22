@@ -327,6 +327,8 @@ bool
 hasPrefix( std::string_view prefix, std::string_view str );
 
 
+/* -------------------------------------------------------------------------- */
+
 /**
  * @brief Does the vector of strings @a lst begin with the elements
  *        of @a prefix?
