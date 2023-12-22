@@ -9,8 +9,12 @@
 
 #pragma once
 
+#include <filesystem>
 #include <tuple>
 
+#include <nlohmann/json.hpp>
+
+#include "flox/core/types.hh"
 #include "flox/pkgdb/read.hh"
 
 
@@ -25,6 +29,32 @@ using Target = std::tuple<flox::AttrPath, flox::Cursor, row_id>;
 
 /** @brief A queue of @a flox::pkgdb::Target to be completed. */
 using Todos = std::queue<Target, std::list<Target>>;
+
+
+/* -------------------------------------------------------------------------- */
+
+struct RulesTreeNode;
+
+/* -------------------------------------------------------------------------- */
+
+/** @brief Scraping rules to modify database creation process in _raw_ form. */
+struct ScrapeRulesRaw
+{
+  std::vector<AttrPathGlob> allowPackage;
+  std::vector<AttrPathGlob> disallowPackage;
+  std::vector<AttrPathGlob> allowRecursive;
+  std::vector<AttrPathGlob> disallowRecursive;
+  // TODO: aliases
+
+  explicit operator RulesTreeNode() const;
+
+
+}; /* End struct `ScrapeRulesRaw` */
+
+
+/** @brief Convert a JSON object to a @a flox::pkgdb::ScrapeRulesRaw. */
+void
+from_json( const nlohmann::json & jfrom, ScrapeRulesRaw & rules );
 
 
 /* -------------------------------------------------------------------------- */
@@ -48,7 +78,11 @@ struct RulesTreeNode
   Children    children = {};
 
 
-  RulesTreeNode() = default;
+  RulesTreeNode();
+
+  RulesTreeNode( const std::filesystem::path & path )
+    : RulesTreeNode( static_cast<ScrapeRulesRaw>( readAndCoerceJSON( path ) ) )
+  {}
 
   explicit RulesTreeNode( std::string attrName,
                           ScrapeRule  rule     = SR_DEFAULT,
@@ -75,30 +109,18 @@ struct RulesTreeNode
   ScrapeRule
   getRule( const AttrPath & relPath ) const;
 
+  /**
+   * @brief Return true/false for explicit allow/disallow, or `std::nullopt`
+   *        if no rule is defined.
+   */
+  std::optional<bool>
+  applyRules( const AttrPath & prefix, const std::string & attrName ) const;
+
 
 }; /* End struct `RulesTreeNode' */
 
-
-/* -------------------------------------------------------------------------- */
-
-
-/** @brief Scraping rules to modify database creation process in _raw_ form. */
-struct ScrapeRulesRaw
-{
-  std::vector<AttrPathGlob> allowPackage;
-  std::vector<AttrPathGlob> disallowPackage;
-  std::vector<AttrPathGlob> allowRecursive;
-  std::vector<AttrPathGlob> disallowRecursive;
-  // TODO: aliases
-
-  explicit operator RulesTreeNode() const;
-
-
-}; /* End struct `ScrapeRulesRaw` */
-
-/** @brief Convert a JSON object to a @a flox::pkgdb::ScrapeRulesRaw. */
 void
-from_json( const nlohmann::json & jfrom, ScrapeRulesRaw & rules );
+from_json( const nlohmann::json & jfrom, RulesTreeNode & rules );
 
 
 /* -------------------------------------------------------------------------- */
@@ -353,9 +375,9 @@ public:
   void
   setPrefixDone( const flox::AttrPath & prefix, bool done );
 
-  std::optional<bool>
-  applyRules( const std::vector<std::string> & prefix,
-              const std::string &              attr );
+  //std::optional<bool>
+  //applyRules( const std::vector<std::string> & prefix,
+  //            const std::string &              attr );
 
   /**
    * @brief Scrape package definitions from an attribute set.
