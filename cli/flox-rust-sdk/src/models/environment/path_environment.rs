@@ -25,6 +25,7 @@ use super::core_environment::CoreEnvironment;
 use super::{
     copy_dir_recursive,
     CanonicalPath,
+    CanonicalizeError,
     EditResult,
     Environment,
     EnvironmentError2,
@@ -81,7 +82,13 @@ impl PathEnvironment {
         pointer: PathPointer,
         temp_dir: impl AsRef<Path>,
     ) -> Result<Self, EnvironmentError2> {
-        let dot_flox_path = CanonicalPath::new(dot_flox_path)?;
+        let dot_flox_path =
+            CanonicalPath::new(dot_flox_path).map_err(|CanonicalizeError { path, err }| {
+                EnvironmentError2::InvalidDotFlox {
+                    path,
+                    source: Box::new(err),
+                }
+            })?;
 
         if &*dot_flox_path == Path::new("/") {
             return Err(EnvironmentError2::InvalidPath(

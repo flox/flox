@@ -74,9 +74,9 @@ pub struct CanonicalPath(PathBuf);
 #[derive(Debug, Error)]
 #[error("couldn't canonicalize path {path:?}: {err}")]
 pub struct CanonicalizeError {
-    path: PathBuf,
+    pub path: PathBuf,
     #[source]
-    err: std::io::Error,
+    pub err: std::io::Error,
 }
 
 impl CanonicalPath {
@@ -318,12 +318,6 @@ pub enum EnvironmentError2 {
     #[error("could not locate the manifest for this environment")]
     ManifestNotFound,
 
-    #[error(transparent)]
-    Canonicalize(#[from] CanonicalizeError),
-
-    #[error("environment directory cannot be {0:?}")]
-    InvalidEnvironmentDirectory(PathBuf),
-
     // endregion
 
     // todo: candidate for impl specific error
@@ -366,12 +360,8 @@ pub enum EnvironmentError2 {
 
     // region: find_dot_flox
     // todo: extract and reuse in other places where we need to canonicalize a path
-    #[error("provided path couldn't be canonicalized: {path}")]
-    CanonicalPath {
-        path: PathBuf,
-        #[source]
-        source: std::io::Error,
-    },
+    #[error(transparent)]
+    StartDiscoveryDir(CanonicalizeError),
 
     // todo: reword?
     // * only occurs if "`.flox`" is `/`
@@ -382,7 +372,7 @@ pub enum EnvironmentError2 {
     InvalidDotFlox {
         path: PathBuf,
         #[source]
-        source: Box<EnvironmentError2>,
+        source: Box<dyn std::error::Error + Send + Sync>,
     },
 
     #[error("error checking if in a git repo")]
@@ -396,9 +386,6 @@ pub enum EnvironmentError2 {
 
     #[error(transparent)]
     RemoteEnvironment(#[from] RemoteEnvironmentError),
-
-    #[error("could not canonicalize path to environment")]
-    EnvCanonicalize(#[source] std::io::Error),
 
     #[error("could not delete environment")]
     DeleteEnvironment(#[source] std::io::Error),
@@ -485,12 +472,8 @@ pub fn global_manifest_lockfile_path(flox: &Flox) -> PathBuf {
 /// The search first looks whether the current directory contains a `.flox` directory,
 /// and if not, it searches upwards, stopping at the root directory.
 pub fn find_dot_flox(initial_dir: &Path) -> Result<Option<DotFlox>, EnvironmentError2> {
-    let path = initial_dir
-        .canonicalize()
-        .map_err(|e| EnvironmentError2::CanonicalPath {
-            path: initial_dir.to_path_buf(),
-            source: e,
-        })?;
+    let path = CanonicalPath::new(initial_dir).map_err(EnvironmentError2::StartDiscoveryDir)?;
+
     let tentative_dot_flox = path.join(DOT_FLOX);
     debug!(
         "looking for .flox: starting_path={}",
