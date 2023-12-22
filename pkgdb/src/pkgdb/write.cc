@@ -139,7 +139,7 @@ RulesTreeNode::getRule( const AttrPath & relPath ) const
 
 /* -------------------------------------------------------------------------- */
 
-RulesTreeNode::RulesTreeNode()
+RulesTreeNode::RulesTreeNode( RulesTreeNode::use_builtin_tag )
   : RulesTreeNode( static_cast<ScrapeRulesRaw>( nlohmann::json::parse(
 #include "./rules.json.hh"
     ) ) )
@@ -699,7 +699,7 @@ PkgDb::scrape( nix::SymbolTable & syms, const Target & target, Todos & todo )
                          nix::actUnknown,
                          "\tevaluating attribute '" + pathS + "'" );
 
-      static RulesTreeNode rules;
+      static RulesTreeNode rules( RulesTreeNode::use_builtin_tag {} );
       auto rulesAllowed = rules.applyRules( prefix, syms[aname] );
 
       if ( rulesAllowed.has_value() && ( ! ( *rulesAllowed ) ) ) { continue; }

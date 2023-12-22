@@ -61,6 +61,11 @@ from_json( const nlohmann::json & jfrom, ScrapeRulesRaw & rules );
 
 struct RulesTreeNode
 {
+  /**
+   * @brief Phony tag struct used to indicate that the _default_/builtin rules
+   *        should be used.
+   */
+  struct use_builtin_tag {};
 
   using Children = std::unordered_map<std::string, RulesTreeNode>;
 
@@ -77,8 +82,9 @@ struct RulesTreeNode
   ScrapeRule  rule     = SR_DEFAULT;
   Children    children = {};
 
+  RulesTreeNode() = default;
 
-  RulesTreeNode();
+  RulesTreeNode( use_builtin_tag );
 
   RulesTreeNode( const std::filesystem::path & path )
     : RulesTreeNode( static_cast<ScrapeRulesRaw>( readAndCoerceJSON( path ) ) )
@@ -374,10 +380,6 @@ public:
    */
   void
   setPrefixDone( const flox::AttrPath & prefix, bool done );
-
-  // std::optional<bool>
-  // applyRules( const std::vector<std::string> & prefix,
-  //             const std::string &              attr );
 
   /**
    * @brief Scrape package definitions from an attribute set.
