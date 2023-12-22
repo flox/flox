@@ -32,6 +32,14 @@ ScrapeCommand::ScrapeCommand() : parser( "scrape" )
     .help( "force re-evaluation of flake" )
     .nargs( 0 )
     .action( [&]( const auto & ) { this->force = true; } );
+  // TODO: don't assign to global.
+  //       Extend `PkgDbInput' and pass this through the registry as a member of
+  //       each individual flake input.
+  //       For now since we only have one input we'll use this forall.
+  //       This needs a rework later.
+  //
+  // TODO: Using this flag should invalidate the cache.
+  // TODO: We need to invalidate caches any time we change the rules file.
   this->parser.add_argument( "-r", "--rules" )
     .help( "the path to the rules.json file" )
     .nargs( 1 )
