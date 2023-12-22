@@ -712,26 +712,30 @@ PkgDb::scrape( nix::SymbolTable & syms, const Target & target, Todos & todo )
   /* Scrape loop over attrs */
   for ( nix::Symbol & aname : cursor->getAttrs() )
     {
-      /* We know this isn't a package or an attrset, so skip immediately. */
-      if ( syms[aname] == "recurseForDerivations" ) { continue; }
-
       /* Used for logging, but can skip it at low verbosity levels. */
       const std::string pathS
         = ( nix::lvlTalkative <= nix::verbosity )
             ? concatStringsSep( ".", prefix ) + "." + syms[aname]
             : "";
 
-      nix::Activity act( *nix::logger,
-                         nix::lvlTalkative,
-                         nix::actUnknown,
-                         "\tevaluating attribute '" + pathS + "'" );
+      /* We know this isn't a package or an attrset, so skip immediately. */
+      if ( syms[aname] == "recurseForDerivations" )
+        {
+          traceLog( "skipping keyword attribute: " + pathS );
+          continue;
+        }
 
       /* Skip anything with a "__" prefix. */
-      if ( hasPrefix( "__", static_cast<std::string>( syms[aname] ) ) )
+      if ( hasPrefix( "__", static_cast<std::string_view>( syms[aname] ) ) )
         {
           traceLog( "skipping attribute with \"__\" prefix: " + pathS );
           continue;
         }
+
+      nix::Activity act( *nix::logger,
+                         nix::lvlTalkative,
+                         nix::actUnknown,
+                         "\tevaluating attribute '" + pathS + "'" );
 
       AttrPath path( prefix );
       path.emplace_back( syms[aname] );

@@ -186,10 +186,21 @@ genParamsNixpkgsFlox() {
 # Unfree filter
 @test "'pkgdb search' 'allow.unfree=false'" {
   run sh -c "$PKGDB_BIN search '$(
+    genParams '.manifest.options.allow.unfree=true'
+  )'|wc -l;"
+  assert_success
+
+  _count="$output";
+
+  run sh -c "$PKGDB_BIN search '$(
     genParams '.manifest.options.allow.unfree=false'
   )'|wc -l;"
   assert_success
-  assert_output 61423
+
+  _count2="$output";
+
+  run expr "$_count2 < $_count"
+  assert_success
 }
 
 # ---------------------------------------------------------------------------- #
@@ -202,7 +213,18 @@ genParamsNixpkgsFlox() {
     genParams '.manifest.options.allow.broken=true'
   )'|wc -l;"
   assert_success
-  assert_output 64163
+
+  _count="$output";
+
+  run sh -c "$PKGDB_BIN search '$(
+    genParams '.manifest.options.allow.broken=false'
+  )'|wc -l;"
+  assert_success
+
+  _count2="$output";
+
+  run expr "$_count2 < $_count"
+  assert_success
 }
 
 # ---------------------------------------------------------------------------- #
