@@ -1000,6 +1000,33 @@ test_RulesTree_parse0()
 
 /* -------------------------------------------------------------------------- */
 
+/**
+ * @brief Ensure parsing @a flox::pkgdb::RulesTreeNode from JSON sets the
+ *        expected fields.
+ */
+bool
+test_RulesTree_parse1()
+{
+  flox::pkgdb::RulesTreeNode rules(
+    rulesJSON.get<flox::pkgdb::ScrapeRulesRaw>() );
+  flox::AttrPath path = { "legacyPackages", "x86_64-linux", "darwin" };
+  flox::pkgdb::RulesTreeNode * node = & rules;
+  std::cerr << nlohmann::json( rules ).dump( 2 ) << std::endl;
+  for ( const std::string & attr : path )
+    {
+      if ( node->children.find( attr ) == node->children.end() )
+        {
+          EXPECT_FAIL( "RulesTreeNode missing child `" + attr + '\'' );
+        }
+      node = & node->children.at( attr );
+    }
+  return true;
+}
+
+
+/* -------------------------------------------------------------------------- */
+
+/** @brief Ensure that a path without a rule uses the _default_ rule. */
 bool
 test_RulesTree_getRule_fallback0()
 {
@@ -1013,23 +1040,44 @@ test_RulesTree_getRule_fallback0()
 
 /* -------------------------------------------------------------------------- */
 
+/** @brief Ensure `null` glob works for all systems. */
 bool
 test_RulesTree_getRule0()
 {
   flox::pkgdb::RulesTreeNode rules(
     rulesJSON.get<flox::pkgdb::ScrapeRulesRaw>() );
   flox::pkgdb::ScrapeRule rule = rules.getRule(
-    flox::AttrPath { "legacyPackages", "x86_64-linux", "hello" } );
-  EXPECT_EQ( rule, flox::pkgdb::SR_DEFAULT );
+    flox::AttrPath { "legacyPackages", "x86_64-linux", "darwin" } );
+  EXPECT_EQ( rule, flox::pkgdb::SR_ALLOW_RECURSIVE );
   rule = rules.getRule(
-    flox::AttrPath { "legacyPackages", "x86_64-darwin", "hello" } );
-  EXPECT_EQ( rule, flox::pkgdb::SR_DEFAULT );
+    flox::AttrPath { "legacyPackages", "x86_64-darwin", "darwin" } );
+  EXPECT_EQ( rule, flox::pkgdb::SR_ALLOW_RECURSIVE );
   rule = rules.getRule(
-    flox::AttrPath { "legacyPackages", "aarch64-linux", "hello" } );
-  EXPECT_EQ( rule, flox::pkgdb::SR_DEFAULT );
+    flox::AttrPath { "legacyPackages", "aarch64-linux", "darwin" } );
+  EXPECT_EQ( rule, flox::pkgdb::SR_ALLOW_RECURSIVE );
   rule = rules.getRule(
-    flox::AttrPath { "legacyPackages", "aarch64-darwin", "hello" } );
-  EXPECT_EQ( rule, flox::pkgdb::SR_DEFAULT );
+    flox::AttrPath { "legacyPackages", "aarch64-darwin", "darwin" } );
+  EXPECT_EQ( rule, flox::pkgdb::SR_ALLOW_RECURSIVE );
+  return true;
+}
+
+
+/* -------------------------------------------------------------------------- */
+
+/**
+ * @brief Ensure nested `allowPackage` under `disallowRecursive` is preserved.
+ */
+bool
+test_RulesTree_getRule1()
+{
+  flox::pkgdb::RulesTreeNode rules(
+    rulesJSON.get<flox::pkgdb::ScrapeRulesRaw>() );
+  flox::pkgdb::ScrapeRule rule
+    = rules.getRule( flox::AttrPath { "legacyPackages",
+                                      "x86_64-linux",
+                                      "python310Packages",
+                                      "pip" } );
+  EXPECT_EQ( rule, flox::pkgdb::SR_ALLOW_PACKAGE );
   return true;
 }
 
@@ -1092,8 +1140,10 @@ main( int argc, char * argv[] )
   }
 
   RUN_TEST( RulesTree_parse0 );
+  RUN_TEST( RulesTree_parse1 );
   RUN_TEST( RulesTree_getRule_fallback0 );
   RUN_TEST( RulesTree_getRule0 );
+  RUN_TEST( RulesTree_getRule1 );
 
   /* XXX: You may find it useful to preserve the file and print it for some
    *      debugging efforts. */

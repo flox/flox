@@ -31,12 +31,13 @@ extern std::optional<std::string> rulesPath;
 
 /* -------------------------------------------------------------------------- */
 
-static std::string
+std::string
 scrapeRuleToString( ScrapeRule rule )
 {
   switch ( rule )
     {
-      case SR_DEFAULT: return "NONE";
+      case SR_NONE: return "UNSET";
+      case SR_DEFAULT: return "default";
       case SR_ALLOW_PACKAGE: return "allowPackage";
       case SR_DISALLOW_PACKAGE: return "disallowPackage";
       case SR_ALLOW_RECURSIVE: return "allowRecursive";
@@ -67,7 +68,7 @@ RulesTreeNode::addRule( AttrPathGlob & relPath, ScrapeRule rule )
       for ( auto & [name, child] : this->children )
         {
           AttrPathGlob emptyPath;
-          if ( child.rule == SR_DEFAULT ) { addRule( emptyPath, rule ); }
+          if ( child.rule == SR_DEFAULT ) { child.addRule( emptyPath, rule ); }
         }
       return;
     }
@@ -93,8 +94,7 @@ RulesTreeNode::addRule( AttrPathGlob & relPath, ScrapeRule rule )
   if ( relPath.empty() )
     {
       /* Add leaf node. */
-      this->children.emplace( std::string( attrName ),
-                              RulesTreeNode( std::move( attrName ), rule ) );
+      this->children.emplace( attrName, RulesTreeNode( attrName, rule ) );
     }
   else if ( auto it = this->children.find( attrName );
             it != this->children.end() )
@@ -108,7 +108,7 @@ RulesTreeNode::addRule( AttrPathGlob & relPath, ScrapeRule rule )
       RulesTreeNode node( attrName );
       /* Inherit default rule. */
       node.addRule( relPath, this->rule );
-      this->children.emplace( std::move( attrName ), std::move( node ) );
+      this->children.emplace( attrName, std::move( node ) );
     }
 }
 
@@ -164,6 +164,22 @@ from_json( const nlohmann::json & jfrom, RulesTreeNode & rules )
 {
   ScrapeRulesRaw raw = jfrom;
   rules              = static_cast<RulesTreeNode>( raw );
+}
+
+
+/* -------------------------------------------------------------------------- */
+
+void
+to_json( nlohmann::json & jto, const RulesTreeNode & rules )
+{
+  jto = nlohmann::json::object();
+  for ( const auto & [name, child] : rules.children )
+    {
+      nlohmann::json jchild;
+      to_json( jchild, child );
+      jto[name] = jchild;
+      jto["__rule"] = scrapeRuleToString( rules.rule );
+    }
 }
 
 

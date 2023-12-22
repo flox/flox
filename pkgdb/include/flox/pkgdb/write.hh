@@ -52,13 +52,17 @@ from_json( const nlohmann::json & jfrom, ScrapeRulesRaw & rules );
 /* -------------------------------------------------------------------------- */
 
 enum ScrapeRule {
-  SR_DEFAULT = 0,      /**< Applies no special rules. */
+  SR_NONE = 0,         /**< Empty state. */
+  SR_DEFAULT,          /**< Applies no special rules. */
   SR_ALLOW_PACKAGE,    /**< Forces an package entry in DB. */
   SR_ALLOW_RECURSIVE,  /**< Forces a sub-tree to be scraped. */
   SR_DISALLOW_PACKAGE, /**< Do not add package entry to DB. */
   /** Ignore sub-tree members unless otherwise specified. */
   SR_DISALLOW_RECURSIVE
 }; /* End enum `ScrapeRule` */
+
+std::string
+scrapeRuleToString( ScrapeRule rule );
 
 
 /* -------------------------------------------------------------------------- */
@@ -114,8 +118,14 @@ struct RulesTreeNode
 
 }; /* End struct `RulesTreeNode' */
 
+
+/** @brief Convert a JSON object to a @a flox::pkgdb::RulesTreeNode. */
 void
 from_json( const nlohmann::json & jfrom, RulesTreeNode & rules );
+
+/** @brief Convert a @a flox::pkgdb::RulesTreeNode to a JSON object. */
+void
+to_json( nlohmann::json & jto, const RulesTreeNode & rules );
 
 
 /* -------------------------------------------------------------------------- */
