@@ -1,7 +1,7 @@
-R"RULES(
+R"_JSON(
 {
     "allowRecursive": [
        ["legacyPackages", null, "darwin"]
     ]
 }
-)RULES"
+)_JSON"

@@ -323,36 +323,15 @@ extract_json_errmsg( nlohmann::json::exception & err )
 std::string
 displayableGlobbedPath( const flox::AttrPathGlob & attrs )
 {
-  std::vector<std::string> globbed;
-  for ( const std::optional<std::string> & attr : attrs )
+  std::stringstream oss;
+  bool              first = true;
+  for ( const auto & attr : attrs )
     {
-      if ( attr.has_value() ) { globbed.emplace_back( *attr ); }
-      else { globbed.emplace_back( "*" ); }
+      if ( first ) { first = false; }
+      else { oss << '.'; }
+      oss << attr.value_or( "*" );
     }
-  auto fold
-    = []( std::string a, std::string b ) { return std::move( a ) + '.' + b; };
-
-  std::string s = std::accumulate( std::next( globbed.begin() ),
-                                   globbed.end(),
-                                   globbed[0],
-                                   fold );
-  return s;
-}
-
-/* -------------------------------------------------------------------------- */
-
-
-std::string
-joinWithDelim( const std::vector<std::string> & strings,
-               const std::string &              delim )
-{
-  auto fold
-    = [&]( std::string acc, std::string elem ) { return acc + delim + elem; };
-  std::string joined = std::accumulate( std::next( strings.begin() ),
-                                        strings.end(),
-                                        strings[0],
-                                        fold );
-  return joined;
+  return oss.str();
 }
 
 /* -------------------------------------------------------------------------- */

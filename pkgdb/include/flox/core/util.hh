@@ -20,6 +20,7 @@
 #include <nix/attrs.hh>
 #include <nix/error.hh>
 #include <nix/flake/flakeref.hh>
+#include <nix/util.hh>
 #include <nlohmann/json.hpp>
 
 #include "flox/core/exceptions.hh"
@@ -449,10 +450,31 @@ displayableGlobbedPath( const AttrPathGlob & attrs );
 
 /* -------------------------------------------------------------------------- */
 
-/** @brief Join a vector of strings with a delimiter between elements. */
+/**
+ * @brief Concatenate the given strings with a separator between
+ *        the elements.
+ */
+template<class Container>
 std::string
-joinWithDelim( const std::vector<std::string> & strings,
-               const std::string &              delim );
+concatStringsSep( const std::string_view sep, const Container & strings )
+{
+  size_t size = 0;
+  /* Needs a cast to string_view since this is also called
+   * with `nix::Symbols'. */
+  for ( const auto & str : strings )
+    {
+      size += sep.size() + std::string_view( str ).size();
+    }
+  std::string rsl;
+  rsl.reserve( size );
+  for ( auto & idx : strings )
+    {
+      if ( rsl.size() != 0 ) { rsl += sep; }
+      rsl += idx;
+    }
+  return rsl;
+}
+
 
 /* -------------------------------------------------------------------------- */
 

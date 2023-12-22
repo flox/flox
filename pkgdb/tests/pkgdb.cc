@@ -1091,6 +1091,39 @@ test_RulesTree_getRule1()
 
 /* -------------------------------------------------------------------------- */
 
+/**
+ *  @brief Ensure @a flox::pkgdb::RulesTreeNode::getRule() does not _inherit_
+ *         parent rules.
+ *
+ * Inheritance is the responsibility of
+ * @a flox::pkgdb::RulesTreeNode::applyRules(), while `getRule()` should return
+ * the *exact* value of @a rule at an attribute path.
+ */
+bool
+test_RulesTree_getRule2()
+{
+  flox::pkgdb::RulesTreeNode rules(
+    rulesJSON.get<flox::pkgdb::ScrapeRulesRaw>() );
+
+  flox::pkgdb::ScrapeRule rule = rules.children.at( "legacyPackages" )
+                                   .children.at( "x86_64-linux" )
+                                   .children.at( "python310Packages" )
+                                   .children.at( "pip" )
+                                   .rule;
+  EXPECT_EQ( rule, flox::pkgdb::SR_ALLOW_PACKAGE );
+
+  flox::pkgdb::ScrapeRule rule2
+    = rules.getRule( flox::AttrPath { "legacyPackages",
+                                      "x86_64-linux",
+                                      "python310Packages",
+                                      "pip" } );
+  EXPECT_EQ( rule2, flox::pkgdb::SR_ALLOW_PACKAGE );
+  return true;
+}
+
+
+/* -------------------------------------------------------------------------- */
+
 int
 main( int argc, char * argv[] )
 {
@@ -1155,6 +1188,7 @@ main( int argc, char * argv[] )
   RUN_TEST( RulesTree_getRule_fallback0 );
   RUN_TEST( RulesTree_getRule0 );
   RUN_TEST( RulesTree_getRule1 );
+  RUN_TEST( RulesTree_getRule2 );
 
   /* XXX: You may find it useful to preserve the file and print it for some
    *      debugging efforts. */

@@ -145,7 +145,7 @@ endif  # ifndef TOOLCHAIN
 # Read info from files
 # --------------------
 
-VERSION := $(file < $(PKGDB_ROOT)/version)
+VERSION := $(file < $(PKGDB_ROOT)/.version)
 
 # Files used by `pkgdb buildenv' need to be added to the `nix' store.
 PROFILE_D_SCRIPTS_DIR ?= $(shell                            \
@@ -518,6 +518,28 @@ FULLCLEANFILES += iwyu.log
 #: Run `clang-tidy' across entire project
 lint: compile_commands.json $(HEADERS) $(ALL_SRCS)
 	$(TIDY) $(filter-out compile_commands.json,$^);
+
+
+# ---------------------------------------------------------------------------- #
+
+<<<<<<< HEAD
+||||||| parent of d7695d51 (fix: applyRules works)
+# Generated Test Data
+# -------------------
+
+# Generate test data files
+.PHONY: test-data test-lockfiles
+test-data: test-lockfiles
+
+_TEST_LOCKFILE_DIRS      := $(wildcard $(TEST_DATA_DIR)/buildenv/lockfiles/*)
+_TEST_LOCKFILE_MANIFESTS := $(addsuffix /manifest.toml,$(_TEST_LOCKFILE_DIRS))
+_TEST_LOCKFILES          := $(addsuffix /manifest.lock,$(_TEST_LOCKFILE_DIRS))
+CLEANFILES               += $(_TEST_LOCKFILES)
+test-lockfiles: $(_TEST_LOCKFILES)
+$(_TEST_LOCKFILES): %/manifest.lock: %/manifest.toml bin/pkgdb
+	$(MKDIR_P) $(@D);
+	_PKGDB_GA_REGISTRY_REF_OR_REV="e8039594435c68eb4f780f3e9bf3972a7399c4b1"  \
+	  bin/pkgdb manifest lock --ga-registry --manifest $< > $@;
 
 
 # ---------------------------------------------------------------------------- #
