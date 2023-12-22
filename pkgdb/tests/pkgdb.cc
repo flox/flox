@@ -1011,7 +1011,6 @@ test_RulesTree_parse1()
     rulesJSON.get<flox::pkgdb::ScrapeRulesRaw>() );
   flox::AttrPath path = { "legacyPackages", "x86_64-linux", "darwin" };
   flox::pkgdb::RulesTreeNode * node = &rules;
-  std::cerr << nlohmann::json( rules ).dump( 2 ) << std::endl;
   for ( const std::string & attr : path )
     {
       if ( node->children.find( attr ) == node->children.end() )
@@ -1072,12 +1071,20 @@ test_RulesTree_getRule1()
 {
   flox::pkgdb::RulesTreeNode rules(
     rulesJSON.get<flox::pkgdb::ScrapeRulesRaw>() );
-  flox::pkgdb::ScrapeRule rule
+
+  flox::pkgdb::ScrapeRule rule = rules.children.at( "legacyPackages" )
+                                   .children.at( "x86_64-linux" )
+                                   .children.at( "python310Packages" )
+                                   .children.at( "pip" )
+                                   .rule;
+  EXPECT_EQ( rule, flox::pkgdb::SR_ALLOW_PACKAGE );
+
+  flox::pkgdb::ScrapeRule rule2
     = rules.getRule( flox::AttrPath { "legacyPackages",
                                       "x86_64-linux",
                                       "python310Packages",
                                       "pip" } );
-  EXPECT_EQ( rule, flox::pkgdb::SR_ALLOW_PACKAGE );
+  EXPECT_EQ( rule2, flox::pkgdb::SR_ALLOW_PACKAGE );
   return true;
 }
 
@@ -1094,6 +1101,10 @@ main( int argc, char * argv[] )
   if ( ( 1 < argc ) && ( std::string_view( argv[1] ) == "-v" ) )
     {
       nix::verbosity = nix::lvlDebug;
+    }
+  else if ( ( 1 < argc ) && ( std::string_view( argv[1] ) == "-vv" ) )
+    {
+      nix::verbosity = nix::lvlVomit;
     }
 
   /* Initialize `nix' */

@@ -443,17 +443,13 @@ vectorMapOptional( const std::vector<T> & orig )
 
 /* -------------------------------------------------------------------------- */
 
-/**
- * @brief Convert a @a AttrPathGlob to a string for display.
- */
+/** @brief Convert a @a AttrPathGlob to a string for display. */
 std::string
 displayableGlobbedPath( const AttrPathGlob & attrs );
 
 /* -------------------------------------------------------------------------- */
 
-/**
- * @brief Join a vector of strings with a delimiter between elements.
- */
+/** @brief Join a vector of strings with a delimiter between elements. */
 std::string
 joinWithDelim( const std::vector<std::string> & strings,
                const std::string &              delim );
