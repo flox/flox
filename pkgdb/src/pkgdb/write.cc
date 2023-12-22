@@ -142,7 +142,7 @@ RulesTreeNode::getRule( const AttrPath & relPath ) const
 RulesTreeNode::RulesTreeNode()
   : RulesTreeNode( static_cast<ScrapeRulesRaw>( nlohmann::json::parse(
 #include "./rules.json.hh"
-) ) )
+    ) ) )
 {}
 
 

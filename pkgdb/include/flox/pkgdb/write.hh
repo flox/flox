@@ -375,9 +375,9 @@ public:
   void
   setPrefixDone( const flox::AttrPath & prefix, bool done );
 
-  //std::optional<bool>
-  //applyRules( const std::vector<std::string> & prefix,
-  //            const std::string &              attr );
+  // std::optional<bool>
+  // applyRules( const std::vector<std::string> & prefix,
+  //             const std::string &              attr );
 
   /**
    * @brief Scrape package definitions from an attribute set.
