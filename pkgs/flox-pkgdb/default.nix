@@ -60,7 +60,8 @@ in
       pname = "flox-pkgdb";
       version = let
         contents = builtins.readFile ../../pkgdb/.version;
-      in builtins.replaceStrings ["\n"] [""] contents;
+      in
+        builtins.replaceStrings ["\n"] [""] contents;
 
       src = builtins.path {
         path = ./../../pkgdb;
