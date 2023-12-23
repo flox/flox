@@ -1,0 +1,68 @@
+#! /usr/bin/env bash
+# ============================================================================ #
+#
+# @file build-aux/autoreconf
+#
+# @brief Wraps `autoreconf' to perform post-processing on `configure'.
+#
+#
+# ---------------------------------------------------------------------------- #
+
+set -eu;
+set -o pipefail;
+
+
+# ---------------------------------------------------------------------------- #
+
+_as_script="${BASH_SOURCE[0]}";
+_as_me="${_as_script##*/}";
+_as_dir="${_as_script%/*}";
+
+
+# ---------------------------------------------------------------------------- #
+
+# @BEGIN_INJECT_UTILS@
+: "${SED:=sed}";
+: "${REAL_AUTORECONF:=autoreconf}";
+
+
+# ---------------------------------------------------------------------------- #
+
+: "${REPO_ROOT:=${_as_dir%/*}}";
+
+
+# ---------------------------------------------------------------------------- #
+
+# Change directory to project root.
+pushd "$REPO_ROOT" >/dev/null||exit;
+
+
+# ---------------------------------------------------------------------------- #
+
+# Run `autoreconf' normally.
+
+echo "$_as_me: running real \`$REAL_AUTORECONF $*'..." >&2;
+$REAL_AUTORECONF "$@"||exit;
+
+
+# ---------------------------------------------------------------------------- #
+
+# Post-process Files
+# ------------------
+
+echo "$_as_me: post-processing \`configure'..." >&2;
+
+
+# Add `-f' to `$RM' invocations when generating `libtool'.
+
+#shellcheck disable=SC2016
+$SED -i -e 's/\$RM \(\\"\$cfgfile\\";\)/$RM -f \1/'  \
+        -e 's/\$RM \("\$cfgfile"\)/$RM -f \1/'       \
+        build-aux/m4/libtool.m4 configure;
+
+
+# ---------------------------------------------------------------------------- #
+#
+#
+#
+# ============================================================================ #

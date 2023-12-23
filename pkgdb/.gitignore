@@ -48,3 +48,5 @@ gmon.out
 /.direnv/
 *.tmp
 /build/
+autom4te.cache/
+configure
