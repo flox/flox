@@ -50,3 +50,5 @@ gmon.out
 /build/
 autom4te.cache/
 configure
+config.status
+config.mk

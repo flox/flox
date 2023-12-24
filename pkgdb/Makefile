@@ -91,7 +91,7 @@ RM         ?= rm -f
 SED        ?= sed
 TEE        ?= tee
 TEST       ?= test
-TIDY       ?= clang-tidy
+LINT       ?= clang-tidy
 TOUCH      ?= touch
 TR         ?= tr
 UNAME      ?= uname
@@ -517,7 +517,7 @@ FULLCLEANFILES += iwyu.log
 .PHONY: lint
 #: Run `clang-tidy' across entire project
 lint: compile_commands.json $(HEADERS) $(ALL_SRCS)
-	$(TIDY) $(filter-out compile_commands.json,$^);
+	$(LINT) $(filter-out compile_commands.json,$^);
 
 
 # ---------------------------------------------------------------------------- #

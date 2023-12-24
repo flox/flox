@@ -97,19 +97,15 @@ FLOX_PROG_GREP
 AC_PROG_SED
 AC_PATH_PROG([SED], ["${SED:-sed}"], [$MISSING sed])
 
-# NOTE: `AC_PROG_RANLIB' is run by `LT_INIT'
-#AC_PROG_RANLIB
-AC_PATH_PROG([RANLIB], ["${RANLIB:-ranlib}"], [$MISSING ranlib])
-
 AM_PROG_AR
 AC_PATH_PROG([AR], ["${AR:-ar}"], [$MISSING ar])
 
 PKG_PROG_PKG_CONFIG
 AC_PATH_PROG([PKG_CONFIG], ["${PKG_CONFIG:-}"], [$MISSING pkg-config])
 
-#FLOX_PROG_MKDIR
+FLOX_PROG_MKDIR
+FLOX_PROG_LN
 #FLOX_PROG_MKTEMP
-#FLOX_PROG_LN
 
 AC_ARG_VAR([CAT], [Concatenate FILE(s) to standard output])
 AC_PATH_PROG([CAT], [cat], [$MISSING cat])
@@ -121,7 +117,7 @@ AC_ARG_VAR([CP], [Copy files])
 AC_PATH_PROG([CP], [cp], [$MISSING cp])
 
 AC_ARG_VAR([RM], [Remove files])
-AC_PATH_PROG([RM], [rm -f], [$MISSING rm])
+AC_PATH_PROG([RM], [rm], [$MISSING rm])
 
 AC_ARG_VAR([SORT], [Sort lines of text])
 AC_PATH_PROG([SORT], [sort], [$MISSING sort])
@@ -154,12 +150,6 @@ AC_PATH_PROG([M4], [m4], [$MISSING m4])
 AC_ARG_VAR([GIT], [Distributed version control system])
 AC_PATH_PROG([GIT], [git], [$MISSING git])
 
-AC_ARG_VAR([COMMITIZEN], [Conventional commit helper])
-AC_PATH_PROG([COMMITIZEN], [commitizen], [$MISSING commitizen])
-
-AC_ARG_VAR([HIVEMIND], [Process manager])
-AC_PATH_PROG([HIVEMIND], [hivemind], [$MISSING hivemind])
-
 AC_ARG_VAR([SQLITE], [Command line interface for SQLite])
 AC_PATH_PROG([SQLITE], [sqlite3], [$MISSING sqlite3])
 
@@ -173,9 +163,6 @@ AC_ARG_VAR([NIXFLAGS],
   [Flags passed as 'nix <NIXFLAGS> <CMD> ...' to all 'nix' invocations ]
   [@<:@default=--experimental-features='nix-command flakes'@:>@])
 AC_SUBST([NIXFLAGS], ["--experimental-features='nix-command flakes'"])
-
-AC_ARG_VAR([NIX_FMT], [Nix code formatter @<:@default=alejandra@:>@])
-AC_PATH_PROG([NIX_FMT], [alejandra], [$MISSING alejandra])
 
 FLOX_PROG_BEAR
 
@@ -194,9 +181,6 @@ AC_PATH_PROG([SEMVER], [semver], [$MISSING semver])
 AC_ARG_VAR([TAR], [Manipulate tape archives])
 AC_PATH_PROG([TAR], [tar], [$MISSING tar])
 
-AC_ARG_VAR([RSYNC], [Remote file copy])
-AC_PATH_PROG([RSYNC], [rsync], [$MISSING rsync])
-
 
 # ---------------------------------------------------------------------------- #
 
@@ -206,33 +190,36 @@ AC_PATH_PROG([RSYNC], [rsync], [$MISSING rsync])
 AC_CANONICAL_HOST
 
 AS_CASE(["$host_os"],
-  [linux*],  [OS=linux],
-  [darwin*], [OS=darwin],
+  [linux*],  [OS=linux; IS_LINUX=yes; IS_DARWIN='';],
+  [darwin*], [OS=darwin; IS_LINUX=''; IS_DARWIN=yes;],
   [AC_MSG_ERROR([Unsupported host OS: $host_os])])
 AC_SUBST([OS])
-AM_CONDITIONAL([IS_LINUX],   [test "$OS" = 'linux'])
-AM_CONDITIONAL([IS_DARWIN],  [test "$OS" = 'darwin'])
+AC_SUBST([IS_LINUS])
+AC_SUBST([IS_DARWIN])
 
 AS_CASE(["$host_cpu"],
-  [x86_64],   [ARCH=x86_64],
-  [aarch64*], [ARCH=aarch64],
-  [arm*],     [ARCH=aarch64],
+  [x86_64],   [ARCH=x86_64; IS_X86_64=yes; IS_AARCH64='';],
+  [aarch64*], [ARCH=aarch64; IS_X86_64=''; IS_AARCH64=yes;],
+  [arm*],     [ARCH=aarch64; IS_X86_64=''; IS_AARCH64=yes;],
   [AC_MSG_ERROR([Unsupported host ARCH: $host_cpu])])
 AC_SUBST([ARCH])
-AM_CONDITIONAL([IS_X86_64],  [test "$ARCH" = 'x86_64'])
-AM_CONDITIONAL([IS_AARCH64], [test "$ARCH" = 'aarch64'])
+AC_SUBST([IS_X86_64])
+AC_SUBST([IS_AARCH64])
 
 AC_CACHE_CHECK([for C++ compiler toolchain], [flox_cv_cxx_toolchain],
   [AS_CASE(["$( $CXX --version 2>/dev/null|$HEAD -n1; )"],
-    [g++\ *],                  [flox_cv_cxx_toolchain=gcc],
-    [clang\ version\ *],       [flox_cv_cxx_toolchain=clang],
-    [Apple\ clang\ version\ *], [flox_cv_cxx_toolchain=clang],
+    [g++\ *],
+      [flox_cv_cxx_toolchain=gcc; IS_GCC=yes; IS_CLANG='';],
+    [clang\ version\ *],
+      [flox_cv_cxx_toolchain=clang; IS_GCC=''; IS_CLANG=yes;],
+    [Apple\ clang\ version\ *],
+      [flox_cv_cxx_toolchain=clang; IS_GCC=''; IS_CLANG=yes;],
     [AC_MSG_ERROR([Unsupported C++ compiler: '$CXX'. ]
       [Version string was: '$( $CXX --version|$HEAD -n1; )'])])
    AC_MSG_RESULT(["$ac_cv_cxx_toolchain"])])
 AC_SUBST([CXX_TOOLCHAIN], ["$flox_cv_cxx_toolchain"])
-AM_CONDITIONAL([IS_GCC],   [test "$CXX_TOOLCHAIN" = 'gcc'])
-AM_CONDITIONAL([IS_CLANG], [test "$CXX_TOOLCHAIN" = 'clang'])
+AC_SUBST([IS_GCC])
+AC_SUBST([IS_CLANG])
 
 
 # ---------------------------------------------------------------------------- #
@@ -285,15 +272,6 @@ AC_CHECK_FUNCS([memset strtoul mkdir utime])
 
 # ---------------------------------------------------------------------------- #
 
-# Cargo Flags
-# -----------
-
-AC_ARG_VAR([CARGOFLAGS], [Additional flags to pass to 'cargo build'])
-AC_SUBST([CARGOFLAGS])
-
-
-# ---------------------------------------------------------------------------- #
-
 # Debug Mode
 # ----------
 
@@ -310,13 +288,15 @@ AC_ARG_ENABLE([debug],
   [AS_HELP_STRING([--enable-debug], [enable debug mode @<:@default=no@:>@])],
   [ENABLE_DEBUG="$enableval"],
   [ENABLE_DEBUG=no])
-AM_CONDITIONAL([ENABLE_DEBUG], [test "$ENABLE_DEBUG" = 'yes'])
 
 AS_IF([test "$ENABLE_DEBUG" != 'no'],
   [AC_DEFINE_UNQUOTED([DEBUG], [1], [Enable debug mode])
    CXXFLAGS="$CXXFLAGS $DEBUG_CXXFLAGS";
    LDFLAGS="$LDFLAGS $DEBUG_LDFLAGS";
-   AC_MSG_NOTICE([Enabled debug mode])])
+   ENABLE_DEBUG=yes;
+   AC_MSG_NOTICE([Enabled debug mode])],
+   [ENABLE_DEBUG='';])
+AC_SUBST([ENABLE_DEBUG])
 
 
 # ---------------------------------------------------------------------------- #
@@ -333,12 +313,14 @@ AC_ARG_ENABLE([coverage],
                   [enable coverage mode @<:@default=no@:>@])],
   [ENABLE_COV="$enableval"],
   [ENABLE_COV=no])
-AM_CONDITIONAL([ENABLE_COV], [test "$ENABLE_COV" = 'yes'])
 
 AS_IF([test "$ENABLE_COV" != 'no'],
   [CXXFLAGS="$CXXFLAGS $COV_CXXFLAGS";
    LDFLAGS="$LDFLAGS $COV_LDFLAGS";
-   AC_MSG_NOTICE([Enabled coverage mode])])
+   ENABLE_COV=yes;
+   AC_MSG_NOTICE([Enabled coverage mode])],
+  [ENABLE_COV='';])
+AC_SUBST([ENABLE_COV])
 
 
 # ---------------------------------------------------------------------------- #
@@ -355,7 +337,6 @@ AC_ARG_ENABLE([release],
                   [enable release mode @<:@default=no@:>@])],
   [ENABLE_RELEASE="$enableval"],
   [ENABLE_RELEASE=no])
-AM_CONDITIONAL([ENABLE_RELEASE], [test "$ENABLE_RELEASE" = 'yes'])
 
 AS_IF([test "$ENABLE_RELEASE" == 'yes'],
   [AS_IF([test "$ENABLE_DEBUG" == 'yes'],
@@ -363,9 +344,10 @@ AS_IF([test "$ENABLE_RELEASE" == 'yes'],
    AC_DEFINE_UNQUOTED([RELEASE], [1], [Enable release mode])
    CXXFLAGS="$CXXFLAGS $RELEASE_CXXFLAGS";
    LDFLAGS="$LDFLAGS $RELEASE_LDFLAGS";
-   CARGOFLAGS="${CARGOFLAGS:+$CARGOFLAGS }--release";
-   FLOX_CLI_targetdir='target/release';
-   AC_MSG_NOTICE([Enabled release mode])])
+   ENABLE_RELEASE=yes;
+   AC_MSG_NOTICE([Enabled release mode])],
+  [ENABLE_RELEASE='';])
+AC_SUBST([ENABLE_RELEASE])
 
 
 # ---------------------------------------------------------------------------- #
@@ -375,22 +357,30 @@ AS_IF([test "$ENABLE_RELEASE" == 'yes'],
 # Enable/Disable sub-sets of targets.
 
 # TODO: all docs
-ENABLE_PKGDB_DOCS='';
+ENABLE_DOCS='';
 AC_ARG_ENABLE([pkgdb-docs],
   [AS_HELP_STRING([--enable-pkgdb-docs],
     [build and install 'pkgdb' documentation @<:@default=yes@:>@])],
-  [ENABLE_PKGDB_DOCS="$enableval"],
-  [ENABLE_PKGDB_DOCS=yes])
-AM_CONDITIONAL([ENABLE_PKGDB_DOCS], [test "$ENABLE_PKGDB_DOCS" != 'no'])
+  [ENABLE_DOCS="$enableval"],
+  [ENABLE_DOCS=yes])
 
-ENABLE_PKGDB_DEV_OUTPUTS='';
+AS_IF([test "$ENABLE_DOCS" != 'no'],
+  [ENABLE_DOCS=yes]
+  [ENBALE_DOCS='';
+   AC_MSG_NOTICE([Disabled 'pkgdb' documentation])])
+AC_SUBST([ENABLE_DOCS])
+
+ENABLE_DEV_OUTPUTS='';
 AC_ARG_ENABLE([pkgdb-dev-outputs],
   [AS_HELP_STRING([--enable-pkgdb-dev-outputs],
     [build and install 'pkgdb' headers @<:@default=no@:>@])],
-  [ENABLE_PKGDB_DEV_OUTPUTS="$enableval"],
-  [ENABLE_PKGDB_DEV_OUTPUTS=no])
-AM_CONDITIONAL([ENABLE_PKGDB_DEV_OUTPUTS],
-               [test "$ENABLE_PKGDB_DEV_OUTPUTS" = 'yes'])
+  [ENABLE_DEV_OUTPUTS="$enableval"],
+  [ENABLE_DEV_OUTPUTS=no])
+AS_IF([test "$ENABLE_DEV_OUTPUTS" != 'no'],
+  [ENABLE_DEV_OUTPUTS=yes]
+  [ENBALE_DEV_OUTPUTS='';
+   AC_MSG_NOTICE([Disabled 'pkgdb' headers])])
+AC_SUBST([ENABLE_DEV_OUTPUTS])
 
 
 # ---------------------------------------------------------------------------- #
@@ -419,7 +409,12 @@ AS_CASE(["$WITH_PKGDB"],
 AC_SUBST([PKGDB_BIN])
 AC_SUBST([WITH_PKGDB])
 
-AM_CONDITIONAL([USE_LOCAL_PKGDB],    [test "$WITH_PKGDB" = 'local'])
+USE_LOCAL_PKGDB='';
+AS_IF([test "$WITH_PKGDB" = 'local'],
+  [USE_LOCAL_PKGDB=yes;
+   AC_MSG_NOTICE([Using built 'pkgdb'])],
+  [AC_MSG_NOTICE([Using 'pkgdb' sub-system from '$PKGDB_BIN'])])
+AC_SUBST([USE_LOCAL_PKGDB])
 
 
 # ---------------------------------------------------------------------------- #
@@ -536,7 +531,15 @@ AS_CASE(["$CXX_TOOLCHAIN"],
   [AC_MSG_ERROR([Unsupported C++ compiler toolchain: $CXX_TOOLCHAIN])])
 AC_SUBST([NO_UNDEFINED_SYMBOLS_FLAG])
 
-AM_CONDITIONAL([BUILD_SHARED_LIBS], [test "$enable_shared" = 'yes'])
+BUILD_SHARED_LIBS='';
+BUILD_STATIC_LIBS='';
+AS_IF([test "${enable_shared:-}" = 'yes'],
+      [BUILD_SHARED_LIBS=yes],
+      [BUILD_STATIC_LIBS=yes])
+AC_SUBST([BUILD_SHARED_LIBS])
+
+AS_IF([test "${enable_static:-}" = 'yes'], [BUILD_STATIC_LIBS=yes])
+AC_SUBST([BUILD_STATIC_LIBS])
 
 
 # ---------------------------------------------------------------------------- #
@@ -581,6 +584,7 @@ AS_IF([test -z "${SET_PROMPT_BASH_SH:-}"], [
         [Invalid '--with-set-prompt-bash-sh': '$WITH_SET_PROMPT_BASH_SH'. ]
         [You must specify either 'local', or a '/nix/store' path])])])])
 AC_SUBST([WITH_SET_PROMPT_BASH_SH])
+AC_SUBST([SET_PROMPT_BASH_SH])
 AC_DEFINE_UNQUOTED([SET_PROMPT_BASH_SH], ["$SET_PROMPT_BASH_SH"],
   [Path to 'set-prompt.bash.sh' script in '/nix/store/'])
 
@@ -609,6 +613,7 @@ AS_IF([test -z "${PROFILE_D_SCRIPT_DIR:-}"], [
         [Invalid '--with-profile-d-script-dir': '$WITH_PROFILE_D_SCRIPT_DIR'. ]
         [You must specify either 'local', or a '/nix/store' path])])])])
 AC_SUBST([WITH_PROFILE_D_SCRIPT_DIR])
+AC_SUBST([PROFILE_D_SCRIPT_DIR])
 AC_DEFINE_UNQUOTED([PROFILE_D_SCRIPT_DIR], ["$PROFILE_D_SCRIPT_DIR"],
   [Path to directory containing 'etc/profile.d' directory in '/nix/store/'])
 

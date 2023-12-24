@@ -9,8 +9,21 @@
 # @brief Provides configured settings to `Makefile' with information about
 #        external dependencies, flags, and any conditional options.
 #
+# For a full list of all avaialble variables, see `configure.ac',
+# `configure', and `config.status' files.
 #
 # ---------------------------------------------------------------------------- #
+
+# Package Information
+# -------------------
+
+PKGDB_VERSION = @PKGDB_VERSION@
+
+
+# ---------------------------------------------------------------------------- #
+
+# Project Directories
+# -------------------
 
 REPO_ROOT      = @REPO_ROOT@
 PKGDB_ROOT     = @PKGDB_ROOT@
@@ -19,6 +32,160 @@ PKGDB_TEST_DIR = @PKGDB_TEST_DIR@
 
 # ---------------------------------------------------------------------------- #
 
+# Installation Directories
+# ------------------------
+
+PREFIX = @PREFIX@
+BINDIR = @BINDIR@
+
+
+# ---------------------------------------------------------------------------- #
+
+# Utilities
+# ---------
+# Utilities used by the build system.
+# Note that additional utilities are available in `configure.ac' but are not
+# used by `Makefile' directly.
+# Feel free to add them here if you need them.
+
+CXX        = @CXX@
+CPP        = @CPP@
+INSTALL    = @INSTALL@
+GREP       = @GREP@
+SED        = @SED@
+AR         = @AR@
+PKG_CONFIG = @PKG_CONFIG@
+MKDIR      = @MKDIR@
+MKDIR_P    = @MKDIR_P@
+LN         = @LN@ -f
+LN_S       = @LN_S@ -f
+CAT        = @CAT@
+HEAD       = @HEAD@
+CP         = @CP@
+RM         = @RM@ -f
+BATS       = @BATS@
+BEAR       = @BEAR@
+DOXYGEN    = @DOXYGEN@
+FMT        = @CXX_FMT@
+NIX        = @NIX@
+TEE        = @TEE@
+TEST       = @TEST@
+LINT       = @CXX_LINT@
+TOUCH      = @TOUCH@
+TR         = @TR@
+UNAME      = @UNAME@
+
+
+# ---------------------------------------------------------------------------- #
+
+# Platform and Toolchains
+# -----------------------
+
+SYSTEM = @SYSTEM@
+
+OS        = @OS@
+IS_LINUX  = @IS_LINUX@
+IS_DARWIN = @IS_DARWIN@
+
+ARCH       = @ARCH@
+IS_X86_64  = @IS_X86_64@
+IS_AARCH64 = @IS_AARCH64@
+
+TOOLCHAIN = @CXX_TOOLCHAIN@
+IS_GCC    = @IS_GCC@
+IS_CLANG  = @IS_CLANG@
+
+
+# ---------------------------------------------------------------------------- #
+
+# Compiler Settings
+# -----------------
+
+# Final flags to use forall compilation and linking.
+# These carry incude directories and linkage for `pkgdb' and all
+# "External Dependencies".
+AM_CXXFLAGS = @AM_CXXFLAGS@
+AM_LDFLAGS  = @AM_LDFLAGS@
+
+# Final flags for "user overridable" compilation and linking settings.
+# These include things like debug, coverage, release mode, as well as warnings
+# and optimization levels.
+# Users can freely override these without having to deal with include paths
+# and locating external dependencies.
+CXXFLAGS = @CXXFLAGS@
+LDFLAGS  = @LDFLAGS@
+
+
+# The following are provided by `CXXFLAGS' and `LDFLAGS', but appear here
+# for visibility and reuse in niche contexts.
+
+DEBUG_CXXFLAGS = @DEBUG_CXXFLAGS@
+ENABLE_DEBUG   = @ENABLE_DEBUG@
+
+COV_CXXFLAGS = @COV_CXXFLAGS@
+ENABLE_COV   = @ENABLE_COV@
+
+RELEASE_CXXFLAGS = @RELEASE_CXXFLAGS@
+ENABLE_RELEASE   = @ENABLE_RELEASE@
+
+RELATIVE_RPATH_FLAG = @RELATIVE_RPATH_FLAG@
+
+set_rpath_option    = @set_rpath_option@
+set_rpath           = '@set_rpath_option@$(1)'
+
+set_soname_option   = @set_soname_option@
+set_soname          = '@set_soname_option@$(1)'
+
+NO_UNDEFINED_SYMBOLS_FLAG = @NO_UNDEFINED_SYMBOLS_FLAG@
+
+
+# ---------------------------------------------------------------------------- #
+
+# Targets
+# -------
+
+ENABLE_DOCS        = @ENABLE_DOCS@
+ENABLE_DEV_OUTPUTS = @ENABLE_DEV_OUTPUTS@
+
+PKGDB_BIN       = @PKGDB_BIN@
+WITH_PKGDB      = @WITH_PKGDB@
+USE_LOCAL_PKGDB = @USE_LOCAL_PKGDB@
+
+
+# ---------------------------------------------------------------------------- #
+
+# External Dependencies
+# ---------------------
+# The following flags already appear in `AM_CXXFLAGS' and `AM_LDFLAGS' but are
+# provided here for visibility and reuse in niche contexts.
+
+NLJSON_CFLAGS = @NLJSON_CFLAGS@
+NLJSON_LIBS   = @NLJSON_LIBS@
+
+ARGPARSE_CFLAGS = @ARGPARSE_CFLAGS@
+ARGPARSE_LIBS   = @ARGPARSE_LIBS@
+
+SQLITE3_CFLAGS = @SQLITE3_CFLAGS@
+SQLITE3_LIBS   = @SQLITE3_LIBS@
+
+SQLITE3PP_CFLAGS = @SQLITE3PP_CFLAGS@
+SQLITE3PP_LIBS   = @SQLITE3PP_LIBS@
+
+YAML_CFLAGS = @YAML_CFLAGS@
+YAML_LIBS   = @YAML_LIBS@
+
+NIX_CFLAGS = @NIX_CFLAGS@
+NIX_LIBS   = @NIX_LIBS@
+
+
+# ---------------------------------------------------------------------------- #
+
+# Assets
+# ------
+
+SET_PROMPT_BASH_SH   = @SET_PROMPT_BASH_SH@
+PROFILE_D_SCRIPT_DIR = @PROFILE_D_SCRIPT_DIR@
+SEMVER_PATH          = @SEMVER_PATH@
 
 
 # ---------------------------------------------------------------------------- #
