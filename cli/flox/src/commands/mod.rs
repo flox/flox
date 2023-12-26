@@ -334,7 +334,7 @@ enum SharingCommands {
     /// Pull environment from flox hub
     Pull(#[bpaf(external(environment::pull))] environment::Pull),
     /// Containerize an environment
-    #[bpaf(command)]
+    #[bpaf(command, hide)]
     Containerize(#[bpaf(external(environment::containerize))] environment::Containerize),
 }
 impl SharingCommands {
