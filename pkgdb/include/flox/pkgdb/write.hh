@@ -180,26 +180,48 @@ public:
 
   /**
    * @brief Execute a raw sqlite statement on the database.
+   *
+   * Will retry for up to 10 seconds if DB is busy.
+   *
    * @param stmt String statement to execute.
    * @return `SQLITE_*` [error code](https://www.sqlite.org/rescode.html).
    */
   inline sql_rc
-  execute( const char * stmt )
+  execute( const char * stmt, std::size_t retries = 100 )
   {
     sqlite3pp::command cmd( this->db, stmt );
-    return cmd.execute();
+    sql_rc             rcode = cmd.execute();
+    while ( ( ( rcode == SQLITE_BUSY ) || ( rcode == SQLITE_LOCKED ) )
+            && ( 0 < retries ) )
+      {
+        std::this_thread::sleep_for( std::chrono::milliseconds( 100 ) );
+        rcode = cmd.execute();
+        retries--;
+      }
+    return rcode;
   }
 
   /**
    * @brief Execute raw sqlite statements on the database.
+   *
+   * Will retry for up to 10 seconds if DB is busy.
+   *
    * @param stmt String statement to execute.
    * @return `SQLITE_*` [error code](https://www.sqlite.org/rescode.html).
    */
   inline sql_rc
-  execute_all( const char * stmt )
+  execute_all( const char * stmt, std::size_t retries = 100 )
   {
     sqlite3pp::command cmd( this->db, stmt );
-    return cmd.execute_all();
+    sql_rc             rcode = cmd.execute_all();
+    while ( ( ( rcode == SQLITE_BUSY ) || ( rcode == SQLITE_LOCKED ) )
+            && ( 0 < retries ) )
+      {
+        std::this_thread::sleep_for( std::chrono::milliseconds( 100 ) );
+        rcode = cmd.execute_all();
+        retries--;
+      }
+    return rcode;
   }
 
 
