@@ -51,27 +51,6 @@ class PkgDb : public PkgDbReadOnly
 
 protected:
 
-  /** @brief Create tables in database if they do not exist. */
-  void
-  initTables();
-
-  /** @brief Create views in database if they do not exist. */
-  void
-  initViews();
-
-  /**
-   * @brief Update the database's `VIEW`s schemas.
-   *
-   * This deletes any existing `VIEW`s and recreates them, and updates the
-   * `DbVersions` row for `pkgdb_views_schema`.
-   */
-  void
-  updateViews();
-
-  /** @brief Create `DbVersions` rows if they do not exist. */
-  void
-  initVersions();
-
   /**
    * @brief Create/update tables/views schema in database.
    * Create tables if they do not exist.
@@ -137,6 +116,21 @@ public:
                       SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE );
     this->init();
     this->loadLockedFlake();
+    /* Detect ScrapeRules mismatch and uninitialized. */
+    try
+      {
+        (void) this->getRules();
+      }
+    catch( const RulesHashMismatch & err )
+      {
+        /* Mismatched hashes, needs to delete and rebuild. */
+        // TODO: Delete DB and rebuild.
+      }
+    catch ( const PkgDbException & err )
+      {
+        /* Initialize */
+        this->writeScrapeRules();
+      }
   }
 
   /**
@@ -167,7 +161,21 @@ public:
       = { flake.flake.lockedRef.to_string(),
           nix::fetchers::attrsToJSON( flake.flake.lockedRef.toAttrs() ) };
     writeInput();
-    writeScrapeRules();
+    /* Detect ScrapeRules mismatch and uninitialized. */
+    try
+      {
+        (void) this->getRules();
+      }
+    catch( const RulesHashMismatch & err )
+      {
+        /* Mismatched hashes, needs to delete and rebuild. */
+        // TODO: Delete DB and rebuild.
+      }
+    catch ( const PkgDbException & err )
+      {
+        /* Initialize */
+        this->writeScrapeRules();
+      }
   }
 
   /**
@@ -203,7 +211,7 @@ public:
       {
         std::this_thread::sleep_for( std::chrono::milliseconds( 100 ) );
         rcode = cmd.execute();
-        retries--;
+        --retries
       }
     return rcode;
   }
@@ -226,7 +234,7 @@ public:
       {
         std::this_thread::sleep_for( std::chrono::milliseconds( 100 ) );
         rcode = cmd.execute_all();
-        retries--;
+        --retries;
       }
     return rcode;
   }
