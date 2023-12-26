@@ -121,7 +121,7 @@ public:
       {
         (void) this->getRules();
       }
-    catch( const RulesHashMismatch & err )
+    catch ( const RulesHashMismatch & err )
       {
         /* Mismatched hashes, needs to delete and rebuild. */
         // TODO: Delete DB and rebuild.
@@ -166,7 +166,7 @@ public:
       {
         (void) this->getRules();
       }
-    catch( const RulesHashMismatch & err )
+    catch ( const RulesHashMismatch & err )
       {
         /* Mismatched hashes, needs to delete and rebuild. */
         // TODO: Delete DB and rebuild.

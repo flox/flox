@@ -135,7 +135,7 @@ std::string
 PkgDbReadOnly::readRulesHash()
 {
   sqlite3pp::query qry( this->db, "SELECT hash FROM ScrapeRules LIMIT 1" );
-  auto itr = qry.begin();
+  auto             itr = qry.begin();
   if ( itr == qry.end() )
     {
       throw PkgDbException( "no rules hash found in database" );
