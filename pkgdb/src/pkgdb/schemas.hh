@@ -43,6 +43,19 @@ CREATE TRIGGER IF NOT EXISTS IT_LockedFlake AFTER INSERT ON LockedFlake
 
 /* -------------------------------------------------------------------------- */
 
+static const char * sql_rules = R"SQL(
+CREATE TABLE IF NOT EXISTS ScrapeRules ( hash  TEXT  PRIMARY KEY );
+
+CREATE TRIGGER IF NOT EXISTS IT_Rules AFTER INSERT ON ScrapeRules
+  WHEN ( 1 < ( SELECT COUNT( hash ) FROM ScrapeRules ) )
+  BEGIN
+    SELECT RAISE( ABORT, 'Cannot write conflicting ScrapeRules info.' );
+  END
+)SQL";
+
+
+/* -------------------------------------------------------------------------- */
+
 static const char * sql_attrSets = R"SQL(
 CREATE TABLE IF NOT EXISTS AttrSets (
   id        INTEGER       PRIMARY KEY

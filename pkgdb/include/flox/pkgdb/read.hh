@@ -25,13 +25,14 @@
 #include "flox/core/types.hh"
 #include "flox/package.hh"
 #include "flox/pkgdb/pkg-query.hh"
+#include "flox/pkgdb/rules.hh"
 
 
 /* -------------------------------------------------------------------------- */
 
-/* This is passed in by `make' and is set by `<pkgdb>/version' */
+/* This is passed in by `make' and is set by `<flox>/pkgdb/.version' */
 #ifndef FLOX_PKGDB_VERSION
-#  define FLOX_PKGDB_VERSION "NO.VERSION"
+#  error "You must define FLOX_PKGDB_VERSION"
 #endif
 
 
@@ -84,7 +85,7 @@ operator<<( std::ostream & oss, const SqlVersions & versions );
 
 
 /** The current SQLite3 schema versions. */
-constexpr SqlVersions sqlVersions = { .tables = 2, .views = 3 };
+constexpr SqlVersions sqlVersions = { .tables = 3, .views = 1 };
 
 
 /* -------------------------------------------------------------------------- */
@@ -149,7 +150,8 @@ public:
     /** Exploded form of URI as an attr-set. */
     nlohmann::json attrs = nlohmann::json::object();
   };
-  struct LockedFlakeRef lockedRef; /**< Locked _flake reference_. */
+  struct LockedFlakeRef        lockedRef; /**< Locked _flake reference_. */
+  std::optional<RulesTreeNode> rules;
 
 
   /* Errors */
@@ -164,6 +166,20 @@ public:
         std::string( "No such database '" + pdb.dbPath.string() + "'." ) )
     {}
   }; /* End struct `NoSuchDatabase' */
+
+  /**
+   * @brief Thrown when a database's `ScrapeRules.hash` does not match @a rules.
+   */
+  struct RulesHashMismatch : PkgDbException
+  {
+    explicit RulesHashMismatch( PkgDbReadOnly & pdb )
+      : PkgDbException(
+        nix::fmt( "database '%s' rules hash '%s' does not match expected '%s'",
+                  pdb.dbPath,
+                  pdb.readRulesHash(),
+                  pdb.rules->getHash() ) )
+    {}
+  }; /* End struct `RulesHashMismatch' */
 
 
   /* Internal Helpers */
@@ -242,7 +258,32 @@ public:
 
   // public:
 
-  /** @return The Package Database schema version. */
+  /**
+   * @brief Read the database's recorded `ScrapeRules.hash`.
+   *
+   * This *always* performs a read - it does not simply call
+   * `this->getRules().getHash()`.
+   */
+  std::string
+  readRulesHash();
+
+  // TODO
+  /**
+   * @brief Lookup a database's ScrapeRules.
+   *
+   * This accessor exists to guard all rules access behind a hash audit which
+   * ensures the database's rules hash aligns with @a rules.
+   *
+   * If a database's rules are ever changed, the database should be recreated.
+   */
+  const RulesTreeNode &
+  getRules();
+
+  /**
+   * @brief Lookup a database schema version and views version.
+   *
+   * @return A `SqlVersions` struct containing the schema and views versions.
+   */
   SqlVersions
   getDbVersion();
 
@@ -324,7 +365,6 @@ public:
   bool
   hasPackage( const flox::AttrPath & path );
 
-
   /**
    * @brief Get the `Description.description` for a given `Description.id`.
    * @param descriptionId The row id to lookup.
@@ -332,7 +372,6 @@ public:
    */
   std::string
   getDescription( row_id descriptionId );
-
 
   /**
    * @brief Return a list of `Packages.id`s for packages which satisfy a given
@@ -343,7 +382,6 @@ public:
    */
   std::vector<row_id>
   getPackages( const PkgQueryArgs & params );
-
 
   /**
    * @brief Get metadata about a single package.
@@ -356,7 +394,6 @@ public:
   nlohmann::json
   getPackage( row_id row );
 
-
   /**
    * @brief Get metadata about a single package.
    *
@@ -367,7 +404,6 @@ public:
    */
   nlohmann::json
   getPackage( const flox::AttrPath & path );
-
 
   nix::FlakeRef
   getLockedFlakeRef() const

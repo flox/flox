@@ -16,6 +16,7 @@
 
 #include "flox/core/types.hh"
 #include "flox/pkgdb/read.hh"
+#include "flox/pkgdb/rules.hh"
 
 
 /* -------------------------------------------------------------------------- */
@@ -33,116 +34,12 @@ using Todos = std::queue<Target, std::list<Target>>;
 
 /* -------------------------------------------------------------------------- */
 
-/** @brief Scraping rules to modify database creation process in _raw_ form. */
-struct ScrapeRulesRaw
-{
-  std::vector<AttrPathGlob> allowPackage;
-  std::vector<AttrPathGlob> disallowPackage;
-  std::vector<AttrPathGlob> allowRecursive;
-  std::vector<AttrPathGlob> disallowRecursive;
-  // TODO: aliases
-}; /* End struct `ScrapeRulesRaw` */
-
-
-/** @brief Convert a JSON object to a @a flox::pkgdb::ScrapeRulesRaw. */
-void
-from_json( const nlohmann::json & jfrom, ScrapeRulesRaw & rules );
-
-
-/* -------------------------------------------------------------------------- */
-
-enum ScrapeRule {
-  SR_NONE = 0,         /**< Empty state. */
-  SR_DEFAULT,          /**< Applies no special rules. */
-  SR_ALLOW_PACKAGE,    /**< Forces an package entry in DB. */
-  SR_ALLOW_RECURSIVE,  /**< Forces a sub-tree to be scraped. */
-  SR_DISALLOW_PACKAGE, /**< Do not add package entry to DB. */
-  /** Ignore sub-tree members unless otherwise specified. */
-  SR_DISALLOW_RECURSIVE
-}; /* End enum `ScrapeRule` */
-
-[[nodiscard]] std::string
-scrapeRuleToString( ScrapeRule rule );
-
-
-/* -------------------------------------------------------------------------- */
-
-struct RulesTreeNode
-{
-  using Children = std::unordered_map<std::string, RulesTreeNode>;
-
-  std::string attrName = "";
-  ScrapeRule  rule     = SR_DEFAULT;
-  Children    children = {};
-
-  RulesTreeNode() = default;
-
-  explicit RulesTreeNode( ScrapeRulesRaw rules );
-
-  explicit RulesTreeNode( const std::filesystem::path & path )
-    : RulesTreeNode( static_cast<ScrapeRulesRaw>( readAndCoerceJSON( path ) ) )
-  {}
-
-  explicit RulesTreeNode( std::string attrName,
-                          ScrapeRule  rule     = SR_DEFAULT,
-                          Children    children = {} )
-    : attrName( std::move( attrName ) )
-    , rule( std::move( rule ) )
-    , children( std::move( children ) )
-  {}
-
-  RulesTreeNode( std::string attrName, Children children )
-    : attrName( std::move( attrName ) ), children( std::move( children ) )
-  {}
-
-  void
-  addRule( AttrPathGlob & relPath, ScrapeRule rule );
-
-  /**
-   * @brief Get the rule at a path, or @a flox::pkgdb::SR_DEFAULT as a fallback.
-   *
-   * This *does NOT* apply parent rules to children.
-   *
-   * @see @a flox::pkgdb::RulesTreeNode::applyRules
-   */
-  [[nodiscard]] ScrapeRule
-  getRule( const AttrPath & path = {} ) const;
-
-  /**
-   * @brief Return true/false for explicit allow/disallow, or `std::nullopt`
-   *        if no rule is defined.
-   *        This is intended for use on _root_ nodes.
-   *
-   * Parent paths may _pass down_ rules to children unless otherwise defined
-   * at lower levels.
-   */
-  [[nodiscard]] std::optional<bool>
-  applyRules( const AttrPath & path ) const;
-
-
-}; /* End struct `RulesTreeNode' */
-
-
-/** @brief Convert a JSON object to a @a flox::pkgdb::RulesTreeNode. */
-void
-from_json( const nlohmann::json & jfrom, RulesTreeNode & rules );
-
-/** @brief Convert a @a flox::pkgdb::RulesTreeNode to a JSON object. */
-void
-to_json( nlohmann::json & jto, const RulesTreeNode & rules );
-
-
-/* -------------------------------------------------------------------------- */
-
 /**
  * @brief A SQLite3 database used to cache derivation/package information about
  *        a single locked flake.
  */
 class PkgDb : public PkgDbReadOnly
 {
-
-private:
-
 
   /* Internal Helpers */
 
@@ -151,7 +48,6 @@ protected:
   /** @brief Create tables in database if they do not exist. */
   void
   initTables();
-
 
   /** @brief Create views in database if they do not exist. */
   void
@@ -166,11 +62,9 @@ protected:
   void
   updateViews();
 
-
   /** @brief Create `DbVersions` rows if they do not exist. */
   void
   initVersions();
-
 
   /**
    * @brief Create/update tables/views schema in database.
@@ -181,13 +75,16 @@ protected:
   void
   init();
 
-
   /**
    * @brief Write @a this `PkgDb` `lockedRef` and `fingerprint` fields to
    *        database metadata.
    */
   void
   writeInput();
+
+  /** @brief Write @a this `PkgDb` `rules` info to the database metadata. */
+  void
+  writeScrapeRules();
 
 
   /* Constructors */

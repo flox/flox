@@ -18,6 +18,7 @@
 #include "flox/core/util.hh"
 #include "flox/flake-package.hh"
 #include "flox/pkgdb/read.hh"
+#include "flox/pkgdb/rules.hh"
 
 
 /* -------------------------------------------------------------------------- */
@@ -111,7 +112,8 @@ PkgDbReadOnly::loadLockedFlake()
   this->lockedRef.string = rsl.get<std::string>( 1 );
   this->lockedRef.attrs  = nlohmann::json::parse( rsl.get<std::string>( 2 ) );
   /* Check to see if our fingerprint is already known.
-   * If it isn't load it, otherwise assert it matches. */
+   * If it isn't load it, otherwise assert it matches.
+   * We use the _default_/empty hash to represent an _unset_ state. */
   if ( this->fingerprint == nix::Hash( nix::htSHA256 ) )
     {
       this->fingerprint = fingerprint;
@@ -124,6 +126,32 @@ PkgDbReadOnly::loadLockedFlake()
                   fingerprintStr,
                   this->fingerprint.to_string( nix::Base16, false ) ) );
     }
+}
+
+
+/* -------------------------------------------------------------------------- */
+
+std::string
+PkgDbReadOnly::readRulesHash()
+{
+  sqlite3pp::query qry( this->db, "SELECT hash FROM ScrapeRules LIMIT 1" );
+  auto             rsl = *qry.begin();
+  return rsl.get<std::string>( 0 );
+}
+
+
+/* -------------------------------------------------------------------------- */
+
+const RulesTreeNode &
+PkgDbReadOnly::getRules()
+{
+  if ( ! this->rules.has_value() ) { this->rules = getDefaultRules(); }
+
+  if ( this->readRulesHash() != this->rules->getHash() )
+    {
+      throw RulesHashMismatch( *this );
+    }
+  return *this->rules;
 }
 
 
