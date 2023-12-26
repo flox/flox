@@ -185,6 +185,7 @@ PkgDb::writeInput()
 
 /* -------------------------------------------------------------------------- */
 
+/** @brief Write a rules hash to a database. */
 static void
 writeScrapeRulesHash( SQLiteDb & database, const RulesTreeNode & rules )
 {
@@ -195,7 +196,7 @@ writeScrapeRulesHash( SQLiteDb & database, const RulesTreeNode & rules )
   if ( sql_rc rcode = cmd.execute(); isSQLError( rcode ) )
     {
       throw PkgDbException(
-        nix::fmt( "failed to write ScrapeRules info:(%d) %s",
+        nix::fmt( "failed to write ScrapeRules hash:(%d) %s",
                   rcode,
                   database.error_msg() ) );
     }
@@ -204,25 +205,20 @@ writeScrapeRulesHash( SQLiteDb & database, const RulesTreeNode & rules )
 
 /* -------------------------------------------------------------------------- */
 
+/**
+ * @brief Clear all rows from tables effected by rules changes.
+ *
+ * This includes `ScrapeRules`, `AttrSets`, `Descriptions`, and `Packages`.
+ */
 static sql_rc
 clearDbTables( PkgDb & pdb )
 {
-  if ( sql_rc rcode = pdb.execute( "DELETE FROM TABLE ScrapeRules" );
-       isSQLError( rcode ) )
-    {
-      return rcode;
-    }
-  if ( sql_rc rcode = pdb.execute( "DELETE FROM TABLE AttrSets" );
-       isSQLError( rcode ) )
-    {
-      return rcode;
-    }
-  if ( sql_rc rcode = pdb.execute( "DELETE FROM TABLE Descriptions" );
-       isSQLError( rcode ) )
-    {
-      return rcode;
-    }
-  return pdb.execute( "DELETE FROM TABLE Packages" );
+  return pdb.execute_all( R"SQL(
+    DELETE FROM TABLE ScrapeRules;
+    DELETE FROM TABLE Descriptions;
+    DELETE FROM TABLE Packages;
+    DELETE FROM TABLE AttrSets
+  )SQL" );
 }
 
 
