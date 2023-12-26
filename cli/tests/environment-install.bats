@@ -216,3 +216,12 @@ teardown() {
   assert_regex "$manifest" 'ripgrep\.path = "ripgrep"'
   assert_regex "$manifest" 'bar\.path = "rubyPackages_3_2\.rails"'
 }
+
+@test "'flox i' aliases to 'install'" {
+  run "$FLOX_BIN" init
+  assert_success
+  run "$FLOX_BIN" i hello
+  assert_success
+  manifest=$(cat "$PROJECT_DIR/.flox/env/manifest.toml")
+  assert_regex "$manifest" 'hello\.path = "hello"'
+}
