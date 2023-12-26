@@ -56,6 +56,8 @@ protected:
    * Create tables if they do not exist.
    * Create views in database if they do not exist or update them.
    * Create `DbVersions` rows if they do not exist.
+   * Write `ScrapeRules.hash` if it is not in the database.
+   * Assert that `ScrapeRules.hash` matches @a rules.
    */
   void
   init();
@@ -66,10 +68,6 @@ protected:
    */
   void
   writeInput();
-
-  /** @brief Write @a this `PkgDb` `rules` info to the database metadata. */
-  void
-  writeScrapeRules();
 
 
   /* Constructors */
@@ -116,21 +114,6 @@ public:
                       SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE );
     this->init();
     this->loadLockedFlake();
-    /* Detect ScrapeRules mismatch and uninitialized. */
-    try
-      {
-        (void) this->getRules();
-      }
-    catch ( const RulesHashMismatch & err )
-      {
-        /* Mismatched hashes, needs to delete and rebuild. */
-        // TODO: Delete DB and rebuild.
-      }
-    catch ( const PkgDbException & err )
-      {
-        /* Initialize */
-        this->writeScrapeRules();
-      }
   }
 
   /**
@@ -161,21 +144,6 @@ public:
       = { flake.flake.lockedRef.to_string(),
           nix::fetchers::attrsToJSON( flake.flake.lockedRef.toAttrs() ) };
     writeInput();
-    /* Detect ScrapeRules mismatch and uninitialized. */
-    try
-      {
-        (void) this->getRules();
-      }
-    catch ( const RulesHashMismatch & err )
-      {
-        /* Mismatched hashes, needs to delete and rebuild. */
-        // TODO: Delete DB and rebuild.
-      }
-    catch ( const PkgDbException & err )
-      {
-        /* Initialize */
-        this->writeScrapeRules();
-      }
   }
 
   /**
@@ -211,7 +179,7 @@ public:
       {
         std::this_thread::sleep_for( std::chrono::milliseconds( 100 ) );
         rcode = cmd.execute();
-        --retries
+        --retries;
       }
     return rcode;
   }

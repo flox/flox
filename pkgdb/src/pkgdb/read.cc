@@ -132,14 +132,11 @@ PkgDbReadOnly::loadLockedFlake()
 /* -------------------------------------------------------------------------- */
 
 std::string
-PkgDbReadOnly::readRulesHash()
+PkgDbReadOnly::readScrapeRulesHash()
 {
   sqlite3pp::query qry( this->db, "SELECT hash FROM ScrapeRules LIMIT 1" );
   auto             itr = qry.begin();
-  if ( itr == qry.end() )
-    {
-      throw PkgDbException( "no rules hash found in database" );
-    }
+  if ( itr == qry.end() ) { throw RulesHashMissing( *this ); }
   return ( *itr ).get<std::string>( 0 );
 }
 
@@ -151,7 +148,7 @@ PkgDbReadOnly::getRules()
 {
   if ( ! this->rules.has_value() ) { this->rules = getDefaultRules(); }
 
-  if ( this->readRulesHash() != this->rules->getHash() )
+  if ( this->readScrapeRulesHash() != this->rules->getHash() )
     {
       throw RulesHashMismatch( *this );
     }

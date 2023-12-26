@@ -185,21 +185,44 @@ PkgDb::writeInput()
 
 /* -------------------------------------------------------------------------- */
 
-void
-PkgDb::writeScrapeRules()
+static void
+writeScrapeRulesHash( SQLiteDb & database, const RulesTreeNode & rules )
 {
   sqlite3pp::command cmd(
-    this->db,
+    database,
     "INSERT OR IGNORE INTO ScrapeRules ( hash ) VALUES ( ? )" );
-  if ( ! this->rules.has_value() ) { this->rules = getDefaultRules(); }
-  cmd.bind( 1, this->rules->getHash(), sqlite3pp::copy );
+  cmd.bind( 1, rules.getHash(), sqlite3pp::copy );
   if ( sql_rc rcode = cmd.execute(); isSQLError( rcode ) )
     {
       throw PkgDbException(
         nix::fmt( "failed to write ScrapeRules info:(%d) %s",
                   rcode,
-                  this->db.error_msg() ) );
+                  database.error_msg() ) );
     }
+}
+
+
+/* -------------------------------------------------------------------------- */
+
+static sql_rc
+clearDbTables( PkgDb & pdb )
+{
+  if ( sql_rc rcode = pdb.execute( "DELETE FROM TABLE ScrapeRules" );
+       isSQLError( rcode ) )
+    {
+      return rcode;
+    }
+  if ( sql_rc rcode = pdb.execute( "DELETE FROM TABLE AttrSets" );
+       isSQLError( rcode ) )
+    {
+      return rcode;
+    }
+  if ( sql_rc rcode = pdb.execute( "DELETE FROM TABLE Descriptions" );
+       isSQLError( rcode ) )
+    {
+      return rcode;
+    }
+  return pdb.execute( "DELETE FROM TABLE Packages" );
 }
 
 
@@ -209,6 +232,27 @@ void
 PkgDb::init()
 {
   initTables( *this );
+
+  // TODO: Rules should /really/ be associated with inputs.
+  //       This initialization belongs closer to `writeInput()'.
+  //       The reason this is okay today is because we only allow `nixpkgs'.
+  /* Detect mismatched on uninitialized `ScrapeRules.hash'. */
+  try
+    {
+      (void) this->getRules();
+    }
+  catch ( const RulesHashMismatch & )
+    {
+      debugLog( "clearing database `" + this->dbPath.string()
+                + "' with stale rules." );
+      clearDbTables( *this );
+    }
+  catch ( const RulesHashMissing & )
+    {
+      traceLog( "writing rules hash to `" + this->dbPath.string() + "'" );
+      /* Indicates uninitialized. */
+      writeScrapeRulesHash( this->db, this->rules.value() );
+    }
 
   initVersions( *this );
 

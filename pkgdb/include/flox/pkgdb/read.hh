@@ -168,6 +168,17 @@ public:
   }; /* End struct `NoSuchDatabase' */
 
   /**
+   * @brief Thrown when a database's `ScrapeRules.hash` is unset.
+   */
+  struct RulesHashMissing : PkgDbException
+  {
+    explicit RulesHashMissing( PkgDbReadOnly & pdb )
+      : PkgDbException( nix::fmt( "database '%s' rules hash is not defined",
+                                  pdb.dbPath.string() ) )
+    {}
+  }; /* End struct `RulesHashMismatch' */
+
+  /**
    * @brief Thrown when a database's `ScrapeRules.hash` does not match @a rules.
    */
   struct RulesHashMismatch : PkgDbException
@@ -264,7 +275,7 @@ public:
    * `this->getRules().getHash()`.
    */
   std::string
-  readRulesHash();
+  readScrapeRulesHash();
 
   // TODO
   /**
