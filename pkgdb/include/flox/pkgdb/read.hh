@@ -174,10 +174,9 @@ public:
   {
     explicit RulesHashMismatch( PkgDbReadOnly & pdb )
       : PkgDbException(
-        nix::fmt( "database '%s' rules hash '%s' does not match expected '%s'",
-                  pdb.dbPath,
-                  pdb.readRulesHash(),
-                  pdb.rules->getHash() ) )
+        nix::fmt( "database '%s' rules hash does not match expected '%s'",
+                  pdb.dbPath.string(),
+                  pdb.rules.value().getHash() ) )
     {}
   }; /* End struct `RulesHashMismatch' */
 

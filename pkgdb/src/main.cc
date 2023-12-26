@@ -151,6 +151,16 @@ printAndReturnException( const flox::FloxException & err )
 int
 main( int argc, char * argv[] )
 {
+  /* Allows you to run without catching which is useful for
+   * `gdb'/`lldb' backtraces. */
+  if ( auto maybeNC = nix::getEnv( "PKGDB_NO_CATCH" );
+       maybeNC.has_value() && ( *maybeNC != "" ) && ( *maybeNC != "0" )
+     )
+    {
+      return run( argc, argv );
+    }
+
+  /* Wrap all execution in an error handler that pretty prints exceptions. */
   try
     {
       return run( argc, argv );
