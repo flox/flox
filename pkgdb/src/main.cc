@@ -154,8 +154,7 @@ main( int argc, char * argv[] )
   /* Allows you to run without catching which is useful for
    * `gdb'/`lldb' backtraces. */
   if ( auto maybeNC = nix::getEnv( "PKGDB_NO_CATCH" );
-       maybeNC.has_value() && ( *maybeNC != "" ) && ( *maybeNC != "0" )
-     )
+       maybeNC.has_value() && ( *maybeNC != "" ) && ( *maybeNC != "0" ) )
     {
       return run( argc, argv );
     }

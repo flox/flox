@@ -34,6 +34,12 @@ using Todos = std::queue<Target, std::list<Target>>;
 
 /* -------------------------------------------------------------------------- */
 
+// TODO: Move all routines to `PkgDb' class.
+// TODO: `isStale()' function that handles DB versions and rules hashes.
+// TODO: Create a single `init` function that detects staleness.
+// TODO: Make `PkgDbReadOnly` a `PkgDb` child class which only exposes
+//       read-only functions.
+
 /**
  * @brief A SQLite3 database used to cache derivation/package information about
  *        a single locked flake.
@@ -161,6 +167,7 @@ public:
       = { flake.flake.lockedRef.to_string(),
           nix::fetchers::attrsToJSON( flake.flake.lockedRef.toAttrs() ) };
     writeInput();
+    writeScrapeRules();
   }
 
   /**
