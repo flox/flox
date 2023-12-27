@@ -229,7 +229,7 @@ pub fn floxmeta_git_options(
     // Set authentication with the floxhub token using an inline credential helper.
     // The credential helper should help avoinding a leak of the token in the process list.
     //
-    // If no token is provided, we still set the credential helper
+    // If no token is provided, we still set the credential helper and pass an empty string as password
     // to enforce authentication failures and avoid fallback to pinentry
     options.add_env_var("FLOX_FLOXHUB_TOKEN", token);
     options.add_config_flag(
