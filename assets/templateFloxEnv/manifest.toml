@@ -4,10 +4,15 @@
 # hello.path = "hello"
 # nodejs = { version = "^18.4.2", path = "nodejs_18" }
 
+# Set an environment variable. These variables may not reference once another.
+[vars]
+# message = "Howdy"
+# pass-in = "$some-env-var"
+
 # Set your activation hook ( run when entering the environment )
 # You can write this inline with the `script` field, or provide a
 # relative path to a file using the `file` field.
-# [hook]
+[hook]
 # script = """
 #   echo "it's gettin flox in here";
 # """
