@@ -1,12 +1,16 @@
 use anyhow::anyhow;
-use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironmentError;
+use flox_rust_sdk::models::environment::managed_environment::{
+    ManagedEnvironmentError,
+    GENERATION_LOCK_FILENAME,
+};
 use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironmentError;
 use flox_rust_sdk::models::environment::{
     CanonicalizeError,
     CoreEnvironmentError,
     EnvironmentError2,
+    ENVIRONMENT_POINTER_FILENAME,
 };
-use flox_rust_sdk::models::pkgdb::{self, CallPkgDbError, PkgDbError};
+use flox_rust_sdk::models::pkgdb::CallPkgDbError;
 use indoc::formatdoc;
 use itertools::Itertools;
 
@@ -255,41 +259,156 @@ fn format_core_error(err: &'static CoreEnvironmentError) -> String {
 
 fn format_managed_error(err: &'static ManagedEnvironmentError) -> String {
     match err {
-        ManagedEnvironmentError::OpenFloxmeta(_) => todo!(),
-        ManagedEnvironmentError::Fetch(_) => todo!(),
-        ManagedEnvironmentError::CheckGitRevision(_) => todo!(),
-        ManagedEnvironmentError::CheckBranchExists(_) => todo!(),
-        ManagedEnvironmentError::LocalRevDoesNotExist => todo!(),
-        ManagedEnvironmentError::RevDoesNotExist => todo!(),
-        ManagedEnvironmentError::InvalidLock(_) => todo!(),
-        ManagedEnvironmentError::ReadPointerLock(_) => todo!(),
-        ManagedEnvironmentError::Git(_) => todo!(),
-        ManagedEnvironmentError::GitBranchHash(_) => todo!(),
-        ManagedEnvironmentError::WriteLock(_) => todo!(),
-        ManagedEnvironmentError::SerializeLock(_) => todo!(),
-        ManagedEnvironmentError::ReverseLink(_) => todo!(),
-        ManagedEnvironmentError::CreateLinksDir(_) => todo!(),
-        ManagedEnvironmentError::EmptyPath => todo!(),
-        ManagedEnvironmentError::BadBranchName(_) => todo!(),
-        ManagedEnvironmentError::ProjectNotFound { path, err } => todo!(),
-        ManagedEnvironmentError::Diverged => todo!(),
-        ManagedEnvironmentError::AccessDenied => todo!(),
-        ManagedEnvironmentError::Push(_) => todo!(),
-        ManagedEnvironmentError::DeleteBranch(_) => todo!(),
-        ManagedEnvironmentError::DeleteEnvironment(_, _) => todo!(),
-        ManagedEnvironmentError::DeleteEnvironmentLink(_, _) => todo!(),
-        ManagedEnvironmentError::DeleteEnvironmentReverseLink(_, _) => todo!(),
-        ManagedEnvironmentError::FetchUpdates(_) => todo!(),
-        ManagedEnvironmentError::ApplyUpdates(_) => todo!(),
-        ManagedEnvironmentError::InitializeFloxmeta(_) => todo!(),
-        ManagedEnvironmentError::SerializePointer(_) => todo!(),
-        ManagedEnvironmentError::WritePointer(_) => todo!(),
-        ManagedEnvironmentError::CreateFloxmetaDir(_) => todo!(),
-        ManagedEnvironmentError::CreateGenerationFiles(_) => todo!(),
-        ManagedEnvironmentError::CommitGeneration(_) => todo!(),
-        ManagedEnvironmentError::Link(_) => todo!(),
+        // todo: communicate reasons for this error
+        // git auth errors may be catched separately or reported
+        ManagedEnvironmentError::OpenFloxmeta(err) => formatdoc! {"
+            Failed to fetch updates environment: {err}
+        "},
+
+        // todo: merge errors or make more specific
+        // now they represent the same thing.
+        ManagedEnvironmentError::Fetch(err) | ManagedEnvironmentError::FetchUpdates(err) => {
+            formatdoc! {"
+            Failed to fetch updates for environment: {err}
+
+            Please ensure that you have network connectivity
+            and access to the remote environment.
+        "}
+        },
+        ManagedEnvironmentError::CheckGitRevision(_) => display_chain(err),
+        ManagedEnvironmentError::CheckBranchExists(_) => display_chain(err),
+        ManagedEnvironmentError::LocalRevDoesNotExist => formatdoc! {"
+            The environment lockfile refers to a version of the environment
+            that does not exist locally.
+
+            This can happen if the environment is modified on another machine,
+            and the lockfile is committed to the version control system
+            before the environment is pushed.
+
+            To resolve this issue, either
+             * remove '.flox/{GENERATION_LOCK_FILENAME}' (this will reset the environment to the latest version)
+             * push the environment on the remote machine and commit the updated lockfile
+        "},
+        ManagedEnvironmentError::RevDoesNotExist => formatdoc! {"
+            The environment lockfile refers to a version of the environment
+            that does not exist locally or on the remote.
+
+            This can happen if the environment was force-pushed
+            after the lockfile was committed to the version control system.
+
+            To resolve this issue, remove '.flox/{GENERATION_LOCK_FILENAME}' (this will reset the environment to the latest version)
+        "},
+        ManagedEnvironmentError::InvalidLock(err) => formatdoc! {"
+            The environment lockfile is invalid: {err}
+
+            This can happen if the lockfile was manually edited.
+
+            To resolve this issue, remove '.flox/{GENERATION_LOCK_FILENAME}' (this will reset the environment to the latest version)
+        "},
+        ManagedEnvironmentError::ReadPointerLock(err) => formatdoc! {"
+            Failed to read pointer lockfile: {err}
+
+            Please ensure that you have read permissions to '.flox/{GENERATION_LOCK_FILENAME}'.
+        "},
+        // various internal git errors while acting on the floxmeta repo
+        ManagedEnvironmentError::Git(_) => display_chain(err),
+        ManagedEnvironmentError::GitBranchHash(_) => display_chain(err),
+        ManagedEnvironmentError::WriteLock(err) => formatdoc! {"
+            Failed to write to lockfile: {err}
+
+            Please ensure that you have write permissions to '.flox/{GENERATION_LOCK_FILENAME}'
+        "},
+        ManagedEnvironmentError::SerializeLock(_) => display_chain(err),
+
+        // the following two errors are related to create reverse links to the .flox directory
+        // those are internal errors but may arise if the user does not have write permissions to
+        // xdg_data_home
+        // todo: expose as rich error or unexpected error?
+        ManagedEnvironmentError::ReverseLink(_) => display_chain(err),
+        ManagedEnvironmentError::CreateLinksDir(_) => display_chain(err),
+
+        ManagedEnvironmentError::BadBranchName(_) => display_chain(err),
+
+        // currently unused
+        ManagedEnvironmentError::ProjectNotFound { .. } => display_chain(err),
+
+        // todo: enrich with url
+        ManagedEnvironmentError::InvalidFloxhubBaseUrl(err) => formatdoc! {"
+            The floxhub base url set in the config is invalid: {err}
+
+            Please ensure that the url
+            * is either a valid http or https url
+            * has a valid domain name
+            * is not an IP address or 'localhost'
+        "},
+
+        ManagedEnvironmentError::Diverged => formatdoc! {"
+            The environment has diverged from the remote.
+
+            This can happen if the environment is modified and pushed from another machine.
+
+            To resolve this issue, either
+             * run 'flox pull --force'
+               to discard local changes
+               and reset the environment to the latest upstream version.
+             * run 'flox push --force'
+               to overwrite the remote environment with the local changes.
+               Attention: this will discard any changes made on the remote machine
+               and cause conflicts when the remote machine tries to pull or push!
+        "},
+        ManagedEnvironmentError::AccessDenied => formatdoc! {"
+            Access denied to the remote environment.
+
+            This can happen if the remote is not owned by you
+            or the owner did not grant you access.
+
+            Please check the spelling of the remote environment
+            and make sure that you have access to it.
+        "},
+        // acces denied is catched early as ManagedEnvironmentError::AccessDenied
+        ManagedEnvironmentError::Push(_) => display_chain(err),
+        ManagedEnvironmentError::DeleteBranch(_) => display_chain(err),
+        ManagedEnvironmentError::DeleteEnvironment(path, err) => formatdoc! {"
+            Failed to delete remote environment at {path:?}: {err}
+
+            Please ensure that you have write permissions to {path:?}.
+        "},
+        ManagedEnvironmentError::DeleteEnvironmentLink(_, _) => display_chain(err),
+        ManagedEnvironmentError::DeleteEnvironmentReverseLink(_, _) => display_chain(err),
+        ManagedEnvironmentError::ApplyUpdates(_) => display_chain(err),
+        // todo: unwrap this error to report more precisely?
+        //       this should this is a bug if this happens to users.
+        ManagedEnvironmentError::InitializeFloxmeta(_) => display_chain(err),
+        ManagedEnvironmentError::SerializePointer(_) => display_chain(err),
+        ManagedEnvironmentError::WritePointer(err) => formatdoc! {"
+            Failed to write to pointer: {err}
+
+            Please ensure that you have write permissions to '.flox/{ENVIRONMENT_POINTER_FILENAME}'.
+        "},
+        ManagedEnvironmentError::CreateFloxmetaDir(_) => display_chain(err),
+        ManagedEnvironmentError::CreateGenerationFiles(_) => display_chain(err),
+        ManagedEnvironmentError::CommitGeneration(err) => formatdoc! {"
+            Failed to create a new generation: {err}
+
+            This may be due to a corrupt environment
+            or another process modifying the environment.
+
+            Please try again later.
+        "},
+        ManagedEnvironmentError::Link(CoreEnvironmentError::LockManifest(pkgdb_err)) => {
+            format_pkgdb_error(pkgdb_err, err, "Failed to lock manifest.")
+        },
+        &ManagedEnvironmentError::Link(CoreEnvironmentError::BuildEnv(ref pkgdb_err)) => {
+            format_pkgdb_error(pkgdb_err, err, "Failed to build environment.")
+        },
+        ManagedEnvironmentError::Link(_) => display_chain(err),
+
         ManagedEnvironmentError::ReadManifest(_) => todo!(),
-        ManagedEnvironmentError::CanonicalizePath(_) => todo!(),
+        ManagedEnvironmentError::CanonicalizePath(canonicalize_err) => formatdoc! {"
+            Invalid path to environment: {canonicalize_err}
+
+            Please ensure that the path exists and that you have read permissions.
+        "},
     }
 }
 
