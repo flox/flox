@@ -302,6 +302,21 @@ fn format_remote_error(err: &'static RemoteEnvironmentError) -> String {
     }
 }
 
+fn format_pkgdb_error(
+    err: &CallPkgDbError,
+    parent: impl Into<anyhow::Error>,
+    context: &str,
+) -> String {
+    match err {
+        CallPkgDbError::PkgDbError(err) => formatdoc! {"
+            {context}
+
+            {err}
+        ", err = display_chain(err)},
+        _ => display_chain(parent),
+    }
+}
+
 fn display_chain(err: impl Into<anyhow::Error>) -> String {
     anyhow!(err).chain().join(": ")
 }
