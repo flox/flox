@@ -414,10 +414,37 @@ fn format_managed_error(err: &'static ManagedEnvironmentError) -> String {
 
 fn format_remote_error(err: &'static RemoteEnvironmentError) -> String {
     match err {
-        RemoteEnvironmentError::OpenManagedEnvironment(_) => todo!(),
-        RemoteEnvironmentError::GetLatestVersion(_) => todo!(),
-        RemoteEnvironmentError::UpdateUpstream(_) => todo!(),
-        RemoteEnvironmentError::InvalidTempPath(_) => todo!(),
+        RemoteEnvironmentError::OpenManagedEnvironment(err) => formatdoc! {"
+            Failed to open cloned remote environment: {err}
+
+            This may be due to a corrupt or incompatible environment.
+        ", err = display_chain(err)},
+
+        RemoteEnvironmentError::GetLatestVersion(err) => formatdoc! {"
+            Failed to get latest version of remote environment: {err}
+
+            ", err = display_chain(err)},
+        RemoteEnvironmentError::UpdateUpstream(ManagedEnvironmentError::Diverged) => formatdoc! {"
+            The remote environment has diverged.
+
+            This can happen if the environment is modified and pushed from another machine
+            at the same time.
+
+            Please try again after verifying the concurrent changes.
+        "},
+        RemoteEnvironmentError::UpdateUpstream(ManagedEnvironmentError::AccessDenied) => {
+            formatdoc! {"
+            Access denied to the remote environment.
+
+            This can happen if the remote is not owned by you
+            or the owner did not grant you access.
+
+            Please check the spelling of the remote environment
+            and make sure that you have access to it.
+        "}
+        },
+        RemoteEnvironmentError::UpdateUpstream(_) => display_chain(err),
+        RemoteEnvironmentError::InvalidTempPath(_) => display_chain(err),
     }
 }
 
