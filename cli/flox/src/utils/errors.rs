@@ -6,6 +6,7 @@ use flox_rust_sdk::models::environment::{
     CoreEnvironmentError,
     EnvironmentError2,
 };
+use flox_rust_sdk::models::pkgdb::{self, CallPkgDbError, PkgDbError};
 use indoc::formatdoc;
 use itertools::Itertools;
 
@@ -170,30 +171,85 @@ pub fn format_error(err: &'static EnvironmentError2) -> String {
 fn format_core_error(err: &'static CoreEnvironmentError) -> String {
     match err {
         CoreEnvironmentError::ModifyToml(_) => todo!(),
-        CoreEnvironmentError::DeserializeManifest(_) => todo!(),
-        CoreEnvironmentError::MakeSandbox(_) => todo!(),
-        CoreEnvironmentError::WriteLockfile(_) => todo!(),
-        CoreEnvironmentError::MakeTemporaryEnv(_) => todo!(),
-        CoreEnvironmentError::PriorTransaction(_) => todo!(),
-        CoreEnvironmentError::BackupTransaction(_) => todo!(),
-        CoreEnvironmentError::AbortTransaction(_) => todo!(),
-        CoreEnvironmentError::Move(_) => todo!(),
-        CoreEnvironmentError::RemoveBackup(_) => todo!(),
-        CoreEnvironmentError::OpenManifest(_) => todo!(),
-        CoreEnvironmentError::UpdateManifest(_) => todo!(),
-        CoreEnvironmentError::BadManifestPath(_, _) => todo!(),
-        CoreEnvironmentError::BadLockfilePath(_, _) => todo!(),
-        CoreEnvironmentError::PkgDbCall(_) => todo!(),
-        CoreEnvironmentError::LockManifest(_) => todo!(),
-        CoreEnvironmentError::ParsePkgDbError(_) => todo!(),
-        CoreEnvironmentError::ParseLockfileJSON(_) => todo!(),
-        CoreEnvironmentError::ReadManifest(_) => todo!(),
-        CoreEnvironmentError::ParseUpdateOutput(_) => todo!(),
-        CoreEnvironmentError::ParseUpgradeOutput(_) => todo!(),
-        CoreEnvironmentError::UpdateFailed(_) => todo!(),
-        CoreEnvironmentError::UpgradeFailed(_) => todo!(),
-        CoreEnvironmentError::BuildEnv(_) => todo!(),
-        CoreEnvironmentError::ParseBuildEnvOutput(_) => todo!(),
+        // todo: enrich with path
+        // raised during edit
+        CoreEnvironmentError::DeserializeManifest(err) => formatdoc! {
+            "Failed to parse manifest: {err}
+
+            Please ensure that '.flox/env/manifest.toml' is a valid TOML file.
+        "},
+        CoreEnvironmentError::MakeSandbox(_) => display_chain(err),
+        // witin transaction, user should not see this and likely can't do anything about it
+        CoreEnvironmentError::WriteLockfile(_) => display_chain(err),
+        CoreEnvironmentError::MakeTemporaryEnv(_) => display_chain(err),
+        CoreEnvironmentError::PriorTransaction(backup) => {
+            let mut env_path = backup.clone();
+            env_path.set_file_name("env");
+            formatdoc! {"
+                Found a transaction backup at {backup:?}.
+
+                This indicates that a previous transaction was interrupted.
+
+                Please restore the backup by moving {backup:?} -> {env_path:?}
+                or delete the {backup:?} directory.
+            "}
+        },
+        CoreEnvironmentError::BackupTransaction(err) => formatdoc! {"
+            Failed to backup current environment directory: {err}
+
+            Please ensure that you have write permissions to '.flox/*'."
+        },
+        CoreEnvironmentError::AbortTransaction(err) => formatdoc! {"
+            Failed to abort transaction: {err}
+
+            Please ensure that you have write permissions to '.flox/*'."
+        },
+        CoreEnvironmentError::Move(err) => formatdoc! {"
+            Failed to commit transaction: {err}
+
+            Could not move modified environment directory to original location.
+        "},
+        CoreEnvironmentError::RemoveBackup(err) => formatdoc! {"
+            Failed to remove transaction backup: {err}
+
+            Please ensure that you have write permissions to '.flox/*'.
+        "},
+
+        // these are out of our user's control as these errors are within the transaction
+        // todo: adapt wordnig?
+        // todo: enrich with path
+        CoreEnvironmentError::OpenManifest(err) => formatdoc! {"
+            Failed to open manifest for reading: {err}
+
+            Please ensure that you have read permissions to '.flox/env/manifest.toml'.
+        "},
+        CoreEnvironmentError::UpdateManifest(err) => formatdoc! {"
+            Failed to write to manifest file: {err}
+
+            Please ensure that you have write permissions to '.flox/env/manifest.toml'.
+        "},
+        // internal error, a bug if this happens to users
+        CoreEnvironmentError::BadManifestPath(_, _) => display_chain(err),
+        CoreEnvironmentError::BadLockfilePath(_, _) => display_chain(err),
+        // error returned by pkgdb
+        // we do minimal formatting here as the error message is supposed to be
+        // already user friendly.
+        CoreEnvironmentError::LockManifest(pkgdb_error) => {
+            format_pkgdb_error(pkgdb_error, err, "Failed to lock manifest.")
+        },
+        // other pkgdb call errors are unexpected
+        CoreEnvironmentError::ParseUpdateOutput(_) => display_chain(err),
+        CoreEnvironmentError::ParseUpgradeOutput(_) => display_chain(err),
+        CoreEnvironmentError::UpdateFailed(pkgdb_error) => {
+            format_pkgdb_error(pkgdb_error, err, "Failed to update environment.")
+        },
+        CoreEnvironmentError::UpgradeFailed(pkgdb_error) => {
+            format_pkgdb_error(pkgdb_error, err, "Failed to upgrade environment.")
+        },
+        CoreEnvironmentError::BuildEnv(pkgdb_error) => {
+            format_pkgdb_error(pkgdb_error, err, "Failed to build environment.")
+        },
+        CoreEnvironmentError::ParseBuildEnvOutput(_) => display_chain(err),
     }
 }
 
