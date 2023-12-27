@@ -394,19 +394,19 @@ home_setup() {
   if [[ "${__FT_RAN_HOME_SETUP:-}" = "real" ]]; then
     export FLOX_TEST_HOME="$REAL_HOME"
     export HOME="$REAL_HOME"
-    return 0;
+  else
+    case "${1:-suite}" in
+      suite) export FLOX_TEST_HOME="${BATS_SUITE_TMPDIR?}/home" ;;
+      file) export FLOX_TEST_HOME="${BATS_FILE_TMPDIR?}/home" ;;
+      test) export FLOX_TEST_HOME="${BATS_TEST_TMPDIR?}/home" ;;
+      *)
+        echo "home_setup: Invalid homedir category '${1?}'" >&2
+        return 1
+        ;;
+    esac
+    # Force recreation on `home' on every invocation.
+    unset __FT_RAN_HOME_SETUP
   fi
-  case "${1:-suite}" in
-    suite) export FLOX_TEST_HOME="${BATS_SUITE_TMPDIR?}/home" ;;
-    file) export FLOX_TEST_HOME="${BATS_FILE_TMPDIR?}/home" ;;
-    test) export FLOX_TEST_HOME="${BATS_TEST_TMPDIR?}/home" ;;
-    *)
-      echo "home_setup: Invalid homedir category '${1?}'" >&2
-      return 1
-      ;;
-  esac
-  # Force recreation on `home' on every invocation.
-  unset __FT_RAN_HOME_SETUP
   xdg_tmp_setup
   flox_vars_setup
   export __FT_RAN_HOME_SETUP="$FLOX_TEST_HOME"
