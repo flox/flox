@@ -12,7 +12,7 @@
 # Set your activation hook ( run when entering the environment )
 # You can write this inline with the `script` field, or provide a
 # relative path to a file using the `file` field.
-[hook]
+# [hook]
 # script = """
 #   echo "it's gettin flox in here";
 # """
