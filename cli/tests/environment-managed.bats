@@ -13,8 +13,8 @@ load test_support.bash
 # Helpers for project based tests.
 
 project_setup() {
-  export PROJECT_NAME="test"
-  export PROJECT_DIR="${BATS_TEST_TMPDIR?}/$PROJECT_NAME"
+  export PROJECT_DIR="${BATS_TEST_TMPDIR?}/project-managed-${BATS_TEST_NUMBER?}"
+  export PROJECT_NAME="${PROJECT_DIR##*/}"
   export OWNER="owner"
 
   rm -rf "$PROJECT_DIR"
@@ -75,7 +75,7 @@ dot_flox_exists() {
 
   run "$FLOX_BIN" install hello
   assert_success
-  assert_output --partial "environment $OWNER/test" # managed env output
+  assert_output --partial "environment $OWNER/project-managed-${BATS_TEST_NUMBER}" # managed env output
 
   run --separate-stderr "$FLOX_BIN" list --name
   assert_success
@@ -309,7 +309,7 @@ EOF
   assert_failure
 
   # when recreating an environment, a new branch should be used
-  run "$FLOX_BIN" pull --remote "$OWNER/test"
+  run "$FLOX_BIN" pull --remote "$OWNER/project-managed-${BATS_TEST_NUMBER}"
   assert_success
 
   "$FLOX_BIN" install emacs
