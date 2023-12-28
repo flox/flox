@@ -144,7 +144,7 @@ impl FloxmetaV2 {
         let token = flox.floxhub_token.as_deref();
         let floxhub = Floxhub::new_from_parts(
             pointer.floxhub_web_url.clone(),
-            pointer.floxhub_web_url.clone(),
+            pointer.floxhub_git_url.clone(),
         );
 
         let git_options = floxmeta_git_options(floxhub.git_url(), &pointer.owner, token);
