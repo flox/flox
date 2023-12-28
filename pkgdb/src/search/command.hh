@@ -13,7 +13,7 @@
 #include <vector>
 
 #include "flox/flox-flake.hh"
-#include "flox/pkgdb/command.hh"
+#include "../pkgdb/command.hh"
 #include "flox/pkgdb/input.hh"
 #include "flox/pkgdb/write.hh"
 #include "flox/registry.hh"

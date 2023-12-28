@@ -9,7 +9,7 @@
 
 #pragma once
 
-#include "flox/pkgdb/command.hh"
+#include "../pkgdb/command.hh"
 #include "flox/resolver/descriptor.hh"
 
 

@@ -178,7 +178,7 @@ TESTS          =  $(filter-out $(TEST_UTILS),$(test_SRCS:.cc=))
 TEST_DATA      =
 ALL_BINS       = $(TESTS) $(TEST_UTILS) $(BINS)
 CLEANDIRS      =
-CLEANFILES     =  $(ALL_SRCS:.cc=.o) $(ALL_BINS)
+CLEANFILES     = $(ALL_SRCS:.cc=.o) $(ALL_BINS)
 FULLCLEANDIRS  =
 FULLCLEANFILES =
 
@@ -526,7 +526,7 @@ lint: compile_commands.json $(HEADERS) $(ALL_SRCS)
 # -------------------
 
 # Generate test data files
-.PHONY: test-data test-lockfiles
+.PHONY: test-data test-lockfiles clean-test-data clean-test-lockfiles
 test-data: test-lockfiles
 
 _TEST_LOCKFILE_DIRS      := $(wildcard $(TEST_DATA_DIR)/buildenv/lockfiles/*)
@@ -538,6 +538,13 @@ $(_TEST_LOCKFILES): %/manifest.lock: %/manifest.toml bin/pkgdb
 	$(MKDIR_P) $(@D);
 	_PKGDB_GA_REGISTRY_REF_OR_REV="e8039594435c68eb4f780f3e9bf3972a7399c4b1"  \
 	  bin/pkgdb manifest lock --ga-registry --manifest $< > $@;
+
+clean-test-data: clean-test-lockfiles
+
+clean-test-lockfiles:
+	-$(RM) $(_TEST_LOCKFILES);
+
+.NOTPARALLEL: test-lockfiles $(_TEST_LOCKFILES)
 
 
 # ---------------------------------------------------------------------------- #

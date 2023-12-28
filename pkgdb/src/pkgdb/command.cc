@@ -20,11 +20,11 @@
 #include <nix/types.hh>
 #include <nix/util.hh>
 
+#include "./command.hh"
 #include "flox/core/command.hh"
 #include "flox/core/exceptions.hh"
 #include "flox/core/util.hh"
 #include "flox/flox-flake.hh"
-#include "flox/pkgdb/command.hh"
 #include "flox/pkgdb/read.hh"
 #include "flox/pkgdb/write.hh"
 #include "flox/registry.hh"

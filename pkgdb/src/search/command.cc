@@ -20,6 +20,7 @@
 #include <nix/ref.hh>
 #include <nlohmann/json.hpp>
 
+#include "./command.hh"
 #include "flox/core/command.hh"
 #include "flox/core/util.hh"
 #include "flox/pkgdb/input.hh"
@@ -29,7 +30,6 @@
 #include "flox/resolver/environment.hh"
 #include "flox/resolver/lockfile.hh"
 #include "flox/resolver/manifest.hh"
-#include "flox/search/command.hh"
 #include "flox/search/params.hh"
 
 

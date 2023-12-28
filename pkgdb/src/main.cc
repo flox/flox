@@ -20,15 +20,15 @@
 #include <nix/util.hh>
 #include <nlohmann/json.hpp>
 
-#include "flox/buildenv/command.hh"
+#include "./buildenv/command.hh"
+#include "./eval/command.hh"
+#include "./parse/command.hh"
+#include "./pkgdb/command.hh"
+#include "./repl/command.hh"
+#include "./resolver/command.hh"
+#include "./search/command.hh"
 #include "flox/core/command.hh"
 #include "flox/core/exceptions.hh"
-#include "flox/eval.hh"
-#include "flox/parse/command.hh"
-#include "flox/pkgdb/command.hh"
-#include "flox/repl.hh"
-#include "flox/resolver/command.hh"
-#include "flox/search/command.hh"
 
 
 /* -------------------------------------------------------------------------- */

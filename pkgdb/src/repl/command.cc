@@ -9,7 +9,7 @@
 
 #include <nix/repl.hh>
 
-#include "flox/repl.hh"
+#include "./command.hh"
 
 
 /* -------------------------------------------------------------------------- */

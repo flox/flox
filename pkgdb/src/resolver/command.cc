@@ -9,7 +9,7 @@
 
 #include <nlohmann/json.hpp>
 
-#include "flox/resolver/command.hh"
+#include "./command.hh"
 
 
 /* -------------------------------------------------------------------------- */

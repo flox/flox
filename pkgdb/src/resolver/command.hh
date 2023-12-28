@@ -14,7 +14,7 @@
 
 #include "flox/resolver/manifest-raw.hh"
 #include "flox/resolver/mixins.hh"
-#include "flox/search/command.hh"
+#include "../search/command.hh"
 
 
 /* -------------------------------------------------------------------------- */

@@ -12,7 +12,7 @@
 #include <nix/eval.hh>
 #include <nix/value-to-json.hh>
 
-#include "flox/eval.hh"
+#include "./command.hh"
 
 
 /* -------------------------------------------------------------------------- */

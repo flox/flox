@@ -9,7 +9,7 @@
 
 #include <iostream>
 
-#include "flox/pkgdb/command.hh"
+#include "./command.hh"
 
 
 /* -------------------------------------------------------------------------- */

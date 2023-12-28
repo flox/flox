@@ -9,7 +9,7 @@
 
 #include <nix/local-fs-store.hh>
 
-#include "flox/buildenv/command.hh"
+#include "./command.hh"
 #include "flox/buildenv/realise.hh"
 #include "flox/resolver/lockfile.hh"
 
