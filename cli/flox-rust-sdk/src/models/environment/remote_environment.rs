@@ -50,6 +50,8 @@ impl RemoteEnvironment {
         let pointer = super::ManagedPointer {
             owner: env_ref.owner().clone(),
             name: env_ref.name().clone(),
+            floxhub_url: flox.floxhub.base_url().clone(),
+            floxhub_git_url_override: flox.floxhub.git_url_override().cloned(),
             version: Version::<1>,
         };
 

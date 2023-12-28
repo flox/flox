@@ -481,7 +481,7 @@ impl GitCommandProvider {
         match GitCommandProvider::run_command(&mut command) {
             Ok(_) => Ok(()),
             Err(ref err @ GitCommandError::BadExit(_, _, ref stderr))
-                if stderr.contains("DENIED") =>
+                if stderr.contains("DENIED") || stderr.contains("Authentication failed") =>
             {
                 debug!("Access denied: {err}");
                 Err(GitRemoteCommandError::AccessDenied)

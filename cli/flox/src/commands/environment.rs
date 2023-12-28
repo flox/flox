@@ -152,7 +152,10 @@ impl Edit {
 
             match result {
                 Err(e) => {
-                    error!("Environment invalid; building resulted in an error: {e}");
+                    error!(
+                        "Environment invalid; building resulted in an error: {}",
+                        anyhow!(e).chain().join(": ")
+                    );
                     if !Dialog::can_prompt() {
                         bail!("Can't prompt to continue editing in non-interactive context");
                     }
@@ -873,7 +876,7 @@ impl Push {
                 let env = Self::push_make_managed(&flox, path_pointer, &dir, owner, self.force)
                     .context("Could not push new environment")?;
 
-                info!("{}", Self::push_new_message(&env, self.force));
+                info!("{}", Self::push_new_message(env.pointer(), self.force));
             },
         }
         Ok(())
@@ -927,6 +930,7 @@ impl Push {
     ///
     /// todo: add floxhub base url when it's available
     fn push_existing_message(env: &ManagedPointer, force: bool) -> String {
+        let web_url = &env.floxhub_url;
         let owner = &env.owner;
         let name = &env.name;
 
@@ -936,16 +940,17 @@ impl Push {
             🚀  updated -> {owner}/{name}{suffix}
 
             Pull this environment with 'flox pull {owner}/{name}'.
-            You can see this environment at https://hub.flox.dev/{owner}/{name}.
+            You can see this environment at {web_url}{owner}/{name}.
         "}
     }
 
     /// construct a message for a newly created environment
     ///
     /// todo: add floxhub base url when it's available
-    fn push_new_message(env: &ManagedEnvironment, force: bool) -> String {
-        let owner = env.owner();
-        let name = env.name();
+    fn push_new_message(env: &ManagedPointer, force: bool) -> String {
+        let web_url = &env.floxhub_url;
+        let owner = &env.owner;
+        let name = &env.name;
 
         let suffix = if force { " (forced)" } else { "" };
 
@@ -953,7 +958,7 @@ impl Push {
             🚀  created -> {owner}/{name}{suffix}
 
             Pull this environment with 'flox pull {owner}/{name}'.
-            You can see this environment at https://hub.flox.dev/{owner}/{name}.
+            You can see this environment at {web_url}{owner}/{name}.
         "}
     }
 }
@@ -1088,7 +1093,11 @@ impl Pull {
         if dot_flox_path.exists() {
             bail!("Cannot pull a new environment into an existing one")
         }
-        let pointer = ManagedPointer::from(env_ref);
+        let pointer = ManagedPointer::new(
+            env_ref.owner().clone(),
+            env_ref.name().clone(),
+            &flox.floxhub,
+        );
 
         let pointer_content =
             serde_json::to_string_pretty(&pointer).context("Could not serialize pointer")?;

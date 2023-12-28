@@ -1,11 +1,13 @@
 use std::path::{Path, PathBuf};
 
+use log::debug;
 use thiserror::Error;
+use url::Url;
 
 use super::environment::managed_environment::remote_branch_name;
 use super::environment::ManagedPointer;
 use super::environment_ref::EnvironmentOwner;
-use crate::flox::Flox;
+use crate::flox::{Flox, Floxhub};
 use crate::providers::git::{
     GitCommandBranchHashError,
     GitCommandError,
@@ -38,6 +40,9 @@ pub enum FloxmetaV2Error {
     FetchBranch(GitCommandError),
     #[error("Failed to clone environment: {0}")]
     CloneBranch(GitCommandError),
+
+    #[error("invalid floxhub base url")]
+    InvalidFloxhubBaseUrl(#[from] url::ParseError),
 }
 
 impl FloxmetaV2 {
@@ -54,15 +59,23 @@ impl FloxmetaV2 {
         flox: &Flox,
         pointer: &ManagedPointer,
     ) -> Result<Self, FloxmetaV2Error> {
-        let host = flox.floxhub_host.as_str();
         let token = flox.floxhub_token.as_deref();
 
-        let git_options = floxmeta_git_options(&flox.floxhub_host, token);
+        let mut floxhub = Floxhub::new(pointer.floxhub_url.to_owned());
+        if let Some(git_url_override) = &pointer.floxhub_git_url_override {
+            floxhub.set_git_url_override(git_url_override.clone());
+        }
+
+        let git_url = floxhub
+            .git_url()
+            .map_err(FloxmetaV2Error::InvalidFloxhubBaseUrl)?;
+
+        let git_options = floxmeta_git_options(&git_url, &pointer.owner, token);
         let branch = remote_branch_name(&flox.system, pointer);
 
         let git = GitCommandProvider::clone_branch_with(
             git_options,
-            format!("{host}/{}/floxmeta", pointer.owner),
+            format!("{}/{}/floxmeta", git_url, pointer.owner),
             path,
             branch,
             true,
@@ -103,7 +116,16 @@ impl FloxmetaV2 {
     ) -> Result<Self, FloxmetaV2Error> {
         let token = flox.floxhub_token.as_deref();
 
-        let git_options = floxmeta_git_options(&flox.floxhub_host, token);
+        let mut floxhub = Floxhub::new(pointer.floxhub_url.to_owned());
+        if let Some(git_url_override) = &pointer.floxhub_git_url_override {
+            floxhub.set_git_url_override(git_url_override.clone());
+        }
+
+        let git_url = floxhub
+            .git_url()
+            .map_err(FloxmetaV2Error::InvalidFloxhubBaseUrl)?;
+
+        let git_options = floxmeta_git_options(&git_url, &pointer.owner, token);
 
         if !user_floxmeta_dir.as_ref().exists() {
             Err(FloxmetaV2Error::NotFound(pointer.owner.to_string()))?
@@ -116,7 +138,7 @@ impl FloxmetaV2 {
             .has_branch(&branch)
             .map_err(FloxmetaV2Error::CheckForBranch)?
         {
-            git.fetch_branch("origin", &branch)
+            git.fetch_branch("dynamicorigin", &branch)
                 .map_err(FloxmetaV2Error::FetchBranch)?;
         }
 
@@ -138,7 +160,16 @@ impl FloxmetaV2 {
     ) -> Result<Self, FloxmetaV2Error> {
         let token = flox.floxhub_token.as_deref();
 
-        let git_options = floxmeta_git_options(&flox.floxhub_host, token);
+        let mut floxhub = Floxhub::new(pointer.floxhub_url.to_owned());
+        if let Some(git_url_override) = &pointer.floxhub_git_url_override {
+            floxhub.set_git_url_override(git_url_override.clone());
+        }
+
+        let git_url = floxhub
+            .git_url()
+            .map_err(FloxmetaV2Error::InvalidFloxhubBaseUrl)?;
+
+        let git_options = floxmeta_git_options(&git_url, &pointer.owner, token);
 
         let git = GitCommandProvider::init_with(git_options, user_floxmeta_dir, false).unwrap();
         git.rename_branch(&remote_branch_name(&flox.system, pointer))
@@ -149,8 +180,20 @@ impl FloxmetaV2 {
 }
 
 /// Returns the git options for interacting with floxmeta repositories
-// todo: move floxhub host and token to Flox, or integrate config...
-pub fn floxmeta_git_options(floxhub_host: &str, floxhub_token: Option<&str>) -> GitCommandOptions {
+///
+/// * Disable global and system config
+///   to avoid user config interfering with flox operations
+/// * Set required user config (name and email)
+/// * Configure a dynamic origin for the floxhub repository
+///   to allow cloning and fetching from different floxhub hosts per user.
+///   The floxhub host is derived from the floxhub url in the environment pointer.
+/// * Set authentication with the floxhub token using an inline credential helper
+///   if a token is provided.
+pub fn floxmeta_git_options(
+    floxhub_git_url: &Url,
+    floxhub_owner: &str,
+    floxhub_token: Option<&str>,
+) -> GitCommandOptions {
     let mut options = GitCommandOptions::default();
 
     // set the user config
@@ -162,15 +205,37 @@ pub fn floxmeta_git_options(floxhub_host: &str, floxhub_token: Option<&str>) -> 
     options.add_env_var("GIT_CONFIG_GLOBAL", "/dev/null");
     options.add_env_var("GIT_CONFIG_SYSTEM", "/dev/null");
 
-    if let Some(token) = floxhub_token {
-        // Set authentication with the floxhub token using an inline credential helper.
-        // The credential helper should help avoinding a leak of the token in the process list.
-        options.add_env_var("FLOX_FLOXHUB_TOKEN", token);
-        options.add_config_flag(
-            &format!("credential.{floxhub_host}.helper"),
-            r#"!f(){ echo "username=oauth"; echo "password=$FLOX_FLOXHUB_TOKEN"; }; f"#,
-        );
-    }
+    // provides a "dynamic" remote "dynamicorigin".
+    //
+    // either the floxhub url from the environment pointer
+    // or the default floxhub url if the current operation does not operate on a managed environment.
+    //
+    // Local floxmeta repositories may contain environments from different floxhub hosts.
+    // The dynamic origin allows to fetch from different floxhub hosts per environment
+    // and reduces the amount of state stored in the local floxmeta repository.
+    options.add_config_flag(
+        "remote.dynamicorigin.url",
+        format!("{floxhub_git_url}/{floxhub_owner}/floxmeta"),
+    );
+
+    let token = if let Some(token) = floxhub_token {
+        debug!("using configured floxhub token");
+        token
+    } else {
+        debug!("no floxhub token configured");
+        ""
+    };
+
+    // Set authentication with the floxhub token using an inline credential helper.
+    // The credential helper should help avoinding a leak of the token in the process list.
+    //
+    // If no token is provided, we still set the credential helper
+    // to enforce authentication failures and avoid fallback to pinentry
+    options.add_env_var("FLOX_FLOXHUB_TOKEN", token);
+    options.add_config_flag(
+        &format!("credential.{floxhub_git_url}.helper"),
+        r#"!f(){ echo "username=oauth"; echo "password=$FLOX_FLOXHUB_TOKEN"; }; f"#,
+    );
 
     options
 }
@@ -188,6 +253,7 @@ mod tests {
 
     use super::*;
     use crate::flox::tests::flox_instance;
+    use crate::flox::DEFAULT_FLOXHUB_URL;
     use crate::providers::git::GitProvider;
 
     /// Create an upstream floxmeta repository with an environment under a given base path
@@ -214,13 +280,18 @@ mod tests {
     fn clone_repo() {
         let _ = env_logger::try_init();
 
-        let (mut flox, tempdir) = flox_instance();
-
-        let pointer = ManagedPointer::new("floxtest".parse().unwrap(), "test".parse().unwrap());
+        let (flox, tempdir) = flox_instance();
         let source_path = tempdir.path().join("source");
 
-        flox.floxhub_token = Some("no token needed here".to_string());
-        flox.floxhub_host = format!("file://{}", source_path.to_string_lossy());
+        let mut floxhub = Floxhub::new(DEFAULT_FLOXHUB_URL.clone());
+
+        floxhub.set_git_url_override(Url::from_directory_path(&source_path).unwrap());
+
+        let pointer = ManagedPointer::new(
+            "floxtest".parse().unwrap(),
+            "test".parse().unwrap(),
+            &floxhub,
+        );
 
         create_fake_floxmeta(&source_path, &flox, &pointer);
 

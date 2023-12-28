@@ -34,10 +34,10 @@ setup() {
   project_setup
 
   export FLOX_FLOXHUB_TOKEN=flox_testOAuthToken
-  export __FLOX_FLOXHUB_URL="file://$BATS_TEST_TMPDIR/floxhub"
+  export _FLOX_FLOXHUB_GIT_URL="file://$BATS_TEST_TMPDIR/floxhub"
 }
 teardown() {
-  unset __FLOX_FLOXHUB_URL
+  unset _FLOX_FLOXHUB_GIT_URL
   project_teardown
   common_test_teardown
 }

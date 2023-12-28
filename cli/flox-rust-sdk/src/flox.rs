@@ -20,6 +20,7 @@ use runix::installable::{AttrPath, FlakeAttribute};
 use runix::{NixBackend, RunJson};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use url::Url;
 
 use crate::environment::{self, default_nix_subprocess_env};
 use crate::models::channels::ChannelRegistry;
@@ -46,7 +47,7 @@ pub static FLOX_VERSION: Lazy<String> =
 /// [Flox] will provide a preconfigured instance of the Nix API.
 /// By default this nix API uses the nix CLI.
 /// Preconfiguration includes environment variables and flox specific arguments.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Flox {
     /// The directory pointing to the users flox configuration
     ///
@@ -68,11 +69,12 @@ pub struct Flox {
 
     pub uuid: uuid::Uuid,
 
+    pub floxhub: Floxhub,
+
     /// Token to authenticate with floxhub.
-    /// It's populated from config during [Flox] initialization.
+    /// It's usually populated from the config during [Flox] initialization.
     /// Checking for [None] can be used to check if the use is logged in.
     pub floxhub_token: Option<String>,
-    pub floxhub_host: String,
 }
 
 pub trait FloxNixApi: NixBackend {
@@ -557,6 +559,56 @@ impl Flox {
     }
 }
 
+pub static DEFAULT_FLOXHUB_URL: Lazy<Url> =
+    Lazy::new(|| Url::parse("https://hub.flox.dev").unwrap());
+
+#[derive(Debug, Clone)]
+pub struct Floxhub {
+    base_url: Url,
+    git_url_override: Option<Url>,
+}
+
+impl Floxhub {
+    pub fn new(base_url: Url) -> Self {
+        Floxhub {
+            base_url,
+            git_url_override: None,
+        }
+    }
+
+    pub fn set_git_url_override(&mut self, git_url_override: Url) -> &mut Self {
+        self.git_url_override = Some(git_url_override);
+        self
+    }
+
+    /// Return the base url of the floxhub instance
+    /// might change to a more specific url in the future
+    pub fn base_url(&self) -> &Url {
+        &self.base_url
+    }
+
+    pub fn git_url_override(&self) -> Option<&Url> {
+        self.git_url_override.as_ref()
+    }
+
+    /// Return the url of the floxhub git interface
+    ///
+    /// If the environment variable `_FLOX_FLOXHUB_GIT_URL` is set,
+    /// it will be used instead of the derived floxhub host.
+    /// This is useful for testing floxhub locally.
+    pub fn git_url(&self) -> Result<Url, url::ParseError> {
+        if let Some(ref url) = self.git_url_override {
+            return Ok(url.clone());
+        }
+
+        let mut url = self.base_url.clone();
+        let host = url.host_str().unwrap();
+        url.set_host(Some(&format!("git.{}", host)))?;
+
+        Ok(url)
+    }
+}
+
 /// Requires login with auth0 with "openid" and "profile" scopes
 /// https://auth0.com/docs/scopes/current/oidc-scopes
 /// See also: `authenticate` in `flox/src/commands/auth.rs` where we set the scopes
@@ -629,7 +681,11 @@ pub mod tests {
             temp_dir,
             config_dir,
             channels,
-            ..Default::default()
+            access_tokens: Default::default(),
+            netrc_file: Default::default(),
+            uuid: Default::default(),
+            floxhub: Floxhub::new(Url::from_str("https://hub.flox.dev").unwrap()),
+            floxhub_token: None,
         };
 
         (flox, tempdir_handle)
