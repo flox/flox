@@ -183,7 +183,14 @@ pub fn floxmeta_git_options(
     options.add_env_var("GIT_CONFIG_GLOBAL", "/dev/null");
     options.add_env_var("GIT_CONFIG_SYSTEM", "/dev/null");
 
-    // set the floxhub origin
+    // provides a "dynamic" remote "dynamicorigin".
+    //
+    // either the floxhub url from the environment pointer
+    // or the default floxhub url if the current operation does not operate on a managed environment.
+    //
+    // Local floxmeta repositories may contain environments from different floxhub hosts.
+    // The dynamic origin allows to fetch from different floxhub hosts per environment
+    // and reduces the amount of state stored in the local floxmeta repository.
     options.add_config_flag(
         "remote.dynamicorigin.url",
         format!("{floxhub_git_url}/{floxhub_owner}/floxmeta"),
