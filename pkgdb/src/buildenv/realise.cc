@@ -35,8 +35,8 @@ namespace flox::buildenv {
 
 /* -------------------------------------------------------------------------- */
 
-#ifndef PROFILE_D_SCRIPT_DIR
-#  error "PROFILE_D_SCRIPT_DIR must be set to the path of `etc/profile.d/'"
+#ifndef PROFILE_D_SCRIPTS_DIR
+#  error "PROFILE_D_SCRIPTS_DIR must be set to the path of `etc/profile.d/'"
 #endif
 
 #ifndef SET_PROMPT_BASH_SH
@@ -357,9 +357,10 @@ createFloxEnv( nix::EvalState &     state,
                      buildenv::Priority() );
 
   /* Insert profile.d scripts.
-   * The store path is provided at compile time via the `PROFILE_D_SCRIPT_DIR'
+   * The store path is provided at compile time via the `PROFILE_D_SCRIPTS_DIR'
    * environment variable. */
-  auto profileScriptsPath = state.store->parseStorePath( PROFILE_D_SCRIPT_DIR );
+  auto profileScriptsPath
+    = state.store->parseStorePath( PROFILE_D_SCRIPTS_DIR );
   state.store->ensurePath( profileScriptsPath );
   references.insert( profileScriptsPath );
   pkgs.emplace_back( state.store->printStorePath( profileScriptsPath ),

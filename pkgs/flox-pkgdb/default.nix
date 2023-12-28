@@ -30,7 +30,8 @@
   gdb ? throw "`gdb' is required for debugging with `g++'",
   lldb ? throw "`lldb' is required for debugging with `clang++'",
   valgrind ? throw "`valgrind' is required for memory sanitization on Linux",
-  ci ? false,
+  substituteAll,
+  symlinkJoin,
 }: let
   batsWith = bats.withLibraries (p: [
     p.bats-assert
@@ -45,10 +46,30 @@
     libExt = stdenv.hostPlatform.extensions.sharedLibrary;
     SEMVER_PATH = semver.outPath + "/bin/semver";
     # Used by `buildenv' to provide activation hook extensions.
-    PROFILE_D_SCRIPT_DIR = builtins.path {
-      name = "etc-profile.d";
-      path = ../../pkgdb/src/buildenv/assets;
-    };
+    PROFILE_D_SCRIPTS_DIR = let
+      path = builtins.path {
+        name = "etc-profile.d";
+        path = ../../pkgdb/src/buildenv/assets/etc/profile.d;
+      };
+
+      dependencies = {
+        realpath = coreutils + "/bin/realpath";
+      };
+
+      scripts = lib.mapAttrs (name: type:
+        substituteAll ({
+            src = path + "/${name}";
+            dir = "etc/profile.d";
+            isExecutable = true;
+          }
+          // dependencies)) (builtins.readDir path);
+
+      joined = symlinkJoin {
+        name = "profile-d-scripts";
+        paths = lib.attrValues scripts;
+      };
+    in
+      joined;
     # Used by `buildenv' to set shell prompts on activation.
     SET_PROMPT_BASH_SH = builtins.path {
       name = "set-prompt-bash.sh";
@@ -113,7 +134,7 @@ in
       configurePhase = ''
         runHook preConfigure;
         export PREFIX="$out";
-        echo "PROFILE_D_SCRIPT_DIR: $PROFILE_D_SCRIPT_DIR" >&2;
+        echo "PROFILE_D_SCRIPTS_DIR: $PROFILE_D_SCRIPTS_DIR" >&2;
         echo "SET_PROMPT_BASH_SH: $SET_PROMPT_BASH_SH" >&2;
         if [[ "''${enableParallelBuilding:-1}" = 1 ]]; then
           makeFlagsArray+=( "-j''${NIX_BUILD_CORES:?}" );
