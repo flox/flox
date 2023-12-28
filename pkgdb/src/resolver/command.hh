@@ -12,9 +12,9 @@
 #include <filesystem>
 #include <optional>
 
+#include "../search/command.hh"
 #include "flox/resolver/manifest-raw.hh"
 #include "flox/resolver/mixins.hh"
-#include "../search/command.hh"
 
 
 /* -------------------------------------------------------------------------- */

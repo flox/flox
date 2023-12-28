@@ -12,8 +12,8 @@
 #include <functional>
 #include <vector>
 
-#include "flox/flox-flake.hh"
 #include "../pkgdb/command.hh"
+#include "flox/flox-flake.hh"
 #include "flox/pkgdb/input.hh"
 #include "flox/pkgdb/write.hh"
 #include "flox/registry.hh"
