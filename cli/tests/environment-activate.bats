@@ -27,6 +27,32 @@ setup_file() {
 project_setup() {
   export PROJECT_DIR="${BATS_TEST_TMPDIR?}/project-${BATS_TEST_NUMBER?}"
   export PROJECT_NAME="${PROJECT_DIR##*/}"
+
+  export VARS=$(
+    cat << EOF
+[vars]
+foo = "\$bar"
+EOF
+  )
+
+  export HELLO_HOOK=$(
+    cat <<- EOF
+[hook]
+script = """
+  echo "Welcome to your flox environment!";
+"""
+EOF
+  )
+
+  export VARS_HOOK=$(
+    cat << EOF
+[hook]
+script = """
+  echo \$foo;
+"""
+EOF
+  )
+
   rm -rf "$PROJECT_DIR"
   mkdir -p "$PROJECT_DIR"
   pushd "$PROJECT_DIR" > /dev/null || return
@@ -104,12 +130,8 @@ env_is_activated() {
 # ---------------------------------------------------------------------------- #
 # bats test_tags=activate,activate:hook:bash
 @test "bash: activate runs hook" {
-  cat << "EOF" >> "$PROJECT_DIR/.flox/env/manifest.toml"
-[hook]
-script = """
-  echo "Welcome to your flox environment!";
-"""
-EOF
+  sed -i -e "s/\[hook\]/${HELLO_HOOK//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
+
   SHELL=bash NO_COLOR=1 run -0 expect -d "$TESTS_DIR/activate/hook.exp" "$PROJECT_DIR"
   assert_output --partial "Welcome to your flox environment!"
 
@@ -121,12 +143,8 @@ EOF
 # ---------------------------------------------------------------------------- #
 # bats test_tags=activate,activate:hook:zsh
 @test "zsh: activate runs hook" {
-  cat << "EOF" >> "$PROJECT_DIR/.flox/env/manifest.toml"
-[hook]
-script = """
-  echo "Welcome to your flox environment!";
-"""
-EOF
+  sed -i -e "s/\[hook\]/${HELLO_HOOK//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
+
   # TODO: flox will set HOME if it doesn't match the home of the user with
   # current euid. I'm not sure if we should change that, but for now just set
   # USER to REAL_USER.
@@ -175,10 +193,8 @@ EOF
 # ---------------------------------------------------------------------------- #
 # bats test_tags=activate,activate:envVar:bash
 @test "bash: activate sets env var" {
-  cat << "EOF" >> "$PROJECT_DIR/.flox/env/manifest.toml"
-[vars]
-foo = "$bar"
-EOF
+  sed -i -e "s/\[vars\]/${VARS//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
+
   SHELL=bash bar=baz NO_COLOR=1 run -0 expect -d "$TESTS_DIR/activate/envVar.exp" "$PROJECT_DIR"
   assert_output --partial "baz"
 
@@ -190,10 +206,9 @@ EOF
 # ---------------------------------------------------------------------------- #
 # bats test_tags=activate,activate:envVar:zsh
 @test "zsh: activate sets env var" {
-  cat << "EOF" >> "$PROJECT_DIR/.flox/env/manifest.toml"
-[vars]
-foo = "$bar"
-EOF
+
+  sed -i -e "s/\[vars\]/${VARS//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
+
   # TODO: flox will set HOME if it doesn't match the home of the user with
   # current euid. I'm not sure if we should change that, but for now just set
   # USER to REAL_USER.
@@ -209,14 +224,9 @@ EOF
 
 # bats test_tags=activate,activate:envVar-before-hook:zsh
 @test "zsh and bash: activate sets env var before hook" {
-  cat << "EOF" >> "$PROJECT_DIR/.flox/env/manifest.toml"
-[vars]
-foo = "$bar"
-[hook]
-script = """
-  echo "$foo";
-"""
-EOF
+  sed -i -e "s/\[vars\]/${VARS//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
+  sed -i -e "s/\[hook\]/${VARS_HOOK//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
+
   # TODO: flox will set HOME if it doesn't match the home of the user with
   # current euid. I'm not sure if we should change that, but for now just set
   # USER to REAL_USER.
