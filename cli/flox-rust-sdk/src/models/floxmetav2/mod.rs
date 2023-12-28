@@ -10,11 +10,11 @@ use super::environment_ref::EnvironmentOwner;
 use crate::flox::{Flox, Floxhub};
 use crate::providers::git::{
     GitCommandBranchHashError,
-    GitCommandError,
     GitCommandOpenError,
     GitCommandOptions,
     GitCommandProvider,
     GitProvider,
+    GitRemoteCommandError,
 };
 
 pub const FLOXMETA_DIR_NAME: &str = "meta";
@@ -37,9 +37,9 @@ pub enum FloxmetaV2Error {
     #[error("Failed to check for branch: {0}")]
     CheckForBranch(GitCommandBranchHashError),
     #[error("Failed to fetch environment: {0}")]
-    FetchBranch(GitCommandError),
+    FetchBranch(GitRemoteCommandError),
     #[error("Failed to clone environment: {0}")]
-    CloneBranch(GitCommandError),
+    CloneBranch(GitRemoteCommandError),
 
     #[error("invalid floxhub base url")]
     InvalidFloxhubBaseUrl(#[from] url::ParseError),
