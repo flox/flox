@@ -27,22 +27,36 @@ load setup_suite.bash
 # --------------------------------------------------------------------------- #
 
 setup_file() {
-  : "${LOCKFILES:=${TESTS_DIR?}/data/buildenv/lockfiles}"
   : "${CAT:=cat}"
   : "${TEST:=test}"
-  export LOCKFILES CAT TEST
-}
+  : "${MKDIR:=mkdir}"
+  export CAT TEST MKDIR
+  export LOCKFILES="${BATS_FILE_TMPDIR?}/lockfiles"
 
-# ---------------------------------------------------------------------------- #
+  # Always use a consistent `nixpkgs' input.
+  export _PKGDB_GA_REGISTRY_REF_OR_REV="${NIXPKGS_REV?}"
 
-mk_lock() {
-  $PKGDB_BIN manifest lock --ga-registry "$1"
+  # Generate lockfiles
+  for dir in "${TESTS_DIR?}"/data/buildenv/lockfiles/*; do
+    if $TEST -d "$dir"; then
+      _lockfile="${LOCKFILES?}/${dir##*/}/manifest.lock"
+      $MKDIR -p "${_lockfile%/*}"
+      ${PKGDB_BIN?} manifest lock --ga-registry --manifest \
+        "$dir/manifest.toml" > "$_lockfile"
+    fi
+  done
 }
 
 # ---------------------------------------------------------------------------- #
 
 # bats test_tags=single,smoke
 @test "Simple environment builds successfully" {
+  run "$PKGDB_BIN" buildenv "$LOCKFILES/single-package/manifest.lock"
+  assert_success
+}
+
+# bats test_tags=single,smoke
+@test "Inline JSON builds successfully" {
   run "$PKGDB_BIN" buildenv "$(< "$LOCKFILES/single-package/manifest.lock")"
   assert_success
 }
@@ -50,7 +64,7 @@ mk_lock() {
 # bats test_tags=single,binaries
 @test "Built environment contains binaries" {
   run "$PKGDB_BIN" buildenv \
-    "$(< "$LOCKFILES/single-package/manifest.lock")" \
+    "$LOCKFILES/single-package/manifest.lock" \
     --out-link "$BATS_TEST_TMPDIR/env"
   assert_success
   assert "$TEST" -x "$BATS_TEST_TMPDIR/env/bin/vim"
@@ -59,7 +73,7 @@ mk_lock() {
 # bats test_tags=single,activate-files
 @test "Built environment contains activate files" {
   run "$PKGDB_BIN" buildenv \
-    "$(< "$LOCKFILES/single-package/manifest.lock")" \
+    "$LOCKFILES/single-package/manifest.lock" \
     --out-link "$BATS_TEST_TMPDIR/env"
   assert_success
   assert "$TEST" -f "$BATS_TEST_TMPDIR/env/activate/bash"
@@ -71,7 +85,7 @@ mk_lock() {
 
 # bats test_tags=hook,script
 @test "Built environment includes hook script" {
-  run "$PKGDB_BIN" buildenv "$(< "$LOCKFILES/hook-script/manifest.lock")" \
+  run "$PKGDB_BIN" buildenv "$LOCKFILES/hook-script/manifest.lock" \
     --out-link "$BATS_TEST_TMPDIR/env"
   assert_success
   assert "$TEST" -f "$BATS_TEST_TMPDIR/env/activate/hook.sh"
@@ -82,7 +96,7 @@ mk_lock() {
 # bats test_tags=hook,file
 @test "Built environment includes hook file" {
   skip "Hook files require path"
-  run "$PKGDB_BIN" buildenv "$(< "$LOCKFILES/hook-file/manifest.lock")" \
+  run "$PKGDB_BIN" buildenv "$LOCKFILES/hook-file/manifest.lock" \
     --out-link "$BATS_TEST_TMPDIR/env"
   assert_success
   assert "$TEST" -f "$BATS_TEST_TMPDIR/env/activate/hook.sh"
@@ -94,7 +108,7 @@ mk_lock() {
 
 # bats test_tags=conflict,detect
 @test "Detects conflicting packages" {
-  run "$PKGDB_BIN" buildenv "$(< "$LOCKFILES/conflict/manifest.lock")" \
+  run "$PKGDB_BIN" buildenv "$LOCKFILES/conflict/manifest.lock" \
     --out-link "$BATS_TEST_TMPDIR/env"
   assert_failure
   assert_output --partial "file conflict between packages"
@@ -103,7 +117,7 @@ mk_lock() {
 # bats test_tags=conflict,resolve
 @test "Allows to resolve conflicting with priority" {
   run "$PKGDB_BIN" buildenv \
-    "$(< "$LOCKFILES/conflict-resolved/manifest.lock")" \
+    "$LOCKFILES/conflict-resolved/manifest.lock" \
     --out-link "$BATS_TEST_TMPDIR/env"
   assert_success
 }
@@ -113,7 +127,7 @@ mk_lock() {
 # bats test_tags=propagated
 @test "Environment includes propagated packages" {
   skip "ansi does not work on all systems"
-  run "$PKGDB_BIN" buildenv "$(< "$LOCKFILES/propagated/manifest.lock")" \
+  run "$PKGDB_BIN" buildenv "$LOCKFILES/propagated/manifest.lock" \
     --out-link "$BATS_TEST_TMPDIR/env"
   assert_success
   # environment contains anki
