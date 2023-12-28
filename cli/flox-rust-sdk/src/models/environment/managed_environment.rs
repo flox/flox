@@ -129,6 +129,9 @@ pub enum ManagedEnvironmentError {
 
     #[error("could not canonicalize environment path")]
     CanonicalizePath(#[source] CanonicalizeError),
+
+    #[error("invalid floxhub base url")]
+    InvalidFloxhubBaseUrl(#[source] url::ParseError),
 }
 
 #[derive(Debug, Deserialize, PartialEq, Serialize)]
@@ -843,7 +846,12 @@ impl ManagedEnvironment {
         // Caller decides whether to set token
         let token = flox.floxhub_token.as_deref();
 
-        let options = floxmeta_git_options(flox.floxhub.git_url(), &pointer.owner, token);
+        let git_url = flox
+            .floxhub
+            .git_url()
+            .map_err(ManagedEnvironmentError::InvalidFloxhubBaseUrl)?;
+
+        let options = floxmeta_git_options(&git_url, &pointer.owner, token);
 
         let generations = Generations::init(
             options,
@@ -870,7 +878,7 @@ impl ManagedEnvironment {
         temp_floxmeta_git
             .add_remote(
                 "upstream",
-                &format!("{}/{}/floxmeta", flox.floxhub.git_url(), &pointer.owner),
+                &format!("{}/{}/floxmeta", &git_url, &pointer.owner),
             )
             .unwrap();
 
@@ -1006,10 +1014,8 @@ mod test {
         ManagedPointer {
             owner: EnvironmentOwner::from_str("owner").unwrap(),
             name: EnvironmentName::from_str("name").unwrap(),
-            floxhub_web_url: Url::from_str(&format!("file://{}", remote_path.to_string_lossy()))
-                .unwrap(),
-            floxhub_git_url: Url::from_str(&format!("file://{}", remote_path.to_string_lossy()))
-                .unwrap(),
+            floxhub_url: Url::from_str("https://floxhub.com").unwrap(),
+            floxhub_git_url_override: Some(Url::from_directory_path(remote_path).unwrap()),
             version: Version::<1> {},
         }
     }
@@ -1688,8 +1694,8 @@ mod test {
         let pointer = ManagedPointer {
             owner: EnvironmentOwner::from_str("owner").unwrap(),
             name: EnvironmentName::from_str("name").unwrap(),
-            floxhub_web_url: Url::from_str("file:///dev/null").unwrap(),
-            floxhub_git_url: Url::from_str("file:///dev/null").unwrap(),
+            floxhub_url: Url::from_str("https://hub.flox.dev").unwrap(),
+            floxhub_git_url_override: None,
             version: Version::<1>,
         };
         let branch_name = branch_name(&flox.system, &pointer, &path);

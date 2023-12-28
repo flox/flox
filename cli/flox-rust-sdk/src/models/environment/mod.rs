@@ -229,8 +229,9 @@ impl PathPointer {
 pub struct ManagedPointer {
     pub owner: EnvironmentOwner,
     pub name: EnvironmentName,
-    pub floxhub_web_url: Url,
-    pub floxhub_git_url: Url,
+    pub floxhub_url: Url,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub floxhub_git_url_override: Option<Url>,
     version: Version<1>,
 }
 
@@ -240,8 +241,8 @@ impl ManagedPointer {
         Self {
             name,
             owner,
-            floxhub_git_url: floxhub.git_url().clone(),
-            floxhub_web_url: floxhub.web_url().clone(),
+            floxhub_url: floxhub.base_url().clone(),
+            floxhub_git_url_override: floxhub.git_url_override().cloned(),
             version: Version::<1>,
         }
     }
@@ -559,13 +560,13 @@ mod test {
     use pretty_assertions::assert_eq;
 
     use super::*;
+    use crate::flox::DEFAULT_FLOXHUB_URL;
     use crate::providers::git::GitProvider;
 
     const MANAGED_ENV_JSON: &'_ str = r#"{
         "name": "name",
         "owner": "owner",
-        "floxhub_web_url": "file:///dev/null",
-        "floxhub_git_url": "file:///dev/null",
+        "floxhub_url": "https://hub.flox.dev/",
         "version": 1
     }"#;
 
@@ -578,8 +579,8 @@ mod test {
         EnvironmentPointer::Managed(ManagedPointer {
             name: EnvironmentName::from_str("name").unwrap(),
             owner: EnvironmentOwner::from_str("owner").unwrap(),
-            floxhub_web_url: Url::parse("file:///dev/null").unwrap(),
-            floxhub_git_url: Url::parse("file:///dev/null").unwrap(),
+            floxhub_url: DEFAULT_FLOXHUB_URL.clone(),
+            floxhub_git_url_override: None,
             version: Version::<1> {},
         })
     });
@@ -589,8 +590,8 @@ mod test {
         let managed_pointer = EnvironmentPointer::Managed(ManagedPointer {
             name: EnvironmentName::from_str("name").unwrap(),
             owner: EnvironmentOwner::from_str("owner").unwrap(),
-            floxhub_web_url: Url::parse("file:///dev/null").unwrap(),
-            floxhub_git_url: Url::parse("file:///dev/null").unwrap(),
+            floxhub_url: DEFAULT_FLOXHUB_URL.clone(),
+            floxhub_git_url_override: None,
             version: Version::<1> {},
         });
 

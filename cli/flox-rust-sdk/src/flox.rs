@@ -559,26 +559,36 @@ impl Flox {
     }
 }
 
+pub static DEFAULT_FLOXHUB_URL: Lazy<Url> =
+    Lazy::new(|| Url::parse("https://hub.flox.dev").unwrap());
+
 #[derive(Debug, Clone)]
 pub struct Floxhub {
-    /// Floxhub base url from which other urls are derived
-    web: Url,
-
-    /// Url of the floxhub git interface
-    git: Url,
+    base_url: Url,
+    git_url_override: Option<Url>,
 }
 
 impl Floxhub {
-    pub fn new_from_parts(web_url: Url, git_url: Url) -> Self {
+    pub fn new(base_url: Url) -> Self {
         Floxhub {
-            web: web_url,
-            git: git_url,
+            base_url,
+            git_url_override: None,
         }
     }
 
+    pub fn set_git_url_override(&mut self, git_url_override: Url) -> &mut Self {
+        self.git_url_override = Some(git_url_override);
+        self
+    }
+
     /// Return the base url of the floxhub instance
-    pub fn web_url(&self) -> &Url {
-        &self.web
+    /// might change to a more specific url in the future
+    pub fn base_url(&self) -> &Url {
+        &self.base_url
+    }
+
+    pub fn git_url_override(&self) -> Option<&Url> {
+        self.git_url_override.as_ref()
     }
 
     /// Return the url of the floxhub git interface
@@ -586,11 +596,17 @@ impl Floxhub {
     /// If the environment variable `_FLOX_FLOXHUB_GIT_URL` is set,
     /// it will be used instead of the derived floxhub host.
     /// This is useful for testing floxhub locally.
-    pub fn git_url(&self) -> &Url {
-        &self.git
-    }
+    pub fn git_url(&self) -> Result<Url, url::ParseError> {
+        if let Some(ref url) = self.git_url_override {
+            return Ok(url.clone());
+        }
 
-    // todo: add methods to retrieve user information from floxhub api
+        let mut url = self.base_url.clone();
+        let host = url.host_str().unwrap();
+        url.set_host(Some(&format!("git.{}", host)))?;
+
+        Ok(url)
+    }
 }
 
 /// Requires login with auth0 with "openid" and "profile" scopes
@@ -668,10 +684,7 @@ pub mod tests {
             access_tokens: Default::default(),
             netrc_file: Default::default(),
             uuid: Default::default(),
-            floxhub: Floxhub::new_from_parts(
-                Url::from_str("file:///dev/null").unwrap(),
-                Url::from_str("file:///dev/null").unwrap(),
-            ),
+            floxhub: Floxhub::new(Url::from_str("https://hub.flox.dev").unwrap()),
             floxhub_token: None,
         };
 

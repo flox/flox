@@ -10,7 +10,7 @@ use std::{env, fmt, fs, mem};
 
 use anyhow::{anyhow, bail, Context, Result};
 use bpaf::{Args, Bpaf, ParseFailure, Parser};
-use flox_rust_sdk::flox::{EnvironmentRef, Flox, Floxhub, FLOX_VERSION};
+use flox_rust_sdk::flox::{EnvironmentRef, Flox, Floxhub, DEFAULT_FLOXHUB_URL, FLOX_VERSION};
 use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironment;
 use flox_rust_sdk::models::environment::path_environment::PathEnvironment;
 use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironment;
@@ -182,23 +182,19 @@ impl FloxArgs {
             .expect("User must have a home directory")
             .join(".netrc");
 
-        let floxhub_base_url = config
-            .flox
-            .floxhub_url
-            .clone()
-            .unwrap_or("https://hub.flox.dev".parse().unwrap());
+        let mut floxhub = Floxhub::new(
+            config
+                .flox
+                .floxhub_url
+                .clone()
+                .unwrap_or_else(|| DEFAULT_FLOXHUB_URL.clone()),
+        );
 
-        let floxhub_git_url = if let Ok(env_set_host) = std::env::var("_FLOX_FLOXHUB_GIT_URL") {
+        if let Ok(env_set_host) = std::env::var("_FLOX_FLOXHUB_GIT_URL") {
             warn!("Using {env_set_host} as floxhub host");
             warn!("`$_FLOX_FLOXHUB_GIT_URL` is used for testing purposes only, alternative floxhub hosts are not yet supported!");
-            env_set_host.parse()?
-        } else {
-            // todo: tentative to the floxhub url structure to be settled
-            let mut url = floxhub_base_url.clone();
-            let host = floxhub_base_url.host_str().unwrap();
-            url.set_host(Some(&format!("git.{host}")))?;
-            url
-        };
+            floxhub.set_git_url_override(env_set_host.parse()?);
+        }
 
         let boostrap_flox = Flox {
             cache_dir: config.flox.cache_dir.clone(),
@@ -211,7 +207,7 @@ impl FloxArgs {
             system: env!("NIX_TARGET_SYSTEM").to_string(),
             uuid: init_uuid(&config.flox.data_dir).await?,
             floxhub_token: config.flox.floxhub_token.clone(),
-            floxhub: Floxhub::new_from_parts(floxhub_base_url, floxhub_git_url),
+            floxhub,
         };
 
         let channels = init_channels(BTreeMap::new())?;

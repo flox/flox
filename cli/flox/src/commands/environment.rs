@@ -930,7 +930,7 @@ impl Push {
     ///
     /// todo: add floxhub base url when it's available
     fn push_existing_message(env: &ManagedPointer, force: bool) -> String {
-        let web_url = &env.floxhub_web_url;
+        let web_url = &env.floxhub_url;
         let owner = &env.owner;
         let name = &env.name;
 
@@ -948,7 +948,7 @@ impl Push {
     ///
     /// todo: add floxhub base url when it's available
     fn push_new_message(env: &ManagedPointer, force: bool) -> String {
-        let web_url = &env.floxhub_web_url;
+        let web_url = &env.floxhub_url;
         let owner = &env.owner;
         let name = &env.name;
 
