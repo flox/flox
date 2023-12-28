@@ -27,16 +27,24 @@ load setup_suite.bash
 # --------------------------------------------------------------------------- #
 
 setup_file() {
-  : "${LOCKFILES:=${TESTS_DIR?}/data/buildenv/lockfiles}"
   : "${CAT:=cat}"
   : "${TEST:=test}"
-  export LOCKFILES CAT TEST
-}
+  : "${MKDIR:=mkdir}"
+  export CAT TEST MKDIR;
+  export LOCKFILES="${BATS_FILE_TMPDIR?}/lockfiles";
 
-# ---------------------------------------------------------------------------- #
+  # Always use a consistent `nixpkgs' input.
+  export _PKGDB_GA_REGISTRY_REF_OR_REV="${NIXPKGS_REV?}"
 
-mk_lock() {
-  $PKGDB_BIN manifest lock --ga-registry "$1"
+  # Generate lockfiles
+  for dir in "${TESTS_DIR?}"/data/buildenv/lockfiles/*; do
+    if $TEST -d "$dir"; then
+      _lockfile="${LOCKFILES?}/${dir##*/}/manifest.lock";
+      $MKDIR -p "${_lockfile%/*}";
+      ${PKGDB_BIN?} manifest lock --ga-registry --manifest              \
+                                  "$dir/manifest.toml" > "$_lockfile";
+    fi
+  done
 }
 
 # ---------------------------------------------------------------------------- #

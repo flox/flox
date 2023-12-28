@@ -168,17 +168,17 @@ rwildcard = $(foreach d,$(wildcard $(1:=/*)),$(call rwildcard,$d,$2)        \
 
 # Various file and target lists
 
-HEADERS        =  $(call rwildcard,include,*.hh)
-SRCS           =  $(call rwildcard,src,*.cc)
-test_SRCS      =  $(sort $(wildcard tests/*.cc))
-ALL_SRCS       =  $(SRCS) $(test_SRCS)
-BINS           =  bin/pkgdb
-TEST_UTILS     =  $(addprefix tests/,is_sqlite3 search-params)
-TESTS          =  $(filter-out $(TEST_UTILS),$(test_SRCS:.cc=))
+HEADERS        = $(call rwildcard,include,*.hh)
+SRCS           = $(call rwildcard,src,*.cc)
+test_SRCS      = $(sort $(wildcard tests/*.cc))
+ALL_SRCS       = $(SRCS) $(test_SRCS)
+BINS           = bin/pkgdb
+TEST_UTILS     = $(addprefix tests/,is_sqlite3 search-params)
+TESTS          = $(filter-out $(TEST_UTILS),$(test_SRCS:.cc=))
 TEST_DATA      =
 ALL_BINS       = $(TESTS) $(TEST_UTILS) $(BINS)
 CLEANDIRS      =
-CLEANFILES     =  $(ALL_SRCS:.cc=.o) $(ALL_BINS)
+CLEANFILES     = $(ALL_SRCS:.cc=.o) $(ALL_BINS)
 FULLCLEANDIRS  =
 FULLCLEANFILES =
 
@@ -522,33 +522,13 @@ lint: compile_commands.json $(HEADERS) $(ALL_SRCS)
 
 # ---------------------------------------------------------------------------- #
 
-# Generated Test Data
-# -------------------
-
-# Generate test data files
-.PHONY: test-data test-lockfiles
-test-data: test-lockfiles
-
-_TEST_LOCKFILE_DIRS      := $(wildcard $(TEST_DATA_DIR)/buildenv/lockfiles/*)
-_TEST_LOCKFILE_MANIFESTS := $(addsuffix /manifest.toml,$(_TEST_LOCKFILE_DIRS))
-_TEST_LOCKFILES          := $(addsuffix /manifest.lock,$(_TEST_LOCKFILE_DIRS))
-CLEANFILES               += $(_TEST_LOCKFILES)
-test-lockfiles: $(_TEST_LOCKFILES)
-$(_TEST_LOCKFILES): %/manifest.lock: %/manifest.toml bin/pkgdb
-	$(MKDIR_P) $(@D);
-	_PKGDB_GA_REGISTRY_REF_OR_REV="e8039594435c68eb4f780f3e9bf3972a7399c4b1"  \
-	  bin/pkgdb manifest lock --ga-registry --manifest $< > $@;
-
-
-# ---------------------------------------------------------------------------- #
-
 .PHONY: check cc-check bats-check
 
 #: Run all tests
 check: cc-check bats-check
 
 #: Run all C++ unit tests
-cc-check: $(TESTS:.cc=) test-data
+cc-check: $(TESTS:.cc=)
 	@_ec=0;                     \
 	echo '';                    \
 	for t in $(TESTS:.cc=); do  \
@@ -564,7 +544,7 @@ cc-check: $(TESTS:.cc=) test-data
 	exit "$$_ec";
 
 #: Run all bats tests
-bats-check: bin $(TEST_UTILS) test-data
+bats-check: bin $(TEST_UTILS)
 	PKGDB_BIN="$(PKGDB_ROOT)/bin/pkgdb"                          \
 	PKGDB_IS_SQLITE3_BIN="$(PKGDB_ROOT)/tests/is_sqlite3"        \
 	PKGDB_SEARCH_PARAMS_BIN="$(PKGDB_ROOT)/tests/search-params"  \
@@ -621,7 +601,7 @@ $(TESTS) $(TEST_UTILS): tests/%: tests/%.o
 bin: $(BINS)
 
 #: Build test executables and resources
-tests: $(TESTS) $(TEST_UTILS) test-data
+tests: $(TESTS) $(TEST_UTILS)
 
 #: Build binaries, tests, and generated `.gitignore' files
 all: bin tests ignores
