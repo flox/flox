@@ -119,6 +119,30 @@ impl TryFrom<LockedManifest> for TypedLockedManifest {
     }
 }
 
+impl TypedLockedManifest {
+    /// List all packages in the locked manifest for a given system
+    pub fn list_packages(&self, system: &System) -> Vec<InstalledPackage> {
+        let mut packages = vec![];
+        if let Some(system_packages) = self.packages.get(system) {
+            for (name, locked_package) in system_packages {
+                packages.push(InstalledPackage {
+                    name: name.clone(),
+                    // SAFETY: we know that the package is in the manifest because it is locked
+                    path: self.manifest.install.get(name).unwrap().path.clone(),
+                    info: locked_package.info.clone(),
+                });
+            }
+        }
+        packages
+    }
+}
+
+pub struct InstalledPackage {
+    pub name: String,
+    pub path: String,
+    pub info: PackageInfo,
+}
+
 #[derive(Debug, Error)]
 pub enum LockedManifestError {
     #[error("failed to lock manifest")]
