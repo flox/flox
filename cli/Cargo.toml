@@ -62,5 +62,6 @@ uuid = { version = "1.2", features = ["serde", "v4"] }
 walkdir = "2"
 xdg = "2.4"
 oauth2 = "4.4"
+comfy-table = "7.1.0"
 
 [patch.crates-io]
