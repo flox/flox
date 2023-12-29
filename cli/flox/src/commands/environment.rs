@@ -8,6 +8,7 @@ use std::str::FromStr;
 
 use anyhow::{anyhow, bail, Context, Result};
 use bpaf::Bpaf;
+use comfy_table::Table;
 use flox_rust_sdk::flox::{Auth0Client, EnvironmentName, EnvironmentOwner, EnvironmentRef, Flox};
 use flox_rust_sdk::models::environment::managed_environment::{
     ManagedEnvironment,
@@ -511,6 +512,9 @@ pub enum ListMode {
 
     #[bpaf(long, short)]
     Extended,
+
+    #[bpaf(long, short)]
+    Detail,
 }
 
 impl List {
@@ -552,6 +556,42 @@ impl List {
                             version = p.info.version
                         )
                     });
+            },
+            ListMode::Detail => {
+                let lockfile_path = env
+                    .lockfile_path(&flox)
+                    .context("Could not get lockfile path")?;
+                if !lockfile_path.exists() {
+                    bail!("No lockfile found for environment, maybe it has not yet been built?");
+                }
+
+                let lockfile: TypedLockedManifest =
+                    serde_json::from_str(std::fs::read_to_string(lockfile_path)?.as_str())?;
+
+                let mut table = Table::new();
+                table.set_header(vec![
+                    "Package ID",
+                    "Path",
+                    "pname",
+                    "Version",
+                    "License",
+                    "Unfree",
+                    "Broken",
+                ]);
+
+                for p in lockfile.list_packages(&flox.system).into_iter() {
+                    table.add_row(vec![
+                        p.name,
+                        p.path,
+                        p.info.pname,
+                        p.info.version,
+                        p.info.license.unwrap_or_else(|| "N/A".to_string()),
+                        p.info.unfree.to_string(),
+                        p.info.broken.to_string(),
+                    ]);
+                }
+
+                println!("{table}");
             },
         }
 
