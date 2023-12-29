@@ -120,6 +120,7 @@ Environment::getPkgDbRegistry()
             {
               input->scrapeSystems( this->getSystems() );
             }
+          lock.release();
         }
     }
   return static_cast<nix::ref<Registry<pkgdb::PkgDbInputFactory>>>( this->dbs );

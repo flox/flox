@@ -90,6 +90,7 @@ ScrapeCommand::run()
       this->input->scrapePrefix( this->attrPath );
     }
 
+  lock.release();
   /* Print path to database. */
   std::cout << ( static_cast<std::string>( *this->dbPath ) ) << std::endl;
   return EXIT_SUCCESS; /* GG, GG */

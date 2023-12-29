@@ -468,19 +468,42 @@ DbLock::inSameDirAs( const std::filesystem::path & file )
 
 
 /* -------------------------------------------------------------------------- */
-DbLock::~DbLock()
+
+void
+DbLock::release()
 {
   /* Tell the heartbeat thread to stop */
+  debugLog( "setting heartbeat thread shutdown flag: pid="
+            + std::to_string( this->getPID() ) );
   shouldStopFlag.test_and_set( std::memory_order_seq_cst );
+  /* This thread should be here if we needed to create the database. If the
+   * database already existed then this will be std::nullopt. */
   if ( this->heartbeatThread.has_value() )
     {
-      /* This thread should always be here, but if by some chance it's not it's
-       * better to check than just deref the optional and crash. */
       this->heartbeatThread->join();
+      this->heartbeatThread = std::nullopt;
     }
 
   /* Delete the db lock */
-  std::filesystem::remove( this->getDbLockPath() );
+  debugLog( "deleting the db lock: path=" + this->getDbLockPath().string() );
+  try
+    {
+      std::filesystem::remove( this->getDbLockPath() );
+    }
+  catch ( const std::filesystem::filesystem_error & e )
+    {
+      /* Most likely it was already deleted. */
+      debugLog( "failed to delete the db lock: pid="
+                + std::to_string( this->getPID() ) + " msg='" + e.what()
+                + "'" );
+    }
+}
+
+
+/* -------------------------------------------------------------------------- */
+DbLock::~DbLock()
+{
+  if ( this->heartbeatThread.has_value() ) { this->release(); }
 }
 
 void
@@ -693,11 +716,14 @@ DbLock::wasAbleToCreateDbLock()
 {
   debugLog( "checking db lock existence: path=" + this->getDbLockPath().string()
             + " pid=" + std::to_string( this->getPID() ) );
-  auto f = ::open( this->getDbLockPath().c_str(), O_WRONLY | O_CREAT | O_EXCL );
+  auto f = ::open( this->getDbLockPath().c_str(),
+                   O_WRONLY | O_CREAT | O_EXCL,
+                   0644 );
   if ( f < 0 )
     {
-      debugLog( "db lock existed, not creating one: pid="
-                + std::to_string( this->getPID() ) );
+      debugLog( "couldn't create db lock: pid="
+                + std::to_string( this->getPID() ) + " msg='"
+                + std::strerror( errno ) + "'" );
       return false;
     }
   ::close( f );

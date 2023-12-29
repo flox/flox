@@ -619,6 +619,13 @@ public:
    */
   DbLockState
   acquire();
+
+  /**
+   * @brief Releases the lock by terminating the heartbeat thread and deleting
+   * the db lock.
+   */
+  void
+  release();
 };
 
 /**
