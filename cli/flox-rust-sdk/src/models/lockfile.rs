@@ -1,6 +1,9 @@
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use flox_types::catalog::System;
+use flox_types::version::Version;
 use log::debug;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -53,7 +56,7 @@ impl LockedManifest {
         gcroot_out_link_path: Option<&Path>,
     ) -> Result<PathBuf, LockedManifestError> {
         let mut pkgdb_cmd = Command::new(pkgdb);
-        pkgdb_cmd.arg("buildenv").arg(&self.0.to_string());
+        pkgdb_cmd.arg("buildenv").arg(&self.to_string());
 
         if let Some(gcroot_out_link_path) = gcroot_out_link_path {
             pkgdb_cmd.args(["--out-link", &gcroot_out_link_path.to_string_lossy()]);
@@ -75,6 +78,47 @@ impl ToString for LockedManifest {
     }
 }
 
+#[derive(Debug, Serialize, Clone, Deserialize, PartialEq)]
+pub struct TypedLockedManifest {
+    #[serde(rename = "lockfile-version")]
+    lockfile_version: Version<0>,
+
+    manifest: Manifest,
+    packages: BTreeMap<System, BTreeMap<String, LockedPackage>>,
+}
+
+#[derive(Debug, Serialize, Clone, Deserialize, PartialEq)]
+struct Manifest {
+    install: BTreeMap<String, InstallSpec>,
+}
+
+#[derive(Debug, Serialize, Clone, Deserialize, PartialEq)]
+struct InstallSpec {
+    path: String,
+}
+
+#[derive(Debug, Serialize, Clone, Deserialize, PartialEq)]
+struct LockedPackage {
+    info: PackageInfo,
+}
+
+#[derive(Debug, Serialize, Clone, Deserialize, PartialEq)]
+pub struct PackageInfo {
+    pub broken: bool,
+    pub license: Option<String>,
+    pub pname: String,
+    pub unfree: bool,
+    pub version: String,
+}
+
+impl TryFrom<LockedManifest> for TypedLockedManifest {
+    type Error = LockedManifestError;
+
+    fn try_from(value: LockedManifest) -> Result<Self, Self::Error> {
+        serde_json::from_value(value.0).map_err(LockedManifestError::ParseLockedManifest)
+    }
+}
+
 #[derive(Debug, Error)]
 pub enum LockedManifestError {
     #[error("failed to lock manifest")]
@@ -87,4 +131,7 @@ pub enum LockedManifestError {
     BadManifestPath(#[source] std::io::Error, PathBuf),
     #[error(transparent)]
     CallPkgDbError(#[from] CallPkgDbError),
+    /// when parsing the contents of a locked manifest into a [TypedLockedManifest]
+    #[error("failed to parse contents of locked manifest")]
+    ParseLockedManifest(#[source] serde_json::Error),
 }
