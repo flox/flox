@@ -17,6 +17,7 @@ use flox_rust_sdk::models::environment::path_environment::{self, PathEnvironment
 use flox_rust_sdk::models::environment::{
     global_manifest_lockfile_path,
     global_manifest_path,
+    CanonicalPath,
     CoreEnvironmentError,
     EditResult,
     Environment,
@@ -506,6 +507,9 @@ pub enum ListMode {
     /// Show only the names of the packages installed in the environment
     #[bpaf(long, short)]
     NameOnly,
+
+    #[bpaf(long, short)]
+    Extended,
 }
 
 impl List {
@@ -521,6 +525,11 @@ impl List {
         match self.list_mode {
             ListMode::Config => println!("{}", manifest_contents),
             ListMode::NameOnly => {
+                if let Some(pkgs) = list_packages(&manifest_contents)? {
+                    pkgs.iter().for_each(|pkg| println!("{}", pkg));
+                }
+            },
+            ListMode::Extended => {
                 if let Some(pkgs) = list_packages(&manifest_contents)? {
                     pkgs.iter().for_each(|pkg| println!("{}", pkg));
                 }
@@ -1265,9 +1274,8 @@ impl Update {
             .arg("--global-manifest")
             .arg(global_manifest_path(&flox));
         if lockfile_path.exists() {
-            let canonical_lockfile_path = lockfile_path.canonicalize().map_err(|e| {
-                CoreEnvironmentError::BadLockfilePath(e, lockfile_path.to_path_buf())
-            })?;
+            let canonical_lockfile_path = CanonicalPath::new(&lockfile_path)
+                .map_err(CoreEnvironmentError::BadLockfilePath)?;
             pkgdb_cmd.arg("--lockfile").arg(canonical_lockfile_path);
         }
         pkgdb_cmd.args(self.inputs);
