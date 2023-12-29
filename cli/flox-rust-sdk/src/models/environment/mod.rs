@@ -327,7 +327,7 @@ pub enum EnvironmentError2 {
     // * three distinct errors map to this
     #[error("could not initialize environment")]
     InitEnv(#[source] std::io::Error),
-    #[error("could not find environment definiton directory")]
+    #[error("could not find environment definition directory")]
     EnvNotFound,
     #[error("an environment already exists at {0:?}")]
     EnvironmentExists(PathBuf),
