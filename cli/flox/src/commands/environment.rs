@@ -33,6 +33,7 @@ use flox_rust_sdk::models::environment::{
     FLOX_PROMPT_ENVIRONMENTS_VAR,
 };
 use flox_rust_sdk::models::floxmetav2::FloxmetaV2Error;
+use flox_rust_sdk::models::lockfile::TypedLockedManifest;
 use flox_rust_sdk::models::manifest::{list_packages, PackageToInstall};
 use flox_rust_sdk::models::pkgdb::{call_pkgdb, UpdateResult, PKGDB_BIN};
 use flox_rust_sdk::nix::command::StoreGc;
@@ -530,9 +531,27 @@ impl List {
                 }
             },
             ListMode::Extended => {
-                if let Some(pkgs) = list_packages(&manifest_contents)? {
-                    pkgs.iter().for_each(|pkg| println!("{}", pkg));
+                let lockfile_path = env
+                    .lockfile_path(&flox)
+                    .context("Could not get lockfile path")?;
+                if !lockfile_path.exists() {
+                    bail!("No lockfile found for environment, maybe it has not yet been built?");
                 }
+
+                let lockfile: TypedLockedManifest =
+                    serde_json::from_str(std::fs::read_to_string(lockfile_path)?.as_str())?;
+
+                lockfile
+                    .list_packages(&flox.system)
+                    .into_iter()
+                    .for_each(|p| {
+                        println!(
+                            "{id}: {path} ({version})",
+                            id = p.name,
+                            path = p.path,
+                            version = p.info.version
+                        )
+                    });
             },
         }
 
