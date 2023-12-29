@@ -149,7 +149,7 @@ VERSION := $(file < $(PKGDB_ROOT)/version)
 
 # Files used by `pkgdb buildenv' need to be added to the `nix' store.
 PROFILE_D_SCRIPTS_DIR ?= $(shell                            \
-  $(NIX) nix build .\#flox-pkgdb.envs.PROFILE_D_SCRIPTS_DIR --print-out-paths)
+  $(NIX) build .\#flox-pkgdb.envs.PROFILE_D_SCRIPTS_DIR --print-out-paths)
 SET_PROMPT_BASH_SH ?= $(shell                                                  \
   $(NIX) store add-path -n set-prompt-bash.sh src/buildenv/set-prompt-bash.sh)
 
