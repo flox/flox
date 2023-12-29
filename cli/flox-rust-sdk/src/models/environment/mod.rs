@@ -17,6 +17,7 @@ use self::managed_environment::ManagedEnvironmentError;
 use self::remote_environment::RemoteEnvironmentError;
 use super::environment_ref::{EnvironmentName, EnvironmentOwner};
 use super::flox_package::FloxTriple;
+use super::lockfile::Lockfile;
 use super::manifest::PackageToInstall;
 use super::pkgdb::UpgradeResult;
 use crate::flox::{Flox, Floxhub};
@@ -55,6 +56,8 @@ pub const ENV_DIR_NAME: &str = "env";
 pub const FLOX_ENV_VAR: &str = "FLOX_ENV";
 pub const FLOX_ACTIVE_ENVIRONMENTS_VAR: &str = "FLOX_ACTIVE_ENVIRONMENTS";
 pub const FLOX_PROMPT_ENVIRONMENTS_VAR: &str = "FLOX_PROMPT_ENVIRONMENTS";
+
+pub type UpdateResult = (Option<Lockfile>, Lockfile);
 
 /// A path that is guaranteed to be canonicalized
 ///
@@ -127,7 +130,11 @@ pub trait Environment: Send {
     fn edit(&mut self, flox: &Flox, contents: String) -> Result<EditResult, EnvironmentError2>;
 
     /// Atomically update this environment's inputs
-    fn update(&mut self, flox: &Flox, inputs: Vec<String>) -> Result<String, EnvironmentError2>;
+    fn update(
+        &mut self,
+        flox: &Flox,
+        inputs: Vec<String>,
+    ) -> Result<UpdateResult, EnvironmentError2>;
 
     /// Atomically upgrade packages in this environment
     fn upgrade(

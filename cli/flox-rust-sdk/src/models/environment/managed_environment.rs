@@ -20,6 +20,7 @@ use super::{
     EnvironmentError2,
     InstallationAttempt,
     ManagedPointer,
+    UpdateResult,
     ENVIRONMENT_POINTER_FILENAME,
 };
 use crate::flox::Flox;
@@ -233,7 +234,11 @@ impl Environment for ManagedEnvironment {
     }
 
     /// Atomically update this environment's inputs
-    fn update(&mut self, flox: &Flox, inputs: Vec<String>) -> Result<String, EnvironmentError2> {
+    fn update(
+        &mut self,
+        flox: &Flox,
+        inputs: Vec<String>,
+    ) -> Result<UpdateResult, EnvironmentError2> {
         let mut generations = self
             .generations()
             .writable(flox.temp_dir.clone())
@@ -245,7 +250,8 @@ impl Environment for ManagedEnvironment {
 
         let message = temporary.update(flox, inputs)?;
 
-        let metadata = format!("updated environment: {message}");
+        // TODO: better message
+        let metadata = "updated environment".to_string();
 
         generations
             .add_generation(&mut temporary, metadata)
