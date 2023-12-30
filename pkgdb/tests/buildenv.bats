@@ -139,6 +139,29 @@ setup_file() {
 }
 
 # ---------------------------------------------------------------------------- #
+
+# Single quotes in variables should be escaped.
+# Similarly accidentally escaped single quotes like
+#
+# [vars]
+# singlequoteescaped = "\\'baz"
+#
+# should be escaped and printed as  \'baz  (literally)
+# bats test_tags=buildenv:vars
+@test "Environment escapes variables" {
+  run "$PKGDB_BIN" buildenv "$LOCKFILES/vars_escape/manifest.lock" \
+    --out-link "$BATS_TEST_TMPDIR/env"
+  assert_success
+
+  ls -lAR "$BATS_TEST_TMPDIR/env" >&3
+
+  assert "$TEST" -f "$BATS_TEST_TMPDIR/env/activate/bash"
+  run "$CAT" "$BATS_TEST_TMPDIR/env/activate/bash"
+  assert_line "export singlequotes=''\''bar'\'''"
+  assert_line "export singlequoteescaped='\'\''baz'"
+}
+
+# ---------------------------------------------------------------------------- #
 #
 #
 #
