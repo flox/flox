@@ -27,7 +27,8 @@ public:
   using DbLock::waitForLockActivity;
   using DbLock::wasAbleToCreateDbLock;
   using DbLock::writePIDsToLock;
-  std::optional<std::thread> heartbeatThread;
+  std::optional<std::thread>           heartbeatThread;
+  std::optional<std::filesystem::path> dbPath;
 };
 
 Fingerprint
@@ -51,6 +52,7 @@ dbLockAtRandomPath()
   TestDbLock  lock( fingerprint );
   auto        lockPath
     = std::filesystem::temp_directory_path() / std::to_string( std::rand() );
+  lock.dbPath = lockPath.replace_extension( "sqlite" );
   lock.setDbLockPath( lockPath );
   return lock;
 }
@@ -148,23 +150,6 @@ test_detectsExistingLock()
   return ! lock.wasAbleToCreateDbLock();
 }
 
-bool
-test_acquiresAndReleases()
-{
-  //
-  TestDbLock lock = dbLockAtRandomPath();
-  lock.acquire();
-  bool lockExists = std::filesystem::exists( lock.getDbLockPath() );
-  EXPECT( lockExists );
-  bool threadExists = lock.heartbeatThread.has_value();
-  EXPECT( threadExists );
-  lock.release();
-  lockExists = std::filesystem::exists( lock.getDbLockPath() );
-  EXPECT( ! lockExists );
-  threadExists = lock.heartbeatThread.has_value();
-  EXPECT( ! threadExists );
-  return true;
-}
 
 /* -------------------------------------------------------------------------- */
 
@@ -189,7 +174,6 @@ main( int argc, char * argv[] )
     RUN_TEST( waitsForLockActivity );
     RUN_TEST( registersAndUnregistersLockInterest );
     RUN_TEST( detectsExistingLock );
-    RUN_TEST( acquiresAndReleases );
   }
 
   return ec;

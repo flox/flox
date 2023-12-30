@@ -490,7 +490,7 @@ protected:
   /**
    * @brief Returns the PID of this process.
    */
-  pid_t
+  [[nodiscard]] pid_t
   getPID();
 
   /**
@@ -509,7 +509,7 @@ protected:
    * @brief Reads the PIDs in the db lock. Returns @a std::nullopt if the db
    * lock no longer exists.
    */
-  std::optional<std::vector<pid_t>>
+  [[nodiscard]] std::optional<std::vector<pid_t>>
   readPIDsFromLock();
 
   /**
@@ -537,7 +537,7 @@ protected:
    * database was created successfully, otherwise returns the last @a
    * std::filesystem::file_time_type at which the lock was touched.
    */
-  DbLockActivity
+  [[nodiscard]] DbLockActivity
   waitForLockActivity();
 
   /**
@@ -545,7 +545,7 @@ protected:
    * This only needs to be called if @a DbLock::waitForLockActivity returned
    * something other DB_LOCK_ACTIVITY_WRITER_DIED.
    */
-  bool
+  [[nodiscard]] bool
   shouldTakeOverDbCreation();
 
   /**
@@ -560,8 +560,15 @@ protected:
    * expect that anyone else could delete the lockfile, so it will crash if
    * another process deletes it out from under it.
    */
-  bool
+  [[nodiscard]] bool
   wasAbleToCreateDbLock();
+
+  /**
+   * @brief Returns a temporary db lock path on the same filesystem as the
+   * current db lock.
+   */
+  [[nodiscard]] std::filesystem::path
+  tempDbLockPath();
 
 public:
 
@@ -617,7 +624,7 @@ public:
    * that the original writer crashed while creating the database and it's now
    * your responsibility to create it.
    */
-  DbLockState
+  [[nodiscard]] DbLockState
   acquire();
 
   /**

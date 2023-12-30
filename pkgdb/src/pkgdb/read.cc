@@ -501,10 +501,11 @@ DbLock::release()
 
 
 /* -------------------------------------------------------------------------- */
-DbLock::~DbLock()
-{
-  if ( this->heartbeatThread.has_value() ) { this->release(); }
-}
+
+DbLock::~DbLock() { this->release(); }
+
+
+/* -------------------------------------------------------------------------- */
 
 void
 DbLock::spawnHeartbeatThread( std::filesystem::path db_lock,
@@ -579,23 +580,43 @@ DbLock::getPID()
 
 /* -------------------------------------------------------------------------- */
 
+std::filesystem::path
+DbLock::tempDbLockPath()
+{
+  //
+  auto path = this->getDbLockPath();
+  path.replace_filename(
+    "XXXXXX" );  // mkstemp replaces Xs with random characters
+  auto f = ::mkstemp( (char *) path.c_str() );
+  if ( f < 0 )
+    {
+      throw DbLockingException( "couldn't create temporary db lock",
+                                std::strerror( errno ) );
+    }
+  ::close( f );
+  /* mkstemp creates the file and we just want the path, so delete the file
+   * before returning the path otherwise trying to copy to this path will fail
+   * ('file exists'). */
+  std::filesystem::remove( path );
+  return path;
+}
+
+
+/* -------------------------------------------------------------------------- */
+
 void
 DbLock::writePIDsToLock( const std::vector<pid_t> & pids )
 {
   /* Create a path to a non-existent temporary file, copy the contents of the
    * existing lockfile to the temp file, write to it, then mv it back. */
-  auto          tmpPath = tempfilePath();
+  auto          tmpPath = this->tempDbLockPath();
   std::ofstream tmpFile;
-  tmpFile.open( tmpPath, std::ios_base::app );
+  tmpFile.open( tmpPath, std::ios_base::out );
   if ( ! tmpFile.good() )
     {
       throw DbLockingException( "failed to open temporary db lock copy" );
     }
-  for ( auto & pid : pids )
-    {
-      tmpFile << std::to_string( pid ) << std::endl;
-      //
-    }
+  for ( auto & pid : pids ) { tmpFile << std::to_string( pid ) << std::endl; }
   std::filesystem::rename( tmpPath, this->getDbLockPath() );
   return;
 }
