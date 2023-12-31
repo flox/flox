@@ -100,6 +100,7 @@ struct InstallSpec {
 #[derive(Debug, Serialize, Clone, Deserialize, PartialEq)]
 struct LockedPackage {
     info: PackageInfo,
+    priority: usize,
 }
 
 #[derive(Debug, Serialize, Clone, Deserialize, PartialEq)]
@@ -130,6 +131,7 @@ impl TypedLockedManifest {
                     // SAFETY: we know that the package is in the manifest because it is locked
                     path: self.manifest.install.get(name).unwrap().path.clone(),
                     info: locked_package.info.clone(),
+                    priority: locked_package.priority,
                 });
             }
         }
@@ -141,6 +143,7 @@ pub struct InstalledPackage {
     pub name: String,
     pub path: String,
     pub info: PackageInfo,
+    pub priority: usize,
 }
 
 #[derive(Debug, Error)]
