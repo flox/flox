@@ -34,7 +34,7 @@ use flox_rust_sdk::models::environment::{
     FLOX_PROMPT_ENVIRONMENTS_VAR,
 };
 use flox_rust_sdk::models::floxmetav2::FloxmetaV2Error;
-use flox_rust_sdk::models::lockfile::TypedLockedManifest;
+use flox_rust_sdk::models::lockfile::{InstalledPackage, PackageInfo, TypedLockedManifest};
 use flox_rust_sdk::models::manifest::{list_packages, PackageToInstall};
 use flox_rust_sdk::models::pkgdb::{call_pkgdb, UpdateResult, PKGDB_BIN};
 use flox_rust_sdk::nix::command::StoreGc;
@@ -514,6 +514,9 @@ pub enum ListMode {
     Extended,
 
     #[bpaf(long, short)]
+    Table,
+
+    #[bpaf(long, short)]
     Detail,
 }
 
@@ -535,7 +538,8 @@ impl List {
                 }
             },
             ListMode::Extended => self.print_extended(&flox, &*env)?,
-            ListMode::Detail => self.print_table(&flox, &*env)?,
+            ListMode::Table => self.print_table(&flox, &*env)?,
+            ListMode::Detail => self.print_detail(&flox, &*env)?,
         }
 
         Ok(())
@@ -603,6 +607,52 @@ impl List {
         }
 
         println!("{table}");
+
+        Ok(())
+    }
+
+    fn print_detail(&self, flox: &Flox, env: &dyn Environment) -> Result<()> {
+        let lockfile_path = env
+            .lockfile_path(flox)
+            .context("Could not get lockfile path")?;
+        if !lockfile_path.exists() {
+            bail!("No lockfile found for environment, maybe it has not yet been built?");
+        }
+
+        let lockfile: TypedLockedManifest =
+            serde_json::from_str(std::fs::read_to_string(lockfile_path)?.as_str())?;
+
+        for InstalledPackage {
+            name,
+            path,
+            info:
+                PackageInfo {
+                    broken,
+                    license,
+                    pname,
+                    unfree,
+                    version,
+                },
+            priority,
+        } in lockfile
+            .list_packages(&flox.system)
+            .into_iter()
+            .sorted_by_key(|p| p.priority)
+        {
+            let message = formatdoc! {"
+                {name}: ({pname})
+                  Path:     {path}
+                  Priority: {priority}
+                  Version:  {version}
+                  License:  {license}
+                  Unfree:   {unfree}
+                  Broken:   {broken}
+                ",
+                license = license.unwrap_or_else(|| "N/A".to_string()),
+            };
+
+            println!("{message}");
+        }
 
         Ok(())
     }
