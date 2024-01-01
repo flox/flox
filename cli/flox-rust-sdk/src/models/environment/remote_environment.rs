@@ -1,3 +1,4 @@
+use std::fs;
 use std::path::{Path, PathBuf};
 
 use flox_types::version::Version;
@@ -13,6 +14,8 @@ use super::{
     Environment,
     EnvironmentError2,
     InstallationAttempt,
+    DOT_FLOX,
+    ENVIRONMENT_POINTER_FILENAME,
 };
 use crate::flox::{EnvironmentOwner, EnvironmentRef, Flox};
 use crate::models::environment_ref::EnvironmentName;
@@ -33,6 +36,9 @@ pub enum RemoteEnvironmentError {
 
     #[error("invalid temporary path for new environment")]
     InvalidTempPath(#[source] CanonicalizeError),
+
+    #[error("could not create temporary environment")]
+    CreateTempDotFlox(#[source] std::io::Error),
 }
 
 #[derive(Debug)]
@@ -65,8 +71,18 @@ impl RemoteEnvironment {
             Err(e) => Err(RemoteEnvironmentError::GetLatestVersion(e))?,
         };
 
+        let path = path.as_ref().join(DOT_FLOX);
+        fs::create_dir_all(&path).map_err(RemoteEnvironmentError::CreateTempDotFlox)?;
+
         let dot_flox_path =
             CanonicalPath::new(path).map_err(RemoteEnvironmentError::InvalidTempPath)?;
+
+        let pointer_content = serde_json::to_string_pretty(&pointer).unwrap();
+        fs::write(
+            dot_flox_path.join(ENVIRONMENT_POINTER_FILENAME),
+            pointer_content,
+        )
+        .unwrap();
 
         let out_link =
             gcroots_dir(flox, &pointer.owner).join(remote_branch_name(&flox.system, &pointer));
