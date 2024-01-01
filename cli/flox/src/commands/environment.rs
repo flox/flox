@@ -497,7 +497,7 @@ impl Init {
 pub struct List {
     #[bpaf(external(environment_select), fallback(Default::default()))]
     environment: EnvironmentSelect,
-    #[bpaf(external(list_mode), fallback(ListMode::NameOnly))]
+    #[bpaf(external(list_mode), fallback(ListMode::Extended))]
     list_mode: ListMode,
 }
 
@@ -510,7 +510,7 @@ pub enum ListMode {
     #[bpaf(long("name"), short)]
     NameOnly,
 
-    /// Show names, paths, and versions
+    /// Show names, paths, and versions (default)
     #[bpaf(long, short)]
     Extended,
 
