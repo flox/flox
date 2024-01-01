@@ -527,7 +527,7 @@ impl List {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("list");
 
-        let env = self
+        let mut env = self
             .environment
             .detect_concrete_environment(&flox, "list using")?
             .into_dyn_environment();
@@ -540,20 +540,26 @@ impl List {
                     pkgs.iter().for_each(|pkg| println!("{}", pkg));
                 }
             },
-            ListMode::Extended => self.print_extended(&flox, &*env)?,
-            ListMode::Table => self.print_table(&flox, &*env)?,
-            ListMode::Detail => self.print_detail(&flox, &*env)?,
+            ListMode::Extended => self.print_extended(&flox, &mut *env)?,
+            ListMode::Table => self.print_table(&flox, &mut *env)?,
+            ListMode::Detail => self.print_detail(&flox, &mut *env)?,
         }
 
         Ok(())
     }
 
-    fn print_extended(&self, flox: &Flox, env: &dyn Environment) -> Result<()> {
+    fn print_extended(&self, flox: &Flox, env: &mut dyn Environment) -> Result<()> {
         let lockfile_path = env
             .lockfile_path(flox)
             .context("Could not get lockfile path")?;
         if !lockfile_path.exists() {
-            bail!("No lockfile found for environment, maybe it has not yet been built?");
+            Dialog {
+                message: "No lockfile found for environment, building...",
+                help_message: None,
+                typed: Spinner::new(|| env.build(flox)),
+            }
+            .spin()
+            .context("Failed to build environment")?;
         }
 
         let lockfile: TypedLockedManifest =
@@ -573,12 +579,18 @@ impl List {
         Ok(())
     }
 
-    fn print_table(&self, flox: &Flox, env: &dyn Environment) -> Result<()> {
+    fn print_table(&self, flox: &Flox, env: &mut dyn Environment) -> Result<()> {
         let lockfile_path = env
             .lockfile_path(flox)
             .context("Could not get lockfile path")?;
         if !lockfile_path.exists() {
-            bail!("No lockfile found for environment, maybe it has not yet been built?");
+            Dialog {
+                message: "No lockfile found for environment, building...",
+                help_message: None,
+                typed: Spinner::new(|| env.build(flox)),
+            }
+            .spin()
+            .context("Failed to build environment")?;
         }
 
         let lockfile: TypedLockedManifest =
@@ -614,12 +626,18 @@ impl List {
         Ok(())
     }
 
-    fn print_detail(&self, flox: &Flox, env: &dyn Environment) -> Result<()> {
+    fn print_detail(&self, flox: &Flox, env: &mut dyn Environment) -> Result<()> {
         let lockfile_path = env
             .lockfile_path(flox)
             .context("Could not get lockfile path")?;
         if !lockfile_path.exists() {
-            bail!("No lockfile found for environment, maybe it has not yet been built?");
+            Dialog {
+                message: "No lockfile found for environment, building...",
+                help_message: None,
+                typed: Spinner::new(|| env.build(flox)),
+            }
+            .spin()
+            .context("Failed to build environment")?;
         }
 
         let lockfile: TypedLockedManifest =
