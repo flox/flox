@@ -506,16 +506,19 @@ pub enum ListMode {
     /// Show the raw contents of the manifest
     #[bpaf(long, short)]
     Config,
-    /// Show only the names of the packages installed in the environment
-    #[bpaf(long, short)]
+    /// Show only names
+    #[bpaf(long("name"), short)]
     NameOnly,
 
+    /// Show names, paths, and versions
     #[bpaf(long, short)]
     Extended,
 
+    /// Show detailed information as a table
     #[bpaf(long, short)]
     Table,
 
+    /// Show detailed information ain blocks
     #[bpaf(long, short)]
     Detail,
 }
