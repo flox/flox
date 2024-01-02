@@ -380,11 +380,11 @@ PkgDb::setPrefixDone( row_id prefixId, bool done )
   cmd.bind( 2, static_cast<long long>( prefixId ) );
   if ( sql_rc rcode = cmd.execute(); isSQLError( rcode ) )
     {
-      throw PkgDbException( nix::fmt(
-        "failed to set AttrSets.done for subtree '%s':(%d) %s",
-        nix::concatStringsSep( ".", this->getAttrSetPath( prefixId ) ),
-        rcode,
-        this->db.error_msg() ) );
+      throw PkgDbException(
+        nix::fmt( "failed to set AttrSets.done for subtree '%s':(%d) %s",
+                  concatStringsSep( ".", this->getAttrSetPath( prefixId ) ),
+                  rcode,
+                  this->db.error_msg() ) );
     }
 }
 
@@ -416,7 +416,7 @@ PkgDb::scrape( nix::SymbolTable & syms, const Target & target, Todos & todo )
                      nix::lvlInfo,
                      nix::actUnknown,
                      nix::fmt( "evaluating package set '%s'",
-                               nix::concatStringsSep( ".", prefix ) ) );
+                               concatStringsSep( ".", prefix ) ) );
 
   /* Scrape loop over attrs */
   for ( nix::Symbol & aname : cursor->getAttrs() )
@@ -426,7 +426,7 @@ PkgDb::scrape( nix::SymbolTable & syms, const Target & target, Todos & todo )
       /* Used for logging, but can skip it at low verbosity levels. */
       const std::string pathS
         = ( nix::lvlTalkative <= nix::verbosity )
-            ? nix::concatStringsSep( ".", prefix ) + "." + syms[aname]
+            ? concatStringsSep( ".", prefix ) + "." + syms[aname]
             : "";
 
       nix::Activity act( *nix::logger,

@@ -303,6 +303,7 @@ extract_json_errmsg( nlohmann::json::exception & err )
   return userFriendly;
 }
 
+
 /* -------------------------------------------------------------------------- */
 
 std::string
@@ -324,21 +325,6 @@ displayableGlobbedPath( const flox::AttrPathGlob & attrs )
   return s;
 }
 
-/* -------------------------------------------------------------------------- */
-
-
-std::string
-joinWithDelim( const std::vector<std::string> & strings,
-               const std::string &              delim )
-{
-  auto fold
-    = [&]( std::string acc, std::string elem ) { return acc + delim + elem; };
-  std::string joined = std::accumulate( std::next( strings.begin() ),
-                                        strings.end(),
-                                        strings[0],
-                                        fold );
-  return joined;
-}
 
 /* -------------------------------------------------------------------------- */
 
@@ -377,6 +363,9 @@ errorLog( const std::string & msg )
 {
   printLog( nix::Verbosity::lvlError, msg );
 }
+
+
+/* -------------------------------------------------------------------------- */
 
 }  // namespace flox
 
