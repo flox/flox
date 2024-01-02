@@ -233,6 +233,8 @@ public:
   {
     return this->name;
   }
+
+
 }; /* End struct `PkgDbInput' */
 
 
