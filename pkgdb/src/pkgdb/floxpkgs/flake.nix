@@ -3,29 +3,29 @@
 #
 #
 # ---------------------------------------------------------------------------- #
-
 {
-
   # -------------------------------------------------------------------------- #
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/release-23.05";
 
   # -------------------------------------------------------------------------- #
 
-  outputs = { self, nixpkgs, ... }: let
-
+  outputs = {
+    self,
+    nixpkgs,
+    ...
+  }: let
     # ------------------------------------------------------------------------ #
-
     config = {
       allowUnfree = true;
       allowBroken = true;
-    };  # End `config'
+    }; # End `config'
 
     # allowRecursive    = [["legacyPackages" "x86_64-linux" "darwin"]]
     # disallowRecursive = [["legacyPackages" "x86_64-linux" "python3"]]
     # allowPackage      = [["legacyPackages" "x86_64-linux" "python3" "pip"]]
     # disallowPackage   = [["legacyPackages" "x86_64-linux" "gcc"]]
-    rules = builtins.fromJSON ( builtins.readFile ./rules.json );
+    rules = builtins.fromJSON (builtins.readFile ./rules.json);
 
     # ------------------------------------------------------------------------ #
 
@@ -41,13 +41,16 @@
       # Type:
       #   setAttrAt :: [String] -> AttrSet -> AttrSet
       getAttrAt = attrPath: attrSet: let
-        len       = builtins.length attrPath;
-        attrName  = builtins.head attrPath;
+        len = builtins.length attrPath;
+        attrName = builtins.head attrPath;
         attrValue = builtins.getAttr attrName attrSet;
-        subPath   = builtins.tail attrPath;
-      in if len == 0 then attrSet else
-         if len == 1 then attrValue else
-         getAttrAt subPath attrValue;
+        subPath = builtins.tail attrPath;
+      in
+        if len == 0
+        then attrSet
+        else if len == 1
+        then attrValue
+        else getAttrAt subPath attrValue;
 
       # setAttrAt attrPath value attrSet
       # --------------------------------
@@ -61,13 +64,18 @@
       # Type:
       #   setAttrAt :: [String] -> Any   -> AttrSet -> AttrSet
       setAttrAt = attrPath: value: attrSet: let
-        len       = builtins.length attrPath;
-        attrName  = builtins.head attrPath;
+        len = builtins.length attrPath;
+        attrName = builtins.head attrPath;
         attrValue = attrSet.${attrName} or {};
-        subPath   = builtins.tail attrPath;
-      in if len == 0 then attrSet else
-         if len == 1 then attrSet // { "${attrPath}" = value; } else
-          attrSet // {
+        subPath = builtins.tail attrPath;
+      in
+        if len == 0
+        then attrSet
+        else if len == 1
+        then attrSet // {"${attrPath}" = value;}
+        else
+          attrSet
+          // {
             ${attrName} = setAttrByPath subPath value attrValue;
           };
 
@@ -82,14 +90,20 @@
       # Type:
       #   setAttrAt :: [String] -> Any   -> AttrSet -> AttrSet
       removeAttrAt = attrPath: attrSet: let
-        len       = builtins.length attrPath;
-        attrName  = builtins.head attrPath;
+        len = builtins.length attrPath;
+        attrName = builtins.head attrPath;
         attrValue = builtins.getAttr attrName attrSet;
-        subPath   = builtins.tail attrPath;
-      in if len == 0 then attrSet else
-         if len == 1 then removeAttrs attrSet [attrName] else
-         if ! ( builtins.hasAttr attrName attrSet ) then attrSet else
-          attrSet // {
+        subPath = builtins.tail attrPath;
+      in
+        if len == 0
+        then attrSet
+        else if len == 1
+        then removeAttrs attrSet [attrName]
+        else if ! (builtins.hasAttr attrName attrSet)
+        then attrSet
+        else
+          attrSet
+          // {
             ${attrName} = removeAttrByPath subPath attrValue;
           };
 
@@ -112,11 +126,19 @@
       #   eachDefaultSystemMap :: ( String -> Any ) -> AttrSet
       eachDefaultSystemMap = let
         defaultSystems = [
-          "x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin"
+          "x86_64-linux"
+          "aarch64-linux"
+          "x86_64-darwin"
+          "aarch64-darwin"
         ];
-      in fn: let
-          proc = system: { name = system; value = fn system; };
-        in builtins.listToAttrs (map proc defaultSystems);
+      in
+        fn: let
+          proc = system: {
+            name = system;
+            value = fn system;
+          };
+        in
+          builtins.listToAttrs (map proc defaultSystems);
 
       # enumeratePaths attrPath
       # -----------------------
@@ -132,32 +154,30 @@
       enumeratePaths = attrPath: let
         proc = acc: attrName: let
           prev = builtins.head acc;
-        in if ( builtins.length prev ) == 0 then [attrPath] else
-           [( prev ++ [attrName] )] ++ acc;
-      in builtins.foldl' proc [] sysRules.allowPackage;
-
-
+        in
+          if (builtins.length prev) == 0
+          then [attrPath]
+          else [(prev ++ [attrName])] ++ acc;
+      in
+        builtins.foldl' proc [] sysRules.allowPackage;
     }; # End `lib'
-
-
     # ------------------------------------------------------------------------ #
-
   in {
-
     legacyPackages = let
-
       # Drop first two elements from each attribute path and handle those which
       # only apply to a single system.
       sysRules = let
         # Drop `legacyPackages' from the attribute paths.
-        systems = builtins.mapAttrs ( _: map builtins.tail ) rules;
+        systems = builtins.mapAttrs (_: map builtins.tail) rules;
         collectForSystem = system: let
           proc = acc: attrPath:
-            if builtins.elem ( builtins.head attrPath ) [system null]
-            then acc ++ [( builtins.tail attrPath )]
+            if builtins.elem (builtins.head attrPath) [system null]
+            then acc ++ [(builtins.tail attrPath)]
             else acc;
-        in builtins.foldl' proc [];
-      in builtins.mapAttrs collectForSystem systems;
+        in
+          builtins.foldl' proc [];
+      in
+        builtins.mapAttrs collectForSystem systems;
 
       # genLegacyPackages system
       # ------------------------
@@ -170,25 +190,27 @@
       # Type:
       #   genLegacyPackages :: String -> AttrSet
       genLegacyPackages = system: let
-
         # Get a configured `nixpkgs' for the given system.
-        base = import nixpkgs.outPath { inherit system config; };
+        base = import nixpkgs.outPath {inherit system config;};
 
         # Set `recurseForDerivations' to `true' for the given attribute paths.
         withAllowRecursive = let
           proc = pkgs: attrPath:
-            lib.setAttrAt ( attrPath ++ ["recurseForDerivations"] ) true pkgs;
-        in builtins.foldl proc base sysRules.allowRecursive;
+            lib.setAttrAt (attrPath ++ ["recurseForDerivations"]) true pkgs;
+        in
+          builtins.foldl proc base sysRules.allowRecursive;
 
         # Set `recurseForDerivations' to `false' for the given attribute paths.
         withDisallowRecursive = let
           proc = pkgs: attrPath: lib.removeAttrAt attrPath pkgs;
-        in builtins.foldl' proc withAllowRecursive sysRules.allowRecursive;
+        in
+          builtins.foldl' proc withAllowRecursive sysRules.allowRecursive;
 
         # Remove the given attribute paths.
         withDisallowPackage = let
           proc = pkgs: attrPath: lib.removeAttrAt attrPath pkgs;
-        in builtins.foldl' proc withDisallowRecursive sysRules.disallowPackage;
+        in
+          builtins.foldl' proc withDisallowRecursive sysRules.disallowPackage;
 
         # Add back the given attribute paths and ensure all parent paths
         # allow `recurseForDerivations'.
@@ -196,33 +218,33 @@
           proc = pkgs: attrPath: let
             # Get the value of the attribute at `attrPath' from the original
             # package set, and set it in the new package set.
-            old     = lib.getAttrAt attrPath base;
+            old = lib.getAttrAt attrPath base;
             withOld = lib.setAttrAt attrPath old pkgs;
             # Ensure all parent paths allow `recurseForDerivations'.
             withParents = let
-              parents = builtins.tail ( lib.enumeratePaths attrPath );
-              proc    = attrs: parent: let
+              parents = builtins.tail (lib.enumeratePaths attrPath);
+              proc = attrs: parent: let
                 path = parent ++ ["recurseForDerivations"];
-              in lib.setAttrAt path true attrs;
-            in builtins.foldl' proc withOld parents;
-          in withParents;
-        in builtins.foldl' proc withDisallowPackage sysRules.allowPackage;
-
-      in withAllowPackage;
-
-    in lib.eachDefaultSystemMap genLegacyPackages;
-
-
-  };  # End `outputs'
-
+              in
+                lib.setAttrAt path true attrs;
+            in
+              builtins.foldl' proc withOld parents;
+          in
+            withParents;
+        in
+          builtins.foldl' proc withDisallowPackage sysRules.allowPackage;
+      in
+        withAllowPackage;
+    in
+      lib.eachDefaultSystemMap genLegacyPackages;
+  }; # End `outputs'
 
   # -------------------------------------------------------------------------- #
-
-}  # End flake
-
-
+}
+# End flake
 # ---------------------------------------------------------------------------- #
 #
 #
 #
 # ============================================================================ #
+
