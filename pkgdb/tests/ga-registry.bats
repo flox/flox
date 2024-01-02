@@ -210,7 +210,7 @@ setup_file() {
     sh -c "$PKGDB_BIN manifest update --ga-registry                   \
                                   --lockfile '$PROJ1/manifest2.lock'  \
                                   --manifest '$PROJ1/manifest.toml'   \
-            |jq -r '.lockfile.registry.inputs.nixpkgs.from.rev';"
+            |jq -r '.registry.inputs.nixpkgs.from.rev';"
   assert_success
   assert_output "$NIXPKGS_REV"
 }
