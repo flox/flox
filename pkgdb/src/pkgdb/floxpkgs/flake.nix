@@ -29,28 +29,21 @@
 
     # ------------------------------------------------------------------------ #
 
-    lib = {
+    lib = let
       # setAttrAt attrPath attrSet
       # --------------------------------
       # Get an attribute in `attrSet` at the path specified in `attrPath`.
       #
       # Example:
-      #   getAttrAt ["a" "b"] { a = { b = 1; c = 2; }
+      #   getAttrAt ["a" "b"] { a = { b = 1; c = 2; }; }
       #   => 1
       #
       # Type:
       #   setAttrAt :: [String] -> AttrSet -> AttrSet
       getAttrAt = attrPath: attrSet: let
-        len = builtins.length attrPath;
-        attrName = builtins.head attrPath;
-        attrValue = builtins.getAttr attrName attrSet;
-        subPath = builtins.tail attrPath;
+        proc = value: attrName: builtins.getAttr attrName value;
       in
-        if len == 0
-        then attrSet
-        else if len == 1
-        then attrValue
-        else getAttrAt subPath attrValue;
+        builtins.foldl' proc attrSet attrPath;
 
       # setAttrAt attrPath value attrSet
       # --------------------------------
@@ -58,7 +51,7 @@
       # the value `value`.
       #
       # Example:
-      #   setAttrAt ["a" "b"] 3 { a = { b = 1; c = 2; }
+      #   setAttrAt ["a" "b"] 3 { a = { b = 1; c = 2; }; }
       #   => { a = { b = 3; c = 2; }; }
       #
       # Type:
@@ -72,11 +65,11 @@
         if len == 0
         then attrSet
         else if len == 1
-        then attrSet // {"${attrPath}" = value;}
+        then attrSet // {${attrName} = value;}
         else
           attrSet
           // {
-            ${attrName} = setAttrByPath subPath value attrValue;
+            ${attrName} = setAttrAt subPath value attrValue;
           };
 
       # removeAttrAt attrPath attrSet
@@ -104,7 +97,7 @@
         else
           attrSet
           // {
-            ${attrName} = removeAttrByPath subPath attrValue;
+            ${attrName} = removeAttrAt subPath attrValue;
           };
 
       # eachDefaultSystemMap fn
@@ -151,34 +144,46 @@
       #
       # Type:
       #   enumeratePaths :: [String] -> [[String]]
-      enumeratePaths = attrPath: let
+      enumeratePaths = let
         proc = acc: attrName: let
           prev = builtins.head acc;
         in
-          if (builtins.length prev) == 0
-          then [attrPath]
+          if (builtins.length acc) == 0
+          then [[attrName]]
           else [(prev ++ [attrName])] ++ acc;
       in
-        builtins.foldl' proc [] sysRules.allowPackage;
+        builtins.foldl' proc [];
+    in {
+      inherit
+        getAttrAt
+        setAttrAt
+        removeAttrAt
+        eachDefaultSystemMap
+        enumeratePaths
+        ;
     }; # End `lib'
+
+    # ------------------------------------------------------------------------ #
+
+    # Drop first two elements from each attribute path and handle those which
+    # only apply to a single system.
+    getSystemRules = system: let
+      # Drop `legacyPackages' from the attribute paths.
+      systems = builtins.mapAttrs (_: map builtins.tail) rules;
+      collectForSystem = let
+        proc = acc: attrPath:
+          if builtins.elem (builtins.head attrPath) [system null]
+          then acc ++ [(builtins.tail attrPath)]
+          else acc;
+      in
+        builtins.foldl' proc [];
+    in
+      builtins.mapAttrs (_: collectForSystem) systems;
     # ------------------------------------------------------------------------ #
   in {
-    legacyPackages = let
-      # Drop first two elements from each attribute path and handle those which
-      # only apply to a single system.
-      sysRules = let
-        # Drop `legacyPackages' from the attribute paths.
-        systems = builtins.mapAttrs (_: map builtins.tail) rules;
-        collectForSystem = system: let
-          proc = acc: attrPath:
-            if builtins.elem (builtins.head attrPath) [system null]
-            then acc ++ [(builtins.tail attrPath)]
-            else acc;
-        in
-          builtins.foldl' proc [];
-      in
-        builtins.mapAttrs collectForSystem systems;
+    inherit lib;
 
+    legacyPackages = let
       # genLegacyPackages system
       # ------------------------
       # Generate a set of legacy packages for the given system.
@@ -193,18 +198,23 @@
         # Get a configured `nixpkgs' for the given system.
         base = import nixpkgs.outPath {inherit system config;};
 
+        sysRules = getSystemRules system;
+
         # Set `recurseForDerivations' to `true' for the given attribute paths.
         withAllowRecursive = let
           proc = pkgs: attrPath:
             lib.setAttrAt (attrPath ++ ["recurseForDerivations"]) true pkgs;
+          rsl =
+            builtins.foldl' proc base sysRules.allowRecursive;
         in
-          builtins.foldl proc base sysRules.allowRecursive;
+          assert (rsl ? darwin);
+          assert rsl.darwin.recurseForDerivations; rsl;
 
         # Set `recurseForDerivations' to `false' for the given attribute paths.
         withDisallowRecursive = let
           proc = pkgs: attrPath: lib.removeAttrAt attrPath pkgs;
         in
-          builtins.foldl' proc withAllowRecursive sysRules.allowRecursive;
+          builtins.foldl' proc withAllowRecursive sysRules.disallowRecursive;
 
         # Remove the given attribute paths.
         withDisallowPackage = let
