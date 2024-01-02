@@ -148,8 +148,8 @@ endif  # ifndef TOOLCHAIN
 VERSION := $(file < $(PKGDB_ROOT)/.version)
 
 # Files used by `pkgdb buildenv' need to be added to the `nix' store.
-PROFILE_D_SCRIPT_DIR ?= $(shell                            \
-  $(NIX) store add-path -n profile.d src/buildenv/assets)
+PROFILE_D_SCRIPTS_DIR ?= $(shell                            \
+  $(NIX) build .\#flox-pkgdb.envs.PROFILE_D_SCRIPTS_DIR --print-out-paths)
 SET_PROMPT_BASH_SH ?= $(shell                                                  \
   $(NIX) store add-path -n set-prompt-bash.sh src/buildenv/set-prompt-bash.sh)
 
@@ -339,7 +339,7 @@ CXXFLAGS += '-DSEMVER_PATH="$(SEMVER_PATH)"'
 # ------------------------
 
 src/buildenv/realise.o: CXXFLAGS +=                   \
-	'-DPROFILE_D_SCRIPT_DIR="$(PROFILE_D_SCRIPT_DIR)"'
+	'-DPROFILE_D_SCRIPTS_DIR="$(PROFILE_D_SCRIPTS_DIR)"'
 
 src/buildenv/realise.o: CXXFLAGS +=               \
 	'-DSET_PROMPT_BASH_SH="$(SET_PROMPT_BASH_SH)"'

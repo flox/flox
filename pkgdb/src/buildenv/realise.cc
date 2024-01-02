@@ -35,8 +35,8 @@ namespace flox::buildenv {
 
 /* -------------------------------------------------------------------------- */
 
-#ifndef PROFILE_D_SCRIPT_DIR
-#  error "PROFILE_D_SCRIPT_DIR must be set to the path of `etc/profile.d/'"
+#ifndef PROFILE_D_SCRIPTS_DIR
+#  error "PROFILE_D_SCRIPTS_DIR must be set to the path of `etc/profile.d/'"
 #endif
 
 #ifndef SET_PROMPT_BASH_SH
@@ -281,18 +281,20 @@ createFloxEnv( nix::EvalState &     state,
 
       for ( auto [name, value] : vars.value() )
         {
-          /* Double quote value and replace " with \".
-           * Note that we could instead do something similar to what
-           * nixpkgs.lib.escapeShellArg does to disable these variables
-           * dynamically expanding at runtime. */
+          /* Single quote value and replace ' with '\''.
+           *
+           * This is the same as what nixpkgs.lib.escapeShellArg does.
+           * to disable these variables dynamically expanding at runtime.
+           *
+           * 'foo''\\''bar' is evaluated as  foo'bar  in bash/zsh*/
           size_t i = 0;
-          while ( ( i = value.find( "\"", i ) ) != std::string::npos )
+          while ( ( i = value.find( "'", i ) ) != std::string::npos )
             {
-              value.replace( i, 1, "\\\"" );
-              i += 2;
+              value.replace( i, 1, "'\\''" );
+              i += 4;
             }
 
-          commonActivate << nix::fmt( "export %s=\"%s\"", name, value )
+          commonActivate << nix::fmt( "export %s='%s'", name, value )
                          << std::endl;
         }
     }
@@ -357,9 +359,10 @@ createFloxEnv( nix::EvalState &     state,
                      buildenv::Priority() );
 
   /* Insert profile.d scripts.
-   * The store path is provided at compile time via the `PROFILE_D_SCRIPT_DIR'
+   * The store path is provided at compile time via the `PROFILE_D_SCRIPTS_DIR'
    * environment variable. */
-  auto profileScriptsPath = state.store->parseStorePath( PROFILE_D_SCRIPT_DIR );
+  auto profileScriptsPath
+    = state.store->parseStorePath( PROFILE_D_SCRIPTS_DIR );
   state.store->ensurePath( profileScriptsPath );
   references.insert( profileScriptsPath );
   pkgs.emplace_back( state.store->printStorePath( profileScriptsPath ),
