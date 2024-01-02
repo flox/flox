@@ -165,28 +165,32 @@
         enumeratePaths
         ;
     }; # End `lib'
-
-    # ------------------------------------------------------------------------ #
-
-    # Drop first two elements from each attribute path and handle those which
-    # only apply to a single system.
-    getSystemRules = system: let
-      # Drop `legacyPackages' from the attribute paths.
-      systems = builtins.mapAttrs (_: map builtins.tail) rules;
-      collectForSystem = let
-        proc = acc: attrPath:
-          if builtins.elem (builtins.head attrPath) [system null]
-          then acc ++ [(builtins.tail attrPath)]
-          else acc;
-      in
-        builtins.foldl' proc [];
-    in
-      builtins.mapAttrs (_: collectForSystem) systems;
     # ------------------------------------------------------------------------ #
   in {
     inherit lib;
 
     legacyPackages = let
+      # getSystemRules system
+      # ---------------------
+      # Drop first two elements from each attribute path and handle those which
+      # only apply to a single system.
+      #
+      # Example:
+      #   getSystemRules "x86_64-linux"
+      #   => { allowPackages = [...]; allowRecursive = [...]; ... }
+      getSystemRules = system: let
+        # Drop `legacyPackages' from the attribute paths.
+        systems = builtins.mapAttrs (_: map builtins.tail) rules;
+        collectForSystem = let
+          proc = acc: attrPath:
+            if builtins.elem (builtins.head attrPath) [system null]
+            then acc ++ [(builtins.tail attrPath)]
+            else acc;
+        in
+          builtins.foldl' proc [];
+      in
+        builtins.mapAttrs (_: collectForSystem) systems;
+
       # genLegacyPackages system
       # ------------------------
       # Generate a set of legacy packages for the given system.
