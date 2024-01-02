@@ -22,46 +22,54 @@ namespace flox::pkgdb {
 
 /* -------------------------------------------------------------------------- */
 
-void
-PkgDb::initViews()
+/** @brief Create views in database if they do not exist. */
+static void
+initViews( SQLiteDb & pdb )
 {
-  if ( sql_rc rcode = this->execute_all( sql_views ); isSQLError( rcode ) )
+  sqlite3pp::command cmd( pdb, sql_views );
+  if ( sql_rc rcode = cmd.execute_all(); isSQLError( rcode ) )
     {
       throw PkgDbException( nix::fmt( "failed to initialize views:(%d) %s",
                                       rcode,
-                                      this->db.error_msg() ) );
+                                      pdb.error_msg() ) );
     }
 }
 
 
 /* -------------------------------------------------------------------------- */
 
-void
-PkgDb::updateViews()
+/**
+ * @brief Update the database's `VIEW`s schemas.
+ *
+ * This deletes any existing `VIEW`s and recreates them, and updates the
+ * `DbVersions` row for `pkgdb_views_schema`.
+ */
+static void
+updateViews( SQLiteDb & pdb )
 {
   /* Drop all existing views. */
   {
-    sqlite3pp::query qry( this->db,
+    sqlite3pp::query qry( pdb,
                           "SELECT name FROM sqlite_master WHERE"
                           " ( type = 'view' )" );
     for ( auto row : qry )
       {
         auto               name = row.get<std::string>( 0 );
         std::string        cmd  = "DROP VIEW IF EXISTS '" + name + '\'';
-        sqlite3pp::command dropView( this->db, cmd.c_str() );
+        sqlite3pp::command dropView( pdb, cmd.c_str() );
         if ( sql_rc rcode = dropView.execute(); isSQLError( rcode ) )
           {
             throw PkgDbException( nix::fmt( "failed to drop view '%s':(%d) %s",
                                             name,
                                             rcode,
-                                            this->db.error_msg() ) );
+                                            pdb.error_msg() ) );
           }
       }
   }
 
   /* Update the `pkgdb_views_schema' version. */
   sqlite3pp::command updateVersion(
-    this->db,
+    pdb,
     "UPDATE DbVersions SET version = ? WHERE name = 'pkgdb_views_schema'" );
   updateVersion.bind( 1, static_cast<int>( sqlVersions.views ) );
 
@@ -69,60 +77,66 @@ PkgDb::updateViews()
     {
       throw PkgDbException( nix::fmt( "failed to update PkgDb Views:(%d) %s",
                                       rcode,
-                                      this->db.error_msg() ) );
+                                      pdb.error_msg() ) );
     }
 
   /* Redefine the `VIEW's */
-  this->initViews();
+  initViews( pdb );
 }
 
 
 /* -------------------------------------------------------------------------- */
 
-void
-PkgDb::initTables()
+/** @brief Create tables in database if they do not exist. */
+static void
+initTables( SQLiteDb & pdb )
 {
-  if ( sql_rc rcode = this->execute( sql_versions ); isSQLError( rcode ) )
+  sqlite3pp::command cmdVersions( pdb, sql_versions );
+  if ( sql_rc rcode = cmdVersions.execute(); isSQLError( rcode ) )
     {
       throw PkgDbException(
         nix::fmt( "failed to initialize DbVersions table:(%d) %s",
                   rcode,
-                  this->db.error_msg() ) );
+                  pdb.error_msg() ) );
     }
 
-  if ( sql_rc rcode = this->execute_all( sql_input ); isSQLError( rcode ) )
+  sqlite3pp::command cmdInput( pdb, sql_input );
+  if ( sql_rc rcode = cmdInput.execute_all(); isSQLError( rcode ) )
     {
       throw PkgDbException(
         nix::fmt( "failed to initialize LockedFlake table:(%d) %s",
                   rcode,
-                  this->db.error_msg() ) );
+                  pdb.error_msg() ) );
     }
 
-  if ( sql_rc rcode = this->execute_all( sql_attrSets ); isSQLError( rcode ) )
+  sqlite3pp::command cmdAttrSets( pdb, sql_attrSets );
+  if ( sql_rc rcode = cmdAttrSets.execute_all(); isSQLError( rcode ) )
     {
       throw PkgDbException(
         nix::fmt( "failed to initialize AttrSets table:(%d) %s",
                   rcode,
-                  this->db.error_msg() ) );
+                  pdb.error_msg() ) );
     }
 
-  if ( sql_rc rcode = this->execute_all( sql_packages ); isSQLError( rcode ) )
+  sqlite3pp::command cmdPackages( pdb, sql_packages );
+  if ( sql_rc rcode = cmdPackages.execute_all(); isSQLError( rcode ) )
     {
       throw PkgDbException(
         nix::fmt( "failed to initialize Packages table:(%d) %s",
                   rcode,
-                  this->db.error_msg() ) );
+                  pdb.error_msg() ) );
     }
 }
 
 
 /* -------------------------------------------------------------------------- */
 
-void
-PkgDb::initVersions()
+/** @brief Create `DbVersions` rows if they do not exist. */
+static void
+initVersions( SQLiteDb & pdb )
 {
   sqlite3pp::command defineVersions(
-    this->db,
+    pdb,
     "INSERT OR IGNORE INTO DbVersions ( name, version ) VALUES"
     "  ( 'pkgdb',        '" FLOX_PKGDB_VERSION "' )"
     ", ( 'pkgdb_tables_schema', ? )"
@@ -133,7 +147,7 @@ PkgDb::initVersions()
     {
       throw PkgDbException( nix::fmt( "failed to write DbVersions info:(%d) %s",
                                       rcode,
-                                      this->db.error_msg() ) );
+                                      pdb.error_msg() ) );
     }
 }
 
@@ -143,36 +157,58 @@ PkgDb::initVersions()
 void
 PkgDb::init()
 {
-  this->initTables();
-
-  this->initVersions();
+  initTables( this->db );
+  initVersions( this->db );
 
   /* If the views version is outdated, update them. */
-  if ( this->getDbVersion().views < sqlVersions.views ) { this->updateViews(); }
-  else { this->initViews(); }
+  if ( this->getDbVersion().views < sqlVersions.views )
+    {
+      updateViews( this->db );
+    }
+  else { initViews( this->db ); }
 }
 
 
 /* -------------------------------------------------------------------------- */
 
-void
-PkgDb::writeInput()
+/**
+ * @brief Write @a this `PkgDb` `lockedRef` and `fingerprint` fields to
+ *        database metadata.
+ */
+static void
+writeInput( PkgDb & pdb )
 {
   sqlite3pp::command cmd(
-    this->db,
+    pdb.db,
     "INSERT OR IGNORE INTO LockedFlake ( fingerprint, string, attrs ) VALUES"
     "  ( ?, ?, ? )" );
-  std::string fpStr = fingerprint.to_string( nix::Base16, false );
+  std::string fpStr = pdb.fingerprint.to_string( nix::Base16, false );
   cmd.bind( 1, fpStr, sqlite3pp::copy );
-  cmd.bind( 2, this->lockedRef.string, sqlite3pp::nocopy );
-  cmd.bind( 3, this->lockedRef.attrs.dump(), sqlite3pp::copy );
+  cmd.bind( 2, pdb.lockedRef.string, sqlite3pp::nocopy );
+  cmd.bind( 3, pdb.lockedRef.attrs.dump(), sqlite3pp::copy );
   if ( sql_rc rcode = cmd.execute(); isSQLError( rcode ) )
     {
       throw PkgDbException(
         nix::fmt( "failed to write LockedFlaked info:(%d) %s",
                   rcode,
-                  this->db.error_msg() ) );
+                  pdb.db.error_msg() ) );
     }
+}
+
+
+/* -------------------------------------------------------------------------- */
+
+PkgDb::PkgDb( const nix::flake::LockedFlake & flake, std::string_view dbPath )
+{
+  this->dbPath      = dbPath;
+  this->fingerprint = flake.getFingerprint();
+  this->db.connect( this->dbPath.c_str(),
+                    SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE );
+  this->init();
+  this->lockedRef
+    = { flake.flake.lockedRef.to_string(),
+        nix::fetchers::attrsToJSON( flake.flake.lockedRef.toAttrs() ) };
+  writeInput( *this );
 }
 
 
