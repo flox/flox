@@ -515,7 +515,7 @@ pub enum ListMode {
     Extended,
 
     /// Show detailed information as a table
-    #[bpaf(long, short)]
+    #[bpaf(long, short, hide)]
     Table,
 
     /// Show detailed information ain blocks
