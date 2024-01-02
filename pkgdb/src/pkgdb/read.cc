@@ -15,6 +15,7 @@
 #include <unordered_set>
 #include <vector>
 
+#include "flox/core/util.hh"
 #include "flox/flake-package.hh"
 #include "flox/pkgdb/read.hh"
 
@@ -272,9 +273,8 @@ PkgDbReadOnly::getAttrSetId( const flox::AttrPath & path )
       /* Handle no such path. */
       if ( itr == qryId.end() )
         {
-          throw PkgDbException(
-            nix::fmt( "No such AttrSet '%s'.",
-                      nix::concatStringsSep( ".", path ) ) );
+          throw PkgDbException( nix::fmt( "No such AttrSet '%s'.",
+                                          concatStringsSep( ".", path ) ) );
         }
       row = ( *itr ).get<long long>( 0 );
     }
@@ -331,7 +331,7 @@ PkgDbReadOnly::getPackageId( const flox::AttrPath & path )
   if ( itr == qry.end() )
     {
       throw PkgDbException(
-        nix::fmt( "No such package %s.", nix::concatStringsSep( ".", path ) ) );
+        nix::fmt( "No such package %s.", concatStringsSep( ".", path ) ) );
     }
   return ( *itr ).get<long long>( 0 );
 }

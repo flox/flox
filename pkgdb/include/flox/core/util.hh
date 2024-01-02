@@ -48,6 +48,30 @@ overloaded( Ts... ) -> overloaded<Ts...>;
 
 /* -------------------------------------------------------------------------- */
 
+/** @brief Detect if two vectors are equal. */
+template<typename T>
+[[nodiscard]] bool
+operator==( const std::vector<T> & lhs, const std::vector<T> & rhs )
+{
+  if ( lhs.size() != rhs.size() ) { return false; }
+  for ( size_t idx = 0; idx < lhs.size(); ++idx )
+    {
+      if ( lhs[idx] != rhs[idx] ) { return false; }
+    }
+  return true;
+}
+
+/** @brief Detect if two vectors are not equal. */
+template<typename T>
+[[nodiscard]] bool
+operator!=( const std::vector<T> & lhs, const std::vector<T> & rhs )
+{
+  return ! ( lhs == rhs );
+}
+
+
+/* -------------------------------------------------------------------------- */
+
 /**
  * @brief Extension to the `nlohmann::json' serializer to support additional
  *        _Argument Dependent Lookup_ (ADL) types.
@@ -179,7 +203,7 @@ struct adl_serializer<nix::FlakeRef>
   }
 
   /** @brief _Move-only_ conversion of a JSON object to a @a nix::FlakeRef. */
-  static nix::FlakeRef
+  [[nodiscard]] static nix::FlakeRef
   from_json( const json & jfrom )
   {
     if ( jfrom.is_object() )
@@ -205,7 +229,7 @@ namespace flox {
 /* -------------------------------------------------------------------------- */
 
 /** @brief Systems to resolve/search in. */
-inline static const std::vector<std::string> &
+[[nodiscard]] inline static const std::vector<std::string> &
 getDefaultSystems()
 {
   static const std::vector<std::string> defaultSystems
@@ -215,7 +239,7 @@ getDefaultSystems()
 
 
 /** @brief `flake' subtrees to resolve/search in. */
-inline static const std::vector<std::string> &
+[[nodiscard]] inline static const std::vector<std::string> &
 getDefaultSubtrees()
 {
   static const std::vector<std::string> defaultSubtrees
@@ -231,7 +255,7 @@ getDefaultSubtrees()
  * @param dbPath Absolute path.
  * @return `true` iff @a path is a SQLite3 database file.
  */
-bool
+[[nodiscard]] bool
 isSQLiteDb( const std::string & dbPath );
 
 
@@ -242,7 +266,7 @@ isSQLiteDb( const std::string & dbPath );
  * @param flakeRef JSON or URI string representing a `nix` flake reference.
  * @return Parsed flake reference object.
  */
-nix::FlakeRef
+[[nodiscard]] nix::FlakeRef
 parseFlakeRef( const std::string & flakeRef );
 
 
@@ -253,21 +277,21 @@ parseFlakeRef( const std::string & flakeRef );
  * @param jsonOrPath A JSON string or a path to a JSON file.
  * @return A parsed JSON object.
  */
-nlohmann::json
+[[nodiscard]] nlohmann::json
 parseOrReadJSONObject( const std::string & jsonOrPath );
 
 
 /* -------------------------------------------------------------------------- */
 
 /** @brief Convert a TOML string to JSON. */
-nlohmann::json
+[[nodiscard]] nlohmann::json
 tomlToJSON( std::string_view toml );
 
 
 /* -------------------------------------------------------------------------- */
 
 /** @brief Convert a YAML string to JSON. */
-nlohmann::json
+[[nodiscard]] nlohmann::json
 yamlToJSON( std::string_view yaml );
 
 
@@ -280,7 +304,7 @@ yamlToJSON( std::string_view yaml );
  * Files with the extension `.yaml` or `.yml` are converted to JSON from YAML.
  * Files with the extension `.toml` are converted to JSON from TOML.
  */
-nlohmann::json
+[[nodiscard]] nlohmann::json
 readAndCoerceJSON( const std::filesystem::path & path );
 
 
@@ -291,7 +315,7 @@ readAndCoerceJSON( const std::filesystem::path & path );
  *
  * Handles quoted strings and escapes.
  */
-std::vector<std::string>
+[[nodiscard]] std::vector<std::string>
 splitAttrPath( std::string_view path );
 
 
@@ -302,7 +326,7 @@ splitAttrPath( std::string_view path );
  * @param str String to test.
  * @return `true` iff @a str is a stringized unsigned integer.
  */
-bool
+[[nodiscard]] bool
 isUInt( std::string_view str );
 
 
@@ -314,7 +338,7 @@ isUInt( std::string_view str );
  * @param str String to test.
  * @return `true` iff @a str has the prefix @a prefix.
  */
-bool
+[[nodiscard]] bool
 hasPrefix( std::string_view prefix, std::string_view str );
 
 
@@ -351,7 +375,7 @@ trim_copy( std::string_view str );
 /**
  * @brief Extract the user-friendly portion of a @a nlohmann::json::exception.
  */
-std::string
+[[nodiscard]] std::string
 extract_json_errmsg( nlohmann::json::exception & err );
 
 /* -------------------------------------------------------------------------- */
@@ -388,7 +412,7 @@ assertIsJSONObject( const nlohmann::json & value,
  * @return The merged @a std::vector.
  */
 template<typename T>
-std::vector<T>
+[[nodiscard]] std::vector<T>
 merge_vectors( const std::vector<T> & lower, const std::vector<T> & higher )
 {
   std::vector<T> merged = higher;
@@ -405,38 +429,38 @@ merge_vectors( const std::vector<T> & lower, const std::vector<T> & higher )
 
 /* -------------------------------------------------------------------------- */
 
+/** @brief Convert a @a AttrPathGlob to a string for display. */
+[[nodiscard]] std::string
+displayableGlobbedPath( const AttrPathGlob & attrs );
+
+
+/* -------------------------------------------------------------------------- */
+
 /**
- * @brief Constructs a @a std::vector<std::optional<T>> from a
- * @a std::vector<T>.
+ * @brief Concatenate the given strings with a separator between
+ *        the elements.
  */
-template<typename T>
-[[nodiscard]] std::vector<std::optional<T>>
-vectorMapOptional( const std::vector<T> & orig )
+template<class Container>
+[[nodiscard]] std::string
+concatStringsSep( const std::string_view sep, const Container & strings )
 {
-  std::vector<std::optional<T>> rsl;
-  for ( const T & val : orig )
+  size_t size = 0;
+  /* Needs a cast to string_view since this is also called
+   * with `nix::Symbols'. */
+  for ( const auto & str : strings )
     {
-      rsl.emplace_back( std::make_optional<T>( val ) );
+      size += sep.size() + std::string_view( str ).size();
+    }
+  std::string rsl;
+  rsl.reserve( size );
+  for ( auto & idx : strings )
+    {
+      if ( rsl.size() != 0 ) { rsl += sep; }
+      rsl += idx;
     }
   return rsl;
 }
 
-/* -------------------------------------------------------------------------- */
-
-/**
- * @brief Convert a @a AttrPathGlob to a string for display.
- */
-std::string
-displayableGlobbedPath( const AttrPathGlob & attrs );
-
-/* -------------------------------------------------------------------------- */
-
-/**
- * @brief Join a vector of strings with a delimiter between elements.
- */
-std::string
-joinWithDelim( const std::vector<std::string> & strings,
-               const std::string &              delim );
 
 /* -------------------------------------------------------------------------- */
 
@@ -444,9 +468,7 @@ joinWithDelim( const std::vector<std::string> & strings,
 void
 printLog( const nix::Verbosity & lvl, const std::string & msg );
 
-/**
- * @brief Prints a log message to `stderr` when called with `-vvvv`.
- */
+/** @brief Prints a log message to `stderr` when called with `-vvvv`. */
 void
 traceLog( const std::string & msg );
 
@@ -456,21 +478,15 @@ traceLog( const std::string & msg );
 void
 debugLog( const std::string & msg );
 
-/**
- * @brief Prints a log message to `stderr` at default verbosity.
- */
+/** @brief Prints a log message to `stderr` at default verbosity. */
 void
 infoLog( const std::string & msg );
 
-/**
- * @brief Prints a log message to `stderr` when verbosity is at least `-q`.
- */
+/** @brief Prints a log message to `stderr` when verbosity is at least `-q`. */
 void
 warningLog( const std::string & msg );
 
-/**
- * @brief Prints a log message to `stderr` when verbosity is at least `-qq`.
- */
+/** @brief Prints a log message to `stderr` when verbosity is at least `-qq`. */
 void
 errorLog( const std::string & msg );
 
