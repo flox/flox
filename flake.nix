@@ -13,7 +13,7 @@
     "flox-cache-public-1:7F4OyH7ZCnFhcze3fJdfyXYLQw/aV7GEed86nQ7IsOs="
   ];
 
-  inputs.nixpkgs.url = "github:NixOS/nixpkgs/release-23.05";
+  inputs.nixpkgs.url = "github:NixOS/nixpkgs/release-23.11";
 
   inputs.floco.url = "github:aakropotkin/floco";
   inputs.floco.inputs.nixpkgs.follows = "nixpkgs";
