@@ -193,7 +193,7 @@ pub trait Environment: Send {
 /// A pointer to an environment, either managed or path.
 /// This is used to determine the type of an environment at a given path.
 /// See [EnvironmentPointer::open].
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, derive_more::From)]
 #[serde(untagged)]
 pub enum EnvironmentPointer {
     /// Identifies an environment whose source of truth lies outside of the project itself
@@ -286,7 +286,7 @@ impl EnvironmentPointer {
 /// However, this type does not perform any validation of the referenced environment.
 /// Opening the environment with [ManagedEnvironment::open] or
 /// [PathEnvironment::open], could still fail.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct UninitializedEnvironment {
     pub path: PathBuf,
     pub pointer: EnvironmentPointer,

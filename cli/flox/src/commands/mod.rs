@@ -3,9 +3,10 @@ mod environment;
 mod general;
 mod search;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, VecDeque};
 use std::fmt::Display;
 use std::path::PathBuf;
+use std::str::FromStr;
 use std::{env, fmt, fs, mem};
 
 use anyhow::{anyhow, bail, Context, Result};
@@ -27,6 +28,7 @@ use flox_rust_sdk::nix::command_line::NixCommandLine;
 use indoc::{formatdoc, indoc};
 use log::{debug, error, info, warn};
 use once_cell::sync::Lazy;
+use serde::{Deserialize, Serialize};
 use tempfile::TempDir;
 use toml_edit::Key;
 
@@ -546,7 +548,11 @@ impl EnvironmentSelect {
             // already activated environment or an environment in the current
             // directory.
             EnvironmentSelect::Unspecified => match detect_environment(message)? {
-                Some(found) => open_environment(flox, found),
+                Some(ActiveEnvironment::DotFlox(found)) => open_environment(flox, found),
+                Some(ActiveEnvironment::Remote(env_ref)) => {
+                    let env = RemoteEnvironment::new(flox, &env_ref)?;
+                    Ok(ConcreteEnvironment::Remote(env))
+                },
                 None => {
                     let current_dir =
                         env::current_dir().context("could not get current directory")?;
@@ -567,25 +573,35 @@ impl EnvironmentSelect {
 ///   inside a git repo.
 /// - Check if there's an already activated environment.
 /// - Prompt if both are true.
-pub fn detect_environment(message: &str) -> Result<Option<UninitializedEnvironment>> {
+pub fn detect_environment(message: &str) -> Result<Option<ActiveEnvironment>> {
     let current_dir = env::current_dir().context("could not get current directory")?;
-    let maybe_found_environment = find_dot_flox(&current_dir)?;
     let maybe_activated = last_activated_environment();
+    let maybe_found_environment = find_dot_flox(&current_dir)?;
 
     let found = match (maybe_activated, maybe_found_environment) {
-        (Some(activated_path), Some(found)) if activated_path == found.path => Some(found),
+        (
+            Some(
+                ref activated @ ActiveEnvironment::DotFlox(UninitializedEnvironment {
+                    ref path, ..
+                }),
+            ),
+            Some(found),
+        ) if path == &found.path => Some(activated.clone()),
         // If there's both an activated environment and an environment in the
         // current directory or git repo, prompt for which to use.
-        (Some(activated_path), Some(found)) => {
-            let activated = UninitializedEnvironment::open(activated_path)?;
+        (Some(activated_env), Some(found)) => {
+            dbg!(&activated_env, &found.path);
+
             let type_of_directory = if found.path == current_dir {
                 "current directory's flox environment"
             } else {
                 "flox environment detected in git repo"
             };
             let message = format!("Do you want to {message} the {type_of_directory} or the current active flox environment?");
-            let found_description = hacky_environment_description(&found)?;
-            let activated_description = hacky_environment_description(&activated)?;
+            let found = ActiveEnvironment::DotFlox(found);
+
+            let found_description = hacky_environment_description(&found);
+            let activated_description = hacky_environment_description(&activated_env);
 
             if !Dialog::can_prompt() {
                 bail!(
@@ -606,12 +622,12 @@ pub fn detect_environment(message: &str) -> Result<Option<UninitializedEnvironme
             let (index, _) = dialog.raw_prompt()?;
             match index {
                 0 => Some(found),
-                1 => Some(activated),
+                1 => Some(activated_env),
                 _ => unreachable!(),
             }
         },
-        (Some(activated_path), None) => Some(UninitializedEnvironment::open(activated_path)?),
-        (None, Some(found)) => Some(found),
+        (Some(activated_env), None) => Some(activated_env),
+        (None, Some(found)) => Some(ActiveEnvironment::DotFlox(found)),
         (None, None) => None,
     };
     Ok(found)
@@ -784,22 +800,26 @@ impl IntoIterator for ActiveEnvironments {
     }
 }
 
-/// Determine the path to most recently activated environment.
-///
-/// When inside a `flox activate` shell, flox stores the path to the
-/// activated environment in `$FLOX_ACTIVE_ENVIRONMENTS`. Environments which
-/// are activated while in a `flox activate` shell, are prepended - the most
-/// recently activated environment is the _first in the list of environments.
-/// TODO: how will we handle remote environments?
-fn last_activated_environment() -> Option<PathBuf> {
-    activated_environments().into_iter().next()
+/// Determine the most recently activated environment [ActiveEnvironment].
+fn last_activated_environment() -> Option<ActiveEnvironment> {
+    activated_environments().last_active()
 }
 
-/// Return paths to all activated environments.
-fn activated_environments() -> Vec<PathBuf> {
-    env::var(FLOX_ACTIVE_ENVIRONMENTS_VAR)
-        .map(|active| env::split_paths(&active).collect())
-        .unwrap_or(vec![])
+/// Read [ActiveEnvironments] from the process environment [FLOX_ACTIVE_ENVIRONMENTS_VAR]
+fn activated_environments() -> ActiveEnvironments {
+    let flox_active_environments_var: String =
+        env::var(FLOX_ACTIVE_ENVIRONMENTS_VAR).unwrap_or_default();
+
+    match ActiveEnvironments::from_str(&flox_active_environments_var) {
+        Ok(active_environments) => active_environments,
+        Err(e) => {
+            error!(
+                "Could not parse FLOX_ACTIVE_ENVIRONMENTS -- using defaults: {}",
+                e
+            );
+            ActiveEnvironments::default()
+        },
+    }
 }
 
 /// Check whether the given [EnvironmentRef] is trusted.

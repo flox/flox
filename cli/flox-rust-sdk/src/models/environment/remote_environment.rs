@@ -106,6 +106,10 @@ impl RemoteEnvironment {
     pub fn owner(&self) -> &EnvironmentOwner {
         self.inner.owner()
     }
+
+    pub fn env_ref(&self) -> EnvironmentRef {
+        EnvironmentRef::new_from_parts(self.owner().clone(), self.name())
+    }
 }
 
 impl Environment for RemoteEnvironment {
