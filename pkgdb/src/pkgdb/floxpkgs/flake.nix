@@ -84,7 +84,7 @@
       #   => { a = { c = 2; }; }
       #
       # Type:
-      #   setAttrAt :: [String] -> Any   -> AttrSet -> AttrSet
+      #   setAttrAt :: [String] -> Any -> AttrSet -> AttrSet
       removeAttrAt = attrPath: attrSet: let
         len = builtins.length attrPath;
         attrName = builtins.head attrPath;
