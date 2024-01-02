@@ -21,10 +21,13 @@
       allowBroken = true;
     }; # End `config'
 
-    # allowRecursive    = [["legacyPackages" "x86_64-linux" "darwin"]]
-    # disallowRecursive = [["legacyPackages" "x86_64-linux" "python3"]]
-    # allowPackage      = [["legacyPackages" "x86_64-linux" "python3" "pip"]]
-    # disallowPackage   = [["legacyPackages" "x86_64-linux" "gcc"]]
+    # Example:
+    # {
+    #   allowRecursive    = [["legacyPackages" "x86_64-linux" "darwin"]];
+    #   disallowRecursive = [["legacyPackages" "x86_64-linux" "python3"]];
+    #   allowPackage      = [["legacyPackages" "x86_64-linux" "python3" "pip"]];
+    #   disallowPackage   = [["legacyPackages" "x86_64-linux" "gcc"]];
+    # }
     rules = builtins.fromJSON (builtins.readFile ./rules.json);
 
     # ------------------------------------------------------------------------ #
@@ -204,11 +207,8 @@
         withAllowRecursive = let
           proc = pkgs: attrPath:
             lib.setAttrAt (attrPath ++ ["recurseForDerivations"]) true pkgs;
-          rsl =
-            builtins.foldl' proc base sysRules.allowRecursive;
         in
-          assert (rsl ? darwin);
-          assert rsl.darwin.recurseForDerivations; rsl;
+          builtins.foldl' proc base sysRules.allowRecursive;
 
         # Set `recurseForDerivations' to `false' for the given attribute paths.
         withDisallowRecursive = let
