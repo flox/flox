@@ -7,10 +7,10 @@
   description = "flox - Harness the power of Nix";
 
   nixConfig.extra-substituters = [
-    "https://cache.floxdev.com"
+    "https://cache.flox.dev"
   ];
   nixConfig.extra-trusted-public-keys = [
-    "flox-store-public-0:8c/B+kjIaQ+BloCmNkRUKwaVPFWkriSAd0JJvuDu4F0="
+    "flox-cache-public-1:7F4OyH7ZCnFhcze3fJdfyXYLQw/aV7GEed86nQ7IsOs="
   ];
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/release-23.05";
