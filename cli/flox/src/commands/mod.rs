@@ -674,6 +674,116 @@ impl ConcreteEnvironment {
     }
 }
 
+/// An environment that has been activated with `flox activate`
+/// and can be (re)opened, i.e. to install packages into it.
+///
+/// Unlike [ConcreteEnvironment], this type does not hold concrete instances of environments,
+/// but rather fully qualified metadata to create an instance from.
+///
+/// * for [PathEnvironment] and [ManagedEnvironment] that's the path to their `.flox` and `.flox/pointer.json`
+/// * for [RemoteEnvironment] that's the [EnvironmentRef] to the remote environment
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum ActiveEnvironment {
+    /// Container for "local" environments pointed to by [DotFlox]
+    DotFlox(UninitializedEnvironment),
+    /// Container for [RemoteEnvironment]
+    Remote(EnvironmentRef),
+}
+
+impl ActiveEnvironment {
+    fn from_concrete_environment(env: &ConcreteEnvironment) -> Result<Self> {
+        match env {
+            ConcreteEnvironment::Path(path_env) => {
+                let pointer = path_env.pointer.clone().into();
+                Ok(Self::DotFlox(UninitializedEnvironment {
+                    path: path_env.parent_path().unwrap(),
+                    pointer,
+                }))
+            },
+            ConcreteEnvironment::Managed(managed_env) => {
+                let pointer = managed_env.pointer().clone().into();
+                Ok(Self::DotFlox(UninitializedEnvironment {
+                    path: managed_env.parent_path().unwrap(),
+                    pointer,
+                }))
+            },
+            ConcreteEnvironment::Remote(remote_env) => {
+                let env_ref = remote_env.env_ref();
+                Ok(Self::Remote(env_ref))
+            },
+        }
+    }
+}
+
+/// A list of environments that are currently active
+/// (i.e. have been activated with `flox activate`)
+///
+/// When inside a `flox activate` shell,
+/// flox stores [ActiveEnvironment] metadata to (re)open the activated environment
+/// in `$FLOX_ACTIVE_ENVIRONMENTS`.
+///
+/// Environments which are activated while in a `flox activate` shell, are prepended
+/// -> the most recently activated environment is the _first_ in the list of environments.
+///
+/// Internally this is implemented through a [VecDeque] which is serialized to JSON.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ActiveEnvironments(VecDeque<ActiveEnvironment>);
+
+impl FromStr for ActiveEnvironments {
+    type Err = serde_json::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s.is_empty() {
+            return Ok(Self(VecDeque::new()));
+        }
+        serde_json::from_str(s).map(Self)
+    }
+}
+
+impl ActiveEnvironments {
+    /// Read the last active environment
+    pub fn last_active(&self) -> Option<ActiveEnvironment> {
+        self.0.front().cloned()
+    }
+
+    /// Set the last active environment
+    pub fn set_last_active(&mut self, env: ActiveEnvironment) {
+        self.0.push_front(env);
+    }
+
+    pub fn is_active(&self, env: &ActiveEnvironment) -> bool {
+        self.0.contains(env)
+    }
+}
+
+impl Display for ActiveEnvironments {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let result = if f.alternate() {
+            serde_json::to_string_pretty(&self)
+        } else {
+            serde_json::to_string(&self)
+        };
+        let data = match result {
+            Ok(data) => data,
+            Err(e) => {
+                debug!("Could not serialize active environments: {e}");
+                return Err(fmt::Error);
+            },
+        };
+
+        f.write_str(&data)
+    }
+}
+
+impl IntoIterator for ActiveEnvironments {
+    type IntoIter = std::collections::vec_deque::IntoIter<Self::Item>;
+    type Item = ActiveEnvironment;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
+
 /// Determine the path to most recently activated environment.
 ///
 /// When inside a `flox activate` shell, flox stores the path to the
