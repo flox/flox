@@ -53,7 +53,7 @@ pub enum ManagedEnvironmentError {
     #[error("failed to open floxmeta git repo: {0}")]
     OpenFloxmeta(FloxmetaV2Error),
     #[error("failed to fetch environment: {0}")]
-    Fetch(GitCommandError),
+    Fetch(GitRemoteCommandError),
     #[error("failed to check for git revision: {0}")]
     CheckGitRevision(GitCommandError),
     #[error("failed to check for branch existence")]
@@ -100,7 +100,7 @@ pub enum ManagedEnvironmentError {
     DeleteEnvironmentReverseLink(PathBuf, #[source] std::io::Error),
 
     #[error("could not sync environment from upstream")]
-    FetchUpdates(#[source] GitCommandError),
+    FetchUpdates(#[source] GitRemoteCommandError),
     #[error("could not apply updates from upstream")]
     ApplyUpdates(#[source] GitRemoteCommandError),
 
@@ -578,10 +578,10 @@ impl ManagedEnvironment {
                         .git
                         .fetch_ref("dynamicorigin", &format!("+{0}:{0}", remote_branch))
                         .map_err(|err| match err {
-                            GitCommandError::BadExit(_, _, _) => {
-                                ManagedEnvironmentError::Fetch(err)
+                            GitRemoteCommandError::Command(e @ GitCommandError::Command(_)) => {
+                                ManagedEnvironmentError::Git(e)
                             },
-                            _ => ManagedEnvironmentError::Git(err),
+                            _ => ManagedEnvironmentError::Fetch(err),
                         })?;
                 }
                 // If it still doesn't exist after fetching,

@@ -870,7 +870,7 @@ impl Push {
                     let user_name = client
                         .get_username()
                         .await
-                        .context("Could not get username from github")?;
+                        .context("Could not get username from floxhub")?;
                     user_name
                         .parse::<EnvironmentOwner>()
                         .context("Invalid owner name")?

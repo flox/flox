@@ -30,7 +30,13 @@ use thiserror::Error;
 use super::core_environment::CoreEnvironment;
 use super::{copy_dir_recursive, PathPointer, ENV_DIR_NAME};
 use crate::models::environment::MANIFEST_FILENAME;
-use crate::providers::git::{GitCommandError, GitCommandOptions, GitCommandProvider, GitProvider};
+use crate::providers::git::{
+    GitCommandError,
+    GitCommandOptions,
+    GitCommandProvider,
+    GitProvider,
+    GitRemoteCommandError,
+};
 
 const GENERATIONS_METADATA_FILE: &str = "metadata.json";
 
@@ -353,7 +359,7 @@ pub enum GenerationsError {
     #[error("could not create generations branch")]
     CreateBranch(#[source] GitCommandError),
     #[error("could not make bare clone of generations branch")]
-    MakeBareClone(#[source] GitCommandError),
+    MakeBareClone(#[source] GitRemoteCommandError),
 
     // endregion
 
@@ -378,13 +384,13 @@ pub enum GenerationsError {
 
     // region: repo/transaction
     #[error("could not clone generations branch")]
-    CloneToFS(#[source] GitCommandError),
+    CloneToFS(#[source] GitRemoteCommandError),
     #[error("could not stage changes")]
     StageChanges(#[source] GitCommandError),
     #[error("could not commit changes")]
     CommitChanges(#[source] GitCommandError),
     #[error("could not complete transaction")]
-    CompleteTransaction(#[source] GitCommandError),
+    CompleteTransaction(#[source] GitRemoteCommandError),
     // endregion
 
     // region: manifest errors
