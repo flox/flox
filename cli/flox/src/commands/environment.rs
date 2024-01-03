@@ -1,10 +1,10 @@
-use std::env;
 use std::fs::{self, File};
 use std::io::stdin;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::str::FromStr;
+use std::{env, vec};
 
 use anyhow::{anyhow, bail, Context, Result};
 use bpaf::Bpaf;
@@ -25,6 +25,7 @@ use flox_rust_sdk::models::environment::{
     ManagedPointer,
     PathPointer,
     UninitializedEnvironment,
+    UpdateResult,
     DOT_FLOX,
     ENVIRONMENT_POINTER_FILENAME,
     FLOX_ACTIVE_ENVIRONMENTS_VAR,
@@ -32,8 +33,9 @@ use flox_rust_sdk::models::environment::{
     FLOX_PROMPT_ENVIRONMENTS_VAR,
 };
 use flox_rust_sdk::models::floxmetav2::FloxmetaV2Error;
+use flox_rust_sdk::models::lockfile::{FlakeRef, Input, Lockfile};
 use flox_rust_sdk::models::manifest::{list_packages, PackageToInstall};
-use flox_rust_sdk::models::pkgdb::{call_pkgdb, UpdateResult, PKGDB_BIN};
+use flox_rust_sdk::models::pkgdb::{call_pkgdb, PKGDB_BIN};
 use flox_rust_sdk::nix::command::StoreGc;
 use flox_rust_sdk::nix::command_line::NixCommandLine;
 use flox_rust_sdk::nix::Run;
@@ -1223,6 +1225,20 @@ impl SwitchGeneration {
     }
 }
 
+#[derive(Debug, Bpaf, Clone)]
+pub enum EnvironmentOrGlobalSelect {
+    Environment(#[bpaf(external(environment_select))] EnvironmentSelect),
+    /// Update inputs used by 'search' and 'show' outside of an environment
+    #[bpaf(long("global"))]
+    Global,
+}
+
+impl Default for EnvironmentOrGlobalSelect {
+    fn default() -> Self {
+        EnvironmentOrGlobalSelect::Environment(Default::default())
+    }
+}
+
 /// Update an environment's inputs
 #[derive(Bpaf, Clone)]
 pub struct Update {
@@ -1230,12 +1246,8 @@ pub struct Update {
     #[bpaf(external(environment_args), group_help("Environment Options"))]
     environment_args: EnvironmentArgs,
 
-    #[bpaf(external(environment_select), fallback(Default::default()))]
-    environment: EnvironmentSelect,
-
-    /// Update inputs used by search and show outside of an environment
-    #[bpaf(long)]
-    global: bool,
+    #[bpaf(external(environment_or_global_select), fallback(Default::default()))]
+    environment_or_global: EnvironmentOrGlobalSelect,
 
     #[bpaf(positional("INPUTS"))]
     inputs: Vec<String>,
@@ -1244,18 +1256,109 @@ impl Update {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("update");
 
-        let message = if self.global {
-            self.update_global_manifest(flox)?
-        } else {
-            self.update_manifest(flox)?
+        let ((old_lockfile, new_lockfile), global, description) = match self.environment_or_global {
+            EnvironmentOrGlobalSelect::Environment(ref environment_select) => {
+                let concrete_environment =
+                    environment_select.detect_concrete_environment(&flox, "update")?;
+
+                let description = Some(environment_description(&concrete_environment)?);
+
+                (
+                    self.update_manifest(flox, concrete_environment)?,
+                    false,
+                    description,
+                )
+            },
+            EnvironmentOrGlobalSelect::Global => (self.update_global_manifest(flox)?, true, None),
         };
 
-        info!("{}", message);
+        if let Some(ref old_lockfile) = old_lockfile {
+            if new_lockfile.registry.inputs == old_lockfile.registry.inputs {
+                if global {
+                    info!("ℹ️  All global inputs are up-to-date.");
+                } else {
+                    info!(
+                        "ℹ️  All inputs are up-to-date in environment {}.",
+                        description.as_ref().unwrap()
+                    );
+                }
+
+                return Ok(());
+            }
+        }
+
+        let mut inputs_to_scrape: Vec<&Input> = vec![];
+
+        for (input_name, new_input) in &new_lockfile.registry.inputs {
+            let old_input = old_lockfile
+                .as_ref()
+                .and_then(|old| old.registry.inputs.get(input_name));
+            match old_input {
+                // unchanged input
+                Some(old_input) if old_input == new_input => continue, // dont need to scrape
+                // updated input
+                Some(_) if global => info!("⬆️  Updated global input '{}'.", input_name),
+                Some(_) => info!(
+                    "⬆️  Updated input '{}' in environment {}.",
+                    input_name,
+                    description.as_ref().unwrap()
+                ),
+                // new input
+                None if global => info!("🔒️  Locked global input '{}'.", input_name),
+                None => info!(
+                    "🔒️  Locked input '{}' in environment {}.",
+                    input_name,
+                    description.as_ref().unwrap(),
+                ),
+            }
+            inputs_to_scrape.push(new_input);
+        }
+
+        if let Some(old_lockfile) = old_lockfile {
+            for (input_name, _) in old_lockfile.registry.inputs {
+                if !new_lockfile.registry.inputs.contains_key(&input_name) {
+                    if global {
+                        info!(
+                            "🗑️  Removed unused input '{}' from global lockfile.",
+                            input_name
+                        );
+                    } else {
+                        info!(
+                            "🗑️  Removed unused input '{}' from lockfile for environment {}.",
+                            input_name,
+                            description.as_ref().unwrap()
+                        );
+                    }
+                }
+            }
+        }
+
+        if inputs_to_scrape.is_empty() {
+            return Ok(());
+        }
+
+        // TODO: make this async when scraping multiple inputs
+        let results: Vec<Result<()>> = Dialog {
+            message: "Generating databases for updated inputs...",
+            help_message: (inputs_to_scrape.len() > 1).then_some("This may take a while."),
+            typed: Spinner::new(|| {
+                inputs_to_scrape
+                    .iter() // TODO: rayon::par_iter
+                    .map(|input| Self::scrape_input(&input.from))
+                    .collect()
+            }),
+        }
+        .spin();
+
+        for result in results {
+            result?;
+        }
 
         Ok(())
     }
 
-    fn update_global_manifest(self, flox: Flox) -> Result<String> {
+    /// TODO: factor out common code with [CoreEnvironment::update]
+    fn update_global_manifest(&self, flox: Flox) -> Result<UpdateResult> {
         let lockfile_path = global_manifest_lockfile_path(&flox);
 
         let mut pkgdb_cmd = Command::new(Path::new(&*PKGDB_BIN));
@@ -1264,37 +1367,53 @@ impl Update {
             .arg("--ga-registry")
             .arg("--global-manifest")
             .arg(global_manifest_path(&flox));
-        if lockfile_path.exists() {
+        let old_lockfile = if lockfile_path.exists() {
             let canonical_lockfile_path = lockfile_path.canonicalize().map_err(|e| {
                 CoreEnvironmentError::BadLockfilePath(e, lockfile_path.to_path_buf())
             })?;
-            pkgdb_cmd.arg("--lockfile").arg(canonical_lockfile_path);
-        }
-        pkgdb_cmd.args(self.inputs);
+            pkgdb_cmd.arg("--lockfile").arg(&canonical_lockfile_path);
+            Some(serde_json::from_slice(&fs::read(canonical_lockfile_path)?)?)
+        } else {
+            None
+        };
+        pkgdb_cmd.args(self.inputs.clone());
 
         debug!("updating global lockfile with command: {pkgdb_cmd:?}");
-        let result: UpdateResult = serde_json::from_value(call_pkgdb(pkgdb_cmd)?)
+        let lockfile: Lockfile = serde_json::from_value(call_pkgdb(pkgdb_cmd)?)
             .map_err(CoreEnvironmentError::ParseUpdateOutput)?;
 
         debug!("writing lockfile to {}", lockfile_path.display());
         std::fs::write(
             lockfile_path,
-            serde_json::to_string_pretty(&result.lockfile).unwrap(),
+            serde_json::to_string_pretty(&lockfile).unwrap(),
         )
         .context("updating global inputs failed")?;
-        Ok(result.message)
+        Ok((old_lockfile, lockfile))
     }
 
-    fn update_manifest(self, flox: Flox) -> Result<String> {
-        let concrete_environment = self
-            .environment
-            .detect_concrete_environment(&flox, "update")?;
-
+    fn update_manifest(
+        &self,
+        flox: Flox,
+        concrete_environment: ConcreteEnvironment,
+    ) -> Result<UpdateResult> {
         let mut environment = concrete_environment.into_dyn_environment();
 
         environment
-            .update(&flox, self.inputs)
+            .update(&flox, self.inputs.clone())
             .context("updating environment failed")
+    }
+
+    fn scrape_input(input: &FlakeRef) -> Result<()> {
+        let mut pkgdb_cmd = Command::new(Path::new(&*PKGDB_BIN));
+        pkgdb_cmd
+            .args(["scrape"])
+            .arg(serde_json::to_string(&input)?)
+            // TODO: this works for nixpkgs, but it won't work for anything else
+            .arg("legacyPackages");
+
+        debug!("scraping input: {pkgdb_cmd:?}");
+        call_pkgdb(pkgdb_cmd)?;
+        Ok(())
     }
 }
 
