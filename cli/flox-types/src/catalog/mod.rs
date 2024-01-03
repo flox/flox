@@ -18,7 +18,7 @@ pub use element::{Element, PublishElement};
 mod eval;
 pub use eval::Eval;
 mod source;
-pub use source::{Locked, Source};
+pub use source::Source;
 
 pub type StorePath = PathBuf;
 pub type AttrPath = Vec<String>;
