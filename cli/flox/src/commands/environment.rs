@@ -518,9 +518,9 @@ pub enum ListMode {
     #[bpaf(long, short, hide)]
     Table,
 
-    /// Show detailed information ain blocks
+    /// Detailed information such as priority and license
     #[bpaf(long, short)]
-    Detail,
+    All,
 }
 
 impl List {
@@ -542,7 +542,7 @@ impl List {
             },
             ListMode::Extended => self.print_extended(&flox, &mut *env)?,
             ListMode::Table => self.print_table(&flox, &mut *env)?,
-            ListMode::Detail => self.print_detail(&flox, &mut *env)?,
+            ListMode::All => self.print_detail(&flox, &mut *env)?,
         }
 
         Ok(())
