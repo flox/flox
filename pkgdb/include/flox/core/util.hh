@@ -107,6 +107,7 @@ struct adl_serializer<std::variant<A, B>>
       }
   }
 
+
 }; /* End struct `adl_serializer<std::variant<A, B>>' */
 
 
@@ -158,6 +159,7 @@ struct adl_serializer<std::variant<A, Types...>>
       }
   }
 
+
 }; /* End struct `adl_serializer<std::variant<A, Types...>>' */
 
 
@@ -183,6 +185,7 @@ struct adl_serializer<nix::fetchers::Attrs>
     /* That was easy. */
     attrs = nix::fetchers::jsonToAttrs( jfrom );
   }
+
 
 }; /* End struct `adl_serializer<nix::fetchers::Attrs>' */
 
@@ -213,6 +216,7 @@ struct adl_serializer<nix::FlakeRef>
       }
     return { nix::parseFlakeRef( jfrom.get<std::string>() ) };
   }
+
 
 }; /* End struct `adl_serializer<nix::FlakeRef>' */
 
