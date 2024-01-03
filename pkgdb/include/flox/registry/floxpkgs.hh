@@ -25,9 +25,7 @@ class FloxpkgsFlake : public FloxFlake
 
   // TODO: modify `ref' to reflect the added rules/pre-processing.
   FloxpkgsFlake( const nix::ref<nix::EvalState> & state,
-                 const nix::FlakeRef &            ref )
-    : FloxFlake( state, ref )
-  {}
+                 const nix::FlakeRef &            ref );
 
   /**
    * @brief Open a `nix` evaluator ( with an eval cache when possible ) with the
@@ -37,7 +35,7 @@ class FloxpkgsFlake : public FloxFlake
    *
    * @return A `nix` evaluator, potentially with caching.
    */
-  nix::ref<nix::eval_cache::EvalCache>
+  [[nodiscard]] nix::ref<nix::eval_cache::EvalCache>
   openEvalCache() override;
 
 

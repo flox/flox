@@ -148,10 +148,21 @@ endif  # ifndef TOOLCHAIN
 VERSION := $(file < $(PKGDB_ROOT)/.version)
 
 # Files used by `pkgdb buildenv' need to be added to the `nix' store.
-PROFILE_D_SCRIPTS_DIR ?= $(shell                            \
+PROFILE_D_SCRIPTS_DIR ?= $(shell                                            \
   $(NIX) build .\#flox-pkgdb.envs.PROFILE_D_SCRIPTS_DIR --print-out-paths)
+PROFILE_D_SCRIPTS_DIR := $(PROFILE_D_SCRIPTS_DIR)
 SET_PROMPT_BASH_SH ?= $(shell                                                  \
   $(NIX) store add-path -n set-prompt-bash.sh src/buildenv/set-prompt-bash.sh)
+SET_PROMPT_BASH_SH := $(SET_PROMPT_BASH_SH)
+
+# Rules for `pkgdb scrape' are stored in a JSON file.
+RULES_JSON ?= $(shell                                                 \
+  $(NIX) store add-path -n rules.json src/pkgdb/floxpkgs/rules.json)
+RULES_JSON := $(RULES_JSON)
+
+FLOXPKGS_FLAKE ?= $(shell                                               \
+  $(NIX) store add-path -n rules.json src/pkgdb/floxpkgs/flake.nix.in)
+FLOXPKGS_FLAKE := $(FLOXPKGS_FLAKE)
 
 
 # ---------------------------------------------------------------------------- #
@@ -344,6 +355,8 @@ src/buildenv/realise.o: CXXFLAGS +=                   \
 src/buildenv/realise.o: CXXFLAGS +=               \
 	'-DSET_PROMPT_BASH_SH="$(SET_PROMPT_BASH_SH)"'
 
+src/registry/floxpkgs.o: CXXFLAGS += '-DRULES_JSON="$(RULES_JSON)"'
+src/registry/floxpkgs.o: CXXFLAGS += '-DFLOXPKGS_FLAKE="$(FLOXPKGS_FLAKE)"'
 
 
 # ---------------------------------------------------------------------------- #
