@@ -82,19 +82,7 @@ impl ToString for LockedManifest {
 pub struct TypedLockedManifest {
     #[serde(rename = "lockfile-version")]
     lockfile_version: Version<0>,
-
-    manifest: Manifest,
     packages: BTreeMap<System, BTreeMap<String, LockedPackage>>,
-}
-
-#[derive(Debug, Serialize, Clone, Deserialize, PartialEq)]
-struct Manifest {
-    install: BTreeMap<String, InstallSpec>,
-}
-
-#[derive(Debug, Serialize, Clone, Deserialize, PartialEq)]
-struct InstallSpec {
-    path: String,
 }
 
 #[derive(Debug, Serialize, Clone, Deserialize, PartialEq)]
@@ -105,6 +93,9 @@ struct LockedPackage {
 
 #[derive(Debug, Serialize, Clone, Deserialize, PartialEq)]
 pub struct PackageInfo {
+    pub description: Option<String>,
+    #[serde(rename = "relPath")]
+    pub rel_path: Vec<String>,
     pub broken: bool,
     pub license: Option<String>,
     pub pname: String,
@@ -128,8 +119,6 @@ impl TypedLockedManifest {
             for (name, locked_package) in system_packages {
                 packages.push(InstalledPackage {
                     name: name.clone(),
-                    // SAFETY: we know that the package is in the manifest because it is locked
-                    path: self.manifest.install.get(name).unwrap().path.clone(),
                     info: locked_package.info.clone(),
                     priority: locked_package.priority,
                 });
@@ -141,7 +130,6 @@ impl TypedLockedManifest {
 
 pub struct InstalledPackage {
     pub name: String,
-    pub path: String,
     pub info: PackageInfo,
     pub priority: usize,
 }

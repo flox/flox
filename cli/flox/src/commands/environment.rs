@@ -572,7 +572,7 @@ impl List {
                 println!(
                     "{id}: {path} ({version})",
                     id = p.name,
-                    path = p.path,
+                    path = p.info.rel_path.join("."),
                     version = p.info.version
                 )
             });
@@ -611,7 +611,7 @@ impl List {
         for p in lockfile.list_packages(&flox.system).into_iter() {
             table.add_row(vec![
                 p.name,
-                p.path,
+                p.info.rel_path.join("."),
                 p.info.pname,
                 p.info.version,
                 p.priority.to_string(),
@@ -645,7 +645,6 @@ impl List {
 
         for InstalledPackage {
             name,
-            path,
             info:
                 PackageInfo {
                     broken,
@@ -653,6 +652,8 @@ impl List {
                     pname,
                     unfree,
                     version,
+                    description,
+                    rel_path,
                 },
             priority,
         } in lockfile
@@ -662,14 +663,17 @@ impl List {
         {
             let message = formatdoc! {"
                 {name}: ({pname})
-                  Path:     {path}
+                  Description: {description}
+                  Path:     {rel_path}
                   Priority: {priority}
                   Version:  {version}
                   License:  {license}
                   Unfree:   {unfree}
                   Broken:   {broken}
                 ",
+                description = description.unwrap_or_else(|| "N/A".to_string()),
                 license = license.unwrap_or_else(|| "N/A".to_string()),
+                rel_path = rel_path.join("."),
             };
 
             println!("{message}");
