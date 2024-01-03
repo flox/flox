@@ -1228,7 +1228,7 @@ impl SwitchGeneration {
 #[derive(Debug, Bpaf, Clone)]
 pub enum EnvironmentOrGlobalSelect {
     Environment(#[bpaf(external(environment_select))] EnvironmentSelect),
-    /// Update inputs used by search and show outside of an environment
+    /// Update inputs used by 'search' and 'show' outside of an environment
     #[bpaf(long("global"))]
     Global,
 }
@@ -1256,23 +1256,21 @@ impl Update {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("update");
 
-        let mut description = None;
-        let (old_lockfile, new_lockfile) = match self.environment_or_global {
+        let ((old_lockfile, new_lockfile), global, description) = match self.environment_or_global {
             EnvironmentOrGlobalSelect::Environment(ref environment_select) => {
                 let concrete_environment =
                     environment_select.detect_concrete_environment(&flox, "update")?;
 
-                description = Some(environment_description(&concrete_environment)?);
+                let description = Some(environment_description(&concrete_environment)?);
 
-                self.update_manifest(flox, concrete_environment)?
+                (
+                    self.update_manifest(flox, concrete_environment)?,
+                    false,
+                    description,
+                )
             },
-            EnvironmentOrGlobalSelect::Global => self.update_global_manifest(flox)?,
+            EnvironmentOrGlobalSelect::Global => (self.update_global_manifest(flox)?, true, None),
         };
-
-        let global = matches!(
-            self.environment_or_global,
-            EnvironmentOrGlobalSelect::Global
-        );
 
         if let Some(ref old_lockfile) = old_lockfile {
             if new_lockfile.registry.inputs == old_lockfile.registry.inputs {
@@ -1292,34 +1290,30 @@ impl Update {
         let mut inputs_to_scrape: Vec<&Input> = vec![];
 
         for (input_name, new_input) in &new_lockfile.registry.inputs {
-            if let Some(ref old_lockfile) = old_lockfile {
-                if let Some(old_input) = old_lockfile.registry.inputs.get(input_name) {
-                    if old_input != new_input {
-                        if global {
-                            info!("⬆️  Updated global input '{}'.", input_name);
-                        } else {
-                            info!(
-                                "⬆️  Updated input '{}' in environment {}.",
-                                input_name,
-                                description.as_ref().unwrap(),
-                            );
-                        }
-                        inputs_to_scrape.push(new_input);
-                    }
-                }
-            } else {
-                if global {
-                    info!("🔒️  Locked global input '{}'.", input_name);
-                } else {
-                    info!(
-                        "🔒️  Locked input '{}' in environment {}.",
-                        input_name,
-                        description.as_ref().unwrap(),
-                    );
-                }
-                inputs_to_scrape.push(new_input);
+            let old_input = old_lockfile
+                .as_ref()
+                .and_then(|old| old.registry.inputs.get(input_name));
+            match old_input {
+                // unchanged input
+                Some(old_input) if old_input == new_input => continue, // dont need to scrape
+                // updated input
+                Some(_) if global => info!("⬆️  Updated global input '{}'.", input_name),
+                Some(_) => info!(
+                    "⬆️  Updated input '{}' in environment {}.",
+                    input_name,
+                    description.as_ref().unwrap()
+                ),
+                // new input
+                None if global => info!("🔒️  Locked global input '{}'.", input_name),
+                None => info!(
+                    "🔒️  Locked input '{}' in environment {}.",
+                    input_name,
+                    description.as_ref().unwrap(),
+                ),
             }
+            inputs_to_scrape.push(new_input);
         }
+
         if let Some(old_lockfile) = old_lockfile {
             for (input_name, _) in old_lockfile.registry.inputs {
                 if !new_lockfile.registry.inputs.contains_key(&input_name) {
@@ -1346,10 +1340,10 @@ impl Update {
         // TODO: make this async when scraping multiple inputs
         let results: Vec<Result<()>> = Dialog {
             message: "Generating databases for updated inputs...",
-            help_message: None,
+            help_message: (inputs_to_scrape.len() > 1).then_some("This may take a while."),
             typed: Spinner::new(|| {
                 inputs_to_scrape
-                    .iter()
+                    .iter() // TODO: rayon::par_iter
                     .map(|input| Self::scrape_input(&input.from))
                     .collect()
             }),

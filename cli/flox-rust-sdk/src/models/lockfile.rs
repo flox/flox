@@ -21,12 +21,14 @@ pub struct Registry {
 
 /// An environment (or global) lockfile.
 ///
-/// The authoritative definition of this structure is in C++. This struct is
-/// used as the format to communicate with pkgdb. Many pkgdb commands will need
-/// to pass some of the information in the lockfile through to Rust. Although we
-/// could selectively pass fields through, I'm hoping it will be easier to parse
-/// the entirety of the lockfile in Rust rather than defining a separate set of
-/// fields for each different pkgdb command.
+/// The authoritative definition of this structure is in C++.
+/// This struct is used as the format to communicate with pkgdb.
+/// Many pkgdb commands will need to pass some of the information in the
+/// lockfile through to Rust.
+/// Although we could selectively pass fields through,
+/// I'm hoping it will be easier to parse the entirety of the lockfile in Rust,
+/// rather than defining a separate set of fields for each different pkgdb
+/// command.
 #[derive(Deserialize, Serialize)]
 pub struct Lockfile {
     pub registry: Registry,
