@@ -391,12 +391,9 @@ Environment::lockPackage( const LockedInputRaw & input,
   LockedPackageRaw pkg;
   pkg.input = input;
   info.at( "absPath" ).get_to( pkg.attrPath );
-  info.erase( "id" );
-  info.erase( "description" );
   info.erase( "absPath" );
-  info.erase( "subtree" );
+  info.erase( "id" );
   info.erase( "system" );
-  info.erase( "relPath" );
   pkg.priority = priority;
   pkg.info     = std::move( info );
   return pkg;

@@ -91,46 +91,68 @@ nlohmann::json mockInputJSON {
 
 /* -------------------------------------------------------------------------- */
 
-nlohmann::json   helloLockedJSON { inputWithNixpkgsJSON,
-                                   { "attr-path",
-                                     { "legacyPackages", _system, "hello" } },
-                                   { "priority", 5 },
-                                   { "info",
-                                     { { "broken", false },
-                                       { "license", "GPL-3.0-or-later" },
-                                       { "pname", "hello" },
-                                       { "unfree", false },
-                                       { "version", "2.12.1" } } } };
+nlohmann::json helloLockedJSON {
+  inputWithNixpkgsJSON,
+  { "attr-path", { "legacyPackages", _system, "hello" } },
+  { "priority", 5 },
+  { "info",
+    {
+      { "broken", false },
+      { "license", "GPL-3.0-or-later" },
+      { "pname", "hello" },
+      { "unfree", false },
+      { "version", "2.12.1" },
+      { "relPath", { "hello" } },
+      { "description",
+        "A program that produces a familiar, friendly greeting" },
+      { "subtree", "legacyPackages" },
+    } }
+};
 LockedPackageRaw helloLocked( helloLockedJSON );
 
 
 /* -------------------------------------------------------------------------- */
 
 /** Change a few fields from what we'd get if actual resultion was performed. */
-nlohmann::json   mockHelloLockedJSON { mockInputJSON,
-                                       { "attr-path", { "mock", "hello" } },
-                                       { "priority", 5 },
-                                       { "info",
-                                         { { "broken", false },
-                                           { "license", "GPL-3.0-or-later" },
-                                           { "pname", "hello" },
-                                           { "unfree", false },
-                                           { "version", "2.12.1" } } } };
+nlohmann::json mockHelloLockedJSON {
+  mockInputJSON,
+  { "attr-path", { "mock", "hello" } },
+  { "priority", 5 },
+  { "info",
+    {
+      { "broken", false },
+      { "license", "GPL-3.0-or-later" },
+      { "pname", "hello" },
+      { "unfree", false },
+      { "version", "2.12.1" },
+      { "relPath", { "hello" } },
+      { "description",
+        "A program that produces a familiar, friendly greeting" },
+      { "subtree", "legacyPackages" },
+    } }
+};
 LockedPackageRaw mockHelloLocked( mockHelloLockedJSON );
 
 
 /* -------------------------------------------------------------------------- */
 
-nlohmann::json   curlLockedJSON { inputWithNixpkgsJSON,
-                                  { "attr-path",
-                                    { "legacyPackages", _system, "curl" } },
-                                  { "priority", 5 },
-                                  { "info",
-                                    { { "broken", false },
-                                      { "license", "curl" },
-                                      { "pname", "curl" },
-                                      { "unfree", false },
-                                      { "version", "8.1.1" } } } };
+nlohmann::json curlLockedJSON {
+  inputWithNixpkgsJSON,
+  { "attr-path", { "legacyPackages", _system, "curl" } },
+  { "priority", 5 },
+  { "info",
+    {
+      { "broken", false },
+      { "license", "curl" },
+      { "pname", "curl" },
+      { "unfree", false },
+      { "version", "8.1.1" },
+      { "relPath", { "curl" } },
+      { "description",
+        "A command line tool for transferring files with URL syntax" },
+      { "subtree", "legacyPackages" },
+    } }
+};
 LockedPackageRaw curlLocked( curlLockedJSON );
 
 
@@ -138,15 +160,21 @@ LockedPackageRaw curlLocked( curlLockedJSON );
 
 /** Change a few fields from what we'd get if actual resultion was performed.
  */
-nlohmann::json   mockCurlLockedJSON { mockInputJSON,
-                                      { "attr-path", { "mock", "curl" } },
-                                      { "priority", 5 },
-                                      { "info",
-                                        { { "broken", false },
-                                          { "license", "GPL-3.0-or-later" },
-                                          { "pname", "curl" },
-                                          { "unfree", false },
-                                          { "version", "2.12.1" } } } };
+nlohmann::json mockCurlLockedJSON {
+  mockInputJSON,
+  { "attr-path", { "mock", "curl" } },
+  { "priority", 5 },
+  { "info",
+    { { "broken", false },
+      { "license", "GPL-3.0-or-later" },
+      { "pname", "curl" },
+      { "unfree", false },
+      { "version", "2.12.1" },
+      { "relPath", { "curl" } },
+      { "description",
+        "A command line tool for transferring files with URL syntax" },
+      { "subtree", "legacyPackages" } } }
+};
 LockedPackageRaw mockCurlLocked( mockCurlLockedJSON );
 
 
