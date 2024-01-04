@@ -303,6 +303,7 @@ EnvironmentMixin::addManifestFileArg( argparse::ArgumentParser & parser,
     = parser.add_argument( "--manifest" )
         .help( "the path to the project's `manifest.{toml,yaml,json}' file." )
         .metavar( "PATH" )
+        .nargs( 1 )
         .action( [&]( const std::string & strPath )
                  { this->setManifestRaw( nix::absPath( strPath ) ); } );
   return required ? arg.required() : arg;
@@ -318,6 +319,7 @@ EnvironmentMixin::addLockfileOption( argparse::ArgumentParser & parser )
     .help( "the path to a lockfile, either the project's `manifest.lock` or "
            "the global lock" )
     .metavar( "PATH" )
+    .nargs( 1 )
     .action( [&]( const std::string & strPath )
              { this->setLockfileRaw( nix::absPath( strPath ) ); } );
 }
