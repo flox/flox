@@ -22,11 +22,9 @@ use flox_rust_sdk::models::environment::{
     CoreEnvironmentError,
     EditResult,
     Environment,
-    EnvironmentError2,
     EnvironmentPointer,
     ManagedPointer,
     PathPointer,
-    UninitializedEnvironment,
     UpdateResult,
     DOT_FLOX,
     ENVIRONMENT_POINTER_FILENAME,
@@ -52,6 +50,7 @@ use indoc::{formatdoc, indoc};
 use itertools::Itertools;
 use log::{debug, error, info};
 use tempfile::NamedTempFile;
+use url::Url;
 
 use super::{environment_select, EnvironmentSelect};
 use crate::commands::{
@@ -59,6 +58,7 @@ use crate::commands::{
     auth,
     ensure_environment_trust,
     ConcreteEnvironment,
+    UninitializedEnvironment,
 };
 use crate::config::Config;
 use crate::subcommand_metric;
@@ -89,10 +89,12 @@ impl Edit {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("edit");
 
-        let mut environment = self
+        let detected_environment = self
             .environment
-            .detect_concrete_environment(&flox, "edit")?
-            .into_dyn_environment();
+            .detect_concrete_environment(&flox, "edit")?;
+        let active_environment =
+            UninitializedEnvironment::from_concrete_environment(&detected_environment)?;
+        let mut environment = detected_environment.into_dyn_environment();
 
         let result = match self.provided_manifest_contents()? {
             // If provided with the contents of a manifest file, either via a path to a file or via
@@ -107,7 +109,7 @@ impl Edit {
                 println!("⚠️  no changes made to environment");
             },
             EditResult::ReActivateRequired => {
-                if activated_environments().contains(&environment.parent_path()?) {
+                if activated_environments().is_active(&active_environment) {
                     println!(indoc::indoc! {"
                             Your manifest has changes that cannot be automatically applied to your current environment.
 
@@ -342,6 +344,9 @@ impl Activate {
             }
         }
 
+        let last_active =
+            UninitializedEnvironment::from_concrete_environment(&concrete_environment)?;
+
         let mut environment = concrete_environment.into_dyn_environment();
 
         let activation_path = Dialog {
@@ -360,14 +365,8 @@ impl Activate {
             });
 
         // Add to FLOX_ACTIVE_ENVIRONMENTS so we can detect what environments are active.
-        let parent_path = environment.parent_path()?;
-        let mut active_environments = vec![parent_path];
-        if let Ok(existing_environments) = env::var(FLOX_ACTIVE_ENVIRONMENTS_VAR) {
-            active_environments.extend(env::split_paths(&existing_environments));
-        };
-        let flox_active_environments = env::join_paths(active_environments).context(
-            "Cannot activate environment because its path contains an invalid character",
-        )?;
+        let mut flox_active_environments = activated_environments();
+        flox_active_environments.set_last_active(last_active);
 
         // TODO more sophisticated detection?
         let shell = if let Ok(shell) = env::var("SHELL") {
@@ -379,7 +378,10 @@ impl Activate {
         command
             .env(FLOX_PROMPT_ENVIRONMENTS_VAR, flox_prompt_environments)
             .env(FLOX_ENV_VAR, &activation_path)
-            .env(FLOX_ACTIVE_ENVIRONMENTS_VAR, flox_active_environments)
+            .env(
+                FLOX_ACTIVE_ENVIRONMENTS_VAR,
+                flox_active_environments.to_string(),
+            )
             .env(
                 "FLOX_PROMPT_COLOR_1",
                 // default to SlateBlue3
@@ -691,52 +693,8 @@ impl List {
     }
 }
 
-fn environment_description(environment: &ConcreteEnvironment) -> Result<String, EnvironmentError2> {
-    Ok(match environment {
-        ConcreteEnvironment::Remote(environment) => {
-            format!("{}/{} (remote)", environment.owner(), environment.name(),)
-        },
-        ConcreteEnvironment::Managed(environment) => {
-            format!(
-                "{}/{} at {}",
-                environment.owner(),
-                environment.name(),
-                environment.path.to_string_lossy()
-            )
-        },
-        ConcreteEnvironment::Path(environment) => {
-            format!(
-                "{} at {}",
-                environment.name(),
-                environment.parent_path()?.to_string_lossy()
-            )
-        },
-    })
-}
-
-/// Generate a description for an environment that has not yet been opened.
-///
-/// TODO: we should share this implementation with environment_description().
-pub fn hacky_environment_description(
-    uninitialized: &UninitializedEnvironment,
-) -> Result<String, EnvironmentError2> {
-    Ok(match &uninitialized.pointer {
-        EnvironmentPointer::Managed(managed_pointer) => {
-            format!(
-                "{}/{} at {}",
-                managed_pointer.owner,
-                managed_pointer.name,
-                uninitialized.path.to_string_lossy(),
-            )
-        },
-        EnvironmentPointer::Path(path_pointer) => {
-            format!(
-                "{} at {}",
-                path_pointer.name,
-                uninitialized.path.to_string_lossy()
-            )
-        },
-    })
+fn environment_description(environment: &ConcreteEnvironment) -> Result<String> {
+    Ok(UninitializedEnvironment::from_concrete_environment(environment)?.to_string())
 }
 
 /// Install a package into an environment
@@ -1170,7 +1128,8 @@ impl Pull {
 
         match self.pull_select {
             PullSelect::New { dir, remote } | PullSelect::NewAbbreviated { dir, remote } => {
-                let (start, complete) = Self::pull_new_messages(dir.as_deref(), &remote);
+                let (start, complete) =
+                    Self::pull_new_messages(dir.as_deref(), &remote, flox.floxhub.base_url());
 
                 let dir = dir.unwrap_or_else(|| std::env::current_dir().unwrap());
 
@@ -1291,11 +1250,13 @@ impl Pull {
     }
 
     /// construct a message for pulling a new environment
-    ///
-    /// todo: add floxhub base url when it's available
-    fn pull_new_messages(dir: Option<&Path>, env_ref: &EnvironmentRef) -> (String, String) {
+    fn pull_new_messages(
+        dir: Option<&Path>,
+        env_ref: &EnvironmentRef,
+        floxhub_host: &Url,
+    ) -> (String, String) {
         let mut start_message =
-            format!("⬇️ remote: pulling and building {env_ref} from https://hub.flox.dev");
+            format!("⬇️ remote: pulling and building {env_ref} from {floxhub_host}");
         if let Some(dir) = dir {
             start_message += &format!(" into {dir}", dir = dir.display());
         } else {
@@ -1303,7 +1264,7 @@ impl Pull {
         };
 
         let complete_message = formatdoc! {"
-            ✨ pulled {env_ref} from https://hub.flox.dev
+            ✨ pulled {env_ref} from {floxhub_host}
 
             You can activate this environment with 'flox activate'
         "};
@@ -1317,14 +1278,15 @@ impl Pull {
     fn pull_existing_messages(pointer: &ManagedPointer, force: bool) -> (String, String) {
         let owner = &pointer.owner;
         let name = &pointer.name;
+        let floxhub_host = &pointer.floxhub_url;
 
         let start_message =
-            format!("⬇️ remote: pulling and building {owner}/{name} from https://hub.flox.dev",);
+            format!("⬇️ remote: pulling and building {owner}/{name} from {floxhub_host}",);
 
         let suffix: &str = if force { " (forced)" } else { "" };
 
         let complete_message = formatdoc! {"
-            ✨ pulled {owner}/{name} from https://hub.flox.dev{suffix}
+            ✨ pulled {owner}/{name} from {floxhub_host}{suffix}
 
             You can activate this environment with 'flox activate'
         "};
