@@ -15,6 +15,7 @@
 
 #include "flox/core/util.hh"
 #include "flox/registry.hh"
+#include "flox/registry/floxpkgs.hh"
 #include "flox/resolver/manifest.hh"
 #include "test.hh"
 
@@ -118,6 +119,19 @@ test_EnvironmentManifest_NoIndirectRefs0()
 
 /* -------------------------------------------------------------------------- */
 
+bool
+test_floxpkgs0()
+{
+  flox::NixState      nstate;
+  nix::FlakeRef       ref = nix::parseFlakeRef( nixpkgsRef );
+  flox::FloxpkgsFlake flake( nstate.getState(), ref );
+
+  return true;
+}
+
+
+/* -------------------------------------------------------------------------- */
+
 int
 main( int argc, char * argv[] )
 {
@@ -139,7 +153,7 @@ main( int argc, char * argv[] )
   RUN_TEST( EnvironmentManifest_badPath0 );
   RUN_TEST( EnvironmentManifest_NoIndirectRefs0 );
   RUN_TEST( merge_vecs );
-
+  RUN_TEST( floxpkgs0 );
 
   return exitCode;
 }

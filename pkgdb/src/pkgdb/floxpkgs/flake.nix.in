@@ -17,7 +17,7 @@
 
 # ---------------------------------------------------------------------------- #
 
-  inputs.nixpkgs.url = "github:NixOS/nixpkgs/release-23.05";
+  inputs.nixpkgs.url = "@NIXPKGS_URL@";
 
 # ---------------------------------------------------------------------------- #
 
@@ -43,10 +43,7 @@
     #
     rules = let
       # Substituted by build, but we can fallback to a local copy for dev:
-      staticRulesFile = "@PKGDB_RULES_FILE@";
-      rulesFile       = if ( builtins.substring 0 1 staticRulesFile ) == "@"
-                        then ./rules.json
-                        else staticRulesFile;
+      rulesFile = "@PKGDB_RULES_FILE@";
     in builtins.fromJSON ( builtins.readFile rulesFile );
 
 

@@ -41,7 +41,7 @@ namespace flox {
 nix::flake::LockedFlake
 lockFlake( nix::EvalState &              state,
            const nix::FlakeRef &         ref,
-           const nix::flake::LockFlags & flags = defaultLockFlags )
+           const nix::flake::LockFlags & flags )
 {
   try
     {
@@ -63,7 +63,8 @@ lockFlake( nix::EvalState &              state,
 
 /* -------------------------------------------------------------------------- */
 
-void
+
+nix::Value *
 flakeLoader( nix::EvalState &                state,
              const nix::flake::LockedFlake & lockedFlake )
 {
@@ -102,7 +103,7 @@ openEvalCache( nix::EvalState &                state,
   auto cache = std::make_shared<nix::eval_cache::EvalCache>(
     useCache,
     state,
-    [&state, &lockedFlake]() { flakeLoader( state, lockedFlake ); } );
+    [&state, &lockedFlake]() { return flakeLoader( state, lockedFlake ); } );
 
   /* Pop old settings. */
   nix::evalSettings.useEvalCache.assign( oldUseCache );

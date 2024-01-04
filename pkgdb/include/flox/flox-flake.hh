@@ -66,7 +66,7 @@ lockFlake( nix::EvalState &              state,
 /* -------------------------------------------------------------------------- */
 
 /** @brief Load a flake's root values into a `nix` evaluator's state. */
-void
+[[nodiscard]] nix::Value *
 flakeLoader( nix::EvalState &                state,
              const nix::flake::LockedFlake & lockedFlake );
 

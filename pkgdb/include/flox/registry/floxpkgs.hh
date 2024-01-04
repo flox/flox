@@ -23,6 +23,8 @@ namespace flox {
 class FloxpkgsFlake : public FloxFlake
 {
 
+public:
+
   // TODO: modify `ref' to reflect the added rules/pre-processing.
   FloxpkgsFlake( const nix::ref<nix::EvalState> & state,
                  const nix::FlakeRef &            ref );
