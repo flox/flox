@@ -79,13 +79,7 @@
     # Rules for `pkgdb scrape'
     RULES_JSON = builtins.path {
       name = "rules.json";
-      path = ../../pkgdb/src/pkgdb/floxpkgs/rules.json;
-    };
-    # Processor for `rules.json'
-    # We must substitute the `rules.json' path in.
-    FLOXPKGS_FLAKE = builtins.path {
-      name = "flake.nix.in";
-      path = ../../pkgdb/src/pkgdb/floxpkgs/flake.nix.in;
+      path = ../../pkgdb/src/registry/floxpkgs/rules.json;
     };
   };
 in
