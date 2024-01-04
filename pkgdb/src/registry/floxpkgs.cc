@@ -10,6 +10,8 @@
  * -------------------------------------------------------------------------- */
 
 #include <fstream>
+#include <iostream>
+#include <optional>
 
 #include "flox/core/util.hh"
 #include "flox/registry/floxpkgs.hh"
@@ -25,9 +27,14 @@ namespace flox {
 #  error "RULES_JSON must be defined"
 #endif  // ifndef RULES_JSON
 
-#ifndef FLOXPKGS_FLAKE
-#  error "FLOXPKGS_FLAKE must be defined"
-#endif  // ifndef FLOXPKGS_FLAKE
+
+/* -------------------------------------------------------------------------- */
+
+[[nodiscard]] static const std::filesystem::path
+getRulesFile()
+{
+  return nix::getEnv( "_PKGDB_NIXPKGS_RULES_JSON" ).value_or( RULES_JSON );
+}
 
 
 /* -------------------------------------------------------------------------- */
@@ -40,10 +47,13 @@ namespace flox {
 createWrappedFlakeDir( const nix::FlakeRef & nixpkgsRef )
 {
   std::filesystem::path tmpDir = nix::createTempDir();
-  std::filesystem::copy( RULES_JSON, tmpDir / "rules.json" );
+  std::filesystem::copy( getRulesFile(), tmpDir / "rules.json" );
 
-  std::ifstream flakeIn( FLOXPKGS_FLAKE );
   std::ofstream flakeOut( tmpDir / "flake.nix" );
+  static const std::string flakeTemplate =
+    #include "./floxpkgs/flake.nix.in.hh"
+  ;
+  std::istringstream flakeIn( flakeTemplate );
 
   std::string line;
   while ( std::getline( flakeIn, line ) )
@@ -105,6 +115,7 @@ createWrappedLockedFlake( nix::EvalState &      state,
 FloxpkgsFlake::FloxpkgsFlake( const nix::ref<nix::EvalState> & state,
                               const nix::FlakeRef &            ref )
   : FloxFlake( state, createWrappedLockedFlake( *state, ref ) )
+  , nixpkgsRef( ref )
 {}
 
 

@@ -31,8 +31,10 @@ class FloxpkgsFlake : public FloxFlake
 
 public:
 
+  const nix::FlakeRef nixpkgsRef;
+
   FloxpkgsFlake( const nix::ref<nix::EvalState> & state,
-                 const nix::FlakeRef &            ref );
+                 const nix::FlakeRef &            nixpkgsRef );
 
 
 }; /* End class `FloxpkgsFlake' */
