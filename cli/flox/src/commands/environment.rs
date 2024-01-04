@@ -1445,7 +1445,7 @@ impl Update {
         };
 
         if let Some(ref old_lockfile) = old_lockfile {
-            if new_lockfile.registry.inputs == old_lockfile.registry.inputs {
+            if new_lockfile.registry().inputs == old_lockfile.registry().inputs {
                 if global {
                     info!("ℹ️  All global inputs are up-to-date.");
                 } else {
@@ -1461,10 +1461,10 @@ impl Update {
 
         let mut inputs_to_scrape: Vec<&Input> = vec![];
 
-        for (input_name, new_input) in &new_lockfile.registry.inputs {
+        for (input_name, new_input) in &new_lockfile.registry().inputs {
             let old_input = old_lockfile
                 .as_ref()
-                .and_then(|old| old.registry.inputs.get(input_name));
+                .and_then(|old| old.registry().inputs.get(input_name));
             match old_input {
                 // unchanged input
                 Some(old_input) if old_input == new_input => continue, // dont need to scrape
@@ -1487,8 +1487,8 @@ impl Update {
         }
 
         if let Some(old_lockfile) = old_lockfile {
-            for (input_name, _) in old_lockfile.registry.inputs {
-                if !new_lockfile.registry.inputs.contains_key(&input_name) {
+            for input_name in old_lockfile.registry().inputs.keys() {
+                if !new_lockfile.registry().inputs.contains_key(input_name) {
                     if global {
                         info!(
                             "🗑️  Removed unused input '{}' from global lockfile.",

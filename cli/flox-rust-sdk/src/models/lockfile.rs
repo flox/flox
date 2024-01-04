@@ -124,7 +124,7 @@ pub struct TypedLockedManifest {
     #[serde(rename = "lockfile-version")]
     lockfile_version: Version<0>,
     packages: BTreeMap<System, BTreeMap<String, LockedPackage>>,
-    pub registry: Registry,
+    registry: Registry,
 }
 
 #[derive(Debug, Serialize, Clone, Deserialize, PartialEq)]
@@ -154,6 +154,10 @@ impl TryFrom<LockedManifest> for TypedLockedManifest {
 }
 
 impl TypedLockedManifest {
+    pub fn registry(&self) -> &Registry {
+        &self.registry
+    }
+
     /// List all packages in the locked manifest for a given system
     pub fn list_packages(&self, system: &System) -> Vec<InstalledPackage> {
         let mut packages = vec![];
