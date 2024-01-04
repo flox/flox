@@ -13,6 +13,7 @@
 #include <functional>
 #include <queue>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include <nix/eval-cache.hh>
@@ -39,6 +40,21 @@
 
 /** @brief Interfaces for caching package metadata in SQLite3 databases. */
 namespace flox::pkgdb {
+
+/* -------------------------------------------------------------------------- */
+
+const DurationMillis DB_RETRY_PERIOD = DurationMillis( 100 );
+
+#define RETRY_WHILE_BUSY( op )                        \
+  int _retry_while_busy_rcode   = op;                 \
+  int _retry_while_busy_retries = 0;                  \
+  while ( ( _retry_while_busy_rcode == SQLITE_BUSY )  \
+          && ( ++_retry_while_busy_retries < 100 ) )  \
+    {                                                 \
+      std::this_thread::sleep_for( DB_RETRY_PERIOD ); \
+      _retry_while_busy_rcode = op;                   \
+    }
+
 
 /* -------------------------------------------------------------------------- */
 
@@ -237,6 +253,18 @@ public:
     : PkgDbReadOnly( fingerprint, genPkgDbName( fingerprint ).string() )
   {}
 
+  /* Connecting and locking */
+
+  /**
+   * @brief Tries to connect to the database.
+   *
+   * The database may be locked by another process that is currently scraping
+   * it. This function will block until that lock is released. Will not acquire
+   * an exclusive lock on the database so that other process can concurrently
+   * read the database.
+   */
+  void
+  connect();
 
   /* Queries */
 
