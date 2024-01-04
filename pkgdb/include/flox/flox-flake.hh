@@ -108,8 +108,13 @@ public:
   nix::ref<nix::EvalState>      state;
   const nix::flake::LockedFlake lockedFlake;
 
+  FloxFlake( const nix::ref<nix::EvalState> & state,
+             nix::flake::LockedFlake          lockedFlake )
+    : state( state ), lockedFlake( std::move( lockedFlake ) )
+  {}
+
   FloxFlake( const nix::ref<nix::EvalState> & state, const nix::FlakeRef & ref )
-    : state( state ), lockedFlake( lockFlake( *this->state, ref ) )
+    : FloxFlake( state, lockFlake( *state, ref ) )
   {}
 
   /**

@@ -32,7 +32,7 @@ namespace flox {
 [[nodiscard]] static std::filesystem::path
 createWrappedFlakeDir( const nix::FlakeRef & nixpkgsRef )
 {
-  std::filesystem::path tmpDir = nix::createTempDir( "", "floxpkgs" );
+  std::filesystem::path tmpDir = nix::createTempDir();
   std::filesystem::copy( RULES_JSON, tmpDir / "rules.json" );
 
   std::ifstream flakeIn( FLOXPKGS_FLAKE );
@@ -73,7 +73,21 @@ createWrappedFlakeDir( const nix::FlakeRef & nixpkgsRef )
 createWrappedFlake( const nix::FlakeRef & nixpkgsRef )
 {
   std::filesystem::path tmpDir = createWrappedFlakeDir( nixpkgsRef );
-  return nix::parseFlakeRef( "file:///" + tmpDir.string() );
+  return nix::parseFlakeRef( tmpDir.string() );
+}
+
+
+/* -------------------------------------------------------------------------- */
+
+[[nodiscard]] static nix::flake::LockedFlake
+createWrappedLockedFlake( nix::EvalState &      state,
+                          const nix::FlakeRef & nixpkgsRef )
+{
+  nix::FlakeRef         ref   = createWrappedFlake( nixpkgsRef );
+  nix::flake::LockFlags flags = defaultLockFlags;
+  flags.updateLockFile        = true;
+  flags.writeLockFile         = true;
+  return flox::lockFlake( state, ref, flags );
 }
 
 
@@ -81,7 +95,7 @@ createWrappedFlake( const nix::FlakeRef & nixpkgsRef )
 
 FloxpkgsFlake::FloxpkgsFlake( const nix::ref<nix::EvalState> & state,
                               const nix::FlakeRef &            ref )
-  : FloxFlake( state, createWrappedFlake( ref ) )
+  : FloxFlake( state, createWrappedLockedFlake( *state, ref ) )
 {}
 
 
