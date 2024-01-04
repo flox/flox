@@ -93,7 +93,7 @@ openEvalCache( nix::EvalState &                state,
 class FloxFlake : public std::enable_shared_from_this<FloxFlake>
 {
 
-private:
+protected:
 
   /**
    * @brief A handle for a cached `nix` evaluator associated with @a this flake.
@@ -122,7 +122,7 @@ public:
    *        evaluated `flake` and its outputs in global scope.
    * @return A `nix` evaluator, potentially with caching.
    */
-  [[nodiscard]] nix::ref<nix::eval_cache::EvalCache>
+  [[nodiscard]] virtual nix::ref<nix::eval_cache::EvalCache>
   openEvalCache();
 
   /**

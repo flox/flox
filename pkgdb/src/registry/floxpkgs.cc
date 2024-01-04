@@ -114,9 +114,23 @@ createWrappedLockedFlake( nix::EvalState &      state,
 
 FloxpkgsFlake::FloxpkgsFlake( const nix::ref<nix::EvalState> & state,
                               const nix::FlakeRef &            ref )
-  : FloxFlake( state, createWrappedLockedFlake( *state, ref ) )
-  , nixpkgsRef( ref )
+  : FloxFlake( state, ref )
+  , wrappedLockedFlake( createWrappedLockedFlake( *state, ref ) )
 {}
+
+
+/* -------------------------------------------------------------------------- */
+
+nix::ref<nix::eval_cache::EvalCache>
+FloxpkgsFlake::openEvalCache()
+{
+  if ( this->_cache == nullptr )
+    {
+      this->_cache
+        = flox::openEvalCache( *this->state, this->wrappedLockedFlake );
+    }
+  return static_cast<nix::ref<nix::eval_cache::EvalCache>>( this->_cache );
+}
 
 
 /* -------------------------------------------------------------------------- */

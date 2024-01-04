@@ -31,10 +31,13 @@ class FloxpkgsFlake : public FloxFlake
 
 public:
 
-  const nix::FlakeRef nixpkgsRef;
+  const nix::flake::LockedFlake wrappedLockedFlake;
 
   FloxpkgsFlake( const nix::ref<nix::EvalState> & state,
                  const nix::FlakeRef &            nixpkgsRef );
+
+  [[nodiscard]] nix::ref<nix::eval_cache::EvalCache>
+  openEvalCache() override;
 
 
 }; /* End class `FloxpkgsFlake' */

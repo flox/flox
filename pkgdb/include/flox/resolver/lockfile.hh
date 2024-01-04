@@ -42,6 +42,12 @@ FLOX_DEFINE_EXCEPTION( InvalidLockfileException,
 
 /* -------------------------------------------------------------------------- */
 
+// XXX: Post-GA if we use non-nixpkgs inputs, or want to support user defined
+//      _scrape rules_ we will need to add fields here to handle those.
+//      For now we assume all inputs are nixpkgs and we use the `fingerprint`
+//      field to track the _scrape rules_ wrapper.
+//      The _actual_ `attrs` and `url` here will only align with the fingerprint
+//      if the _scrape rules_ wrapper is used.
 struct LockedInputRaw
 {
 

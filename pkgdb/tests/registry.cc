@@ -126,6 +126,9 @@ test_floxpkgs0()
   nix::FlakeRef       ref = nix::parseFlakeRef( nixpkgsRef );
   flox::FloxpkgsFlake flake( nstate.getState(), ref );
 
+  nlohmann::json rsl = nlohmann::json::object();
+  EXPECT_EQ( ref, flake.lockedFlake.flake.originalRef);
+  EXPECT_EQ( flake.wrappedLockedFlake.flake.lockedRef.input.getType(), "path" );
   return true;
 }
 
