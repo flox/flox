@@ -1,3 +1,8 @@
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+
+pub type FlakeRef = Value;
+
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -5,15 +10,27 @@ use std::process::Command;
 use flox_types::catalog::System;
 use flox_types::version::Version;
 use log::debug;
-use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use thiserror::Error;
 
 use super::pkgdb::CallPkgDbError;
 use crate::models::environment::CanonicalPath;
 use crate::models::pkgdb::{call_pkgdb, BuildEnvResult};
 
-#[derive(Debug, Serialize, Clone, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Input {
+    pub from: FlakeRef,
+    #[serde(flatten)]
+    _json: Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Registry {
+    pub inputs: BTreeMap<String, Input>,
+    #[serde(flatten)]
+    _json: Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct LockedManifest(Value);
 
 impl LockedManifest {
@@ -78,11 +95,36 @@ impl ToString for LockedManifest {
     }
 }
 
-#[derive(Debug, Serialize, Clone, Deserialize, PartialEq)]
+/// An environment (or global) lockfile.
+///
+/// This struct is meant **for reading only**.
+///
+/// It serves as a typed representation of the lockfile json produced by pkgdb.
+/// Parsing of the lockfile is done in [TypedLockedManifest::try_from]
+/// and should be as late as possible.
+/// Where possible, use the opaque [LockedManifest] instead of this struct
+/// to avoid incompatibility issues with the authoritative definition in C++.
+///
+/// In the optimal case the lockfile schema can be inferred from a common
+/// or `pkgdb`-defined schema.
+///
+/// This struct is used as the format to communicate with pkgdb.
+/// Many pkgdb commands will need to pass some of the information in the
+/// lockfile through to Rust.
+///
+/// And some commands (i.e. `list`) will need to read lockfiles
+/// to get information about the environment without having to call `pkgdb`.
+///
+/// Although we could selectively pass fields through,
+/// I'm hoping it will be easier to parse the entirety of the lockfile in Rust,
+/// rather than defining a separate set of fields for each different pkgdb
+/// command.
+#[derive(Debug, Clone, Deserialize, PartialEq)]
 pub struct TypedLockedManifest {
     #[serde(rename = "lockfile-version")]
     lockfile_version: Version<0>,
     packages: BTreeMap<System, BTreeMap<String, LockedPackage>>,
+    pub registry: Registry,
 }
 
 #[derive(Debug, Serialize, Clone, Deserialize, PartialEq)]
