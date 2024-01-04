@@ -122,7 +122,7 @@ public:
    *        evaluated `flake` and its outputs in global scope.
    * @return A `nix` evaluator, potentially with caching.
    */
-  [[nodiscard]] virtual nix::ref<nix::eval_cache::EvalCache>
+  [[nodiscard]] nix::ref<nix::eval_cache::EvalCache>
   openEvalCache();
 
   /**

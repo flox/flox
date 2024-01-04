@@ -29,6 +29,13 @@ namespace flox {
 #  error "FLOXPKGS_FLAKE must be defined"
 #endif  // ifndef FLOXPKGS_FLAKE
 
+
+/* -------------------------------------------------------------------------- */
+
+/**
+ * @brief Create a temporary directory containing a `flake.nix` which wraps
+ *        @a nixpkgsRef, applying _rules_ from `rules.json`.
+ */
 [[nodiscard]] static std::filesystem::path
 createWrappedFlakeDir( const nix::FlakeRef & nixpkgsRef )
 {
@@ -69,6 +76,7 @@ createWrappedFlakeDir( const nix::FlakeRef & nixpkgsRef )
 
 /* -------------------------------------------------------------------------- */
 
+/** @brief Create a wrapped flake and return its _flake-ref_. */
 [[nodiscard]] static nix::FlakeRef
 createWrappedFlake( const nix::FlakeRef & nixpkgsRef )
 {
@@ -79,6 +87,7 @@ createWrappedFlake( const nix::FlakeRef & nixpkgsRef )
 
 /* -------------------------------------------------------------------------- */
 
+/** @brief Create and lock a wrapped flake. */
 [[nodiscard]] static nix::flake::LockedFlake
 createWrappedLockedFlake( nix::EvalState &      state,
                           const nix::FlakeRef & nixpkgsRef )
@@ -97,16 +106,6 @@ FloxpkgsFlake::FloxpkgsFlake( const nix::ref<nix::EvalState> & state,
                               const nix::FlakeRef &            ref )
   : FloxFlake( state, createWrappedLockedFlake( *state, ref ) )
 {}
-
-
-/* -------------------------------------------------------------------------- */
-
-nix::ref<nix::eval_cache::EvalCache>
-FloxpkgsFlake::openEvalCache()
-{
-  // TODO
-  return FloxFlake::openEvalCache();
-}
 
 
 /* -------------------------------------------------------------------------- */
