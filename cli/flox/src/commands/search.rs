@@ -445,7 +445,7 @@ pub fn manifest_and_lockfile(
                     open_environment(flox, found)?.into_dyn_environment()
                 },
                 ActiveEnvironment::Remote(env_ref) => {
-                    let env = RemoteEnvironment::new(flox, &env_ref)?;
+                    let env = RemoteEnvironment::new(flox, env_ref)?;
                     Box::new(env)
                 },
             };

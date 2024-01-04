@@ -19,6 +19,7 @@ use flox_rust_sdk::models::environment::{
     find_dot_flox,
     Environment,
     EnvironmentPointer,
+    ManagedPointer,
     UninitializedEnvironment,
     DOT_FLOX,
     FLOX_ACTIVE_ENVIRONMENTS_VAR,
@@ -525,7 +526,13 @@ impl EnvironmentSelect {
                 }
             },
             EnvironmentSelect::Remote(env_ref) => {
-                let env = RemoteEnvironment::new(flox, env_ref)?;
+                let pointer = ManagedPointer::new(
+                    env_ref.owner().clone(),
+                    env_ref.name().clone(),
+                    &flox.floxhub,
+                );
+
+                let env = RemoteEnvironment::new(flox, pointer)?;
                 Ok(ConcreteEnvironment::Remote(env))
             },
         }
@@ -550,7 +557,7 @@ impl EnvironmentSelect {
             EnvironmentSelect::Unspecified => match detect_environment(message)? {
                 Some(ActiveEnvironment::DotFlox(found)) => open_environment(flox, found),
                 Some(ActiveEnvironment::Remote(env_ref)) => {
-                    let env = RemoteEnvironment::new(flox, &env_ref)?;
+                    let env = RemoteEnvironment::new(flox, env_ref)?;
                     Ok(ConcreteEnvironment::Remote(env))
                 },
                 None => {
@@ -560,7 +567,13 @@ impl EnvironmentSelect {
                 },
             },
             EnvironmentSelect::Remote(env_ref) => {
-                let env = RemoteEnvironment::new(flox, env_ref)?;
+                let pointer = ManagedPointer::new(
+                    env_ref.owner().clone(),
+                    env_ref.name().clone(),
+                    &flox.floxhub,
+                );
+
+                let env = RemoteEnvironment::new(flox, pointer)?;
                 Ok(ConcreteEnvironment::Remote(env))
             },
         }
@@ -697,13 +710,13 @@ impl ConcreteEnvironment {
 /// but rather fully qualified metadata to create an instance from.
 ///
 /// * for [PathEnvironment] and [ManagedEnvironment] that's the path to their `.flox` and `.flox/pointer.json`
-/// * for [RemoteEnvironment] that's the [EnvironmentRef] to the remote environment
+/// * for [RemoteEnvironment] that's the [ManagedPointer] to the remote environment
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum ActiveEnvironment {
     /// Container for "local" environments pointed to by [DotFlox]
     DotFlox(UninitializedEnvironment),
     /// Container for [RemoteEnvironment]
-    Remote(EnvironmentRef),
+    Remote(ManagedPointer),
 }
 
 impl ActiveEnvironment {
@@ -724,7 +737,7 @@ impl ActiveEnvironment {
                 }))
             },
             ConcreteEnvironment::Remote(remote_env) => {
-                let env_ref = remote_env.env_ref();
+                let env_ref = remote_env.pointer().clone();
                 Ok(Self::Remote(env_ref))
             },
         }

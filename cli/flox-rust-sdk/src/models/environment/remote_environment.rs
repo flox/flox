@@ -1,7 +1,6 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use flox_types::version::Version;
 use log::debug;
 use thiserror::Error;
 
@@ -14,6 +13,7 @@ use super::{
     Environment,
     EnvironmentError2,
     InstallationAttempt,
+    ManagedPointer,
     DOT_FLOX,
     ENVIRONMENT_POINTER_FILENAME,
 };
@@ -51,16 +51,8 @@ impl RemoteEnvironment {
     pub fn new_in(
         flox: &Flox,
         path: impl AsRef<Path>,
-        env_ref: &EnvironmentRef,
+        pointer: ManagedPointer,
     ) -> Result<Self, RemoteEnvironmentError> {
-        let pointer = super::ManagedPointer {
-            owner: env_ref.owner().clone(),
-            name: env_ref.name().clone(),
-            floxhub_url: flox.floxhub.base_url().clone(),
-            floxhub_git_url_override: flox.floxhub.git_url_override().cloned(),
-            version: Version::<1>,
-        };
-
         let floxmeta = match FloxmetaV2::open(flox, &pointer) {
             Ok(floxmeta) => floxmeta,
             Err(FloxmetaV2Error::NotFound(_)) => {
@@ -97,10 +89,10 @@ impl RemoteEnvironment {
     ///
     /// Contrary to [`RemoteEnvironment::new_in`], this function will create a temporary directory
     /// in the flox temp directory which is cleared when the process ends.
-    pub fn new(flox: &Flox, env_ref: &EnvironmentRef) -> Result<Self, RemoteEnvironmentError> {
+    pub fn new(flox: &Flox, pointer: ManagedPointer) -> Result<Self, RemoteEnvironmentError> {
         let path = tempfile::tempdir_in(&flox.temp_dir).unwrap().into_path();
 
-        Self::new_in(flox, path, env_ref)
+        Self::new_in(flox, path, pointer)
     }
 
     pub fn owner(&self) -> &EnvironmentOwner {
@@ -109,6 +101,10 @@ impl RemoteEnvironment {
 
     pub fn env_ref(&self) -> EnvironmentRef {
         EnvironmentRef::new_from_parts(self.owner().clone(), self.name())
+    }
+
+    pub fn pointer(&self) -> &ManagedPointer {
+        self.inner.pointer()
     }
 }
 

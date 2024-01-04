@@ -558,8 +558,8 @@ pub fn hacky_environment_description(environment: &ActiveEnvironment) -> String 
         }) => {
             format!("{} at {}", path_pointer.name, path.to_string_lossy())
         },
-        ActiveEnvironment::Remote(env_ref) => {
-            format!("{}/{} (remote)", env_ref.owner(), env_ref.name(),)
+        ActiveEnvironment::Remote(pointer) => {
+            format!("{}/{} (remote)", pointer.owner, pointer.name,)
         },
     }
 }
