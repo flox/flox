@@ -49,10 +49,10 @@ createWrappedFlakeDir( const nix::FlakeRef & nixpkgsRef )
   std::filesystem::path tmpDir = nix::createTempDir();
   std::filesystem::copy( getRulesFile(), tmpDir / "rules.json" );
 
-  std::ofstream flakeOut( tmpDir / "flake.nix" );
+  std::ofstream            flakeOut( tmpDir / "flake.nix" );
   static const std::string flakeTemplate =
-    #include "./floxpkgs/flake.nix.in.hh"
-  ;
+#include "./floxpkgs/flake.nix.in.hh"
+    ;
   std::istringstream flakeIn( flakeTemplate );
 
   std::string line;
