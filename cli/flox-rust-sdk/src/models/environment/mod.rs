@@ -387,7 +387,7 @@ pub enum EnvironmentError2 {
     #[error("invalid internal state; couldn't remove last element from path: {0}")]
     InvalidPath(PathBuf),
 
-    #[error("invalid .flox directory at {path}: {source}")]
+    #[error("invalid .flox directory at {path}")]
     InvalidDotFlox {
         path: PathBuf,
         #[source]
