@@ -58,10 +58,18 @@ export MANPATH
 # ---------------------------------------------------------------------------- #
 
 
-if [ -z "${FLOX_NOSET_LD_LIBRARY_PATH:-}" ]; then
-  LD_LIBRARY_PATH="$FLOX_ENV/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-  export LD_LIBRARY_PATH
-fi
+case "$(uname -s)" in
+Linux*)
+  if [ -z "${FLOX_NOSET_LD_AUDIT:-}" -a -e "$LD_FLOXLIB" ]; then
+    LD_AUDIT="$LD_FLOXLIB";
+    export LD_AUDIT;
+  fi
+  ;;
+Darwin*)
+  DYLD_FALLBACK_LIBRARY_PATH="$FLOX_ENV/lib:${DYLD_FALLBACK_LIBRARY_PATH:-/usr/local/lib:/usr/lib}";
+  export DYLD_FALLBACK_LIBRARY_PATH;
+  ;;
+esac
 
 # ---------------------------------------------------------------------------- #
 #
