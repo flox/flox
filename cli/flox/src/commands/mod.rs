@@ -672,7 +672,11 @@ impl ConcreteEnvironment {
 ///
 /// * for [PathEnvironment] and [ManagedEnvironment] that's the path to their `.flox` and `.flox/pointer.json`
 /// * for [RemoteEnvironment] that's the [ManagedPointer] to the remote environment
+///
+/// Serialized as is into [FLOX_ACTIVE_ENVIRONMENTS_VAR] to be able to reopen environments.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(tag = "type")]
+#[serde(rename_all = "kebab-case")]
 pub enum UninitializedEnvironment {
     /// Container for "local" environments pointed to by [DotFlox]
     DotFlox(DotFlox),
