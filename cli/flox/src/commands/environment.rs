@@ -23,7 +23,6 @@ use flox_rust_sdk::models::environment::{
     EnvironmentPointer,
     ManagedPointer,
     PathPointer,
-    UninitializedEnvironment,
     DOT_FLOX,
     ENVIRONMENT_POINTER_FILENAME,
     FLOX_ACTIVE_ENVIRONMENTS_VAR,
@@ -46,8 +45,8 @@ use crate::commands::{
     activated_environments,
     auth,
     ensure_environment_trust,
-    ActiveEnvironment,
     ConcreteEnvironment,
+    UninitializedEnvironment,
 };
 use crate::config::Config;
 use crate::subcommand_metric;
@@ -82,7 +81,7 @@ impl Edit {
             .environment
             .detect_concrete_environment(&flox, "edit")?;
         let active_environment =
-            ActiveEnvironment::from_concrete_environment(&detected_environment)?;
+            UninitializedEnvironment::from_concrete_environment(&detected_environment)?;
         let mut environment = detected_environment.into_dyn_environment();
 
         let result = match self.provided_manifest_contents()? {
@@ -333,7 +332,8 @@ impl Activate {
             }
         }
 
-        let last_active = ActiveEnvironment::from_concrete_environment(&concrete_environment)?;
+        let last_active =
+            UninitializedEnvironment::from_concrete_environment(&concrete_environment)?;
 
         let mut environment = concrete_environment.into_dyn_environment();
 
@@ -533,35 +533,7 @@ impl List {
 }
 
 fn environment_description(environment: &ConcreteEnvironment) -> Result<String> {
-    Ok(hacky_environment_description(
-        &ActiveEnvironment::from_concrete_environment(environment)?,
-    ))
-}
-
-/// Generate a description for an environment that has not yet been opened.
-pub fn hacky_environment_description(environment: &ActiveEnvironment) -> String {
-    match environment {
-        ActiveEnvironment::DotFlox(UninitializedEnvironment {
-            path,
-            pointer: EnvironmentPointer::Managed(managed_pointer),
-        }) => {
-            format!(
-                "{}/{} at {}",
-                managed_pointer.owner,
-                managed_pointer.name,
-                path.to_string_lossy(),
-            )
-        },
-        ActiveEnvironment::DotFlox(UninitializedEnvironment {
-            path,
-            pointer: EnvironmentPointer::Path(path_pointer),
-        }) => {
-            format!("{} at {}", path_pointer.name, path.to_string_lossy())
-        },
-        ActiveEnvironment::Remote(pointer) => {
-            format!("{}/{} (remote)", pointer.owner, pointer.name,)
-        },
-    }
+    Ok(UninitializedEnvironment::from_concrete_environment(environment)?.to_string())
 }
 
 /// Install a package into an environment

@@ -17,10 +17,10 @@ use flox_rust_sdk::models::environment::path_environment::PathEnvironment;
 use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironment;
 use flox_rust_sdk::models::environment::{
     find_dot_flox,
+    DotFlox,
     Environment,
     EnvironmentPointer,
     ManagedPointer,
-    UninitializedEnvironment,
     DOT_FLOX,
     FLOX_ACTIVE_ENVIRONMENTS_VAR,
 };
@@ -33,7 +33,6 @@ use serde::{Deserialize, Serialize};
 use tempfile::TempDir;
 use toml_edit::Key;
 
-use self::environment::hacky_environment_description;
 use crate::commands::general::update_config;
 use crate::config::{Config, EnvironmentTrust, FLOX_CONFIG_FILE};
 use crate::utils::dialog::{Dialog, Select};
@@ -521,7 +520,9 @@ impl EnvironmentSelect {
                 let current_dir = env::current_dir().context("could not get current directory")?;
                 let maybe_found_environment = find_dot_flox(&current_dir)?;
                 match maybe_found_environment {
-                    Some(found) => open_environment(flox, found),
+                    Some(found) => {
+                        UninitializedEnvironment::DotFlox(found).into_concrete_environment(flox)
+                    },
                     None => Err(anyhow!(format!("No environment found in {current_dir:?}"))),
                 }
             },
@@ -555,11 +556,7 @@ impl EnvironmentSelect {
             // already activated environment or an environment in the current
             // directory.
             EnvironmentSelect::Unspecified => match detect_environment(message)? {
-                Some(ActiveEnvironment::DotFlox(found)) => open_environment(flox, found),
-                Some(ActiveEnvironment::Remote(env_ref)) => {
-                    let env = RemoteEnvironment::new(flox, env_ref)?;
-                    Ok(ConcreteEnvironment::Remote(env))
-                },
+                Some(env) => env.into_concrete_environment(flox),
                 None => {
                     let current_dir =
                         env::current_dir().context("could not get current directory")?;
@@ -586,18 +583,14 @@ impl EnvironmentSelect {
 ///   inside a git repo.
 /// - Check if there's an already activated environment.
 /// - Prompt if both are true.
-pub fn detect_environment(message: &str) -> Result<Option<ActiveEnvironment>> {
+pub fn detect_environment(message: &str) -> Result<Option<UninitializedEnvironment>> {
     let current_dir = env::current_dir().context("could not get current directory")?;
     let maybe_activated = last_activated_environment();
     let maybe_found_environment = find_dot_flox(&current_dir)?;
 
     let found = match (maybe_activated, maybe_found_environment) {
         (
-            Some(
-                ref activated @ ActiveEnvironment::DotFlox(UninitializedEnvironment {
-                    ref path, ..
-                }),
-            ),
+            Some(ref activated @ UninitializedEnvironment::DotFlox(DotFlox { ref path, .. })),
             Some(found),
         ) if path == &found.path => Some(activated.clone()),
         // If there's both an activated environment and an environment in the
@@ -611,15 +604,10 @@ pub fn detect_environment(message: &str) -> Result<Option<ActiveEnvironment>> {
                 "flox environment detected in git repo"
             };
             let message = format!("Do you want to {message} the {type_of_directory} or the current active flox environment?");
-            let found = ActiveEnvironment::DotFlox(found);
-
-            let found_description = hacky_environment_description(&found);
-            let activated_description = hacky_environment_description(&activated_env);
+            let found = UninitializedEnvironment::DotFlox(found);
 
             if !Dialog::can_prompt() {
-                bail!(
-                    "can't determine whether to use {found_description} or {activated_description}"
-                );
+                bail!("can't determine whether to use {found} or {activated_env}");
             }
 
             let dialog = Dialog {
@@ -627,8 +615,8 @@ pub fn detect_environment(message: &str) -> Result<Option<ActiveEnvironment>> {
                 help_message: None,
                 typed: Select {
                     options: vec![
-                        format!("{type_of_directory} [{found_description}]",),
-                        format!("current active flox environment [{activated_description}]",),
+                        format!("{type_of_directory} [{found}]",),
+                        format!("current active flox environment [{activated_env}]",),
                     ],
                 },
             };
@@ -640,7 +628,7 @@ pub fn detect_environment(message: &str) -> Result<Option<ActiveEnvironment>> {
             }
         },
         (Some(activated_env), None) => Some(activated_env),
-        (None, Some(found)) => Some(ActiveEnvironment::DotFlox(found)),
+        (None, Some(found)) => Some(UninitializedEnvironment::DotFlox(found)),
         (None, None) => None,
     };
     Ok(found)
@@ -648,37 +636,10 @@ pub fn detect_environment(message: &str) -> Result<Option<ActiveEnvironment>> {
 
 /// Open an environment defined in `{path}/.flox`
 fn open_path(flox: &Flox, path: &PathBuf) -> Result<ConcreteEnvironment> {
-    open_environment(
-        flox,
-        UninitializedEnvironment::open(path)
-            .with_context(|| format!("No environment found in {path:?}"))?,
-    )
-}
-
-/// Open an environment defined in `{path}/.flox` with an already parsed pointer
-///
-/// This is used directly when the env pointer was read previously during detection.
-fn open_environment(
-    flox: &Flox,
-    uninitialized: UninitializedEnvironment,
-) -> Result<ConcreteEnvironment> {
-    let dot_flox_path = uninitialized.path.join(DOT_FLOX);
-    let env = match uninitialized.pointer {
-        EnvironmentPointer::Path(path_pointer) => {
-            debug!("detected concrete environment type: path");
-            ConcreteEnvironment::Path(PathEnvironment::open(
-                path_pointer,
-                dot_flox_path,
-                &flox.temp_dir,
-            )?)
-        },
-        EnvironmentPointer::Managed(managed_pointer) => {
-            debug!("detected concrete environment type: managed");
-            let env = ManagedEnvironment::open(flox, managed_pointer, dot_flox_path)?;
-            ConcreteEnvironment::Managed(env)
-        },
-    };
-    Ok(env)
+    DotFlox::open(path)
+        .with_context(|| format!("No environment found in {path:?}"))
+        .map(UninitializedEnvironment::DotFlox)?
+        .into_concrete_environment(flox)
 }
 
 /// The various ways in which an environment can be referred to
@@ -703,35 +664,35 @@ impl ConcreteEnvironment {
     }
 }
 
-/// An environment that has been activated with `flox activate`
-/// and can be (re)opened, i.e. to install packages into it.
+/// An environment descriptor of an environment that can be (re)opened,
+/// i.e. to install packages into it.
 ///
-/// Unlike [ConcreteEnvironment], this type does not hold concrete instances of environments,
+/// Unlike [ConcreteEnvironment], this type does not hold a concrete instance any environment,
 /// but rather fully qualified metadata to create an instance from.
 ///
 /// * for [PathEnvironment] and [ManagedEnvironment] that's the path to their `.flox` and `.flox/pointer.json`
 /// * for [RemoteEnvironment] that's the [ManagedPointer] to the remote environment
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub enum ActiveEnvironment {
+pub enum UninitializedEnvironment {
     /// Container for "local" environments pointed to by [DotFlox]
-    DotFlox(UninitializedEnvironment),
+    DotFlox(DotFlox),
     /// Container for [RemoteEnvironment]
     Remote(ManagedPointer),
 }
 
-impl ActiveEnvironment {
+impl UninitializedEnvironment {
     fn from_concrete_environment(env: &ConcreteEnvironment) -> Result<Self> {
         match env {
             ConcreteEnvironment::Path(path_env) => {
                 let pointer = path_env.pointer.clone().into();
-                Ok(Self::DotFlox(UninitializedEnvironment {
+                Ok(Self::DotFlox(DotFlox {
                     path: path_env.parent_path().unwrap(),
                     pointer,
                 }))
             },
             ConcreteEnvironment::Managed(managed_env) => {
                 let pointer = managed_env.pointer().clone().into();
-                Ok(Self::DotFlox(UninitializedEnvironment {
+                Ok(Self::DotFlox(DotFlox {
                     path: managed_env.parent_path().unwrap(),
                     pointer,
                 }))
@@ -742,13 +703,72 @@ impl ActiveEnvironment {
             },
         }
     }
+
+    /// Open the contained environment and return a [ConcreteEnvironment]
+    ///
+    /// This function will fail if the contained environment is not available or invalid
+    fn into_concrete_environment(self, flox: &Flox) -> Result<ConcreteEnvironment> {
+        match self {
+            UninitializedEnvironment::DotFlox(dot_flox) => {
+                let dot_flox_path = dot_flox.path.join(DOT_FLOX);
+                let env = match dot_flox.pointer {
+                    EnvironmentPointer::Path(path_pointer) => {
+                        debug!("detected concrete environment type: path");
+                        ConcreteEnvironment::Path(PathEnvironment::open(
+                            path_pointer,
+                            dot_flox_path,
+                            &flox.temp_dir,
+                        )?)
+                    },
+                    EnvironmentPointer::Managed(managed_pointer) => {
+                        debug!("detected concrete environment type: managed");
+                        let env = ManagedEnvironment::open(flox, managed_pointer, dot_flox_path)?;
+                        ConcreteEnvironment::Managed(env)
+                    },
+                };
+                Ok(env)
+            },
+            UninitializedEnvironment::Remote(pointer) => {
+                let env = RemoteEnvironment::new(flox, pointer)?;
+                Ok(ConcreteEnvironment::Remote(env))
+            },
+        }
+    }
+}
+
+impl Display for UninitializedEnvironment {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            UninitializedEnvironment::DotFlox(DotFlox {
+                path,
+                pointer: EnvironmentPointer::Managed(managed_pointer),
+            }) => {
+                write!(
+                    f,
+                    "{}/{} at {}",
+                    managed_pointer.owner,
+                    managed_pointer.name,
+                    path.to_string_lossy(),
+                )
+            },
+            UninitializedEnvironment::DotFlox(DotFlox {
+                path,
+                pointer: EnvironmentPointer::Path(path_pointer),
+            }) => {
+                write!(f, "{} at {}", path_pointer.name, path.to_string_lossy())
+            },
+            UninitializedEnvironment::Remote(pointer) => {
+                write!(f, "{}/{} (remote)", pointer.owner, pointer.name,)
+            },
+        }
+    }
 }
 
 /// A list of environments that are currently active
 /// (i.e. have been activated with `flox activate`)
 ///
 /// When inside a `flox activate` shell,
-/// flox stores [ActiveEnvironment] metadata to (re)open the activated environment
+/// flox stores [UninitializedEnvironment] metadata to (re)open the activated environment
 /// in `$FLOX_ACTIVE_ENVIRONMENTS`.
 ///
 /// Environments which are activated while in a `flox activate` shell, are prepended
@@ -756,7 +776,7 @@ impl ActiveEnvironment {
 ///
 /// Internally this is implemented through a [VecDeque] which is serialized to JSON.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct ActiveEnvironments(VecDeque<ActiveEnvironment>);
+pub struct ActiveEnvironments(VecDeque<UninitializedEnvironment>);
 
 impl FromStr for ActiveEnvironments {
     type Err = serde_json::Error;
@@ -771,16 +791,16 @@ impl FromStr for ActiveEnvironments {
 
 impl ActiveEnvironments {
     /// Read the last active environment
-    pub fn last_active(&self) -> Option<ActiveEnvironment> {
+    pub fn last_active(&self) -> Option<UninitializedEnvironment> {
         self.0.front().cloned()
     }
 
     /// Set the last active environment
-    pub fn set_last_active(&mut self, env: ActiveEnvironment) {
+    pub fn set_last_active(&mut self, env: UninitializedEnvironment) {
         self.0.push_front(env);
     }
 
-    pub fn is_active(&self, env: &ActiveEnvironment) -> bool {
+    pub fn is_active(&self, env: &UninitializedEnvironment) -> bool {
         self.0.contains(env)
     }
 }
@@ -806,7 +826,7 @@ impl Display for ActiveEnvironments {
 
 impl IntoIterator for ActiveEnvironments {
     type IntoIter = std::collections::vec_deque::IntoIter<Self::Item>;
-    type Item = ActiveEnvironment;
+    type Item = UninitializedEnvironment;
 
     fn into_iter(self) -> Self::IntoIter {
         self.0.into_iter()
@@ -814,7 +834,7 @@ impl IntoIterator for ActiveEnvironments {
 }
 
 /// Determine the most recently activated environment [ActiveEnvironment].
-fn last_activated_environment() -> Option<ActiveEnvironment> {
+fn last_activated_environment() -> Option<UninitializedEnvironment> {
     activated_environments().last_active()
 }
 

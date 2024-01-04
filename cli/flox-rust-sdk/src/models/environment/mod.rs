@@ -278,7 +278,7 @@ impl EnvironmentPointer {
 
 /// Represents a `.flox` directory that contains an `env.json`.
 ///
-/// An [UninitializedEnvironment] represents a fully qualified reference to open
+/// A [DotFlox] represents a fully qualified reference to open
 /// either a [PathEnvironment] or [ManagedEnvironment].
 /// It is additionally used to provide more precise targets for the interactive
 /// selection of environments.
@@ -287,12 +287,12 @@ impl EnvironmentPointer {
 /// Opening the environment with [ManagedEnvironment::open] or
 /// [PathEnvironment::open], could still fail.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct UninitializedEnvironment {
+pub struct DotFlox {
     pub path: PathBuf,
     pub pointer: EnvironmentPointer,
 }
 
-impl UninitializedEnvironment {
+impl DotFlox {
     pub fn open(path: impl AsRef<Path>) -> Result<Self, EnvironmentError2> {
         Ok(Self {
             path: path.as_ref().to_path_buf(),
@@ -486,9 +486,7 @@ pub fn global_manifest_lockfile_path(flox: &Flox) -> PathBuf {
 ///
 /// The search first looks whether the current directory contains a `.flox` directory,
 /// and if not, it searches upwards, stopping at the root directory.
-pub fn find_dot_flox(
-    initial_dir: &Path,
-) -> Result<Option<UninitializedEnvironment>, EnvironmentError2> {
+pub fn find_dot_flox(initial_dir: &Path) -> Result<Option<DotFlox>, EnvironmentError2> {
     let path = initial_dir
         .canonicalize()
         .map_err(|e| EnvironmentError2::CanonicalPath {
@@ -502,11 +500,9 @@ pub fn find_dot_flox(
     );
     // Look for an immediate child named `.flox`
     if tentative_dot_flox.exists() {
-        let pointer = UninitializedEnvironment::open(&path).map_err(|err| {
-            EnvironmentError2::InvalidDotFlox {
-                path: tentative_dot_flox.clone(),
-                source: Box::new(err),
-            }
+        let pointer = DotFlox::open(&path).map_err(|err| EnvironmentError2::InvalidDotFlox {
+            path: tentative_dot_flox.clone(),
+            source: Box::new(err),
         })?;
         debug!(".flox found: path={}", tentative_dot_flox.display());
         return Ok(Some(pointer));
@@ -534,12 +530,11 @@ pub fn find_dot_flox(
         debug!("looking for .flox: path={}", tentative_dot_flox.display());
 
         if tentative_dot_flox.exists() {
-            let pointer = UninitializedEnvironment::open(ancestor).map_err(|err| {
-                EnvironmentError2::InvalidDotFlox {
+            let pointer =
+                DotFlox::open(ancestor).map_err(|err| EnvironmentError2::InvalidDotFlox {
                     path: ancestor.to_path_buf(),
                     source: Box::new(err),
-                }
-            })?;
+                })?;
             debug!(".flox found: path={}", tentative_dot_flox.display());
             return Ok(Some(pointer));
         }
@@ -660,7 +655,7 @@ mod test {
         let found_environment = find_dot_flox(temp_dir.path())
             .unwrap()
             .expect("expected to find dot flox");
-        assert_eq!(found_environment, UninitializedEnvironment {
+        assert_eq!(found_environment, DotFlox {
             path: temp_dir.path().canonicalize().unwrap(),
             pointer: (*MANAGED_ENV_POINTER).clone()
         });
@@ -687,7 +682,7 @@ mod test {
         let found_environment = find_dot_flox(temp_dir.path())
             .unwrap()
             .expect("expected to find dot flox");
-        assert_eq!(found_environment, UninitializedEnvironment {
+        assert_eq!(found_environment, DotFlox {
             path: temp_dir.path().canonicalize().unwrap(),
             pointer: (*MANAGED_ENV_POINTER).clone()
         });
@@ -722,7 +717,7 @@ mod test {
         let found_environment = find_dot_flox(&start_path)
             .unwrap()
             .expect("expected to find dot flox");
-        assert_eq!(found_environment, UninitializedEnvironment {
+        assert_eq!(found_environment, DotFlox {
             path: temp_dir.path().canonicalize().unwrap(),
             pointer: (*MANAGED_ENV_POINTER).clone()
         });
@@ -760,7 +755,7 @@ mod test {
         let found_environment = find_dot_flox(&start_path)
             .unwrap()
             .expect("expected to find dot flox");
-        assert_eq!(found_environment, UninitializedEnvironment {
+        assert_eq!(found_environment, DotFlox {
             path: foo.canonicalize().unwrap(),
             pointer: (*MANAGED_ENV_POINTER).clone()
         });

@@ -7,7 +7,6 @@ use anyhow::{bail, Context, Result};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::global_manifest_path;
-use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironment;
 use flox_rust_sdk::models::search::{
     do_search,
     PathOrJson,
@@ -20,8 +19,7 @@ use flox_rust_sdk::models::search::{
 };
 use log::{debug, info};
 
-use crate::commands::environment::hacky_environment_description;
-use crate::commands::{detect_environment, open_environment, ActiveEnvironment};
+use crate::commands::detect_environment;
 use crate::config::features::{Features, SearchStrategy};
 use crate::config::Config;
 use crate::subcommand_metric;
@@ -435,20 +433,11 @@ pub fn manifest_and_lockfile(
             (None, None)
         },
         Some(uninitialized) => {
-            debug!(
-                "using environment {}",
-                hacky_environment_description(&uninitialized)
-            );
+            debug!("using environment {uninitialized}");
 
-            let environment = match uninitialized {
-                ActiveEnvironment::DotFlox(found) => {
-                    open_environment(flox, found)?.into_dyn_environment()
-                },
-                ActiveEnvironment::Remote(env_ref) => {
-                    let env = RemoteEnvironment::new(flox, env_ref)?;
-                    Box::new(env)
-                },
-            };
+            let environment = uninitialized
+                .into_concrete_environment(flox)?
+                .into_dyn_environment();
 
             let lockfile_path = environment.lockfile_path(flox)?;
             debug!("checking lockfile: path={}", lockfile_path.display());
