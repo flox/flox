@@ -87,7 +87,6 @@
       name = "flake.nix.in";
       path = ../../pkgdb/src/pkgdb/floxpkgs/flake.nix.in;
     };
-
   };
 in
   stdenv.mkDerivation ({

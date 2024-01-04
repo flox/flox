@@ -11,8 +11,8 @@
 
 #include <fstream>
 
-#include "flox/registry/floxpkgs.hh"
 #include "flox/core/util.hh"
+#include "flox/registry/floxpkgs.hh"
 
 
 /* -------------------------------------------------------------------------- */
