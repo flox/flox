@@ -41,6 +41,7 @@ use indoc::{formatdoc, indoc};
 use itertools::Itertools;
 use log::{debug, error, info};
 use tempfile::NamedTempFile;
+use url::Url;
 
 use super::{environment_select, EnvironmentSelect};
 use crate::commands::{
@@ -969,7 +970,8 @@ impl Pull {
 
         match self.pull_select {
             PullSelect::New { dir, remote } | PullSelect::NewAbbreviated { dir, remote } => {
-                let (start, complete) = Self::pull_new_messages(dir.as_deref(), &remote);
+                let (start, complete) =
+                    Self::pull_new_messages(dir.as_deref(), &remote, flox.floxhub.base_url());
 
                 let dir = dir.unwrap_or_else(|| std::env::current_dir().unwrap());
 
@@ -1090,11 +1092,13 @@ impl Pull {
     }
 
     /// construct a message for pulling a new environment
-    ///
-    /// todo: add floxhub base url when it's available
-    fn pull_new_messages(dir: Option<&Path>, env_ref: &EnvironmentRef) -> (String, String) {
+    fn pull_new_messages(
+        dir: Option<&Path>,
+        env_ref: &EnvironmentRef,
+        floxhub_host: &Url,
+    ) -> (String, String) {
         let mut start_message =
-            format!("⬇️ remote: pulling and building {env_ref} from https://hub.flox.dev");
+            format!("⬇️ remote: pulling and building {env_ref} from {floxhub_host}");
         if let Some(dir) = dir {
             start_message += &format!(" into {dir}", dir = dir.display());
         } else {
@@ -1102,7 +1106,7 @@ impl Pull {
         };
 
         let complete_message = formatdoc! {"
-            ✨ pulled {env_ref} from https://hub.flox.dev
+            ✨ pulled {env_ref} from {floxhub_host}
 
             You can activate this environment with 'flox activate'
         "};
@@ -1116,14 +1120,15 @@ impl Pull {
     fn pull_existing_messages(pointer: &ManagedPointer, force: bool) -> (String, String) {
         let owner = &pointer.owner;
         let name = &pointer.name;
+        let floxhub_host = &pointer.floxhub_url;
 
         let start_message =
-            format!("⬇️ remote: pulling and building {owner}/{name} from https://hub.flox.dev",);
+            format!("⬇️ remote: pulling and building {owner}/{name} from {floxhub_host}",);
 
         let suffix: &str = if force { " (forced)" } else { "" };
 
         let complete_message = formatdoc! {"
-            ✨ pulled {owner}/{name} from https://hub.flox.dev{suffix}
+            ✨ pulled {owner}/{name} from {floxhub_host}{suffix}
 
             You can activate this environment with 'flox activate'
         "};
