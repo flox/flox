@@ -20,6 +20,7 @@ use super::{
     EnvironmentError2,
     InstallationAttempt,
     ManagedPointer,
+    UpdateResult,
     ENVIRONMENT_POINTER_FILENAME,
 };
 use crate::flox::Flox;
@@ -52,7 +53,7 @@ pub enum ManagedEnvironmentError {
     #[error("failed to open floxmeta git repo: {0}")]
     OpenFloxmeta(FloxmetaV2Error),
     #[error("failed to fetch environment: {0}")]
-    Fetch(GitCommandError),
+    Fetch(GitRemoteCommandError),
     #[error("failed to check for git revision: {0}")]
     CheckGitRevision(GitCommandError),
     #[error("failed to check for branch existence")]
@@ -99,7 +100,7 @@ pub enum ManagedEnvironmentError {
     DeleteEnvironmentReverseLink(PathBuf, #[source] std::io::Error),
 
     #[error("could not sync environment from upstream")]
-    FetchUpdates(#[source] GitCommandError),
+    FetchUpdates(#[source] GitRemoteCommandError),
     #[error("could not apply updates from upstream")]
     ApplyUpdates(#[source] GitRemoteCommandError),
 
@@ -233,7 +234,11 @@ impl Environment for ManagedEnvironment {
     }
 
     /// Atomically update this environment's inputs
-    fn update(&mut self, flox: &Flox, inputs: Vec<String>) -> Result<String, EnvironmentError2> {
+    fn update(
+        &mut self,
+        flox: &Flox,
+        inputs: Vec<String>,
+    ) -> Result<UpdateResult, EnvironmentError2> {
         let mut generations = self
             .generations()
             .writable(flox.temp_dir.clone())
@@ -245,7 +250,8 @@ impl Environment for ManagedEnvironment {
 
         let message = temporary.update(flox, inputs)?;
 
-        let metadata = format!("updated environment: {message}");
+        // TODO: better message
+        let metadata = "updated environment".to_string();
 
         generations
             .add_generation(&mut temporary, metadata)
@@ -572,10 +578,10 @@ impl ManagedEnvironment {
                         .git
                         .fetch_ref("dynamicorigin", &format!("+{0}:{0}", remote_branch))
                         .map_err(|err| match err {
-                            GitCommandError::BadExit(_, _, _) => {
-                                ManagedEnvironmentError::Fetch(err)
+                            GitRemoteCommandError::Command(e @ GitCommandError::Command(_)) => {
+                                ManagedEnvironmentError::Git(e)
                             },
-                            _ => ManagedEnvironmentError::Git(err),
+                            _ => ManagedEnvironmentError::Fetch(err),
                         })?;
                 }
                 // If it still doesn't exist after fetching,

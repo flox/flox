@@ -18,7 +18,7 @@ pub struct Source {
 /// TODO use runix FlakeRef
 #[serde_as]
 #[skip_serializing_none]
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 #[serde(deny_unknown_fields)]
 pub struct Locked {

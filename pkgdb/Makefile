@@ -145,7 +145,7 @@ endif  # ifndef TOOLCHAIN
 # Read info from files
 # --------------------
 
-VERSION := $(file < $(PKGDB_ROOT)/version)
+VERSION := $(file < $(PKGDB_ROOT)/.version)
 
 # Files used by `pkgdb buildenv' need to be added to the `nix' store.
 PROFILE_D_SCRIPTS_DIR ?= $(shell                            \
@@ -587,8 +587,8 @@ $(BINS): %: $(SRCS:.cc=.o)
 
 $(test_SRCS:.cc=.o): CXXFLAGS += '-DTEST_DATA_DIR="$(TEST_DATA_DIR)"'
 $(TESTS) $(TEST_UTILS): tests/%: $(filter-out src/main.o,$(SRCS:.cc=.o))
-$(TESTS) $(TEST_UTILS): tests/%: tests/%.o
-	$(CXX) $^ $(LDFLAGS) -o $@;
+$(TESTS) $(TEST_UTILS): tests/%: tests/%.o tests/test.hh
+	$(CXX) $(filter %.o,$^) $(LDFLAGS) -o $@;
 
 # ---------------------------------------------------------------------------- #
 

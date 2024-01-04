@@ -14,6 +14,7 @@ use super::{
     EnvironmentError2,
     InstallationAttempt,
     ManagedPointer,
+    UpdateResult,
     DOT_FLOX,
     ENVIRONMENT_POINTER_FILENAME,
 };
@@ -151,7 +152,11 @@ impl Environment for RemoteEnvironment {
     }
 
     /// Atomically update this environment's inputs
-    fn update(&mut self, flox: &Flox, inputs: Vec<String>) -> Result<String, EnvironmentError2> {
+    fn update(
+        &mut self,
+        flox: &Flox,
+        inputs: Vec<String>,
+    ) -> Result<UpdateResult, EnvironmentError2> {
         let result = self.inner.update(flox, inputs)?;
         self.inner
             .push(false)

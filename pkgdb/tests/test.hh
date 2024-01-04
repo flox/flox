@@ -94,16 +94,26 @@ runTest( std::string_view name, F f, Args &&... args )
 /**
  * @brief For use inside of a function which returns a boolean.
  *
+ * Report a failure with a message and return `false'.
+ */
+#define EXPECT_FAIL( MSG )               \
+  {                                      \
+    std::cerr << "Expectation failed: "; \
+    std::cerr << ( MSG );                \
+    std::cerr << std::endl;              \
+    return false;                        \
+  }
+
+
+/* -------------------------------------------------------------------------- */
+
+/**
+ * @brief For use inside of a function which returns a boolean.
+ *
  * Assert that and expression is `true', otherwise print it and return `false'.
  */
-#define EXPECT( EXPR )                     \
-  if ( ! ( EXPR ) )                        \
-    {                                      \
-      std::cerr << "Expectation failed: "; \
-      std::cerr << ( #EXPR );              \
-      std::cerr << std::endl;              \
-      return false;                        \
-    }
+#define EXPECT( EXPR ) \
+  if ( ! ( EXPR ) ) { EXPECT_FAIL( #EXPR ) }
 
 
 /**

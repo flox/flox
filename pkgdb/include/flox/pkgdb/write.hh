@@ -36,36 +36,9 @@ using Todos = std::queue<Target, std::list<Target>>;
 class PkgDb : public PkgDbReadOnly
 {
 
-  /* --------------------------------------------------------------------------
-   */
-
   /* Internal Helpers */
 
 protected:
-
-  /** @brief Create tables in database if they do not exist. */
-  void
-  initTables();
-
-
-  /** @brief Create views in database if they do not exist. */
-  void
-  initViews();
-
-  /**
-   * @brief Update the database's `VIEW`s schemas.
-   *
-   * This deletes any existing `VIEW`s and recreates them, and updates the
-   * `DbVersions` row for `pkgdb_views_schema`.
-   */
-  void
-  updateViews();
-
-
-  /** @brief Create `DbVersions` rows if they do not exist. */
-  void
-  initVersions();
-
 
   /**
    * @brief Create/update tables/views schema in database.
@@ -75,18 +48,6 @@ protected:
    */
   void
   init();
-
-
-  /**
-   * @brief Write @a this `PkgDb` `lockedRef` and `fingerprint` fields to
-   *        database metadata.
-   */
-  void
-  writeInput();
-
-
-  /* --------------------------------------------------------------------------
-   */
 
   /* Constructors */
 
@@ -151,18 +112,7 @@ public:
    * @param flake Flake associated with the db. Used to write input metadata.
    * @param dbPath Absolute path to database file.
    */
-  PkgDb( const nix::flake::LockedFlake & flake, std::string_view dbPath )
-  {
-    this->dbPath      = dbPath;
-    this->fingerprint = flake.getFingerprint();
-    this->db.connect( this->dbPath.c_str(),
-                      SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE );
-    init();
-    this->lockedRef
-      = { flake.flake.lockedRef.to_string(),
-          nix::fetchers::attrsToJSON( flake.flake.lockedRef.toAttrs() ) };
-    writeInput();
-  }
+  PkgDb( const nix::flake::LockedFlake & flake, std::string_view dbPath );
 
   /**
    * @brief Opens a DB associated with a locked flake.
@@ -174,13 +124,7 @@ public:
     : PkgDb( flake, genPkgDbName( flake.getFingerprint() ).string() )
   {}
 
-
-  /* --------------------------------------------------------------------------
-   */
-
   /* Basic Operations */
-
-  // public:
 
   /**
    * @brief Execute a raw sqlite statement on the database.
@@ -206,13 +150,7 @@ public:
     return cmd.execute_all();
   }
 
-
-  /* --------------------------------------------------------------------------
-   */
-
   /* Insert */
-
-  // public:
 
   /**
    * @brief Get the `AttrSet.id` for a given child of the attribute set
@@ -267,10 +205,6 @@ public:
               bool                 replace  = false,
               bool                 checkDrv = true );
 
-
-  /* --------------------------------------------------------------------------
-   */
-
   /* Updates */
 
   /**
@@ -291,10 +225,6 @@ public:
   void
   setPrefixDone( const flox::AttrPath & prefix, bool done );
 
-
-  /* --------------------------------------------------------------------------
-   */
-
   /**
    * @brief Scrape package definitions from an attribute set.
    *
@@ -309,9 +239,6 @@ public:
   void
   scrape( nix::SymbolTable & syms, const Target & target, Todos & todo );
 
-
-  /* --------------------------------------------------------------------------
-   */
 
 }; /* End class `PkgDb' */
 

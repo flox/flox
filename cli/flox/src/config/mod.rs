@@ -154,7 +154,7 @@ impl Config {
                         .context(format!("Could not create config directory: {config_dir:?}"))?;
                     let config_dir = config_dir
                         .canonicalize()
-                        .context("Could not canonicalize  conifig directory '{config_dir:?}'")?;
+                        .context("Could not canonicalize config directory '{config_dir:?}'")?;
                     env::set_var("FLOX_CONFIG_HOME", &config_dir);
                     config_dir
                 },
