@@ -17,6 +17,7 @@
 
 # ---------------------------------------------------------------------------- #
 
+  # `@NIXPKGS_URL@' is substituted at runtime.
   inputs.nixpkgs.url = "@NIXPKGS_URL@";
 
 # ---------------------------------------------------------------------------- #
@@ -41,10 +42,10 @@
     #   disallowPackage   = [["legacyPackages" "x86_64-linux" "gcc"]];
     # }
     #
-    rules = let
-      # Substituted by build, but we can fallback to a local copy for dev:
-      rulesFile = "@PKGDB_RULES_FILE@";
-    in builtins.fromJSON ( builtins.readFile rulesFile );
+    # TODO: Aliases
+    #
+    # `@PKGDB_RULES_FILE@' is substituted at runtime.
+    rules = builtins.fromJSON ( builtins.readFile "@PKGDB_RULES_FILE@" );
 
 
 # ---------------------------------------------------------------------------- #
@@ -249,6 +250,8 @@
             in builtins.foldl' proc withOld parents;
           in withParents;
         in builtins.foldl' proc withDisallowPackage sysRules.allowPackage;
+
+        # TODO: withAliases
 
       in withAllowPackage;
 
