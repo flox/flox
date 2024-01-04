@@ -1,6 +1,7 @@
 #
 # This is a flox environment manifest.
-# Visit flox.dev/docs/edit or see flox-edit(1) for more information
+# Visit flox.dev/docs/tutorials/edit-manifest/ 
+# or see flox-edit(1) for more information
 #
 
 # List packages you wish to install in your environment inside
