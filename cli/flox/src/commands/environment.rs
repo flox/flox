@@ -28,6 +28,8 @@ use flox_rust_sdk::models::environment::{
     ENVIRONMENT_POINTER_FILENAME,
     FLOX_ACTIVE_ENVIRONMENTS_VAR,
     FLOX_ENV_VAR,
+    FLOX_ENV_DIRS_VAR,
+    FLOX_ENV_LIB_DIRS_VAR,
     FLOX_PROMPT_ENVIRONMENTS_VAR,
 };
 use flox_rust_sdk::models::floxmetav2::FloxmetaV2Error;

@@ -1,84 +1,130 @@
 /*
- * ld-floxlib - ld.so hack allowing Nix binaries to impurely
- *              load RHEL system libraries as last resort
+ * ld-floxlib - LD_AUDIT library that uses the GNU dynamic rtld-audit(7)
+ *              hook to serve up dynamic libraries from FLOX_ENV_LIB_DIRS
+ *              for the benefit of Nix-packaged binaries served up by flox
+ *              developer environments, but only after all other possible
+ *              locations have been exhausted. It provides a more targeted
+ *              and safer mechanism than setting LD_LIBRARY_PATH, which has
+ *              the potential to cause problems with other binaries not built
+ *              and packaged with Nix. In this respect it is similar to the
+ *              DYLD_FALLBACK_LIBRARY_PATH environment variable on Mac OS X
+ *              which provides a colon-separated list of directories to search
+ *              for dynamic libraries as a last resort as described in dyld(1).
+ *
+ *              See rtld-audit(7) for more information on the operation
+ *              of the GNU dynamic linker and how it calls la_objsearch()
+ *              repeatedly in the process of searching for a library in
+ *              various locations.
  */
 
 #ifndef _GNU_SOURCE
-#define _GNU_SOURCE
-#endif  /* _GNU_SOURCE */
+#  define _GNU_SOURCE
+#endif /* _GNU_SOURCE */
 
-#include <stdlib.h>
-#include <unistd.h>
-#include <sys/types.h>
-#include <sys/param.h>
 #include <limits.h>
-#include <stdio.h>
-#include <string.h>
 #include <link.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/param.h>
 #include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
 
-static int audit_impure = -1;
-static int debug_ld_floxlib = -1;
+static int  audit_ld_floxlib = -1;
+static int  debug_ld_floxlib = -1;
 static char name_buf[PATH_MAX];
 
 unsigned int
-la_version(unsigned int version)
+la_version( unsigned int version )
 {
-    return version;
+  return version;
 }
 
 char *
-la_objsearch(const char *name, uintptr_t *cookie, unsigned int flag)
+la_objsearch( const char * name, uintptr_t * cookie, unsigned int flag )
 {
-    struct stat stat_buf;
+  struct stat stat_buf;
 
-    if (audit_impure < 0)
-        audit_impure = (getenv("LD_FLOXLIB_AUDIT_IMPURE") != NULL);
-    if (debug_ld_floxlib < 0)
-        debug_ld_floxlib = (getenv("LD_FLOXLIB_DEBUG") != NULL);
+  if ( debug_ld_floxlib < 0 )
+    {
+      debug_ld_floxlib = ( getenv( "LD_FLOXLIB_DEBUG" ) != NULL );
+    }
 
-    if (debug_ld_floxlib)
-        fprintf(stderr, "DEBUG: la_objsearch: %s\n", name);
+  if ( debug_ld_floxlib )
+    {
+      fprintf( stderr,
+               "DEBUG: la_objsearch(%s, %s)\n",
+               ( flag == LA_SER_ORIG )      ? "LA_SER_ORIG"
+               : ( flag == LA_SER_LIBPATH ) ? "LA_SER_LIBPATH"
+               : ( flag == LA_SER_RUNPATH ) ? "LA_SER_RUNPATH"
+               : ( flag == LA_SER_DEFAULT ) ? "LA_SER_DEFAULT"
+               : ( flag == LA_SER_CONFIG )  ? "LA_SER_CONFIG"
+               : ( flag == LA_SER_SECURE )  ? "LA_SER_SECURE"
+                                            : "???",
+               name );
+    }
 
-    if (flag == LA_SER_DEFAULT && stat(name, &stat_buf) != 0) {
-        char *basename = strrchr(name, '/');
-        char *flox_env = getenv("FLOX_ENV");
+  // Only look in $FLOX_ENV_LIB_DIRS for a match once the dynamic
+  // linker has exhausted all of the other possible locations, and
+  // only if the library isn't specified by way of an explicit path.
+  if ( flag == LA_SER_DEFAULT && *name != '/' )
+    {
+      char * basename          = strrchr( name, '/' );
+      char * flox_env_lib_dirs = getenv( "FLOX_ENV_LIB_DIRS" );
 
-        if (basename != NULL)
-            basename++;
-        else
-            basename = (char *) name;
+      if ( basename != NULL ) { basename++; }
+      else { basename = (char *) name; }
 
-        if (debug_ld_floxlib)
-            fprintf(stderr, "DEBUG: looking for: %s\n", basename);
-
-#ifdef LD_FLOXLIB_LIB
-        // First attempt to find the lib in the LD_FLOXLIB_LIB
-        // cache of common libraries.
-        (void) snprintf(name_buf, sizeof(name_buf), "%s/%s", LD_FLOXLIB_LIB, basename);
-        if (debug_ld_floxlib)
-            fprintf(stderr, "DEBUG: checking: %s\n", name_buf);
-        if (stat(name_buf, &stat_buf) == 0) {
-            if (audit_impure)
-                fprintf(stderr, "AUDIT: %s -> %s\n", name, name_buf);
-            return name_buf;
+      if ( debug_ld_floxlib )
+        {
+          fprintf( stderr, "DEBUG: looking for: %s\n", basename );
         }
-#endif
 
-        // Finally look for the lib in $FLOX_ENV/lib.
-        if (flox_env != NULL) {
-            (void) snprintf(name_buf, sizeof(name_buf), "%s/lib/%s", flox_env, basename);
-            if (debug_ld_floxlib)
-                fprintf(stderr, "DEBUG: checking: %s\n", name_buf);
-            if (stat(name_buf, &stat_buf) == 0) {
-                if (audit_impure)
-                    fprintf(stderr, "AUDIT: %s -> %s\n", name, name_buf);
-                return name_buf;
+      // Look for the lib in $FLOX_ENV/lib.
+      if ( flox_env_lib_dirs != NULL )
+        {
+          // Iterate over the colon-separated list of paths in
+          // FLOX_ENV_LIB_DIRS looking for the requested library.
+          // If found, return the full path to the library and
+          // otherwise return the original name.
+          char * flox_env_library_dir = NULL;
+          flox_env_library_dir        = strtok( flox_env_lib_dirs, ":" );
+          while ( flox_env_library_dir != NULL )
+            {
+              (void) snprintf( name_buf,
+                               sizeof( name_buf ),
+                               "%s/%s",
+                               flox_env_library_dir,
+                               basename );
+              if ( debug_ld_floxlib )
+                {
+                  fprintf( stderr,
+                           "DEBUG: la_objsearch() checking: %s\n",
+                           name_buf );
+                }
+              if ( stat( name_buf, &stat_buf ) == 0 )
+                {
+                  if ( audit_ld_floxlib < 0 )
+                    {
+                      audit_ld_floxlib
+                        = ( getenv( "LD_FLOXLIB_AUDIT" ) != NULL );
+                    }
+                  if ( audit_ld_floxlib || debug_ld_floxlib )
+                    {
+                      fprintf( stderr,
+                               "AUDIT: la_objsearch() resolved %s -> %s\n",
+                               name,
+                               name_buf );
+                    }
+                  return name_buf;
+                }
+              flox_env_library_dir = strtok( NULL, ":" );
             }
         }
     }
 
-    return (char *) name;
+  return (char *) name;
 }
 
 /* vim: set et ts=4: */
