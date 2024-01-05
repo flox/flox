@@ -112,6 +112,9 @@ pub trait Environment: Send {
     /// Build the environment and create a result link as gc-root
     fn build(&mut self, flox: &Flox) -> Result<(), EnvironmentError2>;
 
+    /// Resolve the environment and return the lockfile
+    fn lock(&mut self, flox: &Flox) -> Result<LockedManifest, EnvironmentError2>;
+
     /// Install packages to the environment atomically
     fn install(
         &mut self,

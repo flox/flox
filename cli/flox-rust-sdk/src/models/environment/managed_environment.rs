@@ -26,6 +26,7 @@ use super::{
 use crate::flox::Flox;
 use crate::models::environment_ref::{EnvironmentName, EnvironmentOwner};
 use crate::models::floxmetav2::{floxmeta_git_options, FloxmetaV2, FloxmetaV2Error};
+use crate::models::lockfile::LockedManifest;
 use crate::models::manifest::PackageToInstall;
 use crate::models::pkgdb::UpgradeResult;
 use crate::providers::git::{
@@ -156,6 +157,18 @@ impl Environment for ManagedEnvironment {
         temporary.link(flox, &self.out_link)?;
 
         Ok(())
+    }
+
+    fn lock(&mut self, flox: &Flox) -> Result<LockedManifest, EnvironmentError2> {
+        let generations = self
+            .generations()
+            .writable(flox.temp_dir.clone())
+            .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?;
+        let mut temporary = generations
+            .get_current_generation()
+            .map_err(ManagedEnvironmentError::CreateGenerationFiles)?;
+
+        Ok(temporary.lock(flox)?)
     }
 
     /// Install packages to the environment atomically
