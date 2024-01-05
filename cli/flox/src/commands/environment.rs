@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::fmt::Display;
 use std::fs::{self, File};
 use std::io::{stdin, stdout};
@@ -54,8 +55,8 @@ use crate::commands::{
     UninitializedEnvironment,
 };
 use crate::config::Config;
-use crate::subcommand_metric;
 use crate::utils::dialog::{Confirm, Dialog, Spinner};
+use crate::{subcommand_metric, utils};
 
 #[derive(Bpaf, Clone)]
 pub struct EnvironmentArgs {
@@ -407,11 +408,48 @@ impl Activate {
 
         // TODO more sophisticated detection?
         let shell = if let Ok(shell) = env::var("SHELL") {
-            shell
+            ShellType::try_from(Path::new(&shell))?
         } else {
             bail!("SHELL must be set");
         };
-        let mut command = Command::new(&shell);
+
+        let prompt_color_1 = env::var("FLOX_PROMPT_COLOR_1")
+            .unwrap_or(utils::colors::LIGHT_BLUE.to_ansi256().to_string());
+        let prompt_color_2 = env::var("FLOX_PROMPT_COLOR_2")
+            .unwrap_or(utils::colors::DARK_PEACH.to_ansi256().to_string());
+
+        // when output is not a tty, and no command is provided
+        // we just print an activation script to stdout
+        //
+        // That script can then be `eval`ed in the current shell,
+        // e.g. in a .bashrc or .zshrc file:
+        //
+        //    eval "$(flox activate)"
+        if !stdout().is_tty() && self.run_args.is_empty() {
+            let script: String = formatdoc! {"
+                export {FLOX_ENV_VAR}={activation_path}
+                export {FLOX_PROMPT_ENVIRONMENTS_VAR}={flox_prompt_environments}
+                export {FLOX_ACTIVE_ENVIRONMENTS_VAR}={flox_active_environments}
+                export FLOX_PROMPT_COLOR_1={prompt_color_1}
+                export FLOX_PROMPT_COLOR_2={prompt_color_2}
+
+                # to avoid infinite recursion sourcing bashrc
+                export FLOX_SOURCED_FROM_SHELL_RC=1
+
+                source {activation_path}/activate/{shell}
+
+                unset FLOX_SOURCED_FROM_SHELL_RC
+            ",
+            activation_path=shell_escape::escape(activation_path.to_string_lossy()),
+            flox_active_environments=shell_escape::escape(flox_active_environments.to_string().into()),
+            flox_prompt_environments=shell_escape::escape(Cow::from(&flox_prompt_environments)),
+            };
+
+            println!("{script}");
+
+            return Ok(());
+        }
+        let mut command = Command::new(shell.exe_path());
         command
             .env(FLOX_PROMPT_ENVIRONMENTS_VAR, flox_prompt_environments)
             .env(FLOX_ENV_VAR, &activation_path)
@@ -419,54 +457,47 @@ impl Activate {
                 FLOX_ACTIVE_ENVIRONMENTS_VAR,
                 flox_active_environments.to_string(),
             )
-            .env(
-                "FLOX_PROMPT_COLOR_1",
-                // default to SlateBlue3
-                env::var("FLOX_PROMPT_COLOR_1").unwrap_or("61".to_string()),
-            )
-            .env(
-                "FLOX_PROMPT_COLOR_2",
-                // default to LightSalmon1
-                env::var("FLOX_PROMPT_COLOR_2").unwrap_or("216".to_string()),
-            );
+            .env("FLOX_PROMPT_COLOR_1", prompt_color_1)
+            .env("FLOX_PROMPT_COLOR_2", prompt_color_2);
 
-        if shell.ends_with("bash") {
-            command
-                .arg("--rcfile")
-                .arg(activation_path.join("activate").join("bash"));
-        } else if shell.ends_with("zsh") {
-            // From man zsh:
-            // Commands are then read from $ZDOTDIR/.zshenv.  If the shell is a
-            // login shell, commands are read from /etc/zprofile and then
-            // $ZDOTDIR/.zprofile.  Then, if the shell is interactive, commands
-            // are read from /etc/zshrc and then $ZDOTDIR/.zshrc.  Finally, if
-            // the shell is a login shell, /etc/zlogin and $ZDOTDIR/.zlogin are
-            // read.
-            //
-            // We want to add our customizations as late as possible in the
-            // initialization process - if, e.g. the user has prompt
-            // customizations, we want ours to go last. So we put our
-            // customizations at the end of .zshrc, passing our customizations
-            // using FLOX_ZSH_INIT_SCRIPT.
-            // Otherwise, we want initialization to proceed as normal, so the
-            // files in our ZDOTDIR source global rcs and user rcs.
-            // We disable global rc files and instead source them manually so we
-            // can control the ZDOTDIR they are run with - this is important
-            // since macOS sets
-            // HISTFILE=${ZDOTDIR:-$HOME}/.zsh_history
-            // in /etc/zshrc.
-            if let Ok(zdotdir) = env::var("ZDOTDIR") {
-                command.env("FLOX_ORIG_ZDOTDIR", zdotdir);
-            }
-            command
-                .env("ZDOTDIR", env!("FLOX_ZDOTDIR"))
-                .env(
-                    "FLOX_ZSH_INIT_SCRIPT",
-                    activation_path.join("activate").join("zsh"),
-                )
-                .arg("--no-globalrcs");
-        } else {
-            bail!("Unsupported SHELL '{shell}'");
+        match shell {
+            ShellType::Bash(_) => {
+                command
+                    .arg("--rcfile")
+                    .arg(activation_path.join("activate").join("bash"));
+            },
+            ShellType::Zsh(_) => {
+                // From man zsh:
+                // Commands are then read from $ZDOTDIR/.zshenv.  If the shell is a
+                // login shell, commands are read from /etc/zprofile and then
+                // $ZDOTDIR/.zprofile.  Then, if the shell is interactive, commands
+                // are read from /etc/zshrc and then $ZDOTDIR/.zshrc.  Finally, if
+                // the shell is a login shell, /etc/zlogin and $ZDOTDIR/.zlogin are
+                // read.
+                //
+                // We want to add our customizations as late as possible in the
+                // initialization process - if, e.g. the user has prompt
+                // customizations, we want ours to go last. So we put our
+                // customizations at the end of .zshrc, passing our customizations
+                // using FLOX_ZSH_INIT_SCRIPT.
+                // Otherwise, we want initialization to proceed as normal, so the
+                // files in our ZDOTDIR source global rcs and user rcs.
+                // We disable global rc files and instead source them manually so we
+                // can control the ZDOTDIR they are run with - this is important
+                // since macOS sets
+                // HISTFILE=${ZDOTDIR:-$HOME}/.zsh_history
+                // in /etc/zshrc.
+                if let Ok(zdotdir) = env::var("ZDOTDIR") {
+                    command.env("FLOX_ORIG_ZDOTDIR", zdotdir);
+                }
+                command
+                    .env("ZDOTDIR", env!("FLOX_ZDOTDIR"))
+                    .env(
+                        "FLOX_ZSH_INIT_SCRIPT",
+                        activation_path.join("activate").join("zsh"),
+                    )
+                    .arg("--no-globalrcs");
+            },
         };
 
         if !self.run_args.is_empty() {
