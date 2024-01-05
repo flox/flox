@@ -524,10 +524,6 @@ pub enum ListMode {
     #[bpaf(long, short)]
     Extended,
 
-    /// Show detailed information as a table
-    #[bpaf(long, short, hide)]
-    Table,
-
     /// Detailed information such as priority and license
     #[bpaf(long, short)]
     All,
@@ -551,7 +547,6 @@ impl List {
                 }
             },
             ListMode::Extended => self.print_extended(&flox, &mut *env)?,
-            ListMode::Table => self.print_table(&flox, &mut *env)?,
             ListMode::All => self.print_detail(&flox, &mut *env)?,
         }
 
@@ -586,53 +581,6 @@ impl List {
                     version = p.info.version
                 )
             });
-        Ok(())
-    }
-
-    fn print_table(&self, flox: &Flox, env: &mut dyn Environment) -> Result<()> {
-        let lockfile_path = env
-            .lockfile_path(flox)
-            .context("Could not get lockfile path")?;
-        if !lockfile_path.exists() {
-            Dialog {
-                message: "No lockfile found for environment, building...",
-                help_message: None,
-                typed: Spinner::new(|| env.build(flox)),
-            }
-            .spin()
-            .context("Failed to build environment")?;
-        }
-
-        let lockfile: TypedLockedManifest =
-            serde_json::from_str(std::fs::read_to_string(lockfile_path)?.as_str())?;
-
-        let mut table = Table::new();
-        table.set_header(vec![
-            "Package ID",
-            "Path",
-            "pname",
-            "Version",
-            "Priority",
-            "License",
-            "Unfree",
-            "Broken",
-        ]);
-
-        for p in lockfile.list_packages(&flox.system).into_iter() {
-            table.add_row(vec![
-                p.name,
-                p.info.rel_path.join("."),
-                p.info.pname,
-                p.info.version,
-                p.priority.to_string(),
-                p.info.license.unwrap_or_else(|| "N/A".to_string()),
-                p.info.unfree.to_string(),
-                p.info.broken.to_string(),
-            ]);
-        }
-
-        println!("{table}");
-
         Ok(())
     }
 
