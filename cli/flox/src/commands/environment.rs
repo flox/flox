@@ -1,3 +1,4 @@
+use std::fmt::Display;
 use std::fs::{self, File};
 use std::io::{stdin, stdout};
 use std::os::unix::process::CommandExt;
@@ -309,6 +310,42 @@ pub struct Activate {
     /// Command to run interactively in the context of the environment
     #[bpaf(positional("cmd"), strict, many)]
     run_args: Vec<String>,
+}
+
+#[derive(Debug)]
+enum ShellType {
+    Bash(PathBuf),
+    Zsh(PathBuf),
+}
+
+impl TryFrom<&Path> for ShellType {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &Path) -> std::prelude::v1::Result<Self, Self::Error> {
+        match value.file_name() {
+            Some(name) if name == "bash" => Ok(ShellType::Bash(value.to_owned())),
+            Some(name) if name == "zsh" => Ok(ShellType::Zsh(value.to_owned())),
+            _ => Err(anyhow!("Unsupported shell {value:?}")),
+        }
+    }
+}
+
+impl Display for ShellType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ShellType::Bash(_) => write!(f, "bash"),
+            ShellType::Zsh(_) => write!(f, "zsh"),
+        }
+    }
+}
+
+impl ShellType {
+    fn exe_path(&self) -> &Path {
+        match self {
+            ShellType::Bash(path) => path,
+            ShellType::Zsh(path) => path,
+        }
+    }
 }
 
 impl Activate {
