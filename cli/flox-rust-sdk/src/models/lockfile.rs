@@ -130,7 +130,7 @@ pub struct TypedLockedManifest {
 #[derive(Debug, Clone, Deserialize, PartialEq)]
 struct LockedPackage {
     info: PackageInfo,
-    #[serde(rename = "abs-path")]
+    #[serde(rename = "attr-path")]
     abs_path: Vec<String>,
     priority: usize,
 }
