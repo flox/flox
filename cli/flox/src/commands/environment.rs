@@ -27,9 +27,9 @@ use flox_rust_sdk::models::environment::{
     DOT_FLOX,
     ENVIRONMENT_POINTER_FILENAME,
     FLOX_ACTIVE_ENVIRONMENTS_VAR,
-    FLOX_ENV_VAR,
     FLOX_ENV_DIRS_VAR,
     FLOX_ENV_LIB_DIRS_VAR,
+    FLOX_ENV_VAR,
     FLOX_PROMPT_ENVIRONMENTS_VAR,
 };
 use flox_rust_sdk::models::floxmetav2::FloxmetaV2Error;
@@ -454,6 +454,25 @@ impl Activate {
         }
         flox_active_environments.set_last_active(now_active);
 
+        let (flox_env_dirs, flox_env_lib_dirs) = {
+            let mut flox_env_dirs = vec![activation_path.clone()];
+            if let Ok(existing_environments) = env::var(FLOX_ENV_DIRS_VAR) {
+                flox_env_dirs.extend(env::split_paths(&existing_environments));
+            };
+
+            let flox_env_lib_dirs = flox_env_dirs.iter().map(|p| p.join("lib"));
+
+            let flox_env_dirs = env::join_paths(&flox_env_dirs).context(
+                "Cannot activate environment because its path contains an invalid character",
+            )?;
+
+            let flox_env_lib_dirs = env::join_paths(flox_env_lib_dirs).context(
+                "Cannot activate environment because its path contains an invalid character",
+            )?;
+
+            (flox_env_dirs, flox_env_lib_dirs)
+        };
+
         // TODO more sophisticated detection?
         let shell = if let Ok(shell) = env::var("SHELL") {
             ShellType::try_from(Path::new(&shell))?
@@ -507,6 +526,8 @@ impl Activate {
             )
             .env("FLOX_PROMPT_COLOR_1", prompt_color_1)
             .env("FLOX_PROMPT_COLOR_2", prompt_color_2);
+            .env(FLOX_ENV_DIRS_VAR, flox_env_dirs)
+            .env(FLOX_ENV_LIB_DIRS_VAR, flox_env_lib_dirs)
 
         match shell {
             ShellType::Bash(_) => {
