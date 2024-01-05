@@ -400,7 +400,6 @@ impl Activate {
 
         // Add to FLOX_ACTIVE_ENVIRONMENTS so we can detect what environments are active.
         let mut flox_active_environments = activated_environments();
-
         if flox_active_environments.is_active(&now_active) {
             bail!("Environment '{now_active}' is already active");
         }
