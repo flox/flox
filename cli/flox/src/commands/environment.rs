@@ -1,5 +1,5 @@
 use std::fs::{self, File};
-use std::io::stdin;
+use std::io::{stdin, stdout};
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -8,6 +8,7 @@ use std::{env, vec};
 
 use anyhow::{anyhow, bail, Context, Result};
 use bpaf::Bpaf;
+use crossterm::tty::IsTty;
 use flox_rust_sdk::flox::{Auth0Client, EnvironmentName, EnvironmentOwner, EnvironmentRef, Flox};
 use flox_rust_sdk::models::environment::managed_environment::{
     ManagedEnvironment,
@@ -340,12 +341,17 @@ impl Activate {
 
         let mut environment = concrete_environment.into_dyn_environment();
 
-        let activation_path = Dialog {
-            message: &format!("Building environment '{prompt_name}'..."),
-            help_message: None,
-            typed: Spinner::new(|| environment.activation_path(&flox)),
-        }
-        .spin()?;
+        // Don't spin in bashrcs and similar contexts
+        let activation_path = if !stdout().is_tty() && self.run_args.is_empty() {
+            environment.activation_path(&flox)?
+        } else {
+            Dialog {
+                message: &format!("Building environment '{prompt_name}'..."),
+                help_message: None,
+                typed: Spinner::new(|| environment.activation_path(&flox)),
+            }
+            .spin()?
+        };
 
         // We don't have access to the current PS1 (it's not exported), so we
         // can't modify it. Instead set FLOX_PROMPT_ENVIRONMENTS and let the
