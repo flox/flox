@@ -623,25 +623,30 @@ impl List {
         Ok(())
     }
 
-    /// Read or build to create a [LockedManifest]
+    /// Read existing lockfile or resolve to create a new [LockedManifest].
+    ///
+    /// Does not write the lockfile,
+    /// as that would require writing to the environment in case of remote environments)
     fn get_lockfile(flox: &Flox, env: &mut dyn Environment) -> Result<TypedLockedManifest> {
         let lockfile_path = env
             .lockfile_path(flox)
             .context("Could not get lockfile path")?;
 
-        if !lockfile_path.exists() {
+        let lockfile = if !lockfile_path.exists() {
             Dialog {
                 message: "No lockfile found for environment, building...",
                 help_message: None,
-                typed: Spinner::new(|| env.build(flox)),
+                typed: Spinner::new(|| env.lock(flox)),
             }
             .spin()
-            .context("Failed to build environment")?;
-        }
+            .context("Failed to build environment")?
+        } else {
+            let lockfile_content =
+                fs::read_to_string(lockfile_path).context("Could not read lockfile")?;
+            serde_json::from_str(&lockfile_content)?
+        };
 
-        let lockfile: TypedLockedManifest =
-            serde_json::from_str(std::fs::read_to_string(lockfile_path)?.as_str())?;
-
+        let lockfile: TypedLockedManifest = lockfile.try_into()?;
         Ok(lockfile)
     }
 }
