@@ -8,7 +8,6 @@ use std::{env, vec};
 
 use anyhow::{anyhow, bail, Context, Result};
 use bpaf::Bpaf;
-use comfy_table::Table;
 use flox_rust_sdk::flox::{Auth0Client, EnvironmentName, EnvironmentOwner, EnvironmentRef, Flox};
 use flox_rust_sdk::models::environment::managed_environment::{
     ManagedEnvironment,
@@ -41,7 +40,7 @@ use flox_rust_sdk::models::lockfile::{
     PackageInfo,
     TypedLockedManifest,
 };
-use flox_rust_sdk::models::manifest::{list_packages, PackageToInstall};
+use flox_rust_sdk::models::manifest::PackageToInstall;
 use flox_rust_sdk::models::pkgdb::{call_pkgdb, PKGDB_BIN};
 use flox_rust_sdk::nix::command::StoreGc;
 use flox_rust_sdk::nix::command_line::NixCommandLine;

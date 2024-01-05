@@ -51,7 +51,6 @@ url.workspace = true
 openssl.workspace = true
 chrono.workspace = true
 oauth2.workspace = true
-comfy-table.workspace = true
 
 [dev-dependencies]
 temp-env = "0.3.2"
