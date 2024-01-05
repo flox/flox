@@ -544,12 +544,13 @@ cc-check: $(TESTS:.cc=)
 	exit "$$_ec";
 
 #: Run all bats tests
+PKGDB_BATS_FILES ?= "$(PKGDB_ROOT)/tests"
 bats-check: bin $(TEST_UTILS)
 	PKGDB_BIN="$(PKGDB_ROOT)/bin/pkgdb"                          \
 	PKGDB_IS_SQLITE3_BIN="$(PKGDB_ROOT)/tests/is_sqlite3"        \
 	PKGDB_SEARCH_PARAMS_BIN="$(PKGDB_ROOT)/tests/search-params"  \
 	  $(BATS) --print-output-on-failure --verbose-run --timing   \
-	          "$(PKGDB_ROOT)/tests";
+	          "$(PKGDB_BATS_FILES)";
 
 
 # ---------------------------------------------------------------------------- #

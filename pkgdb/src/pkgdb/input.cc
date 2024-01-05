@@ -54,9 +54,24 @@ PkgDbInput::init()
       PkgDb( this->getFlake()->lockedFlake, this->dbPath.string() );
     }
 
-  this->dbRO = std::make_shared<PkgDbReadOnly>(
-    this->getFlake()->lockedFlake.getFingerprint(),
-    this->dbPath.string() );
+  int retries = 0;
+  do {
+      try
+        {
+          this->dbRO = std::make_shared<PkgDbReadOnly>(
+            this->getFlake()->lockedFlake.getFingerprint(),
+            this->dbPath.string() );
+        }
+      catch ( ... )
+        {
+          std::this_thread::sleep_for( DurationMillis( 250 ) );
+          if ( ++retries > 100 )
+            {
+              throw PkgDbException( "couldn't initialize package database" );
+            }
+        }
+    }
+  while ( ( this->dbRO == nullptr ) );
 
   /* If the schema version is bad, delete the DB so it will be recreated. */
   SqlVersions dbVersions = this->dbRO->getDbVersion();
@@ -106,6 +121,15 @@ PkgDbInput::getDbReadWrite()
 /* -------------------------------------------------------------------------- */
 
 void
+PkgDbInput::closeDbReadWrite()
+{
+  if ( this->dbRW != nullptr ) { this->dbRW = nullptr; }
+}
+
+
+/* -------------------------------------------------------------------------- */
+
+void
 PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
 {
   if ( this->getDbReadOnly()->completedAttrSet( prefix ) ) { return; }
@@ -124,7 +148,7 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
     std::make_tuple( prefix, static_cast<flox::Cursor>( root ), row ) );
 
   /* Start a transaction */
-  sqlite3pp::transaction txn( dbRW->db );
+  dbRW->db.execute( "BEGIN EXCLUSIVE TRANSACTION" );
   try
     {
       while ( ! todo.empty() )
@@ -138,14 +162,14 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
     }
   catch ( const nix::EvalError & err )
     {
-      txn.rollback();
+      dbRW->db.execute( "ROLLBACK TRANSACTION" );
       /* Close the r/w connection if we opened it. */
       if ( ! wasRW ) { this->closeDbReadWrite(); }
       throw NixEvalException( "error scraping flake", err );
     }
 
   /* Close the transaction. */
-  txn.commit();
+  dbRW->db.execute( "COMMIT TRANSACTION" );
 
   /* Close the r/w connection if we opened it. */
   if ( ! wasRW ) { this->closeDbReadWrite(); }

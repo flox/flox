@@ -145,9 +145,8 @@ initVersions( SQLiteDb & pdb )
   defineVersions.bind( 2, static_cast<int>( sqlVersions.views ) );
   if ( sql_rc rcode = defineVersions.execute(); isSQLError( rcode ) )
     {
-      throw PkgDbException( nix::fmt( "failed to write DbVersions info:(%d) %s",
-                                      rcode,
-                                      pdb.error_msg() ) );
+      throw PkgDbException( "failed to write DbVersions info",
+                            pdb.error_msg() );
     }
 }
 
@@ -188,10 +187,8 @@ writeInput( PkgDb & pdb )
   cmd.bind( 3, pdb.lockedRef.attrs.dump(), sqlite3pp::copy );
   if ( sql_rc rcode = cmd.execute(); isSQLError( rcode ) )
     {
-      throw PkgDbException(
-        nix::fmt( "failed to write LockedFlaked info:(%d) %s",
-                  rcode,
-                  pdb.db.error_msg() ) );
+      throw PkgDbException( "failed to write LockedFlaked info",
+                            pdb.db.error_msg() );
     }
 }
 
@@ -202,13 +199,42 @@ PkgDb::PkgDb( const nix::flake::LockedFlake & flake, std::string_view dbPath )
 {
   this->dbPath      = dbPath;
   this->fingerprint = flake.getFingerprint();
-  this->db.connect( this->dbPath.c_str(),
-                    SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE );
+  this->connect();
   this->init();
   this->lockedRef
     = { flake.flake.lockedRef.to_string(),
         nix::fetchers::attrsToJSON( flake.flake.lockedRef.toAttrs() ) };
   writeInput( *this );
+}
+
+
+/* -------------------------------------------------------------------------- */
+
+void
+PkgDb::connect()
+{
+  /* The `locking_mode` pragma acquires an exclusive write lock the first time
+   * that the database is written to and only releases the lock once the
+   * database connection is closed. We make a write as soon as possible after
+   * opening the connection to establish the write lock. After the
+   * `RETRY_WHILE_BUSY` call returns we should be the only process able to write
+   * to the database, though other processes mays still read from the database
+   * (this is why we must use `EXCLUSIVE` transactions, which prevent reads as
+   * well).
+   *
+   * It could be the case that this database hasn't been initialized yet, so we
+   * can't write to an existing table. Instead we just write to a dummy table.
+   * It's unclear whether setting a pragma value like `appliation_id` counts as
+   * a write, so we create a table instead.*/
+  static const char * acquire_lock = R"SQL(
+  BEGIN EXCLUSIVE TRANSACTION;
+  CREATE TABLE IF NOT EXISTS _lock (foo int);
+  COMMIT TRANSACTION
+  )SQL";
+  this->db.connect( this->dbPath.string().c_str(),
+                    SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE );
+  sqlite3pp::command cmd( this->db, acquire_lock );
+  RETRY_WHILE_BUSY( cmd.execute_all() );
 }
 
 
@@ -386,10 +412,9 @@ PkgDb::addPackage( row_id               parentId,
     }
   if ( sql_rc rcode = cmd.execute(); isSQLError( rcode ) )
     {
-      throw PkgDbException( nix::fmt( "failed to write Package '%s':(%d) %s",
-                                      pkg._fullName,
-                                      rcode,
-                                      this->db.error_msg() ) );
+      throw PkgDbException(
+        nix::fmt( "failed to write Package '%s'", pkg._fullName ),
+        this->db.error_msg() );
     }
   return this->db.last_insert_rowid();
 }
@@ -448,11 +473,8 @@ PkgDb::scrape( nix::SymbolTable & syms, const Target & target, Todos & todo )
 
   bool tryRecur = prefix.front() != "packages";
 
-  nix::Activity act( *nix::logger,
-                     nix::lvlInfo,
-                     nix::actUnknown,
-                     nix::fmt( "evaluating package set '%s'",
-                               concatStringsSep( ".", prefix ) ) );
+  debugLog( nix::fmt( "evaluating package set '%s'",
+                      concatStringsSep( ".", prefix ) ) );
 
   /* Scrape loop over attrs */
   for ( nix::Symbol & aname : cursor->getAttrs() )
@@ -465,10 +487,7 @@ PkgDb::scrape( nix::SymbolTable & syms, const Target & target, Todos & todo )
             ? concatStringsSep( ".", prefix ) + "." + syms[aname]
             : "";
 
-      nix::Activity act( *nix::logger,
-                         nix::lvlTalkative,
-                         nix::actUnknown,
-                         "\tevaluating attribute '" + pathS + "'" );
+      traceLog( "\tevaluating attribute '" + pathS + "'" );
 
       try
         {
