@@ -335,7 +335,7 @@ impl Activate {
             }
         }
 
-        let last_active =
+        let now_active =
             UninitializedEnvironment::from_concrete_environment(&concrete_environment)?;
 
         let mut environment = concrete_environment.into_dyn_environment();
@@ -357,7 +357,12 @@ impl Activate {
 
         // Add to FLOX_ACTIVE_ENVIRONMENTS so we can detect what environments are active.
         let mut flox_active_environments = activated_environments();
-        flox_active_environments.set_last_active(last_active);
+
+        if flox_active_environments.is_active(&now_active) {
+            bail!("Environment '{now_active}' is already active");
+        }
+
+        flox_active_environments.set_last_active(now_active);
 
         // TODO more sophisticated detection?
         let shell = if let Ok(shell) = env::var("SHELL") {
