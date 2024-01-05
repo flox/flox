@@ -7,7 +7,7 @@
 PATH="$FLOX_ENV/bin:$FLOX_ENV/sbin${PATH:+:$PATH}"
 FPATH="$FLOX_ENV/share/zsh/vendor-completions${FPATH:+:$FPATH}"
 FPATH="$FLOX_ENV/share/zsh/site-functions:$FPATH"
-MANPATH="$FLOX_ENV/share/man${MANPATH:+:$MANPATH}"
+MANPATH="$FLOX_ENV/share/man${MANPATH:+:$MANPATH}:"
 INFOPATH="$FLOX_ENV/share/info${INFOPATH:+:$INFOPATH}"
 CPATH="$FLOX_ENV/include${CPATH:+:$CPATH}"
 LIBRARY_PATH="$FLOX_ENV/lib${LIBRARY_PATH:+:$LIBRARY_PATH}"
