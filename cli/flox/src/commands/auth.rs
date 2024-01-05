@@ -1,3 +1,5 @@
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 //this module liberally borrows from github-device-flox crate
 use std::time;
 
@@ -6,6 +8,7 @@ use bpaf::Bpaf;
 use chrono::offset::Utc;
 use chrono::{DateTime, Duration};
 use flox_rust_sdk::flox::{Auth0Client, Flox};
+use indoc::eprintdoc;
 use log::{debug, info};
 use oauth2::basic::BasicClient;
 use oauth2::{
@@ -18,12 +21,11 @@ use oauth2::{
     TokenUrl,
 };
 use serde::Serialize;
+use tokio::process::Command;
 
 use crate::commands::general::update_config;
 use crate::config::Config;
 use crate::subcommand_metric;
-
-const TOKEN_INPUT_TIMEOUT: time::Duration = time::Duration::new(30, 0);
 
 #[derive(Debug, Default, Clone, Serialize)]
 pub struct Credential {
@@ -74,25 +76,101 @@ pub async fn authorize(client: BasicClient) -> Result<Credential> {
 
     debug!("Device code details: {details:#?}");
 
-    eprintln!(
-        "Please visit {} in your browser",
-        details.verification_uri().as_str()
-    );
-    eprintln!("And enter code: {}", details.user_code().secret());
+    let url = details.user_code().secret().clone();
+    let prefilled_url = details
+        .verification_uri_complete()
+        .map(|uri| uri.secret())
+        .cloned();
 
-    let token_result = client
+    eprintdoc! {"
+        First copy your one-time code: {code}
+
+        Press [enter] to open {url} in your browser.
+        ",
+        url = details.verification_uri().as_str(),
+        code = details.user_code().secret()
+    };
+
+    debug!(
+        "Waiting for user to enter code (timeout: {}s)",
+        details.expires_in().as_secs()
+    );
+
+    // in he background listen for `[enter]` key presses
+    // if the user presses enter, open the browser using the system default opener
+    // on linux this should be `xdg-open`
+    // on macos this should be `open`
+    //
+    // I'm not sure this is the best way to do this, but it works for now.
+    // Particularly, if the user opens the URL manually,
+    // there will be one less newline in the terminal than expected.
+    let done = Arc::new(AtomicBool::default());
+    let done_clone = done.clone();
+    tokio::task::spawn(async move {
+        loop {
+            if done_clone.load(Ordering::Relaxed) {
+                return;
+            }
+
+            match crossterm::event::poll(time::Duration::from_millis(100)) {
+                Err(_) => {
+                    info!("Could not read input. Please open the following URL manually: {url}",);
+                    return;
+                },
+                Ok(false) => {
+                    continue;
+                },
+                Ok(true) => {
+                    match crossterm::event::read() {
+                        Err(_) => {
+                            info!("Could not read input. Please open the following URL manually: {url}",);
+                            return;
+                        },
+                        Ok(crossterm::event::Event::Key(key))
+                            if key.code == crossterm::event::KeyCode::Enter =>
+                        {
+                            break;
+                        },
+                        _ => {
+                            continue;
+                        },
+                    }
+                },
+            }
+        }
+
+        let opener = match std::env::consts::OS {
+            "linux" => "xdg-open",
+            "macos" => "open",
+            _ => {
+                info!("Could not open browser. Please open the following URL manually: {url}",);
+                return;
+            },
+        };
+
+        let mut command = Command::new(opener);
+        command.arg(prefilled_url.unwrap_or_else(|| url.clone()));
+
+        if command.spawn().is_err() {
+            info!("Could not open browser. Please open the following URL manually: {url}",);
+        }
+    });
+
+    let token = client
         .exchange_device_access_token(&details)
         .request_async(
             oauth2::reqwest::async_http_client,
             tokio::time::sleep,
-            Some(TOKEN_INPUT_TIMEOUT),
+            Some(details.expires_in()),
         )
         .await
         .context("Could not authorize via oauth")?;
 
+    done.store(true, Ordering::Relaxed);
+
     Ok(Credential {
-        token: token_result.access_token().secret().to_string(),
-        expiry: calculate_expiry(token_result.expires_in().unwrap().as_secs() as i64),
+        token: token.access_token().secret().to_string(),
+        expiry: calculate_expiry(token.expires_in().unwrap().as_secs() as i64),
     })
 }
 
