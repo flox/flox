@@ -17,6 +17,7 @@ use flox_rust_sdk::models::environment::path_environment::{self, PathEnvironment
 use flox_rust_sdk::models::environment::{
     global_manifest_lockfile_path,
     global_manifest_path,
+    CanonicalPath,
     CoreEnvironmentError,
     EditResult,
     Environment,
@@ -31,8 +32,15 @@ use flox_rust_sdk::models::environment::{
     FLOX_PROMPT_ENVIRONMENTS_VAR,
 };
 use flox_rust_sdk::models::floxmetav2::FloxmetaV2Error;
-use flox_rust_sdk::models::lockfile::{FlakeRef, Input, Lockfile};
-use flox_rust_sdk::models::manifest::{list_packages, PackageToInstall};
+use flox_rust_sdk::models::lockfile::{
+    FlakeRef,
+    Input,
+    InstalledPackage,
+    LockedManifest,
+    PackageInfo,
+    TypedLockedManifest,
+};
+use flox_rust_sdk::models::manifest::PackageToInstall;
 use flox_rust_sdk::models::pkgdb::{call_pkgdb, PKGDB_BIN};
 use flox_rust_sdk::nix::command::StoreGc;
 use flox_rust_sdk::nix::command_line::NixCommandLine;
@@ -498,7 +506,7 @@ impl Init {
 pub struct List {
     #[bpaf(external(environment_select), fallback(Default::default()))]
     environment: EnvironmentSelect,
-    #[bpaf(external(list_mode), fallback(ListMode::NameOnly))]
+    #[bpaf(external(list_mode), fallback(ListMode::Extended))]
     list_mode: ListMode,
 }
 
@@ -507,16 +515,24 @@ pub enum ListMode {
     /// Show the raw contents of the manifest
     #[bpaf(long, short)]
     Config,
-    /// Show only the names of the packages installed in the environment
-    #[bpaf(long, short)]
+    /// Show only names
+    #[bpaf(long("name"), short)]
     NameOnly,
+
+    /// Show names, paths, and versions (default)
+    #[bpaf(long, short)]
+    Extended,
+
+    /// Detailed information such as priority and license
+    #[bpaf(long, short)]
+    All,
 }
 
 impl List {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("list");
 
-        let env = self
+        let mut env = self
             .environment
             .detect_concrete_environment(&flox, "list using")?
             .into_dyn_environment();
@@ -524,14 +540,112 @@ impl List {
         let manifest_contents = env.manifest_content(&flox)?;
         match self.list_mode {
             ListMode::Config => println!("{}", manifest_contents),
-            ListMode::NameOnly => {
-                if let Some(pkgs) = list_packages(&manifest_contents)? {
-                    pkgs.iter().for_each(|pkg| println!("{}", pkg));
-                }
-            },
+            ListMode::NameOnly => self.print_name_only(&flox, &mut *env)?,
+            ListMode::Extended => self.print_extended(&flox, &mut *env)?,
+            ListMode::All => self.print_detail(&flox, &mut *env)?,
         }
 
         Ok(())
+    }
+
+    /// print package ids only
+    fn print_name_only(&self, flox: &Flox, env: &mut dyn Environment) -> Result<()> {
+        let lockfile = Self::get_lockfile(flox, env)?;
+        lockfile
+            .list_packages(&flox.system)
+            .into_iter()
+            .for_each(|p| println!("{}", p.name));
+        Ok(())
+    }
+
+    /// print package ids, as well as path and version
+    ///
+    /// e.g. `pip: python3Packages.pip (20.3.4)`
+    ///
+    /// This is the default mode
+    fn print_extended(&self, flox: &Flox, env: &mut dyn Environment) -> Result<()> {
+        let lockfile = Self::get_lockfile(flox, env)?;
+        lockfile
+            .list_packages(&flox.system)
+            .into_iter()
+            .for_each(|p| {
+                println!(
+                    "{id}: {path} ({version})",
+                    id = p.name,
+                    path = p.rel_path,
+                    version = p.info.version
+                )
+            });
+        Ok(())
+    }
+
+    /// print package ids, as well as extended detailed information
+    fn print_detail(&self, flox: &Flox, env: &mut dyn Environment) -> Result<()> {
+        let lockfile = Self::get_lockfile(flox, env)?;
+
+        for InstalledPackage {
+            name,
+            rel_path,
+            info:
+                PackageInfo {
+                    broken,
+                    license,
+                    pname,
+                    unfree,
+                    version,
+                    description,
+                },
+            priority,
+        } in lockfile
+            .list_packages(&flox.system)
+            .into_iter()
+            .sorted_by_key(|p| p.priority)
+        {
+            let message = formatdoc! {"
+                {name}: ({pname})
+                  Description: {description}
+                  Path:     {rel_path}
+                  Priority: {priority}
+                  Version:  {version}
+                  License:  {license}
+                  Unfree:   {unfree}
+                  Broken:   {broken}
+                ",
+                description = description.unwrap_or_else(|| "N/A".to_string()),
+                license = license.unwrap_or_else(|| "N/A".to_string()),
+            };
+
+            println!("{message}");
+        }
+
+        Ok(())
+    }
+
+    /// Read existing lockfile or resolve to create a new [LockedManifest].
+    ///
+    /// Does not write the lockfile,
+    /// as that would require writing to the environment in case of remote environments)
+    fn get_lockfile(flox: &Flox, env: &mut dyn Environment) -> Result<TypedLockedManifest> {
+        let lockfile_path = env
+            .lockfile_path(flox)
+            .context("Could not get lockfile path")?;
+
+        let lockfile = if !lockfile_path.exists() {
+            Dialog {
+                message: "No lockfile found for environment, building...",
+                help_message: None,
+                typed: Spinner::new(|| env.lock(flox)),
+            }
+            .spin()
+            .context("Failed to build environment")?
+        } else {
+            let lockfile_content =
+                fs::read_to_string(lockfile_path).context("Could not read lockfile")?;
+            serde_json::from_str(&lockfile_content)?
+        };
+
+        let lockfile: TypedLockedManifest = lockfile.try_into()?;
+        Ok(lockfile)
     }
 }
 
@@ -1218,24 +1332,38 @@ impl Update {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("update");
 
-        let ((old_lockfile, new_lockfile), global, description) = match self.environment_or_global {
+        let (old_lockfile, new_lockfile, global, description) = match self.environment_or_global {
             EnvironmentOrGlobalSelect::Environment(ref environment_select) => {
                 let concrete_environment =
                     environment_select.detect_concrete_environment(&flox, "update")?;
 
                 let description = Some(environment_description(&concrete_environment)?);
-
+                let (old_manifest, new_manifest) =
+                    self.update_manifest(flox, concrete_environment)?;
                 (
-                    self.update_manifest(flox, concrete_environment)?,
+                    old_manifest
+                        .map(TypedLockedManifest::try_from)
+                        .transpose()?,
+                    TypedLockedManifest::try_from(new_manifest)?,
                     false,
                     description,
                 )
             },
-            EnvironmentOrGlobalSelect::Global => (self.update_global_manifest(flox)?, true, None),
+            EnvironmentOrGlobalSelect::Global => {
+                let (old_manifest, new_manifest) = self.update_global_manifest(flox)?;
+                (
+                    old_manifest
+                        .map(TypedLockedManifest::try_from)
+                        .transpose()?,
+                    TypedLockedManifest::try_from(new_manifest)?,
+                    true,
+                    None,
+                )
+            },
         };
 
         if let Some(ref old_lockfile) = old_lockfile {
-            if new_lockfile.registry.inputs == old_lockfile.registry.inputs {
+            if new_lockfile.registry().inputs == old_lockfile.registry().inputs {
                 if global {
                     info!("ℹ️  All global inputs are up-to-date.");
                 } else {
@@ -1251,10 +1379,10 @@ impl Update {
 
         let mut inputs_to_scrape: Vec<&Input> = vec![];
 
-        for (input_name, new_input) in &new_lockfile.registry.inputs {
+        for (input_name, new_input) in &new_lockfile.registry().inputs {
             let old_input = old_lockfile
                 .as_ref()
-                .and_then(|old| old.registry.inputs.get(input_name));
+                .and_then(|old| old.registry().inputs.get(input_name));
             match old_input {
                 // unchanged input
                 Some(old_input) if old_input == new_input => continue, // dont need to scrape
@@ -1277,8 +1405,8 @@ impl Update {
         }
 
         if let Some(old_lockfile) = old_lockfile {
-            for (input_name, _) in old_lockfile.registry.inputs {
-                if !new_lockfile.registry.inputs.contains_key(&input_name) {
+            for input_name in old_lockfile.registry().inputs.keys() {
+                if !new_lockfile.registry().inputs.contains_key(input_name) {
                     if global {
                         info!(
                             "🗑️  Removed unused input '{}' from global lockfile.",
@@ -1330,9 +1458,8 @@ impl Update {
             .arg("--global-manifest")
             .arg(global_manifest_path(&flox));
         let old_lockfile = if lockfile_path.exists() {
-            let canonical_lockfile_path = lockfile_path.canonicalize().map_err(|e| {
-                CoreEnvironmentError::BadLockfilePath(e, lockfile_path.to_path_buf())
-            })?;
+            let canonical_lockfile_path = CanonicalPath::new(&lockfile_path)
+                .map_err(CoreEnvironmentError::BadLockfilePath)?;
             pkgdb_cmd.arg("--lockfile").arg(&canonical_lockfile_path);
             Some(serde_json::from_slice(&fs::read(canonical_lockfile_path)?)?)
         } else {
@@ -1341,7 +1468,7 @@ impl Update {
         pkgdb_cmd.args(self.inputs.clone());
 
         debug!("updating global lockfile with command: {pkgdb_cmd:?}");
-        let lockfile: Lockfile = serde_json::from_value(call_pkgdb(pkgdb_cmd)?)
+        let lockfile: LockedManifest = serde_json::from_value(call_pkgdb(pkgdb_cmd)?)
             .map_err(CoreEnvironmentError::ParseUpdateOutput)?;
 
         debug!("writing lockfile to {}", lockfile_path.display());

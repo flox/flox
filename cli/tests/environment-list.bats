@@ -55,8 +55,28 @@ teardown() {
 
   run "$FLOX_BIN" list
   assert_success
+  assert_output --regexp 'hello: hello \([0-9]+\.[0-9]+\.[0-9]+\)'
+}
+
+@test "'flox list' lists packages of environment in the current dir; shows different paths" {
+  "$FLOX_BIN" init
+  "$FLOX_BIN" install python310Packages.pip
+
+  run "$FLOX_BIN" list
+  assert_success
   assert_output --regexp - << EOF
-hello
+pip: python310Packages.pip \([0-9]+\.[0-9]+\.[0-9]+\)
+EOF
+}
+
+@test "'flox list' lists packages of environment in the current dir; shows different id" {
+  "$FLOX_BIN" init
+  "$FLOX_BIN" install --id greeting hello
+
+  run "$FLOX_BIN" list
+  assert_success
+  assert_output --regexp - << EOF
+greeting: hello \([0-9]+\.[0-9]+\.[0-9]+\)
 EOF
 }
 

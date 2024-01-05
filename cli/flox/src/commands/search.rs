@@ -66,7 +66,8 @@ pub struct Search {
 // Luckily most flakes don't.
 impl Search {
     pub async fn handle(self, config: Config, flox: Flox) -> Result<()> {
-        subcommand_metric!("search");
+        subcommand_metric!("search", search_term = &self.search_term);
+
         debug!("performing search for term: {}", self.search_term);
 
         let (manifest, lockfile) = manifest_and_lockfile(&flox, "search for packages using")

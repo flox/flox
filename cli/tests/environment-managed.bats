@@ -69,7 +69,7 @@ dot_flox_exists() {
 @test "m1: install a package to a managed environment" {
   make_empty_remote_env
 
-  run --separate-stderr "$FLOX_BIN" list
+  run --separate-stderr "$FLOX_BIN" list --name
   assert_success
   assert_output ""
 
@@ -77,7 +77,7 @@ dot_flox_exists() {
   assert_success
   assert_output --partial "environment $OWNER/test" # managed env output
 
-  run --separate-stderr "$FLOX_BIN" list
+  run --separate-stderr "$FLOX_BIN" list --name
   assert_success
   assert_output "hello"
 }
@@ -90,7 +90,7 @@ dot_flox_exists() {
   run "$FLOX_BIN" uninstall hello
   assert_success
 
-  run --separate-stderr "$FLOX_BIN" list
+  run --separate-stderr "$FLOX_BIN" list --name
   assert_success
   assert_output ""
 }
@@ -131,7 +131,7 @@ EOF
   export FLOX_DATA_DIR="$(pwd)/b_data"
   pushd b > /dev/null || return
   "$FLOX_BIN" pull --remote "$OWNER/a"
-  run --separate-stderr "$FLOX_BIN" list
+  run --separate-stderr "$FLOX_BIN" list --name
 
   # assert that the environment contains the installed package
   assert_output "hello"
@@ -170,7 +170,7 @@ EOF
   assert_success
 
   # assert that the environment contains the installed package
-  run --separate-stderr "$FLOX_BIN" list
+  run --separate-stderr "$FLOX_BIN" list --name
   assert_output "hello"
   popd > /dev/null || return
 }
@@ -313,7 +313,7 @@ EOF
   assert_success
 
   "$FLOX_BIN" install emacs
-  run "$FLOX_BIN" list
+  run "$FLOX_BIN" list --name
   assert_output --partial "emacs"
   refute_output "vim"
 }
