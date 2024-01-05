@@ -130,14 +130,25 @@ pub struct TypedLockedManifest {
 #[derive(Debug, Serialize, Clone, Deserialize, PartialEq)]
 struct LockedPackage {
     info: PackageInfo,
+    #[serde(rename = "abs-path")]
+    abs_path: Vec<String>,
     priority: usize,
+}
+
+impl LockedPackage {
+    pub fn rel_path(&self) -> String {
+        self.abs_path
+            .iter()
+            .skip(2)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join(".")
+    }
 }
 
 #[derive(Debug, Serialize, Clone, Deserialize, PartialEq)]
 pub struct PackageInfo {
     pub description: Option<String>,
-    #[serde(rename = "relPath")]
-    pub rel_path: Vec<String>,
     pub broken: bool,
     pub license: Option<String>,
     pub pname: String,
@@ -165,6 +176,7 @@ impl TypedLockedManifest {
             for (name, locked_package) in system_packages {
                 packages.push(InstalledPackage {
                     name: name.clone(),
+                    rel_path: locked_package.rel_path(),
                     info: locked_package.info.clone(),
                     priority: locked_package.priority,
                 });
@@ -176,6 +188,7 @@ impl TypedLockedManifest {
 
 pub struct InstalledPackage {
     pub name: String,
+    pub rel_path: String,
     pub info: PackageInfo,
     pub priority: usize,
 }

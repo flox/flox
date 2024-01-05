@@ -102,10 +102,8 @@ nlohmann::json helloLockedJSON {
       { "pname", "hello" },
       { "unfree", false },
       { "version", "2.12.1" },
-      { "relPath", { "hello" } },
       { "description",
         "A program that produces a familiar, friendly greeting" },
-      { "subtree", "legacyPackages" },
     } }
 };
 LockedPackageRaw helloLocked( helloLockedJSON );
@@ -125,10 +123,8 @@ nlohmann::json mockHelloLockedJSON {
       { "pname", "hello" },
       { "unfree", false },
       { "version", "2.12.1" },
-      { "relPath", { "hello" } },
       { "description",
         "A program that produces a familiar, friendly greeting" },
-      { "subtree", "legacyPackages" },
     } }
 };
 LockedPackageRaw mockHelloLocked( mockHelloLockedJSON );
@@ -147,10 +143,8 @@ nlohmann::json curlLockedJSON {
       { "pname", "curl" },
       { "unfree", false },
       { "version", "8.1.1" },
-      { "relPath", { "curl" } },
       { "description",
         "A command line tool for transferring files with URL syntax" },
-      { "subtree", "legacyPackages" },
     } }
 };
 LockedPackageRaw curlLocked( curlLockedJSON );
@@ -165,15 +159,15 @@ nlohmann::json mockCurlLockedJSON {
   { "attr-path", { "mock", "curl" } },
   { "priority", 5 },
   { "info",
-    { { "broken", false },
+    {
+      { "broken", false },
       { "license", "GPL-3.0-or-later" },
       { "pname", "curl" },
       { "unfree", false },
       { "version", "2.12.1" },
-      { "relPath", { "curl" } },
       { "description",
         "A command line tool for transferring files with URL syntax" },
-      { "subtree", "legacyPackages" } } }
+    } }
 };
 LockedPackageRaw mockCurlLocked( mockCurlLockedJSON );
 

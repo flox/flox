@@ -392,6 +392,8 @@ Environment::lockPackage( const LockedInputRaw & input,
   pkg.input = input;
   info.at( "absPath" ).get_to( pkg.attrPath );
   info.erase( "absPath" );
+  info.erase( "relPath" );
+  info.erase( "subtree" );
   info.erase( "id" );
   info.erase( "system" );
   pkg.priority = priority;

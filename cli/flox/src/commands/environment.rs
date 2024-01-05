@@ -572,7 +572,7 @@ impl List {
                 println!(
                     "{id}: {path} ({version})",
                     id = p.name,
-                    path = p.info.rel_path.join("."),
+                    path = p.rel_path,
                     version = p.info.version
                 )
             });
@@ -585,6 +585,7 @@ impl List {
 
         for InstalledPackage {
             name,
+            rel_path,
             info:
                 PackageInfo {
                     broken,
@@ -593,7 +594,6 @@ impl List {
                     unfree,
                     version,
                     description,
-                    rel_path,
                 },
             priority,
         } in lockfile
@@ -613,7 +613,6 @@ impl List {
                 ",
                 description = description.unwrap_or_else(|| "N/A".to_string()),
                 license = license.unwrap_or_else(|| "N/A".to_string()),
-                rel_path = rel_path.join("."),
             };
 
             println!("{message}");
