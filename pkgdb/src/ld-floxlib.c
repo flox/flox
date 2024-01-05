@@ -67,9 +67,13 @@ la_objsearch( const char * name, uintptr_t * cookie, unsigned int flag )
   // Only look for the library once the dynamic linker has exhausted
   // all of the other possible search locations, and only if it isn't
   // already specified by way of an explicit path.
-  if ( flag == LA_SER_DEFAULT && *name != '/' )
+  if ( flag == LA_SER_DEFAULT && stat(name, &stat_buf) != 0 )
     {
+      char * basename          = strrchr( name, '/' );
       char * flox_env_lib_dirs = getenv( "FLOX_ENV_LIB_DIRS" );
+
+      if ( basename != NULL ) { basename++; }
+      else { basename = (char *) name; }
 
       if ( flox_env_lib_dirs != NULL )
         {
@@ -85,7 +89,7 @@ la_objsearch( const char * name, uintptr_t * cookie, unsigned int flag )
                                sizeof( name_buf ),
                                "%s/%s",
                                flox_env_library_dir,
-                               name );
+                               basename );
               if ( debug_ld_floxlib )
                 {
                   fprintf( stderr,
