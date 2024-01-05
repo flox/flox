@@ -127,7 +127,7 @@ pub struct TypedLockedManifest {
     registry: Registry,
 }
 
-#[derive(Debug, Serialize, Clone, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Deserialize, PartialEq)]
 struct LockedPackage {
     info: PackageInfo,
     #[serde(rename = "abs-path")]
@@ -146,7 +146,7 @@ impl LockedPackage {
     }
 }
 
-#[derive(Debug, Serialize, Clone, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Deserialize, PartialEq)]
 pub struct PackageInfo {
     pub description: Option<String>,
     pub broken: bool,
