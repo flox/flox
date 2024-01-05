@@ -403,7 +403,6 @@ impl Activate {
         if flox_active_environments.is_active(&now_active) {
             bail!("Environment '{now_active}' is already active");
         }
-
         flox_active_environments.set_last_active(now_active);
 
         // TODO more sophisticated detection?
