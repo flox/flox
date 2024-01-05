@@ -16,6 +16,7 @@
 use std::ffi::OsStr;
 use std::fs::{self};
 use std::path::{Path, PathBuf};
+use std::time::SystemTime;
 
 use flox_types::catalog::System;
 use log::debug;
@@ -240,8 +241,33 @@ impl Environment for PathEnvironment {
     }
 
     fn activation_path(&mut self, flox: &Flox) -> Result<PathBuf, EnvironmentError2> {
-        self.build(flox)?;
-        self.out_link(&flox.system)
+        let manifest_modified_at = 'time: {
+            let manifest_path = self.manifest_path(flox)?;
+            let Ok(metadata) = manifest_path.metadata() else {
+                debug!("Could not get metadata for {manifest_path:?} using default time");
+                break 'time SystemTime::UNIX_EPOCH;
+            };
+            metadata.modified().unwrap_or(SystemTime::UNIX_EPOCH)
+        };
+
+        let out_link = self.out_link(&flox.system)?;
+
+        let out_link_modified_at = 'time: {
+            let Ok(metadata) = fs::symlink_metadata(&out_link) else {
+                debug!("Could not get metadata for {out_link:?} using default time");
+                break 'time SystemTime::UNIX_EPOCH;
+            };
+            metadata.modified().unwrap_or(SystemTime::UNIX_EPOCH)
+        };
+
+        debug!(
+            "manifest_modified_at: {manifest_modified_at:?},
+             out_link_modified_at: {out_link_modified_at:?}"
+        );
+        if manifest_modified_at >= out_link_modified_at {
+            self.build(flox)?;
+        }
+        Ok(out_link)
     }
 
     /// Path to the environment's parent directory

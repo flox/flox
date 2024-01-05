@@ -1,5 +1,6 @@
 use std::os::unix::prelude::OsStrExt;
 use std::path::{Path, PathBuf};
+use std::time::SystemTime;
 use std::{fs, io};
 
 use flox_types::version::Version;
@@ -304,7 +305,40 @@ impl Environment for ManagedEnvironment {
     }
 
     fn activation_path(&mut self, flox: &Flox) -> Result<PathBuf, EnvironmentError2> {
-        self.build(flox)?;
+        let pointer_lock_modified_at = 'time: {
+            let Ok(metadate) = self
+            .path
+            .join(GENERATION_LOCK_FILENAME)
+            .metadata()
+            else {
+                debug!(
+                    "Could not get metadata for {:?} using default time",
+                    self.path.join(GENERATION_LOCK_FILENAME));
+
+                break 'time SystemTime::UNIX_EPOCH;
+            };
+
+            metadate.modified().unwrap_or(SystemTime::UNIX_EPOCH)
+        };
+
+        let out_link_modified_at = 'time: {
+            let Ok(metadate) = fs::symlink_metadata(&self.out_link)
+            else {
+                debug!("Could not get metadata for {:?} using default time", self.out_link);
+                break 'time SystemTime::UNIX_EPOCH;
+            };
+            metadate.modified().unwrap_or(SystemTime::UNIX_EPOCH)
+        };
+
+        debug!(
+            "pointer_lock_modified_at: {pointer_lock_modified_at:?}
+            out_link_modified_at: {out_link_modified_at:?}"
+        );
+
+        if pointer_lock_modified_at >= out_link_modified_at {
+            self.build(flox)?;
+        }
+
         Ok(self.out_link.to_path_buf())
     }
 
