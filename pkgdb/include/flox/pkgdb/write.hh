@@ -128,10 +128,6 @@ public:
 
   /**
    * @brief Tries to connect to the database, acquiring an exclusive lock on it.
-   *
-   * The database may be locked by another process that is currently scraping
-   * it. This function will block until that lock is released. If the database
-   * has already been scraped it will not re-scrape it.
    */
   void
   connect();

@@ -213,8 +213,19 @@ PkgDb::PkgDb( const nix::flake::LockedFlake & flake, std::string_view dbPath )
 void
 PkgDb::connect()
 {
-  /* We need to try to write to a junk table, it's unclear whether setting a
-   * PRAGMA counts as a write. */
+  /* The `locking_mode` pragma acquires an exclusive write lock the first time
+   * that the database is written to and only releases the lock once the
+   * database connection is closed. We make a write as soon as possible after
+   * opening the connection to establish the write lock. After the
+   * `RETRY_WHILE_BUSY` call returns we should be the only process able to write
+   * to the database, though other processes mays still read from the database
+   * (this is why we must use `EXCLUSIVE` transactions, which prevent reads as
+   * well).
+   *
+   * It could be the case that this database hasn't been initialized yet, so we
+   * can't write to an existing table. Instead we just write to a dummy table.
+   * It's unclear whether setting a pragma value like `appliation_id` counts as
+   * a write, so we create a table instead.*/
   static const char * acquire_lock = R"SQL(
   BEGIN EXCLUSIVE TRANSACTION;
   CREATE TABLE IF NOT EXISTS _lock (foo int);
