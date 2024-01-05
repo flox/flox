@@ -21,6 +21,7 @@ use super::{
 use crate::flox::{EnvironmentOwner, EnvironmentRef, Flox};
 use crate::models::environment_ref::EnvironmentName;
 use crate::models::floxmetav2::{FloxmetaV2, FloxmetaV2Error};
+use crate::models::lockfile::LockedManifest;
 use crate::models::manifest::PackageToInstall;
 use crate::models::pkgdb::UpgradeResult;
 
@@ -113,6 +114,11 @@ impl Environment for RemoteEnvironment {
     /// Build the environment and create a result link as gc-root
     fn build(&mut self, flox: &Flox) -> Result<(), EnvironmentError2> {
         self.inner.build(flox)
+    }
+
+    /// Lock the environment and return the lockfile contents
+    fn lock(&mut self, flox: &Flox) -> Result<LockedManifest, EnvironmentError2> {
+        self.inner.lock(flox)
     }
 
     /// Install packages to the environment atomically

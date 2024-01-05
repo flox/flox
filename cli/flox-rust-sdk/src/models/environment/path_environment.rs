@@ -39,6 +39,7 @@ use super::{
 use crate::flox::Flox;
 use crate::models::environment::{ENV_DIR_NAME, MANIFEST_FILENAME};
 use crate::models::environment_ref::EnvironmentName;
+use crate::models::lockfile::LockedManifest;
 use crate::models::manifest::PackageToInstall;
 use crate::models::pkgdb::UpgradeResult;
 
@@ -144,6 +145,11 @@ impl Environment for PathEnvironment {
         env_view.link(flox, self.out_link(&flox.system)?)?;
 
         Ok(())
+    }
+
+    fn lock(&mut self, flox: &Flox) -> Result<LockedManifest, EnvironmentError2> {
+        let mut env_view = CoreEnvironment::new(self.path.join(ENV_DIR_NAME));
+        Ok(env_view.lock(flox)?)
     }
 
     /// Install packages to the environment atomically

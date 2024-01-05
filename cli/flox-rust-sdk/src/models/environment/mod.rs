@@ -17,7 +17,7 @@ use self::managed_environment::ManagedEnvironmentError;
 use self::remote_environment::RemoteEnvironmentError;
 use super::environment_ref::{EnvironmentName, EnvironmentOwner};
 use super::flox_package::FloxTriple;
-use super::lockfile::Lockfile;
+use super::lockfile::LockedManifest;
 use super::manifest::PackageToInstall;
 use super::pkgdb::UpgradeResult;
 use crate::flox::{Flox, Floxhub};
@@ -57,7 +57,7 @@ pub const FLOX_ENV_VAR: &str = "FLOX_ENV";
 pub const FLOX_ACTIVE_ENVIRONMENTS_VAR: &str = "FLOX_ACTIVE_ENVIRONMENTS";
 pub const FLOX_PROMPT_ENVIRONMENTS_VAR: &str = "FLOX_PROMPT_ENVIRONMENTS";
 
-pub type UpdateResult = (Option<Lockfile>, Lockfile);
+pub type UpdateResult = (Option<LockedManifest>, LockedManifest);
 
 /// A path that is guaranteed to be canonicalized
 ///
@@ -111,6 +111,9 @@ pub struct InstallationAttempt {
 pub trait Environment: Send {
     /// Build the environment and create a result link as gc-root
     fn build(&mut self, flox: &Flox) -> Result<(), EnvironmentError2>;
+
+    /// Resolve the environment and return the lockfile
+    fn lock(&mut self, flox: &Flox) -> Result<LockedManifest, EnvironmentError2>;
 
     /// Install packages to the environment atomically
     fn install(
