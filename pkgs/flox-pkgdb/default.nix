@@ -213,7 +213,6 @@ in
             remake
             # For IDEs
             ccls
-            bear
             # For lints/fmt
             clang-tools_16
             include-what-you-use
@@ -226,6 +225,7 @@ in
             )
           ]
           ++ (lib.optionals stdenv.isLinux [
+            bear
             valgrind
           ]);
 
