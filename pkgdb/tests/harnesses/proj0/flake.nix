@@ -15,7 +15,7 @@
     owner = "NixOS";
     repo = "nixpkgs";
     # Keep this rev aligned with `<pkgdb>/tests/test.hh'
-    rev = "e8039594435c68eb4f780f3e9bf3972a7399c4b1";
+    rev = "ab5fd150146dcfe41fda501134e6503932cc8dfd";
   };
 
   # ---------------------------------------------------------------------------- #

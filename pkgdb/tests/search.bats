@@ -69,12 +69,12 @@ genParamsNixpkgsFlox() {
 # bats test_tags=search:match
 #
 @test "'pkgdb search' 'match=hello'" {
-  run sh -c "$PKGDB_BIN search '$TDATA/params0.json'|wc -l;"
+  run "$PKGDB_BIN" search "$TDATA/params0.json"
   assert_success
-  assert_output 11
-  run sh -c "$PKGDB_BIN search '$TDATA/params0.json'|grep hello|wc -l;"
+  [ "${#lines[@]}" -eq 9 ]
+  run sh -c "$PKGDB_BIN search '$TDATA/params0.json'|grep hello"
   assert_success
-  assert_output 11
+  [ "${#lines[@]}" -eq 9 ]
 }
 
 # ---------------------------------------------------------------------------- #
@@ -93,9 +93,9 @@ genParamsNixpkgsFlox() {
 # bats test_tags=search:version, search:pname
 
 # Exact `version' match
-@test "'pkgdb search' 'pname=nodejs & version=18.16.0'" {
+@test "'pkgdb search' 'pname=nodejs & version=18.18.2'" {
   run sh -c "$PKGDB_BIN search '$(
-    genParams '.query.pname|="nodejs"|.query.version="18.16.0"'
+    genParams '.query.pname|="nodejs"|.query.version="18.18.2"'
   )'|wc -l;"
   assert_success
   assert_output 4
@@ -106,12 +106,12 @@ genParamsNixpkgsFlox() {
 # bats test_tags=search:semver, search:pname
 
 # Test `semver' by filtering to >18.16, leaving only 20.2 and its alias.
-@test "'pkgdb search' 'pname=nodejs & semver=>18.16.0'" {
+@test "'pkgdb search' 'pname=nodejs & semver=>18.18.0'" {
   run sh -c "$PKGDB_BIN search '$(
-    genParams '.query.pname|="nodejs"|.query.semver=">18.16.0"'
+    genParams '.query.pname|="nodejs"|.query.semver=">18.18.0"'
   )'|wc -l;"
   assert_success
-  assert_output 2
+  assert_output 7
 }
 
 # ---------------------------------------------------------------------------- #
@@ -132,9 +132,9 @@ genParamsNixpkgsFlox() {
 # bats test_tags=search:name
 
 # Exact `name' match.
-@test "'pkgdb search' 'name=nodejs-18.16.0'" {
+@test "'pkgdb search' 'name=nodejs-18.18.2'" {
   run sh -c "$PKGDB_BIN search '$(
-    genParams '.query.name|="nodejs-18.16.0"'
+    genParams '.query.name|="nodejs-18.18.2"'
   )'|wc -l;"
   assert_success
   assert_output 4
@@ -235,10 +235,10 @@ genParamsNixpkgsFlox() {
 @test "'pkgdb search' 'manifest.options.semver.prefer-pre-releases=true'" {
   run sh -c "$PKGDB_BIN search '$(
     genParams '.manifest.options.semver["prefer-pre-releases"]=true
-               |.query.pname="zfs-kernel"'
+               |.query.pname="zfs"'
   )'|head -n1|jq -r .version;"
   assert_success
-  assert_output '2.1.12-staging-2023-04-18-6.1.31'
+  assert_output '2.2.2'
 }
 
 # ---------------------------------------------------------------------------- #
@@ -462,7 +462,7 @@ genParamsNixpkgsFlox() {
   params=$(genGMParams '.query.match="hello%" | .manifest.options.systems=["x86_64-linux"]')
   run --separate-stderr "$PKGDB_BIN" search -q --ga-registry "$params"
   assert_success
-  assert_equal "${#lines[@]}" 11
+  assert_equal "${#lines[@]}" 9
 }
 
 # bats tests_tags=search
