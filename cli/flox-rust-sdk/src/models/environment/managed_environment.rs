@@ -306,7 +306,7 @@ impl Environment for ManagedEnvironment {
 
     fn activation_path(&mut self, flox: &Flox) -> Result<PathBuf, EnvironmentError2> {
         let pointer_lock_modified_at = 'time: {
-            let Ok(metadate) = self
+            let Ok(metadata) = self
             .path
             .join(GENERATION_LOCK_FILENAME)
             .metadata()
