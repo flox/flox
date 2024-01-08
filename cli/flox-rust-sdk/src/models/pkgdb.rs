@@ -1,5 +1,5 @@
 use std::fmt::Display;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::{env, fs};
 
@@ -11,7 +11,11 @@ use thiserror::Error;
 
 use super::environment::{CanonicalizeError, UpdateResult};
 use crate::flox::Flox;
-use crate::models::environment::{global_manifest_path, CanonicalPath};
+use crate::models::environment::{
+    global_manifest_lockfile_path,
+    global_manifest_path,
+    CanonicalPath,
+};
 use crate::models::lockfile::LockedManifest;
 
 // This is the `PKGDB` path that we actually use.
@@ -78,6 +82,11 @@ pub enum UpdateError {
     ReadLockfile(#[source] std::io::Error),
     #[error(transparent)]
     BadLockfilePath(CanonicalizeError),
+    /// TODO: not sure if the global error's belong in this enum
+    #[error("could not serialize global lockfile")]
+    SerializeGlobalLockfile(#[source] serde_json::Error),
+    #[error("could not write global lockfile")]
+    WriteGlobalLockfile(#[source] std::io::Error),
 }
 
 /// Wrapper around `pkgdb update`
@@ -130,6 +139,27 @@ pub fn pkgdb_update(
             .map_err(UpdateError::ParseUpdateOutput)?;
 
     Ok((old_lockfile, lockfile))
+}
+
+/// Update global manifest lockfile and write it.
+///
+/// TODO: this probably doesn't belong in the pkgdb module but I'm not sure
+/// where else to put it.
+pub fn update_global_manifest(
+    flox: &Flox,
+    inputs: Vec<String>,
+) -> Result<UpdateResult, UpdateError> {
+    let lockfile_path = global_manifest_lockfile_path(flox);
+    let (old_lockfile, new_lockfile) = pkgdb_update(flox, None::<PathBuf>, &lockfile_path, inputs)?;
+
+    debug!("writing lockfile to {}", lockfile_path.display());
+    std::fs::write(
+        lockfile_path,
+        serde_json::to_string_pretty(&new_lockfile)
+            .map_err(UpdateError::SerializeGlobalLockfile)?,
+    )
+    .map_err(UpdateError::WriteGlobalLockfile)?;
+    Ok((old_lockfile, new_lockfile))
 }
 
 /// A struct representing error messages coming from pkgdb

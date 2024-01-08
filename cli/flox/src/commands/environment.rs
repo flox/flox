@@ -18,7 +18,6 @@ use flox_rust_sdk::models::environment::managed_environment::{
 };
 use flox_rust_sdk::models::environment::path_environment::{self, PathEnvironment};
 use flox_rust_sdk::models::environment::{
-    global_manifest_lockfile_path,
     EditResult,
     Environment,
     EnvironmentPointer,
@@ -40,7 +39,7 @@ use flox_rust_sdk::models::lockfile::{
     TypedLockedManifest,
 };
 use flox_rust_sdk::models::manifest::PackageToInstall;
-use flox_rust_sdk::models::pkgdb::{call_pkgdb, pkgdb_update, PKGDB_BIN};
+use flox_rust_sdk::models::pkgdb::{call_pkgdb, update_global_manifest, PKGDB_BIN};
 use flox_rust_sdk::nix::command::StoreGc;
 use flox_rust_sdk::nix::command_line::NixCommandLine;
 use flox_rust_sdk::nix::Run;
@@ -1423,7 +1422,7 @@ impl Update {
                 )
             },
             EnvironmentOrGlobalSelect::Global => {
-                let (old_manifest, new_manifest) = self.update_global_manifest(flox)?;
+                let (old_manifest, new_manifest) = update_global_manifest(&flox, self.inputs)?;
                 (
                     old_manifest
                         .map(TypedLockedManifest::try_from)
@@ -1518,18 +1517,6 @@ impl Update {
         }
 
         Ok(())
-    }
-
-    /// TODO: factor out common code with [CoreEnvironment::update]
-    fn update_global_manifest(&self, flox: Flox) -> Result<UpdateResult> {
-        let lockfile_path = global_manifest_lockfile_path(&flox);
-        let (old_lockfile, new_lockfile) =
-            pkgdb_update(&flox, None::<PathBuf>, &lockfile_path, self.inputs.clone())?;
-
-        debug!("writing lockfile to {}", lockfile_path.display());
-        std::fs::write(lockfile_path, serde_json::to_string_pretty(&new_lockfile)?)
-            .context("updating global inputs failed")?;
-        Ok((old_lockfile, new_lockfile))
     }
 
     fn update_manifest(
