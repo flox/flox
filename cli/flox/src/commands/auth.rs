@@ -22,6 +22,7 @@ use oauth2::{
 };
 use serde::Serialize;
 use tokio::process::Command;
+use url::Url;
 
 use crate::commands::general::update_config;
 use crate::config::Config;
@@ -76,26 +77,6 @@ pub async fn authorize(client: BasicClient) -> Result<Credential> {
 
     debug!("Device code details: {details:#?}");
 
-    let url = details.user_code().secret().clone();
-    let prefilled_url = details
-        .verification_uri_complete()
-        .map(|uri| uri.secret())
-        .cloned();
-
-    eprintdoc! {"
-        First copy your one-time code: {code}
-
-        Press [enter] to open {url} in your browser.
-        ",
-        url = details.verification_uri().as_str(),
-        code = details.user_code().secret()
-    };
-
-    debug!(
-        "Waiting for user to enter code (timeout: {}s)",
-        details.expires_in().as_secs()
-    );
-
     let opener = match std::env::consts::OS {
         "linux" => "xdg-open",
         "macos" => "open",
@@ -107,63 +88,50 @@ pub async fn authorize(client: BasicClient) -> Result<Credential> {
     let opener_exists = std::env::split_paths(&std::env::var("PATH").unwrap_or_default())
         .any(|p| p.ends_with(opener));
 
-    // in the background listen for `[enter]` key presses
-    // if the user presses enter, open the browser using the system default opener
-    // on linux this should be `xdg-open`
-    // on macos this should be `open`
-    //
-    // I'm not sure this is the best way to do this, but it works for now.
-    // Particularly, if the user opens the URL manually,
-    // there will be one less newline in the terminal than expected.
     let done = Arc::new(AtomicBool::default());
-    let done_clone = done.clone();
-    tokio::task::spawn(async move {
-        loop {
-            if !opener_exists {
-                info!(
-                    "Could not find browser opener. Please open the following URL manually: {url}",
-                );
-                return;
-            }
 
-            if done_clone.load(Ordering::Relaxed) {
-                return;
-            }
+    if opener_exists {
+        eprintdoc! {"
+            Verification Code: {code}
 
-            match crossterm::event::poll(time::Duration::from_millis(100)) {
-                Err(_) => {
-                    info!("Could not read input. Please open the following URL manually: {url}",);
-                    return;
-                },
-                Ok(false) => {
-                    continue;
-                },
-                Ok(true) => {
-                    match crossterm::event::read() {
-                        Err(_) => {
-                            info!("Could not read input. Please open the following URL manually: {url}",);
-                            return;
-                        },
-                        Ok(crossterm::event::Event::Key(key))
-                            if key.code == crossterm::event::KeyCode::Enter =>
-                        {
-                            break;
-                        },
-                        _ => {
-                            continue;
-                        },
-                    }
-                },
-            }
-        }
+            Press [enter] to open {url} in your browser and verify you see the code above.
+            ",
+            url = details.verification_uri().url().host_str().unwrap_or(details.verification_uri()),
+            code = details.user_code().secret()
+        };
 
-        let mut command = Command::new(opener);
-        command.arg(prefilled_url.unwrap_or_else(|| url.clone()));
+        debug!(
+            "Waiting for user to enter code (timeout: {}s)",
+            details.expires_in().as_secs()
+        );
 
-        if command.spawn().is_err() {
-            info!("Could not open browser. Please open the following URL manually: {url}",);
-        }
-    });
+        // in the background listen for `[enter]` key presses
+        // if the user presses enter, open the browser using the system default opener
+        // on linux this should be `xdg-open`
+        // on macos this should be `open`
+        //
+        // I'm not sure this is the best way to do this, but it works for now.
+        // Particularly, if the user opens the URL manually,
+        // there will be one less newline in the terminal than expected.
+        fun_name(
+            &done,
+            opener.to_string(),
+            details
+                .verification_uri_complete()
+                .map(|u| u.secret())
+                .cloned(),
+            details.verification_uri().url().clone(),
+        );
+    } else {
+        eprintdoc! {"
+            First copy your one-time code: {code}
+
+            Then visit {url} in your browser to continue...
+            ",
+            url = details.verification_uri().url().host_str().unwrap_or(details.verification_uri()),
+            code = details.user_code().secret()
+        };
+    }
 
     let token = client
         .exchange_device_access_token(&details)
@@ -181,6 +149,50 @@ pub async fn authorize(client: BasicClient) -> Result<Credential> {
         token: token.access_token().secret().to_string(),
         expiry: calculate_expiry(token.expires_in().unwrap().as_secs() as i64),
     })
+}
+
+fn fun_name(done: &Arc<AtomicBool>, opener: String, complete: Option<String>, fallback: Url) {
+    let done_clone = done.clone();
+    tokio::task::spawn(async move {
+        loop {
+            if done_clone.load(Ordering::Relaxed) {
+                return;
+            }
+
+            match crossterm::event::poll(time::Duration::from_millis(100)) {
+                Err(_) => {
+                    info!(
+                        "Could not read input. Please open the following URL manually: {fallback}",
+                    );
+                    return;
+                },
+                Ok(false) => {
+                    continue;
+                },
+                Ok(true) => match crossterm::event::read() {
+                    Err(_) => {
+                        info!("Could not read input. Please open the following URL manually: {fallback}",);
+                        return;
+                    },
+                    Ok(crossterm::event::Event::Key(key))
+                        if key.code == crossterm::event::KeyCode::Enter =>
+                    {
+                        break;
+                    },
+                    _ => {
+                        continue;
+                    },
+                },
+            }
+        }
+
+        let mut command = Command::new(opener);
+        command.arg(complete.unwrap_or(fallback.to_string()));
+
+        if command.spawn().is_err() {
+            info!("Could not open browser. Please open the following URL manually: {fallback}",);
+        }
+    });
 }
 
 fn calculate_expiry(expires_in: i64) -> String {
