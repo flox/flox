@@ -96,7 +96,7 @@ pub async fn authorize(client: BasicClient) -> Result<Credential> {
         details.expires_in().as_secs()
     );
 
-    // in he background listen for `[enter]` key presses
+    // in the background listen for `[enter]` key presses
     // if the user presses enter, open the browser using the system default opener
     // on linux this should be `xdg-open`
     // on macos this should be `open`
