@@ -3,7 +3,7 @@ use std::sync::Arc;
 //this module liberally borrows from github-device-flox crate
 use std::time;
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use bpaf::Bpaf;
 use chrono::offset::Utc;
 use chrono::{DateTime, Duration};
@@ -96,6 +96,17 @@ pub async fn authorize(client: BasicClient) -> Result<Credential> {
         details.expires_in().as_secs()
     );
 
+    let opener = match std::env::consts::OS {
+        "linux" => "xdg-open",
+        "macos" => "open",
+        sys => {
+            bail!("Unsupported OS: {sys}")
+        },
+    };
+
+    let opener_exists = std::env::split_paths(&std::env::var("PATH").unwrap_or_default())
+        .any(|p| p.ends_with(opener));
+
     // in the background listen for `[enter]` key presses
     // if the user presses enter, open the browser using the system default opener
     // on linux this should be `xdg-open`
@@ -108,6 +119,13 @@ pub async fn authorize(client: BasicClient) -> Result<Credential> {
     let done_clone = done.clone();
     tokio::task::spawn(async move {
         loop {
+            if !opener_exists {
+                info!(
+                    "Could not find browser opener. Please open the following URL manually: {url}",
+                );
+                return;
+            }
+
             if done_clone.load(Ordering::Relaxed) {
                 return;
             }
@@ -138,15 +156,6 @@ pub async fn authorize(client: BasicClient) -> Result<Credential> {
                 },
             }
         }
-
-        let opener = match std::env::consts::OS {
-            "linux" => "xdg-open",
-            "macos" => "open",
-            _ => {
-                info!("Could not open browser. Please open the following URL manually: {url}",);
-                return;
-            },
-        };
 
         let mut command = Command::new(opener);
         command.arg(prefilled_url.unwrap_or_else(|| url.clone()));
