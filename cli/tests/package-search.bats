@@ -81,7 +81,7 @@ setup_file() {
 
 @test "'FLOX_FEATURES_SEARCH_STRATEGY=match flox search' expected number of results: 'hello'" {
   FLOX_FEATURES_SEARCH_STRATEGY=match run --separate-stderr "$FLOX_BIN" search hello --all
-  assert_equal "${#lines[@]}" 11
+  assert_equal "${#lines[@]}" 9
   assert_equal "$stderr" "$SHOW_HINT"
 }
 

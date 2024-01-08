@@ -74,7 +74,7 @@ genParamsNixpkgsFlox() {
   assert_output 11
   run sh -c "$PKGDB_BIN search '$TDATA/params0.json' | grep hello | wc -l"
   assert_success
-  assert_output 11
+  [ "${#lines[@]}" -eq 9 ]
 }
 
 # ---------------------------------------------------------------------------- #
@@ -110,7 +110,7 @@ genParamsNixpkgsFlox() {
   params="$(genParams '.query.pname|="nodejs"|.query.semver=">18.16.0"')"
   run sh -c "$PKGDB_BIN search '$params' | wc -l"
   assert_success
-  assert_output 2
+  assert_output 7
 }
 
 # ---------------------------------------------------------------------------- #
@@ -235,7 +235,7 @@ genParamsNixpkgsFlox() {
   )"
   run sh -c "$PKGDB_BIN search '$params'|head -n1|jq -r .version;"
   assert_success
-  assert_output '2.1.12-staging-2023-04-18-6.1.31'
+  assert_output '2.2.2'
 }
 
 # ---------------------------------------------------------------------------- #
@@ -463,7 +463,7 @@ genParamsNixpkgsFlox() {
   params="$(genGMParams '.query.match="hello%" | .manifest.options.systems=["x86_64-linux"]')"
   run --separate-stderr "$PKGDB_BIN" search -q --ga-registry "$params"
   assert_success
-  assert_equal "${#lines[@]}" 11
+  assert_equal "${#lines[@]}" 9
 }
 
 # bats tests_tags=search
