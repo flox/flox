@@ -318,7 +318,7 @@ impl Environment for ManagedEnvironment {
                 break 'time SystemTime::UNIX_EPOCH;
             };
 
-            metadate.modified().unwrap_or(SystemTime::UNIX_EPOCH)
+            metadata.modified().unwrap_or(SystemTime::UNIX_EPOCH)
         };
 
         let out_link_modified_at = 'time: {
