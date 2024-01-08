@@ -215,7 +215,7 @@ env_is_activated() {
   SHELL=zsh USER="$REAL_USER" NO_COLOR=1 run -0 expect -d "$TESTS_DIR/activate/envVar.exp" "$PROJECT_DIR"
   assert_output --partial "baz"
 
-  SHELL=zsh  NO_COLOR=1 run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -- echo '$foo'
+  SHELL=zsh NO_COLOR=1 run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -- echo '$foo'
   assert_success
   assert_output --partial "baz"
 }
@@ -356,4 +356,22 @@ env_is_activated() {
   run "$FLOX_BIN" activate -- hello
   assert_success
   assert_output --partial "Hello, world!"
+}
+
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=activate,activate:inplace
+@test "'flox activate' prints script to modify current shell" {
+  # Flox detects that the output is not a tty and prints the script to stdout
+  #
+  # TODO:
+  # better with a flag like '--print-script'
+  # this is confusing:
+  SHELL="bash" run "$FLOX_BIN" activate
+  assert_success
+  assert_output --regexp "source .*/activate/bash"
+
+  SHELL="zsh" run "$FLOX_BIN" activate
+  assert_success
+  assert_output --regexp "source .*/activate/zsh"
 }
