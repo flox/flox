@@ -1,11 +1,18 @@
-use std::env;
 use std::fmt::Display;
+use std::path::Path;
 use std::process::Command;
+use std::{env, fs};
 
+use log::debug;
 use once_cell::sync::Lazy;
 use serde::Deserialize;
 use serde_json::Value;
 use thiserror::Error;
+
+use super::environment::{CanonicalizeError, UpdateResult};
+use crate::flox::Flox;
+use crate::models::environment::{global_manifest_path, CanonicalPath};
+use crate::models::lockfile::LockedManifest;
 
 // This is the `PKGDB` path that we actually use.
 // This is set once and prefers the `PKGDB` env variable, but will use
@@ -57,6 +64,72 @@ pub fn call_pkgdb(mut pkgdb_cmd: Command) -> Result<Value, CallPkgDbError> {
         let json = serde_json::from_slice(&output.stdout).map_err(CallPkgDbError::ParseJSON)?;
         Ok(json)
     }
+}
+
+#[derive(Debug, Error)]
+pub enum UpdateError {
+    #[error("could not parse lockfile")]
+    ParseLockfile(#[source] serde_json::Error),
+    #[error("failed to update environment")]
+    UpdateFailed(#[source] CallPkgDbError),
+    #[error("unexpected output from pkgdb update")]
+    ParseUpdateOutput(#[source] serde_json::Error),
+    #[error("could not open manifest file")]
+    ReadLockfile(#[source] std::io::Error),
+    #[error(transparent)]
+    BadLockfilePath(CanonicalizeError),
+}
+
+/// Wrapper around `pkgdb update`
+///
+/// lockfile_path does not need to exist
+/// TODO: lockfile_path should probably be an Option<CanonicalPath>
+pub fn pkgdb_update(
+    flox: &Flox,
+    manifest_path: Option<impl AsRef<Path>>,
+    lockfile_path: impl AsRef<Path>,
+    inputs: Vec<String>,
+) -> Result<UpdateResult, UpdateError> {
+    let lockfile_path = lockfile_path.as_ref();
+    let maybe_lockfile = if lockfile_path.exists() {
+        debug!("found existing lockfile: {}", lockfile_path.display());
+        Some(lockfile_path)
+    } else {
+        debug!("no existing lockfile found");
+        None
+    };
+
+    let mut pkgdb_cmd = Command::new(Path::new(&*PKGDB_BIN));
+    pkgdb_cmd
+        .args(["manifest", "update"])
+        .arg("--ga-registry")
+        .arg("--global-manifest")
+        .arg(global_manifest_path(flox));
+    // Optionally add --manifest argument
+    if let Some(manifest) = manifest_path {
+        pkgdb_cmd.arg("--manifest").arg(manifest.as_ref());
+    }
+    // Add --lockfile argument if lockfile exists, and parse the old lockfile.
+    let old_lockfile = maybe_lockfile
+        .map(|lf_path| {
+            let canonical_lockfile_path =
+                CanonicalPath::new(lf_path).map_err(UpdateError::BadLockfilePath)?;
+            pkgdb_cmd.arg("--lockfile").arg(&canonical_lockfile_path);
+            serde_json::from_slice(
+                &fs::read(canonical_lockfile_path).map_err(UpdateError::ReadLockfile)?,
+            )
+            .map_err(UpdateError::ParseLockfile)
+        })
+        .transpose()?;
+
+    pkgdb_cmd.args(inputs);
+
+    debug!("updating lockfile with command: {pkgdb_cmd:?}");
+    let lockfile: LockedManifest =
+        serde_json::from_value(call_pkgdb(pkgdb_cmd).map_err(UpdateError::UpdateFailed)?)
+            .map_err(UpdateError::ParseUpdateOutput)?;
+
+    Ok((old_lockfile, lockfile))
 }
 
 /// A struct representing error messages coming from pkgdb

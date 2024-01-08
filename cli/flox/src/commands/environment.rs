@@ -19,9 +19,6 @@ use flox_rust_sdk::models::environment::managed_environment::{
 use flox_rust_sdk::models::environment::path_environment::{self, PathEnvironment};
 use flox_rust_sdk::models::environment::{
     global_manifest_lockfile_path,
-    global_manifest_path,
-    CanonicalPath,
-    CoreEnvironmentError,
     EditResult,
     Environment,
     EnvironmentPointer,
@@ -39,12 +36,11 @@ use flox_rust_sdk::models::lockfile::{
     FlakeRef,
     Input,
     InstalledPackage,
-    LockedManifest,
     PackageInfo,
     TypedLockedManifest,
 };
 use flox_rust_sdk::models::manifest::PackageToInstall;
-use flox_rust_sdk::models::pkgdb::{call_pkgdb, PKGDB_BIN};
+use flox_rust_sdk::models::pkgdb::{call_pkgdb, pkgdb_update, PKGDB_BIN};
 use flox_rust_sdk::nix::command::StoreGc;
 use flox_rust_sdk::nix::command_line::NixCommandLine;
 use flox_rust_sdk::nix::Run;
@@ -1527,34 +1523,13 @@ impl Update {
     /// TODO: factor out common code with [CoreEnvironment::update]
     fn update_global_manifest(&self, flox: Flox) -> Result<UpdateResult> {
         let lockfile_path = global_manifest_lockfile_path(&flox);
-
-        let mut pkgdb_cmd = Command::new(Path::new(&*PKGDB_BIN));
-        pkgdb_cmd
-            .args(["manifest", "update"])
-            .arg("--ga-registry")
-            .arg("--global-manifest")
-            .arg(global_manifest_path(&flox));
-        let old_lockfile = if lockfile_path.exists() {
-            let canonical_lockfile_path = CanonicalPath::new(&lockfile_path)
-                .map_err(CoreEnvironmentError::BadLockfilePath)?;
-            pkgdb_cmd.arg("--lockfile").arg(&canonical_lockfile_path);
-            Some(serde_json::from_slice(&fs::read(canonical_lockfile_path)?)?)
-        } else {
-            None
-        };
-        pkgdb_cmd.args(self.inputs.clone());
-
-        debug!("updating global lockfile with command: {pkgdb_cmd:?}");
-        let lockfile: LockedManifest = serde_json::from_value(call_pkgdb(pkgdb_cmd)?)
-            .map_err(CoreEnvironmentError::ParseUpdateOutput)?;
+        let (old_lockfile, new_lockfile) =
+            pkgdb_update(&flox, None::<PathBuf>, &lockfile_path, self.inputs.clone())?;
 
         debug!("writing lockfile to {}", lockfile_path.display());
-        std::fs::write(
-            lockfile_path,
-            serde_json::to_string_pretty(&lockfile).unwrap(),
-        )
-        .context("updating global inputs failed")?;
-        Ok((old_lockfile, lockfile))
+        std::fs::write(lockfile_path, serde_json::to_string_pretty(&new_lockfile)?)
+            .context("updating global inputs failed")?;
+        Ok((old_lockfile, new_lockfile))
     }
 
     fn update_manifest(
