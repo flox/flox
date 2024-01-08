@@ -1,6 +1,5 @@
 use std::os::unix::prelude::OsStrExt;
 use std::path::{Path, PathBuf};
-use std::time::SystemTime;
 use std::{fs, io};
 
 use flox_types::version::Version;
@@ -35,6 +34,7 @@ use crate::providers::git::{
     GitProvider,
     GitRemoteCommandError,
 };
+use crate::utils::mtime_of;
 
 const GENERATION_LOCK_FILENAME: &str = "env.lock";
 
@@ -305,30 +305,10 @@ impl Environment for ManagedEnvironment {
     }
 
     fn activation_path(&mut self, flox: &Flox) -> Result<PathBuf, EnvironmentError2> {
-        let pointer_lock_modified_at = 'time: {
-            let Ok(metadata) = self
-            .path
-            .join(GENERATION_LOCK_FILENAME)
-            .metadata()
-            else {
-                debug!(
-                    "Could not get metadata for {:?} using default time",
-                    self.path.join(GENERATION_LOCK_FILENAME));
+        let pointer_lock_path = self.path.join(GENERATION_LOCK_FILENAME);
 
-                break 'time SystemTime::UNIX_EPOCH;
-            };
-
-            metadata.modified().unwrap_or(SystemTime::UNIX_EPOCH)
-        };
-
-        let out_link_modified_at = 'time: {
-            let Ok(metadate) = fs::symlink_metadata(&self.out_link)
-            else {
-                debug!("Could not get metadata for {:?} using default time", self.out_link);
-                break 'time SystemTime::UNIX_EPOCH;
-            };
-            metadate.modified().unwrap_or(SystemTime::UNIX_EPOCH)
-        };
+        let pointer_lock_modified_at = mtime_of(pointer_lock_path);
+        let out_link_modified_at = mtime_of(&self.out_link);
 
         debug!(
             "pointer_lock_modified_at: {pointer_lock_modified_at:?}
