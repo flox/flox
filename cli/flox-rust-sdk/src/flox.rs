@@ -688,6 +688,8 @@ pub mod tests {
             floxhub_token: None,
         };
 
+        init_global_manifest(&global_manifest_path(&flox)).unwrap();
+
         (flox, tempdir_handle)
     }
 
@@ -710,6 +712,7 @@ pub mod tests {
     use mockito;
 
     use crate::flox::Auth0Client;
+    use crate::models::environment::{global_manifest_path, init_global_manifest};
 
     #[tokio::test]
     async fn test_get_username() {

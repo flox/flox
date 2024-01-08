@@ -242,15 +242,8 @@ impl Environment for PathEnvironment {
 
     fn activation_path(&mut self, flox: &Flox) -> Result<PathBuf, EnvironmentError2> {
         let out_link = self.out_link(&flox.system)?;
-        let manifest_modified_at = mtime_of(self.manifest_path(flox)?);
-        let out_link_modified_at = mtime_of(&out_link);
 
-        debug!(
-            "manifest_modified_at: {manifest_modified_at:?},
-             out_link_modified_at: {out_link_modified_at:?}"
-        );
-
-        if manifest_modified_at >= out_link_modified_at {
+        if self.needs_rebuild(flox)? {
             self.build(flox)?;
         }
 
@@ -341,6 +334,34 @@ impl PathEnvironment {
 
         Self::open(pointer, dot_flox_path, temp_dir)
     }
+
+    /// Determine if the environment needs to be rebuilt
+    /// based on the modification times of the manifest and the out link
+    ///
+    /// If the manifest was modified after the out link was set,
+    /// the environment needs to be rebuilt.
+    ///
+    /// This is a heuristic to avoid rebuilding the environment when it is not necessary.
+    /// However, it is not perfect.
+    /// For example,
+    /// if the manifest is modified through as a whole idempotent git operations
+    ///   e.g. from branch `a`
+    ///   `git switch b; git switch a;`
+    /// or the manifest was reformatted,
+    /// the modification time of the manifest will change triggering a rebuild although nothing changed.
+    ///
+    /// Similarly, if any adjacent files are modified, the environment will not be rebuilt.
+    fn needs_rebuild(&self, flox: &Flox) -> Result<bool, EnvironmentError2> {
+        let manifest_modified_at = mtime_of(self.manifest_path(flox)?);
+        let out_link_modified_at = mtime_of(self.out_link(&flox.system)?);
+
+        debug!(
+            "manifest_modified_at: {manifest_modified_at:?},
+             out_link_modified_at: {out_link_modified_at:?}"
+        );
+
+        Ok(manifest_modified_at >= out_link_modified_at)
+    }
 }
 
 #[cfg(test)]
@@ -383,5 +404,29 @@ mod tests {
             "manifest exists"
         );
         assert!(actual.path.is_absolute());
+    }
+
+    /// Write a manifest file with invalid toml to ensure we can catch
+    #[test]
+    fn cache_activation_path() {
+        let (flox, temp_dir) = flox_instance();
+
+        let environment_temp_dir = tempfile::tempdir_in(&temp_dir).unwrap();
+        let pointer = PathPointer::new("test".parse().unwrap());
+
+        let mut env =
+            PathEnvironment::init(pointer, environment_temp_dir.path(), temp_dir.path()).unwrap();
+
+        assert!(env.needs_rebuild(&flox).unwrap());
+
+        // build the environment -> out link is created -> no rebuild necessary
+        env.build(&flox).unwrap();
+        assert!(!env.needs_rebuild(&flox).unwrap());
+
+        // "modify" the manifest -> rebuild necessary
+        // TODO: there will be better methods to explicitly set mtime when we upgrade to rust >= 1.75.0
+        let file = fs::write(env.manifest_path(&flox).unwrap(), "");
+        drop(file);
+        assert!(env.needs_rebuild(&flox).unwrap());
     }
 }
