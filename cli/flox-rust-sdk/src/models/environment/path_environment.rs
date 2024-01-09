@@ -16,7 +16,6 @@
 use std::ffi::OsStr;
 use std::fs::{self};
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 use flox_types::catalog::System;
 use log::debug;
@@ -38,7 +37,7 @@ use super::{
     LOCKFILE_FILENAME,
 };
 use crate::flox::Flox;
-use crate::models::environment::{ENV_DIR_NAME, M4_BIN, MANIFEST_FILENAME};
+use crate::models::environment::{ENV_DIR_NAME, FLOX_SYSTEM_PLACEHOLDER, MANIFEST_FILENAME};
 use crate::models::environment_ref::EnvironmentName;
 use crate::models::lockfile::LockedManifest;
 use crate::models::manifest::PackageToInstall;
@@ -326,25 +325,21 @@ impl PathEnvironment {
             env_dir.display()
         );
         copy_dir_recursive(&template_path, &env_dir, false).map_err(EnvironmentError2::InitEnv)?;
-        let replacement = format!("-D_FLOX_INIT_SYSTEM={}", system);
         let manifest_path = env_dir.join(MANIFEST_FILENAME);
         debug!(
             "replacing placeholder system in manifest: path={}, system={}",
             manifest_path.display(),
             system
         );
-        let replaced = Command::new(M4_BIN)
-            .arg(replacement.as_str())
-            .arg(&manifest_path)
-            .output()
-            .map_err(EnvironmentError2::InitEnv);
-        if let Err(e) = replaced {
-            debug!("m4 invocation did not complete successfully");
+        let contents = fs::read_to_string(&manifest_path).map_err(EnvironmentError2::ManifestEdit);
+        if let Err(e) = contents {
+            debug!("couldn't open manifest to replace placeholder system");
             fs::remove_dir_all(&env_dir).map_err(EnvironmentError2::ManifestEdit)?;
             return Err(e);
         }
-        let write_res = fs::write(&manifest_path, replaced.unwrap().stdout)
-            .map_err(EnvironmentError2::ManifestEdit);
+        let replaced = contents.unwrap().replace(FLOX_SYSTEM_PLACEHOLDER, system);
+        let write_res =
+            fs::write(&manifest_path, replaced).map_err(EnvironmentError2::ManifestEdit);
         if let Err(e) = write_res {
             debug!("overwriting manifest did not complete successfully");
             fs::remove_dir_all(&env_dir).map_err(EnvironmentError2::InitEnv)?;

@@ -22,7 +22,6 @@
   installShellFiles,
   runCommand,
   fd,
-  gnum4,
   gnused,
   gitMinimal,
   nix,
@@ -63,7 +62,6 @@
         if flox-pkgdb == null
         then "pkgdb"
         else "${flox-pkgdb}/bin/pkgdb";
-      M4_BIN = "${gnum4}/bin/m4";
       PARSER_UTIL_BIN = "${parser-util}/bin/parser-util";
       FLOX_ETC_DIR = ../../assets/etc;
       FLOX_ZDOTDIR = ../../assets/flox.zdotdir;

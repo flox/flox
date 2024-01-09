@@ -3,7 +3,6 @@
   gcc,
   runCommandCC,
   stdenv,
-  darwin,
   lib,
   bash,
   zsh,
