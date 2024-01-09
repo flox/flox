@@ -361,7 +361,7 @@ env_is_activated() {
 # ---------------------------------------------------------------------------- #
 
 # bats test_tags=activate,activate:inplace-prints
-@test "'flox activate' prints script to modify current shell" {
+@test "'flox activate' prints script to modify current shell (bash)" {
   # Flox detects that the output is not a tty and prints the script to stdout
   #
   # TODO:
@@ -370,22 +370,23 @@ env_is_activated() {
   SHELL="bash" run "$FLOX_BIN" activate
   assert_success
   assert_output --regexp "source .*/activate/bash"
+}
 
+# bats test_tags=activate,activate:inplace-prints
+@test "'flox activate' prints script to modify current shell (zsh)" {
   SHELL="zsh" run "$FLOX_BIN" activate
   assert_success
   assert_output --regexp "source .*/activate/zsh"
 }
 
 # bats test_tags=activate,activate:inplace-modifies
-@test "'flox activate' modifies the current shell" {
+@test "'flox activate' modifies the current shell (bash)" {
 
   # set a hook
   sed -i -e "s/\[hook\]/${HELLO_HOOK//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
   # set vars
   sed -i -e "s/\[vars\]/${VARS//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
-
   "$FLOX_BIN" install hello
-
 
   run bash -c 'eval "$("$FLOX_BIN" activate)"; type hello; echo $foo'
   assert_success
@@ -395,6 +396,16 @@ env_is_activated() {
   assert_line --partial "hello is $(realpath $PROJECT_DIR)/.flox/run/"
   # assert var
   assert_line "baz"
+}
+
+# bats test_tags=activate,activate:inplace-modifies
+@test "'flox activate' modifies the current shell (zsh)" {
+
+  # set a hook
+  sed -i -e "s/\[hook\]/${HELLO_HOOK//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
+  # set vars
+  sed -i -e "s/\[vars\]/${VARS//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
+  "$FLOX_BIN" install hello
 
   run zsh -c 'eval "$("$FLOX_BIN" activate)"; type hello; echo $foo'
   assert_success
