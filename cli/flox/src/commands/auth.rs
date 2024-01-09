@@ -3,7 +3,7 @@ use std::sync::Arc;
 //this module liberally borrows from github-device-flox crate
 use std::time;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 use bpaf::Bpaf;
 use chrono::offset::Utc;
 use chrono::{DateTime, Duration};
@@ -21,12 +21,12 @@ use oauth2::{
     TokenUrl,
 };
 use serde::Serialize;
-use tokio::process::Command;
 use url::Url;
 
 use crate::commands::general::update_config;
 use crate::config::Config;
 use crate::subcommand_metric;
+use crate::utils::openers::Browser;
 
 #[derive(Debug, Default, Clone, Serialize)]
 pub struct Credential {
@@ -77,20 +77,11 @@ pub async fn authorize(client: BasicClient) -> Result<Credential> {
 
     debug!("Device code details: {details:#?}");
 
-    let opener = match std::env::consts::OS {
-        "linux" => "xdg-open",
-        "macos" => "open",
-        sys => {
-            bail!("Unsupported OS: {sys}")
-        },
-    };
-
-    let opener_exists = std::env::split_paths(&std::env::var("PATH").unwrap_or_default())
-        .any(|p| p.ends_with(opener));
+    let opener = Browser::detect();
 
     let done = Arc::new(AtomicBool::default());
 
-    if opener_exists {
+    if let Ok(opener) = opener {
         eprintdoc! {"
             Verification Code: {code}
 
@@ -115,7 +106,7 @@ pub async fn authorize(client: BasicClient) -> Result<Credential> {
         // there will be one less newline in the terminal than expected.
         fun_name(
             &done,
-            opener.to_string(),
+            opener,
             details
                 .verification_uri_complete()
                 .map(|u| u.secret())
@@ -151,7 +142,7 @@ pub async fn authorize(client: BasicClient) -> Result<Credential> {
     })
 }
 
-fn fun_name(done: &Arc<AtomicBool>, opener: String, complete: Option<String>, fallback: Url) {
+fn fun_name(done: &Arc<AtomicBool>, opener: Browser, complete: Option<String>, fallback: Url) {
     let done_clone = done.clone();
     tokio::task::spawn(async move {
         loop {
@@ -186,7 +177,7 @@ fn fun_name(done: &Arc<AtomicBool>, opener: String, complete: Option<String>, fa
             }
         }
 
-        let mut command = Command::new(opener);
+        let mut command = opener.to_command();
         command.arg(complete.unwrap_or(fallback.to_string()));
 
         if command.spawn().is_err() {
