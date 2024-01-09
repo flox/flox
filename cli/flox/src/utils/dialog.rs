@@ -24,6 +24,9 @@ impl<F: FnOnce() -> T + Send, T: Send> Spinner<F> {
 }
 
 #[derive(Debug, Clone)]
+pub struct Checkpoint;
+
+#[derive(Debug, Clone)]
 pub struct Dialog<'a, Type> {
     pub message: &'a str,
     pub help_message: Option<&'a str>,
@@ -34,7 +37,7 @@ impl<'a> Dialog<'a, Confirm> {
     #[allow(unused)]
     pub async fn prompt(self) -> inquire::error::InquireResult<bool> {
         let message = self.message.to_owned();
-        let help_message = self.help_message.map(ToOwned::to_owned);
+        let help_message: Option<String> = self.help_message.map(ToOwned::to_owned);
         let default = self.typed.default;
 
         tokio::task::spawn_blocking(move || {
@@ -54,6 +57,31 @@ impl<'a> Dialog<'a, Confirm> {
         })
         .await
         .expect("Failed to join blocking dialog")
+    }
+}
+
+impl Dialog<'_, Checkpoint> {
+    /// Print the message and wait for the user to press enter
+    pub fn checkpoint(self) -> inquire::error::InquireResult<()> {
+        let message = self.message;
+        let help_message = self.help_message;
+
+        let _stderr_lock = TERMINAL_STDERR.lock();
+
+        let dialog = inquire::CustomType {
+            message,
+            default: None,
+            placeholder: None,
+            help_message,
+            formatter: &|()| "".to_string(),
+            default_value_formatter: &|()| "".to_string(),
+            parser: &|_| Ok(()),
+            validators: vec![],
+            error_message: "".to_string(),
+            render_config: flox_theme(),
+        };
+
+        dialog.prompt()
     }
 }
 
@@ -190,14 +218,14 @@ pub fn flox_theme() -> RenderConfig {
     ) {
         render_config.answered_prompt_prefix = Styled::new(">").with_fg(light_peach);
         render_config.highlighted_option_prefix = Styled::new(">").with_fg(light_peach);
-        render_config.prompt_prefix = Styled::new("?").with_fg(light_peach);
+        render_config.prompt_prefix = Styled::new("!").with_fg(light_peach);
         render_config.prompt = StyleSheet::new().with_attr(Attributes::BOLD);
         render_config.help_message = Styled::new("").with_fg(light_blue).style;
         render_config.answer = Styled::new("").with_fg(light_peach).style;
     } else {
         render_config.answered_prompt_prefix = Styled::new(">");
         render_config.highlighted_option_prefix = Styled::new(">");
-        render_config.prompt_prefix = Styled::new("?");
+        render_config.prompt_prefix = Styled::new("!");
         render_config.prompt = StyleSheet::new();
         render_config.help_message = Styled::new("").style;
         render_config.answer = Styled::new("").style;
