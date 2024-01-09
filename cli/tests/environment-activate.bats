@@ -360,7 +360,7 @@ env_is_activated() {
 
 # ---------------------------------------------------------------------------- #
 
-# bats test_tags=activate,activate:inplace
+# bats test_tags=activate,activate:inplace-prints
 @test "'flox activate' prints script to modify current shell" {
   # Flox detects that the output is not a tty and prints the script to stdout
   #
@@ -374,4 +374,31 @@ env_is_activated() {
   SHELL="zsh" run "$FLOX_BIN" activate
   assert_success
   assert_output --regexp "source .*/activate/zsh"
+}
+
+# bats test_tags=activate,activate:inplace-modifies
+@test "'flox activate' allows to modify current shell" {
+
+  # set a hook
+  sed -i -e "s/\[hook\]/${HELLO_HOOK//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
+  # set vars
+  sed -i -e "s/\[vars\]/${VARS//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
+
+  "$FLOX_BIN" install hello
+
+
+  run bash -c 'eval "$("$FLOX_BIN" activate)"; type hello; echo $foo'
+  assert_success
+  # assert hook
+  assert_line "Welcome to your flox environment!"
+  # assert installed package
+  assert_line --partial "hello is $(realpath $PROJECT_DIR)/.flox/run/"
+  # assert var
+  assert_line "baz"
+
+  run zsh -c 'eval "$("$FLOX_BIN" activate)"; type hello; echo $foo'
+  assert_success
+  assert_line "Welcome to your flox environment!"
+  assert_line --partial "hello is $(realpath $PROJECT_DIR)/.flox/run/"
+  assert_line "baz"
 }
