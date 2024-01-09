@@ -1,7 +1,7 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use bpaf::Bpaf;
 use chrono::offset::Utc;
 use chrono::{DateTime, Duration};
@@ -60,6 +60,10 @@ fn create_oauth_client() -> Result<BasicClient> {
 }
 
 pub async fn authorize(client: BasicClient) -> Result<Credential> {
+    if !Dialog::can_prompt() {
+        bail!("Cannot prompt for user input")
+    }
+
     let details: StandardDeviceAuthorizationResponse = client
         .exchange_device_code()
         .unwrap()
