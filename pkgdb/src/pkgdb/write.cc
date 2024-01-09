@@ -32,7 +32,9 @@ static void
 initViews( SQLiteDb & pdb )
 {
   sqlite3pp::command cmd( pdb, sql_views );
-  if ( sql_rc rcode = cmd.execute_all(); isSQLError( rcode ) )
+  sql_rc rcode;
+  RETRY_WHILE_BUSY( rcode, cmd.execute_all() );
+  if ( isSQLError( rcode ) )
     {
       throw PkgDbException( nix::fmt( "failed to initialize views:(%d) %s",
                                       rcode,
@@ -62,7 +64,9 @@ updateViews( SQLiteDb & pdb )
         auto               name = row.get<std::string>( 0 );
         std::string        cmd  = "DROP VIEW IF EXISTS '" + name + '\'';
         sqlite3pp::command dropView( pdb, cmd.c_str() );
-        if ( sql_rc rcode = dropView.execute(); isSQLError( rcode ) )
+        sql_rc rcode;
+        RETRY_WHILE_BUSY( rcode, dropView.execute() );
+        if ( isSQLError( rcode ) )
           {
             throw PkgDbException( nix::fmt( "failed to drop view '%s':(%d) %s",
                                             name,
@@ -78,7 +82,10 @@ updateViews( SQLiteDb & pdb )
     "UPDATE DbVersions SET version = ? WHERE name = 'pkgdb_views_schema'" );
   updateVersion.bind( 1, static_cast<int>( sqlVersions.views ) );
 
-  if ( sql_rc rcode = updateVersion.execute_all(); isSQLError( rcode ) )
+  sql_rc rcode;
+  RETRY_WHILE_BUSY( rcode, updateVersion.execute_all() );
+
+  if ( isSQLError( rcode ) )
     {
       throw PkgDbException( nix::fmt( "failed to update PkgDb Views:(%d) %s",
                                       rcode,
@@ -96,8 +103,10 @@ updateViews( SQLiteDb & pdb )
 static void
 initTables( SQLiteDb & pdb )
 {
+  sql_rc rcode;
   sqlite3pp::command cmdVersions( pdb, sql_versions );
-  if ( sql_rc rcode = cmdVersions.execute(); isSQLError( rcode ) )
+  RETRY_WHILE_BUSY( rcode, cmdVersions.execute_all() );
+  if ( isSQLError( rcode ) )
     {
       throw PkgDbException(
         nix::fmt( "failed to initialize DbVersions table:(%d) %s",
@@ -106,7 +115,8 @@ initTables( SQLiteDb & pdb )
     }
 
   sqlite3pp::command cmdInput( pdb, sql_input );
-  if ( sql_rc rcode = cmdInput.execute_all(); isSQLError( rcode ) )
+  RETRY_WHILE_BUSY( rcode, cmdInput.execute_all() );
+  if ( isSQLError( rcode ) )
     {
       throw PkgDbException(
         nix::fmt( "failed to initialize LockedFlake table:(%d) %s",
@@ -115,7 +125,8 @@ initTables( SQLiteDb & pdb )
     }
 
   sqlite3pp::command cmdAttrSets( pdb, sql_attrSets );
-  if ( sql_rc rcode = cmdAttrSets.execute_all(); isSQLError( rcode ) )
+  RETRY_WHILE_BUSY( rcode, cmdAttrSets.execute_all() );
+  if ( isSQLError( rcode ) )
     {
       throw PkgDbException(
         nix::fmt( "failed to initialize AttrSets table:(%d) %s",
@@ -124,10 +135,21 @@ initTables( SQLiteDb & pdb )
     }
 
   sqlite3pp::command cmdPackages( pdb, sql_packages );
-  if ( sql_rc rcode = cmdPackages.execute_all(); isSQLError( rcode ) )
+  RETRY_WHILE_BUSY( rcode, cmdPackages.execute_all() );
+  if ( isSQLError( rcode ) )
     {
       throw PkgDbException(
         nix::fmt( "failed to initialize Packages table:(%d) %s",
+                  rcode,
+                  pdb.error_msg() ) );
+    }
+
+  sqlite3pp::command cmdRules( pdb, sql_rules );
+  RETRY_WHILE_BUSY( rcode, cmdRules.execute_all() );
+  if ( isSQLError( rcode ) )
+    {
+      throw PkgDbException(
+        nix::fmt( "failed to initialize ScrapeRules table:(%d) %s",
                   rcode,
                   pdb.error_msg() ) );
     }
@@ -148,7 +170,9 @@ initVersions( SQLiteDb & pdb )
     ", ( 'pkgdb_views_schema', ? )" );
   defineVersions.bind( 1, static_cast<int>( sqlVersions.tables ) );
   defineVersions.bind( 2, static_cast<int>( sqlVersions.views ) );
-  if ( sql_rc rcode = defineVersions.execute(); isSQLError( rcode ) )
+  sql_rc rcode;
+  RETRY_WHILE_BUSY( rcode, defineVersions.execute() );
+  if ( isSQLError( rcode ) )
     {
       throw PkgDbException( "failed to write DbVersions info",
                             pdb.error_msg() );
@@ -167,15 +191,12 @@ initVersions( SQLiteDb & pdb )
 static void
 updateViews( PkgDb & pdb )
 {
-  initTables( this->db );
-  initVersions( this->db );
+  initTables( pdb.db );
+  initVersions( pdb.db );
 
   /* If the views version is outdated, update them. */
-  if ( this->getDbVersion().views < sqlVersions.views )
-    {
-      updateViews( this->db );
-    }
-  else { initViews( this->db ); }
+  if ( pdb.getDbVersion().views < sqlVersions.views ) { updateViews( pdb ); }
+  else { initViews( pdb.db ); }
 }
 
 
@@ -196,7 +217,9 @@ writeInput( PkgDb & pdb )
   cmd.bind( 1, fpStr, sqlite3pp::copy );
   cmd.bind( 2, pdb.lockedRef.string, sqlite3pp::nocopy );
   cmd.bind( 3, pdb.lockedRef.attrs.dump(), sqlite3pp::copy );
-  if ( sql_rc rcode = cmd.execute(); isSQLError( rcode ) )
+  sql_rc rcode;
+  RETRY_WHILE_BUSY( rcode, cmd.execute() )
+  if ( isSQLError( rcode ) )
     {
       throw PkgDbException( "failed to write LockedFlaked info",
                             pdb.db.error_msg() );
@@ -245,7 +268,8 @@ PkgDb::connect()
   this->db.connect( this->dbPath.string().c_str(),
                     SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE );
   sqlite3pp::command cmd( this->db, acquire_lock );
-  RETRY_WHILE_BUSY( cmd.execute_all() );
+  sql_rc rcode;
+  RETRY_WHILE_BUSY( rcode, cmd.execute_all() );
 }
 
 
@@ -259,7 +283,9 @@ writeScrapeRulesHash( SQLiteDb & database, const RulesTreeNode & rules )
     database,
     "INSERT OR IGNORE INTO ScrapeRules ( hash ) VALUES ( ? )" );
   cmd.bind( 1, rules.getHash(), sqlite3pp::copy );
-  if ( sql_rc rcode = cmd.execute(); isSQLError( rcode ) )
+  sql_rc rcode;
+  RETRY_WHILE_BUSY( rcode, cmd.execute() );
+  if ( isSQLError( rcode ) )
     {
       throw PkgDbException(
         nix::fmt( "failed to write ScrapeRules hash:(%d) %s",
@@ -279,12 +305,14 @@ writeScrapeRulesHash( SQLiteDb & database, const RulesTreeNode & rules )
 static sql_rc
 clearDbTables( PkgDb & pdb )
 {
-  return pdb.execute_all( R"SQL(
-    DELETE FROM TABLE ScrapeRules;
-    DELETE FROM TABLE Descriptions;
-    DELETE FROM TABLE Packages;
-    DELETE FROM TABLE AttrSets
-  )SQL" );
+  sql_rc rcode;
+  RETRY_WHILE_BUSY( rcode, pdb.execute_all( R"SQL(
+      DELETE FROM TABLE ScrapeRules;
+      DELETE FROM TABLE Descriptions;
+      DELETE FROM TABLE Packages;
+      DELETE FROM TABLE AttrSets
+    )SQL" ) );
+  return rcode;
 }
 
 
@@ -293,7 +321,7 @@ clearDbTables( PkgDb & pdb )
 void
 PkgDb::init()
 {
-  initTables( *this );
+  initTables( this->db );
 
   // TODO: Rules should /really/ be associated with inputs.
   //       This initialization belongs closer to `writeInput()'.
@@ -316,14 +344,14 @@ PkgDb::init()
       writeScrapeRulesHash( this->db, this->rules.value() );
     }
 
-  initVersions( *this );
+  initVersions( this->db );
 
   /* If the views version is outdated, update them. */
   if ( this->getDbVersion().views < sqlVersions.views )
     {
-      updateViews( *this );
+      updateViews( this->db );
     }
-  else { initViews( *this ); }
+  else { initViews( this->db ); }
 }
 
 
@@ -337,7 +365,9 @@ PkgDb::addOrGetAttrSetId( const std::string & attrName, row_id parent )
     "INSERT INTO AttrSets ( attrName, parent ) VALUES ( ?, ? )" );
   cmd.bind( 1, attrName, sqlite3pp::copy );
   cmd.bind( 2, static_cast<long long>( parent ) );
-  if ( sql_rc rcode = cmd.execute(); isSQLError( rcode ) )
+  sql_rc rcode;
+  RETRY_WHILE_BUSY( rcode, cmd.execute() );
+  if ( isSQLError( rcode ) )
     {
       sqlite3pp::query qryId(
         this->db,
@@ -401,7 +431,9 @@ PkgDb::addOrGetDescriptionId( const std::string & description )
     nix::lvlDebug,
     nix::actUnknown,
     nix::fmt( "Adding new description to database: %s.", description ) );
-  if ( sql_rc rcode = cmd.execute(); isSQLError( rcode ) )
+  sql_rc rcode;
+  RETRY_WHILE_BUSY( rcode, cmd.execute() );
+  if ( isSQLError( rcode ) )
     {
       throw PkgDbException( nix::fmt( "failed to add Description '%s':(%d) %s",
                                       description,
@@ -499,7 +531,10 @@ PkgDb::addPackage( row_id               parentId,
       cmd.bind( ":unfree" );
       cmd.bind( ":descriptionId" );
     }
-  if ( sql_rc rcode = cmd.execute(); isSQLError( rcode ) )
+
+  sql_rc rcode;
+  RETRY_WHILE_BUSY( rcode, cmd.execute() );
+  if ( isSQLError( rcode ) )
     {
       throw PkgDbException(
         nix::fmt( "failed to write Package '%s'", pkg._fullName ),
@@ -528,7 +563,11 @@ PkgDb::setPrefixDone( row_id prefixId, bool done )
   )SQL" );
   cmd.bind( 1, static_cast<int>( done ) );
   cmd.bind( 2, static_cast<long long>( prefixId ) );
-  if ( sql_rc rcode = cmd.execute(); isSQLError( rcode ) )
+
+  sql_rc rcode;
+  RETRY_WHILE_BUSY( rcode, cmd.execute() );
+
+  if ( isSQLError( rcode ) )
     {
       throw PkgDbException(
         nix::fmt( "failed to set AttrSets.done for subtree '%s':(%d) %s",

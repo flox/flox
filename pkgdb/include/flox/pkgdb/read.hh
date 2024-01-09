@@ -51,18 +51,20 @@ namespace flox::pkgdb {
 const DurationMillis DB_RETRY_PERIOD = DurationMillis( 100 );
 const int            DB_MAX_RETRIES  = 1000;
 
-#define RETRY_WHILE_BUSY( op )                                    \
-  int _retry_while_busy_rcode   = op;                             \
-  int _retry_while_busy_retries = 0;                              \
-  while ( _retry_while_busy_rcode == SQLITE_BUSY )                \
-    {                                                             \
-      if ( ++_retry_while_busy_retries > DB_MAX_RETRIES )         \
-        {                                                         \
-          throw PkgDbException( "database operation timed out" ); \
-        }                                                         \
-      std::this_thread::sleep_for( DB_RETRY_PERIOD );             \
-      _retry_while_busy_rcode = op;                               \
-    }
+#define RETRY_WHILE_BUSY( _RC, _EXPR )                              \
+  {                                                                 \
+    _RC                           = ( _EXPR );                      \
+    int _retry_while_busy_retries = 0;                              \
+    while ( _RC == SQLITE_BUSY )                                    \
+      {                                                             \
+        if ( DB_MAX_RETRIES < ++_retry_while_busy_retries )         \
+          {                                                         \
+            throw PkgDbException( "database operation timed out" ); \
+          }                                                         \
+        std::this_thread::sleep_for( DB_RETRY_PERIOD );             \
+        _RC = ( _EXPR );                                            \
+      }                                                             \
+  }
 
 
 /* -------------------------------------------------------------------------- */
@@ -100,6 +102,7 @@ struct SqlVersions
 
   friend std::ostream &
   operator<<( std::ostream & oss, const SqlVersions & versions );
+
 
 }; /* End struct `SqlVersions' */
 
@@ -301,8 +304,6 @@ public:
   connect();
 
   /* Queries */
-
-  // public:
 
   /**
    * @brief Read the database's recorded `ScrapeRules.hash`.

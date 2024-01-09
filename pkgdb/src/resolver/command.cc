@@ -157,13 +157,11 @@ int
 UpdateCommand::run()
 {
   /* If the manifest doesn't have a value, assume we're updating the global
-   * manifest, and set a dummy empty manifest.
-   * TODO: be less hacky. */
-  bool global = false;
+   * manifest, and set a dummy empty manifest. */
+  // TODO: be less hacky.
   if ( ! this->getManifestRaw().has_value() )
     {
       this->setManifestRaw( ManifestRaw {} );
-      global = true;
     }
   nlohmann::json lockfile;
   if ( auto maybeLockfile = this->getLockfile(); maybeLockfile.has_value() )
