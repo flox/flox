@@ -16,6 +16,7 @@
 use std::ffi::OsStr;
 use std::fs::{self};
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
 use flox_types::catalog::System;
 use log::debug;
@@ -37,7 +38,7 @@ use super::{
     LOCKFILE_FILENAME,
 };
 use crate::flox::Flox;
-use crate::models::environment::{ENV_DIR_NAME, MANIFEST_FILENAME};
+use crate::models::environment::{ENV_DIR_NAME, M4_BIN, MANIFEST_FILENAME};
 use crate::models::environment_ref::EnvironmentName;
 use crate::models::lockfile::LockedManifest;
 use crate::models::manifest::PackageToInstall;
@@ -303,6 +304,7 @@ impl PathEnvironment {
         pointer: PathPointer,
         dot_flox_parent_path: impl AsRef<Path>,
         temp_dir: impl AsRef<Path>,
+        system: &str,
     ) -> Result<Self, EnvironmentError2> {
         match EnvironmentPointer::open(dot_flox_parent_path.as_ref()) {
             Err(EnvironmentError2::EnvNotFound) => {},
@@ -324,6 +326,30 @@ impl PathEnvironment {
             env_dir.display()
         );
         copy_dir_recursive(&template_path, &env_dir, false).map_err(EnvironmentError2::InitEnv)?;
+        let replacement = format!("-D_FLOX_INIT_SYSTEM={}", system);
+        let manifest_path = env_dir.join(MANIFEST_FILENAME);
+        debug!(
+            "replacing placeholder system in manifest: path={}, system={}",
+            manifest_path.display(),
+            system
+        );
+        let replaced = Command::new(M4_BIN)
+            .arg(replacement.as_str())
+            .arg(&manifest_path)
+            .output()
+            .map_err(EnvironmentError2::InitEnv);
+        if let Err(e) = replaced {
+            debug!("m4 invocation did not complete successfully");
+            fs::remove_dir_all(&env_dir).map_err(EnvironmentError2::ManifestEdit)?;
+            return Err(e);
+        }
+        let write_res = fs::write(&manifest_path, replaced.unwrap().stdout)
+            .map_err(EnvironmentError2::ManifestEdit);
+        if let Err(e) = write_res {
+            debug!("overwriting manifest did not complete successfully");
+            fs::remove_dir_all(&env_dir).map_err(EnvironmentError2::InitEnv)?;
+            return Err(e);
+        }
 
         // Write the `env.json` file
         if let Err(e) = fs::write(
@@ -393,8 +419,13 @@ mod tests {
             "{before:?}"
         );
 
-        let actual =
-            PathEnvironment::init(pointer, environment_temp_dir.path(), temp_dir.path()).unwrap();
+        let actual = PathEnvironment::init(
+            pointer,
+            environment_temp_dir.path(),
+            temp_dir.path(),
+            &flox.system,
+        )
+        .unwrap();
 
         let expected = PathEnvironment::new(
             environment_temp_dir.into_path().join(".flox"),
@@ -420,8 +451,13 @@ mod tests {
         let environment_temp_dir = tempfile::tempdir_in(&temp_dir).unwrap();
         let pointer = PathPointer::new("test".parse().unwrap());
 
-        let mut env =
-            PathEnvironment::init(pointer, environment_temp_dir.path(), temp_dir.path()).unwrap();
+        let mut env = PathEnvironment::init(
+            pointer,
+            environment_temp_dir.path(),
+            temp_dir.path(),
+            &flox.system,
+        )
+        .unwrap();
 
         assert!(env.needs_rebuild(&flox).unwrap());
 

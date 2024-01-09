@@ -56,6 +56,7 @@ pub const ENV_DIR_NAME: &str = "env";
 pub const FLOX_ENV_VAR: &str = "FLOX_ENV";
 pub const FLOX_ACTIVE_ENVIRONMENTS_VAR: &str = "FLOX_ACTIVE_ENVIRONMENTS";
 pub const FLOX_PROMPT_ENVIRONMENTS_VAR: &str = "FLOX_PROMPT_ENVIRONMENTS";
+pub const M4_BIN: &str = env!("M4_BIN");
 
 pub type UpdateResult = (Option<LockedManifest>, LockedManifest);
 
@@ -343,6 +344,8 @@ pub enum EnvironmentError2 {
     EnvironmentExists(PathBuf),
     #[error("could not write .gitignore file")]
     WriteGitignore(#[source] std::io::Error),
+    #[error("couldn't update manifest")]
+    ManifestEdit(#[source] std::io::Error),
     // endregion
 
     // todo: rmove with "catalog()" method

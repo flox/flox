@@ -560,7 +560,12 @@ impl Init {
                 .parse()?
         };
 
-        let env = PathEnvironment::init(PathPointer::new(env_name), &dir, flox.temp_dir.clone())?;
+        let env = PathEnvironment::init(
+            PathPointer::new(env_name),
+            &dir,
+            flox.temp_dir.clone(),
+            &flox.system,
+        )?;
 
         println!(
             indoc::indoc! {"

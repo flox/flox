@@ -23,6 +23,7 @@
   gnutar,
   jq,
   nix,
+  yq,
   nix-serve,
   openssh,
   parallel,
@@ -63,6 +64,7 @@
       parallel
       unixtools.util-linux
       which
+      yq
     ]
     # TODO: this hack is not going to be needed once we test against sutff on system
     ++ lib.optional stdenv.isDarwin (
