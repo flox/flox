@@ -394,6 +394,9 @@ impl PathEnvironment {
 #[cfg(test)]
 mod tests {
 
+    use std::process::Command;
+    use std::str::FromStr;
+
     use super::*;
     use crate::flox::tests::flox_instance;
 
@@ -438,7 +441,6 @@ mod tests {
         assert!(actual.path.is_absolute());
     }
 
-    /// Write a manifest file with invalid toml to ensure we can catch
     #[test]
     fn cache_activation_path() {
         let (flox, temp_dir) = flox_instance();
@@ -453,6 +455,19 @@ mod tests {
             &flox.system,
         )
         .unwrap();
+        // building requires packages in the manifest, install one so the build succeeds and the outlink is built
+        let pkgs = vec![
+            PackageToInstall::from_str("hello").expect("couldn't create package from 'hello'")
+        ];
+        env.install(&pkgs, &flox).expect("couldn't install 'hello'");
+        // Need to touch the manifest so that its mtime is more recent than the outlink
+        Command::new("touch")
+            .arg(
+                env.manifest_path(&flox)
+                    .expect("couldn't get manifest path"),
+            )
+            .output()
+            .expect("couldn't touch manifest");
 
         assert!(env.needs_rebuild(&flox).unwrap());
 
