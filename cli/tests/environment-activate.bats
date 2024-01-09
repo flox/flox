@@ -377,7 +377,7 @@ env_is_activated() {
 }
 
 # bats test_tags=activate,activate:inplace-modifies
-@test "'flox activate' allows to modify current shell" {
+@test "'flox activate' modifies the current shell" {
 
   # set a hook
   sed -i -e "s/\[hook\]/${HELLO_HOOK//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
