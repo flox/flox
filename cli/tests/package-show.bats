@@ -22,12 +22,14 @@ project_setup() {
   run "$FLOX_BIN" init
   assert_success
   unset output
+  export LOCKFILE_PATH="$PROJECT_DIR/.flox/env/manifest.lock"
 }
 
 project_teardown() {
   popd > /dev/null || return
   rm -rf "${PROJECT_DIR?}"
   unset PROJECT_DIR
+  unset LOCKFILE_PATH
 }
 
 # ---------------------------------------------------------------------------- #
@@ -227,6 +229,38 @@ teardown() {
   run --separate-stderr sh -c "$FLOX_BIN show nodejs|tail -n1"
   assert_success
   assert_output '    nodejs - nodejs@18.17.1'
+}
+
+# ---------------------------------------------------------------------------- #
+
+@test "'flox show' creates global lock" {
+  rm -f "$GLOBAL_MANIFEST_LOCK"
+  run ! [ -e "$LOCKFILE_PATH" ]
+  _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLD?}" \
+    run --separate-stderr sh -c "$FLOX_BIN show nodejs|tail -n1"
+  assert_success
+  assert_output '    nodejs - nodejs@18.16.0'
+
+  # Check the expected global lock was created
+  run jq -r '.registry.inputs.nixpkgs.from.narHash' "$GLOBAL_MANIFEST_LOCK"
+  assert_success
+  assert_output "$PKGDB_NIXPKGS_NAR_HASH_OLD"
+}
+
+# ---------------------------------------------------------------------------- #
+
+@test "'flox show' uses global lock" {
+  rm -f "$GLOBAL_MANIFEST_LOCK"
+  run ! [ -e "$LOCKFILE_PATH" ]
+  _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLD?}" \
+    flox update --global
+
+  # Set new rev just to make sure we're not incidentally using old rev.
+  _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_NEW?}" \
+    run --separate-stderr sh -c "$FLOX_BIN show nodejs|tail -n1"
+  assert_success
+  assert_output '    nodejs - nodejs@18.16.0'
+
 }
 
 # ---------------------------------------------------------------------------- #

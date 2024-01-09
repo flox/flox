@@ -355,6 +355,9 @@ pkgdb_vars_setup() {
   PKGDB_NIXPKGS_REF_OLD="github:NixOS/nixpkgs/$PKGDB_NIXPKGS_REV_OLD"
   PKGDB_NIXPKGS_REF_NEW="github:NixOS/nixpkgs/$PKGDB_NIXPKGS_REV_NEW"
 
+  PKGDB_NIXPKGS_NAR_HASH_OLD="sha256-1UGacsv5coICyvAzwuq89v9NsS00Lo8sz22cDHwhnn8="
+  PKGDB_NIXPKGS_NAR_HASH_NEW="sha256-5uA6jKckTf+DCbVBNKsmT5pUT/7Apt5tNdpcbLnPzFI="
+
   # This causes `pkgdb' to use this revision for `nixpkgs' anywhere the
   # `--ga-registry' flag is used.
   # This is useful for testing `pkgdb' against a specific revision of `nixpkgs'
@@ -363,7 +366,8 @@ pkgdb_vars_setup() {
 
   export PKGDB_NIXPKGS_REV_OLD PKGDB_NIXPKGS_REV_NEW \
     PKGDB_NIXPKGS_REF_OLD PKGDB_NIXPKGS_REF_NEW \
-    _PKGDB_GA_REGISTRY_REF_OR_REV
+    _PKGDB_GA_REGISTRY_REF_OR_REV PKGDB_NIXPKGS_NAR_HASH_OLD \
+    PKGDB_NIXPKGS_NAR_HASH_NEW
 
   export __FT_RAN_PKGDB_VARS_SETUP=:
 }
@@ -381,6 +385,7 @@ flox_vars_setup() {
   export FLOX_ENVIRONMENTS="$FLOX_DATA_HOME/environments"
   export USER="flox-test"
   export HOME="${FLOX_TEST_HOME:-$HOME}"
+  export GLOBAL_MANIFEST_LOCK="$FLOX_CONFIG_HOME/global-manifest.lock"
 }
 
 # ---------------------------------------------------------------------------- #
