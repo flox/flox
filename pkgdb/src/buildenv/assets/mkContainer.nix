@@ -9,6 +9,8 @@
   system,
 }: let
   pkgs = nixpkgsFlake.legacyPackages.${system};
+  lowPriority = pkg: pkg.overrideAttrs (old: old // {meta = (old.meta or {}) // {priority = 10000;};});
+
   buildLayeredImageArgs = {
     name = "flox-env-container";
     # symlinkJoin fails when drv contains a symlinked bin directory, so wrap in an additional buildEnv
@@ -16,8 +18,8 @@
       name = "contents";
       paths = [
         environmentOutPath
-        pkgs.bashInteractive # for a usable shell
-        pkgs.coreutils # for just the basic utils
+        (lowPriority pkgs.bashInteractive) # for a usable shell
+        (lowPriority pkgs.coreutils) # for just the basic utils
       ];
     };
     config = {};
