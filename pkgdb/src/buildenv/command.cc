@@ -40,6 +40,11 @@ BuildEnvCommand::BuildEnvCommand() : parser( "buildenv" )
     .metavar( "SYSTEM" )
     .nargs( 1 )
     .action( [&]( const std::string & str ) { this->system = str; } );
+
+  this->parser.add_argument( "--container", "-c" )
+    .help( "build a container" )
+    .nargs( 0 )
+    .action( [&]( const auto & ) { this->buildContainer = true; } );
 }
 
 
