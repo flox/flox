@@ -35,6 +35,7 @@ use crate::providers::git::{
     GitProvider,
     GitRemoteCommandError,
 };
+use crate::utils::mtime_of;
 
 const GENERATION_LOCK_FILENAME: &str = "env.lock";
 
@@ -317,7 +318,20 @@ impl Environment for ManagedEnvironment {
     }
 
     fn activation_path(&mut self, flox: &Flox) -> Result<PathBuf, EnvironmentError2> {
-        self.build(flox)?;
+        let pointer_lock_path = self.path.join(GENERATION_LOCK_FILENAME);
+
+        let pointer_lock_modified_at = mtime_of(pointer_lock_path);
+        let out_link_modified_at = mtime_of(&self.out_link);
+
+        debug!(
+            "pointer_lock_modified_at: {pointer_lock_modified_at:?}
+            out_link_modified_at: {out_link_modified_at:?}"
+        );
+
+        if pointer_lock_modified_at >= out_link_modified_at {
+            self.build(flox)?;
+        }
+
         Ok(self.out_link.to_path_buf())
     }
 
