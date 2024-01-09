@@ -7,6 +7,7 @@ use anyhow::{bail, Context, Result};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{global_manifest_lockfile_path, global_manifest_path};
+use flox_rust_sdk::models::pkgdb::update_global_manifest;
 use flox_rust_sdk::models::search::{
     do_search,
     PathOrJson,
@@ -19,7 +20,7 @@ use flox_rust_sdk::models::search::{
 };
 use log::{debug, info};
 
-use crate::commands::{detect_environment, update_global_manifest};
+use crate::commands::detect_environment;
 use crate::config::features::{Features, SearchStrategy};
 use crate::config::Config;
 use crate::subcommand_metric;

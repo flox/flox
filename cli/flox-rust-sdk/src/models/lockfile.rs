@@ -35,10 +35,13 @@ pub struct LockedManifest(Value);
 
 impl LockedManifest {
     /// Use pkgdb to lock a manifest
+    ///
+    /// `existing_lockfile_path` can be either the global lock or an environment's
+    /// lockfile
     pub fn lock_manifest(
         pkgdb: &Path,
         manifest_path: &Path,
-        existing_lockfile_path: Option<CanonicalPath>,
+        existing_lockfile_path: &CanonicalPath,
         global_manifest_path: &Path,
     ) -> Result<Self, LockedManifestError> {
         let canonical_manifest_path = manifest_path
@@ -52,10 +55,9 @@ impl LockedManifest {
             .arg("--global-manifest")
             .arg(global_manifest_path)
             .arg("--manifest")
-            .arg(canonical_manifest_path);
-        if let Some(canonical_lockfile_path) = existing_lockfile_path {
-            pkgdb_cmd.arg("--lockfile").arg(canonical_lockfile_path);
-        }
+            .arg(canonical_manifest_path)
+            .arg("--lockfile")
+            .arg(existing_lockfile_path);
 
         debug!("locking manifest with command: {pkgdb_cmd:?}");
         call_pkgdb(pkgdb_cmd)

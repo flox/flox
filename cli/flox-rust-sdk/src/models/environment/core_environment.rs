@@ -15,7 +15,12 @@ use super::{
     MANIFEST_FILENAME,
 };
 use crate::flox::Flox;
-use crate::models::environment::{call_pkgdb, global_manifest_path, CanonicalPath};
+use crate::models::environment::{
+    call_pkgdb,
+    global_manifest_lockfile_path,
+    global_manifest_path,
+    CanonicalPath,
+};
 use crate::models::lockfile::{LockedManifest, LockedManifestError};
 use crate::models::manifest::{
     insert_packages,
@@ -26,6 +31,7 @@ use crate::models::manifest::{
 };
 use crate::models::pkgdb::{
     pkgdb_update,
+    update_global_manifest,
     CallPkgDbError,
     UpdateError,
     UpgradeResult,
@@ -76,7 +82,9 @@ impl<State> CoreEnvironment<State> {
 
     /// Lock the environment.
     ///
-    /// This updates the lock if it exists, or generates a new one if it doesn't.
+    /// This re-writes the lock if it exists.
+    /// If the lock doesn't exist, it uses the global lock, and then it writes
+    /// a new lock.
     ///
     /// Technically this does write to disk as a side effect for now.
     /// It's included in the [ReadOnly] struct for ergonomic reasons
@@ -85,31 +93,42 @@ impl<State> CoreEnvironment<State> {
     /// todo: should we always write the lockfile to disk?
     pub fn lock(&mut self, flox: &Flox) -> Result<LockedManifest, CoreEnvironmentError> {
         let manifest_path = self.manifest_path();
-        let lockfile_path = self.lockfile_path();
-        let maybe_lockfile = if lockfile_path.exists() {
-            debug!("found existing lockfile: {}", lockfile_path.display());
-            Some(
-                CanonicalPath::new(&lockfile_path)
-                    .map_err(CoreEnvironmentError::BadLockfilePath)?,
-            )
+        let environment_lockfile_path = self.lockfile_path();
+        let existing_lockfile_path = if environment_lockfile_path.exists() {
+            debug!(
+                "found existing lockfile: {}",
+                environment_lockfile_path.display()
+            );
+            environment_lockfile_path.clone()
         } else {
             debug!("no existing lockfile found");
-            None
+            // Use the global lock so we're less likely to kick off a pkgdb
+            // scrape in e.g. an install.
+            let global_lockfile_path = global_manifest_lockfile_path(flox);
+            if !global_lockfile_path.exists() {
+                update_global_manifest(flox, vec![]).map_err(CoreEnvironmentError::Update)?;
+            }
+            global_lockfile_path
         };
+        let lockfile_path = CanonicalPath::new(existing_lockfile_path)
+            .map_err(CoreEnvironmentError::BadLockfilePath)?;
 
         let lockfile = LockedManifest::lock_manifest(
             Path::new(&*PKGDB_BIN),
             &manifest_path,
-            maybe_lockfile,
+            &lockfile_path,
             &global_manifest_path(flox),
         )
         .map_err(CoreEnvironmentError::LockManifest)?;
 
         // Write the lockfile to disk
         // todo: do we always want to do this?
-        debug!("generated lockfile, writing to {}", lockfile_path.display());
+        debug!(
+            "generated lockfile, writing to {}",
+            environment_lockfile_path.display()
+        );
         std::fs::write(
-            &lockfile_path,
+            &environment_lockfile_path,
             serde_json::to_string_pretty(&lockfile).unwrap(),
         )
         .map_err(CoreEnvironmentError::WriteLockfile)?;
