@@ -32,7 +32,7 @@ static void
 initViews( SQLiteDb & pdb )
 {
   sqlite3pp::command cmd( pdb, sql_views );
-  sql_rc rcode;
+  sql_rc             rcode;
   RETRY_WHILE_BUSY( rcode, cmd.execute_all() );
   if ( isSQLError( rcode ) )
     {
@@ -64,7 +64,7 @@ updateViews( SQLiteDb & pdb )
         auto               name = row.get<std::string>( 0 );
         std::string        cmd  = "DROP VIEW IF EXISTS '" + name + '\'';
         sqlite3pp::command dropView( pdb, cmd.c_str() );
-        sql_rc rcode;
+        sql_rc             rcode;
         RETRY_WHILE_BUSY( rcode, dropView.execute() );
         if ( isSQLError( rcode ) )
           {
@@ -103,7 +103,7 @@ updateViews( SQLiteDb & pdb )
 static void
 initTables( SQLiteDb & pdb )
 {
-  sql_rc rcode;
+  sql_rc             rcode;
   sqlite3pp::command cmdVersions( pdb, sql_versions );
   RETRY_WHILE_BUSY( rcode, cmdVersions.execute_all() );
   if ( isSQLError( rcode ) )
@@ -268,7 +268,7 @@ PkgDb::connect()
   this->db.connect( this->dbPath.string().c_str(),
                     SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE );
   sqlite3pp::command cmd( this->db, acquire_lock );
-  sql_rc rcode;
+  sql_rc             rcode;
   RETRY_WHILE_BUSY( rcode, cmd.execute_all() );
 }
 
