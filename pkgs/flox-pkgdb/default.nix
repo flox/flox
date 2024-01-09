@@ -83,6 +83,12 @@
       name = "set-prompt.zsh.sh";
       path = ../../pkgdb/src/buildenv/assets/set-prompt.zsh.sh;
     };
+
+    # Used by `buildenv --container' to create a container builder script.
+    CONTAINER_BUILDER_PATH = builtins.path {
+      name = "mkContainer.nix";
+      path = ../../pkgdb/src/buildenv/assets/mkContainer.nix;
+    };
   };
 in
   stdenv.mkDerivation ({

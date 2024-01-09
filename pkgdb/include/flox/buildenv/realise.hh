@@ -20,6 +20,11 @@
 #include "flox/buildenv/buildenv.hh"
 #include "flox/core/exceptions.hh"
 #include "flox/resolver/lockfile.hh"
+#include <nix/build-result.hh>
+#include <nix/flake/flake.hh>
+#include <nix/get-drvs.hh>
+#include <nix/path-with-outputs.hh>
+
 
 /* -------------------------------------------------------------------------- */
 
@@ -59,6 +64,20 @@ createEnvironmentStorePath(
   std::map<nix::StorePath, std::pair<std::string, resolver::LockedPackageRaw>> &
     originalPackage );
 
+
+/* -------------------------------------------------------------------------- */
+
+/**
+ * @brief Create a @a nix::StorePath containing a buildscript for a container.
+ * @param state A `nix` evaluator.
+ * @param environmentStorePath A storepath containing a realised environment.
+ * @param system system to build the environment for.
+ * @return A @a nix::StorePath to a container builder.
+ */
+nix::StorePath
+createContainerBuilder( nix::EvalState & state,
+                        nix::StorePath   environmentStorePath,
+                        const System &   system );
 
 /* -------------------------------------------------------------------------- */
 

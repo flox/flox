@@ -47,6 +47,11 @@ namespace flox::buildenv {
 #  error "SET_PROMPT_ZSH_SH must be set to the path of `set-prompt.zsh.sh'"
 #endif
 
+#ifndef CONTAINER_BUILDER_PATH
+#  error \
+    "CONTAINER_BUILDER_PATH must be set to a store path of 'mkContainer.nix'"
+#endif
+
 /* -------------------------------------------------------------------------- */
 
 static const std::string BASH_ACTIVATE_SCRIPT = R"(
@@ -391,6 +396,64 @@ createFloxEnv( nix::EvalState &     state,
   return createEnvironmentStorePath( state, pkgs, references, originalPackage );
 }
 
+
+nix::StorePath
+createContainerBuilder( nix::EvalState & state,
+                        nix::StorePath   environmentStorePath,
+                        const System &   system )
+{
+
+  static const std::string refOrRev
+    = nix::getEnv( "_PKGDB_GA_REGISTRY_REF_OR_REV" )
+        .value_or( "release-23.05" );
+  static const nix::FlakeRef nixpkgsRef
+    = nix::parseFlakeRef( "github:NixOS/nixpkgs/" + refOrRev );
+
+  auto lockedNixpkgs
+    = nix::flake::lockFlake( state, nixpkgsRef, nix::flake::LockFlags() );
+  nix::Value vNixpkgsFlake;
+  nix::flake::callFlake( state, lockedNixpkgs, vNixpkgsFlake );
+
+  state.store->ensurePath(
+    state.store->parseStorePath( CONTAINER_BUILDER_PATH ) );
+
+  nix::Value vContainerBuilder;
+  state.eval(
+    state.parseExprFromFile( nix::CanonPath( CONTAINER_BUILDER_PATH ) ),
+    vContainerBuilder );
+
+  nix::Value vEnvironmentStorePath;
+  auto       sStorePath = state.store->printStorePath( environmentStorePath );
+  vEnvironmentStorePath.mkPath( sStorePath.c_str() );
+
+  nix::Value vSystem;
+  vSystem.mkString( system );
+
+
+  nix::Value vBindings;
+  auto       bindings = state.buildBindings( 3 );
+  bindings.push_back(
+    { state.symbols.create( "nixpkgsFlake" ), &vNixpkgsFlake } );
+  bindings.push_back(
+    { state.symbols.create( "environmentOutPath" ), &vEnvironmentStorePath } );
+  bindings.push_back( { state.symbols.create( "system" ), &vSystem } );
+  vBindings.mkAttrs( bindings );
+
+  nix::Value vContainerBuilderDrv;
+  state.callFunction( vContainerBuilder,
+                      vBindings,
+                      vContainerBuilderDrv,
+                      nix::PosIdx() );
+
+  auto containerBuilderDrv
+    = nix::getDerivation( state, vContainerBuilderDrv, false ).value();
+
+  state.store->buildPaths( nix::toDerivedPaths(
+    { nix::StorePathWithOutputs { *containerBuilderDrv.queryDrvPath(),
+                                  {} } } ) );
+
+  return containerBuilderDrv.queryOutPath();
+}
 
 /* -------------------------------------------------------------------------- */
 
