@@ -9,6 +9,7 @@ pub mod root;
 pub use runix::{flake_ref, registry};
 pub mod floxmeta;
 pub mod floxmetav2;
+pub mod lockfile;
 pub mod manifest;
 pub mod pkgdb;
 pub mod search;

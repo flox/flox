@@ -30,6 +30,7 @@ use super::{
     EnvironmentPointer,
     InstallationAttempt,
     PathPointer,
+    UpdateResult,
     DOT_FLOX,
     ENVIRONMENT_POINTER_FILENAME,
     GCROOTS_DIR_NAME,
@@ -38,6 +39,7 @@ use super::{
 use crate::flox::Flox;
 use crate::models::environment::{ENV_DIR_NAME, MANIFEST_FILENAME};
 use crate::models::environment_ref::EnvironmentName;
+use crate::models::lockfile::LockedManifest;
 use crate::models::manifest::PackageToInstall;
 use crate::models::pkgdb::UpgradeResult;
 
@@ -145,6 +147,11 @@ impl Environment for PathEnvironment {
         Ok(())
     }
 
+    fn lock(&mut self, flox: &Flox) -> Result<LockedManifest, EnvironmentError2> {
+        let mut env_view = CoreEnvironment::new(self.path.join(ENV_DIR_NAME));
+        Ok(env_view.lock(flox)?)
+    }
+
     /// Install packages to the environment atomically
     ///
     /// Returns the new manifest content if the environment was modified. Also
@@ -192,7 +199,11 @@ impl Environment for PathEnvironment {
     }
 
     /// Atomically update this environment's inputs
-    fn update(&mut self, flox: &Flox, inputs: Vec<String>) -> Result<String, EnvironmentError2> {
+    fn update(
+        &mut self,
+        flox: &Flox,
+        inputs: Vec<String>,
+    ) -> Result<UpdateResult, EnvironmentError2> {
         let mut env_view = CoreEnvironment::new(self.path.join(ENV_DIR_NAME));
         let result = env_view.update(flox, inputs)?;
         env_view.link(flox, self.out_link(&flox.system)?)?;

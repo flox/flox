@@ -1,6 +1,6 @@
+use std::fs;
 use std::path::{Path, PathBuf};
 
-use flox_types::version::Version;
 use log::debug;
 use thiserror::Error;
 
@@ -13,10 +13,15 @@ use super::{
     Environment,
     EnvironmentError2,
     InstallationAttempt,
+    ManagedPointer,
+    UpdateResult,
+    DOT_FLOX,
+    ENVIRONMENT_POINTER_FILENAME,
 };
 use crate::flox::{EnvironmentOwner, EnvironmentRef, Flox};
 use crate::models::environment_ref::EnvironmentName;
 use crate::models::floxmetav2::{FloxmetaV2, FloxmetaV2Error};
+use crate::models::lockfile::LockedManifest;
 use crate::models::manifest::PackageToInstall;
 use crate::models::pkgdb::UpgradeResult;
 
@@ -33,6 +38,9 @@ pub enum RemoteEnvironmentError {
 
     #[error("invalid temporary path for new environment")]
     InvalidTempPath(#[source] CanonicalizeError),
+
+    #[error("could not create temporary environment")]
+    CreateTempDotFlox(#[source] std::io::Error),
 }
 
 #[derive(Debug)]
@@ -45,16 +53,8 @@ impl RemoteEnvironment {
     pub fn new_in(
         flox: &Flox,
         path: impl AsRef<Path>,
-        env_ref: &EnvironmentRef,
+        pointer: ManagedPointer,
     ) -> Result<Self, RemoteEnvironmentError> {
-        let pointer = super::ManagedPointer {
-            owner: env_ref.owner().clone(),
-            name: env_ref.name().clone(),
-            floxhub_url: flox.floxhub.base_url().clone(),
-            floxhub_git_url_override: flox.floxhub.git_url_override().cloned(),
-            version: Version::<1>,
-        };
-
         let floxmeta = match FloxmetaV2::open(flox, &pointer) {
             Ok(floxmeta) => floxmeta,
             Err(FloxmetaV2Error::NotFound(_)) => {
@@ -65,8 +65,18 @@ impl RemoteEnvironment {
             Err(e) => Err(RemoteEnvironmentError::GetLatestVersion(e))?,
         };
 
+        let path = path.as_ref().join(DOT_FLOX);
+        fs::create_dir_all(&path).map_err(RemoteEnvironmentError::CreateTempDotFlox)?;
+
         let dot_flox_path =
             CanonicalPath::new(path).map_err(RemoteEnvironmentError::InvalidTempPath)?;
+
+        let pointer_content = serde_json::to_string_pretty(&pointer).unwrap();
+        fs::write(
+            dot_flox_path.join(ENVIRONMENT_POINTER_FILENAME),
+            pointer_content,
+        )
+        .unwrap();
 
         let out_link =
             gcroots_dir(flox, &pointer.owner).join(remote_branch_name(&flox.system, &pointer));
@@ -81,14 +91,22 @@ impl RemoteEnvironment {
     ///
     /// Contrary to [`RemoteEnvironment::new_in`], this function will create a temporary directory
     /// in the flox temp directory which is cleared when the process ends.
-    pub fn new(flox: &Flox, env_ref: &EnvironmentRef) -> Result<Self, RemoteEnvironmentError> {
+    pub fn new(flox: &Flox, pointer: ManagedPointer) -> Result<Self, RemoteEnvironmentError> {
         let path = tempfile::tempdir_in(&flox.temp_dir).unwrap().into_path();
 
-        Self::new_in(flox, path, env_ref)
+        Self::new_in(flox, path, pointer)
     }
 
     pub fn owner(&self) -> &EnvironmentOwner {
         self.inner.owner()
+    }
+
+    pub fn env_ref(&self) -> EnvironmentRef {
+        EnvironmentRef::new_from_parts(self.owner().clone(), self.name())
+    }
+
+    pub fn pointer(&self) -> &ManagedPointer {
+        self.inner.pointer()
     }
 }
 
@@ -96,6 +114,11 @@ impl Environment for RemoteEnvironment {
     /// Build the environment and create a result link as gc-root
     fn build(&mut self, flox: &Flox) -> Result<(), EnvironmentError2> {
         self.inner.build(flox)
+    }
+
+    /// Lock the environment and return the lockfile contents
+    fn lock(&mut self, flox: &Flox) -> Result<LockedManifest, EnvironmentError2> {
+        self.inner.lock(flox)
     }
 
     /// Install packages to the environment atomically
@@ -135,7 +158,11 @@ impl Environment for RemoteEnvironment {
     }
 
     /// Atomically update this environment's inputs
-    fn update(&mut self, flox: &Flox, inputs: Vec<String>) -> Result<String, EnvironmentError2> {
+    fn update(
+        &mut self,
+        flox: &Flox,
+        inputs: Vec<String>,
+    ) -> Result<UpdateResult, EnvironmentError2> {
         let result = self.inner.update(flox, inputs)?;
         self.inner
             .push(false)

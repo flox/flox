@@ -157,17 +157,13 @@ int
 UpdateCommand::run()
 {
   /* If the manifest doesn't have a value, assume we're updating the global
-   * manifest, and set a dummy empty manifest.
-   * TODO: be less hacky. */
-  bool global = false;
+   * manifest, and set a dummy empty manifest. */
+  // TODO: be less hacky.
   if ( ! this->getManifestRaw().has_value() )
     {
       this->setManifestRaw( ManifestRaw {} );
-      global = true;
     }
-  nlohmann::json    lockfile;
-  std::stringstream message;
-  bool              changes = false;
+  nlohmann::json lockfile;
   if ( auto maybeLockfile = this->getLockfile(); maybeLockfile.has_value() )
     {
       auto lockedRaw         = maybeLockfile->getLockfileRaw();
@@ -203,26 +199,6 @@ UpdateCommand::run()
           lockedRaw.registry.defaults = manifestRegistry.defaults;
           lockedRaw.registry.priority = manifestRegistry.priority;
         }
-      /* Generate message with updated inputs. */
-      if ( global ) { message << "Updated global input(s):"; }
-      else { message << "Updated:"; }
-      for ( const auto & [inputName, input] : oldLockedRegistry.inputs )
-        {
-          if ( const auto & maybeUpdatedInput
-               = lockedRaw.registry.inputs.find( inputName );
-               maybeUpdatedInput != lockedRaw.registry.inputs.end() )
-            {
-              auto & [_, updatedInput] = *maybeUpdatedInput;
-              if ( input != updatedInput )
-                {
-                  changes = true;
-                  message << std::endl
-                          << "'" << inputName << "'"
-                          << " from '" << *input.from << "' to '"
-                          << *updatedInput.from << "'";
-                }
-            }
-        }
       lockfile = lockedRaw;
     }
   /* If the environment doesn't have a lockfile, create one from scratch. Note
@@ -232,18 +208,9 @@ UpdateCommand::run()
     {
       // TODO: `RegistryRaw' should drop empty fields.
       lockfile = this->getEnvironment().createLockfile().getLockfileRaw();
-      changes  = true;
-      if ( global ) { message << "Locked all global inputs."; }
-      else
-        {
-          message << "Locked all inputs for previously unlocked environment.";
-        }
     }
   /* Print that bad boii */
-  nlohmann::json result
-    = { { "lockfile", lockfile },
-        { "message", changes ? message.str() : "All inputs are up to date." } };
-  std::cout << result.dump() << std::endl;
+  std::cout << lockfile.dump() << std::endl;
 
   return EXIT_SUCCESS;
 }

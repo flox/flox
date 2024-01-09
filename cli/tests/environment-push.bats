@@ -116,7 +116,7 @@ function update_dummy_env() {
   run "$FLOX_BIN" pull --remote owner/test
   assert_success
 
-  run "$FLOX_BIN" list
+  run "$FLOX_BIN" list --name
   assert_success
   assert_line "hello"
 
@@ -173,7 +173,7 @@ function update_dummy_env() {
   # Pull the environment owner/test on machine_c and check that it has the emacs package
   pushd "machine_c" > /dev/null || return
   "$FLOX_BIN" pull --remote owner/test
-  run "$FLOX_BIN" list
+  run "$FLOX_BIN" list --name
   assert_success
   assert_line "emacs"
   popd > /dev/null || return

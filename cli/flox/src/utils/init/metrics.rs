@@ -7,7 +7,12 @@ use log::{debug, info};
 use time::OffsetDateTime;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-use crate::utils::metrics::{MetricEntry, METRICS_LOCK_FILE_NAME, METRICS_UUID_FILE_NAME};
+use crate::utils::metrics::{
+    MetricEntry,
+    PosthogEvent,
+    METRICS_LOCK_FILE_NAME,
+    METRICS_UUID_FILE_NAME,
+};
 
 /// Determine whether the user has previously opted-out of metrics
 /// through the legacy consent dialog.
@@ -67,7 +72,13 @@ pub async fn init_telemetry(data_dir: impl AsRef<Path>, cache_dir: impl AsRef<Pa
 
     // Generate a real metric to use as an example so they can see the field contents are non-threatening
     let now = OffsetDateTime::now_utc();
-    let example_metric_entry = MetricEntry::new(Some("[subcommand]".to_string()), now);
+    let example_metric_entry = MetricEntry::new(
+        PosthogEvent {
+            subcommand: "[subcommand]".to_string().into(),
+            extras: Default::default(),
+        },
+        now,
+    );
 
     // Convert it to JSON so we can inject extra bits for the purpose of demonstration,
     // and can print it without `Some()` noising up the output

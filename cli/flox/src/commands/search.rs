@@ -19,8 +19,7 @@ use flox_rust_sdk::models::search::{
 };
 use log::{debug, info};
 
-use crate::commands::environment::hacky_environment_description;
-use crate::commands::{detect_environment, open_environment};
+use crate::commands::detect_environment;
 use crate::config::features::{Features, SearchStrategy};
 use crate::config::Config;
 use crate::subcommand_metric;
@@ -67,7 +66,8 @@ pub struct Search {
 // Luckily most flakes don't.
 impl Search {
     pub async fn handle(self, config: Config, flox: Flox) -> Result<()> {
-        subcommand_metric!("search");
+        subcommand_metric!("search", search_term = &self.search_term);
+
         debug!("performing search for term: {}", self.search_term);
 
         let (manifest, lockfile) = manifest_and_lockfile(&flox, "search for packages using")
@@ -434,11 +434,12 @@ pub fn manifest_and_lockfile(
             (None, None)
         },
         Some(uninitialized) => {
-            debug!(
-                "using environment {}",
-                hacky_environment_description(&uninitialized)?
-            );
-            let environment = open_environment(flox, uninitialized)?.into_dyn_environment();
+            debug!("using environment {uninitialized}");
+
+            let environment = uninitialized
+                .into_concrete_environment(flox)?
+                .into_dyn_environment();
+
             let lockfile_path = environment.lockfile_path(flox)?;
             debug!("checking lockfile: path={}", lockfile_path.display());
             let lockfile = if lockfile_path.exists() {

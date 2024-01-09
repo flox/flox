@@ -48,7 +48,7 @@ namespace flox::buildenv {
 static const std::string BASH_ACTIVATE_SCRIPT = R"(
 # We use --rcfile to activate using bash which skips sourcing ~/.bashrc,
 # so source that here.
-if [ -f ~/.bashrc ]
+if [ -f ~/.bashrc -a "${FLOX_SOURCED_FROM_SHELL_RC:-}" != 1 ]
 then
     source ~/.bashrc
 fi
