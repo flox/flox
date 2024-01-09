@@ -346,6 +346,7 @@ mod test {
     const EXAMPLE_PARAMS: &str = r#"{
         "manifest": "/path/to/manifest",
         "global-manifest": "/path/to/manifest",
+        "lockfile": "/path/to/lockfile",
         "query": {
             "semver": "2.12.1",
             "match": "hello",
@@ -385,7 +386,7 @@ mod test {
         let params = SearchParams {
             manifest: Some(PathOrJson::Path("/path/to/manifest".into())),
             global_manifest: PathOrJson::Path("/path/to/manifest".into()),
-            lockfile: None,
+            lockfile: PathOrJson::Path("/path/to/lockfile".into()),
             query: Query::from_term_and_limit(EXAMPLE_SEARCH_TERM, false, Some(10)).unwrap(),
         };
         let json = serde_json::to_string(&params).unwrap();
