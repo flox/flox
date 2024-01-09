@@ -26,6 +26,7 @@
   bats,
   git,
   coreutils,
+  parallel,
   llvm, # for `llvm-symbolizer'
   gdb ? throw "`gdb' is required for debugging with `g++'",
   lldb ? throw "`lldb' is required for debugging with `clang++'",
@@ -166,6 +167,7 @@ in
           bash
           git
           sqlite
+          parallel
           # For docs
           doxygen
         ];

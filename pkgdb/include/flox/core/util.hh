@@ -49,6 +49,30 @@ overloaded( Ts... ) -> overloaded<Ts...>;
 
 /* -------------------------------------------------------------------------- */
 
+/** @brief Detect if two vectors are equal. */
+template<typename T>
+[[nodiscard]] bool
+operator==( const std::vector<T> & lhs, const std::vector<T> & rhs )
+{
+  if ( lhs.size() != rhs.size() ) { return false; }
+  for ( size_t idx = 0; idx < lhs.size(); ++idx )
+    {
+      if ( lhs[idx] != rhs[idx] ) { return false; }
+    }
+  return true;
+}
+
+/** @brief Detect if two vectors are not equal. */
+template<typename T>
+[[nodiscard]] bool
+operator!=( const std::vector<T> & lhs, const std::vector<T> & rhs )
+{
+  return ! ( lhs == rhs );
+}
+
+
+/* -------------------------------------------------------------------------- */
+
 /**
  * @brief Extension to the `nlohmann::json' serializer to support additional
  *        _Argument Dependent Lookup_ (ADL) types.
@@ -180,7 +204,7 @@ struct adl_serializer<nix::FlakeRef>
   }
 
   /** @brief _Move-only_ conversion of a JSON object to a @a nix::FlakeRef. */
-  static nix::FlakeRef
+  [[nodiscard]] static nix::FlakeRef
   from_json( const json & jfrom )
   {
     if ( jfrom.is_object() )
@@ -467,9 +491,7 @@ concatStringsSep( const std::string_view sep, const Container & strings )
 void
 printLog( const nix::Verbosity & lvl, const std::string & msg );
 
-/**
- * @brief Prints a log message to `stderr` when called with `-vvvv`.
- */
+/** @brief Prints a log message to `stderr` when called with `-vvvv`. */
 void
 traceLog( const std::string & msg );
 
@@ -479,21 +501,15 @@ traceLog( const std::string & msg );
 void
 debugLog( const std::string & msg );
 
-/**
- * @brief Prints a log message to `stderr` at default verbosity.
- */
+/** @brief Prints a log message to `stderr` at default verbosity. */
 void
 infoLog( const std::string & msg );
 
-/**
- * @brief Prints a log message to `stderr` when verbosity is at least `-q`.
- */
+/** @brief Prints a log message to `stderr` when verbosity is at least `-q`. */
 void
 warningLog( const std::string & msg );
 
-/**
- * @brief Prints a log message to `stderr` when verbosity is at least `-qq`.
- */
+/** @brief Prints a log message to `stderr` when verbosity is at least `-qq`. */
 void
 errorLog( const std::string & msg );
 

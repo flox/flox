@@ -318,6 +318,7 @@ extract_json_errmsg( nlohmann::json::exception & err )
   return userFriendly;
 }
 
+
 /* -------------------------------------------------------------------------- */
 
 std::string

@@ -48,7 +48,7 @@ namespace flox::buildenv {
 static const std::string BASH_ACTIVATE_SCRIPT = R"(
 # We use --rcfile to activate using bash which skips sourcing ~/.bashrc,
 # so source that here.
-if [ -f ~/.bashrc ]
+if [ -f ~/.bashrc -a "${FLOX_SOURCED_FROM_SHELL_RC:-}" != 1 ]
 then
     source ~/.bashrc
 fi
@@ -281,18 +281,20 @@ createFloxEnv( nix::EvalState &     state,
 
       for ( auto [name, value] : vars.value() )
         {
-          /* Double quote value and replace " with \".
-           * Note that we could instead do something similar to what
-           * nixpkgs.lib.escapeShellArg does to disable these variables
-           * dynamically expanding at runtime. */
+          /* Single quote value and replace ' with '\''.
+           *
+           * This is the same as what nixpkgs.lib.escapeShellArg does.
+           * to disable these variables dynamically expanding at runtime.
+           *
+           * 'foo''\\''bar' is evaluated as  foo'bar  in bash/zsh*/
           size_t i = 0;
-          while ( ( i = value.find( "\"", i ) ) != std::string::npos )
+          while ( ( i = value.find( "'", i ) ) != std::string::npos )
             {
-              value.replace( i, 1, "\\\"" );
-              i += 2;
+              value.replace( i, 1, "'\\''" );
+              i += 4;
             }
 
-          commonActivate << nix::fmt( "export %s=\"%s\"", name, value )
+          commonActivate << nix::fmt( "export %s='%s'", name, value )
                          << std::endl;
         }
     }

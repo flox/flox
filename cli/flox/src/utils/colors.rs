@@ -84,6 +84,10 @@ pub struct FloxColor {
 }
 
 impl FloxColor {
+    pub fn to_ansi256(&self) -> u8 {
+        self.ansi256
+    }
+
     pub fn to_crossterm(&self) -> Option<crossterm::style::Color> {
         match supports_color::on(supports_color::Stream::Stderr) {
             Some(supports_color::ColorLevel { has_16m: true, .. }) => {

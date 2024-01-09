@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::mpsc;
 
 use anyhow::{Context, Result};
@@ -23,27 +24,36 @@ pub const METRICS_LOCK_FILE_NAME: &str = "metrics-lock";
 pub const METRICS_EVENTS_URL: &str = env!("METRICS_EVENTS_URL");
 pub const METRICS_EVENTS_API_KEY: &str = env!("METRICS_EVENTS_API_KEY");
 
+/// Creates a trace event for the given subcommand.
+///
+/// We set the target to `flox_command` so that we can filter for these exact events.
 #[macro_export]
 macro_rules! subcommand_metric {
-    ($arg:tt) => {{
-        tracing::trace!(target: "flox_command", subcommand = $arg, "Handling subcommand: {}", $arg);
+    ($arg:tt $(, $key:ident = $value:expr)*) => {{
+        tracing::trace!(target: "flox_command", subcommand = $arg $(, $key = $value)*);
     }};
 }
 
-struct PosthogVisitor<'a>(&'a mut Option<String>);
+struct PosthogVisitor<'a>(&'a mut Option<String>, &'a mut HashMap<String, String>);
 
 impl<'a> tracing::field::Visit for PosthogVisitor<'a> {
     fn record_str(&mut self, field: &tracing::field::Field, value: &str) {
         if field.name() == "subcommand" {
             *self.0 = Some(value.to_string());
+            return;
         }
+
+        self.1.insert(field.name().to_string(), value.to_string());
     }
 
-    fn record_debug(&mut self, _field: &tracing::field::Field, _value: &dyn std::fmt::Debug) {}
+    fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
+        self.record_str(field, &format!("{:?}", value))
+    }
 }
 
-struct PosthogEvent {
-    subcommand: Option<String>,
+pub struct PosthogEvent {
+    pub subcommand: Option<String>,
+    pub extras: HashMap<String, String>,
 }
 
 pub struct PosthogLayer {
@@ -58,7 +68,7 @@ impl PosthogLayer {
         std::thread::spawn(move || {
             handle.block_on(async {
                 while let Ok(event) = rx.recv() {
-                    if let Err(err) = add_metric(event.subcommand).await {
+                    if let Err(err) = add_metric(event).await {
                         debug!("Error adding metric: {err}");
                     }
                 }
@@ -85,11 +95,12 @@ where
         }
 
         let mut subcommand = None;
-        let mut visitor = PosthogVisitor(&mut subcommand);
+        let mut extras = HashMap::new();
+        let mut visitor = PosthogVisitor(&mut subcommand, &mut extras);
         event.record(&mut visitor);
 
         if let Ok(tx) = self.tx.lock() {
-            if let Err(err) = tx.send(PosthogEvent { subcommand }) {
+            if let Err(err) = tx.send(PosthogEvent { subcommand, extras }) {
                 error!("Error adding metric: {err}");
             }
         }
@@ -99,6 +110,8 @@ where
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MetricEntry {
     subcommand: Option<String>,
+    #[serde(flatten)]
+    extras: HashMap<String, String>,
     timestamp: OffsetDateTime,
     flox_version: String,
     os_family: Option<String>,
@@ -109,11 +122,15 @@ pub struct MetricEntry {
 }
 
 impl MetricEntry {
-    pub fn new(subcommand: Option<String>, now: OffsetDateTime) -> MetricEntry {
+    pub fn new(
+        PosthogEvent { subcommand, extras }: PosthogEvent,
+        now: OffsetDateTime,
+    ) -> MetricEntry {
         let linux_release = sys_info::linux_os_release().ok();
 
         MetricEntry {
             subcommand,
+            extras,
             timestamp: now,
             flox_version: FLOX_VERSION.to_string(),
             os_family: sys_info::os_type()
@@ -212,7 +229,7 @@ async fn push_metrics(metrics: Vec<MetricEntry>, uuid: Uuid) -> Result<()> {
     Ok(())
 }
 
-pub async fn add_metric(subcommand: Option<String>) -> Result<()> {
+async fn add_metric(event: PosthogEvent) -> Result<()> {
     let config = Config::parse()?;
 
     if config.flox.disable_metrics {
@@ -258,7 +275,7 @@ pub async fn add_metric(subcommand: Option<String>) -> Result<()> {
 
     let now = OffsetDateTime::now_utc();
 
-    let new_entry = MetricEntry::new(subcommand, now);
+    let new_entry = MetricEntry::new(event, now);
 
     // Note: assumes the oldest metric entry must come first
     if buffer_iter

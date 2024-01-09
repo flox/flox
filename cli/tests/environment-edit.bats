@@ -17,6 +17,8 @@ project_setup() {
   export PROJECT_DIR="${BATS_TEST_TMPDIR?}/$PROJECT_NAME"
   export MANIFEST_PATH="$PROJECT_DIR/.flox/env/manifest.toml"
   export TMP_MANIFEST_PATH="${BATS_TEST_TMPDIR}/manifest.toml"
+  export EXTERNAL_MANIFEST_PATH="${TESTS_DIR}/edit/manifest.toml"
+
 
   export Hello_HOOK=$(
     cat << EOF
@@ -116,42 +118,57 @@ EOF
 
 # ---------------------------------------------------------------------------- #
 
+# bats test_tags=edit:manifest:file
 @test "'flox edit' accepts contents via filename" {
-  skip "FIXME: broken migrating to manifest.toml"
-  run cat "$EXTERNAL_MANIFEST_PATH"
+  NEW_MANIFEST_CONTENTS="$(cat "$EXTERNAL_MANIFEST_PATH")"
+  "$FLOX_BIN" init
+
   run "$FLOX_BIN" edit -f "$EXTERNAL_MANIFEST_PATH"
   assert_success
-  WRITTEN=$(cat "$MANIFEST_PATH")
+
+  WRITTEN="$(cat "$MANIFEST_PATH")"
   assert_equal "$WRITTEN" "$NEW_MANIFEST_CONTENTS"
 }
 
 # ---------------------------------------------------------------------------- #
 
+# bats test_tags=edit:manifest:stdin
 @test "'flox edit' accepts contents via pipe to stdin" {
-  skip "FIXME: broken migrating to manifest.toml"
+  NEW_MANIFEST_CONTENTS="$(cat "$EXTERNAL_MANIFEST_PATH")"
+  "$FLOX_BIN" init
+
   run sh -c "cat ${EXTERNAL_MANIFEST_PATH} | ${FLOX_BIN} edit -f -"
   assert_success
   # Get the contents as they appear in the actual manifest after the operation
-  WRITTEN=$(cat "$MANIFEST_PATH")
+  WRITTEN="$(cat "$MANIFEST_PATH")"
   # Assert that it's the same as the contents we supplied
   assert_equal "$WRITTEN" "$NEW_MANIFEST_CONTENTS"
 }
 
 # ---------------------------------------------------------------------------- #
 
+# bats test_tags=edit:manifest:file:invalid
 @test "'flox edit' fails with invalid contents supplied via filename" {
-  skip "FIXME: broken migrating to manifest.toml"
-  echo "foo = " > "$EXTERNAL_MANIFEST_PATH"
-  run "$FLOX_BIN" edit -f "$EXTERNAL_MANIFEST_PATH"
+
+  "$FLOX_BIN" init
+  ORIGINAL_MANIFEST_CONTENTS="$(cat "$MANIFEST_PATH")" # for check_manifest_unchanged
+
+  cat "$EXTERNAL_MANIFEST_PATH" > ./manifest.toml
+  echo "foo = " > ./manifest.toml
+
+  run "$FLOX_BIN" edit -f ./manifest.toml
   assert_failure
   run check_manifest_unchanged
   assert_success
 }
 
 # ---------------------------------------------------------------------------- #
-
+# bats test_tags=edit:manifest:stdin:invalid
 @test "'flox edit' fails with invalid contents supplied via stdin" {
-  skip "FIXME: broken migrating to manifest.toml"
+
+  "$FLOX_BIN" init
+  ORIGINAL_MANIFEST_CONTENTS="$(cat "$MANIFEST_PATH")" # for check_manifest_unchanged
+
   run sh -c "echo 'foo = ;' | ${FLOX_BIN} edit -f -"
   assert_failure
   run check_manifest_unchanged
@@ -175,7 +192,7 @@ EOF
 # ---------------------------------------------------------------------------- #
 
 @test "'flox edit' adds package with EDITOR" {
-  skip "FIXME: broken migrating to manifest.toml"
+  skip "FIXME: broken needs interactivity"
   EDITOR="$TESTS_DIR/add-hello" run "$FLOX_BIN" edit
   assert_success
   run check_manifest_updated
@@ -185,7 +202,7 @@ EOF
 # ---------------------------------------------------------------------------- #
 
 @test "'flox edit' fails when EDITOR makes invalid edit" {
-  skip "FIXME: broken migrating to manifest.toml"
+  skip "FIXME: broken needs interactivity"
   EDITOR="$TESTS_DIR/add-invalid-edit" run "$FLOX_BIN" edit
   assert_failure
   run check_manifest_unchanged

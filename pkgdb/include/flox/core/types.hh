@@ -9,6 +9,7 @@
 
 #pragma once
 
+#include <chrono>
 #include <string>
 #include <vector>
 
@@ -60,6 +61,11 @@ using Cursor = nix::ref<nix::eval_cache::AttrCursor>;
  *   `x86_64-linux`, `aarch64-linux`, `x86_64-darwin`, or `aarch64-darwin`
  */
 using System = std::string;
+
+
+/* -------------------------------------------------------------------------- */
+
+using DurationMillis = std::chrono::duration<double, std::milli>;
 
 
 /* -------------------------------------------------------------------------- */

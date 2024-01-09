@@ -68,7 +68,7 @@ function make_empty_remote_env() {
 @test "r0: listing a remote environment does not create (visible) local files" {
   make_empty_remote_env
 
-  run --separate-stderr "$FLOX_BIN" list --remote "$OWNER/test"
+  run --separate-stderr "$FLOX_BIN" list --name --remote "$OWNER/test"
   assert_success
   assert_output ""
 
@@ -96,7 +96,7 @@ function make_empty_remote_env() {
   assert_success
   assert_output --partial "environment $OWNER/test (remote)" # managed env output
 
-  run --separate-stderr "$FLOX_BIN" list --remote "$OWNER/test"
+  run --separate-stderr "$FLOX_BIN" list --name --remote "$OWNER/test"
   assert_success
   assert_output "hello"
 }
@@ -110,7 +110,7 @@ function make_empty_remote_env() {
   run "$FLOX_BIN" uninstall vim --remote "$OWNER/test"
   assert_success
 
-  run --separate-stderr "$FLOX_BIN" list --remote "$OWNER/test"
+  run --separate-stderr "$FLOX_BIN" list --name --remote "$OWNER/test"
   assert_success
   assert_output "emacs"
 }
@@ -130,7 +130,7 @@ EOF
   assert_success
   assert_output --partial "✅ environment successfully edited"
 
-  run --separate-stderr "$FLOX_BIN" list --remote "$OWNER/test"
+  run --separate-stderr "$FLOX_BIN" list --name --remote "$OWNER/test"
   assert_success
   assert_output "hello"
 }

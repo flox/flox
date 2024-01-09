@@ -13,13 +13,6 @@ use thiserror::Error;
 pub static PKGDB_BIN: Lazy<String> =
     Lazy::new(|| env::var("PKGDB_BIN").unwrap_or(env!("PKGDB_BIN").to_string()));
 
-/// The JSON output of a `pkgdb update` call
-#[derive(Deserialize)]
-pub struct UpdateResult {
-    pub message: String,
-    pub lockfile: Value,
-}
-
 /// The JSON output of a `pkgdb upgrade` call
 #[derive(Deserialize)]
 pub struct UpgradeResultJSON {

@@ -62,14 +62,6 @@ protected:
   void
   init();
 
-  /**
-   * @brief Write @a this `PkgDb` `lockedRef` and `fingerprint` fields to
-   *        database metadata.
-   */
-  void
-  writeInput();
-
-
   /* Constructors */
 
 public:
@@ -133,18 +125,7 @@ public:
    * @param flake Flake associated with the db. Used to write input metadata.
    * @param dbPath Absolute path to database file.
    */
-  PkgDb( const nix::flake::LockedFlake & flake, std::string_view dbPath )
-  {
-    this->dbPath      = dbPath;
-    this->fingerprint = flake.getFingerprint();
-    this->db.connect( this->dbPath.c_str(),
-                      SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE );
-    init();
-    this->lockedRef
-      = { flake.flake.lockedRef.to_string(),
-          nix::fetchers::attrsToJSON( flake.flake.lockedRef.toAttrs() ) };
-    writeInput();
-  }
+  PkgDb( const nix::flake::LockedFlake & flake, std::string_view dbPath );
 
   /**
    * @brief Opens a DB associated with a locked flake.
@@ -156,10 +137,16 @@ public:
     : PkgDb( flake, genPkgDbName( flake.getFingerprint() ).string() )
   {}
 
+  /* Connecting and locking */
+
+  /**
+   * @brief Tries to connect to the database, acquiring an exclusive lock on it.
+   */
+  void
+  connect();
+
 
   /* Basic Operations */
-
-  // public:
 
   /**
    * @brief Execute a raw sqlite statement on the database.
@@ -207,10 +194,7 @@ public:
     return rcode;
   }
 
-
   /* Insert */
-
-  // public:
 
   /**
    * @brief Get the `AttrSet.id` for a given child of the attribute set
@@ -264,7 +248,6 @@ public:
               const flox::Cursor & cursor,
               bool                 replace  = false,
               bool                 checkDrv = true );
-
 
   /* Updates */
 

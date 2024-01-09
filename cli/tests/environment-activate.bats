@@ -31,7 +31,7 @@ project_setup() {
   export VARS=$(
     cat << EOF
 [vars]
-foo = "\$bar"
+foo = "baz"
 EOF
   )
 
@@ -195,10 +195,10 @@ env_is_activated() {
 @test "bash: activate sets env var" {
   sed -i -e "s/\[vars\]/${VARS//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
 
-  SHELL=bash bar=baz NO_COLOR=1 run -0 expect -d "$TESTS_DIR/activate/envVar.exp" "$PROJECT_DIR"
+  SHELL=bash NO_COLOR=1 run -0 expect -d "$TESTS_DIR/activate/envVar.exp" "$PROJECT_DIR"
   assert_output --partial "baz"
 
-  SHELL=bash bar=baz NO_COLOR=1 run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -- echo '$foo'
+  SHELL=bash NO_COLOR=1 run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -- echo '$foo'
   assert_success
   assert_output --partial "baz"
 }
@@ -212,10 +212,10 @@ env_is_activated() {
   # TODO: flox will set HOME if it doesn't match the home of the user with
   # current euid. I'm not sure if we should change that, but for now just set
   # USER to REAL_USER.
-  SHELL=zsh bar=baz USER="$REAL_USER" NO_COLOR=1 run -0 expect -d "$TESTS_DIR/activate/envVar.exp" "$PROJECT_DIR"
+  SHELL=zsh USER="$REAL_USER" NO_COLOR=1 run -0 expect -d "$TESTS_DIR/activate/envVar.exp" "$PROJECT_DIR"
   assert_output --partial "baz"
 
-  SHELL=zsh bar=baz NO_COLOR=1 run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -- echo '$foo'
+  SHELL=zsh NO_COLOR=1 run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -- echo '$foo'
   assert_success
   assert_output --partial "baz"
 }
@@ -230,10 +230,10 @@ env_is_activated() {
   # TODO: flox will set HOME if it doesn't match the home of the user with
   # current euid. I'm not sure if we should change that, but for now just set
   # USER to REAL_USER.
-  SHELL=zsh bar=baz NO_COLOR=1 run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -- exit
+  SHELL=zsh NO_COLOR=1 run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -- exit
   assert_success
   assert_output --partial "baz"
-  SHELL=bash bar=baz NO_COLOR=1 run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -- exit
+  SHELL=bash NO_COLOR=1 run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -- exit
   assert_success
   assert_output --partial "baz"
 }
@@ -356,4 +356,22 @@ env_is_activated() {
   run "$FLOX_BIN" activate -- hello
   assert_success
   assert_output --partial "Hello, world!"
+}
+
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=activate,activate:inplace
+@test "'flox activate' prints script to modify current shell" {
+  # Flox detects that the output is not a tty and prints the script to stdout
+  #
+  # TODO:
+  # better with a flag like '--print-script'
+  # this is confusing:
+  SHELL="bash" run "$FLOX_BIN" activate
+  assert_success
+  assert_output --regexp "source .*/activate/bash"
+
+  SHELL="zsh" run "$FLOX_BIN" activate
+  assert_success
+  assert_output --regexp "source .*/activate/zsh"
 }

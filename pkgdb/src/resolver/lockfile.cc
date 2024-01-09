@@ -387,17 +387,25 @@ from_json( const nlohmann::json & jfrom, LockfileRaw & raw )
               SystemPackages sysPkgs;
               for ( const auto & [pid, descriptor] : descriptors.items() )
                 {
-                  try
+                  if ( descriptor.is_null() )
                     {
-                      sysPkgs.emplace( pid,
-                                       descriptor.get<LockedPackageRaw>() );
+                      sysPkgs.emplace( pid, std::nullopt );
+                      continue;
                     }
-                  catch ( nlohmann::json::exception & err )
+                  else
                     {
-                      throw InvalidLockfileException(
-                        "couldn't parse lockfile field `packages." + system
-                          + "." + pid + "'",
-                        extract_json_errmsg( err ) );
+                      try
+                        {
+                          sysPkgs.emplace( pid,
+                                           descriptor.get<LockedPackageRaw>() );
+                        }
+                      catch ( nlohmann::json::exception & err )
+                        {
+                          throw InvalidLockfileException(
+                            "couldn't parse lockfile field `packages." + system
+                              + "." + pid + "'",
+                            extract_json_errmsg( err ) );
+                        }
                     }
                 }
               raw.packages.emplace( system, std::move( sysPkgs ) );

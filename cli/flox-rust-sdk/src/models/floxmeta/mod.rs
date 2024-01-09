@@ -17,7 +17,12 @@ use super::root::transaction::{GitAccess, GitSandBox, ReadOnly};
 use super::root::{Closed, Root};
 use crate::flox::Flox;
 use crate::models::floxmeta::user_meta::UserMeta;
-use crate::providers::git::{GitCommandError, GitCommandProvider as Git, GitProvider};
+use crate::providers::git::{
+    GitCommandError,
+    GitCommandProvider as Git,
+    GitProvider,
+    GitRemoteCommandError,
+};
 
 pub const FLOXMETA_DIR_NAME: &str = "meta";
 
@@ -385,16 +390,16 @@ pub enum TransactionEnterError {
     #[error("Failed to create tempdir for transaction")]
     CreateTempdir(std::io::Error),
     #[error("Failed to clone env into tempdir")]
-    GitClone(GitCommandError),
+    GitClone(GitRemoteCommandError),
 }
 #[derive(Error, Debug)]
 pub enum TransactionCommitError {
     #[error("Failed committing changes: {0}")]
     GitCommit(GitCommandError),
     #[error("Failed synchronizing changes: {0}")]
-    GitPush(GitCommandError),
+    GitPush(GitRemoteCommandError),
 }
 
 #[derive(Error, Debug)]
 #[error("Failed updating floxmeta: {0}")]
-pub struct FetchError(GitCommandError);
+pub struct FetchError(GitRemoteCommandError);

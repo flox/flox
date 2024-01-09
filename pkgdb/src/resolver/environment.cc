@@ -391,12 +391,11 @@ Environment::lockPackage( const LockedInputRaw & input,
   LockedPackageRaw pkg;
   pkg.input = input;
   info.at( "absPath" ).get_to( pkg.attrPath );
-  info.erase( "id" );
-  info.erase( "description" );
   info.erase( "absPath" );
-  info.erase( "subtree" );
-  info.erase( "system" );
   info.erase( "relPath" );
+  info.erase( "subtree" );
+  info.erase( "id" );
+  info.erase( "system" );
   pkg.priority = priority;
   pkg.info     = std::move( info );
   return pkg;
@@ -577,7 +576,7 @@ Environment::tryResolveGroup( const GroupName &          name,
   debugLog( "starting resolution for group: " + groupStr );
 
   /* When there is an existing lock with this group pinned to an existing
-  input+rev try to use it to resolve the group.
+   * input+rev try to use it to resolve the group.
    * If we fail collect a list of failed descriptors; presumably these are
    * new group members.
    * Skip this step if a group is being upgraded. */
