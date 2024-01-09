@@ -6,7 +6,7 @@ use std::time::Duration;
 use anyhow::{bail, Context, Result};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::models::environment::global_manifest_path;
+use flox_rust_sdk::models::environment::{global_manifest_lockfile_path, global_manifest_path};
 use flox_rust_sdk::models::search::{
     do_search,
     PathOrJson,
@@ -19,7 +19,7 @@ use flox_rust_sdk::models::search::{
 };
 use log::{debug, info};
 
-use crate::commands::detect_environment;
+use crate::commands::{detect_environment, update_global_manifest};
 use crate::config::features::{Features, SearchStrategy};
 use crate::config::Config;
 use crate::subcommand_metric;
@@ -84,7 +84,7 @@ impl Search {
             limit,
             manifest.map(|p| p.try_into()).transpose()?,
             global_manifest_path(&flox).try_into()?,
-            lockfile.map(|p| p.try_into()).transpose()?,
+            PathOrJson::Path(lockfile),
         )?;
 
         let (results, exit_status) = Dialog {
@@ -123,7 +123,7 @@ fn construct_search_params(
     results_limit: Option<u8>,
     manifest: Option<PathOrJson>,
     global_manifest: PathOrJson,
-    lockfile: Option<PathOrJson>,
+    lockfile: PathOrJson,
 ) -> Result<SearchParams> {
     let query = Query::from_term_and_limit(
         search_term,
@@ -302,7 +302,7 @@ impl Show {
             &self.search_term,
             manifest.map(|p| p.try_into()).transpose()?,
             global_manifest_path(&flox).try_into()?,
-            lockfile.map(|p| p.try_into()).transpose()?,
+            PathOrJson::Path(lockfile),
         )?;
 
         let (search_results, exit_status) = do_search(&search_params)?;
@@ -330,7 +330,7 @@ fn construct_show_params(
     search_term: &str,
     manifest: Option<PathOrJson>,
     global_manifest: PathOrJson,
-    lockfile: Option<PathOrJson>,
+    lockfile: PathOrJson,
 ) -> Result<SearchParams> {
     let parts = search_term
         .split(SEARCH_INPUT_SEPARATOR)
@@ -418,17 +418,20 @@ fn render_show(search_results: &[SearchResult], all: bool) -> Result<()> {
     Ok(())
 }
 
-/// Searches for an environment to use, and if one is found, returns the path to
-/// its manifest and optionally the path to its lockfile.
+/// Return an optional manifest and a lockfile to use for search and show.
+///
+/// This searches for an environment to use, and if one is found, it returns the
+/// path to its manifest and optionally the path to its lockfile.
+///
+/// If no environment is found, or if environment does not have a lockfile, the
+/// global lockfile is used.
+/// The global lockfile is created if it does not exist.
 ///
 /// Note that this may perform network operations to pull a ManagedEnvironment,
 /// since a freshly cloned user repo with a ManagedEnvironment may not have a
 /// manifest or lockfile in floxmeta unless the environment is initialized.
-pub fn manifest_and_lockfile(
-    flox: &Flox,
-    message: &str,
-) -> Result<(Option<PathBuf>, Option<PathBuf>)> {
-    let res = match detect_environment(message)? {
+pub fn manifest_and_lockfile(flox: &Flox, message: &str) -> Result<(Option<PathBuf>, PathBuf)> {
+    let (manifest_path, lockfile_path) = match detect_environment(message)? {
         None => {
             debug!("no environment found");
             (None, None)
@@ -452,5 +455,17 @@ pub fn manifest_and_lockfile(
             (Some(environment.manifest_path(flox)?), lockfile)
         },
     };
-    Ok(res)
+
+    // Use the global lock if we don't have a lock yet
+    let lockfile_path = match lockfile_path {
+        Some(lockfile_path) => lockfile_path,
+        None => {
+            let global_lockfile_path = global_manifest_lockfile_path(flox);
+            if !global_lockfile_path.exists() {
+                update_global_manifest(flox, vec![])?;
+            }
+            global_lockfile_path
+        },
+    };
+    Ok((manifest_path, lockfile_path))
 }

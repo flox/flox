@@ -54,8 +54,8 @@ pub struct SearchParams {
     pub manifest: Option<PathOrJson>,
     /// Either an absolute path to a manifest or an inline JSON manifest
     pub global_manifest: PathOrJson,
-    /// An optional exisiting lockfile
-    pub lockfile: Option<PathOrJson>,
+    /// An existing lockfile
+    pub lockfile: PathOrJson,
     /// Parameters for the actual search query
     pub query: Query,
 }
