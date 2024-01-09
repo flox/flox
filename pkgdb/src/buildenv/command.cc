@@ -16,6 +16,28 @@
 
 /* -------------------------------------------------------------------------- */
 
+static void
+writeOutLink( const nix::ref<nix::Store> & store,
+              const nix::StorePath &       storePath,
+              const nix::Path &            path )
+{
+  auto localStore = store.dynamic_pointer_cast<nix::LocalFSStore>();
+  if ( localStore == nullptr )
+    {
+      throw flox::FloxException( "store is not a LocalFSStore" );
+    }
+
+  auto outLinkPath = localStore->addPermRoot( storePath, nix::absPath( path ) );
+
+  if ( nix::lvlDebug <= nix::verbosity )
+    {
+      nix::logger->log( nix::Verbosity::lvlDebug,
+                        "outLinkPath: " + outLinkPath );
+    }
+}
+
+/* -------------------------------------------------------------------------- */
+
 namespace flox::buildenv {
 
 /* -------------------------------------------------------------------------- */
@@ -54,38 +76,38 @@ int
 BuildEnvCommand::run()
 {
 
-  if ( nix::lvlDebug <= nix::verbosity )
-    {
-      nix::logger->log( nix::Verbosity::lvlDebug,
-                        "lockfile: " + this->lockfileContent.dump( 2 ) );
-    }
+  flox::debugLog( "lockfile: " + this->lockfileContent.dump( 2 ) );
 
   resolver::LockfileRaw lockfileRaw = this->lockfileContent;
   auto lockfile = resolver::Lockfile( std::move( lockfileRaw ) );
-  auto store    = this->getStore();
-  auto state    = this->getState();
+  auto system   = this->system.value_or( nix::settings.thisSystem.get() );
 
-  auto system    = this->system.value_or( nix::settings.thisSystem.get() );
+  auto store = this->getStore();
+  auto state = this->getState();
+
+  debugLog( "building environment" );
+
   auto storePath = createFloxEnv( *state, lockfile, system );
 
-  auto localStore = store.dynamic_pointer_cast<nix::LocalFSStore>();
+  debugLog( "built environment: " + store->printStorePath( storePath ) );
 
-  // TODO: Make a read error
-  if ( localStore == nullptr )
+  if ( buildContainer )
     {
-      throw FloxException( "store is not a LocalFSStore" );
-      return EXIT_FAILURE;
-    }
+      debugLog( "container requested, building container build script" );
+
+      auto containerBuilderStorePath
+        = createContainerBuilder( *state, storePath, system );
+
+      debugLog( "built container builder: "
+                + store->printStorePath( containerBuilderStorePath ) );
+
+      storePath = containerBuilderStorePath;
+    };
 
   if ( outLink.has_value() )
     {
-      auto outLinkPath
-        = localStore->addPermRoot( storePath, nix::absPath( outLink.value() ) );
-      if ( nix::lvlDebug <= nix::verbosity )
-        {
-          nix::logger->log( nix::Verbosity::lvlDebug,
-                            "outLinkPath: " + outLinkPath );
-        }
+      debugLog( "writing out-link" );
+      writeOutLink( store, storePath, outLink.value() );
     }
 
   /* Print the resulting store path */
@@ -96,10 +118,11 @@ BuildEnvCommand::run()
   return EXIT_SUCCESS;
 }
 
-
 /* -------------------------------------------------------------------------- */
 
 }  // namespace flox::buildenv
+
+/* -------------------------------------------------------------------------- */
 
 
 /* -------------------------------------------------------------------------- *
