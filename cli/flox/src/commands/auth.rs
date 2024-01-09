@@ -1,14 +1,12 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-//this module liberally borrows from github-device-flox crate
-use std::time;
 
 use anyhow::{Context, Result};
 use bpaf::Bpaf;
 use chrono::offset::Utc;
 use chrono::{DateTime, Duration};
 use flox_rust_sdk::flox::{Auth0Client, Flox};
-use indoc::eprintdoc;
+use indoc::{eprintdoc, formatdoc};
 use log::{debug, info};
 use oauth2::basic::BasicClient;
 use oauth2::{
@@ -21,11 +19,11 @@ use oauth2::{
     TokenUrl,
 };
 use serde::Serialize;
-use url::Url;
 
 use crate::commands::general::update_config;
 use crate::config::Config;
 use crate::subcommand_metric;
+use crate::utils::dialog::{Checkpoint, Dialog};
 use crate::utils::openers::Browser;
 
 #[derive(Debug, Default, Clone, Serialize)]
@@ -81,47 +79,49 @@ pub async fn authorize(client: BasicClient) -> Result<Credential> {
 
     let done = Arc::new(AtomicBool::default());
 
-    if let Ok(opener) = opener {
-        eprintdoc! {"
+    match opener {
+        Ok(opener) => {
+            let message = formatdoc! {"
             Verification Code: {code}
 
             Press [enter] to open {url} in your browser and verify you see the code above.
             ",
-            url = details.verification_uri().url().host_str().unwrap_or(details.verification_uri()),
-            code = details.user_code().secret()
-        };
+                url = details.verification_uri().url().host_str().unwrap_or(details.verification_uri()),
+                code = details.user_code().secret()
+            };
 
-        debug!(
-            "Waiting for user to enter code (timeout: {}s)",
-            details.expires_in().as_secs()
-        );
+            debug!(
+                "Waiting for user to enter code (timeout: {}s)",
+                details.expires_in().as_secs()
+            );
 
-        // in the background listen for `[enter]` key presses
-        // if the user presses enter, open the browser using the system default opener
-        // on linux this should be `xdg-open`
-        // on macos this should be `open`
-        //
-        // I'm not sure this is the best way to do this, but it works for now.
-        // Particularly, if the user opens the URL manually,
-        // there will be one less newline in the terminal than expected.
-        fun_name(
-            &done,
-            opener,
-            details
-                .verification_uri_complete()
-                .map(|u| u.secret())
-                .cloned(),
-            details.verification_uri().url().clone(),
-        );
-    } else {
-        eprintdoc! {"
+            Dialog {
+                message: &message,
+                help_message: None,
+                typed: Checkpoint,
+            }
+            .checkpoint()?;
+
+            let url = details.verification_uri().url().as_str();
+            let mut command = opener.to_command();
+            command.arg(url);
+
+            if command.spawn().is_err() {
+                info!("Could not open browser. Please open the following URL manually: {url}");
+            }
+        },
+        Err(e) => {
+            debug!("Unable to open browser: {e}");
+
+            eprintdoc! {"
             First copy your one-time code: {code}
 
             Then visit {url} in your browser to continue...
             ",
-            url = details.verification_uri().url().host_str().unwrap_or(details.verification_uri()),
-            code = details.user_code().secret()
-        };
+                url = details.verification_uri().url().host_str().unwrap_or(details.verification_uri()),
+                code = details.user_code().secret()
+            };
+        },
     }
 
     let token = client
@@ -140,50 +140,6 @@ pub async fn authorize(client: BasicClient) -> Result<Credential> {
         token: token.access_token().secret().to_string(),
         expiry: calculate_expiry(token.expires_in().unwrap().as_secs() as i64),
     })
-}
-
-fn fun_name(done: &Arc<AtomicBool>, opener: Browser, complete: Option<String>, fallback: Url) {
-    let done_clone = done.clone();
-    tokio::task::spawn(async move {
-        loop {
-            if done_clone.load(Ordering::Relaxed) {
-                return;
-            }
-
-            match crossterm::event::poll(time::Duration::from_millis(100)) {
-                Err(_) => {
-                    info!(
-                        "Could not read input. Please open the following URL manually: {fallback}",
-                    );
-                    return;
-                },
-                Ok(false) => {
-                    continue;
-                },
-                Ok(true) => match crossterm::event::read() {
-                    Err(_) => {
-                        info!("Could not read input. Please open the following URL manually: {fallback}",);
-                        return;
-                    },
-                    Ok(crossterm::event::Event::Key(key))
-                        if key.code == crossterm::event::KeyCode::Enter =>
-                    {
-                        break;
-                    },
-                    _ => {
-                        continue;
-                    },
-                },
-            }
-        }
-
-        let mut command = opener.to_command();
-        command.arg(complete.unwrap_or(fallback.to_string()));
-
-        if command.spawn().is_err() {
-            info!("Could not open browser. Please open the following URL manually: {fallback}",);
-        }
-    });
 }
 
 fn calculate_expiry(expires_in: i64) -> String {
