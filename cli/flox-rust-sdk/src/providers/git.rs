@@ -1345,6 +1345,11 @@ pub mod tests {
         let (mut repo, _tempdir_handle) = init_temp_repo(false);
         repo.add_remote("origin", "https://github.com/torvalds/linux")
             .unwrap();
+
+        repo.get_options_mut()
+            .add_env_var("GIT_CONFIG_SYSTEM", "/dev/null");
+        repo.get_options_mut()
+            .add_env_var("GIT_CONFIG_GLOBAL", "/dev/null");
         repo.get_options_mut().add_config_flag(
             "credential.helper",
             r#"!f(){ echo "username="; echo "password="; }; f"#,
@@ -1362,6 +1367,11 @@ pub mod tests {
         let (mut repo, _tempdir_handle) = init_temp_repo(false);
         repo.add_remote("origin", "https://github.com/flox/flox-private")
             .unwrap();
+
+        repo.get_options_mut()
+            .add_env_var("GIT_CONFIG_SYSTEM", "/dev/null");
+        repo.get_options_mut()
+            .add_env_var("GIT_CONFIG_GLOBAL", "/dev/null");
         repo.get_options_mut().add_config_flag(
             "credential.helper",
             r#"!f(){ echo "username="; echo "password="; }; f"#,
@@ -1377,6 +1387,9 @@ pub mod tests {
     fn test_clone_access_denied() {
         let tempdir = tempfile::tempdir().unwrap();
         let mut options = GitCommandOptions::default();
+
+        options.add_env_var("GIT_CONFIG_SYSTEM", "/dev/null");
+        options.add_env_var("GIT_CONFIG_GLOBAL", "/dev/null");
         options.add_config_flag(
             "credential.helper",
             r#"!f(){ echo "username="; echo "password="; }; f"#,
@@ -1386,7 +1399,7 @@ pub mod tests {
             options,
             "https://github.com/flox/flox-private",
             tempdir,
-            "master",
+            "main",
             false,
         )
         .unwrap_err();
