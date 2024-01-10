@@ -48,7 +48,7 @@ namespace flox::pkgdb {
  * but set a large number of retries so that a slow database operation isn't
  * terminated too early. */
 const DurationMillis DB_RETRY_PERIOD = DurationMillis( 100 );
-const int            DB_MAX_RETRIES  = 1000;
+const int            DB_MAX_RETRIES  = 2500;
 
 #define RETRY_WHILE_BUSY( op )                                    \
   int _retry_while_busy_rcode   = op;                             \
