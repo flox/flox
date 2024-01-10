@@ -303,8 +303,9 @@ impl PathEnvironment {
         pointer: PathPointer,
         dot_flox_parent_path: impl AsRef<Path>,
         temp_dir: impl AsRef<Path>,
-        system: &str,
+        system: impl AsRef<str>,
     ) -> Result<Self, EnvironmentError2> {
+        let system: &str = system.as_ref();
         match EnvironmentPointer::open(dot_flox_parent_path.as_ref()) {
             Err(EnvironmentError2::EnvNotFound) => {},
             Err(e) => Err(e)?,
@@ -337,7 +338,12 @@ impl PathEnvironment {
             fs::remove_dir_all(&env_dir).map_err(EnvironmentError2::ManifestEdit)?;
             return Err(e);
         }
-        let replaced = contents.unwrap().replace(FLOX_SYSTEM_PLACEHOLDER, system);
+        let contents = contents.unwrap();
+        let replaced = contents.replace(FLOX_SYSTEM_PLACEHOLDER, system);
+        debug!(
+            "manifest was updated successfully: {}",
+            contents != replaced
+        );
         let write_res =
             fs::write(&manifest_path, replaced).map_err(EnvironmentError2::ManifestEdit);
         if let Err(e) = write_res {
@@ -460,6 +466,7 @@ mod tests {
             PackageToInstall::from_str("hello").expect("couldn't create package from 'hello'")
         ];
         env.install(&pkgs, &flox).expect("couldn't install 'hello'");
+
         // Need to touch the manifest so that its mtime is more recent than the outlink
         Command::new("touch")
             .arg(
