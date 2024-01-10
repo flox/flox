@@ -348,6 +348,11 @@ src/buildenv/realise.o: CXXFLAGS +=                   \
 src/buildenv/realise.o: CXXFLAGS +=               \
 	'-DSET_PROMPT_BASH_SH="$(SET_PROMPT_BASH_SH)"'
 
+src/buildenv/realise.o: CXXFLAGS +=               \
+	'-DSET_PROMPT_ZSH_SH="$(SET_PROMPT_ZSH_SH)"'
+
+src/buildenv/realise.o: CXXFLAGS +=               \
+	'-DCONTAINER_BUILDER_PATH="$(CONTAINER_BUILDER_PATH)"'
 
 
 # ---------------------------------------------------------------------------- #
