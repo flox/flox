@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 use std::fmt::Display;
 use std::fs::{self, File};
-use std::io::{stdin, stdout};
+use std::io::{stdin, stdout, Write};
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -1602,14 +1602,50 @@ impl Upgrade {
 
 #[derive(Bpaf, Clone, Debug)]
 pub struct Containerize {
-    #[allow(unused)]
     #[bpaf(external(environment_select), fallback(Default::default()))]
     environment: EnvironmentSelect,
+
+    /// Path to write the container to (pass '-' to write to stdout)
+    #[bpaf(short, long, argument("path"))]
+    output: Option<PathBuf>,
 }
 impl Containerize {
-    pub async fn handle(self, _flox: Flox) -> Result<()> {
+    pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("containerize");
 
-        todo!("this command is planned for a future release");
+        let mut env = self
+            .environment
+            .detect_concrete_environment(&flox, "upgrade")?
+            .into_dyn_environment();
+
+        let output_path = match self.output {
+            Some(output) => output,
+            None if !std::io::stdout().is_tty() => PathBuf::from("-"),
+            None => std::env::current_dir()
+                .context("Could not get current directory")?
+                .join(format!("{}-container.tar.gz", env.name())),
+        };
+
+        let mut output: Box<dyn Write> = if output_path == Path::new("-") {
+            debug!("writing container to stdout");
+
+            Box::new(std::io::stdout())
+        } else {
+            debug!("writing container to {}", output_path.display());
+
+            let file = fs::OpenOptions::new()
+                .write(true)
+                .create(true)
+                .truncate(true)
+                .open(&output_path)
+                .context("Could not open output file")?;
+
+            Box::new(file)
+        };
+
+        env.build_container(&flox, &mut output)
+            .context("containerizing environment failed")?;
+
+        Ok(())
     }
 }
