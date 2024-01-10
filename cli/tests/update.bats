@@ -92,6 +92,8 @@ teardown() {
 }
 
 @test "update bumps an input but not an already installed package" {
+  rm -f "$GLOBAL_MANIFEST_LOCK"
+
   "$FLOX_BIN" init
   _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLD?}" \
     "$FLOX_BIN" install hello
