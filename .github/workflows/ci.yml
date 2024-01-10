@@ -35,48 +35,33 @@ jobs:
       - name: "Checkout"
         uses: "actions/checkout@v4"
 
-      - name: "Install newer Nix"
-        uses: "cachix/install-nix-action@v24"
-
-      - name: "Install flox"
-        uses: "flox/install-flox-action@main"
+      - name: "Setup"
+        uses: "./.github/actions/common-setup"
         with:
-          github-access-token:      "${{ secrets.NIX_GIT_TOKEN }}"
-          substituter:              "${{ vars.FLOX_CACHE_PUBLIC_BUCKET }}"
-          substituter-key:          "${{ secrets.FLOX_CACHE_PUBLIC_NIX_SECRET_KEY }}"
-          aws-access-key-id:        "${{ secrets.FLOX_CACHE_PUBLIC_AWS_ACCESS_KEY_ID }}"
-          aws-secret-access-key:    "${{ secrets.FLOX_CACHE_PUBLIC_AWS_SECRET_ACCESS_KEY }}"
-          ssh-key:                  "${{ secrets.FLOXBOT_SSH_KEY }}"
-
-      - name: "Configure Nix"
-        run: |
-          sudo echo 
-          {
-            echo "experimental-features = nix-command flakes";
-          } | sudo tee -a /etc/nix/nix.conf >/dev/null
+          GITHUB_ACCESS_TOKEN:    "${{ secrets.NIX_GIT_TOKEN }}"
+          SUBSTITUTER:            "${{ vars.FLOX_CACHE_PUBLIC_BUCKET }}"
+          SUBSTITUTER_KEY:        "${{ secrets.FLOX_CACHE_PUBLIC_NIX_SECRET_KEY }}"
+          AWS_ACCESS_KEY_ID:      "${{ secrets.FLOX_CACHE_PUBLIC_AWS_ACCESS_KEY_ID }}"
+          AWS_SECRET_ACCESS_KEY:  "${{ secrets.FLOX_CACHE_PUBLIC_AWS_SECRET_ACCESS_KEY }}"
+          SSH_KEY:                "${{ secrets.FLOXBOT_SSH_KEY }}"
 
       - name: "Build"
         run: |
           nix develop -L                 \
-            --accept-flake-config        \
-            --no-update-lock-file        \
             --command make -C pkgdb -j;
 
       - name: "Test (pkgdb)"
         run: |
           nix develop -L                    \
-            --accept-flake-config           \
             --no-update-lock-file           \
             --command make -C pkgdb tests;
           nix develop -L                    \
-            --accept-flake-config           \
             --no-update-lock-file           \
             --command make -C pkgdb check;
 
       - name: "Build Docs"
         run: |
           nix develop -L                   \
-            --accept-flake-config          \
             --no-update-lock-file          \
             --command make -C pkgdb docs;
           chmod -c -R +rX "pkgdb/docs/"|while read line; do
@@ -109,25 +94,15 @@ jobs:
       - name: "Checkout"
         uses: "actions/checkout@v4"
 
-      - name: "Install newer Nix"
-        uses: "cachix/install-nix-action@v24"
-
-      - name: "Install flox"
-        uses: "flox/install-flox-action@main"
+      - name: "Setup"
+        uses: "./.github/actions/common-setup"
         with:
-          github-access-token:      "${{ secrets.NIX_GIT_TOKEN }}"
-          substituter:              "${{ vars.FLOX_CACHE_PUBLIC_BUCKET }}"
-          substituter-key:          "${{ secrets.FLOX_CACHE_PUBLIC_NIX_SECRET_KEY }}"
-          aws-access-key-id:        "${{ secrets.FLOX_CACHE_PUBLIC_AWS_ACCESS_KEY_ID }}"
-          aws-secret-access-key:    "${{ secrets.FLOX_CACHE_PUBLIC_AWS_SECRET_ACCESS_KEY }}"
-          ssh-key:                  "${{ secrets.FLOXBOT_SSH_KEY }}"
-
-      - name: "Configure Nix"
-        run: |
-          sudo echo 
-          {
-            echo "experimental-features = nix-command flakes";
-          } | sudo tee -a /etc/nix/nix.conf >/dev/null
+          GITHUB_ACCESS_TOKEN:    "${{ secrets.NIX_GIT_TOKEN }}"
+          SUBSTITUTER:            "${{ vars.FLOX_CACHE_PUBLIC_BUCKET }}"
+          SUBSTITUTER_KEY:        "${{ secrets.FLOX_CACHE_PUBLIC_NIX_SECRET_KEY }}"
+          AWS_ACCESS_KEY_ID:      "${{ secrets.FLOX_CACHE_PUBLIC_AWS_ACCESS_KEY_ID }}"
+          AWS_SECRET_ACCESS_KEY:  "${{ secrets.FLOX_CACHE_PUBLIC_AWS_SECRET_ACCESS_KEY }}"
+          SSH_KEY:                "${{ secrets.FLOXBOT_SSH_KEY }}"
 
       - name: "Cache Cargo"
         uses: "actions/cache@v3"
@@ -144,7 +119,6 @@ jobs:
       - name: "Build (pkgdb)"
         run: |
           nix develop -L                   \
-            --accept-flake-config          \
             --no-update-lock-file          \
             '.#default'                    \
               --command make -C pkgdb -j;
@@ -153,7 +127,6 @@ jobs:
         run: |
           pushd ./cli;
           nix develop -L                                               \
-            --accept-flake-config                                      \
             --no-update-lock-file                                      \
               --command sh -c                                          \
                 'PKGDB_BIN="${PWD%/*}/pkgdb/bin/pkgdb" cargo build;';
@@ -164,7 +137,6 @@ jobs:
           pushd ./cli;
           export RUST_BACKTRACE=1;
           nix develop -L                                         \
-            --accept-flake-config                                \
             --no-update-lock-file                                \
               --command sh -c '
                 PKGDB_BIN="${PWD%/*}/pkgdb/bin/pkgdb"            \
@@ -176,7 +148,6 @@ jobs:
         run: |
           pushd ./cli;
           nix develop -L                 \
-            --accept-flake-config        \
             --no-update-lock-file        \
               --command flox-cli-tests;
           popd;
@@ -184,7 +155,6 @@ jobs:
       - name: "Test (./tests)"
         run: |
           nix develop -L             \
-            --accept-flake-config    \
             --no-update-lock-file    \
               --command flox-tests;
 
@@ -205,38 +175,22 @@ jobs:
       - name: "Checkout"
         uses: "actions/checkout@v4"
 
-      - name: "Setup Tailscale"
-        uses: "tailscale/github-action@v2"
+      - name: "Setup"
+        uses: "./.github/actions/common-setup"
         with:
-          args: "--timeout 30s --login-server ${{ vars.TAILSCALE_URL }}"
-          tags: "tag:ci"
-          authkey: "${{ secrets.TAILSCALE_AUTH_KEY }}"
-
-      - name: "Install newer Nix"
-        uses: "cachix/install-nix-action@v24"
-
-      - name: "Install flox"
-        uses: "flox/install-flox-action@main"
-        with:
-          github-access-token:      "${{ secrets.NIX_GIT_TOKEN }}"
-          substituter:              "${{ vars.FLOX_CACHE_PUBLIC_BUCKET }}"
-          substituter-key:          "${{ secrets.FLOX_CACHE_PUBLIC_NIX_SECRET_KEY }}"
-          aws-access-key-id:        "${{ secrets.FLOX_CACHE_PUBLIC_AWS_ACCESS_KEY_ID }}"
-          aws-secret-access-key:    "${{ secrets.FLOX_CACHE_PUBLIC_AWS_SECRET_ACCESS_KEY }}"
-          ssh-key:                  "${{ secrets.FLOXBOT_SSH_KEY }}"
-          remote-builders:          "${{ vars.FLOX_BUILDERS }}"
-
-      - name: "Configure Nix"
-        run: |
-          sudo echo 
-          {
-            echo "experimental-features = nix-command flakes";
-          } | sudo tee -a /etc/nix/nix.conf >/dev/null
+          GITHUB_ACCESS_TOKEN:    "${{ secrets.NIX_GIT_TOKEN }}"
+          SUBSTITUTER:            "${{ vars.FLOX_CACHE_PUBLIC_BUCKET }}"
+          SUBSTITUTER_KEY:        "${{ secrets.FLOX_CACHE_PUBLIC_NIX_SECRET_KEY }}"
+          AWS_ACCESS_KEY_ID:      "${{ secrets.FLOX_CACHE_PUBLIC_AWS_ACCESS_KEY_ID }}"
+          AWS_SECRET_ACCESS_KEY:  "${{ secrets.FLOX_CACHE_PUBLIC_AWS_SECRET_ACCESS_KEY }}"
+          SSH_KEY:                "${{ secrets.FLOXBOT_SSH_KEY }}"
+          TAILSCALE_URL:          "${{ vars.TAILSCALE_URL }}"
+          TAILSCALE_AUTH_KEY:     "${{ secrets.TAILSCALE_AUTH_KEY }}"
+          REMOTE_BUILDERS:        "${{ vars.FLOX_BUILDERS }}"
 
       - name: "Build"
         run: |
           if nix path-info                 \
-              --accept-flake-config        \
               --store "$FLOX_SUBSTITUTER"  \
               --eval-store auto            \
               --builders ''                \
@@ -247,7 +201,6 @@ jobs:
              exit 0;
           else
             nix build -L             \
-              --accept-flake-config  \
               --no-update-lock-file  \
               --print-out-paths      \
                 '.#flox-pkgdb'       \
@@ -321,42 +274,21 @@ jobs:
     steps:
       - name: "Checkout"
         uses: "actions/checkout@v4"
-      - name: "Setup Tailscale"
-        uses: "tailscale/github-action@v2"
+
+      - name: "Setup"
+        uses: "./.github/actions/common-setup"
         with:
-          args: "--timeout 30s --login-server ${{ vars.TAILSCALE_URL }}"
-          tags: "tag:ci"
-          authkey: "${{ secrets.TAILSCALE_AUTH_KEY }}"
-      - name: "Install newer Nix"
-        uses: "cachix/install-nix-action@v24"
-      - name: "Install flox"
-        uses: "flox/install-flox-action@main"
-        with:
-          github-access-token:      "${{ secrets.NIX_GIT_TOKEN }}"
-          substituter:              "${{ vars.FLOX_CACHE_PUBLIC_BUCKET }}"
-          substituter-key:          "${{ secrets.FLOX_CACHE_PUBLIC_NIX_SECRET_KEY }}"
-          aws-access-key-id:        "${{ secrets.FLOX_CACHE_PUBLIC_AWS_ACCESS_KEY_ID }}"
-          aws-secret-access-key:    "${{ secrets.FLOX_CACHE_PUBLIC_AWS_SECRET_ACCESS_KEY }}"
-          ssh-key:                  "${{ secrets.FLOXBOT_SSH_KEY }}"
-          remote-builders:          "${{ vars.FLOX_BUILDERS }}"
-      - name: "Configure Nix"
-        run: |
-          sudo echo 
-          {
-            echo "experimental-features = nix-command flakes";
-          } | sudo tee -a /etc/nix/nix.conf >/dev/null
-      - name: "Find remote server to run tests on"
-        run: |
-          set -eo pipefail
-          export REMOTE_SERVER=$(cat /etc/nix/machines | grep ${{ matrix.system }} | cut -f1 -d' ' | cut -f3 -d'/' | head -1 | sed 's/nixbld@//' ; )
-          export REMOTE_SERVER_USER_KNOWN_HOSTS_FILE=$(mktemp)
-          export REMOTE_PUBLIC_HOST_KEY=$(cat /etc/nix/machines | grep ${{ matrix.system }} | tr -s ' ' | cut -f8 -d' ' | base64 -d ; )
-          printf "%s %s\n" "$REMOTE_SERVER" "$REMOTE_PUBLIC_HOST_KEY" > "$REMOTE_SERVER_USER_KNOWN_HOSTS_FILE"
-          echo "REMOTE_SERVER: $REMOTE_SERVER"
-          echo "REMOTE_SERVER_USER_KNOWN_HOSTS_FILE: $REMOTE_SERVER_USER_KNOWN_HOSTS_FILE"
-          cat $REMOTE_SERVER_USER_KNOWN_HOSTS_FILE
-          echo "REMOTE_SERVER=$REMOTE_SERVER" >> $GITHUB_ENV
-          echo "REMOTE_SERVER_USER_KNOWN_HOSTS_FILE=$REMOTE_SERVER_USER_KNOWN_HOSTS_FILE" >> $GITHUB_ENV
+          GITHUB_ACCESS_TOKEN:    "${{ secrets.NIX_GIT_TOKEN }}"
+          SUBSTITUTER:            "${{ vars.FLOX_CACHE_PUBLIC_BUCKET }}"
+          SUBSTITUTER_KEY:        "${{ secrets.FLOX_CACHE_PUBLIC_NIX_SECRET_KEY }}"
+          AWS_ACCESS_KEY_ID:      "${{ secrets.FLOX_CACHE_PUBLIC_AWS_ACCESS_KEY_ID }}"
+          AWS_SECRET_ACCESS_KEY:  "${{ secrets.FLOX_CACHE_PUBLIC_AWS_SECRET_ACCESS_KEY }}"
+          SSH_KEY:                "${{ secrets.FLOXBOT_SSH_KEY }}"
+          TAILSCALE_URL:          "${{ vars.TAILSCALE_URL }}"
+          TAILSCALE_AUTH_KEY:     "${{ secrets.TAILSCALE_AUTH_KEY }}"
+          REMOTE_BUILDERS:        "${{ vars.FLOX_BUILDERS }}"
+          SYSTEM:                 "${{ matrix.system }}"
+
       - name: "Build flox"
         run: |
           git clean -xfd
@@ -368,15 +300,16 @@ jobs:
           # We run bats tests later on against the `FLOX_CLI' env
           echo "FLOX_CLI=$(readlink -f ./result; )/bin/flox" >> "$GITHUB_ENV"
           rm ./result
+
       - name: "Build Bats Tests (./#flox-tests)"
         run: |
           git clean -xfd
           nix build -L \
-              --accept-flake-config \
               --no-update-lock-file \
               --print-out-paths \
               '.#packages.${{ matrix.system }}.flox-cli-tests'
           nix copy --to "$FLOX_SUBSTITUTER" ./result
+
       - name: "Run Bats Tests (./#flox-cli-tests)"
         run: |
           git clean -xfd
