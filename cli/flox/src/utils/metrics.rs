@@ -153,17 +153,17 @@ async fn push_metrics(metrics: Vec<MetricEntry>, uuid: Uuid) -> Result<()> {
                 "event": "cli-invocation",
                 "properties": {
                     "distinct_id": uuid,
+                    "subcommand": entry.subcommand,
+                    "extras": entry.extras,
+
                     "$device_id": uuid,
 
                     "$current_url": entry.subcommand.as_ref().map(|x| format!("flox://{x}")),
                     "$pathname": entry.subcommand,
-                    "subcommand": entry.subcommand,
 
                     "empty_flags": entry.empty_flags,
 
                     "$lib": "flox-cli",
-
-                    "rust_preview": true,
 
                     "os": entry.os,
                     "os_version": entry.os_version,
@@ -203,9 +203,6 @@ async fn push_metrics(metrics: Vec<MetricEntry>, uuid: Uuid) -> Result<()> {
                         // compat
                         "$os": entry.os_family,
                         "kernel_version": entry.os_family_release,
-
-                        // to be deprecated
-                        "flox-cli-uuid": uuid,
                     },
                 },
 
