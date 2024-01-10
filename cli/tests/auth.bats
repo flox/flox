@@ -72,8 +72,8 @@ teardown() {
 
   run expect -d "$TESTS_DIR/auth/loginPrompt.exp"
   assert_success
-  assert_output --partial "Verification Code:"
-  assert_output --partial "Press [enter] to open"
+  assert_line --partial "First copy your one-time code:"
+  assert_line --regexp "Press enter to open .+ in your browser\.\.\."
 }
 
 # ---------------------------------------------------------------------------- #
@@ -93,6 +93,6 @@ teardown() {
 
   run expect -d "$TESTS_DIR/auth/loginPrompt.exp"
   assert_success
-  assert_output --partial "First copy your one-time code:"
-  assert_output --regexp "visit .+ in your browser"
+  assert_line --regexp "Go to .+ in your browser"
+  assert_line --partial "Then enter your one-time code: "
 }

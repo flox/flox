@@ -19,6 +19,7 @@ use oauth2::{
     TokenUrl,
 };
 use serde::Serialize;
+use url::Url;
 
 use crate::commands::general::update_config;
 use crate::config::Config;
@@ -59,7 +60,7 @@ fn create_oauth_client() -> Result<BasicClient> {
     Ok(client)
 }
 
-pub async fn authorize(client: BasicClient) -> Result<Credential> {
+pub async fn authorize(client: BasicClient, floxhub_url: &Url) -> Result<Credential> {
     if !Dialog::can_prompt() {
         bail!("Cannot prompt for user input")
     }
@@ -86,11 +87,11 @@ pub async fn authorize(client: BasicClient) -> Result<Credential> {
     match opener {
         Ok(opener) => {
             let message = formatdoc! {"
-            Verification Code: {code}
+            First copy your one-time code: {code}
 
-            Press [enter] to open {url} in your browser and verify you see the code above.
+            Press enter to open {url} in your browser...
             ",
-                url = details.verification_uri().url().host_str().unwrap_or(details.verification_uri()),
+                url = floxhub_url.host_str().unwrap_or(floxhub_url.as_str()),
                 code = details.user_code().secret()
             };
 
@@ -118,11 +119,11 @@ pub async fn authorize(client: BasicClient) -> Result<Credential> {
             debug!("Unable to open browser: {e}");
 
             eprintdoc! {"
-            First copy your one-time code: {code}
+            Go to {url} in your browser
 
-            Then visit {url} in your browser to continue...
+            Then enter your one-time code: {code}
             ",
-                url = details.verification_uri().url().host_str().unwrap_or(details.verification_uri()),
+                url = details.verification_uri().url(),
                 code = details.user_code().secret()
             };
         },
@@ -214,7 +215,7 @@ impl Auth {
 /// * updates the floxhub_token field in the config struct
 pub async fn login_flox(flox: &mut Flox) -> Result<()> {
     let client = create_oauth_client()?;
-    let cred = authorize(client)
+    let cred = authorize(client, flox.floxhub.base_url())
         .await
         .context("Could not authorize via oauth")?;
 
