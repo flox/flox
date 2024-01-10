@@ -26,7 +26,6 @@
   gitMinimal,
   nix,
   pkgsFor,
-  pre-commit-check,
   flox-pkgdb,
 }: let
   flox-src = builtins.path {

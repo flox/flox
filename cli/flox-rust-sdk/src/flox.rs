@@ -675,7 +675,7 @@ pub mod tests {
         channels.register_channel("flox", "github:flox/floxpkgs/master".parse().unwrap());
 
         let flox = Flox {
-            system: "aarch64-darwin".to_string(),
+            system: env!("NIX_TARGET_SYSTEM").to_string(),
             cache_dir,
             data_dir,
             temp_dir,

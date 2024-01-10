@@ -146,12 +146,18 @@ function check_with_dir() {
   check_with_dir
 }
 
-# bats test_tags=init,init:gitignore
+# bats test_tags=init:gitignore
 @test "c9: flox init adds .gitingore that ignores run/ directory" {
   "$FLOX_BIN" init
   run cat .flox/.gitignore
   assert_success
   assert_line "run/"
+}
+
+@test "'flox init' injects current system" {
+  "$FLOX_BIN" init
+  init_system=$(tomlq -r '.options.systems[0]' .flox/env/manifest.toml)
+  assert_equal "$init_system" "$NIX_SYSTEM"
 }
 
 # ---------------------------------------------------------------------------- #
