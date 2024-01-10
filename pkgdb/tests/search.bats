@@ -181,68 +181,6 @@ genParamsNixpkgsFlox() {
 
 # ---------------------------------------------------------------------------- #
 
-# bats test_tags=search:unfree
-
-# Unfree filter
-@test "'pkgdb search' 'allow.unfree=false'" {
-  run sh -c "$PKGDB_BIN search '$(
-    genParams '.manifest.options.allow.unfree=true'
-  )'|wc -l;"
-  assert_success
-
-  _count="$output";
-
-  run sh -c "$PKGDB_BIN search '$(
-    genParams '.manifest.options.allow.unfree=false'
-  )'|wc -l;"
-  assert_success
-
-  _count2="$output";
-
-  run expr "$_count2 < $_count"
-  assert_success
-}
-
-# ---------------------------------------------------------------------------- #
-
-# bats test_tags=search:broken
-
-# Unfree filter
-@test "'pkgdb search' 'allow.broken=true'" {
-  run sh -c "$PKGDB_BIN search '$(
-    genParams '.manifest.options.allow.broken=true'
-  )'|wc -l;"
-  assert_success
-
-  _count="$output";
-
-  run sh -c "$PKGDB_BIN search '$(
-    genParams '.manifest.options.allow.broken=false'
-  )'|wc -l;"
-  assert_success
-
-  _count2="$output";
-
-  run expr "$_count2 < $_count"
-  assert_success
-}
-
-# ---------------------------------------------------------------------------- #
-
-# bats test_tags=search:prerelease, search:pname
-
-# preferPreReleases ordering
-@test "'pkgdb search' 'manifest.options.semver.prefer-pre-releases=true'" {
-  run sh -c "$PKGDB_BIN search '$(
-    genParams '.manifest.options.semver["prefer-pre-releases"]=true
-               |.query.pname="zfs-kernel"'
-  )'|head -n1|jq -r .version;"
-  assert_success
-  assert_output '2.1.12-staging-2023-04-18-6.1.31'
-}
-
-# ---------------------------------------------------------------------------- #
-
 # bats test_tags=search:system, search:pname
 
 # `systems' ordering

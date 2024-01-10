@@ -554,7 +554,7 @@ bats-check: bin $(TEST_UTILS)
 	PKGDB_BIN="$(PKGDB_ROOT)/bin/pkgdb"                          \
 	PKGDB_IS_SQLITE3_BIN="$(PKGDB_ROOT)/tests/is_sqlite3"        \
 	PKGDB_SEARCH_PARAMS_BIN="$(PKGDB_ROOT)/tests/search-params"  \
-	  $(BATS) --print-output-on-failure --verbose-run --timing   \
+	  $(BATS) -j 4  --print-output-on-failure --verbose-run --timing   \
 	          "$(PKGDB_BATS_FILES)";
 
 
