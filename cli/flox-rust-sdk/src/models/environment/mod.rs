@@ -106,6 +106,13 @@ pub trait Environment: Send {
     /// Resolve the environment and return the lockfile
     fn lock(&mut self, flox: &Flox) -> Result<LockedManifest, EnvironmentError2>;
 
+    /// Create a container image from the environment
+    fn build_container(
+        &mut self,
+        flox: &Flox,
+        image_name: &mut dyn Write,
+    ) -> Result<(), EnvironmentError2>;
+
     /// Install packages to the environment atomically
     fn install(
         &mut self,

@@ -172,6 +172,23 @@ impl Environment for ManagedEnvironment {
         Ok(temporary.lock(flox)?)
     }
 
+    fn build_container(
+        &mut self,
+        flox: &Flox,
+        sink: &mut dyn Write,
+    ) -> Result<(), EnvironmentError2> {
+        let generations = self
+            .generations()
+            .writable(flox.temp_dir.clone())
+            .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?;
+        let mut temporary = generations
+            .get_current_generation()
+            .map_err(ManagedEnvironmentError::CreateGenerationFiles)?;
+
+        temporary.build_container(flox, sink)?;
+        Ok(())
+    }
+
     /// Install packages to the environment atomically
     fn install(
         &mut self,

@@ -153,6 +153,16 @@ impl Environment for PathEnvironment {
         Ok(env_view.lock(flox)?)
     }
 
+    fn build_container(
+        &mut self,
+        flox: &Flox,
+        sink: &mut dyn Write,
+    ) -> Result<(), EnvironmentError2> {
+        let mut env_view = CoreEnvironment::new(self.path.join(ENV_DIR_NAME));
+        env_view.build_container(flox, sink)?;
+        Ok(())
+    }
+
     /// Install packages to the environment atomically
     ///
     /// Returns the new manifest content if the environment was modified. Also

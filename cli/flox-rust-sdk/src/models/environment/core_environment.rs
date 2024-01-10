@@ -173,10 +173,10 @@ impl<State> CoreEnvironment<State> {
     /// and because it doesn't modify the manifest.
     ///
     /// todo: should we always write the lockfile to disk?
-    pub fn containerize(
+    pub fn build_container(
         &mut self,
         flox: &Flox,
-        sink: &mut impl Write,
+        sink: &mut (impl Write + ?Sized),
     ) -> Result<(), CoreEnvironmentError> {
         if std::env::consts::OS != "linux" {
             return Err(CoreEnvironmentError::ContainerizeUnsupportedSystem(

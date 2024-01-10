@@ -121,6 +121,14 @@ impl Environment for RemoteEnvironment {
         self.inner.lock(flox)
     }
 
+    fn build_container(
+        &mut self,
+        flox: &Flox,
+        sink: &mut dyn Write,
+    ) -> Result<(), EnvironmentError2> {
+        self.inner.build_container(flox, sink)
+    }
+
     /// Install packages to the environment atomically
     fn install(
         &mut self,
