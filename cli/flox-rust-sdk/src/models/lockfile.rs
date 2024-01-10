@@ -5,8 +5,9 @@ pub type FlakeRef = Value;
 
 use std::collections::BTreeMap;
 use std::fs;
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 use flox_types::catalog::System;
 use flox_types::version::Version;
@@ -95,6 +96,39 @@ impl LockedManifest {
                 .map_err(LockedManifestError::ParseBuildEnvOutput)?;
 
         Ok(PathBuf::from(result.store_path))
+    }
+
+    /// Build a container image from a locked manifest
+    /// and write it to a provided sink.
+    ///
+    /// The sink can be e.g. a [File](std::fs::File), [Stdout](std::io::Stdout),
+    /// or an internal buffer.
+    pub fn build_container(
+        &self,
+        pkgdb: &Path,
+        sink: &mut (impl Write + ?Sized),
+    ) -> Result<(), LockedManifestError> {
+        let mut pkgdb_cmd = Command::new(pkgdb);
+        pkgdb_cmd.arg("buildenv").arg(&self.to_string());
+
+        debug!("building container builder with command: {pkgdb_cmd:?}");
+        let result: BuildEnvResult =
+            serde_json::from_value(call_pkgdb(pkgdb_cmd).map_err(LockedManifestError::BuildEnv)?)
+                .map_err(LockedManifestError::ParseBuildEnvOutput)?;
+
+        let container_builder_path = PathBuf::from(result.store_path);
+
+        let mut container_builder_command = Command::new(container_builder_path);
+        container_builder_command.stdout(Stdio::piped());
+
+        let handle = container_builder_command
+            .spawn()
+            .map_err(LockedManifestError::CallContainerBuilder)?;
+        let mut stdout = handle.stdout.expect("stdout set to piped");
+
+        io::copy(&mut stdout, sink).unwrap();
+
+        Ok(())
     }
 
     /// Wrapper around `pkgdb update`
@@ -289,6 +323,10 @@ pub enum LockedManifestError {
     LockManifest(#[source] CallPkgDbError),
     #[error("failed to build environment")]
     BuildEnv(#[source] CallPkgDbError),
+    #[error("failed to build container builder")]
+    CallContainerBuilder(#[source] std::io::Error),
+    #[error("failed to write container builder to sink")]
+    WriteContainer(#[source] std::io::Error),
     #[error("failed to parse buildenv output")]
     ParseBuildEnvOutput(#[source] serde_json::Error),
     #[error("failed to update environment")]
