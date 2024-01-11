@@ -26,7 +26,29 @@
         (lowPriority containerPkgs.coreutils) # for just the basic utils
       ];
     };
-    config = {};
+    config = {
+      # * run -it # [interactive, no args]
+      #   -> runs <Entrypoint> <Cmd>
+      #   -> bash -c -i bash --rcfile <activate>
+      #   (skip activation for the first bash and runs default rcfiles)
+      #
+      # * run cmd... # [non-interactive, with arguments]
+      #   -> BASH_ENV=<activate> bash -c cmd
+
+      # * follow convention of sh -c being container entrypoint
+      Entrypoint = ["${containerPkgs.bashInteractive}/bin/bash" "-c"];
+
+      Env = lib.mapAttrsToList (name: value: "${name}=${value}") {
+        "FLOX_ENV" = environment;
+        "FLOX_PROMPT_ENVIRONMENTS" = "floxenv";
+        "FLOX_ACTIVE_ENVIRONMENTS" = "[]";
+        "FLOX_SOURCED_FROM_SHELL_RC" = "1"; # don't source from shell rc (again)
+        "BASH_ENV" = "${environment}/activate/bash";
+      };
+
+      # source original .bashrc, then start another shell that runs activation
+      Cmd = ["-i" "${containerPkgs.bashInteractive}/bin/bash --rcfile ${environment}/activate/bash"];
+    };
   };
 in
   pkgs.dockerTools.streamLayeredImage buildLayeredImageArgs
