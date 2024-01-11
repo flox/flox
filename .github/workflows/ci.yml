@@ -178,7 +178,7 @@ jobs:
           nix develop -L                 \
             --accept-flake-config        \
             --no-update-lock-file        \
-              --command flox-cli-tests;
+              --command just integ-tests --no-parallelize-across-files -j 4;
           popd;
 
       - name: "Test (./tests)"
@@ -385,4 +385,5 @@ jobs:
             nix run \
                 --accept-flake-config \
                 --extra-experimental-features '"nix-command flakes"' \
-                'github:flox/flox/${{ github.sha }}#packages.${{ matrix.system }}.flox-cli-tests'
+                'github:flox/flox/${{ github.sha }}#packages.${{ matrix.system }}.flox-cli-tests' \
+                -- --no-parallelize-across-files -j 4
