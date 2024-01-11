@@ -44,10 +44,6 @@ assert_new_hello() {
   assert_output "$PKGDB_NIXPKGS_NAR_HASH_NEW"
 }
 
-PKGDB_NIXPKGS_NAR_HASH_OLD="sha256-1UGacsv5coICyvAzwuq89v9NsS00Lo8sz22cDHwhnn8="
-PKGDB_NIXPKGS_NAR_HASH_NEW="sha256-5uA6jKckTf+DCbVBNKsmT5pUT/7Apt5tNdpcbLnPzFI="
-GLOBAL_MANIFEST_LOCK="$FLOX_CONFIG_HOME/global-manifest.lock"
-
 # ---------------------------------------------------------------------------- #
 
 setup() {
@@ -60,6 +56,8 @@ teardown() {
 }
 
 @test "upgrade hello" {
+  rm -f "$GLOBAL_MANIFEST_LOCK"
+
   "$FLOX_BIN" init
   _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLD?}" \
     "$FLOX_BIN" install hello
@@ -87,6 +85,8 @@ teardown() {
 }
 
 @test "upgrade by group" {
+  rm -f "$GLOBAL_MANIFEST_LOCK"
+
   "$FLOX_BIN" init
   cat << "EOF" > "$TMP_MANIFEST_PATH"
 [install]
@@ -119,6 +119,8 @@ EOF
 }
 
 @test "upgrade by iid" {
+  rm -f "$GLOBAL_MANIFEST_LOCK"
+
   "$FLOX_BIN" init
   _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLD?}" \
     "$FLOX_BIN" install hello

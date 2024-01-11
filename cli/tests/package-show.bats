@@ -287,6 +287,8 @@ teardown() {
   "$FLOX_BIN" init
   _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_NEW?}" \
     "$FLOX_BIN" update --global
+
+  # new environment uses the global lock
   "$FLOX_BIN" install nodejs
 
   run --separate-stderr sh -c "$FLOX_BIN show nodejs|tail -n1"

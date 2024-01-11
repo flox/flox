@@ -421,15 +421,17 @@ fn render_show(search_results: &[SearchResult], all: bool) -> Result<()> {
 
 /// Return an optional manifest and a lockfile to use for search and show.
 ///
-/// This searches for an environment to use, and if one is found, it returns the
-/// path to its manifest and optionally the path to its lockfile.
+/// This searches for an environment to use,
+/// and if one is found, it returns the path to its manifest and optionally the
+/// path to its lockfile.
 ///
 /// If no environment is found, or if environment does not have a lockfile, the
 /// global lockfile is used.
 /// The global lockfile is created if it does not exist.
 ///
-/// Note that this may perform network operations to pull a ManagedEnvironment,
-/// since a freshly cloned user repo with a ManagedEnvironment may not have a
+/// Note that this may perform network operations to pull a
+/// [ManagedEnvironment],
+/// since a freshly cloned user repo with a [ManagedEnvironment] may not have a
 /// manifest or lockfile in floxmeta unless the environment is initialized.
 pub fn manifest_and_lockfile(flox: &Flox, message: &str) -> Result<(Option<PathBuf>, PathBuf)> {
     let (manifest_path, lockfile_path) = match detect_environment(message)? {
