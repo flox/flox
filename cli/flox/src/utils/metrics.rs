@@ -1,6 +1,7 @@
 use std::collections::{HashMap, VecDeque};
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
+use std::path::Path;
 
 use anyhow::{Context, Result};
 use flox_rust_sdk::flox::FLOX_VERSION;
@@ -19,6 +20,7 @@ use crate::config::Config;
 pub const METRICS_EVENTS_FILE_NAME: &str = "metrics-events-v2.json";
 pub const METRICS_UUID_FILE_NAME: &str = "metrics-uuid";
 pub const METRICS_LOCK_FILE_NAME: &str = "metrics-lock";
+const BUFFER_EXPIRY: Duration = Duration::hours(2);
 
 pub static METRICS_EVENTS_URL: Lazy<String> = Lazy::new(|| {
     std::env::var("_FLOX_METRICS_URL_OVERRIDE").unwrap_or(env!("METRICS_EVENTS_URL").to_string())
@@ -127,6 +129,8 @@ impl MetricEntry {
 }
 
 fn push_metrics(mut metrics: MetricsBuffer, uuid: Uuid) -> Result<()> {
+    debug!("Pushing metrics to server");
+
     let version = FLOX_VERSION.to_string();
     let events = metrics
         .iter()
@@ -197,6 +201,8 @@ fn push_metrics(mut metrics: MetricsBuffer, uuid: Uuid) -> Result<()> {
         .collect::<Result<Vec<serde_json::Value>>>()?;
 
     debug!("Sending metrics to {}", &*METRICS_EVENTS_URL);
+    debug!("Metrics: {events:?}", events = events);
+
     let req = reqwest::Client::new()
         .put(&*METRICS_EVENTS_URL)
         .header("content-type", "application/json")
@@ -207,66 +213,94 @@ fn push_metrics(mut metrics: MetricsBuffer, uuid: Uuid) -> Result<()> {
 
     let handle = tokio::runtime::Handle::current();
     let _guard = handle.enter();
-    futures::executor::block_on(req)?;
+    futures::executor::block_on(req).context("could not send to telemetry backend")?;
 
-    metrics.clear();
+    metrics.clear()?;
     Ok(())
 }
 
-#[derive(Default, Debug)]
-struct MetricsBuffer(Option<File>, VecDeque<MetricEntry>);
+/// A representation of the metrics buffer
+///
+/// The metrics buffer is a file that contains a list of metrics entries.
+/// It is used to store metrics for a period of time
+/// and then push them to the server.
+///
+/// An instance of this struct represents the metrics buffer file and its contents.
+/// While the metrics buffer is being used, it is locked to avoid data corruption.
+/// Thus, a [MetricsBuffer] instance should be short-lived
+/// to avoid blocking other processes.
+#[derive(Debug)]
+struct MetricsBuffer {
+    /// The file where the metrics buffer is stored
+    storage: File,
+    /// The lock file for the metrics buffer.
+    /// Used to avoid concurrent writes to the metrics buffer file.
+    _file_lock: LockFile,
+    buffer: VecDeque<MetricEntry>,
+}
 impl MetricsBuffer {
-    /// Reads the metrics buffer from the given file
-    fn read_from_file(mut file: File) -> Result<Self> {
+    /// Reads the metrics buffer from the cache directory
+    fn read(cache_dir: &Path) -> Result<Self> {
+        let mut metrics_lock = LockFile::open(&cache_dir.join(METRICS_LOCK_FILE_NAME))?;
+        metrics_lock.lock()?;
+
+        let buffer_file_path = cache_dir.join(METRICS_EVENTS_FILE_NAME);
+        let mut events_buffer_file = OpenOptions::new()
+            .write(true)
+            .read(true)
+            .create(true)
+            .open(buffer_file_path)?;
+
         let mut buffer_json = String::new();
-        file.read_to_string(&mut buffer_json)?;
+
+        events_buffer_file.read_to_string(&mut buffer_json)?;
 
         let buffer_iter = serde_json::Deserializer::from_str(&buffer_json)
             .into_iter::<MetricEntry>()
             .filter_map(|x| x.ok())
             .collect();
 
-        Ok(MetricsBuffer(Some(file), buffer_iter))
-    }
-
-    /// Reads the metrics buffer from the cache directory
-    fn read(config: &Config) -> Result<Self> {
-        // dont create a metrics buffer if metrics are disabled anyway
-        if config.flox.disable_metrics {
-            return Ok(Default::default());
-        }
-
-        let cache_dir = &config.flox.cache_dir;
-
-        let mut metrics_lock = LockFile::open(&cache_dir.join(METRICS_LOCK_FILE_NAME))?;
-        metrics_lock.lock()?;
-
-        let buffer_file_path = cache_dir.join(METRICS_EVENTS_FILE_NAME);
-        let events_buffer_file = OpenOptions::new()
-            .write(true)
-            .read(true)
-            .create(true)
-            .open(buffer_file_path)?;
-
-        Self::read_from_file(events_buffer_file)
+        Ok(MetricsBuffer {
+            storage: events_buffer_file,
+            _file_lock: metrics_lock,
+            buffer: buffer_iter,
+        })
     }
 
     /// Returns the oldest timestamp in the buffer
     fn oldest_timestamp(&self) -> Option<OffsetDateTime> {
-        self.1.front().map(|x| x.timestamp)
+        self.buffer.front().map(|x| x.timestamp)
+    }
+
+    /// Returns whether the buffer is expired,
+    /// i.e. needs to be pushed to the server.
+    ///
+    /// The buffer is expired if it contains >= 1 entry
+    /// and the oldest entry is older than [BUFFER_EXPIRY].
+    fn is_expired(&self) -> bool {
+        let now = OffsetDateTime::now_utc();
+        self.oldest_timestamp()
+            .map(|oldest| now - oldest > BUFFER_EXPIRY)
+            .unwrap_or(false)
     }
 
     /// Pushes a new metric entry to the buffer and syncs it to the buffer file
     fn push(&mut self, entry: MetricEntry) -> Result<()> {
-        if let Some(ref mut file) = self.0 {
-            let mut buffer_json = String::new();
-            buffer_json.push_str(&serde_json::to_string(&entry)?);
-            buffer_json.push('\n');
-            file.write_all(buffer_json.as_bytes())?;
-            file.flush()?;
-        }
+        debug!("pushing entry to metrics buffer: {entry:?}");
 
-        self.1.push_back(entry);
+        // update file with new entry
+        // [MetricsBuffer::read] ensures that the file is opened with write permissions
+        // and append mode.
+        let mut buffer_json = String::new();
+        buffer_json.push_str(&serde_json::to_string(&entry)?);
+        buffer_json.push('\n');
+        self.storage
+            .write_all(buffer_json.as_bytes())
+            .context("could not write new metrics entry to buffer file")?;
+        self.storage.flush()?;
+
+        // update the buffer in memory
+        self.buffer.push_back(entry);
 
         Ok(())
     }
@@ -275,21 +309,17 @@ impl MetricsBuffer {
     ///
     /// This is used when the buffer is pushed to the server
     /// and we start collecting metrics in a new buffer.
-    fn clear(&mut self) {
-        if let Some(ref mut file) = self.0 {
-            if let Err(e) = file.set_len(0) {
-                debug!("Could not truncate metrics buffer file: {e}")
-            }
-            if let Err(e) = file.flush() {
-                dbg!(&e);
-                debug!("Could not truncate metrics buffer file: {e}")
-            }
-        }
-        self.1.clear();
+    fn clear(&mut self) -> Result<()> {
+        self.storage
+            .set_len(0)
+            .context("Could not truncate metrics buffer file")?;
+        self.buffer.clear();
+        Ok(())
     }
 
+    /// Returns an iterator over the entries in the buffer
     fn iter(&self) -> impl Iterator<Item = &MetricEntry> {
-        self.1.iter()
+        self.buffer.iter()
     }
 }
 
@@ -297,8 +327,8 @@ fn read_metrics_uuid(config: &Config) -> Result<Uuid> {
     let data_dir = &config.flox.data_dir;
     let uuid_path = data_dir.join(METRICS_UUID_FILE_NAME);
 
-    std::fs::File::open(uuid_path)
-        .or_else(|e| Err(e).context("Could not read metrics UUID file"))
+    File::open(uuid_path)
+        .context("Could not read metrics UUID file")
         .and_then(|mut f| {
             let mut uuid_str = String::new();
             f.read_to_string(&mut uuid_str)?;
@@ -319,23 +349,14 @@ fn add_metric(event: PosthogEvent) -> Result<()> {
     }
 
     let uuid = read_metrics_uuid(&config)?;
-    let mut metrics_buffer = MetricsBuffer::read(&config)?;
+    let mut metrics_buffer = MetricsBuffer::read(&config.flox.cache_dir)?;
 
-    let now = OffsetDateTime::now_utc();
-
-    let new_entry = MetricEntry::new(event, now);
+    let new_entry = MetricEntry::new(event, OffsetDateTime::now_utc());
     metrics_buffer.push(new_entry)?;
 
-    // Note: assumes the oldest metric entry must come first
-    let buffer_time_passed = metrics_buffer
-        .oldest_timestamp()
-        .map(|oldest| now - oldest > Duration::hours(2))
-        .unwrap_or(false);
+    let force_flush_buffer = std::env::var("_FLOX_FORCE_FLUSH_METRICS").is_ok();
 
-    let force_flush_buffer = std::env::var("_FLOX_FORCE_FLUSH_METRICS").unwrap() != "";
-
-    if buffer_time_passed || force_flush_buffer {
-        debug!("Pushing buffered metrics");
+    if metrics_buffer.is_expired() || force_flush_buffer {
         push_metrics(metrics_buffer, uuid)?;
     }
 
