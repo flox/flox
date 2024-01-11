@@ -4,6 +4,7 @@ use serde_json::Value;
 pub type FlakeRef = Value;
 
 use std::collections::BTreeMap;
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -12,9 +13,15 @@ use flox_types::version::Version;
 use log::debug;
 use thiserror::Error;
 
+use super::environment::{CanonicalizeError, UpdateResult};
 use super::pkgdb::CallPkgDbError;
-use crate::models::environment::CanonicalPath;
-use crate::models::pkgdb::{call_pkgdb, BuildEnvResult};
+use crate::flox::Flox;
+use crate::models::environment::{
+    global_manifest_lockfile_path,
+    global_manifest_path,
+    CanonicalPath,
+};
+use crate::models::pkgdb::{call_pkgdb, BuildEnvResult, PKGDB_BIN};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Input {
@@ -88,6 +95,87 @@ impl LockedManifest {
                 .map_err(LockedManifestError::ParseBuildEnvOutput)?;
 
         Ok(PathBuf::from(result.store_path))
+    }
+
+    /// Wrapper around `pkgdb update`
+    ///
+    /// lockfile_path does not need to exist
+    /// TODO: lockfile_path should probably be an Option<CanonicalPath>
+    pub fn update_manifest(
+        flox: &Flox,
+        manifest_path: Option<impl AsRef<Path>>,
+        lockfile_path: impl AsRef<Path>,
+        inputs: Vec<String>,
+    ) -> Result<UpdateResult, LockedManifestError> {
+        let lockfile_path = lockfile_path.as_ref();
+        let maybe_lockfile = if lockfile_path.exists() {
+            debug!("found existing lockfile: {}", lockfile_path.display());
+            Some(lockfile_path)
+        } else {
+            debug!("no existing lockfile found");
+            None
+        };
+
+        let mut pkgdb_cmd = Command::new(Path::new(&*PKGDB_BIN));
+        pkgdb_cmd
+            .args(["manifest", "update"])
+            .arg("--ga-registry")
+            .arg("--global-manifest")
+            .arg(global_manifest_path(flox));
+        // Optionally add --manifest argument
+        if let Some(manifest) = manifest_path {
+            pkgdb_cmd.arg("--manifest").arg(manifest.as_ref());
+        }
+        // Add --lockfile argument if lockfile exists, and parse the old lockfile.
+        let old_lockfile = maybe_lockfile
+            .map(|lf_path| {
+                let canonical_lockfile_path =
+                    CanonicalPath::new(lf_path).map_err(LockedManifestError::BadLockfilePath)?;
+                pkgdb_cmd.arg("--lockfile").arg(&canonical_lockfile_path);
+                serde_json::from_slice(
+                    &fs::read(canonical_lockfile_path)
+                        .map_err(LockedManifestError::ReadLockfile)?,
+                )
+                .map_err(LockedManifestError::ParseLockfile)
+            })
+            .transpose()?;
+
+        pkgdb_cmd.args(inputs);
+
+        debug!("updating lockfile with command: {pkgdb_cmd:?}");
+        let lockfile: LockedManifest =
+            LockedManifest(call_pkgdb(pkgdb_cmd).map_err(LockedManifestError::UpdateFailed)?);
+
+        Ok((old_lockfile, lockfile))
+    }
+
+    /// Update global manifest lockfile and write it.
+    pub fn update_global_manifest(
+        flox: &Flox,
+        inputs: Vec<String>,
+    ) -> Result<UpdateResult, LockedManifestError> {
+        let lockfile_path = global_manifest_lockfile_path(flox);
+        let (old_lockfile, new_lockfile) =
+            Self::update_manifest(flox, None::<PathBuf>, &lockfile_path, inputs)?;
+
+        debug!("writing lockfile to {}", lockfile_path.display());
+        std::fs::write(
+            lockfile_path,
+            serde_json::to_string_pretty(&new_lockfile)
+                .map_err(LockedManifestError::SerializeGlobalLockfile)?,
+        )
+        .map_err(LockedManifestError::WriteGlobalLockfile)?;
+        Ok((old_lockfile, new_lockfile))
+    }
+
+    /// Creates the global lockfile if it doesn't exist and returns its path.
+    pub fn ensure_global_lockfile(flox: &Flox) -> Result<PathBuf, LockedManifestError> {
+        let global_lockfile_path = global_manifest_lockfile_path(flox);
+        if !global_lockfile_path.exists() {
+            debug!("Global lockfile does not exist, updating to create one");
+            Self::update_global_manifest(flox, vec![])?;
+        }
+        Ok(global_lockfile_path)
     }
 }
 
@@ -203,11 +291,24 @@ pub enum LockedManifestError {
     BuildEnv(#[source] CallPkgDbError),
     #[error("failed to parse buildenv output")]
     ParseBuildEnvOutput(#[source] serde_json::Error),
+    #[error("failed to update environment")]
+    UpdateFailed(#[source] CallPkgDbError),
     #[error("failed to canonicalize manifest path: {0:?}")]
     BadManifestPath(#[source] std::io::Error, PathBuf),
     #[error(transparent)]
+    BadLockfilePath(CanonicalizeError),
+    #[error(transparent)]
     CallPkgDbError(#[from] CallPkgDbError),
-    /// when parsing the contents of a locked manifest into a [TypedLockedManifest]
+    #[error("could not open manifest file")]
+    ReadLockfile(#[source] std::io::Error),
+    /// when parsing the contents of a lockfile into a [LockedManifest]
+    #[error("could not parse lockfile")]
+    ParseLockfile(#[source] serde_json::Error),
+    /// when parsing a [LockedManifest] into a [TypedLockedManifest]
     #[error("failed to parse contents of locked manifest")]
     ParseLockedManifest(#[source] serde_json::Error),
+    #[error("could not serialize global lockfile")]
+    SerializeGlobalLockfile(#[source] serde_json::Error),
+    #[error("could not write global lockfile")]
+    WriteGlobalLockfile(#[source] std::io::Error),
 }

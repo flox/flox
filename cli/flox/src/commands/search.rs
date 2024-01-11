@@ -6,8 +6,8 @@ use std::time::Duration;
 use anyhow::{bail, Context, Result};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::models::environment::{global_manifest_lockfile_path, global_manifest_path};
-use flox_rust_sdk::models::pkgdb::update_global_manifest;
+use flox_rust_sdk::models::environment::global_manifest_path;
+use flox_rust_sdk::models::lockfile::LockedManifest;
 use flox_rust_sdk::models::search::{
     do_search,
     PathOrJson,
@@ -462,13 +462,7 @@ pub fn manifest_and_lockfile(flox: &Flox, message: &str) -> Result<(Option<PathB
     // Use the global lock if we don't have a lock yet
     let lockfile_path = match lockfile_path {
         Some(lockfile_path) => lockfile_path,
-        None => {
-            let global_lockfile_path = global_manifest_lockfile_path(flox);
-            if !global_lockfile_path.exists() {
-                update_global_manifest(flox, vec![])?;
-            }
-            global_lockfile_path
-        },
+        None => LockedManifest::ensure_global_lockfile(flox)?,
     };
     Ok((manifest_path, lockfile_path))
 }

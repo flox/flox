@@ -35,11 +35,12 @@ use flox_rust_sdk::models::lockfile::{
     FlakeRef,
     Input,
     InstalledPackage,
+    LockedManifest,
     PackageInfo,
     TypedLockedManifest,
 };
 use flox_rust_sdk::models::manifest::PackageToInstall;
-use flox_rust_sdk::models::pkgdb::{call_pkgdb, update_global_manifest, PKGDB_BIN};
+use flox_rust_sdk::models::pkgdb::{call_pkgdb, PKGDB_BIN};
 use flox_rust_sdk::nix::command::StoreGc;
 use flox_rust_sdk::nix::command_line::NixCommandLine;
 use flox_rust_sdk::nix::Run;
@@ -1422,7 +1423,8 @@ impl Update {
                 )
             },
             EnvironmentOrGlobalSelect::Global => {
-                let (old_manifest, new_manifest) = update_global_manifest(&flox, self.inputs)?;
+                let (old_manifest, new_manifest) =
+                    LockedManifest::update_global_manifest(&flox, self.inputs)?;
                 (
                     old_manifest
                         .map(TypedLockedManifest::try_from)

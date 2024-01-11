@@ -15,12 +15,7 @@ use super::{
     MANIFEST_FILENAME,
 };
 use crate::flox::Flox;
-use crate::models::environment::{
-    call_pkgdb,
-    global_manifest_lockfile_path,
-    global_manifest_path,
-    CanonicalPath,
-};
+use crate::models::environment::{call_pkgdb, global_manifest_path, CanonicalPath};
 use crate::models::lockfile::{LockedManifest, LockedManifestError};
 use crate::models::manifest::{
     insert_packages,
@@ -29,15 +24,7 @@ use crate::models::manifest::{
     PackageToInstall,
     TomlEditError,
 };
-use crate::models::pkgdb::{
-    pkgdb_update,
-    update_global_manifest,
-    CallPkgDbError,
-    UpdateError,
-    UpgradeResult,
-    UpgradeResultJSON,
-    PKGDB_BIN,
-};
+use crate::models::pkgdb::{CallPkgDbError, UpgradeResult, UpgradeResultJSON, PKGDB_BIN};
 
 pub struct ReadOnly {}
 struct ReadWrite {}
@@ -101,14 +88,11 @@ impl<State> CoreEnvironment<State> {
             );
             environment_lockfile_path.clone()
         } else {
-            debug!("no existing lockfile found");
+            debug!("no existing lockfile found, using the global lockfile as a base");
             // Use the global lock so we're less likely to kick off a pkgdb
             // scrape in e.g. an install.
-            let global_lockfile_path = global_manifest_lockfile_path(flox);
-            if !global_lockfile_path.exists() {
-                update_global_manifest(flox, vec![]).map_err(CoreEnvironmentError::Update)?;
-            }
-            global_lockfile_path
+            LockedManifest::ensure_global_lockfile(flox)
+                .map_err(CoreEnvironmentError::LockedManifest)?
         };
         let lockfile_path = CanonicalPath::new(existing_lockfile_path)
             .map_err(CoreEnvironmentError::BadLockfilePath)?;
@@ -119,7 +103,7 @@ impl<State> CoreEnvironment<State> {
             &lockfile_path,
             &global_manifest_path(flox),
         )
-        .map_err(CoreEnvironmentError::LockManifest)?;
+        .map_err(CoreEnvironmentError::LockedManifest)?;
 
         // Write the lockfile to disk
         // todo: do we always want to do this?
@@ -157,7 +141,7 @@ impl<State> CoreEnvironment<State> {
 
         let store_path = lockfile
             .build(Path::new(&*PKGDB_BIN), None)
-            .map_err(CoreEnvironmentError::LockManifest)?;
+            .map_err(CoreEnvironmentError::LockedManifest)?;
 
         debug!(
             "built locked environment, store path={}",
@@ -185,7 +169,7 @@ impl<State> CoreEnvironment<State> {
         );
         lockfile
             .build(Path::new(&*PKGDB_BIN), Some(out_link_path.as_ref()))
-            .map_err(CoreEnvironmentError::LockManifest)?;
+            .map_err(CoreEnvironmentError::LockedManifest)?;
 
         Ok(())
     }
@@ -269,13 +253,13 @@ impl CoreEnvironment<ReadOnly> {
         inputs: Vec<String>,
     ) -> Result<UpdateResult, CoreEnvironmentError> {
         // TODO double check canonicalization
-        let (old_lockfile, new_lockfile) = pkgdb_update(
+        let (old_lockfile, new_lockfile) = LockedManifest::update_manifest(
             flox,
             Some(self.manifest_path()),
             self.lockfile_path(),
             inputs,
         )
-        .map_err(CoreEnvironmentError::Update)?;
+        .map_err(CoreEnvironmentError::LockedManifest)?;
 
         self.transact_with_lockfile_contents(
             serde_json::to_string_pretty(&new_lockfile).unwrap(),
@@ -551,7 +535,7 @@ pub enum CoreEnvironmentError {
 
     // region: pkgdb manifest errors
     #[error(transparent)]
-    LockManifest(LockedManifestError),
+    LockedManifest(LockedManifestError),
 
     #[error(transparent)]
     BadLockfilePath(CanonicalizeError),
@@ -571,8 +555,6 @@ pub enum CoreEnvironmentError {
     #[error("unexpected output from environment builder command")]
     ParseBuildEnvOutput(#[source] serde_json::Error),
     // endregion
-    #[error(transparent)]
-    Update(UpdateError),
 }
 
 #[cfg(test)]
