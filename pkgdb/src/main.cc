@@ -151,6 +151,20 @@ printAndReturnException( const flox::FloxException & err )
 int
 main( int argc, char * argv[] )
 {
+  /* Allows you to run without catching which is useful for
+   * `gdb'/`lldb' backtraces. */
+  auto maybeNC = std::getenv( "PKGDB_NO_CATCH" );
+  if ( maybeNC != nullptr )
+    {
+      std::string noCatch = std::string( maybeNC );
+      if ( ( maybeNC != std::string( "" ) )
+           && ( maybeNC != std::string( "0" ) ) )
+        {
+          return run( argc, argv );
+        }
+    }
+
+  /* Wrap all execution in an error handler that pretty prints exceptions. */
   try
     {
       return run( argc, argv );
