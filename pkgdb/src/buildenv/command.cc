@@ -44,7 +44,8 @@ namespace flox::buildenv {
 
 BuildEnvCommand::BuildEnvCommand() : parser( "buildenv" )
 {
-  this->parser.add_description( "Evaluate and build a locked environment" );
+  this->parser.add_description( "Evaluate and build a locked environment, "
+                                "optionally produce a container build script" );
   this->parser.add_argument( "lockfile" )
     .help( "inline JSON or path to lockfile" )
     .required()
@@ -53,7 +54,7 @@ BuildEnvCommand::BuildEnvCommand() : parser( "buildenv" )
              { this->lockfileContent = parseOrReadJSONObject( str ); } );
 
   this->parser.add_argument( "--out-link", "-o" )
-    .help( "path to link resulting environment" )
+    .help( "path to link resulting environment or builder to" )
     .metavar( "OUT-LINK" )
     .action( [&]( const std::string & str ) { this->outLink = str; } );
 
@@ -64,7 +65,7 @@ BuildEnvCommand::BuildEnvCommand() : parser( "buildenv" )
     .action( [&]( const std::string & str ) { this->system = str; } );
 
   this->parser.add_argument( "--container", "-c" )
-    .help( "build a container" )
+    .help( "build a container builder script" )
     .nargs( 0 )
     .action( [&]( const auto & ) { this->buildContainer = true; } );
 }
