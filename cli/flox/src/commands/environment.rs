@@ -497,6 +497,9 @@ impl Activate {
                 export {FLOX_ENV_VAR}={activation_path}
                 export {FLOX_PROMPT_ENVIRONMENTS_VAR}={flox_prompt_environments}
                 export {FLOX_ACTIVE_ENVIRONMENTS_VAR}={flox_active_environments}
+                export {FLOX_ENV_DIRS_VAR}={flox_env_dirs}
+                export {FLOX_ENV_LIB_DIRS_VAR}={flox_env_lib_dirs}
+
                 export FLOX_PROMPT_COLOR_1={prompt_color_1}
                 export FLOX_PROMPT_COLOR_2={prompt_color_2}
 
@@ -510,6 +513,8 @@ impl Activate {
             activation_path=shell_escape::escape(activation_path.to_string_lossy()),
             flox_active_environments=shell_escape::escape(flox_active_environments.to_string().into()),
             flox_prompt_environments=shell_escape::escape(Cow::from(&flox_prompt_environments)),
+            flox_env_dirs=shell_escape::escape(flox_env_dirs.to_string_lossy()),
+            flox_env_lib_dirs=shell_escape::escape(flox_env_lib_dirs.to_string_lossy()),
             };
 
             println!("{script}");
