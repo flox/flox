@@ -35,18 +35,14 @@ project_teardown() {
 assert_old_hello() {
   run jq -r ".packages.\"$NIX_SYSTEM\".hello.input.attrs.narHash" "$LOCK_PATH"
   assert_success
-  assert_output "$OLD_NAR_HASH"
+  assert_output "$PKGDB_NIXPKGS_NAR_HASH_OLD"
 }
 
 assert_new_hello() {
   run jq -r ".packages.\"$NIX_SYSTEM\".hello.input.attrs.narHash" "$LOCK_PATH"
   assert_success
-  assert_output "$NEW_NAR_HASH"
+  assert_output "$PKGDB_NIXPKGS_NAR_HASH_NEW"
 }
-
-OLD_NAR_HASH="sha256-1UGacsv5coICyvAzwuq89v9NsS00Lo8sz22cDHwhnn8="
-NEW_NAR_HASH="sha256-5uA6jKckTf+DCbVBNKsmT5pUT/7Apt5tNdpcbLnPzFI="
-GLOBAL_MANIFEST_LOCK="$FLOX_CONFIG_HOME/global-manifest.lock"
 
 # ---------------------------------------------------------------------------- #
 
@@ -60,6 +56,8 @@ teardown() {
 }
 
 @test "upgrade hello" {
+  rm -f "$GLOBAL_MANIFEST_LOCK"
+
   "$FLOX_BIN" init
   _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLD?}" \
     "$FLOX_BIN" install hello
@@ -67,7 +65,7 @@ teardown() {
   # nixpkgs and hello are both locked to the old nixpkgs
   run jq -r '.registry.inputs.nixpkgs.from.narHash' "$LOCK_PATH"
   assert_success
-  assert_output "$OLD_NAR_HASH"
+  assert_output "$PKGDB_NIXPKGS_NAR_HASH_OLD"
 
   assert_old_hello
 
@@ -77,7 +75,7 @@ teardown() {
     "$FLOX_BIN" update
   run jq -r '.registry.inputs.nixpkgs.from.narHash' "$LOCK_PATH"
   assert_success
-  assert_output "$NEW_NAR_HASH"
+  assert_output "$PKGDB_NIXPKGS_NAR_HASH_NEW"
 
   assert_old_hello
 
@@ -87,6 +85,8 @@ teardown() {
 }
 
 @test "upgrade by group" {
+  rm -f "$GLOBAL_MANIFEST_LOCK"
+
   "$FLOX_BIN" init
   cat << "EOF" > "$TMP_MANIFEST_PATH"
 [install]
@@ -119,6 +119,8 @@ EOF
 }
 
 @test "upgrade by iid" {
+  rm -f "$GLOBAL_MANIFEST_LOCK"
+
   "$FLOX_BIN" init
   _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLD?}" \
     "$FLOX_BIN" install hello

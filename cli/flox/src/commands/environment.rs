@@ -18,10 +18,6 @@ use flox_rust_sdk::models::environment::managed_environment::{
 };
 use flox_rust_sdk::models::environment::path_environment::{self, PathEnvironment};
 use flox_rust_sdk::models::environment::{
-    global_manifest_lockfile_path,
-    global_manifest_path,
-    CanonicalPath,
-    CoreEnvironmentError,
     EditResult,
     Environment,
     EnvironmentPointer,
@@ -1432,7 +1428,8 @@ impl Update {
                 )
             },
             EnvironmentOrGlobalSelect::Global => {
-                let (old_manifest, new_manifest) = self.update_global_manifest(flox)?;
+                let (old_manifest, new_manifest) =
+                    LockedManifest::update_global_manifest(&flox, self.inputs)?;
                 (
                     old_manifest
                         .map(TypedLockedManifest::try_from)
@@ -1527,39 +1524,6 @@ impl Update {
         }
 
         Ok(())
-    }
-
-    /// TODO: factor out common code with [CoreEnvironment::update]
-    fn update_global_manifest(&self, flox: Flox) -> Result<UpdateResult> {
-        let lockfile_path = global_manifest_lockfile_path(&flox);
-
-        let mut pkgdb_cmd = Command::new(Path::new(&*PKGDB_BIN));
-        pkgdb_cmd
-            .args(["manifest", "update"])
-            .arg("--ga-registry")
-            .arg("--global-manifest")
-            .arg(global_manifest_path(&flox));
-        let old_lockfile = if lockfile_path.exists() {
-            let canonical_lockfile_path = CanonicalPath::new(&lockfile_path)
-                .map_err(CoreEnvironmentError::BadLockfilePath)?;
-            pkgdb_cmd.arg("--lockfile").arg(&canonical_lockfile_path);
-            Some(serde_json::from_slice(&fs::read(canonical_lockfile_path)?)?)
-        } else {
-            None
-        };
-        pkgdb_cmd.args(self.inputs.clone());
-
-        debug!("updating global lockfile with command: {pkgdb_cmd:?}");
-        let lockfile: LockedManifest = serde_json::from_value(call_pkgdb(pkgdb_cmd)?)
-            .map_err(CoreEnvironmentError::ParseUpdateOutput)?;
-
-        debug!("writing lockfile to {}", lockfile_path.display());
-        std::fs::write(
-            lockfile_path,
-            serde_json::to_string_pretty(&lockfile).unwrap(),
-        )
-        .context("updating global inputs failed")?;
-        Ok((old_lockfile, lockfile))
     }
 
     fn update_manifest(
