@@ -54,7 +54,7 @@ impl<'a> tracing::field::Visit for PosthogVisitor<'a> {
     }
 }
 
-pub struct PosthogEvent {
+pub struct MetricEvent {
     pub subcommand: Option<String>,
     pub extras: HashMap<String, String>,
 }
@@ -85,7 +85,7 @@ where
         let mut visitor = PosthogVisitor(&mut subcommand, &mut extras);
         event.record(&mut visitor);
 
-        if let Err(err) = add_metric(PosthogEvent { subcommand, extras }) {
+        if let Err(err) = add_metric(MetricEvent { subcommand, extras }) {
             debug!("Error adding metric: {err}");
         }
     }
@@ -107,7 +107,7 @@ pub struct MetricEntry {
 
 impl MetricEntry {
     pub fn new(
-        PosthogEvent { subcommand, extras }: PosthogEvent,
+        MetricEvent { subcommand, extras }: MetricEvent,
         now: OffsetDateTime,
     ) -> MetricEntry {
         let linux_release = sys_info::linux_os_release().ok();
@@ -341,7 +341,7 @@ fn read_metrics_uuid(config: &Config) -> Result<Uuid> {
         })
 }
 
-fn add_metric(event: PosthogEvent) -> Result<()> {
+fn add_metric(event: MetricEvent) -> Result<()> {
     let config = Config::parse()?;
 
     if config.flox.disable_metrics {
