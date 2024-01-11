@@ -432,14 +432,19 @@ createContainerBuilder( nix::EvalState & state,
   nix::Value vSystem;
   vSystem.mkString( nix::nativeSystem );
 
+  nix::Value vContainerSystem;
+  vContainerSystem.mkString( system );
 
   nix::Value vBindings;
-  auto       bindings = state.buildBindings( 3 );
+  auto       bindings = state.buildBindings( 4 );
   bindings.push_back(
     { state.symbols.create( "nixpkgsFlake" ), &vNixpkgsFlake } );
   bindings.push_back(
     { state.symbols.create( "environmentOutPath" ), &vEnvironmentStorePath } );
   bindings.push_back( { state.symbols.create( "system" ), &vSystem } );
+  bindings.push_back(
+    { state.symbols.create( "containerSystem" ), &vContainerSystem } );
+
   vBindings.mkAttrs( bindings );
 
   nix::Value vContainerBuilderDrv;

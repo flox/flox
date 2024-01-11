@@ -7,9 +7,12 @@
   environmentOutPath,
   # the system to build for
   system,
+  containerSystem,
 }: let
-  environmentOutPath' = builtins.storePath environmentOutPath;
+  environment = builtins.storePath environmentOutPath;
   pkgs = nixpkgsFlake.legacyPackages.${system};
+  containerPkgs = nixpkgsFlake.legacyPackages.${containerSystem};
+  lib = pkgs.lib;
   lowPriority = pkg: pkg.overrideAttrs (old: old // {meta = (old.meta or {}) // {priority = 10000;};});
 
   buildLayeredImageArgs = {
@@ -18,9 +21,9 @@
     contents = pkgs.buildEnv {
       name = "contents";
       paths = [
-        environmentOutPath'
-        (lowPriority pkgs.bashInteractive) # for a usable shell
-        (lowPriority pkgs.coreutils) # for just the basic utils
+        environment
+        (lowPriority containerPkgs.bashInteractive) # for a usable shell
+        (lowPriority containerPkgs.coreutils) # for just the basic utils
       ];
     };
     config = {};
