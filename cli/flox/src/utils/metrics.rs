@@ -37,9 +37,9 @@ macro_rules! subcommand_metric {
     }};
 }
 
-struct PosthogVisitor<'a>(&'a mut Option<String>, &'a mut HashMap<String, String>);
+struct MetricVisitor<'a>(&'a mut Option<String>, &'a mut HashMap<String, String>);
 
-impl<'a> tracing::field::Visit for PosthogVisitor<'a> {
+impl<'a> tracing::field::Visit for MetricVisitor<'a> {
     fn record_str(&mut self, field: &tracing::field::Field, value: &str) {
         if field.name() == "subcommand" {
             *self.0 = Some(value.to_string());
