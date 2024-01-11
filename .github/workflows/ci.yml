@@ -53,7 +53,7 @@ jobs:
       matrix:
         os:
           - "ubuntu-22.04-8core"
-          - "macos-latest-xl"
+          - "ghcr.io/cirruslabs/macos-sonoma-xcode:latest"
 
     # Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
     permissions:
@@ -113,7 +113,7 @@ jobs:
       matrix:
         os:
           - "ubuntu-22.04-8core"
-          - "macos-latest-xl"
+          - "ghcr.io/cirruslabs/macos-sonoma-xcode:latest"
 
     steps:
       - name: "Checkout"
