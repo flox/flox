@@ -430,7 +430,7 @@ createContainerBuilder( nix::EvalState & state,
   vEnvironmentStorePath.mkPath( sStorePath.c_str() );
 
   nix::Value vSystem;
-  vSystem.mkString( system );
+  vSystem.mkString( nix::nativeSystem );
 
 
   nix::Value vBindings;
