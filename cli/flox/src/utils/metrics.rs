@@ -37,6 +37,7 @@ macro_rules! subcommand_metric {
     }};
 }
 
+/// Extracts [MetricEvent] data from a raw [tracing] event
 struct MetricVisitor<'a>(&'a mut Option<String>, &'a mut HashMap<String, String>);
 
 impl<'a> tracing::field::Visit for MetricVisitor<'a> {
@@ -54,11 +55,19 @@ impl<'a> tracing::field::Visit for MetricVisitor<'a> {
     }
 }
 
+/// A [tracing] event that represents a metric of a run command
+/// with additional ad-hoc metadata
+///
+/// Produced by [subcommand_metric!] and processed with [MetricsLayer].
 pub struct MetricEvent {
     pub subcommand: Option<String>,
     pub extras: HashMap<String, String>,
 }
 
+/// A [tracing_subscriber::Layer] that stores metrics events in a buffer
+/// and pushes them to the server when the buffer is expired.
+///
+/// Listens for [tracing] events with the target `flox_command`.
 pub struct MetricsLayer {}
 
 impl MetricsLayer {
@@ -82,7 +91,7 @@ where
 
         let mut subcommand = None;
         let mut extras = HashMap::new();
-        let mut visitor = PosthogVisitor(&mut subcommand, &mut extras);
+        let mut visitor = MetricVisitor(&mut subcommand, &mut extras);
         event.record(&mut visitor);
 
         if let Err(err) = add_metric(MetricEvent { subcommand, extras }) {
@@ -91,6 +100,8 @@ where
     }
 }
 
+/// A single metric entry
+/// This is the a metric event with additional static metadata
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MetricEntry {
     subcommand: Option<String>,
