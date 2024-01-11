@@ -675,7 +675,7 @@ pub mod tests {
         channels.register_channel("flox", "github:flox/floxpkgs/master".parse().unwrap());
 
         let flox = Flox {
-            system: "aarch64-darwin".to_string(),
+            system: env!("NIX_TARGET_SYSTEM").to_string(),
             cache_dir,
             data_dir,
             temp_dir,
@@ -687,6 +687,8 @@ pub mod tests {
             floxhub: Floxhub::new(Url::from_str("https://hub.flox.dev").unwrap()),
             floxhub_token: None,
         };
+
+        init_global_manifest(&global_manifest_path(&flox)).unwrap();
 
         (flox, tempdir_handle)
     }
@@ -710,6 +712,7 @@ pub mod tests {
     use mockito;
 
     use crate::flox::Auth0Client;
+    use crate::models::environment::{global_manifest_path, init_global_manifest};
 
     #[tokio::test]
     async fn test_get_username() {

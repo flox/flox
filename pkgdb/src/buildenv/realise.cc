@@ -43,6 +43,10 @@ namespace flox::buildenv {
 #  error "SET_PROMPT_BASH_SH must be set to the path of `set-prompt.bash.sh'"
 #endif
 
+#ifndef SET_PROMPT_ZSH_SH
+#  error "SET_PROMPT_ZSH_SH must be set to the path of `set-prompt.zsh.sh'"
+#endif
+
 /* -------------------------------------------------------------------------- */
 
 static const std::string BASH_ACTIVATE_SCRIPT = R"(
@@ -57,6 +61,19 @@ if [ -d "$FLOX_ENV/etc/profile.d" ]; then
   declare -a _prof_scripts;
   _prof_scripts=( $(
     shopt -s nullglob;
+    echo "$FLOX_ENV/etc/profile.d"/*.sh;
+  ) );
+  for p in "${_prof_scripts[@]}"; do . "$p"; done
+  unset _prof_scripts;
+fi
+)";
+
+
+// unlike bash, zsh activation calls this script from the user's shell rcfile
+static const std::string ZSH_ACTIVATE_SCRIPT = R"(
+if [ -d "$FLOX_ENV/etc/profile.d" ]; then
+  declare -a _prof_scripts;
+  _prof_scripts=( $(
     echo "$FLOX_ENV/etc/profile.d"/*.sh;
   ) );
   for p in "${_prof_scripts[@]}"; do . "$p"; done
@@ -348,6 +365,8 @@ createFloxEnv( nix::EvalState &     state,
    * Functionality shared between all environments is
    * in `flox.zdotdir/.zshrc'. */
   std::ofstream zshActivate( tempDir / "activate" / "zsh" );
+  zshActivate << ZSH_ACTIVATE_SCRIPT << "\n";
+  zshActivate << "source " << SET_PROMPT_ZSH_SH << "\n";
   zshActivate << commonActivate.str();
   zshActivate.close();
 

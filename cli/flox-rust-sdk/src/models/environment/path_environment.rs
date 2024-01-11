@@ -37,11 +37,12 @@ use super::{
     LOCKFILE_FILENAME,
 };
 use crate::flox::Flox;
-use crate::models::environment::{ENV_DIR_NAME, MANIFEST_FILENAME};
+use crate::models::environment::{ENV_DIR_NAME, FLOX_SYSTEM_PLACEHOLDER, MANIFEST_FILENAME};
 use crate::models::environment_ref::EnvironmentName;
 use crate::models::lockfile::LockedManifest;
 use crate::models::manifest::PackageToInstall;
 use crate::models::pkgdb::UpgradeResult;
+use crate::utils::mtime_of;
 
 /// Struct representing a local environment
 ///
@@ -246,8 +247,13 @@ impl Environment for PathEnvironment {
     }
 
     fn activation_path(&mut self, flox: &Flox) -> Result<PathBuf, EnvironmentError2> {
-        self.build(flox)?;
-        self.out_link(&flox.system)
+        let out_link = self.out_link(&flox.system)?;
+
+        if self.needs_rebuild(flox)? {
+            self.build(flox)?;
+        }
+
+        Ok(out_link)
     }
 
     /// Path to the environment's parent directory
@@ -297,7 +303,9 @@ impl PathEnvironment {
         pointer: PathPointer,
         dot_flox_parent_path: impl AsRef<Path>,
         temp_dir: impl AsRef<Path>,
+        system: impl AsRef<str>,
     ) -> Result<Self, EnvironmentError2> {
+        let system: &str = system.as_ref();
         match EnvironmentPointer::open(dot_flox_parent_path.as_ref()) {
             Err(EnvironmentError2::EnvNotFound) => {},
             Err(e) => Err(e)?,
@@ -318,6 +326,31 @@ impl PathEnvironment {
             env_dir.display()
         );
         copy_dir_recursive(&template_path, &env_dir, false).map_err(EnvironmentError2::InitEnv)?;
+        let manifest_path = env_dir.join(MANIFEST_FILENAME);
+        debug!(
+            "replacing placeholder system in manifest: path={}, system={}",
+            manifest_path.display(),
+            system
+        );
+        let contents = fs::read_to_string(&manifest_path).map_err(EnvironmentError2::ManifestEdit);
+        if let Err(e) = contents {
+            debug!("couldn't open manifest to replace placeholder system");
+            fs::remove_dir_all(&env_dir).map_err(EnvironmentError2::ManifestEdit)?;
+            return Err(e);
+        }
+        let contents = contents.unwrap();
+        let replaced = contents.replace(FLOX_SYSTEM_PLACEHOLDER, system);
+        debug!(
+            "manifest was updated successfully: {}",
+            contents != replaced
+        );
+        let write_res =
+            fs::write(&manifest_path, replaced).map_err(EnvironmentError2::ManifestEdit);
+        if let Err(e) = write_res {
+            debug!("overwriting manifest did not complete successfully");
+            fs::remove_dir_all(&env_dir).map_err(EnvironmentError2::InitEnv)?;
+            return Err(e);
+        }
 
         // Write the `env.json` file
         if let Err(e) = fs::write(
@@ -333,6 +366,34 @@ impl PathEnvironment {
             .map_err(EnvironmentError2::WriteGitignore)?;
 
         Self::open(pointer, dot_flox_path, temp_dir)
+    }
+
+    /// Determine if the environment needs to be rebuilt
+    /// based on the modification times of the manifest and the out link
+    ///
+    /// If the manifest was modified after the out link was set,
+    /// the environment needs to be rebuilt.
+    ///
+    /// This is a heuristic to avoid rebuilding the environment when it is not necessary.
+    /// However, it is not perfect.
+    /// For example,
+    /// if the manifest is modified through as a whole idempotent git operations
+    ///   e.g. from branch `a`
+    ///   `git switch b; git switch a;`
+    /// or the manifest was reformatted,
+    /// the modification time of the manifest will change triggering a rebuild although nothing changed.
+    ///
+    /// Similarly, if any adjacent files are modified, the environment will not be rebuilt.
+    fn needs_rebuild(&self, flox: &Flox) -> Result<bool, EnvironmentError2> {
+        let manifest_modified_at = mtime_of(self.manifest_path(flox)?);
+        let out_link_modified_at = mtime_of(self.out_link(&flox.system)?);
+
+        debug!(
+            "manifest_modified_at: {manifest_modified_at:?},
+             out_link_modified_at: {out_link_modified_at:?}"
+        );
+
+        Ok(manifest_modified_at >= out_link_modified_at)
     }
 }
 
@@ -359,8 +420,13 @@ mod tests {
             "{before:?}"
         );
 
-        let actual =
-            PathEnvironment::init(pointer, environment_temp_dir.path(), temp_dir.path()).unwrap();
+        let actual = PathEnvironment::init(
+            pointer,
+            environment_temp_dir.path(),
+            temp_dir.path(),
+            &flox.system,
+        )
+        .unwrap();
 
         let expected = PathEnvironment::new(
             environment_temp_dir.into_path().join(".flox"),
@@ -376,5 +442,34 @@ mod tests {
             "manifest exists"
         );
         assert!(actual.path.is_absolute());
+    }
+
+    /// Write a manifest file with invalid toml to ensure we can catch
+    #[test]
+    fn cache_activation_path() {
+        let (flox, temp_dir) = flox_instance();
+
+        let environment_temp_dir = tempfile::tempdir_in(&temp_dir).unwrap();
+        let pointer = PathPointer::new("test".parse().unwrap());
+
+        let mut env = PathEnvironment::init(
+            pointer,
+            environment_temp_dir.path(),
+            temp_dir.path(),
+            &flox.system,
+        )
+        .unwrap();
+
+        assert!(env.needs_rebuild(&flox).unwrap());
+
+        // build the environment -> out link is created -> no rebuild necessary
+        env.build(&flox).unwrap();
+        assert!(!env.needs_rebuild(&flox).unwrap());
+
+        // "modify" the manifest -> rebuild necessary
+        // TODO: there will be better methods to explicitly set mtime when we upgrade to rust >= 1.75.0
+        let file = fs::write(env.manifest_path(&flox).unwrap(), "");
+        drop(file);
+        assert!(env.needs_rebuild(&flox).unwrap());
     }
 }

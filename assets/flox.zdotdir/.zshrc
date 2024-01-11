@@ -25,17 +25,5 @@ then
     source "$zshrc"
 fi
 
-source "$flox_zdotdir/prompt.zshrc"
-
-if [ -d "$FLOX_ENV/etc/profile.d" ]; then
-  declare -a _prof_scripts;
-  _prof_scripts=( $(
-    set -o nullglob;
-    echo "$FLOX_ENV/etc/profile.d"/*.sh;
-  ) );
-  for p in "${_prof_scripts[@]}"; do . "$p"; done
-  unset _prof_scripts;
-fi
-
 # Bring in the Nix and Flox environment customizations.
 [ -z "$FLOX_ZSH_INIT_SCRIPT" ] || source "$FLOX_ZSH_INIT_SCRIPT"

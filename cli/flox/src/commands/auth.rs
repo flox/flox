@@ -1,11 +1,12 @@
-//this module liberally borrows from github-device-flox crate
-use std::time;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use bpaf::Bpaf;
 use chrono::offset::Utc;
 use chrono::{DateTime, Duration};
 use flox_rust_sdk::flox::{Auth0Client, Flox};
+use indoc::{eprintdoc, formatdoc};
 use log::{debug, info};
 use oauth2::basic::BasicClient;
 use oauth2::{
@@ -18,12 +19,13 @@ use oauth2::{
     TokenUrl,
 };
 use serde::Serialize;
+use url::Url;
 
 use crate::commands::general::update_config;
 use crate::config::Config;
 use crate::subcommand_metric;
-
-const TOKEN_INPUT_TIMEOUT: time::Duration = time::Duration::new(30, 0);
+use crate::utils::dialog::{Checkpoint, Dialog};
+use crate::utils::openers::Browser;
 
 #[derive(Debug, Default, Clone, Serialize)]
 pub struct Credential {
@@ -58,7 +60,11 @@ fn create_oauth_client() -> Result<BasicClient> {
     Ok(client)
 }
 
-pub async fn authorize(client: BasicClient) -> Result<Credential> {
+pub async fn authorize(client: BasicClient, floxhub_url: &Url) -> Result<Credential> {
+    if !Dialog::can_prompt() {
+        bail!("Cannot prompt for user input")
+    }
+
     let details: StandardDeviceAuthorizationResponse = client
         .exchange_device_code()
         .unwrap()
@@ -74,25 +80,70 @@ pub async fn authorize(client: BasicClient) -> Result<Credential> {
 
     debug!("Device code details: {details:#?}");
 
-    eprintln!(
-        "Please visit {} in your browser",
-        details.verification_uri().as_str()
-    );
-    eprintln!("And enter code: {}", details.user_code().secret());
+    let opener = Browser::detect();
 
-    let token_result = client
+    let done = Arc::new(AtomicBool::default());
+
+    match opener {
+        Ok(opener) => {
+            let message = formatdoc! {"
+            First copy your one-time code: {code}
+
+            Press enter to open {url} in your browser...
+            ",
+                url = floxhub_url.host_str().unwrap_or(floxhub_url.as_str()),
+                code = details.user_code().secret()
+            };
+
+            debug!(
+                "Waiting for user to enter code (timeout: {}s)",
+                details.expires_in().as_secs()
+            );
+
+            Dialog {
+                message: &message,
+                help_message: None,
+                typed: Checkpoint,
+            }
+            .checkpoint()?;
+
+            let url = details.verification_uri().url().as_str();
+            let mut command = opener.to_command();
+            command.arg(url);
+
+            if command.spawn().is_err() {
+                info!("Could not open browser. Please open the following URL manually: {url}");
+            }
+        },
+        Err(e) => {
+            debug!("Unable to open browser: {e}");
+
+            eprintdoc! {"
+            Go to {url} in your browser
+
+            Then enter your one-time code: {code}
+            ",
+                url = details.verification_uri().url(),
+                code = details.user_code().secret()
+            };
+        },
+    }
+
+    let token = client
         .exchange_device_access_token(&details)
         .request_async(
             oauth2::reqwest::async_http_client,
             tokio::time::sleep,
-            Some(TOKEN_INPUT_TIMEOUT),
+            Some(details.expires_in()),
         )
         .await
         .context("Could not authorize via oauth")?;
 
+    done.store(true, Ordering::Relaxed);
+
     Ok(Credential {
-        token: token_result.access_token().secret().to_string(),
-        expiry: calculate_expiry(token_result.expires_in().unwrap().as_secs() as i64),
+        token: token.access_token().secret().to_string(),
+        expiry: calculate_expiry(token.expires_in().unwrap().as_secs() as i64),
     })
 }
 
@@ -164,7 +215,7 @@ impl Auth {
 /// * updates the floxhub_token field in the config struct
 pub async fn login_flox(flox: &mut Flox) -> Result<()> {
     let client = create_oauth_client()?;
-    let cred = authorize(client)
+    let cred = authorize(client, flox.floxhub.base_url())
         .await
         .context("Could not authorize via oauth")?;
 

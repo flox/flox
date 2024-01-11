@@ -10,6 +10,7 @@ pub mod dialog;
 pub mod init;
 pub mod logger;
 pub mod metrics;
+pub mod openers;
 
 use regex::Regex;
 

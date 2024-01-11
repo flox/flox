@@ -151,8 +151,9 @@ VERSION := $(file < $(PKGDB_ROOT)/.version)
 PROFILE_D_SCRIPTS_DIR ?= $(shell                            \
   $(NIX) build .\#flox-pkgdb.envs.PROFILE_D_SCRIPTS_DIR --print-out-paths)
 SET_PROMPT_BASH_SH ?= $(shell                                                  \
-  $(NIX) store add-path -n set-prompt-bash.sh src/buildenv/set-prompt-bash.sh)
-
+  $(NIX) store add-path -n set-prompt.bash.sh src/buildenv/assets/set-prompt-bash.sh)
+SET_PROMPT_ZSH_SH ?= $(shell                                                  \
+  $(NIX) store add-path -n set-prompt.zsh.sh src/buildenv/assets/set-prompt.zsh.sh)
 
 # ---------------------------------------------------------------------------- #
 
@@ -343,6 +344,10 @@ src/buildenv/realise.o: CXXFLAGS +=                   \
 
 src/buildenv/realise.o: CXXFLAGS +=               \
 	'-DSET_PROMPT_BASH_SH="$(SET_PROMPT_BASH_SH)"'
+
+src/buildenv/realise.o: CXXFLAGS +=               \
+	'-DSET_PROMPT_ZSH_SH="$(SET_PROMPT_ZSH_SH)"'
+
 
 
 

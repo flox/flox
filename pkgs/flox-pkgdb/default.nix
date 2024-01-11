@@ -71,10 +71,17 @@
       };
     in
       joined;
+
     # Used by `buildenv' to set shell prompts on activation.
     SET_PROMPT_BASH_SH = builtins.path {
-      name = "set-prompt-bash.sh";
-      path = ../../pkgdb/src/buildenv/set-prompt-bash.sh;
+      name = "set-prompt.bash.sh";
+      path = ../../pkgdb/src/buildenv/assets/set-prompt.bash.sh;
+    };
+
+    # Used by `buildenv' to set shell prompts on activation.
+    SET_PROMPT_ZSH_SH = builtins.path {
+      name = "set-prompt.zsh.sh";
+      path = ../../pkgdb/src/buildenv/assets/set-prompt.zsh.sh;
     };
   };
 in
