@@ -59,15 +59,15 @@ pub struct MetricEvent {
     pub extras: HashMap<String, String>,
 }
 
-pub struct PosthogLayer {}
+pub struct MetricsLayer {}
 
-impl PosthogLayer {
+impl MetricsLayer {
     pub fn new() -> Self {
-        PosthogLayer {}
+        MetricsLayer {}
     }
 }
 
-impl<S> tracing_subscriber::Layer<S> for PosthogLayer
+impl<S> tracing_subscriber::Layer<S> for MetricsLayer
 where
     S: tracing::Subscriber,
 {
