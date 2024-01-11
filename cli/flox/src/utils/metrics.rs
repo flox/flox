@@ -94,6 +94,9 @@ where
         let mut visitor = MetricVisitor(&mut subcommand, &mut extras);
         event.record(&mut visitor);
 
+        // Catch any errors that occurred while writing/pushing the metric.
+        // We do want to _know_ about errors
+        // but they should not block flox commands from running.
         if let Err(err) = add_metric(MetricEvent { subcommand, extras }) {
             debug!("Error adding metric: {err}");
         }
@@ -139,6 +142,10 @@ impl MetricEntry {
     }
 }
 
+/// Push metrics to the telemetry backend
+///
+/// Any network errors will bubble up and be catched by the event handler.
+/// If the network request failed, the buffer file is _not_ cleared.
 fn push_metrics(mut metrics: MetricsBuffer, uuid: Uuid) -> Result<()> {
     debug!("Pushing metrics to server");
 
@@ -252,6 +259,10 @@ struct MetricsBuffer {
 impl MetricsBuffer {
     /// Reads the metrics buffer from the cache directory
     fn read(cache_dir: &Path) -> Result<Self> {
+        // Create a file lock to avoid concurrent access to the metrics.
+        // The lock is released once the object is dropped.
+        // We store the lock in the instance of [MetricsBuffer],
+        // thus the lifetime of the lock is extended until the buffer is dropped.
         let mut metrics_lock = LockFile::open(&cache_dir.join(METRICS_LOCK_FILE_NAME))?;
         metrics_lock.lock()?;
 
