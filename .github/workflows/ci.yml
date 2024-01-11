@@ -34,6 +34,9 @@ jobs:
     steps:
       - name: "Checkout"
         uses: "actions/checkout@v4"
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.ref || github.ref }}
 
       - name: "Setup"
         uses: "./.github/actions/common-setup"
@@ -93,6 +96,9 @@ jobs:
     steps:
       - name: "Checkout"
         uses: "actions/checkout@v4"
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.ref || github.ref }}
 
       - name: "Setup"
         uses: "./.github/actions/common-setup"
@@ -162,6 +168,9 @@ jobs:
     name: "Nix build"
     runs-on: "ubuntu-latest"
 
+    outputs:
+      closure-size: ${{ steps.closure.outputs.closure-size }}
+
     strategy:
       fail-fast: false
       matrix:
@@ -174,6 +183,9 @@ jobs:
     steps:
       - name: "Checkout"
         uses: "actions/checkout@v4"
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.ref || github.ref }}
 
       - name: "Setup"
         uses: "./.github/actions/common-setup"
@@ -189,28 +201,38 @@ jobs:
           REMOTE_BUILDERS:        "${{ vars.FLOX_BUILDERS }}"
 
       - name: "Build"
+        id: "build"
         run: |
-          if nix path-info                 \
-              --store "$FLOX_SUBSTITUTER"  \
-              --eval-store auto            \
-              --builders ''                \
-              -j0                          \
-                '.#flox-pkgdb.outPath'     \
-                '.#flox-cli.outPath'; then
-             echo paths already exist in substituter;
-             exit 0;
-          else
-            nix build -L             \
-              --no-update-lock-file  \
-              --print-out-paths      \
-                '.#flox-pkgdb'       \
-                '.#flox-cli'         \
-                '.#flox';
-          fi
+          for package in '.#flox-pkgdb' '.#flox-cli' '.#flox' ; do
+            echo "Building $package ..."
+            git clean -xfd .
+            if nix path-info                 \
+                --store "$FLOX_SUBSTITUTER"  \
+                --eval-store auto            \
+                --builders ''                \
+                -j0                          \
+                  "$package".outPath ; then
+               echo "  -> Paths for $package already exists in the substituter";
+            else
+              nix build -L             \
+                --no-update-lock-file  \
+                --print-out-paths      \
+                  "$package";
+            fi
+          done
+
+      - name: "Get closure size (x86_64-linux)"
+        if: ${{ matrix.system == 'x86_64-linux' }}
+        id: "closure"
+        run: |
+          git clean -xfd .
+          nix build --no-update-lock-file '.#flox'
+          CLOSURE_SIZE=$(nix path-info --json '.#flox' | jq '[.[] | .narSize] | .[0]')
+          echo "closure-size=$CLOSURE_SIZE" >> "$GITHUB_OUTPUT"
 
   trigger-flox-installers-workflow:
     name: "Build installers"
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'push' }}
     runs-on: "ubuntu-22.04-8core"
 
     needs:
@@ -218,6 +240,7 @@ jobs:
 
     steps:
       - name: "Trigger flox-installers workflow"
+        id: "trigger-workflow"
         uses: "convictional/trigger-workflow-and-wait@v1.6.5"
         with:
           owner:              "flox"
@@ -227,10 +250,24 @@ jobs:
           workflow_file_name: "ci.yml"
           ref:                "main"
           wait_interval:      10
-          client_payload:     '{"TARGET":"git+ssh://git@github.com/flox/flox?ref=main&rev=${{ github.event.pull_request.head.sha || github.sha }}"}'
-          propagate_failure:  false
+          client_payload:     '{"TARGET":"git+ssh://git@github.com/flox/flox?ref=${{ github.event.pull_request.head.ref || github.ref }}&rev=${{ github.event.pull_request.head.sha || github.sha }}"}'
+          propagate_failure:  true
           trigger_workflow:   true
           wait_workflow:      true
+
+      - name: "Create shipit artifact"
+        run: |
+          jq -n \
+            --arg "flox_installers_workflow_id" "${{ steps.trigger-workflow.outputs.workflow_id }}" \
+            --arg "flox_closure_size" "${{ needs.nix-build.outputs.closure-size }}" \
+            '$ARGS.named' > shipit.json
+          cat shipit.json | jq
+
+      - name: "Upload artifact"
+        uses: "actions/upload-artifact@v4"
+        with:
+          name: "shipit"
+          path: "shipit.json"
 
   report-failure:
     name: "Report Failure"
@@ -274,6 +311,9 @@ jobs:
     steps:
       - name: "Checkout"
         uses: "actions/checkout@v4"
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.ref || github.ref }}
 
       - name: "Setup"
         uses: "./.github/actions/common-setup"
