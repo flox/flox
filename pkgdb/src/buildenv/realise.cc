@@ -382,6 +382,9 @@ createFloxEnv( nix::EvalState &     state,
                      true,
                      buildenv::Priority() );
 
+  references.insert( state.store->parseStorePath( SET_PROMPT_BASH_SH ) );
+  references.insert( state.store->parseStorePath( SET_PROMPT_ZSH_SH ) );
+
   /* Insert profile.d scripts.
    * The store path is provided at compile time via the `PROFILE_D_SCRIPTS_DIR'
    * environment variable. */
@@ -445,14 +448,47 @@ createContainerBuilder( nix::EvalState & state,
                       vContainerBuilderDrv,
                       nix::PosIdx() );
 
+  // force the derivation value to be evaluated
+  // this enforces that the nix expression in pure up to the derivation
+  // (see below)
+  state.forceValue( vContainerBuilderDrv, nix::noPos );
+
   auto containerBuilderDrv
     = nix::getDerivation( state, vContainerBuilderDrv, false ).value();
+
+
+  // building of the container builder derivation requires impure evaluation
+
+
+  // Access to absolute paths is restricted by default.
+  // Instead of disabling restricted evaluation,
+  // we allow access to the bundled store path explictly.
+  state.allowPath( environmentStorePath );
+
+  // the derivation uses `builtins.storePath`
+  // to ensure that all store references of the enfironment
+  // are included in the derivation/container.
+  //
+  // `builtins.storePath` however requires impure evaluation
+  // since input addressed store paths are not guaranteed to be pure or
+  // present in the store in the first place.
+  // In this case, we know that the environment is already built.
+  //
+  //
+  auto pureEvalState = nix::evalSettings.pureEval.get();
+  nix::evalSettings.pureEval.override( false );
 
   state.store->buildPaths( nix::toDerivedPaths(
     { nix::StorePathWithOutputs { *containerBuilderDrv.queryDrvPath(),
                                   {} } } ) );
 
-  return containerBuilderDrv.queryOutPath();
+
+  auto outPath = containerBuilderDrv.queryOutPath();
+
+  // be nice, reset the original pure eval state
+  nix::evalSettings.pureEval = pureEvalState;
+
+  return outPath;
 }
 
 /* -------------------------------------------------------------------------- */

@@ -8,6 +8,7 @@
   # the system to build for
   system,
 }: let
+  environmentOutPath' = builtins.storePath environmentOutPath;
   pkgs = nixpkgsFlake.legacyPackages.${system};
   lowPriority = pkg: pkg.overrideAttrs (old: old // {meta = (old.meta or {}) // {priority = 10000;};});
 
@@ -17,7 +18,7 @@
     contents = pkgs.buildEnv {
       name = "contents";
       paths = [
-        environmentOutPath
+        environmentOutPath'
         (lowPriority pkgs.bashInteractive) # for a usable shell
         (lowPriority pkgs.coreutils) # for just the basic utils
       ];
