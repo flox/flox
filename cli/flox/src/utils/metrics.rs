@@ -1,19 +1,18 @@
 use std::collections::{HashMap, VecDeque};
-use std::sync::mpsc;
+use std::fs::{File, OpenOptions};
+use std::io::{Read, Write};
+use std::path::Path;
 
 use anyhow::{Context, Result};
 use flox_rust_sdk::flox::FLOX_VERSION;
 use fslock::LockFile;
-use futures::TryFutureExt;
 use indoc::indoc;
-use log::{debug, error};
+use log::debug;
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use time::format_description::well_known::Iso8601;
 use time::{Duration, OffsetDateTime};
-use tokio::fs::{File, OpenOptions};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use uuid::Uuid;
 
 use crate::config::Config;
@@ -21,6 +20,7 @@ use crate::config::Config;
 pub const METRICS_EVENTS_FILE_NAME: &str = "metrics-events-v2.json";
 pub const METRICS_UUID_FILE_NAME: &str = "metrics-uuid";
 pub const METRICS_LOCK_FILE_NAME: &str = "metrics-lock";
+const BUFFER_EXPIRY: Duration = Duration::hours(2);
 
 pub static METRICS_EVENTS_URL: Lazy<String> = Lazy::new(|| {
     std::env::var("_FLOX_METRICS_URL_OVERRIDE").unwrap_or(env!("METRICS_EVENTS_URL").to_string())
@@ -37,9 +37,10 @@ macro_rules! subcommand_metric {
     }};
 }
 
-struct PosthogVisitor<'a>(&'a mut Option<String>, &'a mut HashMap<String, String>);
+/// Extracts [MetricEvent] data from a raw [tracing] event
+struct MetricVisitor<'a>(&'a mut Option<String>, &'a mut HashMap<String, String>);
 
-impl<'a> tracing::field::Visit for PosthogVisitor<'a> {
+impl<'a> tracing::field::Visit for MetricVisitor<'a> {
     fn record_str(&mut self, field: &tracing::field::Field, value: &str) {
         if field.name() == "subcommand" {
             *self.0 = Some(value.to_string());
@@ -54,37 +55,28 @@ impl<'a> tracing::field::Visit for PosthogVisitor<'a> {
     }
 }
 
-pub struct PosthogEvent {
+/// A [tracing] event that represents a metric of a run command
+/// with additional ad-hoc metadata
+///
+/// Produced by [subcommand_metric!] and processed with [MetricsLayer].
+pub struct MetricEvent {
     pub subcommand: Option<String>,
     pub extras: HashMap<String, String>,
 }
 
-pub struct PosthogLayer {
-    tx: std::sync::Mutex<mpsc::Sender<PosthogEvent>>,
-}
+/// A [tracing_subscriber::Layer] that stores metrics events in a buffer
+/// and pushes them to the server when the buffer is expired.
+///
+/// Listens for [tracing] events with the target `flox_command`.
+pub struct MetricsLayer {}
 
-impl PosthogLayer {
+impl MetricsLayer {
     pub fn new() -> Self {
-        let (tx, rx) = mpsc::channel::<PosthogEvent>();
-
-        let handle = tokio::runtime::Handle::current();
-        std::thread::spawn(move || {
-            handle.block_on(async {
-                while let Ok(event) = rx.recv() {
-                    if let Err(err) = add_metric(event).await {
-                        debug!("Error adding metric: {err}");
-                    }
-                }
-            })
-        });
-
-        PosthogLayer {
-            tx: std::sync::Mutex::new(tx),
-        }
+        MetricsLayer {}
     }
 }
 
-impl<S> tracing_subscriber::Layer<S> for PosthogLayer
+impl<S> tracing_subscriber::Layer<S> for MetricsLayer
 where
     S: tracing::Subscriber,
 {
@@ -99,17 +91,20 @@ where
 
         let mut subcommand = None;
         let mut extras = HashMap::new();
-        let mut visitor = PosthogVisitor(&mut subcommand, &mut extras);
+        let mut visitor = MetricVisitor(&mut subcommand, &mut extras);
         event.record(&mut visitor);
 
-        if let Ok(tx) = self.tx.lock() {
-            if let Err(err) = tx.send(PosthogEvent { subcommand, extras }) {
-                error!("Error adding metric: {err}");
-            }
+        // Catch any errors that occurred while writing/pushing the metric.
+        // We do want to _know_ about errors
+        // but they should not block flox commands from running.
+        if let Err(err) = add_metric(MetricEvent { subcommand, extras }) {
+            debug!("Error adding metric: {err}");
         }
     }
 }
 
+/// A single metric entry
+/// This is the a metric event with additional static metadata
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MetricEntry {
     subcommand: Option<String>,
@@ -126,7 +121,7 @@ pub struct MetricEntry {
 
 impl MetricEntry {
     pub fn new(
-        PosthogEvent { subcommand, extras }: PosthogEvent,
+        MetricEvent { subcommand, extras }: MetricEvent,
         now: OffsetDateTime,
     ) -> MetricEntry {
         let linux_release = sys_info::linux_os_release().ok();
@@ -147,7 +142,13 @@ impl MetricEntry {
     }
 }
 
-async fn push_metrics(mut metrics: MetricsBuffer, uuid: Uuid) -> Result<()> {
+/// Push metrics to the telemetry backend
+///
+/// Any network errors will bubble up and be catched by the event handler.
+/// If the network request failed, the buffer file is _not_ cleared.
+fn push_metrics(mut metrics: MetricsBuffer, uuid: Uuid) -> Result<()> {
+    debug!("Pushing metrics to server");
+
     let version = FLOX_VERSION.to_string();
     let events = metrics
         .iter()
@@ -217,75 +218,111 @@ async fn push_metrics(mut metrics: MetricsBuffer, uuid: Uuid) -> Result<()> {
         })
         .collect::<Result<Vec<serde_json::Value>>>()?;
 
-    reqwest::Client::new()
+    debug!("Sending metrics to {}", &*METRICS_EVENTS_URL);
+    debug!("Metrics: {events:?}", events = events);
+
+    let req = reqwest::Client::new()
         .put(&*METRICS_EVENTS_URL)
         .header("content-type", "application/json")
         .header("x-api-key", METRICS_EVENTS_API_KEY)
         .header("user-agent", format!("flox-cli/{}", version))
         .json(&events)
-        .send()
-        .await?;
+        .send();
 
-    metrics.clear().await;
+    let handle = tokio::runtime::Handle::current();
+    let _guard = handle.enter();
+    futures::executor::block_on(req).context("could not send to telemetry backend")?;
 
+    metrics.clear()?;
     Ok(())
 }
 
-#[derive(Default, Debug)]
-struct MetricsBuffer(Option<File>, VecDeque<MetricEntry>);
+/// A representation of the metrics buffer
+///
+/// The metrics buffer is a file that contains a list of metrics entries.
+/// It is used to store metrics for a period of time
+/// and then push them to the server.
+///
+/// An instance of this struct represents the metrics buffer file and its contents.
+/// While the metrics buffer is being used, it is locked to avoid data corruption.
+/// Thus, a [MetricsBuffer] instance should be short-lived
+/// to avoid blocking other processes.
+#[derive(Debug)]
+struct MetricsBuffer {
+    /// The file where the metrics buffer is stored
+    storage: File,
+    /// The lock file for the metrics buffer.
+    /// Used to avoid concurrent writes to the metrics buffer file.
+    _file_lock: LockFile,
+    buffer: VecDeque<MetricEntry>,
+}
 impl MetricsBuffer {
-    /// Reads the metrics buffer from the given file
-    async fn read_from_file(mut file: File) -> Result<Self> {
+    /// Reads the metrics buffer from the cache directory
+    fn read(cache_dir: &Path) -> Result<Self> {
+        // Create a file lock to avoid concurrent access to the metrics.
+        // The lock is released once the object is dropped.
+        // We store the lock in the instance of [MetricsBuffer],
+        // thus the lifetime of the lock is extended until the buffer is dropped.
+        let mut metrics_lock = LockFile::open(&cache_dir.join(METRICS_LOCK_FILE_NAME))?;
+        metrics_lock.lock()?;
+
+        let buffer_file_path = cache_dir.join(METRICS_EVENTS_FILE_NAME);
+        let mut events_buffer_file = OpenOptions::new()
+            .write(true)
+            .read(true)
+            .create(true)
+            .open(buffer_file_path)?;
+
         let mut buffer_json = String::new();
-        file.read_to_string(&mut buffer_json).await?;
+
+        events_buffer_file.read_to_string(&mut buffer_json)?;
 
         let buffer_iter = serde_json::Deserializer::from_str(&buffer_json)
             .into_iter::<MetricEntry>()
             .filter_map(|x| x.ok())
             .collect();
 
-        Ok(MetricsBuffer(Some(file), buffer_iter))
-    }
-
-    /// Reads the metrics buffer from the cache directory
-    async fn read(config: &Config) -> Result<Self> {
-        // dont create a metrics buffer if metrics are disabled anyway
-        if config.flox.disable_metrics {
-            return Ok(Default::default());
-        }
-
-        let cache_dir = &config.flox.cache_dir;
-
-        let mut metrics_lock = LockFile::open(&cache_dir.join(METRICS_LOCK_FILE_NAME))?;
-        tokio::task::spawn_blocking(move || metrics_lock.lock()).await??;
-
-        let buffer_file_path = cache_dir.join(METRICS_EVENTS_FILE_NAME);
-        let events_buffer_file = OpenOptions::new()
-            .write(true)
-            .read(true)
-            .create(true)
-            .open(buffer_file_path)
-            .await?;
-
-        Self::read_from_file(events_buffer_file).await
+        Ok(MetricsBuffer {
+            storage: events_buffer_file,
+            _file_lock: metrics_lock,
+            buffer: buffer_iter,
+        })
     }
 
     /// Returns the oldest timestamp in the buffer
     fn oldest_timestamp(&self) -> Option<OffsetDateTime> {
-        self.1.front().map(|x| x.timestamp)
+        self.buffer.front().map(|x| x.timestamp)
+    }
+
+    /// Returns whether the buffer is expired,
+    /// i.e. needs to be pushed to the server.
+    ///
+    /// The buffer is expired if it contains >= 1 entry
+    /// and the oldest entry is older than [BUFFER_EXPIRY].
+    fn is_expired(&self) -> bool {
+        let now = OffsetDateTime::now_utc();
+        self.oldest_timestamp()
+            .map(|oldest| now - oldest > BUFFER_EXPIRY)
+            .unwrap_or(false)
     }
 
     /// Pushes a new metric entry to the buffer and syncs it to the buffer file
-    async fn push(&mut self, entry: MetricEntry) -> Result<()> {
-        if let Some(ref mut file) = self.0 {
-            let mut buffer_json = String::new();
-            buffer_json.push_str(&serde_json::to_string(&entry)?);
-            buffer_json.push('\n');
-            file.write_all(buffer_json.as_bytes()).await?;
-            file.flush().await?;
-        }
+    fn push(&mut self, entry: MetricEntry) -> Result<()> {
+        debug!("pushing entry to metrics buffer: {entry:?}");
 
-        self.1.push_back(entry);
+        // update file with new entry
+        // [MetricsBuffer::read] ensures that the file is opened with write permissions
+        // and append mode.
+        let mut buffer_json = String::new();
+        buffer_json.push_str(&serde_json::to_string(&entry)?);
+        buffer_json.push('\n');
+        self.storage
+            .write_all(buffer_json.as_bytes())
+            .context("could not write new metrics entry to buffer file")?;
+        self.storage.flush()?;
+
+        // update the buffer in memory
+        self.buffer.push_back(entry);
 
         Ok(())
     }
@@ -294,29 +331,29 @@ impl MetricsBuffer {
     ///
     /// This is used when the buffer is pushed to the server
     /// and we start collecting metrics in a new buffer.
-    async fn clear(&mut self) {
-        if let Some(ref file) = self.0 {
-            if let Err(e) = file.set_len(0).await {
-                debug!("Could not truncate metrics buffer file: {e}")
-            }
-        }
-        self.1.clear();
+    fn clear(&mut self) -> Result<()> {
+        self.storage
+            .set_len(0)
+            .context("Could not truncate metrics buffer file")?;
+        self.buffer.clear();
+        Ok(())
     }
 
+    /// Returns an iterator over the entries in the buffer
     fn iter(&self) -> impl Iterator<Item = &MetricEntry> {
-        self.1.iter()
+        self.buffer.iter()
     }
 }
 
-async fn read_metrics_uuid(config: &Config) -> Result<Uuid> {
+fn read_metrics_uuid(config: &Config) -> Result<Uuid> {
     let data_dir = &config.flox.data_dir;
     let uuid_path = data_dir.join(METRICS_UUID_FILE_NAME);
 
-    tokio::fs::File::open(&uuid_path)
-        .or_else(|e| async { Err(e).context("Could not read metrics UUID file") })
-        .and_then(|mut f| async move {
+    File::open(uuid_path)
+        .context("Could not read metrics UUID file")
+        .and_then(|mut f| {
             let mut uuid_str = String::new();
-            f.read_to_string(&mut uuid_str).await?;
+            f.read_to_string(&mut uuid_str)?;
             let uuid_str_trimmed = uuid_str.trim();
             Uuid::try_parse(uuid_str_trimmed).with_context(|| {
                 indoc! {"
@@ -324,35 +361,25 @@ async fn read_metrics_uuid(config: &Config) -> Result<Uuid> {
             "}
             })
         })
-        .await
 }
 
-async fn add_metric(event: PosthogEvent) -> Result<()> {
+fn add_metric(event: MetricEvent) -> Result<()> {
     let config = Config::parse()?;
 
     if config.flox.disable_metrics {
         return Ok(());
     }
 
-    let uuid = read_metrics_uuid(&config).await?;
-    let mut metrics_buffer = MetricsBuffer::read(&config).await?;
+    let uuid = read_metrics_uuid(&config)?;
+    let mut metrics_buffer = MetricsBuffer::read(&config.flox.cache_dir)?;
 
-    let now = OffsetDateTime::now_utc();
-
-    let new_entry = MetricEntry::new(event, now);
-    metrics_buffer.push(new_entry).await?;
-
-    // Note: assumes the oldest metric entry must come first
-    let buffer_time_passed = metrics_buffer
-        .oldest_timestamp()
-        .map(|oldest| now - oldest > Duration::hours(2))
-        .unwrap_or(false);
+    let new_entry = MetricEntry::new(event, OffsetDateTime::now_utc());
+    metrics_buffer.push(new_entry)?;
 
     let force_flush_buffer = std::env::var("_FLOX_FORCE_FLUSH_METRICS").is_ok();
 
-    if buffer_time_passed || force_flush_buffer {
-        debug!("Pushing buffered metrics");
-        push_metrics(metrics_buffer, uuid).await?;
+    if metrics_buffer.is_expired() || force_flush_buffer {
+        push_metrics(metrics_buffer, uuid)?;
     }
 
     Ok(())
