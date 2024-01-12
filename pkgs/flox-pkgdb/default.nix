@@ -89,6 +89,18 @@
       name = "mkContainer.nix";
       path = ../../pkgdb/src/buildenv/assets/mkContainer.nix;
     };
+
+    # Used by `buildenv --container' to access `dockerTools` at a known version
+    # When utilities from nixpkgs are used by flox at runtime,
+    # they should be
+    # a) bundled at buildtime if possible (binaries/packages)
+    # b) use this version of nixpkgs i.e. (nix library utils such as `dockerTools`)
+    COMMON_NIXPKGS_URL = let
+      lockfile = builtins.fromJSON (builtins.readFile ./../../flake.lock);
+      root = lockfile.nodes.${lockfile.root};
+      nixpkgs = lockfile.nodes.${root.inputs.nixpkgs}.locked;
+    in
+      builtins.flakeRefToString nixpkgs;
   };
 in
   stdenv.mkDerivation ({

@@ -52,6 +52,10 @@ namespace flox::buildenv {
     "CONTAINER_BUILDER_PATH must be set to a store path of 'mkContainer.nix'"
 #endif
 
+#ifndef COMMON_NIXPKGS_URL
+#  error "COMMON_NIXPKGS_URL must be set to a locked flakeref of nixpkgs to use"
+#endif
+
 /* -------------------------------------------------------------------------- */
 
 static const std::string BASH_ACTIVATE_SCRIPT = R"(
@@ -405,12 +409,8 @@ createContainerBuilder( nix::EvalState & state,
                         nix::StorePath   environmentStorePath,
                         const System &   system )
 {
-
-  static const std::string refOrRev
-    = nix::getEnv( "_PKGDB_GA_REGISTRY_REF_OR_REV" )
-        .value_or( "release-23.05" );
   static const nix::FlakeRef nixpkgsRef
-    = nix::parseFlakeRef( "github:NixOS/nixpkgs/" + refOrRev );
+    = nix::parseFlakeRef( COMMON_NIXPKGS_URL );
 
   auto lockedNixpkgs
     = nix::flake::lockFlake( state, nixpkgsRef, nix::flake::LockFlags() );

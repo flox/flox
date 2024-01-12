@@ -157,6 +157,8 @@ SET_PROMPT_ZSH_SH ?= $(shell                                                  \
 CONTAINER_BUILDER_PATH ?= $(shell                                                  \
   $(NIX) store add-path -n mkContainer.nix src/buildenv/assets/mkContainer.nix)
 
+COMMON_NIXPKGS_URL ?= $(shell \
+  $(NIX) eval --raw .\#flox-pkgdb.envs.COMMON_NIXPKGS_URL)
 
 # ---------------------------------------------------------------------------- #
 
@@ -354,6 +356,8 @@ src/buildenv/realise.o: CXXFLAGS +=               \
 src/buildenv/realise.o: CXXFLAGS +=               \
 	'-DCONTAINER_BUILDER_PATH="$(CONTAINER_BUILDER_PATH)"'
 
+src/buildenv/realise.o: CXXFLAGS +=               \
+	'-DCOMMON_NIXPKGS_URL="$(COMMON_NIXPKGS_URL)"'
 
 # ---------------------------------------------------------------------------- #
 
