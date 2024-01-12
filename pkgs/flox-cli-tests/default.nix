@@ -1,5 +1,4 @@
 {
-  self,
   gcc,
   runCommandCC,
   stdenv,
@@ -26,6 +25,7 @@
   nix-serve,
   openssh,
   parallel,
+  podman,
   unixtools,
   which,
   writeShellScriptBin,
@@ -80,7 +80,13 @@
         mkdir -p "$out/bin"
         echo "$source" | gcc -Wall -o "$out/bin/$name" -xc -
       ''
-    );
+    )
+    # Containerize tests need a container runtime.
+    # Since we're building and building only works on linux,
+    # we only include podman on linux.
+    ++ lib.optionals stdenv.isLinux [
+      podman
+    ];
 in
   # TODO: we should run tests against different shells
   writeShellScriptBin PROJECT_NAME ''

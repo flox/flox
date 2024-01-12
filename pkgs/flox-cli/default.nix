@@ -221,8 +221,8 @@ in
           flox-pkgdb
           ;
 
-        ciPackages = [
-        ];
+        ciPackages = [];
+
 
         devPackages = [
           rustfmt
