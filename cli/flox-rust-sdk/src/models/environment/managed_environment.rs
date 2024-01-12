@@ -24,6 +24,7 @@ use super::{
     ENVIRONMENT_POINTER_FILENAME,
 };
 use crate::flox::Flox;
+use crate::models::container_builder::ContainerBuilder;
 use crate::models::environment_ref::{EnvironmentName, EnvironmentOwner};
 use crate::models::floxmetav2::{floxmeta_git_options, FloxmetaV2, FloxmetaV2Error};
 use crate::models::lockfile::LockedManifest;
@@ -172,11 +173,7 @@ impl Environment for ManagedEnvironment {
         Ok(temporary.lock(flox)?)
     }
 
-    fn build_container(
-        &mut self,
-        flox: &Flox,
-        sink: &mut dyn Write,
-    ) -> Result<(), EnvironmentError2> {
+    fn build_container(&mut self, flox: &Flox) -> Result<ContainerBuilder, EnvironmentError2> {
         let generations = self
             .generations()
             .writable(flox.temp_dir.clone())
@@ -185,8 +182,8 @@ impl Environment for ManagedEnvironment {
             .get_current_generation()
             .map_err(ManagedEnvironmentError::CreateGenerationFiles)?;
 
-        temporary.build_container(flox, sink)?;
-        Ok(())
+        let builder = temporary.build_container(flox)?;
+        Ok(builder)
     }
 
     /// Install packages to the environment atomically

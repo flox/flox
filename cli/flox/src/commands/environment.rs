@@ -1626,7 +1626,7 @@ impl Containerize {
                 .join(format!("{}-container.tar.gz", env.name())),
         };
 
-        let mut output: Box<dyn Write> = if output_path == Path::new("-") {
+        let output: Box<dyn Write> = if output_path == Path::new("-") {
             debug!("writing container to stdout");
 
             Box::new(std::io::stdout())
@@ -1643,8 +1643,17 @@ impl Containerize {
             Box::new(file)
         };
 
-        env.build_container(&flox, &mut output)
-            .context("containerizing environment failed")?;
+        let builder = Dialog {
+            message: &format!("Building container for environment {}...", env.name()),
+            help_message: None,
+            typed: Spinner::new(|| env.build_container(&flox)),
+        }
+        .spin()
+        .context("could not create container builder")?;
+
+        builder
+            .stream_container(output)
+            .context("could not write container to output")?;
 
         Ok(())
     }

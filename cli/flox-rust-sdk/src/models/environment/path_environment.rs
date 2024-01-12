@@ -37,6 +37,7 @@ use super::{
     LOCKFILE_FILENAME,
 };
 use crate::flox::Flox;
+use crate::models::container_builder::ContainerBuilder;
 use crate::models::environment::{ENV_DIR_NAME, FLOX_SYSTEM_PLACEHOLDER, MANIFEST_FILENAME};
 use crate::models::environment_ref::EnvironmentName;
 use crate::models::lockfile::LockedManifest;
@@ -153,14 +154,10 @@ impl Environment for PathEnvironment {
         Ok(env_view.lock(flox)?)
     }
 
-    fn build_container(
-        &mut self,
-        flox: &Flox,
-        sink: &mut dyn Write,
-    ) -> Result<(), EnvironmentError2> {
+    fn build_container(&mut self, flox: &Flox) -> Result<ContainerBuilder, EnvironmentError2> {
         let mut env_view = CoreEnvironment::new(self.path.join(ENV_DIR_NAME));
-        env_view.build_container(flox, sink)?;
-        Ok(())
+        let builder = env_view.build_container(flox)?;
+        Ok(builder)
     }
 
     /// Install packages to the environment atomically

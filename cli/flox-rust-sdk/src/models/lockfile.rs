@@ -5,15 +5,15 @@ pub type FlakeRef = Value;
 
 use std::collections::BTreeMap;
 use std::fs;
-use std::io::{self, Write};
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Command;
 
 use flox_types::catalog::System;
 use flox_types::version::Version;
 use log::debug;
 use thiserror::Error;
 
+use super::container_builder::ContainerBuilder;
 use super::environment::{CanonicalizeError, UpdateResult};
 use super::pkgdb::CallPkgDbError;
 use crate::flox::Flox;
@@ -103,13 +103,12 @@ impl LockedManifest {
     ///
     /// The sink can be e.g. a [File](std::fs::File), [Stdout](std::io::Stdout),
     /// or an internal buffer.
-    pub fn build_container(
-        &self,
-        pkgdb: &Path,
-        sink: &mut (impl Write + ?Sized),
-    ) -> Result<(), LockedManifestError> {
+    pub fn build_container(&self, pkgdb: &Path) -> Result<ContainerBuilder, LockedManifestError> {
         let mut pkgdb_cmd = Command::new(pkgdb);
-        pkgdb_cmd.arg("buildenv").arg(&self.to_string());
+        pkgdb_cmd
+            .arg("buildenv")
+            .arg("--container")
+            .arg(&self.to_string());
 
         debug!("building container builder with command: {pkgdb_cmd:?}");
         let result: BuildEnvResult =
@@ -118,17 +117,7 @@ impl LockedManifest {
 
         let container_builder_path = PathBuf::from(result.store_path);
 
-        let mut container_builder_command = Command::new(container_builder_path);
-        container_builder_command.stdout(Stdio::piped());
-
-        let handle = container_builder_command
-            .spawn()
-            .map_err(LockedManifestError::CallContainerBuilder)?;
-        let mut stdout = handle.stdout.expect("stdout set to piped");
-
-        io::copy(&mut stdout, sink).unwrap();
-
-        Ok(())
+        Ok(ContainerBuilder::new(container_builder_path))
     }
 
     /// Wrapper around `pkgdb update`

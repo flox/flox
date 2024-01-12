@@ -12,6 +12,7 @@ use walkdir::WalkDir;
 
 use self::managed_environment::ManagedEnvironmentError;
 use self::remote_environment::RemoteEnvironmentError;
+use super::container_builder::ContainerBuilder;
 use super::environment_ref::{EnvironmentName, EnvironmentOwner};
 use super::lockfile::LockedManifest;
 use super::manifest::PackageToInstall;
@@ -107,11 +108,7 @@ pub trait Environment: Send {
     fn lock(&mut self, flox: &Flox) -> Result<LockedManifest, EnvironmentError2>;
 
     /// Create a container image from the environment
-    fn build_container(
-        &mut self,
-        flox: &Flox,
-        image_name: &mut dyn Write,
-    ) -> Result<(), EnvironmentError2>;
+    fn build_container(&mut self, flox: &Flox) -> Result<ContainerBuilder, EnvironmentError2>;
 
     /// Install packages to the environment atomically
     fn install(

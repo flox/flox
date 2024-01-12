@@ -19,6 +19,7 @@ use super::{
     ENVIRONMENT_POINTER_FILENAME,
 };
 use crate::flox::{EnvironmentOwner, EnvironmentRef, Flox};
+use crate::models::container_builder::ContainerBuilder;
 use crate::models::environment_ref::EnvironmentName;
 use crate::models::floxmetav2::{FloxmetaV2, FloxmetaV2Error};
 use crate::models::lockfile::LockedManifest;
@@ -121,12 +122,8 @@ impl Environment for RemoteEnvironment {
         self.inner.lock(flox)
     }
 
-    fn build_container(
-        &mut self,
-        flox: &Flox,
-        sink: &mut dyn Write,
-    ) -> Result<(), EnvironmentError2> {
-        self.inner.build_container(flox, sink)
+    fn build_container(&mut self, flox: &Flox) -> Result<ContainerBuilder, EnvironmentError2> {
+        self.inner.build_container(flox)
     }
 
     /// Install packages to the environment atomically

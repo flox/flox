@@ -15,6 +15,7 @@ use super::{
     MANIFEST_FILENAME,
 };
 use crate::flox::Flox;
+use crate::models::container_builder::ContainerBuilder;
 use crate::models::environment::{call_pkgdb, global_manifest_path, CanonicalPath};
 use crate::models::lockfile::{LockedManifest, LockedManifestError};
 use crate::models::manifest::{
@@ -176,8 +177,7 @@ impl<State> CoreEnvironment<State> {
     pub fn build_container(
         &mut self,
         flox: &Flox,
-        sink: &mut (impl Write + ?Sized),
-    ) -> Result<(), CoreEnvironmentError> {
+    ) -> Result<ContainerBuilder, CoreEnvironmentError> {
         if std::env::consts::OS != "linux" {
             return Err(CoreEnvironmentError::ContainerizeUnsupportedSystem(
                 std::env::consts::OS.to_string(),
@@ -192,12 +192,10 @@ impl<State> CoreEnvironment<State> {
             self.lockfile_path().display()
         );
 
-        lockfile
-            .build_container(Path::new(&*PKGDB_BIN), sink)
-            .map_err(CoreEnvironmentError::LockManifest)?;
-
-        debug!("built container environment");
-        Ok(())
+        let builder = lockfile
+            .build_container(Path::new(&*PKGDB_BIN))
+            .map_err(CoreEnvironmentError::LockedManifest)?;
+        Ok(builder)
     }
 
     /// Create a new out-link for the environment at the given path.
