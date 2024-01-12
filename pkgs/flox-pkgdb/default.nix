@@ -5,6 +5,7 @@
   doxygen,
   bear,
   boost,
+  llvmPackages_15,
   ccls,
   clang-tools_16,
   include-what-you-use,
@@ -27,13 +28,15 @@
   git,
   coreutils,
   parallel,
-  llvm, # for `llvm-symbolizer'
+  llvm_15, # for `llvm-symbolizer'
   gdb ? throw "`gdb' is required for debugging with `g++'",
   lldb ? throw "`lldb' is required for debugging with `clang++'",
   valgrind ? throw "`valgrind' is required for memory sanitization on Linux",
   substituteAll,
   symlinkJoin,
 }: let
+  llvmPackages = llvmPackages_15;
+  llvm = llvm_15;
   batsWith = bats.withLibraries (p: [
     p.bats-assert
     p.bats-file
@@ -204,7 +207,9 @@ in
             lcov
             remake
             # For IDEs
-            ccls
+            (ccls.override (old: {
+              llvmPackages = llvmPackages;
+            }))
             bear
             # For lints/fmt
             clang-tools_16

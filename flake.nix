@@ -159,7 +159,7 @@
           rust.cargoManifestPath = "cli/Cargo.toml";
         };
         tools = {
-          clang-tools = final.clang-tools_16;
+          clang-tools = final.clang-tools_15;
         };
       };
 
@@ -247,6 +247,10 @@
     in {
       default = pkgs.callPackage ./shells/default {
         inherit (checksFor) pre-commit-check;
+      };
+      ci = pkgs.callPackage ./shells/default {
+        inherit (checksFor) pre-commit-check;
+        ci = true;
       };
     });
   }; # End `outputs'

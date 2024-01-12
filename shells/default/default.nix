@@ -45,7 +45,7 @@ in
       shellHook =
         flox-pkgdb.devShellHook
         + flox-cli.devShellHook
-        + pre-commit-check.shellHook;
+        + lib.optionalString (!ci) pre-commit-check.shellHook;
     }
     // flox-pkgdb.devEnvs
     // flox-cli.devEnvs
