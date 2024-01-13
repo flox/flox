@@ -3,30 +3,42 @@ use std::str::FromStr;
 
 use anyhow::{Context, Result};
 use flox_rust_sdk::prelude::{Channel, ChannelRegistry};
+use flox_rust_sdk::nix::flake_ref::FlakeRef;
+use flox_rust_sdk::nix::flake_ref::git_service::{GitServiceRef, GitServiceAttributes};
 use indoc::formatdoc;
 use once_cell::sync::Lazy;
 
 /// Default channels that are aways vendored with flox and can't be overridden
-pub static DEFAULT_CHANNELS: Lazy<BTreeMap<&'static str, &'static str>> = Lazy::new(|| {
+pub static DEFAULT_CHANNELS: Lazy<BTreeMap<&'static str, FlakeRef>> = Lazy::new(|| {
     [
-        ("flox", "github:flox/floxpkgs/master"),
-        ("nixpkgs-flox", "github:flox/nixpkgs-flox/master"),
+        ("flox",
+         FlakeRef::Github(GitServiceRef::new("flox".to_string(), "floxpkgs".to_string(), GitServiceAttributes { reference: Some("master".to_string()), ..Default::default()}))
+         ),
+        ("nixpkgs-flox",
+         FlakeRef::Github(GitServiceRef::new("flox".to_string(), "nixpkgs-flox".to_string(), GitServiceAttributes { reference: Some("master".to_string()), ..Default::default()}))
+         ),
     ]
     .into()
 });
 
 /// Hidden channels that are used for stability setup
-pub static HIDDEN_CHANNELS: Lazy<BTreeMap<&'static str, &'static str>> = Lazy::new(|| {
+pub static HIDDEN_CHANNELS: Lazy<BTreeMap<&'static str, FlakeRef>> = Lazy::new(|| {
     [
         (
             "nixpkgs",
             // overridden if stability is known.
             // globalizing stability is outstanding.
-            "github:flox/nixpkgs/stable",
+            FlakeRef::Github(GitServiceRef::new("flox".to_string(), "nixpkgs".to_string(), GitServiceAttributes { reference: Some("stable".to_string()), ..Default::default()}))
         ),
-        ("nixpkgs-stable", "github:flox/nixpkgs/stable"),
-        ("nixpkgs-unstable", "github:flox/nixpkgs/unstable"),
-        ("nixpkgs-staging", "github:flox/nixpkgs/staging"),
+        ("nixpkgs-stable",
+         FlakeRef::Github(GitServiceRef::new("flox".to_string(), "nixpkgs".to_string(), GitServiceAttributes { reference: Some("stable".to_string()), ..Default::default()}))
+         ),
+        ("nixpkgs-unstable",
+         FlakeRef::Github(GitServiceRef::new("flox".to_string(), "nixpkgs".to_string(), GitServiceAttributes { reference: Some("unstable".to_string()), ..Default::default()}))
+         ),
+        ("nixpkgs-staging",
+         FlakeRef::Github(GitServiceRef::new("flox".to_string(), "nixpkgs".to_string(), GitServiceAttributes { reference: Some("staging".to_string()), ..Default::default()}))
+         ),
     ]
     .into()
 });
@@ -54,12 +66,12 @@ pub fn init_channels(user_channels: BTreeMap<String, String>) -> Result<ChannelR
 
     // default channels
     for (name, flakeref) in DEFAULT_CHANNELS.iter() {
-        channels.register_channel(name, Channel::from_str(flakeref)?)
+        channels.register_channel(name, flakeref.clone().into())
     }
 
     // hidden channels
     for (name, flakeref) in HIDDEN_CHANNELS.iter() {
-        channels.register_channel(name, Channel::from_str(flakeref)?)
+        channels.register_channel(name, flakeref.clone().into())
     }
 
     Ok(channels)
