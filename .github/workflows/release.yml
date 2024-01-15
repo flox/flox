@@ -40,7 +40,7 @@ jobs:
 
       # TODO: eventually replace with install flox action
       - name: Install Nix
-        uses: cachix/install-nix-action@v24
+        uses: cachix/install-nix-action@v25
         with:
           extra_nix_config: extra-access-tokens = github.com=${{ secrets.NIX_GIT_TOKEN }}
 
