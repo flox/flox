@@ -1,6 +1,4 @@
 //# An attempt at defining a domain model for flox
-
-pub mod channels;
 pub mod environment;
 pub mod environment_ref;
 pub mod root;
