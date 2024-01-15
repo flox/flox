@@ -16,7 +16,6 @@ use url::Url;
 
 use crate::environment::{self, default_nix_subprocess_env};
 pub use crate::models::environment_ref::{self, *};
-use crate::models::root::{self, Root};
 
 pub static FLOX_VERSION: Lazy<String> =
     Lazy::new(|| std::env::var("FLOX_VERSION").unwrap_or(env!("FLOX_VERSION").to_string()));
@@ -110,10 +109,6 @@ impl ResolvedInstallableMatch {
 }
 
 impl Flox {
-    pub fn resource<X>(&self, x: X) -> Root<root::Closed<X>> {
-        Root::closed(self, x)
-    }
-
     /// Produce a new Nix Backend
     ///
     /// This method performs backend independent configuration of nix
