@@ -1,6 +1,5 @@
 pub mod errors;
 pub mod guard;
-pub mod rnix;
 use std::path::Path;
 use std::time::SystemTime;
 use std::{fs, io};

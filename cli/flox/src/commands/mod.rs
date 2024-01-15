@@ -3,7 +3,7 @@ mod environment;
 mod general;
 mod search;
 
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::VecDeque;
 use std::fmt::Display;
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -38,7 +38,6 @@ use crate::config::{Config, EnvironmentTrust, FLOX_CONFIG_FILE};
 use crate::utils::dialog::{Dialog, Select};
 use crate::utils::init::{
     init_access_tokens,
-    init_channels,
     init_telemetry,
     init_uuid,
     telemetry_opt_out_needs_migration,
@@ -198,11 +197,10 @@ impl FloxArgs {
             floxhub.set_git_url_override(env_set_host.parse()?);
         }
 
-        let boostrap_flox = Flox {
+        let flox = Flox {
             cache_dir: config.flox.cache_dir.clone(),
             data_dir: config.flox.data_dir.clone(),
             config_dir: config.flox.config_dir.clone(),
-            channels: Default::default(),
             access_tokens,
             netrc_file,
             temp_dir: temp_dir_path.clone(),
@@ -210,13 +208,6 @@ impl FloxArgs {
             uuid: init_uuid(&config.flox.data_dir).await?,
             floxhub_token: config.flox.floxhub_token.clone(),
             floxhub,
-        };
-
-        let channels = init_channels(BTreeMap::new())?;
-
-        let flox = Flox {
-            channels,
-            ..boostrap_flox
         };
 
         // Set the global Nix config via the environment variables in flox.default_args so that
