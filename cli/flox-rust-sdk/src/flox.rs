@@ -23,7 +23,6 @@ use thiserror::Error;
 use url::Url;
 
 use crate::environment::{self, default_nix_subprocess_env};
-use crate::models::channels::ChannelRegistry;
 pub use crate::models::environment_ref::{self, *};
 use crate::models::flake_ref::FlakeRef;
 pub use crate::models::flox_installable::*;
@@ -62,8 +61,6 @@ pub struct Flox {
     /// Use [Vec] to preserve original ordering
     pub access_tokens: Vec<(String, String)>,
     pub netrc_file: PathBuf,
-
-    pub channels: ChannelRegistry,
 
     pub system: String,
 
@@ -452,31 +449,6 @@ impl Flox {
         use std::os::unix::prelude::OpenOptionsExt;
 
         let environment = {
-            // Write registry file if it does not exist or has changed
-            let global_registry_file = self.config_dir.join("floxFlakeRegistry.json");
-            let registry_content = serde_json::to_string_pretty(&self.channels).unwrap();
-            if !global_registry_file.exists() || {
-                let contents: ChannelRegistry =
-                    serde_json::from_reader(std::fs::File::open(&global_registry_file).unwrap())
-                        .expect("Invalid registry file");
-
-                contents != self.channels
-            } {
-                let temp_registry_file = self.temp_dir.join("registry.json");
-
-                std::fs::File::options()
-                    .mode(0o600)
-                    .create_new(true)
-                    .write(true)
-                    .open(&temp_registry_file)
-                    .unwrap()
-                    .write_all(registry_content.as_bytes())
-                    .unwrap();
-
-                debug!("Updating flake registry: {global_registry_file:?}");
-                std::fs::rename(temp_registry_file, &global_registry_file).unwrap();
-            }
-
             let config = NixConfigArgs {
                 accept_flake_config: true.into(),
                 warn_dirty: false.into(),
@@ -495,7 +467,7 @@ impl Flox {
                 .to_vec()
                 .into(),
                 extra_access_tokens: self.access_tokens.clone().into(),
-                flake_registry: Some(global_registry_file.into()),
+                flake_registry: None,
                 netrc_file: Some(self.netrc_file.clone().into()),
                 connect_timeout: 5.into(),
                 ..Default::default()
@@ -671,16 +643,12 @@ pub mod tests {
         std::fs::create_dir_all(&temp_dir).unwrap();
         std::fs::create_dir_all(&config_dir).unwrap();
 
-        let mut channels = ChannelRegistry::default();
-        channels.register_channel("flox", "github:flox/floxpkgs/master".parse().unwrap());
-
         let flox = Flox {
             system: env!("NIX_TARGET_SYSTEM").to_string(),
             cache_dir,
             data_dir,
             temp_dir,
             config_dir,
-            channels,
             access_tokens: Default::default(),
             netrc_file: Default::default(),
             uuid: Default::default(),

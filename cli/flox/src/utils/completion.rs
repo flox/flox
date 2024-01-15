@@ -7,7 +7,7 @@ use flox_rust_sdk::providers::git::GitCommandProvider;
 use log::debug;
 use tempfile::TempDir;
 
-use super::init::{init_access_tokens, init_channels};
+use super::init::init_access_tokens;
 use super::nix_str_safe;
 use crate::config::Config;
 
@@ -37,10 +37,6 @@ impl FloxCompletionExt for Flox {
             .map_err(|e| debug!("Failed to load config: {e}"))
             .unwrap();
 
-        // todo: does not use user channels yet
-        let channels = init_channels(Default::default())
-            .map_err(|e| debug!("Failed to initialize channels: {e}"))
-            .unwrap();
 
         let process_dir = config.flox.cache_dir.join("process");
         match std::fs::create_dir_all(&process_dir) {
@@ -69,7 +65,6 @@ impl FloxCompletionExt for Flox {
             cache_dir: config.flox.cache_dir,
             data_dir: config.flox.data_dir,
             config_dir: config.flox.config_dir,
-            channels,
             temp_dir: temp_dir.into_path(),
             system: env!("NIX_TARGET_SYSTEM").to_string(),
             netrc_file,
