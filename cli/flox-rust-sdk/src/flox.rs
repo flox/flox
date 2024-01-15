@@ -16,8 +16,6 @@ use url::Url;
 
 use crate::environment::{self, default_nix_subprocess_env};
 pub use crate::models::environment_ref::{self, *};
-use crate::models::floxmeta::{Floxmeta, GetFloxmetaError};
-use crate::models::root::transaction::ReadOnly;
 use crate::models::root::{self, Root};
 
 pub static FLOX_VERSION: Lazy<String> =
@@ -116,18 +114,6 @@ impl Flox {
         Root::closed(self, x)
     }
 
-    // TODO: revisit this when we discussed floxmeta's role to contribute to config/channels
-    //       flox.floxmeta is referring to the legacy floxmeta implementation
-    //       and is currently only used by the CLI to read the channels from the users floxmain.
-    //
-    //       N.B.: Decide whether we want to keep the `Flox.<model>` API
-    //       to create instances of subsystem models
-    // region: revisit reg. channels
-    pub fn floxmeta(&self, owner: &str) -> Result<Floxmeta<ReadOnly>, GetFloxmetaError> {
-        Floxmeta::get_floxmeta(self, owner)
-    }
-
-    // endregion: revisit reg. channels
     /// Produce a new Nix Backend
     ///
     /// This method performs backend independent configuration of nix
