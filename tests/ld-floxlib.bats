@@ -65,6 +65,21 @@ teardown() {
   assert_output --partial "✅ 'glibc' installed to environment"
   assert_output --partial "✅ 'giflib' installed to environment"
 
-  SHELL=bash run expect -d "$TESTS_DIR/ld-floxlib.exp" "$PROJECT_DIR"
+  #SHELL=bash run expect -d "$TESTS_DIR/ld-floxlib.exp" "$PROJECT_DIR"
+  #assert_success
+
+  ### Verify environment
+  run "$FLOX_BIN" activate -- sh ./verify-environment.sh
   assert_success
+
+  ### Test 1: load libraries found in $FLOX_ENV_LIB_DIRS last
+  run "$FLOX_BIN" activate -- sh ./test-load-library-last.sh
+  assert_success
+
+  ### Test 2: confirm LD_AUDIT can find missing libraries
+  run "$FLOX_BIN" activate -- sh -c "cc -o print-gif-info ./print-gif-info.c -lgif && ./print-gif-info ./flox-edge.gif"
+  assert_output --partial "GIF Information for: ./flox-edge.gif
+  assert_output --partial "Number of frames: 0
+  assert_output --partial "Width: 270 pixels
+  assert_output --partial "Height: 137 pixels
 }
