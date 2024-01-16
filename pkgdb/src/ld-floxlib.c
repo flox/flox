@@ -54,7 +54,8 @@ la_objsearch( const char * name, uintptr_t * cookie, unsigned int flag )
   if ( debug_ld_floxlib )
     {
       fprintf( stderr,
-               "DEBUG: la_objsearch(%s, %s)\n", name,
+               "DEBUG: la_objsearch(%s, %s)\n",
+               name,
                ( flag == LA_SER_ORIG )      ? "LA_SER_ORIG"
                : ( flag == LA_SER_LIBPATH ) ? "LA_SER_LIBPATH"
                : ( flag == LA_SER_RUNPATH ) ? "LA_SER_RUNPATH"
@@ -67,7 +68,7 @@ la_objsearch( const char * name, uintptr_t * cookie, unsigned int flag )
   // Only look for the library once the dynamic linker has exhausted
   // all of the other possible search locations, and only if it isn't
   // already specified by way of an explicit path.
-  if ( flag == LA_SER_DEFAULT && stat(name, &stat_buf) != 0 )
+  if ( flag == LA_SER_DEFAULT && stat( name, &stat_buf ) != 0 )
     {
       char * basename          = strrchr( name, '/' );
       char * flox_env_lib_dirs = getenv( "FLOX_ENV_LIB_DIRS" );
