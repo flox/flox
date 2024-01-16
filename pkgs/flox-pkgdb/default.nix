@@ -100,7 +100,8 @@
       root = lockfile.nodes.${lockfile.root};
       nixpkgs = lockfile.nodes.${root.inputs.nixpkgs}.locked;
     in
-      builtins.flakeRefToString nixpkgs;
+      # todo: use `builtins.flakerefToString` once flox ships with nix 2.18+
+      "github:NixOS/nixpkgs/${nixpkgs.rev}";
   };
 in
   stdenv.mkDerivation ({
