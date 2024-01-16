@@ -2,12 +2,9 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::{env, fs, io};
 
-use flox_types::catalog::CatalogEntry;
 use flox_types::version::Version;
 use log::debug;
 use runix::command_line::NixCommandLineRunJsonError;
-use runix::installable::FlakeAttribute;
-use runix::store_path::StorePath;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use url::Url;
@@ -16,7 +13,6 @@ use walkdir::WalkDir;
 use self::managed_environment::ManagedEnvironmentError;
 use self::remote_environment::RemoteEnvironmentError;
 use super::environment_ref::{EnvironmentName, EnvironmentOwner};
-use super::flox_package::FloxTriple;
 use super::lockfile::LockedManifest;
 use super::manifest::PackageToInstall;
 use super::pkgdb::UpgradeResult;
@@ -93,12 +89,6 @@ impl CanonicalPath {
     pub fn into_path_buf(self) -> PathBuf {
         self.0
     }
-}
-
-pub enum InstalledPackage {
-    Catalog(FloxTriple, CatalogEntry),
-    FlakeAttribute(FlakeAttribute, CatalogEntry),
-    StorePath(StorePath),
 }
 
 /// The result of an installation attempt that contains the new manifest contents

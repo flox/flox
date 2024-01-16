@@ -1,38 +1,21 @@
-use std::collections::{BTreeSet, HashMap};
 use std::io::Read;
-use std::path::{Path, PathBuf};
-use std::str::FromStr;
+use std::path::PathBuf;
 
 use derive_more::Constructor;
-use indoc::indoc;
-use log::{debug, info, warn};
+use log::info;
 use once_cell::sync::Lazy;
 use reqwest;
 use reqwest::header::USER_AGENT;
 use runix::arguments::common::NixCommonArgs;
 use runix::arguments::config::NixConfigArgs;
-use runix::arguments::flake::{FlakeArgs, OverrideInput};
-use runix::arguments::{EvalArgs, NixArgs};
-use runix::command::{Eval, FlakeMetadata};
 use runix::command_line::{DefaultArgs, NixCommandLine};
-use runix::flake_ref::path::PathRef;
 use runix::installable::{AttrPath, FlakeAttribute};
-use runix::{NixBackend, RunJson};
+use runix::NixBackend;
 use serde::{Deserialize, Serialize};
-use thiserror::Error;
 use url::Url;
 
 use crate::environment::{self, default_nix_subprocess_env};
-use crate::models::channels::ChannelRegistry;
 pub use crate::models::environment_ref::{self, *};
-use crate::models::flake_ref::FlakeRef;
-pub use crate::models::flox_installable::*;
-use crate::models::floxmeta::{Floxmeta, GetFloxmetaError};
-use crate::models::root::transaction::ReadOnly;
-use crate::models::root::{self, Root};
-use crate::providers::git::GitProvider;
-
-static INPUT_CHARS: Lazy<Vec<char>> = Lazy::new(|| ('a'..='t').collect());
 
 pub static FLOX_VERSION: Lazy<String> =
     Lazy::new(|| std::env::var("FLOX_VERSION").unwrap_or(env!("FLOX_VERSION").to_string()));
@@ -63,8 +46,6 @@ pub struct Flox {
     pub access_tokens: Vec<(String, String)>,
     pub netrc_file: PathBuf,
 
-    pub channels: ChannelRegistry,
-
     pub system: String,
 
     pub uuid: uuid::Uuid,
@@ -89,32 +70,6 @@ impl FloxNixApi for NixCommandLine {
         }
     }
 }
-
-/// Typed matching installable outputted by our Nix evaluation
-#[derive(Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord)]
-#[serde(rename_all = "camelCase")]
-struct InstallableEvalQueryEntry {
-    system: Option<String>,
-    explicit_system: bool,
-    prefix: String,
-    key: Vec<String>,
-    input: String,
-    description: Option<String>,
-}
-
-#[derive(Error, Debug)]
-pub enum ResolveFloxInstallableError<Nix: FloxNixApi>
-where
-    Eval: RunJson<Nix>,
-{
-    #[error("Error checking for installable matches: {0}")]
-    Eval(<Eval as RunJson<Nix>>::JsonError),
-    #[error("Error parsing installable eval output: {0}")]
-    Parse(#[from] serde_json::Error),
-}
-
-/// Typed output of our Nix evaluation to find matching installables
-type InstallableEvalQueryOut = BTreeSet<InstallableEvalQueryEntry>;
 
 #[derive(Debug, Constructor)]
 pub struct ResolvedInstallableMatch {
@@ -154,292 +109,6 @@ impl ResolvedInstallableMatch {
 }
 
 impl Flox {
-    pub fn resource<X>(&self, x: X) -> Root<root::Closed<X>> {
-        Root::closed(self, x)
-    }
-
-    // TODO: revisit this when we discussed floxmeta's role to contribute to config/channels
-    //       flox.floxmeta is referring to the legacy floxmeta implementation
-    //       and is currently only used by the CLI to read the channels from the users floxmain.
-    //
-    //       N.B.: Decide whether we want to keep the `Flox.<model>` API
-    //       to create instances of subsystem models
-    // region: revisit reg. channels
-    pub fn floxmeta(&self, owner: &str) -> Result<Floxmeta<ReadOnly>, GetFloxmetaError> {
-        Floxmeta::get_floxmeta(self, owner)
-    }
-
-    // endregion: revisit reg. channels
-
-    // TODO: deprecate, with building commands that used installables
-    // region: installables
-    /// Invoke Nix to convert a list of [FloxInstallable] into a list of guaranteed matches
-    ///
-    /// Tries to find a concrete nix installable from possibly ambiguous flox installables.
-    /// flox installables are ambiguous if they do not specify a flakeref or complete attribute path.
-    ///
-    /// We employ a resolver flake (<flox>/resolver/flake.nix)
-    /// to list all attribute paths available through the flakeref specified or default flakerefs.
-    /// We then filter the results by the attribute path and prefix specified in the flox installable.
-    ///
-    /// The result of this function is a list of matches that cant be disambiguated automatically.
-    /// In that case an error or interactive selection can be used by the caller to resolve the ambiguity.
-    pub async fn resolve_matches<Nix: FloxNixApi, Git: GitProvider>(
-        &self,
-        flox_installables: &[FloxInstallable],
-        default_flakerefs: &[&str],
-        default_attr_prefixes: &[(&str, bool)],
-        must_exist: bool,
-        processor: Option<&str>,
-    ) -> Result<Vec<ResolvedInstallableMatch>, ResolveFloxInstallableError<Nix>>
-    where
-        Eval: RunJson<Nix>,
-        FlakeMetadata: RunJson<Nix>,
-    {
-        // Ignore default flake_refs are not flakes.
-        // Default flake_refs can not be changed by the user.
-        // If nix produces errors due to a flake not found,
-        // this can produce misleading error messages.
-        //
-        // Additionally, `./` is used as a default flakeref for multiple installables.
-        // To prevent copying large locations that are not a flake,
-        // we try to ensure a flake can be reached using `nix flake metadata`
-        let default_flakerefs = default_flakerefs
-            .iter()
-            .copied()
-            .filter(|flakeref| {
-                let parsed_flake_ref = FlakeRef::from_str(flakeref);
-                // if we can't parse the flake_ref we warn but keep it
-                // this is until we can be sure enought that our flake_ref parser is robust
-                if let Err(e) = parsed_flake_ref {
-                    debug!(
-                        indoc! {"
-                        Could not parse default flake_ref {flakeref}
-                        {e}
-                   "},
-                        flakeref = flakeref,
-                        e = e
-                    );
-                    return true;
-                };
-                let parsed_flake_ref = parsed_flake_ref.unwrap();
-
-                futures::executor::block_on(async {
-                    let command = FlakeMetadata {
-                        flake_ref: Some(parsed_flake_ref.into()),
-                        ..Default::default()
-                    };
-
-                    command
-                        .run_json(&self.nix::<Nix>(vec![]), &NixArgs::default())
-                        .await
-                        .is_ok()
-                })
-            })
-            .collect::<Vec<_>>();
-
-        // Optimize for installable resolutions that do not require an eval
-        // Match against exactly 1 flakeref and 1 prefix
-        let mut optimized = vec![];
-        for flox_installable in flox_installables {
-            if let (false, [d_flakeref], [(d_prefix, d_systemized)], [key]) = (
-                must_exist,
-                &default_flakerefs[..],
-                default_attr_prefixes,
-                flox_installable.attr_path.as_slice(),
-            ) {
-                optimized.push(ResolvedInstallableMatch::new(
-                    flox_installable
-                        .source
-                        .as_ref()
-                        .map(String::from)
-                        .unwrap_or_else(|| d_flakeref.to_string()),
-                    d_prefix.to_string(),
-                    d_systemized.then(|| self.system.to_string()),
-                    false,
-                    vec![key.to_string()],
-                    None,
-                ));
-            } else {
-                break;
-            }
-        }
-        if optimized.len() == flox_installables.len() {
-            return Ok(optimized);
-        }
-
-        let numbered_flox_installables: Vec<(usize, FloxInstallable)> = flox_installables
-            .iter()
-            .enumerate()
-            .map(|(i, f)| (i, f.clone()))
-            .collect();
-
-        let mut flakeref_inputs: HashMap<char, String> = HashMap::new();
-        let mut inputs_assoc: HashMap<Option<usize>, Vec<char>> = HashMap::new();
-
-        let has_sourceless = numbered_flox_installables
-            .iter()
-            .any(|(_, f)| f.source.is_none());
-
-        let mut occupied = 0;
-
-        if has_sourceless {
-            for flakeref in default_flakerefs {
-                flakeref_inputs.insert(*INPUT_CHARS.get(occupied).unwrap(), flakeref.to_string());
-                inputs_assoc
-                    .entry(None)
-                    .or_insert_with(Vec::new)
-                    .push(*INPUT_CHARS.get(occupied).unwrap());
-                occupied += 1;
-            }
-        }
-
-        for (installable_id, flox_installable) in &numbered_flox_installables {
-            if let Some(ref source) = flox_installable.source {
-                let assoc = inputs_assoc
-                    .entry(Some(*installable_id))
-                    .or_insert_with(Vec::new);
-
-                if let Some((c, _)) = flakeref_inputs.iter().find(|(_, s)| *s == source) {
-                    let c = *c;
-                    flakeref_inputs.insert(c, source.to_string());
-                    assoc.push(c);
-                } else {
-                    flakeref_inputs.insert(*INPUT_CHARS.get(occupied).unwrap(), source.to_string());
-                    assoc.push(*INPUT_CHARS.get(occupied).unwrap());
-                    occupied += 1;
-                }
-            }
-        }
-
-        // Strip the systemization off of the default attr prefixes (only used in optimization)
-        let default_attr_prefixes: Vec<&str> = default_attr_prefixes
-            .iter()
-            .map(|(prefix, _)| *prefix)
-            .collect();
-
-        let installable_resolve_strs: Vec<String> = numbered_flox_installables
-            .into_iter()
-            .map(|(installable_id, flox_installable)| {
-                format!(
-                    // Template the Nix expression and our arguments in
-                    r#"(x {{
-                        system = "{system}";
-                        defaultPrefixes = [{default_prefixes}];
-                        inputs = [{inputs}];
-                        key = [{key}];
-                        processor = {processor};
-                    }})"#,
-                    system = self.system,
-                    default_prefixes = default_attr_prefixes
-                        .iter()
-                        .map(|p| format!("{p:?}"))
-                        .collect::<Vec<_>>()
-                        .join(" "),
-                    inputs = inputs_assoc
-                        .get(&None)
-                        .iter()
-                        .chain(inputs_assoc.get(&Some(installable_id)).iter())
-                        .flat_map(|x| x
-                            .iter()
-                            .map(|x| format!("{:?}", x.to_string()))
-                            .collect::<Vec<String>>())
-                        .collect::<Vec<String>>()
-                        .join(" "),
-                    key = flox_installable
-                        .attr_path
-                        .iter()
-                        .map(|p| format!("{p:?}"))
-                        .collect::<Vec<_>>()
-                        .join(" "),
-                    processor = processor
-                        .map(|x| format!("(prefix: key: item: {x})"))
-                        .unwrap_or_else(|| "null".to_string()),
-                )
-                .replace("                    ", " ")
-                .replace('\n', "")
-            })
-            .collect();
-
-        // Construct the `apply` argument for the nix eval call to find what installables match
-        let eval_apply = format!(r#"(x: ({}))"#, installable_resolve_strs.join(" ++ "));
-
-        // The super resolver we're currently using to evaluate multiple whole flakerefs at once
-        let resolve_flake_attribute = FlakeAttribute {
-            flakeref: FlakeRef::Path(PathRef {
-                path: Path::new(env!("FLOX_RESOLVER_SRC")).to_path_buf(),
-                attributes: Default::default(),
-            }),
-            attr_path: ["", "resolve"].try_into().unwrap(),
-            outputs: Default::default(),
-        };
-
-        let command = Eval {
-            flake: FlakeArgs {
-                no_write_lock_file: true.into(),
-                // Use the flakeref map from earlier as input overrides so all the inputs point to the correct flakerefs
-                override_inputs: flakeref_inputs
-                    .iter()
-                    .filter_map(|(c, flakeref)| {
-                        let parsed_flakeref = flakeref.parse();
-                        match parsed_flakeref {
-                            Ok(to) => Some(OverrideInput {
-                                from: c.to_string(),
-                                to,
-                            }),
-                            Err(e) => {
-                                warn!(
-                                    indoc! {"
-                                    Could not parse flake_ref {flakeref}
-                                    {e}
-                                "},
-                                    flakeref = flakeref,
-                                    e = e
-                                );
-                                None
-                            },
-                        }
-                    })
-                    .collect(),
-            },
-            // Use the super resolver as the installable (which we use as this only takes one)
-            eval_args: EvalArgs {
-                installable: Some(resolve_flake_attribute.into()),
-                apply: Some(eval_apply.into()),
-            },
-            ..Default::default()
-        };
-
-        // Run our eval command with a typed output
-        let json_out = command
-            .run_json(&self.nix::<Nix>(vec![]), &NixArgs::default())
-            .await
-            .map_err(ResolveFloxInstallableError::Eval)?;
-        let out: InstallableEvalQueryOut = serde_json::from_value(json_out)?;
-
-        debug!("Output of installables eval query {:?}", out);
-
-        // Map over the eval query output, including the inputs' flakerefs correlated from the flakeref mapping
-        Ok(out
-            .into_iter()
-            .map(|e| {
-                ResolvedInstallableMatch::new(
-                    flakeref_inputs
-                        .get(&e.input.chars().next().unwrap())
-                        .expect("Match came from input that was not specified")
-                        .to_string(),
-                    e.prefix,
-                    e.system,
-                    e.explicit_system,
-                    e.key,
-                    e.description,
-                )
-            })
-            .collect())
-    }
-
-    // endregion: installables
-
     /// Produce a new Nix Backend
     ///
     /// This method performs backend independent configuration of nix
@@ -452,31 +121,6 @@ impl Flox {
         use std::os::unix::prelude::OpenOptionsExt;
 
         let environment = {
-            // Write registry file if it does not exist or has changed
-            let global_registry_file = self.config_dir.join("floxFlakeRegistry.json");
-            let registry_content = serde_json::to_string_pretty(&self.channels).unwrap();
-            if !global_registry_file.exists() || {
-                let contents: ChannelRegistry =
-                    serde_json::from_reader(std::fs::File::open(&global_registry_file).unwrap())
-                        .expect("Invalid registry file");
-
-                contents != self.channels
-            } {
-                let temp_registry_file = self.temp_dir.join("registry.json");
-
-                std::fs::File::options()
-                    .mode(0o600)
-                    .create_new(true)
-                    .write(true)
-                    .open(&temp_registry_file)
-                    .unwrap()
-                    .write_all(registry_content.as_bytes())
-                    .unwrap();
-
-                debug!("Updating flake registry: {global_registry_file:?}");
-                std::fs::rename(temp_registry_file, &global_registry_file).unwrap();
-            }
-
             let config = NixConfigArgs {
                 accept_flake_config: true.into(),
                 warn_dirty: false.into(),
@@ -495,7 +139,7 @@ impl Flox {
                 .to_vec()
                 .into(),
                 extra_access_tokens: self.access_tokens.clone().into(),
-                flake_registry: Some(global_registry_file.into()),
+                flake_registry: None,
                 netrc_file: Some(self.netrc_file.clone().into()),
                 connect_timeout: 5.into(),
                 ..Default::default()
@@ -654,6 +298,8 @@ impl Auth0Client {
 
 #[cfg(test)]
 pub mod tests {
+    use std::str::FromStr;
+
     use reqwest::header::AUTHORIZATION;
     use tempfile::TempDir;
 
@@ -671,16 +317,12 @@ pub mod tests {
         std::fs::create_dir_all(&temp_dir).unwrap();
         std::fs::create_dir_all(&config_dir).unwrap();
 
-        let mut channels = ChannelRegistry::default();
-        channels.register_channel("flox", "github:flox/floxpkgs/master".parse().unwrap());
-
         let flox = Flox {
             system: env!("NIX_TARGET_SYSTEM").to_string(),
             cache_dir,
             data_dir,
             temp_dir,
             config_dir,
-            channels,
             access_tokens: Default::default(),
             netrc_file: Default::default(),
             uuid: Default::default(),

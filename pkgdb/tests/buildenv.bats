@@ -162,6 +162,30 @@ setup_file() {
 }
 
 # ---------------------------------------------------------------------------- #
+
+# With '--container' produces a script that can be used to build a container.
+# bats test_tags=buildenv:container
+@test "Environment builds container" {
+  run "$PKGDB_BIN" buildenv "$LOCKFILES/single-package/manifest.lock" \
+    --container \
+    --out-link "$BATS_TEST_TMPDIR/container-builder"
+  assert_success
+
+  # Run the container builder script.
+  run bash -c '"$BATS_TEST_TMPDIR/container-builder" > "$BATS_TEST_TMPDIR/container"'
+  assert_success
+
+  # Check that the container is a tar archive.
+  run tar -tf "$BATS_TEST_TMPDIR/container"
+  # Check that the container contains layer(s)
+  assert_output --regexp '([a-z0-9]{64}/layer.tar)+'
+  # Check that the container contains a config file.
+  assert_output --regexp '([a-z0-9]{64}\.json)'
+  # Check that the container contains a manifest file.
+  assert_line 'manifest.json'
+}
+
+# ---------------------------------------------------------------------------- #
 #
 #
 #

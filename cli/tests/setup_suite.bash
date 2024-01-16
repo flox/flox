@@ -305,12 +305,12 @@ xdg_tmp_setup() {
   mkdir -p "${XDG_CONFIG_HOME:?}"
   chmod u+w "$XDG_CONFIG_HOME"
 
-  if [[ -e "${REAL_XDG_CONFIG_HOME:?}/nix" ]]; then
+  if [[ -e "${REAL_XDG_CONFIG_HOME:?}/nix" && "$REAL_XDG_CONFIG_HOME" != "$XDG_CONFIG_HOME" ]]; then
     rm -rf "$XDG_CONFIG_HOME/nix"
     cp -Tr -- "$REAL_XDG_CONFIG_HOME/nix" "$XDG_CONFIG_HOME/nix"
     chmod -R u+w "$XDG_CONFIG_HOME/nix"
   fi
-  if [[ -e "$REAL_XDG_CONFIG_HOME/flox" ]]; then
+  if [[ -e "${REAL_XDG_CONFIG_HOME}/flox" && "$REAL_XDG_CONFIG_HOME" != "$XDG_CONFIG_HOME" ]]; then
     rm -rf "$XDG_CONFIG_HOME/flox"
     cp -Tr -- "$REAL_XDG_CONFIG_HOME/flox" "$XDG_CONFIG_HOME/flox"
     chmod -R u+w "$XDG_CONFIG_HOME/flox"
@@ -396,18 +396,22 @@ flox_vars_setup() {
 # Homedirs can be created "globally" for the entire test suite ( default ), or
 # for individual files or single tests by passing an optional argument.
 home_setup() {
-  case "${1:-suite}" in
-    suite) export FLOX_TEST_HOME="${BATS_SUITE_TMPDIR?}/home" ;;
-    file) export FLOX_TEST_HOME="${BATS_FILE_TMPDIR?}/home" ;;
-    test) export FLOX_TEST_HOME="${BATS_TEST_TMPDIR?}/home" ;;
-    *)
-      echo "home_setup: Invalid homedir category '${1?}'" >&2
-      return 1
-      ;;
-  esac
-  #if [[ "${__FT_RAN_HOME_SETUP:-}" = "$FLOX_TEST_HOME" ]]; then return 0; fi
-  # Force recreation on `home' on every invocation.
-  unset __FT_RAN_HOME_SETUP
+  if [[ "${__FT_RAN_HOME_SETUP:-}" = "real" ]]; then
+    export FLOX_TEST_HOME="$REAL_HOME"
+    export HOME="$REAL_HOME"
+  else
+    case "${1:-suite}" in
+      suite) export FLOX_TEST_HOME="${BATS_SUITE_TMPDIR?}/home" ;;
+      file) export FLOX_TEST_HOME="${BATS_FILE_TMPDIR?}/home" ;;
+      test) export FLOX_TEST_HOME="${BATS_TEST_TMPDIR?}/home" ;;
+      *)
+        echo "home_setup: Invalid homedir category '${1?}'" >&2
+        return 1
+        ;;
+    esac
+    # Force recreation on `home' on every invocation.
+    unset __FT_RAN_HOME_SETUP
+  fi
   xdg_tmp_setup
   flox_vars_setup
   export __FT_RAN_HOME_SETUP="$FLOX_TEST_HOME"
@@ -444,6 +448,7 @@ common_suite_setup() {
   {
     print_var FLOX_TEST_HOME
     print_var HOME
+    print_var PATH
     print_var XDG_CACHE_HOME
     print_var XDG_CONFIG_HOME
     print_var XDG_DATA_HOME
