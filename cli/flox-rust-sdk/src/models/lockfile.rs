@@ -13,6 +13,7 @@ use flox_types::version::Version;
 use log::debug;
 use thiserror::Error;
 
+use super::container_builder::ContainerBuilder;
 use super::environment::{CanonicalizeError, UpdateResult};
 use super::pkgdb::CallPkgDbError;
 use crate::flox::Flox;
@@ -95,6 +96,28 @@ impl LockedManifest {
                 .map_err(LockedManifestError::ParseBuildEnvOutput)?;
 
         Ok(PathBuf::from(result.store_path))
+    }
+
+    /// Build a container image from a locked manifest
+    /// and write it to a provided sink.
+    ///
+    /// The sink can be e.g. a [File](std::fs::File), [Stdout](std::io::Stdout),
+    /// or an internal buffer.
+    pub fn build_container(&self, pkgdb: &Path) -> Result<ContainerBuilder, LockedManifestError> {
+        let mut pkgdb_cmd = Command::new(pkgdb);
+        pkgdb_cmd
+            .arg("buildenv")
+            .arg("--container")
+            .arg(&self.to_string());
+
+        debug!("building container builder with command: {pkgdb_cmd:?}");
+        let result: BuildEnvResult =
+            serde_json::from_value(call_pkgdb(pkgdb_cmd).map_err(LockedManifestError::BuildEnv)?)
+                .map_err(LockedManifestError::ParseBuildEnvOutput)?;
+
+        let container_builder_path = PathBuf::from(result.store_path);
+
+        Ok(ContainerBuilder::new(container_builder_path))
     }
 
     /// Wrapper around `pkgdb update`
@@ -289,6 +312,10 @@ pub enum LockedManifestError {
     LockManifest(#[source] CallPkgDbError),
     #[error("failed to build environment")]
     BuildEnv(#[source] CallPkgDbError),
+    #[error("failed to build container builder")]
+    CallContainerBuilder(#[source] std::io::Error),
+    #[error("failed to write container builder to sink")]
+    WriteContainer(#[source] std::io::Error),
     #[error("failed to parse buildenv output")]
     ParseBuildEnvOutput(#[source] serde_json::Error),
     #[error("failed to update environment")]

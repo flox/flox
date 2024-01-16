@@ -1,0 +1,12 @@
+[install]
+hello.path = "hello"
+
+[vars]
+foo = "bar"
+
+[hook]
+script = """
+    echo "$foo"
+    command -v hello
+    hello
+"""

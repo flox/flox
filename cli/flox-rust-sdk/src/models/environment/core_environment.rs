@@ -15,6 +15,7 @@ use super::{
     MANIFEST_FILENAME,
 };
 use crate::flox::Flox;
+use crate::models::container_builder::ContainerBuilder;
 use crate::models::environment::{call_pkgdb, global_manifest_path, CanonicalPath};
 use crate::models::lockfile::{LockedManifest, LockedManifestError};
 use crate::models::manifest::{
@@ -149,6 +150,52 @@ impl<State> CoreEnvironment<State> {
         );
 
         Ok(store_path)
+    }
+
+    /// Creates a [ContainerBuilder] from the environment.
+    ///
+    /// The sink is typically a [File](std::fs::File), [Stdout](std::io::Stdout)
+    /// but can be any type that implements [Write](std::io::Write).
+    ///
+    /// While container _images_ can be created on any platform,
+    /// only linux _containers_ can be run with `docker` or `podman`.
+    /// Building an environment for linux on a non-linux platform (macos),
+    /// will likely fail unless all packages in the environment can be substituted.
+    ///
+    /// There are mitigations for this, such as building within a VM or container.
+    /// Such solutions are out of scope at this point.
+    /// Until then, this function will error with [CoreEnvironmentError::ContainerizeUnsupportedSystem]
+    /// if the environment is not linux.
+    ///
+    /// [Self::lock]s if necessary.
+    ///
+    /// Technically this does write to disk as a side effect (i.e. by locking).
+    /// It's included in the [ReadOnly] struct for ergonomic reasons
+    /// and because it doesn't modify the manifest.
+    ///
+    /// todo: should we always write the lockfile to disk?
+    pub fn build_container(
+        &mut self,
+        flox: &Flox,
+    ) -> Result<ContainerBuilder, CoreEnvironmentError> {
+        if std::env::consts::OS != "linux" {
+            return Err(CoreEnvironmentError::ContainerizeUnsupportedSystem(
+                std::env::consts::OS.to_string(),
+            ));
+        }
+
+        let lockfile = self.lock(flox)?;
+
+        debug!(
+            "building container: system={}, lockfilePath={}",
+            &flox.system,
+            self.lockfile_path().display()
+        );
+
+        let builder = lockfile
+            .build_container(Path::new(&*PKGDB_BIN))
+            .map_err(CoreEnvironmentError::LockedManifest)?;
+        Ok(builder)
     }
 
     /// Create a new out-link for the environment at the given path.
@@ -555,6 +602,8 @@ pub enum CoreEnvironmentError {
     #[error("unexpected output from environment builder command")]
     ParseBuildEnvOutput(#[source] serde_json::Error),
     // endregion
+    #[error("unsupported system to build container: {0}")]
+    ContainerizeUnsupportedSystem(String),
 }
 
 #[cfg(test)]
