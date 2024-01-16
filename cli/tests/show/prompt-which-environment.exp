@@ -9,9 +9,10 @@ expect_after {
   timeout { exit 1 }
   eof { exit 2 }
   "*\n" { exp_continue }
+  "*\r" { exp_continue }
 }
 
-expect "*\n" {}
+expect "?" {} # match any character
 send "cd 2\n"
 expect "cd 2" {}
 
