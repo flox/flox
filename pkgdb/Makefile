@@ -151,9 +151,14 @@ VERSION := $(file < $(PKGDB_ROOT)/.version)
 PROFILE_D_SCRIPTS_DIR ?= $(shell                            \
   $(NIX) build .\#flox-pkgdb.envs.PROFILE_D_SCRIPTS_DIR --print-out-paths)
 SET_PROMPT_BASH_SH ?= $(shell                                                  \
-  $(NIX) store add-path -n set-prompt.bash.sh src/buildenv/assets/set-prompt-bash.sh)
+  $(NIX) store add-path -n set-prompt.bash.sh src/buildenv/assets/set-prompt.bash.sh)
 SET_PROMPT_ZSH_SH ?= $(shell                                                  \
   $(NIX) store add-path -n set-prompt.zsh.sh src/buildenv/assets/set-prompt.zsh.sh)
+CONTAINER_BUILDER_PATH ?= $(shell                                                  \
+  $(NIX) store add-path -n mkContainer.nix src/buildenv/assets/mkContainer.nix)
+
+COMMON_NIXPKGS_URL ?= $(shell \
+  $(NIX) eval --raw .\#flox-pkgdb.envs.COMMON_NIXPKGS_URL)
 
 # ---------------------------------------------------------------------------- #
 
@@ -348,8 +353,11 @@ src/buildenv/realise.o: CXXFLAGS +=               \
 src/buildenv/realise.o: CXXFLAGS +=               \
 	'-DSET_PROMPT_ZSH_SH="$(SET_PROMPT_ZSH_SH)"'
 
+src/buildenv/realise.o: CXXFLAGS +=               \
+	'-DCONTAINER_BUILDER_PATH="$(CONTAINER_BUILDER_PATH)"'
 
-
+src/buildenv/realise.o: CXXFLAGS +=               \
+	'-DCOMMON_NIXPKGS_URL="$(COMMON_NIXPKGS_URL)"'
 
 # ---------------------------------------------------------------------------- #
 

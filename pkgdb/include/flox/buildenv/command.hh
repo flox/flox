@@ -37,6 +37,7 @@ private:
   nlohmann::json             lockfileContent;
   std::optional<std::string> outLink;
   std::optional<System>      system;
+  bool                       buildContainer;
 
 
 public:
