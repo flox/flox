@@ -47,6 +47,9 @@ setup() {
   common_test_setup
   project_setup
   env_setup
+
+  mkdir -p $HOME/.config/containers
+  echo '{ "default": [ {"type": "insecureAcceptAnything"} ] }' > "$HOME/.config/containers/policy.json"
 }
 
 teardown() {
