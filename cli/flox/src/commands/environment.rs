@@ -1620,7 +1620,6 @@ impl Containerize {
 
         let output_path = match self.output {
             Some(output) => output,
-            None if !std::io::stdout().is_tty() => PathBuf::from("-"),
             None => std::env::current_dir()
                 .context("Could not get current directory")?
                 .join(format!("{}-container.tar.gz", env.name())),
