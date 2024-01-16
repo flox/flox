@@ -531,7 +531,7 @@ genParamsNixpkgsFlox() {
 @test "'pkgdb search' doesn't crash when run in parallel" {
   # We don't want other tests polluting parallel test runs so we do this test
   # with a unique cache directory.
-  run --separate-stderr sh -c 'PKGDB_CACHEDIR="$(mktemp -d)" parallel "sleep 0.{}; \"$PKGDB_BIN\" search --ga-registry --match-name hello" ::: $(seq 10)'
+  run --separate-stderr sh -c 'PKGDB_CACHEDIR="$(mktemp -d)" parallel "sleep 1.{}; \"$PKGDB_BIN\" search --ga-registry --match-name hello" ::: $(seq 10)'
   assert_success
   n_lines="${#lines[@]}"
   assert_equal "$n_lines" 100 # 10x number of results from hello
