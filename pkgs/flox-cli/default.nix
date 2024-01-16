@@ -223,7 +223,6 @@ in
 
         ciPackages = [];
 
-
         devPackages = [
           rustfmt
           clippy
