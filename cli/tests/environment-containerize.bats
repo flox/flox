@@ -39,6 +39,7 @@ env_setup() {
 podman_cache_reset() {
   echo "Resetting podman cache" >&3
   is_linux && podman system reset --force
+  true
 }
 
 # ---------------------------------------------------------------------------- #
@@ -53,9 +54,12 @@ setup() {
 }
 
 teardown() {
-  podman_cache_reset
   project_teardown
   common_test_teardown
+}
+
+teardown_file() {
+  podman_cache_reset
 }
 
 # ---------------------------------------------------------------------------- #
