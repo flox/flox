@@ -113,7 +113,7 @@ function skip_if_linux() {
   assert_line --partial "Loaded image:"
 }
 
-# bats test_tags=containerize:run-container-it
+# bats test_tags=containerize:run-container-i
 @test "container can be run with 'podman/docker run -i'" {
   skip_if_not_linux
 
@@ -121,23 +121,36 @@ function skip_if_linux() {
   run --separate-stderr podman run -q -i "$CONTAINER_ID" true
   assert_success
 
-  # `docker --tty` adds a carriage return to the output messing up bats assertions
-  assert_equal "$(echo "${lines[0]}" | tr -d '\r')"  "bar"  # vars are present
-  assert_equal "$(echo "${lines[1]#/nix/store/*/}" | tr -d '\r')"  "bin/hello"  # vars are present
-  assert_equal "$(echo "${lines[2]}" | tr -d '\r')"  'Hello, world!'  # vars are present
+  # checking
+  # (1) if the variable `foo = bar` is set in the container
+  # (2) if the binary `hello` is present in the container
+  # (3) if the binary `hello` operates as expected
+  assert_output --regexp - << EOF
+bar
+\/nix\/store\/.*\/bin\/hello
+Hello, world!
+EOF
 
 }
 
-# bats test_tags=containerize:run-container-no-it
+# bats test_tags=containerize:run-container-no-i
 @test "container can be run with 'podman/docker run'" {
   skip_if_not_linux
 
   CONTAINER_ID="$("$FLOX_BIN" containerize -o - | podman load | sed -nr 's/^Loaded image: (.*)$/\1/p')"
   run --separate-stderr podman run "$CONTAINER_ID" true
   assert_success
-  assert_line --index 0 "bar"                   # vars are present
-  assert_line --index 1 --regexp ".*/bin/hello" # programs are present
-  assert_line --index 2 'Hello, world!'         # programs execute
+
+  # checking
+  # (1) if the variable `foo = bar` is set in the container
+  # (2) if the binary `hello` is present in the container
+  # (3) if the binary `hello` operates as expected
+  assert_output --regexp - << EOF
+bar
+\/nix\/store\/.*\/bin\/hello
+Hello, world!
+EOF
+
 }
 
 # ---------------------------------------------------------------------------- #
