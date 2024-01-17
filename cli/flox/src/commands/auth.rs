@@ -198,10 +198,14 @@ impl Auth {
             Auth::User => {
                 let token = config.flox.floxhub_token.context("You are not logged in")?;
 
-                let user = Auth0Client::new(env!("OAUTH_BASE_URL").to_string(), token)
-                    .get_username()
-                    .await
-                    .context("Could not get user details")?;
+                let user = Auth0Client::new(
+                    std::env::var("_FLOX_OAUTH_BASE_URL")
+                        .unwrap_or(env!("OAUTH_BASE_URL").to_string()),
+                    token,
+                )
+                .get_username()
+                .await
+                .context("Could not get user details")?;
                 println!("{user}");
                 Ok(())
             },
