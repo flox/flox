@@ -1040,9 +1040,10 @@ impl Push {
         dir: PathBuf,
         force: bool,
     ) -> Result<()> {
-        let mut env = ManagedEnvironment::open(flox, managed_pointer, dir.join(DOT_FLOX))
+        let mut env = ManagedEnvironment::open(flox, managed_pointer.clone(), dir.join(DOT_FLOX))
             .context("Could not open environment")?;
-        env.push(force).context("Could not push environment")?;
+        env.push(force)
+            .map_err(|err| Self::convert_error(err, managed_pointer, false))?;
 
         Ok(())
     }
@@ -1059,22 +1060,41 @@ impl Push {
         let path_environment =
             path_environment::PathEnvironment::open(path_pointer, dot_flox_path, &flox.temp_dir)?;
 
-        let env =
-            ManagedEnvironment::push_new(flox, path_environment, owner.parse().unwrap(), force)
-                .map_err(Self::convert_error)?;
+        let pointer = ManagedPointer::new(owner.clone(), path_environment.name(), &flox.floxhub);
+
+        let env = ManagedEnvironment::push_new(flox, path_environment, owner, force)
+            .map_err(|err| Self::convert_error(err, pointer, true))?;
 
         Ok(env)
     }
 
-    fn convert_error(err: ManagedEnvironmentError) -> anyhow::Error {
-        if let ManagedEnvironmentError::OpenFloxmeta(FloxmetaV2Error::LoggedOut) = err {
-            anyhow!(indoc! {"
-                Could not push environment: not logged in to floxhub.
+    fn convert_error(
+        err: ManagedEnvironmentError,
+        pointer: ManagedPointer,
+        create_remote: bool,
+    ) -> anyhow::Error {
+        let owner = &pointer.owner;
+        let name = &pointer.name;
 
-                Please login to floxhub with `flox auth login`
-                "})
+        let message = match err {
+            ManagedEnvironmentError::AccessDenied => formatdoc! {"
+                ❌  You do not have permission to push to {owner}/{name}
+            "}.into(),
+            ManagedEnvironmentError::Diverged if create_remote => formatdoc! {"
+                ❌  You already have an environment named {owner}/{name}
+
+                To rename your environment: 'flox edit --name <new name>'
+                To pull and manually re-apply your changes: 'flox delete && flox pull -r {owner}/{name}'
+            "}.into(),
+            _ => None
+        };
+
+        // todo: add message to error using `context` when we work more on polishing errors
+        if let Some(message) = message {
+            debug!("converted error to message: {err:?} -> {message}");
+            anyhow::Error::msg(message)
         } else {
-            anyhow!(err)
+            err.into()
         }
     }
 
