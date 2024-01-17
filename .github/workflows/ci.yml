@@ -14,9 +14,38 @@ concurrency:
 
 jobs:
 
+  changes:
+    runs-on: ubuntu-latest
+    # Required permissions
+    permissions:
+      pull-requests: read
+    # Set job outputs to values from filter step
+    outputs:
+      pkgdb: ${{ steps.filter.outputs.pkgdb }}
+    steps:
+    # For pull requests it's not necessary to checkout the code
+    - uses: "actions/checkout@v4"
+
+    - uses: dorny/paths-filter@v2
+      id: filter
+      with:
+        base: ${{ github.event.merge_group.base_ref || 'main' }}
+        ref: ${{ github.event.merge_group.head_ref || github.ref }}
+        filters: |
+          pkgdb:
+            - "pkgdb/**"
+            - "pkgs/**"
+            - "Justfile"
+            - "flake.nix"
+            - "flake.lock"
+            - "shells/**"
+
   pkgdb-dev:
     name: "Pkgdb Tests"
     runs-on: ${{ matrix.os }}
+    if: ${{ needs.changes.outputs.pkgdb == 'true' }}
+    needs:
+      - "changes"
 
     strategy:
       fail-fast: false
@@ -151,6 +180,7 @@ jobs:
           popd;
 
       - name: "Test (./cli/tests)"
+        if: ${{ github.event_name == 'merge_group' }}
         run: |
           pushd ./cli;
           nix develop -L                 \
