@@ -95,6 +95,7 @@ teardown() {
   assert_success
 
   ### Test 2: confirm LD_AUDIT can find missing libraries
+  # Link against nixmain because that's a library that won't be present on any host system.
   # Build print-nix-version, remove RUNPATH & interpreter
   run "$FLOX_BIN" activate -- bash -exc '" \
     g++ -o get-nix-version ./get-nix-version.cc -lnixmain && \
