@@ -120,7 +120,7 @@ impl Edit {
                     info!("✅  renamed environment {old_name} to {name}");
                 } else {
                     // todo: handle remote environments in the future
-                    bail!("❌  Can not rename a environments on floxhub");
+                    bail!("❌  Cannot rename environments on floxhub");
                 }
             },
         }
