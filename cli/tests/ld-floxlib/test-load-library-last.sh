@@ -44,7 +44,7 @@ system_glibc_version=$( env -i -- ./get-glibc-version )
 environment_glibc_version=$( ./get-glibc-version )
 
 # Force use of "environment" glibc first with LD_LIBRARY_PATH.
-forced_environment_glibc_version=$( LD_LIBRARY_PATH="$FLOX_ENV_LIB_DIRS" ./get-glibc-version )
+forced_environment_glibc_version=$( LD_DEBUG=libs LD_LIBRARY_PATH="$FLOX_ENV_LIB_DIRS" ./get-glibc-version )
 
 # Confirm that the system and environment invocations serve up the same version.
 [ "$system_glibc_version" = "$environment_glibc_version" ]
