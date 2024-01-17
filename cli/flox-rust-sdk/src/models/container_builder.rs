@@ -48,3 +48,53 @@ pub enum ContainerBuilderError {
     #[error("failed to stream container to sink")]
     StreamContainer(#[source] std::io::Error),
 }
+
+#[cfg(test)]
+mod tests {
+    use std::fs::{self, File};
+    use std::os::unix::fs::PermissionsExt;
+
+    use indoc::indoc;
+    use tempfile::TempDir;
+
+    use super::*;
+
+    const TEST_BUILDER: &str = indoc! {r#"
+        #!/usr/bin/env bash
+        echo "hello world"
+    "#};
+
+    fn create_test_script() -> (TempDir, PathBuf) {
+        let tempdir = tempfile::tempdir().unwrap();
+        let path = tempdir.path().join("flox-test-container-builder");
+        std::fs::write(&path, TEST_BUILDER).unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+        (tempdir, path)
+    }
+
+    #[test]
+    fn test_writes_output_to_writer() {
+        let (_tempdir, test_script) = create_test_script();
+        let container_builder = ContainerBuilder::new(test_script);
+
+        let mut buf = Vec::new();
+        container_builder.stream_container(&mut buf).unwrap();
+        assert_eq!(buf, b"hello world\n");
+    }
+
+    #[test]
+    fn test_allows_forwarding_to_file() {
+        let (tempdir, test_script) = create_test_script();
+        let output_path = tempdir.path().join("output");
+
+        let container_builder = ContainerBuilder::new(test_script);
+
+        {
+            let mut file = File::create(&output_path).unwrap();
+            container_builder.stream_container(&mut file).unwrap();
+        }
+
+        let output = fs::read_to_string(&output_path).unwrap();
+        assert_eq!(output, "hello world\n");
+    }
+}
