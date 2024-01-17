@@ -273,6 +273,26 @@ setup_file() {
 }
 
 # ---------------------------------------------------------------------------- #
+
+# bats test_tags=python
+
+@test "'flox search' - python310Packages" {
+  run "$FLOX_BIN" search python310Packages
+  assert_success
+  assert_output --partial 'Showing 10 of'
+}
+
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=python
+
+@test "'flox search' - Packages.req" {
+  run "$FLOX_BIN" search Packages.req
+  assert_success
+  assert_output --partial 'Showing 10 of'
+}
+
+# ---------------------------------------------------------------------------- #
 #
 #
 #

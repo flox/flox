@@ -80,11 +80,20 @@ struct PkgQueryArgs
   std::optional<std::string> semver;  /**< Filter results by version range. */
   std::optional<uint8_t>     limit;   /**< Limit the number of results */
 
+  // TODO: would it be better to expose matchPname, matchAttrName,
+  // matchDescription, and matchRelPath fields that we join with OR rather than
+  // exposing fields that match against multiple columns?
+
   /** Filter results by partial match on pname, attrName, or description. */
   std::optional<std::string> partialMatch;
 
   /** Filter results by partial match on pname or attrName. */
   std::optional<std::string> partialNameMatch;
+
+  /**
+   * Filter results by partial match on pname or '.' joined relPath.
+   */
+  std::optional<std::string> partialNameOrRelPathMatch;
 
   /** Filter results by an exact match on either `pname` or `attrName`. */
   std::optional<std::string> pnameOrAttrName;

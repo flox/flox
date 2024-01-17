@@ -21,7 +21,7 @@ use flox_rust_sdk::models::search::{
 use log::{debug, info};
 
 use crate::commands::detect_environment;
-use crate::config::features::{Features, SearchStrategy};
+use crate::config::features::Features;
 use crate::config::Config;
 use crate::subcommand_metric;
 use crate::utils::dialog::{Dialog, Spinner};
@@ -128,7 +128,7 @@ fn construct_search_params(
 ) -> Result<SearchParams> {
     let query = Query::from_term_and_limit(
         search_term,
-        Features::parse()?.search_strategy == SearchStrategy::MatchName,
+        Features::parse()?.search_strategy,
         results_limit,
     )?;
     let params = SearchParams {
@@ -345,7 +345,7 @@ fn construct_show_params(
 
     let query = Query::from_term_and_limit(
         package_name.as_ref().unwrap(), // We already know it's Some(_)
-        Features::parse()?.search_strategy == SearchStrategy::MatchName,
+        Features::parse()?.search_strategy,
         None,
     )?;
     let search_params = SearchParams {

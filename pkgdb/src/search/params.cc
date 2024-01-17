@@ -57,7 +57,24 @@ SearchQuery::check() const
   if ( this->partialMatch.has_value() && this->partialNameMatch.has_value() )
     {
       throw ParseSearchQueryException(
-        "`partialmatch' and `partialNameMatch' filters "
+        "`partialMatch' and `partialNameMatch' filters "
+        "may not be used together." );
+    }
+  /* `partialMatch' and `partialNameOrRelPathMatch' cannot be used together. */
+  if ( this->partialMatch.has_value()
+       && this->partialNameOrRelPathMatch.has_value() )
+    {
+      throw ParseSearchQueryException(
+        "`partialMatch' and `partialNameOrRelPathMatch' filters "
+        "may not be used together." );
+    }
+  /* `partialMatchNameMatch' and `partialNameOrRelPathMatch' cannot be used
+   * together. */
+  if ( this->partialNameMatch.has_value()
+       && this->partialNameOrRelPathMatch.has_value() )
+    {
+      throw ParseSearchQueryException(
+        "`partialNameMatch' and `partialNameOrRelPathMatch' filters "
         "may not be used together." );
     }
 }
@@ -106,6 +123,10 @@ from_json( const nlohmann::json & jfrom, SearchQuery & qry )
             "unrecognized key `query.name-match' , did you "
             "mean `query.match-name'?" );
         }
+      else if ( key == "match-name-or-rel-path" )
+        {
+          getOrFail( key, value, qry.partialNameOrRelPathMatch );
+        }
       else
         {
           throw ParseSearchQueryException( "unrecognized key 'query." + key
@@ -118,13 +139,14 @@ from_json( const nlohmann::json & jfrom, SearchQuery & qry )
 void
 to_json( nlohmann::json & jto, const SearchQuery & qry )
 {
-  jto["name"]       = qry.name;
-  jto["pname"]      = qry.pname;
-  jto["version"]    = qry.version;
-  jto["semver"]     = qry.semver;
-  jto["match"]      = qry.partialMatch;
-  jto["match-name"] = qry.partialNameMatch;
-  jto["limit"]      = qry.limit;
+  jto["name"]                  = qry.name;
+  jto["pname"]                 = qry.pname;
+  jto["version"]               = qry.version;
+  jto["semver"]                = qry.semver;
+  jto["match"]                 = qry.partialMatch;
+  jto["match-name"]            = qry.partialNameMatch;
+  jto["match-name-or-rel-path"] = qry.partialNameOrRelPathMatch;
+  jto["limit"]                 = qry.limit;
 }
 
 
@@ -134,28 +156,14 @@ pkgdb::PkgQueryArgs &
 SearchQuery::fillPkgQueryArgs( pkgdb::PkgQueryArgs & pqa ) const
 {
   /* XXX: DOES NOT CLEAR FIRST! We are called after global preferences. */
-  pqa.name    = this->name;
-  pqa.pname   = this->pname;
-  pqa.version = this->version;
-  pqa.semver  = this->semver;
-  /* These will both write to `path`, so only one of them can be present,
-  which is the same invariant that we already put in place on the `flox` side.*/
-  if ( this->partialMatch.has_value() )
-    {
-      AttrPath path = splitAttrPath( *this->partialMatch );
-      /* There's no situation in which the search term will have more than one
-      path component and _also_ need to set `partial(Name)Match`. Any search
-      term with more than one path component is assumed to be a relative path.*/
-      if ( path.size() > 1 ) { pqa.relPath = path; }
-      else { pqa.partialMatch = this->partialMatch; }
-    }
-  if ( this->partialNameMatch.has_value() )
-    {
-      AttrPath path = splitAttrPath( *this->partialNameMatch );
-      if ( path.size() > 1 ) { pqa.relPath = path; }
-      else { pqa.partialNameMatch = this->partialNameMatch; }
-    }
-  pqa.limit = this->limit;
+  pqa.name                      = this->name;
+  pqa.pname                     = this->pname;
+  pqa.version                   = this->version;
+  pqa.semver                    = this->semver;
+  pqa.partialMatch              = this->partialMatch;
+  pqa.partialNameMatch          = this->partialNameMatch;
+  pqa.partialNameOrRelPathMatch = this->partialNameOrRelPathMatch;
+  pqa.limit                     = this->limit;
   return pqa;
 }
 

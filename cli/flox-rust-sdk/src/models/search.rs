@@ -115,6 +115,15 @@ impl std::fmt::Display for PathOrJson {
     }
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize, Default, PartialEq)]
+#[serde(rename_all = "kebab-case")]
+pub enum SearchStrategy {
+    Match,
+    MatchName,
+    #[default]
+    MatchNameOrRelPath,
+}
+
 /// A set of options for defining a search query.
 ///
 /// The search options aren't mutually exclusive. For instance, the query
@@ -143,6 +152,8 @@ pub struct Query {
     pub r#match: Option<String>,
     /// Match against the package name
     pub match_name: Option<String>,
+    /// Match against the package name or '.' joined relPath
+    pub match_name_or_rel_path: Option<String>,
     /// Limit search results to a specified number
     pub limit: Option<u8>,
 }
@@ -151,7 +162,7 @@ impl Query {
     /// Construct a query from a search term and an optional search result limit.
     pub fn from_term_and_limit(
         search_term: &str,
-        prefer_match_name: bool,
+        search_strategy: SearchStrategy,
         limit: Option<u8>,
     ) -> Result<Self, SearchError> {
         // If there's an '@' in the query, it means the user is trying to use the semver
@@ -171,10 +182,12 @@ impl Query {
                     limit,
                     ..Query::default()
                 };
-                if prefer_match_name {
-                    q.match_name = Some(package.to_string());
-                } else {
-                    q.r#match = Some(package.to_string());
+                match search_strategy {
+                    SearchStrategy::Match => q.r#match = Some(package.to_string()),
+                    SearchStrategy::MatchName => q.match_name = Some(package.to_string()),
+                    SearchStrategy::MatchNameOrRelPath => {
+                        q.match_name_or_rel_path = Some(package.to_string())
+                    },
                 }
                 q
             },
@@ -183,10 +196,12 @@ impl Query {
                     limit,
                     ..Default::default()
                 };
-                if prefer_match_name {
-                    q.match_name = Some(search_term.to_string());
-                } else {
-                    q.r#match = Some(search_term.to_string());
+                match search_strategy {
+                    SearchStrategy::Match => q.r#match = Some(search_term.to_string()),
+                    SearchStrategy::MatchName => q.match_name = Some(search_term.to_string()),
+                    SearchStrategy::MatchNameOrRelPath => {
+                        q.match_name_or_rel_path = Some(search_term.to_string())
+                    },
                 }
                 q
             },
@@ -387,13 +402,14 @@ mod test {
             manifest: Some(PathOrJson::Path("/path/to/manifest".into())),
             global_manifest: PathOrJson::Path("/path/to/manifest".into()),
             lockfile: PathOrJson::Path("/path/to/lockfile".into()),
-            query: Query::from_term_and_limit(EXAMPLE_SEARCH_TERM, false, Some(10)).unwrap(),
+            query: Query::from_term_and_limit(EXAMPLE_SEARCH_TERM, SearchStrategy::Match, Some(10))
+                .unwrap(),
         };
         let json = serde_json::to_string(&params).unwrap();
         // Convert both to `serde_json::Value` to test equality without worrying about whitespace
         let params_value: serde_json::Value = serde_json::from_str(&json).unwrap();
         let example_value: serde_json::Value = serde_json::from_str(EXAMPLE_PARAMS).unwrap();
-        assert_eq!(params_value, example_value);
+        pretty_assertions::assert_eq!(params_value, example_value);
     }
 
     #[test]
