@@ -352,10 +352,10 @@ pkgdb_vars_setup() {
   # some test cases.
   PKGDB_NIXPKGS_REV_NEW='9faf91e6d0b7743d41cce3b63a8e5c733dc696a3'
   # This revision is even older than OLD, selected for the purpose of serving up
-  # a different and incompatible version of glibc (2.35) than the latest (2.37).
+  # a different and incompatible version of glibc (2.34) than the latest (2.37).
   # This could probably replace the PKGDB_NIXPKGS_REV_OLD revision with a
   # refactoring of other test data but we'll tackle that in a separate effort.
-  PKGDB_NIXPKGS_REV_OLDER='249b458e58e8878217391c610fea5f3b77402ba7'
+  PKGDB_NIXPKGS_REV_OLDER='bc01a2be500c10f1507dcc8e98c9f5bd72c02aa3'
 
   PKGDB_NIXPKGS_REF_OLD="github:NixOS/nixpkgs/$PKGDB_NIXPKGS_REV_OLD"
   PKGDB_NIXPKGS_REF_NEW="github:NixOS/nixpkgs/$PKGDB_NIXPKGS_REV_NEW"

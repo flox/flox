@@ -50,5 +50,5 @@ forced_environment_glibc_version=$( LD_LIBRARY_PATH="$FLOX_ENV_LIB_DIRS" ./get-g
 [ "$system_glibc_version" != "$forced_environment_glibc_version" ]
 
 # Finally confirm that the environment is serving up the exact string for
-# version 2.35 as found in the nixpkgs $PKGDB_NIXPKGS_REV_OLDER revision.
-[ "$forced_environment_glibc_version" = "GNU C Library (glibc) version: 2.35" ]
+# version 2.34 as found in the nixpkgs $PKGDB_NIXPKGS_REV_OLDER revision.
+[ "$forced_environment_glibc_version" = "GNU C Library (glibc) version: 2.34" ]

@@ -77,7 +77,7 @@ teardown() {
   fi
 
   # Note:
-  # - installing old versions of nix (2.13.3) and glibc (2.35) for use in tests
+  # - installing old versions of nix (2.13.3) and glibc (2.34) for use in tests
   # - installing curl and libarchive because those packages provide libraries
   #   that are runtime dependencies of libnixmain.so
   run env _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLDER?}" \
