@@ -499,7 +499,6 @@ impl Activate {
                 export {FLOX_ACTIVE_ENVIRONMENTS_VAR}={flox_active_environments}
                 export {FLOX_ENV_DIRS_VAR}={flox_env_dirs}
                 export {FLOX_ENV_LIB_DIRS_VAR}={flox_env_lib_dirs}
-
                 export FLOX_PROMPT_COLOR_1={prompt_color_1}
                 export FLOX_PROMPT_COLOR_2={prompt_color_2}
 
@@ -529,10 +528,10 @@ impl Activate {
                 FLOX_ACTIVE_ENVIRONMENTS_VAR,
                 flox_active_environments.to_string(),
             )
-            .env("FLOX_PROMPT_COLOR_1", prompt_color_1)
-            .env("FLOX_PROMPT_COLOR_2", prompt_color_2);
             .env(FLOX_ENV_DIRS_VAR, flox_env_dirs)
             .env(FLOX_ENV_LIB_DIRS_VAR, flox_env_lib_dirs)
+            .env("FLOX_PROMPT_COLOR_1", prompt_color_1)
+            .env("FLOX_PROMPT_COLOR_2", prompt_color_2);
 
         match shell {
             ShellType::Bash(_) => {
