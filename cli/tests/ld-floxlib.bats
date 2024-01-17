@@ -45,7 +45,7 @@ project_setup() {
   export PROJECT_NAME="${PROJECT_DIR##*/}"
   rm -rf "$PROJECT_DIR"
   mkdir -p "$PROJECT_DIR"
-  cp ./harnesses/ld-floxlib/* "$PROJECT_DIR"
+  cp ./ld-floxlib/* "$PROJECT_DIR"
   pushd "$PROJECT_DIR" > /dev/null || return
   _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLDER?}" \
     "$FLOX_BIN" init
