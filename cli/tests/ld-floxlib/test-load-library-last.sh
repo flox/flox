@@ -13,8 +13,11 @@ test -z "$LD_LIBRARY_PATH"
 
 ### Test 1: load libraries found in $FLOX_ENV_LIBS last
 
-# Build glibc version probe using "system" version of glibc.
-cc -o get-glibc-version ./get-glibc-version.c
+# Build glibc version probe using [assumed] older "env" version of glibc.
+# It's essential that we build it with the older version because glibc
+# is backwards-compatible to run against old binaries, but newer binaries
+# cannot necessarily run against older versions of glibc.
+cc -o get-glibc-version ./get-glibc-version.c -I"$FLOX_ENV"/include -L"$FLOX_ENV"/lib
 
 # Remove all the tricks that Nix does to force this executable
 # to run with the exact version it was compiled with.
