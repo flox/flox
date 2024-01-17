@@ -1123,7 +1123,7 @@ impl Push {
                 ❌  You do not have permission to write to {owner}/{name}
             "}.into(),
             ManagedEnvironmentError::Diverged if create_remote => formatdoc! {"
-                ❌  You already have an environment named {owner}/{name}
+                ❌  An environment named {owner}/{name} already exists!
 
                 To rename your environment: 'flox edit --name <new name>'
                 To pull and manually re-apply your changes: 'flox delete && flox pull -r {owner}/{name}'
