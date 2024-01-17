@@ -208,3 +208,31 @@ EOF
   run check_manifest_unchanged
   assert_success
 }
+
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=edit:rename
+@test "'flox edit --name' edits .flox/env.json" {
+  "$FLOX_BIN" init --name "before"
+
+  BEFORE="$(jq -r .name .flox/env.json)"
+  assert_equal "$BEFORE" "before"
+
+  run "$FLOX_BIN" edit --name "after"
+  assert_success
+
+  AFTER="$(jq -r .name .flox/env.json)"
+  assert_equal "$AFTER" "after"
+}
+
+# bats test_tags=edit:rename-remote
+@test "'flox edit --name' fails with a remote environment" {
+  floxhub_setup "owner"
+
+  "$FLOX_BIN" init --name name
+  "$FLOX_BIN" push --owner "owner"
+
+  run "$FLOX_BIN" edit --remote "owner/name" --name "renamed"
+  assert_failure
+  assert_output --partial "Can not rename a environments on floxhub"
+}
