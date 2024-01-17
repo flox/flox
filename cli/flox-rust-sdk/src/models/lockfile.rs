@@ -236,7 +236,7 @@ impl ToString for LockedManifest {
 pub struct TypedLockedManifest {
     #[serde(rename = "lockfile-version")]
     lockfile_version: Version<0>,
-    packages: BTreeMap<System, BTreeMap<String, LockedPackage>>,
+    packages: BTreeMap<System, BTreeMap<String, Option<LockedPackage>>>,
     registry: Registry,
 }
 
@@ -287,12 +287,14 @@ impl TypedLockedManifest {
         let mut packages = vec![];
         if let Some(system_packages) = self.packages.get(system) {
             for (name, locked_package) in system_packages {
-                packages.push(InstalledPackage {
-                    name: name.clone(),
-                    rel_path: locked_package.rel_path(),
-                    info: locked_package.info.clone(),
-                    priority: locked_package.priority,
-                });
+                if let Some(locked_package) = locked_package {
+                    packages.push(InstalledPackage {
+                        name: name.clone(),
+                        rel_path: locked_package.rel_path(),
+                        info: locked_package.info.clone(),
+                        priority: locked_package.priority,
+                    });
+                };
             }
         }
         packages

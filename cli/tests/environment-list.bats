@@ -99,3 +99,26 @@ EOF
   assert_success
   assert_output "$MANIFEST_CONTENT"
 }
+
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=list,list:not-applicable
+@test "'flox list' hides packages not installed for the current system" {
+  "$FLOX_BIN" init
+  MANIFEST_CONTENT="$(
+    cat <<- EOF
+    [options]
+    systems = [ "$NIX_TARGET_SYSTEM" ]
+    [install]
+    hello.path = "hello"
+    htop = { path = "htop", systems = [] }
+EOF
+
+  )"
+
+  echo "$MANIFEST_CONTENT" | "$FLOX_BIN" edit -f -
+
+  run "$FLOX_BIN" list -n
+  assert_success
+  assert_output "hello"
+}
