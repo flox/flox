@@ -4,6 +4,14 @@ use std::process::{Command, Stdio};
 
 use thiserror::Error;
 
+/// Type representing a container builder script,
+/// i.e. the output of `pkgdb buildenv --container`
+/// ([LockedManifest::build_container](crate::models::lockfile::LockedManifest::build_container)).
+///
+/// The script is executed with no arguments
+/// and writes a container tarball to stdout.
+///
+/// [ContainerBuilder::stream_container] can be used to write that tarball to a sink.
 pub struct ContainerBuilder {
     path: PathBuf,
 }
@@ -16,6 +24,8 @@ impl ContainerBuilder {
         Self { path }
     }
 
+    /// Run the container builder script
+    /// and write the container tarball to the given sink
     pub fn stream_container(&self, mut sink: impl Write) -> Result<(), ContainerBuilderError> {
         let mut container_builder_command = Command::new(&self.path);
         container_builder_command.stdout(Stdio::piped());
