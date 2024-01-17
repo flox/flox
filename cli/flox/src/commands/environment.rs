@@ -78,9 +78,24 @@ pub struct Edit {
     #[bpaf(external(environment_select), fallback(Default::default()))]
     environment: EnvironmentSelect,
 
-    /// Replace environment declaration with that in FILE
-    #[bpaf(long, short, argument("FILE"))]
-    file: Option<PathBuf>,
+    #[bpaf(external(edit_action), fallback(EditAction::EditManifest{file: None}))]
+    action: EditAction,
+}
+
+/// Edit declarative environment configuration
+#[derive(Bpaf, Clone)]
+pub enum EditAction {
+    EditManifest {
+        /// Replace environment declaration with that in <file>
+        #[bpaf(long, short, argument("file"))]
+        file: Option<PathBuf>,
+    },
+
+    Rename {
+        /// Rename the environment to <name>
+        #[bpaf(long, short, argument("name"))]
+        name: EnvironmentName,
+    },
 }
 
 impl Edit {
@@ -90,17 +105,45 @@ impl Edit {
         let detected_environment = self
             .environment
             .detect_concrete_environment(&flox, "edit")?;
+
+        match self.action {
+            EditAction::EditManifest { file } => {
+                Self::edit_manifest(&flox, detected_environment, file).await?
+            },
+            EditAction::Rename { name } => {
+                if let ConcreteEnvironment::Path(mut environment) = detected_environment {
+                    let old_name = environment.name();
+                    if name == old_name {
+                        bail!("✅  environment already named {name}");
+                    }
+                    environment.rename(name.clone())?;
+                    info!("✅  renamed environment {old_name} to {name}");
+                } else {
+                    // todo: handle remote environments in the future
+                    bail!("❌  Can not rename a environments on floxhub");
+                }
+            },
+        }
+
+        Ok(())
+    }
+
+    async fn edit_manifest(
+        flox: &Flox,
+        detected_environment: ConcreteEnvironment,
+        file: Option<PathBuf>,
+    ) -> Result<()> {
         let active_environment =
             UninitializedEnvironment::from_concrete_environment(&detected_environment)?;
         let mut environment = detected_environment.into_dyn_environment();
 
-        let result = match self.provided_manifest_contents()? {
+        let result = match Self::provided_manifest_contents(file)? {
             // If provided with the contents of a manifest file, either via a path to a file or via
             // contents piped to stdin, use those contents to try building the environment.
-            Some(new_manifest) => environment.edit(&flox, new_manifest)?,
+            Some(new_manifest) => environment.edit(flox, new_manifest)?,
             // If not provided with new manifest contents, let the user edit the file directly
             // via $EDITOR or $VISUAL (as long as `flox edit` was invoked interactively).
-            None => self.interactive_edit(flox, environment.as_mut()).await?,
+            None => Self::interactive_edit(flox, environment.as_mut()).await?,
         };
         match result {
             EditResult::Unchanged => {
@@ -125,8 +168,7 @@ impl Edit {
 
     /// Interactively edit the manifest file
     async fn interactive_edit(
-        &self,
-        flox: Flox,
+        flox: &Flox,
         environment: &mut dyn Environment,
     ) -> Result<EditResult> {
         if !Dialog::can_prompt() {
@@ -140,7 +182,7 @@ impl Edit {
         // method because the temporary manifest needs to stick around in case the user wants
         // or needs to make successive edits without starting over each time.
         let tmp_manifest = NamedTempFile::new_in(&flox.temp_dir)?;
-        std::fs::write(&tmp_manifest, environment.manifest_content(&flox)?)?;
+        std::fs::write(&tmp_manifest, environment.manifest_content(flox)?)?;
         let should_continue = Dialog {
             message: "Continue editing?",
             help_message: Default::default(),
@@ -157,7 +199,7 @@ impl Edit {
             let result = Dialog {
                 message: "Building environment to validate edit...",
                 help_message: None,
-                typed: Spinner::new(|| environment.edit(&flox, new_manifest.clone())),
+                typed: Spinner::new(|| environment.edit(flox, new_manifest.clone())),
             }
             .spin();
 
@@ -207,8 +249,8 @@ impl Edit {
     }
 
     /// Retrieves the new manifest file contents if a new manifest file was provided
-    fn provided_manifest_contents(&self) -> Result<Option<String>> {
-        if let Some(ref file) = self.file {
+    fn provided_manifest_contents(file: Option<PathBuf>) -> Result<Option<String>> {
+        if let Some(ref file) = file {
             let mut file: Box<dyn std::io::Read + Send> = if file == Path::new("-") {
                 Box::new(stdin())
             } else {
@@ -1078,7 +1120,7 @@ impl Push {
 
         let message = match err {
             ManagedEnvironmentError::AccessDenied => formatdoc! {"
-                ❌  You do not have permission to push to {owner}/{name}
+                ❌  You do not have permission to write to {owner}/{name}
             "}.into(),
             ManagedEnvironmentError::Diverged if create_remote => formatdoc! {"
                 ❌  You already have an environment named {owner}/{name}
