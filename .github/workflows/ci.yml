@@ -176,6 +176,7 @@ jobs:
           popd;
 
       - name: "Test (./cli/tests)"
+        if: ${{ github.event_name == 'merge_group' }}
         run: |
           pushd ./cli;
           nix develop -L                 \
