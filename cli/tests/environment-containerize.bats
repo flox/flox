@@ -118,7 +118,7 @@ function skip_if_linux() {
   skip_if_not_linux
 
   CONTAINER_ID="$("$FLOX_BIN" containerize -o - | podman load | sed -nr 's/^Loaded image: (.*)$/\1/p')"
-  run podman run -q -i "$CONTAINER_ID" true
+  run --separate-stderr podman run -q -i "$CONTAINER_ID" true
   assert_success
 
   # `docker --tty` adds a carriage return to the output messing up bats assertions
@@ -133,7 +133,7 @@ function skip_if_linux() {
   skip_if_not_linux
 
   CONTAINER_ID="$("$FLOX_BIN" containerize -o - | podman load | sed -nr 's/^Loaded image: (.*)$/\1/p')"
-  run podman run "$CONTAINER_ID" true
+  run --separate-stderr podman run "$CONTAINER_ID" true
   assert_success
   assert_line --index 0 "bar"                   # vars are present
   assert_line --index 1 --regexp ".*/bin/hello" # programs are present
