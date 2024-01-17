@@ -234,5 +234,5 @@ EOF
 
   run "$FLOX_BIN" edit --remote "owner/name" --name "renamed"
   assert_failure
-  assert_output --partial "Can not rename a environments on floxhub"
+  assert_output --partial "Cannot rename environments on floxhub"
 }
