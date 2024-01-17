@@ -11,7 +11,7 @@ use std::{env, vec};
 use anyhow::{anyhow, bail, Context, Result};
 use bpaf::Bpaf;
 use crossterm::tty::IsTty;
-use flox_rust_sdk::flox::{Auth0Client, EnvironmentName, EnvironmentOwner, EnvironmentRef, Flox};
+use flox_rust_sdk::flox::{EnvironmentName, EnvironmentOwner, EnvironmentRef, Flox};
 use flox_rust_sdk::models::environment::managed_environment::{
     ManagedEnvironment,
     ManagedEnvironmentError,
@@ -1053,19 +1053,13 @@ impl Push {
                 let owner = if let Some(owner) = self.owner {
                     owner
                 } else {
-                    let base_url = std::env::var("FLOX_OAUTH_BASE_URL")
-                        .unwrap_or(env!("OAUTH_BASE_URL").to_string());
-                    let client = Auth0Client::new(
-                        base_url,
-                        flox.floxhub_token.clone().context("Need to be logged in")?,
-                    );
-                    let user_name = client
-                        .get_username()
-                        .await
-                        .context("Could not get username from floxhub")?;
-                    user_name
-                        .parse::<EnvironmentOwner>()
-                        .context("Invalid owner name")?
+                    EnvironmentOwner::from_str(
+                        &flox
+                            .floxhub_token
+                            .as_ref()
+                            .context("Need to be loggedin")?
+                            .handle()?,
+                    )?
                 };
                 let env = Self::push_make_managed(&flox, path_pointer, &dir, owner, self.force)
                     .context("Could not push new environment")?;

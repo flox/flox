@@ -5,7 +5,7 @@ use anyhow::{bail, Context, Result};
 use bpaf::Bpaf;
 use chrono::offset::Utc;
 use chrono::{DateTime, Duration};
-use flox_rust_sdk::flox::{Auth0Client, Flox};
+use flox_rust_sdk::flox::{Flox, FloxhubToken};
 use indoc::{eprintdoc, formatdoc};
 use log::{debug, info};
 use oauth2::basic::BasicClient;
@@ -197,12 +197,8 @@ impl Auth {
             },
             Auth::User => {
                 let token = config.flox.floxhub_token.context("You are not logged in")?;
-
-                let user = Auth0Client::new(env!("OAUTH_BASE_URL").to_string(), token)
-                    .get_username()
-                    .await
-                    .context("Could not get user details")?;
-                println!("{user}");
+                let handle = token.handle().context("Could not get user details")?;
+                println!("{handle}");
                 Ok(())
             },
         }
@@ -223,7 +219,7 @@ pub async fn login_flox(flox: &mut Flox) -> Result<()> {
     debug!("Writing token to config");
 
     // set the token in the runtime config
-    let token = flox.floxhub_token.insert(cred.token);
+    let token = flox.floxhub_token.insert(FloxhubToken::new(cred.token));
 
     // write the token to the config file
     update_config(

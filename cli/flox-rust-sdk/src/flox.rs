@@ -55,7 +55,7 @@ pub struct Flox {
     /// Token to authenticate with floxhub.
     /// It's usually populated from the config during [Flox] initialization.
     /// Checking for [None] can be used to check if the use is logged in.
-    pub floxhub_token: Option<String>,
+    pub floxhub_token: Option<FloxhubToken>,
 }
 
 pub trait FloxNixApi: NixBackend {

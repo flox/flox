@@ -4,7 +4,7 @@ use std::{env, fs};
 
 use anyhow::{Context, Result};
 use config::{Config as HierarchicalConfig, Environment};
-use flox_rust_sdk::flox::EnvironmentRef;
+use flox_rust_sdk::flox::{EnvironmentRef, FloxhubToken};
 use flox_types::stability::Stability;
 use itertools::{Either, Itertools};
 use log::{debug, trace};
@@ -61,7 +61,7 @@ pub struct FloxConfig {
     pub signing_key: Option<PathBuf>,
 
     /// Token to authenticate on floxhub
-    pub floxhub_token: Option<String>,
+    pub floxhub_token: Option<FloxhubToken>,
 
     /// How many items `flox show` should show by default
     pub search_limit: Option<u8>,
