@@ -114,7 +114,7 @@ impl Edit {
                 if let ConcreteEnvironment::Path(mut environment) = detected_environment {
                     let old_name = environment.name();
                     if name == old_name {
-                        bail!("✅  environment already named {name}");
+                        bail!("⚠️  environment already named {name}");
                     }
                     environment.rename(name.clone())?;
                     info!("✅  renamed environment {old_name} to {name}");
