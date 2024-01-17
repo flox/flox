@@ -24,9 +24,13 @@ jobs:
       pkgdb: ${{ steps.filter.outputs.pkgdb }}
     steps:
     # For pull requests it's not necessary to checkout the code
+    - uses: "actions/checkout@v4"
+
     - uses: dorny/paths-filter@v2
       id: filter
       with:
+        base: ${{ github.event.merge_group.base_ref || 'main' }}
+        ref: ${{ github.event.merge_group.head_ref || github.ref }}
         filters: |
           pkgdb:
             - "pkgdb/**"
