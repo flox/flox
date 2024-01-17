@@ -2,6 +2,7 @@ use std::io::Read;
 use std::path::PathBuf;
 
 use derive_more::Constructor;
+use jsonwebtoken::{DecodingKey, Validation};
 use log::info;
 use once_cell::sync::Lazy;
 use reqwest;
@@ -12,6 +13,7 @@ use runix::command_line::{DefaultArgs, NixCommandLine};
 use runix::installable::{AttrPath, FlakeAttribute};
 use runix::NixBackend;
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 use url::Url;
 
 use crate::environment::{self, default_nix_subprocess_env};
@@ -206,6 +208,50 @@ impl Flox {
 pub static DEFAULT_FLOXHUB_URL: Lazy<Url> =
     Lazy::new(|| Url::parse("https://hub.flox.dev").unwrap());
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FloxhubToken(String);
+
+impl AsRef<str> for FloxhubToken {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
+impl FloxhubToken {
+    /// Create a new floxhub token from a string
+    pub fn new(token: String) -> Self {
+        FloxhubToken(token)
+    }
+
+    /// Return the token as a string
+    pub fn secret(&self) -> &str {
+        &self.0
+    }
+
+    pub fn handle(&self) -> Result<String, FloxhubTokenError> {
+        #[derive(Debug, Deserialize)]
+        struct Claims {
+            #[serde(rename = "https://flox.dev/handle")]
+            handle: String,
+        }
+
+        let mut validation = Validation::default();
+        // we're neither creating or verifying the token on the client side
+        validation.insecure_disable_signature_validation();
+        validation.validate_aud = false;
+        let token =
+            jsonwebtoken::decode::<Claims>(&self.0, &DecodingKey::from_secret(&[]), &validation)
+                .map_err(FloxhubTokenError::InvalidToken)?;
+        Ok(token.claims.handle)
+    }
+}
+
+#[derive(Debug, Clone, Error)]
+pub enum FloxhubTokenError {
+    #[error("invalid token")]
+    InvalidToken(#[source] jsonwebtoken::errors::Error),
+}
+
 #[derive(Debug, Clone)]
 pub struct Floxhub {
     base_url: Url,
@@ -305,6 +351,21 @@ pub mod tests {
 
     use super::*;
 
+    /// A fake floxhub token
+    ///
+    /// {
+    ///  "typ": "JWT",
+    ///  "alg": "HS256"
+    /// }
+    /// .
+    /// {
+    ///   "https://flox.dev/handle": "test"
+    ///   "exp": 9999999999,                // 2286-11-20T17:46:39+00:00
+    /// }
+    /// .
+    /// AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+    const FAKE_TOKEN: &str= "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3guZGV2L2hhbmRsZSI6InRlc3QiLCJleHAiOjk5OTk5OTk5OTl9.6-nbzFzQEjEX7dfWZFLE-I_qW2N_-9W2HFzzfsquI74";
+
     pub fn flox_instance() -> (Flox, TempDir) {
         let tempdir_handle = tempfile::tempdir_in(std::env::temp_dir()).unwrap();
 
@@ -358,26 +419,7 @@ pub mod tests {
 
     #[tokio::test]
     async fn test_get_username() {
-        let mock_response = serde_json::json!({
-            "nickname": "exampleuser",
-            "name": "Example User",
-        });
-        let mut server = mockito::Server::new();
-        let mock_server_url = server.url();
-        let mock_server = server
-            .mock("GET", "/userinfo")
-            .match_header(AUTHORIZATION.as_str(), "Bearer your_oauth_token")
-            .match_header(USER_AGENT.as_str(), "flox cli")
-            .with_status(200)
-            .with_header("content-type", "application/json")
-            .with_body(mock_response.to_string())
-            .create();
-
-        let github_client = Auth0Client::new(mock_server_url, "your_oauth_token".to_string());
-
-        let username = github_client.get_username().await.unwrap();
-        assert_eq!(username, "exampleuser".to_string());
-
-        mock_server.assert();
+        let token = FloxhubToken::new(FAKE_TOKEN.to_string());
+        assert_eq!(token.handle().unwrap(), "test");
     }
 }
