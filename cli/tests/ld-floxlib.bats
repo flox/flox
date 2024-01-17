@@ -77,7 +77,7 @@ teardown() {
   fi
 
   # Note:
-  # - installing old versions of nix (2.13.3) and glibc (2.34) for use in tests
+  # - installing old versions of nix (2.10.3) and glibc (2.34) for use in tests
   # - installing curl and libarchive because those packages provide libraries
   #   that are runtime dependencies of libnixmain.so
   run env _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLDER?}" \
@@ -98,14 +98,14 @@ teardown() {
   # Link against nixmain because that's a library that won't be present on any host system.
   # Build print-nix-version, remove RUNPATH & interpreter
   run "$FLOX_BIN" activate -- bash -exc '" \
-    g++ -o get-nix-version ./get-nix-version.cc -lnixmain && \
+    g++ -std=c++17 -o get-nix-version ./get-nix-version.cc -L"$FLOX_ENV"/lib -lnixmain && \
     patchelf --remove-rpath ./get-nix-version && \
     patchelf --set-interpreter "$( \
       patchelf --print-interpreter /bin/sh \
     )" ./get-nix-version && \
     LD_FLOXLIB_DEBUG=1 ./get-nix-version"'
   assert_success
-  assert_output --partial "testing (Nix) 2.13.3"
+  assert_output --partial "testing (Nix) 2.10.3"
 
   ### Test 3: confirm binary cannot find missing libraries without LD_AUDIT
   # Note run with "run -127" to silence the 127 "Command not found" error code
