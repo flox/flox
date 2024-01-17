@@ -15,6 +15,7 @@
 
 use std::ffi::OsStr;
 use std::fs::{self};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use flox_types::catalog::System;
@@ -132,6 +133,26 @@ impl PathEnvironment {
     /// To modify the environment, use the [PathEnvironment] methods instead.
     pub(super) fn into_core_environment(self) -> CoreEnvironment {
         CoreEnvironment::new(self.path.join(ENV_DIR_NAME))
+    }
+
+    pub fn rename(&mut self, new_name: EnvironmentName) -> Result<(), EnvironmentError2> {
+        self.pointer.name = new_name;
+        let pointer_content = serde_json::to_string_pretty(&self.pointer)
+            .map_err(EnvironmentError2::SerializeEnvJson)?;
+
+        let mut tempfile =
+            tempfile::NamedTempFile::new_in(&self.path).map_err(EnvironmentError2::WriteEnvJson)?;
+
+        tempfile
+            .write_all(pointer_content.as_bytes())
+            .map_err(EnvironmentError2::WriteEnvJson)?;
+
+        tempfile
+            .persist(self.path.join(ENVIRONMENT_POINTER_FILENAME))
+            .map_err(|e| e.error)
+            .map_err(EnvironmentError2::WriteEnvJson)?;
+
+        Ok(())
     }
 }
 
