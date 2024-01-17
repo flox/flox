@@ -177,7 +177,6 @@ impl Auth {
         match self {
             Auth::Login => {
                 login_flox(&mut flox).await?;
-                info!("Login successful");
                 Ok(())
             },
             Auth::Logout => {
@@ -220,6 +219,7 @@ pub async fn login_flox(flox: &mut Flox) -> Result<()> {
 
     // set the token in the runtime config
     let token = flox.floxhub_token.insert(FloxhubToken::new(cred.token));
+    let handle = token.handle().context("Could not get user details")?;
 
     // write the token to the config file
     update_config(
@@ -229,6 +229,9 @@ pub async fn login_flox(flox: &mut Flox) -> Result<()> {
         Some(token),
     )
     .context("Could not write token to config")?;
+
+    info!("✅  Authentication complete");
+    info!("✅  Logged in as {handle}");
 
     Ok(())
 }
