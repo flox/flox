@@ -208,7 +208,9 @@ in
             bear
             # For lints/fmt
             clang-tools_16
-            include-what-you-use
+            (include-what-you-use.override (old: {
+              llvmPackages = llvmPackages;
+            }))
             llvm # for `llvm-symbolizer'
             # For debugging
             (
