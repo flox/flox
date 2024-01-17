@@ -1746,12 +1746,12 @@ impl Containerize {
                 .join(format!("{}-container.tar.gz", env.name())),
         };
 
-        let output: Box<dyn Write> = if output_path == Path::new("-") {
-            debug!("writing container to stdout");
+        let (output, output_name): (Box<dyn Write>, String) = if output_path == Path::new("-") {
+            debug!("output=stdout");
 
-            Box::new(std::io::stdout())
+            (Box::new(std::io::stdout()), "stdout".to_string())
         } else {
-            debug!("writing container to {}", output_path.display());
+            debug!("output={}", output_path.display());
 
             let file = fs::OpenOptions::new()
                 .write(true)
@@ -1760,7 +1760,7 @@ impl Containerize {
                 .open(&output_path)
                 .context("Could not open output file")?;
 
-            Box::new(file)
+            (Box::new(file), output_path.display().to_string())
         };
 
         let builder = Dialog {
@@ -1771,10 +1771,13 @@ impl Containerize {
         .spin()
         .context("could not create container builder")?;
 
+        info!("Writing container to '{output_name}'");
+
         builder
             .stream_container(output)
             .context("could not write container to output")?;
 
+        info!("✨  Container written to '{output_name}'");
         Ok(())
     }
 }
