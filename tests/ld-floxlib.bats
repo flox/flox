@@ -20,7 +20,7 @@
 #   - repeat with LD_LIBRARY_PATH=$FLOX_ENV_LIBS and confirm that the
 #     version does change
 # 2: confirm LD_AUDIT can find missing libraries
-#   - compile the print-gif-info program
+#   - compile the get-nix-version program
 #   - observe that it can run the compiled program on the sample gif
 #   - unset LD_AUDIT and confirm it cannot run the program
 #
@@ -76,12 +76,18 @@ teardown() {
     skip "not Linux"
   fi
 
+  # Note:
+  # - installing old versions of nix (2.13.3) and glibc (2.35) for use in tests
+  # - installing curl and libarchive because those packages provide libraries
+  #   that are runtime dependencies of libnixmain.so
   run env _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLDER?}" \
-    "$FLOX_BIN" install gcc glibc giflib patchelf
+    "$FLOX_BIN" install curl gcc glibc libarchive nix patchelf
   assert_success
+  assert_output --partial "✅ 'curl' installed to environment"
   assert_output --partial "✅ 'gcc' installed to environment"
   assert_output --partial "✅ 'glibc' installed to environment"
-  assert_output --partial "✅ 'giflib' installed to environment"
+  assert_output --partial "✅ 'libarchive' installed to environment"
+  assert_output --partial "✅ 'nix' installed to environment"
   assert_output --partial "✅ 'patchelf' installed to environment"
 
   ### Test 1: load libraries found in $FLOX_ENV_LIB_DIRS last
@@ -89,10 +95,22 @@ teardown() {
   assert_success
 
   ### Test 2: confirm LD_AUDIT can find missing libraries
-  run "$FLOX_BIN" activate -- bash -exc \
-    '"cc -o pgi ./print-gif-info.c -lgif && ./pgi ./flox-edge.gif"'
-  assert_output --partial "GIF Information for: ./flox-edge.gif"
-  assert_output --partial "Number of frames: 0"
-  assert_output --partial "Width: 270 pixels"
-  assert_output --partial "Height: 137 pixels"
+  # Build print-nix-version, remove RUNPATH & interpreter
+  run "$FLOX_BIN" activate -- bash -exc '" \
+    g++ -o get-nix-version ./get-nix-version.cc -lnixmain && \
+    patchelf --remove-rpath ./get-nix-version && \
+    patchelf --set-interpreter "$( \
+      patchelf --print-interpreter /bin/sh \
+    )" ./get-nix-version && \
+    LD_FLOXLIB_DEBUG=1 ./get-nix-version"'
+  assert_success
+  assert_output --partial "testing (Nix) 2.13.3"
+
+  ### Test 3: confirm binary cannot find missing libraries without LD_AUDIT
+  # Note run with "run -127" to silence the 127 "Command not found" error code
+  # warning that bats will display by default when it attempts to launch a
+  # command that fails to run because it cannot load its libraries.
+  run -127 "$FLOX_BIN" activate -- bash -exc \
+    '"env -i LD_DEBUG=libs ./get-nix-version"'
+  assert_failure
 }
