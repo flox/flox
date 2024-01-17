@@ -5,8 +5,6 @@ use derive_more::Constructor;
 use jsonwebtoken::{DecodingKey, Validation};
 use log::info;
 use once_cell::sync::Lazy;
-use reqwest;
-use reqwest::header::USER_AGENT;
 use runix::arguments::common::NixCommonArgs;
 use runix::arguments::config::NixConfigArgs;
 use runix::command_line::{DefaultArgs, NixCommandLine};
@@ -299,54 +297,10 @@ impl Floxhub {
     }
 }
 
-/// Requires login with auth0 with "openid" and "profile" scopes
-/// https://auth0.com/docs/scopes/current/oidc-scopes
-/// See also: `authenticate` in `flox/src/commands/auth.rs` where we set the scopes
-#[derive(Debug, Serialize, Deserialize)]
-struct Auth0User {
-    /// full name of the user
-    name: String,
-    /// nickname of the user (e.g. github username)
-    nickname: String,
-}
-
-pub struct Auth0Client {
-    base_url: String,
-    oauth_token: String,
-}
-
-impl Auth0Client {
-    pub fn new(base_url: String, oauth_token: String) -> Self {
-        Auth0Client {
-            base_url,
-            oauth_token,
-        }
-    }
-
-    pub async fn get_username(&self) -> Result<String, reqwest::Error> {
-        let url = format!("{}/userinfo", self.base_url);
-        let client = reqwest::Client::new();
-        let request = client
-            .get(url)
-            .header(USER_AGENT, "flox cli")
-            .bearer_auth(&self.oauth_token);
-
-        let response = request.send().await?;
-
-        if response.status().is_success() {
-            let user: Auth0User = response.json().await?;
-            Ok(user.nickname)
-        } else {
-            Err(response.error_for_status().unwrap_err())
-        }
-    }
-}
-
 #[cfg(test)]
 pub mod tests {
     use std::str::FromStr;
 
-    use reqwest::header::AUTHORIZATION;
     use tempfile::TempDir;
 
     use super::*;
@@ -412,9 +366,6 @@ pub mod tests {
         );
     }
 
-    use mockito;
-
-    use crate::flox::Auth0Client;
     use crate::models::environment::{global_manifest_path, init_global_manifest};
 
     #[tokio::test]
