@@ -18,6 +18,9 @@
 #include <string_view>
 #include <vector>
 
+#include <nix/attrs.hh>
+#include <nix/fetchers.hh>
+
 #include <nlohmann/json.hpp>
 
 #include "flox/core/exceptions.hh"
@@ -364,6 +367,41 @@ errorLog( const std::string & msg )
   printLog( nix::Verbosity::lvlError, msg );
 }
 
+
+/* -------------------------------------------------------------------------- */
+
+bool
+isNixpkgsRef( nix::FlakeRef const & ref )
+{
+  if ( ref.input.getType() != "github" ) { return false; }
+  try
+    {
+      if ( auto owner
+           = nix::fetchers::maybeGetStrAttr( ref.input.attrs, "owner" ).value();
+           owner != "NixOS" )
+        {
+          return false;
+        }
+    }
+  catch ( nix::Error & err )
+    {
+      return false;
+    }
+  try
+    {
+      if ( auto owner
+           = nix::fetchers::maybeGetStrAttr( ref.input.attrs, "repo" ).value();
+           owner != "nixpkgs" )
+        {
+          return false;
+        }
+    }
+  catch ( nix::Error & err )
+    {
+      return false;
+    }
+  return true;
+}
 
 /* -------------------------------------------------------------------------- */
 

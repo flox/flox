@@ -208,8 +208,9 @@ struct adl_serializer<nix::FlakeRef>
   {
     if ( jfrom.is_object() )
       {
-        return { nix::FlakeRef::fromAttrs(
-          nix::fetchers::jsonToAttrs( jfrom ) ) };
+        auto attrs = nix::fetchers::jsonToAttrs( jfrom );
+        return nix::FlakeRef::fromAttrs( attrs );
+        ;
       }
     return { nix::parseFlakeRef( jfrom.get<std::string>() ) };
   }
@@ -490,6 +491,17 @@ warningLog( const std::string & msg );
 void
 errorLog( const std::string & msg );
 
+
+/* -------------------------------------------------------------------------- */
+
+/** @brief Returns true if the flake reference points to a nixpkgs revision. */
+bool
+isNixpkgsRef( nix::FlakeRef const & ref );
+
+
+/* -------------------------------------------------------------------------- */
+
+static std::string const FLOX_FLAKE_TYPE = "flox-nixpkgs";
 
 /* -------------------------------------------------------------------------- */
 
