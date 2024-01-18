@@ -113,7 +113,7 @@ teardown() {
   # Link against nixmain because that's a library that won't be present on any host system.
   # Build print-nix-version, remove RUNPATH & interpreter
   run "$FLOX_BIN" activate -- bash -exc '" \
-    g++ -std=c++17 -o get-nix-version ./get-nix-version.cc -L"$FLOX_ENV"/lib -lnixmain && \
+    g++ -std=c++17 -o get-nix-version ./get-nix-version.cc -I"$FLOX_ENV"/include -L"$FLOX_ENV"/lib -lnixmain && \
     patchelf --remove-rpath ./get-nix-version && \
     patchelf --set-interpreter "$( \
       patchelf --print-interpreter /bin/sh \
