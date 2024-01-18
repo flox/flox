@@ -987,7 +987,10 @@ impl ManagedEnvironment {
                 format!("{}:{}", project_branch, sync_branch),
                 force,
             )
-            .map_err(ManagedEnvironmentError::Push)?;
+            .map_err(|err| match err {
+                GitRemoteCommandError::AccessDenied => ManagedEnvironmentError::AccessDenied,
+                _ => ManagedEnvironmentError::Push(err),
+            })?;
 
         // update local envorinment branch, should be fast-forward and a noop if the branches didn't diverge
         self.pull(force)?;
