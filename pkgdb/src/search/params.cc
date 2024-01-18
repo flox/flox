@@ -34,47 +34,47 @@ SearchQuery::clear()
 void
 SearchQuery::check() const
 {
-  /* `name' and `pname' or `version' cannot be used together. */
+  /* 'name' and 'pname' or 'version' cannot be used together. */
   if ( this->name.has_value() && this->pname.has_value() )
     {
       throw ParseSearchQueryException(
-        "`name' and `pname' filters may not be used together." );
+        "'name' and 'pname' filters may not be used together." );
     }
   if ( this->name.has_value() && this->version.has_value() )
     {
       throw ParseSearchQueryException(
-        "`name' and `version' filters may not be used together." );
+        "'name' and 'version' filters may not be used together." );
     }
 
-  /* `version' and `semver' cannot be used together. */
+  /* 'version' and 'semver' cannot be used together. */
   if ( this->version.has_value() && this->semver.has_value() )
     {
       throw ParseSearchQueryException(
-        "`version' and `semver' filters may not be used together." );
+        "'version' and 'semver' filters may not be used together." );
     }
 
-  /* `partialMatch' and `partialNameMatch' cannot be used together. */
+  /* 'partialMatch' and 'partialNameMatch' cannot be used together. */
   if ( this->partialMatch.has_value() && this->partialNameMatch.has_value() )
     {
       throw ParseSearchQueryException(
-        "`partialMatch' and `partialNameMatch' filters "
+        "'partialMatch' and 'partialNameMatch' filters "
         "may not be used together." );
     }
-  /* `partialMatch' and `partialNameOrRelPathMatch' cannot be used together. */
+  /* 'partialMatch' and 'partialNameOrRelPathMatch' cannot be used together. */
   if ( this->partialMatch.has_value()
        && this->partialNameOrRelPathMatch.has_value() )
     {
       throw ParseSearchQueryException(
-        "`partialMatch' and `partialNameOrRelPathMatch' filters "
+        "'partialMatch' and 'partialNameOrRelPathMatch' filters "
         "may not be used together." );
     }
-  /* `partialMatchNameMatch' and `partialNameOrRelPathMatch' cannot be used
+  /* 'partialMatchNameMatch' and 'partialNameOrRelPathMatch' cannot be used
    * together. */
   if ( this->partialNameMatch.has_value()
        && this->partialNameOrRelPathMatch.has_value() )
     {
       throw ParseSearchQueryException(
-        "`partialNameMatch' and `partialNameOrRelPathMatch' filters "
+        "'partialNameMatch' and 'partialNameOrRelPathMatch' filters "
         "may not be used together." );
     }
 }
@@ -120,8 +120,8 @@ from_json( const nlohmann::json & jfrom, SearchQuery & qry )
       else if ( key == "name-match" )
         {
           throw ParseSearchQueryException(
-            "unrecognized key `query.name-match' , did you "
-            "mean `query.match-name'?" );
+            "unrecognized key 'query.name-match' , did you "
+            "mean 'query.match-name'?" );
         }
       else if ( key == "match-name-or-rel-path" )
         {
@@ -277,7 +277,7 @@ from_json( const nlohmann::json & jfrom, SearchParams & params )
           catch ( nlohmann::json::exception & e )
             {
               throw ParseSearchQueryException(
-                "couldn't interpret search query field `global-manifest'",
+                "couldn't interpret search query field 'global-manifest'",
                 extract_json_errmsg( e ) );
             }
         }
@@ -290,7 +290,7 @@ from_json( const nlohmann::json & jfrom, SearchParams & params )
           catch ( nlohmann::json::exception & e )
             {
               throw ParseSearchQueryException(
-                "couldn't interpret search query field `lockfile'",
+                "couldn't interpret search query field 'lockfile'",
                 extract_json_errmsg( e ) );
             }
         }
@@ -303,7 +303,7 @@ from_json( const nlohmann::json & jfrom, SearchParams & params )
           catch ( nlohmann::json::exception & e )
             {
               throw ParseSearchQueryException(
-                "couldn't interpret search query field `lockfile'",
+                "couldn't interpret search query field 'lockfile'",
                 extract_json_errmsg( e ) );
             }
         }
@@ -317,13 +317,13 @@ from_json( const nlohmann::json & jfrom, SearchParams & params )
           catch ( nlohmann::json::exception & e )
             {
               throw ParseSearchQueryException(
-                "couldn't interpret search query field `query'",
+                "couldn't interpret search query field 'query'",
                 extract_json_errmsg( e ) );
             }
         }
       else
         {
-          throw ParseSearchQueryException( "unrecognized field `" + key
+          throw ParseSearchQueryException( "unrecognized field '" + key
                                            + "' in search query" );
         }
     }
