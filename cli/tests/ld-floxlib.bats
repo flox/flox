@@ -4,24 +4,27 @@
 #
 # Test that LD_AUDIT and ld-floxlib.so works as expected on Linux only.
 #
-# This test loads up a flox environment containing the following packages as
-# installed by tests/ld-floxlib.bats:
-# * gcc-wrapped (to be able to compile the test program)
-# * a pinned version of glibc from the past
-# * giflib (a package that is presumed to be not available by default)
+# This test loads up a flox environment containing the following packages:
+# * gcc (to be able to compile the test program)
+# * a pinned version of glibc 2.34 from the past
+# * patchelf (to modify ELF binaries)
+# * nix (a package that is guaranteed to be not available in FHS lib)
+# * curl, libarchive (runtime libraries required by libnixmain.so)
 #
 # It then activates the env to perform two distinct tests:
 # 1: load libraries found in $FLOX_ENV_LIBS last
-#   - compile the get-glibc-version program (with LIBRARY_PATH=$FLOX_ENV_LIBS)
-#   - run it with no environment (using `env -i`) to observe the default
-#     glibc version and confirm this does NOT match the pinned version
+#   - compile the get-glibc-version program (using $FLOX_ENV/{include,lib})
+#   - remove its custom RUNPATH and ld interpreter so that it will use the
+#     "system" libc
+#   - run it having cleared the environment (with `env -i`) and observe the
+#     default glibc version, confirm this does NOT match the pinned version
 #   - repeat with LD_AUDIT defined and confirm that the version again does
 #     not change
-#   - repeat with LD_LIBRARY_PATH=$FLOX_ENV_LIBS and confirm that the
-#     version does change
+#   - repeat with LD_LIBRARY_PATH=$FLOX_ENV_LIBS and confirm that this rolls
+#     back glibc to the version installed to the environment
 # 2: confirm LD_AUDIT can find missing libraries
 #   - compile the get-nix-version program
-#   - observe that it can run the compiled program on the sample gif
+#   - observe that it can run the compiled program
 #   - unset LD_AUDIT and confirm it cannot run the program
 #
 # ---------------------------------------------------------------------------- #
@@ -53,7 +56,7 @@ project_setup() {
 
 project_teardown() {
   popd > /dev/null || return
-  rm -rf "${PROJECT_DIR?}"
+  # rm -rf "${PROJECT_DIR?}"
   unset PROJECT_DIR
   unset PROJECT_NAME
 }

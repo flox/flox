@@ -1,4 +1,6 @@
 ### Verify environment
+
+# Treat every invocation as an assertion (-e) and be verbose (-x).
 set -ex
 
 # FLOX_ENV_LIB_DIRS is defined
@@ -14,13 +16,14 @@ test -z "$LD_LIBRARY_PATH"
 ### Test 1: load libraries found in $FLOX_ENV_LIBS last
 
 # Build glibc version probe using [assumed] older "env" version of glibc.
-# It's essential that we build it with the older version because glibc
-# is backwards-compatible to run against old binaries, but newer binaries
-# cannot necessarily run against older versions of glibc.
+# We build it with the older version because glibc is backwards-compatible
+# to support old binaries, but newer binaries will be looking for symbols
+# not necessarily found in older versions of glibc.
 cc -o get-glibc-version ./get-glibc-version.c -I"$FLOX_ENV"/include -L"$FLOX_ENV"/lib
 
-# Remove all the tricks that Nix does to force this executable
-# to run with the exact version it was compiled with.
+# In order to simulate a binary created on any old Linux version we
+# must first unwind the [2] tricks that Nix performs to force executables
+# to run with the exact version of glibc that it was compiled with.
 
 # 1. Remove the custom RUNPATH added by gcc-wrapper.
 patchelf --remove-rpath ./get-glibc-version
@@ -31,20 +34,29 @@ patchelf --remove-rpath ./get-glibc-version
 #    Linux, and that is most reliably done by observing the one used
 #    for /bin/sh, _the only_ path guaranteed to be present on all
 #    variants of Linux, including NixOS.
+original_interpreter=$(patchelf --print-interpreter ./get-glibc-version)
 system_interpreter=$(patchelf --print-interpreter /bin/sh)
-patchelf --set-interpreter "$system_interpreter" ./get-glibc-version
+patchelf --set-interpreter \
+  "$system_interpreter" ./get-glibc-version
 
 # Invoke it once just to record the default behaviour for the logs.
 LD_FLOXLIB_DEBUG=1 ./get-glibc-version
 
 # Glean "system" glibc version by first clearing the environment with "env -i".
-system_glibc_version=$( env -i -- ./get-glibc-version )
+system_glibc_version="$( env -i -- ./get-glibc-version )"
 
 # Glean "environment" glibc version.
-environment_glibc_version=$( ./get-glibc-version )
+environment_glibc_version="$( ./get-glibc-version )"
 
-# Force use of "environment" glibc first with LD_LIBRARY_PATH.
-forced_environment_glibc_version=$( env -u LD_AUDIT LD_DEBUG=libs LD_LIBRARY_PATH="$FLOX_ENV_LIB_DIRS" ./get-glibc-version )
+# Force use of "environment" glibc first with LD_LIBRARY_PATH. Unlike other
+# libraries, with a change of glibc versions it's essential that the version
+# of the ld interpreter exactly matches that of glibc, so before running this
+# test we have to first set the interpreter back to the matching version.
+patchelf --set-interpreter \
+  "$FLOX_ENV/lib/$(basename $original_interpreter)" ./get-glibc-version
+forced_environment_glibc_version="$(
+  LD_LIBRARY_PATH="$FLOX_ENV_LIB_DIRS" ./get-glibc-version
+)"
 
 # Confirm that the system and environment invocations serve up the same version.
 [ "$system_glibc_version" = "$environment_glibc_version" ]
