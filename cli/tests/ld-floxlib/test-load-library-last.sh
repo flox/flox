@@ -56,7 +56,7 @@ patchelf --set-interpreter $FLOX_ENV/lib/ld-linux-*.so.* ./get-glibc-version
 # Take note of the result for the logs
 patchelf --print-interpreter ./get-glibc-version
 forced_environment_glibc_version="$(
-  LD_AUDIT=libs LD_LIBRARY_PATH="$FLOX_ENV_LIB_DIRS" ./get-glibc-version
+  LD_DEBUG=libs LD_LIBRARY_PATH="$FLOX_ENV_LIB_DIRS" ./get-glibc-version
 )"
 
 # Confirm that the system and environment invocations serve up the same version.
