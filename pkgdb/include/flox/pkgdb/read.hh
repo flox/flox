@@ -26,6 +26,8 @@
 #include "flox/core/types.hh"
 #include "flox/package.hh"
 #include "flox/pkgdb/pkg-query.hh"
+#include <nix/fetchers.hh>
+#include <nix/url.hh>
 
 
 /* -------------------------------------------------------------------------- */
@@ -435,6 +437,9 @@ concept pkgdb_typename = std::is_base_of<PkgDbReadOnly, T>::value;
  */
 bool
 isSQLError( int rcode );
+
+
+/* -------------------------------------------------------------------------- */
 
 
 /* -------------------------------------------------------------------------- */

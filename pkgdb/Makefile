@@ -63,9 +63,9 @@ REPO_ROOT    := $(patsubst %/,%,$(dir $(MAKEFILE_DIR)))
 # Install Prefixes
 # ----------------
 
-PREFIX ?= $(PKGDB_ROOT)/build
-BINDIR ?= $(PREFIX)/bin
-LIBDIR ?= $(PREFIX)/lib
+export PREFIX ?= $(PKGDB_ROOT)/build
+export BINDIR ?= $(PREFIX)/bin
+export LIBDIR ?= $(PREFIX)/lib
 
 
 # ---------------------------------------------------------------------------- #
@@ -75,27 +75,27 @@ LIBDIR ?= $(PREFIX)/lib
 # We use variables to refer to all tools so that we can easily override them
 # from the command line.
 
-BATS       ?= bats
-BEAR       ?= bear
-CAT        ?= cat
-CP         ?= cp
-CXX        ?= c++
-DOXYGEN    ?= doxygen
-FMT        ?= clang-format
-GREP       ?= grep
-LN         ?= ln -f
-MKDIR      ?= mkdir
-MKDIR_P    ?= $(MKDIR) -p
-NIX        ?= nix --extra-experimental-features 'flakes nix-command'
-PKG_CONFIG ?= pkg-config
-RM         ?= rm -f
-SED        ?= sed
-TEE        ?= tee
-TEST       ?= test
-TIDY       ?= clang-tidy
-TOUCH      ?= touch
-TR         ?= tr
-UNAME      ?= uname
+export BATS       ?= bats
+export BEAR       ?= bear
+export CAT        ?= cat
+export CP         ?= cp
+export CXX        ?= c++
+export DOXYGEN    ?= doxygen
+export FMT        ?= clang-format
+export GREP       ?= grep
+export LN         ?= ln -f
+export MKDIR      ?= mkdir
+export MKDIR_P    ?= $(MKDIR) -p
+export NIX        ?= nix --extra-experimental-features 'flakes nix-command'
+export PKG_CONFIG ?= pkg-config
+export RM         ?= rm -f
+export SED        ?= sed
+export TEE        ?= tee
+export TEST       ?= test
+export TIDY       ?= clang-tidy
+export TOUCH      ?= touch
+export TR         ?= tr
+export UNAME      ?= uname
 
 
 # ---------------------------------------------------------------------------- #
@@ -113,7 +113,7 @@ libExt ?= .dylib
 endif  # ifeq (Linux,$(OS))
 endif  # ifndef libExt
 
-TARGET_ARCH ?=
+export TARGET_ARCH ?=
 
 
 # ---------------------------------------------------------------------------- #
@@ -151,13 +151,15 @@ VERSION := $(file < $(PKGDB_ROOT)/.version)
 # Files used by `pkgdb buildenv' need to be added to the `nix' store.
 PROFILE_D_SCRIPTS_DIR ?= $(shell                            \
   $(NIX) build .\#flox-pkgdb.envs.PROFILE_D_SCRIPTS_DIR --print-out-paths)
+PROFILE_D_SCRIPTS_DIR := $(PROFILE_D_SCRIPTS_DIR)
 SET_PROMPT_BASH_SH ?= $(shell                                                  \
   $(NIX) store add-path -n set-prompt.bash.sh src/buildenv/assets/set-prompt.bash.sh)
+SET_PROMPT_BASH_SH := $(SET_PROMPT_BASH_SH)
 SET_PROMPT_ZSH_SH ?= $(shell                                                  \
   $(NIX) store add-path -n set-prompt.zsh.sh src/buildenv/assets/set-prompt.zsh.sh)
+SET_PROMPT_ZSH_SH := $(SET_PROMPT_ZSH_SH)
 CONTAINER_BUILDER_PATH ?= $(shell                                                  \
   $(NIX) store add-path -n mkContainer.nix src/buildenv/assets/mkContainer.nix)
-
 COMMON_NIXPKGS_URL ?= $(shell \
   $(NIX) eval --raw .\#flox-pkgdb.envs.COMMON_NIXPKGS_URL)
 
@@ -173,10 +175,12 @@ rwildcard = $(foreach d,$(wildcard $(1:=/*)),$(call rwildcard,$d,$2)        \
 
 # ---------------------------------------------------------------------------- #
 
+SUBDIRS = src/registry
+
 # Various file and target lists
 
 HEADERS        = $(call rwildcard,include,*.hh)
-SRCS           = $(call rwildcard,src,*.cc)
+SRCS           = $(filter-out src/registry/,$(call rwildcard,src,*.cc))
 test_SRCS      = $(sort $(wildcard tests/*.cc))
 ALL_SRCS       = $(SRCS) $(test_SRCS)
 BINS           = bin/pkgdb
@@ -241,7 +245,7 @@ LDFLAGS  += -O3
 endif # ifneq ($(RELEASE),)
 
 # Debug Mode
-DEBUG ?=
+export DEBUG ?=
 ifneq (,$(DEBUG))
 DEBUG ?=
 ifeq (gcc,$(TOOLCHAIN))
@@ -365,15 +369,31 @@ src/buildenv/realise.o: CXXFLAGS +=               \
 
 src/buildenv/realise.o: CXXFLAGS +=               \
 	'-DCOMMON_NIXPKGS_URL="$(COMMON_NIXPKGS_URL)"'
+	
+# ---------------------------------------------------------------------------- #
+# Export flags for use by sub-makefiles
+# -------------------------------------
+
+export CXXFLAGS
+export LDFLAGS
+export CPPFLAGS
 
 # ---------------------------------------------------------------------------- #
+
+.PHONY: clean-generic clean-recusive fullclean-generic fullclean-recursive
 
 #: Remove build artifacts
 CLEANFILES += $(call rwildcard,,gmon.out *.log *.gcno *.gcda *.gcov)
 CLEANFILES += $(call rwildcard,,result)
-clean: FORCE
+clean-generic: FORCE
 	-$(RM) $(CLEANFILES);
 	-$(RM) -r $(CLEANDIRS);
+
+clean-recursive:
+	for subdir in $(SUBDIRS); do $(MAKE) -C $$subdir clean; done;
+
+#: Remove build artifacts
+clean: clean-generic clean-recursive
 
 
 # For local installs clean install dir.
@@ -381,10 +401,15 @@ ifeq ($(PREFIX),$(PKGDB_ROOT)/build)
 FULLCLEANDIRS += $(PREFIX)
 endif # ifeq ($(PREFIX),$(PKGDB_ROOT)/build)
 
-#: Remove build artifacts and metadata files
-fullclean: clean
+fullclean-generic: clean-generic
 	-$(RM) $(FULLCLEANFILES);
 	-$(RM) -r $(FULLCLEANDIRS);
+
+fullclean-recursive:
+	for subdir in $(SUBDIRS); do $(MAKE) -C $$subdir fullclean; done;
+
+#: Remove build artifacts and metadata files
+fullclean: fullclean-generic fullclean-recursive
 
 
 # ---------------------------------------------------------------------------- #
@@ -604,11 +629,20 @@ $(ALL_SRCS:.cc=.o): %.o: %.cc $(HEADERS)
 
 # ---------------------------------------------------------------------------- #
 
+# Subdirs
+
+src/registry/%:
+	$(MAKE) -C src/registry $(patsubst src/registry/%,%,$@)
+
+
+# ---------------------------------------------------------------------------- #
+
 # Build Targets
 
-$(BINS): %: $(SRCS:.cc=.o)
+$(BINS): %: $(SRCS:.cc=.o) src/registry/libregistry.a
 	$(MKDIR_P) $(@D);
-	$(CXX) $(filter %.o,$^) $(LDFLAGS) -o $@;
+	$(CXX) $(filter %.o %.a,$^) $(LDFLAGS) -o $@;
+
 
 lib/ld-floxlib.so: src/ld-floxlib.c
 	$(MKDIR_P) $(@D);
@@ -619,8 +653,18 @@ lib/ld-floxlib.so: src/ld-floxlib.c
 
 $(test_SRCS:.cc=.o): CXXFLAGS += '-DTEST_DATA_DIR="$(TEST_DATA_DIR)"'
 $(TESTS) $(TEST_UTILS): tests/%: $(filter-out src/main.o,$(SRCS:.cc=.o))
+$(TESTS) $(TEST_UTILS): tests/%: src/registry/libregistry.a
 $(TESTS) $(TEST_UTILS): tests/%: tests/%.o tests/test.hh
-	$(CXX) $(filter %.o,$^) $(LDFLAGS) -o $@;
+	$(CXX) $(filter %.o %.a,$^) $(LDFLAGS) -o $@;
+
+
+# ---------------------------------------------------------------------------- #
+
+.PHONY: all-recursive
+
+all-recursive:
+	for subdir in $(SUBDIRS); do $(MAKE) -C $$subdir all; done;
+
 
 # ---------------------------------------------------------------------------- #
 
@@ -636,7 +680,7 @@ bin: $(BINS)
 tests: $(TESTS) $(TEST_UTILS)
 
 #: Build binaries, tests, and generated `.gitignore' files
-all: bin tests ignores
+all: bin tests ignores all-recursive
 
 #: Build binaries and generated `.gitignore' files
 most: bin ignores

@@ -145,12 +145,26 @@ struct RegistryInput : public InputPreferences
   RegistryInput( const std::optional<std::vector<Subtree>> & subtrees,
                  const nix::FlakeRef &                       from )
     : InputPreferences( subtrees )
-    , from( std::make_shared<nix::FlakeRef>( from ) )
-  {}
+  {
+    if ( isNixpkgsRef( from ) )
+      {
+        auto patched = from;
+        patched.input.attrs.insert_or_assign( "type", FLOX_FLAKE_TYPE );
+        this->from = std::make_shared<nix::FlakeRef>( patched );
+      }
+    else { this->from = std::make_shared<nix::FlakeRef>( from ); }
+  }
 
   explicit RegistryInput( const nix::FlakeRef & from )
-    : from( std::make_shared<nix::FlakeRef>( from ) )
-  {}
+  {
+    if ( isNixpkgsRef( from ) )
+      {
+        auto patched = from;
+        patched.input.attrs.insert_or_assign( "type", FLOX_FLAKE_TYPE );
+        this->from = std::make_shared<nix::FlakeRef>( patched );
+      }
+    else { this->from = std::make_shared<nix::FlakeRef>( from ); }
+  }
 
 
   /** @brief Get the flake reference associated with this input. */
@@ -490,12 +504,16 @@ public:
               "registry contained an indirect reference" );
           }
 
+        /* Replace any nixpkgs refs with our own. */
+
+
         /* Fill default/fallback values if none are defined. */
         RegistryInput input = pair->second;
         if ( ! input.subtrees.has_value() )
           {
             input.subtrees = this->registryRaw.defaults.subtrees;
           }
+
 
         /* Construct the input */
         this->inputs.emplace_back(

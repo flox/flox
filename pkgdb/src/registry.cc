@@ -261,9 +261,10 @@ FloxFlakeInput::getFlake()
 {
   if ( this->flake == nullptr )
     {
+      auto ref = *this->getFlakeRef();
       this->flake
         = std::make_shared<FloxFlake>( NixState( this->store ).getState(),
-                                       *this->getFlakeRef() );
+                                       ref );
     }
   return static_cast<nix::ref<FloxFlake>>( this->flake );
 }
@@ -380,7 +381,7 @@ getGARegistry()
     = nix::getEnv( "_PKGDB_GA_REGISTRY_REF_OR_REV" )
         .value_or( "release-23.11" );
   static const nix::FlakeRef nixpkgsRef
-    = nix::parseFlakeRef( "github:NixOS/nixpkgs/" + refOrRev );
+    = nix::parseFlakeRef( FLOX_FLAKE_TYPE + ":NixOS/nixpkgs/" + refOrRev );
   if ( nix::lvlTalkative < nix::verbosity )
     {
       nix::logger->log( nix::lvlTalkative,
