@@ -380,7 +380,7 @@ getGARegistry()
     = nix::getEnv( "_PKGDB_GA_REGISTRY_REF_OR_REV" )
         .value_or( "release-23.05" );
   static const nix::FlakeRef nixpkgsRef
-    = nix::parseFlakeRef( "github:NixOS/nixpkgs/" + refOrRev );
+    = nix::parseFlakeRef( FLOX_FLAKE_TYPE + ":NixOS/nixpkgs/" + refOrRev );
   if ( nix::lvlTalkative < nix::verbosity )
     {
       nix::logger->log( nix::lvlTalkative,

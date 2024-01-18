@@ -102,6 +102,12 @@
     in
       # todo: use `builtins.flakerefToString` once flox ships with nix 2.18+
       "github:NixOS/nixpkgs/${nixpkgs.rev}";
+
+    # Rules for `pkgdb scrape'
+    RULES_JSON = builtins.path {
+      name = "rules.json";
+      path = ../../pkgdb/src/registry/floxpkgs/rules.json;
+    };
   };
 in
   stdenv.mkDerivation ({

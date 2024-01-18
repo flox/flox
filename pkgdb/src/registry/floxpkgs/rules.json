@@ -1,0 +1,47 @@
+{
+  "allowRecursive": [
+    [
+      "legacyPackages",
+      null,
+      "darwin"
+    ]
+  ],
+  "disallowRecursive": [
+    [
+      "legacyPackages",
+      null,
+      "emacsPackages"
+    ],
+    [
+      "legacyPackages",
+      null,
+      "python310Packages"
+    ],
+    [
+      "legacyPackages",
+      null,
+      "python311Packages"
+    ]
+  ],
+  "allowPackage": [
+    [
+      "legacyPackages",
+      null,
+      "python310Packages",
+      "pip"
+    ],
+    [
+      "legacyPackages",
+      null,
+      "python311Packages",
+      "pip"
+    ]
+  ],
+  "disallowPackage": [
+    [
+      "legacyPackages",
+      null,
+      "gcc"
+    ]
+  ]
+}
