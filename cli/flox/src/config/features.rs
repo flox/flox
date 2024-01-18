@@ -1,4 +1,5 @@
 use anyhow::Result;
+use flox_rust_sdk::models::search::SearchStrategy;
 use serde::{Deserialize, Serialize};
 
 use super::Config;
@@ -12,12 +13,4 @@ impl Features {
     pub fn parse() -> Result<Self> {
         Ok(Config::parse()?.features)
     }
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize, Default, PartialEq)]
-#[serde(rename_all = "kebab-case")]
-pub enum SearchStrategy {
-    Match,
-    #[default]
-    MatchName,
 }
