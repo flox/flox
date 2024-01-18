@@ -1,6 +1,8 @@
 ### Verify environment
 
-# Treat every invocation as an assertion (-e) and be verbose (-x).
+# This script is run using `flox activate --` and is therefore not using
+# `bats` for assertions, so treat every invocation in this script as an
+# assertion (-e) and be verbose about it (-x).
 set -ex
 
 # FLOX_ENV_LIB_DIRS is defined
