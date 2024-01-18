@@ -50,8 +50,16 @@ project_setup() {
   mkdir -p "$PROJECT_DIR"
   cp ./ld-floxlib/* "$PROJECT_DIR"
   pushd "$PROJECT_DIR" > /dev/null || return
-  _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLDER?}" \
-    "$FLOX_BIN" init
+
+  # Create environment (verbosely for the logs). Use pinned nixpkgs revision
+  # containing old versions of nix (2.10.3) and glibc (2.34) for use in tests.
+  sh -xc "_PKGDB_GA_REGISTRY_REF_OR_REV=${PKGDB_NIXPKGS_REV_OLDER?} \
+    $FLOX_BIN init";
+
+  # Install packages, including curl and libarchive that are runtime
+  # dependencies of libnixmain.so.
+  sh -xc "_PKGDB_GA_REGISTRY_REF_OR_REV=${PKGDB_NIXPKGS_REV_OLDER?} \
+    $FLOX_BIN install curl gcc glibc libarchive nix patchelf";
 }
 
 project_teardown() {
@@ -78,20 +86,6 @@ teardown() {
   if [ $(uname -s) != "Linux" ]; then
     skip "not Linux"
   fi
-
-  # Note:
-  # - installing old versions of nix (2.10.3) and glibc (2.34) for use in tests
-  # - installing curl and libarchive because those packages provide libraries
-  #   that are runtime dependencies of libnixmain.so
-  run env _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLDER?}" \
-    "$FLOX_BIN" install curl gcc glibc libarchive nix patchelf
-  assert_success
-  assert_output --partial "✅ 'curl' installed to environment"
-  assert_output --partial "✅ 'gcc' installed to environment"
-  assert_output --partial "✅ 'glibc' installed to environment"
-  assert_output --partial "✅ 'libarchive' installed to environment"
-  assert_output --partial "✅ 'nix' installed to environment"
-  assert_output --partial "✅ 'patchelf' installed to environment"
 
   # Revision PKGDB_NIXPKGS_REV_OLDER is expected to provide glibc 2.34.
   # Assert that here before going any further.
