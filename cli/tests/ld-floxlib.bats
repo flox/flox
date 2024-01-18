@@ -80,6 +80,10 @@ project_teardown() {
 # ---------------------------------------------------------------------------- #
 
 setup() {
+  if [ $(uname -s) != "Linux" ]; then
+    skip "not Linux"
+  fi
+
   common_test_setup
   project_setup
 }
@@ -91,10 +95,6 @@ teardown() {
 # ---------------------------------------------------------------------------- #
 #
 @test "test ld-floxlib.so on Linux only" {
-  if [ $(uname -s) != "Linux" ]; then
-    skip "not Linux"
-  fi
-
   # Revision PKGDB_NIXPKGS_REV_OLDER is expected to provide glibc 2.34.
   # Assert that here before going any further.
   run "$FLOX_BIN" list
