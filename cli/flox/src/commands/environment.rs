@@ -1043,8 +1043,7 @@ impl Push {
             EnvironmentPointer::Managed(managed_pointer) => {
                 let message = Self::push_existing_message(&managed_pointer, self.force);
 
-                Self::push_managed_env(&flox, managed_pointer, dir, self.force)
-                    .context("Could not push managed environment")?;
+                Self::push_managed_env(&flox, managed_pointer, dir, self.force)?;
 
                 info!("{message}");
             },
@@ -1067,8 +1066,7 @@ impl Push {
                         .parse::<EnvironmentOwner>()
                         .context("Invalid owner name")?
                 };
-                let env = Self::push_make_managed(&flox, path_pointer, &dir, owner, self.force)
-                    .context("Could not push new environment")?;
+                let env = Self::push_make_managed(&flox, path_pointer, &dir, owner, self.force)?;
 
                 info!("{}", Self::push_new_message(env.pointer(), self.force));
             },
