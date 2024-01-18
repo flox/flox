@@ -254,7 +254,7 @@ impl Environment for ManagedEnvironment {
             return Ok(result);
         }
 
-        dbg!("environment changed");
+        debug!("Environment changed, create generation, lock generation, build and link");
 
         generations
             .add_generation(&mut temporary, "manually edited".to_string())
