@@ -190,14 +190,14 @@ genParamsNixpkgsFlox() {
   )'|wc -l;"
   assert_success
 
-  _count="$output";
+  _count="$output"
 
   run sh -c "$PKGDB_BIN search '$(
     genParams '.manifest.options.allow.unfree=false'
   )'|wc -l;"
   assert_success
 
-  _count2="$output";
+  _count2="$output"
 
   run expr "$_count2 < $_count"
   assert_success
@@ -214,14 +214,14 @@ genParamsNixpkgsFlox() {
   )'|wc -l;"
   assert_success
 
-  _count="$output";
+  _count="$output"
 
   run sh -c "$PKGDB_BIN search '$(
     genParams '.manifest.options.allow.broken=false'
   )'|wc -l;"
   assert_success
 
-  _count2="$output";
+  _count2="$output"
 
   run expr "$_count2 < $_count"
   assert_success
