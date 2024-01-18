@@ -222,8 +222,9 @@ impl Environment for PathEnvironment {
     fn edit(&mut self, flox: &Flox, contents: String) -> Result<EditResult, EnvironmentError2> {
         let mut env_view = CoreEnvironment::new(self.path.join(ENV_DIR_NAME));
         let result = env_view.edit(flox, contents)?;
-        env_view.link(flox, self.out_link(&flox.system)?)?;
-
+        if result != EditResult::Unchanged {
+            env_view.link(flox, self.out_link(&flox.system)?)?;
+        }
         Ok(result)
     }
 

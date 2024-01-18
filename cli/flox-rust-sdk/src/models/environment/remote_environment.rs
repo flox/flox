@@ -156,6 +156,9 @@ impl Environment for RemoteEnvironment {
     /// Atomically edit this environment, ensuring that it still builds
     fn edit(&mut self, flox: &Flox, contents: String) -> Result<EditResult, EnvironmentError2> {
         let result = self.inner.edit(flox, contents)?;
+        if result == EditResult::Unchanged {
+            return Ok(result);
+        }
         self.inner
             .push(false)
             .map_err(RemoteEnvironmentError::UpdateUpstream)?;
