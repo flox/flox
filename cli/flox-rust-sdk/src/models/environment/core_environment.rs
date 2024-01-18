@@ -287,14 +287,7 @@ impl CoreEnvironment<ReadOnly> {
         contents: String,
     ) -> Result<EditResult, CoreEnvironmentError> {
         let old_contents = self.manifest_content()?;
-
-        // skip the edit if the contents are unchanged
-        // note: consumers of this function may call [Self::link] separately,
-        //       causing an evaluation/build of the environment.
-        if contents == old_contents {
-            return Ok(EditResult::Unchanged);
-        }
-
+        // TODO we should probably skip this if the manifest hasn't changed
         self.transact_with_manifest_contents(&contents, flox)?;
 
         EditResult::new(&old_contents, &contents)
@@ -518,7 +511,7 @@ impl CoreEnvironment<ReadWrite> {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug)]
 pub enum EditResult {
     /// The manifest was not modified.
     Unchanged,

@@ -250,17 +250,13 @@ impl Environment for ManagedEnvironment {
 
         let result = temporary.edit(flox, contents)?;
 
-        if result == EditResult::Unchanged {
-            return Ok(result);
+        if matches!(result, EditResult::Success | EditResult::ReActivateRequired) {
+            generations
+                .add_generation(&mut temporary, "manually edited".to_string())
+                .map_err(ManagedEnvironmentError::CommitGeneration)?;
+            self.lock_pointer()?;
+            temporary.link(flox, &self.out_link)?;
         }
-
-        dbg!("environment changed");
-
-        generations
-            .add_generation(&mut temporary, "manually edited".to_string())
-            .map_err(ManagedEnvironmentError::CommitGeneration)?;
-        self.lock_pointer()?;
-        temporary.link(flox, &self.out_link)?;
 
         Ok(result)
     }
