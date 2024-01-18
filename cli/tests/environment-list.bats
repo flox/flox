@@ -108,7 +108,7 @@ EOF
   MANIFEST_CONTENT="$(
     cat <<- EOF
     [options]
-    systems = [ "$NIX_TARGET_SYSTEM" ]
+    systems = [ "$NIX_SYSTEM" ]
     [install]
     hello.path = "hello"
     htop = { path = "htop", systems = [] }
