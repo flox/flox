@@ -7,6 +7,7 @@
 # ---------------------------------------------------------------------------- #
 
 load test_support.bash
+# bats file_tags=edit
 
 # ---------------------------------------------------------------------------- #
 
@@ -18,7 +19,6 @@ project_setup() {
   export MANIFEST_PATH="$PROJECT_DIR/.flox/env/manifest.toml"
   export TMP_MANIFEST_PATH="${BATS_TEST_TMPDIR}/manifest.toml"
   export EXTERNAL_MANIFEST_PATH="${TESTS_DIR}/edit/manifest.toml"
-
 
   export Hello_HOOK=$(
     cat << EOF
@@ -98,7 +98,6 @@ EOF
   "$FLOX_BIN" init
   cp "$MANIFEST_PATH" "$TMP_MANIFEST_PATH"
   sed "s/\[hook\]/${HOOK//$'\n'/\\n}/" "$MANIFEST_PATH" > "$TMP_MANIFEST_PATH"
-
 
   run "$FLOX_BIN" edit -f "$TMP_MANIFEST_PATH"
   assert_success
@@ -235,4 +234,21 @@ EOF
   run "$FLOX_BIN" edit --remote "owner/name" --name "renamed"
   assert_failure
   assert_output --partial "Cannot rename environments on floxhub"
+}
+
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=edit:unchanged
+@test "'flox edit' returns if it does not detect changes" {
+  "$FLOX_BIN" init
+
+  run "$FLOX_BIN" edit -f "$TESTS_DIR/edit/manifest.toml"
+  assert_success
+
+  # applying the same edit again should return early
+  # (simulates quiting the editor without saving)
+  run "$FLOX_BIN" edit -f "$TESTS_DIR/edit/manifest.toml"
+  assert_success
+  assert_output "⚠️  no changes made to environment"
+
 }
