@@ -172,6 +172,14 @@ in
         runHook postConfigure;
       '';
 
+      # The ld-floxlib.so library only requires libc, which is guaranteed
+      # to either be already loaded or available by way of a default provided
+      # by the linker itself, so to avoid loading a different libc than the
+      # one already loaded we remove RPATH/RUNPATH from the shared library.
+      postFixup = lib.optionalString stdenv.isLinux ''
+        patchelf --remove-rpath $out/lib/ld-floxlib.so
+      '';
+
       # Checks require internet
       doCheck = false;
       doInstallCheck = false;
@@ -237,6 +245,7 @@ in
             REPO_ROOT="$( git rev-parse --show-toplevel; )";
             PATH="$REPO_ROOT/pkgdb/bin:$PATH";
             PKGDB_BIN="$REPO_ROOT/pkgdb/bin/pkgdb";
+            LD_FLOXLIB="$REPO_ROOT/pkgdb/lib/ld-floxlib.so";
             PKGDB_SEARCH_PARAMS_BIN="$REPO_ROOT/pkgdb/tests/search-params";
             PKGDB_IS_SQLITE3_BIN="$REPO_ROOT/pkgdb/tests/is_sqlite3";
           fi

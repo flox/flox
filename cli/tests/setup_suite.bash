@@ -351,6 +351,11 @@ pkgdb_vars_setup() {
   # Notably its default `nodejs' version is `18.17.1' which is referenced in
   # some test cases.
   PKGDB_NIXPKGS_REV_NEW='9faf91e6d0b7743d41cce3b63a8e5c733dc696a3'
+  # This revision is even older than OLD, selected for the purpose of serving up
+  # a different and incompatible version of glibc (2.34) than the latest (2.37).
+  # This could probably replace the PKGDB_NIXPKGS_REV_OLD revision with a
+  # refactoring of other test data but we'll tackle that in a separate effort.
+  PKGDB_NIXPKGS_REV_OLDER='bc01a2be500c10f1507dcc8e98c9f5bd72c02aa3'
 
   PKGDB_NIXPKGS_REF_OLD="github:NixOS/nixpkgs/$PKGDB_NIXPKGS_REV_OLD"
   PKGDB_NIXPKGS_REF_NEW="github:NixOS/nixpkgs/$PKGDB_NIXPKGS_REV_NEW"
@@ -365,6 +370,7 @@ pkgdb_vars_setup() {
   _PKGDB_GA_REGISTRY_REF_OR_REV="$PKGDB_NIXPKGS_REV_OLD"
 
   export PKGDB_NIXPKGS_REV_OLD PKGDB_NIXPKGS_REV_NEW \
+    PKGDB_NIXPKGS_REV_OLDER \
     PKGDB_NIXPKGS_REF_OLD PKGDB_NIXPKGS_REF_NEW \
     _PKGDB_GA_REGISTRY_REF_OR_REV PKGDB_NIXPKGS_NAR_HASH_OLD \
     PKGDB_NIXPKGS_NAR_HASH_NEW
