@@ -1138,17 +1138,15 @@ impl Push {
     ///
     /// todo: add floxhub base url when it's available
     fn push_existing_message(env: &ManagedPointer, force: bool) -> String {
-        let web_url = &env.floxhub_url;
         let owner = &env.owner;
         let name = &env.name;
 
         let suffix = if force { " (forced)" } else { "" };
 
         formatdoc! {"
-            🚀  updated -> {owner}/{name}{suffix}
+            ✅  Updates to {name} successfully pushed to floxhub{suffix}
 
-            Pull this environment with 'flox pull {owner}/{name}'.
-            You can see this environment at {web_url}{owner}/{name}.
+            Use 'flox pull {owner}/{name}' to get this environment in any other location.
         "}
     }
 
@@ -1156,17 +1154,15 @@ impl Push {
     ///
     /// todo: add floxhub base url when it's available
     fn push_new_message(env: &ManagedPointer, force: bool) -> String {
-        let web_url = &env.floxhub_url;
         let owner = &env.owner;
         let name = &env.name;
 
         let suffix = if force { " (forced)" } else { "" };
 
         formatdoc! {"
-            🚀  created -> {owner}/{name}{suffix}
+            ✅  {name} successfully pushed to floxhub{suffix}
 
-            Pull this environment with 'flox pull {owner}/{name}'.
-            You can see this environment at {web_url}{owner}/{name}.
+            Use 'flox pull {owner}/{name}' to get this environment in any other location.
         "}
     }
 }
