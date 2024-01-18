@@ -286,6 +286,7 @@ jobs:
           wait_workflow:      true
 
       - name: "Create shipit artifact"
+        if: ${{ success() || failure() }}
         run: |
           jq -n \
             --arg "flox_installers_workflow_id" "${{ steps.trigger-workflow.outputs.workflow_id }}" \
@@ -295,6 +296,7 @@ jobs:
 
       - name: "Upload artifact"
         uses: "actions/upload-artifact@v4"
+        if: ${{ success() || failure() }}
         with:
           name: "shipit"
           path: "shipit.json"
