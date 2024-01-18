@@ -62,10 +62,12 @@ project_setup() {
   sh -xc "_PKGDB_GA_REGISTRY_REF_OR_REV=${PKGDB_NIXPKGS_REV_OLDER?} \
     $FLOX_BIN update";
 
-  # Install packages, including curl and libarchive that are runtime
-  # dependencies of libnixmain.so.
+  # Install packages, including boost, curl and libarchive that are
+  # compilation and runtime dependencies of libnixmain.so. Use `flox edit`
+  # so that we can bump the priority of the nix package to avoid a path
+  # clash with boost.
   sh -xc "_PKGDB_GA_REGISTRY_REF_OR_REV=${PKGDB_NIXPKGS_REV_OLDER?} \
-    $FLOX_BIN install curl gcc glibc libarchive nix patchelf";
+    $FLOX_BIN edit -f ./manifest.toml"
 }
 
 project_teardown() {
