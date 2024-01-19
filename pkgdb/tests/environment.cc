@@ -66,9 +66,9 @@ nlohmann::json inputWithNixpkgsJSON {
         { "repo", "nixpkgs" },
         { "rev", nixpkgsRev },
         { "type", "github" },
-        { "lastModified", 1685979279 },
+        { "lastModified", 1704300003 },
         { "narHash",
-          "sha256-1UGacsv5coICyvAzwuq89v9NsS00Lo8sz22cDHwhnn8=" } } } }
+          "sha256-FRC/OlLVvKkrdm+RtrODQPufD0vVZYA0hpH9RPaHmp4=" } } } }
 };
 
 
@@ -83,9 +83,9 @@ nlohmann::json mockInputJSON {
         { "repo", "repo" },
         { "rev", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" },
         { "type", "github" },
-        { "lastModified", 1685979279 },
+        { "lastModified", 1704300003 },
         { "narHash",
-          "sha256-1UGacsv5coICyvAzwuq89v9NsS00Lo8sz22cDHwhnn8=" } } } }
+          "sha256-FRC/OlLVvKkrdm+RtrODQPufD0vVZYA0hpH9RPaHmp4=" } } } }
 };
 
 
@@ -771,6 +771,8 @@ test_createLockfile_new()
   /* Test locking manifest creates expectedLockfile */
   Environment environment( std::nullopt, manifest, std::nullopt );
   Lockfile    actualLockfile = environment.createLockfile();
+  std::cout << actualLockfile << std::endl;
+  std::cout << expectedLockfile << std::endl;
   EXPECT( equalLockfile( actualLockfile, expectedLockfile ) );
 
   return true;

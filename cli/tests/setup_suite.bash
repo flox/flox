@@ -346,11 +346,11 @@ pkgdb_vars_setup() {
   # This revision is a bit old, but it was created from `release-23.05'.
   # Notably its default `nodejs' version is `18.16.0' which is referenced in
   # some test cases.
-  PKGDB_NIXPKGS_REV_OLD='e8039594435c68eb4f780f3e9bf3972a7399c4b1'
+  PKGDB_NIXPKGS_REV_OLD='ab5fd150146dcfe41fda501134e6503932cc8dfd'
   # This revision is a bit newer, and was also created from `release-23.05'.
   # Notably its default `nodejs' version is `18.17.1' which is referenced in
   # some test cases.
-  PKGDB_NIXPKGS_REV_NEW='9faf91e6d0b7743d41cce3b63a8e5c733dc696a3'
+  PKGDB_NIXPKGS_REV_NEW='68678e5a4479742a1ff750e5c42aa4ec6aea8553'
   # This revision is even older than OLD, selected for the purpose of serving up
   # a different and incompatible version of glibc (2.34) than the latest (2.37).
   # This could probably replace the PKGDB_NIXPKGS_REV_OLD revision with a

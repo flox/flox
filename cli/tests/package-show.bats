@@ -106,7 +106,7 @@ teardown() {
   run "$FLOX_BIN" show python27Full
   assert_success
   assert_equal "${lines[0]}" "python27Full - A high-level dynamically-typed programming language"
-  assert_equal "${lines[1]}" "    python27Full - python27Full@2.7.18.6"
+  assert_equal "${lines[1]}" "    python27Full - python27Full@2.7.18.7"
 }
 
 # ---------------------------------------------------------------------------- #
@@ -117,7 +117,7 @@ teardown() {
   run "$FLOX_BIN" show python27Full --all
   assert_success
   assert_equal "${lines[0]}" "python27Full - A high-level dynamically-typed programming language"
-  assert_equal "${lines[1]}" "    python27Full - python27Full@2.7.18.6"
+  assert_equal "${lines[1]}" "    python27Full - python27Full@2.7.18.7"
 }
 
 # ---------------------------------------------------------------------------- #
@@ -173,14 +173,14 @@ teardown() {
       \"query\": { \"match-name\": \"nodejs\" }
     }'|head -n1|jq -r '.version';"
   assert_success
-  assert_output '18.16.0'
+  assert_output '18.18.2'
   unset output
 
   # Ensure the version of `nodejs' in our search results aligns with the
   # `--ga-registry` default ( 18.16.0 ).
   run --separate-stderr sh -c "$FLOX_BIN show nodejs|tail -n1"
   assert_success
-  assert_output '    nodejs - nodejs@18.16.0'
+  assert_output '    nodejs - nodejs@18.18.2'
 }
 
 # ---------------------------------------------------------------------------- #
@@ -221,14 +221,14 @@ teardown() {
         \"query\": { \"match-name\": \"nodejs\" }
       }'|head -n1|jq -r '.version';"
   assert_success
-  assert_output '18.17.1'
+  assert_output '18.18.2'
   unset output
 
   # Ensure the version of `nodejs' in our search results aligns with the
   # locked rev ( 18.17.1 ), instead of the `--ga-registry` default ( 18.16.0 ).
   run --separate-stderr sh -c "$FLOX_BIN show nodejs|tail -n1"
   assert_success
-  assert_output '    nodejs - nodejs@18.17.1'
+  assert_output '    nodejs - nodejs@18.18.2'
 }
 
 # ---------------------------------------------------------------------------- #
@@ -279,7 +279,7 @@ teardown() {
 
   run --separate-stderr sh -c "$FLOX_BIN show nodejs|tail -n1"
   assert_success
-  assert_output '    nodejs - nodejs@18.16.0'
+  assert_output '    nodejs - nodejs@18.18.2'
   popd
 
   mkdir 2
@@ -293,10 +293,10 @@ teardown() {
 
   run --separate-stderr sh -c "$FLOX_BIN show nodejs|tail -n1"
   assert_success
-  assert_output '    nodejs - nodejs@18.17.1'
+  assert_output '    nodejs - nodejs@18.18.2'
   popd
 
   SHELL=bash run expect -d "$TESTS_DIR/show/prompt-which-environment.exp"
   assert_success
-  assert_output --partial 'nodejs - nodejs@18.17.1'
+  assert_output --partial 'nodejs - nodejs@18.18.2'
 }
