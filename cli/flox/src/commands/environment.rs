@@ -11,7 +11,7 @@ use std::{env, vec};
 use anyhow::{anyhow, bail, Context, Result};
 use bpaf::Bpaf;
 use crossterm::tty::IsTty;
-use flox_rust_sdk::flox::{Auth0Client, EnvironmentName, EnvironmentOwner, EnvironmentRef, Flox};
+use flox_rust_sdk::flox::{EnvironmentName, EnvironmentOwner, EnvironmentRef, Flox};
 use flox_rust_sdk::models::environment::managed_environment::{
     ManagedEnvironment,
     ManagedEnvironmentError,
@@ -1123,19 +1123,13 @@ impl Push {
                 let owner = if let Some(owner) = self.owner {
                     owner
                 } else {
-                    let base_url = std::env::var("FLOX_OAUTH_BASE_URL")
-                        .unwrap_or(env!("OAUTH_BASE_URL").to_string());
-                    let client = Auth0Client::new(
-                        base_url,
-                        flox.floxhub_token.clone().context("Need to be logged in")?,
-                    );
-                    let user_name = client
-                        .get_username()
-                        .await
-                        .context("Could not get username from floxhub")?;
-                    user_name
-                        .parse::<EnvironmentOwner>()
-                        .context("Invalid owner name")?
+                    EnvironmentOwner::from_str(
+                        &flox
+                            .floxhub_token
+                            .as_ref()
+                            .context("Need to be loggedin")?
+                            .handle()?,
+                    )?
                 };
                 let env = Self::push_make_managed(&flox, path_pointer, &dir, owner, self.force)?;
 
@@ -1213,17 +1207,15 @@ impl Push {
     ///
     /// todo: add floxhub base url when it's available
     fn push_existing_message(env: &ManagedPointer, force: bool) -> String {
-        let web_url = &env.floxhub_url;
         let owner = &env.owner;
         let name = &env.name;
 
         let suffix = if force { " (forced)" } else { "" };
 
         formatdoc! {"
-            🚀  updated -> {owner}/{name}{suffix}
+            ✅  Updates to {name} successfully pushed to floxhub{suffix}
 
-            Pull this environment with 'flox pull {owner}/{name}'.
-            You can see this environment at {web_url}{owner}/{name}.
+            Use 'flox pull {owner}/{name}' to get this environment in any other location.
         "}
     }
 
@@ -1231,17 +1223,15 @@ impl Push {
     ///
     /// todo: add floxhub base url when it's available
     fn push_new_message(env: &ManagedPointer, force: bool) -> String {
-        let web_url = &env.floxhub_url;
         let owner = &env.owner;
         let name = &env.name;
 
         let suffix = if force { " (forced)" } else { "" };
 
         formatdoc! {"
-            🚀  created -> {owner}/{name}{suffix}
+            ✅  {name} successfully pushed to floxhub{suffix}
 
-            Pull this environment with 'flox pull {owner}/{name}'.
-            You can see this environment at {web_url}{owner}/{name}.
+            Use 'flox pull {owner}/{name}' to get this environment in any other location.
         "}
     }
 }

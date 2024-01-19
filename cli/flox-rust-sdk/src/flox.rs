@@ -2,16 +2,16 @@ use std::io::Read;
 use std::path::PathBuf;
 
 use derive_more::Constructor;
+use jsonwebtoken::{DecodingKey, Validation};
 use log::info;
 use once_cell::sync::Lazy;
-use reqwest;
-use reqwest::header::USER_AGENT;
 use runix::arguments::common::NixCommonArgs;
 use runix::arguments::config::NixConfigArgs;
 use runix::command_line::{DefaultArgs, NixCommandLine};
 use runix::installable::{AttrPath, FlakeAttribute};
 use runix::NixBackend;
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 use url::Url;
 
 use crate::environment::{self, default_nix_subprocess_env};
@@ -55,7 +55,7 @@ pub struct Flox {
     /// Token to authenticate with floxhub.
     /// It's usually populated from the config during [Flox] initialization.
     /// Checking for [None] can be used to check if the use is logged in.
-    pub floxhub_token: Option<String>,
+    pub floxhub_token: Option<FloxhubToken>,
 }
 
 pub trait FloxNixApi: NixBackend {
@@ -206,6 +206,50 @@ impl Flox {
 pub static DEFAULT_FLOXHUB_URL: Lazy<Url> =
     Lazy::new(|| Url::parse("https://hub.flox.dev").unwrap());
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FloxhubToken(String);
+
+impl AsRef<str> for FloxhubToken {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
+impl FloxhubToken {
+    /// Create a new floxhub token from a string
+    pub fn new(token: String) -> Self {
+        FloxhubToken(token)
+    }
+
+    /// Return the token as a string
+    pub fn secret(&self) -> &str {
+        &self.0
+    }
+
+    pub fn handle(&self) -> Result<String, FloxhubTokenError> {
+        #[derive(Debug, Deserialize)]
+        struct Claims {
+            #[serde(rename = "https://flox.dev/handle")]
+            handle: String,
+        }
+
+        let mut validation = Validation::default();
+        // we're neither creating or verifying the token on the client side
+        validation.insecure_disable_signature_validation();
+        validation.validate_aud = false;
+        let token =
+            jsonwebtoken::decode::<Claims>(&self.0, &DecodingKey::from_secret(&[]), &validation)
+                .map_err(FloxhubTokenError::InvalidToken)?;
+        Ok(token.claims.handle)
+    }
+}
+
+#[derive(Debug, Clone, Error)]
+pub enum FloxhubTokenError {
+    #[error("invalid token")]
+    InvalidToken(#[source] jsonwebtoken::errors::Error),
+}
+
 #[derive(Debug, Clone)]
 pub struct Floxhub {
     base_url: Url,
@@ -253,57 +297,28 @@ impl Floxhub {
     }
 }
 
-/// Requires login with auth0 with "openid" and "profile" scopes
-/// https://auth0.com/docs/scopes/current/oidc-scopes
-/// See also: `authenticate` in `flox/src/commands/auth.rs` where we set the scopes
-#[derive(Debug, Serialize, Deserialize)]
-struct Auth0User {
-    /// full name of the user
-    name: String,
-    /// nickname of the user (e.g. github username)
-    nickname: String,
-}
-
-pub struct Auth0Client {
-    base_url: String,
-    oauth_token: String,
-}
-
-impl Auth0Client {
-    pub fn new(base_url: String, oauth_token: String) -> Self {
-        Auth0Client {
-            base_url,
-            oauth_token,
-        }
-    }
-
-    pub async fn get_username(&self) -> Result<String, reqwest::Error> {
-        let url = format!("{}/userinfo", self.base_url);
-        let client = reqwest::Client::new();
-        let request = client
-            .get(url)
-            .header(USER_AGENT, "flox cli")
-            .bearer_auth(&self.oauth_token);
-
-        let response = request.send().await?;
-
-        if response.status().is_success() {
-            let user: Auth0User = response.json().await?;
-            Ok(user.nickname)
-        } else {
-            Err(response.error_for_status().unwrap_err())
-        }
-    }
-}
-
 #[cfg(test)]
 pub mod tests {
     use std::str::FromStr;
 
-    use reqwest::header::AUTHORIZATION;
     use tempfile::TempDir;
 
     use super::*;
+
+    /// A fake floxhub token
+    ///
+    /// {
+    ///  "typ": "JWT",
+    ///  "alg": "HS256"
+    /// }
+    /// .
+    /// {
+    ///   "https://flox.dev/handle": "test"
+    ///   "exp": 9999999999,                // 2286-11-20T17:46:39+00:00
+    /// }
+    /// .
+    /// AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+    const FAKE_TOKEN: &str= "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3guZGV2L2hhbmRsZSI6InRlc3QiLCJleHAiOjk5OTk5OTk5OTl9.6-nbzFzQEjEX7dfWZFLE-I_qW2N_-9W2HFzzfsquI74";
 
     pub fn flox_instance() -> (Flox, TempDir) {
         let tempdir_handle = tempfile::tempdir_in(std::env::temp_dir()).unwrap();
@@ -351,33 +366,11 @@ pub mod tests {
         );
     }
 
-    use mockito;
-
-    use crate::flox::Auth0Client;
     use crate::models::environment::{global_manifest_path, init_global_manifest};
 
     #[tokio::test]
     async fn test_get_username() {
-        let mock_response = serde_json::json!({
-            "nickname": "exampleuser",
-            "name": "Example User",
-        });
-        let mut server = mockito::Server::new();
-        let mock_server_url = server.url();
-        let mock_server = server
-            .mock("GET", "/userinfo")
-            .match_header(AUTHORIZATION.as_str(), "Bearer your_oauth_token")
-            .match_header(USER_AGENT.as_str(), "flox cli")
-            .with_status(200)
-            .with_header("content-type", "application/json")
-            .with_body(mock_response.to_string())
-            .create();
-
-        let github_client = Auth0Client::new(mock_server_url, "your_oauth_token".to_string());
-
-        let username = github_client.get_username().await.unwrap();
-        assert_eq!(username, "exampleuser".to_string());
-
-        mock_server.assert();
+        let token = FloxhubToken::new(FAKE_TOKEN.to_string());
+        assert_eq!(token.handle().unwrap(), "test");
     }
 }

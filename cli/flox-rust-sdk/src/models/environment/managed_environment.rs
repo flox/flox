@@ -895,7 +895,7 @@ impl ManagedEnvironment {
         let temp_floxmeta_path = tempfile::tempdir_in(&flox.temp_dir).unwrap().into_path();
 
         // Caller decides whether to set token
-        let token = flox.floxhub_token.as_deref();
+        let token = flox.floxhub_token.as_ref();
 
         let git_url = flox
             .floxhub

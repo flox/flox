@@ -7,7 +7,7 @@ use url::Url;
 use super::environment::managed_environment::remote_branch_name;
 use super::environment::ManagedPointer;
 use super::environment_ref::EnvironmentOwner;
-use crate::flox::{Flox, Floxhub};
+use crate::flox::{Flox, Floxhub, FloxhubToken};
 use crate::providers::git::{
     GitCommandBranchHashError,
     GitCommandOpenError,
@@ -59,7 +59,7 @@ impl FloxmetaV2 {
         flox: &Flox,
         pointer: &ManagedPointer,
     ) -> Result<Self, FloxmetaV2Error> {
-        let token = flox.floxhub_token.as_deref();
+        let token = flox.floxhub_token.as_ref();
 
         let mut floxhub = Floxhub::new(pointer.floxhub_url.to_owned());
         if let Some(git_url_override) = &pointer.floxhub_git_url_override {
@@ -114,7 +114,7 @@ impl FloxmetaV2 {
         flox: &Flox,
         pointer: &ManagedPointer,
     ) -> Result<Self, FloxmetaV2Error> {
-        let token = flox.floxhub_token.as_deref();
+        let token = flox.floxhub_token.as_ref();
 
         let mut floxhub = Floxhub::new(pointer.floxhub_url.to_owned());
         if let Some(git_url_override) = &pointer.floxhub_git_url_override {
@@ -158,7 +158,7 @@ impl FloxmetaV2 {
         flox: &Flox,
         pointer: &ManagedPointer,
     ) -> Result<Self, FloxmetaV2Error> {
-        let token = flox.floxhub_token.as_deref();
+        let token = flox.floxhub_token.as_ref();
 
         let mut floxhub = Floxhub::new(pointer.floxhub_url.to_owned());
         if let Some(git_url_override) = &pointer.floxhub_git_url_override {
@@ -192,7 +192,7 @@ impl FloxmetaV2 {
 pub fn floxmeta_git_options(
     floxhub_git_url: &Url,
     floxhub_owner: &str,
-    floxhub_token: Option<&str>,
+    floxhub_token: Option<&FloxhubToken>,
 ) -> GitCommandOptions {
     let mut options = GitCommandOptions::default();
 
@@ -220,7 +220,7 @@ pub fn floxmeta_git_options(
 
     let token = if let Some(token) = floxhub_token {
         debug!("using configured floxhub token");
-        token
+        token.secret()
     } else {
         debug!("no floxhub token configured");
         ""
