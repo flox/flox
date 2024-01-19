@@ -197,10 +197,10 @@ in
           envs
           // {
             # For running `pkgdb' interactively with inputs from the test suite.
-            NIXPKGS_TEST_REV = "e8039594435c68eb4f780f3e9bf3972a7399c4b1";
+            NIXPKGS_TEST_REV = "ab5fd150146dcfe41fda501134e6503932cc8dfd";
             NIXPKGS_TEST_REF =
               "github:NixOS/nixpkgs/"
-              + "e8039594435c68eb4f780f3e9bf3972a7399c4b1";
+              + "ab5fd150146dcfe41fda501134e6503932cc8dfd";
           };
 
         devShellHook = ''

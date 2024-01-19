@@ -44,8 +44,8 @@ assert_new_hello() {
   assert_output "$NEW_NAR_HASH"
 }
 
-OLD_NAR_HASH="sha256-1UGacsv5coICyvAzwuq89v9NsS00Lo8sz22cDHwhnn8="
-NEW_NAR_HASH="sha256-5uA6jKckTf+DCbVBNKsmT5pUT/7Apt5tNdpcbLnPzFI="
+OLD_NAR_HASH="sha256-FRC/OlLVvKkrdm+RtrODQPufD0vVZYA0hpH9RPaHmp4="
+NEW_NAR_HASH="sha256-fveRTn+bbFerIPzuBwQ8dy4CsBGYnloMGp3z4vtFw+A="
 GLOBAL_MANIFEST_LOCK="$FLOX_CONFIG_HOME/global-manifest.lock"
 
 # ---------------------------------------------------------------------------- #
