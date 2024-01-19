@@ -47,7 +47,6 @@ pub struct ManagedEnvironment {
     pub path: CanonicalPath,
     out_link: PathBuf,
     pointer: ManagedPointer,
-    system: String,
     floxmeta: FloxmetaV2,
 }
 
@@ -539,7 +538,6 @@ impl ManagedEnvironment {
             path: dot_flox_path,
             out_link,
             pointer,
-            system: flox.system.clone(),
             floxmeta,
         })
     }
