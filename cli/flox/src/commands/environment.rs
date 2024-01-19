@@ -13,6 +13,7 @@ use std::{env, vec};
 use anyhow::{anyhow, bail, Context, Result};
 use bpaf::Bpaf;
 use crossterm::tty::IsTty;
+use flox_rust_sdk::environment::default_nix_subprocess_env;
 use flox_rust_sdk::flox::{EnvironmentName, EnvironmentOwner, EnvironmentRef, Flox};
 use flox_rust_sdk::models::environment::managed_environment::{
     ManagedEnvironment,
@@ -595,6 +596,11 @@ impl Activate {
             ("FLOX_PROMPT_COLOR_1", prompt_color_1),
             ("FLOX_PROMPT_COLOR_2", prompt_color_2),
         ]);
+
+        let env = default_nix_subprocess_env(true);
+        env.iter().for_each(|(k, v)| {
+            exports.insert(k, v.to_string());
+        });
 
         if let Some(fixed_up_original_path_joined) = fixed_up_original_path_joined {
             exports.insert(

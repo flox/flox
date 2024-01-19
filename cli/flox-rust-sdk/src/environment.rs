@@ -17,7 +17,10 @@ pub static NIX_BIN: &str = env!("NIX_BIN");
 /// For flox specifically, set Nix-provided defaults for certain
 /// environment variables that we know to be required on the various
 /// operating systems.
-pub fn default_nix_subprocess_env() -> HashMap<String, String> {
+///
+/// * `set_all` - Set all environment variables irrespective of
+///               their presence in the current environment.
+pub fn default_nix_subprocess_env(set_all: bool) -> HashMap<String, String> {
     let mut env_map: HashMap<String, String> = HashMap::new();
 
     // respect SSL_CERT_FILE, but if it isn't set, use buildtime NIXPKGS_CACERT_BUNDLE_CRT
@@ -33,26 +36,26 @@ pub fn default_nix_subprocess_env() -> HashMap<String, String> {
         },
     };
 
-    if env::var("NIX_SSL_CERT_FILE").is_err() {
+    if set_all || env::var("NIX_SSL_CERT_FILE").is_err() {
         env_map.insert("NIX_SSL_CERT_FILE".to_string(), ssl_cert_file);
     }
 
     #[cfg(target_os = "macos")]
     {
-        if env::var("NIX_COREFOUNDATION_RPATH").is_err() {
+        if set_all || env::var("NIX_COREFOUNDATION_RPATH").is_err() {
             env_map.insert(
                 "NIX_COREFOUNDATION_RPATH".to_string(),
                 env!("NIX_COREFOUNDATION_RPATH").to_string(),
             );
         }
-        if env::var("PATH_LOCALE").is_err() {
+        if set_all || env::var("PATH_LOCALE").is_err() {
             env_map.insert("PATH_LOCALE".to_string(), env!("PATH_LOCALE").to_string());
         }
     }
 
     #[cfg(target_os = "linux")]
     {
-        if env::var("LOCALE_ARCHIVE").is_err() {
+        if set_all || env::var("LOCALE_ARCHIVE").is_err() {
             env_map.insert(
                 "LOCALE_ARCHIVE".to_string(),
                 env!("LOCALE_ARCHIVE").to_string(),
