@@ -646,7 +646,7 @@ pub enum ConcreteEnvironment {
 }
 
 impl ConcreteEnvironment {
-    fn into_dyn_environment(self) -> Box<dyn Environment> {
+    pub fn into_dyn_environment(self) -> Box<dyn Environment> {
         match self {
             ConcreteEnvironment::Path(path_env) => Box::new(path_env),
             ConcreteEnvironment::Managed(managed_env) => Box::new(managed_env),
@@ -676,7 +676,7 @@ pub enum UninitializedEnvironment {
 }
 
 impl UninitializedEnvironment {
-    fn from_concrete_environment(env: &ConcreteEnvironment) -> Result<Self> {
+    pub fn from_concrete_environment(env: &ConcreteEnvironment) -> Result<Self> {
         match env {
             ConcreteEnvironment::Path(path_env) => {
                 let pointer = path_env.pointer.clone().into();
@@ -702,7 +702,7 @@ impl UninitializedEnvironment {
     /// Open the contained environment and return a [ConcreteEnvironment]
     ///
     /// This function will fail if the contained environment is not available or invalid
-    fn into_concrete_environment(self, flox: &Flox) -> Result<ConcreteEnvironment> {
+    pub fn into_concrete_environment(self, flox: &Flox) -> Result<ConcreteEnvironment> {
         match self {
             UninitializedEnvironment::DotFlox(dot_flox) => {
                 let dot_flox_path = dot_flox.path.join(DOT_FLOX);

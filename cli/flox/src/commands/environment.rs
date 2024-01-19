@@ -18,8 +18,10 @@ use flox_rust_sdk::models::environment::managed_environment::{
 };
 use flox_rust_sdk::models::environment::path_environment::{self, PathEnvironment};
 use flox_rust_sdk::models::environment::{
+    CoreEnvironmentError,
     EditResult,
     Environment,
+    EnvironmentError2,
     EnvironmentPointer,
     ManagedPointer,
     PathPointer,
@@ -38,6 +40,7 @@ use flox_rust_sdk::models::lockfile::{
     Input,
     InstalledPackage,
     LockedManifest,
+    LockedManifestError,
     PackageInfo,
     TypedLockedManifest,
 };
@@ -62,6 +65,7 @@ use crate::commands::{
 };
 use crate::config::Config;
 use crate::utils::dialog::{Confirm, Dialog, Spinner};
+use crate::utils::didyoumean::DidYouMean;
 use crate::{subcommand_metric, utils};
 
 #[derive(Bpaf, Clone)]
@@ -867,7 +871,8 @@ impl Install {
             help_message: None,
             typed: Spinner::new(|| environment.install(&packages, &flox)),
         }
-        .spin()?;
+        .spin()
+        .map_err(|err| Self::handle_error(err, &flox, &*environment, &packages))?;
 
         if installation.new_manifest.is_some() {
             // Print which new packages were installed
@@ -890,6 +895,45 @@ impl Install {
             }
         }
         Ok(())
+    }
+
+    fn handle_error(
+        err: EnvironmentError2,
+        flox: &Flox,
+        environment: &dyn Environment,
+        packages: &[PackageToInstall],
+    ) -> anyhow::Error {
+        debug!("install error: {:?}", err);
+
+        match err {
+            EnvironmentError2::Core(CoreEnvironmentError::LockedManifest(
+                LockedManifestError::LockManifest(
+                    flox_rust_sdk::models::pkgdb::CallPkgDbError::PkgDbError(pkgdberr),
+                ),
+            )) if pkgdberr.exit_code == 120 => 'error: {
+                let paths = packages.iter().map(|p| p.path.clone()).join(", ");
+                let head = format!("❌  could not install {paths}");
+
+                if packages.len() > 1 {
+                    break 'error anyhow!(formatdoc! {"
+                        {head}
+                        One or more of the packages you are trying to install does not exist.
+                    "});
+                }
+                let path = packages[0].path.clone();
+
+                let suggestion = DidYouMean::new(flox, environment, &path);
+                if !suggestion.has_suggestions() {
+                    break 'error anyhow!(head);
+                }
+
+                anyhow!(formatdoc! {"
+                    {head}
+                    {suggestion}
+                "})
+            },
+            _ => err.into(),
+        }
     }
 }
 
