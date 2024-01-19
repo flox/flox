@@ -1,13 +1,11 @@
 use std::collections::{HashMap, HashSet};
 use std::io::{BufWriter, Write};
-use std::path::PathBuf;
 use std::time::Duration;
 
 use anyhow::{bail, Context, Result};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::global_manifest_path;
-use flox_rust_sdk::models::lockfile::LockedManifest;
 use flox_rust_sdk::models::search::{
     do_search,
     PathOrJson,
@@ -20,11 +18,11 @@ use flox_rust_sdk::models::search::{
 };
 use log::{debug, info};
 
-use crate::commands::detect_environment;
 use crate::config::features::Features;
 use crate::config::Config;
 use crate::subcommand_metric;
 use crate::utils::dialog::{Dialog, Spinner};
+use crate::utils::search::manifest_and_lockfile;
 
 const SEARCH_INPUT_SEPARATOR: &'_ str = ":";
 const DEFAULT_DESCRIPTION: &'_ str = "<no description provided>";
@@ -119,7 +117,7 @@ impl Search {
     }
 }
 
-fn construct_search_params(
+pub(crate) fn construct_search_params(
     search_term: &str,
     results_limit: Option<u8>,
     manifest: Option<PathOrJson>,
@@ -417,52 +415,4 @@ fn render_show(search_results: &[SearchResult], all: bool) -> Result<()> {
     println!("{pkg_name} - {description}");
     println!("    {pkg_name} - {versions}");
     Ok(())
-}
-
-/// Return an optional manifest and a lockfile to use for search and show.
-///
-/// This searches for an environment to use,
-/// and if one is found, it returns the path to its manifest and optionally the
-/// path to its lockfile.
-///
-/// If no environment is found, or if environment does not have a lockfile, the
-/// global lockfile is used.
-/// The global lockfile is created if it does not exist.
-///
-/// Note that this may perform network operations to pull a
-/// [ManagedEnvironment],
-/// since a freshly cloned user repo with a [ManagedEnvironment] may not have a
-/// manifest or lockfile in floxmeta unless the environment is initialized.
-pub fn manifest_and_lockfile(flox: &Flox, message: &str) -> Result<(Option<PathBuf>, PathBuf)> {
-    let (manifest_path, lockfile_path) = match detect_environment(message)? {
-        None => {
-            debug!("no environment found");
-            (None, None)
-        },
-        Some(uninitialized) => {
-            debug!("using environment {uninitialized}");
-
-            let environment = uninitialized
-                .into_concrete_environment(flox)?
-                .into_dyn_environment();
-
-            let lockfile_path = environment.lockfile_path(flox)?;
-            debug!("checking lockfile: path={}", lockfile_path.display());
-            let lockfile = if lockfile_path.exists() {
-                debug!("lockfile exists");
-                Some(lockfile_path)
-            } else {
-                debug!("lockfile doesn't exist");
-                None
-            };
-            (Some(environment.manifest_path(flox)?), lockfile)
-        },
-    };
-
-    // Use the global lock if we don't have a lock yet
-    let lockfile_path = match lockfile_path {
-        Some(lockfile_path) => lockfile_path,
-        None => LockedManifest::ensure_global_lockfile(flox)?,
-    };
-    Ok((manifest_path, lockfile_path))
 }
