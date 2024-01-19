@@ -3,9 +3,11 @@ use std::path::PathBuf;
 use anyhow::Result;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::lockfile::LockedManifest;
+use flox_rust_sdk::models::search::{PathOrJson, Query, SearchParams};
 use log::debug;
 
 use crate::commands::detect_environment;
+use crate::config::features::Features;
 
 /// Return an optional manifest and a lockfile to use for search and show.
 ///
@@ -53,4 +55,28 @@ pub fn manifest_and_lockfile(flox: &Flox, message: &str) -> Result<(Option<PathB
         None => LockedManifest::ensure_global_lockfile(flox)?,
     };
     Ok((manifest_path, lockfile_path))
+}
+
+/// Create [SearchParams] from the given search term
+/// using available manifests and lockfiles for resolution.
+pub(crate) fn construct_search_params(
+    search_term: &str,
+    results_limit: Option<u8>,
+    manifest: Option<PathOrJson>,
+    global_manifest: PathOrJson,
+    lockfile: PathOrJson,
+) -> Result<SearchParams> {
+    let query = Query::from_term_and_limit(
+        search_term,
+        Features::parse()?.search_strategy,
+        results_limit,
+    )?;
+    let params = SearchParams {
+        manifest,
+        global_manifest,
+        lockfile,
+        query,
+    };
+    debug!("search params raw: {:?}", params);
+    Ok(params)
 }

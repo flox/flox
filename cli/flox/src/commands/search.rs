@@ -22,7 +22,7 @@ use crate::config::features::Features;
 use crate::config::Config;
 use crate::subcommand_metric;
 use crate::utils::dialog::{Dialog, Spinner};
-use crate::utils::search::manifest_and_lockfile;
+use crate::utils::search::{construct_search_params, manifest_and_lockfile};
 
 const SEARCH_INPUT_SEPARATOR: &'_ str = ":";
 const DEFAULT_DESCRIPTION: &'_ str = "<no description provided>";
@@ -115,28 +115,6 @@ impl Search {
 
         Ok(())
     }
-}
-
-pub(crate) fn construct_search_params(
-    search_term: &str,
-    results_limit: Option<u8>,
-    manifest: Option<PathOrJson>,
-    global_manifest: PathOrJson,
-    lockfile: PathOrJson,
-) -> Result<SearchParams> {
-    let query = Query::from_term_and_limit(
-        search_term,
-        Features::parse()?.search_strategy,
-        results_limit,
-    )?;
-    let params = SearchParams {
-        manifest,
-        global_manifest,
-        lockfile,
-        query,
-    };
-    debug!("search params raw: {:?}", params);
-    Ok(params)
 }
 
 /// An intermediate representation of a search result used for rendering
