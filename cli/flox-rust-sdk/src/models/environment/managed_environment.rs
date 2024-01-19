@@ -529,7 +529,7 @@ impl ManagedEnvironment {
         dot_flox_path: CanonicalPath,
         out_link: PathBuf,
     ) -> Result<Self, ManagedEnvironmentError> {
-        let lock = Self::ensure_locked(flox, &pointer, &dot_flox_path, &floxmeta)?;
+        let lock = Self::ensure_locked(&pointer, &dot_flox_path, &floxmeta)?;
 
         Self::ensure_branch(&branch_name(&pointer, &dot_flox_path), &lock, &floxmeta)?;
 
@@ -558,7 +558,6 @@ impl ManagedEnvironment {
     /// Currently we can only recommend to not commit lockfiles with a local revision.
     /// This behavior may change in the future.
     fn ensure_locked(
-        _flox: &Flox,
         pointer: &ManagedPointer,
         dot_flox_path: &CanonicalPath,
         floxmeta: &FloxmetaV2,
@@ -1141,7 +1140,7 @@ mod test {
         let dot_flox_path = flox.temp_dir.join(DOT_FLOX);
         let dot_flox_path = create_dot_flox(&dot_flox_path, &test_pointer, None);
 
-        ManagedEnvironment::ensure_locked(&flox, &test_pointer, &dot_flox_path, &floxmeta).unwrap();
+        ManagedEnvironment::ensure_locked(&test_pointer, &dot_flox_path, &floxmeta).unwrap();
 
         let lock_path = dot_flox_path.join(GENERATION_LOCK_FILENAME);
         let lock: GenerationLock = serde_json::from_slice(&fs::read(lock_path).unwrap()).unwrap();
@@ -1192,7 +1191,7 @@ mod test {
         let dot_flox_path = flox.temp_dir.join(DOT_FLOX);
         let dot_flox_path = create_dot_flox(&dot_flox_path, &test_pointer, Some(&lock));
 
-        ManagedEnvironment::ensure_locked(&flox, &test_pointer, &dot_flox_path, &floxmeta).unwrap();
+        ManagedEnvironment::ensure_locked(&test_pointer, &dot_flox_path, &floxmeta).unwrap();
 
         let lock_path = dot_flox_path.join(GENERATION_LOCK_FILENAME);
         let lock: GenerationLock = serde_json::from_slice(&fs::read(lock_path).unwrap()).unwrap();
@@ -1255,7 +1254,6 @@ mod test {
         );
 
         ManagedEnvironment::ensure_locked(
-            &flox,
             &make_test_pointer(&remote_path),
             &dot_flox_path,
             &floxmeta,
@@ -1316,7 +1314,7 @@ mod test {
         let dot_flox_path = create_dot_flox(&dot_flox_path, &test_pointer, Some(&lock));
 
         assert!(matches!(
-            ManagedEnvironment::ensure_locked(&flox, &test_pointer, &dot_flox_path, &floxmeta),
+            ManagedEnvironment::ensure_locked(&test_pointer, &dot_flox_path, &floxmeta),
             Err(ManagedEnvironmentError::RevDoesNotExist)
         ));
     }
@@ -1362,7 +1360,7 @@ mod test {
         let dot_flox_path = create_dot_flox(&dot_flox_path, &test_pointer, Some(&lock));
 
         assert!(matches!(
-            ManagedEnvironment::ensure_locked(&flox, &test_pointer, &dot_flox_path, &floxmeta),
+            ManagedEnvironment::ensure_locked(&test_pointer, &dot_flox_path, &floxmeta),
             Err(ManagedEnvironmentError::RevDoesNotExist)
         ));
 
@@ -1406,7 +1404,7 @@ mod test {
         let dot_flox_path = flox.temp_dir.join(DOT_FLOX);
         let dot_flox_path = create_dot_flox(&dot_flox_path, &test_pointer, Some(&lock));
 
-        ManagedEnvironment::ensure_locked(&flox, &test_pointer, &dot_flox_path, &floxmeta).unwrap();
+        ManagedEnvironment::ensure_locked(&test_pointer, &dot_flox_path, &floxmeta).unwrap();
 
         let lock_path = dot_flox_path.join(GENERATION_LOCK_FILENAME);
 
@@ -1456,7 +1454,7 @@ mod test {
         let dot_flox_path = create_dot_flox(&dot_flox_path, &test_pointer, Some(&lock));
 
         assert!(matches!(
-            ManagedEnvironment::ensure_locked(&flox, &test_pointer, &dot_flox_path, &floxmeta),
+            ManagedEnvironment::ensure_locked(&test_pointer, &dot_flox_path, &floxmeta),
             Err(ManagedEnvironmentError::LocalRevDoesNotExist)
         ));
     }
@@ -1508,8 +1506,7 @@ mod test {
         let dot_flox_path = create_dot_flox(&dot_flox_path, &test_pointer, Some(&lock));
 
         assert_eq!(
-            ManagedEnvironment::ensure_locked(&flox, &test_pointer, &dot_flox_path, &floxmeta)
-                .unwrap(),
+            ManagedEnvironment::ensure_locked(&test_pointer, &dot_flox_path, &floxmeta).unwrap(),
             lock
         );
     }
