@@ -71,7 +71,7 @@ impl FloxmetaV2 {
             .map_err(FloxmetaV2Error::InvalidFloxhubBaseUrl)?;
 
         let git_options = floxmeta_git_options(&git_url, &pointer.owner, token);
-        let branch = remote_branch_name(&flox.system, pointer);
+        let branch = remote_branch_name(pointer);
 
         let git = GitCommandProvider::clone_branch_with(
             git_options,
@@ -133,7 +133,7 @@ impl FloxmetaV2 {
 
         let git = GitCommandProvider::open_with(git_options, user_floxmeta_dir)
             .map_err(FloxmetaV2Error::Open)?;
-        let branch: String = remote_branch_name(&flox.system, pointer);
+        let branch: String = remote_branch_name(pointer);
         if !git
             .has_branch(&branch)
             .map_err(FloxmetaV2Error::CheckForBranch)?
@@ -172,8 +172,7 @@ impl FloxmetaV2 {
         let git_options = floxmeta_git_options(&git_url, &pointer.owner, token);
 
         let git = GitCommandProvider::init_with(git_options, user_floxmeta_dir, false).unwrap();
-        git.rename_branch(&remote_branch_name(&flox.system, pointer))
-            .unwrap();
+        git.rename_branch(&remote_branch_name(pointer)).unwrap();
 
         Ok(FloxmetaV2 { git })
     }
@@ -259,14 +258,13 @@ mod tests {
     /// Create an upstream floxmeta repository with an environment under a given base path
     fn create_fake_floxmeta(
         floxhub_base_path: &Path,
-        flox: &Flox,
+        _flox: &Flox,
         pointer: &ManagedPointer,
     ) -> GitCommandProvider {
         let floxmeta_path = floxhub_base_path.join(format!("{}/floxmeta", pointer.owner));
         fs::create_dir_all(&floxmeta_path).unwrap();
         let git = GitCommandProvider::init(floxmeta_path, false).unwrap();
-        git.rename_branch(&remote_branch_name(&flox.system, pointer))
-            .unwrap();
+        git.rename_branch(&remote_branch_name(pointer)).unwrap();
         fs::write(git.path().join("test.txt"), "test").unwrap();
         git.add(&[Path::new("test.txt")]).unwrap();
         git.commit("test").unwrap();

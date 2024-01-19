@@ -79,8 +79,7 @@ impl RemoteEnvironment {
         )
         .unwrap();
 
-        let out_link =
-            gcroots_dir(flox, &pointer.owner).join(remote_branch_name(&flox.system, &pointer));
+        let out_link = gcroots_dir(flox, &pointer.owner).join(remote_branch_name(&pointer));
 
         let inner = ManagedEnvironment::open_with(floxmeta, flox, pointer, dot_flox_path, out_link)
             .map_err(RemoteEnvironmentError::OpenManagedEnvironment)?;
