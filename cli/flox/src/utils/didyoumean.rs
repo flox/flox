@@ -51,7 +51,7 @@ fn suggest_searched_packages(
     )?;
 
     let (results, _) = Dialog {
-        message: "Looking for suggestions...",
+        message: &format!("Could not find package for {term}. Looking for suggestions..."),
         help_message: None,
         typed: Spinner::new(|| do_search(&search_params)),
     }
