@@ -14,9 +14,15 @@ const SUGGESTION_SEARCH_LIMIT: u8 = 3;
 
 fn suggest_curated_package(input: &str) -> Option<&'static str> {
     let suggestion = match input {
+        "java" => "jdk",
         "node" => "nodejs",
         "npm" => "nodejs",
         "rust" => "cargo",
+        "sed" => "gnused",
+        "make" => "gnumake",
+        "awk" => "gawk",
+        "diff" => "diffutils",
+        "grep" => "gnugrep",
         _ => return None,
     };
     Some(suggestion)
@@ -75,9 +81,9 @@ impl<'a> DidYouMean<'a> {
             },
         };
         Self {
-            term,
-            curated,
             searched_term,
+            curated,
+            search_results,
         }
     }
 
