@@ -436,7 +436,7 @@ impl Activate {
             environment.activation_path(&flox)?
         } else {
             Dialog {
-                message: &format!("Getting ready to use environment '{now_active}'..."),
+                message: &format!("Getting ready to use environment {now_active}..."),
                 help_message: None,
                 typed: Spinner::new(|| environment.activation_path(&flox)),
             }
