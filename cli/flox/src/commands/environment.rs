@@ -436,7 +436,7 @@ impl Activate {
             environment.activation_path(&flox)?
         } else {
             Dialog {
-                message: &format!("Getting ready to use environment '{prompt_name}'..."),
+                message: &format!("Getting ready to use environment '{now_active}'..."),
                 help_message: None,
                 typed: Spinner::new(|| environment.activation_path(&flox)),
             }
@@ -587,7 +587,7 @@ impl Activate {
 
         if self.run_args.is_empty() {
             let message = formatdoc! {"
-                ✅  You are now using the environment {now_active}
+                ✅  You are now using the environment {now_active}.
                 To stop using this environment, type 'exit'"};
             info!("{message}");
         }
