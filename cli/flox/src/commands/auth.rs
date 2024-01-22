@@ -40,20 +40,20 @@ pub struct Credential {
 /// For multitenency, we will integrate with the config subsystem later.
 fn create_oauth_client() -> Result<BasicClient> {
     let auth_url = AuthUrl::new(
-        std::env::var("FLOX_OAUTH_AUTH_URL").unwrap_or(env!("OAUTH_AUTH_URL").to_string()),
+        std::env::var("_FLOX_OAUTH_AUTH_URL").unwrap_or(env!("OAUTH_AUTH_URL").to_string()),
     )
     .context("Invalid auth url")?;
     let token_url = TokenUrl::new(
-        std::env::var("FLOX_OAUTH_TOKEN_URL").unwrap_or(env!("OAUTH_TOKEN_URL").to_string()),
+        std::env::var("_FLOX_OAUTH_TOKEN_URL").unwrap_or(env!("OAUTH_TOKEN_URL").to_string()),
     )
     .context("Invalid token url")?;
     let device_auth_url = DeviceAuthorizationUrl::new(
-        std::env::var("FLOX_OAUTH_DEVICE_AUTH_URL")
+        std::env::var("_FLOX_OAUTH_DEVICE_AUTH_URL")
             .unwrap_or(env!("OAUTH_DEVICE_AUTH_URL").to_string()),
     )
     .context("Invalid device auth url")?;
     let client_id = ClientId::new(
-        std::env::var("FLOX_OAUTH_CLIENT_ID").unwrap_or(env!("OAUTH_CLIENT_ID").to_string()),
+        std::env::var("_FLOX_OAUTH_CLIENT_ID").unwrap_or(env!("OAUTH_CLIENT_ID").to_string()),
     );
     let client = BasicClient::new(client_id, None, auth_url, Some(token_url))
         .set_device_authorization_url(device_auth_url);
