@@ -456,7 +456,7 @@ impl Activate {
         if flox_active_environments.is_active(&now_active) {
             bail!("Environment '{now_active}' is already active");
         }
-        flox_active_environments.set_last_active(now_active);
+        flox_active_environments.set_last_active(now_active.clone());
 
         let (flox_env_dirs, flox_env_lib_dirs) = {
             let mut flox_env_dirs = vec![activation_path.clone()];
@@ -584,6 +584,13 @@ impl Activate {
         }
 
         debug!("running activation command: {:?}", command);
+
+        if self.run_args.is_empty() {
+            let message = formatdoc! {"
+                ✅  You are now using the environment {now_active}
+                To stop using this environment, type 'exit'"};
+            info!("{message}");
+        }
         let error = command.exec();
 
         // exec should never return
