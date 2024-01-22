@@ -20,10 +20,10 @@ use log::{debug, info};
 
 use crate::config::features::Features;
 use crate::config::Config;
-use crate::subcommand_metric;
 use crate::utils::dialog::{Dialog, Spinner};
 use crate::utils::didyoumean;
 use crate::utils::search::{construct_search_params, manifest_and_lockfile};
+use crate::{subcommand_metric, utils};
 
 const SEARCH_INPUT_SEPARATOR: &'_ str = ":";
 const DEFAULT_DESCRIPTION: &'_ str = "<no description provided>";
@@ -118,7 +118,7 @@ impl Search {
             // Try to find a curated package that matches the search term
             // and display search results
 
-            let Some(curated) = didyoumean::suggest_curated_package(&self.search_term) else {
+            let Some(curated) = utils::search::suggest_curated_package(&self.search_term) else {
                 return Ok(());
             };
 

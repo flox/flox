@@ -80,3 +80,17 @@ pub(crate) fn construct_search_params(
     debug!("search params raw: {:?}", params);
     Ok(params)
 }
+
+/// `search` specific curated terms
+pub(crate) fn suggest_curated_package(input: &str) -> Option<&'static str> {
+    let suggestion = match input {
+        "node" => "nodejs",
+        "java" => "jdk",
+        "npm" => "nodejs",
+        "rust" => "cargo",
+        "diff" => "diffutils",
+        "make" => "gnumake",
+        _ => return None,
+    };
+    Some(suggestion)
+}
