@@ -104,7 +104,8 @@ SearchCommand::addSearchQueryOptions( argparse::ArgumentParser & parser )
              { this->params.query.partialNameMatch = arg; } );
 
   parser.add_argument( "--match-name-or-rel-path" )
-    .help( "search for packages by partially matching `pname' or '.' joined `relPath'." )
+    .help( "search for packages by partially matching `pname' or '.' joined "
+           "`relPath'." )
     .metavar( "MATCH" )
     .nargs( 1 )
     .action( [&]( const std::string & arg )
