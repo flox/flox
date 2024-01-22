@@ -140,7 +140,7 @@ jobs:
           SSH_KEY:                "${{ secrets.FLOXBOT_SSH_KEY }}"
 
       - name: "Cache Cargo"
-        uses: "actions/cache@v3"
+        uses: "actions/cache@v4"
         with:
           path: |
             ~/.cargo/bin/
