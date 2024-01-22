@@ -10,9 +10,9 @@ use log::debug;
 use crate::utils::dialog::{Dialog, Spinner};
 use crate::utils::search::construct_search_params;
 
-const SUGGESTION_SEARCH_LIMIT: u8 = 3;
+pub const SUGGESTION_SEARCH_LIMIT: u8 = 3;
 
-fn suggest_curated_package(input: &str) -> Option<&'static str> {
+pub fn suggest_curated_package(input: &str) -> Option<&'static str> {
     let suggestion = match input {
         "java" => "jdk",
         "node" => "nodejs",

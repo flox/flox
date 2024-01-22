@@ -22,6 +22,7 @@ use crate::config::features::Features;
 use crate::config::Config;
 use crate::subcommand_metric;
 use crate::utils::dialog::{Dialog, Spinner};
+use crate::utils::didyoumean;
 use crate::utils::search::{construct_search_params, manifest_and_lockfile};
 
 const SEARCH_INPUT_SEPARATOR: &'_ str = ":";
@@ -72,6 +73,9 @@ impl Search {
         let (manifest, lockfile) = manifest_and_lockfile(&flox, "search for packages using")
             .context("failed while looking for manifest and lockfile")?;
 
+        let manifest = manifest.map(|p| p.try_into()).transpose()?;
+        let global_manifest: PathOrJson = global_manifest_path(&flox).try_into()?;
+
         let limit = if self.all {
             None
         } else {
@@ -81,9 +85,9 @@ impl Search {
         let search_params = construct_search_params(
             &self.search_term,
             limit,
-            manifest.map(|p| p.try_into()).transpose()?,
-            global_manifest_path(&flox).try_into()?,
-            PathOrJson::Path(lockfile),
+            manifest.clone(),
+            global_manifest.clone(),
+            PathOrJson::Path(lockfile.clone()),
         )?;
 
         let (results, exit_status) = Dialog {
@@ -104,7 +108,48 @@ impl Search {
             render_search_results_json(results)?;
         } else {
             debug!("printing search results as user facing");
-            render_search_results_user_facing(&self.search_term, results)?;
+
+            if results.results.is_empty() {
+                info!("No packages matched this search term: {}", self.search_term);
+            } else {
+                render_search_results_user_facing(&self.search_term, results)?;
+            }
+
+            // Try to find a curated package that matches the search term
+            // and display search results
+
+            let Some(curated) = didyoumean::suggest_curated_package(&self.search_term) else {
+                return Ok(());
+            };
+
+            let search_params = construct_search_params(
+                curated,
+                Some(didyoumean::SUGGESTION_SEARCH_LIMIT),
+                manifest,
+                global_manifest,
+                PathOrJson::Path(lockfile),
+            )?;
+
+            let (results, exit_status) = Dialog {
+                message: &format!("Searching alternatives for {curated}..."),
+                help_message: None,
+                typed: Spinner::new(|| do_search(&search_params)),
+            }
+            .spin()?;
+
+            if !exit_status.success() {
+                debug!("failed to search for suggestions {exit_status}");
+                return Ok(());
+            }
+
+            if results.results.is_empty() {
+                debug!("no suggestions found");
+                return Ok(());
+            }
+
+            info!("");
+            info!("Related search results for '{curated}':");
+            render_search_results_user_facing(curated, results)?;
         }
         if !exit_status.success() {
             bail!(
