@@ -31,6 +31,9 @@ static const std::string nixpkgsRef
 static const std::string nixpkgsFingerprintStr
   = "9bb3d4c033fbad8efb5e28ffcd1d70383e0c5bbcb7cc5c526b824524467b19b9";
 
+/* The version of curl in nixpkgsRev */
+static const std::string curlVersion = "8.4.0";
+
 
 /**
  * These counts indicate the total number of derivations under

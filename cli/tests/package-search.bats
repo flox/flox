@@ -81,7 +81,7 @@ setup_file() {
 
 @test "'FLOX_FEATURES_SEARCH_STRATEGY=match flox search' expected number of results: 'hello'" {
   FLOX_FEATURES_SEARCH_STRATEGY=match run --separate-stderr "$FLOX_BIN" search hello --all
-  assert_equal "${#lines[@]}" 9
+  assert_equal "${#lines[@]}" 11
   assert_equal "$stderr" "$SHOW_HINT"
 }
 
@@ -89,7 +89,7 @@ setup_file() {
 
 @test "'flox search' expected number of results: 'hello'" {
   run --separate-stderr "$FLOX_BIN" search hello --all
-  assert_equal "${#lines[@]}" 8
+  assert_equal "${#lines[@]}" 10
   assert_equal "$stderr" "$SHOW_HINT"
 }
 
@@ -198,7 +198,7 @@ setup_file() {
   run --separate-stderr "$FLOX_BIN" search hello --all
   assert_success
   n_lines="${#lines[@]}"
-  assert_equal "$n_lines" 8 # search results from global manifest registry
+  assert_equal "$n_lines" 10 # search results from global manifest registry
 }
 
 # ---------------------------------------------------------------------------- #
@@ -208,7 +208,7 @@ setup_file() {
   run --separate-stderr "$FLOX_BIN" search hello --all
   assert_success
   n_lines="${#lines[@]}"
-  assert_equal "$n_lines" 8 # search results from global manifest registry
+  assert_equal "$n_lines" 10 # search results from global manifest registry
 }
 
 # ---------------------------------------------------------------------------- #

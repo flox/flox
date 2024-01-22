@@ -122,22 +122,6 @@ setup_file() {
   assert_success
 }
 
-# --------------------------------------------------------------------------- #
-
-# bats test_tags=propagated
-@test "Environment includes propagated packages" {
-  skip "ansi does not work on all systems"
-  run "$PKGDB_BIN" buildenv "$LOCKFILES/propagated/manifest.lock" \
-    --out-link "$BATS_TEST_TMPDIR/env"
-  assert_success
-  # environment contains anki
-  # -> which propagates beautifulsoup4
-  _PYPKGS="$BATS_TEST_TMPDIR/env/lib/python3.10/site-packages"
-  assert "$TEST" -f "$_PYPKGS/bs4/__init__.py"
-  # -> which propagates chardet
-  assert "$TEST" -f "$_PYPKGS/chardet/__init__.py"
-}
-
 # ---------------------------------------------------------------------------- #
 
 # Single quotes in variables should be escaped.

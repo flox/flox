@@ -20,16 +20,10 @@ setup_file() {
   # the future.
   export BATS_NO_PARALLELIZE_WITHIN_FILE=true
 
-  # Extract revisions from the manifest.
-  STABLE_REV="$(
-    yj -t < "$PROJ2/manifest.toml" | jq -r '.registry.inputs.stable.from.rev'
-  )"
-  STAGING_REV="$(
-    yj -t < "$PROJ2/manifest.toml" | jq -r '.registry.inputs.staging.from.rev'
-  )"
-  UNSTABLE_REV="$(
-    yj -t < "$PROJ2/manifest.toml" | jq -r '.registry.inputs.unstable.from.rev'
-  )"
+  STABLE_REV="$NIXPKGS_REV_OLDER"
+  STAGING_REV="$NIXPKGS_REV_OLD"
+  UNSTABLE_REV="$NIXPKGS_REV"
+
   export STABLE_REV STAGING_REV UNSTABLE_REV
 }
 
@@ -159,7 +153,7 @@ jq_edit() {
   assert_output "$STAGING_REV"
 
   jq_edit manifest.json '.install.nodejsNew={
-    "name": "nodejs", "version": "^18.17"
+    "name": "nodejs", "version": "^'"$NODEJS_VERSION"'"
   }'
 
   # Making the package optional fixes makes it possible to resolve without
@@ -208,7 +202,7 @@ jq_edit() {
   assert_output "$UNSTABLE_REV"
 
   jq_edit manifest.json '.install.nodejs={
-    "name": "nodejs", "version": ">=18.15.0 <19.0.0"
+    "name": "nodejs", "version": ">'"$NODEJS_VERSION_OLDEST"' <='"$NODEJS_VERISION"'"
   }'
 
   # This doesn't have `pipefail' so we will always get a `manifest.lock2'

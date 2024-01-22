@@ -17,8 +17,8 @@
         "nixpkgs": {
           "from": {
             "owner": "NixOS",
-            "ref": "release-23.05",
             "repo": "nixpkgs",
+            "rev": "bc01a2be500c10f1507dcc8e98c9f5bd72c02aa3",
             "type": "github"
           },
           "subtrees": [
@@ -41,22 +41,23 @@
         ],
         "info": {
           "broken": false,
+          "description": "Event-driven I/O framework for the V8 JavaScript engine",
           "license": "MIT",
           "pname": "nodejs",
           "unfree": false,
-          "version": "18.17.1"
+          "version": "16.16.0"
         },
         "input": {
           "attrs": {
-            "lastModified": 1700478853,
-            "narHash": "sha256-5uA6jKckTf+DCbVBNKsmT5pUT/7Apt5tNdpcbLnPzFI=",
+            "lastModified": 1658528871,
+            "narHash": "sha256-QlD1KEZ4XhjjXAAv8Vi1n+Q7ZqnXBjdjNwikHPN0Tkw=",
             "owner": "NixOS",
             "repo": "nixpkgs",
-            "rev": "9faf91e6d0b7743d41cce3b63a8e5c733dc696a3",
+            "rev": "bc01a2be500c10f1507dcc8e98c9f5bd72c02aa3",
             "type": "github"
           },
-          "fingerprint": "9ea15e83111e20cb13cf98e8592e09d1356df773b6e87492710d006b9d031486",
-          "url": "github:NixOS/nixpkgs/9faf91e6d0b7743d41cce3b63a8e5c733dc696a3"
+          "fingerprint": "ff2ba38c55510b7489e81156c88245fdee5a071acff9715dbd67a297a2804118",
+          "url": "github:NixOS/nixpkgs/bc01a2be500c10f1507dcc8e98c9f5bd72c02aa3"
         },
         "priority": 5
       }
@@ -69,11 +70,11 @@
     "inputs": {
       "nixpkgs": {
         "from": {
-          "lastModified": 1700478853,
-          "narHash": "sha256-5uA6jKckTf+DCbVBNKsmT5pUT/7Apt5tNdpcbLnPzFI=",
+          "lastModified": 1658528871,
+          "narHash": "sha256-QlD1KEZ4XhjjXAAv8Vi1n+Q7ZqnXBjdjNwikHPN0Tkw=",
           "owner": "NixOS",
           "repo": "nixpkgs",
-          "rev": "9faf91e6d0b7743d41cce3b63a8e5c733dc696a3",
+          "rev": "bc01a2be500c10f1507dcc8e98c9f5bd72c02aa3",
           "type": "github"
         },
         "subtrees": [

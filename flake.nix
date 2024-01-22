@@ -15,6 +15,9 @@
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/release-23.11";
 
+  # drop once bear is no longer broken in a newer release
+  inputs.nixpkgs-bear.url = "github:NixOS/nixpkgs/release-23.05";
+
   inputs.floco.url = "github:aakropotkin/floco";
   inputs.floco.inputs.nixpkgs.follows = "nixpkgs";
 
@@ -100,6 +103,11 @@
         base.overrideAttrs (prevAttrs: {preferLocalBuild = false;});
     };
 
+    # bear is broken in release 23.11 on darwin
+    overlays.bear = final: prev: {
+      inherit (inputs.nixpkgs-bear.legacyPackages.${prev.system}) bear;
+    };
+
     # Aggregates all external dependency overlays before adding any of the
     # packages defined by this flake.
     overlays.deps = nixpkgs.lib.composeManyExtensions [
@@ -107,6 +115,7 @@
       overlays.nlohmann
       overlays.semver
       overlays.nix
+      overlays.bear
       sqlite3pp.overlays.default
     ];
 

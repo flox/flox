@@ -83,6 +83,10 @@ misc_vars_setup() {
 
   export _PKGDB_TEST_SUITE_MODE=:
 
+  # Incomplete notes on steps needed to bump:
+  # _PKGDB_GA_REGISTRY_REF_OR_REV=$NIXPKGS_REV \
+  #   pkgdb manifest lock --ga-registry --manifest pkgdb/tests/harnesses/proj1/manifest.toml \
+  #   | jq > pkgdb/tests/harnesses/proj1/manifest.lock
   NIXPKGS_REV="ab5fd150146dcfe41fda501134e6503932cc8dfd"
   NIXPKGS_REF="github:NixOS/nixpkgs/$NIXPKGS_REV"
 
@@ -90,6 +94,25 @@ misc_vars_setup() {
   NIXPKGS_FINGERPRINT="${NIXPKGS_FINGERPRINT}cb7cc5c526b824524467b19b9"
 
   export NIXPKGS_REV NIXPKGS_REF NIXPKGS_FINGERPRINT
+
+  NODEJS_VERSION="18.18.2"
+  export NODEJS_VERSION
+
+  NIXPKGS_REV_OLD="e8039594435c68eb4f780f3e9bf3972a7399c4b1"
+  export NIXPKGS_REV_OLD
+  NODEJS_VERSION_OLD="18.16.0"
+  export NODEJS_VERSION_OLD
+
+  # See reasons for choosing this rev in cli tests
+  # Incomplete notes on steps needed to bump:
+  # _PKGDB_GA_REGISTRY_REF_OR_REV=$NIXPKGS_REV_OLDER \
+  #   pkgdb manifest lock --ga-registry --manifest pkgdb/tests/harnesses/proj1/manifest.toml \
+  #   | jq > pkgdb/tests/harnesses/proj1/manifest_old.lock
+  NIXPKGS_REV_OLDER="bc01a2be500c10f1507dcc8e98c9f5bd72c02aa3"
+  export NIXPKGS_REV_OLDER
+  NODEJS_VERSION_OLDEST="16.16.0"
+  export NODEJS_VERSION_OLDEST
+
 
   export __PD_RAN_MISC_VARS_SETUP=:
 }

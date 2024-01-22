@@ -22,22 +22,19 @@ subtrees = ["legacyPackages"]
 type = "github"
 owner = "NixOS"
 repo = "nixpkgs"
-rev = "ea4c80b39be4c09702b0cb3b42eab59e2ba4f24b"
-# nodejs@18.14.1
+rev = "bc01a2be500c10f1507dcc8e98c9f5bd72c02aa3"
 
 [registry.inputs.staging.from]
 type = "github"
 owner = "NixOS"
 repo = "nixpkgs"
 rev = "e8039594435c68eb4f780f3e9bf3972a7399c4b1"
-# nodejs@18.16.0
 
 [registry.inputs.unstable.from]
 type = "github"
 owner = "NixOS"
 repo = "nixpkgs"
-rev = "9faf91e6d0b7743d41cce3b63a8e5c733dc696a3"
-# nodejs@18.17.1
+rev = "ab5fd150146dcfe41fda501134e6503932cc8dfd"
 
 
 # ---------------------------------------------------------------------------- #

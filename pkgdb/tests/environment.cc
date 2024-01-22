@@ -142,7 +142,7 @@ nlohmann::json curlLockedJSON {
       { "license", "curl" },
       { "pname", "curl" },
       { "unfree", false },
-      { "version", "8.1.1" },
+      { "version", curlVersion },
       { "description",
         "A command line tool for transferring files with URL syntax" },
     } }
@@ -771,8 +771,6 @@ test_createLockfile_new()
   /* Test locking manifest creates expectedLockfile */
   Environment environment( std::nullopt, manifest, std::nullopt );
   Lockfile    actualLockfile = environment.createLockfile();
-  std::cout << actualLockfile << std::endl;
-  std::cout << expectedLockfile << std::endl;
   EXPECT( equalLockfile( actualLockfile, expectedLockfile ) );
 
   return true;

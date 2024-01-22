@@ -291,6 +291,22 @@
         "type": "github"
       }
     },
+    "nixpkgs-bear": {
+      "locked": {
+        "lastModified": 1705957679,
+        "narHash": "sha256-Q8LJaVZGJ9wo33wBafvZSzapYsjOaNjP/pOnSiKVGHY=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "9a333eaa80901efe01df07eade2c16d183761fa3",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "ref": "release-23.05",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
     "nixpkgs-stable": {
       "locked": {
         "lastModified": 1685801374,
@@ -433,6 +449,7 @@
         "floco": "floco",
         "flox-latest": "flox-latest",
         "nixpkgs": "nixpkgs_2",
+        "nixpkgs-bear": "nixpkgs-bear",
         "parser-util": "parser-util_2",
         "pre-commit-hooks": "pre-commit-hooks",
         "sqlite3pp": "sqlite3pp_2"
