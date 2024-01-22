@@ -7,7 +7,7 @@ use url::Url;
 use super::environment::managed_environment::remote_branch_name;
 use super::environment::ManagedPointer;
 use super::environment_ref::EnvironmentOwner;
-use crate::flox::{Flox, Floxhub};
+use crate::flox::{Flox, Floxhub, FloxhubToken};
 use crate::providers::git::{
     GitCommandBranchHashError,
     GitCommandOpenError,
@@ -59,7 +59,7 @@ impl FloxmetaV2 {
         flox: &Flox,
         pointer: &ManagedPointer,
     ) -> Result<Self, FloxmetaV2Error> {
-        let token = flox.floxhub_token.as_deref();
+        let token = flox.floxhub_token.as_ref();
 
         let mut floxhub = Floxhub::new(pointer.floxhub_url.to_owned());
         if let Some(git_url_override) = &pointer.floxhub_git_url_override {
@@ -71,7 +71,7 @@ impl FloxmetaV2 {
             .map_err(FloxmetaV2Error::InvalidFloxhubBaseUrl)?;
 
         let git_options = floxmeta_git_options(&git_url, &pointer.owner, token);
-        let branch = remote_branch_name(&flox.system, pointer);
+        let branch = remote_branch_name(pointer);
 
         let git = GitCommandProvider::clone_branch_with(
             git_options,
@@ -114,7 +114,7 @@ impl FloxmetaV2 {
         flox: &Flox,
         pointer: &ManagedPointer,
     ) -> Result<Self, FloxmetaV2Error> {
-        let token = flox.floxhub_token.as_deref();
+        let token = flox.floxhub_token.as_ref();
 
         let mut floxhub = Floxhub::new(pointer.floxhub_url.to_owned());
         if let Some(git_url_override) = &pointer.floxhub_git_url_override {
@@ -133,7 +133,7 @@ impl FloxmetaV2 {
 
         let git = GitCommandProvider::open_with(git_options, user_floxmeta_dir)
             .map_err(FloxmetaV2Error::Open)?;
-        let branch: String = remote_branch_name(&flox.system, pointer);
+        let branch: String = remote_branch_name(pointer);
         if !git
             .has_branch(&branch)
             .map_err(FloxmetaV2Error::CheckForBranch)?
@@ -158,7 +158,7 @@ impl FloxmetaV2 {
         flox: &Flox,
         pointer: &ManagedPointer,
     ) -> Result<Self, FloxmetaV2Error> {
-        let token = flox.floxhub_token.as_deref();
+        let token = flox.floxhub_token.as_ref();
 
         let mut floxhub = Floxhub::new(pointer.floxhub_url.to_owned());
         if let Some(git_url_override) = &pointer.floxhub_git_url_override {
@@ -172,8 +172,7 @@ impl FloxmetaV2 {
         let git_options = floxmeta_git_options(&git_url, &pointer.owner, token);
 
         let git = GitCommandProvider::init_with(git_options, user_floxmeta_dir, false).unwrap();
-        git.rename_branch(&remote_branch_name(&flox.system, pointer))
-            .unwrap();
+        git.rename_branch(&remote_branch_name(pointer)).unwrap();
 
         Ok(FloxmetaV2 { git })
     }
@@ -192,7 +191,7 @@ impl FloxmetaV2 {
 pub fn floxmeta_git_options(
     floxhub_git_url: &Url,
     floxhub_owner: &str,
-    floxhub_token: Option<&str>,
+    floxhub_token: Option<&FloxhubToken>,
 ) -> GitCommandOptions {
     let mut options = GitCommandOptions::default();
 
@@ -220,7 +219,7 @@ pub fn floxmeta_git_options(
 
     let token = if let Some(token) = floxhub_token {
         debug!("using configured floxhub token");
-        token
+        token.secret()
     } else {
         debug!("no floxhub token configured");
         ""
@@ -259,14 +258,13 @@ mod tests {
     /// Create an upstream floxmeta repository with an environment under a given base path
     fn create_fake_floxmeta(
         floxhub_base_path: &Path,
-        flox: &Flox,
+        _flox: &Flox,
         pointer: &ManagedPointer,
     ) -> GitCommandProvider {
         let floxmeta_path = floxhub_base_path.join(format!("{}/floxmeta", pointer.owner));
         fs::create_dir_all(&floxmeta_path).unwrap();
         let git = GitCommandProvider::init(floxmeta_path, false).unwrap();
-        git.rename_branch(&remote_branch_name(&flox.system, pointer))
-            .unwrap();
+        git.rename_branch(&remote_branch_name(pointer)).unwrap();
         fs::write(git.path().join("test.txt"), "test").unwrap();
         git.add(&[Path::new("test.txt")]).unwrap();
         git.commit("test").unwrap();

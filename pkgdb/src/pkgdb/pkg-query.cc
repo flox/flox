@@ -220,10 +220,30 @@ PkgQuery::initMatch()
   bool hasPartialNameMatch = this->partialNameMatch.has_value()
                              && ( ! this->partialNameMatch->empty() );
   /* `partialMatch' also includes matches on `description'. */
-  if ( hasPartialNameMatch
-       || ( this->partialMatch.has_value()
-            && ( ! this->partialMatch->empty() ) ) )
+  bool hasPartialMatch
+    = this->partialMatch.has_value() && ( ! this->partialMatch->empty() );
+  /* `partialNameOrRelPathMatch' also includes matches on `relPath' */
+  bool hasPartialNameOrRelPathMatch
+    = this->partialNameOrRelPathMatch.has_value()
+      && ( ! this->partialNameOrRelPathMatch->empty() );
+
+  if ( ! ( hasPartialNameMatch || hasPartialMatch
+           || hasPartialNameOrRelPathMatch ) )
     {
+      /* Add bogus `match*` values so that later `ORDER BY` works. */
+      this->addSelection( "NULL AS matchExactPname" );
+      this->addSelection( "NULL AS matchExactAttrName" );
+      this->addSelection( "NULL AS matchPartialPname" );
+      this->addSelection( "NULL AS matchPartialAttrName" );
+      this->addSelection( "NULL AS matchPartialDescription" );
+      this->addSelection( "NULL AS matchExactRelPath" );
+      this->addSelection( "NULL AS matchPartialRelPath" );
+    }
+  else
+    {
+      /* All match fields check pname and attrName. We check for exact and
+       * partial matches to improve ordering. A match for attrName will also
+       * match relPath, but we check attrName no matter what for ordering. */
       /* We have to add '%' around `:match' because they were added for
        * use with `LIKE'. */
       this->addSelection(
@@ -235,9 +255,9 @@ PkgQuery::initMatch()
       this->addSelection( "( pname LIKE :partialMatch ) AS matchPartialPname" );
       this->addSelection(
         "( attrName LIKE :partialMatch ) AS matchPartialAttrName" );
+
       if ( hasPartialNameMatch )
         {
-          this->addSelection( "NULL AS matchPartialDescription" );
           /* Add `%` before binding so `LIKE` works. */
           binds.emplace( ":partialMatch",
                          "%" + ( *this->partialNameMatch ) + "%" );
@@ -245,7 +265,8 @@ PkgQuery::initMatch()
                           "  matchPartialPname OR matchPartialAttrName"
                           ")" );
         }
-      else
+
+      if ( hasPartialMatch )
         {
           this->addSelection(
             "( description LIKE :partialMatch ) AS matchPartialDescription" );
@@ -256,15 +277,32 @@ PkgQuery::initMatch()
                           "  matchPartialDescription "
                           ")" );
         }
-    }
-  else
-    {
-      /* Add bogus `match*` values so that later `ORDER BY` works. */
-      this->addSelection( "NULL AS matchExactPname" );
-      this->addSelection( "NULL AS matchExactAttrName" );
-      this->addSelection( "NULL AS matchPartialPname" );
-      this->addSelection( "NULL AS matchPartialAttrName" );
-      this->addSelection( "NULL AS matchPartialDescription" );
+      else { this->addSelection( "NULL AS matchPartialDescription" ); }
+
+      if ( hasPartialNameOrRelPathMatch )
+        {
+          /* Join relPath with '.' so searches can include dots. */
+          this->addSelection( "(SELECT ( '%' || LOWER( group_concat(value, "
+                              "'.') ) || '%' ) = LOWER( :partialMatch )"
+                              "FROM json_each(v_PackagesSearch.relPath)) AS "
+                              "matchExactRelPath" );
+          this->addSelection(
+            "(SELECT group_concat(value, '.') LIKE :partialMatch "
+            "FROM json_each(v_PackagesSearch.relPath)) AS "
+            "matchPartialRelPath" );
+          /* Add `%` before binding so `LIKE` works. */
+          binds.emplace( ":partialMatch",
+                         "%" + ( *this->partialNameOrRelPathMatch ) + "%" );
+          this->addWhere( "( matchExactPname OR matchExactAttrName OR"
+                          "  matchPartialPname OR matchPartialAttrName OR"
+                          "  matchPartialRelPath"
+                          ")" );
+        }
+      else
+        {
+          this->addSelection( "NULL AS matchExactRelPath" );
+          this->addSelection( "NULL AS matchPartialRelPath" );
+        }
     }
 }
 
@@ -358,9 +396,11 @@ PkgQuery::initOrderBy()
   , matchExactPname         DESC
   , exactAttrName           DESC
   , matchExactAttrName      DESC
+  , matchExactRelPath       DESC
   , depth                   ASC
   , matchPartialPname       DESC
   , matchPartialAttrName    DESC
+  , matchPartialRelPath     DESC
   , matchPartialDescription DESC
 
   , subtreesRank ASC

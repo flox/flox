@@ -7,6 +7,7 @@
 # ---------------------------------------------------------------------------- #
 
 load test_support.bash
+# bats file_tags=install
 
 # ---------------------------------------------------------------------------- #
 
@@ -88,7 +89,32 @@ teardown() {
   "$FLOX_BIN" init
   run "$FLOX_BIN" install not-a-package
   assert_failure
-  assert_output --partial "failed to resolve \`not-a-package'"
+  assert_output --partial "could not install not-a-package"
+}
+
+@test "'flox install' provides suggestions when package not found" {
+  "$FLOX_BIN" init
+  run "$FLOX_BIN" install package
+  assert_failure
+  assert_output --partial "Here are a few other similar options:"
+  assert_output --partial "options with 'flox search package'"
+}
+
+@test "'flox install' provides curated suggestions when package not found" {
+  "$FLOX_BIN" init
+  run "$FLOX_BIN" install java
+  assert_failure
+  assert_output --partial "Try 'flox install jdk' instead."
+  assert_output --partial "Here are a few other similar options:"
+  assert_output --partial "$ flox install "
+  assert_output --partial "options with 'flox search jdk'"
+}
+
+@test "'flox install' does not suggest packages if multiple packages provided" {
+  "$FLOX_BIN" init
+  run "$FLOX_BIN" install java make
+  assert_failure
+  assert_output --partial "could not install java, make"
 }
 
 @test "'flox uninstall' reports error when package not found" {

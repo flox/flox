@@ -7,6 +7,7 @@
 # ---------------------------------------------------------------------------- #
 
 load test_support.bash
+# bats file_tags=remote
 
 # ---------------------------------------------------------------------------- #
 
@@ -85,7 +86,7 @@ function make_empty_remote_env() {
   run --separate-stderr "$FLOX_BIN" install hello --remote "$OWNER/test"
   assert_success
 
-  assert [ -h "$FLOX_CACHE_HOME/run/$OWNER/$NIX_SYSTEM.test" ]
+  assert [ -h "$FLOX_CACHE_HOME/run/$OWNER/test" ]
 }
 
 # bats test_tags=install,remote,remote:install

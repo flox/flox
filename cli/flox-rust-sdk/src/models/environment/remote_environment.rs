@@ -79,8 +79,7 @@ impl RemoteEnvironment {
         )
         .unwrap();
 
-        let out_link =
-            gcroots_dir(flox, &pointer.owner).join(remote_branch_name(&flox.system, &pointer));
+        let out_link = gcroots_dir(flox, &pointer.owner).join(remote_branch_name(&pointer));
 
         let inner = ManagedEnvironment::open_with(floxmeta, flox, pointer, dot_flox_path, out_link)
             .map_err(RemoteEnvironmentError::OpenManagedEnvironment)?;
@@ -156,6 +155,9 @@ impl Environment for RemoteEnvironment {
     /// Atomically edit this environment, ensuring that it still builds
     fn edit(&mut self, flox: &Flox, contents: String) -> Result<EditResult, EnvironmentError2> {
         let result = self.inner.edit(flox, contents)?;
+        if result == EditResult::Unchanged {
+            return Ok(result);
+        }
         self.inner
             .push(false)
             .map_err(RemoteEnvironmentError::UpdateUpstream)?;

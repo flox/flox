@@ -11,15 +11,17 @@ use std::{env, vec};
 use anyhow::{anyhow, bail, Context, Result};
 use bpaf::Bpaf;
 use crossterm::tty::IsTty;
-use flox_rust_sdk::flox::{Auth0Client, EnvironmentName, EnvironmentOwner, EnvironmentRef, Flox};
+use flox_rust_sdk::flox::{EnvironmentName, EnvironmentOwner, EnvironmentRef, Flox};
 use flox_rust_sdk::models::environment::managed_environment::{
     ManagedEnvironment,
     ManagedEnvironmentError,
 };
 use flox_rust_sdk::models::environment::path_environment::{self, PathEnvironment};
 use flox_rust_sdk::models::environment::{
+    CoreEnvironmentError,
     EditResult,
     Environment,
+    EnvironmentError2,
     EnvironmentPointer,
     ManagedPointer,
     PathPointer,
@@ -27,6 +29,8 @@ use flox_rust_sdk::models::environment::{
     DOT_FLOX,
     ENVIRONMENT_POINTER_FILENAME,
     FLOX_ACTIVE_ENVIRONMENTS_VAR,
+    FLOX_ENV_DIRS_VAR,
+    FLOX_ENV_LIB_DIRS_VAR,
     FLOX_ENV_VAR,
     FLOX_PROMPT_ENVIRONMENTS_VAR,
 };
@@ -36,6 +40,7 @@ use flox_rust_sdk::models::lockfile::{
     Input,
     InstalledPackage,
     LockedManifest,
+    LockedManifestError,
     PackageInfo,
     TypedLockedManifest,
 };
@@ -60,6 +65,7 @@ use crate::commands::{
 };
 use crate::config::Config;
 use crate::utils::dialog::{Confirm, Dialog, Spinner};
+use crate::utils::didyoumean::DidYouMean;
 use crate::{subcommand_metric, utils};
 
 #[derive(Bpaf, Clone)]
@@ -452,6 +458,25 @@ impl Activate {
         }
         flox_active_environments.set_last_active(now_active);
 
+        let (flox_env_dirs, flox_env_lib_dirs) = {
+            let mut flox_env_dirs = vec![activation_path.clone()];
+            if let Ok(existing_environments) = env::var(FLOX_ENV_DIRS_VAR) {
+                flox_env_dirs.extend(env::split_paths(&existing_environments));
+            };
+
+            let flox_env_lib_dirs = flox_env_dirs.iter().map(|p| p.join("lib"));
+
+            let flox_env_dirs = env::join_paths(&flox_env_dirs).context(
+                "Cannot activate environment because its path contains an invalid character",
+            )?;
+
+            let flox_env_lib_dirs = env::join_paths(flox_env_lib_dirs).context(
+                "Cannot activate environment because its path contains an invalid character",
+            )?;
+
+            (flox_env_dirs, flox_env_lib_dirs)
+        };
+
         // TODO more sophisticated detection?
         let shell = if let Ok(shell) = env::var("SHELL") {
             ShellType::try_from(Path::new(&shell))?
@@ -476,6 +501,8 @@ impl Activate {
                 export {FLOX_ENV_VAR}={activation_path}
                 export {FLOX_PROMPT_ENVIRONMENTS_VAR}={flox_prompt_environments}
                 export {FLOX_ACTIVE_ENVIRONMENTS_VAR}={flox_active_environments}
+                export {FLOX_ENV_DIRS_VAR}={flox_env_dirs}
+                export {FLOX_ENV_LIB_DIRS_VAR}={flox_env_lib_dirs}
                 export FLOX_PROMPT_COLOR_1={prompt_color_1}
                 export FLOX_PROMPT_COLOR_2={prompt_color_2}
 
@@ -489,6 +516,8 @@ impl Activate {
             activation_path=shell_escape::escape(activation_path.to_string_lossy()),
             flox_active_environments=shell_escape::escape(flox_active_environments.to_string().into()),
             flox_prompt_environments=shell_escape::escape(Cow::from(&flox_prompt_environments)),
+            flox_env_dirs=shell_escape::escape(flox_env_dirs.to_string_lossy()),
+            flox_env_lib_dirs=shell_escape::escape(flox_env_lib_dirs.to_string_lossy()),
             };
 
             println!("{script}");
@@ -503,6 +532,8 @@ impl Activate {
                 FLOX_ACTIVE_ENVIRONMENTS_VAR,
                 flox_active_environments.to_string(),
             )
+            .env(FLOX_ENV_DIRS_VAR, flox_env_dirs)
+            .env(FLOX_ENV_LIB_DIRS_VAR, flox_env_lib_dirs)
             .env("FLOX_PROMPT_COLOR_1", prompt_color_1)
             .env("FLOX_PROMPT_COLOR_2", prompt_color_2);
 
@@ -840,7 +871,8 @@ impl Install {
             help_message: None,
             typed: Spinner::new(|| environment.install(&packages, &flox)),
         }
-        .spin()?;
+        .spin()
+        .map_err(|err| Self::handle_error(err, &flox, &*environment, &packages))?;
 
         if installation.new_manifest.is_some() {
             // Print which new packages were installed
@@ -863,6 +895,45 @@ impl Install {
             }
         }
         Ok(())
+    }
+
+    fn handle_error(
+        err: EnvironmentError2,
+        flox: &Flox,
+        environment: &dyn Environment,
+        packages: &[PackageToInstall],
+    ) -> anyhow::Error {
+        debug!("install error: {:?}", err);
+
+        match err {
+            EnvironmentError2::Core(CoreEnvironmentError::LockedManifest(
+                LockedManifestError::LockManifest(
+                    flox_rust_sdk::models::pkgdb::CallPkgDbError::PkgDbError(pkgdberr),
+                ),
+            )) if pkgdberr.exit_code == 120 => 'error: {
+                let paths = packages.iter().map(|p| p.path.clone()).join(", ");
+                let head = format!("❌  could not install {paths}");
+
+                if packages.len() > 1 {
+                    break 'error anyhow!(formatdoc! {"
+                        {head}
+                        One or more of the packages you are trying to install does not exist.
+                    "});
+                }
+                let path = packages[0].path.clone();
+
+                let suggestion = DidYouMean::new(flox, environment, &path);
+                if !suggestion.has_suggestions() {
+                    break 'error anyhow!(head);
+                }
+
+                anyhow!(formatdoc! {"
+                    {head}
+                    {suggestion}
+                "})
+            },
+            _ => err.into(),
+        }
     }
 }
 
@@ -1043,8 +1114,7 @@ impl Push {
             EnvironmentPointer::Managed(managed_pointer) => {
                 let message = Self::push_existing_message(&managed_pointer, self.force);
 
-                Self::push_managed_env(&flox, managed_pointer, dir, self.force)
-                    .context("Could not push managed environment")?;
+                Self::push_managed_env(&flox, managed_pointer, dir, self.force)?;
 
                 info!("{message}");
             },
@@ -1053,22 +1123,15 @@ impl Push {
                 let owner = if let Some(owner) = self.owner {
                     owner
                 } else {
-                    let base_url = std::env::var("FLOX_OAUTH_BASE_URL")
-                        .unwrap_or(env!("OAUTH_BASE_URL").to_string());
-                    let client = Auth0Client::new(
-                        base_url,
-                        flox.floxhub_token.clone().context("Need to be logged in")?,
-                    );
-                    let user_name = client
-                        .get_username()
-                        .await
-                        .context("Could not get username from floxhub")?;
-                    user_name
-                        .parse::<EnvironmentOwner>()
-                        .context("Invalid owner name")?
+                    EnvironmentOwner::from_str(
+                        &flox
+                            .floxhub_token
+                            .as_ref()
+                            .context("Need to be loggedin")?
+                            .handle()?,
+                    )?
                 };
-                let env = Self::push_make_managed(&flox, path_pointer, &dir, owner, self.force)
-                    .context("Could not push new environment")?;
+                let env = Self::push_make_managed(&flox, path_pointer, &dir, owner, self.force)?;
 
                 info!("{}", Self::push_new_message(env.pointer(), self.force));
             },
@@ -1144,17 +1207,15 @@ impl Push {
     ///
     /// todo: add floxhub base url when it's available
     fn push_existing_message(env: &ManagedPointer, force: bool) -> String {
-        let web_url = &env.floxhub_url;
         let owner = &env.owner;
         let name = &env.name;
 
         let suffix = if force { " (forced)" } else { "" };
 
         formatdoc! {"
-            🚀  updated -> {owner}/{name}{suffix}
+            ✅  Updates to {name} successfully pushed to floxhub{suffix}
 
-            Pull this environment with 'flox pull {owner}/{name}'.
-            You can see this environment at {web_url}{owner}/{name}.
+            Use 'flox pull {owner}/{name}' to get this environment in any other location.
         "}
     }
 
@@ -1162,17 +1223,15 @@ impl Push {
     ///
     /// todo: add floxhub base url when it's available
     fn push_new_message(env: &ManagedPointer, force: bool) -> String {
-        let web_url = &env.floxhub_url;
         let owner = &env.owner;
         let name = &env.name;
 
         let suffix = if force { " (forced)" } else { "" };
 
         formatdoc! {"
-            🚀  created -> {owner}/{name}{suffix}
+            ✅  {name} successfully pushed to floxhub{suffix}
 
-            Pull this environment with 'flox pull {owner}/{name}'.
-            You can see this environment at {web_url}{owner}/{name}.
+            Use 'flox pull {owner}/{name}' to get this environment in any other location.
         "}
     }
 }
@@ -1687,12 +1746,12 @@ impl Containerize {
                 .join(format!("{}-container.tar.gz", env.name())),
         };
 
-        let output: Box<dyn Write> = if output_path == Path::new("-") {
-            debug!("writing container to stdout");
+        let (output, output_name): (Box<dyn Write>, String) = if output_path == Path::new("-") {
+            debug!("output=stdout");
 
-            Box::new(std::io::stdout())
+            (Box::new(std::io::stdout()), "stdout".to_string())
         } else {
-            debug!("writing container to {}", output_path.display());
+            debug!("output={}", output_path.display());
 
             let file = fs::OpenOptions::new()
                 .write(true)
@@ -1701,7 +1760,7 @@ impl Containerize {
                 .open(&output_path)
                 .context("Could not open output file")?;
 
-            Box::new(file)
+            (Box::new(file), output_path.display().to_string())
         };
 
         let builder = Dialog {
@@ -1712,10 +1771,13 @@ impl Containerize {
         .spin()
         .context("could not create container builder")?;
 
+        info!("Writing container to '{output_name}'");
+
         builder
             .stream_container(output)
             .context("could not write container to output")?;
 
+        info!("✨  Container written to '{output_name}'");
         Ok(())
     }
 }
