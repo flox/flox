@@ -69,7 +69,7 @@ pub fn init_access_tokens(
         }
         tokens
     } else {
-        debug!("no default user nix.conf found - weird");
+        debug!("no default user nix.conf found");
         Default::default()
     };
 
