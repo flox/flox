@@ -139,14 +139,14 @@ from_json( const nlohmann::json & jfrom, SearchQuery & qry )
 void
 to_json( nlohmann::json & jto, const SearchQuery & qry )
 {
-  jto["name"]                  = qry.name;
-  jto["pname"]                 = qry.pname;
-  jto["version"]               = qry.version;
-  jto["semver"]                = qry.semver;
-  jto["match"]                 = qry.partialMatch;
-  jto["match-name"]            = qry.partialNameMatch;
+  jto["name"]                   = qry.name;
+  jto["pname"]                  = qry.pname;
+  jto["version"]                = qry.version;
+  jto["semver"]                 = qry.semver;
+  jto["match"]                  = qry.partialMatch;
+  jto["match-name"]             = qry.partialNameMatch;
   jto["match-name-or-rel-path"] = qry.partialNameOrRelPathMatch;
-  jto["limit"]                 = qry.limit;
+  jto["limit"]                  = qry.limit;
 }
 
 
