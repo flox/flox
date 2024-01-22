@@ -865,6 +865,13 @@ pub(super) async fn ensure_environment_trust(
 
     let trust = config.flox.trusted_environments.get(&env_ref);
 
+    if let Some(ref token) = flox.floxhub_token {
+        if token.handle()?.as_str() == env_ref.owner().as_str() {
+            debug!("environment {env_ref} is trusted by token");
+            return Ok(());
+        }
+    }
+
     if matches!(trust, Some(EnvironmentTrust::Trust)) {
         debug!("environment {env_ref} is trusted by config");
         return Ok(());
