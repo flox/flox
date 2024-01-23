@@ -140,3 +140,103 @@ impl Display for DidYouMean<'_, InstallSuggestion> {
         Ok(())
     }
 }
+
+pub struct SearchSuggestion;
+impl<'a> DidYouMean<'a, SearchSuggestion> {
+    /// `search` specific curated terms
+    fn suggest_curated_package(input: &str) -> Option<&'static str> {
+        let suggestion = match input {
+            "node" => "nodejs",
+            "java" => "jdk",
+            "npm" => "nodejs",
+            "rust" => "cargo",
+            "diff" => "diffutils",
+            "make" => "gnumake",
+            _ => return None,
+        };
+        Some(suggestion)
+    }
+
+    fn suggest_searched_packages(
+        term: &str,
+        manifest: Option<PathOrJson>,
+        global_manifest: PathOrJson,
+        lockfile: PathOrJson,
+    ) -> Result<SearchResults> {
+        let search_params = construct_search_params(
+            term,
+            Some(SUGGESTION_SEARCH_LIMIT),
+            manifest,
+            global_manifest,
+            lockfile,
+        )?;
+
+        let (results, _) = Dialog {
+            message: "Looking for alternative suggestions...",
+            help_message: None,
+            typed: Spinner::new(|| do_search(&search_params)),
+        }
+        .spin()?;
+
+        Ok(results)
+    }
+
+    pub fn new(
+        term: &'a str,
+        manifest: Option<PathOrJson>,
+        global_manifest: PathOrJson,
+        lockfile: PathOrJson,
+    ) -> Self {
+        let curated = Self::suggest_curated_package(term);
+
+        let default_results = SearchResults {
+            results: Default::default(),
+            count: Some(0),
+        };
+
+        let search_results = if let Some(curated) = curated {
+            match Self::suggest_searched_packages(curated, manifest, global_manifest, lockfile) {
+                Ok(results) => results,
+                Err(err) => {
+                    debug!("failed to search for suggestions: {}", err);
+                    default_results
+                },
+            }
+        } else {
+            default_results
+        };
+
+        Self {
+            searched_term: term,
+            curated,
+            search_results,
+            _suggestion: SearchSuggestion,
+        }
+    }
+}
+
+impl Display for DidYouMean<'_, SearchSuggestion> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let Some(curated) = self.curated else {
+            debug!("no curated suggestions");
+            return Ok(());
+        };
+
+        let search_results_rendered =
+            match render_search_results_user_facing(curated, self.search_results.clone()) {
+                Ok(rendered) => rendered,
+                Err(err) => {
+                    debug!("failed to render search results: {}", err);
+                    return Ok(());
+                },
+            };
+
+        writeln!(f, "Related search results for '{curated}':")?;
+        write!(f, "{search_results_rendered}")?;
+        if let Some(hint) = search_results_rendered.hint() {
+            write!(f, "\n\n{hint}")?;
+        }
+
+        Ok(())
+    }
+}
