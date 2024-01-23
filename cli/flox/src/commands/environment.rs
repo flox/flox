@@ -1131,7 +1131,7 @@ impl Push {
     ) -> Result<()> {
         let mut env = ManagedEnvironment::open(flox, managed_pointer.clone(), dir.join(DOT_FLOX))
             .context("Could not open environment")?;
-        env.push(force)
+        env.push(flox, force)
             .map_err(|err| Self::convert_error(err, managed_pointer, false))?;
 
         Ok(())
