@@ -1056,7 +1056,7 @@ impl History {
 #[derive(Bpaf, Clone)]
 pub struct Push {
     /// Directory to push the environment from (default: current directory)
-    #[bpaf(positional("path"))]
+    #[bpaf(long, short, argument("path"))]
     dir: Option<PathBuf>,
 
     /// Owner to push push environment to (default: current user)
