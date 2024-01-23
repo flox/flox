@@ -712,6 +712,41 @@ impl ManagedEnvironment {
 
 /// Utility instance methods
 impl ManagedEnvironment {
+    /// Edit the environment without checking that it builds
+    ///
+    /// This is used to allow `flox pull` to work with environments
+    /// that don't specify the current system as supported.
+    pub fn edit_unsafe(
+        &mut self,
+        flox: &Flox,
+        contents: String,
+    ) -> Result<EditResult, EnvironmentError2> {
+        let mut generations = self
+            .generations()
+            .writable(flox.temp_dir.clone())
+            .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?;
+        let mut temporary = generations
+            .get_current_generation()
+            .map_err(ManagedEnvironmentError::CreateGenerationFiles)?;
+
+        let result = temporary.edit_unsafe(flox, contents)?;
+
+        if result == EditResult::Unchanged {
+            return Ok(result);
+        }
+
+        debug!("Environment changed, create and lock generation");
+
+        generations
+            .add_generation(&mut temporary, "manually edited".to_string())
+            .map_err(ManagedEnvironmentError::CommitGeneration)?;
+        self.lock_pointer()?;
+
+        // don't link, the environment may be broken
+
+        Ok(result)
+    }
+
     /// Lock the environment to the current revision
     fn lock_pointer(&self) -> Result<(), ManagedEnvironmentError> {
         write_pointer_lockfile(
