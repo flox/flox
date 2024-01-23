@@ -138,7 +138,7 @@ impl Search {
             .spin()?;
 
             if !exit_status.success() {
-                debug!("failed to search for suggestions {exit_status}");
+                debug!("failed to search for suggestions: status={exit_status}");
                 return Ok(());
             }
 
