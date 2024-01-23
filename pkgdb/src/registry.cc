@@ -378,7 +378,7 @@ getGARegistry()
 {
   static const std::string refOrRev
     = nix::getEnv( "_PKGDB_GA_REGISTRY_REF_OR_REV" )
-        .value_or( "release-23.05" );
+        .value_or( "release-23.11" );
   static const nix::FlakeRef nixpkgsRef
     = nix::parseFlakeRef( "github:NixOS/nixpkgs/" + refOrRev );
   if ( nix::lvlTalkative < nix::verbosity )

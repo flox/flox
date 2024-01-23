@@ -66,9 +66,9 @@ nlohmann::json inputWithNixpkgsJSON {
         { "repo", "nixpkgs" },
         { "rev", nixpkgsRev },
         { "type", "github" },
-        { "lastModified", 1685979279 },
+        { "lastModified", 1704300003 },
         { "narHash",
-          "sha256-1UGacsv5coICyvAzwuq89v9NsS00Lo8sz22cDHwhnn8=" } } } }
+          "sha256-FRC/OlLVvKkrdm+RtrODQPufD0vVZYA0hpH9RPaHmp4=" } } } }
 };
 
 
@@ -83,9 +83,9 @@ nlohmann::json mockInputJSON {
         { "repo", "repo" },
         { "rev", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" },
         { "type", "github" },
-        { "lastModified", 1685979279 },
+        { "lastModified", 1704300003 },
         { "narHash",
-          "sha256-1UGacsv5coICyvAzwuq89v9NsS00Lo8sz22cDHwhnn8=" } } } }
+          "sha256-FRC/OlLVvKkrdm+RtrODQPufD0vVZYA0hpH9RPaHmp4=" } } } }
 };
 
 
@@ -142,7 +142,7 @@ nlohmann::json curlLockedJSON {
       { "license", "curl" },
       { "pname", "curl" },
       { "unfree", false },
-      { "version", "8.1.1" },
+      { "version", curlVersion },
       { "description",
         "A command line tool for transferring files with URL syntax" },
     } }

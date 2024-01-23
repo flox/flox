@@ -8,7 +8,7 @@ subtrees = [ "legacyPackages" ]
   type = "github"
   owner = "NixOS"
   repo = "nixpkgs"
-  rev = "e8039594435c68eb4f780f3e9bf3972a7399c4b1"
+  rev = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
 
 [registry.inputs.floco]
 subtrees = [ "packages" ]
@@ -32,7 +32,7 @@ package-grouping-strategy = "auto"
 type = "github"
 owner = "NixOS"
 repo = "nixpkgs"
-rev = "e8039594435c68eb4f780f3e9bf3972a7399c4b1"
+rev = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
 
   [install.charasay]
   version = "^2"

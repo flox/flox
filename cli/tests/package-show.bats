@@ -162,6 +162,8 @@ teardown() {
 # bats test_tags=search:project, search:manifest, search:show
 
 @test "'flox show' uses '_PKGDB_GA_REGISTRY_REF_OR_REV' revision" {
+  rm -f "$GLOBAL_MANIFEST_LOCK"
+
   mkdir -p "$PROJECT_DIR/.flox/env"
   # Note: at some point it may also be necessary to create a .flox/env.json
   echo 'options.systems = ["x86_64-linux"]' \
@@ -173,14 +175,14 @@ teardown() {
       \"query\": { \"match-name\": \"nodejs\" }
     }'|head -n1|jq -r '.version';"
   assert_success
-  assert_output '18.16.0'
+  assert_output "$NODEJS_VERSION_NEW"
   unset output
 
-  # Ensure the version of `nodejs' in our search results aligns with the
-  # `--ga-registry` default ( 18.16.0 ).
+  # Ensure the version of `nodejs' in our search results aligns with that in
+  # _PKGDB_GA_REGISTRY_REF_OR_REV.
   run --separate-stderr sh -c "$FLOX_BIN show nodejs|tail -n1"
   assert_success
-  assert_output '    nodejs - nodejs@18.16.0'
+  assert_output "    nodejs - nodejs@$NODEJS_VERSION_NEW"
 }
 
 # ---------------------------------------------------------------------------- #
@@ -197,7 +199,7 @@ teardown() {
 
   # Force lockfile to pin a specific revision of `nixpkgs'
   run --separate-stderr sh -c \
-    "_PKGDB_GA_REGISTRY_REF_OR_REV='${PKGDB_NIXPKGS_REV_NEW?}'          \
+    "_PKGDB_GA_REGISTRY_REF_OR_REV='${PKGDB_NIXPKGS_REV_OLD?}'          \
       $PKGDB_BIN manifest lock                                         \
                  --ga-registry                                         \
                  --manifest '$PROJECT_DIR/.flox/env/manifest.toml'     \
@@ -209,26 +211,26 @@ teardown() {
   run --separate-stderr jq -r '.registry.inputs.nixpkgs.from.rev' \
     "$PROJECT_DIR/.flox/env/manifest.lock"
   assert_success
-  assert_output "$PKGDB_NIXPKGS_REV_NEW"
+  assert_output "$PKGDB_NIXPKGS_REV_OLD"
   unset output
 
   # Search for a package with `pkgdb`
   run --separate-stderr sh -c \
-    "_PKGDB_GA_REGISTRY_REF_OR_REV='$PKGDB_NIXPKGS_REV_NEW'       \
+    "_PKGDB_GA_REGISTRY_REF_OR_REV='$PKGDB_NIXPKGS_REV_OLD'       \
       $PKGDB_BIN search --ga-registry '{
         \"manifest\": \"$PROJECT_DIR/.flox/env/manifest.toml\",
         \"lockfile\": \"$PROJECT_DIR/.flox/env/manifest.lock\",
         \"query\": { \"match-name\": \"nodejs\" }
       }'|head -n1|jq -r '.version';"
   assert_success
-  assert_output '18.17.1'
+  assert_output "$NODEJS_VERSION_OLD"
   unset output
 
   # Ensure the version of `nodejs' in our search results aligns with the
-  # locked rev ( 18.17.1 ), instead of the `--ga-registry` default ( 18.16.0 ).
+  # locked rev, instead of the `--ga-registry` default.
   run --separate-stderr sh -c "$FLOX_BIN show nodejs|tail -n1"
   assert_success
-  assert_output '    nodejs - nodejs@18.17.1'
+  assert_output "    nodejs - nodejs@$NODEJS_VERSION_OLD"
 }
 
 # ---------------------------------------------------------------------------- #
@@ -239,7 +241,7 @@ teardown() {
   _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLD?}" \
     run --separate-stderr sh -c "$FLOX_BIN show nodejs|tail -n1"
   assert_success
-  assert_output '    nodejs - nodejs@18.16.0'
+  assert_output "    nodejs - nodejs@$NODEJS_VERSION_OLD"
 
   # Check the expected global lock was created
   run jq -r '.registry.inputs.nixpkgs.from.narHash' "$GLOBAL_MANIFEST_LOCK"
@@ -279,7 +281,7 @@ teardown() {
 
   run --separate-stderr sh -c "$FLOX_BIN show nodejs|tail -n1"
   assert_success
-  assert_output '    nodejs - nodejs@18.16.0'
+  assert_output "    nodejs - nodejs@$NODEJS_VERSION_OLD"
   popd
 
   mkdir 2
@@ -293,10 +295,10 @@ teardown() {
 
   run --separate-stderr sh -c "$FLOX_BIN show nodejs|tail -n1"
   assert_success
-  assert_output '    nodejs - nodejs@18.17.1'
+  assert_output "    nodejs - nodejs@$NODEJS_VERSION_NEW"
   popd
 
   SHELL=bash run expect -d "$TESTS_DIR/show/prompt-which-environment.exp"
   assert_success
-  assert_output --partial 'nodejs - nodejs@18.17.1'
+  assert_output --partial "nodejs - nodejs@$NODEJS_VERSION_NEW"
 }

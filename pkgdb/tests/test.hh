@@ -23,13 +23,16 @@
 /* -------------------------------------------------------------------------- */
 
 static const std::string nixpkgsRev
-  = "e8039594435c68eb4f780f3e9bf3972a7399c4b1";
+  = "ab5fd150146dcfe41fda501134e6503932cc8dfd";
 
 static const std::string nixpkgsRef
-  = "github:NixOS/nixpkgs/e8039594435c68eb4f780f3e9bf3972a7399c4b1";
+  = "github:NixOS/nixpkgs/ab5fd150146dcfe41fda501134e6503932cc8dfd";
 
 static const std::string nixpkgsFingerprintStr
-  = "5fde12e3424840cc2752dae09751b09b03f5a33c3ec4de672fc89d236720bdc7";
+  = "9bb3d4c033fbad8efb5e28ffcd1d70383e0c5bbcb7cc5c526b824524467b19b9";
+
+/* The version of curl in nixpkgsRev */
+static const std::string curlVersion = "8.4.0";
 
 
 /**

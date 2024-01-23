@@ -347,10 +347,13 @@ pkgdb_vars_setup() {
   # Notably its default `nodejs' version is `18.16.0' which is referenced in
   # some test cases.
   PKGDB_NIXPKGS_REV_OLD='e8039594435c68eb4f780f3e9bf3972a7399c4b1'
-  # This revision is a bit newer, and was also created from `release-23.05'.
-  # Notably its default `nodejs' version is `18.17.1' which is referenced in
-  # some test cases.
-  PKGDB_NIXPKGS_REV_NEW='9faf91e6d0b7743d41cce3b63a8e5c733dc696a3'
+  NODEJS_VERSION_OLD="18.16.0"
+  export NODEJS_VERSION_OLD
+
+  # A revision of release-23.11
+  PKGDB_NIXPKGS_REV_NEW='ab5fd150146dcfe41fda501134e6503932cc8dfd'
+  NODEJS_VERSION_NEW="18.18.2"
+  export NODEJS_VERSION_NEW
   # This revision is even older than OLD, selected for the purpose of serving up
   # a different and incompatible version of glibc (2.34) than the latest (2.37).
   # This could probably replace the PKGDB_NIXPKGS_REV_OLD revision with a
@@ -361,13 +364,13 @@ pkgdb_vars_setup() {
   PKGDB_NIXPKGS_REF_NEW="github:NixOS/nixpkgs/$PKGDB_NIXPKGS_REV_NEW"
 
   PKGDB_NIXPKGS_NAR_HASH_OLD="sha256-1UGacsv5coICyvAzwuq89v9NsS00Lo8sz22cDHwhnn8="
-  PKGDB_NIXPKGS_NAR_HASH_NEW="sha256-5uA6jKckTf+DCbVBNKsmT5pUT/7Apt5tNdpcbLnPzFI="
+  PKGDB_NIXPKGS_NAR_HASH_NEW="sha256-FRC/OlLVvKkrdm+RtrODQPufD0vVZYA0hpH9RPaHmp4="
 
   # This causes `pkgdb' to use this revision for `nixpkgs' anywhere the
   # `--ga-registry' flag is used.
   # This is useful for testing `pkgdb' against a specific revision of `nixpkgs'
   # so that we get consistent packages and improved caching.
-  _PKGDB_GA_REGISTRY_REF_OR_REV="$PKGDB_NIXPKGS_REV_OLD"
+  _PKGDB_GA_REGISTRY_REF_OR_REV="$PKGDB_NIXPKGS_REV_NEW"
 
   export PKGDB_NIXPKGS_REV_OLD PKGDB_NIXPKGS_REV_NEW \
     PKGDB_NIXPKGS_REV_OLDER \
