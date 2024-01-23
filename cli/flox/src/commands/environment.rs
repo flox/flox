@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::error::Error;
 use std::fmt::Display;
 use std::fs::{self, File};
 use std::io::{stdin, stdout, Write};
@@ -1165,6 +1166,15 @@ impl Push {
         let owner = &pointer.owner;
         let name = &pointer.name;
 
+        fn error_chain(mut e: &dyn Error) -> String {
+            let mut msg = e.to_string();
+            while let Some(source) = e.source() {
+                e = source;
+                msg.push_str(&format!(": {}", e));
+            }
+            msg
+        }
+
         let message = match err {
             ManagedEnvironmentError::AccessDenied => formatdoc! {"
                 ❌  You do not have permission to write to {owner}/{name}
@@ -1175,6 +1185,14 @@ impl Push {
                 To rename your environment: 'flox edit --name <new name>'
                 To pull and manually re-apply your changes: 'flox delete && flox pull -r {owner}/{name}'
             "}.into(),
+            ManagedEnvironmentError::Build(ref err) => formatdoc! {"
+                ❌  Unable to push environment with build errors:
+
+                {err}
+
+                Use 'flox edit' to resolve errors, test with 'flox activate', and 'flox push' again.",
+                err = error_chain(err)
+            }.into(),
             _ => None
         };
 
