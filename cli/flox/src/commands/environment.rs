@@ -46,7 +46,7 @@ use flox_rust_sdk::models::lockfile::{
     TypedLockedManifest,
 };
 use flox_rust_sdk::models::manifest::PackageToInstall;
-use flox_rust_sdk::models::pkgdb::{call_pkgdb, PKGDB_BIN};
+use flox_rust_sdk::models::pkgdb::{call_pkgdb, CallPkgDbError, PkgDbError, PKGDB_BIN};
 use flox_rust_sdk::nix::command::StoreGc;
 use flox_rust_sdk::nix::command_line::NixCommandLine;
 use flox_rust_sdk::nix::Run;
@@ -54,6 +54,7 @@ use indoc::{formatdoc, indoc};
 use itertools::Itertools;
 use log::{debug, error, info};
 use tempfile::NamedTempFile;
+use toml_edit::Document;
 use url::Url;
 
 use super::{environment_select, EnvironmentSelect};
@@ -1278,6 +1279,10 @@ impl Default for PullSelect {
 /// Pull environment from floxhub
 #[derive(Bpaf, Clone)]
 pub struct Pull {
+    /// forceably add current systems to the environment, even if incompatible
+    #[bpaf(long("amend-system"), short)]
+    amend_system: bool,
+
     #[bpaf(external(pull_select), fallback(Default::default()))]
     pull_select: PullSelect,
 }
@@ -1299,7 +1304,12 @@ impl Pull {
                     message: &start,
                     help_message: None,
                     typed: Spinner::new(|| {
-                        Self::pull_new_environment(&flox, dir.join(DOT_FLOX), remote)
+                        Self::pull_new_environment(
+                            &flox,
+                            dir.join(DOT_FLOX),
+                            remote,
+                            self.amend_system,
+                        )
                     }),
                 }
                 .spin()?;
@@ -1368,6 +1378,7 @@ impl Pull {
         flox: &Flox,
         dot_flox_path: PathBuf,
         env_ref: EnvironmentRef,
+        amend_systems: bool,
     ) -> Result<()> {
         if dot_flox_path.exists() {
             bail!("Cannot pull a new environment into an existing one")
@@ -1380,20 +1391,73 @@ impl Pull {
 
         let pointer_content =
             serde_json::to_string_pretty(&pointer).context("Could not serialize pointer")?;
-        let pointer_path = dot_flox_path.join(ENVIRONMENT_POINTER_FILENAME);
 
-        fs::create_dir_all(&dot_flox_path).context("Could not create .flox/ directory")?;
+        let dot_flox_parent = dot_flox_path
+            .parent()
+            .context("Could not get .flox/ parent")?;
+        fs::create_dir_all(dot_flox_parent).context("Could not create .flox/ parent directory")?;
+
+        let temp_dot_flox_dir = tempfile::TempDir::with_prefix_in(DOT_FLOX, dot_flox_parent)
+            .context("Could not create temporary directory for cloning environment")?;
+
+        let pointer_path = temp_dot_flox_dir.path().join(ENVIRONMENT_POINTER_FILENAME);
         fs::write(pointer_path, pointer_content).context("Could not write pointer")?;
 
-        let result =
-            ManagedEnvironment::open(flox, pointer, &dot_flox_path).map_err(Self::convert_error);
-        match result {
-            Err(err) => {
-                fs::remove_dir_all(dot_flox_path).context("Could not clean up .flox/ directory")?;
-                Err(err)?;
+        let mut env = {
+            let result = ManagedEnvironment::open(flox, pointer, &temp_dot_flox_dir)
+                .map_err(Self::convert_error);
+
+            match result {
+                Err(err) => {
+                    fs::remove_dir_all(&temp_dot_flox_dir)
+                        .context("Could not clean up .flox/ directory")?;
+                    Err(err)?
+                },
+                Ok(env) => env,
+            }
+        };
+
+        match env.build(flox) {
+            Ok(_) => {
+                fs::rename(temp_dot_flox_dir, dot_flox_path)
+                    .context("Could not move .flox/ directory")?;
             },
-            Ok(mut env) => env.build(flox).context("Could not build environment")?,
+            Err(
+                e @ EnvironmentError2::Core(CoreEnvironmentError::BuildEnv(
+                    CallPkgDbError::PkgDbError(PkgDbError { exit_code: 100, .. }),
+                )),
+            ) => {
+                if amend_systems {
+                    let mut doc = env
+                        .manifest_content(flox)?
+                        .parse::<Document>()
+                        .expect("invalid doc");
+                    doc.entry("options")
+                        .or_insert(toml_edit::Item::Table(toml_edit::Table::default()))
+                        .as_table_like_mut()
+                        .context("Invalid manifest format: expected [options] to be a table")?
+                        .entry("systems")
+                        .or_insert(toml_edit::Item::Value(toml_edit::Value::Array(
+                            toml_edit::Array::default(),
+                        )))
+                        .as_array_mut()
+                        .context(
+                            "Invalid manifest format: expected 'options.systems' to be an array",
+                        )?
+                        .push(flox.system.clone());
+
+                    env.edit_unsafe(flox, doc.to_string())?;
+                }
+
+                bail!("Could not build environment: compatibility errors on your system ({system}).\n\n{e}", system = flox.system);
+            },
+            Err(e) => {
+                fs::remove_dir_all(&temp_dot_flox_dir)
+                    .context("Could not clean up .flox/ directory")?;
+                Err(e)?
+            },
         }
+
         Ok(())
     }
 
