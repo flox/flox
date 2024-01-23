@@ -13,6 +13,12 @@ use crate::utils::search::construct_search_params;
 
 pub const SUGGESTION_SEARCH_LIMIT: u8 = 3;
 
+/// Dynamically generate a "did you mean" message for a given search term.
+/// Will look up curated suggested search terms and query related search results.
+///
+/// [DidYouMean] is parameterized by a type `S`,
+/// which is used to distinguish input types for the suggestion
+/// and specific suggestion output.
 pub struct DidYouMean<'a, S> {
     searched_term: &'a str,
     curated: Option<&'static str>,
@@ -28,7 +34,9 @@ impl<S> DidYouMean<'_, S> {
     }
 }
 
+/// Suggestions for `install` subcommand
 impl<'a> DidYouMean<'a, InstallSuggestion> {
+    /// `install` specific curated terms
     fn suggest_curated_package(input: &str) -> Option<&'static str> {
         let suggestion = match input {
             "java" => "jdk",
@@ -77,6 +85,11 @@ impl<'a> DidYouMean<'a, InstallSuggestion> {
         Ok(results)
     }
 
+    /// Create a new [DidYouMean] instance for the given search term
+    /// in the context of an [Environment].
+    ///
+    /// This will attempt to find curated suggestions for the given term,
+    /// based on the lockfile of the given environment.
     pub fn new(flox: &Flox, environment: &dyn Environment, term: &'a str) -> Self {
         let curated = Self::suggest_curated_package(term);
         let searched_term = curated.unwrap_or(term);
@@ -142,6 +155,8 @@ impl Display for DidYouMean<'_, InstallSuggestion> {
 }
 
 pub struct SearchSuggestion;
+
+/// Suggestions for `search` subcommand
 impl<'a> DidYouMean<'a, SearchSuggestion> {
     /// `search` specific curated terms
     fn suggest_curated_package(input: &str) -> Option<&'static str> {
@@ -181,6 +196,16 @@ impl<'a> DidYouMean<'a, SearchSuggestion> {
         Ok(results)
     }
 
+    /// Create a new [DidYouMean] instance for the given search term.
+    ///
+    /// This will attempt to find curated suggestions for the given term,
+    /// and then query `pkgdb` for related search results.
+    /// Either of these may fail, in which case we will return with empty [SearchResults]
+    /// and log the error.
+    ///
+    /// `search` may run without a (local) manifest,
+    /// but still needs to be able to suggest search results
+    /// based on an existing (global) manifest/lockfile.
     pub fn new(
         term: &'a str,
         manifest: Option<PathOrJson>,
