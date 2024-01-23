@@ -77,10 +77,6 @@ pub struct EnvironmentArgs {
 /// Edit declarative environment configuration
 #[derive(Bpaf, Clone)]
 pub struct Edit {
-    #[allow(dead_code)] // pending spec for `-e`, `--dir` behaviour
-    #[bpaf(external(environment_args), group_help("Environment Options"))]
-    environment_args: EnvironmentArgs,
-
     #[bpaf(external(environment_select), fallback(Default::default()))]
     environment: EnvironmentSelect,
 
@@ -297,10 +293,6 @@ pub struct Delete {
     #[allow(dead_code)] // not yet handled in impl
     #[bpaf(short, long, hide)]
     origin: bool,
-
-    #[allow(dead_code)] // pending spec for `-e`, `--dir` behaviour
-    #[bpaf(external(environment_args), group_help("Environment Options"))]
-    environment_args: EnvironmentArgs,
 
     #[bpaf(external(environment_select), fallback(Default::default()))]
     environment: EnvironmentSelect,
@@ -602,10 +594,6 @@ impl Activate {
 /// Create an environment in the current directory
 #[derive(Bpaf, Clone)]
 pub struct Init {
-    #[allow(dead_code)] // pending spec for `-e`, `--dir` behaviour
-    #[bpaf(external(environment_args), group_help("Environment Options"))]
-    environment_args: EnvironmentArgs,
-
     /// Directory to create the environment in (default: current directory)
     #[bpaf(long, short, argument("path"))]
     dir: Option<PathBuf>,
@@ -814,10 +802,6 @@ fn environment_description(environment: &ConcreteEnvironment) -> Result<String> 
 /// Install a package into an environment
 #[derive(Bpaf, Clone)]
 pub struct Install {
-    #[allow(dead_code)] // pending spec for `-e`, `--dir` behaviour
-    #[bpaf(external(environment_args), group_help("Environment Options"))]
-    environment_args: EnvironmentArgs,
-
     #[bpaf(external(environment_select), fallback(Default::default()))]
     environment: EnvironmentSelect,
 
@@ -950,7 +934,7 @@ pub struct Uninstall {
     #[bpaf(external(environment_select), fallback(Default::default()))]
     environment: EnvironmentSelect,
 
-    #[bpaf(positional("PACKAGES"), some("Must specify at least one package"))]
+    #[bpaf(positional("packages"), some("Must specify at least one package"))]
     packages: Vec<String>,
 }
 
@@ -1031,10 +1015,6 @@ impl WipeHistory {
 /// list environment generations with contents
 #[derive(Bpaf, Clone)]
 pub struct Generations {
-    #[allow(dead_code)] // pending spec for `-e`, `--dir` behaviour
-    #[bpaf(external(environment_args), group_help("Environment Options"))]
-    environment_args: EnvironmentArgs,
-
     #[allow(dead_code)] // not yet handled in impl
     #[bpaf(long)]
     json: bool,
@@ -1059,10 +1039,6 @@ pub struct History {
     #[bpaf(long, short)]
     oneline: bool,
 
-    #[allow(dead_code)] // pending spec for `-e`, `--dir` behaviour
-    #[bpaf(external(environment_args), group_help("Environment Options"))]
-    environment_args: EnvironmentArgs,
-
     #[allow(unused)] // Command currently forwarded
     #[bpaf(external(environment_select), fallback(Default::default()))]
     environment: EnvironmentSelect,
@@ -1080,10 +1056,11 @@ impl History {
 #[derive(Bpaf, Clone)]
 pub struct Push {
     /// Directory to push the environment from (default: current directory)
+    #[bpaf(positional("path"))]
     dir: Option<PathBuf>,
 
     /// Owner to push push environment to (default: current user)
-    #[bpaf(long, short)]
+    #[bpaf(long, short, argument("owner"))]
     owner: Option<EnvironmentOwner>,
 
     /// forceably overwrite the remote copy of the environment
@@ -1247,6 +1224,7 @@ impl Push {
 enum PullSelect {
     New {
         /// Directory to create the environment in (default: current directory)
+        #[bpaf(long, short, argument("path"))]
         dir: Option<PathBuf>,
         /// ID of the environment to pull
         #[bpaf(long, short, argument("owner/name"))]
@@ -1254,6 +1232,7 @@ enum PullSelect {
     },
     NewAbbreviated {
         /// Directory to create the environment in (default: current directory)
+        #[bpaf(long, short, argument("path"))]
         dir: Option<PathBuf>,
         /// ID of the environment to pull
         #[bpaf(positional("owner/name"))]
@@ -1261,6 +1240,7 @@ enum PullSelect {
     },
     Existing {
         /// Directory containing a managed environment to pull
+        #[bpaf(long, short, argument("path"))]
         dir: Option<PathBuf>,
         /// forceably overwrite the local copy of the environment
         #[bpaf(long, short)]
@@ -1460,10 +1440,6 @@ impl Pull {
 /// rollback to the previous generation of an environment
 #[derive(Bpaf, Clone)]
 pub struct Rollback {
-    #[allow(dead_code)] // pending spec for `-e`, `--dir` behaviour
-    #[bpaf(external(environment_args), group_help("Environment Options"))]
-    environment_args: EnvironmentArgs,
-
     #[bpaf(long, short, argument("ENV"))]
     #[allow(dead_code)] // not yet handled in impl
     environment: Option<EnvironmentRef>,
@@ -1486,10 +1462,6 @@ impl Rollback {
 /// switch to a specific generation of an environment
 #[derive(Bpaf, Clone)]
 pub struct SwitchGeneration {
-    #[allow(dead_code)] // pending spec for `-e`, `--dir` behaviour
-    #[bpaf(external(environment_args), group_help("Environment Options"))]
-    environment_args: EnvironmentArgs,
-
     #[allow(unused)] // Command currently forwarded
     #[bpaf(external(environment_select), fallback(Default::default()))]
     environment: EnvironmentSelect,
@@ -1524,14 +1496,10 @@ impl Default for EnvironmentOrGlobalSelect {
 /// Update an environment's inputs
 #[derive(Bpaf, Clone)]
 pub struct Update {
-    #[allow(dead_code)] // pending spec for `-e`, `--dir` behaviour
-    #[bpaf(external(environment_args), group_help("Environment Options"))]
-    environment_args: EnvironmentArgs,
-
     #[bpaf(external(environment_or_global_select), fallback(Default::default()))]
     environment_or_global: EnvironmentOrGlobalSelect,
 
-    #[bpaf(positional("INPUTS"))]
+    #[bpaf(positional("inputs"))]
     inputs: Vec<String>,
 }
 impl Update {
@@ -1682,10 +1650,6 @@ impl Update {
 
 #[derive(Bpaf, Clone)]
 pub struct Upgrade {
-    #[allow(dead_code)] // pending spec for `-e`, `--dir` behaviour
-    #[bpaf(external(environment_args), group_help("Environment Options"))]
-    environment_args: EnvironmentArgs,
-
     #[bpaf(external(environment_select), fallback(Default::default()))]
     environment: EnvironmentSelect,
 
