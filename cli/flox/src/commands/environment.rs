@@ -1280,8 +1280,8 @@ impl Default for PullSelect {
 #[derive(Bpaf, Clone)]
 pub struct Pull {
     /// forceably add current systems to the environment, even if incompatible
-    #[bpaf(long("amend-system"), short)]
-    amend_system: bool,
+    #[bpaf(long("add-system"), short)]
+    add_system: bool,
 
     #[bpaf(external(pull_select), fallback(Default::default()))]
     pull_select: PullSelect,
@@ -1304,7 +1304,7 @@ impl Pull {
                     &flox,
                     dir.join(DOT_FLOX),
                     remote,
-                    self.amend_system,
+                    self.add_system,
                     &start,
                 )?;
 
@@ -1372,7 +1372,7 @@ impl Pull {
         flox: &Flox,
         dot_flox_path: PathBuf,
         env_ref: EnvironmentRef,
-        amend_systems: bool,
+        add_systems: bool,
         message: &str,
     ) -> Result<()> {
         if dot_flox_path.exists() {
@@ -1437,13 +1437,13 @@ impl Pull {
                     })),
                 )),
             ) => {
-                if !amend_systems && !query_amend_system(&flox.system) {
+                if !add_systems && !query_add_system(&flox.system) {
                     bail!(formatdoc! {"
                         This environment is not yet compatible with your system ({system}).
 
                         {err:#}
 
-                        Use 'flox pull --amend-system' to add your system to the manifest."
+                        Use 'flox pull --add-system' to add your system to the manifest."
                     , system = flox.system, err = anyhow!(e)});
                 }
                 let doc = amend_current_system(&env, flox)?;
@@ -1520,11 +1520,11 @@ impl Pull {
     }
 }
 
-fn query_amend_system(system: &str) -> bool {
+fn query_add_system(system: &str) -> bool {
     let message = format!(
         "The environment you are trying to pull is not compatible with your system ({system})."
     );
-    let help = "Use 'flox pull --amend-system' to automatically add your system to the list of compatible systems";
+    let help = "Use 'flox pull --add-system' to automatically add your system to the list of compatible systems";
     let confirm_choice =
         format!("Pull this environment anyway and add '{system}' to the supported systems list.");
 

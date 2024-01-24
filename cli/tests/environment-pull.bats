@@ -230,7 +230,7 @@ function make_incompatible() {
   assert_failure
   assert_output --partial "This environment is not yet compatible with your system ($NIX_SYSTEM)"
 
-  run "$FLOX_BIN" pull --remote owner/name --amend-system
+  run "$FLOX_BIN" pull --remote owner/name --add-system
   assert_success
 }
 
