@@ -138,17 +138,18 @@ impl Search {
             let results = render_search_results_user_facing(&self.search_term, results)?;
             println!("{results}");
 
+            info!("");
+
             if let Some(hint) = results.hint() {
-                eprintln!();
                 info!("{hint}");
             }
+
+            info!("{FLOX_SHOW_HINT}");
 
             if suggestion.has_suggestions() {
                 eprintln!();
                 eprintln!("{suggestion}");
             };
-
-            info!("{FLOX_SHOW_HINT}");
         }
         Ok(())
     }

@@ -258,9 +258,6 @@ impl Display for DidYouMean<'_, SearchSuggestion> {
 
         writeln!(f, "Related search results for '{curated}':")?;
         write!(f, "{search_results_rendered}")?;
-        if let Some(hint) = search_results_rendered.hint() {
-            write!(f, "\n\n{hint}")?;
-        }
 
         Ok(())
     }
