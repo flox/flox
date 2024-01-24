@@ -651,6 +651,14 @@ impl ConcreteEnvironment {
             ConcreteEnvironment::Remote(remote_env) => Box::new(remote_env),
         }
     }
+
+    pub fn dyn_environment_ref_mut(&mut self) -> &mut dyn Environment {
+        match self {
+            ConcreteEnvironment::Path(path_env) => path_env,
+            ConcreteEnvironment::Managed(managed_env) => managed_env,
+            ConcreteEnvironment::Remote(remote_env) => remote_env,
+        }
+    }
 }
 
 /// An environment descriptor of an environment that can be (re)opened,
