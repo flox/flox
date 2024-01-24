@@ -202,5 +202,5 @@ function update_dummy_env() {
 
   run "$FLOX_BIN" push --owner owner # dummy owner
   assert_failure
-  assert_output --partial "Unable to push environment with build errors:"
+  assert_output --partial "Unable to push environment with build errors."
 }
