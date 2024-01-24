@@ -241,7 +241,7 @@ function make_incompatible() {
   update_dummy_env "owner" "name"
   make_incompatible "owner" "name"
 
-  run -0 expect -d "$TESTS_DIR/pull/promptAmendSystem.exp" owner/name "$NIX_SYSTEM" n
+  run -0 expect -d "$TESTS_DIR/pull/promptAmendSystem.exp" owner/name "$NIX_SYSTEM" no
   assert_success
   assert_output --partial "This environment is not yet compatible with your system ($NIX_SYSTEM)"
 }
@@ -253,7 +253,7 @@ function make_incompatible() {
   update_dummy_env "owner" "name"
   make_incompatible "owner" "name"
 
-  run -0 expect -d "$TESTS_DIR/pull/promptAmendSystem.exp" owner/name "$NIX_SYSTEM" y
+  run -0 expect -d "$TESTS_DIR/pull/promptAmendSystem.exp" owner/name "$NIX_SYSTEM" yes
   assert_success
 
   run "$FLOX_BIN" list

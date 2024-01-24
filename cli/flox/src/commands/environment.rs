@@ -66,7 +66,7 @@ use crate::commands::{
     UninitializedEnvironment,
 };
 use crate::config::Config;
-use crate::utils::dialog::{Confirm, Dialog, Spinner};
+use crate::utils::dialog::{Confirm, Dialog, Select, Spinner};
 use crate::utils::didyoumean::{DidYouMean, InstallSuggestion};
 use crate::{subcommand_metric, utils};
 
@@ -1521,21 +1521,28 @@ impl Pull {
 }
 
 fn query_amend_system(system: &str) -> bool {
-    let message = formatdoc! {"
-        The environment you are trying to pull is not compatible with your system ({system}).
-        Would you like to add your system to the list of compatible systems in the manifest?
-    "};
+    let message = format!(
+        "The environment you are trying to pull is not compatible with your system ({system})."
+    );
+    let help = "Use 'flox pull --amend-system' to automatically add your system to the list of compatible systems";
+    let confirm_choice =
+        format!("Pull this environment anyway and add '{system}' to the supported systems list.");
 
     if !Dialog::can_prompt() {
         return false;
     }
 
-    Dialog {
+    let dialog = Dialog {
         message: &message,
-        help_message: Some("Use 'flox pull --amend-system' to automatically add your system to the list of compatible systems"),
-        typed: Confirm { default: Some(false) }
-    }.prompt_sync()
-    .unwrap_or(false)
+        help_message: Some(help),
+        typed: Select {
+            options: ["Don't pull this environment", &confirm_choice].to_vec(),
+        },
+    };
+
+    let (choice, _) = dialog.raw_prompt().unwrap_or((0, ""));
+
+    choice == 1
 }
 
 fn amend_current_system(env: &ManagedEnvironment, flox: &Flox) -> Result<Document, anyhow::Error> {

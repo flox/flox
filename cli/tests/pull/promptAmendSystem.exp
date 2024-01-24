@@ -14,8 +14,12 @@ expect_after {
 }
 
 expect -ex "The environment you are trying to pull is not compatible with your system ($system)." {}
-expect -ex "Would you like to add your system to the list of compatible systems in the manifest?" {}
 
-send "$answer\r"
+if { $answer == "yes" } {
+  # Down arrow
+  send "\033\[B"
+}
+
+send "\r"
 
 expect eof
