@@ -1502,6 +1502,24 @@ impl Pull {
     }
 }
 
+fn query_amend_system(system: &str) -> bool {
+    let message = formatdoc! {"
+        The environment you are trying to pull is not compatible with your system ({system}).
+        Would you like to add your system to the list of compatible systems?
+    "};
+
+    if !Dialog::can_prompt() {
+        return false;
+    }
+
+    Dialog {
+        message: &message,
+        help_message: Some("Use 'flox pull --amend-system' to automatically add your system to the list of compatible systems"),
+        typed: Confirm { default: Some(false) }
+    }.prompt_sync()
+    .unwrap_or(false)
+}
+
 fn amend_current_system(env: &ManagedEnvironment, flox: &Flox) -> Result<Document, anyhow::Error> {
     // in memory edit of the manifest
     // toml_edit operates on &mut references of to this document
