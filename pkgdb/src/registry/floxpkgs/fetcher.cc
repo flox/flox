@@ -458,6 +458,13 @@ struct FloxFlakeScheme : GitHubInputScheme
   {
     return true;
   }
+
+  ParsedURL
+  toURL( const Input & input ) const override
+  {
+    GitHubInputScheme githubScheme;
+    return githubScheme.toURL( input );
+  }
 };
 
 /* -------------------------------------------------------------------------- */

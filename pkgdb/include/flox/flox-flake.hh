@@ -20,6 +20,7 @@
 #include "flox/core/exceptions.hh"
 #include "flox/core/nix-state.hh"
 #include "flox/core/types.hh"
+#include "flox/core/util.hh"
 
 
 /* -------------------------------------------------------------------------- */
@@ -39,6 +40,21 @@ static const nix::flake::LockFlags defaultLockFlags
       ,
       .updateLockFile = false,
       .writeLockFile  = false,
+      .useRegistries  = false,
+      /* Remaining fields are defaults */
+      .applyNixConfig        = false,
+      .allowUnlocked         = true,
+      .commitLockFile        = false,
+      .referenceLockFilePath = std::nullopt,
+      .outputLockFilePath    = std::nullopt,
+      .inputOverrides        = {},
+      .inputUpdates          = {} };
+
+static const nix::flake::LockFlags floxFlakeLockFlags
+  = { .recreateLockFile = false /* default */
+      ,
+      .updateLockFile = true,
+      .writeLockFile  = true,
       .useRegistries  = false,
       /* Remaining fields are defaults */
       .applyNixConfig        = false,
@@ -112,6 +128,7 @@ public:
     : state( state ), lockedFlake( std::move( lockedFlake ) )
   {}
 
+  // FloxFlake( nix::ref<nix::EvalState> & state, const nix::FlakeRef & ref );
   FloxFlake( const nix::ref<nix::EvalState> & state,
              const nix::FlakeRef &            ref );
 

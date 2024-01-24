@@ -113,6 +113,8 @@ libExt ?= .dylib
 endif  # ifeq (Linux,$(OS))
 endif  # ifndef libExt
 
+export TARGET_ARCH ?=
+
 
 # ---------------------------------------------------------------------------- #
 
@@ -243,7 +245,7 @@ LDFLAGS  += -O3
 endif # ifneq ($(RELEASE),)
 
 # Debug Mode
-DEBUG ?=
+export DEBUG ?=
 ifneq (,$(DEBUG))
 DEBUG ?=
 ifeq (gcc,$(TOOLCHAIN))

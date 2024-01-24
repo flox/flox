@@ -29,6 +29,7 @@
 #include <vector>
 
 #include "flox/core/types.hh"
+// #include "flox/core/util.hh"
 #include "flox/flox-flake.hh"
 
 
@@ -63,24 +64,19 @@ lockFlake( nix::EvalState &              state,
 
 /* -------------------------------------------------------------------------- */
 
+nix::flake::LockedFlake
+lockFlakeWithRightFlags( nix::EvalState & state, const nix::FlakeRef & ref )
+{
+  nix::flake::LockFlags flags;
+  if ( ref.input.getType() == FLOX_FLAKE_TYPE ) { flags = floxFlakeLockFlags; }
+  else { flags = defaultLockFlags; }
+  return flox::lockFlake( state, ref, flags );
+}
+
 FloxFlake::FloxFlake( const nix::ref<nix::EvalState> & state,
                       const nix::FlakeRef &            ref )
-try : state( state ),
-  lockedFlake( nix::flake::lockFlake( *this->state, ref, defaultLockFlags ) )
-  {}
-catch ( const std::exception & err )
-  {
-
-    throw LockFlakeException( "failed to lock flake \"" + ref.to_string()
-                                + "\"",
-                              nix::filterANSIEscapes( err.what(), true ) );
-  }
-catch ( ... )
-  {
-
-    throw LockFlakeException( "failed to lock flake \"" + ref.to_string()
-                              + "\"" );
-  }
+  : state( state ), lockedFlake( lockFlakeWithRightFlags( *state, ref ) )
+{}
 
 
 /* -------------------------------------------------------------------------- */

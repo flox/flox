@@ -78,15 +78,13 @@ struct LockedInputRaw
     : LockedInputRaw( *input.getDbReadOnly() )
   {}
 
-  explicit
-  operator nix::FlakeRef() const
+  explicit operator nix::FlakeRef() const
   {
     return nix::FlakeRef::fromAttrs(
       nix::fetchers::jsonToAttrs( this->attrs ) );
   }
 
-  explicit
-  operator RegistryInput() const
+  explicit operator RegistryInput() const
   {
     return RegistryInput( static_cast<nix::FlakeRef>( *this ) );
   }

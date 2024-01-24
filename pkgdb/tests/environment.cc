@@ -46,7 +46,7 @@ nlohmann::json registryWithNixpkgsJSON {
   { "inputs",
     { { "nixpkgs",
         { { "from",
-            { { "type", "github" },
+            { { "type", "flox-nixpkgs" },
               { "owner", "NixOS" },
               { "repo", "nixpkgs" },
               { "rev", nixpkgsRev } } },
@@ -801,8 +801,14 @@ test_createLockfile_existing()
   Lockfile expectedLockfile( expectedLockfileRaw );
 
   /* Test locking manifest reuses existing lockfile */
-  Environment environment( std::nullopt, manifest, expectedLockfile );
-  Lockfile    actualLockfile = environment.createLockfile();
+  Environment    environment( std::nullopt, manifest, expectedLockfile );
+  Lockfile       actualLockfile = environment.createLockfile();
+  nlohmann::json actualJson;
+  to_json( actualJson, actualLockfile.getLockfileRaw() );
+  std::cerr << "actual: " << actualJson << std::endl;
+  nlohmann::json expectedJson;
+  to_json( expectedJson, expectedLockfile.getLockfileRaw() );
+  std::cerr << "expected: " << expectedJson << std::endl;
   EXPECT( equalLockfile( actualLockfile, expectedLockfile ) );
 
   return true;
