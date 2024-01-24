@@ -1300,19 +1300,13 @@ impl Pull {
 
                 debug!("Resolved user intent: pull {remote:?} into {dir:?}");
 
-                Dialog {
-                    message: &start,
-                    help_message: None,
-                    typed: Spinner::new(|| {
-                        Self::pull_new_environment(
-                            &flox,
-                            dir.join(DOT_FLOX),
-                            remote,
-                            self.amend_system,
-                        )
-                    }),
-                }
-                .spin()?;
+                Self::pull_new_environment(
+                    &flox,
+                    dir.join(DOT_FLOX),
+                    remote,
+                    self.amend_system,
+                    &start,
+                )?;
 
                 info!("{complete}");
             },
@@ -1379,6 +1373,7 @@ impl Pull {
         dot_flox_path: PathBuf,
         env_ref: EnvironmentRef,
         amend_systems: bool,
+        message: &str,
     ) -> Result<()> {
         if dot_flox_path.exists() {
             bail!("Cannot pull a new environment into an existing one")
@@ -1404,8 +1399,13 @@ impl Pull {
         fs::write(pointer_path, pointer_content).context("Could not write pointer")?;
 
         let mut env = {
-            let result = ManagedEnvironment::open(flox, pointer, &temp_dot_flox_dir)
-                .map_err(Self::convert_error);
+            let result = Dialog {
+                message,
+                help_message: None,
+                typed: Spinner::new(|| ManagedEnvironment::open(flox, pointer, &temp_dot_flox_dir)),
+            }
+            .spin()
+            .map_err(Self::convert_error);
 
             match result {
                 Err(err) => {
@@ -1417,7 +1417,14 @@ impl Pull {
             }
         };
 
-        match env.build(flox) {
+        let result = Dialog {
+            message,
+            help_message: None,
+            typed: Spinner::new(|| env.build(flox)),
+        }
+        .spin();
+
+        match result {
             Ok(_) => {
                 fs::rename(temp_dot_flox_dir, dot_flox_path)
                     .context("Could not move .flox/ directory")?;
@@ -1516,7 +1523,7 @@ impl Pull {
 fn query_amend_system(system: &str) -> bool {
     let message = formatdoc! {"
         The environment you are trying to pull is not compatible with your system ({system}).
-        Would you like to add your system to the list of compatible systems?
+        Would you like to add your system to the list of compatible systems in the manifest?
     "};
 
     if !Dialog::can_prompt() {
