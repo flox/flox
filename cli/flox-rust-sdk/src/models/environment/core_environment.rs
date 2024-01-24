@@ -332,6 +332,12 @@ impl CoreEnvironment<ReadOnly> {
         debug!("transaction: updating manifest");
         temp_env.update_manifest(&contents)?;
 
+        debug!("transaction: building environment, ignoring errors (unsafe)");
+
+        if let Err(err) = temp_env.build(flox) {
+            debug!("transaction: build failed (ignored): {err:?}");
+        }
+
         debug!("transaction: replacing environment");
         self.replace_with(temp_env)?;
 
