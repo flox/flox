@@ -1428,23 +1428,6 @@ impl Pull {
                 )),
             ) => {
                 if amend_systems {
-                    let mut doc = env
-                        .manifest_content(flox)?
-                        .parse::<Document>()
-                        .expect("invalid doc");
-                    doc.entry("options")
-                        .or_insert(toml_edit::Item::Table(toml_edit::Table::default()))
-                        .as_table_like_mut()
-                        .context("Invalid manifest format: expected [options] to be a table")?
-                        .entry("systems")
-                        .or_insert(toml_edit::Item::Value(toml_edit::Value::Array(
-                            toml_edit::Array::default(),
-                        )))
-                        .as_array_mut()
-                        .context(
-                            "Invalid manifest format: expected 'options.systems' to be an array",
-                        )?
-                        .push(flox.system.clone());
 
                     env.edit_unsafe(flox, doc.to_string())?;
                 }
@@ -1517,6 +1500,43 @@ impl Pull {
 
         (start_message, complete_message)
     }
+}
+
+fn amend_current_system(env: &ManagedEnvironment, flox: &Flox) -> Result<Document, anyhow::Error> {
+    // in memory edit of the manifest
+    // toml_edit operates on &mut references of to this document
+    let mut doc = env
+        .manifest_content(flox)?
+        .parse::<Document>()
+        .expect("invalid doc");
+
+    // extract the `[options]` table
+    let options_table = doc
+        .entry("options")
+        .or_insert(toml_edit::Item::Table(toml_edit::Table::default()))
+        .as_table_like_mut()
+        .context("Invalid manifest format: expected [options] to be a table")?;
+
+    // extract the `options.systems` array
+    let systems_list = options_table
+        .entry("systems")
+        .or_insert(toml_edit::Item::Value(toml_edit::Value::Array(
+            toml_edit::Array::default(),
+        )))
+        .as_array_mut()
+        .context("Invalid manifest format: expected 'options.systems' to be an array")?;
+
+    // sanity check that the current system is not already in the list
+    if systems_list
+        .iter()
+        .any(|s| s.as_str().map(|s| s == flox.system).unwrap_or_default())
+    {
+        return Ok(doc);
+    }
+
+    systems_list.push(flox.system.clone());
+
+    Ok(doc)
 }
 
 /// rollback to the previous generation of an environment
