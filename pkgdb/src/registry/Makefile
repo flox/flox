@@ -15,7 +15,7 @@ NIX ?= nix --experimental-features 'nix-command flakes'
 SUBDIRS = floxpkgs
 
 LIBS    = libregistry.a
-SOURCES = $(wildcard *.cc) floxpkgs/fetcher.cc
+SOURCES = $(wildcard *.cc)
 OBJECTS = $(SOURCES:.cc=.o)
 
 
@@ -44,12 +44,10 @@ floxpkgs/%:
 floxpkgs.o: floxpkgs/flake.nix.in.hh
 floxpkgs.o: CPPFLAGS += '-DRULES_JSON="$(RULES_JSON)"'
 
-floxpkgs/fetcher.o: floxpkgs/fetcher.cc
-
 
 # ---------------------------------------------------------------------------- #
 
-libregistry.a: $(OBJECTS) floxpkgs/fetcher.o
+libregistry.a: $(OBJECTS)
 	$(AR) rcs $@ $^
 
 

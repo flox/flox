@@ -16,8 +16,6 @@ SUBDIRS =
 GENERATED_FILES += flake.nix.in.hh
 
 
-fetcher.o: fetcher.cc
-
 # ---------------------------------------------------------------------------- #
 
 flake.nix.in.hh: flake.nix.in
@@ -35,7 +33,7 @@ all-generic: $(GENERATED_FILES)
 all-recursive:
 	for subdir in $(SUBDIRS); do $(MAKE) -C $$subdir all; done
 
-all: all-generic all-recursive fetcher.o
+all: all-generic all-recursive
 
 
 # ---------------------------------------------------------------------------- #
