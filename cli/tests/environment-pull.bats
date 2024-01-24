@@ -233,3 +233,29 @@ function make_incompatible() {
   run "$FLOX_BIN" pull --remote owner/name --amend-system
   assert_success
 }
+
+# bats test_tags=pull:unsupported:prompt-fail
+# pulling an environment without packages for the current platform
+#should fail with an error
+@test "l?: pull environment without packages for the current platform prompts for about adding system" {
+  update_dummy_env "owner" "name"
+  make_incompatible "owner" "name"
+
+  run -0 expect -d "$TESTS_DIR/pull/promptAmendSystem.exp" owner/name "$NIX_SYSTEM" n
+  assert_success
+  assert_output --partial "This environment is not yet compatible with your system ($NIX_SYSTEM)"
+}
+
+# bats test_tags=pull:unsupported:prompt-success
+# pulling an environment without packages for the current platform
+#should fail with an error
+@test "l?: pull environment without packages for the current platform prompts for about adding system: produces env" {
+  update_dummy_env "owner" "name"
+  make_incompatible "owner" "name"
+
+  run -0 expect -d "$TESTS_DIR/pull/promptAmendSystem.exp" owner/name "$NIX_SYSTEM" y
+  assert_success
+
+  run "$FLOX_BIN" list
+  assert_success
+}
