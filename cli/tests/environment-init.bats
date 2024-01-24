@@ -107,12 +107,12 @@ EOF
 
 }
 
-@test "c8: names don't conflict with flox hub: when naming with flox init -e do not allow '/'" {
+@test "c8: names don't conflict with floxhub: when naming with flox init -e do not allow '/'" {
   run "$FLOX_BIN" init -n "owner/name"
   assert_failure
 }
 
-@test "c8: names don't conflict with flox hub: when naming with flox init -e do not allow ' ' (space)" {
+@test "c8: names don't conflict with floxhub: when naming with flox init -e do not allow ' ' (space)" {
   run "$FLOX_BIN" init -n "na me"
   assert_failure
 }

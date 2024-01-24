@@ -129,7 +129,7 @@ EOF
 
   run "$FLOX_BIN" edit -f "$TMP_MANIFEST_PATH" --remote "$OWNER/test"
   assert_success
-  assert_output --partial "✅ environment successfully edited"
+  assert_output --partial "✅  Environment successfully updated."
 
   run --separate-stderr "$FLOX_BIN" list --name --remote "$OWNER/test"
   assert_success

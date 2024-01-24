@@ -149,7 +149,7 @@ impl Edit {
         };
         match result {
             EditResult::Unchanged => {
-                println!("⚠️  no changes made to environment");
+                println!("⚠️  No changes made to environment.");
             },
             EditResult::ReActivateRequired => {
                 if activated_environments().is_active(&active_environment) {
@@ -158,11 +158,11 @@ impl Edit {
 
                             Please `exit` the environment and run `flox activate` to see these changes."});
                 } else {
-                    println!("✅ environment successfully edited");
+                    println!("✅  Environment successfully updated.");
                 }
             },
             EditResult::Success => {
-                println!("✅ environment successfully edited");
+                println!("✅  Environment successfully updated.");
             },
         }
         Ok(())
@@ -872,7 +872,7 @@ impl Install {
                     info!("✅ '{}' installed to environment {description}", pkg.id);
                 } else {
                     info!(
-                        "⚠️  package with id '{}' already installed to environment {description}",
+                        "⚠️  Package with id '{}' already installed to environment {description}",
                         pkg.id
                     );
                 }
@@ -880,7 +880,7 @@ impl Install {
         } else {
             for pkg in packages.iter() {
                 info!(
-                    "⚠️  package with id '{}' already installed to environment {description}",
+                    "⚠️  Package with id '{}' already installed to environment {description}",
                     pkg.id
                 );
             }
@@ -1052,7 +1052,7 @@ impl History {
     }
 }
 
-/// Send environment to flox hub
+/// Send environment to floxhub
 #[derive(Bpaf, Clone)]
 pub struct Push {
     /// Directory to push the environment from (default: current directory)
@@ -1257,7 +1257,7 @@ impl Default for PullSelect {
     }
 }
 
-/// Pull environment from flox hub
+/// Pull environment from floxhub
 #[derive(Bpaf, Clone)]
 pub struct Pull {
     #[bpaf(external(pull_select), fallback(Default::default()))]
@@ -1398,7 +1398,7 @@ impl Pull {
         floxhub_host: &Url,
     ) -> (String, String) {
         let mut start_message =
-            format!("⬇️ remote: pulling and building {env_ref} from {floxhub_host}");
+            format!("⬇️  Remote: pulling and building {env_ref} from {floxhub_host}");
         if let Some(dir) = dir {
             start_message += &format!(" into {dir}", dir = dir.display());
         } else {
@@ -1423,7 +1423,7 @@ impl Pull {
         let floxhub_host = &pointer.floxhub_url;
 
         let start_message =
-            format!("⬇️ remote: pulling and building {owner}/{name} from {floxhub_host}",);
+            format!("⬇️  Remote: pulling and building {owner}/{name} from {floxhub_host}",);
 
         let suffix: &str = if force { " (forced)" } else { "" };
 

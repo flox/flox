@@ -44,7 +44,7 @@
 </p>
 
 [flox][website] is a virtual environment and package manager all in one. With flox you 
-create development environments that layer and replace dependencies just where
+create environments that layer and replace dependencies just where
 it matters, making them portable across the full software lifecycle
 
 Install packages from [the biggest open source repository
