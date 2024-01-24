@@ -1188,6 +1188,8 @@ impl Push {
             ManagedEnvironmentError::Build(ref err) => formatdoc! {"
                 {err}
 
+                ❌  Unable to push environment with build errors:
+
                 Use 'flox edit' to resolve errors, test with 'flox activate', and 'flox push' again.",
                 err = error_chain(err)
             }.into(),
