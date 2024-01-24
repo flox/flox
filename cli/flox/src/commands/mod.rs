@@ -47,7 +47,7 @@ use crate::utils::metrics::METRICS_UUID_FILE_NAME;
 static FLOX_DESCRIPTION: &'_ str = indoc! {"
     flox is a virtual environment and package manager all in one.\n\n
 
-    With flox you create development environments that layer and replace dependencies just where it matters,
+    With flox you create environments that layer and replace dependencies just where it matters,
     making them portable across the full software lifecycle."
 };
 
@@ -79,7 +79,7 @@ fn vec_not_empty<T>(x: Vec<T>) -> bool {
 #[derive(Bpaf, Clone, Debug)]
 pub enum Verbosity {
     Verbose(
-        /// Verbose mode.
+        /// Verbose mode
         ///
         /// Invoke multiple times for increasing detail.
         #[bpaf(short('v'), long("verbose"), req_flag(()), many, map(vec_len))]
@@ -109,13 +109,13 @@ pub struct FloxCli(#[bpaf(external(flox_args))] pub FloxArgs);
 #[derive(Bpaf)]
 #[bpaf(ignore_rustdoc)] // we don't want this struct to be interpreted as a group
 pub struct FloxArgs {
-    /// Verbose mode.
+    /// Verbose mode
     ///
     /// Invoke multiple times for increasing detail.
     #[bpaf(external, fallback(Default::default()))]
     pub verbosity: Verbosity,
 
-    /// Debug mode.
+    /// Debug mode
     #[bpaf(long, req_flag(()), many, map(vec_not_empty))]
     pub debug: bool,
 
@@ -326,11 +326,11 @@ impl LocalDevelopmentCommands {
 /// Sharing Commands
 #[derive(Bpaf, Clone)]
 enum SharingCommands {
-    /// Send environment to flox hub
+    /// Send environment to floxhub
     #[bpaf(command)]
     Push(#[bpaf(external(environment::push))] environment::Push),
     #[bpaf(command)]
-    /// Pull environment from flox hub
+    /// Pull environment from floxhub
     Pull(#[bpaf(external(environment::pull))] environment::Pull),
     /// Containerize an environment
     #[bpaf(command, hide)]

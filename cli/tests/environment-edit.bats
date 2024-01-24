@@ -78,7 +78,7 @@ EOF
 
   run "$FLOX_BIN" edit -f "$TMP_MANIFEST_PATH"
   assert_success
-  assert_output --partial "✅ environment successfully edited"
+  assert_output --partial "✅  Environment successfully updated."
 }
 
 # ---------------------------------------------------------------------------- #
@@ -89,7 +89,7 @@ EOF
 
   run "$FLOX_BIN" edit -f "$TMP_MANIFEST_PATH"
   assert_success
-  assert_output --partial "⚠️  no changes made to environment"
+  assert_output --partial "⚠️  No changes made to environment."
 }
 
 # ---------------------------------------------------------------------------- #
@@ -101,7 +101,7 @@ EOF
 
   run "$FLOX_BIN" edit -f "$TMP_MANIFEST_PATH"
   assert_success
-  assert_output --partial "✅ environment successfully edited"
+  assert_output --partial "✅  Environment successfully updated."
 }
 
 # ---------------------------------------------------------------------------- #
@@ -249,6 +249,6 @@ EOF
   # (simulates quiting the editor without saving)
   run "$FLOX_BIN" edit -f "$TESTS_DIR/edit/manifest.toml"
   assert_success
-  assert_output "⚠️  no changes made to environment"
+  assert_output "⚠️  No changes made to environment."
 
 }
