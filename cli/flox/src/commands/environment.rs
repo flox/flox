@@ -18,6 +18,7 @@ use flox_rust_sdk::models::environment::managed_environment::{
     ManagedEnvironmentError,
 };
 use flox_rust_sdk::models::environment::path_environment::{self, PathEnvironment};
+use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironment;
 use flox_rust_sdk::models::environment::{
     CoreEnvironmentError,
     EditResult,
@@ -399,7 +400,7 @@ impl Activate {
     pub async fn handle(self, mut config: Config, flox: Flox) -> Result<()> {
         subcommand_metric!("activate");
 
-        let concrete_environment = self.environment.to_concrete_environment(&flox)?;
+        let mut concrete_environment = self.environment.to_concrete_environment(&flox)?;
 
         // TODO could move this to a pretty print method on the Environment trait?
         let prompt_name = match concrete_environment {
@@ -423,18 +424,47 @@ impl Activate {
         let now_active =
             UninitializedEnvironment::from_concrete_environment(&concrete_environment)?;
 
-        let mut environment = concrete_environment.into_dyn_environment();
+        let environment = concrete_environment.dyn_environment_ref_mut();
 
         // Don't spin in bashrcs and similar contexts
-        let activation_path = if !stdout().is_tty() && self.run_args.is_empty() {
-            environment.activation_path(&flox)?
+        let activation_path_result = if !stdout().is_tty() && self.run_args.is_empty() {
+            environment.activation_path(&flox)
         } else {
             Dialog {
                 message: &format!("Getting ready to use environment {now_active}..."),
                 help_message: None,
                 typed: Spinner::new(|| environment.activation_path(&flox)),
             }
-            .spin()?
+            .spin()
+        };
+
+        let activation_path = match activation_path_result {
+            Err(
+                err @ EnvironmentError2::Core(CoreEnvironmentError::LockedManifest(
+                    LockedManifestError::BuildEnv(CallPkgDbError::PkgDbError(PkgDbError {
+                        exit_code: 100,
+                        ..
+                    })),
+                )),
+            ) => {
+                let mut message = formatdoc! {"
+                    ❌ This environment is not yet compatible with your system ({system}).
+
+                    {err}",
+                    system = flox.system
+                };
+
+                if let ConcreteEnvironment::Remote(remote) = &concrete_environment {
+                    message.push_str("\n\n");
+                    message.push_str(&format!(
+                    "Use 'flox pull --amend-system {}/{}' to update and verify this environment on your system.",
+                    remote.owner(),
+                    remote.name()));
+                }
+
+                bail!("{message}")
+            },
+            other => other?,
         };
 
         // We don't have access to the current PS1 (it's not exported), so we
