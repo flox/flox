@@ -457,7 +457,7 @@ impl Activate {
                 if let ConcreteEnvironment::Remote(remote) = &concrete_environment {
                     message.push_str("\n\n");
                     message.push_str(&format!(
-                    "Use 'flox pull --amend-system {}/{}' to update and verify this environment on your system.",
+                    "Use 'flox pull --add-system {}/{}' to update and verify this environment on your system.",
                     remote.owner(),
                     remote.name()));
                 }
