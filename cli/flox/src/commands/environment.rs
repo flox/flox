@@ -1406,7 +1406,7 @@ impl Pull {
         };
 
         let complete_message = formatdoc! {"
-            ✨ pulled {env_ref} from {floxhub_host}
+            ✨  Pulled {env_ref} from {floxhub_host}
 
             You can activate this environment with 'flox activate'
         "};
@@ -1428,7 +1428,7 @@ impl Pull {
         let suffix: &str = if force { " (forced)" } else { "" };
 
         let complete_message = formatdoc! {"
-            ✨ pulled {owner}/{name} from {floxhub_host}{suffix}
+            ✨  Pulled {owner}/{name} from {floxhub_host}{suffix}
 
             You can activate this environment with 'flox activate'
         "};
