@@ -181,3 +181,40 @@ function update_dummy_env() {
   run "$FLOX_BIN" pull --remote floxtest/default
   assert_success
 }
+
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=pull:unsupported
+# pulling an environment without packages for the current platform
+#should fail with an error
+@test "l?: pull environment without packages for the current platform fails" {
+  make_dummy_env "owner" "name"
+  update_dummy_env "owner" "name"
+
+  init_system=
+  # replace linux with darwin or darwin with linux
+  if [ -z "${NIX_SYSTEM##*-linux}" ]; then
+    init_system="${NIX_SYSTEM%%-linux}-darwin"
+  elif [ -z "${NIX_SYSTEM#*-darwin}" ]; then
+    init_system="${NIX_SYSTEM%%-darwin}-linux"
+  else
+    echo "unknown system: '$NIX_SYSTEM'"
+    exit 1
+  fi
+
+  # make an unsupported system
+  git clone $FLOXHUB_FLOXMETA_DIR "$PROJECT_DIR/floxmeta"
+  pushd "$PROJECT_DIR/floxmeta" > /dev/null || return
+  git checkout name # "name" is the name of the environment
+  sed -i "s|$NIX_SYSTEM|$init_system|g" 2/env/manifest.toml 2/env/manifest.lock
+  git add .
+  git commit -m "make unsupported system"
+  git push
+
+  run "$FLOX_BIN" pull --remote owner/name
+  assert_failure
+  assert_output --partial "This environment is not yet compatible with your system ($NIX_SYSTEM)"
+
+  run "$FLOX_BIN" pull --remote owner/name --amend-system
+  assert_success
+}
