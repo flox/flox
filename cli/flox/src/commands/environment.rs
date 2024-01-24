@@ -1186,8 +1186,6 @@ impl Push {
                 To pull and manually re-apply your changes: 'flox delete && flox pull -r {owner}/{name}'
             "}.into(),
             ManagedEnvironmentError::Build(ref err) => formatdoc! {"
-                ❌  Unable to push environment with build errors:
-
                 {err}
 
                 Use 'flox edit' to resolve errors, test with 'flox activate', and 'flox push' again.",
