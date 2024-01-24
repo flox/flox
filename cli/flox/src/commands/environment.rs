@@ -1423,16 +1423,27 @@ impl Pull {
                     .context("Could not move .flox/ directory")?;
             },
             Err(
-                e @ EnvironmentError2::Core(CoreEnvironmentError::BuildEnv(
-                    CallPkgDbError::PkgDbError(PkgDbError { exit_code: 100, .. }),
+                e @ EnvironmentError2::Core(CoreEnvironmentError::LockedManifest(
+                    LockedManifestError::BuildEnv(CallPkgDbError::PkgDbError(PkgDbError {
+                        exit_code: 100,
+                        ..
+                    })),
                 )),
             ) => {
-                if amend_systems {
+                if !amend_systems && !query_amend_system(&flox.system) {
+                    bail!(formatdoc! {"
+                        This environment is not yet compatible with your system ({system}).
 
-                    env.edit_unsafe(flox, doc.to_string())?;
+                        {err:#}
+
+                        Use 'flox pull --amend-system' to add your system to the manifest."
+                    , system = flox.system, err = anyhow!(e)});
                 }
+                let doc = amend_current_system(&env, flox)?;
+                env.edit_unsafe(flox, doc.to_string())?;
 
-                bail!("Could not build environment: compatibility errors on your system ({system}).\n\n{e}", system = flox.system);
+                fs::rename(temp_dot_flox_dir, dot_flox_path)
+                    .context("Could not move .flox/ directory")?;
             },
             Err(e) => {
                 fs::remove_dir_all(&temp_dot_flox_dir)
