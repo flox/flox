@@ -64,6 +64,40 @@ function update_dummy_env() {
   "$FLOX_BIN" install gzip --remote "$OWNER/$ENV_NAME"
 }
 
+# make the environment with specified owner and name incompatible with the current system
+function make_incompatible() {
+  OWNER="$1"
+  shift
+  ENV_NAME="$1"
+  shift
+
+  init_system=
+  # replace linux with darwin or darwin with linux
+  if [ -z "${NIX_SYSTEM##*-linux}" ]; then
+    init_system="${NIX_SYSTEM%%-linux}-darwin"
+  elif [ -z "${NIX_SYSTEM#*-darwin}" ]; then
+    init_system="${NIX_SYSTEM%%-darwin}-linux"
+  else
+    echo "unknown system: '$NIX_SYSTEM'"
+    exit 1
+  fi
+
+
+  git clone "$FLOX_FLOXHUB_PATH/$OWNER/floxmeta" "$PROJECT_DIR/floxmeta"
+  pushd "$PROJECT_DIR/floxmeta" > /dev/null || return
+  git checkout "$ENV_NAME"
+  sed -i "s|$NIX_SYSTEM|$init_system|g" 2/env/manifest.toml 2/env/manifest.lock
+  git add .
+  git \
+    -c "user.name=test" \
+    -c "user.email=test@email.address" \
+    commit \
+    -m "make unsupported system"
+  git push
+  popd > /dev/null || return
+  rm -rf "$PROJECT_DIR/floxmeta"
+}
+
 # ---------------------------------------------------------------------------- #
 # bats test_tags=pull,pull:logged-out
 @test "l1: pull login: running flox pull without login succeeds" {
@@ -190,26 +224,7 @@ function update_dummy_env() {
 @test "l?: pull environment without packages for the current platform fails" {
   make_dummy_env "owner" "name"
   update_dummy_env "owner" "name"
-
-  init_system=
-  # replace linux with darwin or darwin with linux
-  if [ -z "${NIX_SYSTEM##*-linux}" ]; then
-    init_system="${NIX_SYSTEM%%-linux}-darwin"
-  elif [ -z "${NIX_SYSTEM#*-darwin}" ]; then
-    init_system="${NIX_SYSTEM%%-darwin}-linux"
-  else
-    echo "unknown system: '$NIX_SYSTEM'"
-    exit 1
-  fi
-
-  # make an unsupported system
-  git clone $FLOXHUB_FLOXMETA_DIR "$PROJECT_DIR/floxmeta"
-  pushd "$PROJECT_DIR/floxmeta" > /dev/null || return
-  git checkout name # "name" is the name of the environment
-  sed -i "s|$NIX_SYSTEM|$init_system|g" 2/env/manifest.toml 2/env/manifest.lock
-  git add .
-  git commit -m "make unsupported system"
-  git push
+  make_incompatible "owner" "name"
 
   run "$FLOX_BIN" pull --remote owner/name
   assert_failure
