@@ -222,6 +222,7 @@ EOF
 # ---------------------------------------------------------------------------- #
 
 @test "sanity check upgrade works for remote environments" {
+  _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLD?}" \
   make_empty_remote_env
 
   _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLD?}" \
