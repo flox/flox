@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use derive_more::Constructor;
 use jsonwebtoken::{DecodingKey, Validation};
-use log::info;
+use log::debug;
 use once_cell::sync::Lazy;
 use runix::arguments::common::NixCommonArgs;
 use runix::arguments::config::NixConfigArgs;
@@ -172,7 +172,7 @@ impl Flox {
                     .write_all(nix_config.as_bytes())
                     .unwrap();
 
-                info!("Updating nix.conf: {global_config_file_path:?}");
+                debug!("Updating nix.conf: {global_config_file_path:?}");
                 std::fs::rename(temp_config_file_path, &global_config_file_path).unwrap()
             }
 
