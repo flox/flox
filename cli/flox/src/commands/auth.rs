@@ -13,6 +13,8 @@ use oauth2::{
     AuthUrl,
     ClientId,
     DeviceAuthorizationUrl,
+    DeviceCodeErrorResponseType,
+    RequestTokenError,
     Scope,
     StandardDeviceAuthorizationResponse,
     TokenResponse,
@@ -129,15 +131,23 @@ pub async fn authorize(client: BasicClient, floxhub_url: &Url) -> Result<Credent
         },
     }
 
-    let token = client
+    let token_result = client
         .exchange_device_access_token(&details)
         .request_async(
             oauth2::reqwest::async_http_client,
             tokio::time::sleep,
             Some(details.expires_in()),
         )
-        .await
-        .context("Could not authorize via oauth")?;
+        .await;
+
+    let token = match token_result {
+        Err(RequestTokenError::ServerResponse(r))
+            if r.error() == &DeviceCodeErrorResponseType::ExpiredToken =>
+        {
+            bail!("failed to authenticate before the device code expired. Please retry to get a new code.");
+        },
+        _ => token_result?,
+    };
 
     done.store(true, Ordering::Relaxed);
 
