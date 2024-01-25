@@ -105,7 +105,7 @@ PkgDbReadOnly::connect()
   this->db.connect( this->dbPath.string().c_str(), SQLITE_OPEN_READONLY );
   /* Just try to execute any query to see if it blocks, which would mean that
    * someone else has the database lock. */
-  std::string qry = "select * from DbVersions";
+  std::string qry = "SELECT * from DbVersions";
   sql_rc      rcode;
   RETRY_WHILE_BUSY( rcode, this->db.execute( qry ) );
 }

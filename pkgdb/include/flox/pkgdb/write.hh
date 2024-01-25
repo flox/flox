@@ -62,6 +62,7 @@ protected:
   void
   init();
 
+
   /* Constructors */
 
 public:
@@ -175,6 +176,7 @@ public:
     return cmd.execute_all();
   }
 
+
   /* Insert */
 
   /**
@@ -229,6 +231,7 @@ public:
               const flox::Cursor & cursor,
               bool                 replace  = false,
               bool                 checkDrv = true );
+
 
   /* Updates */
 
