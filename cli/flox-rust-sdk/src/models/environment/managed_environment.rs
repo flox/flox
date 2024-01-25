@@ -720,7 +720,7 @@ impl ManagedEnvironment {
         &mut self,
         flox: &Flox,
         contents: String,
-    ) -> Result<EditResult, EnvironmentError2> {
+    ) -> Result<Result<EditResult, CoreEnvironmentError>, EnvironmentError2> {
         let mut generations = self
             .generations()
             .writable(flox.temp_dir.clone())
@@ -731,7 +731,7 @@ impl ManagedEnvironment {
 
         let result = temporary.edit_unsafe(flox, contents)?;
 
-        if result == EditResult::Unchanged {
+        if matches!(result, Ok(EditResult::Unchanged)) {
             return Ok(result);
         }
 

@@ -52,7 +52,7 @@ use flox_rust_sdk::nix::command_line::NixCommandLine;
 use flox_rust_sdk::nix::Run;
 use indoc::{formatdoc, indoc};
 use itertools::Itertools;
-use log::{debug, error, info};
+use log::{debug, error, info, warn};
 use tempfile::NamedTempFile;
 use toml_edit::Document;
 use url::Url;
@@ -1447,7 +1447,14 @@ impl Pull {
                     , system = flox.system, err = anyhow!(e)});
                 }
                 let doc = amend_current_system(&env, flox)?;
-                env.edit_unsafe(flox, doc.to_string())?;
+                if let Err(broken_error) = env.edit_unsafe(flox, doc.to_string())? {
+                    warn!("{}", formatdoc! {"
+                        {err:#}
+
+                        Could not build modified environment, build errors need to be resolved manually.",
+                        err = anyhow!(broken_error)
+                    });
+                };
 
                 fs::rename(temp_dot_flox_dir, dot_flox_path)
                     .context("Could not move .flox/ directory")?;

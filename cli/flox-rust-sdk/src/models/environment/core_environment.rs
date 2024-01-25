@@ -309,14 +309,14 @@ impl CoreEnvironment<ReadOnly> {
         &mut self,
         flox: &Flox,
         contents: String,
-    ) -> Result<EditResult, CoreEnvironmentError> {
+    ) -> Result<Result<EditResult, CoreEnvironmentError>, CoreEnvironmentError> {
         let old_contents = self.manifest_content()?;
 
         // skip the edit if the contents are unchanged
         // note: consumers of this function may call [Self::link] separately,
         //       causing an evaluation/build of the environment.
         if contents == old_contents {
-            return Ok(EditResult::Unchanged);
+            return Ok(Ok(EditResult::Unchanged));
         }
 
         let tempdir = tempfile::tempdir_in(&flox.temp_dir)
@@ -334,14 +334,15 @@ impl CoreEnvironment<ReadOnly> {
 
         debug!("transaction: building environment, ignoring errors (unsafe)");
 
-        if let Err(err) = temp_env.build(flox) {
-            debug!("transaction: build failed (ignored): {err:?}");
-        }
+        let build_attempt = temp_env.build(flox);
 
         debug!("transaction: replacing environment");
         self.replace_with(temp_env)?;
 
-        EditResult::new(&old_contents, &contents)
+        match build_attempt {
+            Ok(_) => Ok(EditResult::new(&old_contents, &contents)),
+            Err(err) => Ok(Err(err)),
+        }
     }
 
     /// Update the inputs of an environment atomically.
