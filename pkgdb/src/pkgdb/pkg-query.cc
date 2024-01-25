@@ -547,14 +547,6 @@ PkgQuery::str() const
   if ( ! this->firstOrder ) { qry << " ORDER BY " << this->orders.str(); }
   qry << " )";
 
-  // Dump the bindings as well
-  if (!this->binds.empty()) 
-  {
-    qry << "\n ... with bindings:";
-    for (auto &bind: this->binds) 
-      qry << "\n" << bind.first << " : " << bind.second;
-  }
-  
   return qry.str();
 }
 
