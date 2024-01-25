@@ -1532,6 +1532,8 @@ fn query_add_system(system: &str) -> bool {
         "The environment you are trying to pull is not compatible with your system ({system})."
     );
     let help = "Use 'flox pull --add-system' to automatically add your system to the list of compatible systems";
+
+    let reject_choice = "Don't pull this environment.";
     let confirm_choice =
         format!("Pull this environment anyway and add '{system}' to the supported systems list.");
 
@@ -1543,7 +1545,7 @@ fn query_add_system(system: &str) -> bool {
         message: &message,
         help_message: Some(help),
         typed: Select {
-            options: ["Don't pull this environment", &confirm_choice].to_vec(),
+            options: [reject_choice, &confirm_choice].to_vec(),
         },
     };
 
