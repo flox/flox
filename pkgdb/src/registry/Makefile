@@ -21,6 +21,14 @@ OBJECTS = $(SOURCES:.cc=.o)
 
 # ---------------------------------------------------------------------------- #
 
+# Define variables used by implicit rules
+# ---------------------------------------
+
+export TARGET_ARCH ?=
+
+
+# ---------------------------------------------------------------------------- #
+
 # Rules for `pkgdb scrape' are stored in a JSON file.
 RULES_JSON ?= $(shell $(NIX) store add-path -n rules.json floxpkgs/rules.json)
 RULES_JSON := $(RULES_JSON)

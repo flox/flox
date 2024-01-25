@@ -113,7 +113,7 @@ libExt ?= .dylib
 endif  # ifeq (Linux,$(OS))
 endif  # ifndef libExt
 
-TARGET_ARCH ?=
+export TARGET_ARCH ?=
 
 
 # ---------------------------------------------------------------------------- #
