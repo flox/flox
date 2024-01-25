@@ -13,6 +13,7 @@
 #include <memory>
 #include <optional>
 #include <sstream>
+#include <regex>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -200,7 +201,7 @@ addIn( std::stringstream & oss, const std::vector<std::string> & elems )
 /* -------------------------------------------------------------------------- */
 std::string PkgQuery::mkPatternString(const std::string &matchString)
 {
-  std::string pattern = "%" + matchString + "%";
+  std::string pattern = "%" + std::regex_replace(matchString, std::regex("_"), "\\_") + "%";
   return pattern;
 }
 
@@ -552,6 +553,13 @@ PkgQuery::str() const
   if ( this->deduplicate ) { qry << "\n GROUP BY relPath\n"; }
   if ( ! this->firstOrder ) { qry << " ORDER BY " << this->orders.str(); }
   qry << " )";
+  // Dump the bindings as well
+  if (!this->binds.empty()) 
+  {
+    qry << "\n-- ... with bindings:";
+    for (auto &bind: this->binds) 
+      qry << "\n-- " << bind.first << " : " << bind.second;
+  }
 
   return qry.str();
 }
