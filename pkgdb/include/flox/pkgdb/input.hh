@@ -171,10 +171,7 @@ public:
 
   /** @brief Close the read/write database connection if it is open. */
   void
-  closeDbReadWrite()
-  {
-    this->dbRW = nullptr;
-  }
+  closeDbReadWrite();
 
   /** @return Filesystem path to the flake's package database. */
   [[nodiscard]] std::filesystem::path

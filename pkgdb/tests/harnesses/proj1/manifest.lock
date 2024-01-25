@@ -18,7 +18,7 @@
           "from": {
             "owner": "NixOS",
             "repo": "nixpkgs",
-            "rev": "e8039594435c68eb4f780f3e9bf3972a7399c4b1",
+            "rev": "ab5fd150146dcfe41fda501134e6503932cc8dfd",
             "type": "github"
           },
           "subtrees": [
@@ -41,22 +41,23 @@
         ],
         "info": {
           "broken": false,
+          "description": "Event-driven I/O framework for the V8 JavaScript engine",
           "license": "MIT",
           "pname": "nodejs",
           "unfree": false,
-          "version": "18.16.0"
+          "version": "18.18.2"
         },
         "input": {
           "attrs": {
-            "lastModified": 1685979279,
-            "narHash": "sha256-1UGacsv5coICyvAzwuq89v9NsS00Lo8sz22cDHwhnn8=",
+            "lastModified": 1704300003,
+            "narHash": "sha256-FRC/OlLVvKkrdm+RtrODQPufD0vVZYA0hpH9RPaHmp4=",
             "owner": "NixOS",
             "repo": "nixpkgs",
-            "rev": "e8039594435c68eb4f780f3e9bf3972a7399c4b1",
+            "rev": "ab5fd150146dcfe41fda501134e6503932cc8dfd",
             "type": "github"
           },
-          "fingerprint": "5fde12e3424840cc2752dae09751b09b03f5a33c3ec4de672fc89d236720bdc7",
-          "url": "github:NixOS/nixpkgs/e8039594435c68eb4f780f3e9bf3972a7399c4b1"
+          "fingerprint": "9bb3d4c033fbad8efb5e28ffcd1d70383e0c5bbcb7cc5c526b824524467b19b9",
+          "url": "github:NixOS/nixpkgs/ab5fd150146dcfe41fda501134e6503932cc8dfd"
         },
         "priority": 5
       }
@@ -69,11 +70,11 @@
     "inputs": {
       "nixpkgs": {
         "from": {
-          "lastModified": 1685979279,
-          "narHash": "sha256-1UGacsv5coICyvAzwuq89v9NsS00Lo8sz22cDHwhnn8=",
+          "lastModified": 1704300003,
+          "narHash": "sha256-FRC/OlLVvKkrdm+RtrODQPufD0vVZYA0hpH9RPaHmp4=",
           "owner": "NixOS",
           "repo": "nixpkgs",
-          "rev": "e8039594435c68eb4f780f3e9bf3972a7399c4b1",
+          "rev": "ab5fd150146dcfe41fda501134e6503932cc8dfd",
           "type": "github"
         },
         "subtrees": [

@@ -103,6 +103,14 @@ SearchCommand::addSearchQueryOptions( argparse::ArgumentParser & parser )
     .action( [&]( const std::string & arg )
              { this->params.query.partialNameMatch = arg; } );
 
+  parser.add_argument( "--match-name-or-rel-path" )
+    .help( "search for packages by partially matching `pname' or '.' joined "
+           "`relPath'." )
+    .metavar( "MATCH" )
+    .nargs( 1 )
+    .action( [&]( const std::string & arg )
+             { this->params.query.partialNameOrRelPathMatch = arg; } );
+
   parser.add_argument( "--dump-query" )
     .help( "print the generated SQL query and exit." )
     .nargs( 0 )

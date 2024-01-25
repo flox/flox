@@ -7,6 +7,7 @@
 # ---------------------------------------------------------------------------- #
 
 load test_support.bash
+# bats file_tags=install
 
 # ---------------------------------------------------------------------------- #
 
@@ -18,12 +19,14 @@ project_setup() {
   rm -rf "$PROJECT_DIR"
   mkdir -p "$PROJECT_DIR"
   pushd "$PROJECT_DIR" > /dev/null || return
+  export LOCKFILE_PATH="$PROJECT_DIR/.flox/env/manifest.lock"
 }
 
 project_teardown() {
   popd > /dev/null || return
   rm -rf "${PROJECT_DIR?}"
   unset PROJECT_DIR
+  unset LOCKFILE_PATH
 }
 
 # ---------------------------------------------------------------------------- #
@@ -86,7 +89,32 @@ teardown() {
   "$FLOX_BIN" init
   run "$FLOX_BIN" install not-a-package
   assert_failure
-  assert_output --partial "failed to resolve \`not-a-package'"
+  assert_output --partial "could not install not-a-package"
+}
+
+@test "'flox install' provides suggestions when package not found" {
+  "$FLOX_BIN" init
+  run "$FLOX_BIN" install package
+  assert_failure
+  assert_output --partial "Here are a few other similar options:"
+  assert_output --partial "options with 'flox search package'"
+}
+
+@test "'flox install' provides curated suggestions when package not found" {
+  "$FLOX_BIN" init
+  run "$FLOX_BIN" install java
+  assert_failure
+  assert_output --partial "Try 'flox install jdk' instead."
+  assert_output --partial "Here are a few other similar options:"
+  assert_output --partial "$ flox install "
+  assert_output --partial "options with 'flox search jdk'"
+}
+
+@test "'flox install' does not suggest packages if multiple packages provided" {
+  "$FLOX_BIN" init
+  run "$FLOX_BIN" install java make
+  assert_failure
+  assert_output --partial "could not install java, make"
 }
 
 @test "'flox uninstall' reports error when package not found" {
@@ -224,4 +252,39 @@ teardown() {
   assert_success
   manifest=$(cat "$PROJECT_DIR/.flox/env/manifest.toml")
   assert_regex "$manifest" 'hello\.path = "hello"'
+}
+
+@test "'flox install' creates global lock" {
+  rm -f "$GLOBAL_MANIFEST_LOCK"
+  "$FLOX_BIN" init
+  _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLD?}" \
+    run "$FLOX_BIN" install hello
+  assert_success
+
+  # Check the expected global lock was created
+  run jq -r '.registry.inputs.nixpkgs.from.narHash' "$GLOBAL_MANIFEST_LOCK"
+  assert_success
+  assert_output "$PKGDB_NIXPKGS_NAR_HASH_OLD"
+
+  # Check the lock in the environment is the same as in the environment
+  run jq -r '.registry.inputs.nixpkgs.from.narHash' "$LOCKFILE_PATH"
+  assert_success
+  assert_output "$PKGDB_NIXPKGS_NAR_HASH_OLD"
+}
+
+@test "'flox install' uses global lock" {
+  rm -f "$GLOBAL_MANIFEST_LOCK"
+  _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLD?}" \
+    run "$FLOX_BIN" update --global
+
+  "$FLOX_BIN" init
+  # Set new rev just to make sure we're not incidentally using old rev.
+  _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_NEW?}" \
+    run "$FLOX_BIN" install hello
+  assert_success
+
+  # Check the environment used the global lock
+  run jq -r '.registry.inputs.nixpkgs.from.narHash' "$LOCKFILE_PATH"
+  assert_success
+  assert_output "$PKGDB_NIXPKGS_NAR_HASH_OLD"
 }

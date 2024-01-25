@@ -55,8 +55,28 @@ teardown() {
 
   run "$FLOX_BIN" list
   assert_success
+  assert_output --regexp 'hello: hello \([0-9]+\.[0-9]+\.[0-9]+\)'
+}
+
+@test "'flox list' lists packages of environment in the current dir; shows different paths" {
+  "$FLOX_BIN" init
+  "$FLOX_BIN" install python310Packages.pip
+
+  run "$FLOX_BIN" list
+  assert_success
   assert_output --regexp - << EOF
-hello
+pip: python310Packages.pip \([0-9]+\.[0-9]+\.[0-9]+\)
+EOF
+}
+
+@test "'flox list' lists packages of environment in the current dir; shows different id" {
+  "$FLOX_BIN" init
+  "$FLOX_BIN" install --id greeting hello
+
+  run "$FLOX_BIN" list
+  assert_success
+  assert_output --regexp - << EOF
+greeting: hello \([0-9]+\.[0-9]+\.[0-9]+\)
 EOF
 }
 
@@ -78,4 +98,27 @@ EOF
   run "$FLOX_BIN" list --config
   assert_success
   assert_output "$MANIFEST_CONTENT"
+}
+
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=list,list:not-applicable
+@test "'flox list' hides packages not installed for the current system" {
+  "$FLOX_BIN" init
+  MANIFEST_CONTENT="$(
+    cat <<- EOF
+    [options]
+    systems = [ "$NIX_SYSTEM" ]
+    [install]
+    hello.path = "hello"
+    htop = { path = "htop", systems = [] }
+EOF
+
+  )"
+
+  echo "$MANIFEST_CONTENT" | "$FLOX_BIN" edit -f -
+
+  run "$FLOX_BIN" list -n
+  assert_success
+  assert_output "hello"
 }

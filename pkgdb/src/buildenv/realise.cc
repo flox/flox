@@ -43,12 +43,25 @@ namespace flox::buildenv {
 #  error "SET_PROMPT_BASH_SH must be set to the path of `set-prompt.bash.sh'"
 #endif
 
+#ifndef SET_PROMPT_ZSH_SH
+#  error "SET_PROMPT_ZSH_SH must be set to the path of `set-prompt.zsh.sh'"
+#endif
+
+#ifndef CONTAINER_BUILDER_PATH
+#  error \
+    "CONTAINER_BUILDER_PATH must be set to a store path of 'mkContainer.nix'"
+#endif
+
+#ifndef COMMON_NIXPKGS_URL
+#  error "COMMON_NIXPKGS_URL must be set to a locked flakeref of nixpkgs to use"
+#endif
+
 /* -------------------------------------------------------------------------- */
 
 static const std::string BASH_ACTIVATE_SCRIPT = R"(
 # We use --rcfile to activate using bash which skips sourcing ~/.bashrc,
 # so source that here.
-if [ -f ~/.bashrc ]
+if [ -f ~/.bashrc -a "${FLOX_SOURCED_FROM_SHELL_RC:-}" != 1 ]
 then
     source ~/.bashrc
 fi
@@ -57,6 +70,19 @@ if [ -d "$FLOX_ENV/etc/profile.d" ]; then
   declare -a _prof_scripts;
   _prof_scripts=( $(
     shopt -s nullglob;
+    echo "$FLOX_ENV/etc/profile.d"/*.sh;
+  ) );
+  for p in "${_prof_scripts[@]}"; do . "$p"; done
+  unset _prof_scripts;
+fi
+)";
+
+
+// unlike bash, zsh activation calls this script from the user's shell rcfile
+static const std::string ZSH_ACTIVATE_SCRIPT = R"(
+if [ -d "$FLOX_ENV/etc/profile.d" ]; then
+  declare -a _prof_scripts;
+  _prof_scripts=( $(
     echo "$FLOX_ENV/etc/profile.d"/*.sh;
   ) );
   for p in "${_prof_scripts[@]}"; do . "$p"; done
@@ -348,6 +374,8 @@ createFloxEnv( nix::EvalState &     state,
    * Functionality shared between all environments is
    * in `flox.zdotdir/.zshrc'. */
   std::ofstream zshActivate( tempDir / "activate" / "zsh" );
+  zshActivate << ZSH_ACTIVATE_SCRIPT << "\n";
+  zshActivate << "source " << SET_PROMPT_ZSH_SH << "\n";
   zshActivate << commonActivate.str();
   zshActivate.close();
 
@@ -357,6 +385,9 @@ createFloxEnv( nix::EvalState &     state,
   pkgs.emplace_back( state.store->printStorePath( activationStorePath ),
                      true,
                      buildenv::Priority() );
+
+  references.insert( state.store->parseStorePath( SET_PROMPT_BASH_SH ) );
+  references.insert( state.store->parseStorePath( SET_PROMPT_ZSH_SH ) );
 
   /* Insert profile.d scripts.
    * The store path is provided at compile time via the `PROFILE_D_SCRIPTS_DIR'
@@ -372,6 +403,98 @@ createFloxEnv( nix::EvalState &     state,
   return createEnvironmentStorePath( state, pkgs, references, originalPackage );
 }
 
+
+nix::StorePath
+createContainerBuilder( nix::EvalState & state,
+                        nix::StorePath   environmentStorePath,
+                        const System &   system )
+{
+  static const nix::FlakeRef nixpkgsRef
+    = nix::parseFlakeRef( COMMON_NIXPKGS_URL );
+
+  auto lockedNixpkgs
+    = nix::flake::lockFlake( state, nixpkgsRef, nix::flake::LockFlags() );
+  nix::Value vNixpkgsFlake;
+  nix::flake::callFlake( state, lockedNixpkgs, vNixpkgsFlake );
+
+  state.store->ensurePath(
+    state.store->parseStorePath( CONTAINER_BUILDER_PATH ) );
+
+  nix::Value vContainerBuilder;
+  state.eval(
+    state.parseExprFromFile( nix::CanonPath( CONTAINER_BUILDER_PATH ) ),
+    vContainerBuilder );
+
+  nix::Value vEnvironmentStorePath;
+  auto       sStorePath = state.store->printStorePath( environmentStorePath );
+  vEnvironmentStorePath.mkPath( sStorePath.c_str() );
+
+  nix::Value vSystem;
+  vSystem.mkString( nix::nativeSystem );
+
+  nix::Value vContainerSystem;
+  vContainerSystem.mkString( system );
+
+  nix::Value vBindings;
+  auto       bindings = state.buildBindings( 4 );
+  bindings.push_back(
+    { state.symbols.create( "nixpkgsFlake" ), &vNixpkgsFlake } );
+  bindings.push_back(
+    { state.symbols.create( "environmentOutPath" ), &vEnvironmentStorePath } );
+  bindings.push_back( { state.symbols.create( "system" ), &vSystem } );
+  bindings.push_back(
+    { state.symbols.create( "containerSystem" ), &vContainerSystem } );
+
+  vBindings.mkAttrs( bindings );
+
+  nix::Value vContainerBuilderDrv;
+  state.callFunction( vContainerBuilder,
+                      vBindings,
+                      vContainerBuilderDrv,
+                      nix::PosIdx() );
+
+  // force the derivation value to be evaluated
+  // this enforces that the nix expression in pure up to the derivation
+  // (see below)
+  state.forceValue( vContainerBuilderDrv, nix::noPos );
+
+  auto containerBuilderDrv
+    = nix::getDerivation( state, vContainerBuilderDrv, false ).value();
+
+
+  // building of the container builder derivation requires impure evaluation
+
+
+  // Access to absolute paths is restricted by default.
+  // Instead of disabling restricted evaluation,
+  // we allow access to the bundled store path explictly.
+  state.allowPath( environmentStorePath );
+
+  // the derivation uses `builtins.storePath`
+  // to ensure that all store references of the enfironment
+  // are included in the derivation/container.
+  //
+  // `builtins.storePath` however requires impure evaluation
+  // since input addressed store paths are not guaranteed to be pure or
+  // present in the store in the first place.
+  // In this case, we know that the environment is already built.
+  //
+  //
+  auto pureEvalState = nix::evalSettings.pureEval.get();
+  nix::evalSettings.pureEval.override( false );
+
+  state.store->buildPaths( nix::toDerivedPaths(
+    { nix::StorePathWithOutputs { *containerBuilderDrv.queryDrvPath(),
+                                  {} } } ) );
+
+
+  auto outPath = containerBuilderDrv.queryOutPath();
+
+  // be nice, reset the original pure eval state
+  nix::evalSettings.pureEval = pureEvalState;
+
+  return outPath;
+}
 
 /* -------------------------------------------------------------------------- */
 

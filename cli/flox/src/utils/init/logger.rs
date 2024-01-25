@@ -6,7 +6,7 @@ use tracing_subscriber::prelude::*;
 
 use crate::commands::Verbosity;
 use crate::utils::logger::{self, LogFormatter};
-use crate::utils::metrics::PosthogLayer;
+use crate::utils::metrics::MetricsLayer;
 use crate::utils::TERMINAL_STDERR;
 
 struct LockingTerminalStderr;
@@ -35,7 +35,7 @@ impl std::io::Write for LockingTerminalStderr {
     }
 }
 
-type LayerType = tracing_subscriber::layer::Layered<PosthogLayer, tracing_subscriber::Registry>;
+type LayerType = tracing_subscriber::layer::Layered<MetricsLayer, tracing_subscriber::Registry>;
 type ReloadHandle<T> = tracing_subscriber::reload::Handle<T, LayerType>;
 
 #[allow(clippy::type_complexity)]
@@ -94,7 +94,7 @@ pub fn init_logger(verbosity: Option<Verbosity>, debug: Option<bool>) {
         let fmt_filtered = fmt_reloadable.with_filter(filter_reloadable);
 
         tracing_subscriber::registry()
-            .with(PosthogLayer::new())
+            .with(MetricsLayer::new())
             .with(fmt_filtered)
             .init();
 

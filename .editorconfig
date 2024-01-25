@@ -19,7 +19,7 @@
 [*]
 # use "line feed" with no "carriage return" as EOL
 end_of_line              = lf
-trim_trailing_whitespace = true;
+trim_trailing_whitespace = true
 
 # ---------------------------------------------------------------------------- #
 

@@ -7,6 +7,7 @@
 # ---------------------------------------------------------------------------- #
 
 load test_support.bash
+# bats file_tags=remote
 
 # ---------------------------------------------------------------------------- #
 
@@ -68,7 +69,7 @@ function make_empty_remote_env() {
 @test "r0: listing a remote environment does not create (visible) local files" {
   make_empty_remote_env
 
-  run --separate-stderr "$FLOX_BIN" list --remote "$OWNER/test"
+  run --separate-stderr "$FLOX_BIN" list --name --remote "$OWNER/test"
   assert_success
   assert_output ""
 
@@ -85,7 +86,7 @@ function make_empty_remote_env() {
   run --separate-stderr "$FLOX_BIN" install hello --remote "$OWNER/test"
   assert_success
 
-  assert [ -h "$FLOX_CACHE_HOME/run/$OWNER/$NIX_SYSTEM.test" ]
+  assert [ -h "$FLOX_CACHE_HOME/run/$OWNER/test" ]
 }
 
 # bats test_tags=install,remote,remote:install
@@ -96,7 +97,7 @@ function make_empty_remote_env() {
   assert_success
   assert_output --partial "environment $OWNER/test (remote)" # managed env output
 
-  run --separate-stderr "$FLOX_BIN" list --remote "$OWNER/test"
+  run --separate-stderr "$FLOX_BIN" list --name --remote "$OWNER/test"
   assert_success
   assert_output "hello"
 }
@@ -110,7 +111,7 @@ function make_empty_remote_env() {
   run "$FLOX_BIN" uninstall vim --remote "$OWNER/test"
   assert_success
 
-  run --separate-stderr "$FLOX_BIN" list --remote "$OWNER/test"
+  run --separate-stderr "$FLOX_BIN" list --name --remote "$OWNER/test"
   assert_success
   assert_output "emacs"
 }
@@ -128,9 +129,9 @@ EOF
 
   run "$FLOX_BIN" edit -f "$TMP_MANIFEST_PATH" --remote "$OWNER/test"
   assert_success
-  assert_output --partial "✅ environment successfully edited"
+  assert_output --partial "✅  Environment successfully updated."
 
-  run --separate-stderr "$FLOX_BIN" list --remote "$OWNER/test"
+  run --separate-stderr "$FLOX_BIN" list --name --remote "$OWNER/test"
   assert_success
   assert_output "hello"
 }
@@ -197,6 +198,24 @@ EOF
   assert_failure
 
   run "$FLOX_BIN" activate --remote "$OWNER/test" --trust -- exit
+  assert_success
+}
+
+# bats test_tags=remote,activate,trust,remote:activate:trust-current-user
+#
+# If the remotely accessed environment is owned by the currently logged in user,
+# we trust it automatically.
+#
+# flox reads the user handle from the auth token.
+# Here we set a floxhub token with the user handle "test".
+@test "m10.4: 'activate --remote' succeeds if owned by current user" {
+  export OWNER="test"
+  floxhub_setup "$OWNER"
+  make_empty_remote_env
+
+  "$FLOX_BIN" install hello --remote "$OWNER/test"
+
+  run "$FLOX_BIN" activate --remote "$OWNER/test" -- exit
   assert_success
 }
 

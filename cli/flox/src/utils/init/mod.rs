@@ -12,10 +12,6 @@ mod metrics;
 pub use logger::*;
 pub use metrics::*;
 
-mod channels;
-
-pub use channels::{init_channels, DEFAULT_CHANNELS, HIDDEN_CHANNELS};
-
 pub fn init_access_tokens(
     config_tokens: &HashMap<String, String>,
 ) -> Result<Vec<(String, String)>> {
@@ -73,7 +69,7 @@ pub fn init_access_tokens(
         }
         tokens
     } else {
-        debug!("no default user nix.conf found - weird");
+        debug!("no default user nix.conf found");
         Default::default()
     };
 

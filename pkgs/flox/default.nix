@@ -30,6 +30,7 @@ in
     postBuild = ''
       wrapProgram $out/bin/flox \
         --set PKGDB_BIN       "${flox-pkgdb}/bin/pkgdb" \
+        --set LD_FLOXLIB      "${flox-pkgdb}/lib/ld-floxlib.so" \
         --set FLOX_BIN        "${flox-cli}/bin/flox" \
         --set FLOX_VERSION    "${version}"
     '';

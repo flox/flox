@@ -13,8 +13,9 @@ expect_after {
   timeout { exit 1 }
   eof { exit 2 }
   "*\n" { exp_continue }
+  "*\r" { exp_continue }
 }
-expect "Building environment"
+expect "Getting ready to use environment"
 
 # check for hello
 send "{ command -v hello||which hello||type -P hello || echo not found ; } 2>&1\n"

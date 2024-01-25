@@ -26,7 +26,6 @@
   gitMinimal,
   nix,
   pkgsFor,
-  pre-commit-check,
   flox-pkgdb,
 }: let
   flox-src = builtins.path {
@@ -222,8 +221,7 @@ in
           flox-pkgdb
           ;
 
-        ciPackages = [
-        ];
+        ciPackages = [];
 
         devPackages = [
           rustfmt

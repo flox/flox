@@ -19,8 +19,10 @@ use super::{
     ENVIRONMENT_POINTER_FILENAME,
 };
 use crate::flox::{EnvironmentOwner, EnvironmentRef, Flox};
+use crate::models::container_builder::ContainerBuilder;
 use crate::models::environment_ref::EnvironmentName;
 use crate::models::floxmetav2::{FloxmetaV2, FloxmetaV2Error};
+use crate::models::lockfile::LockedManifest;
 use crate::models::manifest::PackageToInstall;
 use crate::models::pkgdb::UpgradeResult;
 
@@ -77,8 +79,7 @@ impl RemoteEnvironment {
         )
         .unwrap();
 
-        let out_link =
-            gcroots_dir(flox, &pointer.owner).join(remote_branch_name(&flox.system, &pointer));
+        let out_link = gcroots_dir(flox, &pointer.owner).join(remote_branch_name(&pointer));
 
         let inner = ManagedEnvironment::open_with(floxmeta, flox, pointer, dot_flox_path, out_link)
             .map_err(RemoteEnvironmentError::OpenManagedEnvironment)?;
@@ -115,6 +116,15 @@ impl Environment for RemoteEnvironment {
         self.inner.build(flox)
     }
 
+    /// Lock the environment and return the lockfile contents
+    fn lock(&mut self, flox: &Flox) -> Result<LockedManifest, EnvironmentError2> {
+        self.inner.lock(flox)
+    }
+
+    fn build_container(&mut self, flox: &Flox) -> Result<ContainerBuilder, EnvironmentError2> {
+        self.inner.build_container(flox)
+    }
+
     /// Install packages to the environment atomically
     fn install(
         &mut self,
@@ -145,6 +155,9 @@ impl Environment for RemoteEnvironment {
     /// Atomically edit this environment, ensuring that it still builds
     fn edit(&mut self, flox: &Flox, contents: String) -> Result<EditResult, EnvironmentError2> {
         let result = self.inner.edit(flox, contents)?;
+        if result == EditResult::Unchanged {
+            return Ok(result);
+        }
         self.inner
             .push(false)
             .map_err(RemoteEnvironmentError::UpdateUpstream)?;

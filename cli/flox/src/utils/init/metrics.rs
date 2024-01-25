@@ -9,7 +9,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 use crate::utils::metrics::{
     MetricEntry,
-    PosthogEvent,
+    MetricEvent,
     METRICS_LOCK_FILE_NAME,
     METRICS_UUID_FILE_NAME,
 };
@@ -73,7 +73,7 @@ pub async fn init_telemetry(data_dir: impl AsRef<Path>, cache_dir: impl AsRef<Pa
     // Generate a real metric to use as an example so they can see the field contents are non-threatening
     let now = OffsetDateTime::now_utc();
     let example_metric_entry = MetricEntry::new(
-        PosthogEvent {
+        MetricEvent {
             subcommand: "[subcommand]".to_string().into(),
             extras: Default::default(),
         },

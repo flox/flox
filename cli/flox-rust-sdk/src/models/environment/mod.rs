@@ -2,12 +2,9 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::{env, fs, io};
 
-use flox_types::catalog::CatalogEntry;
 use flox_types::version::Version;
 use log::debug;
 use runix::command_line::NixCommandLineRunJsonError;
-use runix::installable::FlakeAttribute;
-use runix::store_path::StorePath;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use url::Url;
@@ -15,9 +12,9 @@ use walkdir::WalkDir;
 
 use self::managed_environment::ManagedEnvironmentError;
 use self::remote_environment::RemoteEnvironmentError;
+use super::container_builder::ContainerBuilder;
 use super::environment_ref::{EnvironmentName, EnvironmentOwner};
-use super::flox_package::FloxTriple;
-use super::lockfile::Lockfile;
+use super::lockfile::LockedManifest;
 use super::manifest::PackageToInstall;
 use super::pkgdb::UpgradeResult;
 use crate::flox::{Flox, Floxhub};
@@ -54,10 +51,13 @@ pub const LOCKFILE_FILENAME: &str = "manifest.lock";
 pub const GCROOTS_DIR_NAME: &str = "run";
 pub const ENV_DIR_NAME: &str = "env";
 pub const FLOX_ENV_VAR: &str = "FLOX_ENV";
+pub const FLOX_ENV_DIRS_VAR: &str = "FLOX_ENV_DIRS";
+pub const FLOX_ENV_LIB_DIRS_VAR: &str = "FLOX_ENV_LIB_DIRS";
 pub const FLOX_ACTIVE_ENVIRONMENTS_VAR: &str = "FLOX_ACTIVE_ENVIRONMENTS";
 pub const FLOX_PROMPT_ENVIRONMENTS_VAR: &str = "FLOX_PROMPT_ENVIRONMENTS";
+pub const FLOX_SYSTEM_PLACEHOLDER: &str = "_FLOX_INIT_SYSTEM";
 
-pub type UpdateResult = (Option<Lockfile>, Lockfile);
+pub type UpdateResult = (Option<LockedManifest>, LockedManifest);
 
 /// A path that is guaranteed to be canonicalized
 ///
@@ -94,12 +94,6 @@ impl CanonicalPath {
     }
 }
 
-pub enum InstalledPackage {
-    Catalog(FloxTriple, CatalogEntry),
-    FlakeAttribute(FlakeAttribute, CatalogEntry),
-    StorePath(StorePath),
-}
-
 /// The result of an installation attempt that contains the new manifest contents
 /// along with whether each package was already installed
 #[derive(Debug)]
@@ -111,6 +105,12 @@ pub struct InstallationAttempt {
 pub trait Environment: Send {
     /// Build the environment and create a result link as gc-root
     fn build(&mut self, flox: &Flox) -> Result<(), EnvironmentError2>;
+
+    /// Resolve the environment and return the lockfile
+    fn lock(&mut self, flox: &Flox) -> Result<LockedManifest, EnvironmentError2>;
+
+    /// Create a container image from the environment
+    fn build_container(&mut self, flox: &Flox) -> Result<ContainerBuilder, EnvironmentError2>;
 
     /// Install packages to the environment atomically
     fn install(
@@ -340,6 +340,8 @@ pub enum EnvironmentError2 {
     EnvironmentExists(PathBuf),
     #[error("could not write .gitignore file")]
     WriteGitignore(#[source] std::io::Error),
+    #[error("couldn't update manifest")]
+    ManifestEdit(#[source] std::io::Error),
     // endregion
 
     // todo: rmove with "catalog()" method

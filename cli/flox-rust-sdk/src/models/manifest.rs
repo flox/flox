@@ -186,26 +186,6 @@ pub fn contains_package(toml: &Document, pkg_name: &str) -> Result<bool, TomlEdi
     }
 }
 
-/// List the packages contained in the contents of a manifest.
-pub fn list_packages(manifest_contents: &str) -> Result<Option<Vec<String>>, TomlEditError> {
-    let toml = manifest_contents
-        .parse::<Document>()
-        .map_err(TomlEditError::ParseManifest)?;
-    if let Some(Item::Table(installs)) = toml.get("install") {
-        let pkgs = installs
-            .iter()
-            .map(|(pkg, _)| pkg.to_string())
-            .collect::<Vec<_>>();
-        if pkgs.is_empty() {
-            Ok(None)
-        } else {
-            Ok(Some(pkgs))
-        }
-    } else {
-        Ok(None)
-    }
-}
-
 /// A parsed descriptor from `pkgdb parse descriptor --manifest`
 ///
 /// FIXME: this is currently a hack using a tool in `pkgdb` only meant for debugging.

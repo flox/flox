@@ -339,26 +339,15 @@ pkgdb_vars_setup() {
 
   export _PKGDB_TEST_SUITE_MODE=:
 
-  # This revision is a bit old, but it was created from `release-23.05'.
-  # Notably its default `nodejs' version is `18.16.0' which is referenced in
-  # some test cases.
-  PKGDB_NIXPKGS_REV_OLD='e8039594435c68eb4f780f3e9bf3972a7399c4b1'
-  # This revision is a bit newer, and was also created from `release-23.05'.
-  # Notably its default `nodejs' version is `18.17.1' which is referenced in
-  # some test cases.
-  PKGDB_NIXPKGS_REV_NEW='9faf91e6d0b7743d41cce3b63a8e5c733dc696a3'
-
-  PKGDB_NIXPKGS_REF_OLD="github:NixOS/nixpkgs/$PKGDB_NIXPKGS_REV_OLD"
-  PKGDB_NIXPKGS_REF_NEW="github:NixOS/nixpkgs/$PKGDB_NIXPKGS_REV_NEW"
+  PKGDB_NIXPKGS_REV_NEW='ab5fd150146dcfe41fda501134e6503932cc8dfd'
 
   # This causes `pkgdb' to use this revision for `nixpkgs' anywhere the
   # `--ga-registry' flag is used.
   # This is useful for testing `pkgdb' against a specific revision of `nixpkgs'
   # so that we get consistent packages and improved caching.
-  _PKGDB_GA_REGISTRY_REF_OR_REV="$PKGDB_NIXPKGS_REV_OLD"
+  _PKGDB_GA_REGISTRY_REF_OR_REV="$PKGDB_NIXPKGS_REV_NEW"
 
-  export PKGDB_NIXPKGS_REV_OLD PKGDB_NIXPKGS_REV_NEW \
-    PKGDB_NIXPKGS_REF_OLD PKGDB_NIXPKGS_REF_NEW \
+  export PKGDB_NIXPKGS_REV_NEW \
     _PKGDB_GA_REGISTRY_REF_OR_REV
 
   export __FT_RAN_PKGDB_VARS_SETUP=:
@@ -451,9 +440,6 @@ common_suite_setup() {
     print_var GIT_CONFIG_SYSTEM
     print_var GIT_CONFIG_GLOBAL
     print_var PKGDB_NIXPKGS_REV_NEW
-    print_var PKGDB_NIXPKGS_REV_OLD
-    print_var PKGDB_NIXPKGS_REF_NEW
-    print_var PKGDB_NIXPKGS_REF_OLD
     print_var _PKGDB_GA_REGISTRY_REF_OR_REV
   } >&3
 }

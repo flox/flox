@@ -65,6 +65,7 @@ REPO_ROOT    := $(patsubst %/,%,$(dir $(MAKEFILE_DIR)))
 
 export PREFIX ?= $(PKGDB_ROOT)/build
 export BINDIR ?= $(PREFIX)/bin
+export LIBDIR ?= $(PREFIX)/lib
 
 
 # ---------------------------------------------------------------------------- #
@@ -151,9 +152,25 @@ VERSION := $(file < $(PKGDB_ROOT)/.version)
 PROFILE_D_SCRIPTS_DIR ?= $(shell                                            \
   $(NIX) build .\#flox-pkgdb.envs.PROFILE_D_SCRIPTS_DIR --print-out-paths)
 PROFILE_D_SCRIPTS_DIR := $(PROFILE_D_SCRIPTS_DIR)
-SET_PROMPT_BASH_SH ?= $(shell                                                  \
-  $(NIX) store add-path -n set-prompt-bash.sh src/buildenv/set-prompt-bash.sh)
+
+SET_PROMPT_BASH_SH ?= $(shell                                    \
+  $(NIX) store add-path -n set-prompt.bash.sh                    \
+	                      src/buildenv/assets/set-prompt.bash.sh)
 SET_PROMPT_BASH_SH := $(SET_PROMPT_BASH_SH)
+
+SET_PROMPT_ZSH_SH ?= $(shell                                    \
+  $(NIX) store add-path -n set-prompt.zsh.sh                    \
+	                      src/buildenv/assets/set-prompt.zsh.sh)
+SET_PROMPT_ZSH_SH := $(SET_PROMPT_ZSH_SH)
+
+CONTAINER_BUILDER_PATH ?= $(shell                             \
+  $(NIX) store add-path -n mkContainer.nix                    \
+	                      src/buildenv/assets/mkContainer.nix)
+CONTAINER_BUILDER_PATH := $(CONTAINER_BUILDER_PATH)
+
+COMMON_NIXPKGS_URL ?= $(shell                               \
+  $(NIX) eval --raw .\#flox-pkgdb.envs.COMMON_NIXPKGS_URL)
+COMMON_NIXPKGS_URL := $(COMMON_NIXPKGS_URL)
 
 
 # ---------------------------------------------------------------------------- #
@@ -177,12 +194,18 @@ SRCS           = $(filter-out src/registry/,$(call rwildcard,src,*.cc))
 test_SRCS      = $(sort $(wildcard tests/*.cc))
 ALL_SRCS       = $(SRCS) $(test_SRCS)
 BINS           = bin/pkgdb
+ifeq (Linux,$(OS))
+LIBS           = lib/ld-floxlib.so
+else
+LIBS           =
+endif  # ifeq (Linux,$(OS))
 TEST_UTILS     = $(addprefix tests/,is_sqlite3 search-params)
 TESTS          = $(filter-out $(TEST_UTILS),$(test_SRCS:.cc=))
 TEST_DATA      =
 ALL_BINS       = $(TESTS) $(TEST_UTILS) $(BINS)
+ALL_LIBS       = $(LIBS)
 CLEANDIRS      =
-CLEANFILES     = $(ALL_SRCS:.cc=.o) $(ALL_BINS)
+CLEANFILES     = $(ALL_SRCS:.cc=.o) $(ALL_BINS) $(ALL_LIBS)
 FULLCLEANDIRS  =
 FULLCLEANFILES =
 
@@ -342,11 +365,19 @@ CXXFLAGS += '-DSEMVER_PATH="$(SEMVER_PATH)"'
 # Flags for Specific Files
 # ------------------------
 
-src/buildenv/realise.o: CXXFLAGS +=                   \
+src/buildenv/realise.o: CXXFLAGS +=                     \
 	'-DPROFILE_D_SCRIPTS_DIR="$(PROFILE_D_SCRIPTS_DIR)"'
 
 src/buildenv/realise.o: CXXFLAGS +=               \
 	'-DSET_PROMPT_BASH_SH="$(SET_PROMPT_BASH_SH)"'
+
+src/buildenv/realise.o: CXXFLAGS += '-DSET_PROMPT_ZSH_SH="$(SET_PROMPT_ZSH_SH)"'
+
+src/buildenv/realise.o: CXXFLAGS +=                       \
+	'-DCONTAINER_BUILDER_PATH="$(CONTAINER_BUILDER_PATH)"'
+
+src/buildenv/realise.o: CXXFLAGS +=               \
+	'-DCOMMON_NIXPKGS_URL="$(COMMON_NIXPKGS_URL)"'
 
 
 # ---------------------------------------------------------------------------- #
@@ -397,10 +428,10 @@ fullclean: fullclean-generic fullclean-recursive
 # Install Targets
 # ---------------
 
-.PHONY: install install-bin
+.PHONY: install install-bin install-lib
 
 #: Install binaries, libraries, and include files
-install: install-bin
+install: install-bin install-lib
 
 $(BINDIR)/%: bin/%
 	$(MKDIR_P) $(@D);
@@ -408,6 +439,13 @@ $(BINDIR)/%: bin/%
 
 #: Install binaries
 install-bin: $(addprefix $(BINDIR)/,$(patsubst bin/%,%,$(BINS)))
+
+$(LIBDIR)/%: lib/%
+	$(MKDIR_P) $(@D);
+	if $(TEST) -f $<; then $(CP) -- "$<" "$@"; fi
+
+#: Install libraries
+install-lib: $(addprefix $(LIBDIR)/,$(patsubst lib/%,%,$(LIBS)))
 
 
 # ---------------------------------------------------------------------------- #
@@ -569,12 +607,13 @@ cc-check: $(TESTS:.cc=)
 	exit "$$_ec";
 
 #: Run all bats tests
+PKGDB_BATS_FILES ?= "$(PKGDB_ROOT)/tests"
 bats-check: bin $(TEST_UTILS)
 	PKGDB_BIN="$(PKGDB_ROOT)/bin/pkgdb"                          \
 	PKGDB_IS_SQLITE3_BIN="$(PKGDB_ROOT)/tests/is_sqlite3"        \
 	PKGDB_SEARCH_PARAMS_BIN="$(PKGDB_ROOT)/tests/search-params"  \
 	  $(BATS) --print-output-on-failure --verbose-run --timing   \
-	          "$(PKGDB_ROOT)/tests";
+	          "$(PKGDB_BATS_FILES)";
 
 
 # ---------------------------------------------------------------------------- #
@@ -614,6 +653,10 @@ src/registry/%:
 $(BINS): %: $(SRCS:.cc=.o) src/registry/libregistry.a
 	$(MKDIR_P) $(@D);
 	$(CXX) $(filter %.o %.a,$^) $(LDFLAGS) -o $@;
+
+lib/ld-floxlib.so: src/ld-floxlib.c
+	$(MKDIR_P) $(@D);
+	$(CC) $(CFLAGS) -shared -fPIC $< -o $@ -ldl;
 
 
 # ---------------------------------------------------------------------------- #

@@ -66,9 +66,9 @@ nlohmann::json inputWithNixpkgsJSON {
         { "repo", "nixpkgs" },
         { "rev", nixpkgsRev },
         { "type", "github" },
-        { "lastModified", 1685979279 },
+        { "lastModified", 1704300003 },
         { "narHash",
-          "sha256-1UGacsv5coICyvAzwuq89v9NsS00Lo8sz22cDHwhnn8=" } } } }
+          "sha256-FRC/OlLVvKkrdm+RtrODQPufD0vVZYA0hpH9RPaHmp4=" } } } }
 };
 
 
@@ -83,54 +83,70 @@ nlohmann::json mockInputJSON {
         { "repo", "repo" },
         { "rev", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" },
         { "type", "github" },
-        { "lastModified", 1685979279 },
+        { "lastModified", 1704300003 },
         { "narHash",
-          "sha256-1UGacsv5coICyvAzwuq89v9NsS00Lo8sz22cDHwhnn8=" } } } }
+          "sha256-FRC/OlLVvKkrdm+RtrODQPufD0vVZYA0hpH9RPaHmp4=" } } } }
 };
 
 
 /* -------------------------------------------------------------------------- */
 
-nlohmann::json   helloLockedJSON { inputWithNixpkgsJSON,
-                                   { "attr-path",
-                                     { "legacyPackages", _system, "hello" } },
-                                   { "priority", 5 },
-                                   { "info",
-                                     { { "broken", false },
-                                       { "license", "GPL-3.0-or-later" },
-                                       { "pname", "hello" },
-                                       { "unfree", false },
-                                       { "version", "2.12.1" } } } };
+nlohmann::json helloLockedJSON {
+  inputWithNixpkgsJSON,
+  { "attr-path", { "legacyPackages", _system, "hello" } },
+  { "priority", 5 },
+  { "info",
+    {
+      { "broken", false },
+      { "license", "GPL-3.0-or-later" },
+      { "pname", "hello" },
+      { "unfree", false },
+      { "version", "2.12.1" },
+      { "description",
+        "A program that produces a familiar, friendly greeting" },
+    } }
+};
 LockedPackageRaw helloLocked( helloLockedJSON );
 
 
 /* -------------------------------------------------------------------------- */
 
 /** Change a few fields from what we'd get if actual resultion was performed. */
-nlohmann::json   mockHelloLockedJSON { mockInputJSON,
-                                       { "attr-path", { "mock", "hello" } },
-                                       { "priority", 5 },
-                                       { "info",
-                                         { { "broken", false },
-                                           { "license", "GPL-3.0-or-later" },
-                                           { "pname", "hello" },
-                                           { "unfree", false },
-                                           { "version", "2.12.1" } } } };
+nlohmann::json mockHelloLockedJSON {
+  mockInputJSON,
+  { "attr-path", { "mock", "hello" } },
+  { "priority", 5 },
+  { "info",
+    {
+      { "broken", false },
+      { "license", "GPL-3.0-or-later" },
+      { "pname", "hello" },
+      { "unfree", false },
+      { "version", "2.12.1" },
+      { "description",
+        "A program that produces a familiar, friendly greeting" },
+    } }
+};
 LockedPackageRaw mockHelloLocked( mockHelloLockedJSON );
 
 
 /* -------------------------------------------------------------------------- */
 
-nlohmann::json   curlLockedJSON { inputWithNixpkgsJSON,
-                                  { "attr-path",
-                                    { "legacyPackages", _system, "curl" } },
-                                  { "priority", 5 },
-                                  { "info",
-                                    { { "broken", false },
-                                      { "license", "curl" },
-                                      { "pname", "curl" },
-                                      { "unfree", false },
-                                      { "version", "8.1.1" } } } };
+nlohmann::json curlLockedJSON {
+  inputWithNixpkgsJSON,
+  { "attr-path", { "legacyPackages", _system, "curl" } },
+  { "priority", 5 },
+  { "info",
+    {
+      { "broken", false },
+      { "license", "curl" },
+      { "pname", "curl" },
+      { "unfree", false },
+      { "version", curlVersion },
+      { "description",
+        "A command line tool for transferring files with URL syntax" },
+    } }
+};
 LockedPackageRaw curlLocked( curlLockedJSON );
 
 
@@ -138,15 +154,21 @@ LockedPackageRaw curlLocked( curlLockedJSON );
 
 /** Change a few fields from what we'd get if actual resultion was performed.
  */
-nlohmann::json   mockCurlLockedJSON { mockInputJSON,
-                                      { "attr-path", { "mock", "curl" } },
-                                      { "priority", 5 },
-                                      { "info",
-                                        { { "broken", false },
-                                          { "license", "GPL-3.0-or-later" },
-                                          { "pname", "curl" },
-                                          { "unfree", false },
-                                          { "version", "2.12.1" } } } };
+nlohmann::json mockCurlLockedJSON {
+  mockInputJSON,
+  { "attr-path", { "mock", "curl" } },
+  { "priority", 5 },
+  { "info",
+    {
+      { "broken", false },
+      { "license", "GPL-3.0-or-later" },
+      { "pname", "curl" },
+      { "unfree", false },
+      { "version", "2.12.1" },
+      { "description",
+        "A command line tool for transferring files with URL syntax" },
+    } }
+};
 LockedPackageRaw mockCurlLocked( mockCurlLockedJSON );
 
 

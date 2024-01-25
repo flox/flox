@@ -124,6 +124,15 @@ public:
     : PkgDb( flake, genPkgDbName( flake.getFingerprint() ).string() )
   {}
 
+  /* Connecting and locking */
+
+  /**
+   * @brief Tries to connect to the database, acquiring an exclusive lock on it.
+   */
+  void
+  connect();
+
+
   /* Basic Operations */
 
   /**

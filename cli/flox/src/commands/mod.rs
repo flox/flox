@@ -3,7 +3,7 @@ mod environment;
 mod general;
 mod search;
 
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::VecDeque;
 use std::fmt::Display;
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -38,7 +38,6 @@ use crate::config::{Config, EnvironmentTrust, FLOX_CONFIG_FILE};
 use crate::utils::dialog::{Dialog, Select};
 use crate::utils::init::{
     init_access_tokens,
-    init_channels,
     init_telemetry,
     init_uuid,
     telemetry_opt_out_needs_migration,
@@ -48,7 +47,7 @@ use crate::utils::metrics::METRICS_UUID_FILE_NAME;
 static FLOX_DESCRIPTION: &'_ str = indoc! {"
     flox is a virtual environment and package manager all in one.\n\n
 
-    With flox you create development environments that layer and replace dependencies just where it matters,
+    With flox you create environments that layer and replace dependencies just where it matters,
     making them portable across the full software lifecycle."
 };
 
@@ -80,7 +79,7 @@ fn vec_not_empty<T>(x: Vec<T>) -> bool {
 #[derive(Bpaf, Clone, Debug)]
 pub enum Verbosity {
     Verbose(
-        /// Verbose mode.
+        /// Verbose mode
         ///
         /// Invoke multiple times for increasing detail.
         #[bpaf(short('v'), long("verbose"), req_flag(()), many, map(vec_len))]
@@ -110,13 +109,13 @@ pub struct FloxCli(#[bpaf(external(flox_args))] pub FloxArgs);
 #[derive(Bpaf)]
 #[bpaf(ignore_rustdoc)] // we don't want this struct to be interpreted as a group
 pub struct FloxArgs {
-    /// Verbose mode.
+    /// Verbose mode
     ///
     /// Invoke multiple times for increasing detail.
     #[bpaf(external, fallback(Default::default()))]
     pub verbosity: Verbosity,
 
-    /// Debug mode.
+    /// Debug mode
     #[bpaf(long, req_flag(()), many, map(vec_not_empty))]
     pub debug: bool,
 
@@ -198,11 +197,10 @@ impl FloxArgs {
             floxhub.set_git_url_override(env_set_host.parse()?);
         }
 
-        let boostrap_flox = Flox {
+        let flox = Flox {
             cache_dir: config.flox.cache_dir.clone(),
             data_dir: config.flox.data_dir.clone(),
             config_dir: config.flox.config_dir.clone(),
-            channels: Default::default(),
             access_tokens,
             netrc_file,
             temp_dir: temp_dir_path.clone(),
@@ -210,13 +208,6 @@ impl FloxArgs {
             uuid: init_uuid(&config.flox.data_dir).await?,
             floxhub_token: config.flox.floxhub_token.clone(),
             floxhub,
-        };
-
-        let channels = init_channels(BTreeMap::new())?;
-
-        let flox = Flox {
-            channels,
-            ..boostrap_flox
         };
 
         // Set the global Nix config via the environment variables in flox.default_args so that
@@ -335,11 +326,11 @@ impl LocalDevelopmentCommands {
 /// Sharing Commands
 #[derive(Bpaf, Clone)]
 enum SharingCommands {
-    /// Send environment to flox hub
+    /// Send environment to floxhub
     #[bpaf(command)]
     Push(#[bpaf(external(environment::push))] environment::Push),
     #[bpaf(command)]
-    /// Pull environment from flox hub
+    /// Pull environment from floxhub
     Pull(#[bpaf(external(environment::pull))] environment::Pull),
     /// Containerize an environment
     #[bpaf(command, hide)]
@@ -596,8 +587,6 @@ pub fn detect_environment(message: &str) -> Result<Option<UninitializedEnvironme
         // If there's both an activated environment and an environment in the
         // current directory or git repo, prompt for which to use.
         (Some(activated_env), Some(found)) => {
-            dbg!(&activated_env, &found.path);
-
             let type_of_directory = if found.path == current_dir {
                 "current directory's flox environment"
             } else {
@@ -655,7 +644,7 @@ pub enum ConcreteEnvironment {
 }
 
 impl ConcreteEnvironment {
-    fn into_dyn_environment(self) -> Box<dyn Environment> {
+    pub fn into_dyn_environment(self) -> Box<dyn Environment> {
         match self {
             ConcreteEnvironment::Path(path_env) => Box::new(path_env),
             ConcreteEnvironment::Managed(managed_env) => Box::new(managed_env),
@@ -685,7 +674,7 @@ pub enum UninitializedEnvironment {
 }
 
 impl UninitializedEnvironment {
-    fn from_concrete_environment(env: &ConcreteEnvironment) -> Result<Self> {
+    pub fn from_concrete_environment(env: &ConcreteEnvironment) -> Result<Self> {
         match env {
             ConcreteEnvironment::Path(path_env) => {
                 let pointer = path_env.pointer.clone().into();
@@ -711,7 +700,7 @@ impl UninitializedEnvironment {
     /// Open the contained environment and return a [ConcreteEnvironment]
     ///
     /// This function will fail if the contained environment is not available or invalid
-    fn into_concrete_environment(self, flox: &Flox) -> Result<ConcreteEnvironment> {
+    pub fn into_concrete_environment(self, flox: &Flox) -> Result<ConcreteEnvironment> {
         match self {
             UninitializedEnvironment::DotFlox(dot_flox) => {
                 let dot_flox_path = dot_flox.path.join(DOT_FLOX);
@@ -873,6 +862,13 @@ pub(super) async fn ensure_environment_trust(
     let env_ref = EnvironmentRef::new_from_parts(environment.owner().clone(), environment.name());
 
     let trust = config.flox.trusted_environments.get(&env_ref);
+
+    if let Some(ref token) = flox.floxhub_token {
+        if token.handle()?.as_str() == env_ref.owner().as_str() {
+            debug!("environment {env_ref} is trusted by token");
+            return Ok(());
+        }
+    }
 
     if matches!(trust, Some(EnvironmentTrust::Trust)) {
         debug!("environment {env_ref} is trusted by config");

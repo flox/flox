@@ -2,7 +2,7 @@
 type = "github"
 owner = "NixOS"
 repo = "nixpkgs"
-rev = "e8039594435c68eb4f780f3e9bf3972a7399c4b1"
+rev = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
 
 [options.allow]
 # Whether non-FOSS packages should appear in search/install results.

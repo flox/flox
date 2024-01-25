@@ -54,6 +54,9 @@ struct SearchQuery
   /** Filter results by partial match on pname or attrName */
   std::optional<std::string> partialNameMatch;
 
+  /** Filter results by partial match on pname or '.' joined relPath. */
+  std::optional<std::string> partialNameOrRelPathMatch;
+
   /** @brief Reset to default state. */
   void
   clear();

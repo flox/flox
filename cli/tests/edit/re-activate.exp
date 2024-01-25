@@ -11,9 +11,10 @@ expect_after {
   timeout { exit 1 }
   eof { exit 2 }
   "*\n" { exp_continue }
+  "*\r" { exp_continue }
 }
 
-expect -ex "Building environment"
+expect -ex "Getting ready to use environment"
 
 # edit environment and check for message prompting to re-activate
 send "$flox edit -f $manifest\n"

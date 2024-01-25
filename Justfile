@@ -40,6 +40,15 @@ build-cdb:
 @build-pkgdb:
     make -C pkgdb -j;
 
+# Build pkgdb with debug symbols
+@build-pkgdb-debug:
+    # Note that you need to clean pkgdb first
+    make -C pkgdb -j -s DEBUG=1
+
+# Clean the pkgdb build cache
+@clean-pkgdb:
+    make -C pkgdb -j -s clean
+
 # Build only flox
 @build-cli: build-pkgdb
     pushd cli; cargo build -q; popd
@@ -125,6 +134,10 @@ test-all: test-pkgdb impure-tests integ-tests functional-tests
 @flox +args="": build
     cli/target/debug/flox {{args}}
 
+
+# Run a `pkgdb` command
+@pkgdb +args="": build-pkgdb
+    pkgdb/bin/pkgdb {{args}}
 
 # ---------------------------------------------------------------------------- #
 #

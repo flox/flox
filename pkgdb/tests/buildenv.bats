@@ -122,22 +122,6 @@ setup_file() {
   assert_success
 }
 
-# --------------------------------------------------------------------------- #
-
-# bats test_tags=propagated
-@test "Environment includes propagated packages" {
-  skip "ansi does not work on all systems"
-  run "$PKGDB_BIN" buildenv "$LOCKFILES/propagated/manifest.lock" \
-    --out-link "$BATS_TEST_TMPDIR/env"
-  assert_success
-  # environment contains anki
-  # -> which propagates beautifulsoup4
-  _PYPKGS="$BATS_TEST_TMPDIR/env/lib/python3.10/site-packages"
-  assert "$TEST" -f "$_PYPKGS/bs4/__init__.py"
-  # -> which propagates chardet
-  assert "$TEST" -f "$_PYPKGS/chardet/__init__.py"
-}
-
 # ---------------------------------------------------------------------------- #
 
 # Single quotes in variables should be escaped.
@@ -159,6 +143,30 @@ setup_file() {
   run "$CAT" "$BATS_TEST_TMPDIR/env/activate/bash"
   assert_line "export singlequotes=''\''bar'\'''"
   assert_line "export singlequoteescaped='\'\''baz'"
+}
+
+# ---------------------------------------------------------------------------- #
+
+# With '--container' produces a script that can be used to build a container.
+# bats test_tags=buildenv:container
+@test "Environment builds container" {
+  run "$PKGDB_BIN" buildenv "$LOCKFILES/single-package/manifest.lock" \
+    --container \
+    --out-link "$BATS_TEST_TMPDIR/container-builder"
+  assert_success
+
+  # Run the container builder script.
+  run bash -c '"$BATS_TEST_TMPDIR/container-builder" > "$BATS_TEST_TMPDIR/container"'
+  assert_success
+
+  # Check that the container is a tar archive.
+  run tar -tf "$BATS_TEST_TMPDIR/container"
+  # Check that the container contains layer(s)
+  assert_output --regexp '([a-z0-9]{64}/layer.tar)+'
+  # Check that the container contains a config file.
+  assert_output --regexp '([a-z0-9]{64}\.json)'
+  # Check that the container contains a manifest file.
+  assert_line 'manifest.json'
 }
 
 # ---------------------------------------------------------------------------- #

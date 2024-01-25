@@ -215,7 +215,7 @@ env_is_activated() {
   SHELL=zsh USER="$REAL_USER" NO_COLOR=1 run -0 expect -d "$TESTS_DIR/activate/envVar.exp" "$PROJECT_DIR"
   assert_output --partial "baz"
 
-  SHELL=zsh  NO_COLOR=1 run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -- echo '$foo'
+  SHELL=zsh NO_COLOR=1 run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -- echo '$foo'
   assert_success
   assert_output --partial "baz"
 }
@@ -356,4 +356,60 @@ env_is_activated() {
   run "$FLOX_BIN" activate -- hello
   assert_success
   assert_output --partial "Hello, world!"
+}
+
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=activate,activate:inplace-prints
+@test "'flox activate' prints script to modify current shell (bash)" {
+  # Flox detects that the output is not a tty and prints the script to stdout
+  #
+  # TODO:
+  # better with a flag like '--print-script'
+  # this is confusing:
+  SHELL="bash" run "$FLOX_BIN" activate
+  assert_success
+  assert_output --regexp "source .*/activate/bash"
+}
+
+# bats test_tags=activate,activate:inplace-prints
+@test "'flox activate' prints script to modify current shell (zsh)" {
+  SHELL="zsh" run "$FLOX_BIN" activate
+  assert_success
+  assert_output --regexp "source .*/activate/zsh"
+}
+
+# bats test_tags=activate,activate:inplace-modifies
+@test "'flox activate' modifies the current shell (bash)" {
+
+  # set a hook
+  sed -i -e "s/\[hook\]/${HELLO_HOOK//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
+  # set vars
+  sed -i -e "s/\[vars\]/${VARS//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
+  "$FLOX_BIN" install hello
+
+  run bash -c 'eval "$("$FLOX_BIN" activate)"; type hello; echo $foo'
+  assert_success
+  # assert hook
+  assert_line "Welcome to your flox environment!"
+  # assert installed package
+  assert_line --partial "hello is $(realpath $PROJECT_DIR)/.flox/run/"
+  # assert var
+  assert_line "baz"
+}
+
+# bats test_tags=activate,activate:inplace-modifies
+@test "'flox activate' modifies the current shell (zsh)" {
+
+  # set a hook
+  sed -i -e "s/\[hook\]/${HELLO_HOOK//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
+  # set vars
+  sed -i -e "s/\[vars\]/${VARS//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
+  "$FLOX_BIN" install hello
+
+  run zsh -c 'eval "$("$FLOX_BIN" activate)"; type hello; echo $foo'
+  assert_success
+  assert_line "Welcome to your flox environment!"
+  assert_line --partial "hello is $(realpath $PROJECT_DIR)/.flox/run/"
+  assert_line "baz"
 }

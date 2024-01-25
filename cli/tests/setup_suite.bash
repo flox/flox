@@ -305,12 +305,12 @@ xdg_tmp_setup() {
   mkdir -p "${XDG_CONFIG_HOME:?}"
   chmod u+w "$XDG_CONFIG_HOME"
 
-  if [[ -e "${REAL_XDG_CONFIG_HOME:?}/nix" ]]; then
+  if [[ -e "${REAL_XDG_CONFIG_HOME:?}/nix" && "$REAL_XDG_CONFIG_HOME" != "$XDG_CONFIG_HOME" ]]; then
     rm -rf "$XDG_CONFIG_HOME/nix"
     cp -Tr -- "$REAL_XDG_CONFIG_HOME/nix" "$XDG_CONFIG_HOME/nix"
     chmod -R u+w "$XDG_CONFIG_HOME/nix"
   fi
-  if [[ -e "$REAL_XDG_CONFIG_HOME/flox" ]]; then
+  if [[ -e "${REAL_XDG_CONFIG_HOME}/flox" && "$REAL_XDG_CONFIG_HOME" != "$XDG_CONFIG_HOME" ]]; then
     rm -rf "$XDG_CONFIG_HOME/flox"
     cp -Tr -- "$REAL_XDG_CONFIG_HOME/flox" "$XDG_CONFIG_HOME/flox"
     chmod -R u+w "$XDG_CONFIG_HOME/flox"
@@ -347,23 +347,36 @@ pkgdb_vars_setup() {
   # Notably its default `nodejs' version is `18.16.0' which is referenced in
   # some test cases.
   PKGDB_NIXPKGS_REV_OLD='e8039594435c68eb4f780f3e9bf3972a7399c4b1'
-  # This revision is a bit newer, and was also created from `release-23.05'.
-  # Notably its default `nodejs' version is `18.17.1' which is referenced in
-  # some test cases.
-  PKGDB_NIXPKGS_REV_NEW='9faf91e6d0b7743d41cce3b63a8e5c733dc696a3'
+  NODEJS_VERSION_OLD="18.16.0"
+  export NODEJS_VERSION_OLD
+
+  # A revision of release-23.11
+  PKGDB_NIXPKGS_REV_NEW='ab5fd150146dcfe41fda501134e6503932cc8dfd'
+  NODEJS_VERSION_NEW="18.18.2"
+  export NODEJS_VERSION_NEW
+  # This revision is even older than OLD, selected for the purpose of serving up
+  # a different and incompatible version of glibc (2.34) than the latest (2.37).
+  # This could probably replace the PKGDB_NIXPKGS_REV_OLD revision with a
+  # refactoring of other test data but we'll tackle that in a separate effort.
+  PKGDB_NIXPKGS_REV_OLDER='bc01a2be500c10f1507dcc8e98c9f5bd72c02aa3'
 
   PKGDB_NIXPKGS_REF_OLD="github:NixOS/nixpkgs/$PKGDB_NIXPKGS_REV_OLD"
   PKGDB_NIXPKGS_REF_NEW="github:NixOS/nixpkgs/$PKGDB_NIXPKGS_REV_NEW"
+
+  PKGDB_NIXPKGS_NAR_HASH_OLD="sha256-1UGacsv5coICyvAzwuq89v9NsS00Lo8sz22cDHwhnn8="
+  PKGDB_NIXPKGS_NAR_HASH_NEW="sha256-FRC/OlLVvKkrdm+RtrODQPufD0vVZYA0hpH9RPaHmp4="
 
   # This causes `pkgdb' to use this revision for `nixpkgs' anywhere the
   # `--ga-registry' flag is used.
   # This is useful for testing `pkgdb' against a specific revision of `nixpkgs'
   # so that we get consistent packages and improved caching.
-  _PKGDB_GA_REGISTRY_REF_OR_REV="$PKGDB_NIXPKGS_REV_OLD"
+  _PKGDB_GA_REGISTRY_REF_OR_REV="$PKGDB_NIXPKGS_REV_NEW"
 
   export PKGDB_NIXPKGS_REV_OLD PKGDB_NIXPKGS_REV_NEW \
+    PKGDB_NIXPKGS_REV_OLDER \
     PKGDB_NIXPKGS_REF_OLD PKGDB_NIXPKGS_REF_NEW \
-    _PKGDB_GA_REGISTRY_REF_OR_REV
+    _PKGDB_GA_REGISTRY_REF_OR_REV PKGDB_NIXPKGS_NAR_HASH_OLD \
+    PKGDB_NIXPKGS_NAR_HASH_NEW
 
   export __FT_RAN_PKGDB_VARS_SETUP=:
 }
@@ -381,6 +394,7 @@ flox_vars_setup() {
   export FLOX_ENVIRONMENTS="$FLOX_DATA_HOME/environments"
   export USER="flox-test"
   export HOME="${FLOX_TEST_HOME:-$HOME}"
+  export GLOBAL_MANIFEST_LOCK="$FLOX_CONFIG_HOME/global-manifest.lock"
 }
 
 # ---------------------------------------------------------------------------- #
@@ -391,18 +405,22 @@ flox_vars_setup() {
 # Homedirs can be created "globally" for the entire test suite ( default ), or
 # for individual files or single tests by passing an optional argument.
 home_setup() {
-  case "${1:-suite}" in
-    suite) export FLOX_TEST_HOME="${BATS_SUITE_TMPDIR?}/home" ;;
-    file) export FLOX_TEST_HOME="${BATS_FILE_TMPDIR?}/home" ;;
-    test) export FLOX_TEST_HOME="${BATS_TEST_TMPDIR?}/home" ;;
-    *)
-      echo "home_setup: Invalid homedir category '${1?}'" >&2
-      return 1
-      ;;
-  esac
-  #if [[ "${__FT_RAN_HOME_SETUP:-}" = "$FLOX_TEST_HOME" ]]; then return 0; fi
-  # Force recreation on `home' on every invocation.
-  unset __FT_RAN_HOME_SETUP
+  if [[ "${__FT_RAN_HOME_SETUP:-}" = "real" ]]; then
+    export FLOX_TEST_HOME="$REAL_HOME"
+    export HOME="$REAL_HOME"
+  else
+    case "${1:-suite}" in
+      suite) export FLOX_TEST_HOME="${BATS_SUITE_TMPDIR?}/home" ;;
+      file) export FLOX_TEST_HOME="${BATS_FILE_TMPDIR?}/home" ;;
+      test) export FLOX_TEST_HOME="${BATS_TEST_TMPDIR?}/home" ;;
+      *)
+        echo "home_setup: Invalid homedir category '${1?}'" >&2
+        return 1
+        ;;
+    esac
+    # Force recreation on `home' on every invocation.
+    unset __FT_RAN_HOME_SETUP
+  fi
   xdg_tmp_setup
   flox_vars_setup
   export __FT_RAN_HOME_SETUP="$FLOX_TEST_HOME"
@@ -439,6 +457,7 @@ common_suite_setup() {
   {
     print_var FLOX_TEST_HOME
     print_var HOME
+    print_var PATH
     print_var XDG_CACHE_HOME
     print_var XDG_CONFIG_HOME
     print_var XDG_DATA_HOME

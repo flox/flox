@@ -85,13 +85,16 @@ hello_pkg_setup() {
 # * sets up a local "floxhub" repo for the given owner.
 #   can be called multiple times with different owners.
 # * sets `FLOX_FLOXHUB_TOKEN` to a dummy value so flox _thinks_ its logged in.
+#   the token is a valid JWT token with a dummy payload:
+#
+#     { "https://flox.dev/handler": "test", "exp": 9999999999 }
 #
 # This is used by tests that need to push/pull to/from floxhub.
 # In the future we may want to use a local floxhub server instead.
 floxhub_setup() {
   OWNER="$1"
   shift
-  export FLOX_FLOXHUB_TOKEN=flox_testOAuthToken
+  export FLOX_FLOXHUB_TOKEN="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3guZGV2L2hhbmRsZSI6InRlc3QiLCJleHAiOjk5OTk5OTk5OTl9.6-nbzFzQEjEX7dfWZFLE-I_qW2N_-9W2HFzzfsquI74"
   export FLOX_FLOXHUB_PATH="$BATS_TEST_TMPDIR/floxhub"
   export FLOXHUB_FLOXMETA_DIR="$FLOX_FLOXHUB_PATH/$OWNER/floxmeta"
 

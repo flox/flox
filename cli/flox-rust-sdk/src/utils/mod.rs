@@ -1,7 +1,7 @@
 pub mod errors;
 pub mod guard;
-pub mod rnix;
 use std::path::Path;
+use std::time::SystemTime;
 use std::{fs, io};
 
 use ::log::debug;
@@ -95,4 +95,31 @@ pub fn copy_file_without_permissions(
         err: io_err,
     })?;
     Ok(())
+}
+
+/// Get the mtime of a file, directory or symlink
+///
+/// Unlike `std::fs::metadata`, this function will not follow symlinks,
+/// but return the mtime of the symlink itself.
+///
+/// If the file or directory does not exist,
+/// or if the mtime cannot be determined, return [SystemTime::UNIX_EPOCH]
+pub fn mtime_of(path: impl AsRef<Path>) -> SystemTime {
+    let path = path.as_ref();
+    'time: {
+        let metadata = if path.is_symlink() {
+            let Ok(metadata) = fs::symlink_metadata(path) else {
+                debug!("Could not get metadata for {path:?} using default time");
+                break 'time SystemTime::UNIX_EPOCH;
+            };
+            metadata
+        } else {
+            let Ok(metadata) = path.metadata() else {
+                debug!("Could not get metadata for {path:?} using default time");
+                break 'time SystemTime::UNIX_EPOCH;
+            };
+            metadata
+        };
+        metadata.modified().unwrap_or(SystemTime::UNIX_EPOCH)
+    }
 }

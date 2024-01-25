@@ -746,7 +746,7 @@ lockRegistry( const RegistryRaw &          unlocked,
  * @brief Get a hard coded registry for use with `flox`'s GA release.
  *
  * This registry contains on `nixpkgs` input, which is set
- * to `github:NixOS/nixpkgs/release-23.05`.
+ * to `github:NixOS/nixpkgs/release-23.11`.
  */
 RegistryRaw
 getGARegistry();

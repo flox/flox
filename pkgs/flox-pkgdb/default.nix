@@ -26,6 +26,7 @@
   bats,
   git,
   coreutils,
+  parallel,
   llvm, # for `llvm-symbolizer'
   gdb ? throw "`gdb' is required for debugging with `g++'",
   lldb ? throw "`lldb' is required for debugging with `clang++'",
@@ -70,10 +71,11 @@
       };
     in
       joined;
+
     # Used by `buildenv' to set shell prompts on activation.
     SET_PROMPT_BASH_SH = builtins.path {
-      name = "set-prompt-bash.sh";
-      path = ../../pkgdb/src/buildenv/set-prompt-bash.sh;
+      name = "set-prompt.bash.sh";
+      path = ../../pkgdb/src/buildenv/assets/set-prompt.bash.sh;
     };
 
     # Rules for `pkgdb scrape'
@@ -81,6 +83,32 @@
       name = "rules.json";
       path = ../../pkgdb/src/registry/floxpkgs/rules.json;
     };
+
+    # Used by `buildenv' to set shell prompts on activation.
+    SET_PROMPT_ZSH_SH = builtins.path {
+      name = "set-prompt.zsh.sh";
+      path = ../../pkgdb/src/buildenv/assets/set-prompt.zsh.sh;
+    };
+
+    # Used by `buildenv --container' to create a container builder script.
+    CONTAINER_BUILDER_PATH = builtins.path {
+      name = "mkContainer.nix";
+      path = ../../pkgdb/src/buildenv/assets/mkContainer.nix;
+    };
+
+    # Used by `buildenv --container' to access `dockerTools` at a known version
+    # When utilities from nixpkgs are used by flox at runtime,
+    # they should be
+    # a) bundled at buildtime if possible (binaries/packages)
+    # b) use this version of nixpkgs i.e.
+    #    (nix library utils such as `dockerTools`)
+    COMMON_NIXPKGS_URL = let
+      lockfile = builtins.fromJSON (builtins.readFile ./../../flake.lock);
+      root = lockfile.nodes.${lockfile.root};
+      nixpkgs = lockfile.nodes.${root.inputs.nixpkgs}.locked;
+    in
+      # todo: use `builtins.flakerefToString` once flox ships with nix 2.18+
+      "github:NixOS/nixpkgs/${nixpkgs.rev}";
   };
 in
   stdenv.mkDerivation ({
@@ -151,6 +179,14 @@ in
         runHook postConfigure;
       '';
 
+      # The ld-floxlib.so library only requires libc, which is guaranteed
+      # to either be already loaded or available by way of a default provided
+      # by the linker itself, so to avoid loading a different libc than the
+      # one already loaded we remove RPATH/RUNPATH from the shared library.
+      postFixup = lib.optionalString stdenv.isLinux ''
+        patchelf --remove-rpath $out/lib/ld-floxlib.so
+      '';
+
       # Checks require internet
       doCheck = false;
       doInstallCheck = false;
@@ -172,6 +208,7 @@ in
           bash
           git
           sqlite
+          parallel
           # For docs
           doxygen
         ];
@@ -203,10 +240,10 @@ in
           envs
           // {
             # For running `pkgdb' interactively with inputs from the test suite.
-            NIXPKGS_TEST_REV = "e8039594435c68eb4f780f3e9bf3972a7399c4b1";
+            NIXPKGS_TEST_REV = "ab5fd150146dcfe41fda501134e6503932cc8dfd";
             NIXPKGS_TEST_REF =
               "github:NixOS/nixpkgs/"
-              + "e8039594435c68eb4f780f3e9bf3972a7399c4b1";
+              + "ab5fd150146dcfe41fda501134e6503932cc8dfd";
           };
 
         devShellHook = ''
@@ -215,6 +252,7 @@ in
             REPO_ROOT="$( git rev-parse --show-toplevel; )";
             PATH="$REPO_ROOT/pkgdb/bin:$PATH";
             PKGDB_BIN="$REPO_ROOT/pkgdb/bin/pkgdb";
+            LD_FLOXLIB="$REPO_ROOT/pkgdb/lib/ld-floxlib.so";
             PKGDB_SEARCH_PARAMS_BIN="$REPO_ROOT/pkgdb/tests/search-params";
             PKGDB_IS_SQLITE3_BIN="$REPO_ROOT/pkgdb/tests/is_sqlite3";
           fi

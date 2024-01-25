@@ -4,20 +4,20 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use log::debug;
-use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use thiserror::Error;
 
 use super::{
     copy_dir_recursive,
+    CanonicalizeError,
     InstallationAttempt,
     UpdateResult,
     LOCKFILE_FILENAME,
     MANIFEST_FILENAME,
 };
 use crate::flox::Flox;
-use crate::models::environment::{call_pkgdb, global_manifest_path};
-use crate::models::lockfile::Lockfile;
+use crate::models::container_builder::ContainerBuilder;
+use crate::models::environment::{call_pkgdb, global_manifest_path, CanonicalPath};
+use crate::models::lockfile::{LockedManifest, LockedManifestError};
 use crate::models::manifest::{
     insert_packages,
     remove_packages,
@@ -25,13 +25,7 @@ use crate::models::manifest::{
     PackageToInstall,
     TomlEditError,
 };
-use crate::models::pkgdb::{
-    BuildEnvResult,
-    CallPkgDbError,
-    UpgradeResult,
-    UpgradeResultJSON,
-    PKGDB_BIN,
-};
+use crate::models::pkgdb::{CallPkgDbError, UpgradeResult, UpgradeResultJSON, PKGDB_BIN};
 
 pub struct ReadOnly {}
 struct ReadWrite {}
@@ -76,7 +70,9 @@ impl<State> CoreEnvironment<State> {
 
     /// Lock the environment.
     ///
-    /// This updates the lock if it exists, or generates a new one if it doesn't.
+    /// This re-writes the lock if it exists.
+    /// If the lock doesn't exist, it uses the global lock, and then it writes
+    /// a new lock.
     ///
     /// Technically this does write to disk as a side effect for now.
     /// It's included in the [ReadOnly] struct for ergonomic reasons
@@ -85,26 +81,39 @@ impl<State> CoreEnvironment<State> {
     /// todo: should we always write the lockfile to disk?
     pub fn lock(&mut self, flox: &Flox) -> Result<LockedManifest, CoreEnvironmentError> {
         let manifest_path = self.manifest_path();
-        let lockfile_path = self.lockfile_path();
-        let maybe_lockfile = if lockfile_path.exists() {
-            debug!("found existing lockfile: {}", lockfile_path.display());
-            Some(lockfile_path.as_ref())
+        let environment_lockfile_path = self.lockfile_path();
+        let existing_lockfile_path = if environment_lockfile_path.exists() {
+            debug!(
+                "found existing lockfile: {}",
+                environment_lockfile_path.display()
+            );
+            environment_lockfile_path.clone()
         } else {
-            debug!("no existing lockfile found");
-            None
+            debug!("no existing lockfile found, using the global lockfile as a base");
+            // Use the global lock so we're less likely to kick off a pkgdb
+            // scrape in e.g. an install.
+            LockedManifest::ensure_global_lockfile(flox)
+                .map_err(CoreEnvironmentError::LockedManifest)?
         };
+        let lockfile_path = CanonicalPath::new(existing_lockfile_path)
+            .map_err(CoreEnvironmentError::BadLockfilePath)?;
+
         let lockfile = LockedManifest::lock_manifest(
             Path::new(&*PKGDB_BIN),
             &manifest_path,
-            maybe_lockfile,
+            &lockfile_path,
             &global_manifest_path(flox),
-        )?;
+        )
+        .map_err(CoreEnvironmentError::LockedManifest)?;
 
         // Write the lockfile to disk
         // todo: do we always want to do this?
-        debug!("generated lockfile, writing to {}", lockfile_path.display());
+        debug!(
+            "generated lockfile, writing to {}",
+            environment_lockfile_path.display()
+        );
         std::fs::write(
-            &lockfile_path,
+            &environment_lockfile_path,
             serde_json::to_string_pretty(&lockfile).unwrap(),
         )
         .map_err(CoreEnvironmentError::WriteLockfile)?;
@@ -131,7 +140,9 @@ impl<State> CoreEnvironment<State> {
             self.lockfile_path().display()
         );
 
-        let store_path = lockfile.build(Path::new(&*PKGDB_BIN), None)?;
+        let store_path = lockfile
+            .build(Path::new(&*PKGDB_BIN), None)
+            .map_err(CoreEnvironmentError::LockedManifest)?;
 
         debug!(
             "built locked environment, store path={}",
@@ -139,6 +150,52 @@ impl<State> CoreEnvironment<State> {
         );
 
         Ok(store_path)
+    }
+
+    /// Creates a [ContainerBuilder] from the environment.
+    ///
+    /// The sink is typically a [File](std::fs::File), [Stdout](std::io::Stdout)
+    /// but can be any type that implements [Write](std::io::Write).
+    ///
+    /// While container _images_ can be created on any platform,
+    /// only linux _containers_ can be run with `docker` or `podman`.
+    /// Building an environment for linux on a non-linux platform (macos),
+    /// will likely fail unless all packages in the environment can be substituted.
+    ///
+    /// There are mitigations for this, such as building within a VM or container.
+    /// Such solutions are out of scope at this point.
+    /// Until then, this function will error with [CoreEnvironmentError::ContainerizeUnsupportedSystem]
+    /// if the environment is not linux.
+    ///
+    /// [Self::lock]s if necessary.
+    ///
+    /// Technically this does write to disk as a side effect (i.e. by locking).
+    /// It's included in the [ReadOnly] struct for ergonomic reasons
+    /// and because it doesn't modify the manifest.
+    ///
+    /// todo: should we always write the lockfile to disk?
+    pub fn build_container(
+        &mut self,
+        flox: &Flox,
+    ) -> Result<ContainerBuilder, CoreEnvironmentError> {
+        if std::env::consts::OS != "linux" {
+            return Err(CoreEnvironmentError::ContainerizeUnsupportedSystem(
+                std::env::consts::OS.to_string(),
+            ));
+        }
+
+        let lockfile = self.lock(flox)?;
+
+        debug!(
+            "building container: system={}, lockfilePath={}",
+            &flox.system,
+            self.lockfile_path().display()
+        );
+
+        let builder = lockfile
+            .build_container(Path::new(&*PKGDB_BIN))
+            .map_err(CoreEnvironmentError::LockedManifest)?;
+        Ok(builder)
     }
 
     /// Create a new out-link for the environment at the given path.
@@ -157,7 +214,9 @@ impl<State> CoreEnvironment<State> {
             self.lockfile_path().display(),
             out_link_path.as_ref().display()
         );
-        lockfile.build(Path::new(&*PKGDB_BIN), Some(out_link_path.as_ref()))?;
+        lockfile
+            .build(Path::new(&*PKGDB_BIN), Some(out_link_path.as_ref()))
+            .map_err(CoreEnvironmentError::LockedManifest)?;
 
         Ok(())
     }
@@ -228,7 +287,14 @@ impl CoreEnvironment<ReadOnly> {
         contents: String,
     ) -> Result<EditResult, CoreEnvironmentError> {
         let old_contents = self.manifest_content()?;
-        // TODO we should probably skip this if the manifest hasn't changed
+
+        // skip the edit if the contents are unchanged
+        // note: consumers of this function may call [Self::link] separately,
+        //       causing an evaluation/build of the environment.
+        if contents == old_contents {
+            return Ok(EditResult::Unchanged);
+        }
+
         self.transact_with_manifest_contents(&contents, flox)?;
 
         EditResult::new(&old_contents, &contents)
@@ -241,52 +307,20 @@ impl CoreEnvironment<ReadOnly> {
         inputs: Vec<String>,
     ) -> Result<UpdateResult, CoreEnvironmentError> {
         // TODO double check canonicalization
-        let manifest_path = self.manifest_path();
-        let lockfile_path = self.lockfile_path();
-        let maybe_lockfile = if lockfile_path.exists() {
-            debug!("found existing lockfile: {}", lockfile_path.display());
-            Some(lockfile_path)
-        } else {
-            debug!("no existing lockfile found");
-            None
-        };
-        let mut pkgdb_cmd = Command::new(Path::new(&*PKGDB_BIN));
-        pkgdb_cmd
-            .args(["manifest", "update"])
-            .arg("--ga-registry")
-            .arg("--global-manifest")
-            .arg(global_manifest_path(flox))
-            .arg("--manifest")
-            .arg(manifest_path);
-        let old_lockfile = if let Some(lf_path) = maybe_lockfile {
-            let canonical_lockfile_path = lf_path
-                .canonicalize()
-                .map_err(|e| CoreEnvironmentError::BadLockfilePath(e, lf_path.to_path_buf()))?;
-            pkgdb_cmd.arg("--lockfile").arg(&canonical_lockfile_path);
-            Some(
-                serde_json::from_slice(
-                    &fs::read(canonical_lockfile_path)
-                        .map_err(CoreEnvironmentError::ReadLockfile)?,
-                )
-                .map_err(CoreEnvironmentError::ParseLockfile)?,
-            )
-        } else {
-            None
-        };
-        pkgdb_cmd.args(inputs);
-
-        debug!("updating lockfile with command: {pkgdb_cmd:?}");
-        let lockfile: Lockfile = serde_json::from_value(
-            call_pkgdb(pkgdb_cmd).map_err(CoreEnvironmentError::UpdateFailed)?,
+        let (old_lockfile, new_lockfile) = LockedManifest::update_manifest(
+            flox,
+            Some(self.manifest_path()),
+            self.lockfile_path(),
+            inputs,
         )
-        .map_err(CoreEnvironmentError::ParseUpdateOutput)?;
+        .map_err(CoreEnvironmentError::LockedManifest)?;
 
         self.transact_with_lockfile_contents(
-            serde_json::to_string_pretty(&lockfile).unwrap(),
+            serde_json::to_string_pretty(&new_lockfile).unwrap(),
             flox,
         )?;
 
-        Ok((old_lockfile, lockfile))
+        Ok((old_lockfile, new_lockfile))
     }
 
     /// Atomically upgrade packages in this environment
@@ -314,9 +348,8 @@ impl CoreEnvironment<ReadOnly> {
             .arg("--manifest")
             .arg(manifest_path);
         if let Some(lf_path) = maybe_lockfile {
-            let canonical_lockfile_path = lf_path
-                .canonicalize()
-                .map_err(|e| CoreEnvironmentError::BadLockfilePath(e, lf_path.to_path_buf()))?;
+            let canonical_lockfile_path =
+                CanonicalPath::new(lf_path).map_err(CoreEnvironmentError::BadLockfilePath)?;
             pkgdb_cmd.arg("--lockfile").arg(canonical_lockfile_path);
         }
         pkgdb_cmd.args(groups_or_iids);
@@ -485,73 +518,7 @@ impl CoreEnvironment<ReadWrite> {
     }
 }
 
-#[derive(Debug, Serialize, Clone, Deserialize, PartialEq)]
-pub struct LockedManifest(Value);
-impl LockedManifest {
-    /// Use pkgdb to lock a manifest
-    pub fn lock_manifest(
-        pkgdb: &Path,
-        manifest_path: &Path,
-        existing_lockfile_path: Option<&Path>,
-        global_manifest_path: &Path,
-    ) -> Result<Self, CoreEnvironmentError> {
-        let canonical_manifest_path = manifest_path
-            .canonicalize()
-            .map_err(|e| CoreEnvironmentError::BadManifestPath(e, manifest_path.to_path_buf()))?;
-
-        let mut pkgdb_cmd = Command::new(pkgdb);
-        pkgdb_cmd
-            .args(["manifest", "lock"])
-            .arg("--ga-registry")
-            .arg("--global-manifest")
-            .arg(global_manifest_path)
-            .arg("--manifest")
-            .arg(canonical_manifest_path);
-        if let Some(lf_path) = existing_lockfile_path {
-            let canonical_lockfile_path = lf_path
-                .canonicalize()
-                .map_err(|e| CoreEnvironmentError::BadLockfilePath(e, lf_path.to_path_buf()))?;
-            pkgdb_cmd.arg("--lockfile").arg(canonical_lockfile_path);
-        }
-
-        debug!("locking manifest with command: {pkgdb_cmd:?}");
-        call_pkgdb(pkgdb_cmd)
-            .map_err(CoreEnvironmentError::LockManifest)
-            .map(Self)
-    }
-
-    /// Build a locked manifest
-    ///
-    /// if a gcroot_out_link_path is provided,
-    /// the environment will be linked to that path and a gcroot will be created
-    pub fn build(
-        &self,
-        pkgdb: &Path,
-        gcroot_out_link_path: Option<&Path>,
-    ) -> Result<PathBuf, CoreEnvironmentError> {
-        let mut pkgdb_cmd = Command::new(pkgdb);
-        pkgdb_cmd.arg("buildenv").arg(&self.0.to_string());
-
-        if let Some(gcroot_out_link_path) = gcroot_out_link_path {
-            pkgdb_cmd.args(["--out-link", &gcroot_out_link_path.to_string_lossy()]);
-        }
-
-        debug!("building environment with command: {pkgdb_cmd:?}");
-
-        let result: BuildEnvResult =
-            serde_json::from_value(call_pkgdb(pkgdb_cmd).map_err(CoreEnvironmentError::BuildEnv)?)
-                .map_err(CoreEnvironmentError::ParseBuildEnvOutput)?;
-
-        Ok(PathBuf::from(result.store_path))
-    }
-}
-impl ToString for LockedManifest {
-    fn to_string(&self) -> String {
-        self.0.to_string()
-    }
-}
-
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EditResult {
     /// The manifest was not modified.
     Unchanged,
@@ -621,41 +588,17 @@ pub enum CoreEnvironmentError {
     // endregion
 
     // region: pkgdb manifest errors
-    #[error("provided manifest path does not exist ({1:?})")]
-    BadManifestPath(#[source] std::io::Error, PathBuf),
+    #[error(transparent)]
+    LockedManifest(LockedManifestError),
 
-    #[error("provided lockfile path does not exist ({1:?})")]
-    BadLockfilePath(#[source] std::io::Error, PathBuf),
-
-    #[error("call to pkgdb failed")]
-    PkgDbCall(#[source] std::io::Error),
-
-    #[error("could not lock manifest")]
-    LockManifest(#[source] CallPkgDbError),
-
-    #[error("unknown error locking manifest {0}")]
-    ParsePkgDbError(String),
-
-    #[error("couldn't parse lockfile as JSON")]
-    ParseLockfileJSON(#[source] serde_json::Error),
+    #[error(transparent)]
+    BadLockfilePath(CanonicalizeError),
 
     #[error("could not open manifest file")]
     ReadManifest(#[source] std::io::Error),
 
-    #[error("could not open manifest file")]
-    ReadLockfile(#[source] std::io::Error),
-
-    #[error("could not parse lockfile")]
-    ParseLockfile(#[source] serde_json::Error),
-
-    #[error("unexpected output from pkgdb update")]
-    ParseUpdateOutput(#[source] serde_json::Error),
-
     #[error("unexpected output from pkgdb upgrade")]
     ParseUpgradeOutput(#[source] serde_json::Error),
-
-    #[error("failed to update environment")]
-    UpdateFailed(#[source] CallPkgDbError),
 
     #[error("failed to upgrade environment")]
     UpgradeFailed(#[source] CallPkgDbError),
@@ -666,6 +609,8 @@ pub enum CoreEnvironmentError {
     #[error("unexpected output from environment builder command")]
     ParseBuildEnvOutput(#[source] serde_json::Error),
     // endregion
+    #[error("unsupported system to build container: {0}")]
+    ContainerizeUnsupportedSystem(String),
 }
 
 #[cfg(test)]

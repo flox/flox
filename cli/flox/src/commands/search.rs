@@ -1,6 +1,5 @@
 use std::collections::{HashMap, HashSet};
 use std::io::{BufWriter, Write};
-use std::path::PathBuf;
 use std::time::Duration;
 
 use anyhow::{bail, Context, Result};
@@ -19,11 +18,11 @@ use flox_rust_sdk::models::search::{
 };
 use log::{debug, info};
 
-use crate::commands::detect_environment;
-use crate::config::features::{Features, SearchStrategy};
+use crate::config::features::Features;
 use crate::config::Config;
 use crate::subcommand_metric;
 use crate::utils::dialog::{Dialog, Spinner};
+use crate::utils::search::{construct_search_params, manifest_and_lockfile};
 
 const SEARCH_INPUT_SEPARATOR: &'_ str = ":";
 const DEFAULT_DESCRIPTION: &'_ str = "<no description provided>";
@@ -66,7 +65,8 @@ pub struct Search {
 // Luckily most flakes don't.
 impl Search {
     pub async fn handle(self, config: Config, flox: Flox) -> Result<()> {
-        subcommand_metric!("search");
+        subcommand_metric!("search", search_term = &self.search_term);
+
         debug!("performing search for term: {}", self.search_term);
 
         let (manifest, lockfile) = manifest_and_lockfile(&flox, "search for packages using")
@@ -83,7 +83,7 @@ impl Search {
             limit,
             manifest.map(|p| p.try_into()).transpose()?,
             global_manifest_path(&flox).try_into()?,
-            lockfile.map(|p| p.try_into()).transpose()?,
+            PathOrJson::Path(lockfile),
         )?;
 
         let (results, exit_status) = Dialog {
@@ -115,28 +115,6 @@ impl Search {
 
         Ok(())
     }
-}
-
-fn construct_search_params(
-    search_term: &str,
-    results_limit: Option<u8>,
-    manifest: Option<PathOrJson>,
-    global_manifest: PathOrJson,
-    lockfile: Option<PathOrJson>,
-) -> Result<SearchParams> {
-    let query = Query::from_term_and_limit(
-        search_term,
-        Features::parse()?.search_strategy == SearchStrategy::MatchName,
-        results_limit,
-    )?;
-    let params = SearchParams {
-        manifest,
-        global_manifest,
-        lockfile,
-        query,
-    };
-    debug!("search params raw: {:?}", params);
-    Ok(params)
 }
 
 /// An intermediate representation of a search result used for rendering
@@ -301,7 +279,7 @@ impl Show {
             &self.search_term,
             manifest.map(|p| p.try_into()).transpose()?,
             global_manifest_path(&flox).try_into()?,
-            lockfile.map(|p| p.try_into()).transpose()?,
+            PathOrJson::Path(lockfile),
         )?;
 
         let (search_results, exit_status) = do_search(&search_params)?;
@@ -329,7 +307,7 @@ fn construct_show_params(
     search_term: &str,
     manifest: Option<PathOrJson>,
     global_manifest: PathOrJson,
-    lockfile: Option<PathOrJson>,
+    lockfile: PathOrJson,
 ) -> Result<SearchParams> {
     let parts = search_term
         .split(SEARCH_INPUT_SEPARATOR)
@@ -343,7 +321,7 @@ fn construct_show_params(
 
     let query = Query::from_term_and_limit(
         package_name.as_ref().unwrap(), // We already know it's Some(_)
-        Features::parse()?.search_strategy == SearchStrategy::MatchName,
+        Features::parse()?.search_strategy,
         None,
     )?;
     let search_params = SearchParams {
@@ -415,41 +393,4 @@ fn render_show(search_results: &[SearchResult], all: bool) -> Result<()> {
     println!("{pkg_name} - {description}");
     println!("    {pkg_name} - {versions}");
     Ok(())
-}
-
-/// Searches for an environment to use, and if one is found, returns the path to
-/// its manifest and optionally the path to its lockfile.
-///
-/// Note that this may perform network operations to pull a ManagedEnvironment,
-/// since a freshly cloned user repo with a ManagedEnvironment may not have a
-/// manifest or lockfile in floxmeta unless the environment is initialized.
-pub fn manifest_and_lockfile(
-    flox: &Flox,
-    message: &str,
-) -> Result<(Option<PathBuf>, Option<PathBuf>)> {
-    let res = match detect_environment(message)? {
-        None => {
-            debug!("no environment found");
-            (None, None)
-        },
-        Some(uninitialized) => {
-            debug!("using environment {uninitialized}");
-
-            let environment = uninitialized
-                .into_concrete_environment(flox)?
-                .into_dyn_environment();
-
-            let lockfile_path = environment.lockfile_path(flox)?;
-            debug!("checking lockfile: path={}", lockfile_path.display());
-            let lockfile = if lockfile_path.exists() {
-                debug!("lockfile exists");
-                Some(lockfile_path)
-            } else {
-                debug!("lockfile doesn't exist");
-                None
-            };
-            (Some(environment.manifest_path(flox)?), lockfile)
-        },
-    };
-    Ok(res)
 }

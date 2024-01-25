@@ -14,7 +14,7 @@ load test_support.bash
 # Helpers for project based tests.
 
 project_setup() {
-  export PROJECT_DIR="${BATS_TEST_TMPDIR?}/test"
+  export PROJECT_DIR="${BATS_TEST_TMPDIR?}/project-push-${BATS_TEST_NUMBER?}"
   rm -rf "$PROJECT_DIR"
   mkdir -p "$PROJECT_DIR"
   pushd "$PROJECT_DIR" > /dev/null || return
@@ -116,7 +116,7 @@ function update_dummy_env() {
   run "$FLOX_BIN" pull --remote owner/test
   assert_success
 
-  run "$FLOX_BIN" list
+  run "$FLOX_BIN" list --name
   assert_success
   assert_line "hello"
 
@@ -140,12 +140,14 @@ function update_dummy_env() {
   # Create an environment owner/test on machine_b and try to push it to floxhub
   # this should fail as an envrioment with the same name but different provenance already exists on floxhub
   pushd "machine_b" > /dev/null || return
+  echo "trying to push to the same upstream env" >&3
+
   "$FLOX_BIN" init --name "test"
   "$FLOX_BIN" install emacs
 
   run "$FLOX_BIN" push --owner owner
   assert_failure
-  assert_output --partial "upstream floxmeta branch diverged from local branch"
+  assert_output --partial "An environment named owner/test already exists!"
   popd > /dev/null || return
 }
 
@@ -173,7 +175,7 @@ function update_dummy_env() {
   # Pull the environment owner/test on machine_c and check that it has the emacs package
   pushd "machine_c" > /dev/null || return
   "$FLOX_BIN" pull --remote owner/test
-  run "$FLOX_BIN" list
+  run "$FLOX_BIN" list --name
   assert_success
   assert_line "emacs"
   popd > /dev/null || return

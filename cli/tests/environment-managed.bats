@@ -13,8 +13,8 @@ load test_support.bash
 # Helpers for project based tests.
 
 project_setup() {
-  export PROJECT_NAME="test"
-  export PROJECT_DIR="${BATS_TEST_TMPDIR?}/$PROJECT_NAME"
+  export PROJECT_DIR="${BATS_TEST_TMPDIR?}/project-managed-${BATS_TEST_NUMBER?}"
+  export PROJECT_NAME="${PROJECT_DIR##*/}"
   export OWNER="owner"
 
   rm -rf "$PROJECT_DIR"
@@ -69,15 +69,15 @@ dot_flox_exists() {
 @test "m1: install a package to a managed environment" {
   make_empty_remote_env
 
-  run --separate-stderr "$FLOX_BIN" list
+  run --separate-stderr "$FLOX_BIN" list --name
   assert_success
   assert_output ""
 
   run "$FLOX_BIN" install hello
   assert_success
-  assert_output --partial "environment $OWNER/test" # managed env output
+  assert_output --partial "environment $OWNER/project-managed-${BATS_TEST_NUMBER}" # managed env output
 
-  run --separate-stderr "$FLOX_BIN" list
+  run --separate-stderr "$FLOX_BIN" list --name
   assert_success
   assert_output "hello"
 }
@@ -90,7 +90,7 @@ dot_flox_exists() {
   run "$FLOX_BIN" uninstall hello
   assert_success
 
-  run --separate-stderr "$FLOX_BIN" list
+  run --separate-stderr "$FLOX_BIN" list --name
   assert_success
   assert_output ""
 }
@@ -108,7 +108,7 @@ EOF
 
   run "$FLOX_BIN" edit -f "$TMP_MANIFEST_PATH"
   assert_success
-  assert_output --partial "✅ environment successfully edited"
+  assert_output --partial "✅  Environment successfully updated."
 }
 
 # ---------------------------------------------------------------------------- #
@@ -131,7 +131,7 @@ EOF
   export FLOX_DATA_DIR="$(pwd)/b_data"
   pushd b > /dev/null || return
   "$FLOX_BIN" pull --remote "$OWNER/a"
-  run --separate-stderr "$FLOX_BIN" list
+  run --separate-stderr "$FLOX_BIN" list --name
 
   # assert that the environment contains the installed package
   assert_output "hello"
@@ -170,7 +170,7 @@ EOF
   assert_success
 
   # assert that the environment contains the installed package
-  run --separate-stderr "$FLOX_BIN" list
+  run --separate-stderr "$FLOX_BIN" list --name
   assert_output "hello"
   popd > /dev/null || return
 }
@@ -309,11 +309,11 @@ EOF
   assert_failure
 
   # when recreating an environment, a new branch should be used
-  run "$FLOX_BIN" pull --remote "$OWNER/test"
+  run "$FLOX_BIN" pull --remote "$OWNER/project-managed-${BATS_TEST_NUMBER}"
   assert_success
 
   "$FLOX_BIN" install emacs
-  run "$FLOX_BIN" list
+  run "$FLOX_BIN" list --name
   assert_output --partial "emacs"
   refute_output "vim"
 }
