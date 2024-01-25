@@ -46,6 +46,10 @@ pub enum TomlEditError {
     /// Tried to uninstall a package that wasn't installed
     #[error("couldn't uninstall '{0}', wasn't previously installed")]
     PackageNotFound(String),
+    #[error("'options' must be a table, but found {0} instead")]
+    MalformedOptionsTable(String),
+    #[error("'options' must be an array, but found {0} instead")]
+    MalformedOptionsSystemsArray(String),
 }
 
 /// Records the result of trying to install a collection of packages to the
@@ -184,6 +188,48 @@ pub fn contains_package(toml: &Document, pkg_name: &str) -> Result<bool, TomlEdi
     } else {
         Ok(false)
     }
+}
+
+/// Add a `system` to the `[options.systems]` array of a manifest
+pub fn add_system(toml: &str, system: &str) -> Result<Document, TomlEditError> {
+    let mut doc = toml
+        .parse::<Document>()
+        .map_err(TomlEditError::ParseManifest)?;
+
+    // extract the `[options]` table
+    let options_table = doc
+        .entry("options")
+        .or_insert(toml_edit::Item::Table(toml_edit::Table::default()));
+    let options_table_type = options_table.type_name().into();
+    let options_table = options_table
+        .as_table_like_mut()
+        .ok_or(TomlEditError::MalformedOptionsTable(options_table_type))?;
+
+    // extract the `options.systems` array
+    let systems_list = options_table
+        .entry("systems")
+        .or_insert(toml_edit::Item::Value(toml_edit::Value::Array(
+            toml_edit::Array::default(),
+        )));
+    let systems_list_type = systems_list.type_name().into();
+    let systems_list =
+        systems_list
+            .as_array_mut()
+            .ok_or(TomlEditError::MalformedOptionsSystemsArray(
+                systems_list_type,
+            ))?;
+
+    // sanity check that the current system is not already in the list
+    if systems_list
+        .iter()
+        .any(|s| s.as_str().map(|s| s == system).unwrap_or_default())
+    {
+        return Ok(doc);
+    }
+
+    systems_list.push(system.to_string());
+
+    Ok(doc)
 }
 
 /// A parsed descriptor from `pkgdb parse descriptor --manifest`
