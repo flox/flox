@@ -12,8 +12,8 @@
 #include <list>
 #include <memory>
 #include <optional>
-#include <sstream>
 #include <regex>
+#include <sstream>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -199,9 +199,11 @@ addIn( std::stringstream & oss, const std::vector<std::string> & elems )
 
 
 /* -------------------------------------------------------------------------- */
-std::string PkgQuery::mkPatternString(const std::string &matchString)
+std::string
+PkgQuery::mkPatternString( const std::string & matchString )
 {
-  std::string pattern = "%" + std::regex_replace(matchString, std::regex("_"), "\\_") + "%";
+  std::string pattern
+    = "%" + std::regex_replace( matchString, std::regex( "_" ), "\\_" ) + "%";
   return pattern;
 }
 
@@ -258,16 +260,17 @@ PkgQuery::initMatch()
         "LOWER( pname ) = LOWER( :partialMatch ) AS matchExactPname" );
       this->addSelection(
         "LOWER( attrName ) = LOWER( :partialMatch ) AS matchExactAttrName" );
-      this->addSelection( "( pname LIKE :partialMatchPattern ) AS matchPartialPname" );
+      this->addSelection(
+        "( pname LIKE :partialMatchPattern ) AS matchPartialPname" );
       this->addSelection(
         "( attrName LIKE :partialMatchPattern ) AS matchPartialAttrName" );
 
       if ( hasPartialNameMatch )
         {
           /* Add `%` before binding so `LIKE` works. */
-          binds.emplace( ":partialMatch",*this->partialNameMatch);
+          binds.emplace( ":partialMatch", *this->partialNameMatch );
           binds.emplace( ":partialMatchPattern",
-                         mkPatternString(*this->partialNameMatch));
+                         mkPatternString( *this->partialNameMatch ) );
           this->addWhere( "( matchExactPname OR matchExactAttrName OR"
                           "  matchPartialPname OR matchPartialAttrName"
                           ")" );
@@ -275,11 +278,11 @@ PkgQuery::initMatch()
 
       if ( hasPartialMatch )
         {
-          this->addSelection(
-            "( description LIKE :partialMatchPattern ) AS matchPartialDescription" );
+          this->addSelection( "( description LIKE :partialMatchPattern ) AS "
+                              "matchPartialDescription" );
           /* Add `%` before binding so `LIKE` works. */
           binds.emplace( ":partialMatchPattern",
-                         mkPatternString(*this->partialMatch));
+                         mkPatternString( *this->partialMatch ) );
           this->addWhere( "( matchExactPname OR matchExactAttrName OR"
                           "  matchPartialPname OR matchPartialAttrName OR"
                           "  matchPartialDescription "
@@ -291,15 +294,16 @@ PkgQuery::initMatch()
         {
           /* Join relPath with '.' so searches can include dots. */
           this->addSelection( "(SELECT LOWER( group_concat(value, '.') ) "
-                                        "= LOWER( :partialMatch )"
+                              "= LOWER( :partialMatch )"
                               "FROM json_each(v_PackagesSearch.relPath)) AS "
-                                "matchExactRelPath" );
+                              "matchExactRelPath" );
           this->addSelection(
             "(SELECT group_concat(value, '.') LIKE :partialMatchPattern "
             "FROM json_each(v_PackagesSearch.relPath)) AS "
             "matchPartialRelPath" );
           /* Add `%` before binding so `LIKE` works. */
-          binds.emplace( ":partialMatch", ( *this->partialNameOrRelPathMatch ) );
+          binds.emplace( ":partialMatch",
+                         ( *this->partialNameOrRelPathMatch ) );
           binds.emplace( ":partialMatchPattern",
                          mkPatternString( *this->partialNameOrRelPathMatch ) );
           this->addWhere( "( matchExactPname OR matchExactAttrName OR"
@@ -554,12 +558,14 @@ PkgQuery::str() const
   if ( ! this->firstOrder ) { qry << " ORDER BY " << this->orders.str(); }
   qry << " )";
   // Dump the bindings as well
-  if (!this->binds.empty()) 
-  {
-    qry << "\n-- ... with bindings:";
-    for (auto &bind: this->binds) 
-      qry << "\n-- " << bind.first << " : " << bind.second;
-  }
+  if ( ! this->binds.empty() )
+    {
+      qry << "\n-- ... with bindings:";
+      for ( auto & bind : this->binds )
+        {
+          qry << "\n-- " << bind.first << " : " << bind.second;
+        }
+    }
 
   return qry.str();
 }

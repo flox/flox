@@ -120,8 +120,8 @@ SearchCommand::addSearchQueryOptions( argparse::ArgumentParser & parser )
   parser.add_argument( "--query-limit" )
     .help( "set the query-limit for results" )
     .nargs( 1 )
-    .action( [&]( const std::string &arg )
-             { this->params.query.limit = std::atoi(arg.c_str()); } );
+    .action( [&]( const std::string & arg )
+             { this->params.query.limit = std::atoi( arg.c_str() ); } );
 }
 
 
@@ -193,11 +193,8 @@ SearchCommand::run()
   to_json( queryJson, args );
   debugLog( "performing search with query: " + queryJson.dump() );
   auto query = pkgdb::PkgQuery( args );
-  if ( this->dumpQuery )
-    {
-      std::cout << query.str() << std::endl;
-    }
-  
+  if ( this->dumpQuery ) { std::cout << query.str() << std::endl; }
+
   /* Collect results from each input */
   auto                                            globalResultCount = 0;
   std::vector<std::vector<pkgdb::row_id>>         globallyFoundIds;
@@ -210,24 +207,28 @@ SearchCommand::run()
 
       debugLog( "querying input=" + name );
       for ( const auto & id : query.execute( dbRO->db ) )
+        {
           thisInputIds.emplace_back( id );
+        }
       inputs.emplace_back( input );
 
       globalResultCount += thisInputIds.size();
-      debugLog( "found " + std::to_string(thisInputIds.size()) +
-                " results, input=" + name);
+      debugLog( "found " + std::to_string( thisInputIds.size() )
+                + " results, input=" + name );
       globallyFoundIds.emplace_back( std::move( thisInputIds ) );
     }
 
-  /* Return results as a single flat list by iterating over each input with results */
-  debugLog( "found " + std::to_string(globalResultCount) +
-            " total results across all inputs" );
+  /* Return results as a single flat list by iterating over each input with
+   * results */
+  debugLog( "found " + std::to_string( globalResultCount )
+            + " total results across all inputs" );
   if ( query.limit.has_value() )
     {
       debugLog( "returning the first " + std::to_string( *query.limit )
                 + " results" );
       // Emit the number of results as the first line
-      nlohmann::json resultCountRecord = { { "result-count", globalResultCount } };
+      nlohmann::json resultCountRecord
+        = { { "result-count", globalResultCount } };
       std::cout << resultCountRecord << std::endl;
       // Only print the first `limit` results
       for ( size_t i = 0; i < inputs.size(); i++ )
