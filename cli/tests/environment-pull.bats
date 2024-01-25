@@ -70,23 +70,36 @@ function make_incompatible() {
   shift
   ENV_NAME="$1"
   shift
+  if [ $# -gt 0 ]; then
+    EXTRA_INCOMPATIBLE="$1"
+    shift
+  else
+    EXTRA_INCOMPATIBLE=""
+  fi
+
 
   init_system=
+  package=
   # replace linux with darwin or darwin with linux
   if [ -z "${NIX_SYSTEM##*-linux}" ]; then
     init_system="${NIX_SYSTEM%%-linux}-darwin"
+    package='["darwin", "ps"]'
   elif [ -z "${NIX_SYSTEM#*-darwin}" ]; then
     init_system="${NIX_SYSTEM%%-darwin}-linux"
+    package='["glibc"]'
   else
     echo "unknown system: '$NIX_SYSTEM'"
     exit 1
   fi
 
-
   git clone "$FLOX_FLOXHUB_PATH/$OWNER/floxmeta" "$PROJECT_DIR/floxmeta"
   pushd "$PROJECT_DIR/floxmeta" > /dev/null || return
   git checkout "$ENV_NAME"
+  if [ ! -z "$EXTRA_INCOMPATIBLE" ]; then
+    tomlq --in-place --toml-output ".install.extra.path = $package" 2/env/manifest.toml
+  fi
   sed -i "s|$NIX_SYSTEM|$init_system|g" 2/env/manifest.toml 2/env/manifest.lock
+
   git add .
   git \
     -c "user.name=test" \
