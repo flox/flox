@@ -198,6 +198,11 @@ addIn( std::stringstream & oss, const std::vector<std::string> & elems )
 
 
 /* -------------------------------------------------------------------------- */
+std::string PkgQuery::mkPatternString(const std::string &matchString)
+{
+  std::string pattern = "%" + matchString + "%";
+  return pattern;
+}
 
 void
 PkgQuery::initMatch()
@@ -249,20 +254,19 @@ PkgQuery::initMatch()
       /* We have to add '%' around `:match' because they were added for
        * use with `LIKE'. */
       this->addSelection(
-        "( ( '%' || LOWER( pname ) || '%' ) = LOWER( :partialMatch ) ) "
-        "AS matchExactPname" );
+        "LOWER( pname ) = LOWER( :partialMatch ) AS matchExactPname" );
       this->addSelection(
-        "( ( '%' || LOWER( attrName ) || '%' ) = LOWER( :partialMatch ) ) "
-        "AS matchExactAttrName" );
-      this->addSelection( "( pname LIKE :partialMatch ) AS matchPartialPname" );
+        "LOWER( attrName ) = LOWER( :partialMatch ) AS matchExactAttrName" );
+      this->addSelection( "( pname LIKE :partialMatchPattern ) AS matchPartialPname" );
       this->addSelection(
-        "( attrName LIKE :partialMatch ) AS matchPartialAttrName" );
+        "( attrName LIKE :partialMatchPattern ) AS matchPartialAttrName" );
 
       if ( hasPartialNameMatch )
         {
           /* Add `%` before binding so `LIKE` works. */
-          binds.emplace( ":partialMatch",
-                         "%" + ( *this->partialNameMatch ) + "%" );
+          binds.emplace( ":partialMatch",*this->partialNameMatch);
+          binds.emplace( ":partialMatchPattern",
+                         mkPatternString(*this->partialNameMatch));
           this->addWhere( "( matchExactPname OR matchExactAttrName OR"
                           "  matchPartialPname OR matchPartialAttrName"
                           ")" );
@@ -271,9 +275,10 @@ PkgQuery::initMatch()
       if ( hasPartialMatch )
         {
           this->addSelection(
-            "( description LIKE :partialMatch ) AS matchPartialDescription" );
+            "( description LIKE :partialMatchPattern ) AS matchPartialDescription" );
           /* Add `%` before binding so `LIKE` works. */
-          binds.emplace( ":partialMatch", "%" + ( *this->partialMatch ) + "%" );
+          binds.emplace( ":partialMatchPattern",
+                         mkPatternString(*this->partialMatch));
           this->addWhere( "( matchExactPname OR matchExactAttrName OR"
                           "  matchPartialPname OR matchPartialAttrName OR"
                           "  matchPartialDescription "
@@ -284,17 +289,18 @@ PkgQuery::initMatch()
       if ( hasPartialNameOrRelPathMatch )
         {
           /* Join relPath with '.' so searches can include dots. */
-          this->addSelection( "(SELECT ( '%' || LOWER( group_concat(value, "
-                              "'.') ) || '%' ) = LOWER( :partialMatch )"
+          this->addSelection( "(SELECT LOWER( group_concat(value, '.') ) "
+                                        "= LOWER( :partialMatch )"
                               "FROM json_each(v_PackagesSearch.relPath)) AS "
-                              "matchExactRelPath" );
+                                "matchExactRelPath" );
           this->addSelection(
-            "(SELECT group_concat(value, '.') LIKE :partialMatch "
+            "(SELECT group_concat(value, '.') LIKE :partialMatchPattern "
             "FROM json_each(v_PackagesSearch.relPath)) AS "
             "matchPartialRelPath" );
           /* Add `%` before binding so `LIKE` works. */
-          binds.emplace( ":partialMatch",
-                         "%" + ( *this->partialNameOrRelPathMatch ) + "%" );
+          binds.emplace( ":partialMatch", ( *this->partialNameOrRelPathMatch ) );
+          binds.emplace( ":partialMatchPattern",
+                         mkPatternString( *this->partialNameOrRelPathMatch ) );
           this->addWhere( "( matchExactPname OR matchExactAttrName OR"
                           "  matchPartialPname OR matchPartialAttrName OR"
                           "  matchPartialRelPath"

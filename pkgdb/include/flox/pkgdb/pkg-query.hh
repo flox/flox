@@ -289,6 +289,9 @@ private:
   void
   init();
 
+  /** @brief A helper to format and escape a string for use in a LIKE clause */
+  std::string
+  mkPatternString(const std::string &matchString);
 
 public:
 
