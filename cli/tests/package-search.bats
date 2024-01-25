@@ -45,7 +45,7 @@ teardown() {
 setup_file() {
   common_file_setup
 
-  export SHOW_HINT="Use \`flox show <package>\` to see available versions"
+  export SHOW_HINT="Use 'flox show <package>' to see available versions"
   # Separator character for ambiguous package sources
   export SEP=":"
 
@@ -79,6 +79,7 @@ setup_file() {
 
 # ---------------------------------------------------------------------------- #
 
+# bats test_tags=search:match-stategy
 @test "'FLOX_FEATURES_SEARCH_STRATEGY=match flox search' expected number of results: 'hello'" {
   FLOX_FEATURES_SEARCH_STRATEGY=match run --separate-stderr "$FLOX_BIN" search hello --all
   assert_equal "${#lines[@]}" 11
@@ -246,6 +247,7 @@ setup_file() {
 
 # ---------------------------------------------------------------------------- #
 
+# bats test_tags=search:hint
 @test "'flox search' includes search term in hint" {
   run --separate-stderr "$FLOX_BIN" search python
   assert_regex "$stderr" "flox search python --all"

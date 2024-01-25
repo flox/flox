@@ -66,7 +66,7 @@ use crate::commands::{
 };
 use crate::config::Config;
 use crate::utils::dialog::{Confirm, Dialog, Spinner};
-use crate::utils::didyoumean::DidYouMean;
+use crate::utils::didyoumean::{DidYouMean, InstallSuggestion};
 use crate::{subcommand_metric, utils};
 
 #[derive(Bpaf, Clone)]
@@ -914,7 +914,7 @@ impl Install {
                 }
                 let path = packages[0].path.clone();
 
-                let suggestion = DidYouMean::new(flox, environment, &path);
+                let suggestion = DidYouMean::<InstallSuggestion>::new(flox, environment, &path);
                 if !suggestion.has_suggestions() {
                     break 'error anyhow!(head);
                 }

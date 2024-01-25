@@ -1,5 +1,3 @@
-use std::collections::{HashMap, HashSet};
-use std::io::{BufWriter, Write};
 use std::time::Duration;
 
 use anyhow::{bail, Context, Result};
@@ -16,17 +14,24 @@ use flox_rust_sdk::models::search::{
     ShowError,
     Subtree,
 };
+use indoc::formatdoc;
 use log::{debug, info};
 
 use crate::config::features::Features;
 use crate::config::Config;
 use crate::subcommand_metric;
 use crate::utils::dialog::{Dialog, Spinner};
-use crate::utils::search::{construct_search_params, manifest_and_lockfile};
+use crate::utils::didyoumean::{DidYouMean, SearchSuggestion};
+use crate::utils::search::{
+    construct_search_params,
+    manifest_and_lockfile,
+    render_search_results_user_facing,
+    DEFAULT_DESCRIPTION,
+    SEARCH_INPUT_SEPARATOR,
+};
 
-const SEARCH_INPUT_SEPARATOR: &'_ str = ":";
-const DEFAULT_DESCRIPTION: &'_ str = "<no description provided>";
 const DEFAULT_SEARCH_LIMIT: Option<u8> = Some(10);
+const FLOX_SHOW_HINT: &str = "Use 'flox show <package>' to see available versions";
 
 #[derive(Bpaf, Clone)]
 pub struct ChannelArgs {}
@@ -72,6 +77,10 @@ impl Search {
         let (manifest, lockfile) = manifest_and_lockfile(&flox, "search for packages using")
             .context("failed while looking for manifest and lockfile")?;
 
+        let manifest = manifest.map(|p| p.try_into()).transpose()?;
+        let lockfile = PathOrJson::Path(lockfile);
+        let global_manifest: PathOrJson = global_manifest_path(&flox).try_into()?;
+
         let limit = if self.all {
             None
         } else {
@@ -81,9 +90,9 @@ impl Search {
         let search_params = construct_search_params(
             &self.search_term,
             limit,
-            manifest.map(|p| p.try_into()).transpose()?,
-            global_manifest_path(&flox).try_into()?,
-            PathOrJson::Path(lockfile),
+            manifest.clone(),
+            global_manifest.clone(),
+            lockfile.clone(),
         )?;
 
         let (results, exit_status) = Dialog {
@@ -104,156 +113,52 @@ impl Search {
             render_search_results_json(results)?;
         } else {
             debug!("printing search results as user facing");
-            render_search_results_user_facing(&self.search_term, results)?;
-        }
-        if !exit_status.success() {
-            bail!(
-                "pkgdb exited with status code: {}",
-                exit_status.code().unwrap_or(-1),
-            );
-        };
 
+            let suggestion = DidYouMean::<SearchSuggestion>::new(
+                &self.search_term,
+                manifest,
+                global_manifest,
+                lockfile,
+            );
+
+            if results.results.is_empty() {
+                let mut message =
+                    format!("No packages matched this search term: {}", self.search_term);
+                if suggestion.has_suggestions() {
+                    message = formatdoc! {"
+                        {message}
+
+                        {suggestion}
+                        {FLOX_SHOW_HINT}
+                    "};
+                }
+                bail!(message);
+            }
+
+            let results = render_search_results_user_facing(&self.search_term, results)?;
+            println!("{results}");
+
+            info!("");
+
+            if let Some(hint) = results.hint() {
+                info!("{hint}");
+            }
+
+            info!("{FLOX_SHOW_HINT}");
+
+            if suggestion.has_suggestions() {
+                eprintln!();
+                eprintln!("{suggestion}");
+            };
+        }
         Ok(())
     }
-}
-
-/// An intermediate representation of a search result used for rendering
-#[derive(Debug, PartialEq, Clone)]
-struct DisplayItem {
-    /// The input that the package came from
-    input: String,
-    /// The displayable part of the package's attribute path
-    package: String,
-    /// The package description
-    description: Option<String>,
-    /// Whether to join the `input` and `package` fields with a separator when rendering
-    render_with_input: bool,
-}
-
-fn render_search_results_user_facing(
-    search_term: &str,
-    search_results: SearchResults,
-) -> Result<()> {
-    let n_results = search_results.results.len();
-    // Nothing to display
-    if n_results == 0 {
-        bail!("No packages matched this search term: {}", search_term);
-    }
-    // Search results contain a lot of information, but all we need for rendering are
-    // the input, the package subpath (e.g. "python310Packages.flask"), and the description.
-    let display_items = search_results
-        .results
-        .into_iter()
-        .map(|r| {
-            Ok(DisplayItem {
-                input: r.input,
-                package: r.rel_path.join("."),
-                description: r.description.map(|s| s.replace('\n', " ")),
-                render_with_input: false,
-            })
-        })
-        .collect::<Result<Vec<_>>>()?;
-
-    let deduped_display_items = dedup_and_disambiguate_display_items(display_items);
-    if deduped_display_items.is_empty() {
-        bail!("deduplicating search results failed");
-    }
-
-    let column_width = deduped_display_items
-        .iter()
-        .map(|d| {
-            if d.render_with_input {
-                d.input.len() + d.package.len() + SEARCH_INPUT_SEPARATOR.len()
-            } else {
-                d.package.len()
-            }
-        })
-        .max()
-        .unwrap(); // SAFETY: could panic if `deduped_display_items` is empty, but we know it's not
-
-    // Finally print something
-    let mut writer = BufWriter::new(std::io::stdout());
-    let default_desc = String::from(DEFAULT_DESCRIPTION);
-    for d in deduped_display_items.into_iter() {
-        let package = if d.render_with_input {
-            [d.input, d.package].join(SEARCH_INPUT_SEPARATOR)
-        } else {
-            d.package
-        };
-        let desc: String = d.description.unwrap_or(default_desc.clone());
-        writeln!(&mut writer, "{package:<column_width$}  {desc}")?;
-    }
-    writer.flush().context("couldn't flush search results")?;
-    info!(""); // We need a blank line between search results and hints
-    if let Some(count) = search_results.count {
-        // Don't show the message if we have exactly the number of results as the limit,
-        // otherwise we would get messages like `Showing 10 of 10...`
-        if count != n_results as u64 {
-            info!(
-            "Showing {n_results} of {count} results. Use `flox search {search_term} --all` to see the full list.",
-        );
-        }
-    }
-    info!("Use `flox show <package>` to see available versions");
-    Ok(())
 }
 
 fn render_search_results_json(search_results: SearchResults) -> Result<()> {
     let json = serde_json::to_string(&search_results.results)?;
     println!("{}", json);
     Ok(())
-}
-
-/// Deduplicate and disambiguate display items.
-///
-/// This gets complicated because we have to satisfy a few constraints:
-/// - The order of results from `pkgdb` is important (best matches come first),
-///   so that order must be preserved.
-/// - Versions shouldn't appear in the output, so multiple package versions from a single
-///   input should be deduplicated.
-/// - Packages that appear in more than one input need to be disambiguated by prepending
-///   the name of the input and a separator.
-fn dedup_and_disambiguate_display_items(mut display_items: Vec<DisplayItem>) -> Vec<DisplayItem> {
-    let mut package_to_inputs: HashMap<String, HashSet<String>> = HashMap::new();
-    for d in display_items.iter() {
-        // Build a collection of packages and which inputs they are seen in so we can tell
-        // which packages need to be disambiguated when rendering search results.
-        package_to_inputs
-            .entry(d.package.clone())
-            .and_modify(|inputs| {
-                inputs.insert(d.input.clone());
-            })
-            .or_insert_with(|| HashSet::from_iter([d.input.clone()]));
-    }
-
-    // For any package that comes from more than one input, mark it as needing to be joined
-    for d in display_items.iter_mut() {
-        if let Some(inputs) = package_to_inputs.get(&d.package) {
-            d.render_with_input = inputs.len() > 1;
-        }
-    }
-
-    // For each package in the search results, `package_to_inputs` contains the set of
-    // inputs that the package is found in. Logically `package_to_inputs` contains
-    // (package, input) pairs. If the `package` and `input` from a `DisplayItem` are
-    // found in `package_to_inputs` it means that we have not yet seen this (package, input)
-    // pair and we should render it (e.g. add it to `deduped_display_items`). Once we've
-    // done that we remove this (package, input) pair from `package_to_inputs` so that
-    // we never see that pair again.
-    let mut deduped_display_items = Vec::new();
-    for d in display_items.into_iter() {
-        if let Some(inputs) = package_to_inputs.get_mut(d.package.as_str()) {
-            // Remove this input so this (package, input) pair is never seen again
-            if inputs.remove(&d.input) {
-                deduped_display_items.push(d.clone());
-            }
-            if inputs.is_empty() {
-                package_to_inputs.remove(&d.package);
-            }
-        }
-    }
-
-    deduped_display_items
 }
 
 /// Show detailed package information
