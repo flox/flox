@@ -224,6 +224,7 @@ pub fn add_system(toml: &str, system: &str) -> Result<Document, TomlEditError> {
         .iter()
         .any(|s| s.as_str().map(|s| s == system).unwrap_or_default())
     {
+        debug!("system '{system}' already in 'options.systems'");
         return Ok(doc);
     }
 
