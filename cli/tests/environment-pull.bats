@@ -282,3 +282,21 @@ function make_incompatible() {
   run "$FLOX_BIN" list
   assert_success
 }
+
+# bats test_tags=pull:unsupported:warning
+# An environment that is not compatible with the current ssystem
+# due to the current system missing <system> in `option.systems`
+# AND a package that is indeed not able to be built for the current system
+# should show a warning, but otherwise succeed to pull
+@test "pull unsupported environment succeeds with '--add-system' flag but shows warning if unable to build still" {
+  update_dummy_env "owner" "name"
+
+  make_incompatible "owner" "name" yes
+
+  run "$FLOX_BIN" pull --remote owner/name --add-system
+  assert_success
+  assert_line --partial "Could not build modified environment, build errors need to be resolved manually."
+
+  run "$FLOX_BIN" list
+  assert_success
+}
