@@ -1546,7 +1546,7 @@ fn query_add_system(system: &str) -> Result<Option<bool>> {
     }
 
     let message = format!(
-        "The environment you are trying to pull is not compatible with your system ({system})."
+        "The environment you are trying to pull is not yet compatible with your system ({system})."
     );
     let help = "Use 'flox pull --add-system' to automatically add your system to the list of compatible systems";
 

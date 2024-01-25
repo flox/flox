@@ -221,14 +221,21 @@ function make_incompatible() {
 # bats test_tags=pull:unsupported
 # pulling an environment without packages for the current platform
 #should fail with an error
-@test "l?: pull environment without packages for the current platform fails" {
-  make_dummy_env "owner" "name"
+@test "pull environment without packages for the current platform fails" {
   update_dummy_env "owner" "name"
   make_incompatible "owner" "name"
 
   run "$FLOX_BIN" pull --remote owner/name
   assert_failure
   assert_output --partial "This environment is not yet compatible with your system ($NIX_SYSTEM)"
+}
+
+# bats test_tags=pull:add-system-flag
+# pulling an environment without packages for the current platform
+#should fail with an error
+@test "pull environment without packages for the current platform succeeds with '--add-system' flag" {
+  update_dummy_env "owner" "name"
+  make_incompatible "owner" "name"
 
   run "$FLOX_BIN" pull --remote owner/name --add-system
   assert_success
@@ -236,20 +243,23 @@ function make_incompatible() {
 
 # bats test_tags=pull:unsupported:prompt-fail
 # pulling an environment without packages for the current platform
-#should fail with an error
-@test "l?: pull environment without packages for the current platform prompts for about adding system" {
+# should fail with an error
+@test "pull environment without packages for the current platform prompts for about adding system" {
   update_dummy_env "owner" "name"
   make_incompatible "owner" "name"
 
   run -0 expect -d "$TESTS_DIR/pull/promptAmendSystem.exp" owner/name "$NIX_SYSTEM" no
   assert_success
-  assert_output --partial "This environment is not yet compatible with your system ($NIX_SYSTEM)"
+  assert_output --partial "The environment you are trying to pull is not yet compatible with your system ($NIX_SYSTEM)"
+  assert_line --partial "Did not pull the environment."
+
+  assert [ ! -e ".flox/" ]
 }
 
 # bats test_tags=pull:unsupported:prompt-success
 # pulling an environment without packages for the current platform
 #should fail with an error
-@test "l?: pull environment without packages for the current platform prompts for about adding system: produces env" {
+@test "pull environment without packages for the current platform prompts for about adding system: produces env" {
   update_dummy_env "owner" "name"
   make_incompatible "owner" "name"
 
