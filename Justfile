@@ -34,20 +34,20 @@ cargo_test_invocation := "PKGDB_BIN=${PKGDB_BIN} cargo test --workspace"
 
 # Build the compilation database
 build-cdb:
-    @make -C pkgdb -j -s cdb
+    @make -C pkgdb -j 8 -s cdb
 
 # Build only pkgdb
 @build-pkgdb:
-    make -C pkgdb -j;
+    make -C pkgdb -j 8;
 
 # Build pkgdb with debug symbols
 @build-pkgdb-debug:
     # Note that you need to clean pkgdb first
-    make -C pkgdb -j -s DEBUG=1
+    make -C pkgdb -j 8 -s DEBUG=1
 
 # Clean the pkgdb build cache
 @clean-pkgdb:
-    make -C pkgdb -j -s clean
+    make -C pkgdb -j 8 -s clean
 
 # Build only flox
 @build-cli: build-pkgdb
@@ -61,7 +61,7 @@ build: build-cli
 
 # Run the pkgdb tests
 @test-pkgdb: build-pkgdb
-    make -C pkgdb -j tests;
+    make -C pkgdb -j 8 tests;
     make -C pkgdb check;
 
 # Run the end-to-end test suite
@@ -94,7 +94,7 @@ build: build-cli
 test-cli: impure-tests integ-tests functional-tests
 
 # Run the entire test suite, including impure unit tests
-test-all: test-pkgdb impure-tests integ-tests functional-tests 
+test-all: test-pkgdb impure-tests integ-tests functional-tests
 
 
 # ---------------------------------------------------------------------------- #

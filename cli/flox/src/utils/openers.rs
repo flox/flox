@@ -34,7 +34,12 @@ impl Browser {
             "linux" => {
                 let path_var =
                     env::var("PATH").map_err(|_| "Could not read PATH variable".to_string())?;
-                let Some((path, _)) = first_in_path([OPENERS, BROWSER_OPENERS].concat(), env::split_paths(&path_var)) else { return Err("No opener found in PATH".to_string()) };
+                let Some((path, _)) = first_in_path(
+                    [OPENERS, BROWSER_OPENERS].concat(),
+                    env::split_paths(&path_var),
+                ) else {
+                    return Err("No opener found in PATH".to_string());
+                };
                 Self(path)
             },
             "macos" => Self(PathBuf::from("/usr/bin/open")),
@@ -75,6 +80,6 @@ where
     I::IntoIter: Clone,
 {
     path.into_iter()
-        .cartesian_product(candidates.into_iter())
+        .cartesian_product(candidates)
         .find(|(path, editor)| path.join(editor).exists())
 }

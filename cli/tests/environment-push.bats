@@ -180,3 +180,27 @@ function update_dummy_env() {
   assert_line "emacs"
   popd > /dev/null || return
 }
+
+# bats test_tags=push:broken
+@test "push: broken: if you attempt to flox push an environment that fails to build then the push should fail with a message." {
+  make_dummy_floxmeta "owner"
+
+  run "$FLOX_BIN" init
+
+  init_system=
+  # replace linux with darwin or darwin with linux
+  if [ -z "${NIX_SYSTEM##*-linux}" ]; then
+    init_system="${NIX_SYSTEM%%-linux}-darwin"
+  elif [ -z "${NIX_SYSTEM#*-darwin}" ]; then
+    init_system="${NIX_SYSTEM%%-darwin}-linux"
+  else
+    echo "unknown system: '$NIX_SYSTEM'"
+    exit 1
+  fi
+
+  tomlq --in-place -t ".options.systems=[\"$init_system\"]" .flox/env/manifest.toml
+
+  run "$FLOX_BIN" push --owner owner # dummy owner
+  assert_failure
+  assert_output --partial "Unable to push environment with build errors."
+}

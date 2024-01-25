@@ -133,7 +133,7 @@ impl Environment for RemoteEnvironment {
     ) -> Result<InstallationAttempt, EnvironmentError2> {
         let result = self.inner.install(packages, flox)?;
         self.inner
-            .push(false)
+            .push(flox, false)
             .map_err(RemoteEnvironmentError::UpdateUpstream)?;
         // TODO: clean up git branch for temporary environment
         Ok(result)
@@ -147,7 +147,7 @@ impl Environment for RemoteEnvironment {
     ) -> Result<String, EnvironmentError2> {
         let result = self.inner.uninstall(packages, flox)?;
         self.inner
-            .push(false)
+            .push(flox, false)
             .map_err(RemoteEnvironmentError::UpdateUpstream)?;
         Ok(result)
     }
@@ -159,7 +159,7 @@ impl Environment for RemoteEnvironment {
             return Ok(result);
         }
         self.inner
-            .push(false)
+            .push(flox, false)
             .map_err(RemoteEnvironmentError::UpdateUpstream)?;
         Ok(result)
     }
@@ -172,7 +172,7 @@ impl Environment for RemoteEnvironment {
     ) -> Result<UpdateResult, EnvironmentError2> {
         let result = self.inner.update(flox, inputs)?;
         self.inner
-            .push(false)
+            .push(flox, false)
             .map_err(RemoteEnvironmentError::UpdateUpstream)?;
         Ok(result)
     }
@@ -185,7 +185,7 @@ impl Environment for RemoteEnvironment {
     ) -> Result<UpgradeResult, EnvironmentError2> {
         let result = self.inner.upgrade(flox, groups_or_iids)?;
         self.inner
-            .push(false)
+            .push(flox, false)
             .map_err(RemoteEnvironmentError::UpdateUpstream)?;
         Ok(result)
     }

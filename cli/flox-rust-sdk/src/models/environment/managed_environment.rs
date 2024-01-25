@@ -127,6 +127,9 @@ pub enum ManagedEnvironmentError {
     #[error("could not link environment")]
     Link(#[source] CoreEnvironmentError),
 
+    #[error("could not build environment")]
+    Build(#[source] CoreEnvironmentError),
+
     #[error("could not read manifest")]
     ReadManifest(#[source] GenerationsError),
 
@@ -877,8 +880,17 @@ impl ManagedEnvironment {
     ) -> Result<Self, ManagedEnvironmentError> {
         // path of the original .flox directory
         let dot_flox_path = path_environment.path.clone();
+        let path_pointer = path_environment.pointer.clone();
+        let name = path_environment.name();
 
-        let pointer = ManagedPointer::new(owner, path_environment.name(), &flox.floxhub);
+        let mut core_environment = path_environment.into_core_environment();
+
+        // Ensure the environment builds before we push it
+        core_environment
+            .build(flox)
+            .map_err(ManagedEnvironmentError::Build)?;
+
+        let pointer = ManagedPointer::new(owner, name, &flox.floxhub);
 
         let checkedout_floxmeta_path = tempfile::tempdir_in(&flox.temp_dir).unwrap().into_path();
         let temp_floxmeta_path = tempfile::tempdir_in(&flox.temp_dir).unwrap().into_path();
@@ -898,7 +910,7 @@ impl ManagedEnvironment {
             checkedout_floxmeta_path,
             temp_floxmeta_path,
             remote_branch_name(&pointer),
-            &path_environment.pointer,
+            &path_pointer,
         )
         .map_err(ManagedEnvironmentError::InitializeFloxmeta)?;
 
@@ -909,10 +921,7 @@ impl ManagedEnvironment {
             .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?;
 
         generations
-            .add_generation(
-                &mut path_environment.into_core_environment(),
-                "Add first generation".to_string(),
-            )
+            .add_generation(&mut core_environment, "Add first generation".to_string())
             .map_err(ManagedEnvironmentError::CommitGeneration)?;
 
         temp_floxmeta_git
@@ -949,9 +958,22 @@ impl ManagedEnvironment {
         Ok(env)
     }
 
-    pub fn push(&mut self, force: bool) -> Result<(), ManagedEnvironmentError> {
+    pub fn push(&mut self, flox: &Flox, force: bool) -> Result<(), ManagedEnvironmentError> {
         let project_branch = branch_name(&self.pointer, &self.path);
         let sync_branch = remote_branch_name(&self.pointer);
+
+        // Ensure the environment builds before we push it
+        // Usually we don't create generations unless they build,
+        // but that is not always the case.
+        // If a user pulls an environment that is broken on their system, we may
+        // create a "broken" generation.
+        // That generation could have a divergent manifest and lock,
+        // or it could fail to build.
+        // So we have to verify we don't have a "broken" generation before pushing.
+        {
+            let mut env = self.get_current_generation(flox)?;
+            env.build(flox).map_err(ManagedEnvironmentError::Build)?;
+        }
 
         // Fetch the remote branch into sync branch
         self.floxmeta
