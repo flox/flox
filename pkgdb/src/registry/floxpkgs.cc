@@ -490,7 +490,11 @@ FloxFlakeScheme::inputFromURL( const nix::ParsedURL & url ) const
   GitHubInputScheme                   githubScheme;
   std::optional<nix::fetchers::Input> fromGithub
     = githubScheme.inputFromURL( asGithub );
-  if ( fromGithub.has_value() ) { return fromGithub; }
+  if ( fromGithub.has_value() )
+    {
+      ( *fromGithub ).scheme = std::make_shared<FloxFlakeScheme>();
+      return fromGithub;
+    }
   else { return {}; }
 }
 
@@ -503,6 +507,7 @@ FloxFlakeScheme::inputFromAttrs( const nix::fetchers::Attrs & attrs ) const
   else
     {
       ( *fromGithub ).attrs.insert_or_assign( "type", flox::FLOX_FLAKE_TYPE );
+      ( *fromGithub ).scheme = std::make_shared<FloxFlakeScheme>();
       return fromGithub;
     }
 }
@@ -512,9 +517,9 @@ FloxFlakeScheme::fetch( nix::ref<nix::Store>         store,
                         const nix::fetchers::Input & input )
 {
   flox::debugLog( "using our fetcher" );
-  nix::fetchers::Input backToGithub = input;
-  backToGithub.attrs.insert_or_assign( "type", "github" );
-  nix::FlakeRef nixpkgsRef = nix::FlakeRef::fromAttrs( backToGithub.attrs );
+  nix::fetchers::Input asGithub = input;
+  asGithub.attrs.insert_or_assign( "type", "github" );
+  nix::FlakeRef nixpkgsRef = nix::FlakeRef::fromAttrs( asGithub.attrs );
   auto          flakeDir   = flox::createWrappedFlakeDir( nixpkgsRef );
   flox::debugLog( "created wrapped flake: path=" + std::string( flakeDir ) );
   nix::StringSink sink;
@@ -537,7 +542,8 @@ FloxFlakeScheme::fetch( nix::ref<nix::Store>         store,
   nix::StorePath path = info.path;
   flox::debugLog( "added filled out template flake to store: store_path="
                   + std::string( path.to_string() ) );
-  return std::pair<nix::StorePath, nix::fetchers::Input>( path, input );
+  asGithub.scheme = std::make_shared<FloxFlakeScheme>();
+  return std::pair<nix::StorePath, nix::fetchers::Input>( path, asGithub );
 }
 
 bool
@@ -550,7 +556,9 @@ nix::ParsedURL
 FloxFlakeScheme::toURL( const nix::fetchers::Input & input ) const
 {
   GitHubInputScheme githubScheme;
-  return githubScheme.toURL( input );
+  auto              url = githubScheme.toURL( input );
+  url.scheme            = type();
+  return url;
 }
 
 /* -------------------------------------------------------------------------- */

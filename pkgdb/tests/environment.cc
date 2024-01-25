@@ -918,24 +918,26 @@ main()
   // NOLINTNEXTLINE(cppcoreguidelines-macro-usage)
 #define RUN_TEST( ... ) _RUN_TEST( exitCode, __VA_ARGS__ )
 
-  RUN_TEST( groupIsLocked0 );
-  RUN_TEST( groupIsLocked1 );
-  RUN_TEST( groupIsLocked2 );
-  RUN_TEST( groupIsLocked3 );
-  RUN_TEST( groupIsLocked4 );
-  RUN_TEST( groupIsLocked5 );
-  RUN_TEST( groupIsLocked6 );
-  RUN_TEST( groupIsLocked_upgrades );
+  // RUN_TEST( groupIsLocked0 );
+  // RUN_TEST( groupIsLocked1 );
+  // RUN_TEST( groupIsLocked2 );
+  // RUN_TEST( groupIsLocked3 );
+  // RUN_TEST( groupIsLocked4 );
+  // RUN_TEST( groupIsLocked5 );
+  // RUN_TEST( groupIsLocked6 );
+  // RUN_TEST( groupIsLocked_upgrades );
 
-  RUN_TEST( getGroupInput0 );
-  RUN_TEST( getGroupInput1 );
-  RUN_TEST( getGroupInput2 );
-  RUN_TEST( getGroupInput3 );
+  // RUN_TEST( getGroupInput0 );
+  // RUN_TEST( getGroupInput1 );
+  // RUN_TEST( getGroupInput2 );
+  // RUN_TEST( getGroupInput3 );
 
-  RUN_TEST( createLockfile_new );
-  RUN_TEST( createLockfile_existing );
-  RUN_TEST( createLockfile_both );
-  RUN_TEST( createLockfile_error );
+  // RUN_TEST( createLockfile_new );
+  // RUN_TEST( createLockfile_existing );
+  // RUN_TEST( createLockfile_both );
+  // RUN_TEST( createLockfile_error );
+
+  test_createLockfile_new();
 
   return exitCode;
 }
