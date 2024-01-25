@@ -1261,7 +1261,7 @@ enum PullSelect {
         /// Directory containing a managed environment to pull
         #[bpaf(long, short, argument("path"))]
         dir: Option<PathBuf>,
-        /// forceably overwrite the local copy of the environment
+        /// Forceably overwrite the local copy of the environment
         #[bpaf(long, short)]
         force: bool,
     },
@@ -1279,7 +1279,7 @@ impl Default for PullSelect {
 /// Pull environment from floxhub
 #[derive(Bpaf, Clone)]
 pub struct Pull {
-    /// forceably add current systems to the environment, even if incompatible
+    /// Forceably add current systems to the environment, even if incompatible
     #[bpaf(long("add-system"), short)]
     add_system: bool,
 
