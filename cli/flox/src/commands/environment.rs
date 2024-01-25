@@ -1437,15 +1437,28 @@ impl Pull {
                     })),
                 )),
             ) => {
-                if !add_systems && !query_add_system(&flox.system) {
-                    bail!(formatdoc! {"
+                let hint = "Use 'flox pull --add-system' to add your system to the manifest.";
+
+                // will return OK if the user chose to abort the pull
+                let add_systems = add_systems
+                    || match query_add_system(&flox.system)? {
+                        Some(false) => {
+                            // prompt available, user chose to abort
+                            info!("{hint}");
+                            bail!("Pull aborted");
+                        },
+                        Some(true) => true, // prompt available, user chose to add system
+                        None => false,      // no prompt available
+                    };
+
+                if !add_systems {
+                    bail!("{}", formatdoc! {"
                         This environment is not yet compatible with your system ({system}).
 
-                        {err:#}
-
-                        Use 'flox pull --add-system' to add your system to the manifest."
-                    , system = flox.system, err = anyhow!(e)});
+                        {hint}"
+                    , system = flox.system});
                 }
+
                 let doc = amend_current_system(&env, flox)?;
                 if let Err(broken_error) = env.edit_unsafe(flox, doc.to_string())? {
                     warn!("{}", formatdoc! {"
@@ -1527,7 +1540,11 @@ impl Pull {
     }
 }
 
-fn query_add_system(system: &str) -> bool {
+fn query_add_system(system: &str) -> Result<Option<bool>> {
+    if !Dialog::can_prompt() {
+        return Ok(None);
+    }
+
     let message = format!(
         "The environment you are trying to pull is not compatible with your system ({system})."
     );
@@ -1537,10 +1554,6 @@ fn query_add_system(system: &str) -> bool {
     let confirm_choice =
         format!("Pull this environment anyway and add '{system}' to the supported systems list.");
 
-    if !Dialog::can_prompt() {
-        return false;
-    }
-
     let dialog = Dialog {
         message: &message,
         help_message: Some(help),
@@ -1549,9 +1562,9 @@ fn query_add_system(system: &str) -> bool {
         },
     };
 
-    let (choice, _) = dialog.raw_prompt().unwrap_or((0, ""));
+    let (choice, _) = dialog.raw_prompt()?;
 
-    choice == 1
+    Ok(Some(choice == 1))
 }
 
 fn amend_current_system(env: &ManagedEnvironment, flox: &Flox) -> Result<Document, anyhow::Error> {
