@@ -196,7 +196,6 @@ SearchCommand::run()
   if ( this->dumpQuery )
     {
       std::cout << query.str() << std::endl;
-      return EXIT_SUCCESS;
     }
   
   /* Collect results from each input */
