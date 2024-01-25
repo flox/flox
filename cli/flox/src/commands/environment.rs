@@ -45,7 +45,7 @@ use flox_rust_sdk::models::lockfile::{
     PackageInfo,
     TypedLockedManifest,
 };
-use flox_rust_sdk::models::manifest::PackageToInstall;
+use flox_rust_sdk::models::manifest::{self, PackageToInstall};
 use flox_rust_sdk::models::pkgdb::{call_pkgdb, CallPkgDbError, PkgDbError, PKGDB_BIN};
 use flox_rust_sdk::nix::command::StoreGc;
 use flox_rust_sdk::nix::command_line::NixCommandLine;
@@ -1441,7 +1441,7 @@ impl Pull {
 
                 // will return OK if the user chose to abort the pull
                 let add_systems = add_systems
-                    || match query_add_system(&flox.system)? {
+                    || match Self::query_add_system(&flox.system)? {
                         Some(false) => {
                             // prompt available, user chose to abort
                             info!("{hint}");
@@ -1459,7 +1459,7 @@ impl Pull {
                     , system = flox.system});
                 }
 
-                let doc = amend_current_system(&env, flox)?;
+                let doc = Self::amend_current_system(&env, flox)?;
                 if let Err(broken_error) = env.edit_unsafe(flox, doc.to_string())? {
                     warn!("{}", formatdoc! {"
                         {err:#}
@@ -1538,70 +1538,48 @@ impl Pull {
 
         (start_message, complete_message)
     }
-}
 
-fn query_add_system(system: &str) -> Result<Option<bool>> {
-    if !Dialog::can_prompt() {
-        return Ok(None);
-    }
+    /// if possible, prompt the user to automatically add their system to the manifest
+    ///
+    /// returns [Ok(None)]` if the user can't be prompted
+    /// returns `[Ok(bool)]` depending on the users choice
+    /// returns `[Err]` if the prompt failed or was cancelled
+    fn query_add_system(system: &str) -> Result<Option<bool>> {
+        if !Dialog::can_prompt() {
+            return Ok(None);
+        }
 
-    let message = format!(
+        let message = format!(
         "The environment you are trying to pull is not yet compatible with your system ({system})."
     );
-    let help = "Use 'flox pull --add-system' to automatically add your system to the list of compatible systems";
+        let help = "Use 'flox pull --add-system' to automatically add your system to the list of compatible systems";
 
-    let reject_choice = "Don't pull this environment.";
-    let confirm_choice =
-        format!("Pull this environment anyway and add '{system}' to the supported systems list.");
+        let reject_choice = "Don't pull this environment.";
+        let confirm_choice = format!(
+            "Pull this environment anyway and add '{system}' to the supported systems list."
+        );
 
-    let dialog = Dialog {
-        message: &message,
-        help_message: Some(help),
-        typed: Select {
-            options: [reject_choice, &confirm_choice].to_vec(),
-        },
-    };
+        let dialog = Dialog {
+            message: &message,
+            help_message: Some(help),
+            typed: Select {
+                options: [reject_choice, &confirm_choice].to_vec(),
+            },
+        };
 
-    let (choice, _) = dialog.raw_prompt()?;
+        let (choice, _) = dialog.raw_prompt()?;
 
-    Ok(Some(choice == 1))
-}
-
-fn amend_current_system(env: &ManagedEnvironment, flox: &Flox) -> Result<Document, anyhow::Error> {
-    // in memory edit of the manifest
-    // toml_edit operates on &mut references of to this document
-    let mut doc = env
-        .manifest_content(flox)?
-        .parse::<Document>()
-        .expect("invalid doc");
-
-    // extract the `[options]` table
-    let options_table = doc
-        .entry("options")
-        .or_insert(toml_edit::Item::Table(toml_edit::Table::default()))
-        .as_table_like_mut()
-        .context("Invalid manifest format: expected [options] to be a table")?;
-
-    // extract the `options.systems` array
-    let systems_list = options_table
-        .entry("systems")
-        .or_insert(toml_edit::Item::Value(toml_edit::Value::Array(
-            toml_edit::Array::default(),
-        )))
-        .as_array_mut()
-        .context("Invalid manifest format: expected 'options.systems' to be an array")?;
-
-    // sanity check that the current system is not already in the list
-    if systems_list
-        .iter()
-        .any(|s| s.as_str().map(|s| s == flox.system).unwrap_or_default())
-    {
-        return Ok(doc);
+        Ok(Some(choice == 1))
     }
 
-    systems_list.push(flox.system.clone());
-
-    Ok(doc)
+    /// add the current system to the manifest of the given environment
+    fn amend_current_system(
+        env: &ManagedEnvironment,
+        flox: &Flox,
+    ) -> Result<Document, anyhow::Error> {
+        manifest::add_system(&env.manifest_content(flox)?, &flox.system)
+            .context("Could not add system to manifest")
+    }
 }
 
 /// rollback to the previous generation of an environment
