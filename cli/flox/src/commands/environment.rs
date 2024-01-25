@@ -1432,7 +1432,7 @@ impl Pull {
             Err(
                 e @ EnvironmentError2::Core(CoreEnvironmentError::LockedManifest(
                     LockedManifestError::BuildEnv(CallPkgDbError::PkgDbError(PkgDbError {
-                        exit_code: 100,
+                        exit_code: 123,
                         ..
                     })),
                 )),

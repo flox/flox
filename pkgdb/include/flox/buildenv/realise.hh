@@ -30,6 +30,17 @@
 
 namespace flox::buildenv {
 
+/**
+ * @class flox::resolver::InvalidLockfileException
+ * @brief An exception thrown when a lockfile is invalid.
+ * @{
+ */
+FLOX_DEFINE_EXCEPTION( SystenNotSupportedByLockfile,
+                       EC_LOCKFILE_INCOMPATIBLE_SYSTEM,
+                       "unsupported system" )
+/** @} */
+
+
 /* -------------------------------------------------------------------------- */
 
 /**
