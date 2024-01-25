@@ -1445,7 +1445,7 @@ impl Pull {
                         Some(false) => {
                             // prompt available, user chose to abort
                             info!("{hint}");
-                            bail!("Pull aborted");
+                            bail!("Did not pull the environment.");
                         },
                         Some(true) => true, // prompt available, user chose to add system
                         None => false,      // no prompt available
