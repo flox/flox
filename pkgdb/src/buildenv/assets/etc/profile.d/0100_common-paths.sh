@@ -4,7 +4,6 @@
 #
 # ---------------------------------------------------------------------------- #
 
-PATH="$FLOX_ENV/bin:$FLOX_ENV/sbin${PATH:+:$PATH}"
 FPATH="$FLOX_ENV/share/zsh/vendor-completions${FPATH:+:$FPATH}"
 FPATH="$FLOX_ENV/share/zsh/site-functions:$FPATH"
 INFOPATH="$FLOX_ENV/share/info${INFOPATH:+:$INFOPATH}"
@@ -16,7 +15,6 @@ ACLOCAL_PATH="$FLOX_ENV/share/aclocal${ACLOCAL_PATH:+:$ACLOCAL_PATH}"
 XDG_DATA_DIRS="$FLOX_ENV/share${XDG_DATA_DIRS:+:$XDG_DATA_DIRS}"
 
 export \
-  PATH \
   FPATH \
   INFOPATH \
   CPATH \
@@ -25,6 +23,28 @@ export \
   ACLOCAL_PATH \
   XDG_DATA_DIRS \
   ;
+
+# ---------------------------------------------------------------------------- #
+
+# Set the PATH environment variable.
+# In the general case, we prepend the flox environments `bin/` and `sbin/`
+# macOS uses `path_helper` to always move system paths at the front of PATH.
+# We can't do much about that, but we can try to fight back
+# by likewise moving the flox environment paths to the front.
+#
+# `FLOX_PATH_PATCHED` is set by `flox activate`
+# *iff* there is a `/usr/libexec/path_helper`.
+# In that case, the existing PATH is patched to move the flox environment paths
+# to the front.
+# The PATH items corresponding to the current activation
+# are subsequently prepended to the patched path as usual.
+if [ ! -z "${FLOX_PATH_PATCHED+x}" ]; then
+  PATH="$FLOX_PATH_PATCHED"
+  unset FLOX_PATH_PATCHED
+fi
+
+PATH="$FLOX_ENV/bin:$FLOX_ENV/sbin${PATH:+:$PATH}"
+export PATH
 
 # ---------------------------------------------------------------------------- #
 
