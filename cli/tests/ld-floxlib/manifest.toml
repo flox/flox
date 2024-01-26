@@ -1,4 +1,6 @@
 [install]
+findutils.path = "findutils"
+coreutils.path = "coreutils"
 boost.path = "boost"
 curl.path = "curl"
 gcc.path = "gcc"
