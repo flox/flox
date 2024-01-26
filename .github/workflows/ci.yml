@@ -147,17 +147,9 @@ jobs:
         run: nix develop -L --no-update-lock-file --command just build-cli
 
       - name: "Test (./cli: cargo test)"
-        run: |
-          export RUST_BACKTRACE=1;
-          nix develop -L --no-update-lock-file --command just impure-tests;
-
-      - name: "Test (./cli/tests)"
-        if: ${{ github.event_name == 'merge_group' }}
-        run: nix develop -L --no-update-lock-file --command just integ-tests
-
-      - name: "Test (./tests)"
-        run: |
-          nix develop -L --no-update-lock-file --command just functional-tests;
+        env:
+          RUST_BACKTRACE: 1
+        run: nix develop -L --no-update-lock-file --command just test-all
 
   nix-build:
     name: "Nix build"
