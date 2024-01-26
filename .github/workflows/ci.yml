@@ -41,9 +41,12 @@ jobs:
             - "shells/**"
 
   pkgdb-dev:
-    name: "Pkgdb Tests"
+    name: "Pkgdb"
     runs-on: ${{ matrix.os }}
-    if: ${{ needs.changes.outputs.pkgdb == 'true' }}
+    if: >
+      ${{ ( github.event_name == 'workflow_dispatch' ) ||
+          ( needs.changes.outputs.pkgdb == 'true' }} )
+       }}
     needs:
       - "changes"
 
@@ -104,7 +107,7 @@ jobs:
         uses: "actions/deploy-pages@v4"
 
   cli-dev:
-    name: "Flox Cargo Tests"
+    name: "Flox CLI Tests"
     runs-on: ${{ matrix.os }}
 
     strategy:
@@ -146,10 +149,11 @@ jobs:
       - name: "Build (cli)"
         run: nix develop -L --no-update-lock-file --command just build-cli
 
-      - name: "Test (./cli: cargo test)"
+      - name: "Test (cli)"
+        shell: zsh
         env:
           RUST_BACKTRACE: 1
-        run: nix develop -L --no-update-lock-file --command just test-all
+        run: nix develop -L --no-update-lock-file --command just test-cli
 
   nix-build:
     name: "Nix build"
