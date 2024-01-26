@@ -212,7 +212,8 @@ createFloxEnv( nix::EvalState &     state,
   if ( packages == lockfile.getLockfileRaw().packages.end() )
     {
       // TODO: throw structured exception
-      throw FloxException( "No packages found for system `" + system + "'" );
+      throw SystenNotSupportedByLockfile(
+        "'" + system + "' not supported by this environment" );
     }
 
   /* Extract all packages */

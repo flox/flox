@@ -300,6 +300,51 @@ impl CoreEnvironment<ReadOnly> {
         EditResult::new(&old_contents, &contents)
     }
 
+    /// Atomically edit this environment, without checking that it still builds
+    ///
+    /// This is unsafe as it can create broken environments!
+    /// Used by the implementation of <https://github.com/flox/flox/issues/823>
+    /// and may be removed in the future in favor of something like <https://github.com/flox/flox/pull/681>
+    pub(crate) fn edit_unsafe(
+        &mut self,
+        flox: &Flox,
+        contents: String,
+    ) -> Result<Result<EditResult, CoreEnvironmentError>, CoreEnvironmentError> {
+        let old_contents = self.manifest_content()?;
+
+        // skip the edit if the contents are unchanged
+        // note: consumers of this function may call [Self::link] separately,
+        //       causing an evaluation/build of the environment.
+        if contents == old_contents {
+            return Ok(Ok(EditResult::Unchanged));
+        }
+
+        let tempdir = tempfile::tempdir_in(&flox.temp_dir)
+            .map_err(CoreEnvironmentError::MakeSandbox)?
+            .into_path();
+
+        debug!(
+            "transaction: making temporary environment in {}",
+            tempdir.display()
+        );
+        let mut temp_env = self.writable(&tempdir)?;
+
+        debug!("transaction: updating manifest");
+        temp_env.update_manifest(&contents)?;
+
+        debug!("transaction: building environment, ignoring errors (unsafe)");
+
+        let build_attempt = temp_env.build(flox);
+
+        debug!("transaction: replacing environment");
+        self.replace_with(temp_env)?;
+
+        match build_attempt {
+            Ok(_) => Ok(EditResult::new(&old_contents, &contents)),
+            Err(err) => Ok(Err(err)),
+        }
+    }
+
     /// Update the inputs of an environment atomically.
     pub fn update(
         &mut self,
@@ -603,9 +648,6 @@ pub enum CoreEnvironmentError {
     #[error("failed to upgrade environment")]
     UpgradeFailed(#[source] CallPkgDbError),
     // endregion
-    #[error("error building environment")]
-    BuildEnv(#[source] CallPkgDbError),
-
     #[error("unexpected output from environment builder command")]
     ParseBuildEnvOutput(#[source] serde_json::Error),
     // endregion
