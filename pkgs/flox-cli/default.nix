@@ -106,6 +106,8 @@
       GLOBAL_MANIFEST_TEMPLATE = builtins.path {
         path = ../../assets/global_manifest_template.toml;
       };
+
+      #NIX_DEBUG_INFO_DIRS = "${nix.debug}/lib/debug";
     }
     // lib.optionalAttrs hostPlatform.isDarwin {
       NIX_COREFOUNDATION_RPATH = "${darwin.CF}/Library/Frameworks";
