@@ -45,7 +45,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     if: >
       ${{ ( github.event_name == 'workflow_dispatch' ) ||
-          ( needs.changes.outputs.pkgdb == 'true' }} )
+          ( needs.changes.outputs.pkgdb == 'true' )
        }}
     needs:
       - "changes"
