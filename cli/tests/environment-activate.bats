@@ -413,3 +413,16 @@ env_is_activated() {
   assert_line --partial "hello is $(realpath $PROJECT_DIR)/.flox/run/"
   assert_line "baz"
 }
+
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=activate,activate:inplace-reactivate
+@test "'flox activate' modifies the current shell (bash) when already activated" {
+  run "$FLOX_BIN" activate -- "$FLOX_BIN" activate --in-place
+  assert_success
+  if [[ -e  /usr/libexec/path_helper ]]; then
+    assert_output --regexp "^(export PATH=.+)$"
+  else
+    assert_output --regexp "^true$"
+  fi
+}
