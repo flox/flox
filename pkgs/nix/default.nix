@@ -10,50 +10,58 @@
 #
 #
 # ---------------------------------------------------------------------------- #
-{nixVersions}:
-nixVersions.nix_2_17.overrideAttrs (prev: {
-  # Apply patch files.
-  patches =
-    prev.patches
-    ++ [
-      (builtins.path {path = ./patches/nix-9147.patch;})
-      (builtins.path {path = ./patches/multiple-github-tokens.2.13.2.patch;})
-    ];
+{
+  nixVersions,
+  stdenv,
+}: let
+  nixWithStdEnv = nixVersions.nix_2_17.override {stdenv = stdenv;};
+in
+  nixWithStdEnv.overrideAttrs (prev: {
+    separateDebugInfo = false;
+    dontStrip = true;
 
-  postFixup = ''
-    # Generate a `sed' pattern to fix up public header `#includes'.
-    # All header names separated by '\|'.
-    _patt="$( find "$dev/include/nix" -type f -name '*.h*' -printf '%P\|'; )";
-    # Strip leading/trailing '\|'.
-    _patt="''${_patt%\\|}";
-    _patt="''${_patt#\\|}";
-    _patt="s,#include \+\"\($_patt\)\",#include <nix/\1>,";
-    # Perform the substitution.
-    find "$dev/include/nix" -type f -name '*.h*' -print                        \
-      |xargs sed -i                                                            \
-                 -e "$_patt"                                                   \
-                 -e 's,#include \+"\(nlohmann/json_fwd\.hpp\)",#include <\1>,';
+    # Apply patch files.
+    patches =
+      prev.patches
+      ++ [
+        (builtins.path {path = ./patches/nix-9147.patch;})
+        (builtins.path {path = ./patches/multiple-github-tokens.2.13.2.patch;})
+      ];
 
-    # Fixup `pkg-config' files.
-    find "$dev" -type f -name '*.pc'                       \
-      |xargs sed -i -e 's,\(-I\''${includedir}\)/nix,\1,'  \
-                    -e 's,-I,-isystem ,';
+    postFixup = ''
+      # Generate a `sed' pattern to fix up public header `#includes'.
+      # All header names separated by '\|'.
+      _patt="$( find "$dev/include/nix" -type f -name '*.h*' -printf '%P\|'; )";
+      # Strip leading/trailing '\|'.
+      _patt="''${_patt%\\|}";
+      _patt="''${_patt#\\|}";
+      _patt="s,#include \+\"\($_patt\)\",#include <nix/\1>,";
+      # Perform the substitution.
+      find "$dev/include/nix" -type f -name '*.h*' -print                        \
+        |xargs sed -i                                                            \
+                   -e "$_patt"                                                   \
+                   -e 's,#include \+"\(nlohmann/json_fwd\.hpp\)",#include <\1>,';
 
-    # Create `nix-fetchers.pc'.
-    cat <<EOF > "$dev/lib/pkgconfig/nix-fetchers.pc"
-    prefix=$out
-    libdir=$out/lib
-    includedir=$dev/include
+      # Fixup `pkg-config' files.
+      find "$dev" -type f -name '*.pc'                       \
+        |xargs sed -i -e 's,\(-I\''${includedir}\)/nix,\1,'  \
+                      -e 's,-I,-isystem ,';
 
-    Name: Nix
-    Description: Nix Package Manager
-    Version: 2.17.1
-    Requires: nix-store bdw-gc
-    Libs: -L\''${libdir} -lnixfetchers
-    Cflags: -isystem \''${includedir} -std=c++2a
-    EOF
-  '';
-})
+      # Create `nix-fetchers.pc'.
+      cat <<EOF > "$dev/lib/pkgconfig/nix-fetchers.pc"
+      prefix=$out
+      libdir=$out/lib
+      includedir=$dev/include
+
+      Name: Nix
+      Description: Nix Package Manager
+      Version: 2.17.1
+      Requires: nix-store bdw-gc
+      Libs: -L\''${libdir} -lnixfetchers
+      Cflags: -isystem \''${includedir} -std=c++2a
+      EOF
+    '';
+  })
 # ---------------------------------------------------------------------------- #
 #
 #
