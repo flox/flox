@@ -756,6 +756,48 @@ impl Activate {
         };
         Ok(())
     }
+
+    fn activate_non_interactive(
+        shell: &ShellType,
+        exports: &HashMap<&str, String>,
+        fixed_up_path: Option<Vec<PathBuf>>,
+        fixed_up_path_joined: OsString,
+        activation_path: &Path,
+    ) {
+        let exports_rendered = exports
+            .iter()
+            .map(|(key, value)| (key, shell_escape::escape(Cow::Borrowed(value))))
+            .map(|(key, value)| format!("export {key}={value}",))
+            .join("\n");
+
+        let path_patch = if fixed_up_path.is_some() {
+            formatdoc! {"
+                    # Add flox environment to PATH
+                    export FLOX_PATH_PATCHED={fixed_up_path_joined}",
+        let path_patch = if let Some(fixed_up_path_joined) = fixed_up_path_joined {
+                fixed_up_path_joined=shell_escape::escape(fixed_up_path_joined.to_string_lossy()),
+        } else {
+            "# No path patching needed".to_string()
+        };
+
+        let script = formatdoc! {"
+                # Common flox environment variables
+                {exports_rendered}
+
+                {path_patch}
+
+                # to avoid infinite recursion sourcing bashrc
+                export FLOX_SOURCED_FROM_SHELL_RC=1
+
+                source {activation_path}/activate/{shell}
+
+                unset FLOX_SOURCED_FROM_SHELL_RC
+            ",
+        activation_path=shell_escape::escape(activation_path.to_string_lossy()),
+        };
+
+        println!("{script}");
+    }
 }
 
 #[cfg(test)]
