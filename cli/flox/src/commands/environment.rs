@@ -1392,6 +1392,11 @@ impl Pull {
             .context("Could not get .flox/ parent")?;
         fs::create_dir_all(dot_flox_parent).context("Could not create .flox/ parent directory")?;
 
+        // Pulls the environment into a temp directory which is later renamed to `.flox`.
+        // We do this to avoid populating the floxmeta branch `owner/name.encode(path to .flox)`
+        // in case building fails or the user aborts the fixup.
+        // The branch will be adjusted when the environment is opened the next time
+        // by the `ensure_branch` routine.
         let temp_dot_flox_dir = tempfile::TempDir::with_prefix_in(DOT_FLOX, dot_flox_parent)
             .context("Could not create temporary directory for cloning environment")?;
 
