@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::collections::HashMap;
 use std::error::Error;
 use std::ffi::{OsStr, OsString};
 use std::fmt::Display;
@@ -529,6 +530,25 @@ impl Activate {
             .unwrap_or(utils::colors::LIGHT_BLUE.to_ansi256().to_string());
         let prompt_color_2 = env::var("FLOX_PROMPT_COLOR_2")
             .unwrap_or(utils::colors::DARK_PEACH.to_ansi256().to_string());
+
+        let exports = HashMap::from([
+            (FLOX_ENV_VAR, activation_path.to_string_lossy().to_string()),
+            (FLOX_PROMPT_ENVIRONMENTS_VAR, flox_prompt_environments),
+            (
+                FLOX_ACTIVE_ENVIRONMENTS_VAR,
+                flox_active_environments.to_string(),
+            ),
+            (
+                FLOX_ENV_DIRS_VAR,
+                flox_env_dirs_joined.to_string_lossy().to_string(),
+            ),
+            (
+                FLOX_ENV_LIB_DIRS_VAR,
+                flox_env_lib_dirs_joined.to_string_lossy().to_string(),
+            ),
+            ("FLOX_PROMPT_COLOR_1", prompt_color_1),
+            ("FLOX_PROMPT_COLOR_2", prompt_color_2),
+        ]);
 
         // when output is not a tty, and no command is provided
         // we just print an activation script to stdout
