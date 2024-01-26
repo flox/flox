@@ -387,6 +387,22 @@ impl Display for ShellType {
 }
 
 impl ShellType {
+    /// Detect the current shell from the SHELL environment variable
+    ///
+    /// TODO:
+    /// We want to print an activation script in the format appropriate for the shell that's actually running,
+    /// not whatever `SHELL` might be, as `SHELL` might not always be set correctly.
+    /// We should detect the type of our parent shell from flox' parent process,
+    /// using an approach like [1], rather than blindly trusting `SHELL`.
+    ///
+    /// [1]: <https://github.com/flox/flox/blob/668a80a40ba19d50f8ca304ff351f4b27a886e21/flox-bash/lib/utils.sh#L1432>
+    fn detect() -> Result<Self> {
+        let shell = env::var("SHELL").context("SHELL must be set")?;
+        let shell = Path::new(&shell);
+        let shell = Self::try_from(shell)?;
+        Ok(shell)
+    }
+
     fn exe_path(&self) -> &Path {
         match self {
             ShellType::Bash(path) => path,
@@ -496,12 +512,7 @@ impl Activate {
             (flox_env_dirs, flox_env_lib_dirs)
         };
 
-        // TODO more sophisticated detection?
-        let shell = if let Ok(shell) = env::var("SHELL") {
-            ShellType::try_from(Path::new(&shell))?
-        } else {
-            bail!("SHELL must be set");
-        };
+        let shell = ShellType::detect()?;
 
         let prompt_color_1 = env::var("FLOX_PROMPT_COLOR_1")
             .unwrap_or(utils::colors::LIGHT_BLUE.to_ansi256().to_string());
