@@ -78,18 +78,10 @@ jobs:
           SSH_KEY:                "${{ secrets.FLOXBOT_SSH_KEY }}"
 
       - name: "Build"
-        run: |
-          nix develop -L                 \
-            --command make -C pkgdb -j;
+        run: nix develop -L --no-update-lock-file --command just build-pkgdb
 
       - name: "Test (pkgdb)"
-        run: |
-          nix develop -L                    \
-            --no-update-lock-file           \
-            --command make -C pkgdb tests;
-          nix develop -L                    \
-            --no-update-lock-file           \
-            --command make -C pkgdb check;
+        run: nix develop -L --no-update-lock-file --command just test-pkgdb
 
       - name: "Build Docs"
         run: |
@@ -151,48 +143,21 @@ jobs:
           key: "cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}"
           restore-keys: "cargo-${{ runner.os }}-"
 
-      - name: "Build (pkgdb)"
-        run: |
-          nix develop -L                   \
-            --no-update-lock-file          \
-            '.#default'                    \
-              --command make -C pkgdb -j;
-
       - name: "Build (cli)"
-        run: |
-          pushd ./cli;
-          nix develop -L                                               \
-            --no-update-lock-file                                      \
-              --command sh -c                                          \
-                'PKGDB_BIN="${PWD%/*}/pkgdb/bin/pkgdb" cargo build;';
-          popd;
+        run: nix develop -L --no-update-lock-file --command just build-cli
 
       - name: "Test (./cli: cargo test)"
         run: |
-          pushd ./cli;
           export RUST_BACKTRACE=1;
-          nix develop -L                                         \
-            --no-update-lock-file                                \
-              --command sh -c '
-                PKGDB_BIN="${PWD%/*}/pkgdb/bin/pkgdb"            \
-                cargo test --locked --workspace -F extra-tests;
-              ';
-          popd;
+          nix develop -L --no-update-lock-file --command just impure-tests;
 
       - name: "Test (./cli/tests)"
         if: ${{ github.event_name == 'merge_group' }}
-        run: |
-          pushd ./cli;
-          nix develop -L                 \
-            --no-update-lock-file        \
-              --command flox-cli-tests;
-          popd;
+        run: nix develop -L --no-update-lock-file --command just integ-tests
 
       - name: "Test (./tests)"
         run: |
-          nix develop -L             \
-            --no-update-lock-file    \
-              --command flox-tests;
+          nix develop -L --no-update-lock-file --command just functional-tests;
 
   nix-build:
     name: "Nix build"
