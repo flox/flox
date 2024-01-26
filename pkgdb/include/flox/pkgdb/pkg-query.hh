@@ -78,7 +78,16 @@ struct PkgQueryArgs
   std::optional<std::string> pname;   /**< Filter results by exact `pname`. */
   std::optional<std::string> version; /**< Filter results by exact version. */
   std::optional<std::string> semver;  /**< Filter results by version range. */
-  std::optional<uint8_t>     limit;   /**< Limit the number of results */
+  /**
+   * Limit the number of results
+   * TODO: limit is unused except in the search command. */
+  std::optional<uint8_t> limit;
+  /**
+   * Return a single result for each package descriptor used by `search` and
+   * `install`. This is a bit hacky as pkgdb shouldn't really have knowledge of
+   * that format. But it's nicer to perform deduplication in SQL.
+   */
+  bool deduplicate = false;
 
   // TODO: would it be better to expose matchPname, matchAttrName,
   // matchDescription, and matchRelPath fields that we join with OR rather than

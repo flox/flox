@@ -22,12 +22,14 @@ project_setup() {
   run "$FLOX_BIN" init
   assert_success
   unset output
+  export MANIFEST_PATH="$PROJECT_DIR/.flox/env/manifest.toml"
 }
 
 project_teardown() {
   popd > /dev/null || return
   rm -rf "${PROJECT_DIR?}"
   unset PROJECT_DIR
+  unset MANIFEST_PATH
 }
 
 # ---------------------------------------------------------------------------- #
@@ -292,6 +294,43 @@ setup_file() {
   run "$FLOX_BIN" search Packages.req
   assert_success
   assert_output --partial 'Showing 10 of'
+}
+
+# ---------------------------------------------------------------------------- #
+
+@test "'flox search' - same number of results for single and multi-system environments" {
+  local extra_system
+  run --separate-stderr "$FLOX_BIN" search neovim
+  assert_success
+
+  num_lines="${#lines[@]}"
+
+  # extract total from '* of XX results*'
+  total="${stderr#* of }"
+  total="${total% results*}"
+
+  # add a second system to search in
+  tomlq -i -t ".options.systems += [ \"$(get_system_other_than_current)\" ]" "$MANIFEST_PATH"
+  run --separate-stderr "$FLOX_BIN" search neovim
+  assert_success
+
+  multi_system_num_lines="${#lines[@]}"
+
+  # extract showing from '*Showing XX of*
+  multi_system_showing="${stderr#*Showing }"
+  multi_system_showing="${multi_system_showing% of*}"
+
+  # extract total from '* of XX results*'
+  multi_system_total="${stderr#* of }"
+  multi_system_total="${multi_system_total% results*}"
+
+  # We should be displaying the number of lines we say we are.
+  assert_equal "$multi_system_num_lines" "$multi_system_showing"
+  # We should be displaying the default limit of 10 lines.
+  assert_equal "$multi_system_num_lines" 10
+  # We should have the same numbers before and after adding the second system.
+  assert_equal "$num_lines" "$multi_system_num_lines"
+  assert_equal "$total" "$multi_system_total"
 }
 
 # ---------------------------------------------------------------------------- #

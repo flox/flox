@@ -7,7 +7,7 @@ use flox_rust_sdk::models::lockfile::LockedManifest;
 use flox_rust_sdk::models::search::{do_search, PathOrJson, SearchResults};
 use log::debug;
 
-use super::search::render_search_results_user_facing;
+use super::search::{DisplayItems, DisplaySearchResults};
 use crate::utils::dialog::{Dialog, Spinner};
 use crate::utils::search::construct_search_params;
 
@@ -136,12 +136,9 @@ impl Display for DidYouMean<'_, InstallSuggestion> {
             None => "more".to_string(),
         };
 
-        for result in self.search_results.results.iter() {
-            writeln!(
-                f,
-                "  $ flox install {path}",
-                path = result.rel_path.join(".")
-            )?;
+        let display_items: DisplayItems = self.search_results.results.clone().into();
+        for result in display_items.iter() {
+            writeln!(f, "  $ flox install {result}",)?;
         }
 
         write!(
@@ -248,7 +245,7 @@ impl Display for DidYouMean<'_, SearchSuggestion> {
         };
 
         let search_results_rendered =
-            match render_search_results_user_facing(curated, self.search_results.clone()) {
+            match DisplaySearchResults::from_search_results(curated, self.search_results.clone()) {
                 Ok(rendered) => rendered,
                 Err(err) => {
                     debug!("failed to render search results: {}", err);

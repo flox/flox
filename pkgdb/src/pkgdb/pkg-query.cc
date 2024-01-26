@@ -111,6 +111,8 @@ to_json( nlohmann::json & jto, const PkgQueryArgs & args )
     { "subtrees", args.subtrees },
     { "systems", args.systems },
     { "relPath", args.relPath },
+    { "limit", args.limit },
+    { "deduplicate", args.deduplicate },
   };
 }
 
@@ -536,6 +538,12 @@ PkgQuery::str() const
   else { qry << this->selects.str(); }
   qry << " FROM v_PackagesSearch";
   if ( ! this->firstWhere ) { qry << " WHERE " << this->wheres.str(); }
+  /* This will cause an arbitrary row to be chosen for all values other than
+   * relPath. See "a single arbitrarily chosen row from within the group" from
+   * https://www.sqlite.org/lang_select.html. This is a bit hacky, but we know
+   * that `flox search` only uses `relPath` and `description`, and we assume
+   * that `description` is the same for all packages that share `relPath`. */
+  if ( this->deduplicate ) { qry << "\n GROUP BY relPath\n"; }
   if ( ! this->firstOrder ) { qry << " ORDER BY " << this->orders.str(); }
   qry << " )";
   return qry.str();

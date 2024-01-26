@@ -187,16 +187,7 @@ function update_dummy_env() {
 
   run "$FLOX_BIN" init
 
-  init_system=
-  # replace linux with darwin or darwin with linux
-  if [ -z "${NIX_SYSTEM##*-linux}" ]; then
-    init_system="${NIX_SYSTEM%%-linux}-darwin"
-  elif [ -z "${NIX_SYSTEM#*-darwin}" ]; then
-    init_system="${NIX_SYSTEM%%-darwin}-linux"
-  else
-    echo "unknown system: '$NIX_SYSTEM'"
-    exit 1
-  fi
+  init_system="$(get_system_other_than_current)"
 
   tomlq --in-place -t ".options.systems=[\"$init_system\"]" .flox/env/manifest.toml
 

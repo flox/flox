@@ -20,6 +20,7 @@ project_setup() {
   mkdir -p "$PROJECT_DIR"
   pushd "$PROJECT_DIR" > /dev/null || return
   export LOCKFILE_PATH="$PROJECT_DIR/.flox/env/manifest.lock"
+  export MANIFEST_PATH="$PROJECT_DIR/.flox/env/manifest.toml"
 }
 
 project_teardown() {
@@ -27,6 +28,7 @@ project_teardown() {
   rm -rf "${PROJECT_DIR?}"
   unset PROJECT_DIR
   unset LOCKFILE_PATH
+  unset MANIFEST_PATH
 }
 
 # ---------------------------------------------------------------------------- #
@@ -98,6 +100,21 @@ teardown() {
   assert_failure
   assert_output --partial "Here are a few other similar options:"
   assert_output --partial "options with 'flox search package'"
+}
+
+@test "'flox install' doesn't provide duplicate suggestions for a multi-system environment" {
+  rm -f "$GLOBAL_MANIFEST_LOCK"
+
+  "$FLOX_BIN" init
+  # add a second system
+  tomlq -i -t ".options.systems += [ \"$(get_system_other_than_current)\" ]" "$MANIFEST_PATH"
+  run "$FLOX_BIN" install npm
+  assert_failure
+  # TODO: it would be less lazy to assert 3 distinct packages are returned
+  # rather than hardcoding package names.
+  assert_output --partial "flox install nodejs"
+  assert_output --partial "flox install elmPackages.nodejs"
+  assert_output --partial "flox install nodejs_21"
 }
 
 @test "'flox install' provides curated suggestions when package not found" {
