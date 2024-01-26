@@ -70,8 +70,8 @@ PkgDbInput::init()
         }
       catch ( ... )
         {
-          std::this_thread::sleep_for( DurationMillis( 250 ) );
-          if ( ++retries > 100 )
+          std::this_thread::sleep_for( DB_RETRY_PERIOD );
+          if ( ++retries > DB_MAX_RETRIES )
             {
               throw PkgDbException(
                 "couldn't initialize read-only package database" );
