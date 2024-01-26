@@ -137,8 +137,6 @@ setup_file() {
     --out-link "$BATS_TEST_TMPDIR/env"
   assert_success
 
-  ls -lAR "$BATS_TEST_TMPDIR/env" >&3
-
   assert "$TEST" -f "$BATS_TEST_TMPDIR/env/activate/bash"
   run "$CAT" "$BATS_TEST_TMPDIR/env/activate/bash"
   assert_line "export singlequotes=''\''bar'\'''"

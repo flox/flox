@@ -360,11 +360,11 @@ pkgdb_vars_setup() {
   # refactoring of other test data but we'll tackle that in a separate effort.
   PKGDB_NIXPKGS_REV_OLDER='bc01a2be500c10f1507dcc8e98c9f5bd72c02aa3'
 
-  PKGDB_NIXPKGS_REF_OLD="github:NixOS/nixpkgs/$PKGDB_NIXPKGS_REV_OLD"
-  PKGDB_NIXPKGS_REF_NEW="github:NixOS/nixpkgs/$PKGDB_NIXPKGS_REV_NEW"
+  PKGDB_NIXPKGS_REF_OLD="flox-nixpkgs:NixOS/nixpkgs/$PKGDB_NIXPKGS_REV_OLD"
+  PKGDB_NIXPKGS_REF_NEW="flox-nixpkgs:NixOS/nixpkgs/$PKGDB_NIXPKGS_REV_NEW"
 
-  PKGDB_NIXPKGS_NAR_HASH_OLD="sha256-1UGacsv5coICyvAzwuq89v9NsS00Lo8sz22cDHwhnn8="
-  PKGDB_NIXPKGS_NAR_HASH_NEW="sha256-FRC/OlLVvKkrdm+RtrODQPufD0vVZYA0hpH9RPaHmp4="
+  PKGDB_NIXPKGS_NAR_HASH_OLD="sha256-7SGVhu5d1Q+77AXJKuNA90tkL0RwzwGZV8xnweqxzBM="
+  PKGDB_NIXPKGS_NAR_HASH_NEW="sha256-YNL2ZvZ6esJ8HYqtR/jaGipEGaiHmWvrF1n43UyudPw="
 
   # This causes `pkgdb' to use this revision for `nixpkgs' anywhere the
   # `--ga-registry' flag is used.

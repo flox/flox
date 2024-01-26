@@ -38,6 +38,12 @@ namespace flox {
 #  error "RULES_JSON must be defined"
 #endif  // ifndef RULES_JSON
 
+static auto FloxFlakeInputScheme = nix::OnStartup(
+  []
+  {
+    nix::fetchers::registerInputScheme( std::make_unique<FloxFlakeScheme>() );
+  } );
+
 
 /* -------------------------------------------------------------------------- */
 
@@ -101,7 +107,7 @@ createWrappedFlakeDir( const nix::FlakeRef & nixpkgsRef )
   nix::flake::LockFlags    flags;
   std::string              wrappedUrl = "path:" + tmpDir.string();
   nix::FlakeRef            wrappedRef = nix::parseFlakeRef( wrappedUrl );
-  nix::flake::lockFlake( *state, wrappedRef, flags );
+  auto _locked = nix::flake::lockFlake( *state, wrappedRef, flags );
   debugLog( "locked flake template" );
 
   return tmpDir;
@@ -231,7 +237,7 @@ GitArchiveInputScheme::inputFromAttrs(
     {
       if ( name != "type" && name != "owner" && name != "repo" && name != "ref"
            && name != "rev" && name != "narHash" && name != "lastModified"
-           && name != "host" )
+           && name != "host" && name != "rules" && name != "rules-processor" )
         {
           throw nix::Error( "unsupported input attribute '%s'", name );
         }
@@ -492,24 +498,36 @@ FloxFlakeScheme::inputFromURL( const nix::ParsedURL & url ) const
     = githubScheme.inputFromURL( asGithub );
   if ( fromGithub.has_value() )
     {
-      fromGithub->attrs.insert_or_assign( "type", flox::FLOX_FLAKE_TYPE );
-      fromGithub->scheme = std::make_shared<FloxFlakeScheme>();
-      return fromGithub;
+      auto     input = *fromGithub;
+      OurAttrs attrs( getRulesHash(), getRulesProcessorHash() );
+      input.attrs  = fromGitHubAttrs( input.attrs, attrs );
+      input.scheme = std::make_shared<FloxFlakeScheme>();
+      return input;
     }
   else { return {}; }
 }
 
 std::optional<nix::fetchers::Input>
-FloxFlakeScheme::inputFromAttrs( const nix::fetchers::Attrs & attrs ) const
+FloxFlakeScheme::inputFromAttrs( const nix::fetchers::Attrs & _attrs ) const
 {
+  auto attrs = _attrs;
+  /* GitArchiveInputScheme complains about extra attrs, so remove and save ours
+   * while treating this like a GitHub ref. */
+  std::pair<nix::fetchers::Attrs, OurAttrs> ghAttrsAndOurAttrs
+    = toGitHubAttrs( attrs );
+  auto                                ghAttrs  = ghAttrsAndOurAttrs.first;
+  auto                                ourAttrs = ghAttrsAndOurAttrs.second;
+  GitHubInputScheme                   githubScheme;
   std::optional<nix::fetchers::Input> fromGithub
-    = GitHubInputScheme::inputFromAttrs( attrs );
+    = githubScheme.inputFromAttrs( ghAttrs );
   if ( ! fromGithub.has_value() ) { return std::nullopt; }
   else
     {
-      fromGithub->attrs.insert_or_assign( "type", flox::FLOX_FLAKE_TYPE );
-      fromGithub->scheme = std::make_shared<FloxFlakeScheme>();
-      return fromGithub;
+      /* Restore our attributes */
+      auto input   = *fromGithub;
+      input.attrs  = fromGitHubAttrs( input.attrs, ourAttrs );
+      input.scheme = std::make_shared<FloxFlakeScheme>();
+      return input;
     }
 }
 
@@ -517,15 +535,25 @@ std::pair<nix::StorePath, nix::fetchers::Input>
 FloxFlakeScheme::fetch( nix::ref<nix::Store>         store,
                         const nix::fetchers::Input & input )
 {
+  /* Convert the input to a GitHub input, pulling out our fetcher-specific
+   * attributes. */
   flox::debugLog( "using our fetcher" );
-  nix::fetchers::Input asGithub = input;
-  asGithub.attrs.insert_or_assign( "type", "github" );
+  auto                 ghAttrsAndOurAttrs = toGitHubAttrs( input.attrs );
+  nix::fetchers::Input asGithub           = input;
+  asGithub.attrs                          = ghAttrsAndOurAttrs.first;
+  auto ourAttrs                           = ghAttrsAndOurAttrs.second;
+
+  /* Wrap the GitHub flake ref in our rules processor. */
   nix::FlakeRef nixpkgsRef = nix::FlakeRef::fromAttrs( asGithub.attrs );
   auto          flakeDir   = flox::createWrappedFlakeDir( nixpkgsRef );
   flox::debugLog( "created wrapped flake: path=" + std::string( flakeDir ) );
+
+  /* Compute the narHash of the wrapped flake. */
   nix::StringSink sink;
   nix::dumpPath( flakeDir, sink );
-  auto               narHash = hashString( nix::htSHA256, sink.s );
+  auto narHash = hashString( nix::htSHA256, sink.s );
+
+  /* Put the wrapped flake in the store. */
   nix::ValidPathInfo info {
     *store,
     "source",
@@ -537,15 +565,19 @@ FloxFlakeScheme::fetch( nix::ref<nix::Store>         store,
     narHash,
   };
   info.narSize = sink.s.size();
-
   nix::StringSource source( sink.s );
   store->addToStore( info, source );
   nix::StorePath path = info.path;
   flox::debugLog( "added filled out template flake to store: store_path="
                   + std::string( path.to_string() ) );
-  asGithub.attrs.insert_or_assign( "type", flox::FLOX_FLAKE_TYPE );
-  asGithub.scheme = std::make_shared<FloxFlakeScheme>();
-  return std::pair<nix::StorePath, nix::fetchers::Input>( path, asGithub );
+
+  /* Compute hashes for the rules file and processor so they can be included in
+   * the lockfile. */
+  auto floxNixpkgsInput   = asGithub;
+  floxNixpkgsInput.attrs  = fromGitHubAttrs( asGithub.attrs, ourAttrs );
+  floxNixpkgsInput.scheme = std::make_shared<FloxFlakeScheme>();
+  return std::pair<nix::StorePath, nix::fetchers::Input>( path,
+                                                          floxNixpkgsInput );
 }
 
 bool
@@ -555,24 +587,103 @@ FloxFlakeScheme::hasAllInfo( const nix::fetchers::Input & ) const
 }
 
 nix::ParsedURL
-FloxFlakeScheme::toURL( const nix::fetchers::Input & input ) const
+FloxFlakeScheme::toURL( const nix::fetchers::Input & _input ) const
 {
+  auto              input = _input;
   GitHubInputScheme githubScheme;
-  auto              url = githubScheme.toURL( input );
-  url.scheme            = this->type();
+  auto              ghAttrsAndOurAttrs = toGitHubAttrs( input.attrs );
+  input.attrs                          = ghAttrsAndOurAttrs.first;
+  auto url                             = githubScheme.toURL( input );
+  url.scheme                           = this->type();
   return url;
 }
 
-/* -------------------------------------------------------------------------- */
-
-static auto FloxFlakeInputScheme = nix::OnStartup(
-  []
-  {
-    nix::fetchers::registerInputScheme( std::make_unique<FloxFlakeScheme>() );
-  } );
 
 /* -------------------------------------------------------------------------- */
 
+std::string
+getRulesHash()
+{
+  auto rulesPath = getRulesFile();
+  auto rulesHash = nix::hashFile( nix::htSHA256, rulesPath );
+  return rulesHash.to_string( nix::Base16, false );
+}
+
+
+/* -------------------------------------------------------------------------- */
+
+std::string
+getRulesProcessorHash()
+{
+  static const std::string flakeTemplate =
+#include "./floxpkgs/flake.nix.in.hh"
+    ;
+  auto processorHash = nix::hashString( nix::htSHA256, flakeTemplate );
+  return processorHash.to_string( nix::Base16, false );
+}
+
+
+/* -------------------------------------------------------------------------- */
+
+std::string
+getWrappedFlakeNarHash( nix::FlakeRef const & ref )
+{
+  auto            flakeDir = createWrappedFlakeDir( ref );
+  nix::StringSink sink;
+  nix::dumpPath( flakeDir, sink );
+  auto narHash    = hashString( nix::htSHA256, sink.s );
+  auto narHashStr = narHash.to_string( nix::SRI, true );
+  return narHashStr;
+}
+
+
+/* -------------------------------------------------------------------------- */
+
+OurAttrs
+removeOurInputAttrs( nix::fetchers::Attrs & attrs )
+{
+  auto rules = nix::fetchers::maybeGetStrAttr( attrs, "rules" );
+  auto rulesProcessor
+    = nix::fetchers::maybeGetStrAttr( attrs, "rules-processor" );
+  if ( rules.has_value() ) { attrs.erase( "rules" ); }
+  if ( rulesProcessor.has_value() ) { attrs.erase( "rules-processor" ); }
+  return OurAttrs( rules, rulesProcessor );
+}
+
+void
+restoreOurInputAttrs( nix::fetchers::Attrs & attrs, const OurAttrs & fields )
+{
+  if ( fields.rules.has_value() )
+    {
+      attrs.insert_or_assign( "rules", *fields.rules );
+    }
+  if ( fields.rulesProcessor.has_value() )
+    {
+      attrs.insert_or_assign( "rules-processor", *fields.rulesProcessor );
+    }
+  return;
+}
+
+std::pair<nix::fetchers::Attrs, OurAttrs>
+toGitHubAttrs( const nix::fetchers::Attrs & _attrs )
+{
+  auto attrs    = _attrs;
+  auto ourAttrs = removeOurInputAttrs( attrs );
+  attrs.insert_or_assign( "type", "github" );
+  return std::pair<nix::fetchers::Attrs, OurAttrs>( attrs, ourAttrs );
+}
+
+nix::fetchers::Attrs
+fromGitHubAttrs( const nix::fetchers::Attrs & _attrs,
+                 const OurAttrs &             ourAttrs )
+{
+  auto attrs = _attrs;
+  restoreOurInputAttrs( attrs, ourAttrs );
+  attrs.insert_or_assign( "type", FLOX_FLAKE_TYPE );
+  return attrs;
+}
+
+/* -------------------------------------------------------------------------- */
 
 }  // namespace flox
 
