@@ -489,7 +489,6 @@ impl Activate {
                 format!("{prompt_name} {prompt_environments}")
             });
 
-        // Add to FLOX_ACTIVE_ENVIRONMENTS so we can detect what environments are active.
         let mut flox_active_environments = activated_environments();
 
         // Detect if the current environment is already active
@@ -501,16 +500,20 @@ impl Activate {
                 bail!("Environment '{now_active}' is already active");
             }
 
+            debug!("Non-interactive shell, ignoring activation (may patch PATH)");
+            Self::reactivate_non_interactive()?;
             return Ok(());
         }
+
+        // Add to FLOX_ACTIVE_ENVIRONMENTS so we can detect what environments are active.
         flox_active_environments.set_last_active(now_active.clone());
 
-        let (flox_env_dirs, flox_env_lib_dirs) = {
-            let mut flox_env_dirs = vec![activation_path.clone()];
-            if let Ok(existing_environments) = env::var(FLOX_ENV_DIRS_VAR) {
-                flox_env_dirs.extend(env::split_paths(&existing_environments));
-            };
-
+        // Set FLOX_ENV_DIRS and FLOX_ENV_LIB_DIRS
+        let mut flox_env_dirs = IndexSet::from([activation_path.clone()]);
+        if let Ok(existing_environments) = env::var(FLOX_ENV_DIRS_VAR) {
+            flox_env_dirs.extend(env::split_paths(&existing_environments));
+        };
+        let (flox_env_dirs_joined, flox_env_lib_dirs_joined) = {
             let flox_env_lib_dirs = flox_env_dirs.iter().map(|p| p.join("lib"));
 
             let flox_env_dirs = env::join_paths(&flox_env_dirs).context(
@@ -523,6 +526,8 @@ impl Activate {
 
             (flox_env_dirs, flox_env_lib_dirs)
         };
+
+        let fixed_up_path_joined = Self::fixup_path(flox_env_dirs).transpose()?;
 
         let shell = ShellType::detect()?;
 
@@ -558,45 +563,35 @@ impl Activate {
         //
         //    eval "$(flox activate)"
         if !stdout().is_tty() && self.run_args.is_empty() {
-            let script: String = formatdoc! {"
-                export {FLOX_ENV_VAR}={activation_path}
-                export {FLOX_PROMPT_ENVIRONMENTS_VAR}={flox_prompt_environments}
-                export {FLOX_ACTIVE_ENVIRONMENTS_VAR}={flox_active_environments}
-                export {FLOX_ENV_DIRS_VAR}={flox_env_dirs}
-                export {FLOX_ENV_LIB_DIRS_VAR}={flox_env_lib_dirs}
-                export FLOX_PROMPT_COLOR_1={prompt_color_1}
-                export FLOX_PROMPT_COLOR_2={prompt_color_2}
-
-                # to avoid infinite recursion sourcing bashrc
-                export FLOX_SOURCED_FROM_SHELL_RC=1
-
-                source {activation_path}/activate/{shell}
-
-                unset FLOX_SOURCED_FROM_SHELL_RC
-            ",
-            activation_path=shell_escape::escape(activation_path.to_string_lossy()),
-            flox_active_environments=shell_escape::escape(flox_active_environments.to_string().into()),
-            flox_prompt_environments=shell_escape::escape(Cow::from(&flox_prompt_environments)),
-            flox_env_dirs=shell_escape::escape(flox_env_dirs.to_string_lossy()),
-            flox_env_lib_dirs=shell_escape::escape(flox_env_lib_dirs.to_string_lossy()),
-            };
-
-            println!("{script}");
+            Self::activate_non_interactive(
+                &shell,
+                &exports,
+                fixed_up_path_joined,
+                &activation_path,
+            );
 
             return Ok(());
         }
+
+        let activate_error =
+            Self::activate_interactive(self.run_args, shell, exports, activation_path, now_active);
+        // If we get here, exec failed!
+        Err(activate_error)
+    }
+
+    /// Activate the environment interactively by spawning a new shell
+    /// and running the respective activation scripts.
+    ///
+    /// This function should never return as it replaces the current process
+    fn activate_interactive(
+        run_args: Vec<String>,
+        shell: ShellType,
+        exports: HashMap<&str, String>,
+        activation_path: PathBuf,
+        now_active: UninitializedEnvironment,
+    ) -> anyhow::Error {
         let mut command = Command::new(shell.exe_path());
-        command
-            .env(FLOX_PROMPT_ENVIRONMENTS_VAR, flox_prompt_environments)
-            .env(FLOX_ENV_VAR, &activation_path)
-            .env(
-                FLOX_ACTIVE_ENVIRONMENTS_VAR,
-                flox_active_environments.to_string(),
-            )
-            .env(FLOX_ENV_DIRS_VAR, flox_env_dirs)
-            .env(FLOX_ENV_LIB_DIRS_VAR, flox_env_lib_dirs)
-            .env("FLOX_PROMPT_COLOR_1", prompt_color_1)
-            .env("FLOX_PROMPT_COLOR_2", prompt_color_2);
+        command.envs(exports);
 
         match shell {
             ShellType::Bash(_) => {
@@ -638,25 +633,22 @@ impl Activate {
             },
         };
 
-        if !self.run_args.is_empty() {
+        if !run_args.is_empty() {
             command.arg("-i");
             command.arg("-c");
-            command.arg(self.run_args.join(" "));
+            command.arg(run_args.join(" "));
         }
 
         debug!("running activation command: {:?}", command);
 
-        if self.run_args.is_empty() {
+        if run_args.is_empty() {
             let message = formatdoc! {"
                 ✅  You are now using the environment {now_active}.
                 To stop using this environment, type 'exit'"};
             info!("{message}");
         }
-        let error = command.exec();
-
         // exec should never return
-
-        bail!("Failed to exec subshell: {error}");
+        command.exec().into()
     }
 
     /// Patch the PATH to undo the effects of `/usr/libexec/path_helper`
