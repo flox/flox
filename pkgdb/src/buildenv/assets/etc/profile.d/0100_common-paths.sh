@@ -57,22 +57,21 @@ export MANPATH
 
 # ---------------------------------------------------------------------------- #
 
-
 if [ -n "${FLOX_ENV_LIB_DIRS:-}" ]; then
   case "$(uname -s)" in
-  Linux*)
-    # N.B. ld-floxlib.so makes use of FLOX_ENV_LIB_DIRS directly.
-    if [ -z "${FLOX_NOSET_LD_AUDIT:-}" -a -e "$LD_FLOXLIB" ]; then
-      LD_AUDIT="$LD_FLOXLIB";
-      export LD_AUDIT;
-    fi
-    ;;
-  Darwin*)
-    if [ -z "${FLOX_NOSET_DYLD_FALLBACK_LIBRARY_PATH:-}" ]; then
-      DYLD_FALLBACK_LIBRARY_PATH="$FLOX_ENV_LIB_DIRS:${DYLD_FALLBACK_LIBRARY_PATH:-/usr/local/lib:/usr/lib}";
-      export DYLD_FALLBACK_LIBRARY_PATH;
-    fi
-    ;;
+    Linux*)
+      # N.B. ld-floxlib.so makes use of FLOX_ENV_LIB_DIRS directly.
+      if [ -z "${FLOX_NOSET_LD_AUDIT:-}" -a -e "$LD_FLOXLIB" ]; then
+        LD_AUDIT="$LD_FLOXLIB"
+        export LD_AUDIT
+      fi
+      ;;
+    Darwin*)
+      if [ -z "${FLOX_NOSET_DYLD_FALLBACK_LIBRARY_PATH:-}" ]; then
+        DYLD_FALLBACK_LIBRARY_PATH="$FLOX_ENV_LIB_DIRS:${DYLD_FALLBACK_LIBRARY_PATH:-/usr/local/lib:/usr/lib}"
+        export DYLD_FALLBACK_LIBRARY_PATH
+      fi
+      ;;
   esac
 fi
 
