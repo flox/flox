@@ -150,8 +150,7 @@ impl<'a, T: Display> Dialog<'a, Select<T>> {
                 Ok(x) => Ok((x.index, x.value)),
                 Err(err) => Err(err),
             }
-        }
-        .expect("Failed to join blocking dialog");
+        }?;
 
         Ok((raw_id, options.remove(id)))
     }

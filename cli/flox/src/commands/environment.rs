@@ -45,15 +45,16 @@ use flox_rust_sdk::models::lockfile::{
     PackageInfo,
     TypedLockedManifest,
 };
-use flox_rust_sdk::models::manifest::PackageToInstall;
-use flox_rust_sdk::models::pkgdb::{call_pkgdb, PKGDB_BIN};
+use flox_rust_sdk::models::manifest::{self, PackageToInstall};
+use flox_rust_sdk::models::pkgdb::{call_pkgdb, CallPkgDbError, PkgDbError, PKGDB_BIN};
 use flox_rust_sdk::nix::command::StoreGc;
 use flox_rust_sdk::nix::command_line::NixCommandLine;
 use flox_rust_sdk::nix::Run;
 use indoc::{formatdoc, indoc};
 use itertools::Itertools;
-use log::{debug, error, info};
+use log::{debug, error, info, warn};
 use tempfile::NamedTempFile;
+use toml_edit::Document;
 use url::Url;
 
 use super::{environment_select, EnvironmentSelect};
@@ -65,7 +66,7 @@ use crate::commands::{
     UninitializedEnvironment,
 };
 use crate::config::Config;
-use crate::utils::dialog::{Confirm, Dialog, Spinner};
+use crate::utils::dialog::{Confirm, Dialog, Select, Spinner};
 use crate::utils::didyoumean::{DidYouMean, InstallSuggestion};
 use crate::{subcommand_metric, utils};
 
@@ -1260,7 +1261,7 @@ enum PullSelect {
         /// Directory containing a managed environment to pull
         #[bpaf(long, short, argument("path"))]
         dir: Option<PathBuf>,
-        /// forceably overwrite the local copy of the environment
+        /// Forceably overwrite the local copy of the environment
         #[bpaf(long, short)]
         force: bool,
     },
@@ -1278,6 +1279,10 @@ impl Default for PullSelect {
 /// Pull environment from floxhub
 #[derive(Bpaf, Clone)]
 pub struct Pull {
+    /// Forceably add current systems to the environment, even if incompatible
+    #[bpaf(long("add-system"), short)]
+    add_system: bool,
+
     #[bpaf(external(pull_select), fallback(Default::default()))]
     pull_select: PullSelect,
 }
@@ -1295,14 +1300,13 @@ impl Pull {
 
                 debug!("Resolved user intent: pull {remote:?} into {dir:?}");
 
-                Dialog {
-                    message: &start,
-                    help_message: None,
-                    typed: Spinner::new(|| {
-                        Self::pull_new_environment(&flox, dir.join(DOT_FLOX), remote)
-                    }),
-                }
-                .spin()?;
+                Self::pull_new_environment(
+                    &flox,
+                    dir.join(DOT_FLOX),
+                    remote,
+                    self.add_system,
+                    &start,
+                )?;
 
                 info!("{complete}");
             },
@@ -1368,6 +1372,8 @@ impl Pull {
         flox: &Flox,
         dot_flox_path: PathBuf,
         env_ref: EnvironmentRef,
+        add_systems: bool,
+        message: &str,
     ) -> Result<()> {
         if dot_flox_path.exists() {
             bail!("Cannot pull a new environment into an existing one")
@@ -1380,20 +1386,104 @@ impl Pull {
 
         let pointer_content =
             serde_json::to_string_pretty(&pointer).context("Could not serialize pointer")?;
-        let pointer_path = dot_flox_path.join(ENVIRONMENT_POINTER_FILENAME);
 
-        fs::create_dir_all(&dot_flox_path).context("Could not create .flox/ directory")?;
+        let dot_flox_parent = dot_flox_path
+            .parent()
+            .context("Could not get .flox/ parent")?;
+        fs::create_dir_all(dot_flox_parent).context("Could not create .flox/ parent directory")?;
+
+        // Pulls the environment into a temp directory which is later renamed to `.flox`.
+        // We do this to avoid populating the floxmeta branch `owner/name.encode(path to .flox)`
+        // in case building fails or the user aborts the fixup.
+        // The branch will be adjusted when the environment is opened the next time
+        // by the `ensure_branch` routine.
+        let temp_dot_flox_dir = tempfile::TempDir::with_prefix_in(DOT_FLOX, dot_flox_parent)
+            .context("Could not create temporary directory for cloning environment")?;
+
+        let pointer_path = temp_dot_flox_dir.path().join(ENVIRONMENT_POINTER_FILENAME);
         fs::write(pointer_path, pointer_content).context("Could not write pointer")?;
 
-        let result =
-            ManagedEnvironment::open(flox, pointer, &dot_flox_path).map_err(Self::convert_error);
-        match result {
-            Err(err) => {
-                fs::remove_dir_all(dot_flox_path).context("Could not clean up .flox/ directory")?;
-                Err(err)?;
-            },
-            Ok(mut env) => env.build(flox).context("Could not build environment")?,
+        let mut env = {
+            let result = Dialog {
+                message,
+                help_message: None,
+                typed: Spinner::new(|| ManagedEnvironment::open(flox, pointer, &temp_dot_flox_dir)),
+            }
+            .spin()
+            .map_err(Self::convert_error);
+
+            match result {
+                Err(err) => {
+                    fs::remove_dir_all(&temp_dot_flox_dir)
+                        .context("Could not clean up .flox/ directory")?;
+                    Err(err)?
+                },
+                Ok(env) => env,
+            }
+        };
+
+        let result = Dialog {
+            message,
+            help_message: None,
+            typed: Spinner::new(|| env.build(flox)),
         }
+        .spin();
+
+        match result {
+            Ok(_) => {
+                fs::rename(temp_dot_flox_dir, dot_flox_path)
+                    .context("Could not move .flox/ directory")?;
+            },
+            Err(
+                e @ EnvironmentError2::Core(CoreEnvironmentError::LockedManifest(
+                    LockedManifestError::BuildEnv(CallPkgDbError::PkgDbError(PkgDbError {
+                        exit_code: 123,
+                        ..
+                    })),
+                )),
+            ) => {
+                let hint = "Use 'flox pull --add-system' to add your system to the manifest.";
+
+                // will return OK if the user chose to abort the pull
+                let add_systems = add_systems
+                    || match Self::query_add_system(&flox.system)? {
+                        Some(false) => {
+                            // prompt available, user chose to abort
+                            info!("{hint}");
+                            bail!("Did not pull the environment.");
+                        },
+                        Some(true) => true, // prompt available, user chose to add system
+                        None => false,      // no prompt available
+                    };
+
+                if !add_systems {
+                    bail!("{}", formatdoc! {"
+                        This environment is not yet compatible with your system ({system}).
+
+                        {hint}"
+                    , system = flox.system});
+                }
+
+                let doc = Self::amend_current_system(&env, flox)?;
+                if let Err(broken_error) = env.edit_unsafe(flox, doc.to_string())? {
+                    warn!("{}", formatdoc! {"
+                        {err:#}
+
+                        Could not build modified environment, build errors need to be resolved manually.",
+                        err = anyhow!(broken_error)
+                    });
+                };
+
+                fs::rename(temp_dot_flox_dir, dot_flox_path)
+                    .context("Could not move .flox/ directory")?;
+            },
+            Err(e) => {
+                fs::remove_dir_all(&temp_dot_flox_dir)
+                    .context("Could not clean up .flox/ directory")?;
+                Err(e)?
+            },
+        }
+
         Ok(())
     }
 
@@ -1452,6 +1542,48 @@ impl Pull {
         "};
 
         (start_message, complete_message)
+    }
+
+    /// if possible, prompt the user to automatically add their system to the manifest
+    ///
+    /// returns [Ok(None)]` if the user can't be prompted
+    /// returns `[Ok(bool)]` depending on the users choice
+    /// returns `[Err]` if the prompt failed or was cancelled
+    fn query_add_system(system: &str) -> Result<Option<bool>> {
+        if !Dialog::can_prompt() {
+            return Ok(None);
+        }
+
+        let message = format!(
+        "The environment you are trying to pull is not yet compatible with your system ({system})."
+    );
+        let help = "Use 'flox pull --add-system' to automatically add your system to the list of compatible systems";
+
+        let reject_choice = "Don't pull this environment.";
+        let confirm_choice = format!(
+            "Pull this environment anyway and add '{system}' to the supported systems list."
+        );
+
+        let dialog = Dialog {
+            message: &message,
+            help_message: Some(help),
+            typed: Select {
+                options: [reject_choice, &confirm_choice].to_vec(),
+            },
+        };
+
+        let (choice, _) = dialog.raw_prompt()?;
+
+        Ok(Some(choice == 1))
+    }
+
+    /// add the current system to the manifest of the given environment
+    fn amend_current_system(
+        env: &ManagedEnvironment,
+        flox: &Flox,
+    ) -> Result<Document, anyhow::Error> {
+        manifest::add_system(&env.manifest_content(flox)?, &flox.system)
+            .context("Could not add system to manifest")
     }
 }
 

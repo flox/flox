@@ -64,6 +64,53 @@ function update_dummy_env() {
   "$FLOX_BIN" install gzip --remote "$OWNER/$ENV_NAME"
 }
 
+# make the environment with specified owner and name incompatible with the current system
+function make_incompatible() {
+  OWNER="$1"
+  shift
+  ENV_NAME="$1"
+  shift
+  if [ $# -gt 0 ]; then
+    EXTRA_INCOMPATIBLE="$1"
+    shift
+  else
+    EXTRA_INCOMPATIBLE=""
+  fi
+
+
+  init_system=
+  package=
+  # replace linux with darwin or darwin with linux
+  if [ -z "${NIX_SYSTEM##*-linux}" ]; then
+    init_system="${NIX_SYSTEM%%-linux}-darwin"
+    package='["darwin", "ps"]'
+  elif [ -z "${NIX_SYSTEM#*-darwin}" ]; then
+    init_system="${NIX_SYSTEM%%-darwin}-linux"
+    package='["glibc"]'
+  else
+    echo "unknown system: '$NIX_SYSTEM'"
+    exit 1
+  fi
+
+  git clone "$FLOX_FLOXHUB_PATH/$OWNER/floxmeta" "$PROJECT_DIR/floxmeta"
+  pushd "$PROJECT_DIR/floxmeta" > /dev/null || return
+  git checkout "$ENV_NAME"
+  if [ ! -z "$EXTRA_INCOMPATIBLE" ]; then
+    tomlq --in-place --toml-output ".install.extra.path = $package" 2/env/manifest.toml
+  fi
+  sed -i "s|$NIX_SYSTEM|$init_system|g" 2/env/manifest.toml 2/env/manifest.lock
+
+  git add .
+  git \
+    -c "user.name=test" \
+    -c "user.email=test@email.address" \
+    commit \
+    -m "make unsupported system"
+  git push
+  popd > /dev/null || return
+  rm -rf "$PROJECT_DIR/floxmeta"
+}
+
 # ---------------------------------------------------------------------------- #
 # bats test_tags=pull,pull:logged-out
 @test "l1: pull login: running flox pull without login succeeds" {
@@ -179,5 +226,77 @@ function update_dummy_env() {
   skip "floxtest/default is not available for all systems"
   unset _FLOX_FLOXHUB_GIT_URL
   run "$FLOX_BIN" pull --remote floxtest/default
+  assert_success
+}
+
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=pull:unsupported
+# pulling an environment without packages for the current platform
+#should fail with an error
+@test "pull environment without packages for the current platform fails" {
+  update_dummy_env "owner" "name"
+  make_incompatible "owner" "name"
+
+  run "$FLOX_BIN" pull --remote owner/name
+  assert_failure
+  assert_output --partial "This environment is not yet compatible with your system ($NIX_SYSTEM)"
+}
+
+# bats test_tags=pull:add-system-flag
+# pulling an environment without packages for the current platform
+#should fail with an error
+@test "pull environment without packages for the current platform succeeds with '--add-system' flag" {
+  update_dummy_env "owner" "name"
+  make_incompatible "owner" "name"
+
+  run "$FLOX_BIN" pull --remote owner/name --add-system
+  assert_success
+}
+
+# bats test_tags=pull:unsupported:prompt-fail
+# pulling an environment without packages for the current platform
+# should fail with an error
+@test "pull environment without packages for the current platform prompts for about adding system" {
+  update_dummy_env "owner" "name"
+  make_incompatible "owner" "name"
+
+  run -0 expect -d "$TESTS_DIR/pull/promptAmendSystem.exp" owner/name "$NIX_SYSTEM" no
+  assert_success
+  assert_output --partial "The environment you are trying to pull is not yet compatible with your system ($NIX_SYSTEM)"
+  assert_line --partial "Did not pull the environment."
+
+  assert [ ! -e ".flox/" ]
+}
+
+# bats test_tags=pull:unsupported:prompt-success
+# pulling an environment without packages for the current platform
+#should fail with an error
+@test "pull environment without packages for the current platform prompts for about adding system: produces env" {
+  update_dummy_env "owner" "name"
+  make_incompatible "owner" "name"
+
+  run -0 expect -d "$TESTS_DIR/pull/promptAmendSystem.exp" owner/name "$NIX_SYSTEM" yes
+  assert_success
+
+  run "$FLOX_BIN" list
+  assert_success
+}
+
+# bats test_tags=pull:unsupported:warning
+# An environment that is not compatible with the current ssystem
+# due to the current system missing <system> in `option.systems`
+# AND a package that is indeed not able to be built for the current system
+# should show a warning, but otherwise succeed to pull
+@test "pull unsupported environment succeeds with '--add-system' flag but shows warning if unable to build still" {
+  update_dummy_env "owner" "name"
+
+  make_incompatible "owner" "name" yes
+
+  run "$FLOX_BIN" pull --remote owner/name --add-system
+  assert_success
+  assert_line --partial "Could not build modified environment, build errors need to be resolved manually."
+
+  run "$FLOX_BIN" list
   assert_success
 }

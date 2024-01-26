@@ -78,8 +78,13 @@ enum error_category {
   /** EnvirontMixin exception/misuse. */
   EC_ENVIRONMENT_MIXIN,
   /** EnvirontMixin exception/misuse. */
-  EC_BUILDENV_CONFLICT
-
+  EC_BUILDENV_CONFLICT,
+  /**
+   * Lockfile does not support the specified system.
+   * Thrown if `flox::buildenv::createFloxEnv` does not find an entry
+   * `packages.<system>` in the lockfile.
+   */
+  EC_LOCKFILE_INCOMPATIBLE_SYSTEM,
 }; /* End enum `error_category' */
 
 
