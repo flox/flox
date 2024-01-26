@@ -148,10 +148,11 @@ jobs:
         run: nix develop -L --no-update-lock-file --command just build-cli
 
       - name: "Test (cli)"
-        shell: zsh
         env:
           RUST_BACKTRACE: 1
-        run: nix develop -L --no-update-lock-file --command just test-cli
+        run: |
+          nix run 'nixpkgs#zsh' --                                         \
+            nix develop -L --no-update-lock-file --command just test-cli;
 
   nix-build:
     name: "Nix build"
