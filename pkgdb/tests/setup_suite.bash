@@ -88,7 +88,7 @@ misc_vars_setup() {
   #   pkgdb manifest lock --ga-registry --manifest pkgdb/tests/harnesses/proj1/manifest.toml \
   #   | jq > pkgdb/tests/harnesses/proj1/manifest.lock
   NIXPKGS_REV="ab5fd150146dcfe41fda501134e6503932cc8dfd"
-  NIXPKGS_REF="github:NixOS/nixpkgs/$NIXPKGS_REV"
+  NIXPKGS_REF="flox-nixpkgs:NixOS/nixpkgs/$NIXPKGS_REV"
 
   NIXPKGS_FINGERPRINT="9bb3d4c033fbad8efb5e28ffcd1d70383e0c5bb"
   NIXPKGS_FINGERPRINT="${NIXPKGS_FINGERPRINT}cb7cc5c526b824524467b19b9"

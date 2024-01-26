@@ -124,11 +124,11 @@ teardown() {
 
 # bats test_tags=python
 
-@test "'flox show' - python310Packages.flask" {
-  run "$FLOX_BIN" show python310Packages.flask
+@test "'flox show' - python310Packages.pip" {
+  run "$FLOX_BIN" show python310Packages.pip
   assert_success
   # Ensure that the package and part of the description show up
-  assert_output --partial 'python310Packages.flask - The'
+  assert_output --partial 'python310Packages.pip - The'
 }
 
 # ---------------------------------------------------------------------------- #

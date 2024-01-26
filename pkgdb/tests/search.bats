@@ -470,7 +470,7 @@ genParamsNixpkgsFlox() {
   params="$(genGMParams '.query.match="hello%" | .manifest.options.systems=["x86_64-linux"]')"
   run --separate-stderr "$PKGDB_BIN" search -q --ga-registry "$params"
   assert_success
-  assert_equal "${#lines[@]}" 9
+  assert_equal "${#lines[@]}" 8
 }
 
 # bats tests_tags=search
@@ -544,7 +544,7 @@ genParamsNixpkgsFlox() {
       ::: $(seq 5)'
   assert_success
   n_lines="${#lines[@]}"
-  assert_equal "$n_lines" 40 # 5x number of results from hello
+  assert_equal "$n_lines" 35 # 5x number of results from hello
 }
 
 # ---------------------------------------------------------------------------- #
