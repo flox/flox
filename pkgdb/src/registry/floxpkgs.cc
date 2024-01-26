@@ -109,6 +109,7 @@ createWrappedFlakeDir( const nix::FlakeRef & nixpkgsRef )
 
 
 /* -------------------------------------------------------------------------- */
+
 /* Copied straight from the nix codebase since these definitions aren't in
  * header files.*/
 
@@ -119,7 +120,7 @@ std::regex               hostRegex( hostRegexS, std::regex::ECMAScript );
 std::optional<nix::fetchers::Input>
 GitArchiveInputScheme::inputFromURL( const nix::ParsedURL & url ) const
 {
-  if ( url.scheme != type() ) { return {}; }
+  if ( url.scheme != this->type() ) { return {}; }
 
   auto path = nix::tokenizeString<std::vector<std::string>>( url.path, "/" );
 
@@ -208,7 +209,7 @@ GitArchiveInputScheme::inputFromURL( const nix::ParsedURL & url ) const
     }
 
   nix::fetchers::Input input;
-  input.attrs.insert_or_assign( "type", type() );
+  input.attrs.insert_or_assign( "type", this->type() );
   input.attrs.insert_or_assign( "owner", path[0] );
   input.attrs.insert_or_assign( "repo", path[1] );
   if ( rev ) { input.attrs.insert_or_assign( "rev", rev->gitRev() ); }
@@ -257,7 +258,7 @@ GitArchiveInputScheme::toURL( const nix::fetchers::Input & input ) const
   if ( ref ) { path += "/" + *ref; }
   if ( rev ) { path += "/" + rev->to_string( nix::Base16, false ); }
   return nix::ParsedURL {
-    .scheme = type(),
+    .scheme = this->type(),
     .path   = path,
   };
 }
@@ -470,6 +471,7 @@ GitHubInputScheme::clone( const nix::fetchers::Input & input,
     .clone( destDir );
 }
 
+
 /* -------------------------------------------------------------------------- */
 
 
@@ -484,7 +486,7 @@ FloxFlakeScheme::inputFromURL( const nix::ParsedURL & url ) const
 {
   /* TODO: if the type is flox-nixpkgs we can short circuit this */
   /* don't try to convert github references */
-  if ( url.scheme != type() ) { return {}; }
+  if ( url.scheme != this->type() ) { return {}; }
   auto asGithub   = url;
   asGithub.scheme = "github";
   GitHubInputScheme                   githubScheme;
@@ -492,7 +494,8 @@ FloxFlakeScheme::inputFromURL( const nix::ParsedURL & url ) const
     = githubScheme.inputFromURL( asGithub );
   if ( fromGithub.has_value() )
     {
-      ( *fromGithub ).scheme = std::make_shared<FloxFlakeScheme>();
+      fromGithub->attrs.insert_or_assign( "type", flox::FLOX_FLAKE_TYPE );
+      fromGithub->scheme = std::make_shared<FloxFlakeScheme>();
       return fromGithub;
     }
   else { return {}; }
@@ -506,8 +509,8 @@ FloxFlakeScheme::inputFromAttrs( const nix::fetchers::Attrs & attrs ) const
   if ( ! fromGithub.has_value() ) { return std::nullopt; }
   else
     {
-      ( *fromGithub ).attrs.insert_or_assign( "type", flox::FLOX_FLAKE_TYPE );
-      ( *fromGithub ).scheme = std::make_shared<FloxFlakeScheme>();
+      fromGithub->attrs.insert_or_assign( "type", flox::FLOX_FLAKE_TYPE );
+      fromGithub->scheme = std::make_shared<FloxFlakeScheme>();
       return fromGithub;
     }
 }
@@ -542,6 +545,7 @@ FloxFlakeScheme::fetch( nix::ref<nix::Store>         store,
   nix::StorePath path = info.path;
   flox::debugLog( "added filled out template flake to store: store_path="
                   + std::string( path.to_string() ) );
+  asGithub.attrs.insert_or_assign( "type", flox::FLOX_FLAKE_TYPE );
   asGithub.scheme = std::make_shared<FloxFlakeScheme>();
   return std::pair<nix::StorePath, nix::fetchers::Input>( path, asGithub );
 }
@@ -557,9 +561,10 @@ FloxFlakeScheme::toURL( const nix::fetchers::Input & input ) const
 {
   GitHubInputScheme githubScheme;
   auto              url = githubScheme.toURL( input );
-  url.scheme            = type();
+  url.scheme            = this->type();
   return url;
 }
+
 
 /* -------------------------------------------------------------------------- */
 
@@ -568,6 +573,7 @@ static auto FloxFlakeInputScheme = nix::OnStartup(
   {
     nix::fetchers::registerInputScheme( std::make_unique<FloxFlakeScheme>() );
   } );
+
 
 /* -------------------------------------------------------------------------- */
 
