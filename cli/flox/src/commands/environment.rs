@@ -488,8 +488,17 @@ impl Activate {
 
         // Add to FLOX_ACTIVE_ENVIRONMENTS so we can detect what environments are active.
         let mut flox_active_environments = activated_environments();
+
+        // Detect if the current environment is already active
         if flox_active_environments.is_active(&now_active) {
-            bail!("Environment '{now_active}' is already active");
+            debug!("Environment is already active: environment={now_active}");
+
+            if stdout().is_tty() || !self.run_args.is_empty() {
+                // Error if interactive and already active
+                bail!("Environment '{now_active}' is already active");
+            }
+
+            return Ok(());
         }
         flox_active_environments.set_last_active(now_active.clone());
 
