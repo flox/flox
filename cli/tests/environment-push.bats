@@ -187,7 +187,7 @@ function update_dummy_env() {
 
   run "$FLOX_BIN" init
 
-  init_system=$(get_system_other_than_current)
+  init_system="$(get_system_other_than_current)"
 
   tomlq --in-place -t ".options.systems=[\"$init_system\"]" .flox/env/manifest.toml
 

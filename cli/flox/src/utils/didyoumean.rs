@@ -136,8 +136,8 @@ impl Display for DidYouMean<'_, InstallSuggestion> {
             None => "more".to_string(),
         };
 
-        let display_items = DisplayItems::from_search_results(self.search_results.results.clone());
-        for result in display_items.0.iter() {
+        let display_items: DisplayItems = self.search_results.results.clone().into();
+        for result in display_items.iter() {
             writeln!(f, "  $ flox install {result}",)?;
         }
 

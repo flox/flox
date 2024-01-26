@@ -123,28 +123,9 @@ impl Display for DisplayItem {
 ///
 /// This should be used for printing search results when the format output by
 /// [DisplaySearchResults] is not desired.
-pub struct DisplayItems(pub Vec<DisplayItem>);
+pub struct DisplayItems(Vec<DisplayItem>);
 
 impl DisplayItems {
-    pub fn from_search_results(search_results: Vec<SearchResult>) -> Self {
-        // Search results contain a lot of information, but all we need for rendering are
-        // the input, the package subpath (e.g. "python310Packages.flask"), and the description.
-        let mut display_items = search_results
-            .into_iter()
-            .map(|r| DisplayItem {
-                input: r.input,
-                rel_path: r.rel_path,
-                description: r.description.map(|s| s.replace('\n', " ")),
-                render_with_input: false,
-            })
-            .collect::<Vec<_>>();
-
-        // TODO: we could disambiguate as we're collecting above
-        Self::disambiguate_display_items(&mut display_items);
-
-        Self(display_items)
-    }
-
     /// Disambiguate display items.
     ///
     /// This gets complicated because we have to satisfy a few constraints:
@@ -171,6 +152,31 @@ impl DisplayItems {
                 d.render_with_input = inputs.len() > 1;
             }
         }
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &DisplayItem> {
+        self.0.iter()
+    }
+}
+
+impl From<Vec<SearchResult>> for DisplayItems {
+    fn from(search_results: Vec<SearchResult>) -> Self {
+        // Search results contain a lot of information, but all we need for rendering are
+        // the input, the package subpath (e.g. "python310Packages.flask"), and the description.
+        let mut display_items = search_results
+            .into_iter()
+            .map(|r| DisplayItem {
+                input: r.input,
+                rel_path: r.rel_path,
+                description: r.description.map(|s| s.replace('\n', " ")),
+                render_with_input: false,
+            })
+            .collect::<Vec<_>>();
+
+        // TODO: we could disambiguate as we're collecting above
+        Self::disambiguate_display_items(&mut display_items);
+
+        Self(display_items)
     }
 }
 
@@ -202,7 +208,7 @@ impl DisplaySearchResults {
     ) -> Result<DisplaySearchResults> {
         let n_results = search_results.results.len();
 
-        let display_items = DisplayItems::from_search_results(search_results.results);
+        let display_items: DisplayItems = search_results.results.into();
 
         Ok(DisplaySearchResults {
             search_term: search_term.to_string(),
@@ -217,14 +223,13 @@ impl Display for DisplaySearchResults {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let column_width = self
             .display_items
-            .0
             .iter()
             .map(|d| d.to_string().len())
             .max()
             .unwrap_or_default();
 
         // Finally print something
-        let mut items = self.display_items.0.iter().peekable();
+        let mut items = self.display_items.iter().peekable();
 
         while let Some(d) = items.next() {
             let desc = d.description.as_deref().unwrap_or(DEFAULT_DESCRIPTION);

@@ -106,7 +106,8 @@ teardown() {
   rm -f "$GLOBAL_MANIFEST_LOCK"
 
   "$FLOX_BIN" init
-  sed -i 's/systems = \[/systems = \["'"$(get_system_other_than_current)"'", /' "$MANIFEST_PATH"
+  # add a second system
+  tomlq -i -t ".options.systems += [ \"$(get_system_other_than_current)\" ]" "$MANIFEST_PATH"
   run "$FLOX_BIN" install npm
   assert_failure
   # TODO: it would be less lazy to assert 3 distinct packages are returned

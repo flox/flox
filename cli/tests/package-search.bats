@@ -298,7 +298,7 @@ setup_file() {
 
 # ---------------------------------------------------------------------------- #
 
-@test "'flox search' - same number of results for single and multi system environments" {
+@test "'flox search' - same number of results for single and multi-system environments" {
   local extra_system
   run --separate-stderr "$FLOX_BIN" search neovim
   assert_success
@@ -309,7 +309,8 @@ setup_file() {
   total="${stderr#* of }"
   total="${total% results*}"
 
-  sed -i 's/systems = \[/systems = \["'"$(get_system_other_than_current)"'", /' "$MANIFEST_PATH"
+  # add a second system to search in
+  tomlq -i -t ".options.systems += [ \"$(get_system_other_than_current)\" ]" "$MANIFEST_PATH"
   run --separate-stderr "$FLOX_BIN" search neovim
   assert_success
 
@@ -323,8 +324,10 @@ setup_file() {
   multi_system_total="${stderr#* of }"
   multi_system_total="${multi_system_total% results*}"
 
-  # We chould be displaying the number of lines we say we are.
+  # We should be displaying the number of lines we say we are.
   assert_equal "$multi_system_num_lines" "$multi_system_showing"
+  # We should be displaying the default limit of 10 lines.
+  assert_equal "$multi_system_num_lines" 10
   # We should have the same numbers before and after adding the second system.
   assert_equal "$num_lines" "$multi_system_num_lines"
   assert_equal "$total" "$multi_system_total"

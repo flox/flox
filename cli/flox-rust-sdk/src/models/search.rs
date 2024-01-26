@@ -167,6 +167,9 @@ impl Query {
     /// `deduplicate = true` will return unique results for flox search;
     /// for example, a single result will be returned for a package even if
     /// there are multiple versions or systems of a package.
+    /// This is a bit hacky, but since we know that `flox search` only displays
+    /// `relPath` and `description`, we assume that `description` is the same
+    /// for all packages that share `relPath`.
     pub fn new(
         search_term: &str,
         search_strategy: SearchStrategy,
