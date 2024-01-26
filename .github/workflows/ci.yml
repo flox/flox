@@ -151,7 +151,7 @@ jobs:
         env:
           RUST_BACKTRACE: 1
         run: |
-          nix run 'nixpkgs#zsh' --                                         \
+          nix run 'nixpkgs#zsh' -- -c                                      \
             nix develop -L --no-update-lock-file --command just test-cli;
 
   nix-build:
