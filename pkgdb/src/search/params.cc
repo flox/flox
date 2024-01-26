@@ -113,6 +113,10 @@ from_json( const nlohmann::json & jfrom, SearchQuery & qry )
       else if ( key == "limit" ) { getOrFail( key, value, qry.limit ); }
       else if ( key == "semver" ) { getOrFail( key, value, qry.semver ); }
       else if ( key == "match" ) { getOrFail( key, value, qry.partialMatch ); }
+      else if ( key == "deduplicate" )
+        {
+          getOrFail( key, value, qry.deduplicate );
+        }
       else if ( key == "match-name" )
         {
           getOrFail( key, value, qry.partialNameMatch );
@@ -147,6 +151,7 @@ to_json( nlohmann::json & jto, const SearchQuery & qry )
   jto["match-name"]             = qry.partialNameMatch;
   jto["match-name-or-rel-path"] = qry.partialNameOrRelPathMatch;
   jto["limit"]                  = qry.limit;
+  jto["deduplicate"]            = qry.deduplicate;
 }
 
 
@@ -164,6 +169,7 @@ SearchQuery::fillPkgQueryArgs( pkgdb::PkgQueryArgs & pqa ) const
   pqa.partialNameMatch          = this->partialNameMatch;
   pqa.partialNameOrRelPathMatch = this->partialNameOrRelPathMatch;
   pqa.limit                     = this->limit;
+  pqa.deduplicate               = this->deduplicate;
   return pqa;
 }
 

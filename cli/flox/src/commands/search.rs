@@ -25,7 +25,7 @@ use crate::utils::didyoumean::{DidYouMean, SearchSuggestion};
 use crate::utils::search::{
     construct_search_params,
     manifest_and_lockfile,
-    render_search_results_user_facing,
+    DisplaySearchResults,
     DEFAULT_DESCRIPTION,
     SEARCH_INPUT_SEPARATOR,
 };
@@ -135,7 +135,7 @@ impl Search {
                 bail!(message);
             }
 
-            let results = render_search_results_user_facing(&self.search_term, results)?;
+            let results = DisplaySearchResults::from_search_results(&self.search_term, results)?;
             println!("{results}");
 
             info!("");
@@ -224,10 +224,11 @@ fn construct_show_params(
         _ => Err(ShowError::InvalidSearchTerm(search_term.to_owned()))?,
     };
 
-    let query = Query::from_term_and_limit(
+    let query = Query::new(
         package_name.as_ref().unwrap(), // We already know it's Some(_)
         Features::parse()?.search_strategy,
         None,
+        false,
     )?;
     let search_params = SearchParams {
         manifest,

@@ -1,12 +1,11 @@
 use std::collections::{HashMap, HashSet};
 use std::fmt::Display;
-use std::io::{BufWriter, Write};
 use std::path::PathBuf;
 
-use anyhow::{bail, Context, Result};
+use anyhow::Result;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::lockfile::LockedManifest;
-use flox_rust_sdk::models::search::{PathOrJson, Query, SearchParams, SearchResults};
+use flox_rust_sdk::models::search::{PathOrJson, Query, SearchParams, SearchResult, SearchResults};
 use log::debug;
 
 use crate::commands::detect_environment;
@@ -72,10 +71,11 @@ pub(crate) fn construct_search_params(
     global_manifest: PathOrJson,
     lockfile: PathOrJson,
 ) -> Result<SearchParams> {
-    let query = Query::from_term_and_limit(
+    let query = Query::new(
         search_term,
         Features::parse()?.search_strategy,
         results_limit,
+        true,
     )?;
     let params = SearchParams {
         manifest,
@@ -87,108 +87,148 @@ pub(crate) fn construct_search_params(
     Ok(params)
 }
 
-/// Deduplicate and disambiguate display items.
-///
-/// This gets complicated because we have to satisfy a few constraints:
-/// - The order of results from `pkgdb` is important (best matches come first),
-///   so that order must be preserved.
-/// - Versions shouldn't appear in the output, so multiple package versions from a single
-///   input should be deduplicated.
-/// - Packages that appear in more than one input need to be disambiguated by prepending
-///   the name of the input and a separator.
-fn dedup_and_disambiguate_display_items(mut display_items: Vec<DisplayItem>) -> Vec<DisplayItem> {
-    let mut package_to_inputs: HashMap<String, HashSet<String>> = HashMap::new();
-    for d in display_items.iter() {
-        // Build a collection of packages and which inputs they are seen in so we can tell
-        // which packages need to be disambiguated when rendering search results.
-        package_to_inputs
-            .entry(d.package.clone())
-            .and_modify(|inputs| {
-                inputs.insert(d.input.clone());
-            })
-            .or_insert_with(|| HashSet::from_iter([d.input.clone()]));
-    }
-
-    // For any package that comes from more than one input, mark it as needing to be joined
-    for d in display_items.iter_mut() {
-        if let Some(inputs) = package_to_inputs.get(&d.package) {
-            d.render_with_input = inputs.len() > 1;
-        }
-    }
-
-    // For each package in the search results, `package_to_inputs` contains the set of
-    // inputs that the package is found in. Logically `package_to_inputs` contains
-    // (package, input) pairs. If the `package` and `input` from a `DisplayItem` are
-    // found in `package_to_inputs` it means that we have not yet seen this (package, input)
-    // pair and we should render it (e.g. add it to `deduped_display_items`). Once we've
-    // done that we remove this (package, input) pair from `package_to_inputs` so that
-    // we never see that pair again.
-    let mut deduped_display_items = Vec::new();
-    for d in display_items.into_iter() {
-        if let Some(inputs) = package_to_inputs.get_mut(d.package.as_str()) {
-            // Remove this input so this (package, input) pair is never seen again
-            if inputs.remove(&d.input) {
-                deduped_display_items.push(d.clone());
-            }
-            if inputs.is_empty() {
-                package_to_inputs.remove(&d.package);
-            }
-        }
-    }
-
-    deduped_display_items
-}
-
 /// An intermediate representation of a search result used for rendering
 #[derive(Debug, PartialEq, Clone)]
-struct DisplayItem {
+pub struct DisplayItem {
     /// The input that the package came from
     input: String,
-    /// The displayable part of the package's attribute path
-    package: String,
+    /// The attribute path of the package, excluding subtree and system
+    rel_path: Vec<String>,
     /// The package description
     description: Option<String>,
     /// Whether to join the `input` and `package` fields with a separator when rendering
     render_with_input: bool,
 }
 
+impl Display for DisplayItem {
+    /// Render a display item in the format that should be output by
+    /// `flox search`.
+    ///
+    /// It should be possible to copy and paste this as an argument to
+    /// `flox install`.
+    ///
+    /// If we change this function, we will likely need to update what the
+    /// deduplicate field controls in pkgdb.
+    /// Technically, pkgdb shouldn't have knowledge of this format,
+    /// but it's nicer to perform deduplication in SQL.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.render_with_input {
+            write!(f, "{}{SEARCH_INPUT_SEPARATOR}", self.input)?;
+        }
+        write!(f, "{}", self.rel_path.join("."))
+    }
+}
+
+/// Contains [DisplayItem]s that have been disambiguated.
+///
+/// This should be used for printing search results when the format output by
+/// [DisplaySearchResults] is not desired.
+pub struct DisplayItems(pub Vec<DisplayItem>);
+
+impl DisplayItems {
+    pub fn from_search_results(search_results: Vec<SearchResult>) -> Self {
+        // Search results contain a lot of information, but all we need for rendering are
+        // the input, the package subpath (e.g. "python310Packages.flask"), and the description.
+        let mut display_items = search_results
+            .into_iter()
+            .map(|r| DisplayItem {
+                input: r.input,
+                rel_path: r.rel_path,
+                description: r.description.map(|s| s.replace('\n', " ")),
+                render_with_input: false,
+            })
+            .collect::<Vec<_>>();
+
+        // TODO: we could disambiguate as we're collecting above
+        Self::disambiguate_display_items(&mut display_items);
+
+        Self(display_items)
+    }
+
+    /// Disambiguate display items.
+    ///
+    /// This gets complicated because we have to satisfy a few constraints:
+    /// - The order of results from `pkgdb` is important (best matches come first),
+    ///   so that order must be preserved.
+    /// - Packages that appear in more than one input need to be disambiguated by prepending
+    ///   the name of the input and a separator.
+    fn disambiguate_display_items(display_items: &mut [DisplayItem]) {
+        let mut package_to_inputs: HashMap<Vec<String>, HashSet<String>> = HashMap::new();
+        for d in display_items.iter() {
+            // Build a collection of packages and which inputs they are seen in so we can tell
+            // which packages need to be disambiguated when rendering search results.
+            package_to_inputs
+                .entry(d.rel_path.clone())
+                .and_modify(|inputs| {
+                    inputs.insert(d.input.clone());
+                })
+                .or_insert_with(|| HashSet::from_iter([d.input.clone()]));
+        }
+
+        // For any package that comes from more than one input, mark it as needing to be joined
+        for d in display_items.iter_mut() {
+            if let Some(inputs) = package_to_inputs.get(&d.rel_path) {
+                d.render_with_input = inputs.len() > 1;
+            }
+        }
+    }
+}
+
+///
 pub struct DisplaySearchResults {
     /// original search term
     search_term: String,
     /// deduplicated and disambiguated search results
-    deduped_display_items: Vec<DisplayItem>,
+    display_items: DisplayItems,
     /// reported number of results
     count: Option<u64>,
     /// number of actual results (including duplicates)
     n_results: u64,
 }
 
+/// A struct that wraps the functionality needed to print [SearchResults] to a
+/// user.
+impl DisplaySearchResults {
+    /// Display a list of search results for a given search term
+    /// This function is responsible for disambiguating search results
+    /// and printing them to stdout in a user-friendly table-ish format.
+    ///
+    /// If no results are found, this function will print nothing
+    /// it's the caller's responsibility to print a message,
+    /// or error if no results are found.
+    pub(crate) fn from_search_results(
+        search_term: &str,
+        search_results: SearchResults,
+    ) -> Result<DisplaySearchResults> {
+        let n_results = search_results.results.len();
+
+        let display_items = DisplayItems::from_search_results(search_results.results);
+
+        Ok(DisplaySearchResults {
+            search_term: search_term.to_string(),
+            display_items,
+            count: search_results.count,
+            n_results: n_results as u64,
+        })
+    }
+}
+
 impl Display for DisplaySearchResults {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let column_width = self
-            .deduped_display_items
+            .display_items
+            .0
             .iter()
-            .map(|d| {
-                if d.render_with_input {
-                    d.input.len() + d.package.len() + SEARCH_INPUT_SEPARATOR.len()
-                } else {
-                    d.package.len()
-                }
-            })
+            .map(|d| d.to_string().len())
             .max()
             .unwrap_or_default();
 
         // Finally print something
-        let mut items = self.deduped_display_items.iter().peekable();
+        let mut items = self.display_items.0.iter().peekable();
 
         while let Some(d) = items.next() {
             let desc = d.description.as_deref().unwrap_or(DEFAULT_DESCRIPTION);
-            let package = if d.render_with_input {
-                [&*d.input, &*d.package].join(SEARCH_INPUT_SEPARATOR)
-            } else {
-                d.package.to_string()
-            };
-            write!(f, "{package:<column_width$}  {desc}")?;
+            write!(f, "{d:<column_width$}  {desc}")?;
             // Only print a newline if there are more items to print
             if items.peek().is_some() {
                 writeln!(f)?;
@@ -217,50 +257,9 @@ impl DisplaySearchResults {
         }
 
         Some(format!(
-                "Showing {n_deduplicated} of {count} results. Use `flox search {search_term} --all` to see the full list.",
-                n_deduplicated = self.deduped_display_items.len(),
+                "Showing {n_results} of {count} results. Use `flox search {search_term} --all` to see the full list.",
+                n_results = self.n_results,
                 search_term = self.search_term
             ))
     }
-}
-
-/// Display a list of search results for a given search term
-/// This function is responsible for deduplicating and disambiguating search results
-/// and printing them to stdout in a user-friendly table-ish format.
-///
-/// If no results are found, this function will print nothing
-/// it's the caller's responsibility to print a message,
-/// or error if no results are found.
-pub(crate) fn render_search_results_user_facing(
-    search_term: &str,
-    search_results: SearchResults,
-) -> Result<DisplaySearchResults> {
-    let n_results = search_results.results.len();
-
-    // Search results contain a lot of information, but all we need for rendering are
-    // the input, the package subpath (e.g. "python310Packages.flask"), and the description.
-    let display_items = search_results
-        .results
-        .into_iter()
-        .map(|r| {
-            Ok(DisplayItem {
-                input: r.input,
-                package: r.rel_path.join("."),
-                description: r.description.map(|s| s.replace('\n', " ")),
-                render_with_input: false,
-            })
-        })
-        .collect::<Result<Vec<_>>>()?;
-
-    let deduped_display_items = dedup_and_disambiguate_display_items(display_items);
-    if deduped_display_items.is_empty() {
-        bail!("deduplicating search results failed");
-    }
-
-    Ok(DisplaySearchResults {
-        search_term: search_term.to_string(),
-        deduped_display_items,
-        count: search_results.count,
-        n_results: n_results as u64,
-    })
 }

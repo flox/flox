@@ -156,14 +156,22 @@ pub struct Query {
     pub match_name_or_rel_path: Option<String>,
     /// Limit search results to a specified number
     pub limit: Option<u8>,
+    /// Return a single result for each package descriptor used by `search` and
+    /// `install`.
+    pub deduplicate: bool,
 }
 
 impl Query {
     /// Construct a query from a search term and an optional search result limit.
-    pub fn from_term_and_limit(
+    ///
+    /// `deduplicate = true` will return unique results for flox search;
+    /// for example, a single result will be returned for a package even if
+    /// there are multiple versions or systems of a package.
+    pub fn new(
         search_term: &str,
         search_strategy: SearchStrategy,
         limit: Option<u8>,
+        deduplicate: bool,
     ) -> Result<Self, SearchError> {
         // If there's an '@' in the query, it means the user is trying to use the semver
         // search capability. This means we need to split the query into package name and
@@ -180,6 +188,7 @@ impl Query {
                 let mut q = Query {
                     semver: Some(semver.to_string()),
                     limit,
+                    deduplicate,
                     ..Query::default()
                 };
                 match search_strategy {
@@ -194,6 +203,7 @@ impl Query {
             None => {
                 let mut q = Query {
                     limit,
+                    deduplicate,
                     ..Default::default()
                 };
                 match search_strategy {
@@ -365,7 +375,8 @@ mod test {
         "query": {
             "semver": "2.12.1",
             "match": "hello",
-            "limit": 10
+            "limit": 10,
+            "deduplicate": true
         }
     }"#;
 
@@ -402,8 +413,7 @@ mod test {
             manifest: Some(PathOrJson::Path("/path/to/manifest".into())),
             global_manifest: PathOrJson::Path("/path/to/manifest".into()),
             lockfile: PathOrJson::Path("/path/to/lockfile".into()),
-            query: Query::from_term_and_limit(EXAMPLE_SEARCH_TERM, SearchStrategy::Match, Some(10))
-                .unwrap(),
+            query: Query::new(EXAMPLE_SEARCH_TERM, SearchStrategy::Match, Some(10), true).unwrap(),
         };
         let json = serde_json::to_string(&params).unwrap();
         // Convert both to `serde_json::Value` to test equality without worrying about whitespace

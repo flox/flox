@@ -111,6 +111,8 @@ to_json( nlohmann::json & jto, const PkgQueryArgs & args )
     { "subtrees", args.subtrees },
     { "systems", args.systems },
     { "relPath", args.relPath },
+    { "limit", args.limit },
+    { "deduplicate", args.deduplicate },
   };
 }
 
@@ -536,6 +538,7 @@ PkgQuery::str() const
   else { qry << this->selects.str(); }
   qry << " FROM v_PackagesSearch";
   if ( ! this->firstWhere ) { qry << " WHERE " << this->wheres.str(); }
+  if ( this->deduplicate ) { qry << "\n GROUP BY relPath\n"; }
   if ( ! this->firstOrder ) { qry << " ORDER BY " << this->orders.str(); }
   qry << " )";
   return qry.str();
