@@ -204,13 +204,15 @@ to make conforming commits interactively.
 
 ### Merges
 
-This repo follows a variant of [git-flow](https://www.atlassian.com/git/tutorials/comparing-workflows/gitflow-workflow).
+Changes should be **squashed and merged** into `main`
 
-Features are branched off the `develop` branch and committed back to it,
-upon completion, using GitHub PRs.
-Features should be **squashed and merged** into `develop`,
-or if they represent multiple bigger changes,
-squashed into multiple distinct change sets.
+Development is done on branches and merged back to `main`.  Keep your branch
+updated by rebasing and resolving conflicts regularly to avoid messy merges.
+Merges to `main` should be squashed and *ff-only* back to `main` using GitHub
+PRs.  Or, if they represent multiple bigger changes, squashed into multiple
+distinct change sets.  Also be sure to run all tests before creating a mergable
+PR.
+
 
 ### Releases
 
