@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 use std::error::Error;
+use std::ffi::{OsStr, OsString};
 use std::fmt::Display;
 use std::fs::{self, File};
 use std::io::{stdin, stdout, Write};
@@ -50,6 +51,7 @@ use flox_rust_sdk::models::pkgdb::{call_pkgdb, CallPkgDbError, PkgDbError, PKGDB
 use flox_rust_sdk::nix::command::StoreGc;
 use flox_rust_sdk::nix::command_line::NixCommandLine;
 use flox_rust_sdk::nix::Run;
+use indexmap::IndexSet;
 use indoc::{formatdoc, indoc};
 use itertools::Itertools;
 use log::{debug, error, info, warn};
@@ -635,6 +637,125 @@ impl Activate {
         // exec should never return
 
         bail!("Failed to exec subshell: {error}");
+    }
+
+    /// Patch the PATH to undo the effects of `/usr/libexec/path_helper`
+    ///
+    /// Darwin has a "path_helper" which indiscriminately reorders the path
+    /// to put the system curated path items first in the `PATH`,
+    /// which completely breaks the user's ability to manage their `PATH` in subshells,
+    /// e.g. when using tmux.
+    ///
+    /// On macos `/usr/libexec/path_helper` is typically invoked from
+    /// default shell rc files, e.g. `/etc/profile` and `/etc/zprofile`.
+    ///
+    /// This function attempts to undo the effects of `/usr/libexec/path_helper`
+    /// by partitioning the `PATH` into two parts:
+    /// 1. known paths of activated flox environments
+    ///    and nix store paths (e.g. `/nix/store/...`) -- assumed to be `nix develop` paths
+    /// 2. everything else
+    ///
+    /// The `PATH` is then reordered to put the flox environment and nix store paths first.
+    /// The order within the two partitions is preserved.
+    #[cfg_attr(not(target_os = "macos"), allow(unused_variables))] // on linux `flox_env_dirs` is not used
+    fn fixup_path(flox_env_dirs: IndexSet<PathBuf>) -> Option<Result<OsString>> {
+        #[cfg(not(target_os = "macos"))]
+        {
+            None
+        }
+        #[cfg(target_os = "macos")]
+        {
+            if !Path::new("/usr/libexec/path_helper").exists() {
+                return None;
+            }
+            let path_var = env::var("PATH").unwrap_or_default();
+            let fixed_up_path = Self::fixup_path_with(path_var, flox_env_dirs);
+            let fixed_up_path_joined = env::join_paths(fixed_up_path).context(
+                "Cannot activate environment because its path contains an invalid character",
+            );
+            Some(fixed_up_path_joined)
+        }
+    }
+
+    /// Patch a given PATH value to undo the effects of `/usr/libexec/path_helper`
+    ///
+    /// See [Self::fixup_path] for more details.
+    fn fixup_path_with(
+        path_var: impl AsRef<OsStr>,
+        flox_env_dirs: IndexSet<PathBuf>,
+    ) -> Vec<PathBuf> {
+        let path_iter = env::split_paths(&path_var);
+
+        let (flox_and_nix_path, path) = path_iter.partition::<Vec<_>, _>(|path| {
+            let is_flox_path = path
+                .parent()
+                .map(|path| flox_env_dirs.contains(path))
+                .unwrap_or_else(|| flox_env_dirs.contains(path));
+
+            path.starts_with("/nix/store") || is_flox_path
+        });
+
+        [flox_and_nix_path, path].into_iter().flatten().collect()
+    }
+
+    /// Used when the activated environment is already active
+    /// and executed non-interactively -- e.g. from a .bashrc.
+    ///
+    /// In the general case, this function produces a noop shell function
+    ///
+    ///     eval "$(flox activate)" -> eval "true"
+    ///
+    /// On macOS, we need to patch the PATH
+    /// to undo the effects of /usr/libexec/path_helper
+    ///
+    ///     eval "$(flox activate)" -> eval "export PATH=<flox_env_dirs>:$PATH"
+    ///
+    /// See [Self::fixup_path] for more details.
+    fn reactivate_non_interactive() -> Result<(), anyhow::Error> {
+        let flox_env_dirs = env::var(FLOX_ENV_DIRS_VAR)
+            .ok()
+            .as_ref()
+            .map(env::split_paths)
+            .map(IndexSet::from_iter)
+            .unwrap_or_default();
+        if let Some(fixed_up_path) = Self::fixup_path(flox_env_dirs) {
+            let fixed_up_path_joined = env::join_paths(fixed_up_path).context(
+                "Cannot activate environment because its path contains an invalid character",
+            )?;
+            debug!(
+                "Patching PATH to {}",
+                fixed_up_path_joined.to_string_lossy()
+            );
+            println!(
+                "export PATH={}",
+                shell_escape::escape(fixed_up_path_joined.to_string_lossy())
+            );
+        } else {
+            debug!("No path patching needed");
+            println!("true");
+        };
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod activate_tests {
+    use super::*;
+
+    const PATH: &str =
+        "/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/flox/env/bin:/nix/store/some/bin";
+
+    #[test]
+    fn test_fixup_path() {
+        let flox_env_dirs = IndexSet::from(["/flox/env"].map(PathBuf::from));
+        let fixed_up_path = Activate::fixup_path_with(PATH, flox_env_dirs);
+        let joined = env::join_paths(fixed_up_path).unwrap();
+
+        assert_eq!(
+            joined.to_string_lossy(),
+            "/flox/env/bin:/nix/store/some/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
+            "PATH was not reordered correctly"
+        );
     }
 }
 
