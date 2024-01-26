@@ -202,10 +202,11 @@ addIn( std::stringstream & oss, const std::vector<std::string> & elems )
 std::string
 PkgQuery::mkPatternString( const std::string & matchString )
 {
-  // SQLite allows _ and % characters in pattern matching so these need to be escaped,
-  // and patterns used for LIKE are surrounded with %
+  // SQLite allows _ and % characters in pattern matching so these need to be
+  // escaped, and patterns used for LIKE are surrounded with %
   std::string pattern
-    = "%" + std::regex_replace( matchString, std::regex( "([_%])" ), "\\$&" ) + "%";
+    = "%" + std::regex_replace( matchString, std::regex( "([_%])" ), "\\$&" )
+      + "%";
   return pattern;
 }
 
