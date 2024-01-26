@@ -357,6 +357,10 @@ pub struct Activate {
     #[bpaf(long, short)]
     trust: bool,
 
+    /// Print an activation script to stdout instead of spawning a subshell
+    #[bpaf(long("in-place"), short, hide)]
+    in_place: bool,
+
     /// Command to run interactively in the context of the environment
     #[bpaf(positional("cmd"), strict, many)]
     run_args: Vec<String>,
@@ -444,9 +448,10 @@ impl Activate {
 
         let environment = concrete_environment.dyn_environment_ref_mut();
 
+        let in_place = self.in_place || (!stdout().is_tty() && self.run_args.is_empty());
         // Don't spin in bashrcs and similar contexts
-        let activation_path_result = if !stdout().is_tty() && self.run_args.is_empty() {
-            environment.activation_path(&flox)
+        let activation_path = if in_place {
+            environment.activation_path(&flox)?
         } else {
             Dialog {
                 message: &format!("Getting ready to use environment {now_active}..."),
@@ -495,7 +500,7 @@ impl Activate {
         if flox_active_environments.is_active(&now_active) {
             debug!("Environment is already active: environment={now_active}");
 
-            if stdout().is_tty() || !self.run_args.is_empty() {
+            if !in_place {
                 // Error if interactive and already active
                 bail!("Environment '{now_active}' is already active");
             }
@@ -562,7 +567,7 @@ impl Activate {
         // e.g. in a .bashrc or .zshrc file:
         //
         //    eval "$(flox activate)"
-        if !stdout().is_tty() && self.run_args.is_empty() {
+        if in_place {
             Self::activate_non_interactive(
                 &shell,
                 &exports,
