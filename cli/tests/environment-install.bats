@@ -103,6 +103,8 @@ teardown() {
 }
 
 @test "'flox install' doesn't provide duplicate suggestions for a multi-system environment" {
+  rm -f "$GLOBAL_MANIFEST_LOCK"
+
   "$FLOX_BIN" init
   sed -i 's/systems = \[/systems = \["'"$(get_system_other_than_current)"'", /' "$MANIFEST_PATH"
   run "$FLOX_BIN" install npm
@@ -111,7 +113,7 @@ teardown() {
   # rather than hardcoding package names.
   assert_output --partial "flox install nodejs"
   assert_output --partial "flox install elmPackages.nodejs"
-  assert_output --partial "flox install nodejs_20"
+  assert_output --partial "flox install nodejs_21"
 }
 
 @test "'flox install' provides curated suggestions when package not found" {
