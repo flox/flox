@@ -264,9 +264,9 @@ PkgQuery::initMatch()
       this->addSelection(
         "LOWER( attrName ) = LOWER( :partialMatch ) AS matchExactAttrName" );
       this->addSelection(
-        "( pname LIKE :partialMatchPattern ) AS matchPartialPname" );
+        "( pname LIKE :partialMatchPattern ESCAPE '\\' ) AS matchPartialPname" );
       this->addSelection(
-        "( attrName LIKE :partialMatchPattern ) AS matchPartialAttrName" );
+        "( attrName LIKE :partialMatchPattern ESCAPE '\\' ) AS matchPartialAttrName" );
 
       if ( hasPartialNameMatch )
         {
@@ -281,7 +281,7 @@ PkgQuery::initMatch()
 
       if ( hasPartialMatch )
         {
-          this->addSelection( "( description LIKE :partialMatchPattern ) AS "
+          this->addSelection( "( description LIKE :partialMatchPattern ESCAPE '\\' ) AS "
                               "matchPartialDescription" );
           /* Add `%` before binding so `LIKE` works. */
           binds.emplace( ":partialMatch", *this->partialMatch );
@@ -302,7 +302,7 @@ PkgQuery::initMatch()
                               "FROM json_each(v_PackagesSearch.relPath)) AS "
                               "matchExactRelPath" );
           this->addSelection(
-            "(SELECT group_concat(value, '.') LIKE :partialMatchPattern "
+            "(SELECT group_concat(value, '.') LIKE :partialMatchPattern ESCAPE '\\' "
             "FROM json_each(v_PackagesSearch.relPath)) AS "
             "matchPartialRelPath" );
           /* Add `%` before binding so `LIKE` works. */
@@ -564,10 +564,10 @@ PkgQuery::str() const
   // Dump the bindings as well
   if ( ! this->binds.empty() )
     {
-      qry << "\n-- ... with bindings:";
+      qry << std::endl << "-- ... with bindings:" << std::endl;
       for ( auto & bind : this->binds )
         {
-          qry << "\n-- " << bind.first << " : " << bind.second;
+          qry << "-- " << bind.first << " : " << bind.second << std::endl;
         }
     }
 
