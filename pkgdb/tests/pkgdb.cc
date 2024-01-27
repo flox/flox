@@ -462,23 +462,28 @@ test_PkgQuery2( flox::pkgdb::PkgDb & db )
     = db.addOrGetDescriptionId( "A program with a friendly hello" );
   row_id descFarewell
     = db.addOrGetDescriptionId( "A program with a friendly farewell" );
+  row_id descSpecial
+    = db.addOrGetDescriptionId( "A program with %%too%% 'many' [special] *chars*" );
   sqlite3pp::command cmd( db.db, R"SQL(
     INSERT INTO Packages (
       parentId, attrName, name, pname, outputs, descriptionId
     ) VALUES
       ( :parentId, 'pkg0', 'hello-2.12.1', 'hello', '["out"]', :descGreetId
       )
-    , ( :parentId, 'pkg1', 'goodbye-2.12.1', 'goodbye'
+    , ( :parentId, 'pkg1', 'woofoo-2.12.1', 'woofoo_[*', '["out"]', :descSpecialId
+      )
+    , ( :parentId, 'pkg2', 'goodbye-2.12.1', 'goodbye'
       , '["out"]', :descFarewellId
       )
-    , ( :parentId, 'pkg2', 'hola-2.12.1', 'hola', '["out"]', :descGreetId
+    , ( :parentId, 'pkg3', 'hola-2.12.1', 'hola', '["out"]', :descGreetId
       )
-    , ( :parentId, 'pkg3', 'ciao-2.12.1', 'ciao', '["out"]', :descFarewellId
+    , ( :parentId, 'pkg4', 'ciao-2.12.1', 'ciao', '["out"]', :descFarewellId
       )
   )SQL" );
   cmd.bind( ":parentId", static_cast<long long>( linux ) );
   cmd.bind( ":descGreetId", static_cast<long long>( descGreet ) );
   cmd.bind( ":descFarewellId", static_cast<long long>( descFarewell ) );
+  cmd.bind( ":descSpecialId", static_cast<long long>( descSpecial ) );
   if ( flox::pkgdb::sql_rc rc = cmd.execute(); flox::pkgdb::isSQLError( rc ) )
     {
       throw flox::pkgdb::PkgDbException(
@@ -487,76 +492,48 @@ test_PkgQuery2( flox::pkgdb::PkgDb & db )
   flox::pkgdb::PkgQueryArgs qargs;
   qargs.systems = std::vector<std::string> { "x86_64-linux" };
 
-  /* Run `partialMatch = "hello"' query */
+  // lambda to perform a search and check match results
+  auto matchTest = [&qargs,&db](std::string matchString, std::vector< std::vector<bool>> exMatches, bool dump=false)
   {
-    qargs.partialMatch = "hello";
+    qargs.partialMatch = matchString;
     flox::pkgdb::PkgQuery qry(
       qargs,
       std::vector<std::string> { "matchExactPname",
+                                 "matchPartialPname",
                                  "matchPartialDescription" } );
     qargs.partialMatch = std::nullopt;
     size_t count       = 0;
     auto   bound       = qry.bind( db.db );
+    if (dump)
+    {
+      std::cout << qry.str();
+    }
     for ( const auto & row : *bound )
       {
+        EXPECT ( exMatches.size() > count );
+        EXPECT_EQ( row.get<bool>(0) ,exMatches[count][0] );
+        EXPECT_EQ( row.get<bool>(1) ,exMatches[count][1] );
         ++count;
-        if ( count == 1 )
-          {
-            EXPECT( row.get<bool>( 0 ) );
-            EXPECT( row.get<bool>( 1 ) );
-          }
-        else
-          {
-            EXPECT( ! row.get<bool>( 0 ) );
-            EXPECT( row.get<bool>( 1 ) );
-          }
       }
-    EXPECT_EQ( count, std::size_t( 2 ) );
-  }
+    EXPECT_EQ( count, std::size_t( exMatches.size() ) );
+    return true;
+  };
 
-  /* Run `partialMatch = "farewell"' query */
-  {
-    qargs.partialMatch = "farewell";
-    flox::pkgdb::PkgQuery qry(
-      qargs,
-      std::vector<std::string> { "matchPartialDescription" } );
-    qargs.partialMatch = std::nullopt;
-    size_t count       = 0;
-    auto   bound       = qry.bind( db.db );
-    for ( const auto & row : *bound )
-      {
-        ++count;
-        EXPECT( row.get<bool>( 0 ) );
-      }
-    EXPECT_EQ( count, std::size_t( 2 ) );
-  }
+  // matchExactPname, matchPartialPname, matchPartialDescription
+  EXPECT ( matchTest( "farewell",   {{0, 0, 1}, {0, 0, 1}}) );
+  EXPECT ( matchTest( "hel",        {{0, 1, 1}, {0, 0, 1}}) );
+  EXPECT ( matchTest( "hello",      {{1, 1, 1}, {0, 0, 1}}) );
+  EXPECT ( matchTest( "hell_",      {}) );
+  EXPECT ( matchTest( "hell%",      {}) );
 
-  /* Run `partialMatch = "hel"' query */
-  {
-    qargs.partialMatch = "hel";
-    flox::pkgdb::PkgQuery qry(
-      qargs,
-      std::vector<std::string> { "matchPartialPname",
-                                 "matchPartialDescription" } );
-    qargs.partialMatch = std::nullopt;
-    size_t count       = 0;
-    auto   bound       = qry.bind( db.db );
-    for ( const auto & row : *bound )
-      {
-        ++count;
-        if ( count == 1 )
-          {
-            EXPECT( row.get<bool>( 0 ) );
-            EXPECT( row.get<bool>( 1 ) );
-          }
-        else
-          {
-            EXPECT( ! row.get<bool>( 0 ) );
-            EXPECT( row.get<bool>( 1 ) );
-          }
-      }
-    EXPECT_EQ( count, std::size_t( 2 ) );
-  }
+  EXPECT ( matchTest( "woofoo_[*", {{1, 1, 0} }, true) );
+  // EXPECT ( matchTest( "woofoo_",    {{0, 1, 0} }) );
+  EXPECT ( matchTest( "'many",      {{0, 0, 1} }) );
+  EXPECT ( matchTest( "ial] *ch",   {{0, 0, 1} }) );
+  // EXPECT ( matchTest( "%%too",      {{0, 0, 1} }) );
+
+    // = db.addOrGetDescriptionId( "A program with \%too\% 'many' [special] *chars*" );
+      // ( :parentId, 'pkg0', 'woofoo-2.12.1', 'foo[*]', '["out"]', :descSpecialId
 
   /* Run `pnameOrAttrName = "hello"' query, which matches pname */
   {
