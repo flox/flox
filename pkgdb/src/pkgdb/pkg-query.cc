@@ -263,10 +263,10 @@ PkgQuery::initMatch()
         "LOWER( pname ) = LOWER( :partialMatch ) AS matchExactPname" );
       this->addSelection(
         "LOWER( attrName ) = LOWER( :partialMatch ) AS matchExactAttrName" );
-      this->addSelection(
-        "( pname LIKE :partialMatchPattern ESCAPE '\\' ) AS matchPartialPname" );
-      this->addSelection(
-        "( attrName LIKE :partialMatchPattern ESCAPE '\\' ) AS matchPartialAttrName" );
+      this->addSelection( "( pname LIKE :partialMatchPattern ESCAPE '\\' ) AS "
+                          "matchPartialPname" );
+      this->addSelection( "( attrName LIKE :partialMatchPattern ESCAPE '\\' ) "
+                          "AS matchPartialAttrName" );
 
       if ( hasPartialNameMatch )
         {
@@ -281,8 +281,9 @@ PkgQuery::initMatch()
 
       if ( hasPartialMatch )
         {
-          this->addSelection( "( description LIKE :partialMatchPattern ESCAPE '\\' ) AS "
-                              "matchPartialDescription" );
+          this->addSelection(
+            "( description LIKE :partialMatchPattern ESCAPE '\\' ) AS "
+            "matchPartialDescription" );
           /* Add `%` before binding so `LIKE` works. */
           binds.emplace( ":partialMatch", *this->partialMatch );
           binds.emplace( ":partialMatchPattern",
@@ -301,10 +302,10 @@ PkgQuery::initMatch()
                               "= LOWER( :partialMatch )"
                               "FROM json_each(v_PackagesSearch.relPath)) AS "
                               "matchExactRelPath" );
-          this->addSelection(
-            "(SELECT group_concat(value, '.') LIKE :partialMatchPattern ESCAPE '\\' "
-            "FROM json_each(v_PackagesSearch.relPath)) AS "
-            "matchPartialRelPath" );
+          this->addSelection( "(SELECT group_concat(value, '.') LIKE "
+                              ":partialMatchPattern ESCAPE '\\' "
+                              "FROM json_each(v_PackagesSearch.relPath)) AS "
+                              "matchPartialRelPath" );
           /* Add `%` before binding so `LIKE` works. */
           binds.emplace( ":partialMatch",
                          ( *this->partialNameOrRelPathMatch ) );
