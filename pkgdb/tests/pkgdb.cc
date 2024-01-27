@@ -470,7 +470,7 @@ test_PkgQuery2( flox::pkgdb::PkgDb & db )
     ) VALUES
       ( :parentId, 'pkg0', 'hello-2.12.1', 'hello', '["out"]', :descGreetId
       )
-    , ( :parentId, 'pkg1', 'woofoo-2.12.1', 'woofoo_[*', '["out"]', :descSpecialId
+    , ( :parentId, 'pkg1', 'woofoo_2.12.1', 'woofoo_[*]', '["out"]', :descSpecialId
       )
     , ( :parentId, 'pkg2', 'goodbye-2.12.1', 'goodbye'
       , '["out"]', :descFarewellId
@@ -493,7 +493,9 @@ test_PkgQuery2( flox::pkgdb::PkgDb & db )
   qargs.systems = std::vector<std::string> { "x86_64-linux" };
 
   // lambda to perform a search and check match results
-  auto matchTest = [&qargs,&db](std::string matchString, std::vector< std::vector<bool>> exMatches, bool dump=false)
+  // exMatches is a vect of bools of the expected state of 
+  //    matchExactPname, matchPartialPname, matchPartialDescription respectively 
+  auto matchTest = [&qargs,&db](std::string matchString, std::vector< std::vector<bool>> exMatches)
   {
     qargs.partialMatch = matchString;
     flox::pkgdb::PkgQuery qry(
@@ -504,33 +506,29 @@ test_PkgQuery2( flox::pkgdb::PkgDb & db )
     qargs.partialMatch = std::nullopt;
     size_t count       = 0;
     auto   bound       = qry.bind( db.db );
-    if (dump)
-    {
-      std::cout << qry.str();
-    }
     for ( const auto & row : *bound )
       {
         EXPECT ( exMatches.size() > count );
-        EXPECT_EQ( row.get<bool>(0) ,exMatches[count][0] );
-        EXPECT_EQ( row.get<bool>(1) ,exMatches[count][1] );
+        for (int i: {0,1,2}) {
+          EXPECT_EQ( row.get<bool>(i) ,exMatches[count][i] );
+        }
         ++count;
       }
     EXPECT_EQ( count, std::size_t( exMatches.size() ) );
     return true;
   };
 
-  // matchExactPname, matchPartialPname, matchPartialDescription
   EXPECT ( matchTest( "farewell",   {{0, 0, 1}, {0, 0, 1}}) );
   EXPECT ( matchTest( "hel",        {{0, 1, 1}, {0, 0, 1}}) );
   EXPECT ( matchTest( "hello",      {{1, 1, 1}, {0, 0, 1}}) );
   EXPECT ( matchTest( "hell_",      {}) );
   EXPECT ( matchTest( "hell%",      {}) );
-
-  EXPECT ( matchTest( "woofoo_[*", {{1, 1, 0} }, true) );
-  // EXPECT ( matchTest( "woofoo_",    {{0, 1, 0} }) );
+  EXPECT ( matchTest( "woofoo_[*]", {{1, 1, 0} }) );
+  EXPECT ( matchTest( "woofoo_[*",  {{0, 1, 0} }) );
+  EXPECT ( matchTest( "woofoo_",    {{0, 1, 0} }) );
   EXPECT ( matchTest( "'many",      {{0, 0, 1} }) );
   EXPECT ( matchTest( "ial] *ch",   {{0, 0, 1} }) );
-  // EXPECT ( matchTest( "%%too",      {{0, 0, 1} }) );
+  EXPECT ( matchTest( "%%too",      {{0, 0, 1} }) );
 
     // = db.addOrGetDescriptionId( "A program with \%too\% 'many' [special] *chars*" );
       // ( :parentId, 'pkg0', 'woofoo-2.12.1', 'foo[*]', '["out"]', :descSpecialId
