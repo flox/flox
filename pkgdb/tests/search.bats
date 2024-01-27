@@ -514,13 +514,22 @@ genParamsNixpkgsFlox() {
   assert_equal "${#lines[@]}" 0
 }
 
-# bats tests_tags=searchfoo
+# bats tests_tags=search
 
-@test "'pkgdb search' with '_' in search term" {
-  params="$(genGMParams '.query.match="hell_" | .manifest.options.systems=["x86_64-linux"]')"
+@test "'pkgdb search' with '_' in search term (negative match)" {
+  params="$(genGMParams '.query.match="hello_" | .manifest.options.systems=["x86_64-linux"]')"
   run --separate-stderr "$PKGDB_BIN" search -q --ga-registry "$params"
   assert_success
   assert_equal "${#lines[@]}" 0
+}
+
+# bats tests_tags=search
+
+@test "'pkgdb search' with '_' in search term (positive match)" {
+  params="$(genGMParams '.query.match="hell_" | .manifest.options.systems=["x86_64-linux"]')"
+  run --separate-stderr "$PKGDB_BIN" search -q --ga-registry "$params"
+  assert_success
+  assert_equal "${#lines[@]}" 4
 }
 
 # bats tests_tags=search
