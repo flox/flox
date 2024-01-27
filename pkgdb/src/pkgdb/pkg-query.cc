@@ -284,6 +284,7 @@ PkgQuery::initMatch()
           this->addSelection( "( description LIKE :partialMatchPattern ) AS "
                               "matchPartialDescription" );
           /* Add `%` before binding so `LIKE` works. */
+          binds.emplace( ":partialMatch", *this->partialMatch );
           binds.emplace( ":partialMatchPattern",
                          mkPatternString( *this->partialMatch ) );
           this->addWhere( "( matchExactPname OR matchExactAttrName OR"
