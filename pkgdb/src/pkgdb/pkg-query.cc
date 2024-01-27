@@ -12,6 +12,7 @@
 #include <list>
 #include <memory>
 #include <optional>
+#include <regex>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -198,6 +199,16 @@ addIn( std::stringstream & oss, const std::vector<std::string> & elems )
 
 
 /* -------------------------------------------------------------------------- */
+std::string
+PkgQuery::mkPatternString( const std::string & matchString )
+{
+  // SQLite allows _ and % characters in pattern matching so these need to be
+  // escaped, and patterns used for LIKE are surrounded with %
+  std::string pattern
+    = "%" + std::regex_replace( matchString, std::regex( "([_%])" ), "\\$&" )
+      + "%";
+  return pattern;
+}
 
 void
 PkgQuery::initMatch()
@@ -249,20 +260,20 @@ PkgQuery::initMatch()
       /* We have to add '%' around `:match' because they were added for
        * use with `LIKE'. */
       this->addSelection(
-        "( ( '%' || LOWER( pname ) || '%' ) = LOWER( :partialMatch ) ) "
-        "AS matchExactPname" );
+        "LOWER( pname ) = LOWER( :partialMatch ) AS matchExactPname" );
       this->addSelection(
-        "( ( '%' || LOWER( attrName ) || '%' ) = LOWER( :partialMatch ) ) "
-        "AS matchExactAttrName" );
-      this->addSelection( "( pname LIKE :partialMatch ) AS matchPartialPname" );
-      this->addSelection(
-        "( attrName LIKE :partialMatch ) AS matchPartialAttrName" );
+        "LOWER( attrName ) = LOWER( :partialMatch ) AS matchExactAttrName" );
+      this->addSelection( "( pname LIKE :partialMatchPattern ESCAPE '\\' ) AS "
+                          "matchPartialPname" );
+      this->addSelection( "( attrName LIKE :partialMatchPattern ESCAPE '\\' ) "
+                          "AS matchPartialAttrName" );
 
       if ( hasPartialNameMatch )
         {
           /* Add `%` before binding so `LIKE` works. */
-          binds.emplace( ":partialMatch",
-                         "%" + ( *this->partialNameMatch ) + "%" );
+          binds.emplace( ":partialMatch", *this->partialNameMatch );
+          binds.emplace( ":partialMatchPattern",
+                         mkPatternString( *this->partialNameMatch ) );
           this->addWhere( "( matchExactPname OR matchExactAttrName OR"
                           "  matchPartialPname OR matchPartialAttrName"
                           ")" );
@@ -271,9 +282,12 @@ PkgQuery::initMatch()
       if ( hasPartialMatch )
         {
           this->addSelection(
-            "( description LIKE :partialMatch ) AS matchPartialDescription" );
+            "( description LIKE :partialMatchPattern ESCAPE '\\' ) AS "
+            "matchPartialDescription" );
           /* Add `%` before binding so `LIKE` works. */
-          binds.emplace( ":partialMatch", "%" + ( *this->partialMatch ) + "%" );
+          binds.emplace( ":partialMatch", *this->partialMatch );
+          binds.emplace( ":partialMatchPattern",
+                         mkPatternString( *this->partialMatch ) );
           this->addWhere( "( matchExactPname OR matchExactAttrName OR"
                           "  matchPartialPname OR matchPartialAttrName OR"
                           "  matchPartialDescription "
@@ -284,17 +298,19 @@ PkgQuery::initMatch()
       if ( hasPartialNameOrRelPathMatch )
         {
           /* Join relPath with '.' so searches can include dots. */
-          this->addSelection( "(SELECT ( '%' || LOWER( group_concat(value, "
-                              "'.') ) || '%' ) = LOWER( :partialMatch )"
+          this->addSelection( "(SELECT LOWER( group_concat(value, '.') ) "
+                              "= LOWER( :partialMatch )"
                               "FROM json_each(v_PackagesSearch.relPath)) AS "
                               "matchExactRelPath" );
-          this->addSelection(
-            "(SELECT group_concat(value, '.') LIKE :partialMatch "
-            "FROM json_each(v_PackagesSearch.relPath)) AS "
-            "matchPartialRelPath" );
+          this->addSelection( "(SELECT group_concat(value, '.') LIKE "
+                              ":partialMatchPattern ESCAPE '\\' "
+                              "FROM json_each(v_PackagesSearch.relPath)) AS "
+                              "matchPartialRelPath" );
           /* Add `%` before binding so `LIKE` works. */
           binds.emplace( ":partialMatch",
-                         "%" + ( *this->partialNameOrRelPathMatch ) + "%" );
+                         ( *this->partialNameOrRelPathMatch ) );
+          binds.emplace( ":partialMatchPattern",
+                         mkPatternString( *this->partialNameOrRelPathMatch ) );
           this->addWhere( "( matchExactPname OR matchExactAttrName OR"
                           "  matchPartialPname OR matchPartialAttrName OR"
                           "  matchPartialRelPath"
@@ -546,6 +562,16 @@ PkgQuery::str() const
   if ( this->deduplicate ) { qry << "\n GROUP BY relPath\n"; }
   if ( ! this->firstOrder ) { qry << " ORDER BY " << this->orders.str(); }
   qry << " )";
+  // Dump the bindings as well
+  if ( ! this->binds.empty() )
+    {
+      qry << std::endl << "-- ... with bindings:" << std::endl;
+      for ( auto & bind : this->binds )
+        {
+          qry << "-- " << bind.first << " : " << bind.second << std::endl;
+        }
+    }
+
   return qry.str();
 }
 
