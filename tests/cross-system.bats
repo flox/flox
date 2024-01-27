@@ -81,16 +81,11 @@ teardown() {
     x86_64-linux)
       pull_system="aarch64-darwin"
       ;;
-    aarch64-linux)
-      pull_system="x86_64-darwin"
-      ;;
-    x86_64-darwin)
-      pull_system="aarch64-linux"
-      ;;
     aarch64-darwin)
       pull_system="x86_64-linux"
       ;;
     *)
+      # we only run the above two systems consistently in CI
       echo "unsupported system: $NIX_SYSTEM"
       return 1
       ;;
@@ -98,8 +93,10 @@ teardown() {
 
   name="created-on-$pull_system"
 
-  "$FLOX_BIN" pull "$OWNER/$name" --amend-system
-  run "$FLOX_BIN" activate -- hello
+  "$FLOX_BIN" pull "$OWNER/$name" --add-system
+  # Close fd 3 because of
+  # https://bats-core.readthedocs.io/en/stable/writing-tests.html#file-descriptor-3-read-this-if-bats-hangs
+  run "$FLOX_BIN" activate -- hello 3>&-
   assert_success
   assert_output --partial "Hello"
 }
