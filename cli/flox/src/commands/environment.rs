@@ -753,10 +753,7 @@ impl Activate {
             .map(env::split_paths)
             .map(IndexSet::from_iter)
             .unwrap_or_default();
-        if let Some(fixed_up_path) = Self::fixup_path(flox_env_dirs) {
-            let fixed_up_path_joined = env::join_paths(fixed_up_path).context(
-                "Cannot activate environment because its path contains an invalid character",
-            )?;
+        if let Some(fixed_up_path_joined) = Self::fixup_path(flox_env_dirs).transpose()? {
             debug!(
                 "Patching PATH to {}",
                 fixed_up_path_joined.to_string_lossy()
