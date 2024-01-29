@@ -79,9 +79,9 @@ teardown() {
   local pull_system
   case "$NIX_SYSTEM" in
     x86_64-linux)
-      pull_system="aarch64-darwin"
+      pull_system="x86_64-darwin"
       ;;
-    aarch64-darwin)
+    x86_64-darwin)
       pull_system="x86_64-linux"
       ;;
     *)
