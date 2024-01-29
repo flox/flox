@@ -93,6 +93,19 @@ Flox must be buildable using `flox` or `nix`.
   $ pre-commit run -a
   ```
 
+### Setting up C/C++ IDE support
+
+For VSCode, it's suggested to use the *C/C++* plugin from *Microsoft*.  This
+section refers to settings from that plugin.
+
+- Set your environment to use `c17` and `c++20` standards.
+  - For VSCode, this is available under *C++ Configuration*
+- *Compile commands* are built with `just build-cdb` and will be placed in the
+  root folder as `compile_commands.json`.
+  - For VSCode, this is available under the *Advanced* drop down under
+  *C++ Configuration* and can be set to `${workspaceFolder}/compile_commands.json`.
+
+
 ### Setting up rust IDE support
 
 - Install the `rust-analyzer` plugin for your editor
@@ -204,14 +217,14 @@ to make conforming commits interactively.
 
 ### Merges
 
-Changes should be **squashed and merged** into `main`
+Changes should be **squashed and merged** into `main`.
 
 Development is done on branches and merged back to `main`.  Keep your branch
 updated by rebasing and resolving conflicts regularly to avoid messy merges.
 Merges to `main` should be squashed and *ff-only* back to `main` using GitHub
 PRs.  Or, if they represent multiple bigger changes, squashed into multiple
 distinct change sets.  Also be sure to run all tests before creating a mergable
-PR.
+PR (See [below](#testing)).
 
 
 ### Releases
