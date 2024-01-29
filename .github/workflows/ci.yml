@@ -153,7 +153,7 @@ jobs:
         run: nix develop -L --no-update-lock-file --command just test-cli
 
       - name: "Functional Tests"
-        if: ${{ github.event_name == 'merge_group' }}
+        if: ${{ github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch' }}
         env:
           RUST_BACKTRACE: 1
           FLOXEM_FLOXTEST_TOKEN: "${{ secrets.FLOXEM_FLOXTEST_TOKEN }}"
