@@ -666,6 +666,27 @@ impl Activate {
     /// On macos `/usr/libexec/path_helper` is typically invoked from
     /// default shell rc files, e.g. `/etc/profile` and `/etc/zprofile`.
     ///
+    /// Note: since the "path_helper" i only invoked by login shells,
+    /// we only need to setup the PATH patching for `flox activate` in shell rc files.
+    ///
+    /// ## Example
+    ///
+    /// > User has `eval "$(flox activate)"` in their `.zshrc`.
+    ///
+    ///  Without the path patching, the following happens:
+    ///
+    /// 1. Open a new terminal (login shell)
+    ///     -> `path_helper` runs (`PATH=<default envs>`)
+    ///     -> `flox activate` runs (`PATH=<flox_env>:<default envs>`)
+    /// 2. Open a new tmux session (login shell by default)
+    ///     -> `path_helper` runs (`PATH=<default envs>:<flox_env>`)
+    ///     -> `flox activate` runs
+    ///     -> ⚡️ environment already active, activate skipped
+    ///        without path patching: `PATH:<default envs>:<flox_env>` ❌
+    ///        with path patching: `PATH:<flox_env>:<default envs>`    ✅ flox env is not shadowed
+    ///
+    /// ## Implementation
+    ///
     /// This function attempts to undo the effects of `/usr/libexec/path_helper`
     /// by partitioning the `PATH` into two parts:
     /// 1. known paths of activated flox environments
@@ -757,8 +778,7 @@ impl Activate {
     fn activate_non_interactive(
         shell: &ShellType,
         exports: &HashMap<&str, String>,
-        fixed_up_path: Option<Vec<PathBuf>>,
-        fixed_up_path_joined: OsString,
+        fixed_up_path_joined: Option<OsString>,
         activation_path: &Path,
     ) {
         let exports_rendered = exports
@@ -767,12 +787,12 @@ impl Activate {
             .map(|(key, value)| format!("export {key}={value}",))
             .join("\n");
 
-        let path_patch = if fixed_up_path.is_some() {
+        let path_patch = if let Some(fixed_up_path_joined) = fixed_up_path_joined {
             formatdoc! {"
                     # Add flox environment to PATH
                     export FLOX_PATH_PATCHED={fixed_up_path_joined}",
-        let path_patch = if let Some(fixed_up_path_joined) = fixed_up_path_joined {
                 fixed_up_path_joined=shell_escape::escape(fixed_up_path_joined.to_string_lossy()),
+            }
         } else {
             "# No path patching needed".to_string()
         };
