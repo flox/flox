@@ -18,7 +18,6 @@ use flox_rust_sdk::models::environment::managed_environment::{
     ManagedEnvironmentError,
 };
 use flox_rust_sdk::models::environment::path_environment::{self, PathEnvironment};
-use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironment;
 use flox_rust_sdk::models::environment::{
     CoreEnvironmentError,
     EditResult,
@@ -1465,7 +1464,7 @@ impl Pull {
                     .context("Could not move .flox/ directory")?;
             },
             Err(
-                e @ EnvironmentError2::Core(CoreEnvironmentError::LockedManifest(
+               EnvironmentError2::Core(CoreEnvironmentError::LockedManifest(
                     LockedManifestError::BuildEnv(CallPkgDbError::PkgDbError(PkgDbError {
                         exit_code: 123,
                         ..
