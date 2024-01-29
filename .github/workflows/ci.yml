@@ -147,11 +147,17 @@ jobs:
       - name: "Build"
         run: nix develop -L --no-update-lock-file --command just build-cli
 
-      - name: "Test"
+      - name: "CLI Tests"
+        env:
+          RUST_BACKTRACE: 1
+        run: nix develop -L --no-update-lock-file --command just test-cli
+
+      - name: "Functional Tests"
+        if: ${{ github.event_name == 'merge_group' }}
         env:
           RUST_BACKTRACE: 1
           FLOXEM_FLOXTEST_TOKEN: "${{ secrets.FLOXEM_FLOXTEST_TOKEN }}"
-        run: nix develop -L --no-update-lock-file --command just test-cli
+        run: nix develop -L --no-update-lock-file --command just functional-tests
 
   nix-build:
     name: "Nix build"
