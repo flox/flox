@@ -498,14 +498,11 @@ impl Activate {
 
         // Detect if the current environment is already active
         if flox_active_environments.is_active(&now_active) {
-            debug!("Environment is already active: environment={now_active}");
-
             if !in_place {
                 // Error if interactive and already active
-                bail!("Environment '{now_active}' is already active");
+                bail!("Environment '{now_active}' is already active.");
             }
-
-            debug!("Non-interactive shell, ignoring activation (may patch PATH)");
+            debug!("Environment is already active: environment={now_active}. Ignoring activation (may patch PATH)");
             Self::reactivate_non_interactive()?;
             return Ok(());
         }
