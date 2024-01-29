@@ -233,7 +233,7 @@ impl Display for DisplaySearchResults {
 
         while let Some(d) = items.next() {
             let desc = d.description.as_deref().unwrap_or(DEFAULT_DESCRIPTION);
-            write!(f, "{d:<column_width$}  {desc}")?;
+            write!(f, "{d:<column_width$}  {desc}", d = d.to_string())?;
             // Only print a newline if there are more items to print
             if items.peek().is_some() {
                 writeln!(f)?;
