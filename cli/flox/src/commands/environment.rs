@@ -764,7 +764,6 @@ impl Activate {
             );
         } else {
             debug!("No path patching needed");
-            println!("true");
         };
         Ok(())
     }

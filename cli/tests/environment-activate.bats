@@ -420,10 +420,14 @@ env_is_activated() {
 @test "'flox activate' only patches PATH when already activated" {
   run bash -c 'eval "$("$FLOX_BIN" activate --in-place)"; "$FLOX_BIN" activate --in-place'
   assert_success
+  # on macos activating an already activated environment using
+  # `eval "$(flox activate [--in-place])"
+  # will only fix the PATH
   if [[ -e  /usr/libexec/path_helper ]]; then
     assert_output --regexp "^(export PATH=.+)$"
   else
-    assert_output --regexp "^true$"
+    # on linux reactivation is ignored
+    assert_output ""
   fi
 }
 
