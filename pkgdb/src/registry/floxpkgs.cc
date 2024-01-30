@@ -632,7 +632,7 @@ getWrappedFlakeNarHash( nix::FlakeRef const & ref )
   nix::StringSink sink;
   nix::dumpPath( flakeDir, sink );
   auto narHash    = hashString( nix::htSHA256, sink.s );
-  auto narHashStr = narHash.to_string( nix::Base16, false );
+  auto narHashStr =  narHash.to_string( nix::SRI, true );
   return narHashStr;
 }
 
