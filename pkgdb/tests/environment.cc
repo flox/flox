@@ -74,12 +74,17 @@ initTestData()
 {
   auto rulesHash     = flox::getRulesHash();
   auto processorHash = flox::getRulesProcessorHash();
+
+  auto refStr = flox::FLOX_FLAKE_TYPE + ":NixOS/nixpkgs/" + nixpkgsRev;
+  auto ref    = nix::parseFlakeRef( refStr );
+
   /* The narHash depends on the temp directory contents, which will change if
    * the rules file or rules processor are in development. Compute it
-   * dynamically instead of hard-coding it. */
-  auto refStr     = flox::FLOX_FLAKE_TYPE + ":NixOS/nixpkgs/" + nixpkgsRev;
-  auto ref        = nix::parseFlakeRef( refStr );
-  auto narHashStr = getWrappedFlakeNarHash( ref );
+   * dynamically instead of hard-coding it.
+   * Since the wrapped flake includes the original nixpkgs ref,
+   * the nar hash also needs to be derived from the effective Input*/
+  auto efectiveInput      = nix::parseFlakeRef( "github:NixOS/nixpkgs/" + nixpkgsRev );
+  auto narHashStr = getWrappedFlakeNarHash( efectiveInput );
 
   registryWithNixpkgsJSON
     = { { "inputs",
