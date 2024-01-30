@@ -438,20 +438,16 @@ impl Activate {
         };
 
         let activation_path = match activation_path_result {
-            Err(
-                err @ EnvironmentError2::Core(CoreEnvironmentError::LockedManifest(
-                    LockedManifestError::BuildEnv(CallPkgDbError::PkgDbError(PkgDbError {
-                        exit_code: 100,
-                        ..
-                    })),
-                )),
-            ) => {
-                let mut message = formatdoc! {"
-                    ❌ This environment is not yet compatible with your system ({system}).
-
-                    {err}",
+            Err(EnvironmentError2::Core(CoreEnvironmentError::LockedManifest(
+                LockedManifestError::BuildEnv(CallPkgDbError::PkgDbError(PkgDbError {
+                    exit_code: 100,
+                    ..
+                })),
+            ))) => {
+                let mut message = format!(
+                    "This environment is not yet compatible with your system ({system}).",
                     system = flox.system
-                };
+                );
 
                 if let ConcreteEnvironment::Remote(remote) = &concrete_environment {
                     message.push_str("\n\n");
