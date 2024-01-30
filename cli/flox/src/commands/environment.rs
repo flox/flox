@@ -1625,34 +1625,23 @@ impl Pull {
         let pointer_content =
             serde_json::to_string_pretty(&pointer).context("Could not serialize pointer")?;
 
-        let dot_flox_parent = dot_flox_path
-            .parent()
-            .context("Could not get .flox/ parent")?;
-        fs::create_dir_all(dot_flox_parent).context("Could not create .flox/ parent directory")?;
+        fs::create_dir_all(&dot_flox_path).context("Could not create .flox/ directory")?;
 
-        // Pulls the environment into a temp directory which is later renamed to `.flox`.
-        // We do this to avoid populating the floxmeta branch `owner/name.encode(path to .flox)`
-        // in case building fails or the user aborts the fixup.
-        // The branch will be adjusted when the environment is opened the next time
-        // by the `ensure_branch` routine.
-        let temp_dot_flox_dir = tempfile::TempDir::with_prefix_in(DOT_FLOX, dot_flox_parent)
-            .context("Could not create temporary directory for cloning environment")?;
-
-        let pointer_path = temp_dot_flox_dir.path().join(ENVIRONMENT_POINTER_FILENAME);
+        let pointer_path = dot_flox_path.join(ENVIRONMENT_POINTER_FILENAME);
         fs::write(pointer_path, pointer_content).context("Could not write pointer")?;
 
         let mut env = {
             let result = Dialog {
                 message,
                 help_message: None,
-                typed: Spinner::new(|| ManagedEnvironment::open(flox, pointer, &temp_dot_flox_dir)),
+                typed: Spinner::new(|| ManagedEnvironment::open(flox, pointer, &dot_flox_path)),
             }
             .spin()
             .map_err(Self::convert_error);
 
             match result {
                 Err(err) => {
-                    fs::remove_dir_all(&temp_dot_flox_dir)
+                    fs::remove_dir_all(&dot_flox_path)
                         .context("Could not clean up .flox/ directory")?;
                     Err(err)?
                 },
@@ -1668,10 +1657,7 @@ impl Pull {
         .spin();
 
         match result {
-            Ok(_) => {
-                fs::rename(temp_dot_flox_dir, dot_flox_path)
-                    .context("Could not move .flox/ directory")?;
-            },
+            Ok(_) => {},
             Err(EnvironmentError2::Core(CoreEnvironmentError::LockedManifest(
                 LockedManifestError::BuildEnv(CallPkgDbError::PkgDbError(PkgDbError {
                     exit_code: 123,
@@ -1686,6 +1672,8 @@ impl Pull {
                         Some(false) => {
                             // prompt available, user chose to abort
                             info!("{hint}");
+                            fs::remove_dir_all(&dot_flox_path)
+                                .context("Could not clean up .flox/ directory")?;
                             bail!("Did not pull the environment.");
                         },
                         Some(true) => true, // prompt available, user chose to add system
@@ -1693,6 +1681,8 @@ impl Pull {
                     };
 
                 if !add_systems {
+                    fs::remove_dir_all(&dot_flox_path)
+                        .context("Could not clean up .flox/ directory")?;
                     bail!("{}", formatdoc! {"
                         This environment is not yet compatible with your system ({system}).
 
@@ -1709,12 +1699,9 @@ impl Pull {
                         err = anyhow!(broken_error)
                     });
                 };
-
-                fs::rename(temp_dot_flox_dir, dot_flox_path)
-                    .context("Could not move .flox/ directory")?;
             },
             Err(e) => {
-                fs::remove_dir_all(&temp_dot_flox_dir)
+                fs::remove_dir_all(&dot_flox_path)
                     .context("Could not clean up .flox/ directory")?;
                 Err(e)?
             },
