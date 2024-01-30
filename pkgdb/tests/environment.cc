@@ -809,10 +809,6 @@ test_createLockfile_new()
   expectedLockfileRaw.packages = { { _system, { { "hello", helloLocked } } } };
   expectedLockfileRaw.manifest = manifestRaw;
   expectedLockfileRaw.registry = lockedRegistryWithNixpkgs;
-
-  nlohmann::json lf = expectedLockfileRaw.registry;
-  std::cerr << lf.dump() << std::endl;
-
   Lockfile expectedLockfile( expectedLockfileRaw );
 
   // Useful for debugging
