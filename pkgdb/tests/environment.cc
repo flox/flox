@@ -87,7 +87,7 @@ initTestData()
    * the nar hash also needs to be derived from the effective Input*/
   auto effectiveInput
     = nix::parseFlakeRef( "github:NixOS/nixpkgs/" + nixpkgsRev );
-  auto narHashStr = getWrappedFlakeNarHash( efectiveInput );
+  auto narHashStr = getWrappedFlakeNarHash( effectiveInput );
 
   registryWithNixpkgsJSON
     = { { "inputs",
