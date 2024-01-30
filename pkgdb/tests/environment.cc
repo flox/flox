@@ -52,6 +52,8 @@ const System _system = "x86_64-linux";
 
 nlohmann::json registryWithNixpkgsJSON;
 RegistryRaw    registryWithNixpkgs;
+nlohmann::json lockedRegistryWithNixpkgsJSON;
+RegistryRaw    lockedRegistryWithNixpkgs;
 
 nlohmann::json inputWithNixpkgsJSON;
 
@@ -99,14 +101,30 @@ initTestData()
                 { "subtrees", { "legacyPackages" } } } } } } };
   registryWithNixpkgs = RegistryRaw( registryWithNixpkgsJSON );
 
+  lockedRegistryWithNixpkgsJSON
+    = { { "inputs",
+          { { "nixpkgs",
+              { { "from",
+                  { { "type", flox::FLOX_FLAKE_TYPE },
+                    { "owner", "NixOS" },
+                    { "repo", "nixpkgs" },
+                    { "rev", nixpkgsRev },
+                    { "rules", rulesHash },
+                    { "rules-processor", processorHash },
+                    { "narHash", narHashStr } } },
+                { "subtrees", { "legacyPackages" } } } } } } };
+  lockedRegistryWithNixpkgs = RegistryRaw( lockedRegistryWithNixpkgsJSON );
+
   inputWithNixpkgsJSON = { "input",
                            { { "fingerprint", floxNixpkgsFingerprintStr },
-                             { "url", nixpkgsRef },
+                             { "url", ref.to_string() },
                              { "attrs",
-                               { { "owner", "NixOS" },
+                               { { "type", flox::FLOX_FLAKE_TYPE },
+                                 { "owner", "NixOS" },
                                  { "repo", "nixpkgs" },
                                  { "rev", nixpkgsRev },
-                                 { "type", flox::FLOX_FLAKE_TYPE },
+                                 { "rules", rulesHash },
+                                 { "rules-processor", processorHash },
                                  { "narHash", narHashStr } } } } };
 
   mockInputJSON = { "input",
@@ -789,7 +807,10 @@ test_createLockfile_new()
   LockfileRaw expectedLockfileRaw;
   expectedLockfileRaw.packages = { { _system, { { "hello", helloLocked } } } };
   expectedLockfileRaw.manifest = manifestRaw;
-  expectedLockfileRaw.registry = registryWithNixpkgs;
+  expectedLockfileRaw.registry = lockedRegistryWithNixpkgs;
+
+  nlohmann::json lf = expectedLockfileRaw.registry;
+  std::cerr << lf.dump() << std::endl;
 
   Lockfile expectedLockfile( expectedLockfileRaw );
 
