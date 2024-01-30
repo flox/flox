@@ -1459,14 +1459,12 @@ impl Pull {
                 fs::rename(temp_dot_flox_dir, dot_flox_path)
                     .context("Could not move .flox/ directory")?;
             },
-            Err(
-               EnvironmentError2::Core(CoreEnvironmentError::LockedManifest(
-                    LockedManifestError::BuildEnv(CallPkgDbError::PkgDbError(PkgDbError {
-                        exit_code: 123,
-                        ..
-                    })),
-                )),
-            ) => {
+            Err(EnvironmentError2::Core(CoreEnvironmentError::LockedManifest(
+                LockedManifestError::BuildEnv(CallPkgDbError::PkgDbError(PkgDbError {
+                    exit_code: 123,
+                    ..
+                })),
+            ))) => {
                 let hint = "Use 'flox pull --add-system' to add your system to the manifest.";
 
                 // will return OK if the user chose to abort the pull
