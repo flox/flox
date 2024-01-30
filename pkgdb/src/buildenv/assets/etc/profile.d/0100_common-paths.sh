@@ -38,7 +38,7 @@ export \
 # to the front.
 # The PATH items corresponding to the current activation
 # are subsequently prepended to the patched path as usual.
-if [ ! -z "${FLOX_PATH_PATCHED+x}" ]; then
+if [ -n "${FLOX_PATH_PATCHED:-}" ]; then
   PATH="$FLOX_PATH_PATCHED"
   unset FLOX_PATH_PATCHED
 fi
