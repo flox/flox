@@ -1436,6 +1436,8 @@ impl Pull {
                         Some(false) => {
                             // prompt available, user chose to abort
                             info!("{hint}");
+                            fs::remove_dir_all(&dot_flox_path)
+                                .context("Could not clean up .flox/ directory")?;
                             bail!("Did not pull the environment.");
                         },
                         Some(true) => true, // prompt available, user chose to add system
@@ -1443,6 +1445,8 @@ impl Pull {
                     };
 
                 if !add_systems {
+                    fs::remove_dir_all(&dot_flox_path)
+                        .context("Could not clean up .flox/ directory")?;
                     bail!("{}", formatdoc! {"
                         This environment is not yet compatible with your system ({system}).
 
