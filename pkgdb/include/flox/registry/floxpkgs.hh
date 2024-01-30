@@ -105,6 +105,9 @@ struct GitHubInputScheme : GitArchiveInputScheme
          const nix::Path &            destDir ) const override;
 };
 
+
+/* -------------------------------------------------------------------------- */
+
 /**
  * @brief A fetcher that wraps a nixpkgs flake in a wrapper flake to apply
  * allow/disallow/alias rules.
@@ -131,8 +134,57 @@ struct FloxFlakeScheme : GitHubInputScheme
   toURL( const nix::fetchers::Input & input ) const override;
 };
 
+
+/* -------------------------------------------------------------------------- */
+
 [[nodiscard]] std::filesystem::path
 createWrappedFlakeDir( const nix::FlakeRef & nixpkgsRef );
+
+
+/* -------------------------------------------------------------------------- */
+
+/** @brief Computes the hash of the rules file. */
+[[nodiscard]] std::string
+getRulesHash();
+
+/** @brief Computes the hash of the rules processor. */
+[[nodiscard]] std::string
+getRulesProcessorHash();
+
+/** @brief Computes the nar has for a wrapped flake. */
+[[nodiscard]] std::string
+getWrappedFlakeNarHash( nix::FlakeRef const & ref );
+
+
+/* -------------------------------------------------------------------------- */
+
+/** @brief A container holding all of the attributes injected by our fetcher. */
+struct OurAttrs
+{
+  std::optional<std::string> rules;
+  std::optional<std::string> rulesProcessor;
+
+  OurAttrs( const std::optional<std::string> & rules,
+            const std::optional<std::string> & rulesProcessor )
+    : rules( rules ), rulesProcessor( rulesProcessor ) {};
+};
+
+/** @brief Removes our fetcher-specific attributes from `attrs` and returns them
+ * so they can be restored later.*/
+[[nodiscard]] OurAttrs
+removeOurInputAttrs( nix::fetchers::Attrs & attrs );
+
+/** @brief Set all of our attrs in `attrs`, overwriting any previous values for
+ * those attributes.*/
+void
+restoreOurInputAttrs( nix::fetchers::Attrs & attrs, const OurAttrs & fields );
+
+[[nodiscard]] std::pair<nix::fetchers::Attrs, OurAttrs>
+toGitHubAttrs( const nix::fetchers::Attrs & attrs );
+
+[[nodiscard]] nix::fetchers::Attrs
+fromGitHubAttrs( const nix::fetchers::Attrs & attrs,
+                 const OurAttrs &             ourAttrs );
 
 
 /* -------------------------------------------------------------------------- */

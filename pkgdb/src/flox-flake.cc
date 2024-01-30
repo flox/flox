@@ -75,7 +75,8 @@ lockFlakeWithRightFlags( nix::EvalState & state, const nix::FlakeRef & ref )
 
 FloxFlake::FloxFlake( const nix::ref<nix::EvalState> & state,
                       const nix::FlakeRef &            ref )
-  : state( state ), lockedFlake( lockFlakeWithRightFlags( *state, ref ) )
+  : state( state )
+  , lockedFlake( flox::lockFlake( *state, ref, flox::defaultLockFlags ) )
 {}
 
 

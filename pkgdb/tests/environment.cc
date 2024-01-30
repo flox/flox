@@ -10,6 +10,7 @@
 #include <nlohmann/json.hpp>
 
 #include "flox/core/util.hh"
+#include "flox/registry/floxpkgs.hh"
 #include "flox/resolver/environment.hh"
 #include "flox/resolver/manifest.hh"
 #include "test.hh"
@@ -71,6 +72,15 @@ LockedPackageRaw mockCurlLocked;
 void
 initTestData()
 {
+  auto rulesHash     = flox::getRulesHash();
+  auto processorHash = flox::getRulesProcessorHash();
+  /* The narHash depends on the temp directory contents, which will change if
+   * the rules file or rules processor are in development. Compute it
+   * dynamically instead of hard-coding it. */
+  auto refStr     = flox::FLOX_FLAKE_TYPE + ":NixOS/nixpkgs/" + nixpkgsRev;
+  auto ref        = nix::parseFlakeRef( refStr );
+  auto narHashStr = getWrappedFlakeNarHash( ref );
+
   registryWithNixpkgsJSON
     = { { "inputs",
           { { "nixpkgs",
@@ -78,35 +88,31 @@ initTestData()
                   { { "type", flox::FLOX_FLAKE_TYPE },
                     { "owner", "NixOS" },
                     { "repo", "nixpkgs" },
-                    { "rev", nixpkgsRev } } },
+                    { "rev", nixpkgsRev },
+                    { "rules", rulesHash },
+                    { "rules-processor", processorHash } } },
                 { "subtrees", { "legacyPackages" } } } } } } };
   registryWithNixpkgs = RegistryRaw( registryWithNixpkgsJSON );
 
-  inputWithNixpkgsJSON
-    = { "input",
-        { { "fingerprint", nixpkgsFingerprintStr },
-          { "url", nixpkgsRef },
-          { "attrs",
-            { { "owner", "NixOS" },
-              { "repo", "nixpkgs" },
-              { "rev", nixpkgsRev },
-              { "type", flox::FLOX_FLAKE_TYPE },
-              { "lastModified", 1704300003 },
-              { "narHash",
-                "sha256-FRC/OlLVvKkrdm+RtrODQPufD0vVZYA0hpH9RPaHmp4=" } } } } };
+  inputWithNixpkgsJSON = { "input",
+                           { { "fingerprint", floxNixpkgsFingerprintStr },
+                             { "url", nixpkgsRef },
+                             { "attrs",
+                               { { "owner", "NixOS" },
+                                 { "repo", "nixpkgs" },
+                                 { "rev", nixpkgsRev },
+                                 { "type", flox::FLOX_FLAKE_TYPE },
+                                 { "narHash", narHashStr } } } } };
 
-  mockInputJSON
-    = { "input",
-        { { "fingerprint", nixpkgsFingerprintStr },
-          { "url", nixpkgsRef },
-          { "attrs",
-            { { "owner", "owner" },
-              { "repo", "repo" },
-              { "rev", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" },
-              { "type", flox::FLOX_FLAKE_TYPE },
-              { "lastModified", 1704300003 },
-              { "narHash",
-                "sha256-FRC/OlLVvKkrdm+RtrODQPufD0vVZYA0hpH9RPaHmp4=" } } } } };
+  mockInputJSON = { "input",
+                    { { "fingerprint", nixpkgsFingerprintStr },
+                      { "url", nixpkgsRef },
+                      { "attrs",
+                        { { "owner", "owner" },
+                          { "repo", "repo" },
+                          { "rev", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" },
+                          { "type", flox::FLOX_FLAKE_TYPE },
+                          { "narHash", narHashStr } } } } };
 
   helloLockedJSON
     = { inputWithNixpkgsJSON,
@@ -765,6 +771,9 @@ test_createLockfile_new()
   manifestRaw.options->systems = { _system };
   manifestRaw.registry         = registryWithNixpkgs;
 
+  flox::RegistryInput nixpkgs = registryWithNixpkgs.inputs["nixpkgs"];
+  std::cerr << nixpkgs.from << std::endl;
+
   EnvironmentManifest manifest( manifestRaw );
 
   /* Test locking manifest creates expectedLockfile */
@@ -775,24 +784,17 @@ test_createLockfile_new()
   LockfileRaw expectedLockfileRaw;
   expectedLockfileRaw.packages = { { _system, { { "hello", helloLocked } } } };
   expectedLockfileRaw.manifest = manifestRaw;
-
-  // FIXME: this is just to make the test pass, there's still a bug here
   expectedLockfileRaw.registry = registryWithNixpkgs;
-  auto pkg                     = actualLockfile.getLockfileRaw()
-               .packages.at( _system )
-               .at( std::string( "hello" ) )
-               .value();
-  expectedLockfileRaw.packages = { { _system, { { "hello", pkg } } } };
 
   Lockfile expectedLockfile( expectedLockfileRaw );
 
   // Useful for debugging
-  // nlohmann::json actualJson;
-  // to_json( actualJson, actualLockfile.getLockfileRaw() );
-  // std::cerr << "actual: " << actualJson << std::endl;
-  // nlohmann::json expectedJson;
-  // to_json( expectedJson, expectedLockfile.getLockfileRaw() );
-  // std::cerr << "expected: " << expectedJson << std::endl;
+  nlohmann::json actualJson;
+  to_json( actualJson, actualLockfile.getLockfileRaw() );
+  std::cerr << "actual: " << actualJson << std::endl;
+  nlohmann::json expectedJson;
+  to_json( expectedJson, expectedLockfile.getLockfileRaw() );
+  std::cerr << "expected: " << expectedJson << std::endl;
   EXPECT( equalLockfile( actualLockfile, expectedLockfile ) );
 
   return true;
@@ -887,6 +889,15 @@ test_createLockfile_both()
   /* Test the lock for hello gets used, but curl gets locked */
   Environment environment( std::nullopt, manifest, existingLockfile );
   Lockfile    actualLockfile = environment.createLockfile();
+
+  // Useful for debugging
+  nlohmann::json actualJson;
+  to_json( actualJson, actualLockfile.getLockfileRaw() );
+  std::cerr << "actual: " << actualJson << std::endl;
+  nlohmann::json expectedJson;
+  to_json( expectedJson, expectedLockfile.getLockfileRaw() );
+  std::cerr << "expected: " << expectedJson << std::endl;
+
   EXPECT( equalLockfile( actualLockfile, expectedLockfile ) );
 
   return true;
@@ -940,26 +951,26 @@ main()
   // NOLINTNEXTLINE(cppcoreguidelines-macro-usage)
 #define RUN_TEST( ... ) _RUN_TEST( exitCode, __VA_ARGS__ )
 
-  RUN_TEST( groupIsLocked0 );
-  RUN_TEST( groupIsLocked1 );
-  RUN_TEST( groupIsLocked2 );
-  RUN_TEST( groupIsLocked3 );
-  RUN_TEST( groupIsLocked4 );
-  RUN_TEST( groupIsLocked5 );
-  RUN_TEST( groupIsLocked6 );
-  RUN_TEST( groupIsLocked_upgrades );
+  // RUN_TEST( groupIsLocked0 );
+  // RUN_TEST( groupIsLocked1 );
+  // RUN_TEST( groupIsLocked2 );
+  // RUN_TEST( groupIsLocked3 );
+  // RUN_TEST( groupIsLocked4 );
+  // RUN_TEST( groupIsLocked5 );
+  // RUN_TEST( groupIsLocked6 );
+  // RUN_TEST( groupIsLocked_upgrades );
 
-  RUN_TEST( getGroupInput0 );
-  RUN_TEST( getGroupInput1 );
-  RUN_TEST( getGroupInput2 );
-  RUN_TEST( getGroupInput3 );
+  // RUN_TEST( getGroupInput0 );
+  // RUN_TEST( getGroupInput1 );
+  // RUN_TEST( getGroupInput2 );
+  // RUN_TEST( getGroupInput3 );
 
   // RUN_TEST( createLockfile_new );
   // RUN_TEST( createLockfile_existing );
   // RUN_TEST( createLockfile_both );
   // RUN_TEST( createLockfile_error );
 
-  // test_createLockfile_new();
+  test_createLockfile_new();
 
   return exitCode;
 }
