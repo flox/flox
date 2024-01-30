@@ -927,6 +927,10 @@ test_createLockfile_error()
  *        unlocked input in an environment's manifest.
  *
  * Re-locking the locked input causes a useless download of nixpkgs.
+ *
+ * To test this, we put an invalid nixpkgs ref in the manifest but put valid
+ * data in the lock. If an attempt to lock the invalid input is ever made, it
+ * will throw an exception and fail the test.
  */
 bool
 test_getCombinedRegistryRaw_uses_lock()
@@ -973,6 +977,10 @@ test_getCombinedRegistryRaw_uses_lock()
  *        unlocked input in a global manifest.
  *
  * Re-locking the locked input causes a useless download of nixpkgs.
+ *
+ * To test this, we put an invalid nixpkgs ref in the manifest but put valid
+ * data in the lock. If an attempt to lock the invalid input is ever made, it
+ * will throw an exception and fail the test.
  */
 bool
 test_getCombinedRegistryRaw_uses_lock_for_global_manifest()

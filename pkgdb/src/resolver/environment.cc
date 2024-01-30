@@ -97,6 +97,19 @@ Environment::getCombinedRegistryRaw()
                 }
             }
         }
+      /* Lock all inputs since we don't have a lock. */
+      else
+        {
+          store   = NixStoreMixin().getStore();
+          factory = FloxFlakeInputFactory( *store );
+          {
+            for ( auto & [name, input] : this->combinedRegistryRaw->inputs )
+              {
+                auto flakeInput = factory->mkInput( name, input );
+                input           = flakeInput->getLockedInput();
+              }
+          }
+        }
     }
   return *this->combinedRegistryRaw;
 }
