@@ -363,8 +363,8 @@ pkgdb_vars_setup() {
   PKGDB_NIXPKGS_REF_OLD="flox-nixpkgs:NixOS/nixpkgs/$PKGDB_NIXPKGS_REV_OLD"
   PKGDB_NIXPKGS_REF_NEW="flox-nixpkgs:NixOS/nixpkgs/$PKGDB_NIXPKGS_REV_NEW"
 
-  PKGDB_NIXPKGS_NAR_HASH_OLD="sha256-7SGVhu5d1Q+77AXJKuNA90tkL0RwzwGZV8xnweqxzBM="
-  PKGDB_NIXPKGS_NAR_HASH_NEW="sha256-YNL2ZvZ6esJ8HYqtR/jaGipEGaiHmWvrF1n43UyudPw="
+  PKGDB_NIXPKGS_NAR_HASH_OLD="sha256-qddUgTfTQ7uya9sm2YYfOjfJ01bVjSVqD4kEWd91Y48="
+  PKGDB_NIXPKGS_NAR_HASH_NEW="sha256-AD9HEX5PwqSkSNuslEJueye5g0Ucx1MYUOWj9x6FxZI="
 
   # This causes `pkgdb' to use this revision for `nixpkgs' anywhere the
   # `--ga-registry' flag is used.

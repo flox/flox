@@ -115,8 +115,9 @@ createWrappedFlakeDir( const nix::FlakeRef & nixpkgsRef )
 
 
 /* -------------------------------------------------------------------------- */
-/* Copied straight from the nix codebase since these definitions aren't in
- * header files.*/
+
+/* Copied from the nix codebase and very slightly modified since these
+ * definitions aren't in header files.*/
 
 // A github, gitlab, or sourcehut host
 const static std::string hostRegexS = "[a-zA-Z0-9.-]*";

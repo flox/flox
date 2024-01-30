@@ -261,10 +261,9 @@ FloxFlakeInput::getFlake()
 {
   if ( this->flake == nullptr )
     {
-      auto ref = *this->getFlakeRef();
       this->flake
         = std::make_shared<FloxFlake>( NixState( this->store ).getState(),
-                                       ref );
+                                       *this->getFlakeRef() );
     }
   return static_cast<nix::ref<FloxFlake>>( this->flake );
 }

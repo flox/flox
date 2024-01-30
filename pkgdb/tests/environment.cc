@@ -910,6 +910,7 @@ test_createLockfile_both()
   expectedLockfileRaw.packages
     = { { _system, { { "hello", mockHelloLocked }, { "curl", curlLocked } } } };
   expectedLockfileRaw.manifest = manifestRaw;
+  expectedLockfileRaw.registry = lockedRegistryWithNixpkgs;
 
   Lockfile expectedLockfile( expectedLockfileRaw );
 

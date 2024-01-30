@@ -100,6 +100,7 @@ main()
   RUN_TEST( constructsInputFromAttrs );
   RUN_TEST( ignoresWrongInputType );
   RUN_TEST( canConvertToURL );
+
   return exitCode;
 }
 

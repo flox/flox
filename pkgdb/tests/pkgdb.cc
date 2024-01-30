@@ -966,8 +966,7 @@ main( int argc, char * argv[] )
 
   nix::FlakeRef ref = nix::parseFlakeRef( nixpkgsRef );
 
-  auto            state = nstate.getState();
-  flox::FloxFlake flake( state, ref );
+  flox::FloxFlake flake( nstate.getState(), ref );
 
   {
     flox::pkgdb::PkgDb db( flake.lockedFlake, path );

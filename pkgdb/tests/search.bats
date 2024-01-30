@@ -562,7 +562,7 @@ genParamsNixpkgsFlox() {
       ::: $(seq 5)'
   assert_success
   n_lines="${#lines[@]}"
-  assert_equal "$n_lines" 35 # 5x number of results from hello
+  assert_equal "$n_lines" 40 # 5x number of results from hello
 }
 
 # ---------------------------------------------------------------------------- #

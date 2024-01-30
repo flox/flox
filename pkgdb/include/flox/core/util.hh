@@ -494,14 +494,8 @@ errorLog( const std::string & msg );
 
 /* -------------------------------------------------------------------------- */
 
-/** @brief Returns true if the flake reference points to a nixpkgs revision. */
-bool
-isNixpkgsRef( nix::FlakeRef const & ref );
-
-
-/* -------------------------------------------------------------------------- */
-
 static std::string const FLOX_FLAKE_TYPE = "flox-nixpkgs";
+
 
 /* -------------------------------------------------------------------------- */
 

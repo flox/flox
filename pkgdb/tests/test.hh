@@ -32,7 +32,7 @@ static const std::string nixpkgsFingerprintStr
   = "9bb3d4c033fbad8efb5e28ffcd1d70383e0c5bbcb7cc5c526b824524467b19b9";
 
 static const std::string floxNixpkgsFingerprintStr
-  = "88174bdc82d78e35edbd96a6c47ef477f4c4128472098d2b2e40a3649a62fed2";
+  = "eea8155a9d6e24d128981697f704e32f70e755753cb5566f1ef8448d5686c72b";
 
 /* The version of curl in nixpkgsRev */
 static const std::string curlVersion = "8.4.0";

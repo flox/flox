@@ -84,7 +84,7 @@
 
     # Use nix@2.17
     overlays.nix = final: prev: {
-      nix = final.enableDebugging (final.callPackage ./pkgs/nix {});
+      nix = final.callPackage ./pkgs/nix {};
     };
 
     # Cherry pick `semver' recipe from `floco'.

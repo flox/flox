@@ -179,9 +179,12 @@ removeOurInputAttrs( nix::fetchers::Attrs & attrs );
 void
 restoreOurInputAttrs( nix::fetchers::Attrs & attrs, const OurAttrs & fields );
 
+/** @brief Converts a flox-nixpkgs attrset to a GitHub attrset, returning both
+ * the stripped attrset and the attrs that were removed.*/
 [[nodiscard]] std::pair<nix::fetchers::Attrs, OurAttrs>
 toGitHubAttrs( const nix::fetchers::Attrs & attrs );
 
+/** @brief Converts a GitHub attrset to a flox-nixpkgs attrset. */
 [[nodiscard]] nix::fetchers::Attrs
 fromGitHubAttrs( const nix::fetchers::Attrs & attrs,
                  const OurAttrs &             ourAttrs );

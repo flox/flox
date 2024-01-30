@@ -178,7 +178,6 @@ maybeSplitAttrPathGlob( const ManifestDescriptorRaw::AbsPath & absPath )
     }
   AttrPathGlob   glob;
   flox::AttrPath path = splitAttrPath( std::get<std::string>( absPath ) );
-  size_t         idx  = 0;
   for ( const auto & part : path )
     {
       /* Treat `null' or `*' as a glob. */
@@ -189,7 +188,6 @@ maybeSplitAttrPathGlob( const ManifestDescriptorRaw::AbsPath & absPath )
           glob.emplace_back( std::nullopt );
         }
       else { glob.emplace_back( part ); }
-      ++idx;
     }
   return glob;
 }

@@ -140,6 +140,7 @@ main( int argc, char * argv[] )
   RUN_TEST( EnvironmentManifest_NoIndirectRefs0 );
   RUN_TEST( merge_vecs );
 
+
   return exitCode;
 }
 
