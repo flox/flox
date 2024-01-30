@@ -85,7 +85,8 @@ initTestData()
    * dynamically instead of hard-coding it.
    * Since the wrapped flake includes the original nixpkgs ref,
    * the nar hash also needs to be derived from the effective Input*/
-  auto efectiveInput      = nix::parseFlakeRef( "github:NixOS/nixpkgs/" + nixpkgsRev );
+  auto efectiveInput
+    = nix::parseFlakeRef( "github:NixOS/nixpkgs/" + nixpkgsRev );
   auto narHashStr = getWrappedFlakeNarHash( efectiveInput );
 
   registryWithNixpkgsJSON
