@@ -440,7 +440,7 @@ impl Activate {
         let activation_path = match activation_path_result {
             Err(EnvironmentError2::Core(CoreEnvironmentError::LockedManifest(
                 LockedManifestError::BuildEnv(CallPkgDbError::PkgDbError(PkgDbError {
-                    exit_code: 100,
+                    exit_code: 123,
                     ..
                 })),
             ))) => {
