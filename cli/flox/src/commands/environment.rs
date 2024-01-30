@@ -450,8 +450,8 @@ impl Activate {
 
         let in_place = self.in_place || (!stdout().is_tty() && self.run_args.is_empty());
         // Don't spin in bashrcs and similar contexts
-        let activation_path = if in_place {
-            environment.activation_path(&flox)?
+        let activation_path_result = if in_place {
+            environment.activation_path(&flox)
         } else {
             Dialog {
                 message: &format!("Getting ready to use environment {now_active}..."),
