@@ -503,7 +503,7 @@ impl Activate {
                 bail!("Environment '{now_active}' is already active.");
             }
             debug!("Environment is already active: environment={now_active}. Ignoring activation (may patch PATH)");
-            Self::reactivate_non_interactive()?;
+            Self::reactivate_in_place()?;
             return Ok(());
         }
 
@@ -565,20 +565,50 @@ impl Activate {
         //
         //    eval "$(flox activate)"
         if in_place {
-            Self::activate_non_interactive(
-                &shell,
-                &exports,
-                fixed_up_path_joined,
-                &activation_path,
-            );
+            Self::activate_inplace(&shell, &exports, fixed_up_path_joined, &activation_path);
 
             return Ok(());
         }
 
-        let activate_error =
-            Self::activate_interactive(self.run_args, shell, exports, activation_path, now_active);
+        let activate_error = if !self.run_args.is_empty() {
+            Self::activate_non_interactive(self.run_args, shell, exports, activation_path)
+        } else {
+            Self::activate_interactive(shell, exports, activation_path, now_active)
+        };
         // If we get here, exec failed!
         Err(activate_error)
+    }
+
+    fn activate_non_interactive(
+        run_args: Vec<String>,
+        shell: ShellType,
+        exports: HashMap<&str, String>,
+        activation_path: PathBuf,
+    ) -> anyhow::Error {
+        let mut command = Command::new(shell.exe_path());
+        command.envs(exports);
+
+        let script = formatdoc! {"
+                # to avoid infinite recursion sourcing bashrc
+                export FLOX_SOURCED_FROM_SHELL_RC=1
+
+                source {activation_path}/activate/{shell}
+
+                unset FLOX_SOURCED_FROM_SHELL_RC
+
+                {run_args}
+        ",
+            activation_path=shell_escape::escape(activation_path.to_string_lossy()),
+            run_args = run_args.join(" "),
+        };
+
+        command.arg("-c");
+        command.arg(script);
+
+        debug!("running activation command: {:?}", command);
+
+        // exec should never return
+        command.exec().into()
     }
 
     /// Activate the environment interactively by spawning a new shell
@@ -586,7 +616,6 @@ impl Activate {
     ///
     /// This function should never return as it replaces the current process
     fn activate_interactive(
-        run_args: Vec<String>,
         shell: ShellType,
         exports: HashMap<&str, String>,
         activation_path: PathBuf,
@@ -635,20 +664,13 @@ impl Activate {
             },
         };
 
-        if !run_args.is_empty() {
-            command.arg("-i");
-            command.arg("-c");
-            command.arg(run_args.join(" "));
-        }
-
         debug!("running activation command: {:?}", command);
 
-        if run_args.is_empty() {
-            let message = formatdoc! {"
+        let message = formatdoc! {"
                 ✅  You are now using the environment {now_active}.
                 To stop using this environment, type 'exit'"};
-            info!("{message}");
-        }
+        info!("{message}");
+
         // exec should never return
         command.exec().into()
     }
@@ -746,7 +768,7 @@ impl Activate {
     ///     eval "$(flox activate)" -> eval "export PATH=<flox_env_dirs>:$PATH"
     ///
     /// See [Self::fixup_path] for more details.
-    fn reactivate_non_interactive() -> Result<(), anyhow::Error> {
+    fn reactivate_in_place() -> Result<(), anyhow::Error> {
         let flox_env_dirs = env::var(FLOX_ENV_DIRS_VAR)
             .ok()
             .as_ref()
@@ -768,7 +790,7 @@ impl Activate {
         Ok(())
     }
 
-    fn activate_non_interactive(
+    fn activate_inplace(
         shell: &ShellType,
         exports: &HashMap<&str, String>,
         fixed_up_path_joined: Option<OsString>,
