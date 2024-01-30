@@ -5,6 +5,13 @@
 #
 # Test if cross system push/pull works.
 #
+# This is a very similar test to that in environment-pull.bats,
+# but it tests across multiple machines.
+# To use multiple machines, we rely on the environment pushed from a different
+# system in the previous CI run.
+# It uses credentials stored in a GH action secret to authenticate with the
+# development floxhub instance.
+#
 #
 # ---------------------------------------------------------------------------- #
 
