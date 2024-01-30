@@ -1420,14 +1420,12 @@ impl Pull {
 
         match result {
             Ok(_) => {},
-            Err(
-                e @ EnvironmentError2::Core(CoreEnvironmentError::LockedManifest(
-                    LockedManifestError::BuildEnv(CallPkgDbError::PkgDbError(PkgDbError {
-                        exit_code: 123,
-                        ..
-                    })),
-                )),
-            ) => {
+            Err(EnvironmentError2::Core(CoreEnvironmentError::LockedManifest(
+                LockedManifestError::BuildEnv(CallPkgDbError::PkgDbError(PkgDbError {
+                    exit_code: 123,
+                    ..
+                })),
+            ))) => {
                 let hint = "Use 'flox pull --add-system' to add your system to the manifest.";
 
                 // will return OK if the user chose to abort the pull
