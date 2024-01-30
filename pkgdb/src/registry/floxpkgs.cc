@@ -517,8 +517,9 @@ FloxFlakeScheme::inputFromAttrs( const nix::fetchers::Attrs & _attrs ) const
     = toGitHubAttrs( attrs );
   auto                                ghAttrs  = ghAttrsAndOurAttrs.first;
   auto                                ourAttrs = ghAttrsAndOurAttrs.second;
+  GitHubInputScheme                   githubScheme;
   std::optional<nix::fetchers::Input> fromGithub
-    = GitHubInputScheme::inputFromAttrs( ghAttrs );
+    = githubScheme.inputFromAttrs( ghAttrs );
   if ( ! fromGithub.has_value() ) { return std::nullopt; }
   else
     {
