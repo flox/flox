@@ -36,11 +36,10 @@ namespace flox {
  *   filesystem; this will only occur if there is no existing lockfile.
  */
 static const nix::flake::LockFlags defaultLockFlags
-  = { .recreateLockFile = false /* default */
-      ,
-      .updateLockFile = false,
-      .writeLockFile  = false,
-      .useRegistries  = false,
+  = { .recreateLockFile = false, /* default */
+      .updateLockFile   = false,
+      .writeLockFile    = false,
+      .useRegistries    = false,
       /* Remaining fields are defaults */
       .applyNixConfig        = false,
       .allowUnlocked         = true,
@@ -51,11 +50,10 @@ static const nix::flake::LockFlags defaultLockFlags
       .inputUpdates          = {} };
 
 static const nix::flake::LockFlags floxFlakeLockFlags
-  = { .recreateLockFile = false /* default */
-      ,
-      .updateLockFile = true,
-      .writeLockFile  = true,
-      .useRegistries  = false,
+  = { .recreateLockFile = false, /* default */
+      .updateLockFile   = true,
+      .writeLockFile    = true,
+      .useRegistries    = false,
       /* Remaining fields are defaults */
       .applyNixConfig        = false,
       .allowUnlocked         = true,
