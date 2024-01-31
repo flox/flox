@@ -157,7 +157,8 @@ getRulesHash();
 [[nodiscard]] std::string
 getRulesProcessorHash();
 
-/** @brief Computes the nar has for a wrapped flake. */
+/** @brief Computes the NAR hash of the provided flake after wrapping it in our
+ * rules processor. */
 [[nodiscard]] std::string
 getWrappedFlakeNarHash( nix::FlakeRef const & ref );
 
