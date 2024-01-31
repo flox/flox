@@ -30,6 +30,9 @@ struct DownloadUrl
 
 /* -------------------------------------------------------------------------- */
 
+/* Copied from the nix codebase and very slightly modified since these
+ * definitions aren't in header files.*/
+
 struct GitArchiveInputScheme : nix::fetchers::InputScheme
 {
   virtual std::string
