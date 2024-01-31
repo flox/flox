@@ -31,7 +31,10 @@ struct DownloadUrl
 /* -------------------------------------------------------------------------- */
 
 /* Copied from the nix codebase and very slightly modified since these
- * definitions aren't in header files.*/
+ * definitions aren't in header files.
+ * NOTE: we explicitly do not register our copies of the input schemes because
+ * we don't want to override global behavior for arbitrary github or git inputs,
+ * only github references to nixpkgs.*/
 
 struct GitArchiveInputScheme : nix::fetchers::InputScheme
 {
