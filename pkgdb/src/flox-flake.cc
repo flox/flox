@@ -114,7 +114,7 @@ openEvalCache( nix::EvalState &                state,
   auto useCache = std::make_optional<std::reference_wrapper<const nix::Hash>>(
     std::cref( fingerprint ) );
 
-  /* Push current settings. */
+  /* Save current settings. */
   bool oldUseCache = nix::evalSettings.useEvalCache;
   bool oldPureEval = nix::evalSettings.pureEval;
 
@@ -127,7 +127,7 @@ openEvalCache( nix::EvalState &                state,
     state,
     [&state, &lockedFlake]() { return flakeLoader( state, lockedFlake ); } );
 
-  /* Pop old settings. */
+  /* Restore previous settings. */
   nix::evalSettings.useEvalCache.assign( oldUseCache );
   nix::evalSettings.pureEval.assign( oldPureEval );
 
