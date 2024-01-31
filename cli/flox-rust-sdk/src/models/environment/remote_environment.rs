@@ -34,7 +34,7 @@ pub enum RemoteEnvironmentError {
     #[error("open managed environment")]
     OpenManagedEnvironment(#[source] ManagedEnvironmentError),
 
-    #[error("could not get initial latest version of environment")]
+    #[error("could not get latest version of environment")]
     GetLatestVersion(#[source] FloxmetaV2Error),
 
     #[error("could not reset managed environment")]
