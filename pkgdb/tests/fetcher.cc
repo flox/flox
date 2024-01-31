@@ -64,8 +64,8 @@ test_constructsInputFromAttrs()
 bool
 test_canConvertToURL()
 {
-  flox::FloxFlakeScheme scheme;
-  auto                  input = scheme.inputFromURL( floxpkgsParsedURL );
+  flox::FloxNixpkgsInputScheme scheme;
+  auto                         input = scheme.inputFromURL( floxpkgsParsedURL );
   EXPECT( input.has_value() );
   auto url = ( *input ).toURLString();
   EXPECT_EQ( url, floxpkgsURL );
@@ -77,10 +77,10 @@ test_canConvertToURL()
 bool
 test_ignoresWrongInputType()
 {
-  flox::FloxFlakeScheme scheme;
-  auto                  url        = "github:NixOS/nixpkgs/release-23.05";
-  auto                  parsed     = nix::parseURL( url );
-  auto                  maybeInput = scheme.inputFromURL( parsed );
+  flox::FloxNixpkgsInputScheme scheme;
+  auto                         url    = "github:NixOS/nixpkgs/release-23.05";
+  auto                         parsed = nix::parseURL( url );
+  auto                         maybeInput = scheme.inputFromURL( parsed );
   EXPECT( maybeInput == std::nullopt );
   return true;
 }

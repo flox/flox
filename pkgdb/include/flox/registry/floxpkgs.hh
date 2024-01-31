@@ -115,7 +115,7 @@ struct GitHubInputScheme : GitArchiveInputScheme
  * @brief A fetcher that wraps a nixpkgs flake in a wrapper flake to apply
  * allow/disallow/alias rules.
  */
-struct FloxFlakeScheme : GitHubInputScheme
+struct FloxNixpkgsInputScheme : GitHubInputScheme
 {
   std::string
   type() const override;

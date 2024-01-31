@@ -41,7 +41,8 @@ namespace flox {
 static auto FloxFlakeInputScheme = nix::OnStartup(
   []
   {
-    nix::fetchers::registerInputScheme( std::make_unique<FloxFlakeScheme>() );
+    nix::fetchers::registerInputScheme(
+      std::make_unique<FloxNixpkgsInputScheme>() );
   } );
 
 
@@ -481,13 +482,13 @@ GitHubInputScheme::clone( const nix::fetchers::Input & input,
 
 
 std::string
-FloxFlakeScheme::type() const
+FloxNixpkgsInputScheme::type() const
 {
   return flox::FLOX_FLAKE_TYPE;
 }
 
 std::optional<nix::fetchers::Input>
-FloxFlakeScheme::inputFromURL( const nix::ParsedURL & url ) const
+FloxNixpkgsInputScheme::inputFromURL( const nix::ParsedURL & url ) const
 {
   /* TODO: if the type is flox-nixpkgs we can short circuit this */
   /* don't try to convert github references */
@@ -503,14 +504,15 @@ FloxFlakeScheme::inputFromURL( const nix::ParsedURL & url ) const
       FloxFlakeSchemeExtraAttrs attrs( getRulesHash(),
                                        getRulesProcessorHash() );
       input.attrs  = fromGitHubAttrs( input.attrs, attrs );
-      input.scheme = std::make_shared<FloxFlakeScheme>();
+      input.scheme = std::make_shared<FloxNixpkgsInputScheme>();
       return input;
     }
   else { return {}; }
 }
 
 std::optional<nix::fetchers::Input>
-FloxFlakeScheme::inputFromAttrs( const nix::fetchers::Attrs & _attrs ) const
+FloxNixpkgsInputScheme::inputFromAttrs(
+  const nix::fetchers::Attrs & _attrs ) const
 {
   auto attrs = _attrs;
   /* GitArchiveInputScheme complains about extra attrs, so remove and save ours
@@ -528,14 +530,14 @@ FloxFlakeScheme::inputFromAttrs( const nix::fetchers::Attrs & _attrs ) const
       /* Restore our attributes */
       auto input   = *fromGithub;
       input.attrs  = fromGitHubAttrs( input.attrs, ourAttrs );
-      input.scheme = std::make_shared<FloxFlakeScheme>();
+      input.scheme = std::make_shared<FloxNixpkgsInputScheme>();
       return input;
     }
 }
 
 std::pair<nix::StorePath, nix::fetchers::Input>
-FloxFlakeScheme::fetch( nix::ref<nix::Store>         store,
-                        const nix::fetchers::Input & input )
+FloxNixpkgsInputScheme::fetch( nix::ref<nix::Store>         store,
+                               const nix::fetchers::Input & input )
 {
   /* Convert the input to a GitHub input, pulling out our fetcher-specific
    * attributes. */
@@ -577,19 +579,19 @@ FloxFlakeScheme::fetch( nix::ref<nix::Store>         store,
    * the lockfile. */
   auto floxNixpkgsInput   = asGithub;
   floxNixpkgsInput.attrs  = fromGitHubAttrs( asGithub.attrs, ourAttrs );
-  floxNixpkgsInput.scheme = std::make_shared<FloxFlakeScheme>();
+  floxNixpkgsInput.scheme = std::make_shared<FloxNixpkgsInputScheme>();
   return std::pair<nix::StorePath, nix::fetchers::Input>( path,
                                                           floxNixpkgsInput );
 }
 
 bool
-FloxFlakeScheme::hasAllInfo( const nix::fetchers::Input & ) const
+FloxNixpkgsInputScheme::hasAllInfo( const nix::fetchers::Input & ) const
 {
   return true;
 }
 
 nix::ParsedURL
-FloxFlakeScheme::toURL( const nix::fetchers::Input & _input ) const
+FloxNixpkgsInputScheme::toURL( const nix::fetchers::Input & _input ) const
 {
   auto              input = _input;
   GitHubInputScheme githubScheme;
