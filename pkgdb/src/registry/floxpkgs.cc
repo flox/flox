@@ -499,8 +499,9 @@ FloxFlakeScheme::inputFromURL( const nix::ParsedURL & url ) const
     = githubScheme.inputFromURL( asGithub );
   if ( fromGithub.has_value() )
     {
-      auto     input = *fromGithub;
-      OurAttrs attrs( getRulesHash(), getRulesProcessorHash() );
+      auto                      input = *fromGithub;
+      FloxFlakeSchemeExtraAttrs attrs( getRulesHash(),
+                                       getRulesProcessorHash() );
       input.attrs  = fromGitHubAttrs( input.attrs, attrs );
       input.scheme = std::make_shared<FloxFlakeScheme>();
       return input;
@@ -514,7 +515,7 @@ FloxFlakeScheme::inputFromAttrs( const nix::fetchers::Attrs & _attrs ) const
   auto attrs = _attrs;
   /* GitArchiveInputScheme complains about extra attrs, so remove and save ours
    * while treating this like a GitHub ref. */
-  std::pair<nix::fetchers::Attrs, OurAttrs> ghAttrsAndOurAttrs
+  std::pair<nix::fetchers::Attrs, FloxFlakeSchemeExtraAttrs> ghAttrsAndOurAttrs
     = toGitHubAttrs( attrs );
   auto                                ghAttrs  = ghAttrsAndOurAttrs.first;
   auto                                ourAttrs = ghAttrsAndOurAttrs.second;
@@ -640,7 +641,7 @@ getWrappedFlakeNarHash( nix::FlakeRef const & ref )
 
 /* -------------------------------------------------------------------------- */
 
-OurAttrs
+FloxFlakeSchemeExtraAttrs
 removeOurInputAttrs( nix::fetchers::Attrs & attrs )
 {
   auto rules = nix::fetchers::maybeGetStrAttr( attrs, "rules" );
@@ -648,11 +649,12 @@ removeOurInputAttrs( nix::fetchers::Attrs & attrs )
     = nix::fetchers::maybeGetStrAttr( attrs, "rules-processor" );
   if ( rules.has_value() ) { attrs.erase( "rules" ); }
   if ( rulesProcessor.has_value() ) { attrs.erase( "rules-processor" ); }
-  return OurAttrs( rules, rulesProcessor );
+  return FloxFlakeSchemeExtraAttrs( rules, rulesProcessor );
 }
 
 void
-restoreOurInputAttrs( nix::fetchers::Attrs & attrs, const OurAttrs & fields )
+restoreOurInputAttrs( nix::fetchers::Attrs &            attrs,
+                      const FloxFlakeSchemeExtraAttrs & fields )
 {
   if ( fields.rules.has_value() )
     {
@@ -665,18 +667,19 @@ restoreOurInputAttrs( nix::fetchers::Attrs & attrs, const OurAttrs & fields )
   return;
 }
 
-std::pair<nix::fetchers::Attrs, OurAttrs>
+std::pair<nix::fetchers::Attrs, FloxFlakeSchemeExtraAttrs>
 toGitHubAttrs( const nix::fetchers::Attrs & _attrs )
 {
   auto attrs    = _attrs;
   auto ourAttrs = removeOurInputAttrs( attrs );
   attrs.insert_or_assign( "type", "github" );
-  return std::pair<nix::fetchers::Attrs, OurAttrs>( attrs, ourAttrs );
+  return std::pair<nix::fetchers::Attrs, FloxFlakeSchemeExtraAttrs>( attrs,
+                                                                     ourAttrs );
 }
 
 nix::fetchers::Attrs
-fromGitHubAttrs( const nix::fetchers::Attrs & _attrs,
-                 const OurAttrs &             ourAttrs )
+fromGitHubAttrs( const nix::fetchers::Attrs &      _attrs,
+                 const FloxFlakeSchemeExtraAttrs & ourAttrs )
 {
   auto attrs = _attrs;
   restoreOurInputAttrs( attrs, ourAttrs );

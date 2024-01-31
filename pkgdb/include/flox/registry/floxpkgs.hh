@@ -162,35 +162,36 @@ getWrappedFlakeNarHash( nix::FlakeRef const & ref );
 /* -------------------------------------------------------------------------- */
 
 /** @brief A container holding all of the attributes injected by our fetcher. */
-struct OurAttrs
+struct FloxFlakeSchemeExtraAttrs
 {
   std::optional<std::string> rules;
   std::optional<std::string> rulesProcessor;
 
-  OurAttrs( const std::optional<std::string> & rules,
-            const std::optional<std::string> & rulesProcessor )
+  FloxFlakeSchemeExtraAttrs( const std::optional<std::string> & rules,
+                             const std::optional<std::string> & rulesProcessor )
     : rules( rules ), rulesProcessor( rulesProcessor ) {};
 };
 
 /** @brief Removes our fetcher-specific attributes from `attrs` and returns them
  * so they can be restored later.*/
-[[nodiscard]] OurAttrs
+[[nodiscard]] FloxFlakeSchemeExtraAttrs
 removeOurInputAttrs( nix::fetchers::Attrs & attrs );
 
 /** @brief Set all of our attrs in `attrs`, overwriting any previous values for
  * those attributes.*/
 void
-restoreOurInputAttrs( nix::fetchers::Attrs & attrs, const OurAttrs & fields );
+restoreOurInputAttrs( nix::fetchers::Attrs &            attrs,
+                      const FloxFlakeSchemeExtraAttrs & fields );
 
 /** @brief Converts a flox-nixpkgs attrset to a GitHub attrset, returning both
  * the stripped attrset and the attrs that were removed.*/
-[[nodiscard]] std::pair<nix::fetchers::Attrs, OurAttrs>
+[[nodiscard]] std::pair<nix::fetchers::Attrs, FloxFlakeSchemeExtraAttrs>
 toGitHubAttrs( const nix::fetchers::Attrs & attrs );
 
 /** @brief Converts a GitHub attrset to a flox-nixpkgs attrset. */
 [[nodiscard]] nix::fetchers::Attrs
-fromGitHubAttrs( const nix::fetchers::Attrs & attrs,
-                 const OurAttrs &             ourAttrs );
+fromGitHubAttrs( const nix::fetchers::Attrs &      attrs,
+                 const FloxFlakeSchemeExtraAttrs & ourAttrs );
 
 
 /* -------------------------------------------------------------------------- */
