@@ -49,14 +49,14 @@ lockFlake( nix::EvalState &              state,
     }
   catch ( const std::exception & err )
     {
-      throw LockFlakeException( "failed to lock flake \"" + ref.to_string()
-                                  + "\"",
+      throw LockFlakeException( "failed to lock flake '" + ref.to_string()
+                                  + "'",
                                 nix::filterANSIEscapes( err.what(), true ) );
     }
   catch ( ... )
     {
-      throw LockFlakeException( "failed to lock flake \"" + ref.to_string()
-                                + "\"" );
+      throw LockFlakeException( "failed to lock flake '" + ref.to_string()
+                                + "'" );
     }
 }
 
