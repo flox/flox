@@ -7,53 +7,75 @@ header: "flox User Manuals"
 
 # NAME
 
-flox-pull -
+flox-pull - pull environment from FloxHub
 
 # SYNOPSIS
 
-flox [ `<general-options>` ] pull [ `<options>` ] [ \--force ] [ ( -m | \--main) ]
+```
+flox [ <general-options> ] pull
+     [-d=<path>]
+     [-a]
+     [[-f] | -r=<owner/name> | <owner/name>]
+```
 
 # DESCRIPTION
 
-(`git`) Push or pull metadata to the environment's `floxmeta` repository,
-and in the `pull` case also proceed to render the environment.
-With this mechanism environments can be pushed and pulled between machines
-and within teams just as you would any project managed with `git`.
+Pull an environment from FloxHub and create a managed environment locally
+referring to that remote environment,
+or, if a managed environment with a reference to a remote environment already
+exists, update that environment.
 
-With the `--force` argument flox will forceably overwrite either the
-upstream or local copy of the environment based on having invoked
-`push` or `pull`, respectively.
+When creating a new managed environment, `-d` specifies the directory in which
+to create that environment.
+The remote environment is specified in the form `<owner/name>`,
+and it may optionally be preceded by `-r`.
 
-With the `(-m|\--main)` argument `flox (push|pull)` will operate on the
-"floxmain" branch, pulling user metadata from the upstream repository.
-Cannot be used in conjunction with the `-e|\--environment` flag.
+When updating a managed environment that already exists, `-d` specifies which
+environment to update.
+`-f` may only be specified in this case, forceably updating the managed
+environment even if there are local changes not reflected in the remote
+environment.
+`<owner/name>` may not be specified in this case, as the managed environment
+already keeps track of its remote environment.
 
-With the `--no-render` argument `flox pull` will fetch and incorporate
-the latest metadata from upstream but will not actually render or create
-links to environments in the store. (Flox internal use only.)
+A remote environment may not support the architecture or operating system of the
+local system pulling the environment,
+in which case `-a` may be passed to forceably add the current system to the
+environment's manifest.
+This may create a broken environment that cannot be pushed back to FloxHub until
+it is repaired with [`flox-edit(1)`](./flox-edit.md) or
+[`flox-remove(1)`](./flox-remove.md).
+See [`manifest.toml(1)`](./manifest.toml.md) for more on multi-system
+environments.
 
 # OPTIONS
 
-```{.include}
-./include/general-options.md
-./include/environment-options.md
-```
-
 ## Pull Options
 
-[ (-m | \--main ) ]
-:   operate on the "floxmain" branch,
-    pull user metadata from the upstrea repository.
-    Cannot be used in conjunction with the `-e|--environment` flag.
+`-d`, `--dir`
+:   Directory in which to create a managed environment, or directory that
+    already contains a managed environment (default: current directory).
 
-[ \--force ]
-:   forceably overwrite the upstream copy of the environment
+`-a`, `--add-system`
+:   Forceably add current system to the environment, even if incompatible.
 
-[ \--no-render ]
-:   do not render or create links to environments in the store
-    (Flox internal use only.)
+`-f`, `--force`
+:   Forceably overwrite the local copy of the environment.
 
+`-r`, `--remote`
+:   ID of the environment to pull.
+
+`<owner/name>`
+:   ID of the environment to pull.
+
+```{.include}
+./include/environment-options.md
+./include/general-options.md
+```
 
 # SEE ALSO
 
--   *flox-push(1)*
+[`flox-push(1)`](./flox-push.md)
+[`flox-edit(1)`](./flox-edit.md)
+[`flox-remove(1)`](./flox-remove.md)
+[`manifest.toml(1)`](./manifest.toml.md)

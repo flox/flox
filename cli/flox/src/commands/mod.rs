@@ -79,13 +79,14 @@ fn vec_not_empty<T>(x: Vec<T>) -> bool {
 #[derive(Bpaf, Clone, Debug)]
 pub enum Verbosity {
     Verbose(
-        /// Verbose mode
+        /// Increase logging verbosity
         ///
         /// Invoke multiple times for increasing detail.
         #[bpaf(short('v'), long("verbose"), req_flag(()), many, map(vec_len))]
         usize,
     ),
 
+    /// Silence logs except for errors
     #[bpaf(short, long)]
     Quiet,
 }
@@ -330,7 +331,7 @@ enum SharingCommands {
     #[bpaf(command)]
     Push(#[bpaf(external(environment::push))] environment::Push),
     #[bpaf(command)]
-    /// Pull environment from floxhub
+    /// Pull environment from FloxHub
     Pull(#[bpaf(external(environment::pull))] environment::Pull),
     /// Containerize an environment
     #[bpaf(command, hide)]
@@ -358,7 +359,7 @@ enum AdditionalCommands {
     #[bpaf(command, hide, header(indoc! {"
         When no arguments are specified, all packages in the environment are upgraded.\n\n
 
-        Packages to upgrade can be specified by either group name or, if a package is
+        Packages to upgrade can be specified by either group name, or, if a package is
         not in a group with any other packages, it may be specified by ID. If the
         specified argument is both a group name and a package ID, only the group is
         upgraded.\n\n
@@ -368,6 +369,7 @@ enum AdditionalCommands {
     "}))]
     /// Upgrade packages in an environment
     Upgrade(#[bpaf(external(environment::upgrade))] environment::Upgrade),
+    /// View and set configuration options
     #[bpaf(command, hide)]
     Config(#[bpaf(external(general::config_args))] general::ConfigArgs),
     #[bpaf(command("wipe-history"), hide)]

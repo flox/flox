@@ -7,45 +7,57 @@ header: "flox User Manuals"
 
 # NAME
 
-flox-push -
+flox-push - send environment to FloxHub
 
 # SYNOPSIS
 
-flox [ `<general-options>` ] push [ `<options>` ] [ \--force ] [ ( -m | \--main ) ]
+```
+flox [ <general-options> ] push
+     [-d=<path>]
+     [-o=<owner>]
+     [-f]
+```
 
 # DESCRIPTION
 
-(`git`) Push metadata to the environment's `floxmeta` repository.
-With this mechanism environments can be pushed and pulled between machines
-and within teams just as you would any project managed with `git`.
+Move a path environment to FloxHub or push local changes to a managed
+environment to FloxHub.
 
-With the `(-m|\--main)` argument `flox (push|pull)` will operate on the
-"floxmain" branch, pushing user metadata to the upstream repository.
-Cannot be used in conjunction with the `-e|\--environment` flag.
+After pushing, the remote environment can be referred to as `<owner/name>`.
 
-With the `--force` argument flox will forceably overwrite either the
-upstream or local copy of the environment based on having invoked
-`push` or `pull`, respectively.
+A path environment contains a manifest file and lock file stored locally and
+possibly committed to version control.
+Pushing the environment moves the manifest and lock file to FloxHub,
+and only a reference to the revision of the environment is stored locally.
 
+Once the environment has been pushed, it is called a managed environment.
+Changes can be made to managed environments locally,
+and flox stores those changes in `$XDG_DATA_HOME`.
+Those changes are then synced to FloxHub when `flox push` is run.
+
+In the same way as a git repo, local changes to a managed environment may
+diverge from the environment on FloxHub if `flox push` is run from a different
+host.
+Passing `--force` to `flox push` will cause it to overwrite any changes on
+FloxHub with local changes to the managed environment.
 
 # OPTIONS
 
-```{.include}
-./include/general-options.md
-./include/environment-options.md
-```
-
 ## Push Options
 
-[ (-m | \--main ) ]
-:   operate on the "floxmain" branch,
-    push user metadata to the upstream repository.
-    Cannot be used in conjunction with the `-e|--environment` flag.
+`-d`, `--dir`
+:   Directory to push the environment from (default: current directory).
 
+`-o`, `--owner`
+:   Owner to push push environment to (default: current user).
 
-[ \--force ]
-:   forceably overwrite the upstream copy of the environment
+`-f`, `--force`
+:   forceably overwrite the remote copy of the environment.
+
+```{.include}
+./include/general-options.md
+```
 
 # SEE ALSO
 
--   *flox-pull(1)*
+[`flox-pull(1)`](./flox-pull.md)

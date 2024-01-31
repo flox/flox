@@ -31,10 +31,6 @@ pub struct Config {
     #[serde(default)]
     pub nix: NixConfig,
 
-    /// github configuration options
-    #[serde(default)]
-    pub github: GithubConfig,
-
     #[serde(default)]
     pub features: Features,
 }
@@ -43,23 +39,30 @@ pub struct Config {
 /// Describes the Configuration for the flox library
 #[derive(Clone, Debug, Deserialize, Serialize, Default)]
 pub struct FloxConfig {
+    /// Disable collecting and sending usage metrics
     #[serde(default)]
     pub disable_metrics: bool,
+    /// Directory where flox should store ephemeral data (default:
+    /// `$XDG_CACHE_HOME/flox`)
     pub cache_dir: PathBuf,
+    /// Directory where flox should store persistent data (default:
+    /// `$XDG_DATA_HOME/flox`)
     pub data_dir: PathBuf,
+    /// Directory where flox should load its configuration file (default:
+    /// `$XDG_CONFIG_HOME/flox`)
     pub config_dir: PathBuf,
 
-    /// Token to authenticate on floxhub
+    /// Token to authenticate on FloxHub
     pub floxhub_token: Option<FloxhubToken>,
 
-    /// How many items `flox show` should show by default
+    /// How many items `flox search` should show by default
     pub search_limit: Option<u8>,
 
-    /// Environments trusted to run remotely
+    /// Remote environments that are trusted for activation
     #[serde(default)]
     pub trusted_environments: HashMap<EnvironmentRef, EnvironmentTrust>,
 
-    /// The url of the floxhub instance to use
+    /// The URL of the FloxHub instance to use
     pub floxhub_url: Option<Url>,
 }
 
@@ -77,9 +80,6 @@ pub struct NixConfig {
     pub access_tokens: HashMap<String, String>,
 }
 
-/// Describes the github config under flox
-#[derive(Clone, Debug, Deserialize, Serialize, Default)]
-pub struct GithubConfig {}
 pub mod features;
 
 /// Error returned by [`Config::get()`]

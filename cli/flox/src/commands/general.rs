@@ -64,10 +64,10 @@ impl ResetMetrics {
 #[derive(Bpaf, Clone)]
 #[bpaf(fallback(ConfigArgs::List))]
 pub enum ConfigArgs {
-    /// List the current values of all configurable parameters
+    /// List the current values of all options
     #[bpaf(short, long)]
     List,
-    /// Reset all configurable parameters to their default values without further confirmation.
+    /// Reset all options to their default values without further confirmation
     #[bpaf(short, long)]
     Reset,
     /// Set a config value
@@ -114,14 +114,14 @@ impl ConfigArgs {
 #[derive(Debug, Clone, Bpaf)]
 #[bpaf(adjacent)]
 pub struct ConfigSet {
-    /// set <key> to <value>
+    /// set <key> to <string>
     #[allow(unused)]
     set: (),
     /// Configuration key
     #[bpaf(positional("key"))]
     key: String,
-    /// configuration Value
-    #[bpaf(positional("value"))]
+    /// Configuration value (string)
+    #[bpaf(positional("string"))]
     value: String,
 }
 
@@ -135,7 +135,7 @@ pub struct ConfigSetNumber {
     /// Configuration key
     #[bpaf(positional("key"))]
     key: String,
-    /// Configuration Value (i32)
+    /// Configuration value (i32)
     #[bpaf(positional("number"))]
     value: i32,
 }
@@ -150,7 +150,7 @@ pub struct ConfigSetBool {
     /// Configuration key
     #[bpaf(positional("key"))]
     key: String,
-    /// Configuration Value (bool)
+    /// Configuration value (bool)
     #[bpaf(positional("bool"))]
     value: bool,
 }
@@ -158,7 +158,7 @@ pub struct ConfigSetBool {
 #[derive(Debug, Clone, Bpaf)]
 #[allow(unused)]
 pub struct ConfigDelete {
-    /// Configuration key
+    /// Delete config key
     #[bpaf(long("delete"), argument("key"))]
     key: String,
 }
