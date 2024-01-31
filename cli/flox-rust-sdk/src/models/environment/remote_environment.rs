@@ -26,13 +26,18 @@ use crate::models::lockfile::LockedManifest;
 use crate::models::manifest::PackageToInstall;
 use crate::models::pkgdb::UpgradeResult;
 
+const REMOTE_ENVIRONMENT_BASE_DIR: &str = "remote";
+
 #[derive(Debug, Error)]
 pub enum RemoteEnvironmentError {
     #[error("open managed environment")]
     OpenManagedEnvironment(#[source] ManagedEnvironmentError),
 
-    #[error("could not get latest version of environment")]
+    #[error("could not get initial latest version of environment")]
     GetLatestVersion(#[source] FloxmetaV2Error),
+
+    #[error("could not reset managed environment")]
+    ResetManagedEnvironment(#[source] ManagedEnvironmentError),
 
     #[error("could not update upstream environment")]
     UpdateUpstream(#[source] ManagedEnvironmentError),
@@ -81,18 +86,28 @@ impl RemoteEnvironment {
 
         let out_link = gcroots_dir(flox, &pointer.owner).join(remote_branch_name(&pointer));
 
-        let inner = ManagedEnvironment::open_with(floxmeta, flox, pointer, dot_flox_path, out_link)
-            .map_err(RemoteEnvironmentError::OpenManagedEnvironment)?;
+        let mut inner =
+            ManagedEnvironment::open_with(floxmeta, flox, pointer, dot_flox_path, out_link)
+                .map_err(RemoteEnvironmentError::OpenManagedEnvironment)?;
+
+        inner
+            .pull(true)
+            .map_err(RemoteEnvironmentError::ResetManagedEnvironment)?;
 
         Ok(Self { inner })
     }
 
-    /// Pull a remote environment into a temporary managed environment
+    /// Pull a remote environment into a flox-provided managed environment
+    /// in `<FLOX_CACHE_DIR>/remote/<owner>/<name>`
     ///
-    /// Contrary to [`RemoteEnvironment::new_in`], this function will create a temporary directory
-    /// in the flox temp directory which is cleared when the process ends.
+    /// This function provides the sensible default directory to [RemoteEnvironment::new_in].
+    /// The direcory will be created by [RemoteEnvironment::new_in].
     pub fn new(flox: &Flox, pointer: ManagedPointer) -> Result<Self, RemoteEnvironmentError> {
-        let path = tempfile::tempdir_in(&flox.temp_dir).unwrap().into_path();
+        let path = flox
+            .cache_dir
+            .join(REMOTE_ENVIRONMENT_BASE_DIR)
+            .join(pointer.owner.as_ref())
+            .join(pointer.name.as_ref());
 
         Self::new_in(flox, path, pointer)
     }
