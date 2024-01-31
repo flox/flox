@@ -457,7 +457,7 @@ genParamsNixpkgsFlox() {
   context_msg="$(echo "$output" | jq -r '.context_message')"
   caught_msg="$(echo "$output" | jq -r '.caught_message')"
   assert_equal "$category_msg" '"error locking flake"'
-  assert_equal "$context_msg" 'failed to lock flake "github:flox/badrepo"'
+  assert_equal "$context_msg" "failed to lock flake 'github:flox/badrepo'"
   # The caught Nix error is big, only check the beginning
   assert_regex "$caught_msg" "^error:"
 }
