@@ -59,18 +59,17 @@ Environment::getCombinedRegistryRaw()
       if ( auto maybeGlobal = this->getGlobalManifest();
            maybeGlobal.has_value() )
         {
-          this->combinedRegistryRaw = maybeGlobal->getLockedRegistry();
+          this->combinedRegistryRaw = maybeGlobal->getRegistryRaw();
           this->combinedRegistryRaw->merge(
-            this->getManifest().getLockedRegistry() );
+            this->getManifest().getRegistryRaw() );
         }
-      else
-        {
-          this->combinedRegistryRaw = this->getManifest().getLockedRegistry();
-        }
+      else { this->combinedRegistryRaw = this->getManifest().getRegistryRaw(); }
 
       /* If there's a lockfile, use pinned inputs.
        * However, do not preserve any inputs that were removed from
        * the manifest. */
+      std::optional<nix::ref<nix::Store>>  store;
+      std::optional<FloxFlakeInputFactory> factory;
       if ( auto maybeLock = this->getOldLockfile(); maybeLock.has_value() )
         {
           auto lockedRegistry = maybeLock->getRegistryRaw();
@@ -82,7 +81,34 @@ Environment::getCombinedRegistryRaw()
                 {
                   input = locked->second;
                 }
+              /* Lock the input if it's not in the lock. */
+              else
+                {
+                  if ( ! store.has_value() )
+                    {
+                      store = NixStoreMixin().getStore();
+                    }
+                  if ( ! factory.has_value() )
+                    {
+                      factory = FloxFlakeInputFactory( *store );
+                    }
+                  auto flakeInput = factory->mkInput( name, input );
+                  input           = flakeInput->getLockedInput();
+                }
             }
+        }
+      /* Lock all inputs since we don't have a lock. */
+      else
+        {
+          store   = NixStoreMixin().getStore();
+          factory = FloxFlakeInputFactory( *store );
+          {
+            for ( auto & [name, input] : this->combinedRegistryRaw->inputs )
+              {
+                auto flakeInput = factory->mkInput( name, input );
+                input           = flakeInput->getLockedInput();
+              }
+          }
         }
     }
   return *this->combinedRegistryRaw;
