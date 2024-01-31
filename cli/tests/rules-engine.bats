@@ -44,7 +44,8 @@ teardown() {
 # ---------------------------------------------------------------------------- #
 
 @test "searches unfree packages" {
-  # elasticsearch uses the Elastic License 2.0, which is unfree
+  # The rules engine enables unfree packages by default,
+  # and elasticsearch uses the Elastic License 2.0, which is unfree.
   # Command broken over two lines only for line length
   cmd="$FLOX_BIN search elasticsearch --json | jq -r -c '.[] | .relPath[0]'"
   cmd="$cmd | sed -n '/^elasticsearch$/p'"
