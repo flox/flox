@@ -147,6 +147,21 @@ pub struct GenerationLock {
     version: Version<1>,
 }
 
+impl GenerationLock {
+    fn read_maybe(path: impl AsRef<Path>) -> Result<Option<Self>, ManagedEnvironmentError> {
+        let lock_contents = match fs::read(path) {
+            Ok(contents) => contents,
+            Err(err) => match err.kind() {
+                io::ErrorKind::NotFound => return Ok(None),
+                _ => Err(ManagedEnvironmentError::ReadPointerLock(err))?,
+            },
+        };
+        serde_json::from_slice(&lock_contents)
+            .map(Some)
+            .map_err(ManagedEnvironmentError::InvalidLock)
+    }
+}
+
 impl Environment for ManagedEnvironment {
     fn build(&mut self, flox: &Flox) -> Result<(), EnvironmentError2> {
         let generations = self
@@ -564,16 +579,7 @@ impl ManagedEnvironment {
         floxmeta: &FloxmetaV2,
     ) -> Result<GenerationLock, ManagedEnvironmentError> {
         let lock_path = dot_flox_path.join(GENERATION_LOCK_FILENAME);
-        let maybe_lock: Option<GenerationLock> = match fs::read(&lock_path) {
-            Ok(lock_contents) => Some(
-                serde_json::from_slice(&lock_contents)
-                    .map_err(ManagedEnvironmentError::InvalidLock)?,
-            ),
-            Err(err) => match err.kind() {
-                io::ErrorKind::NotFound => None,
-                _ => Err(ManagedEnvironmentError::ReadPointerLock(err))?,
-            },
-        };
+        let maybe_lock: Option<GenerationLock> = GenerationLock::read_maybe(&lock_path)?;
 
         Ok(match maybe_lock {
             // Use local_rev if we have it
@@ -749,8 +755,10 @@ impl ManagedEnvironment {
 
     /// Lock the environment to the current revision
     fn lock_pointer(&self) -> Result<(), ManagedEnvironmentError> {
+        let lock_path = self.path.join(GENERATION_LOCK_FILENAME);
+
         write_pointer_lockfile(
-            self.path.join(GENERATION_LOCK_FILENAME),
+            lock_path,
             &self.floxmeta,
             remote_branch_name(&self.pointer),
             branch_name(&self.pointer, &self.path).into(),
@@ -849,6 +857,16 @@ fn write_pointer_lockfile(
         local_rev,
         version: Version::<1> {},
     };
+
+    {
+        let existing_lock = GenerationLock::read_maybe(&lock_path);
+
+        if matches!(existing_lock, Ok(Some(ref existing_lock)) if existing_lock == &lock) {
+            debug!("skip writing unchanged generation lock");
+            return Ok(lock);
+        }
+    }
+
     let lock_contents =
         serde_json::to_string_pretty(&lock).map_err(ManagedEnvironmentError::SerializeLock)?;
 
