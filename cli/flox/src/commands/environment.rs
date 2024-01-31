@@ -565,7 +565,7 @@ impl Activate {
         //
         //    eval "$(flox activate)"
         if in_place {
-            Self::activate_inplace(&shell, &exports, fixed_up_path_joined, &activation_path);
+            Self::activate_in_place(&shell, &exports, fixed_up_path_joined, &activation_path);
 
             return Ok(());
         }
@@ -793,7 +793,7 @@ impl Activate {
     }
 
     /// Used for `eval "$(flox activate)"`
-    fn activate_inplace(
+    fn activate_in_place(
         shell: &ShellType,
         exports: &HashMap<&str, String>,
         fixed_up_path_joined: Option<OsString>,
