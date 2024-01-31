@@ -579,7 +579,7 @@ impl ManagedEnvironment {
         floxmeta: &FloxmetaV2,
     ) -> Result<GenerationLock, ManagedEnvironmentError> {
         let lock_path = dot_flox_path.join(GENERATION_LOCK_FILENAME);
-        let maybe_lock: Option<GenerationLock> = GenerationLock::read_maybe(&lock_path)?;
+        let maybe_lock = GenerationLock::read_maybe(&lock_path)?;
 
         Ok(match maybe_lock {
             // Use local_rev if we have it
