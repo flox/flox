@@ -136,7 +136,9 @@ initTestData()
                           { "repo", "repo" },
                           { "rev", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" },
                           { "type", flox::FLOX_FLAKE_TYPE },
-                          { "narHash", narHashStr } } } } };
+                          { "narHash", narHashStr },
+                          { "rules", rulesHash },
+                          { "rules-processor", processorHash } } } } };
 
   helloLockedJSON
     = { inputWithNixpkgsJSON,
