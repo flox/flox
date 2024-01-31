@@ -108,7 +108,7 @@ impl RemoteEnvironment {
     /// in `<FLOX_CACHE_DIR>/remote/<owner>/<name>`
     ///
     /// This function provides the sensible default directory to [RemoteEnvironment::new_in].
-    /// The direcory will be created by [RemoteEnvironment::new_in].
+    /// The directory will be created by [RemoteEnvironment::new_in].
     pub fn new(flox: &Flox, pointer: ManagedPointer) -> Result<Self, RemoteEnvironmentError> {
         let path = flox
             .cache_dir
