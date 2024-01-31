@@ -91,6 +91,8 @@ impl RemoteEnvironment {
             ManagedEnvironment::open_with(floxmeta, flox, pointer, dot_flox_path, inner_out_link)
                 .map_err(RemoteEnvironmentError::OpenManagedEnvironment)?;
 
+        // (force) Pull latest changes of the environment from upstream.
+        // remote environments stay in sync with upstream without providing a local staging state.
         inner
             .pull(true)
             .map_err(RemoteEnvironmentError::ResetManagedEnvironment)?;
