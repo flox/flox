@@ -579,6 +579,7 @@ impl Activate {
         Err(activate_error)
     }
 
+    /// Used for `flox activate -- run_args`
     fn activate_non_interactive(
         run_args: Vec<String>,
         shell: ShellType,
@@ -592,6 +593,7 @@ impl Activate {
                 # to avoid infinite recursion sourcing bashrc
                 export FLOX_SOURCED_FROM_SHELL_RC=1
 
+                # TODO: this script sets prompt, which isn't necessary
                 source {activation_path}/activate/{shell}
 
                 unset FLOX_SOURCED_FROM_SHELL_RC
@@ -790,6 +792,7 @@ impl Activate {
         Ok(())
     }
 
+    /// Used for `eval "$(flox activate)"`
     fn activate_inplace(
         shell: &ShellType,
         exports: &HashMap<&str, String>,
