@@ -123,19 +123,21 @@ public:
    * This is primary useful to free up memory and resources associated with the
    * old evaluator and cache.
    */
-   void
-   resetEvaluator( const nix::ref<nix::EvalState> & state )
-   {
-     this->_cache = nullptr;
-     /* The `state` object tracks "locked flakes" that it is allowed to
-      * reference, so we need to "relock" the flake - effectively just to
-      * register it as "okay to reference" in expression.
-      *
-      * If this is not done you'll receive complaints about paths being
-      * inaccessible in "pure mode". */
-     state->allowedPaths = this->state->allowedPaths;
-     this->state  = state;
-   }
+  void
+  resetEvaluator( const nix::ref<nix::Store> & store )
+  {
+    /* The `state` object tracks "locked flakes" that it is allowed to
+     * reference, so we need to "relock" the flake - effectively just to
+     * register it as "okay to reference" in expression.
+     *
+     * If this is not done you'll receive complaints about paths being
+     * inaccessible in "pure mode". */
+    auto allowedPaths = this->state->allowedPaths;
+    this->_cache      = nullptr;
+    GC_gcollect();
+    this->state               = NixState( store ).getState();
+    this->state->allowedPaths = std::move( allowedPaths );
+  }
 
 
 }; /* End class `FloxFlake' */

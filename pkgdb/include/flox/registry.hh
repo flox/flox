@@ -677,12 +677,11 @@ public:
    * This is primary useful to free up memory and resources associated with the
    * old evaluator and cache.
    */
-   void
-   resetEvaluator()
-   {
-     auto state = NixState( this->store ).getState();
-     this->getFlake()->resetEvaluator( state );
-   }
+  void
+  resetEvaluator()
+  {
+    this->getFlake()->resetEvaluator( this->store );
+  }
 
 
 }; /* End struct `FloxFlakeInput' */

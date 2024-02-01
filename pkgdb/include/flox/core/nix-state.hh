@@ -142,7 +142,9 @@ public:
    * This may be useful if you wish to avoid a non-default store.
    * @param store An open `nix` store connection.
    */
-  explicit NixState( nix::ref<nix::Store> & store ) : NixStoreMixin( store ) {}
+  explicit NixState( const nix::ref<nix::Store> & store )
+    : NixStoreMixin( store )
+  {}
 
 
   /**
