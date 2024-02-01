@@ -232,28 +232,10 @@ fn format_core_error(err: &'static CoreEnvironmentError) -> String {
 
             Please ensure that you have write permissions to '.flox/env/manifest.toml'.
         "},
-        // internal error, a bug if this happens to users
-        CoreEnvironmentError::BadManifestPath(_, _) => display_chain(err),
-        CoreEnvironmentError::BadLockfilePath(_, _) => display_chain(err),
-        // error returned by pkgdb
-        // we do minimal formatting here as the error message is supposed to be
-        // already user friendly.
-        CoreEnvironmentError::LockManifest(pkgdb_error) => {
-            format_pkgdb_error(pkgdb_error, err, "Failed to lock manifest.")
-        },
-        // other pkgdb call errors are unexpected
-        CoreEnvironmentError::ParseUpdateOutput(_) => display_chain(err),
-        CoreEnvironmentError::ParseUpgradeOutput(_) => display_chain(err),
-        CoreEnvironmentError::UpdateFailed(pkgdb_error) => {
-            format_pkgdb_error(pkgdb_error, err, "Failed to update environment.")
-        },
         CoreEnvironmentError::UpgradeFailed(pkgdb_error) => {
             format_pkgdb_error(pkgdb_error, err, "Failed to upgrade environment.")
         },
-        CoreEnvironmentError::BuildEnv(pkgdb_error) => {
-            format_pkgdb_error(pkgdb_error, err, "Failed to build environment.")
         },
-        CoreEnvironmentError::ParseBuildEnvOutput(_) => display_chain(err),
     }
 }
 
@@ -395,13 +377,6 @@ fn format_managed_error(err: &'static ManagedEnvironmentError) -> String {
 
             Please try again later.
         "},
-        ManagedEnvironmentError::Link(CoreEnvironmentError::LockManifest(pkgdb_err)) => {
-            format_pkgdb_error(pkgdb_err, err, "Failed to lock manifest.")
-        },
-        &ManagedEnvironmentError::Link(CoreEnvironmentError::BuildEnv(ref pkgdb_err)) => {
-            format_pkgdb_error(pkgdb_err, err, "Failed to build environment.")
-        },
-        ManagedEnvironmentError::Link(_) => display_chain(err),
 
         ManagedEnvironmentError::ReadManifest(_) => todo!(),
         ManagedEnvironmentError::CanonicalizePath(canonicalize_err) => formatdoc! {"
@@ -445,6 +420,73 @@ fn format_remote_error(err: &'static RemoteEnvironmentError) -> String {
         },
         RemoteEnvironmentError::UpdateUpstream(_) => display_chain(err),
         RemoteEnvironmentError::InvalidTempPath(_) => display_chain(err),
+    }
+}
+
+fn format_locked_manifest_error(
+    err: &'static LockedManifestError,
+    parent: impl Into<anyhow::Error>,
+) -> String {
+    match err {
+        LockedManifestError::CallContainerBuilder(_) => todo!(),
+
+        // todo: enrich with path
+        LockedManifestError::WriteContainer(err) => formatdoc! {"
+            Failed to write container: {err}
+
+            Please ensure that you have write permissions to '.flox/env/container'.
+        "},
+
+        // this is a BUG
+        LockedManifestError::ParseBuildEnvOutput(_) => display_chain(err),
+        // this is likely a BUG, since we ensure that the lockfile exists in all cases
+        LockedManifestError::BadLockfilePath(canonicalize_error) => formatdoc! {"
+            Bad lockfile path: {canonicalize_error}
+
+            Please ensure that the path exists and that you have read permissions.
+        "},
+
+        LockedManifestError::BadManifestPath(canonicalize_error) => formatdoc! {"
+            Corrupt environment: {canonicalize_error}
+
+            Please ensure that the path exists and that you have read permissions.
+        "},
+        // region: errors returned by pkgdb
+        // we do minimal formatting here as the error message is supposed to be
+        // already user friendly.
+        // some commands catch these errors and process them separately
+        // e.g. `flox pull`, `flox push`
+        LockedManifestError::LockManifest(pkgdb_error) => {
+            format_pkgdb_error(pkgdb_error, parent, "Failed to lock environment manifest.")
+        },
+        LockedManifestError::BuildEnv(_) => todo!(),
+        LockedManifestError::UpdateFailed(pkgdb_error) => {
+            format_pkgdb_error(pkgdb_error, parent, "Failed to update environment.")
+        },
+        // endregion
+
+        // this is a bug, but likely needs some formatting
+        LockedManifestError::ReadLockfile(_) => display_chain(err),
+        LockedManifestError::ParseLockfile(serde_error) => formatdoc! {"
+            Failed to parse lockfile as JSON: {serde_error}
+
+            This is likely due to a corrupt environment.
+        "},
+
+        LockedManifestError::ParseLockedManifest(serde_error) => formatdoc! {"
+            Failed to parse lockfile structure: {serde_error}
+
+            This is likely due to a corrupt environment.
+        "},
+
+        LockedManifestError::SerializeGlobalLockfile(_) => display_chain(err),
+
+        // todo: add global-manifest.lock(1) manual entry and reference it here
+        LockedManifestError::WriteGlobalLockfile(_) => formatdoc! {"
+            Failed to write global lockfile: {err}
+
+            Please ensure that you have write permissions to '~/.config/flox/global-manifest.lock'.
+        "},
     }
 }
 

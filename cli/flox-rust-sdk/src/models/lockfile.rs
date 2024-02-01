@@ -52,9 +52,8 @@ impl LockedManifest {
         existing_lockfile_path: &CanonicalPath,
         global_manifest_path: &Path,
     ) -> Result<Self, LockedManifestError> {
-        let canonical_manifest_path = manifest_path
-            .canonicalize()
-            .map_err(|e| LockedManifestError::BadManifestPath(e, manifest_path.to_path_buf()))?;
+        let canonical_manifest_path =
+            CanonicalPath::new(manifest_path).map_err(LockedManifestError::BadManifestPath)?;
 
         let mut pkgdb_cmd = Command::new(pkgdb);
         pkgdb_cmd
@@ -322,12 +321,10 @@ pub enum LockedManifestError {
     ParseBuildEnvOutput(#[source] serde_json::Error),
     #[error("failed to update environment")]
     UpdateFailed(#[source] CallPkgDbError),
-    #[error("failed to canonicalize manifest path: {0:?}")]
-    BadManifestPath(#[source] std::io::Error, PathBuf),
+    #[error(transparent)]
+    BadManifestPath(CanonicalizeError),
     #[error(transparent)]
     BadLockfilePath(CanonicalizeError),
-    #[error(transparent)]
-    CallPkgDbError(#[from] CallPkgDbError),
     #[error("could not open manifest file")]
     ReadLockfile(#[source] std::io::Error),
     /// when parsing the contents of a lockfile into a [LockedManifest]
