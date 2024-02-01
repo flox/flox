@@ -1,34 +1,30 @@
-use std::borrow::Cow;
 use std::fmt::{self, Write};
 
-use crossterm::style::{Attribute, ContentStyle, Stylize};
-
-use crate::utils::colors;
+use crossterm::style::Stylize;
+use tracing::Level;
 
 #[derive(Default, Debug)]
 struct LogFields {
     message: Option<String>,
     target: Option<String>,
+    module: Option<String>,
+    file: Option<String>,
+    line: Option<String>,
 }
 
 struct LoggerVisitor<'a>(&'a mut LogFields);
 
 impl<'a> tracing::field::Visit for LoggerVisitor<'a> {
     fn record_str(&mut self, field: &tracing::field::Field, value: &str) {
-        if field.name() == "message" {
-            self.0.message = Some(value.to_string());
-        } else if field.name() == "log.target" {
-            self.0.target = Some(value.to_string());
+        match field.name() {
+            "message" => self.0.message = Some(value.to_string()),
+            "log.target" => self.0.target = Some(value.to_string()),
+            "log.file" => self.0.file = Some(value.to_string()),
+            "log.line" => self.0.line = Some(value.to_string()),
+            "log.module_path" => self.0.module = Some(value.to_string()),
+            _ => {},
         }
     }
-
-    fn record_f64(&mut self, _field: &tracing::field::Field, _value: f64) {}
-
-    fn record_i64(&mut self, _field: &tracing::field::Field, _value: i64) {}
-
-    fn record_u64(&mut self, _field: &tracing::field::Field, _value: u64) {}
-
-    fn record_bool(&mut self, _field: &tracing::field::Field, _value: bool) {}
 
     fn record_error(
         &mut self,
@@ -41,9 +37,7 @@ impl<'a> tracing::field::Visit for LoggerVisitor<'a> {
     }
 
     fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
-        if field.name() == "message" {
-            (self.0).message = Some(format!("{value:?}"));
-        }
+        self.record_str(field, &format!("{value:#?}"));
     }
 }
 
@@ -57,15 +51,7 @@ struct IndentWrapper<'a, 'b> {
 
 impl std::fmt::Write for IndentWrapper<'_, '_> {
     fn write_str(&mut self, s: &str) -> Result<(), std::fmt::Error> {
-        let mut first = true;
-        for chunk in s.split('\n') {
-            if !first {
-                write!(self.buf, "\n{:width$}", "", width = 4)?;
-            }
-            self.buf.write_str(chunk)?;
-            first = false;
-        }
-
+        write!(self.buf, "{}", textwrap::fill(s, 80))?;
         Ok(())
     }
 }
@@ -93,103 +79,81 @@ where
         let mut visitor = LoggerVisitor(&mut fields);
         event.record(&mut visitor);
 
-        let message = match fields.message {
+        let mut message = match fields.message {
             Some(m) => m,
             None => return Ok(()),
         };
 
         let is_posix = fields.target.iter().any(|x| x == "posix");
-        let is_flox = fields
-            .target
-            .iter()
-            .any(|x| x == "flox" || x.starts_with("flox::"));
 
-        let message: Cow<str> = if is_posix {
-            format!("+ {message}").into()
-        } else {
-            message.into()
-        };
+        let is_flox = fields.target.map_or(false, |target| {
+            target == "flox" || target.starts_with("flox::")
+        });
 
-        let line = if let Some(light_peach) = colors::LIGHT_PEACH.to_crossterm() {
-            let mut line_style = ContentStyle::new();
-            match (*level, is_flox, is_posix) {
-                // Debug and trace from flox should be bold peach
-                (tracing::Level::TRACE | tracing::Level::DEBUG, true, _) => {
-                    line_style.foreground_color = Some(light_peach);
-                    line_style.attributes.set(Attribute::Bold);
-                },
-                // POSIX outputs should be bold
-                (_, _, true) => {
-                    line_style.attributes.set(Attribute::Bold);
-                },
-                // Other Error and Warn outputs should be bold
-                (tracing::Level::ERROR | tracing::Level::WARN, _, _) => {
-                    line_style.attributes.set(Attribute::Bold);
-                },
-                _ => {},
-            }
-
-            line_style.apply(message).to_string().into()
-        } else {
-            message
-        };
-
-        // If to use the more verbose debug printer, this should always be used with `--debug`,
-        // and otherwise should appear when printing something non-flox, non-posix, and high verbosity
-        if self.debug || (*level <= tracing::Level::DEBUG && !is_flox && !is_posix) {
-            let target_prefix = if let Some(target) = fields.target {
-                // TODO add flox colors for all levels and for target
-                let target_name = match supports_color::on(supports_color::Stream::Stderr) {
-                    Some(supports_color::ColorLevel {
-                        has_basic: true, ..
-                    }) => target.bold().to_string(),
-                    _ => target,
-                };
-                format!("[{target_name}] ")
+        // pretend all messages from `flox` are user facing
+        // unless they are posix command prints
+        if is_flox && !self.debug && !is_posix {
+            let wrap_options = if *level > Level::DEBUG {
+                textwrap::Options::new(80)
             } else {
-                "".to_owned()
+                textwrap::Options::with_termwidth()
             };
 
-            let bare_level_name = match *level {
-                tracing::Level::TRACE => "TRACE",
-                tracing::Level::DEBUG => "DEBUG",
-                tracing::Level::INFO => "INFO",
-                tracing::Level::WARN => "WARN",
-                tracing::Level::ERROR => "ERROR",
-            };
-
-            // TODO add flox colors for all levels and for target
-            let level_name = match supports_color::on(supports_color::Stream::Stderr) {
-                Some(supports_color::ColorLevel {
-                    has_basic: true, ..
-                }) => (match *level {
-                    tracing::Level::TRACE => bare_level_name.cyan(),
-                    tracing::Level::DEBUG => bare_level_name.blue(),
-                    tracing::Level::INFO => bare_level_name.green(),
-                    tracing::Level::WARN => bare_level_name.yellow(),
-                    tracing::Level::ERROR => bare_level_name.red(),
-                })
-                .to_string(),
-                _ => bare_level_name.to_string(),
-            };
-
-            write!(
-                IndentWrapper { buf: &mut f },
-                "[{level_name}] {target_prefix}{line}",
-            )?;
-            writeln!(f)?;
-        } else {
-            write!(
-                IndentWrapper { buf: &mut f },
-                "{level_prefix}{line}",
-                level_prefix = match (*level, colors::LIGHT_PEACH.to_crossterm()) {
-                    (tracing::Level::ERROR, Some(light_peach)) =>
-                        "ERROR: ".with(light_peach).bold().to_string(),
-                    _ => "".to_string(),
-                },
-            )?;
-            writeln!(f)?;
+            let message = textwrap::fill(&message, wrap_options);
+            writeln!(f, "{message}")?;
+            return Ok(());
         }
+
+        // VVV  debug mode, posix or not flox  VVV
+
+        let origin_prefix = {
+            let line = fields.line.as_deref().unwrap_or("??");
+            let file = fields.file.as_deref().unwrap_or("<unknown file>");
+
+            format!("{}:{}", file, line)
+        };
+
+        let level_prefix = {
+            let level_prefix = level.as_str();
+
+            match *level {
+                tracing::Level::ERROR => level_prefix.red(),
+                tracing::Level::WARN => level_prefix.yellow(),
+                _ => level_prefix.black(),
+            }
+        };
+
+        if is_posix {
+            let styled_message = message.bold();
+
+            if self.debug {
+                let head = format!("{level_prefix} {origin_prefix}:").bold();
+                writeln!(f, "{head}")?;
+            }
+            writeln!(f, "+ {styled_message}")?;
+            return Ok(());
+        }
+
+        // VVV  debug mode, not posix, both flox and not flox  VVV
+
+        // todo: filter this out in the `EnvFilter` `Layer` if possible
+        if !self.debug && !is_flox {
+            return Ok(());
+        }
+
+        // VVV  debug  VVV
+
+        let time_prefix: chrono::DateTime<chrono::Local> = chrono::Local::now();
+
+        let head = format!("{level_prefix} {time_prefix} {origin_prefix}").bold();
+
+        let combined_message = format!("{head}:\n{message}");
+
+        let wrap_options = textwrap::Options::with_termwidth().break_words(false);
+
+        message = textwrap::fill(&combined_message, wrap_options);
+
+        writeln!(f, "{}", message)?;
 
         Ok(())
     }
