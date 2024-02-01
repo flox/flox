@@ -88,6 +88,10 @@ public:
   FloxFlake( const nix::ref<nix::EvalState> & state,
              const nix::FlakeRef &            ref );
 
+  virtual ~FloxFlake()
+      { std::cout << "WML: FloxFlake destructor.\n"; };
+
+
   /**
    * Open a `nix` evaluator ( with an eval cache when possible ) with the
    * evaluated `flake` and its outputs in global scope.
