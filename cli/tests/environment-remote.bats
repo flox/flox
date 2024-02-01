@@ -148,7 +148,7 @@ EOF
   # current euid. I'm not sure if we should change that, but for now just set
   # USER to REAL_USER.
   SHELL=bash USER="$REAL_USER" run -0 expect -d "$TESTS_DIR/activate/remote-hello.exp" "$OWNER/test"
-  assert_output --regexp "$FLOX_CACHE_HOME/run/owner/.+\..+\..+/bin/hello"
+  assert_output --partial "$FLOX_CACHE_HOME/remote/owner/test/.flox/run/bin/hello"
   refute_output "not found"
 }
 
