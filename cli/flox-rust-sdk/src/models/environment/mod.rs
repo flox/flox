@@ -333,8 +333,6 @@ pub enum EnvironmentError2 {
     EnvironmentExists(PathBuf),
     #[error("could not write .gitignore file")]
     WriteGitignore(#[source] std::io::Error),
-    #[error("couldn't update manifest")]
-    ManifestEdit(#[source] std::io::Error),
     // endregion
 
     // todo: move pointer related errors somewhere else?
@@ -392,6 +390,8 @@ pub enum EnvironmentError2 {
 
     #[error("could not read manifest")]
     ReadManifest(#[source] std::io::Error),
+    #[error("couldn't write manifest")]
+    WriteManifest(#[source] std::io::Error),
 
     #[error("failed to create GC roots directory")]
     CreateGcRootDir(#[source] std::io::Error),

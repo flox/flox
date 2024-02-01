@@ -368,10 +368,10 @@ impl PathEnvironment {
             manifest_path.display(),
             system
         );
-        let contents = fs::read_to_string(&manifest_path).map_err(EnvironmentError2::ManifestEdit);
+        let contents = fs::read_to_string(&manifest_path).map_err(EnvironmentError2::ReadManifest);
         if let Err(e) = contents {
             debug!("couldn't open manifest to replace placeholder system");
-            fs::remove_dir_all(&env_dir).map_err(EnvironmentError2::ManifestEdit)?;
+            fs::remove_dir_all(&env_dir).map_err(EnvironmentError2::InitEnv)?;
             return Err(e);
         }
         let contents = contents.unwrap();
@@ -381,7 +381,7 @@ impl PathEnvironment {
             contents != replaced
         );
         let write_res =
-            fs::write(&manifest_path, replaced).map_err(EnvironmentError2::ManifestEdit);
+            fs::write(&manifest_path, replaced).map_err(EnvironmentError2::WriteManifest);
         if let Err(e) = write_res {
             debug!("overwriting manifest did not complete successfully");
             fs::remove_dir_all(&env_dir).map_err(EnvironmentError2::InitEnv)?;
