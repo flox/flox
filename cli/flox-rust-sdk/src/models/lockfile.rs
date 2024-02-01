@@ -154,11 +154,7 @@ impl LockedManifest {
                 let canonical_lockfile_path =
                     CanonicalPath::new(lf_path).map_err(LockedManifestError::BadLockfilePath)?;
                 pkgdb_cmd.arg("--lockfile").arg(&canonical_lockfile_path);
-                serde_json::from_slice(
-                    &fs::read(canonical_lockfile_path)
-                        .map_err(LockedManifestError::ReadLockfile)?,
-                )
-                .map_err(LockedManifestError::ParseLockfile)
+                Self::read_from_file(&canonical_lockfile_path)
             })
             .transpose()?;
 
@@ -198,6 +194,11 @@ impl LockedManifest {
             Self::update_global_manifest(flox, vec![])?;
         }
         Ok(global_lockfile_path)
+    }
+
+    pub fn read_from_file(path: &CanonicalPath) -> Result<Self, LockedManifestError> {
+        let contents = fs::read(path).map_err(LockedManifestError::ReadLockfile)?;
+        serde_json::from_slice(&contents).map_err(LockedManifestError::ParseLockfile)
     }
 }
 

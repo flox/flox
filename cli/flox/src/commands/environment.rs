@@ -1,6 +1,5 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
-use std::error::Error;
 use std::ffi::{OsStr, OsString};
 use std::fmt::Display;
 use std::fs::{self, File};
@@ -21,6 +20,7 @@ use flox_rust_sdk::models::environment::managed_environment::{
 };
 use flox_rust_sdk::models::environment::path_environment::{self, PathEnvironment};
 use flox_rust_sdk::models::environment::{
+    CanonicalPath,
     CoreEnvironmentError,
     EditResult,
     Environment,
@@ -71,6 +71,7 @@ use crate::commands::{
 use crate::config::Config;
 use crate::utils::dialog::{Confirm, Dialog, Select, Spinner};
 use crate::utils::didyoumean::{DidYouMean, InstallSuggestion};
+use crate::utils::errors::{format_core_error, format_locked_manifest_error};
 use crate::{subcommand_metric, utils};
 
 #[derive(Bpaf, Clone)]
@@ -211,17 +212,18 @@ impl Edit {
             .spin();
 
             match result {
-                Err(e) => {
-                    error!(
-                        "Environment invalid; building resulted in an error: {}",
-                        anyhow!(e).chain().join(": ")
-                    );
+                Err(EnvironmentError2::Core(CoreEnvironmentError::LockedManifest(e))) => {
+                    error!("{}", format_locked_manifest_error(&e));
+
                     if !Dialog::can_prompt() {
                         bail!("Can't prompt to continue editing in non-interactive context");
                     }
                     if !should_continue.clone().prompt().await? {
                         bail!("Environment editing cancelled");
                     }
+                },
+                Err(e) => {
+                    bail!(e)
                 },
                 Ok(result) => {
                     return Ok(result);
@@ -1017,17 +1019,18 @@ impl List {
             .context("Could not get lockfile path")?;
 
         let lockfile = if !lockfile_path.exists() {
+            debug!("No lockfile found, locking environment...");
             Dialog {
                 message: "No lockfile found for environment, building...",
                 help_message: None,
                 typed: Spinner::new(|| env.lock(flox)),
             }
-            .spin()
-            .context("Failed to build environment")?
+            .spin()?
         } else {
-            let lockfile_content =
-                fs::read_to_string(lockfile_path).context("Could not read lockfile")?;
-            serde_json::from_str(&lockfile_content)?
+            debug!("Using existing lockfile");
+            // we have already checked that the lockfile exists
+            let path = CanonicalPath::new(lockfile_path).unwrap();
+            LockedManifest::read_from_file(&path)?
         };
 
         let lockfile: TypedLockedManifest = lockfile.try_into()?;
@@ -1338,6 +1341,7 @@ impl Push {
             EnvironmentPointer::Managed(managed_pointer) => {
                 let message = Self::push_existing_message(&managed_pointer, self.force);
 
+                // todo add spinner
                 Self::push_managed_env(&flox, managed_pointer, dir, self.force)?;
 
                 info!("{message}");
@@ -1355,6 +1359,8 @@ impl Push {
                             .handle()?,
                     )?
                 };
+
+                // todo add spinner
                 let env = Self::push_make_managed(&flox, path_pointer, &dir, owner, self.force)?;
 
                 info!("{}", Self::push_new_message(env.pointer(), self.force));
@@ -1369,8 +1375,7 @@ impl Push {
         dir: PathBuf,
         force: bool,
     ) -> Result<()> {
-        let mut env = ManagedEnvironment::open(flox, managed_pointer.clone(), dir.join(DOT_FLOX))
-            .context("Could not open environment")?;
+        let mut env = ManagedEnvironment::open(flox, managed_pointer.clone(), dir.join(DOT_FLOX))?;
         env.push(flox, force)
             .map_err(|err| Self::convert_error(err, managed_pointer, false))?;
 
@@ -1405,15 +1410,6 @@ impl Push {
         let owner = &pointer.owner;
         let name = &pointer.name;
 
-        fn error_chain(mut e: &dyn Error) -> String {
-            let mut msg = e.to_string();
-            while let Some(source) = e.source() {
-                e = source;
-                msg.push_str(&format!(": {}", e));
-            }
-            msg
-        }
-
         let message = match err {
             ManagedEnvironmentError::AccessDenied => formatdoc! {"
                 ❌  You do not have permission to write to {owner}/{name}
@@ -1430,7 +1426,7 @@ impl Push {
                 ❌  Unable to push environment with build errors.
 
                 Use 'flox edit' to resolve errors, test with 'flox activate', and 'flox push' again.",
-                err = error_chain(err)
+                err = format_core_error(err)
             }.into(),
             _ => None
         };
@@ -1548,8 +1544,7 @@ impl Pull {
                 debug!("Resolved user intent: pull changes for environment found in {dir:?}");
 
                 let pointer = {
-                    let p = EnvironmentPointer::open(&dir)
-                        .with_context(|| format!("No environment found in {dir:?}"))?;
+                    let p = EnvironmentPointer::open(&dir)?;
                     match p {
                         EnvironmentPointer::Managed(managed_pointer) => managed_pointer,
                         EnvironmentPointer::Path(_) => bail!("Cannot pull into a path environment"),
@@ -1587,8 +1582,8 @@ impl Pull {
     ) -> Result<()> {
         let mut env = ManagedEnvironment::open(flox, pointer, dot_flox_path)
             .context("Could not open environment")?;
-        env.pull(force).context("Could not pull environment")?;
-        env.build(flox).context("Could not build environment")?;
+        env.pull(force)?; //.context("Could not pull environment")?;
+        env.build(flox)?; //.context("Could not build environment")?;
 
         Ok(())
     }
@@ -1697,7 +1692,7 @@ impl Pull {
             Err(e) => {
                 fs::remove_dir_all(&dot_flox_path)
                     .context("Could not clean up .flox/ directory")?;
-                Err(e)?
+                bail!(e)
             },
         }
 
@@ -1996,9 +1991,8 @@ impl Update {
     ) -> Result<UpdateResult> {
         let mut environment = concrete_environment.into_dyn_environment();
 
-        environment
-            .update(&flox, self.inputs.clone())
-            .context("updating environment failed")
+        Ok(environment.update(&flox, self.inputs.clone())?)
+        // .context("updating environment failed")
     }
 
     fn scrape_input(input: &FlakeRef) -> Result<()> {
@@ -2037,8 +2031,8 @@ impl Upgrade {
         let mut environment = concrete_environment.into_dyn_environment();
 
         let upgraded = environment
-            .upgrade(&flox, &self.groups_or_iids)
-            .context("upgrading environment failed")?
+            .upgrade(&flox, &self.groups_or_iids)?
+            // .context("upgrading environment failed")?
             .0;
 
         if upgraded.is_empty() {
@@ -2106,14 +2100,13 @@ impl Containerize {
             help_message: None,
             typed: Spinner::new(|| env.build_container(&flox)),
         }
-        .spin()
-        .context("could not create container builder")?;
+        .spin()?;
+        // .context("could not create container builder")?;
 
         info!("Writing container to '{output_name}'");
 
-        builder
-            .stream_container(output)
-            .context("could not write container to output")?;
+        builder.stream_container(output)?;
+        // .context("could not write container to output")?;
 
         info!("✨  Container written to '{output_name}'");
         Ok(())

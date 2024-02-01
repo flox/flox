@@ -14,8 +14,8 @@ use flox_rust_sdk::models::pkgdb::CallPkgDbError;
 use indoc::formatdoc;
 use log::debug;
 
-pub fn format_error(err: &'static EnvironmentError2) -> String {
-    debug!("formatting environment_error: {}", anyhow::Error::from(err));
+pub fn format_error(err: &EnvironmentError2) -> String {
+    debug!("formatting environment_error: {err:?}");
 
     match err {
         EnvironmentError2::DotFloxNotFound => display_chain(err),
@@ -184,7 +184,6 @@ pub fn format_error(err: &'static EnvironmentError2) -> String {
 }
 
 pub fn format_core_error(err: &CoreEnvironmentError) -> String {
-
     debug!("formatting core_error: {err:?}");
 
     match err {
@@ -272,7 +271,7 @@ pub fn format_core_error(err: &CoreEnvironmentError) -> String {
     }
 }
 
-pub fn format_managed_error(err: & ManagedEnvironmentError) -> String {
+pub fn format_managed_error(err: &ManagedEnvironmentError) -> String {
     debug!("formatting managed_environment_error: {err:?}");
 
     match err {
@@ -417,7 +416,7 @@ pub fn format_managed_error(err: & ManagedEnvironmentError) -> String {
             Could not read managed manifest.
 
             {err}
-        ", err = display_chain(err) },
+        ", err = display_chain(e) },
         ManagedEnvironmentError::CanonicalizePath(canonicalize_err) => formatdoc! {"
             Invalid path to environment: {canonicalize_err}
 
@@ -429,9 +428,8 @@ pub fn format_managed_error(err: & ManagedEnvironmentError) -> String {
     }
 }
 
-pub fn format_remote_error(err: & RemoteEnvironmentError) -> String {
+pub fn format_remote_error(err: &RemoteEnvironmentError) -> String {
     debug!("formatting remote_environment_error: {err:?}");
-
 
     match err {
         RemoteEnvironmentError::OpenManagedEnvironment(err) => formatdoc! {"
@@ -480,10 +478,7 @@ pub fn format_remote_error(err: & RemoteEnvironmentError) -> String {
     }
 }
 
-pub fn format_locked_manifest_error(
-    err: & LockedManifestError,
-) -> String {
-
+pub fn format_locked_manifest_error(err: &LockedManifestError) -> String {
     debug!("formatting locked_manifest_error: {err:?}");
     match err {
         LockedManifestError::CallContainerBuilder(_) => formatdoc! {"
@@ -561,7 +556,6 @@ fn format_pkgdb_error(
     parent: &dyn std::error::Error,
     context: &str,
 ) -> String {
-
     debug!("formatting pkgdb_error: {err:?}");
 
     match err {
