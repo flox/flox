@@ -241,6 +241,7 @@ PkgDbRegistryMixin::scrapeIfNeeded()
   for ( auto & [name, input] : *this->registry )
     {
       input->scrapeSystems( this->getSystems() );
+      input->freeFlake();
     }
 }
 

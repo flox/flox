@@ -261,6 +261,7 @@ FloxFlakeInput::getFlake()
 {
   if ( this->flake == nullptr )
     {
+      std::cout << "WML: getFlake called and getting flake state.\n";
       this->flake
         = std::make_shared<FloxFlake>( NixState( this->store ).getState(),
                                        *this->getFlakeRef() );
@@ -268,6 +269,14 @@ FloxFlakeInput::getFlake()
   return static_cast<nix::ref<FloxFlake>>( this->flake );
 }
 
+void FloxFlakeInput::freeFlake()
+{
+  std::cout << "WML: freeFlake called.\n";
+  if ( this->flake != nullptr )
+    {
+      this->flake = nullptr;
+    }
+}
 
 /* -------------------------------------------------------------------------- */
 
