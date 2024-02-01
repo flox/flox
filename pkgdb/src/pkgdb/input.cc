@@ -198,6 +198,7 @@ PkgDbInput::scrapeSystems( const std::vector<System> & systems )
           prefix.emplace_back( system );
           this->scrapePrefix( prefix );
           prefix.pop_back();
+          this->resetEvaluator(); /* Free resources */
         }
     }
 }
@@ -233,6 +234,7 @@ PkgDbRegistryMixin::initRegistry()
 
 /* -------------------------------------------------------------------------- */
 
+// XXX: Keep in sync with `Environment::getPkgDbRegistry'
 void
 PkgDbRegistryMixin::scrapeIfNeeded()
 {

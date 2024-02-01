@@ -60,7 +60,7 @@ static const nix::flake::LockFlags defaultLockFlags = {
 /* -------------------------------------------------------------------------- */
 
 /**
- * A convenience wrapper that provides various operations on a `flake`.
+ * @brief A convenience wrapper that provides various operations on a `flake`.
  *
  * Notably this class is responsible for a `nix` `EvalState` and an
  * `EvalCache` database associated with a `flake`.
@@ -80,6 +80,7 @@ private:
    */
   std::shared_ptr<nix::eval_cache::EvalCache> _cache;
 
+
 public:
 
   nix::ref<nix::EvalState>      state;
@@ -89,33 +90,56 @@ public:
              const nix::FlakeRef &            ref );
 
   /**
-   * Open a `nix` evaluator ( with an eval cache when possible ) with the
-   * evaluated `flake` and its outputs in global scope.
+   * @brief Open a `nix` evaluator ( with an eval cache when possible ) with the
+   *        evaluated `flake` and its outputs in global scope.
    * @return A `nix` evaluator, potentially with caching.
    */
   nix::ref<nix::eval_cache::EvalCache>
   openEvalCache();
 
   /**
-   * Try to open a `nix` evaluator cursor at a given path.
+   * @brief Try to open a `nix` evaluator cursor at a given path.
    * If there is no such attribute this routine will return `nullptr`.
    * @param path The attribute path try opening.
    * @return `nullptr` iff there is no such path, otherwise a
    *         @a nix::eval_cache::AttrCursor at @a path.
    */
-  MaybeCursor
+  [[nodiscard]] MaybeCursor
   maybeOpenCursor( const AttrPath & path );
 
   /**
-   * Open a `nix` evaluator cursor at a given path.
+   * @brief Open a `nix` evaluator cursor at a given path.
    * If there is no such attribute this routine will throw an error.
    * @param path The attribute path to open.
    * @return A @a nix::eval_cache::AttrCursor at @a path.
    */
-  Cursor
+  [[nodiscard]] Cursor
   openCursor( const AttrPath & path );
 
+  /**
+   * @brief Close the `nix` evaluator and cache associated with this flake and
+   *        replace it with a new one.
+   *
+   * This is primary useful to free up memory and resources associated with the
+   * old evaluator and cache.
+   */
+   void
+   resetEvaluator( const nix::ref<nix::EvalState> & state )
+   {
+     this->_cache = nullptr;
+     /* The `state` object tracks "locked flakes" that it is allowed to
+      * reference, so we need to "relock" the flake - effectively just to
+      * register it as "okay to reference" in expression.
+      *
+      * If this is not done you'll receive complaints about paths being
+      * inaccessible in "pure mode". */
+     state->allowedPaths = this->state->allowedPaths;
+     this->state  = state;
+   }
+
+
 }; /* End class `FloxFlake' */
+
 
 /* -------------------------------------------------------------------------- */
 

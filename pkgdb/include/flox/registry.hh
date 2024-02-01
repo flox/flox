@@ -420,6 +420,7 @@ from_json( const nlohmann::json & jfrom, RegistryRaw & reg );
 void
 to_json( nlohmann::json & jto, const RegistryRaw & reg );
 
+
 /* -------------------------------------------------------------------------- */
 
 /**
@@ -650,11 +651,9 @@ public:
     : RegistryInput( input ), store( store )
   {}
 
-
   /** @brief Get a handle for a flake with a `nix` evaluator. */
   [[nodiscard]] nix::ref<FloxFlake>
   getFlake();
-
 
   /**
    * @brief Get a list of enabled subtrees.
@@ -665,12 +664,25 @@ public:
    *   1. "package"
    *   2. "legacyPackages"
    */
-  [[nodiscard]] const std::vector<Subtree> &
+  [[nodiscard]] virtual const std::vector<Subtree> &
   getSubtrees();
 
-
-  [[nodiscard]] RegistryInput
+  [[nodiscard]] virtual RegistryInput
   getLockedInput();
+
+  /**
+   * @brief Close the `nix` evaluator and cache associated with this flake and
+   *        replace it with a new one.
+   *
+   * This is primary useful to free up memory and resources associated with the
+   * old evaluator and cache.
+   */
+   void
+   resetEvaluator()
+   {
+     auto state = NixState( this->store ).getState();
+     this->getFlake()->resetEvaluator( state );
+   }
 
 
 }; /* End struct `FloxFlakeInput' */
@@ -703,7 +715,6 @@ public:
 
 
 }; /* End class `FloxFlakeInputFactory' */
-
 
 static_assert( registry_input_factory<FloxFlakeInputFactory> );
 

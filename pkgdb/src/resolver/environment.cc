@@ -128,6 +128,7 @@ Environment::getPkgDbRegistry()
         this->getCombinedRegistryRaw(),
         factory );
       /* Scrape if needed. */
+      // XXX: Keep in sync with `PkgdbRegistryMixin::scrapeIfNeeded'
       for ( auto & [name, input] : *this->dbs )
         {
           input->scrapeSystems( this->getSystems() );
