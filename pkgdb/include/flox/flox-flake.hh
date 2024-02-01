@@ -124,7 +124,7 @@ public:
    * old evaluator and cache.
    */
   void
-  resetEvaluator( const nix::ref<nix::EvalState> & state )
+  resetEvaluator( const nix::ref<nix::Store> & store )
   {
     /* The `state` object tracks "locked flakes" that it is allowed to
      * reference, so we need to "relock" the flake - effectively just to
@@ -132,10 +132,11 @@ public:
      *
      * If this is not done you'll receive complaints about paths being
      * inaccessible in "pure mode". */
-    state->allowedPaths = this->state->allowedPaths;
-    this->state         = state;
-    this->_cache        = nullptr;
+    auto allowedPaths = this->state->allowedPaths;
+    this->_cache      = nullptr;
     GC_gcollect();
+    this->state               = NixState( store ).getState();
+    this->state->allowedPaths = std::move( allowedPaths );
   }
 
 

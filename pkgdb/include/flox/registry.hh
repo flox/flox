@@ -680,8 +680,7 @@ public:
   void
   resetEvaluator()
   {
-    auto state = NixState( this->store ).getState();
-    this->getFlake()->resetEvaluator( state );
+    this->getFlake()->resetEvaluator( this->store );
   }
 
 
