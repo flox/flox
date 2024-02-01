@@ -1479,36 +1479,26 @@ impl Push {
 
 #[derive(Debug, Clone, Bpaf)]
 enum PullSelect {
+    Existing {
+        /// Forceably overwrite the local copy of the environment
+        #[bpaf(long, short)]
+        force: bool,
+    },
     New {
-        /// Directory to create the environment in (default: current directory)
-        #[bpaf(long, short, argument("path"))]
-        dir: Option<PathBuf>,
         /// ID of the environment to pull
         #[bpaf(long, short, argument("owner/name"))]
         remote: EnvironmentRef,
     },
     NewAbbreviated {
-        /// Directory to create the environment in (default: current directory)
-        #[bpaf(long, short, argument("path"))]
-        dir: Option<PathBuf>,
         /// ID of the environment to pull
         #[bpaf(positional("owner/name"))]
         remote: EnvironmentRef,
-    },
-    Existing {
-        /// Directory containing a managed environment to pull
-        #[bpaf(long, short, argument("path"))]
-        dir: Option<PathBuf>,
-        /// Forceably overwrite the local copy of the environment
-        #[bpaf(long, short)]
-        force: bool,
     },
 }
 
 impl Default for PullSelect {
     fn default() -> Self {
         PullSelect::Existing {
-            dir: Default::default(),
             force: Default::default(),
         }
     }
@@ -1521,6 +1511,10 @@ pub struct Pull {
     #[bpaf(long("add-system"), short)]
     add_system: bool,
 
+    /// Directory containing the environment (default: current directory)
+    #[bpaf(long, short, argument("path"))]
+    dir: Option<PathBuf>,
+
     #[bpaf(external(pull_select), fallback(Default::default()))]
     pull_select: PullSelect,
 }
@@ -1530,11 +1524,11 @@ impl Pull {
         subcommand_metric!("pull");
 
         match self.pull_select {
-            PullSelect::New { dir, remote } | PullSelect::NewAbbreviated { dir, remote } => {
+            PullSelect::New { remote } | PullSelect::NewAbbreviated { remote } => {
                 let (start, complete) =
-                    Self::pull_new_messages(dir.as_deref(), &remote, flox.floxhub.base_url());
+                    Self::pull_new_messages(self.dir.as_deref(), &remote, flox.floxhub.base_url());
 
-                let dir = dir.unwrap_or_else(|| std::env::current_dir().unwrap());
+                let dir = self.dir.unwrap_or_else(|| std::env::current_dir().unwrap());
 
                 debug!("Resolved user intent: pull {remote:?} into {dir:?}");
 
@@ -1548,8 +1542,8 @@ impl Pull {
 
                 info!("{complete}");
             },
-            PullSelect::Existing { dir, force } => {
-                let dir = dir.unwrap_or_else(|| std::env::current_dir().unwrap());
+            PullSelect::Existing { force } => {
+                let dir = self.dir.unwrap_or_else(|| std::env::current_dir().unwrap());
 
                 debug!("Resolved user intent: pull changes for environment found in {dir:?}");
 
