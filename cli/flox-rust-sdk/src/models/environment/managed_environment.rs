@@ -123,9 +123,6 @@ pub enum ManagedEnvironmentError {
     #[error("could not commit generation")]
     CommitGeneration(#[source] GenerationsError),
 
-    #[error("could not link environment")]
-    Link(#[source] CoreEnvironmentError),
-
     #[error("could not build environment")]
     Build(#[source] CoreEnvironmentError),
 

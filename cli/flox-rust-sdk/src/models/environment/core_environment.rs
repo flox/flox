@@ -641,17 +641,13 @@ pub enum CoreEnvironmentError {
     #[error(transparent)]
     BadLockfilePath(CanonicalizeError),
 
-    #[error("could not open manifest file")]
-    ReadManifest(#[source] std::io::Error),
-
+    // todo: refactor upgrade to use `LockedManifest`
     #[error("unexpected output from pkgdb upgrade")]
     ParseUpgradeOutput(#[source] serde_json::Error),
-
     #[error("failed to upgrade environment")]
     UpgradeFailed(#[source] CallPkgDbError),
     // endregion
-    #[error("unexpected output from environment builder command")]
-    ParseBuildEnvOutput(#[source] serde_json::Error),
+
     // endregion
     #[error("unsupported system to build container: {0}")]
     ContainerizeUnsupportedSystem(String),
