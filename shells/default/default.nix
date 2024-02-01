@@ -18,7 +18,20 @@
     flox-pkgdb.ciPackages
     ++ flox-pkgdb.ciPackages
     ++ flox-cli.ciPackages
-    ++ [flox-cli-tests flox-tests];
+    ++ [
+      (flox-cli-tests.override {
+        PROJECT_TESTS_DIR = "/cli/tests";
+        PKGDB_BIN = null;
+        FLOX_BIN = null;
+        LD_FLOXLIB = null;
+      })
+      (flox-tests.override {
+        PROJECT_TESTS_DIR = "/tests";
+        PKGDB_BIN = null;
+        FLOX_BIN = null;
+        LD_FLOXLIB = null;
+      })
+    ];
 
   devPackages =
     flox-pkgdb.devPackages
@@ -37,7 +50,9 @@ in
 
       inputsFrom = [
         flox-pkgdb
-        flox-cli
+        (flox-cli.override {
+          flox-pkgdb = null;
+        })
       ];
 
       packages = ciPackages ++ lib.optionals (!ci) devPackages;

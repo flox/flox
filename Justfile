@@ -14,6 +14,7 @@ nix_options := "--extra-experimental-features nix-command \
  --extra-experimental-features flakes"
 PKGDB_BIN := "${PWD}/pkgdb/bin/pkgdb"
 FLOX_BIN := "${PWD}/cli/target/debug/flox"
+LD_FLOXLIB := "${PWD}/pkgdb/lib/ld-floxlib.so"
 cargo_test_invocation := "PKGDB_BIN=${PKGDB_BIN} cargo test --workspace"
 
 
@@ -29,6 +30,7 @@ cargo_test_invocation := "PKGDB_BIN=${PKGDB_BIN} cargo test --workspace"
 @bins:
     echo "{{PKGDB_BIN}}"
     echo "{{FLOX_BIN}}"
+    echo "{{LD_FLOXLIB}}"
 
 # ---------------------------------------------------------------------------- #
 
@@ -66,17 +68,18 @@ build: build-cli
 
 # Run the end-to-end test suite
 @functional-tests +bats_args="": build
-    flox-tests --pkgdb "{{PKGDB_BIN}}" --flox "{{FLOX_BIN}}" {{bats_args}}
+    flox-tests --pkgdb "{{PKGDB_BIN}}" \
+     --flox "{{FLOX_BIN}}" --ld-floxlib "{{LD_FLOXLIB}}" -- {{bats_args}}
 
 # Run the CLI integration test suite
 @integ-tests +bats_args="": build
     flox-cli-tests --pkgdb "{{PKGDB_BIN}}" \
-     --flox "{{FLOX_BIN}}" {{bats_args}}
+     --flox "{{FLOX_BIN}}" --ld-floxlib "{{LD_FLOXLIB}}" -- {{bats_args}}
 
 # Run a specific CLI integration test file by name (not path)
 @integ-file +bats_args="": build
     flox-cli-tests --pkgdb "{{PKGDB_BIN}}" \
-     --flox "{{FLOX_BIN}}" {{bats_args}}
+     --flox "{{FLOX_BIN}}" --ld-floxlib "{{LD_FLOXLIB}}" -- {{bats_args}}
 
 # Run the CLI unit tests
 @unit-tests regex="": build
