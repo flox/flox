@@ -204,7 +204,7 @@ impl<'a, F: FnOnce() -> T + Send, T: Send> Dialog<'a, Spinner<F>> {
 impl Dialog<'_, ()> {
     /// True if stderr and stdin are ttys
     pub fn can_prompt() -> bool {
-        std::io::stderr().is_tty() && std::io::stdin().is_tty()
+        std::io::stderr().is_tty() && std::io::stdin().is_tty() && std::io::stdout().is_tty()
     }
 }
 

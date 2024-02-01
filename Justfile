@@ -94,7 +94,7 @@ build: build-cli
      popd;
 
 # Run the entire CLI test suite
-test-cli: impure-tests integ-tests functional-tests
+test-cli: impure-tests integ-tests
 
 # Run the entire test suite, including impure unit tests
 test-all: test-pkgdb impure-tests integ-tests functional-tests
