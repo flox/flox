@@ -126,7 +126,6 @@ public:
    void
    resetEvaluator( const nix::ref<nix::EvalState> & state )
    {
-     this->_cache = nullptr;
      /* The `state` object tracks "locked flakes" that it is allowed to
       * reference, so we need to "relock" the flake - effectively just to
       * register it as "okay to reference" in expression.
@@ -135,6 +134,8 @@ public:
       * inaccessible in "pure mode". */
      state->allowedPaths = this->state->allowedPaths;
      this->state  = state;
+     this->_cache = nullptr;
+     GC_gcollect();
    }
 
 
