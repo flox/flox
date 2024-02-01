@@ -10,6 +10,7 @@ use flox_rust_sdk::models::environment::{
     EnvironmentError2,
     ENVIRONMENT_POINTER_FILENAME,
 };
+use flox_rust_sdk::models::lockfile::LockedManifestError;
 use flox_rust_sdk::models::pkgdb::CallPkgDbError;
 use indoc::formatdoc;
 use itertools::Itertools;
@@ -160,6 +161,15 @@ pub fn format_error(err: &'static EnvironmentError2) -> String {
             Please make sure that '.flox/env/manifest.toml' exists
             and that you have read permissions.
         "},
+
+        // todo: enrich with path
+        EnvironmentError2::WriteManifest(err) => formatdoc! {"
+            Failed to write manifest: {err}
+
+            Please make sure that '.flox/env/manifest.toml' exists
+            and that you have write permissions.
+        "},
+
         // todo: enrich with path
         EnvironmentError2::CreateGcRootDir(err) => format! {"
             Failed to create '.flox/run' directory: {err}
@@ -174,7 +184,11 @@ pub fn format_error(err: &'static EnvironmentError2) -> String {
 
 fn format_core_error(err: &'static CoreEnvironmentError) -> String {
     match err {
-        CoreEnvironmentError::ModifyToml(_) => todo!(),
+        CoreEnvironmentError::ModifyToml(toml_error) => formatdoc! {"
+            Failed to modify manifest.
+
+            {toml_error}
+        "},
         // todo: enrich with path
         // raised during edit
         CoreEnvironmentError::DeserializeManifest(err) => formatdoc! {
@@ -227,15 +241,30 @@ fn format_core_error(err: &'static CoreEnvironmentError) -> String {
 
             Please ensure that you have read permissions to '.flox/env/manifest.toml'.
         "},
+        // todo: enrich with path
         CoreEnvironmentError::UpdateManifest(err) => formatdoc! {"
             Failed to write to manifest file: {err}
 
             Please ensure that you have write permissions to '.flox/env/manifest.toml'.
         "},
+
+        // internal error, a bug if this happens to users!
+        CoreEnvironmentError::BadLockfilePath(_) => display_chain(err),
+
+        // todo: should be in LockedManifesterror
         CoreEnvironmentError::UpgradeFailed(pkgdb_error) => {
             format_pkgdb_error(pkgdb_error, err, "Failed to upgrade environment.")
         },
+        // other pkgdb call errors are unexpected
+        CoreEnvironmentError::ParseUpgradeOutput(_) => display_chain(err),
+
+        CoreEnvironmentError::LockedManifest(locked_manifest_error) => {
+            format_locked_manifest_error(locked_manifest_error, err)
         },
+
+        CoreEnvironmentError::ContainerizeUnsupportedSystem(system) => formatdoc! {"
+            'containerize' is currently only supported on linux (found {system}).
+        "},
     }
 }
 
@@ -378,12 +407,19 @@ fn format_managed_error(err: &'static ManagedEnvironmentError) -> String {
             Please try again later.
         "},
 
-        ManagedEnvironmentError::ReadManifest(_) => todo!(),
+        ManagedEnvironmentError::ReadManifest(e) => formatdoc! {"
+            Could not read managed manifest.
+
+            {err}
+        ", err = anyhow::Error::from(e) },
         ManagedEnvironmentError::CanonicalizePath(canonicalize_err) => formatdoc! {"
             Invalid path to environment: {canonicalize_err}
 
             Please ensure that the path exists and that you have read permissions.
         "},
+        ManagedEnvironmentError::Build(core_environment_error) => {
+            format_core_error(core_environment_error)
+        },
     }
 }
 
@@ -394,6 +430,18 @@ fn format_remote_error(err: &'static RemoteEnvironmentError) -> String {
 
             This may be due to a corrupt or incompatible environment.
         ", err = display_chain(err)},
+
+        RemoteEnvironmentError::CreateTempDotFlox(_) => formatdoc! {"
+            Failed to initialize remote environment locally.
+
+            Please ensure that you have write permissions to FLOX_CACHE_DIR/remote.
+        "},
+
+        RemoteEnvironmentError::ResetManagedEnvironment(err) => formatdoc! {"
+            Failed to reset remote environment to latest upstream version:
+
+            {err}
+            ", err = format_managed_error(err)},
 
         RemoteEnvironmentError::GetLatestVersion(err) => formatdoc! {"
             Failed to get latest version of remote environment: {err}
@@ -428,13 +476,19 @@ fn format_locked_manifest_error(
     parent: impl Into<anyhow::Error>,
 ) -> String {
     match err {
-        LockedManifestError::CallContainerBuilder(_) => todo!(),
+        LockedManifestError::CallContainerBuilder(_) => formatdoc! {"
+            Failed to call container builder.
+
+            Successfully created a container builder for you environment,
+            but failed to call it.
+        "},
 
         // todo: enrich with path
         LockedManifestError::WriteContainer(err) => formatdoc! {"
             Failed to write container: {err}
 
-            Please ensure that you have write permissions to '.flox/env/container'.
+            Please ensure that you have write permissions to
+            the destination file.
         "},
 
         // this is a BUG
@@ -459,7 +513,9 @@ fn format_locked_manifest_error(
         LockedManifestError::LockManifest(pkgdb_error) => {
             format_pkgdb_error(pkgdb_error, parent, "Failed to lock environment manifest.")
         },
-        LockedManifestError::BuildEnv(_) => todo!(),
+        LockedManifestError::BuildEnv(pkgdb_error) => {
+            format_pkgdb_error(pkgdb_error, parent, "Failed to build environment.")
+        },
         LockedManifestError::UpdateFailed(pkgdb_error) => {
             format_pkgdb_error(pkgdb_error, parent, "Failed to update environment.")
         },
