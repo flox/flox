@@ -1,4 +1,3 @@
-use anyhow::anyhow;
 use flox_rust_sdk::models::environment::managed_environment::{
     ManagedEnvironmentError,
     GENERATION_LOCK_FILENAME,
@@ -13,9 +12,11 @@ use flox_rust_sdk::models::environment::{
 use flox_rust_sdk::models::lockfile::LockedManifestError;
 use flox_rust_sdk::models::pkgdb::CallPkgDbError;
 use indoc::formatdoc;
-use itertools::Itertools;
+use log::debug;
 
 pub fn format_error(err: &'static EnvironmentError2) -> String {
+    debug!("formatting environment_error: {}", anyhow::Error::from(err));
+
     match err {
         EnvironmentError2::DotFloxNotFound => display_chain(err),
 
@@ -182,7 +183,10 @@ pub fn format_error(err: &'static EnvironmentError2) -> String {
     }
 }
 
-fn format_core_error(err: &'static CoreEnvironmentError) -> String {
+pub fn format_core_error(err: &CoreEnvironmentError) -> String {
+
+    debug!("formatting core_error: {err:?}");
+
     match err {
         CoreEnvironmentError::ModifyToml(toml_error) => formatdoc! {"
             Failed to modify manifest.
@@ -259,7 +263,7 @@ fn format_core_error(err: &'static CoreEnvironmentError) -> String {
         CoreEnvironmentError::ParseUpgradeOutput(_) => display_chain(err),
 
         CoreEnvironmentError::LockedManifest(locked_manifest_error) => {
-            format_locked_manifest_error(locked_manifest_error, err)
+            format_locked_manifest_error(locked_manifest_error)
         },
 
         CoreEnvironmentError::ContainerizeUnsupportedSystem(system) => formatdoc! {"
@@ -268,7 +272,9 @@ fn format_core_error(err: &'static CoreEnvironmentError) -> String {
     }
 }
 
-fn format_managed_error(err: &'static ManagedEnvironmentError) -> String {
+pub fn format_managed_error(err: & ManagedEnvironmentError) -> String {
+    debug!("formatting managed_environment_error: {err:?}");
+
     match err {
         // todo: communicate reasons for this error
         // git auth errors may be catched separately or reported
@@ -411,7 +417,7 @@ fn format_managed_error(err: &'static ManagedEnvironmentError) -> String {
             Could not read managed manifest.
 
             {err}
-        ", err = anyhow::Error::from(e) },
+        ", err = display_chain(err) },
         ManagedEnvironmentError::CanonicalizePath(canonicalize_err) => formatdoc! {"
             Invalid path to environment: {canonicalize_err}
 
@@ -423,7 +429,10 @@ fn format_managed_error(err: &'static ManagedEnvironmentError) -> String {
     }
 }
 
-fn format_remote_error(err: &'static RemoteEnvironmentError) -> String {
+pub fn format_remote_error(err: & RemoteEnvironmentError) -> String {
+    debug!("formatting remote_environment_error: {err:?}");
+
+
     match err {
         RemoteEnvironmentError::OpenManagedEnvironment(err) => formatdoc! {"
             Failed to open cloned remote environment: {err}
@@ -471,10 +480,11 @@ fn format_remote_error(err: &'static RemoteEnvironmentError) -> String {
     }
 }
 
-fn format_locked_manifest_error(
-    err: &'static LockedManifestError,
-    parent: impl Into<anyhow::Error>,
+pub fn format_locked_manifest_error(
+    err: & LockedManifestError,
 ) -> String {
+
+    debug!("formatting locked_manifest_error: {err:?}");
     match err {
         LockedManifestError::CallContainerBuilder(_) => formatdoc! {"
             Failed to call container builder.
@@ -511,13 +521,13 @@ fn format_locked_manifest_error(
         // some commands catch these errors and process them separately
         // e.g. `flox pull`, `flox push`
         LockedManifestError::LockManifest(pkgdb_error) => {
-            format_pkgdb_error(pkgdb_error, parent, "Failed to lock environment manifest.")
+            format_pkgdb_error(pkgdb_error, err, "Failed to lock environment manifest.")
         },
         LockedManifestError::BuildEnv(pkgdb_error) => {
-            format_pkgdb_error(pkgdb_error, parent, "Failed to build environment.")
+            format_pkgdb_error(pkgdb_error, err, "Failed to build environment.")
         },
         LockedManifestError::UpdateFailed(pkgdb_error) => {
-            format_pkgdb_error(pkgdb_error, parent, "Failed to update environment.")
+            format_pkgdb_error(pkgdb_error, err, "Failed to update environment.")
         },
         // endregion
 
@@ -548,9 +558,12 @@ fn format_locked_manifest_error(
 
 fn format_pkgdb_error(
     err: &CallPkgDbError,
-    parent: impl Into<anyhow::Error>,
+    parent: &dyn std::error::Error,
     context: &str,
 ) -> String {
+
+    debug!("formatting pkgdb_error: {err:?}");
+
     match err {
         CallPkgDbError::PkgDbError(err) => formatdoc! {"
             {context}
@@ -561,6 +574,12 @@ fn format_pkgdb_error(
     }
 }
 
-fn display_chain(err: impl Into<anyhow::Error>) -> String {
-    anyhow!(err).chain().join(": ")
+fn display_chain(mut err: &dyn std::error::Error) -> String {
+    let mut fmt = err.to_string();
+    while let Some(source) = err.source() {
+        fmt = format!("{}: {}", fmt, source);
+        err = source;
+    }
+
+    fmt
 }
