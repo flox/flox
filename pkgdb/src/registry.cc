@@ -272,10 +272,8 @@ FloxFlakeInput::getFlake()
 void FloxFlakeInput::freeFlake()
 {
   std::cout << "WML: freeFlake called.\n";
-  if ( this->flake != nullptr )
-    {
-      this->flake = nullptr;
-    }
+  this->flake = nullptr;
+  GC_gcollect();
 }
 
 /* -------------------------------------------------------------------------- */
