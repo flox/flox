@@ -55,25 +55,20 @@ pub fn init_logger(verbosity: Option<Verbosity>, debug: Option<bool>) {
     let verbosity = verbosity.unwrap_or_default();
     let debug = debug.unwrap_or(false);
 
-    let log_filter = match (debug, verbosity) {
+    let log_filter = match verbosity {
         // Show only errors
-        (false, Verbosity::Quiet) => "off,flox=error",
+        Verbosity::Quiet => "off,flox=error",
         // Show our own info logs
-        (false, Verbosity::Verbose(0)) => "off,flox=info",
-        // Also show POSIX info
-        (false, Verbosity::Verbose(1)) => "off,flox=info,posix=info",
-        // Also show info from our libraries and POSIX debug
-        (false, Verbosity::Verbose(2)) => {
-            "off,flox=debug,flox-rust-sdk=info,runix=info,posix=debug"
-        },
+        Verbosity::Verbose(0) => "off,flox=info",
+        // Also POSIX debug
+        Verbosity::Verbose(1) => "off,flox=info,posix=debug",
         // Also show debug from our libraries
-        (true, Verbosity::Quiet) | (false, Verbosity::Verbose(3)) => {
-            "off,flox=debug,flox-rust-sdk=debug,runix=debug,posix=debug"
-        },
-        // Also show debug from everything
-        (true, Verbosity::Verbose(0)) | (false, Verbosity::Verbose(4)) => "debug",
-        // Also show trace from everything
-        (true, Verbosity::Verbose(_)) | (false, Verbosity::Verbose(_)) => "trace",
+        Verbosity::Verbose(2) => "off,flox=debug,flox-rust-sdk=debug,runix=debug,posix=debug",
+        // Also show trace from our libraries and POSIX
+        Verbosity::Verbose(3) => "off,flox=trace,flox-rust-sdk=trace,runix=trace,posix=trace",
+        // Also show trace from our libraries and POSIX
+        Verbosity::Verbose(4) => "debug,flox=trace,flox-rust-sdk=trace,runix=trace,posix=trace",
+        Verbosity::Verbose(_) => "trace",
     };
 
     let (filter_handle, fmt_handle) = LOGGER_HANDLE.get_or_init(|| {
