@@ -13,10 +13,10 @@
 #include <optional>
 #include <ostream>
 #include <string>
+#include <sys/wait.h>
 #include <unordered_map>
 #include <utility>
 #include <vector>
-#include <sys/wait.h>
 
 #include <nix/flake/flakeref.hh>
 #include <nix/logging.hh>
@@ -134,28 +134,33 @@ Environment::getPkgDbRegistry()
           std::cout << "WML: Scraping systems for input: " << name << std::endl;
 
           pid_t c_pid = fork();
-          if (c_pid == -1) {
-            std::cout << "ERROR forking!!!" << std::endl;
-            exit(-1);
-          }
-          else if (c_pid > 0) {
-            std::cout << "WML: Waiting for child to finish building, pid:" << c_pid << std::endl;
-            // wait for child to finish building the db
-            int status;
-            while ( -1 == waitpid(c_pid, &status, 0));
-            std::cout << "WML: child finished, status:" << status << std::endl;
-            // now this should shortcircuit since the work is done.
-            input->scrapeSystems( this->getSystems() );
-          }
-          else {
-            //build the db and just exit
-            std::cout << "Building the db in child." << std::endl;
-            input->scrapeSystems( this->getSystems() );
-            std::cout << "Finish building the db in child, exiting." << std::endl;
-            exit(0);
-          }
-
-
+          if ( c_pid == -1 )
+            {
+              std::cout << "ERROR forking!!!" << std::endl;
+              exit( -1 );
+            }
+          else if ( c_pid > 0 )
+            {
+              std::cout << "WML: Waiting for child to finish building, pid:"
+                        << c_pid << std::endl;
+              // wait for child to finish building the db
+              int status;
+              while ( -1 == waitpid( c_pid, &status, 0 ) )
+                ;
+              std::cout << "WML: child finished, status:" << status
+                        << std::endl;
+              // now this should shortcircuit since the work is done.
+              input->scrapeSystems( this->getSystems() );
+            }
+          else
+            {
+              // build the db and just exit
+              std::cout << "Building the db in child." << std::endl;
+              input->scrapeSystems( this->getSystems() );
+              std::cout << "Finish building the db in child, exiting."
+                        << std::endl;
+              exit( 0 );
+            }
         }
     }
   return static_cast<nix::ref<Registry<pkgdb::PkgDbInputFactory>>>( this->dbs );

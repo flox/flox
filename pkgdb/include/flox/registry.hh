@@ -654,7 +654,7 @@ public:
   /** @brief Get a handle for a flake with a `nix` evaluator. */
   [[nodiscard]] nix::ref<FloxFlake>
   getFlake();
-  
+
   void
   freeFlake();
 
