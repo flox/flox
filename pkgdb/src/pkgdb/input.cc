@@ -240,6 +240,7 @@ PkgDbRegistryMixin::scrapeIfNeeded()
   assert( this->registry != nullptr );
   for ( auto & [name, input] : *this->registry )
     {
+      std::cout << "WML: scraping systems for input." << std::endl;
       input->scrapeSystems( this->getSystems() );
       input->freeFlake();
     }
