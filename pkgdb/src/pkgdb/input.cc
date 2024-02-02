@@ -186,6 +186,19 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
 
 /* -------------------------------------------------------------------------- */
 
+constexpr int CHILD_NOMEM_STATUS = EXIT_FAILURE + 1;
+
+
+/* Called when the Boehm GC runs out of memory. */
+static void *
+childOOMHandler( size_t /* unused */ )
+{
+  exit( CHILD_NOMEM_STATUS );
+}
+
+
+/* -------------------------------------------------------------------------- */
+
 void
 PkgDbInput::scrapeSystems( const std::vector<System> & systems )
 {
@@ -196,26 +209,43 @@ PkgDbInput::scrapeSystems( const std::vector<System> & systems )
         = { static_cast<std::string>( to_string( subtree ) ) };
       for ( const auto & system : systems )
         {
-          pid_t pid = fork();
-          if ( pid == -1 ) { throw PkgDbException( "fork failed" ); }
-          if ( 0 < pid )
+          while ( true )
             {
-              int status;
-              waitpid( pid, &status, 0 );
-              if ( WIFEXITED( status )
-                   && WEXITSTATUS( status ) != EXIT_SUCCESS )
+              pid_t pid = fork();
+              if ( pid == -1 ) { throw PkgDbException( "fork failed" ); }
+              if ( 0 < pid )
                 {
-                  throw PkgDbException( "scraping failed" );
+                  int status;
+                  waitpid( pid, &status, 0 );
+                  if ( WIFEXITED( status ) )
+                    {
+                      if ( WEXITSTATUS( status ) == CHILD_NOMEM_STATUS )
+                        {
+                          continue;
+                        }
+                      if ( WEXITSTATUS( status ) != EXIT_SUCCESS )
+                        {
+                          std::cerr << "EXIT STATUS: " << WEXITSTATUS( status ) << std::endl;
+                          throw PkgDbException( "scraping failed" );
+                        }
+                      break;
+                    }
                 }
-            }
-          else
-            {
-              /* We are doing the garbage collection by killing forks */
-              setenv( "GC_DONT_GC", "1", 1 );
-              prefix.emplace_back( system );
-              this->scrapePrefix( prefix );
-              prefix.pop_back();
-              exit( EXIT_SUCCESS );
+              else
+                {
+                  prefix.emplace_back( system );
+                  GC_set_oom_fn( childOOMHandler );
+                  try
+                    {
+                      this->scrapePrefix( prefix );
+                    }
+                  catch( ... )
+                    {
+                      exit( EXIT_FAILURE );
+                    }
+                  prefix.pop_back();
+                  exit( EXIT_SUCCESS );
+                }
             }
         }
     }
