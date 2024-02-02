@@ -7,10 +7,10 @@ header: "flox User Manuals"
 
 # NAME
 
-flox-auth - floxhub authentication commands
+flox-auth - FloxHub authentication commands
 
 # SYNOPSIS
-flox
+
 ```
 flox [ <general-options> ] auth
      (login | logout)
@@ -18,7 +18,7 @@ flox [ <general-options> ] auth
 
 # DESCRIPTION
 
-Authenticate with floxhub so that you can push and pull environments.
+Authenticate with FloxHub so that you can push and pull environments.
 
 # OPTIONS
 
@@ -30,4 +30,4 @@ Uses GitHub for identity but otherwise does not acquire any permissions.
 
 ## logout
 
-Logs out from floxhub
+Logs out from FloxHub

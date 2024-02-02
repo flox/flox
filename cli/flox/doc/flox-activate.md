@@ -98,7 +98,7 @@ Invoke a command inside an environment without entering its subshell:
 $ flox activate -- cmd --some-arg arg1 arg2
 ```
 
-Activate `default` flox environment only within the current shell
+Activate `default` Flox environment only within the current shell
 (add to the relevant "rc" file, e.g. `~/.bashrc` or `~/.zprofile`):
 
 ```

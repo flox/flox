@@ -7,7 +7,7 @@ header: "flox User Manuals"
 
 # NAME
 
-flox-init - initialize a flox environment
+flox-init - initialize a Flox environment
 
 # SYNOPSIS
 
@@ -21,12 +21,12 @@ flox [ <general-options> ] init
 
 Create a new empty environment in the current directory.
 
-The name of the environment will be the basename of the current directory or
-`default` if the current directory is `$HOME`.
+The name of the environment will be the basename of the current directory
+or `default` if the current directory is `$HOME`.
 The `--name` flag can be used to give the environment a specific name.
 
 By default the environment will be created in the current directory.
-flox will add a directory `$PWD/.flox` containing all relevant environment 
+Flox will add a directory `$PWD/.flox` containing all relevant environment 
 metadata.
 The `--dir` flag can be used to create an environment in another location.
 
