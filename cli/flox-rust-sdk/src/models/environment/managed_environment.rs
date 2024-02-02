@@ -38,7 +38,7 @@ use crate::providers::git::{
 };
 use crate::utils::mtime_of;
 
-const GENERATION_LOCK_FILENAME: &str = "env.lock";
+pub const GENERATION_LOCK_FILENAME: &str = "env.lock";
 
 #[derive(Debug)]
 pub struct ManagedEnvironment {
@@ -80,8 +80,7 @@ pub enum ManagedEnvironmentError {
     ReverseLink(std::io::Error),
     #[error("couldn't create links directory: {0}")]
     CreateLinksDir(std::io::Error),
-    #[error("attempted to open the empty path ''")]
-    EmptyPath,
+
     #[error("floxmeta branch name was malformed: {0}")]
     BadBranchName(String),
     #[error("project wasn't found at path {path}: {err}")]
@@ -123,9 +122,6 @@ pub enum ManagedEnvironmentError {
 
     #[error("could not commit generation")]
     CommitGeneration(#[source] GenerationsError),
-
-    #[error("could not link environment")]
-    Link(#[source] CoreEnvironmentError),
 
     #[error("could not build environment")]
     Build(#[source] CoreEnvironmentError),

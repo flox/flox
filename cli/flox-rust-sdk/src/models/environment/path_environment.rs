@@ -25,6 +25,7 @@ use super::core_environment::CoreEnvironment;
 use super::{
     copy_dir_recursive,
     CanonicalPath,
+    CanonicalizeError,
     EditResult,
     Environment,
     EnvironmentError2,
@@ -81,7 +82,13 @@ impl PathEnvironment {
         pointer: PathPointer,
         temp_dir: impl AsRef<Path>,
     ) -> Result<Self, EnvironmentError2> {
-        let dot_flox_path = CanonicalPath::new(dot_flox_path)?;
+        let dot_flox_path =
+            CanonicalPath::new(dot_flox_path).map_err(|CanonicalizeError { path, err }| {
+                EnvironmentError2::InvalidDotFlox {
+                    path,
+                    source: Box::new(err),
+                }
+            })?;
 
         if &*dot_flox_path == Path::new("/") {
             return Err(EnvironmentError2::InvalidPath(
@@ -361,10 +368,10 @@ impl PathEnvironment {
             manifest_path.display(),
             system
         );
-        let contents = fs::read_to_string(&manifest_path).map_err(EnvironmentError2::ManifestEdit);
+        let contents = fs::read_to_string(&manifest_path).map_err(EnvironmentError2::ReadManifest);
         if let Err(e) = contents {
             debug!("couldn't open manifest to replace placeholder system");
-            fs::remove_dir_all(&env_dir).map_err(EnvironmentError2::ManifestEdit)?;
+            fs::remove_dir_all(&env_dir).map_err(EnvironmentError2::InitEnv)?;
             return Err(e);
         }
         let contents = contents.unwrap();
@@ -374,7 +381,7 @@ impl PathEnvironment {
             contents != replaced
         );
         let write_res =
-            fs::write(&manifest_path, replaced).map_err(EnvironmentError2::ManifestEdit);
+            fs::write(&manifest_path, replaced).map_err(EnvironmentError2::WriteManifest);
         if let Err(e) = write_res {
             debug!("overwriting manifest did not complete successfully");
             fs::remove_dir_all(&env_dir).map_err(EnvironmentError2::InitEnv)?;
