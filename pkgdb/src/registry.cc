@@ -271,9 +271,12 @@ FloxFlakeInput::getFlake()
 
 void FloxFlakeInput::freeFlake()
 {
-  std::cout << "WML: freeFlake called.\n";
+  std::cout << "WML: freeFlake called." << std::endl;
+  std::cout << "WML: flake ptr use_count: " << this->flake.use_count() << std::endl;
   this->flake = nullptr;
-  GC_gcollect();
+  for(int i = 0; i < 10 ; i++) {
+    GC_gcollect();
+  }
 }
 
 /* -------------------------------------------------------------------------- */
