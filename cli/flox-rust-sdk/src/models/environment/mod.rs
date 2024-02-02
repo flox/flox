@@ -19,7 +19,10 @@ use super::pkgdb::UpgradeResult;
 use crate::flox::{Flox, Floxhub};
 use crate::models::pkgdb::call_pkgdb;
 use crate::providers::git::{
-    GitCommandDiscoverError, GitCommandProvider, GitDiscoverError, GitProvider,
+    GitCommandDiscoverError,
+    GitCommandProvider,
+    GitDiscoverError,
+    GitProvider,
 };
 use crate::utils::copy_file_without_permissions;
 
@@ -634,13 +637,10 @@ mod test {
         let found_environment = find_dot_flox(temp_dir.path())
             .unwrap()
             .expect("expected to find dot flox");
-        assert_eq!(
-            found_environment,
-            DotFlox {
-                path: temp_dir.path().canonicalize().unwrap(),
-                pointer: (*MANAGED_ENV_POINTER).clone()
-            }
-        );
+        assert_eq!(found_environment, DotFlox {
+            path: temp_dir.path().canonicalize().unwrap(),
+            pointer: (*MANAGED_ENV_POINTER).clone()
+        });
     }
 
     /// An environment is found upwards, but only if it is within a git repo.
@@ -664,13 +664,10 @@ mod test {
         let found_environment = find_dot_flox(temp_dir.path())
             .unwrap()
             .expect("expected to find dot flox");
-        assert_eq!(
-            found_environment,
-            DotFlox {
-                path: temp_dir.path().canonicalize().unwrap(),
-                pointer: (*MANAGED_ENV_POINTER).clone()
-            }
-        );
+        assert_eq!(found_environment, DotFlox {
+            path: temp_dir.path().canonicalize().unwrap(),
+            pointer: (*MANAGED_ENV_POINTER).clone()
+        });
     }
 
     /// An environment is found upwards and adjacent, but only if it is within
@@ -702,13 +699,10 @@ mod test {
         let found_environment = find_dot_flox(&start_path)
             .unwrap()
             .expect("expected to find dot flox");
-        assert_eq!(
-            found_environment,
-            DotFlox {
-                path: temp_dir.path().canonicalize().unwrap(),
-                pointer: (*MANAGED_ENV_POINTER).clone()
-            }
-        );
+        assert_eq!(found_environment, DotFlox {
+            path: temp_dir.path().canonicalize().unwrap(),
+            pointer: (*MANAGED_ENV_POINTER).clone()
+        });
     }
 
     /// An environment is found upwards and adjacent when it is a subdirectory
@@ -743,13 +737,10 @@ mod test {
         let found_environment = find_dot_flox(&start_path)
             .unwrap()
             .expect("expected to find dot flox");
-        assert_eq!(
-            found_environment,
-            DotFlox {
-                path: foo.canonicalize().unwrap(),
-                pointer: (*MANAGED_ENV_POINTER).clone()
-            }
-        );
+        assert_eq!(found_environment, DotFlox {
+            path: foo.canonicalize().unwrap(),
+            pointer: (*MANAGED_ENV_POINTER).clone()
+        });
     }
 
     /// An environment above a git repo is not found.
