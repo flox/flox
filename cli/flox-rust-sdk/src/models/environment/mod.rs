@@ -55,6 +55,7 @@ pub const FLOX_ENV_DIRS_VAR: &str = "FLOX_ENV_DIRS";
 pub const FLOX_ENV_LIB_DIRS_VAR: &str = "FLOX_ENV_LIB_DIRS";
 pub const FLOX_ACTIVE_ENVIRONMENTS_VAR: &str = "FLOX_ACTIVE_ENVIRONMENTS";
 pub const FLOX_PROMPT_ENVIRONMENTS_VAR: &str = "FLOX_PROMPT_ENVIRONMENTS";
+pub const FLOX_PATH_PATCHED_VAR: &str = "FLOX_PATH_PATCHED";
 pub const FLOX_SYSTEM_PLACEHOLDER: &str = "_FLOX_INIT_SYSTEM";
 
 pub type UpdateResult = (Option<LockedManifest>, LockedManifest);

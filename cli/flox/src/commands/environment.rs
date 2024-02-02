@@ -35,6 +35,7 @@ use flox_rust_sdk::models::environment::{
     FLOX_ENV_DIRS_VAR,
     FLOX_ENV_LIB_DIRS_VAR,
     FLOX_ENV_VAR,
+    FLOX_PATH_PATCHED_VAR,
     FLOX_PROMPT_ENVIRONMENTS_VAR,
 };
 use flox_rust_sdk::models::floxmetav2::FloxmetaV2Error;
@@ -496,6 +497,21 @@ impl Activate {
 
         let mut flox_active_environments = activated_environments();
 
+        // install prefixes of all active environments
+        let flox_env_install_prefixes = IndexSet::from_iter(env::split_paths(
+            &env::var(FLOX_ENV_DIRS_VAR).unwrap_or_default(),
+        ));
+
+        // on macos: patch the existing PATH
+        // If this is [Some] the path will be restored from `$FLOX_PATH_PATCHED`
+        // As part of running $FLOX_ENV/etc/profile.d/0100_common-paths.sh during activation.
+        //
+        // NOTE: this does _not_ include any additions to the PATH
+        // due to the newly activated environment.
+        // Amending the path is strictly implemented by the activation scripts!
+        let fixed_up_original_path_joined =
+            Self::fixup_path(&flox_env_install_prefixes).transpose()?;
+
         // Detect if the current environment is already active
         if flox_active_environments.is_active(&now_active) {
             if !in_place {
@@ -503,22 +519,26 @@ impl Activate {
                 bail!("Environment '{now_active}' is already active.");
             }
             debug!("Environment is already active: environment={now_active}. Ignoring activation (may patch PATH)");
-            Self::reactivate_in_place()?;
+            Self::reactivate_in_place(fixed_up_original_path_joined)?;
             return Ok(());
         }
 
         // Add to FLOX_ACTIVE_ENVIRONMENTS so we can detect what environments are active.
         flox_active_environments.set_last_active(now_active.clone());
 
-        // Set FLOX_ENV_DIRS and FLOX_ENV_LIB_DIRS
-        let mut flox_env_dirs = IndexSet::from([activation_path.clone()]);
-        if let Ok(existing_environments) = env::var(FLOX_ENV_DIRS_VAR) {
-            flox_env_dirs.extend(env::split_paths(&existing_environments));
+        // Prepend the new environment to the list of active environments
+        let flox_env_install_prefixes = {
+            let mut set = IndexSet::from([activation_path.clone()]);
+            set.extend(flox_env_install_prefixes);
+            set
         };
-        let (flox_env_dirs_joined, flox_env_lib_dirs_joined) = {
-            let flox_env_lib_dirs = flox_env_dirs.iter().map(|p| p.join("lib"));
 
-            let flox_env_dirs = env::join_paths(&flox_env_dirs).context(
+        // Set FLOX_ENV_DIRS and FLOX_ENV_LIB_DIRS
+
+        let (flox_env_dirs_joined, flox_env_lib_dirs_joined) = {
+            let flox_env_lib_dirs = flox_env_install_prefixes.iter().map(|p| p.join("lib"));
+
+            let flox_env_dirs = env::join_paths(&flox_env_install_prefixes).context(
                 "Cannot activate environment because its path contains an invalid character",
             )?;
 
@@ -529,8 +549,6 @@ impl Activate {
             (flox_env_dirs, flox_env_lib_dirs)
         };
 
-        let fixed_up_path_joined = Self::fixup_path(flox_env_dirs).transpose()?;
-
         let shell = ShellType::detect()?;
 
         let prompt_color_1 = env::var("FLOX_PROMPT_COLOR_1")
@@ -538,7 +556,7 @@ impl Activate {
         let prompt_color_2 = env::var("FLOX_PROMPT_COLOR_2")
             .unwrap_or(utils::colors::DARK_PEACH.to_ansi256().to_string());
 
-        let exports = HashMap::from([
+        let mut exports = HashMap::from([
             (FLOX_ENV_VAR, activation_path.to_string_lossy().to_string()),
             (FLOX_PROMPT_ENVIRONMENTS_VAR, flox_prompt_environments),
             (
@@ -557,6 +575,13 @@ impl Activate {
             ("FLOX_PROMPT_COLOR_2", prompt_color_2),
         ]);
 
+        if let Some(fixed_up_original_path_joined) = fixed_up_original_path_joined {
+            exports.insert(
+                FLOX_PATH_PATCHED_VAR,
+                fixed_up_original_path_joined.to_string_lossy().to_string(),
+            );
+        }
+
         // when output is not a tty, and no command is provided
         // we just print an activation script to stdout
         //
@@ -565,7 +590,7 @@ impl Activate {
         //
         //    eval "$(flox activate)"
         if in_place {
-            Self::activate_in_place(&shell, &exports, fixed_up_path_joined, &activation_path);
+            Self::activate_in_place(&shell, &exports, &activation_path);
 
             return Ok(());
         }
@@ -587,6 +612,7 @@ impl Activate {
         activation_path: PathBuf,
     ) -> anyhow::Error {
         let mut command = Command::new(shell.exe_path());
+
         command.envs(exports);
 
         let script = formatdoc! {"
@@ -717,7 +743,7 @@ impl Activate {
     /// The `PATH` is then reordered to put the flox environment and nix store paths first.
     /// The order within the two partitions is preserved.
     #[cfg_attr(not(target_os = "macos"), allow(unused_variables))] // on linux `flox_env_dirs` is not used
-    fn fixup_path(flox_env_dirs: IndexSet<PathBuf>) -> Option<Result<OsString>> {
+    fn fixup_path(flox_env_dirs: &IndexSet<PathBuf>) -> Option<Result<OsString>> {
         #[cfg(not(target_os = "macos"))]
         {
             None
@@ -741,7 +767,7 @@ impl Activate {
     /// See [Self::fixup_path] for more details.
     fn fixup_path_with(
         path_var: impl AsRef<OsStr>,
-        flox_env_dirs: IndexSet<PathBuf>,
+        flox_env_dirs: &IndexSet<PathBuf>,
     ) -> Vec<PathBuf> {
         let path_iter = env::split_paths(&path_var);
 
@@ -770,14 +796,8 @@ impl Activate {
     ///     eval "$(flox activate)" -> eval "export PATH=<flox_env_dirs>:$PATH"
     ///
     /// See [Self::fixup_path] for more details.
-    fn reactivate_in_place() -> Result<(), anyhow::Error> {
-        let flox_env_dirs = env::var(FLOX_ENV_DIRS_VAR)
-            .ok()
-            .as_ref()
-            .map(env::split_paths)
-            .map(IndexSet::from_iter)
-            .unwrap_or_default();
-        if let Some(fixed_up_path_joined) = Self::fixup_path(flox_env_dirs).transpose()? {
+    fn reactivate_in_place(fixed_up_path_joined: Option<OsString>) -> Result<(), anyhow::Error> {
+        if let Some(fixed_up_path_joined) = fixed_up_path_joined {
             debug!(
                 "Patching PATH to {}",
                 fixed_up_path_joined.to_string_lossy()
@@ -796,7 +816,6 @@ impl Activate {
     fn activate_in_place(
         shell: &ShellType,
         exports: &HashMap<&str, String>,
-        fixed_up_path_joined: Option<OsString>,
         activation_path: &Path,
     ) {
         let exports_rendered = exports
@@ -805,21 +824,9 @@ impl Activate {
             .map(|(key, value)| format!("export {key}={value}",))
             .join("\n");
 
-        let path_patch = if let Some(fixed_up_path_joined) = fixed_up_path_joined {
-            formatdoc! {"
-                    # Add flox environment to PATH
-                    export FLOX_PATH_PATCHED={fixed_up_path_joined}",
-                fixed_up_path_joined=shell_escape::escape(fixed_up_path_joined.to_string_lossy()),
-            }
-        } else {
-            "# No path patching needed".to_string()
-        };
-
         let script = formatdoc! {"
                 # Common flox environment variables
                 {exports_rendered}
-
-                {path_patch}
 
                 # to avoid infinite recursion sourcing bashrc
                 export FLOX_SOURCED_FROM_SHELL_RC=1
@@ -845,7 +852,7 @@ mod activate_tests {
     #[test]
     fn test_fixup_path() {
         let flox_env_dirs = IndexSet::from(["/flox/env"].map(PathBuf::from));
-        let fixed_up_path = Activate::fixup_path_with(PATH, flox_env_dirs);
+        let fixed_up_path = Activate::fixup_path_with(PATH, &flox_env_dirs);
         let joined = env::join_paths(fixed_up_path).unwrap();
 
         assert_eq!(
