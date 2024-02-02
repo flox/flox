@@ -88,8 +88,7 @@ public:
   FloxFlake( const nix::ref<nix::EvalState> & state,
              const nix::FlakeRef &            ref );
 
-  virtual ~FloxFlake()
-      { std::cout << "WML: FloxFlake destructor.\n"; };
+  virtual ~FloxFlake() { std::cout << "WML: FloxFlake destructor.\n"; };
 
 
   /**
