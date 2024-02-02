@@ -269,14 +269,14 @@ FloxFlakeInput::getFlake()
   return static_cast<nix::ref<FloxFlake>>( this->flake );
 }
 
-void FloxFlakeInput::freeFlake()
+void
+FloxFlakeInput::freeFlake()
 {
   std::cout << "WML: freeFlake called." << std::endl;
-  std::cout << "WML: flake ptr use_count: " << this->flake.use_count() << std::endl;
+  std::cout << "WML: flake ptr use_count: " << this->flake.use_count()
+            << std::endl;
   this->flake = nullptr;
-  for(int i = 0; i < 10 ; i++) {
-    GC_gcollect();
-  }
+  for ( int i = 0; i < 10; i++ ) { GC_gcollect(); }
 }
 
 /* -------------------------------------------------------------------------- */
