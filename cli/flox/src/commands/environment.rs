@@ -525,7 +525,7 @@ impl Activate {
             return Ok(());
         }
 
-        // Add to FLOX_ACTIVE_ENVIRONMENTS so we can detect what environments are active.
+        // Add to _FLOX_ACTIVE_ENVIRONMENTS so we can detect what environments are active.
         flox_active_environments.set_last_active(now_active.clone());
 
         // Prepend the new environment to the list of active environments

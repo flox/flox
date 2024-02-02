@@ -37,17 +37,34 @@ as shown below:
 flox [env1 env2 env3] <normal prompt>
 ```
 
+When multiple environments are activated each of their shell hooks
+(`hook.script` or `hook.file`)
+are executed in the context of the environment that they come from.
+This means that for each shell hook various environment variables such as
+`PATH`, `MANPATH`, `PKG_CONFIG_PATH`, `PYTHONPATH`, etc,
+are set to the appropriate values for the environment in which the shell
+hook was defined.
+
 # OPTIONS
 
 ## Activate Options
 
 `-- <command> [ <arguments> ]`
 :   Command to run in the environment.
-    Spawns the command in a subshell
-    that does not leak into the calling process.
+    Spawns the command in a subshell that does not leak into the calling
+    process.
 
 `-t`, `--trust`
 :   Trust a remote environment for this activation.
+    Activating an environment executes a shell hookwhich may execute arbitrary
+    code.
+    This presents a security risk,
+    so you will be prompted whether to trust the environment.
+    Environments owned by the current user are always trusted.
+    You may set certain environments to always be trusted using the config key
+    `trusted_environments."<owner/name>"`,
+    or via the following command:
+    `flox config --set trusted_environments.\"<owner/name>\" trust`.
 
 ```{.include}
 ./include/environment-options.md
@@ -56,25 +73,7 @@ flox [env1 env2 env3] <normal prompt>
 
 # ENVIRONMENT VARIABLES
 
-## `$FLOX_ENV`
-The absolute path to the _install prefix_ of the environment being activated.
-Set by `flox activate` before executing `shell.hook`.
-
-If multiple environments are active,
-each `shell.hook` will run with its associated `FLOX_ENV` set properly,
-and the activated environment will have `FLOX_ENV` set to the left-most
-environment listed in the prompt.
-This variable may be used to set other environment variables such as `MANPATH`,
-`PKG_CONFIG_PATH`,
-`PYTHONPATH`,
-etc so that relevant tooling will search these directories to locate files and
-resources from the environment.
-
-**N.B.** the default shell hook for newly-created environments will
-source the `$FLOX_ENV/etc/profile` file at activation if it exists.
-This behavior can be viewed and/or modified with `flox edit`.
-
-## `$FLOX_ACTIVE_ENVIRONMENTS`
+## `$_FLOX_ACTIVE_ENVIRONMENTS`
 A JSON array containing one object per active environment.
 This is currently an implementation detail and its contents are subject to
 change.
@@ -108,4 +107,6 @@ $ eval "$(flox activate)"
 
 # See also
 [`flox-push(1)`](./flox-push.md),
-[`flox-pull(1)`](./flox-pull.md)
+[`flox-pull(1)`](./flox-pull.md),
+[`flox-edit(1)`](./flox-edit.md),
+[`flox-delete(1)`](./flox-delete.md)

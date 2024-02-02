@@ -43,7 +43,7 @@
         "FLOX_PROMPT_ENVIRONMENTS" = "floxenv";
         "FLOX_PROMPT_COLOR_1" = "61";
         "FLOX_PROMPT_COLOR_2" = "216";
-        "FLOX_ACTIVE_ENVIRONMENTS" = "[]";
+        "_FLOX_ACTIVE_ENVIRONMENTS" = "[]";
         "FLOX_SOURCED_FROM_SHELL_RC" = "1"; # don't source from shell rc (again)
         "BASH_ENV" = "${environment}/activate/bash";
       };
