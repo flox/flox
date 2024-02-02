@@ -57,6 +57,24 @@ RegistryRaw registryWithNixpkgs( registryWithNixpkgsJSON );
 
 /* -------------------------------------------------------------------------- */
 
+nlohmann::json registryWithNixpkgsLockedJSON {
+  { "inputs",
+    { { "nixpkgs",
+        { { "from",
+            { { "type", "github" },
+              { "owner", "NixOS" },
+              { "repo", "nixpkgs" },
+              { "rev", nixpkgsRev },
+              { "lastModified", 1704300003 },
+              { "narHash",
+                "sha256-FRC/OlLVvKkrdm+RtrODQPufD0vVZYA0hpH9RPaHmp4=" } } },
+          { "subtrees", { "legacyPackages" } } } } } }
+};
+RegistryRaw registryWithNixpkgsLocked( registryWithNixpkgsLockedJSON );
+
+
+/* -------------------------------------------------------------------------- */
+
 nlohmann::json inputWithNixpkgsJSON {
   "input",
   { { "fingerprint", nixpkgsFingerprintStr },
@@ -904,6 +922,112 @@ test_createLockfile_error()
 
 /* -------------------------------------------------------------------------- */
 
+/**
+ * @brief `getCombinedRegistryRaw()` uses the locked input and doesn't lock the
+ *        unlocked input in an environment's manifest.
+ *
+ * Re-locking the locked input causes a useless download of nixpkgs.
+ *
+ * To test this, we put an invalid nixpkgs ref in the manifest but put valid
+ * data in the lock. If an attempt to lock the invalid input is ever made, it
+ * will throw an exception and fail the test.
+ */
+bool
+test_getCombinedRegistryRaw_uses_lock()
+{
+  /* Create manifest with a registry with an invalid nixpkgs ref */
+  ManifestRaw manifestRaw;
+  manifestRaw.install          = {};
+  manifestRaw.options          = Options {};
+  manifestRaw.options->systems = { _system };
+  nlohmann::json registryWithInvalidNixpkgsJSON( registryWithNixpkgsJSON );
+  registryWithInvalidNixpkgsJSON.at( "inputs" )
+    .at( "nixpkgs" )
+    .at( "from" )
+    .erase( "rev" );
+  registryWithInvalidNixpkgsJSON.at( "inputs" )
+    .at( "nixpkgs" )
+    .at( "from" )["ref"]
+    = "not-a-ref";
+  RegistryRaw registryWithInvalidNixpkgs( registryWithInvalidNixpkgsJSON );
+  manifestRaw.registry = registryWithInvalidNixpkgs;
+  EnvironmentManifest manifest( manifestRaw );
+
+  /* Create lockfile */
+  LockfileRaw existingLockfileRaw;
+  existingLockfileRaw.manifest = manifestRaw;
+  existingLockfileRaw.registry = registryWithNixpkgsLocked;
+  Lockfile existingLockfile( existingLockfileRaw );
+
+  /* Test getCombinedRegistryRaw doesn't lock registryWithInvalidNixpkgsJSON */
+  Environment environment( std::nullopt, manifest, existingLockfile );
+  (void) environment.getCombinedRegistryRaw();
+  /* Just for good measure, make sure nothing in createLockfile locks
+   * registryWithInvalidNixpkgsJSON */
+  (void) environment.createLockfile();
+
+  return true;
+}
+
+
+/* -------------------------------------------------------------------------- */
+
+/**
+ * @brief `getCombinedRegistryRaw()` uses the locked input and doesn't lock the
+ *        unlocked input in a global manifest.
+ *
+ * Re-locking the locked input causes a useless download of nixpkgs.
+ *
+ * To test this, we put an invalid nixpkgs ref in the manifest but put valid
+ * data in the lock. If an attempt to lock the invalid input is ever made, it
+ * will throw an exception and fail the test.
+ */
+bool
+test_getCombinedRegistryRaw_uses_lock_for_global_manifest()
+{
+  /* Create manifest with a registry with an invalid nixpkgs ref */
+  ManifestRaw manifestRaw;
+  manifestRaw.install          = {};
+  manifestRaw.options          = Options {};
+  manifestRaw.options->systems = { _system };
+  nlohmann::json registryWithInvalidNixpkgsJSON( registryWithNixpkgsJSON );
+  registryWithInvalidNixpkgsJSON.at( "inputs" )
+    .at( "nixpkgs" )
+    .at( "from" )
+    .erase( "rev" );
+  registryWithInvalidNixpkgsJSON.at( "inputs" )
+    .at( "nixpkgs" )
+    .at( "from" )["ref"]
+    = "not-a-ref";
+  RegistryRaw registryWithInvalidNixpkgs( registryWithInvalidNixpkgsJSON );
+  manifestRaw.registry = registryWithInvalidNixpkgs;
+  EnvironmentManifest manifest( manifestRaw );
+
+  /* Create lockfile */
+  LockfileRaw existingLockfileRaw;
+  existingLockfileRaw.manifest = manifestRaw;
+  existingLockfileRaw.registry = registryWithNixpkgsLocked;
+  Lockfile existingLockfile( existingLockfileRaw );
+
+  /* Create global manifest */
+  GlobalManifestRaw globalManifestRaw( registryWithInvalidNixpkgs,
+                                       std::nullopt );
+  GlobalManifest    globalManifest( globalManifestRaw );
+
+
+  /* Test getCombinedRegistryRaw doesn't lock registryWithInvalidNixpkgsJSON */
+  Environment environment( globalManifest, manifest, existingLockfile );
+  (void) environment.getCombinedRegistryRaw();
+  /* Just for good measure, make sure nothing in createLockfile locks
+   * registryWithInvalidNixpkgsJSON */
+  (void) environment.createLockfile();
+
+  return true;
+}
+
+
+/* -------------------------------------------------------------------------- */
+
 int
 main()
 {
@@ -930,6 +1054,9 @@ main()
   RUN_TEST( createLockfile_existing );
   RUN_TEST( createLockfile_both );
   RUN_TEST( createLockfile_error );
+
+  RUN_TEST( getCombinedRegistryRaw_uses_lock )
+  RUN_TEST( getCombinedRegistryRaw_uses_lock_for_global_manifest )
 
   return exitCode;
 }

@@ -62,6 +62,10 @@
         if flox-pkgdb == null
         then "pkgdb"
         else "${flox-pkgdb}/bin/pkgdb";
+      LD_FLOXLIB =
+        if flox-pkgdb == null
+        then "ld-floxlib.so"
+        else "${flox-pkgdb}/lib/ld-floxlib.so";
       PARSER_UTIL_BIN = "${parser-util}/bin/parser-util";
       FLOX_ETC_DIR = ../../assets/etc;
       FLOX_ZDOTDIR = ../../assets/flox.zdotdir;

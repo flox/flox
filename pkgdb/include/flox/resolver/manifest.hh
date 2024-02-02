@@ -159,7 +159,9 @@ public:
   }
 
   /* Ignore linter warning about copying params because `nix::ref` is just
-   * a pointer ( `std::shared_pointer' with a `nullptr` check ). */
+   * a pointer ( `std::shared_pointer' with a `nullptr` check ).
+   * Note: don't call this function if a lock for the registry can be found
+   * elsewhere. Re-locking will download flakes. */
   [[nodiscard]] RegistryRaw
   getLockedRegistry( const nix::ref<nix::Store> & store
                      = NixStoreMixin().getStore() ) const
