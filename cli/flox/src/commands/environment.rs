@@ -356,7 +356,7 @@ pub struct Activate {
     #[bpaf(external(environment_select), fallback(Default::default()))]
     environment: EnvironmentSelect,
 
-    /// Trust the a remote environment temporarily for this activation
+    /// Trust a remote environment temporarily for this activation
     #[bpaf(long, short)]
     trust: bool,
 

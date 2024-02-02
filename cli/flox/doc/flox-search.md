@@ -7,35 +7,53 @@ header: "flox User Manuals"
 
 # NAME
 
-flox-search - search for packages to install.
+flox-search - search for packages.
 
 # SYNOPSIS
 
-flox [ `<general-options>` ] search `<name>` [ \--refresh ]
+```
+flox [ <general options> ] search
+     [ --json ]
+     [ -a]
+     <search-term>
+```
 
 # DESCRIPTION
 
-Search for available packages matching name.
+Search for available packages.
 
-The cache of available packages is updated hourly, but if required
-you can invoke with `--refresh` to update the list before searching.
+Searches are performed in the context of the environment if one exists,
+making use of the environment's lock file if one exists and the locked base
+catalog within it.
+Searches performed outside of an environment query a global base catalog.
+Both the global and environment's base catalogs can be updated with
+[`flox-update(1)`](./flox-update.md).
+
+A limited number of search results are reported by default for brevity.
+The full result set can be returned via the `-a` flag.
+
+Only the package name and description are shown by default.
+Structured search results can be returned via the `--json` flag.
+More specific information for a single package is available via the
+[`flox-show(1)`](./flox-show.md) command.
 
 # OPTIONS
+
+## Search Options
+
+`<search-term>`
+:   package name to search for
+
+`--json`
+:   output the search results in json format
+
+`-a`, `--all`
+:   display all search results (default: limited number)
 
 ```{.include}
 ./include/general-options.md
 ```
 
-## Search Options
-
-[ `<name>` ]
-:   package name to search for
-
-[ \--refresh ]
-:   Update the list before searching.
-
-[ \--json ]
-:   output the search results in json format
-
-[ -v | \--verbose ]
-:   output extended information
+# See also
+[`flox-show(1)`](./flox-show.md),
+[`flox-update(1)`](./flox-update.md)
