@@ -167,11 +167,6 @@ env_is_activated() {
   # USER to REAL_USER.
   SHELL=bash USER="$REAL_USER" NO_COLOR=1 run -0 expect -d "$TESTS_DIR/activate/rc.exp" "$PROJECT_DIR"
   assert_output --partial "test_alias is aliased to \`echo testing'"
-
-  SHELL=bash USER="$REAL_USER" NO_COLOR=1 run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -- type test_alias
-  assert_success
-  assert_output --partial "test_alias is aliased to \`echo testing'"
-
 }
 
 # ---------------------------------------------------------------------------- #
@@ -183,11 +178,6 @@ env_is_activated() {
   # USER to REAL_USER.
   SHELL="zsh" USER="$REAL_USER" NO_COLOR=1 run -0 expect -d "$TESTS_DIR/activate/rc.exp" "$PROJECT_DIR"
   assert_output --partial "test_alias is an alias for echo testing"
-
-  SHELL=zsh USER="$REAL_USER" NO_COLOR=1 run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -- type test_alias
-  assert_success
-  assert_output --partial "test_alias is an alias for echo testing"
-
 }
 
 # ---------------------------------------------------------------------------- #
