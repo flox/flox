@@ -12,18 +12,22 @@
 #include <optional>
 #include <vector>
 
-
 #include "flox/core/exceptions.hh"
+
 
 /* -------------------------------------------------------------------------- */
 
 namespace flox::buildenv {
 
+/* -------------------------------------------------------------------------- */
+
 struct Priority
 {
+
   unsigned                   priority;
   std::optional<std::string> parentPath;
   unsigned                   internalPriority;
+
 
   ~Priority()                  = default;
   Priority()                   = default;
@@ -45,6 +49,7 @@ struct Priority
   operator=( Priority && )
     = default;
 
+
 }; /* End struct `Priority' */
 
 
@@ -52,9 +57,11 @@ struct Priority
 
 struct RealisedPackage
 {
+
   std::string path;
   bool        active;
   Priority    priority;
+
 
   ~RealisedPackage()                         = default;
   RealisedPackage()                          = default;
@@ -73,6 +80,7 @@ struct RealisedPackage
   RealisedPackage &
   operator=( RealisedPackage && )
     = default;
+
 
 }; /* End struct `RealisedPackage' */
 
@@ -153,9 +161,11 @@ void
 buildEnvironment( const std::string &             out,
                   std::vector<RealisedPackage> && pkgs );
 
+
 /* -------------------------------------------------------------------------- */
 
 }  // namespace flox::buildenv
+
 
 /* -------------------------------------------------------------------------- *
  *

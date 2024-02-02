@@ -127,7 +127,11 @@ struct LockedPackageRaw
   LockedInputRaw input;
   AttrPath       attrPath;
   unsigned       priority;
-  nlohmann::json info; /* pname, version, license */
+  /** Package information such as `pname`, `version`, `license`, etc. */
+  nlohmann::json info;
+  /** Optimization information such as `out-path`. */
+  std::optional<nlohmann::json> cache;
+
 
   [[nodiscard]] bool
   operator==( const LockedPackageRaw & other ) const
@@ -135,7 +139,7 @@ struct LockedPackageRaw
     return ( this->input == other.input )
            && ( this->attrPath == other.attrPath )
            && ( this->priority == other.priority )
-           && ( this->info == other.info );
+           && ( this->info == other.info ) && ( this->cache == other.cache );
   }
 
   [[nodiscard]] bool

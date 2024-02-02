@@ -300,6 +300,7 @@ from_json( const nlohmann::json & jfrom, LockedPackageRaw & raw )
             }
         }
       else if ( key == "info" ) { raw.info = value; }
+      else if ( key == "cache" ) { raw.cache = value; }
       else
         {
           throw InvalidLockfileException( "encountered unexpected field `" + key
@@ -316,6 +317,7 @@ to_json( nlohmann::json & jto, const LockedPackageRaw & raw )
           { "attr-path", raw.attrPath },
           { "priority", raw.priority },
           { "info", raw.info } };
+  if ( raw.cache.has_value() ) { jto["cache"] = raw.cache.value(); }
 }
 
 

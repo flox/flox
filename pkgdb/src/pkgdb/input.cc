@@ -55,10 +55,12 @@ PkgDbInput::init()
     }
 
   /* If the database exists we don't want to needlessly try to initialize it, so
-  we skip straight to trying to create a read-only connection to the database.
-  However, just because the database exists doesn't mean that it's done being
-  initialized, so creating the read-only connection can fail. We do this retry
-  loop to until creating the read-only connection succeeds. */
+   * we skip straight to trying to create a read-only connection to
+   * the database.
+   * However, just because the database exists doesn't mean that it's done being
+   * initialized, so creating the read-only connection can fail.
+   * We do this retry loop to until creating the read-only connection succeeds.
+   */
   /* TODO: emit the number of retries? */
   int retries = 0;
   do {
