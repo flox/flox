@@ -12,6 +12,7 @@
 #include <map>
 #include <optional>
 #include <ostream>
+#include <sys/wait.h>
 #include <tuple>
 
 #include <nix/error.hh>
@@ -71,7 +72,7 @@ PkgDbInput::init()
       catch ( ... )
         {
           std::this_thread::sleep_for( DB_RETRY_PERIOD );
-          if ( ++retries > DB_MAX_RETRIES )
+          if ( DB_MAX_RETRIES < ++retries )
             {
               throw PkgDbException(
                 "couldn't initialize read-only package database" );
@@ -195,9 +196,27 @@ PkgDbInput::scrapeSystems( const std::vector<System> & systems )
         = { static_cast<std::string>( to_string( subtree ) ) };
       for ( const auto & system : systems )
         {
-          prefix.emplace_back( system );
-          this->scrapePrefix( prefix );
-          prefix.pop_back();
+          pid_t pid = fork();
+          if ( pid == -1 ) { throw PkgDbException( "fork failed" ); }
+          if ( 0 < pid )
+            {
+              int status;
+              waitpid( pid, &status, 0 );
+              if ( WIFEXITED( status )
+                   && WEXITSTATUS( status ) != EXIT_SUCCESS )
+                {
+                  throw PkgDbException( "scraping failed" );
+                }
+            }
+          else
+            {
+              /* We are doing the garbage collection by killing forks */
+              setenv( "GC_DONT_GC", "1", 1 );
+              prefix.emplace_back( system );
+              this->scrapePrefix( prefix );
+              prefix.pop_back();
+              exit( EXIT_SUCCESS );
+            }
         }
     }
 }
@@ -240,9 +259,7 @@ PkgDbRegistryMixin::scrapeIfNeeded()
   assert( this->registry != nullptr );
   for ( auto & [name, input] : *this->registry )
     {
-      std::cout << "WML: scraping systems for input." << std::endl;
       input->scrapeSystems( this->getSystems() );
-      input->freeFlake();
     }
 }
 
