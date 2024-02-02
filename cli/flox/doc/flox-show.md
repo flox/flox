@@ -32,7 +32,7 @@ and version.
 ## Search Options
 
 `<search-term>`
-:   package name to search for
+:   package name to show details for
 
 # EXAMPLES:
 
@@ -44,4 +44,6 @@ ripgrep - A utility that combines the usability of The Silver Searcher with the 
 ```
 
 # See also
-[`flox-search(1)`](./flox-search.md)
+[`flox-search(1)`](./flox-search.md),
+[`flox-install(1)`](./flox-install.md),
+[`flox-update(1)`](./flox-update.md)

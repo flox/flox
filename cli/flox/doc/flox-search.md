@@ -23,8 +23,8 @@ flox [ <general options> ] search
 Search for available packages.
 
 Searches are performed in the context of the environment if one exists,
-making use of the environment's lock file if one exists and the locked base
-catalog within it.
+making use of the environment's lock file if one exists
+and the locked base catalog within it.
 Searches performed outside of an environment query a global base catalog.
 Both the global and environment's base catalogs can be updated with
 [`flox-update(1)`](./flox-update.md).
