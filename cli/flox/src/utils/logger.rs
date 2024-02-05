@@ -45,17 +45,6 @@ pub struct LogFormatter {
     pub debug: bool,
 }
 
-struct IndentWrapper<'a, 'b> {
-    buf: &'a mut tracing_subscriber::fmt::format::Writer<'b>,
-}
-
-impl std::fmt::Write for IndentWrapper<'_, '_> {
-    fn write_str(&mut self, s: &str) -> Result<(), std::fmt::Error> {
-        write!(self.buf, "{}", textwrap::fill(s, 80))?;
-        Ok(())
-    }
-}
-
 impl<S, N> tracing_subscriber::fmt::FormatEvent<S, N> for LogFormatter
 where
     S: tracing::Subscriber + for<'a> tracing_subscriber::registry::LookupSpan<'a>,
