@@ -181,6 +181,9 @@
       # Flox Command Line Interface ( development build ).
       flox-cli = callPackage ./pkgs/flox-cli {};
 
+      # Flox Command Line Interface Manpages
+      flox-manpages = callPackage ./pkgs/flox-manpages {};
+
       # Flox Command Line Interface ( production build ).
       flox = callPackage ./pkgs/flox {};
 
@@ -226,6 +229,7 @@
         flox-pkgdb
         flox-cli
         flox-cli-tests
+        flox-manpages
         flox
         pre-commit-check
         flox-tests-pure
@@ -262,10 +266,3 @@
 
   # -------------------------------------------------------------------------- #
 }
-# End flake
-# ---------------------------------------------------------------------------- #
-#
-#
-#
-# ============================================================================ #
-
