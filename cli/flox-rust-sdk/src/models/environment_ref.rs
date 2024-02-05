@@ -5,6 +5,8 @@ use derive_more::{AsRef, Deref, Display};
 use serde_with::{DeserializeFromStr, SerializeDisplay};
 use thiserror::Error;
 
+use super::environment::ManagedPointer;
+
 pub static DEFAULT_NAME: &str = "default";
 pub static DEFAULT_OWNER: &str = "local";
 
@@ -63,6 +65,15 @@ impl FromStr for EnvironmentRef {
             owner: EnvironmentOwner::from_str(owner)?,
             name: EnvironmentName::from_str(name)?,
         })
+    }
+}
+
+impl From<ManagedPointer> for EnvironmentRef {
+    fn from(pointer: ManagedPointer) -> Self {
+        Self {
+            owner: pointer.owner,
+            name: pointer.name,
+        }
     }
 }
 
