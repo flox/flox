@@ -222,10 +222,10 @@ PkgDbInput::scrapeSystems( const std::vector<System> & systems )
                       if ( WEXITSTATUS( status ) == CHILD_NOMEM_STATUS )
                         {
                           // TODO: make a debug message
-                          //if ( nix::lvlDebug <= nix::verbosity )
+                          // if ( nix::lvlDebug <= nix::verbosity )
                           if ( nix::lvlInfo <= nix::verbosity )
                             {
-                              //debugLog(
+                              // debugLog(
                               infoLog(
                                 nix::fmt( "OOM while scraping '%s.%s'",
                                           concatStringsSep( ".", prefix ),
@@ -258,11 +258,10 @@ PkgDbInput::scrapeSystems( const std::vector<System> & systems )
                     {
                       if ( nix::lvlError <= nix::verbosity )
                         {
-                          errorLog(
-                            nix::fmt( "scraping '%s.%s' failed: %s",
-                                      concatStringsSep( ".", prefix ),
-                                      system,
-                                      e.what() ) );
+                          errorLog( nix::fmt( "scraping '%s.%s' failed: %s",
+                                              concatStringsSep( ".", prefix ),
+                                              system,
+                                              e.what() ) );
                         }
                       exit( EXIT_FAILURE );
                     }
