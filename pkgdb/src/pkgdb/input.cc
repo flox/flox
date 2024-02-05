@@ -139,21 +139,18 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
   if ( root == nullptr ) { return; }
 
   // split this->getFlake()->state->symbols into 1k symbol chunks
-  std::vector<> chunks = split( this->getFlake()->state->symbols, 1000
-                                : )
+  // auto symbolTableChunks = split( this->getFlake()->state->symbols, 1000);
+  auto symbolTableChunks = std::vector<nix::SymbolTable>{ this->getFlake()->state->symbols};
 
     /* Open a read/write connection. */
-    auto dbRW
-    = this->getDbReadWrite();
+  auto dbRW = this->getDbReadWrite();
   row_id row = dbRW->addOrGetAttrSetId( prefix );
 
   todo.emplace(
     std::make_tuple( prefix, static_cast<flox::Cursor>( root ), row ) );
 
-  /* Start a transaction */
-  dbRW->db.execute( "BEGIN EXCLUSIVE TRANSACTION" );
 
-  for ( auto chunk : chunks )
+  for ( auto chunk : symbolTableChunks )
     {
 
       pid_t pid = fork();
@@ -161,27 +158,22 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
       if ( 0 < pid )
         {
           int status = 0;
+          std::cout << "WML: scraping in child: " << pid << std::endl;
           waitpid( pid, &status, 0 );
-          if ( WIFEXITED( status ) )
+          if ( WEXITSTATUS( status ) != EXIT_SUCCESS )
             {
-              if ( WEXITSTATUS( status ) == CHILD_NOMEM_STATUS )
-                {
-                  infoLog( nix::fmt( "OOM while scraping '%s' on '%s'",
-                                     concatStringsSep( ".", prefix ),
-                                     system ) );
-                  continue;
-                }
-              if ( WEXITSTATUS( status ) != EXIT_SUCCESS )
-                {
-                  throw PkgDbException(
-                    nix::fmt( "scraping failed: exit code %d",
-                              WEXITSTATUS( status ) ) );
-                }
-              break;
+              throw PkgDbException(
+                nix::fmt( "scraping failed: exit code %d",
+                          WEXITSTATUS( status ) ) );
             }
+          std::cout << "WML: child exited: status: " << status << std::endl;
         }
       else
         {
+          std::cout << "WML: scaping in child...." << std::endl;
+          /* Start a transaction */
+          dbRW->db.execute( "BEGIN EXCLUSIVE TRANSACTION" );
+
           try
             {
               while ( ! todo.empty() )
@@ -197,17 +189,19 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
               if ( ! wasRW ) { this->closeDbReadWrite(); }
               throw NixEvalException( "error scraping flake", err );
             }
+
+          /* Close the transaction. */
+          dbRW->db.execute( "COMMIT TRANSACTION" );
+          std::cout << "WML: scaping complete in child...." << std::endl;
         }
     }
 
   /* Mark the prefix and its descendants as "done" if todo is empty
     otherwise, we just stopped after scrpaing N prefixes and need to continue.
   */
-  row_id row  = dbRW->addOrGetAttrSetId( prefix );
-  auto   dbRW = this->getDbReadWrite();
+  std::cout << "WML: marking prefix row " << row << " complete " << std::endl;
+  dbRW->db.execute( "BEGIN EXCLUSIVE TRANSACTION" );
   dbRW->setPrefixDone( row, true );
-
-  /* Close the transaction. */
   dbRW->db.execute( "COMMIT TRANSACTION" );
 
   /* Close the r/w connection if we opened it. */
