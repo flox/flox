@@ -167,6 +167,7 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
       catch ( const nix::EvalError & err )
         {
           dbRW->execute( "ROLLBACK TRANSACTION" );
+          dbRW = nullptr;
           /* Close the r/w connection if we opened it. */
           if ( ! wasRW ) { this->closeDbReadWrite(); }
           throw NixEvalException( "error scraping flake", err );
@@ -175,13 +176,10 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
         {
           /* Commit and close so a sibling can complete with our progress. */
           dbRW->execute( "COMMIT TRANSACTION" );
-          /* Reopen the r/w connection if we opened it. */
-          if ( ! wasRW )
-            {
-              dbRW = nullptr;
-              this->closeDbReadWrite();
-              dbRW = this->getDbReadWrite();
-            }
+          /* Flush the commit. */
+          dbRW = nullptr;
+          this->closeDbReadWrite();
+          dbRW = this->getDbReadWrite();
         }
     }
 
@@ -192,6 +190,7 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
   dbRW->execute( "COMMIT TRANSACTION" );
 
   /* Close the r/w connection if we opened it. */
+  dbRW = nullptr;
   if ( ! wasRW ) { this->closeDbReadWrite(); }
 }
 
