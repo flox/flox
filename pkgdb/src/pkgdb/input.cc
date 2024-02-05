@@ -232,7 +232,6 @@ PkgDbRegistryMixin::scrapeIfNeeded()
     {
       std::cout << "WML: scraping systems for input." << std::endl;
       input->scrapeSystems( this->getSystems() );
-      input->freeFlake();
     }
 }
 
