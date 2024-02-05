@@ -38,7 +38,6 @@ use flox_rust_sdk::models::environment::{
     FLOX_PATH_PATCHED_VAR,
     FLOX_PROMPT_ENVIRONMENTS_VAR,
 };
-use flox_rust_sdk::models::floxmetav2::FloxmetaV2Error;
 use flox_rust_sdk::models::lockfile::{
     FlakeRef,
     Input,
@@ -54,7 +53,7 @@ use flox_rust_sdk::nix::command::StoreGc;
 use flox_rust_sdk::nix::command_line::NixCommandLine;
 use flox_rust_sdk::nix::Run;
 use indexmap::IndexSet;
-use indoc::{formatdoc, indoc};
+use indoc::formatdoc;
 use itertools::Itertools;
 use log::{debug, error, info, warn};
 use tempfile::NamedTempFile;
@@ -1658,8 +1657,7 @@ impl Pull {
                 help_message: None,
                 typed: Spinner::new(|| ManagedEnvironment::open(flox, pointer, &dot_flox_path)),
             }
-            .spin()
-            .map_err(Self::convert_error);
+            .spin();
 
             match result {
                 Err(err) => {
@@ -1730,18 +1728,6 @@ impl Pull {
         }
 
         Ok(())
-    }
-
-    fn convert_error(err: ManagedEnvironmentError) -> anyhow::Error {
-        if let ManagedEnvironmentError::OpenFloxmeta(FloxmetaV2Error::LoggedOut) = err {
-            anyhow!(indoc! {"
-                Could not pull environment: not logged in to floxhub.
-
-                Please login to floxhub with `flox auth login`
-                "})
-        } else {
-            anyhow!(err)
-        }
     }
 
     /// construct a message for pulling a new environment
