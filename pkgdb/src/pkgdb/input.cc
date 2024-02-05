@@ -13,6 +13,7 @@
 #include <optional>
 #include <ostream>
 #include <tuple>
+#include <sys/wait.h>
 
 #include <nix/error.hh>
 #include <nix/eval.hh>
@@ -137,6 +138,9 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
 
   if ( root == nullptr ) { return; }
 
+  // split this->getFlake()->state->symbols into 1k symbol chunks
+  std::vector<> chunks = split(this->getFlake()->state->symbols, 1000:) 
+
   /* Open a read/write connection. */
   auto   dbRW = this->getDbReadWrite();
   row_id row  = dbRW->addOrGetAttrSetId( prefix );
@@ -146,24 +150,58 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
 
   /* Start a transaction */
   dbRW->db.execute( "BEGIN EXCLUSIVE TRANSACTION" );
-  try
-    {
-      while ( ! todo.empty() )
-        {
-          dbRW->scrape( this->getFlake()->state->symbols, todo.front(), todo );
-          todo.pop();
-        }
 
-      /* Mark the prefix and its descendants as "done" */
-      dbRW->setPrefixDone( row, true );
-    }
-  catch ( const nix::EvalError & err )
+  for (auto chunk : chunks)
+  {
+
+    pid_t pid = fork();
+    if (pid == -1) {throw PkgDbException( "fork faild"); }
+    if (0 < pid)
     {
-      dbRW->db.execute( "ROLLBACK TRANSACTION" );
-      /* Close the r/w connection if we opened it. */
-      if ( ! wasRW ) { this->closeDbReadWrite(); }
-      throw NixEvalException( "error scraping flake", err );
+      int status = 0;
+      waitpid( pid, &status, 0 );
+      if ( WIFEXITED( status ) )
+        {
+          if ( WEXITSTATUS( status ) == CHILD_NOMEM_STATUS )
+            {
+              infoLog( nix::fmt( "OOM while scraping '%s' on '%s'",
+                                  concatStringsSep( ".", prefix ),
+                                  system ) );
+              continue;
+            }
+          if ( WEXITSTATUS( status ) != EXIT_SUCCESS )
+            {
+              throw PkgDbException(
+                nix::fmt( "scraping failed: exit code %d",
+                          WEXITSTATUS( status ) ) );
+            }
+          break;
+        }
     }
+    else{
+      try
+        {
+          while ( ! todo.empty() )
+            {
+              dbRW->scrape( chunk, todo.front(), todo );
+              todo.pop();
+            }
+        }
+      catch ( const nix::EvalError & err )
+        {
+          dbRW->db.execute( "ROLLBACK TRANSACTION" );
+          /* Close the r/w connection if we opened it. */
+          if ( ! wasRW ) { this->closeDbReadWrite(); }
+          throw NixEvalException( "error scraping flake", err );
+        }
+    }
+  }
+
+  /* Mark the prefix and its descendants as "done" if todo is empty 
+    otherwise, we just stopped after scrpaing N prefixes and need to continue. */
+  row_id row  = dbRW->addOrGetAttrSetId( prefix );
+  auto   dbRW = this->getDbReadWrite();
+  dbRW->setPrefixDone( row, true );
 
   /* Close the transaction. */
   dbRW->db.execute( "COMMIT TRANSACTION" );
