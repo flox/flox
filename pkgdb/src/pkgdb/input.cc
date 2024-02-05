@@ -150,7 +150,7 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
 
   /* Open a read/write connection. */
   std::shared_ptr<PkgDb> dbRW = this->getDbReadWrite();
-  row_id row  = dbRW->addOrGetAttrSetId( prefix );
+  row_id                 row  = dbRW->addOrGetAttrSetId( prefix );
 
   todo.emplace(
     std::make_tuple( prefix, static_cast<flox::Cursor>( root ), row ) );
