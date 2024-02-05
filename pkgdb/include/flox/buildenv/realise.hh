@@ -41,6 +41,16 @@ FLOX_DEFINE_EXCEPTION( SystenNotSupportedByLockfile,
 /** @} */
 
 
+/**
+ * @class flox::buildenv::PackageConflictException
+ * @brief An exception thrown when two packages conflict.
+ * I.e. the same file path is found in two different packages with the same
+ * priority.
+ */
+FLOX_DEFINE_EXCEPTION( PackageConflictException,
+                       EC_BUILDENV_CONFLICT,
+                       "conflicting packages" )
+
 /* -------------------------------------------------------------------------- */
 
 /**
