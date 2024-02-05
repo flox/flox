@@ -118,7 +118,7 @@ Environment::getCombinedRegistryRaw()
 
 /* -------------------------------------------------------------------------- */
 
-#define USE_FORK 1
+#define USE_FORK 0
 
 nix::ref<Registry<pkgdb::PkgDbInputFactory>>
 Environment::getPkgDbRegistry()
