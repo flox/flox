@@ -151,17 +151,14 @@ createEnvironmentStorePath(
       auto [nameB, packageB] = originalPackage.at( storePathB );
 
 
-      throw FloxException(
-        "environment error",
-        "failed to build environment",
-        nix::fmt(
-          "file conflict between packages '%s' and '%s' at '%s'"
-          "\n\n\tresolve by setting the priority of the preferred package "
-          "to a value lower than '%d'",
-          nameA,
-          nameB,
-          filePath,
-          err.getPriority() ) );
+      throw PackageConflictException( nix::fmt(
+        "'%s' conflicts with '%s'. Both packages provide the file '%s'"
+        "\n\nResolve by setting the priority of the preferred package "
+        "to a value lower than '%d'",
+        nameA,
+        nameB,
+        filePath,
+        err.getPriority() ) );
     }
   return addDirToStore( state, tempDir, references );
 }

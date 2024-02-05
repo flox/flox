@@ -83,6 +83,10 @@ struct RealisedPackage
  *
  * This exception is thrown when we attempt to build an environment with two
  * store paths with the same priority that contain the same file.
+ *
+ * This exception is intended to be caught by the caller and converted into a
+ * @a PackageConflict which restores the originating packages for display
+ * purposes
  */
 class FileConflictException : public FloxException
 {
