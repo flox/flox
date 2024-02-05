@@ -140,11 +140,12 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
 
   // split this->getFlake()->state->symbols into 1k symbol chunks
   // auto symbolTableChunks = split( this->getFlake()->state->symbols, 1000);
-  auto symbolTableChunks = std::vector<nix::SymbolTable>{ this->getFlake()->state->symbols};
+  auto symbolTableChunks
+    = std::vector<nix::SymbolTable> { this->getFlake()->state->symbols };
 
-    /* Open a read/write connection. */
-  auto dbRW = this->getDbReadWrite();
-  row_id row = dbRW->addOrGetAttrSetId( prefix );
+  /* Open a read/write connection. */
+  auto   dbRW = this->getDbReadWrite();
+  row_id row  = dbRW->addOrGetAttrSetId( prefix );
 
   todo.emplace(
     std::make_tuple( prefix, static_cast<flox::Cursor>( root ), row ) );
@@ -162,9 +163,8 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
           waitpid( pid, &status, 0 );
           if ( WEXITSTATUS( status ) != EXIT_SUCCESS )
             {
-              throw PkgDbException(
-                nix::fmt( "scraping failed: exit code %d",
-                          WEXITSTATUS( status ) ) );
+              throw PkgDbException( nix::fmt( "scraping failed: exit code %d",
+                                              WEXITSTATUS( status ) ) );
             }
           std::cout << "WML: child exited: status: " << status << std::endl;
         }
