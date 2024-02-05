@@ -366,6 +366,9 @@ public:
   [[nodiscard]] nix::ref<Registry<pkgdb::PkgDbInputFactory>>
   getPkgDbRegistry();
 
+  void
+  getPkgDbRegistryClean();
+
   // TODO: (Question) Should we lock the combined options and fill registry
   //                  `default` fields in inputs?
   /** @brief Create a new lockfile from @a manifest. */
