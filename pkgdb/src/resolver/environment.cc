@@ -125,10 +125,10 @@ Environment::getPkgDbRegistry()
 {
   if ( this->dbs == nullptr )
     {
-      nix::ref<nix::Store> store   = this->getStore();
-      
-      auto                 factory = pkgdb::PkgDbInputFactory( store );
-      this->dbs = std::make_shared<Registry<pkgdb::PkgDbInputFactory>>(
+      nix::ref<nix::Store> store = this->getStore();
+
+      auto factory = pkgdb::PkgDbInputFactory( store );
+      this->dbs    = std::make_shared<Registry<pkgdb::PkgDbInputFactory>>(
         this->getCombinedRegistryRaw(),
         factory );
       /* Scrape if needed. */
@@ -136,10 +136,11 @@ Environment::getPkgDbRegistry()
         {
           std::cout << "WML: Scraping systems for input: " << name << std::endl;
 
-          if ( !USE_FORK ) {
+          if ( ! USE_FORK )
+            {
               input->scrapeSystems( this->getSystems() );
               continue;
-          }
+            }
 
           pid_t c_pid = fork();
           if ( c_pid == -1 )
@@ -170,8 +171,10 @@ Environment::getPkgDbRegistry()
         }
 
       for ( auto & [name, input] : *this->dbs )
+        {
           // now this should shortcircuit since the work is done.
           input->scrapeSystems( this->getSystems() );
+        }
     }
   return static_cast<nix::ref<Registry<pkgdb::PkgDbInputFactory>>>( this->dbs );
 }
