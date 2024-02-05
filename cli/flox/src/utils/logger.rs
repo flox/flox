@@ -67,7 +67,7 @@ where
         let mut visitor = LoggerVisitor(&mut fields);
         event.record(&mut visitor);
 
-        let mut message = match fields.message {
+        let message = match fields.message {
             Some(m) => m,
             None => return Ok(()),
         };
@@ -81,8 +81,6 @@ where
         // pretend all messages from `flox` are user facing
         // unless they are posix command prints
         if is_flox && !self.debug && !is_posix {
-            let wrap_options = textwrap::Options::with_termwidth();
-            let message = textwrap::fill(&message, wrap_options);
             writeln!(f, "{message}")?;
             return Ok(());
         }
@@ -130,11 +128,7 @@ where
 
         let head = format!("{level_prefix} {time_prefix} {origin_prefix}").bold();
 
-        let combined_message = format!("{head}:\n{message}");
-
-        let wrap_options = textwrap::Options::with_termwidth().break_words(false);
-
-        message = textwrap::fill(&combined_message, wrap_options);
+        let message = format!("{head}:\n{message}");
 
         writeln!(f, "{}", message)?;
 
