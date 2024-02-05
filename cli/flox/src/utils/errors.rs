@@ -381,14 +381,8 @@ pub fn format_managed_error(err: &ManagedEnvironmentError) -> String {
             Please check the spelling of the remote environment
             and make sure that you have access to it.
         "},
-        ManagedEnvironmentError::UpstreamNotFound(env_ref, _floxhub) => formatdoc! {"
-            The environment {env_ref} does not exist.
-
-            Double check the name or create it with
-
-                $ flox init --name {name} && flox push --owner {owner}
-            ",
-        name = env_ref.name(), owner = env_ref.owner()},
+        // todo: mark as bug?
+        ManagedEnvironmentError::UpstreamNotFound(_, _) => display_chain(err),
         // acces denied is catched early as ManagedEnvironmentError::AccessDenied
         ManagedEnvironmentError::Push(_) => display_chain(err),
         ManagedEnvironmentError::DeleteBranch(_) => display_chain(err),

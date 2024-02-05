@@ -1657,7 +1657,8 @@ impl Pull {
                 help_message: None,
                 typed: Spinner::new(|| ManagedEnvironment::open(flox, pointer, &dot_flox_path)),
             }
-            .spin();
+            .spin()
+            .map_err(|err| Self::handle_error(flox, err));
 
             match result {
                 Err(err) => {
@@ -1815,6 +1816,41 @@ impl Pull {
     ) -> Result<Document, anyhow::Error> {
         manifest::add_system(&env.manifest_content(flox)?, &flox.system)
             .context("Could not add system to manifest")
+    }
+
+    fn handle_error(flox: &Flox, err: ManagedEnvironmentError) -> anyhow::Error {
+        match err {
+            ManagedEnvironmentError::AccessDenied => {
+                let message = "❌  You do not have permission to pull this environment";
+                anyhow::Error::msg(message)
+            },
+            ManagedEnvironmentError::Diverged => {
+                let message = "❌  The environment has diverged from the remote version";
+                anyhow::Error::msg(message)
+            },
+            ManagedEnvironmentError::UpstreamNotFound(env_ref, _) => {
+                let by_current_user = flox
+                    .floxhub_token
+                    .as_ref()
+                    .and_then(|token| token.handle().ok())
+                    .map(|handle| handle == env_ref.owner().as_str())
+                    .unwrap_or_default();
+                let message = format!("The environment {env_ref} does not exist.");
+                if by_current_user {
+                    anyhow!(formatdoc! {"
+                        {message}
+
+                        Double check the name or can create it with
+
+                            $ flox init --name {name}
+                            $ flox push
+                    ", name = env_ref.name()})
+                } else {
+                    anyhow!(message)
+                }
+            },
+            _ => err.into(),
+        }
     }
 }
 
