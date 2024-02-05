@@ -1,7 +1,6 @@
-use std::fmt::{self, Write};
+use std::fmt;
 
 use crossterm::style::Stylize;
-use tracing::Level;
 
 #[derive(Default, Debug)]
 struct LogFields {
@@ -82,12 +81,7 @@ where
         // pretend all messages from `flox` are user facing
         // unless they are posix command prints
         if is_flox && !self.debug && !is_posix {
-            let wrap_options = if *level > Level::DEBUG {
-                textwrap::Options::new(80)
-            } else {
-                textwrap::Options::with_termwidth()
-            };
-
+            let wrap_options = textwrap::Options::with_termwidth();
             let message = textwrap::fill(&message, wrap_options);
             writeln!(f, "{message}")?;
             return Ok(());
