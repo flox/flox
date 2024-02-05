@@ -149,35 +149,47 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
   if ( root == nullptr ) { return; }
 
   /* Open a read/write connection. */
-  auto   dbRW = this->getDbReadWrite();
+  std::shared_ptr<PkgDb> dbRW = this->getDbReadWrite();
   row_id row  = dbRW->addOrGetAttrSetId( prefix );
 
   todo.emplace(
     std::make_tuple( prefix, static_cast<flox::Cursor>( root ), row ) );
 
   /* Start a transaction */
-  dbRW->db.execute( "BEGIN EXCLUSIVE TRANSACTION" );
-  try
+  while ( ! todo.empty() )
     {
-      while ( ! todo.empty() )
+      dbRW->execute( "BEGIN TRANSACTION" );
+      try
         {
           dbRW->scrape( this->getFlake()->state->symbols, todo.front(), todo );
           todo.pop();
         }
+      catch ( const nix::EvalError & err )
+        {
+          dbRW->execute( "ROLLBACK TRANSACTION" );
+          /* Close the r/w connection if we opened it. */
+          if ( ! wasRW ) { this->closeDbReadWrite(); }
+          throw NixEvalException( "error scraping flake", err );
+        }
+      catch ( const std::bad_alloc & )
+        {
+          /* Commit and close so a sibling can complete with our progress. */
+          dbRW->execute( "COMMIT TRANSACTION" );
+          /* Reopen the r/w connection if we opened it. */
+          if ( ! wasRW )
+            {
+              dbRW = nullptr;
+              this->closeDbReadWrite();
+              dbRW = this->getDbReadWrite();
+            }
+        }
+    }
 
-      /* Mark the prefix and its descendants as "done" */
-      dbRW->setPrefixDone( row, true );
-    }
-  catch ( const nix::EvalError & err )
-    {
-      dbRW->db.execute( "ROLLBACK TRANSACTION" );
-      /* Close the r/w connection if we opened it. */
-      if ( ! wasRW ) { this->closeDbReadWrite(); }
-      throw NixEvalException( "error scraping flake", err );
-    }
+  /* Mark the prefix and its descendants as "done" */
+  dbRW->setPrefixDone( row, true );
 
   /* Close the transaction. */
-  dbRW->db.execute( "COMMIT TRANSACTION" );
+  dbRW->execute( "COMMIT TRANSACTION" );
 
   /* Close the r/w connection if we opened it. */
   if ( ! wasRW ) { this->closeDbReadWrite(); }
@@ -187,14 +199,6 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
 /* -------------------------------------------------------------------------- */
 
 constexpr int CHILD_NOMEM_STATUS = EXIT_FAILURE + 1;
-
-
-/* Called when the Boehm GC runs out of memory. */
-static void *
-childOOMHandler( size_t /* unused */ )
-{
-  exit( CHILD_NOMEM_STATUS );
-}
 
 
 /* -------------------------------------------------------------------------- */
@@ -209,7 +213,7 @@ PkgDbInput::scrapeSystems( const std::vector<System> & systems )
         = { static_cast<std::string>( to_string( subtree ) ) };
       for ( const auto & system : systems )
         {
-          while ( true )
+          for ( size_t retries = 0; retries < MAX_SCRAPES; ++retries )
             {
               pid_t pid = fork();
               if ( pid == -1 ) { throw PkgDbException( "fork failed" ); }
@@ -227,7 +231,8 @@ PkgDbInput::scrapeSystems( const std::vector<System> & systems )
                             {
                               // debugLog(
                               infoLog(
-                                nix::fmt( "OOM while scraping '%s.%s'",
+                                nix::fmt( "OOM while scraping '%s.%s'. "
+                                          "Continuing in sibling process.",
                                           concatStringsSep( ".", prefix ),
                                           system ) );
                             }
@@ -236,7 +241,7 @@ PkgDbInput::scrapeSystems( const std::vector<System> & systems )
                       if ( WEXITSTATUS( status ) != EXIT_SUCCESS )
                         {
                           throw PkgDbException(
-                            nix::fmt( "scraping failed: exit code %d",
+                            nix::fmt( "scraping child failed: exit code %d",
                                       WEXITSTATUS( status ) ) );
                         }
                       break;
@@ -245,12 +250,11 @@ PkgDbInput::scrapeSystems( const std::vector<System> & systems )
               else
                 {
                   prefix.emplace_back( system );
-                  GC_set_oom_fn( childOOMHandler );
                   try
                     {
                       this->scrapePrefix( prefix );
                     }
-                  catch ( std::bad_alloc & )
+                  catch ( const std::bad_alloc & )
                     {
                       exit( CHILD_NOMEM_STATUS );
                     }
@@ -258,16 +262,15 @@ PkgDbInput::scrapeSystems( const std::vector<System> & systems )
                     {
                       if ( nix::lvlError <= nix::verbosity )
                         {
-                          errorLog( nix::fmt( "scraping '%s.%s' failed: %s",
+                          errorLog( nix::fmt( "scraping '%s' failed: %s",
                                               concatStringsSep( ".", prefix ),
-                                              system,
                                               e.what() ) );
                         }
-                      exit( EXIT_FAILURE );
+                      throw;
                     }
                   catch ( ... )
                     {
-                      exit( EXIT_FAILURE );
+                      throw;
                     }
                   prefix.pop_back();
                   exit( EXIT_SUCCESS );

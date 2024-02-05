@@ -213,28 +213,8 @@ PkgDb::PkgDb( const nix::flake::LockedFlake & flake, std::string_view dbPath )
 void
 PkgDb::connect()
 {
-  /* The `locking_mode` pragma acquires an exclusive write lock the first time
-   * that the database is written to and only releases the lock once the
-   * database connection is closed. We make a write as soon as possible after
-   * opening the connection to establish the write lock. After the
-   * `RETRY_WHILE_BUSY` call returns we should be the only process able to write
-   * to the database, though other processes mays still read from the database
-   * (this is why we must use `EXCLUSIVE` transactions, which prevent reads as
-   * well).
-   *
-   * It could be the case that this database hasn't been initialized yet, so we
-   * can't write to an existing table. Instead we just write to a dummy table.
-   * It's unclear whether setting a pragma value like `appliation_id` counts as
-   * a write, so we create a table instead.*/
-  static const char * acquire_lock = R"SQL(
-  BEGIN EXCLUSIVE TRANSACTION;
-  CREATE TABLE IF NOT EXISTS _lock (foo int);
-  COMMIT TRANSACTION
-  )SQL";
   this->db.connect( this->dbPath.string().c_str(),
                     SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE );
-  sqlite3pp::command cmd( this->db, acquire_lock );
-  RETRY_WHILE_BUSY( cmd.execute_all() );
 }
 
 
@@ -522,12 +502,21 @@ PkgDb::scrape( nix::SymbolTable & syms, const Target & target, Todos & todo )
       catch ( const nix::EvalError & err )
         {
           /* Ignore errors in `legacyPackages' */
-          if ( tryRecur )
+          if ( prefix.front() == "legacyPackages" )
             {
               /* Only print eval errors in "debug" mode. */
               nix::ignoreException( nix::lvlDebug );
             }
           else { throw; }
+        }
+      catch ( const std::bad_alloc & err )
+        {
+          /* We need to try this attribute set again in a sibling process. */
+          debugLog( nix::fmt( "ran out of memory evaluating attribute '%s'."
+                              " will try again in a sibling process.",
+                              pathS ) );
+
+          throw;
         }
     }
 }

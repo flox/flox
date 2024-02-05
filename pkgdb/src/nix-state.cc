@@ -35,7 +35,7 @@ initNix()
   // NOLINTNEXTLINE
   nix::setStackSize( ( std::size_t( 64 ) * 1024 ) * 1024 );
   setenv( "GC_INITIAL_HEAP_SIZE", "256M", true );
-  setenv( "GC_MAXIMUM_HEAP_SIZE", "1G", true );
+  setenv( "GC_MAXIMUM_HEAP_SIZE", "5G", true );
   nix::initNix();
   nix::initGC();
   /* Suppress benign warnings about `nix.conf'. */

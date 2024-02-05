@@ -243,7 +243,7 @@ endif # ifneq ($(RELEASE),)
 # Debug Mode
 DEBUG ?=
 ifneq (,$(DEBUG))
-DEBUG ?=
+DEBUG ?= -O0
 ifeq (gcc,$(TOOLCHAIN))
 CXXFLAGS += -ggdb3 -pg -fno-omit-frame-pointer
 LDFLAGS  += -ggdb3 -pg -fno-omit-frame-pointer

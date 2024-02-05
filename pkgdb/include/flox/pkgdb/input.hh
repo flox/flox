@@ -45,6 +45,26 @@ namespace flox::pkgdb {
 
 /* -------------------------------------------------------------------------- */
 
+/**
+ * Maximum number of times to attempt scraping an attribute set with
+ * worker processes.
+ *
+ * This is a safety measure to prevent infinite loops.
+ *
+ * Child workers are expected to scrape a prefix until they run out of memory,
+ * then yield so that a new worker can take over.
+ * Each worker makes progress by writing to the `nix` evaluation cache, so that
+ * later sibling workers do not repeat allocations made by their predecessors.
+ *
+ * `nixpkgs` largest attribute set are the `nixpkgs.<system>` sets, which
+ * contain ~20,000 packages with ~750 sub-attributes sets.
+ */
+constexpr std::size_t MAX_SCRAPES = 100;
+
+
+/* -------------------------------------------------------------------------- */
+
+
 /* Forward declare */
 class PkgDb;
 
