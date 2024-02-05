@@ -64,7 +64,6 @@
         then "ld-floxlib.so"
         else "${flox-pkgdb}/lib/ld-floxlib.so";
       PARSER_UTIL_BIN = "${parser-util}/bin/parser-util";
-      FLOX_ETC_DIR = ../../assets/etc;
       FLOX_ZDOTDIR = ../../assets/flox.zdotdir;
 
       # bundling of internally used nix scripts
@@ -172,7 +171,6 @@ in
 
       # bundle manpages and completion scripts
       postInstall = ''
-        ln -s "${envs.FLOX_ETC_DIR}" "$out/etc"
         installShellCompletion --cmd flox                         \
           --bash <( "$out/bin/flox" --bpaf-complete-style-bash; ) \
           --fish <( "$out/bin/flox" --bpaf-complete-style-fish; ) \
