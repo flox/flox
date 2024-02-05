@@ -5,7 +5,6 @@ use std::{env, fs};
 use anyhow::{Context, Result};
 use config::{Config as HierarchicalConfig, Environment};
 use flox_rust_sdk::flox::{EnvironmentRef, FloxhubToken};
-use flox_types::stability::Stability;
 use itertools::{Either, Itertools};
 use log::{debug, trace};
 use once_cell::sync::OnceCell;
@@ -50,15 +49,6 @@ pub struct FloxConfig {
     pub data_dir: PathBuf,
     pub config_dir: PathBuf,
 
-    pub stability: Option<Stability>,
-
-    /// The url we push _to_
-    pub cache_url: Option<Url>,
-    /// The url we pull _from_
-    pub public_cache_url: Option<Url>,
-    /// Path to signing key
-    pub signing_key: Option<PathBuf>,
-
     /// Token to authenticate on floxhub
     pub floxhub_token: Option<FloxhubToken>,
 
@@ -71,9 +61,6 @@ pub struct FloxConfig {
 
     /// The url of the floxhub instance to use
     pub floxhub_url: Option<Url>,
-
-    #[serde(flatten)]
-    pub instance: InstanceConfig,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -81,11 +68,6 @@ pub struct FloxConfig {
 pub enum EnvironmentTrust {
     Trust,
     Deny,
-}
-
-#[derive(Deserialize, Serialize, Clone, Debug, Default)]
-pub struct InstanceConfig {
-    pub git_base_url: String, // Todo: use Url type?
 }
 
 // TODO: move to runix?
@@ -362,20 +344,6 @@ mod tests {
     use indoc::indoc;
 
     use super::*;
-
-    #[test]
-    fn test_read_flattened() {
-        let mut config = Config::default();
-        config.flox.instance.git_base_url = "hello".to_string();
-        assert!(matches!(
-            config.get(&Key::parse("flox.instance.git_base_url").unwrap()),
-            Err(ReadWriteError::InvalidKey(_))
-        ));
-        assert_eq!(
-            config.get(&Key::parse("git_base_url").unwrap()).unwrap(),
-            "\"hello\"".to_string()
-        );
-    }
 
     #[test]
     fn test_read_bool() {
