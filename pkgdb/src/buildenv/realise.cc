@@ -142,7 +142,7 @@ createEnvironmentStorePath(
     {
       buildenv::buildEnvironment( tempDir, std::move( pkgs ) );
     }
-  catch ( buildenv::BuildEnvFileConflictError & err )
+  catch ( buildenv::FileConflictException & err )
     {
       auto [storePathA, filePath] = state.store->toStorePath( err.getFileA() );
       auto [storePathB, _]        = state.store->toStorePath( err.getFileB() );

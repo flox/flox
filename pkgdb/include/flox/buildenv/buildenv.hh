@@ -79,8 +79,12 @@ struct RealisedPackage
 
 /* -------------------------------------------------------------------------- */
 
-/** @brief A conflict between two files with the same priority. */
-class BuildEnvFileConflictError : public FloxException
+/** @brief A conflict between two files with the same priority.
+ *
+ * This exception is thrown when we attempt to build an environment with two
+ * store paths with the same priority that contain the same file.
+ */
+class FileConflictException : public FloxException
 {
 
 private:
@@ -92,9 +96,9 @@ private:
 
 public:
 
-  BuildEnvFileConflictError( const std::string fileA,
-                             const std::string fileB,
-                             int               priority )
+  FileConflictException( const std::string fileA,
+                         const std::string fileB,
+                         int               priority )
     : FloxException(
       "buildenv file conflict",
       nix::fmt(
@@ -136,7 +140,6 @@ public:
   {
     return this->priority;
   }
-
 
 }; /* End class `BuildEnvFileConflictError' */
 
