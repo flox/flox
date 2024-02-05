@@ -381,6 +381,14 @@ pub fn format_managed_error(err: &ManagedEnvironmentError) -> String {
             Please check the spelling of the remote environment
             and make sure that you have access to it.
         "},
+        ManagedEnvironmentError::UpstreamNotFound(env_ref, _floxhub) => formatdoc! {"
+            The environment {env_ref} does not exist.
+
+            Double check the name or create it with
+
+                $ flox init --name {name} && flox push --owner {owner}
+            ",
+        name = env_ref.name(), owner = env_ref.owner()},
         // acces denied is catched early as ManagedEnvironmentError::AccessDenied
         ManagedEnvironmentError::Push(_) => display_chain(err),
         ManagedEnvironmentError::DeleteBranch(_) => display_chain(err),
@@ -416,7 +424,7 @@ pub fn format_managed_error(err: &ManagedEnvironmentError) -> String {
             Could not read managed manifest.
 
             {err}
-        ", err = display_chain(e) },
+        ",err = display_chain(e) },
         ManagedEnvironmentError::CanonicalizePath(canonicalize_err) => formatdoc! {"
             Invalid path to environment: {canonicalize_err}
 
