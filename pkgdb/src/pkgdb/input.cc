@@ -221,12 +221,16 @@ PkgDbInput::scrapeSystems( const std::vector<System> & systems )
                     {
                       if ( WEXITSTATUS( status ) == CHILD_NOMEM_STATUS )
                         {
+                          infoLog( nix::fmt( "OOM while scraping '%s' on '%s'",
+                                             concatStringsSep( ".", prefix ),
+                                             system ) );
                           continue;
                         }
                       if ( WEXITSTATUS( status ) != EXIT_SUCCESS )
                         {
-                          std::cerr << "EXIT STATUS: " << WEXITSTATUS( status ) << std::endl;
-                          throw PkgDbException( "scraping failed" );
+                          throw PkgDbException(
+                            nix::fmt( "scraping failed: exit code %d",
+                                      WEXITSTATUS( status ) ) );
                         }
                       break;
                     }
@@ -239,7 +243,19 @@ PkgDbInput::scrapeSystems( const std::vector<System> & systems )
                     {
                       this->scrapePrefix( prefix );
                     }
-                  catch( ... )
+                  catch ( std::bad_alloc & )
+                    {
+                      exit( CHILD_NOMEM_STATUS );
+                    }
+                  catch ( const std::exception & e )
+                    {
+                      errorLog( nix::fmt( "scraping '%s' on '%s' failed: %s",
+                                          concatStringsSep( ".", prefix ),
+                                          system,
+                                          e.what() ) );
+                      exit( EXIT_FAILURE );
+                    }
+                  catch ( ... )
                     {
                       exit( EXIT_FAILURE );
                     }
