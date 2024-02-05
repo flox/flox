@@ -20,7 +20,6 @@ use self::features::Features;
 
 /// Name of flox managed directories (config, data, cache)
 const FLOX_DIR_NAME: &'_ str = "flox";
-const FLOX_ETC_DIR: &'_ str = env!("FLOX_ETC_DIR");
 pub const FLOX_CONFIG_FILE: &'_ str = "flox.toml";
 
 #[derive(Clone, Debug, Deserialize, Default, Serialize)]
@@ -162,23 +161,17 @@ impl Config {
 
             let mut builder = HierarchicalConfig::builder()
                 .set_default("default_substituter", "https://cache.floxdev.com/")?
-                .set_default("git_base_url", "https://github.com/")?
+                .set_default("git_base_url", "https://git.hub.flox.dev/")?
                 .set_default("cache_dir", cache_dir.to_str().unwrap())?
                 .set_default("data_dir", data_dir.to_str().unwrap())?
-                // config dir is added to the config for completeness, the config file cannot chenge the config dir
+                // config dir is added to the config for completeness, the config file cannot change the config dir
                 .set_default("config_dir", config_dir.to_str().unwrap())?;
 
-            // read from installation
+            // read from /etc
             builder = builder.add_source(
                 config::File::from(PathBuf::from("/etc").join(FLOX_CONFIG_FILE))
                     .format(config::FileFormat::Toml)
                     .required(false),
-            );
-
-            // read from installation
-            builder = builder.add_source(
-                config::File::from(PathBuf::from(FLOX_ETC_DIR).join(FLOX_CONFIG_FILE))
-                    .format(config::FileFormat::Toml),
             );
 
             // look for files in XDG_CONFIG_DIRS locations
