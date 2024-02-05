@@ -448,13 +448,10 @@ impl GitCommandProvider {
         repository: &str,
         branch: &str,
     ) -> Result<(), GitRemoteCommandError> {
-        GitCommandProvider::run_command(
-            self.new_command()
-                .arg("fetch")
-                .arg(repository)
-                .arg(format!("refs/heads/{branch}:refs/heads/{branch}")),
-        )?;
-        Ok(())
+        self.fetch_ref(
+            repository,
+            &format!("refs/heads/{branch}:refs/heads/{branch}"),
+        )
     }
 
     pub fn fetch_ref(&self, repository: &str, r#ref: &str) -> Result<(), GitRemoteCommandError> {
@@ -600,8 +597,11 @@ pub enum GitRemoteCommandError {
     AccessDenied,
     #[error("branches diverged")]
     Diverged,
+    #[error("ref not found")]
+    RefNotFound(String),
 }
 
+const REF_NOT_FOUND_ERR_PREFIX: &str = "fatal: couldn't find remote ref ";
 impl From<GitCommandError> for GitRemoteCommandError {
     fn from(err: GitCommandError) -> Self {
         match err {
@@ -616,6 +616,13 @@ impl From<GitCommandError> for GitRemoteCommandError {
             {
                 debug!("Branches diverged: {err}");
                 GitRemoteCommandError::Diverged
+            },
+            GitCommandError::BadExit(_, _, ref stderr)
+                if stderr.starts_with(REF_NOT_FOUND_ERR_PREFIX) =>
+            {
+                let ref_name = stderr.strip_prefix(REF_NOT_FOUND_ERR_PREFIX).unwrap();
+                debug!("Ref not found: {ref_name}");
+                GitRemoteCommandError::RefNotFound(ref_name.to_string())
             },
             e => GitRemoteCommandError::Command(e),
         }
