@@ -132,13 +132,13 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
 {
   if ( this->getDbReadOnly()->completedAttrSet( prefix ) ) { return; }
 
-  Todos       todo;
-  bool        wasRW = this->dbRW != nullptr;
+  Todos todo;
+  bool  wasRW = this->dbRW != nullptr;
 
   std::cout << "WML: Scrape prefix " << prefix.back() << std::endl;
 
   {
-    MaybeCursor root  = this->getFlake()->maybeOpenCursor( prefix );
+    MaybeCursor root = this->getFlake()->maybeOpenCursor( prefix );
     if ( root == nullptr ) { return; }
   }
 
@@ -147,8 +147,7 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
   // auto symbolTableChunks
   //   = std::vector<nix::SymbolTable> { this->getFlake()->state->symbols };
 
-  do
-    {
+  do {
 
       pid_t pid = fork();
       if ( pid == -1 ) { throw PkgDbException( "fork faild" ); }
@@ -168,14 +167,15 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
         {
           std::cout << "WML: scraping in child...." << std::endl;
 
-          MaybeCursor root  = this->getFlake()->maybeOpenCursor( prefix );
+          MaybeCursor root = this->getFlake()->maybeOpenCursor( prefix );
 
           /* Open a read/write connection. */
           auto   chunkDbRW = this->getDbReadWrite();
           row_id chunkRow  = chunkDbRW->addOrGetAttrSetId( prefix );
 
-          todo.emplace(
-            std::make_tuple( prefix, static_cast<flox::Cursor>( root ), chunkRow ) );
+          todo.emplace( std::make_tuple( prefix,
+                                         static_cast<flox::Cursor>( root ),
+                                         chunkRow ) );
 
           /* Start a transaction */
           chunkDbRW->db.execute( "BEGIN EXCLUSIVE TRANSACTION" );
@@ -184,7 +184,9 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
             {
               while ( ! todo.empty() )
                 {
-                  chunkDbRW->scrape( this->getFlake()->state->symbols, todo.front(), todo );
+                  chunkDbRW->scrape( this->getFlake()->state->symbols,
+                                     todo.front(),
+                                     todo );
                   todo.pop();
                 }
             }
@@ -200,12 +202,13 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
           chunkDbRW->db.execute( "COMMIT TRANSACTION" );
           std::cout << "WML: scaping complete in child...." << std::endl;
         }
-    } while (false);
+    }
+  while ( false );
 
   /* Open a read/write connection. */
-  auto   dbRW = this->getDbReadWrite();
-  row_id row  = dbRW->addOrGetAttrSetId( prefix );
-  MaybeCursor root  = this->getFlake()->maybeOpenCursor( prefix );
+  auto        dbRW = this->getDbReadWrite();
+  row_id      row  = dbRW->addOrGetAttrSetId( prefix );
+  MaybeCursor root = this->getFlake()->maybeOpenCursor( prefix );
 
   todo.emplace(
     std::make_tuple( prefix, static_cast<flox::Cursor>( root ), row ) );
