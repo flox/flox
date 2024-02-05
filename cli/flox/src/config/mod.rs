@@ -143,10 +143,10 @@ impl Config {
 
             let mut builder = HierarchicalConfig::builder()
                 .set_default("default_substituter", "https://cache.floxdev.com/")?
-                .set_default("git_base_url", "https://git.hub.flox.dev/")?
                 .set_default("cache_dir", cache_dir.to_str().unwrap())?
                 .set_default("data_dir", data_dir.to_str().unwrap())?
-                // config dir is added to the config for completeness, the config file cannot change the config dir
+                // Config dir is added to the config for completeness;
+                // the config file cannot change the config dir.
                 .set_default("config_dir", config_dir.to_str().unwrap())?;
 
             // read from /etc
