@@ -876,7 +876,7 @@ pub struct Init {
     ///
     /// "$(basename $PWD)" or "default" if in $HOME
     #[bpaf(long("name"), short('n'), argument("name"))]
-    env_name: Option<EnvironmentName>,
+    env_name: Option<String>,
 }
 
 impl Init {
@@ -888,14 +888,15 @@ impl Init {
         let home_dir = dirs::home_dir().unwrap();
 
         let env_name = if let Some(name) = self.env_name {
-            name
+            EnvironmentName::from_str(&name)?
         } else if dir == home_dir {
-            "default".parse()?
+            EnvironmentName::from_str("default")?
         } else {
-            dir.file_name()
+            let name = dir
+                .file_name()
                 .map(|n| n.to_string_lossy().to_string())
-                .context("Can't init in root")?
-                .parse()?
+                .context("Can't init in root")?;
+            EnvironmentName::from_str(&name)?
         };
 
         let env = PathEnvironment::init(
