@@ -1470,11 +1470,6 @@ impl Push {
 
 #[derive(Debug, Clone, Bpaf)]
 enum PullSelect {
-    Existing {
-        /// Forceably overwrite the local copy of the environment
-        #[bpaf(long, short)]
-        force: bool,
-    },
     New {
         /// ID of the environment to pull
         #[bpaf(long, short, argument("owner/name"))]
@@ -1484,6 +1479,11 @@ enum PullSelect {
         /// ID of the environment to pull
         #[bpaf(positional("owner/name"))]
         remote: EnvironmentRef,
+    },
+    Existing {
+        /// Forceably overwrite the local copy of the environment
+        #[bpaf(long, short)]
+        force: bool,
     },
 }
 

@@ -15,7 +15,7 @@ flox-pull - pull environment from FloxHub
 flox [ <general-options> ] pull
      [-d=<path>]
      [-a]
-     [[-f] | -r=<owner/name> | <owner/name>]
+     [-r=<owner/name> | <owner/name> | [-f]]
 ```
 
 # DESCRIPTION
@@ -59,14 +59,14 @@ environments.
 `-a`, `--add-system`
 :   Forceably add current system to the environment, even if incompatible.
 
-`-f`, `--force`
-:   Forceably overwrite the local copy of the environment.
-
 `-r`, `--remote`
 :   ID of the environment to pull.
 
 `<owner/name>`
 :   ID of the environment to pull.
+
+`-f`, `--force`
+:   Forceably overwrite the local copy of the environment.
 
 ```{.include}
 ./include/environment-options.md
