@@ -119,8 +119,7 @@ CREATE VIEW IF NOT EXISTS v_AttrPaths AS
     UNION ALL SELECT O.id, O.parent
                    , O.attrName
                    , Parent.subtree
-                   , COALESCE( Parent.system, O.attrName )
-                     AS system
+                   , COALESCE( Parent.system, O.attrName ) AS system
                    , json_insert( Parent.path, '$[#]', O.attrName ) AS path
     FROM AttrSets O INNER JOIN Tree as Parent ON ( Parent.id = O.parent )
   ) SELECT * FROM Tree;
@@ -209,13 +208,13 @@ CREATE VIEW IF NOT EXISTS v_PackagesSearch AS SELECT
 , Packages.license
 , Packages.broken
 , CASE WHEN broken IS NULL THEN 1
-       WHEN broken THEN 2
-       ELSE 0
+       WHEN broken         THEN 2
+                           ELSE 0
   END AS brokenRank
 , Packages.unfree
 , CASE WHEN unfree IS NULL THEN 1
-       WHEN unfree THEN 2
-       ELSE 0
+       WHEN unfree         THEN 2
+                           ELSE 0
   END AS unfreeRank
 , Descriptions.description
 FROM Packages
