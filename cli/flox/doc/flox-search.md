@@ -7,7 +7,7 @@ header: "flox User Manuals"
 
 # NAME
 
-flox-search - search for packages.
+flox-search - search for packages
 
 # SYNOPSIS
 
@@ -37,18 +37,40 @@ Structured search results can be returned via the `--json` flag.
 More specific information for a single package is available via the
 [`flox-show(1)`](./flox-show.md) command.
 
+```{.include}
+./include/package-names.md
+```
+
+## Fuzzy search
+When only given a package name,
+`flox search` uses a fuzzy search mechanism that tries to match either the
+package name itself or some portion of the relative path.
+
+The search query can also include a version filter following the
+familiar `node-semver` syntax (`@` between the package and version).
+```text
+$ flox search 'python@>2'
+```
+
+For packages that have a version that doesn't comform to semantic versioning
+you can use the `=` operator in the version filter
+and the search will perform an exact match on the version supplied.
+```text
+$ flox search foo@=2023-11
+```
+
 # OPTIONS
 
 ## Search Options
 
 `<search-term>`
-:   package name to search for
+:   The package name to search for.
 
 `--json`
-:   output the search results in json format
+:   Display the search results in JSON format.
 
 `-a`, `--all`
-:   display all search results (default: limited number)
+:   Display all search results (default: at most 10).
 
 ```{.include}
 ./include/general-options.md
