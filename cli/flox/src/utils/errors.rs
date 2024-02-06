@@ -12,10 +12,10 @@ use flox_rust_sdk::models::environment::{
 use flox_rust_sdk::models::lockfile::LockedManifestError;
 use flox_rust_sdk::models::pkgdb::CallPkgDbError;
 use indoc::formatdoc;
-use log::debug;
+use log::trace;
 
 pub fn format_error(err: &EnvironmentError2) -> String {
-    debug!("formatting environment_error: {err:?}");
+    trace!("formatting environment_error: {err:?}");
 
     match err {
         EnvironmentError2::DotFloxNotFound => display_chain(err),
@@ -147,7 +147,7 @@ pub fn format_error(err: &EnvironmentError2) -> String {
         EnvironmentError2::DiscoverGitDirectory(_) => formatdoc! {"
             Failed to discover git directory.
 
-            See the '--debug' log for more information.
+            See the run again with `--verbose` for more information.
         "},
         // todo: enrich with path
         EnvironmentError2::DeleteEnvironment(err) => formatdoc! {"
@@ -184,7 +184,7 @@ pub fn format_error(err: &EnvironmentError2) -> String {
 }
 
 pub fn format_core_error(err: &CoreEnvironmentError) -> String {
-    debug!("formatting core_error: {err:?}");
+    trace!("formatting core_error: {err:?}");
 
     match err {
         CoreEnvironmentError::ModifyToml(toml_error) => formatdoc! {"
@@ -272,7 +272,7 @@ pub fn format_core_error(err: &CoreEnvironmentError) -> String {
 }
 
 pub fn format_managed_error(err: &ManagedEnvironmentError) -> String {
-    debug!("formatting managed_environment_error: {err:?}");
+    trace!("formatting managed_environment_error: {err:?}");
 
     match err {
         // todo: communicate reasons for this error
@@ -429,7 +429,7 @@ pub fn format_managed_error(err: &ManagedEnvironmentError) -> String {
 }
 
 pub fn format_remote_error(err: &RemoteEnvironmentError) -> String {
-    debug!("formatting remote_environment_error: {err:?}");
+    trace!("formatting remote_environment_error: {err:?}");
 
     match err {
         RemoteEnvironmentError::OpenManagedEnvironment(err) => formatdoc! {"
@@ -479,7 +479,7 @@ pub fn format_remote_error(err: &RemoteEnvironmentError) -> String {
 }
 
 pub fn format_locked_manifest_error(err: &LockedManifestError) -> String {
-    debug!("formatting locked_manifest_error: {err:?}");
+    trace!("formatting locked_manifest_error: {err:?}");
     match err {
         LockedManifestError::CallContainerBuilder(_) => formatdoc! {"
             Failed to call container builder.
@@ -556,7 +556,7 @@ fn format_pkgdb_error(
     parent: &dyn std::error::Error,
     context: &str,
 ) -> String {
-    debug!("formatting pkgdb_error: {err:?}");
+    trace!("formatting pkgdb_error: {err:?}");
 
     match err {
         CallPkgDbError::PkgDbError(err) => formatdoc! {"

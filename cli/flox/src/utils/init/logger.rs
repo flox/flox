@@ -51,9 +51,9 @@ static LOGGER_HANDLE: OnceCell<(
     >,
 )> = OnceCell::new();
 
-pub fn init_logger(verbosity: Option<Verbosity>, debug: bool) {
+pub fn init_logger(verbosity: Option<Verbosity>) {
     let verbosity = verbosity.unwrap_or_default();
-    let debug = debug || matches!(verbosity, Verbosity::Verbose(1..));
+    let debug = matches!(verbosity, Verbosity::Verbose(1..));
 
     let log_filter = match verbosity {
         // Show only errors
