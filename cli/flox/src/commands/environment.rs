@@ -38,7 +38,6 @@ use flox_rust_sdk::models::environment::{
     FLOX_PATH_PATCHED_VAR,
     FLOX_PROMPT_ENVIRONMENTS_VAR,
 };
-use flox_rust_sdk::models::floxmetav2::FloxmetaV2Error;
 use flox_rust_sdk::models::lockfile::{
     FlakeRef,
     Input,
@@ -54,7 +53,7 @@ use flox_rust_sdk::nix::command::StoreGc;
 use flox_rust_sdk::nix::command_line::NixCommandLine;
 use flox_rust_sdk::nix::Run;
 use indexmap::IndexSet;
-use indoc::{formatdoc, indoc};
+use indoc::formatdoc;
 use itertools::Itertools;
 use log::{debug, error, info, warn};
 use tempfile::NamedTempFile;
@@ -1660,7 +1659,7 @@ impl Pull {
                 typed: Spinner::new(|| ManagedEnvironment::open(flox, pointer, &dot_flox_path)),
             }
             .spin()
-            .map_err(Self::convert_error);
+            .map_err(|err| Self::handle_error(flox, err));
 
             match result {
                 Err(err) => {
@@ -1731,18 +1730,6 @@ impl Pull {
         }
 
         Ok(())
-    }
-
-    fn convert_error(err: ManagedEnvironmentError) -> anyhow::Error {
-        if let ManagedEnvironmentError::OpenFloxmeta(FloxmetaV2Error::LoggedOut) = err {
-            anyhow!(indoc! {"
-                Could not pull environment: not logged in to floxhub.
-
-                Please login to floxhub with `flox auth login`
-                "})
-        } else {
-            anyhow!(err)
-        }
     }
 
     /// construct a message for pulling a new environment
@@ -1830,6 +1817,41 @@ impl Pull {
     ) -> Result<Document, anyhow::Error> {
         manifest::add_system(&env.manifest_content(flox)?, &flox.system)
             .context("Could not add system to manifest")
+    }
+
+    fn handle_error(flox: &Flox, err: ManagedEnvironmentError) -> anyhow::Error {
+        match err {
+            ManagedEnvironmentError::AccessDenied => {
+                let message = "❌  You do not have permission to pull this environment";
+                anyhow::Error::msg(message)
+            },
+            ManagedEnvironmentError::Diverged => {
+                let message = "❌  The environment has diverged from the remote version";
+                anyhow::Error::msg(message)
+            },
+            ManagedEnvironmentError::UpstreamNotFound(env_ref, _) => {
+                let by_current_user = flox
+                    .floxhub_token
+                    .as_ref()
+                    .and_then(|token| token.handle().ok())
+                    .map(|handle| handle == env_ref.owner().as_str())
+                    .unwrap_or_default();
+                let message = format!("The environment {env_ref} does not exist.");
+                if by_current_user {
+                    anyhow!(formatdoc! {"
+                        {message}
+
+                        Double check the name or create it with:
+
+                            $ flox init --name {name}
+                            $ flox push
+                    ", name = env_ref.name()})
+                } else {
+                    anyhow!(message)
+                }
+            },
+            _ => err.into(),
+        }
     }
 }
 

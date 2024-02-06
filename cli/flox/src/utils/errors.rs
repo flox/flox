@@ -278,7 +278,7 @@ pub fn format_managed_error(err: &ManagedEnvironmentError) -> String {
         // todo: communicate reasons for this error
         // git auth errors may be catched separately or reported
         ManagedEnvironmentError::OpenFloxmeta(err) => formatdoc! {"
-            Failed to fetch updates environment: {err}
+            Failed to fetch environment: {err}
         "},
 
         // todo: merge errors or make more specific
@@ -381,6 +381,8 @@ pub fn format_managed_error(err: &ManagedEnvironmentError) -> String {
             Please check the spelling of the remote environment
             and make sure that you have access to it.
         "},
+        // todo: mark as bug?
+        ManagedEnvironmentError::UpstreamNotFound(_, _) => display_chain(err),
         // acces denied is catched early as ManagedEnvironmentError::AccessDenied
         ManagedEnvironmentError::Push(_) => display_chain(err),
         ManagedEnvironmentError::DeleteBranch(_) => display_chain(err),
@@ -416,7 +418,7 @@ pub fn format_managed_error(err: &ManagedEnvironmentError) -> String {
             Could not read managed manifest.
 
             {err}
-        ", err = display_chain(e) },
+        ",err = display_chain(e) },
         ManagedEnvironmentError::CanonicalizePath(canonicalize_err) => formatdoc! {"
             Invalid path to environment: {canonicalize_err}
 
