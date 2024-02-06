@@ -435,7 +435,9 @@ PkgDb::setPrefixDone( const flox::AttrPath & prefix, bool done )
  * Repeated runs against `nixpkgs-flox` come in at ~2m03s using recursion and
  * ~1m40s using a queue. */
 bool
-PkgDb::scrape( nix::SymbolTable & syms, const Target & target, std::size_t evalLimit)
+PkgDb::scrape( nix::SymbolTable & syms,
+               const Target &     target,
+               std::size_t        evalLimit )
 {
   const auto & [prefix, cursor, parentId] = target;
 
@@ -448,100 +450,111 @@ PkgDb::scrape( nix::SymbolTable & syms, const Target & target, std::size_t evalL
                       concatStringsSep( ".", prefix ) ) );
 
   std::size_t evalCount = 0;
-  Todos todo;
+  Todos       todo;
   todo.emplace( target );
-  while (!todo.empty() && evalCount < evalLimit)
-  {
-  const auto [prefix, cursor, parentId] = todo.top();
-    // we'll fully process this, so take it off the stack now, before we add more.
-    todo.pop();
-
-    std::cout << "WML: entering loop, evalCount: " << evalCount << " todo size: " << todo.size() << std::endl;
-
-    if ( this->completedAttrSet( parentId ) )
-     { 
-      // This one is already done, no need to evaluate anything.
-      std::cout << "WML: id already marked as done, " << parentId << std::endl;
-     }
-    // else if ( ) // optimization to set this prefix if we have finished recursing beneath
-    //  {
-
-    //  }
-   else
+  while ( ! todo.empty() && evalCount < evalLimit )
     {
-      // this will require some evaluation, count it.
-      evalCount++;
+      const auto [prefix, cursor, parentId] = todo.top();
+      // we'll fully process this, so take it off the stack now, before we add
+      // more.
+      todo.pop();
 
-      /* Scrape loop over attrs */
-      bool deferredEvals = false;
-      for ( nix::Symbol & aname : cursor->getAttrs() )
+      std::cout << "WML: entering loop, evalCount: " << evalCount
+                << " todo size: " << todo.size() << std::endl;
+
+      if ( this->completedAttrSet( parentId ) )
         {
-          if ( syms[aname] == "recurseForDerivations" ) { continue; }
+          // This one is already done, no need to evaluate anything.
+          std::cout << "WML: id already marked as done, " << parentId
+                    << std::endl;
+        }
+      // else if ( ) // optimization to set this prefix if we have finished
+      // recursing beneath
+      //  {
 
-          /* Used for logging, but can skip it at low verbosity levels. */
-          const std::string pathS
-            = ( nix::lvlTalkative <= nix::verbosity )
-                ? concatStringsSep( ".", prefix ) + "." + syms[aname]
-                : "";
+      //  }
+      else
+        {
+          // this will require some evaluation, count it.
+          evalCount++;
 
-          traceLog( "\tevaluating attribute '" + pathS + "'" );
-
-          try
+          /* Scrape loop over attrs */
+          bool deferredEvals = false;
+          for ( nix::Symbol & aname : cursor->getAttrs() )
             {
-              flox::Cursor child = cursor->getAttr( aname );
-              if ( child->isDerivation() )
+              if ( syms[aname] == "recurseForDerivations" ) { continue; }
+
+              /* Used for logging, but can skip it at low verbosity levels. */
+              const std::string pathS
+                = ( nix::lvlTalkative <= nix::verbosity )
+                    ? concatStringsSep( ".", prefix ) + "." + syms[aname]
+                    : "";
+
+              traceLog( "\tevaluating attribute '" + pathS + "'" );
+
+              try
                 {
-                  // std::cout << "WML: adding package " << pathS << std::endl;
-                  this->addPackage( parentId, syms[aname], child );
-                  continue;
+                  flox::Cursor child = cursor->getAttr( aname );
+                  if ( child->isDerivation() )
+                    {
+                      // std::cout << "WML: adding package " << pathS <<
+                      // std::endl;
+                      this->addPackage( parentId, syms[aname], child );
+                      continue;
+                    }
+                  if ( ! tryRecur ) { continue; }
+                  if ( auto maybe
+                       = child->maybeGetAttr( "recurseForDerivations" );
+                       ( ( maybe != nullptr ) && maybe->getBool() )
+                       /* XXX: We explicitly recurse into
+                        * `legacyPackages.*.darwin' due to a bug in `nixpkgs'
+                        * which doesn't set `recurseForDerivations' attribute
+                        * correctly. */
+                       || ( ( prefix.front() == "legacyPackages" )
+                            && ( syms[aname] == "darwin" ) ) )
+                    {
+                      flox::AttrPath path = prefix;
+                      path.emplace_back( syms[aname] );
+                      row_id childId
+                        = this->addOrGetAttrSetId( syms[aname], parentId );
+                      // This could already be completed as per a previous run,
+                      // don't traverse if it is
+                      if ( ! this->completedAttrSet( childId ) )
+                        {
+                          if ( nix::lvlTalkative <= nix::verbosity )
+                            {
+                              nix::logger->log( nix::lvlTalkative,
+                                                "\tpushing target '" + pathS
+                                                  + "'" );
+                            }
+                          todo.emplace( std::make_tuple( std::move( path ),
+                                                         std::move( child ),
+                                                         childId ) );
+                          deferredEvals = true;
+                        }
+                    }
                 }
-              if ( ! tryRecur ) { continue; }
-              if ( auto maybe = child->maybeGetAttr( "recurseForDerivations" );
-                  ( ( maybe != nullptr ) && maybe->getBool() )
-                  /* XXX: We explicitly recurse into `legacyPackages.*.darwin'
-                    *      due to a bug in `nixpkgs' which doesn't set
-                    *      `recurseForDerivations' attribute correctly. */
-                  || ( ( prefix.front() == "legacyPackages" )
-                        && ( syms[aname] == "darwin" ) ) )
+              catch ( const nix::EvalError & err )
                 {
-                  flox::AttrPath path = prefix;
-                  path.emplace_back( syms[aname] );
-                  row_id childId = this->addOrGetAttrSetId( syms[aname], parentId );
-                  // This could already be completed as per a previous run, don't traverse if it is
-                  if (!this->completedAttrSet(childId))
-                  {
-                    if ( nix::lvlTalkative <= nix::verbosity )
-                      {
-                        nix::logger->log( nix::lvlTalkative,
-                                          "\tpushing target '" + pathS + "'" );
-                      }
-                    todo.emplace( std::make_tuple( std::move( path ),
-                                                   std::move(child),
-                                                   childId ) );
-                    deferredEvals = true;
-                  }
+                  /* Ignore errors in `legacyPackages' */
+                  if ( tryRecur )
+                    {
+                      /* Only print eval errors in "debug" mode. */
+                      nix::ignoreException( nix::lvlDebug );
+                    }
+                  else { throw; }
                 }
             }
-          catch ( const nix::EvalError & err )
-            {
-              /* Ignore errors in `legacyPackages' */
-              if ( tryRecur )
-                {
-                  /* Only print eval errors in "debug" mode. */
-                  nix::ignoreException( nix::lvlDebug );
-                }
-              else { throw; }
-            }
-        }
 
-        // If we didn't defer any evals, then mark this prefix as complete.
-        // if (!deferredEvals)
-        {
-          // this->setPrefixDone(prefix, true);
+          // If we didn't defer any evals, then mark this prefix as complete.
+          // if (!deferredEvals)
+          {
+            // this->setPrefixDone(prefix, true);
+          }
         }
+      std::cout << "WML: ending loop, evalCount: " << evalCount
+                << " todo size: " << todo.size() << std::endl;
     }
-    std::cout << "WML: ending loop, evalCount: " << evalCount << " todo size: " << todo.size() << std::endl;
-  }
 
   return todo.empty();
 }
