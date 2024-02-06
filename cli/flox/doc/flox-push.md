@@ -30,7 +30,7 @@ possibly committed to version control.
 Pushing the environment moves the manifest and lock file to FloxHub,
 and only a reference to the revision of the environment is stored locally.
 
-Once the environment has been pushed, it is called a managed environment.
+Once the environment has been pushed, it is called a *managed environment*.
 Changes can be made to managed environments locally,
 and flox stores those changes in `$XDG_DATA_HOME`.
 Those changes are then synced to FloxHub when `flox push` is run.

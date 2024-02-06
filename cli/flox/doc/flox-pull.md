@@ -59,7 +59,7 @@ environments.
 `-a`, `--add-system`
 :   Forceably add current system to the environment, even if incompatible.
 
-`-r`, `--remote`
+`-r <owner/name>`, `--remote <owner/name>`
 :   ID of the environment to pull.
 
 `<owner/name>`
