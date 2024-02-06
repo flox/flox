@@ -13,13 +13,7 @@ use std::{env, vec};
 use anyhow::{anyhow, bail, Context, Result};
 use bpaf::Bpaf;
 use crossterm::tty::IsTty;
-use flox_rust_sdk::flox::{
-    EnvironmentName,
-    EnvironmentOwner,
-    EnvironmentRef,
-    EnvironmentRefError,
-    Flox,
-};
+use flox_rust_sdk::flox::{EnvironmentName, EnvironmentOwner, EnvironmentRef, Flox};
 use flox_rust_sdk::models::environment::managed_environment::{
     ManagedEnvironment,
     ManagedEnvironmentError,
@@ -894,15 +888,15 @@ impl Init {
         let home_dir = dirs::home_dir().unwrap();
 
         let env_name = if let Some(name) = self.env_name {
-            Init::validate_env_name(&name)?
+            EnvironmentName::from_str(&name)?
         } else if dir == home_dir {
-            "default".parse()?
+            EnvironmentName::from_str("default")?
         } else {
             let name = dir
                 .file_name()
                 .map(|n| n.to_string_lossy().to_string())
                 .context("Can't init in root")?;
-            Init::validate_env_name(&name)?
+            EnvironmentName::from_str(&name)?
         };
 
         let env = PathEnvironment::init(
@@ -925,17 +919,6 @@ impl Init {
             system = flox.system
         );
         Ok(())
-    }
-
-    fn validate_env_name(name: &str) -> Result<EnvironmentName, anyhow::Error> {
-        let parsed: Result<EnvironmentName, EnvironmentRefError> = name.parse();
-        if let Err(EnvironmentRefError::InvalidName) = parsed {
-            bail!(format!(
-                "Name '{}' is invalid. Environment names may not contain ' ' or '/'.",
-                name
-            ))
-        }
-        Ok(parsed.unwrap())
     }
 }
 
