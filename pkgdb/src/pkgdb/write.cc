@@ -243,7 +243,7 @@ PkgDb::addOrGetAttrSetId( const std::string & attrName, row_id parent )
       if ( row == qryId.end() )
         {
           throw PkgDbException(
-            nix::fmt( "failed to add AttrSet.id `AttrSets[%ull].%s':(%d) %s",
+            nix::fmt( "failed to add AttrSet.id 'AttrSets[%ull].%s':(%d) %s",
                       parent,
                       attrName,
                       rcode,

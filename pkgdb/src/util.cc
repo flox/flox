@@ -119,7 +119,7 @@ readAndCoerceJSON( const std::filesystem::path & path )
 {
   if ( ! std::filesystem::exists( path ) )
     {
-      throw flox::FloxException( "File `" + path.string()
+      throw flox::FloxException( "File '" + path.string()
                                  + "' does not exist" );
     }
 
@@ -144,7 +144,7 @@ readAndCoerceJSON( const std::filesystem::path & path )
     }
   else
     {
-      throw flox::FloxException( "Cannot convert file extension `"
+      throw flox::FloxException( "Cannot convert file extension '"
                                  + ext.string() + "' to JSON" );
     }
 }
