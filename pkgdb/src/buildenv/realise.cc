@@ -187,7 +187,7 @@ extractAttrPath( nix::EvalState & state,
         {
           std::ostringstream str;
           output->value->print( state.symbols, str );
-          throw FloxException( "attribute `%s' not found in set `%s'",
+          throw FloxException( "attribute '%s' not found in set '%s'",
                                attrName,
                                str.str() );
         }
@@ -250,7 +250,7 @@ createFloxEnv( nix::EvalState &     state,
 
       if ( ! package_drv.has_value() )
         {
-          throw FloxException( "Failed to get derivation for package `"
+          throw FloxException( "Failed to get derivation for package '"
                                + nlohmann::json( package ).dump() + "'" );
         }
 

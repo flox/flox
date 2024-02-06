@@ -2,7 +2,7 @@
  *
  * @file pkgdb/pkg-query.cc
  *
- * @brief Interfaces for constructing complex `Packages' queries.
+ * @brief Interfaces for constructing complex 'Packages' queries.
  *
  *
  * -------------------------------------------------------------------------- */
@@ -47,14 +47,14 @@ PkgQueryArgs::check() const
             || this->semver.has_value() ) )
     {
       throw InvalidPkgQueryArg(
-        "queries may not mix `name' parameter with any of `pname', "
-        "`version', or `semver' parameters." );
+        "queries may not mix 'name' parameter with any of 'pname', "
+        "'version', or 'semver' parameters." );
     }
 
   if ( this->version.has_value() && this->semver.has_value() )
     {
       throw InvalidPkgQueryArg(
-        "queries may not mix `version' and `semver' parameters." );
+        "queries may not mix 'version' and 'semver' parameters." );
     }
 
   /* Check licenses don't contain the ' character */
@@ -87,7 +87,7 @@ PkgQueryArgs::check() const
   /* `partialMatch' and `partialNameMatch' cannot be used together. */
   if ( this->partialMatch.has_value() && this->partialNameMatch.has_value() )
     {
-      throw InvalidPkgQueryArg( "`partialmatch' and `partialNameMatch' filters "
+      throw InvalidPkgQueryArg( "'partialmatch' and 'partialNameMatch' filters "
                                 "may not be used together." );
     }
 }
