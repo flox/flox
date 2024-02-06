@@ -116,7 +116,7 @@ pub struct FloxArgs {
     pub verbosity: Verbosity,
 
     /// Debug mode
-    #[bpaf(long, req_flag(()), many, map(vec_not_empty))]
+    #[bpaf(long, req_flag(()), many, map(vec_not_empty), hide)]
     pub debug: bool,
 
     /// Print the version of the program
