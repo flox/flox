@@ -47,7 +47,7 @@
 
   # build time environment variables
   envs = let
-    auth0BaseUrl = "https://flox-dev.us.auth0.com";
+    auth0BaseUrl = "https://flox.us.auth0.com";
   in
     {
       # 3rd party CLIs
@@ -76,7 +76,7 @@
       METRICS_EVENTS_API_KEY = "5pAQnBqz5Q7dpqVD9BEXQ4Kdc3D2fGTd3ZgP0XXK";
 
       # oauth client id
-      OAUTH_CLIENT_ID = "e8BGlekBE8w88LyrqGifts588wHtw03Q";
+      OAUTH_CLIENT_ID = "fGrotHBfQr9X1PHGbFoifEWaDPyWZDmc";
       OAUTH_BASE_URL = "${auth0BaseUrl}";
       OAUTH_AUTH_URL = "${auth0BaseUrl}/authorize";
       OAUTH_TOKEN_URL = "${auth0BaseUrl}/oauth/token";
