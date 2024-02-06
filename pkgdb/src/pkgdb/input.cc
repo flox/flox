@@ -137,10 +137,13 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
 
   std::cout << "WML: Scrape prefix " << prefix.back() << std::endl;
 
-  {
-    MaybeCursor root = this->getFlake()->maybeOpenCursor( prefix );
-    if ( root == nullptr ) { return; }
-  }
+  // {
+  //   MaybeCursor root = this->getFlake()->maybeOpenCursor( prefix );
+  //   if ( root == nullptr ) { return; }
+  // }
+  
+  // close the db if we have anything open in preparation for the child to take over.
+  this->closeDbReadWrite();
 
   // split this->getFlake()->state->symbols into 1k symbol chunks
   // auto symbolTableChunks = split( this->getFlake()->state->symbols, 1000);
@@ -165,25 +168,24 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
         }
       else
         {
-          std::cout << "WML: scraping in child...." << std::endl;
-
-          MaybeCursor root = this->getFlake()->maybeOpenCursor( prefix );
-
           /* Open a read/write connection. */
           auto   chunkDbRW = this->getDbReadWrite();
           row_id chunkRow  = chunkDbRW->addOrGetAttrSetId( prefix );
+          MaybeCursor root = this->getFlake()->maybeOpenCursor( prefix );
+
 
           todo.emplace( std::make_tuple( prefix,
                                          static_cast<flox::Cursor>( root ),
                                          chunkRow ) );
 
           /* Start a transaction */
-          chunkDbRW->db.execute( "BEGIN EXCLUSIVE TRANSACTION" );
+          chunkDbRW->execute( "BEGIN EXCLUSIVE TRANSACTION" );
 
           try
             {
               while ( ! todo.empty() )
                 {
+                  // std::cout << "WML: calling 'scrape' in child...." << std::endl;
                   chunkDbRW->scrape( this->getFlake()->state->symbols,
                                      todo.front(),
                                      todo );
@@ -192,15 +194,16 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
             }
           catch ( const nix::EvalError & err )
             {
-              chunkDbRW->db.execute( "ROLLBACK TRANSACTION" );
+              chunkDbRW->execute( "ROLLBACK TRANSACTION" );
               /* Close the r/w connection if we opened it. */
               if ( ! wasRW ) { this->closeDbReadWrite(); }
               throw NixEvalException( "error scraping flake", err );
             }
 
           /* Close the transaction. */
-          chunkDbRW->db.execute( "COMMIT TRANSACTION" );
+          chunkDbRW->execute( "COMMIT TRANSACTION" );
           std::cout << "WML: scaping complete in child...." << std::endl;
+          exit(0);
         }
     }
   while ( false );
@@ -208,17 +211,12 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
   /* Open a read/write connection. */
   auto        dbRW = this->getDbReadWrite();
   row_id      row  = dbRW->addOrGetAttrSetId( prefix );
-  MaybeCursor root = this->getFlake()->maybeOpenCursor( prefix );
 
-  todo.emplace(
-    std::make_tuple( prefix, static_cast<flox::Cursor>( root ), row ) );
-  /* Mark the prefix and its descendants as "done" if todo is empty
-    otherwise, we just stopped after scrpaing N prefixes and need to continue.
-  */
+  /* Mark the prefix and its descendants as "done" */
   std::cout << "WML: marking prefix row " << row << " complete " << std::endl;
-  dbRW->db.execute( "BEGIN EXCLUSIVE TRANSACTION" );
+  dbRW->execute( "BEGIN TRANSACTION" );
   dbRW->setPrefixDone( row, true );
-  dbRW->db.execute( "COMMIT TRANSACTION" );
+  dbRW->execute( "COMMIT TRANSACTION" );
 
   /* Close the r/w connection if we opened it. */
   if ( ! wasRW ) { this->closeDbReadWrite(); }
