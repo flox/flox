@@ -10,7 +10,7 @@ use flox_rust_sdk::models::environment::{
     ENVIRONMENT_POINTER_FILENAME,
 };
 use flox_rust_sdk::models::lockfile::LockedManifestError;
-use flox_rust_sdk::models::pkgdb::CallPkgDbError;
+use flox_rust_sdk::models::pkgdb::{CallPkgDbError, ContextMsgError, PkgDbError};
 use indoc::formatdoc;
 use log::debug;
 
@@ -518,6 +518,14 @@ pub fn format_locked_manifest_error(err: &LockedManifestError) -> String {
         LockedManifestError::LockManifest(pkgdb_error) => {
             format_pkgdb_error(pkgdb_error, err, "Failed to lock environment manifest.")
         },
+
+        // catch package conflict error:
+        // https://github.com/flox/flox/issues/857
+        LockedManifestError::BuildEnv(CallPkgDbError::PkgDbError(PkgDbError {
+            exit_code: 122,
+            context_message: Some(ContextMsgError { message, .. }),
+            ..
+        })) => message.to_string(),
         LockedManifestError::BuildEnv(pkgdb_error) => {
             format_pkgdb_error(pkgdb_error, err, "Failed to build environment.")
         },

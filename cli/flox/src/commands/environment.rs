@@ -1178,19 +1178,20 @@ impl Install {
                 ),
             )) if pkgdberr.exit_code == 120 => 'error: {
                 let paths = packages.iter().map(|p| p.path.clone()).join(", ");
-                let head = format!("❌  could not install {paths}");
 
                 if packages.len() > 1 {
                     break 'error anyhow!(formatdoc! {"
-                        {head}
+                        ❌  Could not install {paths}.
                         One or more of the packages you are trying to install does not exist.
                     "});
                 }
                 let path = packages[0].path.clone();
 
+                let head = format!("❌  Could not find package {path}.");
+
                 let suggestion = DidYouMean::<InstallSuggestion>::new(flox, environment, &path);
                 if !suggestion.has_suggestions() {
-                    break 'error anyhow!(head);
+                    break 'error anyhow!("{head} Try 'flox search' with a broader search term.");
                 }
 
                 anyhow!(formatdoc! {"
