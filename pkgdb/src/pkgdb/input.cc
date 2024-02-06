@@ -55,12 +55,13 @@ PkgDbInput::init()
     }
 
   /* If the database exists we don't want to needlessly try to initialize it, so
-  we skip straight to trying to create a read-only connection to the database.
-  However, just because the database exists doesn't mean that it's done being
-  initialized, so creating the read-only connection can fail. We do this retry
-  loop to until creating the read-only connection succeeds. */
-  /* TODO: emit the number of retries? */
-  int retries = 0;
+   * we skip straight to trying to create a read-only connection to
+   * the database.
+   * However, just because the database exists doesn't mean that it's done being
+   * initialized, so creating the read-only connection can fail.
+   * We do this retry loop to until creating the read-only connection succeeds.
+   */
+  std::size_t retries = 0;
   do {
       try
         {
@@ -71,7 +72,7 @@ PkgDbInput::init()
       catch ( ... )
         {
           std::this_thread::sleep_for( DB_RETRY_PERIOD );
-          if ( ++retries > DB_MAX_RETRIES )
+          if ( DB_MAX_RETRIES < ++retries )
             {
               throw PkgDbException(
                 "couldn't initialize read-only package database" );

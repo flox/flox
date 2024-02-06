@@ -43,25 +43,20 @@ namespace flox::pkgdb {
 
 /* -------------------------------------------------------------------------- */
 
+/** A unique hash associated with a locked flake. */
+using Fingerprint = nix::flake::Fingerprint;
+using SQLiteDb    = sqlite3pp::database; /** < SQLite3 database handle. */
+using sql_rc      = int;                 /**< `SQLITE_*` result code. */
+
+
+/* -------------------------------------------------------------------------- */
+
 /* We may need to wait for the database to be constructed, and that could take
  * some time. We set a reasonably small retry period to preserve responsiveness,
  * but set a large number of retries so that a slow database operation isn't
  * terminated too early. */
-const DurationMillis DB_RETRY_PERIOD = DurationMillis( 100 );
-const int            DB_MAX_RETRIES  = 2500;
-
-#define RETRY_WHILE_BUSY( op )                                    \
-  int _retry_while_busy_rcode   = op;                             \
-  int _retry_while_busy_retries = 0;                              \
-  while ( _retry_while_busy_rcode == SQLITE_BUSY )                \
-    {                                                             \
-      if ( ++_retry_while_busy_retries > DB_MAX_RETRIES )         \
-        {                                                         \
-          throw PkgDbException( "database operation timed out" ); \
-        }                                                         \
-      std::this_thread::sleep_for( DB_RETRY_PERIOD );             \
-      _retry_while_busy_rcode = op;                               \
-    }
+constexpr std::chrono::milliseconds DB_RETRY_PERIOD( 100 );
+constexpr std::size_t               DB_MAX_RETRIES = 2500;
 
 
 /* -------------------------------------------------------------------------- */
@@ -109,14 +104,6 @@ operator<<( std::ostream & oss, const SqlVersions & versions );
 
 /** The current SQLite3 schema versions. */
 constexpr SqlVersions sqlVersions = { .tables = 2, .views = 3 };
-
-
-/* -------------------------------------------------------------------------- */
-
-/** A unique hash associated with a locked flake. */
-using Fingerprint = nix::flake::Fingerprint;
-using SQLiteDb    = sqlite3pp::database; /** < SQLite3 database handle. */
-using sql_rc      = int;                 /**< `SQLITE_*` result code. */
 
 
 /* -------------------------------------------------------------------------- */
@@ -360,7 +347,6 @@ public:
   bool
   hasPackage( const flox::AttrPath & path );
 
-
   /**
    * @brief Get the `Description.description` for a given `Description.id`.
    * @param descriptionId The row id to lookup.
@@ -368,7 +354,6 @@ public:
    */
   std::string
   getDescription( row_id descriptionId );
-
 
   /**
    * @brief Return a list of `Packages.id`s for packages which satisfy a given
@@ -379,7 +364,6 @@ public:
    */
   std::vector<row_id>
   getPackages( const PkgQueryArgs & params );
-
 
   /**
    * @brief Get metadata about a single package.
@@ -392,7 +376,6 @@ public:
   nlohmann::json
   getPackage( row_id row );
 
-
   /**
    * @brief Get metadata about a single package.
    *
@@ -403,7 +386,6 @@ public:
    */
   nlohmann::json
   getPackage( const flox::AttrPath & path );
-
 
   nix::FlakeRef
   getLockedFlakeRef() const
@@ -424,17 +406,6 @@ public:
  */
 template<typename T>
 concept pkgdb_typename = std::is_base_of<PkgDbReadOnly, T>::value;
-
-
-/* -------------------------------------------------------------------------- */
-
-/**
- * @brief Predicate to detect failing SQLite3 return codes.
- * @param rcode A SQLite3 _return code_.
- * @return `true` iff @a rc is a SQLite3 error.
- */
-bool
-isSQLError( int rcode );
 
 
 /* -------------------------------------------------------------------------- */
