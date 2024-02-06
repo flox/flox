@@ -548,6 +548,7 @@ impl EnvironmentSelect {
             // directory.
             EnvironmentSelect::Unspecified => match detect_environment(message)? {
                 Some(env) => env.into_concrete_environment(flox),
+                // todo: remove: `detect_environment` already checked current dir
                 None => {
                     let current_dir =
                         env::current_dir().context("could not get current directory")?;
@@ -596,7 +597,8 @@ pub fn detect_environment(message: &str) -> Result<Option<UninitializedEnvironme
             let found = UninitializedEnvironment::DotFlox(found);
 
             if !Dialog::can_prompt() {
-                bail!("can't determine whether to use {found} or {activated_env}");
+                debug!("No TTY detected, using the found environment {found:?}");
+                return Ok(Some(found));
             }
 
             let dialog = Dialog {
