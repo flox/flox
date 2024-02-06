@@ -57,44 +57,40 @@ where
     ) -> fmt::Result {
         let metadata = event.metadata();
 
+        // Only handle "log" events
         if metadata.target() != "log" {
             return Ok(());
         }
 
-        let level = metadata.level();
-
+        // Read relevant "log.*" fields from the event
+        // theses fields are populated by the `log::{error, warn, info, debug, trace}!` macros
         let mut fields = LogFields::default();
         let mut visitor = LoggerVisitor(&mut fields);
         event.record(&mut visitor);
 
+        // If for any reason the message is not present,
+        // we don't have anything to log
         let message = match fields.message {
             Some(m) => m,
             None => return Ok(()),
         };
 
-        let is_posix = fields.target.iter().any(|x| x == "posix");
-
-        let is_flox = fields.target.map_or(false, |target| {
-            target == "flox" || target.starts_with("flox::")
-        });
-
-        // pretend all messages from `flox` are user facing
-        // unless they are posix command prints
-        if is_flox && !self.debug && !is_posix {
+        // Unless debug output is explicitly requested or tthe verbosity is set high enough,
+        // simply print the message
+        if !self.debug {
             writeln!(f, "{message}")?;
             return Ok(());
         }
 
-        // VVV  debug mode, posix or not flox  VVV
-
-        let origin_prefix = {
-            let line = fields.line.as_deref().unwrap_or("??");
-            let file = fields.file.as_deref().unwrap_or("<unknown file>");
-
-            format!("{}:{}", file, line)
-        };
+        // Produce debug output
+        //
+        // The output will look like this:
+        //
+        // ERROR 2021-08-25T14:00:00.000000000Z /path/to/file.rs:42
+        // <message>
 
         let level_prefix = {
+            let level = metadata.level();
             let level_prefix = level.as_str();
 
             match *level {
@@ -104,27 +100,14 @@ where
             }
         };
 
-        if is_posix {
-            let styled_message = message.bold();
-
-            if self.debug {
-                let head = format!("{level_prefix} {origin_prefix}:").bold();
-                writeln!(f, "{head}")?;
-            }
-            writeln!(f, "+ {styled_message}")?;
-            return Ok(());
-        }
-
-        // VVV  debug mode, not posix, both flox and not flox  VVV
-
-        // todo: filter this out in the `EnvFilter` `Layer` if possible
-        if !self.debug && !is_flox {
-            return Ok(());
-        }
-
-        // VVV  debug  VVV
-
         let time_prefix: chrono::DateTime<chrono::Local> = chrono::Local::now();
+
+        let origin_prefix = {
+            let line = fields.line.as_deref().unwrap_or("??");
+            let file = fields.file.as_deref().unwrap_or("<unknown file>");
+
+            format!("{}:{}", file, line)
+        };
 
         let head = format!("{level_prefix} {time_prefix} {origin_prefix}").bold();
 
