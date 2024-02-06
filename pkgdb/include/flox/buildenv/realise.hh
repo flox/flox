@@ -31,8 +31,9 @@
 namespace flox::buildenv {
 
 /**
- * @class flox::resolver::InvalidLockfileException
- * @brief An exception thrown when a lockfile is invalid.
+ * @class flox::buildenv::SystenNotSupportedByLockfile
+ * @brief An exception thrown when a lockfile is is missing a package.<system>
+ * entry fro the requested system.
  * @{
  */
 FLOX_DEFINE_EXCEPTION( SystenNotSupportedByLockfile,
@@ -40,6 +41,16 @@ FLOX_DEFINE_EXCEPTION( SystenNotSupportedByLockfile,
                        "unsupported system" )
 /** @} */
 
+
+/**
+ * @class flox::buildenv::PackageConflictException
+ * @brief An exception thrown when two packages conflict.
+ * I.e. the same file path is found in two different packages with the same
+ * priority.
+ */
+FLOX_DEFINE_EXCEPTION( PackageConflictException,
+                       EC_BUILDENV_CONFLICT,
+                       "conflicting packages" )
 
 /* -------------------------------------------------------------------------- */
 
