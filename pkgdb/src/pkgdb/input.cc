@@ -141,8 +141,9 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
   //   MaybeCursor root = this->getFlake()->maybeOpenCursor( prefix );
   //   if ( root == nullptr ) { return; }
   // }
-  
-  // close the db if we have anything open in preparation for the child to take over.
+
+  // close the db if we have anything open in preparation for the child to take
+  // over.
   this->closeDbReadWrite();
 
   // split this->getFlake()->state->symbols into 1k symbol chunks
@@ -169,9 +170,9 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
       else
         {
           /* Open a read/write connection. */
-          auto   chunkDbRW = this->getDbReadWrite();
-          row_id chunkRow  = chunkDbRW->addOrGetAttrSetId( prefix );
-          MaybeCursor root = this->getFlake()->maybeOpenCursor( prefix );
+          auto        chunkDbRW = this->getDbReadWrite();
+          row_id      chunkRow  = chunkDbRW->addOrGetAttrSetId( prefix );
+          MaybeCursor root      = this->getFlake()->maybeOpenCursor( prefix );
 
 
           todo.emplace( std::make_tuple( prefix,
@@ -185,7 +186,8 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
             {
               while ( ! todo.empty() )
                 {
-                  // std::cout << "WML: calling 'scrape' in child...." << std::endl;
+                  // std::cout << "WML: calling 'scrape' in child...." <<
+                  // std::endl;
                   chunkDbRW->scrape( this->getFlake()->state->symbols,
                                      todo.front(),
                                      todo );
@@ -203,14 +205,14 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
           /* Close the transaction. */
           chunkDbRW->execute( "COMMIT TRANSACTION" );
           std::cout << "WML: scaping complete in child...." << std::endl;
-          exit(0);
+          exit( 0 );
         }
     }
   while ( false );
 
   /* Open a read/write connection. */
-  auto        dbRW = this->getDbReadWrite();
-  row_id      row  = dbRW->addOrGetAttrSetId( prefix );
+  auto   dbRW = this->getDbReadWrite();
+  row_id row  = dbRW->addOrGetAttrSetId( prefix );
 
   /* Mark the prefix and its descendants as "done" */
   std::cout << "WML: marking prefix row " << row << " complete " << std::endl;
