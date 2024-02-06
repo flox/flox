@@ -111,7 +111,7 @@ setup_file() {
   run "$PKGDB_BIN" buildenv "$LOCKFILES/conflict/manifest.lock" \
     --out-link "$BATS_TEST_TMPDIR/env"
   assert_failure
-  assert_output --partial "file conflict between packages"
+  assert_output --regexp "'vim.*' conflicts with 'vim.*'"
 }
 
 # bats test_tags=conflict,resolve
