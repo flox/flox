@@ -22,7 +22,7 @@ pub fn format_error(err: &EnvironmentError2) -> String {
 
         // todo: enrich with a path?
         EnvironmentError2::EnvNotFound => formatdoc! {"
-            Found a '.flox' directory, but were unable to locate an environment directory.
+            Found a '.flox' directory, but was unable to locate an environment directory.
 
             This is likely due to a corrupt environment.
 
@@ -33,7 +33,7 @@ pub fn format_error(err: &EnvironmentError2) -> String {
 
         // todo: enrich with a path?
         EnvironmentError2::ManifestNotFound => formatdoc! {"
-            Found a '.flox' directory, but were unable to locate a manifest file.
+            Found a '.flox' directory, but was unable to locate a manifest file.
 
             This is likely due to a corrupt environment.
 
