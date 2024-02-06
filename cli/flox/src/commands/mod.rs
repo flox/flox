@@ -597,7 +597,7 @@ pub fn detect_environment(message: &str) -> Result<Option<UninitializedEnvironme
             let found = UninitializedEnvironment::DotFlox(found);
 
             if !Dialog::can_prompt() {
-                debug!("No TTY detected, using the found environment {found:?}");
+                debug!("No TTY detected, using the environment {found:?} found in the current directory or an ancestor directory");
                 return Ok(Some(found));
             }
 
