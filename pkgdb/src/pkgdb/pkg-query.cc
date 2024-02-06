@@ -331,35 +331,26 @@ void
 PkgQuery::initSubtrees()
 {
   /* Handle `subtrees' filtering. */
-  if ( this->subtrees.has_value() )
+  if ( this->subtrees.has_value() && ( ! this->subtrees->empty() ) )
     {
       size_t                   idx = 0;
       std::vector<std::string> lst;
       std::stringstream        rank;
+      rank << "CASE ";
       for ( const auto subtree : *this->subtrees )
         {
           lst.emplace_back( to_string( subtree ) );
-          rank << "iif( ( subtree = '" << lst.back() << "' ), " << idx << ", ";
+          rank << "WHEN subtree = '" << lst.back() << "' THEN " << idx << " ";
           ++idx;
         }
+      /* Wrap up rankings assignment. */
+      rank << "END AS subtreesRank";
+      this->addSelection( rank.str() );
       /* subtree IN ( ...  ) */
       std::stringstream cond;
       cond << "subtree";
       addIn( cond, lst );
       this->addWhere( cond.str() );
-      /* Wrap up rankings assignment. */
-      if ( 1 < idx )
-        {
-          rank << idx;
-          for ( size_t i = 0; i < idx; ++i ) { rank << " )"; }
-          rank << " AS subtreesRank";
-          this->addSelection( rank.str() );
-        }
-      else
-        {
-          /* Add bogus rank so `ORDER BY subtreesRank' works. */
-          this->addSelection( "0 AS subtreesRank" );
-        }
     }
   else
     {
@@ -381,18 +372,17 @@ PkgQuery::initSystems()
     addIn( cond, this->systems );
     this->addWhere( cond.str() );
   }
-  if ( 1 < this->systems.size() )
+  if ( ! this->systems.empty() )
     {
       size_t            idx = 0;
       std::stringstream rank;
+      rank << "CASE ";
       for ( const auto & system : this->systems )
         {
-          rank << "iif( ( system = '" << system << "' ), " << idx << ", ";
+          rank << "WHEN system = '" << system << "' THEN " << idx << " ";
           ++idx;
         }
-      rank << idx;
-      for ( size_t i = 0; i < idx; ++i ) { rank << " )"; }
-      rank << " AS systemsRank";
+      rank << "END AS systemsRank";
       this->addSelection( rank.str() );
     }
   else
