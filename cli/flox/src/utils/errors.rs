@@ -10,7 +10,7 @@ use flox_rust_sdk::models::environment::{
     ENVIRONMENT_POINTER_FILENAME,
 };
 use flox_rust_sdk::models::lockfile::LockedManifestError;
-use flox_rust_sdk::models::pkgdb::CallPkgDbError;
+use flox_rust_sdk::models::pkgdb::{CallPkgDbError, ContextMsgError, PkgDbError};
 use indoc::formatdoc;
 use log::debug;
 
@@ -515,6 +515,34 @@ pub fn format_locked_manifest_error(err: &LockedManifestError) -> String {
         // already user friendly.
         // some commands catch these errors and process them separately
         // e.g. `flox pull`, `flox push`
+
+        // 116: toml parsing error, just print the error message
+        // https://github.com/flox/flox/issues/852
+        LockedManifestError::LockManifest(CallPkgDbError::PkgDbError(PkgDbError {
+            exit_code: 116,
+            context_message:
+                Some(ContextMsgError {
+                    caught: Some(caught),
+                    ..
+                }),
+            ..
+        })) => {
+            let message = &caught.message;
+            let un_prefixed = message.strip_prefix("[error] ").unwrap_or(message);
+            formatdoc! {"
+                {un_prefixed}
+            "}
+        },
+        // 105: invalid lockfile, just print the error message
+        // https://github.com/flox/flox/issues/852
+        LockedManifestError::LockManifest(CallPkgDbError::PkgDbError(PkgDbError {
+            exit_code: 105,
+            context_message: Some(ContextMsgError { message, .. }),
+            ..
+        })) => formatdoc! {"
+            {message}
+        "},
+
         LockedManifestError::LockManifest(pkgdb_error) => {
             format_pkgdb_error(pkgdb_error, err, "Failed to lock environment manifest.")
         },
