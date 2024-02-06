@@ -394,12 +394,12 @@ PkgDbReadOnly::getPackage( row_id row )
       , 'description', Descriptions.description
       , 'license',     license
       , 'broken',      CASE WHEN broken IS NULL THEN json( 'null' )
-                            WHEN broken         THEN JSON( 'true' )
-                                                ELSE JSON( 'false' )
+                            WHEN broken         THEN json( 'true' )
+                                                ELSE json( 'false' )
                        END
       , 'unfree',      CASE WHEN unfree IS NULL THEN json( 'null' )
-                            WHEN unfree         THEN JSON( 'true' )
-                                                ELSE JSON( 'false' )
+                            WHEN unfree         THEN json( 'true' )
+                                                ELSE json( 'false' )
                        END
       ) AS json
       FROM Packages
