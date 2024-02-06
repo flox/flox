@@ -20,7 +20,7 @@ mod config;
 mod utils;
 
 async fn run(args: FloxArgs) -> Result<()> {
-    init_logger(Some(args.verbosity.clone()), Some(args.debug));
+    init_logger(Some(args.verbosity.clone()), args.debug);
     set_user()?;
     set_parent_process_id();
     let config = config::Config::parse()?;
@@ -33,7 +33,7 @@ async fn run(args: FloxArgs) -> Result<()> {
 async fn main() -> ExitCode {
     // initialize logger with "best guess" defaults
     // updating the logger conf is cheap, so we reinitialize whenever we get more information
-    init_logger(None, None);
+    init_logger(None, false);
 
     // Quit early if `--prefix` is present
     if Prefix::check() {
@@ -59,7 +59,7 @@ async fn main() -> ExitCode {
             .run_inner(Args::current_args())
             .unwrap_or_default()
     };
-    init_logger(Some(verbosity), Some(debug));
+    init_logger(Some(verbosity), debug);
 
     // Run the argument parser
     //
