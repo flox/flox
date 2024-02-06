@@ -1,7 +1,7 @@
 ---
 title: FLOX-ACTIVATE
 section: 1
-header: "flox User Manuals"
+header: "Flox User Manuals"
 ...
 
 # NAME
@@ -14,6 +14,7 @@ flox-activate - activate environments
 flox [ <general-options> ] activate
      [-d=<path> | -r=<owner/name>]
      [ -t ]
+     [ --print-script ]
      [ -- <command> [ <arguments> ] ]
 ```
 
@@ -25,8 +26,8 @@ and adds `bin` directories to your `$PATH`.
 
 Launches an interactive subshell when invoked as `flox activate` from an
 interactive shell.
-Launches a subshell non-interactively when invoked with a command and
-arguments.
+Launches a subshell non-interactively when invoked with a command
+and arguments.
 May also be invoked as `$(flox activate)` to produce commands to be sourced
 by your current `$SHELL`.
 
@@ -56,15 +57,21 @@ hook was defined.
 
 `-t`, `--trust`
 :   Trust a remote environment for this activation.
-    Activating an environment executes a shell hookwhich may execute arbitrary
+    Activating an environment executes a shell hook which may execute arbitrary
     code.
     This presents a security risk,
     so you will be prompted whether to trust the environment.
     Environments owned by the current user are always trusted.
     You may set certain environments to always be trusted using the config key
-    `trusted_environments."<owner/name>"`,
+    `trusted_environments."<owner/name>" = (trust | deny)`,
     or via the following command:
     `flox config --set trusted_environments.\"<owner/name>\" trust`.
+
+`--print-script`
+:  Prints an activation script to `stdout` that's suitable for sourcing in
+   a shell rather than activation via creating a subshell.
+   `flox` automatically knows when to print the activation script to `stdout`,
+   so this command is just a debugging aid for users.
 
 ```{.include}
 ./include/environment-options.md
@@ -75,8 +82,8 @@ hook was defined.
 
 ## `$_FLOX_ACTIVE_ENVIRONMENTS`
 A JSON array containing one object per active environment.
-This is currently an implementation detail and its contents are subject to
-change.
+This is currently an implementation detail
+and its contents are subject to change.
 
 # EXAMPLES:
 

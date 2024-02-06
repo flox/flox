@@ -361,8 +361,8 @@ pub struct Activate {
     trust: bool,
 
     /// Print an activation script to stdout instead of spawning a subshell
-    #[bpaf(long("in-place"), short, hide)]
-    in_place: bool,
+    #[bpaf(long("print-script"), short, hide)]
+    print_script: bool,
 
     /// Command to run interactively in the context of the environment
     #[bpaf(positional("cmd"), strict, many)]
@@ -451,7 +451,7 @@ impl Activate {
 
         let environment = concrete_environment.dyn_environment_ref_mut();
 
-        let in_place = self.in_place || (!stdout().is_tty() && self.run_args.is_empty());
+        let in_place = self.print_script || (!stdout().is_tty() && self.run_args.is_empty());
         // Don't spin in bashrcs and similar contexts
         let activation_path_result = if in_place {
             environment.activation_path(&flox)

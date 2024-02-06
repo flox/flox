@@ -1,7 +1,7 @@
 ---
 title: FLOX-SHOW
 section: 1
-header: "flox User Manuals"
+header: "Flox User Manuals"
 ...
 
 
@@ -23,16 +23,20 @@ The default output includes the package description,
 name,
 and version.
 
+```{.include}
+./include/package-names.md
+```
+
 # OPTIONS
 
 ```{.include}
 ./include/general-options.md
 ```
 
-## Search Options
+## Show Options
 
 `<search-term>`
-:   package name to show details for
+:   Package name to show details for.
 
 # EXAMPLES:
 
