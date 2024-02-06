@@ -343,7 +343,7 @@ impl PathEnvironment {
     ) -> Result<Self, EnvironmentError2> {
         let system: &str = system.as_ref();
         match EnvironmentPointer::open(dot_flox_parent_path.as_ref()) {
-            Err(EnvironmentError2::EnvNotFound) => {},
+            Err(EnvironmentError2::DotFloxNotFound) => {},
             Err(e) => Err(e)?,
             Ok(_) => Err(EnvironmentError2::EnvironmentExists(
                 dot_flox_parent_path.as_ref().to_path_buf(),
