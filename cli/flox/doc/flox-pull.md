@@ -20,9 +20,8 @@ flox [ <general-options> ] pull
 
 # DESCRIPTION
 
-Pull an environment from FloxHub and create a local reference to that remote
-environment,
-or, if an environment has already been pulled, update that environment.
+Pull an environment from FloxHub and create a local reference to it,
+or, if an environment has already been pulled, retrieve any updates.
 
 When pulling an environment for the first time, `-d` specifies the directory in
 which to create that environment.
