@@ -21,7 +21,7 @@ pub fn format_error(err: &EnvironmentError2) -> String {
         EnvironmentError2::DotFloxNotFound => display_chain(err),
 
         // todo: enrich with a path?
-        EnvironmentError2::EnvNotFound => formatdoc! {"
+        EnvironmentError2::EnvDirNotFound => formatdoc! {"
             Found a '.flox' directory, but was unable to locate an environment directory.
 
             This is likely due to a corrupt environment.
@@ -29,6 +29,16 @@ pub fn format_error(err: &EnvironmentError2) -> String {
             Try deleting the '.flox' directory and reinitializing the environment.
             If you cloned this environment from a remote repository, verify that
             `.flox/env/maifest.toml` is commited to the version control system.
+        "},
+        // todo: enrich with a path?
+        EnvironmentError2::EnvPointerNotFound => formatdoc! {"
+            Found a '.flox' directory, but was unable to locate an 'env.json' in it.
+
+            This is likely due to a corrupt environment.
+
+            Try deleting the '.flox' directory and reinitializing the environment.
+            If you cloned this environment from a remote repository, verify that
+            `.flox/env.json` is commited to the version control system.
         "},
 
         // todo: enrich with a path?

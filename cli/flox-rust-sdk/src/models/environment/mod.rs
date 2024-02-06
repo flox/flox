@@ -277,7 +277,7 @@ impl EnvironmentPointer {
             Err(err) => match err.kind() {
                 io::ErrorKind::NotFound => {
                     debug!("couldn't find env.json at {}", pointer_path.display());
-                    Err(EnvironmentError2::EnvNotFound)?
+                    Err(EnvironmentError2::EnvPointerNotFound)?
                 },
                 _ => Err(EnvironmentError2::ReadEnvironmentMetadata(err))?,
             },
@@ -333,7 +333,9 @@ pub enum EnvironmentError2 {
     #[error("could not initialize environment")]
     InitEnv(#[source] std::io::Error),
     #[error("could not find environment definition directory")]
-    EnvNotFound,
+    EnvDirNotFound,
+    #[error("could not find environment pointer file")]
+    EnvPointerNotFound,
     #[error("an environment already exists at {0:?}")]
     EnvironmentExists(PathBuf),
     #[error("could not write .gitignore file")]

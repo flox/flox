@@ -98,7 +98,7 @@ impl PathEnvironment {
 
         let env_path = dot_flox_path.join(ENV_DIR_NAME);
         if !env_path.exists() {
-            Err(EnvironmentError2::EnvNotFound)?;
+            Err(EnvironmentError2::EnvDirNotFound)?;
         }
 
         if !env_path.join(MANIFEST_FILENAME).exists() {
@@ -452,7 +452,7 @@ mod tests {
         );
 
         assert!(
-            matches!(before, Err(EnvironmentError2::EnvNotFound)),
+            matches!(before, Err(EnvironmentError2::EnvDirNotFound)),
             "{before:?}"
         );
 
