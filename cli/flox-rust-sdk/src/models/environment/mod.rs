@@ -267,6 +267,10 @@ impl EnvironmentPointer {
     /// on either [PathEnvironment] or [ManagedEnvironment].
     pub fn open(path: impl AsRef<Path>) -> Result<EnvironmentPointer, EnvironmentError2> {
         let dot_flox_path = path.as_ref().join(DOT_FLOX);
+        if !dot_flox_path.exists() {
+            debug!("couldn't find .flox at {}", dot_flox_path.display());
+            Err(EnvironmentError2::DotFloxNotFound)?
+        }
         let pointer_path = dot_flox_path.join(ENVIRONMENT_POINTER_FILENAME);
         let pointer_contents = match fs::read(&pointer_path) {
             Ok(contents) => contents,
