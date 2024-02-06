@@ -131,8 +131,8 @@ CREATE VIEW IF NOT EXISTS v_Semvers AS SELECT
   semver
 , major
 , minor
-, ( iif( ( length( mPatch ) < 1 ), rest, mPatch ) ) AS patch
-, ( iif( ( length( mPatch ) < 1 ), NULL, rest ) )   AS preTag
+, CASE WHEN ( length( mPatch ) < 1 ) THEN rest ELSE mPatch END AS patch
+, CASE WHEN ( length( mPatch ) < 1 ) THEN NULL ELSE rest END   AS preTag
 FROM (
   SELECT semver
        , major
