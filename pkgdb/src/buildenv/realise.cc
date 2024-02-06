@@ -142,10 +142,10 @@ createEnvironmentStorePath(
     {
       buildenv::buildEnvironment( tempDir, std::move( pkgs ) );
     }
-  catch ( buildenv::FileConflictException & err )
+  catch ( buildenv::FileConflict & err )
     {
-      auto [storePathA, filePath] = state.store->toStorePath( err.getFileA() );
-      auto [storePathB, _]        = state.store->toStorePath( err.getFileB() );
+      auto [storePathA, filePath] = state.store->toStorePath( err.fileA );
+      auto [storePathB, _]        = state.store->toStorePath( err.fileB );
 
       auto [nameA, packageA] = originalPackage.at( storePathA );
       auto [nameB, packageB] = originalPackage.at( storePathB );
@@ -158,7 +158,7 @@ createEnvironmentStorePath(
         nameA,
         nameB,
         filePath,
-        err.getPriority() ) );
+        err.priority ) );
     }
   return addDirToStore( state, tempDir, references );
 }

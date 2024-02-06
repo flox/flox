@@ -177,9 +177,9 @@ createLinks( BuildEnvState &     state,
                       // ... and have different parents -> conflict
                       if ( prevPriority.parentPath != priority.parentPath )
                         {
-                          throw FileConflictException( nix::readLink( dstFile ),
-                                                       srcFile,
-                                                       priority.priority );
+                          throw FileConflict( nix::readLink( dstFile ),
+                                              srcFile,
+                                              priority.priority );
                         }
 
                       // ... and dest has a higher (numerically lower)
