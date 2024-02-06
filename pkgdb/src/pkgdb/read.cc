@@ -313,7 +313,7 @@ PkgDbReadOnly::getAttrSetPath( row_id row )
       /* Handle no such path. */
       if ( itr == qry.end() )
         {
-          throw PkgDbException( nix::fmt( "No such `AttrSet.id' %llu.", row ) );
+          throw PkgDbException( nix::fmt( "No such 'AttrSet.id' %llu.", row ) );
         }
       row = ( *itr ).get<long long>( 0 );
       path.push_front( ( *itr ).get<std::string>( 1 ) );
@@ -364,7 +364,7 @@ PkgDbReadOnly::getPackagePath( row_id row )
   /* Handle no such path. */
   if ( itr == qry.end() )
     {
-      throw PkgDbException( nix::fmt( "No such `Packages.id' %llu.", row ) );
+      throw PkgDbException( nix::fmt( "No such 'Packages.id' %llu.", row ) );
     }
   flox::AttrPath path = this->getAttrSetPath( ( *itr ).get<long long>( 0 ) );
   path.emplace_back( ( *itr ).get<std::string>( 1 ) );

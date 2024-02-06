@@ -173,7 +173,7 @@ jq_edit() {
   run sh -c '$PKGDB_BIN manifest lock --lockfile manifest.lock --manifest manifest.json  \
                |tee manifest.lock3;'
   assert_success
-  assert_output --partial "upgrading group \`default'"
+  assert_output --partial "upgrading group 'default'"
   # Ensure we didn't produce an error.
   run jq -r '.category_message' manifest.lock3
   assert_output "null"

@@ -80,7 +80,7 @@ Lockfile::checkGroups() const
                        && descriptor->second.group.has_value() )
                     {
                       throw InvalidLockfileException(
-                        "invalid group `" + *descriptor->second.group
+                        "invalid group '" + *descriptor->second.group
                         + "' uses multiple inputs" );
                     }
                   else
@@ -109,7 +109,7 @@ Lockfile::check() const
           if ( input.getFlakeRef()->input.getType() == "indirect" )
             {
               throw InvalidManifestFileException(
-                "manifest `registry.inputs." + name
+                "manifest 'registry.inputs." + name
                 + ".from.type' may not be \"indirect\"." );
             }
         }
@@ -188,7 +188,7 @@ from_json( const nlohmann::json & jfrom, LockedInputRaw & raw )
           catch ( nlohmann::json::exception & err )
             {
               throw InvalidLockfileException(
-                "couldn't parse locked input field `" + key + "'",
+                "couldn't parse locked input field '" + key + "'",
                 extract_json_errmsg( err ) );
             }
           catch ( nix::BadHash & err )
@@ -207,7 +207,7 @@ from_json( const nlohmann::json & jfrom, LockedInputRaw & raw )
           catch ( nlohmann::json::exception & err )
             {
               throw InvalidLockfileException(
-                "couldn't parse locked input field `" + key + "'",
+                "couldn't parse locked input field '" + key + "'",
                 extract_json_errmsg( err ) );
             }
         }
@@ -220,13 +220,13 @@ from_json( const nlohmann::json & jfrom, LockedInputRaw & raw )
           catch ( nlohmann::json::exception & err )
             {
               throw InvalidLockfileException(
-                "couldn't parse locked input field `" + key + "'",
+                "couldn't parse locked input field '" + key + "'",
                 extract_json_errmsg( err ) );
             }
         }
       else
         {
-          throw InvalidLockfileException( "encountered unexpected field `" + key
+          throw InvalidLockfileException( "encountered unexpected field '" + key
                                           + "' while parsing locked input" );
         }
     }
@@ -269,7 +269,7 @@ from_json( const nlohmann::json & jfrom, LockedPackageRaw & raw )
           catch ( nlohmann::json::exception & err )
             {
               throw InvalidLockfileException(
-                "couldn't parse package input field `" + key + "'",
+                "couldn't parse package input field '" + key + "'",
                 extract_json_errmsg( err ) );
             }
         }
@@ -282,7 +282,7 @@ from_json( const nlohmann::json & jfrom, LockedPackageRaw & raw )
           catch ( nlohmann::json::exception & err )
             {
               throw InvalidLockfileException(
-                "couldn't parse package input field `" + key + "'",
+                "couldn't parse package input field '" + key + "'",
                 extract_json_errmsg( err ) );
             }
         }
@@ -295,14 +295,14 @@ from_json( const nlohmann::json & jfrom, LockedPackageRaw & raw )
           catch ( nlohmann::json::exception & err )
             {
               throw InvalidLockfileException(
-                "couldn't parse package input field `" + key + "'",
+                "couldn't parse package input field '" + key + "'",
                 extract_json_errmsg( err ) );
             }
         }
       else if ( key == "info" ) { raw.info = value; }
       else
         {
-          throw InvalidLockfileException( "encountered unexpected field `" + key
+          throw InvalidLockfileException( "encountered unexpected field '" + key
                                           + "' while parsing locked package" );
         }
     }
@@ -356,7 +356,7 @@ from_json( const nlohmann::json & jfrom, LockfileRaw & raw )
             }
           catch ( nlohmann::json::exception & err )
             {
-              throw InvalidLockfileException( "couldn't parse lockfile field `"
+              throw InvalidLockfileException( "couldn't parse lockfile field '"
                                                 + key + "'",
                                               extract_json_errmsg( err ) );
             }
@@ -369,7 +369,7 @@ from_json( const nlohmann::json & jfrom, LockfileRaw & raw )
             }
           catch ( nlohmann::json::exception & err )
             {
-              throw InvalidLockfileException( "couldn't parse lockfile field `"
+              throw InvalidLockfileException( "couldn't parse lockfile field '"
                                                 + key + "'",
                                               extract_json_errmsg( err ) );
             }
@@ -380,7 +380,7 @@ from_json( const nlohmann::json & jfrom, LockfileRaw & raw )
             {
               assertIsJSONObject<InvalidLockfileException>(
                 jfrom,
-                "lockfile `packages' field" );
+                "lockfile 'packages' field" );
             }
           for ( const auto & [system, descriptors] : value.items() )
             {
@@ -402,7 +402,7 @@ from_json( const nlohmann::json & jfrom, LockfileRaw & raw )
                       catch ( nlohmann::json::exception & err )
                         {
                           throw InvalidLockfileException(
-                            "couldn't parse lockfile field `packages." + system
+                            "couldn't parse lockfile field 'packages." + system
                               + "." + pid + "'",
                             extract_json_errmsg( err ) );
                         }
@@ -419,14 +419,14 @@ from_json( const nlohmann::json & jfrom, LockfileRaw & raw )
             }
           catch ( nlohmann::json::exception & err )
             {
-              throw InvalidLockfileException( "couldn't parse lockfile field `"
+              throw InvalidLockfileException( "couldn't parse lockfile field '"
                                                 + key + "'",
                                               extract_json_errmsg( err ) );
             }
         }
       else
         {
-          throw InvalidLockfileException( "encountered unexpected field `" + key
+          throw InvalidLockfileException( "encountered unexpected field '" + key
                                           + "' while parsing locked package" );
         }
     }
