@@ -20,23 +20,21 @@ flox [ <general-options> ] pull
 
 # DESCRIPTION
 
-Pull an environment from FloxHub and create a managed environment locally
-referring to that remote environment,
-or, if a managed environment with a reference to a remote environment already
-exists, update that environment.
+Pull an environment from FloxHub and create a local reference to that remote
+environment,
+or, if an environment has already been pulled, update that environment.
 
-When creating a new managed environment, `-d` specifies the directory in which
-to create that environment.
+When pulling an environment for the first time, `-d` specifies the directory in
+which to create that environment.
 The remote environment is specified in the form `<owner/name>`,
 and it may optionally be preceded by `-r`.
 
-When updating a managed environment that already exists, `-d` specifies which
+When updating an environment that has already been pulled, `-d` specifies which
 environment to update.
-`-f` may only be specified in this case, forceably updating the managed
-environment even if there are local changes not reflected in the remote
-environment.
-`<owner/name>` may not be specified in this case, as the managed environment
-already keeps track of its remote environment.
+`-f` may only be specified in this case, forceably updating the environment
+locally even if there are local changes not reflected in the remote environment.
+`<owner/name>` may not be specified in this case, as it would have been
+specified when the environment was first pulled.
 
 A remote environment may not support the architecture or operating system of the
 local system pulling the environment,
@@ -53,8 +51,8 @@ environments.
 ## Pull Options
 
 `-d`, `--dir`
-:   Directory in which to create a managed environment, or directory that
-    already contains a managed environment (default: current directory).
+:   Directory to pull an environment into, or directory that contains an
+    environment that has already been pulled (default: current directory).
 
 `-a`, `--add-system`
 :   Forceably add current system to the environment, even if incompatible.

@@ -20,7 +20,7 @@ flox [ <general-options> ] push
 
 # DESCRIPTION
 
-Move a path environment to FloxHub or push local changes to a managed
+Move an environment's manifest to FloxHub or sync local changes to an
 environment to FloxHub.
 
 After pushing, the remote environment can be referred to as `<owner/name>`.
@@ -30,16 +30,15 @@ possibly committed to version control.
 Pushing the environment moves the manifest and lock file to FloxHub,
 and only a reference to the revision of the environment is stored locally.
 
-Once the environment has been pushed, it is called a *managed environment*.
-Changes can be made to managed environments locally,
-and flox stores those changes in `$XDG_DATA_HOME`.
-Those changes are then synced to FloxHub when `flox push` is run.
+Once the environment has been pushed, it can be used directly with the
+`--remote` option,
+or it can be used and edited locally before syncing with `flox push`.
 
-In the same way as a git repo, local changes to a managed environment may
-diverge from the environment on FloxHub if `flox push` is run from a different
-host.
+In the same way as a git repo, local changes to an environment that has been
+pushed may diverge from the environment on FloxHub if `flox push` is run from a
+different host.
 Passing `--force` to `flox push` will cause it to overwrite any changes on
-FloxHub with local changes to the managed environment.
+FloxHub with local changes to the environment.
 
 # OPTIONS
 
