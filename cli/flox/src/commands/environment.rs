@@ -1840,7 +1840,7 @@ impl Pull {
                     anyhow!(formatdoc! {"
                         {message}
 
-                        Double check the name or can create it with
+                        Double check the name or create it with:
 
                             $ flox init --name {name}
                             $ flox push
