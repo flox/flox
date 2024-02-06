@@ -24,7 +24,7 @@ namespace flox::pkgdb {
 using Target = std::tuple<flox::AttrPath, flox::Cursor, row_id>;
 
 /** @brief A queue of @a flox::pkgdb::Target to be completed. */
-using Todos = std::queue<Target, std::list<Target>>;
+using Todos = std::stack<Target, std::list<Target>>;
 
 
 /* -------------------------------------------------------------------------- */
@@ -236,11 +236,12 @@ public:
    * @param syms Symbol table from @a cursor evaluator.
    * @param target A tuple containing the attribute path to scrape, a cursor,
    *               and a SQLite _row id_.
-   * @param todo Queue to add `recurseForDerivations = true` cursors to so
-   *             they may be scraped by later invocations.
+   * @param evalLimit Limit of evaluations to do before bailing out.  This
+   * allows chunking of evaluations.  Evals are done depth first to optimize
+   * passing over parents as subtrees are completed eagerly.
    */
-  void
-  scrape( nix::SymbolTable & syms, const Target & target, Todos & todo );
+  bool
+  scrape( nix::SymbolTable & syms, const Target & target, std::size_t evalLimit);
 
 
 }; /* End class `PkgDb' */
