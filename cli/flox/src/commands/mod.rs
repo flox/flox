@@ -280,7 +280,7 @@ enum LocalDevelopmentCommands {
     /// Create an environment in the current directory
     #[bpaf(command, long("create"))]
     Init(#[bpaf(external(environment::init))] environment::Init),
-    /// Enter the environment
+    /// Enter the environment, type `exit` to leave
     #[bpaf(command, long("develop"))]
     Activate(#[bpaf(external(environment::activate))] environment::Activate),
     /// Search for system or library packages to install
