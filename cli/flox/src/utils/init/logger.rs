@@ -53,21 +53,19 @@ static LOGGER_HANDLE: OnceCell<(
 
 pub fn init_logger(verbosity: Option<Verbosity>, debug: bool) {
     let verbosity = verbosity.unwrap_or_default();
-    let debug = debug || matches!(verbosity, Verbosity::Verbose(2..));
+    let debug = debug || matches!(verbosity, Verbosity::Verbose(1..));
 
     let log_filter = match verbosity {
         // Show only errors
         Verbosity::Quiet => "off,flox=error",
         // Show our own info logs
         Verbosity::Verbose(0) => "off,flox=info",
-        // Also POSIX debug
-        Verbosity::Verbose(1) => "off,flox=info,posix=debug",
         // Also show debug from our libraries
-        Verbosity::Verbose(2) => "off,flox=debug,flox-rust-sdk=debug,runix=debug,posix=debug",
+        Verbosity::Verbose(1) => "off,flox=debug,flox-rust-sdk=debug,runix=debug",
         // Also show trace from our libraries and POSIX
-        Verbosity::Verbose(3) => "off,flox=trace,flox-rust-sdk=trace,runix=trace,posix=trace",
+        Verbosity::Verbose(2) => "off,flox=trace,flox-rust-sdk=trace,runix=trace",
         // Also show trace from our libraries and POSIX
-        Verbosity::Verbose(4) => "debug,flox=trace,flox-rust-sdk=trace,runix=trace,posix=trace",
+        Verbosity::Verbose(3) => "debug,flox=trace,flox-rust-sdk=trace,runix=trace",
         Verbosity::Verbose(_) => "trace",
     };
 
