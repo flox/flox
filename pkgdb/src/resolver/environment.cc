@@ -170,11 +170,11 @@ Environment::getPkgDbRegistry()
             }
         }
 
-      for ( auto & [name, input] : *this->dbs )
-        {
-          // now this should shortcircuit since the work is done.
-          input->scrapeSystems( this->getSystems() );
-        }
+      // for ( auto & [name, input] : *this->dbs )
+      //   {
+      //     // now this should shortcircuit since the work is done.
+      //     input->scrapeSystems( this->getSystems() );
+      //   }
     }
   return static_cast<nix::ref<Registry<pkgdb::PkgDbInputFactory>>>( this->dbs );
 }
