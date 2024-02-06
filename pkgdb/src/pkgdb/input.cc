@@ -153,7 +153,7 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
 
   bool scrapingComplete = false;
   do {
-      const int EXIT_CHILD_INCOMPLETE = EXIT_SUCCESS+1;
+      const int EXIT_CHILD_INCOMPLETE = EXIT_SUCCESS + 1;
 
       pid_t pid = fork();
       if ( pid == -1 ) { throw PkgDbException( "fork faild" ); }
@@ -164,33 +164,36 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
           waitpid( pid, &status, 0 );
           std::cout << "WML: child exited: status: " << status << std::endl;
 
-          if (WIFEXITED(status))
-          {
-            if ( WEXITSTATUS( status ) == EXIT_SUCCESS )
-              {
-                std::cout << "WML: scraping complete, should exit loop !" << std::endl;
-                scrapingComplete = true;
-              }
-            else if ( WEXITSTATUS( status ) == EXIT_CHILD_INCOMPLETE )
-              {
-                std::cout << "WML: scraping incomplete, should loop again!" << std::endl;
-                scrapingComplete = false;
-              }
-            else // ( WEXITSTATUS( status ) != EXIT_SUCCESS )
-              {
-                scrapingComplete = true;
-                std::cout << "WML: scraping failed, aborting!" << std::endl;
-                throw PkgDbException( nix::fmt( "scraping failed: exit code %d",
-                                                WEXITSTATUS( status ) ) );
-              }
-          }
+          if ( WIFEXITED( status ) )
+            {
+              if ( WEXITSTATUS( status ) == EXIT_SUCCESS )
+                {
+                  std::cout << "WML: scraping complete, should exit loop !"
+                            << std::endl;
+                  scrapingComplete = true;
+                }
+              else if ( WEXITSTATUS( status ) == EXIT_CHILD_INCOMPLETE )
+                {
+                  std::cout << "WML: scraping incomplete, should loop again!"
+                            << std::endl;
+                  scrapingComplete = false;
+                }
+              else  // ( WEXITSTATUS( status ) != EXIT_SUCCESS )
+                {
+                  scrapingComplete = true;
+                  std::cout << "WML: scraping failed, aborting!" << std::endl;
+                  throw PkgDbException(
+                    nix::fmt( "scraping failed: exit code %d",
+                              WEXITSTATUS( status ) ) );
+                }
+            }
           else
-          {
-            scrapingComplete = true;
-            std::cout << "WML: scraping failed, aborting!" << std::endl;
-            throw PkgDbException( nix::fmt( "scraping failed: exit code %d",
-                                            WEXITSTATUS( status ) ) );
-          }
+            {
+              scrapingComplete = true;
+              std::cout << "WML: scraping failed, aborting!" << std::endl;
+              throw PkgDbException( nix::fmt( "scraping failed: exit code %d",
+                                              WEXITSTATUS( status ) ) );
+            }
         }
       else
         {
@@ -200,9 +203,10 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
           MaybeCursor root      = this->getFlake()->maybeOpenCursor( prefix );
 
 
-          Target rootTarget = std::make_tuple( prefix,
-                                         static_cast<flox::Cursor>( root ),
-                                         chunkRow );
+          Target rootTarget
+            = std::make_tuple( prefix,
+                               static_cast<flox::Cursor>( root ),
+                               chunkRow );
           bool targetComplete = false;
 
           /* Start a transaction */
@@ -210,10 +214,12 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
 
           try
             {
-              std::cout << "WML: calling 'chunkDbRw->scrape' in child...." << std::endl;
-              targetComplete = chunkDbRW->scrape( this->getFlake()->state->symbols,
-                                  rootTarget,
-                                  1000 );
+              std::cout << "WML: calling 'chunkDbRw->scrape' in child...."
+                        << std::endl;
+              targetComplete
+                = chunkDbRW->scrape( this->getFlake()->state->symbols,
+                                     rootTarget,
+                                     1000 );
             }
           catch ( const nix::EvalError & err )
             {
@@ -221,26 +227,26 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
               /* Close the r/w connection if we opened it. */
               if ( ! wasRW ) { this->closeDbReadWrite(); }
               throw NixEvalException( "error scraping flake", err );
-              exit(EXIT_FAILURE);
+              exit( EXIT_FAILURE );
             }
 
           /* Close the transaction. */
           chunkDbRW->execute( "COMMIT TRANSACTION" );
-          std::cout << "WML: scaping finished in child, completed:" << targetComplete << std::endl;
+          std::cout << "WML: scaping finished in child, completed:"
+                    << targetComplete << std::endl;
           exit( targetComplete ? EXIT_SUCCESS : EXIT_CHILD_INCOMPLETE );
         }
     }
-  while ( !scrapingComplete );
+  while ( ! scrapingComplete );
 
   /* Open a read/write connection. */
   // auto   dbRW = this->getDbReadWrite();
   // row_id row  = dbRW->addOrGetAttrSetId( prefix );
 
   // /* Mark the prefix and its descendants as "done" */
-  // std::cout << "WML: marking prefix row " << row << " complete " << std::endl;
-  // dbRW->execute( "BEGIN TRANSACTION" );
-  // dbRW->setPrefixDone( row, true );
-  // dbRW->execute( "COMMIT TRANSACTION" );
+  // std::cout << "WML: marking prefix row " << row << " complete " <<
+  // std::endl; dbRW->execute( "BEGIN TRANSACTION" ); dbRW->setPrefixDone( row,
+  // true ); dbRW->execute( "COMMIT TRANSACTION" );
 
   /* Close the r/w connection if we opened it. */
   if ( ! wasRW ) { this->closeDbReadWrite(); }

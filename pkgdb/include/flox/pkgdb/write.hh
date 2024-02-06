@@ -241,7 +241,9 @@ public:
    * passing over parents as subtrees are completed eagerly.
    */
   bool
-  scrape( nix::SymbolTable & syms, const Target & target, std::size_t evalLimit);
+  scrape( nix::SymbolTable & syms,
+          const Target &     target,
+          std::size_t        evalLimit );
 
 
 }; /* End class `PkgDb' */
