@@ -253,20 +253,16 @@ pub enum FloxhubTokenError {
 #[derive(Debug, Clone)]
 pub struct Floxhub {
     base_url: Url,
-    git_url_override: Option<Url>,
+    git_url: Url,
 }
 
 impl Floxhub {
-    pub fn new(base_url: Url) -> Self {
-        Floxhub {
-            base_url,
-            git_url_override: None,
-        }
-    }
-
-    pub fn set_git_url_override(&mut self, git_url_override: Url) -> &mut Self {
-        self.git_url_override = Some(git_url_override);
-        self
+    pub fn new(base_url: Url, git_url: Option<Url>) -> Result<Self, FloxhubError> {
+        let git_url = match git_url {
+            Some(base_url) => base_url,
+            None => Self::derive_git_url(&base_url)?,
+        };
+        Ok(Floxhub { base_url, git_url })
     }
 
     /// Return the base url of the floxhub instance
@@ -275,26 +271,36 @@ impl Floxhub {
         &self.base_url
     }
 
-    pub fn git_url_override(&self) -> Option<&Url> {
-        self.git_url_override.as_ref()
-    }
-
     /// Return the url of the floxhub git interface
-    ///
-    /// If the environment variable `_FLOX_FLOXHUB_GIT_URL` is set,
-    /// it will be used instead of the derived floxhub host.
-    /// This is useful for testing floxhub locally.
-    pub fn git_url(&self) -> Result<Url, url::ParseError> {
-        if let Some(ref url) = self.git_url_override {
-            return Ok(url.clone());
-        }
-
-        let mut url = self.base_url.clone();
-        let host = url.host_str().unwrap();
-        url.set_host(Some(&format!("git.{}", host)))?;
-
-        Ok(url)
+    pub fn git_url(&self) -> &Url {
+        &self.git_url
     }
+
+    fn derive_git_url(base_url: &Url) -> Result<Url, FloxhubError> {
+        let mut git_url = base_url.clone();
+        let host = git_url
+            .host_str()
+            .ok_or(FloxhubError::NoHost(base_url.to_string()))?;
+        let without_subdomain = host
+            .strip_prefix("hub.")
+            .ok_or(FloxhubError::NoHubPrefix(base_url.to_string()))?;
+        let with_git_prefix = format!("api.{}", without_subdomain);
+        git_url
+            .set_host(Some(&with_git_prefix))
+            .map_err(|e| FloxhubError::InvalidFloxhubBaseUrl(with_git_prefix, e))?;
+        git_url.set_path("git");
+        Ok(git_url)
+    }
+}
+
+#[derive(Error, Debug)]
+pub enum FloxhubError {
+    #[error("Invalid FloxHub URL: '{0}'. URL must contain a host.")]
+    NoHost(String),
+    #[error("Invalid FloxHub URL: '{0}'. URL must begin with 'hub.'")]
+    NoHubPrefix(String),
+    #[error("Couldn't set git URL host to '{0}'")]
+    InvalidFloxhubBaseUrl(String, #[source] url::ParseError),
 }
 
 #[cfg(test)]
@@ -341,7 +347,7 @@ pub mod tests {
             access_tokens: Default::default(),
             netrc_file: Default::default(),
             uuid: Default::default(),
-            floxhub: Floxhub::new(Url::from_str("https://hub.flox.dev").unwrap()),
+            floxhub: Floxhub::new(Url::from_str("https://hub.flox.dev").unwrap(), None).unwrap(),
             floxhub_token: None,
         };
 
@@ -372,5 +378,13 @@ pub mod tests {
     async fn test_get_username() {
         let token = FloxhubToken::new(FAKE_TOKEN.to_string());
         assert_eq!(token.handle().unwrap(), "test");
+    }
+
+    #[test]
+    fn test_derive_git_url() {
+        assert_eq!(
+            Floxhub::derive_git_url(&Url::from_str("https://hub.flox.dev").unwrap()).unwrap(),
+            Url::from_str("https://api.flox.dev/git").unwrap()
+        );
     }
 }
