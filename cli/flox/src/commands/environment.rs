@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::ffi::{OsStr, OsString};
-use std::fmt::Display;
+use std::fmt::{Display, Write as _};
 use std::fs::{self, File};
 use std::io::{stdin, stdout, Write};
 use std::os::unix::process::CommandExt;
@@ -48,7 +48,13 @@ use flox_rust_sdk::models::lockfile::{
     TypedLockedManifest,
 };
 use flox_rust_sdk::models::manifest::{self, PackageToInstall};
-use flox_rust_sdk::models::pkgdb::{call_pkgdb, CallPkgDbError, PkgDbError, PKGDB_BIN};
+use flox_rust_sdk::models::pkgdb::{
+    call_pkgdb,
+    CallPkgDbError,
+    ContextMsgError,
+    PkgDbError,
+    PKGDB_BIN,
+};
 use indexmap::IndexSet;
 use indoc::{formatdoc, indoc};
 use itertools::Itertools;
@@ -67,8 +73,8 @@ use crate::commands::{
 use crate::config::Config;
 use crate::utils::dialog::{Confirm, Dialog, Select, Spinner};
 use crate::utils::didyoumean::{DidYouMean, InstallSuggestion};
-use crate::utils::errors::{format_core_error, format_locked_manifest_error};
 use crate::utils::message;
+use crate::utils::errors::{display_chain, format_core_error, format_locked_manifest_error};
 use crate::{subcommand_metric, utils};
 
 // Edit declarative environment configuration
@@ -1615,17 +1621,17 @@ impl Pull {
         if dot_flox_path.exists() {
             bail!("Cannot pull a new environment into an existing one")
         }
+
+        // region: write pointer
         let pointer = ManagedPointer::new(
             env_ref.owner().clone(),
             env_ref.name().clone(),
             &flox.floxhub,
         );
-
         let pointer_content =
             serde_json::to_string_pretty(&pointer).context("Could not serialize pointer")?;
 
         fs::create_dir_all(&dot_flox_path).context("Could not create .flox/ directory")?;
-
         let pointer_path = dot_flox_path.join(ENVIRONMENT_POINTER_FILENAME);
         fs::write(pointer_path, pointer_content).context("Could not write pointer")?;
 
@@ -1647,6 +1653,7 @@ impl Pull {
                 Ok(env) => env,
             }
         };
+        // endregion
 
         let result = Dialog {
             message,
@@ -1698,6 +1705,43 @@ impl Pull {
                         err = anyhow!(broken_error)
                     });
                 };
+            },
+            Err(
+                ref e @ EnvironmentError2::Core(CoreEnvironmentError::LockedManifest(
+                    LockedManifestError::BuildEnv(CallPkgDbError::PkgDbError(PkgDbError {
+                        exit_code: exit_code @ 124..=126, // rust syntax is fun sometimes
+                        context_message:
+                            Some(ContextMsgError {
+                                ref message,
+                                ref caught,
+                            }),
+                        ..
+                    })),
+                )),
+            ) => {
+                debug!(
+                    "environment contains package incompatible with the current system: {err}",
+                    err = display_chain(e)
+                );
+
+                let mut pkgdb_error = message.to_string();
+                if exit_code != 124 && caught.is_some() {
+                    write!(
+                        &mut pkgdb_error,
+                        "\n{caught}",
+                        caught = caught.as_ref().unwrap()
+                    )?;
+                }
+
+                message::error(pkgdb_error);
+
+                if Self::query_ignore_build_errors()? {
+                    message::warning("Ignoring build errors and pulling the environment anyway.");
+                } else {
+                    fs::remove_dir_all(&dot_flox_path)
+                        .context("Could not clean up .flox/ directory")?;
+                    bail!("Did not pull the environment.");
+                }
             },
             Err(e) => {
                 fs::remove_dir_all(&dot_flox_path)
@@ -1772,6 +1816,31 @@ impl Pull {
     ) -> Result<Document, anyhow::Error> {
         manifest::add_system(&env.manifest_content(flox)?, &flox.system)
             .context("Could not add system to manifest")
+    }
+
+    /// Ask the user if they want to ignore build errors and pull a broken environment
+    fn query_ignore_build_errors() -> Result<bool> {
+        if !Dialog::can_prompt() {
+            return Ok(false);
+        }
+
+        let message = "The environment you are trying to pull could not be built locally.";
+        let help_message = Some("Use 'flox pull --force' to pull the environment anyway.");
+
+        let reject_choice = "Don't pull this environment.";
+        let confirm_choice = "Pull this environment anyway, 'flox edit' to address issues.";
+
+        let dialog = Dialog {
+            message,
+            help_message,
+            typed: Select {
+                options: [reject_choice, confirm_choice].to_vec(),
+            },
+        };
+
+        let (choice, _) = dialog.raw_prompt()?;
+
+        Ok(choice == 1)
     }
 
     fn handle_error(flox: &Flox, err: ManagedEnvironmentError) -> anyhow::Error {

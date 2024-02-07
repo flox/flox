@@ -616,7 +616,7 @@ fn format_pkgdb_error(
     }
 }
 
-fn display_chain(mut err: &dyn std::error::Error) -> String {
+pub fn display_chain(mut err: &dyn std::error::Error) -> String {
     let mut fmt = err.to_string();
     while let Some(source) = err.source() {
         fmt = format!("{}: {}", fmt, source);
