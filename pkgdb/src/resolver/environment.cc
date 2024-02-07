@@ -118,8 +118,6 @@ Environment::getCombinedRegistryRaw()
 
 /* -------------------------------------------------------------------------- */
 
-#define USE_FORK 0
-
 nix::ref<Registry<pkgdb::PkgDbInputFactory>>
 Environment::getPkgDbRegistry()
 {
@@ -134,40 +132,7 @@ Environment::getPkgDbRegistry()
       /* Scrape if needed. */
       for ( auto & [name, input] : *this->dbs )
         {
-          std::cout << "WML: Scraping systems for input: " << name << std::endl;
-
-          if ( ! USE_FORK )
-            {
-              input->scrapeSystems( this->getSystems() );
-              continue;
-            }
-
-          pid_t c_pid = fork();
-          if ( c_pid == -1 )
-            {
-              std::cout << "ERROR forking!!!" << std::endl;
-              exit( -1 );
-            }
-          else if ( c_pid > 0 )
-            {
-              std::cout << "WML: Waiting for child to finish building, pid:"
-                        << c_pid << std::endl;
-              // wait for child to finish building the db
-              int status;
-              while ( -1 == waitpid( c_pid, &status, 0 ) )
-                ;
-              std::cout << "WML: child finished, status:" << status
-                        << std::endl;
-            }
-          else
-            {
-              // scrape and just exit
-              std::cout << "Building the db in child." << std::endl;
-              input->scrapeSystems( this->getSystems() );
-              std::cout << "Finish building the db in child, exiting."
-                        << std::endl;
-              exit( 0 );
-            }
+          input->scrapeSystems( this->getSystems() );
         }
     }
   return static_cast<nix::ref<Registry<pkgdb::PkgDbInputFactory>>>( this->dbs );
