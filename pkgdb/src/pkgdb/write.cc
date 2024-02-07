@@ -9,6 +9,7 @@
 
 #include <limits>
 #include <memory>
+#include <ranges>
 
 #include "flox/flake-package.hh"
 #include "flox/pkgdb/write.hh"
@@ -435,128 +436,111 @@ PkgDb::setPrefixDone( const flox::AttrPath & prefix, bool done )
  * Repeated runs against `nixpkgs-flox` come in at ~2m03s using recursion and
  * ~1m40s using a queue. */
 bool
-PkgDb::scrape( nix::SymbolTable & syms,
-               const Target &     target,
-               std::size_t        evalLimit )
+PkgDb::scrape( nix::SymbolTable & syms, const Target & target, std::size_t pageSize, std::size_t pageIdx)
 {
   const auto & [prefix, cursor, parentId] = target;
 
   /* If it has previously been scraped then bail out. */
-  if ( this->completedAttrSet( parentId ) ) { return true; }
+  if ( this->completedAttrSet( parentId ) ) { 
+    std::cout << "WML: parentId completed, returning true" << std::endl;
+    return true;
+     }
 
   bool tryRecur = prefix.front() != "packages";
 
   debugLog( nix::fmt( "evaluating package set '%s'",
                       concatStringsSep( ".", prefix ) ) );
 
-  std::size_t evalCount = 0;
-  Todos       todo;
-  todo.emplace( target );
-  while ( ! todo.empty() && evalCount < evalLimit )
-    {
-      const auto [prefix, cursor, parentId] = todo.top();
-      // we'll fully process this, so take it off the stack now, before we add
-      // more.
-      todo.pop();
-
-      std::cout << "WML: entering loop, evalCount: " << evalCount
-                << " todo size: " << todo.size() << std::endl;
-
-      if ( this->completedAttrSet( parentId ) )
+  auto processAttrib = [this, &syms, tryRecur] (
+    const flox::Cursor &childCursor, 
+    const flox::AttrPath &prefix, 
+    const flox::pkgdb::row_id parentId,
+    const nix::Symbol &aname, Todos &todo) -> bool
+  {
+    try{
+      if ( childCursor->isDerivation() )
         {
-          // This one is already done, no need to evaluate anything.
-          std::cout << "WML: id already marked as done, " << parentId
-                    << std::endl;
+          this->addPackage( parentId, syms[aname], childCursor );
+          return false;
         }
-      // else if ( ) // optimization to set this prefix if we have finished
-      // recursing beneath
-      //  {
-
-      //  }
-      else
+      else if ( ! tryRecur ) {return false;}
+      else if ( auto maybe = childCursor->maybeGetAttr( "recurseForDerivations" );
+          ( ( maybe != nullptr ) && maybe->getBool() )
+            /* XXX: We explicitly recurse into `legacyPackages.*.darwin'
+              *      due to a bug in `nixpkgs' which doesn't set
+              *      `recurseForDerivations' attribute correctly. */
+            || ( ( prefix.front() == "legacyPackages" )
+                  && ( syms[aname] == "darwin" ) ))
         {
-          // this will require some evaluation, count it.
-          evalCount++;
-
-          /* Scrape loop over attrs */
-          bool deferredEvals = false;
-          for ( nix::Symbol & aname : cursor->getAttrs() )
-            {
-              if ( syms[aname] == "recurseForDerivations" ) { continue; }
-
-              /* Used for logging, but can skip it at low verbosity levels. */
-              const std::string pathS
-                = ( nix::lvlTalkative <= nix::verbosity )
-                    ? concatStringsSep( ".", prefix ) + "." + syms[aname]
-                    : "";
-
-              traceLog( "\tevaluating attribute '" + pathS + "'" );
-
-              try
-                {
-                  flox::Cursor child = cursor->getAttr( aname );
-                  if ( child->isDerivation() )
-                    {
-                      // std::cout << "WML: adding package " << pathS <<
-                      // std::endl;
-                      this->addPackage( parentId, syms[aname], child );
-                      continue;
-                    }
-                  if ( ! tryRecur ) { continue; }
-                  if ( auto maybe
-                       = child->maybeGetAttr( "recurseForDerivations" );
-                       ( ( maybe != nullptr ) && maybe->getBool() )
-                       /* XXX: We explicitly recurse into
-                        * `legacyPackages.*.darwin' due to a bug in `nixpkgs'
-                        * which doesn't set `recurseForDerivations' attribute
-                        * correctly. */
-                       || ( ( prefix.front() == "legacyPackages" )
-                            && ( syms[aname] == "darwin" ) ) )
-                    {
-                      flox::AttrPath path = prefix;
-                      path.emplace_back( syms[aname] );
-                      row_id childId
-                        = this->addOrGetAttrSetId( syms[aname], parentId );
-                      // This could already be completed as per a previous run,
-                      // don't traverse if it is
-                      if ( ! this->completedAttrSet( childId ) )
-                        {
-                          if ( nix::lvlTalkative <= nix::verbosity )
-                            {
-                              nix::logger->log( nix::lvlTalkative,
-                                                "\tpushing target '" + pathS
-                                                  + "'" );
-                            }
-                          todo.emplace( std::make_tuple( std::move( path ),
-                                                         std::move( child ),
-                                                         childId ) );
-                          deferredEvals = true;
-                        }
-                    }
-                }
-              catch ( const nix::EvalError & err )
-                {
-                  /* Ignore errors in `legacyPackages' */
-                  if ( tryRecur )
-                    {
-                      /* Only print eval errors in "debug" mode. */
-                      nix::ignoreException( nix::lvlDebug );
-                    }
-                  else { throw; }
-                }
-            }
-
-          // If we didn't defer any evals, then mark this prefix as complete.
-          // if (!deferredEvals)
-          {
-            // this->setPrefixDone(prefix, true);
-          }
+          // std::cout << "WML: pushing... " << std::endl;
+          flox::AttrPath path = prefix;
+          path.emplace_back( syms[aname] );
+          row_id childId = this->addOrGetAttrSetId( syms[aname], parentId );
+          todo.emplace( std::make_tuple( std::move( path ),
+                                          std::move(childCursor),
+                                          childId ) );
+          return true;
         }
-      std::cout << "WML: ending loop, evalCount: " << evalCount
-                << " todo size: " << todo.size() << std::endl;
+        else
+          return false;
     }
+    catch ( const nix::EvalError & err )
+      {
+        /* Ignore errors in `legacyPackages' */
+        if ( tryRecur )
+          {
+            /* Only print eval errors in "debug" mode. */
+            nix::ignoreException( nix::lvlDebug );
+            return false;
+          }
+        else { throw; }
+      }
+  };
 
-  return todo.empty();
+  auto allAttribs = cursor->getAttrs();
+  size_t startIdx = pageIdx*pageSize;
+  size_t chunkSize = startIdx + pageSize < allAttribs.size()
+                    ? pageSize : allAttribs.size() % pageSize;
+  auto chunk = std::views::counted(allAttribs.begin()+startIdx, chunkSize);
+  std::cout << "WML: chunking starting at " << pageSize*pageIdx << " for " << chunkSize << " items" << std::endl;
+  std::cout << "WML: chunk is " << chunk.size() << " items " << std::endl;
+
+  for ( nix::Symbol & aname : chunk )
+  {
+    // const std::string pathS
+    //   = concatStringsSep( ".", prefix ) + "." + syms[aname];
+    // std::cout << "WML: processing " << pathS << std::endl;
+
+    if ( syms[aname] == "recurseForDerivations" ) { continue; }
+
+    Todos todo;
+    flox::Cursor childCursor = cursor->getAttr( aname );
+
+    // Try processing this attribute.  If we are to recurse, todo will be loaded
+    // with the first target for us... we process this subtree completely using
+    // the todo stack.
+    if ( processAttrib(childCursor, prefix, parentId, aname, todo) )
+      {
+      // const auto [parentPrefix, _a, _b] = todo.top();
+      do
+        {
+        // std::cout << "WML: recursing into... " << pathS << std::endl;
+
+        const auto [prefix, cursor, parentId] = todo.top();
+        todo.pop();
+
+        for ( nix::Symbol & aname : cursor->getAttrs() )
+          {
+          if ( syms[aname] == "recurseForDerivations" ) { continue; }
+          flox::Cursor childCursor = cursor->getAttr( aname );
+          processAttrib(childCursor, prefix, parentId, aname, todo);
+          }
+        } while (!todo.empty());
+      // this->setPrefixDone(parentPrefix, true);
+      }
+  }
+
+  return chunkSize < pageSize;;
 }
 
 

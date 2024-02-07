@@ -243,7 +243,7 @@ public:
   bool
   scrape( nix::SymbolTable & syms,
           const Target &     target,
-          std::size_t        evalLimit );
+          std::size_t pageSize, std::size_t pageIdx );
 
 
 }; /* End class `PkgDb' */
