@@ -145,29 +145,37 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
 
   do {
       const int EXIT_CHILD_INCOMPLETE = EXIT_SUCCESS + 1;
+      const int EXIT_FAILURE_NIX_EVAL
+        = 150;  // seems to not overlap with common posix codes
 
       pid_t pid = fork();
-      if ( pid == -1 ) { throw PkgDbException( "fork faild" ); }
+      if ( pid == -1 )
+        {
+          throw PkgDbException( "fork to scrape attributes failed" );
+        }
       if ( 0 < pid )
         {
           int status = 0;
-          // WML: todo - log using current conventions for verbosity
-          std::cout << "WML: scraping in child: " << pid << std::endl;
+          debugLog(
+            nix::fmt( "scrapePrefix: Waiting for forked process, pid:%d\n",
+                      pid ) );
           waitpid( pid, &status, 0 );
-          std::cout << "WML: child exited: status: " << status << std::endl;
+          debugLog(
+            nix::fmt( "scrapePrefix: Forked process exited, exitcode:%d\n",
+                      status ) );
 
           if ( WIFEXITED( status ) )
             {
               if ( WEXITSTATUS( status ) == EXIT_SUCCESS )
                 {
-                  std::cout << "WML: scraping complete, should exit loop !"
-                            << std::endl;
+                  debugLog( nix::fmt(
+                    "scrapePrefix: Child reports all pages complete\n" ) );
                   scrapingComplete = true;
                 }
               else if ( WEXITSTATUS( status ) == EXIT_CHILD_INCOMPLETE )
                 {
-                  std::cout << "WML: scraping incomplete, should loop again!"
-                            << std::endl;
+                  debugLog( nix::fmt( "scrapePrefix: Child reports additional "
+                                      "pages to process\n" ) );
                   // Make sure to increment the pageIdx here (in the parent)
                   pageIdx++;
                   scrapingComplete = false;
@@ -175,16 +183,27 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
               else  // ( WEXITSTATUS( status ) != EXIT_SUCCESS )
                 {
                   scrapingComplete = true;
-                  std::cout << "WML: scraping failed, aborting!" << std::endl;
-                  throw PkgDbException(
-                    nix::fmt( "scraping failed: exit code %d",
-                              WEXITSTATUS( status ) ) );
+                  debugLog( nix::fmt(
+                    "scrapePrefix: Child reports failure, aborting\n" ) );
+                  if ( WEXITSTATUS( status ) == EXIT_FAILURE_NIX_EVAL )
+                    {
+                      throw PkgDbException(
+                        nix::fmt( "scraping failed: NixEvalException reported. "
+                                  "See child log for details." ) );
+                    }
+                  else
+                    {
+                      throw PkgDbException(
+                        nix::fmt( "scraping failed: exit code %d",
+                                  WEXITSTATUS( status ) ) );
+                    }
                 }
             }
           else
             {
               scrapingComplete = true;
-              std::cout << "WML: scraping failed, aborting!" << std::endl;
+              debugLog( nix::fmt(
+                "scrapePrefix: Child exited abnormally, aborting\n" ) );
               throw PkgDbException( nix::fmt( "scraping failed: exit code %d",
                                               WEXITSTATUS( status ) ) );
             }
@@ -207,8 +226,10 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
 
           try
             {
-              std::cout << "WML: calling 'chunkDbRw->scrape' in child...."
-                        << std::endl;
+              debugLog( nix::fmt(
+                "scrapePrefix(child): scraping page %d of %d attribs\n",
+                pageIdx,
+                pageSize ) );
               targetComplete
                 = chunkDbRW->scrape( this->getFlake()->state->symbols,
                                      rootTarget,
@@ -217,17 +238,21 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
             }
           catch ( const nix::EvalError & err )
             {
+              debugLog(
+                nix::fmt( "scrapePrefix(child): caught nix::EvalError: %s\n",
+                          err.msg().c_str() ) );
               chunkDbRW->execute( "ROLLBACK TRANSACTION" );
               /* Close the r/w connection if we opened it. */
               if ( ! wasRW ) { this->closeDbReadWrite(); }
-              throw NixEvalException( "error scraping flake", err );
-              exit( EXIT_FAILURE );
+              exit( EXIT_FAILURE_NIX_EVAL );
             }
 
           /* Close the transaction. */
           chunkDbRW->execute( "COMMIT TRANSACTION" );
-          std::cout << "WML: scraping finished in child, completed:"
-                    << targetComplete << std::endl;
+          debugLog( nix::fmt(
+            "scrapePrefix(child): scraping page %d complete, lastPage:%d\n",
+            pageIdx,
+            targetComplete ) );
           exit( targetComplete ? EXIT_SUCCESS : EXIT_CHILD_INCOMPLETE );
         }
     }
