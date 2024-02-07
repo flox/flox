@@ -7,6 +7,7 @@
  *
  * -------------------------------------------------------------------------- */
 
+#include "sys/wait.h"
 #include <nix/flake/flakeref.hh>
 
 #include "flox/core/util.hh"
@@ -316,7 +317,40 @@ FloxFlakeInput::getSubtrees()
 RegistryInput
 FloxFlakeInput::getLockedInput()
 {
-  return { this->getSubtrees(), this->getFlake()->lockedFlake.flake.lockedRef };
+  /* getFlake *may* result in a download internal to nix (see curlFileTransfer
+   * in nix code) which is a static member function to enable connection
+   * sharing. Since we fork later in `scrape`, if we perform a download hear,
+   * when the child of the later fork exits, it tries to cleanup that file
+   * transfer object in the call to `exit()`.  That dies exceptionally well
+   * since it's in a different process at that point.  For now, we'll fork here
+   * to contain the downloads within a child, and hopefully avoid that
+   * situation. */
+  pid_t pid = fork();
+  if ( pid == -1 )
+    {
+      // WML - TODO - better error handling here!
+      errorLog(
+        nix::fmt( "getLockedInput: faild to fork for flake downlod!" ) );
+      exit( -1 );
+    }
+  if ( 0 < pid )
+    {
+      debugLog( nix::fmt( "getLockedInput: waiting for child:%d", pid ) );
+      int status = 0;
+      waitpid( pid, &status, 0 );
+      debugLog(
+        nix::fmt( "getLockedInput: child is finished, exitcode:%d", status ) );
+
+      // The flake should be downloaded and cached locally now
+      return { this->getSubtrees(),
+               this->getFlake()->lockedFlake.flake.lockedRef };
+    }
+  else
+    {
+      // just getFlake to ensure it's downloaded.
+      this->getFlake();
+      exit( 0 );
+    }
 }
 
 
