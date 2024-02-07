@@ -528,6 +528,16 @@ pub fn format_locked_manifest_error(err: &LockedManifestError) -> String {
         // some commands catch these errors and process them separately
         // e.g. `flox pull`, `flox push`
 
+        // 105: invalid lockfile, just print the error message
+        // https://github.com/flox/flox/issues/852
+        LockedManifestError::LockManifest(CallPkgDbError::PkgDbError(PkgDbError {
+            exit_code: 105,
+            context_message: Some(ContextMsgError { message, .. }),
+            ..
+        })) => formatdoc! {"
+            {message}
+        "},
+
         // 116: toml parsing error, just print the error message
         // https://github.com/flox/flox/issues/852
         LockedManifestError::LockManifest(CallPkgDbError::PkgDbError(PkgDbError {
@@ -545,16 +555,6 @@ pub fn format_locked_manifest_error(err: &LockedManifestError) -> String {
                 {un_prefixed}
             "}
         },
-        // 105: invalid lockfile, just print the error message
-        // https://github.com/flox/flox/issues/852
-        LockedManifestError::LockManifest(CallPkgDbError::PkgDbError(PkgDbError {
-            exit_code: 105,
-            context_message: Some(ContextMsgError { message, .. }),
-            ..
-        })) => formatdoc! {"
-            {message}
-        "},
-
         LockedManifestError::LockManifest(pkgdb_error) => {
             format_pkgdb_error(pkgdb_error, err, "Failed to lock environment manifest.")
         },
@@ -566,6 +566,22 @@ pub fn format_locked_manifest_error(err: &LockedManifestError) -> String {
             context_message: Some(ContextMsgError { message, .. }),
             ..
         })) => message.to_string(),
+        // catch package eval error: unsupported system:
+        LockedManifestError::BuildEnv(CallPkgDbError::PkgDbError(PkgDbError {
+            exit_code: 124,
+            context_message: Some(ContextMsgError { message, .. }),
+            ..
+        })) => message.to_string(),
+        // catch package eval and build errors
+        LockedManifestError::BuildEnv(CallPkgDbError::PkgDbError(PkgDbError {
+            exit_code: 124..=125,
+            context_message:
+                Some(ContextMsgError {
+                    message,
+                    caught: Some(caught),
+                }),
+            ..
+        })) => format!("{message}: {caught}"),
         LockedManifestError::BuildEnv(pkgdb_error) => {
             format_pkgdb_error(pkgdb_error, err, "Failed to build environment.")
         },
