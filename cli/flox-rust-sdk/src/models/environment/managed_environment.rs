@@ -1134,7 +1134,7 @@ mod test {
         ManagedPointer {
             owner: EnvironmentOwner::from_str("owner").unwrap(),
             name: EnvironmentName::from_str("name").unwrap(),
-            floxhub_url: Url::from_str("https://floxhub.com").unwrap(),
+            floxhub_url: Url::from_str("https://hub.flox.dev").unwrap(),
             floxhub_git_url_override: Some(Url::from_directory_path(remote_path).unwrap()),
             version: Version::<1> {},
         }
