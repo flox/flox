@@ -12,7 +12,7 @@ flox-upgrade - upgrade packages in an environment
 # SYNOPSIS
 
 ```
-flox [ <general-options> ] upgrade
+flox [<general-options>] upgrade
      [-d=<path> | -r=<owner>/<name>]
      [<package or group>]...
 ```

@@ -11,6 +11,6 @@ pub struct Features {
 
 impl Features {
     pub fn parse() -> Result<Self> {
-        Ok(Config::parse()?.features)
+        Ok(Config::parse()?.features.unwrap_or_default())
     }
 }

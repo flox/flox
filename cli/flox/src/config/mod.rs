@@ -29,10 +29,10 @@ pub struct Config {
 
     /// nix configuration options
     #[serde(default)]
-    pub nix: NixConfig,
+    pub nix: Option<NixConfig>,
 
     #[serde(default)]
-    pub features: Features,
+    pub features: Option<Features>,
 }
 
 // TODO: move to flox_sdk?

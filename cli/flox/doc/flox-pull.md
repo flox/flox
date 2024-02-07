@@ -12,7 +12,7 @@ flox-pull - pull environment from FloxHub
 # SYNOPSIS
 
 ```
-flox [ <general-options> ] pull
+flox [<general-options>] pull
      [-d=<path>]
      [-a]
      [-r=<owner>/<name> | <owner>/<name> | [-f]]
@@ -25,8 +25,10 @@ or, if an environment has already been pulled, retrieve any updates.
 
 When pulling an environment for the first time, `-d` specifies the directory
 in which to create that environment.
-The remote environment is specified in the form `<owner>/<name>`,
-and it may optionally be preceded by `-r`.
+The remote environment is specified in the form `<owner>/<name>`.
+It may optionally be preceded by `-r`,
+but `-r` is not necessary and is accepted simply for consistency with other
+environment commands.
 
 When pulling an environment that has already been pulled, `-d` specifies which
 environment to sync.

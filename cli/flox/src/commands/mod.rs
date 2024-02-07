@@ -178,7 +178,12 @@ impl FloxArgs {
             env::set_var("FLOX_DISABLE_METRICS", "true");
         }
 
-        let access_tokens = init_access_tokens(&config.nix.access_tokens)?;
+        let access_tokens = init_access_tokens(
+            config
+                .nix
+                .as_ref()
+                .map(|nix_config| &nix_config.access_tokens),
+        )?;
 
         let netrc_file = dirs::home_dir()
             .expect("User must have a home directory")

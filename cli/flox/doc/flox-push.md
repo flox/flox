@@ -12,7 +12,7 @@ flox-push - send environment to FloxHub
 # SYNOPSIS
 
 ```
-flox [ <general-options> ] push
+flox [<general-options>] push
      [-d=<path>]
      [-o=<owner>]
      [-f]

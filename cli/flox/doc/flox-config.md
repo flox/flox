@@ -12,7 +12,7 @@ flox-config - view and set configuration options
 # SYNOPSIS
 
 ```
-flox [ <general-options> ] config
+flox [<general-options>] config
      [-l |
       -r |
       --set <key> <string> |
@@ -84,7 +84,7 @@ flox config --set 'trusted_environments."owner/name"' trust
     `$FLOX_CONFIG_DIR` and `config_dir` are ignored.
 
 `cache_dir`
-:   Directory where flox should store ephemeral data 
+:   Directory where flox should store ephemeral data
     (default: `$XDG_CACHE_HOME/flox`).
 
 `data_dir`
@@ -104,14 +104,3 @@ flox config --set 'trusted_environments."owner/name"' trust
 :   Remote environments that are trusted for activation.
     Contains keys of the form `"<owner>/<name>"` that map to either `"trust"` or
     `"deny"`.
-
-## Options used internally
-
-`nix`
-:   Options to pass to `nix` commands.
-
-`floxhub_url`
-:   The URL of the FloxHub instance to use.
-
-`features`
-:   Options used for feature flagging.

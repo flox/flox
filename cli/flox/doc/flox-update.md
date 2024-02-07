@@ -12,7 +12,7 @@ flox-update - update the global base catalog or an environment's base catalog
 # SYNOPSIS
 
 ```
-flox [ <general-options> ] update
+flox [<general-options>] update
      [--global | (-d=<path> | -r=<owner>/<name>)]
 ```
 
