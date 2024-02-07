@@ -139,6 +139,8 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
   // over.
   this->closeDbReadWrite();
 
+  this->freeFlake();
+
   bool         scrapingComplete = false;
   const size_t pageSize         = 5000;
   size_t       pageIdx          = 0;
@@ -157,11 +159,11 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
         {
           int status = 0;
           debugLog(
-            nix::fmt( "scrapePrefix: Waiting for forked process, pid:%d\n",
+            nix::fmt( "scrapePrefix: Waiting for forked process, pid:%d",
                       pid ) );
           waitpid( pid, &status, 0 );
           debugLog(
-            nix::fmt( "scrapePrefix: Forked process exited, exitcode:%d\n",
+            nix::fmt( "scrapePrefix: Forked process exited, exitcode:%d",
                       status ) );
 
           if ( WIFEXITED( status ) )
@@ -169,13 +171,13 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
               if ( WEXITSTATUS( status ) == EXIT_SUCCESS )
                 {
                   debugLog( nix::fmt(
-                    "scrapePrefix: Child reports all pages complete\n" ) );
+                    "scrapePrefix: Child reports all pages complete" ) );
                   scrapingComplete = true;
                 }
               else if ( WEXITSTATUS( status ) == EXIT_CHILD_INCOMPLETE )
                 {
                   debugLog( nix::fmt( "scrapePrefix: Child reports additional "
-                                      "pages to process\n" ) );
+                                      "pages to process" ) );
                   // Make sure to increment the pageIdx here (in the parent)
                   pageIdx++;
                   scrapingComplete = false;
@@ -184,7 +186,7 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
                 {
                   scrapingComplete = true;
                   debugLog( nix::fmt(
-                    "scrapePrefix: Child reports failure, aborting\n" ) );
+                    "scrapePrefix: Child reports failure, aborting" ) );
                   if ( WEXITSTATUS( status ) == EXIT_FAILURE_NIX_EVAL )
                     {
                       throw PkgDbException(
@@ -202,8 +204,8 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
           else
             {
               scrapingComplete = true;
-              debugLog( nix::fmt(
-                "scrapePrefix: Child exited abnormally, aborting\n" ) );
+              debugLog(
+                nix::fmt( "scrapePrefix: Child exited abnormally, aborting" ) );
               throw PkgDbException( nix::fmt( "scraping failed: exit code %d",
                                               WEXITSTATUS( status ) ) );
             }
@@ -226,10 +228,10 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
 
           try
             {
-              debugLog( nix::fmt(
-                "scrapePrefix(child): scraping page %d of %d attribs\n",
-                pageIdx,
-                pageSize ) );
+              debugLog(
+                nix::fmt( "scrapePrefix(child): scraping page %d of %d attribs",
+                          pageIdx,
+                          pageSize ) );
               targetComplete
                 = chunkDbRW->scrape( this->getFlake()->state->symbols,
                                      rootTarget,
@@ -239,7 +241,7 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
           catch ( const nix::EvalError & err )
             {
               debugLog(
-                nix::fmt( "scrapePrefix(child): caught nix::EvalError: %s\n",
+                nix::fmt( "scrapePrefix(child): caught nix::EvalError: %s",
                           err.msg().c_str() ) );
               chunkDbRW->execute( "ROLLBACK TRANSACTION" );
               /* Close the r/w connection if we opened it. */
@@ -250,7 +252,7 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
           /* Close the transaction. */
           chunkDbRW->execute( "COMMIT TRANSACTION" );
           debugLog( nix::fmt(
-            "scrapePrefix(child): scraping page %d complete, lastPage:%d\n",
+            "scrapePrefix(child): scraping page %d complete, lastPage:%d",
             pageIdx,
             targetComplete ) );
           exit( targetComplete ? EXIT_SUCCESS : EXIT_CHILD_INCOMPLETE );
