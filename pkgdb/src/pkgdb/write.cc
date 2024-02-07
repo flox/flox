@@ -444,11 +444,7 @@ PkgDb::scrape( nix::SymbolTable & syms,
   const auto & [prefix, cursor, parentId] = target;
 
   /* If it has previously been scraped then bail out. */
-  if ( this->completedAttrSet( parentId ) )
-    {
-      std::cout << "WML: parentId completed, returning true" << std::endl;
-      return true;
-    }
+  if ( this->completedAttrSet( parentId ) ) { return true; }
 
   bool tryRecur = prefix.front() != "packages";
 
@@ -479,7 +475,6 @@ PkgDb::scrape( nix::SymbolTable & syms,
                   || ( ( prefix.front() == "legacyPackages" )
                        && ( syms[aname] == "darwin" ) ) )
           {
-            // std::cout << "WML: pushing... " << std::endl;
             flox::AttrPath path = prefix;
             path.emplace_back( syms[aname] );
             row_id childId = this->addOrGetAttrSetId( syms[aname], parentId );
@@ -509,12 +504,10 @@ PkgDb::scrape( nix::SymbolTable & syms,
                         ? pageSize
                         : allAttribs.size() % pageSize;
   auto chunk = std::views::counted( allAttribs.begin() + startIdx, chunkSize );
-  std::cout << "WML: chunking starting at " << pageSize * pageIdx << " for "
-            << chunkSize << " items" << std::endl;
-  std::cout << "WML: chunk is " << chunk.size() << " items " << std::endl;
 
   for ( nix::Symbol & aname : chunk )
     {
+      // WML: todo - gate this and log on -vvv
       // const std::string pathS
       //   = concatStringsSep( ".", prefix ) + "." + syms[aname];
       // std::cout << "WML: processing " << pathS << std::endl;
@@ -542,6 +535,7 @@ PkgDb::scrape( nix::SymbolTable & syms,
                 }
             }
           while ( ! todo.empty() );
+          // WML: todo - see if there's an optimization here
           // this->setPrefixDone(parentPrefix, true);
         }
     }
