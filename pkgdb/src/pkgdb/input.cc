@@ -135,20 +135,9 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
   Todos todo;
   bool  wasRW = this->dbRW != nullptr;
 
-  std::cout << "WML: Scrape prefix " << prefix.back() << std::endl;
-
-  // {
-  //   MaybeCursor root = this->getFlake()->maybeOpenCursor( prefix );
-  //   if ( root == nullptr ) { return; }
-  // }
-
   // close the db if we have anything open in preparation for the child to take
   // over.
   this->closeDbReadWrite();
-  // split this->getFlake()->state->symbols into 1k symbol chunks
-  // auto symbolTableChunks = split( this->getFlake()->state->symbols, 1000);
-  // auto symbolTableChunks
-  //   = std::vector<nix::SymbolTable> { this->getFlake()->state->symbols };
 
   bool         scrapingComplete = false;
   const size_t pageSize         = 5000;
@@ -305,7 +294,6 @@ PkgDbRegistryMixin::scrapeIfNeeded()
   assert( this->registry != nullptr );
   for ( auto & [name, input] : *this->registry )
     {
-      std::cout << "WML: scraping systems for input." << std::endl;
       input->scrapeSystems( this->getSystems() );
     }
 }

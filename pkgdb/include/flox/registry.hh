@@ -478,8 +478,6 @@ public:
     for ( const std::reference_wrapper<const std::string> & _name :
           this->registryRaw.getOrder() )
       {
-        std::cout << "WML: Registry constructor, looping for " << _name.get()
-                  << std::endl;
         const auto & pair = std::find_if(
           this->registryRaw.inputs.begin(),
           this->registryRaw.inputs.end(),
