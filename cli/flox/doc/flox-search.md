@@ -47,7 +47,7 @@ When only given a package name,
 package name itself or some portion of the relative path.
 
 The search query can also include a version filter following the
-familiar `node-semver` syntax (`@` between the package and version).
+familiar semver syntax (`@` between the package and version).
 ```text
 $ flox search 'python@>2'
 ```
