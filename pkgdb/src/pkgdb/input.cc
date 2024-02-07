@@ -145,13 +145,15 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
   // close the db if we have anything open in preparation for the child to take
   // over.
   this->closeDbReadWrite();
-
   // split this->getFlake()->state->symbols into 1k symbol chunks
   // auto symbolTableChunks = split( this->getFlake()->state->symbols, 1000);
   // auto symbolTableChunks
   //   = std::vector<nix::SymbolTable> { this->getFlake()->state->symbols };
 
   bool scrapingComplete = false;
+  const size_t pageSize = 5000;
+  size_t pageIdx = 0;
+
   do {
       const int EXIT_CHILD_INCOMPLETE = EXIT_SUCCESS + 1;
 
@@ -176,6 +178,8 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
                 {
                   std::cout << "WML: scraping incomplete, should loop again!"
                             << std::endl;
+                  // Make sure to increment the pageIdx here (in the parent)
+                  pageIdx++;
                   scrapingComplete = false;
                 }
               else  // ( WEXITSTATUS( status ) != EXIT_SUCCESS )
@@ -202,7 +206,6 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
           row_id      chunkRow  = chunkDbRW->addOrGetAttrSetId( prefix );
           MaybeCursor root      = this->getFlake()->maybeOpenCursor( prefix );
 
-
           Target rootTarget
             = std::make_tuple( prefix,
                                static_cast<flox::Cursor>( root ),
@@ -219,7 +222,7 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
               targetComplete
                 = chunkDbRW->scrape( this->getFlake()->state->symbols,
                                      rootTarget,
-                                     1000 );
+                                     pageSize, pageIdx );
             }
           catch ( const nix::EvalError & err )
             {
@@ -232,21 +235,12 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
 
           /* Close the transaction. */
           chunkDbRW->execute( "COMMIT TRANSACTION" );
-          std::cout << "WML: scaping finished in child, completed:"
+          std::cout << "WML: scraping finished in child, completed:"
                     << targetComplete << std::endl;
           exit( targetComplete ? EXIT_SUCCESS : EXIT_CHILD_INCOMPLETE );
         }
     }
   while ( ! scrapingComplete );
-
-  /* Open a read/write connection. */
-  // auto   dbRW = this->getDbReadWrite();
-  // row_id row  = dbRW->addOrGetAttrSetId( prefix );
-
-  // /* Mark the prefix and its descendants as "done" */
-  // std::cout << "WML: marking prefix row " << row << " complete " <<
-  // std::endl; dbRW->execute( "BEGIN TRANSACTION" ); dbRW->setPrefixDone( row,
-  // true ); dbRW->execute( "COMMIT TRANSACTION" );
 
   /* Close the r/w connection if we opened it. */
   if ( ! wasRW ) { this->closeDbReadWrite(); }
