@@ -487,6 +487,7 @@ pub fn format_remote_error(err: &RemoteEnvironmentError) -> String {
         },
         RemoteEnvironmentError::UpdateUpstream(_) => display_chain(err),
         RemoteEnvironmentError::InvalidTempPath(_) => display_chain(err),
+        RemoteEnvironmentError::UpdateOutLink(_, _) => display_chain(err),
     }
 }
 

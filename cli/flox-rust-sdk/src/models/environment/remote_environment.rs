@@ -48,6 +48,9 @@ pub enum RemoteEnvironmentError {
 
     #[error("could not create temporary environment")]
     CreateTempDotFlox(#[source] std::io::Error),
+
+    #[error("could not update out link ({1})")]
+    UpdateOutLink(#[source] std::io::Error, String),
 }
 
 #[derive(Debug)]
@@ -57,7 +60,9 @@ pub struct RemoteEnvironment {
 }
 
 impl RemoteEnvironment {
-    /// Pull a remote environment into a provided (temporary) managed environment
+    /// Pull a remote environment into a provided (temporary) managed environment.
+    /// Constructiing a [RemoteEnvironment] _does not_ create a gc-root
+    /// or guarantee that the environment is valid.
     pub fn new_in(
         flox: &Flox,
         path: impl AsRef<Path>,
@@ -97,11 +102,7 @@ impl RemoteEnvironment {
             .pull(true)
             .map_err(RemoteEnvironmentError::ResetManagedEnvironment)?;
 
-        let out_link = {
-            let link_path = path.join(GCROOTS_DIR_NAME);
-            Self::update_out_link(flox, &link_path, &mut inner)?;
-            link_path
-        };
+        let out_link = path.join(GCROOTS_DIR_NAME);
 
         Ok(Self { inner, out_link })
     }
@@ -144,13 +145,23 @@ impl RemoteEnvironment {
         flox: &Flox,
         out_link: &Path,
         inner: &mut ManagedEnvironment,
-    ) -> Result<(), RemoteEnvironmentError> {
-        let new_link_path = inner.activation_path(flox).unwrap().read_link().unwrap();
+    ) -> Result<(), EnvironmentError2> {
+        let new_link_path = inner.activation_path(flox)?.read_link().map_err(|e| {
+            RemoteEnvironmentError::UpdateOutLink(
+                e,
+                "reading out link of managed environment".to_string(),
+            )
+        })?;
 
         if out_link.read_link().is_ok() {
-            fs::remove_file(out_link).unwrap();
+            fs::remove_file(out_link).map_err(|e| {
+                RemoteEnvironmentError::UpdateOutLink(e, "removing existing out link".to_string())
+            })?;
         }
-        std::os::unix::fs::symlink(new_link_path, out_link).unwrap();
+
+        std::os::unix::fs::symlink(new_link_path, out_link).map_err(|e| {
+            RemoteEnvironmentError::UpdateOutLink(e, "creating new out link".to_string())
+        })?;
 
         Ok(())
     }
@@ -180,7 +191,7 @@ impl Environment for RemoteEnvironment {
         let result = self.inner.install(packages, flox)?;
         self.inner
             .push(flox, false)
-            .map_err(RemoteEnvironmentError::UpdateUpstream)
+            .map_err(|e| RemoteEnvironmentError::UpdateUpstream(e).into())
             .and_then(|_| Self::update_out_link(flox, &self.out_link, &mut self.inner))?;
         // TODO: clean up git branch for temporary environment
         Ok(result)
@@ -195,7 +206,7 @@ impl Environment for RemoteEnvironment {
         let result = self.inner.uninstall(packages, flox)?;
         self.inner
             .push(flox, false)
-            .map_err(RemoteEnvironmentError::UpdateUpstream)
+            .map_err(|e| RemoteEnvironmentError::UpdateUpstream(e).into())
             .and_then(|_| Self::update_out_link(flox, &self.out_link, &mut self.inner))?;
 
         Ok(result)
@@ -209,7 +220,7 @@ impl Environment for RemoteEnvironment {
         }
         self.inner
             .push(flox, false)
-            .map_err(RemoteEnvironmentError::UpdateUpstream)
+            .map_err(|e| RemoteEnvironmentError::UpdateUpstream(e).into())
             .and_then(|_| Self::update_out_link(flox, &self.out_link, &mut self.inner))?;
 
         Ok(result)
@@ -224,7 +235,7 @@ impl Environment for RemoteEnvironment {
         let result = self.inner.update(flox, inputs)?;
         self.inner
             .push(flox, false)
-            .map_err(RemoteEnvironmentError::UpdateUpstream)
+            .map_err(|e| RemoteEnvironmentError::UpdateUpstream(e).into())
             .and_then(|_| Self::update_out_link(flox, &self.out_link, &mut self.inner))?;
 
         Ok(result)
@@ -239,7 +250,7 @@ impl Environment for RemoteEnvironment {
         let result = self.inner.upgrade(flox, groups_or_iids)?;
         self.inner
             .push(flox, false)
-            .map_err(RemoteEnvironmentError::UpdateUpstream)
+            .map_err(|e| RemoteEnvironmentError::UpdateUpstream(e).into())
             .and_then(|_| Self::update_out_link(flox, &self.out_link, &mut self.inner))?;
 
         Ok(result)
@@ -250,7 +261,8 @@ impl Environment for RemoteEnvironment {
         self.inner.manifest_content(flox)
     }
 
-    fn activation_path(&mut self, _flox: &Flox) -> Result<PathBuf, EnvironmentError2> {
+    fn activation_path(&mut self, flox: &Flox) -> Result<PathBuf, EnvironmentError2> {
+        Self::update_out_link(flox, &self.out_link, &mut self.inner)?;
         Ok(self.out_link.clone())
     }
 
