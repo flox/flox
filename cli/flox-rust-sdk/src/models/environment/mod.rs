@@ -238,7 +238,7 @@ pub struct ManagedPointer {
     pub name: EnvironmentName,
     pub floxhub_url: Url,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub floxhub_git_url: Option<Url>,
+    pub floxhub_git_url_override: Option<Url>,
     version: Version<1>,
 }
 
@@ -249,7 +249,7 @@ impl ManagedPointer {
             name,
             owner,
             floxhub_url: floxhub.base_url().clone(),
-            floxhub_git_url: Some(floxhub.git_url().clone()),
+            floxhub_git_url_override: floxhub.git_url_override().cloned(),
             version: Version::<1>,
         }
     }
@@ -557,7 +557,7 @@ mod test {
             name: EnvironmentName::from_str("name").unwrap(),
             owner: EnvironmentOwner::from_str("owner").unwrap(),
             floxhub_url: DEFAULT_FLOXHUB_URL.clone(),
-            floxhub_git_url: None,
+            floxhub_git_url_override: None,
             version: Version::<1> {},
         })
     });
@@ -568,7 +568,7 @@ mod test {
             name: EnvironmentName::from_str("name").unwrap(),
             owner: EnvironmentOwner::from_str("owner").unwrap(),
             floxhub_url: DEFAULT_FLOXHUB_URL.clone(),
-            floxhub_git_url: None,
+            floxhub_git_url_override: None,
             version: Version::<1> {},
         });
 
