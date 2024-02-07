@@ -11,11 +11,11 @@ This attribute path is a sequence of attributes
 (e.g. "python310Packages" and "pip") joined by a delimiter (".").
 For many use cases, the leading `legacyPackages.<system>` is left off.
 The remaining portion of the attribute path (e.g. `python310Packages.pip`) is
-referred to as the "relative path".
+referred to as the "relative path" or "path" for short.
 
 This is the portion that is searched when you execute a `flox search` command.
-The relative path is also the portion shown by `flox show`.
-Finally, the relative path appears in your manifest after a `flox install`.
+The path is also the portion shown by `flox show`.
+Finally, the path appears in your manifest after a `flox install`.
 
 ```toml
 [install]
