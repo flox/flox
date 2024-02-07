@@ -531,8 +531,6 @@ PkgDb::scrape( nix::SymbolTable & syms,
         {
           // const auto [parentPrefix, _a, _b] = todo.top();
           do {
-              // std::cout << "WML: recursing into... " << pathS << std::endl;
-
               const auto [prefix, cursor, parentId] = todo.top();
               todo.pop();
 

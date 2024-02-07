@@ -23,7 +23,9 @@ namespace flox::pkgdb {
 /** @brief A set of arguments used by @a flox::pkgdb::PkgDb::scrape. */
 using Target = std::tuple<flox::AttrPath, flox::Cursor, row_id>;
 
-/** @brief A queue of @a flox::pkgdb::Target to be completed. */
+/** @brief A stack of @a flox::pkgdb::Target to be completed.
+ * A stack is used to promote depth-first processing.
+ */
 using Todos = std::stack<Target, std::list<Target>>;
 
 
@@ -231,14 +233,18 @@ public:
   /**
    * @brief Scrape package definitions from an attribute set.
    *
-   * Adds any attributes marked with `recurseForDerivatsions = true` to
-   * @a todo list.
+   * Processes a subset of the attribute set rooted at @a target.
+   * The child attributes are chunked into pages of size @a pageSize, and
+   * the @a pageIdx -th page is processed in this invocation.  Attributes are
+   * processed depth first so the page is gauraunteed to be fully processed on
+   * a clean return.
+   *
    * @param syms Symbol table from @a cursor evaluator.
    * @param target A tuple containing the attribute path to scrape, a cursor,
    *               and a SQLite _row id_.
-   * @param evalLimit Limit of evaluations to do before bailing out.  This
-   * allows chunking of evaluations.  Evals are done depth first to optimize
-   * passing over parents as subtrees are completed eagerly.
+   * @param pageSize The size of chunks to process at a time.
+   * @param pageIdx The specific page to process in this invocation.
+   * @return True if the entire attribute set has been processed.
    */
   bool
   scrape( nix::SymbolTable & syms,
