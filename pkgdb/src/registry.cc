@@ -261,7 +261,6 @@ FloxFlakeInput::getFlake()
 {
   if ( this->flake == nullptr )
     {
-      std::cout << "WML: getFlake called and getting flake state.\n";
       this->flake
         = std::make_shared<FloxFlake>( NixState( this->store ).getState(),
                                        *this->getFlakeRef() );
@@ -272,9 +271,6 @@ FloxFlakeInput::getFlake()
 void
 FloxFlakeInput::freeFlake()
 {
-  std::cout << "WML: freeFlake called." << std::endl;
-  std::cout << "WML: flake ptr use_count: " << this->flake.use_count()
-            << std::endl;
   this->flake = nullptr;
 }
 
