@@ -19,7 +19,7 @@ expect -ex "Getting ready to use environment"
 # edit environment and check for message prompting to re-activate
 send "$flox edit -f $manifest\n"
 expect  "Your manifest has changes that cannot be automatically applied to your current environment." {}
-expect "Please `exit` the environment and run `flox activate` to see these changes." {}
+expect "Please 'exit' the environment and run 'flox activate' to see these changes." {}
 
 send "exit\n"
 expect eof

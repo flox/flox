@@ -78,7 +78,7 @@ EOF
 
   run "$FLOX_BIN" edit -f "$TMP_MANIFEST_PATH"
   assert_success
-  assert_output --partial "✅  Environment successfully updated."
+  assert_output --partial "✅ Environment successfully updated."
 }
 
 # ---------------------------------------------------------------------------- #
@@ -101,7 +101,7 @@ EOF
 
   run "$FLOX_BIN" edit -f "$TMP_MANIFEST_PATH"
   assert_success
-  assert_output --partial "✅  Environment successfully updated."
+  assert_output --partial "✅ Environment successfully updated."
 }
 
 # ---------------------------------------------------------------------------- #
