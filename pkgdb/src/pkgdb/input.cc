@@ -150,9 +150,9 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
   // auto symbolTableChunks
   //   = std::vector<nix::SymbolTable> { this->getFlake()->state->symbols };
 
-  bool scrapingComplete = false;
-  const size_t pageSize = 5000;
-  size_t pageIdx = 0;
+  bool         scrapingComplete = false;
+  const size_t pageSize         = 5000;
+  size_t       pageIdx          = 0;
 
   do {
       const int EXIT_CHILD_INCOMPLETE = EXIT_SUCCESS + 1;
@@ -222,7 +222,8 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
               targetComplete
                 = chunkDbRW->scrape( this->getFlake()->state->symbols,
                                      rootTarget,
-                                     pageSize, pageIdx );
+                                     pageSize,
+                                     pageIdx );
             }
           catch ( const nix::EvalError & err )
             {
