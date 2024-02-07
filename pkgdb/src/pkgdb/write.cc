@@ -498,19 +498,23 @@ PkgDb::scrape( nix::SymbolTable & syms,
       }
   };
 
-  auto   allAttribs = cursor->getAttrs();
-  size_t startIdx   = pageIdx * pageSize;
-  size_t chunkSize  = startIdx + pageSize < allAttribs.size()
-                        ? pageSize
-                        : allAttribs.size() % pageSize;
-  auto chunk = std::views::counted( allAttribs.begin() + startIdx, chunkSize );
+  auto   allAttribs   = cursor->getAttrs();
+  size_t startIdx     = pageIdx * pageSize;
+  size_t thisPageSize = startIdx + pageSize < allAttribs.size()
+                          ? pageSize
+                          : allAttribs.size() % pageSize;
+  bool   lastPage     = thisPageSize < pageSize;
+  auto   page
+    = std::views::counted( allAttribs.begin() + startIdx, thisPageSize );
 
-  for ( nix::Symbol & aname : chunk )
+  for ( nix::Symbol & aname : page )
     {
-      // WML: todo - gate this and log on -vvv
-      // const std::string pathS
-      //   = concatStringsSep( ".", prefix ) + "." + syms[aname];
-      // std::cout << "WML: processing " << pathS << std::endl;
+      if ( auto lvl = nix::lvlTalkative; lvl <= nix::verbosity )
+        {
+          const std::string pathS
+            = concatStringsSep( ".", prefix ) + "." + syms[aname];
+          traceLog( nix::fmt( "Processing attribute path: %s.", pathS ) );
+        }
 
       if ( syms[aname] == "recurseForDerivations" ) { continue; }
 
@@ -522,7 +526,7 @@ PkgDb::scrape( nix::SymbolTable & syms,
       // completely using the todo stack.
       if ( processAttrib( childCursor, prefix, parentId, aname, todo ) )
         {
-          // const auto [parentPrefix, _a, _b] = todo.top();
+          const auto [parentPrefix, _a, _b] = todo.top();
           do {
               const auto [prefix, cursor, parentId] = todo.top();
               todo.pop();
@@ -535,12 +539,13 @@ PkgDb::scrape( nix::SymbolTable & syms,
                 }
             }
           while ( ! todo.empty() );
-          // WML: todo - see if there's an optimization here
-          // this->setPrefixDone(parentPrefix, true);
+
+          this->setPrefixDone( parentPrefix, true );
         }
     }
 
-  return chunkSize < pageSize;
+  if ( lastPage ) { this->setPrefixDone( prefix, true ); }
+  return lastPage;
   ;
 }
 
