@@ -11,29 +11,38 @@ flox-list - list packages installed in an environment
 
 # SYNOPSIS
 
-flox [ `<general-options>` ] list [ (\--out-path | \--json) ] [ `<generation>` ]
+```
+flox [<general-options>] list
+     [-d=<path> | -r=<owner/name>]
+     [-c | -n | -e | -a]
+```
 
 # DESCRIPTION
 
-List contents of selected environment.
-Provide optional generation argument to list the contents
-of a specific generation.
+List packages installed in an environment.
+The options `-n`, `-e`, and `-a` exist to provide varying levels of detail in
+the output.
 
 # OPTIONS
 
-```{.include}
-./include/general-options.md
-./include/environment-options.md
-```
-
 ## List Options
 
-[ \--out-path ]
-:   Include store paths of packages in the environment
+`-c`, `--config`
+:   Show the raw contents of the manifest.
 
+`-n`, `--name`
+:   Show only the install ID of each package.
 
-[ \--json ]
-:   Print as machine readable JSON
+`-e`, `--extended`
+:   Show the install ID, pkg-path, and version of each package (default).
 
-[ `<generation>` ]
-:   Generation to list, defaults to the latest if absent.
+`-a`, `--all`
+:   Show all available package information including priority and license.
+
+```{.include}
+./include/environment-options.md
+./include/general-options.md
+```
+
+# SEE ALSO
+[`flox-install(1)`](./flox-install.md)
