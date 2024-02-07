@@ -58,11 +58,11 @@ impl FloxmetaV2 {
     ) -> Result<Self, FloxmetaV2Error> {
         let token = flox.floxhub_token.as_ref();
 
-        let mut floxhub =
-            Floxhub::new(pointer.floxhub_url.to_owned()).map_err(FloxmetaV2Error::FloxhubError)?;
-        if let Some(git_url_override) = &pointer.floxhub_git_url_override {
-            floxhub.set_git_url_override(git_url_override.clone());
-        }
+        let floxhub = Floxhub::new(
+            pointer.floxhub_url.to_owned(),
+            pointer.floxhub_git_url_override.clone(),
+        )
+        .map_err(FloxmetaV2Error::FloxhubError)?;
 
         let git_url = floxhub.git_url();
 
@@ -112,11 +112,11 @@ impl FloxmetaV2 {
     ) -> Result<Self, FloxmetaV2Error> {
         let token = flox.floxhub_token.as_ref();
 
-        let mut floxhub =
-            Floxhub::new(pointer.floxhub_url.to_owned()).map_err(FloxmetaV2Error::FloxhubError)?;
-        if let Some(git_url_override) = &pointer.floxhub_git_url_override {
-            floxhub.set_git_url_override(git_url_override.clone());
-        }
+        let floxhub = Floxhub::new(
+            pointer.floxhub_url.to_owned(),
+            pointer.floxhub_git_url_override.clone(),
+        )
+        .map_err(FloxmetaV2Error::FloxhubError)?;
 
         let git_url = floxhub.git_url();
 
@@ -155,11 +155,11 @@ impl FloxmetaV2 {
     ) -> Result<Self, FloxmetaV2Error> {
         let token = flox.floxhub_token.as_ref();
 
-        let mut floxhub =
-            Floxhub::new(pointer.floxhub_url.to_owned()).map_err(FloxmetaV2Error::FloxhubError)?;
-        if let Some(git_url_override) = &pointer.floxhub_git_url_override {
-            floxhub.set_git_url_override(git_url_override.clone());
-        }
+        let floxhub = Floxhub::new(
+            pointer.floxhub_url.to_owned(),
+            pointer.floxhub_git_url_override.clone(),
+        )
+        .map_err(FloxmetaV2Error::FloxhubError)?;
 
         let git_url = floxhub.git_url();
 
@@ -275,9 +275,11 @@ mod tests {
         let (flox, tempdir) = flox_instance();
         let source_path = tempdir.path().join("source");
 
-        let mut floxhub = Floxhub::new(DEFAULT_FLOXHUB_URL.clone()).unwrap();
-
-        floxhub.set_git_url_override(Url::from_directory_path(&source_path).unwrap());
+        let floxhub = Floxhub::new(
+            DEFAULT_FLOXHUB_URL.clone(),
+            Some(Url::from_directory_path(&source_path).unwrap()),
+        )
+        .unwrap();
 
         let pointer = ManagedPointer::new(
             "floxtest".parse().unwrap(),

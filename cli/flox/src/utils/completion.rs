@@ -57,7 +57,7 @@ impl FloxCompletionExt for Flox {
             access_tokens,
             uuid: uuid::Uuid::nil(),
             floxhub_token: config.flox.floxhub_token,
-            floxhub: Floxhub::new(DEFAULT_FLOXHUB_URL.clone())?,
+            floxhub: Floxhub::new(DEFAULT_FLOXHUB_URL.clone(), None)?,
         })
     }
 }

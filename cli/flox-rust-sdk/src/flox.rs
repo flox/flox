@@ -254,22 +254,21 @@ pub enum FloxhubTokenError {
 pub struct Floxhub {
     base_url: Url,
     git_url: Url,
-    git_url_override: Option<Url>,
+    git_url_overridden: bool,
 }
 
 impl Floxhub {
-    pub fn new(base_url: Url) -> Result<Self, FloxhubError> {
-        let git_url = Self::derive_git_url(&base_url)?;
+    pub fn new(base_url: Url, git_url_override: Option<Url>) -> Result<Self, FloxhubError> {
+        let git_url_overridden = git_url_override.is_some();
+        let git_url = match git_url_override {
+            Some(git_url_override) => git_url_override,
+            None => Self::derive_git_url(&base_url)?,
+        };
         Ok(Floxhub {
             base_url,
             git_url,
-            git_url_override: None,
+            git_url_overridden,
         })
-    }
-
-    pub fn set_git_url_override(&mut self, git_url_override: Url) -> &mut Self {
-        self.git_url_override = Some(git_url_override);
-        self
     }
 
     /// Return the base url of the floxhub instance
@@ -279,7 +278,7 @@ impl Floxhub {
     }
 
     pub fn git_url_override(&self) -> Option<&Url> {
-        self.git_url_override.as_ref()
+        self.git_url_overridden.then_some(&self.git_url)
     }
 
     /// Return the url of the floxhub git interface
@@ -288,9 +287,6 @@ impl Floxhub {
     /// it will be used instead of the derived floxhub host.
     /// This is useful for testing floxhub locally.
     pub fn git_url(&self) -> &Url {
-        if let Some(ref url) = self.git_url_override {
-            return url;
-        }
         &self.git_url
     }
 
@@ -365,7 +361,7 @@ pub mod tests {
             access_tokens: Default::default(),
             netrc_file: Default::default(),
             uuid: Default::default(),
-            floxhub: Floxhub::new(Url::from_str("https://hub.flox.dev").unwrap()).unwrap(),
+            floxhub: Floxhub::new(Url::from_str("https://hub.flox.dev").unwrap(), None).unwrap(),
             floxhub_token: None,
         };
 
