@@ -244,7 +244,7 @@ impl Display for DisplaySearchResults {
 }
 
 impl DisplaySearchResults {
-    pub fn hint(&self) -> Option<String> {
+    pub fn search_results_truncated_hint(&self) -> Option<String> {
         let Some(count) = self.count else {
             return None;
         };

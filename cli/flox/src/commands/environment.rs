@@ -50,7 +50,7 @@ use flox_rust_sdk::models::lockfile::{
 use flox_rust_sdk::models::manifest::{self, PackageToInstall};
 use flox_rust_sdk::models::pkgdb::{call_pkgdb, CallPkgDbError, PkgDbError, PKGDB_BIN};
 use indexmap::IndexSet;
-use indoc::formatdoc;
+use indoc::{formatdoc, indoc};
 use itertools::Itertools;
 use log::{debug, error, info, warn};
 use tempfile::NamedTempFile;
@@ -111,13 +111,13 @@ impl Edit {
                 if let ConcreteEnvironment::Path(mut environment) = detected_environment {
                     let old_name = environment.name();
                     if name == old_name {
-                        bail!("⚠️  environment already named {name}");
+                        bail!("environment already named {name}");
                     }
                     environment.rename(name.clone())?;
                     info!("✅  renamed environment {old_name} to {name}");
                 } else {
                     // todo: handle remote environments in the future
-                    bail!("❌  Cannot rename environments on floxhub");
+                    bail!("Cannot rename environments on floxhub");
                 }
             },
         }
@@ -142,22 +142,28 @@ impl Edit {
             // via $EDITOR or $VISUAL (as long as `flox edit` was invoked interactively).
             None => Self::interactive_edit(flox, environment.as_mut()).await?,
         };
+
+        // outside the match to avoid rustfmt falling on its face
+        let reactivate_required_note = indoc! {"
+            Your manifest has changes that cannot be automatically applied to your current environment.
+
+            Please 'exit' the environment and run 'flox activate' to see these changes.
+       "};
+
         match result {
             EditResult::Unchanged => {
                 println!("⚠️  No changes made to environment.");
             },
+            EditResult::ReActivateRequired
+                if activated_environments().is_active(&active_environment) =>
+            {
+                eprintln!("⚠️ {reactivate_required_note}");
+            },
             EditResult::ReActivateRequired => {
-                if activated_environments().is_active(&active_environment) {
-                    println!(indoc::indoc! {"
-                            Your manifest has changes that cannot be automatically applied to your current environment.
-
-                            Please `exit` the environment and run `flox activate` to see these changes."});
-                } else {
-                    println!("✅  Environment successfully updated.");
-                }
+                eprintln!("✅ Environment successfully updated.")
             },
             EditResult::Success => {
-                println!("✅  Environment successfully updated.");
+                eprintln!("✅ Environment successfully updated.")
             },
         }
         Ok(())
@@ -320,17 +326,13 @@ impl Delete {
             bail!("Environment deletion cancelled");
         }
 
-        let result = match environment {
+        match environment {
             ConcreteEnvironment::Path(environment) => environment.delete(&flox),
             ConcreteEnvironment::Managed(environment) => environment.delete(&flox),
             ConcreteEnvironment::Remote(environment) => environment.delete(&flox),
-        };
+        }?;
 
-        match result {
-            Ok(_) => info!("🗑️  environment {description} deleted"),
-            Err(err) => Err(err)
-                .with_context(|| format!("⚠️  could not delete environment {description}"))?,
-        }
+        eprintln!("🗑️  environment {description} deleted");
 
         Ok(())
     }
@@ -1407,10 +1409,10 @@ impl Push {
 
         let message = match err {
             ManagedEnvironmentError::AccessDenied => formatdoc! {"
-                ❌  You do not have permission to write to {owner}/{name}
+                You do not have permission to write to {owner}/{name}
             "}.into(),
             ManagedEnvironmentError::Diverged if create_remote => formatdoc! {"
-                ❌  An environment named {owner}/{name} already exists!
+                An environment named {owner}/{name} already exists!
 
                 To rename your environment: 'flox edit --name <new name>'
                 To pull and manually re-apply your changes: 'flox delete && flox pull -r {owner}/{name}'
@@ -1418,7 +1420,7 @@ impl Push {
             ManagedEnvironmentError::Build(ref err) => formatdoc! {"
                 {err}
 
-                ❌  Unable to push environment with build errors.
+                Unable to push environment with build errors.
 
                 Use 'flox edit' to resolve errors, test with 'flox activate', and 'flox push' again.",
                 err = format_core_error(err)
@@ -1726,7 +1728,7 @@ impl Pull {
         let floxhub_host = &pointer.floxhub_url;
 
         let start_message =
-            format!("⬇️  Remote: pulling and building {owner}/{name} from {floxhub_host}",);
+            format!("⬇️  Remote: pulling and building {owner}/{name} from {floxhub_host}");
 
         let suffix: &str = if force { " (forced)" } else { "" };
 
@@ -1750,8 +1752,8 @@ impl Pull {
         }
 
         let message = format!(
-        "The environment you are trying to pull is not yet compatible with your system ({system})."
-    );
+            "The environment you are trying to pull is not yet compatible with your system ({system})."
+        );
         let help = "Use 'flox pull --add-system' to automatically add your system to the list of compatible systems";
 
         let reject_choice = "Don't pull this environment.";
@@ -1987,8 +1989,9 @@ impl Update {
             message: "Generating databases for updated inputs...",
             help_message: (inputs_to_scrape.len() > 1).then_some("This may take a while."),
             typed: Spinner::new(|| {
+                // TODO: rayon::par_iter
                 inputs_to_scrape
-                    .iter() // TODO: rayon::par_iter
+                    .iter()
                     .map(|input| Self::scrape_input(&input.from))
                     .collect()
             }),
@@ -2015,10 +2018,10 @@ impl Update {
 
     fn scrape_input(input: &FlakeRef) -> Result<()> {
         let mut pkgdb_cmd = Command::new(Path::new(&*PKGDB_BIN));
+        // TODO: this works for nixpkgs, but it won't work for anything else that is not exposing "legacyPackages"
         pkgdb_cmd
             .args(["scrape"])
             .arg(serde_json::to_string(&input)?)
-            // TODO: this works for nixpkgs, but it won't work for anything else
             .arg("legacyPackages");
 
         debug!("scraping input: {pkgdb_cmd:?}");
@@ -2098,22 +2101,23 @@ impl Containerize {
                 .join(format!("{}-container.tar.gz", env.name())),
         };
 
-        let (output, output_name): (Box<dyn Write>, String) = if output_path == Path::new("-") {
-            debug!("output=stdout");
+        let (output, output_name): (Box<dyn Write + Send>, String) =
+            if output_path == Path::new("-") {
+                debug!("output=stdout");
 
-            (Box::new(std::io::stdout()), "stdout".to_string())
-        } else {
-            debug!("output={}", output_path.display());
+                (Box::new(std::io::stdout()), "stdout".to_string())
+            } else {
+                debug!("output={}", output_path.display());
 
-            let file = fs::OpenOptions::new()
-                .write(true)
-                .create(true)
-                .truncate(true)
-                .open(&output_path)
-                .context("Could not open output file")?;
+                let file = fs::OpenOptions::new()
+                    .write(true)
+                    .create(true)
+                    .truncate(true)
+                    .open(&output_path)
+                    .context("Could not open output file")?;
 
-            (Box::new(file), output_path.display().to_string())
-        };
+                (Box::new(file), output_path.display().to_string())
+            };
 
         let builder = Dialog {
             message: &format!("Building container for environment {}...", env.name()),
@@ -2121,12 +2125,13 @@ impl Containerize {
             typed: Spinner::new(|| env.build_container(&flox)),
         }
         .spin()?;
-        // .context("could not create container builder")?;
 
-        info!("Writing container to '{output_name}'");
-
-        builder.stream_container(output)?;
-        // .context("could not write container to output")?;
+        Dialog {
+            message: &format!("Writing container to '{output_name}'"),
+            help_message: None,
+            typed: Spinner::new(|| builder.stream_container(output)),
+        }
+        .spin()?;
 
         info!("✨  Container written to '{output_name}'");
         Ok(())

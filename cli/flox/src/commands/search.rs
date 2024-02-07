@@ -12,7 +12,6 @@ use flox_rust_sdk::models::search::{
     SearchParams,
     SearchResult,
     SearchResults,
-    SearchStrategy,
     ShowError,
     Subtree,
 };
@@ -139,7 +138,7 @@ impl Search {
 
             let mut hints = String::new();
 
-            if let Some(hint) = results.hint() {
+            if let Some(hint) = results.search_results_truncated_hint() {
                 writeln!(&mut hints)?;
                 writeln!(&mut hints, "{hint}")?;
             }

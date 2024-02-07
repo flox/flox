@@ -45,16 +45,16 @@ impl ResetMetrics {
         }
 
         let notice = indoc! {"
-                    Sucessfully reset telemetry ID for this machine!
+            Sucessfully reset telemetry ID for this machine!
 
-                    A new ID will be assigned next time you use flox.
+            A new ID will be assigned next time you use flox.
 
-                    The collection of metrics can be disabled in the following ways:
+            The collection of metrics can be disabled in the following ways:
 
-                      environment: FLOX_DISABLE_METRICS=true
-                        user-wide: flox config --set-bool disable_metrics true
-                      system-wide: update /etc/flox.toml as described in flox(1)
-                "};
+                environment: FLOX_DISABLE_METRICS=true
+                user-wide: flox config --set-bool disable_metrics true
+                system-wide: update /etc/flox.toml as described in flox(1)
+        "};
 
         info!("{notice}");
         Ok(())
