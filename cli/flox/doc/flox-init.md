@@ -48,7 +48,7 @@ an error is returned.
 ./include/general-options.md
 ```
 
-# See also
+# SEE ALSO
 [`flox-activate(1)`](./flox-activate.md),
 [`flox-install(1)`](./flox-install.md),
 

@@ -112,7 +112,7 @@ Activate `default` Flox environment only within the current shell
 $ eval "$(flox activate)"
 ```
 
-# See also
+# SEE ALSO
 [`flox-push(1)`](./flox-push.md),
 [`flox-pull(1)`](./flox-pull.md),
 [`flox-edit(1)`](./flox-edit.md),

@@ -76,6 +76,6 @@ $ flox search foo@=2023-11
 ./include/general-options.md
 ```
 
-# See also
+# SEE ALSO
 [`flox-show(1)`](./flox-show.md),
 [`flox-update(1)`](./flox-update.md)
