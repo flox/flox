@@ -26,21 +26,6 @@ namespace flox::pkgdb {
 
 /* -------------------------------------------------------------------------- */
 
-bool
-isSQLError( int rcode )
-{
-  switch ( rcode )
-    {
-      case SQLITE_OK:
-      case SQLITE_ROW:
-      case SQLITE_DONE: return false; break;
-      default: return true; break;
-    }
-}
-
-
-/* -------------------------------------------------------------------------- */
-
 std::ostream &
 operator<<( std::ostream & oss, const SqlVersions & versions )
 {
@@ -113,12 +98,32 @@ PkgDbReadOnly::loadLockedFlake()
   sqlite3pp::query qry(
     this->db,
     "SELECT fingerprint, string, attrs FROM LockedFlake LIMIT 1" );
-  auto      rsl            = *qry.begin();
-  auto      fingerprintStr = rsl.get<std::string>( 0 );
+  /* `itr.begin()' and `++itr' can throw if they hit errors. */
+  std::optional<sqlite3pp::query::query_iterator::value_type> rsl;
+  for ( std::size_t retries = 0; retries < DB_MAX_RETRIES; ++retries )
+    {
+      try
+        {
+          rsl = *qry.begin();
+          break;
+        }
+      catch ( const sqlite3pp::database_error & err )
+        {
+          if ( ! isSQLiteBusyErr( err ) ) { throw; }
+          std::this_thread::sleep_for( DB_RETRY_PERIOD );
+        }
+    }
+  if ( ! rsl.has_value() )
+    {
+      throw PkgDbException(
+        nix::fmt( "couldn't load locked flake: database '%s' is busy",
+                  this->dbPath ) );
+    }
+  auto      fingerprintStr = rsl->get<std::string>( 0 );
   nix::Hash fingerprint
     = nix::Hash::parseNonSRIUnprefixed( fingerprintStr, nix::htSHA256 );
-  this->lockedRef.string = rsl.get<std::string>( 1 );
-  this->lockedRef.attrs  = nlohmann::json::parse( rsl.get<std::string>( 2 ) );
+  this->lockedRef.string = rsl->get<std::string>( 1 );
+  this->lockedRef.attrs  = nlohmann::json::parse( rsl->get<std::string>( 2 ) );
   /* Check to see if our fingerprint is already known.
    * If it isn't load it, otherwise assert it matches. */
   if ( this->fingerprint == nix::Hash( nix::htSHA256 ) )
@@ -145,12 +150,55 @@ PkgDbReadOnly::getDbVersion()
     this->db,
     "SELECT version FROM DbVersions "
     "WHERE name IN ( 'pkgdb_tables_schema', 'pkgdb_views_schema' ) LIMIT 2" );
-  auto   itr    = qry.begin();
-  auto   tables = ( *itr ).get<std::string>( 0 );
-  auto   views  = ( *++itr ).get<std::string>( 0 );
-  char * end    = nullptr;
+  /* `itr.begin()' and `++itr' can throw if they hit errors. */
+  std::optional<sqlite3pp::query::query_iterator> itr;
+  for ( std::size_t retries = 0; retries < DB_MAX_RETRIES; ++retries )
+    {
+      try
+        {
+          itr = qry.begin();
+          break;
+        }
+      catch ( const sqlite3pp::database_error & err )
+        {
+          if ( ! isSQLiteBusyErr( err ) ) { throw; }
+          std::this_thread::sleep_for( DB_RETRY_PERIOD );
+        }
+    }
+  if ( ! itr.has_value() )
+    {
+      throw PkgDbException(
+        nix::fmt( "couldn't load version information: database '%s' is busy",
+                  this->dbPath ) );
+    }
 
-  static const int base = 10;
+  auto tables  = ( **itr ).get<std::string>( 0 );
+  bool success = false;
+
+  for ( std::size_t retries = 0; true; ++retries )
+    {
+      try
+        {
+          ++( *itr );
+          success = true;
+          break;
+        }
+      catch ( const sqlite3pp::database_error & err )
+        {
+          if ( ! isSQLiteBusyErr( err ) ) { throw; }
+          std::this_thread::sleep_for( DB_RETRY_PERIOD );
+        }
+    }
+  if ( ! success )
+    {
+      throw PkgDbException(
+        nix::fmt( "couldn't load version information: database '%s' is busy",
+                  this->dbPath ) );
+    }
+
+  auto             views = ( **itr ).get<std::string>( 0 );
+  char *           end   = nullptr;
+  static const int base  = 10;
 
   return SqlVersions {
     .tables
@@ -168,8 +216,29 @@ PkgDbReadOnly::completedAttrSet( row_id row )
   /* Lookup the `AttrName.id' ( if one exists ) */
   sqlite3pp::query qryId( this->db, "SELECT done FROM AttrSets WHERE id = ?" );
   qryId.bind( 1, static_cast<long long>( row ) );
-  auto itr = qryId.begin();
-  return ( itr != qryId.end() ) && ( *itr ).get<bool>( 0 );
+  /* `itr.begin()' and `++itr' can throw if they hit errors. */
+  std::optional<sqlite3pp::query::query_iterator> itr;
+  for ( std::size_t retries = 0; retries < DB_MAX_RETRIES; ++retries )
+    {
+      try
+        {
+          itr = qryId.begin();
+          break;
+        }
+      catch ( const sqlite3pp::database_error & err )
+        {
+          if ( ! isSQLiteBusyErr( err ) ) { throw; }
+          std::this_thread::sleep_for( DB_RETRY_PERIOD );
+        }
+    }
+  if ( ! itr.has_value() )
+    {
+      throw PkgDbException( nix::fmt( "couldn't check AttrSets completion of "
+                                      "row '%llu': database '%s' is busy",
+                                      row,
+                                      this->dbPath ) );
+    }
+  return ( ( *itr ) != qryId.end() ) && ( **itr ).get<bool>( 0 );
 }
 
 
@@ -187,12 +256,34 @@ PkgDbReadOnly::completedAttrSet( const flox::AttrPath & path )
                               "WHERE ( attrName = ? ) AND ( parent = ? )" );
       qryId.bind( 1, part, sqlite3pp::copy );
       qryId.bind( 2, static_cast<long long>( row ) );
-      auto itr = qryId.begin();
-      if ( itr == qryId.end() ) { return false; } /* No such path. */
+      /* `itr.begin()' and `++itr' can throw if they hit errors. */
+      std::optional<sqlite3pp::query::query_iterator> itr;
+      for ( std::size_t retries = 0; retries < DB_MAX_RETRIES; ++retries )
+        {
+          try
+            {
+              itr = qryId.begin();
+              break;
+            }
+          catch ( const sqlite3pp::database_error & err )
+            {
+              if ( ! isSQLiteBusyErr( err ) ) { throw; }
+              std::this_thread::sleep_for( DB_RETRY_PERIOD );
+            }
+        }
+      if ( ! itr.has_value() )
+        {
+          throw PkgDbException( nix::fmt( "couldn't check AttrSets completion "
+                                          "for path '%s': database '%s' "
+                                          "is busy",
+                                          concatStringsSep( ".", path ),
+                                          this->dbPath ) );
+        }
+      if ( ( *itr ) == qryId.end() ) { return false; } /* No such path. */
       /* If a parent attrset is marked `done', then all of it's children
        * are also considered done. */
-      if ( ( *itr ).get<bool>( 1 ) ) { return true; }
-      row = ( *itr ).get<long long>( 0 );
+      if ( ( **itr ).get<bool>( 1 ) ) { return true; }
+      row = ( **itr ).get<long long>( 0 );
     }
   return false;
 }
@@ -212,9 +303,31 @@ PkgDbReadOnly::hasAttrSet( const flox::AttrPath & path )
         "SELECT id FROM AttrSets WHERE ( attrName = ? ) AND ( parent = ? )" );
       qryId.bind( 1, part, sqlite3pp::copy );
       qryId.bind( 2, static_cast<long long>( row ) );
-      auto itr = qryId.begin();
-      if ( itr == qryId.end() ) { return false; } /* No such path. */
-      row = ( *itr ).get<long long>( 0 );
+      /* `itr.begin()' and `++itr' can throw if they hit errors. */
+      std::optional<sqlite3pp::query::query_iterator> itr;
+      for ( std::size_t retries = 0; retries < DB_MAX_RETRIES; ++retries )
+        {
+          try
+            {
+              itr = qryId.begin();
+              break;
+            }
+          catch ( const sqlite3pp::database_error & err )
+            {
+              if ( ! isSQLiteBusyErr( err ) ) { throw; }
+              std::this_thread::sleep_for( DB_RETRY_PERIOD );
+            }
+        }
+      if ( ! itr.has_value() )
+        {
+          throw PkgDbException(
+            nix::fmt( "couldn't check for presence of path '%s': "
+                      "database '%s' is busy",
+                      concatStringsSep( ".", path ),
+                      this->dbPath ) );
+        }
+      if ( ( *itr ) == qryId.end() ) { return false; } /* No such path. */
+      row = ( **itr ).get<long long>( 0 );
     }
   return true;
 }
@@ -230,14 +343,38 @@ PkgDbReadOnly::getDescription( row_id descriptionId )
   sqlite3pp::query qryId( this->db,
                           "SELECT description FROM Descriptions WHERE id = ?" );
   qryId.bind( 1, static_cast<long long>( descriptionId ) );
-  auto itr = qryId.begin();
-  /* Handle no such path. */
-  if ( itr == qryId.end() )
+
+  /* `itr.begin()' and `++itr' can throw if they hit errors. */
+  std::optional<sqlite3pp::query::query_iterator> itr;
+  for ( std::size_t retries = 0; retries < DB_MAX_RETRIES; ++retries )
+    {
+      try
+        {
+          itr = qryId.begin();
+          break;
+        }
+      catch ( const sqlite3pp::database_error & err )
+        {
+          if ( ! isSQLiteBusyErr( err ) ) { throw; }
+          std::this_thread::sleep_for( DB_RETRY_PERIOD );
+        }
+    }
+  if ( ! itr.has_value() )
     {
       throw PkgDbException(
-        nix::fmt( "No such Descriptions.id %llu.", descriptionId ) );
+        nix::fmt( "couldn't read description of row '%llu': "
+                  "database '%s' is busy",
+                  descriptionId,
+                  this->dbPath ) );
     }
-  return ( *itr ).get<std::string>( 0 );
+
+  /* Handle no such path. */
+  if ( ( *itr ) == qryId.end() )
+    {
+      throw PkgDbException(
+        nix::fmt( "no such Descriptions.id '%llu'", descriptionId ) );
+    }
+  return ( **itr ).get<std::string>( 0 );
 }
 
 
@@ -259,7 +396,31 @@ PkgDbReadOnly::hasPackage( const flox::AttrPath & path )
                             "AND ( attrName = ? ) LIMIT 1" );
   qryPkgs.bind( 1, static_cast<long long>( row ) );
   qryPkgs.bind( 2, std::string( path.back() ), sqlite3pp::copy );
-  return ( *qryPkgs.begin() ).get<int>( 0 ) != 0;
+  /* `itr.begin()' and `++itr' can throw if they hit errors. */
+  std::optional<sqlite3pp::query::query_iterator> itr;
+  for ( std::size_t retries = 0; retries < DB_MAX_RETRIES; ++retries )
+    {
+      try
+        {
+          itr = qryPkgs.begin();
+          break;
+        }
+      catch ( const sqlite3pp::database_error & err )
+        {
+          if ( ! isSQLiteBusyErr( err ) ) { throw; }
+          std::this_thread::sleep_for( DB_RETRY_PERIOD );
+        }
+    }
+  if ( ! itr.has_value() )
+    {
+      throw PkgDbException(
+        nix::fmt( "couldn't check for presence package at path '%s': "
+                  "database '%s' is busy",
+                  concatStringsSep( ".", path ),
+                  this->dbPath ) );
+    }
+
+  return ( **itr ).get<int>( 0 ) != 0;
 }
 
 
@@ -278,14 +439,38 @@ PkgDbReadOnly::getAttrSetId( const flox::AttrPath & path )
         "WHERE ( attrName = ? ) AND ( parent = ? ) LIMIT 1" );
       qryId.bind( 1, part, sqlite3pp::copy );
       qryId.bind( 2, static_cast<long long>( row ) );
-      auto itr = qryId.begin();
-      /* Handle no such path. */
-      if ( itr == qryId.end() )
+
+      /* `itr.begin()' and `++itr' can throw if they hit errors. */
+      std::optional<sqlite3pp::query::query_iterator> itr;
+      for ( std::size_t retries = 0; retries < DB_MAX_RETRIES; ++retries )
         {
-          throw PkgDbException( nix::fmt( "No such AttrSet '%s'.",
-                                          concatStringsSep( ".", path ) ) );
+          try
+            {
+              itr = qryId.begin();
+              break;
+            }
+          catch ( const sqlite3pp::database_error & err )
+            {
+              if ( ! isSQLiteBusyErr( err ) ) { throw; }
+              std::this_thread::sleep_for( DB_RETRY_PERIOD );
+            }
         }
-      row = ( *itr ).get<long long>( 0 );
+      if ( ! itr.has_value() )
+        {
+          throw PkgDbException(
+            nix::fmt( "couldn't check for id of AttrSet at path '%s': "
+                      "database '%s' is busy",
+                      concatStringsSep( ".", path ),
+                      this->dbPath ) );
+        }
+
+      /* Handle no such path. */
+      if ( ( *itr ) == qryId.end() )
+        {
+          throw PkgDbException(
+            nix::fmt( "no such AttrSet '%s'", concatStringsSep( ".", path ) ) );
+        }
+      row = ( **itr ).get<long long>( 0 );
     }
 
   return row;
@@ -305,14 +490,38 @@ PkgDbReadOnly::getAttrSetPath( row_id row )
         this->db,
         "SELECT parent, attrName FROM AttrSets WHERE ( id = ? )" );
       qry.bind( 1, static_cast<long long>( row ) );
-      auto itr = qry.begin();
+
+      /* `itr.begin()' and `++itr' can throw if they hit errors. */
+      std::optional<sqlite3pp::query::query_iterator> itr;
+      for ( std::size_t retries = 0; retries < DB_MAX_RETRIES; ++retries )
+        {
+          try
+            {
+              itr = qry.begin();
+              break;
+            }
+          catch ( const sqlite3pp::database_error & err )
+            {
+              if ( ! isSQLiteBusyErr( err ) ) { throw; }
+              std::this_thread::sleep_for( DB_RETRY_PERIOD );
+            }
+        }
+      if ( ! itr.has_value() )
+        {
+          throw PkgDbException(
+            nix::fmt( "couldn't check for path of AttrSet of row '%llu': "
+                      "database '%s' is busy",
+                      row,
+                      this->dbPath ) );
+        }
+
       /* Handle no such path. */
-      if ( itr == qry.end() )
+      if ( ( *itr ) == qry.end() )
         {
           throw PkgDbException( nix::fmt( "No such 'AttrSet.id' %llu.", row ) );
         }
-      row = ( *itr ).get<long long>( 0 );
-      path.push_front( ( *itr ).get<std::string>( 1 ) );
+      row = ( **itr ).get<long long>( 0 );
+      path.push_front( ( **itr ).get<std::string>( 1 ) );
     }
   return flox::AttrPath { std::make_move_iterator( std::begin( path ) ),
                           std::make_move_iterator( std::end( path ) ) };
@@ -335,14 +544,37 @@ PkgDbReadOnly::getPackageId( const flox::AttrPath & path )
     "SELECT id FROM Packages WHERE ( parentId = ? ) AND ( attrName = ? )" );
   qry.bind( 1, static_cast<long long>( parent ) );
   qry.bind( 2, path.back(), sqlite3pp::copy );
-  auto itr = qry.begin();
+
+  /* `itr.begin()' and `++itr' can throw if they hit errors. */
+  std::optional<sqlite3pp::query::query_iterator> itr;
+  for ( std::size_t retries = 0; retries < DB_MAX_RETRIES; ++retries )
+    {
+      try
+        {
+          itr = qry.begin();
+          break;
+        }
+      catch ( const sqlite3pp::database_error & err )
+        {
+          if ( ! isSQLiteBusyErr( err ) ) { throw; }
+          std::this_thread::sleep_for( DB_RETRY_PERIOD );
+        }
+    }
+  if ( ! itr.has_value() )
+    {
+      throw PkgDbException( nix::fmt( "couldn't read package at path '%s': "
+                                      "database '%s' is busy",
+                                      concatStringsSep( ".", path ),
+                                      this->dbPath ) );
+    }
+
   /* Handle no such path. */
-  if ( itr == qry.end() )
+  if ( ( *itr ) == qry.end() )
     {
       throw PkgDbException(
-        nix::fmt( "No such package %s.", concatStringsSep( ".", path ) ) );
+        nix::fmt( "no such package %s.", concatStringsSep( ".", path ) ) );
     }
-  return ( *itr ).get<long long>( 0 );
+  return ( **itr ).get<long long>( 0 );
 }
 
 
@@ -356,14 +588,38 @@ PkgDbReadOnly::getPackagePath( row_id row )
     this->db,
     "SELECT parentId, attrName FROM Packages WHERE ( id = ? )" );
   qry.bind( 1, static_cast<long long>( row ) );
-  auto itr = qry.begin();
-  /* Handle no such path. */
-  if ( itr == qry.end() )
+
+  /* `itr.begin()' and `++itr' can throw if they hit errors. */
+  std::optional<sqlite3pp::query::query_iterator> itr;
+  for ( std::size_t retries = 0; retries < DB_MAX_RETRIES; ++retries )
     {
-      throw PkgDbException( nix::fmt( "No such 'Packages.id' %llu.", row ) );
+      try
+        {
+          itr = qry.begin();
+          break;
+        }
+      catch ( const sqlite3pp::database_error & err )
+        {
+          if ( ! isSQLiteBusyErr( err ) ) { throw; }
+          std::this_thread::sleep_for( DB_RETRY_PERIOD );
+        }
     }
-  flox::AttrPath path = this->getAttrSetPath( ( *itr ).get<long long>( 0 ) );
-  path.emplace_back( ( *itr ).get<std::string>( 1 ) );
+  if ( ! itr.has_value() )
+    {
+      throw PkgDbException(
+        nix::fmt( "couldn't read package path of row '%llu': "
+                  "database '%s' is busy",
+                  row,
+                  this->dbPath ) );
+    }
+
+  /* Handle no such path. */
+  if ( ( *itr ) == qry.end() )
+    {
+      throw PkgDbException( nix::fmt( "no such 'Packages.id' %llu.", row ) );
+    }
+  flox::AttrPath path = this->getAttrSetPath( ( **itr ).get<long long>( 0 ) );
+  path.emplace_back( ( **itr ).get<std::string>( 1 ) );
   return path;
 }
 
@@ -404,7 +660,30 @@ PkgDbReadOnly::getPackage( row_id row )
     )SQL" );
   qry.bind( 1, static_cast<long long>( row ) );
 
-  auto rsl = nlohmann::json::parse( ( *qry.begin() ).get<std::string>( 0 ) );
+  /* `itr.begin()' and `++itr' can throw if they hit errors. */
+  std::optional<sqlite3pp::query::query_iterator> itr;
+  for ( std::size_t retries = 0; retries < DB_MAX_RETRIES; ++retries )
+    {
+      try
+        {
+          itr = qry.begin();
+          break;
+        }
+      catch ( const sqlite3pp::database_error & err )
+        {
+          if ( ! isSQLiteBusyErr( err ) ) { throw; }
+          std::this_thread::sleep_for( DB_RETRY_PERIOD );
+        }
+    }
+  if ( ! itr.has_value() )
+    {
+      throw PkgDbException( nix::fmt( "couldn't read package of row '%llu': "
+                                      "database '%s' is busy",
+                                      row,
+                                      this->dbPath ) );
+    }
+
+  auto rsl = nlohmann::json::parse( ( **itr ).get<std::string>( 0 ) );
 
   /* Add the path related field. */
   flox::AttrPath path = this->getPackagePath( row );

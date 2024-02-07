@@ -275,16 +275,35 @@ PkgDb::addOrGetDescriptionId( const std::string & description )
     this->db,
     "SELECT id FROM Descriptions WHERE description = ? LIMIT 1" );
   qry.bind( 1, description, sqlite3pp::copy );
-  auto rows = qry.begin();
-  if ( rows != qry.end() )
+  std::optional<sqlite3pp::query::query_iterator> itr;
+  for ( std::size_t retries = 0; retries < DB_MAX_RETRIES; ++retries )
+    {
+      try
+        {
+          itr = qry.begin();
+          break;
+        }
+      catch ( const sqlite3pp::database_error & err )
+        {
+          if ( ! isSQLiteBusyErr( err ) ) { throw; }
+          std::this_thread::sleep_for( DB_RETRY_PERIOD );
+        }
+    }
+  if ( ! itr.has_value() )
+    {
+      throw PkgDbException( nix::fmt( "failed to query Descriptions: "
+                                      "database '%s' is busy",
+                                      this->dbPath ) );
+    }
+  if ( ( *itr ) != qry.end() )
     {
       nix::Activity act(
         *nix::logger,
         nix::lvlDebug,
         nix::actUnknown,
-        nix::fmt( "Found existing description in database: %s.",
+        nix::fmt( "found existing description in database: %s.",
                   description ) );
-      return ( *rows ).get<long long>( 0 );
+      return ( **itr ).get<long long>( 0 );
     }
 
   sqlite3pp::command cmd(
