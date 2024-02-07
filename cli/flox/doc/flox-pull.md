@@ -28,8 +28,10 @@ which to create that environment.
 The remote environment is specified in the form `<owner/name>`,
 and it may optionally be preceded by `-r`.
 
-When updating an environment that has already been pulled, `-d` specifies which
-environment to update.
+When pulling an environment that has already been pulled, `-d` specifies which
+environment to sync.
+If `-d` is not specified and the current directory contains an environment, that
+environment is synced.
 `-f` may only be specified in this case, forceably updating the environment
 locally even if there are local changes not reflected in the remote environment.
 `<owner/name>` may not be specified in this case, as it would have been
@@ -66,7 +68,6 @@ environments.
 :   Forceably overwrite the local copy of the environment.
 
 ```{.include}
-./include/environment-options.md
 ./include/general-options.md
 ```
 

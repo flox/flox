@@ -7,4 +7,4 @@ the current directory or the last activated environment is used.
 :   Path containing a .flox/ directory.
 
 `-r`, `--remote`
-:   A remote environment on floxhub, specified in the form `<owner/name>`.
+:   A remote environment on FloxHub, specified in the form `<owner/name>`.

@@ -18,8 +18,8 @@ flox [ <general-options> ] update
 
 # DESCRIPTION
 
-Update the global base catalog if `--global` is specified,
-or update an environment's base catalog.
+Update an environment's base catalog,
+or update the global base catalog if `--global` is specified.
 
 The base catalog is a collection of packages used by various flox subcommands.
 
@@ -34,9 +34,9 @@ using that environment,
 and it provides packages for [`flox-install(1)`](./flox-install.md) and
 [`flox-upgrade(1)`](./flox-upgrade.md).
 
-Updating an environment's base catalog does not actually update the packages in
-the environment;
-updating packages requires running an update command followed by a
+Note that updating an environment's base catalog and upgrading packages are two
+separate options.
+Upgrading packages will usually require running an update command followed by a
 [`flox-upgrade`](./flox-upgrade.md).
 
 # OPTIONS

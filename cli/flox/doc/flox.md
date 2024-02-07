@@ -83,9 +83,6 @@ set -px XDG_DATA_DIRS "/nix/var/nix/profiles/default"
 `--version`
 :   Print `flox` version.
 
-`--prefix`
-:   Print `flox` installation prefix / Nix store path (flox internal use only).
-
 # COMMANDS
 
 Flox commands are grouped into categories pertaining to

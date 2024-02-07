@@ -26,18 +26,17 @@ flox [ <general-options> ] config
 Without any flags or when `-l` is passed, `flox config` shows all options with
 their computed value.
 
-The values are computed by reading:
+Config values are read from the following sources in order of descending priority:
 
-1. `flox` provided defaults.
-2. System settings from `/etc/flox.toml`.
-3. User customizations from `$XDG_CONFIG_DIRS`.
-4. User customizations from `$FLOX_CONFIG_HOME` if set or else `$XDG_CONFIG_HOME`.
-4. Environment variables.
+1. Environment variables.
    All config options may be set by prefixing with `FLOX_` and using
    SCREAMING_SNAKE_CASE.
    For example, `disable_metrics` may be set with `FLOX_DISABLE_METRICS=true`.
-
-The last occurence is used as the final value.
+1. User customizations from `$FLOX_CONFIG_HOME/flox.toml` if set or else
+   `$XDG_CONFIG_HOME/flox/flox.toml`.
+1. User customizations from `flox/flox.toml` in any of `$XDG_CONFIG_DIRS`.
+1. System settings from `/etc/flox.toml`.
+1. `flox` provided defaults.
 
 `flox config` commands that mutate configuration always write to
 `${FLOX_CONFIG_HOME:-$XDG_CONFIG_HOME}/flox/flox.toml`.
@@ -58,16 +57,16 @@ flox config --set 'trusted_environments."owner/name"' trust
 :   List the current values of all options.
 
 `-r`, `--reset`
-:   Reset all options to their default values without further confirmation.
+:   Reset all options to their default values without confirmation.
 
-`--set <key> <value>`
-:  Set `<key> = <value>` for string values
+`--set <key> <string>`
+:  Set `<key> = <string>` for string values
 
-`--set-number <key> <value>`
-:  Set `<key> = <value>` for number values
+`--set-number <key> <number>`
+:  Set `<key> = <number>` for number values
 
-`--set-bool <key> <value>`
-:  Set `<key> = <value>` for boolean values
+`--set-bool <key> <bool>`
+:  Set `<key> = <bool>` for boolean values
 
 `--delete <key>`
 :   Delete config key
@@ -103,8 +102,8 @@ flox config --set 'trusted_environments."owner/name"' trust
 
 `trusted_environments`
 :   Remote environments that are trusted for activation.
-    Contains keys of the form `<owner/name>` that map to either `trust` or
-    `deny`.
+    Contains keys of the form `"<owner/name>"` that map to either `"trust"` or
+    `"deny"`.
 
 ## Options used internally
 
