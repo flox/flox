@@ -12,9 +12,9 @@ flox-search - search for packages
 # SYNOPSIS
 
 ```
-flox [ <general options> ] search
-     [ --json ]
-     [ -a]
+flox [<general options>] search
+     [--json]
+     [-a]
      <search-term>
 ```
 

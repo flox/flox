@@ -12,9 +12,9 @@ flox-init - initialize a Flox environment
 # SYNOPSIS
 
 ```
-flox [ <general-options> ] init
-     [ -n <name> ]
-     [ -d <path> ]
+flox [<general-options>] init
+     [-n <name>]
+     [-d <path>]
 ```
 
 # DESCRIPTION

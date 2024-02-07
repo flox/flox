@@ -12,7 +12,7 @@ flox-show - show detailed information about a single package
 # SYNOPSIS
 
 ```
-flox [ <general-options> ] show <search-term>
+flox [<general-options>] show <search-term>
 ```
 
 # DESCRIPTION

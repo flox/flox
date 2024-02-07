@@ -11,11 +11,11 @@ flox-activate - activate environments
 # SYNOPSIS
 
 ```
-flox [ <general-options> ] activate
-     [-d=<path> | -r=<owner/name>]
-     [ -t ]
-     [ --print-script ]
-     [ -- <command> [ <arguments> ] ]
+flox [<general-options>] activate
+     [-d=<path> | -r=<owner>/<name>]
+     [-t]
+     [--print-script]
+     [ -- <command> [<arguments>]]
 ```
 
 # DESCRIPTION
@@ -50,7 +50,7 @@ hook was defined.
 
 ## Activate Options
 
-`-- <command> [ <arguments> ]`
+`-- <command> [<arguments>]`
 :   Command to run in the environment.
     Spawns the command in a subshell that does not leak into the calling
     process.

@@ -12,7 +12,7 @@ flox-auth - FloxHub authentication commands
 # SYNOPSIS
 
 ```
-flox [ <general-options> ] auth
+flox [<general-options>] auth
      (login | logout)
 ```
 
