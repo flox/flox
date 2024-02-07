@@ -1,4 +1,4 @@
-% FLOX(1) flox User Manuals
+% FLOX(1) Flox User Manuals
 
 # NAME
 

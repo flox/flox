@@ -1,7 +1,7 @@
 ---
 title: FLOX-PULL
 section: 1
-header: "flox User Manuals"
+header: "Flox User Manuals"
 ...
 
 
@@ -15,7 +15,7 @@ flox-pull - pull environment from FloxHub
 flox [ <general-options> ] pull
      [-d=<path>]
      [-a]
-     [-r=<owner/name> | <owner/name> | [-f]]
+     [-r=<owner>/<name> | <owner>/<name> | [-f]]
 ```
 
 # DESCRIPTION
@@ -25,7 +25,7 @@ or, if an environment has already been pulled, retrieve any updates.
 
 When pulling an environment for the first time, `-d` specifies the directory
 in which to create that environment.
-The remote environment is specified in the form `<owner/name>`,
+The remote environment is specified in the form `<owner>/<name>`,
 and it may optionally be preceded by `-r`.
 
 When pulling an environment that has already been pulled, `-d` specifies which
@@ -34,7 +34,7 @@ If `-d` is not specified and the current directory contains an environment, that
 environment is synced.
 `-f` may only be specified in this case, forceably updating the environment
 locally even if there are local changes not reflected in the remote environment.
-`<owner/name>` may not be specified in this case, as it would have been
+`<owner>/<name>` may not be specified in this case, as it would have been
 specified when the environment was first pulled.
 
 A remote environment may not support the architecture or operating system of the
@@ -58,10 +58,10 @@ environments.
 `-a`, `--add-system`
 :   Forceably add current system to the environment, even if incompatible.
 
-`-r <owner/name>`, `--remote <owner/name>`
+`-r <owner>/<name>`, `--remote <owner>/<name>`
 :   ID of the environment to pull.
 
-`<owner/name>`
+`<owner>/<name>`
 :   ID of the environment to pull.
 
 `-f`, `--force`

@@ -1,7 +1,7 @@
 ---
 title: FLOX-CONFIG
 section: 1
-header: "flox User Manuals"
+header: "Flox User Manuals"
 ...
 
 
@@ -102,7 +102,7 @@ flox config --set 'trusted_environments."owner/name"' trust
 
 `trusted_environments`
 :   Remote environments that are trusted for activation.
-    Contains keys of the form `"<owner/name>"` that map to either `"trust"` or
+    Contains keys of the form `"<owner>/<name>"` that map to either `"trust"` or
     `"deny"`.
 
 ## Options used internally

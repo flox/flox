@@ -1,7 +1,7 @@
 ---
 title: FLOX-PUSH
 section: 1
-header: "flox User Manuals"
+header: "Flox User Manuals"
 ...
 
 
@@ -23,7 +23,7 @@ flox [ <general-options> ] push
 Move an environment's manifest to FloxHub or sync local changes to an
 environment to FloxHub.
 
-After pushing, the remote environment can be referred to as `<owner/name>`.
+After pushing, the remote environment can be referred to as `<owner>/<name>`.
 
 A path environment contains a manifest file and lock file which are stored
 locally and possibly committed to version control.

@@ -1,7 +1,7 @@
 ---
 title: FLOX-UPDATE
 section: 1
-header: "flox User Manuals"
+header: "Flox User Manuals"
 ...
 
 
@@ -13,7 +13,7 @@ flox-update - update the global base catalog or an environment's base catalog
 
 ```
 flox [ <general-options> ] update
-     [--global | (-d=<path> | -r=<owner/name>)]
+     [--global | (-d=<path> | -r=<owner>/<name>)]
 ```
 
 # DESCRIPTION

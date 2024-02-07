@@ -1,7 +1,7 @@
 ---
 title: FLOX-UPGRADE
 section: 1
-header: "flox User Manuals"
+header: "Flox User Manuals"
 ...
 
 
@@ -13,7 +13,7 @@ flox-upgrade - upgrade packages in an environment
 
 ```
 flox [ <general-options> ] upgrade
-     [-d=<path> | -r=<owner/name>]
+     [-d=<path> | -r=<owner>/<name>]
      [<package or group>]...
 ```
 

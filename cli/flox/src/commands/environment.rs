@@ -1472,12 +1472,12 @@ impl Push {
 enum PullSelect {
     New {
         /// ID of the environment to pull
-        #[bpaf(long, short, argument("owner/name"))]
+        #[bpaf(long, short, argument("owner>/<name"))]
         remote: EnvironmentRef,
     },
     NewAbbreviated {
         /// ID of the environment to pull
-        #[bpaf(positional("owner/name"))]
+        #[bpaf(positional("owner>/<name"))]
         remote: EnvironmentRef,
     },
     Existing {
