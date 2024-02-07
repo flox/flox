@@ -59,7 +59,7 @@ PkgDbInput::init()
    * the database.
    * However, just because the database exists doesn't mean that it's done being
    * initialized, so creating the read-only connection can fail.
-   * We do this retry loop to until creating the read-only connection succeeds.
+   * We do this retry loop until creating the read-only connection succeeds.
    */
   std::size_t retries = 0;
   do {
