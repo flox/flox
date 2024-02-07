@@ -151,6 +151,7 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
       if ( 0 < pid )
         {
           int status = 0;
+          // WML: todo - log using current conventions for verbosity
           std::cout << "WML: scraping in child: " << pid << std::endl;
           waitpid( pid, &status, 0 );
           std::cout << "WML: child exited: status: " << status << std::endl;
