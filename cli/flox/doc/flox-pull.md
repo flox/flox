@@ -23,8 +23,8 @@ flox [ <general-options> ] pull
 Pull an environment from FloxHub and create a local reference to it,
 or, if an environment has already been pulled, retrieve any updates.
 
-When pulling an environment for the first time, `-d` specifies the directory in
-which to create that environment.
+When pulling an environment for the first time, `-d` specifies the directory
+in which to create that environment.
 The remote environment is specified in the form `<owner/name>`,
 and it may optionally be preceded by `-r`.
 
