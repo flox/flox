@@ -267,13 +267,17 @@ impl EnvironmentPointer {
     /// on either [PathEnvironment] or [ManagedEnvironment].
     pub fn open(path: impl AsRef<Path>) -> Result<EnvironmentPointer, EnvironmentError2> {
         let dot_flox_path = path.as_ref().join(DOT_FLOX);
+        if !dot_flox_path.exists() {
+            debug!("couldn't find .flox at {}", dot_flox_path.display());
+            Err(EnvironmentError2::DotFloxNotFound)?
+        }
         let pointer_path = dot_flox_path.join(ENVIRONMENT_POINTER_FILENAME);
         let pointer_contents = match fs::read(&pointer_path) {
             Ok(contents) => contents,
             Err(err) => match err.kind() {
                 io::ErrorKind::NotFound => {
                     debug!("couldn't find env.json at {}", pointer_path.display());
-                    Err(EnvironmentError2::EnvNotFound)?
+                    Err(EnvironmentError2::EnvPointerNotFound)?
                 },
                 _ => Err(EnvironmentError2::ReadEnvironmentMetadata(err))?,
             },
@@ -329,7 +333,9 @@ pub enum EnvironmentError2 {
     #[error("could not initialize environment")]
     InitEnv(#[source] std::io::Error),
     #[error("could not find environment definition directory")]
-    EnvNotFound,
+    EnvDirNotFound,
+    #[error("could not find environment pointer file")]
+    EnvPointerNotFound,
     #[error("an environment already exists at {0:?}")]
     EnvironmentExists(PathBuf),
     #[error("could not write .gitignore file")]
