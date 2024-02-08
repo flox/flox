@@ -34,6 +34,8 @@ setup() {
   project_setup
   floxhub_setup "owner"
   make_dummy_env "owner" "name"
+
+  export UNSUPPORTED_SYSTEM_PROMPT="The environment you are trying to pull is not yet compatible with your system ($NIX_SYSTEM)."
 }
 teardown() {
   unset _FLOX_FLOXHUB_GIT_URL
@@ -98,7 +100,6 @@ function make_incompatible() {
   popd > /dev/null || return
   rm -rf "$PROJECT_DIR/floxmeta"
 }
-
 
 # make the environment with specified owner and name incompatible with the current system
 # by adding a package that fails nix evaluation due to being on an unsupported system.
@@ -284,7 +285,7 @@ function add_incompatible_package() {
   update_dummy_env "owner" "name"
   make_incompatible "owner" "name"
 
-  run -0 expect -d "$TESTS_DIR/pull/promptAmendSystem.exp" owner/name "$NIX_SYSTEM" no
+  run -0 expect -d "$TESTS_DIR/pull/answerPrompt.exp" owner/name "$UNSUPPORTED_SYSTEM_PROMPT" no
   assert_success
   assert_output --partial "The environment you are trying to pull is not yet compatible with your system ($NIX_SYSTEM)"
   assert_line --partial "Did not pull the environment."
@@ -294,12 +295,12 @@ function add_incompatible_package() {
 
 # bats test_tags=pull:unsupported:prompt-success
 # pulling an environment without packages for the current platform
-#should fail with an error
+# should fail with an error
 @test "pull environment without packages for the current platform prompts for about adding system: produces env" {
   update_dummy_env "owner" "name"
   make_incompatible "owner" "name"
 
-  run -0 expect -d "$TESTS_DIR/pull/promptAmendSystem.exp" owner/name "$NIX_SYSTEM" yes
+  run -0 expect -d "$TESTS_DIR/pull/answerPrompt.exp" owner/name "$UNSUPPORTED_SYSTEM_PROMPT" yes
   assert_success
 
   run "$FLOX_BIN" list

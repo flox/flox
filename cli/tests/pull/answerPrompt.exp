@@ -1,10 +1,10 @@
 set env_ref [lindex $argv 0]
-set system [lindex $argv 1]
+set question [lindex $argv 1]
 set answer [lindex $argv 2]
 set flox $env(FLOX_BIN)
 
 # activate environment 1
-set timeout 20
+set timeout 40
 spawn $flox pull --remote $env_ref
 expect_after {
   timeout { exit 1 }
@@ -13,7 +13,7 @@ expect_after {
   "*\r" { exp_continue }
 }
 
-expect -ex "The environment you are trying to pull is not yet compatible with your system ($system)." {}
+expect -ex "$question" {}
 
 if { $answer == "yes" } {
   # Down arrow
