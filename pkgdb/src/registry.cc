@@ -341,15 +341,24 @@ FloxFlakeInput::getLockedInput()
       debugLog(
         nix::fmt( "getLockedInput: child is finished, exitcode:%d", status ) );
 
-      // The flake should be downloaded and cached locally now
-      return { this->getSubtrees(),
-               this->getFlake()->lockedFlake.flake.lockedRef };
+      if ( WEXITSTATUS( status ) == EXIT_SUCCESS )
+        {
+          // The flake should be downloaded and cached locally now
+          return { this->getSubtrees(),
+                   this->getFlake()->lockedFlake.flake.lockedRef };
+        }
+      else
+        {
+          // what to do here?  The error has already been reported via the
+          // child!
+          exit( WEXITSTATUS( status ) );
+        }
     }
   else
     {
       // just getFlake to ensure it's downloaded.
-      this->getFlake();
-      exit( 0 );
+      auto unusedFlake = this->getFlake();
+      exit( EXIT_SUCCESS );
     }
 }
 
