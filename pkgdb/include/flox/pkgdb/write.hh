@@ -9,6 +9,7 @@
 
 #pragma once
 
+#include <stack>
 #include <tuple>
 
 #include "flox/pkgdb/read.hh"
