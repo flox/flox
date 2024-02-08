@@ -32,6 +32,7 @@ use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use tempfile::TempDir;
 use toml_edit::Key;
+use url::Url;
 
 use crate::commands::general::update_config;
 use crate::config::{Config, EnvironmentTrust, FLOX_CONFIG_FILE};
@@ -189,19 +190,24 @@ impl FloxArgs {
             .expect("User must have a home directory")
             .join(".netrc");
 
-        let mut floxhub = Floxhub::new(
+        let git_url_override = {
+            if let Ok(env_set_host) = std::env::var("_FLOX_FLOXHUB_GIT_URL") {
+                warn!("Using {env_set_host} as floxhub host");
+                warn!("`$_FLOX_FLOXHUB_GIT_URL` is used for testing purposes only, alternative floxhub hosts are not yet supported!");
+                Some(Url::parse(&env_set_host)?)
+            } else {
+                None
+            }
+        };
+
+        let floxhub = Floxhub::new(
             config
                 .flox
                 .floxhub_url
                 .clone()
                 .unwrap_or_else(|| DEFAULT_FLOXHUB_URL.clone()),
-        );
-
-        if let Ok(env_set_host) = std::env::var("_FLOX_FLOXHUB_GIT_URL") {
-            warn!("Using {env_set_host} as floxhub host");
-            warn!("`$_FLOX_FLOXHUB_GIT_URL` is used for testing purposes only, alternative floxhub hosts are not yet supported!");
-            floxhub.set_git_url_override(env_set_host.parse()?);
-        }
+            git_url_override,
+        )?;
 
         let flox = Flox {
             cache_dir: config.flox.cache_dir.clone(),
