@@ -53,7 +53,7 @@ build-cdb:
 
 # Build only flox
 @build-cli: build-pkgdb
-    pushd cli; cargo build -q; popd
+    pushd cli; cargo build -q
 
 # Build the binaries
 build: build-cli
@@ -84,14 +84,12 @@ build: build-cli
 # Run the CLI unit tests
 @unit-tests regex="": build
     pushd cli;                            \
-     {{cargo_test_invocation}} {{regex}};  \
-     popd;
+     {{cargo_test_invocation}} {{regex}}
 
 # Run the CLI unit tests, including impure tests
 @impure-tests regex="": build
     pushd cli;                                                     \
-     {{cargo_test_invocation}} {{regex}} --features "extra-tests";  \
-     popd;
+     {{cargo_test_invocation}} {{regex}} --features "extra-tests"
 
 # Run the entire CLI test suite
 test-cli: impure-tests integ-tests

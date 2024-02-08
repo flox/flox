@@ -116,7 +116,7 @@ pub struct FloxArgs {
     pub verbosity: Verbosity,
 
     /// Debug mode
-    #[bpaf(long, req_flag(()), many, map(vec_not_empty))]
+    #[bpaf(long, req_flag(()), many, map(vec_not_empty), hide)]
     pub debug: bool,
 
     /// Print the version of the program
@@ -280,7 +280,7 @@ enum LocalDevelopmentCommands {
     /// Create an environment in the current directory
     #[bpaf(command, long("create"))]
     Init(#[bpaf(external(environment::init))] environment::Init),
-    /// Enter the environment
+    /// Enter the environment, type `exit` to leave
     #[bpaf(command, long("develop"))]
     Activate(#[bpaf(external(environment::activate))] environment::Activate),
     /// Search for system or library packages to install
@@ -548,6 +548,7 @@ impl EnvironmentSelect {
             // directory.
             EnvironmentSelect::Unspecified => match detect_environment(message)? {
                 Some(env) => env.into_concrete_environment(flox),
+                // todo: remove: `detect_environment` already checked current dir
                 None => {
                     let current_dir =
                         env::current_dir().context("could not get current directory")?;
@@ -596,7 +597,8 @@ pub fn detect_environment(message: &str) -> Result<Option<UninitializedEnvironme
             let found = UninitializedEnvironment::DotFlox(found);
 
             if !Dialog::can_prompt() {
-                bail!("can't determine whether to use {found} or {activated_env}");
+                debug!("No TTY detected, using the environment {found:?} found in the current directory or an ancestor directory");
+                return Ok(Some(found));
             }
 
             let dialog = Dialog {

@@ -12,17 +12,17 @@ use flox_rust_sdk::models::environment::{
 use flox_rust_sdk::models::lockfile::LockedManifestError;
 use flox_rust_sdk::models::pkgdb::{CallPkgDbError, ContextMsgError, PkgDbError};
 use indoc::formatdoc;
-use log::debug;
+use log::trace;
 
 pub fn format_error(err: &EnvironmentError2) -> String {
-    debug!("formatting environment_error: {err:?}");
+    trace!("formatting environment_error: {err:?}");
 
     match err {
         EnvironmentError2::DotFloxNotFound => display_chain(err),
 
         // todo: enrich with a path?
-        EnvironmentError2::EnvNotFound => formatdoc! {"
-            Found a '.flox' directory, but were unable to locate an environment directory.
+        EnvironmentError2::EnvDirNotFound => formatdoc! {"
+            Found a '.flox' directory but unable to locate an environment directory.
 
             This is likely due to a corrupt environment.
 
@@ -30,10 +30,20 @@ pub fn format_error(err: &EnvironmentError2) -> String {
             If you cloned this environment from a remote repository, verify that
             `.flox/env/maifest.toml` is commited to the version control system.
         "},
+        // todo: enrich with a path?
+        EnvironmentError2::EnvPointerNotFound => formatdoc! {"
+            Found a '.flox' directory but unable to locate an 'env.json' in it.
+
+            This is likely due to a corrupt environment.
+
+            Try deleting the '.flox' directory and reinitializing the environment.
+            If you cloned this environment from a remote repository, verify that
+            `.flox/env.json` is commited to the version control system.
+        "},
 
         // todo: enrich with a path?
         EnvironmentError2::ManifestNotFound => formatdoc! {"
-            Found a '.flox' directory, but were unable to locate a manifest file.
+            Found a '.flox' directory but unable to locate a manifest file.
 
             This is likely due to a corrupt environment.
 
@@ -147,7 +157,7 @@ pub fn format_error(err: &EnvironmentError2) -> String {
         EnvironmentError2::DiscoverGitDirectory(_) => formatdoc! {"
             Failed to discover git directory.
 
-            See the '--debug' log for more information.
+            See the run again with `--verbose` for more information.
         "},
         // todo: enrich with path
         EnvironmentError2::DeleteEnvironment(err) => formatdoc! {"
@@ -184,7 +194,7 @@ pub fn format_error(err: &EnvironmentError2) -> String {
 }
 
 pub fn format_core_error(err: &CoreEnvironmentError) -> String {
-    debug!("formatting core_error: {err:?}");
+    trace!("formatting core_error: {err:?}");
 
     match err {
         CoreEnvironmentError::ModifyToml(toml_error) => formatdoc! {"
@@ -272,13 +282,13 @@ pub fn format_core_error(err: &CoreEnvironmentError) -> String {
 }
 
 pub fn format_managed_error(err: &ManagedEnvironmentError) -> String {
-    debug!("formatting managed_environment_error: {err:?}");
+    trace!("formatting managed_environment_error: {err:?}");
 
     match err {
         // todo: communicate reasons for this error
         // git auth errors may be catched separately or reported
         ManagedEnvironmentError::OpenFloxmeta(err) => formatdoc! {"
-            Failed to fetch updates environment: {err}
+            Failed to fetch environment: {err}
         "},
 
         // todo: merge errors or make more specific
@@ -381,6 +391,8 @@ pub fn format_managed_error(err: &ManagedEnvironmentError) -> String {
             Please check the spelling of the remote environment
             and make sure that you have access to it.
         "},
+        // todo: mark as bug?
+        ManagedEnvironmentError::UpstreamNotFound(_, _) => display_chain(err),
         // acces denied is catched early as ManagedEnvironmentError::AccessDenied
         ManagedEnvironmentError::Push(_) => display_chain(err),
         ManagedEnvironmentError::DeleteBranch(_) => display_chain(err),
@@ -416,7 +428,7 @@ pub fn format_managed_error(err: &ManagedEnvironmentError) -> String {
             Could not read managed manifest.
 
             {err}
-        ", err = display_chain(e) },
+        ",err = display_chain(e) },
         ManagedEnvironmentError::CanonicalizePath(canonicalize_err) => formatdoc! {"
             Invalid path to environment: {canonicalize_err}
 
@@ -429,7 +441,7 @@ pub fn format_managed_error(err: &ManagedEnvironmentError) -> String {
 }
 
 pub fn format_remote_error(err: &RemoteEnvironmentError) -> String {
-    debug!("formatting remote_environment_error: {err:?}");
+    trace!("formatting remote_environment_error: {err:?}");
 
     match err {
         RemoteEnvironmentError::OpenManagedEnvironment(err) => formatdoc! {"
@@ -479,7 +491,7 @@ pub fn format_remote_error(err: &RemoteEnvironmentError) -> String {
 }
 
 pub fn format_locked_manifest_error(err: &LockedManifestError) -> String {
-    debug!("formatting locked_manifest_error: {err:?}");
+    trace!("formatting locked_manifest_error: {err:?}");
     match err {
         LockedManifestError::CallContainerBuilder(_) => formatdoc! {"
             Failed to call container builder.
@@ -515,6 +527,34 @@ pub fn format_locked_manifest_error(err: &LockedManifestError) -> String {
         // already user friendly.
         // some commands catch these errors and process them separately
         // e.g. `flox pull`, `flox push`
+
+        // 116: toml parsing error, just print the error message
+        // https://github.com/flox/flox/issues/852
+        LockedManifestError::LockManifest(CallPkgDbError::PkgDbError(PkgDbError {
+            exit_code: 116,
+            context_message:
+                Some(ContextMsgError {
+                    caught: Some(caught),
+                    ..
+                }),
+            ..
+        })) => {
+            let message = &caught.message;
+            let un_prefixed = message.strip_prefix("[error] ").unwrap_or(message);
+            formatdoc! {"
+                {un_prefixed}
+            "}
+        },
+        // 105: invalid lockfile, just print the error message
+        // https://github.com/flox/flox/issues/852
+        LockedManifestError::LockManifest(CallPkgDbError::PkgDbError(PkgDbError {
+            exit_code: 105,
+            context_message: Some(ContextMsgError { message, .. }),
+            ..
+        })) => formatdoc! {"
+            {message}
+        "},
+
         LockedManifestError::LockManifest(pkgdb_error) => {
             format_pkgdb_error(pkgdb_error, err, "Failed to lock environment manifest.")
         },
@@ -564,7 +604,7 @@ fn format_pkgdb_error(
     parent: &dyn std::error::Error,
     context: &str,
 ) -> String {
-    debug!("formatting pkgdb_error: {err:?}");
+    trace!("formatting pkgdb_error: {err:?}");
 
     match err {
         CallPkgDbError::PkgDbError(err) => formatdoc! {"

@@ -1,3 +1,4 @@
+use std::fmt::Write;
 use std::time::Duration;
 
 use anyhow::{bail, Context, Result};
@@ -15,7 +16,7 @@ use flox_rust_sdk::models::search::{
     Subtree,
 };
 use indoc::formatdoc;
-use log::{debug, info};
+use log::debug;
 
 use crate::config::features::Features;
 use crate::config::Config;
@@ -125,6 +126,7 @@ impl Search {
                         {message}
 
                         {suggestion}
+
                         {FLOX_SHOW_HINT}
                     "};
                 }
@@ -134,18 +136,22 @@ impl Search {
             let results = DisplaySearchResults::from_search_results(&self.search_term, results)?;
             println!("{results}");
 
-            info!("");
+            let mut hints = String::new();
 
             if let Some(hint) = results.hint() {
-                info!("{hint}");
+                writeln!(&mut hints)?;
+                writeln!(&mut hints, "{hint}")?;
             }
 
-            info!("{FLOX_SHOW_HINT}");
+            writeln!(&mut hints)?;
+            writeln!(&mut hints, "{FLOX_SHOW_HINT}")?;
 
             if suggestion.has_suggestions() {
-                eprintln!();
-                eprintln!("{suggestion}");
+                writeln!(&mut hints)?;
+                writeln!(&mut hints, "{suggestion}")?;
             };
+
+            eprintln!("{hints}");
         }
         Ok(())
     }
