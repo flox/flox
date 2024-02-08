@@ -189,7 +189,10 @@ impl Edit {
         // the original manifest. You can't put creation/cleanup inside the `edited_manifest_contents`
         // method because the temporary manifest needs to stick around in case the user wants
         // or needs to make successive edits without starting over each time.
-        let tmp_manifest = NamedTempFile::new_in(&flox.temp_dir)?;
+        let tmp_manifest = tempfile::Builder::new()
+            .prefix("manifest.")
+            .suffix(".toml")
+            .tempfile_in(&flox.temp_dir)?;
         std::fs::write(&tmp_manifest, environment.manifest_content(flox)?)?;
         let should_continue = Dialog {
             message: "Continue editing?",
