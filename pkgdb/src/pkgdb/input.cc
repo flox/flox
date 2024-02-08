@@ -58,28 +58,17 @@ PkgDbInput::init()
    * we skip straight to trying to create a read-only connection to
    * the database.
    * However, just because the database exists doesn't mean that it's done being
-   * initialized, so creating the read-only connection can fail.
-   * We do this retry loop until creating the read-only connection succeeds.
-   */
-  std::size_t retries = 0;
-  do {
-      try
-        {
-          this->dbRO = std::make_shared<PkgDbReadOnly>(
-            this->getFlake()->lockedFlake.getFingerprint(),
-            this->dbPath.string() );
-        }
-      catch ( ... )
-        {
-          std::this_thread::sleep_for( DB_RETRY_PERIOD );
-          if ( DB_MAX_RETRIES < ++retries )
-            {
-              throw PkgDbException(
-                "couldn't initialize read-only package database" );
-            }
-        }
+   * initialized, so creating the read-only connection can fail. */
+  try
+    {
+      this->dbRO = std::make_shared<PkgDbReadOnly>(
+        this->getFlake()->lockedFlake.getFingerprint(),
+        this->dbPath.string() );
     }
-  while ( ( this->dbRO == nullptr ) );
+  catch ( ... )
+    {
+      throw PkgDbException( "couldn't initialize read-only package database" );
+    }
 
   /* If the schema version is bad, delete the DB so it will be recreated. */
   SqlVersions dbVersions = this->dbRO->getDbVersion();

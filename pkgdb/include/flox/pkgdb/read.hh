@@ -43,20 +43,16 @@ namespace flox::pkgdb {
 
 /* -------------------------------------------------------------------------- */
 
-/** A unique hash associated with a locked flake. */
-using Fingerprint = nix::flake::Fingerprint;
-using SQLiteDb    = sqlite3pp::database; /** < SQLite3 database handle. */
-using sql_rc      = int;                 /**< `SQLITE_*` result code. */
+/** SQLite3 busy timeout in milliseconds. */
+constexpr int DB_BUSY_TIMEOUT = 250 * 1000;
 
 
 /* -------------------------------------------------------------------------- */
 
-/* We may need to wait for the database to be constructed, and that could take
- * some time. We set a reasonably small retry period to preserve responsiveness,
- * but set a large number of retries so that a slow database operation isn't
- * terminated too early. */
-constexpr std::chrono::milliseconds DB_RETRY_PERIOD( 100 );
-constexpr std::size_t               DB_MAX_RETRIES = 2500;
+/** A unique hash associated with a locked flake. */
+using Fingerprint = nix::flake::Fingerprint;
+using SQLiteDb    = sqlite3pp::database; /** < SQLite3 database handle. */
+using sql_rc      = int;                 /**< `SQLITE_*` result code. */
 
 
 /* -------------------------------------------------------------------------- */

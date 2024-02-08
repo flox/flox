@@ -144,25 +144,7 @@ public:
   execute( const char * stmt )
   {
     sqlite3pp::command cmd( this->db, stmt );
-    return this->execute( cmd );
-  }
-
-  /**
-   * @brief Execute a raw sqlite statement on the database.
-   * @param cmd Command to execute.
-   * @return `SQLITE_*` [error code](https://www.sqlite.org/rescode.html).
-   */
-  static inline sql_rc
-  execute( sqlite3pp::command & cmd )
-  {
-    sql_rc rcode = cmd.execute();
-    for ( std::size_t retries = 0;
-          ( rcode == SQLITE_BUSY ) && ( retries < DB_MAX_RETRIES );
-          ++retries, rcode = cmd.execute() )
-      {
-        std::this_thread::sleep_for( DB_RETRY_PERIOD );
-      }
-    return rcode;
+    return cmd.execute();
   }
 
   /**
@@ -174,25 +156,7 @@ public:
   execute_all( const char * stmt )
   {
     sqlite3pp::command cmd( this->db, stmt );
-    return this->execute_all( cmd );
-  }
-
-  /**
-   * @brief Execute raw sqlite statements on the database.
-   * @param cmd Commands to execute.
-   * @return `SQLITE_*` [error code](https://www.sqlite.org/rescode.html).
-   */
-  static inline sql_rc
-  execute_all( sqlite3pp::command & cmd )
-  {
-    sql_rc rcode = cmd.execute_all();
-    for ( std::size_t retries = 0;
-          ( rcode == SQLITE_BUSY ) && ( retries < DB_MAX_RETRIES );
-          ++retries, rcode = cmd.execute_all() )
-      {
-        std::this_thread::sleep_for( DB_RETRY_PERIOD );
-      }
-    return rcode;
+    return cmd.execute_all();
   }
 
   /* Insert */
