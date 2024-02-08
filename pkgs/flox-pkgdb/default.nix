@@ -31,6 +31,7 @@
   gdb ? throw "`gdb' is required for debugging with `g++'",
   lldb ? throw "`lldb' is required for debugging with `clang++'",
   valgrind ? throw "`valgrind' is required for memory sanitization on Linux",
+  massif-visualizer ? throw "`massif-visualizer' is required for memory profiling on Linux",
   substituteAll,
   symlinkJoin,
 }: let
@@ -227,6 +228,7 @@ in
           ]
           ++ (lib.optionals stdenv.isLinux [
             valgrind
+            massif-visualizer
           ]);
 
         devEnvs =
