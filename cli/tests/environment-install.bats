@@ -91,7 +91,7 @@ teardown() {
   "$FLOX_BIN" init
   run "$FLOX_BIN" install not-a-package
   assert_failure
-  assert_output --partial "could not install not-a-package"
+  assert_output --partial "Could not find package not-a-package. Try 'flox search' with a broader search term."
 }
 
 @test "'flox install' provides suggestions when package not found" {
@@ -131,7 +131,7 @@ teardown() {
   "$FLOX_BIN" init
   run "$FLOX_BIN" install java make
   assert_failure
-  assert_output --partial "could not install java, make"
+  assert_output --partial "Could not install java, make"
 }
 
 @test "'flox uninstall' reports error when package not found" {

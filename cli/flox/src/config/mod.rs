@@ -364,14 +364,14 @@ mod tests {
                     "HOME",
                     Some(tempdir.path().as_os_str().to_string_lossy().as_ref()),
                 ),
-                ("FLOX_GIT_BASE_URL", Some("hello")),
+                ("FLOX_FLOXHUB_URL", Some("https://example.com")),
             ],
             || {
-                env::set_var("FLOX_GIT_BASE_URL", "hello");
+                env::set_var("FLOX_FLOXHUB_URL", "https://example.com");
                 let config = Config::parse().unwrap();
                 assert_eq!(
-                    config.get(&Key::parse("git_base_url").unwrap()).unwrap(),
-                    "\"hello\"".to_string()
+                    config.get(&Key::parse("floxhub_url").unwrap()).unwrap(),
+                    "\"https://example.com/\"".to_string()
                 );
                 env::remove_var("FLOX_CONFIG_HOME");
             },
@@ -380,47 +380,51 @@ mod tests {
 
     #[test]
     fn test_writing_value() {
-        let config_content =
-            Config::write_to(None, &Key::parse("git_base_url").unwrap(), Some("hello")).unwrap();
+        let config_content = Config::write_to(
+            None,
+            &Key::parse("floxhub_url").unwrap(),
+            Some("https://example.com"),
+        )
+        .unwrap();
         assert_eq!(config_content, indoc! {"
-            git_base_url = \"hello\"
+            floxhub_url = \"https://example.com\"
             "})
     }
     #[test]
     fn test_appending_value() {
         let config_before = indoc! {"
-        git_base_url = \"hello\"
+        floxhub_url = \"hello\"
         "};
 
         let config_content = Config::write_to(
             Some(config_before.to_string()),
-            &Key::parse("stability").unwrap(),
-            Some("stable"),
+            &Key::parse("disable_metrics").unwrap(),
+            Some(true),
         )
         .unwrap();
         assert_eq!(config_content, indoc! {"
-        git_base_url = \"hello\"
-        stability = \"stable\"
+        floxhub_url = \"hello\"
+        disable_metrics = true
         "});
     }
 
     #[test]
     fn test_appending_value_keep_comment() {
         let config_before = indoc! {"
-        # my git base url is friendly, see:
-        git_base_url = \"hello\"
+        # my FloxHub url is friendly, see:
+        floxhub_url = \"hello\"
         "};
 
         let config_content = Config::write_to(
             Some(config_before.to_string()),
-            &Key::parse("stability").unwrap(),
-            Some("stable"),
+            &Key::parse("disable_metrics").unwrap(),
+            Some(true),
         )
         .unwrap();
         assert_eq!(config_content, indoc! {"
-        # my git base url is friendly, see:
-        git_base_url = \"hello\"
-        stability = \"stable\"
+        # my FloxHub url is friendly, see:
+        floxhub_url = \"hello\"
+        disable_metrics = true
         "});
     }
 

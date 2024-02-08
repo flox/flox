@@ -418,7 +418,7 @@ genParamsNixpkgsFlox() {
   category_msg="$(echo "$output" | jq '.category_message')"
   context_msg="$(echo "$output" | jq -r '.context_message')"
   assert_equal "$category_msg" '"invalid lockfile"'
-  assert_equal "$context_msg" "encountered unexpected field \`foo' while parsing locked package"
+  assert_equal "$context_msg" "encountered unexpected field 'foo' while parsing locked package"
 }
 
 # ---------------------------------------------------------------------------- #

@@ -38,7 +38,6 @@ use flox_rust_sdk::models::environment::{
     FLOX_PATH_PATCHED_VAR,
     FLOX_PROMPT_ENVIRONMENTS_VAR,
 };
-use flox_rust_sdk::models::floxmetav2::FloxmetaV2Error;
 use flox_rust_sdk::models::lockfile::{
     FlakeRef,
     Input,
@@ -51,7 +50,7 @@ use flox_rust_sdk::models::lockfile::{
 use flox_rust_sdk::models::manifest::{self, PackageToInstall};
 use flox_rust_sdk::models::pkgdb::{call_pkgdb, CallPkgDbError, PkgDbError, PKGDB_BIN};
 use indexmap::IndexSet;
-use indoc::{formatdoc, indoc};
+use indoc::formatdoc;
 use itertools::Itertools;
 use log::{debug, error, info, warn};
 use tempfile::NamedTempFile;
@@ -867,7 +866,7 @@ pub struct Init {
     ///
     /// "$(basename $PWD)" or "default" if in $HOME
     #[bpaf(long("name"), short('n'), argument("name"))]
-    env_name: Option<EnvironmentName>,
+    env_name: Option<String>,
 }
 
 impl Init {
@@ -879,14 +878,15 @@ impl Init {
         let home_dir = dirs::home_dir().unwrap();
 
         let env_name = if let Some(name) = self.env_name {
-            name
+            EnvironmentName::from_str(&name)?
         } else if dir == home_dir {
-            "default".parse()?
+            EnvironmentName::from_str("default")?
         } else {
-            dir.file_name()
+            let name = dir
+                .file_name()
                 .map(|n| n.to_string_lossy().to_string())
-                .context("Can't init in root")?
-                .parse()?
+                .context("Can't init in root")?;
+            EnvironmentName::from_str(&name)?
         };
 
         let env = PathEnvironment::init(
@@ -1169,19 +1169,20 @@ impl Install {
                 ),
             )) if pkgdberr.exit_code == 120 => 'error: {
                 let paths = packages.iter().map(|p| p.path.clone()).join(", ");
-                let head = format!("❌  could not install {paths}");
 
                 if packages.len() > 1 {
                     break 'error anyhow!(formatdoc! {"
-                        {head}
+                        ❌  Could not install {paths}.
                         One or more of the packages you are trying to install does not exist.
                     "});
                 }
                 let path = packages[0].path.clone();
 
+                let head = format!("❌  Could not find package {path}.");
+
                 let suggestion = DidYouMean::<InstallSuggestion>::new(flox, environment, &path);
                 if !suggestion.has_suggestions() {
-                    break 'error anyhow!(head);
+                    break 'error anyhow!("{head} Try 'flox search' with a broader search term.");
                 }
 
                 anyhow!(formatdoc! {"
@@ -1621,7 +1622,7 @@ impl Pull {
                 typed: Spinner::new(|| ManagedEnvironment::open(flox, pointer, &dot_flox_path)),
             }
             .spin()
-            .map_err(Self::convert_error);
+            .map_err(|err| Self::handle_error(flox, err));
 
             match result {
                 Err(err) => {
@@ -1692,18 +1693,6 @@ impl Pull {
         }
 
         Ok(())
-    }
-
-    fn convert_error(err: ManagedEnvironmentError) -> anyhow::Error {
-        if let ManagedEnvironmentError::OpenFloxmeta(FloxmetaV2Error::LoggedOut) = err {
-            anyhow!(indoc! {"
-                Could not pull environment: not logged in to floxhub.
-
-                Please login to floxhub with `flox auth login`
-                "})
-        } else {
-            anyhow!(err)
-        }
     }
 
     /// construct a message for pulling a new environment
@@ -1791,6 +1780,41 @@ impl Pull {
     ) -> Result<Document, anyhow::Error> {
         manifest::add_system(&env.manifest_content(flox)?, &flox.system)
             .context("Could not add system to manifest")
+    }
+
+    fn handle_error(flox: &Flox, err: ManagedEnvironmentError) -> anyhow::Error {
+        match err {
+            ManagedEnvironmentError::AccessDenied => {
+                let message = "❌  You do not have permission to pull this environment";
+                anyhow::Error::msg(message)
+            },
+            ManagedEnvironmentError::Diverged => {
+                let message = "❌  The environment has diverged from the remote version";
+                anyhow::Error::msg(message)
+            },
+            ManagedEnvironmentError::UpstreamNotFound(env_ref, _) => {
+                let by_current_user = flox
+                    .floxhub_token
+                    .as_ref()
+                    .and_then(|token| token.handle().ok())
+                    .map(|handle| handle == env_ref.owner().as_str())
+                    .unwrap_or_default();
+                let message = format!("The environment {env_ref} does not exist.");
+                if by_current_user {
+                    anyhow!(formatdoc! {"
+                        {message}
+
+                        Double check the name or create it with:
+
+                            $ flox init --name {name}
+                            $ flox push
+                    ", name = env_ref.name()})
+                } else {
+                    anyhow!(message)
+                }
+            },
+            _ => err.into(),
+        }
     }
 }
 

@@ -142,26 +142,23 @@ createEnvironmentStorePath(
     {
       buildenv::buildEnvironment( tempDir, std::move( pkgs ) );
     }
-  catch ( buildenv::BuildEnvFileConflictError & err )
+  catch ( buildenv::FileConflict & err )
     {
-      auto [storePathA, filePath] = state.store->toStorePath( err.getFileA() );
-      auto [storePathB, _]        = state.store->toStorePath( err.getFileB() );
+      auto [storePathA, filePath] = state.store->toStorePath( err.fileA );
+      auto [storePathB, _]        = state.store->toStorePath( err.fileB );
 
       auto [nameA, packageA] = originalPackage.at( storePathA );
       auto [nameB, packageB] = originalPackage.at( storePathB );
 
 
-      throw FloxException(
-        "environment error",
-        "failed to build environment",
-        nix::fmt(
-          "file conflict between packages '%s' and '%s' at '%s'"
-          "\n\n\tresolve by setting the priority of the preferred package "
-          "to a value lower than '%d'",
-          nameA,
-          nameB,
-          filePath,
-          err.getPriority() ) );
+      throw PackageConflictException( nix::fmt(
+        "'%s' conflicts with '%s'. Both packages provide the file '%s'"
+        "\n\nResolve by setting the priority of the preferred package "
+        "to a value lower than '%d'",
+        nameA,
+        nameB,
+        filePath,
+        err.priority ) );
     }
   return addDirToStore( state, tempDir, references );
 }
@@ -190,7 +187,7 @@ extractAttrPath( nix::EvalState & state,
         {
           std::ostringstream str;
           output->value->print( state.symbols, str );
-          throw FloxException( "attribute `%s' not found in set `%s'",
+          throw FloxException( "attribute '%s' not found in set '%s'",
                                attrName,
                                str.str() );
         }
@@ -253,7 +250,7 @@ createFloxEnv( nix::EvalState &     state,
 
       if ( ! package_drv.has_value() )
         {
-          throw FloxException( "Failed to get derivation for package `"
+          throw FloxException( "Failed to get derivation for package '"
                                + nlohmann::json( package ).dump() + "'" );
         }
 
