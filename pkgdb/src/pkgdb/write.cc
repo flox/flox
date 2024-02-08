@@ -24,14 +24,13 @@ namespace flox::pkgdb {
 
 /** @brief Create views in database if they do not exist. */
 static void
-initViews( SQLiteDb & pdb )
+initViews( PkgDb & pdb )
 {
-  sqlite3pp::command cmd( pdb, sql_views );
-  if ( sql_rc rcode = cmd.execute_all(); isSQLError( rcode ) )
+  if ( sql_rc rcode = pdb.execute_all( sql_views ); isSQLError( rcode ) )
     {
       throw PkgDbException( nix::fmt( "failed to initialize views:(%d) %s",
                                       rcode,
-                                      pdb.error_msg() ) );
+                                      pdb.db.error_msg() ) );
     }
 }
 
@@ -45,39 +44,38 @@ initViews( SQLiteDb & pdb )
  * `DbVersions` row for `pkgdb_views_schema`.
  */
 static void
-updateViews( SQLiteDb & pdb )
+updateViews( PkgDb & pdb )
 {
   /* Drop all existing views. */
   {
-    sqlite3pp::query qry( pdb,
+    sqlite3pp::query qry( pdb.db,
                           "SELECT name FROM sqlite_master WHERE"
                           " ( type = 'view' )" );
     for ( auto row : qry )
       {
-        auto               name = row.get<std::string>( 0 );
-        std::string        cmd  = "DROP VIEW IF EXISTS '" + name + '\'';
-        sqlite3pp::command dropView( pdb, cmd.c_str() );
-        if ( sql_rc rcode = dropView.execute(); isSQLError( rcode ) )
+        auto        name = row.get<std::string>( 0 );
+        std::string cmd  = "DROP VIEW IF EXISTS '" + name + '\'';
+        if ( sql_rc rcode = pdb.execute( cmd.c_str() ); isSQLError( rcode ) )
           {
             throw PkgDbException( nix::fmt( "failed to drop view '%s':(%d) %s",
                                             name,
                                             rcode,
-                                            pdb.error_msg() ) );
+                                            pdb.db.error_msg() ) );
           }
       }
   }
 
   /* Update the `pkgdb_views_schema' version. */
   sqlite3pp::command updateVersion(
-    pdb,
+    pdb.db,
     "UPDATE DbVersions SET version = ? WHERE name = 'pkgdb_views_schema'" );
   updateVersion.bind( 1, static_cast<int>( sqlVersions.views ) );
 
-  if ( sql_rc rcode = updateVersion.execute_all(); isSQLError( rcode ) )
+  if ( sql_rc rcode = updateVersion.execute(); isSQLError( rcode ) )
     {
       throw PkgDbException( nix::fmt( "failed to update PkgDb Views:(%d) %s",
                                       rcode,
-                                      pdb.error_msg() ) );
+                                      pdb.db.error_msg() ) );
     }
 
   /* Redefine the `VIEW's */
@@ -89,42 +87,38 @@ updateViews( SQLiteDb & pdb )
 
 /** @brief Create tables in database if they do not exist. */
 static void
-initTables( SQLiteDb & pdb )
+initTables( PkgDb & pdb )
 {
-  sqlite3pp::command cmdVersions( pdb, sql_versions );
-  if ( sql_rc rcode = cmdVersions.execute(); isSQLError( rcode ) )
+  if ( sql_rc rcode = pdb.execute( sql_versions ); isSQLError( rcode ) )
     {
       throw PkgDbException(
         nix::fmt( "failed to initialize DbVersions table:(%d) %s",
                   rcode,
-                  pdb.error_msg() ) );
+                  pdb.db.error_msg() ) );
     }
 
-  sqlite3pp::command cmdInput( pdb, sql_input );
-  if ( sql_rc rcode = cmdInput.execute_all(); isSQLError( rcode ) )
+  if ( sql_rc rcode = pdb.execute_all( sql_input ); isSQLError( rcode ) )
     {
       throw PkgDbException(
         nix::fmt( "failed to initialize LockedFlake table:(%d) %s",
                   rcode,
-                  pdb.error_msg() ) );
+                  pdb.db.error_msg() ) );
     }
 
-  sqlite3pp::command cmdAttrSets( pdb, sql_attrSets );
-  if ( sql_rc rcode = cmdAttrSets.execute_all(); isSQLError( rcode ) )
+  if ( sql_rc rcode = pdb.execute_all( sql_attrSets ); isSQLError( rcode ) )
     {
       throw PkgDbException(
         nix::fmt( "failed to initialize AttrSets table:(%d) %s",
                   rcode,
-                  pdb.error_msg() ) );
+                  pdb.db.error_msg() ) );
     }
 
-  sqlite3pp::command cmdPackages( pdb, sql_packages );
-  if ( sql_rc rcode = cmdPackages.execute_all(); isSQLError( rcode ) )
+  if ( sql_rc rcode = pdb.execute_all( sql_packages ); isSQLError( rcode ) )
     {
       throw PkgDbException(
         nix::fmt( "failed to initialize Packages table:(%d) %s",
                   rcode,
-                  pdb.error_msg() ) );
+                  pdb.db.error_msg() ) );
     }
 }
 
@@ -133,10 +127,10 @@ initTables( SQLiteDb & pdb )
 
 /** @brief Create `DbVersions` rows if they do not exist. */
 static void
-initVersions( SQLiteDb & pdb )
+initVersions( PkgDb & pdb )
 {
   sqlite3pp::command defineVersions(
-    pdb,
+    pdb.db,
     "INSERT OR IGNORE INTO DbVersions ( name, version ) VALUES"
     "  ( 'pkgdb',        '" FLOX_PKGDB_VERSION "' )"
     ", ( 'pkgdb_tables_schema', ? )"
@@ -146,7 +140,7 @@ initVersions( SQLiteDb & pdb )
   if ( sql_rc rcode = defineVersions.execute(); isSQLError( rcode ) )
     {
       throw PkgDbException( "failed to write DbVersions info",
-                            pdb.error_msg() );
+                            pdb.db.error_msg() );
     }
 }
 
@@ -156,15 +150,15 @@ initVersions( SQLiteDb & pdb )
 void
 PkgDb::init()
 {
-  initTables( this->db );
-  initVersions( this->db );
+  initTables( *this );
+  initVersions( *this );
 
   /* If the views version is outdated, update them. */
   if ( this->getDbVersion().views < sqlVersions.views )
     {
-      updateViews( this->db );
+      updateViews( *this );
     }
-  else { initViews( this->db ); }
+  else { initViews( *this ); }
 }
 
 
@@ -213,28 +207,9 @@ PkgDb::PkgDb( const nix::flake::LockedFlake & flake, std::string_view dbPath )
 void
 PkgDb::connect()
 {
-  /* The `locking_mode` pragma acquires an exclusive write lock the first time
-   * that the database is written to and only releases the lock once the
-   * database connection is closed. We make a write as soon as possible after
-   * opening the connection to establish the write lock. After the
-   * `RETRY_WHILE_BUSY` call returns we should be the only process able to write
-   * to the database, though other processes mays still read from the database
-   * (this is why we must use `EXCLUSIVE` transactions, which prevent reads as
-   * well).
-   *
-   * It could be the case that this database hasn't been initialized yet, so we
-   * can't write to an existing table. Instead we just write to a dummy table.
-   * It's unclear whether setting a pragma value like `appliation_id` counts as
-   * a write, so we create a table instead.*/
-  static const char * acquire_lock = R"SQL(
-  BEGIN EXCLUSIVE TRANSACTION;
-  CREATE TABLE IF NOT EXISTS _lock (foo int);
-  COMMIT TRANSACTION
-  )SQL";
   this->db.connect( this->dbPath.string().c_str(),
                     SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE );
-  sqlite3pp::command cmd( this->db, acquire_lock );
-  RETRY_WHILE_BUSY( cmd.execute_all() );
+  this->db.set_busy_timeout( DB_BUSY_TIMEOUT );
 }
 
 
@@ -259,7 +234,7 @@ PkgDb::addOrGetAttrSetId( const std::string & attrName, row_id parent )
       if ( row == qryId.end() )
         {
           throw PkgDbException(
-            nix::fmt( "failed to add AttrSet.id `AttrSets[%ull].%s':(%d) %s",
+            nix::fmt( "failed to add AttrSet.id 'AttrSets[%ull].%s':(%d) %s",
                       parent,
                       attrName,
                       rcode,
@@ -291,16 +266,16 @@ PkgDb::addOrGetDescriptionId( const std::string & description )
     this->db,
     "SELECT id FROM Descriptions WHERE description = ? LIMIT 1" );
   qry.bind( 1, description, sqlite3pp::copy );
-  auto rows = qry.begin();
-  if ( rows != qry.end() )
+  auto itr = qry.begin();
+  if ( itr != qry.end() )
     {
       nix::Activity act(
         *nix::logger,
         nix::lvlDebug,
         nix::actUnknown,
-        nix::fmt( "Found existing description in database: %s.",
+        nix::fmt( "found existing description in database: %s.",
                   description ) );
-      return ( *rows ).get<long long>( 0 );
+      return ( *itr ).get<long long>( 0 );
     }
 
   sqlite3pp::command cmd(
@@ -328,27 +303,22 @@ PkgDb::addOrGetDescriptionId( const std::string & description )
 row_id
 PkgDb::addPackage( row_id               parentId,
                    std::string_view     attrName,
-                   const flox::Cursor & cursor,
-                   bool                 replace,
-                   bool                 checkDrv )
+                   const flox::Cursor & cursor )
 {
-#define ADD_PKG_BODY                                                   \
-  " INTO Packages ("                                                   \
-  "  parentId, attrName, name, pname, version, semver, license"        \
-  ", outputs, outputsToInstall, broken, unfree, descriptionId"         \
-  ") VALUES ("                                                         \
-  "  :parentId, :attrName, :name, :pname, :version, :semver, :license" \
-  ", :outputs, :outputsToInstall, :broken, :unfree, :descriptionId"    \
-  ")"
-  static const char * qryIgnore  = "INSERT OR IGNORE" ADD_PKG_BODY;
-  static const char * qryReplace = "INSERT OR REPLACE" ADD_PKG_BODY;
-
-  sqlite3pp::command cmd( this->db, replace ? qryReplace : qryIgnore );
+  sqlite3pp::command cmd( this->db, R"SQL(
+    INSERT OR REPLACE INTO Packages (
+      parentId, attrName, name, pname, version, semver, license
+    , outputs, outputsToInstall, broken, unfree, descriptionId
+    ) VALUES (
+      :parentId, :attrName, :name, :pname, :version, :semver, :license
+    , :outputs, :outputsToInstall, :broken, :unfree, :descriptionId
+    )
+  )SQL" );
 
   /* We don't need to reference any `attrPath' related info here, so
    * we can avoid looking up the parent path by passing a phony one to the
    * `FlakePackage' constructor here. */
-  FlakePackage pkg( cursor, { "packages", "x86_64-linux", "phony" }, checkDrv );
+  FlakePackage pkg( cursor, { "packages", "x86_64-linux", "phony" }, true );
   std::string  attrNameS( attrName );
 
   cmd.bind( ":parentId", static_cast<long long>( parentId ) );
@@ -410,6 +380,7 @@ PkgDb::addPackage( row_id               parentId,
       cmd.bind( ":unfree" );
       cmd.bind( ":descriptionId" );
     }
+
   if ( sql_rc rcode = cmd.execute(); isSQLError( rcode ) )
     {
       throw PkgDbException(

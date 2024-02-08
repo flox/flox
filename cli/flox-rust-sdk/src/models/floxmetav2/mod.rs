@@ -26,14 +26,11 @@ pub struct FloxmetaV2 {
 
 #[derive(Error, Debug)]
 pub enum FloxmetaV2Error {
-    #[error("No login token provided")]
-    LoggedOut,
     #[error("floxmeta for {0} not found")]
     NotFound(String),
-    #[error("Currently only hub.flox.dev is supported as a remote")]
-    UnsupportedRemote,
     #[error("Could not open user environment directory {0}")]
     Open(GitCommandOpenError),
+
     #[error("Failed to check for branch: {0}")]
     CheckForBranch(GitCommandBranchHashError),
     #[error("Failed to fetch environment: {0}")]

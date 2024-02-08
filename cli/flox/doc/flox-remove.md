@@ -1,7 +1,7 @@
 ---
 title: FLOX-REMOVE
 section: 1
-header: "flox User Manuals"
+header: "Flox User Manuals"
 ...
 
 

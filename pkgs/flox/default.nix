@@ -6,6 +6,7 @@
   makeBinaryWrapper,
   flox-pkgdb,
   flox-cli,
+  flox-manpages,
 }: let
   # Inherit version from Cargo.toml, aligning with the CLI version.
   # We also inject some indication about the `git' revision of the repository.
@@ -24,7 +25,7 @@ in
   symlinkJoin {
     name = "${flox-cli.pname}-${version}";
 
-    paths = [flox-cli];
+    paths = [flox-cli flox-manpages];
     nativeBuildInputs = [makeBinaryWrapper];
 
     postBuild = ''

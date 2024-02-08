@@ -65,7 +65,7 @@ impl<State> CoreEnvironment<State> {
 
     /// Read the manifest file
     fn manifest_content(&self) -> Result<String, CoreEnvironmentError> {
-        fs::read_to_string(self.manifest_path()).map_err(CoreEnvironmentError::ReadManifest)
+        fs::read_to_string(self.manifest_path()).map_err(CoreEnvironmentError::OpenManifest)
     }
 
     /// Lock the environment.
@@ -579,6 +579,8 @@ impl EditResult {
             Ok(Self::Unchanged)
         } else {
             // todo: use a single toml crate (toml_edit already implements serde traits)
+            // TODO: use different error variants, users _can_ fix errors in the _new_ manifest
+            //       but they _can't_ fix errors in the _old_ manifest
             let old_manifest: Manifest =
                 toml::from_str(old_manifest).map_err(CoreEnvironmentError::DeserializeManifest)?;
             let new_manifest: Manifest =
@@ -639,17 +641,13 @@ pub enum CoreEnvironmentError {
     #[error(transparent)]
     BadLockfilePath(CanonicalizeError),
 
-    #[error("could not open manifest file")]
-    ReadManifest(#[source] std::io::Error),
-
+    // todo: refactor upgrade to use `LockedManifest`
     #[error("unexpected output from pkgdb upgrade")]
     ParseUpgradeOutput(#[source] serde_json::Error),
-
     #[error("failed to upgrade environment")]
     UpgradeFailed(#[source] CallPkgDbError),
     // endregion
-    #[error("unexpected output from environment builder command")]
-    ParseBuildEnvOutput(#[source] serde_json::Error),
+
     // endregion
     #[error("unsupported system to build container: {0}")]
     ContainerizeUnsupportedSystem(String),

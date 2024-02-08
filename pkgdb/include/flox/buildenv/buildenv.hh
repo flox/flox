@@ -79,66 +79,28 @@ struct RealisedPackage
 
 /* -------------------------------------------------------------------------- */
 
-/** @brief A conflict between two files with the same priority. */
-class BuildEnvFileConflictError : public FloxException
+/** @brief A conflict between two files with the same priority.
+ *
+ * This exception is thrown when we attempt to build an environment with two
+ * store paths with the same priority that contain the same file.
+ *
+ * This exception is intended to be caught by the caller and converted into a
+ * @a PackageConflict which restores the originating packages for display
+ * purposes
+ */
+class FileConflict : public std::exception
 {
 
-private:
+public:
 
   const std::string fileA;
   const std::string fileB;
   const int         priority;
 
-
-public:
-
-  BuildEnvFileConflictError( const std::string fileA,
-                             const std::string fileB,
-                             int               priority )
-    : FloxException(
-      "buildenv file conflict",
-      nix::fmt(
-        "there is a conflict for the files with priority %zu: `%s' and `%s'",
-        priority,
-        fileA,
-        fileB ) )
-    , fileA( fileA )
-    , fileB( fileB )
-    , priority( priority )
+  FileConflict( const std::string fileA, const std::string fileB, int priority )
+    : fileA( fileA ), fileB( fileB ), priority( priority )
   {}
-
-  [[nodiscard]] error_category
-  getErrorCode() const noexcept override
-  {
-    return EC_BUILDENV_CONFLICT;
-  }
-
-  [[nodiscard]] std::string_view
-  getCategoryMessage() const noexcept override
-  {
-    return "buildenv file conflict";
-  }
-
-  const std::string &
-  getFileA() const
-  {
-    return this->fileA;
-  }
-
-  const std::string &
-  getFileB() const
-  {
-    return this->fileB;
-  }
-
-  int
-  getPriority() const
-  {
-    return this->priority;
-  }
-
-
-}; /* End class `BuildEnvFileConflictError' */
+}; /* End class `FileConflict' */
 
 
 /* -------------------------------------------------------------------------- */

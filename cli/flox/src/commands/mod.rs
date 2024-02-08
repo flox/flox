@@ -79,13 +79,14 @@ fn vec_not_empty<T>(x: Vec<T>) -> bool {
 #[derive(Bpaf, Clone, Debug)]
 pub enum Verbosity {
     Verbose(
-        /// Verbose mode
+        /// Increase logging verbosity
         ///
         /// Invoke multiple times for increasing detail.
         #[bpaf(short('v'), long("verbose"), req_flag(()), many, map(vec_len))]
         usize,
     ),
 
+    /// Silence logs except for errors
     #[bpaf(short, long)]
     Quiet,
 }
@@ -116,7 +117,7 @@ pub struct FloxArgs {
     pub verbosity: Verbosity,
 
     /// Debug mode
-    #[bpaf(long, req_flag(()), many, map(vec_not_empty))]
+    #[bpaf(long, req_flag(()), many, map(vec_not_empty), hide)]
     pub debug: bool,
 
     /// Print the version of the program
@@ -177,7 +178,12 @@ impl FloxArgs {
             env::set_var("FLOX_DISABLE_METRICS", "true");
         }
 
-        let access_tokens = init_access_tokens(&config.nix.access_tokens)?;
+        let access_tokens = init_access_tokens(
+            config
+                .nix
+                .as_ref()
+                .map(|nix_config| &nix_config.access_tokens),
+        )?;
 
         let netrc_file = dirs::home_dir()
             .expect("User must have a home directory")
@@ -280,7 +286,7 @@ enum LocalDevelopmentCommands {
     /// Create an environment in the current directory
     #[bpaf(command, long("create"))]
     Init(#[bpaf(external(environment::init))] environment::Init),
-    /// Enter the environment
+    /// Enter the environment, type `exit` to leave
     #[bpaf(command, long("develop"))]
     Activate(#[bpaf(external(environment::activate))] environment::Activate),
     /// Search for system or library packages to install
@@ -330,7 +336,7 @@ enum SharingCommands {
     #[bpaf(command)]
     Push(#[bpaf(external(environment::push))] environment::Push),
     #[bpaf(command)]
-    /// Pull environment from floxhub
+    /// Pull environment from FloxHub
     Pull(#[bpaf(external(environment::pull))] environment::Pull),
     /// Containerize an environment
     #[bpaf(command, hide)]
@@ -358,16 +364,19 @@ enum AdditionalCommands {
     #[bpaf(command, hide, header(indoc! {"
         When no arguments are specified, all packages in the environment are upgraded.\n\n
 
-        Packages to upgrade can be specified by either group name or, if a package is
+        Packages to upgrade can be specified by either group name, or, if a package is
         not in a group with any other packages, it may be specified by ID. If the
-        specified argument is both a group name and a package ID, only the group is
+        specified argument is both a group name and a package ID, the group is
         upgraded.\n\n
 
-        Packages without a specified group in the manifest can be upgraded by passing
-        'toplevel' as the group name.
+        Packages without a specified group in the manifest are placed in a group
+        named 'toplevel'.
+        The packages in that group can be upgraded without updating any other
+        groups by passing 'toplevel' as the group name.
     "}))]
     /// Upgrade packages in an environment
     Upgrade(#[bpaf(external(environment::upgrade))] environment::Upgrade),
+    /// View and set configuration options
     #[bpaf(command, hide)]
     Config(#[bpaf(external(general::config_args))] general::ConfigArgs),
     #[bpaf(command("wipe-history"), hide)]
@@ -487,8 +496,8 @@ pub enum EnvironmentSelect {
         PathBuf,
     ),
     Remote(
-        /// A remote environment on floxhub
-        #[bpaf(long("remote"), short('r'), argument("owner/name"))]
+        /// A remote environment on FloxHub
+        #[bpaf(long("remote"), short('r'), argument("owner>/<name"))]
         environment_ref::EnvironmentRef,
     ),
     #[default]
@@ -548,6 +557,7 @@ impl EnvironmentSelect {
             // directory.
             EnvironmentSelect::Unspecified => match detect_environment(message)? {
                 Some(env) => env.into_concrete_environment(flox),
+                // todo: remove: `detect_environment` already checked current dir
                 None => {
                     let current_dir =
                         env::current_dir().context("could not get current directory")?;
@@ -596,7 +606,8 @@ pub fn detect_environment(message: &str) -> Result<Option<UninitializedEnvironme
             let found = UninitializedEnvironment::DotFlox(found);
 
             if !Dialog::can_prompt() {
-                bail!("can't determine whether to use {found} or {activated_env}");
+                debug!("No TTY detected, using the environment {found:?} found in the current directory or an ancestor directory");
+                return Ok(Some(found));
             }
 
             let dialog = Dialog {
@@ -848,7 +859,7 @@ fn activated_environments() -> ActiveEnvironments {
         Ok(active_environments) => active_environments,
         Err(e) => {
             error!(
-                "Could not parse FLOX_ACTIVE_ENVIRONMENTS -- using defaults: {}",
+                "Could not parse _FLOX_ACTIVE_ENVIRONMENTS -- using defaults: {}",
                 e
             );
             ActiveEnvironments::default()

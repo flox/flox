@@ -669,7 +669,7 @@ Environment::tryResolveGroup( const GroupName &          name,
                = std::get_if<SystemPackages>( &maybeResolved ) )
             {
               nix::logger->log( nix::lvlInfo,
-                                nix::fmt( "upgrading group `%s' to avoid "
+                                nix::fmt( "upgrading group '%s' to avoid "
                                           "resolution failure",
                                           getGroupName( group ) ) );
 
@@ -701,10 +701,10 @@ describeResolutionFailure( std::stringstream &       msg,
                            const GroupName &         name,
                            const ResolutionFailure & failure )
 {
-  msg << "  in `" << name << "': '" << std::endl;
+  msg << "  in '" << name << "': '" << std::endl;
   for ( const auto & [iid, url] : failure )
     {
-      msg << "    failed to resolve `" << iid << "' in input `" << url << '\'';
+      msg << "    failed to resolve '" << iid << "' in input '" << url << '\'';
     }
   return msg;
 }

@@ -16,12 +16,9 @@
   pkg-config,
   darwin,
   parser-util,
-  pandoc,
   cacert,
   glibcLocalesUtf8,
   installShellFiles,
-  runCommand,
-  fd,
   gnused,
   gitMinimal,
   nix,
@@ -67,7 +64,6 @@
         then "ld-floxlib.so"
         else "${flox-pkgdb}/lib/ld-floxlib.so";
       PARSER_UTIL_BIN = "${parser-util}/bin/parser-util";
-      FLOX_ETC_DIR = ../../assets/etc;
       FLOX_ZDOTDIR = ../../assets/flox.zdotdir;
 
       # bundling of internally used nix scripts
@@ -119,24 +115,6 @@
       LOCALE_ARCHIVE = "${glibcLocalesUtf8}/lib/locale/locale-archive";
     };
 
-  # compiled manpages
-  manpages =
-    runCommand "flox-manpages" {
-      src = flox-src + "/flox/doc";
-      buildInputs = [pandoc fd];
-    } ''
-
-      mkdir $out
-      pushd $src
-
-      fd "flox.*.md" ./ -x \
-        pandoc -t man \
-          -L ${./pandoc-filters/include-files.lua} \
-          --standalone \
-          -o "$out/{/.}.1" \
-          {}
-    '';
-
   cargoToml = lib.importTOML (flox-src + "/flox/Cargo.toml");
 
   # incremental build of thrid party crates
@@ -172,9 +150,6 @@ in
 
       cargoArtifacts = cargoDepsArtifacts;
 
-      outputs = ["out" "man"];
-      outputsToInstall = ["out" "man"];
-
       # runtime dependencies
       buildInputs = cargoDepsArtifacts.buildInputs ++ [];
 
@@ -196,8 +171,6 @@ in
 
       # bundle manpages and completion scripts
       postInstall = ''
-        ln -s "${envs.FLOX_ETC_DIR}" "$out/etc"
-        installManPage ${manpages}/*;
         installShellCompletion --cmd flox                         \
           --bash <( "$out/bin/flox" --bpaf-complete-style-bash; ) \
           --fish <( "$out/bin/flox" --bpaf-complete-style-fish; ) \
@@ -217,7 +190,6 @@ in
       passthru = {
         inherit
           envs
-          manpages
           rustPlatform
           cargoDepsArtifacts
           pkgsFor

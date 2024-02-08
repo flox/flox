@@ -222,7 +222,7 @@ function make_incompatible() {
 
 # bats test_tags=pull:floxhub
 # try pulling from floxhub authenticated with a test token
-@test "l?: pull environment from floxhub" {
+@test "l?: pull environment from FloxHub" {
   skip "floxtest/default is not available for all systems"
   unset _FLOX_FLOXHUB_GIT_URL
   run "$FLOX_BIN" pull --remote floxtest/default

@@ -1,6 +1,10 @@
 ## Environment Options
 
- The following option is supported by environment commands:
+If no environment is specified for an environment command, the environment in
+the current directory or the last activated environment is used.
 
-(-e|--environment) `<name>`
-:    Selects flox environment to be modified or used.  If not provided then flox will fall back to using the default environment.
+`-d`, `--dir`
+:   Path containing a .flox/ directory.
+
+`-r`, `--remote`
+:   A remote environment on FloxHub, specified in the form `<owner>/<name>`.

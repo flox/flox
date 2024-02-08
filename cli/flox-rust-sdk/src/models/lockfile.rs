@@ -52,9 +52,8 @@ impl LockedManifest {
         existing_lockfile_path: &CanonicalPath,
         global_manifest_path: &Path,
     ) -> Result<Self, LockedManifestError> {
-        let canonical_manifest_path = manifest_path
-            .canonicalize()
-            .map_err(|e| LockedManifestError::BadManifestPath(e, manifest_path.to_path_buf()))?;
+        let canonical_manifest_path =
+            CanonicalPath::new(manifest_path).map_err(LockedManifestError::BadManifestPath)?;
 
         let mut pkgdb_cmd = Command::new(pkgdb);
         pkgdb_cmd
@@ -155,11 +154,7 @@ impl LockedManifest {
                 let canonical_lockfile_path =
                     CanonicalPath::new(lf_path).map_err(LockedManifestError::BadLockfilePath)?;
                 pkgdb_cmd.arg("--lockfile").arg(&canonical_lockfile_path);
-                serde_json::from_slice(
-                    &fs::read(canonical_lockfile_path)
-                        .map_err(LockedManifestError::ReadLockfile)?,
-                )
-                .map_err(LockedManifestError::ParseLockfile)
+                Self::read_from_file(&canonical_lockfile_path)
             })
             .transpose()?;
 
@@ -199,6 +194,11 @@ impl LockedManifest {
             Self::update_global_manifest(flox, vec![])?;
         }
         Ok(global_lockfile_path)
+    }
+
+    pub fn read_from_file(path: &CanonicalPath) -> Result<Self, LockedManifestError> {
+        let contents = fs::read(path).map_err(LockedManifestError::ReadLockfile)?;
+        serde_json::from_slice(&contents).map_err(LockedManifestError::ParseLockfile)
     }
 }
 
@@ -322,12 +322,10 @@ pub enum LockedManifestError {
     ParseBuildEnvOutput(#[source] serde_json::Error),
     #[error("failed to update environment")]
     UpdateFailed(#[source] CallPkgDbError),
-    #[error("failed to canonicalize manifest path: {0:?}")]
-    BadManifestPath(#[source] std::io::Error, PathBuf),
+    #[error(transparent)]
+    BadManifestPath(CanonicalizeError),
     #[error(transparent)]
     BadLockfilePath(CanonicalizeError),
-    #[error(transparent)]
-    CallPkgDbError(#[from] CallPkgDbError),
     #[error("could not open manifest file")]
     ReadLockfile(#[source] std::io::Error),
     /// when parsing the contents of a lockfile into a [LockedManifest]
