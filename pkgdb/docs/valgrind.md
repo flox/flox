@@ -16,6 +16,12 @@ additional debug info, so prefer `make check DEBUG=1` which adds `-ggdb3` and
 a few other debug metadata options.
 
 
+### Default Flags
+
+Default options for `valgrind` can be found in `pkgdb/.valgrindrc` and a default
+suppressions file can be found in `pkgdb/build-aux/valgrind.supp`.
+
+
 ### memcheck: Leak Checker
 
 This tool monitors a running program and attempts to identify potential 
@@ -30,7 +36,11 @@ We are primarily interested in "definitely lost" and _large blocks_ of
 #### Quick Start
 
 ```shell
-# TODO
+$ nix develop; # only if you aren't using direnv
+$ cd pkgdb;
+$ make clean;
+$ make -j DEBUG=1;
+$ valgrind --tool=memcheck ./bin/pkgdb <SUB-COMMAND> [ARGS...];
 ```
 
 
@@ -82,16 +92,37 @@ Want to find out what parts of your code-base are hogging memory?
 `massif` is the tool for you!
 
 
-<!-- TODO -->
+`massif` will collect detailed heap snapshots as your program runs which can
+be analyzed by a variety of tools, most commonly `ms_print` and
+`massif-visualizer`, to identify which code-paths are consuming large amounts
+of memory, and when.
 
 
 #### Quick Start
 
 ```shell
-# TODO
+$ nix develop; # only if you aren't using direnv
+$ cd pkgdb;
+$ make clean;
+$ make -j DEBUG=1;
+$ valgrind --tool=massif ./bin/pkgdb <SUB-COMMAND> [ARGS...];
+$ massif-viewer ./massif.out.*;
 ```
+
+
+#### Suppressions
+
+Suppressions in `build-aux/valgrind.supp` are not used by default in
+`massif` so that we can track memory consumption by `nix`
+evaluators and parsers.
+
+You can enable the use of suppressions with
+`valgrind --tool=massif --suppressions=./build-aux/valgrind.supp ...`.
 
 
 #### massif Visualizer
 
-<!-- TODO -->
+`massif-visualizer` is a fancy `massif.out.*` file viewer that I
+strongly recommend.
+
+It has been made available in the development shell for Linux users.

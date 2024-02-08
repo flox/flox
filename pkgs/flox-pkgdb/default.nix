@@ -227,6 +227,7 @@ in
           ]
           ++ (lib.optionals stdenv.isLinux [
             valgrind
+            massif-visualizer
           ]);
 
         devEnvs =
