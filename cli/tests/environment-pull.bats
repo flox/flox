@@ -65,27 +65,54 @@ function update_dummy_env() {
 }
 
 # make the environment with specified owner and name incompatible with the current system
+# by changing setting `option.systems = [<not the current system>]`
 function make_incompatible() {
   OWNER="$1"
   shift
   ENV_NAME="$1"
   shift
-  if [ $# -gt 0 ]; then
-    EXTRA_INCOMPATIBLE="$1"
-    shift
-  else
-    EXTRA_INCOMPATIBLE=""
-  fi
-
 
   init_system=
-  package=
   # replace linux with darwin or darwin with linux
   if [ -z "${NIX_SYSTEM##*-linux}" ]; then
     init_system="${NIX_SYSTEM%%-linux}-darwin"
-    package='["darwin", "ps"]'
   elif [ -z "${NIX_SYSTEM#*-darwin}" ]; then
     init_system="${NIX_SYSTEM%%-darwin}-linux"
+  else
+    echo "unknown system: '$NIX_SYSTEM'"
+    exit 1
+  fi
+
+  git clone "$FLOX_FLOXHUB_PATH/$OWNER/floxmeta" "$PROJECT_DIR/floxmeta"
+  pushd "$PROJECT_DIR/floxmeta" > /dev/null || return
+  git checkout "$ENV_NAME"
+  sed -i "s|$NIX_SYSTEM|$init_system|g" 2/env/manifest.toml 2/env/manifest.lock
+
+  git add .
+  git \
+    -c "user.name=test" \
+    -c "user.email=test@email.address" \
+    commit \
+    -m "make unsupported system"
+  git push
+  popd > /dev/null || return
+  rm -rf "$PROJECT_DIR/floxmeta"
+}
+
+
+# make the environment with specified owner and name incompatible with the current system
+# by adding a package that fails nix evaluation due to being on an unsupported system.
+function add_incompatible_package() {
+  OWNER="$1"
+  shift
+  ENV_NAME="$1"
+  shift
+
+  package=
+  # replace linux with darwin or darwin with linux
+  if [ -z "${NIX_SYSTEM##*-linux}" ]; then
+    package='["darwin", "ps"]'
+  elif [ -z "${NIX_SYSTEM#*-darwin}" ]; then
     package='["glibc"]'
   else
     echo "unknown system: '$NIX_SYSTEM'"
@@ -95,11 +122,7 @@ function make_incompatible() {
   git clone "$FLOX_FLOXHUB_PATH/$OWNER/floxmeta" "$PROJECT_DIR/floxmeta"
   pushd "$PROJECT_DIR/floxmeta" > /dev/null || return
   git checkout "$ENV_NAME"
-  if [ ! -z "$EXTRA_INCOMPATIBLE" ]; then
-    tomlq --in-place --toml-output ".install.extra.path = $package" 2/env/manifest.toml
-  fi
-  sed -i "s|$NIX_SYSTEM|$init_system|g" 2/env/manifest.toml 2/env/manifest.lock
-
+  tomlq --in-place --toml-output ".install.extra.path = $package" 2/env/manifest.toml
   git add .
   git \
     -c "user.name=test" \
@@ -291,7 +314,8 @@ function make_incompatible() {
 @test "pull unsupported environment succeeds with '--add-system' flag but shows warning if unable to build still" {
   update_dummy_env "owner" "name"
 
-  make_incompatible "owner" "name" yes
+  make_incompatible "owner" "name"
+  add_incompatible_package "owner" "name"
 
   run "$FLOX_BIN" pull --remote owner/name --add-system
   assert_success
