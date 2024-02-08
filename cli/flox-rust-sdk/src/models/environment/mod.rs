@@ -52,7 +52,7 @@ pub const ENV_DIR_NAME: &str = "env";
 pub const FLOX_ENV_VAR: &str = "FLOX_ENV";
 pub const FLOX_ENV_DIRS_VAR: &str = "FLOX_ENV_DIRS";
 pub const FLOX_ENV_LIB_DIRS_VAR: &str = "FLOX_ENV_LIB_DIRS";
-pub const FLOX_ACTIVE_ENVIRONMENTS_VAR: &str = "FLOX_ACTIVE_ENVIRONMENTS";
+pub const FLOX_ACTIVE_ENVIRONMENTS_VAR: &str = "_FLOX_ACTIVE_ENVIRONMENTS";
 pub const FLOX_PROMPT_ENVIRONMENTS_VAR: &str = "FLOX_PROMPT_ENVIRONMENTS";
 pub const FLOX_PATH_PATCHED_VAR: &str = "FLOX_PATH_PATCHED";
 pub const FLOX_SYSTEM_PLACEHOLDER: &str = "_FLOX_INIT_SYSTEM";
@@ -159,7 +159,7 @@ pub trait Environment: Send {
     /// Directory containing .flox
     ///
     /// For anything internal, path should be used instead. `parent_path` is
-    /// stored in FLOX_ACTIVE_ENVIRONMENTS and printed to users so that users
+    /// stored in _FLOX_ACTIVE_ENVIRONMENTS and printed to users so that users
     /// don't have to see the trailing .flox
     /// TODO: figure out what to store for remote environments
     fn parent_path(&self) -> Result<PathBuf, EnvironmentError2>;

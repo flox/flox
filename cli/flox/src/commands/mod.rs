@@ -79,13 +79,14 @@ fn vec_not_empty<T>(x: Vec<T>) -> bool {
 #[derive(Bpaf, Clone, Debug)]
 pub enum Verbosity {
     Verbose(
-        /// Verbose mode
+        /// Increase logging verbosity
         ///
         /// Invoke multiple times for increasing detail.
         #[bpaf(short('v'), long("verbose"), req_flag(()), many, map(vec_len))]
         usize,
     ),
 
+    /// Silence logs except for errors
     #[bpaf(short, long)]
     Quiet,
 }
@@ -177,7 +178,12 @@ impl FloxArgs {
             env::set_var("FLOX_DISABLE_METRICS", "true");
         }
 
-        let access_tokens = init_access_tokens(&config.nix.access_tokens)?;
+        let access_tokens = init_access_tokens(
+            config
+                .nix
+                .as_ref()
+                .map(|nix_config| &nix_config.access_tokens),
+        )?;
 
         let netrc_file = dirs::home_dir()
             .expect("User must have a home directory")
@@ -330,7 +336,7 @@ enum SharingCommands {
     #[bpaf(command)]
     Push(#[bpaf(external(environment::push))] environment::Push),
     #[bpaf(command)]
-    /// Pull environment from floxhub
+    /// Pull environment from FloxHub
     Pull(#[bpaf(external(environment::pull))] environment::Pull),
     /// Containerize an environment
     #[bpaf(command, hide)]
@@ -358,16 +364,19 @@ enum AdditionalCommands {
     #[bpaf(command, hide, header(indoc! {"
         When no arguments are specified, all packages in the environment are upgraded.\n\n
 
-        Packages to upgrade can be specified by either group name or, if a package is
+        Packages to upgrade can be specified by either group name, or, if a package is
         not in a group with any other packages, it may be specified by ID. If the
-        specified argument is both a group name and a package ID, only the group is
+        specified argument is both a group name and a package ID, the group is
         upgraded.\n\n
 
-        Packages without a specified group in the manifest can be upgraded by passing
-        'toplevel' as the group name.
+        Packages without a specified group in the manifest are placed in a group
+        named 'toplevel'.
+        The packages in that group can be upgraded without updating any other
+        groups by passing 'toplevel' as the group name.
     "}))]
     /// Upgrade packages in an environment
     Upgrade(#[bpaf(external(environment::upgrade))] environment::Upgrade),
+    /// View and set configuration options
     #[bpaf(command, hide)]
     Config(#[bpaf(external(general::config_args))] general::ConfigArgs),
     #[bpaf(command("wipe-history"), hide)]
@@ -487,8 +496,8 @@ pub enum EnvironmentSelect {
         PathBuf,
     ),
     Remote(
-        /// A remote environment on floxhub
-        #[bpaf(long("remote"), short('r'), argument("owner/name"))]
+        /// A remote environment on FloxHub
+        #[bpaf(long("remote"), short('r'), argument("owner>/<name"))]
         environment_ref::EnvironmentRef,
     ),
     #[default]
@@ -850,7 +859,7 @@ fn activated_environments() -> ActiveEnvironments {
         Ok(active_environments) => active_environments,
         Err(e) => {
             error!(
-                "Could not parse FLOX_ACTIVE_ENVIRONMENTS -- using defaults: {}",
+                "Could not parse _FLOX_ACTIVE_ENVIRONMENTS -- using defaults: {}",
                 e
             );
             ActiveEnvironments::default()

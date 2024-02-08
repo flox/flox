@@ -173,7 +173,7 @@ misc_vars_setup() {
 
 # Scrub vars recognized by `flox' CLI and set a few configurables.
 flox_cli_vars_setup() {
-  unset FLOX_PROMPT_ENVIRONMENTS FLOX_ACTIVE_ENVIRONMENTS
+  unset FLOX_PROMPT_ENVIRONMENTS _FLOX_ACTIVE_ENVIRONMENTS
   export FLOX_DISABLE_METRICS='true'
 }
 
