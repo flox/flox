@@ -475,32 +475,33 @@ concatStringsSep( const std::string_view sep, const Container & strings )
 
 /* -------------------------------------------------------------------------- */
 
-/** @brief Print a log message with the provided log level. */
-void
-printLog( const nix::Verbosity & lvl, const std::string & msg );
+/** @brief Print a log message with the provided log level.
+ *
+ * This is a macro so that any allocations needed for msg can be optimized out.
+ */
+#define printLog( lvl, msg )                                                                               \
+  /* See                                                                                                   \
+   * https://github.com/NixOS/nix/blob/09a6e8e7030170611a833612b9f40b9a10778c18/src/libutil/logging.cc#L64 \
+   * for lvl to verbosity comparison                                                                       \
+   */                                                                                                      \
+  if ( ! ( lvl > nix::verbosity ) ) { nix::logger->log( lvl, msg ); }
 
 /** @brief Prints a log message to `stderr` when called with `-vvvv`. */
-void
-traceLog( const std::string & msg );
+#define traceLog( msg ) printLog( nix::Verbosity::lvlVomit, msg )
 
 /**
  * @brief Prints a log message to `stderr` when called with `--debug` or `-vvv`.
  */
-void
-debugLog( const std::string & msg );
+#define debugLog( msg ) printLog( nix::Verbosity::lvlDebug, msg )
 
 /** @brief Prints a log message to `stderr` at default verbosity. */
-void
-infoLog( const std::string & msg );
+#define infoLog( msg ) printLog( nix::Verbosity::lvlInfo, msg )
 
 /** @brief Prints a log message to `stderr` when verbosity is at least `-q`. */
-void
-warningLog( const std::string & msg );
+#define warningLog( msg ) printLog( nix::Verbosity::lvlWarn, msg )
 
 /** @brief Prints a log message to `stderr` when verbosity is at least `-qq`. */
-void
-errorLog( const std::string & msg );
-
+#define errorLog( msg ) printLog( nix::Verbosity::lvlError, msg )
 
 /* -------------------------------------------------------------------------- */
 

@@ -57,15 +57,6 @@ using sql_rc      = int;                 /**< `SQLITE_*` result code. */
 
 /* -------------------------------------------------------------------------- */
 
-static inline bool
-isSQLiteBusyErr( const sqlite3pp::database_error & err )
-{
-  return err.what() == std::string_view( "database is locked" );
-}
-
-
-/* -------------------------------------------------------------------------- */
-
 /** @brief SQLite3 schema versions. */
 struct SqlVersions
 {
