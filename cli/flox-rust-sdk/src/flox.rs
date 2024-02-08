@@ -298,10 +298,10 @@ impl Floxhub {
         let without_hub = host
             .strip_prefix("hub")
             .ok_or(FloxhubError::NoHubPrefix(base_url.to_string()))?;
-        let with_git_prefix = format!("api{}", without_hub);
+        let with_api_prefix = format!("api{}", without_hub);
         git_url
-            .set_host(Some(&with_git_prefix))
-            .map_err(|e| FloxhubError::InvalidFloxhubBaseUrl(with_git_prefix, e))?;
+            .set_host(Some(&with_api_prefix))
+            .map_err(|e| FloxhubError::InvalidFloxhubBaseUrl(with_api_prefix, e))?;
         git_url.set_path("git");
         Ok(git_url)
     }
