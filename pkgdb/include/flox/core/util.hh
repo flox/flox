@@ -264,7 +264,7 @@ isSQLiteDb( const std::string & dbPath );
 /**
  * @brief Predicate to detect failing SQLite3 return codes.
  * @param rcode A SQLite3 _return code_.
- * @return `true` iff @a rc is a SQLite3 error.
+ * @return `true` iff @a rcode is a SQLite3 error.
  */
 bool
 isSQLError( int rcode );
