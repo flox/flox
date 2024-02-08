@@ -355,13 +355,13 @@ pub struct Activate {
     #[bpaf(external(environment_select), fallback(Default::default()))]
     environment: EnvironmentSelect,
 
-    /// Trust the a remote environment temporarily for this activation
+    /// Trust a remote environment temporarily for this activation
     #[bpaf(long, short)]
     trust: bool,
 
     /// Print an activation script to stdout instead of spawning a subshell
-    #[bpaf(long("in-place"), short, hide)]
-    in_place: bool,
+    #[bpaf(long("print-script"), short, hide)]
+    print_script: bool,
 
     /// Command to run interactively in the context of the environment
     #[bpaf(positional("cmd"), strict, many)]
@@ -450,7 +450,7 @@ impl Activate {
 
         let environment = concrete_environment.dyn_environment_ref_mut();
 
-        let in_place = self.in_place || (!stdout().is_tty() && self.run_args.is_empty());
+        let in_place = self.print_script || (!stdout().is_tty() && self.run_args.is_empty());
         // Don't spin in bashrcs and similar contexts
         let activation_path_result = if in_place {
             environment.activation_path(&flox)
@@ -524,7 +524,7 @@ impl Activate {
             return Ok(());
         }
 
-        // Add to FLOX_ACTIVE_ENVIRONMENTS so we can detect what environments are active.
+        // Add to _FLOX_ACTIVE_ENVIRONMENTS so we can detect what environments are active.
         flox_active_environments.set_last_active(now_active.clone());
 
         // Prepend the new environment to the list of active environments

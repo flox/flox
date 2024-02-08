@@ -44,19 +44,15 @@ pub struct Search {
     #[bpaf(long)]
     pub json: bool,
 
-    /// force update of catalogs from remote sources before searching
-    #[bpaf(long)]
-    pub refresh: bool,
-
     /// Print all search results
     #[bpaf(short, long)]
     pub all: bool,
 
-    /// query string of the form `<REGEX>[@<SEMVER-RANGE>]` used to filter
-    /// match against package names/descriptions, and semantic version.
-    /// Regex pattern is `PCRE` style, and semver ranges use the
-    /// `node-semver` syntax.
-    /// Exs: `(hello|coreutils)`, `node@>=16`, `coreutils@9.1`
+    /// The package to search for in the format '<pkg>[@<semver-range>]' using 'node-semver' syntax.
+    ///
+    /// ex.) python310Packages.pip
+    ///
+    /// ex.) 'node@>=16' # quotes needed to prevent '>' redirection
     #[bpaf(positional("search-term"))]
     pub search_term: String,
 }

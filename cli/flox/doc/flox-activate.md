@@ -1,7 +1,7 @@
 ---
 title: FLOX-ACTIVATE
 section: 1
-header: "flox User Manuals"
+header: "Flox User Manuals"
 ...
 
 # NAME
@@ -10,99 +10,110 @@ flox-activate - activate environments
 
 # SYNOPSIS
 
-flox [ `<general-options>` ] activate [ `<options>` ] [ -- `<command>` [ `<argument>` ] ]
+```
+flox [<general-options>] activate
+     [-d=<path> | -r=<owner>/<name>]
+     [-t]
+     [--print-script]
+     [ -- <command> [<arguments>]]
+```
 
 # DESCRIPTION
 
-Sets environment variables and aliases, runs hooks and adds environment
-`bin` directories to your `$PATH`. Can be invoked from an interactive
-terminal to launch a sub-shell, non-interactively to produce
-a series of commands to be sourced by your current `$SHELL`,
-or with a command and arguments to be invoked directly.
+Sets environment variables and aliases,
+runs hooks,
+and adds `bin` directories to your `$PATH`.
 
+Launches an interactive subshell when invoked as `flox activate` from an
+interactive shell.
+Launches a subshell non-interactively when invoked with a command
+and arguments.
+May also be invoked as `$(flox activate)` to produce commands to be sourced
+by your current `$SHELL`.
 
+When invoked interactively,
+the shell prompt will be modified to display the active environments,
+as shown below:
+```
+flox [env1 env2 env3] <normal prompt>
+```
+
+When multiple environments are activated each of their shell hooks
+(`hook.script` or `hook.file`)
+are executed in the context of the environment that they come from.
+This means that for each shell hook various environment variables such as
+`PATH`, `MANPATH`, `PKG_CONFIG_PATH`, `PYTHONPATH`, etc,
+are set to the appropriate values for the environment in which the shell
+hook was defined.
 
 # OPTIONS
 
-```{.include}
-./include/general-options.md
-./include/environment-options.md
-```
-
 ## Activate Options
 
-[ -- `<command>` [ `<argument>` ] ]
+`-- <command> [<arguments>]`
 :   Command to run in the environment.
-    Spawns the command in a subshell
-    that does not leak into the calling process.
+    Spawns the command in a subshell that does not leak into the calling
+    process.
 
+`-t`, `--trust`
+:   Trust a remote environment for this activation.
+    Activating an environment executes a shell hook which may execute arbitrary
+    code.
+    This presents a security risk,
+    so you will be prompted whether to trust the environment.
+    Environments owned by the current user are always trusted.
+    You may set certain environments to always be trusted using the config key
+    `trusted_environments."<owner/name>" = (trust | deny)`,
+    or via the following command:
+    `flox config --set trusted_environments.\"<owner/name>\" trust`.
+
+`--print-script`
+:  Prints an activation script to `stdout` that's suitable for sourcing in
+   a shell rather than activation via creating a subshell.
+   `flox` automatically knows when to print the activation script to `stdout`,
+   so this command is just a debugging aid for users.
+
+```{.include}
+./include/environment-options.md
+./include/general-options.md
+```
 
 # ENVIRONMENT VARIABLES
 
-`$FLOX_ENV`
-:   Absolute path to the _install prefix_ of the environment being activated.
-
-    Set by `flox activate` before executing `shell.hook`.
-
-    If multiple environments are indicated, each `shell.hook` will run with
-    its associated `FLOX_ENV` set properly, and the activated environment
-    will have `FLOX_ENV` set to the first environment indicated on the CLI.
-
-    This variable may be used to set other environment variables such as
-    `MANPATH`, `PKG_CONFIG_PATH`, `PYTHONPATH`, etc so that relevant tooling
-    will search these directories to locate files and resources from
-    the environment.
-
-    **N.B.** the default shell hook for newly-created environments will
-    source the `$FLOX_ENV/etc/profile` file at activation if it exists.
-    This behavior can be viewed/modified with `flox edit`.
-
-## Language packs _(**experimental**)_
-
-Language packs help you develop with flox the way **you** work, making it
-possible to install and use compilers, interpreters, libraries and modules
-in much the way you would on any other operating system.
-
-Language packs are activated by way of `$FLOX_ENV/etc/profile` as described
-above, and the `flox.etc-profiles` package provides a version of this script
-along with "language packs" providing environment variables and hooks that
-support developing in a variety of languages.
-
-Install a bundle of all language packs with the command:
-
-```
-flox install flox.etc-profiles
-```
-
-To restrict the installation to individual language packs, invoke `flox edit`
-and update the installation stanza as follows:
-
-```
-packages.flox.etc-profiles = {
-  meta.outputsToInstall = [ "base" "common_paths" "python3" ];
-};
-```
-
-Please note that the `base` and `common_paths` language packs are required
-when installing individual language packs.
+## `$_FLOX_ACTIVE_ENVIRONMENTS`
+A JSON array containing one object per active environment.
+This is currently an implementation detail
+and its contents are subject to change.
 
 # EXAMPLES:
 
--   activate "default" flox environment only within the current shell
-    (add to the relevant "rc" file, e.g. `~/.bashrc` or `~/.zprofile`)
+Activate an environment stored in the current directory:
 
-    ```
-    eval "$(flox activate)"
-    ```
+```
+$ flox activate
+```
 
--   activate "foo" and "default" flox environments in a new subshell
+Activate an environment `some_user/myenv` that's been pushed to FloxHub:
 
-    ```
-    flox activate -e foo
-    ```
+```
+$ flox activate -r some_user/myenv
+```
 
--   invoke command using "foo" and "default" flox environments
+Invoke a command inside an environment without entering its subshell:
 
-    ```
-    flox activate -e foo -- cmd --cmdflag cmdflagarg cmdarg
-    ```
+```
+$ flox activate -- cmd --some-arg arg1 arg2
+```
+
+Activate `default` Flox environment only within the current shell
+(add to the relevant "rc" file, e.g. `~/.bashrc` or `~/.zprofile`):
+
+```
+$ eval "$(flox activate)"
+```
+
+# SEE ALSO
+[`flox-push(1)`](./flox-push.md),
+[`flox-pull(1)`](./flox-pull.md),
+[`flox-edit(1)`](./flox-edit.md),
+[`flox-delete(1)`](./flox-delete.md)

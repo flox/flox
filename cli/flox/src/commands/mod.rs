@@ -850,7 +850,7 @@ fn activated_environments() -> ActiveEnvironments {
         Ok(active_environments) => active_environments,
         Err(e) => {
             error!(
-                "Could not parse FLOX_ACTIVE_ENVIRONMENTS -- using defaults: {}",
+                "Could not parse _FLOX_ACTIVE_ENVIRONMENTS -- using defaults: {}",
                 e
             );
             ActiveEnvironments::default()
