@@ -22,6 +22,15 @@ Default options for `valgrind` can be found in `pkgdb/.valgrindrc` and a default
 suppressions file can be found in `pkgdb/build-aux/valgrind.supp`.
 
 
+### Caches
+
+When profiling consumption try to keep in mind how existing caches for `nix` and
+`pkgdb` may effect your results.
+
+You may find it useful to set a temporary `XDG_CACHE_HOME` or to delete
+`~/.cache/{flox,nix}` before each profiling run.
+
+
 ### memcheck: Leak Checker
 
 This tool monitors a running program and attempts to identify potential 
