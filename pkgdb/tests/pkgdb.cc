@@ -296,7 +296,7 @@ test_PkgQuery0( flox::pkgdb::PkgDb & db )
   )SQL" );
   cmd.bind( ":parentId", static_cast<long long>( linux ) );
   cmd.bind( ":descriptionId", static_cast<long long>( desc ) );
-  if ( flox::pkgdb::sql_rc rc = cmd.execute(); flox::pkgdb::isSQLError( rc ) )
+  if ( flox::pkgdb::sql_rc rc = cmd.execute(); flox::isSQLError( rc ) )
     {
       throw flox::pkgdb::PkgDbException(
         nix::fmt( "Failed to write Package 'hello':(%d) %s",
@@ -386,7 +386,7 @@ test_PkgQuery1( flox::pkgdb::PkgDb & db )
   )SQL" );
   cmd.bind( ":parentId", static_cast<long long>( linux ) );
   cmd.bind( ":descriptionId", static_cast<long long>( desc ) );
-  if ( flox::pkgdb::sql_rc rc = cmd.execute(); flox::pkgdb::isSQLError( rc ) )
+  if ( flox::pkgdb::sql_rc rc = cmd.execute(); flox::isSQLError( rc ) )
     {
       throw flox::pkgdb::PkgDbException(
         nix::fmt( "Failed to write Packages:(%d) %s", rc, db.db.error_msg() ) );
@@ -484,7 +484,7 @@ test_PkgQuery2( flox::pkgdb::PkgDb & db )
   cmd.bind( ":descGreetId", static_cast<long long>( descGreet ) );
   cmd.bind( ":descFarewellId", static_cast<long long>( descFarewell ) );
   cmd.bind( ":descSpecialId", static_cast<long long>( descSpecial ) );
-  if ( flox::pkgdb::sql_rc rc = cmd.execute(); flox::pkgdb::isSQLError( rc ) )
+  if ( flox::pkgdb::sql_rc rc = cmd.execute(); flox::isSQLError( rc ) )
     {
       throw flox::pkgdb::PkgDbException(
         nix::fmt( "Failed to write Packages:(%d) %s", rc, db.db.error_msg() ) );
@@ -617,7 +617,7 @@ test_getPackages0( flox::pkgdb::PkgDb & db )
   )SQL" );
   cmd.bind( ":parentId", static_cast<long long>( linux ) );
   cmd.bind( ":descriptionId", static_cast<long long>( desc ) );
-  if ( flox::pkgdb::sql_rc rc = cmd.execute(); flox::pkgdb::isSQLError( rc ) )
+  if ( flox::pkgdb::sql_rc rc = cmd.execute(); flox::isSQLError( rc ) )
     {
       throw flox::pkgdb::PkgDbException(
         nix::fmt( "Failed to write Packages:(%d) %s", rc, db.db.error_msg() ) );
@@ -687,7 +687,7 @@ test_getPackages1( flox::pkgdb::PkgDb & db )
   cmd.bind( ":packagesLinuxId", static_cast<long long>( packagesLinux ) );
   cmd.bind( ":legacyDarwinId", static_cast<long long>( legacyDarwin ) );
   cmd.bind( ":packagesDarwinId", static_cast<long long>( packagesDarwin ) );
-  if ( flox::pkgdb::sql_rc rc = cmd.execute(); flox::pkgdb::isSQLError( rc ) )
+  if ( flox::pkgdb::sql_rc rc = cmd.execute(); flox::isSQLError( rc ) )
     {
       throw flox::pkgdb::PkgDbException(
         nix::fmt( "Failed to write Packages:(%d) %s", rc, db.db.error_msg() ) );
@@ -758,7 +758,7 @@ test_getPackages2( flox::pkgdb::PkgDb & db )
       , '["out"]' )
   )SQL" );
   cmd.bind( ":parentId", static_cast<long long>( linux ) );
-  if ( flox::pkgdb::sql_rc rc = cmd.execute(); flox::pkgdb::isSQLError( rc ) )
+  if ( flox::pkgdb::sql_rc rc = cmd.execute(); flox::isSQLError( rc ) )
     {
       throw flox::pkgdb::PkgDbException(
         nix::fmt( "Failed to write Packages:(%d) %s", rc, db.db.error_msg() ) );
@@ -805,7 +805,7 @@ test_DbPackage0( flox::pkgdb::PkgDb & db )
   )SQL" );
   cmd.bind( ":parentId", static_cast<long long>( linux ) );
   cmd.bind( ":descriptionId", static_cast<long long>( desc ) );
-  if ( flox::pkgdb::sql_rc rc = cmd.execute(); flox::pkgdb::isSQLError( rc ) )
+  if ( flox::pkgdb::sql_rc rc = cmd.execute(); flox::isSQLError( rc ) )
     {
       throw flox::pkgdb::PkgDbException(
         nix::fmt( "Failed to write Packages:(%d) %s", rc, db.db.error_msg() ) );
@@ -874,7 +874,7 @@ test_getPackages_semver0( flox::pkgdb::PkgDb & db )
   )SQL" );
   cmd.bind( ":parentId", static_cast<long long>( linux ) );
   cmd.bind( ":descriptionId", static_cast<long long>( desc ) );
-  if ( flox::pkgdb::sql_rc rc = cmd.execute(); flox::pkgdb::isSQLError( rc ) )
+  if ( flox::pkgdb::sql_rc rc = cmd.execute(); flox::isSQLError( rc ) )
     {
       throw flox::pkgdb::PkgDbException(
         nix::fmt( "Failed to write Packages:(%d) %s", rc, db.db.error_msg() ) );

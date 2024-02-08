@@ -262,6 +262,17 @@ isSQLiteDb( const std::string & dbPath );
 /* -------------------------------------------------------------------------- */
 
 /**
+ * @brief Predicate to detect failing SQLite3 return codes.
+ * @param rcode A SQLite3 _return code_.
+ * @return `true` iff @a rcode is a SQLite3 error.
+ */
+bool
+isSQLError( int rcode );
+
+
+/* -------------------------------------------------------------------------- */
+
+/**
  * @brief Parse a flake reference from either a JSON attrset or URI string.
  * @param flakeRef JSON or URI string representing a `nix` flake reference.
  * @return Parsed flake reference object.

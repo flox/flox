@@ -201,18 +201,12 @@ public:
    * @param attrName The name of the attribute name to be added ( last element
    *                 of the attribute path ).
    * @param cursor An attribute cursor to scrape data from.
-   * @param replace Whether to replace/ignore existing rows.
-   * @param checkDrv Whether to check `isDerivation` for @a cursor.
-   *                 Skipping this check is a slight optimization for cases
-   *                 where the caller has already checked themselves.
    * @return The `Packages.id` value for the added package.
    */
   row_id
   addPackage( row_id               parentId,
               std::string_view     attrName,
-              const flox::Cursor & cursor,
-              bool                 replace  = false,
-              bool                 checkDrv = true );
+              const flox::Cursor & cursor );
 
   /* Updates */
 
