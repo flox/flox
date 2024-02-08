@@ -206,8 +206,8 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
               scrapingComplete = true;
               debugLog(
                 nix::fmt( "scrapePrefix: Child exited abnormally, aborting" ) );
-              throw PkgDbException( nix::fmt( "scraping failed: exit code %d",
-                                              WEXITSTATUS( status ) ) );
+              throw PkgDbException(
+                nix::fmt( "scraping failed: abnormal child exit" ) );
             }
         }
       else
