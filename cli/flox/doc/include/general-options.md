@@ -1,23 +1,19 @@
 ## General Options
 
-Many flox commands wrap Nix commands of the same name,
-and will correspondingly pass on options and arguments
-directly to the underlying `nix` invocation.
-For more information on the options supported by specific Nix commands
-please invoke `flox nix <command> help`.
+`-h`, `--help`
+:   Prints help information.
 
-The following options are used specifically by `flox`
-and must be specified _before_ the `<command>` argument.
+The following options can be passed when running any `flox` subcommand but must
+be specified _before_ the subcommand.
 
--v, \--verbose
-:   Verbose mode. Invoke multiple times for increasing detail.
+`-v`, `--verbose`
+:   Increase logging verbosity.
+    Invoke multiple times for increasing detail.
 
-\--debug
-:   Debug mode. Invoke multiple times for increasing detail.
+`-q`, `--quiet`
+:   Silence logs except for errors.
 
--V, \--version
-:   Print `flox` version.
+`--debug`
+:   Debug mode.
 
-\--prefix
-:   Print `flox` installation prefix / Nix store path.
-    (flox internal use only.)
+

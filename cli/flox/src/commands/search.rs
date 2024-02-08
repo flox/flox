@@ -6,14 +6,7 @@ use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::global_manifest_path;
 use flox_rust_sdk::models::search::{
-    do_search,
-    PathOrJson,
-    Query,
-    SearchParams,
-    SearchResult,
-    SearchResults,
-    ShowError,
-    Subtree,
+    do_search, PathOrJson, Query, SearchParams, SearchResult, SearchResults, SearchStrategy, ShowError, Subtree
 };
 use indoc::formatdoc;
 use log::debug;

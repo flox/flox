@@ -49,9 +49,6 @@ use flox_rust_sdk::models::lockfile::{
 };
 use flox_rust_sdk::models::manifest::{self, PackageToInstall};
 use flox_rust_sdk::models::pkgdb::{call_pkgdb, CallPkgDbError, PkgDbError, PKGDB_BIN};
-use flox_rust_sdk::nix::command::StoreGc;
-use flox_rust_sdk::nix::command_line::NixCommandLine;
-use flox_rust_sdk::nix::Run;
 use indexmap::IndexSet;
 use indoc::formatdoc;
 use itertools::Itertools;
@@ -73,12 +70,6 @@ use crate::utils::dialog::{Confirm, Dialog, Select, Spinner};
 use crate::utils::didyoumean::{DidYouMean, InstallSuggestion};
 use crate::utils::errors::{format_core_error, format_locked_manifest_error};
 use crate::{subcommand_metric, utils};
-
-#[derive(Bpaf, Clone)]
-pub struct EnvironmentArgs {
-    #[bpaf(short, long, argument("SYSTEM"))]
-    pub system: Option<String>,
-}
 
 /// Edit declarative environment configuration
 #[derive(Bpaf, Clone)]
@@ -1248,43 +1239,15 @@ impl Uninstall {
 /// delete builds of non-current versions of an environment
 #[derive(Bpaf, Clone)]
 pub struct WipeHistory {
-    #[allow(dead_code)] // pending spec for `-e`, `--dir` behaviour
-    #[bpaf(external(environment_args), group_help("Environment Options"))]
-    environment_args: EnvironmentArgs,
-
     #[bpaf(external(environment_select), fallback(Default::default()))]
-    environment: EnvironmentSelect,
+    _environment: EnvironmentSelect,
 }
 
 impl WipeHistory {
-    pub async fn handle(self, flox: Flox) -> Result<()> {
+    pub async fn handle(self, _flox: Flox) -> Result<()> {
         subcommand_metric!("wipe-history");
 
-        let env = self
-            .environment
-            .detect_concrete_environment(&flox, "wipe history of")?
-            .into_dyn_environment();
-
-        if env.delete_symlinks()? {
-            // The flox nix instance is created with `--quiet --quiet`
-            // because nix logs are passed to stderr unfiltered.
-            // nix store gc logs are more useful,
-            // thus we use 3 `--verbose` to have them appear.
-            let nix = flox.nix::<NixCommandLine>(vec![
-                "--verbose".to_string(),
-                "--verbose".to_string(),
-                "--verbose".to_string(),
-            ]);
-            let store_gc_command = StoreGc {
-                ..StoreGc::default()
-            };
-
-            info!("Running garbage collection. This may take a while...");
-            store_gc_command.run(&nix, &Default::default()).await?;
-        } else {
-            info!("No old generations found to clean up.")
-        }
-        Ok(())
+        todo!("this command is planned for a future release");
     }
 }
 
@@ -1508,20 +1471,20 @@ impl Push {
 
 #[derive(Debug, Clone, Bpaf)]
 enum PullSelect {
-    Existing {
-        /// Forceably overwrite the local copy of the environment
-        #[bpaf(long, short)]
-        force: bool,
-    },
     New {
         /// ID of the environment to pull
-        #[bpaf(long, short, argument("owner/name"))]
+        #[bpaf(long, short, argument("owner>/<name"))]
         remote: EnvironmentRef,
     },
     NewAbbreviated {
         /// ID of the environment to pull
-        #[bpaf(positional("owner/name"))]
+        #[bpaf(positional("owner>/<name"))]
         remote: EnvironmentRef,
+    },
+    Existing {
+        /// Forceably overwrite the local copy of the environment
+        #[bpaf(long, short)]
+        force: bool,
     },
 }
 
@@ -1533,16 +1496,16 @@ impl Default for PullSelect {
     }
 }
 
-/// Pull environment from floxhub
+/// Pull environment from FloxHub
 #[derive(Bpaf, Clone)]
 pub struct Pull {
-    /// Forceably add current systems to the environment, even if incompatible
-    #[bpaf(long("add-system"), short)]
-    add_system: bool,
-
-    /// Directory containing the environment (default: current directory)
+    /// Directory in which to create a managed environment, or directory that already contains a managed environment (default: current directory)
     #[bpaf(long, short, argument("path"))]
     dir: Option<PathBuf>,
+
+    /// Forceably add current system to the environment, even if incompatible
+    #[bpaf(long("add-system"), short)]
+    add_system: bool,
 
     #[bpaf(external(pull_select), fallback(Default::default()))]
     pull_select: PullSelect,
@@ -1899,10 +1862,10 @@ impl SwitchGeneration {
 
 #[derive(Debug, Bpaf, Clone)]
 pub enum EnvironmentOrGlobalSelect {
-    Environment(#[bpaf(external(environment_select))] EnvironmentSelect),
-    /// Update inputs used by 'search' and 'show' outside of an environment
+    /// Update the global base catalog
     #[bpaf(long("global"))]
     Global,
+    Environment(#[bpaf(external(environment_select))] EnvironmentSelect),
 }
 
 impl Default for EnvironmentOrGlobalSelect {
@@ -1911,13 +1874,13 @@ impl Default for EnvironmentOrGlobalSelect {
     }
 }
 
-/// Update an environment's inputs
+/// Update the global base catalog or an environment's base catalog
 #[derive(Bpaf, Clone)]
 pub struct Update {
     #[bpaf(external(environment_or_global_select), fallback(Default::default()))]
     environment_or_global: EnvironmentOrGlobalSelect,
 
-    #[bpaf(positional("inputs"))]
+    #[bpaf(positional("inputs"), hide)]
     inputs: Vec<String>,
 }
 impl Update {
