@@ -36,6 +36,7 @@ setup() {
   make_dummy_env "owner" "name"
 
   export UNSUPPORTED_SYSTEM_PROMPT="The environment you are trying to pull is not yet compatible with your system ($NIX_SYSTEM)."
+  export UNSUPPORTED_PACKAGE_PROMPT="The environment you are trying to pull could not be built locally."
 }
 teardown() {
   unset _FLOX_FLOXHUB_GIT_URL
@@ -321,6 +322,53 @@ function add_incompatible_package() {
   run "$FLOX_BIN" pull --remote owner/name --add-system
   assert_success
   assert_line --partial "Could not build modified environment, build errors need to be resolved manually."
+
+  run "$FLOX_BIN" list
+  assert_success
+}
+
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=pull:unsupported-package
+# pulling an environment with a package that is not available for the current platform
+# should fail with an error
+@test "pull environment with package not available for the current platform fails" {
+  update_dummy_env "owner" "name"
+  add_incompatible_package "owner" "name"
+
+  run "$FLOX_BIN" pull --remote owner/name
+
+  assert_failure
+  assert_line --partial "package 'extra' is not available for this system ('$NIX_SYSTEM')"
+}
+
+# bats test_tags=pull:unsupported-package:prompt-fail
+# pulling an environment with a package that is not available for the current platform
+# should prompt to ignore the error and pull the environment anyway.
+# When answering no, an error should be shown and the environment should not be pulled.
+@test "pull unsupported package prompt and abort cleanly" {
+  update_dummy_env "owner" "name"
+  add_incompatible_package "owner" "name"
+
+  run -0 expect -d "$TESTS_DIR/pull/answerPrompt.exp" owner/name "$UNSUPPORTED_PACKAGE_PROMPT" no
+  assert_success
+  assert_line --partial "package 'extra' is not available for this system ('$NIX_SYSTEM')"
+  assert_output --partial "$UNSUPPORTED_PACKAGE_PROMPT"
+  assert_line --partial "Did not pull the environment."
+}
+
+# bats test_tags=pull:unsupported-package:prompt-success
+# pulling an environment with a package that is not available for the current platform
+# should prompt to ignore the error and pull the environment anyway.
+# When answering yes, the environment should be pulled in a potentially broken state.
+@test "pull unsupported package prompt and ignore" {
+  update_dummy_env "owner" "name"
+  add_incompatible_package "owner" "name"
+
+  run -0 expect -d "$TESTS_DIR/pull/answerPrompt.exp" owner/name "$UNSUPPORTED_PACKAGE_PROMPT" yes
+  assert_success
+  assert_line --partial "package 'extra' is not available for this system ('$NIX_SYSTEM')"
+  assert_output --partial "$UNSUPPORTED_PACKAGE_PROMPT"
 
   run "$FLOX_BIN" list
   assert_success
