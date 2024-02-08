@@ -49,6 +49,7 @@ $ nix develop; # only if you aren't using direnv
 $ cd pkgdb;
 $ make clean;
 $ make -j DEBUG=1;
+$ rm -rf ~/.cache/{flox,nix};  # Optional
 $ valgrind --tool=memcheck ./bin/pkgdb <SUB-COMMAND> [ARGS...];
 ```
 
@@ -114,6 +115,7 @@ $ nix develop; # only if you aren't using direnv
 $ cd pkgdb;
 $ make clean;
 $ make -j DEBUG=1;
+$ rm -rf ~/.cache/{flox,nix};  # Optional
 $ valgrind --tool=massif ./bin/pkgdb <SUB-COMMAND> [ARGS...];
 $ massif-viewer ./massif.out.*;
 ```
