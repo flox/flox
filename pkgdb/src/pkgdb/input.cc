@@ -172,6 +172,7 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
                   debugLog( nix::fmt(
                     "scrapePrefix: Child reports all pages complete" ) );
                   scrapingComplete = true;
+                  this->init();
                 }
               else if ( WEXITSTATUS( status ) == EXIT_CHILD_INCOMPLETE )
                 {
@@ -211,6 +212,7 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
         }
       else
         {
+          this->init();
           /* Open a read/write connection. */
           auto chunkDbRW = this->getDbReadWrite();
 
