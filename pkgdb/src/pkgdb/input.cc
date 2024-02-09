@@ -251,6 +251,8 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
           chunkDbRW->execute( "COMMIT TRANSACTION" );
           this->closeDbReadWrite();
           this->freeFlake();
+          int status;
+          wait( &status );
 
           debugLog( nix::fmt(
             "scrapePrefix(child): scraping page %d complete, lastPage:%d",
