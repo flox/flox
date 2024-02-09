@@ -305,40 +305,23 @@ createFloxEnv( nix::EvalState &     state,
       /* Collect drvs that may yet need to be built. */
       if ( auto drvPath = package_drv->queryDrvPath() )
         {
-          drvsToBuild.push_back( nix::StorePathWithOutputs { *drvPath, {} } );
-        }
-    }
-
-  // TODO: check if this builds `outputsToInstall` only
-  // TODO: do we need to honor repair flag? state.repair ? bmRepair : bmNormal
-  /* Build derivations that make up the environment */
-  auto buildResults
-    = state.store->buildPathsWithResults( nix::toDerivedPaths( drvsToBuild ) );
-
-  for ( auto & buildResult : buildResults )
-    {
-      if ( ! buildResult.success() )
-        {
-          // would like to use `buildResult.path.getBaseStorePath()`,
-          // but that's not implemented in our version of nix we link to
-          if ( auto maybePackage
-               = originalPackage.find( state.store->parseStorePath(
-                 buildResult.path.to_string( *state.store ) ) );
-               maybePackage != originalPackage.end() )
+          /* Build derivation of pacakge in environment,
+           * rethrow errors as PackageBuildFailure. */
+          try
             {
-
-              throw PackageBuildFailure( "Failed to build package '"
-                                           + maybePackage->second.first + "'",
-                                         buildResult.toString() );
-            };
-
-          throw PackageBuildFailure(
-            "Failed to build element of the environment '"
-              + buildResult.path.to_string( *state.store ) + "'",
-            buildResult.toString() );
+              auto storePathWithOutputs
+                = nix::StorePathWithOutputs { *drvPath, {} };
+              state.store->buildPaths(
+                nix::toDerivedPaths( { storePathWithOutputs } ) );
+            }
+          catch ( const nix::Error & e )
+            {
+              throw PackageBuildFailure(
+                "Failed to build package '" + pId + "'",
+                nix::filterANSIEscapes( e.what(), true ) );
+            }
         }
     }
-
 
   /* verbatim content of the activate script common to all shells */
   std::stringstream commonActivate;
