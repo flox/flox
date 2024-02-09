@@ -472,7 +472,7 @@ impl Activate {
                 if let ConcreteEnvironment::Remote(remote) = &concrete_environment {
                     message.push_str("\n\n");
                     message.push_str(&format!(
-                    "Use 'flox pull --add-system {}/{}' to update and verify this environment on your system.",
+                    "Use 'flox pull --force {}/{}' to update and verify this environment on your system.",
                     remote.owner(),
                     remote.name()));
                 }
@@ -1486,18 +1486,12 @@ enum PullSelect {
         #[bpaf(positional("owner>/<name"))]
         remote: EnvironmentRef,
     },
-    Existing {
-        /// Forceably overwrite the local copy of the environment
-        #[bpaf(long, short)]
-        force: bool,
-    },
+    Existing {},
 }
 
 impl Default for PullSelect {
     fn default() -> Self {
-        PullSelect::Existing {
-            force: Default::default(),
-        }
+        PullSelect::Existing {}
     }
 }
 
@@ -1508,9 +1502,12 @@ pub struct Pull {
     #[bpaf(long, short, argument("path"))]
     dir: Option<PathBuf>,
 
-    /// Forceably add current system to the environment, even if incompatible
+    /// Forceably pull the environment
+    /// When pulling a new environment, adds the system to the manifest if the lockfile is incompatible
+    /// and ignores eval and build errors
+    /// When pulling an existing environment, overrides local changes.
     #[bpaf(long("add-system"), short)]
-    add_system: bool,
+    force: bool,
 
     #[bpaf(external(pull_select), fallback(Default::default()))]
     pull_select: PullSelect,
@@ -1529,17 +1526,11 @@ impl Pull {
 
                 debug!("Resolved user intent: pull {remote:?} into {dir:?}");
 
-                Self::pull_new_environment(
-                    &flox,
-                    dir.join(DOT_FLOX),
-                    remote,
-                    self.add_system,
-                    &start,
-                )?;
+                Self::pull_new_environment(&flox, dir.join(DOT_FLOX), remote, self.force, &start)?;
 
                 message::updated(complete);
             },
-            PullSelect::Existing { force } => {
+            PullSelect::Existing {} => {
                 let dir = self.dir.unwrap_or_else(|| std::env::current_dir().unwrap());
 
                 debug!("Resolved user intent: pull changes for environment found in {dir:?}");
@@ -1567,7 +1558,7 @@ impl Pull {
                             &flox,
                             dir.join(DOT_FLOX),
                             pointer.clone(),
-                            force,
+                            self.force,
                         )
                     }),
                 }
@@ -1577,7 +1568,11 @@ impl Pull {
                     Pulled {owner}/{name} from {floxhub_host}{suffix}
 
                     You can activate this environment with 'flox activate'
-                ", owner = pointer.owner, name = pointer.name, floxhub_host = flox.floxhub.base_url(), suffix = if force { " (forced)" } else { "" }};
+                    ",
+                    owner = pointer.owner, name = pointer.name,
+                    floxhub_host = flox.floxhub.base_url(),
+                    suffix = if self.force { " (forced)" } else { "" }
+                };
 
                 message::created(complete_message);
             },
@@ -1615,7 +1610,7 @@ impl Pull {
         flox: &Flox,
         dot_flox_path: PathBuf,
         env_ref: EnvironmentRef,
-        add_systems: bool,
+        force: bool,
         message: &str,
     ) -> Result<()> {
         if dot_flox_path.exists() {
@@ -1670,30 +1665,25 @@ impl Pull {
                     ..
                 })),
             ))) => {
-                let hint = "Use 'flox pull --add-system' to add your system to the manifest.";
-
-                // will return OK if the user chose to abort the pull
-                let add_systems = add_systems
-                    || match Self::query_add_system(&flox.system)? {
-                        Some(false) => {
-                            // prompt available, user chose to abort
-                            message::plain(hint);
-                            fs::remove_dir_all(&dot_flox_path)
-                                .context("Could not clean up .flox/ directory")?;
-                            bail!("Did not pull the environment.");
-                        },
-                        Some(true) => true, // prompt available, user chose to add system
-                        None => false,      // no prompt available
-                    };
-
-                if !add_systems {
+                let hint = "Use 'flox pull --force' to add your system to the manifest.";
+                if !force && !Dialog::can_prompt() {
                     fs::remove_dir_all(&dot_flox_path)
                         .context("Could not clean up .flox/ directory")?;
                     bail!("{}", formatdoc! {"
-                        This environment is not yet compatible with your system ({system}).
+                            This environment is not yet compatible with your system ({system}).
 
-                        {hint}"
+                            {hint}"
                     , system = flox.system});
+                }
+
+                // will return OK if the user chose to abort the pull
+                let force = force || Self::query_add_system(&flox.system)?;
+                if !force {
+                    // prompt available, user chose to abort
+                    message::plain(hint);
+                    fs::remove_dir_all(&dot_flox_path)
+                        .context("Could not clean up .flox/ directory")?;
+                    bail!("Did not pull the environment.");
                 }
 
                 let doc = Self::amend_current_system(&env, flox)?;
@@ -1726,9 +1716,15 @@ impl Pull {
 
                 let pkgdb_error = format_locked_manifest_error(builder_error);
 
+                if !force && !Dialog::can_prompt() {
+                    fs::remove_dir_all(&dot_flox_path)
+                        .context("Could not clean up .flox/ directory")?;
+                    bail!("{pkgdb_error}");
+                }
+
                 message::error(pkgdb_error);
 
-                if Self::query_ignore_build_errors()? {
+                if force || Self::query_ignore_build_errors()? {
                     message::warning("Ignoring build errors and pulling the environment anyway.");
                 } else {
                     fs::remove_dir_all(&dot_flox_path)
@@ -1774,15 +1770,12 @@ impl Pull {
     /// returns [Ok(None)]` if the user can't be prompted
     /// returns `[Ok(bool)]` depending on the users choice
     /// returns `[Err]` if the prompt failed or was cancelled
-    fn query_add_system(system: &str) -> Result<Option<bool>> {
-        if !Dialog::can_prompt() {
-            return Ok(None);
-        }
-
+    fn query_add_system(system: &str) -> Result<bool> {
         let message = format!(
             "The environment you are trying to pull is not yet compatible with your system ({system})."
         );
-        let help = "Use 'flox pull --add-system' to automatically add your system to the list of compatible systems";
+
+        let help = "Use 'flox pull --force' to automatically add your system to the list of compatible systems";
 
         let reject_choice = "Don't pull this environment.";
         let confirm_choice = format!(
@@ -1799,7 +1792,7 @@ impl Pull {
 
         let (choice, _) = dialog.raw_prompt()?;
 
-        Ok(Some(choice == 1))
+        Ok(choice == 1)
     }
 
     /// add the current system to the manifest of the given environment

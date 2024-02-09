@@ -294,11 +294,11 @@ function add_insecure_package() {
 # bats test_tags=pull:add-system-flag
 # pulling an environment without packages for the current platform
 #should fail with an error
-@test "pull environment without packages for the current platform succeeds with '--add-system' flag" {
+@test "pull environment without packages for the current platform succeeds with '--force' flag" {
   update_dummy_env "owner" "name"
   make_incompatible "owner" "name"
 
-  run "$FLOX_BIN" pull --remote owner/name --add-system
+  run "$FLOX_BIN" pull --remote owner/name --force
   assert_success
 }
 
@@ -336,13 +336,13 @@ function add_insecure_package() {
 # due to the current system missing <system> in `option.systems`
 # AND a package that is indeed not able to be built for the current system
 # should show a warning, but otherwise succeed to pull
-@test "pull unsupported environment succeeds with '--add-system' flag but shows warning if unable to build still" {
+@test "pull unsupported environment succeeds with '--force' flag but shows warning if unable to build still" {
   update_dummy_env "owner" "name"
 
   make_incompatible "owner" "name"
   add_incompatible_package "owner" "name"
 
-  run "$FLOX_BIN" pull --remote owner/name --add-system
+  run "$FLOX_BIN" pull --remote owner/name --force
   assert_success
   assert_line --partial "Could not build modified environment, build errors need to be resolved manually."
 
