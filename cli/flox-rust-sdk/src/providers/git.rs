@@ -1349,14 +1349,17 @@ pub mod tests {
         repo.add_remote("origin", "https://github.com/torvalds/linux")
             .unwrap();
 
-        repo.get_options_mut()
-            .add_env_var("GIT_CONFIG_SYSTEM", "/dev/null");
-        repo.get_options_mut()
-            .add_env_var("GIT_CONFIG_GLOBAL", "/dev/null");
-        repo.get_options_mut().add_config_flag(
-            "credential.helper",
-            r#"!f(){ echo "username="; echo "password="; }; f"#,
-        );
+        {
+            let options = repo.get_options_mut();
+            options.add_env_var("GIT_CONFIG_SYSTEM", "/dev/null");
+            options.add_env_var("GIT_CONFIG_GLOBAL", "/dev/null");
+            options.add_config_flag(
+                "credential.helper",
+                r#"!f(){ echo "username="; echo "password="; }; f"#,
+            );
+            options.add_config_flag("user.name", "testuser");
+            options.add_config_flag("user.email", "testuser@localhost");
+        }
 
         repo.checkout("branch_1", true).unwrap();
         commit_file(&repo, "dummy");
