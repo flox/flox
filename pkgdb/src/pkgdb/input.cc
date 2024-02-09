@@ -133,7 +133,6 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
   if ( this->getDbReadOnly()->completedAttrSet( prefix ) ) { return; }
 
   Todos todo;
-  bool  wasRW = this->dbRW != nullptr;
 
   // close the db if we have anything open in preparation for the child to take
   // over.
@@ -214,6 +213,9 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
         {
           /* Open a read/write connection. */
           auto        chunkDbRW = this->getDbReadWrite();
+
+          /* Start a transaction */
+          chunkDbRW->execute( "BEGIN TRANSACTION" );
           row_id      chunkRow  = chunkDbRW->addOrGetAttrSetId( prefix );
           MaybeCursor root      = this->getFlake()->maybeOpenCursor( prefix );
 
@@ -222,9 +224,6 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
                                static_cast<flox::Cursor>( root ),
                                chunkRow );
           bool targetComplete = false;
-
-          /* Start a transaction */
-          chunkDbRW->execute( "BEGIN EXCLUSIVE TRANSACTION" );
 
           try
             {
@@ -244,8 +243,6 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
                 nix::fmt( "scrapePrefix(child): caught nix::EvalError: %s",
                           err.msg().c_str() ) );
               chunkDbRW->execute( "ROLLBACK TRANSACTION" );
-              /* Close the r/w connection if we opened it. */
-              if ( ! wasRW ) { this->closeDbReadWrite(); }
               exit( EXIT_FAILURE_NIX_EVAL );
             }
 
@@ -259,9 +256,6 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
         }
     }
   while ( ! scrapingComplete );
-
-  /* Close the r/w connection if we opened it. */
-  if ( ! wasRW ) { this->closeDbReadWrite(); }
 }
 
 
