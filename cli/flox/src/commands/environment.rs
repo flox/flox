@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::ffi::{OsStr, OsString};
-use std::fmt::{Display, Write as _};
+use std::fmt::Display;
 use std::fs::{self, File};
 use std::io::{stdin, stdout, Write};
 use std::os::unix::process::CommandExt;
@@ -52,7 +52,6 @@ use flox_rust_sdk::models::pkgdb::{
     call_pkgdb,
     error_codes,
     CallPkgDbError,
-    ContextMsgError,
     PkgDbError,
     PKGDB_BIN,
 };
@@ -1709,15 +1708,9 @@ impl Pull {
             },
             Err(
                 ref e @ EnvironmentError2::Core(CoreEnvironmentError::LockedManifest(
-                    LockedManifestError::BuildEnv(CallPkgDbError::PkgDbError(PkgDbError {
-                        exit_code,
-                        context_message:
-                            Some(ContextMsgError {
-                                ref message,
-                                ref caught,
-                            }),
-                        ..
-                    })),
+                    ref builder_error @ LockedManifestError::BuildEnv(CallPkgDbError::PkgDbError(
+                        PkgDbError { exit_code, .. },
+                    )),
                 )),
             ) if [
                 error_codes::PACKAGE_BUILD_FAILURE,
@@ -1731,14 +1724,7 @@ impl Pull {
                     err = display_chain(e)
                 );
 
-                let mut pkgdb_error = message.to_string();
-                if exit_code != error_codes::PACKAGE_EVAL_INCOMPATIBLE_SYSTEM && caught.is_some() {
-                    write!(
-                        &mut pkgdb_error,
-                        "{caught}",
-                        caught = caught.as_ref().unwrap()
-                    )?;
-                }
+                let pkgdb_error = format_locked_manifest_error(builder_error);
 
                 message::error(pkgdb_error);
 
