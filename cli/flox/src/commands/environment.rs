@@ -1504,9 +1504,9 @@ pub struct Pull {
 
     /// Forceably pull the environment
     /// When pulling a new environment, adds the system to the manifest if the lockfile is incompatible
-    /// and ignores eval and build errors
+    /// and ignores eval and build errors.
     /// When pulling an existing environment, overrides local changes.
-    #[bpaf(long("add-system"), short)]
+    #[bpaf(long, short)]
     force: bool,
 
     #[bpaf(external(pull_select), fallback(Default::default()))]
